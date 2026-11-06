@@ -18,6 +18,8 @@ export const LOCAL_RUNNER_DEFAULT_PORT = 47610;
 export const LOCAL_RUNNER_TOKEN_HEADER = "x-tianshu-local-token";
 /** 云端接收端路径（相对天枢 api 的根），鉴权用 Authorization: Bearer <个人令牌>。 */
 export const LOCAL_RUNNER_SYNC_PATH = "/api/local-runner/sync";
+/** 云端「验收交代」（相对天枢 api 的根）：GET ?handbackKey=<交回条目的 key>，鉴权同上。本机在交回同步上去以后取它，起验收会话。 */
+export const LOCAL_RUNNER_VERIFY_BRIEF_PATH = "/api/local-runner/verify-brief";
 
 const Instant = Type.String({ format: "date-time" });
 const Id = Type.String({ minLength: 1, maxLength: 80, pattern: "^[A-Za-z0-9_-]+$" });
@@ -26,6 +28,8 @@ const strict = { additionalProperties: false } as const;
 /** 钥匙和令牌只收可见 ASCII（不含空格、换行等控制字符），免得经 stdin 交给系统凭据工具时被当成另一条命令。 */
 const SECRET_CHARS = "^[\x21-\x7E]*$";
 const Nullable = <T extends TSchema>(schema: T) => Type.Union([schema, Type.Null()]);
+/** 同步条目的幂等键，交回时用它点名产出和证据（云端存成 local_outputs.client_id）。 */
+const SyncKey = Type.String({ minLength: 10, maxLength: 200 });
 
 // ───────────────────────── 通用 ─────────────────────────
 
@@ -41,8 +45,16 @@ export const LocalRunnerError = Type.Object({
 
 /** 执行方。codex 12 月接，现在开会话会得到 not_implemented。 */
 export const LocalAgentKind = Type.Union([Type.Literal("claude-code"), Type.Literal("codex")]);
-/** card：看板上的一张卡（执行事项）；topic：调研专题。两者都是能对话的本机会话。 */
-export const LocalSessionKind = Type.Union([Type.Literal("card"), Type.Literal("topic")]);
+/**
+ * 本机会话的四种（V2 设计第 21 节）：都是能对话的本机会话，都占本机的位置。
+ * - card：执行 worker，看板上的一张卡（执行事项）；topic：调研专题。
+ * - plan：规划员，把一个 Task 拆成计划和派活单草稿（propose_plan），只读不改文件。
+ * - verify：验收员，执行方交回以后本机自己起，逐条判这次交回（submit_verdict），只读不改文件。网页不能开这种会话。
+ * 排队先后：verify → plan → card、topic；同一种先来先跑。
+ */
+export const LocalSessionKind = Type.Union([Type.Literal("card"), Type.Literal("topic"), Type.Literal("plan"), Type.Literal("verify")]);
+/** 模型档位，和云端岗位的 modelTier 一致：strong 强、normal 普通、light 轻。 */
+export const LocalModelTier = Type.Union([Type.Literal("strong"), Type.Literal("normal"), Type.Literal("light")]);
 
 // ───────────────────────── 健康与配对 ─────────────────────────
 
@@ -248,10 +260,14 @@ export const LocalSessionStatus = Type.Union([
 
 export const LocalSessionSubject = Type.Object({
   kind: LocalSessionKind,
-  /** 天枢里卡（执行事项）的 id，kind=card 时必填。 */
+  /** 天枢里卡（执行事项）的 id：kind=card 时必填；kind=verify 时是被验的那张卡。 */
   cardId: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
   /** 天枢里调研专题的 id，kind=topic 时必填。 */
   topicId: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
+  /** 天枢里 Task 的 id，kind=plan 时必填（拆的是这个 Task）。 */
+  taskId: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
+  /** 只有 kind=verify（本机填）：验的是哪一次交回，就是那条 handback 同步条目的 key。 */
+  handbackKey: Type.Optional(SyncKey),
 }, strict);
 
 export const LocalUsage = Type.Object({
@@ -279,15 +295,18 @@ export const LocalRole = Type.Object({
   practiceMd: RoleText,
   acceptanceMd: RoleText,
   tools: Type.Array(LocalRoleTool, { maxItems: 5 }),
-  modelTier: Type.Optional(Type.Union([Type.Literal("strong"), Type.Literal("normal"), Type.Literal("light")])),
+  modelTier: Type.Optional(LocalModelTier),
   version: Type.Optional(Type.Integer({ minimum: 1 })),
 }, strict);
 
-/** POST /v1/sessions */
+/**
+ * POST /v1/sessions。kind=plan（规划员）：带 taskId，firstMessage 是云端的拆卡交代，role 是规划员岗位；不给目录时本机给它建一个专用目录。
+ * kind=verify 不能从网页开（400）：执行方交回以后本机自己起。
+ */
 export const LocalCreateSessionRequest = Type.Object({
   subject: LocalSessionSubject,
   title: Type.String({ minLength: 1, maxLength: 120 }),
-  /** 工作目录：必须在允许的文件夹内。topic 可不填，本机程序给它建一个专用目录。 */
+  /** 工作目录：必须在允许的文件夹内。topic、plan 可不填，本机程序给它建一个专用目录。 */
   cwd: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
   agent: Type.Optional(LocalAgentKind),
   /** 不填用默认模型。 */
@@ -408,10 +427,74 @@ export const LocalHandbackCriterion = Type.Object({
   evidence: Type.String({ maxLength: 2000 }),
 }, strict);
 
+/**
+ * 规划员出的派活单里的一件（对得上云端的草稿卡）：brief 是交代；doneDefinition 是完成标准，每行一条；criterionIndex 对约定第几条（从 1 起，对不上为 null）；
+ * role 是交代里岗位清单的 id 或名字（云端按本人的岗位对上，对不上当没配）；modelTier 是模型档位；why 一句话说为什么这么拆。
+ */
+export const LocalPlanCard = Type.Object({
+  title: Type.String({ minLength: 1, maxLength: 120 }),
+  brief: Type.String({ maxLength: 4000 }),
+  doneDefinition: Type.String({ minLength: 1, maxLength: 500 }),
+  criterionIndex: Nullable(Type.Integer({ minimum: 1 })),
+  role: Nullable(Type.String({ minLength: 1, maxLength: 80 })),
+  modelTier: LocalModelTier,
+  why: Nullable(Type.String({ maxLength: 200 })),
+}, strict);
+/**
+ * 规划员出的计划和派活单草稿（propose_plan）。revision 是本会话第几次出（本人说一句让它改，改完再出是新的一次，云端以最新一次为准）；
+ * summary 一句话；steps 是计划的几步（数组顺序就是先后）；risks 是风险；cards 是派活单。
+ * modelLabel、roleId、roleVersion 记是谁出的（本机用的模型、规划员岗位和版本，没配岗位为 null）。
+ */
+export const LocalCardPlan = Type.Object({
+  revision: Type.Integer({ minimum: 1 }),
+  summary: Type.String({ minLength: 1, maxLength: 500 }),
+  steps: Type.Array(Type.Object({ title: Type.String({ minLength: 1, maxLength: 200 }), detail: Nullable(Type.String({ maxLength: 1000 })) }, strict), { maxItems: 20 }),
+  risks: Type.Array(Type.String({ minLength: 1, maxLength: 300 }), { maxItems: 10 }),
+  cards: Type.Array(LocalPlanCard, { minItems: 1, maxItems: 8 }),
+  modelLabel: Type.String(),
+  roleId: Nullable(Uuid),
+  roleVersion: Nullable(Type.Integer({ minimum: 1 })),
+}, strict);
+
+/** 验收员对一条完成标准的判定（对得上云端的 CardAcceptanceCriterion，少了 text：云端有交回时的标准快照）。fix 是没达到时怎么补。 */
+export const LocalVerdictCriterion = Type.Object({
+  index: Type.Integer({ minimum: 1 }),
+  verdict: Type.Union([Type.Literal("met"), Type.Literal("partial"), Type.Literal("unmet")]),
+  reason: Type.String({ minLength: 1, maxLength: 2000 }),
+  evidence: Nullable(Type.String({ maxLength: 2000 })),
+  fix: Nullable(Type.String({ maxLength: 2000 })),
+}, strict);
+/**
+ * 验收员的结论（submit_verdict）：每条完成标准判一次，条数和验收交代的 criteria 一样；passed 是每条都 met；beyondScope 是标准以外的建议，不算没达到。
+ * modelLabel、roleId、roleVersion 记是谁验的（本机用的模型、验收员岗位和版本，用内置规矩时为 null）。
+ */
+export const LocalVerdict = Type.Object({
+  passed: Type.Boolean(),
+  summary: Type.String({ minLength: 1, maxLength: 2000 }),
+  criteria: Type.Array(LocalVerdictCriterion, { minItems: 1, maxItems: 50 }),
+  beyondScope: Type.Array(Type.String({ minLength: 1, maxLength: 500 }), { maxItems: 10 }),
+  modelLabel: Type.String(),
+  roleId: Nullable(Uuid),
+  roleVersion: Nullable(Type.Integer({ minimum: 1 })),
+}, strict);
+
+/**
+ * GET <apiBaseUrl>/api/local-runner/verify-brief?handbackKey=<key>（云端实现）：本机起验收会话用的交代。
+ * - markdown 原样作为验收会话的第一句话（≤ 20000 字）：约定、卡的完成标准、卡所属岗位的验收口径、这次交回的逐条自评和总结、交回点名的产出和证据（标题、文件名、链接、证据正文）。
+ * - criteria 是交回那一刻卡的完成标准（按行拆好），验收员逐条判，条数以它为准。
+ * - role 是验收员岗位（kind=reviewer，带模型档位，本机按档位挑模型）；没配为 null，本机用内置的验收规矩、普通档。
+ * - failStreak 是这张卡在这次交回之前连续没过几次（推翻以后从 0 算）。这次再没过、累计到 2 就是「受阻」。
+ * 404：云端没有这次交回（还没收到或拒收了）；409：这次交回已经有结论（已验过或已推翻），不用再验。
+ */
+export const LocalVerifyBriefResponse = Type.Object({
+  markdown: Type.String({ minLength: 1, maxLength: 20000 }),
+  criteria: Type.Array(Type.String({ minLength: 1 }), { minItems: 1, maxItems: 50 }),
+  role: Nullable(LocalRole),
+  failStreak: Type.Integer({ minimum: 0 }),
+}, strict);
+
 /** 专题一版的种类：outline 提纲、draft 正文、review 评审会合成的「分歧和建议」。 */
 export const LocalTopicVersionKind = Type.Union([Type.Literal("outline"), Type.Literal("draft"), Type.Literal("review")]);
-/** 同步条目的幂等键，交回时用它点名产出和证据（云端存成 local_outputs.client_id）。 */
-const SyncKey = Type.String({ minLength: 10, maxLength: 200 });
 
 /**
  * 计划进度（派活单上的「第 3/6 步」）：done 做完几条，total 共几条，step 是第几步（正在做的那条是第几条；没有正在做的就是做完的条数），
@@ -450,7 +533,15 @@ export const LocalSessionEvent = Type.Union([
   ev("handback", { summary: Type.String(), criteria: Type.Array(LocalHandbackCriterion), outputKeys: Type.Array(SyncKey) }),
   /** 专题存了新的一版（已排进上报队列）。 */
   ev("version", { number: Type.Integer({ minimum: 1 }), kind: LocalTopicVersionKind, label: Nullable(Type.String()), note: Nullable(Type.String()) }),
-  /** interjection_next_step：插话已送出，下一步生效；auth_required：执行方登录失效；agent_stderr：执行方报错输出。 */
+  /**
+   * 验收员交了结论。验收会话和被验的那张卡的会话里各有一条（同一份）：网页在卡的会话里看到没过、又没受阻时，把 returnText 经「说一句」送回执行会话；
+   * failStreak 是算上这次连续没过几次，blocked（累计到 2）时停在「受阻」等本人，不再自动送回。过了时 returnText 为 null。
+   */
+  ev("verdict", {
+    handbackKey: SyncKey, passed: Type.Boolean(), summary: Type.String(), criteria: Type.Array(LocalVerdictCriterion), beyondScope: Type.Array(Type.String()),
+    failStreak: Type.Integer({ minimum: 0 }), blocked: Type.Boolean(), returnText: Nullable(Type.String()),
+  }),
+  /** interjection_next_step：插话已送出，下一步生效；auth_required：执行方登录失效；agent_stderr：执行方报错输出；verify_waiting：验收在等交代（连不上天枢等）。 */
   ev("notice", { level: Type.Union([Type.Literal("info"), Type.Literal("warn"), Type.Literal("error")]), code: Type.String(), text: Type.String() }),
 ]);
 
@@ -513,6 +604,10 @@ export const LocalSyncItem = Type.Union([
     number: Type.Integer({ minimum: 1 }),
     feishuUrl: Type.String({ pattern: "^https://", maxLength: 2000 }),
   }, strict)),
+  /** 规划员出的计划和派活单草稿（subject.kind = plan，带 taskId）。 */
+  syncItem("card_plan", LocalCardPlan),
+  /** 验收员的结论（subject.kind = verify，带 cardId 和 handbackKey）：云端按 handbackKey 找到那次交回，照原来的规则落结果（过了进准备中，没过拼改法，第二次没过受阻）。 */
+  syncItem("verdict", LocalVerdict),
   /** 花费：每轮结束报一次本轮的增量。 */
   syncItem("cost", Type.Object({ modelLabel: Type.String(), usage: LocalUsage }, strict)),
 ]);
@@ -572,6 +667,12 @@ export type TLocalPlanEntry = Static<typeof LocalPlanEntry>;
 export type TLocalHandbackCriterion = Static<typeof LocalHandbackCriterion>;
 export type TLocalTopicVersionKind = Static<typeof LocalTopicVersionKind>;
 export type TLocalRole = Static<typeof LocalRole>;
+export type TLocalModelTier = Static<typeof LocalModelTier>;
+export type TLocalPlanCard = Static<typeof LocalPlanCard>;
+export type TLocalCardPlan = Static<typeof LocalCardPlan>;
+export type TLocalVerdictCriterion = Static<typeof LocalVerdictCriterion>;
+export type TLocalVerdict = Static<typeof LocalVerdict>;
+export type TLocalVerifyBriefResponse = Static<typeof LocalVerifyBriefResponse>;
 export type TLocalSlots = Static<typeof LocalSlots>;
 export type TLocalPlanProgress = Static<typeof LocalPlanProgress>;
 export type TLocalCreateSessionBatchRequest = Static<typeof LocalCreateSessionBatchRequest>;
