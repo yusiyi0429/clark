@@ -1,0 +1,56 @@
+/*
+ * 选项框（components/work/DecisionBox）：对话里问的那一处。一层发丝框，选项靠留白分开、不加框；选中的行一层很淡的底色。
+ * 只用现有 token，深浅两套跟着 token 走。
+ */
+.box { margin: 12px 0; padding: 12px 6px 6px; border-radius: 14px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--hairline-strong); color: var(--ink); font-size: 13.5px; line-height: 1.5; outline: none; }
+.box[data-outside] { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--counter) 45%, transparent); }
+.box:focus-within { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 45%, var(--hairline-strong)); }
+.head { display: flex; align-items: flex-start; gap: 10px; min-height: 22px; padding: 0 10px 6px; }
+.title { flex: 1; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+.pager { display: inline-flex; flex: none; align-items: center; gap: 2px; color: var(--ink-faint); font-size: 12px; font-variant-numeric: tabular-nums; }
+.pager button { display: grid; place-items: center; width: 22px; height: 22px; border: 0; border-radius: 6px; background: none; color: inherit; cursor: pointer; }
+.pager button:hover:not(:disabled) { background: var(--wash-hover); color: var(--ink); }
+.pager button:disabled { opacity: .35; cursor: default; }
+.body { padding: 0 10px 8px; color: var(--ink-muted); font-size: 13px; }
+.cmd { display: block; padding: 7px 10px; border-radius: 9px; background: color-mix(in oklab, var(--ink) 4%, var(--surface)); color: var(--ink); font: 12.5px/1.5 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.outside { margin: 6px 0 0; padding: 0; list-style: none; color: var(--counter); font-size: 12px; }
+.all { flex: none; height: 22px; padding: 0 8px; border: 0; border-radius: 6px; background: none; color: var(--accent); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.all:hover { background: var(--wash-hover); }
+
+.options { display: grid; gap: 1px; }
+.option { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: start; gap: 6px; width: 100%; padding: 7px 10px; border: 0; border-radius: 9px; background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.option:hover:not(:disabled), .option[data-selected] { background: var(--wash-hover); }
+.option:focus-visible { outline: 2px solid color-mix(in oklab, var(--accent) 60%, transparent); outline-offset: -2px; }
+.option:disabled { cursor: default; color: var(--ink-faint); }
+.option[data-other] .label { color: var(--ink-muted); }
+.key { padding-top: 1px; color: var(--ink-faint); font: 12px/1.6 var(--font-sans); font-variant-numeric: tabular-nums; }
+.label { display: grid; min-width: 0; }
+.label small { color: var(--ink-faint); font-size: 12px; line-height: 1.45; }
+.trail { display: inline-flex; align-items: center; gap: 6px; padding-top: 1px; color: var(--ink-faint); }
+.rec { color: var(--accent); font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+
+.write { position: relative; margin: 2px 6px 4px 34px; }
+.write textarea { display: block; width: 100%; min-height: 44px; max-height: 160px; padding: 8px 40px 8px 10px; border: 0; border-radius: 10px; background: color-mix(in oklab, var(--ink) 4%, var(--surface)); color: var(--ink); font: inherit; font-size: 13.5px; resize: none; field-sizing: content; outline: none; }
+.write textarea:focus { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 45%, transparent); }
+.send { position: absolute; right: 6px; bottom: 6px; display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 8px; background: var(--accent); color: var(--accent-foreground, #fff); cursor: pointer; }
+.send:disabled { background: color-mix(in oklab, var(--ink) 10%, transparent); color: var(--ink-faint); cursor: default; }
+
+.foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 10px 4px; color: var(--ink-faint); font-size: 12px; }
+.grow { flex: 1; }
+.confirm { height: 28px; padding: 0 12px; border: 0; border-radius: 8px; background: var(--accent); color: var(--accent-foreground, #fff); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.confirm:disabled { opacity: .45; cursor: default; }
+.blocked { margin: 0; padding: 0 10px 6px; color: var(--ink-faint); font-size: 12px; }
+
+/* 答过的：一行，勾、问的、答的。 */
+.resolved { display: flex; align-items: baseline; gap: 6px; margin: 8px 0; padding: 0 2px; color: var(--ink-faint); font-size: 12.5px; }
+.resolved svg { flex: none; align-self: center; }
+.rTitle { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rAnswer { flex: none; max-width: 60%; overflow: hidden; color: var(--ink-muted); text-overflow: ellipsis; white-space: nowrap; }
+.rAnswer::before { content: "· "; color: var(--ink-faint); }
+
+/* 「1 个问题等你 ↑」 */
+.chip { position: absolute; left: 50%; bottom: calc(var(--pane-composer, 52px) + 22px); z-index: 3; display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 10px 0 12px; border: 0; border-radius: 14px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--hairline-strong), 0 4px 14px -6px var(--sh-3); color: var(--ink); font-size: 12.5px; font-weight: 500; white-space: nowrap; transform: translateX(-50%); cursor: pointer; animation: chipIn 180ms var(--ease-swift); }
+.chip svg { color: var(--accent); }
+.chip:hover { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 40%, var(--hairline-strong)), 0 4px 14px -6px var(--sh-3); }
+@keyframes chipIn { from { opacity: 0; transform: translate(-50%, 6px); } }
+@media (prefers-reduced-motion: reduce) { .chip { animation: none; } }

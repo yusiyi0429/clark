@@ -1,0 +1,112 @@
+"use client";
+
+/**
+ * 左栏（新首页设计第 3 节）：最上面是伙伴形象，点了进总管线；进去以后这个位置换成「回到首页」。
+ * 在 Task 管线、详情、子会话里，伙伴形象右边多一个回首页的小图标。
+ * 下面是 Mission 名（只有一个 Mission 时不写）和 Task：标题加一行小字，标题右边的信息图标鼠标移上去才显示（手机上一直显示）。
+ * Task 下面缩进一条竖线，是子会话，一行一个，状态用图标。不归任何 Task 的子会话放在最下面一组「其他」，没有就不显示。
+ */
+import { useState, type ReactNode } from "react";
+import { House, Info } from "lucide-react";
+import { BuddyMark } from "@/components/buddy/BuddyMark";
+import type { Buddy } from "@/components/buddy/useBuddy";
+import { BUDDY_HREF, HOME_HREF, cardHref, infoHref, taskHref, topicHref } from "@/lib/home/derive";
+import type { HomeTask, SubSession, WorkHomeData } from "@/lib/home/types";
+import { StateIcon } from "./StateIcon";
+import type { View } from "./view";
+import h from "@/styles/home.module.css";
+
+const ICON = { size: 16, strokeWidth: 1.5, "aria-hidden": true } as const;
+export const subHref = (sub: Pick<SubSession, "kind" | "id">) => (sub.kind === "card" ? cardHref(sub.id) : topicHref(sub.id));
+
+export function LeftColumn({ data, view, buddy, speaking, go, phone, top }: {
+  data: WorkHomeData;
+  view: View;
+  buddy: Buddy | null;
+  /** 伙伴在说话（总管线的回答进行中）。 */
+  speaking: boolean;
+  go: (href: string) => void;
+  phone: boolean;
+  /** 手机首屏：伙伴下面先放「等你」。 */
+  top?: ReactNode;
+}) {
+  const name = buddy?.name?.trim() || "伙伴";
+  const many = data.missions.length > 1;
+  return (
+    <nav className={h.leftInner} aria-label="Task">
+      <div className={h.slot}>
+        {view.kind === "buddy" && !phone ? (
+          <button type="button" className={h.homeBack} onClick={() => go(HOME_HREF)} data-testid="back-home"><House {...ICON} />回到首页</button>
+        ) : (
+          <>
+            <button type="button" className={h.buddy} aria-label={name} title={name} onClick={() => go(BUDDY_HREF)} data-testid="buddy-entry">
+              <span className={h.buddyFigure} data-buddy-figure="left"><BuddyMark buddy={buddy} place="sheet" active={speaking} /></span>
+            </button>
+            {view.kind !== "home" && !phone ? <button type="button" className={h.icon} aria-label="回到首页" title="回到首页" onClick={() => go(HOME_HREF)}><House {...ICON} /></button> : null}
+          </>
+        )}
+      </div>
+      {top}
+      <div className={h.tree}>
+        {data.missions.map((mission) => (
+          <section key={mission.missionId} aria-label={mission.title} className={h.group}>
+            {many ? <p className={h.groupTitle}>{mission.title}</p> : null}
+            {mission.tasks.map((task) => <TaskNode key={task.taskId} task={task} view={view} go={go} />)}
+          </section>
+        ))}
+        {data.other.subSessions.length ? (
+          <section aria-label="其他" className={h.group}>
+            <p className={h.groupTitle}>其他</p>
+            <Subs subs={data.other.subSessions} view={view} go={go} />
+          </section>
+        ) : null}
+      </div>
+    </nav>
+  );
+}
+
+/** 完成的子会话收进折叠的「已完成 N」（设计第 4.5 条），不删，点开还能看；Task 交付以后全部收进去，Task 行打勾。 */
+function TaskNode({ task, view, go }: { task: HomeTask; view: View; go: (href: string) => void }) {
+  const here = (view.kind === "task" || view.kind === "info") && view.taskId === task.taskId;
+  const [open, setOpen] = useState(false);
+  const folded = task.subSessions.filter((sub) => task.delivered || sub.state === "done");
+  const live = task.subSessions.filter((sub) => !folded.includes(sub));
+  const viewing = folded.some((sub) => (view.kind === "card" || view.kind === "topic") && view.kind === sub.kind && view.id === sub.id);
+  const expanded = open || viewing;
+  return (
+    <div className={h.taskNode} data-testid="tree-task">
+      <div className={h.taskRow} data-current={view.kind === "task" && here ? "" : undefined}>
+        <button type="button" className={h.taskMain} onClick={() => go(taskHref(task.taskId))} aria-current={view.kind === "task" && here ? "page" : undefined}>
+          <span className={h.taskName}>{task.name}{task.delivered ? <StateIcon state="done" /> : null}</span>
+          {task.subtitle ? <span className={h.taskSub}>{task.subtitle}</span> : null}
+        </button>
+        <button type="button" className={h.info} aria-label={`${task.name} 详情`} title="详情" aria-pressed={view.kind === "info" && here}
+          onClick={() => go(view.kind === "info" && here ? taskHref(task.taskId) : infoHref(task.taskId))} data-testid="task-info"><Info {...ICON} /></button>
+      </div>
+      {live.length ? <Subs subs={live} view={view} go={go} /> : null}
+      {folded.length ? (
+        <div className={h.fold}>
+          <button type="button" className={h.foldToggle} aria-expanded={expanded} onClick={() => setOpen(!expanded)} data-testid="tree-done">已完成 {folded.length}</button>
+          {expanded ? <Subs subs={folded} view={view} go={go} /> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function Subs({ subs, view, go }: { subs: SubSession[]; view: View; go: (href: string) => void }) {
+  return (
+    <ul className={h.subs}>
+      {subs.map((sub) => {
+        const current = (view.kind === "card" || view.kind === "topic") && view.kind === sub.kind && view.id === sub.id;
+        return (
+          <li key={`${sub.kind}:${sub.id}`}>
+            <button type="button" className={h.sub} data-state={sub.state} aria-current={current ? "page" : undefined} onClick={() => go(subHref(sub))} data-testid="tree-sub">
+              <StateIcon state={sub.state} /><span>{sub.title}</span>
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}

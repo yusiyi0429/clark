@@ -1,35 +1,26 @@
 "use client";
 
 /**
- * 伙伴另外说的一句（V2 设计第 20.3 节，只有三种，样子照 prototype-home），由网页按时间插进对话：
- * 验收过了或没过、岗位修改建议、这一单全部完成。等你的事不单出一句（在左栏和派活单的行里）；逐步的进展也不往对话里刷。
+ * Task 管线里伙伴另外说的一句（新首页设计第 4.5 条），由网页按时间插进这条管线的对话：
+ * 验收过了或没过、这一单全部完成。岗位修改建议在首页「等你」；受阻、合回的拍板是选项框（TaskDecisions）；逐步的进展不往对话里刷。
  * 每张卡只有最近一次交回，所以条数跟着本月的卡走，不另外按时间截。
  */
 import { useState, type ReactNode } from "react";
 import { HeroButton } from "@/components/HeroButton";
 import { showWorkspaceToast } from "@/lib/toast";
 import type { TaskBoard } from "@/lib/board/useTaskBoard";
-import { FIELD_LABEL, decideProposal, type RoleProposalView } from "@/lib/team/roles";
 import { overruleWorker } from "@/lib/work/actions";
 import type { Worker } from "@/lib/work/workers";
-import { Chain, RoleAvatar } from "./WorkerRow";
+import { Chain } from "./marks";
 import type { TimedBlock } from "./WorkTimeline";
 import w from "@/styles/v2-work.module.css";
 
 export type NoteHandlers = { openWorker: (cardId: string) => void; openTask: (taskId: string) => void; changed: () => void };
 
-/** 改后比改前多出来的行（建议里新加的那句）；没有新行就是整段。 */
-export function addedLines(before: string, after: string): string {
-  const old = new Set(before.split("\n").map((line) => line.trim()));
-  const added = after.split("\n").filter((line) => line.trim() && !old.has(line.trim()));
-  return (added.length ? added : after.split("\n")).join("\n").trim();
-}
-
-export function workNotes({ workers, tasks, boards, proposals, on }: {
+export function workNotes({ workers, tasks, boards, on }: {
   workers: Worker[];
   tasks: { taskId: string; name: string }[];
   boards: Record<string, TaskBoard>;
-  proposals: RoleProposalView[];
   on: NoteHandlers;
 }): TimedBlock[] {
   const notes: TimedBlock[] = [];
@@ -38,7 +29,6 @@ export function workNotes({ workers, tasks, boards, proposals, on }: {
     if (handback?.status !== "done" || !handback.outcome || !handback.finishedAt) continue;
     notes.push({ key: `accept:${handback.id}`, at: handback.finishedAt, node: <AcceptanceNote worker={worker} on={on} /> });
   }
-  for (const proposal of proposals) notes.push({ key: `proposal:${proposal.id}`, at: proposal.createdAt, node: <ProposalNote proposal={proposal} onChanged={on.changed} /> });
   for (const task of tasks) {
     const mine = workers.filter((worker) => worker.taskId === task.taskId);
     if (!mine.length || mine.some((worker) => worker.state !== "done")) continue;
@@ -89,27 +79,6 @@ function AcceptanceNote({ worker, on }: { worker: Worker; on: NoteHandlers }) {
           {pass && inclusion?.state === "included" ? null : <HeroButton variant="ghost" size="sm" onPress={() => setReason("")}>{pass ? "推翻" : "仍然通过"}</HeroButton>}
         </div>
       )}
-    </Note>
-  );
-}
-
-function ProposalNote({ proposal, onChanged }: { proposal: RoleProposalView; onChanged: () => void }) {
-  const [busy, setBusy] = useState(false);
-  const decide = async (decision: "accept" | "dismiss") => {
-    setBusy(true);
-    try { await decideProposal(proposal.id, decision); showWorkspaceToast({ text: decision === "accept" ? `已写进「${proposal.role.name}」` : "已丢掉" }); onChanged(); }
-    catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没成功，请重试" }); }
-    finally { setBusy(false); }
-  };
-  return (
-    <Note testId="note-proposal" lead={<RoleAvatar name={proposal.role.name} kind={proposal.role.kind} />}>
-      <div><b>{proposal.role.name}</b>的{FIELD_LABEL[proposal.field]}改一句</div>
-      <blockquote>{addedLines(proposal.currentText, proposal.proposedText)}</blockquote>
-      <div className={w.m}>{proposal.sourceKind === "overrule" ? `因为你推翻了「${proposal.card.title}」的验收` : `因为「${proposal.card.title}」第二次没过`}</div>
-      <div className={w.acts}>
-        <HeroButton variant="primary" size="sm" isDisabled={busy} onPress={() => void decide("accept")}>采纳</HeroButton>
-        <HeroButton variant="secondary" size="sm" isDisabled={busy} onPress={() => void decide("dismiss")}>不要</HeroButton>
-      </div>
     </Note>
   );
 }

@@ -9,12 +9,15 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import Markdown from "react-markdown";
-import { ChevronLeft } from "lucide-react";
-import type { TTopicDetailResponse, TTopicVersionView } from "@warmap/contracts";
+import { ChevronLeft, Info } from "lucide-react";
+import type { TLocalQuestionAnswerRequest, TTopicDetailResponse, TTopicVersionView } from "@warmap/contracts";
 import { HeroButton } from "@/components/HeroButton";
 import { useHandheld } from "@/components/ui/useHandheld";
 import { StartDialog } from "@/components/local/StartDialog";
-import { SessionComposer, SessionTranscript } from "@/components/cards/SessionTranscript";
+import { SessionComposer, SessionTranscript, type DecideOptions } from "@/components/cards/SessionTranscript";
+import { QuestionDecision } from "@/components/work/decisions";
+import { PendingBoxes, PendingChip } from "@/components/work/DecisionBox";
+import { useViewChrome } from "@/components/home/view";
 import { latestSessionFor, useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { useSessionEvents } from "@/lib/local/useSessionEvents";
 import { localWait } from "@/lib/local/sessionView";
@@ -26,7 +29,12 @@ import { ReviewDialog, ReviewDoc, isReview, reviewText } from "./Review";
 import { showWorkspaceToast } from "@/lib/toast";
 import s from "@/styles/v2-session.module.css";
 
-export function TopicSession({ topicId }: { topicId: string }) {
+const ICON = { size: 16, strokeWidth: 1.5, "aria-hidden": true } as const;
+
+/** embedded：放在新首页的展示区里——没有返回键，页头右边的文档图标在「对话」和「当前版本」之间切。 */
+export function TopicSession({ topicId, embedded = false }: { topicId: string; embedded?: boolean }) {
+  const chrome = useViewChrome();
+  const [reading, setReading] = useState(false);
   const local = useLocalRunner();
   const handheld = useHandheld();
   const [detail, setDetail] = useState<TTopicDetailResponse | null>(null);
@@ -80,11 +88,19 @@ export function TopicSession({ topicId }: { topicId: string }) {
     try { await local.runner.sendMessage(session.id, text); return true; }
     catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没发出去，请重试" }); return false; }
   };
-  const decide = async (requestId: string, decision: "allow" | "deny", forSession: boolean) => {
+  const decide = async (requestId: string, decision: "allow" | "deny", { forSession, message }: DecideOptions) => {
     if (!session) return;
-    try { await local.runner.decidePermission(session.id, requestId, { decision, allowForSession: forSession }); }
+    try { await local.runner.decidePermission(session.id, requestId, { decision, ...(forSession ? { allowForSession: true } : {}), ...(message ? { message } : {}) }); }
     catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没成功，请重试" }); }
   };
+  // Claude Code 在问本人：选项框放在对话最后。
+  const question = session ? view.question ?? session.pendingQuestion ?? null : null;
+  const answer = async (body: TLocalQuestionAnswerRequest) => {
+    if (!session || !question) return;
+    try { await local.runner.answerQuestion(session.id, question.requestId, body); await local.refresh(); }
+    catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没成功，请重试" }); }
+  };
+  const asking = question ? <QuestionDecision key={question.requestId} request={question} blocked={canAct ? null : "到电脑上处理"} onAnswer={answer} /> : null;
   const toPending = async () => {
     if (!shown || !topic.planTaskId) return;
     try { await addTopicVersionToPending(topic.planTaskId, shown.id); showWorkspaceToast({ text: "已放进下一版" }); void load(); }
@@ -124,6 +140,51 @@ export function TopicSession({ topicId }: { topicId: string }) {
     </aside>
   );
 
+  const state = wait ? <span className={s.tag} data-tone={waitTone(wait)}>{WAIT_LABEL[wait]}</span> : <span className={s.tag} data-tone={topic.status === "archived" ? undefined : "ver"}>{topic.status === "archived" ? "已归档" : "进行中"}</span>;
+  const chat = (
+    <PendingBoxes>
+      <div className={s.chat}>
+        <div className={s.scroll}>
+          {session ? <SessionTranscript entries={view.entries} agentName="Claude Code" canAct={canAct} onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={asking} />
+            : <div className={s.feed}><span className={s.evt}>{topic.title}</span>
+                {ready && topic.status === "active" ? <div className={s.actions}><HeroButton variant="primary" size="sm" onPress={() => setStarting(true)}>开始</HeroButton></div> : null}
+              </div>}
+        </div>
+        <PendingChip />
+        <SessionComposer placeholder="发给 Claude Code…" disabled={!canAct} onSend={say} />
+      </div>
+    </PendingBoxes>
+  );
+  const dialogs = <>
+    {reviewing ? <ReviewDialog onClose={() => setReviewing(false)} onStart={async (critics) => {
+      if (!session) return;
+      try { await local.runner.sendMessage(session.id, reviewText(critics), "review"); setReviewing(false); showWorkspaceToast({ text: "评审会开始了" }); }
+      catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没开起来，请重试" }); }
+    }} /> : null}
+    {starting ? <StartDialog title={topic.title} needsFolder={false} onClose={() => setStarting(false)} onStart={async (model) => {
+      await startTopic(local.runner, topic, model);
+      setStarting(false);
+      await local.refresh();
+    }} /> : null}
+  </>;
+  // 新首页的展示区：一行页头（名字、状态、文档图标），下面是对话；点文档图标换成当前版本（手机上默认看文档）。
+  if (embedded) {
+    const showDoc = reading || (handheld && !session);
+    return (
+      <div className={s.page} data-embedded="" data-testid="topic-session">
+        <header className={s.embedHead}>
+          {chrome.lead}
+          <b className={s.embedTitle}>{topic.title}</b>
+          {state}
+          <span className={s.exec} />
+          <button type="button" className={s.iconBtn} aria-label="当前版本" title="当前版本" aria-pressed={showDoc} onClick={() => setReading(!showDoc)} data-testid="session-details"><Info {...ICON} /></button>
+          {chrome.trail}
+        </header>
+        <div className={s.body} data-solo="">{showDoc ? <div className={s.paneScroll}>{doc}</div> : chat}</div>
+        {dialogs}
+      </div>
+    );
+  }
   return (
     <div className={s.page} data-testid="topic-session">
       <header className={s.head}>
@@ -131,7 +192,7 @@ export function TopicSession({ topicId }: { topicId: string }) {
         <div className={s.title}>
           <span className={s.kind} data-kind="topic">专题</span>
           <b>{topic.title}</b>
-          {wait ? <span className={s.tag} data-tone={waitTone(wait)}>{WAIT_LABEL[wait]}</span> : <span className={s.tag} data-tone={topic.status === "archived" ? undefined : "ver"}>{topic.status === "archived" ? "已归档" : "进行中"}</span>}
+          {state}
         </div>
         <div className={s.exec}>
           {detail.task ? <Link href={`/me/work/tasks/${encodeURIComponent(detail.task.taskId)}`} className={s.link}>{detail.task.name}</Link> : null}
@@ -140,28 +201,11 @@ export function TopicSession({ topicId }: { topicId: string }) {
       </header>
       {handheld ? <div className={s.body} data-solo>{doc}</div> : (
         <div className={s.body}>
-          <div className={s.chat}>
-            <div className={s.scroll}>
-              {session ? <SessionTranscript entries={view.entries} agentName="Claude Code" canAct={canAct} onDecide={(request, decision, forSession) => decide(request.requestId, decision, forSession)} />
-                : <div className={s.feed}><span className={s.evt}>{topic.title}</span>
-                    {ready && topic.status === "active" ? <div className={s.actions}><HeroButton variant="primary" size="sm" onPress={() => setStarting(true)}>开始</HeroButton></div> : null}
-                  </div>}
-            </div>
-            <SessionComposer placeholder="发给 Claude Code…" disabled={!canAct} onSend={say} />
-          </div>
+          {chat}
           {doc}
         </div>
       )}
-      {reviewing ? <ReviewDialog onClose={() => setReviewing(false)} onStart={async (critics) => {
-        if (!session) return;
-        try { await local.runner.sendMessage(session.id, reviewText(critics), "review"); setReviewing(false); showWorkspaceToast({ text: "评审会开始了" }); }
-        catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没开起来，请重试" }); }
-      }} /> : null}
-      {starting ? <StartDialog title={topic.title} needsFolder={false} onClose={() => setStarting(false)} onStart={async (model) => {
-        await startTopic(local.runner, topic, model);
-        setStarting(false);
-        await local.refresh();
-      }} /> : null}
+      {dialogs}
     </div>
   );
 }

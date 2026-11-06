@@ -93,13 +93,13 @@ describe("手机宽度只能看", () => {
     expect(transcript(false)).toContain("运行 pnpm test");
     expect(transcript(false)).not.toContain("批准");
     expect(transcript(true)).toContain("批准");
-    expect(transcript(true)).toContain("这张卡都允许");
+    expect(transcript(true)).toContain("同类以后都批准");
     // 越界：标红写出路径，只能允许这一次。
     const outside = transcript(true, { outsidePaths: ["C:\\Users\\me\\.ssh\\id_rsa"], canAllowForSession: false });
     expect(outside).toContain("data-outside");
     expect(outside).toContain("越界：C:\\Users\\me\\.ssh\\id_rsa");
     expect(outside).toContain("允许这一次");
-    expect(outside).not.toContain("这张卡都允许");
+    expect(outside).not.toContain("同类以后都批准");
   });
 });
 

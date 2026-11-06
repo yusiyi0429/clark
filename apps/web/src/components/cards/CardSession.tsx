@@ -8,7 +8,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Info } from "lucide-react";
 import type { TCardHandbackView, TLocalQuestionAnswerRequest, TLocalRunView } from "@warmap/contracts";
 import { HeroButton } from "@/components/HeroButton";
 import { useHandheld } from "@/components/ui/useHandheld";
@@ -22,21 +22,27 @@ import { overrule, retryAcceptance } from "@/lib/board/cloud";
 import { cardRole } from "@/lib/team/roles";
 import { useAutoReturn } from "@/lib/board/useAutoReturn";
 import { showWorkspaceToast } from "@/lib/toast";
-import { SessionComposer, SessionTranscript } from "./SessionTranscript";
+import { SessionComposer, SessionTranscript, type DecideOptions } from "./SessionTranscript";
 import { useCardDetail, type CardDetail } from "./useCardDetail";
 import { MergeAction } from "@/components/work/MergeAction";
-import { QuestionForm } from "@/components/work/QuestionForm";
+import { QuestionDecision } from "@/components/work/decisions";
+import { PendingBoxes, PendingChip } from "@/components/work/DecisionBox";
+import { useViewChrome } from "@/components/home/view";
 import { commitText, placeText, shortPlace } from "@/lib/work/merge";
 import type { TLocalSessionSummary } from "@/lib/local/runner";
 import s from "@/styles/v2-session.module.css";
 
 /** 回到新首页，锚着这张卡的 Task（V2 设计第 20.4 节；没打开新首页的人会被带回老首页）。 */
 const workHref = (taskId: string | null) => (taskId ? `/me/work/tasks/${encodeURIComponent(taskId)}` : "/me/work");
+const ICON = { size: 16, strokeWidth: 1.5, "aria-hidden": true } as const;
 
 const VERDICT: Record<string, string> = { met: "达到", partial: "部分", unmet: "未达到" };
 const money = (usd: number | null) => (usd === null ? null : `约 $${usd.toFixed(usd < 1 ? 3 : 2)}`);
 
-export function CardSession({ cardId }: { cardId: string }) {
+/** embedded：放在新首页的展示区里——没有返回键（左栏就是导航），页头右边的信息图标在「对话」和「结果」之间切。 */
+export function CardSession({ cardId, embedded = false }: { cardId: string; embedded?: boolean }) {
+  const chrome = useViewChrome();
+  const [details, setDetails] = useState(false);
   const { detail, missing, refresh } = useCardDetail(cardId);
   const local = useLocalRunner();
   const handheld = useHandheld();
@@ -45,7 +51,6 @@ export function CardSession({ cardId }: { cardId: string }) {
   const { view } = useSessionEvents(local.runner, session?.id ?? null);
   const [tab, setTab] = useState<"result" | "chat">("result");
   const [starting, setStarting] = useState(false);
-  const [answering, setAnswering] = useState(false);
   useAutoReturn(local.runner, ready, detail ? [detail.task] : [], local.sessions, () => void refresh());
   // 开工耗时：从点「开始」到看到第一条事件（≤ 5 秒是验收条件）。只量一次，写进提示。
   useEffect(() => {
@@ -74,19 +79,17 @@ export function CardSession({ cardId }: { cardId: string }) {
   const backHref = workHref(taskId);
   const sessionRunning = session ? running(view.status ?? session.status) : false;
 
-  const decide = async (requestId: string, decision: "allow" | "deny", forSession: boolean) => {
+  const decide = async (requestId: string, decision: "allow" | "deny", { forSession, message }: DecideOptions) => {
     if (!session) return;
-    try { await local.runner.decidePermission(session.id, requestId, { decision, allowForSession: forSession }); }
+    try { await local.runner.decidePermission(session.id, requestId, { decision, ...(forSession ? { allowForSession: true } : {}), ...(message ? { message } : {}) }); }
     catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没成功，请重试" }); }
   };
   // 执行方在问本人：事件流里最新的那次，没收到事件时照会话摘要。
   const question = session ? view.question ?? session.pendingQuestion ?? null : null;
   const answer = async (body: TLocalQuestionAnswerRequest) => {
     if (!session || !question) return;
-    setAnswering(true);
     try { await local.runner.answerQuestion(session.id, question.requestId, body); await local.refresh(); }
     catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没成功，请重试" }); }
-    finally { setAnswering(false); }
   };
   const say = async (text: string) => {
     if (!session) return false;
@@ -111,19 +114,49 @@ export function CardSession({ cardId }: { cardId: string }) {
         onStart={() => setStarting(true)} onControl={(action) => void control(action)} onResume={() => void say("继续")} onChanged={() => void refresh()} />
     </aside>
   );
+  // 执行方在问本人：选项框放在对话最后（问的那一处）；手机、别的电脑上灰着。
+  const asking = question ? <QuestionDecision key={question.requestId} request={question} blocked={canAct ? null : "到电脑上处理"} onAnswer={answer} /> : null;
   const chat = (
-    <div className={s.chat}>
-      <div className={s.scroll}>
-        {session ? (
-          <SessionTranscript entries={view.entries} agentName={agentName} canAct={canAct} lead={`交代：${item.title}${item.card?.criterion ? ` · 按「${item.card.criterion.text}」验收` : ""}`}
-            onDecide={(request, decision, forSession) => decide(request.requestId, decision, forSession)} />
-        ) : <CloudTimeline run={detail.runs[0] ?? null} title={item.title} />}
+    <PendingBoxes>
+      <div className={s.chat}>
+        <div className={s.scroll}>
+          {session ? (
+            <SessionTranscript entries={view.entries} agentName={agentName} canAct={canAct} lead={`交代：${item.title}${item.card?.criterion ? ` · 按「${item.card.criterion.text}」验收` : ""}`}
+              onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={asking} />
+          ) : <CloudTimeline run={detail.runs[0] ?? null} title={item.title} />}
+        </div>
+        <PendingChip />
+        {agent ? <SessionComposer placeholder={`发给${agentName}…`} disabled={!canAct} onSend={say} /> : null}
       </div>
-      {question && canAct ? <QuestionForm key={question.requestId} request={question} busy={answering} onAnswer={(body) => void answer(body)} /> : null}
-      {agent ? <SessionComposer placeholder={`发给${agentName}…`} disabled={!canAct} onSend={say} /> : null}
-    </div>
+    </PendingBoxes>
   );
 
+  const state = wait ? <span className={s.tag} data-tone={waitTone(wait)}>{WAIT_LABEL[wait]}</span>
+    : <span className={s.tag} data-tone={stage === "done" ? "done" : stage === "todo" ? undefined : "ver"}>{STAGES.find((entry) => entry.id === stage)?.label}</span>;
+  const starter = starting ? <StartDialog title={item.title} role={role} onClose={() => setStarting(false)} onStart={async (model, folder, picked) => {
+    const begun = performance.now();
+    const created = await startCard(local.runner, item, model, folder?.path ?? "", picked);
+    try { sessionStorage.setItem(`tianshu-start-${created.id}`, String(begun)); } catch { /* 只是量开工耗时 */ }
+    setStarting(false);
+    await local.refresh();
+  }} /> : null;
+  // 新首页的展示区：一行页头（名字、状态、在哪做、信息图标），下面是对话；点信息图标换成结果（交代、计划、标准、验收、产出、合回）。
+  if (embedded) {
+    return (
+      <div className={s.page} data-embedded="" data-testid="card-session">
+        <header className={s.embedHead}>
+          {chrome.lead}
+          <b className={s.embedTitle}>{item.title}</b>
+          {state}
+          <span className={s.exec}>{session?.workspace ? <span title={placeText(session.workspace)}>{shortPlace(session.workspace)}</span> : null}</span>
+          <button type="button" className={s.iconBtn} aria-label="结果" title="结果" aria-pressed={details} onClick={() => setDetails(!details)} data-testid="session-details"><Info {...ICON} /></button>
+          {chrome.trail}
+        </header>
+        <div className={s.body} data-solo="">{details ? <div className={s.paneScroll}>{pane}</div> : chat}</div>
+        {starter}
+      </div>
+    );
+  }
   return (
     <div className={s.page} data-testid="card-session">
       <header className={s.head}>
@@ -131,8 +164,7 @@ export function CardSession({ cardId }: { cardId: string }) {
         <div className={s.title}>
           <span className={s.kind} data-kind="card">执行事项</span>
           <b>{item.title}</b>
-          {wait ? <span className={s.tag} data-tone={waitTone(wait)}>{WAIT_LABEL[wait]}</span>
-            : <span className={s.tag} data-tone={stage === "done" ? "done" : stage === "todo" ? undefined : "ver"}>{STAGES.find((entry) => entry.id === stage)?.label}</span>}
+          {state}
         </div>
         <div className={s.exec}>
           {role ? <span className={s.ex}><i>&gt;_</i>{role.name}</span> : null}
@@ -150,13 +182,7 @@ export function CardSession({ cardId }: { cardId: string }) {
         {chat}
         {pane}
       </div>
-      {starting ? <StartDialog title={item.title} role={role} onClose={() => setStarting(false)} onStart={async (model, folder, picked) => {
-        const begun = performance.now();
-        const created = await startCard(local.runner, item, model, folder?.path ?? "", picked);
-        try { sessionStorage.setItem(`tianshu-start-${created.id}`, String(begun)); } catch { /* 只是量开工耗时 */ }
-        setStarting(false);
-        await local.refresh();
-      }} /> : null}
+      {starter}
     </div>
   );
 }

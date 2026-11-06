@@ -19,8 +19,17 @@ import s from "@/styles/v2-chat.module.css";
 
 const NOOP = () => undefined;
 
-export function ChatPane({ buddy, head, extra, timeline, above, variant = "page" }: {
+export function ChatPane(props: Omit<Parameters<typeof ChatColumn>[0], "data">) {
+  const data = useConversation("global");
+  return <ChatColumn {...props} data={data} />;
+}
+
+/** 同一列，对话由调用方给（新首页：总管线是总线程，Task 管线是那件 Task 的对话）。 */
+export function ChatColumn({ data, buddy, head, extra, timeline, above, variant = "page", label }: {
+  data: ConversationData;
   buddy: Buddy | null;
+  /** 列和输入条的名字；不给时是伙伴的名字。 */
+  label?: string;
   /** 列顶上那一块（伙伴形象、对话列表钮、Task 标签）。 */
   head?: ReactNode;
   /** 接在对话记录后面、只在网页里画的东西（Task 下要你拿主意的卡）。 */
@@ -32,10 +41,9 @@ export function ChatPane({ buddy, head, extra, timeline, above, variant = "page"
   /** page：对话页居中一列；side：Task 页左栏。 */
   variant?: "page" | "side";
 }) {
-  const data = useConversation("global");
   const scroll = useConversationScroll({ streaming: data.streaming });
   const [composerHeight, setComposerHeight] = useState(52);
-  const name = buddy?.name?.trim() || "伙伴";
+  const name = label ?? (buddy?.name?.trim() || "伙伴");
   const channels: ConversationChannel[] = [{ id: "agent", kind: "agent", label: "天枢", title: name, unread: 0 }];
   return (
     <section className={s.pane} data-variant={variant} data-tone="light" aria-label={`和${name}的对话`} style={{ ["--pane-composer" as string]: `${composerHeight}px` }}>
