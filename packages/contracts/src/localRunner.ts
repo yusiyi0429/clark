@@ -165,6 +165,53 @@ export const LocalSettingsPatch = Type.Object({
   paused: Type.Optional(Type.Boolean()),
 }, strict);
 
+/**
+ * 订阅的一个额度窗口（11/07 用 Claude Code 2.1.318 的 get_usage 和 rate_limit_event 实测）：
+ * session 是 5 小时窗口（计划里有才有）；weekly_all 本周（所有模型）；weekly_scoped 本周某个模型的（model 是它的名字，如 Fable）。
+ * usedPercent 用了多少（0–100）；state：ok、warning（到了警戒线）、blocked（用完了，到 resetsAt 恢复）；resetsAt 下次重置（读不到为 null）。
+ */
+export const LocalQuotaWindow = Type.Object({
+  kind: Type.Union([Type.Literal("session"), Type.Literal("weekly_all"), Type.Literal("weekly_scoped")]),
+  model: Nullable(Type.String({ minLength: 1, maxLength: 60 })),
+  usedPercent: Type.Integer({ minimum: 0, maximum: 100 }),
+  state: Type.Union([Type.Literal("ok"), Type.Literal("warning"), Type.Literal("blocked")]),
+  resetsAt: Nullable(Instant),
+}, strict);
+/**
+ * 一个额度来源（现在只有本人的 Claude 订阅）。windows 只列计划里有的窗口；blockedUntil 用完时什么时候恢复（没用完为 null）；
+ * plan 计划名（Claude Code 报的，如 max）；extraUsage 额外额度开没开（读不到为 null）；updatedAt 最近一次读到的时间（还没读到为 null）；
+ * error 最近一次没读到的原因（读到了为 null）。账号邮箱、组织不在这里，也不出本机。
+ */
+export const LocalQuotaSource = Type.Object({
+  source: Type.Literal("claude_subscription"),
+  plan: Nullable(Type.String({ maxLength: 40 })),
+  windows: Type.Array(LocalQuotaWindow, { maxItems: 12 }),
+  blockedUntil: Nullable(Instant),
+  extraUsage: Nullable(Type.Boolean()),
+  updatedAt: Nullable(Instant),
+  error: Nullable(Type.String({ maxLength: 300 })),
+}, strict);
+/** 同步给云端的额度：只带窗口（种类、模型名、百分比、状态、重置时间）、恢复时间和读到的时间；不带计划名、额外额度、出错原因。 */
+export const LocalQuotaSync = Type.Object({
+  source: Type.Literal("claude_subscription"),
+  windows: Type.Array(LocalQuotaWindow, { maxItems: 12 }),
+  blockedUntil: Nullable(Instant),
+  updatedAt: Instant,
+}, strict);
+
+/**
+ * 这台电脑上 worker 能用的命令行工具（连接页「这台电脑」那组）：gh 是 GitHub，lark-cli 是飞书命令行。
+ * state：ready 已登录；not_installed 没装；not_logged_in 没登录；expired 登录过期；unknown 还没查完。
+ * account 登的是谁（GitHub 用户名、飞书里的名字），只在本机，不同步。checkedAt 上次查的时间（本机启动时和每 10 分钟查一次）。
+ */
+export const LocalToolStatus = Type.Object({
+  kind: Type.Union([Type.Literal("gh"), Type.Literal("lark-cli")]),
+  state: Type.Union([Type.Literal("ready"), Type.Literal("not_installed"), Type.Literal("not_logged_in"), Type.Literal("expired"), Type.Literal("unknown")]),
+  version: Nullable(Type.String({ maxLength: 40 })),
+  account: Nullable(Type.String({ maxLength: 100 })),
+  checkedAt: Nullable(Instant),
+}, strict);
+
 /** GET /v1/status */
 export const LocalStatusResponse = Type.Object({
   deviceId: Uuid,
@@ -175,6 +222,10 @@ export const LocalStatusResponse = Type.Object({
   slots: LocalSlots,
   cloud: LocalCloudLinkView,
   settings: LocalSettings,
+  /** 额度（Claude 订阅）：本机向 Claude Code 读（get_usage，不发提示、不花 token），跑着的卡实时报的（rate_limit_event）也算进来。 */
+  quota: Type.Array(LocalQuotaSource, { maxItems: 4 }),
+  /** 命令行工具登没登录：gh、lark-cli。 */
+  tools: Type.Array(LocalToolStatus, { maxItems: 8 }),
 }, strict);
 
 /** POST /v1/agents/claude-code/login 的贴码兜底：浏览器显示一串代码而没有跳回时，本人贴进网页。 */
@@ -286,7 +337,10 @@ export const LocalUsage = Type.Object({
   outputTokens: Type.Integer({ minimum: 0 }),
   cacheReadTokens: Type.Integer({ minimum: 0 }),
   cacheWriteTokens: Type.Integer({ minimum: 0 }),
-  /** 订阅登录时是 Claude Code 自己估的等价花费；网关模型可能为 null。 */
+  /**
+   * Claude Code 按 Anthropic 标价算的等价金额，只算官方模型（costBasis 为 list）；网关模型（costBasis 为 unknown，它按 Opus 价瞎算）为 null。
+   * 订阅登录时这不是真花的钱；真钱看 cost 条目的 money。
+   */
   costUsd: Nullable(Type.Number({ minimum: 0 })),
 }, strict);
 
@@ -322,6 +376,11 @@ export const LocalCreateSessionRequest = Type.Object({
   agent: Type.Optional(LocalAgentKind),
   /** 不填用默认模型。 */
   modelProfileId: Type.Optional(Id),
+  /**
+   * 这件的档位（派活单上的 modelTier）。模型配置没写模型名（本人的 Claude 订阅）时，本机按档位选模型和思考强度：
+   * strong 是 Opus、high；normal 是 Opus、medium；light 是 Sonnet、low。不填按岗位的档位，再没有按 normal。
+   */
+  modelTier: Type.Optional(LocalModelTier),
   firstMessage: Type.String({ minLength: 1, maxLength: 20000 }),
   /** 覆盖「默认干净」：true 时带上本人全局配置（hooks、插件、个人 MCP）。 */
   includePersonalConfig: Type.Optional(Type.Boolean()),
@@ -409,6 +468,13 @@ export const LocalBackgroundItem = Type.Object({
   stoppable: Type.Boolean(),
 }, strict);
 
+/**
+ * 卡为什么停着等（不是等你回复，界面「等额度恢复 · HH:MM」）：usage_limit 是订阅额度用完了，until 是恢复的时间（读不到为 null）。
+ * 停着不占位置。到点后 1 分钟本机先读一次额度，没用完就自己接着做：一轮做到一半的，进程还开着就往里说一句接着做，没开着就续上（--resume）；
+ * 还没开始的照常排队开始。没开始的订阅卡在额度用完时也停在排队里、带这个原因。
+ */
+export const LocalHold = Type.Object({ reason: Type.Literal("usage_limit"), until: Nullable(Instant) }, strict);
+
 export const LocalSessionSummary = Type.Object({
   /** 同时就是 Claude Code 的 --session-id，续接用它。 */
   id: Uuid,
@@ -435,6 +501,8 @@ export const LocalSessionSummary = Type.Object({
   waitingFor: Type.Optional(Type.Array(Type.String(), { minItems: 1, maxItems: 8 })),
   /** 这个会话里开过的后台任务（按开始的先后，最多留最近 50 个）；没有就不带。 */
   background: Type.Optional(Type.Array(LocalBackgroundItem, { maxItems: 50 })),
+  /** 停着等额度恢复（见 LocalHold）；没在等就不带。 */
+  hold: Type.Optional(LocalHold),
 }, strict);
 export const LocalSessionListResponse = Type.Object({ sessions: Type.Array(LocalSessionSummary) }, strict);
 
@@ -638,7 +706,8 @@ export const LocalPlanProgress = Type.Object({
  * 事件已归一化，不随执行方变：Claude Code 和以后的 Codex 都映射到这几种。
  */
 export const LocalSessionEvent = Type.Union([
-  ev("status", { status: LocalSessionStatus, exitCode: Type.Optional(Nullable(Type.Integer())), reason: Type.Optional(Type.String()) }),
+  /** hold：停着等额度恢复时带（见 LocalHold）。 */
+  ev("status", { status: LocalSessionStatus, exitCode: Type.Optional(Nullable(Type.Integer())), reason: Type.Optional(Type.String()), hold: Type.Optional(LocalHold) }),
   ev("agent_info", { agent: LocalAgentKind, version: Type.String(), model: Nullable(Type.String()), permissionMode: Nullable(Type.String()) }),
   ev("user_message", { text: Type.String(), source: Type.Union([Type.Literal("initial"), Type.Literal("web")]) }),
   ev("assistant_text", { text: Type.String() }),
@@ -658,7 +727,8 @@ export const LocalSessionEvent = Type.Union([
     text: Nullable(Type.String()),
     durationMs: Type.Integer({ minimum: 0 }),
     usage: LocalUsage,
-    errorKind: Type.Optional(Type.Union([Type.Literal("auth"), Type.Literal("api"), Type.Literal("interrupted"), Type.Literal("other")])),
+    /** usage_limit：订阅额度用完了（rate_limit_event rejected、usage_limit_reached、429），本机转成停着等恢复，不当成等你回复。 */
+    errorKind: Type.Optional(Type.Union([Type.Literal("auth"), Type.Literal("api"), Type.Literal("usage_limit"), Type.Literal("interrupted"), Type.Literal("other")])),
   }),
   ev("artifact", { artifactId: Id, title: Type.String(), fileName: Type.String(), size: Type.Integer({ minimum: 0 }), sha256: Type.String() }),
   /** commit：卡在工作树里做时，交回那一刻分支上的提交（本机先把没提交的改动提交了）。 */
@@ -704,6 +774,9 @@ export const LocalMergeSync = Type.Object({
   auto: Type.Boolean(),
 }, strict);
 
+/** 一笔钱：金额、币种（如 USD、CNY）、是不是估的。 */
+export const LocalMoney = Type.Object({ amount: Type.Number({ minimum: 0 }), currency: Type.String({ minLength: 1, maxLength: 10 }), estimated: Type.Boolean() }, strict);
+
 const syncItem = <T extends string, D extends TSchema>(type: T, data: D) => Type.Object({
   /** 幂等键：<deviceId>:<sessionId>:<本机序号>。云端按它去重，重复提交返回 accepted。 */
   key: SyncKey,
@@ -721,6 +794,8 @@ export const LocalSyncItem = Type.Union([
     queuePosition: Type.Optional(Type.Integer({ minimum: 1 })),
     /** 只在 status = queued、卡在等前面的卡时带：还没合回的那几张的 cardId（派活单上「已排队 · 等前面的卡」）。少了一张就重发一条。 */
     waitingFor: Type.Optional(Type.Array(Type.String(), { minItems: 1, maxItems: 8 })),
+    /** 停着等额度恢复（见 LocalHold）：等的时候报一条带它的，恢复接着做时报的那条不带。 */
+    hold: Type.Optional(LocalHold),
   }, strict)),
   syncItem("plan", Type.Object({ entries: Type.Array(LocalPlanEntry, { maxItems: 100 }), progress: LocalPlanProgress }, strict)),
   /** 证据：一段说明、日志片段、链接（PR 等）、改动摘要。不传完整工具输出。 */
@@ -771,9 +846,21 @@ export const LocalSyncItem = Type.Union([
   syncItem("card_plan", LocalCardPlan),
   /** 验收员的结论（subject.kind = verify，带 cardId 和 handbackKey）：云端按 handbackKey 找到那次交回，照原来的规则落结果（过了进准备中，没过拼改法，第二次没过受阻）。 */
   syncItem("verdict", LocalVerdict),
-  /** 花费：每轮结束报一次本轮的增量。 */
-  syncItem("cost", Type.Object({ modelLabel: Type.String(), usage: LocalUsage }, strict)),
-  /** 会话里的后台任务开始或变了：每次带全部字段，云端按 sessionId + data.id 覆盖（/api/me/background?scope=session:<sessionId>）。 */
+  /**
+   * 花费：每轮结束报一次本轮的增量。source：subscription 是本人的订阅（usage.costUsd 按标价算，不是真钱），gateway 是 TokenHub 等网关（花的是真钱）；
+   * model 是这一轮用得最多的模型名；money 是网关的真钱，本机按 TokenHub 的价目表算（按价目表的币种，不换算，estimated 为 true），订阅或读不到价目表时为 null。
+   */
+  syncItem("cost", Type.Object({
+    modelLabel: Type.String(), usage: LocalUsage,
+    source: Type.Optional(Type.Union([Type.Literal("subscription"), Type.Literal("gateway")])),
+    model: Type.Optional(Nullable(Type.String({ maxLength: 100 }))),
+    money: Type.Optional(Nullable(LocalMoney)),
+  }, strict)),
+  /**
+   * 会话里的后台任务开始或变了：每次带全部字段，云端按 sessionId + data.id 覆盖（/api/me/background?scope=session:<sessionId>）。
+   * 发件箱重试时同一项的几条可能乱序到达：云端留 key 末尾本机序号最大的那条（occurredAt 可能落在同一毫秒）。
+   * 不要另定「已结束的不再变回 running」：子 agent 跑完后被续上（SendMessage）时，Claude Code 沿用同一个 task_id，这一项会从 done 回到 running。
+   */
   syncItem("background", LocalBackgroundItem),
   /** 卡合回的结果，见 LocalMergeSync。 */
   syncItem("merge", LocalMergeSync),
@@ -784,6 +871,8 @@ export const LocalSyncBatchRequest = Type.Object({
   runnerVersion: Type.String(),
   /** 发这一批时本机的位置数（云端的 worker 列表和「资源」用）。 */
   slots: LocalSlots,
+  /** 本机读到的额度（读到过才带，见 LocalQuotaSync）：只有百分比、状态、重置时间，云端给手机看。 */
+  quota: Type.Optional(Type.Array(LocalQuotaSync, { maxItems: 4 })),
   /** 可以为空：本机开着、5 分钟里没别的要报时发一批空的当心跳，云端照样刷新本机的在线时间和位置数，回 accepted、rejected 都为空。 */
   items: Type.Array(LocalSyncItem, { maxItems: 50 }),
 }, strict);
@@ -836,6 +925,12 @@ export type TLocalGitRef = Static<typeof LocalGitRef>;
 export type TLocalMergeBlockReason = Static<typeof LocalMergeBlockReason>;
 export type TLocalMergeResponse = Static<typeof LocalMergeResponse>;
 export type TLocalMergeHoldReason = Static<typeof LocalMergeHoldReason>;
+export type TLocalQuotaWindow = Static<typeof LocalQuotaWindow>;
+export type TLocalQuotaSource = Static<typeof LocalQuotaSource>;
+export type TLocalQuotaSync = Static<typeof LocalQuotaSync>;
+export type TLocalToolStatus = Static<typeof LocalToolStatus>;
+export type TLocalHold = Static<typeof LocalHold>;
+export type TLocalMoney = Static<typeof LocalMoney>;
 export type TLocalMergeSync = Static<typeof LocalMergeSync>;
 export type TLocalQuestion = Static<typeof LocalQuestion>;
 export type TLocalQuestionRequestView = Static<typeof LocalQuestionRequestView>;
