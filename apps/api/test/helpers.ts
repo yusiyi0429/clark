@@ -391,6 +391,8 @@ export async function createTestApp(
     docChangeAgent?: Parameters<typeof buildApp>[0]["docChangeAgent"];
     /** 战场进展汇总的假 Agent；不注入时用真实装配（打开汇总接口才会调用）。 */
     battlefieldSummaryAgent?: Parameters<typeof buildApp>[0]["battlefieldSummaryAgent"];
+    /** V2 看板的假拆卡、假 Agent 验收；不注入时用真实装配（只在后台队列里调用）。 */
+    boardAgents?: Parameters<typeof buildApp>[0]["boardAgents"];
   } = {},
   researchService?: ResearchService,
 ): Promise<TestApp> {
