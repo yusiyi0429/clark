@@ -54,6 +54,16 @@ describe("本机程序契约", () => {
       { ...item, type: "cost", data: { modelLabel: "订阅", usage: { inputTokens: 1, outputTokens: 2, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null } } },
     ] })).toBe(true);
     expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", items: [] })).toBe(false);
+    // 交回点名产出和证据；专题新的一版、存进飞书的地址
+    const topic = { ...item, subject: { kind: "topic", topicId: "t-1" } };
+    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", items: [
+      { ...item, type: "handback", data: { summary: "做完了", criteria: [{ index: 1, result: "met", evidence: "a.md" }], outputKeys: [`${deviceId}:${sessionId}:3`] } },
+      { ...topic, type: "topic_version", data: { number: 3, kind: "review", label: null, note: "合成了三方意见", body: "# 分歧和建议" } },
+      { ...topic, type: "topic_version_feishu", data: { number: 3, feishuUrl: "https://x.feishu.cn/docx/abc" } },
+    ] })).toBe(true);
+    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", items: [{ ...item, type: "handback", data: { summary: "x", criteria: [] } }] })).toBe(false);
+    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", items: [{ ...topic, type: "topic_version", data: { number: 1, kind: "final", label: null, note: null, body: "x" } }] })).toBe(false);
+    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", items: [{ ...topic, type: "topic_version_feishu", data: { number: 1, feishuUrl: "http://x" } }] })).toBe(false);
     expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", items: [{ ...item, type: "repo_files", data: {} }] })).toBe(false);
     expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", items: [{ ...item, type: "artifact", data: {
       artifactId: "a1", title: "方案", fileName: "a.md", mimeType: "text/markdown", size: 11 * 1024 * 1024, sha256: "0".repeat(64), contentBase64: "",

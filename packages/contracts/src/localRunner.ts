@@ -257,6 +257,8 @@ export const LocalCreateSessionRequest = Type.Object({
   firstMessage: Type.String({ minLength: 1, maxLength: 20000 }),
   /** 覆盖「默认干净」：true 时带上本人全局配置（hooks、插件、个人 MCP）。 */
   includePersonalConfig: Type.Optional(Type.Boolean()),
+  /** 专题：云端已有的最新一版号（交代里的 latestVersion，没有版本时不填）。本机存新一版时从下一号往下编。 */
+  versionBase: Type.Optional(Type.Integer({ minimum: 0 })),
 }, strict);
 
 export const LocalSessionSummary = Type.Object({
@@ -342,6 +344,11 @@ export const LocalHandbackCriterion = Type.Object({
   evidence: Type.String({ maxLength: 2000 }),
 }, strict);
 
+/** 专题一版的种类：outline 提纲、draft 正文、review 评审会合成的「分歧和建议」。 */
+export const LocalTopicVersionKind = Type.Union([Type.Literal("outline"), Type.Literal("draft"), Type.Literal("review")]);
+/** 同步条目的幂等键，交回时用它点名产出和证据（云端存成 local_outputs.client_id）。 */
+const SyncKey = Type.String({ minLength: 10, maxLength: 200 });
+
 /**
  * GET /v1/sessions/:id/events（text/event-stream）。每条 `id: <seq>` + `data: <JSON>`。
  * 断线后带 Last-Event-ID 重连，本机从会话事件日志补发其后的全部事件；也可用 ?after=<seq>。
@@ -365,7 +372,9 @@ export const LocalSessionEvent = Type.Union([
     errorKind: Type.Optional(Type.Union([Type.Literal("auth"), Type.Literal("api"), Type.Literal("interrupted"), Type.Literal("other")])),
   }),
   ev("artifact", { artifactId: Id, title: Type.String(), fileName: Type.String(), size: Type.Integer({ minimum: 0 }), sha256: Type.String() }),
-  ev("handback", { summary: Type.String(), criteria: Type.Array(LocalHandbackCriterion) }),
+  ev("handback", { summary: Type.String(), criteria: Type.Array(LocalHandbackCriterion), outputKeys: Type.Array(SyncKey) }),
+  /** 专题存了新的一版（已排进上报队列）。 */
+  ev("version", { number: Type.Integer({ minimum: 1 }), kind: LocalTopicVersionKind, label: Nullable(Type.String()), note: Nullable(Type.String()) }),
   /** interjection_next_step：插话已送出，下一步生效；auth_required：执行方登录失效；agent_stderr：执行方报错输出。 */
   ev("notice", { level: Type.Union([Type.Literal("info"), Type.Literal("warn"), Type.Literal("error")]), code: Type.String(), text: Type.String() }),
 ]);
@@ -374,7 +383,7 @@ export const LocalSessionEvent = Type.Union([
 
 const syncItem = <T extends string, D extends TSchema>(type: T, data: D) => Type.Object({
   /** 幂等键：<deviceId>:<sessionId>:<本机序号>。云端按它去重，重复提交返回 accepted。 */
-  key: Type.String({ minLength: 10, maxLength: 200 }),
+  key: SyncKey,
   sessionId: Uuid,
   subject: LocalSessionSubject,
   occurredAt: Instant,
@@ -404,7 +413,31 @@ export const LocalSyncItem = Type.Union([
     sha256: Type.String({ pattern: "^[0-9a-f]{64}$" }),
     contentBase64: Type.String({ maxLength: 14 * 1024 * 1024 }),
   }, strict)),
-  syncItem("handback", Type.Object({ summary: Type.String({ maxLength: 4000 }), criteria: Type.Array(LocalHandbackCriterion, { maxItems: 50 }) }, strict)),
+  /**
+   * 交回（只有卡）。outputKeys 是这次交回点名用的产出和证据（它们的 artifact、evidence 条目的 key）：
+   * 执行方点了名就是那几份，没点名就是本会话上一次交回以后交的全部；可以为空。
+   */
+  syncItem("handback", Type.Object({
+    summary: Type.String({ maxLength: 4000 }),
+    criteria: Type.Array(LocalHandbackCriterion, { maxItems: 50 }),
+    outputKeys: Type.Array(SyncKey, { maxItems: 100 }),
+  }, strict)),
+  /**
+   * 专题新的一版（只有专题）：number 由本机从开工时的 versionBase 往下编；label 为 null 时云端按自己的规矩起名（「提纲」「第 N 版」）；
+   * note 是这一版改了什么；body 是 Markdown 正文。
+   */
+  syncItem("topic_version", Type.Object({
+    number: Type.Integer({ minimum: 1 }),
+    kind: LocalTopicVersionKind,
+    label: Nullable(Type.String({ minLength: 1, maxLength: 20 })),
+    note: Nullable(Type.String({ maxLength: 200 })),
+    body: Type.String({ minLength: 1, maxLength: 200000 }),
+  }, strict)),
+  /** 专题的第 number 版已由本机会话用本人的飞书登录存进飞书，feishuUrl 是飞书里的地址。 */
+  syncItem("topic_version_feishu", Type.Object({
+    number: Type.Integer({ minimum: 1 }),
+    feishuUrl: Type.String({ pattern: "^https://", maxLength: 2000 }),
+  }, strict)),
   /** 花费：每轮结束报一次本轮的增量。 */
   syncItem("cost", Type.Object({ modelLabel: Type.String(), usage: LocalUsage }, strict)),
 ]);
@@ -460,6 +493,7 @@ export type TLocalPermissionDecisionRequest = Static<typeof LocalPermissionDecis
 export type TLocalSessionActionResponse = Static<typeof LocalSessionActionResponse>;
 export type TLocalPlanEntry = Static<typeof LocalPlanEntry>;
 export type TLocalHandbackCriterion = Static<typeof LocalHandbackCriterion>;
+export type TLocalTopicVersionKind = Static<typeof LocalTopicVersionKind>;
 export type TLocalSessionEvent = Static<typeof LocalSessionEvent>;
 export type TLocalSyncItem = Static<typeof LocalSyncItem>;
 export type TLocalSyncBatchRequest = Static<typeof LocalSyncBatchRequest>;

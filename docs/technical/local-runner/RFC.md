@@ -112,14 +112,24 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
 
 文件里只写 `${变量名}`，值经 Claude Code 子进程的环境变量传进去，Claude Code 启动时展开（11/06 用假 MCP 服务实测：收到的是展开后的请求头；真机实测本会话 MCP 照常连上）。所以本会话密钥不落盘、不进命令行；云端令牌只在本机程序里，会话和它跑的命令都拿不到。
 
-联网搜索由天枢 MCP 提供（`/mcp/me` 上的只读 `web_search`，博查，钥匙留在服务器、按人限流），本机不另起搜索 MCP、不存博查钥匙。它的工具名等云端定了，填进 `sessions.ts` 的 `CLOUD_MCP_READONLY_TOOLS` 预先放行；天枢 MCP 的其他工具（写进展、建事项等）每次调用都要网页批准。
+联网搜索由天枢 MCP 提供（`/mcp/me` 上的只读 `web_search`，博查，钥匙留在服务器、按人限流），本机不另起搜索 MCP、不存博查钥匙。工具名 `web_search`（11/06 定），已在 `sessions.ts` 的 `CLOUD_MCP_READONLY_TOOLS` 里预先放行；天枢 MCP 的其他工具（写进展、建事项等）每次调用都要网页批准。
 
-本会话 MCP 的工具：`add_artifact`（工作目录里的 md/html/pdf/docx/txt，≤10 MB，同名再交是新一版）、`add_evidence`（说明/日志片段/链接/改动摘要）、`submit_handback`（逐条完成标准 met/partial/unmet + 证据 + 总结）。用 HTTP 而不是 stdio，是为了不给每个会话再起一个 150 MB 的本机程序进程。真机实测：Claude Code（haiku）经 ToolSearch 找到这几个工具，调用不弹权限，产出物和交回进了发件箱。
+本会话 MCP 的工具（卡和专题各看到自己那几个）：
+
+| 工具 | 谁有 | 做什么 |
+|-|-|-|
+| `add_artifact` | 卡、专题 | 交工作目录里的 md/html/pdf/docx/txt（≤10 MB，同名再交是新一版），返回编号 A1、A2… |
+| `add_evidence` | 卡、专题 | 交说明、日志片段、链接、改动摘要，返回编号 E1、E2… |
+| `hand_back` | 卡 | 逐条完成标准 met/partial/unmet + 证据 + 总结，`outputs` 点名用哪几份（编号）；不点名就是上次交回以后交的全部 |
+| `save_version` | 专题 | 存一版：工作目录里的 Markdown 文件，`kind` 是 outline/draft/review，`note` 写改了什么；号从开工时的 `versionBase`（交代里的 latestVersion）往下编 |
+| `set_feishu_url` | 专题 | 某一版存进本人飞书以后，报回第几版和地址 |
+
+用 HTTP 而不是 stdio，是为了不给每个会话再起一个 150 MB 的本机程序进程。真机实测：Claude Code（haiku）经 ToolSearch 找到这几个工具，调用不弹权限，产出物和交回进了发件箱。
 
 ## 8. 云端同步（本机 → 云端，单向）
 
 - `POST {apiBaseUrl}/api/local-runner/sync`，`Authorization: Bearer <个人令牌>`，体 `LocalSyncBatchRequest`（≤50 条、≤12 MB），回 `LocalSyncBatchResponse`。
-- 条目：`status`（状态变化）、`plan`（TodoWrite）、`evidence`、`artifact`（原文 base64）、`handback`、`cost`（每轮增量）。不传仓库文件、完整工具输出、环境变量、钥匙。
+- 条目：`status`（状态变化）、`plan`（TodoWrite）、`evidence`、`artifact`（原文 base64）、`handback`（带 `outputKeys`：点名的产出和证据的条目幂等键，云端存成 `local_outputs.client_id`）、`topic_version`（专题新的一版：号、种类、名字或 null、改了什么、Markdown 正文）、`topic_version_feishu`（第几版已存进飞书、地址）、`cost`（每轮增量）。不传仓库文件、完整工具输出、环境变量、钥匙。
 - 幂等键 `<deviceId>:<sessionId>:<本会话同步序号>`。云端按键去重，重复的也回 `accepted`；`rejected` 的本机记一笔后出队；回执里没提到的、网络错、5xx 都退避重试（1 s × 2^n，最长 5 分钟）。发件箱先落盘（`outbox.json`），断网、重启都不丢。
 - 关联：网页 `PUT /v1/cloud` 交 `apiBaseUrl` 和令牌；`apiBaseUrl` 的来源必须在白名单里，免得被指到别处。这个令牌同时用于会话里的天枢 MCP（第 7 节）。**建议 api 会话**给个人令牌加一种 `local` 客户端：能调 `/api/local-runner/*` 和 `/mcp/me`，网页配对后建一个这种令牌交给本机程序，设置页能看到、能吊销。
 

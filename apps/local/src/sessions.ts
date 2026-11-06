@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSyn
 import { basename, extname, join, resolve } from "node:path";
 import type {
   TLocalAgentKind, TLocalCreateSessionRequest, TLocalHandbackCriterion, TLocalPermissionRequestView, TLocalSendMessageResponse,
-  TLocalSessionStatus, TLocalSessionSubject, TLocalSessionSummary, TLocalSyncItem, TLocalUsage,
+  TLocalSessionKind, TLocalSessionStatus, TLocalSessionSubject, TLocalSessionSummary, TLocalSyncItem, TLocalTopicVersionKind, TLocalUsage,
 } from "@warmap/contracts";
 import { readJson, writeJsonAtomic, nowIso } from "./store.js";
 import type { EventLog, EventBody } from "./eventLog.js";
@@ -11,15 +11,15 @@ import type { AgentAdapter, AgentRun } from "./agents/types.js";
 import type { ModelProfiles } from "./models.js";
 import { isInside, type Folders } from "./folders.js";
 import type { Outbox } from "./outbox.js";
-import { SESSION_MCP_NAME, SESSION_TOOL_NAMES } from "./sessionMcp.js";
+import { SESSION_MCP_NAME, sessionToolNames } from "./sessionMcp.js";
 
 /** 云端天枢 MCP 在会话里的名字：和本人在 Claude Code 里配的天枢 MCP 同名，工具名一致。 */
 const CLOUD_MCP_NAME = "tianshu";
 /**
  * 云端天枢 MCP 里预先放行的只读工具（不弹权限请求）。联网搜索改由天枢提供（/mcp/me 上的 web_search，博查，钥匙留在服务器），
- * 工具名等云端定了填进来。其余工具（写进展、建事项等）每次调用都要网页批准。
+ * 其余工具（写进展、建事项等）每次调用都要网页批准。
  */
-const CLOUD_MCP_READONLY_TOOLS: string[] = [];
+const CLOUD_MCP_READONLY_TOOLS: string[] = ["web_search"];
 
 interface SessionRecord {
   id: string;
@@ -38,6 +38,12 @@ interface SessionRecord {
   syncSeq: number;
   /** 本会话的本机 MCP（交产出物、证据、交回）回连本机程序时出示的密钥。 */
   mcpSecret: string;
+  /** 交过的产出和证据：编号（A1、E1）给执行方点名用，key 是它们的同步条目幂等键。 */
+  outputs: { ref: string; key: string; title: string }[];
+  /** 上一次交回时已交到第几份（没点名时，交回算的是这之后的全部）。 */
+  handedBack: number;
+  /** 专题：最近一版的号（开工时取交代里的 latestVersion）。 */
+  versionNumber: number;
 }
 
 export class SessionError extends Error {
@@ -66,6 +72,7 @@ const ARTIFACT_TYPES: Record<string, string> = {
   ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".txt": "text/plain",
 };
 const MAX_ARTIFACT_BYTES = 10 * 1024 * 1024;
+const MAX_VERSION_CHARS = 200_000;
 const zeroUsage = (): TLocalUsage => ({ inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0 });
 const LIVE: TLocalSessionStatus[] = ["starting", "running", "waiting_permission", "idle"];
 
@@ -86,6 +93,9 @@ export class SessionManager {
     for (const id of readdirSync(this.dir)) {
       const rec = readJson<SessionRecord | null>(join(this.dir, id, "session.json"), null);
       if (!rec) continue;
+      rec.outputs ??= [];
+      rec.handedBack ??= 0;
+      rec.versionNumber ??= 0;
       this.records.set(rec.id, rec);
       // 本机程序重启时，上次的进程都已不在。
       if (LIVE.includes(rec.status)) this.setStatus(rec, "exited", { reason: "本机程序重启，会话已停；再发一句话会接着做" });
@@ -98,7 +108,7 @@ export class SessionManager {
   }
 
   private summary(rec: SessionRecord): TLocalSessionSummary {
-    const { mcpSecret: _s, syncSeq: _q, ...rest } = rec;
+    const { mcpSecret: _s, syncSeq: _q, outputs: _o, handedBack: _h, versionNumber: _v, ...rest } = rec;
     return { ...rest, lastSeq: this.d.log.lastSeq(rec.id), pendingPermissions: this.pending.get(rec.id)?.size ?? 0 };
   }
 
@@ -109,6 +119,11 @@ export class SessionManager {
   get(id: string): { session: TLocalSessionSummary; pendingPermissions: TLocalPermissionRequestView[] } {
     const rec = this.must(id);
     return { session: this.summary(rec), pendingPermissions: [...(this.pending.get(id)?.values() ?? [])] };
+  }
+
+  /** 本会话 MCP 按卡或专题给不同的工具。 */
+  kindOf(id: string): TLocalSessionKind {
+    return this.must(id).subject.kind;
   }
 
   activeCount(): number {
@@ -125,12 +140,13 @@ export class SessionManager {
     return this.d.log.append(rec.id, body);
   }
 
-  private sync(rec: SessionRecord, item: Omit<TLocalSyncItem, "key" | "sessionId" | "subject" | "occurredAt">) {
+  /** 排进发件箱，返回这一条的幂等键。 */
+  private sync(rec: SessionRecord, item: Omit<TLocalSyncItem, "key" | "sessionId" | "subject" | "occurredAt">): string {
     rec.syncSeq += 1;
     this.save(rec);
-    this.d.outbox.enqueue({
-      key: `${this.d.deviceId}:${rec.id}:${rec.syncSeq}`, sessionId: rec.id, subject: rec.subject, occurredAt: nowIso(), ...item,
-    } as TLocalSyncItem);
+    const key = `${this.d.deviceId}:${rec.id}:${rec.syncSeq}`;
+    this.d.outbox.enqueue({ key, sessionId: rec.id, subject: rec.subject, occurredAt: nowIso(), ...item } as TLocalSyncItem);
+    return key;
   }
 
   private setStatus(rec: SessionRecord, status: TLocalSessionStatus, extra: { exitCode?: number | null; reason?: string } = {}) {
@@ -167,6 +183,7 @@ export class SessionManager {
       id: randomUUID(), subject, title: req.title, agent, modelProfileId: model.profileId, modelLabel: model.label, cwd,
       includePersonalConfig: req.includePersonalConfig ?? defaults.includePersonalConfig,
       createdAt: now, updatedAt: now, status: "starting", usage: zeroUsage(), syncSeq: 0, mcpSecret: randomBytes(24).toString("hex"),
+      outputs: [], handedBack: 0, versionNumber: subject.kind === "topic" ? req.versionBase ?? 0 : 0,
     };
     await this.startRun(rec, false); // 起不来（没装、太旧、没实现）直接抛给调用方，不留记录
     this.records.set(rec.id, rec);
@@ -193,7 +210,7 @@ export class SessionManager {
         headers: secretHeader,
       },
     };
-    const allowedTools = [...SESSION_TOOL_NAMES];
+    const allowedTools = sessionToolNames(rec.subject.kind);
     if (await this.d.cloudLinked?.()) {
       // 天枢 MCP 经本机程序转发（/internal/sessions/:id/cloud-mcp），云端令牌留在本机程序里，会话和它跑的命令都拿不到。
       servers[CLOUD_MCP_NAME] = { type: "http", url: `${local}/cloud-mcp`, headers: secretHeader };
@@ -370,8 +387,9 @@ export class SessionManager {
     const artifactId = createHash("sha256").update(`${rec.id}:${fileName}`).digest("hex").slice(0, 24);
     const title = (input.title?.trim() || fileName).slice(0, 200);
     this.emit(rec, { type: "artifact", artifactId, title, fileName, size, sha256 });
-    this.sync(rec, { type: "artifact", data: { artifactId, title, fileName, mimeType, size, sha256, contentBase64: content.toString("base64") } });
-    return `已交：${title}（${Math.ceil(size / 1024)} KB）`;
+    const key = this.sync(rec, { type: "artifact", data: { artifactId, title, fileName, mimeType, size, sha256, contentBase64: content.toString("base64") } });
+    const ref = this.remember(rec, "A", key, title);
+    return `已交：${title}（${Math.ceil(size / 1024)} KB），编号 ${ref}`;
   }
 
   addEvidence(id: string, input: { kind: "note" | "log" | "link" | "diff_summary"; title: string; text?: string; url?: string }): string {
@@ -379,17 +397,69 @@ export class SessionManager {
     const title = input.title.trim().slice(0, 200);
     if (!title) throw new SessionError("validation", "证据要有标题");
     if (input.url !== undefined && (!/^https?:\/\//.test(input.url) || input.url.length > 2000)) throw new SessionError("validation", "链接只收 2000 字以内的 http(s) 地址");
-    this.sync(rec, { type: "evidence", data: { kind: input.kind, title, ...(input.text ? { text: input.text.slice(0, 8000) } : {}), ...(input.url ? { url: input.url } : {}) } });
+    const key = this.sync(rec, { type: "evidence", data: { kind: input.kind, title, ...(input.text ? { text: input.text.slice(0, 8000) } : {}), ...(input.url ? { url: input.url } : {}) } });
+    const ref = this.remember(rec, "E", key, title);
     this.emit(rec, { type: "notice", level: "info", code: "evidence_added", text: `交了一条证据：${title.slice(0, 80)}` });
-    return "已记下这条证据";
+    return `已记下这条证据，编号 ${ref}`;
   }
 
-  submitHandback(id: string, input: { summary: string; criteria: TLocalHandbackCriterion[] }): string {
+  private remember(rec: SessionRecord, prefix: "A" | "E", key: string, title: string): string {
+    const ref = `${prefix}${rec.outputs.filter((o) => o.ref.startsWith(prefix)).length + 1}`;
+    rec.outputs.push({ ref, key, title });
+    this.save(rec);
+    return ref;
+  }
+
+  /** 交回：outputs 是点名的编号（A1、E1）；不点名就是上一次交回以后交的全部。 */
+  handBack(id: string, input: { summary: string; criteria: TLocalHandbackCriterion[]; outputs?: string[] }): string {
     const rec = this.must(id);
+    if (rec.subject.kind !== "card") throw new SessionError("validation", "专题不用交回，用 save_version 存版本");
+    let picked: SessionRecord["outputs"];
+    if (input.outputs) {
+      const unknown = input.outputs.filter((r) => !rec.outputs.some((o) => o.ref === r.trim().toUpperCase()));
+      if (unknown.length) throw new SessionError("validation", `没有这些编号：${unknown.join("、")}。可用的：${rec.outputs.map((o) => o.ref).join("、") || "（还没交过产出和证据）"}`);
+      picked = rec.outputs.filter((o) => input.outputs!.some((r) => r.trim().toUpperCase() === o.ref));
+    } else {
+      picked = rec.outputs.slice(rec.handedBack);
+    }
     const summary = input.summary.slice(0, 4000);
     const criteria = input.criteria.slice(0, 50);
-    this.emit(rec, { type: "handback", summary, criteria });
-    this.sync(rec, { type: "handback", data: { summary, criteria } });
-    return "已交回，等 Agent 验收";
+    const outputKeys = picked.slice(0, 100).map((o) => o.key);
+    rec.handedBack = rec.outputs.length;
+    this.emit(rec, { type: "handback", summary, criteria, outputKeys });
+    this.sync(rec, { type: "handback", data: { summary, criteria, outputKeys } });
+    return `已交回（用了 ${picked.map((o) => o.ref).join("、") || "0 份产出和证据"}），等 Agent 验收`;
+  }
+
+  /** 专题存一版：读工作目录里的 Markdown，号从开工时的 versionBase 往下编。 */
+  saveVersion(id: string, input: { path: string; kind: TLocalTopicVersionKind; label?: string; note?: string }): string {
+    const rec = this.must(id);
+    if (rec.subject.kind !== "topic") throw new SessionError("validation", "只有专题存版本；卡做完用 hand_back 交回");
+    const file = resolve(rec.cwd, input.path);
+    if (!isInside(rec.cwd, file)) throw new SessionError("folder_not_allowed", "版本文件必须在本会话的工作目录里");
+    if (![".md", ".markdown", ".txt"].includes(extname(file).toLowerCase())) throw new SessionError("validation", "版本要存成 Markdown（.md）");
+    if (!existsSync(file) || !statSync(file).isFile()) throw new SessionError("not_found", "文件不存在");
+    const body = readFileSync(file, "utf8");
+    if (!body.trim()) throw new SessionError("validation", "文件是空的");
+    if (body.length > MAX_VERSION_CHARS) throw new SessionError("validation", `一版最多 ${MAX_VERSION_CHARS} 字`);
+    const label = input.label?.trim().slice(0, 20) || null;
+    const note = input.note?.trim().slice(0, 200) || null;
+    rec.versionNumber += 1;
+    const number = rec.versionNumber;
+    this.emit(rec, { type: "version", number, kind: input.kind, label, note });
+    this.sync(rec, { type: "topic_version", data: { number, kind: input.kind, label, note, body } });
+    return `已存第 ${number} 版${label ? `（${label}）` : ""}`;
+  }
+
+  /** 专题第 number 版已存进飞书：报回地址。 */
+  setFeishuUrl(id: string, input: { number: number; url: string }): string {
+    const rec = this.must(id);
+    if (rec.subject.kind !== "topic") throw new SessionError("validation", "只有专题的版本能存进飞书");
+    if (input.number < 1 || input.number > rec.versionNumber) throw new SessionError("validation", `没有第 ${input.number} 版（现在最新是第 ${rec.versionNumber} 版）`);
+    const url = input.url.trim();
+    if (!/^https:\/\//.test(url) || url.length > 2000) throw new SessionError("validation", "飞书地址要是 https 开头");
+    this.sync(rec, { type: "topic_version_feishu", data: { number: input.number, feishuUrl: url } });
+    this.emit(rec, { type: "notice", level: "info", code: "version_saved_to_feishu", text: `第 ${input.number} 版已存进飞书` });
+    return `已记下第 ${input.number} 版的飞书地址`;
   }
 }
