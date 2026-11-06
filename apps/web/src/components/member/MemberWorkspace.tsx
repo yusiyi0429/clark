@@ -1,97 +1,33 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { Lock } from "lucide-react";
 import { AccountMenu, type Account } from "@/components/AccountMenu";
-import { ActionNoticeCard } from "@/components/ActionNoticeCard";
-import { unplacedNotices } from "@/components/tasks/Unplaced";
 import { HeroButton } from "@/components/HeroButton";
-import { RailClock } from "@/components/NotificationRail";
-import { MissionCardNoticeGroup } from "@/components/missionCards/MissionCardNoticeGroup";
-import { MonthlyReviewNotices } from "@/components/monthlyReview/MonthlyReviewNotices";
-import { M2EntryNotice } from "@/components/monthlyReview/M2EntryNotice";
-import { PersonalReviewBoard } from "@/components/monthlyReview/PersonalReviewBoard";
-import { RequestNotices, type RequestCounts } from "@/components/requests/RequestNotices";
+import { type RequestCounts } from "@/components/requests/RequestNotices";
 import { RequestListPanel } from "@/components/requests/RequestListScreen";
-import { MeetingCardNoticeList, useMeetingRecords } from "@/components/meeting/MeetingCardNotices";
-import { useFeishuEvents } from "@/components/meeting/useFeishuEvents";
-import { railBackgroundProps, useRailBackground } from "@/components/railBackground/useRailBackground";
 import { WorkspaceFrame } from "@/components/shell/WorkspaceFrame";
 import { useWorkspace } from "@/components/shell/WorkspaceContext";
-import { logout } from "@/lib/logout";
 import { HomeActions } from "./home/HomeActions";
 import { HomePlan } from "./home/HomePlan";
 import { useHomePlan } from "./home/useHomePlan";
-import { MemberRadarNotices, noteworthySignals } from "./MemberRadarNotices";
-import { MemberMeetingSchedule } from "./MemberMeetingSchedule";
-import { memberNoticeGroups, quietNoticeCount } from "./memberNotices";
+import { MemberNoticeRail } from "./MemberNoticeRail";
 import { useMemberHome } from "./useMemberHome";
-import n from "@/styles/notifications.module.css";
-import rb from "@/styles/rail-background.module.css";
 import m from "@/styles/member-home.module.css";
 
 const NO_REQUESTS: RequestCounts = { items: 0, waitingReplies: 0 };
 
 /** 成员首页保留在共享外壳内；Mission Card、战场与雷达详情都在同一个展开区打开。 */
 export function MemberWorkspace({ displayName, loginId, viewerId = null, children }: { displayName: string; loginId?: string; viewerId?: string | null; children?: ReactNode }) {
-  const [leaving, setLeaving] = useState(false);
-  /** 左栏请求、影响两组的条数（算进空通知提示）和首页「等回复 N」：跟着那两组的轮询走。 */
+  /** 首页「等回复 N」：跟着左栏请求、影响两组的轮询走。 */
   const [requests, setRequests] = useState(NO_REQUESTS);
   const home = useMemberHome();
   // 首页计划和通知栏的「待归位」用同一份。
   const plan = useHomePlan();
-  const railBackground = useRailBackground();
-  const records = useMeetingRecords();
-  const feishuEvents = useFeishuEvents();
-  const radarSignals = noteworthySignals(home.radar);
   const account = { personId: viewerId, displayName, loginId, role: "member" as const };
   return (
     <WorkspaceFrame homeHref="/me" viewerId={viewerId} account={account} agentTitle="我的对话"
       home={<MemberHomeBody displayName={displayName} home={home} plan={plan} account={account} waitingReplies={requests.waitingReplies} />}
-      notifications={(api, currentHref) => (
-        <aside className={`${n.rail} ${rb.bg}`} {...railBackgroundProps(railBackground)} aria-label="通知">
-          <RailClock
-            homeActive={!api.detailOpen}
-            onHome={() => api.navigate("/me")}
-            lead={
-              <HeroButton variant="ghost" size="sm" isIconOnly type="button" onPress={() => {
-                  setLeaving(true);
-                  void logout();
-                }}
-                isDisabled={leaving} aria-label="退出登录" title="退出登录">
-                <Lock aria-hidden="true" />
-              </HeroButton>
-            }
-          />
-          <div className={n.noticeList}>
-            {/* M2 接管复盘和拆解时，天枢自己的周期卡（个人复盘、月度复盘）不出，同 CEO 通知栏；任务卡签发只看 M2。 */}
-            <MeetingCardNoticeList meetings={records.meetings} confirms={records.confirms} minutes={records.minutes} meetingBase="/me/meetings" onNavigate={api.navigate} onChanged={records.reload} />
-            <MemberMeetingSchedule meetings={home.meetings} feishuEvents={feishuEvents} onNavigate={api.navigate} />
-            {api.m2Available ? null : <PersonalReviewBoard onNavigate={api.navigate} />}
-            <RequestNotices base="/me/requests" currentHref={currentHref} onNavigate={api.navigate} header={false} onCounts={setRequests} />
-            <M2EntryNotice available={api.m2Available ?? false} />
-            {api.m2Available ? null : <MonthlyReviewNotices onNavigate={api.navigate} />}
-            {home.rounds.map((round) => <MissionCardNoticeGroup key={round.roundId} round={round} entry="member" currentHref={currentHref} onNavigate={api.navigate} onRefresh={home.refresh} />)}
-            <ActionNoticeCard id="unplaced" plain title="待归位的事项" subtitle="还没有所属 Mission" mark="unplaced"
-              notices={unplacedNotices(plan.plan?.unplaced ?? [], (id, from) => api.navigate(`/me/tasks/${encodeURIComponent(id)}`, from))} onSettled={() => undefined} />
-            <ActionNoticeCard id="assigned" plain title="分给你的事与邀请" subtitle="会后分派与协作邀请" mark="assign" notices={memberNoticeGroups(home.notifications, { ...home, openTask: (id, from) => api.navigate(`/me/tasks/${encodeURIComponent(id)}`, from), openGroup: (type, id, from) => api.navigate(`/me/${type === "issue" ? "issues" : "meetings"}/${encodeURIComponent(id)}`, from) }).assigned} onSettled={home.settle} />
-            <ActionNoticeCard id="results" title="回复与结果" mark="progress" notices={memberNoticeGroups(home.notifications, { ...home, openTask: (id, from) => api.navigate(`/me/tasks/${encodeURIComponent(id)}`, from), openAcceptance: (id, from) => api.navigate(`/me/tasks/${encodeURIComponent(id)}?accept=1`, from), openGroup: (type, id, from) => api.navigate(`/me/${type === "issue" ? "issues" : "meetings"}/${encodeURIComponent(id)}`, from) }).results} onSettled={home.settle} />
-            <ActionNoticeCard id="progress" title="协作进展" mark="progress" notices={memberNoticeGroups(home.notifications, { ...home, openTask: (id, from) => api.navigate(`/me/tasks/${encodeURIComponent(id)}`, from), openAcceptance: (id, from) => api.navigate(`/me/tasks/${encodeURIComponent(id)}?accept=1`, from), openGroup: (type, id, from) => api.navigate(`/me/${type === "issue" ? "issues" : "meetings"}/${encodeURIComponent(id)}`, from) }).progress} onSettled={home.settle} />
-            <ActionNoticeCard id="thread-unread" title="群聊新消息" mark="chat" notices={home.unreadThreads.map((item) => ({ id: `${item.objectType}:${item.objectId}`, title: `${item.objectType === "issue" ? "议题" : item.objectType === "meeting" ? "会议" : "执行事项"}「${item.title}」 · ${item.unread} 条新消息`, detail: "群聊", onOpen: (from: Element | null) => {
-              window.dispatchEvent(new CustomEvent("open-thread-channel", { detail: { objectType: item.objectType, objectId: item.objectId } }));
-              api.navigate(`${item.href}?channel=group`, from);
-            }, buttons: [] })).concat(home.unreadMissionGroups.map((item) => ({ id: `mission-card:${item.cardId}`, title: `任务卡「${item.title}」 · ${item.unread} 条新消息`, detail: "群聊", onOpen: (from: Element | null) => {
-              window.dispatchEvent(new CustomEvent("open-mission-group-channel", { detail: { cardId: item.cardId } }));
-              api.navigate(`${item.href}?channel=group`, from);
-            }, buttons: [] })))} onSettled={() => undefined} />
-            <MemberRadarNotices signals={radarSignals} currentHref={currentHref} onNavigate={api.navigate} onRead={home.readRadarNotice} />
-            {(plan.plan?.unplaced.length ?? 0) + requests.items + records.meetings.length + records.confirms.length + records.minutes.length + home.rounds.length + home.meetings.length + feishuEvents.length + home.unreadThreads.length + home.unreadMissionGroups.length + quietNoticeCount(home.notifications) + radarSignals.length === 0 ? <p className={m.quiet}>暂时没有新通知</p> : null}
-          </div>
-          <div className={n.railFoot}>
-            <AccountMenu account={account} onNavigate={api.navigate} />
-          </div>
-        </aside>
-      )}
+      notifications={(api, currentHref) => <MemberNoticeRail api={api} currentHref={currentHref} home={home} plan={plan} account={account} onRequestCounts={setRequests} />}
     >{children}</WorkspaceFrame>
   );
 }
