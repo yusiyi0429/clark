@@ -10,7 +10,7 @@ import { MissionList } from "@/components/member/home/MissionList";
 
 const task = (extra: Partial<TTaskView> = {}): TTaskView => ({
   id: "t1", version: 3, title: "研究一号位外部数据源的付费模式", status: "not_started", source: "meeting", startDate: null, dueDate: null, doneDefinition: null,
-  card: { stage: "todo", wait: null, role: null, executor: null, model: null, criterion: null, run: null, handback: null, deliverable: null },
+  card: { stage: "todo", wait: null, role: null, executor: null, model: null, criterion: null, run: null, handback: null, deliverable: null, after: [] },
   mission: null, waitingOn: null, owner: { personId: "sun", name: "孙铭泽" }, collaborators: [], latestProgress: null, returnReason: null,
   origin: { type: "meeting", meetingId: "m1", meetingTitle: "inception review", quote: null }, awaitingAcceptance: false, planTaskId: null, blocker: null,
   unplaced: { reason: "你名下没有和数据源调研对得上的 Mission" }, createdAt: "2026-10-26T08:00:00Z", updatedAt: "2026-10-26T08:00:00Z", ...extra,

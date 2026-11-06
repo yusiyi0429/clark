@@ -16,7 +16,7 @@ const mission = { missionId: "sun-202610-1", title: "CEO / DRI Agent 从能用�
 const activity = (id: string, title: string, extra: Record<string, unknown> = {}) => ({
   id, version: 2, title, status: "in_progress", source: "plan", startDate: "2026-10-19", dueDate: "2026-10-25", doneDefinition: null,
   mission, waitingOn: null, owner: person, collaborators: [], latestProgress: null, returnReason: null, origin: null,
-  awaitingAcceptance: false, planTaskId: null, blocker: null, createdAt: now, updatedAt: now, card: { stage: "doing", wait: null, role: null, executor: null, model: null, criterion: null, run: null, handback: null, deliverable: null }, ...extra,
+  awaitingAcceptance: false, planTaskId: null, blocker: null, createdAt: now, updatedAt: now, card: { stage: "doing", wait: null, role: null, executor: null, model: null, criterion: null, run: null, handback: null, deliverable: null, after: [] }, ...extra,
 });
 const day = (n: number) => `2026-10-${String(n).padStart(2, "0")}`;
 /** 10 月 31 天；2026-10-01 是周四，周六周日休息。 */
