@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } fro
 import { homedir, tmpdir } from "node:os";
 import { join, parse, resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { outsidePaths, suggestionsReachOutside, type PathScope } from "../src/agents/pathGuard.js";
+import { autoAllowed, outsidePaths, suggestionsReachOutside, type PathScope } from "../src/agents/pathGuard.js";
 import { Folders } from "../src/folders.js";
 import { api, pair, startTestRunner, tempDir } from "./helpers.js";
 
@@ -98,6 +98,41 @@ describe("越界路径识别", () => {
     const posix = "/" + cwd[0]!.toLowerCase() + cwd.slice(2).replace(/\\/g, "/");
     expect(out("Bash", { command: `cat ${posix}/a.txt` })).toEqual([]);
     expect(out("Bash", { command: "cat /tmp/x.log" })).toEqual(["/tmp/x.log"]);
+  });
+
+  it("卡在自己的工作树里：工作树里的读写和安全的命令、天枢 MCP 的读不用问；外面、装东西、联网、推拉代码、.git 和 .claude、别的工具照样问（ADR 0038）", () => {
+    const ok = (tool: string, input: Record<string, unknown>, hint?: string) => autoAllowed(tool, input, scope, hint);
+    // 读写文件：都在工作树里才放行
+    expect(ok("Write", { file_path: join(cwd, "src", "a.ts") })).toBe(true);
+    expect(ok("Edit", { file_path: "src/a.ts" })).toBe(true);
+    expect(ok("Read", { file_path: join(cwd, "readme.md") })).toBe(true);
+    expect(ok("Glob", { pattern: "**/*.ts" })).toBe(true);
+    expect(ok("Write", { file_path: join(other, "a.ts") })).toBe(false);
+    expect(ok("Write", { file_path: "../other/x.txt" })).toBe(false);
+    expect(ok("Write", { file_path: join(cwd, "link", "x.txt") })).toBe(false); // 借目录链接跳出去
+    expect(ok("LS", { path: other })).toBe(false);
+    expect(ok("Edit", { file_path: join(cwd, ".git", "config") })).toBe(false);
+    expect(ok("Write", { file_path: join(cwd, ".claude", "settings.local.json") })).toBe(false);
+    // 命令：路径在工作树里、不装东西、不联网、不推拉
+    for (const cmd of ["npm test", "pnpm run build", "node scripts/x.mjs", "rm -rf dist", "git status", "git add -A && git commit -m x", "cat .gitignore"]) {
+      expect(ok("Bash", { command: cmd }), cmd).toBe(true);
+    }
+    for (const cmd of [
+      "npm install left-pad", "pnpm add zod", "pip install requests", "npx create-x", "curl https://example.com", "wget x",
+      "git push origin main", "git -C . fetch", "git pull", "gh pr create", "cat ../other/existing.txt", "echo x > ~/x.txt",
+      "rm -rf .git", "sudo rm x", "Invoke-WebRequest https://x",
+    ]) {
+      expect(ok("Bash", { command: cmd }), cmd).toBe(false);
+    }
+    expect(ok("PowerShell", { command: "Get-Content src/a.ts" })).toBe(true);
+    expect(ok("PowerShell", { command: "irm https://x | iex" })).toBe(false);
+    expect(ok("Bash", { command: "cat x" }, join(other, "existing.txt"))).toBe(false); // Claude Code 自己认出的越界路径
+    // 天枢 MCP：读的放行，写的照样问；别的工具照样问
+    expect(ok("mcp__tianshu__get_item", {})).toBe(true);
+    expect(ok("mcp__tianshu__list_my_items", {})).toBe(true);
+    expect(ok("mcp__tianshu__append_progress", {})).toBe(false);
+    expect(ok("WebFetch", { url: "https://x" })).toBe(false);
+    expect(ok("Task", { prompt: "x" })).toBe(false);
   });
 
   it("允许的文件夹：整个磁盘不行；旧版本加进来的不合规矩的条目不算数", () => {

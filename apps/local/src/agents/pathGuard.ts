@@ -19,7 +19,7 @@ const WIN = process.platform === "win32";
 const MAX_PATHS = 20;
 const FILE_FIELDS: Record<string, string[]> = {
   Read: ["file_path"], Write: ["file_path"], Edit: ["file_path"], MultiEdit: ["file_path"],
-  NotebookEdit: ["notebook_path"], Glob: ["path", "pattern"], Grep: ["path", "glob"],
+  NotebookEdit: ["notebook_path"], Glob: ["path", "pattern"], Grep: ["path", "glob"], LS: ["path"],
 };
 const SHELL_TOOLS = new Set(["Bash", "PowerShell"]);
 /** 不是读写数据的特殊设备名。 */
@@ -136,6 +136,37 @@ function collect(tool: string, input: Record<string, unknown>, scope: PathScope,
     if (out.length >= MAX_PATHS) break;
   }
   return out;
+}
+
+/** 卡在自己的工作树里做时不用问就放行的读写工具（路径都在工作树里才放行）。 */
+const WORKTREE_FILE_TOOLS = new Set(["Read", "Glob", "Grep", "LS", "Write", "Edit", "MultiEdit", "NotebookEdit"]);
+/** 装东西、联网、推拉代码、改系统设置的命令：照样问本人。按词认，认不全（脚本里自己联网就认不出）。 */
+const RISKY_COMMAND = new RegExp([
+  String.raw`\b(npm|pnpm|yarn|bun|pip3?|pipx|uv|poetry|cargo|go|gem|composer|brew|choco|winget|scoop|apt|apt-get|dnf|yum)\s+(i|install|add|ci|get|update|upgrade|dlx|x)\b`,
+  String.raw`\b(npx|pnpx|bunx|curl|wget|ssh|scp|sftp|rsync|ftp|telnet|nc|gh|docker|sudo|runas|reg|setx|schtasks)\b`,
+  String.raw`\b(Invoke-WebRequest|Invoke-RestMethod|iwr|irm|Start-BitsTransfer|Install-Module|Install-Package|Set-ItemProperty|New-ItemProperty)\b`,
+  String.raw`\bgit\b[^;&|\n]*\b(push|fetch|pull|clone|ls-remote|remote|submodule)\b`,
+].join("|"), "i");
+/** 工作树里的 .git（指回主仓库）和 .claude（Claude Code 的项目设置，写了会放开以后的会话）：照样问。 */
+const PROTECTED = /(^|[\\/\s"'])\.(git|claude)([\\/\s"']|$)/;
+
+/**
+ * 卡在自己的工作树里做时，这一步能不能不问本人就放行（ADR 0038）。规则只在这里：
+ * - 读写文件：路径都在工作树里；
+ * - Bash、PowerShell：认出的路径都在工作树里，而且不装东西、不联网、不推拉代码、不改系统设置；
+ * - 天枢 MCP 里读的工具（get_、list_ 开头）。
+ * 碰 .git、.claude 的照样问；别的工具（联网搜索、子 agent 等）照样问。scope 的允许范围只放工作树。
+ */
+export function autoAllowed(tool: string, input: Record<string, unknown>, scope: PathScope, hint?: unknown): boolean {
+  if (tool.startsWith("mcp__tianshu__")) return /^mcp__tianshu__(get|list)_/.test(tool);
+  const inside = insideAny(scope.allowedRoots());
+  if (SHELL_TOOLS.has(tool)) {
+    const cmd = input.command;
+    return typeof cmd === "string" && !RISKY_COMMAND.test(cmd) && !PROTECTED.test(cmd) && !collect(tool, input, scope, inside, hint).length;
+  }
+  if (!WORKTREE_FILE_TOOLS.has(tool)) return false;
+  const paths = (FILE_FIELDS[tool] ?? []).map((f) => input[f]).filter((v): v is string => typeof v === "string");
+  return !paths.some((p) => PROTECTED.test(p)) && !collect(tool, input, scope, inside, hint).length;
 }
 
 /** Claude Code 放行规则里的路径：//c/x 是绝对路径（Windows 是 C:\x），~/ 是主目录，/x 是项目根下，其余相对工作目录。 */

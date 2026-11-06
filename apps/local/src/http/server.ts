@@ -4,7 +4,7 @@ import { Value } from "@sinclair/typebox/value";
 import {
   LOCAL_RUNNER_PROTOCOL, LOCAL_RUNNER_ROUTES, LOCAL_RUNNER_TOKEN_HEADER,
   LocalPairingStartRequest, LocalAgentLoginCodeRequest, LocalCloudLinkRequest, LocalSettingsPatch, LocalModelProfileUpsert,
-  LocalCreateSessionRequest, LocalCreateSessionBatchRequest, LocalSendMessageRequest, LocalPermissionDecisionRequest,
+  LocalCreateSessionRequest, LocalCreateSessionBatchRequest, LocalSendMessageRequest, LocalPermissionDecisionRequest, LocalQuestionAnswerRequest,
   type TLocalRunnerErrorCode, type TLocalStatusResponse, type TLocalHealthResponse,
 } from "@warmap/contracts";
 import { checkHost, checkJson, checkOrigin, corsHeaders, preflightHeaders, type Rejection } from "./security.js";
@@ -186,6 +186,7 @@ export function createServer(d: ServerDeps): http.Server {
     decidePermission: (c) => ({ session: d.sessions.decide(c.params.id!, c.params.requestId!, validate(LocalPermissionDecisionRequest, c.body)) }),
     kill: async (c) => ({ session: await d.sessions.kill(c.params.id!) }),
     mergeSession: (c) => d.sessions.merge(c.params.id!),
+    answerQuestion: (c) => ({ session: d.sessions.answerQuestion(c.params.id!, c.params.requestId!, validate(LocalQuestionAnswerRequest, c.body)) }),
   };
 
   function agentMustBeClaude(c: Ctx) {

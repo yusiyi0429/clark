@@ -17,6 +17,7 @@ export interface CloudTarget { apiBaseUrl: string; token: string }
 const MAX_BATCH_ITEMS = 50;
 const MAX_BATCH_BYTES = 12 * 1024 * 1024;
 const MAX_BACKOFF_MS = 5 * 60_000;
+const REJECTED = "云端令牌无效，请在天枢网页里重新连接本机";
 /** 这么久没同步过任何东西就发一次心跳（云端 10 分钟没收到同步就当本机离线）。 */
 const HEARTBEAT_MS = 5 * 60_000;
 /** 这些 4xx 说明条目本身不合格：整批被拒时拆开逐条发，单条再被拒就丢掉，不让一条坏的卡住后面所有的。 */
@@ -33,6 +34,8 @@ export class Outbox {
   slots: () => TLocalSlots = () => ({ max: 3, running: 0, queued: 0 });
   /** 有条目出队（云端收下或拒收）以后调：交回送到了，本机才去取验收交代。 */
   onSent: () => void = () => {};
+  /** 同步回 401（令牌被拒）时调，带被拒的令牌：app 把关联标成没关联，网页会自己重新关联；条目留着，关联上以后接着发。 */
+  onRejected: (token: string) => void = () => {};
   private state: State;
   private timer: NodeJS.Timeout | null = null;
   private flushing: Promise<void> | null = null;
@@ -109,15 +112,25 @@ export class Outbox {
     this.beat.unref?.();
   }
 
-  /** 心跳：5 分钟里没同步过任何东西（闲着，或条目都在退避）时发一批空的，让云端知道本机还开着。从不抛错，没发成等下一分钟再试。 */
-  async heartbeat(): Promise<void> {
-    if (this.now() - this.lastOkAt < HEARTBEAT_MS) return;
+  /**
+   * 心跳：5 分钟里没同步过任何东西（闲着，或条目都在退避）时发一批空的，让云端知道本机还开着。从不抛错，没发成等下一分钟再试。
+   * force：马上发一次，用来确认令牌还有没有效（会话的天枢 MCP、验收交代碰到 401 时）；回 401 就当令牌被拒。
+   */
+  async heartbeat(force = false): Promise<void> {
+    if (!force && this.now() - this.lastOkAt < HEARTBEAT_MS) return;
     const target = await this.target().catch(() => null);
     if (!target) return;
     const res = await this.post(target, []).catch(() => null);
+    if (res?.status === 401) {
+      this.state.lastError = REJECTED;
+      this.save();
+      this.onRejected(target.token);
+      return;
+    }
     if (!res?.ok) return;
     this.lastOkAt = this.now();
     this.state.lastSyncedAt = nowIso();
+    if (!this.state.entries.length) this.state.lastError = null; // 重新关联以后，令牌被拒那句不再留着
     this.save();
   }
 
@@ -187,7 +200,8 @@ export class Outbox {
           error = `云端拒收一条 ${batch[0]!.item.type}（${res.status}）：${detail}`;
         }
       } else if (!res.ok) {
-        throw new Error(res.status === 401 ? "云端令牌无效，请在天枢网页里重新连接本机" : `云端返回 ${res.status}`);
+        if (res.status === 401) this.onRejected(target.token);
+        throw new Error(res.status === 401 ? REJECTED : `云端返回 ${res.status}`);
       } else {
         const parsed = (await res.json()) as unknown;
         if (!Value.Check(LocalSyncBatchResponse, parsed)) throw new Error("云端回执格式不对");

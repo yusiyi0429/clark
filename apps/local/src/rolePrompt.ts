@@ -8,7 +8,8 @@ import type { TLocalRole, TLocalRoleTool, TLocalSessionKind, TLocalVerdictCriter
 const CARD_RULES = `## 规矩
 - 产出写在当前工作目录里，用 add_artifact 交；证据（说明、日志片段、链接、改动摘要）用 add_evidence 交。两个工具都会返回编号（A1、E1）。
 - 做完用 hand_back 交回：对照完成标准逐条写达到、部分还是没达到，附证据，点名用到的产出和证据编号，再写一句总结。交回后由验收员验收，没过会把意见发回来，照着改完再交回。
-- 只在当前工作目录和本人允许的文件夹里读写，要碰别处先说为什么。`;
+- 只在当前工作目录和本人允许的文件夹里读写，要碰别处先说为什么。
+- 报告、命令输出、测试结果写进交回的正文和证据（add_evidence），不要在仓库里留报告或输出文件：交回时工作目录里的改动都会进卡的分支。`;
 
 const TOPIC_RULES = `## 规矩
 - 先交提纲：写成工作目录里的 Markdown 文件，用 save_version（kind=outline）存，然后停下，等本人的意见。
@@ -19,12 +20,14 @@ const TOPIC_RULES = `## 规矩
 const PLAN_RULES = `## 规矩
 - 你是规划员：只读，不改文件、不跑命令。用天枢 MCP 的 get_task_context 读这个 Task 的上下文（约定、Mission、近期的事和决定、上一版交付物和评审），需要时读工作目录里的文件。
 - 把 Task 拆成计划和派活单，用 propose_plan 交：计划几步、先后、风险；派活单每件写交代、完成标准（每行一条、能检查）、对约定第几条、交给哪个岗位（交代里岗位清单的名字）、模型档位。一件就是一个 worker 一次能交回的活。
+- 一件要用到前面几件的结果（比如合起来跑测试、总验收）时，after 写上它要等的那几件的位置；本机会等那几件合回后再开它。互不相干的件不写 after，好同时做。
 - 交完就停，等本人在网页上看派活单；本人让你改，改完再用 propose_plan 交一次。`;
 
 const VERIFY_RULES = `## 规矩
 - 你是验收员：只读，不改文件、不跑命令，也不替执行方补做。
 - 依据是交代里的约定、卡的完成标准、卡所属岗位的验收口径和你自己的验收口径；材料是交回里的自评、证据和产出（产出文件在当前工作目录里，可以读）。需要时用天枢 MCP 的 get_task_context 读 Task 的上下文。
 - 每条完成标准判一次：达到（met）、部分（partial）、没达到（unmet），写理由和依据，没达到的写怎么补；标准以外的建议放进 beyondScope，不算没达到。证据不够就判没达到。
+- 对照交代里的改动：完成标准没要求的新增或改动的文件（报告、命令输出、临时文件等），逐个指出来，写进相关那条的理由或 beyondScope。
 - 判完用 submit_verdict 交一次结论，然后停下。`;
 
 const RULES: Record<TLocalSessionKind, string> = { card: CARD_RULES, topic: TOPIC_RULES, plan: PLAN_RULES, verify: VERIFY_RULES };
