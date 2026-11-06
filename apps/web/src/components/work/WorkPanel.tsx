@@ -2,7 +2,7 @@
 
 /**
  * 右栏（V2 设计第 20.4 节，样子照 prototype-home）：两个标签「worker」「本月」，整栏可以收起；点一个 worker 或 Task，右栏换成它的详情，左上角返回。
- * - worker：顶上「资源」（本机、云端、模型、花费、岗位），下面进行中、已排队、已完成（今天），跨所有 Task。
+ * - worker：顶上「资源」（本机、模型、花费、岗位），下面进行中、已排队、已完成（今天），跨所有 Task；规划员、验收员也在里面。
  * - 本月：Mission 下列 Task，一行写交付、链路小点（一个点一个 worker）；点 Task 打开 Task 视图并把对话锚到它。
  * - worker 详情：在干什么、等你、资源和岗位、计划、最近、产出、逐条验收（仍然通过、推翻）、打开完整会话。
  * 手机上没有标签头（底部标签切），详情的正文放进白卡。
@@ -49,7 +49,7 @@ export function ChainDots({ workers }: { workers: Worker[] }) {
   return <span className={w.dots} role="img" aria-label={order.map((state) => `${CHAIN_LABEL[state]} ${workers.filter((worker) => worker.state === state).length}`).join(" · ")}>{sorted.map((worker) => <span key={worker.key} className={w.cd} data-state={worker.state} />)}</span>;
 }
 
-export function WorkPanel({ tab, onTab, view, backLabel, onOpen, onBack, onDispatch, onCollapse, handheld, plan, boards, workers, resources, roles, proposals, now, anchorTaskId, onChanged }: {
+export function WorkPanel({ tab, onTab, view, backLabel, onOpen, onBack, onDispatch, onSplit, onCollapse, handheld, plan, boards, workers, resources, roles, proposals, now, anchorTaskId, onChanged }: {
   tab: PanelTab;
   onTab: (tab: PanelTab) => void;
   view: PanelView | null;
@@ -58,6 +58,8 @@ export function WorkPanel({ tab, onTab, view, backLabel, onOpen, onBack, onDispa
   onBack: () => void;
   /** Task 视图的「派活」：把对话锚到这个 Task。 */
   onDispatch: (taskId: string) => void;
+  /** 「拆一下」：这台电脑连着本机就开规划员，否则登记成「拆卡 · 等开工」。 */
+  onSplit: (taskId: string) => void;
   onCollapse?: () => void;
   handheld: boolean;
   plan: THomePlanResponse | null;
@@ -91,7 +93,7 @@ export function WorkPanel({ tab, onTab, view, backLabel, onOpen, onBack, onDispa
         {view ? <button type="button" className={w.back} onClick={onBack}><ChevronLeft size={14} aria-hidden />{backLabel}</button> : null}
         {view?.kind === "worker" ? (worker ? <WorkerDetail worker={worker} roles={roles} now={now} wrap={wrap} onChanged={onChanged} /> : <p className={w.emp}>这个 worker 已经不在了</p>)
           : view?.kind === "task" ? (task && plan ? <TaskView plan={plan} task={task} board={boards[task.taskId] ?? null} workers={workers.filter((entry) => entry.taskId === task.taskId)} now={now} wrap={wrap}
-            onOpenWorker={(key) => onOpen({ kind: "worker", key })} onDispatch={() => onDispatch(task.taskId)} onChanged={onChanged} /> : <p className={w.emp}>没有这个 Task</p>)
+            onOpenWorker={(key) => onOpen({ kind: "worker", key })} onDispatch={() => onDispatch(task.taskId)} onSplit={() => onSplit(task.taskId)} onChanged={onChanged} /> : <p className={w.emp}>没有这个 Task</p>)
           : tab === "worker" ? <WorkerTab workers={workers} resources={resources} roles={roles} proposals={proposals} now={now} onOpen={(key) => onOpen({ kind: "worker", key })} onChanged={onChanged} />
           : <MonthTab plan={plan} workers={workers} anchorTaskId={anchorTaskId} onOpen={(taskId) => onOpen({ kind: "task", taskId })} />}
       </div>
@@ -125,8 +127,6 @@ function WorkerTab({ workers, resources, roles, proposals, now, onOpen, onChange
           <span className={w.v}><span className={w.live} data-off={!resources.local.online || undefined} aria-hidden />{resources.local.online ? "在线" : "没连上"}
             <Slots used={resources.local.used} cap={resources.local.cap} off={!resources.local.online} /><span className={w.num}>{resources.local.used}/{resources.local.cap}</span>
             {resources.local.name ? <span className={w.dim}>{resources.local.name}</span> : null}</span>
-          <span className={w.k}>云端</span>
-          <span className={w.v}>验收 <span className={w.num}>{resources.cloud.accepting}</span><span className={w.dim}>拆卡 {resources.cloud.planning}</span></span>
           <span className={w.k}>模型</span>
           <span className={w.v}>{resources.models.map((model) => <span key={model.key} className={w.mt} data-off={!model.on || undefined}>{model.label}</span>)}</span>
           <span className={w.k}>花费</span>
@@ -182,9 +182,9 @@ function MonthTab({ plan, workers, anchorTaskId, onOpen }: { plan: THomePlanResp
 }
 
 /** Task 视图：约定（这个 Task 的标准）、交付物（V1 的面板原样嵌进来，「我的事项」那一折不出）、它的 worker，「派活」把对话锚到它。 */
-function TaskView({ plan, task, board, workers, now, wrap, onOpenWorker, onDispatch, onChanged }: {
+function TaskView({ plan, task, board, workers, now, wrap, onOpenWorker, onDispatch, onSplit, onChanged }: {
   plan: THomePlanResponse; task: THomePlanTask; board: TaskBoard | null; workers: Worker[]; now: number; wrap: (children: React.ReactNode) => React.ReactNode;
-  onOpenWorker: (key: string) => void; onDispatch: () => void; onChanged: () => void;
+  onOpenWorker: (key: string) => void; onDispatch: () => void; onSplit: () => void; onChanged: () => void;
 }) {
   const mission = plan.missions.find((entry) => entry.missionId === task.missionId) ?? null;
   const order = { done: 0, doing: 1, queued: 2 } as const;
@@ -215,7 +215,10 @@ function TaskView({ plan, task, board, workers, now, wrap, onOpenWorker, onDispa
           <p className={w.h2}>worker <span className={w.c}>{workers.length}</span></p>
           <div className={w.list}>{sorted.length ? sorted.map((worker) => <WorkerRow key={worker.key} worker={worker} now={now} onOpen={() => onOpenWorker(worker.key)} onChanged={onChanged} />) : <div className={w.emp}>—</div>}</div>
         </section>
-        <div className={w.rowActs}><HeroButton variant="primary" size="sm" onPress={onDispatch}>派活</HeroButton></div>
+        <div className={w.rowActs}>
+          {workers.some((worker) => worker.kind === "plan") ? null : <HeroButton variant="secondary" size="sm" onPress={onSplit}>拆一下</HeroButton>}
+          <HeroButton variant="primary" size="sm" onPress={onDispatch}>派活</HeroButton>
+        </div>
       </>)}
     </>
   );

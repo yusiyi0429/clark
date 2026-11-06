@@ -2,7 +2,8 @@
 
 /**
  * 派活单（V2 设计第 20.3 节，样子照 prototype-home）：对话里一个 Task 的那一块，由网页按时间插进对话，不经过 Chat 服务。
- * - 拆卡在跑：已用 / 预计。
+ * - 规划员在本机拆（第 21 节）：「拆卡中 · 第 n/m 步」；登记了还没开是「拆卡 · 等开工」，没空位是「拆卡 · 等空位」。拆完派活单草稿接着出。
+ * - 云端拆卡在跑（旧路子，开关默认关）：已用 / 预计。
  * - 拆好了（待开工）：每行一个 worker，写岗位、要干的事、对约定第几条，右边模型（按岗位档位默认，点开能换）；「开工」「改一改」（改标题、换岗位、去掉一行）。
  *   没有岗位的是人自己的活，照样建成执行事项，不交给本机。
  * - 开工：在这台电脑上一次交给本机，同时最多 3 个，多的排队；手机上确认的排进「等开工」，回到电脑上页头有「开工 N 件」。
@@ -13,6 +14,8 @@ import { ChevronDown, X } from "lucide-react";
 import type { TCardDraftView, THomePlanTask } from "@warmap/contracts";
 import { HeroButton } from "@/components/HeroButton";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
+import { planStep } from "@/lib/local/sessionView";
+import { useSessionEvents } from "@/lib/local/useSessionEvents";
 import { readLast, writeLast } from "@/lib/local/start";
 import type { TLocalModelProfile } from "@/lib/local/runner";
 import { acceptDrafts, dismissDraft, planCards } from "@/lib/board/cloud";
@@ -20,7 +23,7 @@ import type { TaskBoard } from "@/lib/board/useTaskBoard";
 import { showWorkspaceToast } from "@/lib/toast";
 import { TIER_LABEL, draftRole, modelForTier, type CardRole, type RoleView } from "@/lib/team/roles";
 import { SLOT_CAP, startBatch, startedText, type StartPlan } from "@/lib/work/queue";
-import { chainCounts, elapsed, liveSessions, type Worker } from "@/lib/work/workers";
+import { QUEUE_LABEL, chainCounts, elapsed, liveSessions, type Worker } from "@/lib/work/workers";
 import { ChainDots, Slots } from "./WorkPanel";
 import { Chain, RoleAvatar, WorkerRow } from "./WorkerRow";
 import w from "@/styles/v2-work.module.css";
@@ -50,10 +53,12 @@ export function DispatchBlock({ task, board, workers, roles, now, handheld, curr
   onChanged: () => void;
 }) {
   const planning = board.plan && (board.plan.status === "queued" || board.plan.status === "running") ? board.plan : null;
+  const planner = workers.find((worker) => worker.kind === "plan") ?? null;
+  const rest = workers.filter((worker) => worker.kind !== "plan");
   return (
     <>
-      {workers.length ? <Live task={task} workers={workers} now={now} current={current} newest={newest} onOpenWorker={onOpenWorker} onChanged={onChanged} /> : null}
-      {planning ? (
+      {rest.length ? <Live task={task} workers={rest} now={now} current={current} newest={newest} onOpenWorker={onOpenWorker} onChanged={onChanged} /> : null}
+      {planner ? <Planning task={task} planner={planner} now={now} onOpenWorker={onOpenWorker} onChanged={onChanged} /> : planning ? (
         <section className={w.disp} aria-label={`拆卡：${task.name}`}>
           <div className={w.dispHead}><span className={w.tagd}>派活单</span><span className={w.ttl}>{task.name}</span><span className={w.sum}>正在拆</span>
             <span className={w.el}>{Math.max(0, Math.round((now - Date.parse(planning.startedAt ?? planning.createdAt)) / 1000))} 秒 / 预计 {planning.expectedSeconds} 秒</span></div>
@@ -70,6 +75,26 @@ export function DispatchBlock({ task, board, workers, roles, now, handheld, curr
 }
 
 const NEEDS_YOU = new Set(["approval", "reply", "review_failed"]);
+
+/** 规划员这一单的页头：第几步从本机会话的计划进度来；等你批准、等你回复时带上那一行。 */
+export function plannerText(planner: Worker, step: { step: number; total: number } | null): string {
+  if (planner.state === "queued") return `拆卡 · ${QUEUE_LABEL[planner.reason ?? "start"]}`;
+  return step ? `拆卡中 · 第 ${step.step}/${step.total} 步` : "拆卡中";
+}
+
+function Planning({ task, planner, now, onOpenWorker, onChanged }: { task: THomePlanTask; planner: Worker; now: number; onOpenWorker: (key: string) => void; onChanged: () => void }) {
+  const local = useLocalRunner();
+  const { view } = useSessionEvents(local.runner, planner.state === "doing" ? planner.session?.id ?? null : null);
+  return (
+    <section className={w.disp} data-testid="dispatch-planning" aria-label={`拆卡：${task.name}`}>
+      <div className={w.dispHead} role="button" tabIndex={0} onClick={() => onOpenWorker(planner.key)} onKeyDown={(event) => { if (event.key === "Enter") onOpenWorker(planner.key); }}>
+        <span className={w.tagd}>派活单</span><span className={w.ttl}>{task.name}</span><span className={w.sum}>{plannerText(planner, planStep(view.plan))}</span>
+        {planner.startedAt ? <span className={w.el}>{elapsed(planner.startedAt, now)}</span> : null}
+      </div>
+      {planner.mark && NEEDS_YOU.has(planner.mark) ? <WorkerRow worker={planner} now={now} ask onOpen={() => onOpenWorker(planner.key)} onChanged={onChanged} /> : null}
+    </section>
+  );
+}
 
 function Live({ task, workers, now, current, newest, onOpenWorker, onChanged }: { task: THomePlanTask; workers: Worker[]; now: number; current: string | null; newest: boolean; onOpenWorker: (key: string) => void; onChanged: () => void }) {
   const [open, setOpen] = useState<boolean | null>(null);

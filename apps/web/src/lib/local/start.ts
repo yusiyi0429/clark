@@ -2,8 +2,10 @@
  * 对本机「开始」一张卡或一个专题（V2 设计第 6.2、19.5 节）：交代从云端取（markdown 原样作为第一句话，岗位原样转给本机），
  * 模型和文件夹本人选（记住上一次）。卡的模型同时记到云端的卡上（只存名字）。云端接口还没有时，卡的交代用标题和完成标准拼一段。
  */
+import type { THomePlanTask } from "@warmap/contracts";
 import type { TLocalCreateSessionRequest, TLocalModelProfile, TLocalSessionSummary } from "./runner";
 import type { LocalRunner } from "./runner";
+import { asCreateRequest } from "./kinds";
 import { cardBrief, patchCard, topicBrief, CloudError } from "@/lib/board/cloud";
 import type { CardItem } from "@/lib/board/cards";
 import { cardRole, localRole, setCardRole, type RoleView } from "@/lib/team/roles";
@@ -59,4 +61,22 @@ export async function startTopic(runner: LocalRunner, topic: { id: string; title
     if (!(error instanceof CloudError) || error.status !== 404) throw error;
   }
   return runner.createSession(request);
+}
+
+/**
+ * 规划员的开工请求（第 21.3 节）：交代是 Task、约定和本人的岗位清单，岗位用团队里叫「规划员」的那个（有的话）。
+ * E 的规划交代接口合进来后，firstMessage 和 role 改从它取。
+ */
+export function planStartRequest(task: Pick<THomePlanTask, "taskId" | "name" | "criteria" | "doneDefinition">, roles: RoleView[], model: TLocalModelProfile, cwd: string | undefined): TLocalCreateSessionRequest {
+  const criteria = task.criteria.length ? task.criteria : task.doneDefinition ? [task.doneDefinition] : [];
+  const planner = roles.find((role) => role.name === "规划员") ?? null;
+  const workers = roles.filter((role) => role.kind === "worker" && role !== planner).map((role) => role.name);
+  const firstMessage = [
+    `# 拆卡：${task.name}`,
+    criteria.length ? `约定：\n${criteria.map((line, i) => `${i + 1}. ${line}`).join("\n")}` : null,
+    workers.length ? `能派的岗位：${workers.join("、")}` : null,
+    "把这个 Task 拆成计划和派活单：每件做什么、对约定第几条、哪个岗位、模型档位。",
+  ].filter(Boolean).join("\n\n");
+  return asCreateRequest({ subject: { kind: "plan", taskId: task.taskId }, title: `拆卡：${task.name}`.slice(0, 120), ...(cwd ? { cwd } : {}), modelProfileId: model.id, firstMessage,
+    ...(planner ? { role: localRole(planner) } : {}) });
 }

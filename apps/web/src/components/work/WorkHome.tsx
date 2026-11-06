@@ -8,8 +8,10 @@
  * - 右：worker / 本月两个标签和详情（可收起；960–1279 宽默认收起）。
  * 手机（≤959）底部三个标签：伙伴、worker、本月；「等你」在伙伴页顶部；详情全屏；本机上的事写「到电脑上处理」。
  * 对话锚到一个 Task 时地址是 /me/work/tasks/<id>（发消息时 pagePath 带着它）。
+ * 拆卡（第 21 节）：伙伴在这个标签页的回复里「登记拆卡」、本机又连着，就在这台电脑上直接开规划员；否则是「拆卡 · 等开工」，和卡一起由「开工 N 件」开。
+ * 验收没过的改法由这个页面自动对执行的会话说一句（同卡的完整会话页）。
  */
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import type { Account } from "@/components/AccountMenu";
@@ -25,11 +27,13 @@ import { ShellToast } from "@/components/rail/V2Shell";
 import { WorkspaceContext, type WorkspaceApi } from "@/components/shell/WorkspaceContext";
 import { useHandheld } from "@/components/ui/useHandheld";
 import { LocalRunnerProvider, useLocalRunner } from "@/lib/local/LocalRunnerProvider";
-import { readLast } from "@/lib/local/start";
+import { planStartRequest, readLast } from "@/lib/local/start";
+import { useAutoReturn } from "@/lib/board/useAutoReturn";
 import { showWorkspaceToast } from "@/lib/toast";
 import { FIELD_LABEL, decideProposal, modelForTier, type RoleProposalView } from "@/lib/team/roles";
 import { canCommandHere, decide, overruleWorker, reply } from "@/lib/work/actions";
 import { startBatch, startedText, type StartPlan } from "@/lib/work/queue";
+import { SPLIT_EVENT, readSplits, registerSplit, takeSplit } from "@/lib/work/splits";
 import { useWork } from "@/lib/work/useWork";
 import { MARK_LABEL, isWaiting, workerName, type Worker } from "@/lib/work/workers";
 import { DispatchBlock, countsText } from "./DispatchBlock";
@@ -109,7 +113,7 @@ function WorkFrame({ account }: { account: Account }) {
       const board = work.boards[task.taskId];
       const mine = work.workers.filter((worker) => worker.taskId === task.taskId);
       if (!board || (!board.plan && !board.drafts.length && !mine.length)) return [];
-      const at = board.plan?.finishedAt ?? board.plan?.createdAt ?? mine.map((worker) => worker.startedAt ?? worker.item?.createdAt ?? "").filter(Boolean).sort()[0];
+      const at = board.plan?.finishedAt ?? board.plan?.createdAt ?? mine.map((worker) => worker.startedAt ?? worker.item?.createdAt ?? worker.requestedAt ?? "").filter(Boolean).sort()[0];
       return at ? [{ task, board, mine, at }] : [];
     });
     const newest = dispatch.map((entry) => entry.at).sort().pop();
@@ -122,23 +126,57 @@ function WorkFrame({ account }: { account: Account }) {
   }, [tasks, work.boards, work.workers, work.roles, work.proposals, now, handheld, currentCard, openWorker, open, changed]);
 
   const active = work.workers.filter((worker) => worker.state !== "done");
-  const toStart = work.workers.filter((worker) => worker.reason === "start" && worker.item);
+  const toStart = work.workers.filter((worker) => worker.reason === "start" && (worker.item || worker.splitId));
   const waiting = work.workers.filter((worker) => isWaiting(worker.mark));
-  const startAll = async () => {
+  /** 卡和规划员一批交给本机；开成了的规划员把那条登记拿掉，没开成的照旧等开工。 */
+  const start = async (cards: Worker[], planners: { taskId: string; splitId?: string }[]) => {
     const cwd = local.folders.find((folder) => folder.id === readLast().folderId)?.path ?? local.folders[0]?.path;
     if (!cwd) { showWorkspaceToast({ text: "先在插件页加一个文件夹" }); return; }
-    const plans: StartPlan[] = toStart.flatMap((worker) => {
-      const role = work.roles?.roles.find((entry) => entry.id === worker.role.id) ?? null;
+    const roles = work.roles?.roles ?? [];
+    const plans: StartPlan[] = cards.flatMap((worker) => {
+      const role = roles.find((entry) => entry.id === worker.role.id) ?? null;
       const model = local.models.find((entry) => entry.id === worker.item?.card?.model?.id) ?? modelForTier(local.models, role?.modelTier ?? "normal");
       return model && worker.item ? [{ item: worker.item, model, cwd, role }] : [];
     });
+    const plannerModel = modelForTier(local.models, roles.find((role) => role.name === "规划员")?.modelTier ?? "strong");
+    const jobs = planners.flatMap((job) => {
+      const task = tasks.find((entry) => entry.taskId === job.taskId);
+      return task && plannerModel ? [{ ...job, request: planStartRequest(task, roles, plannerModel, cwd) }] : [];
+    });
     try {
-      const result = await startBatch(local.runner, plans);
+      const result = await startBatch(local.runner, plans, jobs.map((job) => job.request));
+      await Promise.all(jobs.map((job, index) => (job.splitId && result.opened[plans.length + index] ? takeSplit(job.splitId) : undefined)));
       await local.refresh();
       showWorkspaceToast({ text: startedText(result) });
       changed();
     } catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没开起来，请重试" }); }
   };
+  const startAll = () => start(toStart.filter((worker) => worker.item), toStart.flatMap((worker) => (worker.splitId && worker.taskId ? [{ taskId: worker.taskId, splitId: worker.splitId }] : [])));
+  const here = local.phase === "ready" && !handheld;
+  const split = async (taskId: string) => {
+    if (here) { await start([], [{ taskId }]); return; }
+    await registerSplit(taskId);
+    showWorkspaceToast({ text: "拆卡 · 等开工" });
+    changed();
+  };
+  // 伙伴在这个标签页的回复里登记了拆卡：这一轮之前没见过的登记，本机连着就直接开规划员。
+  const knownSplits = useRef(new Set<string>());
+  const onSplitEvent = useRef<() => Promise<void>>(async () => undefined);
+  useEffect(() => {
+    onSplitEvent.current = async () => {
+      const fresh = (await readSplits()).filter((request) => !knownSplits.current.has(request.id));
+      if (here && fresh.length) await start([], fresh.map((request) => ({ taskId: request.taskId, splitId: request.id })));
+      else changed();
+    };
+  });
+  useEffect(() => { knownSplits.current = new Set(work.splits.map((request) => request.id)); }, [work.splits]);
+  useEffect(() => {
+    const handler = () => { void onSplitEvent.current(); };
+    window.addEventListener(SPLIT_EVENT, handler);
+    return () => window.removeEventListener(SPLIT_EVENT, handler);
+  }, []);
+  const allCards = useMemo(() => Object.values(work.boards).flatMap((board) => board.cards), [work.boards]);
+  useAutoReturn(local.runner, here, allCards, local.sessions, changed);
   const anchored = tasks.find((task) => task.taskId === anchorTaskId) ?? null;
   const previous = stack[stack.length - 2] ?? null;
   const backLabel = previous ? (previous.kind === "task" ? tasks.find((task) => task.taskId === previous.taskId)?.name ?? "返回"
@@ -166,7 +204,7 @@ function WorkFrame({ account }: { account: Account }) {
   const panel = (
     <aside className={w.panel} aria-label="worker 和本月">
       <WorkPanel tab={handheld ? (phone === "month" ? "month" : "worker") : tab} onTab={(next) => { setTab(next); setStack([]); }} view={current} backLabel={backLabel} onOpen={open}
-        onBack={() => setStack((list) => list.slice(0, -1))} onDispatch={(taskId) => { anchor(taskId); if (handheld) setPhone("buddy"); }}
+        onBack={() => setStack((list) => list.slice(0, -1))} onDispatch={(taskId) => { anchor(taskId); if (handheld) setPhone("buddy"); }} onSplit={(taskId) => void split(taskId)}
         onCollapse={handheld ? undefined : () => { togglePanel(false); setStack([]); }} handheld={handheld} plan={work.plan} boards={work.boards} workers={work.workers}
         resources={work.resources} roles={work.roles} proposals={work.proposals} now={now} anchorTaskId={anchorTaskId} onChanged={changed} />
     </aside>

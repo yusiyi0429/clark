@@ -40,7 +40,7 @@ export function marker(worker: Worker): { text: string; tone: "you" | "acc" | "w
 
 const minutes = (from: string | null, to: number) => (from ? `${Math.max(0, Math.round((to - Date.parse(from)) / 60_000))} 分` : null);
 const hhmm = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }) : null);
-/** 验收中：干活的是云端的验收员（云端给的岗位就是验收员）。 */
+/** 验收中：干活的是验收员（本机交回后自己接的；别的设备上看是云端转来的）。 */
 const reviewing = (worker: Worker) => worker.state === "doing" && worker.mark === "reviewing";
 
 /** 第二行：资源在前，Task 最后。 */
@@ -52,7 +52,7 @@ export function secondLine(worker: Worker, now: number, task: string | null): (s
   if (worker.state === "done") {
     return [handback ? `${handback.met}/${handback.total} 达到` : null, inclusion ? `${inclusion.state === "included" ? "已纳入" : "攒进"} v${inclusion.versionNumber}` : null, hhmm(worker.endedAt), ...tail].filter((part): part is string => !!part);
   }
-  if (reviewing(worker)) return [<Resource key="r" where="cloud" model={null} />, (handback?.total ? `对照 ${handback.total} 条` : "逐条对照"), ...tail];
+  if (reviewing(worker)) return [<Resource key="r" where={worker.where ?? "local"} model={worker.model} />, (handback?.total ? `对照 ${handback.total} 条` : "逐条对照"), ...tail];
   return [<Resource key="r" where={worker.where ?? "local"} model={worker.model} />, worker.step ? `第 ${worker.step.n}/${worker.step.total} 步` : null, minutes(worker.startedAt, now), ...tail]
     .filter((part): part is string | ReactElement => !!part);
 }
