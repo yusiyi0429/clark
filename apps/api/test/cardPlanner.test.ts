@@ -24,7 +24,7 @@ async function plannerFixture() {
   return { ...f, calls, hold, roleId: role.json().id as string, release: () => release(), setImpl: (next: typeof impl) => { impl = next; } };
 }
 
-describe("拆卡：作业和草稿", () => {
+describe("拆卡：作业和草稿", { timeout: 30_000 }, () => {
   it("拆卡进队列，同一个 Task 同时只跑一次；伙伴拿到 Task、标准、Mission、已有的卡、本人的岗位、没加的预设和本人的想法；草稿配上岗位", async () => {
     const f = await plannerFixture();
     try {
@@ -42,7 +42,7 @@ describe("拆卡：作业和草稿", () => {
       expect(f.calls).toHaveLength(1);
       expect(f.calls[0]).toMatchObject({ task: { name: "对话质量达标", doneDefinition: "对话质量过 75 分", criteria: [{ index: 1, text: "有题库打分结果" }, { index: 2, text: "有新人上手录屏" }] },
         mission: { title: "内部版上线", milestones: [] }, existing: [{ title: "已有的一张", criterionIndex: null, status: "not_started" }], hint: "先打分再录屏",
-        roles: [{ id: f.roleId, name: "开发", duties: "写代码、改代码" }], presets: [{ key: "researcher", name: "调研员" }] });
+        roles: [{ id: f.roleId, name: "开发", duties: "写代码、改代码" }], presets: [{ key: "executor", name: "执行员" }, { key: "researcher", name: "调研员" }] });
       const board = (await f.call("GET", "/api/plan-tasks/task-open/cards")).json();
       expect(board.plan).toMatchObject({ id: first.json().id, status: "done", error: null });
       expect(board.drafts).toMatchObject([

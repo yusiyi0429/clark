@@ -7,8 +7,9 @@ import { personDisplayNames } from "../people.js";
 import type { AppInstance, RouteContext } from "./shared.js";
 import { worldConfigured } from "../worldClient.js";
 import { createChatService } from "../chatService.js";
+import type { WebSearchAdapter } from "../webSearch.js";
 
-export function registerSystemRoutes(app: AppInstance, ctx: RouteContext): void {
+export function registerSystemRoutes(app: AppInstance, ctx: RouteContext, deps: { search?: WebSearchAdapter & { configured: boolean } } = {}): void {
   const { q, env, runtime, peopleDirectory, radar, recordings, voiceprints } = ctx;
 
   const healthz = async (): Promise<Static<typeof HealthResponse>> => {
@@ -61,7 +62,9 @@ export function registerSystemRoutes(app: AppInstance, ctx: RouteContext): void 
     const { server, transport } = await createMeMcpSession({ pool: ctx.pool, q, pepper: env.sessionSecret, now: ctx.now,
       names: () => personDisplayNames(peopleDirectory), findPerson, initialPerson: findPerson(identity.personId)!, authorization: req.headers.authorization,
       people: () => peopleDirectory.searchPeople(undefined), publicOrigin: env.publicOrigin, planTasks: ctx.planTasks,
-      chat: env.chatServiceUrl ? createChatService({ baseUrl: env.chatServiceUrl, token: env.internalChatToken }) : undefined });
+      chat: env.chatServiceUrl ? createChatService({ baseUrl: env.chatServiceUrl, token: env.internalChatToken }) : undefined,
+      deliverables: { storageDir: ctx.materialStorageDir, enqueueReview: (versionId) => app.deliverables.enqueueReview(versionId) }, search: deps.search,
+      company: ctx.company.company });
     reply.raw.on("close", () => { void server.close(); });
     await transport.handleRequest(req.raw, reply.raw, req.body);
   };

@@ -154,6 +154,26 @@ describe("标记的浮层与打开原文", () => {
     expect(render("据[你 9 月 3 日的原话](cite:chat:c1#3)，先做样板。", true)).toContain('data-cite="plain"');
   });
 
+  it("本体对象（cite:world:<id>@<版本>）认得：句末是标记，浮层写「本体 · 第几版」；放大时交给依据面板打开出处卡，句中是可点的名称", () => {
+    const panel = vi.fn();
+    registerCitationPanel(panel);
+    const ref = "world:7885a696-3b6c-4d2e-9f00-1a2b3c4d5e6f@5";
+    const html = render(`企业经营 Context 这个 Mission 已经上线首版[企业经营 Context 建模与数据供给](cite:${ref})。`, true);
+    expect(marks(html)).toEqual(['data-cite-mark="ref"']);
+    expect(html).toContain(`data-cite-ref="${ref}"`);
+    expect(visible(html)).not.toContain("world:");
+    expect(citationLocator(ref)).toBe("本体 · 第 5 版");
+    const target = markTarget(`cite:${ref}`);
+    expect(canOpenMark(target, { linked: true, surface: "rail" })).toBe(true);
+    expect(canOpenMark(target, { linked: false, surface: "rail" })).toBe(false);
+    openMark(target, { linked: true, surface: "rail" }, null);
+    expect(panel).toHaveBeenCalledWith(ref, expect.objectContaining({ surface: "rail" }));
+    expect(render(`据[企业经营 Context](cite:${ref})，首版已上线。`, true)).toContain(`data-cite-ref="${ref}"`);
+    // 版本缺失或写错的不认，只显示名称。
+    expect(citationLocator("world:7885a696")).toBeNull();
+    expect(render("据[某对象](cite:world:7885a696@v5)，首版已上线。", true)).toContain('data-cite="invalid"');
+  });
+
   it("排着的那一条 2 秒内没放大成就作废", () => {
     openMark(markTarget("cite:memory:a.md#s1"), { linked: false, surface: "sheet", expand: vi.fn() }, null);
     expect(takePendingCitation(Date.now() + 2_500)).toBeNull();

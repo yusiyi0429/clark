@@ -1,6 +1,7 @@
 import { Type, type Static } from "@sinclair/typebox";
 import { MemberWork } from "./memberHome.js";
 import { MemberRadarBrief } from "./personalRadar.js";
+import { TaskCard } from "./taskCardView.js";
 
 /** 执行事项状态：returned 只能通过退回接口进入。 */
 export const TaskStatus = Type.Union([
@@ -121,6 +122,8 @@ export const TaskView = Type.Object(
     /** ISO 8601 */
     createdAt: Type.String({ minLength: 1 }),
     updatedAt: Type.String({ minLength: 1 }),
+    /** 卡（V2 执行看板，taskCardView.ts）：列、标记、岗位、执行方、最近一次本机执行和交回、进交付物到哪了，api 读的时候算；每件执行事项都有。 */
+    card: TaskCard,
   },
   { additionalProperties: false },
 );
@@ -170,6 +173,8 @@ export const TaskAcceptance = Type.Object(
       { additionalProperties: false },
     ), { maxItems: 50 }),
     deliverableMaterialIds: Type.Array(Type.String({ format: "uuid" }), { maxItems: 30 }),
+    /** 卡由 Agent 验收通过（或本人推翻 Agent 的「没过」）时是那一次交回的 id（V2 执行看板）；本人自己验收的为 null。 */
+    agentHandbackId: Type.Union([Type.String({ format: "uuid" }), Type.Null()]),
   },
   { additionalProperties: false },
 );

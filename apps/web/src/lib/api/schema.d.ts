@@ -2425,6 +2425,58 @@ export interface paths {
         patch: operations["patchDeliverableNote"];
         trace?: never;
     };
+    "/api/plan-tasks/{taskId}/agreement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 一个 Task 的约定：每条标准用什么证明、谁来认，这次不包括什么；先读本体，没有再读天枢 11 月的补充，两样都没有只给标准原文；标出来源和标准有没有改过（负责人、Mission 负责人、战场负责人、CEO、约定里的认可人能看） */
+        get: operations["getTaskAgreement"];
+        /** 存 11 月的补充（负责人、Mission 负责人）：整份覆盖、留修改记录；约定来自本体时 409 AGREEMENT_FROM_WORLD，没有标准时 409 NO_CRITERIA，认可人不在人员目录 400 UNKNOWN_PERSON */
+        put: operations["putTaskAgreement"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/plan-tasks/{taskId}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 对表（不调模型）：约定和最新一版的参考评审摆在一起，每条标出有证据、差、评审中、还没交付物、要 X 确认之一，顶上一句结论（还不能交 / 可以交）；评审的「下次可以做」单独附在后面 */
+        get: operations["checkTask"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/plan-tasks/{taskId}/check/notify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 「请 X 看」（负责人）：给这一条约定的认可人推一条飞书私聊，带 Task 的链接；同一条一天最多推一次。personId 和约定里的认可人对不上 400 NOT_ACCEPTOR；这一条还不是「要 X 确认」409 NOT_AWAITING_ACCEPTOR；认可人没关联飞书 409 ACCEPTOR_NOT_ON_FEISHU；飞书没接 503 FEISHU_NOT_CONFIGURED */
+        post: operations["notifyCheckAcceptor"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/battlefield-progress": {
         parameters: {
             query?: never;
@@ -3913,6 +3965,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ontology/objects/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 出处卡：按本人在 COMPANY_WORLD_ACCESS_FILE 里被授权的域读一个本体对象当前这一版（类型、标题、版本、状态、负责人、当前进展）；只读 */
+        get: operations["getWorldSource"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/dri/todo-feedback": {
         parameters: {
             query?: never;
@@ -4229,8 +4298,76 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 拆卡（Task 负责人）：伙伴出 3–8 张草稿卡，后台跑；已有一次在排队或在跑时返回那一次 */
+        /** 云端拆卡作业（Task 负责人）：只在 BOARD_CLOUD_AGENTS=1 时开，默认关（409 CLOUD_AGENTS_OFF），拆卡改由本机规划员做（登记拆卡）；开着时伙伴出 3–8 张草稿卡，已有一次在排队或在跑时返回那一次 */
         post: operations["createCardPlan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/plan-tasks/{taskId}/card-splits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 登记拆卡（Task 负责人，Task 页「拆一下」）：只记下要拆这个 Task，真正去拆的是本人电脑上的规划员；已有一条没开工的登记时返回那一条 */
+        post: operations["registerCardSplit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/card-splits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人还没开工的拆卡登记（伙伴登记的和 Task 页登记的），先登记的在前 */
+        get: operations["listCardSplits"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/card-splits/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 去掉一条拆卡登记（网页在这台电脑上开了规划员以后，或本人不拆了） */
+        delete: operations["removeCardSplit"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/plan-tasks/{taskId}/plan-brief": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 规划员的开工交代（Task 负责人）：Task、约定、本人的岗位清单和职责摘要、规划员岗位 */
+        get: operations["getCardPlanBrief"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -5241,6 +5378,76 @@ export interface components {
                 };
                 createdAt: string;
                 updatedAt: string;
+                card: {
+                    stage: "todo" | "doing" | "review" | "done";
+                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                    role: {
+                        /** Format: uuid */
+                        id: string;
+                        name: string;
+                        kind: "worker" | "reviewer" | "critic";
+                    } | null;
+                    executor: ("claude_code" | "self") | null;
+                    model: {
+                        id: string;
+                        label: string;
+                        kind: "subscription" | "gateway";
+                    } | null;
+                    criterion: {
+                        index: number;
+                        text: string;
+                    } | null;
+                    run: {
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: uuid */
+                        deviceId: string;
+                        deviceName: string;
+                        state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                        modelLabel: string | null;
+                        plan: {
+                            done: number;
+                            total: number;
+                            step: number;
+                            current: string | null;
+                        };
+                        lastActivity: {
+                            /** Format: date-time */
+                            at: string;
+                            text: string;
+                        } | null;
+                        cost: {
+                            inputTokens: number;
+                            outputTokens: number;
+                            costUsd: number | null;
+                        };
+                        /** Format: date-time */
+                        startedAt: string;
+                        /** Format: date-time */
+                        updatedAt: string;
+                        endedAt: string | null;
+                    } | null;
+                    handback: {
+                        /** Format: uuid */
+                        id: string;
+                        attempt: number;
+                        status: "queued" | "running" | "done" | "failed";
+                        outcome: ("pass" | "fail") | null;
+                        met: number;
+                        total: number;
+                        headline: string | null;
+                        returnText: string | null;
+                        returnedAt: string | null;
+                        overruled: boolean;
+                        /** Format: date-time */
+                        createdAt: string;
+                        finishedAt: string | null;
+                    } | null;
+                    deliverable: {
+                        state: "pending" | "included";
+                        versionNumber: number;
+                    } | null;
+                };
             };
             view?: {
                 draft: {
@@ -9202,6 +9409,76 @@ export interface components {
             };
             createdAt: string;
             updatedAt: string;
+            card: {
+                stage: "todo" | "doing" | "review" | "done";
+                wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                role: {
+                    /** Format: uuid */
+                    id: string;
+                    name: string;
+                    kind: "worker" | "reviewer" | "critic";
+                } | null;
+                executor: ("claude_code" | "self") | null;
+                model: {
+                    id: string;
+                    label: string;
+                    kind: "subscription" | "gateway";
+                } | null;
+                criterion: {
+                    index: number;
+                    text: string;
+                } | null;
+                run: {
+                    /** Format: uuid */
+                    id: string;
+                    /** Format: uuid */
+                    deviceId: string;
+                    deviceName: string;
+                    state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                    modelLabel: string | null;
+                    plan: {
+                        done: number;
+                        total: number;
+                        step: number;
+                        current: string | null;
+                    };
+                    lastActivity: {
+                        /** Format: date-time */
+                        at: string;
+                        text: string;
+                    } | null;
+                    cost: {
+                        inputTokens: number;
+                        outputTokens: number;
+                        costUsd: number | null;
+                    };
+                    /** Format: date-time */
+                    startedAt: string;
+                    /** Format: date-time */
+                    updatedAt: string;
+                    endedAt: string | null;
+                } | null;
+                handback: {
+                    /** Format: uuid */
+                    id: string;
+                    attempt: number;
+                    status: "queued" | "running" | "done" | "failed";
+                    outcome: ("pass" | "fail") | null;
+                    met: number;
+                    total: number;
+                    headline: string | null;
+                    returnText: string | null;
+                    returnedAt: string | null;
+                    overruled: boolean;
+                    /** Format: date-time */
+                    createdAt: string;
+                    finishedAt: string | null;
+                } | null;
+                deliverable: {
+                    state: "pending" | "included";
+                    versionNumber: number;
+                } | null;
+            };
         };
         TaskProgressSource: "web" | "codex" | "claude" | "github" | "other";
         TaskProgressLink: {
@@ -9308,6 +9585,76 @@ export interface components {
                     };
                     createdAt: string;
                     updatedAt: string;
+                    card: {
+                        stage: "todo" | "doing" | "review" | "done";
+                        wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                        role: {
+                            /** Format: uuid */
+                            id: string;
+                            name: string;
+                            kind: "worker" | "reviewer" | "critic";
+                        } | null;
+                        executor: ("claude_code" | "self") | null;
+                        model: {
+                            id: string;
+                            label: string;
+                            kind: "subscription" | "gateway";
+                        } | null;
+                        criterion: {
+                            index: number;
+                            text: string;
+                        } | null;
+                        run: {
+                            /** Format: uuid */
+                            id: string;
+                            /** Format: uuid */
+                            deviceId: string;
+                            deviceName: string;
+                            state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                            modelLabel: string | null;
+                            plan: {
+                                done: number;
+                                total: number;
+                                step: number;
+                                current: string | null;
+                            };
+                            lastActivity: {
+                                /** Format: date-time */
+                                at: string;
+                                text: string;
+                            } | null;
+                            cost: {
+                                inputTokens: number;
+                                outputTokens: number;
+                                costUsd: number | null;
+                            };
+                            /** Format: date-time */
+                            startedAt: string;
+                            /** Format: date-time */
+                            updatedAt: string;
+                            endedAt: string | null;
+                        } | null;
+                        handback: {
+                            /** Format: uuid */
+                            id: string;
+                            attempt: number;
+                            status: "queued" | "running" | "done" | "failed";
+                            outcome: ("pass" | "fail") | null;
+                            met: number;
+                            total: number;
+                            headline: string | null;
+                            returnText: string | null;
+                            returnedAt: string | null;
+                            overruled: boolean;
+                            /** Format: date-time */
+                            createdAt: string;
+                            finishedAt: string | null;
+                        } | null;
+                        deliverable: {
+                            state: "pending" | "included";
+                            versionNumber: number;
+                        } | null;
+                    };
                 }[];
             }[];
         };
@@ -9818,6 +10165,22 @@ export interface components {
                     }[];
                 }[];
             }[];
+        };
+        WorldSourceView: {
+            ref: string;
+            objectId: string;
+            version: number;
+            type: string;
+            title: string;
+            status: string;
+            owners: string[];
+            progress: {
+                ref: string | null;
+                asOf: string | null;
+                author: string | null;
+                unconfirmed: boolean;
+                lines: string[];
+            } | null;
         };
         ListPersonalTokensResponse: {
             tokens: {
@@ -10546,6 +10909,76 @@ export interface components {
                 };
                 createdAt: string;
                 updatedAt: string;
+                card: {
+                    stage: "todo" | "doing" | "review" | "done";
+                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                    role: {
+                        /** Format: uuid */
+                        id: string;
+                        name: string;
+                        kind: "worker" | "reviewer" | "critic";
+                    } | null;
+                    executor: ("claude_code" | "self") | null;
+                    model: {
+                        id: string;
+                        label: string;
+                        kind: "subscription" | "gateway";
+                    } | null;
+                    criterion: {
+                        index: number;
+                        text: string;
+                    } | null;
+                    run: {
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: uuid */
+                        deviceId: string;
+                        deviceName: string;
+                        state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                        modelLabel: string | null;
+                        plan: {
+                            done: number;
+                            total: number;
+                            step: number;
+                            current: string | null;
+                        };
+                        lastActivity: {
+                            /** Format: date-time */
+                            at: string;
+                            text: string;
+                        } | null;
+                        cost: {
+                            inputTokens: number;
+                            outputTokens: number;
+                            costUsd: number | null;
+                        };
+                        /** Format: date-time */
+                        startedAt: string;
+                        /** Format: date-time */
+                        updatedAt: string;
+                        endedAt: string | null;
+                    } | null;
+                    handback: {
+                        /** Format: uuid */
+                        id: string;
+                        attempt: number;
+                        status: "queued" | "running" | "done" | "failed";
+                        outcome: ("pass" | "fail") | null;
+                        met: number;
+                        total: number;
+                        headline: string | null;
+                        returnText: string | null;
+                        returnedAt: string | null;
+                        overruled: boolean;
+                        /** Format: date-time */
+                        createdAt: string;
+                        finishedAt: string | null;
+                    } | null;
+                    deliverable: {
+                        state: "pending" | "included";
+                        versionNumber: number;
+                    } | null;
+                };
             };
             judgment: string | null;
             judgmentAt: string | null;
@@ -10610,6 +11043,7 @@ export interface components {
                     materialId: string | null;
                 }[];
                 deliverableMaterialIds: string[];
+                agentHandbackId: string | null;
             } | null;
         };
         PutMyTaskNoteRequest: {
@@ -10692,6 +11126,76 @@ export interface components {
                 };
                 createdAt: string;
                 updatedAt: string;
+                card: {
+                    stage: "todo" | "doing" | "review" | "done";
+                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                    role: {
+                        /** Format: uuid */
+                        id: string;
+                        name: string;
+                        kind: "worker" | "reviewer" | "critic";
+                    } | null;
+                    executor: ("claude_code" | "self") | null;
+                    model: {
+                        id: string;
+                        label: string;
+                        kind: "subscription" | "gateway";
+                    } | null;
+                    criterion: {
+                        index: number;
+                        text: string;
+                    } | null;
+                    run: {
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: uuid */
+                        deviceId: string;
+                        deviceName: string;
+                        state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                        modelLabel: string | null;
+                        plan: {
+                            done: number;
+                            total: number;
+                            step: number;
+                            current: string | null;
+                        };
+                        lastActivity: {
+                            /** Format: date-time */
+                            at: string;
+                            text: string;
+                        } | null;
+                        cost: {
+                            inputTokens: number;
+                            outputTokens: number;
+                            costUsd: number | null;
+                        };
+                        /** Format: date-time */
+                        startedAt: string;
+                        /** Format: date-time */
+                        updatedAt: string;
+                        endedAt: string | null;
+                    } | null;
+                    handback: {
+                        /** Format: uuid */
+                        id: string;
+                        attempt: number;
+                        status: "queued" | "running" | "done" | "failed";
+                        outcome: ("pass" | "fail") | null;
+                        met: number;
+                        total: number;
+                        headline: string | null;
+                        returnText: string | null;
+                        returnedAt: string | null;
+                        overruled: boolean;
+                        /** Format: date-time */
+                        createdAt: string;
+                        finishedAt: string | null;
+                    } | null;
+                    deliverable: {
+                        state: "pending" | "included";
+                        versionNumber: number;
+                    } | null;
+                };
             }[];
         };
         MonthPlanResponse: {
@@ -10772,6 +11276,76 @@ export interface components {
                     };
                     createdAt: string;
                     updatedAt: string;
+                    card: {
+                        stage: "todo" | "doing" | "review" | "done";
+                        wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                        role: {
+                            /** Format: uuid */
+                            id: string;
+                            name: string;
+                            kind: "worker" | "reviewer" | "critic";
+                        } | null;
+                        executor: ("claude_code" | "self") | null;
+                        model: {
+                            id: string;
+                            label: string;
+                            kind: "subscription" | "gateway";
+                        } | null;
+                        criterion: {
+                            index: number;
+                            text: string;
+                        } | null;
+                        run: {
+                            /** Format: uuid */
+                            id: string;
+                            /** Format: uuid */
+                            deviceId: string;
+                            deviceName: string;
+                            state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                            modelLabel: string | null;
+                            plan: {
+                                done: number;
+                                total: number;
+                                step: number;
+                                current: string | null;
+                            };
+                            lastActivity: {
+                                /** Format: date-time */
+                                at: string;
+                                text: string;
+                            } | null;
+                            cost: {
+                                inputTokens: number;
+                                outputTokens: number;
+                                costUsd: number | null;
+                            };
+                            /** Format: date-time */
+                            startedAt: string;
+                            /** Format: date-time */
+                            updatedAt: string;
+                            endedAt: string | null;
+                        } | null;
+                        handback: {
+                            /** Format: uuid */
+                            id: string;
+                            attempt: number;
+                            status: "queued" | "running" | "done" | "failed";
+                            outcome: ("pass" | "fail") | null;
+                            met: number;
+                            total: number;
+                            headline: string | null;
+                            returnText: string | null;
+                            returnedAt: string | null;
+                            overruled: boolean;
+                            /** Format: date-time */
+                            createdAt: string;
+                            finishedAt: string | null;
+                        } | null;
+                        deliverable: {
+                            state: "pending" | "included";
+                            versionNumber: number;
+                        } | null;
+                    };
                 }[];
             }[];
         };
@@ -10852,6 +11426,76 @@ export interface components {
                 };
                 createdAt: string;
                 updatedAt: string;
+                card: {
+                    stage: "todo" | "doing" | "review" | "done";
+                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                    role: {
+                        /** Format: uuid */
+                        id: string;
+                        name: string;
+                        kind: "worker" | "reviewer" | "critic";
+                    } | null;
+                    executor: ("claude_code" | "self") | null;
+                    model: {
+                        id: string;
+                        label: string;
+                        kind: "subscription" | "gateway";
+                    } | null;
+                    criterion: {
+                        index: number;
+                        text: string;
+                    } | null;
+                    run: {
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: uuid */
+                        deviceId: string;
+                        deviceName: string;
+                        state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                        modelLabel: string | null;
+                        plan: {
+                            done: number;
+                            total: number;
+                            step: number;
+                            current: string | null;
+                        };
+                        lastActivity: {
+                            /** Format: date-time */
+                            at: string;
+                            text: string;
+                        } | null;
+                        cost: {
+                            inputTokens: number;
+                            outputTokens: number;
+                            costUsd: number | null;
+                        };
+                        /** Format: date-time */
+                        startedAt: string;
+                        /** Format: date-time */
+                        updatedAt: string;
+                        endedAt: string | null;
+                    } | null;
+                    handback: {
+                        /** Format: uuid */
+                        id: string;
+                        attempt: number;
+                        status: "queued" | "running" | "done" | "failed";
+                        outcome: ("pass" | "fail") | null;
+                        met: number;
+                        total: number;
+                        headline: string | null;
+                        returnText: string | null;
+                        returnedAt: string | null;
+                        overruled: boolean;
+                        /** Format: date-time */
+                        createdAt: string;
+                        finishedAt: string | null;
+                    } | null;
+                    deliverable: {
+                        state: "pending" | "included";
+                        versionNumber: number;
+                    } | null;
+                };
             }[];
             work: {
                 period: string;
@@ -11023,6 +11667,7 @@ export interface components {
                             upheld: boolean | null;
                         } | null;
                     }[];
+                    beyondScope: string[];
                     error: string | null;
                 };
                 deliveredAt: string | null;
@@ -11087,6 +11732,7 @@ export interface components {
                         upheld: boolean | null;
                     } | null;
                 }[];
+                beyondScope: string[];
                 error: string | null;
             };
             deliveredAt: string | null;
@@ -11143,6 +11789,7 @@ export interface components {
                     upheld: boolean | null;
                 } | null;
             }[];
+            beyondScope: string[];
             error: string | null;
         };
         ReviewCriterion: {
@@ -11175,6 +11822,90 @@ export interface components {
             why?: string;
             lesson?: string | null;
             dismissed?: boolean;
+        };
+        TaskAgreementResponse: {
+            taskId: string;
+            taskName: string;
+            missionId: string;
+            basis: "acceptance" | "definition" | "none";
+            source: "world" | "tianshu" | "none";
+            criteria: {
+                index: number;
+                text: string;
+                proof: string | null;
+                acceptor: {
+                    personId: string;
+                    name: string;
+                } | null;
+            }[];
+            exclusions: string[];
+            complete: boolean;
+            basisChanged: boolean;
+            canEdit: boolean;
+            updatedBy: {
+                personId: string;
+                name: string;
+            } | null;
+            updatedAt: string | null;
+        };
+        PutTaskAgreementRequest: {
+            criteria: {
+                index: number;
+                proof: string | null;
+                acceptorId: string | null;
+            }[];
+            exclusions: string[];
+        };
+        TaskCheckResponse: {
+            taskId: string;
+            verdict: "ready" | "not_ready";
+            conclusion: string;
+            notices: {
+                code: "basis_changed" | "agreement_incomplete";
+                text: string;
+            }[];
+            source: "world" | "tianshu" | "none";
+            criteria: {
+                index: number;
+                text: string;
+                status: "evidenced" | "gap" | "reviewing" | "no_deliverable" | "needs_acceptor";
+                proof: string | null;
+                acceptor: {
+                    personId: string;
+                    name: string;
+                } | null;
+                evidence: {
+                    /** Format: uuid */
+                    versionId: string;
+                    versionNumber: number;
+                    items: {
+                        /** Format: uuid */
+                        id: string;
+                        kind: "file" | "image" | "link";
+                        name: string;
+                        url: string | null;
+                    }[];
+                    locator: string | null;
+                } | null;
+                gap: string | null;
+                notifiedToday: boolean;
+            }[];
+            version: {
+                /** Format: uuid */
+                id: string;
+                number: number;
+                reviewStatus: "queued" | "running" | "done" | "failed";
+                deliveredAt: string | null;
+            } | null;
+            beyondScope: string[];
+            canNotify: boolean;
+        };
+        CheckNotifyRequest: {
+            index: number;
+            personId: string;
+        };
+        CheckNotifyResponse: {
+            status: "sent" | "already_sent";
         };
         HomePlanMission: {
             missionId: string;
@@ -11253,6 +11984,76 @@ export interface components {
                 };
                 createdAt: string;
                 updatedAt: string;
+                card: {
+                    stage: "todo" | "doing" | "review" | "done";
+                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                    role: {
+                        /** Format: uuid */
+                        id: string;
+                        name: string;
+                        kind: "worker" | "reviewer" | "critic";
+                    } | null;
+                    executor: ("claude_code" | "self") | null;
+                    model: {
+                        id: string;
+                        label: string;
+                        kind: "subscription" | "gateway";
+                    } | null;
+                    criterion: {
+                        index: number;
+                        text: string;
+                    } | null;
+                    run: {
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: uuid */
+                        deviceId: string;
+                        deviceName: string;
+                        state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                        modelLabel: string | null;
+                        plan: {
+                            done: number;
+                            total: number;
+                            step: number;
+                            current: string | null;
+                        };
+                        lastActivity: {
+                            /** Format: date-time */
+                            at: string;
+                            text: string;
+                        } | null;
+                        cost: {
+                            inputTokens: number;
+                            outputTokens: number;
+                            costUsd: number | null;
+                        };
+                        /** Format: date-time */
+                        startedAt: string;
+                        /** Format: date-time */
+                        updatedAt: string;
+                        endedAt: string | null;
+                    } | null;
+                    handback: {
+                        /** Format: uuid */
+                        id: string;
+                        attempt: number;
+                        status: "queued" | "running" | "done" | "failed";
+                        outcome: ("pass" | "fail") | null;
+                        met: number;
+                        total: number;
+                        headline: string | null;
+                        returnText: string | null;
+                        returnedAt: string | null;
+                        overruled: boolean;
+                        /** Format: date-time */
+                        createdAt: string;
+                        finishedAt: string | null;
+                    } | null;
+                    deliverable: {
+                        state: "pending" | "included";
+                        versionNumber: number;
+                    } | null;
+                };
             };
             missionId: string | null;
             column: "done" | "week" | "later";
@@ -11372,6 +12173,76 @@ export interface components {
                     };
                     createdAt: string;
                     updatedAt: string;
+                    card: {
+                        stage: "todo" | "doing" | "review" | "done";
+                        wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                        role: {
+                            /** Format: uuid */
+                            id: string;
+                            name: string;
+                            kind: "worker" | "reviewer" | "critic";
+                        } | null;
+                        executor: ("claude_code" | "self") | null;
+                        model: {
+                            id: string;
+                            label: string;
+                            kind: "subscription" | "gateway";
+                        } | null;
+                        criterion: {
+                            index: number;
+                            text: string;
+                        } | null;
+                        run: {
+                            /** Format: uuid */
+                            id: string;
+                            /** Format: uuid */
+                            deviceId: string;
+                            deviceName: string;
+                            state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                            modelLabel: string | null;
+                            plan: {
+                                done: number;
+                                total: number;
+                                step: number;
+                                current: string | null;
+                            };
+                            lastActivity: {
+                                /** Format: date-time */
+                                at: string;
+                                text: string;
+                            } | null;
+                            cost: {
+                                inputTokens: number;
+                                outputTokens: number;
+                                costUsd: number | null;
+                            };
+                            /** Format: date-time */
+                            startedAt: string;
+                            /** Format: date-time */
+                            updatedAt: string;
+                            endedAt: string | null;
+                        } | null;
+                        handback: {
+                            /** Format: uuid */
+                            id: string;
+                            attempt: number;
+                            status: "queued" | "running" | "done" | "failed";
+                            outcome: ("pass" | "fail") | null;
+                            met: number;
+                            total: number;
+                            headline: string | null;
+                            returnText: string | null;
+                            returnedAt: string | null;
+                            overruled: boolean;
+                            /** Format: date-time */
+                            createdAt: string;
+                            finishedAt: string | null;
+                        } | null;
+                        deliverable: {
+                            state: "pending" | "included";
+                            versionNumber: number;
+                        } | null;
+                    };
                 };
                 missionId: string | null;
                 column: "done" | "week" | "later";
@@ -11441,6 +12312,76 @@ export interface components {
                 };
                 createdAt: string;
                 updatedAt: string;
+                card: {
+                    stage: "todo" | "doing" | "review" | "done";
+                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                    role: {
+                        /** Format: uuid */
+                        id: string;
+                        name: string;
+                        kind: "worker" | "reviewer" | "critic";
+                    } | null;
+                    executor: ("claude_code" | "self") | null;
+                    model: {
+                        id: string;
+                        label: string;
+                        kind: "subscription" | "gateway";
+                    } | null;
+                    criterion: {
+                        index: number;
+                        text: string;
+                    } | null;
+                    run: {
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: uuid */
+                        deviceId: string;
+                        deviceName: string;
+                        state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                        modelLabel: string | null;
+                        plan: {
+                            done: number;
+                            total: number;
+                            step: number;
+                            current: string | null;
+                        };
+                        lastActivity: {
+                            /** Format: date-time */
+                            at: string;
+                            text: string;
+                        } | null;
+                        cost: {
+                            inputTokens: number;
+                            outputTokens: number;
+                            costUsd: number | null;
+                        };
+                        /** Format: date-time */
+                        startedAt: string;
+                        /** Format: date-time */
+                        updatedAt: string;
+                        endedAt: string | null;
+                    } | null;
+                    handback: {
+                        /** Format: uuid */
+                        id: string;
+                        attempt: number;
+                        status: "queued" | "running" | "done" | "failed";
+                        outcome: ("pass" | "fail") | null;
+                        met: number;
+                        total: number;
+                        headline: string | null;
+                        returnText: string | null;
+                        returnedAt: string | null;
+                        overruled: boolean;
+                        /** Format: date-time */
+                        createdAt: string;
+                        finishedAt: string | null;
+                    } | null;
+                    deliverable: {
+                        state: "pending" | "included";
+                        versionNumber: number;
+                    } | null;
+                };
             }[];
         };
         PlanCalendarResponse: {
@@ -12011,6 +12952,7 @@ export interface components {
                 materialId: string | null;
             }[];
             deliverableMaterialIds: string[];
+            agentHandbackId: string | null;
         };
         AcceptMyTaskRequest: {
             version: number;
@@ -14180,6 +15122,14 @@ export interface components {
             startedAt: string | null;
             finishedAt: string | null;
             expectedSeconds: number;
+            source: "cloud" | "local";
+            summary: string | null;
+            steps: {
+                title: string;
+                detail: string | null;
+            }[];
+            risks: string[];
+            revision: number | null;
         };
         CardDraftView: {
             /** Format: uuid */
@@ -14384,6 +15334,14 @@ export interface components {
                 startedAt: string | null;
                 finishedAt: string | null;
                 expectedSeconds: number;
+                source: "cloud" | "local";
+                summary: string | null;
+                steps: {
+                    title: string;
+                    detail: string | null;
+                }[];
+                risks: string[];
+                revision: number | null;
             } | null;
             pending: {
                 /** Format: uuid */
@@ -14605,6 +15563,12 @@ export interface components {
                 /** Format: date-time */
                 at: string;
                 reason: string;
+            } | null;
+            verifier: {
+                source: "cloud" | "local";
+                modelLabel: string | null;
+                roleId: string | null;
+                roleVersion: number | null;
             } | null;
         };
         CardDetailResponse: {
@@ -14828,6 +15792,12 @@ export interface components {
                     /** Format: date-time */
                     at: string;
                     reason: string;
+                } | null;
+                verifier: {
+                    source: "cloud" | "local";
+                    modelLabel: string | null;
+                    roleId: string | null;
+                    roleVersion: number | null;
                 } | null;
             }[];
             outputs: {
@@ -15776,6 +16746,70 @@ export interface components {
                     };
                 };
             };
+        };
+        CardSplitRequestView: {
+            /** Format: uuid */
+            id: string;
+            taskId: string;
+            taskName: string;
+            missionId: string;
+            origin: "buddy" | "web";
+            /** Format: date-time */
+            createdAt: string;
+        };
+        CardSplitListResponse: {
+            requests: {
+                /** Format: uuid */
+                id: string;
+                taskId: string;
+                taskName: string;
+                missionId: string;
+                origin: "buddy" | "web";
+                /** Format: date-time */
+                createdAt: string;
+            }[];
+        };
+        PlanBriefRole: {
+            id: string | null;
+            presetKey: string | null;
+            name: string;
+            kind: "worker" | "reviewer" | "critic";
+            dutiesSummary: string;
+            modelTier: "strong" | "normal" | "light";
+        };
+        CardPlanBriefResponse: {
+            markdown: string;
+            role: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                kind: "worker" | "reviewer" | "critic";
+                dutiesMd: string;
+                practiceMd: string;
+                acceptanceMd: string;
+                tools: ("tianshu" | "web_search" | "feishu" | "github" | "browser")[];
+                modelTier: "strong" | "normal" | "light";
+                version: number;
+            } | null;
+            task: {
+                taskId: string;
+                name: string;
+                missionId: string;
+            };
+            criteria: {
+                index: number;
+                text: string;
+                proof: string | null;
+            }[];
+            exclusions: string[];
+            roles: {
+                id: string | null;
+                presetKey: string | null;
+                name: string;
+                kind: "worker" | "reviewer" | "critic";
+                dutiesSummary: string;
+                modelTier: "strong" | "normal" | "light";
+            }[];
         };
     };
     responses: never;
@@ -23307,6 +24341,255 @@ export interface operations {
             };
         };
     };
+    getTaskAgreement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 约定 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAgreementResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    putTaskAgreement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutTaskAgreementRequest"];
+            };
+        };
+        responses: {
+            /** @description 存好后的约定 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAgreementResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    checkTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 对表结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskCheckResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    notifyCheckAcceptor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckNotifyRequest"];
+            };
+        };
+        responses: {
+            /** @description 推了，或今天已经推过 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckNotifyResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     getMyBattlefieldProgress: {
         parameters: {
             query?: never;
@@ -28992,6 +30275,56 @@ export interface operations {
             };
         };
     };
+    getWorldSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 本体对象 id（不带 @版本） */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 本体对象当前这一版 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorldSourceView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     importDriMonthlyTodoFeedback: {
         parameters: {
             query?: never;
@@ -30128,6 +31461,189 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    registerCardSplit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已有一条没开工的登记 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardSplitRequestView"];
+                };
+            };
+            /** @description 登记好了 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardSplitRequestView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listCardSplits: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 登记 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardSplitListResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    removeCardSplit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 去掉了 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getCardPlanBrief: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 交代 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardPlanBriefResponse"];
                 };
             };
             /** @description ApiError 统一错误 */

@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { MCP_WRITE_TOOLS } from "../src/mcpOAuth.js";
 import { createTestApp, TEST_CEO, TEST_MEMBER } from "./helpers.js";
 
 const rpc = (id: number, method: string) => ({ jsonrpc: "2.0", id, method });
@@ -46,8 +47,8 @@ async function fixture() {
   return { t, call, pair, task, sync, session, close: async () => { await t.close(); await rm(storage, { recursive: true, force: true }); } };
 }
 
-describe("本机程序：设备令牌和单向上报", () => {
-  it("配对建设备令牌：不占 5 把的名额、不在设置页列；不能连 MCP、不能当登录态；吊销、再配对后旧令牌立刻失效", async () => {
+describe("本机程序：设备令牌和单向上报", { timeout: 30_000 }, () => {
+  it("配对建设备令牌：不占 5 把的名额、不在设置页列；连 MCP 只读、不能当登录态；吊销、再配对后旧令牌立刻失效", async () => {
     const f = await fixture();
     try {
       const device = randomUUID();
@@ -57,9 +58,15 @@ describe("本机程序：设备令牌和单向上报", () => {
       expect((await f.call("GET", "/api/me/tokens")).json().tokens.map((token: { client: string }) => token.client)).not.toContain("local");
       expect((await f.call("GET", "/api/me/local-devices")).json().devices).toMatchObject([{ id: device, name: "我的电脑" }]);
 
-      const mcp = await f.t.app.inject({ method: "POST", url: "/mcp/me", headers: { authorization: `Bearer ${first.token}`, accept: "application/json, text/event-stream" },
-        payload: rpc(1, "tools/list") });
-      expect(mcp.statusCode).toBe(401);
+      // 本机会话经本机程序转发连 /mcp/me：只列读的工具，调写的工具 403。
+      const mcp = (id: number, method: string, params?: Record<string, unknown>, token = first.token) => f.t.app.inject({ method: "POST", url: "/mcp/me",
+        headers: { authorization: `Bearer ${token}`, accept: "application/json, text/event-stream" }, payload: { ...rpc(id, method), ...(params ? { params } : {}) } });
+      expect((await mcp(1, "initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "tianshu-local", version: "1" } })).statusCode).toBe(200);
+      const tools = (await mcp(2, "tools/list")).json().result.tools.map((tool: { name: string }) => tool.name) as string[];
+      expect(tools).toEqual(expect.arrayContaining(["list_my_items", "get_item", "get_task_agreement", "check_task"]));
+      expect(tools.filter((name) => MCP_WRITE_TOOLS.has(name))).toEqual([]);
+      expect((await mcp(3, "tools/call", { name: "list_my_items", arguments: {} })).json().result.isError).toBe(false);
+      expect((await mcp(4, "tools/call", { name: "append_progress", arguments: { itemId: randomUUID(), body: "写不进去" } })).statusCode).toBe(403);
       expect((await f.t.app.inject({ method: "GET", url: "/api/me/home", headers: { authorization: `Bearer ${first.token}` } })).statusCode).toBe(401);
       expect((await f.sync(first.token, device, [f.session(device, { kind: "topic", topicId: randomUUID() }).item(1, "plan", plan([]))])).statusCode).toBe(200);
 
@@ -68,6 +75,7 @@ describe("本机程序：设备令牌和单向上报", () => {
       expect((await f.sync(second.token, randomUUID(), [f.session(device, { kind: "topic", topicId: randomUUID() }).item(1, "plan", plan([]))])).statusCode).toBe(403);
       expect((await f.call("GET", "/api/me/local-devices")).json().devices).toMatchObject([{ id: device, name: "改了名字", appVersion: "0.1.0" }]);
       expect((await f.call("DELETE", `/api/me/local-devices/${device}`)).statusCode).toBe(204);
+      expect((await mcp(5, "tools/list", undefined, second.token)).statusCode).toBe(401);
       expect((await f.sync(second.token, device, [f.session(device, { kind: "topic", topicId: randomUUID() }).item(1, "plan", plan([]))])).statusCode).toBe(401);
       expect((await f.call("GET", "/api/me/local-devices")).json().devices).toEqual([]);
       expect((await f.call("DELETE", `/api/me/local-devices/${device}`)).statusCode).toBe(404);

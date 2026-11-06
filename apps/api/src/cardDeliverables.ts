@@ -7,6 +7,7 @@ import type { Query } from "./meetingStore.js";
 import { UUID_PATTERN } from "./meetingStore.js";
 import { CardError, pendingItems } from "./taskCards.js";
 import { createDeliverableVersion, DeliverableError, MAX_DELIVERABLE_FILES, type DeliverableFile, type OwnTask } from "./taskDeliverables.js";
+import type { AgreementSnapshot } from "./deliverableReview.js";
 
 /**
  * 准备中的交付物和「出下一版」（V2 设计第 7.4 节）：Agent 验收通过的卡自动进准备中，专题的一版本人点了才进；
@@ -47,7 +48,9 @@ const safeName = (name: string) => name.replace(/[\u0000-\u001f/\\:*?"<>|]/g, "_
  * 建完回写 version_id。statement 不填就用这几样的标题拼一句。超过一版的上限（10 份新文件、5 个链接）时报错，什么都不写。
  * 同一个 Task 同时只出一版（会话级咨询锁）。返回新版本，评审由调用方排队。
  */
-export async function createVersionFromPending(pool: Pool, own: OwnTask, statement: string | undefined, storageDir: string): Promise<TDeliverableVersion> {
+/** agreement 是此刻约定的快照（V1，参考评审照它判），没有约定为 null。 */
+export async function createVersionFromPending(pool: Pool, own: OwnTask, statement: string | undefined, storageDir: string,
+  agreement: AgreementSnapshot | null): Promise<TDeliverableVersion> {
   const lock = await pool.connect();
   const key = `deliverable-pending:${own.task.taskId}`;
   await lock.query("SELECT pg_advisory_lock(hashtext($1))", [key]);
@@ -78,7 +81,7 @@ export async function createVersionFromPending(pool: Pool, own: OwnTask, stateme
     for (const row of topics) files.push({ filename: `${safeName(`${row.topic_title} · ${row.label}`)}.md`, buffer: Buffer.from(row.body!) });
     const titles = pending.map((row) => row.card_title ?? `${row.topic_title} · ${row.label}`);
     const text = statement?.trim() || `这一版纳入：${titles.join("、")}`.slice(0, 2000);
-    const version = await createDeliverableVersion(pool, own, files, { links, statement: text, keep: kept.map((item) => item.id) }, storageDir).catch((cause) => {
+    const version = await createDeliverableVersion(pool, own, files, { links, statement: text, keep: kept.map((item) => item.id) }, storageDir, agreement).catch((cause) => {
       if (cause instanceof DeliverableError) throw new CardError(cause.status, cause.code, cause.message);
       throw cause;
     });

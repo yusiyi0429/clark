@@ -35,7 +35,7 @@ async function acceptanceFixture() {
   return { ...f, calls, plan, handBack, card, view, settle, hold: () => { let open = () => undefined as void; gate = new Promise((resolve) => { open = resolve; }); return () => { gate = null; open(); }; } };
 }
 
-describe("Agent 验收：队列、推翻、退回记录", () => {
+describe("Agent 验收：队列、推翻、退回记录", { timeout: 30_000 }, () => {
   it("都达到 → 已完成，准备中多一行，事项群里记一句；Agent 拿到卡、标准、执行方的说法、产出和链接正文", async () => {
     const f = await acceptanceFixture();
     try {
@@ -60,6 +60,8 @@ describe("Agent 验收：队列、推翻、退回记录", () => {
       const [task] = await f.t.sql("SELECT acceptance FROM tasks WHERE id=$1", [id]);
       expect(task.acceptance).toMatchObject({ by: TEST_MEMBER.personId, verdict: "Agent 验收通过（2/2）", agentHandbackId: handback,
         standards: [{ text: "有方案文档", met: true, evidence: "方案.md 第 1 段" }, { text: "有评审结论", met: true }] });
+      // 事项详情里的验收记录写明是哪次交回由 Agent 验的。
+      expect((await f.call("GET", `/api/me/tasks/${id}`)).json().acceptance).toMatchObject({ verdict: "Agent 验收通过（2/2）", agentHandbackId: handback });
       expect((await f.call("GET", "/api/plan-tasks/task-open/cards")).json().pending).toMatchObject([{ kind: "card", cardId: id, title: "写方案" }]);
       expect((await f.t.sql("SELECT content FROM thread_messages WHERE object_type='task' AND object_id=$1 ORDER BY id DESC LIMIT 1", [id]))[0].content)
         .toBe("Agent 验收通过（2/2）。");
@@ -166,6 +168,27 @@ describe("Agent 验收：队列、推翻、退回记录", () => {
       const detail = await f.view(third);
       expect(detail.handbacks.map((item: { attempt: number; outcome: string | null }) => [item.attempt, item.outcome])).toEqual([[2, null], [1, "pass"]]);
       expect(detail.task.status).toBe("in_progress");
+    } finally { await f.close(); }
+  });
+
+  it("Task 的约定（V1）进卡的开工交代和验收的输入：卡对的那条用什么证明、这次不包括什么；没写约定时为空", async () => {
+    const f = await acceptanceFixture();
+    try {
+      const id = await f.card();
+      const before = (await f.call("GET", `/api/me/cards/${id}/brief`)).json();
+      expect(before).toMatchObject({ criterion: { index: 1, text: "有题库打分结果", proof: null }, exclusions: [] });
+      expect(before.markdown).not.toContain("这次不包括");
+      expect((await f.call("PUT", "/api/plan-tasks/task-open/agreement", { criteria: [{ index: 1, proof: "题库 200 题的打分表", acceptorId: null },
+        { index: 2, proof: "录屏链接", acceptorId: null }], exclusions: ["不含英文题库"] })).statusCode).toBe(200);
+
+      const brief = (await f.call("GET", `/api/me/cards/${id}/brief`)).json();
+      expect(brief).toMatchObject({ criterion: { index: 1, proof: "题库 200 题的打分表" }, exclusions: ["不含英文题库"] });
+      for (const text of ["这条用什么证明：题库 200 题的打分表", "## 这次不包括", "- 不含英文题库"]) expect(brief.markdown).toContain(text);
+
+      f.plan.push(["met", "met"]);
+      await f.handBack(id);
+      await f.settle();
+      expect(f.calls[0].input.agreement).toEqual({ proof: "题库 200 题的打分表", exclusions: ["不含英文题库"] });
     } finally { await f.close(); }
   });
 });

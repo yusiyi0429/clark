@@ -9,6 +9,7 @@ import { listTaskProgress } from "./taskProgress.js";
 import { postThreadIntro, type ThreadIntroAgent } from "./threadIntro.js";
 import { postCoAgentMessage, threadIntroInput, type ThreadRef } from "./threads.js";
 import type { PeopleDirectory } from "./peopleDirectory.js";
+import { CARD_COLUMNS, cardsOf, type CardRow } from "./cardProjection.js";
 
 type TaskRow = {
   id: string; version: number; title: string; status: TTaskView["status"]; created_by: TTaskView["source"];
@@ -61,7 +62,9 @@ export const TASK_PLACE_JOB = "task.place";
 
 const queryOf = (client: PoolClient): Query => (sql, params) => client.query(sql, params);
 const person = (id: string, names: Map<string, string>) => ({ personId: id, name: names.get(id) ?? id });
-function projectTask(row: TaskRow, names: Map<string, string>): TTaskView {
+/** 不带 card 的那部分（一行就能投影）；card 要一批一起读，见 withCards。 */
+type TaskBase = Omit<TTaskView, "card">;
+function projectTask(row: TaskRow, names: Map<string, string>): TaskBase {
   return {
     id: row.id, version: row.version, title: row.title, status: row.status, source: row.created_by,
     startDate: row.start_date, dueDate: row.due_date, doneDefinition: row.done_definition,
@@ -83,6 +86,14 @@ function projectTask(row: TaskRow, names: Map<string, string>): TTaskView {
     createdAt: row.created_at.toISOString(), updatedAt: row.updated_at.toISOString(),
   };
 }
+
+/** 给一批投影好的事项带上卡（V2 执行看板的列、标记、最近一次执行和交回）。 */
+async function withCards(q: Query, tasks: TaskBase[]): Promise<TTaskView[]> {
+  if (!tasks.length) return [];
+  const cards = await cardsOf(q, (await q(`SELECT ${CARD_COLUMNS} FROM tasks WHERE id=ANY($1::uuid[])`, [tasks.map((task) => task.id)])).rows as CardRow[]);
+  return tasks.flatMap((task) => { const card = cards.get(task.id); return card ? [{ ...task, card }] : []; });
+}
+const projectOne = async (q: Query, row: TaskRow, names: Map<string, string>): Promise<TTaskView> => (await withCards(q, [projectTask(row, names)]))[0];
 
 /** 完成标准：doneDefinition 按行拆开，去掉空行和行首的列表记号（- * · • [ ] 1. 1、 (1) ①）。 */
 export function taskStandards(doneDefinition: string | null): string[] {
@@ -110,26 +121,26 @@ async function getTaskRow(q: Query, id: string): Promise<TaskRow | null> {
 }
 export async function getTaskView(q: Query, id: string, names: Map<string, string>): Promise<TTaskView | null> {
   const row = await getTaskRow(q, id);
-  return row ? projectTask(row, names) : null;
+  return row ? projectOne(q, row, names) : null;
 }
 /** 一次取多条，按 ids 的顺序；不在了的跳过。 */
 export async function getTaskViews(q: Query, ids: string[], names: Map<string, string>): Promise<TTaskView[]> {
   if (!ids.length) return [];
   const rows = new Map(((await q(`${TASK_SELECT} WHERE t.id=ANY($1::uuid[])`, [ids])).rows as TaskRow[]).map((row) => [row.id, row]));
-  return ids.flatMap((id) => { const row = rows.get(id); return row ? [projectTask(row, names)] : []; });
+  return withCards(q, ids.flatMap((id) => { const row = rows.get(id); return row ? [projectTask(row, names)] : []; }));
 }
 export async function listMyTasks(q: Query, ownerId: string, names: Map<string, string>): Promise<TTaskView[]> {
   const rows = (await q(`${TASK_SELECT} WHERE t.owner_id=$1 ORDER BY t.created_at DESC,t.id`, [ownerId])).rows as TaskRow[];
-  return rows.map((row) => projectTask(row, names));
+  return withCards(q, rows.map((row) => projectTask(row, names)));
 }
 /** 本人待归位的事项（UNPLACED），新的在前。 */
 export async function listUnplacedTasks(q: Query, ownerId: string, names: Map<string, string>): Promise<TTaskView[]> {
   const rows = (await q(`${TASK_SELECT} WHERE t.owner_id=$1 AND ${UNPLACED} ORDER BY t.created_at DESC,t.id`, [ownerId])).rows as TaskRow[];
-  return rows.map((row) => projectTask(row, names));
+  return withCards(q, rows.map((row) => projectTask(row, names)));
 }
 export async function listMissionItems(q: Query, missionId: string, names: Map<string, string>): Promise<TTaskView[]> {
   const rows = (await q(`${TASK_SELECT} WHERE t.mission_id=$1 ORDER BY t.step_order,t.id`, [missionId])).rows as TaskRow[];
-  return rows.map((row) => projectTask(row, names));
+  return withCards(q, rows.map((row) => projectTask(row, names)));
 }
 export async function canReadTask(q: Query, id: string, personId: string): Promise<boolean> {
   if (!UUID_PATTERN.test(id)) return false;
@@ -244,7 +255,7 @@ async function ownerMutation(pool: Pool, ownerId: string, taskId: string, versio
     await client.query("BEGIN");
     const row = await lockedOwnerTask(client,ownerId,taskId);
     if (!row) { await client.query("ROLLBACK"); return { notFound:true }; }
-    if (row.version !== version) { await client.query("ROLLBACK"); return { conflict:projectTask(row,names) }; }
+    if (row.version !== version) { await client.query("ROLLBACK"); return { conflict:await projectOne(queryOf(client),row,names) }; }
     const failed = await apply(client,row);
     if (failed) { await client.query("ROLLBACK"); return failed; }
     const task = (await getTaskView(queryOf(client),taskId,names))!;
@@ -353,7 +364,7 @@ export function acceptMyTask(pool: Pool, ownerId: string, taskId: string, input:
     const checks = new Map(input.standards.map((check) => [check.index, check]));
     if (standards.some((_, index) => !checks.get(index)?.met)) return error(400,"ACCEPTANCE_NOT_ALL_MET","还有完成标准没确认达到；没达到的请退回");
     const verdict = input.verdict?.trim() || null;
-    const acceptance: StoredAcceptance = { by: ownerId, at: now.toISOString(), verdict, deliverableMaterialIds: deliverables,
+    const acceptance: StoredAcceptance = { by: ownerId, at: now.toISOString(), verdict, deliverableMaterialIds: deliverables, agentHandbackId: null,
       standards: standards.map((text, index) => {
         const check = checks.get(index)!;
         return { text, met: true, evidence: check.evidence?.trim() || null, materialId: check.materialId ?? null };
@@ -425,7 +436,7 @@ export async function deleteMyTask(pool: Pool, ownerId: string, taskId: string, 
     await client.query("BEGIN");
     const row = await lockedOwnerTask(client,ownerId,taskId);
     if (!row) { await client.query("ROLLBACK"); return { notFound:true }; }
-    if (row.version !== version) { await client.query("ROLLBACK"); return { conflict:projectTask(row,names) }; }
+    if (row.version !== version) { await client.query("ROLLBACK"); return { conflict:await projectOne(queryOf(client),row,names) }; }
     if (row.created_by === "meeting") { await client.query("ROLLBACK"); return error(409,"TASK_NOT_DELETABLE","会后分派的事项不能删除，只能退回"); }
     if (row.status !== "not_started" && !anyStatus) { await client.query("ROLLBACK"); return error(409,"TASK_NOT_DELETABLE","只有未启动的自建或计划事项可以删除"); }
     for (const table of ["thread_reads","thread_messages","thread_members"]) await client.query(`DELETE FROM ${table} WHERE object_type='task' AND object_id=$1`,[taskId]);
@@ -446,11 +457,12 @@ export async function getTaskDetail(q: Query, taskId: string, viewerId: string, 
     .map((m)=>({ missionId:m.id,title:m.title,battlefieldName:m.battlefield,period:m.period })) : [];
   const excluded = new Set([row.owner_id,...row.collaborators]);
   const collaboratorOptions = owner ? [...names].filter(([id])=>!excluded.has(id) && invitable.has(id)).map(([id])=>person(id,names)) : [];
-  return { task:projectTask(row,names),judgment:row.judgment,judgmentAt:row.judgment_at?.toISOString() ?? null,
+  return { task:await projectOne(q,row,names),judgment:row.judgment,judgmentAt:row.judgment_at?.toISOString() ?? null,
     myNote:note?.note ?? null,myNoteAt:note?.updated_at.toISOString() ?? null,role:owner?"owner":"collaborator",missionOptions,collaboratorOptions,
     progress: await listTaskProgress(q,taskId,names), standards: taskStandards(row.done_definition),
     submission: row.submission && row.status !== "done" ? { ...row.submission, by: person(row.submission.by,names) } : null,
-    acceptance: row.acceptance && row.status === "done" ? { ...row.acceptance, by: person(row.acceptance.by,names) } : null };
+    // 早先存的验收记录没有 agentHandbackId（都是本人验收的）。
+    acceptance: row.acceptance && row.status === "done" ? { ...row.acceptance, agentHandbackId: row.acceptance.agentHandbackId ?? null, by: person(row.acceptance.by,names) } : null };
 }
 export async function putMyTaskNote(pool: Pool, viewerId: string, taskId: string, note: string | null): Promise<{ myNote:string | null } | { notFound:true }> {
   const q: Query = (sql,params)=>pool.query(sql,params);

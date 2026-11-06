@@ -44,7 +44,7 @@ import { CollaboratorsDialog } from "./CollaboratorsDialog";
 type Task = components["schemas"]["TaskView"];
 type Detail = components["schemas"]["TaskDetailResponse"];
 const task = (id = "task-1", extra: Partial<Task> = {}): Task => ({
-  id, version: 2, title: `事项 ${id}`, status: "not_started", source: "self", startDate: "2026-10-01", dueDate: "2026-10-12", doneDefinition: "留下结论\n附上依据", mission: { missionId: "mission-1", title: "上线验证", cardId: "card-1", period: "2026-10", battlefieldName: "灯塔客户", step: 2, steps: 4 }, waitingOn: { taskId: "task-0", title: "确认范围" }, awaitingAcceptance: false, planTaskId: null, blocker: null, owner: { personId: "sun", name: "孙铭泽" }, collaborators: [{ personId: "lin", name: "林晓" }], latestProgress: null, returnReason: null, origin: null, createdAt: "2026-09-27T00:00:00Z", updatedAt: "2026-09-27T00:00:00Z", ...extra,
+  id, version: 2, title: `事项 ${id}`, status: "not_started", source: "self", startDate: "2026-10-01", dueDate: "2026-10-12", doneDefinition: "留下结论\n附上依据", mission: { missionId: "mission-1", title: "上线验证", cardId: "card-1", period: "2026-10", battlefieldName: "灯塔客户", step: 2, steps: 4 }, waitingOn: { taskId: "task-0", title: "确认范围" }, awaitingAcceptance: false, planTaskId: null, blocker: null, owner: { personId: "sun", name: "孙铭泽" }, collaborators: [{ personId: "lin", name: "林晓" }], latestProgress: null, returnReason: null, origin: null, createdAt: "2026-09-27T00:00:00Z", updatedAt: "2026-09-27T00:00:00Z", card: { stage: "todo", wait: null, role: null, executor: null, model: null, criterion: null, run: null, handback: null, deliverable: null }, ...extra,
 });
 const detail = (role: Detail["role"], extra: Partial<Detail> = {}): Detail => ({ task: task(), judgment: null, judgmentAt: null, myNote: null, myNoteAt: null, role, missionOptions: role === "owner" ? [{ missionId: "mission-2", title: "客户试点", battlefieldName: "灯塔客户", period: "2026-10" }] : [], collaboratorOptions: role === "owner" ? [{ personId: "bai", name: "白田田" }] : [], progress: [], standards: ["留下结论", "附上依据"], submission: null, acceptance: null, ...extra });
 const material = (id: string, extra: Partial<TMaterialView> = {}): TMaterialView => ({ id, objectType: "task", objectId: "task-1", fileName: "版本规划.md", format: "markdown", sizeBytes: 40, origin: "upload",
@@ -138,7 +138,7 @@ describe("执行事项封面", () => {
     const html = screen(detail("owner", { task: task("task-1", { status: "done" }), acceptance: {
       by: { personId: "sun", name: "孙铭泽" }, at: "2026-10-10T08:30:00Z", verdict: "两家都确认了方向",
       standards: [{ text: "留下结论", met: true, evidence: "进展 · 10 月 9 日", materialId: null }, { text: "附上依据", met: false, evidence: null, materialId: null }],
-      deliverableMaterialIds: [DOC],
+      deliverableMaterialIds: [DOC], agentHandbackId: null,
     } }));
     const text = visible(html);
     expect(text).toContain("已验收孙铭泽 · 10 月 10 日 16:30 · 比计划早 2 天"); expect(text).toContain("两家都确认了方向");

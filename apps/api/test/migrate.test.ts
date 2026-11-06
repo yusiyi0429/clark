@@ -199,6 +199,7 @@ describe("migration", () => {
         "222_person_rail_backgrounds.sql",
         "223_buddy_personality.sql",
         "224_person_avatars.sql",
+        "225_task_agreement_notes.sql",
         "226_cards.sql",
         "227_research_topics.sql",
         "228_local_runs.sql",
@@ -207,6 +208,7 @@ describe("migration", () => {
         "231_local_run_queued.sql",
         "232_web_search_calls.sql",
         "233_local_sync_slots_progress_versions.sql",
+        "234_local_plan_verify.sql",
       ]);
 
       // 幂等：重复执行不再变更

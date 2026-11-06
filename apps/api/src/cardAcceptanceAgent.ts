@@ -68,7 +68,7 @@ export type AcceptanceInput = {
   outputs: { name: string; kind: "artifact" | "evidence"; text: string | null; url: string | null }[];
   unreadable: { name: string; note: string }[];
   previous?: { index: number; text: string; verdict: TCriterionVerdict; reason: string; fix: string | null }[];
-  /** 约定：V1 的约定读取合进来以前一直为 null。 */
+  /** 约定（V1）：卡对的那条 Task 标准用什么证明、这次不包括什么；两样都没有为 null。 */
   agreement: { proof: string | null; exclusions: string[] } | null;
   role: { name: string; acceptanceMd: string } | null;
   reviewer: { name: string; practiceMd: string; acceptanceMd: string } | null;

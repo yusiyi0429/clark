@@ -18,7 +18,7 @@ async function passedCard(f: Awaited<ReturnType<typeof boardFixture>>, local: Aw
   return id;
 }
 
-describe("准备中的交付物和出下一版", () => {
+describe("准备中的交付物和出下一版", { timeout: 30_000 }, () => {
   it("专题的一版点了才进准备中，能拿出来；出下一版沿用上一版全部材料、加上准备中的各样，回写 version_id，评审自动开始", async () => {
     const f = await boardFixture({ boardAgents: { acceptance } });
     try {

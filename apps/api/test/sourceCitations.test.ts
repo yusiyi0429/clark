@@ -16,7 +16,7 @@ describe("回答里的出处", () => {
     // 旧企业知识已退役（ADR-0027），不再教模型写 memory: 引用
     expect(SOURCE_CITATION_RULES).not.toContain("memory:");
     for (const text of ["[资料名称](地址)", "cite:<引用标记>", "#p<段号>", "read_group_evidence", "read_decision_history",
-      "cite:research:<议题 id>", "cite:issue:<议题 id>", "cite:meeting:<会议 id>", "不能自己拼、不能猜", "出处带网址的写原网址", "cite:source", "名称里不写内部编号"]) {
+      "cite:research:<议题 id>", "cite:issue:<议题 id>", "cite:meeting:<会议 id>", "cite:world:<ref>", "不能自己拼、不能猜", "出处带网址的写原网址", "cite:source", "名称里不写内部编号"]) {
       expect(SOURCE_CITATION_RULES).toContain(text);
     }
     expect(findForbiddenPhrase(SOURCE_CITATION_RULES)).toBeNull();

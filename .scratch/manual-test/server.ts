@@ -138,7 +138,8 @@ async function main() {
   let clockAnchor = Date.now();
   const appNow = () => new Date(now.getTime() + Date.now() - clockAnchor);
   applicationNow = appNow;
-  app = await createTestApp({ companyPeopleSeed: peopleFile, companyName: "天枢（手动测试）", missionCardDraftsDir: join(root, "seed/placeholders") }, {
+  // 云端拆卡和云端验收（BOARD_CLOUD_AGENTS）缺省关；本机程序接上规划员、验收员之前，手动测试环境（模拟本机走的是云端拆卡）先开着。
+  app = await createTestApp({ companyPeopleSeed: peopleFile, companyName: "天枢（手动测试）", missionCardDraftsDir: join(root, "seed/placeholders"), boardCloudAgents: true }, {
     async run(input) {
       const answer = "这是隔离验收中的私人只读回复。公开意见请在事项群组发表；这段私聊不会进入集中 Review。";
       input.emit({ type: "message", delta: answer });

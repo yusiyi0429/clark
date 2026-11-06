@@ -1,14 +1,22 @@
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
-import type { TAcceptCardDraftsRequest, TCardBoardResponse, TCardBriefResponse, TCardDetailResponse, TCardHandbackBrief, TCardHandbackView, TCardModel, TCardPlanView, TCardTaskView,
-  TCardWait, TCriterionVerdict, TDeliverableInclusion, TLocalHandbackCriterion, TPatchCardRequest, TPendingDeliverableItem, TTaskCard, TTaskView } from "@warmap/contracts";
-import { findOwnTask, DeliverableError, type OwnTask } from "./taskDeliverables.js";
-import { outputView, recentRuns, runBrief, runView, type OutputRow, type RunRow } from "./localDevices.js";
+import type { TAcceptCardDraftsRequest, TCardBoardResponse, TCardBriefResponse, TCardDetailResponse, TCardHandbackView, TCardPlanView, TCardTaskView, TPatchCardRequest,
+  TPendingDeliverableItem, TTaskAgreementResponse, TTaskView } from "@warmap/contracts";
+import { DeliverableError, type OwnTask } from "./taskDeliverables.js";
+import { planTaskViewer, type PlanTaskAccess } from "./planTaskAccess.js";
+import type { PeopleDirectory } from "./peopleDirectory.js";
+import { personDisplayNames } from "./people.js";
+import { openPlanTask } from "./taskAgreements.js";
+import { CARD_COLUMNS, cardsOf, effectiveOutcome, handbackBrief, nextVersions, type CardRow, type HandbackRow, type StoredAcceptance } from "./cardProjection.js";
+import { outputView, recentRuns, runView, type OutputRow } from "./localDevices.js";
 import type { Query } from "./meetingStore.js";
 import { UUID_PATTERN } from "./meetingStore.js";
 import type { PlanTaskSource } from "./planTasks.js";
 import type { TaskPageFacts } from "./pageGuides.js";
-import { ownRole, roleBrief, roleRef, rolesById, type RoleRow } from "./roles.js";
+import { ensurePresetRole, ownRole, roleBrief, roleRef, rolesById, type RoleRow } from "./roles.js";
+
+/** 没配岗位的卡兜底用的预设（roles/presets/general/executor.md）。 */
+const DEFAULT_WORKER_PRESET = "executor";
 import { createInTransaction, getTaskViews, taskStandards } from "./tasks.js";
 
 /**
@@ -17,99 +25,29 @@ import { createInTransaction, getTaskViews, taskStandards } from "./tasks.js";
  */
 
 export class CardError extends Error {
-  constructor(public readonly status: 400 | 403 | 404 | 409 | 413, public readonly code: string, message: string, public readonly latestTask?: TTaskView) { super(message); }
+  constructor(public readonly status: 400 | 403 | 404 | 409 | 413 | 503, public readonly code: string, message: string, public readonly latestTask?: TTaskView) { super(message); }
 }
 
-/** 一次交回在库里的验收结论。 */
-export type StoredAcceptance = { headline: string | null; criteria: { index: number; verdict: TCriterionVerdict; reason: string; evidence: string | null; fix: string | null }[];
-  beyondScope: string[] };
-export type HandbackRow = { id: string; task_id: string; run_id: string | null; owner_id: string; attempt: number; criteria: string[]; claims: TLocalHandbackCriterion[];
-  summary: string | null; output_ids: string[]; status: TCardHandbackBrief["status"]; started_at: Date | null; finished_at: Date | null; error: string | null;
-  result: StoredAcceptance | null; outcome: "pass" | "fail" | null; return_text: string | null; returned_at: Date | null; overruled_at: Date | null;
-  overruled_by: string | null; overrule_reason: string | null; created_at: Date };
-type CardRow = { id: string; status: TTaskView["status"]; executor: TTaskCard["executor"]; model: TCardModel | null; brief: string | null;
-  criterion_index: number | null; criterion_text: string | null; plan_task_id: string | null; done_definition: string | null; mission_id: string | null;
-  role_id: string | null };
+/** 卡挂的 Task：V1 的 openPlanTask 找到的（谁能看照它判：负责人、Mission 负责人、战场负责人、CEO、约定里的认可人）和此刻的约定。 */
+export type CardPlanTask = PlanTaskAccess & { agreement: TTaskAgreementResponse };
+/** 按人打开一个 Task；看不到、找不到抛 DeliverableError（404）。 */
+export type OpenPlanTask = (personId: string, planTaskId: string) => Promise<CardPlanTask>;
 
-/** 推翻过的验收按本人的判断算：通过的推翻算没过，没过的推翻算通过。 */
-export const effectiveOutcome = (row: Pick<HandbackRow, "outcome" | "overruled_at">) =>
-  row.outcome && row.overruled_at ? (row.outcome === "pass" ? "fail" : "pass") : row.outcome;
-
-/** 连续几次没过（从最近一次往前数，排队或在验收的不算）。 */
-export function failStreak(handbacks: HandbackRow[]): number {
-  let streak = 0;
-  for (const row of handbacks) {
-    if (row.status !== "done" || effectiveOutcome(row) === null) continue;
-    if (effectiveOutcome(row) !== "fail") break;
-    streak++;
-  }
-  return streak;
+export function planTaskOpener(q: Query, planTasks: PlanTaskSource, directory: PeopleDirectory, now: () => Date): OpenPlanTask {
+  return async (personId, planTaskId) => {
+    const { access, agreement } = await openPlanTask(q, planTasks, planTaskViewer(directory, personId), now(), planTaskId, personDisplayNames(directory));
+    return { ...access, agreement };
+  };
 }
 
-export function handbackBrief(row: HandbackRow): TCardHandbackBrief {
-  const criteria = row.result?.criteria ?? [];
-  return { id: row.id, attempt: row.attempt, status: row.status, outcome: row.outcome, met: criteria.filter((item) => item.verdict === "met").length, total: criteria.length,
-    headline: row.result?.headline ?? null, returnText: row.return_text, returnedAt: row.returned_at?.toISOString() ?? null, overruled: row.overruled_at !== null,
-    createdAt: row.created_at.toISOString(), finishedAt: row.finished_at?.toISOString() ?? null };
-}
+export { effectiveOutcome, failStreak, handbackBrief, nextVersions, type HandbackRow, type StoredAcceptance } from "./cardProjection.js";
 
-/** 列和标记（第 3 节）：handbacks、runs 都是新的在前。 */
-function stageAndWait(row: CardRow, handbacks: HandbackRow[], runs: RunRow[]): Pick<TTaskCard, "stage" | "wait"> {
-  if (row.status === "not_started") return { stage: "todo", wait: null };
-  if (row.status === "done") return { stage: "done", wait: null };
-  const latest = handbacks[0];
-  if (latest && (latest.status === "queued" || latest.status === "running")) return { stage: "review", wait: null };
-  const failedRuns = runs.length >= 2 && runs.slice(0, 2).every((run) => run.state === "failed");
-  if (failStreak(handbacks) >= 2 || failedRuns) return { stage: "doing", wait: "blocked" };
-  if (latest && effectiveOutcome(latest) === "fail" && !latest.returned_at) return { stage: "doing", wait: "review_failed" };
-  const waits: Partial<Record<RunRow["state"], TCardWait>> = { waiting_permission: "approval", idle: "reply", exited: "paused" };
-  return { stage: "doing", wait: runs[0] ? waits[runs[0].state] ?? null : null };
-}
+/** 带上 card 的执行事项（TaskView 自己带 card），按 ids 的顺序；不在了的跳过。 */
+export const cardTaskViews = (q: Query, ids: string[], names: Map<string, string>): Promise<TCardTaskView[]> => getTaskViews(q, ids, names);
 
-const CARD_COLUMNS = "id::text,status,executor,model,brief,criterion_index,criterion_text,plan_task_id,done_definition,mission_id,role_id::text";
-
-/** 一批执行事项各自的 card。 */
-async function cardsOf(q: Query, rows: CardRow[]): Promise<Map<string, TTaskCard>> {
-  const ids = rows.map((row) => row.id);
-  if (!ids.length) return new Map();
-  const handbacks = (await q("SELECT * FROM card_handbacks WHERE task_id=ANY($1::uuid[]) ORDER BY attempt DESC", [ids])).rows as HandbackRow[];
-  // 每张卡最近两次执行：最近一次给摘要和标记，两次都异常退出算受阻。
-  const runs = (await q(`SELECT * FROM (SELECT r.*,d.name AS device_name,row_number() OVER (PARTITION BY r.task_id ORDER BY r.started_at DESC,r.id) AS n
-    FROM local_runs r LEFT JOIN local_devices d ON d.owner_id=r.owner_id AND d.id=r.device_id WHERE r.task_id=ANY($1::uuid[])) x
-    WHERE n<=2 ORDER BY started_at DESC,id`, [ids])).rows as RunRow[];
-  const inclusions = (await q(`SELECT h.task_id::text,v.number,p.version_id FROM deliverable_pending_items p JOIN card_handbacks h ON h.id=p.handback_id
-    LEFT JOIN deliverable_versions v ON v.id=p.version_id WHERE h.task_id=ANY($1::uuid[]) ORDER BY p.added_at DESC`, [ids])).rows as { task_id: string; number: number | null; version_id: string | null }[];
-  const next = await nextVersions(q, [...new Set(rows.flatMap((row) => row.plan_task_id ? [row.plan_task_id] : []))]);
-  const roles = await rolesById(q, rows.map((row) => row.role_id));
-  return new Map(rows.map((row) => {
-    const own = handbacks.filter((item) => item.task_id === row.id), ownRuns = runs.filter((item) => item.task_id === row.id);
-    const inclusion = inclusions.find((item) => item.task_id === row.id);
-    const deliverable: TDeliverableInclusion | null = !inclusion ? null : inclusion.version_id ? { state: "included", versionNumber: inclusion.number! }
-      : { state: "pending", versionNumber: next.get(row.plan_task_id ?? "") ?? 1 };
-    const role = row.role_id ? roles.get(row.role_id) : undefined;
-    return [row.id, { ...stageAndWait(row, own, ownRuns), role: role ? roleRef(role) : null, executor: row.executor, model: row.model,
-      criterion: row.criterion_index && row.criterion_text ? { index: row.criterion_index, text: row.criterion_text } : null,
-      run: ownRuns[0] ? runBrief(ownRuns[0]) : null, handback: own[0] ? handbackBrief(own[0]) : null, deliverable }];
-  }));
-}
-
-/** 每个 Task 下一版交付物的号。 */
-export async function nextVersions(q: Query, planTaskIds: string[]): Promise<Map<string, number>> {
-  if (!planTaskIds.length) return new Map();
-  const rows = (await q("SELECT task_id,max(number)::int AS number FROM deliverable_versions WHERE task_id=ANY($1::text[]) GROUP BY task_id", [planTaskIds])).rows as { task_id: string; number: number }[];
-  return new Map(planTaskIds.map((id) => [id, (rows.find((row) => row.task_id === id)?.number ?? 0) + 1]));
-}
-
-/** 带上 card 的执行事项，按 ids 的顺序；不在了的跳过。 */
-export async function cardTaskViews(q: Query, ids: string[], names: Map<string, string>): Promise<TCardTaskView[]> {
-  const rows = (await q(`SELECT ${CARD_COLUMNS} FROM tasks WHERE id=ANY($1::uuid[])`, [ids])).rows as CardRow[];
-  const cards = await cardsOf(q, rows);
-  return (await getTaskViews(q, ids, names)).flatMap((task) => cards.has(task.id) ? [{ ...task, card: cards.get(task.id)! }] : []);
-}
-
-/** 看板只给 Task 负责人：本人 Mission 下的 Task，本体登记了别人做负责人时不给。 */
-export async function boardTask(q: Query, planTasks: PlanTaskSource, personId: string, now: Date, taskId: string): Promise<OwnTask> {
-  const own = await findOwnTask(q, planTasks, personId, now, taskId).catch((cause) => {
+/** 看板只给 Task 负责人（本体没登记负责人时是 Mission 负责人）；能看但不是负责人的 403，看不到的 404。 */
+export async function boardTask(open: OpenPlanTask, personId: string, taskId: string): Promise<CardPlanTask> {
+  const own = await open(personId, taskId).catch((cause) => {
     if (cause instanceof DeliverableError) throw new CardError(cause.status, cause.code, cause.message);
     throw cause;
   });
@@ -117,12 +55,26 @@ export async function boardTask(q: Query, planTasks: PlanTaskSource, personId: s
   return own;
 }
 
-/** 对话从 Task 页发出时带给 Chat 的这个 Task（pageGuides.ts 的 TaskPageFacts）：本人 Mission 下读不到为 null；看板各列几张卡只给负责人。 */
-export async function taskPageFacts(q: Query, planTasks: PlanTaskSource, personId: string, now: Date, taskId: string): Promise<TaskPageFacts | null> {
-  const own = await findOwnTask(q, planTasks, personId, now, taskId).catch((cause) => {
+/**
+ * 卡对的那条 Task 标准的约定（V1）：用什么证明（卡对了第几条才有）、这次不包括什么。两样都没有为 null。
+ * 开工交代和验收的输入都用它。
+ */
+export function cardAgreement(agreement: TTaskAgreementResponse | null, criterionIndex: number | null): { proof: string | null; exclusions: string[] } | null {
+  if (!agreement) return null;
+  const proof = criterionIndex ? agreement.criteria.find((item) => item.index === criterionIndex)?.proof ?? null : null;
+  return proof || agreement.exclusions.length ? { proof, exclusions: agreement.exclusions } : null;
+}
+
+/** 卡挂的 Task，看不到、找不到为 null（其余错误照抛）。 */
+export const planTaskOrNull = (open: OpenPlanTask, personId: string) => (planTaskId: string): Promise<CardPlanTask | null> =>
+  open(personId, planTaskId).catch((cause) => {
     if (cause instanceof DeliverableError) return null;
     throw cause;
   });
+
+/** 对话从 Task 页发出时带给 Chat 的这个 Task（pageGuides.ts 的 TaskPageFacts）：看不到为 null；看板各列几张卡只给负责人。 */
+export async function taskPageFacts(q: Query, open: OpenPlanTask, personId: string, taskId: string): Promise<TaskPageFacts | null> {
+  const own = await planTaskOrNull(open, personId)(taskId);
   if (!own) return null;
   if (!own.canEdit) return { name: own.task.name, criteria: own.criteria.length, cards: null };
   const rows = (await q(`SELECT ${CARD_COLUMNS} FROM tasks WHERE plan_task_id=$1 AND owner_id=$2 AND status<>'returned'`, [taskId, personId])).rows as CardRow[];
@@ -131,9 +83,11 @@ export async function taskPageFacts(q: Query, planTasks: PlanTaskSource, personI
   return { name: own.task.name, criteria: own.criteria.length, cards };
 }
 
-type PlanRow = { id: string; status: TCardPlanView["status"]; hint: string | null; error: string | null; created_at: Date; started_at: Date | null; finished_at: Date | null };
+type PlanRow = { id: string; status: TCardPlanView["status"]; hint: string | null; error: string | null; created_at: Date; started_at: Date | null; finished_at: Date | null;
+  source: "cloud" | "local"; summary: string | null; steps: TCardPlanView["steps"]; risks: string[]; revision: number | null };
 export const planView = (row: PlanRow, expectedSeconds: number): TCardPlanView => ({ id: row.id, status: row.status, hint: row.hint, error: row.status === "failed" ? row.error : null,
-  createdAt: row.created_at.toISOString(), startedAt: row.started_at?.toISOString() ?? null, finishedAt: row.finished_at?.toISOString() ?? null, expectedSeconds });
+  createdAt: row.created_at.toISOString(), startedAt: row.started_at?.toISOString() ?? null, finishedAt: row.finished_at?.toISOString() ?? null, expectedSeconds,
+  source: row.source, summary: row.summary, steps: row.steps, risks: row.risks, revision: row.revision });
 
 /** 拆卡预计用时：最近 20 次拆完的中位数，30 秒到 10 分钟之间；还没有拆完过的按 1 分钟。 */
 export async function planExpectedSeconds(q: Query): Promise<number> {
@@ -189,7 +143,8 @@ export function handbackView(row: HandbackRow, names: Map<string, string>, expec
     result: row.result ? { criteria: row.result.criteria.map((item) => ({ ...item, text: row.criteria[item.index - 1] ?? "" })), beyondScope: row.result.beyondScope } : null,
     error: row.status === "failed" ? row.error : null, startedAt: row.started_at?.toISOString() ?? null, expectedSeconds,
     overrule: row.overruled_at && row.overruled_by && row.overrule_reason
-      ? { by: { personId: row.overruled_by, name: names.get(row.overruled_by) ?? row.overruled_by }, at: row.overruled_at.toISOString(), reason: row.overrule_reason } : null };
+      ? { by: { personId: row.overruled_by, name: names.get(row.overruled_by) ?? row.overruled_by }, at: row.overruled_at.toISOString(), reason: row.overrule_reason } : null,
+    verifier: row.verifier_source ? { source: row.verifier_source, modelLabel: row.verifier_model, roleId: row.verifier_role_id, roleVersion: row.verifier_role_version } : null };
 }
 
 /** 验收预计用时：最近 20 次验收完的中位数，30 秒到 10 分钟之间；还没有验收过的按 90 秒。 */
@@ -251,11 +206,11 @@ export async function patchCard(pool: Pool, ownerId: string, id: string, input: 
 }
 
 /**
- * GET /api/me/cards/:id/brief：开工时交给本机的交代（第 8.3、19.4 节）。约定里的「用什么证明」「这次不包括」等 V1 的约定读取合进来以后补上，现在是空的。
+ * GET /api/me/cards/:id/brief：开工时交给本机的交代（第 8.3、19.4 节）。约定（V1）写进来：卡对的那条标准用什么证明、这次不包括什么。
  * 本体上下文先只放 Mission 和 Task。role 是卡的岗位此刻的内容（岗位改了，下一张卡的交代就变）；职责、做法由本机程序注入会话，
  * markdown 里只写岗位名和它的验收口径（干完会按它验）。
  */
-export async function cardBrief(q: Query, ownerId: string, id: string, planTask: (planTaskId: string) => Promise<OwnTask | null>): Promise<TCardBriefResponse> {
+export async function cardBrief(q: Query, ownerId: string, id: string, planTask: (planTaskId: string) => Promise<CardPlanTask | null>): Promise<TCardBriefResponse> {
   const card = await ownCard(q, ownerId, id);
   const mission = card.mission_id ? (await q("SELECT id,title FROM missions WHERE id=$1", [card.mission_id])).rows[0] as { id: string; title: string } | undefined : undefined;
   const own = card.plan_task_id ? await planTask(card.plan_task_id) : null;
@@ -265,22 +220,26 @@ export async function cardBrief(q: Query, ownerId: string, id: string, planTask:
   const gap = review?.criteria.find((item) => item.index === card.criterion_index && item.verdict !== "met")?.fix ?? null;
   const judged = (await q("SELECT * FROM card_handbacks WHERE task_id=$1 AND status='done' AND outcome IS NOT NULL ORDER BY attempt DESC LIMIT 1", [id])).rows[0] as HandbackRow | undefined;
   const lastReturn = judged && effectiveOutcome(judged) === "fail" ? judged.return_text : null;
-  const criterion = card.criterion_index && card.criterion_text ? { index: card.criterion_index, text: card.criterion_text, proof: null } : null;
+  const agreement = cardAgreement(own?.agreement ?? null, card.criterion_index);
+  const criterion = card.criterion_index && card.criterion_text ? { index: card.criterion_index, text: card.criterion_text, proof: agreement?.proof ?? null } : null;
+  const exclusions = agreement?.exclusions ?? [];
   const role = card.role_id ? (await rolesById(q, [card.role_id])).get(card.role_id) : undefined;
   const lines = [
     `# 执行事项：${card.title}`, "",
     ...(mission ? [`- Mission：${mission.title}`] : []),
     ...(own ? [`- Task：${own.task.name}`] : []),
     ...(criterion ? [`- 对的是 Task 的第 ${criterion.index} 条标准：${criterion.text}`] : []),
+    ...(criterion?.proof ? [`- 这条用什么证明：${criterion.proof}`] : []),
     ...(role ? [`- 岗位：${role.name}`] : []),
     "", "## 交代", "", card.brief ?? "（没写交代，按标题和完成标准做）",
     "", "## 完成标准（交回时逐条写证据）", "", ...(standards.length ? standards.map((text, index) => `${index + 1}. ${text}`) : ["（还没写完成标准）"]),
+    ...(exclusions.length ? ["", "## 这次不包括", "", ...exclusions.map((text) => `- ${text}`)] : []),
     ...(gap ? ["", "## Task 最新一版评审里这条还差", "", gap] : []),
     ...(lastReturn ? ["", "## 上一次验收没过", "", lastReturn] : []),
     ...(role?.acceptance_md.trim() ? ["", `## ${role.name}的验收口径`, "", role.acceptance_md.trim()] : []),
   ];
   return { markdown: lines.join("\n").slice(0, 20_000), role: role ? roleBrief(role) : null, mission: mission ? { missionId: mission.id, title: mission.title } : null,
-    task: own ? { taskId: own.task.taskId, name: own.task.name } : null, criterion, exclusions: [], reviewGap: gap, lastReturn };
+    task: own ? { taskId: own.task.taskId, name: own.task.name } : null, criterion, exclusions, reviewGap: gap, lastReturn };
 }
 
 /** 拆卡（Task 负责人）：同一个 Task 已有一次在排队或在跑时返回那一次（created=false），不另起。 */
@@ -295,8 +254,9 @@ export async function createCardPlan(q: Query, own: OwnTask, hint: string | unde
 /**
  * 放进看板（Task 负责人）：草稿变成执行事项，推进人是本人，挂这个 Task 和它的 Mission，来源记「自己建」；草稿 id 当建事项的幂等键。
  * 可以顺手改标题、交代、完成标准、执行方。已经处理过的草稿 409。
+ * 交给 Claude Code 的卡都要有岗位（worker 列表按岗位列）：没配时照草稿建议的预设、没建议时照「执行员」预设给本人加上并挂上。
  */
-export async function acceptCardDrafts(pool: Pool, own: OwnTask, input: TAcceptCardDraftsRequest, names: Map<string, string>): Promise<TCardTaskView[]> {
+export async function acceptCardDrafts(pool: Pool, own: OwnTask, input: TAcceptCardDraftsRequest, names: Map<string, string>, now: Date): Promise<TCardTaskView[]> {
   const ids: string[] = [];
   const client = await pool.connect();
   try {
@@ -312,9 +272,12 @@ export async function acceptCardDrafts(pool: Pool, own: OwnTask, input: TAcceptC
         : new CardError(409, "DRAFT_DECIDED", "这张草稿已经处理过了");
       const index = draft.criterion_index && own.criteria[draft.criterion_index - 1] ? draft.criterion_index : null;
       if (edit.roleId) await ownRole(client.query.bind(client), own.viewerId, edit.roleId);
+      const executor = edit.executor ?? draft.executor;
+      let roleId = edit.roleId === undefined ? draft.role_id : edit.roleId;
+      if (!roleId && executor === "claude_code") roleId = (await (draft.suggest_preset_key ? ensurePresetRole(client, own.viewerId, draft.suggest_preset_key, now) : null)
+        ?? await ensurePresetRole(client, own.viewerId, DEFAULT_WORKER_PRESET, now))?.id ?? null;
       await client.query("UPDATE tasks SET executor=$2,brief=$3,criterion_index=$4,criterion_text=$5,role_id=$6 WHERE id=$1",
-        [created.task.id, edit.executor ?? draft.executor, (edit.brief ?? draft.brief).trim() || null, index, index ? own.criteria[index - 1] : null,
-          edit.roleId === undefined ? draft.role_id : edit.roleId]);
+        [created.task.id, executor, (edit.brief ?? draft.brief).trim() || null, index, index ? own.criteria[index - 1] : null, roleId]);
       await client.query("UPDATE card_drafts SET status='accepted',task_id=$2,decided_at=now() WHERE id=$1", [draft.id, created.task.id]);
       ids.push(created.task.id);
     }

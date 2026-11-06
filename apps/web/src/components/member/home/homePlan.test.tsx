@@ -102,7 +102,7 @@ import { HOME_PLAN_CHANGED, useHomePlan } from "./useHomePlan";
 
 
 const item = (id: string, title: string, extra: Partial<TTaskView> = {}): TTaskView => ({
-  id, version: 1, title, status: "in_progress", source: "self", startDate: null, dueDate: null, doneDefinition: null,
+  id, version: 1, title, status: "in_progress", source: "self", startDate: null, dueDate: null, doneDefinition: null, card: { stage: "todo", wait: null, role: null, executor: null, model: null, criterion: null, run: null, handback: null, deliverable: null },
   mission: null, waitingOn: null, owner: { personId: "sun", name: "孙铭泽" }, collaborators: [], latestProgress: null,
   returnReason: null, origin: null, awaitingAcceptance: false, planTaskId: null, blocker: null,
   createdAt: "2026-10-01T00:00:00Z", updatedAt: "2026-10-01T00:00:00Z", ...extra,

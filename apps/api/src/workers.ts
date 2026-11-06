@@ -52,7 +52,7 @@ export async function listWorkers(deps: { q: Query; planTasks: PlanTaskSource; n
       AND (status<>'done' OR ((acceptance->>'at')::timestamptz AT TIME ZONE 'Asia/Shanghai')::date=($2::timestamptz AT TIME ZONE 'Asia/Shanghai')::date)
     ORDER BY created_at,id`, [ownerId, now])).rows as { id: string; mission_id: string | null; plan_task_id: string | null; finished_at: Date | null }[];
   const cards = await cardTaskViews(q, cardRows.map((row) => row.id), deps.names);
-  const cardCosts = new Map(cardRows.length ? ((await q(`SELECT task_id::text AS id,${COST_SUM} FROM local_runs WHERE task_id=ANY($1::uuid[]) GROUP BY task_id`,
+  const cardCosts = new Map(cardRows.length ? ((await q(`SELECT task_id::text AS id,${COST_SUM} FROM local_runs WHERE task_id=ANY($1::uuid[]) AND kind='card' GROUP BY task_id`,
     [cardRows.map((row) => row.id)])).rows as (CostRow & { id: string })[]).map((row) => [row.id, costOf(row)]) : []);
   const reviewer = cards.some((card) => card.card.stage === "review") ? await reviewerRole(q, ownerId) : null;
 

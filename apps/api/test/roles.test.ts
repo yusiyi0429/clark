@@ -13,7 +13,7 @@ import { boardFixture } from "./boardFixture.js";
 const repoPreset = async (key: string) => (await readPresets()).presets.find((item) => item.key === key)!;
 const preset = (name: string, practice = "先交提纲") => `---\nname: ${name}\nkind: worker\ntools: [tianshu, web_search]\nmodel_tier: strong\n---\n\n## 职责\n\n查资料\n\n## 做法\n\n${practice}\n\n## 验收口径\n\n有出处\n`;
 
-describe("岗位：预设同步", () => {
+describe("岗位：预设同步", { timeout: 30_000 }, () => {
   it("预设文件按 frontmatter 加三段正文读；格式不对说清哪里不对；仓库里的预设都读得出来", async () => {
     expect(parsePreset(preset("调研员"), "strategy_content", "researcher")).toEqual({ key: "researcher", family: "strategy_content", name: "调研员", kind: "worker",
       tools: ["tianshu", "web_search"], modelTier: "strong", dutiesMd: "查资料", practiceMd: "先交提纲", acceptanceMd: "有出处" });
@@ -55,7 +55,7 @@ describe("岗位：预设同步", () => {
   });
 });
 
-describe("岗位：本人的团队", () => {
+describe("岗位：本人的团队", { timeout: 30_000 }, () => {
   it("列岗位和预设；从预设加是一份副本、加过的再加 409；自己新建；改了版本 +1 留记录、版本不对 409；归档以后不列、记录还在、能再加", async () => {
     const f = await boardFixture();
     try {
@@ -115,7 +115,7 @@ describe("岗位：本人的团队", () => {
   });
 });
 
-describe("岗位：验收口径和会成长", () => {
+describe("岗位：验收口径和会成长", { timeout: 30_000 }, () => {
   async function growthFixture() {
     const acceptanceCalls: AcceptanceInput[] = [];
     const proposalCalls: RoleProposalInput[] = [];

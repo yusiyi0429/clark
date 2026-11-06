@@ -11,6 +11,7 @@ import { parseSourceRef } from "@/cards/meetingSources";
 import { citationRoute, knownCitation, openCitation, queueCitation, type CitationSurface } from "./citationBridge";
 import { CITE_MARK_PROP, NAMED_SOURCE } from "./citationMarks";
 import { MemoryMark } from "./MemoryMark";
+import { useWorldSource, worldLocator } from "./WorldSource";
 import s from "@/styles/citations.module.css";
 
 /**
@@ -61,6 +62,7 @@ export function citationLocator(ref: string): string | null {
     case "research": return "议题研究";
     case "chat": return "原话";
     case "pmem": return "个人记忆";
+    case "world": return worldLocator(parsed.version);
     default: return null;
   }
 }
@@ -178,13 +180,18 @@ export function popPosition(rect: { left: number; right: number; top: number; bo
 export function CitationMark({ href, title }: { href: string; title: string }) {
   const surface = useContext(SurfaceContext);
   const target = useMemo(() => markTarget(href), [href]);
-  const locator = target.kind === "ref" ? citationLocator(target.ref) : target.kind === "url" ? hostOf(target.url) : null;
-  const name = title.trim() || (target.kind === "url" ? hostOf(target.url) ?? "外部来源" : "出处");
   const button = useRef<HTMLButtonElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pointer = useRef<string>("mouse");
   const [pop, setPop] = useState<PopPosition | null>(null);
   const [sheet, setSheet] = useState(false);
+  // 本体出处：浮层或底部弹层打开时读这个对象，读到后写真实标题和类型。
+  const parsedRef = target.kind === "ref" ? parseSourceRef(target.ref) : null;
+  const world = useWorldSource(parsedRef?.kind === "world" ? parsedRef.ref : null, Boolean(pop) || sheet);
+  const worldSource = world?.state === "ready" ? world.source : undefined;
+  const locator = parsedRef?.kind === "world" ? worldLocator(parsedRef.version, worldSource)
+    : target.kind === "ref" ? citationLocator(target.ref) : target.kind === "url" ? hostOf(target.url) : null;
+  const name = worldSource?.title ?? (title.trim() || (target.kind === "url" ? hostOf(target.url) ?? "外部来源" : "出处"));
   const popId = useId();
 
   const clear = () => { if (timer.current) { clearTimeout(timer.current); timer.current = null; } };

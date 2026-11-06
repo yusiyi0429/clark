@@ -6,6 +6,7 @@ export type CompanyWorldObject = {
   business: { object_id: string; domain_id?: string; title: string; object_type: string; version: number; object_version: number; revision_id: string;
     attributes: Record<string, unknown>; blocks: WorldBlock[]; relations: { relation: string; value: unknown }[]; formal?: { lifecycle_status?: string } };
   identity: { responsible?: { principals?: { display_name: string }[] } };
+  /** latest_state / confirmed_review：0.3 起是一份 StateSnapshot（ref、as_of、generator、blocks），旧数据也可能直接带 text。 */
   records: { lifecycle: { status?: string; display_name?: string } | null; latest_state?: unknown; confirmed_review?: unknown };
 };
 
@@ -24,12 +25,13 @@ export function createCompanyWorldReader(env: WorldEnv) {
     return JSON.parse(body);
   }
   return {
-    async list(domain: string, signal: AbortSignal): Promise<WorldHead[]> {
+    /** 按域列对象头；给了 period 时交给本体按周期筛（没有周期属性的类型不会出现）。 */
+    async list(domain: string, signal: AbortSignal, filters: { period?: string } = {}): Promise<WorldHead[]> {
       const heads: WorldHead[] = [];
       let cursor: string | undefined;
       const seen = new Set<string>();
       do {
-        const query = new URLSearchParams({ domain_id: domain, limit: '100' });
+        const query = new URLSearchParams({ domain_id: domain, limit: '100', ...(filters.period ? { period: filters.period } : {}) });
         if (cursor) query.set('cursor', cursor);
         const page = await get(`/v1/world/objects?${query}`, signal);
         if (!Array.isArray(page.items) || (page.next_cursor !== null && typeof page.next_cursor !== 'string')) throw new Error('Invalid World list');

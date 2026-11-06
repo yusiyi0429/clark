@@ -8,6 +8,7 @@ import rateLimit from "@fastify/rate-limit";
 import multipart from "@fastify/multipart";
 import { loadPeopleDirectory, type PeopleDirectoryEnv } from "./peopleDirectory.js";
 import { createCompanyContext, type CompanyContextEnv } from "./companyContext.js";
+import type { CompanyReader } from "./company.js";
 import { createPersonalMemory } from "./personalMemory.js";
 import { createMemoryRecall, memoryRecallModels, type MemoryRecall } from "./personalMemoryRecall.js";
 import { createPersonalDistillation } from "./personalDistillation.js";
@@ -133,7 +134,8 @@ import { registerRoleRoutes } from "./routes/roles.js";
 import { registerWorkerRoutes } from "./routes/workers.js";
 import { registerTopicRoutes } from "./routes/topics.js";
 import { registerTaskCardRoutes, type BoardAgents } from "./routes/taskCards.js";
-import { taskPageFacts } from "./taskCards.js";
+import { planTaskOpener, taskPageFacts } from "./taskCards.js";
+import { registerAgreementRoutes } from "./routes/agreements.js";
 import type { DeliverableAgents, DeliverableQueue } from "./deliverableReview.js";
 import type { ArticleFetcher } from "./articleText.js";
 import { personDisplayNames } from "./people.js";
@@ -245,6 +247,11 @@ export type AppEnv = {
   preflightThinking?: string;
   /** 交付物评审与版本说明的模型（REVIEW_MODEL / REVIEW_BASE_URL / REVIEW_API_KEY / REVIEW_THINKING，指向 TokenHub）；不配时用 PI_BASE_URL、PI_API_KEY、HEAVY_MODEL，思考 medium。 */
   review?: { model?: string; baseUrl?: string; apiKey?: string; thinking?: string };
+  /**
+   * 云端拆卡和云端 Agent 验收（BOARD_CLOUD_AGENTS=1 才开，V2 第 21 节）：缺省关，拆卡和验收在本人电脑上由规划员、验收员做；
+   * 关着时「拆卡」返回 409、交回不排云端验收、验收重试返回 409。本机程序还没接上规划员的手动测试环境打开它。
+   */
+  boardCloudAgents?: boolean;
   /** 会后提取等候选 Agent 的模型与思考强度（OUTCOME_MODEL 等，agentModels.ts）；不配时与之前一致。 */
   agentModels?: AgentModelEnv;
   materialStorageDir?: string;
@@ -334,6 +341,7 @@ export async function buildApp({
   battlefieldSummaryAgent,
   taskPlacementAgent,
   boardAgents,
+  companyReader,
   conversationTurnTimeoutMs = CONVERSATION_TURN_TIMEOUT_MS,
   conversationStallTimeoutMs = CONVERSATION_STALL_TIMEOUT_MS,
   conversationHeartbeatMs = CONVERSATION_HEARTBEAT_MS,
@@ -414,6 +422,8 @@ export async function buildApp({
   taskPlacementAgent?: TaskPlacementAgent;
   /** V2 看板的拆卡、Agent 验收（测试注入假实现）；缺省照参考评审用 REVIEW_*，没配时 HEAVY_MODEL。 */
   boardAgents?: Partial<BoardAgents>;
+  /** 本体公司事实的读取（测试注入假实现）；缺省按 env 读本体（company.ts）。 */
+  companyReader?: CompanyReader;
   conversationTurnTimeoutMs?: number;
   conversationStallTimeoutMs?: number;
   conversationHeartbeatMs?: number;
@@ -431,7 +441,7 @@ export async function buildApp({
   // seed 缺失/不合规 → 启动即失败，不虚构人员或空目录（Ticket 16 装载真实 seed）
   const peopleDirectory = loadPeopleDirectory(env);
   // 本体只读公司事实（company.ts）：对话按本人授权读；后台服务按 COMPANY_SYSTEM_PERSON_ID 的授权读。读不到时如实说没读到，不用本地资料兜底。
-  const company = createCompanyContext(env);
+  const company = createCompanyContext(env, companyReader);
   // 分诊与思考翻译用的快模型（TRIAGE_MODEL，不配时 LIGHT_MODEL）；TRIAGE_MODEL 出错时退回 LIGHT_MODEL 再试一次。
   const fastModels = { modelId: env.triageModel || env.lightModel, fallbackModelId: env.lightModel };
   // 真实预审 Agent 在后台跑：建会、加入会议、重试预审的接口写完就返回（巡检 P1-5/6）；注入的测试替身保持同步，除非自己声明 background。
@@ -469,6 +479,8 @@ export async function buildApp({
   const world = createWorldReader({ q: pool.query.bind(pool), env });
   // 首页 Task 行：本体配了、实例也开了读（和其他读本体的地方同一个开关），或配了 TK 只读实例，才从本体读（只读），否则没有 Task。
   const planTaskSource = planTasks ?? worldPlanTaskSource(pool.query.bind(pool), env, world.enabled);
+  // Task 页带进对话时按看的人打开这个 Task（谁能看照约定 V1 的规则）。
+  const openPlanTaskForPage = planTaskOpener(pool.query.bind(pool), planTaskSource, peopleDirectory, now);
   // 第二个只读实例（TK scope，写死只读）：默认关闭；开了也只做健康探测和快照缓存，还没接进战场卡与 read_ontology。
   const worldTk = env.worldTk ? createWorldReader({ q: pool.query.bind(pool), env: env.worldTk }) : undefined;
   const baseGlobalContext = () => globalConversationContext(pool.query.bind(pool), now(), personDisplayNames(peopleDirectory));
@@ -497,7 +509,7 @@ export async function buildApp({
   // 首页走独立 Chat 时只建这一个客户端（首页分段的「人 × 视角」互斥在它里面）；转发的每一句记下进了哪一段，纪要据此去读。
   const chat = env.chatServiceUrl ? createChatService({ baseUrl: env.chatServiceUrl, token: env.internalChatToken, rotation: env.chatSessionRotation === true,
     ...(env.chatPageContext ? { pageGuide: (path: string, viewer: { personId: string }) =>
-      pageFor(path, (taskId) => taskPageFacts(pool.query.bind(pool), planTaskSource, viewer.personId, now(), taskId)) } : {}),
+      pageFor(path, (taskId) => taskPageFacts(pool.query.bind(pool), openPlanTaskForPage, viewer.personId, taskId)) } : {}),
     onSegment: (viewer, segment) => recordChatSegment(pool.query.bind(pool), viewer, segment) }) : undefined;
   // 会话纪要（后台，CONVERSATION_DIGEST_MODEL / CONVERSATION_DIGEST_THINKING，不配时 LIGHT_MODEL、不开思考）与回看。
   const conversationDigests = createConversationDigests({ pool, chat, baseUrl: env.piBaseUrl, apiKey: env.piApiKey,
@@ -792,7 +804,8 @@ export async function buildApp({
   registerActionRoutes(app, ctx);
   registerDriRoutes(app, ctx);
   registerOntologyRoutes(app, ctx);
-  registerSystemRoutes(app, ctx);
+  // /mcp/me 的 web_search 用同一个博查实例（server.ts 装配；测试里是假的，没带 configured 的当作配好了）。
+  registerSystemRoutes(app, ctx, webSearch ? { search: { configured: (webSearch as { configured?: boolean }).configured !== false, search: (input, signal) => webSearch.search(input, signal) } } : {});
   registerThreadRoutes(app, ctx);
   registerRecordingRoutes(app, ctx);
   registerMeRoutes(app, ctx);
@@ -801,6 +814,7 @@ export async function buildApp({
   registerSeenMarkRoutes(app, ctx);
   registerMissionCardRoutes(app, ctx, missionCardAnnotationAgent, missionCardReviewAgent);
   registerDeliverableRoutes(app, ctx, { agents: deliverableAgents, fetchArticle: deliverableFetcher });
+  registerAgreementRoutes(app, ctx);
   registerMyRadarRoutes(app, ctx);
   registerMonthlyReviewRoutes(app, ctx);
   registerRequestRoutes(app, ctx, deliveryAgent);
@@ -854,7 +868,7 @@ export async function buildApp({
   registerWorkerRoutes(app, ctx);
   registerTopicRoutes(app, ctx);
   const board = registerTaskCardRoutes(app, ctx, { agents: boardAgents, fetchArticle: deliverableFetcher });
-  registerLocalRoutes(app, ctx, { onHandbacks: (ids) => ids.forEach(board.enqueueAcceptance) });
+  registerLocalRoutes(app, ctx, board);
 
   return app;
 }

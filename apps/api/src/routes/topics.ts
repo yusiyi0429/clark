@@ -3,7 +3,7 @@ import type { FastifyReply } from "fastify";
 import { CreateTopicRequest, PatchTopicRequest, ResearchTopicView, TopicBriefResponse, TopicDetailResponse, TopicListResponse, TopicVersionView } from "@warmap/contracts";
 import { createTopic, listTopics, patchTopic, readTopic, readTopicVersion, TopicError, topicBrief } from "../researchTopics.js";
 import { RoleError } from "../roles.js";
-import { findOwnTask, type OwnTask } from "../taskDeliverables.js";
+import { planTaskOpener, planTaskOrNull } from "../taskCards.js";
 import type { AppInstance, RouteContext } from "./shared.js";
 
 const idParams = Type.Object({ id: Type.String({ minLength: 1 }) });
@@ -11,7 +11,8 @@ const idParams = Type.Object({ id: Type.String({ minLength: 1 }) });
 /** 调研专题（契约 topics.ts）：本人的专题列表、新建、详情、改、某一版、开专题的交代。 */
 export function registerTopicRoutes(app: AppInstance, ctx: RouteContext): void {
   const { q, fail, requirePerson } = ctx;
-  const planTaskOf = (personId: string) => (taskId: string): Promise<OwnTask | null> => findOwnTask(q, ctx.planTasks, personId, ctx.now(), taskId).catch(() => null);
+  const open = planTaskOpener(q, ctx.planTasks, ctx.peopleDirectory, ctx.now);
+  const planTaskOf = (personId: string) => planTaskOrNull(open, personId);
   const handle = async <T>(reply: FastifyReply, work: () => Promise<T>) => {
     try { return await work(); } catch (cause) {
       if (cause instanceof TopicError || cause instanceof RoleError) return fail(reply, cause.status, cause.code, cause.message);

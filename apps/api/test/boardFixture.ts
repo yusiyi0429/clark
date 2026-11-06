@@ -19,7 +19,8 @@ export const BOARD_TASKS: THomePlanTask[] = [
 
 export async function boardFixture(runtime: Parameters<typeof createTestApp>[2] = {}, seed: Parameters<typeof createTestApp>[0] = {}) {
   const storage = await mkdtemp(join(tmpdir(), "board-"));
-  const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED, materialStorageDir: storage, ...seed }, undefined, {
+  // 看板原有的测试跑云端拆卡和云端验收（BOARD_CLOUD_AGENTS）；第 21 节本机那条路的测试传 boardCloudAgents: false。
+  const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED, materialStorageDir: storage, boardCloudAgents: true, ...seed }, undefined, {
     monthlyNow: () => BOARD_NOW,
     planTasks: async (missions) => BOARD_TASKS.filter((task) => missions.some((mission) => mission.id === task.missionId)),
     deliverableAgents: { review: { async review(input) {
@@ -35,7 +36,7 @@ export async function boardFixture(runtime: Parameters<typeof createTestApp>[2] 
   await mission("other", THIRD.personId);
   await t.sql("INSERT INTO member_access (person_id, login_id, passcode_hash, must_change) VALUES ($1, $2, $3, FALSE)", [THIRD.personId, THIRD.loginId, hashSecret(THIRD.passcode)]);
   const member = await t.memberCookie();
-  const call = (method: "GET" | "POST" | "PATCH" | "DELETE", url: string, payload?: unknown, cookie = member) =>
+  const call = (method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE", url: string, payload?: unknown, cookie = member) =>
     t.app.inject({ method, url, headers: { cookie, origin: t.publicOrigin }, ...(payload === undefined ? {} : { payload: payload as Record<string, unknown> }) });
   /** 本人在 mine 下挂 planTaskId 建一件执行事项（卡）。 */
   const card = async (title: string, options: { planTaskId?: string; doneDefinition?: string } = {}) => {

@@ -79,6 +79,8 @@ describe("依据 ref 解析", () => {
     expect(parseSourceRef("chat:7d1c0f7e")).toMatchObject({ kind: "unknown" });
     expect(parseSourceRef("pmem:5f0e8c1a-2b3c")).toEqual({ kind: "pmem", ref: "pmem:5f0e8c1a-2b3c", id: "5f0e8c1a-2b3c" });
     expect(parseSourceRef("pmem:a b")).toMatchObject({ kind: "unknown" });
+    expect(parseSourceRef("world:7885a696-3b6c@5")).toEqual({ kind: "world", ref: "world:7885a696-3b6c@5", objectId: "7885a696-3b6c", version: 5 });
+    for (const bad of ["world:7885a696", "world:7885a696@v5", "world:a b@1", "world:@3"]) expect(parseSourceRef(bad)).toMatchObject({ kind: "unknown" });
     expect(parseSourceRef("signal:s-1")).toMatchObject({ kind: "signal", id: "s-1" });
     expect(parseSourceRef("whatever")).toMatchObject({ kind: "unknown" });
   });

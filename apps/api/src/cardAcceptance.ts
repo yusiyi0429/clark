@@ -7,8 +7,9 @@ import type { ArticleFetcher } from "./articleText.js";
 import { acceptanceProblem, type AcceptanceInput, type CardAcceptanceAgent } from "./cardAcceptanceAgent.js";
 import type { Query } from "./meetingStore.js";
 import { requestRoleProposal } from "./roleProposals.js";
-import { reviewerRole, rolesById } from "./roles.js";
-import { CardError, effectiveOutcome, failStreak, type HandbackRow, type StoredAcceptance } from "./taskCards.js";
+import type { TLocalVerifyBriefResponse } from "@warmap/contracts";
+import { reviewerRole, roleBrief, rolesById } from "./roles.js";
+import { CardError, cardAgreement, effectiveOutcome, failStreak, type CardPlanTask, type HandbackRow, type StoredAcceptance } from "./taskCards.js";
 import { postCoAgentMessage } from "./threads.js";
 
 /**
@@ -57,9 +58,50 @@ type TaskRow = { id: string; owner_id: string; title: string; brief: string | nu
 type OutputRow = { id: string; kind: "artifact" | "evidence"; title: string; file_name: string | null; mime: string | null; storage_key: string | null; url: string | null;
   text: string | null; extracted_text: string | null };
 
+/** 谁验的：cloud 是云端的验收作业，local 是本人电脑上的验收员（同步条目 verdict）。 */
+export type Verifier = { source: "cloud" | "local"; modelLabel: string | null; roleId: string | null; roleVersion: number | null; runId: string | null };
+
+/**
+ * 一次交回有了验收结论，在调用方的事务里落下（云端作业和本机验收员共用）：结论、改法（没过时固定格式拼）、谁验的；
+ * 这是这张卡最近一次交回时：过了 → 卡完成、进准备中、事项群记一句；同一张卡第二次没过 → 记一条岗位修改（返回它的 id，调用方提交后排队）。
+ * token：云端作业的 run_token（只认还是自己在验的那次）；本机的为 null，只要这次交回还没有结论。没落下（已有结论、被别人认领）时 saved=false。
+ */
+export async function settleHandback(client: PoolClient, row: HandbackRow, result: StoredAcceptance, verifier: Verifier, token: string | null, now: Date):
+  Promise<{ saved: boolean; outcome: "pass" | "fail"; proposal: string | null }> {
+  const met = result.criteria.filter((item) => item.verdict === "met").length;
+  const outcome = met === result.criteria.length ? "pass" : "fail";
+  const locked = (await client.query("SELECT id::text,owner_id,status,plan_task_id FROM tasks WHERE id=$1 FOR UPDATE", [row.task_id])).rows[0] as TaskRow;
+  const saved = await client.query(`UPDATE card_handbacks SET status='done',result=$3::jsonb,outcome=$4,return_text=$5,finished_at=$6,error=NULL,
+    verifier_source=$7,verifier_model=$8,verifier_role_id=$9,verifier_role_version=$10,verify_run_id=$11
+    WHERE id=$1 AND (($2::uuid IS NULL AND outcome IS NULL AND overruled_at IS NULL) OR (run_token=$2 AND status='running'))`,
+  [row.id, token, JSON.stringify(result), outcome, outcome === "fail" ? returnText(row.criteria, result) : null, now,
+    verifier.source, verifier.modelLabel, verifier.roleId, verifier.roleVersion, verifier.runId]);
+  if (!saved.rowCount) return { saved: false, outcome, proposal: null };
+  // 旧的一次交回验完了，新的已经交上来：只记结论，不动卡。
+  const latest = (await client.query("SELECT max(attempt)::int AS n FROM card_handbacks WHERE task_id=$1", [row.task_id])).rows[0].n as number;
+  if (latest !== row.attempt) return { saved: true, outcome, proposal: null };
+  if (outcome === "pass") {
+    if (locked.status !== "done" && locked.status !== "returned") {
+      const who = verifier.source === "local" ? "本机验收员" : "Agent ";
+      await completeCard(client, locked, row.id, acceptanceRecord(locked.owner_id, row.id, row.criteria, result, now, `${who}验收通过（${met}/${result.criteria.length}）`));
+      await tellGroup(client, locked.id, locked.owner_id, `${who}验收通过（${met}/${result.criteria.length}）。`);
+    }
+    return { saved: true, outcome, proposal: null };
+  }
+  // 同一张卡第二次没过：提一条岗位修改。
+  const history = (await client.query("SELECT * FROM card_handbacks WHERE task_id=$1 ORDER BY attempt DESC", [row.task_id])).rows as HandbackRow[];
+  const proposal = failStreak(history) === 2
+    ? await requestRoleProposal(client, { taskId: row.task_id, ownerId: row.owner_id, sourceKind: "second_fail", sourceId: row.id, reason: null }) : null;
+  return { saved: true, outcome, proposal };
+}
+
 /** onProposal：第二次没过时记下的岗位修改，提交后交给提岗位修改的队列。 */
 export function createCardAcceptanceQueue(options: { pool: Pool; storageDir: string; agent: CardAcceptanceAgent; fetchArticle: ArticleFetcher; now: () => Date;
-  onError: (cause: unknown) => void; onProposal: (proposalId: string) => void }) {
+  onError: (cause: unknown) => void; onProposal: (proposalId: string) => void;
+  /** 按推进人读卡挂的 Task 和它的约定（V1）；读不到为 null，这次就不带约定。 */
+  planTask: (ownerId: string, planTaskId: string) => Promise<CardPlanTask | null>;
+  /** 云端验收用的模型（记进验收结论）。 */
+  modelLabel: string | null }) {
   const running = new Map<string, Promise<void>>(), abort = new AbortController();
   const q: Query = options.pool.query.bind(options.pool);
   const stale = () => new Date(options.now().getTime() - STALE_MS);
@@ -124,7 +166,8 @@ export function createCardAcceptanceQueue(options: { pool: Pool; storageDir: str
       const input: AcceptanceInput = {
         card: { title: task.title, brief: task.brief, criteria: row.criteria.map((text, index) => ({ index: index + 1, text })) },
         taskCriterion: task.criterion_index && task.criterion_text ? { index: task.criterion_index, text: task.criterion_text } : null,
-        claims: row.claims, summary: row.summary, outputs, unreadable, agreement: null,
+        claims: row.claims, summary: row.summary, outputs, unreadable,
+        agreement: cardAgreement(task.plan_task_id ? (await options.planTask(row.owner_id, task.plan_task_id))?.agreement ?? null : null, task.criterion_index),
         role: role ? { name: role.name, acceptanceMd: role.acceptance_md } : null,
         reviewer: reviewer ? { name: reviewer.name, practiceMd: reviewer.practice_md, acceptanceMd: reviewer.acceptance_md } : null,
         ...(previous && effectiveOutcome(previous) === "fail" ? { previous: previous.result!.criteria.map((item) => ({ index: item.index,
@@ -138,31 +181,8 @@ export function createCardAcceptanceQueue(options: { pool: Pool; storageDir: str
       if (problem) throw new Error(problem);
       const result: StoredAcceptance = { headline: candidate.headline, beyondScope: candidate.beyondScope,
         criteria: [...candidate.criteria].sort((a, b) => a.index - b.index) };
-      const met = result.criteria.filter((item) => item.verdict === "met").length;
-      const outcome = met === result.criteria.length ? "pass" : "fail";
-      const client = await options.pool.connect();
-      let proposal: string | null = null;
-      try {
-        await client.query("BEGIN");
-        const locked = (await client.query("SELECT id::text,owner_id,status,plan_task_id FROM tasks WHERE id=$1 FOR UPDATE", [row.task_id])).rows[0] as TaskRow;
-        const saved = await client.query(`UPDATE card_handbacks SET status='done',result=$3::jsonb,outcome=$4,return_text=$5,finished_at=$6 WHERE ${guard}`,
-          [handbackId, token, JSON.stringify(result), outcome, outcome === "fail" ? returnText(row.criteria, result) : null, options.now()]);
-        // 旧的一次交回验完了，新的已经交上来：只记结论，不动卡。
-        const latest = (await client.query("SELECT max(attempt)::int AS n FROM card_handbacks WHERE task_id=$1", [row.task_id])).rows[0].n as number;
-        if (saved.rowCount && latest === row.attempt && outcome === "pass" && locked.status !== "done" && locked.status !== "returned") {
-          await completeCard(client, locked, handbackId, acceptanceRecord(locked.owner_id, handbackId, row.criteria, result, options.now(),
-            `Agent 验收通过（${met}/${result.criteria.length}）`));
-          await tellGroup(client, locked.id, locked.owner_id, `Agent 验收通过（${met}/${result.criteria.length}）。`);
-        }
-        // 同一张卡第二次没过：提一条岗位修改。
-        if (saved.rowCount && latest === row.attempt && outcome === "fail") {
-          const history = (await client.query("SELECT * FROM card_handbacks WHERE task_id=$1 ORDER BY attempt DESC", [row.task_id])).rows as HandbackRow[];
-          if (failStreak(history) === 2)
-            proposal = await requestRoleProposal(client, { taskId: row.task_id, ownerId: row.owner_id, sourceKind: "second_fail", sourceId: handbackId, reason: null });
-        }
-        await client.query("COMMIT");
-      } catch (cause) { await client.query("ROLLBACK").catch(() => undefined); throw cause; }
-      finally { client.release(); }
+      const { proposal } = await inTransaction(options.pool, (client) => settleHandback(client, row, result,
+        { source: "cloud", modelLabel: options.modelLabel, roleId: reviewer?.id ?? null, roleVersion: reviewer?.version ?? null, runId: null }, token, options.now()));
       if (proposal) options.onProposal(proposal);
     } catch (cause) {
       // 关闭时放回队列，下次启动接着验；其余算这次没验完，可以重试。
@@ -250,6 +270,52 @@ export function retryHandback(pool: Pool, ownerId: string, cardId: string, handb
     if (row.status !== "failed") throw new CardError(409, "NOT_FAILED", "验收没有出错，不用重试");
     await client.query("UPDATE card_handbacks SET status='queued',error=NULL,run_token=NULL WHERE id=$1", [handbackId]);
   });
+}
+
+const RESULT_TEXT = { met: "达到", partial: "部分达到", unmet: "没达到" } as const;
+const BRIEF_ITEM_CHARS = 2000;
+
+/**
+ * GET /api/local-runner/verify-brief?handbackKey=（本机程序，设备令牌）：本机起验收员会话用的交代（第 21 节）。
+ * markdown：卡的交代和完成标准、约定（对 Task 第几条、用什么证明、这次不包括）、卡所属岗位的验收口径、执行方的逐条自评和总结、
+ * 交回点名的产出和证据（文件在本机，验收员自己去读）、上一次没过的地方。role 是本人的验收员（没有时用预设）；failStreak 是这次以前连续没过几次。
+ * 找不到这次交回 404；已经有结论（验过、推翻过）409。
+ */
+export async function verifyBrief(q: Query, ownerId: string, handbackKey: string, planTask: (planTaskId: string) => Promise<CardPlanTask | null>):
+  Promise<TLocalVerifyBriefResponse> {
+  const row = (await q("SELECT * FROM card_handbacks WHERE client_id=$1 AND owner_id=$2", [handbackKey, ownerId])).rows[0] as HandbackRow | undefined;
+  if (!row) throw new CardError(404, "NOT_FOUND", "云端没有这次交回");
+  if (row.outcome || row.overruled_at) throw new CardError(409, "ALREADY_JUDGED", "这次交回已经有验收结论了");
+  if (!row.criteria.length) throw new CardError(409, "NO_CRITERIA", "这张卡没写完成标准，写好以后重新交回");
+  const task = (await q("SELECT id::text,owner_id,title,brief,status,plan_task_id,criterion_index,criterion_text,role_id FROM tasks WHERE id=$1", [row.task_id])).rows[0] as TaskRow;
+  const role = task.role_id ? (await rolesById(q, [task.role_id])).get(task.role_id) ?? null : null;
+  const agreement = cardAgreement(task.plan_task_id ? (await planTask(task.plan_task_id))?.agreement ?? null : null, task.criterion_index);
+  const outputs = row.output_ids.length ? (await q("SELECT * FROM local_outputs WHERE id=ANY($1::uuid[]) ORDER BY created_at,id", [row.output_ids])).rows as OutputRow[] : [];
+  const history = (await q("SELECT * FROM card_handbacks WHERE task_id=$1 AND attempt<$2 ORDER BY attempt DESC", [row.task_id, row.attempt])).rows as HandbackRow[];
+  const previous = history.find((item) => item.status === "done" && item.result);
+  const cut = (text: string) => text.length > BRIEF_ITEM_CHARS ? `${text.slice(0, BRIEF_ITEM_CHARS)}…` : text;
+  const pointed = task.criterion_index && task.criterion_text ? [`这张卡对的是 Task 第 ${task.criterion_index} 条标准：${task.criterion_text}`] : [];
+  const lines = [
+    `# 验收：${task.title}`, "",
+    `这是这张卡第 ${row.attempt} 次交回。只读，不改任何文件。按下面的依据逐条判（met 达到、partial 部分、unmet 没达到），用 submit_verdict 交结论。`,
+    ...(task.brief?.trim() ? ["", "## 卡的交代", "", task.brief.trim()] : []),
+    "", `## 完成标准（共 ${row.criteria.length} 条，逐条判）`, "", ...row.criteria.map((text, index) => `${index + 1}. ${text}`),
+    ...(pointed.length || agreement ? ["", "## 约定", "", ...pointed, ...(agreement?.proof ? [`用什么证明：${agreement.proof}`] : []),
+      ...(agreement?.exclusions.length ? ["这次不包括（不能当作没达到的理由）：", ...agreement.exclusions.map((text) => `- ${text}`)] : [])] : []),
+    ...(role?.acceptance_md.trim() ? ["", `## ${role.name}的验收口径`, "", role.acceptance_md.trim()] : []),
+    "", "## 执行方的逐条自评（自己说的不算证据）", "",
+    ...(row.claims.length ? [...row.claims].sort((a, b) => a.index - b.index).map((claim) => `- 第 ${claim.index} 条：${RESULT_TEXT[claim.result]}。${cut(claim.evidence)}`) : ["没有写。"]),
+    ...(row.summary?.trim() ? ["", "## 执行方的总结", "", cut(row.summary.trim())] : []),
+    "", "## 交回点名的产出和证据", "",
+    ...(outputs.length ? outputs.map((output) => output.kind === "artifact"
+      ? `- 产出「${output.title}」${output.file_name ? `：文件 ${output.file_name}` : ""}${output.mime ? `（${output.mime}）` : ""}`
+      : `- 证据「${output.title}」${output.url ? `：${output.url}` : ""}${output.text?.trim() ? `\n  ${cut(output.text.trim()).replace(/\n/g, "\n  ")}` : ""}`) : ["没有点名产出和证据。"]),
+    ...(previous && effectiveOutcome(previous) === "fail" && previous.result ? ["", "## 上一次没过的地方", "",
+      ...previous.result.criteria.filter((item) => item.verdict !== "met").map((item) =>
+        `- 第 ${item.index} 条「${previous.criteria[item.index - 1] ?? ""}」：${item.reason}${item.fix ? `；怎么补：${item.fix}` : ""}`)] : []),
+  ];
+  const reviewer = await reviewerRole(q, ownerId);
+  return { markdown: lines.join("\n").slice(0, 20_000), criteria: row.criteria, role: reviewer ? roleBrief(reviewer) : null, failStreak: failStreak(history) };
 }
 
 /** 网页已经把没过的改法送到本机：记一笔；已经记过的不动。 */

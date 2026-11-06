@@ -70,7 +70,8 @@ export function citationRoute(ref: string, surface: CitationSurface, page: PageC
   const parsed = parseSourceRef(ref);
   // 原话、个人记忆没有可以打开的原文页：只显示名称（个人记忆有自己的小标记）。
   if (parsed.kind === "unknown" || parsed.kind === "chat" || parsed.kind === "pmem") return "none";
-  if (surface === "sheet" || !page) return "panel";
+  // 本体对象不在任何页面里：一律在依据面板打开出处卡。
+  if (surface === "sheet" || !page || parsed.kind === "world") return "panel";
   if (parsed.kind === "issue" || parsed.kind === "research") {
     const target = sourceTarget(ref, page.context);
     if (anchorPresent(target, page.root())) return "page";

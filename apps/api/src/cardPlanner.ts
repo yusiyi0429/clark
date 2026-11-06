@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
+import type { TLocalCardPlan } from "@warmap/contracts";
 import { cardPlanProblem, type CardPlanAgent, type CardPlanInput } from "./cardPlanAgent.js";
 import type { Query } from "./meetingStore.js";
-import type { RoleRow } from "./roles.js";
+import { isPlannerRole, type RoleRow } from "./roles.js";
 import type { OwnTask } from "./taskDeliverables.js";
 
 /**
@@ -40,8 +41,8 @@ export function createCardPlanQueue(options: { pool: Pool; agent: CardPlanAgent;
       const openDrafts = (await q("SELECT title FROM card_drafts WHERE plan_task_id=$1 AND owner_id=$2 AND status='open'", [row.plan_task_id, row.owner_id]))
         .rows.map((item) => ({ title: item.title as string, criterionIndex: null, status: "draft" }));
       // 本人团队里干活的岗位，和还没加的干活预设（没有合适岗位时建议加哪个）。
-      const roles = (await q(`SELECT * FROM roles WHERE kind='worker' AND archived_at IS NULL AND (owner_id=$1 OR owner_id IS NULL) ORDER BY created_at,preset_key`,
-        [row.owner_id])).rows as RoleRow[];
+      const roles = ((await q(`SELECT * FROM roles WHERE kind='worker' AND archived_at IS NULL AND (owner_id=$1 OR owner_id IS NULL) ORDER BY created_at,preset_key`,
+        [row.owner_id])).rows as RoleRow[]).filter((role) => !isPlannerRole(role));
       const team = roles.filter((role) => role.owner_id === row.owner_id);
       const added = new Set(team.flatMap((role) => role.preset_key ? [role.preset_key] : []));
       const input: CardPlanInput = {
@@ -99,3 +100,47 @@ export function createCardPlanQueue(options: { pool: Pool; agent: CardPlanAgent;
   };
 }
 export type CardPlanQueue = ReturnType<typeof createCardPlanQueue>;
+
+/**
+ * 本机规划员报上来的计划和派活单（同步条目 card_plan，V2 第 21 节）：一次规划会话一行 card_plans（source=local，run_id），落下就是拆完的。
+ * 本人让它改、再出一次（revision 更大）时换上新的计划，上一次还没处理的草稿收起来，新草稿接在后面；晚到的旧一次不收（返回 false）。
+ * 岗位按本人团队里的 id、名字或预设 key 对，对不上再按预设的 key 或名字建议加哪个；对约定第几条超出范围的当没对上。
+ */
+export async function saveLocalCardPlan(client: PoolClient, input: { ownerId: string; runId: string; own: OwnTask; plan: TLocalCardPlan; at: Date }): Promise<boolean> {
+  const { ownerId, runId, own, plan, at } = input;
+  const existing = (await client.query("SELECT id,revision FROM card_plans WHERE run_id=$1 FOR UPDATE", [runId])).rows[0] as { id: string; revision: number } | undefined;
+  if (existing && existing.revision >= plan.revision) return false;
+  // 可空的文字经接口校验会变成空串（Fastify 的类型转换），空串当没写。
+  const steps = plan.steps.map(({ title, detail }) => ({ title: title.trim(), detail: detail?.trim() || null }));
+  const values = [plan.revision, plan.summary.trim(), JSON.stringify(steps), JSON.stringify(plan.risks), plan.modelLabel.trim() || null, plan.roleId, plan.roleVersion, at];
+  const planId = existing?.id ?? randomUUID();
+  if (existing) {
+    await client.query(`UPDATE card_plans SET revision=$2,summary=$3,steps=$4::jsonb,risks=$5::jsonb,model_label=$6,role_id=$7,role_version=$8,finished_at=$9 WHERE id=$1`,
+      [planId, ...values]);
+    await client.query("UPDATE card_drafts SET status='dismissed',decided_at=$2 WHERE plan_id=$1 AND status='open'", [planId, at]);
+  } else {
+    await client.query(`INSERT INTO card_plans(id,plan_task_id,mission_id,owner_id,status,source,run_id,revision,summary,steps,risks,model_label,role_id,role_version,finished_at)
+      VALUES($1,$2,$3,$4,'done','local',$5,$6,$7,$8::jsonb,$9::jsonb,$10,$11,$12,$13)`, [planId, own.task.taskId, own.task.missionId, ownerId, runId, ...values]);
+  }
+  const roles = (await client.query(`SELECT * FROM roles WHERE kind='worker' AND archived_at IS NULL AND (owner_id=$1 OR owner_id IS NULL) ORDER BY created_at,preset_key`,
+    [ownerId])).rows as RoleRow[];
+  const roleOf = (ref: string | null) => {
+    const name = ref?.trim();
+    if (!name) return { roleId: null, preset: null };
+    const mine = roles.find((role) => role.owner_id === ownerId && (role.id === name || role.name === name || role.preset_key === name));
+    if (mine) return { roleId: mine.id, preset: null };
+    return { roleId: null, preset: roles.find((role) => role.owner_id === null && (role.preset_key === name || role.name === name))?.preset_key ?? null };
+  };
+  const start = (await client.query("SELECT coalesce(max(position)+1,0)::int AS n FROM card_drafts WHERE plan_id=$1", [planId])).rows[0].n as number;
+  for (const [position, card] of plan.cards.entries()) {
+    const { roleId, preset } = roleOf(card.role);
+    const index = card.criterionIndex && own.criteria[card.criterionIndex - 1] ? card.criterionIndex : null;
+    await client.query(`INSERT INTO card_drafts(id,plan_id,plan_task_id,owner_id,position,title,brief,done_definition,criterion_index,executor,model_tier,why,role_id,suggest_preset_key)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'claude_code',$10,$11,$12,$13)`, [randomUUID(), planId, own.task.taskId, ownerId, start + position, card.title.trim(),
+      card.brief.trim(), standardLines(card.doneDefinition), index, card.modelTier, card.why?.trim() || null, roleId, preset]);
+  }
+  return true;
+}
+
+/** 完成标准按行去空白、去空行。 */
+export const standardLines = (text: string) => text.split("\n").map((line) => line.trim()).filter(Boolean).join("\n");

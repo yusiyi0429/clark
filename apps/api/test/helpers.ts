@@ -322,7 +322,7 @@ const defaultConversationRuntime: ConversationRuntime = {
 };
 
 export async function createTestApp(
-  seedOverrides: Partial<Pick<AppEnv, "companyPeopleSeed" | "materialStorageDir" | "conversationAttachmentStorageDir" | "recordingStorageDir" | "extraOrigins" | "companyName" | "missionCardDraftsDir" | "worldApiUrl" | "worldAgentToken" | "worldInstance" | "worldInstanceLocalFile" | "publicOrigin" | "feishu" | "adminPersonIds" | "onboardingDelegationStep" | "internalChatToken" | "chatServiceUrl" | "wechatEnabled" | "chatSessionRotation" | "conversationSegments" | "chatPageContext" | "worldPeriodGoalGates" | "collectionsEnabled" | "docChangeEnabled">> = {},
+  seedOverrides: Partial<Pick<AppEnv, "companyPeopleSeed" | "materialStorageDir" | "conversationAttachmentStorageDir" | "recordingStorageDir" | "extraOrigins" | "companyName" | "missionCardDraftsDir" | "worldApiUrl" | "worldAgentToken" | "worldInstance" | "worldInstanceLocalFile" | "publicOrigin" | "feishu" | "adminPersonIds" | "onboardingDelegationStep" | "internalChatToken" | "chatServiceUrl" | "wechatEnabled" | "chatSessionRotation" | "conversationSegments" | "chatPageContext" | "worldPeriodGoalGates" | "collectionsEnabled" | "docChangeEnabled" | "companyWorldAccessFile" | "boardCloudAgents">> = {},
   conversationRuntime: ConversationRuntime = defaultConversationRuntime,
   runtimeOptions: {
     conversationTurnTimeoutMs?: number;
@@ -393,6 +393,10 @@ export async function createTestApp(
     battlefieldSummaryAgent?: Parameters<typeof buildApp>[0]["battlefieldSummaryAgent"];
     /** V2 看板的假拆卡、假 Agent 验收；不注入时用真实装配（只在后台队列里调用）。 */
     boardAgents?: Parameters<typeof buildApp>[0]["boardAgents"];
+    /** 本体公司事实的假读取（get_task_context 等）；不注入时按 testEnv 读（没配本体）。 */
+    companyReader?: Parameters<typeof buildApp>[0]["companyReader"];
+    /** 博查的假实现（对话、/mcp/me 的 web_search 共用）；不注入时没有联网搜索。 */
+    webSearch?: Parameters<typeof buildApp>[0]["webSearch"];
   } = {},
   researchService?: ResearchService,
 ): Promise<TestApp> {

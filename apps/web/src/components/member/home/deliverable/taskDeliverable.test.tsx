@@ -22,7 +22,7 @@ const criteria = task.criteria;
 const review = (patch: Partial<TDeliverableVersion["review"]> = {}): TDeliverableVersion["review"] => ({
   status: "done", phase: null, startedAt: "2026-10-29T10:00:00.000Z", finishedAt: "2026-10-29T10:01:52.000Z", expectedSeconds: 120,
   basis: "acceptance", headline: "还差第 2 条：缺题库打分结果", summary: "第 1 条有据可查；内网监控面板打不开，没算进依据。", gain: null, mismatch: null,
-  score: 50, met: 1, total: 2, ready: false, error: null,
+  score: 50, met: 1, total: 2, ready: false, error: null, beyondScope: [],
   criteria: [
     { index: 1, text: criteria[0], verdict: "met", reason: "上线记录里有 10/28 21:40 的正式环境部署和健康检查。", evidence: "10-28 上线记录.pdf 第 2 页", fix: null, dissent: null },
     { index: 2, text: criteria[1], verdict: "unmet", reason: "交付物里没有题库打分结果，只有对话截图。", evidence: "上线截图.png：首页一轮问答，没有分数。", fix: "传题库评测报告，要有总分和否决项那一栏。", dissent: null },
