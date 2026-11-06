@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import type { CardAcceptanceAgent } from "../src/cardAcceptance.js";
+import type { CardAcceptanceAgent } from "../src/cardAcceptanceAgent.js";
 import { TEST_MEMBER } from "./helpers.js";
 import { boardFixture } from "./boardFixture.js";
 
