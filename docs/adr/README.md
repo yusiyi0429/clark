@@ -34,5 +34,8 @@ ADR 保留决策依据，被替代的部分只作历史参考。当前产品术�
 | [0028](0028-local-runner-single-binary-with-bun.md) | 本机程序用 TS + Bun 单文件，托盘用系统脚本宿主 | 有效 |
 | [0029](0029-local-runner-keys-stay-on-device.md) | 模型钥匙和同步令牌只存本机 | 有效 |
 | [0030](0030-local-runner-sessions-clean-by-default.md) | 本机会话默认不带个人配置 | 有效 |
+| [0031](0031-local-runner-outside-paths-flagged-not-denied.md) | 本机会话越界的路径：标红交本人定，不自动拒绝 | 有效 |
+| [0032](0032-local-runner-release-and-code-signing.md) | 本机程序的发布：内部试用先不签名，签名和公证列成选项由本人定 | 待本人定 |
+| [0033](0033-local-runner-roles-via-cli-flags.md) | 岗位进本机会话：用 Claude Code 自带的参数，文件放本机程序的数据目录 | 有效 |
 
 新增 ADR 沿用下一个编号，被替代时在原文开头写明替代关系，不删除原文。

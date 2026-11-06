@@ -13,6 +13,7 @@
 - 留一个开关：设置里的 `includePersonalConfigByDefault`，或开会话时的 `includePersonalConfig`。打开后不加上面两个参数，本人全局配置照常生效，本会话 MCP 照样带上。
 - 每个会话都加 `skipWebFetchPreflight: true`（WebFetch 抓网页前不再连 api.anthropic.com 做域名检查，国内网络连不上会整个失败）；网关模型的会话另加 `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`，默认不给自带的 WebSearch（`--disallowedTools WebSearch`），因为不支持服务端搜索的模型不报错还会编结果，实测能搜的模型在配置里打开 `webSearch`。
 - 用本人默认的 Claude 配置目录（不设 `CLAUDE_CONFIG_DIR`），这样本人在终端里用 Claude Code 和本机程序共用一个登录，不用再登一次。
+- 主目录这一层的记忆文件也排除（11/06 第二轮补）：工作目录在主目录下时，Claude Code 往上逐级找 `CLAUDE.md` 和 `.claude/rules/`，会把 `~/.claude/rules/*.md`、`~/.claude/CLAUDE.md` 当成「项目规则」读进来，`--setting-sources` 管不住，换 `CLAUDE_CONFIG_DIR` 也不行（假网关实测看到的上下文）。干净会话加 `--settings` 的 `claudeMdExcludes: ["<主目录>/.claude/**", "<主目录>/CLAUDE.md", "<主目录>/CLAUDE.local.md"]`，仓库自己的 CLAUDE.md 照常读；带个人配置时不加。允许的文件夹也不能是主目录或它的上级（ADR 0031）。主目录和仓库之间那几层目录里的 `CLAUDE.md`、`.claude/rules`（如 `~/Desktop/CLAUDE.md`）照 Claude Code 的默认行为读，不排除。
 
 ## 代价
 

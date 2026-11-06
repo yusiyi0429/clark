@@ -14,14 +14,16 @@ export function tempDir(prefix = "tl-"): string {
   return mkdtempSync(join(tmpdir(), prefix));
 }
 
-export async function startTestRunner(opts: { approvePairing?: boolean; pickFolder?: string | null; fetchImpl?: typeof fetch } = {}) {
+export async function startTestRunner(opts: { approvePairing?: boolean; pickFolder?: string | null | (() => string | null); fetchImpl?: typeof fetch; skillsDir?: string } = {}) {
   const dataDir = tempDir();
   const desktop = new HeadlessDesktop();
   desktop.confirm = async () => opts.approvePairing ?? true;
-  desktop.pickFolder = async () => opts.pickFolder ?? null;
+  desktop.pickFolder = async () => (typeof opts.pickFolder === "function" ? opts.pickFolder() : opts.pickFolder ?? null);
   const runner: Runner = await startRunner({
     dataDir, port: 0 as unknown as number, headless: true, desktop, secrets: new FileSecretStore(dataDir),
     claudeBin: { command: process.execPath, prefixArgs: [FAKE_CLAUDE] }, fetchImpl: opts.fetchImpl, allowedOrigins: [ORIGIN],
+    // 测试不读本人真装的技能
+    skillsDir: opts.skillsDir ?? join(dataDir, "no-skills"),
   });
   const port = (runner.server.address() as { port: number }).port;
   runner.config.port = port; // 监听随机端口时，Host 检查要按实际端口

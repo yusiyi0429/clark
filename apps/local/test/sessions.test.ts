@@ -90,8 +90,8 @@ describe("会话：开工、事件、批权限、插话、停下、强停、续�
     expect(after("--setting-sources")).toBe("project,local");
     expect(a).toContain("--strict-mcp-config");
     expect(existsSync(after("--mcp-config"))).toBe(true);
-    expect(after("--allowedTools")).toContain("mcp__tianshu-session__submit_handback");
-    expect(JSON.parse(after("--settings"))).toEqual({ skipWebFetchPreflight: true }); // 订阅也关掉 WebFetch 预检
+    expect(after("--allowedTools")).toContain("mcp__tianshu-session__hand_back");
+    expect(JSON.parse(after("--settings"))).toEqual({ skipWebFetchPreflight: true, claudeMdExcludes: expect.any(Array) }); // 订阅也关掉 WebFetch 预检
     expect(first.sessionSecret).toMatch(/^[0-9a-f]{48}$/); // 本会话密钥只经环境变量传
     expect(a.join(" ")).not.toContain(first.sessionSecret);
     expect(a).not.toContain("--disallowedTools"); // 订阅模型保留自带搜索
@@ -182,17 +182,52 @@ describe("会话：开工、事件、批权限、插话、停下、强停、续�
       body: JSON.stringify({ jsonrpc: "2.0", id: ++n, method, params }),
     })).body;
     expect((await rpc("initialize", { protocolVersion: "2025-06-18" })).result.serverInfo.name).toBe("tianshu-local");
-    expect((await rpc("tools/list")).result.tools.map((x: any) => x.name)).toEqual(["add_artifact", "add_evidence", "submit_handback"]);
-    expect((await rpc("tools/call", { name: "add_artifact", arguments: { path: "方案.md", title: "方案" } })).result.isError).toBe(false);
-    expect((await rpc("tools/call", { name: "add_artifact", arguments: { path: "../../etc/passwd" } })).result.isError).toBe(true);
-    expect((await rpc("tools/call", { name: "add_evidence", arguments: { kind: "link", title: "PR", url: "https://github.com/x/y/pull/1" } })).result.isError).toBe(false);
-    const hb = await rpc("tools/call", { name: "submit_handback", arguments: { summary: "做完了", criteria: [{ index: 1, result: "met", evidence: "hello.txt 已写" }] } });
-    expect(hb.result.isError).toBe(false);
+    expect((await rpc("tools/list")).result.tools.map((x: any) => x.name)).toEqual(["add_artifact", "add_evidence", "hand_back"]);
+    const call = async (name: string, args: unknown) => (await rpc("tools/call", { name, arguments: args })).result as { isError: boolean; content: { text: string }[] };
+    expect((await call("add_artifact", { path: "方案.md", title: "方案" })).content[0]!.text).toContain("编号 A1");
+    expect((await call("add_artifact", { path: "../../etc/passwd" })).isError).toBe(true);
+    expect((await call("add_evidence", { kind: "link", title: "PR", url: "https://github.com/x/y/pull/1" })).content[0]!.text).toContain("编号 E1");
+    expect((await call("add_evidence", { kind: "note", title: "草稿说明" })).content[0]!.text).toContain("编号 E2");
+    expect((await call("save_version", { path: "方案.md", kind: "draft" })).isError).toBe(true); // 卡没有存版本的工具
+    expect((await call("hand_back", { summary: "做完了", criteria: [{ index: 1, result: "met", evidence: "x" }], outputs: ["A9"] })).isError).toBe(true);
+    const hb = await call("hand_back", { summary: "做完了", criteria: [{ index: 1, result: "met", evidence: "hello.txt 已写" }], outputs: ["A1", "e1"] });
+    expect(hb.isError).toBe(false);
+    // 交回点名的是那两份的同步幂等键（云端存成 local_outputs.client_id），没点名的 E2 不算
+    const queued = JSON.parse(readFileSync(join(t.dataDir, "outbox.json"), "utf8")).entries.map((e: any) => e.item);
+    const keyOf = (type: string, pred: (d: any) => boolean) => queued.find((i: any) => i.type === type && pred(i.data)).key;
+    expect(queued.find((i: any) => i.type === "handback").data.outputKeys).toEqual([keyOf("artifact", (d) => d.title === "方案"), keyOf("evidence", (d) => d.title === "PR")]);
     const note = await raw(t.port, { method: "POST", path: `/internal/sessions/${id}/mcp`, headers: { "x-tianshu-session-secret": secret, "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) });
     expect(note.status).toBe(202);
     const all = await readSse(t.port, token, id, { until: has("handback") });
     expect(all.find((e) => e.type === "artifact")).toMatchObject({ title: "方案", fileName: "方案.md" });
     expect(t.runner.outbox.status().pending).toBeGreaterThan(5); // 没关联云端：状态、计划、花费、产出物、交回都排着
+  });
+
+  it("专题：存版本从开工时的 versionBase 往下编号，报回飞书地址；专题不能交回", async () => {
+    const s = await api(t.port, token, "POST", "/v1/sessions", { subject: { kind: "topic", topicId: "topic-1" }, title: "调研", firstMessage: "先出提纲", versionBase: 2 });
+    expect(s.status).toBe(200);
+    const tid = s.body.id as string;
+    const secret = JSON.parse(readFileSync(join(t.dataDir, "sessions", tid, "session.json"), "utf8")).mcpSecret;
+    let n = 0;
+    const rpc = async (method: string, params?: unknown) => (await raw(t.port, {
+      method: "POST", path: `/internal/sessions/${tid}/mcp`, headers: { "x-tianshu-session-secret": secret, "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: ++n, method, params }),
+    })).body;
+    const call = async (name: string, args: unknown) => (await rpc("tools/call", { name, arguments: args })).result as { isError: boolean; content: { text: string }[] };
+    expect((await rpc("tools/list")).result.tools.map((x: any) => x.name)).toEqual(["add_artifact", "add_evidence", "save_version", "set_feishu_url"]);
+    writeFileSync(join(s.body.cwd, "提纲.md"), "# 提纲\n1. 背景");
+    expect((await call("save_version", { path: "提纲.md", kind: "outline", note: "第一次出提纲" })).content[0]!.text).toBe("已存第 3 版");
+    expect((await call("save_version", { path: "../x.md", kind: "draft" })).isError).toBe(true);
+    expect((await call("set_feishu_url", { number: 4, url: "https://x.feishu.cn/docx/abc" })).isError).toBe(true);
+    expect((await call("set_feishu_url", { number: 3, url: "http://x.feishu.cn/docx/abc" })).isError).toBe(true);
+    expect((await call("set_feishu_url", { number: 3, url: "https://x.feishu.cn/docx/abc" })).isError).toBe(false);
+    expect((await call("hand_back", { summary: "x", criteria: [] })).isError).toBe(true);
+    const all = await readSse(t.port, token, tid, { until: has("version") });
+    expect(all.find((e) => e.type === "version")).toMatchObject({ number: 3, kind: "outline", label: null, note: "第一次出提纲" });
+    const queued = JSON.parse(readFileSync(join(t.dataDir, "outbox.json"), "utf8")).entries.map((e: any) => e.item).filter((i: any) => i.sessionId === tid);
+    expect(queued.find((i: any) => i.type === "topic_version").data).toEqual({ number: 3, kind: "outline", label: null, note: "第一次出提纲", body: "# 提纲\n1. 背景" });
+    expect(queued.find((i: any) => i.type === "topic_version_feishu").data).toEqual({ number: 3, feishuUrl: "https://x.feishu.cn/docx/abc" });
+    await api(t.port, token, "POST", `/v1/sessions/${tid}/kill`, {});
   });
 });
 
@@ -227,7 +262,10 @@ describe("模型配置与钥匙", () => {
     expect(run.argv.join(" ")).not.toContain(key);
     const settings = JSON.parse(run.argv[run.argv.indexOf("--settings") + 1]);
     expect(run.argv[run.argv.indexOf("--disallowedTools") + 1]).toBe("WebSearch"); // 网关模型默认不给自带搜索
-    expect(settings).toEqual({ skipWebFetchPreflight: true, env: { ANTHROPIC_BASE_URL: "https://hub.example.com", ANTHROPIC_MODEL: "deepseek-v4.1-flash", ANTHROPIC_DEFAULT_HAIKU_MODEL: "deepseek-v4.1-flash" } });
+    expect(settings).toEqual({
+      skipWebFetchPreflight: true, claudeMdExcludes: expect.any(Array),
+      env: { ANTHROPIC_BASE_URL: "https://hub.example.com", ANTHROPIC_MODEL: "deepseek-v4.1-flash", ANTHROPIC_DEFAULT_HAIKU_MODEL: "deepseek-v4.1-flash" },
+    });
     await api(t.port, token, "POST", `/v1/sessions/${s.body.id}/kill`, {});
   });
 
@@ -254,6 +292,8 @@ describe("模型配置与钥匙", () => {
     const run = trace(work).at(-1);
     expect(run.cloudToken).toBeNull();
     expect(run.argv.join(" ")).not.toContain(cloudToken);
+    // 天枢 MCP 的只读搜索预先放行，其余工具每次都要网页批准
+    expect(run.argv[run.argv.indexOf("--allowedTools") + 1].split(",")).toContain("mcp__tianshu__web_search");
 
     // 会话的 MCP 客户端经本机转发调天枢 MCP：本机换上云端令牌，原样转发请求和响应。
     const secret = JSON.parse(readFileSync(join(sessionDir, "session.json"), "utf8")).mcpSecret;

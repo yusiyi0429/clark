@@ -12,6 +12,7 @@ fieldset{border:1px solid #d8dde6;border-radius:8px;margin:0 0 12px;padding:8px 
 button{margin:2px 4px 2px 0}input,textarea,select{font:inherit}textarea{width:100%;box-sizing:border-box}
 #log{background:#0f1420;color:#d6e2ff;height:340px;overflow:auto;padding:8px;border-radius:8px;white-space:pre-wrap;font:12px/1.45 ui-monospace,monospace}
 .perm{background:#fff6dd;border:1px solid #f0d27a;border-radius:6px;padding:6px;margin:4px 0}
+.perm.out{background:#ffe9e7;border-color:#e0533d}.perm .why{color:#b42318;font-weight:600}
 </style></head><body>
 <h2>天枢本机程序 · 测试页</h2>
 <fieldset><legend>1 连接</legend>
@@ -25,7 +26,7 @@ button{margin:2px 4px 2px 0}input,textarea,select{font:inherit}textarea{width:10
 <button id="start">开工</button> <select id="sessions"></select> <button id="watch">看这个会话</button></fieldset>
 <fieldset><legend>4 控制</legend>
 <input id="say" placeholder="插话 / 下一句" style="width:60%"> <button id="send">发送</button>
-<button id="interrupt">停下</button> <button id="kill">强停</button>
+<button id="interrupt">停下</button> <button id="kill">强停</button> <button id="review">评审会（专题）</button>
 <div id="perms"></div></fieldset>
 <div id="log"></div>
 <script>
@@ -59,7 +60,9 @@ $('pair').onclick = async () => {
 };
 $('unpair').onclick = async () => { await api('DELETE', '/v1/pairing'); token = ''; sessionStorage.removeItem('lt'); refresh(); };
 $('login').onclick = async () => { await api('POST', '/v1/agents/claude-code/login'); setTimeout(refresh, 1500); };
-$('pick').onclick = async () => { const r = await api('POST', '/v1/folders/pick'); log(r.folder ? '已添加 ' + r.folder.path : '取消了'); refresh(); };
+$('pick').onclick = async () => {
+  try { const r = await api('POST', '/v1/folders/pick'); log(r.folder ? '已添加 ' + r.folder.path : '取消了'); refresh(); } catch (e) { log('不能添加：' + e.message); }
+};
 $('start').onclick = async () => {
   const kind = document.querySelector('input[name=kind]:checked').value;
   const body = { subject: kind === 'card' ? { kind, cardId: 'dev-card' } : { kind, topicId: 'dev-topic' }, title: '测试 ' + new Date().toLocaleTimeString(), firstMessage: $('first').value, modelProfileId: $('models').value };
@@ -69,6 +72,7 @@ $('start').onclick = async () => {
 $('watch').onclick = () => watch($('sessions').value);
 $('send').onclick = async () => { const r = await api('POST', '/v1/sessions/' + current + '/messages', { text: $('say').value }); log('→ 已发送（' + r.delivery + '）'); $('say').value = ''; };
 $('interrupt').onclick = () => api('POST', '/v1/sessions/' + current + '/interrupt');
+$('review').onclick = async () => { try { const r = await api('POST', '/v1/sessions/' + current + '/messages', { kind: 'review' }); log('→ 开评审会（' + r.delivery + '）'); } catch (e) { log('开不了评审会：' + e.message); } };
 $('kill').onclick = () => api('POST', '/v1/sessions/' + current + '/kill');
 async function decide(id, decision, allowForSession) {
   const message = decision === 'deny' ? (prompt('拒绝理由（可空）') || undefined) : undefined;
@@ -81,9 +85,11 @@ function show(e) {
   else if (t === 'tool_call') log('  · ' + e.title);
   else if (t === 'tool_result') log('    ' + (e.isError ? '✗ ' : '✓ ') + e.preview.slice(0, 160));
   else if (t === 'permission_request') {
-    const d = document.createElement('div'); d.className = 'perm'; d.id = 'p-' + e.request.requestId;
+    const out = e.request.outsidePaths || []; // 升级前记下的事件没有这个字段
+    const d = document.createElement('div'); d.className = out.length ? 'perm out' : 'perm'; d.id = 'p-' + e.request.requestId;
     const btn = (text, onclick) => { const b = document.createElement('button'); b.textContent = text; b.onclick = onclick; return b; };
-    d.append('要权限：' + e.request.title + ' ', btn('允许', () => decide(e.request.requestId, 'allow', false)));
+    if (out.length) { const w = document.createElement('div'); w.className = 'why'; w.textContent = '越界（不在允许的文件夹里）：' + out.join('、'); d.append(w); }
+    d.append('要权限：' + e.request.title + ' ', btn(out.length ? '只允许这一次' : '允许', () => decide(e.request.requestId, 'allow', false)));
     if (e.request.canAllowForSession) d.append(btn('这张卡都允许', () => decide(e.request.requestId, 'allow', true)));
     d.append(btn('拒绝', () => decide(e.request.requestId, 'deny')));
     $('perms').appendChild(d); log('  ? ' + e.request.title);

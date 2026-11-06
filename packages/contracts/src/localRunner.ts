@@ -46,7 +46,17 @@ export const LocalSessionKind = Type.Union([Type.Literal("card"), Type.Literal("
 
 // ───────────────────────── 健康与配对 ─────────────────────────
 
-/** GET /v1/health：不需要口令，只要来源在白名单里。网页据此判断「装了没、配对没」。 */
+/**
+ * 本机同时跑的位置（V2 设计 20.6，界面上的「资源 · 本机 ▮▮▯」）：max 是上限（本机设置 maxConcurrent，默认 3）；
+ * running 是占着位置的会话（开工中、进行中、等你批准；一轮做完在等你回复的不占）；queued 是等空位的。
+ */
+export const LocalSlots = Type.Object({
+  max: Type.Integer({ minimum: 1, maximum: 10 }),
+  running: Type.Integer({ minimum: 0 }),
+  queued: Type.Integer({ minimum: 0 }),
+}, strict);
+
+/** GET /v1/health：不需要口令，只要来源在白名单里。网页据此判断「装了没、配对没」，资源栏也读这里的 slots。 */
 export const LocalHealthResponse = Type.Object({
   app: Type.Literal("tianshu-local"),
   version: Type.String(),
@@ -54,6 +64,7 @@ export const LocalHealthResponse = Type.Object({
   platform: Type.Union([Type.Literal("win32"), Type.Literal("darwin"), Type.Literal("linux")]),
   /** 请求里带的口令是否有效；没带就是 false。 */
   tokenValid: Type.Boolean(),
+  slots: LocalSlots,
 }, strict);
 
 /** POST /v1/pairings：网页发起配对。本机弹出确认框，显示同一个四位确认码，本人点「允许」才发口令。 */
@@ -123,9 +134,12 @@ export const LocalSettings = Type.Object({
   allowedOrigins: Type.Array(Type.String()),
   /** 「暂停全部」后为 true：进行中的会话停下，不接新会话、不续接旧会话；只能在托盘里恢复。 */
   paused: Type.Boolean(),
+  /** 同时最多跑几个（默认 3，插件页可改）。超出的排队，先来先跑；调大时立刻从队里接上。 */
+  maxConcurrent: Type.Integer({ minimum: 1, maximum: 10 }),
 }, strict);
 export const LocalSettingsPatch = Type.Object({
   includePersonalConfigByDefault: Type.Optional(Type.Boolean()),
+  maxConcurrent: Type.Optional(Type.Integer({ minimum: 1, maximum: 10 })),
   /** 网页只能暂停（true）；传 false 会被拒（409），恢复只能在本机托盘里点。 */
   paused: Type.Optional(Type.Boolean()),
 }, strict);
@@ -135,7 +149,9 @@ export const LocalStatusResponse = Type.Object({
   deviceId: Uuid,
   version: Type.String(),
   agents: Type.Array(LocalAgentStatus),
+  /** 等于 slots.running（留着兼容）。 */
   activeSessions: Type.Integer({ minimum: 0 }),
+  slots: LocalSlots,
   cloud: LocalCloudLinkView,
   settings: LocalSettings,
 }, strict);
@@ -208,12 +224,17 @@ export const LocalFolder = Type.Object({
   addedAt: Instant,
 }, strict);
 export const LocalFolderListResponse = Type.Object({ folders: Type.Array(LocalFolder) }, strict);
-/** POST /v1/folders/pick：本人在本机选择框里点了取消时 folder 为 null。 */
+/**
+ * POST /v1/folders/pick：本人在本机选择框里点了取消时 folder 为 null。
+ * 选了主目录或它的上级、Claude 配置目录、本机程序数据目录（或它们的上级）时回 400 validation，message 可直接给人看。
+ */
 export const LocalFolderPickResponse = Type.Object({ folder: Nullable(LocalFolder) }, strict);
 
 // ───────────────────────── 会话 ─────────────────────────
 
 export const LocalSessionStatus = Type.Union([
+  /** 等空位：本机同时跑的已满，先来先跑，有空位自动开始；本机程序重启后照样排着。界面上叫「等空位」。 */
+  Type.Literal("queued"),
   Type.Literal("starting"),
   Type.Literal("running"),
   /** 有权限请求挂起，等网页批准或拒绝。 */
@@ -242,6 +263,26 @@ export const LocalUsage = Type.Object({
   costUsd: Nullable(Type.Number({ minimum: 0 })),
 }, strict);
 
+/** 岗位能用的工具（插件），和云端 roles.ts 的 RoleTool 一致。 */
+export const LocalRoleTool = Type.Union([Type.Literal("tianshu"), Type.Literal("web_search"), Type.Literal("feishu"), Type.Literal("github"), Type.Literal("browser")]);
+const RoleText = Type.String({ maxLength: 8000 });
+/**
+ * 岗位（V2 设计第 19 节）：和云端交代里的 RoleBrief 同形，网页可原样转给本机。
+ * 本机把职责、做法、验收口径写进会话追加的系统提示词（不往本人的仓库写文件，ADR 0033）；tools 决定挂哪些插件、给哪些工具。
+ * modelTier 由网页按档位挑好模型（modelProfileId），本机不看；id、kind、version 只用来显示和留痕。
+ */
+export const LocalRole = Type.Object({
+  id: Type.Optional(Uuid),
+  name: Type.String({ minLength: 1, maxLength: 40 }),
+  kind: Type.Optional(Type.Union([Type.Literal("worker"), Type.Literal("reviewer"), Type.Literal("critic")])),
+  dutiesMd: RoleText,
+  practiceMd: RoleText,
+  acceptanceMd: RoleText,
+  tools: Type.Array(LocalRoleTool, { maxItems: 5 }),
+  modelTier: Type.Optional(Type.Union([Type.Literal("strong"), Type.Literal("normal"), Type.Literal("light")])),
+  version: Type.Optional(Type.Integer({ minimum: 1 })),
+}, strict);
+
 /** POST /v1/sessions */
 export const LocalCreateSessionRequest = Type.Object({
   subject: LocalSessionSubject,
@@ -254,6 +295,12 @@ export const LocalCreateSessionRequest = Type.Object({
   firstMessage: Type.String({ minLength: 1, maxLength: 20000 }),
   /** 覆盖「默认干净」：true 时带上本人全局配置（hooks、插件、个人 MCP）。 */
   includePersonalConfig: Type.Optional(Type.Boolean()),
+  /** 专题：云端已有的最新一版号（交代里的 latestVersion，没有版本时不填）。本机存新一版时从下一号往下编。 */
+  versionBase: Type.Optional(Type.Integer({ minimum: 0 })),
+  /** 做这张卡或这个专题的岗位（交代里的 role）。不带就按通用的规矩做。 */
+  role: Type.Optional(LocalRole),
+  /** 只有专题：评审会用的挑刺岗位（交代里的 critics，最多 3 个）。开工时定下，评审会时并行起它们。 */
+  critics: Type.Optional(Type.Array(LocalRole, { maxItems: 3 })),
 }, strict);
 
 export const LocalSessionSummary = Type.Object({
@@ -271,6 +318,8 @@ export const LocalSessionSummary = Type.Object({
   updatedAt: Instant,
   lastSeq: Type.Integer({ minimum: 0 }),
   pendingPermissions: Type.Integer({ minimum: 0 }),
+  /** 排队时是第几个（1 起），没在排队为 null。 */
+  queuePosition: Nullable(Type.Integer({ minimum: 1 })),
   usage: LocalUsage,
 }, strict);
 export const LocalSessionListResponse = Type.Object({ sessions: Type.Array(LocalSessionSummary) }, strict);
@@ -281,7 +330,15 @@ export const LocalPermissionRequestView = Type.Object({
   /** 给人看的一行，例如「改文件 src/app.ts」「运行 pnpm test」。 */
   title: Type.String(),
   input: Type.Record(Type.String(), Type.Unknown()),
-  /** Claude Code 给了 permission_suggestions：可以「这张卡都允许」。 */
+  /**
+   * 这一步要碰的、不在允许的文件夹里的路径（越界）。非空时网页要标红写明越界的路径，且只能「允许这一次」。
+   * 文件类工具按字段取路径；Bash、PowerShell 是从命令里尽力认，可能认不全。本机不自动拒绝，由本人决定（ADR 0031）。
+   */
+  outsidePaths: Type.Array(Type.String(), { maxItems: 20 }),
+  /**
+   * 可以「这张卡都允许」：Claude Code 给了放行建议，这一步没越界，且建议要放开的范围（加进来的目录、放行规则里的路径）也都在允许的文件夹里。
+   * 放行只在本会话内有效，不写进仓库或本人的设置。
+   */
   canAllowForSession: Type.Boolean(),
   requestedAt: Instant,
 }, strict);
@@ -290,8 +347,28 @@ export const LocalSessionDetailResponse = Type.Object({
   pendingPermissions: Type.Array(LocalPermissionRequestView),
 }, strict);
 
-/** POST /v1/sessions/:id/messages：插话。进行中时在下一个工具步骤生效；空闲时开下一轮；已退出时先 --resume 再发。 */
-export const LocalSendMessageRequest = Type.Object({ text: Type.String({ minLength: 1, maxLength: 20000 }) }, strict);
+/**
+ * POST /v1/sessions/batch：一次开工多件（派活单点一次「开工」）。每件和单开一件一样；按给的顺序排，有空位的马上开，满了的进队列（status = queued）。
+ * 开工只能由本人在这台电脑的网页上点，云端不发指令。
+ */
+export const LocalCreateSessionBatchRequest = Type.Object({ items: Type.Array(LocalCreateSessionRequest, { minItems: 1, maxItems: 20 }) }, strict);
+/** 每件一个结果，顺序和请求一样：成了给会话（可能是 queued），没成给错误（这一件不留记录，别的照常）。 */
+export const LocalCreateSessionBatchResponse = Type.Object({
+  results: Type.Array(Type.Union([
+    Type.Object({ ok: Type.Literal(true), session: LocalSessionSummary }, strict),
+    Type.Object({ ok: Type.Literal(false), error: Type.Object({ code: LocalRunnerErrorCode, message: Type.String() }, strict) }, strict),
+  ])),
+}, strict);
+
+/**
+ * POST /v1/sessions/:id/messages：说一句。进行中时在下一个工具步骤生效；空闲时开下一轮；已退出时先 --resume 再发。
+ * kind = review：专题开评审会（开工时带了 critics 才行），本机让会话并行起挑刺子 agent，合成「分歧和建议」存成 kind = review 的一版；
+ * 这时 text 可不填，填了是本人对这次评审的补充要求。不带 kind 就是普通的一句话，text 必填。
+ */
+export const LocalSendMessageRequest = Type.Object({
+  kind: Type.Optional(Type.Union([Type.Literal("say"), Type.Literal("review")])),
+  text: Type.Optional(Type.String({ minLength: 1, maxLength: 20000 })),
+}, strict);
 export const LocalSendMessageResponse = Type.Object({
   /** next_step：进行中，下一步前送达；new_turn：开了新一轮；resumed：进程已退出，续接后送达。 */
   delivery: Type.Union([Type.Literal("next_step"), Type.Literal("new_turn"), Type.Literal("resumed")]),
@@ -331,6 +408,22 @@ export const LocalHandbackCriterion = Type.Object({
   evidence: Type.String({ maxLength: 2000 }),
 }, strict);
 
+/** 专题一版的种类：outline 提纲、draft 正文、review 评审会合成的「分歧和建议」。 */
+export const LocalTopicVersionKind = Type.Union([Type.Literal("outline"), Type.Literal("draft"), Type.Literal("review")]);
+/** 同步条目的幂等键，交回时用它点名产出和证据（云端存成 local_outputs.client_id）。 */
+const SyncKey = Type.String({ minLength: 10, maxLength: 200 });
+
+/**
+ * 计划进度（派活单上的「第 3/6 步」）：done 做完几条，total 共几条，step 是第几步（正在做的那条是第几条；没有正在做的就是做完的条数），
+ * current 是正在做的那条的标题（没有为 null）。
+ */
+export const LocalPlanProgress = Type.Object({
+  done: Type.Integer({ minimum: 0 }),
+  total: Type.Integer({ minimum: 0 }),
+  step: Type.Integer({ minimum: 0 }),
+  current: Nullable(Type.String()),
+}, strict);
+
 /**
  * GET /v1/sessions/:id/events（text/event-stream）。每条 `id: <seq>` + `data: <JSON>`。
  * 断线后带 Last-Event-ID 重连，本机从会话事件日志补发其后的全部事件；也可用 ?after=<seq>。
@@ -343,7 +436,7 @@ export const LocalSessionEvent = Type.Union([
   ev("assistant_text", { text: Type.String() }),
   ev("tool_call", { toolUseId: Type.String(), name: Type.String(), title: Type.String(), input: Type.Record(Type.String(), Type.Unknown()) }),
   ev("tool_result", { toolUseId: Type.String(), isError: Type.Boolean(), preview: Type.String() }),
-  ev("plan", { entries: Type.Array(LocalPlanEntry) }),
+  ev("plan", { entries: Type.Array(LocalPlanEntry), progress: LocalPlanProgress }),
   ev("permission_request", { request: LocalPermissionRequestView }),
   ev("permission_resolved", { requestId: Type.String(), decision: Type.Union([Type.Literal("allow"), Type.Literal("deny")]), message: Type.Optional(Type.String()), allowForSession: Type.Boolean() }),
   ev("turn_end", {
@@ -354,7 +447,9 @@ export const LocalSessionEvent = Type.Union([
     errorKind: Type.Optional(Type.Union([Type.Literal("auth"), Type.Literal("api"), Type.Literal("interrupted"), Type.Literal("other")])),
   }),
   ev("artifact", { artifactId: Id, title: Type.String(), fileName: Type.String(), size: Type.Integer({ minimum: 0 }), sha256: Type.String() }),
-  ev("handback", { summary: Type.String(), criteria: Type.Array(LocalHandbackCriterion) }),
+  ev("handback", { summary: Type.String(), criteria: Type.Array(LocalHandbackCriterion), outputKeys: Type.Array(SyncKey) }),
+  /** 专题存了新的一版（已排进上报队列）。 */
+  ev("version", { number: Type.Integer({ minimum: 1 }), kind: LocalTopicVersionKind, label: Nullable(Type.String()), note: Nullable(Type.String()) }),
   /** interjection_next_step：插话已送出，下一步生效；auth_required：执行方登录失效；agent_stderr：执行方报错输出。 */
   ev("notice", { level: Type.Union([Type.Literal("info"), Type.Literal("warn"), Type.Literal("error")]), code: Type.String(), text: Type.String() }),
 ]);
@@ -363,7 +458,7 @@ export const LocalSessionEvent = Type.Union([
 
 const syncItem = <T extends string, D extends TSchema>(type: T, data: D) => Type.Object({
   /** 幂等键：<deviceId>:<sessionId>:<本机序号>。云端按它去重，重复提交返回 accepted。 */
-  key: Type.String({ minLength: 10, maxLength: 200 }),
+  key: SyncKey,
   sessionId: Uuid,
   subject: LocalSessionSubject,
   occurredAt: Instant,
@@ -375,7 +470,7 @@ export const LocalSyncItem = Type.Union([
   syncItem("status", Type.Object({
     status: LocalSessionStatus, title: Type.String(), agent: LocalAgentKind, modelLabel: Type.String(),
   }, strict)),
-  syncItem("plan", Type.Object({ entries: Type.Array(LocalPlanEntry, { maxItems: 100 }) }, strict)),
+  syncItem("plan", Type.Object({ entries: Type.Array(LocalPlanEntry, { maxItems: 100 }), progress: LocalPlanProgress }, strict)),
   /** 证据：一段说明、日志片段、链接（PR 等）、改动摘要。不传完整工具输出。 */
   syncItem("evidence", Type.Object({
     kind: Type.Union([Type.Literal("note"), Type.Literal("log"), Type.Literal("link"), Type.Literal("diff_summary")]),
@@ -393,7 +488,31 @@ export const LocalSyncItem = Type.Union([
     sha256: Type.String({ pattern: "^[0-9a-f]{64}$" }),
     contentBase64: Type.String({ maxLength: 14 * 1024 * 1024 }),
   }, strict)),
-  syncItem("handback", Type.Object({ summary: Type.String({ maxLength: 4000 }), criteria: Type.Array(LocalHandbackCriterion, { maxItems: 50 }) }, strict)),
+  /**
+   * 交回（只有卡）。outputKeys 是这次交回点名用的产出和证据（它们的 artifact、evidence 条目的 key）：
+   * 执行方点了名就是那几份，没点名就是本会话上一次交回以后交的全部；可以为空。
+   */
+  syncItem("handback", Type.Object({
+    summary: Type.String({ maxLength: 4000 }),
+    criteria: Type.Array(LocalHandbackCriterion, { maxItems: 50 }),
+    outputKeys: Type.Array(SyncKey, { maxItems: 100 }),
+  }, strict)),
+  /**
+   * 专题新的一版（只有专题）：number 由本机从开工时的 versionBase 往下编；label 为 null 时云端按自己的规矩起名（「提纲」「第 N 版」）；
+   * note 是这一版改了什么；body 是 Markdown 正文。
+   */
+  syncItem("topic_version", Type.Object({
+    number: Type.Integer({ minimum: 1 }),
+    kind: LocalTopicVersionKind,
+    label: Nullable(Type.String({ minLength: 1, maxLength: 20 })),
+    note: Nullable(Type.String({ maxLength: 200 })),
+    body: Type.String({ minLength: 1, maxLength: 200000 }),
+  }, strict)),
+  /** 专题的第 number 版已由本机会话用本人的飞书登录存进飞书，feishuUrl 是飞书里的地址。 */
+  syncItem("topic_version_feishu", Type.Object({
+    number: Type.Integer({ minimum: 1 }),
+    feishuUrl: Type.String({ pattern: "^https://", maxLength: 2000 }),
+  }, strict)),
   /** 花费：每轮结束报一次本轮的增量。 */
   syncItem("cost", Type.Object({ modelLabel: Type.String(), usage: LocalUsage }, strict)),
 ]);
@@ -401,6 +520,8 @@ export const LocalSyncItem = Type.Union([
 export const LocalSyncBatchRequest = Type.Object({
   deviceId: Uuid,
   runnerVersion: Type.String(),
+  /** 发这一批时本机的位置数（云端的 worker 列表和「资源」用）。 */
+  slots: LocalSlots,
   items: Type.Array(LocalSyncItem, { minItems: 1, maxItems: 50 }),
 }, strict);
 export const LocalSyncBatchResponse = Type.Object({
@@ -449,6 +570,13 @@ export type TLocalPermissionDecisionRequest = Static<typeof LocalPermissionDecis
 export type TLocalSessionActionResponse = Static<typeof LocalSessionActionResponse>;
 export type TLocalPlanEntry = Static<typeof LocalPlanEntry>;
 export type TLocalHandbackCriterion = Static<typeof LocalHandbackCriterion>;
+export type TLocalTopicVersionKind = Static<typeof LocalTopicVersionKind>;
+export type TLocalRole = Static<typeof LocalRole>;
+export type TLocalSlots = Static<typeof LocalSlots>;
+export type TLocalPlanProgress = Static<typeof LocalPlanProgress>;
+export type TLocalCreateSessionBatchRequest = Static<typeof LocalCreateSessionBatchRequest>;
+export type TLocalCreateSessionBatchResponse = Static<typeof LocalCreateSessionBatchResponse>;
+export type TLocalRoleTool = Static<typeof LocalRoleTool>;
 export type TLocalSessionEvent = Static<typeof LocalSessionEvent>;
 export type TLocalSyncItem = Static<typeof LocalSyncItem>;
 export type TLocalSyncBatchRequest = Static<typeof LocalSyncBatchRequest>;
@@ -481,6 +609,7 @@ export const LOCAL_RUNNER_ROUTES = {
   deleteFolder: { method: "DELETE", path: "/v1/folders/:id", auth: true },
   listSessions: { method: "GET", path: "/v1/sessions", auth: true },
   createSession: { method: "POST", path: "/v1/sessions", auth: true },
+  createSessionBatch: { method: "POST", path: "/v1/sessions/batch", auth: true },
   getSession: { method: "GET", path: "/v1/sessions/:id", auth: true },
   sessionEvents: { method: "GET", path: "/v1/sessions/:id/events", auth: true },
   sendMessage: { method: "POST", path: "/v1/sessions/:id/messages", auth: true },

@@ -56,11 +56,17 @@ export class Settings {
   constructor(dataDir: string, private readonly allowedOrigins: readonly string[]) { this.file = join(dataDir, "settings.json"); }
   get(): TLocalSettings {
     const s = readJson<Partial<TLocalSettings>>(this.file, {});
-    return { includePersonalConfigByDefault: s.includePersonalConfigByDefault ?? false, paused: s.paused ?? false, allowedOrigins: [...this.allowedOrigins] };
+    return {
+      includePersonalConfigByDefault: s.includePersonalConfigByDefault ?? false, paused: s.paused ?? false, allowedOrigins: [...this.allowedOrigins],
+      maxConcurrent: s.maxConcurrent ?? 3,
+    };
   }
   patch(p: TLocalSettingsPatch): TLocalSettings {
     const cur = this.get();
-    const next = { includePersonalConfigByDefault: p.includePersonalConfigByDefault ?? cur.includePersonalConfigByDefault, paused: p.paused ?? cur.paused };
+    const next = {
+      includePersonalConfigByDefault: p.includePersonalConfigByDefault ?? cur.includePersonalConfigByDefault, paused: p.paused ?? cur.paused,
+      maxConcurrent: p.maxConcurrent ?? cur.maxConcurrent,
+    };
     writeJsonAtomic(this.file, next);
     return this.get();
   }

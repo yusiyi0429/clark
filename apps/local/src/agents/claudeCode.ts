@@ -3,7 +3,9 @@ import { randomUUID } from "node:crypto";
 import type { TLocalPermissionRequestView, TLocalUsage } from "@warmap/contracts";
 import type { EventBody } from "../eventLog.js";
 import { AgentStartError, type AgentAdapter, type AgentLaunch, type AgentRun, type PermissionAnswer } from "./types.js";
-import { buildClaudeArgs, childEnv, describeTool, personalSettingsSetKey, versionAtLeast } from "./claudeEnv.js";
+import { buildClaudeArgs, childEnv, describeTool, homeDir, personalSettingsSetKey, versionAtLeast } from "./claudeEnv.js";
+import { outsidePaths, suggestionsReachOutside, type PathScope } from "./pathGuard.js";
+import { planProgress } from "../plan.js";
 
 /** 低于这个版本不保证兼容：11/05 实测基于 2.1.318；权限模式 default 改名 manual 也在 2.1.3xx。 */
 export const MIN_CLAUDE_VERSION = "2.1.300";
@@ -53,12 +55,14 @@ class ClaudeRun implements AgentRun {
   private readonly eventFns: ((e: EventBody) => void)[] = [];
   private readonly exitFns: ((code: number | null) => void)[] = [];
   private readonly hostRequests = new Map<string, (r: Json) => void>();
-  private readonly permissions = new Map<string, Json>();
+  /** broad：这一步越界，或「这张卡都允许」要放开的范围越界——这时不给本会话放行。 */
+  private readonly permissions = new Map<string, { req: Json; broad: boolean }>();
   private interrupting = false;
   private exited = false;
   private authFailed = false;
+  private apiRetried = false;
 
-  constructor(private readonly child: ChildProcessWithoutNullStreams, private readonly sessionId: string) {
+  constructor(private readonly child: ChildProcessWithoutNullStreams, private readonly sessionId: string, private readonly scope: PathScope) {
     child.stdout.setEncoding("utf8").on("data", (d: string) => this.onStdout(d));
     let errBuf = "";
     child.stderr.setEncoding("utf8").on("data", (d: string) => {
@@ -105,11 +109,17 @@ class ClaudeRun implements AgentRun {
   }
 
   respondPermission(requestId: string, a: PermissionAnswer): boolean {
-    const req = this.permissions.get(requestId);
-    if (!req) return false;
+    const entry = this.permissions.get(requestId);
+    if (!entry) return false;
     this.permissions.delete(requestId);
+    const { req } = entry;
+    // 「这张卡都允许」只在本会话内有效：Claude Code 有的建议会写进仓库的 .claude/settings.local.json（11/06 实测 Bash），一律改成 session。
+    // 越界的这一步、或建议放开的范围越界时不给：越界建议是把外面的目录加进工作目录或放行整个外面的目录。
+    const session = a.allowForSession && !entry.broad && Array.isArray(req.permission_suggestions)
+      ? req.permission_suggestions.map((s: Json) => ({ ...s, destination: "session" }))
+      : null;
     const response = a.allow
-      ? { behavior: "allow", updatedInput: req.input ?? {}, ...(a.allowForSession && req.permission_suggestions ? { updatedPermissions: req.permission_suggestions } : {}) }
+      ? { behavior: "allow", updatedInput: req.input ?? {}, ...(session ? { updatedPermissions: session } : {}) }
       : { behavior: "deny", message: a.message?.trim() || "本人在天枢网页上拒绝了这一步" };
     this.write({ type: "control_response", response: { subtype: "success", request_id: requestId, response } });
     return true;
@@ -164,13 +174,18 @@ class ClaudeRun implements AgentRun {
           return;
         }
         const req = ev.request;
-        this.permissions.set(ev.request_id, req);
+        const toolName = String(req.tool_name ?? "");
+        // blocked_path：Claude Code 自己从 Bash 命令里认出的越界路径（11/06 实测）。
+        const outside = outsidePaths(toolName, req.input ?? {}, this.scope, req.blocked_path);
+        const broad = outside.length > 0 || suggestionsReachOutside(req.permission_suggestions, this.scope);
+        this.permissions.set(ev.request_id, { req, broad });
         const view: TLocalPermissionRequestView = {
           requestId: ev.request_id,
-          toolName: String(req.tool_name ?? ""),
-          title: describeTool(String(req.tool_name ?? ""), req.input ?? {}),
+          toolName,
+          title: describeTool(toolName, req.input ?? {}),
           input: clipInput(req.input ?? {}),
-          canAllowForSession: Array.isArray(req.permission_suggestions) && req.permission_suggestions.length > 0,
+          outsidePaths: outside,
+          canAllowForSession: !broad && Array.isArray(req.permission_suggestions) && req.permission_suggestions.length > 0,
           requestedAt: new Date().toISOString(),
         };
         this.emit({ type: "permission_request", request: view });
@@ -190,11 +205,17 @@ class ClaudeRun implements AgentRun {
           // 第一次认证失败就停，不必等它重试十次。
           this.authFailure("Claude 登录已失效，请在天枢里重新登录 Claude。");
           void this.kill();
+        } else if (ev.subtype === "api_retry") {
+          // 模型服务出错时每次重试都马上告诉网页，不等最后失败。
+          this.apiRetried = true;
+          const why = typeof ev.error_status === "number" ? `模型服务出错（HTTP ${ev.error_status}）` : "连不上模型服务（超时或拒绝连接）";
+          this.emit({ type: "notice", level: "warn", code: "api_retry", text: `${why}，正在重试（第 ${Number(ev.attempt) || 1}/${Number(ev.max_retries) || "?"} 次）` });
         }
         return;
       }
       case "assistant": {
         if (ev.error === "authentication_failed") this.authFailure("Claude 还没登录或登录已失效，请在天枢里登录 Claude。");
+        else if (!ev.error) this.apiRetried = false; // 重试后模型又答上来了：这一轮之后再出错不算模型服务的错
         if (ev.parent_tool_use_id) return; // 子代理内部的步骤不逐条上屏
         for (const c of ev.message?.content ?? []) {
           if (c.type === "text" && c.text?.trim()) this.emit({ type: "assistant_text", text: c.text });
@@ -204,7 +225,7 @@ class ClaudeRun implements AgentRun {
               const entries = c.input.todos
                 .filter((t: Json) => typeof t?.content === "string")
                 .map((t: Json) => ({ content: t.content, status: ["pending", "in_progress", "completed"].includes(t.status) ? t.status : "pending" }));
-              this.emit({ type: "plan", entries });
+              this.emit({ type: "plan", entries, progress: planProgress(entries) });
             }
           }
         }
@@ -225,7 +246,9 @@ class ClaudeRun implements AgentRun {
       }
       case "result": {
         const interrupted = this.interrupting && ev.subtype === "error_during_execution";
+        const apiRetried = this.apiRetried;
         this.interrupting = false;
+        this.apiRetried = false;
         const isError = Boolean(ev.is_error) || ev.subtype !== "success";
         const auth = this.authFailed || ev.api_error_status === 401;
         if (auth && !this.authFailed) this.authFailure("Claude 登录已失效，请在天枢里重新登录 Claude。");
@@ -235,7 +258,8 @@ class ClaudeRun implements AgentRun {
           text: typeof ev.result === "string" ? ev.result : null,
           durationMs: Math.max(0, Math.round(Number(ev.duration_ms) || 0)),
           usage: usageOf(ev),
-          ...(isError ? { errorKind: interrupted ? "interrupted" : auth ? "auth" : ev.api_error_status ? "api" : "other" } : {}),
+          // 拒连、超时没有 HTTP 状态码，但这一轮重试过就算模型服务的错。
+          ...(isError ? { errorKind: interrupted ? "interrupted" : auth ? "auth" : ev.api_error_status || apiRetried ? "api" : "other" } : {}),
         } as EventBody);
         return;
       }
@@ -266,7 +290,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       // Mac/Linux 上自成进程组，强停时整组杀掉。
       detached: process.platform !== "win32",
     });
-    const run = new ClaudeRun(child, launch.sessionId);
+    const run = new ClaudeRun(child, launch.sessionId, { cwd: launch.cwd, home: homeDir(), allowedRoots: launch.allowedRoots });
     const spawned = await new Promise<Error | null>((resolve) => {
       child.once("spawn", () => resolve(null));
       child.once("error", (e) => resolve(e));
