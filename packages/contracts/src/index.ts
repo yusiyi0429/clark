@@ -64,3 +64,4 @@ export * from "./topics.js";
 export * from "./roles.js";
 export * from "./workers.js";
 export * from "./cardSplits.js";
+export * from "./workHome.js";
