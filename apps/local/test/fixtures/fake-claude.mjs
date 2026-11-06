@@ -7,12 +7,15 @@ import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 
 const argv = process.argv.slice(2);
-const sid = argv[argv.indexOf("--session-id") + 1] ?? argv[argv.indexOf("--resume") + 1];
+const sid = argv.includes("--session-id") ? argv[argv.indexOf("--session-id") + 1] : argv[argv.indexOf("--resume") + 1];
 let home = process.cwd();
 while (!existsSync(join(home, ".fake-claude.json")) && dirname(home) !== home) home = dirname(home);
 if (!existsSync(join(home, ".fake-claude.json"))) home = process.cwd();
-const cfg = existsSync(join(home, ".fake-claude.json")) ? JSON.parse(readFileSync(join(home, ".fake-claude.json"), "utf8")) : {};
+const readCfg = () => existsSync(join(home, ".fake-claude.json")) ? JSON.parse(readFileSync(join(home, ".fake-claude.json"), "utf8")) : {};
+const cfg = readCfg();
 const TRACE = join(home, ".fake-claude-trace.jsonl");
+/** 每一轮收到的话另记一份（不混进 trace：别的测试拿 trace 的最后一行当最近一次拉起）。 */
+const TURNS = join(home, ".fake-claude-turns.jsonl");
 appendFileSync(TRACE, JSON.stringify({ pid: process.pid, argv, envKeys: Object.keys(process.env), authToken: process.env.ANTHROPIC_AUTH_TOKEN ?? null, sessionSecret: process.env.TIANSHU_SESSION_SECRET ?? null, cloudToken: process.env.TIANSHU_CLOUD_TOKEN ?? null, maxRetries: process.env.CLAUDE_CODE_MAX_RETRIES ?? null, apiTimeout: process.env.API_TIMEOUT_MS ?? null }) + "\n");
 const out = (o) => process.stdout.write(JSON.stringify(o) + "\n");
 const mode = cfg.mode ?? "normal";
@@ -29,6 +32,19 @@ function startTurn(text) {
     return;
   }
   out({ type: "system", subtype: "init", session_id: sid, model: "claude-haiku-5-5", permissionMode: "default", claude_code_version: "2.1.318" });
+  // 额度：每轮现读配置（测试中途改）。usageLimit 在时这一轮碰壁：rate_limit_event rejected → 助手报 rate_limit → 429 的 result（exit 时直接退出）；
+  // 这一串照社区复现和 Claude Code 程序里的字符串，没真机复现过
+  const live = readCfg();
+  appendFileSync(TURNS, JSON.stringify({ turnText: text, sid }) + "\n");
+  if (live.usageLimit) {
+    const resetsAt = live.usageLimit.resetsAt;
+    out({ type: "rate_limit_event", rate_limit_info: { status: "rejected", resetsAt, rateLimitType: "five_hour", utilization: 1, isUsingOverage: false, unifiedWindows: { five_hour: { utilization: 1, resetsAt, status: "rejected" } } } });
+    out({ type: "assistant", error: "rate_limit", api_error: "usage_limit_reached", message: { content: [{ type: "text", text: "You've hit your limit · resets 3pm" }] }, parent_tool_use_id: null });
+    if (live.usageLimit.exit) process.exit(1);
+    out({ type: "result", subtype: "success", is_error: true, result: "You've hit your limit · resets 3pm", api_error_status: 429, duration_ms: 5, usage: {} });
+    return;
+  }
+  if (live.rateInfo) out({ type: "rate_limit_event", rate_limit_info: live.rateInfo });
   if (mode === "gateway_down") {
     // 11/06 假网关实测：每次重试一条 api_retry，最后 result 是 success + is_error，拒连时没有 api_error_status。
     for (let a = 1; a <= 2; a++) out({ type: "system", subtype: "api_retry", attempt: a, max_retries: 2, retry_delay_ms: 500 * a, error_status: null, error: "unknown" });
@@ -144,8 +160,8 @@ function agentDone() {
 
 function finish(ok, text) {
   out({ type: "result", subtype: ok ? "success" : "error_during_execution", is_error: !ok, result: text, duration_ms: 12, total_cost_usd: 0.01 * turns,
-    usage: { input_tokens: 3, output_tokens: 5, cache_read_input_tokens: 7, cache_creation_input_tokens: 11 },
-    model_usage_since_last_result: { "claude-haiku-5-5": { costUSD: 0.01 } } });
+    usage: { input_tokens: 3, output_tokens: 5, cache_read_input_tokens: 7, cache_creation_input_tokens: 11, ...(cfg.iterations ? { iterations: Array.from({ length: cfg.iterations }, () => ({})) } : {}) },
+    model_usage_since_last_result: cfg.modelUsage ?? { "claude-haiku-5-5": { costUSD: 0.01 } } });
   turn = null;
 }
 
@@ -165,6 +181,15 @@ rl.on("line", (line) => {
   if (msg.type === "control_request" && msg.request.subtype === "initialize") {
     if (cfg.initDelayMs) { setTimeout(() => out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: { claude_code_version: cfg.version ?? "2.1.318", pid: process.pid } } }), cfg.initDelayMs); return; }
     out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: { claude_code_version: cfg.version ?? "2.1.318", pid: process.pid } } });
+  } else if (msg.type === "control_request" && msg.request.subtype === "get_usage") {
+    // 读额度（11/07 实测 2.1.318 的形状，只留本机用到的字段）
+    appendFileSync(TRACE, JSON.stringify({ getUsage: msg.request }) + "\n");
+    const usage = cfg.usage ?? { subscription_type: "max", rate_limits: { limits: [
+      { kind: "session", group: "session", percent: 12, severity: "normal", resets_at: "2026-11-07T10:00:00Z", scope: null, is_active: true },
+      { kind: "weekly_all", group: "weekly", percent: 40, severity: "normal", resets_at: "2026-11-12T00:00:00Z", scope: null, is_active: true },
+      { kind: "weekly_scoped", group: "weekly", percent: 81, severity: "warning", resets_at: "2026-11-12T00:00:00Z", scope: { model: { display_name: "Opus" } }, is_active: true },
+    ], extra_usage: { is_enabled: false } }, account: { email: "someone@example.com", organization: "Org" } };
+    out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: usage } });
   } else if (msg.type === "control_request" && msg.request.subtype === "stop_task") {
     const id = msg.request.task_id;
     appendFileSync(TRACE, JSON.stringify({ stopTask: id }) + "\n");
@@ -197,6 +222,9 @@ rl.on("line", (line) => {
       return;
     }
     if (r.behavior === "allow") {
+      // 批了以后这一轮里才报额度变化（跑着的卡途中碰到）：现读配置
+      const late = readCfg().rateInfoOnAllow;
+      if (late) out({ type: "rate_limit_event", rate_limit_info: late });
       if (!cfg.writePath) writeFileSync("hello.txt", "你好");
       out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: `toolu_w${turns}`, content: "File created successfully" }] }, parent_tool_use_id: null });
       out({ type: "assistant", message: { content: [{ type: "text", text: r.updatedPermissions ? "写好了（本会话都允许）" : "写好了" }] }, parent_tool_use_id: null });

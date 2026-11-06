@@ -9,11 +9,13 @@ import {
   type TLocalSendMessageRequest, type TLocalSendMessageResponse, type TLocalSessionKind, type TLocalSessionStatus, type TLocalSlots, type TLocalSessionSubject,
   type TLocalSessionSummary, type TLocalSyncItem, type TLocalTopicVersionKind, type TLocalUsage, type TLocalVerdict, type TLocalVerdictCriterion,
   type TLocalWorkspace, type TLocalGitRef, type TLocalMergeResponse, type TLocalQuestionRequestView, type TLocalQuestionAnswerRequest,
-  type TLocalBackgroundItem, type TLocalMergeHoldReason, type TLocalMergeSync,
+  type TLocalBackgroundItem, type TLocalMergeHoldReason, type TLocalMergeSync, type TLocalModelTier, type TLocalHold, type TLocalMoney,
 } from "@warmap/contracts";
 import { readJson, writeJsonAtomic, nowIso } from "./store.js";
 import type { EventLog, EventBody } from "./eventLog.js";
-import type { AgentAdapter, AgentRun } from "./agents/types.js";
+import type { AgentAdapter, AgentRun, TurnModels } from "./agents/types.js";
+import type { QuotaTracker } from "./quota.js";
+import type { GatewayPricing } from "./pricing.js";
 import type { ModelProfiles } from "./models.js";
 import { isInside, type Folders } from "./folders.js";
 import type { Outbox } from "./outbox.js";
@@ -44,6 +46,13 @@ const VERIFY_NUDGE = "还没交结论：请逐条判完，用 submit_verdict 交
 const MAX_BACKGROUND = 50;
 /** 卡在等前面的卡时排队的原因（ADR 0038）。 */
 const WAITING_FOR_CARDS = "等前面的卡合回";
+/** 额度恢复以后再等多久接着做（新首页设计 11.2：恢复时间到了再过 1 分钟）。 */
+const HOLD_RESUME_AFTER_MS = 60_000;
+/** 停着等额度、不知道几点恢复时，隔多久读一次额度再试。 */
+const HOLD_POLL_MS = 5 * 60_000;
+/** 额度恢复后发给执行方的一句（不是本人说的，网页上显示成一条提示）。 */
+const HOLD_CONTINUE = "额度恢复了，接着把刚才没做完的做完。";
+const HOLD_REASON = "订阅额度用完了，恢复后自动接着做";
 /** 不是 git 仓库的文件夹同时只做一张卡（ADR 0038），另一张在那儿跑时排队的原因。 */
 const FOLDER_BUSY = "这个文件夹不是 git 仓库，同时只做一张卡，等另一张这一轮做完";
 
@@ -72,6 +81,8 @@ interface SessionRecord {
   lastVersion: { number: number; path: string } | null;
   /** 岗位（开工时的快照）和专题评审会的挑刺岗位。 */
   role: TLocalRole | null;
+  /** 这件的档位（开工请求的 modelTier，没有就是岗位的）：订阅模型按它选模型和思考强度；null 按 normal。 */
+  modelTier: TLocalModelTier | null;
   critics: TLocalRole[];
   /** 排队时存着的第一句话；真开始时送出并清空。不为 null 说明这件还没开始过。 */
   queuedMessage: string | null;
@@ -99,6 +110,10 @@ interface SessionRecord {
   passed: boolean | null;
   /** 这个会话里 Claude Code 自己开的后台任务（子 agent、后台命令），按开始的先后。 */
   background: TLocalBackgroundItem[];
+  /** 停着等订阅额度恢复（新首页设计 11.2）：排着的不开始，做过的到点自动接着做。 */
+  hold: TLocalHold | null;
+  /** 什么时候开始停着等的（不知道几点恢复时，读过一次额度以后才接着做）。 */
+  holdSince: string | null;
 }
 
 /** 不合契约时给执行方看的一句（哪个字段、哪里不对）。 */
@@ -135,6 +150,12 @@ export interface SessionDeps {
   skillsDir?: string;
   /** 向天枢取一次交回的验收交代（没有就不自动验收）。 */
   verifyBrief?: (handbackKey: string) => Promise<VerifyBrief>;
+  /** 本人订阅的额度：用完了订阅的会话停着等，跑着的卡报的额度变化记进去。 */
+  quota?: QuotaTracker;
+  /** 网关模型按 TokenHub 价目表算真钱。 */
+  pricing?: GatewayPricing;
+  /** 测试用：额度恢复后再等多久、不知道几点恢复时多久再试。 */
+  holdTiming?: { resumeAfterMs?: number; pollMs?: number };
   onChange?: () => void;
 }
 
@@ -184,6 +205,7 @@ export class SessionManager {
   private pulling: Promise<void> | null = null;
   private pullAgain = false;
   private briefTimer: NodeJS.Timeout | null = null;
+  private holdTimer: NodeJS.Timeout | null = null;
   private readonly dir: string;
 
   constructor(private readonly d: SessionDeps) {
@@ -197,6 +219,7 @@ export class SessionManager {
       rec.versionNumber ??= 0;
       rec.lastVersion ??= null;
       rec.role ??= null;
+      rec.modelTier ??= null;
       rec.critics ??= [];
       rec.queuedMessage ??= null;
       rec.queueOrder ??= 0;
@@ -211,15 +234,18 @@ export class SessionManager {
       rec.after ??= [];
       rec.passed ??= null;
       rec.background ??= [];
+      rec.hold ??= null;
+      rec.holdSince ??= null;
       this.queueSeq = Math.max(this.queueSeq, rec.queueOrder);
       this.records.set(rec.id, rec);
       // 上次没收尾的后台任务（本机程序没正常退出）：进程已不在，算被停了
       this.stopAllBackground(rec);
       // 本机程序重启时，上次的进程都已不在。排着的照原样排着；刚从队里拉起、还没开始的放回队里（位置不变）。
       if (rec.status === "starting" && rec.queuedMessage !== null) this.setStatus(rec, "queued", { reason: "本机程序重启，照原样排着" });
-      else if (LIVE.includes(rec.status)) this.setStatus(rec, "exited", { reason: "本机程序重启，会话已停；再发一句话会接着做" });
+      else if (LIVE.includes(rec.status)) this.setStatus(rec, "exited", { reason: rec.hold ? HOLD_REASON : "本机程序重启，会话已停；再发一句话会接着做" });
     }
     this.holdQueue = false;
+    this.scheduleHoldCheck(); // 上次停着等额度的，照原来的恢复时间接着等
   }
 
   private save(rec: SessionRecord) {
@@ -231,14 +257,14 @@ export class SessionManager {
     const {
       mcpSecret: _s, syncSeq: _q, outputs: _o, versionNumber: _v, lastVersion: _l, role: _r, critics: _c, queuedMessage: _m, queueOrder: _n,
       parentId: _p, briefPending: _b, criteria: _cr, failStreak: _f, submitted: _sb, nudged: _nd, workspace, commit: _cm, after: _af, passed: _ps,
-      background, ...rest
+      background, hold, holdSince: _hs, ...rest
     } = rec;
     const question = this.questions.get(rec.id);
     const waitingFor = this.waitingFor(rec);
     return {
       ...rest, lastSeq: this.d.log.lastSeq(rec.id), pendingPermissions: this.pending.get(rec.id)?.size ?? 0, queuePosition: this.queuePosition(rec),
       ...(workspace ? { workspace } : {}), ...(question ? { pendingQuestion: question } : {}), ...(waitingFor.length ? { waitingFor } : {}),
-      ...(background.length ? { background } : {}),
+      ...(background.length ? { background } : {}), ...(hold ? { hold } : {}),
     };
   }
 
@@ -269,9 +295,13 @@ export class SessionManager {
       .sort((a, b) => PRIORITY[a.subject.kind] - PRIORITY[b.subject.kind] || a.queueOrder - b.queueOrder);
   }
 
-  /** 排着、而且能开始的（等验收交代的验收员、等前面的卡或工作树还没开好的卡、文件夹被另一张卡占着的卡先跳过）。 */
+  /** 排着、而且能开始的（等验收交代的验收员、等前面的卡或工作树还没开好的卡、文件夹被另一张卡占着的卡、停着等额度的先跳过）。 */
   private ready(): SessionRecord[] {
-    return this.queue().filter((r) => !r.briefPending && !(r.after.length && !r.workspace) && !this.folderBusy(r));
+    return this.queue().filter((r) => !r.hold && this.startable(r));
+  }
+
+  private startable(r: SessionRecord): boolean {
+    return !r.briefPending && !(r.after.length && !r.workspace) && !this.folderBusy(r);
   }
 
   /** 排着的卡还在等的前面的卡（还没做完的那几张）。 */
@@ -349,6 +379,12 @@ export class SessionManager {
    */
   pump(): void {
     if (this.holdQueue || this.d.paused?.()) return;
+    this.gateQueued();
+    // 额度恢复了：做过的先接着做（它们本来就在做），排着的回到队里
+    for (const rec of [...this.records.values()].filter((r) => this.holdDue(r)).sort((a, b) => Number(a.status === "queued") - Number(b.status === "queued"))) {
+      if (rec.status !== "queued" && this.activeCount() >= this.max()) continue;
+      this.resumeHeld(rec);
+    }
     for (let next = this.ready()[0]; next && this.activeCount() < this.max(); next = this.ready()[0]) {
       this.setStatus(next, "starting");
       void this.launchQueued(next);
@@ -389,6 +425,7 @@ export class SessionManager {
     const waitingFor = this.waitingFor(rec);
     this.sync(rec, { type: "status", data: {
       status: rec.status, title: rec.title, agent: rec.agent, modelLabel: rec.modelLabel, ...(queuePosition ? { queuePosition } : {}), ...(waitingFor.length ? { waitingFor } : {}),
+      ...(rec.hold ? { hold: rec.hold } : {}),
     } });
   }
 
@@ -416,7 +453,7 @@ export class SessionManager {
     const left = rec.status === "queued" && status !== "queued";
     rec.status = status;
     this.save(rec);
-    this.emit(rec, { type: "status", status, ...extra });
+    this.emit(rec, { type: "status", status, ...extra, ...(rec.hold ? { hold: rec.hold } : {}) });
     this.syncStatus(rec);
     if (left) this.syncQueuePositions();
     this.d.onChange?.();
@@ -461,17 +498,19 @@ export class SessionManager {
       includePersonalConfig: req.includePersonalConfig ?? defaults.includePersonalConfig,
       createdAt: now, updatedAt: now, status: "starting", usage: zeroUsage(), syncSeq: 0, mcpSecret: randomBytes(24).toString("hex"),
       outputs: [], versionNumber: subject.kind === "topic" ? req.versionBase ?? 0 : 0, lastVersion: null,
-      role: req.role ?? null, critics: req.critics ?? [], queuedMessage: null, queueOrder: 0,
+      role: req.role ?? null, modelTier: req.modelTier ?? req.role?.modelTier ?? null, critics: req.critics ?? [], queuedMessage: null, queueOrder: 0,
       parentId: null, briefPending: false, criteria: [], failStreak: 0, submitted: 0, nudged: false,
-      workspace: place?.workspace ?? null, commit: null, after: waiting ? after : [], passed: null, background: [],
+      workspace: place?.workspace ?? null, commit: null, after: waiting ? after : [], passed: null, background: [], hold: null, holdSince: null,
     };
-    // 满了（或前面还有人在排、在等前面的卡、文件夹被另一张卡占着）就进队，先来先跑；有空位时 pump 接上。
+    // 满了（或前面还有人在排、在等前面的卡、文件夹被另一张卡占着、订阅额度用完了）就进队，先来先跑；有空位时 pump 接上。
     const busy = this.folderBusy(rec);
-    if (waiting || this.ready().length || this.activeCount() >= this.max() || busy) {
+    const limited = model.source === "subscription" && this.blocked() !== null;
+    if (waiting || this.ready().length || this.activeCount() >= this.max() || busy || limited) {
       rec.queuedMessage = req.firstMessage;
       rec.queueOrder = ++this.queueSeq;
       this.records.set(rec.id, rec);
-      this.setStatus(rec, "queued", waiting ? { reason: WAITING_FOR_CARDS } : busy ? { reason: FOLDER_BUSY } : {});
+      if (limited && !waiting) this.markHold(rec);
+      this.setStatus(rec, "queued", waiting ? { reason: WAITING_FOR_CARDS } : busy ? { reason: FOLDER_BUSY } : rec.hold ? { reason: HOLD_REASON } : {});
       this.noteWorkspace(rec, place);
       return this.summary(rec);
     }
@@ -606,7 +645,7 @@ export class SessionManager {
       ...(READ_ONLY_KINDS.includes(rec.subject.kind) ? WRITE_TOOLS : []),
     ];
     const run = await adapter.start({
-      sessionId: rec.id, cwd: rec.cwd, resume, model, includePersonalConfig: rec.includePersonalConfig,
+      sessionId: rec.id, cwd: rec.cwd, resume, model, tier: rec.modelTier ?? "normal", includePersonalConfig: rec.includePersonalConfig,
       mcpConfigPath: mcp.path, mcpEnv: mcp.env, allowedTools: mcp.allowedTools,
       disallowedTools,
       systemPromptPath, agentsPath, pluginDirs: plugin ? [plugin] : [],
@@ -626,6 +665,7 @@ export class SessionManager {
     this.pending.set(rec.id, new Map());
     run.onEvent((e) => this.onAgentEvent(rec, e));
     run.onExit((code) => this.onExit(rec, run, code));
+    if (model.source === "subscription") run.onRateLimit((info) => this.d.quota?.fromEvent(info));
     return run;
   }
 
@@ -670,8 +710,12 @@ export class SessionManager {
           cacheReadTokens: u.cacheReadTokens + e.usage.cacheReadTokens, cacheWriteTokens: u.cacheWriteTokens + e.usage.cacheWriteTokens,
           costUsd: e.usage.costUsd === null || u.costUsd === null ? null : u.costUsd + e.usage.costUsd,
         };
-        this.sync(rec, { type: "cost", data: { modelLabel: rec.modelLabel, usage: e.usage } });
         const run = this.runs.get(rec.id);
+        void this.syncCost(rec, e.usage, run?.lastTurn ?? null);
+        // 订阅额度用完了：停着等恢复（不算出错、不等本人回复）；之后有一轮正常做完了就不再等
+        const limited = e.errorKind === "usage_limit";
+        if (limited) this.markHold(rec);
+        else if (rec.hold && !e.isError) this.clearHold(rec);
         // 这一轮的请求随这一轮作废；后台子 agent 的请求执行方还在等，留着（不然子 agent 一直卡着）
         const pending = this.pending.get(rec.id);
         for (const id of [...(pending?.keys() ?? [])]) {
@@ -696,7 +740,7 @@ export class SessionManager {
           run.close();
           break;
         }
-        this.setStatus(rec, pending?.size ? "waiting_permission" : "idle");
+        this.setStatus(rec, pending?.size ? "waiting_permission" : "idle", limited ? { reason: HOLD_REASON } : {});
         break;
       }
       default:
@@ -718,8 +762,11 @@ export class SessionManager {
     const finished = this.finished.delete(rec.id) && !killed;
     this.proposed.delete(rec.id);
     rec.mcpSecret = "";
+    // 订阅额度用完时 Claude Code 可能不交结果、直接退出：也是停着等额度，不算失败
+    const limited = !killed && !finished && code !== 0 && (Boolean(rec.hold) || (this.subscription(rec) && this.blocked() !== null));
+    if (limited && !rec.hold) this.markHold(rec);
     if (finished) this.setStatus(rec, "done", { exitCode: code, reason: rec.subject.kind === "plan" ? "计划交了" : "验收完了" });
-    else this.setStatus(rec, killed || code === 0 ? "exited" : "failed", { exitCode: code, reason: killed ? "已强停" : undefined });
+    else this.setStatus(rec, killed || code === 0 || limited ? "exited" : "failed", { exitCode: code, reason: killed ? "已强停" : limited ? HOLD_REASON : undefined });
     this.d.log.evict(rec.id);
     // 验收过了：卡在工作树里做的，试着自动合回
     if (finished && rec.subject.kind === "verify" && rec.passed) void this.autoMerge(rec);
@@ -743,6 +790,7 @@ export class SessionManager {
       if (!req.text) throw new SessionError("validation", "说一句要有内容");
       text = req.text;
     }
+    this.clearHold(rec); // 本人说了一句：不再等额度，照常发（额度还没恢复就再停着等）
     let run = this.runs.get(id);
     let resumed = false;
     if (!run) {
@@ -783,7 +831,9 @@ export class SessionManager {
 
   async interrupt(id: string): Promise<TLocalSessionSummary> {
     const rec = this.must(id);
+    const held = this.clearHold(rec); // 停下：不再等额度、到点也不自动接着做
     if (this.cancelQueued(rec)) return this.summary(rec);
+    if (held) this.noteHold(rec);
     const run = this.runs.get(id);
     // 在问本人时状态是 idle，但这一轮还没完（执行方在等回答），也要停
     if (run && (rec.status !== "idle" || this.questions.has(id))) await run.interrupt();
@@ -867,7 +917,9 @@ export class SessionManager {
 
   async kill(id: string): Promise<TLocalSessionSummary> {
     const rec = this.must(id);
+    const held = this.clearHold(rec);
     if (this.cancelQueued(rec)) return this.summary(rec);
+    if (held) this.noteHold(rec);
     const run = this.runs.get(id);
     if (run) {
       this.killed.add(id);
@@ -970,6 +1022,137 @@ export class SessionManager {
     this.sync(card, { type: "merge", data: { handbackKey: verifier.subject.handbackKey, baseBranch: ws.baseBranch, ...r, message: r.message?.slice(0, 500) || null } });
   }
 
+  // ───────── 订阅额度（新首页设计第 11 节） ─────────
+
+  private subscription(rec: SessionRecord): boolean {
+    return this.d.models.sourceOf(rec.modelProfileId) === "subscription";
+  }
+
+  /** 订阅额度用完、还没到恢复时间：恢复时间（毫秒，不知道几点为 Infinity）；没用完为 null。 */
+  private blocked(): number | null {
+    return this.d.quota?.blockedUntil() ?? null;
+  }
+
+  private timing() {
+    return { resumeAfterMs: this.d.holdTiming?.resumeAfterMs ?? HOLD_RESUME_AFTER_MS, pollMs: this.d.holdTiming?.pollMs ?? HOLD_POLL_MS };
+  }
+
+  /** 记下停着等额度（之后的状态变化会带上 hold）。不知道几点恢复就马上读一次额度。 */
+  private markHold(rec: SessionRecord) {
+    const b = this.blocked();
+    rec.hold = { reason: "usage_limit", until: b !== null && Number.isFinite(b) ? new Date(b).toISOString() : null };
+    rec.holdSince = nowIso();
+    this.save(rec);
+    if (!rec.hold.until) void this.d.quota?.refresh(true);
+    this.scheduleHoldCheck();
+  }
+
+  private clearHold(rec: SessionRecord): boolean {
+    if (!rec.hold) return false;
+    rec.hold = null;
+    rec.holdSince = null;
+    this.save(rec);
+    this.scheduleHoldCheck();
+    return true;
+  }
+
+  /** 状态没变、只是等额度变了：照样报一条状态（网页和云端按 hold 显示「等额度恢复 · HH:MM」）。 */
+  private noteHold(rec: SessionRecord) {
+    this.emit(rec, { type: "status", status: rec.status, ...(rec.hold ? { hold: rec.hold } : {}) });
+    this.syncStatus(rec);
+    this.d.onChange?.();
+  }
+
+  /** 额度用完时，排着、本来能开始的订阅会话停着等（不开始，免得一开始就碰壁）。 */
+  private gateQueued() {
+    if (this.blocked() === null) return;
+    for (const rec of this.queue()) {
+      if (rec.hold || !this.startable(rec) || !this.subscription(rec)) continue;
+      this.markHold(rec);
+      this.noteHold(rec);
+    }
+  }
+
+  /** 到点了：额度没在用完的状态，而且过了恢复时间 1 分钟；不知道几点恢复时，等读过一次额度（或隔一会儿）再试。 */
+  private holdDue(rec: SessionRecord): boolean {
+    const h = rec.hold;
+    if (!h || !["queued", "idle", "exited"].includes(rec.status) || this.blocked() !== null) return false;
+    const now = Date.now();
+    if (h.until) return now >= Date.parse(h.until) + this.timing().resumeAfterMs;
+    const since = Date.parse(rec.holdSince ?? "") || 0;
+    const read = Date.parse(this.d.quota?.view()[0]?.updatedAt ?? "") || 0;
+    return read > since || now >= since + this.timing().pollMs;
+  }
+
+  /** 接着做：排着的回到队里；一轮做完停着的往开着的进程里说一句；进程不在了就续接（--resume）再说。 */
+  private resumeHeld(rec: SessionRecord) {
+    this.clearHold(rec);
+    if (rec.status === "queued") { this.noteHold(rec); return; }
+    this.emit(rec, { type: "notice", level: "info", code: "usage_resumed", text: "额度恢复了，接着做" });
+    const run = this.runs.get(rec.id);
+    if (run) {
+      run.send(HOLD_CONTINUE);
+      this.setStatus(rec, "running");
+      return;
+    }
+    this.setStatus(rec, "starting");
+    const p = this.startRun(rec, true);
+    this.starting.set(rec.id, p);
+    p.then((r) => { r.send(HOLD_CONTINUE); this.setStatus(rec, "running"); }, (e: unknown) => {
+      const cancelled = e instanceof SessionError && e.message === CANCELLED_WHILE_STARTING;
+      this.setStatus(rec, "exited", { reason: cancelled ? "已强停" : `额度恢复了，但没接上：${e instanceof Error ? e.message : String(e)}；再发一句话会接着做` });
+    }).finally(() => this.starting.delete(rec.id));
+  }
+
+  /** 额度变了（读到了、跑着的卡报了）：停着等的更新恢复时间，能接着做的接上，重排下一次检查。 */
+  onQuotaChange(): void {
+    const b = this.blocked();
+    if (b !== null) {
+      const until = Number.isFinite(b) ? new Date(b).toISOString() : null;
+      for (const rec of this.records.values()) {
+        if (!rec.hold || rec.hold.until === until) continue;
+        rec.hold = { ...rec.hold, until };
+        rec.holdSince = nowIso();
+        this.save(rec);
+        this.noteHold(rec);
+      }
+    }
+    this.pump();
+    this.scheduleHoldCheck();
+  }
+
+  /** 下一次检查：最早的恢复时间过 1 分钟；不知道几点的隔一会儿；已经过点（没空位接上）的也隔一会儿再看。 */
+  private scheduleHoldCheck() {
+    if (this.holdTimer) clearTimeout(this.holdTimer);
+    this.holdTimer = null;
+    const held = [...this.records.values()].filter((r) => r.hold);
+    if (!held.length || this.holdQueue) return;
+    const { resumeAfterMs, pollMs } = this.timing();
+    const now = Date.now();
+    const at = Math.min(...held.map((r) => (r.hold!.until ? Date.parse(r.hold!.until) + resumeAfterMs : (Date.parse(r.holdSince ?? "") || now) + pollMs)));
+    this.holdTimer = setTimeout(() => void this.checkHolds(), at > now ? at - now : pollMs);
+    this.holdTimer.unref?.();
+  }
+
+  private async checkHolds() {
+    this.holdTimer = null;
+    await this.d.quota?.refresh(true);
+    this.onQuotaChange();
+  }
+
+  /** 一轮的花费：带上是订阅还是网关、主要用的模型；网关的按 TokenHub 价目表估真钱（读不到为 null）。 */
+  private async syncCost(rec: SessionRecord, usage: TLocalUsage, turn: TurnModels | null) {
+    const source = this.d.models.sourceOf(rec.modelProfileId);
+    const size = (m: TurnModels["models"][number]) => m.inputTokens + m.outputTokens + m.cacheReadTokens + m.cacheWriteTokens;
+    const model = turn?.models.slice().sort((a, b) => size(b) - size(a))[0]?.model.slice(0, 100) ?? null;
+    let money: TLocalMoney | null = null;
+    if (source === "gateway" && this.d.pricing) {
+      const m = await this.d.models.resolve(rec.modelProfileId).catch(() => null);
+      if (m) money = await this.d.pricing.money({ baseUrl: m.baseUrl, apiKey: m.apiKey }, turn).catch(() => null);
+    }
+    this.sync(rec, { type: "cost", data: { modelLabel: rec.modelLabel, usage, ...(source ? { source } : {}), model, money } });
+  }
+
   /** 本机程序启动时：卡用过的仓库里，目录已经没了的工作树清掉登记（git worktree prune）。 */
   async pruneWorktrees(): Promise<void> {
     const repos = new Set([...this.records.values()].flatMap((r) => (r.workspace?.kind === "worktree" ? [r.workspace.folder] : [])));
@@ -981,7 +1164,15 @@ export class SessionManager {
     this.holdQueue = true;
     if (this.briefTimer) clearTimeout(this.briefTimer);
     this.briefTimer = null;
-    await Promise.all([...this.runs.keys()].map((id) => this.kill(id).catch(() => undefined)));
+    if (this.holdTimer) clearTimeout(this.holdTimer);
+    this.holdTimer = null;
+    // 停着等额度的不算本人停的：关机时照原样进程退出（kill 会清掉等额度），下次启动接着等
+    await Promise.all([...this.runs.keys()].map(async (id) => {
+      const run = this.runs.get(id);
+      const rec = this.records.get(id);
+      if (rec?.hold && run) { this.killed.add(id); await run.kill(); return; }
+      await this.kill(id).catch(() => undefined);
+    }));
   }
 
   // ───────── 本会话 MCP 回报（产出物、证据、交回） ─────────
@@ -1080,9 +1271,9 @@ export class SessionManager {
       id: randomUUID(), subject: { kind: "verify", cardId: card.subject.cardId!, handbackKey }, title: `验收：${card.title}`.slice(0, 120),
       agent: card.agent, modelProfileId: card.modelProfileId, modelLabel: card.modelLabel, cwd: card.cwd, includePersonalConfig: false,
       createdAt: now, updatedAt: now, status: "queued", usage: zeroUsage(), syncSeq: 0, mcpSecret: "", outputs: [], versionNumber: 0, lastVersion: null,
-      role: null, critics: [], queuedMessage: null, queueOrder: ++this.queueSeq,
+      role: null, modelTier: null, critics: [], queuedMessage: null, queueOrder: ++this.queueSeq,
       parentId: card.id, briefPending: true, criteria: [], failStreak: 0, submitted: 0, nudged: false, workspace: null, commit, after: [], passed: null,
-      background: [],
+      background: [], hold: null, holdSince: null,
     };
     this.records.set(rec.id, rec);
     this.setStatus(rec, "queued", { reason: "等交回送到天枢，取验收交代" });
@@ -1142,7 +1333,7 @@ export class SessionManager {
       if (rec.status !== "queued" || !rec.briefPending) continue;
       // 交代、模型一次填好再标成能开始：中间不能有 await，免得别处的 pump 拿着空的第一句话、执行方的模型先开了它。
       const markdown = changes ? `${brief.markdown}\n\n${changes}` : brief.markdown;
-      Object.assign(rec, { briefPending: false, queuedMessage: markdown, criteria: brief.criteria, failStreak: brief.failStreak, role: brief.role });
+      Object.assign(rec, { briefPending: false, queuedMessage: markdown, criteria: brief.criteria, failStreak: brief.failStreak, role: brief.role, modelTier: brief.role?.modelTier ?? "normal" });
       if (model) Object.assign(rec, { modelProfileId: model.profileId, modelLabel: model.label });
       this.waitNotes.delete(rec.id);
       this.save(rec);

@@ -1,5 +1,5 @@
 // 卡在自己的 git 工作树里做（ADR 0038）：用真的临时 git 仓库测两张卡同时做、交回提交、验收员只看这张卡的改动、合回、不是仓库时排队、清理。
-// 假 claude 的配置（.fake-claude.json）提交在仓库里，工作树里也有；它的记录文件在 .gitignore 里，不进提交。
+// 假 claude 的配置（.fake-claude.json）提交在仓库里，工作树里也有；它的两个记录文件在 .gitignore 里，不进提交。
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -31,7 +31,7 @@ function repo(busy = false): string {
   git(dir, "config", "user.name", "测试");
   git(dir, "config", "user.email", "test@example.com");
   git(dir, "config", "core.autocrlf", "false");
-  writeFileSync(join(dir, ".gitignore"), ".fake-claude-trace.jsonl\n");
+  writeFileSync(join(dir, ".gitignore"), ".fake-claude-trace.jsonl\n.fake-claude-turns.jsonl\n");
   writeFileSync(join(dir, ".fake-claude.json"), JSON.stringify({ verdict: PASSING, ...(busy ? { writePath: join(dir, MAIN_FILE) } : {}) }));
   writeFileSync(join(dir, "readme.md"), "原来的\n");
   git(dir, "add", "-A");

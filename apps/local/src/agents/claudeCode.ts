@@ -2,7 +2,7 @@ import { spawn, execFile, type ChildProcessWithoutNullStreams } from "node:child
 import { randomUUID } from "node:crypto";
 import type { TLocalBackgroundItem, TLocalPermissionRequestView, TLocalQuestion, TLocalUsage } from "@warmap/contracts";
 import type { EventBody } from "../eventLog.js";
-import { AgentStartError, type AgentAdapter, type AgentLaunch, type AgentRun, type PermissionAnswer } from "./types.js";
+import { AgentStartError, type AgentAdapter, type AgentLaunch, type AgentRun, type PermissionAnswer, type TurnModels } from "./types.js";
 import { buildClaudeArgs, childEnv, describeTool, homeDir, personalSettingsSetKey, versionAtLeast } from "./claudeEnv.js";
 import { autoAllowed, outsidePaths, suggestionsReachOutside, type PathScope } from "./pathGuard.js";
 import { planProgress } from "../plan.js";
@@ -60,14 +60,31 @@ const isoOf = (ms: unknown) => (typeof ms === "number" && ms > 0 ? new Date(ms).
 function usageOf(result: Json): TLocalUsage {
   const u = result.usage ?? {};
   // result.usage 是本轮的；total_cost_usd 是整个会话累计的，本轮花费看 model_usage_since_last_result（11/05 日志核对过）。
+  // 网关模型的 costBasis 是 unknown：Claude Code 按 Opus 价瞎算（DeepSeek 高估约 17 倍），不算；没有 costBasis 的旧版本照旧算
   const since = result.model_usage_since_last_result as Record<string, Json> | undefined;
-  const cost = since ? Object.values(since).reduce((s, m) => s + (Number(m.costUSD) || 0), 0) : null;
+  const listed = since ? Object.values(since).filter((m) => m.costBasis === undefined || m.costBasis === "list") : [];
+  const cost = listed.length ? listed.reduce((s, m) => s + (Number(m.costUSD) || 0), 0) : null;
   return {
     inputTokens: Number(u.input_tokens) || 0,
     outputTokens: Number(u.output_tokens) || 0,
     cacheReadTokens: Number(u.cache_read_input_tokens) || 0,
     cacheWriteTokens: Number(u.cache_creation_input_tokens) || 0,
     costUsd: cost,
+  };
+}
+
+/** 这一轮每个模型用了多少、发了几次请求（给本机按价目表算网关的钱）。 */
+function turnModelsOf(result: Json): TurnModels | null {
+  const since = result.model_usage_since_last_result as Record<string, Json> | undefined;
+  if (!since) return null;
+  const n = (v: unknown) => Math.max(0, Number(v) || 0);
+  const iterations = result.usage?.iterations;
+  return {
+    models: Object.entries(since).map(([model, m]) => ({
+      model, inputTokens: n(m.inputTokens), outputTokens: n(m.outputTokens), cacheReadTokens: n(m.cacheReadInputTokens), cacheWriteTokens: n(m.cacheCreationInputTokens),
+      costBasis: typeof m.costBasis === "string" ? m.costBasis : null,
+    })),
+    requests: Array.isArray(iterations) ? iterations.length : null,
   };
 }
 
@@ -82,14 +99,21 @@ class ClaudeRun implements AgentRun {
   private readonly questions = new Map<string, Json>();
   /** Claude Code 报来的任务（task_started 起）。visible：算不算后台任务（前台跑完的普通命令、它内部的任务不算）。 */
   private readonly tasks = new Map<string, { item: TLocalBackgroundItem; visible: boolean }>();
+  private readonly rateFns: ((info: Json) => void)[] = [];
+  private markReported: () => void = () => {};
+  /** 退出已经报给会话（onExit 都跑过了）。 */
+  private readonly exitReported = new Promise<void>((r) => { this.markReported = r; });
+  lastTurn: TurnModels | null = null;
   private interrupting = false;
   private exited = false;
   private authFailed = false;
   private apiRetried = false;
+  /** 这一轮碰到订阅额度用完了（rate_limit_event rejected、usage_limit_reached）。 */
+  private limitHit = false;
 
   constructor(
     private readonly child: ChildProcessWithoutNullStreams, private readonly sessionId: string, private readonly scope: PathScope,
-    private readonly autoAllowRoot: string | null,
+    private readonly autoAllowRoot: string | null, private readonly subscription: boolean,
   ) {
     child.stdout.setEncoding("utf8").on("data", (d: string) => this.onStdout(d));
     let errBuf = "";
@@ -103,7 +127,16 @@ class ClaudeRun implements AgentRun {
       this.exited = true;
       for (const r of this.hostRequests.values()) r({ subtype: "error", error: "process exited" });
       this.hostRequests.clear();
-      for (const fn of this.exitFns) fn(code);
+      // 退出时最后几行可能还没读完（额度用完时 Claude Code 报完 rate_limit_event 就退出）：读完再报退出，最多等 1 秒
+      let reported = false;
+      const report = () => {
+        if (reported) return;
+        reported = true;
+        for (const fn of this.exitFns) fn(code);
+        this.markReported();
+      };
+      if (child.stdout.readableEnded) report();
+      else { setTimeout(report, 1_000).unref(); child.stdout.once("end", report); }
     });
     child.stdin.on("error", () => { /* 进程已退出时写 stdin 会 EPIPE，由 exit 处理 */ });
   }
@@ -112,6 +145,8 @@ class ClaudeRun implements AgentRun {
   onEvent(fn: (e: EventBody) => void) { this.eventFns.push(fn); }
   onExit(fn: (code: number | null) => void) { this.exitFns.push(fn); }
   private emit(e: EventBody) { for (const fn of this.eventFns) fn(e); }
+
+  onRateLimit(fn: (info: Json) => void) { this.rateFns.push(fn); }
 
   private write(obj: Json) {
     if (this.exited) return;
@@ -200,11 +235,12 @@ class ClaudeRun implements AgentRun {
   }
 
   kill(): Promise<void> {
-    if (this.exited || this.child.pid === undefined) return Promise.resolve();
+    if (this.child.pid === undefined) return Promise.resolve();
+    if (this.exited) return this.exitReported;
     const pid = this.child.pid;
     return new Promise((resolve) => {
       const done = () => resolve();
-      this.child.once("exit", done);
+      void this.exitReported.then(done);
       if (process.platform === "win32") {
         // 只杀自己 spawn 出来、记下的这个 PID 及其子进程。
         execFile("taskkill", ["/PID", String(pid), "/T", "/F"], { windowsHide: true }, () => setTimeout(done, 2_000));
@@ -322,7 +358,17 @@ class ClaudeRun implements AgentRun {
         }
         return;
       }
+      case "rate_limit_event": {
+        // 额度变化（只在百分比、重置时间、状态变了时来）：给本机记额度；rejected 就是用完了（用完的这一串没真机复现过，照社区复现和 Claude Code 程序里的字符串）
+        const info = ev.rate_limit_info;
+        if (!info || typeof info !== "object") return;
+        if (info.status === "rejected" && this.subscription) this.limitHit = true;
+        for (const fn of this.rateFns) fn(info);
+        return;
+      }
       case "assistant": {
+        // 订阅额度用完时 Claude Code 自己补一条助手消息：error rate_limit、api_error usage_limit_reached（文字会变，不看文字）
+        if (this.subscription && (ev.error === "rate_limit" || ev.api_error === "usage_limit_reached")) this.limitHit = true;
         if (ev.error === "authentication_failed") this.authFailure("Claude 还没登录或登录已失效，请在天枢里登录 Claude。");
         else if (!ev.error) this.apiRetried = false; // 重试后模型又答上来了：这一轮之后再出错不算模型服务的错
         if (ev.parent_tool_use_id) return; // 子代理内部的步骤不逐条上屏
@@ -356,8 +402,11 @@ class ClaudeRun implements AgentRun {
       case "result": {
         const interrupted = this.interrupting && ev.subtype === "error_during_execution";
         const apiRetried = this.apiRetried;
+        const limited = this.limitHit;
         this.interrupting = false;
         this.apiRetried = false;
+        this.limitHit = false;
+        this.lastTurn = turnModelsOf(ev);
         const isError = Boolean(ev.is_error) || ev.subtype !== "success";
         const auth = this.authFailed || ev.api_error_status === 401;
         if (auth && !this.authFailed) this.authFailure("Claude 登录已失效，请在天枢里重新登录 Claude。");
@@ -368,13 +417,51 @@ class ClaudeRun implements AgentRun {
           durationMs: Math.max(0, Math.round(Number(ev.duration_ms) || 0)),
           usage: usageOf(ev),
           // 拒连、超时没有 HTTP 状态码，但这一轮重试过就算模型服务的错。
-          ...(isError ? { errorKind: interrupted ? "interrupted" : auth ? "auth" : ev.api_error_status || apiRetried ? "api" : "other" } : {}),
+          ...(isError ? { errorKind: interrupted ? "interrupted" : auth ? "auth" : limited ? "usage_limit" : ev.api_error_status || apiRetried ? "api" : "other" } : {}),
         } as EventBody);
         return;
       }
       default:
         return;
     }
+  }
+}
+
+/**
+ * 读本人订阅的额度：起一个不发提示的 Claude Code（不存会话、不读本人的全局设置），只发 initialize 和 get_usage，读完就关。
+ * 11/07 实测不花 token、get_usage 约 0.7 秒回。get_usage 是 Claude Code 自己标的实验接口，形状可能变。读不到抛错。
+ */
+export async function readUsage(bin: ClaudeBin, cwd: string, baseEnv: NodeJS.ProcessEnv = process.env, timeoutMs = 30_000): Promise<Json> {
+  const args = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--setting-sources", "project,local", "--strict-mcp-config", "--no-session-persistence"];
+  const child = spawn(bin.command, [...bin.prefixArgs, ...args], { cwd, env: childEnv(baseEnv, { DISABLE_AUTOUPDATER: "1" }), stdio: ["pipe", "pipe", "pipe"], windowsHide: true, shell: false });
+  const waiters = new Map<string, (r: Json) => void>();
+  let buf = "";
+  child.stdout.setEncoding("utf8").on("data", (d: string) => {
+    buf += d;
+    for (let i = buf.indexOf("\n"); i >= 0; i = buf.indexOf("\n")) {
+      const line = buf.slice(0, i).trim();
+      buf = buf.slice(i + 1);
+      let ev: Json;
+      try { ev = JSON.parse(line); } catch { continue; }
+      if (ev.type === "control_response") waiters.get(ev.response?.request_id)?.(ev.response);
+    }
+  });
+  child.stderr.resume();
+  const gone = new Promise<Json>((resolve) => { child.once("error", (e) => resolve({ subtype: "error", error: e.message })); child.once("exit", () => resolve({ subtype: "error", error: "Claude Code 退出了" })); });
+  const control = (id: string, request: Json) => Promise.race([
+    new Promise<Json>((resolve) => { waiters.set(id, resolve); child.stdin.write(`${JSON.stringify({ type: "control_request", request_id: id, request })}\n`); }),
+    gone,
+    new Promise<Json>((resolve) => setTimeout(() => resolve({ subtype: "error", error: "读额度超时" }), timeoutMs).unref()),
+  ]);
+  try {
+    const init = await control("u1", { subtype: "initialize" });
+    if (init.subtype !== "success") throw new Error(String(init.error ?? "Claude Code 没有响应握手"));
+    const usage = await control("u2", { subtype: "get_usage", skip_behaviors: true });
+    if (usage.subtype !== "success" || !usage.response) throw new Error(String(usage.error ?? "没读到额度"));
+    return usage.response;
+  } finally {
+    child.stdin.end();
+    setTimeout(() => { try { child.kill(); } catch { /* 已退出 */ } }, 5_000).unref();
   }
 }
 
@@ -399,7 +486,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       // Mac/Linux 上自成进程组，强停时整组杀掉。
       detached: process.platform !== "win32",
     });
-    const run = new ClaudeRun(child, launch.sessionId, { cwd: launch.cwd, home: homeDir(), allowedRoots: launch.allowedRoots }, launch.autoAllowRoot);
+    const run = new ClaudeRun(child, launch.sessionId, { cwd: launch.cwd, home: homeDir(), allowedRoots: launch.allowedRoots }, launch.autoAllowRoot, launch.model.source === "subscription");
     const spawned = await new Promise<Error | null>((resolve) => {
       child.once("spawn", () => resolve(null));
       child.once("error", (e) => resolve(e));

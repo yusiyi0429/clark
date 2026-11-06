@@ -28,6 +28,20 @@ function fakeCloud(reply: (keys: string[]) => Response | Promise<Response>) {
 const json = (o: unknown, status = 200) => new Response(JSON.stringify(o), { status, headers: { "content-type": "application/json" } });
 
 describe("发件箱", () => {
+  it("每批（心跳也是）带读到过的额度：只有窗口、恢复时间、读到的时间；没读到过不带", async () => {
+    const cloud = fakeCloud((keys) => json({ accepted: keys, rejected: [] }));
+    const box = new Outbox(tempDir(), target, meta, cloud.fetchImpl);
+    await box.heartbeat(true);
+    expect(cloud.calls[0]!.body).not.toHaveProperty("quota");
+    const quota = [{ source: "claude_subscription" as const, windows: [{ kind: "session" as const, model: null, usedPercent: 100, state: "blocked" as const, resetsAt: "2026-11-07T09:00:00.000Z" }], blockedUntil: "2026-11-07T09:00:00.000Z", updatedAt: "2026-11-07T08:00:00.000Z" }];
+    box.quota = () => quota;
+    box.enqueue(item(1));
+    await box.flush();
+    box.stop();
+    expect(cloud.calls[1]!.body.quota).toEqual(quota);
+    expect(Value.Check(LocalSyncBatchRequest, cloud.calls[1]!.body)).toBe(true);
+  });
+
   it("没关联云端时只排队，落盘，重启后还在；同一幂等键只排一次", async () => {
     const dir = tempDir();
     const a = new Outbox(dir, async () => null, meta, fakeCloud(() => json({})).fetchImpl);

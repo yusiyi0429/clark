@@ -150,7 +150,7 @@ describe("规划员和验收员", { timeout: 30_000 }, () => {
       expect(flagList(vv, "--allowedTools")).toEqual(["mcp__tianshu-session__submit_verdict", "mcp__tianshu__get_task_context"]);
       expect(flagList(pv, "--allowedTools")).toEqual(["mcp__tianshu-session__propose_plan", "mcp__tianshu__get_task_context"]);
       expect(flagList(av, "--allowedTools")).toEqual(expect.arrayContaining(["mcp__tianshu-session__hand_back", "mcp__tianshu__get_task_context"]));
-      expect([flag(vv, "--model"), flag(av, "--model")]).toEqual(["haiku", null]);
+      expect([flag(vv, "--model"), flag(av, "--model")]).toEqual(["haiku", "opus"]); // 执行没说档位：按标准档 Opus
       // 验收员的提示词：验收规矩 + 交代里的验收员岗位
       const vPrompt = readFileSync(flag(vv, "--append-system-prompt-file")!, "utf8");
       expect(vPrompt).toContain("你是验收员：只读");

@@ -1,4 +1,4 @@
-import type { TLocalAgentKind } from "@warmap/contracts";
+import type { TLocalAgentKind, TLocalModelTier } from "@warmap/contracts";
 import type { EventBody } from "../eventLog.js";
 import type { ResolvedModel } from "../models.js";
 
@@ -9,6 +9,8 @@ export interface AgentLaunch {
   /** true：用 --resume 续上这个会话；false：用 --session-id 新开。 */
   resume: boolean;
   model: ResolvedModel;
+  /** 这件的档位：订阅模型按它选模型（配置里没写模型名时）和思考强度。 */
+  tier: TLocalModelTier;
   includePersonalConfig: boolean;
   /** 本会话要带的 MCP 配置文件路径（本机程序写好的 JSON），以及要预先放行的工具名。 */
   mcpConfigPath: string | null;
@@ -55,7 +57,15 @@ export interface AgentRun {
   close(): void;
   onEvent(fn: (e: EventBody) => void): void;
   onExit(fn: (code: number | null) => void): void;
+  /** Claude Code 报的额度变化（rate_limit_event 的 rate_limit_info，原样）：只给本机记额度用，不进事件流。 */
+  onRateLimit(fn: (info: Record<string, unknown>) => void): void;
+  /** 上一轮每个模型用了多少、发了几次请求（result 里的）：给本机按价目表算网关的钱。还没有为 null。 */
+  readonly lastTurn: TurnModels | null;
 }
+
+/** 一轮里一个模型用了多少（Claude Code 的 model_usage_since_last_result）。costBasis：list 是官方模型按标价算的，unknown 是网关模型。 */
+export interface TurnModelUsage { model: string; inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; costBasis: string | null }
+export interface TurnModels { models: TurnModelUsage[]; requests: number | null }
 
 /**
  * 执行方适配器。Claude Code 已实现；Codex 12 月按同一接口接（见 codex.ts 里的协议对照）。

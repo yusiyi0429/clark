@@ -17,6 +17,8 @@ import type { Folders } from "../folders.js";
 import type { ClaudeSetup } from "../agents/claudeSetup.js";
 import type { CloudLink, Settings } from "../cloud.js";
 import type { RunnerConfig } from "../config.js";
+import type { QuotaTracker } from "../quota.js";
+import type { CliTools } from "../tools.js";
 import { DEV_PAGE } from "./devPage.js";
 import { handleMcpMessage } from "../sessionMcp.js";
 
@@ -32,6 +34,8 @@ export interface ServerDeps {
   claude: ClaudeSetup;
   cloud: CloudLink;
   settings: Settings;
+  quota: QuotaTracker;
+  tools: CliTools;
   pickFolder: () => Promise<string | null>;
   onSettingsChange?: () => void;
   /** 转发天枢 MCP 用；测试里换成桩。 */
@@ -115,10 +119,16 @@ export function createServer(d: ServerDeps): http.Server {
       return r;
     },
     unpair: (c) => { d.tokens.revoke(c.token!); return { ok: true }; },
-    status: async (): Promise<TLocalStatusResponse> => ({
-      deviceId: d.config.deviceId, version: d.version, agents: [await d.claude.status()],
-      activeSessions: d.sessions.activeCount(), slots: d.sessions.slots(), cloud: d.cloud.view(), settings: d.settings.get(),
-    }),
+    status: async (): Promise<TLocalStatusResponse> => {
+      const claude = await d.claude.status();
+      // 额度读缓存；超过 5 分钟没读过就在后台读一次（不发提示、不花 token），下一次轮询就有了
+      if (claude.installed && claude.loggedIn) void d.quota.refresh();
+      return {
+        deviceId: d.config.deviceId, version: d.version, agents: [claude],
+        activeSessions: d.sessions.activeCount(), slots: d.sessions.slots(), cloud: d.cloud.view(), settings: d.settings.get(),
+        quota: d.quota.view(), tools: d.tools.view(),
+      };
+    },
     installAgent: (c) => { agentMustBeClaude(c); if (!d.claude.install()) throw new HttpError(409, "conflict", "正在安装或登录中"); return { ok: true }; },
     loginAgent: async (c) => { agentMustBeClaude(c); if (!(await d.claude.login())) throw new HttpError(409, "conflict", "没装 Claude Code，或正在安装、登录中"); return { ok: true }; },
     loginAgentCode: (c) => {

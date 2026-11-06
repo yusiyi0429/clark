@@ -167,6 +167,30 @@ describe("越界路径识别", () => {
     }
   });
 
+  it("飞书命令行：工作树里只放行读的；发消息、发邮件、改文档等写操作和登录照样问，看不出是读的也问（新首页设计 11.5）", () => {
+    const ok = (command: string) => autoAllowed("Bash", { command }, scope);
+    for (const cmd of [
+      "lark-cli docs +fetch --doc https://x.feishu.cn/docx/abc", "lark-cli im +messages-search --query 周报", "lark-cli im +chat-messages-list --chat-id oc_1",
+      "lark-cli calendar +agenda", "lark-cli task +get-my-tasks", "lark-cli contact +search-user --query 孙", "lark-cli drive +search --query x",
+      "lark-cli sheets +cells-get --range A1:B2", "lark-cli base +record-list --table t", "lark-cli wiki +node-get --token w",
+      "lark-cli calendar events list --params '{}'", "lark-cli auth status", "lark-cli schema im.messages.create",
+      "lark-cli im +messages-send --help", "lark-cli mail +send --to a@b.c --dry-run", "lark-cli --version",
+    ]) {
+      expect(ok(cmd), cmd).toBe(true);
+    }
+    for (const cmd of [
+      "lark-cli im +messages-send --chat-id oc_1 --text 你好", "lark-cli im +messages-reply --message-id om_1 --text x", "lark-cli mail +send --to a@b.c",
+      "lark-cli mail +draft-send --id d", "lark-cli docs +update --doc x --markdown y", "lark-cli docs +create --title x", "lark-cli drive +upload --file a.md",
+      "lark-cli drive +push", "lark-cli sheets +cells-set --range A1 --value 1", "lark-cli calendar +create --summary 会", "lark-cli task +complete --id t",
+      "lark-cli base +record-batch-update", "lark-cli api POST /open-apis/im/v1/messages", "lark-cli auth login",
+      "lark-cli api GET /open-apis/im/v1/chats", // 直接调接口：读的也问（接口路径看着像工作树外面的路径） "lark-cli event consume im.message.receive_v1",
+      "lark-cli --as user im +messages-search --query x", "lark-cli", "lark-cli docs +fetch --doc x; lark-cli im +messages-send --text y",
+      "lark-cli docs +history-revert-status --doc x",
+    ]) {
+      expect(ok(cmd), cmd).toBe(false);
+    }
+  });
+
   it("允许的文件夹：整个磁盘不行；旧版本加进来的不合规矩的条目不算数", () => {
     const dataDir = tempDir("tl-folders-");
     const f = new Folders(dataDir, join(tempDir("tl-home-"), "me"));
@@ -197,7 +221,7 @@ describe("会话里的越界请求、允许的文件夹、全局记忆、网关�
   const fake = (cfg: Record<string, unknown>) => writeFileSync(join(work, ".fake-claude.json"), JSON.stringify(cfg));
   const open = async (extra: Record<string, unknown> = {}) => {
     const s = await api(t.port, token, "POST", "/v1/sessions", { subject: { kind: "card", cardId: "c" }, title: "x", cwd: work, firstMessage: "hi", ...extra });
-    expect(s.status).toBe(200);
+    expect(s.status, JSON.stringify(s.body)).toBe(200);
     return s.body.id as string;
   };
   const pending = (id: string) => until(async () => (await api(t.port, token, "GET", `/v1/sessions/${id}`)).body.pendingPermissions[0]);

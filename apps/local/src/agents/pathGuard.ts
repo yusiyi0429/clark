@@ -168,6 +168,37 @@ function binsInstalled(cmd: string, dirs: string[]): boolean {
   return true;
 }
 
+/**
+ * 飞书命令行（lark-cli）只放行读的（11/07 照 1.0.93 的命令名）：快捷命令（+xxx）名字最后一段是读的动词、或以 get-、search- 开头，
+ * 而且名字里没有写的词；按资源调方法的 list、get、search、query、mget；auth status、list、check、scopes；schema、help、version；
+ * 带 --help、--dry-run 的。别的照样问本人：发消息、发邮件、改文档、建日程、改表格等写操作，登录登出，直接调接口（api），看不出是读的（宁可多问）。
+ */
+const LARK_READ_TAIL = new Set(["list", "search", "get", "mget", "query", "fetch", "read", "status", "agenda", "detail", "info", "preview", "inspect", "freebusy", "find", "download", "summary"]);
+const LARK_WRITE_PART = new Set(["send", "create", "update", "edit", "delete", "remove", "add", "set", "put", "revert", "move", "copy", "upload", "reply", "forward", "trash", "modify", "share", "submit", "push", "sync", "import", "rename", "clear", "insert", "enable", "disable", "bind", "unbind", "complete", "reopen", "assign", "transfer", "invite", "join", "leave", "end", "rsvp"]);
+function larkRead(words: string[]): boolean {
+  if (words.some((w) => /^(--help|-h|--dry-run|--version)$/.test(w))) return true;
+  const head: string[] = [];
+  for (const w of words) { if (w.startsWith("-")) break; head.push(w); }
+  const [a, b] = head.map((w) => w.toLowerCase());
+  if (!a) return false;
+  if (a === "help" || a === "version" || a === "schema") return true;
+  if (a === "auth") return ["status", "list", "check", "scopes"].includes(b ?? "");
+  const shortcut = head.find((w) => w.startsWith("+"));
+  if (shortcut) {
+    const parts = shortcut.slice(1).toLowerCase().split("-");
+    if (parts.some((p) => LARK_WRITE_PART.has(p))) return false;
+    return LARK_READ_TAIL.has(parts.at(-1)!) || parts[0] === "get" || parts[0] === "search";
+  }
+  return head.length >= 3 && ["list", "get", "search", "query", "mget"].includes(head.at(-1)!.toLowerCase());
+}
+/** 命令里有一次 lark-cli 不是读的。 */
+function larkWrites(cmd: string): boolean {
+  for (const m of cmd.matchAll(/\blark-cli\b([^;&|\n]*)/gi)) {
+    if (!larkRead(m[1]!.trim().split(/\s+/).filter(Boolean))) return true;
+  }
+  return false;
+}
+
 /** 工作树里的 .git（指回主仓库）和 .claude（Claude Code 的项目设置，写了会放开以后的会话）：照样问。 */
 const PROTECTED = /(^|[\\/\s"'])\.(git|claude)([\\/\s"']|$)/;
 /** 只是用来排除、筛选的 .git、.claude（-Exclude .git、-notmatch '\\.git\\'、--exclude-dir=.git、-g '!.git'）。 */
@@ -182,7 +213,7 @@ function touchesProtected(cmd: string): boolean {
 /**
  * 卡在自己的工作树里做时，这一步能不能不问本人就放行（ADR 0038）。规则只在这里：
  * - 读写文件：路径都在工作树里；
- * - Bash、PowerShell：认出的路径都在工作树里，而且不装东西、不联网、不推拉代码、不改系统设置（跑仓库自己的脚本 npm test、npm run x、
+ * - Bash、PowerShell：认出的路径都在工作树里，而且不装东西、不联网、不推拉代码、不改系统设置、飞书命令行只读（跑仓库自己的脚本 npm test、npm run x、
  *   pnpm test、node --test 行；npx 之类只跑工作树里装好的）；
  * - 天枢 MCP 里读的工具（get_、list_ 开头）。
  * 碰 .git、.claude 的照样问（只用来排除、筛选的不算）；别的工具（联网搜索、子 agent 等）照样问。scope 的允许范围只放工作树。
@@ -192,7 +223,7 @@ export function autoAllowed(tool: string, input: Record<string, unknown>, scope:
   const inside = insideAny(scope.allowedRoots());
   if (SHELL_TOOLS.has(tool)) {
     const cmd = input.command;
-    return typeof cmd === "string" && !RISKY_COMMAND.test(cmd) && binsInstalled(cmd, [scope.cwd, ...scope.allowedRoots()])
+    return typeof cmd === "string" && !RISKY_COMMAND.test(cmd) && !larkWrites(cmd) && binsInstalled(cmd, [scope.cwd, ...scope.allowedRoots()])
       && !touchesProtected(cmd) && !collect(tool, input, scope, inside, hint).length;
   }
   if (!WORKTREE_FILE_TOOLS.has(tool)) return false;

@@ -1,6 +1,7 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import type { TLocalModelTier } from "@warmap/contracts";
 import type { AgentLaunch } from "./types.js";
 
 /** 本人主目录（Windows 上按磁盘实际大小写，和 Claude Code 自己算出的路径一致）。 */
@@ -61,6 +62,13 @@ export const PERMISSION_ARGS = [
   "--permission-prompt-tool", "stdio",
 ];
 
+/** 订阅模型按档位跑什么：重活 Opus high、普通 Opus medium、轻活 Sonnet low（新首页设计 11.3「自动」）。 */
+export const TIER_RUN: Record<TLocalModelTier, { model: string; effort: string }> = {
+  strong: { model: "opus", effort: "high" },
+  normal: { model: "opus", effort: "medium" },
+  light: { model: "sonnet", effort: "low" },
+};
+
 /**
  * 拉起参数。默认会话干净：只读项目和本地设置、只带本会话的 MCP；打开 includePersonalConfig 才带本人全局配置。
  * 网关模型：地址和模型名放 --settings 的 env（盖过本人全局配置，11/05 实测）；钥匙只放进程环境变量，不进命令行
@@ -98,8 +106,9 @@ export function buildClaudeArgs(launch: AgentLaunch): { args: string[]; env: Rec
     if (m.apiKey) env.ANTHROPIC_AUTH_TOKEN = m.apiKey;
     env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
     Object.assign(env, GATEWAY_FAIL_FAST);
-  } else if (m.model) {
-    args.push("--model", m.model);
+  } else {
+    // 订阅：配置里没写模型名（本人的 Claude 订阅）就按档位选，不然每一档都跑账号默认的 Opus；思考强度也按档位传（新首页设计 11.3「自动」）
+    args.push("--model", m.model ?? TIER_RUN[launch.tier].model, "--effort", TIER_RUN[launch.tier].effort);
   }
   args.push("--settings", JSON.stringify(settings));
   return { args, env };

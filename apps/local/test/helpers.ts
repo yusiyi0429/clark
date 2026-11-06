@@ -3,7 +3,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { startRunner, type Runner } from "../src/app.js";
+import { startRunner, type Runner, type RunnerOptions } from "../src/app.js";
+import type { ToolExec } from "../src/tools.js";
 import { FileSecretStore } from "../src/secrets.js";
 import { HeadlessDesktop } from "../src/desktop/index.js";
 
@@ -14,7 +15,10 @@ export function tempDir(prefix = "tl-"): string {
   return mkdtempSync(join(tmpdir(), prefix));
 }
 
-export async function startTestRunner(opts: { approvePairing?: boolean; pickFolder?: string | null | (() => string | null); fetchImpl?: typeof fetch; skillsDir?: string; dataDir?: string } = {}) {
+export async function startTestRunner(opts: {
+  approvePairing?: boolean; pickFolder?: string | null | (() => string | null); fetchImpl?: typeof fetch; skillsDir?: string; dataDir?: string;
+  toolsExec?: ToolExec; holdTiming?: RunnerOptions["holdTiming"];
+} = {}) {
   // 给 dataDir 时接着用上一次的数据（测重启）
   const dataDir = opts.dataDir ?? tempDir();
   const desktop = new HeadlessDesktop();
@@ -25,6 +29,8 @@ export async function startTestRunner(opts: { approvePairing?: boolean; pickFold
     claudeBin: { command: process.execPath, prefixArgs: [FAKE_CLAUDE] }, fetchImpl: opts.fetchImpl, allowedOrigins: [ORIGIN],
     // 测试不读本人真装的技能
     skillsDir: opts.skillsDir ?? join(dataDir, "no-skills"),
+    // 测试不查本人电脑上真装的 gh、lark-cli
+    toolsExec: opts.toolsExec ?? (async () => null), holdTiming: opts.holdTiming,
   });
   const port = (runner.server.address() as { port: number }).port;
   runner.config.port = port; // 监听随机端口时，Host 检查要按实际端口
