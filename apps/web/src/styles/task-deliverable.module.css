@@ -153,7 +153,7 @@ a.itemName:hover { text-decoration: underline; text-decoration-color: var(--hair
 .changed { padding: 0 8px; border-radius: 999px; background: var(--judgment-wash); color: var(--judgment); font-size: 12px; font-weight: 500; line-height: 20px; }
 .criterionBody .agreement { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 14px; margin: 0; color: var(--ink-muted); font-size: 12.5px; }
 .agreement small { color: var(--ink-faint); font-size: 11.5px; }
-button.agreement { justify-self: start; max-width: 100%; margin-left: -6px; padding: 1px 6px; border: 0; border-radius: 8px; background: none; font: inherit; font-size: 12.5px; text-align: left; cursor: pointer; }
+.criterionBody button.agreement { justify-self: start; max-width: 100%; margin-left: -6px; padding: 1px 6px; border: 0; border-radius: 8px; background: none; font: inherit; font-size: 12.5px; text-align: left; cursor: pointer; }
 button.agreement:hover { background: color-mix(in oklab, var(--ink) 4%, transparent); color: var(--ink); }
 .agreementAdd { justify-self: start; padding: 0; border: 0; background: none; color: #2f6fd6; font: inherit; font-size: 12.5px; cursor: pointer; }
 .agreementAdd:hover { text-decoration: underline; text-underline-offset: 3px; }
@@ -191,7 +191,7 @@ button.agreement:hover { background: color-mix(in oklab, var(--ink) 4%, transpar
 /* 手持：字号下限、热区 44。 */
 @media (max-width: 959px) {
   .facts, .label, .meta, .elapsed, .itemState, .hint, .dropHint, .foldToggle, .referenceToggle, .delivered, .noteField > span { font-size: 13px; }
-  .criterionBody .agreement, button.agreement, .agreement small, .agreementAdd, .agreementEdit > label, .agreementEdit > span, .criterionBody .check, .asked, .notice, .changed { font-size: 13px; }
+  .criterionBody .agreement, .criterionBody button.agreement, .agreement small, .agreementAdd, .agreementEdit > label, .agreementEdit > span, .criterionBody .check, .asked, .notice, .changed { font-size: 13px; }
   .checkRow .plain { height: 36px; }
   .agreementAdd { min-height: 36px; }
   .screenBody { padding: 16px 16px 144px; }
