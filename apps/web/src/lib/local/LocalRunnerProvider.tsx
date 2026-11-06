@@ -12,6 +12,7 @@ import { createHttpRunner, writeLocalToken } from "./client";
 import { createMockRunner } from "./mock";
 import { phaseOf, readBrowserPermission, type LocalPhase } from "./connection";
 import { HANDHELD_QUERY } from "@/components/ui/useHandheld";
+import { setMockAgents } from "@/lib/board/cards";
 
 export type Pairing = { code: string; state: "waiting" | "denied" | "expired" | "failed" };
 
@@ -58,6 +59,7 @@ const sharedMock = () => (mockRunner ??= createMockRunner());
 
 export function LocalRunnerProvider({ children, runner: given }: { children: ReactNode; runner?: LocalRunner }) {
   const [runner] = useState<LocalRunner>(() => given ?? pickRunner());
+  useEffect(() => { setMockAgents(runner.kind === "mock" && !given); return () => setMockAgents(false); }, [runner, given]);
   const [phase, setPhase] = useState<LocalPhase>("checking");
   const [version, setVersion] = useState<string | null>(null);
   const [status, setStatus] = useState<TLocalStatusResponse | null>(null);

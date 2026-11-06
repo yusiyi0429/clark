@@ -82,8 +82,15 @@ export const pendingCount = (cards: BoardCard[]) => cards.filter((card) => isPen
 /** 对第几条标准：①②③…，超过 20 写数字。 */
 export const circled = (n: number) => (n >= 1 && n <= 20 ? String.fromCodePoint(0x245f + n) : String(n));
 
+/**
+ * 假本机程序（开发走查）时，云端还没给 card 的老事项也当成 Claude Code 的卡，好在后端没好之前把开工走一遍。
+ * 只由 LocalRunnerProvider 在用假程序时打开。
+ */
+let mockAgents = false;
+export const setMockAgents = (on: boolean) => { mockAgents = on; };
+
 /** claude_code 由本机的 Claude Code 干；self 或没设（老事项）是本人自己做。 */
-export const isAgentCard = (item: CardItem) => item.card?.executor === "claude_code";
+export const isAgentCard = (item: CardItem) => item.card?.executor === "claude_code" || (mockAgents && !item.card);
 
 /** 已完成的卡：「已纳入 v2」或「v2 准备中」。 */
 export function deliverableLabel(item: CardItem): string | null {

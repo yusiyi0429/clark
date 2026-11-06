@@ -65,7 +65,7 @@ export function MonthCapsule({ buddy }: { buddy: Buddy | null }) {
     return (
       <div className={s.capsule}>
         <button type="button" className={s.capsuleFigure} aria-label={`跟${name}说`} onClick={() => { setOpen(true); requestAnimationFrame(() => field.current?.focus()); }}>
-          <BuddyMark buddy={buddy} place="entry" active={false} />
+          <BuddyMark buddy={buddy} place="sheet" active={data.streaming} />
         </button>
       </div>
     );
