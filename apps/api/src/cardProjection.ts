@@ -19,7 +19,7 @@ export type HandbackRow = { id: string; task_id: string; run_id: string | null; 
   git: TLocalGitRef | null; verified_commit: string | null };
 export type CardRow = { id: string; status: TTaskView["status"]; executor: TTaskCard["executor"]; model: TCardModel | null; brief: string | null;
   criterion_index: number | null; criterion_text: string | null; plan_task_id: string | null; done_definition: string | null; mission_id: string | null;
-  role_id: string | null };
+  role_id: string | null; after_card_ids: string[] };
 
 /** 推翻过的验收按本人的判断算：通过的推翻算没过，没过的推翻算通过。 */
 export const effectiveOutcome = (row: Pick<HandbackRow, "outcome" | "overruled_at">) =>
@@ -59,7 +59,7 @@ function stageAndWait(row: CardRow, handbacks: HandbackRow[], runs: RunRow[]): P
   return { stage: "doing", wait: runs[0] ? waits[runs[0].state] ?? null : null };
 }
 
-export const CARD_COLUMNS = "id::text,status,executor,model,brief,criterion_index,criterion_text,plan_task_id,done_definition,mission_id,role_id::text";
+export const CARD_COLUMNS = "id::text,status,executor,model,brief,criterion_index,criterion_text,plan_task_id,done_definition,mission_id,role_id::text,after_card_ids::text[]";
 
 /** 一批执行事项各自的 card。 */
 export async function cardsOf(q: Query, rows: CardRow[]): Promise<Map<string, TTaskCard>> {
@@ -85,7 +85,7 @@ export async function cardsOf(q: Query, rows: CardRow[]): Promise<Map<string, TT
     const role = row.role_id ? roles.get(row.role_id) : undefined;
     return [row.id, { ...stageAndWait(row, own, ownRuns), role: role ? roleRef(role) : null, executor: row.executor, model: row.model,
       criterion: row.criterion_index && row.criterion_text ? { index: row.criterion_index, text: row.criterion_text } : null,
-      run: ownRuns[0] ? runBrief(ownRuns[0]) : null, handback: own[0] ? handbackBrief(own[0]) : null, deliverable }];
+      run: ownRuns[0] ? runBrief(ownRuns[0]) : null, handback: own[0] ? handbackBrief(own[0]) : null, deliverable, after: row.after_card_ids }];
   }));
 }
 

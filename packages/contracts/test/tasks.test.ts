@@ -16,7 +16,7 @@ const step = {
   waitingOn: { taskId: "7b0c3c1e-0000-4000-8000-000000000000", title: "对齐验收口径" },
   owner: person, collaborators: [{ personId: "bai-tiantian", name: "白田田" }], latestProgress: null,
   returnReason: null, origin: null, awaitingAcceptance: false, planTaskId: null, blocker: null, createdAt: now, updatedAt: now,
-  card: { stage: "doing", wait: null, role: null, executor: null, model: null, criterion: null, run: null, handback: null, deliverable: null },
+  card: { stage: "doing", wait: null, role: null, executor: null, model: null, criterion: null, run: null, handback: null, deliverable: null, after: [] },
 };
 /** uuid 格式由 Fastify 校验；这里只查字段与范围。 */
 const withoutFormat = (schema: typeof CreateMyTaskRequest) => ({ ...schema, properties: { ...schema.properties, clientId: { ...schema.properties.clientId, format: undefined } } });

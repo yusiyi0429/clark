@@ -5454,6 +5454,7 @@ export interface components {
                         state: "pending" | "included";
                         versionNumber: number;
                     } | null;
+                    after: string[];
                 };
             };
             view?: {
@@ -9492,6 +9493,7 @@ export interface components {
                     state: "pending" | "included";
                     versionNumber: number;
                 } | null;
+                after: string[];
             };
         };
         TaskProgressSource: "web" | "codex" | "claude" | "github" | "other";
@@ -9675,6 +9677,7 @@ export interface components {
                             state: "pending" | "included";
                             versionNumber: number;
                         } | null;
+                        after: string[];
                     };
                 }[];
             }[];
@@ -11006,6 +11009,7 @@ export interface components {
                         state: "pending" | "included";
                         versionNumber: number;
                     } | null;
+                    after: string[];
                 };
             };
             judgment: string | null;
@@ -11230,6 +11234,7 @@ export interface components {
                         state: "pending" | "included";
                         versionNumber: number;
                     } | null;
+                    after: string[];
                 };
             }[];
         };
@@ -11387,6 +11392,7 @@ export interface components {
                             state: "pending" | "included";
                             versionNumber: number;
                         } | null;
+                        after: string[];
                     };
                 }[];
             }[];
@@ -11544,6 +11550,7 @@ export interface components {
                         state: "pending" | "included";
                         versionNumber: number;
                     } | null;
+                    after: string[];
                 };
             }[];
             work: {
@@ -12109,6 +12116,7 @@ export interface components {
                         state: "pending" | "included";
                         versionNumber: number;
                     } | null;
+                    after: string[];
                 };
             };
             missionId: string | null;
@@ -12305,6 +12313,7 @@ export interface components {
                             state: "pending" | "included";
                             versionNumber: number;
                         } | null;
+                        after: string[];
                     };
                 };
                 missionId: string | null;
@@ -12451,6 +12460,7 @@ export interface components {
                         state: "pending" | "included";
                         versionNumber: number;
                     } | null;
+                    after: string[];
                 };
             }[];
         };
@@ -15054,6 +15064,7 @@ export interface components {
                 state: "pending" | "included";
                 versionNumber: number;
             } | null;
+            after: string[];
         };
         CardTaskView: {
             id: string;
@@ -15193,6 +15204,7 @@ export interface components {
                     state: "pending" | "included";
                     versionNumber: number;
                 } | null;
+                after: string[];
             };
         };
         CardPlanView: {
@@ -15398,6 +15410,7 @@ export interface components {
                         state: "pending" | "included";
                         versionNumber: number;
                     } | null;
+                    after: string[];
                 };
             }[];
             drafts: {
@@ -15614,6 +15627,7 @@ export interface components {
                         state: "pending" | "included";
                         versionNumber: number;
                     } | null;
+                    after: string[];
                 };
             }[];
         };
@@ -15829,6 +15843,7 @@ export interface components {
                         state: "pending" | "included";
                         versionNumber: number;
                     } | null;
+                    after: string[];
                 };
             };
             brief: string | null;
@@ -16684,7 +16699,7 @@ export interface components {
             stage: "todo" | "doing" | "review" | "done";
             wait: ("approval" | "reply" | "paused" | "reviewing" | "review_failed" | "blocked") | null;
             needsYou: boolean;
-            queueReason: ("not_dispatched" | "slot" | "device_offline") | null;
+            queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards") | null;
             queuePosition: number | null;
             git: {
                 branch: string;
@@ -16693,6 +16708,10 @@ export interface components {
                 commit: string;
                 verifiedCommit: string | null;
             } | null;
+            waitingFor: {
+                cardId: string;
+                title: string;
+            }[];
         };
         WorkerResources: {
             devices: {
@@ -16764,7 +16783,7 @@ export interface components {
                 stage: "todo" | "doing" | "review" | "done";
                 wait: ("approval" | "reply" | "paused" | "reviewing" | "review_failed" | "blocked") | null;
                 needsYou: boolean;
-                queueReason: ("not_dispatched" | "slot" | "device_offline") | null;
+                queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards") | null;
                 queuePosition: number | null;
                 git: {
                     branch: string;
@@ -16773,6 +16792,10 @@ export interface components {
                     commit: string;
                     verifiedCommit: string | null;
                 } | null;
+                waitingFor: {
+                    cardId: string;
+                    title: string;
+                }[];
             }[];
             queued: {
                 key: string;
@@ -16818,7 +16841,7 @@ export interface components {
                 stage: "todo" | "doing" | "review" | "done";
                 wait: ("approval" | "reply" | "paused" | "reviewing" | "review_failed" | "blocked") | null;
                 needsYou: boolean;
-                queueReason: ("not_dispatched" | "slot" | "device_offline") | null;
+                queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards") | null;
                 queuePosition: number | null;
                 git: {
                     branch: string;
@@ -16827,6 +16850,10 @@ export interface components {
                     commit: string;
                     verifiedCommit: string | null;
                 } | null;
+                waitingFor: {
+                    cardId: string;
+                    title: string;
+                }[];
             }[];
             done: {
                 key: string;
@@ -16872,7 +16899,7 @@ export interface components {
                 stage: "todo" | "doing" | "review" | "done";
                 wait: ("approval" | "reply" | "paused" | "reviewing" | "review_failed" | "blocked") | null;
                 needsYou: boolean;
-                queueReason: ("not_dispatched" | "slot" | "device_offline") | null;
+                queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards") | null;
                 queuePosition: number | null;
                 git: {
                     branch: string;
@@ -16881,6 +16908,10 @@ export interface components {
                     commit: string;
                     verifiedCommit: string | null;
                 } | null;
+                waitingFor: {
+                    cardId: string;
+                    title: string;
+                }[];
             }[];
             resources: {
                 devices: {

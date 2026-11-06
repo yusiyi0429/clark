@@ -21,8 +21,11 @@ export const WorkerMark = Type.Union([
   Type.Literal("approval"), Type.Literal("reply"), Type.Literal("paused"), Type.Literal("reviewing"), Type.Literal("review_failed"), Type.Literal("blocked"),
 ]);
 
-/** 已排队在等什么：not_dispatched 等开工（本人确认了、还没交给本机）、slot 等空位（本机同时跑满了）、device_offline 等本机上线。 */
-export const WorkerQueueReason = Type.Union([Type.Literal("not_dispatched"), Type.Literal("slot"), Type.Literal("device_offline")]);
+/**
+ * 已排队在等什么：not_dispatched 等开工（本人确认了、还没交给本机）、slot 等空位（本机同时跑满了）、device_offline 等本机上线、
+ * prior_cards 等前面的卡（本机报的 waitingFor：派活单上要等的那几张还没在这台本机上合回）。
+ */
+export const WorkerQueueReason = Type.Union([Type.Literal("not_dispatched"), Type.Literal("slot"), Type.Literal("device_offline"), Type.Literal("prior_cards")]);
 
 /** worker 用的资源：local 在本人电脑上（哪台、什么模型）；cloud 在云端（验收员验收），没有设备。 */
 export const WorkerResource = Type.Object({
@@ -52,6 +55,7 @@ export const WorkerCost = Type.Object({
  * step 取本机报的计划进度：n 是 progress.step，label 是 progress.current（没有正在做的一步时 step 为 null）。
  * queuePosition 是「排第 n」：只有 queueReason=slot 的有，和本机程序的 queuePosition 同义——这台电脑上等空位的会话按开工先后排第几（1 起）。
  * git：卡和验收员这一行，卡最近一次交回的分支、提交和验的提交（卡在工作树里做时才有）；规划员、专题和没交回过的卡为 null。
+ * waitingFor：queueReason=prior_cards 时在等的那几张卡（id 和标题），别的为空。
  */
 export const WorkerItem = Type.Object({
   key: Type.String({ minLength: 1 }),
@@ -75,6 +79,7 @@ export const WorkerItem = Type.Object({
   queueReason: Nullable(WorkerQueueReason),
   queuePosition: Nullable(Type.Integer({ minimum: 1 })),
   git: Nullable(CardGit),
+  waitingFor: Type.Array(Type.Object({ cardId: Type.String({ minLength: 1 }), title: Type.String() }, strict)),
 }, strict);
 
 /**

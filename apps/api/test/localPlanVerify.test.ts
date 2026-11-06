@@ -10,7 +10,8 @@ import { boardFixture } from "./boardFixture.js";
  */
 
 type Subject = Record<string, string>;
-type PlanCard = { title?: string; brief?: string; doneDefinition?: string; criterionIndex?: number | null; role?: string | null; modelTier?: string; why?: string | null };
+type PlanCard = { title?: string; brief?: string; doneDefinition?: string; criterionIndex?: number | null; role?: string | null; modelTier?: string; why?: string | null;
+  after?: number[] };
 
 const plan = (revision: number, cards: PlanCard[]) => ({ revision, summary: "先打分再录屏", steps: [{ title: "跑题库", detail: null }, { title: "录屏", detail: "约一位新人" }],
   risks: ["题库不全"], modelLabel: "claude-opus-5.5", roleId: null, roleVersion: null,
@@ -81,6 +82,8 @@ describe("拆卡和验收在本机（第 21 节）", { timeout: 30_000 }, () => 
       expect(roles.map((role) => role.preset_key)).toEqual(["executor", "researcher"]);
       expect(accepted.json().cards.map((card: { card: { role: { id: string } | null } }) => card.card.role?.id))
         .toEqual([roles[0].id, roles[1].id]);
+      // 派活单没写先后：卡不用等。
+      expect(accepted.json().cards.map((card: { card: { after: string[] } }) => card.card.after)).toEqual([[], []]);
       const workers = (await f.call("GET", "/api/me/workers")).json();
       const listed = JSON.stringify(workers);
       for (const card of accepted.json().cards as { id: string }[]) expect(listed).toContain(card.id);
@@ -190,6 +193,46 @@ describe("拆卡和验收在本机（第 21 节）", { timeout: 30_000 }, () => 
       expect((await f.t.sql("SELECT content FROM thread_messages WHERE object_type='task' AND object_id=$1 ORDER BY id DESC LIMIT 1", [other]))[0].content)
         .toBe("本机验收员验收通过（2/2）。");
       expect(f.cloud).toEqual({ accept: 0, plan: 0 });
+    } finally { await f.close(); }
+  });
+
+  it("卡的先后：派活单写要等前面哪几件，放进看板以后换成那几张卡的 id（先放后放都对得上）；本机报在等前面的卡，worker 行写等哪几张；不写先后的照旧", async () => {
+    const f = await localFixture();
+    try {
+      // 只能等排在前面的：第 1 件等第 1 件不收。
+      expect((await f.sync({ kind: "plan", taskId: "task-open" }, [["card_plan", plan(1, [{ title: "自己等自己", after: [1] }])]])).rejected
+        .map((item) => item.code)).toEqual(["INVALID_PLAN"]);
+      await f.sync({ kind: "plan", taskId: "task-open" }, [["card_plan", plan(1, [{ title: "做 A" }, { title: "做 B" }, { title: "总验收", after: [1, 2] }, { title: "不相干" }])]]);
+      const drafts = (await f.call("GET", "/api/plan-tasks/task-open/cards")).json().drafts as { id: string; title: string }[];
+      const draft = (title: string) => drafts.find((item) => item.title === title)!.id;
+      const accept = async (titles: string[]) => (await f.call("POST", "/api/plan-tasks/task-open/card-drafts/accept",
+        { drafts: titles.map((title) => ({ id: draft(title) })) })).json().cards as { id: string; title: string; card: { after: string[] } }[];
+      // 先放「总验收」：要等的两张还没放进看板，先空着；再放 A、B，「总验收」就等它们。
+      const [total] = await accept(["总验收"]);
+      expect(total.card.after).toEqual([]);
+      const [a, b, other] = await accept(["做 A", "做 B", "不相干"]);
+      expect([a, b, other].map((card) => card.card.after)).toEqual([[], [], []]);
+      expect((await f.call("GET", `/api/me/cards/${total.id}`)).json().task.card.after).toEqual([a.id, b.id]);
+      const board = (await f.call("GET", "/api/plan-tasks/task-open/cards")).json();
+      expect(board.cards.find((card: { id: string }) => card.id === total.id).card.after).toEqual([a.id, b.id]);
+
+      // 本机开工：「总验收」排着等 A、B；「不相干」等空位。
+      const status = (state: string, waitingFor?: string[]) => ["status", { status: state, title: "卡", agent: "claude-code", modelLabel: "订阅 · Opus",
+        ...(waitingFor ? { waitingFor } : {}) }] as [string, unknown];
+      const waiting = await f.sync({ kind: "card", cardId: total.id }, [status("queued", [a.id, b.id])]);
+      await f.sync({ kind: "card", cardId: other.id }, [status("queued")]);
+      const row = async (card: string) => { const body = (await f.call("GET", "/api/me/workers")).json();
+        return [...body.running, ...body.queued].find((item: { key: string }) => item.key === `card:${card}`); };
+      expect(await row(total.id)).toMatchObject({ queueReason: "prior_cards", queuePosition: null, stage: "todo",
+        waitingFor: [{ cardId: a.id, title: "做 A" }, { cardId: b.id, title: "做 B" }] });
+      // 在等前面的卡的不占等空位的号：「不相干」排第 1。
+      expect(await row(other.id)).toMatchObject({ queueReason: "slot", queuePosition: 1, waitingFor: [] });
+      // A 合回了：只等 B；开始做了：不在已排队里。
+      await f.sync({ kind: "card", cardId: total.id }, [status("queued", [b.id])], waiting.session);
+      expect((await row(total.id)).waitingFor).toEqual([{ cardId: b.id, title: "做 B" }]);
+      await f.sync({ kind: "card", cardId: total.id }, [status("running")], waiting.session);
+      expect(await row(total.id)).toMatchObject({ queueReason: null, waitingFor: [] });
+      expect(await f.t.sql("SELECT waiting_for FROM local_runs WHERE id=$1", [waiting.session])).toEqual([{ waiting_for: null }]);
     } finally { await f.close(); }
   });
 

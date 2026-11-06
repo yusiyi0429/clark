@@ -23452,7 +23452,8 @@
                   "criterion",
                   "run",
                   "handback",
-                  "deliverable"
+                  "deliverable",
+                  "after"
                 ],
                 "properties": {
                   "stage": {
@@ -24027,6 +24028,13 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "after": {
+                    "type": "array",
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    }
                   }
                 }
               }
@@ -50047,7 +50055,8 @@
               "criterion",
               "run",
               "handback",
-              "deliverable"
+              "deliverable",
+              "after"
             ],
             "properties": {
               "stage": {
@@ -50622,6 +50631,13 @@
                     "type": "null"
                   }
                 ]
+              },
+              "after": {
+                "type": "array",
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                }
               }
             }
           }
@@ -51355,7 +51371,8 @@
                           "criterion",
                           "run",
                           "handback",
-                          "deliverable"
+                          "deliverable",
+                          "after"
                         ],
                         "properties": {
                           "stage": {
@@ -51930,6 +51947,13 @@
                                 "type": "null"
                               }
                             ]
+                          },
+                          "after": {
+                            "type": "array",
+                            "items": {
+                              "format": "uuid",
+                              "type": "string"
+                            }
                           }
                         }
                       }
@@ -60188,7 +60212,8 @@
                   "criterion",
                   "run",
                   "handback",
-                  "deliverable"
+                  "deliverable",
+                  "after"
                 ],
                 "properties": {
                   "stage": {
@@ -60763,6 +60788,13 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "after": {
+                    "type": "array",
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    }
                   }
                 }
               }
@@ -61845,7 +61877,8 @@
                     "criterion",
                     "run",
                     "handback",
-                    "deliverable"
+                    "deliverable",
+                    "after"
                   ],
                   "properties": {
                     "stage": {
@@ -62420,6 +62453,13 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "after": {
+                      "type": "array",
+                      "items": {
+                        "format": "uuid",
+                        "type": "string"
+                      }
                     }
                   }
                 }
@@ -63014,7 +63054,8 @@
                           "criterion",
                           "run",
                           "handback",
-                          "deliverable"
+                          "deliverable",
+                          "after"
                         ],
                         "properties": {
                           "stage": {
@@ -63589,6 +63630,13 @@
                                 "type": "null"
                               }
                             ]
+                          },
+                          "after": {
+                            "type": "array",
+                            "items": {
+                              "format": "uuid",
+                              "type": "string"
+                            }
                           }
                         }
                       }
@@ -64158,7 +64206,8 @@
                     "criterion",
                     "run",
                     "handback",
-                    "deliverable"
+                    "deliverable",
+                    "after"
                   ],
                   "properties": {
                     "stage": {
@@ -64733,6 +64782,13 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "after": {
+                      "type": "array",
+                      "items": {
+                        "format": "uuid",
+                        "type": "string"
+                      }
                     }
                   }
                 }
@@ -68416,7 +68472,8 @@
                   "criterion",
                   "run",
                   "handback",
-                  "deliverable"
+                  "deliverable",
+                  "after"
                 ],
                 "properties": {
                   "stage": {
@@ -68991,6 +69048,13 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "after": {
+                    "type": "array",
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    }
                   }
                 }
               }
@@ -69836,7 +69900,8 @@
                         "criterion",
                         "run",
                         "handback",
-                        "deliverable"
+                        "deliverable",
+                        "after"
                       ],
                       "properties": {
                         "stage": {
@@ -70411,6 +70476,13 @@
                               "type": "null"
                             }
                           ]
+                        },
+                        "after": {
+                          "type": "array",
+                          "items": {
+                            "format": "uuid",
+                            "type": "string"
+                          }
                         }
                       }
                     }
@@ -70929,7 +71001,8 @@
                     "criterion",
                     "run",
                     "handback",
-                    "deliverable"
+                    "deliverable",
+                    "after"
                   ],
                   "properties": {
                     "stage": {
@@ -71504,6 +71577,13 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "after": {
+                      "type": "array",
+                      "items": {
+                        "format": "uuid",
+                        "type": "string"
+                      }
                     }
                   }
                 }
@@ -88881,7 +88961,8 @@
           "criterion",
           "run",
           "handback",
-          "deliverable"
+          "deliverable",
+          "after"
         ],
         "properties": {
           "stage": {
@@ -89456,6 +89537,13 @@
                 "type": "null"
               }
             ]
+          },
+          "after": {
+            "type": "array",
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            }
           }
         }
       },
@@ -89922,7 +90010,8 @@
               "criterion",
               "run",
               "handback",
-              "deliverable"
+              "deliverable",
+              "after"
             ],
             "properties": {
               "stage": {
@@ -90497,6 +90586,13 @@
                     "type": "null"
                   }
                 ]
+              },
+              "after": {
+                "type": "array",
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                }
               }
             }
           }
@@ -91429,7 +91525,8 @@
                     "criterion",
                     "run",
                     "handback",
-                    "deliverable"
+                    "deliverable",
+                    "after"
                   ],
                   "properties": {
                     "stage": {
@@ -92004,6 +92101,13 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "after": {
+                      "type": "array",
+                      "items": {
+                        "format": "uuid",
+                        "type": "string"
+                      }
                     }
                   }
                 }
@@ -93000,7 +93104,8 @@
                     "criterion",
                     "run",
                     "handback",
-                    "deliverable"
+                    "deliverable",
+                    "after"
                   ],
                   "properties": {
                     "stage": {
@@ -93575,6 +93680,13 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "after": {
+                      "type": "array",
+                      "items": {
+                        "format": "uuid",
+                        "type": "string"
+                      }
                     }
                   }
                 }
@@ -94628,7 +94740,8 @@
                   "criterion",
                   "run",
                   "handback",
-                  "deliverable"
+                  "deliverable",
+                  "after"
                 ],
                 "properties": {
                   "stage": {
@@ -95203,6 +95316,13 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "after": {
+                    "type": "array",
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    }
                   }
                 }
               }
@@ -100854,7 +100974,8 @@
           "needsYou",
           "queueReason",
           "queuePosition",
-          "git"
+          "git",
+          "waitingFor"
         ],
         "properties": {
           "key": {
@@ -101240,6 +101361,10 @@
                   {
                     "const": "device_offline",
                     "type": "string"
+                  },
+                  {
+                    "const": "prior_cards",
+                    "type": "string"
                   }
                 ]
               },
@@ -101300,6 +101425,26 @@
                 "type": "null"
               }
             ]
+          },
+          "waitingFor": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "cardId",
+                "title"
+              ],
+              "properties": {
+                "cardId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       },
@@ -101496,7 +101641,8 @@
                 "needsYou",
                 "queueReason",
                 "queuePosition",
-                "git"
+                "git",
+                "waitingFor"
               ],
               "properties": {
                 "key": {
@@ -101882,6 +102028,10 @@
                         {
                           "const": "device_offline",
                           "type": "string"
+                        },
+                        {
+                          "const": "prior_cards",
+                          "type": "string"
                         }
                       ]
                     },
@@ -101942,6 +102092,26 @@
                       "type": "null"
                     }
                   ]
+                },
+                "waitingFor": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "cardId",
+                      "title"
+                    ],
+                    "properties": {
+                      "cardId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -101972,7 +102142,8 @@
                 "needsYou",
                 "queueReason",
                 "queuePosition",
-                "git"
+                "git",
+                "waitingFor"
               ],
               "properties": {
                 "key": {
@@ -102358,6 +102529,10 @@
                         {
                           "const": "device_offline",
                           "type": "string"
+                        },
+                        {
+                          "const": "prior_cards",
+                          "type": "string"
                         }
                       ]
                     },
@@ -102418,6 +102593,26 @@
                       "type": "null"
                     }
                   ]
+                },
+                "waitingFor": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "cardId",
+                      "title"
+                    ],
+                    "properties": {
+                      "cardId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -102448,7 +102643,8 @@
                 "needsYou",
                 "queueReason",
                 "queuePosition",
-                "git"
+                "git",
+                "waitingFor"
               ],
               "properties": {
                 "key": {
@@ -102834,6 +103030,10 @@
                         {
                           "const": "device_offline",
                           "type": "string"
+                        },
+                        {
+                          "const": "prior_cards",
+                          "type": "string"
                         }
                       ]
                     },
@@ -102894,6 +103094,26 @@
                       "type": "null"
                     }
                   ]
+                },
+                "waitingFor": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "cardId",
+                      "title"
+                    ],
+                    "properties": {
+                      "cardId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      }
+                    }
+                  }
                 }
               }
             }
