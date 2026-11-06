@@ -37,8 +37,7 @@
 /* C妹 头顶的呆毛比框高出约 7（放到 1.1 后约 8）：这块往上多留 9，画跟着往下挪 9，上沿还贴着入口胶囊。 */
 .mark[data-place="entry"][data-skin="cmei"] { height: 57px; }
 .mark[data-place="entry"][data-skin="cmei"] .scale { transform: translate(-50%, 9px) scale(1.1); }
-/* 探出来的半身也算入口：点它和点胶囊一样打开对话。 */
-.mark[data-place="entry"]:is([data-skin="miles"], [data-skin="cmei"]) { pointer-events: auto; cursor: pointer; }
+/* 探出来的半身不接点击（沿用 .mark 的 pointer-events: none）：它盖在页面右下的按钮上，点下去要落到那些按钮；打开对话只认下面的胶囊。 */
 
 @media (prefers-reduced-motion: reduce) {
   .mark[data-place="sheet"] { transition: none; }
