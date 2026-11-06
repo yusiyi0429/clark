@@ -74,6 +74,11 @@ export async function cardsOf(q: Query, rows: CardRow[]): Promise<Map<string, TT
   const inclusions = (await q(`SELECT h.task_id::text,v.number,p.version_id FROM deliverable_pending_items p JOIN card_handbacks h ON h.id=p.handback_id
     LEFT JOIN deliverable_versions v ON v.id=p.version_id WHERE h.task_id=ANY($1::uuid[]) ORDER BY p.added_at DESC`, [ids])).rows as { task_id: string; number: number | null; version_id: string | null }[];
   const roles = await rolesById(q, rows.map((row) => row.role_id));
+  // 先后只算 Agent 做的卡（claude_code）：本机等前面的卡在本机合回才放行，本人自己做的卡不会在本机合回，等它就永远等着。
+  // 读的时候按那几张卡此刻的执行方筛（看板、卡的详情、开工都从这里拿），执行方后来改了也跟着变。
+  const afterIds = [...new Set(rows.flatMap((row) => row.after_card_ids))];
+  const agentCards = new Set(afterIds.length ? ((await q("SELECT id::text FROM tasks WHERE id=ANY($1::uuid[]) AND executor='claude_code'", [afterIds])).rows as
+    { id: string }[]).map((row) => row.id) : []);
   // 下一版的号只有准备中的卡要。
   const next = await nextVersions(q, [...new Set(rows.flatMap((row) => row.plan_task_id && inclusions.some((item) => item.task_id === row.id && !item.version_id)
     ? [row.plan_task_id] : []))]);
@@ -85,7 +90,7 @@ export async function cardsOf(q: Query, rows: CardRow[]): Promise<Map<string, TT
     const role = row.role_id ? roles.get(row.role_id) : undefined;
     return [row.id, { ...stageAndWait(row, own, ownRuns), role: role ? roleRef(role) : null, executor: row.executor, model: row.model,
       criterion: row.criterion_index && row.criterion_text ? { index: row.criterion_index, text: row.criterion_text } : null,
-      run: ownRuns[0] ? runBrief(ownRuns[0]) : null, handback: own[0] ? handbackBrief(own[0]) : null, deliverable, after: row.after_card_ids }];
+      run: ownRuns[0] ? runBrief(ownRuns[0]) : null, handback: own[0] ? handbackBrief(own[0]) : null, deliverable, after: row.after_card_ids.filter((id) => agentCards.has(id)) }];
   }));
 }
 
