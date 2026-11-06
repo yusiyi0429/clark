@@ -236,7 +236,8 @@ describe("规划员和验收员", () => {
       // 连上天枢：交回送上去，取到交代，开始验收
       await h.link();
       await h.waitStatus(v1.id, "exited");
-      expect(h.cloud.items.find((i) => i.type === "verdict").subject.handbackKey).toBe(v1.subject.handbackKey);
+      // 结论经发件箱送上去（入队后 300 毫秒发），可能比验收员退出晚一点
+      expect((await until(() => h.cloud.items.find((i) => i.type === "verdict"))).subject.handbackKey).toBe(v1.subject.handbackKey);
 
       // 天枢上没有这次交回（404）：不验；这次交回已有结论（409）：不用验
       h.cloud.setBrief(() => ({ status: 404 }));
