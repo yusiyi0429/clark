@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, extname, join, resolve } from "node:path";
 import type {
   TLocalAgentKind, TLocalCreateSessionRequest, TLocalHandbackCriterion, TLocalPermissionRequestView, TLocalSendMessageResponse,
@@ -150,6 +150,8 @@ export class SessionManager {
     if (req.cwd) {
       cwd = resolve(req.cwd);
       if (!existsSync(cwd) || !statSync(cwd).isDirectory()) throw new SessionError("validation", "工作目录不存在");
+      // 按磁盘上的实际大小写：Claude Code 排除本人全局记忆（claudeMdExcludes）是按路径大小写匹配的。
+      cwd = realpathSync.native(cwd);
       if (!this.d.folders.isAllowed(cwd)) throw new SessionError("folder_not_allowed", "这个目录不在本人允许的文件夹里");
     } else if (subject.kind === "topic") {
       cwd = this.d.folders.topicDir(subject.topicId!);
@@ -218,6 +220,8 @@ export class SessionManager {
     const run = await adapter.start({
       sessionId: rec.id, cwd: rec.cwd, resume, model, includePersonalConfig: rec.includePersonalConfig,
       mcpConfigPath: mcp.path, mcpEnv: mcp.env, allowedTools: mcp.allowedTools,
+      // 每次现查：会话途中本人移除了文件夹，之后的请求就算越界。
+      isAllowedPath: (p) => isInside(rec.cwd, p) || this.d.folders.contains(p),
     });
     if (this.cancelled.delete(rec.id)) {
       await run.kill();

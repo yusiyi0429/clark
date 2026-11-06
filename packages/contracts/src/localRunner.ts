@@ -208,7 +208,10 @@ export const LocalFolder = Type.Object({
   addedAt: Instant,
 }, strict);
 export const LocalFolderListResponse = Type.Object({ folders: Type.Array(LocalFolder) }, strict);
-/** POST /v1/folders/pick：本人在本机选择框里点了取消时 folder 为 null。 */
+/**
+ * POST /v1/folders/pick：本人在本机选择框里点了取消时 folder 为 null。
+ * 选了主目录或它的上级、Claude 配置目录、本机程序数据目录（或它们的上级）时回 400 validation，message 可直接给人看。
+ */
 export const LocalFolderPickResponse = Type.Object({ folder: Nullable(LocalFolder) }, strict);
 
 // ───────────────────────── 会话 ─────────────────────────
@@ -281,7 +284,12 @@ export const LocalPermissionRequestView = Type.Object({
   /** 给人看的一行，例如「改文件 src/app.ts」「运行 pnpm test」。 */
   title: Type.String(),
   input: Type.Record(Type.String(), Type.Unknown()),
-  /** Claude Code 给了 permission_suggestions：可以「这张卡都允许」。 */
+  /**
+   * 这一步要碰的、不在允许的文件夹里的路径（越界）。非空时网页要标红写明越界的路径，且只能「允许这一次」。
+   * 文件类工具按字段取路径；Bash、PowerShell 是从命令里尽力认，可能认不全。本机不自动拒绝，由本人决定（ADR 0031）。
+   */
+  outsidePaths: Type.Array(Type.String(), { maxItems: 20 }),
+  /** 可以「这张卡都允许」：Claude Code 给了放行建议，且这一步没越界。放行只在本会话内有效，不写进仓库或本人的设置。 */
   canAllowForSession: Type.Boolean(),
   requestedAt: Instant,
 }, strict);

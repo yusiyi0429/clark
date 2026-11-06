@@ -14,11 +14,11 @@ export function tempDir(prefix = "tl-"): string {
   return mkdtempSync(join(tmpdir(), prefix));
 }
 
-export async function startTestRunner(opts: { approvePairing?: boolean; pickFolder?: string | null; fetchImpl?: typeof fetch } = {}) {
+export async function startTestRunner(opts: { approvePairing?: boolean; pickFolder?: string | null | (() => string | null); fetchImpl?: typeof fetch } = {}) {
   const dataDir = tempDir();
   const desktop = new HeadlessDesktop();
   desktop.confirm = async () => opts.approvePairing ?? true;
-  desktop.pickFolder = async () => opts.pickFolder ?? null;
+  desktop.pickFolder = async () => (typeof opts.pickFolder === "function" ? opts.pickFolder() : opts.pickFolder ?? null);
   const runner: Runner = await startRunner({
     dataDir, port: 0 as unknown as number, headless: true, desktop, secrets: new FileSecretStore(dataDir),
     claudeBin: { command: process.execPath, prefixArgs: [FAKE_CLAUDE] }, fetchImpl: opts.fetchImpl, allowedOrigins: [ORIGIN],

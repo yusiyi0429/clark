@@ -144,7 +144,13 @@ export function createServer(d: ServerDeps): http.Server {
     },
     deleteModel: async (c) => { if (!(await d.models.remove(c.params.id!))) throw new HttpError(404, "not_found", "没有这个模型配置，或是内置配置"); return { ok: true }; },
     listFolders: () => ({ folders: d.folders.list() }),
-    pickFolder: async () => { const p = await d.pickFolder(); return { folder: p ? d.folders.add(p) : null }; },
+    pickFolder: async () => {
+      const p = await d.pickFolder();
+      if (!p) return { folder: null };
+      const why = d.folders.rejectReason(p);
+      if (why) throw new HttpError(400, "validation", why);
+      return { folder: d.folders.add(p) };
+    },
     deleteFolder: (c) => { if (!d.folders.remove(c.params.id!)) throw new HttpError(404, "not_found", "没有这个文件夹"); return { ok: true }; },
     listSessions: () => ({ sessions: d.sessions.list() }),
     createSession: (c) =>

@@ -21,6 +21,10 @@ Write-Host ''
 Write-Host '天枢本机程序 · 安装' -ForegroundColor Cyan
 
 if (-not [Environment]::Is64BitOperatingSystem) { throw '只支持 64 位 Windows' }
+# Windows 11「智能应用控制」开着强制时，会拦下没签名的程序（本机程序和它首次启动时编出的托盘助手），没有单个放行的办法（ADR 0032）
+$sac = $null
+try { $sac = (Get-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\CI\Policy' -Name VerifiedAndReputablePolicyState -ErrorAction Stop).VerifiedAndReputablePolicyState } catch {}
+if ($sac -eq 1) { throw '这台电脑开着「智能应用控制」，会拦下还没签名的天枢本机程序。请等签名版，或在「Windows 安全中心 › 应用和浏览器控制 › 智能应用控制设置」里关掉后再装' }
 New-Item -ItemType Directory -Force -Path $Dir | Out-Null
 
 # 1. 停掉正在跑的旧版本（只停装在这个位置的那个）
