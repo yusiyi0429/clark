@@ -4203,6 +4203,333 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/plan-tasks/{taskId}/cards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Task 页看板（Task 负责人）：本人挂在这个 Task 下的卡（带 card）、没处理的草稿、最近一次拆卡、准备中的东西和下一版的号 */
+        get: operations["getCardBoard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/plan-tasks/{taskId}/card-plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 拆卡（Task 负责人）：伙伴出 3–8 张草稿卡，后台跑；已有一次在排队或在跑时返回那一次 */
+        post: operations["createCardPlan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/plan-tasks/{taskId}/card-drafts/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 放进看板（Task 负责人）：草稿变成执行事项，挂这个 Task 和它的 Mission */
+        post: operations["acceptCardDrafts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/card-drafts/{id}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 不要这张草稿（Task 负责人） */
+        post: operations["dismissCardDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/cards/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 卡的详情（推进人）：卡、交代、完成标准、最近 5 次本机执行、交回和验收、产出 */
+        get: operations["getCard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 改执行方、模型、交代、对哪条标准（推进人）；version 不一致 409 带 latestTask */
+        patch: operations["patchCard"];
+        trace?: never;
+    };
+    "/api/me/cards/{id}/brief": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 开工时交给本机的交代（推进人）：markdown 原样作为本机会话的第一句话 */
+        get: operations["getCardBrief"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/cards/{id}/handbacks/{handbackId}/overrule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 推翻 Agent 验收（推进人）：通过的变回进行中、从准备中拿掉；没过的算通过 */
+        post: operations["overruleCardHandback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/cards/{id}/handbacks/{handbackId}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 验收本身出错了（failed），重排一次（推进人） */
+        post: operations["retryCardHandback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/cards/{id}/handbacks/{handbackId}/returned": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 网页已经把没过的改法送到本机，记一笔（推进人）；已经记过的照样返回 */
+        post: operations["markCardHandbackReturned"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/plan-tasks/{taskId}/deliverable/pending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 把挂在这个 Task 上的专题的一版放进下一版（Task 负责人） */
+        post: operations["addPendingDeliverable"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/plan-tasks/{taskId}/deliverable/pending/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 从准备中拿出来（Task 负责人） */
+        delete: operations["removePendingDeliverable"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/plan-tasks/{taskId}/deliverable/versions/from-pending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 出下一版（Task 负责人）：准备中的各样连同上一版的全部材料建成新一版，评审自动开始 */
+        post: operations["createDeliverableVersionFromPending"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/local-outputs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 打开本机传上来的一份产出（本人）；HTML 照材料预览加 CSP sandbox */
+        get: operations["readLocalOutput"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/local-devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人配对过、没吊销的本机设备 */
+        get: operations["listLocalDevices"];
+        put?: never;
+        /** 配对时建设备令牌（本人）：同一台电脑再配对换一把新的、旧的立刻失效；令牌只回这一次 */
+        post: operations["createLocalDevice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/local-devices/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 吊销一台设备（本人）：它的令牌立刻失效 */
+        delete: operations["revokeLocalDevice"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/topics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人的调研专题（默认没归档的，status=archived 看归档的） */
+        get: operations["listTopics"];
+        put?: never;
+        /** 新建调研专题（本人），可挂本人 Mission 下的一个 Task */
+        post: operations["createTopic"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/topics/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 专题详情（本人）：各版本（不带正文）、最新一版正文、最近 5 次本机执行 */
+        get: operations["getTopic"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 改标题、归档或取消归档（本人） */
+        patch: operations["patchTopic"];
+        trace?: never;
+    };
+    "/api/me/topics/{id}/versions/{number}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 专题的某一版，带正文（本人） */
+        get: operations["getTopicVersion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/topics/{id}/brief": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 开专题时交给本机的交代（本人）：markdown 原样作为本机会话的第一句话 */
+        get: operations["getTopicBrief"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -13517,6 +13844,1250 @@ export interface components {
                     itemId?: string;
                 }[];
             }[];
+        };
+        TaskCard: {
+            stage: "todo" | "doing" | "review" | "done";
+            wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+            executor: ("claude_code" | "self") | null;
+            model: {
+                id: string;
+                label: string;
+                kind: "subscription" | "gateway";
+            } | null;
+            criterion: {
+                index: number;
+                text: string;
+            } | null;
+            run: {
+                /** Format: uuid */
+                id: string;
+                /** Format: uuid */
+                deviceId: string;
+                deviceName: string;
+                state: "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                modelLabel: string | null;
+                plan: {
+                    done: number;
+                    total: number;
+                    current: string | null;
+                };
+                lastActivity: {
+                    /** Format: date-time */
+                    at: string;
+                    text: string;
+                } | null;
+                cost: {
+                    inputTokens: number;
+                    outputTokens: number;
+                    costUsd: number | null;
+                };
+                /** Format: date-time */
+                startedAt: string;
+                /** Format: date-time */
+                updatedAt: string;
+                endedAt: string | null;
+            } | null;
+            handback: {
+                /** Format: uuid */
+                id: string;
+                attempt: number;
+                status: "queued" | "running" | "done" | "failed";
+                outcome: ("pass" | "fail") | null;
+                met: number;
+                total: number;
+                headline: string | null;
+                returnText: string | null;
+                returnedAt: string | null;
+                overruled: boolean;
+                /** Format: date-time */
+                createdAt: string;
+                finishedAt: string | null;
+            } | null;
+            deliverable: {
+                state: "pending" | "included";
+                versionNumber: number;
+            } | null;
+        };
+        CardTaskView: {
+            id: string;
+            version: number;
+            title: string;
+            status: "not_started" | "in_progress" | "done" | "returned";
+            source: "meeting" | "self" | "plan" | "agent";
+            startDate: string | null;
+            dueDate: string | null;
+            doneDefinition: string | null;
+            mission: {
+                missionId: string;
+                title: string;
+                cardId: string | null;
+                period: string;
+                battlefieldName: string;
+                step: number;
+                steps: number;
+            } | null;
+            waitingOn: {
+                taskId: string;
+                title: string;
+            } | null;
+            owner: {
+                personId: string;
+                name: string;
+            };
+            collaborators: {
+                personId: string;
+                name: string;
+            }[];
+            latestProgress: {
+                body: string;
+                source: "web" | "codex" | "claude" | "github" | "other";
+                author: {
+                    personId: string;
+                    name: string;
+                };
+                createdAt: string;
+            } | null;
+            returnReason: string | null;
+            origin: {
+                /** @constant */
+                type: "meeting";
+                meetingId: string;
+                meetingTitle: string;
+                quote: string | null;
+            } | null;
+            awaitingAcceptance: boolean;
+            planTaskId: string | null;
+            blocker: {
+                reason: string;
+                waitingOn: {
+                    personId: string;
+                    name: string;
+                } | null;
+                since: string;
+            } | null;
+            unplaced?: {
+                reason: string | null;
+            };
+            createdAt: string;
+            updatedAt: string;
+            card: {
+                stage: "todo" | "doing" | "review" | "done";
+                wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                executor: ("claude_code" | "self") | null;
+                model: {
+                    id: string;
+                    label: string;
+                    kind: "subscription" | "gateway";
+                } | null;
+                criterion: {
+                    index: number;
+                    text: string;
+                } | null;
+                run: {
+                    /** Format: uuid */
+                    id: string;
+                    /** Format: uuid */
+                    deviceId: string;
+                    deviceName: string;
+                    state: "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                    modelLabel: string | null;
+                    plan: {
+                        done: number;
+                        total: number;
+                        current: string | null;
+                    };
+                    lastActivity: {
+                        /** Format: date-time */
+                        at: string;
+                        text: string;
+                    } | null;
+                    cost: {
+                        inputTokens: number;
+                        outputTokens: number;
+                        costUsd: number | null;
+                    };
+                    /** Format: date-time */
+                    startedAt: string;
+                    /** Format: date-time */
+                    updatedAt: string;
+                    endedAt: string | null;
+                } | null;
+                handback: {
+                    /** Format: uuid */
+                    id: string;
+                    attempt: number;
+                    status: "queued" | "running" | "done" | "failed";
+                    outcome: ("pass" | "fail") | null;
+                    met: number;
+                    total: number;
+                    headline: string | null;
+                    returnText: string | null;
+                    returnedAt: string | null;
+                    overruled: boolean;
+                    /** Format: date-time */
+                    createdAt: string;
+                    finishedAt: string | null;
+                } | null;
+                deliverable: {
+                    state: "pending" | "included";
+                    versionNumber: number;
+                } | null;
+            };
+        };
+        CardPlanView: {
+            /** Format: uuid */
+            id: string;
+            status: "queued" | "running" | "done" | "failed";
+            hint: string | null;
+            error: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            startedAt: string | null;
+            finishedAt: string | null;
+            expectedSeconds: number;
+        };
+        CardDraftView: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            planId: string;
+            position: number;
+            title: string;
+            brief: string;
+            doneDefinition: string;
+            criterionIndex: number | null;
+            executor: "claude_code" | "self";
+            modelTier: "strong" | "normal" | "light";
+            why: string | null;
+        };
+        PendingDeliverableItem: {
+            /** Format: uuid */
+            id: string;
+            kind: "card" | "topic";
+            title: string;
+            cardId: string | null;
+            topicId: string | null;
+            topicVersionId: string | null;
+            /** Format: date-time */
+            addedAt: string;
+        };
+        CardBoardResponse: {
+            taskId: string;
+            criteria: {
+                index: number;
+                text: string;
+            }[];
+            cards: {
+                id: string;
+                version: number;
+                title: string;
+                status: "not_started" | "in_progress" | "done" | "returned";
+                source: "meeting" | "self" | "plan" | "agent";
+                startDate: string | null;
+                dueDate: string | null;
+                doneDefinition: string | null;
+                mission: {
+                    missionId: string;
+                    title: string;
+                    cardId: string | null;
+                    period: string;
+                    battlefieldName: string;
+                    step: number;
+                    steps: number;
+                } | null;
+                waitingOn: {
+                    taskId: string;
+                    title: string;
+                } | null;
+                owner: {
+                    personId: string;
+                    name: string;
+                };
+                collaborators: {
+                    personId: string;
+                    name: string;
+                }[];
+                latestProgress: {
+                    body: string;
+                    source: "web" | "codex" | "claude" | "github" | "other";
+                    author: {
+                        personId: string;
+                        name: string;
+                    };
+                    createdAt: string;
+                } | null;
+                returnReason: string | null;
+                origin: {
+                    /** @constant */
+                    type: "meeting";
+                    meetingId: string;
+                    meetingTitle: string;
+                    quote: string | null;
+                } | null;
+                awaitingAcceptance: boolean;
+                planTaskId: string | null;
+                blocker: {
+                    reason: string;
+                    waitingOn: {
+                        personId: string;
+                        name: string;
+                    } | null;
+                    since: string;
+                } | null;
+                unplaced?: {
+                    reason: string | null;
+                };
+                createdAt: string;
+                updatedAt: string;
+                card: {
+                    stage: "todo" | "doing" | "review" | "done";
+                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                    executor: ("claude_code" | "self") | null;
+                    model: {
+                        id: string;
+                        label: string;
+                        kind: "subscription" | "gateway";
+                    } | null;
+                    criterion: {
+                        index: number;
+                        text: string;
+                    } | null;
+                    run: {
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: uuid */
+                        deviceId: string;
+                        deviceName: string;
+                        state: "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                        modelLabel: string | null;
+                        plan: {
+                            done: number;
+                            total: number;
+                            current: string | null;
+                        };
+                        lastActivity: {
+                            /** Format: date-time */
+                            at: string;
+                            text: string;
+                        } | null;
+                        cost: {
+                            inputTokens: number;
+                            outputTokens: number;
+                            costUsd: number | null;
+                        };
+                        /** Format: date-time */
+                        startedAt: string;
+                        /** Format: date-time */
+                        updatedAt: string;
+                        endedAt: string | null;
+                    } | null;
+                    handback: {
+                        /** Format: uuid */
+                        id: string;
+                        attempt: number;
+                        status: "queued" | "running" | "done" | "failed";
+                        outcome: ("pass" | "fail") | null;
+                        met: number;
+                        total: number;
+                        headline: string | null;
+                        returnText: string | null;
+                        returnedAt: string | null;
+                        overruled: boolean;
+                        /** Format: date-time */
+                        createdAt: string;
+                        finishedAt: string | null;
+                    } | null;
+                    deliverable: {
+                        state: "pending" | "included";
+                        versionNumber: number;
+                    } | null;
+                };
+            }[];
+            drafts: {
+                /** Format: uuid */
+                id: string;
+                /** Format: uuid */
+                planId: string;
+                position: number;
+                title: string;
+                brief: string;
+                doneDefinition: string;
+                criterionIndex: number | null;
+                executor: "claude_code" | "self";
+                modelTier: "strong" | "normal" | "light";
+                why: string | null;
+            }[];
+            plan: {
+                /** Format: uuid */
+                id: string;
+                status: "queued" | "running" | "done" | "failed";
+                hint: string | null;
+                error: string | null;
+                /** Format: date-time */
+                createdAt: string;
+                startedAt: string | null;
+                finishedAt: string | null;
+                expectedSeconds: number;
+            } | null;
+            pending: {
+                /** Format: uuid */
+                id: string;
+                kind: "card" | "topic";
+                title: string;
+                cardId: string | null;
+                topicId: string | null;
+                topicVersionId: string | null;
+                /** Format: date-time */
+                addedAt: string;
+            }[];
+            nextVersion: number;
+        };
+        CreateCardPlanRequest: {
+            hint?: string;
+        };
+        AcceptCardDraftsRequest: {
+            drafts: {
+                /** Format: uuid */
+                id: string;
+                title?: string;
+                brief?: string;
+                doneDefinition?: string;
+                executor?: "claude_code" | "self";
+            }[];
+        };
+        AcceptCardDraftsResponse: {
+            cards: {
+                id: string;
+                version: number;
+                title: string;
+                status: "not_started" | "in_progress" | "done" | "returned";
+                source: "meeting" | "self" | "plan" | "agent";
+                startDate: string | null;
+                dueDate: string | null;
+                doneDefinition: string | null;
+                mission: {
+                    missionId: string;
+                    title: string;
+                    cardId: string | null;
+                    period: string;
+                    battlefieldName: string;
+                    step: number;
+                    steps: number;
+                } | null;
+                waitingOn: {
+                    taskId: string;
+                    title: string;
+                } | null;
+                owner: {
+                    personId: string;
+                    name: string;
+                };
+                collaborators: {
+                    personId: string;
+                    name: string;
+                }[];
+                latestProgress: {
+                    body: string;
+                    source: "web" | "codex" | "claude" | "github" | "other";
+                    author: {
+                        personId: string;
+                        name: string;
+                    };
+                    createdAt: string;
+                } | null;
+                returnReason: string | null;
+                origin: {
+                    /** @constant */
+                    type: "meeting";
+                    meetingId: string;
+                    meetingTitle: string;
+                    quote: string | null;
+                } | null;
+                awaitingAcceptance: boolean;
+                planTaskId: string | null;
+                blocker: {
+                    reason: string;
+                    waitingOn: {
+                        personId: string;
+                        name: string;
+                    } | null;
+                    since: string;
+                } | null;
+                unplaced?: {
+                    reason: string | null;
+                };
+                createdAt: string;
+                updatedAt: string;
+                card: {
+                    stage: "todo" | "doing" | "review" | "done";
+                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                    executor: ("claude_code" | "self") | null;
+                    model: {
+                        id: string;
+                        label: string;
+                        kind: "subscription" | "gateway";
+                    } | null;
+                    criterion: {
+                        index: number;
+                        text: string;
+                    } | null;
+                    run: {
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: uuid */
+                        deviceId: string;
+                        deviceName: string;
+                        state: "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                        modelLabel: string | null;
+                        plan: {
+                            done: number;
+                            total: number;
+                            current: string | null;
+                        };
+                        lastActivity: {
+                            /** Format: date-time */
+                            at: string;
+                            text: string;
+                        } | null;
+                        cost: {
+                            inputTokens: number;
+                            outputTokens: number;
+                            costUsd: number | null;
+                        };
+                        /** Format: date-time */
+                        startedAt: string;
+                        /** Format: date-time */
+                        updatedAt: string;
+                        endedAt: string | null;
+                    } | null;
+                    handback: {
+                        /** Format: uuid */
+                        id: string;
+                        attempt: number;
+                        status: "queued" | "running" | "done" | "failed";
+                        outcome: ("pass" | "fail") | null;
+                        met: number;
+                        total: number;
+                        headline: string | null;
+                        returnText: string | null;
+                        returnedAt: string | null;
+                        overruled: boolean;
+                        /** Format: date-time */
+                        createdAt: string;
+                        finishedAt: string | null;
+                    } | null;
+                    deliverable: {
+                        state: "pending" | "included";
+                        versionNumber: number;
+                    } | null;
+                };
+            }[];
+        };
+        PatchCardRequest: {
+            version: number;
+            executor?: "claude_code" | "self";
+            model?: {
+                id: string;
+                label: string;
+                kind: "subscription" | "gateway";
+            } | null;
+            brief?: string | null;
+            criterionIndex?: number | null;
+        };
+        CardHandbackView: {
+            /** Format: uuid */
+            id: string;
+            attempt: number;
+            status: "queued" | "running" | "done" | "failed";
+            outcome: ("pass" | "fail") | null;
+            met: number;
+            total: number;
+            headline: string | null;
+            returnText: string | null;
+            returnedAt: string | null;
+            overruled: boolean;
+            /** Format: date-time */
+            createdAt: string;
+            finishedAt: string | null;
+            runId: string | null;
+            criteria: string[];
+            claims: {
+                index: number;
+                result: "met" | "partial" | "unmet";
+                evidence: string;
+            }[];
+            summary: string | null;
+            outputIds: string[];
+            result: {
+                criteria: {
+                    index: number;
+                    text: string;
+                    verdict: "met" | "partial" | "unmet";
+                    reason: string;
+                    evidence: string | null;
+                    fix: string | null;
+                }[];
+                beyondScope: string[];
+            } | null;
+            error: string | null;
+            startedAt: string | null;
+            expectedSeconds: number;
+            overrule: {
+                by: {
+                    personId: string;
+                    name: string;
+                };
+                /** Format: date-time */
+                at: string;
+                reason: string;
+            } | null;
+        };
+        CardDetailResponse: {
+            task: {
+                id: string;
+                version: number;
+                title: string;
+                status: "not_started" | "in_progress" | "done" | "returned";
+                source: "meeting" | "self" | "plan" | "agent";
+                startDate: string | null;
+                dueDate: string | null;
+                doneDefinition: string | null;
+                mission: {
+                    missionId: string;
+                    title: string;
+                    cardId: string | null;
+                    period: string;
+                    battlefieldName: string;
+                    step: number;
+                    steps: number;
+                } | null;
+                waitingOn: {
+                    taskId: string;
+                    title: string;
+                } | null;
+                owner: {
+                    personId: string;
+                    name: string;
+                };
+                collaborators: {
+                    personId: string;
+                    name: string;
+                }[];
+                latestProgress: {
+                    body: string;
+                    source: "web" | "codex" | "claude" | "github" | "other";
+                    author: {
+                        personId: string;
+                        name: string;
+                    };
+                    createdAt: string;
+                } | null;
+                returnReason: string | null;
+                origin: {
+                    /** @constant */
+                    type: "meeting";
+                    meetingId: string;
+                    meetingTitle: string;
+                    quote: string | null;
+                } | null;
+                awaitingAcceptance: boolean;
+                planTaskId: string | null;
+                blocker: {
+                    reason: string;
+                    waitingOn: {
+                        personId: string;
+                        name: string;
+                    } | null;
+                    since: string;
+                } | null;
+                unplaced?: {
+                    reason: string | null;
+                };
+                createdAt: string;
+                updatedAt: string;
+                card: {
+                    stage: "todo" | "doing" | "review" | "done";
+                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                    executor: ("claude_code" | "self") | null;
+                    model: {
+                        id: string;
+                        label: string;
+                        kind: "subscription" | "gateway";
+                    } | null;
+                    criterion: {
+                        index: number;
+                        text: string;
+                    } | null;
+                    run: {
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: uuid */
+                        deviceId: string;
+                        deviceName: string;
+                        state: "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                        modelLabel: string | null;
+                        plan: {
+                            done: number;
+                            total: number;
+                            current: string | null;
+                        };
+                        lastActivity: {
+                            /** Format: date-time */
+                            at: string;
+                            text: string;
+                        } | null;
+                        cost: {
+                            inputTokens: number;
+                            outputTokens: number;
+                            costUsd: number | null;
+                        };
+                        /** Format: date-time */
+                        startedAt: string;
+                        /** Format: date-time */
+                        updatedAt: string;
+                        endedAt: string | null;
+                    } | null;
+                    handback: {
+                        /** Format: uuid */
+                        id: string;
+                        attempt: number;
+                        status: "queued" | "running" | "done" | "failed";
+                        outcome: ("pass" | "fail") | null;
+                        met: number;
+                        total: number;
+                        headline: string | null;
+                        returnText: string | null;
+                        returnedAt: string | null;
+                        overruled: boolean;
+                        /** Format: date-time */
+                        createdAt: string;
+                        finishedAt: string | null;
+                    } | null;
+                    deliverable: {
+                        state: "pending" | "included";
+                        versionNumber: number;
+                    } | null;
+                };
+            };
+            brief: string | null;
+            standards: string[];
+            runs: {
+                /** Format: uuid */
+                id: string;
+                /** Format: uuid */
+                deviceId: string;
+                deviceName: string;
+                state: "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                modelLabel: string | null;
+                plan: {
+                    done: number;
+                    total: number;
+                    current: string | null;
+                };
+                lastActivity: {
+                    /** Format: date-time */
+                    at: string;
+                    text: string;
+                } | null;
+                cost: {
+                    inputTokens: number;
+                    outputTokens: number;
+                    costUsd: number | null;
+                };
+                /** Format: date-time */
+                startedAt: string;
+                /** Format: date-time */
+                updatedAt: string;
+                endedAt: string | null;
+                planEntries: {
+                    content: string;
+                    status: "pending" | "in_progress" | "completed";
+                }[];
+                timeline: {
+                    /** Format: date-time */
+                    at: string;
+                    text: string;
+                }[];
+            }[];
+            handbacks: {
+                /** Format: uuid */
+                id: string;
+                attempt: number;
+                status: "queued" | "running" | "done" | "failed";
+                outcome: ("pass" | "fail") | null;
+                met: number;
+                total: number;
+                headline: string | null;
+                returnText: string | null;
+                returnedAt: string | null;
+                overruled: boolean;
+                /** Format: date-time */
+                createdAt: string;
+                finishedAt: string | null;
+                runId: string | null;
+                criteria: string[];
+                claims: {
+                    index: number;
+                    result: "met" | "partial" | "unmet";
+                    evidence: string;
+                }[];
+                summary: string | null;
+                outputIds: string[];
+                result: {
+                    criteria: {
+                        index: number;
+                        text: string;
+                        verdict: "met" | "partial" | "unmet";
+                        reason: string;
+                        evidence: string | null;
+                        fix: string | null;
+                    }[];
+                    beyondScope: string[];
+                } | null;
+                error: string | null;
+                startedAt: string | null;
+                expectedSeconds: number;
+                overrule: {
+                    by: {
+                        personId: string;
+                        name: string;
+                    };
+                    /** Format: date-time */
+                    at: string;
+                    reason: string;
+                } | null;
+            }[];
+            outputs: {
+                /** Format: uuid */
+                id: string;
+                /** Format: uuid */
+                runId: string;
+                kind: "artifact" | "evidence";
+                evidenceKind: ("note" | "log" | "link" | "diff_summary") | null;
+                title: string;
+                fileName: string | null;
+                mimeType: string | null;
+                sizeBytes: number | null;
+                url: string | null;
+                text: string | null;
+                /** Format: date-time */
+                createdAt: string;
+            }[];
+        };
+        CardBriefResponse: {
+            markdown: string;
+            mission: {
+                missionId: string;
+                title: string;
+            } | null;
+            task: {
+                taskId: string;
+                name: string;
+            } | null;
+            criterion: {
+                index: number;
+                text: string;
+                proof: string | null;
+            } | null;
+            exclusions: string[];
+            reviewGap: string | null;
+            lastReturn: string | null;
+        };
+        OverruleCardHandbackRequest: {
+            reason: string;
+        };
+        AddPendingDeliverableRequest: {
+            /** Format: uuid */
+            topicVersionId: string;
+        };
+        CreateVersionFromPendingRequest: {
+            statement?: string;
+        };
+        LocalDeviceView: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            os: "win32" | "darwin" | "linux";
+            appVersion: string | null;
+            lastSyncAt: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        CreateLocalDeviceRequest: {
+            /** Format: uuid */
+            deviceId: string;
+            name: string;
+            os: "win32" | "darwin" | "linux";
+        };
+        CreateLocalDeviceResponse: {
+            device: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                os: "win32" | "darwin" | "linux";
+                appVersion: string | null;
+                lastSyncAt: string | null;
+                /** Format: date-time */
+                createdAt: string;
+            };
+            token: string;
+        };
+        LocalDeviceListResponse: {
+            devices: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                os: "win32" | "darwin" | "linux";
+                appVersion: string | null;
+                lastSyncAt: string | null;
+                /** Format: date-time */
+                createdAt: string;
+            }[];
+        };
+        LocalRunBrief: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            deviceId: string;
+            deviceName: string;
+            state: "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+            modelLabel: string | null;
+            plan: {
+                done: number;
+                total: number;
+                current: string | null;
+            };
+            lastActivity: {
+                /** Format: date-time */
+                at: string;
+                text: string;
+            } | null;
+            cost: {
+                inputTokens: number;
+                outputTokens: number;
+                costUsd: number | null;
+            };
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            endedAt: string | null;
+        };
+        LocalRunView: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            deviceId: string;
+            deviceName: string;
+            state: "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+            modelLabel: string | null;
+            plan: {
+                done: number;
+                total: number;
+                current: string | null;
+            };
+            lastActivity: {
+                /** Format: date-time */
+                at: string;
+                text: string;
+            } | null;
+            cost: {
+                inputTokens: number;
+                outputTokens: number;
+                costUsd: number | null;
+            };
+            /** Format: date-time */
+            startedAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            endedAt: string | null;
+            planEntries: {
+                content: string;
+                status: "pending" | "in_progress" | "completed";
+            }[];
+            timeline: {
+                /** Format: date-time */
+                at: string;
+                text: string;
+            }[];
+        };
+        LocalOutputView: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            runId: string;
+            kind: "artifact" | "evidence";
+            evidenceKind: ("note" | "log" | "link" | "diff_summary") | null;
+            title: string;
+            fileName: string | null;
+            mimeType: string | null;
+            sizeBytes: number | null;
+            url: string | null;
+            text: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        ResearchTopicView: {
+            /** Format: uuid */
+            id: string;
+            title: string;
+            status: "active" | "archived";
+            planTaskId: string | null;
+            missionId: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            lastVersionAt: string | null;
+            latestVersion: {
+                number: number;
+                kind: "outline" | "draft";
+                label: string;
+            } | null;
+            run: {
+                /** Format: uuid */
+                id: string;
+                /** Format: uuid */
+                deviceId: string;
+                deviceName: string;
+                state: "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                modelLabel: string | null;
+                plan: {
+                    done: number;
+                    total: number;
+                    current: string | null;
+                };
+                lastActivity: {
+                    /** Format: date-time */
+                    at: string;
+                    text: string;
+                } | null;
+                cost: {
+                    inputTokens: number;
+                    outputTokens: number;
+                    costUsd: number | null;
+                };
+                /** Format: date-time */
+                startedAt: string;
+                /** Format: date-time */
+                updatedAt: string;
+                endedAt: string | null;
+            } | null;
+        };
+        TopicVersionSummary: {
+            /** Format: uuid */
+            id: string;
+            number: number;
+            kind: "outline" | "draft";
+            label: string;
+            note: string | null;
+            feishuUrl: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            deliverable: {
+                state: "pending" | "included";
+                versionNumber: number;
+            } | null;
+        };
+        TopicVersionView: {
+            /** Format: uuid */
+            id: string;
+            number: number;
+            kind: "outline" | "draft";
+            label: string;
+            note: string | null;
+            feishuUrl: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            deliverable: {
+                state: "pending" | "included";
+                versionNumber: number;
+            } | null;
+            body: string;
+        };
+        TopicListResponse: {
+            topics: {
+                /** Format: uuid */
+                id: string;
+                title: string;
+                status: "active" | "archived";
+                planTaskId: string | null;
+                missionId: string | null;
+                /** Format: date-time */
+                createdAt: string;
+                /** Format: date-time */
+                updatedAt: string;
+                lastVersionAt: string | null;
+                latestVersion: {
+                    number: number;
+                    kind: "outline" | "draft";
+                    label: string;
+                } | null;
+                run: {
+                    /** Format: uuid */
+                    id: string;
+                    /** Format: uuid */
+                    deviceId: string;
+                    deviceName: string;
+                    state: "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                    modelLabel: string | null;
+                    plan: {
+                        done: number;
+                        total: number;
+                        current: string | null;
+                    };
+                    lastActivity: {
+                        /** Format: date-time */
+                        at: string;
+                        text: string;
+                    } | null;
+                    cost: {
+                        inputTokens: number;
+                        outputTokens: number;
+                        costUsd: number | null;
+                    };
+                    /** Format: date-time */
+                    startedAt: string;
+                    /** Format: date-time */
+                    updatedAt: string;
+                    endedAt: string | null;
+                } | null;
+            }[];
+        };
+        CreateTopicRequest: {
+            title: string;
+            planTaskId?: string;
+        };
+        PatchTopicRequest: {
+            title?: string;
+            status?: "active" | "archived";
+        };
+        TopicDetailResponse: {
+            topic: {
+                /** Format: uuid */
+                id: string;
+                title: string;
+                status: "active" | "archived";
+                planTaskId: string | null;
+                missionId: string | null;
+                /** Format: date-time */
+                createdAt: string;
+                /** Format: date-time */
+                updatedAt: string;
+                lastVersionAt: string | null;
+                latestVersion: {
+                    number: number;
+                    kind: "outline" | "draft";
+                    label: string;
+                } | null;
+                run: {
+                    /** Format: uuid */
+                    id: string;
+                    /** Format: uuid */
+                    deviceId: string;
+                    deviceName: string;
+                    state: "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                    modelLabel: string | null;
+                    plan: {
+                        done: number;
+                        total: number;
+                        current: string | null;
+                    };
+                    lastActivity: {
+                        /** Format: date-time */
+                        at: string;
+                        text: string;
+                    } | null;
+                    cost: {
+                        inputTokens: number;
+                        outputTokens: number;
+                        costUsd: number | null;
+                    };
+                    /** Format: date-time */
+                    startedAt: string;
+                    /** Format: date-time */
+                    updatedAt: string;
+                    endedAt: string | null;
+                } | null;
+            };
+            task: {
+                taskId: string;
+                name: string;
+            } | null;
+            versions: {
+                /** Format: uuid */
+                id: string;
+                number: number;
+                kind: "outline" | "draft";
+                label: string;
+                note: string | null;
+                feishuUrl: string | null;
+                /** Format: date-time */
+                createdAt: string;
+                deliverable: {
+                    state: "pending" | "included";
+                    versionNumber: number;
+                } | null;
+            }[];
+            current: {
+                /** Format: uuid */
+                id: string;
+                number: number;
+                kind: "outline" | "draft";
+                label: string;
+                note: string | null;
+                feishuUrl: string | null;
+                /** Format: date-time */
+                createdAt: string;
+                deliverable: {
+                    state: "pending" | "included";
+                    versionNumber: number;
+                } | null;
+                body: string;
+            } | null;
+            runs: {
+                /** Format: uuid */
+                id: string;
+                /** Format: uuid */
+                deviceId: string;
+                deviceName: string;
+                state: "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                modelLabel: string | null;
+                plan: {
+                    done: number;
+                    total: number;
+                    current: string | null;
+                };
+                lastActivity: {
+                    /** Format: date-time */
+                    at: string;
+                    text: string;
+                } | null;
+                cost: {
+                    inputTokens: number;
+                    outputTokens: number;
+                    costUsd: number | null;
+                };
+                /** Format: date-time */
+                startedAt: string;
+                /** Format: date-time */
+                updatedAt: string;
+                endedAt: string | null;
+                planEntries: {
+                    content: string;
+                    status: "pending" | "in_progress" | "completed";
+                }[];
+                timeline: {
+                    /** Format: date-time */
+                    at: string;
+                    text: string;
+                }[];
+            }[];
+        };
+        TopicBriefResponse: {
+            markdown: string;
+            title: string;
+            latestVersion: number | null;
         };
     };
     responses: never;
@@ -27776,6 +29347,1225 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+        };
+    };
+    getCardBoard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 看板 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardBoardResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    createCardPlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCardPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description 已有一次在跑 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardPlanView"];
+                };
+            };
+            /** @description 已排队 */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardPlanView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    acceptCardDrafts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcceptCardDraftsRequest"];
+            };
+        };
+        responses: {
+            /** @description 建出来的卡 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcceptCardDraftsResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    dismissCardDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已去掉 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getCard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 卡的详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardDetailResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    patchCard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatchCardRequest"];
+            };
+        };
+        responses: {
+            /** @description 改好的卡 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardTaskView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getCardBrief: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 交代 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardBriefResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    overruleCardHandback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                handbackId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OverruleCardHandbackRequest"];
+            };
+        };
+        responses: {
+            /** @description 卡的详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardDetailResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    retryCardHandback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                handbackId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 卡的详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardDetailResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    markCardHandbackReturned: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                handbackId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 卡的详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardDetailResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    addPendingDeliverable: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddPendingDeliverableRequest"];
+            };
+        };
+        responses: {
+            /** @description 准备中的一样 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PendingDeliverableItem"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    removePendingDeliverable: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已拿出 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    createDeliverableVersionFromPending: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateVersionFromPendingRequest"];
+            };
+        };
+        responses: {
+            /** @description 新版本（评审已排队） */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliverableVersion"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    readLocalOutput: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 原文件 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listLocalDevices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 设备 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalDeviceListResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    createLocalDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateLocalDeviceRequest"];
+            };
+        };
+        responses: {
+            /** @description 设备和令牌 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateLocalDeviceResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    revokeLocalDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已吊销 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listTopics: {
+        parameters: {
+            query?: {
+                status?: "active" | "archived";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 专题 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopicListResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    createTopic: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTopicRequest"];
+            };
+        };
+        responses: {
+            /** @description 新专题 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchTopicView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getTopic: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 专题 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopicDetailResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    patchTopic: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatchTopicRequest"];
+            };
+        };
+        responses: {
+            /** @description 专题 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchTopicView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getTopicVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                number: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 这一版 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopicVersionView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getTopicBrief: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 交代 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopicBriefResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
                 };
             };
         };
