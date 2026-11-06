@@ -78,7 +78,7 @@ V1（约定）用 225，不冲突。
 ## 9. 本机程序的云端一侧
 
 - 配对：`POST /api/me/local-devices` 发 `local` 令牌（同一台电脑再配对吊销旧的）；`GET` 列、`DELETE` 吊销。
-- 同步：`POST /api/local-runner/sync`（`bodyLimit` 13MB），令牌对应的设备要和 `deviceId` 一致（不一致 403）。每批写设备的 `last_sync_at`、`app_version`、`slots`。条目处理见 ADR-0036：
+- 同步：`POST /api/local-runner/sync`（`bodyLimit` 13MB），令牌对应的设备要和 `deviceId` 一致（不一致 403）。每批写设备的 `last_sync_at`、`app_version`、`slots`；本机闲着时每 5 分钟发一批空的当心跳（`items` 可以为空），同样刷新，回执两边都为空。条目处理见 ADR-0036：
 
 | 条目 | 云端做什么 |
 |-|-|

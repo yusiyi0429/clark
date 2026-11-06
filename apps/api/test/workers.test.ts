@@ -95,6 +95,41 @@ describe("worker 列表", { timeout: 30_000 }, () => {
     } finally { await f.close(); }
   });
 
+  it("心跳：本机闲着时每 5 分钟发一批空的，一直算在线、位置数跟着刷新；10 分钟没同步算不在线", async () => {
+    let clock = BOARD_NOW;
+    const f = await boardFixture({ monthlyNow: () => clock });
+    try {
+      const laptop = await f.local("我的电脑");
+      const beat = (running: number) => f.t.app.inject({ method: "POST", url: "/api/local-runner/sync", headers: { authorization: `Bearer ${laptop.token}` },
+        payload: { deviceId: laptop.device, runnerVersion: "0.2.0", slots: { max: 3, running, queued: 0 }, items: [] } });
+      const resources = async () => (await f.call("GET", "/api/me/workers")).json().resources;
+      const at = (minutes: number, seconds = 0) => new Date(BOARD_NOW.getTime() + minutes * 60_000 + seconds * 1000);
+      // 配对了还没同步过：不在线。
+      expect((await resources()).devices).toEqual([{ id: laptop.device, name: "我的电脑", lastSeenAt: null, online: false }]);
+
+      for (const minute of [0, 5, 10, 15, 20]) {
+        clock = at(minute);
+        const res = await beat(minute === 20 ? 1 : 0);
+        expect([res.statusCode, res.json()]).toEqual([200, { accepted: [], rejected: [] }]);
+        // 下一次心跳之前（离上一次 4 分 59 秒）一直在线。
+        clock = at(minute + 4, 59);
+        expect((await resources()).devices[0]).toMatchObject({ online: true, lastSeenAt: at(minute).toISOString() });
+      }
+      clock = at(29, 59);
+      expect(await resources()).toMatchObject({ devices: [{ online: true }], running: 1, cap: 3 });
+      expect(await f.t.sql("SELECT app_version FROM local_devices WHERE id=$1", [laptop.device])).toEqual([{ app_version: "0.2.0" }]);
+      // 最后一次心跳在第 20 分钟：满 10 分钟没同步就不在线，位置数也不算了。
+      clock = at(30);
+      expect(await resources()).toMatchObject({ devices: [{ online: false, lastSeenAt: at(20).toISOString() }], running: 0, cap: null });
+      clock = at(31);
+      await beat(0);
+      expect((await resources()).devices[0]).toMatchObject({ online: true, lastSeenAt: at(31).toISOString() });
+      // 空的一批也要令牌和设备对得上。
+      expect((await f.t.app.inject({ method: "POST", url: "/api/local-runner/sync", headers: { authorization: "Bearer nope" },
+        payload: { deviceId: laptop.device, runnerVersion: "0.2.0", slots: { max: 3, running: 0, queued: 0 }, items: [] } })).statusCode).toBe(401);
+    } finally { await f.close(); }
+  });
+
   it("本机的规划员、验收员也是 worker（第 21 节，云端验收关着）：从同步上来的会话列，带岗位、本机和模型、排第几；验收员写明在验哪张卡，本机还没起时等开工或等本机上线", async () => {
     const f = await boardFixture({}, { boardCloudAgents: false });
     try {

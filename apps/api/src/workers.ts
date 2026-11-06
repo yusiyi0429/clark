@@ -17,7 +17,7 @@ import { cardTaskViews } from "./taskCards.js";
  * 专题没有「完成」：最近一次执行还没结束的算进行中，带岗位还没开过的算等开工。
  */
 
-/** 设备多久没上报算不在线。跑着的时候状态、计划、花费都会报；没有动静的一步也可能超过它，本机程序加了心跳以后可以缩短。 */
+/** 设备多久没上报算不在线。跑着的时候状态、计划、花费都会报；闲着时本机每 5 分钟发一批空的当心跳（本机程序契约 LocalSyncBatchRequest）。 */
 export const ONLINE_WINDOW_MS = 10 * 60_000;
 const ACTIVE = new Set<string>(["queued", "starting", "running", "waiting_permission", "idle"]);
 const NEEDS_YOU = new Set<TWorkerMark>(["approval", "reply", "review_failed", "blocked"]);
