@@ -117,7 +117,7 @@ function WorkFrame({ account }: { account: Account }) {
       ...dispatch.map(({ task, board, mine, at }) => ({ key: `dispatch:${task.taskId}`, at, node: (
         <DispatchBlock task={task} board={board} workers={mine} roles={work.roles?.roles ?? []} now={now} handheld={handheld} current={currentCard} newest={at === newest} onOpenWorker={openWorker} onChanged={changed} />
       ) })),
-      ...workNotes({ workers: work.workers, tasks, boards: work.boards, proposals: work.proposals, now, on: { openWorker, openTask: (taskId) => open({ kind: "task", taskId }), changed } }),
+      ...workNotes({ workers: work.workers, tasks, boards: work.boards, proposals: work.proposals, on: { openWorker, openTask: (taskId) => open({ kind: "task", taskId }), changed } }),
     ];
   }, [tasks, work.boards, work.workers, work.roles, work.proposals, now, handheld, currentCard, openWorker, open, changed]);
 

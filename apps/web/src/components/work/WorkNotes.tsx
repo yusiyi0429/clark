@@ -2,7 +2,8 @@
 
 /**
  * 伙伴另外说的一句（V2 设计第 20.3 节，只有三种，样子照 prototype-home），由网页按时间插进对话：
- * 验收过了或没过、岗位修改建议、这一单全部完成。等你的事不单出一句（在左栏和派活单的行里）；逐步的进展也不往对话里刷。只出最近一天的。
+ * 验收过了或没过、岗位修改建议、这一单全部完成。等你的事不单出一句（在左栏和派活单的行里）；逐步的进展也不往对话里刷。
+ * 每张卡只有最近一次交回，所以条数跟着本月的卡走，不另外按时间截。
  */
 import { useState, type ReactNode } from "react";
 import { HeroButton } from "@/components/HeroButton";
@@ -15,8 +16,6 @@ import { Chain, RoleAvatar } from "./WorkerRow";
 import type { TimedBlock } from "./WorkTimeline";
 import w from "@/styles/v2-work.module.css";
 
-const DAY_MS = 86_400_000;
-
 export type NoteHandlers = { openWorker: (cardId: string) => void; openTask: (taskId: string) => void; changed: () => void };
 
 /** 改后比改前多出来的行（建议里新加的那句）；没有新行就是整段。 */
@@ -26,12 +25,11 @@ export function addedLines(before: string, after: string): string {
   return (added.length ? added : after.split("\n")).join("\n").trim();
 }
 
-export function workNotes({ workers, tasks, boards, proposals, now, on }: {
+export function workNotes({ workers, tasks, boards, proposals, on }: {
   workers: Worker[];
   tasks: { taskId: string; name: string }[];
   boards: Record<string, TaskBoard>;
   proposals: RoleProposalView[];
-  now: number;
   on: NoteHandlers;
 }): TimedBlock[] {
   const notes: TimedBlock[] = [];
@@ -55,7 +53,7 @@ export function workNotes({ workers, tasks, boards, proposals, now, on }: {
       </Note>
     ) });
   }
-  return notes.filter((note) => now - Date.parse(note.at) < DAY_MS);
+  return notes;
 }
 
 function Note({ testId, lead, children }: { testId: string; lead: ReactNode; children: ReactNode }) {
