@@ -60,7 +60,8 @@
 - 根目录使用 pnpm workspace；目标应用为 `apps/web` 与 `apps/api`，共享契约位于 `packages/contracts`。
 - `apps/web` 只负责页面、组件、样式、展示态和 API 客户端，不保存业务数据，不实现状态迁移、模型调用、调度或数据库访问。
 - `apps/api` 负责业务对象、Card 投影、Action、Pi Runtime、人员目录与本体公司事实读取、外部集成、鉴权、调度和持久化。
-- `packages/contracts` 只保存 TypeBox schema 与 OpenAPI 生成入口，不依赖 React、Fastify 运行实例、Pi 或数据库实现。
+- `apps/local` 是装在本人电脑上的天枢本机程序：只监听 127.0.0.1，负责网页直连、配对、拉起本机的 Claude Code（以后 Codex）、会话事件、本机钥匙和单向报给云端的发件箱。它不访问天枢数据库、不接收云端指令，只调用 `apps/api` 的同步接口；源码只用 `node:` 标准库，产物用 Bun 编成单文件。
+- `packages/contracts` 只保存 TypeBox schema 与 OpenAPI 生成入口，不依赖 React、Fastify 运行实例、Pi 或数据库实现。本机程序的接口和同步载荷在 `localRunner.ts`。
 - Web 客户端类型由 OpenAPI 生成，生成文件不得手工修改；契约变化先改 schema，再重新生成。
 - 旧 `frontend/` 已在 Ticket 18 随 cutover 整体删除，未迁移其业务逻辑、数据或 localStorage；像素级视觉与交互基线为根目录 `UpgradeDesign.pen`，源码恢复依赖根仓库 Git 历史。
 
