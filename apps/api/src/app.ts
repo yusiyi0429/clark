@@ -795,7 +795,8 @@ export async function buildApp({
   registerActionRoutes(app, ctx);
   registerDriRoutes(app, ctx);
   registerOntologyRoutes(app, ctx);
-  registerSystemRoutes(app, ctx);
+  // /mcp/me 的 web_search 用同一个博查实例（server.ts 装配；测试里是假的，没带 configured 的当作配好了）。
+  registerSystemRoutes(app, ctx, webSearch ? { search: { configured: (webSearch as { configured?: boolean }).configured !== false, search: (input, signal) => webSearch.search(input, signal) } } : {});
   registerThreadRoutes(app, ctx);
   registerRecordingRoutes(app, ctx);
   registerMeRoutes(app, ctx);

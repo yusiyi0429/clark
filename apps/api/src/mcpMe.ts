@@ -24,6 +24,8 @@ import { PERSONAL_REVIEW_WRITING_REQUIREMENTS } from "./personalReviewAgent.js";
 import { TaskQualityId, TaskRepairHandoff, TaskRepairList, TaskRepairView, TaskRepairReceiptInput } from "@warmap/contracts";
 import { ChatServiceError, type createChatService } from "./chatService.js";
 import { agreementDefinitions, agreementToolNames, callAgreementTool, type AgreementToolDeps } from "./mcpAgreements.js";
+import { runWebSearch, WEB_SEARCH_TOOL } from "./mcpWebSearch.js";
+import type { WebSearchAdapter } from "./webSearch.js";
 import { agreementSummaries } from "./taskAgreements.js";
 
 const QualityView = Type.Union([Type.Literal("ceo"), Type.Literal("member")]);
@@ -130,7 +132,9 @@ const taskFailure = (outcome: TaskResult | { deleted: true }) => "notFound" in o
 export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: string; now: () => Date;
   names: () => Map<string, string>; findPerson: (personId: string) => MemoryPerson | undefined;
   people: () => MemoryPerson[]; initialPerson: MemoryPerson; publicOrigin?: string; authorization: string | undefined; planTasks: PlanTaskSource;
-  chat?: ReturnType<typeof createChatService>; deliverables: AgreementToolDeps["deliverables"] }) {
+  chat?: ReturnType<typeof createChatService>; deliverables: AgreementToolDeps["deliverables"];
+  /** 联网搜索（博查，服务器上的钥匙）；没配时不列 web_search。 */
+  search?: WebSearchAdapter & { configured: boolean } }) {
   const auth = () => authenticateMcpToken(deps.q, deps.authorization, deps.pepper, deps.now(), (id) => !!deps.findPerson(id), deps.publicOrigin ? oauthUrls(deps.publicOrigin).resource : undefined);
   /** 推进人写进展、放链接会让未启动的事项变进行中、版本跟着变：把事项此刻的状态和版本一起回给外部工具，接着提交验收直接用。 */
   const itemState = async (itemId: string) =>
@@ -158,6 +162,7 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
     ] : []),
     "任务卡正文是只读边界的例外：get_mission_card 只读本人可见卡；仅本人准备期间、editable=true时，用户已经明确具体改法可用edit_mission_card立即改有权限的任务字段并留痕。必须用刚读取的round填写sourceRound；本人已确认或已开始汇总时，只读正文和历史，先由本人取消确认或由战场 DRI 退回本人重新确认，不能自动绕过。保存备注不授权改文；仅明确修改意图可以写入。重新开放后需重新核对本次改法，不把旧改法直接套进新的本人准备窗口。不确定用户意思时先提问题与选项，最后一个选项为自己输入，澄清后立即改。不能自动向群聊发送私聊记录，不能签发或确认任务卡。遇到旧准备窗口、版本或原字段冲突必须重新读取。",
     "月末会有个人复盘待起草。用 list_pending 发现，get_my_review 读取本人的承诺、进展和写作要求，再用 save_review_draft 写入四部分草稿；不能替本人提交，请本人回天枢确认。",
+    ...(deps.search?.configured ? ["要查外部的最新事实（行业、产品、新闻、数据）用 web_search，结果带链接，引用时写出处；证据够了就停。"] : []),
   ].join("\n");
   const server = new Server({ name: "tianshu", version: "0.1.0" }, { capabilities: { tools: {} }, instructions });
   server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -167,7 +172,7 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
     const roles = access(person);
     return { tools: [...(roles.member ? memberDefinitions : []), ...(roles.ceo ? ceoDefinitions : []),
       ...(roles.ceo || roles.member ? missionCardDefinitions : []), ...(roles.ceo || roles.member ? agreementDefinitions : []), ...reviewDefinitions,
-      ...(deps.chat && (roles.ceo || roles.member) ? qualityDefinitions : [])]
+      ...(deps.chat && (roles.ceo || roles.member) ? qualityDefinitions : []), ...(deps.search?.configured && (roles.ceo || roles.member) ? [WEB_SEARCH_TOOL] : [])]
       .filter((tool) => !identity?.scopes || identity.scopes.includes("tianshu:write") || !MCP_WRITE_TOOLS.has(tool.name)) };
   });
   server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
@@ -209,6 +214,13 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
         const outcome = await callAgreementTool({ pool: deps.pool, q: deps.q, now: deps.now, planTasks: deps.planTasks, names, publicOrigin: deps.publicOrigin,
           deliverables: deps.deliverables }, { personId: person.personId, isCeo: roles.ceo }, tool, args);
         if (outcome) { code = outcome.error; return result(outcome.value, !!outcome.error); }
+      }
+      // 联网搜索（mcpWebSearch.ts）：成员和 CEO 都能用，本机程序的设备令牌也能用；每人每分钟、每天有上限，每真搜一次记一行。
+      if (tool === WEB_SEARCH_TOOL.name) {
+        if (!deps.search || (!roles.member && !roles.ceo)) { code = "FORBIDDEN"; return result({ code, message: "这个工具只对成员或 CEO 开放" }, true); }
+        const outcome = await runWebSearch({ q: deps.q, search: deps.search, now: deps.now() }, { personId: person.personId, client: identity.client }, args, extra.signal);
+        if (!outcome.ok) { code = outcome.code; return result({ code: outcome.code, message: outcome.message }, true); }
+        return result(outcome.value);
       }
       const ceoContext = () => ({ q: deps.q, secret: deps.pepper, now: deps.now(), names,
         people: deps.people(), personId: identity.personId });

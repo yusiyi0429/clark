@@ -393,6 +393,8 @@ export async function createTestApp(
     battlefieldSummaryAgent?: Parameters<typeof buildApp>[0]["battlefieldSummaryAgent"];
     /** V2 看板的假拆卡、假 Agent 验收；不注入时用真实装配（只在后台队列里调用）。 */
     boardAgents?: Parameters<typeof buildApp>[0]["boardAgents"];
+    /** 博查的假实现（对话、/mcp/me 的 web_search 共用）；不注入时没有联网搜索。 */
+    webSearch?: Parameters<typeof buildApp>[0]["webSearch"];
   } = {},
   researchService?: ResearchService,
 ): Promise<TestApp> {

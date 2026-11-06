@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import type { TWebSearchInput } from "@warmap/contracts";
 import { runWebSearch, WEB_SEARCH_PER_DAY, WEB_SEARCH_PER_MINUTE } from "../src/mcpWebSearch.js";
@@ -57,5 +58,48 @@ describe("MCP web_search", { timeout: 30_000 }, () => {
       expect(await run({ query: "今天满了" }, new Date(NOW.getTime() + 3 * 60_000))).toMatchObject({ ok: false, code: "RATE_LIMITED" });
       expect((await run({ query: "第二天" }, new Date("2026-11-06T16:00:00.000Z"))).ok).toBe(true);
     } finally { await t.close(); }
+  });
+
+  it("挂在 /mcp/me：个人令牌和本机程序的设备令牌都能调，说明里多一句；没配博查时不列", async () => {
+    const asked: TWebSearchInput[] = [];
+    const search = { async search(input: TWebSearchInput) {
+      asked.push(input);
+      return { results: [{ title: "新加坡天气", url: "https://www.nea.gov.sg/weather", excerpt: "晴", provider: "bocha" }], warnings: [] };
+    } };
+    const t = await createTestApp({}, undefined, { webSearch: search });
+    try {
+      const cookie = await t.memberCookie();
+      const call = (method: "POST", url: string, payload: Record<string, unknown>) => t.app.inject({ method, url, headers: { cookie, origin: t.publicOrigin }, payload });
+      const personal = (await call("POST", "/api/me/tokens", { name: "Claude Code", client: "claude", expiresInDays: null })).json().token as string;
+      const device = randomUUID();
+      const local = (await call("POST", "/api/me/local-devices", { deviceId: device, name: "我的电脑", os: "win32" })).json().token as string;
+      const mcp = (token: string, id: number, method: string, params?: Record<string, unknown>) => t.app.inject({ method: "POST", url: "/mcp/me",
+        headers: { authorization: `Bearer ${token}`, accept: "application/json, text/event-stream" }, payload: { jsonrpc: "2.0", id, method, ...(params ? { params } : {}) } });
+      const initialized = (await mcp(personal, 1, "initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "1" } })).json();
+      expect(initialized.result.instructions).toContain("web_search");
+      expect((await mcp(personal, 2, "tools/list")).json().result.tools.map((tool: { name: string }) => tool.name)).toContain("web_search");
+      expect((await mcp(local, 3, "tools/list")).json().result.tools.map((tool: { name: string }) => tool.name)).toContain("web_search");
+      for (const [token, query] of [[personal, "新加坡 天气"], [local, "新加坡 今天"]]) {
+        const called = (await mcp(token, 4, "tools/call", { name: "web_search", arguments: { query } })).json().result;
+        expect(called.isError).toBe(false);
+        expect(JSON.parse(called.content[0].text).results).toEqual([{ title: "新加坡天气", url: "https://www.nea.gov.sg/weather", excerpt: "晴" }]);
+      }
+      expect(asked.map((input) => input.query)).toEqual(["新加坡 天气", "新加坡 今天"]);
+      expect(await t.sql("SELECT person_id,client,ok FROM web_search_calls ORDER BY at,client")).toEqual(expect.arrayContaining([
+        { person_id: TEST_MEMBER.personId, client: "claude", ok: true }, { person_id: TEST_MEMBER.personId, client: "local", ok: true }]));
+      const bad = (await mcp(personal, 5, "tools/call", { name: "web_search", arguments: { query: "" } })).json().result;
+      expect(bad.isError).toBe(true);
+      expect(JSON.parse(bad.content[0].text).code).toBe("INVALID_INPUT");
+    } finally { await t.close(); }
+
+    const plain = await createTestApp();
+    try {
+      const cookie = await plain.memberCookie();
+      const token = (await plain.app.inject({ method: "POST", url: "/api/me/tokens", headers: { cookie, origin: plain.publicOrigin },
+        payload: { name: "Codex", client: "codex", expiresInDays: null } })).json().token as string;
+      const listed = await plain.app.inject({ method: "POST", url: "/mcp/me", headers: { authorization: `Bearer ${token}`, accept: "application/json, text/event-stream" },
+        payload: { jsonrpc: "2.0", id: 1, method: "tools/list" } });
+      expect(listed.json().result.tools.map((tool: { name: string }) => tool.name)).not.toContain("web_search");
+    } finally { await plain.close(); }
   });
 });
