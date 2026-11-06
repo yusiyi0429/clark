@@ -1,10 +1,10 @@
 import { spawn, execFile, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import type { TLocalPermissionRequestView, TLocalUsage } from "@warmap/contracts";
+import type { TLocalPermissionRequestView, TLocalQuestion, TLocalUsage } from "@warmap/contracts";
 import type { EventBody } from "../eventLog.js";
 import { AgentStartError, type AgentAdapter, type AgentLaunch, type AgentRun, type PermissionAnswer } from "./types.js";
 import { buildClaudeArgs, childEnv, describeTool, homeDir, personalSettingsSetKey, versionAtLeast } from "./claudeEnv.js";
-import { outsidePaths, suggestionsReachOutside, type PathScope } from "./pathGuard.js";
+import { autoAllowed, outsidePaths, suggestionsReachOutside, type PathScope } from "./pathGuard.js";
 import { planProgress } from "../plan.js";
 
 /** 低于这个版本不保证兼容：11/05 实测基于 2.1.318；权限模式 default 改名 manual 也在 2.1.3xx。 */
@@ -36,6 +36,19 @@ function previewOf(content: unknown): string {
   return text.length > PREVIEW_CHARS ? `${text.slice(0, PREVIEW_CHARS)}…` : text;
 }
 
+/** AskUserQuestion 的问题按契约整理（字段缺了补空，超长截断）。 */
+function questionsOf(input: Json): TLocalQuestion[] {
+  const list = Array.isArray(input?.questions) ? input.questions : [];
+  return list.slice(0, 10).map((q: Json) => ({
+    question: String(q?.question ?? "").slice(0, 2000) || "（没写问题）",
+    header: String(q?.header ?? "").slice(0, 100),
+    options: (Array.isArray(q?.options) ? q.options : []).slice(0, 10)
+      .map((o: Json) => ({ label: String(o?.label ?? "").slice(0, 200), description: String(o?.description ?? "").slice(0, 1000) }))
+      .filter((o: { label: string }) => o.label),
+    multiSelect: Boolean(q?.multiSelect),
+  }));
+}
+
 function usageOf(result: Json): TLocalUsage {
   const u = result.usage ?? {};
   // result.usage 是本轮的；total_cost_usd 是整个会话累计的，本轮花费看 model_usage_since_last_result（11/05 日志核对过）。
@@ -57,12 +70,17 @@ class ClaudeRun implements AgentRun {
   private readonly hostRequests = new Map<string, (r: Json) => void>();
   /** broad：这一步越界，或「这张卡都允许」要放开的范围越界——这时不给本会话放行。 */
   private readonly permissions = new Map<string, { req: Json; broad: boolean }>();
+  /** 在等本人回答的提问（AskUserQuestion）。 */
+  private readonly questions = new Map<string, Json>();
   private interrupting = false;
   private exited = false;
   private authFailed = false;
   private apiRetried = false;
 
-  constructor(private readonly child: ChildProcessWithoutNullStreams, private readonly sessionId: string, private readonly scope: PathScope) {
+  constructor(
+    private readonly child: ChildProcessWithoutNullStreams, private readonly sessionId: string, private readonly scope: PathScope,
+    private readonly autoAllowRoot: string | null,
+  ) {
     child.stdout.setEncoding("utf8").on("data", (d: string) => this.onStdout(d));
     let errBuf = "";
     child.stderr.setEncoding("utf8").on("data", (d: string) => {
@@ -125,6 +143,15 @@ class ClaudeRun implements AgentRun {
     return true;
   }
 
+  respondQuestion(requestId: string, answers: Record<string, string>): boolean {
+    const req = this.questions.get(requestId);
+    if (!req) return false;
+    this.questions.delete(requestId);
+    // Claude Code 的「问用户」：放行时在输入里带上 answers（问题原文 → 回答），它就当成本人的回答。
+    this.write({ type: "control_response", response: { subtype: "success", request_id: requestId, response: { behavior: "allow", updatedInput: { ...(req.input ?? {}), answers } } } });
+    return true;
+  }
+
   close() {
     if (this.exited) return;
     this.child.stdin.end();
@@ -181,6 +208,18 @@ class ClaudeRun implements AgentRun {
         }
         const req = ev.request;
         const toolName = String(req.tool_name ?? "");
+        if (toolName === "AskUserQuestion") {
+          // 「问用户」不是权限：转成提问，等本人在网页上选（会话转成等你回复）
+          this.questions.set(ev.request_id, req);
+          this.emit({ type: "question", request: { requestId: ev.request_id, questions: questionsOf(req.input ?? {}), askedAt: new Date().toISOString() } });
+          return;
+        }
+        // 卡在自己的工作树里：工作树里安全的步骤直接放行（规则在 pathGuard 的 autoAllowed）
+        const root = this.autoAllowRoot;
+        if (root && autoAllowed(toolName, req.input ?? {}, { ...this.scope, allowedRoots: () => [root] }, req.blocked_path)) {
+          this.write({ type: "control_response", response: { subtype: "success", request_id: ev.request_id, response: { behavior: "allow", updatedInput: req.input ?? {} } } });
+          return;
+        }
         // blocked_path：Claude Code 自己从 Bash 命令里认出的越界路径（11/06 实测）。
         const outside = outsidePaths(toolName, req.input ?? {}, this.scope, req.blocked_path);
         const broad = outside.length > 0 || suggestionsReachOutside(req.permission_suggestions, this.scope);
@@ -198,10 +237,11 @@ class ClaudeRun implements AgentRun {
         return;
       }
       case "control_cancel_request": {
-        // CLI 自己撤回了还没答复的权限请求（例如停下时）。
+        // CLI 自己撤回了还没答复的权限请求或提问（例如停下时）。
         if (this.permissions.delete(ev.request_id)) {
           this.emit({ type: "permission_resolved", requestId: ev.request_id, decision: "deny", message: "已撤回", allowForSession: false });
         }
+        if (this.questions.delete(ev.request_id)) this.emit({ type: "question_resolved", requestId: ev.request_id, choices: null, text: null });
         return;
       }
       case "system": {
@@ -296,7 +336,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       // Mac/Linux 上自成进程组，强停时整组杀掉。
       detached: process.platform !== "win32",
     });
-    const run = new ClaudeRun(child, launch.sessionId, { cwd: launch.cwd, home: homeDir(), allowedRoots: launch.allowedRoots });
+    const run = new ClaudeRun(child, launch.sessionId, { cwd: launch.cwd, home: homeDir(), allowedRoots: launch.allowedRoots }, launch.autoAllowRoot);
     const spawned = await new Promise<Error | null>((resolve) => {
       child.once("spawn", () => resolve(null));
       child.once("error", (e) => resolve(e));

@@ -74,7 +74,7 @@ const SET_FEISHU_URL = {
 
 const PROPOSE_PLAN = {
   name: "propose_plan",
-  description: "交计划和派活单草稿：计划几步（按先后）、风险；派活单 1–8 件，每件写交代（brief）、完成标准（doneDefinition，每行一条、能检查）、对约定第几条（criterionIndex，对不上不填）、岗位（role，交代里岗位清单的名字）、模型档位（modelTier）。本人让你改时，改完再交一次。",
+  description: "交计划和派活单草稿：计划几步（按先后）、风险；派活单 1–8 件，每件写交代（brief）、完成标准（doneDefinition，每行一条、能检查）、对约定第几条（criterionIndex，对不上不填）、岗位（role，交代里岗位清单的名字）、模型档位（modelTier），要等前面哪几件（after，用到它们的结果时才写）。本人让你改时，改完再交一次。",
   inputSchema: {
     type: "object",
     properties: {
@@ -96,6 +96,10 @@ const PROPOSE_PLAN = {
             role: { type: "string", description: "岗位名字（交代里的岗位清单）" },
             modelTier: { type: "string", enum: ["strong", "normal", "light"] },
             why: { type: "string", description: "一句话为什么这么拆" },
+            after: {
+              type: "array", items: { type: "integer", minimum: 1 },
+              description: "要等派活单里哪几件做完（位置，从 1 起，只能写排在前面的）。只在要用到前面几件的结果时才写；互不相干的件不写，好并行做",
+            },
           },
           required: ["title", "brief", "doneDefinition", "modelTier"],
         },

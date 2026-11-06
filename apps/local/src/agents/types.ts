@@ -25,6 +25,8 @@ export interface AgentLaunch {
   pluginDirs: string[];
   /** 本会话允许的范围（本人允许的文件夹，加上还算数的工作目录），每次权限请求现查，据此标出越界路径。 */
   allowedRoots(): string[];
+  /** 卡在自己的工作树里做时是工作树的根：这里面安全的步骤不问本人就放行（pathGuard 的 autoAllowed）。别的会话为 null。 */
+  autoAllowRoot: string | null;
 }
 
 export interface PermissionAnswer {
@@ -41,6 +43,8 @@ export interface AgentRun {
   /** 停下当前一轮，会话保留。 */
   interrupt(): Promise<void>;
   respondPermission(requestId: string, answer: PermissionAnswer): boolean;
+  /** 回答一次提问（AskUserQuestion）：answers 是「问题原文 → 回答」，执行方当成本人的回答。已答过或已撤回返回 false。 */
+  respondQuestion(requestId: string, answers: Record<string, string>): boolean;
   /** 强停：只杀本进程树。 */
   kill(): Promise<void>;
   /** 说完了：关掉输入，让执行方自己退出（验收员交完结论用）；一会儿还不退就强停。 */

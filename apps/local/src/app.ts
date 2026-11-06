@@ -57,6 +57,15 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   const settings = new Settings(config.dataDir, config.allowedOrigins);
   const outbox = new Outbox(config.dataDir, () => cloud.target(), { deviceId: config.deviceId, runnerVersion: VERSION }, opts.fetchImpl);
   cloud.outbox = outbox;
+  // 令牌被拒只认同步接口：同步回 401 才当成没关联（网页会自己重新关联），发件箱留着、关联上以后接着发。
+  // 会话的天枢 MCP、验收交代碰到 401 时，马上用同步接口（发一批空的）确认一次。
+  outbox.onRejected = (token) => void cloud.rejected(token);
+  const baseFetch = opts.fetchImpl ?? fetch;
+  const cloudFetch: typeof fetch = async (input, init) => {
+    const res = await baseFetch(input, init);
+    if (res.status === 401) void outbox.heartbeat(true);
+    return res;
+  };
   const claude = new ClaudeSetup(config.claudePath);
   let sessionsRef: SessionManager | null = null;
   const updateTray = () => desktop.setState({ paired: tokens.count() > 0, running: sessionsRef?.activeCount() ?? 0, paused: settings.get().paused });
@@ -66,7 +75,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
     paused: () => settings.get().paused,
     skillsDir: opts.skillsDir ?? join(homeDir(), ".claude", "skills"),
     maxConcurrent: () => settings.get().maxConcurrent,
-    verifyBrief: async (handbackKey) => fetchVerifyBrief(await cloud.target(), handbackKey, opts.fetchImpl ?? fetch),
+    verifyBrief: async (handbackKey) => fetchVerifyBrief(await cloud.target(), handbackKey, cloudFetch),
     adapters: {
       "claude-code": new ClaudeCodeAdapter(opts.claudeBin ? async () => opts.claudeBin! : () => claude.bin()),
       codex: new CodexAdapter(),
@@ -80,7 +89,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   const server = createServer({
     config, version: VERSION, tokens, pairings, sessions, log, models, folders, claude, cloud, settings,
     pickFolder: () => desktop.pickFolder(),
-    fetchImpl: opts.fetchImpl ?? fetch,
+    fetchImpl: cloudFetch,
     onSettingsChange: updateTray,
   });
 
@@ -108,6 +117,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   sessions.pump();
   void sessions.pullBriefs();
   void sessions.pruneWorktrees();
+  void sessions.releaseWaiting();
   await desktop.start((a) => void onMenu(a));
   updateTray();
   setInterval(updateTray, 10_000).unref();

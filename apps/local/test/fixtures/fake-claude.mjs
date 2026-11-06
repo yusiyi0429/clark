@@ -38,6 +38,14 @@ function startTurn(text) {
   out({ type: "assistant", message: { content: [{ type: "text", text: `收到：${text}` }] }, parent_tool_use_id: null });
   out({ type: "assistant", message: { content: [{ type: "tool_use", id: `toolu_todo${turns}`, name: "TodoWrite", input: { todos: [{ content: "写文件", status: "in_progress" }] } }] }, parent_tool_use_id: null });
   if (readOnly) { void readOnlyTurn(); return; }
+  // 配置里有 ask：第一轮先用「问用户」（AskUserQuestion）问本人，收到回答就结束这一轮
+  if (cfg.ask && turns === 1) {
+    const input = { questions: cfg.ask };
+    out({ type: "assistant", message: { content: [{ type: "tool_use", id: `toolu_ask${turns}`, name: "AskUserQuestion", input }] }, parent_tool_use_id: null });
+    turn = { permId: `ask-${turns}`, ask: true };
+    out({ type: "control_request", request_id: turn.permId, request: { subtype: "can_use_tool", tool_name: "AskUserQuestion", input, tool_use_id: `toolu_ask${turns}` } });
+    return;
+  }
   const file = cfg.writePath ?? "hello.txt";
   out({ type: "assistant", message: { content: [{ type: "tool_use", id: `toolu_w${turns}`, name: "Write", input: { file_path: file, content: "你好" } }] }, parent_tool_use_id: null });
   const permId = `perm-${turns}`;
@@ -107,6 +115,13 @@ rl.on("line", (line) => {
     const r = msg.response.response;
     if (!turn || msg.response.request_id !== turn.permId) return;
     appendFileSync(TRACE, JSON.stringify({ permissionResponse: r }) + "\n");
+    if (turn.ask) {
+      const answers = r.updatedInput?.answers ?? null;
+      out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: `toolu_ask${turns}`, content: `User has answered your questions: ${JSON.stringify(answers)}` }] }, parent_tool_use_id: null });
+      out({ type: "assistant", message: { content: [{ type: "text", text: `收到回答：${JSON.stringify(answers)}` }] }, parent_tool_use_id: null });
+      finish(true, "收到回答");
+      return;
+    }
     if (r.behavior === "allow") {
       if (!cfg.writePath) writeFileSync("hello.txt", "你好");
       out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: `toolu_w${turns}`, content: "File created successfully" }] }, parent_tool_use_id: null });

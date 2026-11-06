@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { api, pair, raw, startTestRunner, tempDir, ORIGIN } from "./helpers.js";
+import { systemPrompt } from "../src/rolePrompt.js";
 
 async function until<T>(fn: () => Promise<T | null | undefined | false> | T | null | undefined | false, ms = 10_000): Promise<T> {
   const t0 = Date.now();
@@ -318,6 +319,27 @@ describe("规划员和验收员", { timeout: 30_000 }, () => {
       await until(() => h.cloud.items.filter((i) => i.type === "card_plan").length === 2 && h.cloud.items.some((i) => i.type === "verdict"));
       expect(h.cloud.items.filter((i) => i.type === "card_plan").map((i) => i.data.revision)).toEqual([1, 2]);
       expect(h.cloud.items.filter((i) => i.type === "verdict")).toHaveLength(1);
+    } finally {
+      await h.t.cleanup();
+    }
+  });
+
+  it("派活单写等哪几件（只能等前面的）；规矩里写清：要用前面的结果才写 after、报告不留在仓库、验收员指出多出来的文件", async () => {
+    const h = await setup(3);
+    try {
+      const p = await h.open({ subject: { kind: "plan", taskId: "T9" }, title: "拆卡：T9", firstMessage: "拆卡交代", role: PLANNER });
+      await h.waitStatus(p.id, "idle");
+      const card = (title: string, after?: number[]) => ({ title, brief: "做", doneDefinition: "能检查", modelTier: "light", ...(after ? { after } : {}) });
+      const bad = await h.mcp(p.id, "propose_plan", { summary: "拆三件", cards: [card("甲", [2]), card("乙")] });
+      expect(bad.isError).toBe(true);
+      expect(bad.content[0]!.text).toContain("第 1 件的 after 只能写排在它前面的件");
+      const ok = await h.mcp(p.id, "propose_plan", { summary: "拆三件", cards: [card("甲"), card("乙"), card("总验收", [1, 2])] });
+      expect(ok.isError).toBe(false);
+      const item = await until(() => h.cloud.items.find((i) => i.type === "card_plan"));
+      expect(item.data.cards.map((c: any) => c.after ?? null)).toEqual([null, null, [1, 2]]);
+      expect(readFileSync(join(h.t.dataDir, "sessions", p.id, "system.md"), "utf8")).toContain("after 写上它要等的那几件的位置");
+      expect(systemPrompt("card", null, [], null)).toContain("不要在仓库里留报告或输出文件");
+      expect(systemPrompt("verify", null, [], null)).toContain("完成标准没要求的新增或改动的文件");
     } finally {
       await h.t.cleanup();
     }

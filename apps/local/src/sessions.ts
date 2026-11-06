@@ -8,7 +8,7 @@ import {
   type TLocalAgentKind, type TLocalCardPlan, type TLocalCreateSessionRequest, type TLocalHandbackCriterion, type TLocalPermissionRequestView, type TLocalRole,
   type TLocalSendMessageRequest, type TLocalSendMessageResponse, type TLocalSessionKind, type TLocalSessionStatus, type TLocalSlots, type TLocalSessionSubject,
   type TLocalSessionSummary, type TLocalSyncItem, type TLocalTopicVersionKind, type TLocalUsage, type TLocalVerdict, type TLocalVerdictCriterion,
-  type TLocalWorkspace, type TLocalGitRef, type TLocalMergeResponse,
+  type TLocalWorkspace, type TLocalGitRef, type TLocalMergeResponse, type TLocalQuestionRequestView, type TLocalQuestionAnswerRequest,
 } from "@warmap/contracts";
 import { readJson, writeJsonAtomic, nowIso } from "./store.js";
 import type { EventLog, EventBody } from "./eventLog.js";
@@ -39,6 +39,8 @@ const PRIORITY: Record<TLocalSessionKind, number> = { verify: 0, plan: 1, card: 
 const BRIEF_RETRY_MS = 15_000;
 /** 验收员一轮做完没交结论时，本机提醒它一次。 */
 const VERIFY_NUDGE = "还没交结论：请逐条判完，用 submit_verdict 交一次。";
+/** 卡在等前面的卡时排队的原因（ADR 0038）。 */
+const WAITING_FOR_CARDS = "等前面的卡合回";
 /** 不是 git 仓库的文件夹同时只做一张卡（ADR 0038），另一张在那儿跑时排队的原因。 */
 const FOLDER_BUSY = "这个文件夹不是 git 仓库，同时只做一张卡，等另一张这一轮做完";
 
@@ -88,6 +90,10 @@ interface SessionRecord {
   workspace: TLocalWorkspace | null;
   /** 验收员：验的是哪个提交（卡在工作树里做时，交回的那个提交）。 */
   commit: string | null;
+  /** 卡：开工时说要等的卡（cardId）。都做完（合回，或文件夹里的卡验收过了）以前排着，没有工作树。 */
+  after: string[];
+  /** 验收员：结论过没过（还没交为 null）。 */
+  passed: boolean | null;
 }
 
 /** 不合契约时给执行方看的一句（哪个字段、哪里不对）。 */
@@ -160,6 +166,10 @@ export class SessionManager {
   private readonly finished = new Set<string>();
   /** 等验收交代时最近一次告诉网页的原因（变了才再说）。 */
   private readonly waitNotes = new Map<string, string>();
+  /** 在等本人回答的提问（会话 id → 提问），会话这时是 idle（等你回复）。 */
+  private readonly questions = new Map<string, TLocalQuestionRequestView>();
+  /** 前面的卡都做完、正在开工作树的卡（开好以前不能开始）。 */
+  private readonly opening = new Set<string>();
   private pulling: Promise<void> | null = null;
   private pullAgain = false;
   private briefTimer: NodeJS.Timeout | null = null;
@@ -187,6 +197,8 @@ export class SessionManager {
       rec.nudged ??= false;
       rec.workspace ??= null;
       rec.commit ??= null;
+      rec.after ??= [];
+      rec.passed ??= null;
       this.queueSeq = Math.max(this.queueSeq, rec.queueOrder);
       this.records.set(rec.id, rec);
       // 本机程序重启时，上次的进程都已不在。排着的照原样排着；刚从队里拉起、还没开始的放回队里（位置不变）。
@@ -204,11 +216,13 @@ export class SessionManager {
   private summary(rec: SessionRecord): TLocalSessionSummary {
     const {
       mcpSecret: _s, syncSeq: _q, outputs: _o, versionNumber: _v, lastVersion: _l, role: _r, critics: _c, queuedMessage: _m, queueOrder: _n,
-      parentId: _p, briefPending: _b, criteria: _cr, failStreak: _f, submitted: _sb, nudged: _nd, workspace, commit: _cm, ...rest
+      parentId: _p, briefPending: _b, criteria: _cr, failStreak: _f, submitted: _sb, nudged: _nd, workspace, commit: _cm, after: _af, passed: _ps, ...rest
     } = rec;
+    const question = this.questions.get(rec.id);
+    const waitingFor = this.waitingFor(rec);
     return {
       ...rest, lastSeq: this.d.log.lastSeq(rec.id), pendingPermissions: this.pending.get(rec.id)?.size ?? 0, queuePosition: this.queuePosition(rec),
-      ...(workspace ? { workspace } : {}),
+      ...(workspace ? { workspace } : {}), ...(question ? { pendingQuestion: question } : {}), ...(waitingFor.length ? { waitingFor } : {}),
     };
   }
 
@@ -239,9 +253,55 @@ export class SessionManager {
       .sort((a, b) => PRIORITY[a.subject.kind] - PRIORITY[b.subject.kind] || a.queueOrder - b.queueOrder);
   }
 
-  /** 排着、而且能开始的（等验收交代的验收员、文件夹被另一张卡占着的卡先跳过）。 */
+  /** 排着、而且能开始的（等验收交代的验收员、等前面的卡或工作树还没开好的卡、文件夹被另一张卡占着的卡先跳过）。 */
   private ready(): SessionRecord[] {
-    return this.queue().filter((r) => !r.briefPending && !this.folderBusy(r));
+    return this.queue().filter((r) => !r.briefPending && !(r.after.length && !r.workspace) && !this.folderBusy(r));
+  }
+
+  /** 排着的卡还在等的前面的卡（还没做完的那几张）。 */
+  private waitingFor(rec: SessionRecord): string[] {
+    if (rec.status !== "queued" || !rec.after.length || rec.workspace) return [];
+    return rec.after.filter((id) => !this.cardDone(id));
+  }
+
+  /** 这张卡在这台本机上做完了：在工作树里做的合回了；在文件夹里做的（不是 git 仓库，没有合回）最近一次验收过了。 */
+  private cardDone(cardId: string): boolean {
+    const all = [...this.records.values()];
+    return all.some((r) => {
+      if (r.subject.kind !== "card" || r.subject.cardId !== cardId) return false;
+      if (r.workspace?.kind === "worktree") return Boolean(r.workspace.mergedCommit);
+      if (r.workspace?.kind !== "folder") return false;
+      const last = all.filter((v) => v.parentId === r.id && v.passed !== null).sort((a, b) => a.createdAt.localeCompare(b.createdAt)).at(-1);
+      return last?.passed === true;
+    });
+  }
+
+  /**
+   * 前面的卡做完了一张：还在等的卡重报一次（少了一张）；都做完的从基线最新的提交开工作树，开好了排着等空位（pump 接上）。
+   * 合回成功、验收过了、本机程序启动后都会调。前面的卡取消了或一直没合回，就一直等，本人可以停掉它。
+   */
+  async releaseWaiting(): Promise<void> {
+    for (const rec of this.queue().filter((r) => r.after.length && !r.workspace && !this.opening.has(r.id))) {
+      if (this.waitingFor(rec).length) {
+        this.syncStatus(rec);
+        continue;
+      }
+      this.opening.add(rec.id);
+      try {
+        const place = await this.openWorkspace(rec.subject.cardId!, rec.title, rec.cwd);
+        Object.assign(rec, { cwd: place.cwd, workspace: place.workspace });
+        this.save(rec);
+        if (rec.status !== "queued") { void this.releaseWorktree(rec); continue; } // 开的时候被取消了
+        this.noteWorkspace(rec, place);
+        this.syncStatus(rec);
+        this.d.onChange?.();
+      } catch (e) {
+        this.setStatus(rec, "failed", { reason: `前面的卡都做完了，但没开起来：${e instanceof Error ? e.message : String(e)}` });
+      } finally {
+        this.opening.delete(rec.id);
+      }
+    }
+    this.pump();
   }
 
   /** 不是 git 仓库的文件夹同时只做一张卡：另一张卡正在那儿跑（占着位置或正在拉起）。 */
@@ -309,7 +369,10 @@ export class SessionManager {
     const queuePosition = this.queuePosition(rec);
     if (queuePosition === null) this.sentPosition.delete(rec.id);
     else this.sentPosition.set(rec.id, queuePosition);
-    this.sync(rec, { type: "status", data: { status: rec.status, title: rec.title, agent: rec.agent, modelLabel: rec.modelLabel, ...(queuePosition ? { queuePosition } : {}) } });
+    const waitingFor = this.waitingFor(rec);
+    this.sync(rec, { type: "status", data: {
+      status: rec.status, title: rec.title, agent: rec.agent, modelLabel: rec.modelLabel, ...(queuePosition ? { queuePosition } : {}), ...(waitingFor.length ? { waitingFor } : {}),
+    } });
   }
 
   private must(id: string): SessionRecord {
@@ -351,6 +414,7 @@ export class SessionManager {
     if (subject.kind === "topic" && !subject.topicId) throw new SessionError("validation", "专题的会话要带 topicId");
     if (subject.kind === "plan" && !subject.taskId) throw new SessionError("validation", "规划员的会话要带 taskId");
     if (subject.kind !== "topic" && req.critics?.length) throw new SessionError("validation", "挑刺岗位只给专题的评审会用");
+    if (subject.kind !== "card" && req.after?.length) throw new SessionError("validation", "只有卡能等别的卡");
     let cwd: string;
     if (req.cwd) {
       cwd = resolve(req.cwd);
@@ -370,7 +434,10 @@ export class SessionManager {
     if (model.source === "gateway" && !model.apiKey) throw new SessionError("validation", `「${model.label}」还没填钥匙`);
     const agent = req.agent ?? "claude-code";
     if (this.d.paused?.()) throw new SessionError("conflict", "本机程序已暂停，先在托盘里恢复");
-    const place = subject.kind === "card" ? await this.openWorkspace(subject.cardId!, req.title, cwd) : null;
+    // 要等前面的卡：先排着，等它们都做完再开工作树（从那时基线最新的提交开出来）
+    const after = [...new Set(req.after ?? [])].filter((id) => id !== subject.cardId);
+    const waiting = after.some((id) => !this.cardDone(id));
+    const place = subject.kind === "card" && !waiting ? await this.openWorkspace(subject.cardId!, req.title, cwd) : null;
     const now = nowIso();
     const rec: SessionRecord = {
       id: randomUUID(), subject, title: req.title, agent, modelProfileId: model.profileId, modelLabel: model.label, cwd: place?.cwd ?? cwd,
@@ -379,15 +446,15 @@ export class SessionManager {
       outputs: [], versionNumber: subject.kind === "topic" ? req.versionBase ?? 0 : 0, lastVersion: null,
       role: req.role ?? null, critics: req.critics ?? [], queuedMessage: null, queueOrder: 0,
       parentId: null, briefPending: false, criteria: [], failStreak: 0, submitted: 0, nudged: false,
-      workspace: place?.workspace ?? null, commit: null,
+      workspace: place?.workspace ?? null, commit: null, after: waiting ? after : [], passed: null,
     };
-    // 满了（或前面还有人在排、文件夹被另一张卡占着）就进队，先来先跑；有空位时 pump 接上。
+    // 满了（或前面还有人在排、在等前面的卡、文件夹被另一张卡占着）就进队，先来先跑；有空位时 pump 接上。
     const busy = this.folderBusy(rec);
-    if (this.ready().length || this.activeCount() >= this.max() || busy) {
+    if (waiting || this.ready().length || this.activeCount() >= this.max() || busy) {
       rec.queuedMessage = req.firstMessage;
       rec.queueOrder = ++this.queueSeq;
       this.records.set(rec.id, rec);
-      this.setStatus(rec, "queued", busy ? { reason: FOLDER_BUSY } : {});
+      this.setStatus(rec, "queued", waiting ? { reason: WAITING_FOR_CARDS } : busy ? { reason: FOLDER_BUSY } : {});
       this.noteWorkspace(rec, place);
       return this.summary(rec);
     }
@@ -531,6 +598,8 @@ export class SessionManager {
         ...(this.d.folders.isAllowed(folder) ? [rec.workspace?.kind === "worktree" ? rec.workspace.path : rec.cwd] : []),
         ...this.d.folders.list().map((f) => f.path),
       ],
+      // 卡在自己的工作树里：工作树里安全的步骤不问本人（规则在 pathGuard 的 autoAllowed）
+      autoAllowRoot: rec.subject.kind === "card" && rec.workspace?.kind === "worktree" ? rec.workspace.path : null,
     });
     if (this.cancelled.delete(rec.id)) {
       await run.kill();
@@ -553,6 +622,14 @@ export class SessionManager {
       case "permission_resolved":
         this.pending.get(rec.id)?.delete(e.requestId);
         if (!this.pending.get(rec.id)?.size && rec.status === "waiting_permission") this.setStatus(rec, "running");
+        break;
+      case "question":
+        // 执行方问本人：等你回复（不占位置），网页按问题和选项画按钮
+        this.questions.set(rec.id, e.request);
+        this.setStatus(rec, "idle");
+        break;
+      case "question_resolved":
+        this.questions.delete(rec.id);
         break;
       case "plan":
         this.sync(rec, { type: "plan", data: { entries: e.entries.slice(0, 100), progress: e.progress } });
@@ -598,6 +675,8 @@ export class SessionManager {
       this.emit(rec, { type: "permission_resolved", requestId: id, decision: "deny", message: "进程已结束", allowForSession: false });
     }
     this.pending.delete(rec.id);
+    const question = this.questions.get(rec.id);
+    if (question) this.onAgentEvent(rec, { type: "question_resolved", requestId: question.requestId, choices: null, text: null });
     const killed = this.killed.delete(rec.id);
     const finished = this.finished.delete(rec.id);
     rec.mcpSecret = "";
@@ -609,6 +688,12 @@ export class SessionManager {
     const rec = this.must(id);
     if (rec.status === "queued") throw new SessionError("conflict", "还在等空位，开始后再说");
     if (rec.queuedMessage !== null && !this.starting.has(id)) throw new SessionError("conflict", "这件还没开始过（排队时取消了或没开起来），要做就重新开工");
+    // 在等回答时说的一句就是回答（不选选项）
+    const question = this.questions.get(id);
+    if (question && req.kind !== "review" && req.text) {
+      this.answerQuestion(id, question.requestId, { choices: question.questions.map(() => []), text: req.text });
+      return { delivery: "next_step" };
+    }
     let text: string;
     if (req.kind === "review") {
       if (rec.subject.kind !== "topic" || !rec.critics.length) throw new SessionError("validation", "评审会只给开工时带了挑刺岗位的专题用");
@@ -659,7 +744,38 @@ export class SessionManager {
     const rec = this.must(id);
     if (this.cancelQueued(rec)) return this.summary(rec);
     const run = this.runs.get(id);
-    if (run && rec.status !== "idle") await run.interrupt();
+    // 在问本人时状态是 idle，但这一轮还没完（执行方在等回答），也要停
+    if (run && (rec.status !== "idle" || this.questions.has(id))) await run.interrupt();
+    return this.summary(rec);
+  }
+
+  /**
+   * 回答一次提问：choices[i] 是第 i 个问题选中的选项，text 是本人另外写的话。交给执行方时每个问题一条「问题原文 → 回答」：
+   * 选了的写选项（多选用顿号连）；text 给没选的问题，都选了就接在最后一个问题的回答后面。
+   */
+  answerQuestion(id: string, requestId: string, req: TLocalQuestionAnswerRequest): TLocalSessionSummary {
+    const rec = this.must(id);
+    const q = this.questions.get(id);
+    const run = this.runs.get(id);
+    if (!q || q.requestId !== requestId || !run) throw new SessionError("conflict", "这次提问已经答过或已失效");
+    if (req.choices.length !== q.questions.length) throw new SessionError("validation", `要按 ${q.questions.length} 个问题各给一组选项`);
+    const text = req.text?.trim() || null;
+    q.questions.forEach((item, i) => {
+      const picked = req.choices[i]!;
+      const unknown = picked.filter((l) => !item.options.some((o) => o.label === l));
+      if (unknown.length) throw new SessionError("validation", `第 ${i + 1} 个问题没有这个选项：${unknown.join("、")}`);
+      if (!item.multiSelect && picked.length > 1) throw new SessionError("validation", `第 ${i + 1} 个问题只能选一个`);
+      if (!picked.length && !text) throw new SessionError("validation", `第 ${i + 1} 个问题还没回答`);
+    });
+    const allPicked = req.choices.every((c) => c.length);
+    const answers: Record<string, string> = {};
+    q.questions.forEach((item, i) => {
+      const picked = req.choices[i]!.join("、");
+      answers[item.question] = !picked ? text! : allPicked && text && i === q.questions.length - 1 ? `${picked}；${text}` : picked;
+    });
+    if (!run.respondQuestion(requestId, answers)) throw new SessionError("conflict", "这次提问已经答过或已失效");
+    this.onAgentEvent(rec, { type: "question_resolved", requestId, choices: req.choices, text });
+    this.setStatus(rec, "running");
     return this.summary(rec);
   }
 
@@ -721,6 +837,7 @@ export class SessionManager {
     await removeWorktree(ws.folder, ws.path).catch((e) => { text = `${merged}，工作树没删掉：${e instanceof Error ? e.message : String(e)}`; });
     this.emit(rec, { type: "notice", level: "info", code: "merged", text });
     this.d.onChange?.();
+    void this.releaseWaiting(); // 等这张卡的卡可能可以开了
     return { merged: true, commit: out.commit, session: this.summary(rec) };
   }
 
@@ -834,7 +951,7 @@ export class SessionManager {
       agent: card.agent, modelProfileId: card.modelProfileId, modelLabel: card.modelLabel, cwd: card.cwd, includePersonalConfig: false,
       createdAt: now, updatedAt: now, status: "queued", usage: zeroUsage(), syncSeq: 0, mcpSecret: "", outputs: [], versionNumber: 0, lastVersion: null,
       role: null, critics: [], queuedMessage: null, queueOrder: ++this.queueSeq,
-      parentId: card.id, briefPending: true, criteria: [], failStreak: 0, submitted: 0, nudged: false, workspace: null, commit,
+      parentId: card.id, briefPending: true, criteria: [], failStreak: 0, submitted: 0, nudged: false, workspace: null, commit, after: [], passed: null,
     };
     this.records.set(rec.id, rec);
     this.setStatus(rec, "queued", { reason: "等交回送到天枢，取验收交代" });
@@ -940,7 +1057,9 @@ export class SessionManager {
     const problem = schemaProblem(LocalVerdict, verdict);
     if (problem) throw new SessionError("validation", `结论不合格：${problem}`);
     rec.submitted = 1;
+    rec.passed = verdict.passed;
     this.sync(rec, { type: "verdict", data: verdict });
+    if (verdict.passed) void this.releaseWaiting(); // 文件夹里做的卡验收过了就算做完
     const failStreak = verdict.passed ? 0 : rec.failStreak + 1;
     const blocked = failStreak >= 2;
     const event = {
@@ -970,11 +1089,15 @@ export class SessionManager {
         title: String(c?.title ?? "").trim(), brief: String(c?.brief ?? "").trim(), doneDefinition: String(c?.doneDefinition ?? "").trim(),
         criterionIndex: Number.isInteger(c?.criterionIndex) && c.criterionIndex >= 1 ? c.criterionIndex : null,
         role: textOrNull(c?.role), modelTier: c?.modelTier, why: textOrNull(c?.why),
+        ...(Array.isArray(c?.after) && c.after.length ? { after: [...new Set<number>(c.after)] } : {}),
       })),
       modelLabel: rec.modelLabel, roleId: rec.role?.id ?? null, roleVersion: rec.role?.version ?? null,
     };
     const problem = schemaProblem(LocalCardPlan, plan);
     if (problem) throw new SessionError("validation", `计划不合格：${problem}`);
+    // 只能等排在前面的件（位置比自己小），免得互相等
+    const bad = plan.cards.findIndex((c, i) => c.after?.some((p) => p > i));
+    if (bad >= 0) throw new SessionError("validation", `第 ${bad + 1} 件的 after 只能写排在它前面的件（1 到 ${bad}）`);
     rec.submitted = plan.revision;
     this.sync(rec, { type: "card_plan", data: plan });
     this.emit(rec, { type: "notice", level: "info", code: "card_plan", text: `交了第 ${plan.revision} 次计划：${plan.cards.length} 件` });

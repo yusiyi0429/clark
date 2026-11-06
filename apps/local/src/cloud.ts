@@ -34,6 +34,11 @@ export class CloudLink {
     writeJsonAtomic(this.file, {});
   }
 
+  /** 同步说这个令牌被拒（401）：还是它就当成没关联（网页会自己重新关联），发件箱留着；网页已经换了新令牌就不动。 */
+  async rejected(token: string): Promise<void> {
+    if ((await this.secrets.get(TOKEN_KEY)) === token) await this.unlink();
+  }
+
   async target(): Promise<CloudTarget | null> {
     const m = this.meta();
     if (!m.apiBaseUrl) return null;
