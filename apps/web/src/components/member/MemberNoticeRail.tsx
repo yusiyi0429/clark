@@ -4,7 +4,7 @@
  * 成员的通知栏（左栏）：会议、日程、复盘、请求、任务卡、待归位、分派、结果、协作、群聊、雷达，底部个人菜单。
  * 原先写在 MemberWorkspace 里，新首页 /me/work 也要原样放进来（V2 设计第 20.4 节），所以挪成一个组件；lead 放在最上面（「worker 等你」）。
  */
-import { useState, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { Lock } from "lucide-react";
 import { AccountMenu, type Account } from "@/components/AccountMenu";
 import { ActionNoticeCard } from "@/components/ActionNoticeCard";
@@ -51,7 +51,7 @@ export function MemberNoticeRail({ api, currentHref, home, plan, account, homeHr
   const records = useMeetingRecords();
   const feishuEvents = useFeishuEvents();
   const radarSignals = noteworthySignals(home.radar);
-  const counts = (next: RequestCounts) => { setRequests(next); onRequestCounts?.(next); };
+  const counts = useCallback((next: RequestCounts) => { setRequests(next); onRequestCounts?.(next); }, [onRequestCounts]);
   return (
     <aside className={`${n.rail} ${rb.bg}`} {...railBackgroundProps(railBackground)} aria-label="通知">
       <RailClock
