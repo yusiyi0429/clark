@@ -26,21 +26,26 @@ describe("新首页契约", () => {
       period: "2026-11",
       missions: [{ missionId: "M1", title: "上线", period: "2026-11", tasks: [{ taskId: "T-1", missionId: "M1", name: "11/18 上线 V1", subtitle: null,
         summary: { running: 0, waiting: 1, queued: 0, done: 0, doneToday: 0, needsYou: 1 }, pipeline: { conversationId: null, scope: "plan-task:T-1" }, planning: false,
-        completedAt: null, subSessions: [sub] }] }],
-      other: { subSessions: [{ ...sub, kind: "topic", state: "queued", waiting: null, queueReason: "device_offline", sessionId: null, deviceId: null, autoStart: true }] },
+        completedAt: null, subSessions: [sub], items: [{ id: uuid, title: "自己写的方案", status: "in_progress", dueDate: "2026-11-12", awaitingAcceptance: false,
+          updatedAt: at }] }] }],
+      other: { subSessions: [{ ...sub, kind: "topic", state: "queued", waiting: null, queueReason: "device_offline", sessionId: null, deviceId: null, autoStart: true }], items: [] },
       waiting: [{ id: `approval:${uuid}`, kind: "approval", title: "要运行命令", source: "修登录页 · 11/18 上线 V1", at, open: { kind: "card", id: uuid },
-        taskId: "T-1", sessionId: uuid, deviceId: uuid }],
+        taskId: "T-1", sessionId: uuid, deviceId: uuid, deviceName: "我的电脑", dueAt: null, answer: "inline_local", person: null, month: null },
+      { id: "month:review:2026-10", kind: "month", title: "复盘 10 月", source: null, at, open: { kind: "month", id: "2026-10" }, taskId: null, sessionId: null,
+        deviceId: null, deviceName: null, dueAt: at, answer: "open", person: null, month: { step: "review", period: "2026-10" } },
+      { id: "acceptance:T-9:2", kind: "acceptance", title: "请你认可「交付」第 2 条", source: "陈创峰", at, open: { kind: "task_detail", id: "T-9" }, taskId: null,
+        sessionId: null, deviceId: null, deviceName: null, dueAt: null, answer: "open", person: { personId: "p-2", name: "陈创峰" }, month: null }],
     };
     expect(Value.Check(WorkHomeResponse, home)).toBe(true);
     // 子会话只有卡和专题；规划员、验收员是后台任务。
-    expect(Value.Check(WorkHomeResponse, { ...home, other: { subSessions: [{ ...sub, kind: "plan" }] } })).toBe(false);
-    expect(Value.Check(WorkHomeResponse, { ...home, other: { subSessions: [{ ...sub, waiting: "paused" }] } })).toBe(false);
+    expect(Value.Check(WorkHomeResponse, { ...home, other: { items: [], subSessions: [{ ...sub, kind: "plan" }] } })).toBe(false);
+    expect(Value.Check(WorkHomeResponse, { ...home, other: { items: [], subSessions: [{ ...sub, waiting: "paused" }] } })).toBe(false);
     // 之前月份的 Mission 带它的月份；验收过但没合回的子会话等你合。
     const merge = { state: "needs_merge", commit: null, baseBranch: "main", reason: "dirty", message: "主文件夹有没提交的改动", at };
     expect(Value.Check(WorkHomeResponse, { ...home, missions: [...home.missions, { ...home.missions[0], missionId: "M0", period: "2026-10" }],
-      other: { subSessions: [{ ...sub, state: "waiting", waiting: "merge", merge }] } })).toBe(true);
+      other: { items: [], subSessions: [{ ...sub, state: "waiting", waiting: "merge", merge }] } })).toBe(true);
     expect(Value.Check(WorkHomeResponse, { ...home, missions: [{ ...home.missions[0], period: "10 月" }] })).toBe(false);
-    expect(Value.Check(WorkHomeResponse, { ...home, other: { subSessions: [{ ...sub, state: "waiting", waiting: "merge",
+    expect(Value.Check(WorkHomeResponse, { ...home, other: { items: [], subSessions: [{ ...sub, state: "waiting", waiting: "merge",
       merge: { ...merge, reason: "not_ready", message: "卡还在跑" } }] } })).toBe(true);
   });
 
@@ -60,6 +65,7 @@ describe("新首页契约", () => {
     expect(Value.Check(BackgroundQuery, { scope: "task:T-A" })).toBe(true);
     expect(Value.Check(BackgroundQuery, { scope: `card:${uuid}` })).toBe(true);
     expect(Value.Check(BackgroundQuery, { scope: `topic:${uuid}` })).toBe(true);
+    expect(Value.Check(BackgroundQuery, { scope: "resources" })).toBe(true);
     expect(Value.Check(BackgroundQuery, { scope: "all" })).toBe(false);
     expect(Value.Check(BackgroundQuery, { scope: "card:x" })).toBe(false);
     expect(Value.Check(BackgroundResponse, { resources, items: [{ id: `bg:${uuid}:t1`, title: "跑测试", kind: "command", state: "running", startedAt: at, finishedAt: null,

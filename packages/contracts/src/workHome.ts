@@ -99,12 +99,26 @@ export const HomeTaskSummary = Type.Object({
 }, strict);
 
 /**
+ * 自己做的执行事项（设计 9.10）：没有岗位、不交给 Agent 的事项，也挂在 Task 下面（行首是本人小头像），不算子会话、不能对话，点开是事项详情。
+ * status 照执行事项（退回的不列）；dueDate 是截止日（YYYY-MM-DD，没写为 null）；awaitingAcceptance 是交了在等验收。
+ */
+export const HomeItem = Type.Object({
+  id: Type.String({ format: "uuid" }),
+  title: Type.String(),
+  status: Type.Union([Type.Literal("not_started"), Type.Literal("in_progress"), Type.Literal("done")]),
+  dueDate: Nullable(Type.String()),
+  awaitingAcceptance: Type.Boolean(),
+  updatedAt: Instant,
+}, strict);
+
+/**
  * 左栏一件 Task：本人负责、没了结的（见文件头；本月的 Mission 定好就出现，哪怕还没开始聊）。
  * subtitle：标题下一行小字（完成定义或第一条标准，都没有为 null）。
  * pipeline.conversationId：这件 Task 的管线对话；还没开过为 null（POST /api/me/tasks/:taskId/pipeline 建）。对话的 scope 永远是 plan-task:<taskId>。
  * planning：规划员在拆这件 Task（本机的规划员会话还没结束，或登记了拆卡还没开）。
  * completedAt：本人确认完成的时间（V1 的「交付」：最新一版交付物交付了）；交付以后又开了返工、或交付撤回了，回到 null。
  * 不为 null 时网页把它下面的子会话全部收起，Task 行打勾；本月的照样列着，之前月份的了结了就不列。
+ * items：本人在这件 Task 下自己做的执行事项（没完成的，和这件 Task 还在树上时完成了的）。
  */
 export const HomeTask = Type.Object({
   taskId: Type.String({ minLength: 1 }),
@@ -116,6 +130,7 @@ export const HomeTask = Type.Object({
   planning: Type.Boolean(),
   completedAt: Nullable(Instant),
   subSessions: Type.Array(SubSession),
+  items: Type.Array(HomeItem),
 }, strict);
 
 const Period = Type.String({ pattern: "^\\d{4}-(0[1-9]|1[0-2])$" });
@@ -129,31 +144,50 @@ export const HomeMission = Type.Object({
 }, strict);
 
 /**
- * 等你：要本人拿主意的事，跨所有来源，一件一行。
+ * 等你：要本人拿主意、不拿就有事卡住的，才进来（设计 9.6）；只是让你知道的（群消息、协作进展、文档变更、雷达、第一次没过）不进。一件一行。
  * approval / question：子会话（或规划员、验收员）在等你批准、等你回复；verdict：卡连续两次验收没过（受阻）；
+ * merge：卡验收过了但本机没能自动合回，等你在那台电脑上合（open 是卡，deviceId 是那台电脑）；
+ * plan_start：规划员出了派活单，计划等你开工（open 是 Task 管线，就地「开工」= 接受草稿带 start）；
  * meeting：会议记录要你确认（你是责任人的决策、你负责的行动项、你主持的会要补归属或记录没生成），一场会一行；
- * mission_card：Mission Card 要你做的事（本人确认我的任务，或拍板人那一侧的待办）；role：岗位修改建议（采纳或不要）；
- * merge：卡验收过了但本机没能自动合回，等你在那台电脑上合（open 是卡，deviceId 是那台电脑）。
+ * mission_card：Mission Card 要你做的事（本人确认我的任务，或拍板人那一侧的待办），dueAt 是本人确认截止的时间；
+ * acceptance：请你认可——别人的 Task 有一条约定由你来认，负责人请你看了（person 是对方，open 是只读的 Task 详情）；
+ * role：岗位修改建议（采纳或不要）；
+ * month：月份这个检查点要你做的（month.step：review 复盘、finalize 新月份的草稿到了待敲定、continue 之前月份还有没了结的 Task；open 是月份页）；
+ * device：没有在线的电脑而有活在等本机（要开工的、等本机上线的），open 是连接页；这台电脑本机程序的状态（未配对、暂停中等）网页自己看本机程序，不靠这一条；
+ * quota：额度用完或预算到了，有活停着等你定（open 是那个子会话，或连接页）。
  */
 export const WaitingKind = Type.Union([
   Type.Literal("approval"), Type.Literal("question"), Type.Literal("verdict"), Type.Literal("meeting"), Type.Literal("mission_card"), Type.Literal("role"),
-  Type.Literal("merge"),
+  Type.Literal("merge"), Type.Literal("plan_start"), Type.Literal("acceptance"), Type.Literal("month"), Type.Literal("device"), Type.Literal("quota"),
 ]);
 
 /**
  * 去哪儿看：card、topic 是子会话（id 是卡或专题的 id），task 是 Task 管线（id 是 Task id），meeting 是会议（id 是会议 id），
- * mission_card 是个人 Mission Card（id 是任务卡 id，拍板人那一侧没有具体某张卡时是轮次 id，round = true），role 是岗位修改建议（id 是建议 id）。
+ * mission_card 是个人 Mission Card（id 是任务卡 id，拍板人那一侧没有具体某张卡时是轮次 id，round = true），role 是岗位修改建议（id 是建议 id），
+ * task_detail 是 Task 详情（别人的 Task 只读，id 是 Task id），month 是月份页（id 是 YYYY-MM），connections 是连接页（id 固定 "this_computer"）。
  */
 export const WaitingTarget = Type.Object({
-  kind: Type.Union([Type.Literal("card"), Type.Literal("topic"), Type.Literal("task"), Type.Literal("meeting"), Type.Literal("mission_card"), Type.Literal("role")]),
+  kind: Type.Union([Type.Literal("card"), Type.Literal("topic"), Type.Literal("task"), Type.Literal("meeting"), Type.Literal("mission_card"), Type.Literal("role"),
+    Type.Literal("task_detail"), Type.Literal("month"), Type.Literal("connections")]),
   id: Type.String({ minLength: 1 }),
   round: Type.Optional(Type.Boolean()),
 }, strict);
 
 /**
+ * 能不能就地答（设计 9.6、5.7「等你在手机上」）：
+ * inline 在这一行就能答，走云端，手机上也能（开工、岗位建议的采纳 / 不要）；
+ * inline_local 在这一行答，但要本机程序办（批准、回答、合回）：只在 deviceId 那台电脑上画按钮，单选题才就地答（题目在本机，网页自己判断），
+ *   手机和别的电脑上画「等你 · {deviceName}」，点开是只读摘要；
+ * open 点开去答（受阻、会后确认、Mission Card、请你认可、月份、电脑、额度）。
+ */
+export const WaitingAnswer = Type.Union([Type.Literal("inline"), Type.Literal("inline_local"), Type.Literal("open")]);
+
+/**
  * 一件等你的事。id 稳定（同一件事每次一样），界面拿它做 key。title 是要你定的事，source 是小字（出自哪个子会话和 Task、哪场会、哪个战场）。
  * taskId：属于哪件 Task（Task 一行的「1 件等你」和 Task 管线里的提醒用），不属于为 null。
- * sessionId、deviceId：子会话那几种（approval、question、merge）是哪个本机会话、在哪台电脑上；在这台电脑上的，网页就地批准、回答、合回（本机程序接口），别处的只能打开看。
+ * sessionId、deviceId、deviceName：子会话那几种（approval、question、merge）是哪个本机会话、在哪台电脑上；在这台电脑上的，网页就地批准、回答、合回（本机程序接口），别处的只能打开看。
+ * dueAt：有截止时间的（Mission Card 本人确认截止、复盘窗口关闭）写上，网页离截止不到 24 小时换警告档；没有为 null。
+ * person：acceptance 是请你认可的那个人（负责人），别的为 null。month：只有 kind = month 有（step、period）。
  */
 export const WaitingItem = Type.Object({
   id: Type.String({ minLength: 1 }),
@@ -165,6 +199,11 @@ export const WaitingItem = Type.Object({
   taskId: Nullable(Type.String({ minLength: 1 })),
   sessionId: Nullable(Type.String({ format: "uuid" })),
   deviceId: Nullable(Type.String({ format: "uuid" })),
+  deviceName: Nullable(Type.String()),
+  dueAt: Nullable(Instant),
+  answer: WaitingAnswer,
+  person: Nullable(Type.Object({ personId: Type.String({ minLength: 1 }), name: Type.String() }, strict)),
+  month: Nullable(Type.Object({ step: Type.Union([Type.Literal("review"), Type.Literal("finalize"), Type.Literal("continue")]), period: Period }, strict)),
 }, strict);
 
 /**
@@ -172,13 +211,14 @@ export const WaitingItem = Type.Object({
  * period：现在是哪个月（公司时区，YYYY-MM）。
  * missions：有「没了结」的 Task 的 Mission（见文件头），本月的在前，之前月份的按月份从近到远；本月的 Mission 没有 Task 也列。每个下面是本人负责的 Task。
  * 一件 Task 下面的子会话不看月份，全列（done 的网页折叠）。
- * other.subSessions：不归任何 Task 的子会话，加 Task 不在树上（了结了、或不是本人负责）但还没完成的子会话，左栏最下面一组「其他」。
- * waiting：等你，最新的在前。
+ * other.subSessions：不归任何 Task 的子会话，加 Task 不在树上（了结了、或不是本人负责）但还没完成的子会话，左栏最下面一组「其他」；
+ * other.items：待归位的事项（本人自己建、没挂 Mission 的执行事项，没完成的）。
+ * waiting：等你。排序（设计 9.6）：先是卡住正在跑的活的（approval、question、quota），再是有截止时间的（dueAt 早的在前），其余按 at 新的在前。
  */
 export const WorkHomeResponse = Type.Object({
   period: Period,
   missions: Type.Array(HomeMission),
-  other: Type.Object({ subSessions: Type.Array(SubSession) }, strict),
+  other: Type.Object({ subSessions: Type.Array(SubSession), items: Type.Array(HomeItem) }, strict),
   waiting: Type.Array(WaitingItem),
 }, strict);
 
@@ -247,8 +287,12 @@ export const BackgroundResponse = Type.Object({
   items: Type.Array(BackgroundItem),
   resources: WorkerResources,
 }, strict);
+/**
+ * 右栏跟着什么（设计第 5 节）：首页、总管线 → main；Task 管线、Task 详情 → task:<taskId>；子会话 → card:<id> / topic:<id>；
+ * 二级页、月份页 → resources（只要资源块，items 为空）。
+ */
 export const BackgroundQuery = Type.Object({
-  scope: Type.String({ pattern: "^(main|task:.{1,128}|card:[0-9a-fA-F-]{36}|topic:[0-9a-fA-F-]{36})$" }),
+  scope: Type.String({ pattern: "^(main|resources|task:.{1,128}|card:[0-9a-fA-F-]{36}|topic:[0-9a-fA-F-]{36})$" }),
 }, strict);
 
 /**
@@ -315,6 +359,8 @@ export type THomeTaskSummary = Static<typeof HomeTaskSummary>;
 export type THomeTask = Static<typeof HomeTask>;
 export type THomeMission = Static<typeof HomeMission>;
 export type TWaitingKind = Static<typeof WaitingKind>;
+export type TWaitingAnswer = Static<typeof WaitingAnswer>;
+export type THomeItem = Static<typeof HomeItem>;
 export type TWaitingTarget = Static<typeof WaitingTarget>;
 export type TWaitingItem = Static<typeof WaitingItem>;
 export type TWorkHomeResponse = Static<typeof WorkHomeResponse>;
