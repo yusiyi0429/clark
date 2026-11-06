@@ -94,6 +94,8 @@ a.itemName:hover { text-decoration: underline; text-decoration-color: var(--hair
 .noteTools { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .noteEdit { display: grid; gap: 8px; min-width: 0; }
 .noteEdit input, .noteEdit textarea { width: 100%; box-sizing: border-box; padding: 8px 12px; font: inherit; font-size: 13px; }
+.noteField { display: grid; gap: 4px; min-width: 0; }
+.noteField > span { color: var(--ink-faint); font-size: 12px; line-height: 18px; }
 .delivered { display: flex; align-items: center; gap: 10px; margin: 0; color: var(--confirmed); font-size: 12.5px; font-weight: 500; }
 
 /* 传新版本：虚线放置区（唯一的框），拖进来时变蓝。 */
@@ -188,7 +190,7 @@ button.agreement:hover { background: color-mix(in oklab, var(--ink) 4%, transpar
 
 /* 手持：字号下限、热区 44。 */
 @media (max-width: 959px) {
-  .facts, .label, .meta, .elapsed, .itemState, .hint, .dropHint, .foldToggle, .referenceToggle, .delivered { font-size: 13px; }
+  .facts, .label, .meta, .elapsed, .itemState, .hint, .dropHint, .foldToggle, .referenceToggle, .delivered, .noteField > span { font-size: 13px; }
   .criterionBody .agreement, button.agreement, .agreement small, .agreementAdd, .agreementEdit > label, .agreementEdit > span, .criterionBody .check, .asked, .notice, .changed { font-size: 13px; }
   .checkRow .plain { height: 36px; }
   .agreementAdd { min-height: 36px; }

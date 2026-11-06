@@ -63,10 +63,10 @@ export function VersionNote({ version, canEdit, onPatch, onWithdraw }: {
           <BuddyMark buddy={buddy} place="note" active={false} />
           {draft ? (
             <div className={d.noteEdit}>
-              <input value={draft.achieved} maxLength={120} aria-label="达成了什么" disabled={busy} onChange={(event) => setDraft({ ...draft, achieved: event.target.value })} />
-              <textarea value={draft.gain} maxLength={200} rows={2} aria-label="这一版多做到的" disabled={busy} onChange={(event) => setDraft({ ...draft, gain: event.target.value })} />
-              <textarea value={draft.why} maxLength={300} rows={2} aria-label="为什么变了" disabled={busy} onChange={(event) => setDraft({ ...draft, why: event.target.value })} />
-              <textarea value={draft.lesson} maxLength={200} rows={2} aria-label="经验" disabled={busy} onChange={(event) => setDraft({ ...draft, lesson: event.target.value })} />
+              <label className={d.noteField}><span>达成了什么</span><input value={draft.achieved} maxLength={120} disabled={busy} onChange={(event) => setDraft({ ...draft, achieved: event.target.value })} /></label>
+              <label className={d.noteField}><span>这一版多做到的</span><textarea value={draft.gain} maxLength={200} rows={2} disabled={busy} onChange={(event) => setDraft({ ...draft, gain: event.target.value })} /></label>
+              <label className={d.noteField}><span>为什么变了</span><textarea value={draft.why} maxLength={300} rows={2} disabled={busy} onChange={(event) => setDraft({ ...draft, why: event.target.value })} /></label>
+              <label className={d.noteField}><span>经验</span><textarea value={draft.lesson} maxLength={200} rows={2} disabled={busy} onChange={(event) => setDraft({ ...draft, lesson: event.target.value })} /></label>
               <div className={d.noteTools}>
                 <button type="button" className={d.quiet} disabled={busy} onClick={() => setDraft(null)}>取消</button>
                 <button type="button" className={d.plain} disabled={busy || !draft.achieved.trim()} onClick={() => void save()}>保存</button>
