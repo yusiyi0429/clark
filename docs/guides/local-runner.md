@@ -73,7 +73,7 @@ sh "$HOME/Library/Application Support/Tianshu/bin/uninstall.sh"
    ```
 
    编 Windows x64、macOS arm64/x64 三个程序，连同 `install.ps1`、`uninstall.ps1`、`install.sh`、`uninstall.sh` 放进 `apps/local/dist/release/<版本>/`，写 `SHA256SUMS`。顺带自查：`install.ps1` 不能带 BOM（`irm | iex` 会把它当成乱码命令）、`uninstall.ps1` 要带 BOM（`powershell -File` 在 5.1 下没有 BOM 按本地代码页读）、`.sh` 必须是 LF、三个程序的文件格式对。只换脚本不重编程序时加 `-- --skip-build`。
-3. **Mac 程序验签**（12 月 Mac 版上线前，在一台 Mac 上做）：`codesign -v tianshu-local-darwin-arm64`、`-x64`。Bun 交叉编译会带临时签名，但有报告说会失效；失效就 `codesign --remove-signature <文件> && codesign --force --sign - <文件>`，把签好的文件放回 `apps/local/dist/`，再跑一次第 2 步（`--skip-build`）重写 `SHA256SUMS`。
+3. **Mac 程序重签**（12 月 Mac 版上线前，在一台 Mac 上做；**必做**）：11/06 离线核对，Bun 1.3.13 在 Windows 上交叉编出的两个 Mac 程序签名都不可用——arm64 最后一页的哈希算错了（按整页补零算），x64 带的还是 Bun 运行时原来的签名、没覆盖我们的代码；第 2 步会打出这两条提醒。Apple 芯片要求签名有效。在 Mac 上 `codesign --remove-signature <文件> && codesign --force --sign - <文件> && codesign -v <文件>`，把签好的文件放回 `apps/local/dist/`，再跑一次第 2 步（`--skip-build`），提醒消失、`SHA256SUMS` 重写。买了 Apple 开发者账号后，这一步换成 Developer ID 签名加公证（ADR 0032）。
 4. **上传**：把 `dist/release/<版本>/` 里的 8 个文件整体放进下载源目录（建议服务器上按版本留目录，`/downloads/local/` 指向当前版本，回滚时指回上一版）。**脚本和 `SHA256SUMS` 必须回 `Content-Type: text/plain; charset=utf-8`**（PowerShell 5.1 的 `irm` 没有 charset 时按 ISO-8859-1 解码，中文全乱，11/06 实测）。Caddy 写法参考（没在线上验证过）：
 
    ```

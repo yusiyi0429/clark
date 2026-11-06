@@ -13,9 +13,10 @@ export function homeDir(): string {
  * 会把 ~/.claude/rules/*.md、~/.claude/CLAUDE.md 当成「项目规则」读进来，--setting-sources 管不住，换 CLAUDE_CONFIG_DIR 也不行（11/06 实测）。
  * 用 claudeMdExcludes 排除主目录这一层；仓库自己的 CLAUDE.md 照常读。Claude Code 按正斜杠的绝对路径匹配。
  */
-export function personalMemoryExcludes(home: string): string[] {
-  const h = home.replace(/\\/g, "/").replace(/\/$/, "");
-  return [`${h}/.claude/**`, `${h}/CLAUDE.md`, `${h}/CLAUDE.local.md`];
+export function personalMemoryExcludes(...homes: string[]): string[] {
+  // 主目录按磁盘实际大小写和按环境变量的写法各给一份：Claude Code 用哪种拼法算路径不确定，它按大小写敏感匹配。
+  return [...new Set(homes.map((home) => home.replace(/\\/g, "/").replace(/\/$/, "")))]
+    .flatMap((h) => [`${h}/.claude/**`, `${h}/CLAUDE.md`, `${h}/CLAUDE.local.md`]);
 }
 
 /**
@@ -73,13 +74,18 @@ export function buildClaudeArgs(launch: AgentLaunch): { args: string[]; env: Rec
   if (launch.mcpConfigPath) args.push("--mcp-config", launch.mcpConfigPath);
   if (launch.allowedTools.length) args.push("--allowedTools", launch.allowedTools.join(","));
   // 模型不支持服务端搜索时，自带的 WebSearch 不报错还会编结果（11/06 实测 qwen3.8-flash），干脆不给这个工具。
-  if (!launch.model.webSearch) args.push("--disallowedTools", "WebSearch");
+  const disallowed = [...new Set([...launch.disallowedTools, ...(launch.model.webSearch ? [] : ["WebSearch"])])];
+  if (disallowed.length) args.push("--disallowedTools", disallowed.join(","));
+  // 岗位和工作规矩、挑刺子 agent、飞书技能：都是本机程序数据目录里的文件，只在本会话生效（ADR 0033）。
+  if (launch.systemPromptPath) args.push("--append-system-prompt-file", launch.systemPromptPath);
+  if (launch.agentsPath) args.push("--agents", launch.agentsPath);
+  for (const dir of launch.pluginDirs) args.push("--plugin-dir", dir);
 
   // MCP 配置文件里用 ${变量名} 引用的密钥和令牌，经子进程环境变量交给 Claude Code。
   const env: Record<string, string> = { DISABLE_AUTOUPDATER: "1", ...launch.mcpEnv };
   // WebFetch 抓取前默认连 api.anthropic.com 做域名检查，国内网络连不上就整个失败（11/06 实测）。每个会话都关掉。
   const settings: { skipWebFetchPreflight: true; claudeMdExcludes?: string[]; env?: Record<string, string> } = { skipWebFetchPreflight: true };
-  if (!launch.includePersonalConfig) settings.claudeMdExcludes = personalMemoryExcludes(homeDir());
+  if (!launch.includePersonalConfig) settings.claudeMdExcludes = personalMemoryExcludes(homeDir(), homedir());
   const m = launch.model;
   if (m.source === "gateway") {
     if (!m.baseUrl || !m.model) throw new Error("网关模型缺地址或模型名");

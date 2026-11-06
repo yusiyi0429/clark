@@ -203,6 +203,9 @@ describe("migration", () => {
         "227_research_topics.sql",
         "228_local_runs.sql",
         "229_card_handbacks.sql",
+        "230_roles.sql",
+        "231_local_run_queued.sql",
+        "232_web_search_calls.sql",
       ]);
 
       // 幂等：重复执行不再变更

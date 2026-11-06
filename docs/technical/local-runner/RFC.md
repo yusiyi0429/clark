@@ -1,6 +1,6 @@
 # RFC：天枢本机程序（apps/local）
 
-v0.1 · 2026-11-06 · 第一版（Windows 先行）。决策见 ADR [0028](../../adr/0028-local-runner-single-binary-with-bun.md)（打包）、[0029](../../adr/0029-local-runner-keys-stay-on-device.md)（钥匙）、[0030](../../adr/0030-local-runner-sessions-clean-by-default.md)（会话默认干净）、[0031](../../adr/0031-local-runner-outside-paths-flagged-not-denied.md)（越界路径）、[0032](../../adr/0032-local-runner-release-and-code-signing.md)（发布与签名，待本人定）；接口以 `packages/contracts/src/localRunner.ts` 为准；装、卸、排错见 [runbook](../../guides/local-runner.md)。
+v0.1 · 2026-11-06 · 第一版（Windows 先行）。决策见 ADR [0028](../../adr/0028-local-runner-single-binary-with-bun.md)（打包）、[0029](../../adr/0029-local-runner-keys-stay-on-device.md)（钥匙）、[0030](../../adr/0030-local-runner-sessions-clean-by-default.md)（会话默认干净）、[0031](../../adr/0031-local-runner-outside-paths-flagged-not-denied.md)（越界路径）、[0032](../../adr/0032-local-runner-release-and-code-signing.md)（发布与签名，待本人定）、[0033](../../adr/0033-local-runner-roles-via-cli-flags.md)（岗位进会话）；接口以 `packages/contracts/src/localRunner.ts` 为准；装、卸、排错见 [runbook](../../guides/local-runner.md)。
 
 ## 0. 一句话
 
@@ -78,6 +78,9 @@ claude -p --input-format stream-json --output-format stream-json --verbose
               [,"claudeMdExcludes":["<主目录>/.claude/**","<主目录>/CLAUDE.md","<主目录>/CLAUDE.local.md"]]（干净会话）
               [,"env":{ANTHROPIC_BASE_URL,ANTHROPIC_MODEL,ANTHROPIC_DEFAULT_HAIKU_MODEL}（网关）]}
   [--model <订阅时选的模型>]
+  --append-system-prompt-file <sessions/<id>/system.md>   # 工作规矩 + 岗位（ADR 0033）
+  [--agents <sessions/<id>/agents.json>]                 # 专题的挑刺子 agent
+  [--plugin-dir <数据目录/plugins/tianshu-feishu>]        # 岗位要飞书时
   [--disallowedTools WebSearch]        # 模型配置的 webSearch 关着时（网关默认关，实测白名单除外）
 env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP 和天枢 MCP 转发共用）
      [+ ANTHROPIC_AUTH_TOKEN、CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1、CLAUDE_CODE_MAX_RETRIES=2、API_TIMEOUT_MS=40000（网关）]
@@ -99,6 +102,8 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
 
 状态：`starting → running ⇄ waiting_permission → idle → running …`；进程退出为 `exited`（正常、强停）或 `failed`（异常退出码）。本机程序重启时，上次还活着的会话一律记为 `exited`，再发一句话就 `--resume` 续上。会话 id 同时是 Claude Code 的 `--session-id`。
 
+开工请求可带 `role`（岗位）和专题的 `critics`（挑刺岗位，最多 3 个），进会话的方式见 ADR 0033；网页「说一句」带 `kind: "review"` 就是专题的评审会：本机替本人说一句，让会话同时调用挑刺子 agent、合成「分歧和建议」存成 kind = review 的一版（11/06 真跑 haiku 验证过并行和存版本）。
+
 卡和调研专题是同一种会话，只是 `subject.kind` 不同：卡要 `cardId` 和允许文件夹里的 `cwd`；专题要 `topicId`，不给 `cwd` 时用本机程序的专用目录 `topics/<topicId>/`。
 
 ## 7. 会话里的 MCP
@@ -112,14 +117,24 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
 
 文件里只写 `${变量名}`，值经 Claude Code 子进程的环境变量传进去，Claude Code 启动时展开（11/06 用假 MCP 服务实测：收到的是展开后的请求头；真机实测本会话 MCP 照常连上）。所以本会话密钥不落盘、不进命令行；云端令牌只在本机程序里，会话和它跑的命令都拿不到。
 
-联网搜索由天枢 MCP 提供（`/mcp/me` 上的只读 `web_search`，博查，钥匙留在服务器、按人限流），本机不另起搜索 MCP、不存博查钥匙。它的工具名等云端定了，填进 `sessions.ts` 的 `CLOUD_MCP_READONLY_TOOLS` 预先放行；天枢 MCP 的其他工具（写进展、建事项等）每次调用都要网页批准。
+联网搜索由天枢 MCP 提供（`/mcp/me` 上的只读 `web_search`，博查，钥匙留在服务器、按人限流），本机不另起搜索 MCP、不存博查钥匙。工具名 `web_search`（11/06 定），已在 `sessions.ts` 的 `CLOUD_MCP_READONLY_TOOLS` 里预先放行；天枢 MCP 的其他工具（写进展、建事项等）每次调用都要网页批准。
 
-本会话 MCP 的工具：`add_artifact`（工作目录里的 md/html/pdf/docx/txt，≤10 MB，同名再交是新一版）、`add_evidence`（说明/日志片段/链接/改动摘要）、`submit_handback`（逐条完成标准 met/partial/unmet + 证据 + 总结）。用 HTTP 而不是 stdio，是为了不给每个会话再起一个 150 MB 的本机程序进程。真机实测：Claude Code（haiku）经 ToolSearch 找到这几个工具，调用不弹权限，产出物和交回进了发件箱。
+本会话 MCP 的工具（卡和专题各看到自己那几个）：
+
+| 工具 | 谁有 | 做什么 |
+|-|-|-|
+| `add_artifact` | 卡、专题 | 交工作目录里的 md/html/pdf/docx/txt（≤10 MB，同名再交是新一版），返回编号 A1、A2… |
+| `add_evidence` | 卡、专题 | 交说明、日志片段、链接、改动摘要，返回编号 E1、E2… |
+| `hand_back` | 卡 | 逐条完成标准 met/partial/unmet + 证据 + 总结，`outputs` 点名用哪几份（编号）；不点名就是上次交回以后交的全部 |
+| `save_version` | 专题 | 存一版：工作目录里的 Markdown 文件，`kind` 是 outline/draft/review，`note` 写改了什么；号从开工时的 `versionBase`（交代里的 latestVersion）往下编 |
+| `set_feishu_url` | 专题 | 某一版存进本人飞书以后，报回第几版和地址 |
+
+用 HTTP 而不是 stdio，是为了不给每个会话再起一个 150 MB 的本机程序进程。真机实测：Claude Code（haiku）经 ToolSearch 找到这几个工具，调用不弹权限，产出物和交回进了发件箱。
 
 ## 8. 云端同步（本机 → 云端，单向）
 
 - `POST {apiBaseUrl}/api/local-runner/sync`，`Authorization: Bearer <个人令牌>`，体 `LocalSyncBatchRequest`（≤50 条、≤12 MB），回 `LocalSyncBatchResponse`。
-- 条目：`status`（状态变化）、`plan`（TodoWrite）、`evidence`、`artifact`（原文 base64）、`handback`、`cost`（每轮增量）。不传仓库文件、完整工具输出、环境变量、钥匙。
+- 条目：`status`（状态变化）、`plan`（TodoWrite）、`evidence`、`artifact`（原文 base64）、`handback`（带 `outputKeys`：点名的产出和证据的条目幂等键，云端存成 `local_outputs.client_id`）、`topic_version`（专题新的一版：号、种类、名字或 null、改了什么、Markdown 正文）、`topic_version_feishu`（第几版已存进飞书、地址）、`cost`（每轮增量）。不传仓库文件、完整工具输出、环境变量、钥匙。
 - 幂等键 `<deviceId>:<sessionId>:<本会话同步序号>`。云端按键去重，重复的也回 `accepted`；`rejected` 的本机记一笔后出队；回执里没提到的、网络错、5xx 都退避重试（1 s × 2^n，最长 5 分钟）。发件箱先落盘（`outbox.json`），断网、重启都不丢。
 - 关联：网页 `PUT /v1/cloud` 交 `apiBaseUrl` 和令牌；`apiBaseUrl` 的来源必须在白名单里，免得被指到别处。这个令牌同时用于会话里的天枢 MCP（第 7 节）。**建议 api 会话**给个人令牌加一种 `local` 客户端：能调 `/api/local-runner/*` 和 `/mcp/me`，网页配对后建一个这种令牌交给本机程序，设置页能看到、能吊销。
 
@@ -143,8 +158,10 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
 
 ## 13. 测试与验证（11/06）
 
-- 单测 46 条（`pnpm --filter @warmap/local test`）：安全 10、会话与适配器 15（假 `claude` 按 stream-json 说话，含参数、环境白名单、事件、SSE 补发、权限、插话、停下、强停、续接、本会话 MCP、天枢 MCP 转发、钥匙不外泄、搜索白名单、版本太旧、登录失效、Codex 未接）、发件箱 3、加固 10、越界与网关 8（第二轮）；契约 6。故意放开环境白名单、去掉续接互斥、去掉换地址作废钥匙、去掉日志补换行，以及第二轮的越界不给「都允许」、建议改 session、排除全局记忆、网关快速失败、重试提示、主目录提示，对应用例都会失败（确认用例有效）。
+- 单测 52 条（`pnpm --filter @warmap/local test`）：安全 10、会话与适配器 15（假 `claude` 按 stream-json 说话，含参数、环境白名单、事件、SSE 补发、权限、插话、停下、强停、续接、本会话 MCP、天枢 MCP 转发、钥匙不外泄、搜索白名单、版本太旧、登录失效、Codex 未接）、发件箱 3、加固 10、越界与网关 14（第二轮，含目录链接、命令写法、放行建议越界、移除文件夹、旧条目、路径大小写）；契约 6。故意放开环境白名单、去掉续接互斥、去掉换地址作废钥匙、去掉日志补换行，以及第二轮的 14 处（越界不给「都允许」、建议改 session、建议越界、排除全局记忆、网关快速失败、重试提示、主目录提示、不存在的路径解链接、普通词查链接、旧条目复查、整个磁盘、移除文件夹后工作目录越界、工作目录换实际写法、PowerShell 不按 \ 转义），对应用例都会失败（确认用例有效）。
 - 独立评审（11/06，xhigh）：13 条，8 条有复现。已修 12 条（怪路径打挂进程、换地址带走旧钥匙、续接不重查文件夹和暂停、并发续接起两个进程、强停追不上启动中的进程、发件箱被不合格条目卡住、发送异常带走进程、日志半行吞事件、钥匙串换行注入、测试页 XSS、安装脚本 BOM、升级残留子进程），带个人配置时钥匙进命令行改为拒绝开工；网关钥匙在会话环境里这条按 ADR 0029 接受。设计层两条见第 14 节。
+- 第二轮独立评审（11/06，xhigh）：7 条确认、3 条可能。已修：借目录链接越界判成没越界（不存在的路径、相对路径）、命令切词漏认多种写法（另加「放行建议越界就不给都允许」这一层，不靠切词）、旧版本加的不合规矩的文件夹仍算数、测试超时偏紧、大小写测试测不出问题、`--verify` 整套旧版本也能通过、重试恢复后别的错误被算成模型服务的错、移除文件夹后工作目录仍算数、测试页回放旧事件报错；主目录两种写法都给排除规则；整个磁盘不能选。没改：主目录和仓库之间几层目录里的 CLAUDE.md 照默认读（ADR 0030）。
+- 和云端联调（11/06）：本机程序分支 + `claude/v2-board-api` 的接收端合进临时分支 `claude/local-runner-sync-e2e`（只在本机），时间机器起 API，真程序 + 真 Claude Code（haiku）走通配对 → 建设备令牌 → 关联云端 → 开卡 → 交产出物和交回 → 云端收到（13 条、2 份产出、1 条交回排队、卡变进行中）→ 断网时排队 6 条 → 恢复后自动补发 → 原样重发 6 条全部 accepted、表里不重复。44 秒，$0.0043。记录在 `.scratch/local-runner/实验/I_云端联调.md`。
 - 真机：编出的 exe + 真 Claude Code 2.1.318（haiku），冒烟命令走完配对 → 开工 → 事件 → 3 次批准 → 插话下一步生效（b.txt 改成 22）→ 新一轮 → 停下（interrupted）→ 强停（exited），花费 $0.003；另一次验证本会话 MCP 交证据和交回。真实调用共 2 次会话（4 轮）。
 - 托盘模式：配对确认框、选文件夹框、托盘图标/提示/菜单、暂停与恢复、菜单退出都在 Windows 11 上截图验证（`.scratch/local-runner/实验/截图/`）。
 - 安装：用本地 exe 跑 `install.ps1`（4.4 秒装好并启动、写入自启项）；按注册表里的命令行启动成功（模拟开机，未真重启）；`uninstall.ps1` 后进程、自启项、程序、数据、端口全部清掉。
@@ -154,8 +171,8 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
 1. **内存**：空闲约 195 MB（主程序 155–165 + 托盘助手约 30）。再要降就评估 Node SEA（ADR 0028）。
 2. ~~工具不按文件夹拦~~：已改（11/06 第二轮，ADR 0031）。越界路径在权限请求里标出、网页标红、只能允许这一次；不自动拒绝。Bash 认路径是尽力而为。
 3. **项目配置不经网页就生效**：`-p` 模式没有「信任这个文件夹」的确认，仓库里 `.claude/settings.json` 的 hooks 和放行规则直接生效（仓库自己写越界放行规则时，那一步也不会来问）。允许的文件夹应只放本人信得过的仓库（ADR 0030）。以后不再信任项目配置时，可以用 SDK 钩子把越界调用强制拉回网页（ADR 0031 做法 C，已实测可用）。
-4. **Mac 没测**：JXA 菜单栏、`osascript` 弹框、钥匙串、LaunchAgent、`install.sh` 都只按文档写了。
-5. **云端接收端和令牌类型**：等 api 会话；本机这边在没关联时只排队。
+4. **Mac 没测**：JXA 菜单栏、`osascript` 弹框、钥匙串、LaunchAgent、`install.sh` 都只按文档写了。另外，Windows 上交叉编出的两个 Mac 程序签名都不可用（11/06 离线核对，发布脚本会提醒），上 Mac 版前必须在 Mac 上重签（runbook「打包和发布」第 3 步）。
+5. **云端接收端和令牌类型**：接收端和设备令牌已由 V2 后端做好（`claude/v2-board-api` 04c7befb），联调通过（第 13 节）。设备令牌调 `/mcp/me` 现在是 401（等那边改成只读），会话里的天枢 MCP 暂时连不上，不影响开工和交回。
 6. **网页**：要做首次授权引导、配对、选文件夹、事件流（fetch 读 SSE）、批权限、插话、停下；测试页可以照抄。
 7. **下载源**：文件已能一键准备并自查（`release.mjs`），本机模拟下载源走通了 `irm | iex` 安装；**还没上传**，线上要配 `charset=utf-8`（runbook 有 Caddy 写法，没在线上验证）。Windows 签名、Mac 公证没做，选项和费用见 ADR 0032，等本人定。
 8. **Claude Code 安装**：官方脚本在无终端环境下能否跑完没在干净机器上测；国内网络可能连不上 `downloads.claude.ai`。

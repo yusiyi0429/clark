@@ -2,94 +2,22 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Pool, PoolClient } from "pg";
-import { Type, type Static } from "@sinclair/typebox";
 import type { ImageContent } from "@earendil-works/pi-ai";
-import type { TCriterionVerdict, TLocalHandbackCriterion } from "@warmap/contracts";
 import type { ArticleFetcher } from "./articleText.js";
-import { runCandidateAgent } from "./candidateAgentRuntime.js";
-import { boardModel, type BoardModelOptions } from "./cardPlanner.js";
-import { reviewProblem, type TReviewCandidate } from "./deliverableReview.js";
+import { acceptanceProblem, type AcceptanceInput, type CardAcceptanceAgent } from "./cardAcceptanceAgent.js";
 import type { Query } from "./meetingStore.js";
-import { ADDRESS_STYLE } from "./promptStyle.js";
-import { CardError, effectiveOutcome, type HandbackRow, type StoredAcceptance } from "./taskCards.js";
+import { requestRoleProposal } from "./roleProposals.js";
+import { reviewerRole, rolesById } from "./roles.js";
+import { CardError, effectiveOutcome, failStreak, type HandbackRow, type StoredAcceptance } from "./taskCards.js";
 import { postCoAgentMessage } from "./threads.js";
 
 /**
- * Agent 验收（V2 设计第 7 节）：本机交回一次，就按卡的完成标准逐条判达到、部分、未达到，带证据。
+ * Agent 验收（V2 设计第 7 节）的排队、落库、推翻：本机交回一次，就请验收员（cardAcceptanceAgent.ts 的作业）按卡的完成标准逐条判。
  * 都达到：卡完成、进下一版交付物的「准备中」；没都达到：用固定格式拼一段改法，等网页送回执行方；连续两次没过算受阻。本人能推翻。
+ * 推翻（不论哪个方向）和第二次没过时，记一条要写的岗位修改（roleProposals.ts）。
  * 队列照交付物评审：进程内 Map，启动时和每分钟 recover；run_token 防覆盖，running 超过 10 分钟重排；单次 5 分钟超时。
  * 只验交回时执行方不是「本人自己做」的卡（本人自己做的照旧本人验收）。
  */
-
-export const CARD_ACCEPTANCE_PROMPT = `# 角色
-
-你是天枢的验收 Agent。执行方（本人电脑上的 Claude Code）做完一张卡（执行事项）交回来了，你按这张卡的完成标准逐条验收。只按完成标准判，不加新要求。
-
-# 输入
-
-一个JSON：card 是卡的标题、交代和完成标准（criteria，编号从 1 起，是交回那一刻的快照）；taskCriterion 是这张卡对的那条 Task 标准的原文，有时没有；
-claims 是执行方逐条写的（index、它自己判的 met/partial/unmet、证据）；summary 是它的一句总结；outputs 是它交出的产出和证据（名字、种类、文字、链接），截图随消息附上；
-unreadable 是读不到的产出和原因；previous 是上一次没过时的逐条结果，第一次交回没有。
-
-# 怎么判
-
-- 每一条三档：met 达到，partial 部分达到，unmet 未达到。部分达到按没过算，所以拿不准就判 partial，写清差什么。
-- 执行方自己说的不算证据：要有产出、链接、截图或改动对得上。claims 里写了「已完成」但 outputs 里找不到对应的东西，判 unmet。
-- 读不到的产出不能当证据；某一条要靠它时，fix 写「这份产出打不开，请重新交」。
-- reason：一句话说判定的理由，不超过 60 字。
-- evidence：引用的证据位置，写哪份产出、哪一段，或哪个链接、哪张截图；met 必须写，其余没有就写 null。
-- fix：具体怎么补，补什么、做到什么程度；partial 和 unmet 必须写，met 写 null。
-- 有 previous 时，看上次没过的几条这次补上没有。
-
-# 报告
-
-- headline：一句结论，不超过 30 字。都达到写「3 条都达到了」这样的话；没都达到点出最要紧的缺口。
-- criteria：每一条一项，index 和输入的编号一一对应，不多不少。
-- beyondScope：标准以外你觉得值得做的改进，最多 3 条，每条一句；没有就写空数组。它们不算进没达到，也不能当作判 partial、unmet 的理由。
-
-用 submit_candidate 提交，散文不会被保存。
-
-${ADDRESS_STYLE}`;
-
-const AcceptanceCandidate = Type.Object({
-  headline: Type.String({ minLength: 1, maxLength: 60 }),
-  criteria: Type.Array(Type.Object({
-    index: Type.Integer({ minimum: 1 }),
-    verdict: Type.Union([Type.Literal("met"), Type.Literal("partial"), Type.Literal("unmet")]),
-    reason: Type.String({ minLength: 1, maxLength: 120 }),
-    evidence: Type.Union([Type.String({ maxLength: 300 }), Type.Null()]),
-    fix: Type.Union([Type.String({ maxLength: 300 }), Type.Null()]),
-  }, { additionalProperties: false }), { minItems: 1 }),
-  beyondScope: Type.Array(Type.String({ minLength: 1, maxLength: 120 }), { maxItems: 3 }),
-}, { additionalProperties: false });
-export type TAcceptanceCandidate = Static<typeof AcceptanceCandidate>;
-
-export type AcceptanceInput = {
-  card: { title: string; brief: string | null; criteria: { index: number; text: string }[] };
-  taskCriterion: { index: number; text: string } | null;
-  claims: TLocalHandbackCriterion[];
-  summary: string | null;
-  outputs: { name: string; kind: "artifact" | "evidence"; text: string | null; url: string | null }[];
-  unreadable: { name: string; note: string }[];
-  previous?: { index: number; text: string; verdict: TCriterionVerdict; reason: string; fix: string | null }[];
-};
-export type CardAcceptanceAgent = {
-  accept(input: AcceptanceInput, options: { handbackId: string; personId: string; images: ImageContent[]; signal: AbortSignal }): Promise<TAcceptanceCandidate>;
-};
-
-/** 业务校验照参考评审：编号正好 1..n 各一次；met 要写依据，partial / unmet 要写怎么补。 */
-export const acceptanceProblem = (candidate: TAcceptanceCandidate, total: number) =>
-  reviewProblem({ headline: candidate.headline, summary: candidate.headline, gain: null, criteria: candidate.criteria } satisfies TReviewCandidate, total);
-
-export function createCardAcceptanceAgent(options: BoardModelOptions): CardAcceptanceAgent {
-  return {
-    async accept(input, { handbackId, personId, images, signal }) {
-      return (await runCandidateAgent({ ...boardModel(options), kind: "card_acceptance", objectRef: { type: "card_handback", id: handbackId }, personId, input,
-        prompt: CARD_ACCEPTANCE_PROMPT, schema: AcceptanceCandidate, images, signal, maxModelCalls: 4,
-        validate: (candidate) => acceptanceProblem(candidate, input.card.criteria.length) })).candidate;
-    },
-  };
-}
 
 /** 没过时发回执行方的那段话：固定格式拼，不调模型。 */
 export function returnText(criteria: string[], result: StoredAcceptance): string {
@@ -125,12 +53,13 @@ const STALE_MS = 10 * 60_000;
 const ACCEPTANCE_FAILED = "验收没做完，可以重试";
 
 type TaskRow = { id: string; owner_id: string; title: string; brief: string | null; status: string; plan_task_id: string | null; criterion_index: number | null;
-  criterion_text: string | null };
+  criterion_text: string | null; role_id: string | null };
 type OutputRow = { id: string; kind: "artifact" | "evidence"; title: string; file_name: string | null; mime: string | null; storage_key: string | null; url: string | null;
   text: string | null; extracted_text: string | null };
 
+/** onProposal：第二次没过时记下的岗位修改，提交后交给提岗位修改的队列。 */
 export function createCardAcceptanceQueue(options: { pool: Pool; storageDir: string; agent: CardAcceptanceAgent; fetchArticle: ArticleFetcher; now: () => Date;
-  onError: (cause: unknown) => void }) {
+  onError: (cause: unknown) => void; onProposal: (proposalId: string) => void }) {
   const running = new Map<string, Promise<void>>(), abort = new AbortController();
   const q: Query = options.pool.query.bind(options.pool);
   const stale = () => new Date(options.now().getTime() - STALE_MS);
@@ -184,7 +113,9 @@ export function createCardAcceptanceQueue(options: { pool: Pool; storageDir: str
     const fail = (message: string) => q(`UPDATE card_handbacks SET status='failed',error=$3,finished_at=$4 WHERE ${guard}`, [handbackId, token, message, options.now()]);
     try {
       if (!row.criteria.length) { await fail("这张卡没写完成标准，写好以后重新交回"); return; }
-      const task = (await q("SELECT id::text,owner_id,title,brief,status,plan_task_id,criterion_index,criterion_text FROM tasks WHERE id=$1", [row.task_id])).rows[0] as TaskRow;
+      const task = (await q("SELECT id::text,owner_id,title,brief,status,plan_task_id,criterion_index,criterion_text,role_id FROM tasks WHERE id=$1", [row.task_id])).rows[0] as TaskRow;
+      const role = task.role_id ? (await rolesById(q, [task.role_id])).get(task.role_id) ?? null : null;
+      const reviewer = await reviewerRole(q, row.owner_id);
       const signal = AbortSignal.any([abort.signal, AbortSignal.timeout(RUN_TIMEOUT_MS)]);
       const rows = row.output_ids.length ? (await q("SELECT * FROM local_outputs WHERE id=ANY($1::uuid[]) ORDER BY created_at,id", [row.output_ids])).rows as OutputRow[] : [];
       const { outputs, unreadable, images } = await material(rows, signal);
@@ -193,7 +124,9 @@ export function createCardAcceptanceQueue(options: { pool: Pool; storageDir: str
       const input: AcceptanceInput = {
         card: { title: task.title, brief: task.brief, criteria: row.criteria.map((text, index) => ({ index: index + 1, text })) },
         taskCriterion: task.criterion_index && task.criterion_text ? { index: task.criterion_index, text: task.criterion_text } : null,
-        claims: row.claims, summary: row.summary, outputs, unreadable,
+        claims: row.claims, summary: row.summary, outputs, unreadable, agreement: null,
+        role: role ? { name: role.name, acceptanceMd: role.acceptance_md } : null,
+        reviewer: reviewer ? { name: reviewer.name, practiceMd: reviewer.practice_md, acceptanceMd: reviewer.acceptance_md } : null,
         ...(previous && effectiveOutcome(previous) === "fail" ? { previous: previous.result!.criteria.map((item) => ({ index: item.index,
           text: previous.criteria[item.index - 1] ?? "", verdict: item.verdict, reason: item.reason, fix: item.fix })) } : {}),
       };
@@ -208,6 +141,7 @@ export function createCardAcceptanceQueue(options: { pool: Pool; storageDir: str
       const met = result.criteria.filter((item) => item.verdict === "met").length;
       const outcome = met === result.criteria.length ? "pass" : "fail";
       const client = await options.pool.connect();
+      let proposal: string | null = null;
       try {
         await client.query("BEGIN");
         const locked = (await client.query("SELECT id::text,owner_id,status,plan_task_id FROM tasks WHERE id=$1 FOR UPDATE", [row.task_id])).rows[0] as TaskRow;
@@ -220,9 +154,16 @@ export function createCardAcceptanceQueue(options: { pool: Pool; storageDir: str
             `Agent 验收通过（${met}/${result.criteria.length}）`));
           await tellGroup(client, locked.id, locked.owner_id, `Agent 验收通过（${met}/${result.criteria.length}）。`);
         }
+        // 同一张卡第二次没过：提一条岗位修改。
+        if (saved.rowCount && latest === row.attempt && outcome === "fail") {
+          const history = (await client.query("SELECT * FROM card_handbacks WHERE task_id=$1 ORDER BY attempt DESC", [row.task_id])).rows as HandbackRow[];
+          if (failStreak(history) === 2)
+            proposal = await requestRoleProposal(client, { taskId: row.task_id, ownerId: row.owner_id, sourceKind: "second_fail", sourceId: handbackId, reason: null });
+        }
         await client.query("COMMIT");
       } catch (cause) { await client.query("ROLLBACK").catch(() => undefined); throw cause; }
       finally { client.release(); }
+      if (proposal) options.onProposal(proposal);
     } catch (cause) {
       // 关闭时放回队列，下次启动接着验；其余算这次没验完，可以重试。
       if (abort.signal.aborted) await q(`UPDATE card_handbacks SET status='queued',run_token=NULL WHERE ${guard}`, [handbackId, token]);
@@ -272,8 +213,9 @@ async function inTransaction<T>(pool: Pool, work: (client: PoolClient) => Promis
  * 推翻（只有推进人，只推翻最近一次有结论的交回）：
  * - 通过的推翻：卡回进行中，验收记录清掉，从准备中拿掉（已经进了某一版的不能推翻）；推翻的原因当改法，等网页送回执行方。
  * - 没过的推翻（「仍然通过」）：卡完成、进准备中，验收记录写本人，verdict 写推翻的原因。
+ * 两个方向都记一条要写的岗位修改，返回它的 id（没记为 null），调用方提交后排队。
  */
-export function overruleHandback(pool: Pool, ownerId: string, cardId: string, handbackId: string, reason: string, now: Date, names: Map<string, string>): Promise<void> {
+export function overruleHandback(pool: Pool, ownerId: string, cardId: string, handbackId: string, reason: string, now: Date, names: Map<string, string>): Promise<string | null> {
   const text = reason.trim();
   if (!text) throw new CardError(400, "INVALID_INPUT", "写一句为什么");
   return inTransaction(pool, async (client) => {
@@ -297,6 +239,7 @@ export function overruleHandback(pool: Pool, ownerId: string, cardId: string, ha
       await client.query("UPDATE card_handbacks SET overruled_at=$2,overruled_by=$3,overrule_reason=$4 WHERE id=$1", [handbackId, now, ownerId, text]);
       await tellGroup(client, cardId, ownerId, `${who}推翻了 Agent 验收，算通过：${text}`);
     }
+    return requestRoleProposal(client, { taskId: cardId, ownerId, sourceKind: "overrule", sourceId: handbackId, reason: text });
   });
 }
 

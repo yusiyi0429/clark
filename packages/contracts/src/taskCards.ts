@@ -4,6 +4,7 @@ import { LocalHandbackCriterion } from "./localRunner.js";
 import { LocalOutputView, LocalRunView } from "./localDevices.js";
 import { TaskPerson, TaskView } from "./tasks.js";
 import { CardCriterion, CardExecutor, CardHandbackBrief, CardModel, TaskCard } from "./taskCardView.js";
+import { RoleBrief, RoleRef } from "./roles.js";
 
 /**
  * 执行看板（V2 设计第 3–8 节）：Task 页右边的四列加交付物、拆卡、卡的详情、Agent 验收和推翻、准备中的交付物和「出下一版」。
@@ -35,7 +36,8 @@ export const CardModelTier = Type.Union([Type.Literal("strong"), Type.Literal("n
 
 /**
  * 草稿卡：还不是执行事项，在「待开始」里画成虚线。doneDefinition 每行一条完成标准；criterionIndex 对 Task 的第几条标准（从 1 起），对「其他」为 null。
- * why 是伙伴一句话说为什么这么拆。只列还没处理的（放进看板或不要以后就不在了）。
+ * role 是伙伴给它配的岗位（本人的岗位之一）；本人没有合适的岗位时为 null，suggestPresetKey 是建议从哪个预设加一个。
+ * executor、modelTier 是配岗位以前的建议，留着兼容。why 是伙伴一句话说为什么这么拆。只列还没处理的（放进看板或不要以后就不在了）。
  */
 export const CardDraftView = Type.Object({
   id: Type.String({ format: "uuid" }),
@@ -45,6 +47,8 @@ export const CardDraftView = Type.Object({
   brief: Type.String({ maxLength: 4000 }),
   doneDefinition: Type.String({ minLength: 1, maxLength: 500 }),
   criterionIndex: Nullable(Type.Integer({ minimum: 1 })),
+  role: Nullable(RoleRef),
+  suggestPresetKey: Nullable(Type.String()),
   executor: CardExecutor,
   modelTier: CardModelTier,
   why: Nullable(Type.String({ maxLength: 200 })),
@@ -85,7 +89,7 @@ export const CreateCardPlanRequest = Type.Object({
 }, strict);
 
 /**
- * 放进看板：每张可以顺手改标题、交代、完成标准、执行方。建出来的执行事项挂这个 Task 和它的 Mission，来源记「自己建」。
+ * 放进看板：每张可以顺手改标题、交代、完成标准、执行方、岗位（roleId 是本人没归档的岗位，null 不配）。建出来的执行事项挂这个 Task 和它的 Mission，来源记「自己建」。
  * 已经放进过或不要了的草稿 409。返回建出来的卡，顺序同请求。
  */
 export const AcceptCardDraftsRequest = Type.Object({
@@ -95,17 +99,19 @@ export const AcceptCardDraftsRequest = Type.Object({
     brief: Type.Optional(Type.String({ maxLength: 4000 })),
     doneDefinition: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
     executor: Type.Optional(CardExecutor),
+    roleId: Type.Optional(Nullable(Type.String({ format: "uuid" }))),
   }, strict), { minItems: 1, maxItems: 8 }),
 }, strict);
 export const AcceptCardDraftsResponse = Type.Object({ cards: Type.Array(CardTaskView) }, strict);
 
 /**
- * 改卡上卡的那几样（只有推进人）：执行方、模型、交代、对哪条标准。标题和完成标准照旧用 PATCH /api/me/tasks/:id。
+ * 改卡上卡的那几样（只有推进人）：执行方、岗位（本人没归档的岗位，null 不配）、模型、交代、对哪条标准。标题和完成标准照旧用 PATCH /api/me/tasks/:id。
  * version 不一致 409 VERSION_CONFLICT（带 latestTask）。除 version 外至少带一个字段。
  */
 export const PatchCardRequest = Type.Object({
   version: Type.Integer({ minimum: 1 }),
   executor: Type.Optional(CardExecutor),
+  roleId: Type.Optional(Nullable(Type.String({ format: "uuid" }))),
   model: Type.Optional(Nullable(CardModel)),
   brief: Type.Optional(Nullable(Type.String({ minLength: 1, maxLength: 4000 }))),
   criterionIndex: Type.Optional(Nullable(Type.Integer({ minimum: 1 }))),
@@ -162,10 +168,12 @@ export const CardDetailResponse = Type.Object({
 /**
  * GET /api/me/cards/:id/brief：开工时交给本机的交代。markdown 原样作为本机会话的第一句话（≤ 20000 字）：
  * Mission、Task、对的那条标准和约定里它「用什么证明」、Task 的「这次不包括」、卡的交代和完成标准、Task 最新一版评审里这条还差什么、上一次验收没过的改法。
+ * role 是卡的岗位（职责、做法、验收口径、工具、模型档位、版本），本机开工时按它注入；没配岗位为 null。
  * 工作规矩（怎么交回、产出写在哪）在本机程序的提示词里，这里不重复。
  */
 export const CardBriefResponse = Type.Object({
   markdown: Type.String({ minLength: 1, maxLength: 20000 }),
+  role: Nullable(RoleBrief),
   mission: Nullable(Type.Object({ missionId: Type.String({ minLength: 1 }), title: Type.String() }, strict)),
   task: Nullable(Type.Object({ taskId: Type.String({ minLength: 1 }), name: Type.String() }, strict)),
   criterion: Nullable(Type.Object({ index: Type.Integer({ minimum: 1 }), text: Type.String(), proof: Nullable(Type.String()) }, strict)),

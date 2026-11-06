@@ -3,9 +3,14 @@ import type { FastifyReply } from "fastify";
 import { AcceptCardDraftsRequest, AcceptCardDraftsResponse, CardBoardResponse, CardBriefResponse, CardDetailResponse, CardPlanView, CardTaskView, CreateCardPlanRequest,
   AddPendingDeliverableRequest, CreateVersionFromPendingRequest, DeliverableVersion, OverruleCardHandbackRequest, PatchCardRequest, PendingDeliverableItem } from "@warmap/contracts";
 import { createArticleFetcher, type ArticleFetcher } from "../articleText.js";
-import { createCardAcceptanceAgent, createCardAcceptanceQueue, markHandbackReturned, overruleHandback, retryHandback, type CardAcceptanceAgent } from "../cardAcceptance.js";
+import { createCardAcceptanceQueue, markHandbackReturned, overruleHandback, retryHandback } from "../cardAcceptance.js";
+import { createCardAcceptanceAgent, type CardAcceptanceAgent } from "../cardAcceptanceAgent.js";
 import { addPendingTopicVersion, createVersionFromPending, removePending } from "../cardDeliverables.js";
-import { createCardPlanAgent, createCardPlanQueue, type CardPlanAgent } from "../cardPlanner.js";
+import { createCardPlanAgent, type CardPlanAgent } from "../cardPlanAgent.js";
+import { createCardPlanQueue } from "../cardPlanner.js";
+import { createRoleProposalAgent, type RoleProposalAgent } from "../roleProposalAgent.js";
+import { createRoleProposalQueue } from "../roleProposals.js";
+import { RoleError } from "../roles.js";
 import { personDisplayNames } from "../people.js";
 import { findOwnTask, type OwnTask } from "../taskDeliverables.js";
 import { acceptCardDrafts, boardTask, CardError, cardBrief, createCardPlan, dismissCardDraft, patchCard, readBoard, readCardDetail } from "../taskCards.js";
@@ -15,11 +20,13 @@ const taskParams = Type.Object({ taskId: Type.String({ minLength: 1 }) });
 const idParams = Type.Object({ id: Type.String({ minLength: 1 }) });
 const handbackParams = Type.Object({ id: Type.String({ minLength: 1 }), handbackId: Type.String({ format: "uuid" }) });
 
-export type BoardAgents = { plan: CardPlanAgent; acceptance: CardAcceptanceAgent };
+/** 看板的三个作业：拆卡、Agent 验收、提岗位修改。换成别的服务来跑时，只换这三个实现。 */
+export type BoardAgents = { plan: CardPlanAgent; acceptance: CardAcceptanceAgent; proposal: RoleProposalAgent };
 
 /**
  * 执行看板（契约 taskCards.ts）：Task 页看板、拆卡和草稿、卡的详情、改卡、开工交代、Agent 验收的推翻、重试和「已送到」。成员工作台的人才有。
- * 拆卡和 Agent 验收在后台队列里跑；模型照参考评审用 REVIEW_*，没配时用 PI_* 的 heavy 模型。agents、fetchArticle 可注入（测试用假实现）。
+ * 拆卡、Agent 验收、提岗位修改在后台队列里跑；拆卡和验收照参考评审用 REVIEW_*（没配时用 PI_* 的 heavy 模型），提岗位修改用 PI_* 的 light 模型。
+ * agents、fetchArticle 可注入（测试用假实现）。
  * 返回 Agent 验收的入队（本机上报新交回时用）。
  */
 export function registerTaskCardRoutes(app: AppInstance, ctx: RouteContext, deps: { agents?: Partial<BoardAgents>; fetchArticle?: ArticleFetcher } = {}):
@@ -33,28 +40,33 @@ export function registerTaskCardRoutes(app: AppInstance, ctx: RouteContext, deps
     findOwnTask(q, ctx.planTasks, personId, ctx.now(), planTaskId).catch(() => null);
   const plans = createCardPlanQueue({ pool, now: ctx.now, onError: () => app.log.error("card plan failed"), agent: deps.agents?.plan ?? createCardPlanAgent(model),
     planTask: (ownerId, planTaskId) => planTaskOf(ownerId)(planTaskId) });
+  const proposals = createRoleProposalQueue({ pool, onError: () => app.log.error("role proposal failed"), agent: deps.agents?.proposal
+    ?? createRoleProposalAgent({ query: q, baseUrl: env.piBaseUrl, apiKey: env.piApiKey, modelId: env.lightModel, thinking: "off" }) });
   const acceptance = createCardAcceptanceQueue({ pool, storageDir: ctx.materialStorageDir, now: ctx.now, onError: () => app.log.error("card acceptance failed"),
-    agent: deps.agents?.acceptance ?? createCardAcceptanceAgent(model), fetchArticle: deps.fetchArticle ?? createArticleFetcher() });
+    agent: deps.agents?.acceptance ?? createCardAcceptanceAgent(model), fetchArticle: deps.fetchArticle ?? createArticleFetcher(),
+    onProposal: (id) => { void proposals.enqueue(id); } });
   app.decorate("cardPlans", plans);
   app.decorate("cardAcceptance", acceptance);
+  app.decorate("roleProposals", proposals);
   let recovery: ReturnType<typeof setInterval> | undefined;
-  const recover = () => Promise.all([plans.recover(), acceptance.recover()]).catch(() => app.log.error("board queue recovery failed"));
+  const recover = () => Promise.all([plans.recover(), acceptance.recover(), proposals.recover()]).catch(() => app.log.error("board queue recovery failed"));
   app.addHook("onReady", async () => {
     await recover();
     recovery = setInterval(() => { void recover(); }, 60_000);
     recovery.unref();
   });
-  app.addHook("onClose", async () => { clearInterval(recovery); await Promise.all([plans.close(), acceptance.close()]); });
+  app.addHook("onClose", async () => { clearInterval(recovery); await Promise.all([plans.close(), acceptance.close(), proposals.close()]); });
 
   const requireMember: Guard = async (req, reply) => {
     await requirePerson(req, reply);
     if (reply.sent) return reply;
     if (req.person?.role !== "member") return fail(reply, 403, "FORBIDDEN", "请切换到 DRI 工作台");
   };
-  /** CardError 换成对应的错误响应。 */
+  /** CardError、RoleError 换成对应的错误响应。 */
   const handle = async <T>(reply: FastifyReply, work: () => Promise<T>) => {
     try { return await work(); } catch (cause) {
       if (cause instanceof CardError) return fail(reply, cause.status, cause.code, cause.message, cause.latestTask ? { latestTask: cause.latestTask } : undefined);
+      if (cause instanceof RoleError) return fail(reply, cause.status, cause.code, cause.message);
       throw cause;
     }
   };
@@ -97,8 +109,10 @@ export function registerTaskCardRoutes(app: AppInstance, ctx: RouteContext, deps
         return readCardDetail(q, req.person!.personId, params.id, names());
       });
     });
-  handbackAction("/api/me/cards/:id/handbacks/:handbackId/overrule", (personId, cardId, handbackId, body: { reason: string }) =>
-    overruleHandback(pool, personId, cardId, handbackId, body.reason, ctx.now(), names()), OverruleCardHandbackRequest);
+  handbackAction("/api/me/cards/:id/handbacks/:handbackId/overrule", async (personId, cardId, handbackId, body: { reason: string }) => {
+    const proposal = await overruleHandback(pool, personId, cardId, handbackId, body.reason, ctx.now(), names());
+    if (proposal) void proposals.enqueue(proposal);
+  }, OverruleCardHandbackRequest);
   handbackAction("/api/me/cards/:id/handbacks/:handbackId/retry", async (personId, cardId, handbackId) => {
     await retryHandback(pool, personId, cardId, handbackId);
     void acceptance.enqueue(handbackId);
@@ -131,5 +145,7 @@ declare module "fastify" {
     cardPlans: ReturnType<typeof createCardPlanQueue>;
     /** Agent 验收队列（测试用 idle() 等它跑完）。 */
     cardAcceptance: ReturnType<typeof createCardAcceptanceQueue>;
+    /** 提岗位修改的队列（测试用 idle() 等它跑完）。 */
+    roleProposals: ReturnType<typeof createRoleProposalQueue>;
   }
 }

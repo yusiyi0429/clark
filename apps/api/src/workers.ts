@@ -1,0 +1,146 @@
+import type { TWorkerCost, TWorkerItem, TWorkerMark, TWorkersResponse } from "@warmap/contracts";
+import { ownMissions, planTaskMissions } from "./homePlan.js";
+import { latestRuns, runBrief } from "./localDevices.js";
+import type { Query } from "./meetingStore.js";
+import { companyPeriod } from "./monthlyPlans.js";
+import { readPlanTasks, type PlanTaskSource } from "./planTasks.js";
+import { reviewerRole, roleRef, rolesById } from "./roles.js";
+import { cardTaskViews } from "./taskCards.js";
+
+/**
+ * worker 列表（V2 设计第 20 节）：本人所有 worker（带岗位的卡、带岗位的专题），跨 Task 分进行中、已排队、已完成（今天），加资源摘要。
+ * 没有岗位的执行事项是人自己的活，不算。#号读的时候算：本人列出来的同一岗位的 worker 按开工时间排。
+ * 卡在验收中时干活的是云端的验收员。设备 10 分钟内上报过算在线；本机的执行还没结束、但设备不在线的，算「等本机上线」。
+ * 专题没有「完成」：最近一次执行还没结束的算进行中，带岗位还没开过的算等开工。
+ */
+
+/** 设备多久没上报算不在线。跑着的时候状态、计划、花费都会报；没有动静的一步也可能超过它，本机程序加了心跳以后可以缩短。 */
+export const ONLINE_WINDOW_MS = 10 * 60_000;
+const ACTIVE = new Set<string>(["queued", "starting", "running", "waiting_permission", "idle"]);
+const NEEDS_YOU = new Set<TWorkerMark>(["approval", "reply", "review_failed", "blocked"]);
+const ZERO: TWorkerCost = { inputTokens: 0, outputTokens: 0, costUsd: null, costCny: null };
+const COST_SUM = "sum((tokens->>'input')::bigint) AS input,sum((tokens->>'output')::bigint) AS output,sum(cost_usd) AS usd";
+
+type CostRow = { input: string | null; output: string | null; usd: string | null };
+const costOf = (row: CostRow | undefined): TWorkerCost => !row ? ZERO
+  : { inputTokens: Number(row.input ?? 0), outputTokens: Number(row.output ?? 0), costUsd: row.usd === null ? null : Number(row.usd), costCny: null };
+/** 本机的会话在等空位（本机程序加了同时跑的上限以后会报 queued）。 */
+const isQueued = (state: string) => state === "queued";
+/** 按开工时间排，等开工（没有开工时间）的排在后面。 */
+const byStart = (a: { startedAt: string | null; key: string }, b: { startedAt: string | null; key: string }) =>
+  (a.startedAt ? Date.parse(a.startedAt) : Number.POSITIVE_INFINITY) - (b.startedAt ? Date.parse(b.startedAt) : Number.POSITIVE_INFINITY) || a.key.localeCompare(b.key);
+
+/** live：本机上真在跑（算进「正在跑几个」）。 */
+type Draft = Omit<TWorkerItem, "workerNo"> & { group: "running" | "queued" | "done"; live: boolean };
+
+export async function listWorkers(deps: { q: Query; planTasks: PlanTaskSource; now: Date; names: Map<string, string>; reviewModel: string },
+  ownerId: string): Promise<TWorkersResponse> {
+  const { q, now } = deps;
+  const devices = (await q("SELECT id::text,name,last_sync_at FROM local_devices WHERE owner_id=$1 AND revoked_at IS NULL ORDER BY created_at", [ownerId])).rows as
+    { id: string; name: string; last_sync_at: Date | null }[];
+  const since = now.getTime() - ONLINE_WINDOW_MS;
+  const online = new Set(devices.filter((device) => device.last_sync_at && device.last_sync_at.getTime() > since).map((device) => device.id));
+  const elapsed = (start: string | null, end: Date = now) => start ? Math.max(0, Math.round((end.getTime() - Date.parse(start)) / 1000)) : null;
+
+  // 卡：带岗位的、没退回的；完成的只要今天（公司时区）完成的。
+  const cardRows = (await q(`SELECT id::text,mission_id,plan_task_id,(acceptance->>'at')::timestamptz AS finished_at FROM tasks
+    WHERE owner_id=$1 AND role_id IS NOT NULL AND status<>'returned'
+      AND (status<>'done' OR ((acceptance->>'at')::timestamptz AT TIME ZONE 'Asia/Shanghai')::date=($2::timestamptz AT TIME ZONE 'Asia/Shanghai')::date)
+    ORDER BY created_at,id`, [ownerId, now])).rows as { id: string; mission_id: string | null; plan_task_id: string | null; finished_at: Date | null }[];
+  const cards = await cardTaskViews(q, cardRows.map((row) => row.id), deps.names);
+  const cardCosts = new Map(cardRows.length ? ((await q(`SELECT task_id::text AS id,${COST_SUM} FROM local_runs WHERE task_id=ANY($1::uuid[]) GROUP BY task_id`,
+    [cardRows.map((row) => row.id)])).rows as (CostRow & { id: string })[]).map((row) => [row.id, costOf(row)]) : []);
+  const reviewer = cards.some((card) => card.card.stage === "review") ? await reviewerRole(q, ownerId) : null;
+
+  // 专题：带岗位、没归档的。
+  const topics = (await q("SELECT id::text,title,role_id::text,plan_task_id,mission_id FROM research_topics WHERE owner_id=$1 AND role_id IS NOT NULL AND status='active'",
+    [ownerId])).rows as { id: string; title: string; role_id: string; plan_task_id: string | null; mission_id: string | null }[];
+  const topicRuns = await latestRuns(q, "topic_id", topics.map((topic) => topic.id));
+  const topicRoles = await rolesById(q, topics.map((topic) => topic.role_id));
+  const topicCosts = new Map(topics.length ? ((await q(`SELECT topic_id::text AS id,${COST_SUM} FROM local_runs WHERE topic_id=ANY($1::uuid[]) GROUP BY topic_id`,
+    [topics.map((topic) => topic.id)])).rows as (CostRow & { id: string })[]).map((row) => [row.id, costOf(row)]) : []);
+
+  // Task 名字（本人这个月的 Task，读不到时写 id）和 Mission 名字。
+  const missionIds = [...new Set([...cardRows.map((row) => row.mission_id), ...topics.map((topic) => topic.mission_id)].filter((id): id is string => Boolean(id)))];
+  const missions = new Map(missionIds.length ? ((await q("SELECT id,title FROM missions WHERE id=ANY($1::text[])", [missionIds])).rows as { id: string; title: string }[])
+    .map((row) => [row.id, row.title]) : []);
+  const hasTasks = [...cardRows, ...topics].some((row) => row.plan_task_id);
+  const taskNames = new Map(hasTasks ? (await readPlanTasks(deps.planTasks, planTaskMissions((await ownMissions(q, ownerId, companyPeriod(now))).rows)))
+    .map((task) => [task.taskId, task.name]) : []);
+  const taskOf = (id: string | null) => id ? { id, name: taskNames.get(id) ?? id } : null;
+  const missionOf = (id: string | null) => id ? { id, title: missions.get(id) ?? "" } : null;
+  const step = (plan: { done: number; total: number; current: string | null } | null) =>
+    plan?.current ? { n: Math.min(plan.done + 1, plan.total), total: plan.total, label: plan.current } : null;
+
+  const drafts: Draft[] = [];
+  for (const card of cards) {
+    const row = cardRows.find((item) => item.id === card.id)!;
+    const run = card.card.run;
+    const role = card.card.role!;
+    const base = { key: `card:${card.id}`, kind: "card" as const, cardId: card.id, topicId: null, title: card.title, task: taskOf(row.plan_task_id),
+      mission: missionOf(row.mission_id), cost: cardCosts.get(card.id) ?? null, stage: card.card.stage };
+    const local = run ? { where: "local" as const, deviceId: run.deviceId, deviceName: run.deviceName, modelLabel: run.modelLabel } : null;
+    if (card.card.stage === "todo") {
+      drafts.push({ ...base, group: "queued", live: false, role, step: null, resource: null, startedAt: null, elapsedSeconds: null, finishedAt: null,
+        wait: null, needsYou: false, queueReason: "not_dispatched" });
+    } else if (card.card.stage === "done") {
+      drafts.push({ ...base, group: "done", live: false, role, step: null, resource: local, startedAt: run?.startedAt ?? null,
+        elapsedSeconds: elapsed(run?.startedAt ?? null, row.finished_at ?? now), finishedAt: row.finished_at?.toISOString() ?? null, wait: null, needsYou: false, queueReason: null });
+    } else if (card.card.stage === "review") {
+      const startedAt = card.card.handback?.createdAt ?? null;
+      drafts.push({ ...base, group: "running", live: false, role: reviewer ? roleRef(reviewer) : role, step: null,
+        resource: { where: "cloud", deviceId: null, deviceName: null, modelLabel: deps.reviewModel }, startedAt, elapsedSeconds: elapsed(startedAt), finishedAt: null,
+        wait: "reviewing", needsYou: false, queueReason: null });
+    } else {
+      const active = Boolean(run && ACTIVE.has(run.state));
+      const queueReason = run && active && !online.has(run.deviceId) ? "device_offline" as const : run && isQueued(run.state) ? "slot" as const : null;
+      const wait = queueReason ? null : card.card.wait;
+      drafts.push({ ...base, group: queueReason ? "queued" : "running", live: active && !queueReason, role, step: step(run?.plan ?? null), resource: local,
+        startedAt: run?.startedAt ?? null, elapsedSeconds: elapsed(run?.startedAt ?? null), finishedAt: null, wait, needsYou: wait !== null && NEEDS_YOU.has(wait), queueReason });
+    }
+  }
+  for (const topic of topics) {
+    const role = topicRoles.get(topic.role_id);
+    const run = topicRuns.get(topic.id);
+    if (!role || (run && !ACTIVE.has(run.state))) continue;
+    const base = { key: `topic:${topic.id}`, kind: "topic" as const, cardId: null, topicId: topic.id, title: topic.title, role: roleRef(role),
+      task: taskOf(topic.plan_task_id), mission: missionOf(topic.mission_id), cost: topicCosts.get(topic.id) ?? null, finishedAt: null };
+    if (!run) {
+      drafts.push({ ...base, group: "queued", live: false, step: null, resource: null, startedAt: null, elapsedSeconds: null, stage: "todo", wait: null, needsYou: false,
+        queueReason: "not_dispatched" });
+      continue;
+    }
+    const brief = runBrief(run);
+    const queueReason = !online.has(run.device_id) ? "device_offline" as const : isQueued(run.state) ? "slot" as const : null;
+    const wait: TWorkerMark | null = queueReason ? null : run.state === "waiting_permission" ? "approval" : run.state === "idle" ? "reply" : null;
+    drafts.push({ ...base, group: queueReason ? "queued" : "running", live: !queueReason, step: step(brief.plan),
+      resource: { where: "local", deviceId: brief.deviceId, deviceName: brief.deviceName, modelLabel: brief.modelLabel }, startedAt: brief.startedAt,
+      elapsedSeconds: elapsed(brief.startedAt), stage: "doing", wait, needsYou: wait !== null && NEEDS_YOU.has(wait), queueReason });
+  }
+
+  // #号：同一岗位按开工时间排（等开工的排在后面）。
+  const numbered = new Map<string, number>(), counters = new Map<string, number>();
+  for (const draft of [...drafts].sort(byStart)) {
+    const next = (counters.get(draft.role.id) ?? 0) + 1;
+    counters.set(draft.role.id, next);
+    numbered.set(draft.key, next);
+  }
+  const items = (group: Draft["group"]) => drafts.filter((draft) => draft.group === group)
+    .map(({ group: _group, live: _live, ...item }): TWorkerItem => ({ ...item, workerNo: numbered.get(item.key)! }));
+
+  const today = (await q(`SELECT ${COST_SUM} FROM local_runs WHERE owner_id=$1
+    AND (started_at AT TIME ZONE 'Asia/Shanghai')::date=($2::timestamptz AT TIME ZONE 'Asia/Shanghai')::date`, [ownerId, now])).rows[0] as CostRow;
+  const month = (await q(`SELECT ${COST_SUM} FROM local_runs WHERE owner_id=$1
+    AND date_trunc('month',started_at AT TIME ZONE 'Asia/Shanghai')=date_trunc('month',$2::timestamptz AT TIME ZONE 'Asia/Shanghai')`, [ownerId, now])).rows[0] as CostRow;
+  return {
+    running: items("running").sort((a, b) => Number(b.needsYou) - Number(a.needsYou) || byStart(a, b)),
+    queued: items("queued").sort(byStart),
+    done: items("done").sort((a, b) => (b.finishedAt ?? "").localeCompare(a.finishedAt ?? "")),
+    resources: {
+      devices: devices.map((device) => ({ id: device.id, name: device.name, lastSeenAt: device.last_sync_at?.toISOString() ?? null, online: online.has(device.id) })),
+      running: drafts.filter((draft) => draft.live).length,
+      cap: null,
+      cost: { today: costOf(today), month: costOf(month) },
+    },
+  };
+}

@@ -4,7 +4,7 @@ import { Value } from "@sinclair/typebox/value";
 import {
   LOCAL_RUNNER_PROTOCOL, LOCAL_RUNNER_ROUTES, LOCAL_RUNNER_TOKEN_HEADER,
   LocalPairingStartRequest, LocalAgentLoginCodeRequest, LocalCloudLinkRequest, LocalSettingsPatch, LocalModelProfileUpsert,
-  LocalCreateSessionRequest, LocalSendMessageRequest, LocalPermissionDecisionRequest,
+  LocalCreateSessionRequest, LocalCreateSessionBatchRequest, LocalSendMessageRequest, LocalPermissionDecisionRequest,
   type TLocalRunnerErrorCode, type TLocalStatusResponse, type TLocalHealthResponse,
 } from "@warmap/contracts";
 import { checkHost, checkJson, checkOrigin, corsHeaders, preflightHeaders, type Rejection } from "./security.js";
@@ -84,12 +84,24 @@ function validate<T extends TSchema>(schema: T, body: unknown): any {
   throw new HttpError(400, "validation", first ? `${first.path || "请求体"}：${first.message}` : "请求体不合格");
 }
 
+/** 会话和执行方的错误换成接口错误：一批开工的每件结果、单个请求的回复共用。 */
+function errorOf(e: unknown): { code: TLocalRunnerErrorCode; message: string } {
+  if (e instanceof HttpError || e instanceof SessionError || e instanceof AgentStartError) return { code: e.code, message: e.message };
+  return { code: "internal", message: e instanceof Error ? e.message : String(e) };
+}
+function statusOf(e: unknown): number {
+  if (e instanceof SessionError) return e.code === "not_found" ? 404 : e.code === "conflict" ? 409 : e.code === "folder_not_allowed" ? 403 : 400;
+  if (e instanceof AgentStartError) return e.code === "not_implemented" ? 501 : e.code === "validation" ? 400 : 409;
+  return 500;
+}
+
 export function createServer(d: ServerDeps): http.Server {
   const handlers: Record<RouteName, (c: Ctx) => Promise<unknown> | unknown> = {
     health: (c): TLocalHealthResponse => ({
       app: "tianshu-local", version: d.version, protocol: LOCAL_RUNNER_PROTOCOL,
       platform: process.platform === "darwin" ? "darwin" : process.platform === "win32" ? "win32" : "linux",
       tokenValid: d.tokens.verify(c.token, c.origin),
+      slots: d.sessions.slots(),
     }),
     startPairing: (c) => {
       const b = validate(LocalPairingStartRequest, c.body ?? {});
@@ -105,7 +117,7 @@ export function createServer(d: ServerDeps): http.Server {
     unpair: (c) => { d.tokens.revoke(c.token!); return { ok: true }; },
     status: async (): Promise<TLocalStatusResponse> => ({
       deviceId: d.config.deviceId, version: d.version, agents: [await d.claude.status()],
-      activeSessions: d.sessions.activeCount(), cloud: d.cloud.view(), settings: d.settings.get(),
+      activeSessions: d.sessions.activeCount(), slots: d.sessions.slots(), cloud: d.cloud.view(), settings: d.settings.get(),
     }),
     installAgent: (c) => { agentMustBeClaude(c); if (!d.claude.install()) throw new HttpError(409, "conflict", "正在安装或登录中"); return { ok: true }; },
     loginAgent: async (c) => { agentMustBeClaude(c); if (!(await d.claude.login())) throw new HttpError(409, "conflict", "没装 Claude Code，或正在安装、登录中"); return { ok: true }; },
@@ -155,9 +167,19 @@ export function createServer(d: ServerDeps): http.Server {
     listSessions: () => ({ sessions: d.sessions.list() }),
     createSession: (c) =>
       d.sessions.create(validate(LocalCreateSessionRequest, c.body), { includePersonalConfig: d.settings.get().includePersonalConfigByDefault }),
+    // 一批开工：一件一件按顺序交给会话管理（有空位的马上开，满了的排队），一件失败不影响别的。
+    createSessionBatch: async (c) => {
+      const { items } = validate(LocalCreateSessionBatchRequest, c.body);
+      const defaults = { includePersonalConfig: d.settings.get().includePersonalConfigByDefault };
+      const results = [];
+      for (const item of items) {
+        try { results.push({ ok: true as const, session: await d.sessions.create(item, defaults) }); } catch (e) { results.push({ ok: false as const, error: errorOf(e) }); }
+      }
+      return { results };
+    },
     getSession: (c) => d.sessions.get(c.params.id!),
     sessionEvents: (c) => streamEvents(c),
-    sendMessage: (c) => d.sessions.sendMessage(c.params.id!, validate(LocalSendMessageRequest, c.body).text),
+    sendMessage: (c) => d.sessions.sendMessage(c.params.id!, validate(LocalSendMessageRequest, c.body)),
     interrupt: async (c) => ({ session: await d.sessions.interrupt(c.params.id!) }),
     decidePermission: (c) => ({ session: d.sessions.decide(c.params.id!, c.params.requestId!, validate(LocalPermissionDecisionRequest, c.body)) }),
     kill: async (c) => ({ session: await d.sessions.kill(c.params.id!) }),
@@ -281,15 +303,7 @@ export function createServer(d: ServerDeps): http.Server {
     } catch (e) {
       if (res.headersSent) { res.end(); return; }
       if (e instanceof HttpError) return reject(res, e, cors);
-      if (e instanceof SessionError) {
-        const status = e.code === "not_found" ? 404 : e.code === "conflict" ? 409 : e.code === "folder_not_allowed" ? 403 : 400;
-        return reject(res, { status, code: e.code, message: e.message }, cors);
-      }
-      if (e instanceof AgentStartError) {
-        const status = e.code === "not_implemented" ? 501 : e.code === "validation" ? 400 : 409;
-        return reject(res, { status, code: e.code, message: e.message }, cors);
-      }
-      return reject(res, { status: 500, code: "internal", message: e instanceof Error ? e.message : String(e) }, cors);
+      return reject(res, { status: statusOf(e), ...errorOf(e) }, cors);
     }
   }
 

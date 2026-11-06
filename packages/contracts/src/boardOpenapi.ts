@@ -6,12 +6,15 @@ import {
   PendingDeliverableItem,
 } from "./taskCards.js";
 import { TaskCard } from "./taskCardView.js";
+import { CreateRoleRequest, PatchRoleRequest, RoleBrief, RoleListResponse, RolePresetView, RoleProposalList, RoleProposalView, RoleRef, RoleRevisionList,
+  RoleRevisionView, RoleView } from "./roles.js";
+import { WorkerCost, WorkerItem, WorkerResource, WorkerResources, WorkersResponse } from "./workers.js";
 import {
   CreateTopicRequest, PatchTopicRequest, ResearchTopicView, TopicBriefResponse, TopicDetailResponse, TopicListResponse, TopicVersionSummary, TopicVersionView,
 } from "./topics.js";
 
 /**
- * 执行看板、本机设备、调研专题（V2）的 OpenAPI 路径，手工列出，在 openapi.ts 里展开。
+ * 执行看板、本机设备、调研专题、岗位（V2）的 OpenAPI 路径，手工列出，在 openapi.ts 里展开。
  * 本机程序的同步接收端（POST /api/local-runner/sync）用本机程序自己的契约（localRunner.ts），网页不调，不在这里列。
  */
 
@@ -21,6 +24,8 @@ export const boardSchemas: Record<string, JsonSchema> = {
   AddPendingDeliverableRequest, CreateVersionFromPendingRequest,
   LocalDeviceView, CreateLocalDeviceRequest, CreateLocalDeviceResponse, LocalDeviceListResponse, LocalRunBrief, LocalRunView, LocalOutputView,
   ResearchTopicView, TopicVersionSummary, TopicVersionView, TopicListResponse, CreateTopicRequest, PatchTopicRequest, TopicDetailResponse, TopicBriefResponse,
+  RoleRef, RoleBrief, RoleView, RolePresetView, RoleListResponse, CreateRoleRequest, PatchRoleRequest, RoleRevisionView, RoleRevisionList, RoleProposalView, RoleProposalList,
+  WorkerResource, WorkerCost, WorkerItem, WorkerResources, WorkersResponse,
 };
 
 const error = { description: "ApiError 统一错误", content: { "application/json": { schema: { $ref: "#/components/schemas/ApiError" } } } };
@@ -207,9 +212,76 @@ export const boardPaths: OpenAPIV3.Document["paths"] = {
   "/api/me/topics/{id}/brief": {
     get: {
       operationId: "getTopicBrief",
-      summary: "开专题时交给本机的交代（本人）：markdown 原样作为本机会话的第一句话",
+      summary: "开专题时交给本机的交代（本人）：markdown 原样作为本机会话的第一句话；带岗位和评审会的挑刺岗位（critics 参数是逗号隔开的岗位 id，不带时取本人的前 3 个）",
+      parameters: [...path("id"), { name: "critics", in: "query", required: false, schema: { type: "string" } }],
+      responses: { "200": json("交代", "TopicBriefResponse"), ...errors(400, 401, 404) },
+    },
+  },
+  "/api/me/workers": {
+    get: {
+      operationId: "listWorkers",
+      summary: "本人所有 worker（带岗位的卡和专题），跨 Task 分进行中、已排队、已完成（今天），加资源摘要（设备在不在线、正在跑几个、今天和本月的花费）",
+      responses: { "200": json("worker 列表", "WorkersResponse"), ...errors(401) },
+    },
+  },
+  "/api/me/roles": {
+    get: {
+      operationId: "listRoles",
+      summary: "本人的岗位（没归档的），加可用的预设（标明已加没加）",
+      responses: { "200": json("岗位", "RoleListResponse"), ...errors(401) },
+    },
+    post: {
+      operationId: "createRole",
+      summary: "从预设复制一个岗位（{presetKey}，已经加过的 409），或自己新建",
+      requestBody: body("CreateRoleRequest"),
+      responses: { "201": json("新岗位", "RoleView"), ...errors(400, 401, 404, 409) },
+    },
+  },
+  "/api/me/roles/{id}": {
+    patch: {
+      operationId: "patchRole",
+      summary: "改岗位（本人）：版本不一致 409；保存后版本 +1、留一条修改记录，下一张卡就按新的来",
       parameters: path("id"),
-      responses: { "200": json("交代", "TopicBriefResponse"), ...errors(401, 404) },
+      requestBody: body("PatchRoleRequest"),
+      responses: { "200": json("改好的岗位", "RoleView"), ...errors(400, 401, 404, 409) },
+    },
+    delete: {
+      operationId: "archiveRole",
+      summary: "归档岗位（本人）：卡上的快照不受影响",
+      parameters: path("id"),
+      responses: { "204": { description: "已归档" }, ...errors(401, 404) },
+    },
+  },
+  "/api/me/roles/{id}/revisions": {
+    get: {
+      operationId: "listRoleRevisions",
+      summary: "岗位的修改记录（新的在前）",
+      parameters: path("id"),
+      responses: { "200": json("修改记录", "RoleRevisionList"), ...errors(401, 404) },
+    },
+  },
+  "/api/me/role-proposals": {
+    get: {
+      operationId: "listRoleProposals",
+      summary: "伙伴提的岗位修改（默认待本人确认的，status=all 看全部）",
+      parameters: [{ name: "status", in: "query", required: false, schema: { type: "string", enum: ["open", "all"] } }],
+      responses: { "200": json("岗位修改", "RoleProposalList"), ...errors(400, 401) },
+    },
+  },
+  "/api/me/role-proposals/{id}/accept": {
+    post: {
+      operationId: "acceptRoleProposal",
+      summary: "采纳：改后的整段写回岗位，版本 +1、留记录；岗位在这之后改过时 409 ROLE_CHANGED",
+      parameters: path("id"),
+      responses: { "200": json("改好的岗位", "RoleView"), ...errors(401, 404, 409) },
+    },
+  },
+  "/api/me/role-proposals/{id}/dismiss": {
+    post: {
+      operationId: "dismissRoleProposal",
+      summary: "不要这条岗位修改",
+      parameters: path("id"),
+      responses: { "200": json("这条修改", "RoleProposalView"), ...errors(401, 404, 409) },
     },
   },
 };

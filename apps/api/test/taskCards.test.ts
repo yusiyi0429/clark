@@ -58,7 +58,7 @@ describe("执行看板：卡的投影和看板接口", () => {
         .map((name) => [name, [card(name).stage, card(name).wait]]))).toEqual({
         todo: ["todo", null], approval: ["doing", "approval"], reply: ["doing", "reply"], paused: ["doing", "paused"], review: ["review", null],
         failedOnce: ["doing", "review_failed"], failedReturned: ["doing", null], blocked: ["doing", "blocked"], crashed: ["doing", "blocked"], done: ["done", null] });
-      expect(card("todo")).toEqual({ stage: "todo", wait: null, executor: null, model: null, criterion: null, run: null, handback: null, deliverable: null });
+      expect(card("todo")).toEqual({ stage: "todo", wait: null, role: null, executor: null, model: null, criterion: null, run: null, handback: null, deliverable: null });
       expect(card("approval").run).toMatchObject({ deviceId: DEVICE, deviceName: "本机", state: "waiting_permission", plan: { done: 1, total: 2, current: "写" },
         lastActivity: { text: "在做" }, cost: { inputTokens: 0, outputTokens: 0, costUsd: null }, endedAt: null });
       expect(card("failedOnce").handback).toMatchObject({ attempt: 1, status: "done", outcome: "fail", met: 1, total: 2, headline: "结论",

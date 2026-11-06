@@ -17,9 +17,9 @@ export const BOARD_TASKS: THomePlanTask[] = [
   { taskId: "task-other", missionId: "other", name: "别人 Mission 的", doneDefinition: null, criteria: ["有方案"] },
 ];
 
-export async function boardFixture(runtime: Parameters<typeof createTestApp>[2] = {}) {
+export async function boardFixture(runtime: Parameters<typeof createTestApp>[2] = {}, seed: Parameters<typeof createTestApp>[0] = {}) {
   const storage = await mkdtemp(join(tmpdir(), "board-"));
-  const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED, materialStorageDir: storage }, undefined, {
+  const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED, materialStorageDir: storage, ...seed }, undefined, {
     monthlyNow: () => BOARD_NOW,
     planTasks: async (missions) => BOARD_TASKS.filter((task) => missions.some((mission) => mission.id === task.missionId)),
     deliverableAgents: { review: { async review(input) {
@@ -44,10 +44,21 @@ export async function boardFixture(runtime: Parameters<typeof createTestApp>[2] 
     if (res.statusCode !== 200) throw new Error(res.body);
     return res.json().id as string;
   };
-  /** 配对一台电脑；handBack 是本机做完一轮交回来：几份产出、几个链接证据、一次交回（各一个新会话）。 */
-  const local = async () => {
+  /**
+   * 配对一台电脑。send 是本机在一个新会话里报几条（subject 是卡或专题），返回会话 id；
+   * handBack 是本机做完一轮交回来：几份产出、几个链接证据、一次交回。
+   */
+  const local = async (name = "我的电脑") => {
     const device = randomUUID();
-    const token = (await call("POST", "/api/me/local-devices", { deviceId: device, name: "我的电脑", os: "win32" })).json().token as string;
+    const token = (await call("POST", "/api/me/local-devices", { deviceId: device, name, os: "win32" })).json().token as string;
+    const send = async (subject: { kind: "card"; cardId: string } | { kind: "topic"; topicId: string }, items: [string, unknown][]) => {
+      const session = randomUUID();
+      const res = await t.app.inject({ method: "POST", url: "/api/local-runner/sync", headers: { authorization: `Bearer ${token}` }, payload: { deviceId: device,
+        runnerVersion: "0.1.0", items: items.map(([type, data], index) => ({ key: `${device}:${session}:${index + 1}`, sessionId: session, subject,
+          occurredAt: new Date(Date.UTC(2026, 10, 6, 1, 0, index + 1)).toISOString(), type, data })) } });
+      if (res.statusCode !== 200 || res.json().rejected.length) throw new Error(res.body);
+      return session;
+    };
     const handBack = async (cardId: string, options: { files?: [string, string][]; links?: string[] } = {}) => {
       const session = randomUUID();
       let seq = 0;
@@ -67,7 +78,7 @@ export async function boardFixture(runtime: Parameters<typeof createTestApp>[2] 
       if (res.statusCode !== 200 || res.json().rejected.length) throw new Error(res.body);
       return (await t.sql("SELECT id FROM card_handbacks WHERE task_id=$1 ORDER BY attempt DESC LIMIT 1", [cardId]))[0].id as string;
     };
-    return { device, token, handBack };
+    return { device, token, send, handBack };
   };
   return { t, call, card, local, member, storage, close: async () => { await t.close(); await rm(storage, { recursive: true, force: true }); } };
 }

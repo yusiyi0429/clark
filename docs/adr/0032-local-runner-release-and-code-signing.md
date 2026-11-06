@@ -7,7 +7,7 @@
 - 装法：Windows `irm https://tk.tokenkingos.com/downloads/local/install.ps1 | iex`，Mac `curl -fsSL …/install.sh | sh`。下载源放 4 个脚本、3 个程序（Windows x64 约 112 MB、Mac arm64 约 61 MB、x64 约 66 MB）、`SHA256SUMS`。
 - 本机实测（11/06，Windows 11 26300）：PowerShell 5.1 和 7 的 `Invoke-WebRequest` 下载的文件**没有**「来自网络」标记（Zone.Identifier），所以照这个装法**不会弹 SmartScreen**；只有本人用浏览器直接下载 exe 才会弹。
 - 会拦的是 Windows 11 的**智能应用控制**（Smart App Control）：开着「强制」时，它检查所有程序，不管有没有网络标记；没签名、云端又不认识的一律拦，没有单个放行的办法。我们的主程序和首次启动时用 csc 编出的托盘助手都会被拦。微软没公布开着的比例：只有全新安装的 Win11 默认进「评估」，系统判断不合适（开发者、企业托管机）会自动关掉；本机是关的。
-- Mac：curl 下载不带隔离标记，Gatekeeper 不检查，**不公证也能跑**；Apple 芯片要求至少有效的临时签名（ad-hoc），Bun 交叉编译会带上，但有报告说 Bun 的签名可能失效，要在 Mac 上验一次。
+- Mac：curl 下载不带隔离标记，Gatekeeper 不检查，**不公证也能跑**；Apple 芯片要求至少有效的临时签名（ad-hoc）。11/06 离线按 Apple 的算法核对：Bun 1.3.13 在 Windows 上交叉编出的 arm64 程序最后一页哈希算错，x64 程序带的是 Bun 运行时原来的签名，**两个都不可用**，上 Mac 版前必须在 Mac 上重签（发布脚本会提醒）。
 - PowerShell 5.1 的 `irm` 在响应头没有 `charset` 时按 ISO-8859-1 解码，脚本里的中文全乱（11/06 实测：有 charset 时中文完好，没有时乱）。
 
 ## 决定（拍板前的默认）
@@ -36,7 +36,7 @@
 |-|-|-|
 | 费用 | 0 | $99/年（中国大陆 ¥688） |
 | 多久办下来 | 0 | 公司名义要先办 D-U-N-S（免费，最多 5 个工作日 + 苹果同步最多 2 个工作日），再等苹果审核（官方没给时长，经验 1–2 周）；建议 11 月内就开始 |
-| 做什么 | 在 Mac 上 `codesign -v` 确认两个程序的临时签名有效，坏了就重签临时签名 | Developer ID 签名 + Hardened Runtime（Bun 要加几项 entitlements）+ 打 zip 公证（通常 5 分钟内）；裸程序不能 staple，curl 装法不受影响 |
+| 做什么 | 在 Mac 上重签临时签名（`codesign --force --sign -`）再 `codesign -v`（Windows 上编出的签名不可用，必做） | Developer ID 签名 + Hardened Runtime（Bun 要加几项 entitlements）+ 打 zip 公证（通常 5 分钟内）；裸程序不能 staple，curl 装法不受影响 |
 | 本人看到什么 | curl 装法照常能跑；每次升级，系统隐私授权（如果有）要重新点；浏览器下载走不通 | 升级不丢授权；登录项通知里显示公司名 |
 
 ### 建议

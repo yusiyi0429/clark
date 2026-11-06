@@ -26,7 +26,7 @@ button{margin:2px 4px 2px 0}input,textarea,select{font:inherit}textarea{width:10
 <button id="start">开工</button> <select id="sessions"></select> <button id="watch">看这个会话</button></fieldset>
 <fieldset><legend>4 控制</legend>
 <input id="say" placeholder="插话 / 下一句" style="width:60%"> <button id="send">发送</button>
-<button id="interrupt">停下</button> <button id="kill">强停</button>
+<button id="interrupt">停下</button> <button id="kill">强停</button> <button id="review">评审会（专题）</button>
 <div id="perms"></div></fieldset>
 <div id="log"></div>
 <script>
@@ -72,6 +72,7 @@ $('start').onclick = async () => {
 $('watch').onclick = () => watch($('sessions').value);
 $('send').onclick = async () => { const r = await api('POST', '/v1/sessions/' + current + '/messages', { text: $('say').value }); log('→ 已发送（' + r.delivery + '）'); $('say').value = ''; };
 $('interrupt').onclick = () => api('POST', '/v1/sessions/' + current + '/interrupt');
+$('review').onclick = async () => { try { const r = await api('POST', '/v1/sessions/' + current + '/messages', { kind: 'review' }); log('→ 开评审会（' + r.delivery + '）'); } catch (e) { log('开不了评审会：' + e.message); } };
 $('kill').onclick = () => api('POST', '/v1/sessions/' + current + '/kill');
 async function decide(id, decision, allowForSession) {
   const message = decision === 'deny' ? (prompt('拒绝理由（可空）') || undefined) : undefined;
@@ -84,7 +85,7 @@ function show(e) {
   else if (t === 'tool_call') log('  · ' + e.title);
   else if (t === 'tool_result') log('    ' + (e.isError ? '✗ ' : '✓ ') + e.preview.slice(0, 160));
   else if (t === 'permission_request') {
-    const out = e.request.outsidePaths;
+    const out = e.request.outsidePaths || []; // 升级前记下的事件没有这个字段
     const d = document.createElement('div'); d.className = out.length ? 'perm out' : 'perm'; d.id = 'p-' + e.request.requestId;
     const btn = (text, onclick) => { const b = document.createElement('button'); b.textContent = text; b.onclick = onclick; return b; };
     if (out.length) { const w = document.createElement('div'); w.className = 'why'; w.textContent = '越界（不在允许的文件夹里）：' + out.join('、'); d.append(w); }

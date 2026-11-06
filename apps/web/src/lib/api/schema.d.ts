@@ -4520,10 +4520,131 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 开专题时交给本机的交代（本人）：markdown 原样作为本机会话的第一句话 */
+        /** 开专题时交给本机的交代（本人）：markdown 原样作为本机会话的第一句话；带岗位和评审会的挑刺岗位（critics 参数是逗号隔开的岗位 id，不带时取本人的前 3 个） */
         get: operations["getTopicBrief"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/workers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人所有 worker（带岗位的卡和专题），跨 Task 分进行中、已排队、已完成（今天），加资源摘要（设备在不在线、正在跑几个、今天和本月的花费） */
+        get: operations["listWorkers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/roles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人的岗位（没归档的），加可用的预设（标明已加没加） */
+        get: operations["listRoles"];
+        put?: never;
+        /** 从预设复制一个岗位（{presetKey}，已经加过的 409），或自己新建 */
+        post: operations["createRole"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/roles/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 归档岗位（本人）：卡上的快照不受影响 */
+        delete: operations["archiveRole"];
+        options?: never;
+        head?: never;
+        /** 改岗位（本人）：版本不一致 409；保存后版本 +1、留一条修改记录，下一张卡就按新的来 */
+        patch: operations["patchRole"];
+        trace?: never;
+    };
+    "/api/me/roles/{id}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 岗位的修改记录（新的在前） */
+        get: operations["listRoleRevisions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/role-proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 伙伴提的岗位修改（默认待本人确认的，status=all 看全部） */
+        get: operations["listRoleProposals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/role-proposals/{id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 采纳：改后的整段写回岗位，版本 +1、留记录；岗位在这之后改过时 409 ROLE_CHANGED */
+        post: operations["acceptRoleProposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/role-proposals/{id}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 不要这条岗位修改 */
+        post: operations["dismissRoleProposal"];
         delete?: never;
         options?: never;
         head?: never;
@@ -13848,6 +13969,12 @@ export interface components {
         TaskCard: {
             stage: "todo" | "doing" | "review" | "done";
             wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+            role: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                kind: "worker" | "reviewer" | "critic";
+            } | null;
             executor: ("claude_code" | "self") | null;
             model: {
                 id: string;
@@ -13973,6 +14100,12 @@ export interface components {
             card: {
                 stage: "todo" | "doing" | "review" | "done";
                 wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                role: {
+                    /** Format: uuid */
+                    id: string;
+                    name: string;
+                    kind: "worker" | "reviewer" | "critic";
+                } | null;
                 executor: ("claude_code" | "self") | null;
                 model: {
                     id: string;
@@ -14056,6 +14189,13 @@ export interface components {
             brief: string;
             doneDefinition: string;
             criterionIndex: number | null;
+            role: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                kind: "worker" | "reviewer" | "critic";
+            } | null;
+            suggestPresetKey: string | null;
             executor: "claude_code" | "self";
             modelTier: "strong" | "normal" | "light";
             why: string | null;
@@ -14142,6 +14282,12 @@ export interface components {
                 card: {
                     stage: "todo" | "doing" | "review" | "done";
                     wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                    role: {
+                        /** Format: uuid */
+                        id: string;
+                        name: string;
+                        kind: "worker" | "reviewer" | "critic";
+                    } | null;
                     executor: ("claude_code" | "self") | null;
                     model: {
                         id: string;
@@ -14213,6 +14359,13 @@ export interface components {
                 brief: string;
                 doneDefinition: string;
                 criterionIndex: number | null;
+                role: {
+                    /** Format: uuid */
+                    id: string;
+                    name: string;
+                    kind: "worker" | "reviewer" | "critic";
+                } | null;
+                suggestPresetKey: string | null;
                 executor: "claude_code" | "self";
                 modelTier: "strong" | "normal" | "light";
                 why: string | null;
@@ -14253,6 +14406,7 @@ export interface components {
                 brief?: string;
                 doneDefinition?: string;
                 executor?: "claude_code" | "self";
+                roleId?: string | null;
             }[];
         };
         AcceptCardDraftsResponse: {
@@ -14321,6 +14475,12 @@ export interface components {
                 card: {
                     stage: "todo" | "doing" | "review" | "done";
                     wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                    role: {
+                        /** Format: uuid */
+                        id: string;
+                        name: string;
+                        kind: "worker" | "reviewer" | "critic";
+                    } | null;
                     executor: ("claude_code" | "self") | null;
                     model: {
                         id: string;
@@ -14386,6 +14546,7 @@ export interface components {
         PatchCardRequest: {
             version: number;
             executor?: "claude_code" | "self";
+            roleId?: string | null;
             model?: {
                 id: string;
                 label: string;
@@ -14508,6 +14669,12 @@ export interface components {
                 card: {
                     stage: "todo" | "doing" | "review" | "done";
                     wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                    role: {
+                        /** Format: uuid */
+                        id: string;
+                        name: string;
+                        kind: "worker" | "reviewer" | "critic";
+                    } | null;
                     executor: ("claude_code" | "self") | null;
                     model: {
                         id: string;
@@ -14676,6 +14843,18 @@ export interface components {
         };
         CardBriefResponse: {
             markdown: string;
+            role: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                kind: "worker" | "reviewer" | "critic";
+                dutiesMd: string;
+                practiceMd: string;
+                acceptanceMd: string;
+                tools: ("tianshu" | "web_search" | "feishu" | "github" | "browser")[];
+                modelTier: "strong" | "normal" | "light";
+                version: number;
+            } | null;
             mission: {
                 missionId: string;
                 title: string;
@@ -14834,6 +15013,12 @@ export interface components {
             status: "active" | "archived";
             planTaskId: string | null;
             missionId: string | null;
+            role: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                kind: "worker" | "reviewer" | "critic";
+            } | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -14841,7 +15026,7 @@ export interface components {
             lastVersionAt: string | null;
             latestVersion: {
                 number: number;
-                kind: "outline" | "draft";
+                kind: "outline" | "draft" | "review";
                 label: string;
             } | null;
             run: {
@@ -14878,7 +15063,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             number: number;
-            kind: "outline" | "draft";
+            kind: "outline" | "draft" | "review";
             label: string;
             note: string | null;
             feishuUrl: string | null;
@@ -14893,7 +15078,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             number: number;
-            kind: "outline" | "draft";
+            kind: "outline" | "draft" | "review";
             label: string;
             note: string | null;
             feishuUrl: string | null;
@@ -14913,6 +15098,12 @@ export interface components {
                 status: "active" | "archived";
                 planTaskId: string | null;
                 missionId: string | null;
+                role: {
+                    /** Format: uuid */
+                    id: string;
+                    name: string;
+                    kind: "worker" | "reviewer" | "critic";
+                } | null;
                 /** Format: date-time */
                 createdAt: string;
                 /** Format: date-time */
@@ -14920,7 +15111,7 @@ export interface components {
                 lastVersionAt: string | null;
                 latestVersion: {
                     number: number;
-                    kind: "outline" | "draft";
+                    kind: "outline" | "draft" | "review";
                     label: string;
                 } | null;
                 run: {
@@ -14957,10 +15148,13 @@ export interface components {
         CreateTopicRequest: {
             title: string;
             planTaskId?: string;
+            /** Format: uuid */
+            roleId?: string;
         };
         PatchTopicRequest: {
             title?: string;
             status?: "active" | "archived";
+            roleId?: string | null;
         };
         TopicDetailResponse: {
             topic: {
@@ -14970,6 +15164,12 @@ export interface components {
                 status: "active" | "archived";
                 planTaskId: string | null;
                 missionId: string | null;
+                role: {
+                    /** Format: uuid */
+                    id: string;
+                    name: string;
+                    kind: "worker" | "reviewer" | "critic";
+                } | null;
                 /** Format: date-time */
                 createdAt: string;
                 /** Format: date-time */
@@ -14977,7 +15177,7 @@ export interface components {
                 lastVersionAt: string | null;
                 latestVersion: {
                     number: number;
-                    kind: "outline" | "draft";
+                    kind: "outline" | "draft" | "review";
                     label: string;
                 } | null;
                 run: {
@@ -15018,7 +15218,7 @@ export interface components {
                 /** Format: uuid */
                 id: string;
                 number: number;
-                kind: "outline" | "draft";
+                kind: "outline" | "draft" | "review";
                 label: string;
                 note: string | null;
                 feishuUrl: string | null;
@@ -15033,7 +15233,7 @@ export interface components {
                 /** Format: uuid */
                 id: string;
                 number: number;
-                kind: "outline" | "draft";
+                kind: "outline" | "draft" | "review";
                 label: string;
                 note: string | null;
                 feishuUrl: string | null;
@@ -15086,8 +15286,480 @@ export interface components {
         };
         TopicBriefResponse: {
             markdown: string;
+            role: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                kind: "worker" | "reviewer" | "critic";
+                dutiesMd: string;
+                practiceMd: string;
+                acceptanceMd: string;
+                tools: ("tianshu" | "web_search" | "feishu" | "github" | "browser")[];
+                modelTier: "strong" | "normal" | "light";
+                version: number;
+            } | null;
+            critics: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                kind: "worker" | "reviewer" | "critic";
+                dutiesMd: string;
+                practiceMd: string;
+                acceptanceMd: string;
+                tools: ("tianshu" | "web_search" | "feishu" | "github" | "browser")[];
+                modelTier: "strong" | "normal" | "light";
+                version: number;
+            }[];
             title: string;
             latestVersion: number | null;
+        };
+        RoleRef: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            kind: "worker" | "reviewer" | "critic";
+        };
+        RoleBrief: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            kind: "worker" | "reviewer" | "critic";
+            dutiesMd: string;
+            practiceMd: string;
+            acceptanceMd: string;
+            tools: ("tianshu" | "web_search" | "feishu" | "github" | "browser")[];
+            modelTier: "strong" | "normal" | "light";
+            version: number;
+        };
+        RoleView: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            kind: "worker" | "reviewer" | "critic";
+            dutiesMd: string;
+            practiceMd: string;
+            acceptanceMd: string;
+            tools: ("tianshu" | "web_search" | "feishu" | "github" | "browser")[];
+            modelTier: "strong" | "normal" | "light";
+            version: number;
+            family: "general" | "dev" | "strategy_content";
+            presetKey: string | null;
+            presetVersion: number | null;
+            /** Format: date-time */
+            updatedAt: string;
+            updatedBy: {
+                personId: string;
+                name: string;
+            } | null;
+        };
+        RolePresetView: {
+            presetKey: string;
+            name: string;
+            family: "general" | "dev" | "strategy_content";
+            kind: "worker" | "reviewer" | "critic";
+            dutiesMd: string;
+            tools: ("tianshu" | "web_search" | "feishu" | "github" | "browser")[];
+            modelTier: "strong" | "normal" | "light";
+            version: number;
+            added: boolean;
+        };
+        RoleListResponse: {
+            roles: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                kind: "worker" | "reviewer" | "critic";
+                dutiesMd: string;
+                practiceMd: string;
+                acceptanceMd: string;
+                tools: ("tianshu" | "web_search" | "feishu" | "github" | "browser")[];
+                modelTier: "strong" | "normal" | "light";
+                version: number;
+                family: "general" | "dev" | "strategy_content";
+                presetKey: string | null;
+                presetVersion: number | null;
+                /** Format: date-time */
+                updatedAt: string;
+                updatedBy: {
+                    personId: string;
+                    name: string;
+                } | null;
+            }[];
+            presets: {
+                presetKey: string;
+                name: string;
+                family: "general" | "dev" | "strategy_content";
+                kind: "worker" | "reviewer" | "critic";
+                dutiesMd: string;
+                tools: ("tianshu" | "web_search" | "feishu" | "github" | "browser")[];
+                modelTier: "strong" | "normal" | "light";
+                version: number;
+                added: boolean;
+            }[];
+        };
+        CreateRoleRequest: {
+            presetKey: string;
+        } | {
+            name: string;
+            family: "general" | "dev" | "strategy_content";
+            kind: "worker" | "reviewer" | "critic";
+            dutiesMd?: string;
+            practiceMd?: string;
+            acceptanceMd?: string;
+            tools?: ("tianshu" | "web_search" | "feishu" | "github" | "browser")[];
+            modelTier?: "strong" | "normal" | "light";
+        };
+        PatchRoleRequest: {
+            version: number;
+            name?: string;
+            dutiesMd?: string;
+            practiceMd?: string;
+            acceptanceMd?: string;
+            tools?: ("tianshu" | "web_search" | "feishu" | "github" | "browser")[];
+            modelTier?: "strong" | "normal" | "light";
+            reason?: string;
+        };
+        RoleRevisionView: {
+            /** Format: uuid */
+            id: string;
+            version: number;
+            changes: {
+                field: "name" | "dutiesMd" | "practiceMd" | "acceptanceMd" | "tools" | "modelTier";
+                before: string;
+                after: string;
+            }[];
+            reason: string | null;
+            source: "manual" | "proposal";
+            proposalId: string | null;
+            createdBy: {
+                personId: string;
+                name: string;
+            };
+            /** Format: date-time */
+            createdAt: string;
+        };
+        RoleRevisionList: {
+            revisions: {
+                /** Format: uuid */
+                id: string;
+                version: number;
+                changes: {
+                    field: "name" | "dutiesMd" | "practiceMd" | "acceptanceMd" | "tools" | "modelTier";
+                    before: string;
+                    after: string;
+                }[];
+                reason: string | null;
+                source: "manual" | "proposal";
+                proposalId: string | null;
+                createdBy: {
+                    personId: string;
+                    name: string;
+                };
+                /** Format: date-time */
+                createdAt: string;
+            }[];
+        };
+        RoleProposalView: {
+            /** Format: uuid */
+            id: string;
+            role: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                kind: "worker" | "reviewer" | "critic";
+            };
+            baseVersion: number;
+            sourceKind: "overrule" | "second_fail";
+            /** Format: uuid */
+            handbackId: string;
+            card: {
+                id: string;
+                title: string;
+            };
+            field: "dutiesMd" | "practiceMd" | "acceptanceMd";
+            currentText: string;
+            proposedText: string;
+            why: string;
+            status: "open" | "accepted" | "dismissed";
+            /** Format: date-time */
+            createdAt: string;
+            decidedAt: string | null;
+        };
+        RoleProposalList: {
+            proposals: {
+                /** Format: uuid */
+                id: string;
+                role: {
+                    /** Format: uuid */
+                    id: string;
+                    name: string;
+                    kind: "worker" | "reviewer" | "critic";
+                };
+                baseVersion: number;
+                sourceKind: "overrule" | "second_fail";
+                /** Format: uuid */
+                handbackId: string;
+                card: {
+                    id: string;
+                    title: string;
+                };
+                field: "dutiesMd" | "practiceMd" | "acceptanceMd";
+                currentText: string;
+                proposedText: string;
+                why: string;
+                status: "open" | "accepted" | "dismissed";
+                /** Format: date-time */
+                createdAt: string;
+                decidedAt: string | null;
+            }[];
+        };
+        WorkerResource: {
+            where: "local" | "cloud";
+            deviceId: string | null;
+            deviceName: string | null;
+            modelLabel: string | null;
+        };
+        WorkerCost: {
+            inputTokens: number;
+            outputTokens: number;
+            costUsd: number | null;
+            costCny: number | null;
+        };
+        WorkerItem: {
+            key: string;
+            kind: "card" | "topic";
+            cardId: string | null;
+            topicId: string | null;
+            title: string;
+            role: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                kind: "worker" | "reviewer" | "critic";
+            };
+            workerNo: number;
+            task: {
+                id: string;
+                name: string;
+            } | null;
+            mission: {
+                id: string;
+                title: string;
+            } | null;
+            step: {
+                n: number;
+                total: number;
+                label: string;
+            } | null;
+            resource: {
+                where: "local" | "cloud";
+                deviceId: string | null;
+                deviceName: string | null;
+                modelLabel: string | null;
+            } | null;
+            startedAt: string | null;
+            elapsedSeconds: number | null;
+            finishedAt: string | null;
+            cost: {
+                inputTokens: number;
+                outputTokens: number;
+                costUsd: number | null;
+                costCny: number | null;
+            } | null;
+            stage: "todo" | "doing" | "review" | "done";
+            wait: ("approval" | "reply" | "paused" | "reviewing" | "review_failed" | "blocked") | null;
+            needsYou: boolean;
+            queueReason: ("not_dispatched" | "slot" | "device_offline") | null;
+        };
+        WorkerResources: {
+            devices: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                lastSeenAt: string | null;
+                online: boolean;
+            }[];
+            running: number;
+            cap: number | null;
+            cost: {
+                today: {
+                    inputTokens: number;
+                    outputTokens: number;
+                    costUsd: number | null;
+                    costCny: number | null;
+                };
+                month: {
+                    inputTokens: number;
+                    outputTokens: number;
+                    costUsd: number | null;
+                    costCny: number | null;
+                };
+            };
+        };
+        WorkersResponse: {
+            running: {
+                key: string;
+                kind: "card" | "topic";
+                cardId: string | null;
+                topicId: string | null;
+                title: string;
+                role: {
+                    /** Format: uuid */
+                    id: string;
+                    name: string;
+                    kind: "worker" | "reviewer" | "critic";
+                };
+                workerNo: number;
+                task: {
+                    id: string;
+                    name: string;
+                } | null;
+                mission: {
+                    id: string;
+                    title: string;
+                } | null;
+                step: {
+                    n: number;
+                    total: number;
+                    label: string;
+                } | null;
+                resource: {
+                    where: "local" | "cloud";
+                    deviceId: string | null;
+                    deviceName: string | null;
+                    modelLabel: string | null;
+                } | null;
+                startedAt: string | null;
+                elapsedSeconds: number | null;
+                finishedAt: string | null;
+                cost: {
+                    inputTokens: number;
+                    outputTokens: number;
+                    costUsd: number | null;
+                    costCny: number | null;
+                } | null;
+                stage: "todo" | "doing" | "review" | "done";
+                wait: ("approval" | "reply" | "paused" | "reviewing" | "review_failed" | "blocked") | null;
+                needsYou: boolean;
+                queueReason: ("not_dispatched" | "slot" | "device_offline") | null;
+            }[];
+            queued: {
+                key: string;
+                kind: "card" | "topic";
+                cardId: string | null;
+                topicId: string | null;
+                title: string;
+                role: {
+                    /** Format: uuid */
+                    id: string;
+                    name: string;
+                    kind: "worker" | "reviewer" | "critic";
+                };
+                workerNo: number;
+                task: {
+                    id: string;
+                    name: string;
+                } | null;
+                mission: {
+                    id: string;
+                    title: string;
+                } | null;
+                step: {
+                    n: number;
+                    total: number;
+                    label: string;
+                } | null;
+                resource: {
+                    where: "local" | "cloud";
+                    deviceId: string | null;
+                    deviceName: string | null;
+                    modelLabel: string | null;
+                } | null;
+                startedAt: string | null;
+                elapsedSeconds: number | null;
+                finishedAt: string | null;
+                cost: {
+                    inputTokens: number;
+                    outputTokens: number;
+                    costUsd: number | null;
+                    costCny: number | null;
+                } | null;
+                stage: "todo" | "doing" | "review" | "done";
+                wait: ("approval" | "reply" | "paused" | "reviewing" | "review_failed" | "blocked") | null;
+                needsYou: boolean;
+                queueReason: ("not_dispatched" | "slot" | "device_offline") | null;
+            }[];
+            done: {
+                key: string;
+                kind: "card" | "topic";
+                cardId: string | null;
+                topicId: string | null;
+                title: string;
+                role: {
+                    /** Format: uuid */
+                    id: string;
+                    name: string;
+                    kind: "worker" | "reviewer" | "critic";
+                };
+                workerNo: number;
+                task: {
+                    id: string;
+                    name: string;
+                } | null;
+                mission: {
+                    id: string;
+                    title: string;
+                } | null;
+                step: {
+                    n: number;
+                    total: number;
+                    label: string;
+                } | null;
+                resource: {
+                    where: "local" | "cloud";
+                    deviceId: string | null;
+                    deviceName: string | null;
+                    modelLabel: string | null;
+                } | null;
+                startedAt: string | null;
+                elapsedSeconds: number | null;
+                finishedAt: string | null;
+                cost: {
+                    inputTokens: number;
+                    outputTokens: number;
+                    costUsd: number | null;
+                    costCny: number | null;
+                } | null;
+                stage: "todo" | "doing" | "review" | "done";
+                wait: ("approval" | "reply" | "paused" | "reviewing" | "review_failed" | "blocked") | null;
+                needsYou: boolean;
+                queueReason: ("not_dispatched" | "slot" | "device_offline") | null;
+            }[];
+            resources: {
+                devices: {
+                    /** Format: uuid */
+                    id: string;
+                    name: string;
+                    lastSeenAt: string | null;
+                    online: boolean;
+                }[];
+                running: number;
+                cap: number | null;
+                cost: {
+                    today: {
+                        inputTokens: number;
+                        outputTokens: number;
+                        costUsd: number | null;
+                        costCny: number | null;
+                    };
+                    month: {
+                        inputTokens: number;
+                        outputTokens: number;
+                        costUsd: number | null;
+                        costCny: number | null;
+                    };
+                };
+            };
         };
     };
     responses: never;
@@ -30532,7 +31204,9 @@ export interface operations {
     };
     getTopicBrief: {
         parameters: {
-            query?: never;
+            query?: {
+                critics?: string;
+            };
             header?: never;
             path: {
                 id: string;
@@ -30551,6 +31225,15 @@ export interface operations {
                 };
             };
             /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -30561,6 +31244,402 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listWorkers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description worker 列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkersResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listRoles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 岗位 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleListResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    createRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateRoleRequest"];
+            };
+        };
+        responses: {
+            /** @description 新岗位 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    archiveRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已归档 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    patchRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatchRoleRequest"];
+            };
+        };
+        responses: {
+            /** @description 改好的岗位 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listRoleRevisions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 修改记录 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleRevisionList"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listRoleProposals: {
+        parameters: {
+            query?: {
+                status?: "open" | "all";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 岗位修改 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleProposalList"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    acceptRoleProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 改好的岗位 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    dismissRoleProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 这条修改 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleProposalView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

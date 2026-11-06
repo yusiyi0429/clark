@@ -1,5 +1,6 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import { LocalRunBrief } from "./localDevices.js";
+import { RoleRef } from "./roles.js";
 
 /**
  * 看板上的卡（V2 设计第 3 节）：卡就是执行事项，这里是它身上「卡」的那部分（TaskView.card）。
@@ -78,12 +79,14 @@ export const DeliverableInclusion = Type.Object({
 }, strict);
 
 /**
- * TaskView.card：卡的那部分。executor 为 null 是没设执行方的老事项（照旧本人做、本人验收）。
+ * TaskView.card：卡的那部分。role 是这张卡的岗位（卡上显示岗位名，不再显示执行方）；没配岗位为 null。
+ * executor 为 null 是没设执行方的老事项（照旧本人做、本人验收）。
  * run 是最近一次本机执行的摘要（卡在别的电脑上跑时，网页据 run.deviceId 标那台电脑、不给操作按钮）。
  */
 export const TaskCard = Type.Object({
   stage: CardStage,
   wait: Nullable(CardWait),
+  role: Nullable(RoleRef),
   executor: Nullable(CardExecutor),
   model: Nullable(CardModel),
   criterion: Nullable(CardCriterion),

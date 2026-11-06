@@ -4,7 +4,8 @@ import type { TLocalPermissionRequestView, TLocalUsage } from "@warmap/contracts
 import type { EventBody } from "../eventLog.js";
 import { AgentStartError, type AgentAdapter, type AgentLaunch, type AgentRun, type PermissionAnswer } from "./types.js";
 import { buildClaudeArgs, childEnv, describeTool, homeDir, personalSettingsSetKey, versionAtLeast } from "./claudeEnv.js";
-import { outsidePaths, type PathScope } from "./pathGuard.js";
+import { outsidePaths, suggestionsReachOutside, type PathScope } from "./pathGuard.js";
+import { planProgress } from "../plan.js";
 
 /** 低于这个版本不保证兼容：11/05 实测基于 2.1.318；权限模式 default 改名 manual 也在 2.1.3xx。 */
 export const MIN_CLAUDE_VERSION = "2.1.300";
@@ -54,7 +55,8 @@ class ClaudeRun implements AgentRun {
   private readonly eventFns: ((e: EventBody) => void)[] = [];
   private readonly exitFns: ((code: number | null) => void)[] = [];
   private readonly hostRequests = new Map<string, (r: Json) => void>();
-  private readonly permissions = new Map<string, { req: Json; outside: boolean }>();
+  /** broad：这一步越界，或「这张卡都允许」要放开的范围越界——这时不给本会话放行。 */
+  private readonly permissions = new Map<string, { req: Json; broad: boolean }>();
   private interrupting = false;
   private exited = false;
   private authFailed = false;
@@ -112,8 +114,8 @@ class ClaudeRun implements AgentRun {
     this.permissions.delete(requestId);
     const { req } = entry;
     // 「这张卡都允许」只在本会话内有效：Claude Code 有的建议会写进仓库的 .claude/settings.local.json（11/06 实测 Bash），一律改成 session。
-    // 越界的这一步不给：越界建议是把外面的目录加进工作目录或放行整个外面的目录。
-    const session = a.allowForSession && !entry.outside && Array.isArray(req.permission_suggestions)
+    // 越界的这一步、或建议放开的范围越界时不给：越界建议是把外面的目录加进工作目录或放行整个外面的目录。
+    const session = a.allowForSession && !entry.broad && Array.isArray(req.permission_suggestions)
       ? req.permission_suggestions.map((s: Json) => ({ ...s, destination: "session" }))
       : null;
     const response = a.allow
@@ -175,14 +177,15 @@ class ClaudeRun implements AgentRun {
         const toolName = String(req.tool_name ?? "");
         // blocked_path：Claude Code 自己从 Bash 命令里认出的越界路径（11/06 实测）。
         const outside = outsidePaths(toolName, req.input ?? {}, this.scope, req.blocked_path);
-        this.permissions.set(ev.request_id, { req, outside: outside.length > 0 });
+        const broad = outside.length > 0 || suggestionsReachOutside(req.permission_suggestions, this.scope);
+        this.permissions.set(ev.request_id, { req, broad });
         const view: TLocalPermissionRequestView = {
           requestId: ev.request_id,
           toolName,
           title: describeTool(toolName, req.input ?? {}),
           input: clipInput(req.input ?? {}),
           outsidePaths: outside,
-          canAllowForSession: outside.length === 0 && Array.isArray(req.permission_suggestions) && req.permission_suggestions.length > 0,
+          canAllowForSession: !broad && Array.isArray(req.permission_suggestions) && req.permission_suggestions.length > 0,
           requestedAt: new Date().toISOString(),
         };
         this.emit({ type: "permission_request", request: view });
@@ -212,6 +215,7 @@ class ClaudeRun implements AgentRun {
       }
       case "assistant": {
         if (ev.error === "authentication_failed") this.authFailure("Claude 还没登录或登录已失效，请在天枢里登录 Claude。");
+        else if (!ev.error) this.apiRetried = false; // 重试后模型又答上来了：这一轮之后再出错不算模型服务的错
         if (ev.parent_tool_use_id) return; // 子代理内部的步骤不逐条上屏
         for (const c of ev.message?.content ?? []) {
           if (c.type === "text" && c.text?.trim()) this.emit({ type: "assistant_text", text: c.text });
@@ -221,7 +225,7 @@ class ClaudeRun implements AgentRun {
               const entries = c.input.todos
                 .filter((t: Json) => typeof t?.content === "string")
                 .map((t: Json) => ({ content: t.content, status: ["pending", "in_progress", "completed"].includes(t.status) ? t.status : "pending" }));
-              this.emit({ type: "plan", entries });
+              this.emit({ type: "plan", entries, progress: planProgress(entries) });
             }
           }
         }
@@ -286,7 +290,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       // Mac/Linux 上自成进程组，强停时整组杀掉。
       detached: process.platform !== "win32",
     });
-    const run = new ClaudeRun(child, launch.sessionId, { cwd: launch.cwd, home: homeDir(), isAllowed: launch.isAllowedPath });
+    const run = new ClaudeRun(child, launch.sessionId, { cwd: launch.cwd, home: homeDir(), allowedRoots: launch.allowedRoots });
     const spawned = await new Promise<Error | null>((resolve) => {
       child.once("spawn", () => resolve(null));
       child.once("error", (e) => resolve(e));

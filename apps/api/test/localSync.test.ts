@@ -14,7 +14,8 @@ const file = (name: string, text: string) => {
 
 async function fixture() {
   const storage = await mkdtemp(join(tmpdir(), "local-sync-"));
-  const t = await createTestApp({ materialStorageDir: storage });
+  // 交回会进 Agent 验收队列：这里只看上报，验收用一个不返回的桩，不调真模型。
+  const t = await createTestApp({ materialStorageDir: storage }, undefined, { boardAgents: { acceptance: { accept: () => new Promise(() => undefined) } } });
   const member = await t.memberCookie();
   const call = (method: "GET" | "POST" | "DELETE", url: string, payload?: Record<string, unknown>) =>
     t.app.inject({ method, url, headers: { cookie: member, origin: t.publicOrigin }, ...(payload ? { payload } : {}) });
@@ -100,7 +101,7 @@ describe("本机程序：设备令牌和单向上报", () => {
       expect(outputs).toMatchObject([{ kind: "evidence", evidence_kind: "link", url: "https://github.com/x/y/pull/12" },
         { kind: "artifact", title: "方案.md", mime: "text/markdown", extracted_text: "# 方案\n\n有题库打分结果" }]);
       const [handback] = await f.t.sql("SELECT attempt,status,criteria,claims,summary,jsonb_array_length(output_ids) AS outputs FROM card_handbacks WHERE task_id=$1", [cardId]);
-      expect(handback).toMatchObject({ attempt: 1, status: "queued", criteria: ["有方案文档", "有评审结论"], summary: "方案写好了", outputs: 2,
+      expect(handback).toMatchObject({ attempt: 1, status: expect.stringMatching(/^(queued|running)$/), criteria: ["有方案文档", "有评审结论"], summary: "方案写好了", outputs: 2,
         claims: [{ index: 1, result: "met", evidence: "方案.md" }, { index: 2, result: "partial", evidence: "评审还没开" }] });
       expect((await f.t.sql("SELECT status,executor FROM tasks WHERE id=$1", [cardId]))[0]).toEqual({ status: "in_progress", executor: "claude_code" });
       const output = (await f.t.sql("SELECT id FROM local_outputs WHERE kind='artifact'"))[0].id as string;

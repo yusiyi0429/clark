@@ -111,11 +111,14 @@ async function lockSubject(client: PoolClient, owner: Owner, item: TLocalSyncIte
 /** 这次执行的摘要行：第一次见到时建，之后锁住改。 */
 async function lockRun(client: PoolClient, owner: Owner, item: TLocalSyncItem, at: Date): Promise<RunRow> {
   const { kind, cardId, topicId } = item.subject;
-  await client.query(`INSERT INTO local_runs(id,owner_id,device_id,kind,task_id,topic_id,started_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$7)
+  const created = await client.query(`INSERT INTO local_runs(id,owner_id,device_id,kind,task_id,topic_id,started_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$7)
     ON CONFLICT (id) DO NOTHING`, [item.sessionId, owner.personId, owner.deviceId, kind, kind === "card" ? cardId : null, kind === "topic" ? topicId : null, at]);
   const run = (await client.query("SELECT * FROM local_runs WHERE id=$1 FOR UPDATE", [item.sessionId])).rows[0] as RunRow;
   if (run.owner_id !== owner.personId) throw new SyncReject("NOT_OWNER", "这次执行不是你的");
   if (run.kind !== kind || (kind === "card" ? run.task_id !== cardId : run.topic_id !== topicId)) throw new SyncReject("SUBJECT_MISMATCH", "这次执行属于另一张卡或专题");
+  // 开工（本机第一次报这次执行）时记下卡的岗位版本。
+  if (created.rowCount && kind === "card")
+    await client.query("UPDATE tasks t SET role_version=r.version FROM roles r WHERE t.id=$1 AND r.id=t.role_id", [cardId]);
   return run;
 }
 
@@ -171,9 +174,10 @@ async function applyType(client: PoolClient, deps: { storageDir: string }, owner
       await client.query(`INSERT INTO local_outputs(id,owner_id,device_id,run_id,task_id,topic_id,kind,title,file_name,mime,size_bytes,sha256,storage_key,extracted_text,client_id,created_at)
         VALUES($1,$2,$3,$4,$5,$6,'artifact',$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
       [id, owner.personId, owner.deviceId, run.id, run.task_id, run.topic_id, title, fileName, mime, size, sha256, storageKey, text, item.key, at]);
-      // 本机程序还没有「专题新一版」条目时的临时做法：专题交出的 Markdown、纯文本就是新的一版，标题或文件名里有「提纲」「outline」的算提纲。
+      // 本机程序还没有「专题新一版」条目时的临时做法：专题交出的 Markdown、纯文本就是新的一版；标题或文件名里有「评审」「review」的算评审会的一版，
+      // 有「提纲」「outline」的算提纲。
       const label = run.topic_id && text && (mime === "text/markdown" || mime === "text/plain")
-        ? await saveTopicVersion(client, run, { kind: /提纲|outline/i.test(`${title} ${fileName}`) ? "outline" : "draft", body: text, note: null, clientId: item.key }, at) : null;
+        ? await saveTopicVersion(client, run, { kind: topicKind(`${title} ${fileName}`), body: text, note: null, clientId: item.key }, at) : null;
       await note(client, run, at, label ? `存了${label}` : `交出：${title}`, true);
       return null;
     }
@@ -192,12 +196,14 @@ async function applyType(client: PoolClient, deps: { storageDir: string }, owner
   }
 }
 
-/** 专题存一版：号接着往下排；提纲叫「提纲」，正文按第几版正文叫「第 N 版」。返回这一版的名字。 */
+const topicKind = (name: string): "outline" | "draft" | "review" => /评审|review/i.test(name) ? "review" : /提纲|outline/i.test(name) ? "outline" : "draft";
+
+/** 专题存一版：号接着往下排；提纲叫「提纲」，评审会的一版叫「评审」，正文按第几版正文叫「第 N 版」。返回这一版的名字。 */
 export async function saveTopicVersion(client: PoolClient, run: Pick<RunRow, "id" | "topic_id">,
-  version: { kind: "outline" | "draft"; body: string; note: string | null; clientId: string }, at: Date): Promise<string> {
+  version: { kind: "outline" | "draft" | "review"; body: string; note: string | null; clientId: string }, at: Date): Promise<string> {
   const counts = (await client.query(`SELECT COALESCE(max(number),0)::int AS number,count(*) FILTER (WHERE kind='draft')::int AS drafts
     FROM topic_versions WHERE topic_id=$1`, [run.topic_id])).rows[0] as { number: number; drafts: number };
-  const label = version.kind === "outline" ? "提纲" : `第 ${counts.drafts + 1} 版`;
+  const label = version.kind === "outline" ? "提纲" : version.kind === "review" ? "评审" : `第 ${counts.drafts + 1} 版`;
   await client.query(`INSERT INTO topic_versions(id,topic_id,number,kind,label,body,note,client_id,run_id,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
     [randomUUID(), run.topic_id, counts.number + 1, version.kind, label, version.body.slice(0, 200_000), version.note, version.clientId, run.id, at]);
   await client.query("UPDATE research_topics SET last_version_at=$2,updated_at=$2 WHERE id=$1", [run.topic_id, at]);
