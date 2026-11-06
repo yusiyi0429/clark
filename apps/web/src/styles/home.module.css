@@ -174,31 +174,44 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .viewHead[data-flush] { min-height: var(--row-48); padding: 0; }
 .viewTitle { flex: 1; min-width: 0; margin: 0; overflow: hidden; font-size: var(--text-base); font-weight: 600; line-height: var(--lh-row); text-overflow: ellipsis; white-space: nowrap; outline: none; }
 
-/* ---------- 开工的选项框里的几步、规划员一行、开了哪几个子会话 ---------- */
-.steps { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
-.steps li { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: start; gap: 8px; padding: 5px 0; }
-.steps li > .state { margin-top: 2px; }
+/* ---------- 开工的选项框里的几步（5.4.3「开工的特别规矩」）、规划员一行、开了以后的事件行 ---------- */
+.steps { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.steps li { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: start; gap: var(--space-2); }
+.stepNo { color: var(--ink-faint); font-size: var(--text-base); line-height: var(--lh-row); font-variant-numeric: tabular-nums; }
 .stepMain { display: grid; min-width: 0; }
-.stepTitle { color: var(--ink); font-size: var(--text-sm); }
-.stepMeta { color: var(--ink-faint); font-size: var(--text-xs); }
-.stepMain input { width: 100%; height: 28px; padding: 0 8px; border: 0; border-radius: 7px; background: var(--neutral-wash); color: var(--ink); font: inherit; font-size: var(--field-font); outline: none; } /* 待设计规范 */
-.stepMain input:focus { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 45%, transparent); } /* 待设计规范 */
-.stepSide { display: flex; align-items: center; gap: 4px; }
-.chip { display: inline-flex; align-items: center; gap: 3px; max-width: 200px; height: 24px; padding: 0 8px; overflow: hidden; border: 0; border-radius: 7px; background: var(--default-soft); color: var(--ink-muted); font: inherit; font-size: var(--text-xs); text-overflow: ellipsis; white-space: nowrap; cursor: pointer; } /* 待设计规范 */
-.chip:hover { background: var(--default-hover); color: var(--ink); }
-.slotsLine { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-faint); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
-.line { display: flex; align-items: center; gap: 8px; margin: 10px 0; color: var(--ink-faint); font-size: var(--text-xs); }
-/* Task 管线里的验收行：一行字，点了进那张卡；行尾「推翻」只是一个淡色的字（待设计规范统一）。 */
+.stepTitle { color: var(--ink); font-size: var(--text-base); line-height: var(--lh-row); }
+.stepMeta { color: var(--ink-muted); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); }
+.stepSum { margin: 0; color: var(--ink-muted); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); font-variant-numeric: tabular-nums; }
+/* 「改一改」里每步的标题：全局输入框样式，聚焦只换边色。 */
+.stepMain input { width: 100%; height: var(--row-32); padding: 0 var(--space-2); border: 1px solid var(--field-border); border-radius: var(--r-control); background: var(--field-bg); color: var(--field-ink); font: inherit; font-size: var(--field-font); outline: none; }
+.stepMain input:hover { border-color: var(--field-border-hover); }
+.stepMain input:focus { border-color: var(--field-border-focus); }
+.stepSide { display: flex; align-items: center; gap: var(--space-1); }
+/* 弹层的触发器（岗位、模型、文件夹）：中性 chip，悬停加深一档。 */
+.chip { display: inline-flex; align-items: center; gap: var(--space-1); max-width: 200px; height: var(--row-28); padding: 0 var(--space-2); overflow: hidden; border: 0; border-radius: var(--r-capsule); background: var(--neutral-wash); color: var(--ink-muted); font: inherit; font-size: var(--text-xs); line-height: 16px; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.chip:hover, .chip[data-pressed] { background: var(--default-hover); color: var(--ink); }
+.chip svg { flex: none; color: var(--ink-faint); }
+.slotsLine { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--ink-faint); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+.line { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-32); margin: var(--space-2) 0; color: var(--ink-faint); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); }
+/* Task 管线里的验收行（结果那句话、推翻）：一行字，点了进那张卡。 */
 .lineLink { min-width: 0; overflow: hidden; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 .lineLink:hover { color: var(--ink); }
 .lineAct { flex: none; padding: 0; border: 0; background: none; color: var(--ink-faint); font: inherit; cursor: pointer; }
-.lineAct:hover { color: var(--counter); }
+.lineAct:hover { color: var(--ink-muted); }
 .lineMore { min-width: 0; overflow: hidden; color: var(--ink-faint); text-overflow: ellipsis; white-space: nowrap; }
-.started { margin: 10px 0 14px; }
-.started .line { margin: 0 0 4px; }
-.started ul { display: grid; gap: 1px; margin: 0 0 0 7px; padding: 0 0 0 14px; list-style: none; box-shadow: inset 1px 0 0 var(--hairline-strong); }
-.started button { display: flex; align-items: center; gap: 8px; max-width: 100%; height: 28px; padding: 0 8px; border: 0; border-radius: 7px; background: none; color: var(--ink-muted); font: inherit; font-size: var(--text-sm); cursor: pointer; } /* 待设计规范 */
-.started button:hover { background: var(--default-soft); color: var(--ink); }
+/* 开了以后：答完那一行（勾 · 问题 · 答案，12/16），下面是子会话事件行（带竖线，和左栏子会话行同一个样子）。 */
+.started { margin: var(--space-2) 0 var(--space-4); }
+.resolvedLine { display: flex; align-items: center; gap: var(--space-1); margin: 0 0 var(--space-1); color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; }
+.resolvedLine svg { flex: none; }
+.resolvedQ { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.resolvedA { flex: none; color: var(--ink-muted); font-weight: 600; }
+.resolvedA::before { content: "· "; color: var(--ink-faint); font-weight: 400; }
+.eventList { display: grid; gap: 2px; margin: 0 0 0 7px; padding: 0 0 0 var(--space-2); list-style: none; box-shadow: inset 1px 0 0 var(--hairline-strong); }
+.event { display: flex; align-items: center; gap: var(--space-2); max-width: 100%; height: var(--row-32); padding: 0 var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink); font: inherit; font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); text-align: left; cursor: pointer; }
+.event:hover { background: var(--default-soft); }
+.event:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.eventName { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eventStage { flex: none; color: var(--ink-muted); white-space: pre; }
 
 /* ---------- Task 详情 ---------- */
 .infoView { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; }

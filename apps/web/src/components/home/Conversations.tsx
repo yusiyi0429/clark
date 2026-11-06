@@ -28,7 +28,8 @@ import { subHref } from "./LeftColumn";
 import { useViewChrome } from "./view";
 import h from "@/styles/home.module.css";
 
-import { ICON } from "./StateIcon";
+import { ICON, StateIcon } from "./StateIcon";
+import { HeroButton } from "@/components/HeroButton";
 
 /** 首页输入框发来、等着进对话的一句。 */
 export type Outbox = { id: number; target: "main" | string; text: string } | null;
@@ -118,7 +119,7 @@ function MockPipeline(props: PipelineProps) {
  * Task 管线的对话，网页按时间插进去的几块：规划员在拆（一行）、拆好的派活单（开工的选项框）、开了哪几个子会话、
  * 验收行（过了、受阻、约定都达到、返工，TaskFeed）。
  */
-function PipelineBody({ data, task, home, api, buddy, outbox, consume, go, onSpeaking }: PipelineProps & { data: ConversationData }) {
+function PipelineBody({ data, task, home, api, buddy, outbox, consume, go, onSpeaking, onSplit }: PipelineProps & { data: ConversationData }) {
   const chrome = useViewChrome();
   const handheld = useHandheld();
   const { work } = api;
@@ -133,6 +134,12 @@ function PipelineBody({ data, task, home, api, buddy, outbox, consume, go, onSpe
     const list: TimedBlock[] = [];
     const planner = mine.find((worker) => worker.kind === "plan" && worker.state !== "done");
     if (planner) list.push({ key: `planning:${planner.key}`, at: planner.startedAt ?? planner.requestedAt ?? new Date().toISOString(), node: <PlanningLine planner={planner} /> });
+    // 拆卡没做完（出了错才给兜底）：一行「拆卡失败」加「重试」（弱按钮）。
+    else if (board?.plan?.status === "failed" && !board.drafts.length) {
+      list.push({ key: `plan-failed:${board.plan.id}`, at: board.plan.finishedAt ?? board.plan.createdAt, node: (
+        <p className={h.line} data-testid="plan-failed"><StateIcon state="failed" />拆卡失败<HeroButton variant="ghost" size="sm" onPress={() => onSplit(task.taskId)}>重试</HeroButton></p>
+      ) });
+    }
     if (board?.drafts.length) {
       // 拆好的时候（规划员拆完同步上来那一刻）；没有记录时当作现在，放在最后。
       list.push({ key: `plan:${board.drafts[0]!.id}`, at: board.plan?.finishedAt ?? board.plan?.createdAt ?? new Date().toISOString(), node: (
@@ -145,11 +152,11 @@ function PipelineBody({ data, task, home, api, buddy, outbox, consume, go, onSpe
     const first = cards.map((worker) => worker.item!.createdAt).sort()[0];
     const cardSubs = subs.filter((sub) => sub.kind === "card");
     if (first && cardSubs.length) {
-      list.push({ key: `started:${task.taskId}`, at: first, node: <StartedRecord subs={[...cardSubs].sort(byTitle(cards))} onOpen={(sub: SubSession) => go(subHref(sub))} /> });
+      list.push({ key: `started:${task.taskId}`, at: first, node: <StartedRecord task={task.name} subs={[...cardSubs].sort(byTitle(cards))} onOpen={(sub: SubSession) => go(subHref(sub))} /> });
     }
     list.push(...feedBlocks({ items: feed, workers: mine, taskId: task.taskId, go, onSay: (text) => void data.send(text, []), onChanged: () => void changed() }));
     return list;
-  }, [mine, board, task, work.roles, handheld, changed, data, subs, go, feed]);
+  }, [mine, board, task, work.roles, handheld, changed, data, subs, go, feed, onSplit]);
   return (
     <PendingBoxes>
       <div className={h.convo} data-testid="pipeline-view">

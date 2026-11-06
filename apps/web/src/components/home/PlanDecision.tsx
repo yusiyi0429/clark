@@ -5,10 +5,13 @@
  * 「就按这个开始（推荐）/ 改一改 / 自己说」。选了就开：卡放进看板，在这台电脑上一次交给本机（同时最多 3 个，多的排队），子会话出现在左边。
  * 改一改：就地改每步的标题、换岗位、去掉一步，模型在每步右边换。自己说：这句话发进 Task 管线。
  * 手机、本机没连时选「开始」，卡排成等开工，回到这台电脑上打开天枢时自己开（HomeShell）。
- * 另外两块：规划员在拆时的一行（拆卡中 · 第几步），开了以后「开了哪几个子会话」的一块。
+ * 另外两块：规划员在拆时的一行（拆卡中 · 第几步），开了以后选项框收成一行、计划的几步变成子会话行（和左栏同样式、带竖线，原地跟着状态变）。
+ * 样子照设计 5.4.3「开工的特别规矩」：问题「{Task 名}：这样开工？」，编号的几步 14/20，每步下面一行「岗位 · 约定第 N 条」，再一行「N 个子会话」；
+ * 岗位、模型、文件夹点了用弹层选（全站唯一那种弹层）。
  */
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, X } from "lucide-react";
+import { Dropdown } from "@heroui/react";
+import { Check, ChevronDown, X } from "lucide-react";
 import type { TCardDraftView, THomePlanTask } from "@warmap/contracts";
 import { DecisionBox } from "@/components/work/DecisionBox";
 import { ApprovalDecision, QuestionDecision } from "@/components/work/decisions";
@@ -26,10 +29,10 @@ import { TIER_LABEL, draftRole, modelForTier, type CardRole, type RoleView } fro
 import { SLOT_CAP, startBatch, startedText, type StartPlan } from "@/lib/work/queue";
 import { QUEUE_LABEL, liveSessions, type Worker } from "@/lib/work/workers";
 import type { SubSession } from "@/lib/home/types";
-import { StateIcon } from "./StateIcon";
+import { ICON as STATE_ICON, StateIcon } from "./StateIcon";
 import h from "@/styles/home.module.css";
 
-const ICON = { size: 16, strokeWidth: 1.5 } as const;
+const ICON = STATE_ICON;
 
 /** 草稿行配的岗位：拆卡给的；没给时执行方是自己的为 null（人自己的活），否则写 Claude Code。 */
 export function draftWorkerRole(draft: TCardDraftView): CardRole | null {
@@ -105,14 +108,16 @@ export function PlanDecision({ task, drafts, roles, handheld, onSay, onChanged }
     }
   };
 
+  const agents = kept.filter((draft) => roleOf(draft)).length;
   const steps = (
+    <>
     <ol className={h.steps}>
-      {kept.map((draft) => {
+      {kept.map((draft, index) => {
         const role = roleOf(draft);
         const model = modelOf(draft);
         return (
           <li key={draft.id} data-testid="plan-step">
-            <StateIcon state="queued" />
+            <span className={h.stepNo}>{index + 1}.</span>
             <span className={h.stepMain}>
               {editing ? <input value={edits[draft.id]?.title ?? draft.title} maxLength={120} aria-label="这一步" onChange={(event) => edit(draft.id, { title: event.target.value })} />
                 : <span className={h.stepTitle}>{edits[draft.id]?.title ?? draft.title}</span>}
@@ -123,7 +128,7 @@ export function PlanDecision({ task, drafts, roles, handheld, onSay, onChanged }
                 <Pick label={role?.name ?? "我自己"} value={role?.id || "self"}
                   options={[...workerRoles.map((entry) => ({ id: entry.id, label: entry.name })), { id: "self", label: "我自己" }]}
                   onPick={(id) => edit(draft.id, { role: id === "self" ? null : { id, name: workerRoles.find((entry) => entry.id === id)!.name, kind: "worker" }, modelId: undefined })} />
-                <button type="button" className={h.icon} aria-label={`去掉「${draft.title}」`} onClick={() => edit(draft.id, { dropped: true })}><X {...ICON} aria-hidden /></button>
+                <button type="button" className={h.icon} aria-label={`去掉「${draft.title}」`} title="删除" onClick={() => edit(draft.id, { dropped: true })}><X {...ICON} /></button>
               </> : role ? (local.models.length ? <Pick label={model?.label ?? "模型"} value={model?.id ?? ""} options={local.models.map((entry) => ({ id: entry.id, label: entry.label }))} onPick={(id) => edit(draft.id, { modelId: id })} />
                 : <span className={h.chip}>{TIER_LABEL[tierOf(draft, role)]}</span>) : null}
             </span>
@@ -131,6 +136,8 @@ export function PlanDecision({ task, drafts, roles, handheld, onSay, onChanged }
         );
       })}
     </ol>
+    {agents ? <p className={h.stepSum}>{agents} 个子会话</p> : null}
+    </>
   );
   const footer = ready ? <>
     {folder ? <Pick label={folder.label} value={folder.id} options={local.folders.map((entry) => ({ id: entry.id, label: entry.label }))} onPick={setFolderId} up />
@@ -140,31 +147,28 @@ export function PlanDecision({ task, drafts, roles, handheld, onSay, onChanged }
   </> : null;
 
   return (
-    <DecisionBox kind="plan" testId="plan-decision" title={`${kept.length} 步`} body={steps} busy={busy} footer={footer}
+    <DecisionBox kind="plan" testId="plan-decision" title={`${task.name}：这样开工？`} body={steps} busy={busy} footer={footer}
       options={editing ? [{ label: START_LABEL, recommended: true }, { label: "改好了" }] : [{ label: START_LABEL, recommended: true }, { label: "改一改" }]}
       onPick={([picked]) => (picked === 0 ? start() : setEditing(!editing))}
       other={{ onSubmit: (text) => onSay(text) }} />
   );
 }
 
-/** 一个小下拉：点开列出选项。 */
+/** 一个小下拉：点开是弹层（全站唯一那种），当前那项行尾打勾。 */
 function Pick({ label, options, value, onPick, up }: { label: string; options: { id: string; label: string }[]; value: string; onPick: (id: string) => void; up?: boolean }) {
-  const [open, setOpen] = useState(false);
-  useEffect(() => {
-    if (!open) return;
-    const close = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
-    window.addEventListener("keydown", close);
-    return () => window.removeEventListener("keydown", close);
-  }, [open]);
   return (
-    <span className={h.pick}>
-      <button type="button" className={h.chip} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>{label}<ChevronDown {...ICON} aria-hidden /></button>
-      {open ? (
-        <span className={h.menu} data-up={up || undefined} role="menu" onMouseLeave={() => setOpen(false)}>
-          {options.map((option) => <button key={option.id || "none"} type="button" role="menuitemradio" aria-checked={option.id === value} onClick={() => { onPick(option.id); setOpen(false); }}>{option.label}</button>)}
-        </span>
-      ) : null}
-    </span>
+    <Dropdown>
+      <Dropdown.Trigger className={h.chip}>{label}<ChevronDown {...ICON} /></Dropdown.Trigger>
+      <Dropdown.Popover placement={up ? "top start" : "bottom end"} offset={8} className={h.pop}>
+        <Dropdown.Menu aria-label={label} className={h.menuList} onAction={(key) => onPick(String(key))}>
+          {options.map((option) => (
+            <Dropdown.Item key={option.id || "none"} id={option.id || "none"} textValue={option.label} className={h.menuItem}>
+              <span className={h.grow}>{option.label}</span>{option.id === value ? <Check {...ICON} /> : null}
+            </Dropdown.Item>
+          ))}
+        </Dropdown.Menu>
+      </Dropdown.Popover>
+    </Dropdown>
   );
 }
 
@@ -199,14 +203,34 @@ export function PlanningLine({ planner }: { planner: Worker }) {
   );
 }
 
-/** 开了以后：「就按这个开始 · 3 个子会话」，下面一行一个，点了进那个子会话。 */
-export function StartedRecord({ subs, onOpen }: { subs: SubSession[]; onOpen: (sub: SubSession) => void }) {
+const QUEUE_TEXT: Record<string, string> = { not_dispatched: "等开工", slot: "等空位", device_offline: "等本机上线", prior_cards: "等前面的卡" };
+const WAIT_TEXT: Record<string, string> = { approval: "等你批准", question: "等你回复", verdict: "受阻", merge: "等你合回" };
+/** 事件行的阶段（5.6 状态词）。 */
+export function subStage(sub: SubSession): string {
+  switch (sub.state) {
+    case "queued": return `已排队${sub.queueReason ? ` · ${QUEUE_TEXT[sub.queueReason] ?? ""}` : ""}`;
+    case "waiting": return sub.waiting ? WAIT_TEXT[sub.waiting] ?? "等你" : "等你回复";
+    case "done": return "已完成";
+    case "failed": return "失败";
+    default: return "进行中";
+  }
+}
+
+/**
+ * 开了以后（5.4.3「事件行」）：开工的选项框收成一行（勾 · 问题 · 就按这个开始），下面是开出的子会话，一行一个（和左栏同样式、带竖线）：
+ * 状态图标 · 名字 · 阶段，原地跟着状态变；子会话要批准、提问时这一行写「等你批准」，点了进子会话去答（选项框不在两处各画一遍）。
+ */
+export function StartedRecord({ task, subs, onOpen }: { task: string; subs: SubSession[]; onOpen: (sub: SubSession) => void }) {
   return (
     <div className={h.started} data-testid="started-record">
-      <p className={h.line}><StateIcon state="done" />{START_LABEL} · {subs.length} 个子会话</p>
-      <ul>
+      <p className={h.resolvedLine}><Check {...ICON} /><span className={h.resolvedQ}>{task}：这样开工？</span><span className={h.resolvedA}>{START_LABEL}</span></p>
+      <ul className={h.eventList}>
         {subs.map((sub) => (
-          <li key={sub.id}><button type="button" onClick={() => onOpen(sub)}><StateIcon state={sub.state} />{sub.title}</button></li>
+          <li key={sub.id}>
+            <button type="button" className={h.event} onClick={() => onOpen(sub)} data-state={sub.state}>
+              <StateIcon state={sub.state} /><span className={h.eventName}>{sub.title}</span><span className={h.eventStage}> · {subStage(sub)}</span>
+            </button>
+          </li>
         ))}
       </ul>
     </div>

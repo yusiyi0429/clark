@@ -161,12 +161,13 @@ describe("开工（Task 管线里的选项框）", () => {
   const local = { runner: createMockRunner(), phase: "offline", version: null, status: null, models: [], folders: [], sessions: [], pairing: null, error: null,
     refresh: vi.fn(), pair: vi.fn(), unpair: vi.fn(), pickFolder: vi.fn(), setIncludePersonal: vi.fn() } as unknown as Parameters<typeof LocalContext.Provider>[0]["value"];
 
-  it("拆好了：每步的岗位、对约定第几条；就按这个开始（推荐）/ 改一改 / 自己说；没有岗位的是我自己", () => {
+  it("拆好了：问「Task 名：这样开工？」，编号的几步，每步的岗位、对约定第几条，几个子会话；就按这个开始（推荐）/ 改一改 / 自己说；没有岗位的是我自己", () => {
     const html = renderToStaticMarkup(<LocalContext.Provider value={local}>
       <PlanDecision task={task} drafts={[draft("00000000-0000-4000-8000-0000000000d1", "派活单组件"), draft("00000000-0000-4000-8000-0000000000d2", "和晨星对接口", { role: null, executor: "self" })]}
         roles={[]} handheld={false} onSay={vi.fn()} onChanged={vi.fn()} />
     </LocalContext.Provider>);
-    expect(html).toContain("2 步");
+    expect(html).toContain("派活单与 worker 链路：这样开工？");
+    expect(html).toContain("1 个子会话");
     expect(html).toContain("派活单组件");
     expect(html).toContain("约定第 1 条");
     expect(html).toContain("我自己");
