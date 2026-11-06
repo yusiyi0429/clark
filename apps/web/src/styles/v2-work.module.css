@@ -8,5 +8,6 @@
 /* 本机 ▮▮▯：一格一个位置。 */
 .slots { display: inline-flex; gap: 3px; vertical-align: -2px; }
 .slot { width: 7px; height: 13px; border-radius: 2.5px; box-shadow: inset 0 0 0 1.5px var(--hairline-strong); }
-.slot[data-on] { background: var(--confirmed); box-shadow: none; }
+/* 新首页里位置条不上色（--slot-on 由外壳给 --ink-muted，设计 5.4.5）；老页面照旧是确认色。 */
+.slot[data-on] { background: var(--slot-on, var(--confirmed)); box-shadow: none; }
 

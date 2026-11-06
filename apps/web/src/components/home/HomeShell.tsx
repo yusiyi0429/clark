@@ -37,7 +37,7 @@ import { HOME_HREF, routeText, todayLabel } from "@/lib/home/derive";
 import type { BackgroundItem, RouteTarget } from "@/lib/home/types";
 import { useBackground } from "@/lib/home/useBackground";
 import { useWorkHome } from "@/lib/home/useWorkHome";
-import { BackgroundPanel, BackgroundStrip } from "./BackgroundPanel";
+import { BackgroundPanel, BackgroundStrip, useMachine } from "./BackgroundPanel";
 import { BuddyView, PipelineView, type Outbox } from "./Conversations";
 import { HomeView, WaitingList, type SendTarget } from "./HomeView";
 import { LeftColumn } from "./LeftColumn";
@@ -255,6 +255,7 @@ function HomeFrame({ account }: { account: Account }) {
 
   // ---- 后台任务 ----
   const items = useBackground(scopeOf(view), api);
+  const machine = useMachine();
   const running = items.filter((item) => item.state === "running" || item.state === "queued").length;
   const model = local.models.find((entry) => entry.isDefault)?.label ?? local.models[0]?.label ?? null;
   // 规划员、验收员停会话；子 agent、后台命令只停那一项，会话接着做。
@@ -269,7 +270,7 @@ function HomeFrame({ account }: { account: Account }) {
     catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没停下，请重试" }); }
   };
   const panel = (extra: { onCollapse?: () => void; onClose?: () => void }) => (
-    <BackgroundPanel items={items} resources={work.resources} model={model} onStop={stop} {...extra} />
+    <BackgroundPanel items={items} resources={work.resources} model={model} onStop={stop} handheld={handheld} {...extra} />
   );
 
   const workspace: WorkspaceApi = useMemo(() => ({
@@ -290,8 +291,9 @@ function HomeFrame({ account }: { account: Account }) {
   const backgroundButton = useMemo(() => (
     <button type="button" className={h.icon} aria-label="后台任务" title="后台任务" onClick={() => setSheet(true)} data-testid="phone-background">
       {running ? <span className={h.runningCount}><LoaderCircle {...ICON} />{running}</span> : <ListChecks {...ICON} />}
+      {machine.alert ? <i className={h.cornerDot} aria-hidden /> : null}
     </button>
-  ), [running]);
+  ), [running, machine.alert]);
   const chrome = useMemo(() => (handheld ? {
     lead: <button type="button" className={h.icon} aria-label="返回" title="返回" onClick={() => go(HOME_HREF)} data-testid="phone-back"><ArrowLeft {...ICON} /></button>,
     trail: backgroundButton,
@@ -299,7 +301,7 @@ function HomeFrame({ account }: { account: Account }) {
   useTabTitle(data.waiting.length);
   const display = (current: View) => {
     switch (current.kind) {
-      case "home": return <HomeView data={data} api={api} buddy={buddy} loading={!api.ready} go={go} route={route} onSend={send} />;
+      case "home": return <HomeView data={data} api={api} buddy={buddy} today={todayLabel(work.plan?.today ?? null)} go={go} route={route} onSend={send} />;
       case "buddy": return <BuddyView buddy={buddy} outbox={outbox} consume={consume} onSpeaking={setSpeaking} />;
       case "task": {
         const task = planTask(current.taskId);
@@ -325,8 +327,8 @@ function HomeFrame({ account }: { account: Account }) {
       }
     }
   };
-  // 连接要处理（本人行的琥珀点，设计 9.4）：这台电脑没就绪（离线、被拦截、未配对）。额度用完、飞书授权失效等 D、B 的字段到了再加。
-  const alert = !handheld && (local.phase === "offline" || local.phase === "blocked" || local.phase === "unpaired");
+  // 连接要处理（本人行的琥珀点，设计 9.4）：这台电脑没就绪。额度用完、飞书授权失效等 D、B 的字段到了再加。
+  const alert = !handheld && machine.alert;
 
   const left = (
     <LeftColumn data={data} view={view} buddy={buddy} speaking={speaking} go={go} phone={handheld} account={account}

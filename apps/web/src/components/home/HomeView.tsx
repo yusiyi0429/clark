@@ -1,44 +1,47 @@
 "use client";
 
 /**
- * 首页（新首页设计第 4.1 条）是「此刻」：
- * 1. 等你：所有要你拿主意的事合在一起，一件一行；短的（批准、单选、接下、采纳）就在这一行答，长的点进去答。没有就不显示。
- * 2. Task：按 Mission 分组，一件一行，标题和一句现状，点了进那件 Task 的管线。之前月份没了结的 Mission 标出月份（不按月份硬切）。
- * 3. 底部输入框：左边「发给」默认自动，也能选伙伴或某件 Task；发出去以后直接跳进那条管线的对话。首页自己不存对话。
+ * 首页（新首页设计 5.4.4）：页头「11 月 7 日 周六」，从上到下是 等你（有才画）→ 各 Mission 的 Task → 输入框；区块之间 32，Mission 之间 16。
+ * - 等你：一件两行（原话；来源 · 哪件 Task · 截止）。短的（批准、单选、合回、开工、岗位建议）在行尾就地答，推荐的那个是次按钮、另一个弱按钮；
+ *   答完这一行变成状态词（「已批准」）停 2 秒再收走，不弹 toast。行首不放强调色点（组头已经写了「等你」）。
+ * - Task 现状行：和左栏 Task 行同一个样子；小字「等你 1 · 进行中 2 · 已排队 1」（等你用计数样式），行尾「11/20 验收」。点了进 Task 管线。
+ * - 输入框：ComposerPill；左下「发给」默认自动（打字停下 300ms 后问一次分发接口，只认最后一次），也能选伙伴或某件 Task；发出去以后跳进那条对话。
  */
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, AtSign, ChevronDown } from "lucide-react";
+import { Dropdown, Header } from "@heroui/react";
+import { Check, ChevronDown } from "lucide-react";
 import type { Buddy } from "@/components/buddy/useBuddy";
+import { HeroButton } from "@/components/HeroButton";
 import { localOptions, oneTap } from "@/components/work/decisions";
 import { useHandheld } from "@/components/ui/useHandheld";
+import { ComposerAction, ComposerPill } from "@/conversation/ComposerPill";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { decideProposal } from "@/lib/team/roles";
 import { canCommandHere, decide } from "@/lib/work/actions";
 import { mergeCard } from "@/lib/work/merge";
-import { showWorkspaceToast } from "@/lib/toast";
-import { monthLabel, statusLine, taskHref, waitingHref } from "@/lib/home/derive";
-import type { RouteTarget, WaitingItem, WorkHomeData } from "@/lib/home/types";
+import { monthLabel, statusParts, taskHref, waitingHref } from "@/lib/home/derive";
+import type { HomeMission, RouteTarget, WaitingItem, WorkHomeData } from "@/lib/home/types";
 import type { WorkHomeApi } from "@/lib/home/useWorkHome";
+import { ICON } from "./StateIcon";
 import h from "@/styles/home.module.css";
-
-const ICON = { size: 16, strokeWidth: 1.5, "aria-hidden": true } as const;
 
 export type SendTarget = "auto" | RouteTarget;
 
-export function HomeView({ data, api, buddy, loading, go, route, onSend }: {
+export function HomeView({ data, api, buddy, today, go, route, onSend }: {
   data: WorkHomeData;
   api: WorkHomeApi;
   buddy: Buddy | null;
-  /** 本月计划还没读到：「本月」那一块先空着，不写「还没有 Task」。 */
-  loading: boolean;
+  /** 「11 月 7 日 周六」：页头和「今天」行一样。 */
+  today: string;
   go: (href: string) => void;
   /** 「自动」会发去哪（打字时实时显示）。 */
   route: (text: string) => Promise<RouteTarget>;
   onSend: (text: string, target: SendTarget) => void;
 }) {
-  const tasks = data.missions.flatMap((mission) => mission.tasks);
+  const missions = data.missions.filter((mission) => mission.tasks.length);
   return (
     <div className={h.homeView} data-testid="home-view">
+      <header className={h.viewHead}><h1 className={h.viewTitle} tabIndex={-1}>{today}</h1></header>
       <div className={h.homeScroll}>
         <div className={h.homeInner}>
           {data.waiting.length ? (
@@ -47,32 +50,42 @@ export function HomeView({ data, api, buddy, loading, go, route, onSend }: {
               <WaitingList items={data.waiting} api={api} go={go} />
             </section>
           ) : null}
-          <section aria-label="Task" className={h.section}>
-            {data.missions.filter((mission) => mission.tasks.length).map((mission) => (
-              <div key={mission.missionId} className={h.taskList}>
-                <p className={h.sectionTitle}>{mission.title}{mission.period !== data.period ? <span>{monthLabel(mission.period)}</span> : null}</p>
-                {mission.tasks.map((task) => (
-                  <button key={task.taskId} type="button" className={h.taskLine} onClick={() => go(taskHref(task.taskId))} data-testid="home-task">
-                    <span className={h.taskLineName}>{task.name}</span>
-                    <span className={h.taskLineStatus} data-waiting={task.summary.needsYou && !task.completedAt ? "" : undefined}>{statusLine(task)}</span>
-                  </button>
-                ))}
-              </div>
-            ))}
-            {tasks.length || loading ? null : <p className={h.empty}>本月还没有 Task</p>}
-          </section>
+          {missions.length ? (
+            <section aria-label="Task" className={h.section}>
+              {missions.map((mission) => (
+                <div key={mission.missionId} className={h.taskList}>
+                  <p className={h.sectionTitle}>{mission.period !== data.period ? <span>{monthLabel(mission.period)} · </span> : null}{mission.title}</p>
+                  {mission.tasks.map((task) => {
+                    const { needsYou, rest } = statusParts(task);
+                    return (
+                      <button key={task.taskId} type="button" className={h.taskLine} onClick={() => go(taskHref(task.taskId))} data-testid="home-task">
+                        <span className={h.taskText}>
+                          <span className={h.taskName}>{task.name}</span>
+                          <span className={h.taskSub}>
+                            {needsYou ? <span className={h.count}><i aria-hidden />等你 {needsYou}</span> : null}
+                            {rest.length ? <span>{needsYou ? " · " : ""}{rest.join(" · ")}</span> : null}
+                          </span>
+                        </span>
+                        {task.subtitle ? <span className={h.taskGate}>{task.subtitle}</span> : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </section>
+          ) : null}
         </div>
       </div>
-      <HomeComposer buddy={buddy} tasks={tasks} route={route} onSend={onSend} />
+      <HomeComposer buddy={buddy} missions={missions} route={route} onSend={onSend} />
     </div>
   );
 }
 
-type Action = { label: string; primary?: boolean; run: () => Promise<unknown> };
+type Action = { label: string; done: string; primary?: boolean; run: () => Promise<unknown> };
 
 /**
- * 等你的一件：短的给就地答的按钮。本机上的批准、提问、合回只在那台电脑上能答（契约的 deviceId；手机上、别的电脑上点进去看），
- * 答案直接回给那个子会话（设计第 4.1 条：直接跟子会话说话的入口之一）。
+ * 等你的一件能就地答的（5.4.4「就地答」）：本机上的批准、提问、合回只在那台电脑上能答（契约的 deviceId），
+ * 答案直接回给那个子会话；手机上、别的电脑上整行点进去看。
  */
 function useActions(api: WorkHomeApi) {
   const local = useLocalRunner();
@@ -82,64 +95,70 @@ function useActions(api: WorkHomeApi) {
     if (item.deviceId && api.deviceId && item.deviceId !== api.deviceId) return [];
     const worker = item.sessionId ? api.work.workers.find((entry) => entry.session?.id === item.sessionId) : undefined;
     if (worker && (item.kind === "approval" || item.kind === "question") && !canCommandHere(worker, ready, handheld)) return [];
-    if (item.kind === "approval" && worker) return [{ label: "批准", primary: true, run: () => decide(local.runner, worker, "allow") }];
+    if (item.kind === "approval" && worker) return [{ label: "批准", done: "已批准", primary: true, run: () => decide(local.runner, worker, "allow") }];
     if (item.kind === "question" && worker?.session?.pendingQuestion) {
       const question = worker.session.pendingQuestion;
       const session = worker.session;
       if (!oneTap(question) || question.questions[0]!.options.length > 3) return [];
       const { options, order } = localOptions(question.questions[0]!.options);
-      return options.map((option, index) => ({
-        label: option.label, primary: index === 0,
+      return options.slice(0, 2).map((option, index) => ({
+        label: option.label, done: "已回答", primary: index === 0,
         run: () => local.runner.answerQuestion(session.id, question.requestId, { choices: [[question.questions[0]!.options[order[index]!]!.label]] }),
       }));
     }
     if (item.kind === "role" && item.open.kind === "role") {
       const id = item.open.id;
-      return [{ label: "采纳", primary: true, run: () => decideProposal(id, "accept") }, { label: "不要", run: () => decideProposal(id, "dismiss") }];
+      return [{ label: "采纳", done: "已采纳", primary: true, run: () => decideProposal(id, "accept") }, { label: "不要", done: "已回答", run: () => decideProposal(id, "dismiss") }];
     }
     if (item.kind === "assigned" && item.notificationId) {
       const id = item.notificationId;
-      return [{ label: "接下", primary: true, run: async () => { const result = await api.member.markSeen([id]); if (!result.ok) throw new Error(result.error); } }];
+      return [{ label: "接下", done: "已接下", primary: true, run: async () => { const result = await api.member.markSeen([id]); if (!result.ok) throw new Error(result.error); } }];
     }
     if (item.kind === "merge" && item.sessionId) {
       const session = local.sessions.find((entry) => entry.id === item.sessionId);
       if (!session || handheld) return [];
-      return [{ label: "合并", primary: true, run: async () => { const result = await mergeCard(local.runner, session, item.source ?? ""); if (!result.ok) throw new Error(result.text); } }];
+      const base = session.workspace?.kind === "worktree" ? session.workspace.baseBranch : "main";
+      return [{ label: `合进 ${base}`, done: "已合回", primary: true, run: async () => { const result = await mergeCard(local.runner, session, item.source ?? ""); if (!result.ok) throw new Error(result.text); } }];
     }
     return [];
   };
 }
 
+/** 等你的一行。答完先在原处写状态词，停 2 秒再刷新（收走）；失败在原处写「失败」加「重试」，不弹 toast。 */
 export function WaitingList({ items, api, go }: { items: WaitingItem[]; api: WorkHomeApi; go: (href: string) => void }) {
   const actions = useActions(api);
   const local = useLocalRunner();
-  const [busy, setBusy] = useState<string | null>(null);
+  const [state, setState] = useState<Record<string, { busy?: boolean; done?: string; failed?: Action }>>({});
+  const timers = useRef<number[]>([]);
+  useEffect(() => () => timers.current.forEach((timer) => window.clearTimeout(timer)), []);
   const run = async (item: WaitingItem, action: Action) => {
-    setBusy(item.id);
-    try { await action.run(); await Promise.all([local.refresh(), api.refresh()]); }
-    catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没成功，请重试" }); }
-    finally { setBusy(null); }
+    setState((current) => ({ ...current, [item.id]: { busy: true } }));
+    try {
+      await action.run();
+      setState((current) => ({ ...current, [item.id]: { done: action.done } }));
+      timers.current.push(window.setTimeout(() => { void Promise.all([local.refresh(), api.refresh()]); }, 2000));
+    } catch {
+      setState((current) => ({ ...current, [item.id]: { failed: action } }));
+    }
   };
   return (
     <ul className={h.waiting} data-testid="waiting-list">
       {items.map((item) => {
         const buttons = actions(item);
+        const row = state[item.id];
         return (
-          <li key={item.id} className={h.wait} data-kind={item.kind}>
+          <li key={item.id} className={h.wait} data-kind={item.kind} data-done={row?.done ? "" : undefined}>
             <button type="button" className={h.waitMain} onClick={() => go(waitingHref(item))}>
-              <i className={h.waitDot} aria-hidden />
-              <span className={h.waitText}>
-                <span className={h.waitTitle}>{item.title}</span>
-                {item.source ? <span className={h.waitSource}>{item.source}</span> : null}
-              </span>
+              <span className={h.waitTitle}>{item.title}</span>
+              {item.source ? <span className={h.waitSource}>{item.source}</span> : null}
             </button>
-            {buttons.length ? (
-              <span className={h.waitActs}>
-                {buttons.map((action) => (
-                  <button key={action.label} type="button" className={h.act} data-primary={action.primary ? "" : undefined} disabled={busy === item.id} onClick={() => void run(item, action)}>{action.label}</button>
+            <span className={h.waitActs}>
+              {row?.done ? <span className={h.waitDone}>{row.done}</span>
+                : row?.failed ? <><span className={h.waitFailed}>失败</span><HeroButton variant="ghost" size="sm" onPress={() => void run(item, row.failed!)}>重试</HeroButton></>
+                : buttons.map((action) => (
+                  <HeroButton key={action.label} variant={action.primary ? "tertiary" : "ghost"} size="sm" isDisabled={row?.busy} onPress={() => void run(item, action)}>{action.label}</HeroButton>
                 ))}
-              </span>
-            ) : null}
+            </span>
           </li>
         );
       })}
@@ -148,18 +167,16 @@ export function WaitingList({ items, api, go }: { items: WaitingItem[]; api: Wor
 }
 
 /**
- * 首页底部的输入框：「发给」默认自动；回车发出，跳进那条对话。
- * 自动只在管线之间选（伙伴或某件 Task，不直接发给子会话）：停下打字约 300ms 后问一次分发接口，标签写出会发去哪（「自动 · Task 2」），
- * 发之前就能改（设计第 4.1 条）。问得慢、先问的后回来时，只认最后一次。
+ * 首页底部的输入框（5.4.3「输入框和『发给』」）：ComposerPill，占位「说点什么…」；左下「发给」默认自动，回车发出，跳进那条对话。
+ * 「发给」是选择器的触发器：「发给」淡色 + 目标墨色 + ChevronDown；点开是弹层：自动、伙伴，再按 Mission 列出 Task，当前那项行尾一个勾。
  */
-function HomeComposer({ buddy, tasks, route, onSend }: { buddy: Buddy | null; tasks: { taskId: string; name: string }[]; route: (text: string) => Promise<RouteTarget>; onSend: (text: string, target: SendTarget) => void }) {
+function HomeComposer({ buddy, missions, route, onSend }: { buddy: Buddy | null; missions: HomeMission[]; route: (text: string) => Promise<RouteTarget>; onSend: (text: string, target: SendTarget) => void }) {
   const [text, setText] = useState("");
   const [target, setTarget] = useState<SendTarget>("auto");
   const [guess, setGuess] = useState<RouteTarget>("main");
-  const [open, setOpen] = useState(false);
-  const menuRef = useRef<HTMLSpanElement>(null);
   const asked = useRef(0);
   const name = buddy?.name?.trim() || "伙伴";
+  const tasks = missions.flatMap((mission) => mission.tasks);
   const nameOf = (value: RouteTarget) => (value === "main" ? name : tasks.find((task) => task.taskId === value.taskId)?.name ?? name);
   useEffect(() => {
     if (target !== "auto") return;
@@ -172,48 +189,45 @@ function HomeComposer({ buddy, tasks, route, onSend }: { buddy: Buddy | null; ta
     return () => window.clearTimeout(timer);
   }, [text, target, route]);
   const label = target === "auto" ? (text.trim() ? `自动 · ${nameOf(guess)}` : "自动") : nameOf(target);
-  useEffect(() => {
-    if (!open) return;
-    const close = (event: MouseEvent | KeyboardEvent) => {
-      if (event instanceof KeyboardEvent ? event.key === "Escape" : !menuRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    window.addEventListener("mousedown", close);
-    window.addEventListener("keydown", close);
-    return () => { window.removeEventListener("mousedown", close); window.removeEventListener("keydown", close); };
-  }, [open]);
   const send = () => {
     const value = text.trim();
     if (!value) return;
     setText("");
     onSend(value, target);
   };
-  const pick = (next: SendTarget) => { setTarget(next); setOpen(false); };
-  const options: { key: string; label: string; target: SendTarget }[] = [
-    { key: "auto", label: "自动", target: "auto" },
-    { key: "main", label: name, target: "main" },
-    ...tasks.map((task) => ({ key: task.taskId, label: task.name, target: { taskId: task.taskId } as SendTarget })),
-  ];
-  const current = (option: SendTarget) => (typeof option === "string" ? option === target : typeof target === "object" && target.taskId === option.taskId);
+  const keyOf = (value: SendTarget) => (value === "auto" || value === "main" ? value : `task:${value.taskId}`);
+  const current = keyOf(target);
+  const pick = (key: string) => setTarget(key === "auto" || key === "main" ? key : { taskId: key.slice(5) });
+  const item = (key: string, text: string) => (
+    <Dropdown.Item key={key} id={key} textValue={text} className={h.menuItem}><span className={h.grow}>{text}</span>{current === key ? <Check {...ICON} /> : null}</Dropdown.Item>
+  );
   return (
-    <form className={h.composer} onSubmit={(event) => { event.preventDefault(); send(); }} data-testid="home-composer">
-      <textarea rows={2} value={text} aria-label="说点什么" onChange={(event) => setText(event.target.value)}
-        onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); send(); } }} />
-      <div className={h.composerBar}>
-        <span className={h.pick} ref={menuRef}>
-          <button type="button" className={h.sendTo} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)} data-testid="send-to">
-            <AtSign {...ICON} /><span>发给</span><b>{label}</b><ChevronDown {...ICON} />
-          </button>
-          {open ? (
-            <span className={h.menu} data-up="" role="menu">
-              {options.map((option) => (
-                <button key={option.key} type="button" role="menuitemradio" aria-checked={current(option.target)} onClick={() => pick(option.target)}>{option.label}</button>
-              ))}
-            </span>
-          ) : null}
-        </span>
-        <span className={h.grow} />
-        <button type="submit" className={h.sendBtn} aria-label="发送" disabled={!text.trim()}><ArrowUp {...ICON} /></button>
-      </div>
-    </form>
+    <div className={h.composerDock}>
+      <ComposerPill tone="agent" onSubmit={send}
+        leading={(
+          <Dropdown>
+            <Dropdown.Trigger className={h.sendTo} data-testid="send-to"><span className={h.sendToLabel}>发给</span><b>{label}</b><ChevronDown {...ICON} /></Dropdown.Trigger>
+            <Dropdown.Popover placement="top start" offset={8} className={h.pop}>
+              <Dropdown.Menu aria-label="发给" className={h.menuList} onAction={(key) => pick(String(key))}>
+                <Dropdown.Section className={h.menuSection}>
+                  {item("auto", "自动")}
+                  {item("main", name)}
+                </Dropdown.Section>
+                {missions.map((mission) => (
+                  <Dropdown.Section key={mission.missionId} className={h.menuSection}>
+                    <Header className={h.menuHeader}>{mission.title}</Header>
+                    {mission.tasks.map((task) => item(`task:${task.taskId}`, task.name))}
+                  </Dropdown.Section>
+                ))}
+              </Dropdown.Menu>
+            </Dropdown.Popover>
+          </Dropdown>
+        )}
+        field={(
+          <textarea rows={1} value={text} aria-label="说点什么" placeholder="说点什么…" onChange={(event) => setText(event.target.value)}
+            onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); send(); } }} />
+        )}
+        action={<ComposerAction state="send" isDisabled={!text.trim()} />} />
+    </div>
   );
 }
