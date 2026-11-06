@@ -143,6 +143,8 @@ export function createServer(d: ServerDeps): http.Server {
       if (b.paused === false && d.settings.get().paused) throw new HttpError(409, "conflict", "只能在本机托盘里恢复");
       const s = d.settings.patch(b);
       if (b.paused) await d.sessions.interruptAll();
+      // 调大上限时立刻从队里接上。
+      d.sessions.pump();
       d.onSettingsChange?.();
       return s;
     },

@@ -469,6 +469,8 @@ const syncItem = <T extends string, D extends TSchema>(type: T, data: D) => Type
 export const LocalSyncItem = Type.Union([
   syncItem("status", Type.Object({
     status: LocalSessionStatus, title: Type.String(), agent: LocalAgentKind, modelLabel: Type.String(),
+    /** 只在 status = queued 时带：排第几（1 起）。前面的开始或取消后，本机会给还在排的每件重发一条带新位置的 queued。 */
+    queuePosition: Type.Optional(Type.Integer({ minimum: 1 })),
   }, strict)),
   syncItem("plan", Type.Object({ entries: Type.Array(LocalPlanEntry, { maxItems: 100 }), progress: LocalPlanProgress }, strict)),
   /** 证据：一段说明、日志片段、链接（PR 等）、改动摘要。不传完整工具输出。 */

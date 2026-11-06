@@ -14,8 +14,9 @@ export function tempDir(prefix = "tl-"): string {
   return mkdtempSync(join(tmpdir(), prefix));
 }
 
-export async function startTestRunner(opts: { approvePairing?: boolean; pickFolder?: string | null | (() => string | null); fetchImpl?: typeof fetch; skillsDir?: string } = {}) {
-  const dataDir = tempDir();
+export async function startTestRunner(opts: { approvePairing?: boolean; pickFolder?: string | null | (() => string | null); fetchImpl?: typeof fetch; skillsDir?: string; dataDir?: string } = {}) {
+  // 给 dataDir 时接着用上一次的数据（测重启）
+  const dataDir = opts.dataDir ?? tempDir();
   const desktop = new HeadlessDesktop();
   desktop.confirm = async () => opts.approvePairing ?? true;
   desktop.pickFolder = async () => (typeof opts.pickFolder === "function" ? opts.pickFolder() : opts.pickFolder ?? null);

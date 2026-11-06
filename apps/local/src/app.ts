@@ -92,7 +92,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   const onMenu = async (a: MenuAction) => {
     if (a === "open") openUrl(config.tianshuUrl);
     if (a === "pause") { settings.patch({ paused: true }); await sessions.interruptAll(); }
-    if (a === "resume") settings.patch({ paused: false });
+    if (a === "resume") { settings.patch({ paused: false }); sessions.pump(); }
     if (a === "quit") { await close(); opts.onQuit?.(); }
     updateTray();
   };
@@ -101,6 +101,8 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
     server.once("error", reject);
     server.listen(config.port, "127.0.0.1", () => { server.off("error", reject); resolve(); });
   });
+  // 上次没开始的排队会话，有空位就接上（要等本机程序开始监听，本会话 MCP 才连得上）。
+  sessions.pump();
   await desktop.start((a) => void onMenu(a));
   updateTray();
   setInterval(updateTray, 10_000).unref();

@@ -72,7 +72,8 @@ describe("本机程序契约", () => {
     expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots, items: [] })).toBe(false);
     // 每一批都带本机的位置数
     expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", items: [{ ...item, type: "status", data: { status: "queued", title: "x", agent: "claude-code", modelLabel: "订阅" } }] })).toBe(false);
-    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots, items: [{ ...item, type: "status", data: { status: "queued", title: "x", agent: "claude-code", modelLabel: "订阅" } }] })).toBe(true);
+    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots, items: [{ ...item, type: "status", data: { status: "queued", title: "x", agent: "claude-code", modelLabel: "订阅", queuePosition: 2 } }] })).toBe(true);
+    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots, items: [{ ...item, type: "status", data: { status: "queued", title: "x", agent: "claude-code", modelLabel: "订阅", queuePosition: 0 } }] })).toBe(false);
     // 交回点名产出和证据；专题新的一版、存进飞书的地址
     const topic = { ...item, subject: { kind: "topic", topicId: "t-1" } };
     expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots, items: [

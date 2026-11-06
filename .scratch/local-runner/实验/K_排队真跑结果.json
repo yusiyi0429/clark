@@ -1,0 +1,166 @@
+[
+  {
+    "t": 2.4,
+    "what": "一批开工的结果",
+    "data": [
+      {
+        "ok": true,
+        "status": "running",
+        "queuePosition": null
+      },
+      {
+        "ok": true,
+        "status": "queued",
+        "queuePosition": 1
+      }
+    ]
+  },
+  {
+    "t": 2.4,
+    "what": "资源栏（health.slots）",
+    "data": {
+      "max": 1,
+      "running": 1,
+      "queued": 1
+    }
+  },
+  {
+    "t": 2.4,
+    "what": "第 1 件 → running",
+    "data": {
+      "queuePosition": null,
+      "slots": {
+        "max": 1,
+        "running": 1,
+        "queued": 1
+      }
+    }
+  },
+  {
+    "t": 2.4,
+    "what": "第 2 件 → queued",
+    "data": {
+      "queuePosition": 1,
+      "slots": {
+        "max": 1,
+        "running": 1,
+        "queued": 1
+      }
+    }
+  },
+  {
+    "t": 4.9,
+    "what": "第 1 件 → idle",
+    "data": {
+      "queuePosition": null,
+      "slots": {
+        "max": 1,
+        "running": 1,
+        "queued": 0
+      }
+    }
+  },
+  {
+    "t": 4.9,
+    "what": "第 2 件 → starting",
+    "data": {
+      "queuePosition": null,
+      "slots": {
+        "max": 1,
+        "running": 1,
+        "queued": 0
+      }
+    }
+  },
+  {
+    "t": 6.5,
+    "what": "第 2 件 → running",
+    "data": {
+      "queuePosition": null,
+      "slots": {
+        "max": 1,
+        "running": 1,
+        "queued": 0
+      }
+    }
+  },
+  {
+    "t": 8.9,
+    "what": "第 2 件 → idle",
+    "data": {
+      "queuePosition": null,
+      "slots": {
+        "max": 1,
+        "running": 0,
+        "queued": 0
+      }
+    }
+  },
+  {
+    "t": 10.4,
+    "what": "第 1 件 的事件",
+    "data": [
+      "status:starting",
+      "user_message",
+      "status:running",
+      "agent_info",
+      "说：好",
+      "一轮结束 $0.0015979100000000001",
+      "status:idle"
+    ]
+  },
+  {
+    "t": 11.9,
+    "what": "第 2 件 的事件",
+    "data": [
+      "status:queued",
+      "status:starting",
+      "user_message",
+      "status:running",
+      "agent_info",
+      "说：好",
+      "一轮结束 $0.00025366",
+      "status:idle"
+    ]
+  },
+  {
+    "t": 11.9,
+    "what": "第 2 件报给云端的状态",
+    "data": [
+      {
+        "status": "queued",
+        "title": "排队真跑 2",
+        "agent": "claude-code",
+        "modelLabel": "订阅 · haiku",
+        "queuePosition": 1
+      },
+      {
+        "status": "starting",
+        "title": "排队真跑 2",
+        "agent": "claude-code",
+        "modelLabel": "订阅 · haiku"
+      },
+      {
+        "status": "running",
+        "title": "排队真跑 2",
+        "agent": "claude-code",
+        "modelLabel": "订阅 · haiku"
+      },
+      {
+        "status": "idle",
+        "title": "排队真跑 2",
+        "agent": "claude-code",
+        "modelLabel": "订阅 · haiku"
+      }
+    ]
+  },
+  {
+    "t": 12.7,
+    "what": "每一批带的 slots（现在）",
+    "data": {
+      "max": 1,
+      "running": 0,
+      "queued": 0
+    }
+  }
+]

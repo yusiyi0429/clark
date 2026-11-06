@@ -51,6 +51,10 @@ interface SessionRecord {
   /** 岗位（开工时的快照）和专题评审会的挑刺岗位。 */
   role: TLocalRole | null;
   critics: TLocalRole[];
+  /** 排队时存着的第一句话；真开始时送出并清空。不为 null 说明这件还没开始过。 */
+  queuedMessage: string | null;
+  /** 进队的先后（先来先跑；一批里同一毫秒进的也分得清）。 */
+  queueOrder: number;
 }
 
 export class SessionError extends Error {
@@ -86,6 +90,9 @@ const MAX_ARTIFACT_BYTES = 10 * 1024 * 1024;
 const MAX_VERSION_CHARS = 200_000;
 const zeroUsage = (): TLocalUsage => ({ inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0 });
 const LIVE: TLocalSessionStatus[] = ["starting", "running", "waiting_permission", "idle"];
+/** 占着位置的状态：一轮做完在等本人回复的（idle）不占，排队的不占。 */
+const OCCUPYING: TLocalSessionStatus[] = ["starting", "running", "waiting_permission"];
+const CANCELLED_WHILE_STARTING = "启动途中已被强停";
 
 export class SessionManager {
   private readonly records = new Map<string, SessionRecord>();
@@ -101,6 +108,11 @@ export class SessionManager {
    * 否则第一次连接 401、它转去找 OAuth 再碰 403，整场会话都没有本会话 MCP（11/06 真跑 haiku 时碰到）。
    */
   private readonly launching = new Map<string, SessionRecord>();
+  /** 上次报给云端的排队位置（位置变了才重报）。 */
+  private readonly sentPosition = new Map<string, number>();
+  private queueSeq = 0;
+  /** 读回上次的会话时（本机程序还没开始监听）和关机时不从队里接；启动好后由 app 调 pump。 */
+  private holdQueue = true;
   private readonly dir: string;
 
   constructor(private readonly d: SessionDeps) {
@@ -115,10 +127,15 @@ export class SessionManager {
       rec.lastVersion ??= null;
       rec.role ??= null;
       rec.critics ??= [];
+      rec.queuedMessage ??= null;
+      rec.queueOrder ??= 0;
+      this.queueSeq = Math.max(this.queueSeq, rec.queueOrder);
       this.records.set(rec.id, rec);
-      // 本机程序重启时，上次的进程都已不在。
-      if (LIVE.includes(rec.status)) this.setStatus(rec, "exited", { reason: "本机程序重启，会话已停；再发一句话会接着做" });
+      // 本机程序重启时，上次的进程都已不在。排着的照原样排着；刚从队里拉起、还没开始的放回队里（位置不变）。
+      if (rec.status === "starting" && rec.queuedMessage !== null) this.setStatus(rec, "queued", { reason: "本机程序重启，照原样排着" });
+      else if (LIVE.includes(rec.status)) this.setStatus(rec, "exited", { reason: "本机程序重启，会话已停；再发一句话会接着做" });
     }
+    this.holdQueue = false;
   }
 
   private save(rec: SessionRecord) {
@@ -127,7 +144,7 @@ export class SessionManager {
   }
 
   private summary(rec: SessionRecord): TLocalSessionSummary {
-    const { mcpSecret: _s, syncSeq: _q, outputs: _o, handedBack: _h, versionNumber: _v, lastVersion: _l, role: _r, critics: _c, ...rest } = rec;
+    const { mcpSecret: _s, syncSeq: _q, outputs: _o, handedBack: _h, versionNumber: _v, lastVersion: _l, role: _r, critics: _c, queuedMessage: _m, queueOrder: _n, ...rest } = rec;
     return { ...rest, lastSeq: this.d.log.lastSeq(rec.id), pendingPermissions: this.pending.get(rec.id)?.size ?? 0, queuePosition: this.queuePosition(rec) };
   }
 
@@ -154,16 +171,66 @@ export class SessionManager {
   }
 
   private queue(): SessionRecord[] {
-    return [...this.records.values()].filter((r) => r.status === "queued").sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    return [...this.records.values()].filter((r) => r.status === "queued").sort((a, b) => a.queueOrder - b.queueOrder);
+  }
+
+  private max(): number {
+    return this.d.maxConcurrent?.() ?? 3;
   }
 
   /** 资源栏的「本机 ▮▮▯」。 */
   slots(): TLocalSlots {
-    return { max: this.d.maxConcurrent?.() ?? 3, running: this.activeCount(), queued: this.queue().length };
+    return { max: this.max(), running: this.activeCount(), queued: this.queue().length };
   }
 
+  /** 占着位置的会话数（含正在第一次拉起、还没登记的）。 */
   activeCount(): number {
-    return [...this.records.values()].filter((r) => r.status === "running" || r.status === "waiting_permission" || r.status === "starting").length;
+    return [...this.records.values()].filter((r) => OCCUPYING.includes(r.status)).length + this.launching.size;
+  }
+
+  /**
+   * 有空位就从队头接上，直到占满或队空（暂停、关机时不接）。先改成 starting 再拉起，所以同一轮里不会多接。
+   * 会话让出位置（一轮做完、结束、失败、排队时取消）、调大上限、托盘恢复、本机程序启动后都会调它。
+   */
+  pump(): void {
+    if (this.holdQueue || this.d.paused?.()) return;
+    for (let next = this.queue()[0]; next && this.activeCount() < this.max(); next = this.queue()[0]) {
+      this.setStatus(next, "starting");
+      void this.launchQueued(next);
+    }
+  }
+
+  private async launchQueued(rec: SessionRecord): Promise<void> {
+    const p = this.startRun(rec, false);
+    this.starting.set(rec.id, p);
+    try {
+      await p;
+    } catch (e) {
+      const cancelled = e instanceof SessionError && e.message === CANCELLED_WHILE_STARTING;
+      this.setStatus(rec, cancelled ? "exited" : "failed", { reason: cancelled ? "已强停" : `没开起来：${e instanceof Error ? e.message : String(e)}` });
+      return;
+    } finally {
+      this.starting.delete(rec.id);
+    }
+    const text = rec.queuedMessage ?? "";
+    rec.queuedMessage = null;
+    this.emit(rec, { type: "user_message", text, source: "initial" });
+    this.runs.get(rec.id)!.send(text);
+    this.setStatus(rec, "running");
+  }
+
+  /** 队里还在排的，位置变了就给云端重报一条 queued。 */
+  private syncQueuePositions() {
+    this.queue().forEach((rec, i) => {
+      if (this.sentPosition.get(rec.id) !== i + 1) this.syncStatus(rec);
+    });
+  }
+
+  private syncStatus(rec: SessionRecord) {
+    const queuePosition = this.queuePosition(rec);
+    if (queuePosition === null) this.sentPosition.delete(rec.id);
+    else this.sentPosition.set(rec.id, queuePosition);
+    this.sync(rec, { type: "status", data: { status: rec.status, title: rec.title, agent: rec.agent, modelLabel: rec.modelLabel, ...(queuePosition ? { queuePosition } : {}) } });
   }
 
   private must(id: string): SessionRecord {
@@ -187,11 +254,14 @@ export class SessionManager {
 
   private setStatus(rec: SessionRecord, status: TLocalSessionStatus, extra: { exitCode?: number | null; reason?: string } = {}) {
     if (rec.status === status && !extra.reason) return;
+    const left = rec.status === "queued" && status !== "queued";
     rec.status = status;
     this.save(rec);
     this.emit(rec, { type: "status", status, ...extra });
-    this.sync(rec, { type: "status", data: { status, title: rec.title, agent: rec.agent, modelLabel: rec.modelLabel } });
+    this.syncStatus(rec);
+    if (left) this.syncQueuePositions();
     this.d.onChange?.();
+    if (!OCCUPYING.includes(status)) this.pump();
   }
 
   async create(req: TLocalCreateSessionRequest, defaults: { includePersonalConfig: boolean }): Promise<TLocalSessionSummary> {
@@ -215,14 +285,23 @@ export class SessionManager {
     if (!model) throw new SessionError("validation", "没有这个模型配置");
     if (model.source === "gateway" && !model.apiKey) throw new SessionError("validation", `「${model.label}」还没填钥匙`);
     const agent = req.agent ?? "claude-code";
+    if (this.d.paused?.()) throw new SessionError("conflict", "本机程序已暂停，先在托盘里恢复");
     const now = nowIso();
     const rec: SessionRecord = {
       id: randomUUID(), subject, title: req.title, agent, modelProfileId: model.profileId, modelLabel: model.label, cwd,
       includePersonalConfig: req.includePersonalConfig ?? defaults.includePersonalConfig,
       createdAt: now, updatedAt: now, status: "starting", usage: zeroUsage(), syncSeq: 0, mcpSecret: randomBytes(24).toString("hex"),
       outputs: [], handedBack: 0, versionNumber: subject.kind === "topic" ? req.versionBase ?? 0 : 0, lastVersion: null,
-      role: req.role ?? null, critics: req.critics ?? [],
+      role: req.role ?? null, critics: req.critics ?? [], queuedMessage: null, queueOrder: 0,
     };
+    // 满了（或前面还有人在排）就进队，先来先跑；有空位时 pump 接上。
+    if (this.queue().length || this.activeCount() >= this.max()) {
+      rec.queuedMessage = req.firstMessage;
+      rec.queueOrder = ++this.queueSeq;
+      this.records.set(rec.id, rec);
+      this.setStatus(rec, "queued");
+      return this.summary(rec);
+    }
     // 起不来（没装、太旧、没实现）直接抛给调用方，不留记录
     this.launching.set(rec.id, rec);
     try {
@@ -302,7 +381,7 @@ export class SessionManager {
     });
     if (this.cancelled.delete(rec.id)) {
       await run.kill();
-      throw new SessionError("conflict", "启动途中已被强停");
+      throw new SessionError("conflict", CANCELLED_WHILE_STARTING);
     }
     this.runs.set(rec.id, run);
     this.pending.set(rec.id, new Map());
@@ -360,6 +439,8 @@ export class SessionManager {
 
   async sendMessage(id: string, req: TLocalSendMessageRequest): Promise<TLocalSendMessageResponse> {
     const rec = this.must(id);
+    if (rec.status === "queued") throw new SessionError("conflict", "还在等空位，开始后再说");
+    if (rec.queuedMessage !== null && !this.starting.has(id)) throw new SessionError("conflict", "这件还没开始过（排队时取消了或没开起来），要做就重新开工");
     let text: string;
     if (req.kind === "review") {
       if (rec.subject.kind !== "topic" || !rec.critics.length) throw new SessionError("validation", "评审会只给开工时带了挑刺岗位的专题用");
@@ -388,8 +469,16 @@ export class SessionManager {
     return { delivery };
   }
 
+  /** 还在排的：停下、强停都是取消，让它出队（不留进程，不能再续）。 */
+  private cancelQueued(rec: SessionRecord): boolean {
+    if (rec.status !== "queued") return false;
+    this.setStatus(rec, "exited", { reason: "排队时取消了，没开始" });
+    return true;
+  }
+
   async interrupt(id: string): Promise<TLocalSessionSummary> {
     const rec = this.must(id);
+    if (this.cancelQueued(rec)) return this.summary(rec);
     const run = this.runs.get(id);
     if (run && rec.status !== "idle") await run.interrupt();
     return this.summary(rec);
@@ -408,6 +497,7 @@ export class SessionManager {
 
   async kill(id: string): Promise<TLocalSessionSummary> {
     const rec = this.must(id);
+    if (this.cancelQueued(rec)) return this.summary(rec);
     const run = this.runs.get(id);
     if (run) {
       this.killed.add(id);
@@ -425,6 +515,8 @@ export class SessionManager {
   }
 
   async shutdown(): Promise<void> {
+    // 关机时进程一个个退出会让出位置，这时不能再从队里接新的：排着的留到下次启动。
+    this.holdQueue = true;
     await Promise.all([...this.runs.keys()].map((id) => this.kill(id).catch(() => undefined)));
   }
 

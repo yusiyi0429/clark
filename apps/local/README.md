@@ -40,7 +40,8 @@ tianshu-local version
 | `src/main.ts`、`src/app.ts` | 命令行入口；把各部分接起来、托盘菜单动作 |
 | `src/http/server.ts`、`security.ts` | 路由；Host、Origin、口令、只收 JSON；SSE 补发；本会话 MCP 接口 |
 | `src/pairing.ts` | 配对（本机弹框确认码）、口令只存哈希 |
-| `src/sessions.ts` | 会话状态机、权限挂起、插话、停下、强停、续接、交产出物和交回、喂发件箱 |
+| `src/sessions.ts` | 会话状态机、同时跑的上限和先来先跑的队列、权限挂起、插话、停下、强停、续接、交产出物和交回、喂发件箱 |
+| `src/plan.ts` | 计划条目算「第几步 / 共几步」 |
 | `src/agents/claudeCode.ts`、`claudeEnv.ts` | 拉起 Claude Code、参数、环境变量白名单、stream-json 归一化 |
 | `src/agents/pathGuard.ts` | 权限请求里认越界路径、放行建议越界就不给「这张卡都允许」（ADR 0031） |
 | `src/rolePrompt.ts`、`src/agents/feishuPlugin.ts` | 工作规矩和岗位进追加的系统提示词、挑刺子 agent、评审会那句话；岗位要飞书时挂的会话插件（ADR 0033） |
