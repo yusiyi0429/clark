@@ -5,7 +5,7 @@ import {
   LocalCreateSessionRequest, LocalModelProfileUpsert, LocalModelProfile, LocalPermissionDecisionRequest, LocalSessionEvent,
   LocalSyncBatchRequest, LocalPairingStatusResponse, LocalSendMessageRequest, LOCAL_RUNNER_ROUTES,
   LocalCreateSessionBatchRequest, LocalCreateSessionBatchResponse, LocalSettingsPatch, LocalSessionSummary, LocalHealthResponse,
-  LocalVerifyBriefResponse, LOCAL_RUNNER_VERIFY_BRIEF_PATH, LocalMergeResponse, LocalVerdict, LocalQuestionAnswerRequest, LocalPlanCard,
+  LocalVerifyBriefResponse, LOCAL_RUNNER_VERIFY_BRIEF_PATH, LocalMergeResponse, LocalVerdict, LocalQuestionAnswerRequest, LocalPlanCard, LocalBackgroundItem,
 } from "../src/index.js";
 
 const sessionId = "6b0f3a52-4d0c-4c1e-9a43-1f7d2c9b8e10";
@@ -218,6 +218,27 @@ describe("本机程序契约", () => {
     const status = { status: "queued", title: "总验收", agent: "claude-code", modelLabel: "订阅", queuePosition: 1 };
     expect(Value.Check(LocalSyncBatchRequest, batch({ ...status, waitingFor: ["card-1", "card-2"] }))).toBe(true);
     expect(Value.Check(LocalSyncBatchRequest, batch(status))).toBe(true);
+  });
+
+  it("后台任务：会话摘要列出子 agent 和后台命令，事件和同步条目每次带全部字段，可以停", () => {
+    const at = "2026-11-07T02:00:00.000Z";
+    const agent = { id: "a87b163c2898fa14a", title: "数文件", kind: "subagent", state: "running", startedAt: at, finishedAt: null, stoppable: true };
+    const cmd = { id: "bbvrkzzoy", title: "后台等待 30 秒", kind: "command", state: "stopped", startedAt: at, finishedAt: at, stoppable: false };
+    expect(Value.Check(LocalBackgroundItem, agent)).toBe(true);
+    expect(Value.Check(LocalBackgroundItem, cmd)).toBe(true);
+    expect(Value.Check(LocalBackgroundItem, { ...agent, kind: "plan" })).toBe(false); // 规划员、验收员、合回是云端自己知道的，不在这里
+    expect(Value.Check(LocalBackgroundItem, { ...agent, state: "killed" })).toBe(false);
+    expect(Value.Check(LocalBackgroundItem, { ...agent, finishedAt: undefined })).toBe(false);
+    const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0 };
+    const summary = {
+      id: sessionId, subject: { kind: "card", cardId: "card-1" }, title: "改登录页", agent: "claude-code", modelProfileId: "subscription", modelLabel: "订阅",
+      cwd: "D:/repo", status: "running", includePersonalConfig: false, createdAt: at, updatedAt: at, lastSeq: 9, pendingPermissions: 0, queuePosition: null, usage,
+    };
+    expect(Value.Check(LocalSessionSummary, { ...summary, background: [agent, cmd] })).toBe(true);
+    expect(Value.Check(LocalSessionEvent, { seq: 10, at, sessionId, type: "background", item: cmd })).toBe(true);
+    const batch = { deviceId, runnerVersion: "0.1.0", slots: { max: 3, running: 1, queued: 0 }, items: [{ key: `${deviceId}:${sessionId}:11`, sessionId, subject: summary.subject, occurredAt: at, type: "background", data: agent }] };
+    expect(Value.Check(LocalSyncBatchRequest, batch)).toBe(true);
+    expect(LOCAL_RUNNER_ROUTES.stopBackground).toEqual({ method: "POST", path: "/v1/sessions/:id/background/:itemId/stop", auth: true });
   });
 
   it("配对口令只在批准后出现；路由表里只有健康和配对不要口令", () => {

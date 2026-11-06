@@ -112,6 +112,11 @@ export const AcceptCardDraftsRequest = Type.Object({
     executor: Type.Optional(CardExecutor),
     roleId: Type.Optional(Nullable(Type.String({ format: "uuid" }))),
   }, strict), { minItems: 1, maxItems: 8 }),
+  /**
+   * 新首页第 4.4 节：Task 管线里定了计划（派活单上选了「就按这个开始」）。true 时交给 Agent 做的卡（执行方 claude_code）放进看板的同时登记要开工，
+   * 不用再点开工：配对的电脑上开着的网页认领后交给本机程序（POST /api/me/session-starts/claim），手机上确认的排着「等本机上线」。不带或 false 照旧只放进看板。
+   */
+  start: Type.Optional(Type.Boolean()),
 }, strict);
 export const AcceptCardDraftsResponse = Type.Object({ cards: Type.Array(CardTaskView) }, strict);
 

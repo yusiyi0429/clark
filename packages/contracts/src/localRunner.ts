@@ -370,6 +370,25 @@ export const LocalQuestionRequestView = Type.Object({
   askedAt: Instant,
 }, strict);
 
+/**
+ * 会话里 Claude Code 自己开的后台任务（首页右栏「后台任务」、云端 /api/me/background?scope=session:<id>）：
+ * subagent 是子 agent（Agent / Task 工具），command 是后台命令（Bash 的 run_in_background）和别的后台任务。前台跑完的普通命令不算。
+ * id 是 Claude Code 的 task_id，同一个会话里唯一。title 是它的说明（子 agent 的 description、命令的 description，没有就用命令本身），截到 200 字。
+ * state：running 在跑；done 跑完了；failed 失败；stopped 被停了（本人点停止、执行方自己停、进程退出）。
+ * stoppable：现在能不能点停止（在跑、进程还在才能停）。
+ */
+export const LocalBackgroundItemKind = Type.Union([Type.Literal("subagent"), Type.Literal("command")]);
+export const LocalBackgroundItemState = Type.Union([Type.Literal("running"), Type.Literal("done"), Type.Literal("failed"), Type.Literal("stopped")]);
+export const LocalBackgroundItem = Type.Object({
+  id: Type.String({ minLength: 1, maxLength: 120 }),
+  title: Type.String({ maxLength: 200 }),
+  kind: LocalBackgroundItemKind,
+  state: LocalBackgroundItemState,
+  startedAt: Instant,
+  finishedAt: Nullable(Instant),
+  stoppable: Type.Boolean(),
+}, strict);
+
 export const LocalSessionSummary = Type.Object({
   /** 同时就是 Claude Code 的 --session-id，续接用它。 */
   id: Uuid,
@@ -394,6 +413,8 @@ export const LocalSessionSummary = Type.Object({
   pendingQuestion: Type.Optional(LocalQuestionRequestView),
   /** 只有卡：排着队、还在等的前面的卡（cardId，还没在这台本机上合回的），界面「已排队 · 等前面的卡」；不在等就不带。 */
   waitingFor: Type.Optional(Type.Array(Type.String(), { minItems: 1, maxItems: 8 })),
+  /** 这个会话里开过的后台任务（按开始的先后，最多留最近 50 个）；没有就不带。 */
+  background: Type.Optional(Type.Array(LocalBackgroundItem, { maxItems: 50 })),
 }, strict);
 export const LocalSessionListResponse = Type.Object({ sessions: Type.Array(LocalSessionSummary) }, strict);
 
@@ -476,6 +497,11 @@ export const LocalQuestionAnswerRequest = Type.Object({
   choices: Type.Array(Type.Array(Type.String({ minLength: 1, maxLength: 200 }), { maxItems: 10 }), { minItems: 1, maxItems: 10 }),
   text: Type.Optional(Type.String({ minLength: 1, maxLength: 4000 })),
 }, strict);
+
+/**
+ * POST /v1/sessions/:id/background/:itemId/stop（体 {}）：停一个后台任务（让 Claude Code 停掉它，会话本身不停），回执是 LocalSessionActionResponse。
+ * 停下以后这一项的 state 变成 stopped（事件 background 和同步条目 background 都会报）。不在跑、进程已退出、没有这一项回 409。
+ */
 
 /** POST /v1/sessions/:id/interrupt（停下，会话保留）与 /kill（强停，杀本会话进程树）的回执。 */
 export const LocalSessionActionResponse = Type.Object({ session: LocalSessionSummary }, strict);
@@ -601,6 +627,8 @@ export const LocalSessionEvent = Type.Union([
   ev("plan", { entries: Type.Array(LocalPlanEntry), progress: LocalPlanProgress }),
   ev("permission_request", { request: LocalPermissionRequestView }),
   ev("permission_resolved", { requestId: Type.String(), decision: Type.Union([Type.Literal("allow"), Type.Literal("deny")]), message: Type.Optional(Type.String()), allowForSession: Type.Boolean() }),
+  /** 后台任务开始或变了（开始、跑完、失败、被停）：每次带这一项的全部字段，按 item.id 覆盖。 */
+  ev("background", { item: LocalBackgroundItem }),
   /** 执行方问本人（Claude Code 的 AskUserQuestion）：会话转成 idle（等你回复）。 */
   ev("question", { request: LocalQuestionRequestView }),
   /** 提问了结：答了带 choices 和 text；这一轮停了、进程退出了就作废，choices 为 null。 */
@@ -707,6 +735,8 @@ export const LocalSyncItem = Type.Union([
   syncItem("verdict", LocalVerdict),
   /** 花费：每轮结束报一次本轮的增量。 */
   syncItem("cost", Type.Object({ modelLabel: Type.String(), usage: LocalUsage }, strict)),
+  /** 会话里的后台任务开始或变了：每次带全部字段，云端按 sessionId + data.id 覆盖（/api/me/background?scope=session:<sessionId>）。 */
+  syncItem("background", LocalBackgroundItem),
 ]);
 
 export const LocalSyncBatchRequest = Type.Object({
@@ -768,6 +798,9 @@ export type TLocalMergeResponse = Static<typeof LocalMergeResponse>;
 export type TLocalQuestion = Static<typeof LocalQuestion>;
 export type TLocalQuestionRequestView = Static<typeof LocalQuestionRequestView>;
 export type TLocalQuestionAnswerRequest = Static<typeof LocalQuestionAnswerRequest>;
+export type TLocalBackgroundItem = Static<typeof LocalBackgroundItem>;
+export type TLocalBackgroundItemKind = Static<typeof LocalBackgroundItemKind>;
+export type TLocalBackgroundItemState = Static<typeof LocalBackgroundItemState>;
 export type TLocalPlanEntry = Static<typeof LocalPlanEntry>;
 export type TLocalHandbackCriterion = Static<typeof LocalHandbackCriterion>;
 export type TLocalTopicVersionKind = Static<typeof LocalTopicVersionKind>;
@@ -824,4 +857,5 @@ export const LOCAL_RUNNER_ROUTES = {
   kill: { method: "POST", path: "/v1/sessions/:id/kill", auth: true },
   mergeSession: { method: "POST", path: "/v1/sessions/:id/merge", auth: true },
   answerQuestion: { method: "POST", path: "/v1/sessions/:id/questions/:requestId", auth: true },
+  stopBackground: { method: "POST", path: "/v1/sessions/:id/background/:itemId/stop", auth: true },
 } as const;
