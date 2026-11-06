@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Value } from "@sinclair/typebox/value";
 import { LocalSyncBatchRequest, type TLocalSyncItem } from "@warmap/contracts";
 import { Outbox } from "../src/outbox.js";
@@ -84,5 +84,50 @@ describe("发件箱", () => {
     await box.flush();
     box.stop();
     expect(box.status()).toMatchObject({ pending: 1, lastError: "云端返回 500" });
+  });
+
+  it("心跳：5 分钟里没同步过就发一批空的（合契约、带位置数），刚同步过不发，没关联云端不发；每分钟看一次，停下就不再发", async () => {
+    let now = 1_000_000;
+    const cloud = fakeCloud((keys) => json({ accepted: keys, rejected: [] }));
+    const box = new Outbox(tempDir(), target, meta, cloud.fetchImpl, () => now);
+    box.slots = () => ({ max: 3, running: 0, queued: 0 });
+    await box.heartbeat(); // 开机后还没同步过：发
+    expect(cloud.calls.map((c) => c.body.items)).toEqual([[]]);
+    expect(Value.Check(LocalSyncBatchRequest, cloud.calls[0]!.body)).toBe(true);
+    expect(cloud.calls[0]!.body.slots).toEqual({ max: 3, running: 0, queued: 0 });
+    expect(box.status().lastSyncedAt).not.toBeNull();
+    now += 4 * 60_000;
+    await box.heartbeat(); // 4 分钟前发过：不发
+    expect(cloud.calls.length).toBe(1);
+    box.enqueue(item(1));
+    await box.flush(); // 有东西要报：照常发
+    now += 4 * 60_000; // 离上次心跳 8 分钟，离上次同步 4 分钟：不发
+    await box.heartbeat();
+    expect(cloud.calls.length).toBe(2);
+    now += 60_000; // 离上次同步满 5 分钟：发
+    await box.heartbeat();
+    expect(cloud.calls.map((c) => c.body.items.length)).toEqual([0, 1, 0]);
+    box.stop();
+
+    const unlinked = new Outbox(tempDir(), async () => null, meta, cloud.fetchImpl, () => now);
+    await unlinked.heartbeat();
+    unlinked.stop();
+    expect(cloud.calls.length).toBe(3);
+
+    vi.useFakeTimers();
+    try {
+      const timed = new Outbox(tempDir(), target, meta, cloud.fetchImpl, () => now);
+      timed.startHeartbeat();
+      await vi.advanceTimersByTimeAsync(59_000);
+      expect(cloud.calls.length).toBe(3);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(cloud.calls.length).toBe(4);
+      timed.stop();
+      now += 10 * 60_000;
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      expect(cloud.calls.length).toBe(4);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

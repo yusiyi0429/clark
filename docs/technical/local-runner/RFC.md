@@ -146,6 +146,7 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
 ## 8. 云端同步（本机 → 云端，单向）
 
 - `POST {apiBaseUrl}/api/local-runner/sync`，`Authorization: Bearer <个人令牌>`，体 `LocalSyncBatchRequest`（≤50 条、≤12 MB），回 `LocalSyncBatchResponse`。
+- 心跳：云端 10 分钟没收到同步就当本机离线。本机开着、5 分钟里没同步过任何东西（闲着，或条目都在退避）时，发一批空的（`items: []`，照样带 `slots`），云端照样刷新在线时间和位置数；每分钟看一次，没关联云端不发，没发成等下一分钟。
 - 条目：`status`（状态变化）、`plan`（TodoWrite）、`evidence`、`artifact`（原文 base64）、`handback`（带 `outputKeys`：点名的产出和证据的条目幂等键，云端存成 `local_outputs.client_id`）、`topic_version`（专题新的一版：号、种类、名字或 null、改了什么、Markdown 正文）、`topic_version_feishu`（第几版已存进飞书、地址）、`card_plan`（规划员的计划和派活单草稿）、`verdict`（验收员的逐条结论，subject 带 cardId 和 handbackKey）、`cost`（每轮增量）。规划员、验收员的 status、plan、cost 条目 subject.kind 是 plan / verify，云端不能当成卡自己的状态。不传仓库文件、完整工具输出、环境变量、钥匙。
 - 幂等键 `<deviceId>:<sessionId>:<本会话同步序号>`。云端按键去重，重复的也回 `accepted`；`rejected` 的本机记一笔后出队；回执里没提到的、网络错、5xx 都退避重试（1 s × 2^n，最长 5 分钟）。发件箱先落盘（`outbox.json`），断网、重启都不丢。
 - 关联：网页 `PUT /v1/cloud` 交 `apiBaseUrl` 和令牌；`apiBaseUrl` 的来源必须在白名单里，免得被指到别处。这个令牌同时用于会话里的天枢 MCP（第 7 节）。**建议 api 会话**给个人令牌加一种 `local` 客户端：能调 `/api/local-runner/*` 和 `/mcp/me`，网页配对后建一个这种令牌交给本机程序，设置页能看到、能吊销。

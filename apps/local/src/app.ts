@@ -111,5 +111,6 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   updateTray();
   setInterval(updateTray, 10_000).unref();
   outbox.kick();
+  outbox.startHeartbeat();
   return { config, server, sessions, outbox, close };
 }

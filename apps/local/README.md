@@ -49,7 +49,7 @@ tianshu-local version
 | `src/agents/claudeSetup.ts` | 检测、安装、登录 Claude Code |
 | `src/agents/codex.ts` | Codex 占位（12 月） |
 | `src/eventLog.ts` | 每会话事件日志 |
-| `src/outbox.ts` | 发件箱：落盘、退避重试、幂等键 |
+| `src/outbox.ts` | 发件箱：落盘、退避重试、幂等键；闲着时的心跳 |
 | `src/models.ts`、`secrets.ts` | 模型配置；钥匙存 DPAPI / 钥匙串 |
 | `src/desktop/` | 托盘和本机弹框（Windows：首次启动用系统自带 csc 编的 C# 小程序；Mac：osascript） |
 | `src/autostart.ts` | HKCU Run / LaunchAgent |
