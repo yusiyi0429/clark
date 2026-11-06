@@ -28,7 +28,7 @@ export function agreementBody(agreement: TTaskAgreementResponse,
   };
 }
 
-export const SOURCE_LABEL: Record<TAgreementSource, string | null> = { world: "本体", tianshu: "11 月补充", none: null };
+const SOURCE_LABEL: Record<TAgreementSource, string | null> = { world: "本体", tianshu: "11 月补充", none: null };
 
 export function AgreementLine({ criterion, source, canEdit, onSave }: {
   criterion: TAgreementCriterion;
