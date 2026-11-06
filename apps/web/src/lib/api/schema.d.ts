@@ -16819,7 +16819,7 @@ export interface components {
             stage: "todo" | "doing" | "review" | "done";
             wait: ("approval" | "reply" | "paused" | "reviewing" | "review_failed" | "blocked") | null;
             needsYou: boolean;
-            queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards") | null;
+            queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota") | null;
             queuePosition: number | null;
             git: {
                 branch: string;
@@ -16832,6 +16832,7 @@ export interface components {
                 cardId: string;
                 title: string;
             }[];
+            holdUntil: string | null;
         };
         WorkerResources: {
             devices: {
@@ -16857,6 +16858,23 @@ export interface components {
                     costCny: number | null;
                 };
             };
+            quota: {
+                /** Format: uuid */
+                deviceId: string;
+                deviceName: string;
+                /** @constant */
+                source: "claude_subscription";
+                windows: {
+                    kind: "session" | "weekly_all" | "weekly_scoped";
+                    model: string | null;
+                    usedPercent: number;
+                    state: "ok" | "warning" | "blocked";
+                    resetsAt: string | null;
+                }[];
+                blockedUntil: string | null;
+                /** Format: date-time */
+                updatedAt: string;
+            }[];
         };
         WorkersResponse: {
             running: {
@@ -16903,7 +16921,7 @@ export interface components {
                 stage: "todo" | "doing" | "review" | "done";
                 wait: ("approval" | "reply" | "paused" | "reviewing" | "review_failed" | "blocked") | null;
                 needsYou: boolean;
-                queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards") | null;
+                queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota") | null;
                 queuePosition: number | null;
                 git: {
                     branch: string;
@@ -16916,6 +16934,7 @@ export interface components {
                     cardId: string;
                     title: string;
                 }[];
+                holdUntil: string | null;
             }[];
             queued: {
                 key: string;
@@ -16961,7 +16980,7 @@ export interface components {
                 stage: "todo" | "doing" | "review" | "done";
                 wait: ("approval" | "reply" | "paused" | "reviewing" | "review_failed" | "blocked") | null;
                 needsYou: boolean;
-                queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards") | null;
+                queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota") | null;
                 queuePosition: number | null;
                 git: {
                     branch: string;
@@ -16974,6 +16993,7 @@ export interface components {
                     cardId: string;
                     title: string;
                 }[];
+                holdUntil: string | null;
             }[];
             done: {
                 key: string;
@@ -17019,7 +17039,7 @@ export interface components {
                 stage: "todo" | "doing" | "review" | "done";
                 wait: ("approval" | "reply" | "paused" | "reviewing" | "review_failed" | "blocked") | null;
                 needsYou: boolean;
-                queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards") | null;
+                queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota") | null;
                 queuePosition: number | null;
                 git: {
                     branch: string;
@@ -17032,6 +17052,7 @@ export interface components {
                     cardId: string;
                     title: string;
                 }[];
+                holdUntil: string | null;
             }[];
             resources: {
                 devices: {
@@ -17057,6 +17078,23 @@ export interface components {
                         costCny: number | null;
                     };
                 };
+                quota: {
+                    /** Format: uuid */
+                    deviceId: string;
+                    deviceName: string;
+                    /** @constant */
+                    source: "claude_subscription";
+                    windows: {
+                        kind: "session" | "weekly_all" | "weekly_scoped";
+                        model: string | null;
+                        usedPercent: number;
+                        state: "ok" | "warning" | "blocked";
+                        resetsAt: string | null;
+                    }[];
+                    blockedUntil: string | null;
+                    /** Format: date-time */
+                    updatedAt: string;
+                }[];
             };
         };
         CardSplitRequestView: {
@@ -17129,7 +17167,7 @@ export interface components {
             title: string;
             state: "queued" | "running" | "waiting" | "done" | "failed";
             waiting: ("approval" | "question" | "verdict" | "merge") | null;
-            queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards") | null;
+            queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota") | null;
             role: {
                 /** Format: uuid */
                 id: string;
@@ -17150,6 +17188,7 @@ export interface components {
                 /** Format: date-time */
                 at: string;
             } | null;
+            holdUntil: string | null;
         };
         HomeTaskSummary: {
             running: number;
@@ -17184,7 +17223,7 @@ export interface components {
                 title: string;
                 state: "queued" | "running" | "waiting" | "done" | "failed";
                 waiting: ("approval" | "question" | "verdict" | "merge") | null;
-                queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards") | null;
+                queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota") | null;
                 role: {
                     /** Format: uuid */
                     id: string;
@@ -17205,6 +17244,7 @@ export interface components {
                     /** Format: date-time */
                     at: string;
                 } | null;
+                holdUntil: string | null;
             }[];
             items: {
                 /** Format: uuid */
@@ -17246,7 +17286,7 @@ export interface components {
                     title: string;
                     state: "queued" | "running" | "waiting" | "done" | "failed";
                     waiting: ("approval" | "question" | "verdict" | "merge") | null;
-                    queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards") | null;
+                    queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota") | null;
                     role: {
                         /** Format: uuid */
                         id: string;
@@ -17267,6 +17307,7 @@ export interface components {
                         /** Format: date-time */
                         at: string;
                     } | null;
+                    holdUntil: string | null;
                 }[];
                 items: {
                     /** Format: uuid */
@@ -17342,7 +17383,7 @@ export interface components {
                         title: string;
                         state: "queued" | "running" | "waiting" | "done" | "failed";
                         waiting: ("approval" | "question" | "verdict" | "merge") | null;
-                        queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards") | null;
+                        queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota") | null;
                         role: {
                             /** Format: uuid */
                             id: string;
@@ -17363,6 +17404,7 @@ export interface components {
                             /** Format: date-time */
                             at: string;
                         } | null;
+                        holdUntil: string | null;
                     }[];
                     items: {
                         /** Format: uuid */
@@ -17383,7 +17425,7 @@ export interface components {
                     title: string;
                     state: "queued" | "running" | "waiting" | "done" | "failed";
                     waiting: ("approval" | "question" | "verdict" | "merge") | null;
-                    queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards") | null;
+                    queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota") | null;
                     role: {
                         /** Format: uuid */
                         id: string;
@@ -17404,6 +17446,7 @@ export interface components {
                         /** Format: date-time */
                         at: string;
                     } | null;
+                    holdUntil: string | null;
                 }[];
                 items: {
                     /** Format: uuid */
@@ -17457,6 +17500,7 @@ export interface components {
             taskId: string | null;
             cardId: string | null;
             topicId: string | null;
+            holdUntil: string | null;
         };
         BackgroundResponse: {
             items: {
@@ -17473,6 +17517,7 @@ export interface components {
                 taskId: string | null;
                 cardId: string | null;
                 topicId: string | null;
+                holdUntil: string | null;
             }[];
             resources: {
                 devices: {
@@ -17498,6 +17543,23 @@ export interface components {
                         costCny: number | null;
                     };
                 };
+                quota: {
+                    /** Format: uuid */
+                    deviceId: string;
+                    deviceName: string;
+                    /** @constant */
+                    source: "claude_subscription";
+                    windows: {
+                        kind: "session" | "weekly_all" | "weekly_scoped";
+                        model: string | null;
+                        usedPercent: number;
+                        state: "ok" | "warning" | "blocked";
+                        resetsAt: string | null;
+                    }[];
+                    blockedUntil: string | null;
+                    /** Format: date-time */
+                    updatedAt: string;
+                }[];
             };
         };
         TaskPipelineResponse: {

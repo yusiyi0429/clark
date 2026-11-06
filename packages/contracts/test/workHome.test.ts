@@ -16,9 +16,10 @@ beforeAll(() => {
 });
 
 const sub = { id: uuid, kind: "card", title: "修登录页", state: "waiting", waiting: "approval", queueReason: null, role: null, sessionId: uuid, deviceId: uuid,
-  autoStart: false, updatedAt: at, merge: null };
+  autoStart: false, updatedAt: at, merge: null, holdUntil: null };
 const resources = { devices: [], running: 0, cap: null, cost: { today: { inputTokens: 0, outputTokens: 0, costUsd: null, costCny: null },
-  month: { inputTokens: 0, outputTokens: 0, costUsd: null, costCny: null } } };
+  month: { inputTokens: 0, outputTokens: 0, costUsd: null, costCny: null } }, quota: [{ deviceId: uuid, deviceName: "我的电脑", source: "claude_subscription",
+  windows: [{ kind: "weekly_all", model: null, usedPercent: 100, state: "blocked", resetsAt: at }], blockedUntil: at, updatedAt: at }] };
 
 describe("新首页契约", () => {
   it("首页：Mission → Task → 子会话，其他，等你", () => {
@@ -69,7 +70,7 @@ describe("新首页契约", () => {
     expect(Value.Check(BackgroundQuery, { scope: "all" })).toBe(false);
     expect(Value.Check(BackgroundQuery, { scope: "card:x" })).toBe(false);
     expect(Value.Check(BackgroundResponse, { resources, items: [{ id: `bg:${uuid}:t1`, title: "跑测试", kind: "command", state: "running", startedAt: at, finishedAt: null,
-      stoppable: true, sessionId: uuid, itemId: "t1", deviceId: uuid, taskId: "T-1", cardId: uuid, topicId: null }] })).toBe(true);
+      stoppable: true, sessionId: uuid, itemId: "t1", deviceId: uuid, taskId: "T-1", cardId: uuid, topicId: null, holdUntil: null }] })).toBe(true);
   });
 
   it("Task 管线、自动分发、认领开工", () => {
