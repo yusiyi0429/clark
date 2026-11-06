@@ -132,7 +132,7 @@ function HomeFrame({ account }: { account: Account }) {
   const start = useCallback(async (cards: Worker[], planners: { taskId: string; splitId?: string }[]): Promise<Set<string>> => {
     const opened = new Set<string>();
     const cwd = local.folders.find((folder) => folder.id === readLast().folderId)?.path ?? local.folders[0]?.path;
-    if (!cwd && cards.length) { showWorkspaceToast({ text: "先在插件页加一个文件夹" }); return opened; }
+    if (!cwd && cards.length) { showWorkspaceToast({ text: "先在连接页加一个文件夹" }); return opened; }
     const roles = work.roles?.roles ?? [];
     const plans: StartPlan[] = cards.flatMap((worker) => {
       const role = roles.find((entry) => entry.id === worker.role.id) ?? null;

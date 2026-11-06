@@ -27,7 +27,7 @@ const RAIL: { section: V2Section; href: string; label: string; icon: typeof Mess
   { section: "chat", href: "/me/chat", label: "对话", icon: MessageCircle },
   { section: "month", href: "/me/month", label: "本月", icon: PanelsTopLeft },
   { section: "team", href: "/me/team", label: "岗位", icon: UsersRound },
-  { section: "plugins", href: "/me/plugins", label: "插件", icon: Shapes },
+  { section: "plugins", href: "/me/plugins", label: "连接", icon: Shapes },
 ];
 const TABS: { section: V2Section; href: string; label: string; icon: typeof MessageCircle }[] = [
   { section: "chat", href: "/me/chat", label: "伙伴", icon: Smile },

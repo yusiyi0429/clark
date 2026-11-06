@@ -25,24 +25,16 @@ const ago = (iso: string | null) => {
   const minutes = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60_000));
   return minutes < 1 ? "刚刚同步" : minutes < 60 ? `${minutes} 分钟前同步` : minutes < 1440 ? `${Math.round(minutes / 60)} 小时前同步` : `${Math.round(minutes / 1440)} 天前同步`;
 };
-// 吊销了「这台」：这台电脑上的网页都不再自动关联（关联会给它再发令牌，等于没吊销），回来靠手点「关联」。
-const relinkKey = "tianshu-revoked-device";
-const holdRelink = (deviceId: string | null) => {
-  try { if (deviceId) localStorage.setItem(relinkKey, deviceId); else localStorage.removeItem(relinkKey); } catch { /* 存不了就照常自动关联 */ }
-};
-const relinkHeld = (deviceId: string) => {
-  try { return localStorage.getItem(relinkKey) === deviceId; } catch { return false; }
-};
 
 export function PluginsPage({ account }: { account: Account }) {
   const handheld = useHandheld();
   return (
     <div className={s.page} data-testid="plugins-page">
       <div className={s.wrap}>
-        {handheld ? <div className={s.meHead}><h1>我</h1><AccountMenu account={account} /></div> : <h1 className={s.pageTitle}>插件</h1>}
+        {handheld ? <div className={s.meHead}><h1>我</h1><AccountMenu account={account} /></div> : <h1 className={s.pageTitle}>连接</h1>}
         {handheld ? <Link href="/me/team" className={s.row}><UsersRound size={16} aria-hidden /><b>岗位</b><span className={s.grow} /><ChevronRight size={16} aria-hidden /></Link> : null}
         <LocalSection personName={account.displayName} handheld={handheld} />
-        <DevicesSection />
+        <DevicesSection personName={account.displayName} />
       </div>
     </div>
   );
@@ -56,7 +48,7 @@ export function LocalSection({ personName, handheld }: { personName: string; han
   const ready = local.phase === "ready";
   // 配对好、还没关联云端：自动关联一次（拿设备令牌交给本机）。
   useEffect(() => {
-    if (!ready || !status || status.cloud.linked || linking || handheld || relinkHeld(status.deviceId)) return;
+    if (!ready || !status || status.cloud.linked || linking || handheld) return;
     setLinking(true);
     void linkCloud(local.runner, status, personName).then(() => local.refresh()).catch(() => undefined).finally(() => setLinking(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -81,7 +73,7 @@ export function LocalSection({ personName, handheld }: { personName: string; han
         <div className={s.cardSide}>
           {ready ? <span className={s.state} data-tone="done">已连接</span> : null}
           {ready && agent?.installed && !agent.loggedIn && !handheld ? <HeroButton variant="secondary" size="sm" onPress={() => void local.runner.login().then(() => local.refresh())}>登录 Claude</HeroButton> : null}
-          {ready && status && !status.cloud.linked && !linking && !handheld ? <HeroButton variant="secondary" size="sm" onPress={() => { setLinking(true); void linkCloud(local.runner, status, personName).then(() => { holdRelink(null); return local.refresh(); }).catch((error) => showWorkspaceToast({ text: error instanceof Error ? error.message : "没关联上" })).finally(() => setLinking(false)); }}>关联</HeroButton> : null}
+          {ready && status && !status.cloud.linked && !linking && !handheld ? <HeroButton variant="secondary" size="sm" onPress={() => { setLinking(true); void linkCloud(local.runner, status, personName).then(() => local.refresh()).catch((error) => showWorkspaceToast({ text: error instanceof Error ? error.message : "没关联上" })).finally(() => setLinking(false)); }}>关联</HeroButton> : null}
         </div>
       </div>
       {ready && !handheld ? <ModelsAndFolders /> : null}
@@ -217,7 +209,11 @@ function ModelsAndFolders() {
   );
 }
 
-export function DevicesSection() {
+/**
+ * 本机设备（新首页设计 12.1 第 7 条）：吊销的正好是这台时，当场重新关联（这台电脑拿一把新令牌，被吊销的那一行留着写「已吊销」）；
+ * 被吊销的设备只写「已吊销」，不再有按钮。
+ */
+export function DevicesSection({ personName }: { personName: string }) {
   const local = useLocalRunner();
   const [devices, setDevices] = useState<TLocalDeviceView[] | null>(null);
   // 这页吊销的留在页上：列表只回没吊销的，重新拉掉了就接在后面；列表里又有了（重新关联过）就不算吊销。
@@ -227,11 +223,12 @@ export function DevicesSection() {
   const rows = [...(devices ?? []), ...revoked.filter((device) => !devices?.some((entry) => entry.id === device.id))];
   if (!rows.length) return null;
   const here = local.status?.deviceId ?? null;
-  const revoke = (device: TLocalDeviceView) => void revokeDevice(device.id).then(() => {
-    if (device.id === here) holdRelink(device.id);
+  const [failed, setFailed] = useState<string | null>(null);
+  const revoke = (device: TLocalDeviceView) => void revokeDevice(device.id).then(async () => {
+    setFailed(null);
     setRevoked((gone) => [...gone, device]);
-    showWorkspaceToast({ text: `已吊销 ${device.name}` });
-  }).catch(() => showWorkspaceToast({ text: "没吊销成功，请重试" }));
+    if (device.id === here && local.status) { await linkCloud(local.runner, local.status, personName).catch(() => undefined); await local.refresh(); load(); }
+  }).catch(() => setFailed(device.id));
   return (
     <section className={s.section} aria-label="本机设备">
       <p className={s.lab}>本机设备</p>
@@ -243,7 +240,7 @@ export function DevicesSection() {
             <small className={s.faint}>{device.appVersion ? `v${device.appVersion} · ` : ""}{ago(device.lastSyncAt)}</small>
             <span className={s.grow} />
             {revoked.some((entry) => entry.id === device.id) ? <span className={s.state}>已吊销</span>
-              : <HeroButton variant="ghost" size="sm" onPress={() => revoke(device)}>吊销</HeroButton>}
+              : <>{failed === device.id ? <span className={s.error}>失败</span> : null}<HeroButton variant="ghost" size="sm" onPress={() => revoke(device)}>{failed === device.id ? "重试" : "吊销"}</HeroButton></>}
           </div>
         ))}
       </div>

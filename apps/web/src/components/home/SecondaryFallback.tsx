@@ -15,7 +15,7 @@ export function SecondaryFallback({ page, account }: { page: PageKey; account: A
   switch (page) {
     case "profile": return <><AvatarEditor personId={account.personId ?? null} initial={avatarInitial(account.displayName)} onDone={() => undefined} /><PersonalProfileForm /></>;
     case "buddy": return <BuddySettings onDone={() => undefined} />;
-    case "connections": return <><LocalSection personName={account.displayName} handheld={false} /><DevicesSection /></>;
+    case "connections": return <><LocalSection personName={account.displayName} handheld={false} /><DevicesSection personName={account.displayName} /></>;
     case "preferences": return null;
   }
 }

@@ -114,7 +114,7 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
   const pane = (
     <aside className={s.pane} aria-label="结果">
       <ResultPane detail={detail} session={session} view={session ? view : null} canAct={canAct} wait={wait} stage={stage} handheld={handheld} ready={ready}
-        onStart={() => setStarting(true)} onControl={(action) => void control(action)} onResume={() => void say("继续")} onChanged={() => void refresh()} />
+        onStart={embedded ? undefined : () => setStarting(true)} onControl={(action) => void control(action)} onResume={() => void say("继续")} onChanged={() => void refresh()} />
     </aside>
   );
   // 执行方在问本人：选项框放在对话最后（问的那一处）；手机、别的电脑上灰着。
@@ -207,7 +207,8 @@ function CloudTimeline({ run, title }: { run: TLocalRunView | null; title: strin
 
 function ResultPane({ detail, session, view, canAct, wait, stage, handheld, ready, onStart, onControl, onResume, onChanged }: {
   detail: CardDetail; session: TLocalSessionSummary | null; view: SessionView | null; canAct: boolean; wait: string | null; stage: string; handheld: boolean; ready: boolean;
-  onStart: () => void; onControl: (action: "interrupt" | "kill") => void; onResume: () => void; onChanged: () => void;
+  /** 新首页里没有常驻的「开始」（设计 9.8）：自动开工失败时由 Task 管线那一行出「手动开始」。 */
+  onStart?: () => void; onControl: (action: "interrupt" | "kill") => void; onResume: () => void; onChanged: () => void;
 }) {
   const item = detail.task;
   const run = detail.runs[0] ?? null;
@@ -272,7 +273,7 @@ function ResultPane({ detail, session, view, canAct, wait, stage, handheld, read
 
       {agent && !handheld ? (
         <div className={s.actions}>
-          {stage === "todo" && !view ? <HeroButton variant="primary" onPress={onStart} isDisabled={!ready}>开始</HeroButton> : null}
+          {stage === "todo" && !view && onStart ? <HeroButton variant="primary" onPress={onStart} isDisabled={!ready}>开始</HeroButton> : null}
           {canAct && live ? <HeroButton variant="secondary" onPress={() => onControl("interrupt")}>停下</HeroButton> : null}
           {canAct && paused && !live ? <HeroButton variant="primary" onPress={onResume}>继续</HeroButton> : null}
           {canAct && view && status !== "exited" && status !== "done" && status !== "failed" ? <HeroButton variant="ghost" onPress={() => onControl("kill")}>强停</HeroButton> : null}
