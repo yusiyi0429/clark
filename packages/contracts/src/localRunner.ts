@@ -737,7 +737,8 @@ export const LocalSyncItem = Type.Union([
   syncItem("cost", Type.Object({ modelLabel: Type.String(), usage: LocalUsage }, strict)),
   /**
    * 会话里的后台任务开始或变了：每次带全部字段，云端按 sessionId + data.id 覆盖（/api/me/background?scope=session:<sessionId>）。
-   * 发件箱重试时同一项的几条可能乱序到达：云端留 key 末尾本机序号最大的那条（occurredAt 可能落在同一毫秒），已结束的（done、failed、stopped）不被 running 盖回去。
+   * 发件箱重试时同一项的几条可能乱序到达：云端留 key 末尾本机序号最大的那条（occurredAt 可能落在同一毫秒）。
+   * 不要另定「已结束的不再变回 running」：子 agent 跑完后被续上（SendMessage）时，Claude Code 沿用同一个 task_id，这一项会从 done 回到 running。
    */
   syncItem("background", LocalBackgroundItem),
 ]);
