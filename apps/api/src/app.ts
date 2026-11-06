@@ -128,6 +128,7 @@ import { createThreadIntroAgent, type ThreadIntroAgent } from "./threadIntro.js"
 import { createTaskAcceptanceAgent, type TaskAcceptanceAgent } from "./taskAcceptanceDraft.js";
 import { createWorldPlanTaskSource, emptyPlanTaskSource, type PlanTaskSource } from "./planTasks.js";
 import { registerDeliverableRoutes } from "./routes/deliverables.js";
+import { registerAgreementRoutes } from "./routes/agreements.js";
 import type { DeliverableAgents, DeliverableQueue } from "./deliverableReview.js";
 import type { ArticleFetcher } from "./articleText.js";
 import { personDisplayNames } from "./people.js";
@@ -790,6 +791,7 @@ export async function buildApp({
   registerSeenMarkRoutes(app, ctx);
   registerMissionCardRoutes(app, ctx, missionCardAnnotationAgent, missionCardReviewAgent);
   registerDeliverableRoutes(app, ctx, { agents: deliverableAgents, fetchArticle: deliverableFetcher });
+  registerAgreementRoutes(app, ctx);
   registerMyRadarRoutes(app, ctx);
   registerMonthlyReviewRoutes(app, ctx);
   registerRequestRoutes(app, ctx, deliveryAgent);

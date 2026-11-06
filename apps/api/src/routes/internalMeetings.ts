@@ -16,6 +16,9 @@ import { MISSION_PLAN_TIMEOUT_MS, readMissionPlans, type MissionPlanWorld, type 
 import { companyPeriod } from "../monthlyPlans.js";
 import { isRealPerson, personDisplayNames } from "../people.js";
 import { WorldClient, worldConfigured } from "../worldClient.js";
+import { planTaskViewer } from "../planTaskAccess.js";
+import { checkTask, openPlanTask } from "../taskAgreements.js";
+import { DeliverableError } from "../taskDeliverables.js";
 import { readHomeSnapshots } from "./cards.js";
 import type { AppInstance, RouteContext } from "./shared.js";
 
@@ -37,6 +40,7 @@ const recallSearchQuery = Type.Object({
 }, { additionalProperties: false });
 const segmentParams = Type.Object({ segmentId: Type.String({ minLength: 1, maxLength: 64 }) }, { additionalProperties: false });
 const recallReadQuery = Type.Object({ cursor: Type.Optional(Type.String({ minLength: 1, maxLength: 24 })) }, { additionalProperties: false });
+const planTaskParams = Type.Object({ taskId: Type.String({ minLength: 1 }) }, { additionalProperties: false });
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 type View = { personId: string; role: SessionRole };
@@ -241,6 +245,29 @@ export function registerInternalMeetingRoutes(app: AppInstance, ctx: RouteContex
     if (!view) return reply;
     const period = companyPeriod(ctx.now());
     return { viewerRole: view.role, period, missions: await readMissionPlans(q, view.personId, period, planWorld) };
+  });
+
+  // 约定与对表（V1 设计第 6、10 节）：给伙伴只读，和网页 GET /api/plan-tasks/:taskId/agreement、/check 同一份，看得到的人也一样
+  // （负责人、Mission 负责人、战场负责人、CEO、约定里的认可人；CEO 按人员目录认，不看视角）。看不到的当找不到（404 NOT_FOUND）。
+  const openTask = async (reply: FastifyReply, view: View, taskId: string) => {
+    try {
+      return await openPlanTask(q, ctx.planTasks, planTaskViewer(peopleDirectory, view.personId), ctx.now(), taskId, personDisplayNames(peopleDirectory));
+    } catch (error) {
+      if (error instanceof DeliverableError) { fail(reply, error.status, error.code, error.message); return null; }
+      throw error;
+    }
+  };
+  app.get("/internal/plan-tasks/:taskId/agreement", { onRequest, schema: { params: planTaskParams } }, async (req, reply) => {
+    const view = viewOf(req, reply);
+    if (!view) return reply;
+    const opened = await openTask(reply, view, req.params.taskId);
+    return opened ? opened.agreement : reply;
+  });
+  app.get("/internal/plan-tasks/:taskId/check", { onRequest, schema: { params: planTaskParams } }, async (req, reply) => {
+    const view = viewOf(req, reply);
+    if (!view) return reply;
+    const opened = await openTask(reply, view, req.params.taskId);
+    return opened ? checkTask(q, opened.access, opened.agreement, ctx.now()) : reply;
   });
 
   // 首页对话里约会议（10/28 与人豪定：Chat 的 book_meeting 工具调这里）：把本人一句话里的时间、人名换成一张会议卡，只读不写库；

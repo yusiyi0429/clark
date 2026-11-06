@@ -23,7 +23,7 @@ export const DELIVERABLE_REVIEW_PROMPT = `# 角色
 
 # 输入
 
-一个 JSON：task 是 Task 的名字和完成定义；basis 说明按哪套标准评（acceptance 是本体验收标准，definition 是没有验收标准时用的完成定义）；criteria 是要逐条对照的标准，编号从 1 起；version 是这一版：statement 是本人附的一句话或现状说明，items 是能读到的材料（名字、类型、文字），图片随消息附上；unreadable 是读不到的材料和原因；previous 是上一版每一条的判定和理由，第一版没有；otherTasks 是本人这个月别的 Task 的名字，有时没有；dissent 有时出现，是本人对某一条的异议，这时 current 是这一版原来的报告。
+一个 JSON：task 是 Task 的名字和完成定义；basis 说明按哪套标准评（acceptance 是本体验收标准，definition 是没有验收标准时用的完成定义）；criteria 是要逐条对照的标准，编号从 1 起，有约定的条带 proof（约定好用什么证明）；exclusions 有时出现，是约定里这次不包括的事；version 是这一版：statement 是本人附的一句话或现状说明，items 是能读到的材料（名字、类型、文字），图片随消息附上；unreadable 是读不到的材料和原因；previous 是上一版每一条的判定和理由，第一版没有；otherTasks 是本人这个月别的 Task 的名字，有时没有；dissent 有时出现，是本人对某一条的异议，这时 current 是这一版原来的报告。
 
 # 先看对不对得上
 
@@ -33,6 +33,7 @@ export const DELIVERABLE_REVIEW_PROMPT = `# 角色
 
 # 怎么判
 
+- 只按约定判，不加新要求：某一条带 proof 时，就看这一版里有没有 proof 说的那种证明，有就判 met，不再追加 proof 以外的条件；没带 proof 的条按标准原文判。exclusions 里的事不算缺口。
 - 每一条三档：met 达到，partial 部分达到，unmet 未达到。
 - 证据只认这一版的材料。没有证据就判 unmet，写清缺的是什么证据，例如「缺一段新人 3 分钟内走完上手的录屏」。
 - 本人的现状说明是本人的陈述：有材料印证的才算证据；只有陈述、没有材料印证的，最多判 partial。
@@ -41,6 +42,7 @@ export const DELIVERABLE_REVIEW_PROMPT = `# 角色
 - evidence：引用的证据位置，写哪份材料、哪一页或哪一段，可以照抄能定位的短语；met 必须写，其余没有就写 null。
 - fix：具体怎么补，要补什么材料、做到什么程度；partial 和 unmet 必须写，met 写 null。
 - 有 dissent 时只重评它指的那一条：认真看本人的理由，再看材料；理由有材料支撑就改判，没有就维持原判，并在 reason 里说清为什么。
+- 约定以外你觉得还能做得更好的地方，写进 beyondScope（下次可以做），最多 3 条，每条不超过 40 字；这些不能当作 partial、unmet 的理由，也不写进 fix。没有就写空数组。
 
 # 报告
 
@@ -48,6 +50,7 @@ export const DELIVERABLE_REVIEW_PROMPT = `# 角色
 - summary：一到两句，说各条的大致情况，不超过 80 字。
 - gain：和上一版比，多达到了哪几条、补上了什么，直接写内容，不用「比上一版」「较上一版」开头（界面上已经有这几个字）；第一版写 null。
 - criteria：每一条一项，index 和输入的编号一一对应，不多不少；有 dissent 时只交它指的那一条。
+- beyondScope：见上，有 dissent 时写空数组。
 
 用 submit_candidate 提交，散文不会被保存。
 
@@ -80,6 +83,7 @@ const ReviewCandidate = Type.Object({
   summary: Type.String({ minLength: 1, maxLength: 160 }),
   gain: Nullable(Type.String({ maxLength: 160 })),
   mismatch: Type.Optional(Nullable(Type.String({ maxLength: 120 }))),
+  beyondScope: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 80 }), { maxItems: 5 })),
   criteria: Type.Array(Type.Object({
     index: Type.Integer({ minimum: 1 }),
     verdict: Type.Union([Type.Literal("met"), Type.Literal("partial"), Type.Literal("unmet")]),
@@ -103,11 +107,16 @@ export type StoredCriterion = TReviewCandidate["criteria"][number] & { dissent: 
 /** mismatch：材料和这个 Task 对不上时的一句话；11/03 以前的报告没有这一项。beyondScope：约定外的改进建议；11/06 以前的报告没有这一项。 */
 export type StoredReview = { headline: string | null; summary: string | null; gain: string | null; mismatch?: string | null; beyondScope?: string[]; criteria: StoredCriterion[] };
 export type StoredNote = { status: "writing" | "done" | "failed"; achieved: string | null; gain: string | null; why: string | null; lesson: string | null; edited: boolean; dismissed: boolean };
+/** 传版本时约定的快照（deliverable_versions.agreement）：proofs 和这一版的 criteria 一一对应，没写为 null。 */
+export type AgreementSnapshot = { proofs: (string | null)[]; exclusions: string[] };
 
 export type ReviewAgentInput = {
   task: { name: string; doneDefinition: string | null };
   basis: "acceptance" | "definition";
-  criteria: { index: number; text: string }[];
+  /** proof：约定里这一条用什么证明（没约定的条不带）。 */
+  criteria: { index: number; text: string; proof?: string }[];
+  /** 约定里这次不包括的事（没有时不带）。 */
+  exclusions?: string[];
   version: { statement: string | null; items: { name: string; kind: string; text: string | null }[] };
   unreadable: { name: string; note: string }[];
   previous?: { index: number; text: string; verdict: TCriterionVerdict; reason: string }[];
@@ -199,7 +208,8 @@ async function readLink(url: string, fetchArticle: ArticleFetcher, signal?: Abor
 }
 
 type VersionRow = { id: string; task_id: string; author_id: string; number: number; task_name: string; done_definition: string | null; statement: string | null;
-  basis: "acceptance" | "definition" | "none"; criteria: string[]; review: StoredReview | null; review_status: string; delivered_at: Date | null; note: StoredNote | null };
+  basis: "acceptance" | "definition" | "none"; criteria: string[]; agreement: AgreementSnapshot | null; review: StoredReview | null; review_status: string;
+  delivered_at: Date | null; note: StoredNote | null };
 type ItemRow = { id: string; kind: "file" | "image" | "link"; name: string; mime_type: string | null; storage_key: string | null; url: string | null;
   extracted_text: string | null; read: "pending" | "read" | "unreadable"; read_note: string | null };
 
@@ -274,7 +284,8 @@ export function createDeliverableQueue(options: { pool: Pool; storageDir: string
       const otherTasks = dissent || !options.otherTasks ? [] : await options.otherTasks(row.author_id, row.task_id).catch(() => []);
       const input: ReviewAgentInput = {
         task: { name: row.task_name, doneDefinition: row.done_definition }, basis: row.basis,
-        criteria: row.criteria.map((text, index) => ({ index: index + 1, text })),
+        criteria: row.criteria.map((text, index) => ({ index: index + 1, text, ...(row.agreement?.proofs[index] ? { proof: row.agreement.proofs[index]! } : {}) })),
+        ...(row.agreement?.exclusions.length ? { exclusions: row.agreement.exclusions } : {}),
         version: { statement: row.statement, items: readableItems(items) },
         unreadable: items.filter((item) => item.read === "unreadable").map((item) => ({ name: item.name, note: item.read_note ?? "读不到" })),
         ...(previous?.review.criteria.length ? { previous: previous.review.criteria.map((item) => ({ index: item.index, text: previous.criteria[item.index - 1] ?? "",
@@ -301,7 +312,7 @@ export function createDeliverableQueue(options: { pool: Pool; storageDir: string
           return { ...next, dissent: { reason: dissent.dissent!.reason, upheld: next.verdict === "met" } };
         }) }
         : { headline: candidate.headline, summary: candidate.summary, gain: previous ? candidate.gain : null, mismatch: candidate.mismatch ?? null,
-          criteria: [...candidate.criteria].sort((a, b) => a.index - b.index).map((item) => ({ ...item, dissent: null })) };
+          beyondScope: candidate.beyondScope ?? [], criteria: [...candidate.criteria].sort((a, b) => a.index - b.index).map((item) => ({ ...item, dissent: null })) };
       const saved = await q(`UPDATE deliverable_versions SET review_status='done',review=$3::jsonb,review_phase=NULL,review_finished_at=$4 WHERE ${guard}`,
         [versionId, token, JSON.stringify(report), options.now()]);
       if (saved.rowCount && seen.length) await q("UPDATE deliverable_items SET read='read' WHERE id=ANY($1::uuid[])", [seen]);

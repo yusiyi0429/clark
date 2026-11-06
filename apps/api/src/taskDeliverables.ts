@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
 import type { Pool } from "pg";
-import type { TDeliverableItem, TDeliverableNotePatch, TDeliverableReview, TDeliverableVersion, THomePlanTask, TReviewBasis, TTaskDeliverableResponse,
+import type { TDeliverableItem, TDeliverableNotePatch, TDeliverableReview, TDeliverableVersion, TReviewBasis, TTaskDeliverableResponse,
   TTaskDeliverableStatus } from "@warmap/contracts";
 import { MAX_MATERIAL_FILE_BYTES, MAX_MATERIAL_TEXT_CHARS, runWorker } from "./materialParser.js";
 import { htmlToText } from "./meetingEvidence.js";
@@ -10,15 +10,18 @@ import type { Query } from "./meetingStore.js";
 import { companyPeriod } from "./monthlyPlans.js";
 import { ownMissions, planTaskMissions } from "./homePlan.js";
 import { readPlanTasks, type PlanTaskSource } from "./planTasks.js";
-import type { StoredNote, StoredReview } from "./deliverableReview.js";
+import type { PlanTaskAccess } from "./planTaskAccess.js";
+import type { AgreementSnapshot, StoredNote, StoredReview } from "./deliverableReview.js";
 
 /**
- * Task 的交付物（spec 5.2–5.4）：只认本人 Mission 下的 Task；本体登记了负责人时只有负责人能传版本、交付，没登记时 Mission 的负责人（就是看的人）能。
+ * Task 的交付物（spec 5.2–5.4）：谁能看、谁能改见 planTaskAccess.ts（11/06 起负责人、Mission 负责人、战场负责人、CEO 和约定里的认可人能看；
+ * 本体登记了负责人时只有负责人能传版本、交付，没登记时 Mission 的负责人能）。
  * 一个版本 = 一次评审。评审只作参考（11/03 定）：最新一版评审跑完（评完或没评完）就能交付，不看达没达到。交付和版本说明这一版只记在天枢。
  */
 
+/** 交付物和约定共用的业务错误（路由换成同样的状态码和错误码）。 */
 export class DeliverableError extends Error {
-  constructor(public readonly status: 400 | 403 | 404 | 409 | 413, public readonly code: string, message: string) { super(message); }
+  constructor(public readonly status: 400 | 403 | 404 | 409 | 413 | 503, public readonly code: string, message: string) { super(message); }
 }
 
 export const MAX_DELIVERABLE_FILES = 10;
@@ -27,18 +30,8 @@ const MAX_LINKS = 5;
 const MAX_STATEMENT = 2000;
 const VERDICT_SCORE = { met: 100, partial: 50, unmet: 0 } as const;
 
-export type OwnTask = { task: THomePlanTask; viewerId: string; responsibleId: string | null; canEdit: boolean; basis: TReviewBasis; criteria: string[] };
-
-/** 本人 Mission 下的这个 Task，带权限和按哪套标准评；不是本人 Mission 下的一律当找不到。 */
-export async function findOwnTask(q: Query, planTasks: PlanTaskSource, viewerId: string, now: Date, taskId: string): Promise<OwnTask> {
-  const { rows } = await ownMissions(q, viewerId, companyPeriod(now));
-  const task = (await readPlanTasks(planTasks, planTaskMissions(rows))).find((item) => item.taskId === taskId);
-  if (!task) throw new DeliverableError(404, "NOT_FOUND", "找不到这个 Task");
-  const responsibleId = task.responsibleId ?? null;
-  const [basis, criteria]: [TReviewBasis, string[]] = task.criteria.length ? ["acceptance", task.criteria]
-    : task.doneDefinition ? ["definition", [task.doneDefinition]] : ["none", []];
-  return { task, viewerId, responsibleId, canEdit: responsibleId ? responsibleId === viewerId : true, basis, criteria };
-}
+/** 交付物用到的那几项（planTaskAccess.locatePlanTask 找到的 Task）；canEdit 是负责人。 */
+export type OwnTask = Pick<PlanTaskAccess, "task" | "viewerId" | "responsibleId" | "canEdit" | "basis" | "criteria">;
 
 /** 本人 Mission 下这个月的 Task（评审认材料是不是传错了 Task 时，拿来点名）。 */
 export async function ownTaskNames(q: Query, planTasks: PlanTaskSource, viewerId: string, now: Date): Promise<{ taskId: string; name: string }[]> {
@@ -192,8 +185,12 @@ async function extractText(path: string, mime: string, buffer: Buffer): Promise<
 
 const fileName = (name: string) => basename(name).replace(/[\u0000-\u001f/\\]/g, "_").trim().slice(0, 240) || "未命名";
 
-/** 传一个新版本：沿用上一版的几样（同一份存储）、加文件和链接、附一句话；落库后评审排队，由调用方开始评审。 */
-export async function createDeliverableVersion(pool: Pool, own: OwnTask, files: DeliverableFile[], fields: DeliverableFields, storageDir: string): Promise<TDeliverableVersion> {
+/**
+ * 传一个新版本：沿用上一版的几样（同一份存储）、加文件和链接、附一句话；落库后评审排队，由调用方开始评审。
+ * agreement 是此刻约定的快照（每条用什么证明、这次不包括什么），评审照它判；没有约定时为 null。
+ */
+export async function createDeliverableVersion(pool: Pool, own: OwnTask, files: DeliverableFile[], fields: DeliverableFields, storageDir: string,
+  agreement: AgreementSnapshot | null = null): Promise<TDeliverableVersion> {
   requireEdit(own);
   if (files.length > MAX_DELIVERABLE_FILES) throw new DeliverableError(400, "TOO_MANY_FILES", `一版最多 ${MAX_DELIVERABLE_FILES} 份文件`);
   const kinds = files.map((file) => deliverableKind(file.filename, file.buffer.length));
@@ -218,9 +215,9 @@ export async function createDeliverableVersion(pool: Pool, own: OwnTask, files: 
       const kept = fields.keep.length && latest
         ? (await client.query("SELECT * FROM deliverable_items WHERE version_id=$1 AND id=ANY($2::uuid[]) ORDER BY position", [latest.id, fields.keep])).rows as ItemRow[] : [];
       if (kept.length !== fields.keep.length) throw new DeliverableError(400, "INVALID_KEEP", "沿用的东西不在上一版里");
-      await client.query(`INSERT INTO deliverable_versions(id,task_id,mission_id,author_id,number,task_name,done_definition,statement,basis,criteria)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb)`, [versionId, own.task.taskId, own.task.missionId, own.viewerId, (latest?.number ?? 0) + 1,
-        own.task.name, own.task.doneDefinition, fields.statement, own.basis, JSON.stringify(own.criteria)]);
+      await client.query(`INSERT INTO deliverable_versions(id,task_id,mission_id,author_id,number,task_name,done_definition,statement,basis,criteria,agreement)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb)`, [versionId, own.task.taskId, own.task.missionId, own.viewerId, (latest?.number ?? 0) + 1,
+        own.task.name, own.task.doneDefinition, fields.statement, own.basis, JSON.stringify(own.criteria), agreement ? JSON.stringify(agreement) : null]);
       const items = [...kept.map(({ version_id: _version, ...item }) => ({ ...item, id: randomUUID() })), ...uploaded,
         ...fields.links.map((url) => ({ id: randomUUID(), kind: "link" as const, name: url.slice(0, 2000), mime_type: null, size_bytes: null, page_count: null,
           storage_key: null, url, extracted_text: null, read: "pending" as const, read_note: null }))];
@@ -284,8 +281,8 @@ export async function patchVersionNote(q: Query, own: OwnTask, versionId: string
   return readVersion(q, own.task.taskId, versionId);
 }
 
-/** 不同意某一条：只对评完的部分 / 未达到，一次只重评一条；带着本人的理由重评（调用方开始评审）。 */
-export async function dissentCriterion(q: Query, own: OwnTask, versionId: string, index: number, reason: string): Promise<TDeliverableVersion> {
+/** 不同意某一条：只对评完的部分 / 未达到，一次只重评一条；带着本人的理由重评（调用方开始评审），用时从此刻重新算。 */
+export async function dissentCriterion(q: Query, own: OwnTask, versionId: string, index: number, reason: string, now: Date): Promise<TDeliverableVersion> {
   requireEdit(own);
   const text = reason.trim();
   if (!text) throw new DeliverableError(400, "INVALID_INPUT", "写一句为什么");
@@ -296,8 +293,8 @@ export async function dissentCriterion(q: Query, own: OwnTask, versionId: string
   if (criterion.verdict === "met") throw new DeliverableError(409, "ALREADY_MET", "这一条已经达到了");
   if (row.review.criteria.some((item) => item.dissent?.upheld === null)) throw new DeliverableError(409, "DISSENT_PENDING", "还有一条在重评");
   const review: StoredReview = { ...row.review, criteria: row.review.criteria.map((item) => item.index === index ? { ...item, dissent: { reason: text, upheld: null } } : item) };
-  await q(`UPDATE deliverable_versions SET review=$2::jsonb,review_status='running',review_run_token=NULL,review_error=NULL,review_phase=$3::jsonb
-    WHERE id=$1 AND review_status='done'`, [versionId, JSON.stringify(review), JSON.stringify({ step: 1, total: 1, label: `重评第 ${index} 条` })]);
+  await q(`UPDATE deliverable_versions SET review=$2::jsonb,review_status='running',review_run_token=NULL,review_error=NULL,review_phase=$3::jsonb,
+    review_started_at=$4,review_finished_at=NULL WHERE id=$1 AND review_status='done'`, [versionId, JSON.stringify(review), JSON.stringify({ step: 1, total: 1, label: `重评第 ${index} 条` }), now]);
   return readVersion(q, own.task.taskId, versionId);
 }
 

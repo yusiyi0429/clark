@@ -3,10 +3,19 @@ import { logEvent } from "./observability.js";
 import { worldErrorCode, type WorldClient, type WorldHead, type WorldObject } from "./worldClient.js";
 import { worldDisplayText } from "./worldReader.js";
 
+/**
+ * 本体 Task 的 definition 块里带的约定（12 月起斯一加的 proof / acceptor / exclusions，约定与对表设计 v0.2 第 2 节）：
+ * proofs、acceptorIds 和标准一一对应（有验收标准时按 acceptance_criterion，没有时按完成定义那一条）；acceptorIds 已换成天枢 personId，对不上为 null。
+ * 这几项一样都没有时 Task 上不带 agreement。
+ */
+export type WorldAgreement = { proofs: (string | null)[]; acceptorIds: (string | null)[]; exclusions: string[] };
+/** 首页 Task 行，外加本体里的约定（只在 api 里用，首页响应按契约不带）。 */
+export type PlanTask = THomePlanTask & { agreement?: WorldAgreement };
+
 /** 一个本地 Mission；从本体载入的带本体身份（scope、对象 id、所在域），按它直接找 Task，不靠外部引用。 */
 export type PlanTaskMission = { id: string; code: string; world?: { scopeId: string; objectId: string; domainId: string } | null };
 /** 首页 Task 行的来源：本体里挂在这些 Mission 下的 Task。 */
-export type PlanTaskSource = (missions: PlanTaskMission[]) => Promise<THomePlanTask[]>;
+export type PlanTaskSource = (missions: PlanTaskMission[]) => Promise<PlanTask[]>;
 
 /** 还没接本体（或实例没开读）时的来源：一个 Task 都没有。 */
 export const emptyPlanTaskSource: PlanTaskSource = async () => [];
@@ -15,7 +24,7 @@ export const emptyPlanTaskSource: PlanTaskSource = async () => [];
 export const PLAN_TASKS_BUDGET_MS = 2_500;
 
 /** 按时间预算读 Task：超时或出错都给空的、记一条日志，不让调用方等满一整轮本体请求。 */
-export async function readPlanTasks(planTasks: PlanTaskSource, missions: PlanTaskMission[], budgetMs = PLAN_TASKS_BUDGET_MS): Promise<THomePlanTask[]> {
+export async function readPlanTasks(planTasks: PlanTaskSource, missions: PlanTaskMission[], budgetMs = PLAN_TASKS_BUDGET_MS): Promise<PlanTask[]> {
   let timer: NodeJS.Timeout | undefined;
   const timeout = new Promise<"timeout">((resolve) => { timer = setTimeout(() => resolve("timeout"), budgetMs); });
   try {
@@ -33,11 +42,11 @@ export async function readPlanTasks(planTasks: PlanTaskSource, missions: PlanTas
 type PlanTaskWorld = Pick<WorldClient, "listObjects" | "getObject">;
 /** 本体主体 id → 天枢 personId（实例配置的 people 反查）；对不上给 null。 */
 type PersonOf = (principal: string) => string | null;
-type Component = { type?: string; text?: unknown };
+type Component = { type?: string; text?: unknown; proof?: unknown; acceptor?: unknown };
 type TaskObject = WorldObject & { identity?: { responsible?: { principals?: { principal_id?: string }[] } } };
 type TaskBusiness = WorldObject["business"] & {
   relations?: { field?: string; relation?: string; value?: unknown }[];
-  blocks?: { id: string; components?: Component[]; value?: { components?: Component[] } | null }[];
+  blocks?: { id: string; components?: Component[]; exclusions?: unknown; value?: { components?: Component[]; exclusions?: unknown } | null }[];
 };
 /** 同时取对象的上限。 */
 const READ_CONCURRENCY = 4;
@@ -51,8 +60,34 @@ function parentIds(business: TaskBusiness): string[] {
     .flatMap((item) => Array.isArray(item.value) ? item.value : [item.value])
     .flatMap((value) => typeof (value as { object_id?: unknown } | null)?.object_id === "string" ? [(value as { object_id: string }).object_id] : []);
 }
+const hasText = (item: Component, type: string) => item.type === type && typeof item.text === "string" && !!item.text.trim();
 const texts = (components: Component[], type: string) =>
-  components.flatMap((item) => item.type === type && typeof item.text === "string" && item.text.trim() ? [worldDisplayText(item.text.trim())] : []);
+  components.flatMap((item) => hasText(item, type) ? [worldDisplayText((item.text as string).trim())] : []);
+const optionalText = (value: unknown) => typeof value === "string" && value.trim() ? worldDisplayText(value.trim()) : null;
+/** 认可人：主体 id 字符串，或带 principal_id 的引用对象。字段名以斯一 12 月实际加的为准，先认这两种。 */
+const principalOf = (value: unknown) => typeof value === "string" && value.trim() ? value.trim()
+  : typeof (value as { principal_id?: unknown } | null)?.principal_id === "string" ? (value as { principal_id: string }).principal_id : null;
+
+/**
+ * definition 块里的约定：每条标准组件上的 proof、acceptor（没有验收标准时看完成定义那个 outcome 组件），
+ * 「这次不包括」认块上的 exclusions 字符串数组，或 exclusion 组件的文字。一样都没有返回 undefined。
+ */
+function worldAgreementOf(definition: NonNullable<TaskBusiness["blocks"]>[number] | undefined, components: Component[], personOf: PersonOf,
+  objectId: string): WorldAgreement | undefined {
+  const criteria = components.filter((item) => hasText(item, "acceptance_criterion"));
+  const basis = criteria.length ? criteria : components.filter((item) => hasText(item, "outcome")).slice(0, 1);
+  const proofs = basis.map((item) => optionalText(item.proof));
+  const principals = basis.map((item) => principalOf(item.acceptor));
+  const listed = definition?.value?.exclusions ?? definition?.exclusions;
+  const exclusions = [...(Array.isArray(listed) ? listed.flatMap((item) => optionalText(item) ?? []) : []), ...texts(components, "exclusion")];
+  if (!proofs.some(Boolean) && !principals.some(Boolean) && !exclusions.length) return undefined;
+  const acceptorIds = principals.map((principal) => {
+    const personId = principal ? personOf(principal) : null;
+    if (principal && !personId) logEvent({ event: "plan_tasks.object", status: "skipped", objectRef: `world:${objectId}`, errorCode: "AGREEMENT_ACCEPTOR_UNMAPPED" });
+    return personId;
+  });
+  return { proofs, acceptorIds, exclusions };
+}
 
 /**
  * 斯一 10/22 定的存法：Task 是独立的 Task 对象，parent_ref 指向所属 Mission。
@@ -61,10 +96,11 @@ const texts = (components: Component[], type: string) =>
  * 再按 Mission 所在的域列 Task、逐个取对象，留下父引用指向它的。
  * 用列表头而不是 byExternalRef：0.3 取对象的 business 里没有 domain_id，只有列表头带。
  * 负责人取 identity.responsible 第一个主体（没有再看 attributes.responsible），经 personOf 换成天枢的人，对不上为 null。
- * 短名取 title；doneDefinition 取 definition 块里 outcome 组件的文字，criteria 取同块 acceptance_criterion 组件，按出现顺序。只读。
+ * 短名取 title；doneDefinition 取 definition 块里 outcome 组件的文字，criteria 取同块 acceptance_criterion 组件，按出现顺序；
+ * 同块里有约定（proof / acceptor / exclusions）时带 agreement（worldAgreementOf）。只读。
  * 列表读失败整次作废（不再往下取对象）；单个对象取不到就跳过它、记日志。
  */
-async function readWorldPlanTasks(world: PlanTaskWorld, missions: PlanTaskMission[], scopes: Map<string, PlanTaskWorld>, personOf: PersonOf): Promise<THomePlanTask[]> {
+async function readWorldPlanTasks(world: PlanTaskWorld, missions: PlanTaskMission[], scopes: Map<string, PlanTaskWorld>, personOf: PersonOf): Promise<PlanTask[]> {
   const loaded = missions.flatMap((mission) => mission.world ? [mission.world.scopeId] : []);
   const reads = [...new Set(loaded)].flatMap((scopeId) => {
     const client = scopes.get(scopeId);
@@ -78,7 +114,7 @@ async function readWorldPlanTasks(world: PlanTaskWorld, missions: PlanTaskMissio
   return (await Promise.all(reads)).flat();
 }
 
-async function readTasksIn(world: PlanTaskWorld, personOf: PersonOf, missions: { missionId: string; objectId: string; domainId: string }[]): Promise<THomePlanTask[]> {
+async function readTasksIn(world: PlanTaskWorld, personOf: PersonOf, missions: { missionId: string; objectId: string; domainId: string }[]): Promise<PlanTask[]> {
   const localMission = new Map(missions.map(({ objectId, missionId }) => [objectId, missionId] as const));
   if (!localMission.size) return [];
   const candidates: WorldHead[] = [];
@@ -107,9 +143,10 @@ async function readTasksIn(world: PlanTaskWorld, personOf: PersonOf, missions: {
     const components = definition?.value?.components?.length ? definition.value.components : definition?.components ?? [];
     // 负责人和 Mission 载入同一个取法；本体没登记时不带这一项（首页按 null 显示）。
     const principal = (object as TaskObject).identity?.responsible?.principals?.[0]?.principal_id ?? business.attributes?.responsible;
+    const agreement = worldAgreementOf(definition, components, personOf, business.object_id);
     return [{ taskId: business.object_id, missionId, name: worldDisplayText(business.title),
       doneDefinition: texts(components, "outcome")[0] ?? null, criteria: texts(components, "acceptance_criterion"),
-      ...(principal ? { responsibleId: personOf(principal) } : {}) }];
+      ...(principal ? { responsibleId: personOf(principal) } : {}), ...(agreement ? { agreement } : {}) }];
   });
 }
 
@@ -120,7 +157,7 @@ async function readTasksIn(world: PlanTaskWorld, personOf: PersonOf, missions: {
 export function createWorldPlanTaskSource(world: PlanTaskWorld, options: { ttlMs?: number; clock?: () => number; scopes?: Map<string, PlanTaskWorld>; personOf?: PersonOf } = {}): PlanTaskSource {
   const ttl = options.ttlMs ?? PLAN_TASKS_TTL_MS;
   const clock = options.clock ?? Date.now;
-  const cache = new Map<string, { value: THomePlanTask[] | null; at: number; pending: Promise<THomePlanTask[]> | null }>();
+  const cache = new Map<string, { value: PlanTask[] | null; at: number; pending: Promise<PlanTask[]> | null }>();
   return async (missions) => {
     const key = missions.map(({ id, code, world: source }) => [id, code, source?.scopeId ?? "", source?.objectId ?? ""].join("\u0000")).sort().join("\u0001");
     let entry = cache.get(key);
