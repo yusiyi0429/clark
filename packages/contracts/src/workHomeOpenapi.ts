@@ -1,7 +1,7 @@
 import type { JsonSchema, OpenAPIV3 } from "./types/JsonSchemaTypes.js";
 import {
   BackgroundItem, BackgroundResponse, ClaimSessionStartsRequest, ClaimSessionStartsResponse, HomeMission, HomeTask, HomeTaskSummary, RouteRequest, RouteResponse,
-  SessionStartView, SubSession, TaskPipelineResponse, WaitingItem, WaitingTarget, WorkHomeResponse, CardMerge, TaskFeedItem, TaskFeedResponse,
+  SessionStartView, SubSession, TaskPipelineResponse, WaitingItem, WaitingTarget, WorkHomeResponse, CardMerge, TaskFeedItem, TaskFeedResponse, HomeItem,
 } from "./workHome.js";
 
 /**
@@ -12,7 +12,7 @@ import {
 export const workHomeSchemas: Record<string, JsonSchema> = {
   SubSession, HomeTaskSummary, HomeTask, HomeMission, WaitingTarget, WaitingItem, WorkHomeResponse,
   BackgroundItem, BackgroundResponse, TaskPipelineResponse, RouteRequest, RouteResponse,
-  SessionStartView, ClaimSessionStartsRequest, ClaimSessionStartsResponse, CardMerge, TaskFeedItem, TaskFeedResponse,
+  SessionStartView, ClaimSessionStartsRequest, ClaimSessionStartsResponse, CardMerge, TaskFeedItem, TaskFeedResponse, HomeItem,
 };
 
 const error = { description: "ApiError 统一错误", content: { "application/json": { schema: { $ref: "#/components/schemas/ApiError" } } } };
@@ -32,7 +32,7 @@ export const workHomePaths: OpenAPIV3.Document["paths"] = {
   "/api/me/background": {
     get: {
       operationId: "getBackground",
-      summary: "后台任务（右栏）：scope=main | task:<taskId> | card:<卡 id> | topic:<专题 id>；规划员、验收员、子会话里的子 agent 和后台命令，加资源摘要",
+      summary: "后台任务（右栏）：scope=main | resources | task:<taskId> | card:<卡 id> | topic:<专题 id>；规划员、验收员、子会话里的子 agent 和后台命令，加资源摘要（resources 只要资源块）",
       parameters: [{ name: "scope", in: "query", required: true, schema: { type: "string" } }],
       responses: { "200": json("后台任务", "BackgroundResponse"), ...errors(400, 401, 403, 404) },
     },

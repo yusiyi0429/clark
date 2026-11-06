@@ -19746,7 +19746,7 @@
     "/api/me/background": {
       "get": {
         "operationId": "getBackground",
-        "summary": "后台任务（右栏）：scope=main | task:<taskId> | card:<卡 id> | topic:<专题 id>；规划员、验收员、子会话里的子 agent 和后台命令，加资源摘要",
+        "summary": "后台任务（右栏）：scope=main | resources | task:<taskId> | card:<卡 id> | topic:<专题 id>；规划员、验收员、子会话里的子 agent 和后台命令，加资源摘要（resources 只要资源块）",
         "parameters": [
           {
             "name": "scope",
@@ -104573,7 +104573,8 @@
           "pipeline",
           "planning",
           "completedAt",
-          "subSessions"
+          "subSessions",
+          "items"
         ],
         "properties": {
           "taskId": {
@@ -104962,6 +104963,63 @@
                 }
               }
             }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "title",
+                "status",
+                "dueDate",
+                "awaitingAcceptance",
+                "updatedAt"
+              ],
+              "properties": {
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "const": "not_started",
+                      "type": "string"
+                    },
+                    {
+                      "const": "in_progress",
+                      "type": "string"
+                    },
+                    {
+                      "const": "done",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "dueDate": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "awaitingAcceptance": {
+                  "type": "boolean"
+                },
+                "updatedAt": {
+                  "format": "date-time",
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       },
@@ -105000,7 +105058,8 @@
                 "pipeline",
                 "planning",
                 "completedAt",
-                "subSessions"
+                "subSessions",
+                "items"
               ],
               "properties": {
                 "taskId": {
@@ -105389,6 +105448,63 @@
                       }
                     }
                   }
+                },
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "title",
+                      "status",
+                      "dueDate",
+                      "awaitingAcceptance",
+                      "updatedAt"
+                    ],
+                    "properties": {
+                      "id": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "anyOf": [
+                          {
+                            "const": "not_started",
+                            "type": "string"
+                          },
+                          {
+                            "const": "in_progress",
+                            "type": "string"
+                          },
+                          {
+                            "const": "done",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "dueDate": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "awaitingAcceptance": {
+                        "type": "boolean"
+                      },
+                      "updatedAt": {
+                        "format": "date-time",
+                        "type": "string"
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -105428,6 +105544,18 @@
               {
                 "const": "role",
                 "type": "string"
+              },
+              {
+                "const": "task_detail",
+                "type": "string"
+              },
+              {
+                "const": "month",
+                "type": "string"
+              },
+              {
+                "const": "connections",
+                "type": "string"
               }
             ]
           },
@@ -105452,7 +105580,12 @@
           "open",
           "taskId",
           "sessionId",
-          "deviceId"
+          "deviceId",
+          "deviceName",
+          "dueAt",
+          "answer",
+          "person",
+          "month"
         ],
         "properties": {
           "id": {
@@ -105487,6 +105620,26 @@
               },
               {
                 "const": "merge",
+                "type": "string"
+              },
+              {
+                "const": "plan_start",
+                "type": "string"
+              },
+              {
+                "const": "acceptance",
+                "type": "string"
+              },
+              {
+                "const": "month",
+                "type": "string"
+              },
+              {
+                "const": "device",
+                "type": "string"
+              },
+              {
+                "const": "quota",
                 "type": "string"
               }
             ]
@@ -105549,6 +105702,18 @@
                   {
                     "const": "role",
                     "type": "string"
+                  },
+                  {
+                    "const": "task_detail",
+                    "type": "string"
+                  },
+                  {
+                    "const": "month",
+                    "type": "string"
+                  },
+                  {
+                    "const": "connections",
+                    "type": "string"
                   }
                 ]
               },
@@ -105588,6 +105753,104 @@
               {
                 "format": "uuid",
                 "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "deviceName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dueAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "answer": {
+            "anyOf": [
+              {
+                "const": "inline",
+                "type": "string"
+              },
+              {
+                "const": "inline_local",
+                "type": "string"
+              },
+              {
+                "const": "open",
+                "type": "string"
+              }
+            ]
+          },
+          "person": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "personId",
+                  "name"
+                ],
+                "properties": {
+                  "personId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "month": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "step",
+                  "period"
+                ],
+                "properties": {
+                  "step": {
+                    "anyOf": [
+                      {
+                        "const": "review",
+                        "type": "string"
+                      },
+                      {
+                        "const": "finalize",
+                        "type": "string"
+                      },
+                      {
+                        "const": "continue",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "period": {
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                    "type": "string"
+                  }
+                }
               },
               {
                 "type": "null"
@@ -105647,7 +105910,8 @@
                       "pipeline",
                       "planning",
                       "completedAt",
-                      "subSessions"
+                      "subSessions",
+                      "items"
                     ],
                     "properties": {
                       "taskId": {
@@ -106036,6 +106300,63 @@
                             }
                           }
                         }
+                      },
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "id",
+                            "title",
+                            "status",
+                            "dueDate",
+                            "awaitingAcceptance",
+                            "updatedAt"
+                          ],
+                          "properties": {
+                            "id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "title": {
+                              "type": "string"
+                            },
+                            "status": {
+                              "anyOf": [
+                                {
+                                  "const": "not_started",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "in_progress",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "done",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "dueDate": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "awaitingAcceptance": {
+                              "type": "boolean"
+                            },
+                            "updatedAt": {
+                              "format": "date-time",
+                              "type": "string"
+                            }
+                          }
+                        }
                       }
                     }
                   }
@@ -106047,7 +106368,8 @@
             "additionalProperties": false,
             "type": "object",
             "required": [
-              "subSessions"
+              "subSessions",
+              "items"
             ],
             "properties": {
               "subSessions": {
@@ -106338,6 +106660,63 @@
                     }
                   }
                 }
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "title",
+                    "status",
+                    "dueDate",
+                    "awaitingAcceptance",
+                    "updatedAt"
+                  ],
+                  "properties": {
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "const": "not_started",
+                          "type": "string"
+                        },
+                        {
+                          "const": "in_progress",
+                          "type": "string"
+                        },
+                        {
+                          "const": "done",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "dueDate": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "awaitingAcceptance": {
+                      "type": "boolean"
+                    },
+                    "updatedAt": {
+                      "format": "date-time",
+                      "type": "string"
+                    }
+                  }
+                }
               }
             }
           },
@@ -106355,7 +106734,12 @@
                 "open",
                 "taskId",
                 "sessionId",
-                "deviceId"
+                "deviceId",
+                "deviceName",
+                "dueAt",
+                "answer",
+                "person",
+                "month"
               ],
               "properties": {
                 "id": {
@@ -106390,6 +106774,26 @@
                     },
                     {
                       "const": "merge",
+                      "type": "string"
+                    },
+                    {
+                      "const": "plan_start",
+                      "type": "string"
+                    },
+                    {
+                      "const": "acceptance",
+                      "type": "string"
+                    },
+                    {
+                      "const": "month",
+                      "type": "string"
+                    },
+                    {
+                      "const": "device",
+                      "type": "string"
+                    },
+                    {
+                      "const": "quota",
                       "type": "string"
                     }
                   ]
@@ -106452,6 +106856,18 @@
                         {
                           "const": "role",
                           "type": "string"
+                        },
+                        {
+                          "const": "task_detail",
+                          "type": "string"
+                        },
+                        {
+                          "const": "month",
+                          "type": "string"
+                        },
+                        {
+                          "const": "connections",
+                          "type": "string"
                         }
                       ]
                     },
@@ -106491,6 +106907,104 @@
                     {
                       "format": "uuid",
                       "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "deviceName": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "dueAt": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "answer": {
+                  "anyOf": [
+                    {
+                      "const": "inline",
+                      "type": "string"
+                    },
+                    {
+                      "const": "inline_local",
+                      "type": "string"
+                    },
+                    {
+                      "const": "open",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "person": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "personId",
+                        "name"
+                      ],
+                      "properties": {
+                        "personId": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "month": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "step",
+                        "period"
+                      ],
+                      "properties": {
+                        "step": {
+                          "anyOf": [
+                            {
+                              "const": "review",
+                              "type": "string"
+                            },
+                            {
+                              "const": "finalize",
+                              "type": "string"
+                            },
+                            {
+                              "const": "continue",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "period": {
+                          "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                          "type": "string"
+                        }
+                      }
                     },
                     {
                       "type": "null"
@@ -107866,6 +108380,60 @@
                 }
               ]
             }
+          }
+        }
+      },
+      "HomeItem": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "status",
+          "dueDate",
+          "awaitingAcceptance",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "not_started",
+                "type": "string"
+              },
+              {
+                "const": "in_progress",
+                "type": "string"
+              },
+              {
+                "const": "done",
+                "type": "string"
+              }
+            ]
+          },
+          "dueDate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "awaitingAcceptance": {
+            "type": "boolean"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
           }
         }
       }

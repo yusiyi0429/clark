@@ -4812,7 +4812,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 后台任务（右栏）：scope=main | task:<taskId> | card:<卡 id> | topic:<专题 id>；规划员、验收员、子会话里的子 agent 和后台命令，加资源摘要 */
+        /** 后台任务（右栏）：scope=main | resources | task:<taskId> | card:<卡 id> | topic:<专题 id>；规划员、验收员、子会话里的子 agent 和后台命令，加资源摘要（resources 只要资源块） */
         get: operations["getBackground"];
         put?: never;
         post?: never;
@@ -17206,6 +17206,16 @@ export interface components {
                     at: string;
                 } | null;
             }[];
+            items: {
+                /** Format: uuid */
+                id: string;
+                title: string;
+                status: "not_started" | "in_progress" | "done";
+                dueDate: string | null;
+                awaitingAcceptance: boolean;
+                /** Format: date-time */
+                updatedAt: string;
+            }[];
         };
         HomeMission: {
             missionId: string;
@@ -17258,27 +17268,48 @@ export interface components {
                         at: string;
                     } | null;
                 }[];
+                items: {
+                    /** Format: uuid */
+                    id: string;
+                    title: string;
+                    status: "not_started" | "in_progress" | "done";
+                    dueDate: string | null;
+                    awaitingAcceptance: boolean;
+                    /** Format: date-time */
+                    updatedAt: string;
+                }[];
             }[];
         };
         WaitingTarget: {
-            kind: "card" | "topic" | "task" | "meeting" | "mission_card" | "role";
+            kind: "card" | "topic" | "task" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections";
             id: string;
             round?: boolean;
         };
         WaitingItem: {
             id: string;
-            kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge";
+            kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota";
             title: string;
             source: string | null;
             at: string | null;
             open: {
-                kind: "card" | "topic" | "task" | "meeting" | "mission_card" | "role";
+                kind: "card" | "topic" | "task" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections";
                 id: string;
                 round?: boolean;
             };
             taskId: string | null;
             sessionId: string | null;
             deviceId: string | null;
+            deviceName: string | null;
+            dueAt: string | null;
+            answer: "inline" | "inline_local" | "open";
+            person: {
+                personId: string;
+                name: string;
+            } | null;
+            month: {
+                step: "review" | "finalize" | "continue";
+                period: string;
+            } | null;
         };
         WorkHomeResponse: {
             period: string;
@@ -17333,6 +17364,16 @@ export interface components {
                             at: string;
                         } | null;
                     }[];
+                    items: {
+                        /** Format: uuid */
+                        id: string;
+                        title: string;
+                        status: "not_started" | "in_progress" | "done";
+                        dueDate: string | null;
+                        awaitingAcceptance: boolean;
+                        /** Format: date-time */
+                        updatedAt: string;
+                    }[];
                 }[];
             }[];
             other: {
@@ -17364,21 +17405,42 @@ export interface components {
                         at: string;
                     } | null;
                 }[];
+                items: {
+                    /** Format: uuid */
+                    id: string;
+                    title: string;
+                    status: "not_started" | "in_progress" | "done";
+                    dueDate: string | null;
+                    awaitingAcceptance: boolean;
+                    /** Format: date-time */
+                    updatedAt: string;
+                }[];
             };
             waiting: {
                 id: string;
-                kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge";
+                kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota";
                 title: string;
                 source: string | null;
                 at: string | null;
                 open: {
-                    kind: "card" | "topic" | "task" | "meeting" | "mission_card" | "role";
+                    kind: "card" | "topic" | "task" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections";
                     id: string;
                     round?: boolean;
                 };
                 taskId: string | null;
                 sessionId: string | null;
                 deviceId: string | null;
+                deviceName: string | null;
+                dueAt: string | null;
+                answer: "inline" | "inline_local" | "open";
+                person: {
+                    personId: string;
+                    name: string;
+                } | null;
+                month: {
+                    step: "review" | "finalize" | "continue";
+                    period: string;
+                } | null;
             }[];
         };
         BackgroundItem: {
@@ -17593,6 +17655,16 @@ export interface components {
                 fromCardId: string;
                 reason: string;
             })[];
+        };
+        HomeItem: {
+            /** Format: uuid */
+            id: string;
+            title: string;
+            status: "not_started" | "in_progress" | "done";
+            dueDate: string | null;
+            awaitingAcceptance: boolean;
+            /** Format: date-time */
+            updatedAt: string;
         };
     };
     responses: never;
