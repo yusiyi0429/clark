@@ -6,6 +6,7 @@
  */
 import type { TCardStage, TCardWait, TTaskCard, TTaskView } from "@warmap/contracts";
 import type { TLocalSessionSummary } from "@/lib/local/runner";
+import { cardRole } from "@/lib/team/roles";
 
 export type CardStage = TCardStage;
 export type CardWait = TCardWait;
@@ -89,8 +90,8 @@ export const circled = (n: number) => (n >= 1 && n <= 20 ? String.fromCodePoint(
 let mockAgents = false;
 export const setMockAgents = (on: boolean) => { mockAgents = on; };
 
-/** claude_code 由本机的 Claude Code 干；self 或没设（老事项）是本人自己做。 */
-export const isAgentCard = (item: CardItem) => item.card?.executor === "claude_code" || (mockAgents && !item.card);
+/** 配了岗位或 claude_code 的由本机的 Claude Code 按岗位干；self 或没设（老事项）是本人自己做。 */
+export const isAgentCard = (item: CardItem) => item.card?.executor === "claude_code" || !!cardRole(item) || (mockAgents && !item.card);
 
 /** 已完成的卡：「已纳入 v2」或「v2 准备中」。 */
 export function deliverableLabel(item: CardItem): string | null {
@@ -104,7 +105,7 @@ export function deliverableLabel(item: CardItem): string | null {
  * 这张卡在本机上的会话还要在这台电脑上（hasSession）。
  */
 export const canCommand = ({ ready, handheld, hasSession = true }: { ready: boolean; handheld: boolean; hasSession?: boolean }) => ready && !handheld && hasSession;
-/** 「开始」只给执行方是 Claude Code 的卡。 */
+/** 「开始」只给 Claude Code 干的卡。 */
 export const canStartCard = ({ ready, handheld, item }: { ready: boolean; handheld: boolean; item: CardItem }) => canCommand({ ready, handheld }) && isAgentCard(item);
 
 /** 卡在别的电脑上跑：云端摘要里的设备不是这台。 */

@@ -17,6 +17,7 @@ import { StartDialog } from "@/components/local/StartDialog";
 import { ChatPane } from "@/components/rail/ChatPane";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { startCard } from "@/lib/local/start";
+import { cardRole } from "@/lib/team/roles";
 import { STAGES, WAIT_LABEL, boardCards, byStage, canStartCard, elsewhere, isAgentCard, waitTone, type BoardCard, type CardItem } from "@/lib/board/cards";
 import { useTaskBoard } from "@/lib/board/useTaskBoard";
 import { useAutoReturn } from "@/lib/board/useAutoReturn";
@@ -50,9 +51,9 @@ export function TaskPage({ taskId }: { taskId: string }) {
   useAutoReturn(local.runner, ready, board?.cards ?? [], sessions, () => void refresh());
 
   const canStart = (card: BoardCard) => canStartCard({ ready, handheld, item: card.item });
-  const start = async (item: CardItem, model: Parameters<typeof startCard>[2], cwd: string) => {
+  const start = async (item: CardItem, model: Parameters<typeof startCard>[2], cwd: string, role: Parameters<typeof startCard>[4]) => {
     const begun = performance.now();
-    const session = await startCard(local.runner, item, model, cwd);
+    const session = await startCard(local.runner, item, model, cwd, role);
     setStarting(null);
     await local.refresh();
     showWorkspaceToast({ text: `开始了 · ${model.label}` });
@@ -119,7 +120,7 @@ export function TaskPage({ taskId }: { taskId: string }) {
           </div>
         ) : <div className={s.loading} aria-busy />}
       </div>
-      {starting ? <StartDialog title={starting.title} onClose={() => setStarting(null)} onStart={(model, folder) => start(starting, model, folder?.path ?? "")} /> : null}
+      {starting ? <StartDialog title={starting.title} role={cardRole(starting)} onClose={() => setStarting(null)} onStart={(model, folder, role) => start(starting, model, folder?.path ?? "", role)} /> : null}
     </div>
   );
 }

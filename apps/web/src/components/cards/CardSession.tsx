@@ -2,7 +2,7 @@
 
 /**
  * 卡的子会话页（/me/cards/[id]，原型 v8.4 renderSess + cardPane，第 11.1 节）：左边和执行方对话（本机实时），右边结果。
- * 右边从上到下：交代（所属 Task、对的那条标准）、执行方和模型、计划条目、完成标准、Agent 验收、产出、动作。
+ * 右边从上到下：交代（所属 Task、对的那条标准、岗位和模型）、计划条目、完成标准、Agent 验收、产出、动作。卡上写岗位名，不写执行方（第 19.6 节）。
  * 只有这台电脑上的本机程序在跑这张卡、而且不是手机时，才能开始、插话、停下、批权限；别处只看云端同步来的摘要。
  * 手机上分「结果」「对话」两个标签。
  */
@@ -18,7 +18,8 @@ import { useSessionEvents } from "@/lib/local/useSessionEvents";
 import { localWait, planStep, running, type SessionView } from "@/lib/local/sessionView";
 import { startCard } from "@/lib/local/start";
 import { STAGES, WAIT_LABEL, boardCards, canCommand, circled, deliverableLabel, isAgentCard, waitTone } from "@/lib/board/cards";
-import { overrule, patchCard, retryAcceptance } from "@/lib/board/cloud";
+import { overrule, retryAcceptance } from "@/lib/board/cloud";
+import { cardRole } from "@/lib/team/roles";
 import { useAutoReturn } from "@/lib/board/useAutoReturn";
 import { showWorkspaceToast } from "@/lib/toast";
 import { taskHref } from "@/components/board/MonthLanes";
@@ -56,6 +57,8 @@ export function CardSession({ cardId }: { cardId: string }) {
 
   const item = detail.task;
   const agent = isAgentCard(item);
+  const role = cardRole(item);
+  const agentName = role?.name ?? "Claude Code";
   const canAct = canCommand({ ready, handheld, hasSession: !!session });
   const card = boardCards([item], session ? [session] : [])[0]!;
   const wait = session ? localWait(view) ?? card.wait : card.wait;
@@ -96,11 +99,11 @@ export function CardSession({ cardId }: { cardId: string }) {
     <div className={s.chat}>
       <div className={s.scroll}>
         {session ? (
-          <SessionTranscript entries={view.entries} agentName="Claude Code" canAct={canAct} lead={`交代：${item.title}${item.card?.criterion ? ` · 按「${item.card.criterion.text}」验收` : ""}`}
+          <SessionTranscript entries={view.entries} agentName={agentName} canAct={canAct} lead={`交代：${item.title}${item.card?.criterion ? ` · 按「${item.card.criterion.text}」验收` : ""}`}
             onDecide={(request, decision, forSession) => decide(request.requestId, decision, forSession)} />
         ) : <CloudTimeline run={detail.runs[0] ?? null} title={item.title} />}
       </div>
-      {agent ? <SessionComposer placeholder="发给 Claude Code…" disabled={!canAct} onSend={say} /> : null}
+      {agent ? <SessionComposer placeholder={`发给${agentName}…`} disabled={!canAct} onSend={say} /> : null}
     </div>
   );
 
@@ -115,7 +118,8 @@ export function CardSession({ cardId }: { cardId: string }) {
             : <span className={s.tag} data-tone={stage === "done" ? "done" : stage === "todo" ? undefined : "ver"}>{STAGES.find((entry) => entry.id === stage)?.label}</span>}
         </div>
         <div className={s.exec}>
-          {agent ? <><span className={s.ex}><i>&gt;_</i>Claude Code</span><span>{session ? `本机${sessionRunning ? " · 在跑" : ""}` : item.card?.run ? item.card.run.deviceName : ""}</span></> : <span className={s.ex}><i data-self>我</i>我自己</span>}
+          {role ? <span className={s.ex}><i>&gt;_</i>{role.name}</span> : null}
+          {agent ? <span>{session ? `本机${sessionRunning ? " · 在跑" : ""}` : item.card?.run ? item.card.run.deviceName : ""}</span> : null}
         </div>
       </header>
       {handheld ? (
@@ -128,9 +132,9 @@ export function CardSession({ cardId }: { cardId: string }) {
         {chat}
         {pane}
       </div>
-      {starting ? <StartDialog title={item.title} onClose={() => setStarting(false)} onStart={async (model, folder) => {
+      {starting ? <StartDialog title={item.title} role={role} onClose={() => setStarting(false)} onStart={async (model, folder, picked) => {
         const begun = performance.now();
-        const created = await startCard(local.runner, item, model, folder?.path ?? "");
+        const created = await startCard(local.runner, item, model, folder?.path ?? "", picked);
         try { sessionStorage.setItem(`tianshu-start-${created.id}`, String(begun)); } catch { /* 只是量开工耗时 */ }
         setStarting(false);
         await local.refresh();
@@ -158,6 +162,7 @@ function ResultPane({ detail, view, canAct, wait, stage, handheld, ready, onStar
   const item = detail.task;
   const run = detail.runs[0] ?? null;
   const agent = isAgentCard(item);
+  const role = cardRole(item);
   const plan = view?.plan.length ? view.plan : run?.planEntries ?? [];
   const step = planStep(plan);
   const handback = detail.handbacks[0] ?? null;
@@ -165,10 +170,6 @@ function ResultPane({ detail, view, canAct, wait, stage, handheld, ready, onStar
   const status = view?.status ?? null;
   const live = status === "running" || status === "starting" || status === "waiting_permission";
   const paused = wait === "paused" || status === "idle";
-  const setExecutor = async (executor: "claude_code" | "self") => {
-    try { await patchCard(item.id, { version: item.version, executor }); onChanged(); }
-    catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没改成，请重试" }); }
-  };
   const model = view ? null : item.card?.model?.label;
   return (
     <>
@@ -177,18 +178,8 @@ function ResultPane({ detail, view, canAct, wait, stage, handheld, ready, onStar
         {item.planTaskId ? <Link href={taskHref(item.planTaskId)} className={s.link}>{item.mission?.title ? `${item.mission.title} › ` : ""}Task</Link> : null}
         {item.card?.criterion ? <div className={s.meta}><span className={s.crit}>{circled(item.card.criterion.index)}</span><span>{item.card.criterion.text}</span></div> : null}
         {detail.brief ? <p className={s.text}>{detail.brief}</p> : null}
-        {agent && (model || run?.modelLabel) ? <div className={s.meta}><span>{model ?? run?.modelLabel}</span></div> : null}
+        {agent && (role || model || run?.modelLabel) ? <div className={s.meta}>{role ? <span className={s.ex}><i>&gt;_</i>{role.name}</span> : null}<span>{model ?? run?.modelLabel}</span></div> : null}
       </div>
-
-      {stage === "todo" && !handheld ? (
-        <div className={s.sec}>
-          <p className={s.lab}>执行方</p>
-          <div className={s.chips} role="radiogroup" aria-label="执行方">
-            <button type="button" role="radio" aria-checked={agent} className={s.choice} onClick={() => void setExecutor("claude_code")} disabled={detail.fallback}>Claude Code</button>
-            <button type="button" role="radio" aria-checked={!agent} className={s.choice} onClick={() => void setExecutor("self")} disabled={detail.fallback}>我自己</button>
-          </div>
-        </div>
-      ) : null}
 
       {plan.length ? (
         <div className={s.sec}>

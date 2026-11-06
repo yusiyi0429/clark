@@ -1,36 +1,63 @@
 "use client";
 
 /**
- * 点「开始」：先选模型和文件夹（记住上一次），再开工（V2 设计第 11.2 节）。专题不用选文件夹（本机给它一个专用目录）。
- * 模型分订阅和 TokenHub（网关）两组；文件夹只能经本机弹出的选择框添加。
+ * 点「开始」：卡先选岗位（默认拆卡时配的），再选模型（默认按岗位的档位，没有岗位时记住上一次）和文件夹，再开工（V2 设计第 11.2、19.6 节）。
+ * 专题不选岗位、不用选文件夹（本机给它一个专用目录）。模型分订阅和 TokenHub（网关）两组；文件夹只能经本机弹出的选择框添加。
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FolderPlus } from "lucide-react";
 import { MenuDialog } from "@/components/AccountMenu";
 import { HeroButton } from "@/components/HeroButton";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { readLast, writeLast } from "@/lib/local/start";
 import type { TLocalFolder, TLocalModelProfile } from "@/lib/local/runner";
+import { TIER_LABEL, listRoles, modelForTier, type CardRole, type RoleView } from "@/lib/team/roles";
 import s from "@/styles/v2-local.module.css";
 
-export function StartDialog({ title, needsFolder = true, onClose, onStart }: {
+export function StartDialog({ title, needsFolder = true, role: given, onClose, onStart }: {
   title: string;
   needsFolder?: boolean;
+  /** 卡：拆卡时配的岗位（没配为 null）；不传表示不选岗位（专题）。 */
+  role?: CardRole | null;
   onClose: () => void;
-  onStart: (model: TLocalModelProfile, folder: TLocalFolder | null) => Promise<void>;
+  onStart: (model: TLocalModelProfile, folder: TLocalFolder | null, role: RoleView | null) => Promise<void>;
 }) {
   const local = useLocalRunner();
   const last = readLast();
+  const withRole = given !== undefined;
+  const [roles, setRoles] = useState<RoleView[]>([]);
+  const [roleId, setRoleId] = useState<string | null>(given?.id ?? null);
   const [modelId, setModelId] = useState(() => local.models.find((model) => model.id === last.modelId)?.id ?? local.models.find((model) => model.isDefault)?.id ?? local.models[0]?.id ?? "");
   const [folderId, setFolderId] = useState(() => local.folders.find((folder) => folder.id === last.folderId)?.id ?? local.folders[0]?.id ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const model = local.models.find((entry) => entry.id === modelId) ?? null;
   const folder = local.folders.find((entry) => entry.id === folderId) ?? null;
+  const role = roles.find((entry) => entry.id === roleId) ?? null;
   const groups = [
     { label: "订阅", models: local.models.filter((entry) => entry.source === "subscription") },
     { label: "TokenHub", models: local.models.filter((entry) => entry.source === "gateway") },
   ].filter((group) => group.models.length);
+
+  const pickRole = (next: RoleView) => {
+    setRoleId(next.id);
+    const byTier = modelForTier(local.models, next.modelTier);
+    if (byTier) setModelId(byTier.id);
+  };
+  // 岗位只列干活的；默认拆卡时配的，没配用第一个。模型跟着岗位的档位走。
+  useEffect(() => {
+    if (!withRole) return;
+    let alive = true;
+    void listRoles().then((data) => {
+      if (!alive) return;
+      const workers = data.roles.filter((entry) => entry.kind === "worker");
+      setRoles(workers);
+      const first = workers.find((entry) => entry.id === given?.id) ?? workers[0];
+      if (first) pickRole(first);
+    }).catch(() => undefined);
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [withRole, given?.id]);
 
   const start = async () => {
     if (!model || (needsFolder && !folder) || busy) return;
@@ -38,7 +65,7 @@ export function StartDialog({ title, needsFolder = true, onClose, onStart }: {
     setError(null);
     writeLast({ modelId: model.id, ...(folder ? { folderId: folder.id } : {}) });
     try {
-      await onStart(model, folder);
+      await onStart(model, folder, role);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "没开起来，请重试");
       setBusy(false);
@@ -49,8 +76,18 @@ export function StartDialog({ title, needsFolder = true, onClose, onStart }: {
     <MenuDialog title="开始" onClose={onClose}>
       <div className={s.start}>
         <p className={s.startTitle}>{title}</p>
+        {withRole && roles.length ? (
+          <div className={s.field} role="radiogroup" aria-label="岗位">
+            <span className={s.label}>岗位</span>
+            <div className={s.chipRow}>
+              {roles.map((entry) => (
+                <button key={entry.id} type="button" role="radio" aria-checked={entry.id === roleId} className={s.choice} onClick={() => pickRole(entry)}>{entry.name}</button>
+              ))}
+            </div>
+          </div>
+        ) : null}
         <div className={s.field} role="radiogroup" aria-label="模型">
-          <span className={s.label}>模型</span>
+          <span className={s.label}>模型{role ? <small className={s.faint}> · 档位：{TIER_LABEL[role.modelTier]}</small> : null}</span>
           {groups.map((group) => (
             <div key={group.label} className={s.chipRow}>
               <small>{group.label}</small>
@@ -70,6 +107,7 @@ export function StartDialog({ title, needsFolder = true, onClose, onStart }: {
               <button type="button" className={s.add} onClick={() => void local.pickFolder().then((picked) => { if (picked) setFolderId(picked.id); })}><FolderPlus size={14} aria-hidden />添加</button>
             </div>
             {folder ? <small className={s.path}>{folder.path}</small> : null}
+            {local.error ? <small className={s.error} role="alert">{local.error}</small> : null}
           </div>
         ) : null}
         {error ? <p className={s.error} role="alert">{error}</p> : null}
