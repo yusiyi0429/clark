@@ -6,13 +6,18 @@
  * 从上到下：负责人和按什么评一行 → 材料和 Task 对不上时的一句提醒 → 验收标准（点开参考评审时带逐条判定）→ 交付物（版本、材料）
  * → 交付以后伙伴写的说明 → 动作（传新版本、说说现状、交付）→ 展开的「我的事项」和新建。
  * 只有能改的人（负责人；本体没登记负责人时是 Mission 负责人，服务端给 canEdit）看得到动作。
+ * 约定与对表（设计 V1 第 8 节，useTaskAgreement）：每条标准下面是约定，标题行有「对表」，结果标在每条上、结论在列表上面；
+ * 对表开着时最新一版或它的评审变了就再对一次。checkOnOpen（从飞书链接进来）打开就对一次。
+ * 别人的 Task（认可人、Mission 负责人、战场负责人、CEO 只读地看）不传 activities，就没有「我的事项」那一行。
  */
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import type { THomePlanTask } from "@warmap/contracts";
 import { avatarInitial } from "@/components/AccountMenu";
 import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import { useTaskDeliverable } from "./useTaskDeliverable";
+import { useTaskAgreement } from "./useTaskAgreement";
+import { AgreementLine, BeyondScope, CheckLine, CheckSummary, Exclusions, agreementBody } from "./Agreement";
 import { ReviewHeader } from "./ReviewHeader";
 import { CriteriaList } from "./CriteriaList";
 import { VersionItems } from "./VersionItems";
@@ -22,15 +27,18 @@ import d from "@/styles/task-deliverable.module.css";
 
 type Composer = "files" | "statement" | null;
 
-export function TaskDeliverable({ task, activities, activityCount, newItem }: {
-  task: THomePlanTask;
-  /** 这个 Task 下的执行事项三栏，放在底部，默认展开。 */
-  activities: ReactNode;
-  activityCount: number;
+export function TaskDeliverable({ task, activities, activityCount = 0, newItem, checkOnOpen = false }: {
+  task: Pick<THomePlanTask, "taskId">;
+  /** 这个 Task 下的执行事项三栏，放在底部，默认展开；不传就没有「我的事项」那一行。 */
+  activities?: ReactNode;
+  activityCount?: number;
   /** 「我的事项」那一行右边的新建键。 */
   newItem?: ReactNode;
+  /** 打开就对一次表（从飞书「请 X 看」的链接进来）。 */
+  checkOnOpen?: boolean;
 }) {
   const api = useTaskDeliverable(task.taskId);
+  const pact = useTaskAgreement(task.taskId);
   const [picked, setPicked] = useState<string | null>(null);
   const [composer, setComposer] = useState<Composer>(null);
   const [itemsOpen, setItemsOpen] = useState(true);
@@ -38,8 +46,15 @@ export function TaskDeliverable({ task, activities, activityCount, newItem }: {
   const [delivering, setDelivering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const data = api.data;
+  const latestVersion = data?.versions[0] ?? null;
+  // 对表跟着最新一版走：换了一版、评审跑完、交付或撤回，结果就过时了。
+  const latestKey = latestVersion ? `${latestVersion.id}:${latestVersion.review.status}:${latestVersion.deliveredAt ?? ""}` : "";
+  const { runCheck } = pact;
+  const checkShown = pact.check !== null;
+  useEffect(() => { if (checkOnOpen) void runCheck(); }, [checkOnOpen, runCheck]);
+  useEffect(() => { if (checkShown) void runCheck(); }, [latestKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const items = (
+  const items = activities === undefined ? null : (
     <div className={d.fold}>
       <div className={d.foldHead}>
         <button type="button" className={d.foldToggle} aria-expanded={itemsOpen} onClick={() => setItemsOpen((open) => !open)}>
@@ -52,7 +67,7 @@ export function TaskDeliverable({ task, activities, activityCount, newItem }: {
   );
 
   if (!data) {
-    return <div className={d.panel} aria-busy={!api.error}>{api.error ? <p className={d.error} role="alert">{api.error}</p> : <div className={d.loading} aria-hidden="true" />}{items}</div>;
+    return <div className={d.panel} data-plan-task={task.taskId} aria-busy={!api.error}>{api.error ? <p className={d.error} role="alert">{api.error}</p> : <div className={d.loading} aria-hidden="true" />}{items}</div>;
   }
 
   const latest = data.versions[0] ?? null;
@@ -66,6 +81,17 @@ export function TaskDeliverable({ task, activities, activityCount, newItem }: {
     : shown.status === "failed" ? "没评完" : shown.total ? `${shown.met}/${shown.total}` : null;
 
   const result = (problem: { ok: boolean; message?: string }) => (problem.ok ? null : problem.message ?? "没成功，请重试");
+  const agreement = pact.agreement;
+  const check = onLatest || !latest ? pact.check : null;
+  const criterionOf = (index: number) => agreement?.criteria.find((row) => row.index === index) ?? null;
+  const checkOf = (index: number) => check?.criteria.find((row) => row.index === index) ?? null;
+  /** 对表后每条的圈：有证据（含要别人确认）是 ✓，差按最新一版评审的部分 / 未达到画。 */
+  const markOf = (index: number) => {
+    const row = checkOf(index);
+    if (row?.status === "evidenced" || row?.status === "needs_acceptor") return "met" as const;
+    if (row?.status === "gap") return latest?.review.criteria.find((item) => item.index === index)?.verdict === "partial" ? "partial" as const : "unmet" as const;
+    return null;
+  };
   const deliver = async () => {
     if (!latest) return;
     setDelivering(true);
@@ -74,7 +100,7 @@ export function TaskDeliverable({ task, activities, activityCount, newItem }: {
   };
 
   return (
-    <div className={d.panel}>
+    <div className={d.panel} data-plan-task={task.taskId}>
       <p className={d.facts}>
         <span className={d.owner} data-missing={data.responsibleName ? undefined : true}>
           {data.responsibleName ? <PersonAvatar personId={data.responsibleId} className={d.ownerAvatar}>{avatarInitial(data.responsibleName)}</PersonAvatar> : null}
@@ -99,7 +125,29 @@ export function TaskDeliverable({ task, activities, activityCount, newItem }: {
         <CriteriaList title={data.basis === "definition" ? "完成定义" : "验收标准"} texts={selected?.review.criteria.length ? selected.review.criteria.map((row) => row.text) : data.criteria}
           results={referenceOpen && selected?.review.criteria.length ? selected.review.criteria : null}
           canDissent={referenceOpen && data.canEdit && onLatest && !selected?.deliveredAt}
-          onDissent={async (index, reason) => (selected ? result(await api.dissent(selected.id, index, reason)) : null)} />
+          onDissent={async (index, reason) => (selected ? result(await api.dissent(selected.id, index, reason)) : null)}
+          tools={<>
+            {agreement?.basisChanged ? <span className={d.changed}>标准改过</span> : null}
+            <span className={d.grow} />
+            <button type="button" className={d.plain} disabled={pact.checking} onClick={() => void runCheck()}>{pact.checking ? "对表中…" : "对表"}</button>
+          </>}
+          lead={<>
+            {pact.checkError ? <p className={d.error} role="alert">{pact.checkError}</p> : null}
+            {check ? <CheckSummary check={check} /> : null}
+          </>}
+          markOf={markOf}
+          below={(index) => {
+            const criterion = criterionOf(index);
+            const row = checkOf(index);
+            return <>
+              {criterion && agreement ? <AgreementLine criterion={criterion} source={agreement.source} canEdit={agreement.canEdit}
+                onSave={(proof, acceptorId) => pact.save(agreementBody(agreement, { index, proof, acceptorId }))} /> : null}
+              {row && check ? <CheckLine row={row} canNotify={check.canNotify} asked={pact.asked.includes(index)} feishuOff={pact.feishuOff} onNotify={pact.notify} /> : null}
+            </>;
+          }}>
+          {agreement ? <Exclusions items={agreement.exclusions} canEdit={agreement.canEdit} onSave={(exclusions) => pact.save(agreementBody(agreement, { exclusions }))} /> : null}
+          {check ? <BeyondScope items={check.beyondScope} /> : null}
+        </CriteriaList>
 
         {selected ? <VersionItems versions={data.versions} selected={selected} onPick={(id) => setPicked(id)} itemHref={api.itemHref} /> : null}
 

@@ -126,7 +126,7 @@ a.itemName:hover { text-decoration: underline; text-decoration-color: var(--hair
 .quiet { height: 28px; padding: 0 8px; background: none; color: var(--ink-faint); }
 .quiet:hover:not(:disabled) { background: color-mix(in oklab, var(--ink) 4%, transparent); color: var(--ink); }
 .plain:disabled, .primary:disabled, .quiet:disabled { cursor: default; opacity: .45; }
-.plain:focus-visible, .primary:focus-visible, .quiet:focus-visible, .toggle:focus-visible, .version:focus-visible { outline: 2px solid var(--ink-muted); outline-offset: 2px; }
+.plain:focus-visible, .primary:focus-visible, .quiet:focus-visible, .toggle:focus-visible, .version:focus-visible, button.agreement:focus-visible, .agreementAdd:focus-visible { outline: 2px solid var(--ink-muted); outline-offset: 2px; }
 .error { margin: 0; color: var(--counter); font-size: 12.5px; }
 
 /* 我的事项：默认折叠，点开是原来的执行事项三栏。 */
@@ -146,9 +146,56 @@ a.itemName:hover { text-decoration: underline; text-decoration-color: var(--hair
 .foldToggle[aria-expanded="true"] svg { transform: rotate(90deg); }
 .foldBody { margin-top: 14px; }
 
+/*
+ * 约定与对表（Agreement.tsx）：标题行右边「标准改过」小标和「对表」；每条下面一行约定（能改的人点这一行就地改）和一行对表结果；
+ * 列表上面一块淡底的结论（可以交是绿底），列表下面「这次不包括」「下次可以做」。颜色同上：有证据 --confirmed、差 --counter、其余淡墨。
+ */
+.sectionHead { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-height: 32px; }
+.changed { padding: 0 8px; border-radius: 999px; background: var(--judgment-wash); color: var(--judgment); font-size: 12px; font-weight: 500; line-height: 20px; }
+.criterionBody .agreement { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 14px; margin: 0; color: var(--ink-muted); font-size: 12.5px; }
+.agreement small { color: var(--ink-faint); font-size: 11.5px; }
+button.agreement { justify-self: start; max-width: 100%; margin-left: -6px; padding: 1px 6px; border: 0; border-radius: 8px; background: none; font: inherit; font-size: 12.5px; text-align: left; cursor: pointer; }
+button.agreement:hover { background: color-mix(in oklab, var(--ink) 4%, transparent); color: var(--ink); }
+.agreementAdd { justify-self: start; padding: 0; border: 0; background: none; color: #2f6fd6; font: inherit; font-size: 12.5px; cursor: pointer; }
+.agreementAdd:hover { text-decoration: underline; text-underline-offset: 3px; }
+.agreementEdit { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 10px; align-items: center; margin-top: 6px; padding-left: 10px; border-left: 2px solid var(--hairline); }
+.agreementEdit > label, .agreementEdit > span { color: var(--ink-faint); font-size: 12.5px; }
+.agreementEdit input { min-width: 0; height: 34px; padding: 0 12px; font-size: 13px; }
+.agreementEditActions { display: flex; flex-wrap: wrap; gap: 8px; grid-column: 1 / -1; }
+.agreementEdit .error, .exclusionsEdit .error { grid-column: 1 / -1; }
+.checkRow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.criterionBody .check { color: var(--ink-faint); font-size: 12.5px; }
+.check[data-status="evidenced"], .check[data-status="needs_acceptor"] { color: var(--confirmed); }
+.check[data-status="gap"] { color: var(--counter); }
+.checkRow .plain { height: 26px; padding: 0 10px; font-size: 12.5px; }
+.asked { color: var(--ink-faint); font-size: 12.5px; }
+.checkSummary { display: grid; gap: 2px; padding: 10px 12px; border-radius: 10px; background: var(--neutral-wash); }
+.checkSummary[data-verdict="ready"] { background: var(--confirmed-wash); }
+.checkSummary p { margin: 0; overflow-wrap: anywhere; }
+.conclusion { color: var(--ink); font-weight: 600; }
+.checkSummary[data-verdict="ready"] .conclusion { color: var(--confirmed); }
+.notice { color: var(--judgment); font-size: 12.5px; }
+.exclusions { display: grid; gap: 4px; min-width: 0; }
+.subHead { display: flex; align-items: center; gap: 8px; min-height: 28px; }
+.plainList { margin: 0; padding-left: 18px; color: var(--ink-muted); }
+.plainList li { overflow-wrap: anywhere; }
+.exclusionsEdit { display: grid; gap: 8px; }
+.exclusionsEdit textarea { width: 100%; box-sizing: border-box; padding: 8px 12px; font: inherit; font-size: 13px; line-height: 1.6; resize: vertical; }
+
+/* 别人的 Task 单独打开时的二级页（PlanTaskScreen）：阅读页铺满外框，正文同成员战场详情的宽度和留白。 */
+.screen { display: flex; flex: 1; min-width: 0; min-height: 0; }
+.screen :global(.ts-detail) { background: var(--surface); overflow-y: auto; overscroll-behavior: contain; }
+.screenBody { width: 100%; min-width: 0; box-sizing: border-box; padding: 20px 32px 128px; }
+.screenBody > * { max-width: 840px; margin-inline: auto; }
+.screenEmpty { margin: 12px 0 0; color: var(--ink-faint); font-size: 14px; line-height: 1.8; }
+
 /* 手持：字号下限、热区 44。 */
 @media (max-width: 959px) {
   .facts, .label, .meta, .elapsed, .itemState, .hint, .dropHint, .foldToggle, .referenceToggle, .delivered { font-size: 13px; }
+  .criterionBody .agreement, button.agreement, .agreement small, .agreementAdd, .agreementEdit > label, .agreementEdit > span, .criterionBody .check, .asked, .notice, .changed { font-size: 13px; }
+  .checkRow .plain { height: 36px; }
+  .agreementAdd { min-height: 36px; }
+  .screenBody { padding: 16px 16px 144px; }
   .panel { font-size: 14px; }
   .plain, .primary { height: 40px; }
   .quiet { height: 36px; }
