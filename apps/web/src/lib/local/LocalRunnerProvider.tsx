@@ -13,6 +13,7 @@ import { createMockRunner } from "./mock";
 import { phaseOf, readBrowserPermission, type LocalPhase } from "./connection";
 import { HANDHELD_QUERY } from "@/components/ui/useHandheld";
 import { setMockAgents } from "@/lib/board/cards";
+import { planCards } from "@/lib/board/cloud";
 
 export type Pairing = { code: string; state: "waiting" | "denied" | "expired" | "failed" };
 
@@ -55,7 +56,8 @@ function pickRunner(): LocalRunner {
   return mock ? sharedMock() : createHttpRunner();
 }
 let mockRunner: LocalRunner | null = null;
-const sharedMock = () => (mockRunner ??= createMockRunner());
+// 假规划员拆完时，用云端拆卡出一份派活单草稿（假装本机把 card_plan 同步上去了）。
+const sharedMock = () => (mockRunner ??= createMockRunner({ onPlanned: (taskId) => void planCards(taskId).catch(() => undefined) }));
 
 export function LocalRunnerProvider({ children, runner: given }: { children: ReactNode; runner?: LocalRunner }) {
   const [runner] = useState<LocalRunner>(() => given ?? pickRunner());
@@ -197,7 +199,8 @@ export function useLocalRunner(): LocalRunnerState {
   return value;
 }
 
-/** 这张卡（或专题）在本机上最近的那个会话。 */
+/** 这张卡（或专题）在本机上最近的那个执行会话（同卡的验收员不算）。 */
 export function latestSessionFor(sessions: TLocalSessionSummary[], subject: { cardId?: string; topicId?: string }): TLocalSessionSummary | null {
-  return sessions.find((session) => (subject.cardId ? session.subject.cardId === subject.cardId : session.subject.topicId === subject.topicId)) ?? null;
+  return sessions.find((session) => (subject.cardId ? session.subject.kind === "card" && session.subject.cardId === subject.cardId
+    : session.subject.kind === "topic" && session.subject.topicId === subject.topicId)) ?? null;
 }

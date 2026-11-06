@@ -1,6 +1,7 @@
 /**
  * 假本机程序：和真程序同一个接口（LocalRunner），按脚本吐事件——开工、三步计划、一次权限请求、一次提问、交回。
- * 同时跑的上限默认 3：满了的会话是 queued（排第几），有会话停下、做完一轮或退出就按先来先跑接上（V2 设计 20.6）。
+ * 同时跑的上限默认 3：满了的会话是 queued（排第几），有会话停下、做完一轮或退出就接上：验收员先、规划员次、执行的最后，同一种先来先跑（V2 设计 20.6、21.1）。
+ * 规划员（plan）按三步拆完就退出；执行的交回以后本机自己接一个验收员（verify，只读）。
  * 开发时设 NEXT_PUBLIC_LOCAL_RUNNER=mock 切到它；测试里直接 createMockRunner()。
  * 状态只在内存里：同一个页面会话内跨页面保留，刷新就没了。
  */
@@ -9,6 +10,7 @@ import type {
   TLocalSessionEvent, TLocalSessionStatus, TLocalSessionSummary, TLocalUsage,
 } from "@warmap/contracts";
 import { LocalRunnerError, type EventWatch, type LocalRunner } from "./runner";
+import { asCreateRequest, subjectOf } from "./kinds";
 
 type Step = (s: MockSession) => void | "wait";
 type MockSession = {
@@ -27,6 +29,10 @@ type MockSession = {
 
 const ZERO: TLocalUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0 };
 const PLAN = ["读交代和现有代码", "改代码并补测试", "跑测试、整理交回"];
+const PLANNER = ["读 Task 和约定", "读本体里的上下文", "列计划和派活单"];
+const VERIFIER = ["对照约定逐条看", "交验收结果"];
+/** 排队先后：验收员 → 规划员 → 执行。 */
+const RANK: Record<string, number> = { verify: 0, plan: 1 };
 
 const MODELS: TLocalModelProfile[] = [
   { id: "subscription", label: "订阅 · 默认", source: "subscription", agent: "claude-code", baseUrl: null, model: null, smallModel: null, webSearch: true, hasKey: false, isDefault: true },
@@ -34,9 +40,10 @@ const MODELS: TLocalModelProfile[] = [
   { id: "tokenhub-deepseek", label: "TokenHub · DeepSeek", source: "gateway", agent: "claude-code", baseUrl: "https://tokenhub.example/anthropic", model: "deepseek-v4.1-flash", smallModel: null, webSearch: true, hasKey: true, isDefault: false },
 ];
 
-export type MockOptions = { stepMs?: number; paired?: boolean };
+/** onPlanned：规划员拆完时调（假装本机把 card_plan 同步上去了）。 */
+export type MockOptions = { stepMs?: number; paired?: boolean; onPlanned?: (taskId: string) => void };
 
-export function createMockRunner({ stepMs = 900, paired = true }: MockOptions = {}): LocalRunner {
+export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: MockOptions = {}): LocalRunner {
   let token = paired ? "mock-token-0000000000000000000000" : "";
   const sessions = new Map<string, MockSession>();
   const folders: TLocalFolder[] = [{ id: "f1", path: "C:\\work\\tianshu", label: "tianshu", addedAt: new Date().toISOString() }];
@@ -68,11 +75,14 @@ export function createMockRunner({ stepMs = 900, paired = true }: MockOptions = 
     emit(s, { type: "status", status, ...(reason ? { reason } : {}) });
     if (!OCCUPYING.has(status)) promote();
   };
-  /** 有空位就把排队的按先后接上，其余的重新编号。 */
+  const rank = (s: MockSession) => RANK[subjectOf(s.summary).kind] ?? 2;
+  const queue = () => [...sessions.values()].filter((s) => s.summary.status === "queued")
+    .sort((a, b) => rank(a) - rank(b) || a.summary.createdAt.localeCompare(b.summary.createdAt));
+  const renumber = () => queue().forEach((s, i) => { s.summary = { ...s.summary, queuePosition: i + 1 }; });
+  /** 有空位就按先后接上，其余的重新编号。 */
   const promote = () => {
-    const queued = [...sessions.values()].filter((s) => s.summary.status === "queued").sort((a, b) => a.summary.createdAt.localeCompare(b.summary.createdAt));
     let free = maxConcurrent - slots().running;
-    for (const s of queued) {
+    for (const s of queue()) {
       if (free > 0) {
         free--;
         s.summary = { ...s.summary, queuePosition: null };
@@ -80,12 +90,11 @@ export function createMockRunner({ stepMs = 900, paired = true }: MockOptions = 
         advance(s);
       }
     }
-    [...sessions.values()].filter((s) => s.summary.status === "queued").sort((a, b) => a.summary.createdAt.localeCompare(b.summary.createdAt))
-      .forEach((s, i) => { s.summary = { ...s.summary, queuePosition: i + 1 }; });
+    renumber();
   };
-  const plan = (s: MockSession, done: number) => emit(s, {
-    type: "plan", entries: PLAN.map((content, i): TLocalPlanEntry => ({ content, status: i < done ? "completed" : i === done ? "in_progress" : "pending" })),
-    progress: { done: Math.min(done, PLAN.length), total: PLAN.length, step: Math.min(done + 1, PLAN.length), current: PLAN[done] ?? null },
+  const plan = (s: MockSession, done: number, steps = PLAN) => emit(s, {
+    type: "plan", entries: steps.map((content, i): TLocalPlanEntry => ({ content, status: i < done ? "completed" : i === done ? "in_progress" : "pending" })),
+    progress: { done: Math.min(done, steps.length), total: steps.length, step: Math.min(done + 1, steps.length), current: steps[done] ?? null },
   });
   const tool = (s: MockSession, name: string, title: string) => {
     const toolUseId = `tu${++seqId}`;
@@ -124,9 +133,33 @@ export function createMockRunner({ stepMs = 900, paired = true }: MockOptions = 
       plan(s, 3);
       emit(s, { type: "handback", summary: "改完了，测试都过。", criteria: [{ index: 1, result: "met", evidence: "测试 12/12 通过" }, { index: 2, result: "met", evidence: "交回说明.md" }], outputKeys: [] });
       turnEnd(s, "改完了，已交回。");
+      const subject = subjectOf(s.summary);
+      if (subject.kind === "card" && subject.cardId)
+        void create(asCreateRequest({ subject: { kind: "verify", cardId: subject.cardId }, title: `验收：${s.summary.title}`.slice(0, 120), modelProfileId: s.summary.modelProfileId, firstMessage: "逐条对照约定验收这次交回。" }));
       setStatus(s, "idle");
       return "wait";
     },
+  ];
+  const started = (s: MockSession, mode: string) => { setStatus(s, "running"); emit(s, { type: "agent_info", agent: "claude-code", version: "2.1.318", model: s.summary.modelLabel, permissionMode: mode }); };
+  const planner: Step[] = [
+    (s) => started(s, "manual"),
+    (s) => { emit(s, { type: "assistant_text", text: "先读 Task、约定和相关的近期事件。" }); plan(s, 0, PLANNER); },
+    (s) => { tool(s, "mcp__tianshu__get_task_context", "读 Task 的上下文"); plan(s, 1, PLANNER); },
+    (s) => { plan(s, 2, PLANNER); tool(s, "propose_plan", "交计划和派活单"); },
+    (s) => {
+      plan(s, 3, PLANNER);
+      turnEnd(s, "拆好了，派活单交上去了。");
+      const subject = subjectOf(s.summary);
+      if (subject.kind === "plan") onPlanned?.(subject.taskId);
+      setStatus(s, "exited");
+      return "wait";
+    },
+  ];
+  const verifier: Step[] = [
+    (s) => started(s, "plan"),
+    (s) => { emit(s, { type: "assistant_text", text: "逐条对照约定看交回的证据。" }); plan(s, 0, VERIFIER); },
+    (s) => { plan(s, 1, VERIFIER); tool(s, "submit_verdict", "交验收结果"); },
+    (s) => { plan(s, 2, VERIFIER); turnEnd(s, "2/2 达到。"); setStatus(s, "exited"); return "wait"; },
   ];
 
   const advance = (s: MockSession) => {
@@ -233,9 +266,10 @@ export function createMockRunner({ stepMs = 900, paired = true }: MockOptions = 
     const full = slots().running >= maxConcurrent;
     const s: MockSession = {
       summary: { id, subject: body.subject, title: body.title, agent: "claude-code", modelProfileId: model.id, modelLabel: model.label, cwd: body.cwd ?? "topics", status: full ? "queued" : "starting", includePersonalConfig: Boolean(body.includePersonalConfig), createdAt: now(), updatedAt: now(), lastSeq: 0, pendingPermissions: 0, queuePosition: full ? slots().queued + 1 : null, usage: { ...ZERO } },
-      log: [], listeners: new Set(), script, cursor: 0, timer: null, pending: null, paused: false, denied: false,
+      log: [], listeners: new Set(), script: { plan: planner, verify: verifier }[subjectOf(body).kind as "plan" | "verify"] ?? script, cursor: 0, timer: null, pending: null, paused: false, denied: false,
     };
     sessions.set(id, s);
+    if (full) renumber();
     emit(s, { type: "status", status: s.summary.status });
     emit(s, { type: "user_message", text: body.firstMessage, source: "initial" });
     if (!full) advance(s);
