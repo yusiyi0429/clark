@@ -31,5 +31,6 @@ ADR 保留决策依据，被替代的部分只作历史参考。当前产品术�
 | [0025](0025-mission-card-owner-self-review.md) | 本人审核 | 准备阶段可见性与汇总方式由任务卡契约替代 |
 | [0026](0026-draft-mission-cards-on-plan-sign.md) | 签发即起草 | 有效 |
 | [0027](0027-company-facts-only-from-world.md) | 公司事实只认本体、人员目录独立 | 有效，取代 0004、0013 |
+| [0033](0033-task-agreements-in-tianshu-for-november.md) | 11 月约定存天枢、12 月改读本体；Task 读权限放宽到认可人 | 有效（0028–0032 是本机程序分支的编号） |
 
 新增 ADR 沿用下一个编号，被替代时在原文开头写明替代关系，不删除原文。
