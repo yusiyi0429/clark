@@ -5,6 +5,7 @@ import type { TMissionRoundSummary } from "@warmap/contracts";
 import { Check, ChevronRight } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
 import { ContextMark } from "@/components/ContextMark";
+import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import { RoundClock } from "./RoundClock";
 import { useRoundNow } from "./useRoundNow";
 import { MissionRoundProgress } from "./MissionRoundProgress";
@@ -67,7 +68,7 @@ export function MissionCardNoticeGroup({ round, entry, embedded = false, current
           <HeroButton variant="ghost" className={s.row} data-origin={path(card.cardId)} aria-current={path(card.cardId) === currentHref?.split("?")[0] ? "true" : undefined} data-waiting={round.approver && (card.pending > 0 || card.pendingCorrections > 0) || undefined}
             aria-label={`${card.ownerName}${card.mine ? "（你）" : ""} · ${card.roleLabel ?? "参与 DRI"} · ${card.missionCount} 项个人任务 · ${stateText(card)}，查看详情：${card.ownerName}的 ${month} 月 Mission Card`}
             isDisabled={card.contentVisible === false} onPress={(event) => { if (card.contentVisible !== false) onNavigate(path(card.cardId), (event.target as Element).closest("[data-notice-group]")); }}>
-            <span className={s.initial} aria-hidden="true">{card.ownerName.slice(0, 1)}</span>
+            <PersonAvatar personId={card.ownerId} className={s.initial}>{card.ownerName.slice(0, 1)}</PersonAvatar>
             <span className={s.who}><span className={s.name}>{card.ownerName}{card.mine ? <em className={s.mine}>你</em> : null}{card.placeholder ? <em className={s.mine}>占位</em> : null}</span><span className={s.role}>{(card.roleLabel ?? "参与 DRI").replace(/ 战役 DRI$/, " 战役")} · <span className={s.missionCount}>{card.missionCount} 项</span></span></span>
             <span className={s.line} data-review={round.phase !== "confirmed" ? card.ownerConfirmedAt ? "done" : "wait" : undefined}>{round.phase !== "confirmed" && card.ownerConfirmedAt ? <Check size={14} aria-hidden /> : null}{stateText(card)}</span>{card.contentVisible === false ? <span aria-hidden /> : <ChevronRight size={15} aria-hidden="true" />}
           </HeroButton>

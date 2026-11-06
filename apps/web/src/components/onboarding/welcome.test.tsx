@@ -385,6 +385,54 @@ describe("选择你的伙伴（spec 5.5）", () => {
     expect(elements(tree).some((element) => element.type === CoAgentCapsule)).toBe(true);
   });
 
+  it("伙伴那一步之后的每一页，顶上一直是本人选的那颗（刚选的、以前选好的都算）；选的是默认那颗就还是原来的大胶囊", async () => {
+    vi.stubGlobal("window", new EventTarget());
+    vi.spyOn(browserApi, "PUT").mockResolvedValue({ data: { name: "团团", form: "panda" }, response: new Response(null, { status: 200 }) } as never);
+    nameInput(flow(member)).onChange("团团");
+    press(flow(member), "继续");
+    skinPicker(flow(member)).onChange("panda");
+    press(flow(member), "继续");
+    press(flow(member), "继续");
+    await vi.waitFor(() => expect(text(flow(member))).toContain("你好，测试"));
+    const hero = (tree: ReactNode) => elements(tree).find((element) => element.type === PresenceCapsule)?.props;
+    expect(hero(flow(member))).toMatchObject({ skin: "panda", name: "团团", pose: "idle" });
+    press(flow(member), "开始");
+    expect(text(flow(member))).toContain("左边是通知栏");
+    expect(hero(flow(member))).toMatchObject({ skin: "panda" });
+    expect(elements(flow(member)).some((element) => element.type === CoAgentCapsule)).toBe(false);
+
+    hooks.reset(); hooks.begin();
+    expect(hero(WelcomeFlow({ data: member, buddy: { name: "Christopher", form: "miles" } }))).toMatchObject({ skin: "miles", name: "Christopher" });
+    hooks.reset(); hooks.begin();
+    const classic = WelcomeFlow({ data: member, buddy: { name: "小天", form: "classic" } });
+    expect(hero(classic)).toBeUndefined();
+    expect(elements(classic).some((element) => element.type === CoAgentCapsule)).toBe(true);
+  });
+
+  it("名字太长、多的字被截掉时，框下面写「名字已到最长」；输入法组字时不提示，组完被截才提示；删回放得下就消失", () => {
+    const onChange = vi.fn();
+    const render = () => { hooks.begin(); return BuddyNameInput({ value: "", onChange }); };
+    const type = (value: string, isComposing = false) => {
+      const input = elements(render()).find((element) => element.type === "input")!;
+      (input.props.onChange as (event: unknown) => void)({ target: { value }, nativeEvent: { isComposing } });
+    };
+    const hint = () => text(render());
+    expect(hint()).toBe("");
+    type("Christopherrr");
+    expect(onChange).toHaveBeenLastCalledWith("Christopher");
+    expect(hint()).toBe("名字已到最长");
+    expect(elements(render()).find((element) => element.props.role === "status")).toBeDefined();
+    type("Christophe");
+    expect(hint()).toBe("");
+    type("一二三四五六七", true);
+    expect(onChange).toHaveBeenLastCalledWith("一二三四五六七");
+    expect(hint()).toBe("");
+    const input = elements(render()).find((element) => element.type === "input")!;
+    (input.props.onCompositionEnd as (event: unknown) => void)({ currentTarget: { value: "一二三四五六七" } });
+    expect(onChange).toHaveBeenLastCalledWith("一二三四五六");
+    expect(hint()).toBe("名字已到最长");
+  });
+
   it("存不上就留在选性格这一页并说明，不往下走", async () => {
     vi.stubGlobal("window", new EventTarget());
     vi.spyOn(browserApi, "PUT").mockResolvedValue({ data: undefined, error: { message: "伙伴要有名字" }, response: new Response(null, { status: 400 }) } as never);

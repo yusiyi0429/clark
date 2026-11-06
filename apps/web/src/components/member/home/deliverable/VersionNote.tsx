@@ -2,10 +2,12 @@
 
 /**
  * 交付以后：伙伴写的这一版说明（达成了什么、这一版多做到的、为什么变了、经验），本人可以改一改，也可以不要这段；不点就算认可。
- * 下面一行「已交付 · 12 分钟」和「撤回」。左边一颗小胶囊表示这段是伙伴写的。
+ * 下面一行「已交付 · 12 分钟」和「撤回」。左边是本人选的伙伴形象（BuddyMark 署名那一号），表示这段是伙伴写的；正在写时它在说。
  */
 import { useEffect, useState } from "react";
 import type { TDeliverableNotePatch, TDeliverableVersion } from "@warmap/contracts";
+import { BuddyMark } from "@/components/buddy/BuddyMark";
+import { useBuddy } from "@/components/buddy/useBuddy";
 import { since } from "./deliverableFormat";
 import d from "@/styles/task-deliverable.module.css";
 
@@ -27,6 +29,7 @@ export function VersionNote({ version, canEdit, onPatch, onWithdraw }: {
   onWithdraw: () => Promise<string | null>;
 }) {
   const now = useMinuteNow();
+  const { buddy } = useBuddy();
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,20 +53,20 @@ export function VersionNote({ version, canEdit, onPatch, onWithdraw }: {
   return (
     <section className={d.section} aria-label="这一版的说明">
       {note && note.status === "writing" ? (
-        <div className={d.note} data-writing>
-          <span className={d.capsule} aria-hidden="true" />
+        <div className={d.note}>
+          <BuddyMark buddy={buddy} place="note" active />
           <p className={d.noteWriting} role="status">正在写这一版的说明</p>
         </div>
       ) : null}
       {note && note.status === "done" && !note.dismissed ? (
         <div className={d.note}>
-          <span className={d.capsule} aria-hidden="true" />
+          <BuddyMark buddy={buddy} place="note" active={false} />
           {draft ? (
             <div className={d.noteEdit}>
-              <input value={draft.achieved} maxLength={120} aria-label="达成了什么" disabled={busy} onChange={(event) => setDraft({ ...draft, achieved: event.target.value })} />
-              <textarea value={draft.gain} maxLength={200} rows={2} aria-label="这一版多做到的" disabled={busy} onChange={(event) => setDraft({ ...draft, gain: event.target.value })} />
-              <textarea value={draft.why} maxLength={300} rows={2} aria-label="为什么变了" disabled={busy} onChange={(event) => setDraft({ ...draft, why: event.target.value })} />
-              <textarea value={draft.lesson} maxLength={200} rows={2} aria-label="经验" disabled={busy} onChange={(event) => setDraft({ ...draft, lesson: event.target.value })} />
+              <label className={d.noteField}><span>达成了什么</span><input value={draft.achieved} maxLength={120} disabled={busy} onChange={(event) => setDraft({ ...draft, achieved: event.target.value })} /></label>
+              <label className={d.noteField}><span>这一版多做到的</span><textarea value={draft.gain} maxLength={200} rows={2} disabled={busy} onChange={(event) => setDraft({ ...draft, gain: event.target.value })} /></label>
+              <label className={d.noteField}><span>为什么变了</span><textarea value={draft.why} maxLength={300} rows={2} disabled={busy} onChange={(event) => setDraft({ ...draft, why: event.target.value })} /></label>
+              <label className={d.noteField}><span>经验</span><textarea value={draft.lesson} maxLength={200} rows={2} disabled={busy} onChange={(event) => setDraft({ ...draft, lesson: event.target.value })} /></label>
               <div className={d.noteTools}>
                 <button type="button" className={d.quiet} disabled={busy} onClick={() => setDraft(null)}>取消</button>
                 <button type="button" className={d.plain} disabled={busy || !draft.achieved.trim()} onClick={() => void save()}>保存</button>

@@ -1,14 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { TDeliverableVersion, THomePlanTask, TTaskDeliverableResponse } from "@warmap/contracts";
+import type { TDeliverableVersion, THomePlanTask, TTaskAgreementResponse, TTaskCheckCriterion, TTaskCheckResponse, TTaskDeliverableResponse } from "@warmap/contracts";
+import type { TaskAgreementApi } from "./useTaskAgreement";
 
-/** 交付物面板：数据换成固定的几种状态，看每一种画出了什么（没有 jsdom，只看第一屏）。 */
-const state = vi.hoisted(() => ({ data: null as unknown }));
+/** 交付物面板：数据换成固定的几种状态，看每一种画出了什么（没有 jsdom，只看第一屏）。约定与对表的数据同样换成固定的（state.pact）。 */
+const state = vi.hoisted(() => ({ data: null as unknown, pact: null as unknown }));
 vi.mock("./useTaskDeliverable", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./useTaskDeliverable")>()),
   useTaskDeliverable: () => ({ data: state.data, error: null, createVersion: vi.fn(), deliver: vi.fn(), withdraw: vi.fn(), retry: vi.fn(),
     dissent: vi.fn(), patchNote: vi.fn(), itemHref: (id: string) => `/api/plan-tasks/t1/deliverable/items/${id}` }),
 }));
+vi.mock("./useTaskAgreement", () => ({ useTaskAgreement: () => state.pact }));
 vi.mock("@/components/AccountMenu", () => ({ avatarInitial: (name: string) => [...name][1] ?? name }));
 
 import { TaskDeliverable } from "./TaskDeliverable";
@@ -16,6 +18,7 @@ import { ReviewHeader } from "./ReviewHeader";
 import { CriteriaList } from "./CriteriaList";
 import { fileProblem, normalizeLink } from "./DeliverableComposer";
 import { about, clock, itemState, statusChip, versionLabel } from "./deliverableFormat";
+import { agreementBody, checkText } from "./Agreement";
 
 const task: THomePlanTask = { taskId: "t1", missionId: "m1", name: "对话质量达标", doneDefinition: null, criteria: ["10/26 进程内发布，10/28 随上线", "题库打分 75 分且无否决项"] };
 const criteria = task.criteria;
@@ -40,14 +43,38 @@ const version = (patch: Partial<TDeliverableVersion> = {}): TDeliverableVersion 
 const deliverable = (patch: Partial<TTaskDeliverableResponse> = {}): TTaskDeliverableResponse => ({
   taskId: "t1", responsibleId: "sun", responsibleName: "孙铭泽", canEdit: true, basis: "acceptance", criteria, versions: [], ...patch,
 });
-const render = (data: TTaskDeliverableResponse) => {
+const pact = (patch: Partial<TaskAgreementApi> = {}): TaskAgreementApi => ({
+  agreement: null, check: null, checking: false, checkError: null, asked: [], feishuOff: false,
+  runCheck: vi.fn(), save: vi.fn(), notify: vi.fn(), ...patch,
+});
+const render = (data: TTaskDeliverableResponse, agreementApi: TaskAgreementApi = pact()) => {
   state.data = data;
+  state.pact = agreementApi;
   return renderToStaticMarkup(<TaskDeliverable task={task} activities={<div data-columns />} activityCount={3} newItem={<span data-new-item />} />);
 };
 const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 const button = (html: string, label: string) => html.match(new RegExp(`<button[^>]*>${label}</button>`))?.[0] ?? null;
 
-beforeEach(() => { state.data = null; });
+beforeEach(() => { state.data = null; state.pact = pact(); });
+
+const yang = { personId: "yang", name: "杨主任" };
+const agreement = (patch: Partial<TTaskAgreementResponse> = {}): TTaskAgreementResponse => ({
+  taskId: "t1", taskName: task.name, missionId: "m1", basis: "acceptance", source: "none",
+  criteria: criteria.map((text, index) => ({ index: index + 1, text, proof: null, acceptor: null })),
+  exclusions: [], complete: false, basisChanged: false, canEdit: true, updatedBy: null, updatedAt: null, ...patch,
+});
+const row = (index: number, status: TTaskCheckCriterion["status"], patch: Partial<TTaskCheckCriterion> = {}): TTaskCheckCriterion => ({
+  index, text: criteria[index - 1], status, proof: null, acceptor: null, evidence: null, gap: null, notifiedToday: false, ...patch,
+});
+const evidence = { versionId: "11111111-1111-4111-8111-111111111111", versionNumber: 2, locator: "第 2 页",
+  items: [{ id: "21111111-1111-4111-8111-111111111111", kind: "file" as const, name: "10-28 上线记录.pdf", url: null }] };
+const check = (patch: Partial<TTaskCheckResponse> = {}): TTaskCheckResponse => ({
+  taskId: "t1", verdict: "not_ready", conclusion: "还不能交：差第 2 条（传题库评测报告）。", notices: [], source: "tianshu",
+  criteria: [row(1, "evidenced", { evidence }), row(2, "gap", { gap: "传题库评测报告，要有总分和否决项那一栏。" })],
+  version: { id: evidence.versionId, number: 2, reviewStatus: "done", deliveredAt: null }, beyondScope: [], canNotify: true, ...patch,
+});
+/** 第 n 条标准（li）的整段。 */
+const item = (html: string, n: number) => html.match(/<li[^>]*>.*?<\/li>/g)?.filter((li) => li.includes("criterionText"))[n - 1] ?? "";
 
 describe("Task 交付物面板", () => {
   it("还没交：负责人、按什么评；空心圈列出标准；下面是放置区（上传文件、粘贴链接、说说现状）；没有交付按钮", () => {
@@ -136,6 +163,152 @@ describe("Task 交付物面板", () => {
     expect(button(html, "上传文件")).toBeNull();
   });
 });
+
+describe("约定与对表", () => {
+  it("没补约定：每条下面是「补约定」，列表底部「这次不包括」带「补」；标题行有「对表」，还没对过就不画结果", () => {
+    const html = render(deliverable({ versions: [version()] }), pact({ agreement: agreement() }));
+    expect(html.match(/<button[^>]*>补约定<\/button>/g)).toHaveLength(2);
+    expect(text(html)).toContain("这次不包括 补");
+    expect(button(html, "对表")).not.toMatch(/disabled/);
+    expect(text(html)).not.toMatch(/证明：|11 月补充/);
+    expect(html).not.toMatch(/data-verdict=/);
+    expect(html).not.toContain("标准改过");
+  });
+
+  it("补了一半：写了的那条是「证明：…」「认可：X」和小字「11 月补充」，点这一行就能改；没写的那条还是「补约定」", () => {
+    const html = render(deliverable({ versions: [version()] }), pact({ agreement: agreement({ source: "tianshu", updatedAt: "2026-11-06T02:00:00.000Z", updatedBy: { personId: "sun", name: "孙铭泽" },
+      criteria: [{ index: 1, text: criteria[0], proof: "正式环境部署记录和健康检查截图", acceptor: yang }, { index: 2, text: criteria[1], proof: null, acceptor: null }],
+      exclusions: ["客户版的对话质量"] }) }));
+    expect(text(item(html, 1))).toContain("证明：正式环境部署记录和健康检查截图 认可：杨主任 11 月补充");
+    expect(item(html, 1)).toMatch(/<button[^>]*aria-label="改第 1 条的约定"/);
+    expect(item(html, 1)).not.toContain("补约定");
+    expect(item(html, 2)).toContain(">补约定</button>");
+    expect(text(html)).toContain("这次不包括 改 客户版的对话质量");
+  });
+
+  it("「谁来认」留空：只写证明，不写认可", () => {
+    const html = render(deliverable(), pact({ agreement: agreement({ source: "tianshu", complete: true,
+      criteria: [{ index: 1, text: criteria[0], proof: "上线记录", acceptor: null }, { index: 2, text: criteria[1], proof: "评测报告", acceptor: null }] }) }));
+    expect(text(item(html, 1))).toContain("证明：上线记录 11 月补充");
+    expect(text(html)).not.toContain("认可：");
+  });
+
+  it("约定来自本体：只读——小字「本体」，没有「补约定」、改的键和「这次不包括」的「改」", () => {
+    const html = render(deliverable({ versions: [version()] }), pact({ agreement: agreement({ source: "world", canEdit: false, complete: true,
+      criteria: [{ index: 1, text: criteria[0], proof: "上线记录", acceptor: yang }, { index: 2, text: criteria[1], proof: "题库评测报告", acceptor: null }],
+      exclusions: ["客户版"] }) }));
+    expect(text(item(html, 1))).toContain("证明：上线记录 认可：杨主任 本体");
+    expect(item(html, 1)).not.toMatch(/aria-label="改第/);
+    expect(html).not.toContain("补约定");
+    expect(button(html, "改")).toBeNull();
+    expect(text(html)).toContain("这次不包括 客户版");
+  });
+
+  it("不能改又没补过：不出约定行，也不出空的「这次不包括」", () => {
+    const html = render(deliverable({ canEdit: false }), pact({ agreement: agreement({ canEdit: false }) }));
+    expect(html).not.toContain("补约定");
+    expect(text(html)).not.toContain("这次不包括");
+  });
+
+  it("对表 · 还不能交：服务端给的提示在前、结论在后，放在列表上面；差的那条写差什么、画 ✗；有证据的写第几版、哪份材料、定位、画 ✓", () => {
+    const html = render(deliverable({ versions: [version()] }), pact({ agreement: agreement(), check: check({
+      notices: [{ code: "agreement_incomplete", text: "约定还没补全：第 2 条没写用什么证明。" }] }) }));
+    const summary = html.match(/<div[^>]*data-verdict="not_ready"[^>]*>.*?<\/div>/)?.[0] ?? "";
+    expect(text(summary)).toBe("约定还没补全：第 2 条没写用什么证明。 还不能交：差第 2 条（传题库评测报告）。");
+    expect(html.indexOf("还不能交")).toBeLessThan(html.indexOf(criteria[0]));
+    expect(text(item(html, 1))).toContain("有证据 · v2 · 10-28 上线记录.pdf · 第 2 页");
+    expect(item(html, 1)).toMatch(/data-verdict="met"/);
+    expect(text(item(html, 2))).toContain("差：传题库评测报告，要有总分和否决项那一栏。");
+    expect(item(html, 2)).toMatch(/data-verdict="unmet"/);
+  });
+
+  it("对表 · 差的那条在最新一版评审里是部分达到：圈画半个", () => {
+    const partial = review({ criteria: review().criteria.map((row) => (row.index === 2 ? { ...row, verdict: "partial" as const } : row)) });
+    const html = render(deliverable({ versions: [version({ review: partial })] }), pact({ check: check() }));
+    expect(item(html, 2)).toMatch(/data-verdict="partial"/);
+  });
+
+  it("对表 · 评审中、还没交付物：各写一句，圈是空的", () => {
+    const html = render(deliverable({ versions: [version()] }), pact({ check: check({ criteria: [row(1, "reviewing"), row(2, "no_deliverable")] }) }));
+    expect(text(item(html, 1))).toContain("评审中");
+    expect(text(item(html, 2))).toContain("还没交付物");
+    expect(item(html, 1) + item(html, 2)).not.toMatch(/data-verdict=/);
+  });
+
+  it("对表 · 可以交：绿底结论；要别人确认的那条写「要杨主任确认」，旁边「请杨主任看」；下次可以做单列，不进结论", () => {
+    const html = render(deliverable({ versions: [version()] }), pact({ check: check({ verdict: "ready",
+      conclusion: "约定的 2 条都有证据了，可以交。交之前请杨主任确认第 1 条。再改要重新谈范围。",
+      criteria: [row(1, "needs_acceptor", { acceptor: yang, evidence }), row(2, "evidenced", { evidence })],
+      beyondScope: ["把评测脚本放进仓库", "补一份客户版对照"] }) }));
+    expect(html).toMatch(/data-verdict="ready"[^>]*role="status"/);
+    expect(text(html)).toContain("约定的 2 条都有证据了，可以交。");
+    expect(text(item(html, 1))).toContain("要杨主任确认 · v2 · 10-28 上线记录.pdf · 第 2 页");
+    expect(button(item(html, 1), "请杨主任看")).not.toMatch(/disabled/);
+    expect(item(html, 1)).toMatch(/data-verdict="met"/);
+    expect(text(html)).toContain("下次可以做 2");
+    expect(text(html)).not.toContain("把评测脚本放进仓库");
+  });
+
+  it("今天已请：服务端说今天请过，或这次刚请过，都写「今天已请」，不能再点；飞书没接时按钮置灰；不是负责人不出按钮", () => {
+    const ready = (patch: Partial<TTaskCheckCriterion>, more: Partial<TTaskCheckResponse> = {}) => check({ verdict: "ready", conclusion: "可以交。",
+      criteria: [row(1, "needs_acceptor", { acceptor: yang, evidence, ...patch }), row(2, "evidenced", { evidence })], ...more });
+    const notified = render(deliverable({ versions: [version()] }), pact({ check: ready({ notifiedToday: true }) }));
+    expect(text(item(notified, 1))).toContain("今天已请");
+    expect(button(notified, "请杨主任看")).toBeNull();
+    const asked = render(deliverable({ versions: [version()] }), pact({ check: ready({}), asked: [1] }));
+    expect(text(item(asked, 1))).toContain("今天已请");
+    expect(button(asked, "请杨主任看")).toBeNull();
+    const off = render(deliverable({ versions: [version()] }), pact({ check: ready({}), feishuOff: true }));
+    expect(button(off, "请杨主任看")).toMatch(/disabled/);
+    const reader = render(deliverable({ canEdit: false, versions: [version()] }), pact({ check: ready({}, { canNotify: false }) }));
+    expect(button(reader, "请杨主任看")).toBeNull();
+    expect(text(item(reader, 1))).toContain("要杨主任确认");
+  });
+
+  it("标准改过：标题行小标「标准改过」，对表的提示里也有那一句", () => {
+    const html = render(deliverable({ versions: [version()] }), pact({ agreement: agreement({ basisChanged: true, source: "tianshu" }),
+      check: check({ notices: [{ code: "basis_changed", text: "本体里这个 Task 的标准改过，约定是照旧标准写的。" }] }) }));
+    expect(html).toMatch(/<span[^>]*>标准改过<\/span>/);
+    expect(text(html)).toContain("本体里这个 Task 的标准改过，约定是照旧标准写的。");
+  });
+
+  it("标准改过以后，列表写本体当前的标准（最新一版评审里还是旧的那句）；点开参考评审才看评审时的原文", () => {
+    const html = render(deliverable({ criteria: [criteria[0], "题库打分 80 分且无否决项"], versions: [version()] }), pact({ agreement: agreement({ basisChanged: true }) }));
+    expect(text(item(html, 2))).toContain("题库打分 80 分且无否决项");
+    expect(text(html)).not.toContain(criteria[1]);
+  });
+
+  it("对表在跑：按钮写「对表中…」并置灰；没对成写服务端的那句话", () => {
+    const html = render(deliverable({ versions: [version()] }), pact({ checking: true, checkError: "对表没成功，请重试" }));
+    expect(button(html, "对表中…")).toMatch(/disabled/);
+    expect(text(html)).toContain("对表没成功，请重试");
+  });
+
+  it("别人的 Task（不传 activities）：没有「我的事项」那一行，面板照样带对表结果", () => {
+    state.data = deliverable({ canEdit: false, versions: [version()] });
+    state.pact = pact({ check: check() });
+    const html = renderToStaticMarkup(<TaskDeliverable task={{ taskId: "t1" }} checkOnOpen />);
+    expect(text(html)).not.toContain("我的事项");
+    expect(text(html)).toContain("还不能交");
+    expect(html).toContain('data-plan-task="t1"');
+  });
+
+  it("存约定是整份覆盖：改一条时别的条目和「这次不包括」原样带上；改「这次不包括」时条目原样带上", () => {
+    const current = agreement({ source: "tianshu", exclusions: ["客户版"],
+      criteria: [{ index: 1, text: criteria[0], proof: "上线记录", acceptor: yang }, { index: 2, text: criteria[1], proof: null, acceptor: null }] });
+    expect(agreementBody(current, { index: 2, proof: "评测报告", acceptorId: null })).toEqual({
+      criteria: [{ index: 1, proof: "上线记录", acceptorId: "yang" }, { index: 2, proof: "评测报告", acceptorId: null }], exclusions: ["客户版"] });
+    expect(agreementBody(current, { exclusions: [] })).toEqual({
+      criteria: [{ index: 1, proof: "上线记录", acceptorId: "yang" }, { index: 2, proof: null, acceptorId: null }], exclusions: [] });
+  });
+
+  it("对表小字：差没有说明时只写「差」；要确认的人没名字时写「要认可人确认」；没有定位就不写", () => {
+    expect(checkText(row(1, "gap"))).toBe("差");
+    expect(checkText(row(1, "needs_acceptor"))).toBe("要认可人确认");
+    expect(checkText(row(1, "evidenced", { evidence: { ...evidence, locator: null } }))).toBe("有证据 · v2 · 10-28 上线记录.pdf");
+  });
+});
+
 
 describe("格式与校验", () => {
   it("左边 Task 卡的状态小标：未开始、已传 vN、已交付，不写分数", () => {

@@ -3,6 +3,7 @@
 /**
  * 传一个新版本：上一版的材料默认沿用（× 去掉），再加文件（点选或拖进来）、贴链接、写一段现状；「评审这一版」交上去就开始评审。
  * 只有这一块用虚线框，表示可以往里放东西。类型和大小先在这里挡一遍，服务端还会再查。
+ * 点「说说现状」光标就进写现状的框：框新出来时靠 autoFocus，已经开着时直接聚焦。
  */
 import { useRef, useState, type DragEvent } from "react";
 import { Plus, X } from "lucide-react";
@@ -61,6 +62,7 @@ export function DeliverableComposer({ previous, startWithStatement, onSubmit, on
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const picker = useRef<HTMLInputElement>(null);
+  const statementField = useRef<HTMLTextAreaElement>(null);
 
   const kept = previous?.items.filter((item) => keep.includes(item.id)) ?? [];
   const fileCount = kept.filter((item) => item.kind !== "link").length + files.length;
@@ -126,7 +128,7 @@ export function DeliverableComposer({ previous, startWithStatement, onSubmit, on
         <div className={d.dropButtons}>
           <button type="button" className={d.plain} disabled={busy} onClick={() => picker.current?.click()}>上传文件</button>
           <button type="button" className={d.plain} disabled={busy} onClick={() => setLinkOpen(true)}>粘贴链接</button>
-          <button type="button" className={d.plain} disabled={busy} onClick={() => setStatementOpen(true)}>说说现状</button>
+          <button type="button" className={d.plain} disabled={busy} onClick={() => (statementOpen ? statementField.current?.focus() : setStatementOpen(true))}>说说现状</button>
         </div>
         <small className={d.dropHint}>PDF · Word · Markdown · HTML · 图片 · 网页链接</small>
         <input ref={picker} type="file" multiple accept={ACCEPT} hidden onChange={(event) => { addFiles([...(event.target.files ?? [])]); event.target.value = ""; }} />
@@ -138,7 +140,7 @@ export function DeliverableComposer({ previous, startWithStatement, onSubmit, on
         </form>
       ) : null}
       {statementOpen ? (
-        <textarea className={d.statementInput} value={statement} maxLength={2000} rows={3} autoFocus={startWithStatement || undefined} disabled={busy}
+        <textarea ref={statementField} className={d.statementInput} value={statement} maxLength={2000} rows={3} autoFocus disabled={busy}
           placeholder="这一版做到了哪一步" aria-label="现状" onChange={(event) => setStatement(event.target.value)} />
       ) : null}
       {error ? <p className={d.error} role="alert">{error}</p> : null}

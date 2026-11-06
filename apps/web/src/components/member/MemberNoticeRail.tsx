@@ -47,7 +47,7 @@ export function MemberNoticeRail({ api, currentHref, home, plan, account, homeHr
 }) {
   const [leaving, setLeaving] = useState(false);
   const [requests, setRequests] = useState(NO_REQUESTS);
-  const railBackground = useRailBackground();
+  const railBackground = useRailBackground(account.personId);
   const records = useMeetingRecords();
   const feishuEvents = useFeishuEvents();
   const radarSignals = noteworthySignals(home.radar);
