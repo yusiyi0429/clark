@@ -10,7 +10,7 @@ import { KanbanCard } from "@/components/board/KanbanCard";
 import { ReviewDoc, isReview, reviewText, splitSections } from "@/components/topics/Review";
 import { Diff, Proposals, changedFields } from "./TeamPage";
 
-const base: TTaskView = {
+const base: Omit<TTaskView, "card"> = {
   id: "c1", version: 1, title: "把看板接上", status: "not_started", source: "self", startDate: null, dueDate: null, doneDefinition: "做完", mission: null, waitingOn: null,
   owner: { personId: "p1", name: "孙铭泽" }, collaborators: [], latestProgress: null, returnReason: null, origin: null, awaitingAcceptance: false, planTaskId: "t1", blocker: null,
   createdAt: "2026-11-06T01:00:00Z", updatedAt: "2026-11-06T01:00:00Z",

@@ -13,13 +13,14 @@ import type { LocalRunner, TLocalSessionSummary } from "@/lib/local/runner";
 import { SessionTranscript } from "@/components/cards/SessionTranscript";
 import { BoardView } from "./BoardView";
 
-const base: TTaskView = {
+/** 不带卡：老事项（stageOf 按 status 放）。 */
+const base: Omit<TTaskView, "card"> = {
   id: "x", version: 1, title: "x", status: "not_started", source: "self", startDate: null, dueDate: null, doneDefinition: "做完", mission: null, waitingOn: null,
   owner: { personId: "p1", name: "孙铭泽" }, collaborators: [], latestProgress: null, returnReason: null, origin: null, awaitingAcceptance: false, planTaskId: "t1", blocker: null,
   createdAt: "2026-11-06T01:00:00Z", updatedAt: "2026-11-06T01:00:00Z",
 };
 const facet = (card: Partial<TTaskCard>): TTaskCard => ({ stage: "todo", wait: null, executor: "claude_code", role: null, model: null, criterion: null, run: null, handback: null, deliverable: null, ...card });
-const item = (id: string, card: Partial<TTaskCard> | null, extra: Partial<TTaskView> = {}): CardItem => ({ ...base, id, title: `卡 ${id}`, ...extra, ...(card ? { card: facet(card) } : {}) });
+const item = (id: string, card: Partial<TTaskCard> | null, extra: Partial<TTaskView> = {}): CardItem => ({ ...base, id, title: `卡 ${id}`, ...extra, ...(card ? { card: facet(card) } : {}) }) as CardItem;
 const task: THomePlanTask = { taskId: "t1", missionId: "m1", name: "看板与派活跑通", doneDefinition: null, criteria: ["能拆卡", "能开工"], responsibleId: null };
 const draft: TCardDraftView = { id: "00000000-0000-4000-8000-0000000000d1", planId: "00000000-0000-4000-8000-0000000000a1", position: 0, title: "草稿一", brief: "", doneDefinition: "完成", criterionIndex: 1, executor: "claude_code", modelTier: "normal", why: null, role: null, suggestPresetKey: null };
 const board = (cards: CardItem[], drafts: TCardDraftView[] = []): TaskBoard => ({ taskId: "t1", criteria: [{ index: 1, text: "能拆卡" }, { index: 2, text: "能开工" }], cards, drafts, plan: null, pending: [], nextVersion: 2, fallback: false });
