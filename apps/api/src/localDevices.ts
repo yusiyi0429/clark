@@ -58,6 +58,7 @@ export async function deviceOfToken(q: Query, tokenId: string): Promise<{ ownerI
 }
 
 export type RunRow = { id: string; owner_id: string; device_id: string; device_name: string | null; kind: "card" | "topic" | "plan" | "verify"; task_id: string | null; topic_id: string | null;
+  plan_task_id: string | null;
   title: string | null; model_label: string | null; state: TLocalSessionStatus; plan: TLocalPlanEntry[]; plan_progress: TLocalRunPlanProgress | null;
   last_activity: TLocalRunActivity | null;
   timeline: TLocalRunActivity[]; tokens: { input: number; output: number; cacheRead: number; cacheWrite: number }; cost_usd: string | null;
@@ -81,12 +82,12 @@ export async function recentRuns(q: Query, subject: { taskId: string } | { topic
   return (await q(`${RUN_SELECT} WHERE r.${column}=$1 AND r.kind=$3 ORDER BY r.started_at DESC,r.id LIMIT $2`, [id, limit, kind])).rows as RunRow[];
 }
 
-/** 每张卡（或专题）最近一次执行；ids 里没有执行过的不在结果里。 */
-export async function latestRuns(q: Query, column: "task_id" | "topic_id", ids: string[]): Promise<Map<string, RunRow>> {
+/** 每张卡（或专题）最近一次某种会话（kind）；ids 里没有的不在结果里。 */
+export async function latestRuns(q: Query, column: "task_id" | "topic_id", ids: string[], kind: RunRow["kind"]): Promise<Map<string, RunRow>> {
   if (!ids.length) return new Map();
   const rows = (await q(`SELECT DISTINCT ON (r.${column}) r.*,d.name AS device_name FROM local_runs r
     LEFT JOIN local_devices d ON d.owner_id=r.owner_id AND d.id=r.device_id
-    WHERE r.${column}=ANY($1::uuid[]) ORDER BY r.${column},r.started_at DESC,r.id`, [ids])).rows as RunRow[];
+    WHERE r.${column}=ANY($1::uuid[]) AND r.kind=$2 ORDER BY r.${column},r.started_at DESC,r.id`, [ids, kind])).rows as RunRow[];
   return new Map(rows.map((row) => [(column === "task_id" ? row.task_id : row.topic_id)!, row]));
 }
 

@@ -100052,6 +100052,14 @@
               {
                 "const": "topic",
                 "type": "string"
+              },
+              {
+                "const": "plan",
+                "type": "string"
+              },
+              {
+                "const": "verify",
+                "type": "string"
               }
             ]
           },
@@ -100643,6 +100651,14 @@
                     {
                       "const": "topic",
                       "type": "string"
+                    },
+                    {
+                      "const": "plan",
+                      "type": "string"
+                    },
+                    {
+                      "const": "verify",
+                      "type": "string"
                     }
                   ]
                 },
@@ -101068,6 +101084,14 @@
                     {
                       "const": "topic",
                       "type": "string"
+                    },
+                    {
+                      "const": "plan",
+                      "type": "string"
+                    },
+                    {
+                      "const": "verify",
+                      "type": "string"
                     }
                   ]
                 },
@@ -101492,6 +101516,14 @@
                     },
                     {
                       "const": "topic",
+                      "type": "string"
+                    },
+                    {
+                      "const": "plan",
+                      "type": "string"
+                    },
+                    {
+                      "const": "verify",
                       "type": "string"
                     }
                   ]

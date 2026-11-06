@@ -10,7 +10,7 @@ import type { AppInstance, RouteContext } from "./shared.js";
 export function registerWorkerRoutes(app: AppInstance, ctx: RouteContext): void {
   const { q, env, fail, requirePerson, requireServiceToken, peopleDirectory } = ctx;
   const workers = (ownerId: string) => listWorkers({ q, planTasks: ctx.planTasks, now: ctx.now(), names: personDisplayNames(peopleDirectory),
-    reviewModel: env.review?.model ?? env.heavyModel }, ownerId);
+    reviewModel: env.review?.model ?? env.heavyModel, cloudAgents: Boolean(env.boardCloudAgents) }, ownerId);
 
   app.get("/api/me/workers", { preHandler: requirePerson, schema: { response: { 200: WorkersResponse } } }, async (req) => workers(req.person!.personId));
 
