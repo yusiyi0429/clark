@@ -25,7 +25,7 @@ import { showWorkspaceToast } from "@/lib/toast";
 import { SessionComposer, SessionTranscript } from "./SessionTranscript";
 import { useCardDetail, type CardDetail } from "./useCardDetail";
 import { MergeAction } from "@/components/work/MergeAction";
-import { placeText, shortPlace } from "@/lib/work/merge";
+import { commitText, placeText, shortPlace } from "@/lib/work/merge";
 import type { TLocalSessionSummary } from "@/lib/local/runner";
 import s from "@/styles/v2-session.module.css";
 
@@ -125,7 +125,7 @@ export function CardSession({ cardId }: { cardId: string }) {
         <div className={s.exec}>
           {role ? <span className={s.ex}><i>&gt;_</i>{role.name}</span> : null}
           {agent ? <span>{session ? `本机${sessionRunning ? " · 在跑" : ""}` : item.card?.run ? item.card.run.deviceName : ""}</span> : null}
-          {session?.workspace ? <span title={placeText(session.workspace)}>{shortPlace(session.workspace)}</span> : null}
+          {session?.workspace ? <span title={placeText(session.workspace)}>{shortPlace(session.workspace)}</span> : item.card?.handback?.git ? <span>{item.card.handback.git.branch}</span> : null}
         </div>
       </header>
       {handheld ? (
@@ -178,7 +178,8 @@ function ResultPane({ detail, session, view, canAct, wait, stage, handheld, read
   const paused = wait === "paused" || status === "idle";
   const model = view ? null : item.card?.model?.label;
   // 在哪做：本机开工时说的（分支、从哪个提交开始、主文件夹没提交的改动没带进来），没收到时照会话摘要。
-  const place = view?.place ?? (session?.workspace ? placeText(session.workspace) : null);
+  const git = item.card?.handback?.git ?? null;
+  const place = view?.place ?? (session?.workspace ? placeText(session.workspace) : git ? `分支 ${git.branch}` : null);
   return (
     <>
       <div className={s.brief}>
@@ -189,6 +190,7 @@ function ResultPane({ detail, session, view, canAct, wait, stage, handheld, read
         {agent && (role || model || run?.modelLabel) ? <div className={s.meta}>{role ? <span className={s.ex}><i>&gt;_</i>{role.name}</span> : null}<span>{model ?? run?.modelLabel}</span></div> : null}
         {view?.queuedBecause ? <div className={s.meta}><span>{view.queuedBecause}</span></div> : null}
         {place ? <div className={s.meta}><span>{place}</span></div> : null}
+        {git ? <div className={s.meta}><span>{commitText(git)}</span></div> : null}
       </div>
 
       {plan.length ? (

@@ -9,7 +9,7 @@ import { createMockRunner } from "@/lib/local/mock";
 import type { TLocalSessionSummary } from "@/lib/local/runner";
 import type { TaskBoard } from "@/lib/board/useTaskBoard";
 import { groupWorkers, isWaiting, plannerWorkers, toWorker, type Worker } from "@/lib/work/workers";
-import { mergeBlockedText, mergeCard, shortPlace } from "@/lib/work/merge";
+import { commitText, mergeBlockedText, mergeCard, shortPlace } from "@/lib/work/merge";
 import { DispatchBlock, countsText, plannerText } from "./DispatchBlock";
 import { WorkerRow, secondLine } from "./WorkerRow";
 import { placeBlocks } from "./WorkTimeline";
@@ -20,7 +20,7 @@ const item = (extra: Partial<TWorkerItem>): TWorkerItem => ({
   key: "card:c1", kind: "card", cardId: "c1", topicId: null, title: "同时跑的上限和排队", role: ROLE, workerNo: 1,
   task: { id: "t1", name: "本机程序第一版" }, mission: null, step: { n: 4, total: 7, label: "跑测试" },
   resource: { where: "local", deviceId: null, deviceName: "ThinkPad", modelLabel: "Sonnet" }, startedAt: "2026-11-06T04:00:00Z", elapsedSeconds: 840,
-  finishedAt: null, cost: null, stage: "doing", wait: null, needsYou: false, queueReason: null, queuePosition: null, ...extra,
+  finishedAt: null, cost: null, stage: "doing", wait: null, needsYou: false, queueReason: null, queuePosition: null, git: null, ...extra,
 });
 const session = (extra: Partial<TLocalSessionSummary>): TLocalSessionSummary => ({
   id: "00000000-0000-4000-8000-0000000000a1", subject: { kind: "card", cardId: "c1" }, title: "x", agent: "claude-code", modelProfileId: "subscription", modelLabel: "订阅 · Sonnet",
@@ -198,6 +198,16 @@ describe("卡在哪做和合并（ADR 0038）", () => {
     const waiting = toWorker(item({}), ctx([session({ status: "queued", queuePosition: 1, workspace: folder }), other]));
     expect(waiting).toMatchObject({ state: "queued", reason: "folder" });
     expect(line(waiting)).toContain("notes");
+  });
+
+  it("手机和别的电脑上：分支和提交用云端记的，验收过的写验过的提交", () => {
+    const git = { branch: "tianshu/c1-board", baseBranch: "main", baseCommit: "a".repeat(40), commit: "b".repeat(40), verifiedCommit: "b".repeat(40) };
+    const worker = toWorker(item({ stage: "done", finishedAt: "2026-11-06T05:00:00Z", git }), ctx());
+    expect(worker.git).toEqual(git);
+    const line = renderToStaticMarkup(<>{secondLine({ ...worker, state: "doing" }, Date.parse("2026-11-06T04:14:00Z"), null).map((part, i) => <span key={i}>{part}</span>)}</>);
+    expect(line).toContain("tianshu/c1-board");
+    expect(commitText(git)).toBe("交回 bbbbbbb · 验过 bbbbbbb");
+    expect(commitText({ ...git, verifiedCommit: null })).toBe("交回 bbbbbbb");
   });
 
   it("合不了的原因说人话：主文件夹不在基线分支、有没提交的改动、有冲突（列文件）", () => {

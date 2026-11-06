@@ -3,7 +3,7 @@
  * 合不了的那几张记在这里（这个页面里，跨首页和卡页），左栏「worker 等你」列出来，写清为什么、能再点。
  */
 import { useSyncExternalStore } from "react";
-import type { TLocalMergeResponse, TLocalWorkspace } from "@warmap/contracts";
+import type { TCardGit, TLocalMergeResponse, TLocalWorkspace } from "@warmap/contracts";
 import type { LocalRunner, TLocalSessionSummary } from "@/lib/local/runner";
 
 export type MergeIssue = { sessionId: string; cardId: string | null; title: string; text: string };
@@ -28,6 +28,11 @@ export function mergeBlockedText(result: Extract<TLocalMergeResponse, { merged: 
 /** 卡在哪做：工作树写分支，不是 git 仓库写文件夹。 */
 export function placeText(workspace: TLocalWorkspace): string {
   return workspace.kind === "worktree" ? `分支 ${workspace.branch}` : `文件夹 ${workspace.folder}`;
+}
+
+/** 云端记的这次交回（手机和别的电脑上看）：交回的提交，验收员验过的提交。 */
+export function commitText(git: TCardGit): string {
+  return `交回 ${git.commit.slice(0, 7)}${git.verifiedCommit ? ` · 验过 ${git.verifiedCommit.slice(0, 7)}` : ""}`;
 }
 
 /** 行里放得下的：分支名，或文件夹的最后一段。 */

@@ -44,10 +44,10 @@ const hhmm = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString("zh
 /** 验收中：干活的是验收员（本机交回后自己接的；别的设备上看是云端转来的）。 */
 const reviewing = (worker: Worker) => worker.state === "doing" && worker.mark === "reviewing";
 
-/** 第二行：资源在前，再是在哪做（分支或文件夹），Task 最后。 */
+/** 第二行：资源在前，再是在哪做（分支或文件夹；这台电脑上没有会话时用云端记的分支），Task 最后。 */
 export function secondLine(worker: Worker, now: number, task: string | null): (string | ReactElement)[] {
   const tail = task ? [task] : [];
-  const place = worker.workspace ? shortPlace(worker.workspace) : null;
+  const place = worker.workspace ? shortPlace(worker.workspace) : worker.git?.branch ?? null;
   const handback = worker.item?.card?.handback ?? null;
   const inclusion = worker.item?.card?.deliverable ?? null;
   if (worker.state === "queued") return [<Resource key="r" where="local" model={worker.model} />, place, worker.queuePos ? `排第 ${worker.queuePos}` : null, ...tail].filter((part): part is string | ReactElement => !!part);

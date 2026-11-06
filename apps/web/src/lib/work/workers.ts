@@ -5,7 +5,7 @@
  * 规划员、验收员也是 worker（第 21 节）：都在本机跑、占位置。云端列的 plan:<会话>、verify:<卡> 在这台电脑上有本机会话时以本机为准，
  * 云端还没列上的本机规划员照本机加一行；登记了还没开的拆卡（GET /api/me/card-splits，不在 worker 列表里）是「拆卡 · 等开工」。
  */
-import type { TCardSplitRequestView, TLocalWorkspace, TRoleRef, TWorkerItem, TWorkerMark } from "@warmap/contracts";
+import type { TCardGit, TCardSplitRequestView, TLocalWorkspace, TRoleRef, TWorkerItem, TWorkerMark } from "@warmap/contracts";
 import type { TLocalSessionSummary } from "@/lib/local/runner";
 import { localWaitOf, type CardItem } from "@/lib/board/cards";
 
@@ -57,6 +57,8 @@ export type Worker = {
   session: TLocalSessionSummary | null;
   /** 卡在哪做（这台电脑上执行的会话报的：工作树和分支，或文件夹）。 */
   workspace: TLocalWorkspace | null;
+  /** 云端记的最近一次交回的分支、提交和验过的提交（手机和别的电脑上用它；在文件夹里做的卡没有）。 */
+  git: TCardGit | null;
   /** 卡本身（看板接口来的，带交回和交付物）；专题没有。 */
   item: CardItem | null;
   /** 登记了还没开的规划员：哪条登记、什么时候登记的。 */
@@ -120,6 +122,7 @@ export function toWorker(entry: TWorkerItem, { sessions, cards, deviceName }: { 
     ask: null,
     session,
     workspace: session?.workspace ?? null,
+    git: entry.git,
     item: entry.cardId ? cards.get(entry.cardId) ?? null : null,
   };
   // 卡这一行：交回后本机已经接了验收员、云端还没换成验收员那一行时，先按本机写成验收员（排队时写等空位）；回复、说一句仍对执行的会话。
@@ -141,7 +144,7 @@ export function plannerWorkers({ sessions, splits, listed, tasks, deviceName }: 
 }): Worker[] {
   const base = (taskId: string, taskName: string | null, missionId: string | null): Omit<Worker, "key" | "state" | "reason" | "mark" | "queuePos" | "model" | "startedAt" | "session"> => ({
     kind: "plan", cardId: null, topicId: null, title: taskName ?? "拆卡", role: PLANNER, seq: 1, taskId, taskName, missionId,
-    doing: null, step: null, where: "local", device: deviceName, endedAt: null, costUsd: null, tokens: 0, ask: null, item: null, workspace: null,
+    doing: null, step: null, where: "local", device: deviceName, endedAt: null, costUsd: null, tokens: 0, ask: null, item: null, workspace: null, git: null,
   });
   const keys = new Set(listed.map((worker) => worker.key));
   const local = sessions.flatMap((session): Worker[] => {

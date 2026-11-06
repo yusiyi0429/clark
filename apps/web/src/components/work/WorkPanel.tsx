@@ -20,7 +20,7 @@ import { deliverableLabel } from "@/lib/board/cards";
 import type { RoleListResponse, RoleProposalView } from "@/lib/team/roles";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { useSessionEvents } from "@/lib/local/useSessionEvents";
-import { placeText } from "@/lib/work/merge";
+import { commitText, placeText } from "@/lib/work/merge";
 import { MergeAction } from "./MergeAction";
 import type { Resources } from "@/lib/work/useWork";
 import { CHAIN_LABEL, groupWorkers, resourceText, type ChainState, type Worker } from "@/lib/work/workers";
@@ -250,7 +250,9 @@ function WorkerDetail({ worker, roles, now, wrap, onChanged }: { worker: Worker;
         <dl className={w.kv}>
           <dt>在干</dt><dd>{worker.doing ?? (worker.state === "queued" ? view.queuedBecause ?? "还没开始" : "—")}</dd>
           <dt>资源</dt><dd>{resource.filter(Boolean).join(" · ") || "—"}</dd>
-          {worker.workspace ? <><dt>在哪</dt><dd>{view.place ?? placeText(worker.workspace)}</dd></> : null}
+          {worker.workspace ? <><dt>在哪</dt><dd>{view.place ?? placeText(worker.workspace)}</dd></>
+            : worker.git ? <><dt>在哪</dt><dd>分支 {worker.git.branch}</dd></> : null}
+          {worker.git ? <><dt>提交</dt><dd>{commitText(worker.git)}</dd></> : null}
           <dt>岗位</dt><dd>{role ? `${role.name} · 第 ${role.version} 版` : worker.role.name}</dd>
         </dl>
         {worker.cardId ? <CardExtras cardId={worker.cardId} worker={worker} onChanged={onChanged} /> : null}
