@@ -9,6 +9,7 @@ import {
   type TLocalSendMessageRequest, type TLocalSendMessageResponse, type TLocalSessionKind, type TLocalSessionStatus, type TLocalSlots, type TLocalSessionSubject,
   type TLocalSessionSummary, type TLocalSyncItem, type TLocalTopicVersionKind, type TLocalUsage, type TLocalVerdict, type TLocalVerdictCriterion,
   type TLocalWorkspace, type TLocalGitRef, type TLocalMergeResponse, type TLocalQuestionRequestView, type TLocalQuestionAnswerRequest,
+  type TLocalBackgroundItem,
 } from "@warmap/contracts";
 import { readJson, writeJsonAtomic, nowIso } from "./store.js";
 import type { EventLog, EventBody } from "./eventLog.js";
@@ -39,6 +40,8 @@ const PRIORITY: Record<TLocalSessionKind, number> = { verify: 0, plan: 1, card: 
 const BRIEF_RETRY_MS = 15_000;
 /** 验收员一轮做完没交结论时，本机提醒它一次。 */
 const VERIFY_NUDGE = "还没交结论：请逐条判完，用 submit_verdict 交一次。";
+/** 一个会话最多留几个后台任务（先丢最早的已结束的）。 */
+const MAX_BACKGROUND = 50;
 /** 卡在等前面的卡时排队的原因（ADR 0038）。 */
 const WAITING_FOR_CARDS = "等前面的卡合回";
 /** 不是 git 仓库的文件夹同时只做一张卡（ADR 0038），另一张在那儿跑时排队的原因。 */
@@ -94,6 +97,8 @@ interface SessionRecord {
   after: string[];
   /** 验收员：结论过没过（还没交为 null）。 */
   passed: boolean | null;
+  /** 这个会话里 Claude Code 自己开的后台任务（子 agent、后台命令），按开始的先后。 */
+  background: TLocalBackgroundItem[];
 }
 
 /** 不合契约时给执行方看的一句（哪个字段、哪里不对）。 */
@@ -148,6 +153,8 @@ export class SessionManager {
   private readonly runs = new Map<string, AgentRun>();
   private readonly pending = new Map<string, Map<string, TLocalPermissionRequestView>>();
   private readonly killed = new Set<string>();
+  /** 正在跑一轮的会话：Claude Code 每轮开头报 system/init，到这一轮的 turn_end 为止。一轮之外来的权限请求是后台子 agent 的。 */
+  private readonly inTurn = new Set<string>();
   /** 正在拉起（含续接握手）的会话：同一个会话同时只许有一次启动。 */
   private readonly starting = new Map<string, Promise<AgentRun>>();
   /** 启动途中被强停的会话：启动一完成就杀掉。 */
@@ -199,8 +206,11 @@ export class SessionManager {
       rec.commit ??= null;
       rec.after ??= [];
       rec.passed ??= null;
+      rec.background ??= [];
       this.queueSeq = Math.max(this.queueSeq, rec.queueOrder);
       this.records.set(rec.id, rec);
+      // 上次没收尾的后台任务（本机程序没正常退出）：进程已不在，算被停了
+      this.stopAllBackground(rec);
       // 本机程序重启时，上次的进程都已不在。排着的照原样排着；刚从队里拉起、还没开始的放回队里（位置不变）。
       if (rec.status === "starting" && rec.queuedMessage !== null) this.setStatus(rec, "queued", { reason: "本机程序重启，照原样排着" });
       else if (LIVE.includes(rec.status)) this.setStatus(rec, "exited", { reason: "本机程序重启，会话已停；再发一句话会接着做" });
@@ -216,13 +226,15 @@ export class SessionManager {
   private summary(rec: SessionRecord): TLocalSessionSummary {
     const {
       mcpSecret: _s, syncSeq: _q, outputs: _o, versionNumber: _v, lastVersion: _l, role: _r, critics: _c, queuedMessage: _m, queueOrder: _n,
-      parentId: _p, briefPending: _b, criteria: _cr, failStreak: _f, submitted: _sb, nudged: _nd, workspace, commit: _cm, after: _af, passed: _ps, ...rest
+      parentId: _p, briefPending: _b, criteria: _cr, failStreak: _f, submitted: _sb, nudged: _nd, workspace, commit: _cm, after: _af, passed: _ps,
+      background, ...rest
     } = rec;
     const question = this.questions.get(rec.id);
     const waitingFor = this.waitingFor(rec);
     return {
       ...rest, lastSeq: this.d.log.lastSeq(rec.id), pendingPermissions: this.pending.get(rec.id)?.size ?? 0, queuePosition: this.queuePosition(rec),
       ...(workspace ? { workspace } : {}), ...(question ? { pendingQuestion: question } : {}), ...(waitingFor.length ? { waitingFor } : {}),
+      ...(background.length ? { background } : {}),
     };
   }
 
@@ -304,12 +316,13 @@ export class SessionManager {
     this.pump();
   }
 
-  /** 不是 git 仓库的文件夹同时只做一张卡：另一张卡正在那儿跑（占着位置或正在拉起）。 */
+  /** 不是 git 仓库的文件夹同时只做一张卡：另一张卡正在那儿跑（占着位置、正在拉起，或它开的后台任务还在跑）。 */
   private folderBusy(rec: SessionRecord): boolean {
     const ws = rec.workspace;
     if (ws?.kind !== "folder") return false;
     const same = (r: SessionRecord) => r !== rec && r.workspace?.kind === "folder" && r.workspace.folder === ws.folder;
-    return [...this.records.values()].some((r) => same(r) && OCCUPYING.includes(r.status)) || [...this.launching.values()].some(same);
+    const busy = (r: SessionRecord) => OCCUPYING.includes(r.status) || r.background.some((b) => b.state === "running");
+    return [...this.records.values()].some((r) => same(r) && busy(r)) || [...this.launching.values()].some(same);
   }
 
   private max(): number {
@@ -446,7 +459,7 @@ export class SessionManager {
       outputs: [], versionNumber: subject.kind === "topic" ? req.versionBase ?? 0 : 0, lastVersion: null,
       role: req.role ?? null, critics: req.critics ?? [], queuedMessage: null, queueOrder: 0,
       parentId: null, briefPending: false, criteria: [], failStreak: 0, submitted: 0, nudged: false,
-      workspace: place?.workspace ?? null, commit: null, after: waiting ? after : [], passed: null,
+      workspace: place?.workspace ?? null, commit: null, after: waiting ? after : [], passed: null, background: [],
     };
     // 满了（或前面还有人在排、在等前面的卡、文件夹被另一张卡占着）就进队，先来先跑；有空位时 pump 接上。
     const busy = this.folderBusy(rec);
@@ -621,12 +634,24 @@ export class SessionManager {
         break;
       case "permission_resolved":
         this.pending.get(rec.id)?.delete(e.requestId);
-        if (!this.pending.get(rec.id)?.size && rec.status === "waiting_permission") this.setStatus(rec, "running");
+        // 批完回到原来的样子：在一轮里是在跑；一轮之外（后台子 agent 的请求，它在后台接着跑）或正在问本人时是等你回复
+        if (!this.pending.get(rec.id)?.size && rec.status === "waiting_permission") {
+          this.setStatus(rec, this.inTurn.has(rec.id) && !this.questions.has(rec.id) ? "running" : "idle");
+        }
+        break;
+      case "agent_info":
+        // 新的一轮开始（Claude Code 每轮开头都报 system/init）
+        this.inTurn.add(rec.id);
+        // Claude Code 自己开了一轮（后台子 agent 跑完来通知时，不经本人）：会话又在跑了
+        if (rec.status === "idle" && !this.questions.has(rec.id)) this.setStatus(rec, "running");
+        break;
+      case "background":
+        this.recordBackground(rec, e.item);
         break;
       case "question":
-        // 执行方问本人：等你回复（不占位置），网页按问题和选项画按钮
+        // 执行方问本人：等你回复（不占位置），网页按问题和选项画按钮；后台子 agent 还有权限请求在等时仍是等你批准
         this.questions.set(rec.id, e.request);
-        this.setStatus(rec, "idle");
+        this.setStatus(rec, this.pending.get(rec.id)?.size ? "waiting_permission" : "idle");
         break;
       case "question_resolved":
         this.questions.delete(rec.id);
@@ -642,11 +667,14 @@ export class SessionManager {
           costUsd: e.usage.costUsd === null || u.costUsd === null ? null : u.costUsd + e.usage.costUsd,
         };
         this.sync(rec, { type: "cost", data: { modelLabel: rec.modelLabel, usage: e.usage } });
-        for (const id of this.pending.get(rec.id)?.keys() ?? []) {
-          this.emit(rec, { type: "permission_resolved", requestId: id, decision: "deny", message: "这一轮已结束", allowForSession: false });
-        }
-        this.pending.get(rec.id)?.clear();
         const run = this.runs.get(rec.id);
+        // 这一轮的请求随这一轮作废；后台子 agent 的请求执行方还在等，留着（不然子 agent 一直卡着）
+        const pending = this.pending.get(rec.id);
+        for (const id of [...(pending?.keys() ?? [])]) {
+          if (run?.isWaiting(id)) continue;
+          this.emit(rec, { type: "permission_resolved", requestId: id, decision: "deny", message: "这一轮已结束", allowForSession: false });
+          pending!.delete(id);
+        }
         if (rec.subject.kind === "verify" && !rec.submitted && !rec.nudged && !e.isError && run) {
           // 验收员一轮做完却没交结论：提醒一次，状态保持进行中（不让出位置，免得刚让出去又占回来）。
           rec.nudged = true;
@@ -655,7 +683,8 @@ export class SessionManager {
           run.send(VERIFY_NUDGE);
           break;
         }
-        this.setStatus(rec, "idle");
+        this.inTurn.delete(rec.id);
+        this.setStatus(rec, pending?.size ? "waiting_permission" : "idle");
         if (rec.subject.kind === "verify" && rec.submitted && run) {
           // 交完结论就收工：让 Claude Code 自己退出，不留空闲进程。本人想问它，说一句会续上。
           this.finished.add(rec.id);
@@ -677,6 +706,7 @@ export class SessionManager {
     this.pending.delete(rec.id);
     const question = this.questions.get(rec.id);
     if (question) this.onAgentEvent(rec, { type: "question_resolved", requestId: question.requestId, choices: null, text: null });
+    this.stopAllBackground(rec); // 进程没了，还在跑的后台任务也没了
     const killed = this.killed.delete(rec.id);
     const finished = this.finished.delete(rec.id);
     rec.mcpSecret = "";
@@ -749,6 +779,40 @@ export class SessionManager {
     return this.summary(rec);
   }
 
+  /** 后台任务开始或变了：按 id 覆盖，存下，报给云端。最多留 MAX_BACKGROUND 个（先丢最早的已结束的）。 */
+  private recordBackground(rec: SessionRecord, item: TLocalBackgroundItem) {
+    const i = rec.background.findIndex((b) => b.id === item.id);
+    if (i >= 0) rec.background[i] = item;
+    else rec.background.push(item);
+    while (rec.background.length > MAX_BACKGROUND) {
+      const old = rec.background.findIndex((b) => b.state !== "running");
+      rec.background.splice(old >= 0 ? old : 0, 1);
+    }
+    this.save(rec);
+    this.sync(rec, { type: "background", data: item });
+    this.d.onChange?.();
+    if (item.state !== "running") this.pump(); // 后台任务结束可能让出了文件夹
+  }
+
+  /** 进程不在了：还在跑的后台任务都算被停了。 */
+  private stopAllBackground(rec: SessionRecord) {
+    for (const b of rec.background.filter((x) => x.state === "running")) {
+      const item: TLocalBackgroundItem = { ...b, state: "stopped", finishedAt: new Date().toISOString(), stoppable: false };
+      this.emit(rec, { type: "background", item });
+      this.recordBackground(rec, item);
+    }
+  }
+
+  /** 停一个后台任务（会话本身不停）。执行方答应后会来 background 事件（stopped），回执里已经是停了的样子。 */
+  async stopBackground(id: string, itemId: string): Promise<TLocalSessionSummary> {
+    const rec = this.must(id);
+    const item = rec.background.find((b) => b.id === itemId);
+    const run = this.runs.get(id);
+    if (!item || item.state !== "running" || !run) throw new SessionError("conflict", "这个后台任务已经停了或不在了");
+    if (!(await run.stopTask(itemId))) throw new SessionError("conflict", "执行方没停下这个后台任务，可能刚好结束了");
+    return this.summary(rec);
+  }
+
   /**
    * 回答一次提问：choices[i] 是第 i 个问题选中的选项，text 是本人另外写的话。交给执行方时每个问题一条「问题原文 → 回答」：
    * 选了的写选项（多选用顿号连）；text 给没选的问题，都选了就接在最后一个问题的回答后面。
@@ -775,7 +839,7 @@ export class SessionManager {
     });
     if (!run.respondQuestion(requestId, answers)) throw new SessionError("conflict", "这次提问已经答过或已失效");
     this.onAgentEvent(rec, { type: "question_resolved", requestId, choices: req.choices, text });
-    this.setStatus(rec, "running");
+    this.setStatus(rec, this.pending.get(id)?.size ? "waiting_permission" : "running");
     return this.summary(rec);
   }
 
@@ -822,6 +886,7 @@ export class SessionManager {
     if (related.some((r) => r.status === "queued" || OCCUPYING.includes(r.status) || this.starting.has(r.id))) {
       throw new SessionError("conflict", "卡或它的验收员还在跑，停下再合");
     }
+    if (rec.background.some((b) => b.state === "running")) throw new SessionError("conflict", "卡还有后台任务在跑，等它们结束或停掉再合");
     if (!this.d.folders.isAllowed(ws.folder)) throw new SessionError("folder_not_allowed", "主文件夹已不在允许的文件夹里");
     if (!existsSync(ws.path)) throw new SessionError("conflict", "这张卡的工作树已经不在了");
     if ((await changedFiles(ws.path)).length) throw new SessionError("conflict", "卡的工作树里还有没提交的改动（交回以后又改过），让它再交回一次再合");
@@ -952,6 +1017,7 @@ export class SessionManager {
       createdAt: now, updatedAt: now, status: "queued", usage: zeroUsage(), syncSeq: 0, mcpSecret: "", outputs: [], versionNumber: 0, lastVersion: null,
       role: null, critics: [], queuedMessage: null, queueOrder: ++this.queueSeq,
       parentId: card.id, briefPending: true, criteria: [], failStreak: 0, submitted: 0, nudged: false, workspace: null, commit, after: [], passed: null,
+      background: [],
     };
     this.records.set(rec.id, rec);
     this.setStatus(rec, "queued", { reason: "等交回送到天枢，取验收交代" });

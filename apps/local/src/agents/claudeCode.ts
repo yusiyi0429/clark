@@ -1,6 +1,6 @@
 import { spawn, execFile, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import type { TLocalPermissionRequestView, TLocalQuestion, TLocalUsage } from "@warmap/contracts";
+import type { TLocalBackgroundItem, TLocalPermissionRequestView, TLocalQuestion, TLocalUsage } from "@warmap/contracts";
 import type { EventBody } from "../eventLog.js";
 import { AgentStartError, type AgentAdapter, type AgentLaunch, type AgentRun, type PermissionAnswer } from "./types.js";
 import { buildClaudeArgs, childEnv, describeTool, homeDir, personalSettingsSetKey, versionAtLeast } from "./claudeEnv.js";
@@ -49,6 +49,14 @@ function questionsOf(input: Json): TLocalQuestion[] {
   }));
 }
 
+/** 算子 agent 的后台任务种类（Claude Code 的 task_type）；别的（后台命令、监视、工作流等）都算 command。 */
+const AGENT_TASKS = new Set(["local_agent", "remote_agent", "in_process_teammate"]);
+/** Claude Code 的任务状态 → 契约里的 state。pending、paused 算还在跑。 */
+const TASK_STATE: Record<string, TLocalBackgroundItem["state"]> = {
+  pending: "running", running: "running", paused: "running", completed: "done", failed: "failed", killed: "stopped", stopped: "stopped",
+};
+const isoOf = (ms: unknown) => (typeof ms === "number" && ms > 0 ? new Date(ms).toISOString() : new Date().toISOString());
+
 function usageOf(result: Json): TLocalUsage {
   const u = result.usage ?? {};
   // result.usage 是本轮的；total_cost_usd 是整个会话累计的，本轮花费看 model_usage_since_last_result（11/05 日志核对过）。
@@ -72,6 +80,8 @@ class ClaudeRun implements AgentRun {
   private readonly permissions = new Map<string, { req: Json; broad: boolean }>();
   /** 在等本人回答的提问（AskUserQuestion）。 */
   private readonly questions = new Map<string, Json>();
+  /** Claude Code 报来的任务（task_started 起）。visible：算不算后台任务（前台跑完的普通命令、它内部的任务不算）。 */
+  private readonly tasks = new Map<string, { item: TLocalBackgroundItem; visible: boolean }>();
   private interrupting = false;
   private exited = false;
   private authFailed = false;
@@ -141,6 +151,37 @@ class ClaudeRun implements AgentRun {
       : { behavior: "deny", message: a.message?.trim() || "本人在天枢网页上拒绝了这一步" };
     this.write({ type: "control_response", response: { subtype: "success", request_id: requestId, response } });
     return true;
+  }
+
+  isWaiting(requestId: string): boolean {
+    return this.permissions.has(requestId) || this.questions.has(requestId);
+  }
+
+  async stopTask(taskId: string): Promise<boolean> {
+    const r = await this.control({ subtype: "stop_task", task_id: taskId }, 10_000);
+    return r.subtype === "success";
+  }
+
+  /** 任务开始或变了：记下，算后台任务的报给会话（状态、名字、能不能停有变化才报）。 */
+  private taskChanged(id: string, change: Partial<TLocalBackgroundItem>, visible?: boolean) {
+    const t = this.tasks.get(id);
+    if (!t) return;
+    const next: TLocalBackgroundItem = { ...t.item, ...change };
+    if (next.state !== "running") {
+      next.stoppable = false;
+      next.finishedAt ??= new Date().toISOString();
+    }
+    const shown = visible ?? t.visible;
+    const differs = (["title", "state", "finishedAt", "stoppable"] as const).some((k) => next[k] !== t.item[k]);
+    this.tasks.set(id, { item: next, visible: shown });
+    if (shown && (differs || !t.visible)) this.emit({ type: "background", item: next });
+    if (next.state === "running") return;
+    // 子 agent 结束了（多半是被停了），它还在等的权限请求作废（agent_id 就是它的 task_id），不然会话一直等你批准
+    for (const [requestId, p] of this.permissions) {
+      if (p.req.agent_id !== id) continue;
+      this.permissions.delete(requestId);
+      this.emit({ type: "permission_resolved", requestId, decision: "deny", message: "子 agent 已结束", allowForSession: false });
+    }
   }
 
   respondQuestion(requestId: string, answers: Record<string, string>): boolean {
@@ -245,6 +286,28 @@ class ClaudeRun implements AgentRun {
         return;
       }
       case "system": {
+        if (ev.subtype === "task_started" && typeof ev.task_id === "string" && !ev.ambient && !ev.skip_transcript) {
+          // 后台任务：子 agent 都算；命令只算放到后台的（前台跑完的普通命令不算）；Claude Code 别的任务算 command
+          const type = String(ev.task_type ?? "");
+          const kind = AGENT_TASKS.has(type) ? "subagent" : "command";
+          const visible = kind === "subagent" || type !== "local_bash" || ev.is_backgrounded === true;
+          // 名字用 Claude Code 给的说明（模型没写说明时它自己会填上命令）；不另外取命令和子 agent 的提示词，免得把整段命令、提示词同步到云端
+          const title = String(ev.description ?? "").trim().slice(0, 200) || (kind === "subagent" ? "子 agent" : "后台命令");
+          const item: TLocalBackgroundItem = { id: ev.task_id.slice(0, 120), title, kind, state: "running", startedAt: new Date().toISOString(), finishedAt: null, stoppable: true };
+          this.tasks.set(ev.task_id, { item, visible });
+          if (visible) this.emit({ type: "background", item });
+        } else if (ev.subtype === "task_updated" && typeof ev.task_id === "string") {
+          const p = ev.patch ?? {};
+          const state = TASK_STATE[String(p.status)];
+          this.taskChanged(ev.task_id, {
+            ...(state ? { state } : {}),
+            ...(typeof p.description === "string" && p.description.trim() ? { title: p.description.trim().slice(0, 200) } : {}),
+            ...(state && state !== "running" && p.end_time ? { finishedAt: isoOf(p.end_time) } : {}),
+          }, p.is_backgrounded === true ? true : undefined);
+        } else if (ev.subtype === "task_notification" && typeof ev.task_id === "string") {
+          const state = TASK_STATE[String(ev.status)];
+          if (state) this.taskChanged(ev.task_id, { state });
+        }
         if (ev.subtype === "init") {
           this.emit({ type: "agent_info", agent: "claude-code", version: String(ev.claude_code_version ?? ""), model: ev.model ?? null, permissionMode: ev.permissionMode ?? null });
         } else if (ev.subtype === "api_retry" && ev.error === "authentication_failed") {

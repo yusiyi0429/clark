@@ -38,6 +38,8 @@ function startTurn(text) {
   out({ type: "assistant", message: { content: [{ type: "text", text: `收到：${text}` }] }, parent_tool_use_id: null });
   out({ type: "assistant", message: { content: [{ type: "tool_use", id: `toolu_todo${turns}`, name: "TodoWrite", input: { todos: [{ content: "写文件", status: "in_progress" }] } }] }, parent_tool_use_id: null });
   if (readOnly) { void readOnlyTurn(); return; }
+  // 配置里有 background：第一轮照 Claude Code 2.1.318 的样子开后台任务（11/07 真机抓的形状），这一轮马上结束，后台的接着跑
+  if (cfg.background && turns === 1) { backgroundTurn(); return; }
   // 配置里有 ask：第一轮先用「问用户」（AskUserQuestion）问本人，收到回答就结束这一轮
   if (cfg.ask && turns === 1) {
     const input = { questions: cfg.ask };
@@ -82,6 +84,64 @@ async function readOnlyTurn() {
   finish(true, result ? "交好了" : "看完了");
 }
 
+// 后台任务：一条后台命令（不停就一直跑）、一个子 agent（cfg.agentMs 后跑完，跑完 Claude Code 自己再开一轮）；
+// 再加一条前台跑完的命令和一个内部任务（ambient），这两个本机不该报。
+const tasks = new Map();
+const sys = (o) => out({ type: "system", ...o, uuid: `u-${Math.random()}`, session_id: sid });
+function backgroundTurn() {
+  out({ type: "assistant", message: { content: [{ type: "tool_use", id: "toolu_bg", name: "Bash", input: { command: "sleep 30", description: "后台等一会儿", run_in_background: true } }] }, parent_tool_use_id: null });
+  sys({ subtype: "task_started", task_id: "bgtask1", tool_use_id: "toolu_bg", description: "后台等一会儿", is_backgrounded: true, task_type: "local_bash" });
+  tasks.set("bgtask1", "toolu_bg");
+  out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "toolu_bg", content: "Command running in background with ID: bgtask1." }] }, parent_tool_use_id: null });
+  out({ type: "assistant", message: { content: [{ type: "tool_use", id: "toolu_ag", name: "Agent", input: { description: "数文件", prompt: "数一下", subagent_type: "Explore" } }] }, parent_tool_use_id: null });
+  sys({ subtype: "task_started", task_id: "agent1", tool_use_id: "toolu_ag", description: "数文件", subagent_type: "Explore", is_backgrounded: true, spawn_depth: 1, task_type: "local_agent" });
+  tasks.set("agent1", "toolu_ag");
+  out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "toolu_ag", content: "Async agent launched successfully." }] }, parent_tool_use_id: null });
+  // 前台跑完的普通命令、内部任务：不算后台任务
+  sys({ subtype: "task_started", task_id: "fg1", tool_use_id: "toolu_fg", description: "前台命令", is_backgrounded: false, task_type: "local_bash" });
+  sys({ subtype: "task_updated", task_id: "fg1", patch: { status: "completed", end_time: Date.now() } });
+  sys({ subtype: "task_started", task_id: "amb1", description: "内部", task_type: "dream", ambient: true });
+  if (cfg.moreTasks) {
+    // 先在前台跑、后来移到后台的命令（从那时起算后台任务），后来失败了。
+    // 真机结束时 task_updated 和 task_notification 都发；这里 fg2 只发前一种、fg3 只发后一种，两条路各自测到。
+    sys({ subtype: "task_started", task_id: "fg2", tool_use_id: "toolu_fg2", description: "", is_backgrounded: false, task_type: "local_bash" });
+    sys({ subtype: "task_updated", task_id: "fg2", patch: { is_backgrounded: true } });
+    sys({ subtype: "task_updated", task_id: "fg2", patch: { status: "failed", end_time: Date.now(), error: "exit 1" } });
+    sys({ subtype: "task_started", task_id: "fg3", tool_use_id: "toolu_fg3", description: "跑测试", is_backgrounded: true, task_type: "local_bash" });
+    sys({ subtype: "task_notification", task_id: "fg3", status: "completed", output_file: "", summary: "" });
+  }
+  // 后台子 agent 来要权限（agent_id 就是它的 task_id），批了它才跑完。subagentAsks 定它什么时候来：
+  // after 主轮结束后几十毫秒（11/07 真机抓到的顺序）；before 主轮结束前；question 主轮结束前，之后主轮又问本人。
+  const agentAsks = () => out({ type: "control_request", request_id: "perm-agent1", request: { subtype: "can_use_tool", tool_name: "Bash", input: { command: "ls" }, agent_id: "agent1", tool_use_id: "toolu_ag_ls" } });
+  if (cfg.subagentAsks === "question") {
+    agentAsks();
+    const input = { questions: [{ question: "接着做吗？", header: "接着", multiSelect: false, options: [{ label: "做", description: "" }, { label: "不做", description: "" }] }] };
+    out({ type: "assistant", message: { content: [{ type: "tool_use", id: "toolu_askbg", name: "AskUserQuestion", input }] }, parent_tool_use_id: null });
+    turn = { permId: "ask-bg", ask: true };
+    out({ type: "control_request", request_id: "ask-bg", request: { subtype: "can_use_tool", tool_name: "AskUserQuestion", input, tool_use_id: "toolu_askbg" } });
+    return;
+  }
+  if (cfg.subagentAsks === "before") agentAsks();
+  out({ type: "assistant", message: { content: [{ type: "text", text: "两件都开了，在后台跑" }] }, parent_tool_use_id: null });
+  finish(true, "两件都开了");
+  if (cfg.subagentAsks === "after") setTimeout(agentAsks, 30);
+  if (!cfg.subagentAsks) setTimeout(agentDone, cfg.agentMs ?? 300);
+}
+function agentDone() {
+  {
+    if (!tasks.has("agent1")) return;
+    tasks.delete("agent1");
+    sys({ subtype: "task_progress", task_id: "agent1", tool_use_id: "toolu_ag", description: "Running ls", usage: { total_tokens: 10, tool_uses: 1, duration_ms: 50 }, last_tool_name: "Bash" });
+    sys({ subtype: "task_updated", task_id: "agent1", patch: { status: "completed", end_time: Date.now() } });
+    sys({ subtype: "task_notification", task_id: "agent1", tool_use_id: "toolu_ag", status: "completed", output_file: "", summary: "2" });
+    // 子 agent 跑完，Claude Code 自己开一轮
+    turns += 1;
+    out({ type: "system", subtype: "init", session_id: sid, model: "claude-haiku-5-5", permissionMode: "default", claude_code_version: "2.1.318" });
+    out({ type: "assistant", message: { content: [{ type: "text", text: "子 agent 回来了：2 个文件" }] }, parent_tool_use_id: null });
+    finish(true, "子 agent 回来了");
+  }
+}
+
 function finish(ok, text) {
   out({ type: "result", subtype: ok ? "success" : "error_during_execution", is_error: !ok, result: text, duration_ms: 12, total_cost_usd: 0.01 * turns,
     usage: { input_tokens: 3, output_tokens: 5, cache_read_input_tokens: 7, cache_creation_input_tokens: 11 },
@@ -105,12 +165,26 @@ rl.on("line", (line) => {
   if (msg.type === "control_request" && msg.request.subtype === "initialize") {
     if (cfg.initDelayMs) { setTimeout(() => out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: { claude_code_version: cfg.version ?? "2.1.318", pid: process.pid } } }), cfg.initDelayMs); return; }
     out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: { claude_code_version: cfg.version ?? "2.1.318", pid: process.pid } } });
+  } else if (msg.type === "control_request" && msg.request.subtype === "stop_task") {
+    const id = msg.request.task_id;
+    appendFileSync(TRACE, JSON.stringify({ stopTask: id }) + "\n");
+    if (!tasks.has(id)) {
+      out({ type: "control_response", response: { subtype: "error", request_id: msg.request_id, error: `no task ${id}` } });
+      return;
+    }
+    tasks.delete(id);
+    sys({ subtype: "task_updated", task_id: id, patch: { status: "killed", end_time: Date.now() } });
+    sys({ subtype: "task_notification", task_id: id, status: "stopped", output_file: "", summary: "" });
+    out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: {} } });
   } else if (msg.type === "control_request" && msg.request.subtype === "interrupt") {
     out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: { still_queued: [] } } });
     if (turn) {
       out({ type: "control_cancel_request", request_id: turn.permId });
       finish(false, "");
     }
+  } else if (msg.type === "control_response" && msg.response.request_id === "perm-agent1") {
+    appendFileSync(TRACE, JSON.stringify({ subagentPermission: msg.response.response }) + "\n");
+    if (msg.response.response?.behavior === "allow" && cfg.subagentAsks !== "question") agentDone();
   } else if (msg.type === "control_response") {
     const r = msg.response.response;
     if (!turn || msg.response.request_id !== turn.permId) return;

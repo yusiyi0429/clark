@@ -187,6 +187,7 @@ export function createServer(d: ServerDeps): http.Server {
     kill: async (c) => ({ session: await d.sessions.kill(c.params.id!) }),
     mergeSession: (c) => d.sessions.merge(c.params.id!),
     answerQuestion: (c) => ({ session: d.sessions.answerQuestion(c.params.id!, c.params.requestId!, validate(LocalQuestionAnswerRequest, c.body)) }),
+    stopBackground: async (c) => ({ session: await d.sessions.stopBackground(c.params.id!, c.params.itemId!) }),
   };
 
   function agentMustBeClaude(c: Ctx) {

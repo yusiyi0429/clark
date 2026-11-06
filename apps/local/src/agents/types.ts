@@ -45,6 +45,10 @@ export interface AgentRun {
   respondPermission(requestId: string, answer: PermissionAnswer): boolean;
   /** 回答一次提问（AskUserQuestion）：answers 是「问题原文 → 回答」，执行方当成本人的回答。已答过或已撤回返回 false。 */
   respondQuestion(requestId: string, answers: Record<string, string>): boolean;
+  /** 执行方还在等这个权限请求或提问的答复（后台子 agent 的请求可能跨过主轮的结束）。 */
+  isWaiting(requestId: string): boolean;
+  /** 停一个后台任务（子 agent、后台命令），会话本身不停。执行方答应了返回 true；之后会来一条 background 事件（stopped）。 */
+  stopTask(taskId: string): Promise<boolean>;
   /** 强停：只杀本进程树。 */
   kill(): Promise<void>;
   /** 说完了：关掉输入，让执行方自己退出（验收员交完结论用）；一会儿还不退就强停。 */
