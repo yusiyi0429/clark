@@ -75,6 +75,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
     paused: () => settings.get().paused,
     skillsDir: opts.skillsDir ?? join(homeDir(), ".claude", "skills"),
     maxConcurrent: () => settings.get().maxConcurrent,
+    autoMerge: () => settings.get().autoMerge,
     verifyBrief: async (handbackKey) => fetchVerifyBrief(await cloud.target(), handbackKey, cloudFetch),
     adapters: {
       "claude-code": new ClaudeCodeAdapter(opts.claudeBin ? async () => opts.claudeBin! : () => claude.bin()),

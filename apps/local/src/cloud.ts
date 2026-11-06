@@ -81,14 +81,14 @@ export class Settings {
     const s = readJson<Partial<TLocalSettings>>(this.file, {});
     return {
       includePersonalConfigByDefault: s.includePersonalConfigByDefault ?? false, paused: s.paused ?? false, allowedOrigins: [...this.allowedOrigins],
-      maxConcurrent: s.maxConcurrent ?? 3,
+      maxConcurrent: s.maxConcurrent ?? 3, autoMerge: s.autoMerge ?? true,
     };
   }
   patch(p: TLocalSettingsPatch): TLocalSettings {
     const cur = this.get();
     const next = {
       includePersonalConfigByDefault: p.includePersonalConfigByDefault ?? cur.includePersonalConfigByDefault, paused: p.paused ?? cur.paused,
-      maxConcurrent: p.maxConcurrent ?? cur.maxConcurrent,
+      maxConcurrent: p.maxConcurrent ?? cur.maxConcurrent, autoMerge: p.autoMerge ?? cur.autoMerge,
     };
     writeJsonAtomic(this.file, next);
     return this.get();

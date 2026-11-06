@@ -1,5 +1,5 @@
-import { lstatSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, lstatSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { insideAny } from "../folders.js";
 
 /**
@@ -60,25 +60,31 @@ function argPaths(w: string): string[] {
   return /(^|[^$])\{[^{}]*,[^{}]*\}/.test(w) ? w.split(/[{},]/).filter(Boolean) : [w];
 }
 
+/** PowerShell 里后面跟的是匹配模式、不是路径的：比较运算符（-notmatch '\\.git\\'）和 -Pattern 参数。 */
+const PATTERN_OPERATOR = /^-[ci]?(not)?(match|like)$|^-[ci]?(replace|split)$|^-Pattern$/i;
+
 /**
  * 很粗的命令切词：认引号、转义（Bash 用 \，PowerShell 用 `）、; | & < > ( ) 换行；每段命令的第一个词是程序本身，不算数据路径。
  * 重定向的目标一定是数据路径。
  */
-function shellCandidates(cmd: string, bash: boolean): string[] {
+function shellCandidates(cmd: string, bash: boolean, patterns?: Set<string>): string[] {
   const esc = bash ? "\\" : "`";
   const words: string[] = [];
   let cur = "";
   let quote: string | null = null;
   let first = true;
   let has = false;
+  let prev = "";
   const end = (boundary: boolean) => {
     if (has) {
-      if (!first) words.push(cur);
+      if (!first && !bash && PATTERN_OPERATOR.test(prev)) patterns?.add(cur);
+      else if (!first) words.push(cur);
       first = false;
+      prev = cur;
     }
     cur = "";
     has = false;
-    if (boundary) first = true;
+    if (boundary) { first = true; prev = ""; }
   };
   for (let i = 0; i < cmd.length; i++) {
     const c = cmd[i]!;
@@ -126,9 +132,10 @@ export function outsidePaths(tool: string, input: Record<string, unknown>, scope
 function collect(tool: string, input: Record<string, unknown>, scope: PathScope, inside: Inside, hint?: unknown): string[] {
   const words: string[] = [];
   for (const f of FILE_FIELDS[tool] ?? []) if (typeof input[f] === "string") words.push(input[f] as string);
-  if (SHELL_TOOLS.has(tool) && typeof input.command === "string") words.push(...shellCandidates(input.command, tool === "Bash").filter((w) => !plainWordInCwd(w, scope)));
-  // Claude Code 自己认出的越界路径（Bash 请求里的 blocked_path）
-  if (typeof hint === "string" && hint) words.push(hint);
+  const patterns = new Set<string>();
+  if (SHELL_TOOLS.has(tool) && typeof input.command === "string") words.push(...shellCandidates(input.command, tool === "Bash", patterns).filter((w) => !plainWordInCwd(w, scope)));
+  // Claude Code 自己认出的越界路径（Bash 请求里的 blocked_path）；它把 -notmatch 后面的正则当成路径时不算
+  if (typeof hint === "string" && hint && !patterns.has(hint)) words.push(hint);
   const out: string[] = [];
   for (const w of words) {
     if (out.includes(w) || !isOutside(w, scope, inside)) continue;
@@ -142,27 +149,51 @@ function collect(tool: string, input: Record<string, unknown>, scope: PathScope,
 const WORKTREE_FILE_TOOLS = new Set(["Read", "Glob", "Grep", "LS", "Write", "Edit", "MultiEdit", "NotebookEdit"]);
 /** 装东西、联网、推拉代码、改系统设置的命令：照样问本人。按词认，认不全（脚本里自己联网就认不出）。 */
 const RISKY_COMMAND = new RegExp([
-  String.raw`\b(npm|pnpm|yarn|bun|pip3?|pipx|uv|poetry|cargo|go|gem|composer|brew|choco|winget|scoop|apt|apt-get|dnf|yum)\s+(i|install|add|ci|get|update|upgrade|dlx|x)\b`,
-  String.raw`\b(npx|pnpx|bunx|curl|wget|ssh|scp|sftp|rsync|ftp|telnet|nc|gh|docker|sudo|runas|reg|setx|schtasks)\b`,
+  String.raw`\b(npm|pnpm|yarn|bun|pip3?|pipx|uv|poetry|cargo|go|gem|composer|brew|choco|winget|scoop|apt|apt-get|dnf|yum)\s+(i|install|add|ci|get|update|upgrade|dlx)\b`,
+  String.raw`\b(curl|wget|ssh|scp|sftp|rsync|ftp|telnet|nc|gh|docker|sudo|runas|reg|setx|schtasks)\b`,
   String.raw`\b(Invoke-WebRequest|Invoke-RestMethod|iwr|irm|Start-BitsTransfer|Install-Module|Install-Package|Set-ItemProperty|New-ItemProperty)\b`,
   String.raw`\bgit\b[^;&|\n]*\b(push|fetch|pull|clone|ls-remote|remote|submodule)\b`,
 ].join("|"), "i");
+/**
+ * npx、npm exec、bunx 跑的程序不在 node_modules/.bin 里时会自己去下载（非交互时不问）：只有工作树里已经装好的才放行
+ * （npx vitest run 行，npx create-x、带版本的 x@1、带范围的 @s/x、-p 指定包的照样问）。
+ */
+const RUN_BIN = /\b(?:npx|pnpx|bunx|npm\s+(?:exec|x)|bun\s+x)((?:\s+--?[\w-]+(?:=\S*)?)*)\s+([^\s;&|<>]+)/gi;
+function binsInstalled(cmd: string, dirs: string[]): boolean {
+  for (const m of cmd.matchAll(RUN_BIN)) {
+    const name = m[2]!;
+    if (/(^|\s)(-p|--package)\b/.test(m[1] ?? "") || !/^[\w.-]+$/.test(name)) return false;
+    if (!dirs.some((d) => [name, `${name}.cmd`, `${name}.ps1`].some((f) => existsSync(join(d, "node_modules", ".bin", f))))) return false;
+  }
+  return true;
+}
+
 /** 工作树里的 .git（指回主仓库）和 .claude（Claude Code 的项目设置，写了会放开以后的会话）：照样问。 */
 const PROTECTED = /(^|[\\/\s"'])\.(git|claude)([\\/\s"']|$)/;
+/** 只是用来排除、筛选的 .git、.claude（-Exclude .git、-notmatch '\\.git\\'、--exclude-dir=.git、-g '!.git'）。 */
+const FILTER_ARG = /(^|\s)(-Exclude|-[ci]?(?:not)?(?:match|like)|--exclude(?:-dir)?|--glob|-g)(?:\s+|=)("[^"]*"|'[^']*'|[^\s;&|]+)/gi;
+/** 写、删、挪文件的命令和重定向（2>&1 这种合并输出的不算）。 */
+const WRITES = /(^|[\s;|&(])(Remove-Item|ri|rm|rmdir|rd|del|erase|Move-Item|mi|mv|move|Copy-Item|cpi|cp|copy|Rename-Item|rni|ren|Set-Content|sc|Add-Content|ac|Out-File|New-Item|ni|tee|Tee-Object)(?=\s|$)|(?<![\d*&])>(?!&)/i;
+/** 命令碰不碰 .git、.claude：只用来排除、筛选的不算（命令里还有写、删、挪、重定向时照样算，免得先筛出来再删）。 */
+function touchesProtected(cmd: string): boolean {
+  return PROTECTED.test(WRITES.test(cmd) ? cmd : cmd.replace(FILTER_ARG, "$1"));
+}
 
 /**
  * 卡在自己的工作树里做时，这一步能不能不问本人就放行（ADR 0038）。规则只在这里：
  * - 读写文件：路径都在工作树里；
- * - Bash、PowerShell：认出的路径都在工作树里，而且不装东西、不联网、不推拉代码、不改系统设置；
+ * - Bash、PowerShell：认出的路径都在工作树里，而且不装东西、不联网、不推拉代码、不改系统设置（跑仓库自己的脚本 npm test、npm run x、
+ *   pnpm test、node --test 行；npx 之类只跑工作树里装好的）；
  * - 天枢 MCP 里读的工具（get_、list_ 开头）。
- * 碰 .git、.claude 的照样问；别的工具（联网搜索、子 agent 等）照样问。scope 的允许范围只放工作树。
+ * 碰 .git、.claude 的照样问（只用来排除、筛选的不算）；别的工具（联网搜索、子 agent 等）照样问。scope 的允许范围只放工作树。
  */
 export function autoAllowed(tool: string, input: Record<string, unknown>, scope: PathScope, hint?: unknown): boolean {
   if (tool.startsWith("mcp__tianshu__")) return /^mcp__tianshu__(get|list)_/.test(tool);
   const inside = insideAny(scope.allowedRoots());
   if (SHELL_TOOLS.has(tool)) {
     const cmd = input.command;
-    return typeof cmd === "string" && !RISKY_COMMAND.test(cmd) && !PROTECTED.test(cmd) && !collect(tool, input, scope, inside, hint).length;
+    return typeof cmd === "string" && !RISKY_COMMAND.test(cmd) && binsInstalled(cmd, [scope.cwd, ...scope.allowedRoots()])
+      && !touchesProtected(cmd) && !collect(tool, input, scope, inside, hint).length;
   }
   if (!WORKTREE_FILE_TOOLS.has(tool)) return false;
   const paths = (FILE_FIELDS[tool] ?? []).map((f) => input[f]).filter((v): v is string => typeof v === "string");

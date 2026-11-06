@@ -135,6 +135,38 @@ describe("越界路径识别", () => {
     expect(ok("Task", { prompt: "x" })).toBe(false);
   });
 
+  it("工作树里跑仓库自己的脚本不用问；npx 之类只跑装好的；只用来排除、筛选的 .git 不算碰它（11/07 第二遍真跑里总验收那张被拦的命令）", () => {
+    const wt = join(root, "wt");
+    mkdirSync(join(wt, "node_modules", ".bin"), { recursive: true });
+    writeFileSync(join(wt, "node_modules", ".bin", win ? "vitest.cmd" : "vitest"), "");
+    const s: PathScope = { cwd: wt, home: homedir(), allowedRoots: () => [wt] };
+    const ok = (tool: string, command: string) => autoAllowed(tool, { command }, s);
+    const real = String.raw`git log --oneline -3; Get-Content package.json; Get-ChildItem -Recurse -File -Exclude .git | Where-Object { $_.FullName -notmatch '\\.git\\' } | Select-Object -ExpandProperty FullName; npm test 2>&1; "EXIT_CODE=$LASTEXITCODE"`;
+    expect(ok("PowerShell", real)).toBe(true);
+    expect(outsidePaths("PowerShell", { command: real }, s)).toEqual([]); // 正则不是路径
+    expect(autoAllowed("PowerShell", { command: real }, s, String.raw`\\.git\\`)).toBe(true); // Claude Code 把这个正则当成越界路径报上来也不算
+    expect(autoAllowed("PowerShell", { command: real }, s, join(homedir(), "x.txt"))).toBe(false); // 它报的别的越界路径照样算
+    for (const cmd of ["npm test", "npm run lint", "npm t", "pnpm test", "pnpm run build", "yarn test", "node --test", "npx vitest run", "npx --yes vitest run", "npm exec vitest", "pnpm exec vitest run"]) {
+      expect(ok("Bash", cmd), cmd).toBe(true);
+    }
+    for (const cmd of ["rg -n greet -g '!.git'", "grep -rn --exclude-dir=.git greet .", "Get-ChildItem -Recurse -Exclude .git,node_modules"]) {
+      expect(ok(cmd.startsWith("Get-") ? "PowerShell" : "Bash", cmd), cmd).toBe(true);
+    }
+    for (const cmd of [
+      "npm i", "npm ci", "npm install zod", "pnpm install", "pnpm add zod", "yarn add zod", "pip install x", "pnpm dlx create-x",
+      "npx create-x", "npx vitest@1 run", "npx @scope/tool", "npx -p vitest vitest run", "npm exec create-x", "npm x create-x", "bunx create-x", "npx ../.bin/vitest", "npx x/../vitest",
+      "git push", "curl https://x",
+    ]) {
+      expect(ok("Bash", cmd), cmd).toBe(false);
+    }
+    for (const cmd of [
+      "Get-ChildItem -Recurse | Where-Object { $_.Name -match '.git' } | Remove-Item", "rm -rf .git", "cat .git/config",
+      "Get-ChildItem -Exclude .git > .git/x", "Copy-Item x .claude/settings.json",
+    ]) {
+      expect(ok("PowerShell", cmd), cmd).toBe(false);
+    }
+  });
+
   it("允许的文件夹：整个磁盘不行；旧版本加进来的不合规矩的条目不算数", () => {
     const dataDir = tempDir("tl-folders-");
     const f = new Folders(dataDir, join(tempDir("tl-home-"), "me"));

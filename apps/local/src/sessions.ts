@@ -9,7 +9,7 @@ import {
   type TLocalSendMessageRequest, type TLocalSendMessageResponse, type TLocalSessionKind, type TLocalSessionStatus, type TLocalSlots, type TLocalSessionSubject,
   type TLocalSessionSummary, type TLocalSyncItem, type TLocalTopicVersionKind, type TLocalUsage, type TLocalVerdict, type TLocalVerdictCriterion,
   type TLocalWorkspace, type TLocalGitRef, type TLocalMergeResponse, type TLocalQuestionRequestView, type TLocalQuestionAnswerRequest,
-  type TLocalBackgroundItem,
+  type TLocalBackgroundItem, type TLocalMergeHoldReason, type TLocalMergeSync,
 } from "@warmap/contracts";
 import { readJson, writeJsonAtomic, nowIso } from "./store.js";
 import type { EventLog, EventBody } from "./eventLog.js";
@@ -19,7 +19,7 @@ import { isInside, type Folders } from "./folders.js";
 import type { Outbox } from "./outbox.js";
 import { SESSION_MCP_NAME, sessionToolNames } from "./sessionMcp.js";
 import { changesBrief, criticAgents, returnText, reviewMessage, systemPrompt } from "./rolePrompt.js";
-import { addWorktree, branchName, cardDiff, changedFiles, commitAll, deleteBranch, mergeBranch, pruneRepo, removeWorktree, repoHead } from "./git.js";
+import { addWorktree, branchName, cardDiff, changedFiles, commitAll, deleteBranch, git, mergeBranch, pruneRepo, removeWorktree, repoHead } from "./git.js";
 import { ensureFeishuPlugin, larkSkills } from "./agents/feishuPlugin.js";
 import type { VerifyBrief } from "./cloud.js";
 
@@ -129,6 +129,8 @@ export interface SessionDeps {
   paused?: () => boolean;
   /** 同时最多跑几个（本机设置 maxConcurrent）。 */
   maxConcurrent?: () => number;
+  /** 验收过就合回（本机设置 autoMerge，默认开）。 */
+  autoMerge?: () => boolean;
   /** 本人已装的技能目录（找 lark-* 飞书技能，岗位要飞书时挂给会话）。 */
   skillsDir?: string;
   /** 向天枢取一次交回的验收交代（没有就不自动验收）。 */
@@ -153,6 +155,8 @@ export class SessionManager {
   private readonly runs = new Map<string, AgentRun>();
   private readonly pending = new Map<string, Map<string, TLocalPermissionRequestView>>();
   private readonly killed = new Set<string>();
+  /** 这一轮交了计划的规划员：这一轮做完就收工。 */
+  private readonly proposed = new Set<string>();
   /** 正在跑一轮的会话：Claude Code 每轮开头报 system/init，到这一轮的 turn_end 为止。一轮之外来的权限请求是后台子 agent 的。 */
   private readonly inTurn = new Set<string>();
   /** 正在拉起（含续接握手）的会话：同一个会话同时只许有一次启动。 */
@@ -684,12 +688,15 @@ export class SessionManager {
           break;
         }
         this.inTurn.delete(rec.id);
-        this.setStatus(rec, pending?.size ? "waiting_permission" : "idle");
-        if (rec.subject.kind === "verify" && rec.submitted && run) {
-          // 交完结论就收工：让 Claude Code 自己退出，不留空闲进程。本人想问它，说一句会续上。
+        // 交完就收工（done）：验收员交了结论、规划员这一轮交了计划，让 Claude Code 自己退出，不留空闲进程，也不在「等你回复」停一下。
+        // 本人想问验收员、要规划员「改一改」，说一句会续上。
+        const delivered = rec.subject.kind === "verify" ? rec.submitted > 0 : this.proposed.delete(rec.id);
+        if (delivered && run && !pending?.size) {
           this.finished.add(rec.id);
           run.close();
+          break;
         }
+        this.setStatus(rec, pending?.size ? "waiting_permission" : "idle");
         break;
       }
       default:
@@ -708,10 +715,14 @@ export class SessionManager {
     if (question) this.onAgentEvent(rec, { type: "question_resolved", requestId: question.requestId, choices: null, text: null });
     this.stopAllBackground(rec); // 进程没了，还在跑的后台任务也没了
     const killed = this.killed.delete(rec.id);
-    const finished = this.finished.delete(rec.id);
+    const finished = this.finished.delete(rec.id) && !killed;
+    this.proposed.delete(rec.id);
     rec.mcpSecret = "";
-    this.setStatus(rec, killed || finished || code === 0 ? "exited" : "failed", { exitCode: code, reason: killed ? "已强停" : finished ? "验收完了" : undefined });
+    if (finished) this.setStatus(rec, "done", { exitCode: code, reason: rec.subject.kind === "plan" ? "计划交了" : "验收完了" });
+    else this.setStatus(rec, killed || code === 0 ? "exited" : "failed", { exitCode: code, reason: killed ? "已强停" : undefined });
     this.d.log.evict(rec.id);
+    // 验收过了：卡在工作树里做的，试着自动合回
+    if (finished && rec.subject.kind === "verify" && rec.passed) void this.autoMerge(rec);
   }
 
   async sendMessage(id: string, req: TLocalSendMessageRequest): Promise<TLocalSendMessageResponse> {
@@ -877,7 +888,7 @@ export class SessionManager {
    * 合回（只在本人点了才合，ADR 0038）：卡的分支合进主文件夹的 baseBranch，合成了清理工作树、保留分支。
    * 主文件夹不在 baseBranch 上、有改动、有冲突时不合，主文件夹原样不动；卡这边合不了（不在工作树里、还在跑、工作树里有没提交的改动）回 409。
    */
-  async merge(id: string): Promise<TLocalMergeResponse> {
+  async merge(id: string, auto = false): Promise<TLocalMergeResponse> {
     const rec = this.must(id);
     const ws = rec.workspace;
     if (ws?.kind !== "worktree") throw new SessionError("conflict", "这张卡不在工作树里做，没有分支可合");
@@ -891,9 +902,18 @@ export class SessionManager {
     if (!existsSync(ws.path)) throw new SessionError("conflict", "这张卡的工作树已经不在了");
     if ((await changedFiles(ws.path)).length) throw new SessionError("conflict", "卡的工作树里还有没提交的改动（交回以后又改过），让它再交回一次再合");
     const out = await mergeBranch(ws.folder, ws.branch, ws.baseBranch, `合回天枢卡「${rec.title}」（${ws.branch}）`);
-    if (!out.merged) return out;
+    if (!out.merged) {
+      // 验收过了自动合没合成：记下原因等本人合（本人点了没合成的，原因在回执和同步条目里）
+      if (auto) ws.needsMerge = { reason: out.reason, message: out.message.slice(0, 500) };
+      this.save(rec);
+      this.syncMerge(rec, { merged: false, commit: null, reason: out.reason, message: out.message, auto });
+      this.d.onChange?.();
+      return out;
+    }
     ws.mergedCommit = out.commit;
+    delete ws.needsMerge;
     this.save(rec);
+    this.syncMerge(rec, { merged: true, commit: out.commit, reason: null, message: null, auto });
     // 一轮做完还开着的进程（卡、本人续上的验收员）先让它们退出：进程还在工作树里时，Windows 上删不掉。
     const open = related.map((r) => this.runs.get(r.id)).filter((run): run is AgentRun => Boolean(run));
     await Promise.all(open.map((run) => new Promise<void>((done) => { run.onExit(() => done()); run.close(); })));
@@ -904,6 +924,50 @@ export class SessionManager {
     this.d.onChange?.();
     void this.releaseWaiting(); // 等这张卡的卡可能可以开了
     return { merged: true, commit: out.commit, session: this.summary(rec) };
+  }
+
+  /**
+   * 验收过了，卡在工作树里做的自动合回（本机设置「验收过就合回」，只合不推）：主文件夹停在原分支上、干净、合并没冲突才合，
+   * 合了等它的卡接着开始。合不了（或关了、卡还在跑、交回以后又改过）就在卡上记 needsMerge 等本人合。都报一条同步条目 merge。
+   */
+  private async autoMerge(verifier: SessionRecord): Promise<void> {
+    const card = verifier.parentId ? this.records.get(verifier.parentId) : undefined;
+    const ws = card?.workspace;
+    // 卡在这之后又交回了：以新的那次验收为准
+    if (!card || ws?.kind !== "worktree" || ws.mergedCommit || this.latestVerifier(card) !== verifier) return;
+    const notice = (message: string) => this.emit(card, { type: "notice", level: "info", code: "merge_needed", text: `验收过了，没自动合回：${message}` });
+    const hold = (reason: TLocalMergeHoldReason, message: string) => {
+      ws.needsMerge = { reason, message: message.slice(0, 500) };
+      this.save(card);
+      this.syncMerge(card, { merged: false, commit: null, reason, message, auto: true });
+      notice(message);
+      this.d.onChange?.();
+    };
+    if (this.d.autoMerge?.() === false) return hold("auto_merge_off", "没开「验收过就合回」，等你合");
+    // 只合验过的那个提交：交回以后卡又提交过，等它再交回、再验收
+    try {
+      const head = await git(ws.folder, ["rev-parse", `refs/heads/${ws.branch}`]).then((o) => o.trim(), () => null);
+      if (!head) return hold("not_ready", `找不到卡的分支 ${ws.branch}`);
+      if (verifier.commit && head !== verifier.commit) return hold("not_ready", "交回以后卡又改过，等它再交回、验收过了再合");
+      const out = await this.merge(card.id, true); // 合不了时 merge 自己记下 needsMerge、报 merge
+      if (!out.merged) notice(out.message);
+    } catch (e) {
+      // 不能让后台这一步把本机程序带倒：前提不满足（卡还在跑等）和 git 出错都记下来等本人合
+      hold("not_ready", e instanceof SessionError ? e.message : `合回出错：${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  /** 卡最近一次交回的验收员。 */
+  private latestVerifier(card: SessionRecord): SessionRecord | undefined {
+    return [...this.records.values()].filter((v) => v.parentId === card.id && v.subject.kind === "verify").sort((a, b) => a.createdAt.localeCompare(b.createdAt)).at(-1);
+  }
+
+  /** 报一条合回结果（同步条目 merge），按卡最近一次交回；没交回过就合的不报。 */
+  private syncMerge(card: SessionRecord, r: Omit<TLocalMergeSync, "handbackKey" | "baseBranch">) {
+    const ws = card.workspace;
+    const verifier = this.latestVerifier(card);
+    if (ws?.kind !== "worktree" || !verifier?.subject.handbackKey) return;
+    this.sync(card, { type: "merge", data: { handbackKey: verifier.subject.handbackKey, baseBranch: ws.baseBranch, ...r, message: r.message?.slice(0, 500) || null } });
   }
 
   /** 本机程序启动时：卡用过的仓库里，目录已经没了的工作树清掉登记（git worktree prune）。 */
@@ -1000,6 +1064,7 @@ export class SessionManager {
         throw new SessionError("conflict", `提交改动没成，没交回：${e instanceof Error ? e.message : String(e)}`);
       }
     }
+    if (ws?.kind === "worktree" && ws.needsMerge) { delete ws.needsMerge; this.save(rec); } // 又交回了：等这次验收的结果
     this.emit(rec, { type: "handback", summary, criteria, outputKeys, ...(git ? { commit: git.commit } : {}) });
     const key = this.sync(rec, { type: "handback", data: { summary, criteria, outputKeys, ...(git ? { git } : {}) } });
     this.queueVerify(rec, key, git?.commit ?? null);
@@ -1165,9 +1230,10 @@ export class SessionManager {
     const bad = plan.cards.findIndex((c, i) => c.after?.some((p) => p > i));
     if (bad >= 0) throw new SessionError("validation", `第 ${bad + 1} 件的 after 只能写排在它前面的件（1 到 ${bad}）`);
     rec.submitted = plan.revision;
+    this.proposed.add(rec.id);
     this.sync(rec, { type: "card_plan", data: plan });
     this.emit(rec, { type: "notice", level: "info", code: "card_plan", text: `交了第 ${plan.revision} 次计划：${plan.cards.length} 件` });
-    return `已交第 ${plan.revision} 次计划（${plan.cards.length} 件）。本人会在网页上看派活单，要改会告诉你，改完再交一次。`;
+    return `已交第 ${plan.revision} 次计划（${plan.cards.length} 件）。这一轮做完你就收工；本人要改会再叫你，改完再交一次。`;
   }
 
   /** 专题存一版：读工作目录里的 Markdown，号接着这个专题已有的往下编。 */
