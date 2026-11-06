@@ -89,6 +89,38 @@ CEO 目标快照（不含健康检查和版本号）：改前 0.23 s、列表 5 
 
 单元测试：`test/sourceCitations.test.ts`（出处规则里有 `cite:world:<ref>`）、`test/company.test.ts`（带 ref、定位只读命中的对象、按周期筛和筛空退回、定位不到走全量读、后台不定位、进展快照的格式和位置、对话工具确实打开定位）、`test/worldReader.test.ts`（快照里的 Mission/Task 清单、请求顺序、`part=missions`）。
 
+## 生产用哪个本体实例
+
+只看了仓库里的部署文档、compose 和配置样例，没有上主机、没有请求生产。
+
+**仓库里没写生产的实际值。** `TKOS_WORLD_INSTANCE` 写在主机上的 `infra/.env` 里，不进仓库；`docs/guides/deployment.md`、`infra/staging/runbook.md`、`infra/staging/release.md`、`.env.example` 都没写生产填什么。能确定的只有缺省值和每个实例配置的开关：
+
+- compose 原样透传 `TKOS_WORLD_INSTANCE: ${TKOS_WORLD_INSTANCE:-}`，不填就是空串；`resolveWorldEnv` 把空串当缺省 `mvp`，读 `apps/api/config/world-instance.json`。
+- 各实例配置（`apps/api/config/world-instance*.json`）：
+
+  | 实例 | scope | 读（`reads`） | 写（`writes`） | 用途 |
+  |-|-|-|-|-|
+  | `mvp`（缺省） | a92430fd（词元云集真实 scope） | 没写 = 关 | 没写 = 开 | 会议写回等写入 |
+  | `tk` | a92430fd | 开 | 关 | 只读 |
+  | `demo` | 8c18bcbb（演示） | 开 | 关 | 演示 |
+  | `preview` | 8c18bcbb | 开 | 开 | 预发 |
+  | `formal` | 1fb8bdf8（集团） | 开 | 关 | 集团正式范围 |
+
+- 只有 `mvp` 既指向真实 scope、又能写。生产如果在往真实 scope 写会议事件，主实例就只能是 `mvp`。
+
+**主实例是 `mvp` 时（推断，未核实）：**
+
+- `world.enabled` 等于实例配置的 `reads`，`mvp` 没开，所以 CEO 对话里**没有 `read_ontology` 这个工具**，CEO 目标快照也不读，战场长期目标不会换成本体版本（`app.ts` 里 `readOntology` 和 `globalContext` 都看 `world.enabled`）。这次加的 Mission、Task 清单在生产上用不到。
+- 第二个只读实例 `TKOS_WORLD_TK_INSTANCE=tk` 即使开了，也只做健康探测和快照缓存，没接进 `read_ontology`（`app.ts` 的注释写明了）。
+- **不受影响的**：`query_company`、对话预取、后台作业都走主实例的地址和凭据，读哪些域由 `COMPANY_WORLD_ACCESS_FILE` 定，不看实例配置的 `reads`。只要生产配了授权文件，对象页对话的「答案带出处」在 `mvp` 上照样能用。
+
+**还差的信息**（二选一，都只读）：
+
+1. 生产的 `GET /api/healthz` 返回里的 `world.instance`、`world.reads`、`world.scopeId`（不需要登录，不含凭据和地址）。如果开了第二实例，还有 `worldTk` 一项。
+2. 有主机权限的人看 `/srv/tokenhub/apps/tianshu/infra/.env` 里的 `TKOS_WORLD_INSTANCE`、`TKOS_WORLD_TK_INSTANCE`、`COMPANY_WORLD_ACCESS_FILE`、`COMPANY_SYSTEM_PERSON_ID` 四行，只看这四行，不看凭据。
+
+确认是 `mvp` 后，如果要 CEO 在生产上有 `read_ontology`，要在 `world-instance.json` 加 `"reads": true`，并确认生产凭据能读全部 8 个域。但真实 scope 的责任单元没挂战场引用，打开后快照里也只有 Company、Strategy 和 Mission、Task 清单，长期目标和本期目标还是空的。开不开要用户定。
+
 ## 还差什么
 
 **要斯一给的读接口**（提案第三节）：
@@ -102,7 +134,7 @@ CEO 目标快照（不含健康检查和版本号）：改前 0.23 s、列表 5 
 **天枢这边还没做的**：
 
 - 前端引用卡：`parseSourceRef`（`apps/web/src/cards/meetingSources.ts`）还不认 `world:`，点开只看到名称；「本体事件」那类也还没有。要加两种 kind 和对应的打开方式（提案第二节）。
-- 真实 scope 的责任单元没挂 `battlefield:` 外部引用，CEO 目标快照的 `units`（长期目标、本期目标）是空的；`read_ontology` 只在实例配置 `reads: true`（tk、demo、formal）时注册，主实例 `mvp` 默认不开。这两件要确认生产到底用哪个实例、单元按什么对上（战场还是能力域）。
+- 真实 scope 的责任单元没挂 `battlefield:` 外部引用，CEO 目标快照的 `units`（长期目标、本期目标）是空的；单元按什么对上（战场还是能力域）要定。`read_ontology` 在生产上会不会出现见上一节。
 - Mission → 周期目标、Task → Mission 的挂接只在读了对象正文后才有；快照里的清单是平的。
 
 ## 搬进晨星新服务时怎么搬
