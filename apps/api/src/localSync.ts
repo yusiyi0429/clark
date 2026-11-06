@@ -11,6 +11,7 @@ import { settleHandback } from "./cardAcceptance.js";
 import { saveLocalCardPlan, standardLines } from "./cardPlanner.js";
 import type { HandbackRow } from "./cardProjection.js";
 import type { CardPlanTask } from "./taskCards.js";
+import { closeStartsFor } from "./sessionStarts.js";
 
 /**
  * 本机程序单向上报的接收端（POST /api/local-runner/sync，载荷是本机程序契约 localRunner.ts 的 LocalSyncBatchRequest）。
@@ -158,6 +159,9 @@ async function lockRun(client: PoolClient, owner: Owner, item: TLocalSyncItem, a
   // 开工（本机第一次报这次执行）时记下卡的岗位版本。
   if (created.rowCount && kind === "card")
     await client.query("UPDATE tasks t SET role_version=r.version FROM roles r WHERE t.id=$1 AND r.id=t.role_id", [cardId]);
+  // 这张卡、这个专题登记过要开工（第 4.4 节）：本机开起来了，那条了结，别处不再认领。
+  if (created.rowCount && (kind === "card" || kind === "topic"))
+    await closeStartsFor(client.query.bind(client), kind === "card" ? { cardId } : { topicId }, at);
   return run;
 }
 
@@ -171,7 +175,7 @@ async function note(client: PoolClient, run: RunRow, at: Date, text: string, mil
   await client.query("UPDATE local_runs SET last_activity=$2::jsonb,timeline=$3::jsonb WHERE id=$1", [run.id, JSON.stringify(latest), JSON.stringify(timeline)]);
 }
 
-async function applyType(client: PoolClient, deps: { storageDir: string }, owner: Owner, item: TLocalSyncItem, run: RunRow, card: CardRow | null,
+async function applyType(client: PoolClient, deps: Pick<SyncDeps, "storageDir" | "now">, owner: Owner, item: TLocalSyncItem, run: RunRow, card: CardRow | null,
   seq: number, at: Date, written: string[], planned: CardPlanTask | null): Promise<Applied> {
   switch (item.type) {
     case "status": {
@@ -261,6 +265,15 @@ async function applyType(client: PoolClient, deps: { storageDir: string }, owner
         'cacheRead',(tokens->>'cacheRead')::bigint+$5,'cacheWrite',(tokens->>'cacheWrite')::bigint+$6),
         cost_usd=CASE WHEN $7::numeric IS NULL THEN cost_usd ELSE COALESCE(cost_usd,0)+$7::numeric END WHERE id=$1`,
       [run.id, modelLabel, usage.inputTokens, usage.outputTokens, usage.cacheReadTokens, usage.cacheWriteTokens, usage.costUsd]);
+      return {};
+    }
+    case "background": {
+      // 会话里的子 agent、后台命令：按会话 + 本机的 id 覆盖，序号更小的晚到了不改。只给首页右栏显示，不记动静。
+      const { id, kind, title, state, startedAt, finishedAt, stoppable } = item.data;
+      await client.query(`INSERT INTO local_background_items(run_id,item_id,owner_id,kind,title,state,started_at,finished_at,stoppable,seq,updated_at)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (run_id,item_id) DO UPDATE SET kind=EXCLUDED.kind,title=EXCLUDED.title,state=EXCLUDED.state,
+        started_at=EXCLUDED.started_at,finished_at=EXCLUDED.finished_at,stoppable=EXCLUDED.stoppable,seq=EXCLUDED.seq,updated_at=EXCLUDED.updated_at
+        WHERE local_background_items.seq < EXCLUDED.seq`, [run.id, id, owner.personId, kind, title, state, startedAt, finishedAt, stoppable, seq, deps.now()]);
       return {};
     }
   }

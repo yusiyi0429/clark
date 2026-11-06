@@ -14,6 +14,7 @@ import { UUID_PATTERN } from "./meetingStore.js";
 import type { PlanTaskSource } from "./planTasks.js";
 import type { TaskPageFacts } from "./pageGuides.js";
 import { ensurePresetRole, ownRole, roleBrief, roleRef, rolesById, type RoleRow } from "./roles.js";
+import { requestStarts } from "./sessionStarts.js";
 
 /** 没配岗位的卡兜底用的预设（roles/presets/general/executor.md）。 */
 const DEFAULT_WORKER_PRESET = "executor";
@@ -256,9 +257,10 @@ export async function createCardPlan(q: Query, own: OwnTask, hint: string | unde
  * 放进看板（Task 负责人）：草稿变成执行事项，推进人是本人，挂这个 Task 和它的 Mission，来源记「自己建」；草稿 id 当建事项的幂等键。
  * 可以顺手改标题、交代、完成标准、执行方。已经处理过的草稿 409。
  * 交给 Claude Code 的卡都要有岗位（worker 列表按岗位列）：没配时照草稿建议的预设、没建议时照「执行员」预设给本人加上并挂上。
+ * start（新首页第 4.4 节）：交给 Claude Code 的卡同时登记要开工，由本人电脑上开着的网页认领后交给本机程序。
  */
 export async function acceptCardDrafts(pool: Pool, own: OwnTask, input: TAcceptCardDraftsRequest, names: Map<string, string>, now: Date): Promise<TCardTaskView[]> {
-  const ids: string[] = [], plans = new Set<string>();
+  const ids: string[] = [], plans = new Set<string>(), starts: string[] = [];
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -282,6 +284,7 @@ export async function acceptCardDrafts(pool: Pool, own: OwnTask, input: TAcceptC
       await client.query("UPDATE card_drafts SET status='accepted',task_id=$2,decided_at=now() WHERE id=$1", [draft.id, created.task.id]);
       ids.push(created.task.id);
       plans.add(draft.plan_id);
+      if (executor === "claude_code") starts.push(created.task.id);
     }
     // 先后：草稿要等的那几张草稿放进看板了，换成它们的卡 id（先放后放都对得上；不要了的那张不等）。
     await client.query(`UPDATE tasks t SET after_card_ids=w.ids FROM (
@@ -289,6 +292,8 @@ export async function acceptCardDrafts(pool: Pool, own: OwnTask, input: TAcceptC
       FROM card_drafts d LEFT JOIN card_drafts a ON a.id=ANY(d.after_draft_ids) AND a.status='accepted'
       WHERE d.plan_id=ANY($1::uuid[]) AND d.status='accepted' AND d.task_id IS NOT NULL AND cardinality(d.after_draft_ids)>0 GROUP BY d.task_id) w
       WHERE t.id=w.task_id`, [[...plans]]);
+    if (input.start && starts.length) await requestStarts(client.query.bind(client), { ownerId: own.viewerId, origin: "web", now,
+      items: starts.map((cardId) => ({ kind: "card", cardId, planTaskId: own.task.taskId })) });
     await client.query("COMMIT");
   } catch (cause) { await client.query("ROLLBACK").catch(() => undefined); throw cause; }
   finally { client.release(); }

@@ -1,4 +1,4 @@
-import type { TLocalRunPlanProgress, TLocalSlots, TWorkerCost, TWorkerItem, TWorkerMark, TWorkersResponse } from "@warmap/contracts";
+import type { TLocalRunPlanProgress, TLocalSlots, TWorkerCost, TWorkerItem, TWorkerMark, TWorkerResources, TWorkersResponse } from "@warmap/contracts";
 import { ownMissions, planTaskMissions } from "./homePlan.js";
 import { latestRuns, RUN_SELECT, runBrief, type RunRow } from "./localDevices.js";
 import { UUID_PATTERN, type Query } from "./meetingStore.js";
@@ -19,7 +19,8 @@ import { cardTaskViews } from "./taskCards.js";
 
 /** 设备多久没上报算不在线。跑着的时候状态、计划、花费都会报；闲着时本机每 5 分钟发一批空的当心跳（本机程序契约 LocalSyncBatchRequest）。 */
 export const ONLINE_WINDOW_MS = 10 * 60_000;
-const ACTIVE = new Set<string>(["queued", "starting", "running", "waiting_permission", "idle"]);
+/** 本机的会话还在（没退出、没失败）。 */
+export const ACTIVE = new Set<string>(["queued", "starting", "running", "waiting_permission", "idle"]);
 const NEEDS_YOU = new Set<TWorkerMark>(["approval", "reply", "review_failed", "blocked"]);
 const ZERO: TWorkerCost = { inputTokens: 0, outputTokens: 0, costUsd: null, costCny: null };
 const COST_SUM = "sum((tokens->>'input')::bigint) AS input,sum((tokens->>'output')::bigint) AS output,sum(cost_usd) AS usd";
@@ -38,12 +39,8 @@ type Draft = Omit<TWorkerItem, "workerNo"> & { group: "running" | "queued" | "do
 export async function listWorkers(deps: { q: Query; planTasks: PlanTaskSource; now: Date; names: Map<string, string>; reviewModel: string; cloudAgents: boolean },
   ownerId: string): Promise<TWorkersResponse> {
   const { q, now } = deps;
-  const devices = (await q("SELECT id::text,name,last_sync_at,slots FROM local_devices WHERE owner_id=$1 AND revoked_at IS NULL ORDER BY created_at", [ownerId])).rows as
-    { id: string; name: string; last_sync_at: Date | null; slots: TLocalSlots | null }[];
-  const since = now.getTime() - ONLINE_WINDOW_MS;
-  const onlineDevices = devices.filter((device) => device.last_sync_at && device.last_sync_at.getTime() > since);
-  const online = new Set(onlineDevices.map((device) => device.id));
-  const slots = onlineDevices.flatMap((device) => device.slots ? [device.slots] : []);
+  const resources = await workerResources(q, ownerId, now);
+  const online = new Set(resources.devices.filter((device) => device.online).map((device) => device.id));
   // 等空位的排第几（在等前面的卡的不占位置，不算）；在等前面的卡的，等的是哪几张（本机报的 waitingFor，标题按本人的卡读）。
   const positions = new Map(((await q(`SELECT id::text,row_number() OVER (PARTITION BY device_id ORDER BY started_at,id)::int AS position FROM local_runs
     WHERE owner_id=$1 AND state='queued' AND waiting_for IS NULL`, [ownerId])).rows as { id: string; position: number }[]).map((row) => [row.id, row.position]));
@@ -185,19 +182,30 @@ export async function listWorkers(deps: { q: Query; planTasks: PlanTaskSource; n
   const items = (group: Draft["group"]) => drafts.filter((draft) => draft.group === group)
     .map(({ group: _group, ...item }): TWorkerItem => ({ ...item, workerNo: numbered.get(item.key)! }));
 
+  return {
+    running: items("running").sort((a, b) => Number(b.needsYou) - Number(a.needsYou) || byStart(a, b)),
+    queued: items("queued").sort(byStart),
+    done: items("done").sort((a, b) => (b.finishedAt ?? "").localeCompare(a.finishedAt ?? "")),
+    resources,
+  };
+}
+
+/** 资源摘要（worker 列表和首页右栏的第一行）：本人的电脑在不在线，在线的几个位置用了几个，今天和这个月的花费（公司时区）。 */
+export async function workerResources(q: Query, ownerId: string, now: Date): Promise<TWorkerResources> {
+  const devices = (await q("SELECT id::text,name,last_sync_at,slots FROM local_devices WHERE owner_id=$1 AND revoked_at IS NULL ORDER BY created_at", [ownerId])).rows as
+    { id: string; name: string; last_sync_at: Date | null; slots: TLocalSlots | null }[];
+  const since = now.getTime() - ONLINE_WINDOW_MS;
+  const onlineDevices = devices.filter((device) => device.last_sync_at && device.last_sync_at.getTime() > since);
+  const online = new Set(onlineDevices.map((device) => device.id));
+  const slots = onlineDevices.flatMap((device) => device.slots ? [device.slots] : []);
   const today = (await q(`SELECT ${COST_SUM} FROM local_runs WHERE owner_id=$1
     AND (started_at AT TIME ZONE 'Asia/Shanghai')::date=($2::timestamptz AT TIME ZONE 'Asia/Shanghai')::date`, [ownerId, now])).rows[0] as CostRow;
   const month = (await q(`SELECT ${COST_SUM} FROM local_runs WHERE owner_id=$1
     AND date_trunc('month',started_at AT TIME ZONE 'Asia/Shanghai')=date_trunc('month',$2::timestamptz AT TIME ZONE 'Asia/Shanghai')`, [ownerId, now])).rows[0] as CostRow;
   return {
-    running: items("running").sort((a, b) => Number(b.needsYou) - Number(a.needsYou) || byStart(a, b)),
-    queued: items("queued").sort(byStart),
-    done: items("done").sort((a, b) => (b.finishedAt ?? "").localeCompare(a.finishedAt ?? "")),
-    resources: {
-      devices: devices.map((device) => ({ id: device.id, name: device.name, lastSeenAt: device.last_sync_at?.toISOString() ?? null, online: online.has(device.id) })),
-      running: slots.reduce((sum, slot) => sum + slot.running, 0),
-      cap: slots.length ? slots.reduce((sum, slot) => sum + slot.max, 0) : null,
-      cost: { today: costOf(today), month: costOf(month) },
-    },
+    devices: devices.map((device) => ({ id: device.id, name: device.name, lastSeenAt: device.last_sync_at?.toISOString() ?? null, online: online.has(device.id) })),
+    running: slots.reduce((sum, slot) => sum + slot.running, 0),
+    cap: slots.length ? slots.reduce((sum, slot) => sum + slot.max, 0) : null,
+    cost: { today: costOf(today), month: costOf(month) },
   };
 }

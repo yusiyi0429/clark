@@ -49,7 +49,9 @@ import { createCompanyMap, defaultFocus, scopeLabel } from "../companyMap.js";
 import { acceptIssueDraft, afterIssueDraftCreated, createIssueSuggest, declineIssueDraft, getIssueDraftView, issueSuggestBlock, issueSuggestContext, withChatIssueCards } from "../issueDrafts.js";
 import { buildSceneAnchor } from "../sceneAnchor.js";
 import type { ConversationAnchor } from "../conversationAnchor.js";
-import { ChatServiceError } from "../chatService.js";
+import { ChatServiceError, type ChatTarget } from "../chatService.js";
+import { boardTask, CardError, planTaskOpener, type CardPlanTask } from "../taskCards.js";
+import { ensureTaskPipeline, pipelineViewer, taskPipelineConversation } from "../taskPipelines.js";
 import { VIA_HEADER } from "../homeTurn.js";
 import { currentSegmentOf, segmentDateLabel, startsNewSegment } from "../conversationSegments.js";
 import type { PastConversations } from "../conversationRecall.js";
@@ -60,8 +62,16 @@ import { idParams, type AppInstance, type RouteContext, type SessionPerson } fro
 /** 场景锚点里对象页的叫法（按 scope 前缀）。 */
 const OBJECT_SCENES: Record<string, string> = {
   task: "执行事项详情", meeting: "会议详情", issue: "议题详情", mission: "Mission 详情", "mission-card": "任务卡详情",
-  "monthly-plan": "月度计划详情", "monthly-review-item": "复盘项详情", "personal-review": "个人复盘", signal: "信号详情",
+  "monthly-plan": "月度计划详情", "monthly-review-item": "复盘项详情", "personal-review": "个人复盘", signal: "信号详情", "plan-task": "Task 管线",
 };
+
+/** Task 管线（plan-task:<taskId>，新首页）的页面对象：这件 Task 的名字、完成定义、标准和约定。 */
+function pipelineSnapshot(scope: string, own: CardPlanTask): TReferenceSnapshot {
+  const { task, agreement } = own;
+  return { cardId: scope, version: 1, kind: "plan-task", title: `Task：${task.name}`, objectRef: { type: "plan-task", id: task.taskId, version: 1 },
+    payload: { task: { name: task.name, doneDefinition: task.doneDefinition, criteria: task.criteria },
+      agreement: { criteria: agreement.criteria, exclusions: agreement.exclusions } } };
+}
 
 /**
  * 正在写的对话轮次（runId → 本人与这一轮的 abort）：停机时由 settleActiveTurns 收尾，本人点「停止」时按 runId 停下。
@@ -83,8 +93,30 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
   const { pool, q, env, fail, requirePerson, requireCEO, requestContext, runtime, peopleDirectory, conversationAttachmentStorageDir, conversationTurnTimeoutMs, conversationStallTimeoutMs, conversationHeartbeatMs, conversationCompaction, research } = ctx;
 
   const conversationParams = Type.Object({ scope: ConversationScope }, { additionalProperties: false });
+  const openPlanTask = planTaskOpener(q, ctx.planTasks, peopleDirectory, ctx.now);
+  /** Task 管线只给这件 Task 的负责人（CEO 视角也只看本人是不是负责人）：不是 403、找不到 404（CardError）。 */
+  const pipelineTask = (person: SessionPerson, scope: TConversationScope) => boardTask(openPlanTask, person.personId, scope.slice("plan-task:".length));
+  /** plan-task scope 先核对负责人；没过时已回了错误，返回 true。别的 scope 不管。 */
+  const pipelineDenied = async (reply: FastifyReply, person: SessionPerson, scope: TConversationScope) => {
+    if (!scope.startsWith("plan-task:")) return false;
+    try {
+      await pipelineTask(person, scope);
+      return false;
+    } catch (cause) {
+      if (!(cause instanceof CardError)) throw cause;
+      fail(reply, cause.status, cause.code, cause.message);
+      return true;
+    }
+  };
   // 我的 Agent 按「人 × 页面」私有；任务卡 scope 始终复查对象成员及当前拍板权。
   const scopeObjectFor = async (person: SessionPerson, scope: TConversationScope) => {
+    if (scope.startsWith("plan-task:")) {
+      const own = await pipelineTask(person, scope).catch((cause) => {
+        if (cause instanceof CardError) return null;
+        throw cause;
+      });
+      return own ? { visible: true, snapshot: pipelineSnapshot(scope, own) } : { snapshot: null, visible: false };
+    }
     if (person.role !== "ceo" && (scope.startsWith("issue:") || scope.startsWith("meeting:"))) {
       const [objectType, objectId] = scope.split(":", 2) as ["issue" | "meeting", string];
       if (!await isActiveMember(q, { objectType, objectId }, person.personId)) return { snapshot: null, visible: false };
@@ -102,8 +134,16 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
   };
   const conversationScopeVisible = async (person: SessionPerson, scope: TConversationScope) =>
     (await scopeObjectFor(person, scope)).visible;
-  // 首页对话改走独立 Chat（CHAT_SERVICE_URL，chatService.ts）：只管 global，对象页的对话照旧。
+  // 首页对话改走独立 Chat（CHAT_SERVICE_URL，chatService.ts）：只管 global 和 Task 管线（plan-task），对象页的对话照旧。
   const chat = ctx.chat;
+  const onChat = (scope: TConversationScope) => scope === "global" || scope.startsWith("plan-task:");
+  /** Task 管线在 Chat 里的那一段：发一句、传附件时没有就建（ensure），读历史时只查不建。 */
+  const pipelineTarget = async (person: SessionPerson, scope: TConversationScope, requestId: string, ensure: boolean): Promise<ChatTarget | null> => {
+    const taskId = scope.slice("plan-task:".length);
+    const conversationId = ensure ? (await ensureTaskPipeline({ pool, chat }, person, taskId, requestId)).conversationId
+      : await taskPipelineConversation(q, person.personId, taskId);
+    return conversationId ? { conversationId, scope, taskId } : null;
+  };
   // 对话分段（CONVERSATION_SEGMENTS=1 才开）：闲置满 12 小时或跨过北京时间凌晨 4 点换一段，模型侧只带这一段；上一段经会话目录里的纪要交接。
   // 关着时（缺省）照旧：闲置 12 小时模型侧只带摘要重开（CONVERSATION_IDLE_RESTART_MS）。
   const segmentsOn = env.conversationSegments === true;
@@ -116,6 +156,16 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
     "/api/conversations/:scope/messages",
     { preHandler: requirePerson, schema: { params: conversationParams } },
     async (req, reply) => {
+      if (await pipelineDenied(reply, req.person!, req.params.scope)) return reply;
+      // Task 管线走 Chat：还没开过就是空的，不建。
+      if (chat && req.params.scope.startsWith("plan-task:")) {
+        try {
+          const target = await pipelineTarget(req.person!, req.params.scope, String(req.id), false);
+          return target ? await chat.history(pipelineViewer(req.person!.personId), String(req.id), target) : { scope: req.params.scope, messages: [] };
+        } catch (error) {
+          return chatFailed(reply, error);
+        }
+      }
       // 一号位的首页历史里补上 Chat 那几轮的转议题建议卡（issueDrafts.ts withChatIssueCards）。
       if (chat && req.params.scope === "global") {
         return chat.history(req.person!, String(req.id))
@@ -135,9 +185,16 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
   ): Promise<void> => {
       const person = req.person!;
       const owner = person.personId;
-      if (chat && req.params.scope === "global") {
+      if (await pipelineDenied(reply, person, req.params.scope)) return;
+      if (chat && onChat(req.params.scope)) {
         // 和天枢自己的对话同一条规则：成员不能借显式引用把 Card 带进对话。
         if (person.role !== "ceo" && req.body.references?.length) return fail(reply, 404, "REFERENCE_NOT_FOUND", "Card 引用不存在");
+        // Task 管线：进这件 Task 那一段（没有就建），飞书、微信只进总管线。
+        if (req.params.scope !== "global") {
+          return pipelineTarget(person, req.params.scope, String(req.id), true)
+            .then((target) => chat.relay(pipelineViewer(owner), String(req.id), req.body, reply, undefined, target!))
+            .catch((error) => chatFailed(reply, error));
+        }
         const via = req.headers[VIA_HEADER];
         return chat.relay(person, String(req.id), req.body, reply, via === "feishu" || via === "wechat" ? via : undefined)
           .catch((error) => chatFailed(reply, error));
@@ -760,16 +817,18 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
   app.get("/api/conversations/:scope/turns/:runId/stream", { preHandler: requirePerson, schema: { params: ConversationTurnParams } },
     async (req, reply) => {
       if (chat && req.params.scope === "global" && chat.follow(req.person!, req.params.runId, reply)) return;
+      if (chat && req.params.scope.startsWith("plan-task:") && chat.follow(pipelineViewer(req.person!.personId), req.params.runId, reply, req.params.scope)) return;
       return reply.code(204).send();
     });
   app.post("/api/conversations/:scope/turns/:runId/stop", { preHandler: requirePerson, schema: { params: ConversationTurnParams } },
     async (req, reply) => {
-      if (!chat || req.params.scope !== "global") {
+      if (!chat || !onChat(req.params.scope)) {
         const turn = activeTurns.get(req.params.runId);
         if (turn?.ownerId === req.person!.personId) turn.abort.abort(Object.assign(new Error("Conversation stopped by user"), { code: "USER_STOPPED" }));
         return reply.code(204).send();
       }
-      return chat.cancel(req.person!, String(req.id), req.params.runId).catch((error) => chatFailed(reply, error));
+      const viewer = req.params.scope === "global" ? req.person! : pipelineViewer(req.person!.personId);
+      return chat.cancel(viewer, String(req.id), req.params.runId).catch((error) => chatFailed(reply, error));
     });
 
   // 一号位深聊转议题（issueDrafts.ts）：建议卡读取、开议题 / 接到议题、不用。只有 CEO。
@@ -804,6 +863,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
     async (req, reply) => {
       let parsed: Awaited<ReturnType<typeof parseMaterialBatch>> | undefined;
       try {
+        if (await pipelineDenied(reply, req.person!, req.params.scope)) return reply;
         if (!await conversationScopeVisible(req.person!, req.params.scope)) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
         const files: { filename: string; mimetype: string; buffer: Buffer }[] = [];
         for await (const part of req.files({ limits: { fileSize: MAX_MATERIAL_FILE_BYTES, files: MAX_MATERIAL_FILES } })) {
@@ -812,6 +872,10 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
         }
         if (!files.length) return fail(reply, 400, "INVALID_ATTACHMENT", "缺少附件文件");
         if (chat && req.params.scope === "global") return await chat.upload(req.person!, String(req.id), files);
+        if (chat && req.params.scope.startsWith("plan-task:")) {
+          const target = await pipelineTarget(req.person!, req.params.scope, String(req.id), true);
+          return await chat.upload(pipelineViewer(req.person!.personId), String(req.id), files, target!);
+        }
         parsed = await parseMaterialBatch(files);
         const conversationId = await ensureMainConversation(pool, req.person!.personId, req.params.scope);
         const stored = await storeConversationAttachments(conversationAttachmentStorageDir, conversationId, parsed.materials);

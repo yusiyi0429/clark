@@ -13,6 +13,7 @@ import { createPersonalMemory } from "./personalMemory.js";
 import { createMemoryRecall, memoryRecallModels, type MemoryRecall } from "./personalMemoryRecall.js";
 import { createPersonalDistillation } from "./personalDistillation.js";
 import { createChatService } from "./chatService.js";
+import { pipelineConversationIds } from "./taskPipelines.js";
 import { pageFor } from "./pageGuides.js";
 import { createConversationDigests, recordChatSegment } from "./conversationDigests.js";
 import { createConversationRecall } from "./conversationRecall.js";
@@ -133,6 +134,9 @@ import { registerLocalRoutes } from "./routes/local.js";
 import { registerRoleRoutes } from "./routes/roles.js";
 import { registerWorkerRoutes } from "./routes/workers.js";
 import { registerTopicRoutes } from "./routes/topics.js";
+import { registerWorkHomeRoutes } from "./routes/workHome.js";
+import { registerSessionStartRoutes } from "./routes/sessionStarts.js";
+import { registerTaskPipelineRoutes } from "./routes/taskPipelines.js";
 import { registerTaskCardRoutes, type BoardAgents } from "./routes/taskCards.js";
 import { planTaskOpener, taskPageFacts } from "./taskCards.js";
 import { registerAgreementRoutes } from "./routes/agreements.js";
@@ -510,7 +514,8 @@ export async function buildApp({
   const chat = env.chatServiceUrl ? createChatService({ baseUrl: env.chatServiceUrl, token: env.internalChatToken, rotation: env.chatSessionRotation === true,
     ...(env.chatPageContext ? { pageGuide: (path: string, viewer: { personId: string }) =>
       pageFor(path, (taskId) => taskPageFacts(pool.query.bind(pool), openPlanTaskForPage, viewer.personId, taskId)) } : {}),
-    onSegment: (viewer, segment) => recordChatSegment(pool.query.bind(pool), viewer, segment) }) : undefined;
+    onSegment: (viewer, segment) => recordChatSegment(pool.query.bind(pool), viewer, segment),
+    pipelines: (viewer) => pipelineConversationIds(pool.query.bind(pool), viewer.personId) }) : undefined;
   // 会话纪要（后台，CONVERSATION_DIGEST_MODEL / CONVERSATION_DIGEST_THINKING，不配时 LIGHT_MODEL、不开思考）与回看。
   const conversationDigests = createConversationDigests({ pool, chat, baseUrl: env.piBaseUrl, apiKey: env.piApiKey,
     ...agentModel(env.agentModels, "conversationDigest", { modelId: env.lightModel }), streamSimple: conversationDigestStream });
@@ -867,6 +872,9 @@ export async function buildApp({
   registerRoleRoutes(app, ctx);
   registerWorkerRoutes(app, ctx);
   registerTopicRoutes(app, ctx);
+  registerWorkHomeRoutes(app, ctx);
+  registerSessionStartRoutes(app, ctx);
+  registerTaskPipelineRoutes(app, ctx);
   const board = registerTaskCardRoutes(app, ctx, { agents: boardAgents, fetchArticle: deliverableFetcher });
   registerLocalRoutes(app, ctx, board);
 
