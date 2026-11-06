@@ -100,8 +100,8 @@ export type TNoteCandidate = Static<typeof NoteCandidate>;
 
 /** 报告里存的一条（标准文字在版本的 criteria 快照里）。 */
 export type StoredCriterion = TReviewCandidate["criteria"][number] & { dissent: { reason: string; upheld: boolean | null } | null };
-/** mismatch：材料和这个 Task 对不上时的一句话；11/03 以前的报告没有这一项。 */
-export type StoredReview = { headline: string | null; summary: string | null; gain: string | null; mismatch?: string | null; criteria: StoredCriterion[] };
+/** mismatch：材料和这个 Task 对不上时的一句话；11/03 以前的报告没有这一项。beyondScope：约定外的改进建议；11/06 以前的报告没有这一项。 */
+export type StoredReview = { headline: string | null; summary: string | null; gain: string | null; mismatch?: string | null; beyondScope?: string[]; criteria: StoredCriterion[] };
 export type StoredNote = { status: "writing" | "done" | "failed"; achieved: string | null; gain: string | null; why: string | null; lesson: string | null; edited: boolean; dismissed: boolean };
 
 export type ReviewAgentInput = {

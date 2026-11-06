@@ -84,6 +84,7 @@ function versionView(row: VersionRow, items: ItemRow[], expected: number): TDeli
       headline: review?.headline ?? null, summary: review?.summary ?? null, gain: review?.gain ?? null, mismatch: review?.mismatch ?? null, ...scoreOf(review),
       criteria: (review?.criteria ?? []).map((item) => ({ index: item.index, text: row.criteria[item.index - 1] ?? "", verdict: item.verdict, reason: item.reason,
         evidence: item.evidence, fix: item.fix, dissent: item.dissent })),
+      beyondScope: review?.beyondScope ?? [],
       error: row.review_status === "failed" ? row.review_error : null },
     deliveredAt: row.delivered_at?.toISOString() ?? null,
     note: row.note ? { status: row.note.status, achieved: row.note.achieved, gain: row.note.gain, why: row.note.why, lesson: row.note.lesson,

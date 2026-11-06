@@ -16,6 +16,7 @@ import { Buddy, BuddyForm, BuddyPersonality } from "./buddy.js";
 import { RailBackground, RailBackgroundChoice, SaveRailBackgroundRequest } from "./railBackground.js";
 import { PersonAvatarsResponse, SaveAvatarRequest, SavedAvatar } from "./avatar.js";
 import { DeliverableDissentRequest, DeliverableItem, DeliverableNote, DeliverableNotePatch, DeliverableReview, DeliverableVersion, ReviewCriterion, TaskDeliverableResponse, TaskDeliverableStatus } from "./deliverables.js";
+import { CheckNotifyRequest, CheckNotifyResponse, PutTaskAgreementRequest, TaskAgreementResponse, TaskCheckResponse } from "./agreements.js";
 import { ConfirmDocChangeRequest, DocChangeResponse, DocChangeView, DocOwnerAnswerRequest, ImpactBasisChoiceRequest } from "./docChanges.js";
 import {
   CollectionField, CollectionEntryView, CollectionRoundView, CollectionView, CollectionResponse, DraftCollectionRequest, DraftCollectionResponse,
@@ -1557,6 +1558,50 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           parameters: [{ name: "taskId", in: "path", required: true, schema: { type: "string" } }, { name: "versionId", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
           requestBody: jsonBody({ $ref: "#/components/schemas/DeliverableNotePatch" }),
           responses: { "200": { description: "这一版", content: { "application/json": { schema: { $ref: "#/components/schemas/DeliverableVersion" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse },
+        },
+      },
+      "/api/plan-tasks/{taskId}/agreement": {
+        get: {
+          operationId: "getTaskAgreement",
+          summary: "一个 Task 的约定：每条标准用什么证明、谁来认，这次不包括什么；先读本体，没有再读天枢 11 月的补充，两样都没有只给标准原文；标出来源和标准有没有改过（负责人、Mission 负责人、战场负责人、CEO、约定里的认可人能看）",
+          parameters: [{ name: "taskId", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "200": { description: "约定", content: { "application/json": { schema: { $ref: "#/components/schemas/TaskAgreementResponse" } } } },
+            "401": errorResponse, "403": errorResponse, "404": errorResponse,
+          },
+        },
+        put: {
+          operationId: "putTaskAgreement",
+          summary: "存 11 月的补充（负责人、Mission 负责人）：整份覆盖、留修改记录；约定来自本体时 409 AGREEMENT_FROM_WORLD，没有标准时 409 NO_CRITERIA，认可人不在人员目录 400 UNKNOWN_PERSON",
+          parameters: [{ name: "taskId", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/PutTaskAgreementRequest" }),
+          responses: {
+            "200": { description: "存好后的约定", content: { "application/json": { schema: { $ref: "#/components/schemas/TaskAgreementResponse" } } } },
+            "400": errorResponse, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse,
+          },
+        },
+      },
+      "/api/plan-tasks/{taskId}/check": {
+        get: {
+          operationId: "checkTask",
+          summary: "对表（不调模型）：约定和最新一版的参考评审摆在一起，每条标出有证据、差、评审中、还没交付物、要 X 确认之一，顶上一句结论（还不能交 / 可以交）；评审的「下次可以做」单独附在后面",
+          parameters: [{ name: "taskId", in: "path", required: true, schema: { type: "string" } }],
+          responses: {
+            "200": { description: "对表结果", content: { "application/json": { schema: { $ref: "#/components/schemas/TaskCheckResponse" } } } },
+            "401": errorResponse, "403": errorResponse, "404": errorResponse,
+          },
+        },
+      },
+      "/api/plan-tasks/{taskId}/check/notify": {
+        post: {
+          operationId: "notifyCheckAcceptor",
+          summary: "「请 X 看」（负责人）：给这一条约定的认可人推一条飞书私聊，带 Task 的链接；同一条一天最多推一次。personId 和约定里的认可人对不上 400 NOT_ACCEPTOR；这一条还不是「要 X 确认」409 NOT_AWAITING_ACCEPTOR；飞书没接 503 FEISHU_NOT_CONFIGURED",
+          parameters: [{ name: "taskId", in: "path", required: true, schema: { type: "string" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/CheckNotifyRequest" }),
+          responses: {
+            "200": { description: "推了，或今天已经推过", content: { "application/json": { schema: { $ref: "#/components/schemas/CheckNotifyResponse" } } } },
+            "400": errorResponse, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse, "503": errorResponse,
+          },
         },
       },
       "/api/me/battlefield-progress": {
@@ -3383,6 +3428,11 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         DeliverableNote: DeliverableNote as JsonSchema,
         DeliverableDissentRequest: DeliverableDissentRequest as JsonSchema,
         DeliverableNotePatch: DeliverableNotePatch as JsonSchema,
+        TaskAgreementResponse: TaskAgreementResponse as JsonSchema,
+        PutTaskAgreementRequest: PutTaskAgreementRequest as JsonSchema,
+        TaskCheckResponse: TaskCheckResponse as JsonSchema,
+        CheckNotifyRequest: CheckNotifyRequest as JsonSchema,
+        CheckNotifyResponse: CheckNotifyResponse as JsonSchema,
         HomePlanMission: HomePlanMission as JsonSchema,
         HomePlanActivity: HomePlanActivity as JsonSchema,
         HomePlanResponse: HomePlanResponse as JsonSchema,
