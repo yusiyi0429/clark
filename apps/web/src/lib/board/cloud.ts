@@ -3,7 +3,7 @@
  * 后端实现还在做，接口可能暂时 404：读的当成「还没有」，写的报一句「没成功」。
  */
 import type {
-  TAcceptCardDraftsRequest, TCardBoardResponse, TCardBriefResponse, TCardDetailResponse, TCardPlanView, TCardTaskView,
+  TAcceptCardDraftsRequest, TCardBoardResponse, TCardBriefResponse, TCardDetailResponse, TCardPlanBriefResponse, TCardPlanView, TCardSplitListResponse, TCardSplitRequestView, TCardTaskView,
   TCreateLocalDeviceRequest, TCreateLocalDeviceResponse, TLocalDeviceView, TPatchCardRequest, TResearchTopicView,
   TTopicBriefResponse, TTopicDetailResponse, TTopicVersionView, TWorkersResponse,
 } from "@warmap/contracts";
@@ -57,6 +57,14 @@ export const shipPending = (taskId: string, statement?: string) =>
   unwrap(browserApi.POST("/api/plan-tasks/{taskId}/deliverable/versions/from-pending", { params: task(taskId), body: statement ? { statement } : {} }));
 export const addTopicVersionToPending = (taskId: string, topicVersionId: string) =>
   unwrap(browserApi.POST("/api/plan-tasks/{taskId}/deliverable/pending", { params: task(taskId), body: { topicVersionId } }));
+
+// ── 拆卡（第 21 节）：登记了还没开工的拆卡，真正去拆的是本人电脑上的规划员 ──
+export const listSplits = () => maybe<TCardSplitListResponse>(browserApi.GET("/api/me/card-splits") as Promise<Result<TCardSplitListResponse>>).then((data) => data?.requests ?? []);
+export const registerSplit = (taskId: string) => unwrap<TCardSplitRequestView>(browserApi.POST("/api/plan-tasks/{taskId}/card-splits", { params: task(taskId) }) as Promise<Result<TCardSplitRequestView>>);
+/** 规划员开起来以后把登记去掉（回 204，没有回包）。 */
+export const removeSplit = (splitId: string) => unwrap(browserApi.DELETE("/api/me/card-splits/{id}", { params: id(splitId) }))
+  .then(() => undefined, (error: unknown) => { if (!(error instanceof CloudError && error.status === 204)) throw error; });
+export const planBrief = (taskId: string) => unwrap<TCardPlanBriefResponse>(browserApi.GET("/api/plan-tasks/{taskId}/plan-brief", { params: task(taskId) }) as Promise<Result<TCardPlanBriefResponse>>);
 
 // ── 卡 ──
 export const readCard = (cardId: string) => maybe<TCardDetailResponse>(browserApi.GET("/api/me/cards/{id}", { params: id(cardId) }));

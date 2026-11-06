@@ -29,11 +29,11 @@ import { useHandheld } from "@/components/ui/useHandheld";
 import { LocalRunnerProvider, useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { planStartRequest, readLast } from "@/lib/local/start";
 import { useAutoReturn } from "@/lib/board/useAutoReturn";
+import { listSplits, registerSplit, removeSplit } from "@/lib/board/cloud";
 import { showWorkspaceToast } from "@/lib/toast";
 import { FIELD_LABEL, decideProposal, modelForTier, type RoleProposalView } from "@/lib/team/roles";
 import { canCommandHere, decide, overruleWorker, reply } from "@/lib/work/actions";
 import { startBatch, startedText, type StartPlan } from "@/lib/work/queue";
-import { SPLIT_EVENT, readSplits, registerSplit, takeSplit } from "@/lib/work/splits";
 import { useWork } from "@/lib/work/useWork";
 import { MARK_LABEL, isWaiting, workerName, type Worker } from "@/lib/work/workers";
 import { DispatchBlock, countsText } from "./DispatchBlock";
@@ -44,6 +44,8 @@ import { WorkTimeline, type TimedBlock } from "./WorkTimeline";
 import w from "@/styles/v2-work.module.css";
 
 const PANEL_KEY = "tianshu-work-panel-v1";
+/** 伙伴这一轮调了「登记拆卡」（useConversation 发出）。 */
+const SPLIT_EVENT = "card-split-registered";
 export const taskOfPath = (pathname: string) => {
   const match = /^\/me\/work\/tasks\/([^/]+)/.exec(pathname);
   return match ? decodeURIComponent(match[1]!) : null;
@@ -126,28 +128,28 @@ function WorkFrame({ account }: { account: Account }) {
   }, [tasks, work.boards, work.workers, work.roles, work.proposals, now, handheld, currentCard, openWorker, open, changed]);
 
   const active = work.workers.filter((worker) => worker.state !== "done");
-  const toStart = work.workers.filter((worker) => worker.reason === "start" && (worker.item || worker.splitId));
+  // 等开工的卡和拆卡登记（验收员不从网页开：交回后本机自己接）。
+  const toStart = work.workers.filter((worker) => worker.reason === "start" && ((worker.kind === "card" && worker.item) || worker.splitId));
   const waiting = work.workers.filter((worker) => isWaiting(worker.mark));
   /** 卡和规划员一批交给本机；开成了的规划员把那条登记拿掉，没开成的照旧等开工。 */
   const start = async (cards: Worker[], planners: { taskId: string; splitId?: string }[]) => {
     const cwd = local.folders.find((folder) => folder.id === readLast().folderId)?.path ?? local.folders[0]?.path;
-    if (!cwd) { showWorkspaceToast({ text: "先在插件页加一个文件夹" }); return; }
+    if (!cwd && cards.length) { showWorkspaceToast({ text: "先在插件页加一个文件夹" }); return; }
     const roles = work.roles?.roles ?? [];
     const plans: StartPlan[] = cards.flatMap((worker) => {
       const role = roles.find((entry) => entry.id === worker.role.id) ?? null;
       const model = local.models.find((entry) => entry.id === worker.item?.card?.model?.id) ?? modelForTier(local.models, role?.modelTier ?? "normal");
-      return model && worker.item ? [{ item: worker.item, model, cwd, role }] : [];
-    });
-    const plannerModel = modelForTier(local.models, roles.find((role) => role.name === "规划员")?.modelTier ?? "strong");
-    const jobs = planners.flatMap((job) => {
-      const task = tasks.find((entry) => entry.taskId === job.taskId);
-      return task && plannerModel ? [{ ...job, request: planStartRequest(task, roles, plannerModel, cwd) }] : [];
+      return model && worker.item && cwd ? [{ item: worker.item, model, cwd, role }] : [];
     });
     try {
+      // 规划员的交代各取各的，取不到的那件算没开成。
+      const jobs = (await Promise.all(planners.map(async (job) => {
+        try { return { ...job, request: await planStartRequest(job.taskId, local.models, cwd) }; } catch { return null; }
+      }))).filter((job): job is NonNullable<typeof job> => !!job);
       const result = await startBatch(local.runner, plans, jobs.map((job) => job.request));
-      await Promise.all(jobs.map((job, index) => (job.splitId && result.opened[plans.length + index] ? takeSplit(job.splitId) : undefined)));
+      await Promise.all(jobs.map((job, index) => (job.splitId && result.opened[plans.length + index] ? removeSplit(job.splitId).catch(() => undefined) : undefined)));
       await local.refresh();
-      showWorkspaceToast({ text: startedText(result) });
+      showWorkspaceToast({ text: startedText({ ...result, failed: result.failed + planners.length - jobs.length }) });
       changed();
     } catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没开起来，请重试" }); }
   };
@@ -155,16 +157,18 @@ function WorkFrame({ account }: { account: Account }) {
   const here = local.phase === "ready" && !handheld;
   const split = async (taskId: string) => {
     if (here) { await start([], [{ taskId }]); return; }
-    await registerSplit(taskId);
-    showWorkspaceToast({ text: "拆卡 · 等开工" });
-    changed();
+    try {
+      await registerSplit(taskId);
+      showWorkspaceToast({ text: "拆卡 · 等开工" });
+      changed();
+    } catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没成功，请重试" }); }
   };
   // 伙伴在这个标签页的回复里登记了拆卡：这一轮之前没见过的登记，本机连着就直接开规划员。
   const knownSplits = useRef(new Set<string>());
   const onSplitEvent = useRef<() => Promise<void>>(async () => undefined);
   useEffect(() => {
     onSplitEvent.current = async () => {
-      const fresh = (await readSplits()).filter((request) => !knownSplits.current.has(request.id));
+      const fresh = (await listSplits().catch(() => [])).filter((request) => !knownSplits.current.has(request.id));
       if (here && fresh.length) await start([], fresh.map((request) => ({ taskId: request.taskId, splitId: request.id })));
       else changed();
     };

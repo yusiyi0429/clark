@@ -76,7 +76,7 @@ export function DispatchBlock({ task, board, workers, roles, now, handheld, curr
 
 const NEEDS_YOU = new Set(["approval", "reply", "review_failed"]);
 
-/** 规划员这一单的页头：第几步从本机会话的计划进度来；等你批准、等你回复时带上那一行。 */
+/** 规划员这一单的页头：第几步从这台电脑上的本机会话来，没有时（手机、别的电脑）用云端转来的；等你批准、等你回复时带上那一行。 */
 export function plannerText(planner: Worker, step: { step: number; total: number } | null): string {
   if (planner.state === "queued") return `拆卡 · ${QUEUE_LABEL[planner.reason ?? "start"]}`;
   return step ? `拆卡中 · 第 ${step.step}/${step.total} 步` : "拆卡中";
@@ -88,7 +88,7 @@ function Planning({ task, planner, now, onOpenWorker, onChanged }: { task: THome
   return (
     <section className={w.disp} data-testid="dispatch-planning" aria-label={`拆卡：${task.name}`}>
       <div className={w.dispHead} role="button" tabIndex={0} onClick={() => onOpenWorker(planner.key)} onKeyDown={(event) => { if (event.key === "Enter") onOpenWorker(planner.key); }}>
-        <span className={w.tagd}>派活单</span><span className={w.ttl}>{task.name}</span><span className={w.sum}>{plannerText(planner, planStep(view.plan))}</span>
+        <span className={w.tagd}>派活单</span><span className={w.ttl}>{task.name}</span><span className={w.sum}>{plannerText(planner, planStep(view.plan) ?? (planner.step ? { step: planner.step.n, total: planner.step.total } : null))}</span>
         {planner.startedAt ? <span className={w.el}>{elapsed(planner.startedAt, now)}</span> : null}
       </div>
       {planner.mark && NEEDS_YOU.has(planner.mark) ? <WorkerRow worker={planner} now={now} ask onOpen={() => onOpenWorker(planner.key)} onChanged={onChanged} /> : null}

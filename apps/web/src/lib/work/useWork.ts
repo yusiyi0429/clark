@@ -7,14 +7,13 @@
  * 规划员（本机的 plan 会话和登记了还没开的拆卡）也合进 worker；规划员退出时马上重取看板，派活单接着出。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { TLocalDeviceView, TWorkersResponse } from "@warmap/contracts";
+import type { TCardSplitRequestView, TLocalDeviceView, TWorkersResponse } from "@warmap/contracts";
 import type { useHomePlan } from "@/components/member/home/useHomePlan";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
-import { listDevices, readBoard, readWorkers } from "@/lib/board/cloud";
+import { listDevices, listSplits, readBoard, readWorkers } from "@/lib/board/cloud";
 import { fallbackBoard, type TaskBoard } from "@/lib/board/useTaskBoard";
 import type { CardItem } from "@/lib/board/cards";
 import { listProposals, listRoles, type RoleListResponse, type RoleProposalView } from "@/lib/team/roles";
-import { readSplits, type SplitRequest } from "./splits";
 import { liveSessions, plannerWorkers, toWorker, type Worker } from "./workers";
 
 export type Resources = {
@@ -31,7 +30,7 @@ export function useWork({ planHook }: { planHook: ReturnType<typeof useHomePlan>
   const [roles, setRoles] = useState<RoleListResponse | null>(null);
   const [proposals, setProposals] = useState<RoleProposalView[]>([]);
   const [devices, setDevices] = useState<TLocalDeviceView[]>([]);
-  const [splits, setSplits] = useState<SplitRequest[]>([]);
+  const [splits, setSplits] = useState<TCardSplitRequestView[]>([]);
   const loading = useRef(false);
   const taskIds = useMemo(() => plan?.tasks.map((task) => task.taskId) ?? [], [plan]);
 
@@ -39,17 +38,18 @@ export function useWork({ planHook }: { planHook: ReturnType<typeof useHomePlan>
     if (!plan || loading.current) return;
     loading.current = true;
     try {
-      const [entries, workers] = await Promise.all([
+      const [entries, workers, requests] = await Promise.all([
         Promise.all(plan.tasks.map(async (task) => {
           const data = await readBoard(task.taskId).catch(() => undefined);
           const board: TaskBoard | null = data ? { ...data, fallback: false } : fallbackBoard(plan, task.taskId);
           return [task.taskId, board] as const;
         })),
         readWorkers().catch(() => undefined),
+        listSplits().catch(() => undefined),
       ]);
       setBoards(Object.fromEntries(entries.filter((entry): entry is readonly [string, TaskBoard] => !!entry[1])));
       if (workers !== undefined) setListed(workers);
-      setSplits(await readSplits());
+      if (requests !== undefined) setSplits(requests);
     } finally {
       loading.current = false;
     }
@@ -101,11 +101,11 @@ export function useWork({ planHook }: { planHook: ReturnType<typeof useHomePlan>
     return map;
   }, [boards]);
   const tasks = useMemo(() => plan?.tasks ?? [], [plan]);
-  const workers = useMemo(() => [
-    ...(listed ? [...listed.running, ...listed.queued, ...listed.done] : []).map((entry) => toWorker(entry, { sessions, cards, deviceName })),
-    ...plannerWorkers({ sessions, splits, tasks, deviceName }),
-  ].map((worker) => ({ ...worker, ask: worker.mark === "approval" && worker.session ? asks[worker.session.id] ?? null : null })),
-  [listed, sessions, splits, tasks, cards, deviceName, asks]);
+  const workers = useMemo(() => {
+    const cloud = (listed ? [...listed.running, ...listed.queued, ...listed.done] : []).map((entry) => toWorker(entry, { sessions, cards, deviceName }));
+    return [...cloud, ...plannerWorkers({ sessions, splits, listed: cloud, tasks, deviceName })]
+      .map((worker) => ({ ...worker, ask: worker.mark === "approval" && worker.session ? asks[worker.session.id] ?? null : null }));
+  }, [listed, sessions, splits, tasks, cards, deviceName, asks]);
 
   const slots = local.status?.slots ?? null;
   const resources: Resources = {

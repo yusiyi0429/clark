@@ -834,7 +834,7 @@ ${input}` : input;
           if (event.type === "tool" && event.phase === "completed" && !event.isError
             && (event.name === "edit_mission_card" || event.name === "edit_my_mission_card" || event.name === "ask_mission_card_question"))
             window.dispatchEvent(new CustomEvent("mission-card-changed", { detail: { scope } }));
-          // 伙伴登记了拆卡：新首页在这台电脑上开规划员（V2 设计第 21.3 节；事件名同 lib/work/splits.ts 的 SPLIT_EVENT）。
+          // 伙伴登记了拆卡：新首页在这台电脑上开规划员（V2 设计第 21.3 节；事件名同 components/work/WorkHome.tsx 的 SPLIT_EVENT）。
           if (event.type === "tool" && event.phase === "completed" && !event.isError && event.name === "register_card_split")
             window.dispatchEvent(new CustomEvent("card-split-registered", { detail: { scope } }));
           if (event.type === "error") {

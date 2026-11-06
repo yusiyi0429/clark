@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { TCardDraftView, THomePlanTask, TLocalCreateSessionRequest, TWorkerItem } from "@warmap/contracts";
+import type { TCardDraftView, TCardSplitRequestView, THomePlanTask, TLocalCreateSessionRequest, TWorkerItem } from "@warmap/contracts";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }), usePathname: () => "/me/work" }));
 
@@ -27,6 +27,8 @@ const session = (extra: Partial<TLocalSessionSummary>): TLocalSessionSummary => 
   queuePosition: null, usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null }, ...extra,
 });
 const ctx = (sessions: TLocalSessionSummary[] = []) => ({ sessions, cards: new Map(), deviceName: "这台电脑" });
+const split = (id: string, taskId: string): TCardSplitRequestView => ({ id, taskId, taskName: taskId === "t1" ? "派活单" : "本机程序", missionId: "m1", origin: "web",
+  createdAt: taskId === "t1" ? "2026-11-06T04:00:00Z" : "2026-11-06T04:01:00Z" });
 
 describe("worker 和链路", () => {
   it("云端三格照搬；带岗位没开工的是「等开工」；验收中是云端的验收员", () => {
@@ -56,11 +58,10 @@ describe("worker 和链路", () => {
     expect(toWorker(item({}), ctx([exec, verify("exited")]))).toMatchObject({ role: { name: "开发" }, mark: "reply" });
   });
 
-  it("规划员：本机的 plan 会话是一行（同一个 Task 的登记不重复列），登记了还没开的是「拆卡 · 等开工」", () => {
+  it("规划员：云端还没列上的本机 plan 会话补一行，登记了还没开的是「拆卡 · 等开工」（已有规划员的 Task 不重复列）", () => {
     const plan = session({ id: "00000000-0000-4000-8000-0000000000a3", subject: { kind: "plan", taskId: "t1" }, status: "running" });
-    const splits = [{ id: "s1", taskId: "t1", createdAt: "2026-11-06T04:00:00Z" }, { id: "s2", taskId: "t2", createdAt: "2026-11-06T04:01:00Z" }];
     const tasks = [{ taskId: "t1", name: "派活单", missionId: "m1" }, { taskId: "t2", name: "本机程序", missionId: "m1" }];
-    const workers = plannerWorkers({ sessions: [plan], splits, tasks, deviceName: "ThinkPad" });
+    const workers = plannerWorkers({ sessions: [plan], splits: [split("s1", "t1"), split("s2", "t2")], listed: [], tasks, deviceName: "ThinkPad" });
     expect(workers.map((worker) => [worker.key, worker.state, worker.reason, worker.role.name, worker.where, worker.taskName])).toEqual([
       [`plan:${plan.id}`, "doing", null, "规划员", "local", "派活单"],
       ["split:s2", "queued", "start", "规划员", "local", "本机程序"],
@@ -68,7 +69,23 @@ describe("worker 和链路", () => {
     expect(workers[1]).toMatchObject({ splitId: "s2", requestedAt: "2026-11-06T04:01:00Z" });
     expect(plannerText(workers[1]!, null)).toBe("拆卡 · 等开工");
     expect(plannerText(workers[0]!, { step: 2, total: 3 })).toBe("拆卡中 · 第 2/3 步");
-    expect(plannerWorkers({ sessions: [{ ...plan, status: "exited" }], splits: [], tasks, deviceName: null })).toEqual([]);
+    expect(plannerWorkers({ sessions: [{ ...plan, status: "exited" }], splits: [], listed: [], tasks, deviceName: null })).toEqual([]);
+  });
+
+  it("云端的规划员、验收员行：这台电脑上有本机会话时以本机为准、不重复列；手机上照云端（验收员在跑是验收中，没起是等开工）", () => {
+    const plan = session({ id: "00000000-0000-4000-8000-0000000000a3", subject: { kind: "plan", taskId: "t1" }, status: "queued", queuePosition: 2 });
+    const cloudPlan = item({ key: `plan:${plan.id}`, kind: "plan", cardId: null, title: "派活单", role: { id: "00000000-0000-4000-8000-0000000000e1", name: "规划员", kind: "worker" },
+      task: { id: "t1", name: "派活单" }, stage: "doing" });
+    const merged = toWorker(cloudPlan, ctx([plan]));
+    expect(merged).toMatchObject({ kind: "plan", state: "queued", reason: "slot", queuePos: 2, session: { id: plan.id } });
+    expect(plannerWorkers({ sessions: [plan], splits: [split("s1", "t1")], listed: [merged], tasks: [], deviceName: null })).toEqual([]);
+    const reviewer = { id: "00000000-0000-4000-8000-0000000000e2", name: "验收员", kind: "reviewer" as const };
+    const cloudVerify = (extra: Partial<TWorkerItem>) => item({ key: "verify:c1", kind: "verify", role: reviewer, stage: "review", ...extra });
+    expect(toWorker(cloudVerify({}), ctx())).toMatchObject({ state: "doing", mark: "reviewing" });
+    expect(toWorker(cloudVerify({ queueReason: "not_dispatched", startedAt: null }), ctx())).toMatchObject({ state: "queued", reason: "start" });
+    expect(toWorker(cloudVerify({ queueReason: "device_offline" }), ctx())).toMatchObject({ state: "queued", reason: "offline" });
+    const verify = session({ id: "00000000-0000-4000-8000-0000000000a2", subject: { kind: "verify", cardId: "c1" }, status: "running", modelLabel: "订阅 · Haiku" });
+    expect(toWorker(cloudVerify({ queueReason: "not_dispatched" }), ctx([verify]))).toMatchObject({ state: "doing", mark: "reviewing", model: "订阅 · Haiku", session: { id: verify.id } });
   });
 
   it("进行中里等你的排最前；已排队按排第几", () => {
@@ -131,7 +148,7 @@ describe("派活单", () => {
   });
 
   it("规划员在拆：派活单页头写「拆卡 · 等开工」，不出 worker 行", () => {
-    const [planner] = plannerWorkers({ sessions: [], splits: [{ id: "s1", taskId: "t1", createdAt: "2026-11-06T04:00:00Z" }], tasks: [{ taskId: "t1", name: task.name, missionId: "m1" }], deviceName: null });
+    const [planner] = plannerWorkers({ sessions: [], splits: [split("s1", "t1")], listed: [], tasks: [], deviceName: null });
     const html = renderToStaticMarkup(<LocalContext.Provider value={local}>
       <DispatchBlock task={task} board={board([])} workers={[planner!]} roles={[]} now={0} handheld={false} current={null} newest onOpenWorker={vi.fn()} onChanged={vi.fn()} />
     </LocalContext.Provider>);
