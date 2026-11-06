@@ -38,7 +38,7 @@
 - 当前进展、已确认复盘从 StateSnapshot 的块里取：一行快照 ref、日期、谁记的、是否未确认，再取各块正文（每条 ≤400 字、≤12 条），放在定义前面，问「怎么样了」时第一页就能读到。
 - 修订号、哈希等协议元数据仍不进正文。
 - `query_company` 的工具说明加了一句：正文里不写 ref，出处标记和本人追问出处时照抄它。
-- CEO 对话的出处规则（`sourceCitations.ts`）加了一种：本体公司事实写 `[名称](cite:world:<ref>)`，照抄 `query_company`、`read_ontology` 给的 ref。前端认不出 `world:` 这类引用，按「只有名称」显示（和 `cite:source` 一样），所以界面不变；存下来的回答里带上了对象编号，以后加「本体对象」引用卡时直接能用。成员（DRI）对话的提示词里没有出处规则，这次没加。
+- CEO 对话的出处规则（`sourceCitations.ts`）加了一种：本体公司事实写 `[名称](cite:world:<ref>)`，照抄 `query_company`、`read_ontology` 给的 ref。网页显示成本体出处卡，见下面第 4 节。成员（DRI）对话的提示词里没有出处规则，这次没加。
 
 ### 2. 伙伴对话先定位再读
 
@@ -58,6 +58,16 @@
 `loadWorldSnapshot` 多列两类对象头：Mission、Task，先按当前公司月筛，筛空就不按周期；撤销、取消的不列。只列头（标题、ref、状态、所属单元），不逐个读对象，每 5 分钟刷新多 2–4 次列表请求。`read_ontology` 多一个 `part=missions`，不带 `part` 时也给，每类最多 40 个；要某个 Mission 或 Task 的正文和进展，让模型用 `query_company` 按名称查（走上面的定位）。
 
 Mission 挂哪个周期目标、Task 挂哪个 Mission 要读对象正文的 `relations` 才知道，这次没读，见「还差什么」。
+
+### 4. 网页出处卡
+
+答案里的 `[名称](cite:world:<object_id>@<version>)`：
+
+- `parseSourceRef`（`apps/web/src/cards/meetingSources.ts`）认 `world:`，版本必须是数字，写错的照旧只显示名称。
+- 句末的出处圆点：悬停或点开浮层时读一次对象，浮层写真实标题和「本体 · 类型 · 第几版」（类型用中文：公司、战略、长期目标、周期目标、责任单元；Mission、Task 照写）；本体里已有更新的版本时加「已有新版」。
+- 「打开原文」和句中可点的名称一律在依据面板打开（`citationRoute` 对 `world` 不交给页面）：出处卡里是状态、负责人和当前进展（快照日期、谁记的、是否未确认、各条摘要），没有进展记录时写「还没有进展记录」。组件在 `apps/web/src/conversation/WorldSource.tsx`，样式沿用议题依据的 `.drawer` 和依据面板的 `.block`。
+- 数据走天枢的只读接口 `GET /api/ontology/objects/:id`（`readWorldSource`）：要登录，按本人在 `COMPANY_WORLD_ACCESS_FILE` 里被授权的域先列再读，范围外和不存在的一样 404，网页不直连本体。同一对象一页里只读一次。
+- 出处卡显示的是对象**当前这一版**；引用时那一版的内容要等本体给按版本读的接口。
 
 ## 评测
 
@@ -144,7 +154,7 @@ CEO 目标快照（不含健康检查和版本号）：改前 0.23 s、列表 5 
 
 **天枢这边还没做的**：
 
-- 前端引用卡：`parseSourceRef`（`apps/web/src/cards/meetingSources.ts`）还不认 `world:`，点开只看到名称；「本体事件」那类也还没有。要加两种 kind 和对应的打开方式（提案第二节）。
+- 「本体事件」出处卡还没有（本体对象的已做，见第 4 节）：等事件读接口和 `cite:world-event:` 写法定了再加。
 - 真实 scope 的责任单元没挂 `battlefield:` 外部引用，CEO 目标快照的 `units`（长期目标、本期目标）是空的；单元按什么对上（战场还是能力域）要定。`read_ontology` 在生产上会不会出现见上一节。
 - Mission → 周期目标、Task → Mission 的挂接只在读了对象正文后才有；快照里的清单是平的。
 
@@ -163,7 +173,7 @@ CEO 目标快照（不含健康检查和版本号）：改前 0.23 s、列表 5 
 
 - **兼容性**：Chat 调天枢 `/internal/*` 用的 `JsonHttp` 只做 JSON 解析，不做 TypeBox 校验；各处用 `record()` 宽松取字段，多出来的字段不会整轮拒收。这次没有改任何 `/internal/*` 的返回，Chat 不用动也不会坏。
 - **要答案带出处，Chat 自己要改**：
-  1. 出处写法：`TIANSHU_SOURCE_RULE` 现在要求内部依据写 `[资料名称](cite:source)`、「不写内部编号或句柄」，所以本体对象的 id 不会出现在答案或引用里。要标到具体对象，改成和天枢 CEO 对话同一种写法 `cite:world:<object_id>@<version>`（天枢前端现在按「只有名称」显示，不会坏）；事件建议 `cite:world-event:<event_id>`，和天枢前端一起定。
+  1. 出处写法：`TIANSHU_SOURCE_RULE` 现在要求内部依据写 `[资料名称](cite:source)`、「不写内部编号或句柄」，所以本体对象的 id 不会出现在答案或引用里。要标到具体对象，改成和天枢 CEO 对话同一种写法 `cite:world:<object_id>@<version>`（天枢网页认这个写法，显示成本体出处卡；首页对话的回答也是天枢网页渲染，Chat 改了写法就能点开）；事件建议 `cite:world-event:<event_id>`，和天枢前端一起定。
   2. `read_world_object` 已经读到 `object_id` 和版本（R 句柄背后），交给模型的材料里显式带上 `ref` 字段，模型才能照抄；现在给模型的是 R 句柄。
   3. 进展：Chat 的 `evidence-content.ts` 已经按 StateSnapshot 取 `latest_state`（带快照版本、事实截至、记录者、未确认说明），这一块天枢是这次才补上的，Chat 不用改。
   4. 先筛再读：`list_world_objects` 已支持类型、周期、责任单元，Chat 的模型自己会定位；不用照搬天枢的标题打分，等晨星的共用工具定下来再统一。
