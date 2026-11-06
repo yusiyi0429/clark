@@ -77,6 +77,9 @@
 .acts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .inline { display: flex; flex: 1; gap: 6px; min-width: 180px; }
 .inline input { flex: 1; min-width: 0; height: 28px; padding: 0 10px; border: 1px solid var(--field-border); border-radius: var(--r-control); background: var(--field-bg); color: var(--ink); font: inherit; font-size: 12.5px; }
+/* 回答提问：每个问题一行选项，下面一句话和发送。 */
+.qform { display: grid; flex: 1 1 100%; gap: 8px; min-width: 0; }
+.q { display: grid; gap: 6px; }
 
 /* 派活单（对话里的块）。 */
 .disp { overflow: hidden; margin: 4px 0 12px; border-radius: 14px; background: var(--surface); box-shadow: 0 0 0 1px #e3e8ef, 0 1px 2px #1018280a; }

@@ -13,6 +13,7 @@ import { showWorkspaceToast } from "@/lib/toast";
 import type { RoleKind } from "@/lib/team/roles";
 import { canCommandHere, decide, overruleWorker, reply } from "@/lib/work/actions";
 import { shortPlace } from "@/lib/work/merge";
+import { QuestionForm, questionTitle } from "./QuestionForm";
 import { CHAIN_LABEL, MARK_LABEL, QUEUE_LABEL, type ChainState, type Worker } from "@/lib/work/workers";
 import w from "@/styles/v2-work.module.css";
 
@@ -44,13 +45,17 @@ const hhmm = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString("zh
 /** 验收中：干活的是验收员（本机交回后自己接的；别的设备上看是云端转来的）。 */
 const reviewing = (worker: Worker) => worker.state === "doing" && worker.mark === "reviewing";
 
-/** 第二行：资源在前，再是在哪做（分支或文件夹；这台电脑上没有会话时用云端记的分支），Task 最后。 */
+/** 「等「卡 A」「卡 B」」 */
+export const waitingText = (titles: string[]) => `等${titles.map((title) => `「${title}」`).join("")}`;
+
+/** 第二行：资源在前，再是在哪做（分支或文件夹；这台电脑上没有会话时用云端记的分支；等前面的卡时写等哪几张），Task 最后。 */
 export function secondLine(worker: Worker, now: number, task: string | null): (string | ReactElement)[] {
   const tail = task ? [task] : [];
   const place = worker.workspace ? shortPlace(worker.workspace) : worker.git?.branch ?? null;
   const handback = worker.item?.card?.handback ?? null;
   const inclusion = worker.item?.card?.deliverable ?? null;
-  if (worker.state === "queued") return [<Resource key="r" where="local" model={worker.model} />, place, worker.queuePos ? `排第 ${worker.queuePos}` : null, ...tail].filter((part): part is string | ReactElement => !!part);
+  if (worker.state === "queued") return [<Resource key="r" where="local" model={worker.model} />, worker.waitingFor ? waitingText(worker.waitingFor) : place,
+    worker.queuePos && !worker.waitingFor ? `排第 ${worker.queuePos}` : null, ...tail].filter((part): part is string | ReactElement => !!part);
   if (worker.state === "done") {
     return [handback ? `${handback.met}/${handback.total} 达到` : null, inclusion ? `${inclusion.state === "included" ? "已纳入" : "攒进"} v${inclusion.versionNumber}` : null,
       worker.workspace?.kind === "worktree" && worker.workspace.mergedCommit ? "已合并" : null, hhmm(worker.endedAt), ...tail].filter((part): part is string => !!part);
@@ -99,7 +104,7 @@ export function AskText({ worker }: { worker: Worker }) {
   return <span>要{worker.ask.text}</span>;
 }
 
-/** 等你的事：批准、拒绝（这台电脑），回复，仍然通过（云端，手机也能）。 */
+/** 等你的事：批准、拒绝（这台电脑），回复或回答提问，仍然通过（云端，手机也能）。 */
 export function AskRow({ worker, onChanged, boxed = true }: { worker: Worker; onChanged: () => void; boxed?: boolean }) {
   const local = useLocalRunner();
   const handheld = useHandheld();
@@ -108,16 +113,20 @@ export function AskRow({ worker, onChanged, boxed = true }: { worker: Worker; on
   const mark = worker.state === "doing" ? worker.mark : null;
   if (mark !== "approval" && mark !== "reply" && mark !== "review_failed") return null;
   const here = canCommandHere(worker, local.phase === "ready", handheld);
+  const question = mark === "reply" ? worker.session?.pendingQuestion ?? null : null;
   const run = async (action: () => Promise<void>, done: string) => {
     setBusy(true);
     try { await action(); showWorkspaceToast({ text: done }); setText(null); await local.refresh(); onChanged(); }
     catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没成功，请重试" }); }
     finally { setBusy(false); }
   };
-  const what = mark === "approval" ? <AskText worker={worker} /> : mark === "reply" ? <span>{worker.doing ?? "等你回复"}</span>
+  const what = mark === "approval" ? <AskText worker={worker} /> : mark === "reply" ? <span>{question ? questionTitle(question) : worker.doing ?? "等你回复"}</span>
     : <span>验收没过{worker.item?.card?.handback ? ` · ${worker.item.card.handback.met}/${worker.item.card.handback.total} 条` : ""}</span>;
   const remote = (mark === "approval" || mark === "reply") && !here;
-  const body = text !== null ? (
+  const session = worker.session;
+  const body = question && session && here ? (
+    <QuestionForm request={question} busy={busy} onAnswer={(answer) => void run(async () => { await local.runner.answerQuestion(session.id, question.requestId, answer); }, "已回复")} />
+  ) : text !== null ? (
     <form className={w.acts} onSubmit={(event) => { event.preventDefault(); if (text.trim()) void run(() => (mark === "reply" ? reply(local.runner, worker, text.trim()) : overruleWorker(worker, text.trim())), mark === "reply" ? "已回复" : "已算通过"); }}>
       <span className={w.inline}><input autoFocus value={text} maxLength={mark === "reply" ? 4000 : 200} placeholder={mark === "reply" ? "回复" : "原因"} aria-label={mark === "reply" ? "回复" : "仍然通过的原因"} onChange={(event) => setText(event.target.value)} /></span>
       <HeroButton variant="primary" size="sm" type="submit" isDisabled={busy || !text.trim()}>{mark === "reply" ? "发送" : "仍然通过"}</HeroButton>

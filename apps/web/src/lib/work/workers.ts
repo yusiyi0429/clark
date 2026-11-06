@@ -10,12 +10,12 @@ import type { TLocalSessionSummary } from "@/lib/local/runner";
 import { localWaitOf, type CardItem } from "@/lib/board/cards";
 
 export type ChainState = "queued" | "doing" | "done";
-/** 等开工：本人确认了还没交给本机；等空位：本机同时跑的满了；等本机上线；等文件夹：不是 git 仓库的文件夹同时只做一张卡。 */
-export type QueueReason = "start" | "slot" | "offline" | "folder";
+/** 等开工：本人确认了还没交给本机；等空位：本机同时跑的满了；等本机上线；等文件夹：不是 git 仓库的文件夹同时只做一张卡；等前面的卡：派活单里排在前面的还没合回。 */
+export type QueueReason = "start" | "slot" | "offline" | "folder" | "after";
 export type WorkerMark = TWorkerMark;
 
 export const CHAIN_LABEL: Record<ChainState, string> = { queued: "已排队", doing: "进行中", done: "已完成" };
-export const QUEUE_LABEL: Record<QueueReason, string> = { start: "等开工", slot: "等空位", offline: "等本机上线", folder: "等文件夹空出来" };
+export const QUEUE_LABEL: Record<QueueReason, string> = { start: "等开工", slot: "等空位", offline: "等本机上线", folder: "等文件夹空出来", after: "等前面的卡" };
 export const MARK_LABEL: Record<WorkerMark, string> = { approval: "等你批准", reply: "等你回复", paused: "已暂停", reviewing: "验收中", review_failed: "验收没过", blocked: "受阻" };
 /** 「等你」：要本人动手的几种。 */
 export const WAITING: WorkerMark[] = ["approval", "reply", "review_failed", "blocked"];
@@ -59,6 +59,8 @@ export type Worker = {
   workspace: TLocalWorkspace | null;
   /** 云端记的最近一次交回的分支、提交和验过的提交（手机和别的电脑上用它；在文件夹里做的卡没有）。 */
   git: TCardGit | null;
+  /** 在等的前面的卡（标题）；不在等为 null。 */
+  waitingFor: string[] | null;
   /** 卡本身（看板接口来的，带交回和交付物）；专题没有。 */
   item: CardItem | null;
   /** 登记了还没开的规划员：哪条登记、什么时候登记的。 */
@@ -99,11 +101,15 @@ export function toWorker(entry: TWorkerItem, { sessions, cards, deviceName }: { 
   let reason: QueueReason | null = state === "queued" ? REASON[entry.queueReason ?? "not_dispatched"] : null;
   let mark: WorkerMark | null = state === "doing" ? entry.wait : null;
   let queuePos: number | null = entry.queuePosition;
+  // 等前面的卡：这台电脑上以本机为准，没有本机会话时用云端的（E 的 waitingFor 合进来之前，有就读）。
+  const waitingIds = session?.waitingFor ?? (entry as { waitingFor?: string[] | null }).waitingFor ?? null;
+  const waitingFor = waitingIds?.length ? waitingIds.map((id) => cards.get(id)?.title ?? "另一张卡") : null;
   // 本机的更新：排队、开工、等你批准、等你回复、已暂停以这台电脑为准；验收中、验收没过、受阻只有云端知道。
   if (session && state !== "done" && mark !== "reviewing" && mark !== "review_failed" && mark !== "blocked") {
     if (session.status === "queued") { state = "queued"; reason = folderBusy(session, sessions) ? "folder" : "slot"; mark = null; queuePos = session.queuePosition; }
     else { state = "doing"; reason = null; mark = localWaitOf(session); }
   }
+  if (waitingFor && state !== "done") { state = "queued"; reason = "after"; mark = null; }
   // 验收员在进行中就是验收中（等你批准、等你回复照本机）。
   if (entry.kind === "verify" && state === "doing" && !mark) mark = "reviewing";
   const worker: Worker = {
@@ -123,6 +129,7 @@ export function toWorker(entry: TWorkerItem, { sessions, cards, deviceName }: { 
     session,
     workspace: session?.workspace ?? null,
     git: entry.git,
+    waitingFor,
     item: entry.cardId ? cards.get(entry.cardId) ?? null : null,
   };
   // 卡这一行：交回后本机已经接了验收员、云端还没换成验收员那一行时，先按本机写成验收员（排队时写等空位）；回复、说一句仍对执行的会话。
@@ -144,7 +151,7 @@ export function plannerWorkers({ sessions, splits, listed, tasks, deviceName }: 
 }): Worker[] {
   const base = (taskId: string, taskName: string | null, missionId: string | null): Omit<Worker, "key" | "state" | "reason" | "mark" | "queuePos" | "model" | "startedAt" | "session"> => ({
     kind: "plan", cardId: null, topicId: null, title: taskName ?? "拆卡", role: PLANNER, seq: 1, taskId, taskName, missionId,
-    doing: null, step: null, where: "local", device: deviceName, endedAt: null, costUsd: null, tokens: 0, ask: null, item: null, workspace: null, git: null,
+    doing: null, step: null, where: "local", device: deviceName, endedAt: null, costUsd: null, tokens: 0, ask: null, item: null, workspace: null, git: null, waitingFor: null,
   });
   const keys = new Set(listed.map((worker) => worker.key));
   const local = sessions.flatMap((session): Worker[] => {

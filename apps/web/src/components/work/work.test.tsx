@@ -10,6 +10,8 @@ import type { TLocalSessionSummary } from "@/lib/local/runner";
 import type { TaskBoard } from "@/lib/board/useTaskBoard";
 import { groupWorkers, isWaiting, plannerWorkers, toWorker, type Worker } from "@/lib/work/workers";
 import { commitText, mergeBlockedText, mergeCard, shortPlace } from "@/lib/work/merge";
+import { reply } from "@/lib/work/actions";
+import { EMPTY_VIEW, foldEvents } from "@/lib/local/sessionView";
 import { DispatchBlock, countsText, plannerText } from "./DispatchBlock";
 import { WorkerRow, secondLine } from "./WorkerRow";
 import { placeBlocks } from "./WorkTimeline";
@@ -232,6 +234,71 @@ describe("卡在哪做和合并（ADR 0038）", () => {
     const second = await runner.createSession({ subject: { kind: "card", cardId: "c3" }, title: "笔记二", cwd: "C:\\work\\project-2", firstMessage: "交代" });
     expect(plain.workspace).toEqual({ kind: "folder", folder: "C:\\work\\project-2" });
     expect(second.status).toBe("queued");
+    vi.useRealTimers();
+  });
+});
+
+describe("执行方问本人、卡等前面的卡", () => {
+  const request = { requestId: "q-1", askedAt: "2026-11-07T01:00:00Z", questions: [{ header: "安装说明", question: "旧的安装说明要不要一起删掉？", multiSelect: false,
+    options: [{ label: "删掉", description: "只留新的" }, { label: "留着", description: "放进附录" }] }] };
+  const local = { runner: createMockRunner(), phase: "ready", version: null, status: null, models: [], folders: [], sessions: [], pairing: null, error: null,
+    refresh: vi.fn(), pair: vi.fn(), unpair: vi.fn(), pickFolder: vi.fn(), setIncludePersonal: vi.fn() } as unknown as Parameters<typeof LocalContext.Provider>[0]["value"];
+
+  it("问着的时候是等你回复，行里写问的是什么、选项是按钮；答了就收起", () => {
+    const worker = toWorker(item({}), ctx([session({ status: "idle", pendingQuestion: request })]));
+    expect(worker.mark).toBe("reply");
+    const html = renderToStaticMarkup(<LocalContext.Provider value={local}><WorkerRow worker={worker} now={0} ask onChanged={vi.fn()} /></LocalContext.Provider>);
+    expect(html).toContain('data-testid="question-form"');
+    expect(html).toContain("安装说明");
+    expect(html).toContain("删掉");
+    expect(html).toContain("留着");
+    const view = foldEvents([
+      { seq: 1, at: "2026-11-07T01:00:00Z", sessionId: "s", type: "question", request },
+      { seq: 2, at: "2026-11-07T01:01:00Z", sessionId: "s", type: "question_resolved", requestId: "q-1", choices: [["删掉"]], text: null },
+    ] as never, EMPTY_VIEW);
+    expect(view.question).toBeNull();
+    expect(view.entries.map((entry) => entry.kind === "notice" ? entry.text : "")).toEqual(["问：旧的安装说明要不要一起删掉？", "答：删掉"]);
+  });
+
+  it("在问的时候写一句就是回答这次提问（不选选项）", async () => {
+    const runner = { answerQuestion: vi.fn(async () => undefined), sendMessage: vi.fn() };
+    await reply(runner as never, toWorker(item({}), ctx([session({ status: "idle", pendingQuestion: request })])), "先留着");
+    expect(runner.answerQuestion).toHaveBeenCalledWith("00000000-0000-4000-8000-0000000000a1", "q-1", { choices: [[]], text: "先留着" });
+    expect(runner.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("等前面的卡：已排队、写等哪几张，还没有分支", () => {
+    const cards = new Map([["c0", { id: "c0", title: "先搭骨架" } as never]]);
+    const worker = toWorker(item({ stage: "todo", queueReason: "not_dispatched" }), { sessions: [session({ status: "queued", waitingFor: ["c0"], queuePosition: 1 })], cards, deviceName: null });
+    expect(worker).toMatchObject({ state: "queued", reason: "after", waitingFor: ["先搭骨架"], workspace: null });
+    const line = renderToStaticMarkup(<>{secondLine(worker, 0, null).map((part, i) => <span key={i}>{part}</span>)}</>);
+    expect(line).toContain("等「先搭骨架」");
+    expect(line).not.toContain("排第");
+  });
+
+  it("假本机程序：批准以后问一个单选问题，答了接着做；答过再答是 409。带 after 的卡等前面的卡合回才开工作树、开始", async () => {
+    vi.useFakeTimers();
+    const runner = createMockRunner({ stepMs: 10 });
+    const first = await runner.createSession({ subject: { kind: "card", cardId: "c1" }, title: "Skeleton", cwd: "C:\\work\\tianshu", firstMessage: "交代" });
+    const second = await runner.createSession({ subject: { kind: "card", cardId: "c2" }, title: "Rows", cwd: "C:\\work\\tianshu", firstMessage: "交代", after: ["c1"] });
+    expect(second).toMatchObject({ status: "queued", waitingFor: ["c1"] });
+    expect(second.workspace).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(60);
+    const pending = (await runner.getSession(first.id)).pendingPermissions[0]!;
+    await runner.decidePermission(first.id, pending.requestId, { decision: "allow" });
+    await vi.advanceTimersByTimeAsync(30);
+    const asked = (await runner.getSession(first.id)).session;
+    expect(asked.status).toBe("idle");
+    expect(asked.pendingQuestion?.questions[0]).toMatchObject({ header: "安装说明", options: [{ label: "删掉" }, { label: "留着" }] });
+    await runner.answerQuestion(first.id, asked.pendingQuestion!.requestId, { choices: [["删掉"]] });
+    await expect(runner.answerQuestion(first.id, asked.pendingQuestion!.requestId, { choices: [["删掉"]] })).rejects.toMatchObject({ status: 409 });
+    await vi.advanceTimersByTimeAsync(200);
+    await runner.mergeSession(first.id);
+    await runner.mergeSession(first.id);
+    const started = (await runner.getSession(second.id)).session;
+    expect(started.waitingFor).toBeUndefined();
+    expect(started.workspace).toMatchObject({ kind: "worktree", branch: "tianshu/c2-rows" });
+    expect(started.status).not.toBe("queued");
     vi.useRealTimers();
   });
 });

@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
-import type { TCardHandbackView, TLocalRunView } from "@warmap/contracts";
+import type { TCardHandbackView, TLocalQuestionAnswerRequest, TLocalRunView } from "@warmap/contracts";
 import { HeroButton } from "@/components/HeroButton";
 import { useHandheld } from "@/components/ui/useHandheld";
 import { StartDialog } from "@/components/local/StartDialog";
@@ -25,6 +25,7 @@ import { showWorkspaceToast } from "@/lib/toast";
 import { SessionComposer, SessionTranscript } from "./SessionTranscript";
 import { useCardDetail, type CardDetail } from "./useCardDetail";
 import { MergeAction } from "@/components/work/MergeAction";
+import { QuestionForm } from "@/components/work/QuestionForm";
 import { commitText, placeText, shortPlace } from "@/lib/work/merge";
 import type { TLocalSessionSummary } from "@/lib/local/runner";
 import s from "@/styles/v2-session.module.css";
@@ -44,6 +45,7 @@ export function CardSession({ cardId }: { cardId: string }) {
   const { view } = useSessionEvents(local.runner, session?.id ?? null);
   const [tab, setTab] = useState<"result" | "chat">("result");
   const [starting, setStarting] = useState(false);
+  const [answering, setAnswering] = useState(false);
   useAutoReturn(local.runner, ready, detail ? [detail.task] : [], local.sessions, () => void refresh());
   // 开工耗时：从点「开始」到看到第一条事件（≤ 5 秒是验收条件）。只量一次，写进提示。
   useEffect(() => {
@@ -77,6 +79,15 @@ export function CardSession({ cardId }: { cardId: string }) {
     try { await local.runner.decidePermission(session.id, requestId, { decision, allowForSession: forSession }); }
     catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没成功，请重试" }); }
   };
+  // 执行方在问本人：事件流里最新的那次，没收到事件时照会话摘要。
+  const question = session ? view.question ?? session.pendingQuestion ?? null : null;
+  const answer = async (body: TLocalQuestionAnswerRequest) => {
+    if (!session || !question) return;
+    setAnswering(true);
+    try { await local.runner.answerQuestion(session.id, question.requestId, body); await local.refresh(); }
+    catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没成功，请重试" }); }
+    finally { setAnswering(false); }
+  };
   const say = async (text: string) => {
     if (!session) return false;
     try {
@@ -108,6 +119,7 @@ export function CardSession({ cardId }: { cardId: string }) {
             onDecide={(request, decision, forSession) => decide(request.requestId, decision, forSession)} />
         ) : <CloudTimeline run={detail.runs[0] ?? null} title={item.title} />}
       </div>
+      {question && canAct ? <QuestionForm key={question.requestId} request={question} busy={answering} onAnswer={(body) => void answer(body)} /> : null}
       {agent ? <SessionComposer placeholder={`发给${agentName}…`} disabled={!canAct} onSend={say} /> : null}
     </div>
   );

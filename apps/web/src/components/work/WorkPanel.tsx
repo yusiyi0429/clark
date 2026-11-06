@@ -24,7 +24,7 @@ import { commitText, placeText } from "@/lib/work/merge";
 import { MergeAction } from "./MergeAction";
 import type { Resources } from "@/lib/work/useWork";
 import { CHAIN_LABEL, groupWorkers, resourceText, type ChainState, type Worker } from "@/lib/work/workers";
-import { AskRow, Chain, RoleAvatar, WorkerRow, marker } from "./WorkerRow";
+import { AskRow, Chain, RoleAvatar, WorkerRow, marker, waitingText } from "./WorkerRow";
 import d from "@/styles/task-deliverable.module.css";
 import w from "@/styles/v2-work.module.css";
 
@@ -248,7 +248,7 @@ function WorkerDetail({ worker, roles, now, wrap, onChanged }: { worker: Worker;
       {wrap(<>
         <AskRow worker={worker} onChanged={onChanged} boxed={false} />
         <dl className={w.kv}>
-          <dt>在干</dt><dd>{worker.doing ?? (worker.state === "queued" ? view.queuedBecause ?? "还没开始" : "—")}</dd>
+          <dt>在干</dt><dd>{worker.doing ?? (worker.state === "queued" ? (worker.waitingFor ? waitingText(worker.waitingFor) : view.queuedBecause ?? "还没开始") : "—")}</dd>
           <dt>资源</dt><dd>{resource.filter(Boolean).join(" · ") || "—"}</dd>
           {worker.workspace ? <><dt>在哪</dt><dd>{view.place ?? placeText(worker.workspace)}</dd></>
             : worker.git ? <><dt>在哪</dt><dd>分支 {worker.git.branch}</dd></> : null}

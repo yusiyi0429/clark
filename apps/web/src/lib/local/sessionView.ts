@@ -2,7 +2,7 @@
  * 把本机会话的事件流折成页面要画的样子：对话记录、计划条目、挂着的权限请求、花费、在等什么。
  * 纯函数，事件按 seq 只增；同一个 seq 来两次（重连补发）只算一次。
  */
-import type { TLocalPermissionRequestView, TLocalPlanEntry, TLocalSessionEvent, TLocalSessionStatus, TLocalUsage } from "./runner";
+import type { TLocalPermissionRequestView, TLocalPlanEntry, TLocalQuestionRequestView, TLocalSessionEvent, TLocalSessionStatus, TLocalUsage } from "./runner";
 
 export type SessionEntry =
   | { kind: "user"; seq: number; at: string; text: string }
@@ -34,12 +34,14 @@ export type SessionView = {
   place: string | null;
   /** 排队的原因（本机说的，例如不是 git 仓库的文件夹同时只做一张卡）；不排了为 null。 */
   queuedBecause: string | null;
+  /** 执行方在问本人、还没答的那次提问。 */
+  question: TLocalQuestionRequestView | null;
 };
 
 export const EMPTY_VIEW: SessionView = {
   lastSeq: 0, status: null, startedAt: null, agentVersion: null, plan: [], entries: [], pending: [],
   usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null },
-  lastActivity: null, interrupted: false, handedBack: false, place: null, queuedBecause: null,
+  lastActivity: null, interrupted: false, handedBack: false, place: null, queuedBecause: null, question: null,
 };
 
 const addUsage = (a: TLocalUsage, b: TLocalUsage): TLocalUsage => ({
@@ -110,6 +112,18 @@ export function foldEvent(view: SessionView, event: TLocalSessionEvent): Session
     case "version":
       next.entries = [...view.entries, { kind: "notice", ...base, level: "info", text: `存了${event.label ?? `第 ${event.number} 版`}` }];
       next.lastActivity = { at: event.at, text: `存了${event.label ?? `第 ${event.number} 版`}` };
+      return next;
+    case "question":
+      next.question = event.request;
+      next.entries = [...view.entries, { kind: "notice", ...base, level: "info", text: `问：${event.request.questions.map((entry) => entry.question).join(" ")}` }];
+      next.lastActivity = { at: event.at, text: event.request.questions[0]!.question };
+      return next;
+    case "question_resolved":
+      if (view.question?.requestId === event.requestId) next.question = null;
+      if (event.choices || event.text) {
+        const said = [...(event.choices ?? []).flat(), event.text].filter(Boolean).join("、");
+        next.entries = [...view.entries, { kind: "notice", ...base, level: "info", text: `答：${said}` }];
+      }
       return next;
     case "verdict": {
       // 本机验收员的结论（验收会话和被验的卡的会话各一条）。

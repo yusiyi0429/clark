@@ -40,6 +40,7 @@ import { MARK_LABEL, isWaiting, workerName, type Worker } from "@/lib/work/worke
 import { DispatchBlock, countsText } from "./DispatchBlock";
 import { Slots, WorkPanel, type PanelTab, type PanelView } from "./WorkPanel";
 import { AskText, RoleAvatar } from "./WorkerRow";
+import { oneTap, questionTitle } from "./QuestionForm";
 import { workNotes } from "./WorkNotes";
 import { WorkTimeline, type TimedBlock } from "./WorkTimeline";
 import w from "@/styles/v2-work.module.css";
@@ -246,7 +247,12 @@ const outcome = async (action: () => Promise<void>, settled: string): Promise<No
 };
 
 /** 等你批准的那一行写成「开发 #1 要运行测试」那样：要做的事放标题，命令放下面。 */
-const askTitle = (worker: Worker) => worker.mark === "approval" ? `${workerName(worker)} ${worker.ask ? `要${worker.ask.command ? "运行命令" : worker.ask.text}` : MARK_LABEL.approval}` : `${workerName(worker)} ${MARK_LABEL[worker.mark!]}`;
+const askTitle = (worker: Worker) => worker.mark === "approval" ? `${workerName(worker)} ${worker.ask ? `要${worker.ask.command ? "运行命令" : worker.ask.text}` : MARK_LABEL.approval}` : `${workerName(worker)} ${waitText(worker)}`;
+/** 「等你回复」，在问本人时带上问的是什么。 */
+const waitText = (worker: Worker) => {
+  const question = worker.mark === "reply" ? worker.session?.pendingQuestion : null;
+  return question ? `${MARK_LABEL.reply} · ${questionTitle(question)}` : MARK_LABEL[worker.mark!];
+};
 
 /** 左栏最上面一组「worker 等你」：等你批准、等你回复、验收没过、受阻，加岗位修改建议、合并不了的卡。每条带按钮。 */
 function WaitingGroup({ workers, proposals, onOpen, onChanged }: { workers: Worker[]; proposals: RoleProposalView[]; onOpen: (key: string) => void; onChanged: () => void }) {
@@ -257,16 +263,21 @@ function WaitingGroup({ workers, proposals, onOpen, onChanged }: { workers: Work
   const notices: ActionNotice[] = workers.map((worker): ActionNotice => {
     const here = canCommandHere(worker, ready, handheld);
     const remote = (worker.mark === "approval" || worker.mark === "reply") && !here;
+    const question = worker.mark === "reply" ? worker.session?.pendingQuestion ?? null : null;
     return {
       id: `worker:${worker.key}`,
       title: askTitle(worker),
-      detail: [worker.mark === "approval" && worker.ask?.command ? worker.ask.command : null, worker.title, remote ? "到电脑上处理" : null].filter(Boolean).join(" · "),
+      detail: [worker.mark === "approval" && worker.ask?.command ? worker.ask.command : null, question && question.questions[0]!.header ? question.questions[0]!.question : null, worker.title,
+        remote ? "到电脑上处理" : null].filter(Boolean).join(" · "),
       tone: worker.mark === "approval" || worker.mark === "reply" ? "red" : "amber",
       onOpen: () => onOpen(worker.key),
       buttons: worker.mark === "approval" && here ? [
         { label: "批准", emphasis: true, run: () => outcome(() => decide(local.runner, worker, "allow"), "已批准") },
         { label: "拒绝", run: () => outcome(() => decide(local.runner, worker, "deny"), "已拒绝") },
-      ] : [],
+      ] : question && here && oneTap(question) && question.questions[0]!.options.length <= 4 && worker.session ? question.questions[0]!.options.map((option, index) => ({
+        label: option.label, ...(index === 0 ? { emphasis: true } : {}),
+        run: () => outcome(async () => { await local.runner.answerQuestion(worker.session!.id, question.requestId, { choices: [[option.label]] }); }, "已回复"),
+      })) : [],
       reason: worker.mark === "reply" && here ? { label: "回复", fieldLabel: "回复", placeholder: "回复", submitLabel: "发送", run: (text) => outcome(() => reply(local.runner, worker, text), "已回复") }
         : worker.mark === "review_failed" ? { label: "仍然通过", fieldLabel: "原因", placeholder: "原因", submitLabel: "仍然通过", run: (text) => outcome(() => overruleWorker(worker, text), "已算通过") }
         : undefined,
@@ -306,7 +317,7 @@ function PhoneWaiting({ workers, proposals, onChanged }: { workers: Worker[]; pr
       <div className={w.pcard}>
         {workers.map((worker) => (
           <div key={worker.key} className={w.ri}>
-            <div className={w.t}><RoleAvatar name={worker.role.name} kind={worker.role.kind} size="s" /><span>{workerName(worker)} {worker.mark === "approval" ? <AskText worker={worker} /> : MARK_LABEL[worker.mark!]}</span></div>
+            <div className={w.t}><RoleAvatar name={worker.role.name} kind={worker.role.kind} size="s" /><span>{workerName(worker)} {worker.mark === "approval" ? <AskText worker={worker} /> : waitText(worker)}</span></div>
             <div className={w.m}>{worker.title}</div>
             {worker.mark === "approval" || worker.mark === "reply" ? <div className={w.m}>到电脑上处理</div> : null}
           </div>

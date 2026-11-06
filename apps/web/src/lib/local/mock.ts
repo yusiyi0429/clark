@@ -4,11 +4,12 @@
  * 规划员（plan）按三步拆完就退出；执行的交回以后本机自己接一个验收员（verify，只读）。
  * 卡的会话在哪做（ADR 0038）：第一个文件夹（C:\work\tianshu）当 git 仓库，每张卡一个工作树和分支，开工时说一句主文件夹没提交的改动没带进来；
  * 别的文件夹当不是 git 仓库，同一个文件夹同时只做一张卡，别的排队（status 带原因）。合回：第一次回「主文件夹有没提交的改动」，再点就合上。
+ * 卡在批准之后问本人一个单选问题（pendingQuestion，状态 idle）；开工带 after 的卡等前面的卡在本机合回（waitingFor，没有工作树），合回了才开始。
  * 开发时设 NEXT_PUBLIC_LOCAL_RUNNER=mock 切到它；测试里直接 createMockRunner()。
  * 状态只在内存里：同一个页面会话内跨页面保留，刷新就没了。
  */
 import type {
-  TLocalCreateSessionRequest, TLocalFolder, TLocalMergeResponse, TLocalModelProfile, TLocalPermissionRequestView, TLocalPlanEntry,
+  TLocalCreateSessionRequest, TLocalFolder, TLocalMergeResponse, TLocalModelProfile, TLocalPermissionRequestView, TLocalPlanEntry, TLocalQuestionRequestView,
   TLocalSessionEvent, TLocalSessionStatus, TLocalSessionSummary, TLocalUsage, TLocalWorkspace,
 } from "@warmap/contracts";
 import { LocalRunnerError, type EventWatch, type LocalRunner } from "./runner";
@@ -28,6 +29,8 @@ type MockSession = {
   denied: boolean;
   /** 合回点了几次（假程序第一次回主文件夹不干净）。 */
   mergeTries: number;
+  /** 等前面的卡时：都合回以后要开的工作树。 */
+  waits?: { workspace: TLocalWorkspace | undefined };
 };
 
 const ZERO: TLocalUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0 };
@@ -91,11 +94,11 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
     return ws?.kind === "folder" && [...sessions.values()].some((other) => other !== s && other.summary.workspace?.kind === "folder"
       && other.summary.workspace.folder === ws.folder && OCCUPYING.has(other.summary.status));
   };
-  /** 有空位就按先后接上（文件夹被占着的跳过），其余的重新编号。 */
+  /** 有空位就按先后接上（文件夹被占着的、等前面的卡的跳过），其余的重新编号。 */
   const promote = () => {
     let free = maxConcurrent - slots().running;
     for (const s of queue()) {
-      if (free > 0 && !folderBusy(s)) {
+      if (free > 0 && !folderBusy(s) && !s.summary.waitingFor) {
         free--;
         s.summary = { ...s.summary, queuePosition: null };
         setStatus(s, "starting");
@@ -132,10 +135,14 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
       return "wait";
     },
     (s) => {
-      const ask = s.denied ? "不跑测试了。旧的安装说明要不要一起删掉？" : "测试过了。旧的安装说明要不要一起删掉？";
       if (!s.denied) tool(s, "Bash", "运行 pnpm --filter @warmap/web test");
-      emit(s, { type: "assistant_text", text: ask });
-      turnEnd(s, ask);
+      // 执行方问本人（AskUserQuestion）：会话转成 idle（等你回复），摘要带 pendingQuestion。
+      const request: TLocalQuestionRequestView = { requestId: `q-${++seqId}`, askedAt: now(), questions: [{
+        header: "安装说明", question: "旧的安装说明要不要一起删掉？", multiSelect: false,
+        options: [{ label: "删掉", description: "只留新的安装说明" }, { label: "留着", description: "旧的放进附录" }],
+      }] };
+      s.summary = { ...s.summary, pendingQuestion: request };
+      emit(s, { type: "question", request });
       setStatus(s, "idle");
       return "wait";
     },
@@ -239,6 +246,10 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
       }
       emit(s, { type: "user_message", text, source: "web" });
       s.paused = false;
+      if (s.summary.pendingQuestion) {
+        emit(s, { type: "question_resolved", requestId: s.summary.pendingQuestion.requestId, choices: null, text: null });
+        s.summary = { ...s.summary, pendingQuestion: undefined };
+      }
       if (was === "running") { emit(s, { type: "notice", level: "info", code: "interjection_next_step", text: "下一步生效" }); return { delivery: "next_step" }; }
       advance(s);
       return { delivery: was === "exited" ? "resumed" : "new_turn" };
@@ -269,6 +280,15 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
       advance(s);
       return summaryOf(s);
     },
+    answerQuestion: async (id, requestId, body) => {
+      const s = must(id);
+      if (s.summary.pendingQuestion?.requestId !== requestId) throw new LocalRunnerError("conflict", "这个问题已经答过或作废了", 409);
+      s.summary = { ...s.summary, pendingQuestion: undefined };
+      emit(s, { type: "question_resolved", requestId, choices: body.choices, text: body.text ?? null });
+      s.paused = false;
+      advance(s);
+      return summaryOf(s);
+    },
     mergeSession: async (id): Promise<TLocalMergeResponse> => {
       const s = must(id);
       const ws = s.summary.workspace;
@@ -280,6 +300,14 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
       const commit = sha(`${id}:merge`);
       s.summary = { ...s.summary, workspace: { ...ws, mergedCommit: commit } };
       emit(s, { type: "notice", level: "info", code: "merged", text: `已合回 ${ws.baseBranch}（${commit.slice(0, 7)}），工作树已清理，分支 ${ws.branch} 保留` });
+      // 等这张卡的卡：少等一张；都合回了就开工作树、排进队里。
+      const cardId = s.summary.subject.cardId;
+      for (const other of sessions.values()) {
+        if (!cardId || !other.summary.waitingFor?.includes(cardId)) continue;
+        const rest = other.summary.waitingFor.filter((entry) => entry !== cardId);
+        other.summary = rest.length ? { ...other.summary, waitingFor: rest } : { ...other.summary, waitingFor: undefined, workspace: other.waits?.workspace };
+      }
+      promote();
       return { merged: true, commit, session: summaryOf(s) };
     },
     watch: async (id: string, { after, onEvent, onLink, signal }: EventWatch) => {
@@ -302,10 +330,14 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
         baseBranch: "main", baseCommit: sha(`${cardId}:base`), mergedCommit: null }
       : { kind: "folder", folder: body.cwd };
     const busy = workspace?.kind === "folder" && [...sessions.values()].some((other) => other.summary.workspace?.kind === "folder" && other.summary.workspace.folder === workspace.folder && OCCUPYING.has(other.summary.status));
-    const full = slots().running >= maxConcurrent || busy;
+    // 前面的卡还没在本机合回的，先排着、不开工作树。
+    const merged = new Set([...sessions.values()].flatMap((other) => (other.summary.workspace?.kind === "worktree" && other.summary.workspace.mergedCommit && other.summary.subject.cardId ? [other.summary.subject.cardId] : [])));
+    const waitingFor = (body.after ?? []).filter((entry) => !merged.has(entry));
+    const full = slots().running >= maxConcurrent || busy || waitingFor.length > 0;
     const s: MockSession = {
-      summary: { id, subject: body.subject, title: body.title, agent: "claude-code", modelProfileId: model.id, modelLabel: model.label, cwd: body.cwd ?? "topics", status: full ? "queued" : "starting", includePersonalConfig: Boolean(body.includePersonalConfig), createdAt: now(), updatedAt: now(), lastSeq: 0, pendingPermissions: 0, queuePosition: full ? slots().queued + 1 : null, usage: { ...ZERO }, ...(workspace ? { workspace } : {}) },
+      summary: { id, subject: body.subject, title: body.title, agent: "claude-code", modelProfileId: model.id, modelLabel: model.label, cwd: body.cwd ?? "topics", status: full ? "queued" : "starting", includePersonalConfig: Boolean(body.includePersonalConfig), createdAt: now(), updatedAt: now(), lastSeq: 0, pendingPermissions: 0, queuePosition: full ? slots().queued + 1 : null, usage: { ...ZERO }, ...(workspace && !waitingFor.length ? { workspace } : {}), ...(waitingFor.length ? { waitingFor } : {}) },
       log: [], listeners: new Set(), script: body.subject.kind === "plan" ? planner : body.subject.kind === "verify" ? verifier : script, cursor: 0, timer: null, pending: null, paused: false, denied: false, mergeTries: 0,
+      ...(waitingFor.length ? { waits: { workspace } } : {}),
     };
     sessions.set(id, s);
     if (full) renumber();

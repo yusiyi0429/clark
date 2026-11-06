@@ -1,6 +1,6 @@
 /**
  * 对一个 worker 的处理（左栏「worker 等你」、派活单里的行、对话里的小卡、右栏详情共用）：
- * 批准、拒绝、回复只能在跑它的这台电脑上（本机会话在这里，而且不是手机）；仍然通过、推翻在云端，手机上也能做（第 20.4 节）。
+ * 批准、拒绝、回复（含回答提问）只能在跑它的这台电脑上（本机会话在这里，而且不是手机）；仍然通过、推翻在云端，手机上也能做（第 20.4 节）。
  */
 import type { LocalRunner } from "@/lib/local/runner";
 import { overrule } from "@/lib/board/cloud";
@@ -20,7 +20,10 @@ export async function decide(runner: LocalRunner, worker: Worker, decision: "all
 
 export async function reply(runner: LocalRunner, worker: Worker, text: string): Promise<void> {
   if (!worker.session) throw new Error("到电脑上处理");
-  await runner.sendMessage(worker.session.id, text);
+  const question = worker.session.pendingQuestion;
+  // 在问本人时，写的话就是这次提问的回答（不选选项）。
+  if (question) await runner.answerQuestion(worker.session.id, question.requestId, { choices: question.questions.map(() => []), text });
+  else await runner.sendMessage(worker.session.id, text);
 }
 
 /** 验收没过仍然通过，或者通过了推翻：都要写原因。 */
