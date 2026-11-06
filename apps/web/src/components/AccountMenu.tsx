@@ -344,8 +344,8 @@ export function MenuDialog({ title, wide = false, onClose, children }: { title: 
 
 const FOUR_DIGITS = /^\d{4}$/;
 
-/** 版本信息藏在「修改口令」底部（用户 2026-09-30 指定）：Web 与 API 各自的构建版本，一样时只写一个。 */
-function BuildVersion() {
+/** Web 与 API 各自的构建版本，一样时只写一个（「修改口令」底部、新首页个人菜单最后一行）。 */
+export function useBuildVersion(): string {
   const [text, setText] = useState("");
   useEffect(() => {
     let active = true;
@@ -355,6 +355,12 @@ function BuildVersion() {
     });
     return () => { active = false; };
   }, []);
+  return text;
+}
+
+/** 版本信息藏在「修改口令」底部（用户 2026-09-30 指定）。 */
+function BuildVersion() {
+  const text = useBuildVersion();
   return text ? <p className={m.version}>{text}</p> : null;
 }
 

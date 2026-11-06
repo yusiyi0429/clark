@@ -4,6 +4,8 @@
 @import "@heroui/styles";
 /* 「tianshu」主题：html[data-theme="tianshu"] 下生效（layout.tsx 服务端写入）。 */
 @import "./heroui-tianshu.css";
+/* 新首页的深色：只在外壳带 data-scheme="auto" 时在根上生效。 */
+@import "./scheme-dark.css";
 
 /* ---------------------------------------------------------------------------
    设计 token：与 clark-main `src/app/globals.css` 的 :root 同值，只保留 CEO 工作面
@@ -121,6 +123,14 @@
   --space-6: 24px;
   --space-8: 32px;
 
+  /* 行（新首页设计 5.2）：14 号字配 20 行高（--text-base 自带的行高合 24.5）；四档行高；手机底部抽屉的阴影（朝上，--elev-3 都朝下）。 */
+  --lh-row: 20px;
+  --row-28: 28px;
+  --row-32: 32px;
+  --row-36: 36px;
+  --row-48: 48px;
+  --sheet-shadow: 0 -12px 40px rgb(20 30 50 / 18%);
+
   /*
    * 材料排印（docs/superpowers/specs/2026-10-12-issue-page-typography.md）：二级页读材料用的一套字号、字重、墨色。
    * 议题页只用两级 16 / 13 + 标签专用 12（--doc-type-title 20 议题页已不用，目前只剩月度计划页的一处在用）；字重只有 400 / 600；
@@ -142,12 +152,13 @@
   --doc-weight-regular: 400;
   --doc-weight-strong: 600;
   /* 墨色：主（正文、标题）17:1 · 次（说明、摘录）7.6:1 · 弱（日期、出处、编号、标签）5.3:1；强调色只给可点的字。 */
-  --doc-ink-1: #17171b;
-  --doc-ink-2: #535358;
-  --doc-ink-3: #6b6b70;
-  --doc-ink-accent: #3c66bf;
-  --doc-tag-wash: color-mix(in oklab, #17171b 6%, transparent);
-  --doc-rule: color-mix(in oklab, #17171b 9%, transparent);
+  /* 读主墨三级和辅助蓝（取值相同），深色下跟着变。 */
+  --doc-ink-1: var(--ink);
+  --doc-ink-2: var(--ink-muted);
+  --doc-ink-3: var(--ink-faint);
+  --doc-ink-accent: var(--tianshu-blue-secondary, #3c66bf);
+  --doc-tag-wash: color-mix(in oklab, var(--ink) 6%, transparent);
+  --doc-rule: color-mix(in oklab, var(--ink) 9%, transparent);
   /* 行长：正文 16px 每行约 37 字（二级页左侧阅读列统一 600，见深度讨论 spec 末节）。 */
   --doc-measure: 600px;
 }

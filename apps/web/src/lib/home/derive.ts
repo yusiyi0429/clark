@@ -90,7 +90,10 @@ function boardSub(card: CardItem, sessions: TLocalSessionSummary[], merges: Merg
   };
 }
 
-/** 子会话在树上的状态（契约 SubSessionState 的对法）：等你批准、等你回复、受阻、等你合回、已暂停是等你；验收没过是叉；验收中还在跑。 */
+/**
+ * 子会话在树上的状态（契约 SubSessionState 的对法，设计 5.4.2）：等你批准、等你回复、受阻、等你合回、已暂停是等你；
+ * 验收第一次没过不单设状态，仍是进行中（阶段「重做中」，自动重做）；第二次没过是受阻（等你）。叉只给程序层面的失败。
+ */
 function subState(worker: Worker, merge: TCardMerge | null): Pick<SubSession, "state" | "waiting"> {
   if (worker.state === "done") return merge?.state === "needs_merge" ? { state: "waiting", waiting: "merge" } : { state: "done", waiting: null };
   if (worker.state === "queued") return { state: "queued", waiting: null };
@@ -99,7 +102,6 @@ function subState(worker: Worker, merge: TCardMerge | null): Pick<SubSession, "s
     case "reply": return { state: "waiting", waiting: "question" };
     case "blocked": return { state: "waiting", waiting: "verdict" };
     case "paused": return { state: "waiting", waiting: null };
-    case "review_failed": return { state: "failed", waiting: null };
     default: return { state: "running", waiting: null };
   }
 }
@@ -140,16 +142,28 @@ export function summarize(list: SubSession[], needsYou: number, today: string): 
 }
 
 /**
- * 首页 Task 一行的现状：「等你 1 · 进行中 2 · 今天完成 3」。没过的在自动重做，算进行中（树上照样是叉）；
- * 什么都没有是「还没开始」，规划员在拆前面加「拆卡中」，本人确认完成是「已完成」。
+ * 首页 Task 一行的现状（设计 5.4.4）：按紧急程度「等你 1 · 进行中 2 · 已排队 1 · 今天完成 3」，是 0 的不写，最多三段；
+ * 规划员在拆，最前面是「拆卡中」；还没开过子会话是「未开始」；本人确认完成是「已完成」。
+ * needsYou 单拿出来：首页那一行它用计数样式（圆点加数字），后面跟淡色的其余几段。
  */
-export function statusLine(task: Pick<HomeTask, "summary" | "planning" | "completedAt" | "subSessions">): string {
-  if (task.completedAt) return "已完成";
+export function statusParts(task: Pick<HomeTask, "summary" | "planning" | "completedAt" | "subSessions">): { needsYou: number; rest: string[] } {
+  if (task.completedAt) return { needsYou: 0, rest: ["已完成"] };
   const running = task.subSessions.filter((sub) => sub.state === "running" || sub.state === "failed").length;
   const { queued, doneToday, needsYou } = task.summary;
-  const parts = [needsYou ? `等你 ${needsYou}` : null, running ? `进行中 ${running}` : null, queued ? `已排队 ${queued}` : null, doneToday ? `今天完成 ${doneToday}` : null].filter(Boolean);
-  if (task.planning) return ["拆卡中", ...parts].join(" · ");
-  return parts.length ? parts.join(" · ") : "还没开始";
+  const rest = [task.planning ? "拆卡中" : null, running ? `进行中 ${running}` : null, queued ? `已排队 ${queued}` : null, doneToday ? `今天完成 ${doneToday}` : null]
+    .filter((part): part is string => !!part).slice(0, needsYou ? 2 : 3);
+  return { needsYou, rest: needsYou || rest.length ? rest : ["未开始"] };
+}
+export function statusLine(task: Pick<HomeTask, "summary" | "planning" | "completedAt" | "subSessions">): string {
+  const { needsYou, rest } = statusParts(task);
+  return [needsYou ? `等你 ${needsYou}` : null, ...rest].filter(Boolean).join(" · ");
+}
+
+/** 「今天」行和首页页头的日期（5.6）：「11 月 7 日 周六」。today 是公司时区的 YYYY-MM-DD，没有就按这台电脑的钟。 */
+export function todayLabel(today: string | null): string {
+  const date = today ?? calendarDate(new Date().toISOString());
+  const weekday = "日一二三四五六"[new Date(`${date}T00:00:00Z`).getUTCDay()];
+  return `${Number(date.slice(5, 7))} 月 ${Number(date.slice(8, 10))} 日 周${weekday}`;
 }
 
 const short = (text: string, max = 28) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
@@ -186,6 +200,12 @@ export function deriveWorkHome({ plan, workers, boards, notices, proposals, merg
     ...tasks.flatMap((task) => mergeWaiting(taskSubs.get(task.taskId) ?? [], task, merges)), ...mergeWaiting(other, null, merges), ...orphanMerges(merges, all),
     ...noticeWaiting(notices), ...proposalWaiting(proposals),
   ];
+  // Task 行的小字（设计 5.4.2）：预算、加预算、管线最近一句结论都还没有数据时，写这个 Mission 下一个验收时间点「11/20 验收」。
+  const gateOf = (missionId: string) => {
+    const dates = (plan?.gates ?? []).filter((gate) => gate.missionId === missionId).map((gate) => gate.date).sort();
+    const date = dates.find((value) => value >= (plan?.today ?? "")) ?? dates[dates.length - 1];
+    return date ? `${date.slice(5).replace("-", "/")} 验收` : null;
+  };
   const missions: HomeMission[] = (plan?.missions ?? []).map((mission) => ({
     missionId: mission.missionId,
     title: mission.title,
@@ -196,7 +216,7 @@ export function deriveWorkHome({ plan, workers, boards, notices, proposals, merg
       const planning = workers.some((worker) => worker.kind === "plan" && worker.taskId === task.taskId && worker.state !== "done")
         || board?.plan?.status === "queued" || board?.plan?.status === "running";
       return {
-        taskId: task.taskId, missionId: mission.missionId, name: task.name, subtitle: task.doneDefinition?.trim() || task.criteria[0] || null,
+        taskId: task.taskId, missionId: mission.missionId, name: task.name, subtitle: gateOf(mission.missionId),
         summary: summarize(subSessions, waiting.filter((item) => item.taskId === task.taskId).length, today),
         pipeline: { conversationId: null, scope: `plan-task:${task.taskId}` }, planning,
         // 计划里只有交付状态没有时间；这里只用来判「交付了」（Task 打勾、子会话收起）。

@@ -16,7 +16,8 @@ import b from "@/styles/buddy-mark.module.css";
 
 export function BuddyMark({ buddy, place, active, listening = false, level = 0 }: {
   buddy: Buddy | null;
-  place: "sheet" | "entry" | "note";
+  /** stage：新首页左栏顶上的伙伴台（正方形里居中，比页头大一号，设计 9.2）。 */
+  place: "sheet" | "entry" | "note" | "stage";
   active: boolean;
   /** 在听本人说话（听写中）。 */
   listening?: boolean;
@@ -29,7 +30,7 @@ export function BuddyMark({ buddy, place, active, listening = false, level = 0 }
   return (
     <span className={b.mark} data-place={place} data-skin={skin} data-listening={listening || undefined} aria-hidden>
       <span className={b.scale}>
-        <PresenceCapsule skin={skin} name={buddy?.name ?? ""} milesSize={place === "sheet" ? "header" : "small"}
+        <PresenceCapsule skin={skin} name={buddy?.name ?? ""} milesSize={place === "sheet" || place === "stage" ? "header" : "small"}
           pose={listening ? "listening" : speaking ? "speaking" : "idle"} level={listening ? level : speaking ? simulated : 0} />
       </span>
     </span>

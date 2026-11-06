@@ -48,7 +48,7 @@ export function PluginsPage({ account }: { account: Account }) {
   );
 }
 
-function LocalSection({ personName, handheld }: { personName: string; handheld: boolean }) {
+export function LocalSection({ personName, handheld }: { personName: string; handheld: boolean }) {
   const local = useLocalRunner();
   const [linking, setLinking] = useState(false);
   const status = local.status;
@@ -217,7 +217,7 @@ function ModelsAndFolders() {
   );
 }
 
-function DevicesSection() {
+export function DevicesSection() {
   const local = useLocalRunner();
   const [devices, setDevices] = useState<TLocalDeviceView[] | null>(null);
   // 这页吊销的留在页上：列表只回没吊销的，重新拉掉了就接在后面；列表里又有了（重新关联过）就不算吊销。

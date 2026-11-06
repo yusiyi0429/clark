@@ -23,7 +23,7 @@ const session = (extra: Partial<TLocalSessionSummary>): TLocalSessionSummary => 
 });
 const worker = (extra: Partial<TWorkerItem>, sessions: TLocalSessionSummary[] = []): Worker => toWorker(item(extra), { sessions, cards: new Map(), deviceName: null });
 const plan = {
-  period: "2026-11", today: "2026-11-07",
+  period: "2026-11", today: "2026-11-07", gates: [{ missionId: "m1", date: "2026-11-30" }, { missionId: "m1", date: "2026-11-20" }],
   missions: [{ missionId: "m1", code: "M1", title: "天枢 11 月", cardId: null, color: "#000", world: null }, { missionId: "m2", code: "M2", title: "空的", cardId: null, color: "#000", world: null }],
   tasks: [
     { taskId: "t1", missionId: "m1", name: "11/30 上线 V2", doneDefinition: "本机派活、岗位与本机验收跑通", criteria: ["本机派活跑通", "验收员逐条判"] },
@@ -65,25 +65,27 @@ describe("新首页的数据（B 的 work-home 没上时照契约的形状拼）
     rounds: [], unreadThreads: [{ objectType: "issue", objectId: "i1", title: "验收口径", unread: 2, href: "/me/issues/i1" }], unreadMissionGroups: [],
   } });
 
-  it("Task 下是能对话的子会话（卡、专题），规划员和验收员不算；等你、没过排在前面；不归 Task 的进「其他」；本月的 Mission 没有 Task 也列（界面不画）", () => {
+  it("Task 下是能对话的子会话（卡、专题），规划员和验收员不算；等你排在前面，第一次没过仍是进行中（重做中）；不归 Task 的进「其他」；本月的 Mission 没有 Task 也列（界面不画）", () => {
     expect(data.period).toBe("2026-11");
     expect(data.missions.map((mission) => [mission.missionId, mission.period, mission.tasks.length])).toEqual([["m1", "2026-11", 2], ["m2", "2026-11", 0]]);
     const v2 = data.missions[0]!.tasks[0]!;
     expect(v2.subSessions.map((sub) => [sub.id, sub.state, sub.waiting, sub.queueReason])).toEqual([
-      ["c1", "waiting", "approval", null], ["c4", "failed", null, null], ["c2", "queued", null, "slot"], ["c3", "done", null, null],
+      ["c1", "waiting", "approval", null], ["c4", "running", null, null], ["c2", "queued", null, "slot"], ["c3", "done", null, null],
     ]);
     expect(v2.pipeline).toEqual({ conversationId: null, scope: "plan-task:t1" });
-    expect(v2.subtitle).toBe("本机派活、岗位与本机验收跑通");
+    expect(v2.subtitle).toBe("11/20 验收");
     expect(data.missions[0]!.tasks[1]!.completedAt).not.toBeNull();
     expect(data.other.subSessions).toEqual([expect.objectContaining({ id: "tp1", kind: "topic" })]);
   });
 
-  it("首页一行现状：等你（归这件 Task 的等你条数）、进行中（没过的在自动重做，算进去）、已排队、今天完成；交付了是已完成；规划员在拆写拆卡中", () => {
+  it("首页一行现状：按紧急程度等你、进行中（没过的在自动重做）、已排队、今天完成，最多三段；交付了是已完成；规划员在拆写拆卡中；什么都没有是未开始", () => {
     const [v2, v1] = data.missions[0]!.tasks;
-    expect(v2!.summary).toMatchObject({ running: 0, waiting: 2, queued: 1, done: 1, doneToday: 1, needsYou: 1 });
-    expect(statusLine(v2!)).toBe("等你 1 · 进行中 1 · 已排队 1 · 今天完成 1");
+    expect(v2!.summary).toMatchObject({ running: 1, waiting: 1, queued: 1, done: 1, doneToday: 1, needsYou: 1 });
+    expect(statusLine(v2!)).toBe("等你 1 · 进行中 1 · 已排队 1");
     expect(statusLine(v1!)).toBe("已完成");
-    expect(statusLine({ ...v2!, completedAt: null, subSessions: [], summary: { ...v2!.summary, queued: 0, doneToday: 0, needsYou: 0 }, planning: true })).toBe("拆卡中");
+    const idle = { ...v2!, completedAt: null, subSessions: [], summary: { ...v2!.summary, queued: 0, doneToday: 0, needsYou: 0 } };
+    expect(statusLine({ ...idle, planning: true })).toBe("拆卡中");
+    expect(statusLine({ ...idle, planning: false })).toBe("未开始");
   });
 
   it("等你：子会话的批准、会议记录待确认、群里的新消息；去哪儿看由 open 映射到路由；受阻去 Task 管线；第一次没过自动重做，不在这里", () => {

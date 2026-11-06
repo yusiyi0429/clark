@@ -9,17 +9,18 @@
  */
 
 .pill {
-  --tone-bg: var(--pill-bg-agent, #ffffff);
-  --tone-line: var(--pill-line-agent, #dfe5ee);
-  --tone-track: var(--pill-track-agent, #f1f5fb);
-  --tone-current: var(--pill-current-agent, #eaf2ff);
-  --tone-current-ink: var(--pill-current-ink-agent, #2f6fd6);
-  --tone-selected: var(--pill-selected-agent, #2f6fd6);
-  --tone-mic: var(--pill-mic-agent, #f1f4f8);
-  --tone-send: var(--pill-send-agent, #3a83f7);
-  --tone-ink: #282c32;
-  --tone-muted: #7b8290;
-  --tone-placeholder: #9197a0;
+  /* 默认（对话频道）读全站变量（新首页设计 5.4.3，深色下跟着变）；群聊频道照旧是暖色那一套。 */
+  --tone-bg: var(--pill-bg-agent, var(--field-bg));
+  --tone-line: var(--pill-line-agent, var(--field-border));
+  --tone-track: var(--pill-track-agent, var(--neutral-wash));
+  --tone-current: var(--pill-current-agent, var(--accent-soft));
+  --tone-current-ink: var(--pill-current-ink-agent, var(--accent-soft-foreground));
+  --tone-selected: var(--pill-selected-agent, var(--accent));
+  --tone-mic: var(--pill-mic-agent, var(--neutral-wash));
+  --tone-send: var(--pill-send-agent, var(--accent));
+  --tone-ink: var(--field-ink);
+  --tone-muted: var(--ink-faint);
+  --tone-placeholder: var(--field-placeholder);
 
   container-type: inline-size;
   display: grid;
@@ -36,10 +37,12 @@
   border-radius: 20px;
   background: var(--tone-bg);
   color: var(--tone-ink);
-  box-shadow: 0 4px 18px rgb(29 29 31 / 7%), inset 0 1px rgb(255 255 255 / 70%);
+  box-shadow: var(--elev-2);
   pointer-events: auto;
   transition: background-color 200ms ease, border-color 200ms ease;
 }
+
+.pill:not([data-tone='group']):focus-within { border-color: var(--field-border-focus); }
 
 .pill[data-tone='group'] {
   --tone-bg: var(--pill-bg-group, #f8f4ec);
@@ -264,7 +267,7 @@
   cursor: pointer;
 }
 
-.tool:hover { background: rgb(29 29 31 / 5%); color: var(--tone-ink); }
+.tool:hover { background: var(--default-soft); color: var(--tone-ink); }
 .tool:disabled { opacity: 0.45; cursor: default; }
 .tool:focus-visible { outline: 2px solid var(--tone-send); outline-offset: 2px; }
 

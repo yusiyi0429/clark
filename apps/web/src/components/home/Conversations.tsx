@@ -2,7 +2,7 @@
 
 /**
  * 展示区里的两种对话：
- * - 总管线：伙伴唯一的对话（总线程），一直聊下去；页头正中是伙伴形象（从左上角飞过来）。
+ * - 总管线：伙伴唯一的对话（总线程），一直聊下去；页头标题是伙伴的名字（伙伴只在左栏的伙伴台上，说话时台上的它在动）。
  * - Task 管线：每件 Task 一条单独的对话。先聊计划，规划员拆好后在对话里给出开工的选项框；开了以后写开了哪几个子会话，
  *   验收行（过了、受阻、约定都达到、返工）也由网页按时间插进这条对话。B 的接口没上时是这个标签页里的假对话（lib/home/pipeline）。
  * 首页输入框发来的话（outbox）进了对应的对话就发出去。
@@ -10,7 +10,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Info } from "lucide-react";
 import type { THomePlanTask } from "@warmap/contracts";
-import { BuddyMark } from "@/components/buddy/BuddyMark";
 import type { Buddy } from "@/components/buddy/useBuddy";
 import { ChatColumn } from "@/components/rail/ChatPane";
 import { PendingBoxes, PendingChip } from "@/components/work/DecisionBox";
@@ -29,7 +28,7 @@ import { subHref } from "./LeftColumn";
 import { useDarkScheme, useViewChrome } from "./view";
 import h from "@/styles/home.module.css";
 
-const ICON = { size: 16, strokeWidth: 1.5, "aria-hidden": true } as const;
+import { ICON } from "./StateIcon";
 
 /** 首页输入框发来、等着进对话的一句。 */
 export type Outbox = { id: number; target: "main" | string; text: string } | null;
@@ -58,11 +57,11 @@ export function BuddyView({ buddy, outbox, consume, onSpeaking }: { buddy: Buddy
       <div className={h.convo} data-testid="buddy-view">
         <ChatColumn data={data} buddy={buddy} tone={dark ? "dark" : "light"}
           head={(
-            <div className={h.buddyHead}>
-              <span className={h.headSide}>{chrome.lead}</span>
-              <span className={h.buddyFigure} data-buddy-figure="head" role="img" aria-label={name}><BuddyMark buddy={buddy} place="sheet" active={data.streaming} /></span>
-              <span className={h.headSide} data-end="">{chrome.trail}</span>
-            </div>
+            <header className={h.viewHead} data-flush="">
+              {chrome.lead}
+              <h1 className={h.viewTitle} tabIndex={-1}>{name}</h1>
+              {chrome.trail}
+            </header>
           )}
           timeline={(current) => <WorkTimeline data={current} blocks={[]} />}
           above={<PendingChip />} />
@@ -80,6 +79,8 @@ type PipelineProps = {
   consume: (id: number) => void;
   go: (href: string) => void;
   onSplit: (taskId: string) => void;
+  /** 伙伴在这条管线里说话（伙伴台换成「在说」）。 */
+  onSpeaking: (speaking: boolean) => void;
 };
 
 /** B 的 Task 管线（live）用真的对话；接口没上时是这个标签页里的假对话（lib/home/pipeline）。 */
@@ -118,11 +119,12 @@ function MockPipeline(props: PipelineProps) {
  * Task 管线的对话，网页按时间插进去的几块：规划员在拆（一行）、拆好的派活单（开工的选项框）、开了哪几个子会话、
  * 验收行（过了、受阻、约定都达到、返工，TaskFeed）。
  */
-function PipelineBody({ data, task, home, api, buddy, outbox, consume, go }: PipelineProps & { data: ConversationData }) {
+function PipelineBody({ data, task, home, api, buddy, outbox, consume, go, onSpeaking }: PipelineProps & { data: ConversationData }) {
   const chrome = useViewChrome();
   const dark = useDarkScheme();
   const handheld = useHandheld();
   const { work } = api;
+  useEffect(() => { onSpeaking(data.streaming); return () => onSpeaking(false); }, [data.streaming, onSpeaking]);
   const board = work.boards[task.taskId] ?? null;
   const mine = useMemo(() => work.workers.filter((worker) => worker.taskId === task.taskId), [work.workers, task.taskId]);
   useOutbox(data, task.taskId, outbox, consume);
@@ -157,7 +159,7 @@ function PipelineBody({ data, task, home, api, buddy, outbox, consume, go }: Pip
           head={(
             <header className={h.viewHead} data-flush="">
               {chrome.lead}
-              <span className={h.viewTitle}>{task.name}</span>
+              <h1 className={h.viewTitle} tabIndex={-1}>{task.name}</h1>
               <button type="button" className={h.icon} aria-label="详情" title="详情" aria-pressed={false} onClick={() => go(infoHref(task.taskId))}><Info {...ICON} /></button>
               {chrome.trail}
             </header>

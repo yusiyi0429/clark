@@ -2,21 +2,20 @@
 
 /**
  * 新首页 /me/work（新首页_伙伴总管线与Task管线_2026-11-07，替换 V2 设计第 20.4 节的三栏首页），按人打开：
- * - 左：伙伴形象（点了进总管线，进去后换成「回到首页」）+ Task 树（Task 下缩进是子会话）。
- * - 中：展示区，五种内容——首页、总管线、Task 管线、子会话、Task 详情（地址决定，见 view.ts）。
- * - 右：后台任务，跟着展示区走，可以收成细条。
- * 手机：首屏是左栏（伙伴、等你、Task 树），点进去全屏；后台任务从页头的图标打开，是底部抽屉。
- *
- * 伙伴的动效：在左上角和总管线页头之间用共享元素过渡（280ms 缓出），开了「减少动态效果」就直接切。
- * 切换展示区用 history.pushState（Next 会同步 usePathname），不等服务端，动效才连得上；每个地址也都有页面，刷新照样打开。
+ * - 左：四个锚点——伙伴台（总管线）、「今天」行（首页）、Mission → Task → 子会话、本人行（个人菜单），见 LeftColumn。
+ * - 中：展示区——首页、总管线、Task 管线、Task 详情、子会话、二级页、月份页（地址决定，见 view.ts）。
+ * - 右：资源和后台任务，跟着展示区走，可以收成细条。
+ * 手机：首屏兼首页（伙伴台、今天、等你、树、本人），点进去全屏；后台任务从「今天」行和页头的按钮打开，是底部抽屉。
+ * 深色跟系统：外壳带 data-scheme="auto"，深色变量挂在根上（app/scheme-dark.css）。伙伴不飞走，一直在台上（设计 9.2）。
+ * 切换展示区用 history.pushState（Next 会同步 usePathname），不等服务端；每个地址也都有页面，刷新照样打开。
  *
  * 云端不指挥本机（第 4.4 条）：开子会话、开规划员都由这台电脑上开着的网页去拉起本机程序——
  * Task 管线里选「就按这个开始」马上开；在手机上开始、或网页没开时排成「等开工」的卡和拆卡登记，下次在电脑上打开就自己开，不用点。
  * 伙伴在这个标签页的回复里「登记拆卡」、本机又连着，就直接开规划员；验收没过的改法由这里自动对执行的会话说一句（useAutoReturn）。
  */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { ChevronLeft, ListTodo } from "lucide-react";
+import { ArrowLeft, ListChecks, LoaderCircle } from "lucide-react";
 import type { THomePlanTask } from "@warmap/contracts";
 import type { Account } from "@/components/AccountMenu";
 import { useBuddy } from "@/components/buddy/useBuddy";
@@ -34,7 +33,7 @@ import { showWorkspaceToast } from "@/lib/toast";
 import { modelForTier } from "@/lib/team/roles";
 import { startBatch, startedText, type StartPlan } from "@/lib/work/queue";
 import type { Worker } from "@/lib/work/workers";
-import { HOME_HREF, routeText } from "@/lib/home/derive";
+import { HOME_HREF, routeText, todayLabel } from "@/lib/home/derive";
 import type { BackgroundItem, RouteTarget } from "@/lib/home/types";
 import { useBackground } from "@/lib/home/useBackground";
 import { useWorkHome } from "@/lib/home/useWorkHome";
@@ -43,17 +42,18 @@ import { BuddyView, PipelineView, type Outbox } from "./Conversations";
 import { HomeView, WaitingList, type SendTarget } from "./HomeView";
 import { LeftColumn } from "./LeftColumn";
 import { TaskInfo } from "./TaskInfo";
-import { ViewChrome, scopeOf, viewOf, type View } from "./view";
+import { ViewChrome, PAGE_TITLE, scopeOf, viewOf, type View } from "./view";
+import { MONTH_PAGE, SECONDARY_PAGES, type SecondaryPageProps } from "./pages";
+import { SecondaryFallback } from "./SecondaryFallback";
+import { ICON } from "./StateIcon";
+import { useTabTitle } from "./useTabTitle";
 import h from "@/styles/home.module.css";
 
 const PANEL_KEY = "tianshu-home-panel-v1";
 /** 伙伴这一轮调了「登记拆卡」（useConversation 发出）。 */
 const SPLIT_EVENT = "card-split-registered";
-const FLIGHT_MS = 280;
 /** 认领到了开不起来、放回去以后，隔一会再认领；树上一直挂着要开工的，也隔一会再看一次（别处认领了又没开、过期了）。 */
 const CLAIM_RETRY_MS = 60_000;
-const FLIGHT_EASE = "cubic-bezier(0.2, 0.8, 0.2, 1)";
-const ICON = { size: 16, strokeWidth: 1.5, "aria-hidden": true } as const;
 
 export function HomeShell({ account }: { account: Account }) {
   return (
@@ -92,31 +92,23 @@ function HomeFrame({ account }: { account: Account }) {
     return () => window.removeEventListener("keydown", close);
   }, [sheet]);
 
-  // ---- 切展示区和伙伴的飞行 ----
-  const flight = useRef<DOMRect | null>(null);
+  // ---- 切展示区：新首页里的地址 pushState，离开新首页（老页面、M2）整页跳 ----
   const go = useCallback((href: string) => {
     if (!href.startsWith("/me/work")) { router.push(href); return; }
     if (href === window.location.pathname) return;
-    const into = viewOf(href).kind === "buddy";
-    if (into !== (viewOf(window.location.pathname).kind === "buddy")) {
-      flight.current = document.querySelector(`[data-buddy-figure="${into ? "left" : "head"}"]`)?.getBoundingClientRect() ?? null;
-    }
     window.history.pushState(null, "", href);
   }, [router]);
-  useLayoutEffect(() => {
-    const from = flight.current;
-    flight.current = null;
-    if (!from || handheld || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const target = document.querySelector<HTMLElement>(`[data-buddy-figure="${view.kind === "buddy" ? "head" : "left"}"]`);
-    if (!target) return;
-    const to = target.getBoundingClientRect();
-    if (!to.width || !from.width) return;
-    const scale = from.width / to.width;
-    target.animate([
-      { transform: `translate(${from.left - to.left}px, ${from.top - to.top}px) scale(${scale})`, transformOrigin: "0 0" },
-      { transform: "none", transformOrigin: "0 0" },
-    ], { duration: FLIGHT_MS, easing: FLIGHT_EASE });
-  }, [view.kind, handheld]);
+  // Esc 回首页（「今天」行）：菜单、弹层、抽屉、输入框里的 Esc 由它们自己处理，这里只接没人要的。
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || handheld) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable=\"true\"], [role=dialog], [role=menu], [role=listbox]")) return;
+      go(HOME_HREF);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [go, handheld]);
 
   // ---- 首页输入框：自动（只在管线之间选：伙伴或某件 Task）、伙伴、某件 Task；跳进那条对话，那边发出去 ----
   // 自动走 B 的 POST /api/me/route（只按关键词）；接口没上时网页按同样的规则自己分。
@@ -294,17 +286,24 @@ function HomeFrame({ account }: { account: Account }) {
     const home = homeTask(taskId);
     return home ? { taskId, missionId: home.missionId, name: home.name, doneDefinition: home.subtitle, criteria: [] } : null;
   };
+  // 手机的后台任务按钮（5.7）：没有在跑的是 ListChecks；有在跑的是转圈加数字。
+  const backgroundButton = useMemo(() => (
+    <button type="button" className={h.icon} aria-label="后台任务" title="后台任务" onClick={() => setSheet(true)} data-testid="phone-background">
+      {running ? <span className={h.runningCount}><LoaderCircle {...ICON} />{running}</span> : <ListChecks {...ICON} />}
+    </button>
+  ), [running]);
   const chrome = useMemo(() => (handheld ? {
-    lead: <button type="button" className={h.icon} aria-label="返回" onClick={() => go(HOME_HREF)} data-testid="phone-back"><ChevronLeft {...ICON} /></button>,
-    trail: <button type="button" className={h.icon} aria-label="后台任务" onClick={() => setSheet(true)} data-testid="phone-background"><ListTodo {...ICON} />{running ? <em className={h.badge}>{running}</em> : null}</button>,
-  } : { lead: null, trail: null }), [handheld, go, running]);
+    lead: <button type="button" className={h.icon} aria-label="返回" title="返回" onClick={() => go(HOME_HREF)} data-testid="phone-back"><ArrowLeft {...ICON} /></button>,
+    trail: backgroundButton,
+  } : { lead: null, trail: null }), [handheld, go, backgroundButton]);
+  useTabTitle(data.waiting.length);
   const display = (current: View) => {
     switch (current.kind) {
       case "home": return <HomeView data={data} api={api} buddy={buddy} loading={!api.ready} go={go} route={route} onSend={send} />;
       case "buddy": return <BuddyView buddy={buddy} outbox={outbox} consume={consume} onSpeaking={setSpeaking} />;
       case "task": {
         const task = planTask(current.taskId);
-        return task ? <PipelineView key={task.taskId} task={task} home={homeTask(task.taskId)} api={api} buddy={buddy} outbox={outbox} consume={consume} go={go} onSplit={(taskId) => void split(taskId)} />
+        return task ? <PipelineView key={task.taskId} task={task} home={homeTask(task.taskId)} api={api} buddy={buddy} outbox={outbox} consume={consume} go={go} onSplit={(taskId) => void split(taskId)} onSpeaking={setSpeaking} />
           : <Missing loading={!api.ready} onGone={() => { if (outbox?.target === current.taskId) consume(outbox.id); }} />;
       }
       case "info": {
@@ -315,11 +314,23 @@ function HomeFrame({ account }: { account: Account }) {
       }
       case "card": return <CardSession key={current.id} cardId={current.id} embedded />;
       case "topic": return <TopicSession key={current.id} topicId={current.id} embedded />;
+      case "page": {
+        // 二级页：W2 交的组件挂在这里（components/home/pages）；还没交的先用现有的老组件顶着。
+        const Page = SECONDARY_PAGES[current.page] as ComponentType<SecondaryPageProps> | undefined;
+        return <SecondaryFrame key={current.page} title={PAGE_TITLE[current.page]} go={go}>{Page ? <Page go={go} /> : <SecondaryFallback page={current.page} account={account} />}</SecondaryFrame>;
+      }
+      case "month": {
+        const Month = MONTH_PAGE;
+        return <SecondaryFrame key={current.period} title={`${Number(current.period.slice(5))} 月`} go={go}>{Month ? <Month go={go} period={current.period} /> : null}</SecondaryFrame>;
+      }
     }
   };
+  // 连接要处理（本人行的琥珀点，设计 9.4）：这台电脑没就绪（离线、被拦截、未配对）。额度用完、飞书授权失效等 D、B 的字段到了再加。
+  const alert = !handheld && (local.phase === "offline" || local.phase === "blocked" || local.phase === "unpaired");
 
   const left = (
     <LeftColumn data={data} view={view} buddy={buddy} speaking={speaking} go={go} phone={handheld} account={account}
+      today={todayLabel(work.plan?.today ?? null)} alert={alert} trail={handheld ? backgroundButton : null}
       top={handheld && data.waiting.length ? (
         <section aria-label="等你" className={h.phoneWaiting}>
           <p className={h.sectionTitle}>等你 <span>{data.waiting.length}</span></p>
@@ -332,7 +343,7 @@ function HomeFrame({ account }: { account: Account }) {
     return (
       <WorkspaceContext.Provider value={workspace}>
         <ViewChrome.Provider value={chrome}>
-          <div className={h.app} data-phone="" data-view={view.kind} data-testid="work-home">
+          <div className={h.app} data-phone="" data-view={view.kind} data-scheme="auto" data-testid="work-home">
             {view.kind === "home" ? <aside className={h.left}>{left}</aside> : <main className={h.display}>{display(view)}</main>}
             {sheet ? (
               <div className={h.sheetBackdrop} onClick={() => setSheet(false)}>
@@ -350,7 +361,7 @@ function HomeFrame({ account }: { account: Account }) {
   return (
     <WorkspaceContext.Provider value={workspace}>
       <ViewChrome.Provider value={chrome}>
-        <div className={h.app} data-panel={panelOpen ? "open" : "closed"} data-view={view.kind} data-testid="work-home">
+        <div className={h.app} data-panel={panelOpen ? "open" : "closed"} data-view={view.kind} data-scheme="auto" data-testid="work-home">
           <aside className={h.left}>{left}</aside>
           <main className={h.display}>{display(view)}</main>
           <aside className={h.right} aria-label="后台任务">
@@ -359,6 +370,19 @@ function HomeFrame({ account }: { account: Account }) {
         </div>
       </ViewChrome.Provider>
     </WorkspaceContext.Provider>
+  );
+}
+
+/** 二级页、月份页的壳（5.4.7）：页头（返回、标题）+ 文档类阅读尺，内容是挂进来的组件。 */
+function SecondaryFrame({ title, go, children }: { title: string; go: (href: string) => void; children: React.ReactNode }) {
+  return (
+    <div className={h.page} data-type-scale="doc" data-testid="secondary-page">
+      <header className={h.viewHead}>
+        <button type="button" className={h.icon} aria-label="返回" title="返回" onClick={() => (window.history.length > 1 ? window.history.back() : go(HOME_HREF))}><ArrowLeft {...ICON} /></button>
+        <h1 className={h.viewTitle} tabIndex={-1}>{title}</h1>
+      </header>
+      <div className={h.pageScroll}><div className={h.pageInner}>{children}</div></div>
+    </div>
   );
 }
 

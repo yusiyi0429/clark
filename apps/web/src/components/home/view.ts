@@ -1,7 +1,8 @@
 /**
- * 新首页展示区的五种内容（设计第 3 节），由地址决定：
+ * 新首页展示区的内容，由地址决定：
  * /me/work 首页 · /me/work/buddy 总管线 · /me/work/tasks/<id> Task 管线 · /me/work/tasks/<id>/info Task 详情 ·
- * /me/work/cards/<id>、/me/work/topics/<id> 子会话。
+ * /me/work/cards/<id>、/me/work/topics/<id> 子会话 ·
+ * /me/work/settings/<页> 二级页（头像和资料、伙伴、连接、偏好，设计 9.4）· /me/work/month/<YYYY-MM> 月份页（第 10 节）。
  */
 import { createContext, useContext, useSyncExternalStore, type ReactNode } from "react";
 import type { BackgroundScope } from "@/lib/home/types";
@@ -12,7 +13,17 @@ export type View =
   | { kind: "task"; taskId: string }
   | { kind: "info"; taskId: string }
   | { kind: "card"; id: string }
-  | { kind: "topic"; id: string };
+  | { kind: "topic"; id: string }
+  | { kind: "page"; page: PageKey }
+  | { kind: "month"; period: string };
+
+/** 二级页（个人菜单进去的，设计 9.4、5.4.6）：组件由 W2 交（components/home/pages），挂在展示区里。 */
+export const PAGE_KEYS = ["profile", "buddy", "connections", "preferences"] as const;
+export type PageKey = (typeof PAGE_KEYS)[number];
+export const PAGE_TITLE: Record<PageKey, string> = { profile: "头像和资料", buddy: "伙伴", connections: "连接", preferences: "偏好" };
+export const pageHref = (page: PageKey) => `/me/work/settings/${page}`;
+export const monthHref = (period: string) => `/me/work/month/${period}`;
+const isPage = (value: string | undefined): value is PageKey => !!value && (PAGE_KEYS as readonly string[]).includes(value);
 
 export function viewOf(pathname: string): View {
   const parts = pathname.replace(/\/+$/, "").split("/").slice(3).map((part) => decodeURIComponent(part));
@@ -20,16 +31,19 @@ export function viewOf(pathname: string): View {
   if (parts[0] === "tasks" && parts[1]) return parts[2] === "info" ? { kind: "info", taskId: parts[1] } : { kind: "task", taskId: parts[1] };
   if (parts[0] === "cards" && parts[1]) return { kind: "card", id: parts[1] };
   if (parts[0] === "topics" && parts[1]) return { kind: "topic", id: parts[1] };
+  if (parts[0] === "settings" && isPage(parts[1])) return { kind: "page", page: parts[1] };
+  if (parts[0] === "month" && parts[1] && /^d{4}-d{2}$/.test(parts[1])) return { kind: "month", period: parts[1] };
   return { kind: "home" };
 }
 
-/** 右栏跟着展示区走：首页和总管线列本人全部（B 的契约 scope=main），Task 管线和详情列这件 Task 的，子会话列它自己的。 */
-export function scopeOf(view: View): BackgroundScope {
+/** 右栏跟着展示区走：首页和总管线列本人全部（B 的契约 scope=main），Task 管线和详情列这件 Task 的，子会话列它自己的；二级页、月份页只显示资源块。 */
+export function scopeOf(view: View): BackgroundScope | null {
   switch (view.kind) {
     case "home": case "buddy": return "main";
     case "task": case "info": return `task:${view.taskId}`;
     case "card": return `card:${view.id}`;
     case "topic": return `topic:${view.id}`;
+    case "page": case "month": return null;
   }
 }
 
