@@ -51,9 +51,13 @@ CREATE TABLE local_background_items (
 );
 CREATE INDEX local_background_items_owner ON local_background_items (owner_id, started_at DESC);
 
--- 验收过的卡合回到哪了（第 4.5 节，本机程序报的 merge 同步条目，同一次交回取 occurredAt 最新的一条）：
--- { merged, commit, baseBranch, reason, message, auto, at }，merged=false 时 reason 是 base_not_checked_out | dirty | conflict | auto_merge_off。没报过为空。
+-- 验收过的卡合回到哪了（第 4.5 节，本机程序报的 merge 同步条目；同一次交回以同步条目幂等键末尾的本机序号最大的那条为准，同一毫秒里可能报两条）：
+-- { merged, commit, baseBranch, reason, message, auto, at, seq }，merged=false 时 reason 是 base_not_checked_out | dirty | conflict | auto_merge_off | not_ready。没报过为空。
 ALTER TABLE card_handbacks ADD COLUMN merge JSONB;
 
 -- 返工卡（第 4.5 节）：已合回的卡验收被推翻时，在同一件 Task 下开一张新卡接着改，记下是从哪张卡开出来的；原卡不退回、已合进去的不撤回。
 ALTER TABLE tasks ADD COLUMN rework_of_card_id UUID REFERENCES tasks (id) ON DELETE SET NULL;
+
+-- 本机会话状态加 done（本机契约 b735df52）：规划员交了计划、验收员交了结论，这一轮做完就自己收工、进程退出；不占位置，再说一句会续上。
+ALTER TABLE local_runs DROP CONSTRAINT local_runs_state_check;
+ALTER TABLE local_runs ADD CONSTRAINT local_runs_state_check CHECK (state IN ('queued', 'starting', 'running', 'waiting_permission', 'idle', 'exited', 'failed', 'done'));

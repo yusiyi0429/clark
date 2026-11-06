@@ -128,7 +128,8 @@ describe("自动开工（第 4.4 节）", { timeout: 30_000 }, () => {
         payload: { title: "不该建" } })).statusCode).toBe(401);
       expect(await f.t.sql("SELECT count(*)::int AS n FROM research_topics")).toEqual([{ n: 2 }]);
 
-      expect((await f.claimed(f.machine.device)).map((item) => item.topicId)).toEqual([topicId, loose.json().topicId]);
+      // 测试的时钟是定住的，两条登记时间相同，先后按 id，不比顺序。
+      expect((await f.claimed(f.machine.device)).map((item) => item.topicId).sort()).toEqual([topicId, loose.json().topicId].sort());
       await f.machine.send({ kind: "topic", topicId }, [status("starting", "竞品调研")]);
       expect(await f.t.sql("SELECT topic_id::text FROM session_starts WHERE closed_at IS NULL")).toEqual([{ topic_id: loose.json().topicId }]);
     } finally { await f.close(); }
