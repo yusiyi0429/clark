@@ -9,6 +9,7 @@ import { TaskCard } from "./taskCardView.js";
 import { CreateRoleRequest, PatchRoleRequest, RoleBrief, RoleListResponse, RolePresetView, RoleProposalList, RoleProposalView, RoleRef, RoleRevisionList,
   RoleRevisionView, RoleView } from "./roles.js";
 import { WorkerCost, WorkerItem, WorkerResource, WorkerResources, WorkersResponse } from "./workers.js";
+import { CardPlanBriefResponse, CardSplitListResponse, CardSplitRequestView, PlanBriefRole } from "./cardSplits.js";
 import {
   CreateTopicRequest, PatchTopicRequest, ResearchTopicView, TopicBriefResponse, TopicDetailResponse, TopicListResponse, TopicVersionSummary, TopicVersionView,
 } from "./topics.js";
@@ -26,6 +27,7 @@ export const boardSchemas: Record<string, JsonSchema> = {
   ResearchTopicView, TopicVersionSummary, TopicVersionView, TopicListResponse, CreateTopicRequest, PatchTopicRequest, TopicDetailResponse, TopicBriefResponse,
   RoleRef, RoleBrief, RoleView, RolePresetView, RoleListResponse, CreateRoleRequest, PatchRoleRequest, RoleRevisionView, RoleRevisionList, RoleProposalView, RoleProposalList,
   WorkerResource, WorkerCost, WorkerItem, WorkerResources, WorkersResponse,
+  CardSplitRequestView, CardSplitListResponse, PlanBriefRole, CardPlanBriefResponse,
 };
 
 const error = { description: "ApiError 统一错误", content: { "application/json": { schema: { $ref: "#/components/schemas/ApiError" } } } };
@@ -46,10 +48,41 @@ export const boardPaths: OpenAPIV3.Document["paths"] = {
   "/api/plan-tasks/{taskId}/card-plans": {
     post: {
       operationId: "createCardPlan",
-      summary: "拆卡（Task 负责人）：伙伴出 3–8 张草稿卡，后台跑；已有一次在排队或在跑时返回那一次",
+      summary: "云端拆卡作业（Task 负责人）：只在 BOARD_CLOUD_AGENTS=1 时开，默认关（409 CLOUD_AGENTS_OFF），拆卡改由本机规划员做（登记拆卡）；开着时伙伴出 3–8 张草稿卡，已有一次在排队或在跑时返回那一次",
       parameters: path("taskId"),
       requestBody: body("CreateCardPlanRequest"),
-      responses: { "200": json("已有一次在跑", "CardPlanView"), "202": json("已排队", "CardPlanView"), ...errors(400, 401, 403, 404) },
+      responses: { "200": json("已有一次在跑", "CardPlanView"), "202": json("已排队", "CardPlanView"), ...errors(400, 401, 403, 404, 409) },
+    },
+  },
+  "/api/plan-tasks/{taskId}/card-splits": {
+    post: {
+      operationId: "registerCardSplit",
+      summary: "登记拆卡（Task 负责人，Task 页「拆一下」）：只记下要拆这个 Task，真正去拆的是本人电脑上的规划员；已有一条没开工的登记时返回那一条",
+      parameters: path("taskId"),
+      responses: { "200": json("已有一条没开工的登记", "CardSplitRequestView"), "201": json("登记好了", "CardSplitRequestView"), ...errors(401, 403, 404) },
+    },
+  },
+  "/api/me/card-splits": {
+    get: {
+      operationId: "listCardSplits",
+      summary: "本人还没开工的拆卡登记（伙伴登记的和 Task 页登记的），先登记的在前",
+      responses: { "200": json("登记", "CardSplitListResponse"), ...errors(401) },
+    },
+  },
+  "/api/me/card-splits/{id}": {
+    delete: {
+      operationId: "removeCardSplit",
+      summary: "去掉一条拆卡登记（网页在这台电脑上开了规划员以后，或本人不拆了）",
+      parameters: path("id"),
+      responses: { "204": { description: "去掉了" }, ...errors(401, 404) },
+    },
+  },
+  "/api/plan-tasks/{taskId}/plan-brief": {
+    get: {
+      operationId: "getCardPlanBrief",
+      summary: "规划员的开工交代（Task 负责人）：Task、约定、本人的岗位清单和职责摘要、规划员岗位",
+      parameters: path("taskId"),
+      responses: { "200": json("交代", "CardPlanBriefResponse"), ...errors(401, 403, 404) },
     },
   },
   "/api/plan-tasks/{taskId}/card-drafts/accept": {

@@ -29,6 +29,15 @@ export const CardPlanView = Type.Object({
   startedAt: Nullable(Instant),
   finishedAt: Nullable(Instant),
   expectedSeconds: Type.Integer({ minimum: 1 }),
+  /**
+   * 谁拆的（第 21 节）：local 是本人电脑上的规划员（经同步条目 card_plan 报上来，到了就是 done），cloud 是云端拆卡作业（开关 BOARD_CLOUD_AGENTS，默认关）。
+   * 本机规划员出的还带计划：summary 一句话，steps 几步（数组顺序就是先后），risks 风险，revision 是第几次出（以最新一次为准）；云端拆的这几样是空的。
+   */
+  source: Type.Union([Type.Literal("cloud"), Type.Literal("local")]),
+  summary: Nullable(Type.String()),
+  steps: Type.Array(Type.Object({ title: Type.String({ minLength: 1 }), detail: Nullable(Type.String()) }, strict)),
+  risks: Type.Array(Type.String()),
+  revision: Nullable(Type.Integer({ minimum: 1 })),
 }, strict);
 
 /** 伙伴建议的模型档位，本人开工时再落到具体模型。 */
@@ -150,6 +159,13 @@ export const CardHandbackView = Type.Object({
   startedAt: Nullable(Instant),
   expectedSeconds: Type.Integer({ minimum: 1 }),
   overrule: Nullable(CardOverrule),
+  /** 谁验的（第 21 节）：local 是本人电脑上的验收员（同步条目 verdict），cloud 是云端验收作业；记模型和验收员岗位的版本。还没结论时为 null。 */
+  verifier: Nullable(Type.Object({
+    source: Type.Union([Type.Literal("cloud"), Type.Literal("local")]),
+    modelLabel: Nullable(Type.String()),
+    roleId: Nullable(Type.String({ format: "uuid" })),
+    roleVersion: Nullable(Type.Integer({ minimum: 1 })),
+  }, strict)),
 }, strict);
 
 /**

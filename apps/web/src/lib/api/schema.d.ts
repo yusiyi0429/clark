@@ -4298,8 +4298,76 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 拆卡（Task 负责人）：伙伴出 3–8 张草稿卡，后台跑；已有一次在排队或在跑时返回那一次 */
+        /** 云端拆卡作业（Task 负责人）：只在 BOARD_CLOUD_AGENTS=1 时开，默认关（409 CLOUD_AGENTS_OFF），拆卡改由本机规划员做（登记拆卡）；开着时伙伴出 3–8 张草稿卡，已有一次在排队或在跑时返回那一次 */
         post: operations["createCardPlan"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/plan-tasks/{taskId}/card-splits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 登记拆卡（Task 负责人，Task 页「拆一下」）：只记下要拆这个 Task，真正去拆的是本人电脑上的规划员；已有一条没开工的登记时返回那一条 */
+        post: operations["registerCardSplit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/card-splits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人还没开工的拆卡登记（伙伴登记的和 Task 页登记的），先登记的在前 */
+        get: operations["listCardSplits"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/card-splits/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 去掉一条拆卡登记（网页在这台电脑上开了规划员以后，或本人不拆了） */
+        delete: operations["removeCardSplit"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/plan-tasks/{taskId}/plan-brief": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 规划员的开工交代（Task 负责人）：Task、约定、本人的岗位清单和职责摘要、规划员岗位 */
+        get: operations["getCardPlanBrief"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -15054,6 +15122,14 @@ export interface components {
             startedAt: string | null;
             finishedAt: string | null;
             expectedSeconds: number;
+            source: "cloud" | "local";
+            summary: string | null;
+            steps: {
+                title: string;
+                detail: string | null;
+            }[];
+            risks: string[];
+            revision: number | null;
         };
         CardDraftView: {
             /** Format: uuid */
@@ -15258,6 +15334,14 @@ export interface components {
                 startedAt: string | null;
                 finishedAt: string | null;
                 expectedSeconds: number;
+                source: "cloud" | "local";
+                summary: string | null;
+                steps: {
+                    title: string;
+                    detail: string | null;
+                }[];
+                risks: string[];
+                revision: number | null;
             } | null;
             pending: {
                 /** Format: uuid */
@@ -15479,6 +15563,12 @@ export interface components {
                 /** Format: date-time */
                 at: string;
                 reason: string;
+            } | null;
+            verifier: {
+                source: "cloud" | "local";
+                modelLabel: string | null;
+                roleId: string | null;
+                roleVersion: number | null;
             } | null;
         };
         CardDetailResponse: {
@@ -15702,6 +15792,12 @@ export interface components {
                     /** Format: date-time */
                     at: string;
                     reason: string;
+                } | null;
+                verifier: {
+                    source: "cloud" | "local";
+                    modelLabel: string | null;
+                    roleId: string | null;
+                    roleVersion: number | null;
                 } | null;
             }[];
             outputs: {
@@ -16650,6 +16746,70 @@ export interface components {
                     };
                 };
             };
+        };
+        CardSplitRequestView: {
+            /** Format: uuid */
+            id: string;
+            taskId: string;
+            taskName: string;
+            missionId: string;
+            origin: "buddy" | "web";
+            /** Format: date-time */
+            createdAt: string;
+        };
+        CardSplitListResponse: {
+            requests: {
+                /** Format: uuid */
+                id: string;
+                taskId: string;
+                taskName: string;
+                missionId: string;
+                origin: "buddy" | "web";
+                /** Format: date-time */
+                createdAt: string;
+            }[];
+        };
+        PlanBriefRole: {
+            id: string | null;
+            presetKey: string | null;
+            name: string;
+            kind: "worker" | "reviewer" | "critic";
+            dutiesSummary: string;
+            modelTier: "strong" | "normal" | "light";
+        };
+        CardPlanBriefResponse: {
+            markdown: string;
+            role: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                kind: "worker" | "reviewer" | "critic";
+                dutiesMd: string;
+                practiceMd: string;
+                acceptanceMd: string;
+                tools: ("tianshu" | "web_search" | "feishu" | "github" | "browser")[];
+                modelTier: "strong" | "normal" | "light";
+                version: number;
+            } | null;
+            task: {
+                taskId: string;
+                name: string;
+                missionId: string;
+            };
+            criteria: {
+                index: number;
+                text: string;
+                proof: string | null;
+            }[];
+            exclusions: string[];
+            roles: {
+                id: string | null;
+                presetKey: string | null;
+                name: string;
+                kind: "worker" | "reviewer" | "critic";
+                dutiesSummary: string;
+                modelTier: "strong" | "normal" | "light";
+            }[];
         };
     };
     responses: never;
@@ -31301,6 +31461,189 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    registerCardSplit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已有一条没开工的登记 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardSplitRequestView"];
+                };
+            };
+            /** @description 登记好了 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardSplitRequestView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listCardSplits: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 登记 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardSplitListResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    removeCardSplit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 去掉了 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getCardPlanBrief: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 交代 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardPlanBriefResponse"];
                 };
             };
             /** @description ApiError 统一错误 */

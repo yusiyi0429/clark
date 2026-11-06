@@ -17607,7 +17607,7 @@
     "/api/plan-tasks/{taskId}/card-plans": {
       "post": {
         "operationId": "createCardPlan",
-        "summary": "拆卡（Task 负责人）：伙伴出 3–8 张草稿卡，后台跑；已有一次在排队或在跑时返回那一次",
+        "summary": "云端拆卡作业（Task 负责人）：只在 BOARD_CLOUD_AGENTS=1 时开，默认关（409 CLOUD_AGENTS_OFF），拆卡改由本机规划员做（登记拆卡）；开着时伙伴出 3–8 张草稿卡，已有一次在排队或在跑时返回那一次",
         "parameters": [
           {
             "name": "taskId",
@@ -17655,6 +17655,211 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/plan-tasks/{taskId}/card-splits": {
+      "post": {
+        "operationId": "registerCardSplit",
+        "summary": "登记拆卡（Task 负责人，Task 页「拆一下」）：只记下要拆这个 Task，真正去拆的是本人电脑上的规划员；已有一条没开工的登记时返回那一条",
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "已有一条没开工的登记",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardSplitRequestView"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "登记好了",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardSplitRequestView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/card-splits": {
+      "get": {
+        "operationId": "listCardSplits",
+        "summary": "本人还没开工的拆卡登记（伙伴登记的和 Task 页登记的），先登记的在前",
+        "responses": {
+          "200": {
+            "description": "登记",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardSplitListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/card-splits/{id}": {
+      "delete": {
+        "operationId": "removeCardSplit",
+        "summary": "去掉一条拆卡登记（网页在这台电脑上开了规划员以后，或本人不拆了）",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "去掉了"
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/plan-tasks/{taskId}/plan-brief": {
+      "get": {
+        "operationId": "getCardPlanBrief",
+        "summary": "规划员的开工交代（Task 负责人）：Task、约定、本人的岗位清单和职责摘要、规划员岗位",
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "交代",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardPlanBriefResponse"
                 }
               }
             }
@@ -89792,7 +89997,12 @@
           "createdAt",
           "startedAt",
           "finishedAt",
-          "expectedSeconds"
+          "expectedSeconds",
+          "source",
+          "summary",
+          "steps",
+          "risks",
+          "revision"
         ],
         "properties": {
           "id": {
@@ -89868,6 +90078,72 @@
           "expectedSeconds": {
             "minimum": 1,
             "type": "integer"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "const": "cloud",
+                "type": "string"
+              },
+              {
+                "const": "local",
+                "type": "string"
+              }
+            ]
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "title",
+                "detail"
+              ],
+              "properties": {
+                "title": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "detail": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "risks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -91296,7 +91572,12 @@
                   "createdAt",
                   "startedAt",
                   "finishedAt",
-                  "expectedSeconds"
+                  "expectedSeconds",
+                  "source",
+                  "summary",
+                  "steps",
+                  "risks",
+                  "revision"
                 ],
                 "properties": {
                   "id": {
@@ -91372,6 +91653,72 @@
                   "expectedSeconds": {
                     "minimum": 1,
                     "type": "integer"
+                  },
+                  "source": {
+                    "anyOf": [
+                      {
+                        "const": "cloud",
+                        "type": "string"
+                      },
+                      {
+                        "const": "local",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "summary": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "steps": {
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "title",
+                        "detail"
+                      ],
+                      "properties": {
+                        "title": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "detail": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "risks": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "revision": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 }
               },
@@ -92673,7 +93020,8 @@
           "error",
           "startedAt",
           "expectedSeconds",
-          "overrule"
+          "overrule",
+          "verifier"
         ],
         "properties": {
           "id": {
@@ -93001,6 +93349,69 @@
                     "minLength": 1,
                     "maxLength": 200,
                     "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "verifier": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "source",
+                  "modelLabel",
+                  "roleId",
+                  "roleVersion"
+                ],
+                "properties": {
+                  "source": {
+                    "anyOf": [
+                      {
+                        "const": "cloud",
+                        "type": "string"
+                      },
+                      {
+                        "const": "local",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "modelLabel": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "roleId": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "roleVersion": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 }
               },
@@ -94309,7 +94720,8 @@
                 "error",
                 "startedAt",
                 "expectedSeconds",
-                "overrule"
+                "overrule",
+                "verifier"
               ],
               "properties": {
                 "id": {
@@ -94637,6 +95049,69 @@
                           "minLength": 1,
                           "maxLength": 200,
                           "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "verifier": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "source",
+                        "modelLabel",
+                        "roleId",
+                        "roleVersion"
+                      ],
+                      "properties": {
+                        "source": {
+                          "anyOf": [
+                            {
+                              "const": "cloud",
+                              "type": "string"
+                            },
+                            {
+                              "const": "local",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "modelLabel": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "roleId": {
+                          "anyOf": [
+                            {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "roleVersion": {
+                          "anyOf": [
+                            {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         }
                       }
                     },
@@ -101555,6 +102030,446 @@
                       }
                     }
                   }
+                }
+              }
+            }
+          }
+        }
+      },
+      "CardSplitRequestView": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "taskId",
+          "taskName",
+          "missionId",
+          "origin",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "taskId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "taskName": {
+            "type": "string"
+          },
+          "missionId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "origin": {
+            "anyOf": [
+              {
+                "const": "buddy",
+                "type": "string"
+              },
+              {
+                "const": "web",
+                "type": "string"
+              }
+            ]
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        }
+      },
+      "CardSplitListResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "requests"
+        ],
+        "properties": {
+          "requests": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "taskId",
+                "taskName",
+                "missionId",
+                "origin",
+                "createdAt"
+              ],
+              "properties": {
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "taskId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "taskName": {
+                  "type": "string"
+                },
+                "missionId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "origin": {
+                  "anyOf": [
+                    {
+                      "const": "buddy",
+                      "type": "string"
+                    },
+                    {
+                      "const": "web",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "createdAt": {
+                  "format": "date-time",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "PlanBriefRole": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "presetKey",
+          "name",
+          "kind",
+          "dutiesSummary",
+          "modelTier"
+        ],
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "presetKey": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "const": "worker",
+                "type": "string"
+              },
+              {
+                "const": "reviewer",
+                "type": "string"
+              },
+              {
+                "const": "critic",
+                "type": "string"
+              }
+            ]
+          },
+          "dutiesSummary": {
+            "type": "string"
+          },
+          "modelTier": {
+            "anyOf": [
+              {
+                "const": "strong",
+                "type": "string"
+              },
+              {
+                "const": "normal",
+                "type": "string"
+              },
+              {
+                "const": "light",
+                "type": "string"
+              }
+            ]
+          }
+        }
+      },
+      "CardPlanBriefResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "markdown",
+          "role",
+          "task",
+          "criteria",
+          "exclusions",
+          "roles"
+        ],
+        "properties": {
+          "markdown": {
+            "minLength": 1,
+            "maxLength": 20000,
+            "type": "string"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "id",
+                  "name",
+                  "kind",
+                  "dutiesMd",
+                  "practiceMd",
+                  "acceptanceMd",
+                  "tools",
+                  "modelTier",
+                  "version"
+                ],
+                "properties": {
+                  "id": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "name": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "const": "worker",
+                        "type": "string"
+                      },
+                      {
+                        "const": "reviewer",
+                        "type": "string"
+                      },
+                      {
+                        "const": "critic",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "dutiesMd": {
+                    "maxLength": 8000,
+                    "type": "string"
+                  },
+                  "practiceMd": {
+                    "maxLength": 8000,
+                    "type": "string"
+                  },
+                  "acceptanceMd": {
+                    "maxLength": 8000,
+                    "type": "string"
+                  },
+                  "tools": {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "const": "tianshu",
+                          "type": "string"
+                        },
+                        {
+                          "const": "web_search",
+                          "type": "string"
+                        },
+                        {
+                          "const": "feishu",
+                          "type": "string"
+                        },
+                        {
+                          "const": "github",
+                          "type": "string"
+                        },
+                        {
+                          "const": "browser",
+                          "type": "string"
+                        }
+                      ]
+                    }
+                  },
+                  "modelTier": {
+                    "anyOf": [
+                      {
+                        "const": "strong",
+                        "type": "string"
+                      },
+                      {
+                        "const": "normal",
+                        "type": "string"
+                      },
+                      {
+                        "const": "light",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "version": {
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "task": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "taskId",
+              "name",
+              "missionId"
+            ],
+            "properties": {
+              "taskId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "missionId": {
+                "minLength": 1,
+                "type": "string"
+              }
+            }
+          },
+          "criteria": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "index",
+                "text",
+                "proof"
+              ],
+              "properties": {
+                "index": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "proof": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "exclusions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "presetKey",
+                "name",
+                "kind",
+                "dutiesSummary",
+                "modelTier"
+              ],
+              "properties": {
+                "id": {
+                  "anyOf": [
+                    {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "presetKey": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "name": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "worker",
+                      "type": "string"
+                    },
+                    {
+                      "const": "reviewer",
+                      "type": "string"
+                    },
+                    {
+                      "const": "critic",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "dutiesSummary": {
+                  "type": "string"
+                },
+                "modelTier": {
+                  "anyOf": [
+                    {
+                      "const": "strong",
+                      "type": "string"
+                    },
+                    {
+                      "const": "normal",
+                      "type": "string"
+                    },
+                    {
+                      "const": "light",
+                      "type": "string"
+                    }
+                  ]
                 }
               }
             }
