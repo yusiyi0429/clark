@@ -452,7 +452,7 @@ export const LocalQuestionRequestView = Type.Object({
 /**
  * 会话里 Claude Code 自己开的后台任务（首页右栏「后台任务」、云端 /api/me/background?scope=session:<id>）：
  * subagent 是子 agent（Agent / Task 工具），command 是后台命令（Bash 的 run_in_background）和别的后台任务。前台跑完的普通命令不算。
- * id 是 Claude Code 的 task_id，同一个会话里唯一。title 是它的说明（子 agent 的 description、命令的 description，没有就用命令本身），截到 200 字。
+ * id 是 Claude Code 的 task_id，同一个会话里唯一。title 是 Claude Code 给的说明，截到 200 字；没有说明时是「子 agent」或「后台命令」（不另取命令原文和子 agent 的提示词）。
  * state：running 在跑；done 跑完了；failed 失败；stopped 被停了（本人点停止、执行方自己停、进程退出）。
  * stoppable：现在能不能点停止（在跑、进程还在才能停）。
  */
