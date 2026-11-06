@@ -393,7 +393,7 @@ export const LocalQuestionRequestView = Type.Object({
 /**
  * 会话里 Claude Code 自己开的后台任务（首页右栏「后台任务」、云端 /api/me/background?scope=session:<id>）：
  * subagent 是子 agent（Agent / Task 工具），command 是后台命令（Bash 的 run_in_background）和别的后台任务。前台跑完的普通命令不算。
- * id 是 Claude Code 的 task_id，同一个会话里唯一。title 是它的说明（子 agent 的 description、命令的 description，没有就用命令本身），截到 200 字。
+ * id 是 Claude Code 的 task_id，同一个会话里唯一。title 是 Claude Code 给的说明，截到 200 字；没有说明时是「子 agent」或「后台命令」（不另取命令原文和子 agent 的提示词）。
  * state：running 在跑；done 跑完了；failed 失败；stopped 被停了（本人点停止、执行方自己停、进程退出）。
  * stoppable：现在能不能点停止（在跑、进程还在才能停）。
  */
@@ -773,7 +773,10 @@ export const LocalSyncItem = Type.Union([
   syncItem("verdict", LocalVerdict),
   /** 花费：每轮结束报一次本轮的增量。 */
   syncItem("cost", Type.Object({ modelLabel: Type.String(), usage: LocalUsage }, strict)),
-  /** 会话里的后台任务开始或变了：每次带全部字段，云端按 sessionId + data.id 覆盖（/api/me/background?scope=session:<sessionId>）。 */
+  /**
+   * 会话里的后台任务开始或变了：每次带全部字段，云端按 sessionId + data.id 覆盖（/api/me/background?scope=session:<sessionId>）。
+   * 发件箱重试时同一项的几条可能乱序到达：云端留 key 末尾本机序号最大的那条（occurredAt 可能落在同一毫秒），已结束的（done、failed、stopped）不被 running 盖回去。
+   */
   syncItem("background", LocalBackgroundItem),
   /** 卡合回的结果，见 LocalMergeSync。 */
   syncItem("merge", LocalMergeSync),
