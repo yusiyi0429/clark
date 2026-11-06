@@ -10,7 +10,7 @@ v0.1 · 2026-11-06 · 分支 `claude/v2-board-api`。设计以 `.scratch/next-ph
 
 | 做了 | 没做 |
 |-|-|
-| 契约（`packages/contracts`）、迁移 226–233、看板与卡、拆卡、Agent 验收与推翻、准备中与出下一版、调研专题、岗位与岗位修改、worker 列表、设备令牌与同步接收端、`web_search` 作业 | 网页（apps/web，另一会话）；本机程序（apps/local，另一会话）；共享文件那一步（见第 10 节）；`/internal` 的拆卡入口（等新 Chat API 接上再开） |
+| 契约（`packages/contracts`）、迁移 226–233、看板与卡、拆卡、Agent 验收与推翻、准备中与出下一版、调研专题、岗位与岗位修改、worker 列表、设备令牌与同步接收端、`web_search` 作业、Task 页带进对话（`page` 兜底） | 网页（apps/web，另一会话）；本机程序（apps/local，另一会话）；共享文件那一步（见交接第 2 节）；`/internal` 的拆卡入口（等新 Chat API 接上再开） |
 
 ## 2. 代码在哪
 
@@ -27,7 +27,8 @@ v0.1 · 2026-11-06 · 分支 `claude/v2-board-api`。设计以 `.scratch/next-ph
 | 调研专题 | — | `researchTopics.ts` | `routes/topics.ts` | `topics.ts` |
 | worker 列表 | — | `workers.ts` | `routes/workers.ts` | `workers.ts` |
 | 设备与同步 | — | `localDevices.ts`、`localSync.ts`、`personalTokens.ts`（`local` 令牌） | `routes/local.ts` | `localDevices.ts`；同步载荷是本机程序的 `localRunner.ts` |
-| 联网搜索 | — | `mcpWebSearch.ts` | 挂进 `/mcp/me` 在第 10 节 | 输入沿用 `agentRuntime.ts` 的 `WebSearchInput` |
+| 联网搜索 | — | `mcpWebSearch.ts` | 挂进 `/mcp/me` 见交接第 2 节 | 输入沿用 `agentRuntime.ts` 的 `WebSearchInput` |
+| Task 页带进对话 | — | `pageGuides.ts`（`pageFor`）、`taskCards.ts`（`taskPageFacts`） | `chatService.ts` 转发时带 `page` | — |
 
 OpenAPI 路径在 `packages/contracts/src/boardOpenapi.ts` 手列；改契约后 `pnpm --filter @warmap/web gen:client`。
 
@@ -88,7 +89,7 @@ V1（约定）用 225，不冲突。
 | `topic_version_feishu` | 只有专题；先认本会话的本机号，再按号认；都没有拒收 `VERSION_NOT_FOUND` |
 | `cost` | 累计 token 和估价 |
 
-- 第一次报某张卡时卡变进行中，并记下岗位版本。
+- 第一次报某张卡时记下岗位版本，卡变进行中；只报了等空位（`queued`）的还没开工，卡留在待开始。
 - 产出读取：`GET /api/me/local-outputs/:id`（HTML 用材料预览的 CSP，其余 `sandbox`）。
 
 ## 10. worker 列表
