@@ -40,7 +40,7 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
   const home = useMemberHome();
   // 首页计划和通知栏的「待归位」用同一份。
   const plan = useHomePlan();
-  const railBackground = useRailBackground();
+  const railBackground = useRailBackground(viewerId);
   const records = useMeetingRecords();
   const feishuEvents = useFeishuEvents();
   const radarSignals = noteworthySignals(home.radar);

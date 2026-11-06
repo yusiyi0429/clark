@@ -2,8 +2,8 @@
 
 /**
  * 本人给左边通知栏选的背景（个人菜单 › 设置 › 通知栏背景）：存在服务端、跟着人走。
- * 这台电脑上另记一份上次的选择，打开页面先用它，免得每次先闪一下雾蓝；保存后发 `rail-background-changed`，
- * 同一页里的通知栏和设置面板跟着重读。
+ * 这台电脑上按人另记一份上次的选择，打开页面先用它，免得每次先闪一下雾蓝（共用电脑换了账号也不会先闪上一个人的背景）；
+ * 保存后发 `rail-background-changed`，同一页里的通知栏和设置面板跟着重读。
  */
 
 import { useEffect, useState, type CSSProperties } from "react";
@@ -15,19 +15,20 @@ export type RailBackgroundChoice = RailBackground["choice"];
 type SaveBody = components["schemas"]["SaveRailBackgroundRequest"];
 
 const CHANGED = "rail-background-changed";
-const STORED = "tianshu.rail-background";
+/** 本机缓存按人分开：键里带 personId。 */
+const storedKey = (personId: string) => `tianshu.rail-background:${personId}`;
 /** 上传前缩到的长边：通知栏最高一千来像素，两倍屏也够用。 */
 const MAX_EDGE = 2000;
 
-function readStored(): RailBackground | null {
+function readStored(personId: string): RailBackground | null {
   try {
-    const value = JSON.parse(window.localStorage.getItem(STORED) ?? "null") as RailBackground | null;
+    const value = JSON.parse(window.localStorage.getItem(storedKey(personId)) ?? "null") as RailBackground | null;
     return value && typeof value.choice === "string" ? value : null;
   } catch { return null; }
 }
 
-function store(value: RailBackground) {
-  try { window.localStorage.setItem(STORED, JSON.stringify(value)); } catch { /* 记不下就每次从服务端读 */ }
+function store(personId: string, value: RailBackground) {
+  try { window.localStorage.setItem(storedKey(personId), JSON.stringify(value)); } catch { /* 记不下就每次从服务端读 */ }
 }
 
 const railImageUrl = (version: string) => `/api/me/rail-background/image?v=${encodeURIComponent(version)}`;
@@ -40,30 +41,30 @@ export function railBackgroundProps(value: RailBackground | null): { "data-rail-
   return { "data-rail-bg": "custom", style: { "--rail-photo": `url("${railImageUrl(value.imageVersion)}")` } as CSSProperties };
 }
 
-export function useRailBackground(): RailBackground | null {
+/** personId：登录的人；拿不到时不用本机缓存，只等服务端。 */
+export function useRailBackground(personId: string | null | undefined): RailBackground | null {
   const [value, setValue] = useState<RailBackground | null>(null);
   useEffect(() => {
     let active = true;
-    const stored = readStored();
-    if (stored) setValue(stored);
+    setValue(personId ? readStored(personId) : null);
     const load = () => {
       void browserApi.GET("/api/me/rail-background").then(({ data }) => {
         if (!active || !data) return;
-        store(data);
+        if (personId) store(personId, data);
         setValue(data);
       }).catch(() => undefined);
     };
     load();
     window.addEventListener(CHANGED, load);
     return () => { active = false; window.removeEventListener(CHANGED, load); };
-  }, []);
+  }, [personId]);
   return value;
 }
 
 export async function saveRailBackground(body: SaveBody): Promise<RailBackground> {
   const { data, error } = await browserApi.PUT("/api/me/rail-background", { body });
   if (!data) throw new Error(error?.message ?? "未保存，请重试。");
-  store(data);
+  // 本机那份由各处的 useRailBackground 重读时按人记下。
   window.dispatchEvent(new Event(CHANGED));
   return data;
 }
