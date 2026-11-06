@@ -179,7 +179,7 @@ button.agreement:hover { background: color-mix(in oklab, var(--ink) 4%, transpar
 .plainList { margin: 0; padding-left: 18px; color: var(--ink-muted); }
 .plainList li { overflow-wrap: anywhere; }
 .exclusionsEdit { display: grid; gap: 8px; }
-.exclusionsEdit textarea { width: 100%; box-sizing: border-box; padding: 8px 12px; font: inherit; font-size: 13px; line-height: 1.6; resize: vertical; }
+.exclusionsEdit textarea { width: 100%; box-sizing: border-box; padding: 8px 12px; font: inherit; font-size: 13px; line-height: 1.6; resize: none; field-sizing: content; max-height: 200px; }
 
 /* 别人的 Task 单独打开时的二级页（PlanTaskScreen）：阅读页铺满外框，正文同成员战场详情的宽度和留白。 */
 .screen { display: flex; flex: 1; min-width: 0; min-height: 0; }
