@@ -69,6 +69,7 @@ export const CardMerge = Type.Object({
  * autoStart：已经登记了要开工、还没有哪台电脑接下（第 4.4 节）。在配对的电脑上开着的网页看到它就认领开工（POST /api/me/session-starts/claim）。
  * updatedAt：最近一次动静（本机报的、卡或专题改的），树上同一格按它排。
  * merge：只有卡，最近一次验收通过的交回合回到哪了（见 CardMerge）；专题、还没过的卡为 null。
+ * holdUntil：queueReason = quota（订阅额度用完，停着等恢复）时恢复的时间，界面「等额度恢复 · HH:MM」；读不到或不在等为 null。
  */
 export const SubSession = Type.Object({
   id: Type.String({ minLength: 1 }),
@@ -83,6 +84,7 @@ export const SubSession = Type.Object({
   autoStart: Type.Boolean(),
   updatedAt: Instant,
   merge: Nullable(CardMerge),
+  holdUntil: Nullable(Instant),
 }, strict);
 
 /**
@@ -154,7 +156,8 @@ export const HomeMission = Type.Object({
  * role：岗位修改建议（采纳或不要）；
  * month：月份这个检查点要你做的（month.step：review 复盘、finalize 新月份的草稿到了待敲定、continue 之前月份还有没了结的 Task；open 是月份页）；
  * device：没有在线的电脑而有活在等本机（要开工的、等本机上线的），open 是连接页；这台电脑本机程序的状态（未配对、暂停中等）网页自己看本机程序，不靠这一条；
- * quota：额度用完或预算到了，有活停着等你定（open 是那个子会话，或连接页）。
+ * quota：额度用完或预算到了，有活停着等你定：订阅额度用完时一台电脑一条「Claude 订阅额度用完 · HH:MM 恢复」，source 写停着几件，
+ *   open 是连接页，dueAt 是恢复的时间（到点本机自己接着做；要不要换网关模型、开额外额度由你定）。预算（设计 11.4）以后再加。
  */
 export const WaitingKind = Type.Union([
   Type.Literal("approval"), Type.Literal("question"), Type.Literal("verdict"), Type.Literal("meeting"), Type.Literal("mission_card"), Type.Literal("role"),
@@ -259,6 +262,7 @@ export const BackgroundState = Type.Union([Type.Literal("queued"), Type.Literal(
  * sessionId 是哪个本机会话（规划员、验收员是它自己，子 agent 和后台命令是开它的那个子会话），itemId 是本机的后台任务 id（只有 subagent、command）。
  * stoppable：这一项现在能停（还在跑）。停只能在 deviceId 那台电脑上经本机程序停（规划员、验收员停会话，子 agent 和后台命令用 stopBackground），云端和手机只显示。
  * taskId、cardId、topicId：挂在哪件 Task、哪张卡、哪个专题。
+ * holdUntil：规划员、验收员停着等额度恢复（本机报的 hold）时恢复的时间，state 是 queued；别的为 null。
  */
 export const BackgroundItem = Type.Object({
   id: Type.String({ minLength: 1 }),
@@ -274,6 +278,7 @@ export const BackgroundItem = Type.Object({
   taskId: Nullable(Type.String({ minLength: 1 })),
   cardId: Nullable(Type.String({ minLength: 1 })),
   topicId: Nullable(Type.String({ format: "uuid" })),
+  holdUntil: Nullable(Instant),
 }, strict);
 
 /**

@@ -1,4 +1,5 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
+import { LocalQuotaWindow } from "./localRunner.js";
 import { RoleRef } from "./roles.js";
 import { CardGit, CardStage } from "./taskCardView.js";
 
@@ -23,9 +24,11 @@ export const WorkerMark = Type.Union([
 
 /**
  * 已排队在等什么：not_dispatched 等开工（本人确认了、还没交给本机）、slot 等空位（本机同时跑满了）、device_offline 等本机上线、
- * prior_cards 等前面的卡（本机报的 waitingFor：派活单上要等的那几张还没在这台本机上合回）。
+ * prior_cards 等前面的卡（本机报的 waitingFor：派活单上要等的那几张还没在这台本机上合回）、
+ * quota 等额度恢复（本机报的 hold：订阅额度用完了，停着不占位置，到点本机自己接着做；界面「等额度恢复 · HH:MM」，时间是 holdUntil）。
  */
-export const WorkerQueueReason = Type.Union([Type.Literal("not_dispatched"), Type.Literal("slot"), Type.Literal("device_offline"), Type.Literal("prior_cards")]);
+export const WorkerQueueReason = Type.Union([Type.Literal("not_dispatched"), Type.Literal("slot"), Type.Literal("device_offline"), Type.Literal("prior_cards"),
+  Type.Literal("quota")]);
 
 /** worker 用的资源：local 在本人电脑上（哪台、什么模型）；cloud 在云端（验收员验收），没有设备。 */
 export const WorkerResource = Type.Object({
@@ -35,7 +38,10 @@ export const WorkerResource = Type.Object({
   modelLabel: Nullable(Type.String()),
 }, strict);
 
-/** 花费：token 累计；costUsd 是本机给的估价，costCny 是 TokenHub 给的人民币（还没有时为 null）。 */
+/**
+ * 花费：token 累计（订阅和网关都算）；costUsd、costCny 是真花的钱（设计第 11 节）：只算网关模型（TokenHub 等）的钱，本机按价目表估的（cost 条目的 money），
+ * 按币种分开、不换算；本人订阅的用量不是真钱，不算进来。一笔网关的钱都还没有时为 null。
+ */
 export const WorkerCost = Type.Object({
   inputTokens: Type.Integer({ minimum: 0 }),
   outputTokens: Type.Integer({ minimum: 0 }),
@@ -56,6 +62,7 @@ export const WorkerCost = Type.Object({
  * queuePosition 是「排第 n」：只有 queueReason=slot 的有，和本机程序的 queuePosition 同义——这台电脑上等空位的会话按开工先后排第几（1 起）。
  * git：卡和验收员这一行，卡最近一次交回的分支、提交和验的提交（卡在工作树里做时才有）；规划员、专题和没交回过的卡为 null。
  * waitingFor：queueReason=prior_cards 时在等的那几张卡（id 和标题），别的为空。
+ * holdUntil：queueReason=quota 时额度恢复的时间（本机读不到为 null），别的为 null。
  */
 export const WorkerItem = Type.Object({
   key: Type.String({ minLength: 1 }),
@@ -80,12 +87,15 @@ export const WorkerItem = Type.Object({
   queuePosition: Nullable(Type.Integer({ minimum: 1 })),
   git: Nullable(CardGit),
   waitingFor: Type.Array(Type.Object({ cardId: Type.String({ minLength: 1 }), title: Type.String() }, strict)),
+  holdUntil: Nullable(Instant),
 }, strict);
 
 /**
  * 资源摘要：本人的设备（online 看最近一次上报的时间，10 分钟内算在线）；running 和 cap 取在线设备最近一批同步报的 slots（本机程序契约的 LocalSlots）：
  * running 是占着位置的会话数（slots.running 相加，含不带岗位的卡），cap 是同时跑的上限（slots.max 相加，没有在线设备报过为 null）；
  * 今天和本月的花费（按开工日、公司时区算，只算本机报的，云端验收的模型花费不在里面）。
+ * quota：各台设备最近一批同步报的订阅额度（本机程序契约 LocalQuotaSync：窗口的种类、用了百分之几、状态、重置时间，用完时的恢复时间、读到的时间），
+ * 给手机和别的电脑看；在这台电脑上，网页以本机程序 GET /v1/status 的 quota 为准。没报过的设备不列。
  */
 export const WorkerResources = Type.Object({
   devices: Type.Array(Type.Object({
@@ -97,6 +107,14 @@ export const WorkerResources = Type.Object({
   running: Type.Integer({ minimum: 0 }),
   cap: Nullable(Type.Integer({ minimum: 1 })),
   cost: Type.Object({ today: WorkerCost, month: WorkerCost }, strict),
+  quota: Type.Array(Type.Object({
+    deviceId: Type.String({ format: "uuid" }),
+    deviceName: Type.String(),
+    source: Type.Literal("claude_subscription"),
+    windows: Type.Array(LocalQuotaWindow),
+    blockedUntil: Nullable(Instant),
+    updatedAt: Instant,
+  }, strict)),
 }, strict);
 
 /** GET /api/me/workers：进行中（等你的在前，再按开工时间）、已排队、已完成（今天，公司时区，新的在前），加资源摘要。 */

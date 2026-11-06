@@ -101495,7 +101495,8 @@
           "queueReason",
           "queuePosition",
           "git",
-          "waitingFor"
+          "waitingFor",
+          "holdUntil"
         ],
         "properties": {
           "key": {
@@ -101885,6 +101886,10 @@
                   {
                     "const": "prior_cards",
                     "type": "string"
+                  },
+                  {
+                    "const": "quota",
+                    "type": "string"
                   }
                 ]
               },
@@ -101965,6 +101970,17 @@
                 }
               }
             }
+          },
+          "holdUntil": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -101975,7 +101991,8 @@
           "devices",
           "running",
           "cap",
-          "cost"
+          "cost",
+          "quota"
         ],
         "properties": {
           "devices": {
@@ -102122,6 +102139,125 @@
                 }
               }
             }
+          },
+          "quota": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "deviceId",
+                "deviceName",
+                "source",
+                "windows",
+                "blockedUntil",
+                "updatedAt"
+              ],
+              "properties": {
+                "deviceId": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "deviceName": {
+                  "type": "string"
+                },
+                "source": {
+                  "const": "claude_subscription",
+                  "type": "string"
+                },
+                "windows": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "kind",
+                      "model",
+                      "usedPercent",
+                      "state",
+                      "resetsAt"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "anyOf": [
+                          {
+                            "const": "session",
+                            "type": "string"
+                          },
+                          {
+                            "const": "weekly_all",
+                            "type": "string"
+                          },
+                          {
+                            "const": "weekly_scoped",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "model": {
+                        "anyOf": [
+                          {
+                            "minLength": 1,
+                            "maxLength": 60,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "usedPercent": {
+                        "minimum": 0,
+                        "maximum": 100,
+                        "type": "integer"
+                      },
+                      "state": {
+                        "anyOf": [
+                          {
+                            "const": "ok",
+                            "type": "string"
+                          },
+                          {
+                            "const": "warning",
+                            "type": "string"
+                          },
+                          {
+                            "const": "blocked",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "resetsAt": {
+                        "anyOf": [
+                          {
+                            "format": "date-time",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                "blockedUntil": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "updatedAt": {
+                  "format": "date-time",
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       },
@@ -102162,7 +102298,8 @@
                 "queueReason",
                 "queuePosition",
                 "git",
-                "waitingFor"
+                "waitingFor",
+                "holdUntil"
               ],
               "properties": {
                 "key": {
@@ -102552,6 +102689,10 @@
                         {
                           "const": "prior_cards",
                           "type": "string"
+                        },
+                        {
+                          "const": "quota",
+                          "type": "string"
                         }
                       ]
                     },
@@ -102632,6 +102773,17 @@
                       }
                     }
                   }
+                },
+                "holdUntil": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               }
             }
@@ -102663,7 +102815,8 @@
                 "queueReason",
                 "queuePosition",
                 "git",
-                "waitingFor"
+                "waitingFor",
+                "holdUntil"
               ],
               "properties": {
                 "key": {
@@ -103053,6 +103206,10 @@
                         {
                           "const": "prior_cards",
                           "type": "string"
+                        },
+                        {
+                          "const": "quota",
+                          "type": "string"
                         }
                       ]
                     },
@@ -103133,6 +103290,17 @@
                       }
                     }
                   }
+                },
+                "holdUntil": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               }
             }
@@ -103164,7 +103332,8 @@
                 "queueReason",
                 "queuePosition",
                 "git",
-                "waitingFor"
+                "waitingFor",
+                "holdUntil"
               ],
               "properties": {
                 "key": {
@@ -103554,6 +103723,10 @@
                         {
                           "const": "prior_cards",
                           "type": "string"
+                        },
+                        {
+                          "const": "quota",
+                          "type": "string"
                         }
                       ]
                     },
@@ -103634,6 +103807,17 @@
                       }
                     }
                   }
+                },
+                "holdUntil": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               }
             }
@@ -103645,7 +103829,8 @@
               "devices",
               "running",
               "cap",
-              "cost"
+              "cost",
+              "quota"
             ],
             "properties": {
               "devices": {
@@ -103789,6 +103974,125 @@
                           }
                         ]
                       }
+                    }
+                  }
+                }
+              },
+              "quota": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "deviceId",
+                    "deviceName",
+                    "source",
+                    "windows",
+                    "blockedUntil",
+                    "updatedAt"
+                  ],
+                  "properties": {
+                    "deviceId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "deviceName": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "const": "claude_subscription",
+                      "type": "string"
+                    },
+                    "windows": {
+                      "type": "array",
+                      "items": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "kind",
+                          "model",
+                          "usedPercent",
+                          "state",
+                          "resetsAt"
+                        ],
+                        "properties": {
+                          "kind": {
+                            "anyOf": [
+                              {
+                                "const": "session",
+                                "type": "string"
+                              },
+                              {
+                                "const": "weekly_all",
+                                "type": "string"
+                              },
+                              {
+                                "const": "weekly_scoped",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "model": {
+                            "anyOf": [
+                              {
+                                "minLength": 1,
+                                "maxLength": 60,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "usedPercent": {
+                            "minimum": 0,
+                            "maximum": 100,
+                            "type": "integer"
+                          },
+                          "state": {
+                            "anyOf": [
+                              {
+                                "const": "ok",
+                                "type": "string"
+                              },
+                              {
+                                "const": "warning",
+                                "type": "string"
+                              },
+                              {
+                                "const": "blocked",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "resetsAt": {
+                            "anyOf": [
+                              {
+                                "format": "date-time",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    "blockedUntil": {
+                      "anyOf": [
+                        {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "updatedAt": {
+                      "format": "date-time",
+                      "type": "string"
                     }
                   }
                 }
@@ -104252,7 +104556,8 @@
           "deviceId",
           "autoStart",
           "updatedAt",
-          "merge"
+          "merge",
+          "holdUntil"
         ],
         "properties": {
           "id": {
@@ -104343,6 +104648,10 @@
                   },
                   {
                     "const": "prior_cards",
+                    "type": "string"
+                  },
+                  {
+                    "const": "quota",
                     "type": "string"
                   }
                 ]
@@ -104520,6 +104829,17 @@
                 "type": "null"
               }
             ]
+          },
+          "holdUntil": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -104692,7 +105012,8 @@
                 "deviceId",
                 "autoStart",
                 "updatedAt",
-                "merge"
+                "merge",
+                "holdUntil"
               ],
               "properties": {
                 "id": {
@@ -104783,6 +105104,10 @@
                         },
                         {
                           "const": "prior_cards",
+                          "type": "string"
+                        },
+                        {
+                          "const": "quota",
                           "type": "string"
                         }
                       ]
@@ -104955,6 +105280,17 @@
                           "type": "string"
                         }
                       }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "holdUntil": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
                     },
                     {
                       "type": "null"
@@ -105177,7 +105513,8 @@
                       "deviceId",
                       "autoStart",
                       "updatedAt",
-                      "merge"
+                      "merge",
+                      "holdUntil"
                     ],
                     "properties": {
                       "id": {
@@ -105268,6 +105605,10 @@
                               },
                               {
                                 "const": "prior_cards",
+                                "type": "string"
+                              },
+                              {
+                                "const": "quota",
                                 "type": "string"
                               }
                             ]
@@ -105440,6 +105781,17 @@
                                 "type": "string"
                               }
                             }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "holdUntil": {
+                        "anyOf": [
+                          {
+                            "format": "date-time",
+                            "type": "string"
                           },
                           {
                             "type": "null"
@@ -106029,7 +106381,8 @@
                             "deviceId",
                             "autoStart",
                             "updatedAt",
-                            "merge"
+                            "merge",
+                            "holdUntil"
                           ],
                           "properties": {
                             "id": {
@@ -106120,6 +106473,10 @@
                                     },
                                     {
                                       "const": "prior_cards",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "quota",
                                       "type": "string"
                                     }
                                   ]
@@ -106297,6 +106654,17 @@
                                   "type": "null"
                                 }
                               ]
+                            },
+                            "holdUntil": {
+                              "anyOf": [
+                                {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
                             }
                           }
                         }
@@ -106389,7 +106757,8 @@
                     "deviceId",
                     "autoStart",
                     "updatedAt",
-                    "merge"
+                    "merge",
+                    "holdUntil"
                   ],
                   "properties": {
                     "id": {
@@ -106480,6 +106849,10 @@
                             },
                             {
                               "const": "prior_cards",
+                              "type": "string"
+                            },
+                            {
+                              "const": "quota",
                               "type": "string"
                             }
                           ]
@@ -106652,6 +107025,17 @@
                               "type": "string"
                             }
                           }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "holdUntil": {
+                      "anyOf": [
+                        {
+                          "format": "date-time",
+                          "type": "string"
                         },
                         {
                           "type": "null"
@@ -107032,7 +107416,8 @@
           "deviceId",
           "taskId",
           "cardId",
-          "topicId"
+          "topicId",
+          "holdUntil"
         ],
         "properties": {
           "id": {
@@ -107180,6 +107565,17 @@
                 "type": "null"
               }
             ]
+          },
+          "holdUntil": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -107209,7 +107605,8 @@
                 "deviceId",
                 "taskId",
                 "cardId",
-                "topicId"
+                "topicId",
+                "holdUntil"
               ],
               "properties": {
                 "id": {
@@ -107357,6 +107754,17 @@
                       "type": "null"
                     }
                   ]
+                },
+                "holdUntil": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               }
             }
@@ -107368,7 +107776,8 @@
               "devices",
               "running",
               "cap",
-              "cost"
+              "cost",
+              "quota"
             ],
             "properties": {
               "devices": {
@@ -107512,6 +107921,125 @@
                           }
                         ]
                       }
+                    }
+                  }
+                }
+              },
+              "quota": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "deviceId",
+                    "deviceName",
+                    "source",
+                    "windows",
+                    "blockedUntil",
+                    "updatedAt"
+                  ],
+                  "properties": {
+                    "deviceId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "deviceName": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "const": "claude_subscription",
+                      "type": "string"
+                    },
+                    "windows": {
+                      "type": "array",
+                      "items": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "kind",
+                          "model",
+                          "usedPercent",
+                          "state",
+                          "resetsAt"
+                        ],
+                        "properties": {
+                          "kind": {
+                            "anyOf": [
+                              {
+                                "const": "session",
+                                "type": "string"
+                              },
+                              {
+                                "const": "weekly_all",
+                                "type": "string"
+                              },
+                              {
+                                "const": "weekly_scoped",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "model": {
+                            "anyOf": [
+                              {
+                                "minLength": 1,
+                                "maxLength": 60,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "usedPercent": {
+                            "minimum": 0,
+                            "maximum": 100,
+                            "type": "integer"
+                          },
+                          "state": {
+                            "anyOf": [
+                              {
+                                "const": "ok",
+                                "type": "string"
+                              },
+                              {
+                                "const": "warning",
+                                "type": "string"
+                              },
+                              {
+                                "const": "blocked",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "resetsAt": {
+                            "anyOf": [
+                              {
+                                "format": "date-time",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    "blockedUntil": {
+                      "anyOf": [
+                        {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "updatedAt": {
+                      "format": "date-time",
+                      "type": "string"
                     }
                   }
                 }
