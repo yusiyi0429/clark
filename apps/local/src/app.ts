@@ -8,7 +8,7 @@ import { createSecretStore, type SecretStore } from "./secrets.js";
 import { ModelProfiles } from "./models.js";
 import { Folders } from "./folders.js";
 import { Outbox } from "./outbox.js";
-import { CloudLink, Settings } from "./cloud.js";
+import { CloudLink, Settings, fetchVerifyBrief } from "./cloud.js";
 import { SessionManager } from "./sessions.js";
 import { ClaudeSetup } from "./agents/claudeSetup.js";
 import { ClaudeCodeAdapter, type ClaudeBin } from "./agents/claudeCode.js";
@@ -66,6 +66,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
     paused: () => settings.get().paused,
     skillsDir: opts.skillsDir ?? join(homeDir(), ".claude", "skills"),
     maxConcurrent: () => settings.get().maxConcurrent,
+    verifyBrief: async (handbackKey) => fetchVerifyBrief(await cloud.target(), handbackKey, opts.fetchImpl ?? fetch),
     adapters: {
       "claude-code": new ClaudeCodeAdapter(opts.claudeBin ? async () => opts.claudeBin! : () => claude.bin()),
       codex: new CodexAdapter(),
@@ -74,6 +75,8 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   });
   sessionsRef = sessions;
   outbox.slots = () => sessions.slots();
+  // 交回送到天枢以后去取验收交代。
+  outbox.onSent = () => void sessions.pullBriefs();
   const server = createServer({
     config, version: VERSION, tokens, pairings, sessions, log, models, folders, claude, cloud, settings,
     pickFolder: () => desktop.pickFolder(),
@@ -103,6 +106,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   });
   // 上次没开始的排队会话，有空位就接上（要等本机程序开始监听，本会话 MCP 才连得上）。
   sessions.pump();
+  void sessions.pullBriefs();
   await desktop.start((a) => void onMenu(a));
   updateTray();
   setInterval(updateTray, 10_000).unref();

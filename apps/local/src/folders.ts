@@ -79,13 +79,14 @@ export class Folders {
     return true;
   }
 
-  topicDir(topicId: string): string {
-    const dir = join(this.dataDir, "topics", topicId.replace(/[^A-Za-z0-9_-]/g, "_"));
+  /** 专题、规划员没给目录时用的专用目录（在本机程序的数据目录里）。 */
+  ownDir(group: "topics" | "plans", id: string): string {
+    const dir = join(this.dataDir, group, id.replace(/[^A-Za-z0-9_-]/g, "_"));
     mkdirSync(dir, { recursive: true });
     return dir;
   }
 
   isAllowed(cwd: string): boolean {
-    return this.contains(cwd) || isInside(join(this.dataDir, "topics"), cwd);
+    return this.contains(cwd) || isInside(join(this.dataDir, "topics"), cwd) || isInside(join(this.dataDir, "plans"), cwd);
   }
 }

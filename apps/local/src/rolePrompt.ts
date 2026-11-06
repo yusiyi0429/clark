@@ -1,4 +1,4 @@
-import type { TLocalRole, TLocalRoleTool, TLocalSessionKind } from "@warmap/contracts";
+import type { TLocalRole, TLocalRoleTool, TLocalSessionKind, TLocalVerdictCriterion } from "@warmap/contracts";
 
 /**
  * 会话追加的系统提示词（--append-system-prompt-file）、挑刺子 agent 的定义（--agents）、评审会的那句话（ADR 0033）。
@@ -15,6 +15,25 @@ const TOPIC_RULES = `## 规矩
 - 本人同意后写正文，写完用 save_version（kind=draft）存；以后每改一次存新的一版，note 写这一版改了什么。
 - 本人要把某一版存进飞书时，用飞书工具存进本人的云文档，再用 set_feishu_url 报回第几版和地址。
 - 图、PDF 这类附件用 add_artifact 交。`;
+
+const PLAN_RULES = `## 规矩
+- 你是规划员：只读，不改文件、不跑命令。用天枢 MCP 的 get_task_context 读这个 Task 的上下文（约定、Mission、近期的事和决定、上一版交付物和评审），需要时读工作目录里的文件。
+- 把 Task 拆成计划和派活单，用 propose_plan 交：计划几步、先后、风险；派活单每件写交代、完成标准（每行一条、能检查）、对约定第几条、交给哪个岗位（交代里岗位清单的名字）、模型档位。一件就是一个 worker 一次能交回的活。
+- 交完就停，等本人在网页上看派活单；本人让你改，改完再用 propose_plan 交一次。`;
+
+const VERIFY_RULES = `## 规矩
+- 你是验收员：只读，不改文件、不跑命令，也不替执行方补做。
+- 依据是交代里的约定、卡的完成标准、卡所属岗位的验收口径和你自己的验收口径；材料是交回里的自评、证据和产出（产出文件在当前工作目录里，可以读）。需要时用天枢 MCP 的 get_task_context 读 Task 的上下文。
+- 每条完成标准判一次：达到（met）、部分（partial）、没达到（unmet），写理由和依据，没达到的写怎么补；标准以外的建议放进 beyondScope，不算没达到。证据不够就判没达到。
+- 判完用 submit_verdict 交一次结论，然后停下。`;
+
+const RULES: Record<TLocalSessionKind, string> = { card: CARD_RULES, topic: TOPIC_RULES, plan: PLAN_RULES, verify: VERIFY_RULES };
+const INTRO: Record<TLocalSessionKind, string> = {
+  card: "本人在天枢网页上把这张卡派给你，在本人自己的电脑上做。网页能看到你的每一步，本人会批权限、插话。",
+  topic: "本人在天枢网页上把这个调研专题派给你，在本人自己的电脑上做。网页能看到你的每一步，本人会批权限、插话。",
+  plan: "本人在天枢网页上请你把一个 Task 拆成计划和派活单，在本人自己的电脑上做。网页能看到你的每一步，本人会插话。",
+  verify: "执行方交回了一张卡，本机请你验收，在本人自己的电脑上做。网页能看到你的每一步。",
+};
 
 const TOOL_TEXT: Record<TLocalRoleTool, string> = {
   tianshu: "天枢：用天枢 MCP（tianshu）读本人的事项、Mission 和公司资料；写进去的操作每次都要本人批准",
@@ -44,11 +63,7 @@ const FEISHU_NOTE: Record<"plugin" | "personal" | "none", string> = {
 };
 
 export function systemPrompt(kind: TLocalSessionKind, role: TLocalRole | null, critics: TLocalRole[], feishu: FeishuSkills): string {
-  const parts = [
-    "# 天枢本机会话",
-    `本人在天枢网页上把这${kind === "card" ? "张卡" : "个调研专题"}派给你，在本人自己的电脑上做。网页能看到你的每一步，本人会批权限、插话。`,
-    kind === "card" ? CARD_RULES : TOPIC_RULES,
-  ];
+  const parts = ["# 天枢本机会话", INTRO[kind], RULES[kind]];
   if (role) {
     parts.push(roleBlock(role, "## 你的岗位："));
     const tools = role.tools.map((t) => `- ${TOOL_TEXT[t]}${t === "feishu" ? FEISHU_NOTE[feishu ?? "none"] : ""}`);
@@ -68,6 +83,13 @@ export function criticAgents(critics: TLocalRole[], searchTool: string | null): 
     prompt: `${roleBlock(c, "# 你是挑刺岗位：")}\n\n## 怎么做\n读主会话指定的那一版，按你的职责和口径逐条列问题、理由和建议，最后一句给总体判断。只提意见，不改任何文件。\n`,
     tools: ["Read", "Grep", "Glob", ...(searchTool && c.tools.includes("web_search") ? [searchTool] : [])],
   }]));
+}
+
+/** 验收没过时送回执行方的那段改法：固定格式拼，不调模型（和云端 cardAcceptance.ts 的 returnText 一个格式）。 */
+export function returnText(criteria: string[], judged: TLocalVerdictCriterion[]): string {
+  const missed = judged.filter((c) => c.verdict !== "met")
+    .map((c) => `第 ${c.index} 条「${criteria[c.index - 1] ?? ""}」，${c.reason}；怎么补：${c.fix ?? "补上能核对的证据"}`);
+  return `验收没过：${missed.join("。")}。改完再交回。`;
 }
 
 /** 网页点「评审会」时本机替本人说的那句话。 */

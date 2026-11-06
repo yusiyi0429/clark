@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { TLocalModelProfile, TLocalModelProfileUpsert } from "@warmap/contracts";
+import type { TLocalModelProfile, TLocalModelProfileUpsert, TLocalModelTier } from "@warmap/contracts";
 import { readJson, writeJsonAtomic } from "./store.js";
 import type { SecretStore } from "./secrets.js";
 
@@ -25,6 +25,8 @@ const builtIn: Stored = {
 };
 
 const keyName = (id: string) => `model:${id}`;
+/** 档位怎么认模型：和网页（apps/web 的 modelForTier）同一套。 */
+const TIER_MATCH: Record<TLocalModelTier, RegExp> = { strong: /opus/i, normal: /sonnet/i, light: /haiku|flash|mini|lite/i };
 
 /**
  * 经网关实测会真的执行 Claude Code 自带联网搜索的模型（11/06，TokenHub 的 Anthropic 入口）。不在这里的网关模型默认关掉自带搜索：
@@ -83,6 +85,12 @@ export class ModelProfiles {
     writeJsonAtomic(this.file, list.filter((p) => p.id !== id));
     await this.secrets.delete(keyName(id));
     return true;
+  }
+
+  /** 按档位挑模型（验收员由本机自己起时用）：和网页一样按模型名和名字认，认不出用默认的。 */
+  forTier(tier: TLocalModelTier): string {
+    const all = this.stored();
+    return (all.find((p) => TIER_MATCH[tier].test(`${p.model ?? ""} ${p.label}`)) ?? all.find((p) => p.isDefault) ?? all[0]!).id;
   }
 
   async resolve(id?: string): Promise<ResolvedModel | null> {

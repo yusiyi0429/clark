@@ -29,6 +29,8 @@ export class Outbox {
   private readonly blobDir: string;
   /** 发每一批时带上本机的位置数（app 接好会话管理后替换）。 */
   slots: () => TLocalSlots = () => ({ max: 3, running: 0, queued: 0 });
+  /** 有条目出队（云端收下或拒收）以后调：交回送到了，本机才去取验收交代。 */
+  onSent: () => void = () => {};
   private state: State;
   private timer: NodeJS.Timeout | null = null;
   private flushing: Promise<void> | null = null;
@@ -66,6 +68,11 @@ export class Outbox {
     this.state.entries.push(entry);
     this.save();
     this.schedule(300);
+  }
+
+  /** 这一条还在队里（云端还没收下）。 */
+  has(key: string): boolean {
+    return this.state.entries.some((e) => e.item.key === key);
   }
 
   status(): TLocalOutboxStatus {
@@ -129,6 +136,7 @@ export class Outbox {
       items.push(item);
       bytes += size;
     }
+    const before = this.state.entries.length;
     const body: TLocalSyncBatchRequest = { deviceId: this.meta.deviceId, runnerVersion: this.meta.runnerVersion, slots: this.slots(), items };
     let error: string | null = null;
     let retryNow = false;
@@ -165,7 +173,9 @@ export class Outbox {
       for (const entry of batch) this.backoff(entry);
     }
     this.state.lastError = error;
+    const sent = this.state.entries.length < before;
     this.save();
+    if (sent) this.onSent();
     if (retryNow || (!error && this.state.entries.some((e) => e.nextAt <= this.now()))) this.schedule(0);
     else this.scheduleNext();
   }

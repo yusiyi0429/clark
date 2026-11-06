@@ -1,9 +1,13 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { basename, extname, join, resolve } from "node:path";
-import type {
-  TLocalAgentKind, TLocalCreateSessionRequest, TLocalHandbackCriterion, TLocalPermissionRequestView, TLocalRole, TLocalSendMessageRequest, TLocalSendMessageResponse,
-  TLocalSessionKind, TLocalSessionStatus, TLocalSlots, TLocalSessionSubject, TLocalSessionSummary, TLocalSyncItem, TLocalTopicVersionKind, TLocalUsage,
+import type { TSchema } from "@sinclair/typebox";
+import { Value } from "@sinclair/typebox/value";
+import {
+  LocalCardPlan, LocalVerdict,
+  type TLocalAgentKind, type TLocalCardPlan, type TLocalCreateSessionRequest, type TLocalHandbackCriterion, type TLocalPermissionRequestView, type TLocalRole,
+  type TLocalSendMessageRequest, type TLocalSendMessageResponse, type TLocalSessionKind, type TLocalSessionStatus, type TLocalSlots, type TLocalSessionSubject,
+  type TLocalSessionSummary, type TLocalSyncItem, type TLocalTopicVersionKind, type TLocalUsage, type TLocalVerdict, type TLocalVerdictCriterion,
 } from "@warmap/contracts";
 import { readJson, writeJsonAtomic, nowIso } from "./store.js";
 import type { EventLog, EventBody } from "./eventLog.js";
@@ -12,16 +16,27 @@ import type { ModelProfiles } from "./models.js";
 import { isInside, type Folders } from "./folders.js";
 import type { Outbox } from "./outbox.js";
 import { SESSION_MCP_NAME, sessionToolNames } from "./sessionMcp.js";
-import { criticAgents, reviewMessage, systemPrompt } from "./rolePrompt.js";
+import { criticAgents, returnText, reviewMessage, systemPrompt } from "./rolePrompt.js";
 import { ensureFeishuPlugin, larkSkills } from "./agents/feishuPlugin.js";
+import type { VerifyBrief } from "./cloud.js";
 
 /** 云端天枢 MCP 在会话里的名字：和本人在 Claude Code 里配的天枢 MCP 同名，工具名一致。 */
 const CLOUD_MCP_NAME = "tianshu";
 /**
- * 云端天枢 MCP 里预先放行的只读工具（不弹权限请求）。联网搜索改由天枢提供（/mcp/me 上的 web_search，博查，钥匙留在服务器），
- * 其余工具（写进展、建事项等）每次调用都要网页批准。
+ * 云端天枢 MCP 里预先放行的只读工具（不弹权限请求）：读 Task 上下文（get_task_context，规划员、验收员、执行都用）；
+ * 联网搜索（web_search，博查，钥匙留在服务器）只在岗位有搜索时放行。其余工具（写进展、建事项等）每次调用都要网页批准。
  */
-const CLOUD_MCP_READONLY_TOOLS: string[] = ["web_search"];
+const CLOUD_MCP_CONTEXT_TOOL = "get_task_context";
+const CLOUD_MCP_SEARCH_TOOL = "web_search";
+/** 规划员、验收员只读：改东西的工具都不给；子 agent 也不给，免得绕过去改。 */
+const READ_ONLY_KINDS: TLocalSessionKind[] = ["plan", "verify"];
+const WRITE_TOOLS = ["Edit", "MultiEdit", "Write", "NotebookEdit", "Bash", "PowerShell", "Agent", "Task"];
+/** 排队先后：验收员（短，而且卡着交付）→ 规划员 → 执行；同一档先来先跑。 */
+const PRIORITY: Record<TLocalSessionKind, number> = { verify: 0, plan: 1, card: 2, topic: 2 };
+/** 验收交代取不到（没连天枢、断网、天枢出错）时多久再试一次。 */
+const BRIEF_RETRY_MS = 15_000;
+/** 验收员一轮做完没交结论时，本机提醒它一次。 */
+const VERIFY_NUDGE = "还没交结论：请逐条判完，用 submit_verdict 交一次。";
 
 interface SessionRecord {
   id: string;
@@ -53,7 +68,27 @@ interface SessionRecord {
   queuedMessage: string | null;
   /** 进队的先后（先来先跑；一批里同一毫秒进的也分得清）。 */
   queueOrder: number;
+  /** 验收员：是哪个执行会话交回后起的（结论也报给它）。 */
+  parentId: string | null;
+  /** 验收员：还在等天枢的验收交代（交回送到天枢后才取得到）。 */
+  briefPending: boolean;
+  /** 验收员：交回那一刻卡的完成标准（交代里给的），逐条判。 */
+  criteria: string[];
+  /** 验收员：这次交回之前这张卡连续没过几次。 */
+  failStreak: number;
+  /** 规划员交过几次计划；验收员交过几次结论（只许一次）。 */
+  submitted: number;
+  /** 验收员：一轮做完没交结论时提醒过没有（只提醒一次）。 */
+  nudged: boolean;
 }
+
+/** 不合契约时给执行方看的一句（哪个字段、哪里不对）。 */
+function schemaProblem(schema: TSchema, value: unknown): string | null {
+  if (Value.Check(schema, value)) return null;
+  const e = [...Value.Errors(schema, value)][0];
+  return e ? `${e.path || "/"} ${e.message}` : "格式不对";
+}
+const textOrNull = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
 
 export class SessionError extends Error {
   constructor(readonly code: "not_found" | "conflict" | "folder_not_allowed" | "validation", message: string) { super(message); }
@@ -77,6 +112,8 @@ export interface SessionDeps {
   maxConcurrent?: () => number;
   /** 本人已装的技能目录（找 lark-* 飞书技能，岗位要飞书时挂给会话）。 */
   skillsDir?: string;
+  /** 向天枢取一次交回的验收交代（没有就不自动验收）。 */
+  verifyBrief?: (handbackKey: string) => Promise<VerifyBrief>;
   onChange?: () => void;
 }
 
@@ -111,6 +148,13 @@ export class SessionManager {
   private queueSeq = 0;
   /** 读回上次的会话时（本机程序还没开始监听）和关机时不从队里接；启动好后由 app 调 pump。 */
   private holdQueue = true;
+  /** 验收员交完结论、本机让它退出的会话（退出时记「验收完了」）。 */
+  private readonly finished = new Set<string>();
+  /** 等验收交代时最近一次告诉网页的原因（变了才再说）。 */
+  private readonly waitNotes = new Map<string, string>();
+  private pulling: Promise<void> | null = null;
+  private pullAgain = false;
+  private briefTimer: NodeJS.Timeout | null = null;
   private readonly dir: string;
 
   constructor(private readonly d: SessionDeps) {
@@ -127,6 +171,12 @@ export class SessionManager {
       rec.critics ??= [];
       rec.queuedMessage ??= null;
       rec.queueOrder ??= 0;
+      rec.parentId ??= null;
+      rec.briefPending ??= false;
+      rec.criteria ??= [];
+      rec.failStreak ??= 0;
+      rec.submitted ??= 0;
+      rec.nudged ??= false;
       this.queueSeq = Math.max(this.queueSeq, rec.queueOrder);
       this.records.set(rec.id, rec);
       // 本机程序重启时，上次的进程都已不在。排着的照原样排着；刚从队里拉起、还没开始的放回队里（位置不变）。
@@ -142,7 +192,10 @@ export class SessionManager {
   }
 
   private summary(rec: SessionRecord): TLocalSessionSummary {
-    const { mcpSecret: _s, syncSeq: _q, outputs: _o, versionNumber: _v, lastVersion: _l, role: _r, critics: _c, queuedMessage: _m, queueOrder: _n, ...rest } = rec;
+    const {
+      mcpSecret: _s, syncSeq: _q, outputs: _o, versionNumber: _v, lastVersion: _l, role: _r, critics: _c, queuedMessage: _m, queueOrder: _n,
+      parentId: _p, briefPending: _b, criteria: _cr, failStreak: _f, submitted: _sb, nudged: _nd, ...rest
+    } = rec;
     return { ...rest, lastSeq: this.d.log.lastSeq(rec.id), pendingPermissions: this.pending.get(rec.id)?.size ?? 0, queuePosition: this.queuePosition(rec) };
   }
 
@@ -162,14 +215,20 @@ export class SessionManager {
     return rec.subject.kind;
   }
 
-  /** 排队时是第几个（先来先跑）；没在排队为 null。 */
+  /** 排队时是第几个（验收员、规划员排前面，同一档先来先跑）；没在排队为 null。 */
   private queuePosition(rec: SessionRecord): number | null {
     if (rec.status !== "queued") return null;
     return this.queue().indexOf(rec) + 1;
   }
 
   private queue(): SessionRecord[] {
-    return [...this.records.values()].filter((r) => r.status === "queued").sort((a, b) => a.queueOrder - b.queueOrder);
+    return [...this.records.values()].filter((r) => r.status === "queued")
+      .sort((a, b) => PRIORITY[a.subject.kind] - PRIORITY[b.subject.kind] || a.queueOrder - b.queueOrder);
+  }
+
+  /** 排着、而且能开始的（等验收交代的验收员先跳过）。 */
+  private ready(): SessionRecord[] {
+    return this.queue().filter((r) => !r.briefPending);
   }
 
   private max(): number {
@@ -192,7 +251,7 @@ export class SessionManager {
    */
   pump(): void {
     if (this.holdQueue || this.d.paused?.()) return;
-    for (let next = this.queue()[0]; next && this.activeCount() < this.max(); next = this.queue()[0]) {
+    for (let next = this.ready()[0]; next && this.activeCount() < this.max(); next = this.ready()[0]) {
       this.setStatus(next, "starting");
       void this.launchQueued(next);
     }
@@ -264,9 +323,12 @@ export class SessionManager {
 
   async create(req: TLocalCreateSessionRequest, defaults: { includePersonalConfig: boolean }): Promise<TLocalSessionSummary> {
     const { subject } = req;
+    if (subject.kind === "verify") throw new SessionError("validation", "验收员由本机在执行方交回后自己起，网页不能开");
+    if (subject.handbackKey) throw new SessionError("validation", "handbackKey 由本机填");
     if (subject.kind === "card" && !subject.cardId) throw new SessionError("validation", "卡的会话要带 cardId");
     if (subject.kind === "topic" && !subject.topicId) throw new SessionError("validation", "专题的会话要带 topicId");
-    if (subject.kind === "card" && req.critics?.length) throw new SessionError("validation", "挑刺岗位只给专题的评审会用");
+    if (subject.kind === "plan" && !subject.taskId) throw new SessionError("validation", "规划员的会话要带 taskId");
+    if (subject.kind !== "topic" && req.critics?.length) throw new SessionError("validation", "挑刺岗位只给专题的评审会用");
     let cwd: string;
     if (req.cwd) {
       cwd = resolve(req.cwd);
@@ -275,7 +337,9 @@ export class SessionManager {
       cwd = realpathSync.native(cwd);
       if (!this.d.folders.isAllowed(cwd)) throw new SessionError("folder_not_allowed", "这个目录不在本人允许的文件夹里");
     } else if (subject.kind === "topic") {
-      cwd = this.d.folders.topicDir(subject.topicId!);
+      cwd = this.d.folders.ownDir("topics", subject.topicId!);
+    } else if (subject.kind === "plan") {
+      cwd = this.d.folders.ownDir("plans", subject.taskId!);
     } else {
       throw new SessionError("validation", "卡的会话要指定工作目录");
     }
@@ -291,9 +355,10 @@ export class SessionManager {
       createdAt: now, updatedAt: now, status: "starting", usage: zeroUsage(), syncSeq: 0, mcpSecret: randomBytes(24).toString("hex"),
       outputs: [], versionNumber: subject.kind === "topic" ? req.versionBase ?? 0 : 0, lastVersion: null,
       role: req.role ?? null, critics: req.critics ?? [], queuedMessage: null, queueOrder: 0,
+      parentId: null, briefPending: false, criteria: [], failStreak: 0, submitted: 0, nudged: false,
     };
     // 满了（或前面还有人在排）就进队，先来先跑；有空位时 pump 接上。
-    if (this.queue().length || this.activeCount() >= this.max()) {
+    if (this.ready().length || this.activeCount() >= this.max()) {
       rec.queuedMessage = req.firstMessage;
       rec.queueOrder = ++this.queueSeq;
       this.records.set(rec.id, rec);
@@ -335,7 +400,8 @@ export class SessionManager {
     if (tools.cloud) {
       // 天枢 MCP 经本机程序转发（/internal/sessions/:id/cloud-mcp），云端令牌留在本机程序里，会话和它跑的命令都拿不到。
       servers[CLOUD_MCP_NAME] = { type: "http", url: `${local}/cloud-mcp`, headers: secretHeader };
-      if (tools.search) allowedTools.push(...CLOUD_MCP_READONLY_TOOLS.map((t) => `mcp__${CLOUD_MCP_NAME}__${t}`));
+      allowedTools.push(`mcp__${CLOUD_MCP_NAME}__${CLOUD_MCP_CONTEXT_TOOL}`);
+      if (tools.search) allowedTools.push(`mcp__${CLOUD_MCP_NAME}__${CLOUD_MCP_SEARCH_TOOL}`);
     }
     const path = join(this.dir, rec.id, "mcp.json");
     writeJsonAtomic(path, { mcpServers: servers });
@@ -371,12 +437,16 @@ export class SessionManager {
     if (rec.subject.kind === "topic" && rec.critics.length) {
       agentsPath = join(dir, "agents.json");
       // 主岗位名单里没有 web_search 时整场都禁了它（disallowedTools），挑刺子 agent 也就不给。
-      writeJsonAtomic(agentsPath, criticAgents(rec.critics, tools.cloud && tools.search ? `mcp__${CLOUD_MCP_NAME}__web_search` : null));
+      writeJsonAtomic(agentsPath, criticAgents(rec.critics, tools.cloud && tools.search ? `mcp__${CLOUD_MCP_NAME}__${CLOUD_MCP_SEARCH_TOOL}` : null));
     }
+    const disallowedTools = [
+      ...(has("web_search") ? [] : ["WebSearch", `mcp__${CLOUD_MCP_NAME}__${CLOUD_MCP_SEARCH_TOOL}`]),
+      ...(READ_ONLY_KINDS.includes(rec.subject.kind) ? WRITE_TOOLS : []),
+    ];
     const run = await adapter.start({
       sessionId: rec.id, cwd: rec.cwd, resume, model, includePersonalConfig: rec.includePersonalConfig,
       mcpConfigPath: mcp.path, mcpEnv: mcp.env, allowedTools: mcp.allowedTools,
-      disallowedTools: has("web_search") ? [] : ["WebSearch", `mcp__${CLOUD_MCP_NAME}__web_search`],
+      disallowedTools,
       systemPromptPath, agentsPath, pluginDirs: plugin ? [plugin] : [],
       // 每次现查：会话途中本人移除了文件夹，之后的请求（包括工作目录里的）就算越界。
       allowedRoots: () => [...(this.d.folders.isAllowed(rec.cwd) ? [rec.cwd] : []), ...this.d.folders.list().map((f) => f.path)],
@@ -418,7 +488,21 @@ export class SessionManager {
           this.emit(rec, { type: "permission_resolved", requestId: id, decision: "deny", message: "这一轮已结束", allowForSession: false });
         }
         this.pending.get(rec.id)?.clear();
+        const run = this.runs.get(rec.id);
+        if (rec.subject.kind === "verify" && !rec.submitted && !rec.nudged && !e.isError && run) {
+          // 验收员一轮做完却没交结论：提醒一次，状态保持进行中（不让出位置，免得刚让出去又占回来）。
+          rec.nudged = true;
+          this.save(rec);
+          this.emit(rec, { type: "notice", level: "info", code: "verify_nudge", text: VERIFY_NUDGE });
+          run.send(VERIFY_NUDGE);
+          break;
+        }
         this.setStatus(rec, "idle");
+        if (rec.subject.kind === "verify" && rec.submitted && run) {
+          // 交完结论就收工：让 Claude Code 自己退出，不留空闲进程。本人想问它，说一句会续上。
+          this.finished.add(rec.id);
+          run.close();
+        }
         break;
       }
       default:
@@ -434,8 +518,9 @@ export class SessionManager {
     }
     this.pending.delete(rec.id);
     const killed = this.killed.delete(rec.id);
+    const finished = this.finished.delete(rec.id);
     rec.mcpSecret = "";
-    this.setStatus(rec, killed || code === 0 ? "exited" : "failed", { exitCode: code, reason: killed ? "已强停" : undefined });
+    this.setStatus(rec, killed || finished || code === 0 ? "exited" : "failed", { exitCode: code, reason: killed ? "已强停" : finished ? "验收完了" : undefined });
     this.d.log.evict(rec.id);
   }
 
@@ -519,6 +604,8 @@ export class SessionManager {
   async shutdown(): Promise<void> {
     // 关机时进程一个个退出会让出位置，这时不能再从队里接新的：排着的留到下次启动。
     this.holdQueue = true;
+    if (this.briefTimer) clearTimeout(this.briefTimer);
+    this.briefTimer = null;
     await Promise.all([...this.runs.keys()].map((id) => this.kill(id).catch(() => undefined)));
   }
 
@@ -592,8 +679,159 @@ export class SessionManager {
     const criteria = input.criteria.slice(0, 50);
     const outputKeys = picked.slice(0, 100).map((o) => o.key);
     this.emit(rec, { type: "handback", summary, criteria, outputKeys });
-    this.sync(rec, { type: "handback", data: { summary, criteria, outputKeys } });
-    return `已交回（用了 ${picked.map((o) => o.ref).join("、") || "0 份产出和证据"}），等 Agent 验收`;
+    const key = this.sync(rec, { type: "handback", data: { summary, criteria, outputKeys } });
+    this.queueVerify(rec, key);
+    return `已交回（用了 ${picked.map((o) => o.ref).join("、") || "0 份产出和证据"}），本机接着起验收员验收`;
+  }
+
+  // ───────── 验收员：交回后本机自己起（不经云端） ─────────
+
+  /** 先排着；等交回被天枢收下、取到验收交代，再按验收员的岗位档位挑模型开始。 */
+  private queueVerify(card: SessionRecord, handbackKey: string) {
+    const now = nowIso();
+    const rec: SessionRecord = {
+      id: randomUUID(), subject: { kind: "verify", cardId: card.subject.cardId!, handbackKey }, title: `验收：${card.title}`.slice(0, 120),
+      agent: card.agent, modelProfileId: card.modelProfileId, modelLabel: card.modelLabel, cwd: card.cwd, includePersonalConfig: false,
+      createdAt: now, updatedAt: now, status: "queued", usage: zeroUsage(), syncSeq: 0, mcpSecret: "", outputs: [], versionNumber: 0, lastVersion: null,
+      role: null, critics: [], queuedMessage: null, queueOrder: ++this.queueSeq,
+      parentId: card.id, briefPending: true, criteria: [], failStreak: 0, submitted: 0, nudged: false,
+    };
+    this.records.set(rec.id, rec);
+    this.setStatus(rec, "queued", { reason: "等交回送到天枢，取验收交代" });
+    void this.pullBriefs();
+  }
+
+  /** 给等交代的验收员取交代：交回送到天枢以后、连上天枢时、本机程序启动后都会调；同时只跑一遍，跑着时又被叫就再跑一遍。 */
+  pullBriefs(): Promise<void> {
+    if (this.pulling) {
+      this.pullAgain = true;
+      return this.pulling;
+    }
+    this.pulling = (async () => {
+      do {
+        this.pullAgain = false;
+        await this.pullOnce().catch(() => undefined);
+      } while (this.pullAgain);
+    })().finally(() => { this.pulling = null; });
+    return this.pulling;
+  }
+
+  private async pullOnce(): Promise<void> {
+    const fetchBrief = this.d.verifyBrief;
+    if (!fetchBrief || this.holdQueue) return;
+    for (const rec of this.queue().filter((r) => r.briefPending)) {
+      const key = rec.subject.handbackKey!;
+      if (this.d.outbox.has(key)) {
+        this.waitNote(rec, (await this.d.cloudLinked?.()) ? "等交回送到天枢，再取验收交代" : "本机还没连上天枢，连上后开始验收");
+        continue;
+      }
+      let got: VerifyBrief;
+      try {
+        got = await fetchBrief(key);
+      } catch (e) {
+        this.waitNote(rec, `取验收交代没成（${e instanceof Error ? e.message : String(e)}），稍后再试`);
+        continue;
+      }
+      if (rec.status !== "queued" || !rec.briefPending) continue; // 等的时候被取消了
+      if (got.kind === "not_linked") {
+        this.waitNote(rec, "本机还没连上天枢，连上后开始验收");
+        continue;
+      }
+      if (got.kind !== "ok") {
+        rec.briefPending = false;
+        this.waitNotes.delete(rec.id);
+        if (got.kind === "gone") this.setStatus(rec, "failed", { reason: "天枢上没有这次交回（可能被拒收了），没法验收" });
+        else this.setStatus(rec, "exited", { reason: "这次交回天枢上已经有结论，不用再验" });
+        continue;
+      }
+      const { brief } = got;
+      const model = await this.d.models.resolve(this.d.models.forTier(brief.role?.modelTier ?? "normal"));
+      if (rec.status !== "queued" || !rec.briefPending) continue;
+      // 交代、模型一次填好再标成能开始：中间不能有 await，免得别处的 pump 拿着空的第一句话、执行方的模型先开了它。
+      Object.assign(rec, { briefPending: false, queuedMessage: brief.markdown, criteria: brief.criteria, failStreak: brief.failStreak, role: brief.role });
+      if (model) Object.assign(rec, { modelProfileId: model.profileId, modelLabel: model.label });
+      this.waitNotes.delete(rec.id);
+      this.save(rec);
+      this.syncStatus(rec);
+      this.d.onChange?.();
+    }
+    this.pump();
+    if (this.queue().some((r) => r.briefPending) && !this.briefTimer && !this.holdQueue) {
+      this.briefTimer = setTimeout(() => { this.briefTimer = null; void this.pullBriefs(); }, BRIEF_RETRY_MS);
+      this.briefTimer.unref?.();
+    }
+  }
+
+  private waitNote(rec: SessionRecord, text: string) {
+    if (this.waitNotes.get(rec.id) === text) return;
+    this.waitNotes.set(rec.id, text);
+    this.emit(rec, { type: "notice", level: "info", code: "verify_waiting", text });
+  }
+
+  /** 验收员交结论：每条完成标准判一次，经发件箱报给天枢；验收会话和被验的卡的会话里各记一条结论事件（网页据此把改法送回执行方）。 */
+  submitVerdict(id: string, input: { summary: string; criteria: unknown[]; beyondScope?: unknown }): string {
+    const rec = this.must(id);
+    if (rec.subject.kind !== "verify") throw new SessionError("validation", "只有验收员交结论");
+    if (rec.submitted) throw new SessionError("conflict", "这次交回已经交过结论了，不能再交");
+    const n = rec.criteria.length;
+    const judged = input.criteria.map((c: any) => ({
+      index: c?.index, verdict: c?.verdict, reason: String(c?.reason ?? "").trim(), evidence: textOrNull(c?.evidence), fix: textOrNull(c?.fix),
+    })) as TLocalVerdictCriterion[];
+    judged.sort((a, b) => a.index - b.index);
+    const seen = judged.map((c) => c.index);
+    const outside = seen.filter((i) => !Number.isInteger(i) || i < 1 || i > n);
+    if (outside.length) throw new SessionError("validation", `没有第 ${outside.join("、")} 条（完成标准共 ${n} 条）`);
+    const twice = seen.filter((i, k) => seen.indexOf(i) !== k);
+    if (twice.length) throw new SessionError("validation", `第 ${[...new Set(twice)].join("、")} 条判了不止一次`);
+    const missing = Array.from({ length: n }, (_, k) => k + 1).filter((i) => !seen.includes(i));
+    if (missing.length) throw new SessionError("validation", `第 ${missing.join("、")} 条还没判（完成标准共 ${n} 条）`);
+    const verdict: TLocalVerdict = {
+      passed: judged.every((c) => c.verdict === "met"), summary: input.summary.trim(), criteria: judged,
+      beyondScope: Array.isArray(input.beyondScope) ? input.beyondScope.map((s) => String(s).trim()).filter(Boolean) : [],
+      modelLabel: rec.modelLabel, roleId: rec.role?.id ?? null, roleVersion: rec.role?.version ?? null,
+    };
+    const problem = schemaProblem(LocalVerdict, verdict);
+    if (problem) throw new SessionError("validation", `结论不合格：${problem}`);
+    rec.submitted = 1;
+    this.sync(rec, { type: "verdict", data: verdict });
+    const failStreak = verdict.passed ? 0 : rec.failStreak + 1;
+    const blocked = failStreak >= 2;
+    const event = {
+      type: "verdict" as const, handbackKey: rec.subject.handbackKey!, passed: verdict.passed, summary: verdict.summary, criteria: judged,
+      beyondScope: verdict.beyondScope, failStreak, blocked, returnText: verdict.passed ? null : returnText(rec.criteria, judged),
+    };
+    this.emit(rec, event);
+    const card = rec.parentId ? this.records.get(rec.parentId) : undefined;
+    if (card) this.emit(card, event);
+    if (verdict.passed) return "结论已交：过了。";
+    return blocked ? `结论已交：没过（连续第 ${failStreak} 次），停在受阻等本人。` : "结论已交：没过，改法会送回执行方。";
+  }
+
+  // ───────── 规划员 ─────────
+
+  /** 规划员交计划和派活单草稿：改了再交是新的一次（revision +1），天枢以最新一次为准。 */
+  proposePlan(id: string, input: { summary: string; steps?: unknown; risks?: unknown; cards: unknown[] }): string {
+    const rec = this.must(id);
+    if (rec.subject.kind !== "plan") throw new SessionError("validation", "只有规划员交计划");
+    const list = (v: unknown) => (Array.isArray(v) ? v : []);
+    const plan: TLocalCardPlan = {
+      revision: rec.submitted + 1,
+      summary: input.summary.trim(),
+      steps: list(input.steps).map((s: any) => ({ title: String(s?.title ?? "").trim(), detail: textOrNull(s?.detail) })),
+      risks: list(input.risks).map((r) => String(r).trim()).filter(Boolean),
+      cards: input.cards.map((c: any) => ({
+        title: String(c?.title ?? "").trim(), brief: String(c?.brief ?? "").trim(), doneDefinition: String(c?.doneDefinition ?? "").trim(),
+        criterionIndex: Number.isInteger(c?.criterionIndex) && c.criterionIndex >= 1 ? c.criterionIndex : null,
+        role: textOrNull(c?.role), modelTier: c?.modelTier, why: textOrNull(c?.why),
+      })),
+      modelLabel: rec.modelLabel, roleId: rec.role?.id ?? null, roleVersion: rec.role?.version ?? null,
+    };
+    const problem = schemaProblem(LocalCardPlan, plan);
+    if (problem) throw new SessionError("validation", `计划不合格：${problem}`);
+    rec.submitted = plan.revision;
+    this.sync(rec, { type: "card_plan", data: plan });
+    this.emit(rec, { type: "notice", level: "info", code: "card_plan", text: `交了第 ${plan.revision} 次计划：${plan.cards.length} 件` });
+    return `已交第 ${plan.revision} 次计划（${plan.cards.length} 件）。本人会在网页上看派活单，要改会告诉你，改完再交一次。`;
   }
 
   /** 专题存一版：读工作目录里的 Markdown，号接着这个专题已有的往下编。 */

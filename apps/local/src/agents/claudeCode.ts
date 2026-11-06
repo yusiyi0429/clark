@@ -125,6 +125,12 @@ class ClaudeRun implements AgentRun {
     return true;
   }
 
+  close() {
+    if (this.exited) return;
+    this.child.stdin.end();
+    setTimeout(() => { if (!this.exited) void this.kill(); }, 10_000).unref();
+  }
+
   kill(): Promise<void> {
     if (this.exited || this.child.pid === undefined) return Promise.resolve();
     const pid = this.child.pid;

@@ -1,5 +1,6 @@
 import { join } from "node:path";
-import type { TLocalCloudLinkView, TLocalSettings, TLocalSettingsPatch } from "@warmap/contracts";
+import { Value } from "@sinclair/typebox/value";
+import { LOCAL_RUNNER_VERIFY_BRIEF_PATH, LocalVerifyBriefResponse, type TLocalCloudLinkView, type TLocalSettings, type TLocalSettingsPatch, type TLocalVerifyBriefResponse } from "@warmap/contracts";
 import { readJson, writeJsonAtomic } from "./store.js";
 import type { SecretStore } from "./secrets.js";
 import type { CloudTarget, Outbox } from "./outbox.js";
@@ -49,6 +50,23 @@ export class CloudLink {
       outbox: this.outbox?.status() ?? { pending: 0, lastSyncedAt: null, lastError: null },
     };
   }
+}
+
+/** 取验收交代的结果：ok 拿到了；not_linked 还没连天枢；gone 天枢上没有这次交回（404）；done 这次交回已有结论（409）。 */
+export type VerifyBrief = { kind: "ok"; brief: TLocalVerifyBriefResponse } | { kind: "not_linked" } | { kind: "gone" } | { kind: "done" };
+
+/** 向天枢取一次交回的验收交代。连不上、5xx、格式不对时抛错，由调用方稍后再试。 */
+export async function fetchVerifyBrief(target: CloudTarget | null, handbackKey: string, fetchImpl: typeof fetch): Promise<VerifyBrief> {
+  if (!target) return { kind: "not_linked" };
+  const url = new URL(LOCAL_RUNNER_VERIFY_BRIEF_PATH, target.apiBaseUrl);
+  url.searchParams.set("handbackKey", handbackKey);
+  const res = await fetchImpl(url, { headers: { authorization: `Bearer ${target.token}` }, signal: AbortSignal.timeout(30_000) });
+  if (res.status === 404) return { kind: "gone" };
+  if (res.status === 409) return { kind: "done" };
+  if (!res.ok) throw new Error(res.status === 401 ? "云端令牌无效，请在天枢网页里重新连接本机" : `天枢返回 ${res.status}`);
+  const body = (await res.json()) as unknown;
+  if (!Value.Check(LocalVerifyBriefResponse, body)) throw new Error("天枢的验收交代格式不对");
+  return { kind: "ok", brief: body };
 }
 
 export class Settings {

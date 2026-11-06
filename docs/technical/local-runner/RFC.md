@@ -108,6 +108,14 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
 
 卡和调研专题是同一种会话，只是 `subject.kind` 不同：卡要 `cardId` 和允许文件夹里的 `cwd`；专题要 `topicId`，不给 `cwd` 时用本机程序的专用目录 `topics/<topicId>/`。
 
+**规划员和验收员（V2 设计第 21 节，11/06）**：拆卡和验收不在云端跑，在本人电脑上由本机程序拉起 Claude Code。会话种类加 `plan`（规划员）和 `verify`（验收员），和执行一样占位置；排队先后是验收员 → 规划员 → 执行（卡、专题），同一档先来先跑。
+- 规划员：网页开（`subject: { kind: "plan", taskId }`，第一句话是云端的拆卡交代，`role` 是规划员岗位），不给 `cwd` 时用 `plans/<taskId>/`。它用本会话工具 `propose_plan` 交计划（几步、先后、风险）和派活单草稿（每件的交代、完成标准、对约定第几条、岗位名、模型档位），经发件箱同步 `card_plan`；改了再交 `revision` +1。
+- 验收员：网页不能开。执行方 `hand_back` 以后本机自己起（不经云端）：先排着（`subject: { kind: "verify", cardId, handbackKey }`），等交回条目被云端收下，再向云端取验收交代（`GET /api/local-runner/verify-brief?handbackKey=…`：第一句话、交回时的完成标准、验收员岗位、之前连续没过几次）。取不到（没连天枢、断网、天枢出错）就排着，不挡别人，事件流里用 `notice`（`verify_waiting`）说在等什么，发件箱送出东西（连上天枢时会先把交回送上去）、本机程序启动后、每 15 秒都会再取；云端回 404（没有这次交回）不验，409（已有结论）不用验。拿到交代后按验收员岗位的档位挑模型（和网页一样按模型名认：opus 强、sonnet 普通、haiku/flash/mini/lite 轻，认不出用默认的；没配岗位用普通档），所以可以和执行用的模型不同。它用 `submit_verdict` 逐条判（条数照交代、只交一次），经发件箱同步 `verdict`；一轮做完没交就提醒一次；交完就让 Claude Code 自己退出（`exited`，原因「验收完了」），本人想问它，说一句会续上。
+- 规划员、验收员只读：`--disallowedTools` 加 Edit、MultiEdit、Write、NotebookEdit、Bash、PowerShell，子 agent（Agent、Task）也不给，免得绕过。没用 Claude Code 的 plan 模式：plan 模式会让模型走「出计划、请求退出」那一套，和交结论的工具不合。
+- 没过怎么办：验收会话和被验的卡的会话里各记一条 `verdict` 事件（结论、算上这次连续没过几次 `failStreak`、`blocked`、改法 `returnText`，改法的格式和云端 `cardAcceptance.ts` 的一样）。网页在卡的会话里看到没过又没受阻，就把改法经「说一句」送回执行会话（原来的那条路：空闲时开新一轮，已退出时续上）；执行方改完再交回，本机再起一个验收员。连续第二次没过 `blocked = true`，停在「受阻」等本人。
+- 天枢 MCP 的 `get_task_context`（Task、约定、Mission、近期的事和决定、上一版交付物和评审，带出处；云端在做）预先放行；挂不挂天枢 MCP 仍按岗位的工具名单。
+- 假 claude 测三种会话的参数和排队先后、交回后自动起验收、只读、没过送回再验、第二次受阻、取不到交代时排着等、重启后照样排着（`test/planVerify.test.ts`）；真跑见第 13 节。
+
 ## 7. 会话里的 MCP
 
 每个会话的 `mcp.json`（`--strict-mcp-config` 下只有它）挂两个 HTTP MCP：
@@ -119,9 +127,9 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
 
 文件里只写 `${变量名}`，值经 Claude Code 子进程的环境变量传进去，Claude Code 启动时展开（11/06 用假 MCP 服务实测：收到的是展开后的请求头；真机实测本会话 MCP 照常连上）。所以本会话密钥不落盘、不进命令行；云端令牌只在本机程序里，会话和它跑的命令都拿不到。
 
-联网搜索由天枢 MCP 提供（`/mcp/me` 上的只读 `web_search`，博查，钥匙留在服务器、按人限流），本机不另起搜索 MCP、不存博查钥匙。工具名 `web_search`（11/06 定），已在 `sessions.ts` 的 `CLOUD_MCP_READONLY_TOOLS` 里预先放行；天枢 MCP 的其他工具（写进展、建事项等）每次调用都要网页批准。
+联网搜索由天枢 MCP 提供（`/mcp/me` 上的只读 `web_search`，博查，钥匙留在服务器、按人限流），本机不另起搜索 MCP、不存博查钥匙。预先放行的只有两个只读工具：`get_task_context`（挂了天枢 MCP 就放行）和 `web_search`（岗位有搜索时放行）；天枢 MCP 的其他工具（写进展、建事项等）每次调用都要网页批准。
 
-本会话 MCP 的工具（卡和专题各看到自己那几个）：
+本会话 MCP 的工具（每种会话各看到自己那几个）：
 
 | 工具 | 谁有 | 做什么 |
 |-|-|-|
@@ -130,13 +138,15 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
 | `hand_back` | 卡 | 逐条完成标准 met/partial/unmet + 证据 + 总结，`outputs` 点名用哪几份（编号）；不点名就是本会话交过的全部，同一个文件交过几次只算最新一版（验收没过改完再交回，没改的产出也在） |
 | `save_version` | 专题 | 存一版：工作目录里的 Markdown 文件，`kind` 是 outline/draft/review，`note` 写改了什么；号从开工时的 `versionBase`（交代里的 latestVersion）和本机同一个专题别的会话已存到的号里取大的往下编（云端还没收到本机刚存的版本时也不撞号） |
 | `set_feishu_url` | 专题 | 某一版存进本人飞书以后，报回第几版和地址 |
+| `propose_plan` | 规划员 | 交计划（summary、steps、risks）和派活单（1–8 件：title、brief、doneDefinition、criterionIndex、role、modelTier、why），经发件箱同步 `card_plan`；改了再交是新的一次 |
+| `submit_verdict` | 验收员 | 每条完成标准判一次（met/partial/unmet、理由、依据、怎么补）、beyondScope、一句结论；只交一次，经发件箱同步 `verdict`，同时在被验的卡的会话里记一条结论事件 |
 
 用 HTTP 而不是 stdio，是为了不给每个会话再起一个 150 MB 的本机程序进程。真机实测：Claude Code（haiku）经 ToolSearch 找到这几个工具，调用不弹权限，产出物和交回进了发件箱。
 
 ## 8. 云端同步（本机 → 云端，单向）
 
 - `POST {apiBaseUrl}/api/local-runner/sync`，`Authorization: Bearer <个人令牌>`，体 `LocalSyncBatchRequest`（≤50 条、≤12 MB），回 `LocalSyncBatchResponse`。
-- 条目：`status`（状态变化）、`plan`（TodoWrite）、`evidence`、`artifact`（原文 base64）、`handback`（带 `outputKeys`：点名的产出和证据的条目幂等键，云端存成 `local_outputs.client_id`）、`topic_version`（专题新的一版：号、种类、名字或 null、改了什么、Markdown 正文）、`topic_version_feishu`（第几版已存进飞书、地址）、`cost`（每轮增量）。不传仓库文件、完整工具输出、环境变量、钥匙。
+- 条目：`status`（状态变化）、`plan`（TodoWrite）、`evidence`、`artifact`（原文 base64）、`handback`（带 `outputKeys`：点名的产出和证据的条目幂等键，云端存成 `local_outputs.client_id`）、`topic_version`（专题新的一版：号、种类、名字或 null、改了什么、Markdown 正文）、`topic_version_feishu`（第几版已存进飞书、地址）、`card_plan`（规划员的计划和派活单草稿）、`verdict`（验收员的逐条结论，subject 带 cardId 和 handbackKey）、`cost`（每轮增量）。规划员、验收员的 status、plan、cost 条目 subject.kind 是 plan / verify，云端不能当成卡自己的状态。不传仓库文件、完整工具输出、环境变量、钥匙。
 - 幂等键 `<deviceId>:<sessionId>:<本会话同步序号>`。云端按键去重，重复的也回 `accepted`；`rejected` 的本机记一笔后出队；回执里没提到的、网络错、5xx 都退避重试（1 s × 2^n，最长 5 分钟）。发件箱先落盘（`outbox.json`），断网、重启都不丢。
 - 关联：网页 `PUT /v1/cloud` 交 `apiBaseUrl` 和令牌；`apiBaseUrl` 的来源必须在白名单里，免得被指到别处。这个令牌同时用于会话里的天枢 MCP（第 7 节）。**建议 api 会话**给个人令牌加一种 `local` 客户端：能调 `/api/local-runner/*` 和 `/mcp/me`，网页配对后建一个这种令牌交给本机程序，设置页能看到、能吊销。
 
