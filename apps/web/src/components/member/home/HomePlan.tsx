@@ -177,7 +177,7 @@ export function HomePlan({ plan, actions, onNavigate }: { plan: THomePlanRespons
               onInfo={(next) => setPopover(next ? { kind: "info" } : null)} />
           ) : null}
           panel={selectedTask ? (
-            <TaskDeliverable key={selectedTask.taskId} task={selectedTask} activityCount={shown.length} newItem={<StartTaskButton onNavigate={onNavigate} />}
+            <TaskDeliverable key={selectedTask.taskId} task={selectedTask} activityCount={shown.length} newItem={<StartTaskButton onNavigate={onNavigate} missionId={selectedTask.missionId} taskId={selectedTask.taskId} />}
               activities={<ActivityColumns activities={shown} today={plan.today} weekStart={plan.weekStart} weekEnd={plan.weekEnd} onNavigate={onNavigate} />} />
           ) : null}
           activities={shown}

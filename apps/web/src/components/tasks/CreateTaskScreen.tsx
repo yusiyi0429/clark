@@ -65,17 +65,18 @@ function DateChoice({ label, value, quick, min, max, onChange }: {
 /**
  * 新建执行事项：一步一问，整个左侧是这一步的舞台（样式跟首次引导的演示动画一致）。
  * ① 做什么 → ② 推进哪个 Mission（本月没有 Mission 时跳过）→ ③ 什么时候做（不选就是今天开始、截止还没想好）。
+ * 从某个 Task 的「我的事项」点进来时带着它的 Mission 和 Task，第二步预先选好；那个 Mission 不在可选的里面时退回独立事项。
  */
-export function CreateTaskScreen() {
+export function CreateTaskScreen({ missionId: presetMission, taskId: presetTask }: { missionId?: string; taskId?: string } = {}) {
   const workspace = useWorkspace();
   useRegisterDetail({ scope: "global", label: "开启执行事项", mark: null, cards });
   const [plan, setPlan] = useState<Plan | null>(null);
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState<Step>("what");
   const [title, setTitle] = useState("");
-  const [linked, setLinked] = useState(false);
-  const [missionId, setMissionId] = useState("");
-  const [planTaskId, setPlanTaskId] = useState("");
+  const [linked, setLinked] = useState(!!presetMission);
+  const [missionId, setMissionId] = useState(presetMission ?? "");
+  const [planTaskId, setPlanTaskId] = useState(presetMission ? presetTask ?? "" : "");
   const [startDate, setStartDate] = useState(todayIso);
   const [dueDate, setDueDate] = useState("");
   const [doneDefinition, setDoneDefinition] = useState("");
@@ -92,11 +93,15 @@ export function CreateTaskScreen() {
     let live = true;
     void browserApi.GET("/api/me/plan").then(({ data }) => {
       if (!live) return;
-      if (data) setPlan(data);
-      else setError(READ_FAILED);
+      if (data) {
+        setPlan(data);
+        if (presetMission && !(data.editable && data.groups.some((group) => group.missionId === presetMission))) {
+          setLinked(false); setMissionId(""); setPlanTaskId("");
+        }
+      } else setError(READ_FAILED);
     }).catch(() => { if (live) setError(READ_FAILED); }).finally(() => { if (live) setLoading(false); });
     return () => { live = false; };
-  }, []);
+  }, [presetMission]);
 
   const missions = plan?.editable ? plan.groups.filter((group) => group.missionId).map((group) => ({ id: group.missionId!, title: group.title, battlefield: group.battlefieldName })) : [];
   const steps: Step[] = !loading && missions.length === 0 ? ["what", "when"] : ["what", "mission", "when"];

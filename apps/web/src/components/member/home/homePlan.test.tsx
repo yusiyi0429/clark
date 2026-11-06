@@ -88,13 +88,14 @@ vi.mock("ts-design/primitives", async () => {
   return { Button, Popover };
 });
 vi.mock("./MonthCalendar", () => ({ MonthCalendar: (props: Record<string, unknown>) => { h.calendar = props; return null; } }));
-vi.mock("@/components/tours/StartTaskButton", () => ({ StartTaskButton: () => null }));
+// 「开启执行事项」只看它拿到哪个 Mission、哪个 Task（地址怎么拼在 tours/startTaskButton.test.tsx）。
+vi.mock("@/components/tours/StartTaskButton", () => ({ StartTaskButton: ({ missionId, taskId }: { missionId?: string; taskId?: string }) => <span data-start-task={`${missionId}/${taskId}`} /> }));
 vi.mock("@/components/tasks/AcceptDialog", () => ({ AcceptDialog: (props: Record<string, unknown>) => { h.accept = props; return <div data-accept-dialog="true" />; } }));
 vi.mock("@/lib/api/client", () => ({ browserApi: h.api }));
 // 交付物面板自己有测试（deliverable/taskDeliverable.test.tsx）；这里只看它拿到哪个 Task，执行事项三栏照样画在它里面。
 vi.mock("./deliverable/TaskDeliverable", () => ({
-  TaskDeliverable: ({ task, activities, activityCount }: { task: { taskId: string }; activities: ReactNode; activityCount: number }) =>
-    <div data-deliverable={task.taskId} data-activity-count={activityCount}>{activities}</div>,
+  TaskDeliverable: ({ task, activities, activityCount, newItem }: { task: { taskId: string }; activities: ReactNode; activityCount: number; newItem: ReactNode }) =>
+    <div data-deliverable={task.taskId} data-activity-count={activityCount}>{activities}{newItem}</div>,
 }));
 
 import { HomePlan } from "./HomePlan";
@@ -412,6 +413,15 @@ describe("HomePlan：选某个 Mission 时的详情", () => {
     view.task("loose");
     expect(view.html).not.toMatch(/data-deliverable=/);
     expect(view.html).toMatch(/data-activity="/);
+  });
+
+  it("面板「我的事项」那一行的「开启执行事项」带着这个 Mission 和 Task；换 Task 跟着换", () => {
+    const view = mount();
+    view.mission("m1");
+    expect(view.html).toContain('data-start-task="m1/t1"');
+    view.task("t2");
+    expect(view.html).toContain('data-start-task="m1/t2"');
+    expect(view.html).not.toContain('data-start-task="m1/t1"');
   });
 
   it("点另一个 Task：它浮起来（aria-pressed、data-selected），头部换名字，三栏换成它的事项；再点一次不取消", () => {
