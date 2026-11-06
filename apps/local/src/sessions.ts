@@ -596,7 +596,7 @@ export class SessionManager {
     return `已交回（用了 ${picked.map((o) => o.ref).join("、") || "0 份产出和证据"}），等 Agent 验收`;
   }
 
-  /** 专题存一版：读工作目录里的 Markdown，号从开工时的 versionBase 往下编。 */
+  /** 专题存一版：读工作目录里的 Markdown，号接着这个专题已有的往下编。 */
   saveVersion(id: string, input: { path: string; kind: TLocalTopicVersionKind; label?: string; note?: string }): string {
     const rec = this.must(id);
     if (rec.subject.kind !== "topic") throw new SessionError("validation", "只有专题存版本；卡做完用 hand_back 交回");
@@ -609,7 +609,10 @@ export class SessionManager {
     if (body.length > MAX_VERSION_CHARS) throw new SessionError("validation", `一版最多 ${MAX_VERSION_CHARS} 字`);
     const label = input.label?.trim().slice(0, 20) || null;
     const note = input.note?.trim().slice(0, 200) || null;
-    rec.versionNumber += 1;
+    // 号从开工时的 versionBase 和本机同一个专题别的会话已存到的号里取大的往下编：交代里的 latestVersion 可能还没算上本机刚存、云端还没收到的版本。
+    const topicId = rec.subject.topicId;
+    const sameTopic = [...this.records.values()].filter((r) => r.subject.kind === "topic" && r.subject.topicId === topicId);
+    rec.versionNumber = Math.max(rec.versionNumber, ...sameTopic.map((r) => r.versionNumber)) + 1;
     const number = rec.versionNumber;
     // 评审会读的「最近一版」是正文（提纲、草稿），不是上一次评审会存的分歧和建议。
     if (input.kind !== "review") rec.lastVersion = { number, path: input.path };

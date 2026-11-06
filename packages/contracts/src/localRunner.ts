@@ -500,7 +500,7 @@ export const LocalSyncItem = Type.Union([
     outputKeys: Type.Array(SyncKey, { maxItems: 100 }),
   }, strict)),
   /**
-   * 专题新的一版（只有专题）：number 由本机从开工时的 versionBase 往下编；label 为 null 时云端按自己的规矩起名（「提纲」「第 N 版」）；
+   * 专题新的一版（只有专题）：number 由本机从开工时的 versionBase 和本机同一个专题已存到的号里取大的往下编；label 为 null 时云端按自己的规矩起名（「提纲」「第 N 版」）；
    * note 是这一版改了什么；body 是 Markdown 正文。
    */
   syncItem("topic_version", Type.Object({

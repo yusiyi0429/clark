@@ -235,6 +235,16 @@ describe("会话：开工、事件、批权限、插话、停下、强停、续�
     expect(queued.find((i: any) => i.type === "topic_version").data).toEqual({ number: 3, kind: "outline", label: null, note: "第一次出提纲", body: "# 提纲\n1. 背景" });
     expect(queued.find((i: any) => i.type === "topic_version_feishu").data).toEqual({ number: 3, feishuUrl: "https://x.feishu.cn/docx/abc" });
     await api(t.port, token, "POST", `/v1/sessions/${tid}/kill`, {});
+
+    // 同一个专题再开一个会话，交代里的 latestVersion 还是旧的（云端还没收到第 3 版）：号接着本机已存的往下编，不撞号
+    const s2 = await api(t.port, token, "POST", "/v1/sessions", { subject: { kind: "topic", topicId: "topic-1" }, title: "调研（续）", firstMessage: "接着写", versionBase: 2 });
+    const secret2 = JSON.parse(readFileSync(join(t.dataDir, "sessions", s2.body.id, "session.json"), "utf8")).mcpSecret;
+    const r2 = await raw(t.port, {
+      method: "POST", path: `/internal/sessions/${s2.body.id}/mcp`, headers: { "x-tianshu-session-secret": secret2, "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "save_version", arguments: { path: "提纲.md", kind: "draft" } } }),
+    });
+    expect(r2.body.result.content[0].text).toBe("已存第 4 版");
+    await api(t.port, token, "POST", `/v1/sessions/${s2.body.id}/kill`, {});
   });
 });
 
