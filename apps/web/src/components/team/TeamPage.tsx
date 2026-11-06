@@ -12,39 +12,34 @@ import { ChevronLeft, Plus } from "lucide-react";
 import { MenuDialog } from "@/components/AccountMenu";
 import { HeroButton } from "@/components/HeroButton";
 import { useHandheld } from "@/components/ui/useHandheld";
-import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { CloudError } from "@/lib/board/cloud";
 import { REMARK_PLUGINS } from "@/lib/markdown";
 import { showWorkspaceToast } from "@/lib/toast";
 import {
-  FAMILY_LABEL, FIELDS, FIELD_KEY, FIELD_LABEL, KIND_LABEL, TIERS, TIER_LABEL, TOOLS, TOOL_LABEL,
-  addPreset, decideProposal, listProposals, listRevisions, listRoles, patchRole, rolesStubbed, seedStubProposal,
-  type PatchRoleRequest, type RoleChange, type RoleFamily, type RoleListResponse, type RoleProposalView, type RoleRevisionView, type RoleView,
+  CHANGE_LABEL, FAMILY_LABEL, FIELDS, FIELD_LABEL, KIND_LABEL, TIERS, TIER_LABEL, TOOLS, TOOL_LABEL,
+  addPreset, decideProposal, listProposals, listRevisions, listRoles, patchRole,
+  type PatchRoleRequest, type RoleFamily, type RoleListResponse, type RoleProposalView, type RoleRevisionView, type RoleView,
 } from "@/lib/team/roles";
 import s from "@/styles/v2-team.module.css";
 
 const failText = (error: unknown) => (error instanceof Error ? error.message : "没成功，请重试");
 const roleLine = (role: Pick<RoleView, "family" | "kind">) => `${FAMILY_LABEL[role.family]} · ${KIND_LABEL[role.kind]}`;
-const CHANGE_LABEL: Record<RoleChange["field"], string> = { ...FIELD_LABEL, name: "名称", tools: "工具", model_tier: "模型档位" };
 const when = (iso: string) => new Date(iso).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 
 export function TeamPage() {
   const handheld = useHandheld();
-  const local = useLocalRunner();
   const [data, setData] = useState<RoleListResponse | null>(null);
   const [proposals, setProposals] = useState<RoleProposalView[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const load = useCallback(async () => {
     try {
-      const list = await listRoles();
-      if (rolesStubbed() && local.runner.kind === "mock") seedStubProposal();
-      setData(list);
+      setData(await listRoles());
       setProposals(await listProposals());
     } catch (error) {
       showWorkspaceToast({ text: failText(error) });
     }
-  }, [local.runner.kind]);
+  }, []);
   useEffect(() => { void load(); }, [load]);
   const roles = useMemo(() => data?.roles ?? [], [data]);
   // 宽屏上默认打开第一个；手机上先看列表。
@@ -106,7 +101,7 @@ export function Proposals({ proposals, onDecided }: { proposals: RoleProposalVie
     setBusy(proposal.id);
     try {
       await decideProposal(proposal.id, decision);
-      showWorkspaceToast({ text: decision === "accept" ? `已写进「${proposal.roleName}」` : "已丢掉" });
+      showWorkspaceToast({ text: decision === "accept" ? `已写进「${proposal.role.name}」` : "已丢掉" });
       onDecided();
     } catch (error) {
       showWorkspaceToast({ text: failText(error) });
@@ -120,9 +115,9 @@ export function Proposals({ proposals, onDecided }: { proposals: RoleProposalVie
       {proposals.map((proposal) => (
         <div key={proposal.id} className={s.proposal} data-testid="role-proposal">
           <div className={s.proposalHead}>
-            <b>{proposal.roleName}</b>
+            <b>{proposal.role.name}</b>
             <span className={s.badge}>{FIELD_LABEL[proposal.field]}</span>
-            {proposal.card ? <Link href={`/me/cards/${encodeURIComponent(proposal.card.id)}`} className={s.link}>{proposal.card.title}</Link> : null}
+            <Link href={`/me/cards/${encodeURIComponent(proposal.card.id)}`} className={s.link}>{proposal.card.title}</Link>
             <span className={s.grow} />
             <button type="button" className={s.textBtn} aria-expanded={open === proposal.id} onClick={() => setOpen(open === proposal.id ? null : proposal.id)}>{open === proposal.id ? "收起" : "看改动"}</button>
             <HeroButton variant="ghost" size="sm" isDisabled={busy === proposal.id} onPress={() => void decide(proposal, "dismiss")}>不要</HeroButton>
@@ -164,7 +159,7 @@ const draftOf = (role: RoleView): Draft => ({ name: role.name, dutiesMd: role.du
 export function changedFields(role: RoleView, draft: Draft): PatchRoleRequest | null {
   const body: PatchRoleRequest = { version: role.version };
   if (draft.name.trim() !== role.name) body.name = draft.name.trim();
-  for (const field of FIELDS) if (draft[FIELD_KEY[field]] !== role[FIELD_KEY[field]]) body[FIELD_KEY[field]] = draft[FIELD_KEY[field]];
+  for (const field of FIELDS) if (draft[field] !== role[field]) body[field] = draft[field];
   if ([...draft.tools].sort().join() !== [...role.tools].sort().join()) body.tools = TOOLS.filter((tool) => draft.tools.includes(tool));
   if (draft.modelTier !== role.modelTier) body.modelTier = draft.modelTier;
   return Object.keys(body).length > 1 ? body : null;
@@ -204,7 +199,7 @@ function RoleDetail({ role, onBack, onSaved, onConflict }: { role: RoleView; onB
         <span className={s.faint}>{roleLine(role)} · 第 {role.version} 版</span>
       </div>
       {FIELDS.map((field) => {
-        const key = FIELD_KEY[field];
+        const key = field;
         return (
           <section key={field} className={s.section} aria-label={FIELD_LABEL[field]}>
             <div className={s.sectionHead}>
@@ -262,9 +257,8 @@ function Revisions({ revisions }: { revisions: RoleRevisionView[] }) {
             <span className={s.ver}>第 {revision.version} 版</span>
             <span>{revision.changes.map((change) => CHANGE_LABEL[change.field]).join("、")}</span>
             {revision.source === "proposal" ? <span className={s.badge}>采纳的修改</span> : null}
-            {revision.card ? <span className={s.faint}>因为「{revision.card.title}」</span> : null}
             <span className={s.grow} />
-            <span className={s.faint}>{revision.by.name} · {when(revision.at)}</span>
+            <span className={s.faint}>{revision.createdBy.name} · {when(revision.createdAt)}</span>
           </button>
           {open === revision.version ? (
             <div className={s.changes}>
@@ -298,12 +292,12 @@ function PresetDialog({ presets, onClose, onAdded }: { presets: RoleListResponse
           <div key={group.family} className={s.family}>
             <p className={s.lab}>{FAMILY_LABEL[group.family]}</p>
             {group.presets.map((preset) => (
-              <div key={preset.key} className={s.presetLine}>
+              <div key={preset.presetKey} className={s.presetLine}>
                 <b>{preset.name}</b>
                 <span className={s.badge}>{KIND_LABEL[preset.kind]}</span>
                 <span className={s.grow} />
                 {preset.added ? <span className={s.faint}>已添加</span>
-                  : <HeroButton variant="secondary" size="sm" isDisabled={busy !== null} onPress={() => void add(preset.key)}>添加</HeroButton>}
+                  : <HeroButton variant="secondary" size="sm" isDisabled={busy !== null} onPress={() => void add(preset.presetKey)}>添加</HeroButton>}
               </div>
             ))}
           </div>

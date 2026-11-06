@@ -152,7 +152,11 @@ export function TopicSession({ topicId }: { topicId: string }) {
           {doc}
         </div>
       )}
-      {reviewing ? <ReviewDialog onClose={() => setReviewing(false)} onStart={async (critics) => { if (await say(reviewText(critics))) { setReviewing(false); showWorkspaceToast({ text: "评审会开始了" }); } }} /> : null}
+      {reviewing ? <ReviewDialog onClose={() => setReviewing(false)} onStart={async (critics) => {
+        if (!session) return;
+        try { await local.runner.sendMessage(session.id, reviewText(critics), "review"); setReviewing(false); showWorkspaceToast({ text: "评审会开始了" }); }
+        catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没开起来，请重试" }); }
+      }} /> : null}
       {starting ? <StartDialog title={topic.title} needsFolder={false} onClose={() => setStarting(false)} onStart={async (model) => {
         await startTopic(local.runner, topic, model);
         setStarting(false);
