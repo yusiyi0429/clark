@@ -64,6 +64,10 @@ describe("执行看板：卡的投影和看板接口", { timeout: 30_000 }, () =
         lastActivity: { text: "在做" }, cost: { inputTokens: 0, outputTokens: 0, costUsd: null }, endedAt: null });
       expect(card("failedOnce").handback).toMatchObject({ attempt: 1, status: "done", outcome: "fail", met: 1, total: 2, headline: "结论",
         returnText: "验收没过：第 2 条", returnedAt: null, overruled: false });
+      // 别的地方读到的执行事项（TaskView）也带着同一张卡：事项详情、本人的事项列表。
+      expect((await f.call("GET", `/api/me/tasks/${ids.blocked}`)).json().task.card).toEqual(card("blocked"));
+      const home = (await f.call("GET", "/api/me/home")).json();
+      expect(home.myTasks.find((item: { id: string }) => item.id === ids.approval).card).toEqual(card("approval"));
     } finally { await f.close(); }
   });
 

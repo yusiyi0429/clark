@@ -60,6 +60,8 @@ describe("Agent 验收：队列、推翻、退回记录", { timeout: 30_000 }, (
       const [task] = await f.t.sql("SELECT acceptance FROM tasks WHERE id=$1", [id]);
       expect(task.acceptance).toMatchObject({ by: TEST_MEMBER.personId, verdict: "Agent 验收通过（2/2）", agentHandbackId: handback,
         standards: [{ text: "有方案文档", met: true, evidence: "方案.md 第 1 段" }, { text: "有评审结论", met: true }] });
+      // 事项详情里的验收记录写明是哪次交回由 Agent 验的。
+      expect((await f.call("GET", `/api/me/tasks/${id}`)).json().acceptance).toMatchObject({ verdict: "Agent 验收通过（2/2）", agentHandbackId: handback });
       expect((await f.call("GET", "/api/plan-tasks/task-open/cards")).json().pending).toMatchObject([{ kind: "card", cardId: id, title: "写方案" }]);
       expect((await f.t.sql("SELECT content FROM thread_messages WHERE object_type='task' AND object_id=$1 ORDER BY id DESC LIMIT 1", [id]))[0].content)
         .toBe("Agent 验收通过（2/2）。");

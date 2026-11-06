@@ -5293,6 +5293,76 @@ export interface components {
                 };
                 createdAt: string;
                 updatedAt: string;
+                card: {
+                    stage: "todo" | "doing" | "review" | "done";
+                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                    role: {
+                        /** Format: uuid */
+                        id: string;
+                        name: string;
+                        kind: "worker" | "reviewer" | "critic";
+                    } | null;
+                    executor: ("claude_code" | "self") | null;
+                    model: {
+                        id: string;
+                        label: string;
+                        kind: "subscription" | "gateway";
+                    } | null;
+                    criterion: {
+                        index: number;
+                        text: string;
+                    } | null;
+                    run: {
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: uuid */
+                        deviceId: string;
+                        deviceName: string;
+                        state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                        modelLabel: string | null;
+                        plan: {
+                            done: number;
+                            total: number;
+                            step: number;
+                            current: string | null;
+                        };
+                        lastActivity: {
+                            /** Format: date-time */
+                            at: string;
+                            text: string;
+                        } | null;
+                        cost: {
+                            inputTokens: number;
+                            outputTokens: number;
+                            costUsd: number | null;
+                        };
+                        /** Format: date-time */
+                        startedAt: string;
+                        /** Format: date-time */
+                        updatedAt: string;
+                        endedAt: string | null;
+                    } | null;
+                    handback: {
+                        /** Format: uuid */
+                        id: string;
+                        attempt: number;
+                        status: "queued" | "running" | "done" | "failed";
+                        outcome: ("pass" | "fail") | null;
+                        met: number;
+                        total: number;
+                        headline: string | null;
+                        returnText: string | null;
+                        returnedAt: string | null;
+                        overruled: boolean;
+                        /** Format: date-time */
+                        createdAt: string;
+                        finishedAt: string | null;
+                    } | null;
+                    deliverable: {
+                        state: "pending" | "included";
+                        versionNumber: number;
+                    } | null;
+                };
             };
             view?: {
                 draft: {
@@ -9254,6 +9324,76 @@ export interface components {
             };
             createdAt: string;
             updatedAt: string;
+            card: {
+                stage: "todo" | "doing" | "review" | "done";
+                wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                role: {
+                    /** Format: uuid */
+                    id: string;
+                    name: string;
+                    kind: "worker" | "reviewer" | "critic";
+                } | null;
+                executor: ("claude_code" | "self") | null;
+                model: {
+                    id: string;
+                    label: string;
+                    kind: "subscription" | "gateway";
+                } | null;
+                criterion: {
+                    index: number;
+                    text: string;
+                } | null;
+                run: {
+                    /** Format: uuid */
+                    id: string;
+                    /** Format: uuid */
+                    deviceId: string;
+                    deviceName: string;
+                    state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                    modelLabel: string | null;
+                    plan: {
+                        done: number;
+                        total: number;
+                        step: number;
+                        current: string | null;
+                    };
+                    lastActivity: {
+                        /** Format: date-time */
+                        at: string;
+                        text: string;
+                    } | null;
+                    cost: {
+                        inputTokens: number;
+                        outputTokens: number;
+                        costUsd: number | null;
+                    };
+                    /** Format: date-time */
+                    startedAt: string;
+                    /** Format: date-time */
+                    updatedAt: string;
+                    endedAt: string | null;
+                } | null;
+                handback: {
+                    /** Format: uuid */
+                    id: string;
+                    attempt: number;
+                    status: "queued" | "running" | "done" | "failed";
+                    outcome: ("pass" | "fail") | null;
+                    met: number;
+                    total: number;
+                    headline: string | null;
+                    returnText: string | null;
+                    returnedAt: string | null;
+                    overruled: boolean;
+                    /** Format: date-time */
+                    createdAt: string;
+                    finishedAt: string | null;
+                } | null;
+                deliverable: {
+                    state: "pending" | "included";
+                    versionNumber: number;
+                } | null;
+            };
         };
         TaskProgressSource: "web" | "codex" | "claude" | "github" | "other";
         TaskProgressLink: {
@@ -9360,6 +9500,76 @@ export interface components {
                     };
                     createdAt: string;
                     updatedAt: string;
+                    card: {
+                        stage: "todo" | "doing" | "review" | "done";
+                        wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                        role: {
+                            /** Format: uuid */
+                            id: string;
+                            name: string;
+                            kind: "worker" | "reviewer" | "critic";
+                        } | null;
+                        executor: ("claude_code" | "self") | null;
+                        model: {
+                            id: string;
+                            label: string;
+                            kind: "subscription" | "gateway";
+                        } | null;
+                        criterion: {
+                            index: number;
+                            text: string;
+                        } | null;
+                        run: {
+                            /** Format: uuid */
+                            id: string;
+                            /** Format: uuid */
+                            deviceId: string;
+                            deviceName: string;
+                            state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                            modelLabel: string | null;
+                            plan: {
+                                done: number;
+                                total: number;
+                                step: number;
+                                current: string | null;
+                            };
+                            lastActivity: {
+                                /** Format: date-time */
+                                at: string;
+                                text: string;
+                            } | null;
+                            cost: {
+                                inputTokens: number;
+                                outputTokens: number;
+                                costUsd: number | null;
+                            };
+                            /** Format: date-time */
+                            startedAt: string;
+                            /** Format: date-time */
+                            updatedAt: string;
+                            endedAt: string | null;
+                        } | null;
+                        handback: {
+                            /** Format: uuid */
+                            id: string;
+                            attempt: number;
+                            status: "queued" | "running" | "done" | "failed";
+                            outcome: ("pass" | "fail") | null;
+                            met: number;
+                            total: number;
+                            headline: string | null;
+                            returnText: string | null;
+                            returnedAt: string | null;
+                            overruled: boolean;
+                            /** Format: date-time */
+                            createdAt: string;
+                            finishedAt: string | null;
+                        } | null;
+                        deliverable: {
+                            state: "pending" | "included";
+                            versionNumber: number;
+                        } | null;
+                    };
                 }[];
             }[];
         };
@@ -10598,6 +10808,76 @@ export interface components {
                 };
                 createdAt: string;
                 updatedAt: string;
+                card: {
+                    stage: "todo" | "doing" | "review" | "done";
+                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                    role: {
+                        /** Format: uuid */
+                        id: string;
+                        name: string;
+                        kind: "worker" | "reviewer" | "critic";
+                    } | null;
+                    executor: ("claude_code" | "self") | null;
+                    model: {
+                        id: string;
+                        label: string;
+                        kind: "subscription" | "gateway";
+                    } | null;
+                    criterion: {
+                        index: number;
+                        text: string;
+                    } | null;
+                    run: {
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: uuid */
+                        deviceId: string;
+                        deviceName: string;
+                        state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                        modelLabel: string | null;
+                        plan: {
+                            done: number;
+                            total: number;
+                            step: number;
+                            current: string | null;
+                        };
+                        lastActivity: {
+                            /** Format: date-time */
+                            at: string;
+                            text: string;
+                        } | null;
+                        cost: {
+                            inputTokens: number;
+                            outputTokens: number;
+                            costUsd: number | null;
+                        };
+                        /** Format: date-time */
+                        startedAt: string;
+                        /** Format: date-time */
+                        updatedAt: string;
+                        endedAt: string | null;
+                    } | null;
+                    handback: {
+                        /** Format: uuid */
+                        id: string;
+                        attempt: number;
+                        status: "queued" | "running" | "done" | "failed";
+                        outcome: ("pass" | "fail") | null;
+                        met: number;
+                        total: number;
+                        headline: string | null;
+                        returnText: string | null;
+                        returnedAt: string | null;
+                        overruled: boolean;
+                        /** Format: date-time */
+                        createdAt: string;
+                        finishedAt: string | null;
+                    } | null;
+                    deliverable: {
+                        state: "pending" | "included";
+                        versionNumber: number;
+                    } | null;
+                };
             };
             judgment: string | null;
             judgmentAt: string | null;
@@ -10662,6 +10942,7 @@ export interface components {
                     materialId: string | null;
                 }[];
                 deliverableMaterialIds: string[];
+                agentHandbackId: string | null;
             } | null;
         };
         PutMyTaskNoteRequest: {
@@ -10744,6 +11025,76 @@ export interface components {
                 };
                 createdAt: string;
                 updatedAt: string;
+                card: {
+                    stage: "todo" | "doing" | "review" | "done";
+                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                    role: {
+                        /** Format: uuid */
+                        id: string;
+                        name: string;
+                        kind: "worker" | "reviewer" | "critic";
+                    } | null;
+                    executor: ("claude_code" | "self") | null;
+                    model: {
+                        id: string;
+                        label: string;
+                        kind: "subscription" | "gateway";
+                    } | null;
+                    criterion: {
+                        index: number;
+                        text: string;
+                    } | null;
+                    run: {
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: uuid */
+                        deviceId: string;
+                        deviceName: string;
+                        state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                        modelLabel: string | null;
+                        plan: {
+                            done: number;
+                            total: number;
+                            step: number;
+                            current: string | null;
+                        };
+                        lastActivity: {
+                            /** Format: date-time */
+                            at: string;
+                            text: string;
+                        } | null;
+                        cost: {
+                            inputTokens: number;
+                            outputTokens: number;
+                            costUsd: number | null;
+                        };
+                        /** Format: date-time */
+                        startedAt: string;
+                        /** Format: date-time */
+                        updatedAt: string;
+                        endedAt: string | null;
+                    } | null;
+                    handback: {
+                        /** Format: uuid */
+                        id: string;
+                        attempt: number;
+                        status: "queued" | "running" | "done" | "failed";
+                        outcome: ("pass" | "fail") | null;
+                        met: number;
+                        total: number;
+                        headline: string | null;
+                        returnText: string | null;
+                        returnedAt: string | null;
+                        overruled: boolean;
+                        /** Format: date-time */
+                        createdAt: string;
+                        finishedAt: string | null;
+                    } | null;
+                    deliverable: {
+                        state: "pending" | "included";
+                        versionNumber: number;
+                    } | null;
+                };
             }[];
         };
         MonthPlanResponse: {
@@ -10824,6 +11175,76 @@ export interface components {
                     };
                     createdAt: string;
                     updatedAt: string;
+                    card: {
+                        stage: "todo" | "doing" | "review" | "done";
+                        wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                        role: {
+                            /** Format: uuid */
+                            id: string;
+                            name: string;
+                            kind: "worker" | "reviewer" | "critic";
+                        } | null;
+                        executor: ("claude_code" | "self") | null;
+                        model: {
+                            id: string;
+                            label: string;
+                            kind: "subscription" | "gateway";
+                        } | null;
+                        criterion: {
+                            index: number;
+                            text: string;
+                        } | null;
+                        run: {
+                            /** Format: uuid */
+                            id: string;
+                            /** Format: uuid */
+                            deviceId: string;
+                            deviceName: string;
+                            state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                            modelLabel: string | null;
+                            plan: {
+                                done: number;
+                                total: number;
+                                step: number;
+                                current: string | null;
+                            };
+                            lastActivity: {
+                                /** Format: date-time */
+                                at: string;
+                                text: string;
+                            } | null;
+                            cost: {
+                                inputTokens: number;
+                                outputTokens: number;
+                                costUsd: number | null;
+                            };
+                            /** Format: date-time */
+                            startedAt: string;
+                            /** Format: date-time */
+                            updatedAt: string;
+                            endedAt: string | null;
+                        } | null;
+                        handback: {
+                            /** Format: uuid */
+                            id: string;
+                            attempt: number;
+                            status: "queued" | "running" | "done" | "failed";
+                            outcome: ("pass" | "fail") | null;
+                            met: number;
+                            total: number;
+                            headline: string | null;
+                            returnText: string | null;
+                            returnedAt: string | null;
+                            overruled: boolean;
+                            /** Format: date-time */
+                            createdAt: string;
+                            finishedAt: string | null;
+                        } | null;
+                        deliverable: {
+                            state: "pending" | "included";
+                            versionNumber: number;
+                        } | null;
+                    };
                 }[];
             }[];
         };
@@ -10904,6 +11325,76 @@ export interface components {
                 };
                 createdAt: string;
                 updatedAt: string;
+                card: {
+                    stage: "todo" | "doing" | "review" | "done";
+                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                    role: {
+                        /** Format: uuid */
+                        id: string;
+                        name: string;
+                        kind: "worker" | "reviewer" | "critic";
+                    } | null;
+                    executor: ("claude_code" | "self") | null;
+                    model: {
+                        id: string;
+                        label: string;
+                        kind: "subscription" | "gateway";
+                    } | null;
+                    criterion: {
+                        index: number;
+                        text: string;
+                    } | null;
+                    run: {
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: uuid */
+                        deviceId: string;
+                        deviceName: string;
+                        state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                        modelLabel: string | null;
+                        plan: {
+                            done: number;
+                            total: number;
+                            step: number;
+                            current: string | null;
+                        };
+                        lastActivity: {
+                            /** Format: date-time */
+                            at: string;
+                            text: string;
+                        } | null;
+                        cost: {
+                            inputTokens: number;
+                            outputTokens: number;
+                            costUsd: number | null;
+                        };
+                        /** Format: date-time */
+                        startedAt: string;
+                        /** Format: date-time */
+                        updatedAt: string;
+                        endedAt: string | null;
+                    } | null;
+                    handback: {
+                        /** Format: uuid */
+                        id: string;
+                        attempt: number;
+                        status: "queued" | "running" | "done" | "failed";
+                        outcome: ("pass" | "fail") | null;
+                        met: number;
+                        total: number;
+                        headline: string | null;
+                        returnText: string | null;
+                        returnedAt: string | null;
+                        overruled: boolean;
+                        /** Format: date-time */
+                        createdAt: string;
+                        finishedAt: string | null;
+                    } | null;
+                    deliverable: {
+                        state: "pending" | "included";
+                        versionNumber: number;
+                    } | null;
+                };
             }[];
             work: {
                 period: string;
@@ -11392,6 +11883,76 @@ export interface components {
                 };
                 createdAt: string;
                 updatedAt: string;
+                card: {
+                    stage: "todo" | "doing" | "review" | "done";
+                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                    role: {
+                        /** Format: uuid */
+                        id: string;
+                        name: string;
+                        kind: "worker" | "reviewer" | "critic";
+                    } | null;
+                    executor: ("claude_code" | "self") | null;
+                    model: {
+                        id: string;
+                        label: string;
+                        kind: "subscription" | "gateway";
+                    } | null;
+                    criterion: {
+                        index: number;
+                        text: string;
+                    } | null;
+                    run: {
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: uuid */
+                        deviceId: string;
+                        deviceName: string;
+                        state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                        modelLabel: string | null;
+                        plan: {
+                            done: number;
+                            total: number;
+                            step: number;
+                            current: string | null;
+                        };
+                        lastActivity: {
+                            /** Format: date-time */
+                            at: string;
+                            text: string;
+                        } | null;
+                        cost: {
+                            inputTokens: number;
+                            outputTokens: number;
+                            costUsd: number | null;
+                        };
+                        /** Format: date-time */
+                        startedAt: string;
+                        /** Format: date-time */
+                        updatedAt: string;
+                        endedAt: string | null;
+                    } | null;
+                    handback: {
+                        /** Format: uuid */
+                        id: string;
+                        attempt: number;
+                        status: "queued" | "running" | "done" | "failed";
+                        outcome: ("pass" | "fail") | null;
+                        met: number;
+                        total: number;
+                        headline: string | null;
+                        returnText: string | null;
+                        returnedAt: string | null;
+                        overruled: boolean;
+                        /** Format: date-time */
+                        createdAt: string;
+                        finishedAt: string | null;
+                    } | null;
+                    deliverable: {
+                        state: "pending" | "included";
+                        versionNumber: number;
+                    } | null;
+                };
             };
             missionId: string | null;
             column: "done" | "week" | "later";
@@ -11511,6 +12072,76 @@ export interface components {
                     };
                     createdAt: string;
                     updatedAt: string;
+                    card: {
+                        stage: "todo" | "doing" | "review" | "done";
+                        wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                        role: {
+                            /** Format: uuid */
+                            id: string;
+                            name: string;
+                            kind: "worker" | "reviewer" | "critic";
+                        } | null;
+                        executor: ("claude_code" | "self") | null;
+                        model: {
+                            id: string;
+                            label: string;
+                            kind: "subscription" | "gateway";
+                        } | null;
+                        criterion: {
+                            index: number;
+                            text: string;
+                        } | null;
+                        run: {
+                            /** Format: uuid */
+                            id: string;
+                            /** Format: uuid */
+                            deviceId: string;
+                            deviceName: string;
+                            state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                            modelLabel: string | null;
+                            plan: {
+                                done: number;
+                                total: number;
+                                step: number;
+                                current: string | null;
+                            };
+                            lastActivity: {
+                                /** Format: date-time */
+                                at: string;
+                                text: string;
+                            } | null;
+                            cost: {
+                                inputTokens: number;
+                                outputTokens: number;
+                                costUsd: number | null;
+                            };
+                            /** Format: date-time */
+                            startedAt: string;
+                            /** Format: date-time */
+                            updatedAt: string;
+                            endedAt: string | null;
+                        } | null;
+                        handback: {
+                            /** Format: uuid */
+                            id: string;
+                            attempt: number;
+                            status: "queued" | "running" | "done" | "failed";
+                            outcome: ("pass" | "fail") | null;
+                            met: number;
+                            total: number;
+                            headline: string | null;
+                            returnText: string | null;
+                            returnedAt: string | null;
+                            overruled: boolean;
+                            /** Format: date-time */
+                            createdAt: string;
+                            finishedAt: string | null;
+                        } | null;
+                        deliverable: {
+                            state: "pending" | "included";
+                            versionNumber: number;
+                        } | null;
+                    };
                 };
                 missionId: string | null;
                 column: "done" | "week" | "later";
@@ -11580,6 +12211,76 @@ export interface components {
                 };
                 createdAt: string;
                 updatedAt: string;
+                card: {
+                    stage: "todo" | "doing" | "review" | "done";
+                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                    role: {
+                        /** Format: uuid */
+                        id: string;
+                        name: string;
+                        kind: "worker" | "reviewer" | "critic";
+                    } | null;
+                    executor: ("claude_code" | "self") | null;
+                    model: {
+                        id: string;
+                        label: string;
+                        kind: "subscription" | "gateway";
+                    } | null;
+                    criterion: {
+                        index: number;
+                        text: string;
+                    } | null;
+                    run: {
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: uuid */
+                        deviceId: string;
+                        deviceName: string;
+                        state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                        modelLabel: string | null;
+                        plan: {
+                            done: number;
+                            total: number;
+                            step: number;
+                            current: string | null;
+                        };
+                        lastActivity: {
+                            /** Format: date-time */
+                            at: string;
+                            text: string;
+                        } | null;
+                        cost: {
+                            inputTokens: number;
+                            outputTokens: number;
+                            costUsd: number | null;
+                        };
+                        /** Format: date-time */
+                        startedAt: string;
+                        /** Format: date-time */
+                        updatedAt: string;
+                        endedAt: string | null;
+                    } | null;
+                    handback: {
+                        /** Format: uuid */
+                        id: string;
+                        attempt: number;
+                        status: "queued" | "running" | "done" | "failed";
+                        outcome: ("pass" | "fail") | null;
+                        met: number;
+                        total: number;
+                        headline: string | null;
+                        returnText: string | null;
+                        returnedAt: string | null;
+                        overruled: boolean;
+                        /** Format: date-time */
+                        createdAt: string;
+                        finishedAt: string | null;
+                    } | null;
+                    deliverable: {
+                        state: "pending" | "included";
+                        versionNumber: number;
+                    } | null;
+                };
             }[];
         };
         PlanCalendarResponse: {
@@ -12150,6 +12851,7 @@ export interface components {
                 materialId: string | null;
             }[];
             deliverableMaterialIds: string[];
+            agentHandbackId: string | null;
         };
         AcceptMyTaskRequest: {
             version: number;
