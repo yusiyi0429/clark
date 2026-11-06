@@ -152,7 +152,7 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
       <div className={s.page} data-embedded="" data-testid="card-session">
         <header className={s.embedHead}>
           {chrome.lead}
-          <b className={s.embedTitle}>{item.title}</b>
+          <b className={s.embedTitle}>{chrome.parent}{item.title}</b>
           {state}
           <span className={s.exec}>{session?.workspace ? <span title={placeText(session.workspace)}>{shortPlace(session.workspace)}</span> : null}</span>
           <button type="button" className={s.iconBtn} aria-label="结果" title="结果" aria-pressed={details} onClick={() => setDetails(!details)} data-testid="session-details"><Info {...ICON} /></button>

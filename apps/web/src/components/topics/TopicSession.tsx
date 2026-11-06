@@ -179,7 +179,7 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
       <div className={s.page} data-embedded="" data-testid="topic-session">
         <header className={s.embedHead}>
           {chrome.lead}
-          <b className={s.embedTitle}>{topic.title}</b>
+          <b className={s.embedTitle}>{chrome.parent}{topic.title}</b>
           {state}
           <span className={s.exec} />
           <button type="button" className={s.iconBtn} aria-label="当前版本" title="当前版本" aria-pressed={showDoc} onClick={() => setReading(!showDoc)} data-testid="session-details"><Info {...ICON} /></button>

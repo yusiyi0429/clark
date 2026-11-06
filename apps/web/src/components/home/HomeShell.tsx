@@ -294,10 +294,16 @@ function HomeFrame({ account }: { account: Account }) {
       {machine.alert ? <i className={h.cornerDot} aria-hidden /> : null}
     </button>
   ), [running, machine.alert]);
+  // 子会话页头的上一级：它挂在哪件 Task 下（树上找），点了回到那件 Task 的管线。
+  const subId = view.kind === "card" || view.kind === "topic" ? view.id : null;
+  const owner = subId ? data.missions.flatMap((mission) => mission.tasks).find((task) => task.subSessions.some((sub) => sub.id === subId)) ?? null : null;
+  const parent = useMemo(() => (owner ? (
+    <button type="button" className={h.crumb} onClick={() => go(`/me/work/tasks/${encodeURIComponent(owner.taskId)}`)}>{owner.name} / </button>
+  ) : null), [owner, go]);
   const chrome = useMemo(() => (handheld ? {
     lead: <button type="button" className={h.icon} aria-label="返回" title="返回" onClick={() => go(HOME_HREF)} data-testid="phone-back"><ArrowLeft {...ICON} /></button>,
-    trail: backgroundButton,
-  } : { lead: null, trail: null }), [handheld, go, backgroundButton]);
+    trail: backgroundButton, parent,
+  } : { lead: null, trail: null, parent }), [handheld, go, backgroundButton, parent]);
   useTabTitle(data.waiting.length);
   const display = (current: View) => {
     switch (current.kind) {

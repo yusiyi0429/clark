@@ -4,7 +4,7 @@
  * /me/work/cards/<id>、/me/work/topics/<id> 子会话 ·
  * /me/work/settings/<页> 二级页（头像和资料、伙伴、连接、偏好，设计 9.4）· /me/work/month/<YYYY-MM> 月份页（第 10 节）。
  */
-import { createContext, useContext, useSyncExternalStore, type ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 import type { BackgroundScope } from "@/lib/home/types";
 import { isPage, type PageKey } from "./pageKeys";
 
@@ -43,19 +43,9 @@ export function scopeOf(view: View): BackgroundScope | null {
 }
 
 /**
- * 展示区页头两端的小件：手机上是返回（回到左栏）和后台任务（底部抽屉），桌面上没有。
- * 页头由各内容自己画（总管线是伙伴形象，Task 管线是 Task 名，子会话是会话名），这样手机上不多一行。
+ * 展示区页头的小件（设计 5.4.3「页头」）：手机上两端是返回和后台任务按钮（桌面上没有）；
+ * parent 是子会话标题前面那一段上一级「Task 名 / 」（12 淡色，点了回到 Task 管线），层级一眼看得出。
+ * 页头由各内容自己画（标题就是左栏当前那一行的字），这样手机上不多一行。
  */
-export const ViewChrome = createContext<{ lead: ReactNode; trail: ReactNode }>({ lead: null, trail: null });
+export const ViewChrome = createContext<{ lead: ReactNode; trail: ReactNode; parent?: ReactNode }>({ lead: null, trail: null });
 export const useViewChrome = () => useContext(ViewChrome);
-
-/** 系统是不是深色。新首页的颜色跟着系统走（home.module.css 末尾）；对话列的正文和输入条有自己的浅/深两套，要按这个选。 */
-const DARK_QUERY = "(prefers-color-scheme: dark)";
-const subscribeDark = (notify: () => void) => {
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return () => undefined;
-  const media = window.matchMedia(DARK_QUERY);
-  media.addEventListener("change", notify);
-  return () => media.removeEventListener("change", notify);
-};
-const darkSnapshot = () => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(DARK_QUERY).matches;
-export const useDarkScheme = () => useSyncExternalStore(subscribeDark, darkSnapshot, () => false);

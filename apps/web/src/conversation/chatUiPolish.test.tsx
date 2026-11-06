@@ -59,8 +59,9 @@ describe("思考区可读", () => {
     expect(base).toContain("font-size:13px");
     expect(base).not.toContain("mask-image");
     expect(rules).toMatch(/\.thinkingStream\[data-clipped\]\{[^}]*mask-image:linear-gradient\(to bottom,transparent 0,#000 calc\(13px \* 1\.6\)\)/);
-    expect(rules).toMatch(/:global\(\[data-tone=light\]\) \.thinkingStream\{color:#666d76\}/);
-    expect(rules).toMatch(/:global\(\[data-tone=light\]\) \.progressDetail\{color:#7a7f89\}/);
+    // 浅色档读变量（新首页设计 5.2：深色下跟着变）：思考流比正文浅一级（--ink-muted），进度细节再浅一级（--ink-faint）。
+    expect(rules).toMatch(/:global\(\[data-tone=light\]\) \.thinkingStream\{color:var\(--ink-muted\)\}/);
+    expect(rules).toMatch(/:global\(\[data-tone=light\]\) \.progressDetail\{color:var\(--ink-faint\)\}/);
     // 只有几行时不淡出
     expect(renderToStaticMarkup(<ThinkingStream text="先比对截止日期。" />)).not.toContain("data-clipped");
   });

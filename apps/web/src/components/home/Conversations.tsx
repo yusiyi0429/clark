@@ -25,7 +25,7 @@ import { useHandheld } from "@/components/ui/useHandheld";
 import { PlanDecision, PlanningLine, StartedRecord } from "./PlanDecision";
 import { feedBlocks, useTaskFeed } from "./TaskFeed";
 import { subHref } from "./LeftColumn";
-import { useDarkScheme, useViewChrome } from "./view";
+import { useViewChrome } from "./view";
 import h from "@/styles/home.module.css";
 
 import { ICON } from "./StateIcon";
@@ -48,14 +48,13 @@ function useOutbox(data: ConversationData, key: "main" | string, outbox: Outbox,
 export function BuddyView({ buddy, outbox, consume, onSpeaking }: { buddy: Buddy | null; outbox: Outbox; consume: (id: number) => void; onSpeaking: (speaking: boolean) => void }) {
   const data = useConversation("global");
   const chrome = useViewChrome();
-  const dark = useDarkScheme();
   useOutbox(data, "main", outbox, consume);
   useEffect(() => { onSpeaking(data.streaming); return () => onSpeaking(false); }, [data.streaming, onSpeaking]);
   const name = buddy?.name?.trim() || "伙伴";
   return (
     <PendingBoxes>
       <div className={h.convo} data-testid="buddy-view">
-        <ChatColumn data={data} buddy={buddy} tone={dark ? "dark" : "light"}
+        <ChatColumn data={data} buddy={buddy} tone="light"
           head={(
             <header className={h.viewHead} data-flush="">
               {chrome.lead}
@@ -121,7 +120,6 @@ function MockPipeline(props: PipelineProps) {
  */
 function PipelineBody({ data, task, home, api, buddy, outbox, consume, go, onSpeaking }: PipelineProps & { data: ConversationData }) {
   const chrome = useViewChrome();
-  const dark = useDarkScheme();
   const handheld = useHandheld();
   const { work } = api;
   useEffect(() => { onSpeaking(data.streaming); return () => onSpeaking(false); }, [data.streaming, onSpeaking]);
@@ -155,7 +153,7 @@ function PipelineBody({ data, task, home, api, buddy, outbox, consume, go, onSpe
   return (
     <PendingBoxes>
       <div className={h.convo} data-testid="pipeline-view">
-        <ChatColumn data={data} buddy={buddy} label={task.name} tone={dark ? "dark" : "light"}
+        <ChatColumn data={data} buddy={buddy} label={task.name} tone="light"
           head={(
             <header className={h.viewHead} data-flush="">
               {chrome.lead}
