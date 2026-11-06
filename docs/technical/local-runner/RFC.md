@@ -43,7 +43,9 @@ claude -p --input-format stream-json --output-format stream-json …（每张卡
 | 别的网站来调 | 必须带 `Origin` 且在白名单（默认只有 `https://tk.tokenkingos.com`，本机 `config.json` 里改，网页改不了）；不带、`null`、别的来源都 403；跨域头只回本来源，不用通配 | 同上 |
 | 表单跨站提交 | `POST/PUT/PATCH` 只收 `application/json`（415）；口令在自定义请求头，HTML 表单带不了、必须过预检 | 同上 |
 | 同一来源页面被注入脚本后悄悄配对 | 配对要本人在本机弹框里核对四位确认码点「是」；口令只交付一次，按来源绑定，本机只存 SHA-256 | 同上，另有托盘模式真机截图 |
-| 网页指使本机读任意目录 | 允许的文件夹只能经本机系统选择框添加；开会话的 `cwd` 必须在里面（先解析符号链接）；产出物只收本会话工作目录里的文件 | `sessions.test.ts` |
+| 网页指使本机读任意目录 | 允许的文件夹只能经本机系统选择框添加，且不能是主目录或它的上级、`~/.claude`、本机程序数据目录（ADR 0031）；开会话的 `cwd` 必须在里面（先解析符号链接）；产出物只收本会话工作目录里的文件 | `sessions.test.ts`、`guard.test.ts` |
+| 会话读写允许范围外的文件 | Claude Code 自己会把越界的读写和命令转成权限请求；本机在请求里标出越界路径（`outsidePaths`），网页标红，只能「只允许这一次」；「这张卡都允许」只在本会话内有效，不写进仓库或本人设置（ADR 0031） | `guard.test.ts` |
+| 本人全局规则混进卡 | 干净会话用 `claudeMdExcludes` 排除主目录这一层的 `CLAUDE.md` 和 `.claude/`（ADR 0030） | `guard.test.ts`，假网关看上下文实测（附录 G） |
 | 内部 MCP 接口被网页调用 | `/internal/...` 带 `Origin` 一律 403（浏览器请求必带），另要本会话密钥（经子进程环境变量交给 Claude Code，不落盘、不进命令行；每次拉起换新，进程退出即作废） | `security.test.ts`、`sessions.test.ts` |
 | 怪请求打挂常驻进程 | 路径必须以单个 `/` 开头，否则 400；每个请求的处理都兜住异常，单个请求出错不会带走进程；发件箱发送失败也不往外抛 | `hardening.test.ts` |
 | 网页改个地址就把钥匙送走 | 改网关地址不带新钥匙时旧钥匙作废；钥匙和令牌只收可见 ASCII | `sessions.test.ts` |
@@ -72,11 +74,13 @@ claude -p --input-format stream-json --output-format stream-json --verbose
   --session-id <会话 uuid>            # 续接时换成 --resume <同一个 uuid>
   --setting-sources project,local --strict-mcp-config   # 默认干净（ADR 0030）；带个人配置时去掉
   --mcp-config <sessions/<id>/mcp.json> --allowedTools mcp__tianshu-session__add_artifact,…
-  --settings {"skipWebFetchPreflight":true[,"env":{ANTHROPIC_BASE_URL,ANTHROPIC_MODEL,ANTHROPIC_DEFAULT_HAIKU_MODEL}（网关）]}
+  --settings {"skipWebFetchPreflight":true
+              [,"claudeMdExcludes":["<主目录>/.claude/**","<主目录>/CLAUDE.md","<主目录>/CLAUDE.local.md"]]（干净会话）
+              [,"env":{ANTHROPIC_BASE_URL,ANTHROPIC_MODEL,ANTHROPIC_DEFAULT_HAIKU_MODEL}（网关）]}
   [--model <订阅时选的模型>]
   [--disallowedTools WebSearch]        # 模型配置的 webSearch 关着时（网关默认关，实测白名单除外）
 env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP 和天枢 MCP 转发共用）
-     [+ ANTHROPIC_AUTH_TOKEN、CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1（网关）]
+     [+ ANTHROPIC_AUTH_TOKEN、CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1、CLAUDE_CODE_MAX_RETRIES=2、API_TIMEOUT_MS=40000（网关）]
 ```
 
 `skipWebFetchPreflight` 每个会话都加：WebFetch 抓网页前会先把域名发给 api.anthropic.com 检查，国内网络连不上时 WebFetch 全部失败，这一步不看用哪家模型，`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` 也关不掉（11/06 两次独立实测）。
@@ -86,8 +90,9 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
 - **插话**：往 stdin 写一条 `user` 消息。进行中时在下一个工具步骤生效（回 `next_step`，并出一条 `notice: interjection_next_step`）；空闲时开新一轮（`new_turn`）；进程已退出时先 `--resume` 再发（`resumed`）。
 - **停下**：发 `control_request{interrupt}`，约 0.2 秒结束本轮（`turn_end.errorKind = interrupted`），进程和会话保留。
 - **强停**：Windows `taskkill /PID <pid> /T /F`，Mac 杀进程组；只杀本会话记下的 PID。
-- **权限**：`can_use_tool` 挂起，等网页 `allow` 或 `deny`（可附一句理由，Claude 会看到）；`allowForSession` 时把 `permission_suggestions` 原样作为 `updatedPermissions` 回给它（「这张卡都允许」）。一轮结束或进程退出时，没答的请求记为拒绝。
+- **权限**：`can_use_tool` 挂起，等网页 `allow` 或 `deny`（可附一句理由，Claude 会看到）。请求里标出越界路径 `outsidePaths`（ADR 0031）：非空时网页标红，只能「只允许这一次」。「这张卡都允许」（`allowForSession`）时把 `permission_suggestions` 作为 `updatedPermissions` 回给它，`destination` 一律改成 `session`（Claude Code 给 Bash 的建议原本会写进仓库的 `.claude/settings.local.json`）。一轮结束或进程退出时，没答的请求记为拒绝。
 - **登录失效**：看到 `authentication_failed`（`assistant.error` 或 `system/api_retry`）或 `api_error_status 401`，出 `notice: auth_required`，第一次就停，不等它重试十次；`result.subtype` 这时仍是 `success`，要看 `is_error`。
+- **模型服务出错**：每次 `system/api_retry` 马上出 `notice: api_retry`（「连不上模型服务…正在重试（第 1/2 次）」），不等最后失败；这一轮最终出错时 `turn_end.errorKind = api`（拒连、超时没有状态码，靠这一轮重试过判断）。网关模型重试 2 次、等响应头 40 秒：回 500 或拒连约 3 秒报错，连上不回约 40 秒出第一条提示、约 2 分钟失败（附录 G）。订阅保留 Claude Code 默认（重试 10 次）。
 - **搜索没生效**：WebSearch 的 `tool_use_result.searchCount === 0` 时出 `notice: search_not_effective`（部分网关模型不支持服务端搜索，还会编结果，附录 D）。
 
 ## 6. 会话
@@ -138,7 +143,7 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
 
 ## 13. 测试与验证（11/06）
 
-- 单测 38 条（`pnpm --filter @warmap/local test`）：安全 10、会话与适配器 14（假 `claude` 按 stream-json 说话，含参数、环境白名单、事件、SSE 补发、权限、插话、停下、强停、续接、本会话 MCP、天枢 MCP 转发、钥匙不外泄、搜索白名单、版本太旧、登录失效、Codex 未接）、发件箱 3、加固 11；契约 6。故意放开环境白名单、去掉续接互斥、去掉换地址作废钥匙、去掉日志补换行，对应用例都会失败（确认用例有效）。
+- 单测 46 条（`pnpm --filter @warmap/local test`）：安全 10、会话与适配器 15（假 `claude` 按 stream-json 说话，含参数、环境白名单、事件、SSE 补发、权限、插话、停下、强停、续接、本会话 MCP、天枢 MCP 转发、钥匙不外泄、搜索白名单、版本太旧、登录失效、Codex 未接）、发件箱 3、加固 10、越界与网关 8（第二轮）；契约 6。故意放开环境白名单、去掉续接互斥、去掉换地址作废钥匙、去掉日志补换行，以及第二轮的越界不给「都允许」、建议改 session、排除全局记忆、网关快速失败、重试提示、主目录提示，对应用例都会失败（确认用例有效）。
 - 独立评审（11/06，xhigh）：13 条，8 条有复现。已修 12 条（怪路径打挂进程、换地址带走旧钥匙、续接不重查文件夹和暂停、并发续接起两个进程、强停追不上启动中的进程、发件箱被不合格条目卡住、发送异常带走进程、日志半行吞事件、钥匙串换行注入、测试页 XSS、安装脚本 BOM、升级残留子进程），带个人配置时钥匙进命令行改为拒绝开工；网关钥匙在会话环境里这条按 ADR 0029 接受。设计层两条见第 14 节。
 - 真机：编出的 exe + 真 Claude Code 2.1.318（haiku），冒烟命令走完配对 → 开工 → 事件 → 3 次批准 → 插话下一步生效（b.txt 改成 22）→ 新一轮 → 停下（interrupted）→ 强停（exited），花费 $0.003；另一次验证本会话 MCP 交证据和交回。真实调用共 2 次会话（4 轮）。
 - 托盘模式：配对确认框、选文件夹框、托盘图标/提示/菜单、暂停与恢复、菜单退出都在 Windows 11 上截图验证（`.scratch/local-runner/实验/截图/`）。
@@ -147,15 +152,15 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
 ## 14. 已知问题与待定
 
 1. **内存**：空闲约 195 MB（主程序 155–165 + 托盘助手约 30）。再要降就评估 Node SEA（ADR 0028）。
-2. **工具不按文件夹拦**：本机程序只管工作目录在允许的文件夹里；会话里 Write、Edit、Read 写绝对路径时，靠网页逐次批准把关，本机不按路径拦。要硬拦可以以后给每次权限请求加一层路径检查（只放行允许文件夹内的路径）。
-3. **项目配置不经网页就生效**：`-p` 模式没有「信任这个文件夹」的确认，仓库里 `.claude/settings.json` 的 hooks 和放行规则直接生效。允许的文件夹应只放本人信得过的仓库（ADR 0030）。
+2. ~~工具不按文件夹拦~~：已改（11/06 第二轮，ADR 0031）。越界路径在权限请求里标出、网页标红、只能允许这一次；不自动拒绝。Bash 认路径是尽力而为。
+3. **项目配置不经网页就生效**：`-p` 模式没有「信任这个文件夹」的确认，仓库里 `.claude/settings.json` 的 hooks 和放行规则直接生效（仓库自己写越界放行规则时，那一步也不会来问）。允许的文件夹应只放本人信得过的仓库（ADR 0030）。以后不再信任项目配置时，可以用 SDK 钩子把越界调用强制拉回网页（ADR 0031 做法 C，已实测可用）。
 4. **Mac 没测**：JXA 菜单栏、`osascript` 弹框、钥匙串、LaunchAgent、`install.sh` 都只按文档写了。
 5. **云端接收端和令牌类型**：等 api 会话；本机这边在没关联时只排队。
 6. **网页**：要做首次授权引导、配对、选文件夹、事件流（fetch 读 SSE）、批权限、插话、停下；测试页可以照抄。
 7. **下载源**：服务器给 `install.ps1` 要带 `charset=utf-8`（PowerShell 5.1 默认按 ISO-8859-1 解码，中文会乱）；Windows 签名、Mac 公证没做。
 8. **Claude Code 安装**：官方脚本在无终端环境下能否跑完没在干净机器上测；国内网络可能连不上 `downloads.claude.ai`。
-9. **工作目录在本人主目录下时**：即使只开 project/local 设置，`~/.claude/rules/*.md` 仍会被当成项目规则读进去（11/06 联网搜索实测发现）。给卡选工作目录时要知道这一点；要彻底干净得换 `CLAUDE_CONFIG_DIR`，代价是单独登录一次。
-10. **网关出错时重试太久**：网关回 500 时 Claude Code 默认重试约 3 分钟才失败。以后可按卡设 `CLAUDE_CODE_MAX_RETRIES` / `API_TIMEOUT_MS`（这次没做）。
+9. ~~工作目录在本人主目录下时读进本人全局规则~~：已改（11/06 第二轮）。干净会话用 `claudeMdExcludes` 排除主目录这一层；允许的文件夹不能是主目录或它的上级。原先写的「换 `CLAUDE_CONFIG_DIR` 能解决」实测不成立（附录 G）。
+10. ~~网关出错时重试太久~~：已改（11/06 第二轮）。网关模型重试 2 次、等响应头 40 秒，每次重试即时提示网页。剩下一种：网关回了响应头之后卡住不动，Claude Code 固定等 5 分钟才重试，`CLAUDE_STREAM_IDLE_TIMEOUT_MS` 改不小（实测），只能本人在网页上点停下。
 11. **合规**：「我们的程序替本人拉起官方 CLI、用本人订阅」算不算条款允许的用法，请法务确认；Codex app-server 登录方式文档写着不允许用于商业或托管服务。
 
 ---
@@ -187,3 +192,18 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
 ### F. 装成应用（PWA）后连本机的授权
 
 结论：和标签页一样，而且共用。证据（Chrome 156，全新 profile，真安装 PWA）：授权按来源 + profile 保存——标签页允许过，应用窗口直接 200；应用窗口里屏蔽，标签页也屏蔽；第一次就在应用窗口访问，同样弹「想要访问此设备上的其他应用和服务」，挂在标题栏「⋮」下；屏蔽后可在「⋮ → 应用信息 → 设备上的应用」改回，不用刷新。本机程序没启动时授权框照样会弹。Edge 只测了访客模式 `--app` 窗口（表现一致），真安装没测；CDP 模拟不了「点允许」。
+
+### G. 假网关实测：越界路径、全局规则、网关出错（11/06 第二轮）
+
+方法：本机起一个假的 Anthropic 格式网关，把真 Claude Code 2.1.318 的 `ANTHROPIC_BASE_URL` 指过去，参数和本机程序一致（`-p`、stream-json、`manual` 权限、`project,local`）。假网关能看到 Claude Code 发出的完整上下文，也能按脚本假装模型发工具调用；不调真模型，不花钱。脚本和原始记录在 `.scratch/local-runner/实验/G_假网关实测.md`。
+
+| 问题 | 结果 |
+|-|-|
+| 工作目录外的 Read、Write、Glob、Grep、`cat` 会不会来问 | 都会（`can_use_tool`，原因「Path is outside allowed working directories」，Bash 另带 `blocked_path`）；目录内的读和 `ls` 直接放行。仓库设置写 `allow: ["Read","Bash(cat:*)","Glob","Grep"]` 或 `additionalDirectories` 指向外面，越界的读照样来问 |
+| 越界请求的放行建议 | Read/Glob/Grep：本会话放行整个外面目录；Write：`acceptEdits` + 把外面目录加进工作目录；Bash：一条 `destination: localSettings`（写进仓库 `.claude/settings.local.json`） |
+| SDK 钩子 | `initialize` 里注册 PreToolUse 回调可用（`hook_callback`），返回 `permissionDecision: "ask"` 能把调用强制转成权限请求，原因原样带到请求里 |
+| 工作目录在主目录下读进全局规则 | 会：`~/.claude/rules/pstack-models.md` 以「project instructions」出现在上下文里。`claudeMdExcludes: ["<主目录>/.claude/**"]` 后没有了，仓库 CLAUDE.md 还在；换 `CLAUDE_CONFIG_DIR` 没用 |
+| 网关回 500 / 拒连 | 默认重试 10 次约 3 分钟；`CLAUDE_CODE_MAX_RETRIES=2` 后约 3.3 秒报错，每次重试有 `system/api_retry`（带 `attempt`、`max_retries`、`error_status`） |
+| 网关连上不回 | `CLAUDE_STREAM_FIRST_BYTE_TIMEOUT_MS=20000` 对网关不起作用（170 秒没报）；`API_TIMEOUT_MS=20000` 时每次 20 秒，重试 2 次共约 63 秒 |
+| `API_TIMEOUT_MS` 会不会掐断长回答 | 不会：它只管等响应头，`API_TIMEOUT_MS=20000` 时一个 45 秒流完的回答照常完成 |
+| 回了头之后卡住 | 固定约 5 分钟后才重试；`CLAUDE_STREAM_IDLE_TIMEOUT_MS=30000` 不生效（下限 5 分钟） |

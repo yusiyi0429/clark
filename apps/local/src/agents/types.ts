@@ -15,6 +15,8 @@ export interface AgentLaunch {
   /** MCP 配置文件里 ${变量名} 引用的值（本会话密钥、云端令牌），只经子进程环境变量传。 */
   mcpEnv: Record<string, string>;
   allowedTools: string[];
+  /** 路径在不在本会话允许的范围里（本人允许的文件夹或本会话工作目录），权限请求据此标出越界路径。 */
+  isAllowedPath(path: string): boolean;
 }
 
 export interface PermissionAnswer {

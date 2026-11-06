@@ -1,7 +1,22 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { AgentLaunch } from "./types.js";
+
+/** 本人主目录（Windows 上按磁盘实际大小写，和 Claude Code 自己算出的路径一致）。 */
+export function homeDir(): string {
+  try { return realpathSync.native(homedir()); } catch { return homedir(); }
+}
+
+/**
+ * 干净会话不读本人的全局记忆：工作目录在主目录下时，Claude Code 往上逐级找 CLAUDE.md 和 .claude/rules，
+ * 会把 ~/.claude/rules/*.md、~/.claude/CLAUDE.md 当成「项目规则」读进来，--setting-sources 管不住，换 CLAUDE_CONFIG_DIR 也不行（11/06 实测）。
+ * 用 claudeMdExcludes 排除主目录这一层；仓库自己的 CLAUDE.md 照常读。Claude Code 按正斜杠的绝对路径匹配。
+ */
+export function personalMemoryExcludes(home: string): string[] {
+  const h = home.replace(/\\/g, "/").replace(/\/$/, "");
+  return [`${h}/.claude/**`, `${h}/CLAUDE.md`, `${h}/CLAUDE.local.md`];
+}
 
 /**
  * 子进程环境变量走白名单：系统路径、用户目录、语言区域、代理和证书。
@@ -28,6 +43,16 @@ export function childEnv(base: NodeJS.ProcessEnv, extra: Record<string, string> 
   return { ...env, ...extra };
 }
 
+/**
+ * 网关模型出错时快点失败（11/06 用假网关实测 Claude Code 2.1.318）：
+ * - 默认重试 10 次、退避到 32 秒，网关回 500 或拒连要约 3 分钟才报错；重试 2 次后约 3 秒报错。
+ * - 网关连上不回：API_TIMEOUT_MS 只管等响应头（45 秒的长回答照常流完），40 秒一次、共 3 次约 2 分钟失败；
+ *   第一次重试时网页就收到 api_retry 提示（约 40 秒）。CLAUDE_STREAM_FIRST_BYTE_TIMEOUT_MS 对网关不起作用。
+ * - 回了头之后卡住：Claude Code 固定等 5 分钟，CLAUDE_STREAM_IDLE_TIMEOUT_MS 改不小，只能本人在网页上停下。
+ * 订阅（直连 Anthropic）保留默认，扛得住官方偶发的 529 过载；重试过程同样即时提示到网页。
+ */
+const GATEWAY_FAIL_FAST = { CLAUDE_CODE_MAX_RETRIES: "2", API_TIMEOUT_MS: "40000" };
+
 export const PERMISSION_ARGS = [
   "--permission-mode", "manual",
   "--permission-prompts", "host",
@@ -53,7 +78,8 @@ export function buildClaudeArgs(launch: AgentLaunch): { args: string[]; env: Rec
   // MCP 配置文件里用 ${变量名} 引用的密钥和令牌，经子进程环境变量交给 Claude Code。
   const env: Record<string, string> = { DISABLE_AUTOUPDATER: "1", ...launch.mcpEnv };
   // WebFetch 抓取前默认连 api.anthropic.com 做域名检查，国内网络连不上就整个失败（11/06 实测）。每个会话都关掉。
-  const settings: { skipWebFetchPreflight: true; env?: Record<string, string> } = { skipWebFetchPreflight: true };
+  const settings: { skipWebFetchPreflight: true; claudeMdExcludes?: string[]; env?: Record<string, string> } = { skipWebFetchPreflight: true };
+  if (!launch.includePersonalConfig) settings.claudeMdExcludes = personalMemoryExcludes(homeDir());
   const m = launch.model;
   if (m.source === "gateway") {
     if (!m.baseUrl || !m.model) throw new Error("网关模型缺地址或模型名");
@@ -65,6 +91,7 @@ export function buildClaudeArgs(launch: AgentLaunch): { args: string[]; env: Rec
     };
     if (m.apiKey) env.ANTHROPIC_AUTH_TOKEN = m.apiKey;
     env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+    Object.assign(env, GATEWAY_FAIL_FAST);
   } else if (m.model) {
     args.push("--model", m.model);
   }

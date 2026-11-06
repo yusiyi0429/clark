@@ -91,7 +91,7 @@ describe("会话：开工、事件、批权限、插话、停下、强停、续�
     expect(a).toContain("--strict-mcp-config");
     expect(existsSync(after("--mcp-config"))).toBe(true);
     expect(after("--allowedTools")).toContain("mcp__tianshu-session__submit_handback");
-    expect(JSON.parse(after("--settings"))).toEqual({ skipWebFetchPreflight: true }); // 订阅也关掉 WebFetch 预检
+    expect(JSON.parse(after("--settings"))).toEqual({ skipWebFetchPreflight: true, claudeMdExcludes: expect.any(Array) }); // 订阅也关掉 WebFetch 预检
     expect(first.sessionSecret).toMatch(/^[0-9a-f]{48}$/); // 本会话密钥只经环境变量传
     expect(a.join(" ")).not.toContain(first.sessionSecret);
     expect(a).not.toContain("--disallowedTools"); // 订阅模型保留自带搜索
@@ -227,7 +227,10 @@ describe("模型配置与钥匙", () => {
     expect(run.argv.join(" ")).not.toContain(key);
     const settings = JSON.parse(run.argv[run.argv.indexOf("--settings") + 1]);
     expect(run.argv[run.argv.indexOf("--disallowedTools") + 1]).toBe("WebSearch"); // 网关模型默认不给自带搜索
-    expect(settings).toEqual({ skipWebFetchPreflight: true, env: { ANTHROPIC_BASE_URL: "https://hub.example.com", ANTHROPIC_MODEL: "deepseek-v4.1-flash", ANTHROPIC_DEFAULT_HAIKU_MODEL: "deepseek-v4.1-flash" } });
+    expect(settings).toEqual({
+      skipWebFetchPreflight: true, claudeMdExcludes: expect.any(Array),
+      env: { ANTHROPIC_BASE_URL: "https://hub.example.com", ANTHROPIC_MODEL: "deepseek-v4.1-flash", ANTHROPIC_DEFAULT_HAIKU_MODEL: "deepseek-v4.1-flash" },
+    });
     await api(t.port, token, "POST", `/v1/sessions/${s.body.id}/kill`, {});
   });
 
