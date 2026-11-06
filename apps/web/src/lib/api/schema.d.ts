@@ -4795,7 +4795,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 新首页（DRI 工作台）：Mission → 本人负责的 Task → 子会话（卡、专题）的树，不归任何 Task 的「其他」，和跨来源的「等你」 */
+        /** 新首页（DRI 工作台）：Mission → 本人负责、没了结的 Task → 子会话（卡、专题）的树，不归任何 Task 的「其他」，和跨来源的「等你」；不按月份硬切 */
         get: operations["getWorkHome"];
         put?: never;
         post?: never;
@@ -4833,6 +4833,23 @@ export interface paths {
         put?: never;
         /** 这件 Task 的管线对话（Task 负责人）：第一次打开时建，以后都返回同一条；收发消息走 /api/conversations/{scope}，scope 是 plan-task:<taskId> */
         post: operations["openTaskPipeline"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/tasks/{taskId}/feed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Task 管线里的验收行（Task 负责人）：卡验收过了（带合回结果）、受阻、约定都达到、合回后推翻开了返工卡，从旧到新；网页按时间插进 Task 管线 */
+        get: operations["getTaskFeed"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -17111,7 +17128,7 @@ export interface components {
             kind: "card" | "topic";
             title: string;
             state: "queued" | "running" | "waiting" | "done" | "failed";
-            waiting: ("approval" | "question" | "verdict") | null;
+            waiting: ("approval" | "question" | "verdict" | "merge") | null;
             queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards") | null;
             role: {
                 /** Format: uuid */
@@ -17124,12 +17141,23 @@ export interface components {
             autoStart: boolean;
             /** Format: date-time */
             updatedAt: string;
+            merge: {
+                state: "merged" | "needs_merge";
+                commit: string | null;
+                baseBranch: string | null;
+                reason: ("base_not_checked_out" | "dirty" | "conflict" | "auto_merge_off") | null;
+                message: string | null;
+                /** Format: date-time */
+                at: string;
+            } | null;
         };
         HomeTaskSummary: {
             running: number;
             waiting: number;
             queued: number;
             done: number;
+            doneToday: number;
+            needsYou: number;
         };
         HomeTask: {
             taskId: string;
@@ -17141,18 +17169,21 @@ export interface components {
                 waiting: number;
                 queued: number;
                 done: number;
+                doneToday: number;
+                needsYou: number;
             };
             pipeline: {
                 conversationId: string | null;
                 scope: string;
             };
             planning: boolean;
+            completedAt: string | null;
             subSessions: {
                 id: string;
                 kind: "card" | "topic";
                 title: string;
                 state: "queued" | "running" | "waiting" | "done" | "failed";
-                waiting: ("approval" | "question" | "verdict") | null;
+                waiting: ("approval" | "question" | "verdict" | "merge") | null;
                 queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards") | null;
                 role: {
                     /** Format: uuid */
@@ -17165,11 +17196,21 @@ export interface components {
                 autoStart: boolean;
                 /** Format: date-time */
                 updatedAt: string;
+                merge: {
+                    state: "merged" | "needs_merge";
+                    commit: string | null;
+                    baseBranch: string | null;
+                    reason: ("base_not_checked_out" | "dirty" | "conflict" | "auto_merge_off") | null;
+                    message: string | null;
+                    /** Format: date-time */
+                    at: string;
+                } | null;
             }[];
         };
         HomeMission: {
             missionId: string;
             title: string;
+            period: string;
             tasks: {
                 taskId: string;
                 missionId: string;
@@ -17180,18 +17221,21 @@ export interface components {
                     waiting: number;
                     queued: number;
                     done: number;
+                    doneToday: number;
+                    needsYou: number;
                 };
                 pipeline: {
                     conversationId: string | null;
                     scope: string;
                 };
                 planning: boolean;
+                completedAt: string | null;
                 subSessions: {
                     id: string;
                     kind: "card" | "topic";
                     title: string;
                     state: "queued" | "running" | "waiting" | "done" | "failed";
-                    waiting: ("approval" | "question" | "verdict") | null;
+                    waiting: ("approval" | "question" | "verdict" | "merge") | null;
                     queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards") | null;
                     role: {
                         /** Format: uuid */
@@ -17204,6 +17248,15 @@ export interface components {
                     autoStart: boolean;
                     /** Format: date-time */
                     updatedAt: string;
+                    merge: {
+                        state: "merged" | "needs_merge";
+                        commit: string | null;
+                        baseBranch: string | null;
+                        reason: ("base_not_checked_out" | "dirty" | "conflict" | "auto_merge_off") | null;
+                        message: string | null;
+                        /** Format: date-time */
+                        at: string;
+                    } | null;
                 }[];
             }[];
         };
@@ -17214,7 +17267,7 @@ export interface components {
         };
         WaitingItem: {
             id: string;
-            kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role";
+            kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge";
             title: string;
             source: string | null;
             at: string | null;
@@ -17228,9 +17281,11 @@ export interface components {
             deviceId: string | null;
         };
         WorkHomeResponse: {
+            period: string;
             missions: {
                 missionId: string;
                 title: string;
+                period: string;
                 tasks: {
                     taskId: string;
                     missionId: string;
@@ -17241,18 +17296,21 @@ export interface components {
                         waiting: number;
                         queued: number;
                         done: number;
+                        doneToday: number;
+                        needsYou: number;
                     };
                     pipeline: {
                         conversationId: string | null;
                         scope: string;
                     };
                     planning: boolean;
+                    completedAt: string | null;
                     subSessions: {
                         id: string;
                         kind: "card" | "topic";
                         title: string;
                         state: "queued" | "running" | "waiting" | "done" | "failed";
-                        waiting: ("approval" | "question" | "verdict") | null;
+                        waiting: ("approval" | "question" | "verdict" | "merge") | null;
                         queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards") | null;
                         role: {
                             /** Format: uuid */
@@ -17265,6 +17323,15 @@ export interface components {
                         autoStart: boolean;
                         /** Format: date-time */
                         updatedAt: string;
+                        merge: {
+                            state: "merged" | "needs_merge";
+                            commit: string | null;
+                            baseBranch: string | null;
+                            reason: ("base_not_checked_out" | "dirty" | "conflict" | "auto_merge_off") | null;
+                            message: string | null;
+                            /** Format: date-time */
+                            at: string;
+                        } | null;
                     }[];
                 }[];
             }[];
@@ -17274,7 +17341,7 @@ export interface components {
                     kind: "card" | "topic";
                     title: string;
                     state: "queued" | "running" | "waiting" | "done" | "failed";
-                    waiting: ("approval" | "question" | "verdict") | null;
+                    waiting: ("approval" | "question" | "verdict" | "merge") | null;
                     queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards") | null;
                     role: {
                         /** Format: uuid */
@@ -17287,11 +17354,20 @@ export interface components {
                     autoStart: boolean;
                     /** Format: date-time */
                     updatedAt: string;
+                    merge: {
+                        state: "merged" | "needs_merge";
+                        commit: string | null;
+                        baseBranch: string | null;
+                        reason: ("base_not_checked_out" | "dirty" | "conflict" | "auto_merge_off") | null;
+                        message: string | null;
+                        /** Format: date-time */
+                        at: string;
+                    } | null;
                 }[];
             };
             waiting: {
                 id: string;
-                kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role";
+                kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge";
                 title: string;
                 source: string | null;
                 at: string | null;
@@ -17400,6 +17476,123 @@ export interface components {
                 /** Format: date-time */
                 requestedAt: string;
             }[];
+        };
+        CardMerge: {
+            state: "merged" | "needs_merge";
+            commit: string | null;
+            baseBranch: string | null;
+            reason: ("base_not_checked_out" | "dirty" | "conflict" | "auto_merge_off") | null;
+            message: string | null;
+            /** Format: date-time */
+            at: string;
+        };
+        TaskFeedItem: {
+            /** @constant */
+            kind: "card_passed";
+            id: string;
+            /** Format: date-time */
+            at: string;
+            /** Format: uuid */
+            cardId: string;
+            title: string;
+            met: number;
+            total: number;
+            merge: {
+                state: "merged" | "needs_merge";
+                commit: string | null;
+                baseBranch: string | null;
+                reason: ("base_not_checked_out" | "dirty" | "conflict" | "auto_merge_off") | null;
+                message: string | null;
+                /** Format: date-time */
+                at: string;
+            } | null;
+        } | {
+            /** @constant */
+            kind: "card_blocked";
+            id: string;
+            /** Format: date-time */
+            at: string;
+            /** Format: uuid */
+            cardId: string;
+            title: string;
+            /** Format: uuid */
+            handbackId: string;
+            fix: string | null;
+        } | {
+            /** @constant */
+            kind: "criteria_met";
+            id: string;
+            /** Format: date-time */
+            at: string;
+            met: number;
+            total: number;
+        } | {
+            /** @constant */
+            kind: "rework_opened";
+            id: string;
+            /** Format: date-time */
+            at: string;
+            /** Format: uuid */
+            cardId: string;
+            title: string;
+            /** Format: uuid */
+            fromCardId: string;
+            reason: string;
+        };
+        TaskFeedResponse: {
+            items: ({
+                /** @constant */
+                kind: "card_passed";
+                id: string;
+                /** Format: date-time */
+                at: string;
+                /** Format: uuid */
+                cardId: string;
+                title: string;
+                met: number;
+                total: number;
+                merge: {
+                    state: "merged" | "needs_merge";
+                    commit: string | null;
+                    baseBranch: string | null;
+                    reason: ("base_not_checked_out" | "dirty" | "conflict" | "auto_merge_off") | null;
+                    message: string | null;
+                    /** Format: date-time */
+                    at: string;
+                } | null;
+            } | {
+                /** @constant */
+                kind: "card_blocked";
+                id: string;
+                /** Format: date-time */
+                at: string;
+                /** Format: uuid */
+                cardId: string;
+                title: string;
+                /** Format: uuid */
+                handbackId: string;
+                fix: string | null;
+            } | {
+                /** @constant */
+                kind: "criteria_met";
+                id: string;
+                /** Format: date-time */
+                at: string;
+                met: number;
+                total: number;
+            } | {
+                /** @constant */
+                kind: "rework_opened";
+                id: string;
+                /** Format: date-time */
+                at: string;
+                /** Format: uuid */
+                cardId: string;
+                title: string;
+                /** Format: uuid */
+                fromCardId: string;
+                reason: string;
+            })[];
         };
     };
     responses: never;
@@ -33934,6 +34127,55 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getTaskFeed: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 验收行 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskFeedResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
