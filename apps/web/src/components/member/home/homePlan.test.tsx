@@ -21,7 +21,10 @@ const h = vi.hoisted(() => ({
   popovers: [] as { open: boolean; change: (open: boolean) => void }[],
   api: { GET: vi.fn(), POST: vi.fn(), PATCH: vi.fn(), DELETE: vi.fn() },
   accept: null as Record<string, unknown> | null,
+  /** 地址栏的参数（/me?planTask=…）；null 是没有。 */
+  search: null as URLSearchParams | null,
 }));
+vi.mock("next/navigation", () => ({ useSearchParams: () => h.search }));
 vi.mock("react", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react")>();
   return { ...actual,
@@ -93,8 +96,8 @@ vi.mock("@/components/tasks/AcceptDialog", () => ({ AcceptDialog: (props: Record
 vi.mock("@/lib/api/client", () => ({ browserApi: h.api }));
 // 交付物面板自己有测试（deliverable/taskDeliverable.test.tsx）；这里只看它拿到哪个 Task，执行事项三栏照样画在它里面。
 vi.mock("./deliverable/TaskDeliverable", () => ({
-  TaskDeliverable: ({ task, activities, activityCount }: { task: { taskId: string }; activities: ReactNode; activityCount: number }) =>
-    <div data-deliverable={task.taskId} data-activity-count={activityCount}>{activities}</div>,
+  TaskDeliverable: ({ task, activities, activityCount, checkOnOpen }: { task: { taskId: string }; activities: ReactNode; activityCount: number; checkOnOpen?: boolean }) =>
+    <div data-deliverable={task.taskId} data-activity-count={activityCount} data-check-on-open={checkOnOpen || undefined}>{activities}</div>,
 }));
 
 import { HomePlan } from "./HomePlan";
@@ -513,6 +516,42 @@ describe("HomePlan：选某个 Mission 时的详情", () => {
     expect(view.openPopovers()).toBe(0);
     view.setPlan(plan());
     expect(view.html).not.toContain('role="dialog"');
+  });
+});
+
+describe("HomePlan：飞书链接 /me?planTask=…", () => {
+  const link = (taskId: string) => {
+    h.search = new URLSearchParams({ planTask: taskId });
+    const replaceState = vi.fn();
+    vi.stubGlobal("window", { dispatchEvent: vi.fn(), location: { href: `https://tk.example/me?planTask=${taskId}` }, history: { state: null, replaceState },
+      requestAnimationFrame: vi.fn(() => 1), cancelAnimationFrame: vi.fn() });
+    return replaceState;
+  };
+  afterEach(() => { h.search = null; });
+
+  it("Task 在本人计划里：选中它的 Mission 和 Task，面板打开就对一次表；地址里的参数去掉（刷新不再跳）", () => {
+    const replaceState = link("t2");
+    const view = mount();
+    expect(heading(view.html)).toBe("CEO / DRI Agent 从能用到在用 / 对话质量达标");
+    expect(view.html).toMatch(/data-deliverable="t2"[^>]*data-check-on-open="true"/);
+    expect(replaceState).toHaveBeenCalledWith(null, "", "/me");
+    expect(view.onNavigate).not.toHaveBeenCalled();
+  });
+
+  it("计划还没读到先不动；读到以后才定位", () => {
+    link("t3");
+    const view = mount(null);
+    expect(window.history.replaceState).not.toHaveBeenCalled();
+    view.setPlan(plan());
+    expect(heading(view.html)).toBe("灯塔首次会面 / Chat 客户版");
+  });
+
+  it("不在本人计划里（认可人看别人的 Task）：打开只读的二级页 /me/plan-tasks/…", () => {
+    const replaceState = link("别人的 Task");
+    const view = mount();
+    expect(replaceState).toHaveBeenCalledWith(null, "", "/me");
+    expect(view.onNavigate).toHaveBeenCalledWith("/me/plan-tasks/%E5%88%AB%E4%BA%BA%E7%9A%84%20Task");
+    expect(view.html).not.toMatch(/data-check-on-open/);
   });
 });
 

@@ -40,6 +40,12 @@
 /* 探出来的半身也算入口：点它和点胶囊一样打开对话。 */
 .mark[data-place="entry"]:is([data-skin="miles"], [data-skin="cmei"]) { pointer-events: auto; cursor: pointer; }
 
+/* 署名：伙伴写的段落左边（交付物的版本说明）。横放胶囊按页头的比例画、缩到四分之一（40×16）；Miles、C妹 缩一半（约 35–48 宽）。 */
+.mark[data-place="note"] { --coagent-capsule-width: 160px; --coagent-capsule-height: 64px; width: 40px; height: 16px; }
+.mark[data-place="note"] .scale { transform: scale(.25); }
+.mark[data-place="note"]:is([data-skin="miles"], [data-skin="cmei"]) { width: 48px; height: 33px; }
+.mark[data-place="note"]:is([data-skin="miles"], [data-skin="cmei"]) .scale { transform: scale(.5); width: max-content; }
+
 @media (prefers-reduced-motion: reduce) {
   .mark[data-place="sheet"] { transition: none; }
 }

@@ -4,8 +4,10 @@
  * 验收标准逐条：评完是 ✓ 达到、◐ 部分、✗ 未达到加一句理由，没评或评审中是空心圈。
  * 没达到的默认展开「依据 / 怎么补」，达到的点一下再看依据。没达到的条目旁边「我不同意」：写一句为什么，带着这句话重评这一条；
  * 重评以后还是没达到，这一条标「本人有异议」（有异议的条目不能交付）。
+ * 约定与对表（Agreement.tsx）挂在这里：标题行右边的 tools（标准改过、对表），列表上面的 lead（结论），每条下面的 below（约定、对表结果），
+ * 列表下面的 children（这次不包括、下次可以做）；没点开参考评审时圈按对表结果画（markOf）。
  */
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { Check, ChevronRight, X } from "lucide-react";
 import type { TReviewCriterion } from "@warmap/contracts";
 import d from "@/styles/task-deliverable.module.css";
@@ -39,7 +41,7 @@ function Dissent({ onSend, onCancel }: { onSend: (reason: string) => Promise<str
   );
 }
 
-export function CriteriaList({ title, texts, results, canDissent, onDissent }: {
+export function CriteriaList({ title, texts, results, canDissent, onDissent, tools, lead, below, markOf, children }: {
   /** 「验收标准」，按完成定义评时是「完成定义」。 */
   title: string;
   /** 按哪几条评（评审结果没出来时用它画空心圈）。 */
@@ -48,13 +50,20 @@ export function CriteriaList({ title, texts, results, canDissent, onDissent }: {
   results: TReviewCriterion[] | null;
   canDissent: boolean;
   onDissent: (index: number, reason: string) => Promise<string | null>;
+  tools?: ReactNode;
+  lead?: ReactNode;
+  below?: (index: number) => ReactNode;
+  /** 没有逐条评审结果时每条的圈（对表以后）。 */
+  markOf?: (index: number) => TReviewCriterion["verdict"] | null;
+  children?: ReactNode;
 }) {
   const [open, setOpen] = useState<Record<number, boolean>>({});
   const [dissenting, setDissenting] = useState<number | null>(null);
   const rows = results ?? texts.map((text, index) => ({ index: index + 1, text, verdict: null, reason: "", evidence: null, fix: null, dissent: null }));
   return (
     <section className={d.section} aria-label={title}>
-      <h3 className={d.label}>{title}</h3>
+      {tools ? <div className={d.sectionHead}><h3 className={d.label}>{title}</h3>{tools}</div> : <h3 className={d.label}>{title}</h3>}
+      {lead}
       <ol className={d.criteria}>
         {rows.map((row) => {
           const expanded = open[row.index] ?? (row.verdict === "partial" || row.verdict === "unmet");
@@ -62,9 +71,10 @@ export function CriteriaList({ title, texts, results, canDissent, onDissent }: {
           const pending = row.dissent?.upheld === null;
           return (
             <li key={row.index} className={d.criterion} data-verdict={row.verdict ?? undefined}>
-              <Mark verdict={row.verdict} />
+              <Mark verdict={results ? row.verdict : markOf?.(row.index) ?? null} />
               <div className={d.criterionBody}>
                 <p className={d.criterionText}>{row.text}</p>
+                {below?.(row.index)}
                 {row.reason ? <p className={d.reason}>{row.reason}</p> : null}
                 {details && expanded ? (
                   <dl className={d.details}>
@@ -100,6 +110,7 @@ export function CriteriaList({ title, texts, results, canDissent, onDissent }: {
           );
         })}
       </ol>
+      {children}
     </section>
   );
 }
