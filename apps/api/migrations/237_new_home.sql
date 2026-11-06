@@ -50,3 +50,10 @@ CREATE TABLE local_background_items (
   PRIMARY KEY (run_id, item_id)
 );
 CREATE INDEX local_background_items_owner ON local_background_items (owner_id, started_at DESC);
+
+-- 验收过的卡合回到哪了（第 4.5 节，本机程序报的 merge 同步条目，同一次交回取 occurredAt 最新的一条）：
+-- { merged, commit, baseBranch, reason, message, auto, at }，merged=false 时 reason 是 base_not_checked_out | dirty | conflict | auto_merge_off。没报过为空。
+ALTER TABLE card_handbacks ADD COLUMN merge JSONB;
+
+-- 返工卡（第 4.5 节）：已合回的卡验收被推翻时，在同一件 Task 下开一张新卡接着改，记下是从哪张卡开出来的；原卡不退回、已合进去的不撤回。
+ALTER TABLE tasks ADD COLUMN rework_of_card_id UUID REFERENCES tasks (id) ON DELETE SET NULL;
