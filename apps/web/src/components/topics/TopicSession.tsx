@@ -53,6 +53,15 @@ export function TopicSession({ topicId }: { topicId: string }) {
 
   const ready = local.phase === "ready";
   const session = ready ? latestSessionFor(local.sessions, { topicId }) : null;
+  // 刚建的专题（?start=1）：本机连着、还没开过，就直接弹出「开始」。
+  const [autoStart, setAutoStart] = useState(false);
+  useEffect(() => { setAutoStart(new URLSearchParams(window.location.search).get("start") === "1"); }, []);
+  useEffect(() => {
+    if (!autoStart || !ready || !detail || session) return;
+    setAutoStart(false);
+    setStarting(true);
+    window.history.replaceState(null, "", window.location.pathname);
+  }, [autoStart, ready, detail, session]);
   const { view } = useSessionEvents(local.runner, session?.id ?? null);
   const canAct = canCommand({ ready, handheld, hasSession: !!session });
 

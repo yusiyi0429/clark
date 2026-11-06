@@ -69,7 +69,7 @@ export function ChatList({ current, buddyName }: { current: "main" | string; bud
             <p className={s.groupLabel}>专题</p>
             {topics === null ? null : live.length ? live.map(row) : <p className={s.none}>还没有专题</p>}
             {archived.length ? <><p className={s.groupLabel}>已归档</p>{archived.map(row)}</> : null}
-            {adding ? <NewTopicForm onCancel={() => setAdding(false)} onCreated={(topic) => go(`/me/topics/${encodeURIComponent(topic.id)}`)} /> : null}
+            {adding ? <NewTopicForm onCancel={() => setAdding(false)} onCreated={(topic) => go(`/me/topics/${encodeURIComponent(topic.id)}?start=1`)} /> : null}
           </Popover.Dialog>
         </TianshuPortalTheme>
       </Popover.Content>

@@ -36,12 +36,23 @@ export function cardsOfTask(plan: THomePlanResponse, taskId: string, sessions: T
   return boardCards(plan.activities.map((activity) => activity.item).filter((item) => item.planTaskId === taskId && item.status !== "returned"), sessions);
 }
 
-function Cell({ cards, taskId }: { cards: BoardCard[]; taskId: string }) {
+/** 挂在 Mission 下、还没归到哪个 Task 的事项：这个 Mission 最后一行「未归入 Task」。 */
+export function looseCards(plan: THomePlanResponse, missionId: string, sessions: TLocalSessionSummary[]): BoardCard[] {
+  const taskIds = new Set(plan.tasks.filter((task) => task.missionId === missionId).map((task) => task.taskId));
+  return boardCards(plan.activities.filter((activity) => activity.missionId === missionId && (!activity.item.planTaskId || !taskIds.has(activity.item.planTaskId)) && activity.item.status !== "returned").map((activity) => activity.item), sessions);
+}
+
+/** 泳道里出现的 Mission：有 Task，或者有还没归到 Task 的事项。 */
+export const laneMissions = (plan: THomePlanResponse) =>
+  plan.missions.filter((mission) => plan.tasks.some((task) => task.missionId === mission.missionId) || plan.activities.some((activity) => activity.missionId === mission.missionId && activity.item.status !== "returned"));
+
+function Cell({ cards, taskId }: { cards: BoardCard[]; taskId: string | null }) {
   if (!cards.length) return <span className={s.cell}><span className={s.empty}>—</span></span>;
+  const shown = taskId ? cards.slice(0, 2) : cards;
   return (
     <span className={s.cell}>
-      {cards.slice(0, 2).map((card) => <CardPill key={card.item.id} card={card} />)}
-      {cards.length > 2 ? <Link href={taskHref(taskId)} className={s.more}>+{cards.length - 2}</Link> : null}
+      {shown.map((card) => <CardPill key={card.item.id} card={card} />)}
+      {taskId && cards.length > 2 ? <Link href={taskHref(taskId)} className={s.more}>+{cards.length - 2}</Link> : null}
     </span>
   );
 }
@@ -61,7 +72,7 @@ function DeliverableCell({ task, cards }: { task: THomePlanTask; cards: BoardCar
 
 export function MonthLanes({ plan, sessions }: { plan: THomePlanResponse; sessions: TLocalSessionSummary[] }) {
   const [closed, setClosed] = useState<Set<string>>(() => new Set());
-  const missions = plan.missions.filter((mission) => plan.tasks.some((task) => task.missionId === mission.missionId));
+  const missions = laneMissions(plan);
   const toggle = (id: string) => setClosed((current) => {
     const next = new Set(current);
     if (next.has(id)) next.delete(id); else next.add(id);
@@ -76,6 +87,7 @@ export function MonthLanes({ plan, sessions }: { plan: THomePlanResponse; sessio
       </div>
       {missions.map((mission, index) => {
         const tasks = plan.tasks.filter((task) => task.missionId === mission.missionId);
+        const loose = looseCards(plan, mission.missionId, sessions);
         const open = !closed.has(mission.missionId);
         return (
           <div key={mission.missionId} className={s.missionGroup} role="rowgroup" style={{ ["--c" as string]: mission.color }}>
@@ -86,7 +98,7 @@ export function MonthLanes({ plan, sessions }: { plan: THomePlanResponse; sessio
                 <b>{mission.title}</b>
                 {gateText(gateOf(plan, mission.missionId)) ? <span className={s.meta}>{gateText(gateOf(plan, mission.missionId))}</span> : null}
               </button>
-              <span className={s.sum}>{tasks.length} 个 Task</span>
+              <span className={s.sum}>{tasks.length ? `${tasks.length} 个 Task` : ""}</span>
             </div>
             {open ? tasks.map((task) => {
               const cards = cardsOfTask(plan, task.taskId, sessions);
@@ -101,6 +113,13 @@ export function MonthLanes({ plan, sessions }: { plan: THomePlanResponse; sessio
                 </div>
               );
             }) : null}
+            {open && loose.length ? (
+              <div className={s.lane} role="row" data-loose>
+                <span className={s.taskCell}><span className={s.looseName}>未归入 Task</span></span>
+                {STAGES.map((stage) => <Cell key={stage.id} cards={byStage(loose, stage.id)} taskId={null} />)}
+                <span />
+              </div>
+            ) : null}
           </div>
         );
       })}
@@ -110,7 +129,7 @@ export function MonthLanes({ plan, sessions }: { plan: THomePlanResponse; sessio
 
 /** 手机上的本月（原型 phoneMonth）：Mission 一张卡，Task 一行，后面几颗小标签：待处理、进行中、待开始、交付物。 */
 export function PhoneMonth({ plan, sessions }: { plan: THomePlanResponse; sessions: TLocalSessionSummary[] }) {
-  const missions = plan.missions.filter((mission) => plan.tasks.some((task) => task.missionId === mission.missionId));
+  const missions = laneMissions(plan);
   return (
     <div className={s.phoneList}>
       {missions.map((mission) => (

@@ -11,7 +11,7 @@ import { useBuddy } from "@/components/buddy/useBuddy";
 import { useHandheld } from "@/components/ui/useHandheld";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { DayStrip, useDayEvents } from "./DayStrip";
-import { MonthLanes, PhoneMonth } from "./MonthLanes";
+import { MonthLanes, PhoneMonth, laneMissions } from "./MonthLanes";
 import { MonthCapsule } from "./MonthCapsule";
 import type { CardItem } from "@/lib/board/cards";
 import s from "@/styles/v2-month.module.css";
@@ -30,7 +30,7 @@ export function MonthPage() {
   const shown = plan && offset === 0 ? plan : null;
   const running = shown ? shown.activities.filter(({ item }) => (item as CardItem).card?.stage === "doing" || local.sessions.some((session) => session.subject.cardId === item.id && (session.status === "running" || session.status === "starting"))).length : 0;
   const taskCount = shown?.tasks.length ?? 0;
-  const missionCount = shown ? new Set(shown.tasks.map((task) => task.missionId)).size : 0;
+  const missionCount = shown ? laneMissions(shown).length : 0;
 
   return (
     <div className={s.page} data-testid="month-page">
@@ -54,7 +54,7 @@ export function MonthPage() {
             {running ? <span className={s.live}><span className={s.pulse} aria-hidden />{running} 件进行中</span> : null}
           </div>
           <div className={s.scroll}>
-            {shown ? (taskCount ? <MonthLanes plan={shown} sessions={local.sessions} /> : <p className={s.emptyMonth}>这个月还没有 Task</p>)
+            {shown ? (missionCount ? <MonthLanes plan={shown} sessions={local.sessions} /> : <p className={s.emptyMonth}>这个月还没有 Task</p>)
               : plan ? <p className={s.emptyMonth}>{period ? monthLabel(period) : ""}没有 Task</p> : <div className={s.loading} aria-busy />}
           </div>
         </section>

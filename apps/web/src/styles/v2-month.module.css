@@ -133,6 +133,7 @@
 .taskName { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; color: var(--ink); font-size: 13px; font-weight: 500; text-decoration: none; }
 .taskName::after { content: "›"; margin-left: 2px; color: var(--field-placeholder); font-weight: 400; }
 .taskName:hover { color: var(--brand-deep); }
+.looseName { color: var(--ink-faint); font-size: 12.5px; }
 .pending { display: inline-grid; flex: none; place-items: center; min-width: 17px; height: 17px; padding: 0 5px; border-radius: 9px; background: var(--accent); color: #fff; font-size: 10.5px; font-weight: 700; font-style: normal; }
 .cell { flex-wrap: wrap; align-content: center; gap: 4px; }
 .empty { color: #d0d3d9; font-size: 12px; }

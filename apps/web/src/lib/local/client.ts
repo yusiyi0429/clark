@@ -2,7 +2,8 @@
  * 真本机程序的客户端：直连 http://127.0.0.1:<端口>，口令放在 x-tianshu-local-token 头里。
  * 事件流不能用 EventSource（带不了口令头），用 fetch 读 SSE，断了带 Last-Event-ID 重连（RFC 第 4 节）。
  */
-import { LOCAL_RUNNER_DEFAULT_PORT, LOCAL_RUNNER_ROUTES, LOCAL_RUNNER_TOKEN_HEADER, type TLocalSessionEvent } from "@warmap/contracts";
+import type { TLocalSessionEvent } from "@warmap/contracts";
+import { LOCAL_RUNNER_DEFAULT_PORT, LOCAL_RUNNER_ROUTES, LOCAL_RUNNER_TOKEN_HEADER } from "./routes";
 import { LocalRunnerError, type EventWatch, type LocalRunner } from "./runner";
 
 type RouteName = keyof typeof LOCAL_RUNNER_ROUTES;

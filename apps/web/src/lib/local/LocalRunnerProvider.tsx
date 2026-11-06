@@ -11,6 +11,7 @@ import { LocalRunnerError, type LocalRunner } from "./runner";
 import { createHttpRunner, writeLocalToken } from "./client";
 import { createMockRunner } from "./mock";
 import { phaseOf, readBrowserPermission, type LocalPhase } from "./connection";
+import { HANDHELD_QUERY } from "@/components/ui/useHandheld";
 
 export type Pairing = { code: string; state: "waiting" | "denied" | "expired" | "failed" };
 
@@ -37,6 +38,7 @@ export const LocalContext = createContext<LocalRunnerState | null>(null);
 
 const PROMPT_WAIT_MS = 1200;
 const RETRY_MS = 4000;
+const MAX_RETRY_MS = 60_000;
 const LIVE_MS = 10_000;
 
 /** NEXT_PUBLIC_LOCAL_RUNNER=mock 用假程序；开发环境里也可以在地址上带 ?local=mock 切过去（存在本标签页）。 */
@@ -64,6 +66,7 @@ export function LocalRunnerProvider({ children, runner: given }: { children: Rea
   const [sessions, setSessions] = useState<TLocalSessionSummary[]>([]);
   const [pairing, setPairing] = useState<Pairing | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
   const alive = useRef(true);
   const inFlight = useRef<Promise<void> | null>(null);
 
@@ -106,26 +109,33 @@ export function LocalRunnerProvider({ children, runner: given }: { children: Rea
     return inFlight.current;
   }, [runner, loadPaired]);
 
+  // 手机和触屏上不连本机（第 13 节：手机只看）：不探，免得一直报连不上。
+  const [handheld] = useState(() => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(HANDHELD_QUERY).matches);
   useEffect(() => {
     alive.current = true;
-    void refresh();
+    if (handheld && !given) setPhase("offline");
+    else void refresh();
     return () => { alive.current = false; };
-  }, [refresh]);
+  }, [refresh, handheld, given]);
 
-  // 没连上就隔几秒再探（本机程序刚装好、刚在站点设置里改回允许）；连上了定时刷会话列表。回到前台立刻探一次。
+  // 没连上就隔一阵再探（本机程序刚装好、刚在站点设置里改回允许），连着没连上就越隔越久（最长 1 分钟）；
+  // 连上了每 10 秒刷一次会话列表。回到前台、切回窗口立刻探一次。
+  const misses = useRef(0);
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible") void refresh();
-    }, phase === "ready" ? LIVE_MS : RETRY_MS);
-    const resume = () => { if (document.visibilityState === "visible") void refresh(); };
+    if (handheld && !given) return;
+    if (phase === "offline" || phase === "blocked") misses.current++;
+    else misses.current = 0;
+    const delay = phase === "ready" ? LIVE_MS : phase === "offline" || phase === "blocked" ? Math.min(MAX_RETRY_MS, RETRY_MS * 2 ** Math.max(0, misses.current - 1)) : RETRY_MS;
+    const timer = window.setTimeout(() => { if (document.visibilityState === "visible") void refresh().then(() => setTick((n) => n + 1)); else setTick((n) => n + 1); }, delay);
+    const resume = () => { if (document.visibilityState === "visible") { misses.current = 0; void refresh(); } };
     document.addEventListener("visibilitychange", resume);
     window.addEventListener("focus", resume);
     return () => {
-      window.clearInterval(timer);
+      window.clearTimeout(timer);
       document.removeEventListener("visibilitychange", resume);
       window.removeEventListener("focus", resume);
     };
-  }, [phase, refresh]);
+  }, [phase, tick, refresh, handheld, given]);
 
   const pair = useCallback(async () => {
     setError(null);
