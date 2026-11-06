@@ -10,6 +10,7 @@ pnpm --filter @warmap/local typecheck
 pnpm --filter @warmap/local dev         # 用 tsx 跑，带 --dev：测试页 http://127.0.0.1:47610/dev
 pnpm --filter @warmap/local build       # 用 Bun 编当前平台的单文件，产物在 dist/（要装 Bun ≥1.3，或用 BUN=路径 指定）
 pnpm --filter @warmap/local build:all   # 编 Windows x64、macOS arm64/x64
+pnpm --filter @warmap/local release     # 准备下载源文件（三个程序 + 四个脚本 + SHA256SUMS，带自查），产物在 dist/release/<版本>/；不上传
 ```
 
 测试页照契约直连本机 API，网页那边可以照着写：配对 → 添加文件夹 → 开工 → 看事件 → 插话 → 批权限 → 停下 → 强停。

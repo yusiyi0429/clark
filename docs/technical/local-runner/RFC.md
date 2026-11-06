@@ -1,6 +1,6 @@
 # RFC：天枢本机程序（apps/local）
 
-v0.1 · 2026-11-06 · 第一版（Windows 先行）。决策见 ADR [0028](../../adr/0028-local-runner-single-binary-with-bun.md)（打包）、[0029](../../adr/0029-local-runner-keys-stay-on-device.md)（钥匙）、[0030](../../adr/0030-local-runner-sessions-clean-by-default.md)（会话默认干净）；接口以 `packages/contracts/src/localRunner.ts` 为准；装、卸、排错见 [runbook](../../guides/local-runner.md)。
+v0.1 · 2026-11-06 · 第一版（Windows 先行）。决策见 ADR [0028](../../adr/0028-local-runner-single-binary-with-bun.md)（打包）、[0029](../../adr/0029-local-runner-keys-stay-on-device.md)（钥匙）、[0030](../../adr/0030-local-runner-sessions-clean-by-default.md)（会话默认干净）、[0031](../../adr/0031-local-runner-outside-paths-flagged-not-denied.md)（越界路径）、[0032](../../adr/0032-local-runner-release-and-code-signing.md)（发布与签名，待本人定）；接口以 `packages/contracts/src/localRunner.ts` 为准；装、卸、排错见 [runbook](../../guides/local-runner.md)。
 
 ## 0. 一句话
 
@@ -135,7 +135,7 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
 
 ## 11. 安装与卸载
 
-`irm <下载源>/install.ps1 | iex`（Windows）、`curl -fsSL <下载源>/install.sh | sh`（Mac）：装到本人目录（不要管理员）、核对 `SHA256SUMS`、注册开机自启并启动、检查 Claude Code（没装就跑官方脚本，没登录就 `claude auth login`，浏览器里点授权）、打开天枢。下载源默认 `https://tk.tokenkingos.com/downloads/local`，可用 `TIANSHU_LOCAL_DOWNLOAD_BASE` 改；**这次没有发布**。卸载脚本装时留一份在本机，默认保留本机数据。
+`irm <下载源>/install.ps1 | iex`（Windows）、`curl -fsSL <下载源>/install.sh | sh`（Mac）：装到本人目录（不要管理员）、核对 `SHA256SUMS`、注册开机自启并启动、检查 Claude Code（没装就跑官方脚本，没登录就 `claude auth login`，浏览器里点授权）、打开天枢。下载源默认 `https://tk.tokenkingos.com/downloads/local`，可用 `TIANSHU_LOCAL_DOWNLOAD_BASE` 改；**这次没有发布**。`install.ps1` 一开始查 Windows 智能应用控制，开着「强制」就停下说明（没签名的程序会被拦，ADR 0032）。卸载脚本装时留一份在本机，默认保留本机数据。下载源的文件用 `pnpm --filter @warmap/local release` 准备，上传后用 `release.mjs --verify` 核对（runbook「打包和发布」）。
 
 ## 12. 以后接 Codex
 
@@ -157,7 +157,7 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
 4. **Mac 没测**：JXA 菜单栏、`osascript` 弹框、钥匙串、LaunchAgent、`install.sh` 都只按文档写了。
 5. **云端接收端和令牌类型**：等 api 会话；本机这边在没关联时只排队。
 6. **网页**：要做首次授权引导、配对、选文件夹、事件流（fetch 读 SSE）、批权限、插话、停下；测试页可以照抄。
-7. **下载源**：服务器给 `install.ps1` 要带 `charset=utf-8`（PowerShell 5.1 默认按 ISO-8859-1 解码，中文会乱）；Windows 签名、Mac 公证没做。
+7. **下载源**：文件已能一键准备并自查（`release.mjs`），本机模拟下载源走通了 `irm | iex` 安装；**还没上传**，线上要配 `charset=utf-8`（runbook 有 Caddy 写法，没在线上验证）。Windows 签名、Mac 公证没做，选项和费用见 ADR 0032，等本人定。
 8. **Claude Code 安装**：官方脚本在无终端环境下能否跑完没在干净机器上测；国内网络可能连不上 `downloads.claude.ai`。
 9. ~~工作目录在本人主目录下时读进本人全局规则~~：已改（11/06 第二轮）。干净会话用 `claudeMdExcludes` 排除主目录这一层；允许的文件夹不能是主目录或它的上级。原先写的「换 `CLAUDE_CONFIG_DIR` 能解决」实测不成立（附录 G）。
 10. ~~网关出错时重试太久~~：已改（11/06 第二轮）。网关模型重试 2 次、等响应头 40 秒，每次重试即时提示网页。剩下一种：网关回了响应头之后卡住不动，Claude Code 固定等 5 分钟才重试，`CLAUDE_STREAM_IDLE_TIMEOUT_MS` 改不小（实测），只能本人在网页上点停下。

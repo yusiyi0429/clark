@@ -35,5 +35,6 @@ ADR 保留决策依据，被替代的部分只作历史参考。当前产品术�
 | [0029](0029-local-runner-keys-stay-on-device.md) | 模型钥匙和同步令牌只存本机 | 有效 |
 | [0030](0030-local-runner-sessions-clean-by-default.md) | 本机会话默认不带个人配置 | 有效 |
 | [0031](0031-local-runner-outside-paths-flagged-not-denied.md) | 本机会话越界的路径：标红交本人定，不自动拒绝 | 有效 |
+| [0032](0032-local-runner-release-and-code-signing.md) | 本机程序的发布：内部试用先不签名，签名和公证列成选项由本人定 | 待本人定 |
 
 新增 ADR 沿用下一个编号，被替代时在原文开头写明替代关系，不删除原文。
