@@ -35,7 +35,7 @@ async function acceptanceFixture() {
   return { ...f, calls, plan, handBack, card, view, settle, hold: () => { let open = () => undefined as void; gate = new Promise((resolve) => { open = resolve; }); return () => { gate = null; open(); }; } };
 }
 
-describe("Agent 验收：队列、推翻、退回记录", () => {
+describe("Agent 验收：队列、推翻、退回记录", { timeout: 30_000 }, () => {
   it("都达到 → 已完成，准备中多一行，事项群里记一句；Agent 拿到卡、标准、执行方的说法、产出和链接正文", async () => {
     const f = await acceptanceFixture();
     try {

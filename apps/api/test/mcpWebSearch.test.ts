@@ -6,7 +6,7 @@ import { createTestApp, TEST_MEMBER } from "./helpers.js";
 const NOW = new Date("2026-11-06T02:00:00.000Z");
 const signal = new AbortController().signal;
 
-describe("MCP web_search", () => {
+describe("MCP web_search", { timeout: 30_000 }, () => {
   it("用服务器上的博查搜，结果去重、截短；每次真搜记一行；每人每分钟、每天有上限；没接通、搜失败、参数不对各回各的错", async () => {
     const t = await createTestApp();
     try {

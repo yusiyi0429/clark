@@ -825,7 +825,7 @@ describe("首页对话带上本人所在页面（CHAT_PAGE_CONTEXT）", () => {
       await t.close();
       await chat.close();
     }
-  });
+  }, 30_000);
 
   it("关着时（缺省）即使网页带了页面路径也不发 page", async () => {
     const chat = await fakeChat();

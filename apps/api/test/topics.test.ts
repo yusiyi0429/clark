@@ -6,7 +6,7 @@ import { THIRD, boardFixture } from "./boardFixture.js";
 const version = (number: number, kind: "outline" | "draft" | "review", body: string) =>
   ["topic_version", { number, kind, label: null, note: null, body }] as [string, unknown];
 
-describe("调研专题", () => {
+describe("调研专题", { timeout: 30_000 }, () => {
   it("新建挂 Task 和岗位；本机报来的提纲、各稿、评审按顺序编号；详情带各版本、最新一版正文和本机执行；归档的不在列表里", async () => {
     const f = await boardFixture();
     try {

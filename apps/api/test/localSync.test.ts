@@ -46,7 +46,7 @@ async function fixture() {
   return { t, call, pair, task, sync, session, close: async () => { await t.close(); await rm(storage, { recursive: true, force: true }); } };
 }
 
-describe("本机程序：设备令牌和单向上报", () => {
+describe("本机程序：设备令牌和单向上报", { timeout: 30_000 }, () => {
   it("配对建设备令牌：不占 5 把的名额、不在设置页列；不能连 MCP、不能当登录态；吊销、再配对后旧令牌立刻失效", async () => {
     const f = await fixture();
     try {

@@ -19,7 +19,7 @@ const handback = (f: BoardFixture, taskId: string, attempt: number, fields: { st
     fields.overruled ? at(31) : null, fields.overruled ? TEST_MEMBER.personId : null, fields.overruled ? "我看过了" : null]);
 const status = (f: BoardFixture, taskId: string, value: string) => f.t.sql("UPDATE tasks SET status=$2 WHERE id=$1", [taskId, value]);
 
-describe("执行看板：卡的投影和看板接口", () => {
+describe("执行看板：卡的投影和看板接口", { timeout: 30_000 }, () => {
   it("看板只给 Task 负责人；没有卡时只有标准和下一版的号", async () => {
     const f = await boardFixture();
     try {

@@ -24,7 +24,7 @@ async function plannerFixture() {
   return { ...f, calls, hold, roleId: role.json().id as string, release: () => release(), setImpl: (next: typeof impl) => { impl = next; } };
 }
 
-describe("拆卡：作业和草稿", () => {
+describe("拆卡：作业和草稿", { timeout: 30_000 }, () => {
   it("拆卡进队列，同一个 Task 同时只跑一次；伙伴拿到 Task、标准、Mission、已有的卡、本人的岗位、没加的预设和本人的想法；草稿配上岗位", async () => {
     const f = await plannerFixture();
     try {

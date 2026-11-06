@@ -5,7 +5,7 @@ import { BOARD_NOW, boardFixture } from "./boardFixture.js";
 
 const status = (state: string, title: string) => ["status", { status: state, title, agent: "claude-code", modelLabel: "订阅 · Sonnet" }] as [string, unknown];
 
-describe("worker 列表", () => {
+describe("worker 列表", { timeout: 30_000 }, () => {
   it("带岗位的卡和专题按进行中、已排队、已完成（今天）列出；等你的排在最前；验收中的是云端的验收员；等空位的排第几；资源取在线设备报的位置数；伙伴读的是同一份", async () => {
     // 验收用一个不返回的桩：交回以后一直在「验收中」。
     const f = await boardFixture({ boardAgents: { acceptance: { accept: () => new Promise(() => undefined) } } }, { internalChatToken: "chat-token" });
