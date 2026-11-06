@@ -253,7 +253,7 @@ export const LocalSessionStatus = Type.Union([
   Type.Literal("running"),
   /** 有权限请求挂起，等网页批准或拒绝。 */
   Type.Literal("waiting_permission"),
-  /** 一轮结束，进程还在，等下一句话。 */
+  /** 一轮结束，进程还在，等下一句话；或者执行方在问本人（摘要带 pendingQuestion）。界面「等你回复」，不占位置。 */
   Type.Literal("idle"),
   /** 进程已退出（停下、强停、本机程序重启）；再发消息会用 --resume 续上。 */
   Type.Literal("exited"),
@@ -322,6 +322,11 @@ export const LocalCreateSessionRequest = Type.Object({
   role: Type.Optional(LocalRole),
   /** 只有专题：评审会用的挑刺岗位（交代里的 critics，最多 3 个）。开工时定下，评审会时并行起它们。 */
   critics: Type.Optional(Type.Array(LocalRole, { maxItems: 3 })),
+  /**
+   * 只有卡：要等的卡（天枢里的 cardId，派活单里 after 指的那几张）。本机先排着（摘要的 waitingFor），等这几张都在这台本机上合回以后，
+   * 从基线分支最新的提交开出这张卡的工作树，自己开始。等着的时候还没有工作树（摘要不带 workspace）。
+   */
+  after: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 80 }), { maxItems: 8 })),
 }, strict);
 
 /**
@@ -348,6 +353,23 @@ export const LocalWorkspace = Type.Union([
   Type.Object({ kind: Type.Literal("folder"), folder: Type.String() }, strict),
 ]);
 
+/** Claude Code 的「问用户」（AskUserQuestion）里的一个问题，按它给的原样转给网页：标题、问题、选项（label + 说明），能不能多选。 */
+export const LocalQuestion = Type.Object({
+  question: Type.String({ minLength: 1, maxLength: 2000 }),
+  header: Type.String({ maxLength: 100 }),
+  options: Type.Array(Type.Object({ label: Type.String({ minLength: 1, maxLength: 200 }), description: Type.String({ maxLength: 1000 }) }, strict), { maxItems: 10 }),
+  multiSelect: Type.Boolean(),
+}, strict);
+/**
+ * 一次提问（一次可以问几个问题）。问着的时候会话状态是 idle（界面「等你回复」，不占位置），摘要带 pendingQuestion；
+ * 本人用 POST /v1/sessions/:id/questions/:requestId 回答。不再当成权限请求（以前网页只看到「要 AskUserQuestion · 批准 / 拒绝」）。
+ */
+export const LocalQuestionRequestView = Type.Object({
+  requestId: Type.String({ minLength: 1, maxLength: 120 }),
+  questions: Type.Array(LocalQuestion, { minItems: 1, maxItems: 10 }),
+  askedAt: Instant,
+}, strict);
+
 export const LocalSessionSummary = Type.Object({
   /** 同时就是 Claude Code 的 --session-id，续接用它。 */
   id: Uuid,
@@ -366,8 +388,12 @@ export const LocalSessionSummary = Type.Object({
   /** 排队时是第几个（1 起），没在排队为 null。 */
   queuePosition: Nullable(Type.Integer({ minimum: 1 })),
   usage: LocalUsage,
-  /** 只有卡：在工作树还是文件夹里做（本机总会填）。 */
+  /** 只有卡：在工作树还是文件夹里做（本机总会填；等前面的卡时还没有工作树，不带）。 */
   workspace: Type.Optional(LocalWorkspace),
+  /** 在等本人回答的提问（状态是 idle，界面「等你回复」）；没有就不带。 */
+  pendingQuestion: Type.Optional(LocalQuestionRequestView),
+  /** 只有卡：排着队、还在等的前面的卡（cardId，还没在这台本机上合回的），界面「已排队 · 等前面的卡」；不在等就不带。 */
+  waitingFor: Type.Optional(Type.Array(Type.String(), { minItems: 1, maxItems: 8 })),
 }, strict);
 export const LocalSessionListResponse = Type.Object({ sessions: Type.Array(LocalSessionSummary) }, strict);
 
@@ -441,6 +467,16 @@ export const LocalMergeResponse = Type.Union([
   Type.Object({ merged: Type.Literal(false), reason: LocalMergeBlockReason, message: Type.String(), files: Type.Array(Type.String(), { maxItems: 200 }) }, strict),
 ]);
 
+/**
+ * POST /v1/sessions/:id/questions/:requestId：回答一次提问，回执是 LocalSessionActionResponse。choices[i] 是第 i 个问题选中的选项 label
+ * （单选最多一个，多选可以几个，可以一个不选），条数和 questions 一样；text 是本人另外写的话（不在选项里的回答）。
+ * 这次提问已经答过或已失效（这一轮停了、进程退出了）回 409。
+ */
+export const LocalQuestionAnswerRequest = Type.Object({
+  choices: Type.Array(Type.Array(Type.String({ minLength: 1, maxLength: 200 }), { maxItems: 10 }), { minItems: 1, maxItems: 10 }),
+  text: Type.Optional(Type.String({ minLength: 1, maxLength: 4000 })),
+}, strict);
+
 /** POST /v1/sessions/:id/interrupt（停下，会话保留）与 /kill（强停，杀本会话进程树）的回执。 */
 export const LocalSessionActionResponse = Type.Object({ session: LocalSessionSummary }, strict);
 
@@ -478,6 +514,8 @@ export const LocalPlanCard = Type.Object({
   role: Nullable(Type.String({ minLength: 1, maxLength: 80 })),
   modelTier: LocalModelTier,
   why: Nullable(Type.String({ maxLength: 200 })),
+  /** 要等派活单里哪几件做完（位置，从 1 起，只能是排在它前面的）；不填就是不用等，可以和别的并行。 */
+  after: Type.Optional(Type.Array(Type.Integer({ minimum: 1 }), { maxItems: 7 })),
 }, strict);
 /**
  * 规划员出的计划和派活单草稿（propose_plan）。revision 是本会话第几次出（本人说一句让它改，改完再出是新的一次，云端以最新一次为准）；
@@ -563,6 +601,10 @@ export const LocalSessionEvent = Type.Union([
   ev("plan", { entries: Type.Array(LocalPlanEntry), progress: LocalPlanProgress }),
   ev("permission_request", { request: LocalPermissionRequestView }),
   ev("permission_resolved", { requestId: Type.String(), decision: Type.Union([Type.Literal("allow"), Type.Literal("deny")]), message: Type.Optional(Type.String()), allowForSession: Type.Boolean() }),
+  /** 执行方问本人（Claude Code 的 AskUserQuestion）：会话转成 idle（等你回复）。 */
+  ev("question", { request: LocalQuestionRequestView }),
+  /** 提问了结：答了带 choices 和 text；这一轮停了、进程退出了就作废，choices 为 null。 */
+  ev("question_resolved", { requestId: Type.String(), choices: Nullable(Type.Array(Type.Array(Type.String()))), text: Nullable(Type.String()) }),
   ev("turn_end", {
     isError: Type.Boolean(),
     text: Nullable(Type.String()),
@@ -608,6 +650,10 @@ const syncItem = <T extends string, D extends TSchema>(type: T, data: D) => Type
 export const LocalSyncItem = Type.Union([
   syncItem("status", Type.Object({
     status: LocalSessionStatus, title: Type.String(), agent: LocalAgentKind, modelLabel: Type.String(),
+    /** 只在 status = queued 时带：排第几（1 起）。前面的开始或取消后，本机会给还在排的每件重发一条带新位置的 queued。 */
+    queuePosition: Type.Optional(Type.Integer({ minimum: 1 })),
+    /** 只在 status = queued、卡在等前面的卡时带：还没合回的那几张的 cardId（派活单上「已排队 · 等前面的卡」）。少了一张就重发一条。 */
+    waitingFor: Type.Optional(Type.Array(Type.String(), { minItems: 1, maxItems: 8 })),
   }, strict)),
   syncItem("plan", Type.Object({ entries: Type.Array(LocalPlanEntry, { maxItems: 100 }), progress: LocalPlanProgress }, strict)),
   /** 证据：一段说明、日志片段、链接（PR 等）、改动摘要。不传完整工具输出。 */
@@ -718,6 +764,9 @@ export type TLocalWorkspace = Static<typeof LocalWorkspace>;
 export type TLocalGitRef = Static<typeof LocalGitRef>;
 export type TLocalMergeBlockReason = Static<typeof LocalMergeBlockReason>;
 export type TLocalMergeResponse = Static<typeof LocalMergeResponse>;
+export type TLocalQuestion = Static<typeof LocalQuestion>;
+export type TLocalQuestionRequestView = Static<typeof LocalQuestionRequestView>;
+export type TLocalQuestionAnswerRequest = Static<typeof LocalQuestionAnswerRequest>;
 export type TLocalPlanEntry = Static<typeof LocalPlanEntry>;
 export type TLocalHandbackCriterion = Static<typeof LocalHandbackCriterion>;
 export type TLocalTopicVersionKind = Static<typeof LocalTopicVersionKind>;
@@ -773,4 +822,5 @@ export const LOCAL_RUNNER_ROUTES = {
   decidePermission: { method: "POST", path: "/v1/sessions/:id/permissions/:requestId", auth: true },
   kill: { method: "POST", path: "/v1/sessions/:id/kill", auth: true },
   mergeSession: { method: "POST", path: "/v1/sessions/:id/merge", auth: true },
+  answerQuestion: { method: "POST", path: "/v1/sessions/:id/questions/:requestId", auth: true },
 } as const;

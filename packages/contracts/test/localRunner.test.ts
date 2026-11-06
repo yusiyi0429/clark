@@ -5,7 +5,7 @@ import {
   LocalCreateSessionRequest, LocalModelProfileUpsert, LocalModelProfile, LocalPermissionDecisionRequest, LocalSessionEvent,
   LocalSyncBatchRequest, LocalPairingStatusResponse, LocalSendMessageRequest, LOCAL_RUNNER_ROUTES,
   LocalCreateSessionBatchRequest, LocalCreateSessionBatchResponse, LocalSettingsPatch, LocalSessionSummary, LocalHealthResponse,
-  LocalVerifyBriefResponse, LOCAL_RUNNER_VERIFY_BRIEF_PATH, LocalMergeResponse, LocalVerdict,
+  LocalVerifyBriefResponse, LOCAL_RUNNER_VERIFY_BRIEF_PATH, LocalMergeResponse, LocalVerdict, LocalQuestionAnswerRequest, LocalPlanCard,
 } from "../src/index.js";
 
 const sessionId = "6b0f3a52-4d0c-4c1e-9a43-1f7d2c9b8e10";
@@ -168,6 +168,55 @@ describe("本机程序契约", () => {
       expect(Value.Check(LocalMergeResponse, { merged: false, reason, message: "合不了", files: ["src/a.ts"] })).toBe(true);
     }
     expect(Value.Check(LocalMergeResponse, { merged: false, reason: "card_running", message: "x", files: [] })).toBe(false);
+  });
+
+  it("提问：摘要带在等的提问（等你回复），事件有提问和了结，网页按问题给选中的选项和一句话", () => {
+    const at = "2026-11-07T02:00:00.000Z";
+    const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0 };
+    const summary = {
+      id: sessionId, subject: { kind: "card", cardId: "card-3" }, title: "总验收", agent: "claude-code", modelProfileId: "subscription", modelLabel: "订阅",
+      cwd: "C:/data/worktrees/card-3", status: "idle", includePersonalConfig: false, createdAt: at, updatedAt: at, lastSeq: 9, pendingPermissions: 0, queuePosition: null, usage,
+    };
+    const request = {
+      requestId: "toolu_ask1", askedAt: at,
+      questions: [
+        { question: "等前两张交回，还是先预跑？", header: "先后", multiSelect: false, options: [{ label: "等交回", description: "前两张合回后再跑" }, { label: "先预跑", description: "" }] },
+        { question: "要跑哪些检查？", header: "检查", multiSelect: true, options: [{ label: "单测", description: "npm test" }, { label: "类型检查", description: "tsc" }] },
+      ],
+    };
+    expect(Value.Check(LocalSessionSummary, { ...summary, pendingQuestion: request })).toBe(true);
+    expect(Value.Check(LocalSessionSummary, { ...summary, pendingQuestion: { ...request, questions: [] } })).toBe(false);
+    expect(Value.Check(LocalSessionEvent, { seq: 9, at, sessionId, type: "question", request })).toBe(true);
+    expect(Value.Check(LocalSessionEvent, { seq: 10, at, sessionId, type: "question_resolved", requestId: "toolu_ask1", choices: [["等交回"], ["单测", "类型检查"]], text: null })).toBe(true);
+    expect(Value.Check(LocalSessionEvent, { seq: 10, at, sessionId, type: "question_resolved", requestId: "toolu_ask1", choices: null, text: null })).toBe(true); // 作废
+    expect(LOCAL_RUNNER_ROUTES.answerQuestion).toEqual({ method: "POST", path: "/v1/sessions/:id/questions/:requestId", auth: true });
+    expect(Value.Check(LocalQuestionAnswerRequest, { choices: [["等交回"], ["单测"]] })).toBe(true);
+    expect(Value.Check(LocalQuestionAnswerRequest, { choices: [[], []], text: "先跑单测，别的不用" })).toBe(true);
+    expect(Value.Check(LocalQuestionAnswerRequest, { choices: [] })).toBe(false);
+    expect(Value.Check(LocalQuestionAnswerRequest, { choices: [["等交回"]], text: "" })).toBe(false);
+  });
+
+  it("卡的先后：派活单写等哪几件，开工请求带要等的卡，排着时摘要和同步带还在等的卡", () => {
+    const card = { title: "总验收", brief: "前两张合回后跑测试", doneDefinition: "npm test 全过", criterionIndex: 3, role: null, modelTier: "light", why: null };
+    expect(Value.Check(LocalPlanCard, { ...card, after: [1, 2] })).toBe(true);
+    expect(Value.Check(LocalPlanCard, card)).toBe(true); // 不填就是不用等
+    expect(Value.Check(LocalPlanCard, { ...card, after: [0] })).toBe(false);
+    const start = { subject: { kind: "card", cardId: "card-3" }, title: "总验收", cwd: "D:/repo", firstMessage: "做总验收" };
+    expect(Value.Check(LocalCreateSessionRequest, { ...start, after: ["card-1", "card-2"] })).toBe(true);
+    expect(Value.Check(LocalCreateSessionRequest, { ...start, after: [""] })).toBe(false);
+    const at = "2026-11-07T02:00:00.000Z";
+    const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0 };
+    const queued = {
+      id: sessionId, subject: start.subject, title: "总验收", agent: "claude-code", modelProfileId: "subscription", modelLabel: "订阅",
+      cwd: "D:/repo", status: "queued", includePersonalConfig: false, createdAt: at, updatedAt: at, lastSeq: 1, pendingPermissions: 0, queuePosition: 1, usage,
+    };
+    expect(Value.Check(LocalSessionSummary, { ...queued, waitingFor: ["card-2"] })).toBe(true);
+    expect(Value.Check(LocalSessionSummary, { ...queued, waitingFor: [] })).toBe(false); // 不在等就不带
+    const item = { key: `${deviceId}:${sessionId}:2`, sessionId, subject: start.subject, occurredAt: at, type: "status" };
+    const batch = (data: unknown) => ({ deviceId, runnerVersion: "0.1.0", slots: { max: 3, running: 2, queued: 1 }, items: [{ ...item, data }] });
+    const status = { status: "queued", title: "总验收", agent: "claude-code", modelLabel: "订阅", queuePosition: 1 };
+    expect(Value.Check(LocalSyncBatchRequest, batch({ ...status, waitingFor: ["card-1", "card-2"] }))).toBe(true);
+    expect(Value.Check(LocalSyncBatchRequest, batch(status))).toBe(true);
   });
 
   it("配对口令只在批准后出现；路由表里只有健康和配对不要口令", () => {
