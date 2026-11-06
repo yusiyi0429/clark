@@ -3,7 +3,7 @@ import { CriterionVerdict } from "./deliverables.js";
 import { LocalHandbackCriterion } from "./localRunner.js";
 import { LocalOutputView, LocalRunView } from "./localDevices.js";
 import { TaskPerson, TaskView } from "./tasks.js";
-import { CardCriterion, CardExecutor, CardHandbackBrief, CardModel, TaskCard } from "./taskCardView.js";
+import { CardCriterion, CardExecutor, CardGit, CardHandbackBrief, CardModel, TaskCard } from "./taskCardView.js";
 import { RoleBrief, RoleRef } from "./roles.js";
 
 /**
@@ -66,6 +66,7 @@ export const CardDraftView = Type.Object({
 /**
  * 准备中的一样东西（等进下一版交付物）：kind=card 是一张 Agent 验收通过的卡（cardId 是执行事项 id），
  * kind=topic 是调研专题的一版（topicId、topicVersionId）。title 是卡的标题，或「专题标题 · 第 N 版」。
+ * git：卡在工作树里做时，验收通过的那次交回的分支、提交和验的提交；专题和在文件夹里做的卡为 null。
  */
 export const PendingDeliverableItem = Type.Object({
   id: Type.String({ format: "uuid" }),
@@ -75,6 +76,7 @@ export const PendingDeliverableItem = Type.Object({
   topicId: Nullable(Type.String({ format: "uuid" })),
   topicVersionId: Nullable(Type.String({ format: "uuid" })),
   addedAt: Instant,
+  git: Nullable(CardGit),
 }, strict);
 
 /**

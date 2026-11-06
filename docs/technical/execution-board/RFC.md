@@ -46,6 +46,7 @@ OpenAPI 路径在 `packages/contracts/src/boardOpenapi.ts` 手列；改契约后
 | 232 | `web_search_calls` |
 | 233 | `local_devices.slots`、`local_runs.plan_progress`、`topic_versions.local_number` |
 | 234 | `local_runs` 加 `plan`（`plan_task_id`）、`verify` 两种会话；`card_plans` 加 `source`、`run_id`、`revision`、`summary`、`steps`、`risks`、模型和规划员岗位；`card_handbacks` 加谁验的（`verifier_*`、`verify_run_id`）；`card_split_requests`（同一个人同一个 Task 只有一条没关的） |
+| 235 | `card_handbacks` 加 `git`（交回的分支和提交）、`verified_commit`（本机验收员验的提交），ADR 0038 |
 
 V1（约定）用 225，不冲突。
 
@@ -86,7 +87,7 @@ V1（约定）用 225，不冲突。
 | `plan` | 按序号只往前；条目整份替换，`progress` 存 `plan_progress` |
 | `evidence` | 记一行 `local_outputs`（规划员、验收员的会话不收） |
 | `artifact` | 扩展名白名单、大小和 sha256 核对，存材料卷，抽文字（PDF、Word 走材料解析进程） |
-| `handback` | 只有卡；产出取 `outputKeys` 点名的（拒收过的、不是这张卡的不算）；开关开着时排云端验收，关着时等本机验收员 |
+| `handback` | 只有卡；产出取 `outputKeys` 点名的（拒收过的、不是这张卡的不算）；带 `git`（卡在自己的工作树里做时的分支、基线和交回的提交，ADR 0038）就记下；开关开着时排云端验收，关着时等本机验收员 |
 | `card_plan` | 只有规划员会话（`plan`，带 `taskId`）；本人是 Task 负责人才收；落成派活单草稿，见第 13 节 |
 | `verdict` | 只有验收员会话（`verify`，带被验的 `cardId` 和 `handbackKey`）；落成验收结论，见第 13 节 |
 | `topic_version` | 只有专题；号用本机的，撞号排到最后（`local_number` 留本机号）；没名字按种类起名 |
@@ -123,4 +124,5 @@ V1（约定）用 225，不冲突。
 - **放进看板兜底岗位**：交给 Claude Code 的卡放进看板时还没岗位，就照草稿建议的预设、没建议时照「执行员」预设（`general/executor.md`）给本人加上并挂上，免得卡不进 worker 列表。
 - **验收员交代** `GET /api/local-runner/verify-brief?handbackKey=`（设备令牌）：卡的交代和完成标准、约定、卡所属岗位的验收口径、执行方的逐条自评和总结、点名的产出和证据（文件在本机）、上一次没过的地方；`role` 是本人的验收员（没有用预设），`failStreak` 是这次以前连续没过几次。找不到 404，已经有结论 409。
 - **`verdict`**：按 `handbackKey` 找到这次交回，条数和交回时的标准对上才收（`INVALID_VERDICT`），已有结论拒收（`ALREADY_JUDGED`）。和云端作业共用 `settleHandback`：过了卡完成、进准备中、事项群记「本机验收员验收通过」；没过把改法写进这次交回（`return_text`），网页照原来的「送回」送一次；同一张卡第二次没过受阻、记一条岗位修改（提交后排队）。记下谁验的：`verifier_source=local`、模型、验收员岗位和版本、验收会话 id。
+- **卡的分支和提交**（ADR 0038，D 的本机程序）：交回记分支和提交，`verdict` 的 `commit` 记成验的提交。读的地方都给同一个 `git`（`branch`、`baseBranch`、`baseCommit`、`commit`、`verifiedCommit`）：卡的最近一次交回（看板上的卡、卡的详情里每次交回）、worker 列表里卡和验收员那一行、准备中的卡。合回主文件夹由本人在本机点、本机自己合，云端不记合没合。
 - **`get_task_context`**（`/mcp/me`，只读，个人令牌和设备令牌都能调）：谁能看照约定（负责人、Mission 负责人、战场负责人、CEO、认可人），看不到的当找不到、也不去读本体。返回 Task 和约定、Mission、战场半年目标、本体事实（按本人授权读两次：Task 名 + Mission 名、「本月目标」+ 战场名，只读定位到的对象，每条带 `cite:world:<id>@<版本>`）、最近两版交付物和参考评审。

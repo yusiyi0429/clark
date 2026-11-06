@@ -296,7 +296,7 @@ async function applyVerdict(client: PoolClient, owner: Owner, run: RunRow, card:
     criteria: [...data.criteria].sort((a, b) => a.index - b.index)
     .map(({ index, verdict, reason, evidence, fix }) => ({ index, verdict, reason: reason.trim(), evidence: evidence?.trim() || null, fix: fix?.trim() || null })) };
   const settled = await settleHandback(client, row, result,
-    { source: "local", modelLabel: data.modelLabel, roleId: data.roleId, roleVersion: data.roleVersion, runId: run.id }, null, at);
+    { source: "local", modelLabel: data.modelLabel, roleId: data.roleId, roleVersion: data.roleVersion, runId: run.id, commit: data.commit ?? null }, null, at);
   if (!settled.saved) throw new SyncReject("ALREADY_JUDGED", "这次交回已经有验收结论了");
   await note(client, run, at, settled.outcome === "pass" ? "验收通过" : "验收没过", true);
   return settled.proposal ? { proposal: settled.proposal } : {};
@@ -314,10 +314,11 @@ async function insertHandback(client: PoolClient, owner: Owner, key: string, run
   const agent = card.status !== "done" && card.executor !== "self";
   if (agent && card.executor === null) await client.query("UPDATE tasks SET executor='claude_code' WHERE id=$1", [card.id]);
   const id = randomUUID();
-  await client.query(`INSERT INTO card_handbacks(id,task_id,run_id,owner_id,client_id,attempt,criteria,claims,summary,output_ids,status,created_at)
-    VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10::jsonb,$11,$12)`,
+  // git：卡在自己的工作树里做时交回的分支和提交（ADR 0038），在文件夹里做的不带。
+  await client.query(`INSERT INTO card_handbacks(id,task_id,run_id,owner_id,client_id,attempt,criteria,claims,summary,output_ids,status,created_at,git)
+    VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10::jsonb,$11,$12,$13::jsonb)`,
   [id, card.id, run.id, owner.personId, key, attempt, JSON.stringify(taskStandards(card.done_definition)), JSON.stringify(data.criteria),
-    data.summary.trim() || null, JSON.stringify(outputs), agent ? "queued" : "done", at]);
+    data.summary.trim() || null, JSON.stringify(outputs), agent ? "queued" : "done", at, data.git ? JSON.stringify(data.git) : null]);
   await note(client, run, at, agent ? "交回，等验收" : "交回", true);
   return agent ? id : null;
 }

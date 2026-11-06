@@ -1,6 +1,6 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import { RoleRef } from "./roles.js";
-import { CardStage } from "./taskCardView.js";
+import { CardGit, CardStage } from "./taskCardView.js";
 
 /**
  * worker 列表（V2 设计第 20 节）：不做看板，以「资源」和「worker」呈现。worker 是岗位这一趟派出去的执行（一张带岗位的卡、一个带岗位的专题，
@@ -51,6 +51,7 @@ export const WorkerCost = Type.Object({
  * startedAt 是开工时间（等开工的为 null），elapsedSeconds 是到现在（已完成的到完成）用了多久。queueReason 只有「已排队」的有。
  * step 取本机报的计划进度：n 是 progress.step，label 是 progress.current（没有正在做的一步时 step 为 null）。
  * queuePosition 是「排第 n」：只有 queueReason=slot 的有，和本机程序的 queuePosition 同义——这台电脑上等空位的会话按开工先后排第几（1 起）。
+ * git：卡和验收员这一行，卡最近一次交回的分支、提交和验的提交（卡在工作树里做时才有）；规划员、专题和没交回过的卡为 null。
  */
 export const WorkerItem = Type.Object({
   key: Type.String({ minLength: 1 }),
@@ -73,6 +74,7 @@ export const WorkerItem = Type.Object({
   needsYou: Type.Boolean(),
   queueReason: Nullable(WorkerQueueReason),
   queuePosition: Nullable(Type.Integer({ minimum: 1 })),
+  git: Nullable(CardGit),
 }, strict);
 
 /**
