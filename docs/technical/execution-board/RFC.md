@@ -1,16 +1,16 @@
 # RFC：执行看板、Agent 验收、调研专题、岗位和本机程序的云端一侧（apps/api）
 
-v0.1 · 2026-11-06 · 分支 `claude/v2-board-api`。设计以 `.scratch/next-phase/设计_执行看板与本机执行_V2_2026-11-06.md` 为准（第 18 节评审结论优先，第 19 节岗位，第 20 节 worker 列表）。决策见 ADR [0034](../../adr/0034-execution-board-cards-are-execution-items.md)（看板）、[0035](../../adr/0035-agent-acceptance-and-growing-roles.md)（Agent 验收和岗位）、[0036](../../adr/0036-local-runner-cloud-side-receives-only.md)（本机程序的云端一侧）。本机程序那一侧见 [local-runner/RFC.md](../local-runner/RFC.md)；交接事项见 [交接.md](交接.md)。
+v0.2 · 2026-11-06 · 分支 `claude/v2-board-api`。设计以 `.scratch/next-phase/设计_执行看板与本机执行_V2_2026-11-06.md` 为准（第 18 节评审结论优先，第 19 节岗位，第 20 节 worker 列表，第 21 节拆卡和验收改在本机——覆盖第 5、6 节的触发方式，见本文第 13 节）。决策见 ADR [0034](../../adr/0034-execution-board-cards-are-execution-items.md)（看板）、[0035](../../adr/0035-agent-acceptance-and-growing-roles.md)（Agent 验收和岗位）、[0036](../../adr/0036-local-runner-cloud-side-receives-only.md)（本机程序的云端一侧）。本机程序那一侧见 [local-runner/RFC.md](../local-runner/RFC.md)；交接事项见 [交接.md](交接.md)。
 
 ## 0. 一句话
 
-本人在一个 Task 下让伙伴拆卡、把卡交给本机的 Claude Code 去做；本机只把结果单向报上来，云端的 Agent 按三样口径先验收，本人可推翻；验收通过的卡和本人点的专题版本进「准备中」，本人点「出下一版」出交付物。跨 Task 只给 worker 列表。
+本人在一个 Task 下让本机的规划员拆卡、把卡交给本机的 Claude Code 去做；本机只把结果单向报上来，本机的验收员按三样口径先验收（云端只收结论），本人可推翻；验收通过的卡和本人点的专题版本进「准备中」，本人点「出下一版」出交付物。跨 Task 只给 worker 列表。
 
 ## 1. 范围
 
 | 做了 | 没做 |
 |-|-|
-| 契约（`packages/contracts`）、迁移 226–233、看板与卡、拆卡、Agent 验收与推翻、准备中与出下一版、调研专题、岗位与岗位修改、worker 列表、设备令牌与同步接收端、`web_search` 作业、Task 页带进对话（`page` 兜底） | 网页（apps/web，另一会话）；本机程序（apps/local，另一会话）；共享文件那一步（见交接第 2 节）；`/internal` 的拆卡入口（等新 Chat API 接上再开） |
+| 契约（`packages/contracts`）、迁移 226–234、看板与卡、拆卡、Agent 验收与推翻、准备中与出下一版、调研专题、岗位与岗位修改、worker 列表、设备令牌与同步接收端、`web_search`、Task 页带进对话（`page` 兜底）；第 21 节：`card_plan`/`verdict` 接收、登记拆卡、规划员和验收员的交代、`get_task_context`、云端两个作业的开关 | 网页（apps/web，另一会话）；本机程序（apps/local，另一会话）；规划员、验收员会话进 worker 列表（本机程序那边出，云端列表还没有这两种） |
 
 ## 2. 代码在哪
 
@@ -19,15 +19,16 @@ v0.1 · 2026-11-06 · 分支 `claude/v2-board-api`。设计以 `.scratch/next-ph
 | 功能 | 作业 | 接口、数据 | 路由 | 契约 |
 |-|-|-|-|-|
 | 看板与卡 | — | `taskCards.ts` | `routes/taskCards.ts` | `taskCards.ts`、`taskCardView.ts` |
-| 拆卡 | `cardPlanAgent.ts` | `cardPlanner.ts` | 同上 | 同上 |
-| Agent 验收 | `cardAcceptanceAgent.ts` | `cardAcceptance.ts` | 同上 | 同上 |
+| 拆卡 | 本机规划员（云端 `cardPlanAgent.ts` 关着） | `cardPlanner.ts`（`saveLocalCardPlan`）、`cardSplits.ts`（登记、规划员交代） | 同上 | 同上、`cardSplits.ts` |
+| Agent 验收 | 本机验收员（云端 `cardAcceptanceAgent.ts` 关着） | `cardAcceptance.ts`（`settleHandback`、`verifyBrief`） | 同上；验收交代在 `routes/local.ts` | 同上；交代和 `verdict` 在 `localRunner.ts` |
 | 准备中、出下一版 | — | `cardDeliverables.ts` | 同上 | 同上 |
 | 岗位 | — | `roles.ts`、预设 `roles/presets/<family>/<key>.md` | `routes/roles.ts` | `roles.ts` |
 | 岗位修改 | `roleProposalAgent.ts` | `roleProposals.ts` | `routes/roles.ts` | `roles.ts` |
 | 调研专题 | — | `researchTopics.ts` | `routes/topics.ts` | `topics.ts` |
 | worker 列表 | — | `workers.ts` | `routes/workers.ts` | `workers.ts` |
 | 设备与同步 | — | `localDevices.ts`、`localSync.ts`、`personalTokens.ts`（`local` 令牌） | `routes/local.ts` | `localDevices.ts`；同步载荷是本机程序的 `localRunner.ts` |
-| 联网搜索 | — | `mcpWebSearch.ts` | 挂进 `/mcp/me` 见交接第 2 节 | 输入沿用 `agentRuntime.ts` 的 `WebSearchInput` |
+| 联网搜索 | — | `mcpWebSearch.ts` | `/mcp/me` | 输入沿用 `agentRuntime.ts` 的 `WebSearchInput` |
+| Task 上下文 | — | `mcpTaskContext.ts`（读本体用 `company.ts`） | `/mcp/me` 的 `get_task_context` | — |
 | Task 页带进对话 | — | `pageGuides.ts`（`pageFor`）、`taskCards.ts`（`taskPageFacts`） | `chatService.ts` 转发时带 `page` | — |
 
 OpenAPI 路径在 `packages/contracts/src/boardOpenapi.ts` 手列；改契约后 `pnpm --filter @warmap/web gen:client`。
@@ -44,6 +45,7 @@ OpenAPI 路径在 `packages/contracts/src/boardOpenapi.ts` 手列；改契约后
 | 231 | `local_runs.state` 加 `queued` |
 | 232 | `web_search_calls` |
 | 233 | `local_devices.slots`、`local_runs.plan_progress`、`topic_versions.local_number` |
+| 234 | `local_runs` 加 `plan`（`plan_task_id`）、`verify` 两种会话；`card_plans` 加 `source`、`run_id`、`revision`、`summary`、`steps`、`risks`、模型和规划员岗位；`card_handbacks` 加谁验的（`verifier_*`、`verify_run_id`）；`card_split_requests`（同一个人同一个 Task 只有一条没关的） |
 
 V1（约定）用 225，不冲突。
 
@@ -82,14 +84,17 @@ V1（约定）用 225，不冲突。
 |-|-|
 | `status` | 按序号只往前；记开工时间、结束时间、里程碑 |
 | `plan` | 按序号只往前；条目整份替换，`progress` 存 `plan_progress` |
-| `evidence` | 记一行 `local_outputs` |
+| `evidence` | 记一行 `local_outputs`（规划员、验收员的会话不收） |
 | `artifact` | 扩展名白名单、大小和 sha256 核对，存材料卷，抽文字（PDF、Word 走材料解析进程） |
-| `handback` | 只有卡；产出取 `outputKeys` 点名的（拒收过的、不是这张卡的不算）；排 Agent 验收 |
+| `handback` | 只有卡；产出取 `outputKeys` 点名的（拒收过的、不是这张卡的不算）；开关开着时排云端验收，关着时等本机验收员 |
+| `card_plan` | 只有规划员会话（`plan`，带 `taskId`）；本人是 Task 负责人才收；落成派活单草稿，见第 13 节 |
+| `verdict` | 只有验收员会话（`verify`，带被验的 `cardId` 和 `handbackKey`）；落成验收结论，见第 13 节 |
 | `topic_version` | 只有专题；号用本机的，撞号排到最后（`local_number` 留本机号）；没名字按种类起名 |
 | `topic_version_feishu` | 只有专题；先认本会话的本机号，再按号认；都没有拒收 `VERSION_NOT_FOUND` |
 | `cost` | 累计 token 和估价 |
 
-- 第一次报某张卡时记下岗位版本，卡变进行中；只报了等空位（`queued`）的还没开工，卡留在待开始。
+- 第一次报某张卡时记下岗位版本，卡变进行中；只报了等空位（`queued`）的还没开工，卡留在待开始。验收员的会话也挂这张卡，但不改卡、不算卡的执行（看板、卡的详情、worker 的花费只算 `kind='card'`）。
+- 可空的文字字段经 Fastify 的类型转换会变成空串，接收端把空串当没写。
 - 产出读取：`GET /api/me/local-outputs/:id`（HTML 用材料预览的 CSP，其余 `sandbox`）。
 
 ## 10. worker 列表
@@ -105,4 +110,15 @@ V1（约定）用 225，不冲突。
 
 ## 12. 测试
 
-`apps/api/test/`：`taskCards`、`cardPlanner`、`cardAcceptance`、`cardDeliverables`、`roles`、`topics`、`workers`、`localSync`、`mcpWebSearch`，公用 `boardFixture.ts`（本人一个本月 Mission、几个 Task、配对一台电脑并按真实同步载荷报条目）。拆卡、验收、提岗位修改和博查一律打桩。跑法见交接第 1 节。
+`apps/api/test/`：`taskCards`、`cardPlanner`、`cardAcceptance`、`cardDeliverables`、`roles`、`topics`、`workers`、`localSync`、`mcpWebSearch`、`localPlanVerify`（第 21 节），公用 `boardFixture.ts`（本人一个本月 Mission、几个 Task、配对一台电脑并按真实同步载荷报条目；缺省打开云端两个作业，第 21 节的测试关着跑）。拆卡、验收、提岗位修改、博查和本体读取一律打桩。跑法见交接第 1 节。
+
+## 13. 拆卡和验收在本机（设计第 21 节）
+
+- **开关**：`BOARD_CLOUD_AGENTS=1` 才开云端拆卡和云端验收（`cardPlanAgent`、`cardAcceptanceAgent` 不删）。缺省关：`POST …/card-plans` 和验收重试回 409 `CLOUD_AGENTS_OFF`，交回不排云端验收，两个队列不 recover。岗位修改作业照旧在云端。
+- **登记拆卡**：网页 `POST /api/plan-tasks/:taskId/card-splits`（origin `web`），伙伴 `POST /internal/plan-tasks/:taskId/card-splits`（工具名 `register_card_split`，`INTERNAL_CHAT_TOKEN` + `X-Owner-Id`，origin `buddy`）。只记一笔、不起作业；只有 Task 负责人能登记；同一个 Task 已有没开工的登记时返回那一条（200）。`GET /api/me/card-splits` 列没开工的，`DELETE /api/me/card-splits/:id` 去掉（网页开了规划员以后，或本人不拆了）。
+- **规划员交代** `GET /api/plan-tasks/:taskId/plan-brief`（负责人）：Task、每条标准和用什么证明、这次不包括、已经有的卡和草稿、能派的岗位（本人干活的岗位和没加的干活预设，规划员自己除外，职责取第一段最多 200 字）、出派活单的要求；`role` 是本人的规划员（预设 key `planner` 或名字「规划员」），没有时用预设。
+- **`card_plan`**：一次规划会话一行 `card_plans`（`source=local`、`run_id`、`status=done`）。同一会话 `revision` 更大时换上新计划，上一次没处理的草稿收起来、新草稿接在后面；晚到的旧一次收下不动。岗位按本人岗位的 id、名字或预设 key 对，对不上再按预设 key 或名字写建议；条号越界当没对上；执行方是 Claude Code。
+- **放进看板兜底岗位**：交给 Claude Code 的卡放进看板时还没岗位，就照草稿建议的预设、没建议时照「执行员」预设（`general/executor.md`）给本人加上并挂上，免得卡不进 worker 列表。
+- **验收员交代** `GET /api/local-runner/verify-brief?handbackKey=`（设备令牌）：卡的交代和完成标准、约定、卡所属岗位的验收口径、执行方的逐条自评和总结、点名的产出和证据（文件在本机）、上一次没过的地方；`role` 是本人的验收员（没有用预设），`failStreak` 是这次以前连续没过几次。找不到 404，已经有结论 409。
+- **`verdict`**：按 `handbackKey` 找到这次交回，条数和交回时的标准对上才收（`INVALID_VERDICT`），已有结论拒收（`ALREADY_JUDGED`）。和云端作业共用 `settleHandback`：过了卡完成、进准备中、事项群记「本机验收员验收通过」；没过把改法写进这次交回（`return_text`），网页照原来的「送回」送一次；同一张卡第二次没过受阻、记一条岗位修改（提交后排队）。记下谁验的：`verifier_source=local`、模型、验收员岗位和版本、验收会话 id。
+- **`get_task_context`**（`/mcp/me`，只读，个人令牌和设备令牌都能调）：谁能看照约定（负责人、Mission 负责人、战场负责人、CEO、认可人），看不到的当找不到、也不去读本体。返回 Task 和约定、Mission、战场半年目标、本体事实（按本人授权读两次：Task 名 + Mission 名、「本月目标」+ 战场名，只读定位到的对象，每条带 `cite:world:<id>@<版本>`）、最近两版交付物和参考评审。
