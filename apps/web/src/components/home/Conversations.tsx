@@ -12,7 +12,7 @@ import { Info } from "lucide-react";
 import type { THomePlanTask } from "@warmap/contracts";
 import type { Buddy } from "@/components/buddy/useBuddy";
 import { ChatColumn } from "@/components/rail/ChatPane";
-import { PendingBoxes, PendingChip } from "@/components/work/DecisionBox";
+import { PendingBoxes, PendingDock } from "@/components/work/DecisionBox";
 import { WorkTimeline, type TimedBlock } from "@/components/work/WorkTimeline";
 import type { ConversationData } from "@/conversation/useConversation";
 import { useConversation } from "@/conversation/useConversation";
@@ -64,7 +64,7 @@ export function BuddyView({ buddy, outbox, consume, onSpeaking }: { buddy: Buddy
             </header>
           )}
           timeline={(current) => <WorkTimeline data={current} blocks={[]} />}
-          above={<PendingChip />} />
+          dock={(latest) => <PendingDock latest={latest} />} />
       </div>
     </PendingBoxes>
   );
@@ -170,7 +170,7 @@ function PipelineBody({ data, task, home, api, buddy, outbox, consume, go, onSpe
             </header>
           )}
           timeline={(current) => <WorkTimeline data={current} blocks={blocks} />}
-          above={<PendingChip />} />
+          dock={(latest) => <PendingDock latest={latest} />} />
       </div>
     </PendingBoxes>
   );

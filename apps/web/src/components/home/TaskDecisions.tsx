@@ -72,7 +72,6 @@ export function MergeDecision({ worker, onChanged }: { worker: Worker; onChanged
   if (later) return <DecisionBox kind="question" title={title} options={[]} onPick={() => undefined} resolved="先不合" />;
   const merge = async () => {
     const result = await mergeCard(local.runner, session, worker.title);
-    if (result.ok) showWorkspaceToast({ text: `已合进 ${ws.baseBranch}` });
     await local.refresh();
     onChanged();
   };

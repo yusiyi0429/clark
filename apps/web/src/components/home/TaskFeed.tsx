@@ -102,7 +102,7 @@ function PassedLine({ item, worker, go, onChanged }: { item: Passed; worker: Wor
         <DecisionBox kind="question" testId="overrule-box" title={`推翻「${item.title}」`}
           options={[{ label: "不推翻" }]} onPick={() => setUndoing(false)}
           other={{ label: "写原因…", placeholder: "为什么推翻", onSubmit: async (reason) => {
-            try { await overrule(item.cardId, handback.id, reason); showWorkspaceToast({ text: "已推翻" }); setUndoing(false); onChanged(); }
+            try { await overrule(item.cardId, handback.id, reason); setUndoing(false); onChanged(); }
             catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没成功，请重试" }); }
           } }} />
       ) : null}

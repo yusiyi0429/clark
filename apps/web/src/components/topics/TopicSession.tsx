@@ -16,7 +16,7 @@ import { useHandheld } from "@/components/ui/useHandheld";
 import { StartDialog } from "@/components/local/StartDialog";
 import { SessionComposer, SessionTranscript, type DecideOptions } from "@/components/cards/SessionTranscript";
 import { QuestionDecision } from "@/components/work/decisions";
-import { PendingBoxes, PendingChip } from "@/components/work/DecisionBox";
+import { PendingBoxes, PendingDock } from "@/components/work/DecisionBox";
 import { useViewChrome } from "@/components/home/view";
 import { useConversationScroll } from "@/conversation/useConversationScroll";
 import { latestSessionFor, useLocalRunner } from "@/lib/local/LocalRunnerProvider";
@@ -155,7 +155,7 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
           </div>
           <div ref={scroll.reserveRef} aria-hidden />
         </div>
-        <PendingChip />
+        <PendingDock latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} />
         <SessionComposer placeholder="发给 Claude Code…" disabled={!canAct} onSend={say} />
       </div>
     </PendingBoxes>

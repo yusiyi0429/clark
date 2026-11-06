@@ -26,7 +26,7 @@ import type { TLocalModelProfile } from "@/lib/local/runner";
 import { acceptDrafts, dismissDraft } from "@/lib/board/cloud";
 import { showWorkspaceToast } from "@/lib/toast";
 import { TIER_LABEL, draftRole, modelForTier, type CardRole, type RoleView } from "@/lib/team/roles";
-import { SLOT_CAP, startBatch, startedText, type StartPlan } from "@/lib/work/queue";
+import { SLOT_CAP, startBatch, type StartPlan } from "@/lib/work/queue";
 import { QUEUE_LABEL, liveSessions, type Worker } from "@/lib/work/workers";
 import type { SubSession } from "@/lib/home/types";
 import { ICON as STATE_ICON, StateIcon } from "./StateIcon";
@@ -92,11 +92,8 @@ export function PlanDecision({ task, drafts, roles, handheld, onSay, onChanged }
       });
       if (ready && folder) {
         writeLast({ folderId: folder.id });
-        const result = await startBatch(local.runner, plans);
+        await startBatch(local.runner, plans);
         await local.refresh();
-        showWorkspaceToast({ text: startedText(result) });
-      } else {
-        showWorkspaceToast({ text: `${plans.length} 件${QUEUE_LABEL.start}` });
       }
       setEdits({});
       setEditing(false);

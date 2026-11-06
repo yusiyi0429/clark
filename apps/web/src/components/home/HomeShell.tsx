@@ -31,7 +31,7 @@ import { claimStarts, listSplits, registerSplit, releaseStart, removeSplit, rout
 import { gateOf, gateText } from "@/components/board/MonthLanes";
 import { showWorkspaceToast } from "@/lib/toast";
 import { modelForTier } from "@/lib/team/roles";
-import { startBatch, startedText, type StartPlan } from "@/lib/work/queue";
+import { startBatch, type StartPlan } from "@/lib/work/queue";
 import type { Worker } from "@/lib/work/workers";
 import { HOME_HREF, routeText, todayLabel } from "@/lib/home/derive";
 import type { BackgroundItem, RouteTarget } from "@/lib/home/types";
@@ -155,7 +155,6 @@ function HomeFrame({ account }: { account: Account }) {
       const missed = [...jobs.filter((job) => !job.request), ...ready.filter((_, index) => !result.opened[plans.length + index])];
       await giveBack(missed);
       await local.refresh();
-      if (plans.length || claimed.length) showWorkspaceToast({ text: startedText({ ...result, failed: result.failed + jobs.length - ready.length }) });
       changed();
     } catch (error) {
       await giveBack(claimed);
@@ -166,7 +165,7 @@ function HomeFrame({ account }: { account: Account }) {
   }, [local, work.roles, changed]);
   const split = useCallback(async (taskId: string) => {
     if (here) { await start([], [{ taskId }]); return; }
-    try { await registerSplit(taskId); showWorkspaceToast({ text: "拆卡 · 等开工" }); changed(); }
+    try { await registerSplit(taskId); changed(); }
     catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没成功，请重试" }); }
   }, [here, start, changed]);
 

@@ -25,7 +25,7 @@ export function ChatPane(props: Omit<Parameters<typeof ChatColumn>[0], "data">) 
 }
 
 /** 同一列，对话由调用方给（新首页：总管线是总线程，Task 管线是那件 Task 的对话）。 */
-export function ChatColumn({ data, buddy, head, extra, timeline, above, variant = "page", label, tone = "light" }: {
+export function ChatColumn({ data, buddy, head, extra, timeline, above, dock, variant = "page", label, tone = "light" }: {
   data: ConversationData;
   buddy: Buddy | null;
   /** 列和输入条的名字；不给时是伙伴的名字。 */
@@ -38,6 +38,8 @@ export function ChatColumn({ data, buddy, head, extra, timeline, above, variant 
   timeline?: (data: ConversationData) => ReactNode;
   /** 输入条上方（新首页的「关于：某 Task」）。 */
   above?: ReactNode;
+  /** 换掉「回到最新」那一块（新首页把它和问题提示条并成一个，PendingDock）：拿到要不要出、怎么跳。 */
+  dock?: (latest: { visible: boolean; jump: () => void }) => ReactNode;
   /** page：对话页居中一列；side：Task 页左栏。 */
   variant?: "page" | "side";
   /** 对话正文用哪一套颜色；新首页跟着系统深浅，别处一直是浅色。 */
@@ -60,10 +62,10 @@ export function ChatColumn({ data, buddy, head, extra, timeline, above, variant 
         </div>
         <div ref={scroll.reserveRef} aria-hidden />
       </div>
-      <JumpToLatest visible={!scroll.atBottom} onJump={scroll.jumpToLatest} streaming={data.streaming} className={s.jump} />
+      {dock ? dock({ visible: !scroll.atBottom, jump: scroll.jumpToLatest }) : <JumpToLatest visible={!scroll.atBottom} onJump={scroll.jumpToLatest} streaming={data.streaming} className={s.jump} />}
       {above}
       <div className={s.composer}>
-        <ColumnComposer data={data} label={name} channels={channels} channel="agent" onChannel={NOOP} narrow={false} mobileOpen={false}
+        <ColumnComposer data={data} label={name} buddyName={name} channels={channels} channel="agent" onChannel={NOOP} narrow={false} mobileOpen={false}
           onMobileOpen={NOOP} references={[]} onHeightChange={setComposerHeight} />
       </div>
     </section>

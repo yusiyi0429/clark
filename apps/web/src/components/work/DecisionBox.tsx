@@ -9,10 +9,10 @@
  * - 焦点和误触保护：出现时焦点落在推荐的那个上（正在别处打字时不抢）；出现后 220ms 内不接按键和点击；输入法组字时回车不提交。
  * - 提交中：选中的那行出转圈，其余行变淡。答完收成一行：勾 · 问题 · 答案；失效收成「已失效」。
  * - 这里答不了时（手机上、问题在别的电脑上）不画选项，只留问题和状态 chip「等你 · …」。
- * 还没答的框登记到 PendingBoxes：框滚出屏幕时，输入框上方出「1 个问题等你 ↑」（PendingChip），点了跳回最早的那个。
+ * 还没答的框登记到 PendingBoxes：框滚出屏幕时，输入框上方出「1 个问题等你 ↑」（PendingDock，和「回到最新」同一个位置），点了跳回最早的那个。
  */
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from "react";
-import { ArrowUp, Check, ChevronLeft, ChevronRight, LoaderCircle } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, LoaderCircle } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
 import x from "@/styles/decision-box.module.css";
 
@@ -230,7 +230,7 @@ function createRegistry(): Registry {
 
 const PendingContext = createContext<Registry | null>(null);
 
-/** 一条对话一份：里面的选项框登记进来，PendingChip 读。 */
+/** 一条对话一份：里面的选项框登记进来，PendingDock 读。 */
 export function PendingBoxes({ children }: { children: ReactNode }) {
   const [registry] = useState(createRegistry);
   return <PendingContext.Provider value={registry}>{children}</PendingContext.Provider>;
@@ -247,7 +247,7 @@ function usePendingBox(ref: React.RefObject<HTMLDivElement | null> | null, kind:
 
 const EMPTY: Entry[] = [];
 
-/** 有几个没答的选项框不在眼前（批准、开工也算一个）。PendingChip 和「回到最新」共用一个位置，有问题时问题优先。 */
+/** 有几个没答的选项框不在眼前（批准、开工也算一个）。和「回到最新」共用一个位置（PendingDock），有问题时问题优先。 */
 export function useHiddenPending(): { count: number; jump: () => void } {
   const registry = useContext(PendingContext);
   const entries = useSyncExternalStore(registry?.subscribe ?? (() => () => undefined), registry?.read ?? (() => EMPTY), () => EMPTY);
@@ -276,13 +276,23 @@ export function useHiddenPending(): { count: number; jump: () => void } {
   return { count: hidden.length, jump };
 }
 
-/** 输入框上方居中的一条（5.4.3）：8px 强调色圆点 +「1 个问题等你」+ ArrowUp。 */
-export function PendingChip() {
+/**
+ * 输入框上方居中的那一条（5.4.3「问题提示条和『回到最新』」）：有没答的选项框滚出了可视区，出「1 个问题等你 ↑」（优先）；
+ * 否则没到底时，出「回到最新 ↓」（没有圆点）。两样东西抢同一个位置，所以并成一个。
+ */
+export function PendingDock({ latest }: { latest: { visible: boolean; jump: () => void } }) {
   const { count, jump } = useHiddenPending();
-  if (!count) return null;
+  if (count) {
+    return (
+      <button type="button" className={x.chip} onClick={jump} data-testid="pending-chip">
+        <i className={x.chipDot} aria-hidden />{count} 个问题等你<ArrowUp {...ICON} aria-hidden />
+      </button>
+    );
+  }
+  if (!latest.visible) return null;
   return (
-    <button type="button" className={x.chip} onClick={jump} data-testid="pending-chip">
-      <i className={x.chipDot} aria-hidden />{count} 个问题等你<ArrowUp {...ICON} aria-hidden />
+    <button type="button" className={x.chip} onClick={latest.jump} data-testid="jump-latest">
+      回到最新<ArrowDown {...ICON} aria-hidden />
     </button>
   );
 }

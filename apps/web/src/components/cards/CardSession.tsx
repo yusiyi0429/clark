@@ -26,7 +26,7 @@ import { SessionComposer, SessionTranscript, type DecideOptions } from "./Sessio
 import { useCardDetail, type CardDetail } from "./useCardDetail";
 import { MergeAction } from "@/components/work/MergeAction";
 import { QuestionDecision } from "@/components/work/decisions";
-import { PendingBoxes, PendingChip } from "@/components/work/DecisionBox";
+import { PendingBoxes, PendingDock } from "@/components/work/DecisionBox";
 import { useViewChrome } from "@/components/home/view";
 import { useConversationScroll } from "@/conversation/useConversationScroll";
 import { commitText, placeText, shortPlace } from "@/lib/work/merge";
@@ -131,7 +131,7 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
           </div>
           <div ref={scroll.reserveRef} aria-hidden />
         </div>
-        <PendingChip />
+        <PendingDock latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} />
         {agent ? <SessionComposer placeholder={`发给${agentName}…`} disabled={!canAct} onSend={say} /> : null}
       </div>
     </PendingBoxes>
