@@ -240,7 +240,7 @@ function HomeFrame({ account }: { account: Account }) {
       }
       case "info": {
         const task = planTask(current.taskId);
-        return task && work.plan ? <TaskInfo plan={work.plan} task={task} board={work.boards[task.taskId] ?? null} go={go} /> : <Missing loading={!work.plan} />;
+        return task && work.plan ? <TaskInfo plan={work.plan} task={task} go={go} /> : <Missing loading={!work.plan} />;
       }
       case "card": return <CardSession key={current.id} cardId={current.id} embedded />;
       case "topic": return <TopicSession key={current.id} topicId={current.id} embedded />;

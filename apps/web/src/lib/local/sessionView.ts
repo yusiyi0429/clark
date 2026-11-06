@@ -38,6 +38,9 @@ export type SessionView = {
   question: TLocalQuestionRequestView | null;
 };
 
+/** 对话里记下的那一行「问：…」；还没答时对话最后是选项框，这一行不重复画（SessionTranscript）。 */
+export const questionNotice = (request: TLocalQuestionRequestView) => `问：${request.questions.map((entry) => entry.question).join(" ")}`;
+
 export const EMPTY_VIEW: SessionView = {
   lastSeq: 0, status: null, startedAt: null, agentVersion: null, plan: [], entries: [], pending: [],
   usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null },
@@ -115,7 +118,7 @@ export function foldEvent(view: SessionView, event: TLocalSessionEvent): Session
       return next;
     case "question":
       next.question = event.request;
-      next.entries = [...view.entries, { kind: "notice", ...base, level: "info", text: `问：${event.request.questions.map((entry) => entry.question).join(" ")}` }];
+      next.entries = [...view.entries, { kind: "notice", ...base, level: "info", text: questionNotice(event.request) }];
       next.lastActivity = { at: event.at, text: event.request.questions[0]!.question };
       return next;
     case "question_resolved":

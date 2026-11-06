@@ -122,7 +122,7 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
         <div className={s.scroll}>
           {session ? (
             <SessionTranscript entries={view.entries} agentName={agentName} canAct={canAct} lead={`交代：${item.title}${item.card?.criterion ? ` · 按「${item.card.criterion.text}」验收` : ""}`}
-              onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={asking} />
+              onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={asking} asking={question} />
           ) : <CloudTimeline run={detail.runs[0] ?? null} title={item.title} />}
         </div>
         <PendingChip />

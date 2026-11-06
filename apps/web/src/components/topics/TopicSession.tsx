@@ -145,7 +145,7 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
     <PendingBoxes>
       <div className={s.chat}>
         <div className={s.scroll}>
-          {session ? <SessionTranscript entries={view.entries} agentName="Claude Code" canAct={canAct} onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={asking} />
+          {session ? <SessionTranscript entries={view.entries} agentName="Claude Code" canAct={canAct} onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={asking} asking={question} />
             : <div className={s.feed}><span className={s.evt}>{topic.title}</span>
                 {ready && topic.status === "active" ? <div className={s.actions}><HeroButton variant="primary" size="sm" onPress={() => setStarting(true)}>开始</HeroButton></div> : null}
               </div>}

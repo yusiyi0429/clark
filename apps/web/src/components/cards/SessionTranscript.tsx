@@ -8,8 +8,8 @@
  */
 import { useState } from "react";
 import { ArrowUp, FileText } from "lucide-react";
-import type { SessionEntry } from "@/lib/local/sessionView";
-import type { TLocalPermissionRequestView } from "@/lib/local/runner";
+import { questionNotice, type SessionEntry } from "@/lib/local/sessionView";
+import type { TLocalPermissionRequestView, TLocalQuestionRequestView } from "@/lib/local/runner";
 import { ApprovalDecision } from "@/components/work/decisions";
 import { DecisionBox } from "@/components/work/DecisionBox";
 import s from "@/styles/v2-session.module.css";
@@ -18,7 +18,7 @@ const hhmm = (iso: string) => new Date(iso).toLocaleTimeString("zh-CN", { hour: 
 
 export type DecideOptions = { forSession?: boolean; message?: string };
 
-export function SessionTranscript({ entries, agentName, canAct, onDecide, lead, tail }: {
+export function SessionTranscript({ entries, agentName, canAct, onDecide, lead, tail, asking }: {
   entries: SessionEntry[];
   agentName: string;
   canAct: boolean;
@@ -27,13 +27,18 @@ export function SessionTranscript({ entries, agentName, canAct, onDecide, lead, 
   lead?: string;
   /** 接在最后的（执行方在问本人时的选项框）。 */
   tail?: React.ReactNode;
+  /** 还没答的那次提问：它的「问：…」一行不画，选项框就是它。 */
+  asking?: TLocalQuestionRequestView | null;
 }) {
   const pending = entries.flatMap((entry) => (entry.kind === "permission" && !entry.decision ? [entry.request] : []));
   const firstPending = pending[0]?.requestId;
+  const askingText = asking ? questionNotice(asking) : null;
+  const lastAsk = askingText ? entries.map((entry) => entry.kind === "notice" && entry.text === askingText).lastIndexOf(true) : -1;
   return (
     <div className={s.feed}>
       {lead ? <span className={s.evt}>{lead}</span> : null}
-      {entries.map((entry) => {
+      {entries.map((entry, index) => {
+        if (index === lastAsk) return null;
         switch (entry.kind) {
           case "user": return <div key={entry.seq} className={s.me}>{entry.text}</div>;
           case "assistant": return <div key={entry.seq} className={s.bubble}><small className={s.who}>{agentName}</small><p>{entry.text}</p></div>;
