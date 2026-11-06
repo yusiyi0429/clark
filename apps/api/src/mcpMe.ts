@@ -179,6 +179,8 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
     const roles = access(person);
     const write = MCP_WRITE_TOOLS.has(tool);
     if (write && identity.scopes && !identity.scopes.includes("tianshu:write")) return result({ code: "FORBIDDEN", message: "这次连接没有写入权限，请重新授权" }, true);
+    // 写进展、提交验收时记是哪种工具写的；本机程序的设备令牌（local）只读，到不了写工具。
+    const writer = identity.client === "local" ? null : identity.client;
     let itemId: string | undefined;
     let code: string | undefined;
     try {
@@ -314,7 +316,7 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
           if (!Value.Check(AppendInput, args)) break;
           if (!(args.body as string).trim()) { code = "INVALID_INPUT"; return result({ code, message: "请填写进展正文" }, true); }
           itemId = args.itemId as string;
-          const saved = await appendTaskProgress(deps.pool, itemId, identity.personId, identity.client,
+          const saved = await appendTaskProgress(deps.pool, itemId, identity.personId, writer!,
             { body: args.body as string, links: args.links as { url: string; title?: string }[] | undefined,
               clientEventId: args.clientEventId as string | undefined ?? randomUUID() }, names, identity.tokenId);
           if ("error" in saved) { code = saved.error.code; return result(saved.error, true); }
@@ -324,7 +326,7 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
           if (!Value.Check(StatusInput, args)) break;
           itemId = args.itemId as string;
           if (args.status === "done") {
-            const submitted = await submitMyTaskForAcceptance(deps.pool, identity.personId, itemId, { version: args.version as number }, identity.client, names, deps.now());
+            const submitted = await submitMyTaskForAcceptance(deps.pool, identity.personId, itemId, { version: args.version as number }, writer!, names, deps.now());
             if ("notFound" in submitted) { code = "TASK_NOT_FOUND"; return result({ code, message: "找不到这件执行事项" }, true); }
             if ("conflict" in submitted) { code = "VERSION_CONFLICT"; return result({ code, message: "版本已变化，请读取最新状态后重试", currentVersion: submitted.conflict.version, currentStatus: submitted.conflict.status }, true); }
             if ("error" in submitted) { code = submitted.error.code; return result(submitted.error, true); }
@@ -341,7 +343,7 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
           if (!Value.Check(SubmitInput, args)) break;
           const input = args as typeof SubmitInput.static;
           itemId = input.itemId;
-          const submitted = await submitMyTaskForAcceptance(deps.pool, identity.personId, itemId, input, identity.client, names, deps.now());
+          const submitted = await submitMyTaskForAcceptance(deps.pool, identity.personId, itemId, input, writer!, names, deps.now());
           if ("notFound" in submitted) {
             const readable = await canReadTask(deps.q, itemId, identity.personId);
             code = readable ? "FORBIDDEN" : "TASK_NOT_FOUND";
@@ -391,7 +393,7 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
             verdict: input.verdict ?? submission?.verdict ?? null,
             standards: input.standards?.map((check) => ({ ...check, evidence: check.evidence ?? null, materialId: check.materialId ?? null })) ?? submission?.standards ?? [],
             deliverableMaterialIds: input.deliverables ?? submission?.deliverableMaterialIds ?? [] },
-          names, deps.now(), { client: identity.client, userConfirmation: input.userConfirmation });
+          names, deps.now(), { client: writer!, userConfirmation: input.userConfirmation });
           const failed = taskFailure(accepted);
           if (failed || !("task" in accepted)) { code = failed?.code ?? "INTERNAL"; return result(failed, true); }
           return result({ status: accepted.task.status, version: accepted.task.version });
