@@ -1,8 +1,9 @@
 // 岗位进会话、挑刺岗位、评审会、工具名单决定挂什么（V2 设计 19.5，ADR 0033）。
-import { mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { api, pair, startTestRunner, tempDir } from "./helpers.js";
+import { ensureFeishuPlugin } from "../src/agents/feishuPlugin.js";
 
 const trace = (dir: string) => readFileSync(join(dir, ".fake-claude-trace.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((l) => l.argv);
 const after = (argv: string[], flag: string) => (argv.includes(flag) ? argv[argv.indexOf(flag) + 1] : undefined);
@@ -94,6 +95,27 @@ describe("岗位", () => {
     expect(readFileSync(after(argv2, "--append-system-prompt-file")!, "utf8")).toContain("没找到飞书技能");
     await api(t2.port, token2, "POST", `/v1/sessions/${s2.body.id}/kill`, {});
     await t2.cleanup();
+  });
+
+  it("飞书插件：本人删掉的技能只删链接、不碰指向的目录；删不掉的（不是链接）留着，不挡开工", () => {
+    const data = tempDir("tl-data-");
+    const sk = tempDir("tl-skills-");
+    for (const n of ["lark-doc", "lark-im"]) { mkdirSync(join(sk, n)); writeFileSync(join(sk, n, "SKILL.md"), n); }
+    writeFileSync(join(sk, "lark-im", "notes.txt"), "本人的文件");
+    const dir = ensureFeishuPlugin(data, sk)!;
+    expect(readdirSync(join(dir, "skills")).sort()).toEqual(["lark-doc", "lark-im"]);
+    // 本人把 lark-im 改得不再是技能（目录还在），lark-doc 整个删了又装回；插件目录里还混进一个不是链接的目录
+    rmSync(join(sk, "lark-im", "SKILL.md"));
+    mkdirSync(join(dir, "skills", "lark-old"));
+    writeFileSync(join(dir, "skills", "lark-old", "x"), "留着");
+    expect(ensureFeishuPlugin(data, sk)).toBe(dir);
+    expect(readdirSync(join(dir, "skills")).sort()).toEqual(["lark-doc", "lark-old"]);
+    expect(readFileSync(join(sk, "lark-im", "notes.txt"), "utf8")).toBe("本人的文件"); // 只删了链接
+    expect(readFileSync(join(dir, "skills", "lark-old", "x"), "utf8")).toBe("留着");
+    // 一个技能都没了：不挂插件
+    rmSync(join(sk, "lark-doc", "SKILL.md"));
+    expect(ensureFeishuPlugin(data, sk)).toBeNull();
+    expect(existsSync(join(sk, "lark-doc"))).toBe(true);
   });
 
   it("专题带挑刺岗位：每个挑刺岗位是一个只读子 agent；评审会那句话点名它们和最近一版；卡不收挑刺岗位、不能开评审会", async () => {
