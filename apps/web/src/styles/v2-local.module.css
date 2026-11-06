@@ -1,0 +1,68 @@
+/*
+ * 插件页和开工对话框（components/local/**），照原型 v8.4 的 .plugins / .pgCard / .chip。只用现有 token。
+ */
+.page { height: 100%; overflow-y: auto; background: color-mix(in oklab, var(--ink) 2%, var(--surface)); }
+.wrap { display: grid; gap: 18px; max-width: 900px; margin: 0 auto; padding: 28px 28px 40px; }
+.pageTitle { margin: 0; font-size: 20px; font-weight: 650; }
+.meHead { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.meHead h1 { margin: 0; font-size: 20px; }
+.section { display: grid; gap: 8px; }
+.lab { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--ink-faint); font-size: 12px; font-weight: 500; }
+.grow { flex: 1; }
+.faint { color: var(--ink-faint); font-size: 12px; }
+
+.card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 12px; padding: 14px 16px; border: 1px solid #dfe4e9; border-radius: 16px; background: linear-gradient(145deg, #fff, var(--morning-end) 70%); box-shadow: 0 2px 8px #29334c08; }
+.icon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; background: #23262d; color: #fff; font: 600 11px/1 var(--font-mono); }
+.cardBody { display: grid; gap: 6px; min-width: 0; }
+.cardBody > b { font-size: 14px; }
+.cardSide { display: grid; justify-items: end; gap: 8px; }
+.state { display: inline-flex; align-items: center; justify-self: start; height: 20px; padding: 0 8px; border-radius: 999px; background: color-mix(in oklab, var(--ink) 5%, transparent); color: var(--ink-muted); font-size: 11.5px; font-weight: 500; white-space: nowrap; }
+.state[data-tone="done"] { background: color-mix(in oklab, var(--confirmed) 9%, var(--surface)); color: var(--confirmed); }
+.state[data-tone="wait"] { background: var(--accent); color: #fff; }
+.state[data-tone="warn"] { background: color-mix(in oklab, var(--judgment) 10%, var(--surface)); color: var(--judgment); }
+.facts { display: grid; gap: 2px; margin: 4px 0 0; font-size: 12.5px; }
+.facts div { display: flex; gap: 10px; }
+.facts dt { min-width: 76px; color: var(--ink-faint); }
+.facts dd { margin: 0; color: var(--ink); }
+.guide { display: grid; justify-items: start; gap: 8px; }
+.figure { width: 260px; max-width: 100%; height: auto; }
+.steps { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.stepList { margin: 0; padding-left: 18px; color: var(--ink-muted); font-size: 12.5px; line-height: 1.7; }
+.code { color: var(--ink-muted); font-size: 13px; }
+.code b { margin-left: 4px; color: var(--ink); font-size: 18px; font-variant-numeric: tabular-nums; letter-spacing: 2px; }
+.command { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 100%; }
+.command small { color: var(--ink-faint); font-size: 11.5px; }
+.command code { max-width: 100%; overflow-x: auto; padding: 6px 10px; border-radius: 9px; background: color-mix(in oklab, var(--ink) 4%, var(--surface)); color: var(--ink); font: 12px/1.5 var(--font-mono); white-space: nowrap; }
+.copy, .add { display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 10px; border: 0; border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--hairline-strong); color: var(--ink); font-size: 12.5px; cursor: pointer; }
+.copy:hover, .add:hover { box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 45%, var(--surface)); }
+
+.grid2 { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.block { display: grid; align-content: start; gap: 4px; padding: 12px 14px; border: 1px solid #dfe4e9; border-radius: 14px; background: var(--surface); }
+.line { display: flex; align-items: center; gap: 8px; min-width: 0; min-height: 34px; padding: 4px 6px; border-radius: 10px; font-size: 13px; }
+.line:nth-child(even) { background: #f8fafc; }
+.line b { flex: none; font-weight: 600; }
+.badge { display: inline-flex; flex: none; align-items: center; height: 18px; padding: 0 6px; border-radius: 6px; background: var(--neutral-wash); color: var(--ink-muted); font-size: 11px; font-weight: 600; }
+.path { min-width: 0; overflow: hidden; color: var(--ink-faint); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+.mini { display: grid; flex: none; place-items: center; width: 26px; height: 26px; border: 0; border-radius: 8px; background: none; color: var(--ink-faint); cursor: pointer; }
+.mini:hover { background: var(--wash-hover); color: var(--ink); }
+.toggle { display: inline-flex; align-items: center; gap: 8px; justify-self: start; color: var(--ink); font-size: 13px; cursor: pointer; }
+.toggle input { width: 16px; height: 16px; accent-color: var(--accent); }
+.footActions { display: flex; justify-content: flex-end; }
+
+/* 开工对话框：选模型、选文件夹。 */
+.start { display: grid; gap: 14px; padding: 4px 20px 18px; }
+.startTitle { margin: 0; color: var(--ink); font-size: 14px; font-weight: 600; }
+.field { display: grid; gap: 6px; }
+.label { color: var(--ink-faint); font-size: 12px; font-weight: 500; }
+.chipRow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.chipRow small { min-width: 64px; color: var(--ink-faint); font-size: 11.5px; }
+.choice { height: 28px; padding: 0 11px; border: 0; border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--hairline-strong); color: var(--ink); font-size: 12.5px; cursor: pointer; }
+.choice[aria-checked="true"] { background: color-mix(in oklab, var(--accent) 9%, var(--surface)); box-shadow: inset 0 0 0 1.5px var(--accent); color: var(--brand-deep); font-weight: 600; }
+.error { margin: 0; color: var(--counter); font-size: 12.5px; }
+.actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+@media (max-width: 959px) {
+  .wrap { padding: 16px 16px 24px; }
+  .card { grid-template-columns: auto minmax(0, 1fr); }
+  .cardSide { grid-column: 2; justify-items: start; }
+}

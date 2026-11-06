@@ -1,0 +1,84 @@
+/**
+ * 新骨架要的云端接口（V2 设计第 5.1 节，契约 taskCards.ts、topics.ts、localDevices.ts，见 boardOpenapi.ts）。
+ * 后端实现还在做，接口可能暂时 404：读的当成「还没有」，写的报一句「没成功」。
+ */
+import type {
+  TAcceptCardDraftsRequest, TCardBoardResponse, TCardBriefResponse, TCardDetailResponse, TCardPlanView, TCardTaskView,
+  TCreateLocalDeviceRequest, TCreateLocalDeviceResponse, TLocalDeviceView, TPatchCardRequest, TResearchTopicView,
+  TTopicBriefResponse, TTopicDetailResponse, TTopicVersionView,
+} from "@warmap/contracts";
+import { browserApi } from "@/lib/api/client";
+
+export class CloudError extends Error {
+  constructor(readonly status: number, message: string, readonly code?: string) { super(message); }
+}
+
+type Result<T> = { data?: T; error?: unknown; response: Response };
+
+/** 401 去登录；不成功抛 CloudError（带服务端的话）。 */
+async function unwrap<T>(call: Promise<Result<T>>): Promise<T> {
+  let result: Result<T>;
+  try {
+    result = await call;
+  } catch {
+    throw new CloudError(0, "连不上天枢，请稍后再试");
+  }
+  const { data, error, response } = result;
+  if (response.status === 401) {
+    window.location.assign(`/access?next=${encodeURIComponent(window.location.pathname)}`);
+    throw new CloudError(401, "登录过期了");
+  }
+  if (!response.ok || data === undefined) {
+    const body = (error ?? {}) as { message?: string; code?: string };
+    throw new CloudError(response.status, body.message ?? "没成功，请重试", body.code);
+  }
+  return data;
+}
+/** 读：接口还没有（404）时返回 null。 */
+async function maybe<T>(call: Promise<Result<T>>): Promise<T | null> {
+  try {
+    return await unwrap(call);
+  } catch (error) {
+    if (error instanceof CloudError && error.status === 404) return null;
+    throw error;
+  }
+}
+
+const id = (value: string) => ({ path: { id: value } });
+const task = (taskId: string) => ({ path: { taskId } });
+
+// ── 看板 ──
+export const readBoard = (taskId: string) => maybe<TCardBoardResponse>(browserApi.GET("/api/plan-tasks/{taskId}/cards", { params: task(taskId) }));
+export const planCards = (taskId: string, hint?: string) => unwrap<TCardPlanView>(browserApi.POST("/api/plan-tasks/{taskId}/card-plans", { params: task(taskId), body: hint ? { hint } : {} }) as Promise<Result<TCardPlanView>>);
+export const acceptDrafts = (taskId: string, drafts: TAcceptCardDraftsRequest["drafts"]) =>
+  unwrap(browserApi.POST("/api/plan-tasks/{taskId}/card-drafts/accept", { params: task(taskId), body: { drafts } })).then((data) => data.cards as TCardTaskView[]);
+export const dismissDraft = (draftId: string) => unwrap(browserApi.POST("/api/card-drafts/{id}/dismiss", { params: id(draftId) }));
+export const shipPending = (taskId: string, statement?: string) =>
+  unwrap(browserApi.POST("/api/plan-tasks/{taskId}/deliverable/versions/from-pending", { params: task(taskId), body: statement ? { statement } : {} }));
+export const addTopicVersionToPending = (taskId: string, topicVersionId: string) =>
+  unwrap(browserApi.POST("/api/plan-tasks/{taskId}/deliverable/pending", { params: task(taskId), body: { topicVersionId } }));
+
+// ── 卡 ──
+export const readCard = (cardId: string) => maybe<TCardDetailResponse>(browserApi.GET("/api/me/cards/{id}", { params: id(cardId) }));
+export const patchCard = (cardId: string, body: TPatchCardRequest) => unwrap(browserApi.PATCH("/api/me/cards/{id}", { params: id(cardId), body })) as Promise<unknown>;
+export const cardBrief = (cardId: string) => unwrap<TCardBriefResponse>(browserApi.GET("/api/me/cards/{id}/brief", { params: id(cardId) }));
+const handback = (cardId: string, handbackId: string) => ({ path: { id: cardId, handbackId } });
+export const overrule = (cardId: string, handbackId: string, reason: string) =>
+  unwrap(browserApi.POST("/api/me/cards/{id}/handbacks/{handbackId}/overrule", { params: handback(cardId, handbackId), body: { reason } }));
+export const retryAcceptance = (cardId: string, handbackId: string) => unwrap(browserApi.POST("/api/me/cards/{id}/handbacks/{handbackId}/retry", { params: handback(cardId, handbackId) }));
+export const markReturned = (cardId: string, handbackId: string) => unwrap(browserApi.POST("/api/me/cards/{id}/handbacks/{handbackId}/returned", { params: handback(cardId, handbackId) }));
+
+// ── 本机设备 ──
+export const listDevices = () => maybe(browserApi.GET("/api/me/local-devices")).then((data) => (data?.devices ?? []) as TLocalDeviceView[]);
+export const createDevice = (body: TCreateLocalDeviceRequest) => unwrap<TCreateLocalDeviceResponse>(browserApi.POST("/api/me/local-devices", { body }) as Promise<Result<TCreateLocalDeviceResponse>>);
+export const revokeDevice = (deviceId: string) => unwrap(browserApi.DELETE("/api/me/local-devices/{id}", { params: id(deviceId) }));
+
+// ── 调研专题 ──
+export const listTopics = (status: "active" | "archived" = "active") =>
+  maybe(browserApi.GET("/api/me/topics", { params: { query: { status } } })).then((data) => (data?.topics ?? []) as TResearchTopicView[]);
+export const createTopic = (body: { title: string; planTaskId?: string }) => unwrap<TResearchTopicView>(browserApi.POST("/api/me/topics", { body }) as Promise<Result<TResearchTopicView>>);
+export const readTopic = (topicId: string) => maybe<TTopicDetailResponse>(browserApi.GET("/api/me/topics/{id}", { params: id(topicId) }));
+export const patchTopic = (topicId: string, body: { title?: string; status?: "active" | "archived" }) => unwrap(browserApi.PATCH("/api/me/topics/{id}", { params: id(topicId), body }));
+export const readTopicVersion = (topicId: string, number: number) =>
+  unwrap<TTopicVersionView>(browserApi.GET("/api/me/topics/{id}/versions/{number}", { params: { path: { id: topicId, number } } }) as Promise<Result<TTopicVersionView>>);
+export const topicBrief = (topicId: string) => unwrap<TTopicBriefResponse>(browserApi.GET("/api/me/topics/{id}/brief", { params: id(topicId) }));
