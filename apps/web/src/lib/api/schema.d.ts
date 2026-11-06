@@ -3913,6 +3913,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ontology/objects/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 出处卡：按本人在 COMPANY_WORLD_ACCESS_FILE 里被授权的域读一个本体对象当前这一版（类型、标题、版本、状态、负责人、当前进展）；只读 */
+        get: operations["getWorldSource"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/dri/todo-feedback": {
         parameters: {
             query?: never;
@@ -9370,6 +9387,22 @@ export interface components {
                     }[];
                 }[];
             }[];
+        };
+        WorldSourceView: {
+            ref: string;
+            objectId: string;
+            version: number;
+            type: string;
+            title: string;
+            status: string;
+            owners: string[];
+            progress: {
+                ref: string | null;
+                asOf: string | null;
+                author: string | null;
+                unconfirmed: boolean;
+                lines: string[];
+            } | null;
         };
         ListPersonalTokensResponse: {
             tokens: {
@@ -26715,6 +26748,56 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getWorldSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description 本体对象 id（不带 @版本） */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 本体对象当前这一版 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorldSourceView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

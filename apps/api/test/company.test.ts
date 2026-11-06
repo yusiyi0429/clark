@@ -9,7 +9,7 @@ import { createPiConversationRuntime } from '../src/piConversationRuntime.js';
 import { loadPeopleDirectory } from '../src/peopleDirectory.js';
 import { testEnv } from './helpers.js';
 
-import { LOCATED_PAGE_BYTES, createCompanyMemory, locateHeads, locateHints } from '../src/company.js';
+import { LOCATED_PAGE_BYTES, createCompanyMemory, locateHeads, locateHints, readWorldSource } from '../src/company.js';
 import type { WorldHead } from '../src/worldClient.js';
 
 const viewer = { personId: 'ceo', role: 'ceo' as const };
@@ -262,10 +262,11 @@ describe('World company facts: locate before reading', () => {
       } else res.end(JSON.stringify(objects.get(decodeURIComponent(url.pathname.split('/').at(-1)!))!.object));
     });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-    const company = createCompanyMemory({ worldApiUrl: `http://127.0.0.1:${(server.address() as { port: number }).port}`, worldAgentToken: 'test-token',
-      companyWorldAccessFile: grantFile, companyStorageDir: join(dir, 'stored') });
+    const env = { worldApiUrl: `http://127.0.0.1:${(server.address() as { port: number }).port}`, worldAgentToken: 'test-token',
+      companyWorldAccessFile: grantFile, companyStorageDir: join(dir, 'stored') };
+    const company = createCompanyMemory(env);
     const reads = () => requests.filter((url) => url.pathname.startsWith('/v1/world/objects/')).map((url) => decodeURIComponent(url.pathname.split('/').at(-1)!));
-    return { company, requests, reads, close: () => new Promise<void>((resolve) => server.close(() => resolve())) };
+    return { company, env, requests, reads, close: () => new Promise<void>((resolve) => server.close(() => resolve())) };
   }
   const SEEDS: Seed[] = [
     { id: 'mission-lh', type: 'Mission', title: '灯塔交付', period: '2026-10' },
@@ -354,6 +355,31 @@ describe('World company facts: locate before reading', () => {
       const second = await t.company.read(viewer, { query: '灯塔这件事到底怎么样了', locate: true, cursor: first.nextCursor }, new AbortController().signal);
       expect(second.entries.length).toBeGreaterThan(0);
       expect(second.entries.every((entry) => !entry.handle.endsWith(':0'))).toBe(true);
+    } finally { await t.close(); }
+  });
+
+  it('source card: reads one granted object with type, title, version, status, owners and the current snapshot, GET only', async () => {
+    const t = await world([...SEEDS.slice(0, 1).map((seed) => ({ ...seed, latestState: {
+      object_type: 'StateSnapshot', ref: 'snap-1@1', as_of: '2026-11-05T10:10:00Z', unconfirmed: true, generator: { display_name: '于斯一的 Claude Code' },
+      blocks: [{ id: 'current_state', display_name: '当前状态', value: { text: '首版已上线', components: [] } }] } })), ...SEEDS.slice(1)]);
+    try {
+      const result = await readWorldSource(t.env, viewer, 'mission-lh', new AbortController().signal);
+      expect(result).toEqual({ status: 'ready', source: {
+        ref: 'mission-lh@2', objectId: 'mission-lh', version: 2, type: 'Mission', title: '灯塔交付', status: '草稿', owners: ['E&O Mission Owner'],
+        progress: { ref: 'snap-1@1', asOf: '2026-11-05', author: '于斯一的 Claude Code', unconfirmed: true, lines: ['当前状态：首版已上线'] } } });
+      expect(t.reads()).toEqual(['mission-lh']);
+      expect(t.requests.every((url) => !url.pathname.endsWith('/context'))).toBe(true);
+      const plain = await readWorldSource(t.env, viewer, 'strategy', new AbortController().signal);
+      expect(plain.status === 'ready' && plain.source.progress).toBeNull();
+    } finally { await t.close(); }
+  });
+
+  it('source card: objects outside the granted domains and people without a grant read as not found, without fetching the object', async () => {
+    const t = await world(SEEDS);
+    try {
+      expect(await readWorldSource(t.env, viewer, 'not-granted', new AbortController().signal)).toEqual({ status: 'not_found' });
+      expect(await readWorldSource(t.env, { personId: 'someone-else', role: 'member' }, 'mission-lh', new AbortController().signal)).toEqual({ status: 'coverage_unavailable' });
+      expect(t.reads()).toEqual([]);
     } finally { await t.close(); }
   });
 

@@ -30,8 +30,9 @@ const STATE_LINES_MAX = 12;
  * 进展记录（latest_state、confirmed_review）的正文。0.3 起它是一份 StateSnapshot：标一行快照编号、日期、谁记的、是否未确认，
  * 再取各块的正文和组件正文（每条最多 400 字、最多 12 条）；旧数据直接带 text / summary / result / outcome 的照旧取。
  */
-function recordLines(record: unknown): string[] {
-  if (!record || typeof record !== 'object') return [];
+type RecordParts = { ref: string | null; asOf: string | null; author: string | null; unconfirmed: boolean; lines: string[] };
+function recordParts(record: unknown): RecordParts | null {
+  if (!record || typeof record !== 'object') return null;
   const value = record as Record<string, unknown>;
   const lines = ['text', 'summary', 'result', 'outcome'].flatMap((key) => typeof value[key] === 'string' && value[key] ? [value[key] as string] : []);
   for (const block of Array.isArray(value.blocks) ? value.blocks as WorldBlock[] : []) {
@@ -41,21 +42,27 @@ function recordLines(record: unknown): string[] {
     const label = block?.display_name;
     lines.push(...parts.map((part, index) => clip(index === 0 && text && label && !part.startsWith(label) ? `${label}：${part}` : part, STATE_TEXT_MAX)));
   }
-  if (!lines.length) return [];
-  const ref = typeof value.ref === 'string' ? value.ref : null;
-  const asOf = typeof value.as_of === 'string' ? value.as_of.slice(0, 10) : null;
+  if (!lines.length) return null;
   const by = value.generator && typeof value.generator === 'object' ? (value.generator as { display_name?: unknown }).display_name : undefined;
-  const header = [ref && `快照 ${ref}`, asOf, typeof by === 'string' && by, value.unconfirmed === true && '未确认'].filter(Boolean).join(' · ');
-  return [...(header ? [header] : []), ...lines.slice(0, STATE_LINES_MAX), ...businessValues(value)];
+  return { ref: typeof value.ref === 'string' ? value.ref : null, asOf: typeof value.as_of === 'string' ? value.as_of.slice(0, 10) : null,
+    author: typeof by === 'string' && by ? by : null, unconfirmed: value.unconfirmed === true, lines: [...lines.slice(0, STATE_LINES_MAX), ...businessValues(value)] };
 }
+function recordLines(record: unknown): string[] {
+  const parts = recordParts(record);
+  if (!parts) return [];
+  const header = [parts.ref && `快照 ${parts.ref}`, parts.asOf, parts.author, parts.unconfirmed && '未确认'].filter(Boolean).join(' · ');
+  return [...(header ? [header] : []), ...parts.lines];
+}
+const statusOf = ({ business, records }: CompanyWorldObject) => records.lifecycle?.display_name ?? records.lifecycle?.status ?? business.formal?.lifecycle_status ?? '状态未提供';
+const ownersOf = ({ identity }: CompanyWorldObject) => identity.responsible?.principals?.map((person) => person.display_name).filter((name): name is string => Boolean(name)) ?? [];
 /** 已授权范围里的对象头（标题、ref）；关系只展开到这里面的对象，读不到的目标不透露。 */
 type HeadIndex = Map<string, { title: string; ref: string }>;
 const headIndex = (heads: WorldHead[]): HeadIndex => new Map(heads.map((head) => [head.object_id, { title: head.title, ref: `${head.object_id}@${head.version}` }]));
 
 function project(object: CompanyWorldObject, titles: HeadIndex): CompanyEntry[] {
-  const { business, records, identity } = object;
-  const status = records.lifecycle?.display_name ?? records.lifecycle?.status ?? business.formal?.lifecycle_status ?? '状态未提供';
-  const people = identity.responsible?.principals?.map((person) => person.display_name).filter(Boolean) ?? [];
+  const { business, records } = object;
+  const status = statusOf(object);
+  const people = ownersOf(object);
   const ref = `${business.object_id}@${business.version}`;
   const lines = [`## ${business.title}`, `状态：${status}`, ...(people.length ? [`负责人：${people.join('、')}`] : []), ...businessValues(business.attributes)];
   // 进展放在定义前面：问「怎么样了」时第一页就能读到。
@@ -185,6 +192,46 @@ function fingerprint(heads: WorldHead[]): string {
   return JSON.stringify(heads.map((head) => [head.object_id, head.revision_id, head.object_version]).sort(([left], [right]) => String(left).localeCompare(String(right))));
 }
 
+/** 本人在 COMPANY_WORLD_ACCESS_FILE 里被授权的域（排好序、去重）；没有授权或文件读不了是 null。 */
+async function grantedDomains(env: CompanyEnv, viewer: CompanyViewer): Promise<string[] | null> {
+  try {
+    const grants = JSON.parse(await readFile(env.companyWorldAccessFile ?? '', 'utf8')) as Record<string, unknown>;
+    const grant = Object.hasOwn(grants, viewer.personId) ? grants[viewer.personId] : undefined;
+    if (!Array.isArray(grant) || !grant.length || grant.some((domain) => typeof domain !== 'string' || !domain)) return null;
+    return [...new Set(grant)].sort();
+  } catch { return null; }
+}
+
+export type WorldSource = {
+  ref: string; objectId: string; version: number; type: string; title: string; status: string; owners: string[];
+  /** 当前进展（latest_state 那份快照）：快照 ref、日期、谁记的、是否未确认、正文各条；还没有进展记录时为 null。 */
+  progress: RecordParts | null;
+};
+export type WorldSourceResult = { status: 'ready'; source: WorldSource } | { status: 'not_found' | 'not_configured' | 'coverage_unavailable' | 'unavailable' };
+
+/**
+ * 网页出处卡（答案里的 cite:world:<ref>）：按本人授权的域读一个本体对象当前这一版。
+ * 先列本人授权的域，对象不在里面就当没有（不透露存在与否）；只发 GET。
+ */
+export async function readWorldSource(env: CompanyEnv, viewer: CompanyViewer, objectId: string, signal: AbortSignal): Promise<WorldSourceResult> {
+  if (!worldConfigured(env)) return { status: 'not_configured' };
+  const domains = await grantedDomains(env, viewer);
+  if (!domains) return { status: 'coverage_unavailable' };
+  try {
+    const reader = createCompanyWorldReader(env);
+    const head = (await Promise.all(domains.map((domain) => reader.list(domain, signal)))).flat().find((item) => item.object_id === objectId);
+    if (!head) return { status: 'not_found' };
+    const object = await reader.read(objectId, signal);
+    if (object.business.domain_id !== undefined && object.business.domain_id !== head.domain_id) return { status: 'not_found' };
+    const { business, records } = object;
+    return { status: 'ready', source: { ref: `${business.object_id}@${business.version}`, objectId, version: business.version, type: business.object_type, title: business.title,
+      status: statusOf(object), owners: ownersOf(object), progress: recordParts(records.latest_state) } };
+  } catch (error) {
+    logEvent({ event: 'company.world_unavailable', status: 'unavailable', errorCode: signal.aborted ? 'ABORTED' : 'WORLD_READ_FAILED', error: (error as Error)?.message, domains: domains.length, read: 'source' });
+    return { status: 'unavailable' };
+  }
+}
+
 /** 读不到本体时附在 message 里的说明（2026-10-19 D-48，取代 10/16 的「再用本地资料作答」）：公司事实不兜底；天枢自己的业务数据照常可用。 */
 const NOT_READ = '这次没有读到本体：不能据此判断本体里有没有，也不要用本地资料补公司事实；Mission、执行事项、会议、复盘、材料这些天枢自己的业务数据照常可用。';
 
@@ -197,14 +244,7 @@ export function createCompanyMemory(env: CompanyEnv): CompanyReader {
   return {
     async read(viewer, request, signal) {
       if (!worldConfigured(env)) return { status: 'not_configured', entries: [], message: `本体公司事实读取尚未配置。${NOT_READ}` };
-      const authorizedDomains = async (): Promise<string[] | null> => {
-        try {
-          const grants = JSON.parse(await readFile(env.companyWorldAccessFile ?? '', 'utf8')) as Record<string, unknown>;
-          const grant = Object.hasOwn(grants, viewer.personId) ? grants[viewer.personId] : undefined;
-          if (!Array.isArray(grant) || !grant.length || grant.some((domain) => typeof domain !== 'string' || !domain)) return null;
-          return [...new Set(grant)].sort();
-        } catch { return null; }
-      };
+      const authorizedDomains = () => grantedDomains(env, viewer);
       const unavailableScope: CompanyView = { status: 'coverage_unavailable', entries: [], message: `尚未确定你可读取的本体公司信息范围。${NOT_READ}` };
       const domains = await authorizedDomains();
       if (!domains) {
