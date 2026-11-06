@@ -7,7 +7,9 @@ import { createArticleFetcher, type ArticleFetcher } from "../articleText.js";
 import { createDeliverableNoteAgent, createDeliverableQueue, createDeliverableReviewAgent, type DeliverableAgents } from "../deliverableReview.js";
 import { MAX_MATERIAL_FILE_BYTES } from "../materialParser.js";
 import { personDisplayNames } from "../people.js";
-import { DeliverableError, MAX_DELIVERABLE_FILES, createDeliverableVersion, deliverVersion, deliverableItemFile, dissentCriterion, findOwnTask,
+import { planTaskViewer } from "../planTaskAccess.js";
+import { agreementSnapshot, openPlanTask } from "../taskAgreements.js";
+import { DeliverableError, MAX_DELIVERABLE_FILES, createDeliverableVersion, deliverVersion, deliverableItemFile, dissentCriterion,
   ownTaskNames, parseDeliverableFields, patchVersionNote, readTaskDeliverable, retryReview, withdrawVersion, type DeliverableFile, type OwnTask } from "../taskDeliverables.js";
 import type { AppInstance, Guard, RouteContext } from "./shared.js";
 
@@ -15,7 +17,8 @@ const taskParams = Type.Object({ taskId: Type.String({ minLength: 1 }) });
 const versionParams = Type.Object({ taskId: Type.String({ minLength: 1 }), versionId: Type.String({ format: "uuid" }) });
 
 /**
- * Task 交付物的 8 个接口（契约 /api/plan-tasks/{taskId}/deliverable）：成员工作台的人，只认本人 Mission 下的 Task。
+ * Task 交付物的 8 个接口（契约 /api/plan-tasks/{taskId}/deliverable）。读（交付物、原文件）：负责人、Mission 负责人、战场负责人、CEO 和约定里的认可人，
+ * 两种视角都行；改（传版本、交付、异议、重评、改说明）：负责人，要在成员工作台（11/06 约定与对表 ADR 0028）。
  * 评审和版本说明在后台队列里跑；agents、fetchArticle 可注入（测试用假实现）。
  */
 export function registerDeliverableRoutes(app: AppInstance, ctx: RouteContext, deps: { agents?: Partial<DeliverableAgents>; fetchArticle?: ArticleFetcher } = {}): void {
@@ -42,7 +45,9 @@ export function registerDeliverableRoutes(app: AppInstance, ctx: RouteContext, d
     if (reply.sent) return reply;
     if (req.person?.role !== "member") return fail(reply, 403, "FORBIDDEN", "请切换到 DRI 工作台");
   };
-  const own = (personId: string, taskId: string) => findOwnTask(q, ctx.planTasks, personId, ctx.now(), taskId);
+  const open = (personId: string, taskId: string) =>
+    openPlanTask(q, ctx.planTasks, planTaskViewer(ctx.peopleDirectory, personId), ctx.now(), taskId, personDisplayNames(ctx.peopleDirectory));
+  const own = async (personId: string, taskId: string): Promise<OwnTask> => (await open(personId, taskId)).access;
   const error = (reply: FastifyReply, cause: unknown) => {
     if (cause instanceof DeliverableError) return fail(reply, cause.status, cause.code, cause.message);
     throw cause;
@@ -51,14 +56,14 @@ export function registerDeliverableRoutes(app: AppInstance, ctx: RouteContext, d
   const withTask = <T>(reply: FastifyReply, personId: string, taskId: string, work: (task: OwnTask) => Promise<T>) =>
     own(personId, taskId).then(work).catch((cause) => error(reply, cause));
 
-  app.get("/api/plan-tasks/:taskId/deliverable", { preHandler: requireMember, schema: { params: taskParams, response: { 200: TaskDeliverableResponse } } },
+  app.get("/api/plan-tasks/:taskId/deliverable", { preHandler: requirePerson, schema: { params: taskParams, response: { 200: TaskDeliverableResponse } } },
     async (req, reply) => withTask(reply, req.person!.personId, req.params.taskId, (task) => readTaskDeliverable(q, task, personDisplayNames(ctx.peopleDirectory))));
 
   app.post("/api/plan-tasks/:taskId/deliverable/versions", { preHandler: requireMember, schema: { params: taskParams },
     bodyLimit: MAX_DELIVERABLE_FILES * MAX_MATERIAL_FILE_BYTES + 1024 * 1024 }, async (req, reply) => {
     try {
-      // 先认权限再收文件。
-      const task = await own(req.person!.personId, req.params.taskId);
+      // 先认权限再收文件；约定的快照跟着这一版存，评审照它判。
+      const { access: task, agreement } = await open(req.person!.personId, req.params.taskId);
       if (!task.canEdit) throw new DeliverableError(403, "FORBIDDEN", "这个 Task 由负责人交付");
       const fields = new Map<string, string>();
       const files: DeliverableFile[] = [];
@@ -68,7 +73,7 @@ export function registerDeliverableRoutes(app: AppInstance, ctx: RouteContext, d
           files.push({ filename: part.filename, buffer: await part.toBuffer() });
         } else if (typeof part.value === "string") fields.set(part.fieldname, part.value);
       }
-      const version = await createDeliverableVersion(pool, task, files, parseDeliverableFields(fields), ctx.materialStorageDir);
+      const version = await createDeliverableVersion(pool, task, files, parseDeliverableFields(fields), ctx.materialStorageDir, agreementSnapshot(agreement));
       void queue.enqueueReview(version.id);
       return reply.status(201).send(version);
     } catch (cause) {
@@ -82,7 +87,7 @@ export function registerDeliverableRoutes(app: AppInstance, ctx: RouteContext, d
   });
 
   app.get("/api/plan-tasks/:taskId/deliverable/items/:itemId", {
-    onRequest: async (_req, reply) => { reply.header("content-security-policy", "sandbox"); }, preHandler: requireMember,
+    onRequest: async (_req, reply) => { reply.header("content-security-policy", "sandbox"); }, preHandler: requirePerson,
     schema: { params: Type.Object({ taskId: Type.String({ minLength: 1 }), itemId: Type.String({ format: "uuid" }) }) } }, async (req, reply) =>
     withTask(reply, req.person!.personId, req.params.taskId, async (task) => {
       const file = await deliverableItemFile(q, task.task.taskId, req.params.itemId);
