@@ -2,8 +2,10 @@
 
 /**
  * 选项框的三种用法（DecisionBox）：
- * - QuestionDecision：执行方问本人（Claude Code 的「问用户」，本机的 pendingQuestion）。一次几个问题时一题一页，答完最后一题一起交。
- * - ApprovalDecision：执行方要权限。批准 / 同类以后都批准 / 换个做法（拒绝并附一句）；几件一起来时翻页，带「全部批准」。越界的只能「允许这一次」。
+ * - QuestionDecision：执行方问本人（Claude Code 的「问用户」，本机的 pendingQuestion）。一次几个问题时一题一页，答完一页自动翻到下一页，全部答完「提交」才能点、一起发出。
+ * - ApprovalDecision（设计 5.4.3「批准的特别规矩」）：批准 / 同类以后都批准（说明写清范围、只在这个子会话内；回车永远不会是它）/ 换个做法（原地一句话）。
+ *   对外的动作（推送、开 PR、发消息、发邮件）头部加「对外」；碰到工作区外的路径（ADR 0031）路径一行一个标红、头部加「工作区外」、只剩「批准 / 换个做法」、不预先放焦点。
+ *   几件一起来时翻页，头部右侧「全部批准」（弱按钮）。
  * - AskDecision：伙伴回复里的提问卡（ask_user 工具）。替换以前「开始回答」弹窗那一版，在对话里就地答。
  * 开工（计划）那一种在 components/home/PlanDecision。
  */
@@ -11,7 +13,8 @@ import { useContext, useState } from "react";
 import type { TConversationCard, TLocalQuestionAnswerRequest, TLocalQuestionRequestView } from "@warmap/contracts";
 import type { TLocalPermissionRequestView } from "@/lib/local/runner";
 import { AskContext, answersOf } from "@/conversation/AskPanel";
-import { DecisionBox, type DecisionOption } from "./DecisionBox";
+import { HeroButton } from "@/components/HeroButton";
+import { DecisionBox, DecisionTag, type DecisionOption } from "./DecisionBox";
 import x from "@/styles/decision-box.module.css";
 
 /** Claude Code 把推荐的写在标签后面「(Recommended)」：去掉，标成推荐、放第一个。 */
@@ -36,27 +39,36 @@ export function QuestionDecision({ request, blocked, onAnswer, resolved }: {
   const [page, setPage] = useState(0);
   const [choices, setChoices] = useState<string[][]>(() => request.questions.map(() => []));
   const [notes, setNotes] = useState<string[]>(() => request.questions.map(() => ""));
+  const [sending, setSending] = useState(false);
   const question = request.questions[page]!;
   const { options, order } = localOptions(question.options);
-  const last = page === request.questions.length - 1;
+  const several = request.questions.length > 1;
+  const answered = (nextChoices: string[][], nextNotes: string[]) => request.questions.every((_, index) => nextChoices[index]!.length > 0 || !!nextNotes[index]);
   const finish = (nextChoices: string[][], nextNotes: string[]) => {
-    const text = nextNotes.map((note, index) => (note ? (request.questions.length > 1 ? `${request.questions[index]!.question}：${note}` : note) : "")).filter(Boolean).join("\n");
+    const text = nextNotes.map((note, index) => (note ? (several ? `${request.questions[index]!.question}：${note}` : note) : "")).filter(Boolean).join("\n");
     return onAnswer({ choices: nextChoices, ...(text ? { text } : {}) });
   };
+  // 一个问题：点了就交。几个问题：答完一页自动翻到下一个没答的，全部答完「提交」才能点，一起发出。
   const advance = (nextChoices: string[][], nextNotes: string[]) => {
     setChoices(nextChoices);
     setNotes(nextNotes);
-    if (last) return finish(nextChoices, nextNotes);
-    setPage(page + 1);
+    if (!several) return finish(nextChoices, nextNotes);
+    const next = request.questions.findIndex((_, index) => index > page && !nextChoices[index]!.length && !nextNotes[index]);
+    if (next >= 0) setPage(next);
     return undefined;
   };
+  const submit = async () => { setSending(true); try { await finish(choices, notes); } finally { setSending(false); } };
   return (
-    <DecisionBox kind="question" testId="question-decision" title={question.question} options={options} multi={question.multiSelect} blocked={blocked}
-      resolved={resolved} pager={request.questions.length > 1 ? { index: page, total: request.questions.length, onGo: setPage } : undefined}
-      onPick={(picked) => advance(choices.map((chosen, index) => (index === page ? picked.map((at) => question.options[order[at]!]!.label) : chosen)), notes)}
-      other={{ placeholder: question.header || undefined, onSubmit: (text) => advance(choices.map((chosen, index) => (index === page ? [] : chosen)), notes.map((note, index) => (index === page ? text : note))) }} />
+    <DecisionBox kind="question" testId="question-decision" title={question.question} options={options} multi={question.multiSelect} blocked={blocked} busy={sending}
+      resolved={resolved} pager={several ? { index: page, total: request.questions.length, onGo: setPage } : undefined}
+      onPick={(picked, note) => advance(choices.map((chosen, index) => (index === page ? picked.map((at) => question.options[order[at]!]!.label) : chosen)), notes.map((value, index) => (index === page ? note ?? "" : value)))}
+      other={{ placeholder: question.header || undefined, onSubmit: (text) => advance(choices.map((chosen, index) => (index === page ? [] : chosen)), notes.map((note, index) => (index === page ? text : note))) }}
+      footer={several ? <><span className={x.grow} /><HeroButton variant="primary" size="sm" isDisabled={sending || !answered(choices, notes)} onPress={() => void submit()}>提交</HeroButton></> : undefined} />
   );
 }
+
+/** 对外的动作：推送、开 PR、发消息、发邮件（就算在工作区里也一律要本人批，设计 9.5）。按命令尽力认。 */
+const EXTERNAL = /\bgit\s+push\b|\bgh\s+(pr|issue|release)\s+(create|merge|comment|edit)\b|\blark-cli\b[^\n]*\b(send|reply|create|update|delete)\b|\b(sendmail|mail)\b/i;
 
 const commandOf = (request: TLocalPermissionRequestView) => (typeof request.input.command === "string" ? request.input.command : null);
 
@@ -73,8 +85,10 @@ export function ApprovalDecision({ requests, blocked, onDecide }: {
   if (!request) return null;
   const outside = request.outsidePaths ?? [];
   const command = commandOf(request);
-  const options: DecisionOption[] = outside.length ? [{ label: "允许这一次", recommended: false }]
-    : [{ label: "批准", recommended: true }, ...(request.canAllowForSession ? [{ label: "同类以后都批准" }] : [])];
+  const external = !!command && EXTERNAL.test(command);
+  // 「同类以后都批准」只在这个子会话内放行；说明写清是哪一类（等宽字写工具），回车永远不会选它。
+  const options: DecisionOption[] = outside.length ? [{ label: "批准" }]
+    : [{ label: "批准", recommended: true }, ...(request.canAllowForSession ? [{ label: "同类以后都批准", noEnter: true, detail: <><code className={x.ruleCode}>{request.toolName}</code> · 这个子会话内</> }] : [])];
   const allowAll = async () => {
     setAllBusy(true);
     try { for (const entry of requests) await onDecide(entry, "allow", {}); } finally { setAllBusy(false); }
@@ -85,13 +99,17 @@ export function ApprovalDecision({ requests, blocked, onDecide }: {
     <DecisionBox key={request.requestId} kind="approval" testId="approval-decision" title={request.title} blocked={blocked} outside={outside.length > 0} autoFocus={!outside.length} busy={allBusy}
       body={command || outside.length ? <>
         {command ? <code className={x.cmd}>{command}</code> : null}
-        {outside.length ? <ul className={x.outside} aria-label="越界的路径">{outside.map((path) => <li key={path}>越界：{path}</li>)}</ul> : null}
+        {outside.length ? <ul className={x.outside} aria-label="工作区外的路径">{outside.map((path) => <li key={path}>{path}</li>)}</ul> : null}
       </> : undefined}
       pager={requests.length > 1 ? { index, total: requests.length, onGo: setPage } : undefined}
-      aside={requests.length > 1 && plain && !blocked ? <button type="button" className={x.all} disabled={allBusy} onClick={() => void allowAll()}>全部批准</button> : undefined}
+      aside={<>
+        {external ? <DecisionTag>对外</DecisionTag> : null}
+        {outside.length ? <DecisionTag>工作区外</DecisionTag> : null}
+        {requests.length > 1 && plain && !blocked ? <HeroButton variant="ghost" size="sm" isDisabled={allBusy} onPress={() => void allowAll()}>全部批准</HeroButton> : null}
+      </>}
       options={options}
       onPick={([picked]) => onDecide(request, "allow", { forSession: picked === 1 && !outside.length })}
-      other={{ label: "换个做法…", onSubmit: (message) => onDecide(request, "deny", { message }) }} />
+      other={{ label: "换个做法", onSubmit: (message) => onDecide(request, "deny", { message }) }} />
   );
 }
 

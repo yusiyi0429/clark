@@ -111,20 +111,25 @@ describe("选项框", () => {
   const permission = (requestId: string, extra: Record<string, unknown> = {}) => ({ requestId, toolName: "Bash", title: "运行 pnpm test", input: { command: "pnpm --filter @warmap/web test" },
     outsidePaths: [], canAllowForSession: true, ...extra }) as never;
 
-  it("批准：批准（推荐）/ 同类以后都批准 / 换个做法…，带命令；几件一起来时 1/2 和全部批准；越界的只能允许这一次", () => {
+  it("批准：批准（推荐）/ 同类以后都批准（写清范围，回车不会选它）/ 换个做法，带命令；几件一起来时 1/2 和全部批准；工作区外只剩批准、换个做法，路径标出、加 chip；对外的加 chip", () => {
     const one = text(renderToStaticMarkup(<ApprovalDecision requests={[permission("p1")]} onDecide={vi.fn()} />));
     expect(one).toContain("pnpm --filter @warmap/web test");
-    expect(one).toContain("批准推荐");
-    expect(one.indexOf("同类以后都批准")).toBeGreaterThan(one.indexOf("批准推荐"));
-    expect(one.indexOf("换个做法…")).toBeGreaterThan(one.indexOf("同类以后都批准"));
+    expect(one).toContain("批准（推荐）");
+    expect(one.indexOf("同类以后都批准")).toBeGreaterThan(one.indexOf("批准（推荐）"));
+    expect(one).toContain("这个子会话内");
+    expect(one.indexOf("换个做法")).toBeGreaterThan(one.indexOf("同类以后都批准"));
     expect(one).not.toContain("全部批准");
+    expect(one).not.toContain("对外");
     const two = text(renderToStaticMarkup(<ApprovalDecision requests={[permission("p1"), permission("p2")]} onDecide={vi.fn()} />));
     expect(two).toContain("1/2");
     expect(two).toContain("全部批准");
     const outside = text(renderToStaticMarkup(<ApprovalDecision requests={[permission("p3", { outsidePaths: ["D:/secrets"] })]} onDecide={vi.fn()} />));
-    expect(outside).toContain("允许这一次");
+    expect(outside).toContain("工作区外");
+    expect(outside).toContain("D:/secrets");
     expect(outside).not.toContain("同类以后都批准");
-    expect(outside).toContain("越界：D:/secrets");
+    expect(outside).not.toContain("允许这一次");
+    const push = text(renderToStaticMarkup(<ApprovalDecision requests={[permission("p4", { input: { command: "git push origin main" } })]} onDecide={vi.fn()} />));
+    expect(push).toContain("对外");
   });
 
   it("手机和别的电脑上只显示要做的事，不给选项，写到电脑上处理", () => {

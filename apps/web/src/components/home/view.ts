@@ -6,6 +6,7 @@
  */
 import { createContext, useContext, useSyncExternalStore, type ReactNode } from "react";
 import type { BackgroundScope } from "@/lib/home/types";
+import { isPage, type PageKey } from "./pageKeys";
 
 export type View =
   | { kind: "home" }
@@ -17,13 +18,7 @@ export type View =
   | { kind: "page"; page: PageKey }
   | { kind: "month"; period: string };
 
-/** 二级页（个人菜单进去的，设计 9.4、5.4.6）：组件由 W2 交（components/home/pages），挂在展示区里。 */
-export const PAGE_KEYS = ["profile", "buddy", "connections", "preferences"] as const;
-export type PageKey = (typeof PAGE_KEYS)[number];
-export const PAGE_TITLE: Record<PageKey, string> = { profile: "头像和资料", buddy: "伙伴", connections: "连接", preferences: "偏好" };
-export const pageHref = (page: PageKey) => `/me/work/settings/${page}`;
-export const monthHref = (period: string) => `/me/work/month/${period}`;
-const isPage = (value: string | undefined): value is PageKey => !!value && (PAGE_KEYS as readonly string[]).includes(value);
+export { PAGE_KEYS, PAGE_TITLE, monthHref, pageHref, type PageKey } from "./pageKeys";
 
 export function viewOf(pathname: string): View {
   const parts = pathname.replace(/\/+$/, "").split("/").slice(3).map((part) => decodeURIComponent(part));

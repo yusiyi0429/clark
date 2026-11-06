@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { requireMember } from "@/lib/api/server";
 import { workEnabledFor } from "@/lib/work/gate";
-import { PAGE_KEYS } from "@/components/home/view";
+import { PAGE_KEYS } from "@/components/home/pageKeys";
 
 export const metadata: Metadata = { title: "天枢" };
 
