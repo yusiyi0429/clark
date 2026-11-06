@@ -46,7 +46,7 @@ interface SessionRecord {
   handedBack: number;
   /** 专题：最近一版的号（开工时取交代里的 latestVersion）。 */
   versionNumber: number;
-  /** 专题：本会话最近存的一版（评审会读它）。 */
+  /** 专题：本会话最近存的正文一版（提纲、草稿；评审会读它，评审版不算）。 */
   lastVersion: { number: number; path: string } | null;
   /** 岗位（开工时的快照）和专题评审会的挑刺岗位。 */
   role: TLocalRole | null;
@@ -606,7 +606,8 @@ export class SessionManager {
     const note = input.note?.trim().slice(0, 200) || null;
     rec.versionNumber += 1;
     const number = rec.versionNumber;
-    rec.lastVersion = { number, path: input.path };
+    // 评审会读的「最近一版」是正文（提纲、草稿），不是上一次评审会存的分歧和建议。
+    if (input.kind !== "review") rec.lastVersion = { number, path: input.path };
     this.emit(rec, { type: "version", number, kind: input.kind, label, note });
     this.sync(rec, { type: "topic_version", data: { number, kind: input.kind, label, note, body } });
     return `已存第 ${number} 版${label ? `（${label}）` : ""}`;

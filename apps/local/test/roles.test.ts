@@ -135,12 +135,17 @@ describe("岗位", () => {
 
     // 存一版，再开评审会：本机替本人说的那句话点名挑刺子 agent 和这一版
     const secret = JSON.parse(readFileSync(join(t.dataDir, "sessions", id, "session.json"), "utf8")).mcpSecret;
-    writeFileSync(join(s.body.cwd, "初稿.md"), "# 初稿");
-    const rpc = await fetch(`http://127.0.0.1:${t.port}/internal/sessions/${id}/mcp`, {
-      method: "POST", headers: { "x-tianshu-session-secret": secret, "content-type": "application/json" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "save_version", arguments: { path: "初稿.md", kind: "draft" } } }),
-    });
-    expect((await rpc.json()).result.content[0].text).toBe("已存第 2 版");
+    const save = async (path: string, kind: string) => {
+      writeFileSync(join(s.body.cwd, path), `# ${path}`);
+      const rpc = await fetch(`http://127.0.0.1:${t.port}/internal/sessions/${id}/mcp`, {
+        method: "POST", headers: { "x-tianshu-session-secret": secret, "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "save_version", arguments: { path, kind } } }),
+      });
+      return (await rpc.json()).result.content[0].text as string;
+    };
+    expect(await save("初稿.md", "draft")).toBe("已存第 2 版");
+    // 上一次评审会存的「分歧和建议」也是一版，但下一次评审会挑的仍是正文最近一版
+    expect(await save("分歧和建议.md", "review")).toBe("已存第 3 版");
     await until(async () => (await api(t.port, token, "GET", `/v1/sessions/${id}`)).body.session.status !== "starting");
     expect((await api(t.port, token, "POST", `/v1/sessions/${id}/messages`, { kind: "review", text: "重点看数据来源" })).status).toBe(200);
     const events = readFileSync(join(t.dataDir, "sessions", id, "events.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
