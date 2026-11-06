@@ -16509,7 +16509,7 @@ export interface components {
         };
         WorkerItem: {
             key: string;
-            kind: "card" | "topic";
+            kind: "card" | "topic" | "plan" | "verify";
             cardId: string | null;
             topicId: string | null;
             title: string;
@@ -16582,7 +16582,7 @@ export interface components {
         WorkersResponse: {
             running: {
                 key: string;
-                kind: "card" | "topic";
+                kind: "card" | "topic" | "plan" | "verify";
                 cardId: string | null;
                 topicId: string | null;
                 title: string;
@@ -16629,7 +16629,7 @@ export interface components {
             }[];
             queued: {
                 key: string;
-                kind: "card" | "topic";
+                kind: "card" | "topic" | "plan" | "verify";
                 cardId: string | null;
                 topicId: string | null;
                 title: string;
@@ -16676,7 +16676,7 @@ export interface components {
             }[];
             done: {
                 key: string;
-                kind: "card" | "topic";
+                kind: "card" | "topic" | "plan" | "verify";
                 cardId: string | null;
                 topicId: string | null;
                 title: string;
