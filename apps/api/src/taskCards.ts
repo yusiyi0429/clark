@@ -82,7 +82,7 @@ async function cardsOf(q: Query, rows: CardRow[]): Promise<Map<string, TTaskCard
     const inclusion = inclusions.find((item) => item.task_id === row.id);
     const deliverable: TDeliverableInclusion | null = !inclusion ? null : inclusion.version_id ? { state: "included", versionNumber: inclusion.number! }
       : { state: "pending", versionNumber: next.get(row.plan_task_id ?? "") ?? 1 };
-    return [row.id, { ...stageAndWait(row, own, ownRuns), executor: row.executor, model: row.model,
+    return [row.id, { ...stageAndWait(row, own, ownRuns), role: null, executor: row.executor, model: row.model,
       criterion: row.criterion_index && row.criterion_text ? { index: row.criterion_index, text: row.criterion_text } : null,
       run: ownRuns[0] ? runBrief(ownRuns[0]) : null, handback: own[0] ? handbackBrief(own[0]) : null, deliverable }];
   }));
@@ -152,7 +152,7 @@ export async function readBoard(q: Query, own: OwnTask, names: Map<string, strin
 export type DraftRow = { id: string; plan_id: string; position: number; title: string; brief: string; done_definition: string; criterion_index: number | null;
   executor: "claude_code" | "self"; model_tier: "strong" | "normal" | "light"; why: string | null };
 const draftView = (row: DraftRow) => ({ id: row.id, planId: row.plan_id, position: row.position, title: row.title, brief: row.brief, doneDefinition: row.done_definition,
-  criterionIndex: row.criterion_index, executor: row.executor, modelTier: row.model_tier, why: row.why });
+  criterionIndex: row.criterion_index, role: null, suggestPresetKey: null, executor: row.executor, modelTier: row.model_tier, why: row.why });
 
 /** 推进人自己的卡（锁住改用 forUpdate）；不是推进人的当找不到。 */
 export async function ownCard(q: Query, ownerId: string, id: string, forUpdate = false): Promise<CardRow & { version: number; title: string }> {
@@ -248,7 +248,7 @@ export async function cardBrief(q: Query, ownerId: string, id: string, planTask:
     ...(gap ? ["", "## Task 最新一版评审里这条还差", "", gap] : []),
     ...(lastReturn ? ["", "## 上一次验收没过", "", lastReturn] : []),
   ];
-  return { markdown: lines.join("\n").slice(0, 20_000), mission: mission ? { missionId: mission.id, title: mission.title } : null,
+  return { markdown: lines.join("\n").slice(0, 20_000), role: null, mission: mission ? { missionId: mission.id, title: mission.title } : null,
     task: own ? { taskId: own.task.taskId, name: own.task.name } : null, criterion, exclusions: [], reviewGap: gap, lastReturn };
 }
 
