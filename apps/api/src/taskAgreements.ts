@@ -6,7 +6,7 @@ import type { AgreementSnapshot, StoredReview } from "./deliverableReview.js";
 import { FEISHU_NOTIFY_KIND, type FeishuNotice } from "./feishu/notify.js";
 import { enqueueJob } from "./jobs.js";
 import type { Query } from "./meetingStore.js";
-import { locatePlanTask, PlanTaskNotFound, taskBasis, type PlanTaskAccess, type PlanTaskViewer } from "./planTaskAccess.js";
+import { locatePlanTask, taskBasis, type PlanTaskAccess, type PlanTaskViewer } from "./planTaskAccess.js";
 import type { PlanTask, PlanTaskSource } from "./planTasks.js";
 import { DeliverableError } from "./taskDeliverables.js";
 import { shanghaiDate } from "./workdays.js";
@@ -87,13 +87,7 @@ export async function agreementSummaries(q: Query, tasks: PlanTask[]): Promise<M
  */
 export async function openPlanTask(q: Query, planTasks: PlanTaskSource, viewer: PlanTaskViewer, now: Date, taskId: string, names: Map<string, string>):
   Promise<{ access: PlanTaskAccess; agreement: TTaskAgreementResponse }> {
-  let access: PlanTaskAccess;
-  try {
-    access = await locatePlanTask(q, planTasks, viewer, now, taskId);
-  } catch (cause) {
-    if (cause instanceof PlanTaskNotFound) throw new DeliverableError(404, "NOT_FOUND", "找不到这个 Task");
-    throw cause;
-  }
+  const access = await locatePlanTask(q, planTasks, viewer, now, taskId);
   const agreement = await readAgreement(q, access, names);
   if (!access.related && !agreement.criteria.some((item) => item.acceptor?.personId === viewer.personId)) throw new DeliverableError(404, "NOT_FOUND", "找不到这个 Task");
   return { access, agreement };

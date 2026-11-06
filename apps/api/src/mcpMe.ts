@@ -130,7 +130,7 @@ const taskFailure = (outcome: TaskResult | { deleted: true }) => "notFound" in o
 export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: string; now: () => Date;
   names: () => Map<string, string>; findPerson: (personId: string) => MemoryPerson | undefined;
   people: () => MemoryPerson[]; initialPerson: MemoryPerson; publicOrigin?: string; authorization: string | undefined; planTasks: PlanTaskSource;
-  chat?: ReturnType<typeof createChatService>; deliverables?: AgreementToolDeps["deliverables"] }) {
+  chat?: ReturnType<typeof createChatService>; deliverables: AgreementToolDeps["deliverables"] }) {
   const auth = () => authenticateMcpToken(deps.q, deps.authorization, deps.pepper, deps.now(), (id) => !!deps.findPerson(id), deps.publicOrigin ? oauthUrls(deps.publicOrigin).resource : undefined);
   /** 推进人写进展、放链接会让未启动的事项变进行中、版本跟着变：把事项此刻的状态和版本一起回给外部工具，接着提交验收直接用。 */
   const itemState = async (itemId: string) =>

@@ -29,8 +29,8 @@ export const agreementDefinitions: Tool[] = [
 export const agreementToolNames = new Set(agreementDefinitions.map((tool) => tool.name));
 
 export type AgreementToolDeps = { pool: Pool; q: Query; now: () => Date; planTasks: PlanTaskSource; names: Map<string, string>; publicOrigin?: string;
-  /** 交版本用：材料卷和评审队列（app.deliverables）；没接时 add_deliverable_version 报未接通。 */
-  deliverables?: { storageDir: string; enqueueReview: (versionId: string) => Promise<void> } };
+  /** 交版本用：材料卷和评审队列（app.deliverables）。 */
+  deliverables: { storageDir: string; enqueueReview: (versionId: string) => Promise<void> } };
 type ToolResult = { value: unknown; error?: string };
 
 /** 执行一个约定工具：返回结果，或带错误码的失败（调用方包成 MCP 结果）。参数不合法时返回 null，由调用方报 INVALID_INPUT。 */
@@ -42,7 +42,6 @@ export async function callAgreementTool(deps: AgreementToolDeps, viewer: PlanTas
       return { value: tool === "get_task_agreement" ? agreement : await checkTask(deps.q, access, agreement, deps.now()) };
     }
     if (tool !== "add_deliverable_version" || !Value.Check(AddVersionInput, args)) return null;
-    if (!deps.deliverables) return { value: { code: "DELIVERABLES_NOT_CONFIGURED", message: "交付物服务没接通" }, error: "DELIVERABLES_NOT_CONFIGURED" };
     const { access, agreement } = await openPlanTask(deps.q, deps.planTasks, viewer, deps.now(), args.taskId, deps.names);
     if (!access.canEdit) throw new DeliverableError(403, "FORBIDDEN", "这个 Task 由负责人交付");
     // 沿用上一版的全部材料（和网页上默认勾着的一样），同一个链接不重复放。

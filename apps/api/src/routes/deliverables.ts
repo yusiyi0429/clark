@@ -18,7 +18,7 @@ const versionParams = Type.Object({ taskId: Type.String({ minLength: 1 }), versi
 
 /**
  * Task 交付物的 8 个接口（契约 /api/plan-tasks/{taskId}/deliverable）。读（交付物、原文件）：负责人、Mission 负责人、战场负责人、CEO 和约定里的认可人，
- * 两种视角都行；改（传版本、交付、异议、重评、改说明）：负责人，要在成员工作台（11/06 约定与对表 ADR 0028）。
+ * 两种视角都行；改（传版本、交付、异议、重评、改说明）：负责人，要在成员工作台（11/06 约定与对表，ADR 0033）。
  * 评审和版本说明在后台队列里跑；agents、fetchArticle 可注入（测试用假实现）。
  */
 export function registerDeliverableRoutes(app: AppInstance, ctx: RouteContext, deps: { agents?: Partial<DeliverableAgents>; fetchArticle?: ArticleFetcher } = {}): void {

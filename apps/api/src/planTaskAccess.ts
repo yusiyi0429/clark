@@ -4,6 +4,7 @@ import type { Query } from "./meetingStore.js";
 import { companyPeriod } from "./monthlyPlans.js";
 import type { PeopleDirectory } from "./peopleDirectory.js";
 import { readPlanTasks, type PlanTask, type PlanTaskMission, type PlanTaskSource } from "./planTasks.js";
+import { DeliverableError } from "./taskDeliverables.js";
 
 /**
  * 找一个本体 Task，并说明看的人和它的关系（约定与对表 V1、Task 交付物共用）。
@@ -35,10 +36,6 @@ export type PlanTaskAccess = {
   related: boolean;
 };
 
-export class PlanTaskNotFound extends Error {
-  constructor() { super("找不到这个 Task"); }
-}
-
 /** 本人 Mission 以外的 Task 要读整个公司当期的 Mission：第一次读本体可能比首页那一组慢，多等一会儿，免得冷启动时报找不到。 */
 export const LOCATE_BUDGET_MS = 8_000;
 
@@ -53,15 +50,16 @@ async function companyMissions(q: Query, now: Date): Promise<PlanTaskMission[]> 
 
 /**
  * 先在本人的 Mission 里找（和首页同一组，缓存是热的），找不到再在公司当期全部 Mission 里找。
- * 都找不到抛 PlanTaskNotFound；找到了不判能不能看，related 交给调用方（认可人还要看约定）。
+ * 都找不到抛 404；找到了不判能不能看，related 交给调用方（认可人还要看约定）。
  */
 export async function locatePlanTask(q: Query, planTasks: PlanTaskSource, viewer: PlanTaskViewer, now: Date, taskId: string): Promise<PlanTaskAccess> {
   const own = await ownMissions(q, viewer.personId, companyPeriod(now));
   let task = (await readPlanTasks(planTasks, planTaskMissions(own.rows))).find((item) => item.taskId === taskId);
   if (!task) task = (await readPlanTasks(planTasks, await companyMissions(q, now), LOCATE_BUDGET_MS)).find((item) => item.taskId === taskId);
-  if (!task) throw new PlanTaskNotFound();
+  const notFound = () => new DeliverableError(404, "NOT_FOUND", "找不到这个 Task");
+  if (!task) throw notFound();
   const mission = (await q("SELECT owner_id, battlefield_ids FROM missions WHERE id=$1", [task.missionId])).rows[0] as { owner_id: string; battlefield_ids: string[] } | undefined;
-  if (!mission) throw new PlanTaskNotFound();
+  if (!mission) throw notFound();
   const responsibleId = task.responsibleId ?? null;
   const ownerId = responsibleId ?? mission.owner_id;
   const missionOwner = mission.owner_id === viewer.personId;
