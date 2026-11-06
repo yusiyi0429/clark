@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
+import type { CompanyReader, CompanyRequest, CompanyViewer } from "../src/company.js";
 import { TEST_MEMBER } from "./helpers.js";
 import { boardFixture } from "./boardFixture.js";
 
@@ -189,6 +190,51 @@ describe("拆卡和验收在本机（第 21 节）", { timeout: 30_000 }, () => 
       expect((await f.t.sql("SELECT content FROM thread_messages WHERE object_type='task' AND object_id=$1 ORDER BY id DESC LIMIT 1", [other]))[0].content)
         .toBe("本机验收员验收通过（2/2）。");
       expect(f.cloud).toEqual({ accept: 0, plan: 0 });
+    } finally { await f.close(); }
+  });
+
+  it("get_task_context：本人看得到的 Task 才读，本体按本人授权读、每条事实带 cite:world:<id>@<版本>；带 Mission、约定、上一版交付物和评审；个人令牌和本机设备令牌都能调", async () => {
+    const reads: { viewer: CompanyViewer; request: CompanyRequest }[] = [];
+    const companyReader: CompanyReader = { async read(viewer, request) {
+      reads.push({ viewer, request });
+      return { status: "ready", entries: request.query?.startsWith("本月目标")
+        ? [{ handle: "goal", ref: "goal-11@3", type: "PeriodGoal", title: "11 月目标", text: "## 11 月目标\n\n内部版上线" }]
+        : [{ handle: "task", ref: "task-open@4", type: "Task", title: "对话质量达标", text: "## 对话质量达标\n\n状态：进行中" }] };
+    } };
+    const f = await localFixture({ companyReader });
+    try {
+      const personal = (await f.call("POST", "/api/me/tokens", { name: "Claude Code", client: "claude", expiresInDays: null })).json().token as string;
+      const mcp = (token: string, id: number, method: string, params?: Record<string, unknown>) => f.t.app.inject({ method: "POST", url: "/mcp/me",
+        headers: { authorization: `Bearer ${token}`, accept: "application/json, text/event-stream" }, payload: { jsonrpc: "2.0", id, method, ...(params ? { params } : {}) } });
+      const context = async (token: string, taskId: string) => (await mcp(token, 2, "tools/call", { name: "get_task_context", arguments: { taskId } })).json().result;
+      for (const token of [personal, f.machine.token])
+        expect((await mcp(token, 1, "tools/list")).json().result.tools.map((tool: { name: string }) => tool.name)).toContain("get_task_context");
+
+      const version = (await mcp(personal, 3, "tools/call", { name: "add_deliverable_version", arguments: { taskId: "task-open", links: ["https://example.com/v1"] } })).json().result;
+      expect(version.isError).toBe(false);
+      await f.t.app.deliverables.idle();
+
+      const read = await context(f.machine.token, "task-open");
+      expect(read.isError).toBe(false);
+      const value = JSON.parse(read.content[0].text);
+      expect(value).toMatchObject({
+        task: { taskId: "task-open", name: "对话质量达标", missionId: "mine", canEdit: true, exclusions: [],
+          criteria: [{ index: 1, text: "有题库打分结果", proof: null, acceptor: null }, { index: 2, text: "有新人上手录屏", proof: null, acceptor: null }] },
+        mission: { id: "mine", title: "内部版上线" },
+        world: { status: "ready", facts: [
+          { cite: "cite:world:task-open@4", type: "Task", title: "对话质量达标" },
+          { cite: "cite:world:goal-11@3", type: "PeriodGoal", title: "11 月目标" }] },
+        deliverable: { versions: [{ number: 1, items: [{ kind: "link", url: "https://example.com/v1" }], review: { status: "done", headline: "评过了" } }] },
+      });
+      expect(value.citeRule).toContain("cite:world:");
+      expect(reads.map(({ viewer, request }) => [viewer.personId, request.locate, request.query])).toEqual([
+        [TEST_MEMBER.personId, true, "对话质量达标 内部版上线"], [TEST_MEMBER.personId, true, expect.stringMatching(/^本月目标/)]]);
+
+      // 看不到的 Task：当找不到，也不去读本体。
+      const hidden = await context(personal, "task-other");
+      expect([hidden.isError, JSON.parse(hidden.content[0].text).code]).toEqual([true, "NOT_FOUND"]);
+      expect(reads).toHaveLength(2);
+      expect((await context(personal, "task-theirs")).isError).toBe(false);
     } finally { await f.close(); }
   });
 });

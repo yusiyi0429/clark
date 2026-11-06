@@ -25,6 +25,8 @@ import { TaskQualityId, TaskRepairHandoff, TaskRepairList, TaskRepairView, TaskR
 import { ChatServiceError, type createChatService } from "./chatService.js";
 import { agreementDefinitions, agreementToolNames, callAgreementTool, type AgreementToolDeps } from "./mcpAgreements.js";
 import { runWebSearch, WEB_SEARCH_TOOL } from "./mcpWebSearch.js";
+import { readTaskContext, TASK_CONTEXT_TOOL } from "./mcpTaskContext.js";
+import type { CompanyReader } from "./company.js";
 import type { WebSearchAdapter } from "./webSearch.js";
 import { agreementSummaries } from "./taskAgreements.js";
 
@@ -134,7 +136,9 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
   people: () => MemoryPerson[]; initialPerson: MemoryPerson; publicOrigin?: string; authorization: string | undefined; planTasks: PlanTaskSource;
   chat?: ReturnType<typeof createChatService>; deliverables: AgreementToolDeps["deliverables"];
   /** 联网搜索（博查，服务器上的钥匙）；没配时不列 web_search。 */
-  search?: WebSearchAdapter & { configured: boolean } }) {
+  search?: WebSearchAdapter & { configured: boolean };
+  /** 本体公司事实（get_task_context 按本人授权读）。 */
+  company: CompanyReader }) {
   const auth = () => authenticateMcpToken(deps.q, deps.authorization, deps.pepper, deps.now(), (id) => !!deps.findPerson(id), deps.publicOrigin ? oauthUrls(deps.publicOrigin).resource : undefined);
   /** 推进人写进展、放链接会让未启动的事项变进行中、版本跟着变：把事项此刻的状态和版本一起回给外部工具，接着提交验收直接用。 */
   const itemState = async (itemId: string) =>
@@ -159,6 +163,7 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
       "事项由本人建，粒度随本人：本人叫建什么就建什么，先用 list_my_items 看有没有同一件，有就告诉本人，不重复建；完成标准写成可检查的几条，验收时逐条对。记进展写做了什么、证据和下一步，产出用 add_link 放进去；本人说做完了，对照完成标准逐条写是否达到和依据，再用 submit_for_acceptance 提交验收。只写真实做过的事。会后分派来的事不删，本人说不做时用 return_item 退回。",
       "验收是本人逐条对完成标准的事：list_my_items 里有 awaitingAcceptance=true 的事，在对话开头或聊到相关的事时提醒一句（「有 N 件等你验收：…」），请本人到天枢逐条验收；本人在对话里逐条确认每条都达到时才用 accept_item 代为确认，一句「通过」不代确认。",
       "Task 的约定与对表：get_task_agreement 读每条验收标准用什么证明、谁来认、这次不包括什么；本人问「能交了吗」「还差什么」时用 check_task 对表，照结果说结论和差的那几条，不自己另判。add_deliverable_version 只在本人要求时用，交一版链接、自动参考评审；交付由本人在天枢点。",
+      "要拆一个 Task、做它下面的一件事或验收之前，用 get_task_context 读这个 Task 的上下文（约定、Mission 和战场目标、本体里的相关事实和最近进展、上一版交付物和评审）；引用本体事实时照抄它给的 cite。",
     ] : []),
     "任务卡正文是只读边界的例外：get_mission_card 只读本人可见卡；仅本人准备期间、editable=true时，用户已经明确具体改法可用edit_mission_card立即改有权限的任务字段并留痕。必须用刚读取的round填写sourceRound；本人已确认或已开始汇总时，只读正文和历史，先由本人取消确认或由战场 DRI 退回本人重新确认，不能自动绕过。保存备注不授权改文；仅明确修改意图可以写入。重新开放后需重新核对本次改法，不把旧改法直接套进新的本人准备窗口。不确定用户意思时先提问题与选项，最后一个选项为自己输入，澄清后立即改。不能自动向群聊发送私聊记录，不能签发或确认任务卡。遇到旧准备窗口、版本或原字段冲突必须重新读取。",
     "月末会有个人复盘待起草。用 list_pending 发现，get_my_review 读取本人的承诺、进展和写作要求，再用 save_review_draft 写入四部分草稿；不能替本人提交，请本人回天枢确认。",
@@ -171,7 +176,7 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
     if (!person) return { tools: [] };
     const roles = access(person);
     return { tools: [...(roles.member ? memberDefinitions : []), ...(roles.ceo ? ceoDefinitions : []),
-      ...(roles.ceo || roles.member ? missionCardDefinitions : []), ...(roles.ceo || roles.member ? agreementDefinitions : []), ...reviewDefinitions,
+      ...(roles.ceo || roles.member ? missionCardDefinitions : []), ...(roles.ceo || roles.member ? [...agreementDefinitions, TASK_CONTEXT_TOOL] : []), ...reviewDefinitions,
       ...(deps.chat && (roles.ceo || roles.member) ? qualityDefinitions : []), ...(deps.search?.configured && (roles.ceo || roles.member) ? [WEB_SEARCH_TOOL] : [])]
       .filter((tool) => !identity?.scopes || identity.scopes.includes("tianshu:write") || !MCP_WRITE_TOOLS.has(tool.name)) };
   });
@@ -213,6 +218,13 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
         if (!roles.member && !roles.ceo) { code = "FORBIDDEN"; return result({ code, message: "这个工具只对成员或 CEO 开放" }, true); }
         const outcome = await callAgreementTool({ pool: deps.pool, q: deps.q, now: deps.now, planTasks: deps.planTasks, names, publicOrigin: deps.publicOrigin,
           deliverables: deps.deliverables }, { personId: person.personId, isCeo: roles.ceo }, tool, args);
+        if (outcome) { code = outcome.error; return result(outcome.value, !!outcome.error); }
+      }
+      // Task 上下文（mcpTaskContext.ts）：成员和 CEO 都能用，本机程序的设备令牌也能用（只读）；谁能看照约定判，本体按本人授权读。
+      if (tool === TASK_CONTEXT_TOOL.name) {
+        if (!roles.member && !roles.ceo) { code = "FORBIDDEN"; return result({ code, message: "这个工具只对成员或 CEO 开放" }, true); }
+        const outcome = await readTaskContext({ q: deps.q, now: deps.now, planTasks: deps.planTasks, names, company: deps.company },
+          { personId: person.personId, isCeo: roles.ceo }, args, extra.signal);
         if (outcome) { code = outcome.error; return result(outcome.value, !!outcome.error); }
       }
       // 联网搜索（mcpWebSearch.ts）：成员和 CEO 都能用，本机程序的设备令牌也能用；每人每分钟、每天有上限，每真搜一次记一行。

@@ -63,7 +63,8 @@ export function registerSystemRoutes(app: AppInstance, ctx: RouteContext, deps: 
       names: () => personDisplayNames(peopleDirectory), findPerson, initialPerson: findPerson(identity.personId)!, authorization: req.headers.authorization,
       people: () => peopleDirectory.searchPeople(undefined), publicOrigin: env.publicOrigin, planTasks: ctx.planTasks,
       chat: env.chatServiceUrl ? createChatService({ baseUrl: env.chatServiceUrl, token: env.internalChatToken }) : undefined,
-      deliverables: { storageDir: ctx.materialStorageDir, enqueueReview: (versionId) => app.deliverables.enqueueReview(versionId) }, search: deps.search });
+      deliverables: { storageDir: ctx.materialStorageDir, enqueueReview: (versionId) => app.deliverables.enqueueReview(versionId) }, search: deps.search,
+      company: ctx.company.company });
     reply.raw.on("close", () => { void server.close(); });
     await transport.handleRequest(req.raw, reply.raw, req.body);
   };

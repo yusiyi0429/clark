@@ -28,10 +28,10 @@ describe("CEO 个人 MCP", () => {
       const initialized = (await send(f.t.app, token, 1, "initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "1" } })).json();
       expect(initialized.result.instructions).toContain("拍板、签发、确认请回天枢网页操作");
       const ceoTools = (await send(f.t.app, token, 2, "tools/list")).json().result.tools;
-      expect(ceoTools.map((tool: { name: string }) => tool.name)).toEqual(["get_issue", "get_meeting", "company_progress", "get_mission_card", "edit_mission_card", "get_task_agreement", "check_task", "add_deliverable_version", "list_pending", "get_my_review", "save_review_draft"]);
+      expect(ceoTools.map((tool: { name: string }) => tool.name)).toEqual(["get_issue", "get_meeting", "company_progress", "get_mission_card", "edit_mission_card", "get_task_agreement", "check_task", "add_deliverable_version", "get_task_context", "list_pending", "get_my_review", "save_review_draft"]);
       expect(ceoTools.filter((tool: { name: string }) => !["save_review_draft", "edit_mission_card", "add_deliverable_version"].includes(tool.name)).every((tool: { annotations?: { readOnlyHint?: boolean } }) => tool.annotations?.readOnlyHint === true)).toBe(true);
       expect((await send(f.t.app, memberToken, 3, "tools/list")).json().result.tools.map((tool: { name: string }) => tool.name))
-        .toEqual(["list_my_items", "create_item", "get_item", "append_progress", "update_status", "submit_for_acceptance", "add_link", "update_item", "delete_item", "return_item", "accept_item", "get_mission_card", "edit_mission_card", "get_task_agreement", "check_task", "add_deliverable_version", "list_pending", "get_my_review", "save_review_draft"]);
+        .toEqual(["list_my_items", "create_item", "get_item", "append_progress", "update_status", "submit_for_acceptance", "add_link", "update_item", "delete_item", "return_item", "accept_item", "get_mission_card", "edit_mission_card", "get_task_agreement", "check_task", "add_deliverable_version", "get_task_context", "list_pending", "get_my_review", "save_review_draft"]);
       expect(value(await invoke(f.t.app, memberToken, 4, "get_issue", { issueId: randomUUID() })))
         .toMatchObject({ code: "FORBIDDEN", message: "这个工具只对 CEO 开放" });
       expect(value(await invoke(f.t.app, token, 5, "append_progress", { itemId: randomUUID(), body: "test" })))
@@ -115,7 +115,7 @@ describe("CEO 个人 MCP", () => {
         payload: { name: "双身份", client: "codex", expiresInDays: null } })).json();
       const tools = (await send(t.app, token, 1, "tools/list")).json().result.tools;
       expect(tools.map((tool: { name: string }) => tool.name)).toEqual([
-        "list_my_items", "create_item", "get_item", "append_progress", "update_status", "submit_for_acceptance", "add_link", "update_item", "delete_item", "return_item", "accept_item", "get_issue", "get_meeting", "company_progress", "get_mission_card", "edit_mission_card", "get_task_agreement", "check_task", "add_deliverable_version", "list_pending", "get_my_review", "save_review_draft",
+        "list_my_items", "create_item", "get_item", "append_progress", "update_status", "submit_for_acceptance", "add_link", "update_item", "delete_item", "return_item", "accept_item", "get_issue", "get_meeting", "company_progress", "get_mission_card", "edit_mission_card", "get_task_agreement", "check_task", "add_deliverable_version", "get_task_context", "list_pending", "get_my_review", "save_review_draft",
       ]);
     } finally { await t?.close(); await rm(dir, { recursive: true, force: true }); }
   });
