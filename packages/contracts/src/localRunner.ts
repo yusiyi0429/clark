@@ -620,7 +620,8 @@ export const LocalSyncBatchRequest = Type.Object({
   runnerVersion: Type.String(),
   /** 发这一批时本机的位置数（云端的 worker 列表和「资源」用）。 */
   slots: LocalSlots,
-  items: Type.Array(LocalSyncItem, { minItems: 1, maxItems: 50 }),
+  /** 可以为空：本机开着、5 分钟里没别的要报时发一批空的当心跳，云端照样刷新本机的在线时间和位置数，回 accepted、rejected 都为空。 */
+  items: Type.Array(LocalSyncItem, { maxItems: 50 }),
 }, strict);
 export const LocalSyncBatchResponse = Type.Object({
   /** 已存下或以前存过的幂等键；本机据此出队。 */
