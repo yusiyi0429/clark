@@ -1,7 +1,9 @@
 import { Type } from "@sinclair/typebox";
 import type { FastifyReply } from "fastify";
 import { AcceptCardDraftsRequest, AcceptCardDraftsResponse, CardBoardResponse, CardBriefResponse, CardDetailResponse, CardPlanView, CardTaskView, CreateCardPlanRequest,
-  PatchCardRequest } from "@warmap/contracts";
+  OverruleCardHandbackRequest, PatchCardRequest } from "@warmap/contracts";
+import { createArticleFetcher, type ArticleFetcher } from "../articleText.js";
+import { createCardAcceptanceAgent, createCardAcceptanceQueue, markHandbackReturned, overruleHandback, retryHandback, type CardAcceptanceAgent } from "../cardAcceptance.js";
 import { createCardPlanAgent, createCardPlanQueue, type CardPlanAgent } from "../cardPlanner.js";
 import { personDisplayNames } from "../people.js";
 import { findOwnTask, type OwnTask } from "../taskDeliverables.js";
@@ -10,14 +12,17 @@ import type { AppInstance, Guard, RouteContext } from "./shared.js";
 
 const taskParams = Type.Object({ taskId: Type.String({ minLength: 1 }) });
 const idParams = Type.Object({ id: Type.String({ minLength: 1 }) });
+const handbackParams = Type.Object({ id: Type.String({ minLength: 1 }), handbackId: Type.String({ format: "uuid" }) });
 
-export type BoardAgents = { plan: CardPlanAgent };
+export type BoardAgents = { plan: CardPlanAgent; acceptance: CardAcceptanceAgent };
 
 /**
- * 执行看板（契约 taskCards.ts）：Task 页看板、拆卡和草稿、卡的详情、改卡、开工交代。成员工作台的人才有。
- * 拆卡在后台队列里跑；模型照参考评审用 REVIEW_*，没配时用 PI_* 的 heavy 模型。agents 可注入（测试用假实现）。
+ * 执行看板（契约 taskCards.ts）：Task 页看板、拆卡和草稿、卡的详情、改卡、开工交代、Agent 验收的推翻、重试和「已送到」。成员工作台的人才有。
+ * 拆卡和 Agent 验收在后台队列里跑；模型照参考评审用 REVIEW_*，没配时用 PI_* 的 heavy 模型。agents、fetchArticle 可注入（测试用假实现）。
+ * 返回 Agent 验收的入队（本机上报新交回时用）。
  */
-export function registerTaskCardRoutes(app: AppInstance, ctx: RouteContext, deps: { agents?: Partial<BoardAgents> } = {}): void {
+export function registerTaskCardRoutes(app: AppInstance, ctx: RouteContext, deps: { agents?: Partial<BoardAgents>; fetchArticle?: ArticleFetcher } = {}):
+  { enqueueAcceptance: (handbackId: string) => void } {
   const { q, pool, fail, requirePerson, env } = ctx;
   const names = () => personDisplayNames(ctx.peopleDirectory);
   const model = { query: q, baseUrl: env.review?.baseUrl ?? env.piBaseUrl, apiKey: env.review?.apiKey ?? env.piApiKey,
@@ -27,15 +32,18 @@ export function registerTaskCardRoutes(app: AppInstance, ctx: RouteContext, deps
     findOwnTask(q, ctx.planTasks, personId, ctx.now(), planTaskId).catch(() => null);
   const plans = createCardPlanQueue({ pool, now: ctx.now, onError: () => app.log.error("card plan failed"), agent: deps.agents?.plan ?? createCardPlanAgent(model),
     planTask: (ownerId, planTaskId) => planTaskOf(ownerId)(planTaskId) });
+  const acceptance = createCardAcceptanceQueue({ pool, storageDir: ctx.materialStorageDir, now: ctx.now, onError: () => app.log.error("card acceptance failed"),
+    agent: deps.agents?.acceptance ?? createCardAcceptanceAgent(model), fetchArticle: deps.fetchArticle ?? createArticleFetcher() });
   app.decorate("cardPlans", plans);
+  app.decorate("cardAcceptance", acceptance);
   let recovery: ReturnType<typeof setInterval> | undefined;
-  const recover = () => plans.recover().catch(() => app.log.error("card plan recovery failed"));
+  const recover = () => Promise.all([plans.recover(), acceptance.recover()]).catch(() => app.log.error("board queue recovery failed"));
   app.addHook("onReady", async () => {
     await recover();
     recovery = setInterval(() => { void recover(); }, 60_000);
     recovery.unref();
   });
-  app.addHook("onClose", async () => { clearInterval(recovery); await plans.close(); });
+  app.addHook("onClose", async () => { clearInterval(recovery); await Promise.all([plans.close(), acceptance.close()]); });
 
   const requireMember: Guard = async (req, reply) => {
     await requirePerson(req, reply);
@@ -78,11 +86,32 @@ export function registerTaskCardRoutes(app: AppInstance, ctx: RouteContext, deps
 
   app.get("/api/me/cards/:id/brief", { preHandler: requireMember, schema: { params: idParams, response: { 200: CardBriefResponse } } }, async (req, reply) =>
     handle(reply, () => cardBrief(q, req.person!.personId, req.params.id, planTaskOf(req.person!.personId))));
+
+  /** 对一次交回做完一件事，回卡的详情。 */
+  const handbackAction = (path: string, work: (personId: string, cardId: string, handbackId: string, body: never) => Promise<void>, body?: typeof OverruleCardHandbackRequest) =>
+    app.post(path, { preHandler: requireMember, schema: { params: handbackParams, ...(body ? { body } : {}), response: { 200: CardDetailResponse } } }, async (req, reply) => {
+      const params = req.params as { id: string; handbackId: string };
+      return handle(reply, async () => {
+        await work(req.person!.personId, params.id, params.handbackId, req.body as never);
+        return readCardDetail(q, req.person!.personId, params.id, names());
+      });
+    });
+  handbackAction("/api/me/cards/:id/handbacks/:handbackId/overrule", (personId, cardId, handbackId, body: { reason: string }) =>
+    overruleHandback(pool, personId, cardId, handbackId, body.reason, ctx.now(), names()), OverruleCardHandbackRequest);
+  handbackAction("/api/me/cards/:id/handbacks/:handbackId/retry", async (personId, cardId, handbackId) => {
+    await retryHandback(pool, personId, cardId, handbackId);
+    void acceptance.enqueue(handbackId);
+  });
+  handbackAction("/api/me/cards/:id/handbacks/:handbackId/returned", (personId, cardId, handbackId) => markHandbackReturned(pool, personId, cardId, handbackId, ctx.now()));
+
+  return { enqueueAcceptance: (handbackId) => { void acceptance.enqueue(handbackId); } };
 }
 
 declare module "fastify" {
   interface FastifyInstance {
     /** 拆卡队列（测试用 idle() 等它跑完）。 */
     cardPlans: ReturnType<typeof createCardPlanQueue>;
+    /** Agent 验收队列（测试用 idle() 等它跑完）。 */
+    cardAcceptance: ReturnType<typeof createCardAcceptanceQueue>;
   }
 }

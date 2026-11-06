@@ -844,8 +844,8 @@ export async function buildApp({
     app.addHook("onClose", async () => { await wechat.close(); });
   }
   // V2 执行看板（routes/taskCards.ts）；本机程序在云端的那一侧（routes/local.ts）：配对、设备令牌、单向上报的接收端。
-  registerTaskCardRoutes(app, ctx, { agents: boardAgents });
-  registerLocalRoutes(app, ctx, { onHandbacks: () => undefined });
+  const board = registerTaskCardRoutes(app, ctx, { agents: boardAgents, fetchArticle: deliverableFetcher });
+  registerLocalRoutes(app, ctx, { onHandbacks: (ids) => ids.forEach(board.enqueueAcceptance) });
 
   return app;
 }
