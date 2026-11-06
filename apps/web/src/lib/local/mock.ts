@@ -10,7 +10,6 @@ import type {
   TLocalSessionEvent, TLocalSessionStatus, TLocalSessionSummary, TLocalUsage,
 } from "@warmap/contracts";
 import { LocalRunnerError, type EventWatch, type LocalRunner } from "./runner";
-import { asCreateRequest, subjectOf } from "./kinds";
 
 type Step = (s: MockSession) => void | "wait";
 type MockSession = {
@@ -75,7 +74,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
     emit(s, { type: "status", status, ...(reason ? { reason } : {}) });
     if (!OCCUPYING.has(status)) promote();
   };
-  const rank = (s: MockSession) => RANK[subjectOf(s.summary).kind] ?? 2;
+  const rank = (s: MockSession) => RANK[s.summary.subject.kind] ?? 2;
   const queue = () => [...sessions.values()].filter((s) => s.summary.status === "queued")
     .sort((a, b) => rank(a) - rank(b) || a.summary.createdAt.localeCompare(b.summary.createdAt));
   const renumber = () => queue().forEach((s, i) => { s.summary = { ...s.summary, queuePosition: i + 1 }; });
@@ -133,9 +132,9 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
       plan(s, 3);
       emit(s, { type: "handback", summary: "改完了，测试都过。", criteria: [{ index: 1, result: "met", evidence: "测试 12/12 通过" }, { index: 2, result: "met", evidence: "交回说明.md" }], outputKeys: [] });
       turnEnd(s, "改完了，已交回。");
-      const subject = subjectOf(s.summary);
+      const subject = s.summary.subject;
       if (subject.kind === "card" && subject.cardId)
-        void create(asCreateRequest({ subject: { kind: "verify", cardId: subject.cardId }, title: `验收：${s.summary.title}`.slice(0, 120), modelProfileId: s.summary.modelProfileId, firstMessage: "逐条对照约定验收这次交回。" }));
+        void create({ subject: { kind: "verify", cardId: subject.cardId }, title: `验收：${s.summary.title}`.slice(0, 120), modelProfileId: s.summary.modelProfileId, firstMessage: "逐条对照约定验收这次交回。" });
       setStatus(s, "idle");
       return "wait";
     },
@@ -149,8 +148,8 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
     (s) => {
       plan(s, 3, PLANNER);
       turnEnd(s, "拆好了，派活单交上去了。");
-      const subject = subjectOf(s.summary);
-      if (subject.kind === "plan") onPlanned?.(subject.taskId);
+      const subject = s.summary.subject;
+      if (subject.kind === "plan" && subject.taskId) onPlanned?.(subject.taskId);
       setStatus(s, "exited");
       return "wait";
     },
@@ -266,7 +265,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
     const full = slots().running >= maxConcurrent;
     const s: MockSession = {
       summary: { id, subject: body.subject, title: body.title, agent: "claude-code", modelProfileId: model.id, modelLabel: model.label, cwd: body.cwd ?? "topics", status: full ? "queued" : "starting", includePersonalConfig: Boolean(body.includePersonalConfig), createdAt: now(), updatedAt: now(), lastSeq: 0, pendingPermissions: 0, queuePosition: full ? slots().queued + 1 : null, usage: { ...ZERO } },
-      log: [], listeners: new Set(), script: { plan: planner, verify: verifier }[subjectOf(body).kind as "plan" | "verify"] ?? script, cursor: 0, timer: null, pending: null, paused: false, denied: false,
+      log: [], listeners: new Set(), script: body.subject.kind === "plan" ? planner : body.subject.kind === "verify" ? verifier : script, cursor: 0, timer: null, pending: null, paused: false, denied: false,
     };
     sessions.set(id, s);
     if (full) renumber();

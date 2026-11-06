@@ -6,7 +6,6 @@
  */
 import type { TRoleRef, TWorkerItem, TWorkerMark } from "@warmap/contracts";
 import type { TLocalSessionSummary } from "@/lib/local/runner";
-import { subjectOf } from "@/lib/local/kinds";
 import { localWaitOf, type CardItem } from "@/lib/board/cards";
 import type { SplitRequest } from "./splits";
 
@@ -75,11 +74,11 @@ const ACTIVE = new Set(["queued", ...OCCUPYING]);
 /** 云端的一条 + 这台电脑上的本机会话 + 卡本身 → 界面上的 worker。 */
 export function toWorker(entry: TWorkerItem, { sessions, cards, deviceName }: { sessions: TLocalSessionSummary[]; cards: Map<string, CardItem>; deviceName: string | null }): Worker {
   const session = sessions.find((candidate) => {
-    const subject = subjectOf(candidate);
+    const subject = candidate.subject;
     return (subject.kind === "card" && !!entry.cardId && subject.cardId === entry.cardId) || (subject.kind === "topic" && !!entry.topicId && subject.topicId === entry.topicId);
   }) ?? null;
   const verify = sessions.find((candidate) => {
-    const subject = subjectOf(candidate);
+    const subject = candidate.subject;
     return subject.kind === "verify" && subject.cardId === entry.cardId && ACTIVE.has(candidate.status);
   }) ?? null;
   let state: ChainState = entry.stage === "todo" ? "queued" : entry.stage === "done" ? "done" : "doing";
@@ -131,8 +130,8 @@ export function plannerWorkers({ sessions, splits, tasks, deviceName }: {
       doing: null, step: null, where: "local", device: deviceName, endedAt: null, costUsd: null, tokens: 0, ask: null, item: null };
   };
   const running = sessions.flatMap((session): Worker[] => {
-    const subject = subjectOf(session);
-    if (subject.kind !== "plan" || (!ACTIVE.has(session.status) && session.status !== "idle")) return [];
+    const subject = session.subject;
+    if (subject.kind !== "plan" || !subject.taskId || (!ACTIVE.has(session.status) && session.status !== "idle")) return [];
     const queued = session.status === "queued";
     return [{ ...base(subject.taskId), key: `plan:${session.id}`, state: queued ? "queued" : "doing", reason: queued ? "slot" : null, mark: queued ? null : localWaitOf(session),
       queuePos: session.queuePosition, model: session.modelLabel, startedAt: session.createdAt, session,

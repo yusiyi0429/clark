@@ -5,7 +5,6 @@
 import type { THomePlanTask } from "@warmap/contracts";
 import type { TLocalCreateSessionRequest, TLocalModelProfile, TLocalSessionSummary } from "./runner";
 import type { LocalRunner } from "./runner";
-import { asCreateRequest } from "./kinds";
 import { cardBrief, patchCard, topicBrief, CloudError } from "@/lib/board/cloud";
 import type { CardItem } from "@/lib/board/cards";
 import { cardRole, localRole, setCardRole, type RoleView } from "@/lib/team/roles";
@@ -65,7 +64,7 @@ export async function startTopic(runner: LocalRunner, topic: { id: string; title
 
 /**
  * 规划员的开工请求（第 21.3 节）：交代是 Task、约定和本人的岗位清单，岗位用团队里叫「规划员」的那个（有的话）。
- * E 的规划交代接口合进来后，firstMessage 和 role 改从它取。
+ * 不给目录时本机给它建一个专用目录。E 的规划交代接口合进来后，firstMessage 和 role 改从它取。
  */
 export function planStartRequest(task: Pick<THomePlanTask, "taskId" | "name" | "criteria" | "doneDefinition">, roles: RoleView[], model: TLocalModelProfile, cwd: string | undefined): TLocalCreateSessionRequest {
   const criteria = task.criteria.length ? task.criteria : task.doneDefinition ? [task.doneDefinition] : [];
@@ -77,6 +76,6 @@ export function planStartRequest(task: Pick<THomePlanTask, "taskId" | "name" | "
     workers.length ? `能派的岗位：${workers.join("、")}` : null,
     "把这个 Task 拆成计划和派活单：每件做什么、对约定第几条、哪个岗位、模型档位。",
   ].filter(Boolean).join("\n\n");
-  return asCreateRequest({ subject: { kind: "plan", taskId: task.taskId }, title: `拆卡：${task.name}`.slice(0, 120), ...(cwd ? { cwd } : {}), modelProfileId: model.id, firstMessage,
-    ...(planner ? { role: localRole(planner) } : {}) });
+  return { subject: { kind: "plan", taskId: task.taskId }, title: `拆卡：${task.name}`.slice(0, 120), ...(cwd ? { cwd } : {}), modelProfileId: model.id, firstMessage,
+    ...(planner ? { role: localRole(planner) } : {}) };
 }

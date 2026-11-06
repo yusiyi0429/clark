@@ -9,7 +9,6 @@ import { createMockRunner } from "@/lib/local/mock";
 import type { TLocalSessionSummary } from "@/lib/local/runner";
 import type { TaskBoard } from "@/lib/board/useTaskBoard";
 import { groupWorkers, isWaiting, plannerWorkers, toWorker, type Worker } from "@/lib/work/workers";
-import { asCreateRequest } from "@/lib/local/kinds";
 import { DispatchBlock, countsText, plannerText } from "./DispatchBlock";
 import { WorkerRow, secondLine } from "./WorkerRow";
 import { placeBlocks } from "./WorkTimeline";
@@ -50,7 +49,7 @@ describe("worker 和链路", () => {
 
   it("交回后本机接的验收员：这一行换成验收员、验收中、资源是本机，回复仍对执行的会话；验收员排队时写等空位", () => {
     const exec = session({ status: "idle" });
-    const verify = (status: TLocalSessionSummary["status"]) => session({ id: "00000000-0000-4000-8000-0000000000a2", subject: { kind: "verify", cardId: "c1" } as unknown as TLocalSessionSummary["subject"],
+    const verify = (status: TLocalSessionSummary["status"]) => session({ id: "00000000-0000-4000-8000-0000000000a2", subject: { kind: "verify", cardId: "c1" },
       status, modelLabel: "订阅 · Haiku", queuePosition: status === "queued" ? 1 : null });
     expect(toWorker(item({}), ctx([exec, verify("running")]))).toMatchObject({ role: { name: "验收员", kind: "reviewer" }, state: "doing", mark: "reviewing", where: "local", model: "订阅 · Haiku", session: { id: exec.id } });
     expect(toWorker(item({}), ctx([exec, verify("queued")]))).toMatchObject({ role: { name: "验收员" }, state: "queued", reason: "slot", queuePos: 1 });
@@ -58,7 +57,7 @@ describe("worker 和链路", () => {
   });
 
   it("规划员：本机的 plan 会话是一行（同一个 Task 的登记不重复列），登记了还没开的是「拆卡 · 等开工」", () => {
-    const plan = session({ id: "00000000-0000-4000-8000-0000000000a3", subject: { kind: "plan", taskId: "t1" } as unknown as TLocalSessionSummary["subject"], status: "running" });
+    const plan = session({ id: "00000000-0000-4000-8000-0000000000a3", subject: { kind: "plan", taskId: "t1" }, status: "running" });
     const splits = [{ id: "s1", taskId: "t1", createdAt: "2026-11-06T04:00:00Z" }, { id: "s2", taskId: "t2", createdAt: "2026-11-06T04:01:00Z" }];
     const tasks = [{ taskId: "t1", name: "派活单", missionId: "m1" }, { taskId: "t2", name: "本机程序", missionId: "m1" }];
     const workers = plannerWorkers({ sessions: [plan], splits, tasks, deviceName: "ThinkPad" });
@@ -196,8 +195,8 @@ describe("假本机程序的排队（同真程序的规矩）", () => {
     const [first, second, planner, verifier] = await Promise.all([
       runner.createSession(card("c1")),
       runner.createSession(card("c2")),
-      runner.createSession(asCreateRequest({ subject: { kind: "plan", taskId: "t1" }, title: "拆卡", firstMessage: "拆" })),
-      runner.createSession(asCreateRequest({ subject: { kind: "verify", cardId: "c0" }, title: "验收", firstMessage: "验" })),
+      runner.createSession({ subject: { kind: "plan", taskId: "t1" }, title: "拆卡", firstMessage: "拆" }),
+      runner.createSession({ subject: { kind: "verify", cardId: "c0" }, title: "验收", firstMessage: "验" }),
     ]);
     const position = async (id: string) => (await runner.listSessions()).find((s) => s.id === id)?.queuePosition;
     expect(first!.status).toBe("starting");
@@ -215,7 +214,7 @@ describe("假本机程序的排队（同真程序的规矩）", () => {
     await vi.advanceTimersByTimeAsync(100);
     await runner.sendMessage(second!.id, "删掉");
     await vi.advanceTimersByTimeAsync(100);
-    const chained = (await runner.listSessions()).find((s) => (s.subject as { kind: string }).kind === "verify" && s.subject.cardId === "c2");
+    const chained = (await runner.listSessions()).find((s) => s.subject.kind === "verify" && s.subject.cardId === "c2");
     expect(chained).toBeDefined();
     vi.useRealTimers();
   });

@@ -105,6 +105,13 @@ export function foldEvent(view: SessionView, event: TLocalSessionEvent): Session
       next.entries = [...view.entries, { kind: "notice", ...base, level: "info", text: `存了${event.label ?? `第 ${event.number} 版`}` }];
       next.lastActivity = { at: event.at, text: `存了${event.label ?? `第 ${event.number} 版`}` };
       return next;
+    case "verdict": {
+      // 本机验收员的结论（验收会话和被验的卡的会话各一条）。
+      const text = `验收${event.passed ? "过了" : event.blocked ? "没过，受阻" : "没过"}：${event.summary}`;
+      next.entries = [...view.entries, { kind: "notice", ...base, level: event.passed ? "info" : "warn", text }];
+      next.lastActivity = { at: event.at, text };
+      return next;
+    }
   }
 }
 
