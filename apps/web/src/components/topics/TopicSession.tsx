@@ -68,7 +68,7 @@ export function TopicSession({ topicId }: { topicId: string }) {
   const { view } = useSessionEvents(local.runner, session?.id ?? null);
   const canAct = canCommand({ ready, handheld, hasSession: !!session });
 
-  if (missing) return <div className={s.gone}><p>没有这个专题</p><Link href="/me/chat">回到对话</Link></div>;
+  if (missing) return <div className={s.gone}><p>没有这个专题</p><Link href="/me/work">回到首页</Link></div>;
   if (!detail) return <div className={s.page} aria-busy />;
 
   const { topic } = detail;
@@ -127,14 +127,14 @@ export function TopicSession({ topicId }: { topicId: string }) {
   return (
     <div className={s.page} data-testid="topic-session">
       <header className={s.head}>
-        <Link href="/me/chat" className={s.back}><ChevronLeft size={14} aria-hidden />{handheld ? null : "对话"}</Link>
+        <Link href="/me/work" className={s.back}><ChevronLeft size={14} aria-hidden />{handheld ? null : "返回"}</Link>
         <div className={s.title}>
           <span className={s.kind} data-kind="topic">专题</span>
           <b>{topic.title}</b>
           {wait ? <span className={s.tag} data-tone={waitTone(wait)}>{WAIT_LABEL[wait]}</span> : <span className={s.tag} data-tone={topic.status === "archived" ? undefined : "ver"}>{topic.status === "archived" ? "已归档" : "进行中"}</span>}
         </div>
         <div className={s.exec}>
-          {detail.task ? <Link href={`/me/month/tasks/${encodeURIComponent(detail.task.taskId)}`} className={s.link}>{detail.task.name}</Link> : null}
+          {detail.task ? <Link href={`/me/work/tasks/${encodeURIComponent(detail.task.taskId)}`} className={s.link}>{detail.task.name}</Link> : null}
           {!handheld ? <HeroButton variant="ghost" size="sm" onPress={() => void archive()}>{topic.status === "archived" ? "取消归档" : "归档"}</HeroButton> : null}
         </div>
       </header>

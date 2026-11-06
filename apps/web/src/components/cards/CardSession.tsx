@@ -22,10 +22,12 @@ import { overrule, retryAcceptance } from "@/lib/board/cloud";
 import { cardRole } from "@/lib/team/roles";
 import { useAutoReturn } from "@/lib/board/useAutoReturn";
 import { showWorkspaceToast } from "@/lib/toast";
-import { taskHref } from "@/components/board/MonthLanes";
 import { SessionComposer, SessionTranscript } from "./SessionTranscript";
 import { useCardDetail, type CardDetail } from "./useCardDetail";
 import s from "@/styles/v2-session.module.css";
+
+/** 回到新首页，锚着这张卡的 Task（V2 设计第 20.4 节；没打开新首页的人会被带回老首页）。 */
+const workHref = (taskId: string | null) => (taskId ? `/me/work/tasks/${encodeURIComponent(taskId)}` : "/me/work");
 
 const VERDICT: Record<string, string> = { met: "达到", partial: "部分", unmet: "未达到" };
 const money = (usd: number | null) => (usd === null ? null : `约 $${usd.toFixed(usd < 1 ? 3 : 2)}`);
@@ -64,7 +66,7 @@ export function CardSession({ cardId }: { cardId: string }) {
   const wait = session ? localWait(view) ?? card.wait : card.wait;
   const stage = card.stage;
   const taskId = item.planTaskId;
-  const backHref = taskId ? taskHref(taskId) : "/me/month";
+  const backHref = workHref(taskId);
   const sessionRunning = session ? running(view.status ?? session.status) : false;
 
   const decide = async (requestId: string, decision: "allow" | "deny", forSession: boolean) => {
@@ -110,7 +112,7 @@ export function CardSession({ cardId }: { cardId: string }) {
   return (
     <div className={s.page} data-testid="card-session">
       <header className={s.head}>
-        <Link href={backHref} className={s.back}><ChevronLeft size={14} aria-hidden />{handheld ? null : item.planTaskId ? "Task" : "本月"}</Link>
+        <Link href={backHref} className={s.back}><ChevronLeft size={14} aria-hidden />{handheld ? null : "返回"}</Link>
         <div className={s.title}>
           <span className={s.kind} data-kind="card">执行事项</span>
           <b>{item.title}</b>
@@ -175,7 +177,7 @@ function ResultPane({ detail, view, canAct, wait, stage, handheld, ready, onStar
     <>
       <div className={s.brief}>
         <p className={s.lab}>交代</p>
-        {item.planTaskId ? <Link href={taskHref(item.planTaskId)} className={s.link}>{item.mission?.title ? `${item.mission.title} › ` : ""}Task</Link> : null}
+        {item.planTaskId ? <Link href={workHref(item.planTaskId)} className={s.link}>{item.mission?.title ? `${item.mission.title} › ` : ""}Task</Link> : null}
         {item.card?.criterion ? <div className={s.meta}><span className={s.crit}>{circled(item.card.criterion.index)}</span><span>{item.card.criterion.text}</span></div> : null}
         {detail.brief ? <p className={s.text}>{detail.brief}</p> : null}
         {agent && (role || model || run?.modelLabel) ? <div className={s.meta}>{role ? <span className={s.ex}><i>&gt;_</i>{role.name}</span> : null}<span>{model ?? run?.modelLabel}</span></div> : null}
