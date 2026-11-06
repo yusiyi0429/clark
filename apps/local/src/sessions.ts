@@ -40,10 +40,8 @@ interface SessionRecord {
   syncSeq: number;
   /** 本会话的本机 MCP（交产出物、证据、交回）回连本机程序时出示的密钥。 */
   mcpSecret: string;
-  /** 交过的产出和证据：编号（A1、E1）给执行方点名用，key 是它们的同步条目幂等键。 */
-  outputs: { ref: string; key: string; title: string }[];
-  /** 上一次交回时已交到第几份（没点名时，交回算的是这之后的全部）。 */
-  handedBack: number;
+  /** 交过的产出和证据：编号（A1、E1）给执行方点名用，key 是它们的同步条目幂等键；产出物带 artifactId（同一个文件再交是新一版）。 */
+  outputs: { ref: string; key: string; title: string; artifactId?: string }[];
   /** 专题：最近一版的号（开工时取交代里的 latestVersion）。 */
   versionNumber: number;
   /** 专题：本会话最近存的正文一版（提纲、草稿；评审会读它，评审版不算）。 */
@@ -122,7 +120,7 @@ export class SessionManager {
       const rec = readJson<SessionRecord | null>(join(this.dir, id, "session.json"), null);
       if (!rec) continue;
       rec.outputs ??= [];
-      rec.handedBack ??= 0;
+      Reflect.deleteProperty(rec, "handedBack"); // 旧版本记录里的字段，交回已不按它算
       rec.versionNumber ??= 0;
       rec.lastVersion ??= null;
       rec.role ??= null;
@@ -144,7 +142,7 @@ export class SessionManager {
   }
 
   private summary(rec: SessionRecord): TLocalSessionSummary {
-    const { mcpSecret: _s, syncSeq: _q, outputs: _o, handedBack: _h, versionNumber: _v, lastVersion: _l, role: _r, critics: _c, queuedMessage: _m, queueOrder: _n, ...rest } = rec;
+    const { mcpSecret: _s, syncSeq: _q, outputs: _o, versionNumber: _v, lastVersion: _l, role: _r, critics: _c, queuedMessage: _m, queueOrder: _n, ...rest } = rec;
     return { ...rest, lastSeq: this.d.log.lastSeq(rec.id), pendingPermissions: this.pending.get(rec.id)?.size ?? 0, queuePosition: this.queuePosition(rec) };
   }
 
@@ -291,7 +289,7 @@ export class SessionManager {
       id: randomUUID(), subject, title: req.title, agent, modelProfileId: model.profileId, modelLabel: model.label, cwd,
       includePersonalConfig: req.includePersonalConfig ?? defaults.includePersonalConfig,
       createdAt: now, updatedAt: now, status: "starting", usage: zeroUsage(), syncSeq: 0, mcpSecret: randomBytes(24).toString("hex"),
-      outputs: [], handedBack: 0, versionNumber: subject.kind === "topic" ? req.versionBase ?? 0 : 0, lastVersion: null,
+      outputs: [], versionNumber: subject.kind === "topic" ? req.versionBase ?? 0 : 0, lastVersion: null,
       role: req.role ?? null, critics: req.critics ?? [], queuedMessage: null, queueOrder: 0,
     };
     // 满了（或前面还有人在排）就进队，先来先跑；有空位时 pump 接上。
@@ -552,7 +550,7 @@ export class SessionManager {
     const title = (input.title?.trim() || fileName).slice(0, 200);
     this.emit(rec, { type: "artifact", artifactId, title, fileName, size, sha256 });
     const key = this.sync(rec, { type: "artifact", data: { artifactId, title, fileName, mimeType, size, sha256, contentBase64: content.toString("base64") } });
-    const ref = this.remember(rec, "A", key, title);
+    const ref = this.remember(rec, "A", key, title, artifactId);
     return `已交：${title}（${Math.ceil(size / 1024)} KB），编号 ${ref}`;
   }
 
@@ -567,14 +565,17 @@ export class SessionManager {
     return `已记下这条证据，编号 ${ref}`;
   }
 
-  private remember(rec: SessionRecord, prefix: "A" | "E", key: string, title: string): string {
+  private remember(rec: SessionRecord, prefix: "A" | "E", key: string, title: string, artifactId?: string): string {
     const ref = `${prefix}${rec.outputs.filter((o) => o.ref.startsWith(prefix)).length + 1}`;
-    rec.outputs.push({ ref, key, title });
+    rec.outputs.push({ ref, key, title, ...(artifactId ? { artifactId } : {}) });
     this.save(rec);
     return ref;
   }
 
-  /** 交回：outputs 是点名的编号（A1、E1）；不点名就是上一次交回以后交的全部。 */
+  /**
+   * 交回：outputs 是点名的编号（A1、E1）；不点名就是本会话交过的全部，同一个文件交过几次只算最新一版。
+   * 验收没过、改完再交回时，没改的产出也照样在里面（原来只算上一次交回以后的，会漏掉）。
+   */
   handBack(id: string, input: { summary: string; criteria: TLocalHandbackCriterion[]; outputs?: string[] }): string {
     const rec = this.must(id);
     if (rec.subject.kind !== "card") throw new SessionError("validation", "专题不用交回，用 save_version 存版本");
@@ -584,12 +585,12 @@ export class SessionManager {
       if (unknown.length) throw new SessionError("validation", `没有这些编号：${unknown.join("、")}。可用的：${rec.outputs.map((o) => o.ref).join("、") || "（还没交过产出和证据）"}`);
       picked = rec.outputs.filter((o) => input.outputs!.some((r) => r.trim().toUpperCase() === o.ref));
     } else {
-      picked = rec.outputs.slice(rec.handedBack);
+      const latest = new Map(rec.outputs.filter((o) => o.artifactId).map((o) => [o.artifactId!, o.ref]));
+      picked = rec.outputs.filter((o) => !o.artifactId || latest.get(o.artifactId) === o.ref);
     }
     const summary = input.summary.slice(0, 4000);
     const criteria = input.criteria.slice(0, 50);
     const outputKeys = picked.slice(0, 100).map((o) => o.key);
-    rec.handedBack = rec.outputs.length;
     this.emit(rec, { type: "handback", summary, criteria, outputKeys });
     this.sync(rec, { type: "handback", data: { summary, criteria, outputKeys } });
     return `已交回（用了 ${picked.map((o) => o.ref).join("、") || "0 份产出和证据"}），等 Agent 验收`;

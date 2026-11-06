@@ -43,7 +43,7 @@ const HAND_BACK = {
           required: ["index", "result", "evidence"],
         },
       },
-      outputs: { type: "array", items: { type: "string" }, description: "用到的产出和证据的编号（add_artifact、add_evidence 返回的 A1、E1 等）。不填就是上次交回以后交的全部。" },
+      outputs: { type: "array", items: { type: "string" }, description: "用到的产出和证据的编号（add_artifact、add_evidence 返回的 A1、E1 等）。不填就是本会话交过的全部（同一个文件交过几次只算最新一版）。" },
     },
     required: ["summary", "criteria"],
   },

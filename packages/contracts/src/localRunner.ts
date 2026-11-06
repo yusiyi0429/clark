@@ -492,7 +492,7 @@ export const LocalSyncItem = Type.Union([
   }, strict)),
   /**
    * 交回（只有卡）。outputKeys 是这次交回点名用的产出和证据（它们的 artifact、evidence 条目的 key）：
-   * 执行方点了名就是那几份，没点名就是本会话上一次交回以后交的全部；可以为空。
+   * 执行方点了名就是那几份，没点名就是本会话交过的全部（同一个产出物交过几次只算最新一版）；可以为空。
    */
   syncItem("handback", Type.Object({
     summary: Type.String({ maxLength: 4000 }),
