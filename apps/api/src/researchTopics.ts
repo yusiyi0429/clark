@@ -34,7 +34,7 @@ async function topicViews(q: Query, rows: TopicRow[]): Promise<TResearchTopicVie
   const ids = rows.map((row) => row.id);
   const latest = new Map(ids.length ? ((await q(`SELECT DISTINCT ON (topic_id) topic_id,number,kind,label FROM topic_versions WHERE topic_id=ANY($1::uuid[])
     ORDER BY topic_id,number DESC`, [ids])).rows as LatestRow[]).map((row) => [row.topic_id, row]) : []);
-  const runs = await latestRuns(q, "topic_id", ids);
+  const runs = await latestRuns(q, "topic_id", ids, "topic");
   const roles = await rolesById(q, rows.map((row) => row.role_id));
   return rows.map((row) => {
     const version = latest.get(row.id), run = runs.get(row.id), role = row.role_id ? roles.get(row.role_id) : undefined;

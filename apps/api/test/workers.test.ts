@@ -94,4 +94,59 @@ describe("worker 列表", { timeout: 30_000 }, () => {
       expect((await internal({ authorization: "Bearer wrong", "x-owner-id": TEST_MEMBER.personId })).statusCode).toBe(401);
     } finally { await f.close(); }
   });
+
+  it("本机的规划员、验收员也是 worker（第 21 节，云端验收关着）：从同步上来的会话列，带岗位、本机和模型、排第几；验收员写明在验哪张卡，本机还没起时等开工或等本机上线", async () => {
+    const f = await boardFixture({}, { boardCloudAgents: false });
+    try {
+      const dev = (await f.call("POST", "/api/me/roles", { name: "开发", family: "dev", kind: "worker" })).json();
+      const withRole = async (title: string) => {
+        const id = await f.card(title);
+        await f.call("PATCH", `/api/me/cards/${id}`, { version: 1, roleId: dev.id, executor: "claude_code" });
+        return id;
+      };
+      const [checking, waiting, offline] = [await withRole("在验的卡"), await withRole("等验的卡"), await withRole("那台电脑交的卡")];
+      const laptop = await f.local("我的电脑", { max: 2, running: 2, queued: 1 });
+      const desktop = await f.local("另一台");
+      for (const card of [checking, waiting]) await laptop.handBack(card);
+      await desktop.handBack(offline);
+      await f.t.sql("UPDATE local_devices SET last_sync_at=$2 WHERE id=$1", [desktop.device, new Date(BOARD_NOW.getTime() - 60 * 60_000)]);
+      const keyOf = async (card: string) => (await f.t.sql("SELECT client_id FROM card_handbacks WHERE task_id=$1", [card]))[0].client_id as string;
+
+      // 本机交回以后起了验收员（在交回之后开的会话）；还有一个规划员在跑、一个规划员等空位。
+      const verify = await laptop.send({ kind: "verify", cardId: checking, handbackKey: await keyOf(checking) } as never, [status("running", "验收"),
+        ["cost", { modelLabel: "订阅 · Opus", usage: { inputTokens: 300, outputTokens: 40, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0.1 } }]]);
+      const planning = await laptop.send({ kind: "plan", taskId: "task-open" } as never, [["status", { status: "running", title: "拆卡", agent: "claude-code", modelLabel: "订阅 · Opus" }],
+        ["plan", { entries: [{ content: "读约定", status: "completed" }, { content: "出派活单", status: "in_progress" }], progress: { done: 1, total: 2, step: 2, current: "出派活单" } }]]);
+      const queued = await laptop.send({ kind: "plan", taskId: "task-theirs" } as never, [status("queued", "拆卡")]);
+      for (const [run, minute] of [[verify, 10], [planning, 20], [queued, 30]] as const)
+        await f.t.sql("UPDATE local_runs SET started_at=$2 WHERE id=$1", [run, new Date(Date.UTC(2026, 10, 6, 3, minute))]);
+
+      const body = (await f.call("GET", "/api/me/workers")).json();
+      const all = [...body.running, ...body.queued, ...body.done];
+      const byKey = (key: string) => all.find((entry: { key: string }) => entry.key === key);
+      expect(byKey(`verify:${checking}`)).toMatchObject({ kind: "verify", cardId: checking, title: "在验的卡", role: { name: "验收员", kind: "reviewer" },
+        task: { id: "task-open", name: "对话质量达标" }, mission: { id: "mine", title: "内部版上线" }, stage: "review", wait: null, queueReason: null,
+        resource: { where: "local", deviceId: laptop.device, deviceName: "我的电脑", modelLabel: "订阅 · Opus" }, startedAt: "2026-11-06T03:10:00.000Z",
+        cost: { inputTokens: 300, outputTokens: 40, costUsd: 0.1, costCny: null } });
+      expect(byKey(`plan:${planning}`)).toMatchObject({ kind: "plan", cardId: null, topicId: null, title: "对话质量达标", role: { name: "规划员" },
+        task: { id: "task-open", name: "对话质量达标" }, mission: { id: "mine", title: "内部版上线" }, stage: "doing", step: { n: 2, total: 2, label: "出派活单" },
+        resource: { where: "local", deviceName: "我的电脑", modelLabel: "订阅 · Opus" }, queueReason: null });
+      expect(byKey(`plan:${queued}`)).toMatchObject({ kind: "plan", title: "别人负责的", queueReason: "slot", queuePosition: 1 });
+      // 本机还没起验收员：交回的那台电脑在线是等开工，不在线是等本机上线；都不算云端的验收员。
+      expect(byKey(`verify:${waiting}`)).toMatchObject({ kind: "verify", cardId: waiting, queueReason: "not_dispatched", cost: null,
+        resource: { where: "local", deviceName: "我的电脑", modelLabel: null } });
+      expect(byKey(`verify:${offline}`)).toMatchObject({ kind: "verify", queueReason: "device_offline", resource: { deviceName: "另一台" } });
+      expect(body.running.map((entry: { key: string }) => entry.key).sort()).toEqual([`plan:${planning}`, `verify:${checking}`].sort());
+      expect(body.queued.map((entry: { key: string }) => entry.key).sort()).toEqual([`plan:${queued}`, `verify:${offline}`, `verify:${waiting}`].sort());
+      expect(all.some((entry: { resource: { where: string } | null }) => entry.resource?.where === "cloud")).toBe(false);
+      // 验收员的会话不算卡自己的执行：卡的花费里没有它。
+      expect((await f.call("GET", `/api/me/cards/${checking}`)).json().runs.map((run: { id: string }) => run.id)).not.toContain(verify);
+
+      // 验收员交了结论以后卡不在验收中，这一行就没了。
+      await laptop.send({ kind: "verify", cardId: checking, handbackKey: await keyOf(checking) } as never, [["verdict", { passed: true, summary: "都对上", beyondScope: [],
+        criteria: [1, 2].map((index) => ({ index, verdict: "met", reason: "有", evidence: null, fix: null })), modelLabel: "订阅 · Opus", roleId: null, roleVersion: null }]]);
+      const after = (await f.call("GET", "/api/me/workers")).json();
+      expect([...after.running, ...after.queued].map((entry: { key: string }) => entry.key)).not.toContain(`verify:${checking}`);
+    } finally { await f.close(); }
+  });
 });

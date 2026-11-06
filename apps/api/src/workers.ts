@@ -1,14 +1,16 @@
 import type { TLocalRunPlanProgress, TLocalSlots, TWorkerCost, TWorkerItem, TWorkerMark, TWorkersResponse } from "@warmap/contracts";
 import { ownMissions, planTaskMissions } from "./homePlan.js";
-import { latestRuns, runBrief } from "./localDevices.js";
+import { latestRuns, RUN_SELECT, runBrief, type RunRow } from "./localDevices.js";
 import type { Query } from "./meetingStore.js";
 import { companyPeriod } from "./monthlyPlans.js";
 import { readPlanTasks, type PlanTaskSource } from "./planTasks.js";
-import { reviewerRole, roleRef, rolesById } from "./roles.js";
+import { plannerRole, reviewerRole, roleRef, rolesById } from "./roles.js";
 import { cardTaskViews } from "./taskCards.js";
 
 /**
- * worker 列表（V2 设计第 20 节）：本人所有 worker（带岗位的卡、带岗位的专题），跨 Task 分进行中、已排队、已完成（今天），加资源摘要。
+ * worker 列表（V2 设计第 20 节）：本人所有 worker（带岗位的卡、带岗位的专题、本机的规划员和验收员会话），跨 Task 分进行中、已排队、已完成（今天），加资源摘要。
+ * 规划员、验收员（第 21 节）从本机同步上来的 plan、verify 会话来：手机和别的电脑上没有本机程序，也看得到本机在跑什么。
+ * 验收中的卡：本机起了验收员就列那个会话；没起时云端验收开着（cloudAgents）照旧算云端的验收员，关着算等本机。
  * 没有岗位的执行事项是人自己的活，不算。#号读的时候算：本人列出来的同一岗位的 worker 按开工时间排。
  * 卡在验收中时干活的是云端的验收员。设备 10 分钟内上报过算在线；本机的执行还没结束、但设备不在线的，算「等本机上线」；
  * 本机报 queued 的是「等空位」，排第几和本机程序一样：这台电脑上等空位的按开工先后排。资源的 running、cap 取在线设备最近一批报的 slots。
@@ -33,7 +35,7 @@ const byStart = (a: { startedAt: string | null; key: string }, b: { startedAt: s
 
 type Draft = Omit<TWorkerItem, "workerNo"> & { group: "running" | "queued" | "done" };
 
-export async function listWorkers(deps: { q: Query; planTasks: PlanTaskSource; now: Date; names: Map<string, string>; reviewModel: string },
+export async function listWorkers(deps: { q: Query; planTasks: PlanTaskSource; now: Date; names: Map<string, string>; reviewModel: string; cloudAgents: boolean },
   ownerId: string): Promise<TWorkersResponse> {
   const { q, now } = deps;
   const devices = (await q("SELECT id::text,name,last_sync_at,slots FROM local_devices WHERE owner_id=$1 AND revoked_at IS NULL ORDER BY created_at", [ownerId])).rows as
@@ -54,26 +56,48 @@ export async function listWorkers(deps: { q: Query; planTasks: PlanTaskSource; n
   const cards = await cardTaskViews(q, cardRows.map((row) => row.id), deps.names);
   const cardCosts = new Map(cardRows.length ? ((await q(`SELECT task_id::text AS id,${COST_SUM} FROM local_runs WHERE task_id=ANY($1::uuid[]) AND kind='card' GROUP BY task_id`,
     [cardRows.map((row) => row.id)])).rows as (CostRow & { id: string })[]).map((row) => [row.id, costOf(row)]) : []);
-  const reviewer = cards.some((card) => card.card.stage === "review") ? await reviewerRole(q, ownerId) : null;
+  const reviewing = cards.filter((card) => card.card.stage === "review");
+  const reviewer = reviewing.length ? await reviewerRole(q, ownerId) : null;
+  const verifyRuns = await latestRuns(q, "task_id", reviewing.map((card) => card.id), "verify");
+
+  // 本机的规划员：还没结束的 plan 会话。
+  const planRuns = (await q(`${RUN_SELECT} WHERE r.owner_id=$1 AND r.kind='plan' AND r.state=ANY($2::text[]) ORDER BY r.started_at,r.id`,
+    [ownerId, [...ACTIVE]])).rows as RunRow[];
+  const planner = planRuns.length ? await plannerRole(q, ownerId) : null;
 
   // 专题：带岗位、没归档的。
   const topics = (await q("SELECT id::text,title,role_id::text,plan_task_id,mission_id FROM research_topics WHERE owner_id=$1 AND role_id IS NOT NULL AND status='active'",
     [ownerId])).rows as { id: string; title: string; role_id: string; plan_task_id: string | null; mission_id: string | null }[];
-  const topicRuns = await latestRuns(q, "topic_id", topics.map((topic) => topic.id));
+  const topicRuns = await latestRuns(q, "topic_id", topics.map((topic) => topic.id), "topic");
   const topicRoles = await rolesById(q, topics.map((topic) => topic.role_id));
   const topicCosts = new Map(topics.length ? ((await q(`SELECT topic_id::text AS id,${COST_SUM} FROM local_runs WHERE topic_id=ANY($1::uuid[]) GROUP BY topic_id`,
     [topics.map((topic) => topic.id)])).rows as (CostRow & { id: string })[]).map((row) => [row.id, costOf(row)]) : []);
 
-  // Task 名字（本人这个月的 Task，读不到时写 id）和 Mission 名字。
-  const missionIds = [...new Set([...cardRows.map((row) => row.mission_id), ...topics.map((topic) => topic.mission_id)].filter((id): id is string => Boolean(id)))];
+  // Task 名字（本人这个月的 Task，读不到时写 id）和 Mission 名字（规划员的 Mission 取它拆的那个 Task 的）。
+  const hasTasks = [...cardRows, ...topics, ...planRuns].some((row) => row.plan_task_id);
+  const planTasks = new Map(hasTasks ? (await readPlanTasks(deps.planTasks, planTaskMissions((await ownMissions(q, ownerId, companyPeriod(now))).rows)))
+    .map((task) => [task.taskId, task]) : []);
+  const missionIds = [...new Set([...cardRows.map((row) => row.mission_id), ...topics.map((topic) => topic.mission_id),
+    ...planRuns.map((run) => planTasks.get(run.plan_task_id!)?.missionId ?? null)].filter((id): id is string => Boolean(id)))];
   const missions = new Map(missionIds.length ? ((await q("SELECT id,title FROM missions WHERE id=ANY($1::text[])", [missionIds])).rows as { id: string; title: string }[])
     .map((row) => [row.id, row.title]) : []);
-  const hasTasks = [...cardRows, ...topics].some((row) => row.plan_task_id);
-  const taskNames = new Map(hasTasks ? (await readPlanTasks(deps.planTasks, planTaskMissions((await ownMissions(q, ownerId, companyPeriod(now))).rows)))
-    .map((task) => [task.taskId, task.name]) : []);
-  const taskOf = (id: string | null) => id ? { id, name: taskNames.get(id) ?? id } : null;
+  const taskOf = (id: string | null) => id ? { id, name: planTasks.get(id)?.name ?? id } : null;
   const missionOf = (id: string | null) => id ? { id, title: missions.get(id) ?? "" } : null;
   const step = (plan: TLocalRunPlanProgress | null) => plan?.current ? { n: plan.step, total: plan.total, label: plan.current } : null;
+  /**
+   * 本机一个会话（专题、规划员、验收员）在列表里的那几样：那台电脑不在线算等本机上线，本机报 queued 算等空位（带排第几）；
+   * 等批准、等回复照会话状态；会话停了（exited、failed）算已暂停。
+   */
+  const session = (run: RunRow) => {
+    const brief = runBrief(run);
+    const queueReason = ACTIVE.has(run.state) && !online.has(run.device_id) ? "device_offline" as const : isQueued(run.state) ? "slot" as const : null;
+    const wait: TWorkerMark | null = queueReason ? null : run.state === "waiting_permission" ? "approval" : run.state === "idle" ? "reply" : ACTIVE.has(run.state) ? null : "paused";
+    return { group: queueReason ? "queued" as const : "running" as const, step: step(brief.plan),
+      resource: { where: "local" as const, deviceId: brief.deviceId, deviceName: brief.deviceName, modelLabel: brief.modelLabel },
+      startedAt: brief.startedAt, elapsedSeconds: elapsed(brief.startedAt), finishedAt: null,
+      cost: { inputTokens: brief.cost.inputTokens, outputTokens: brief.cost.outputTokens, costUsd: brief.cost.costUsd, costCny: null },
+      wait, needsYou: wait !== null && NEEDS_YOU.has(wait), queueReason, queuePosition: queueReason === "slot" ? positions.get(run.id) ?? null : null };
+  };
 
   const drafts: Draft[] = [];
   for (const card of cards) {
@@ -96,10 +120,22 @@ export async function listWorkers(deps: { q: Query; planTasks: PlanTaskSource; n
         elapsedSeconds: elapsed(run?.startedAt ?? null, row.finished_at ?? now), finishedAt: row.finished_at?.toISOString() ?? null, wait: null, needsYou: false,
         queueReason: null, queuePosition: null });
     } else if (card.card.stage === "review") {
-      const startedAt = card.card.handback?.createdAt ?? null;
-      drafts.push({ ...base, group: "running", role: reviewer ? roleRef(reviewer) : role, step: null,
-        resource: { where: "cloud", deviceId: null, deviceName: null, modelLabel: deps.reviewModel }, startedAt, elapsedSeconds: elapsed(startedAt), finishedAt: null,
+      const verifier = reviewer ? roleRef(reviewer) : role;
+      const handedBack = card.card.handback?.createdAt ?? null;
+      // 本机为这次交回起的验收员（交回以后开的那个会话）。
+      const verifyRun = verifyRuns.get(card.id);
+      const current = verifyRun && handedBack && verifyRun.started_at.getTime() >= Date.parse(handedBack) ? verifyRun : undefined;
+      const verify = { ...base, key: `verify:${card.id}`, kind: "verify" as const, role: verifier };
+      if (current) drafts.push({ ...verify, ...session(current) });
+      else if (deps.cloudAgents) drafts.push({ ...base, group: "running", role: verifier, step: null,
+        resource: { where: "cloud", deviceId: null, deviceName: null, modelLabel: deps.reviewModel }, startedAt: handedBack, elapsedSeconds: elapsed(handedBack), finishedAt: null,
         wait: "reviewing", needsYou: false, queueReason: null, queuePosition: null });
+      else {
+        // 本机还没起验收员：交回的那台电脑在线是等开工，不在线是等本机上线。
+        const queueReason = run && online.has(run.deviceId) ? "not_dispatched" as const : "device_offline" as const;
+        drafts.push({ ...verify, group: "queued", step: null, resource: run ? { where: "local", deviceId: run.deviceId, deviceName: run.deviceName, modelLabel: null } : null,
+          startedAt: null, elapsedSeconds: null, finishedAt: null, cost: null, wait: null, needsYou: false, queueReason, queuePosition: null });
+      }
     } else {
       const active = Boolean(run && ACTIVE.has(run.state));
       const queueReason = run && active && !online.has(run.deviceId) ? "device_offline" as const : run && isQueued(run.state) ? "slot" as const : null;
@@ -120,13 +156,14 @@ export async function listWorkers(deps: { q: Query; planTasks: PlanTaskSource; n
         queueReason: "not_dispatched", queuePosition: null });
       continue;
     }
-    const brief = runBrief(run);
-    const queueReason = !online.has(run.device_id) ? "device_offline" as const : isQueued(run.state) ? "slot" as const : null;
-    const wait: TWorkerMark | null = queueReason ? null : run.state === "waiting_permission" ? "approval" : run.state === "idle" ? "reply" : null;
-    drafts.push({ ...base, group: queueReason ? "queued" : "running", step: step(brief.plan),
-      resource: { where: "local", deviceId: brief.deviceId, deviceName: brief.deviceName, modelLabel: brief.modelLabel }, startedAt: brief.startedAt,
-      elapsedSeconds: elapsed(brief.startedAt), stage: "doing", wait, needsYou: wait !== null && NEEDS_YOU.has(wait), queueReason,
-      queuePosition: queueReason === "slot" ? positions.get(run.id) ?? null : null });
+    const { cost: _cost, ...rest } = session(run);
+    drafts.push({ ...base, ...rest, stage: "doing" });
+  }
+  for (const run of planRuns) {
+    if (!planner) break;
+    const task = taskOf(run.plan_task_id)!;
+    drafts.push({ key: `plan:${run.id}`, kind: "plan", cardId: null, topicId: null, title: task.name, role: roleRef(planner), task,
+      mission: missionOf(planTasks.get(task.id)?.missionId ?? null), stage: "doing", ...session(run) });
   }
 
   // #号：同一岗位按开工时间排（等开工的排在后面）。

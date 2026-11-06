@@ -10,7 +10,7 @@ v0.2 · 2026-11-06 · 分支 `claude/v2-board-api`。设计以 `.scratch/next-ph
 
 | 做了 | 没做 |
 |-|-|
-| 契约（`packages/contracts`）、迁移 226–234、看板与卡、拆卡、Agent 验收与推翻、准备中与出下一版、调研专题、岗位与岗位修改、worker 列表、设备令牌与同步接收端、`web_search`、Task 页带进对话（`page` 兜底）；第 21 节：`card_plan`/`verdict` 接收、登记拆卡、规划员和验收员的交代、`get_task_context`、云端两个作业的开关 | 网页（apps/web，另一会话）；本机程序（apps/local，另一会话）；规划员、验收员会话进 worker 列表（本机程序那边出，云端列表还没有这两种） |
+| 契约（`packages/contracts`）、迁移 226–234、看板与卡、拆卡、Agent 验收与推翻、准备中与出下一版、调研专题、岗位与岗位修改、worker 列表、设备令牌与同步接收端、`web_search`、Task 页带进对话（`page` 兜底）；第 21 节：`card_plan`/`verdict` 接收、登记拆卡、规划员和验收员的交代、`get_task_context`、云端两个作业的开关 | 网页（apps/web，另一会话）；本机程序（apps/local，另一会话） |
 
 ## 2. 代码在哪
 
@@ -100,7 +100,9 @@ V1（约定）用 225，不冲突。
 ## 10. worker 列表
 
 - `GET /api/me/workers`；伙伴用 `GET /internal/me/workers`（服务令牌 + `X-Owner-Id`，人不存在 404）。
-- 只算带岗位的卡和专题。分组：进行中（等你的在前，再按开工时间）、已排队（等开工 `not_dispatched`、等空位 `slot`、等本机上线 `device_offline`）、已完成（今天，上海时间）。验收中的卡在进行中，干活的是云端的验收员。
+- 只算带岗位的卡和专题，加本机同步上来的规划员、验收员会话（第 21 节，手机和别的电脑上没有本机程序也看得到）。分组：进行中（等你的在前，再按开工时间）、已排队（等开工 `not_dispatched`、等空位 `slot`、等本机上线 `device_offline`）、已完成（今天，上海时间）。
+- 规划员：还没结束的 `plan` 会话，`kind=plan`、key `plan:<会话 id>`，title 和 task 是它拆的 Task，岗位取本人的规划员（没有用预设）。
+- 验收中的卡：本机为这次交回起了验收员（交回以后开的 `verify` 会话）就列那个会话，`kind=verify`、key `verify:<卡 id>`、`cardId` 是被验的卡，会话停了没交结论算已暂停；没起时，云端验收开着照旧算云端的验收员（`kind=card`、`resource.where=cloud`），关着算已排队（交回的那台电脑在线是等开工，不在线是等本机上线）。验收员会话的花费记在它自己那一行，不算进卡。
 - `step` 取本机报的 `progress`（n = `step`，label = `current`）；`queuePosition` 是这台电脑上等空位的会话按开工先后排第几，和本机程序的 `queuePosition` 同义。
 - 资源：设备 10 分钟内同步过算在线；`running`、`cap` 是在线设备最近一批 `slots` 的 `running`、`max` 相加（没有在线设备报过时 `cap` 为 null）；花费按开工日算今天、本月，只算本机报的。
 
