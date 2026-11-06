@@ -77,7 +77,7 @@ claude -p --input-format stream-json --output-format stream-json --verbose
   --settings {"skipWebFetchPreflight":true
               [,"claudeMdExcludes":["<主目录>/.claude/**","<主目录>/CLAUDE.md","<主目录>/CLAUDE.local.md"]]（干净会话）
               [,"env":{ANTHROPIC_BASE_URL,ANTHROPIC_MODEL,ANTHROPIC_DEFAULT_HAIKU_MODEL}（网关）]}
-  [--model <订阅时选的模型>]
+  [--model <配置里写的模型，没写按档位> --effort <按档位>]   # 订阅才传（第 6 节「订阅额度」）
   --append-system-prompt-file <sessions/<id>/system.md>   # 工作规矩 + 岗位（ADR 0037）
   [--agents <sessions/<id>/agents.json>]                 # 专题的挑刺子 agent
   [--plugin-dir <数据目录/plugins/tianshu-feishu>]        # 岗位要飞书时
@@ -97,6 +97,8 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
 - **登录失效**：看到 `authentication_failed`（`assistant.error` 或 `system/api_retry`）或 `api_error_status 401`，出 `notice: auth_required`，第一次就停，不等它重试十次；`result.subtype` 这时仍是 `success`，要看 `is_error`。
 - **模型服务出错**：每次 `system/api_retry` 马上出 `notice: api_retry`（「连不上模型服务…正在重试（第 1/2 次）」），不等最后失败；这一轮最终出错时 `turn_end.errorKind = api`（拒连、超时没有状态码，靠这一轮重试过判断）。网关模型重试 2 次、等响应头 40 秒：回 500 或拒连约 3 秒报错，连上不回约 40 秒出第一条提示、约 2 分钟失败（附录 G）。订阅保留 Claude Code 默认（重试 10 次）。
 - **搜索没生效**：WebSearch 的 `tool_use_result.searchCount === 0` 时出 `notice: search_not_effective`（部分网关模型不支持服务端搜索，还会编结果，附录 D）。
+- **订阅额度用完（11/07）**：`rate_limit_event`（额度的百分比、重置时间、状态变了才来）不进事件流，交给本机记额度。用完时 Claude Code 先报 `rejected`，再补一条 `assistant`（`error: rate_limit`、`api_error: usage_limit_reached`，文字会变，不看文字），最后 `result` 是 429 的 `is_error`，也可能不交 result 直接以退出码 1 退出（claude-code#103820）；这一轮 `turn_end.errorKind = usage_limit`（只认订阅模型）。这一串没真机复现过，照社区复现和 Claude Code 程序里的字符串（主会话 11/07 的调研）。进程退出时等 stdout 读完再报退出（最多 1 秒），免得退出前最后几行丢掉。
+- **本轮花费**：只算官方模型按标价算的（`model_usage_since_last_result` 里 `costBasis: list`；没有这个字段的旧版本照算）。网关模型是 `costBasis: unknown`，Claude Code 按 Opus 价瞎算（DeepSeek 高估约 17 倍），不要，`costUsd` 为 null，真钱由本机按价目表估（第 6 节）。
 
 ## 6. 会话
 
@@ -140,7 +142,17 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
 - 不是 git 仓库（或不在分支上、没有提交）：在文件夹里做（`workspace.kind = folder`），同一个文件夹同时只做一张卡，另一张占着位置时排队（状态事件的原因说明），那张一轮做完就让出来。
 - 用真的临时 git 仓库测两张卡同时做、交回提交、验收员只看到这张卡的改动、合回四种结果、不是仓库时排队、清理和重启时的 prune（`test/worktree.test.ts`）。
 - 工作树里不用问（11/07）：卡在自己的工作树里时，工作树里的读写、认出的路径都在工作树里而且不装东西、不联网、不推拉代码、不改系统设置的命令、天枢 MCP 里读的工具（`get_`、`list_` 开头）直接放行，不弹权限请求；碰工作树外面、装东西、联网、`git push`、`.git` 和 `.claude` 里的文件、别的工具（联网搜索、子 agent）照样问。规则只在 `pathGuard.ts` 的 `autoAllowed`。在文件夹里做的卡照旧每步都问。
+- 飞书命令行（11/07）：工作树里只放行读的：快捷命令名字最后一段是读的动词（list、search、get、fetch、download 等）或以 get-、search- 开头、名字里没有写的词（send、create、update、delete 等），按资源调方法的 list、get、search、query、mget，`auth status` 等，schema、help、`--help`、`--dry-run`。发消息、发邮件、改文档、建日程、改表格、登录、直接调接口（`api`）、开头先写全局参数的照样问（宁可多问）。
 - 卡的先后（11/07）：派活单的一件可以写 `after`（要等前面哪几件，位置，只能是前面的）；网页开工时把它换成 cardId 放进开工请求的 `after`。这张卡先排着（状态事件的原因「等前面的卡合回」，摘要和 status 同步条目带 `waitingFor`，少一张就重报），这时没有工作树；等的卡都在这台本机上合回以后，从主文件夹所在分支最新的提交开工作树，有空位就自己开始。等的卡在文件夹里做（没有合回）的，以它最近一次验收过了为准。等的卡取消了或一直没合回，就一直等，本人可以停掉它。合回、验收过了、本机程序启动后都会查一遍。
+
+**订阅额度、停着等、档位、花费（11/07，新首页设计第 11 节「马上」那一批）**：
+- 读额度：起一个不发提示的 Claude Code（`--no-session-persistence`，不读本人全局设置），只发 `initialize` 和 `get_usage`（`skip_behaviors: true`），读完就关；不花 token，约 0.7 秒（11/07 实测 2.1.318；它自己标的实验接口，形状可能变）。缓存 5 分钟，存在数据目录 `quota.json`（重启后还认得用完了、几点恢复）。`GET /v1/status` 读缓存，过了 5 分钟就在后台读一次（Claude Code 装了、登着时），下一次轮询就有。跑着的订阅卡报的 `rate_limit_event` 随时更新（5 小时窗口记为 `session`，7 天记为 `weekly_all`）。`quota` 每项：`plan`、`windows[{ kind: session|weekly_all|weekly_scoped, model, usedPercent, state: ok|warning|blocked, resetsAt }]`、`blockedUntil`、`extraUsage`、`updatedAt`、`error`；到 100% 算用完。邮箱、组织等账号信息不取。每批同步（心跳也是）带 `quota`：只有窗口、恢复时间、读到的时间。
+- 停着等：订阅的会话一轮碰壁（`usage_limit`）或碰壁后直接退出，不算出错也不算失败。状态照常（一轮做完是 idle，退出是 exited），摘要、状态事件和 status 同步条目带 `hold { reason: "usage_limit", until }`，网页显示「等额度恢复 · HH:MM」（不知道几点恢复时 until 为 null，本机马上读一次额度）。用完时排着、本来能开始的订阅会话也不开始（带 hold）；用完时新开的订阅会话直接排着等（原因「订阅额度用完了，恢复后自动接着做」）。网关的不受影响。停着等的不占位置。
+- 到点接着做：恢复时间过 1 分钟，本机读一次额度，没在用完的状态就接着做（看同时上限和暂停）：一轮做完停着的，往开着的进程里说一句「额度恢复了，接着把刚才没做完的做完。」（事件流记 `notice: usage_resumed`，不记成本人说的话）；进程已退出的 `--resume` 续上再说；排着的回到队里。不知道几点恢复的，读到额度没用完、或 5 分钟后再试。读到恢复时间推后了（比如周额度也用完了）就改 until 再等。本人说一句、停下、强停都不再等（说一句照常发，额度还没恢复就再停着等）。本机程序重启后照原来的恢复时间接着等，关机不清 hold。
+- 档位：开工请求可带 `modelTier`（没有就用岗位的）。订阅按档位传 `--model` 和 `--effort`：强 opus high、标准 opus medium、轻 sonnet low（新首页设计 11.3「自动」），没说按标准；配置里写了模型名的用它的模型，思考强度照档位。网关只用配置的模型，不传思考强度。以前订阅不传 `--model`，每一档都跑账号默认的 Opus。
+- 花费：`cost` 条目带 `source`（subscription / gateway）、`model`（这一轮用得最多的模型 id）、`money`。订阅照旧按标价算 `costUsd`（不是另花的钱，云端按来源显示），`money` 为 null。网关的 `costUsd` 为 null，`money` 由本机按 TokenHub 价目表估：`GET <网关主机>/api/tokavi/v1/model/prices?model_name=…`，带本机存的钥匙（`x-api-key`），缓存 1 小时，读不到这一轮为 null；算法照 tokavi-tokenhub f31dd05 的 `price_util.py`（按一次请求的输入长度选档，缓存读写按显式缓存价、没给就按输入价，分时段按价目表时区，参考段乘倍率），`estimated: true`：节假日按周一到周五算工作日，一轮几次请求按平均长度选档，币种照价目表不换算。
+- 命令行工具：本机程序启动时和每 10 分钟查一次 gh（`gh auth status --json hosts` 里 github.com 的当前账号）和飞书命令行（`lark-cli auth status` 的用户身份；刷新令牌过期算过期，只有机器人身份不算登着），放在 `GET /v1/status` 的 `tools[{ kind, state: ready|not_installed|not_logged_in|expired|unknown, version, account, checkedAt }]`，不同步给云端。
+- 测试：`test/quota.test.ts`（额度解析、事件、缓存，向假 Claude Code 读额度，命令行工具四种状态，价目表三种策略和缓存，碰壁停着等再往进程里说一句、排着的跟着停、碰壁退出再续接、本人说一句或停下就不再等，花费的来源和真钱，档位，状态接口），`test/outbox.test.ts` 同步带额度，`test/guard.test.ts` 飞书命令行。
 
 ## 7. 会话里的 MCP
 
@@ -172,15 +184,15 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
 ## 8. 云端同步（本机 → 云端，单向）
 
 - `POST {apiBaseUrl}/api/local-runner/sync`，`Authorization: Bearer <个人令牌>`，体 `LocalSyncBatchRequest`（≤50 条、≤12 MB），回 `LocalSyncBatchResponse`。
-- 心跳：云端 10 分钟没收到同步就当本机离线。本机开着、5 分钟里没同步过任何东西（闲着，或条目都在退避）时，发一批空的（`items: []`，照样带 `slots`），云端照样刷新在线时间和位置数；每分钟看一次，没关联云端不发，没发成等下一分钟。
-- 条目：`status`（状态变化）、`plan`（TodoWrite）、`evidence`、`artifact`（原文 base64）、`handback`（带 `outputKeys`：点名的产出和证据的条目幂等键，云端存成 `local_outputs.client_id`）、`topic_version`（专题新的一版：号、种类、名字或 null、改了什么、Markdown 正文）、`topic_version_feishu`（第几版已存进飞书、地址）、`card_plan`（规划员的计划和派活单草稿）、`verdict`（验收员的逐条结论，subject 带 cardId 和 handbackKey）、`cost`（每轮增量）、`background`（会话里的后台任务开始或变了，每次全部字段）、`merge`（卡合回的结果：按交回的 handbackKey，`merged`、`commit`、`baseBranch`、`reason`、`message`、`auto`；同一个交回以本机序号最大的为准）。规划员、验收员的 status、plan、cost 条目 subject.kind 是 plan / verify，云端不能当成卡自己的状态。卡在工作树里做时，`handback` 带 `git`（分支、基线、交回的提交），`verdict` 带 `commit`（ADR 0038）。不传仓库文件、完整工具输出、环境变量、钥匙。
+- 心跳：云端 10 分钟没收到同步就当本机离线。本机开着、5 分钟里没同步过任何东西（闲着，或条目都在退避）时，发一批空的（`items: []`，照样带 `slots` 和读到过的 `quota`），云端照样刷新在线时间和位置数；每分钟看一次，没关联云端不发，没发成等下一分钟。
+- 条目：`status`（状态变化）、`plan`（TodoWrite）、`evidence`、`artifact`（原文 base64）、`handback`（带 `outputKeys`：点名的产出和证据的条目幂等键，云端存成 `local_outputs.client_id`）、`topic_version`（专题新的一版：号、种类、名字或 null、改了什么、Markdown 正文）、`topic_version_feishu`（第几版已存进飞书、地址）、`card_plan`（规划员的计划和派活单草稿）、`verdict`（验收员的逐条结论，subject 带 cardId 和 handbackKey）、`cost`（每轮增量，带 `source`、`model`、网关的 `money`，第 6 节）、`background`（会话里的后台任务开始或变了，每次全部字段）、`merge`（卡合回的结果：按交回的 handbackKey，`merged`、`commit`、`baseBranch`、`reason`、`message`、`auto`；同一个交回以本机序号最大的为准）。规划员、验收员的 status、plan、cost 条目 subject.kind 是 plan / verify，云端不能当成卡自己的状态。卡在工作树里做时，`handback` 带 `git`（分支、基线、交回的提交），`verdict` 带 `commit`（ADR 0038）。不传仓库文件、完整工具输出、环境变量、钥匙。
 - 幂等键 `<deviceId>:<sessionId>:<本会话同步序号>`。云端按键去重，重复的也回 `accepted`；`rejected` 的本机记一笔后出队；回执里没提到的、网络错、5xx 都退避重试（1 s × 2^n，最长 5 分钟）。发件箱先落盘（`outbox.json`），断网、重启都不丢。
 - 令牌被拒（11/07）：同步回 401 时，本机把关联当成没关联（`/v1/cloud`、`/v1/status` 报 `linked: false`），网页原有的自动关联会重新关联一次；发件箱不丢，原因留在 `outbox.lastError`，关联上以后接着发。只认同步接口：会话的天枢 MCP、验收交代碰到 401 时，本机马上发一批空的确认一次，同步也 401 才算被拒（设备令牌调 `/mcp/me` 被拒不能把关联弄掉）。被拒的令牌已经换掉了就不动。
 - 关联：网页 `PUT /v1/cloud` 交 `apiBaseUrl` 和令牌；`apiBaseUrl` 的来源必须在白名单里，免得被指到别处。这个令牌同时用于会话里的天枢 MCP（第 7 节）。**建议 api 会话**给个人令牌加一种 `local` 客户端：能调 `/api/local-runner/*` 和 `/mcp/me`，网页配对后建一个这种令牌交给本机程序，设置页能看到、能吊销。
 
 ## 9. 模型
 
-- 内置 `subscription`：用本人 Claude Code 的登录，不设任何模型环境变量。也可以加「订阅 + 指定模型」的配置（如 haiku、sonnet、opus）。
+- 内置 `subscription`：用本人 Claude Code 的登录，不设任何模型环境变量，模型和思考强度按会话的档位传（第 6 节）。也可以加「订阅 + 指定模型」的配置（如 haiku、sonnet、opus）。
 - `gateway`：Anthropic 格式地址 + 模型名 + 钥匙（TokenHub 等）；小模型（WebFetch 摘要用）不填就同主模型。几张卡同时跑、各用各的模型（11/05 实测）。
 - WebFetch 走网关能用（要 `skipWebFetchPreflight`）；WebSearch 能不能用看网关背后的模型：DeepSeek v4.1 flash、Opus 能真搜，Qwen 3.8 flash 不搜还编结果（附录 D）。所以模型配置有 `webSearch` 开关：订阅默认开，网关默认关（拉起时加 `--disallowedTools WebSearch`），实测能搜的再打开。调研专题要联网时，用开了搜索的模型，或用天枢提供的搜索工具。
 
@@ -210,6 +222,7 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
   - 吊销后显示「已关联」：查第二遍真跑现场（另一个会话 scratchpad 的 `tl-data2`），本机在 18:21 左右心跳收到 401 后已经取消关联；插件页只在本机报没关联时才自动关联（`PluginsPage.tsx` 第 51 行），`cloud.json` 和令牌文件都是 18:25:11Z 重写（本人 18:25:09 重新打开插件页之后两秒），18:25:49 用新令牌同步成功、原因清掉。所以刷新后看到的「已关联」是网页已经用新令牌重新关联上了，本机没有要修的；新加的测试照真跑的路径走一遍（闲着、只靠心跳、401、取消关联、重新关联）。
   - 总验收那张被拦的命令：拦它的不是 `npm test`，是 `-Exclude .git` 和 `-notmatch '\\.git\\'`（碰 `.git` 的规则），以及正则 `'\\.git\\'` 被当成网络路径（越界）。改成：只用来排除、筛选的 `.git`、`.claude` 不算碰（命令里有写、删、挪、重定向时照样算）；PowerShell 比较运算符和 `-Pattern` 后面的词不当路径，Claude Code 在请求里把这种词当越界路径（`blocked_path`）报上来也不算（真跑里那个越界路径是我们认的还是它报的分不出来，08:00 后真跑一次确认）；`npx`、`npm exec`、`bunx` 只放行工作树 `node_modules/.bin` 里已有的程序（没装会去下载）。
   - 没有真跑（额度快用完，主会话要求 08:00 前不跑）。
+- 第九轮（11/07 早上，额度这一批）：单测 107 条（新增 `test/quota.test.ts` 12 条，`test/outbox.test.ts` 同步带额度 1 条，`test/guard.test.ts` 飞书命令行 1 条；`test/planVerify.test.ts` 执行的 `--model` 从没有改成按标准档 opus），契约 99 条。假 claude 加了 `get_usage`、碰壁（`rate_limit_event` rejected → 助手报 rate_limit → 429 的 result，或直接退出）、途中报额度、网关用量和请求次数；每轮收到的话记在单独的 `.fake-claude-turns.jsonl`。33 处变异 32 处有测试失败；没抓到的一处是「进程退出时等 stdout 读完再报退出」：Windows 上管道里的数据总在退出事件之前送到（先说 2 MB 再退出也一样），测不出来；Node 文档写明退出事件时 stdio 可能还没关，Mac 上额度用完直接退出时最后几行会丢，所以留着。没有真跑（主会话要求 08:00 前不跑耗额度的）；`get_usage` 的形状和 0.7 秒是主会话 11/07 调研时真机读的，碰壁那一串没真机复现过（见第 5 节）。
 - 和云端联调（11/06）：本机程序分支 + `claude/v2-board-api` 的接收端合进临时分支 `claude/local-runner-sync-e2e`（只在本机），时间机器起 API，真程序 + 真 Claude Code（haiku）走通配对 → 建设备令牌 → 关联云端 → 开卡 → 交产出物和交回 → 云端收到（13 条、2 份产出、1 条交回排队、卡变进行中）→ 断网时排队 6 条 → 恢复后自动补发 → 原样重发 6 条全部 accepted、表里不重复。44 秒，$0.0043。记录在 `.scratch/local-runner/实验/I_云端联调.md`。
 - 真机：编出的 exe + 真 Claude Code 2.1.318（haiku），冒烟命令走完配对 → 开工 → 事件 → 3 次批准 → 插话下一步生效（b.txt 改成 22）→ 新一轮 → 停下（interrupted）→ 强停（exited），花费 $0.003；另一次验证本会话 MCP 交证据和交回。真实调用共 2 次会话（4 轮）。
 - 托盘模式：配对确认框、选文件夹框、托盘图标/提示/菜单、暂停与恢复、菜单退出都在 Windows 11 上截图验证（`.scratch/local-runner/实验/截图/`）。
@@ -231,6 +244,7 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
 12. **卡的工作树（ADR 0038）**：工作树里放行的命令按词认（装东西、联网、推拉代码），认不全：脚本自己联网（如 `node x.js` 里 fetch）认不出，会放行。强停后没合回的卡，工作树一直留着（还没有「丢掉这张卡」的操作）；大仓库开工要等完整检出，子模块不初始化，Windows 上路径可能太长；合回的结果没同步给云端；验收期间本人让卡接着改，验收员读到的文件可能比交回的提交新（以交代里的改动为准）。
 13. **会话里的后台任务**：Claude Code 自己开的那一轮（后台子 agent 跑完时）不经排队、也不看文件夹，可能暂时超过同时上限；不是仓库的文件夹里排着等这张卡的后台任务的卡，会在子 agent 跑完那一刻开工，和这一轮同时改这个文件夹（和 ADR 0038 里「空闲的卡被本人说一句」是同一类代价）；后台子 agent 在一轮之外来要权限时，会话变成 waiting_permission 也不经排队，可能超过同时上限，直到本人批了、拒了或停了它（这时本人说一句，网页上报的是「下一步前送达」，实际是新的一轮）；进程退出时还在跑的都记成 stopped，Claude Code 退出时有没有真的结束后台命令起的子进程没核对；停只能在本机网页上点。
 14. **令牌被吊销要等心跳**：本机闲着时 5 分钟才发一次心跳，吊销后最多约 6 分钟才知道；网页打开着的插件页不刷新就看不到「没关联」，也就不会自己重新关联（网页侧）。
+15. **订阅额度（11/07）**：`get_usage` 是 Claude Code 自己标的实验接口，形状变了就读不到（`quota.error` 记原因，停着等照样靠跑着的卡报的 `rate_limit_event`）。只认订阅：网关的限额、余额没接（TokenHub 的 `/api/tokavi/v1/log/usage` 今天、本月花了多少也没接）；Codex 的额度 12 月接 Codex 时再做。到点接着做时说的那一句是本机写死的；碰壁时正在等的后台子 agent 不单独处理。gh、lark-cli 的查法按 11/07 的版本写（gh 2.88 起有 `--json`），升级后形状变了会显示没登录；飞书命令行哪些算读按命令名认，新命令名里没有写的词、最后一段又像读的会被放行（宁可多列写的词）。
 
 ---
 
