@@ -65,7 +65,8 @@ describe("SegmentedSwitch（二级页类型切换）", () => {
   it("样式：选中段浅蓝底深蓝字的胶囊，未选中无外框；过渡不超过 180ms，减少动效时不过渡；字号不小于 13px", () => {
     const css = readFileSync(new URL("../styles/segmented-switch.module.css", import.meta.url), "utf8");
     expect(css).toMatch(/\.segment \{[^}]*border: 0;[^}]*border-radius: 999px;[^}]*background: transparent;[^}]*font-size: 14px;/);
-    expect(css).toMatch(/\[aria-checked='true'\][^{]*\{[^}]*background: #e4eefc;[^}]*color: #1c4f94;/);
+    // 浅蓝底深蓝字读强调色变量（深色时跟着换）。
+    expect(css).toMatch(/\[aria-checked='true'\][^{]*\{[^}]*background: var\(--accent-soft\);[^}]*color: var\(--accent-soft-foreground\);/);
     const durations = [...css.matchAll(/(\d+)ms/g)].map((match) => Number(match[1]));
     expect(durations.length).toBeGreaterThan(0);
     expect(Math.max(...durations)).toBeLessThanOrEqual(180);

@@ -79,6 +79,8 @@ type PipelineProps = {
   consume: (id: number) => void;
   go: (href: string) => void;
   onSplit: (taskId: string) => void;
+  /** 拆卡登记没成（出「拆卡失败 · 重试」）。 */
+  splitFailed?: boolean;
   /** 伙伴在这条管线里说话（伙伴台换成「在说」）。 */
   onSpeaking: (speaking: boolean) => void;
 };
@@ -119,7 +121,7 @@ function MockPipeline(props: PipelineProps) {
  * Task 管线的对话，网页按时间插进去的几块：规划员在拆（一行）、拆好的派活单（开工的选项框）、开了哪几个子会话、
  * 验收行（过了、受阻、约定都达到、返工，TaskFeed）。
  */
-function PipelineBody({ data, task, home, api, buddy, outbox, consume, go, onSpeaking, onSplit }: PipelineProps & { data: ConversationData }) {
+function PipelineBody({ data, task, home, api, buddy, outbox, consume, go, onSpeaking, onSplit, splitFailed }: PipelineProps & { data: ConversationData }) {
   const chrome = useViewChrome();
   const handheld = useHandheld();
   const { work } = api;
@@ -135,8 +137,9 @@ function PipelineBody({ data, task, home, api, buddy, outbox, consume, go, onSpe
     const planner = mine.find((worker) => worker.kind === "plan" && worker.state !== "done");
     if (planner) list.push({ key: `planning:${planner.key}`, at: planner.startedAt ?? planner.requestedAt ?? new Date().toISOString(), node: <PlanningLine planner={planner} /> });
     // 拆卡没做完（出了错才给兜底）：一行「拆卡失败」加「重试」（弱按钮）。
-    else if (board?.plan?.status === "failed" && !board.drafts.length) {
-      list.push({ key: `plan-failed:${board.plan.id}`, at: board.plan.finishedAt ?? board.plan.createdAt, node: (
+    else if ((board?.plan?.status === "failed" && !board.drafts.length) || splitFailed) {
+      const plan = board?.plan?.status === "failed" ? board.plan : null;
+      list.push({ key: `plan-failed:${plan?.id ?? task.taskId}`, at: plan ? plan.finishedAt ?? plan.createdAt : new Date().toISOString(), node: (
         <p className={h.line} data-testid="plan-failed"><StateIcon state="failed" />拆卡失败<HeroButton variant="ghost" size="sm" onPress={() => onSplit(task.taskId)}>重试</HeroButton></p>
       ) });
     }
@@ -156,7 +159,7 @@ function PipelineBody({ data, task, home, api, buddy, outbox, consume, go, onSpe
     }
     list.push(...feedBlocks({ items: feed, workers: mine, taskId: task.taskId, go, onSay: (text) => void data.send(text, []), onChanged: () => void changed() }));
     return list;
-  }, [mine, board, task, work.roles, handheld, changed, data, subs, go, feed, onSplit]);
+  }, [mine, board, task, work.roles, handheld, changed, data, subs, go, feed, onSplit, splitFailed]);
   return (
     <PendingBoxes>
       <div className={h.convo} data-testid="pipeline-view">

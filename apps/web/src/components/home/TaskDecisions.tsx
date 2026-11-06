@@ -17,10 +17,8 @@ import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { canCommandHere, reply } from "@/lib/work/actions";
 import { mergeCard, useMergeIssues } from "@/lib/work/merge";
 import type { Worker } from "@/lib/work/workers";
-import { showWorkspaceToast } from "@/lib/toast";
 import { cardHref } from "@/lib/home/derive";
 
-const fail = (error: unknown) => showWorkspaceToast({ text: error instanceof Error ? error.message : "没成功，请重试" });
 
 /** Task 管线里答过的验收行（这台电脑上记着）：同一件不再问，一行写答了什么。 */
 const ANSWERED_KEY = "tianshu-feed-answered-v2";
@@ -40,17 +38,16 @@ export function BlockedDecision({ item, worker, go, onChanged }: { item: Blocked
   const here = !!worker && canCommandHere(worker, local.phase === "ready", handheld);
   const fix = item.fix?.trim() || null;
   const options = [...(here ? [{ label: "按这个改", recommended: true }] : []), { label: "我去看看" }, { label: "仍然通过" }];
+  // 没成的交给选项框：原处写「失败 · 重试」。
   const pick = async (label: string) => {
-    try {
-      if (label === "按这个改" && worker) {
-        await reply(local.runner, worker, `验收没过，按这几条再改一遍：\n${fix ?? "照验收员写的改法"}`);
-        await markReturned(item.cardId, item.handbackId).catch(() => undefined);
-      } else if (label === "我去看看") { go(cardHref(item.cardId)); return; }
-      else await overrule(item.cardId, item.handbackId, "本人判仍然通过");
-      markAnswered(item.id, label);
-      setAnswer(label);
-      onChanged();
-    } catch (error) { fail(error); }
+    if (label === "按这个改" && worker) {
+      await reply(local.runner, worker, `验收没过，按这几条再改一遍：\n${fix ?? "照验收员写的改法"}`);
+      await markReturned(item.cardId, item.handbackId).catch(() => undefined);
+    } else if (label === "我去看看") { go(cardHref(item.cardId)); return; }
+    else await overrule(item.cardId, item.handbackId, "本人判仍然通过");
+    markAnswered(item.id, label);
+    setAnswer(label);
+    onChanged();
   };
   if (answer) return <DecisionBox kind="question" title={`「${item.title}」受阻`} options={[]} onPick={() => undefined} resolved={answer} />;
   return (

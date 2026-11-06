@@ -9,7 +9,6 @@ import { HeroButton } from "@/components/HeroButton";
 import { useHandheld } from "@/components/ui/useHandheld";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import type { TLocalSessionSummary } from "@/lib/local/runner";
-import { showWorkspaceToast } from "@/lib/toast";
 import { mergeCard, useMergeIssues } from "@/lib/work/merge";
 import w from "@/styles/v2-work.module.css";
 
@@ -24,8 +23,8 @@ export function MergeAction({ session, title, accepted, onChanged }: { session: 
   if (!accepted || handheld || local.phase !== "ready") return null;
   const merge = async () => {
     setBusy(true);
-    const result = await mergeCard(local.runner, session, title);
-    if (result.ok) showWorkspaceToast({ text: `已合并到 ${ws.baseBranch}（${result.commit.slice(0, 7)}）` });
+    // 合成了这一处换成「已合并 · 提交号」，没合成写原因（useMergeIssues），不弹 toast。
+    await mergeCard(local.runner, session, title);
     await local.refresh();
     setBusy(false);
     onChanged();

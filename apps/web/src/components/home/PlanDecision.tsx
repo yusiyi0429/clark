@@ -24,7 +24,6 @@ import { useSessionEvents } from "@/lib/local/useSessionEvents";
 import { readLast, writeLast } from "@/lib/local/start";
 import type { TLocalModelProfile } from "@/lib/local/runner";
 import { acceptDrafts, dismissDraft } from "@/lib/board/cloud";
-import { showWorkspaceToast } from "@/lib/toast";
 import { TIER_LABEL, draftRole, modelForTier, type CardRole, type RoleView } from "@/lib/team/roles";
 import { SLOT_CAP, startBatch, type StartPlan } from "@/lib/work/queue";
 import { QUEUE_LABEL, liveSessions, type Worker } from "@/lib/work/workers";
@@ -73,7 +72,12 @@ export function PlanDecision({ task, drafts, roles, handheld, onSay, onChanged }
 
   const start = async () => {
     if (!kept.length || busy) return;
-    if (ready && !folder) { showWorkspaceToast({ text: "先选一个文件夹" }); return; }
+    let target = folder;
+    if (ready && !target) {
+      target = await local.pickFolder();
+      if (!target) return;
+      setFolderId(target.id);
+    }
     setBusy(true);
     try {
       for (const draft of drafts.filter((entry) => edits[entry.id]?.dropped)) await dismissDraft(draft.id).catch(() => undefined);
@@ -83,23 +87,21 @@ export function PlanDecision({ task, drafts, roles, handheld, onSay, onChanged }
         const role = roleOf(draft);
         const changed = (role?.id || null) !== (draftRole(draft)?.id ?? null);
         return { id: draft.id, ...(edits[draft.id]?.title?.trim() ? { title: edits[draft.id]!.title!.trim() } : {}), ...(changed ? { roleId: role?.id || null } : {}) };
-      }), !(ready && folder));
+      }), !(ready && target));
       const plans: StartPlan[] = kept.flatMap((draft, index) => {
         const item = cards[index];
         const role = roleOf(draft);
         const model = modelOf(draft);
-        return item && role && model ? [{ item, model, cwd: folder?.path ?? "", role: roles.find((entry) => entry.id === role.id) ?? null }] : [];
+        return item && role && model ? [{ item, model, cwd: target?.path ?? "", role: roles.find((entry) => entry.id === role.id) ?? null }] : [];
       });
-      if (ready && folder) {
-        writeLast({ folderId: folder.id });
+      if (ready && target) {
+        writeLast({ folderId: target.id });
         await startBatch(local.runner, plans);
         await local.refresh();
       }
       setEdits({});
       setEditing(false);
       onChanged();
-    } catch (error) {
-      showWorkspaceToast({ text: error instanceof Error ? error.message : "没开起来，请重试" });
     } finally {
       setBusy(false);
     }
@@ -184,17 +186,16 @@ export function PlanningLine({ planner }: { planner: Worker }) {
   const step = planStep(view.plan) ?? (planner.step ? { step: planner.step.n, total: planner.step.total } : null);
   const blocked = canCommandHere(planner, local.phase === "ready", handheld) ? null : "到电脑上处理";
   const question = session ? view.question ?? session.pendingQuestion ?? null : null;
-  const fail = (error: unknown) => showWorkspaceToast({ text: error instanceof Error ? error.message : "没成功，请重试" });
   return (
     <>
       <p className={h.line} data-testid="planning-line"><StateIcon state={planner.state === "queued" ? "queued" : "running"} />{plannerText(planner, step)}</p>
       {session && view.pending.length ? (
         <ApprovalDecision requests={view.pending} blocked={blocked} onDecide={(request, decision, { forSession, message }) => local.runner.decidePermission(session.id, request.requestId,
-          { decision, ...(forSession ? { allowForSession: true } : {}), ...(message ? { message } : {}) }).catch(fail)} />
+          { decision, ...(forSession ? { allowForSession: true } : {}), ...(message ? { message } : {}) })} />
       ) : null}
       {session && question ? (
         <QuestionDecision key={question.requestId} request={question} blocked={blocked}
-          onAnswer={(body) => local.runner.answerQuestion(session.id, question.requestId, body).then(() => local.refresh()).catch(fail)} />
+          onAnswer={(body) => local.runner.answerQuestion(session.id, question.requestId, body).then(() => local.refresh())} />
       ) : null}
     </>
   );

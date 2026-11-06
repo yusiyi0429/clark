@@ -11,7 +11,7 @@ import { ArrowUp, FileText } from "lucide-react";
 import { questionNotice, type SessionEntry } from "@/lib/local/sessionView";
 import type { TLocalPermissionRequestView, TLocalQuestionRequestView } from "@/lib/local/runner";
 import { ApprovalDecision } from "@/components/work/decisions";
-import { DecisionBox } from "@/components/work/DecisionBox";
+import { DecisionBox, FailedLine } from "@/components/work/DecisionBox";
 import s from "@/styles/v2-session.module.css";
 
 const hhmm = (iso: string) => new Date(iso).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
@@ -60,12 +60,15 @@ export function SessionTranscript({ entries, agentName, canAct, onDecide, lead, 
 export function SessionComposer({ placeholder, disabled, onSend }: { placeholder: string; disabled: boolean; onSend: (text: string) => Promise<boolean> }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  /** 没发出去：字放回框里，框里原处写「失败 · 重试」（原因在 title 里），不弹 toast。 */
+  const [failed, setFailed] = useState<string | null>(null);
   const send = async () => {
     const value = text.trim();
     if (!value || busy || disabled) return;
     setBusy(true);
+    setFailed(null);
     setText("");
-    const ok = await onSend(value).catch(() => false);
+    const ok = await onSend(value).catch((error: unknown) => { setFailed(error instanceof Error ? error.message : ""); return false; });
     if (!ok) setText(value);
     setBusy(false);
   };
@@ -74,6 +77,7 @@ export function SessionComposer({ placeholder, disabled, onSend }: { placeholder
       <textarea rows={1} value={text} disabled={disabled} placeholder={placeholder} aria-label={placeholder}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } }} />
+      {failed !== null && !busy ? <FailedLine inline reason={failed} onRetry={() => void send()} /> : null}
       <button type="submit" className={s.send} disabled={disabled || busy || !text.trim()} aria-label="发送"><ArrowUp size={15} aria-hidden /></button>
     </form>
   );

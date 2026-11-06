@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import { ChevronRight, LoaderCircle, PanelRightClose, PanelRightOpen, Square, X } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
 import { Slots } from "@/components/work/Slots";
+import { FailedLine } from "@/components/work/DecisionBox";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import type { LocalPhase } from "@/lib/local/connection";
 import { duration, groupBackground } from "@/lib/home/derive";
@@ -55,9 +56,14 @@ export function BackgroundPanel({ items, resources, model, onStop, onCollapse, h
   const [open, setOpen] = useState(false);
   const finishedOpen = open || failed > 0;
   const [acting, setActing] = useState(false);
+  /** 没停下：那一行停止按钮的位置写「失败 · 重试」（原因在 title 里），不弹 toast。 */
+  const [stopFailed, setStopFailed] = useState<{ id: string; reason: string } | null>(null);
   const stop = async (item: BackgroundItem) => {
     setStopping(item.id);
-    try { await onStop(item); } finally { setStopping(null); }
+    setStopFailed(null);
+    try { await onStop(item); }
+    catch (error) { setStopFailed({ id: item.id, reason: error instanceof Error ? error.message : "" }); }
+    finally { setStopping(null); }
   };
   const row = (item: BackgroundItem) => (
     <li key={item.id} className={h.bgRow} data-state={item.state} data-handheld={handheld ? "" : undefined} data-testid="bg-row">
@@ -65,7 +71,8 @@ export function BackgroundPanel({ items, resources, model, onStop, onCollapse, h
       <span className={h.bgKind}>{KIND[item.kind]}</span>
       <span className={h.bgTitle} title={item.title}>{item.title}</span>
       <span className={h.bgTime}>{item.state === "failed" ? "失败" : item.state === "stopped" ? "已停止" : item.state === "queued" ? "已排队" : duration(item.startedAt, item.finishedAt ?? now)}</span>
-      {item.stoppable && (item.state === "running" || item.state === "queued") ? (
+      {stopFailed?.id === item.id && stopping !== item.id ? <FailedLine inline reason={stopFailed.reason} onRetry={() => void stop(item)} />
+      : item.stoppable && (item.state === "running" || item.state === "queued") ? (
         <span className={h.bgStop}>
           <HeroButton variant="ghost" size="sm" isIconOnly title="停止" aria-label={`停止 ${item.title}`} isDisabled={stopping === item.id} onPress={() => void stop(item)}><Square {...ICON} /></HeroButton>
         </span>

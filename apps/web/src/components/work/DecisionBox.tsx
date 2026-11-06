@@ -61,6 +61,8 @@ export function DecisionBox({ kind, title, body, options, onPick, other, multi, 
   const [writing, setWriting] = useState(false);
   const [text, setText] = useState("");
   const [sending, setSending] = useState<number | null>(null);
+  /** 答案没发出去：框底下一行「失败 · 重试」（重试 = 同一个动作再来一次），title 里是原因。 */
+  const [failed, setFailed] = useState<{ retry: () => void; reason: string } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const optionRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const textRef = useRef<HTMLTextAreaElement>(null);
@@ -89,7 +91,10 @@ export function DecisionBox({ kind, title, body, options, onPick, other, multi, 
 
   const run = async (index: number, action: () => void | Promise<unknown>) => {
     setSending(index);
-    try { await action(); } finally { setSending(null); }
+    setFailed(null);
+    try { await action(); }
+    catch (error) { setFailed({ retry: () => void run(index, action), reason: error instanceof Error ? error.message : "" }); }
+    finally { setSending(null); }
   };
   const choose = (index: number) => {
     if (disabled || arming()) return;
@@ -201,9 +206,20 @@ export function DecisionBox({ kind, title, body, options, onPick, other, multi, 
           <HeroButton variant="primary" size="sm" isDisabled={disabled || !picks.length} onPress={() => void run(picks[0] ?? 0, () => onPick(picks))}>提交</HeroButton>
         </div>
       ) : null}
+      {failed && sending === null ? <FailedLine reason={failed.reason} onRetry={failed.retry} /> : null}
       {footer ? <div className={x.foot}>{footer}</div> : null}
       </>}
     </div>
+  );
+}
+
+/** 动作失败（5.4.1 交互状态表）：原处一行「失败」加「重试」（弱按钮）；原因放在 title 里。 */
+export function FailedLine({ reason, onRetry, inline }: { reason?: string; onRetry: () => void; inline?: boolean }) {
+  return (
+    <span className={inline ? x.failInline : x.failLine} data-testid="action-failed">
+      <span className={x.failed} title={reason || undefined}>失败</span>
+      <HeroButton variant="ghost" size="sm" onPress={onRetry}>重试</HeroButton>
+    </span>
   );
 }
 

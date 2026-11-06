@@ -18,7 +18,6 @@ import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import type { TaskBoard } from "@/lib/board/useTaskBoard";
 import { useMergeIssues } from "@/lib/work/merge";
 import type { Worker } from "@/lib/work/workers";
-import { showWorkspaceToast } from "@/lib/toast";
 import { cardHref, deriveFeed, infoHref } from "@/lib/home/derive";
 import type { FeedItem } from "@/lib/home/types";
 import type { WorkHomeApi } from "@/lib/home/useWorkHome";
@@ -102,8 +101,7 @@ function PassedLine({ item, worker, go, onChanged }: { item: Passed; worker: Wor
         <DecisionBox kind="question" testId="overrule-box" title={`推翻「${item.title}」`}
           options={[{ label: "不推翻" }]} onPick={() => setUndoing(false)}
           other={{ label: "写原因…", placeholder: "为什么推翻", onSubmit: async (reason) => {
-            try { await overrule(item.cardId, handback.id, reason); setUndoing(false); onChanged(); }
-            catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没成功，请重试" }); }
+            await overrule(item.cardId, handback.id, reason); setUndoing(false); onChanged();
           } }} />
       ) : null}
     </div>
@@ -121,13 +119,11 @@ function CriteriaDecision({ item, taskId, go, onSay }: { item: Met; taskId: stri
   const title = `约定 ${item.total} 条都达到了，交给认可人？`;
   if (answer) return <DecisionBox kind="question" title={title} options={[]} onPick={() => undefined} resolved={answer} />;
   const settle = (text: string) => { markAnswered(item.id, text); setAnswer(text); };
-  // 出一版没成（文件太多、产出缺了）：框留着，照样去 Task 详情里改；没有攒着的东西也算成了（最新那版照旧）。
+  // 出一版没成（文件太多、产出缺了）：框留着，原处写「失败 · 重试」（原因在 title 里）；没有攒着的东西也算成了（最新那版照旧）。
   const hand = async () => {
-    try { await shipPending(taskId); settle("交给认可人"); }
-    catch (error) {
-      if (error instanceof CloudError && error.code === "NOTHING_PENDING") settle("交给认可人");
-      else showWorkspaceToast({ text: error instanceof Error ? error.message : "没出成一版" });
-    }
+    try { await shipPending(taskId); }
+    catch (error) { if (!(error instanceof CloudError && error.code === "NOTHING_PENDING")) throw error; }
+    settle("交给认可人");
     go(infoHref(taskId));
   };
   return (

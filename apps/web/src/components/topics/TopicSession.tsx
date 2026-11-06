@@ -16,7 +16,7 @@ import { useHandheld } from "@/components/ui/useHandheld";
 import { StartDialog } from "@/components/local/StartDialog";
 import { SessionComposer, SessionTranscript, type DecideOptions } from "@/components/cards/SessionTranscript";
 import { QuestionDecision } from "@/components/work/decisions";
-import { PendingBoxes, PendingDock } from "@/components/work/DecisionBox";
+import { FailedLine, PendingBoxes, PendingDock } from "@/components/work/DecisionBox";
 import { useViewChrome } from "@/components/home/view";
 import { useConversationScroll } from "@/conversation/useConversationScroll";
 import { latestSessionFor, useLocalRunner } from "@/lib/local/LocalRunnerProvider";
@@ -27,7 +27,6 @@ import { WAIT_LABEL, canCommand, waitTone } from "@/lib/board/cards";
 import { addTopicVersionToPending, patchTopic, readTopic, readTopicVersion } from "@/lib/board/cloud";
 import { REMARK_PLUGINS } from "@/lib/markdown";
 import { ReviewDialog, ReviewDoc, isReview, reviewText } from "./Review";
-import { showWorkspaceToast } from "@/lib/toast";
 import s from "@/styles/v2-session.module.css";
 
 const ICON = { size: 16, strokeWidth: 1.5, "aria-hidden": true } as const;
@@ -85,32 +84,36 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
   const shown = version ?? detail.current;
   const hasDraft = detail.versions.some((entry) => entry.kind === "draft");
   const wait = session ? localWait(view) : null;
+  // 没成的不弹 toast：发消息交给输入框，批准、回答交给选项框，这页的按钮后面各自写「失败 · 重试」。
+  const [failed, setFailed] = useState<{ at: "doc" | "head"; retry: () => void; reason: string } | null>(null);
+  const act = (at: "doc" | "head", action: () => Promise<unknown>) => { setFailed(null); action().catch((error: unknown) => setFailed({ at, retry: () => act(at, action), reason: error instanceof Error ? error.message : "" })); };
   const say = async (text: string) => {
     if (!session) return false;
-    try { await local.runner.sendMessage(session.id, text); return true; }
-    catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没发出去，请重试" }); return false; }
+    await local.runner.sendMessage(session.id, text);
+    return true;
   };
   const decide = async (requestId: string, decision: "allow" | "deny", { forSession, message }: DecideOptions) => {
     if (!session) return;
-    try { await local.runner.decidePermission(session.id, requestId, { decision, ...(forSession ? { allowForSession: true } : {}), ...(message ? { message } : {}) }); scroll.jumpToLatest(); }
-    catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没成功，请重试" }); }
+    await local.runner.decidePermission(session.id, requestId, { decision, ...(forSession ? { allowForSession: true } : {}), ...(message ? { message } : {}) });
+    scroll.jumpToLatest();
   };
   // Claude Code 在问本人：选项框放在对话最后。
   const question = session ? view.question ?? session.pendingQuestion ?? null : null;
   const answer = async (body: TLocalQuestionAnswerRequest) => {
     if (!session || !question) return;
-    try { await local.runner.answerQuestion(session.id, question.requestId, body); await local.refresh(); scroll.jumpToLatest(); }
-    catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没成功，请重试" }); }
+    await local.runner.answerQuestion(session.id, question.requestId, body);
+    await local.refresh();
+    scroll.jumpToLatest();
   };
   const asking = question ? <QuestionDecision key={question.requestId} request={question} blocked={canAct ? null : "到电脑上处理"} onAnswer={answer} /> : null;
   const toPending = async () => {
     if (!shown || !topic.planTaskId) return;
-    try { await addTopicVersionToPending(topic.planTaskId, shown.id); showWorkspaceToast({ text: "已放进下一版" }); void load(); }
-    catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没放进去，请重试" }); }
+    await addTopicVersionToPending(topic.planTaskId, shown.id);
+    void load();
   };
   const archive = async () => {
-    try { await patchTopic(topic.id, { status: topic.status === "archived" ? "active" : "archived" }); showWorkspaceToast({ text: topic.status === "archived" ? "已取消归档" : "已归档" }); void load(); }
-    catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没成功，请重试" }); }
+    await patchTopic(topic.id, { status: topic.status === "archived" ? "active" : "archived" });
+    void load();
   };
 
   const doc = (
@@ -121,9 +124,10 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
         <span className={s.grow} />
         {hasDraft && canAct ? <HeroButton variant="secondary" size="sm" onPress={() => setReviewing(true)}>评审会</HeroButton> : null}
         {shown?.feishuUrl ? <a href={shown.feishuUrl} target="_blank" rel="noopener noreferrer" className={s.tag} data-tone="done">已存进飞书</a>
-          : shown && canAct ? <HeroButton variant="secondary" size="sm" onPress={() => void say(`把「${shown.label}」存进飞书，存好把地址交回来。`)}>存进飞书</HeroButton> : null}
+          : shown && canAct ? <HeroButton variant="secondary" size="sm" onPress={() => act("doc", () => say(`把「${shown.label}」存进飞书，存好把地址交回来。`))}>存进飞书</HeroButton> : null}
         {shown && topic.planTaskId && !handheld ? (shown.deliverable ? <span className={s.tag} data-tone="ver">{shown.deliverable.state === "included" ? `已纳入 v${shown.deliverable.versionNumber}` : `v${shown.deliverable.versionNumber} 准备中`}</span>
-          : <HeroButton variant="ghost" size="sm" onPress={() => void toPending()}>放进下一版</HeroButton>) : null}
+          : <HeroButton variant="ghost" size="sm" onPress={() => act("doc", toPending)}>放进下一版</HeroButton>) : null}
+        {failed?.at === "doc" ? <FailedLine inline reason={failed.reason} onRetry={failed.retry} /> : null}
       </div>
       {detail.versions.length > 1 ? (
         <div className={s.versions} role="tablist" aria-label="版本">
@@ -163,8 +167,8 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
   const dialogs = <>
     {reviewing ? <ReviewDialog onClose={() => setReviewing(false)} onStart={async (critics) => {
       if (!session) return;
-      try { await local.runner.sendMessage(session.id, reviewText(critics), "review"); setReviewing(false); showWorkspaceToast({ text: "评审会开始了" }); }
-      catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没开起来，请重试" }); }
+      await local.runner.sendMessage(session.id, reviewText(critics), "review");
+      setReviewing(false);
     }} /> : null}
     {starting ? <StartDialog title={topic.title} needsFolder={false} onClose={() => setStarting(false)} onStart={async (model) => {
       await startTopic(local.runner, topic, model);
@@ -201,7 +205,8 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
         </div>
         <div className={s.exec}>
           {detail.task ? <Link href={`/me/work/tasks/${encodeURIComponent(detail.task.taskId)}`} className={s.link}>{detail.task.name}</Link> : null}
-          {!handheld ? <HeroButton variant="ghost" size="sm" onPress={() => void archive()}>{topic.status === "archived" ? "取消归档" : "归档"}</HeroButton> : null}
+          {!handheld ? <HeroButton variant="ghost" size="sm" onPress={() => act("head", archive)}>{topic.status === "archived" ? "取消归档" : "归档"}</HeroButton> : null}
+          {failed?.at === "head" ? <FailedLine inline reason={failed.reason} onRetry={failed.retry} /> : null}
         </div>
       </header>
       {handheld ? <div className={s.body} data-solo>{doc}</div> : (

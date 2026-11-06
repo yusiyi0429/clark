@@ -128,8 +128,11 @@ function HomeFrame({ account }: { account: Account }) {
   // ---- 开规划员、开卡（一次交给本机）----
   const here = local.phase === "ready" && !handheld;
   const changed = useCallback(() => { void api.refresh(); }, [api]);
-  /** 一批交给本机：开了哪几张卡（卡 id）。 */
-  const start = useCallback(async (cards: Worker[], planners: { taskId: string; splitId?: string }[]): Promise<Set<string>> => {
+  /**
+   * 一批交给本机：开了哪几张卡（卡 id）。没开起来时 onError 接着（拆卡写在管线里「拆卡失败 · 重试」）；
+   * 自动开工的没地方写（「手动开始」那一行要等数据分得出「自动开工失败」），先照旧提示一句。
+   */
+  const start = useCallback(async (cards: Worker[], planners: { taskId: string; splitId?: string }[], onError?: () => void): Promise<Set<string>> => {
     const opened = new Set<string>();
     const cwd = local.folders.find((folder) => folder.id === readLast().folderId)?.path ?? local.folders[0]?.path;
     if (!cwd && cards.length) { showWorkspaceToast({ text: "先在连接页加一个文件夹" }); return opened; }
@@ -158,15 +161,19 @@ function HomeFrame({ account }: { account: Account }) {
       changed();
     } catch (error) {
       await giveBack(claimed);
-      showWorkspaceToast({ text: error instanceof Error ? error.message : "没开起来，请重试" });
+      if (onError) onError();
+      else showWorkspaceToast({ text: error instanceof Error ? error.message : "没开起来，请重试" });
       changed();
     }
     return opened;
   }, [local, work.roles, changed]);
+  /** 拆卡登记没成的那件 Task：管线里出「拆卡失败 · 重试」（不弹 toast）。 */
+  const [splitFailed, setSplitFailed] = useState<string | null>(null);
   const split = useCallback(async (taskId: string) => {
-    if (here) { await start([], [{ taskId }]); return; }
+    setSplitFailed(null);
+    if (here) { await start([], [{ taskId }], () => setSplitFailed(taskId)); return; }
     try { await registerSplit(taskId); changed(); }
-    catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没成功，请重试" }); }
+    catch { setSplitFailed(taskId); }
   }, [here, start, changed]);
 
   // 等开工的卡和拆卡登记：这台电脑连着本机时自己开（每件只试一次，没开成的照旧等开工）。
@@ -260,13 +267,10 @@ function HomeFrame({ account }: { account: Account }) {
   // 规划员、验收员停会话；子 agent、后台命令只停那一项，会话接着做。
   const stop = async (item: BackgroundItem) => {
     if (!item.sessionId) return;
-    try {
-      if ((item.kind === "subagent" || item.kind === "command") && item.itemId) await local.runner.stopBackground(item.sessionId, item.itemId);
-      else await local.runner.kill(item.sessionId);
-      await local.refresh();
-      changed();
-    }
-    catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没停下，请重试" }); }
+    if ((item.kind === "subagent" || item.kind === "command") && item.itemId) await local.runner.stopBackground(item.sessionId, item.itemId);
+    else await local.runner.kill(item.sessionId);
+    await local.refresh();
+    changed();
   };
   const panel = (extra: { onCollapse?: () => void; onClose?: () => void }) => (
     <BackgroundPanel items={items} resources={work.resources} model={model} onStop={stop} handheld={handheld} {...extra} />
@@ -310,7 +314,7 @@ function HomeFrame({ account }: { account: Account }) {
       case "buddy": return <BuddyView buddy={buddy} outbox={outbox} consume={consume} onSpeaking={setSpeaking} />;
       case "task": {
         const task = planTask(current.taskId);
-        return task ? <PipelineView key={task.taskId} task={task} home={homeTask(task.taskId)} api={api} buddy={buddy} outbox={outbox} consume={consume} go={go} onSplit={(taskId) => void split(taskId)} onSpeaking={setSpeaking} />
+        return task ? <PipelineView key={task.taskId} task={task} home={homeTask(task.taskId)} api={api} buddy={buddy} outbox={outbox} consume={consume} go={go} onSplit={(taskId) => void split(taskId)} splitFailed={splitFailed === task.taskId} onSpeaking={setSpeaking} />
           : <Missing loading={!api.ready} onGone={() => { if (outbox?.target === current.taskId) consume(outbox.id); }} />;
       }
       case "info": {

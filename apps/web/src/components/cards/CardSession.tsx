@@ -26,7 +26,7 @@ import { SessionComposer, SessionTranscript, type DecideOptions } from "./Sessio
 import { useCardDetail, type CardDetail } from "./useCardDetail";
 import { MergeAction } from "@/components/work/MergeAction";
 import { QuestionDecision } from "@/components/work/decisions";
-import { PendingBoxes, PendingDock } from "@/components/work/DecisionBox";
+import { FailedLine, PendingBoxes, PendingDock } from "@/components/work/DecisionBox";
 import { useViewChrome } from "@/components/home/view";
 import { useConversationScroll } from "@/conversation/useConversationScroll";
 import { commitText, placeText, shortPlace } from "@/lib/work/merge";
@@ -82,39 +82,35 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
   const backHref = workHref(taskId);
   const sessionRunning = session ? running(view.status ?? session.status) : false;
 
+  // 没成的不弹 toast：批准、回答交给选项框，发消息交给输入框，停下交给那排按钮，各自在原处写「失败 · 重试」。
   const decide = async (requestId: string, decision: "allow" | "deny", { forSession, message }: DecideOptions) => {
     if (!session) return;
-    try { await local.runner.decidePermission(session.id, requestId, { decision, ...(forSession ? { allowForSession: true } : {}), ...(message ? { message } : {}) }); scroll.jumpToLatest(); }
-    catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没成功，请重试" }); }
+    await local.runner.decidePermission(session.id, requestId, { decision, ...(forSession ? { allowForSession: true } : {}), ...(message ? { message } : {}) });
+    scroll.jumpToLatest();
   };
   // 执行方在问本人：事件流里最新的那次，没收到事件时照会话摘要。
   const question = session ? view.question ?? session.pendingQuestion ?? null : null;
   const answer = async (body: TLocalQuestionAnswerRequest) => {
     if (!session || !question) return;
-    try { await local.runner.answerQuestion(session.id, question.requestId, body); await local.refresh(); scroll.jumpToLatest(); }
-    catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没成功，请重试" }); }
+    await local.runner.answerQuestion(session.id, question.requestId, body);
+    await local.refresh();
+    scroll.jumpToLatest();
   };
   const say = async (text: string) => {
     if (!session) return false;
-    try {
-      const result = await local.runner.sendMessage(session.id, text);
-      if (result.delivery === "next_step") showWorkspaceToast({ text: "下一步生效" });
-      return true;
-    } catch (error) {
-      showWorkspaceToast({ text: error instanceof Error ? error.message : "没发出去，请重试" });
-      return false;
-    }
+    await local.runner.sendMessage(session.id, text);
+    return true;
   };
   const control = async (action: "interrupt" | "kill") => {
     if (!session) return;
-    try { await local.runner[action](session.id); await local.refresh(); showWorkspaceToast({ text: action === "interrupt" ? "已停下" : "已强停" }); }
-    catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没成功，请重试" }); }
+    await local.runner[action](session.id);
+    await local.refresh();
   };
 
   const pane = (
     <aside className={s.pane} aria-label="结果">
       <ResultPane detail={detail} session={session} view={session ? view : null} canAct={canAct} wait={wait} stage={stage} handheld={handheld} ready={ready}
-        onStart={embedded ? undefined : () => setStarting(true)} onControl={(action) => void control(action)} onResume={() => void say("继续")} onChanged={() => void refresh()} />
+        onStart={embedded ? undefined : () => setStarting(true)} onControl={control} onResume={() => say("继续")} onChanged={() => void refresh()} />
     </aside>
   );
   // 执行方在问本人：选项框放在对话最后（问的那一处）；手机、别的电脑上灰着。
@@ -208,9 +204,12 @@ function CloudTimeline({ run, title }: { run: TLocalRunView | null; title: strin
 function ResultPane({ detail, session, view, canAct, wait, stage, handheld, ready, onStart, onControl, onResume, onChanged }: {
   detail: CardDetail; session: TLocalSessionSummary | null; view: SessionView | null; canAct: boolean; wait: string | null; stage: string; handheld: boolean; ready: boolean;
   /** 新首页里没有常驻的「开始」（设计 9.8）：自动开工失败时由 Task 管线那一行出「手动开始」。 */
-  onStart?: () => void; onControl: (action: "interrupt" | "kill") => void; onResume: () => void; onChanged: () => void;
+  onStart?: () => void; onControl: (action: "interrupt" | "kill") => Promise<unknown>; onResume: () => Promise<unknown>; onChanged: () => void;
 }) {
   const item = detail.task;
+  // 停下、继续、强停没成：那排按钮后面写「失败 · 重试」（原因在 title 里），不弹 toast。
+  const [failed, setFailed] = useState<{ retry: () => void; reason: string } | null>(null);
+  const act = (action: () => Promise<unknown>) => { setFailed(null); action().catch((error: unknown) => setFailed({ retry: () => act(action), reason: error instanceof Error ? error.message : "" })); };
   const run = detail.runs[0] ?? null;
   const agent = isAgentCard(item);
   const role = cardRole(item);
@@ -274,9 +273,10 @@ function ResultPane({ detail, session, view, canAct, wait, stage, handheld, read
       {agent && !handheld ? (
         <div className={s.actions}>
           {stage === "todo" && !view && onStart ? <HeroButton variant="primary" onPress={onStart} isDisabled={!ready}>开始</HeroButton> : null}
-          {canAct && live ? <HeroButton variant="secondary" onPress={() => onControl("interrupt")}>停下</HeroButton> : null}
-          {canAct && paused && !live ? <HeroButton variant="primary" onPress={onResume}>继续</HeroButton> : null}
-          {canAct && view && status !== "exited" && status !== "done" && status !== "failed" ? <HeroButton variant="ghost" onPress={() => onControl("kill")}>强停</HeroButton> : null}
+          {canAct && live ? <HeroButton variant="secondary" onPress={() => act(() => onControl("interrupt"))}>停下</HeroButton> : null}
+          {canAct && paused && !live ? <HeroButton variant="primary" onPress={() => act(onResume)}>继续</HeroButton> : null}
+          {canAct && view && status !== "exited" && status !== "done" && status !== "failed" ? <HeroButton variant="ghost" onPress={() => act(() => onControl("kill"))}>强停</HeroButton> : null}
+          {failed ? <FailedLine inline reason={failed.reason} onRetry={failed.retry} /> : null}
         </div>
       ) : null}
       {!agent && item.status !== "done" ? <div className={s.actions}><Link href={`/me/tasks/${encodeURIComponent(item.id)}`} className={s.link}>打开事项</Link></div> : null}
@@ -288,11 +288,13 @@ function ResultPane({ detail, session, view, canAct, wait, stage, handheld, read
 export function Acceptance({ cardId, handback, canOverrule, deliverable, onChanged }: { cardId: string; handback: TCardHandbackView; canOverrule: boolean; deliverable: string | null; onChanged: () => void }) {
   const [reason, setReason] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState<{ retry: () => void; reason: string } | null>(null);
   const verdicts = useMemo(() => handback.result?.criteria ?? [], [handback.result]);
-  const run = async (action: () => Promise<unknown>, done: string) => {
+  const run = async (action: () => Promise<unknown>) => {
     setBusy(true);
-    try { await action(); showWorkspaceToast({ text: done }); setReason(null); onChanged(); }
-    catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没成功，请重试" }); }
+    setFailed(null);
+    try { await action(); setReason(null); onChanged(); }
+    catch (error) { setFailed({ retry: () => void run(action), reason: error instanceof Error ? error.message : "" }); }
     finally { setBusy(false); }
   };
   const head = handback.status === "queued" || handback.status === "running" ? "Agent 验收中"
@@ -318,15 +320,17 @@ export function Acceptance({ cardId, handback, canOverrule, deliverable, onChang
       {handback.overrule ? <p className={s.faint}>{handback.overrule.by.name} 推翻：{handback.overrule.reason}</p> : null}
       {handback.error ? <p className={s.faint}>{handback.error}</p> : null}
       {reason !== null ? (
-        <form className={s.reason} onSubmit={(event) => { event.preventDefault(); if (reason.trim()) void run(() => overrule(cardId, handback.id, reason.trim()), handback.outcome === "pass" ? "已推翻，回到进行中" : "已算通过"); }}>
+        <form className={s.reason} onSubmit={(event) => { event.preventDefault(); if (reason.trim()) void run(() => overrule(cardId, handback.id, reason.trim())); }}>
           <input autoFocus value={reason} maxLength={200} placeholder="原因" aria-label="推翻的原因" onChange={(event) => setReason(event.target.value)} />
           <HeroButton variant="primary" size="sm" type="submit" isDisabled={busy || !reason.trim()}>{handback.outcome === "pass" ? "推翻" : "仍然通过"}</HeroButton>
           <HeroButton variant="ghost" size="sm" onPress={() => setReason(null)}>取消</HeroButton>
+          {failed && !busy ? <FailedLine inline reason={failed.reason} onRetry={failed.retry} /> : null}
         </form>
       ) : (
         <div className={s.actions}>
           {canFlip ? <HeroButton variant="secondary" size="sm" onPress={() => setReason("")}>{handback.outcome === "pass" ? "推翻验收" : "仍然通过"}</HeroButton> : null}
-          {canOverrule && handback.status === "failed" ? <HeroButton variant="secondary" size="sm" isDisabled={busy} onPress={() => void run(() => retryAcceptance(cardId, handback.id), "已重新排队")}>重新验收</HeroButton> : null}
+          {canOverrule && handback.status === "failed" ? <HeroButton variant="secondary" size="sm" isDisabled={busy} onPress={() => void run(() => retryAcceptance(cardId, handback.id))}>重新验收</HeroButton> : null}
+          {failed && !busy ? <FailedLine inline reason={failed.reason} onRetry={failed.retry} /> : null}
         </div>
       )}
     </div>
