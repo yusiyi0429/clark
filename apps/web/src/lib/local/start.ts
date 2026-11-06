@@ -41,8 +41,8 @@ export async function cardStartRequest(item: CardItem, model: TLocalModelProfile
     firstMessage = fallbackCardBrief(item);
   }
   void patchCard(item.id, { version, model: { id: model.id, label: model.label, kind: model.source } }).catch(() => undefined);
-  // 要等的前面的卡（E 把卡上的 after 合进来之前，有就读）：本机等它们在这台电脑上合回再开始。
-  const after = (item.card as { after?: string[] } | null | undefined)?.after ?? [];
+  // 要等的前面的卡（派活单上规划员写的先后）：本机等它们在这台电脑上合回再开始。
+  const after = item.card?.after ?? [];
   return { subject: { kind: "card", cardId: item.id }, title: item.title.slice(0, 120), cwd, modelProfileId: model.id, firstMessage, ...(brief?.role ? { role: localRole(brief.role) } : {}),
     ...(after.length ? { after } : {}) };
 }

@@ -15,7 +15,7 @@ const base: Omit<TTaskView, "card"> = {
   owner: { personId: "p1", name: "孙铭泽" }, collaborators: [], latestProgress: null, returnReason: null, origin: null, awaitingAcceptance: false, planTaskId: "t1", blocker: null,
   createdAt: "2026-11-06T01:00:00Z", updatedAt: "2026-11-06T01:00:00Z",
 };
-const facet: TTaskCard = { stage: "todo", wait: null, executor: "claude_code", role: null, model: null, criterion: null, run: null, handback: null, deliverable: null };
+const facet: TTaskCard = { stage: "todo", wait: null, executor: "claude_code", role: null, model: null, criterion: null, run: null, handback: null, deliverable: null, after: [] };
 const RID = "00000000-0000-4000-8000-000000000001";
 
 describe("岗位页", () => {

@@ -20,7 +20,7 @@ export const MARK_LABEL: Record<WorkerMark, string> = { approval: "等你批准"
 /** 「等你」：要本人动手的几种。 */
 export const WAITING: WorkerMark[] = ["approval", "reply", "review_failed", "blocked"];
 export const isWaiting = (mark: WorkerMark | null) => !!mark && WAITING.includes(mark);
-const REASON: Record<NonNullable<TWorkerItem["queueReason"]>, QueueReason> = { not_dispatched: "start", slot: "slot", device_offline: "offline" };
+const REASON: Record<NonNullable<TWorkerItem["queueReason"]>, QueueReason> = { not_dispatched: "start", slot: "slot", device_offline: "offline", prior_cards: "after" };
 
 export type Worker = {
   key: string;
@@ -101,9 +101,10 @@ export function toWorker(entry: TWorkerItem, { sessions, cards, deviceName }: { 
   let reason: QueueReason | null = state === "queued" ? REASON[entry.queueReason ?? "not_dispatched"] : null;
   let mark: WorkerMark | null = state === "doing" ? entry.wait : null;
   let queuePos: number | null = entry.queuePosition;
-  // 等前面的卡：这台电脑上以本机为准，没有本机会话时用云端的（E 的 waitingFor 合进来之前，有就读）。
-  const waitingIds = session?.waitingFor ?? (entry as { waitingFor?: string[] | null }).waitingFor ?? null;
-  const waitingFor = waitingIds?.length ? waitingIds.map((id) => cards.get(id)?.title ?? "另一张卡") : null;
+  // 等前面的卡：这台电脑上以本机为准（标题从看板的卡和云端行里找），没有本机会话时用云端的。
+  const cloudTitle = (id: string) => entry.waitingFor.find((card) => card.cardId === id)?.title;
+  const waitingFor = session?.waitingFor?.length ? session.waitingFor.map((id) => cards.get(id)?.title ?? cloudTitle(id) ?? "另一张卡")
+    : session || !entry.waitingFor.length ? null : entry.waitingFor.map((card) => card.title);
   // 本机的更新：排队、开工、等你批准、等你回复、已暂停以这台电脑为准；验收中、验收没过、受阻只有云端知道。
   if (session && state !== "done" && mark !== "reviewing" && mark !== "review_failed" && mark !== "blocked") {
     if (session.status === "queued") { state = "queued"; reason = folderBusy(session, sessions) ? "folder" : "slot"; mark = null; queuePos = session.queuePosition; }

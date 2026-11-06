@@ -22,7 +22,7 @@ const item = (extra: Partial<TWorkerItem>): TWorkerItem => ({
   key: "card:c1", kind: "card", cardId: "c1", topicId: null, title: "同时跑的上限和排队", role: ROLE, workerNo: 1,
   task: { id: "t1", name: "本机程序第一版" }, mission: null, step: { n: 4, total: 7, label: "跑测试" },
   resource: { where: "local", deviceId: null, deviceName: "ThinkPad", modelLabel: "Sonnet" }, startedAt: "2026-11-06T04:00:00Z", elapsedSeconds: 840,
-  finishedAt: null, cost: null, stage: "doing", wait: null, needsYou: false, queueReason: null, queuePosition: null, git: null, ...extra,
+  finishedAt: null, cost: null, stage: "doing", wait: null, needsYou: false, queueReason: null, queuePosition: null, git: null, waitingFor: [], ...extra,
 });
 const session = (extra: Partial<TLocalSessionSummary>): TLocalSessionSummary => ({
   id: "00000000-0000-4000-8000-0000000000a1", subject: { kind: "card", cardId: "c1" }, title: "x", agent: "claude-code", modelProfileId: "subscription", modelLabel: "订阅 · Sonnet",
@@ -274,6 +274,9 @@ describe("执行方问本人、卡等前面的卡", () => {
     const line = renderToStaticMarkup(<>{secondLine(worker, 0, null).map((part, i) => <span key={i}>{part}</span>)}</>);
     expect(line).toContain("等「先搭骨架」");
     expect(line).not.toContain("排第");
+    // 手机和别的电脑上照云端行：排队原因 prior_cards，等的卡带标题。
+    const remote = toWorker(item({ stage: "todo", queueReason: "prior_cards", waitingFor: [{ cardId: "c0", title: "先搭骨架" }] }), ctx());
+    expect(remote).toMatchObject({ state: "queued", reason: "after", waitingFor: ["先搭骨架"] });
   });
 
   it("假本机程序：批准以后问一个单选问题，答了接着做；答过再答是 409。带 after 的卡等前面的卡合回才开工作树、开始", async () => {
