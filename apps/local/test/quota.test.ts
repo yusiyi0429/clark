@@ -79,10 +79,17 @@ describe("额度", () => {
     await q.refresh(true);
     expect(reads).toBe(3);
     // 读不到：记下原因，窗口照旧
-    const broken = new QuotaTracker(dir, async () => { throw new Error("没读到额度"); }, () => now);
-    await broken.refresh(true);
+    let fails = 0;
+    const broken = new QuotaTracker(dir, async () => { fails += 1; throw new Error("没读到额度"); }, () => now);
+    now += QUOTA_TTL_MS;
+    await broken.refresh();
     expect(broken.view()[0]).toMatchObject({ plan: "max", error: "没读到额度" });
     expect(broken.view()[0]!.windows).toHaveLength(3);
+    await broken.refresh(); // 刚试过没读到：5 分钟内不再起进程去读（网页每 10 秒问一次状态）
+    expect(fails).toBe(1);
+    now += QUOTA_TTL_MS;
+    await broken.refresh();
+    expect(fails).toBe(2);
   });
 
   it("向假 Claude Code 读额度：不发提示，只握手和 get_usage", async () => {

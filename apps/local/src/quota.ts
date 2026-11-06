@@ -46,6 +46,8 @@ export class QuotaTracker {
   private readonly file: string;
   private state: TLocalQuotaSource | null;
   private reading: Promise<void> | null = null;
+  /** 上次去读的时间（没读到也算）：读不到时不能每次轮询都起一个 Claude Code。 */
+  private triedAt = 0;
   onChange: () => void = () => {};
 
   constructor(dataDir: string, private readonly read: () => Promise<Json>, private readonly now = () => Date.now()) {
@@ -70,10 +72,11 @@ export class QuotaTracker {
     return s.windows.some((w) => w.state === "blocked") ? Infinity : null;
   }
 
-  /** 读一次（get_usage）。force 以外 5 分钟内读过就不再读；同时只读一次。从不抛错，没读到记在 error 里。 */
+  /** 读一次（get_usage）。force 以外 5 分钟内读过、试过就不再读；同时只读一次。从不抛错，没读到记在 error 里。 */
   refresh(force = false): Promise<void> {
-    const at = this.state?.updatedAt ? Date.parse(this.state.updatedAt) : 0;
-    if (!force && this.now() - at < QUOTA_TTL_MS) return Promise.resolve();
+    const at = Math.max(this.triedAt, this.state?.updatedAt ? Date.parse(this.state.updatedAt) : 0);
+    if (!force && this.now() - at < QUOTA_TTL_MS) return this.reading ?? Promise.resolve();
+    if (!this.reading) this.triedAt = this.now();
     this.reading ??= this.read()
       .then((resp) => this.set({ ...quotaFromUsage(resp), updatedAt: this.stamp(), error: null }))
       .catch((e: unknown) => this.set({ ...(this.state ?? { plan: null, windows: [], extraUsage: null, blockedUntil: null, updatedAt: null }), error: (e instanceof Error ? e.message : String(e)).slice(0, 300) }))
