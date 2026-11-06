@@ -5,7 +5,7 @@ import {
   LocalCreateSessionRequest, LocalModelProfileUpsert, LocalModelProfile, LocalPermissionDecisionRequest, LocalSessionEvent,
   LocalSyncBatchRequest, LocalPairingStatusResponse, LocalSendMessageRequest, LOCAL_RUNNER_ROUTES,
   LocalCreateSessionBatchRequest, LocalCreateSessionBatchResponse, LocalSettingsPatch, LocalSessionSummary, LocalHealthResponse,
-  LocalVerifyBriefResponse, LOCAL_RUNNER_VERIFY_BRIEF_PATH,
+  LocalVerifyBriefResponse, LOCAL_RUNNER_VERIFY_BRIEF_PATH, LocalMergeResponse, LocalVerdict,
 } from "../src/index.js";
 
 const sessionId = "6b0f3a52-4d0c-4c1e-9a43-1f7d2c9b8e10";
@@ -133,6 +133,41 @@ describe("本机程序契约", () => {
     const role = { id: sessionId, name: "验收员", kind: "reviewer", dutiesMd: "逐条判", practiceMd: "", acceptanceMd: "", tools: ["tianshu"], modelTier: "light", version: 1 };
     expect(Value.Check(LocalVerifyBriefResponse, { markdown: "# 验收", criteria: ["页面能登录", "有截图"], role, failStreak: 1 })).toBe(true);
     expect(Value.Check(LocalVerifyBriefResponse, { markdown: "# 验收", criteria: [], role: null, failStreak: 0 })).toBe(false);
+  });
+
+  it("卡的工作树：会话摘要说在哪做，交回和结论带提交，同步带分支，合回的结果（ADR 0038）", () => {
+    const sha = "a".repeat(40);
+    const at = "2026-11-06T02:00:00.000Z";
+    const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0 };
+    const summary = {
+      id: sessionId, subject: { kind: "card", cardId: "card-1" }, title: "改登录页", agent: "claude-code", modelProfileId: "subscription", modelLabel: "订阅",
+      cwd: "C:/data/worktrees/card-1", status: "running", includePersonalConfig: false, createdAt: at, updatedAt: at, lastSeq: 3, pendingPermissions: 0, queuePosition: null, usage,
+    };
+    const worktree = { kind: "worktree", folder: "D:/repo", path: "C:/data/worktrees/card-1", branch: "tianshu/card1-login", baseBranch: "main", baseCommit: sha, mergedCommit: null };
+    expect(Value.Check(LocalSessionSummary, { ...summary, workspace: worktree })).toBe(true);
+    expect(Value.Check(LocalSessionSummary, { ...summary, workspace: { kind: "folder", folder: "D:/notes" } })).toBe(true);
+    expect(Value.Check(LocalSessionSummary, summary)).toBe(true); // 专题、规划员、验收员不带
+    expect(Value.Check(LocalSessionSummary, { ...summary, workspace: { ...worktree, baseCommit: "abc1234" } })).toBe(false); // 提交号要完整
+    expect(Value.Check(LocalSessionSummary, { ...summary, workspace: { kind: "folder", folder: "D:/notes", branch: "x" } })).toBe(false);
+
+    const item = { key: `${deviceId}:${sessionId}:5`, sessionId, subject: { kind: "card", cardId: "card-1" }, occurredAt: at };
+    const git = { branch: "tianshu/card1-login", baseBranch: "main", baseCommit: sha, commit: "b".repeat(40) };
+    const handback = { summary: "做完了", criteria: [], outputKeys: [] };
+    const batch = (data: unknown) => ({ deviceId, runnerVersion: "0.1.0", slots: { max: 3, running: 1, queued: 0 }, items: [{ ...item, type: "handback", data }] });
+    expect(Value.Check(LocalSyncBatchRequest, batch({ ...handback, git }))).toBe(true);
+    expect(Value.Check(LocalSyncBatchRequest, batch(handback))).toBe(true); // 在文件夹里做的卡不带
+    expect(Value.Check(LocalSyncBatchRequest, batch({ ...handback, git: { ...git, commit: undefined } }))).toBe(false);
+    expect(Value.Check(LocalSessionEvent, { seq: 1, at, sessionId, type: "handback", ...handback, commit: git.commit })).toBe(true);
+    const verdict = { passed: true, summary: "都达到了", criteria: [{ index: 1, verdict: "met", reason: "能登录", evidence: null, fix: null }], beyondScope: [], modelLabel: "haiku", roleId: null, roleVersion: null };
+    expect(Value.Check(LocalVerdict, { ...verdict, commit: git.commit })).toBe(true);
+    expect(Value.Check(LocalVerdict, verdict)).toBe(true);
+
+    expect(LOCAL_RUNNER_ROUTES.mergeSession).toEqual({ method: "POST", path: "/v1/sessions/:id/merge", auth: true });
+    expect(Value.Check(LocalMergeResponse, { merged: true, commit: sha, session: { ...summary, workspace: { ...worktree, mergedCommit: sha } } })).toBe(true);
+    for (const reason of ["base_not_checked_out", "dirty", "conflict"]) {
+      expect(Value.Check(LocalMergeResponse, { merged: false, reason, message: "合不了", files: ["src/a.ts"] })).toBe(true);
+    }
+    expect(Value.Check(LocalMergeResponse, { merged: false, reason: "card_running", message: "x", files: [] })).toBe(false);
   });
 
   it("配对口令只在批准后出现；路由表里只有健康和配对不要口令", () => {
