@@ -130,6 +130,7 @@ import { createWorldPlanTaskSource, emptyPlanTaskSource, type PlanTaskSource } f
 import { registerDeliverableRoutes } from "./routes/deliverables.js";
 import { registerLocalRoutes } from "./routes/local.js";
 import { registerRoleRoutes } from "./routes/roles.js";
+import { registerWorkerRoutes } from "./routes/workers.js";
 import { registerTaskCardRoutes, type BoardAgents } from "./routes/taskCards.js";
 import type { DeliverableAgents, DeliverableQueue } from "./deliverableReview.js";
 import type { ArticleFetcher } from "./articleText.js";
@@ -846,6 +847,7 @@ export async function buildApp({
   }
   // V2 执行看板（routes/taskCards.ts）；本机程序在云端的那一侧（routes/local.ts）：配对、设备令牌、单向上报的接收端。
   registerRoleRoutes(app, ctx);
+  registerWorkerRoutes(app, ctx);
   const board = registerTaskCardRoutes(app, ctx, { agents: boardAgents, fetchArticle: deliverableFetcher });
   registerLocalRoutes(app, ctx, { onHandbacks: (ids) => ids.forEach(board.enqueueAcceptance) });
 
