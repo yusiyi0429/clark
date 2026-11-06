@@ -9,7 +9,7 @@ import { createPiConversationRuntime } from '../src/piConversationRuntime.js';
 import { loadPeopleDirectory } from '../src/peopleDirectory.js';
 import { testEnv } from './helpers.js';
 
-import { createCompanyMemory, locateHeads, locateHints } from '../src/company.js';
+import { LOCATED_PAGE_BYTES, createCompanyMemory, locateHeads, locateHints } from '../src/company.js';
 import type { WorldHead } from '../src/worldClient.js';
 
 const viewer = { personId: 'ceo', role: 'ceo' as const };
@@ -236,7 +236,7 @@ describe('World company public read boundary', () => {
 
 // 11/06「答案带出处」：先按类型、周期和标题定位，只读定位到的对象；定位不到才全量读（和原来一样）。
 describe('World company facts: locate before reading', () => {
-  type Seed = { id: string; type: string; title: string; period?: string; latestState?: unknown };
+  type Seed = { id: string; type: string; title: string; period?: string; latestState?: unknown; body?: string };
   async function world(seeds: Seed[]) {
     const dir = await mkdtemp(join(tmpdir(), 'company-locate-'));
     const grantFile = join(dir, 'access.json');
@@ -246,6 +246,7 @@ describe('World company facts: locate before reading', () => {
       object.object_id = seed.id;
       Object.assign(object.business, { object_id: seed.id, object_type: seed.type, title: seed.title, relations: [] });
       if (seed.latestState) object.records.latest_state = seed.latestState;
+      if (seed.body) object.business.blocks[0].value.text = seed.body;
       return [seed.id, { object, period: seed.period }];
     }));
     const requests: URL[] = [];
@@ -331,6 +332,28 @@ describe('World company facts: locate before reading', () => {
       const [entry] = (await read(t, '灯塔交付怎么样了')).entries;
       expect(entry.text).toContain('### 当前进展\n\n快照 snap-1@1 · 2026-11-05 · 于斯一的 Claude Code · 未确认\n\n当前状态：首版已上线，等真实会议读回\n\n11/4 换版完成');
       expect(entry.text.indexOf('### 当前进展')).toBeLessThan(entry.text.indexOf('### 定义'));
+    } finally { await t.close(); }
+  });
+
+  it('puts the opening of every located object on the first page before any continuation, within the located page budget', async () => {
+    const body = Array.from({ length: 12 }, () => '定义正文。'.repeat(100)).join('\n\n');
+    const latestState = { object_type: 'StateSnapshot', ref: 'snap@1', as_of: '2026-11-05T00:00:00Z', blocks: [{ id: 'current_state', display_name: '当前状态', value: { text: '首版已上线', components: [] } }] };
+    const t = await world([
+      { id: 'mission-a', type: 'Mission', title: '灯塔成本核算', latestState, body },
+      { id: 'po-b', type: 'PeriodGoal', title: '10 月：灯塔首版核算', latestState, body },
+      { id: 'strategy', type: 'Strategy', title: '总体战略定位' },
+    ]);
+    try {
+      const first = await read(t, '灯塔这件事到底怎么样了');
+      expect(first.status).toBe('ready');
+      expect(new Set(t.reads())).toEqual(new Set(['mission-a', 'po-b']));
+      expect(first.entries.slice(0, 2).map((entry) => [entry.ref, entry.handle.split(':').at(-1)])).toEqual([['mission-a@2', '0'], ['po-b@2', '0']]);
+      expect(first.entries.slice(0, 2).every((entry) => entry.text.includes('### 当前进展\n\n快照 snap@1'))).toBe(true);
+      expect(Buffer.byteLength(JSON.stringify(first.entries))).toBeLessThanOrEqual(LOCATED_PAGE_BYTES + 200);
+      expect(first.nextCursor).toBeDefined();
+      const second = await t.company.read(viewer, { query: '灯塔这件事到底怎么样了', locate: true, cursor: first.nextCursor }, new AbortController().signal);
+      expect(second.entries.length).toBeGreaterThan(0);
+      expect(second.entries.every((entry) => !entry.handle.endsWith(':0'))).toBe(true);
     } finally { await t.close(); }
   });
 

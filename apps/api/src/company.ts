@@ -160,6 +160,9 @@ export function locateHints(query: string, now: Date): { types: string[]; period
 }
 /** 一次最多读几个对象；定位到的超过这个数只读标题最贴的几个。 */
 const LOCATE_MAX = 6;
+/** 一页最多多少字节（条目的 JSON）：全量读 7000；定位读只有几个对象，放宽到 12000，第一页放得下两三个对象的开头。 */
+const PAGE_BYTES = 7000;
+export const LOCATED_PAGE_BYTES = 12000;
 /**
  * 按标题挑对象头：问话检索词（同 query_company，不用单字汉字）在标题里命中几个就是几分。
  * 有类型提示且这些类型里有命中的，只在这些类型里挑；只留分数不低于最高分一半的，最多 LOCATE_MAX 个。
@@ -230,7 +233,7 @@ export function createCompanyMemory(env: CompanyEnv): CompanyReader {
             }
             return objects;
           };
-          const pageOf = (entries: CompanyEntry[], heads: WorldHead[], markdown: string, fallback: boolean): CompanyView => {
+          const pageOf = (entries: CompanyEntry[], heads: WorldHead[], markdown: string, fallback: boolean, budget: number): CompanyView => {
             const filtered = entries.filter((entry) => !request.handle || entry.handle === request.handle);
             if (request.handle && !filtered.length) return { status: 'unavailable', entries: [], message: '公司参考已变化、删除或不可见，请重新查询。' };
             const version = createHash('sha256').update(JSON.stringify([viewer.personId, scope, fingerprint(heads), markdown, request.query ?? ''])).digest('base64url');
@@ -245,7 +248,7 @@ export function createCompanyMemory(env: CompanyEnv): CompanyReader {
             const page: CompanyEntry[] = [];
             let size = 0;
             for (const entry of filtered.slice(cursor)) {
-              if (page.length && size + Buffer.byteLength(JSON.stringify(entry)) > 7000) break;
+              if (page.length && size + Buffer.byteLength(JSON.stringify(entry)) > budget) break;
               page.push(entry); size += Buffer.byteLength(JSON.stringify(entry));
               if (page.length >= 8) break;
             }
@@ -265,9 +268,11 @@ export function createCompanyMemory(env: CompanyEnv): CompanyReader {
             if (objects) {
               if (JSON.stringify(await authorizedDomains()) !== JSON.stringify(domains)) return unavailableScope;
               const titles = headIndex([...listed, ...inPeriod]);
-              const entries = objects.flatMap((object) => project(object, titles));
+              // 各对象轮流放：先放每个对象的第一段（标题、状态、当前进展），再放第二段……第一页就能看到每个定位到的对象。
+              const chunks = objects.map((object) => project(object, titles));
+              const entries = Array.from({ length: Math.max(...chunks.map((list) => list.length)) }, (_, index) => chunks.flatMap((list) => list[index] ?? [])).flat();
               logEvent({ event: 'company.world_read', mode: 'located', listed: listed.length, read: objects.length, types: hints.types, period: hints.period ?? null, durationMs: Date.now() - started });
-              return pageOf(entries, picked, entries.map((entry) => entry.text).join('\n\n'), false);
+              return pageOf(entries, picked, entries.map((entry) => entry.text).join('\n\n'), false, LOCATED_PAGE_BYTES);
             }
           }
           for (let attempt = 0; attempt < 2; attempt++) {
@@ -305,7 +310,7 @@ export function createCompanyMemory(env: CompanyEnv): CompanyReader {
             if (JSON.stringify(await authorizedDomains()) !== JSON.stringify(domains)) return unavailableScope;
             const ranked = relevantEntries(entries, request.query);
             logEvent({ event: 'company.world_read', mode: 'full', listed: heads.length, read: objects.length, durationMs: Date.now() - started });
-            return pageOf(ranked.entries, heads, markdown, ranked.fallback);
+            return pageOf(ranked.entries, heads, markdown, ranked.fallback, PAGE_BYTES);
           }
           logEvent({ event: 'company.world_unavailable', status: 'unavailable', errorCode: 'WORLD_CHANGED_DURING_READ', domains: domains.length });
           return { status: 'unavailable', entries: [], message: `读取期间本体公司信息发生变化，请重试。${NOT_READ}` };
