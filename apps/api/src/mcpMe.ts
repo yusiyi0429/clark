@@ -23,6 +23,8 @@ import { executePersonalReviewAction, getCurrentPersonalReview, getPersonalRevie
 import { PERSONAL_REVIEW_WRITING_REQUIREMENTS } from "./personalReviewAgent.js";
 import { TaskQualityId, TaskRepairHandoff, TaskRepairList, TaskRepairView, TaskRepairReceiptInput } from "@warmap/contracts";
 import { ChatServiceError, type createChatService } from "./chatService.js";
+import { agreementDefinitions, agreementToolNames, callAgreementTool, type AgreementToolDeps } from "./mcpAgreements.js";
+import { agreementSummaries } from "./taskAgreements.js";
 
 const QualityView = Type.Union([Type.Literal("ceo"), Type.Literal("member")]);
 const QualityList = Type.Object({ viewerRole: QualityView }, { additionalProperties: false });
@@ -128,17 +130,21 @@ const taskFailure = (outcome: TaskResult | { deleted: true }) => "notFound" in o
 export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: string; now: () => Date;
   names: () => Map<string, string>; findPerson: (personId: string) => MemoryPerson | undefined;
   people: () => MemoryPerson[]; initialPerson: MemoryPerson; publicOrigin?: string; authorization: string | undefined; planTasks: PlanTaskSource;
-  chat?: ReturnType<typeof createChatService> }) {
+  chat?: ReturnType<typeof createChatService>; deliverables?: AgreementToolDeps["deliverables"] }) {
   const auth = () => authenticateMcpToken(deps.q, deps.authorization, deps.pepper, deps.now(), (id) => !!deps.findPerson(id), deps.publicOrigin ? oauthUrls(deps.publicOrigin).resource : undefined);
   /** 推进人写进展、放链接会让未启动的事项变进行中、版本跟着变：把事项此刻的状态和版本一起回给外部工具，接着提交验收直接用。 */
   const itemState = async (itemId: string) =>
     (await deps.q("SELECT status, version FROM tasks WHERE id=$1", [itemId])).rows[0] as { status: string; version: number } | undefined;
-  /** 可挂的 Mission，各带本体里挂在它下面的 Task（和首页同一个来源，限时；读不到就是空的）。 */
+  /**
+   * 可挂的 Mission，各带本体里挂在它下面的 Task（和首页同一个来源，限时；读不到就是空的）。
+   * 每个 Task 带几条标准（criteriaCount）和约定补全了没有（agreementComplete：每条都写了用什么证明），约定与对表 V1。
+   */
   const missionsWithTasks = async (personId: string) => {
     const missions = await listAvailableMissions(deps.q, personId, deps.now());
     const tasks = await readPlanTasks(deps.planTasks, missions.map(({ id, code }) => ({ id, code })));
+    const agreements = await agreementSummaries(deps.q, tasks);
     return missions.map(({ code: _code, period: _period, ...mission }) => ({ ...mission,
-      tasks: tasks.filter((task) => task.missionId === mission.id).map(({ taskId, name }) => ({ taskId, name })) }));
+      tasks: tasks.filter((task) => task.missionId === mission.id).map(({ taskId, name }) => ({ taskId, name, ...agreements.get(taskId)! })) }));
   };
   const initialAccess = access(deps.initialPerson);
   const instructions = [
@@ -148,6 +154,7 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
       "只在本人明确要求时才往天枢里写，比如本人说「同步本周进展」「记一下」「建一件事」「提交验收」：建事项、写进展、放链接、改事项、提交验收、整理合并或删除事项都一样；本人没开口就只读，不要自己判断该记了就去写。",
       "事项由本人建，粒度随本人：本人叫建什么就建什么，先用 list_my_items 看有没有同一件，有就告诉本人，不重复建；完成标准写成可检查的几条，验收时逐条对。记进展写做了什么、证据和下一步，产出用 add_link 放进去；本人说做完了，对照完成标准逐条写是否达到和依据，再用 submit_for_acceptance 提交验收。只写真实做过的事。会后分派来的事不删，本人说不做时用 return_item 退回。",
       "验收是本人逐条对完成标准的事：list_my_items 里有 awaitingAcceptance=true 的事，在对话开头或聊到相关的事时提醒一句（「有 N 件等你验收：…」），请本人到天枢逐条验收；本人在对话里逐条确认每条都达到时才用 accept_item 代为确认，一句「通过」不代确认。",
+      "Task 的约定与对表：get_task_agreement 读每条验收标准用什么证明、谁来认、这次不包括什么；本人问「能交了吗」「还差什么」时用 check_task 对表，照结果说结论和差的那几条，不自己另判。add_deliverable_version 只在本人要求时用，交一版链接、自动参考评审；交付由本人在天枢点。",
     ] : []),
     "任务卡正文是只读边界的例外：get_mission_card 只读本人可见卡；仅本人准备期间、editable=true时，用户已经明确具体改法可用edit_mission_card立即改有权限的任务字段并留痕。必须用刚读取的round填写sourceRound；本人已确认或已开始汇总时，只读正文和历史，先由本人取消确认或由战场 DRI 退回本人重新确认，不能自动绕过。保存备注不授权改文；仅明确修改意图可以写入。重新开放后需重新核对本次改法，不把旧改法直接套进新的本人准备窗口。不确定用户意思时先提问题与选项，最后一个选项为自己输入，澄清后立即改。不能自动向群聊发送私聊记录，不能签发或确认任务卡。遇到旧准备窗口、版本或原字段冲突必须重新读取。",
     "月末会有个人复盘待起草。用 list_pending 发现，get_my_review 读取本人的承诺、进展和写作要求，再用 save_review_draft 写入四部分草稿；不能替本人提交，请本人回天枢确认。",
@@ -159,7 +166,7 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
     if (!person) return { tools: [] };
     const roles = access(person);
     return { tools: [...(roles.member ? memberDefinitions : []), ...(roles.ceo ? ceoDefinitions : []),
-      ...(roles.ceo || roles.member ? missionCardDefinitions : []), ...reviewDefinitions,
+      ...(roles.ceo || roles.member ? missionCardDefinitions : []), ...(roles.ceo || roles.member ? agreementDefinitions : []), ...reviewDefinitions,
       ...(deps.chat && (roles.ceo || roles.member) ? qualityDefinitions : [])]
       .filter((tool) => !identity?.scopes || identity.scopes.includes("tianshu:write") || !MCP_WRITE_TOOLS.has(tool.name)) };
   });
@@ -193,6 +200,13 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
         if (call.name === "list_task_repairs") return result(await deps.chat.quality(viewer, randomUUID(), "/proposals", TaskRepairList, undefined, extra.signal));
         if (call.name === "get_task_repair_handoff") return result(await deps.chat.quality(viewer, randomUUID(), `/proposals/${call.arguments.proposalId}/handoff`, TaskRepairHandoff, undefined, extra.signal));
         return result(await deps.chat.quality(viewer, randomUUID(), `/proposals/${call.arguments.proposalId}/receipts`, TaskRepairView, call.arguments.receipt, extra.signal));
+      }
+      // 约定与对表（mcpAgreements.ts）：成员和 CEO 都列，谁能看、谁能交在里面按人和 Task 的关系判；参数不合法落到最后的 INVALID_INPUT。
+      if (agreementToolNames.has(tool)) {
+        if (!roles.member && !roles.ceo) { code = "FORBIDDEN"; return result({ code, message: "这个工具只对成员或 CEO 开放" }, true); }
+        const outcome = await callAgreementTool({ pool: deps.pool, q: deps.q, now: deps.now, planTasks: deps.planTasks, names, publicOrigin: deps.publicOrigin,
+          deliverables: deps.deliverables }, { personId: person.personId, isCeo: roles.ceo }, tool, args);
+        if (outcome) { code = outcome.error; return result(outcome.value, !!outcome.error); }
       }
       const ceoContext = () => ({ q: deps.q, secret: deps.pepper, now: deps.now(), names,
         people: deps.people(), personId: identity.personId });

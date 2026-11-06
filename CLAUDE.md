@@ -83,4 +83,5 @@ Issues 和 Specs 使用本地 Markdown，保存在 `.scratch/<feature-slug>/`。
 通过用户级 MCP 服务 `tianshu` 读写本人的执行事项（令牌只在用户配置里，不写进项目文件）。
 
 - 只在本人明确要求时才往天枢里写（比如「记一下」「建一件事」「提交验收」），没说就不动：要建事项时先用 `list_my_items` 看有没有同一件，本人叫建什么就建什么；要记进展时用 `append_progress` 写一条（做了什么、证据链接、下一步或阻塞）；做出来的文档、设计稿、PR 用 `add_link` 放进对应事项；要提交验收时用 `submit_for_acceptance`（对照完成标准逐条写明是否达到和依据），由本人在天枢确认完成。只写真实做过的事。
+- Task 的约定与对表：本人问某个 Task「能交了吗」「还差什么」时，用 `check_task` 对表，照结果说结论和差的那几条，不自己另判；每条用什么证明、谁来认用 `get_task_agreement` 看（`list_my_items` 的 tasks 带 `criteriaCount` 和 `agreementComplete`）。本人要交一版时才用 `add_deliverable_version` 交链接（自动参考评审，文件从网页传）；交付由本人在天枢点。
 - 用户说「同步本周进展」时：先调用 tianshu 的 `list_my_items`（status=all）看我负责的执行事项；我已知的协作事项用 `get_item` 核对。再根据我这周实际做过的事（当前目录的提交、文档，以及我们的对话），为每件有进展的事项调用一次 `append_progress`，写清做了什么、证据链接和下一步；做出来的文档、设计稿、PR 这类有链接的东西，用 `add_link` 放进对应事项。我推进的事项已经做完的，用 `submit_for_acceptance` 提交验收，对照完成标准逐条写明是否达到和依据，完成由我在天枢确认。没有进展的事项不要写，不要编造。最后列出你写了哪几条。

@@ -349,3 +349,44 @@ describe("给伙伴的内部接口", () => {
     } finally { await f.close(); }
   });
 });
+
+describe("MCP：get_task_agreement、check_task、add_deliverable_version", () => {
+  it("读的两个和网页同一份；交版本沿用上一版材料再加链接、自动评审；只有负责人能交", async () => {
+    const f = await fixture();
+    try {
+      const tokenOf = async (cookie: string) => (await f.call("POST", "/api/me/tokens", { name: "Claude", client: "claude", expiresInDays: 30 }, cookie)).json().token as string;
+      const [member, ceo] = [await tokenOf(f.member), await tokenOf(f.ceo)];
+      const invoke = async (token: string, name: string, args: Record<string, unknown>) => {
+        const res = (await f.t.app.inject({ method: "POST", url: "/mcp/me", headers: { authorization: `Bearer ${token}`, accept: "application/json, text/event-stream" },
+          payload: { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } } })).json().result;
+        return { isError: res.isError as boolean, value: JSON.parse(res.content[0].text) };
+      };
+      await f.put("t-plain", { criteria: [{ index: 1, proof: "题库评测报告", acceptorId: null }], exclusions: [] });
+      expect((await invoke(member, "get_task_agreement", { taskId: "t-plain" })).value).toEqual((await f.call("GET", "/api/plan-tasks/t-plain/agreement")).json());
+      expect((await invoke(ceo, "check_task", { taskId: "t-plain" })).value).toMatchObject({ verdict: "not_ready", conclusion: "还不能交：还没交付物。", canNotify: false });
+
+      // 网页先传了一份文件；从 Claude Code 再交一版链接：文件沿用，链接加上，评审照约定判。
+      const web = await f.t.app.inject({ method: "POST", url: "/api/plan-tasks/t-plain/deliverable/versions",
+        headers: { cookie: f.member, origin: f.t.publicOrigin, "content-type": "multipart/form-data; boundary=b" },
+        payload: Buffer.from(`--b\r\nContent-Disposition: form-data; name="files"; filename="方案.md"\r\nContent-Type: text/markdown\r\n\r\n# 方案\r\n--b--\r\n`) });
+      expect(web.statusCode).toBe(201);
+      await f.t.app.deliverables.idle();
+      const added = await invoke(member, "add_deliverable_version", { taskId: "t-plain", links: ["https://example.com/pr/1"], note: "补上 PR" });
+      expect(added.isError).toBe(false);
+      expect(added.value).toMatchObject({ number: 2, review: "queued", items: [{ kind: "file", name: "方案.md" }, { kind: "link", url: "https://example.com/pr/1" }],
+        href: `${f.t.publicOrigin}/me?planTask=t-plain` });
+      await f.t.app.deliverables.idle();
+      expect(f.reviews.at(-1)).toMatchObject({ criteria: [{ index: 1, proof: "题库评测报告" }, { index: 2 }], version: { statement: "补上 PR" } });
+      // 同一个链接再交一次不重复放。
+      const again = await invoke(member, "add_deliverable_version", { taskId: "t-plain", links: ["https://example.com/pr/1"] });
+      expect(again.value.items.map((item: { kind: string }) => item.kind)).toEqual(["file", "link"]);
+      await f.t.app.deliverables.idle();
+      expect((await invoke(member, "check_task", { taskId: "t-plain" })).value).toMatchObject({ verdict: "ready", version: { number: 3 } });
+
+      expect((await invoke(ceo, "add_deliverable_version", { taskId: "t-plain", links: ["https://example.com/a"] })).value).toMatchObject({ code: "FORBIDDEN" });
+      expect((await invoke(member, "add_deliverable_version", { taskId: "t-other", links: ["https://example.com/a"] })).value).toMatchObject({ code: "NOT_FOUND" });
+      expect((await invoke(member, "add_deliverable_version", { taskId: "t-plain", links: ["ftp://example.com/a"] })).value).toMatchObject({ code: "INVALID_INPUT" });
+      expect((await invoke(member, "check_task", { taskId: "t-other" })).value).toMatchObject({ code: "NOT_FOUND" });
+    } finally { await f.close(); }
+  });
+});

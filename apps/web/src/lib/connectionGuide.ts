@@ -113,6 +113,7 @@ export function connectionGuide({ role, client, endpoint, token, expires }: { ro
       `- 这些工具只读。要拍板、签发、确认，把结果里的 \`href\` 拼成完整链接给用户（天枢网址是 \`${endpoint.replace(/\/mcp\/me$/, "")}\`，例如 \`${endpoint.replace(/\/mcp\/me$/, "")}/issues/<id>\`），让用户回天枢网页处理。`,
     ] : [
       "- 只在用户明确要求时才往天枢里写（比如「记一下」「建一件事」「提交验收」），用户没开口就只读：要建事项时先用 `list_my_items` 看有没有同一件，没有再用 `create_item` 建，用户叫建什么就建什么；要记进展时用 `append_progress` 写一条（做了什么、证据链接、下一步或阻塞）；做出来的文档、设计稿、PR 用 `add_link` 放进这件事；用户说做完了，用 `submit_for_acceptance` 提交验收（对照完成标准逐条写明是否达到和依据），由用户在天枢逐条确认完成。只写真实做过的事。",
+      "- Task 的约定与对表：`list_my_items` 的 missions[].tasks 里每个 Task 带 criteriaCount（几条验收标准）和 agreementComplete（约定补全了没有）。用户问某个 Task「能交了吗」「还差什么」时，调用 `check_task` 对表，照结果说结论和差的那几条，不自己另判；想看每条用什么证明、谁来认，调用 `get_task_agreement`。用户要你交一版时，才用 `add_deliverable_version` 交做出来的东西的链接（会自动参考评审，文件请用户在天枢网页上传）；交付由用户在天枢点。",
       `- 用户说「同步本周进展」时，照这段做：${SYNC_INSTRUCTION}`,
       "- 月末天枢会请每人对照自己的 Mission Card 做个人复盘，Co-Agent 会先起草一版。用户说「改写我的月度复盘」时：调用 `get_my_review` 看状态、Mission、现有草稿和写作要求，结合用户手边的周复盘、文档和提交记录补充改写四部分，用 `save_review_draft` 保存；不能替用户提交，写完请用户回天枢确认提交。`list_pending` 里出现待提交的个人复盘时，主动提醒用户。",
       "- 可以问用户要不要把上面两条写进常用项目的 AGENTS.md 或 CLAUDE.md（不要写令牌）。",
