@@ -3,7 +3,7 @@ import { FormatRegistry } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import {
   LocalCreateSessionRequest, LocalModelProfileUpsert, LocalModelProfile, LocalPermissionDecisionRequest, LocalSessionEvent,
-  LocalSyncBatchRequest, LocalPairingStatusResponse, LOCAL_RUNNER_ROUTES,
+  LocalSyncBatchRequest, LocalPairingStatusResponse, LocalSendMessageRequest, LOCAL_RUNNER_ROUTES,
 } from "../src/index.js";
 
 const sessionId = "6b0f3a52-4d0c-4c1e-9a43-1f7d2c9b8e10";
@@ -23,6 +23,17 @@ describe("本机程序契约", () => {
     expect(Value.Check(LocalCreateSessionRequest, { subject: { kind: "topic", topicId: "t-1" }, title: "比较日志存储", firstMessage: "先出提纲" })).toBe(true);
     expect(Value.Check(LocalCreateSessionRequest, { subject: { kind: "card" }, title: "x", firstMessage: "" })).toBe(false);
     expect(Value.Check(LocalCreateSessionRequest, { subject: { kind: "card" }, title: "x", firstMessage: "y", env: { A: "1" } })).toBe(false);
+  });
+
+  it("开工带岗位（和云端的 RoleBrief 同形，可原样转）；专题带挑刺岗位；说一句可以是评审会", () => {
+    const role = { id: sessionId, name: "调研员", kind: "worker", dutiesMd: "职责", practiceMd: "做法", acceptanceMd: "口径", tools: ["web_search", "feishu"], modelTier: "normal", version: 2 };
+    const critic = { ...role, name: "反方", kind: "critic", tools: [] };
+    expect(Value.Check(LocalCreateSessionRequest, { subject: { kind: "topic", topicId: "t-1" }, title: "x", firstMessage: "y", role, critics: [critic, critic], versionBase: 2 })).toBe(true);
+    expect(Value.Check(LocalCreateSessionRequest, { subject: { kind: "topic", topicId: "t-1" }, title: "x", firstMessage: "y", critics: [critic, critic, critic, critic] })).toBe(false);
+    expect(Value.Check(LocalCreateSessionRequest, { subject: { kind: "card", cardId: "c" }, title: "x", firstMessage: "y", role: { ...role, tools: ["shell"] } })).toBe(false);
+    expect(Value.Check(LocalSendMessageRequest, { kind: "review" })).toBe(true);
+    expect(Value.Check(LocalSendMessageRequest, { kind: "review", text: "重点看数据" })).toBe(true);
+    expect(Value.Check(LocalSendMessageRequest, { kind: "vote", text: "x" })).toBe(false);
   });
 
   it("模型钥匙只写不读", () => {

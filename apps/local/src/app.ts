@@ -13,6 +13,7 @@ import { SessionManager } from "./sessions.js";
 import { ClaudeSetup } from "./agents/claudeSetup.js";
 import { ClaudeCodeAdapter, type ClaudeBin } from "./agents/claudeCode.js";
 import { CodexAdapter } from "./agents/codex.js";
+import { homeDir } from "./agents/claudeEnv.js";
 import { createServer } from "./http/server.js";
 import { createDesktop, openUrl, type Desktop, type MenuAction } from "./desktop/index.js";
 
@@ -27,6 +28,8 @@ export interface RunnerOptions {
   desktop?: Desktop;
   fetchImpl?: typeof fetch;
   allowedOrigins?: string[];
+  /** 本人已装技能的目录（找飞书技能）；默认 ~/.claude/skills。 */
+  skillsDir?: string;
   onQuit?: () => void;
 }
 
@@ -61,6 +64,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
     dataDir: config.dataDir, log, models, folders, outbox, deviceId: config.deviceId, port: () => config.port,
     cloudLinked: async () => Boolean(await cloud.target()),
     paused: () => settings.get().paused,
+    skillsDir: opts.skillsDir ?? join(homeDir(), ".claude", "skills"),
     adapters: {
       "claude-code": new ClaudeCodeAdapter(opts.claudeBin ? async () => opts.claudeBin! : () => claude.bin()),
       codex: new CodexAdapter(),

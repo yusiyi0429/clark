@@ -1,8 +1,8 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { basename, extname, join, resolve } from "node:path";
 import type {
-  TLocalAgentKind, TLocalCreateSessionRequest, TLocalHandbackCriterion, TLocalPermissionRequestView, TLocalSendMessageResponse,
+  TLocalAgentKind, TLocalCreateSessionRequest, TLocalHandbackCriterion, TLocalPermissionRequestView, TLocalRole, TLocalSendMessageRequest, TLocalSendMessageResponse,
   TLocalSessionKind, TLocalSessionStatus, TLocalSessionSubject, TLocalSessionSummary, TLocalSyncItem, TLocalTopicVersionKind, TLocalUsage,
 } from "@warmap/contracts";
 import { readJson, writeJsonAtomic, nowIso } from "./store.js";
@@ -12,6 +12,8 @@ import type { ModelProfiles } from "./models.js";
 import { isInside, type Folders } from "./folders.js";
 import type { Outbox } from "./outbox.js";
 import { SESSION_MCP_NAME, sessionToolNames } from "./sessionMcp.js";
+import { criticAgents, reviewMessage, systemPrompt } from "./rolePrompt.js";
+import { ensureFeishuPlugin } from "./agents/feishuPlugin.js";
 
 /** 云端天枢 MCP 在会话里的名字：和本人在 Claude Code 里配的天枢 MCP 同名，工具名一致。 */
 const CLOUD_MCP_NAME = "tianshu";
@@ -44,6 +46,11 @@ interface SessionRecord {
   handedBack: number;
   /** 专题：最近一版的号（开工时取交代里的 latestVersion）。 */
   versionNumber: number;
+  /** 专题：本会话最近存的一版（评审会读它）。 */
+  lastVersion: { number: number; path: string } | null;
+  /** 岗位（开工时的快照）和专题评审会的挑刺岗位。 */
+  role: TLocalRole | null;
+  critics: TLocalRole[];
 }
 
 export class SessionError extends Error {
@@ -64,6 +71,8 @@ export interface SessionDeps {
   cloudLinked?: () => Promise<boolean>;
   /** 托盘或网页暂停后，不开新会话、不续接旧会话。 */
   paused?: () => boolean;
+  /** 本人已装的技能目录（找 lark-* 飞书技能，岗位要飞书时挂给会话）。 */
+  skillsDir?: string;
   onChange?: () => void;
 }
 
@@ -85,6 +94,11 @@ export class SessionManager {
   private readonly starting = new Map<string, Promise<AgentRun>>();
   /** 启动途中被强停的会话：启动一完成就杀掉。 */
   private readonly cancelled = new Set<string>();
+  /**
+   * 正在第一次拉起、还没登记的会话：Claude Code 启动途中（握手回复之前）就连本会话 MCP，这时也要认得出它的密钥，
+   * 否则第一次连接 401、它转去找 OAuth 再碰 403，整场会话都没有本会话 MCP（11/06 真跑 haiku 时碰到）。
+   */
+  private readonly launching = new Map<string, SessionRecord>();
   private readonly dir: string;
 
   constructor(private readonly d: SessionDeps) {
@@ -96,6 +110,9 @@ export class SessionManager {
       rec.outputs ??= [];
       rec.handedBack ??= 0;
       rec.versionNumber ??= 0;
+      rec.lastVersion ??= null;
+      rec.role ??= null;
+      rec.critics ??= [];
       this.records.set(rec.id, rec);
       // 本机程序重启时，上次的进程都已不在。
       if (LIVE.includes(rec.status)) this.setStatus(rec, "exited", { reason: "本机程序重启，会话已停；再发一句话会接着做" });
@@ -108,7 +125,7 @@ export class SessionManager {
   }
 
   private summary(rec: SessionRecord): TLocalSessionSummary {
-    const { mcpSecret: _s, syncSeq: _q, outputs: _o, handedBack: _h, versionNumber: _v, ...rest } = rec;
+    const { mcpSecret: _s, syncSeq: _q, outputs: _o, handedBack: _h, versionNumber: _v, lastVersion: _l, role: _r, critics: _c, ...rest } = rec;
     return { ...rest, lastSeq: this.d.log.lastSeq(rec.id), pendingPermissions: this.pending.get(rec.id)?.size ?? 0 };
   }
 
@@ -123,7 +140,9 @@ export class SessionManager {
 
   /** 本会话 MCP 按卡或专题给不同的工具。 */
   kindOf(id: string): TLocalSessionKind {
-    return this.must(id).subject.kind;
+    const rec = this.records.get(id) ?? this.launching.get(id);
+    if (!rec) throw new SessionError("not_found", "没有这个会话");
+    return rec.subject.kind;
   }
 
   activeCount(): number {
@@ -162,6 +181,7 @@ export class SessionManager {
     const { subject } = req;
     if (subject.kind === "card" && !subject.cardId) throw new SessionError("validation", "卡的会话要带 cardId");
     if (subject.kind === "topic" && !subject.topicId) throw new SessionError("validation", "专题的会话要带 topicId");
+    if (subject.kind === "card" && req.critics?.length) throw new SessionError("validation", "挑刺岗位只给专题的评审会用");
     let cwd: string;
     if (req.cwd) {
       cwd = resolve(req.cwd);
@@ -183,10 +203,17 @@ export class SessionManager {
       id: randomUUID(), subject, title: req.title, agent, modelProfileId: model.profileId, modelLabel: model.label, cwd,
       includePersonalConfig: req.includePersonalConfig ?? defaults.includePersonalConfig,
       createdAt: now, updatedAt: now, status: "starting", usage: zeroUsage(), syncSeq: 0, mcpSecret: randomBytes(24).toString("hex"),
-      outputs: [], handedBack: 0, versionNumber: subject.kind === "topic" ? req.versionBase ?? 0 : 0,
+      outputs: [], handedBack: 0, versionNumber: subject.kind === "topic" ? req.versionBase ?? 0 : 0, lastVersion: null,
+      role: req.role ?? null, critics: req.critics ?? [],
     };
-    await this.startRun(rec, false); // 起不来（没装、太旧、没实现）直接抛给调用方，不留记录
-    this.records.set(rec.id, rec);
+    // 起不来（没装、太旧、没实现）直接抛给调用方，不留记录
+    this.launching.set(rec.id, rec);
+    try {
+      await this.startRun(rec, false);
+      this.records.set(rec.id, rec);
+    } finally {
+      this.launching.delete(rec.id);
+    }
     this.save(rec);
     this.emit(rec, { type: "status", status: "starting" });
     this.emit(rec, { type: "user_message", text: req.firstMessage, source: "initial" });
@@ -199,7 +226,7 @@ export class SessionManager {
    * 本会话的 MCP 配置文件：本会话 MCP（交产出物、证据、交回）；关联了云端时再挂天枢 MCP（/mcp/me，搜索等）。
    * 密钥和令牌不写进文件也不进命令行：文件里写 ${变量名}，Claude Code 启动时从子进程环境变量展开（11/06 实测）。
    */
-  private async writeMcpConfig(rec: SessionRecord): Promise<{ path: string; env: Record<string, string>; allowedTools: string[] }> {
+  private async writeMcpConfig(rec: SessionRecord, tools: { cloud: boolean; search: boolean }): Promise<{ path: string; env: Record<string, string>; allowedTools: string[] }> {
     const env: Record<string, string> = { TIANSHU_SESSION_SECRET: rec.mcpSecret };
     const local = `http://127.0.0.1:${this.d.port()}/internal/sessions/${rec.id}`;
     const secretHeader = { "x-tianshu-session-secret": "${TIANSHU_SESSION_SECRET}" };
@@ -211,10 +238,10 @@ export class SessionManager {
       },
     };
     const allowedTools = sessionToolNames(rec.subject.kind);
-    if (await this.d.cloudLinked?.()) {
+    if (tools.cloud) {
       // 天枢 MCP 经本机程序转发（/internal/sessions/:id/cloud-mcp），云端令牌留在本机程序里，会话和它跑的命令都拿不到。
       servers[CLOUD_MCP_NAME] = { type: "http", url: `${local}/cloud-mcp`, headers: secretHeader };
-      allowedTools.push(...CLOUD_MCP_READONLY_TOOLS.map((t) => `mcp__${CLOUD_MCP_NAME}__${t}`));
+      if (tools.search) allowedTools.push(...CLOUD_MCP_READONLY_TOOLS.map((t) => `mcp__${CLOUD_MCP_NAME}__${t}`));
     }
     const path = join(this.dir, rec.id, "mcp.json");
     writeJsonAtomic(path, { mcpServers: servers });
@@ -233,10 +260,26 @@ export class SessionManager {
     // 每次拉起换一个本会话密钥，进程退出即作废：会话里跑的命令就算读到它，也只在这一次进程活着时有用。
     rec.mcpSecret = randomBytes(24).toString("hex");
     if (this.records.has(rec.id)) this.save(rec);
-    const mcp = await this.writeMcpConfig(rec);
+    // 岗位的工具名单决定挂什么、给什么（ADR 0033）；没配岗位时照旧全给。
+    const has = (t: TLocalRole["tools"][number]) => !rec.role || rec.role.tools.includes(t);
+    const linked = Boolean(await this.d.cloudLinked?.());
+    const tools = { cloud: linked && (has("tianshu") || has("web_search")), search: has("web_search") };
+    const mcp = await this.writeMcpConfig(rec, tools);
+    const feishu = rec.role?.tools.includes("feishu") && !rec.includePersonalConfig && this.d.skillsDir ? ensureFeishuPlugin(this.d.dataDir, this.d.skillsDir) : null;
+    // 工作规矩、岗位、挑刺子 agent 写在本机程序的数据目录，经参数交给 Claude Code，不往本人的仓库写文件。
+    const dir = join(this.dir, rec.id);
+    const systemPromptPath = join(dir, "system.md");
+    writeFileSync(systemPromptPath, systemPrompt(rec.subject.kind, rec.role, rec.critics, Boolean(feishu)));
+    let agentsPath: string | null = null;
+    if (rec.subject.kind === "topic" && rec.critics.length) {
+      agentsPath = join(dir, "agents.json");
+      writeJsonAtomic(agentsPath, criticAgents(rec.critics, tools.cloud ? `mcp__${CLOUD_MCP_NAME}__web_search` : null));
+    }
     const run = await adapter.start({
       sessionId: rec.id, cwd: rec.cwd, resume, model, includePersonalConfig: rec.includePersonalConfig,
       mcpConfigPath: mcp.path, mcpEnv: mcp.env, allowedTools: mcp.allowedTools,
+      disallowedTools: has("web_search") ? [] : ["WebSearch", `mcp__${CLOUD_MCP_NAME}__web_search`],
+      systemPromptPath, agentsPath, pluginDirs: feishu ? [feishu] : [],
       // 每次现查：会话途中本人移除了文件夹，之后的请求（包括工作目录里的）就算越界。
       allowedRoots: () => [...(this.d.folders.isAllowed(rec.cwd) ? [rec.cwd] : []), ...this.d.folders.list().map((f) => f.path)],
     });
@@ -298,8 +341,16 @@ export class SessionManager {
     this.d.log.evict(rec.id);
   }
 
-  async sendMessage(id: string, text: string): Promise<TLocalSendMessageResponse> {
+  async sendMessage(id: string, req: TLocalSendMessageRequest): Promise<TLocalSendMessageResponse> {
     const rec = this.must(id);
+    let text: string;
+    if (req.kind === "review") {
+      if (rec.subject.kind !== "topic" || !rec.critics.length) throw new SessionError("validation", "评审会只给开工时带了挑刺岗位的专题用");
+      text = reviewMessage(rec.critics, rec.lastVersion, req.text);
+    } else {
+      if (!req.text) throw new SessionError("validation", "说一句要有内容");
+      text = req.text;
+    }
     let run = this.runs.get(id);
     let resumed = false;
     if (!run) {
@@ -363,7 +414,7 @@ export class SessionManager {
   // ───────── 本会话 MCP 回报（产出物、证据、交回） ─────────
 
   verifySecret(id: string, secret: string | undefined): boolean {
-    const rec = this.records.get(id);
+    const rec = this.records.get(id) ?? this.launching.get(id);
     if (!rec || !secret || !rec.mcpSecret) return false;
     const a = Buffer.from(secret);
     const b = Buffer.from(rec.mcpSecret);
@@ -446,6 +497,7 @@ export class SessionManager {
     const note = input.note?.trim().slice(0, 200) || null;
     rec.versionNumber += 1;
     const number = rec.versionNumber;
+    rec.lastVersion = { number, path: input.path };
     this.emit(rec, { type: "version", number, kind: input.kind, label, note });
     this.sync(rec, { type: "topic_version", data: { number, kind: input.kind, label, note, body } });
     return `已存第 ${number} 版${label ? `（${label}）` : ""}`;

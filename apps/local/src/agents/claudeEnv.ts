@@ -74,7 +74,12 @@ export function buildClaudeArgs(launch: AgentLaunch): { args: string[]; env: Rec
   if (launch.mcpConfigPath) args.push("--mcp-config", launch.mcpConfigPath);
   if (launch.allowedTools.length) args.push("--allowedTools", launch.allowedTools.join(","));
   // 模型不支持服务端搜索时，自带的 WebSearch 不报错还会编结果（11/06 实测 qwen3.8-flash），干脆不给这个工具。
-  if (!launch.model.webSearch) args.push("--disallowedTools", "WebSearch");
+  const disallowed = [...new Set([...launch.disallowedTools, ...(launch.model.webSearch ? [] : ["WebSearch"])])];
+  if (disallowed.length) args.push("--disallowedTools", disallowed.join(","));
+  // 岗位和工作规矩、挑刺子 agent、飞书技能：都是本机程序数据目录里的文件，只在本会话生效（ADR 0033）。
+  if (launch.systemPromptPath) args.push("--append-system-prompt-file", launch.systemPromptPath);
+  if (launch.agentsPath) args.push("--agents", launch.agentsPath);
+  for (const dir of launch.pluginDirs) args.push("--plugin-dir", dir);
 
   // MCP 配置文件里用 ${变量名} 引用的密钥和令牌，经子进程环境变量交给 Claude Code。
   const env: Record<string, string> = { DISABLE_AUTOUPDATER: "1", ...launch.mcpEnv };

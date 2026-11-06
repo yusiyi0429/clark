@@ -157,7 +157,7 @@ export function createServer(d: ServerDeps): http.Server {
       d.sessions.create(validate(LocalCreateSessionRequest, c.body), { includePersonalConfig: d.settings.get().includePersonalConfigByDefault }),
     getSession: (c) => d.sessions.get(c.params.id!),
     sessionEvents: (c) => streamEvents(c),
-    sendMessage: (c) => d.sessions.sendMessage(c.params.id!, validate(LocalSendMessageRequest, c.body).text),
+    sendMessage: (c) => d.sessions.sendMessage(c.params.id!, validate(LocalSendMessageRequest, c.body)),
     interrupt: async (c) => ({ session: await d.sessions.interrupt(c.params.id!) }),
     decidePermission: (c) => ({ session: d.sessions.decide(c.params.id!, c.params.requestId!, validate(LocalPermissionDecisionRequest, c.body)) }),
     kill: async (c) => ({ session: await d.sessions.kill(c.params.id!) }),

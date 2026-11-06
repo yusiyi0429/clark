@@ -245,6 +245,26 @@ export const LocalUsage = Type.Object({
   costUsd: Nullable(Type.Number({ minimum: 0 })),
 }, strict);
 
+/** 岗位能用的工具（插件），和云端 roles.ts 的 RoleTool 一致。 */
+export const LocalRoleTool = Type.Union([Type.Literal("tianshu"), Type.Literal("web_search"), Type.Literal("feishu"), Type.Literal("github"), Type.Literal("browser")]);
+const RoleText = Type.String({ maxLength: 8000 });
+/**
+ * 岗位（V2 设计第 19 节）：和云端交代里的 RoleBrief 同形，网页可原样转给本机。
+ * 本机把职责、做法、验收口径写进会话追加的系统提示词（不往本人的仓库写文件，ADR 0033）；tools 决定挂哪些插件、给哪些工具。
+ * modelTier 由网页按档位挑好模型（modelProfileId），本机不看；id、kind、version 只用来显示和留痕。
+ */
+export const LocalRole = Type.Object({
+  id: Type.Optional(Uuid),
+  name: Type.String({ minLength: 1, maxLength: 40 }),
+  kind: Type.Optional(Type.Union([Type.Literal("worker"), Type.Literal("reviewer"), Type.Literal("critic")])),
+  dutiesMd: RoleText,
+  practiceMd: RoleText,
+  acceptanceMd: RoleText,
+  tools: Type.Array(LocalRoleTool, { maxItems: 5 }),
+  modelTier: Type.Optional(Type.Union([Type.Literal("strong"), Type.Literal("normal"), Type.Literal("light")])),
+  version: Type.Optional(Type.Integer({ minimum: 1 })),
+}, strict);
+
 /** POST /v1/sessions */
 export const LocalCreateSessionRequest = Type.Object({
   subject: LocalSessionSubject,
@@ -259,6 +279,10 @@ export const LocalCreateSessionRequest = Type.Object({
   includePersonalConfig: Type.Optional(Type.Boolean()),
   /** 专题：云端已有的最新一版号（交代里的 latestVersion，没有版本时不填）。本机存新一版时从下一号往下编。 */
   versionBase: Type.Optional(Type.Integer({ minimum: 0 })),
+  /** 做这张卡或这个专题的岗位（交代里的 role）。不带就按通用的规矩做。 */
+  role: Type.Optional(LocalRole),
+  /** 只有专题：评审会用的挑刺岗位（交代里的 critics，最多 3 个）。开工时定下，评审会时并行起它们。 */
+  critics: Type.Optional(Type.Array(LocalRole, { maxItems: 3 })),
 }, strict);
 
 export const LocalSessionSummary = Type.Object({
@@ -303,8 +327,15 @@ export const LocalSessionDetailResponse = Type.Object({
   pendingPermissions: Type.Array(LocalPermissionRequestView),
 }, strict);
 
-/** POST /v1/sessions/:id/messages：插话。进行中时在下一个工具步骤生效；空闲时开下一轮；已退出时先 --resume 再发。 */
-export const LocalSendMessageRequest = Type.Object({ text: Type.String({ minLength: 1, maxLength: 20000 }) }, strict);
+/**
+ * POST /v1/sessions/:id/messages：说一句。进行中时在下一个工具步骤生效；空闲时开下一轮；已退出时先 --resume 再发。
+ * kind = review：专题开评审会（开工时带了 critics 才行），本机让会话并行起挑刺子 agent，合成「分歧和建议」存成 kind = review 的一版；
+ * 这时 text 可不填，填了是本人对这次评审的补充要求。不带 kind 就是普通的一句话，text 必填。
+ */
+export const LocalSendMessageRequest = Type.Object({
+  kind: Type.Optional(Type.Union([Type.Literal("say"), Type.Literal("review")])),
+  text: Type.Optional(Type.String({ minLength: 1, maxLength: 20000 })),
+}, strict);
 export const LocalSendMessageResponse = Type.Object({
   /** next_step：进行中，下一步前送达；new_turn：开了新一轮；resumed：进程已退出，续接后送达。 */
   delivery: Type.Union([Type.Literal("next_step"), Type.Literal("new_turn"), Type.Literal("resumed")]),
@@ -494,6 +525,8 @@ export type TLocalSessionActionResponse = Static<typeof LocalSessionActionRespon
 export type TLocalPlanEntry = Static<typeof LocalPlanEntry>;
 export type TLocalHandbackCriterion = Static<typeof LocalHandbackCriterion>;
 export type TLocalTopicVersionKind = Static<typeof LocalTopicVersionKind>;
+export type TLocalRole = Static<typeof LocalRole>;
+export type TLocalRoleTool = Static<typeof LocalRoleTool>;
 export type TLocalSessionEvent = Static<typeof LocalSessionEvent>;
 export type TLocalSyncItem = Static<typeof LocalSyncItem>;
 export type TLocalSyncBatchRequest = Static<typeof LocalSyncBatchRequest>;

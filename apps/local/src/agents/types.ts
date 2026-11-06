@@ -15,6 +15,14 @@ export interface AgentLaunch {
   /** MCP 配置文件里 ${变量名} 引用的值（本会话密钥、云端令牌），只经子进程环境变量传。 */
   mcpEnv: Record<string, string>;
   allowedTools: string[];
+  /** 不给的工具（岗位的工具名单里没有的）。 */
+  disallowedTools: string[];
+  /** 追加的系统提示词文件（工作规矩 + 岗位），在本机程序的数据目录里。 */
+  systemPromptPath: string | null;
+  /** 挑刺子 agent 的定义文件（--agents），只有带了 critics 的专题有。 */
+  agentsPath: string | null;
+  /** 只在本会话生效的插件目录（--plugin-dir），如飞书技能。 */
+  pluginDirs: string[];
   /** 本会话允许的范围（本人允许的文件夹，加上还算数的工作目录），每次权限请求现查，据此标出越界路径。 */
   allowedRoots(): string[];
 }
