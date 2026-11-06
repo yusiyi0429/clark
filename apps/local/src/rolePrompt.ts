@@ -85,7 +85,7 @@ export function criticAgents(critics: TLocalRole[], searchTool: string | null): 
   }]));
 }
 
-/** 验收没过时送回执行方的那段改法：固定格式拼，不调模型（和云端 cardAcceptance.ts 的 returnText 一个格式）。 */
+/** 验收没过时结论事件里的改法：固定格式拼，不调模型（和云端 cardAcceptance.ts 的 returnText 一个格式）。送回执行方走云端那条路。 */
 export function returnText(criteria: string[], judged: TLocalVerdictCriterion[]): string {
   const missed = judged.filter((c) => c.verdict !== "met")
     .map((c) => `第 ${c.index} 条「${criteria[c.index - 1] ?? ""}」，${c.reason}；怎么补：${c.fix ?? "补上能核对的证据"}`);

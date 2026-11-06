@@ -534,8 +534,9 @@ export const LocalSessionEvent = Type.Union([
   /** 专题存了新的一版（已排进上报队列）。 */
   ev("version", { number: Type.Integer({ minimum: 1 }), kind: LocalTopicVersionKind, label: Nullable(Type.String()), note: Nullable(Type.String()) }),
   /**
-   * 验收员交了结论。验收会话和被验的那张卡的会话里各有一条（同一份）：网页在卡的会话里看到没过、又没受阻时，把 returnText 经「说一句」送回执行会话；
-   * failStreak 是算上这次连续没过几次，blocked（累计到 2）时停在「受阻」等本人，不再自动送回。过了时 returnText 为 null。
+   * 验收员交了结论。验收会话和被验的那张卡的会话里各有一条（同一份），只给网页显示：failStreak 是算上这次连续没过几次，blocked（累计到 2）是「受阻」，
+   * returnText 是改法（过了时为 null）。网页**不要**据这条事件送回改法：送回只走云端那条路——verdict 同步上去，云端把改法写进那次交回，
+   * 网页原有的自动送回按交回送一次（多个标签页也只送一次）。
    */
   ev("verdict", {
     handbackKey: SyncKey, passed: Type.Boolean(), summary: Type.String(), criteria: Type.Array(LocalVerdictCriterion), beyondScope: Type.Array(Type.String()),

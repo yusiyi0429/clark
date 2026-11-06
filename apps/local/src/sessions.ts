@@ -768,7 +768,7 @@ export class SessionManager {
     this.emit(rec, { type: "notice", level: "info", code: "verify_waiting", text });
   }
 
-  /** 验收员交结论：每条完成标准判一次，经发件箱报给天枢；验收会话和被验的卡的会话里各记一条结论事件（网页据此把改法送回执行方）。 */
+  /** 验收员交结论：每条完成标准判一次，经发件箱报给天枢；验收会话和被验的卡的会话里各记一条结论事件（只给网页显示；改法由云端写进那次交回后，网页按交回送回一次）。 */
   submitVerdict(id: string, input: { summary: string; criteria: unknown[]; beyondScope?: unknown }): string {
     const rec = this.must(id);
     if (rec.subject.kind !== "verify") throw new SessionError("validation", "只有验收员交结论");

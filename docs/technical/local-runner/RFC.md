@@ -112,7 +112,7 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
 - 规划员：网页开（`subject: { kind: "plan", taskId }`，第一句话是云端的拆卡交代，`role` 是规划员岗位），不给 `cwd` 时用 `plans/<taskId>/`。它用本会话工具 `propose_plan` 交计划（几步、先后、风险）和派活单草稿（每件的交代、完成标准、对约定第几条、岗位名、模型档位），经发件箱同步 `card_plan`；改了再交 `revision` +1。
 - 验收员：网页不能开。执行方 `hand_back` 以后本机自己起（不经云端）：先排着（`subject: { kind: "verify", cardId, handbackKey }`），等交回条目被云端收下，再向云端取验收交代（`GET /api/local-runner/verify-brief?handbackKey=…`：第一句话、交回时的完成标准、验收员岗位、之前连续没过几次）。取不到（没连天枢、断网、天枢出错）就排着，不挡别人，事件流里用 `notice`（`verify_waiting`）说在等什么，发件箱送出东西（连上天枢时会先把交回送上去）、本机程序启动后、每 15 秒都会再取；云端回 404（没有这次交回）不验，409（已有结论）不用验。拿到交代后按验收员岗位的档位挑模型（和网页一样按模型名认：opus 强、sonnet 普通、haiku/flash/mini/lite 轻，认不出用默认的；没配岗位用普通档），所以可以和执行用的模型不同。它用 `submit_verdict` 逐条判（条数照交代、只交一次），经发件箱同步 `verdict`；一轮做完没交就提醒一次；交完就让 Claude Code 自己退出（`exited`，原因「验收完了」），本人想问它，说一句会续上。
 - 规划员、验收员只读：`--disallowedTools` 加 Edit、MultiEdit、Write、NotebookEdit、Bash、PowerShell，子 agent（Agent、Task）也不给，免得绕过。没用 Claude Code 的 plan 模式：plan 模式会让模型走「出计划、请求退出」那一套，和交结论的工具不合。
-- 没过怎么办：验收会话和被验的卡的会话里各记一条 `verdict` 事件（结论、算上这次连续没过几次 `failStreak`、`blocked`、改法 `returnText`，改法的格式和云端 `cardAcceptance.ts` 的一样）。网页在卡的会话里看到没过又没受阻，就把改法经「说一句」送回执行会话（原来的那条路：空闲时开新一轮，已退出时续上）；执行方改完再交回，本机再起一个验收员。连续第二次没过 `blocked = true`，停在「受阻」等本人。
+- 没过怎么办：送回改法只走云端一条路。`verdict` 同步上去，云端接收端把改法写进那次交回的记录，网页原有的自动送回按交回送一次（多个标签页也只送一次），经「说一句」送回执行会话（空闲时开新一轮，已退出时续上）；执行方改完再交回，本机再起一个验收员。连续第二次没过停在「受阻」等本人。验收会话和被验的卡的会话里各记一条 `verdict` 事件（结论、算上这次连续没过几次 `failStreak`、`blocked`、改法 `returnText`，格式和云端 `cardAcceptance.ts` 的一样），只给网页显示，网页不据它送回。
 - 天枢 MCP 的 `get_task_context`（Task、约定、Mission、近期的事和决定、上一版交付物和评审，带出处；云端在做）预先放行；挂不挂天枢 MCP 仍按岗位的工具名单。
 - 假 claude 测三种会话的参数和排队先后、交回后自动起验收、只读、没过送回再验、第二次受阻、取不到交代时排着等、重启后照样排着（`test/planVerify.test.ts`）；真跑见第 13 节。
 
