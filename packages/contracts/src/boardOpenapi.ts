@@ -8,6 +8,7 @@ import {
 import { TaskCard } from "./taskCardView.js";
 import { CreateRoleRequest, PatchRoleRequest, RoleBrief, RoleListResponse, RolePresetView, RoleProposalList, RoleProposalView, RoleRef, RoleRevisionList,
   RoleRevisionView, RoleView } from "./roles.js";
+import { WorkerCost, WorkerItem, WorkerResource, WorkerResources, WorkersResponse } from "./workers.js";
 import {
   CreateTopicRequest, PatchTopicRequest, ResearchTopicView, TopicBriefResponse, TopicDetailResponse, TopicListResponse, TopicVersionSummary, TopicVersionView,
 } from "./topics.js";
@@ -24,6 +25,7 @@ export const boardSchemas: Record<string, JsonSchema> = {
   LocalDeviceView, CreateLocalDeviceRequest, CreateLocalDeviceResponse, LocalDeviceListResponse, LocalRunBrief, LocalRunView, LocalOutputView,
   ResearchTopicView, TopicVersionSummary, TopicVersionView, TopicListResponse, CreateTopicRequest, PatchTopicRequest, TopicDetailResponse, TopicBriefResponse,
   RoleRef, RoleBrief, RoleView, RolePresetView, RoleListResponse, CreateRoleRequest, PatchRoleRequest, RoleRevisionView, RoleRevisionList, RoleProposalView, RoleProposalList,
+  WorkerResource, WorkerCost, WorkerItem, WorkerResources, WorkersResponse,
 };
 
 const error = { description: "ApiError 统一错误", content: { "application/json": { schema: { $ref: "#/components/schemas/ApiError" } } } };
@@ -213,6 +215,13 @@ export const boardPaths: OpenAPIV3.Document["paths"] = {
       summary: "开专题时交给本机的交代（本人）：markdown 原样作为本机会话的第一句话；带岗位和评审会的挑刺岗位（critics 参数是逗号隔开的岗位 id，不带时取本人的前 3 个）",
       parameters: [...path("id"), { name: "critics", in: "query", required: false, schema: { type: "string" } }],
       responses: { "200": json("交代", "TopicBriefResponse"), ...errors(400, 401, 404) },
+    },
+  },
+  "/api/me/workers": {
+    get: {
+      operationId: "listWorkers",
+      summary: "本人所有 worker（带岗位的卡和专题），跨 Task 分进行中、已排队、已完成（今天），加资源摘要（设备在不在线、正在跑几个、今天和本月的花费）",
+      responses: { "200": json("worker 列表", "WorkersResponse"), ...errors(401) },
     },
   },
   "/api/me/roles": {

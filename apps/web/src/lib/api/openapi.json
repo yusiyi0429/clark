@@ -18684,6 +18684,34 @@
         }
       }
     },
+    "/api/me/workers": {
+      "get": {
+        "operationId": "listWorkers",
+        "summary": "本人所有 worker（带岗位的卡和专题），跨 Task 分进行中、已排队、已完成（今天），加资源摘要（设备在不在线、正在跑几个、今天和本月的花费）",
+        "responses": {
+          "200": {
+            "description": "worker 列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkersResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/roles": {
       "get": {
         "operationId": "listRoles",
@@ -92710,6 +92738,2078 @@
                       "type": "null"
                     }
                   ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "WorkerResource": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "where",
+          "deviceId",
+          "deviceName",
+          "modelLabel"
+        ],
+        "properties": {
+          "where": {
+            "anyOf": [
+              {
+                "const": "local",
+                "type": "string"
+              },
+              {
+                "const": "cloud",
+                "type": "string"
+              }
+            ]
+          },
+          "deviceId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "deviceName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "modelLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "WorkerCost": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "inputTokens",
+          "outputTokens",
+          "costUsd",
+          "costCny"
+        ],
+        "properties": {
+          "inputTokens": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "outputTokens": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "costUsd": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "costCny": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "WorkerItem": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "key",
+          "kind",
+          "cardId",
+          "topicId",
+          "title",
+          "role",
+          "workerNo",
+          "task",
+          "mission",
+          "step",
+          "resource",
+          "startedAt",
+          "elapsedSeconds",
+          "finishedAt",
+          "cost",
+          "stage",
+          "wait",
+          "needsYou",
+          "queueReason"
+        ],
+        "properties": {
+          "key": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "const": "card",
+                "type": "string"
+              },
+              {
+                "const": "topic",
+                "type": "string"
+              }
+            ]
+          },
+          "cardId": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "topicId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "role": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "id",
+              "name",
+              "kind"
+            ],
+            "properties": {
+              "id": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "name": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "kind": {
+                "anyOf": [
+                  {
+                    "const": "worker",
+                    "type": "string"
+                  },
+                  {
+                    "const": "reviewer",
+                    "type": "string"
+                  },
+                  {
+                    "const": "critic",
+                    "type": "string"
+                  }
+                ]
+              }
+            }
+          },
+          "workerNo": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "task": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "id",
+                  "name"
+                ],
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mission": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "id",
+                  "title"
+                ],
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "step": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "n",
+                  "total",
+                  "label"
+                ],
+                "properties": {
+                  "n": {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "total": {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "label": {
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resource": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "where",
+                  "deviceId",
+                  "deviceName",
+                  "modelLabel"
+                ],
+                "properties": {
+                  "where": {
+                    "anyOf": [
+                      {
+                        "const": "local",
+                        "type": "string"
+                      },
+                      {
+                        "const": "cloud",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "deviceId": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "deviceName": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "modelLabel": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "startedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "elapsedSeconds": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "finishedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cost": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "inputTokens",
+                  "outputTokens",
+                  "costUsd",
+                  "costCny"
+                ],
+                "properties": {
+                  "inputTokens": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "outputTokens": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "costUsd": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "costCny": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "const": "todo",
+                "type": "string"
+              },
+              {
+                "const": "doing",
+                "type": "string"
+              },
+              {
+                "const": "review",
+                "type": "string"
+              },
+              {
+                "const": "done",
+                "type": "string"
+              }
+            ]
+          },
+          "wait": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "const": "approval",
+                    "type": "string"
+                  },
+                  {
+                    "const": "reply",
+                    "type": "string"
+                  },
+                  {
+                    "const": "paused",
+                    "type": "string"
+                  },
+                  {
+                    "const": "reviewing",
+                    "type": "string"
+                  },
+                  {
+                    "const": "review_failed",
+                    "type": "string"
+                  },
+                  {
+                    "const": "blocked",
+                    "type": "string"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "needsYou": {
+            "type": "boolean"
+          },
+          "queueReason": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "const": "not_dispatched",
+                    "type": "string"
+                  },
+                  {
+                    "const": "slot",
+                    "type": "string"
+                  },
+                  {
+                    "const": "device_offline",
+                    "type": "string"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "WorkerResources": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "devices",
+          "running",
+          "cap",
+          "cost"
+        ],
+        "properties": {
+          "devices": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "name",
+                "lastSeenAt",
+                "online"
+              ],
+              "properties": {
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "lastSeenAt": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "online": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "running": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "cap": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cost": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "today",
+              "month"
+            ],
+            "properties": {
+              "today": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "inputTokens",
+                  "outputTokens",
+                  "costUsd",
+                  "costCny"
+                ],
+                "properties": {
+                  "inputTokens": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "outputTokens": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "costUsd": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "costCny": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              "month": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "inputTokens",
+                  "outputTokens",
+                  "costUsd",
+                  "costCny"
+                ],
+                "properties": {
+                  "inputTokens": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "outputTokens": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "costUsd": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "costCny": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "WorkersResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "running",
+          "queued",
+          "done",
+          "resources"
+        ],
+        "properties": {
+          "running": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "key",
+                "kind",
+                "cardId",
+                "topicId",
+                "title",
+                "role",
+                "workerNo",
+                "task",
+                "mission",
+                "step",
+                "resource",
+                "startedAt",
+                "elapsedSeconds",
+                "finishedAt",
+                "cost",
+                "stage",
+                "wait",
+                "needsYou",
+                "queueReason"
+              ],
+              "properties": {
+                "key": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "card",
+                      "type": "string"
+                    },
+                    {
+                      "const": "topic",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "cardId": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "topicId": {
+                  "anyOf": [
+                    {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "title": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "role": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "name",
+                    "kind"
+                  ],
+                  "properties": {
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "name": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "const": "worker",
+                          "type": "string"
+                        },
+                        {
+                          "const": "reviewer",
+                          "type": "string"
+                        },
+                        {
+                          "const": "critic",
+                          "type": "string"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "workerNo": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "task": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "name"
+                      ],
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "mission": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "title"
+                      ],
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "step": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "n",
+                        "total",
+                        "label"
+                      ],
+                      "properties": {
+                        "n": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "total": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "label": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "resource": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "where",
+                        "deviceId",
+                        "deviceName",
+                        "modelLabel"
+                      ],
+                      "properties": {
+                        "where": {
+                          "anyOf": [
+                            {
+                              "const": "local",
+                              "type": "string"
+                            },
+                            {
+                              "const": "cloud",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "deviceId": {
+                          "anyOf": [
+                            {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "deviceName": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "modelLabel": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "startedAt": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "elapsedSeconds": {
+                  "anyOf": [
+                    {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "finishedAt": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "cost": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "inputTokens",
+                        "outputTokens",
+                        "costUsd",
+                        "costCny"
+                      ],
+                      "properties": {
+                        "inputTokens": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "outputTokens": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "costUsd": {
+                          "anyOf": [
+                            {
+                              "minimum": 0,
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "costCny": {
+                          "anyOf": [
+                            {
+                              "minimum": 0,
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "stage": {
+                  "anyOf": [
+                    {
+                      "const": "todo",
+                      "type": "string"
+                    },
+                    {
+                      "const": "doing",
+                      "type": "string"
+                    },
+                    {
+                      "const": "review",
+                      "type": "string"
+                    },
+                    {
+                      "const": "done",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "wait": {
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "const": "approval",
+                          "type": "string"
+                        },
+                        {
+                          "const": "reply",
+                          "type": "string"
+                        },
+                        {
+                          "const": "paused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "reviewing",
+                          "type": "string"
+                        },
+                        {
+                          "const": "review_failed",
+                          "type": "string"
+                        },
+                        {
+                          "const": "blocked",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "needsYou": {
+                  "type": "boolean"
+                },
+                "queueReason": {
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "const": "not_dispatched",
+                          "type": "string"
+                        },
+                        {
+                          "const": "slot",
+                          "type": "string"
+                        },
+                        {
+                          "const": "device_offline",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "queued": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "key",
+                "kind",
+                "cardId",
+                "topicId",
+                "title",
+                "role",
+                "workerNo",
+                "task",
+                "mission",
+                "step",
+                "resource",
+                "startedAt",
+                "elapsedSeconds",
+                "finishedAt",
+                "cost",
+                "stage",
+                "wait",
+                "needsYou",
+                "queueReason"
+              ],
+              "properties": {
+                "key": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "card",
+                      "type": "string"
+                    },
+                    {
+                      "const": "topic",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "cardId": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "topicId": {
+                  "anyOf": [
+                    {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "title": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "role": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "name",
+                    "kind"
+                  ],
+                  "properties": {
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "name": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "const": "worker",
+                          "type": "string"
+                        },
+                        {
+                          "const": "reviewer",
+                          "type": "string"
+                        },
+                        {
+                          "const": "critic",
+                          "type": "string"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "workerNo": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "task": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "name"
+                      ],
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "mission": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "title"
+                      ],
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "step": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "n",
+                        "total",
+                        "label"
+                      ],
+                      "properties": {
+                        "n": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "total": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "label": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "resource": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "where",
+                        "deviceId",
+                        "deviceName",
+                        "modelLabel"
+                      ],
+                      "properties": {
+                        "where": {
+                          "anyOf": [
+                            {
+                              "const": "local",
+                              "type": "string"
+                            },
+                            {
+                              "const": "cloud",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "deviceId": {
+                          "anyOf": [
+                            {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "deviceName": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "modelLabel": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "startedAt": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "elapsedSeconds": {
+                  "anyOf": [
+                    {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "finishedAt": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "cost": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "inputTokens",
+                        "outputTokens",
+                        "costUsd",
+                        "costCny"
+                      ],
+                      "properties": {
+                        "inputTokens": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "outputTokens": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "costUsd": {
+                          "anyOf": [
+                            {
+                              "minimum": 0,
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "costCny": {
+                          "anyOf": [
+                            {
+                              "minimum": 0,
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "stage": {
+                  "anyOf": [
+                    {
+                      "const": "todo",
+                      "type": "string"
+                    },
+                    {
+                      "const": "doing",
+                      "type": "string"
+                    },
+                    {
+                      "const": "review",
+                      "type": "string"
+                    },
+                    {
+                      "const": "done",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "wait": {
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "const": "approval",
+                          "type": "string"
+                        },
+                        {
+                          "const": "reply",
+                          "type": "string"
+                        },
+                        {
+                          "const": "paused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "reviewing",
+                          "type": "string"
+                        },
+                        {
+                          "const": "review_failed",
+                          "type": "string"
+                        },
+                        {
+                          "const": "blocked",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "needsYou": {
+                  "type": "boolean"
+                },
+                "queueReason": {
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "const": "not_dispatched",
+                          "type": "string"
+                        },
+                        {
+                          "const": "slot",
+                          "type": "string"
+                        },
+                        {
+                          "const": "device_offline",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "done": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "key",
+                "kind",
+                "cardId",
+                "topicId",
+                "title",
+                "role",
+                "workerNo",
+                "task",
+                "mission",
+                "step",
+                "resource",
+                "startedAt",
+                "elapsedSeconds",
+                "finishedAt",
+                "cost",
+                "stage",
+                "wait",
+                "needsYou",
+                "queueReason"
+              ],
+              "properties": {
+                "key": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "card",
+                      "type": "string"
+                    },
+                    {
+                      "const": "topic",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "cardId": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "topicId": {
+                  "anyOf": [
+                    {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "title": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "role": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "name",
+                    "kind"
+                  ],
+                  "properties": {
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "name": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "const": "worker",
+                          "type": "string"
+                        },
+                        {
+                          "const": "reviewer",
+                          "type": "string"
+                        },
+                        {
+                          "const": "critic",
+                          "type": "string"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "workerNo": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "task": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "name"
+                      ],
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "mission": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "title"
+                      ],
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "step": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "n",
+                        "total",
+                        "label"
+                      ],
+                      "properties": {
+                        "n": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "total": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "label": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "resource": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "where",
+                        "deviceId",
+                        "deviceName",
+                        "modelLabel"
+                      ],
+                      "properties": {
+                        "where": {
+                          "anyOf": [
+                            {
+                              "const": "local",
+                              "type": "string"
+                            },
+                            {
+                              "const": "cloud",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "deviceId": {
+                          "anyOf": [
+                            {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "deviceName": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "modelLabel": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "startedAt": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "elapsedSeconds": {
+                  "anyOf": [
+                    {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "finishedAt": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "cost": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "inputTokens",
+                        "outputTokens",
+                        "costUsd",
+                        "costCny"
+                      ],
+                      "properties": {
+                        "inputTokens": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "outputTokens": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "costUsd": {
+                          "anyOf": [
+                            {
+                              "minimum": 0,
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "costCny": {
+                          "anyOf": [
+                            {
+                              "minimum": 0,
+                              "type": "number"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "stage": {
+                  "anyOf": [
+                    {
+                      "const": "todo",
+                      "type": "string"
+                    },
+                    {
+                      "const": "doing",
+                      "type": "string"
+                    },
+                    {
+                      "const": "review",
+                      "type": "string"
+                    },
+                    {
+                      "const": "done",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "wait": {
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "const": "approval",
+                          "type": "string"
+                        },
+                        {
+                          "const": "reply",
+                          "type": "string"
+                        },
+                        {
+                          "const": "paused",
+                          "type": "string"
+                        },
+                        {
+                          "const": "reviewing",
+                          "type": "string"
+                        },
+                        {
+                          "const": "review_failed",
+                          "type": "string"
+                        },
+                        {
+                          "const": "blocked",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "needsYou": {
+                  "type": "boolean"
+                },
+                "queueReason": {
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "const": "not_dispatched",
+                          "type": "string"
+                        },
+                        {
+                          "const": "slot",
+                          "type": "string"
+                        },
+                        {
+                          "const": "device_offline",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "resources": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "devices",
+              "running",
+              "cap",
+              "cost"
+            ],
+            "properties": {
+              "devices": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "name",
+                    "lastSeenAt",
+                    "online"
+                  ],
+                  "properties": {
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "lastSeenAt": {
+                      "anyOf": [
+                        {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "online": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              },
+              "running": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "cap": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "cost": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "today",
+                  "month"
+                ],
+                "properties": {
+                  "today": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "inputTokens",
+                      "outputTokens",
+                      "costUsd",
+                      "costCny"
+                    ],
+                    "properties": {
+                      "inputTokens": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "outputTokens": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "costUsd": {
+                        "anyOf": [
+                          {
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "costCny": {
+                        "anyOf": [
+                          {
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "month": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "inputTokens",
+                      "outputTokens",
+                      "costUsd",
+                      "costCny"
+                    ],
+                    "properties": {
+                      "inputTokens": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "outputTokens": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "costUsd": {
+                        "anyOf": [
+                          {
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "costCny": {
+                        "anyOf": [
+                          {
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  }
                 }
               }
             }

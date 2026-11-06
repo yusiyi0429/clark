@@ -4530,6 +4530,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/workers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人所有 worker（带岗位的卡和专题），跨 Task 分进行中、已排队、已完成（今天），加资源摘要（设备在不在线、正在跑几个、今天和本月的花费） */
+        get: operations["listWorkers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/roles": {
         parameters: {
             query?: never;
@@ -15495,6 +15512,254 @@ export interface components {
                 createdAt: string;
                 decidedAt: string | null;
             }[];
+        };
+        WorkerResource: {
+            where: "local" | "cloud";
+            deviceId: string | null;
+            deviceName: string | null;
+            modelLabel: string | null;
+        };
+        WorkerCost: {
+            inputTokens: number;
+            outputTokens: number;
+            costUsd: number | null;
+            costCny: number | null;
+        };
+        WorkerItem: {
+            key: string;
+            kind: "card" | "topic";
+            cardId: string | null;
+            topicId: string | null;
+            title: string;
+            role: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                kind: "worker" | "reviewer" | "critic";
+            };
+            workerNo: number;
+            task: {
+                id: string;
+                name: string;
+            } | null;
+            mission: {
+                id: string;
+                title: string;
+            } | null;
+            step: {
+                n: number;
+                total: number;
+                label: string;
+            } | null;
+            resource: {
+                where: "local" | "cloud";
+                deviceId: string | null;
+                deviceName: string | null;
+                modelLabel: string | null;
+            } | null;
+            startedAt: string | null;
+            elapsedSeconds: number | null;
+            finishedAt: string | null;
+            cost: {
+                inputTokens: number;
+                outputTokens: number;
+                costUsd: number | null;
+                costCny: number | null;
+            } | null;
+            stage: "todo" | "doing" | "review" | "done";
+            wait: ("approval" | "reply" | "paused" | "reviewing" | "review_failed" | "blocked") | null;
+            needsYou: boolean;
+            queueReason: ("not_dispatched" | "slot" | "device_offline") | null;
+        };
+        WorkerResources: {
+            devices: {
+                /** Format: uuid */
+                id: string;
+                name: string;
+                lastSeenAt: string | null;
+                online: boolean;
+            }[];
+            running: number;
+            cap: number | null;
+            cost: {
+                today: {
+                    inputTokens: number;
+                    outputTokens: number;
+                    costUsd: number | null;
+                    costCny: number | null;
+                };
+                month: {
+                    inputTokens: number;
+                    outputTokens: number;
+                    costUsd: number | null;
+                    costCny: number | null;
+                };
+            };
+        };
+        WorkersResponse: {
+            running: {
+                key: string;
+                kind: "card" | "topic";
+                cardId: string | null;
+                topicId: string | null;
+                title: string;
+                role: {
+                    /** Format: uuid */
+                    id: string;
+                    name: string;
+                    kind: "worker" | "reviewer" | "critic";
+                };
+                workerNo: number;
+                task: {
+                    id: string;
+                    name: string;
+                } | null;
+                mission: {
+                    id: string;
+                    title: string;
+                } | null;
+                step: {
+                    n: number;
+                    total: number;
+                    label: string;
+                } | null;
+                resource: {
+                    where: "local" | "cloud";
+                    deviceId: string | null;
+                    deviceName: string | null;
+                    modelLabel: string | null;
+                } | null;
+                startedAt: string | null;
+                elapsedSeconds: number | null;
+                finishedAt: string | null;
+                cost: {
+                    inputTokens: number;
+                    outputTokens: number;
+                    costUsd: number | null;
+                    costCny: number | null;
+                } | null;
+                stage: "todo" | "doing" | "review" | "done";
+                wait: ("approval" | "reply" | "paused" | "reviewing" | "review_failed" | "blocked") | null;
+                needsYou: boolean;
+                queueReason: ("not_dispatched" | "slot" | "device_offline") | null;
+            }[];
+            queued: {
+                key: string;
+                kind: "card" | "topic";
+                cardId: string | null;
+                topicId: string | null;
+                title: string;
+                role: {
+                    /** Format: uuid */
+                    id: string;
+                    name: string;
+                    kind: "worker" | "reviewer" | "critic";
+                };
+                workerNo: number;
+                task: {
+                    id: string;
+                    name: string;
+                } | null;
+                mission: {
+                    id: string;
+                    title: string;
+                } | null;
+                step: {
+                    n: number;
+                    total: number;
+                    label: string;
+                } | null;
+                resource: {
+                    where: "local" | "cloud";
+                    deviceId: string | null;
+                    deviceName: string | null;
+                    modelLabel: string | null;
+                } | null;
+                startedAt: string | null;
+                elapsedSeconds: number | null;
+                finishedAt: string | null;
+                cost: {
+                    inputTokens: number;
+                    outputTokens: number;
+                    costUsd: number | null;
+                    costCny: number | null;
+                } | null;
+                stage: "todo" | "doing" | "review" | "done";
+                wait: ("approval" | "reply" | "paused" | "reviewing" | "review_failed" | "blocked") | null;
+                needsYou: boolean;
+                queueReason: ("not_dispatched" | "slot" | "device_offline") | null;
+            }[];
+            done: {
+                key: string;
+                kind: "card" | "topic";
+                cardId: string | null;
+                topicId: string | null;
+                title: string;
+                role: {
+                    /** Format: uuid */
+                    id: string;
+                    name: string;
+                    kind: "worker" | "reviewer" | "critic";
+                };
+                workerNo: number;
+                task: {
+                    id: string;
+                    name: string;
+                } | null;
+                mission: {
+                    id: string;
+                    title: string;
+                } | null;
+                step: {
+                    n: number;
+                    total: number;
+                    label: string;
+                } | null;
+                resource: {
+                    where: "local" | "cloud";
+                    deviceId: string | null;
+                    deviceName: string | null;
+                    modelLabel: string | null;
+                } | null;
+                startedAt: string | null;
+                elapsedSeconds: number | null;
+                finishedAt: string | null;
+                cost: {
+                    inputTokens: number;
+                    outputTokens: number;
+                    costUsd: number | null;
+                    costCny: number | null;
+                } | null;
+                stage: "todo" | "doing" | "review" | "done";
+                wait: ("approval" | "reply" | "paused" | "reviewing" | "review_failed" | "blocked") | null;
+                needsYou: boolean;
+                queueReason: ("not_dispatched" | "slot" | "device_offline") | null;
+            }[];
+            resources: {
+                devices: {
+                    /** Format: uuid */
+                    id: string;
+                    name: string;
+                    lastSeenAt: string | null;
+                    online: boolean;
+                }[];
+                running: number;
+                cap: number | null;
+                cost: {
+                    today: {
+                        inputTokens: number;
+                        outputTokens: number;
+                        costUsd: number | null;
+                        costCny: number | null;
+                    };
+                    month: {
+                        inputTokens: number;
+                        outputTokens: number;
+                        costUsd: number | null;
+                        costCny: number | null;
+                    };
+                };
+            };
         };
     };
     responses: never;
@@ -30979,6 +31244,35 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listWorkers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description worker 列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkersResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
