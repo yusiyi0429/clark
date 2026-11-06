@@ -46,15 +46,18 @@ export const SubSessionState = Type.Union([Type.Literal("queued"), Type.Literal(
 export const SubSessionWaiting = Type.Union([Type.Literal("approval"), Type.Literal("question"), Type.Literal("verdict"), Type.Literal("merge")]);
 
 /**
- * 卡验收过以后的合回（第 4.5 节，本机程序报的 merge 同步条目，同一次交回取最新的一条）：merged 已合进 baseBranch（commit 是合并后主文件夹上的提交）；
- * needs_merge 没合，reason 说为什么（base_not_checked_out 主文件夹不在原分支上、dirty 主文件夹有没提交的改动、conflict 有冲突、
- * auto_merge_off 本人关了「验收过就合回」），message 给人看，等你在这台电脑上合。卡不在工作树里做、或本机还没报，为 null。
+ * 卡验收过以后的合回（第 4.5 节，本机程序报的 merge 同步条目 LocalMergeSync；同一次交回报了几条时以本机序号最大的那条为准）：
+ * merged 已合进 baseBranch（commit 是合并后主文件夹上的提交）；needs_merge 没合，reason 说为什么（同本机契约 LocalMergeHoldReason：
+ * base_not_checked_out 主文件夹不在原分支上、dirty 主文件夹有没提交的改动、conflict 有冲突、auto_merge_off 本人关了「验收过就合回」、
+ * not_ready 卡还在跑或有后台任务在跑、交回以后又改过、工作树不在了等，message 写明是哪种），等你在这台电脑上合。
+ * 卡不在工作树里做、或本机还没报，为 null。
  */
 export const CardMerge = Type.Object({
   state: Type.Union([Type.Literal("merged"), Type.Literal("needs_merge")]),
   commit: Nullable(Type.String()),
   baseBranch: Nullable(Type.String()),
-  reason: Nullable(Type.Union([Type.Literal("base_not_checked_out"), Type.Literal("dirty"), Type.Literal("conflict"), Type.Literal("auto_merge_off")])),
+  reason: Nullable(Type.Union([Type.Literal("base_not_checked_out"), Type.Literal("dirty"), Type.Literal("conflict"), Type.Literal("auto_merge_off"),
+    Type.Literal("not_ready")])),
   message: Nullable(Type.String()),
   at: Instant,
 }, strict);
