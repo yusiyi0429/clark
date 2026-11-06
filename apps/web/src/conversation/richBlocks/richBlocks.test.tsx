@@ -89,7 +89,7 @@ describe("完成度色阶（同首页战况面）", () => {
 
   it("色值与首页战况面一致", () => {
     const css = readFileSync(new URL("../../styles/rich-blocks.module.css", import.meta.url), "utf8");
-    for (const color of ["[data-band=good]{--band:#178a6b}", "[data-band=steady]{--band:#3b6fc9}", "[data-band=low]{--band:#bf7a10}", ".metric{--band:#8e959e"]) expect(css).toContain(color);
+    for (const color of ["[data-band=good]{--band:var(--confirmed)}", "[data-band=steady]{--band:var(--tianshu-blue-secondary)}", "[data-band=low]{--band:var(--judgment)}", ".metric{--band:var(--ink-faint)"]) expect(css).toContain(color);
   });
 });
 

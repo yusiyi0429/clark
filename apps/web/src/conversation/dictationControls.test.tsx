@@ -29,9 +29,9 @@ describe("听写控件：红点 + 计时 + 弱化声波，三样同时可见", (
     expect(html).toContain("正在录音，结束后转写");
   });
 
-  it("样式：8px 红点 #e5484d 呼吸 1.2 秒、减少动效时不动；声波 2–10px 灰、透明度 0.45", () => {
+  it("样式：8px 红点（--counter）呼吸 1.2 秒、减少动效时不动；声波 2–10px 灰、透明度 0.45", () => {
     const rules = css("dictation.module.css");
-    expect(rules).toMatch(/\.dot\s*\{[^}]*width:\s*8px[^}]*background:\s*#e5484d[^}]*animation:\s*breathe 1200ms/);
+    expect(rules).toMatch(/\.dot\s*\{[^}]*width:\s*8px[^}]*background:\s*var\(--counter\)[^}]*animation:\s*breathe 1200ms/);
     expect(rules).toMatch(/\.wave\s*\{[^}]*opacity:\s*0\.45/);
     expect(rules).toMatch(/@media \(prefers-reduced-motion: reduce\)\s*\{[^@]*\.dot\s*\{\s*animation:\s*none/);
     expect(rules).toMatch(/\.marked\s*\{[^}]*text-decoration-line:\s*underline/);

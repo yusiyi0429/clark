@@ -26,7 +26,8 @@ describe("议题页排印", () => {
     expect([token("doc-type-title"), token("doc-type-section"), token("doc-type-body"), token("doc-type-meta"), token("doc-type-tag")])
       .toEqual(["20px", "16px", "16px", "13px", "12px"]);
     expect([token("doc-weight-regular"), token("doc-weight-strong")]).toEqual(["400", "600"]);
-    for (const name of ["doc-ink-1", "doc-ink-2", "doc-ink-3", "doc-ink-accent"]) expect(token(name)).toMatch(/^#[0-9a-f]{6}$/);
+    // 三级墨色 + 强调色接到底层墨色变量上，深色时跟着换（新首页设计 5.2）。
+    expect(["doc-ink-1", "doc-ink-2", "doc-ink-3", "doc-ink-accent"].map(token)).toEqual(["var(--ink)", "var(--ink-muted)", "var(--ink-faint)", "var(--tianshu-blue-secondary, #3c66bf)"]);
     expect(token("doc-measure")).toBe("600px");
     // 外壳 .shell 有一套随视口变的 --type-*：材料排印不能和它重名。
     expect(globals).not.toMatch(/^\s*--type-(title|body|meta)\s*:/m);
