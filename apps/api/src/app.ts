@@ -128,6 +128,7 @@ import { createThreadIntroAgent, type ThreadIntroAgent } from "./threadIntro.js"
 import { createTaskAcceptanceAgent, type TaskAcceptanceAgent } from "./taskAcceptanceDraft.js";
 import { createWorldPlanTaskSource, emptyPlanTaskSource, type PlanTaskSource } from "./planTasks.js";
 import { registerDeliverableRoutes } from "./routes/deliverables.js";
+import { registerLocalRoutes } from "./routes/local.js";
 import type { DeliverableAgents, DeliverableQueue } from "./deliverableReview.js";
 import type { ArticleFetcher } from "./articleText.js";
 import { personDisplayNames } from "./people.js";
@@ -838,6 +839,8 @@ export async function buildApp({
     registerWechatRoutes(app, ctx, wechat);
     app.addHook("onClose", async () => { await wechat.close(); });
   }
+  // V2 本机程序在云端的那一侧（routes/local.ts）：配对、设备令牌、单向上报的接收端。
+  registerLocalRoutes(app, ctx, { onHandbacks: () => undefined });
 
   return app;
 }
