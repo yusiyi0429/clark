@@ -109,7 +109,8 @@ async function setup(max: number, opts: { link?: boolean; reuse?: { dataDir: str
 const flagList = (argv: string[], name: string) => (argv.includes(name) ? argv[argv.indexOf(name) + 1]!.split(",") : []);
 const flag = (argv: string[], name: string) => (argv.includes(name) ? argv[argv.indexOf(name) + 1] : null);
 
-describe("规划员和验收员", () => {
+// 每条要拉起几个假 claude 进程，机器忙时单条要好几秒：显式给 30 秒，不靠 vitest 默认的 5 秒或 package.json 里的参数
+describe("规划员和验收员", { timeout: 30_000 }, () => {
   it("排队先后验收员 → 规划员 → 执行；两者只读、各用自己的工具；验收员按岗位档位挑模型、交完结论就收工", async () => {
     const h = await setup(1);
     try {

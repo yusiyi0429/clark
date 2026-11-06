@@ -90,7 +90,8 @@ async function setup(folder: string, max = 3, dataDir?: string, token0?: string)
   return { t, token, cloud, call, session, status, waitStatus, open, allow, events, handBack, verifierOf, merge };
 }
 
-describe("卡在自己的工作树里做", () => {
+// 每条要拉起几个假 claude 进程，机器忙时单条要好几秒：显式给 30 秒，不靠 vitest 默认的 5 秒或 package.json 里的参数
+describe("卡在自己的工作树里做", { timeout: 30_000 }, () => {
   it("同一个仓库两张卡同时做，各在自己的工作树；交回提交到卡的分支；验收员只看这张卡的改动；合回：有改动、不在基线分支、成了、冲突", async () => {
     const main = repo();
     const base = git(main, "rev-parse", "HEAD");

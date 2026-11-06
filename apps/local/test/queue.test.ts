@@ -51,7 +51,8 @@ async function setup(max: number, reuse?: { dataDir: string; work: string; token
   return { t, token, work, call, session, status, item, open, slots, waitStatus, allow };
 }
 
-describe("同时跑的上限和队列", () => {
+// 每条要拉起几个假 claude 进程，机器忙时单条要好几秒：显式给 30 秒，不靠 vitest 默认的 5 秒或 package.json 里的参数
+describe("同时跑的上限和队列", { timeout: 30_000 }, () => {
   it("上限 2、一批 4 件（夹一件开不了的）：前 2 件马上开，后 2 件排队；强停、一轮做完都让位，先来先跑", async () => {
     const h = await setup(2);
     try {
