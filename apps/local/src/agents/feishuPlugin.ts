@@ -1,14 +1,18 @@
 import { existsSync, lstatSync, mkdirSync, readdirSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+/** 本人已装的飞书技能（lark-* 且有 SKILL.md）；目录读不了就当没有。 */
+export function larkSkills(skillsDir: string): string[] {
+  try { return readdirSync(skillsDir).filter((n) => n.startsWith("lark-") && existsSync(join(skillsDir, n, "SKILL.md"))); } catch { return []; }
+}
+
 /**
  * 岗位的工具里有 feishu 时，给干净会话挂一个只在本会话生效的插件（--plugin-dir）：里面的技能是指向本人已装的 lark-* 技能的目录链接，
  * 不复制、不改本人的配置。11/06 实测：Claude Code 认 --plugin-dir 里经目录链接（junction）指过去的技能，显示为 tianshu-feishu:lark-doc 等。
  * 本人没装飞书技能、或一个链接都建不了时返回 null。整理链接出什么错都不挡开工。
  */
 export function ensureFeishuPlugin(dataDir: string, skillsDir: string): string | null {
-  let skills: string[];
-  try { skills = readdirSync(skillsDir).filter((n) => n.startsWith("lark-") && existsSync(join(skillsDir, n, "SKILL.md"))); } catch { return null; }
+  const skills = larkSkills(skillsDir);
   if (!skills.length) return null;
   const dir = join(dataDir, "plugins", "tianshu-feishu");
   const linkDir = join(dir, "skills");

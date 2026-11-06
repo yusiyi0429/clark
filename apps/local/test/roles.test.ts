@@ -84,7 +84,18 @@ describe("岗位", () => {
     expect(readdirSync(join(plugin, "skills"))).toEqual(["lark-doc"]);
     expect(realpathSync(join(plugin, "skills", "lark-doc"))).toBe(realpathSync(join(skills, "lark-doc")));
     expect(argv).not.toContain("--disallowedTools"); // 名单里有联网搜索
+    expect(readFileSync(after(argv, "--append-system-prompt-file")!, "utf8")).toContain("tianshu-feishu:lark-doc");
     await kill(s.body.id);
+
+    // 带个人配置：本人自己的技能照常加载，不挂插件，提示词也不能说没找到
+    const p = await api(t.port, token, "POST", "/v1/sessions", { subject: { kind: "card", cardId: "c3p" }, title: "x", cwd: work, firstMessage: "hi", includePersonalConfig: true, role: role("写稿人", ["feishu"]) });
+    expect(p.status).toBe(200);
+    const argvP: string[] = trace(work).at(-1).argv;
+    expect(argvP).not.toContain("--plugin-dir");
+    const promptP = readFileSync(after(argvP, "--append-system-prompt-file")!, "utf8");
+    expect(promptP).toContain("用本人自己装的 lark-* 技能");
+    expect(promptP).not.toContain("没找到飞书技能");
+    await kill(p.body.id);
 
     const t2 = await startTestRunner({ pickFolder: work, skillsDir: tempDir("tl-empty-") });
     const token2 = await pair(t2.port);

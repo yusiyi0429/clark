@@ -19,7 +19,7 @@ const TOPIC_RULES = `## 规矩
 const TOOL_TEXT: Record<TLocalRoleTool, string> = {
   tianshu: "天枢：用天枢 MCP（tianshu）读本人的事项、Mission 和公司资料；写进去的操作每次都要本人批准",
   web_search: "联网搜索：用天枢 MCP 的 web_search",
-  feishu: "飞书：用 lark-cli 命令行和 tianshu-feishu 里的飞书技能，以本人的飞书登录操作",
+  feishu: "飞书：用 lark-cli 命令行和飞书技能，以本人的飞书登录操作",
   github: "GitHub：用 gh 命令行",
   browser: "浏览器：这台电脑上没有给会话用的浏览器插件，要用时先问本人",
 };
@@ -35,7 +35,15 @@ function roleBlock(role: TLocalRole, heading: string): string {
 /** 挑刺子 agent 在会话里的名字：critic-1、critic-2…（Agent 工具的 subagent_type）。 */
 export const criticAgentName = (i: number) => `critic-${i + 1}`;
 
-export function systemPrompt(kind: TLocalSessionKind, role: TLocalRole | null, critics: TLocalRole[], feishuMounted: boolean): string {
+/** 飞书技能从哪来：本机挂的会话插件、本人自己的配置（带个人配置时），或者这台电脑上没有。 */
+export type FeishuSkills = "plugin" | "personal" | null;
+const FEISHU_NOTE: Record<"plugin" | "personal" | "none", string> = {
+  plugin: "（技能在 tianshu-feishu 插件里，如 tianshu-feishu:lark-doc）",
+  personal: "（用本人自己装的 lark-* 技能）",
+  none: "（这台电脑上没找到飞书技能，做不了时直接告诉本人）",
+};
+
+export function systemPrompt(kind: TLocalSessionKind, role: TLocalRole | null, critics: TLocalRole[], feishu: FeishuSkills): string {
   const parts = [
     "# 天枢本机会话",
     `本人在天枢网页上把这${kind === "card" ? "张卡" : "个调研专题"}派给你，在本人自己的电脑上做。网页能看到你的每一步，本人会批权限、插话。`,
@@ -43,7 +51,7 @@ export function systemPrompt(kind: TLocalSessionKind, role: TLocalRole | null, c
   ];
   if (role) {
     parts.push(roleBlock(role, "## 你的岗位："));
-    const tools = role.tools.map((t) => `- ${TOOL_TEXT[t]}${t === "feishu" && !feishuMounted ? "（这台电脑上没找到飞书技能，做不了时直接告诉本人）" : ""}`);
+    const tools = role.tools.map((t) => `- ${TOOL_TEXT[t]}${t === "feishu" ? FEISHU_NOTE[feishu ?? "none"] : ""}`);
     parts.push(`### 能用的工具\n${tools.length ? tools.join("\n") : "- 只用 Claude Code 自带的读写和命令"}`);
   }
   if (kind === "topic" && critics.length) {

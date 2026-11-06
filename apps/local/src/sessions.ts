@@ -13,7 +13,7 @@ import { isInside, type Folders } from "./folders.js";
 import type { Outbox } from "./outbox.js";
 import { SESSION_MCP_NAME, sessionToolNames } from "./sessionMcp.js";
 import { criticAgents, reviewMessage, systemPrompt } from "./rolePrompt.js";
-import { ensureFeishuPlugin } from "./agents/feishuPlugin.js";
+import { ensureFeishuPlugin, larkSkills } from "./agents/feishuPlugin.js";
 
 /** 云端天枢 MCP 在会话里的名字：和本人在 Claude Code 里配的天枢 MCP 同名，工具名一致。 */
 const CLOUD_MCP_NAME = "tianshu";
@@ -361,11 +361,14 @@ export class SessionManager {
     const linked = Boolean(await this.d.cloudLinked?.());
     const tools = { cloud: linked && (has("tianshu") || has("web_search")), search: has("web_search") };
     const mcp = await this.writeMcpConfig(rec, tools);
-    const feishu = rec.role?.tools.includes("feishu") && !rec.includePersonalConfig && this.d.skillsDir ? ensureFeishuPlugin(this.d.dataDir, this.d.skillsDir) : null;
+    // 带个人配置时本人自己的技能照常加载，不另挂插件；干净会话挂一个只在本会话生效的插件。
+    const skillsDir = rec.role?.tools.includes("feishu") ? this.d.skillsDir : undefined;
+    const plugin = skillsDir && !rec.includePersonalConfig ? ensureFeishuPlugin(this.d.dataDir, skillsDir) : null;
+    const feishu = plugin ? "plugin" : skillsDir && rec.includePersonalConfig && larkSkills(skillsDir).length ? "personal" : null;
     // 工作规矩、岗位、挑刺子 agent 写在本机程序的数据目录，经参数交给 Claude Code，不往本人的仓库写文件。
     const dir = join(this.dir, rec.id);
     const systemPromptPath = join(dir, "system.md");
-    writeFileSync(systemPromptPath, systemPrompt(rec.subject.kind, rec.role, rec.critics, Boolean(feishu)));
+    writeFileSync(systemPromptPath, systemPrompt(rec.subject.kind, rec.role, rec.critics, feishu));
     let agentsPath: string | null = null;
     if (rec.subject.kind === "topic" && rec.critics.length) {
       agentsPath = join(dir, "agents.json");
@@ -375,7 +378,7 @@ export class SessionManager {
       sessionId: rec.id, cwd: rec.cwd, resume, model, includePersonalConfig: rec.includePersonalConfig,
       mcpConfigPath: mcp.path, mcpEnv: mcp.env, allowedTools: mcp.allowedTools,
       disallowedTools: has("web_search") ? [] : ["WebSearch", `mcp__${CLOUD_MCP_NAME}__web_search`],
-      systemPromptPath, agentsPath, pluginDirs: feishu ? [feishu] : [],
+      systemPromptPath, agentsPath, pluginDirs: plugin ? [plugin] : [],
       // 每次现查：会话途中本人移除了文件夹，之后的请求（包括工作目录里的）就算越界。
       allowedRoots: () => [...(this.d.folders.isAllowed(rec.cwd) ? [rec.cwd] : []), ...this.d.folders.list().map((f) => f.path)],
     });
