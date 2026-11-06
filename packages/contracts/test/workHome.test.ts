@@ -40,6 +40,8 @@ describe("新首页契约", () => {
     expect(Value.Check(WorkHomeResponse, { ...home, missions: [...home.missions, { ...home.missions[0], missionId: "M0", period: "2026-10" }],
       other: { subSessions: [{ ...sub, state: "waiting", waiting: "merge", merge }] } })).toBe(true);
     expect(Value.Check(WorkHomeResponse, { ...home, missions: [{ ...home.missions[0], period: "10 月" }] })).toBe(false);
+    expect(Value.Check(WorkHomeResponse, { ...home, other: { subSessions: [{ ...sub, state: "waiting", waiting: "merge",
+      merge: { ...merge, reason: "not_ready", message: "卡还在跑" } }] } })).toBe(true);
   });
 
   it("Task 管线里的验收行：过了（带合回）、受阻、约定都达到、返工", () => {

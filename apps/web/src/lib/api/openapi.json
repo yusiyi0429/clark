@@ -24120,6 +24120,10 @@
                                 "type": "string"
                               },
                               {
+                                "const": "done",
+                                "type": "string"
+                              },
+                              {
                                 "const": "failed",
                                 "type": "string"
                               }
@@ -50723,6 +50727,10 @@
                             "type": "string"
                           },
                           {
+                            "const": "done",
+                            "type": "string"
+                          },
+                          {
                             "const": "failed",
                             "type": "string"
                           }
@@ -52036,6 +52044,10 @@
                                       },
                                       {
                                         "const": "exited",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "done",
                                         "type": "string"
                                       },
                                       {
@@ -60880,6 +60892,10 @@
                                 "type": "string"
                               },
                               {
+                                "const": "done",
+                                "type": "string"
+                              },
+                              {
                                 "const": "failed",
                                 "type": "string"
                               }
@@ -62545,6 +62561,10 @@
                                   "type": "string"
                                 },
                                 {
+                                  "const": "done",
+                                  "type": "string"
+                                },
+                                {
                                   "const": "failed",
                                   "type": "string"
                                 }
@@ -63722,6 +63742,10 @@
                                         "type": "string"
                                       },
                                       {
+                                        "const": "done",
+                                        "type": "string"
+                                      },
+                                      {
                                         "const": "failed",
                                         "type": "string"
                                       }
@@ -64871,6 +64895,10 @@
                                 },
                                 {
                                   "const": "exited",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "done",
                                   "type": "string"
                                 },
                                 {
@@ -69140,6 +69168,10 @@
                                 "type": "string"
                               },
                               {
+                                "const": "done",
+                                "type": "string"
+                              },
+                              {
                                 "const": "failed",
                                 "type": "string"
                               }
@@ -70568,6 +70600,10 @@
                                       "type": "string"
                                     },
                                     {
+                                      "const": "done",
+                                      "type": "string"
+                                    },
+                                    {
                                       "const": "failed",
                                       "type": "string"
                                     }
@@ -71666,6 +71702,10 @@
                                 },
                                 {
                                   "const": "exited",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "done",
                                   "type": "string"
                                 },
                                 {
@@ -89629,6 +89669,10 @@
                         "type": "string"
                       },
                       {
+                        "const": "done",
+                        "type": "string"
+                      },
+                      {
                         "const": "failed",
                         "type": "string"
                       }
@@ -90675,6 +90719,10 @@
                           },
                           {
                             "const": "exited",
+                            "type": "string"
+                          },
+                          {
+                            "const": "done",
                             "type": "string"
                           },
                           {
@@ -92190,6 +92238,10 @@
                                 },
                                 {
                                   "const": "exited",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "done",
                                   "type": "string"
                                 },
                                 {
@@ -93772,6 +93824,10 @@
                                 },
                                 {
                                   "const": "exited",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "done",
                                   "type": "string"
                                 },
                                 {
@@ -95411,6 +95467,10 @@
                                 "type": "string"
                               },
                               {
+                                "const": "done",
+                                "type": "string"
+                              },
+                              {
                                 "const": "failed",
                                 "type": "string"
                               }
@@ -95833,6 +95893,10 @@
                     },
                     {
                       "const": "exited",
+                      "type": "string"
+                    },
+                    {
+                      "const": "done",
                       "type": "string"
                     },
                     {
@@ -97208,6 +97272,10 @@
                 "type": "string"
               },
               {
+                "const": "done",
+                "type": "string"
+              },
+              {
                 "const": "failed",
                 "type": "string"
               }
@@ -97388,6 +97456,10 @@
               },
               {
                 "const": "exited",
+                "type": "string"
+              },
+              {
+                "const": "done",
                 "type": "string"
               },
               {
@@ -97916,6 +97988,10 @@
                       },
                       {
                         "const": "exited",
+                        "type": "string"
+                      },
+                      {
+                        "const": "done",
                         "type": "string"
                       },
                       {
@@ -98491,6 +98567,10 @@
                               "type": "string"
                             },
                             {
+                              "const": "done",
+                              "type": "string"
+                            },
+                            {
                               "const": "failed",
                               "type": "string"
                             }
@@ -98911,6 +98991,10 @@
                           },
                           {
                             "const": "exited",
+                            "type": "string"
+                          },
+                          {
+                            "const": "done",
                             "type": "string"
                           },
                           {
@@ -99349,6 +99433,10 @@
                     },
                     {
                       "const": "exited",
+                      "type": "string"
+                    },
+                    {
+                      "const": "done",
                       "type": "string"
                     },
                     {
@@ -104400,6 +104488,10 @@
                           {
                             "const": "auto_merge_off",
                             "type": "string"
+                          },
+                          {
+                            "const": "not_ready",
+                            "type": "string"
                           }
                         ]
                       },
@@ -104835,6 +104927,10 @@
                                 {
                                   "const": "auto_merge_off",
                                   "type": "string"
+                                },
+                                {
+                                  "const": "not_ready",
+                                  "type": "string"
                                 }
                               ]
                             },
@@ -105257,6 +105353,10 @@
                                       },
                                       {
                                         "const": "auto_merge_off",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "not_ready",
                                         "type": "string"
                                       }
                                     ]
@@ -105901,6 +106001,10 @@
                                             {
                                               "const": "auto_merge_off",
                                               "type": "string"
+                                            },
+                                            {
+                                              "const": "not_ready",
+                                              "type": "string"
                                             }
                                           ]
                                         },
@@ -106198,6 +106302,10 @@
                                     },
                                     {
                                       "const": "auto_merge_off",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "not_ready",
                                       "type": "string"
                                     }
                                   ]
@@ -107187,6 +107295,10 @@
                   {
                     "const": "auto_merge_off",
                     "type": "string"
+                  },
+                  {
+                    "const": "not_ready",
+                    "type": "string"
                   }
                 ]
               },
@@ -107318,6 +107430,10 @@
                               },
                               {
                                 "const": "auto_merge_off",
+                                "type": "string"
+                              },
+                              {
+                                "const": "not_ready",
                                 "type": "string"
                               }
                             ]
@@ -107590,6 +107706,10 @@
                                     },
                                     {
                                       "const": "auto_merge_off",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "not_ready",
                                       "type": "string"
                                     }
                                   ]

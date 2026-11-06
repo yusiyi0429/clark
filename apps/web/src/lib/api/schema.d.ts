@@ -5522,7 +5522,7 @@ export interface components {
                         /** Format: uuid */
                         deviceId: string;
                         deviceName: string;
-                        state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                        state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "done" | "failed";
                         modelLabel: string | null;
                         plan: {
                             done: number;
@@ -9561,7 +9561,7 @@ export interface components {
                     /** Format: uuid */
                     deviceId: string;
                     deviceName: string;
-                    state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                    state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "done" | "failed";
                     modelLabel: string | null;
                     plan: {
                         done: number;
@@ -9745,7 +9745,7 @@ export interface components {
                             /** Format: uuid */
                             deviceId: string;
                             deviceName: string;
-                            state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                            state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "done" | "failed";
                             modelLabel: string | null;
                             plan: {
                                 done: number;
@@ -11077,7 +11077,7 @@ export interface components {
                         /** Format: uuid */
                         deviceId: string;
                         deviceName: string;
-                        state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                        state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "done" | "failed";
                         modelLabel: string | null;
                         plan: {
                             done: number;
@@ -11302,7 +11302,7 @@ export interface components {
                         /** Format: uuid */
                         deviceId: string;
                         deviceName: string;
-                        state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                        state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "done" | "failed";
                         modelLabel: string | null;
                         plan: {
                             done: number;
@@ -11460,7 +11460,7 @@ export interface components {
                             /** Format: uuid */
                             deviceId: string;
                             deviceName: string;
-                            state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                            state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "done" | "failed";
                             modelLabel: string | null;
                             plan: {
                                 done: number;
@@ -11618,7 +11618,7 @@ export interface components {
                         /** Format: uuid */
                         deviceId: string;
                         deviceName: string;
-                        state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                        state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "done" | "failed";
                         modelLabel: string | null;
                         plan: {
                             done: number;
@@ -12184,7 +12184,7 @@ export interface components {
                         /** Format: uuid */
                         deviceId: string;
                         deviceName: string;
-                        state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                        state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "done" | "failed";
                         modelLabel: string | null;
                         plan: {
                             done: number;
@@ -12381,7 +12381,7 @@ export interface components {
                             /** Format: uuid */
                             deviceId: string;
                             deviceName: string;
-                            state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                            state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "done" | "failed";
                             modelLabel: string | null;
                             plan: {
                                 done: number;
@@ -12528,7 +12528,7 @@ export interface components {
                         /** Format: uuid */
                         deviceId: string;
                         deviceName: string;
-                        state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                        state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "done" | "failed";
                         modelLabel: string | null;
                         plan: {
                             done: number;
@@ -15132,7 +15132,7 @@ export interface components {
                 /** Format: uuid */
                 deviceId: string;
                 deviceName: string;
-                state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "done" | "failed";
                 modelLabel: string | null;
                 plan: {
                     done: number;
@@ -15272,7 +15272,7 @@ export interface components {
                     /** Format: uuid */
                     deviceId: string;
                     deviceName: string;
-                    state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                    state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "done" | "failed";
                     modelLabel: string | null;
                     plan: {
                         done: number;
@@ -15478,7 +15478,7 @@ export interface components {
                         /** Format: uuid */
                         deviceId: string;
                         deviceName: string;
-                        state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                        state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "done" | "failed";
                         modelLabel: string | null;
                         plan: {
                             done: number;
@@ -15696,7 +15696,7 @@ export interface components {
                         /** Format: uuid */
                         deviceId: string;
                         deviceName: string;
-                        state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                        state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "done" | "failed";
                         modelLabel: string | null;
                         plan: {
                             done: number;
@@ -15912,7 +15912,7 @@ export interface components {
                         /** Format: uuid */
                         deviceId: string;
                         deviceName: string;
-                        state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                        state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "done" | "failed";
                         modelLabel: string | null;
                         plan: {
                             done: number;
@@ -15974,7 +15974,7 @@ export interface components {
                 /** Format: uuid */
                 deviceId: string;
                 deviceName: string;
-                state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "done" | "failed";
                 modelLabel: string | null;
                 plan: {
                     done: number;
@@ -16173,7 +16173,7 @@ export interface components {
             /** Format: uuid */
             deviceId: string;
             deviceName: string;
-            state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+            state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "done" | "failed";
             modelLabel: string | null;
             plan: {
                 done: number;
@@ -16203,7 +16203,7 @@ export interface components {
             /** Format: uuid */
             deviceId: string;
             deviceName: string;
-            state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+            state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "done" | "failed";
             modelLabel: string | null;
             plan: {
                 done: number;
@@ -16281,7 +16281,7 @@ export interface components {
                 /** Format: uuid */
                 deviceId: string;
                 deviceName: string;
-                state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "done" | "failed";
                 modelLabel: string | null;
                 plan: {
                     done: number;
@@ -16367,7 +16367,7 @@ export interface components {
                     /** Format: uuid */
                     deviceId: string;
                     deviceName: string;
-                    state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                    state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "done" | "failed";
                     modelLabel: string | null;
                     plan: {
                         done: number;
@@ -16434,7 +16434,7 @@ export interface components {
                     /** Format: uuid */
                     deviceId: string;
                     deviceName: string;
-                    state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                    state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "done" | "failed";
                     modelLabel: string | null;
                     plan: {
                         done: number;
@@ -16500,7 +16500,7 @@ export interface components {
                 /** Format: uuid */
                 deviceId: string;
                 deviceName: string;
-                state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "done" | "failed";
                 modelLabel: string | null;
                 plan: {
                     done: number;
@@ -17145,7 +17145,7 @@ export interface components {
                 state: "merged" | "needs_merge";
                 commit: string | null;
                 baseBranch: string | null;
-                reason: ("base_not_checked_out" | "dirty" | "conflict" | "auto_merge_off") | null;
+                reason: ("base_not_checked_out" | "dirty" | "conflict" | "auto_merge_off" | "not_ready") | null;
                 message: string | null;
                 /** Format: date-time */
                 at: string;
@@ -17200,7 +17200,7 @@ export interface components {
                     state: "merged" | "needs_merge";
                     commit: string | null;
                     baseBranch: string | null;
-                    reason: ("base_not_checked_out" | "dirty" | "conflict" | "auto_merge_off") | null;
+                    reason: ("base_not_checked_out" | "dirty" | "conflict" | "auto_merge_off" | "not_ready") | null;
                     message: string | null;
                     /** Format: date-time */
                     at: string;
@@ -17252,7 +17252,7 @@ export interface components {
                         state: "merged" | "needs_merge";
                         commit: string | null;
                         baseBranch: string | null;
-                        reason: ("base_not_checked_out" | "dirty" | "conflict" | "auto_merge_off") | null;
+                        reason: ("base_not_checked_out" | "dirty" | "conflict" | "auto_merge_off" | "not_ready") | null;
                         message: string | null;
                         /** Format: date-time */
                         at: string;
@@ -17327,7 +17327,7 @@ export interface components {
                             state: "merged" | "needs_merge";
                             commit: string | null;
                             baseBranch: string | null;
-                            reason: ("base_not_checked_out" | "dirty" | "conflict" | "auto_merge_off") | null;
+                            reason: ("base_not_checked_out" | "dirty" | "conflict" | "auto_merge_off" | "not_ready") | null;
                             message: string | null;
                             /** Format: date-time */
                             at: string;
@@ -17358,7 +17358,7 @@ export interface components {
                         state: "merged" | "needs_merge";
                         commit: string | null;
                         baseBranch: string | null;
-                        reason: ("base_not_checked_out" | "dirty" | "conflict" | "auto_merge_off") | null;
+                        reason: ("base_not_checked_out" | "dirty" | "conflict" | "auto_merge_off" | "not_ready") | null;
                         message: string | null;
                         /** Format: date-time */
                         at: string;
@@ -17481,7 +17481,7 @@ export interface components {
             state: "merged" | "needs_merge";
             commit: string | null;
             baseBranch: string | null;
-            reason: ("base_not_checked_out" | "dirty" | "conflict" | "auto_merge_off") | null;
+            reason: ("base_not_checked_out" | "dirty" | "conflict" | "auto_merge_off" | "not_ready") | null;
             message: string | null;
             /** Format: date-time */
             at: string;
@@ -17501,7 +17501,7 @@ export interface components {
                 state: "merged" | "needs_merge";
                 commit: string | null;
                 baseBranch: string | null;
-                reason: ("base_not_checked_out" | "dirty" | "conflict" | "auto_merge_off") | null;
+                reason: ("base_not_checked_out" | "dirty" | "conflict" | "auto_merge_off" | "not_ready") | null;
                 message: string | null;
                 /** Format: date-time */
                 at: string;
@@ -17555,7 +17555,7 @@ export interface components {
                     state: "merged" | "needs_merge";
                     commit: string | null;
                     baseBranch: string | null;
-                    reason: ("base_not_checked_out" | "dirty" | "conflict" | "auto_merge_off") | null;
+                    reason: ("base_not_checked_out" | "dirty" | "conflict" | "auto_merge_off" | "not_ready") | null;
                     message: string | null;
                     /** Format: date-time */
                     at: string;
