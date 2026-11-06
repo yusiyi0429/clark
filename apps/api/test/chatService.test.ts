@@ -804,6 +804,29 @@ describe("首页对话带上本人所在页面（CHAT_PAGE_CONTEXT）", () => {
     }, CHAT_TOKEN, { chatPageContext: true });
   });
 
+  it("Task 页（本月页 /me/month/tasks/<id>、新首页锚到 Task 的 /me/work/tasks/<id>）带上本人读到的这个 Task；新首页本身、不是本人的 Task 不带", async () => {
+    const chat = await fakeChat();
+    const now = new Date("2026-11-06T02:00:00.000Z");
+    const t = await createTestApp({ internalChatToken: CHAT_TOKEN, chatServiceUrl: chat.url, chatPageContext: true }, countingRuntime(), {
+      monthlyNow: () => now,
+      planTasks: async (missions) => missions.some((mission) => mission.id === "m-page") ? [{ taskId: "task-1", missionId: "m-page", name: "对话质量达标", doneDefinition: null,
+        criteria: ["有题库打分结果", "有新人上手录屏"] }] : [],
+    });
+    try {
+      await t.sql(`INSERT INTO missions(id,version,code,period,title,owner_id,capability_id,battlefield_ids,outcome,milestones,source_ref,source_document_id,source_revision,source_title)
+        VALUES('m-page',1,'m-page','2026-11','内部版上线',$1,'method','["growth"]','目标','[]','fixture://p','fixture',1,'fixture')`, [TEST_CEO.personId]);
+      await t.sql("INSERT INTO tasks(id,title,owner_id,created_by,status,mission_id,step_order,plan_task_id) VALUES($1,'写方案',$2,'self','in_progress','m-page',1,'task-1')",
+        [randomUUID(), TEST_CEO.personId]);
+      for (const path of ["/me/month/tasks/task-1", "/me/work/tasks/task-1", "/me/work", "/me/work/tasks/task-other"]) await send(t, path);
+      const guide = expect.stringContaining("它有 2 条验收标准；看板上待开始 0 张、进行中 1 张");
+      expect(pages(chat)).toEqual([{ path: "/me/month/tasks/task-1", title: "Task：对话质量达标", guide }, { path: "/me/work/tasks/task-1", title: "Task：对话质量达标", guide },
+        null, null]);
+    } finally {
+      await t.close();
+      await chat.close();
+    }
+  });
+
   it("关着时（缺省）即使网页带了页面路径也不发 page", async () => {
     const chat = await fakeChat();
     await withChat(chat, countingRuntime(), async (t) => {

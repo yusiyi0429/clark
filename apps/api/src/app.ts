@@ -12,7 +12,7 @@ import { createPersonalMemory } from "./personalMemory.js";
 import { createMemoryRecall, memoryRecallModels, type MemoryRecall } from "./personalMemoryRecall.js";
 import { createPersonalDistillation } from "./personalDistillation.js";
 import { createChatService } from "./chatService.js";
-import { pageGuide } from "./pageGuides.js";
+import { pageFor } from "./pageGuides.js";
 import { createConversationDigests, recordChatSegment } from "./conversationDigests.js";
 import { createConversationRecall } from "./conversationRecall.js";
 import { registerPersonalMemoryRoutes } from "./routes/personalMemory.js";
@@ -133,6 +133,7 @@ import { registerRoleRoutes } from "./routes/roles.js";
 import { registerWorkerRoutes } from "./routes/workers.js";
 import { registerTopicRoutes } from "./routes/topics.js";
 import { registerTaskCardRoutes, type BoardAgents } from "./routes/taskCards.js";
+import { taskPageFacts } from "./taskCards.js";
 import type { DeliverableAgents, DeliverableQueue } from "./deliverableReview.js";
 import type { ArticleFetcher } from "./articleText.js";
 import { personDisplayNames } from "./people.js";
@@ -466,6 +467,8 @@ export async function buildApp({
   // 本体（tkos.world）只读集成：未配置时 reader 不发请求；读失败一律回退本地，不影响启动和页面。
   // 读取时间用真实时钟（演示场次的业务时钟是资料截至时间，不能用来标「读自本体」的时刻）。
   const world = createWorldReader({ q: pool.query.bind(pool), env });
+  // 首页 Task 行：本体配了、实例也开了读（和其他读本体的地方同一个开关），或配了 TK 只读实例，才从本体读（只读），否则没有 Task。
+  const planTaskSource = planTasks ?? worldPlanTaskSource(pool.query.bind(pool), env, world.enabled);
   // 第二个只读实例（TK scope，写死只读）：默认关闭；开了也只做健康探测和快照缓存，还没接进战场卡与 read_ontology。
   const worldTk = env.worldTk ? createWorldReader({ q: pool.query.bind(pool), env: env.worldTk }) : undefined;
   const baseGlobalContext = () => globalConversationContext(pool.query.bind(pool), now(), personDisplayNames(peopleDirectory));
@@ -493,7 +496,8 @@ export async function buildApp({
     modelId: env.lightModel, streamSimple: personalDistillationStream });
   // 首页走独立 Chat 时只建这一个客户端（首页分段的「人 × 视角」互斥在它里面）；转发的每一句记下进了哪一段，纪要据此去读。
   const chat = env.chatServiceUrl ? createChatService({ baseUrl: env.chatServiceUrl, token: env.internalChatToken, rotation: env.chatSessionRotation === true,
-    ...(env.chatPageContext ? { pageGuide } : {}),
+    ...(env.chatPageContext ? { pageGuide: (path: string, viewer: { personId: string }) =>
+      pageFor(path, (taskId) => taskPageFacts(pool.query.bind(pool), planTaskSource, viewer.personId, now(), taskId)) } : {}),
     onSegment: (viewer, segment) => recordChatSegment(pool.query.bind(pool), viewer, segment) }) : undefined;
   // 会话纪要（后台，CONVERSATION_DIGEST_MODEL / CONVERSATION_DIGEST_THINKING，不配时 LIGHT_MODEL、不开思考）与回看。
   const conversationDigests = createConversationDigests({ pool, chat, baseUrl: env.piBaseUrl, apiKey: env.piApiKey,
@@ -751,8 +755,7 @@ export async function buildApp({
     threadIntroAgent: threadIntroAgent ?? createThreadIntroAgent(pool, env),
     missionCardDraftAgent: missionCardDraftAgent ?? createMissionCardDraftAgent({ query: q, baseUrl: env.piBaseUrl, apiKey: env.piApiKey, modelId: env.heavyModel }),
     taskAcceptanceAgent: taskAcceptanceAgent ?? createTaskAcceptanceAgent(pool, env),
-    // 首页 Task 行：本体配了、实例也开了读（和其他读本体的地方同一个开关），或配了 TK 只读实例，才从本体读（只读），否则没有 Task。
-    planTasks: planTasks ?? worldPlanTaskSource(q, env, world.enabled),
+    planTasks: planTaskSource,
     materialStorageDir,
     conversationAttachmentStorageDir,
     conversationTurnTimeoutMs,
