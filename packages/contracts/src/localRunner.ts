@@ -50,8 +50,9 @@ export const LocalAgentKind = Type.Union([Type.Literal("claude-code"), Type.Lite
 /**
  * 本机会话的四种（V2 设计第 21 节）：都是能对话的本机会话，都占本机的位置。
  * - card：执行 worker，看板上的一张卡（执行事项）；topic：调研专题。
- * - plan：规划员，把一个 Task 拆成计划和派活单草稿（propose_plan），只读不改文件。
- * - verify：验收员，执行方交回以后本机自己起，逐条判这次交回（submit_verdict），只读不改文件。网页不能开这种会话。
+ * - plan：规划员，把一个 Task 拆成计划和派活单草稿（propose_plan），只读不改文件。交了计划、这一轮做完就收工（done）；
+ *   本人「改一改」就对它说一句（POST /v1/sessions/:id/messages），本机续上原来的对话，改完再交一次（revision +1），又收工。
+ * - verify：验收员，执行方交回以后本机自己起，逐条判这次交回（submit_verdict），只读不改文件，交完结论就收工（done）。网页不能开这种会话。
  * 排队先后：verify → plan → card、topic；同一种先来先跑。
  */
 export const LocalSessionKind = Type.Union([Type.Literal("card"), Type.Literal("topic"), Type.Literal("plan"), Type.Literal("verify")]);
@@ -150,10 +151,16 @@ export const LocalSettings = Type.Object({
   paused: Type.Boolean(),
   /** 同时最多跑几个（默认 3，插件页可改）。超出的排队，先来先跑；调大时立刻从队里接上。 */
   maxConcurrent: Type.Integer({ minimum: 1, maximum: 10 }),
+  /**
+   * 「验收过就合回」（默认 true，插件页可改）：卡的验收过了，主文件夹停在原分支上、没有没提交的改动、合并没有冲突时，本机自动合回（只合不推），
+   * 等它的卡接着自己开始。不满足或关了时不合，卡的 workspace.needsMerge 写明原因，等本人合。
+   */
+  autoMerge: Type.Boolean(),
 }, strict);
 export const LocalSettingsPatch = Type.Object({
   includePersonalConfigByDefault: Type.Optional(Type.Boolean()),
   maxConcurrent: Type.Optional(Type.Integer({ minimum: 1, maximum: 10 })),
+  autoMerge: Type.Optional(Type.Boolean()),
   /** 网页只能暂停（true）；传 false 会被拒（409），恢复只能在本机托盘里点。 */
   paused: Type.Optional(Type.Boolean()),
 }, strict);
@@ -257,6 +264,8 @@ export const LocalSessionStatus = Type.Union([
   Type.Literal("idle"),
   /** 进程已退出（停下、强停、本机程序重启）；再发消息会用 --resume 续上。 */
   Type.Literal("exited"),
+  /** 交完了、进程已退出：规划员交了计划、验收员交了结论，这一轮做完就自己收工。和 exited 一样不占位置，再说一句会续上（running）。 */
+  Type.Literal("done"),
   Type.Literal("failed"),
 ]);
 
@@ -332,9 +341,18 @@ export const LocalCreateSessionRequest = Type.Object({
 /**
  * 卡的会话在哪做（ADR 0038）。本人选的文件夹在 git 仓库里（在某个分支上、至少有一个提交）时，每张卡在本机程序数据目录里的
  * worktrees/<cardId> 开一个自己的工作树，新建分支 tianshu/<卡 id 前 8 位>-<标题里的英文和数字>，从开工那一刻主文件夹所在分支的最新提交开始；
- * 几张卡同时做互不覆盖，交回时本机把没提交的改动提交到这个分支，验收员看开工以来这个分支上的改动，合回由本人点（POST /v1/sessions/:id/merge）。
+ * 几张卡同时做互不覆盖，交回时本机把没提交的改动提交到这个分支，验收员看开工以来这个分支上的改动。
+ * 验收过了本机自动合回（LocalSettings.autoMerge，条件不满足时等本人点 POST /v1/sessions/:id/merge）。
  * 不是 git 仓库（或不在分支上、还没有提交）时就在这个文件夹里做，同一个文件夹同时只做一张卡，别的排队。
  */
+/**
+ * 验收过了却没自动合回的原因（卡的 workspace.needsMerge、同步条目 merge）：
+ * base_not_checked_out 主文件夹现在不在 baseBranch 上；dirty 主文件夹有没提交的改动（含没加进 git 的文件）；conflict 有冲突（已放弃这次合并）；
+ * auto_merge_off 本人把「验收过就合回」关了；not_ready 卡还在跑或有后台任务在跑、交回以后卡又改过、工作树不在了、主文件夹已不在允许的文件夹里（message 写明是哪种）。
+ */
+export const LocalMergeHoldReason = Type.Union([
+  Type.Literal("base_not_checked_out"), Type.Literal("dirty"), Type.Literal("conflict"), Type.Literal("auto_merge_off"), Type.Literal("not_ready"),
+]);
 export const LocalWorkspace = Type.Union([
   Type.Object({
     kind: Type.Literal("worktree"),
@@ -349,6 +367,8 @@ export const LocalWorkspace = Type.Union([
     baseCommit: Sha,
     /** 合回以后主文件夹里的提交（合回后工作树已清理，分支保留）；没合回为 null。 */
     mergedCommit: Nullable(Sha),
+    /** 验收过了但没合回、要本人合：原因和一句给人看的话。合回了、还没验收过、又交回了在重新验收时不带。 */
+    needsMerge: Type.Optional(Type.Object({ reason: LocalMergeHoldReason, message: Type.String({ minLength: 1, maxLength: 500 }) }, strict)),
   }, strict),
   Type.Object({ kind: Type.Literal("folder"), folder: Type.String() }, strict),
 ]);
@@ -478,7 +498,7 @@ export const LocalPermissionDecisionRequest = Type.Object({
 }, strict);
 
 /**
- * POST /v1/sessions/:id/merge（体 {}）：把卡的分支合回主文件夹的 baseBranch，只在本人点了才合，本机从不自动合。合成了清理工作树、保留分支。
+ * POST /v1/sessions/:id/merge（体 {}）：本人点合并，把卡的分支合回主文件夹的 baseBranch（验收过了本机会先自动试一次，见 LocalSettings.autoMerge）。只合不推。合成了清理工作树、保留分支。
  * 合不了时 merged = false，主文件夹原样不动：base_not_checked_out 主文件夹现在不在 baseBranch 上；dirty 主文件夹有没提交的改动（含没加进 git 的文件）；
  * conflict 有冲突（已放弃这次合并）。files 是有改动或冲突的文件。卡不在工作树里、卡或它的验收员还在跑、卡的工作树里还有没提交的改动、已经合回过，回 409。
  */
@@ -666,6 +686,24 @@ export const LocalSessionEvent = Type.Union([
 /** 卡的分支和提交：branch 从 baseBranch 的 baseCommit 开出来，commit 是交回那一刻分支上的提交。 */
 export const LocalGitRef = Type.Object({ branch: Type.String(), baseBranch: Type.String(), baseCommit: Sha, commit: Sha }, strict);
 
+/**
+ * 卡合回的结果（同步条目 merge，按卡的会话报；首页「已合并 / 要你合」、Task 管线的验收行用它）。什么时候报：
+ * - 验收过了本机自动合回成了：merged true、auto true；
+ * - 验收过了没自动合（条件不满足或本人关了自动合回）：merged false、auto true、reason；
+ * - 本人在卡上点了合并：auto false，合成了 merged true，没合成 merged false、reason 是 base_not_checked_out、dirty、conflict 之一。
+ * handbackKey 是验的那次交回（没交回过就合的不报）。同一个 handbackKey 有多条时，以 key 末尾本机序号最大的为准。
+ * commit 是合回后主文件夹里的提交，没合成为 null；baseBranch 是合到哪个分支；message 给人看，合成了为 null。
+ */
+export const LocalMergeSync = Type.Object({
+  handbackKey: SyncKey,
+  merged: Type.Boolean(),
+  commit: Nullable(Sha),
+  baseBranch: Type.String({ minLength: 1, maxLength: 200 }),
+  reason: Nullable(LocalMergeHoldReason),
+  message: Nullable(Type.String({ minLength: 1, maxLength: 500 })),
+  auto: Type.Boolean(),
+}, strict);
+
 const syncItem = <T extends string, D extends TSchema>(type: T, data: D) => Type.Object({
   /** 幂等键：<deviceId>:<sessionId>:<本机序号>。云端按它去重，重复提交返回 accepted。 */
   key: SyncKey,
@@ -741,6 +779,8 @@ export const LocalSyncItem = Type.Union([
    * 不要另定「已结束的不再变回 running」：子 agent 跑完后被续上（SendMessage）时，Claude Code 沿用同一个 task_id，这一项会从 done 回到 running。
    */
   syncItem("background", LocalBackgroundItem),
+  /** 卡合回的结果，见 LocalMergeSync。 */
+  syncItem("merge", LocalMergeSync),
 ]);
 
 export const LocalSyncBatchRequest = Type.Object({
@@ -799,6 +839,8 @@ export type TLocalWorkspace = Static<typeof LocalWorkspace>;
 export type TLocalGitRef = Static<typeof LocalGitRef>;
 export type TLocalMergeBlockReason = Static<typeof LocalMergeBlockReason>;
 export type TLocalMergeResponse = Static<typeof LocalMergeResponse>;
+export type TLocalMergeHoldReason = Static<typeof LocalMergeHoldReason>;
+export type TLocalMergeSync = Static<typeof LocalMergeSync>;
 export type TLocalQuestion = Static<typeof LocalQuestion>;
 export type TLocalQuestionRequestView = Static<typeof LocalQuestionRequestView>;
 export type TLocalQuestionAnswerRequest = Static<typeof LocalQuestionAnswerRequest>;

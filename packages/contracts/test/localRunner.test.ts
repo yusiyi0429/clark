@@ -6,6 +6,7 @@ import {
   LocalSyncBatchRequest, LocalPairingStatusResponse, LocalSendMessageRequest, LOCAL_RUNNER_ROUTES,
   LocalCreateSessionBatchRequest, LocalCreateSessionBatchResponse, LocalSettingsPatch, LocalSessionSummary, LocalHealthResponse,
   LocalVerifyBriefResponse, LOCAL_RUNNER_VERIFY_BRIEF_PATH, LocalMergeResponse, LocalVerdict, LocalQuestionAnswerRequest, LocalPlanCard, LocalBackgroundItem,
+  LocalSettings, LocalMergeSync,
 } from "../src/index.js";
 
 const sessionId = "6b0f3a52-4d0c-4c1e-9a43-1f7d2c9b8e10";
@@ -239,6 +240,37 @@ describe("本机程序契约", () => {
     const batch = { deviceId, runnerVersion: "0.1.0", slots: { max: 3, running: 1, queued: 0 }, items: [{ key: `${deviceId}:${sessionId}:11`, sessionId, subject: summary.subject, occurredAt: at, type: "background", data: agent }] };
     expect(Value.Check(LocalSyncBatchRequest, batch)).toBe(true);
     expect(LOCAL_RUNNER_ROUTES.stopBackground).toEqual({ method: "POST", path: "/v1/sessions/:id/background/:itemId/stop", auth: true });
+  });
+
+  it("交完收工是 done；验收过就合回是设置；没合回的卡带 needsMerge；合回结果按交回同步", () => {
+    const at = "2026-11-07T04:30:00.000Z";
+    const sha = "a".repeat(40);
+    const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0 };
+    const plan = {
+      id: sessionId, subject: { kind: "plan", taskId: "task-1" }, title: "拆卡", agent: "claude-code", modelProfileId: "subscription", modelLabel: "订阅",
+      cwd: "D:/plans/task-1", status: "done", includePersonalConfig: false, createdAt: at, updatedAt: at, lastSeq: 9, pendingPermissions: 0, queuePosition: null, usage,
+    };
+    expect(Value.Check(LocalSessionSummary, plan)).toBe(true);
+    expect(Value.Check(LocalSessionEvent, { seq: 10, at, sessionId, type: "status", status: "done", reason: "计划交了" })).toBe(true);
+
+    const settings = { includePersonalConfigByDefault: false, allowedOrigins: [], paused: false, maxConcurrent: 3, autoMerge: true };
+    expect(Value.Check(LocalSettings, settings)).toBe(true);
+    expect(Value.Check(LocalSettings, { ...settings, autoMerge: undefined })).toBe(false);
+    expect(Value.Check(LocalSettingsPatch, { autoMerge: false })).toBe(true);
+
+    const workspace = { kind: "worktree", folder: "D:/repo", path: "D:/data/worktrees/c1", branch: "tianshu/c1-login", baseBranch: "main", baseCommit: sha, mergedCommit: null };
+    const card = { ...plan, subject: { kind: "card", cardId: "card-1" }, status: "idle", workspace };
+    expect(Value.Check(LocalSessionSummary, card)).toBe(true);
+    expect(Value.Check(LocalSessionSummary, { ...card, workspace: { ...workspace, needsMerge: { reason: "dirty", message: "主文件夹有没提交的改动：readme.md" } } })).toBe(true);
+    expect(Value.Check(LocalSessionSummary, { ...card, workspace: { ...workspace, needsMerge: { reason: "busy", message: "x" } } })).toBe(false);
+
+    const key = `${deviceId}:${sessionId}:12`;
+    const merged = { handbackKey: key, merged: true, commit: sha, baseBranch: "main", reason: null, message: null, auto: true };
+    const held = { handbackKey: key, merged: false, commit: null, baseBranch: "main", reason: "auto_merge_off", message: "没开「验收过就合回」，等你合", auto: true };
+    for (const m of [merged, held, { ...held, reason: "not_ready", message: "交回以后卡又改过" }, { ...merged, auto: false }]) expect(Value.Check(LocalMergeSync, m)).toBe(true);
+    expect(Value.Check(LocalMergeSync, { ...held, reason: "busy" })).toBe(false);
+    const batch = { deviceId, runnerVersion: "0.1.0", slots: { max: 3, running: 0, queued: 0 }, items: [{ key: `${deviceId}:${sessionId}:13`, sessionId, subject: card.subject, occurredAt: at, type: "merge", data: merged }] };
+    expect(Value.Check(LocalSyncBatchRequest, batch)).toBe(true);
   });
 
   it("配对口令只在批准后出现；路由表里只有健康和配对不要口令", () => {
