@@ -66,7 +66,7 @@ export function V2Shell({ account, children }: { account: Account; children: Rea
 }
 
 /** 底部一行提示：和老工作台同一个事件（showWorkspaceToast），样子照它。 */
-function ShellToast() {
+export function ShellToast() {
   const [toast, setToast] = useState<ToastDetail | null>(null);
   useEffect(() => {
     const shown = (event: Event) => {

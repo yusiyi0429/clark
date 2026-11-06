@@ -227,7 +227,7 @@ function ResultPane({ detail, view, canAct, wait, stage, handheld, ready, onStar
 }
 
 /** Agent 验收：逐条达到 / 部分 / 未达到，带理由和怎么补；本人能推翻（通过的退回去，没过的直接算通过）。 */
-function Acceptance({ cardId, handback, canOverrule, deliverable, onChanged }: { cardId: string; handback: TCardHandbackView; canOverrule: boolean; deliverable: string | null; onChanged: () => void }) {
+export function Acceptance({ cardId, handback, canOverrule, deliverable, onChanged }: { cardId: string; handback: TCardHandbackView; canOverrule: boolean; deliverable: string | null; onChanged: () => void }) {
   const [reason, setReason] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const verdicts = useMemo(() => handback.result?.criteria ?? [], [handback.result]);
