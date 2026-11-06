@@ -9,6 +9,7 @@
  * 约定与对表（设计 V1 第 8 节，useTaskAgreement）：每条标准下面是约定，标题行有「对表」，结果标在每条上、结论在列表上面；
  * 对表开着时最新一版或它的评审变了就再对一次。checkOnOpen（从飞书链接进来）打开就对一次。
  * 别人的 Task（认可人、Mission 负责人、战场负责人、CEO 只读地看）不传 activities，就没有「我的事项」那一行。
+ * 列表写本体当前的标准（标准改过以后也是新的那句），点开参考评审时才换成评审时的原文和逐条判定。
  */
 import { useEffect, useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
@@ -122,7 +123,7 @@ export function TaskDeliverable({ task, activities, activityCount = 0, newItem, 
             onRetry={() => void api.retry(selected.id).then((value) => setError(result(value)))} />
         ) : null}
 
-        <CriteriaList title={data.basis === "definition" ? "完成定义" : "验收标准"} texts={selected?.review.criteria.length ? selected.review.criteria.map((row) => row.text) : data.criteria}
+        <CriteriaList title={data.basis === "definition" ? "完成定义" : "验收标准"} texts={data.criteria}
           results={referenceOpen && selected?.review.criteria.length ? selected.review.criteria : null}
           canDissent={referenceOpen && data.canEdit && onLatest && !selected?.deliveredAt}
           onDissent={async (index, reason) => (selected ? result(await api.dissent(selected.id, index, reason)) : null)}

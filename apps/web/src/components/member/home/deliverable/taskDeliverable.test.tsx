@@ -272,6 +272,12 @@ describe("约定与对表", () => {
     expect(text(html)).toContain("本体里这个 Task 的标准改过，约定是照旧标准写的。");
   });
 
+  it("标准改过以后，列表写本体当前的标准（最新一版评审里还是旧的那句）；点开参考评审才看评审时的原文", () => {
+    const html = render(deliverable({ criteria: [criteria[0], "题库打分 80 分且无否决项"], versions: [version()] }), pact({ agreement: agreement({ basisChanged: true }) }));
+    expect(text(item(html, 2))).toContain("题库打分 80 分且无否决项");
+    expect(text(html)).not.toContain(criteria[1]);
+  });
+
   it("对表在跑：按钮写「对表中…」并置灰；没对成写服务端的那句话", () => {
     const html = render(deliverable({ versions: [version()] }), pact({ checking: true, checkError: "对表没成功，请重试" }));
     expect(button(html, "对表中…")).toMatch(/disabled/);
