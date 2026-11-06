@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -44,6 +44,31 @@ export async function boardFixture(runtime: Parameters<typeof createTestApp>[2] 
     if (res.statusCode !== 200) throw new Error(res.body);
     return res.json().id as string;
   };
-  return { t, call, card, member, storage, close: async () => { await t.close(); await rm(storage, { recursive: true, force: true }); } };
+  /** 配对一台电脑；handBack 是本机做完一轮交回来：几份产出、几个链接证据、一次交回（各一个新会话）。 */
+  const local = async () => {
+    const device = randomUUID();
+    const token = (await call("POST", "/api/me/local-devices", { deviceId: device, name: "我的电脑", os: "win32" })).json().token as string;
+    const handBack = async (cardId: string, options: { files?: [string, string][]; links?: string[] } = {}) => {
+      const session = randomUUID();
+      let seq = 0;
+      const item = (type: string, data: unknown) => ({ key: `${device}:${session}:${++seq}`, sessionId: session, subject: { kind: "card", cardId },
+        occurredAt: new Date(Date.UTC(2026, 10, 6, 3, 0, seq)).toISOString(), type, data });
+      const items = [
+        ...(options.files ?? [["方案.md", "# 方案\n有方案文档"]]).map(([name, text]) => {
+          const buffer = Buffer.from(text);
+          return item("artifact", { artifactId: `a${seq + 1}`, title: name, fileName: name, mimeType: "text/markdown", size: buffer.length,
+            sha256: createHash("sha256").update(buffer).digest("hex"), contentBase64: buffer.toString("base64") });
+        }),
+        ...(options.links ?? ["https://example.com/review"]).map((url) => item("evidence", { kind: "link", title: "评审记录", url })),
+        item("handback", { summary: "做完了", criteria: [{ index: 1, result: "met", evidence: "方案.md" }, { index: 2, result: "met", evidence: "评审记录" }] }),
+      ];
+      const res = await t.app.inject({ method: "POST", url: "/api/local-runner/sync", headers: { authorization: `Bearer ${token}` },
+        payload: { deviceId: device, runnerVersion: "0.1.0", items } });
+      if (res.statusCode !== 200 || res.json().rejected.length) throw new Error(res.body);
+      return (await t.sql("SELECT id FROM card_handbacks WHERE task_id=$1 ORDER BY attempt DESC LIMIT 1", [cardId]))[0].id as string;
+    };
+    return { device, token, handBack };
+  };
+  return { t, call, card, local, member, storage, close: async () => { await t.close(); await rm(storage, { recursive: true, force: true }); } };
 }
 export type BoardFixture = Awaited<ReturnType<typeof boardFixture>>;

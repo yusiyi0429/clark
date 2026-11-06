@@ -1,9 +1,10 @@
 import { Type } from "@sinclair/typebox";
 import type { FastifyReply } from "fastify";
 import { AcceptCardDraftsRequest, AcceptCardDraftsResponse, CardBoardResponse, CardBriefResponse, CardDetailResponse, CardPlanView, CardTaskView, CreateCardPlanRequest,
-  OverruleCardHandbackRequest, PatchCardRequest } from "@warmap/contracts";
+  AddPendingDeliverableRequest, CreateVersionFromPendingRequest, DeliverableVersion, OverruleCardHandbackRequest, PatchCardRequest, PendingDeliverableItem } from "@warmap/contracts";
 import { createArticleFetcher, type ArticleFetcher } from "../articleText.js";
 import { createCardAcceptanceAgent, createCardAcceptanceQueue, markHandbackReturned, overruleHandback, retryHandback, type CardAcceptanceAgent } from "../cardAcceptance.js";
+import { addPendingTopicVersion, createVersionFromPending, removePending } from "../cardDeliverables.js";
 import { createCardPlanAgent, createCardPlanQueue, type CardPlanAgent } from "../cardPlanner.js";
 import { personDisplayNames } from "../people.js";
 import { findOwnTask, type OwnTask } from "../taskDeliverables.js";
@@ -103,6 +104,23 @@ export function registerTaskCardRoutes(app: AppInstance, ctx: RouteContext, deps
     void acceptance.enqueue(handbackId);
   });
   handbackAction("/api/me/cards/:id/handbacks/:handbackId/returned", (personId, cardId, handbackId) => markHandbackReturned(pool, personId, cardId, handbackId, ctx.now()));
+
+  app.post("/api/plan-tasks/:taskId/deliverable/pending", { preHandler: requireMember, schema: { params: taskParams, body: AddPendingDeliverableRequest,
+    response: { 201: PendingDeliverableItem } } }, async (req, reply) => handle(reply, async () =>
+    reply.status(201).send(await addPendingTopicVersion(q, await board(req.person!.personId, req.params.taskId), req.body.topicVersionId))));
+
+  app.delete("/api/plan-tasks/:taskId/deliverable/pending/:id", { preHandler: requireMember,
+    schema: { params: Type.Object({ taskId: Type.String({ minLength: 1 }), id: Type.String({ minLength: 1 }) }) } }, async (req, reply) => handle(reply, async () => {
+    await removePending(q, await board(req.person!.personId, req.params.taskId), req.params.id);
+    return reply.status(204).send();
+  }));
+
+  app.post("/api/plan-tasks/:taskId/deliverable/versions/from-pending", { preHandler: requireMember, schema: { params: taskParams, body: CreateVersionFromPendingRequest,
+    response: { 201: DeliverableVersion } } }, async (req, reply) => handle(reply, async () => {
+    const version = await createVersionFromPending(pool, await board(req.person!.personId, req.params.taskId), req.body.statement, ctx.materialStorageDir);
+    void app.deliverables.enqueueReview(version.id);
+    return reply.status(201).send(version);
+  }));
 
   return { enqueueAcceptance: (handbackId) => { void acceptance.enqueue(handbackId); } };
 }

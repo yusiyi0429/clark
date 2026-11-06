@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import type { AcceptanceInput, CardAcceptanceAgent, TAcceptanceCandidate } from "../src/cardAcceptance.js";
 import { returnText } from "../src/cardAcceptance.js";
@@ -22,25 +22,9 @@ async function acceptanceFixture() {
     return candidate(next);
   } };
   const f = await boardFixture({ boardAgents: { acceptance }, deliverableFetcher: async (url) => ({ text: `网页正文 ${url}`, images: [] }) });
-  const device = randomUUID();
-  const paired = await f.call("POST", "/api/me/local-devices", { deviceId: device, name: "我的电脑", os: "win32" });
-  const token = paired.json().token as string;
+  const local = await f.local();
   /** 本机做完一轮交回来：一份产出、一个链接证据、一次交回。 */
-  const handBack = async (cardId: string, text = "# 方案\n有方案文档") => {
-    const session = randomUUID();
-    const buffer = Buffer.from(text);
-    const item = (seq: number, type: string, data: unknown) => ({ key: `${device}:${session}:${seq}`, sessionId: session, subject: { kind: "card", cardId },
-      occurredAt: new Date(Date.UTC(2026, 10, 6, 3, 0, seq)).toISOString(), type, data });
-    const res = await f.t.app.inject({ method: "POST", url: "/api/local-runner/sync", headers: { authorization: `Bearer ${token}` }, payload: { deviceId: device, runnerVersion: "0.1.0",
-      items: [
-        item(1, "artifact", { artifactId: "a1", title: "方案.md", fileName: "方案.md", mimeType: "text/markdown", size: buffer.length,
-          sha256: createHash("sha256").update(buffer).digest("hex"), contentBase64: buffer.toString("base64") }),
-        item(2, "evidence", { kind: "link", title: "评审记录", url: "https://example.com/review" }),
-        item(3, "handback", { summary: "做完了", criteria: [{ index: 1, result: "met", evidence: "方案.md" }, { index: 2, result: "met", evidence: "评审记录" }] }),
-      ] } });
-    expect(res.json().rejected).toEqual([]);
-    return (await f.t.sql("SELECT id FROM card_handbacks WHERE task_id=$1 ORDER BY attempt DESC LIMIT 1", [cardId]))[0].id as string;
-  };
+  const handBack = (cardId: string, text = "# 方案\n有方案文档") => local.handBack(cardId, { files: [["方案.md", text]] });
   const card = async () => {
     const id = await f.card("写方案");
     expect((await f.call("PATCH", `/api/me/cards/${id}`, { version: 1, executor: "claude_code", criterionIndex: 1 })).statusCode).toBe(200);
