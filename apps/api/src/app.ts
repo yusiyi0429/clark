@@ -129,7 +129,7 @@ import { createTaskAcceptanceAgent, type TaskAcceptanceAgent } from "./taskAccep
 import { createWorldPlanTaskSource, emptyPlanTaskSource, type PlanTaskSource } from "./planTasks.js";
 import { registerDeliverableRoutes } from "./routes/deliverables.js";
 import { registerLocalRoutes } from "./routes/local.js";
-import { registerTaskCardRoutes } from "./routes/taskCards.js";
+import { registerTaskCardRoutes, type BoardAgents } from "./routes/taskCards.js";
 import type { DeliverableAgents, DeliverableQueue } from "./deliverableReview.js";
 import type { ArticleFetcher } from "./articleText.js";
 import { personDisplayNames } from "./people.js";
@@ -329,6 +329,7 @@ export async function buildApp({
   docChangeAgent,
   battlefieldSummaryAgent,
   taskPlacementAgent,
+  boardAgents,
   conversationTurnTimeoutMs = CONVERSATION_TURN_TIMEOUT_MS,
   conversationStallTimeoutMs = CONVERSATION_STALL_TIMEOUT_MS,
   conversationHeartbeatMs = CONVERSATION_HEARTBEAT_MS,
@@ -407,6 +408,8 @@ export async function buildApp({
   battlefieldSummaryAgent?: BattlefieldSummaryAgent;
   /** 会后事项归位的 Agent（测试注入假实现）；缺省 TASK_PLACEMENT_MODEL，不配时 LIGHT_MODEL、不开思考。 */
   taskPlacementAgent?: TaskPlacementAgent;
+  /** V2 看板的拆卡、Agent 验收（测试注入假实现）；缺省照参考评审用 REVIEW_*，没配时 HEAVY_MODEL。 */
+  boardAgents?: Partial<BoardAgents>;
   conversationTurnTimeoutMs?: number;
   conversationStallTimeoutMs?: number;
   conversationHeartbeatMs?: number;
@@ -841,7 +844,7 @@ export async function buildApp({
     app.addHook("onClose", async () => { await wechat.close(); });
   }
   // V2 执行看板（routes/taskCards.ts）；本机程序在云端的那一侧（routes/local.ts）：配对、设备令牌、单向上报的接收端。
-  registerTaskCardRoutes(app, ctx);
+  registerTaskCardRoutes(app, ctx, { agents: boardAgents });
   registerLocalRoutes(app, ctx, { onHandbacks: () => undefined });
 
   return app;

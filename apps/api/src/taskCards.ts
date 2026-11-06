@@ -1,11 +1,13 @@
-import type { TCardBoardResponse, TCardBriefResponse, TCardDetailResponse, TCardHandbackBrief, TCardHandbackView, TCardModel, TCardPlanView, TCardTaskView,
+import { randomUUID } from "node:crypto";
+import type { Pool } from "pg";
+import type { TAcceptCardDraftsRequest, TCardBoardResponse, TCardBriefResponse, TCardDetailResponse, TCardHandbackBrief, TCardHandbackView, TCardModel, TCardPlanView, TCardTaskView,
   TCardWait, TCriterionVerdict, TDeliverableInclusion, TLocalHandbackCriterion, TPatchCardRequest, TPendingDeliverableItem, TTaskCard, TTaskView } from "@warmap/contracts";
 import { findOwnTask, DeliverableError, type OwnTask } from "./taskDeliverables.js";
 import { outputView, recentRuns, runBrief, runView, type OutputRow, type RunRow } from "./localDevices.js";
 import type { Query } from "./meetingStore.js";
 import { UUID_PATTERN } from "./meetingStore.js";
 import type { PlanTaskSource } from "./planTasks.js";
-import { getTaskViews, taskStandards } from "./tasks.js";
+import { createInTransaction, getTaskViews, taskStandards } from "./tasks.js";
 
 /**
  * 执行看板（V2 设计第 3–5、8.3 节）：卡就是执行事项，card 是 api 算好的列、标记、最近一次执行和交回、进交付物到哪了。
@@ -190,7 +192,7 @@ export async function readCardDetail(q: Query, ownerId: string, id: string, name
  * PATCH /api/me/cards/:id：执行方、模型、交代、对哪条标准。对哪条标准要这张卡挂着本人 Mission 下的 Task，存那一条当时的原文。
  * planTask 是读 Task 标准用的（只在改 criterionIndex 时调）。
  */
-export async function patchCard(pool: import("pg").Pool, ownerId: string, id: string, input: TPatchCardRequest, names: Map<string, string>,
+export async function patchCard(pool: Pool, ownerId: string, id: string, input: TPatchCardRequest, names: Map<string, string>,
   planTask: (planTaskId: string) => Promise<OwnTask | null>): Promise<TCardTaskView> {
   const { version, ...fields } = input;
   if (!Object.keys(fields).length) throw new CardError(400, "INVALID_INPUT", "至少改一样");
@@ -248,4 +250,53 @@ export async function cardBrief(q: Query, ownerId: string, id: string, planTask:
   ];
   return { markdown: lines.join("\n").slice(0, 20_000), mission: mission ? { missionId: mission.id, title: mission.title } : null,
     task: own ? { taskId: own.task.taskId, name: own.task.name } : null, criterion, exclusions: [], reviewGap: gap, lastReturn };
+}
+
+/** 拆卡（Task 负责人）：同一个 Task 已有一次在排队或在跑时返回那一次（created=false），不另起。 */
+export async function createCardPlan(q: Query, own: OwnTask, hint: string | undefined): Promise<{ plan: TCardPlanView; created: boolean }> {
+  const inserted = (await q(`INSERT INTO card_plans(id,plan_task_id,mission_id,owner_id,hint) VALUES($1,$2,$3,$4,$5)
+    ON CONFLICT (plan_task_id) WHERE status IN ('queued','running') DO NOTHING RETURNING *`,
+  [randomUUID(), own.task.taskId, own.task.missionId, own.viewerId, hint?.trim() || null])).rows[0] as PlanRow | undefined;
+  const row = inserted ?? (await q("SELECT * FROM card_plans WHERE plan_task_id=$1 AND status IN ('queued','running')", [own.task.taskId])).rows[0] as PlanRow;
+  return { plan: planView(row, await planExpectedSeconds(q)), created: Boolean(inserted) };
+}
+
+/**
+ * 放进看板（Task 负责人）：草稿变成执行事项，推进人是本人，挂这个 Task 和它的 Mission，来源记「自己建」；草稿 id 当建事项的幂等键。
+ * 可以顺手改标题、交代、完成标准、执行方。已经处理过的草稿 409。
+ */
+export async function acceptCardDrafts(pool: Pool, own: OwnTask, input: TAcceptCardDraftsRequest, names: Map<string, string>): Promise<TCardTaskView[]> {
+  const ids: string[] = [];
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    for (const edit of input.drafts) {
+      const draft = (await client.query("SELECT * FROM card_drafts WHERE id=$1 AND plan_task_id=$2 AND owner_id=$3 FOR UPDATE",
+        [edit.id, own.task.taskId, own.viewerId])).rows[0] as (DraftRow & { status: string }) | undefined;
+      if (!draft) throw new CardError(404, "NOT_FOUND", "找不到这张草稿");
+      if (draft.status !== "open") throw new CardError(409, "DRAFT_DECIDED", "这张草稿已经处理过了");
+      const created = await createInTransaction(client, own.viewerId, names, { clientId: draft.id, title: (edit.title ?? draft.title).trim(), missionId: own.task.missionId,
+        doneDefinition: (edit.doneDefinition ?? draft.done_definition).trim(), planTaskId: own.task.taskId, source: "self" });
+      if (!("task" in created)) throw "error" in created ? new CardError(created.error.status as 400, created.error.code, created.error.message)
+        : new CardError(409, "DRAFT_DECIDED", "这张草稿已经处理过了");
+      const index = draft.criterion_index && own.criteria[draft.criterion_index - 1] ? draft.criterion_index : null;
+      await client.query("UPDATE tasks SET executor=$2,brief=$3,criterion_index=$4,criterion_text=$5 WHERE id=$1",
+        [created.task.id, edit.executor ?? draft.executor, (edit.brief ?? draft.brief).trim() || null, index, index ? own.criteria[index - 1] : null]);
+      await client.query("UPDATE card_drafts SET status='accepted',task_id=$2,decided_at=now() WHERE id=$1", [draft.id, created.task.id]);
+      ids.push(created.task.id);
+    }
+    await client.query("COMMIT");
+  } catch (cause) { await client.query("ROLLBACK").catch(() => undefined); throw cause; }
+  finally { client.release(); }
+  return cardTaskViews(pool.query.bind(pool), ids, names);
+}
+
+/** 不要这张草稿：只有这个 Task 的负责人（就是草稿的主人）。 */
+export async function dismissCardDraft(q: Query, personId: string, id: string, ownTask: (planTaskId: string) => Promise<OwnTask>): Promise<void> {
+  const draft = UUID_PATTERN.test(id) ? (await q("SELECT plan_task_id,status FROM card_drafts WHERE id=$1 AND owner_id=$2", [id, personId])).rows[0] as
+    { plan_task_id: string; status: string } | undefined : undefined;
+  if (!draft) throw new CardError(404, "NOT_FOUND", "找不到这张草稿");
+  await ownTask(draft.plan_task_id);
+  if (draft.status !== "open") throw new CardError(409, "DRAFT_DECIDED", "这张草稿已经处理过了");
+  await q("UPDATE card_drafts SET status='dismissed',decided_at=now() WHERE id=$1 AND status='open'", [id]);
 }
