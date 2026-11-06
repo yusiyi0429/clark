@@ -40,7 +40,8 @@ tianshu-local version
 | `src/main.ts`、`src/app.ts` | 命令行入口；把各部分接起来、托盘菜单动作 |
 | `src/http/server.ts`、`security.ts` | 路由；Host、Origin、口令、只收 JSON；SSE 补发；本会话 MCP 接口 |
 | `src/pairing.ts` | 配对（本机弹框确认码）、口令只存哈希 |
-| `src/sessions.ts` | 会话状态机（卡、专题、规划员、验收员）、同时跑的上限和队列（验收员 → 规划员 → 执行）、权限挂起、插话、停下、强停、续接、交产出物和交回、交回后自己起验收员（取云端验收交代）、交计划和结论、喂发件箱 |
+| `src/sessions.ts` | 会话状态机（卡、专题、规划员、验收员）、卡在哪做（工作树或文件夹，不是仓库的同一个文件夹一次一张）、同时跑的上限和队列（验收员 → 规划员 → 执行）、权限挂起、插话、停下、强停、续接、交产出物和交回、交回后自己起验收员（取云端验收交代）、交计划和结论、喂发件箱 |
+| `src/git.ts` | 卡的工作树：开工作树和分支、交回时提交、验收员看的改动、合回、清理（ADR 0038） |
 | `src/plan.ts` | 计划条目算「第几步 / 共几步」 |
 | `src/agents/claudeCode.ts`、`claudeEnv.ts` | 拉起 Claude Code、参数、环境变量白名单、stream-json 归一化 |
 | `src/agents/pathGuard.ts` | 权限请求里认越界路径、放行建议越界就不给「这张卡都允许」（ADR 0031） |

@@ -1,6 +1,6 @@
 # RFC：天枢本机程序（apps/local）
 
-v0.1 · 2026-11-06 · 第一版（Windows 先行）。决策见 ADR [0028](../../adr/0028-local-runner-single-binary-with-bun.md)（打包）、[0029](../../adr/0029-local-runner-keys-stay-on-device.md)（钥匙）、[0030](../../adr/0030-local-runner-sessions-clean-by-default.md)（会话默认干净）、[0031](../../adr/0031-local-runner-outside-paths-flagged-not-denied.md)（越界路径）、[0032](../../adr/0032-local-runner-release-and-code-signing.md)（发布与签名，待本人定）、[0037](../../adr/0037-local-runner-roles-via-cli-flags.md)（岗位进会话）；接口以 `packages/contracts/src/localRunner.ts` 为准；装、卸、排错见 [runbook](../../guides/local-runner.md)。
+v0.1 · 2026-11-06 · 第一版（Windows 先行）。决策见 ADR [0028](../../adr/0028-local-runner-single-binary-with-bun.md)（打包）、[0029](../../adr/0029-local-runner-keys-stay-on-device.md)（钥匙）、[0030](../../adr/0030-local-runner-sessions-clean-by-default.md)（会话默认干净）、[0031](../../adr/0031-local-runner-outside-paths-flagged-not-denied.md)（越界路径）、[0032](../../adr/0032-local-runner-release-and-code-signing.md)（发布与签名，待本人定）、[0037](../../adr/0037-local-runner-roles-via-cli-flags.md)（岗位进会话）、[0038](../../adr/0038-local-runner-card-worktrees.md)（卡的工作树）；接口以 `packages/contracts/src/localRunner.ts` 为准；装、卸、排错见 [runbook](../../guides/local-runner.md)。
 
 ## 0. 一句话
 
@@ -116,6 +116,15 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
 - 天枢 MCP 的 `get_task_context`（Task、约定、Mission、近期的事和决定、上一版交付物和评审，带出处；云端在做）预先放行；挂不挂天枢 MCP 仍按岗位的工具名单。
 - 假 claude 测三种会话的参数和排队先后、交回后自动起验收、只读、没过送回再验、第二次受阻、取不到交代时排着等、重启后照样排着（`test/planVerify.test.ts`）；真跑见第 13 节。
 
+**卡在自己的 git 工作树里做（ADR 0038，11/06）**：同时跑几张卡时，同一个仓库里的卡不再改同一份文件。
+- 开工：本人选的文件夹在 git 仓库里（在分支上、有提交），点「开工」那一刻（排队也一样）在 `<数据目录>/worktrees/<cardId>` 开工作树，新建分支 `tianshu/<卡 id 前 8 位>-<标题里的英文和数字>`（被占了加 `-2`），从主文件夹所在分支的最新提交开出来。会话摘要的 `workspace` 写明工作树、分支、`baseBranch`、`baseCommit`。主文件夹里没提交的改动、`.gitignore` 里的文件（`.env`、`node_modules`）都不带过去：开工时的 `notice`（`workspace`）说明前者，追加的系统提示词告诉执行方工作树是新的、依赖自己装。
+- 交回：本机先把没提交的改动提交到卡的分支（不跑提交钩子），交回事件带 `commit`，同步条目带 `git { branch, baseBranch, baseCommit, commit }`。没过以后接着在同一个工作树里改。
+- 验收：验收员在卡的工作树里只读地做，交代后面接上 `baseCommit` 到交回提交的改动（`--stat` 和补丁，补丁最多 4 万字）；结论带 `commit`。
+- 合回：`POST /v1/sessions/:id/merge`，只在本人点了才合（`git merge --no-ff`）。主文件夹不在 `baseBranch` 上、有改动（含没加进 git 的文件）、有冲突时不合，回 `merged: false` 和原因（`base_not_checked_out`、`dirty`、`conflict`）、文件，主文件夹原样不动（冲突时已 `git merge --abort`）。卡不在工作树里、卡或它的验收员还在跑、工作树里有交回以后的改动、已合回过，回 409。合成了先让还开着的进程退出，再清工作树、留分支，摘要记 `mergedCommit`，事件流里记一条 `notice`（`merged`）。
+- 清理：合回后、卡没开始就取消时清工作树（分支都留着）；强停正在做的卡不清（还能续）。本机程序启动时对卡用过的仓库跑 `git worktree prune`。同一张卡再开工：上一个工作树还在就接着用，有会话在做时拒绝。
+- 不是 git 仓库（或不在分支上、没有提交）：在文件夹里做（`workspace.kind = folder`），同一个文件夹同时只做一张卡，另一张占着位置时排队（状态事件的原因说明），那张一轮做完就让出来。
+- 用真的临时 git 仓库测两张卡同时做、交回提交、验收员只看到这张卡的改动、合回四种结果、不是仓库时排队、清理和重启时的 prune（`test/worktree.test.ts`）。
+
 ## 7. 会话里的 MCP
 
 每个会话的 `mcp.json`（`--strict-mcp-config` 下只有它）挂两个 HTTP MCP：
@@ -147,7 +156,7 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
 
 - `POST {apiBaseUrl}/api/local-runner/sync`，`Authorization: Bearer <个人令牌>`，体 `LocalSyncBatchRequest`（≤50 条、≤12 MB），回 `LocalSyncBatchResponse`。
 - 心跳：云端 10 分钟没收到同步就当本机离线。本机开着、5 分钟里没同步过任何东西（闲着，或条目都在退避）时，发一批空的（`items: []`，照样带 `slots`），云端照样刷新在线时间和位置数；每分钟看一次，没关联云端不发，没发成等下一分钟。
-- 条目：`status`（状态变化）、`plan`（TodoWrite）、`evidence`、`artifact`（原文 base64）、`handback`（带 `outputKeys`：点名的产出和证据的条目幂等键，云端存成 `local_outputs.client_id`）、`topic_version`（专题新的一版：号、种类、名字或 null、改了什么、Markdown 正文）、`topic_version_feishu`（第几版已存进飞书、地址）、`card_plan`（规划员的计划和派活单草稿）、`verdict`（验收员的逐条结论，subject 带 cardId 和 handbackKey）、`cost`（每轮增量）。规划员、验收员的 status、plan、cost 条目 subject.kind 是 plan / verify，云端不能当成卡自己的状态。不传仓库文件、完整工具输出、环境变量、钥匙。
+- 条目：`status`（状态变化）、`plan`（TodoWrite）、`evidence`、`artifact`（原文 base64）、`handback`（带 `outputKeys`：点名的产出和证据的条目幂等键，云端存成 `local_outputs.client_id`）、`topic_version`（专题新的一版：号、种类、名字或 null、改了什么、Markdown 正文）、`topic_version_feishu`（第几版已存进飞书、地址）、`card_plan`（规划员的计划和派活单草稿）、`verdict`（验收员的逐条结论，subject 带 cardId 和 handbackKey）、`cost`（每轮增量）。规划员、验收员的 status、plan、cost 条目 subject.kind 是 plan / verify，云端不能当成卡自己的状态。卡在工作树里做时，`handback` 带 `git`（分支、基线、交回的提交），`verdict` 带 `commit`（ADR 0038）。不传仓库文件、完整工具输出、环境变量、钥匙。
 - 幂等键 `<deviceId>:<sessionId>:<本会话同步序号>`。云端按键去重，重复的也回 `accepted`；`rejected` 的本机记一笔后出队；回执里没提到的、网络错、5xx 都退避重试（1 s × 2^n，最长 5 分钟）。发件箱先落盘（`outbox.json`），断网、重启都不丢。
 - 关联：网页 `PUT /v1/cloud` 交 `apiBaseUrl` 和令牌；`apiBaseUrl` 的来源必须在白名单里，免得被指到别处。这个令牌同时用于会话里的天枢 MCP（第 7 节）。**建议 api 会话**给个人令牌加一种 `local` 客户端：能调 `/api/local-runner/*` 和 `/mcp/me`，网页配对后建一个这种令牌交给本机程序，设置页能看到、能吊销。
 
@@ -176,6 +185,7 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
 - 第二轮独立评审（11/06，xhigh）：7 条确认、3 条可能。已修：借目录链接越界判成没越界（不存在的路径、相对路径）、命令切词漏认多种写法（另加「放行建议越界就不给都允许」这一层，不靠切词）、旧版本加的不合规矩的文件夹仍算数、测试超时偏紧、大小写测试测不出问题、`--verify` 整套旧版本也能通过、重试恢复后别的错误被算成模型服务的错、移除文件夹后工作目录仍算数、测试页回放旧事件报错；主目录两种写法都给排除规则；整个磁盘不能选。没改：主目录和仓库之间几层目录里的 CLAUDE.md 照默认读（ADR 0030）。
 - 第三轮（11/06，岗位、评审会、排队之后）：单测 64 条（另有排队 4 条：批量、先来先跑、让位、取消、调上限、暂停、重启恢复）、契约 92 条。上一轮自审的 5 处已修，每处都先在旧代码上让测试失败：整理飞书插件链接出错挡开工（另在 Bun 1.3.13 下核对只删链接）、评审版被当成最近一版、带个人配置时提示词说没找到飞书技能、主岗位没有搜索时挑刺子 agent 仍拿搜索、不点名交回漏掉前一轮的产出又重复算同一文件的旧版；另修同一专题两个会话存版本撞号。重新编三个平台后，exe 跑冒烟（$0.0032）和排队真跑（上限 1、同时 2 件，第 2 件排第 1，第 1 件 4.0 秒做完后马上接上）都通过。
 - 第四轮（11/06，拆卡和验收改在本机）：单测 68 条（新增 `test/planVerify.test.ts` 4 条：三种会话的参数和排队先后、只读、按档位挑模型、交回后自动起验收员、没过经说一句送回再验、第二次没过受阻、取不到交代时排着等、404 和 409、重启后照样排着、结论校验和提醒），契约 93 条。9 处变异（排队先后、只读、交回后起验收、等交代的不开始、结论报给卡的会话、提醒一次、交回送到再取交代、交完收工、第二次受阻）每处都有测试失败。重新编三个平台后，exe 冒烟通过（$0.003）；exe + 真 Claude Code（订阅 haiku）+ 假天枢真跑一次：规划员先读 get_task_context 再交 2 件的派活单（各对约定第 1、2 条）→ 一批开工 → 两件交回 → 本机各起一个验收员（交回送到天枢后 0.1 秒取到交代，0.4 秒开始）→ 两份结论同步上去（都过），验收员只用了 Glob、Read 和 submit_verdict，没来要过权限，交代里让它试写的 probe.txt 没写出来，交完自己退出；五个会话共 66 秒、$0.0196。记录 `.scratch/local-runner/实验/L_规划验收真跑结果.json`，脚本 `L_plan-verify-e2e.mjs`（第一次跑时汇总那段脚本有错，链路已跑完，结果由 `L_collect.mjs` 从本机程序的会话记录汇总；脚本错误已改）。
+- 第五轮（11/06 晚，卡的工作树，ADR 0038）：单测 73 条（新增 `test/worktree.test.ts` 4 条，用真的临时 git 仓库：两张卡同时在各自的工作树里做、交回提交到卡的分支、验收员的交代里只有这张卡的改动、结论带提交、合回的四种结果（主文件夹有改动、不在基线分支、成了、冲突后放弃）、卡这边合不了回 409、不是仓库的文件夹排队、排队时取消清工作树、同一张卡再开工、重启时 prune），契约 94 条。原来几张卡共用一个临时文件夹的测试改成每张卡一个子文件夹（假 claude 往上找配置）。13 处变异（不开工作树、交回不提交、交代不接改动、改动按分支名算、结论不带提交、不查主文件夹改动、不查基线分支、冲突不放弃、文件夹不排队、取消不清、启动不 prune、合回前不关进程、同一张卡开两个）每处都有测试失败。没有真跑 haiku。
 - 和云端联调（11/06）：本机程序分支 + `claude/v2-board-api` 的接收端合进临时分支 `claude/local-runner-sync-e2e`（只在本机），时间机器起 API，真程序 + 真 Claude Code（haiku）走通配对 → 建设备令牌 → 关联云端 → 开卡 → 交产出物和交回 → 云端收到（13 条、2 份产出、1 条交回排队、卡变进行中）→ 断网时排队 6 条 → 恢复后自动补发 → 原样重发 6 条全部 accepted、表里不重复。44 秒，$0.0043。记录在 `.scratch/local-runner/实验/I_云端联调.md`。
 - 真机：编出的 exe + 真 Claude Code 2.1.318（haiku），冒烟命令走完配对 → 开工 → 事件 → 3 次批准 → 插话下一步生效（b.txt 改成 22）→ 新一轮 → 停下（interrupted）→ 强停（exited），花费 $0.003；另一次验证本会话 MCP 交证据和交回。真实调用共 2 次会话（4 轮）。
 - 托盘模式：配对确认框、选文件夹框、托盘图标/提示/菜单、暂停与恢复、菜单退出都在 Windows 11 上截图验证（`.scratch/local-runner/实验/截图/`）。
@@ -194,6 +204,7 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
 9. ~~工作目录在本人主目录下时读进本人全局规则~~：已改（11/06 第二轮）。干净会话用 `claudeMdExcludes` 排除主目录这一层；允许的文件夹不能是主目录或它的上级。原先写的「换 `CLAUDE_CONFIG_DIR` 能解决」实测不成立（附录 G）。
 10. ~~网关出错时重试太久~~：已改（11/06 第二轮）。网关模型重试 2 次、等响应头 40 秒，每次重试即时提示网页。剩下一种：网关回了响应头之后卡住不动，Claude Code 固定等 5 分钟才重试，`CLAUDE_STREAM_IDLE_TIMEOUT_MS` 改不小（实测），只能本人在网页上点停下。
 11. **合规**：「我们的程序替本人拉起官方 CLI、用本人订阅」算不算条款允许的用法，请法务确认；Codex app-server 登录方式文档写着不允许用于商业或托管服务。
+12. **卡的工作树（ADR 0038）**：强停后没合回的卡，工作树一直留着（还没有「丢掉这张卡」的操作）；大仓库开工要等完整检出，子模块不初始化，Windows 上路径可能太长；合回的结果没同步给云端；验收期间本人让卡接着改，验收员读到的文件可能比交回的提交新（以交代里的改动为准）。
 
 ---
 
