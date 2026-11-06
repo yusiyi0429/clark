@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
-import { basename, extname, join, resolve } from "node:path";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { basename, extname, isAbsolute, join, relative, resolve } from "node:path";
 import type { TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import {
@@ -8,6 +8,7 @@ import {
   type TLocalAgentKind, type TLocalCardPlan, type TLocalCreateSessionRequest, type TLocalHandbackCriterion, type TLocalPermissionRequestView, type TLocalRole,
   type TLocalSendMessageRequest, type TLocalSendMessageResponse, type TLocalSessionKind, type TLocalSessionStatus, type TLocalSlots, type TLocalSessionSubject,
   type TLocalSessionSummary, type TLocalSyncItem, type TLocalTopicVersionKind, type TLocalUsage, type TLocalVerdict, type TLocalVerdictCriterion,
+  type TLocalWorkspace, type TLocalGitRef, type TLocalMergeResponse,
 } from "@warmap/contracts";
 import { readJson, writeJsonAtomic, nowIso } from "./store.js";
 import type { EventLog, EventBody } from "./eventLog.js";
@@ -16,7 +17,8 @@ import type { ModelProfiles } from "./models.js";
 import { isInside, type Folders } from "./folders.js";
 import type { Outbox } from "./outbox.js";
 import { SESSION_MCP_NAME, sessionToolNames } from "./sessionMcp.js";
-import { criticAgents, returnText, reviewMessage, systemPrompt } from "./rolePrompt.js";
+import { changesBrief, criticAgents, returnText, reviewMessage, systemPrompt } from "./rolePrompt.js";
+import { addWorktree, branchName, cardDiff, changedFiles, commitAll, deleteBranch, mergeBranch, pruneRepo, removeWorktree, repoHead } from "./git.js";
 import { ensureFeishuPlugin, larkSkills } from "./agents/feishuPlugin.js";
 import type { VerifyBrief } from "./cloud.js";
 
@@ -37,6 +39,8 @@ const PRIORITY: Record<TLocalSessionKind, number> = { verify: 0, plan: 1, card: 
 const BRIEF_RETRY_MS = 15_000;
 /** 验收员一轮做完没交结论时，本机提醒它一次。 */
 const VERIFY_NUDGE = "还没交结论：请逐条判完，用 submit_verdict 交一次。";
+/** 不是 git 仓库的文件夹同时只做一张卡（ADR 0038），另一张在那儿跑时排队的原因。 */
+const FOLDER_BUSY = "这个文件夹不是 git 仓库，同时只做一张卡，等另一张这一轮做完";
 
 interface SessionRecord {
   id: string;
@@ -80,6 +84,10 @@ interface SessionRecord {
   submitted: number;
   /** 验收员：一轮做完没交结论时提醒过没有（只提醒一次）。 */
   nudged: boolean;
+  /** 卡：在自己的工作树还是文件夹里做（ADR 0038）；别的会话为 null。 */
+  workspace: TLocalWorkspace | null;
+  /** 验收员：验的是哪个提交（卡在工作树里做时，交回的那个提交）。 */
+  commit: string | null;
 }
 
 /** 不合契约时给执行方看的一句（哪个字段、哪里不对）。 */
@@ -177,6 +185,8 @@ export class SessionManager {
       rec.failStreak ??= 0;
       rec.submitted ??= 0;
       rec.nudged ??= false;
+      rec.workspace ??= null;
+      rec.commit ??= null;
       this.queueSeq = Math.max(this.queueSeq, rec.queueOrder);
       this.records.set(rec.id, rec);
       // 本机程序重启时，上次的进程都已不在。排着的照原样排着；刚从队里拉起、还没开始的放回队里（位置不变）。
@@ -194,9 +204,12 @@ export class SessionManager {
   private summary(rec: SessionRecord): TLocalSessionSummary {
     const {
       mcpSecret: _s, syncSeq: _q, outputs: _o, versionNumber: _v, lastVersion: _l, role: _r, critics: _c, queuedMessage: _m, queueOrder: _n,
-      parentId: _p, briefPending: _b, criteria: _cr, failStreak: _f, submitted: _sb, nudged: _nd, ...rest
+      parentId: _p, briefPending: _b, criteria: _cr, failStreak: _f, submitted: _sb, nudged: _nd, workspace, commit: _cm, ...rest
     } = rec;
-    return { ...rest, lastSeq: this.d.log.lastSeq(rec.id), pendingPermissions: this.pending.get(rec.id)?.size ?? 0, queuePosition: this.queuePosition(rec) };
+    return {
+      ...rest, lastSeq: this.d.log.lastSeq(rec.id), pendingPermissions: this.pending.get(rec.id)?.size ?? 0, queuePosition: this.queuePosition(rec),
+      ...(workspace ? { workspace } : {}),
+    };
   }
 
   list(): TLocalSessionSummary[] {
@@ -226,9 +239,17 @@ export class SessionManager {
       .sort((a, b) => PRIORITY[a.subject.kind] - PRIORITY[b.subject.kind] || a.queueOrder - b.queueOrder);
   }
 
-  /** 排着、而且能开始的（等验收交代的验收员先跳过）。 */
+  /** 排着、而且能开始的（等验收交代的验收员、文件夹被另一张卡占着的卡先跳过）。 */
   private ready(): SessionRecord[] {
-    return this.queue().filter((r) => !r.briefPending);
+    return this.queue().filter((r) => !r.briefPending && !this.folderBusy(r));
+  }
+
+  /** 不是 git 仓库的文件夹同时只做一张卡：另一张卡正在那儿跑（占着位置或正在拉起）。 */
+  private folderBusy(rec: SessionRecord): boolean {
+    const ws = rec.workspace;
+    if (ws?.kind !== "folder") return false;
+    const same = (r: SessionRecord) => r !== rec && r.workspace?.kind === "folder" && r.workspace.folder === ws.folder;
+    return [...this.records.values()].some((r) => same(r) && OCCUPYING.includes(r.status)) || [...this.launching.values()].some(same);
   }
 
   private max(): number {
@@ -265,6 +286,7 @@ export class SessionManager {
     } catch (e) {
       const cancelled = e instanceof SessionError && e.message === CANCELLED_WHILE_STARTING;
       this.setStatus(rec, cancelled ? "exited" : "failed", { reason: cancelled ? "已强停" : `没开起来：${e instanceof Error ? e.message : String(e)}` });
+      if (cancelled) void this.releaseWorktree(rec);
       return;
     } finally {
       this.starting.delete(rec.id);
@@ -348,37 +370,91 @@ export class SessionManager {
     if (model.source === "gateway" && !model.apiKey) throw new SessionError("validation", `「${model.label}」还没填钥匙`);
     const agent = req.agent ?? "claude-code";
     if (this.d.paused?.()) throw new SessionError("conflict", "本机程序已暂停，先在托盘里恢复");
+    const place = subject.kind === "card" ? await this.openWorkspace(subject.cardId!, req.title, cwd) : null;
     const now = nowIso();
     const rec: SessionRecord = {
-      id: randomUUID(), subject, title: req.title, agent, modelProfileId: model.profileId, modelLabel: model.label, cwd,
+      id: randomUUID(), subject, title: req.title, agent, modelProfileId: model.profileId, modelLabel: model.label, cwd: place?.cwd ?? cwd,
       includePersonalConfig: req.includePersonalConfig ?? defaults.includePersonalConfig,
       createdAt: now, updatedAt: now, status: "starting", usage: zeroUsage(), syncSeq: 0, mcpSecret: randomBytes(24).toString("hex"),
       outputs: [], versionNumber: subject.kind === "topic" ? req.versionBase ?? 0 : 0, lastVersion: null,
       role: req.role ?? null, critics: req.critics ?? [], queuedMessage: null, queueOrder: 0,
       parentId: null, briefPending: false, criteria: [], failStreak: 0, submitted: 0, nudged: false,
+      workspace: place?.workspace ?? null, commit: null,
     };
-    // 满了（或前面还有人在排）就进队，先来先跑；有空位时 pump 接上。
-    if (this.ready().length || this.activeCount() >= this.max()) {
+    // 满了（或前面还有人在排、文件夹被另一张卡占着）就进队，先来先跑；有空位时 pump 接上。
+    const busy = this.folderBusy(rec);
+    if (this.ready().length || this.activeCount() >= this.max() || busy) {
       rec.queuedMessage = req.firstMessage;
       rec.queueOrder = ++this.queueSeq;
       this.records.set(rec.id, rec);
-      this.setStatus(rec, "queued");
+      this.setStatus(rec, "queued", busy ? { reason: FOLDER_BUSY } : {});
+      this.noteWorkspace(rec, place);
       return this.summary(rec);
     }
-    // 起不来（没装、太旧、没实现）直接抛给调用方，不留记录
+    // 起不来（没装、太旧、没实现）直接抛给调用方，不留记录，也不留刚开的工作树和分支
     this.launching.set(rec.id, rec);
     try {
       await this.startRun(rec, false);
       this.records.set(rec.id, rec);
+    } catch (e) {
+      if (place?.created && rec.workspace?.kind === "worktree") {
+        await removeWorktree(rec.workspace.folder, rec.workspace.path).catch(() => undefined);
+        await deleteBranch(rec.workspace.folder, rec.workspace.branch);
+      }
+      throw e;
     } finally {
       this.launching.delete(rec.id);
     }
     this.save(rec);
     this.emit(rec, { type: "status", status: "starting" });
+    this.noteWorkspace(rec, place);
     this.emit(rec, { type: "user_message", text: req.firstMessage, source: "initial" });
     this.runs.get(rec.id)!.send(req.firstMessage);
     this.setStatus(rec, "running");
     return this.summary(rec);
+  }
+
+  /**
+   * 卡在哪做（ADR 0038）：本人选的文件夹在 git 仓库里（在分支上、有提交）就在本机数据目录的 worktrees/<cardId> 开一个工作树和新分支，
+   * 从主文件夹所在分支的最新提交开始；这张卡上一个会话留下的工作树还在就接着用。不是仓库就在文件夹里做（同一个文件夹同时一张）。
+   */
+  private async openWorkspace(cardId: string, title: string, folder: string): Promise<{ workspace: TLocalWorkspace; cwd: string; created: boolean; reused: boolean; dirty: boolean }> {
+    const head = await repoHead(folder);
+    if (!head) return { workspace: { kind: "folder", folder }, cwd: folder, created: false, reused: false, dirty: false };
+    const path = this.d.folders.worktreeDir(cardId);
+    const prior = [...this.records.values()].filter((r) => r.workspace?.kind === "worktree" && r.workspace.path === path)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    if (prior.some((r) => r.status === "queued" || LIVE.includes(r.status))) throw new SessionError("conflict", "这张卡已经有一个会话在做，给它说一句就行");
+    const last = prior.at(-1);
+    if (last?.workspace?.kind === "worktree" && !last.workspace.mergedCommit && existsSync(path)) {
+      return { workspace: { ...last.workspace }, cwd: last.cwd, created: false, reused: true, dirty: false };
+    }
+    // 没有会话认领的旧目录（本机程序上次中途退出留下的）先清掉
+    if (existsSync(path)) await removeWorktree(head.top, path).catch(() => rmSync(path, { recursive: true, force: true }));
+    const dirty = (await changedFiles(folder)).length > 0;
+    let branch: string;
+    try {
+      branch = await addWorktree(head.top, path, branchName(cardId, title), head.commit);
+    } catch (e) {
+      throw new SessionError("conflict", `给这张卡开工作树没成：${e instanceof Error ? e.message : String(e)}`);
+    }
+    // 本人选的是仓库里的子文件夹时，会话在工作树里对应的子文件夹里做
+    const sub = relative(resolve(head.top), folder);
+    const cwd = sub && !sub.startsWith("..") && !isAbsolute(sub) ? join(path, sub) : path;
+    return {
+      workspace: { kind: "worktree", folder, path, branch, baseBranch: head.branch, baseCommit: head.commit, mergedCommit: null },
+      cwd, created: true, reused: false, dirty,
+    };
+  }
+
+  /** 开工时告诉网页卡在哪做。 */
+  private noteWorkspace(rec: SessionRecord, place: { reused: boolean; dirty: boolean } | null) {
+    const ws = rec.workspace;
+    if (ws?.kind !== "worktree" || !place) return;
+    const text = place.reused
+      ? `接着在这张卡的工作树里做：分支 ${ws.branch}`
+      : `在工作树里做：分支 ${ws.branch}，从 ${ws.baseBranch} 的最新提交 ${ws.baseCommit.slice(0, 7)} 开始${place.dirty ? "；主文件夹里没提交的改动没带进来" : ""}`;
+    this.emit(rec, { type: "notice", level: "info", code: "workspace", text });
   }
 
   /**
@@ -412,8 +488,10 @@ export class SessionManager {
     const adapter = this.d.adapters[rec.agent];
     if (!adapter) throw new SessionError("validation", `不支持的执行方 ${rec.agent}`);
     if (this.d.paused?.()) throw new SessionError("conflict", "本机程序已暂停，先在托盘里恢复");
-    // 续接时也重查：允许的文件夹可能已被本人移除。
-    if (!this.d.folders.isAllowed(rec.cwd)) throw new SessionError("folder_not_allowed", "这个会话的目录已不在允许的文件夹里");
+    // 续接时也重查：允许的文件夹可能已被本人移除（卡在工作树里做时看本人选的主文件夹）。
+    const folder = rec.workspace?.folder ?? rec.cwd;
+    if (!this.d.folders.isAllowed(folder)) throw new SessionError("folder_not_allowed", "这个会话的目录已不在允许的文件夹里");
+    if (!existsSync(rec.cwd)) throw new SessionError("conflict", "工作目录已经不在了（卡合回或取消后，它的工作树会清理）");
     const model = await this.d.models.resolve(rec.modelProfileId);
     if (!model) throw new SessionError("validation", "这个会话用的模型配置已被删除");
     mkdirSync(join(this.dir, rec.id), { recursive: true });
@@ -432,7 +510,7 @@ export class SessionManager {
     // 工作规矩、岗位、挑刺子 agent 写在本机程序的数据目录，经参数交给 Claude Code，不往本人的仓库写文件。
     const dir = join(this.dir, rec.id);
     const systemPromptPath = join(dir, "system.md");
-    writeFileSync(systemPromptPath, systemPrompt(rec.subject.kind, rec.role, rec.critics, feishu));
+    writeFileSync(systemPromptPath, systemPrompt(rec.subject.kind, rec.role, rec.critics, feishu, rec.workspace));
     let agentsPath: string | null = null;
     if (rec.subject.kind === "topic" && rec.critics.length) {
       agentsPath = join(dir, "agents.json");
@@ -448,8 +526,11 @@ export class SessionManager {
       mcpConfigPath: mcp.path, mcpEnv: mcp.env, allowedTools: mcp.allowedTools,
       disallowedTools,
       systemPromptPath, agentsPath, pluginDirs: plugin ? [plugin] : [],
-      // 每次现查：会话途中本人移除了文件夹，之后的请求（包括工作目录里的）就算越界。
-      allowedRoots: () => [...(this.d.folders.isAllowed(rec.cwd) ? [rec.cwd] : []), ...this.d.folders.list().map((f) => f.path)],
+      // 每次现查：会话途中本人移除了文件夹，之后的请求（包括工作目录里的）就算越界。卡在工作树里做时整个工作树都算。
+      allowedRoots: () => [
+        ...(this.d.folders.isAllowed(folder) ? [rec.workspace?.kind === "worktree" ? rec.workspace.path : rec.cwd] : []),
+        ...this.d.folders.list().map((f) => f.path),
+      ],
     });
     if (this.cancelled.delete(rec.id)) {
       await run.kill();
@@ -560,7 +641,18 @@ export class SessionManager {
   private cancelQueued(rec: SessionRecord): boolean {
     if (rec.status !== "queued") return false;
     this.setStatus(rec, "exited", { reason: "排队时取消了，没开始" });
+    void this.releaseWorktree(rec);
     return true;
+  }
+
+  /** 卡没开始就取消了：工作树没有别的会话在用就清掉（分支保留）。 */
+  private async releaseWorktree(rec: SessionRecord): Promise<void> {
+    const ws = rec.workspace;
+    if (ws?.kind !== "worktree" || ws.mergedCommit || !existsSync(ws.path)) return;
+    if ([...this.records.values()].some((r) => r !== rec && r.workspace?.kind === "worktree" && r.workspace.path === ws.path)) return;
+    await removeWorktree(ws.folder, ws.path).catch((e) => {
+      this.emit(rec, { type: "notice", level: "warn", code: "workspace", text: `工作树没清掉：${e instanceof Error ? e.message : String(e)}` });
+    });
   }
 
   async interrupt(id: string): Promise<TLocalSessionSummary> {
@@ -599,6 +691,43 @@ export class SessionManager {
   /** 托盘「暂停全部」：所有进行中的会话都停下（会话保留）。 */
   async interruptAll(): Promise<void> {
     await Promise.all([...this.runs.keys()].map((id) => this.interrupt(id).catch(() => undefined)));
+  }
+
+  /**
+   * 合回（只在本人点了才合，ADR 0038）：卡的分支合进主文件夹的 baseBranch，合成了清理工作树、保留分支。
+   * 主文件夹不在 baseBranch 上、有改动、有冲突时不合，主文件夹原样不动；卡这边合不了（不在工作树里、还在跑、工作树里有没提交的改动）回 409。
+   */
+  async merge(id: string): Promise<TLocalMergeResponse> {
+    const rec = this.must(id);
+    const ws = rec.workspace;
+    if (ws?.kind !== "worktree") throw new SessionError("conflict", "这张卡不在工作树里做，没有分支可合");
+    if (ws.mergedCommit) throw new SessionError("conflict", "这张卡已经合回过了");
+    const related = [...this.records.values()].filter((r) => r === rec || r.parentId === rec.id);
+    if (related.some((r) => r.status === "queued" || OCCUPYING.includes(r.status) || this.starting.has(r.id))) {
+      throw new SessionError("conflict", "卡或它的验收员还在跑，停下再合");
+    }
+    if (!this.d.folders.isAllowed(ws.folder)) throw new SessionError("folder_not_allowed", "主文件夹已不在允许的文件夹里");
+    if (!existsSync(ws.path)) throw new SessionError("conflict", "这张卡的工作树已经不在了");
+    if ((await changedFiles(ws.path)).length) throw new SessionError("conflict", "卡的工作树里还有没提交的改动（交回以后又改过），让它再交回一次再合");
+    const out = await mergeBranch(ws.folder, ws.branch, ws.baseBranch, `合回天枢卡「${rec.title}」（${ws.branch}）`);
+    if (!out.merged) return out;
+    ws.mergedCommit = out.commit;
+    this.save(rec);
+    // 一轮做完还开着的进程（卡、本人续上的验收员）先让它们退出：进程还在工作树里时，Windows 上删不掉。
+    const open = related.map((r) => this.runs.get(r.id)).filter((run): run is AgentRun => Boolean(run));
+    await Promise.all(open.map((run) => new Promise<void>((done) => { run.onExit(() => done()); run.close(); })));
+    const merged = `已合回 ${ws.baseBranch}（${out.commit.slice(0, 7)}）`;
+    let text = `${merged}，工作树已清理，分支 ${ws.branch} 保留`;
+    await removeWorktree(ws.folder, ws.path).catch((e) => { text = `${merged}，工作树没删掉：${e instanceof Error ? e.message : String(e)}`; });
+    this.emit(rec, { type: "notice", level: "info", code: "merged", text });
+    this.d.onChange?.();
+    return { merged: true, commit: out.commit, session: this.summary(rec) };
+  }
+
+  /** 本机程序启动时：卡用过的仓库里，目录已经没了的工作树清掉登记（git worktree prune）。 */
+  async pruneWorktrees(): Promise<void> {
+    const repos = new Set([...this.records.values()].flatMap((r) => (r.workspace?.kind === "worktree" ? [r.workspace.folder] : [])));
+    for (const repo of repos) if (existsSync(repo)) await pruneRepo(repo);
   }
 
   async shutdown(): Promise<void> {
@@ -663,7 +792,7 @@ export class SessionManager {
    * 交回：outputs 是点名的编号（A1、E1）；不点名就是本会话交过的全部，同一个文件交过几次只算最新一版。
    * 验收没过、改完再交回时，没改的产出也照样在里面（原来只算上一次交回以后的，会漏掉）。
    */
-  handBack(id: string, input: { summary: string; criteria: TLocalHandbackCriterion[]; outputs?: string[] }): string {
+  async handBack(id: string, input: { summary: string; criteria: TLocalHandbackCriterion[]; outputs?: string[] }): Promise<string> {
     const rec = this.must(id);
     if (rec.subject.kind !== "card") throw new SessionError("validation", "专题不用交回，用 save_version 存版本");
     let picked: SessionRecord["outputs"];
@@ -678,23 +807,34 @@ export class SessionManager {
     const summary = input.summary.slice(0, 4000);
     const criteria = input.criteria.slice(0, 50);
     const outputKeys = picked.slice(0, 100).map((o) => o.key);
-    this.emit(rec, { type: "handback", summary, criteria, outputKeys });
-    const key = this.sync(rec, { type: "handback", data: { summary, criteria, outputKeys } });
-    this.queueVerify(rec, key);
-    return `已交回（用了 ${picked.map((o) => o.ref).join("、") || "0 份产出和证据"}），本机接着起验收员验收`;
+    // 卡在工作树里做：没提交的改动先提交到卡的分支，交回和验收都认这个提交（ADR 0038）
+    const ws = rec.workspace;
+    let git: TLocalGitRef | undefined;
+    if (ws?.kind === "worktree") {
+      try {
+        const commit = await commitAll(ws.path, `交回：${rec.title}\n\n天枢卡 ${rec.subject.cardId}`);
+        git = { branch: ws.branch, baseBranch: ws.baseBranch, baseCommit: ws.baseCommit, commit };
+      } catch (e) {
+        throw new SessionError("conflict", `提交改动没成，没交回：${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+    this.emit(rec, { type: "handback", summary, criteria, outputKeys, ...(git ? { commit: git.commit } : {}) });
+    const key = this.sync(rec, { type: "handback", data: { summary, criteria, outputKeys, ...(git ? { git } : {}) } });
+    this.queueVerify(rec, key, git?.commit ?? null);
+    return `已交回（用了 ${picked.map((o) => o.ref).join("、") || "0 份产出和证据"}${git ? `，提交 ${git.commit.slice(0, 7)}` : ""}），本机接着起验收员验收`;
   }
 
   // ───────── 验收员：交回后本机自己起（不经云端） ─────────
 
   /** 先排着；等交回被天枢收下、取到验收交代，再按验收员的岗位档位挑模型开始。 */
-  private queueVerify(card: SessionRecord, handbackKey: string) {
+  private queueVerify(card: SessionRecord, handbackKey: string, commit: string | null) {
     const now = nowIso();
     const rec: SessionRecord = {
       id: randomUUID(), subject: { kind: "verify", cardId: card.subject.cardId!, handbackKey }, title: `验收：${card.title}`.slice(0, 120),
       agent: card.agent, modelProfileId: card.modelProfileId, modelLabel: card.modelLabel, cwd: card.cwd, includePersonalConfig: false,
       createdAt: now, updatedAt: now, status: "queued", usage: zeroUsage(), syncSeq: 0, mcpSecret: "", outputs: [], versionNumber: 0, lastVersion: null,
       role: null, critics: [], queuedMessage: null, queueOrder: ++this.queueSeq,
-      parentId: card.id, briefPending: true, criteria: [], failStreak: 0, submitted: 0, nudged: false,
+      parentId: card.id, briefPending: true, criteria: [], failStreak: 0, submitted: 0, nudged: false, workspace: null, commit,
     };
     this.records.set(rec.id, rec);
     this.setStatus(rec, "queued", { reason: "等交回送到天枢，取验收交代" });
@@ -745,10 +885,16 @@ export class SessionManager {
         continue;
       }
       const { brief } = got;
+      // 卡在工作树里做：交代后面接上开工以来到交回那个提交的改动（验收员只读、不能跑命令）
+      const ws = rec.parentId ? this.records.get(rec.parentId)?.workspace : null;
+      const changes = rec.commit && ws?.kind === "worktree"
+        ? changesBrief(ws, rec.commit, await cardDiff(ws.folder, ws.baseCommit, rec.commit).catch((e: unknown) => (e instanceof Error ? e.message : String(e))))
+        : null;
       const model = await this.d.models.resolve(this.d.models.forTier(brief.role?.modelTier ?? "normal"));
       if (rec.status !== "queued" || !rec.briefPending) continue;
       // 交代、模型一次填好再标成能开始：中间不能有 await，免得别处的 pump 拿着空的第一句话、执行方的模型先开了它。
-      Object.assign(rec, { briefPending: false, queuedMessage: brief.markdown, criteria: brief.criteria, failStreak: brief.failStreak, role: brief.role });
+      const markdown = changes ? `${brief.markdown}\n\n${changes}` : brief.markdown;
+      Object.assign(rec, { briefPending: false, queuedMessage: markdown, criteria: brief.criteria, failStreak: brief.failStreak, role: brief.role });
       if (model) Object.assign(rec, { modelProfileId: model.profileId, modelLabel: model.label });
       this.waitNotes.delete(rec.id);
       this.save(rec);
@@ -789,6 +935,7 @@ export class SessionManager {
       passed: judged.every((c) => c.verdict === "met"), summary: input.summary.trim(), criteria: judged,
       beyondScope: Array.isArray(input.beyondScope) ? input.beyondScope.map((s) => String(s).trim()).filter(Boolean) : [],
       modelLabel: rec.modelLabel, roleId: rec.role?.id ?? null, roleVersion: rec.role?.version ?? null,
+      ...(rec.commit ? { commit: rec.commit } : {}),
     };
     const problem = schemaProblem(LocalVerdict, verdict);
     if (problem) throw new SessionError("validation", `结论不合格：${problem}`);

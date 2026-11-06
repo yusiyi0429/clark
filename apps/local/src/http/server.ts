@@ -185,6 +185,7 @@ export function createServer(d: ServerDeps): http.Server {
     interrupt: async (c) => ({ session: await d.sessions.interrupt(c.params.id!) }),
     decidePermission: (c) => ({ session: d.sessions.decide(c.params.id!, c.params.requestId!, validate(LocalPermissionDecisionRequest, c.body)) }),
     kill: async (c) => ({ session: await d.sessions.kill(c.params.id!) }),
+    mergeSession: (c) => d.sessions.merge(c.params.id!),
   };
 
   function agentMustBeClaude(c: Ctx) {
@@ -230,8 +231,8 @@ export function createServer(d: ServerDeps): http.Server {
     try {
       const body = await readBody(req);
       const out = Array.isArray(body)
-        ? body.map((m) => handleMcpMessage(d.sessions, sessionId, m)).filter((r) => r !== null)
-        : handleMcpMessage(d.sessions, sessionId, body);
+        ? (await Promise.all(body.map((m) => handleMcpMessage(d.sessions, sessionId, m)))).filter((r) => r !== null)
+        : await handleMcpMessage(d.sessions, sessionId, body);
       if (out === null || (Array.isArray(out) && !out.length)) { res.writeHead(202); return res.end(); }
       send(res, 200, out);
     } catch (e) {

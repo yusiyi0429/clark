@@ -146,7 +146,7 @@ export function sessionToolNames(kind: TLocalSessionKind): string[] {
   return sessionTools(kind).map((t) => `mcp__${SESSION_MCP_NAME}__${t.name}`);
 }
 
-function callTool(sessions: SessionManager, id: string, kind: TLocalSessionKind, name: string, input: any): string {
+function callTool(sessions: SessionManager, id: string, kind: TLocalSessionKind, name: string, input: any): string | Promise<string> {
   if (!sessionTools(kind).some((t) => t.name === name)) throw new Error(`这个会话没有 ${name} 这个工具`);
   if (name === "add_artifact" && typeof input?.path === "string") return sessions.addArtifact(id, input);
   if (name === "add_evidence" && ["note", "log", "link", "diff_summary"].includes(input?.kind) && typeof input?.title === "string") {
@@ -173,7 +173,7 @@ function callTool(sessions: SessionManager, id: string, kind: TLocalSessionKind,
 }
 
 /** 处理一条 JSON-RPC 消息；通知（没有 id）返回 null，HTTP 回 202。 */
-export function handleMcpMessage(sessions: SessionManager, id: string, msg: any): unknown | null {
+export async function handleMcpMessage(sessions: SessionManager, id: string, msg: any): Promise<unknown | null> {
   if (msg?.id === undefined || msg?.id === null) return null;
   const ok = (result: unknown) => ({ jsonrpc: "2.0", id: msg.id, result });
   const kind = sessions.kindOf(id);
@@ -184,7 +184,7 @@ export function handleMcpMessage(sessions: SessionManager, id: string, msg: any)
       return ok({ tools: sessionTools(kind) });
     case "tools/call":
       try {
-        return ok({ content: [{ type: "text", text: callTool(sessions, id, kind, String(msg.params?.name), msg.params?.arguments ?? {}) }], isError: false });
+        return ok({ content: [{ type: "text", text: await callTool(sessions, id, kind, String(msg.params?.name), msg.params?.arguments ?? {}) }], isError: false });
       } catch (e) {
         return ok({ content: [{ type: "text", text: e instanceof Error ? e.message : String(e) }], isError: true });
       }
