@@ -46,8 +46,17 @@ export function useWorkHome() {
     });
   }, [local.runner.kind, local.sessions, work.workers]);
 
+  // 拆完的规划员：云端和 worker 列表里拆完就不再列（派活单接着出），已完成那组由这台电脑上的会话补上。
+  const finishedPlans = useMemo<MockChild[]>(() => local.sessions.flatMap((session): MockChild[] => {
+    const { subject } = session;
+    if (subject.kind !== "plan" || (session.status !== "exited" && session.status !== "failed")) return [];
+    return [{ id: `plan:${session.id}`, kind: "plan", title: "拆卡", state: session.status === "failed" ? "failed" : "done", startedAt: session.createdAt, finishedAt: session.updatedAt,
+      stoppable: false, sessionId: session.id, taskId: subject.taskId ?? null, cardId: null, topicId: null }];
+  }), [local.sessions]);
+
   const canStop = local.phase === "ready" && !handheld;
-  const background = useCallback((scope: BackgroundScope) => backgroundItems({ workers: work.workers, scope, canStop, mockChildren }), [work.workers, canStop, mockChildren]);
+  const background = useCallback((scope: BackgroundScope) => backgroundItems({ workers: work.workers, scope, canStop, local: [...finishedPlans, ...mockChildren] }),
+    [work.workers, canStop, finishedPlans, mockChildren]);
   const refresh = useCallback(async () => { await Promise.all([work.refresh(), member.refresh()]); }, [work, member]);
   return { data, work, member, background, refresh };
 }

@@ -42,7 +42,7 @@
 .slot { display: flex; align-items: center; gap: 6px; min-height: 80px; padding: 0 2px 10px; }
 .buddy { display: inline-flex; align-items: center; padding: 4px; border: 0; border-radius: 14px; background: none; cursor: pointer; transition: background-color var(--dur-snap) var(--ease-swift); }
 .buddy:hover { background: var(--wash-hover); }
-.slot > .icon { margin-left: auto; }
+.slot > .icon, .slotTrail { margin-left: auto; }
 .homeBack { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 12px 0 9px; border: 0; border-radius: 10px; background: none; color: var(--ink-muted); font-size: 13px; cursor: pointer; animation: fadeIn 220ms var(--ease-swift) 60ms both; }
 .homeBack:hover { background: var(--wash-hover); color: var(--ink); }
 .homeBack svg { color: var(--ink-faint); }
@@ -272,5 +272,20 @@
     --accent-soft-foreground: #8cbbff;
     --accent-soft-hover: color-mix(in oklab, var(--accent) 24%, var(--surface));
     --focus: #4c97ff;
+    /* 对话列的输入条（ComposerPill）读这组；不给就是它自带的浅色。 */
+    --pill-bg-agent: var(--surface);
+    --pill-line-agent: var(--hairline-strong);
+    --pill-track-agent: var(--neutral-wash);
+    --pill-current-agent: var(--accent-soft);
+    --pill-current-ink-agent: #8cbbff;
+    --pill-selected-agent: #4c97ff;
+    --pill-mic-agent: var(--neutral-wash);
+    --pill-send-agent: #4c97ff;
+  }
+  .app [data-composer] form[data-tone] {
+    --tone-ink: var(--ink);
+    --tone-muted: var(--ink-muted);
+    --tone-placeholder: var(--field-placeholder);
+    box-shadow: 0 4px 18px var(--sh-1);
   }
 }

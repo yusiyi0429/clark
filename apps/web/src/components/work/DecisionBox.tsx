@@ -151,7 +151,7 @@ export function DecisionBox({ kind, title, body, options, onPick, other, multi, 
           return (
             <button key={`${index}:${option.label}`} ref={(element) => { optionRefs.current[index] = element; }} type="button" className={x.option}
               role={multi ? "checkbox" : "radio"} aria-checked={checked} data-selected={selected === index ? "" : undefined} aria-keyshortcuts={String(index + 1)}
-              tabIndex={selected === index ? 0 : -1} disabled={disabled} onFocus={() => setSelected(index)} onClick={() => choose(index)} data-testid="decision-option">
+              tabIndex={selected === index ? 0 : -1} disabled={disabled} onFocus={() => setSelected(index)} onMouseEnter={() => setSelected(index)} onClick={() => choose(index)} data-testid="decision-option">
               <kbd className={x.key} aria-hidden>{index + 1}</kbd>
               <span className={x.label}><span>{option.label}</span>{option.detail ? <small>{option.detail}</small> : null}</span>
               <span className={x.trail}>
@@ -165,7 +165,7 @@ export function DecisionBox({ kind, title, body, options, onPick, other, multi, 
           <>
             <button ref={(element) => { optionRefs.current[otherIndex] = element; }} type="button" className={x.option} data-other="" role={multi ? "checkbox" : "radio"}
               aria-checked={writing} data-selected={selected === otherIndex ? "" : undefined} aria-keyshortcuts={String(otherIndex + 1)} tabIndex={selected === otherIndex ? 0 : -1}
-              disabled={disabled} aria-expanded={writing} onFocus={() => setSelected(otherIndex)} onClick={() => choose(otherIndex)} data-testid="decision-other">
+              disabled={disabled} aria-expanded={writing} onFocus={() => setSelected(otherIndex)} onMouseEnter={() => setSelected(otherIndex)} onClick={() => choose(otherIndex)} data-testid="decision-other">
               <kbd className={x.key} aria-hidden>{otherIndex + 1}</kbd>
               <span className={x.label}><span>{other.label ?? "自己说…"}</span></span>
               <span className={x.trail} />

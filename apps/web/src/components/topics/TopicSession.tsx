@@ -18,6 +18,7 @@ import { SessionComposer, SessionTranscript, type DecideOptions } from "@/compon
 import { QuestionDecision } from "@/components/work/decisions";
 import { PendingBoxes, PendingChip } from "@/components/work/DecisionBox";
 import { useViewChrome } from "@/components/home/view";
+import { useConversationScroll } from "@/conversation/useConversationScroll";
 import { latestSessionFor, useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { useSessionEvents } from "@/lib/local/useSessionEvents";
 import { localWait } from "@/lib/local/sessionView";
@@ -37,6 +38,7 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
   const [reading, setReading] = useState(false);
   const local = useLocalRunner();
   const handheld = useHandheld();
+  const scroll = useConversationScroll({ streaming: false, resetKey: topicId });
   const [detail, setDetail] = useState<TTopicDetailResponse | null>(null);
   const [missing, setMissing] = useState(false);
   const [picked, setPicked] = useState<number | null>(null);
@@ -144,11 +146,14 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
   const chat = (
     <PendingBoxes>
       <div className={s.chat}>
-        <div className={s.scroll}>
-          {session ? <SessionTranscript entries={view.entries} agentName="Claude Code" canAct={canAct} onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={asking} asking={question} />
-            : <div className={s.feed}><span className={s.evt}>{topic.title}</span>
-                {ready && topic.status === "active" ? <div className={s.actions}><HeroButton variant="primary" size="sm" onPress={() => setStarting(true)}>开始</HeroButton></div> : null}
-              </div>}
+        <div className={s.scroll} ref={scroll.scrollRef}>
+          <div ref={scroll.contentRef}>
+            {session ? <SessionTranscript entries={view.entries} agentName="Claude Code" canAct={canAct} onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={asking} asking={question} />
+              : <div className={s.feed}><span className={s.evt}>{topic.title}</span>
+                  {ready && topic.status === "active" ? <div className={s.actions}><HeroButton variant="primary" size="sm" onPress={() => setStarting(true)}>开始</HeroButton></div> : null}
+                </div>}
+          </div>
+          <div ref={scroll.reserveRef} aria-hidden />
         </div>
         <PendingChip />
         <SessionComposer placeholder="发给 Claude Code…" disabled={!canAct} onSend={say} />

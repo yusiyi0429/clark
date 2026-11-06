@@ -186,14 +186,14 @@ const bgState = (worker: Worker): BackgroundState => (worker.session?.status ===
 
 /**
  * 后台任务：规划员（拆卡）、验收员（验收「卡」）来自 worker 列表；子 agent、后台命令要本机程序报上来（D 在做），
- * 用假本机程序时由 mockChildren 补几条，真程序没报之前没有。
+ * 由 local 补：这台电脑上拆完的规划员（worker 列表拆完就不列了），用假本机程序时再补子 agent、命令各几条（真程序没报之前没有）。
  */
-export function backgroundItems({ workers, scope, canStop, mockChildren = [] }: {
+export function backgroundItems({ workers, scope, canStop, local = [] }: {
   workers: Worker[];
   scope: BackgroundScope;
   /** 这台电脑能不能停（本机连着、不是手机）。 */
   canStop: boolean;
-  mockChildren?: (BackgroundItem & { taskId: string | null; cardId: string | null; topicId: string | null })[];
+  local?: (BackgroundItem & { taskId: string | null; cardId: string | null; topicId: string | null })[];
 }): BackgroundItem[] {
   const own = workers.filter((worker) => worker.kind === "plan" || worker.kind === "verify").map((worker) => ({
     item: {
@@ -203,7 +203,7 @@ export function backgroundItems({ workers, scope, canStop, mockChildren = [] }: 
     } satisfies BackgroundItem,
     taskId: worker.taskId, cardId: worker.kind === "verify" ? worker.cardId : null, topicId: null as string | null,
   }));
-  const children = mockChildren.map(({ taskId, cardId, topicId, ...item }) => ({ item, taskId, cardId, topicId }));
+  const children = local.map(({ taskId, cardId, topicId, ...item }) => ({ item, taskId, cardId, topicId }));
   const inScope = (entry: { taskId: string | null; cardId: string | null; topicId: string | null }) => {
     if (scope === "main") return true;
     const [kind, id] = scope.split(":") as [string, string];

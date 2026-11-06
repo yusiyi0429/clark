@@ -19,7 +19,8 @@
 
 .options { display: grid; gap: 1px; }
 .option { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: start; gap: 6px; width: 100%; padding: 7px 10px; border: 0; border-radius: 9px; background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
-.option:hover:not(:disabled), .option[data-selected] { background: var(--wash-hover); }
+/* 鼠标移上去就选中那一行（DecisionBox onMouseEnter），和键盘共用一个高亮，任何时候只亮一行。 */
+.option[data-selected]:not(:disabled) { background: var(--wash-hover); }
 .option:focus-visible { outline: 2px solid color-mix(in oklab, var(--accent) 60%, transparent); outline-offset: -2px; }
 .option:disabled { cursor: default; color: var(--ink-faint); }
 .option[data-other] .label { color: var(--ink-muted); }

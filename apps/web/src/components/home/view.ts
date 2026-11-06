@@ -3,7 +3,7 @@
  * /me/work 首页 · /me/work/buddy 总管线 · /me/work/tasks/<id> Task 管线 · /me/work/tasks/<id>/info Task 详情 ·
  * /me/work/cards/<id>、/me/work/topics/<id> 子会话。
  */
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useSyncExternalStore, type ReactNode } from "react";
 import type { BackgroundScope } from "@/lib/home/types";
 
 export type View =
@@ -39,3 +39,14 @@ export function scopeOf(view: View): BackgroundScope {
  */
 export const ViewChrome = createContext<{ lead: ReactNode; trail: ReactNode }>({ lead: null, trail: null });
 export const useViewChrome = () => useContext(ViewChrome);
+
+/** 系统是不是深色。新首页的颜色跟着系统走（home.module.css 末尾）；对话列的正文和输入条有自己的浅/深两套，要按这个选。 */
+const DARK_QUERY = "(prefers-color-scheme: dark)";
+const subscribeDark = (notify: () => void) => {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return () => undefined;
+  const media = window.matchMedia(DARK_QUERY);
+  media.addEventListener("change", notify);
+  return () => media.removeEventListener("change", notify);
+};
+const darkSnapshot = () => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(DARK_QUERY).matches;
+export const useDarkScheme = () => useSyncExternalStore(subscribeDark, darkSnapshot, () => false);

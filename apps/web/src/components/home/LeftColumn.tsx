@@ -2,7 +2,7 @@
 
 /**
  * 左栏（新首页设计第 3 节）：最上面是伙伴形象，点了进总管线；进去以后这个位置换成「回到首页」。
- * 在 Task 管线、详情、子会话里，伙伴形象右边多一个回首页的小图标。
+ * 在 Task 管线、详情、子会话里，伙伴形象右边多一个回首页的小图标。手机首屏这一行右端是后台任务的图标（和对话页头同一个）。
  * 下面是 Mission 名（只有一个 Mission 时不写）和 Task：标题加一行小字，标题右边的信息图标鼠标移上去才显示（手机上一直显示）。
  * Task 下面缩进一条竖线，是子会话，一行一个，状态用图标。不归任何 Task 的子会话放在最下面一组「其他」，没有就不显示。
  */
@@ -13,7 +13,7 @@ import type { Buddy } from "@/components/buddy/useBuddy";
 import { BUDDY_HREF, HOME_HREF, cardHref, infoHref, taskHref, topicHref } from "@/lib/home/derive";
 import type { HomeTask, SubSession, WorkHomeData } from "@/lib/home/types";
 import { StateIcon } from "./StateIcon";
-import type { View } from "./view";
+import { useViewChrome, type View } from "./view";
 import h from "@/styles/home.module.css";
 
 const ICON = { size: 16, strokeWidth: 1.5, "aria-hidden": true } as const;
@@ -32,6 +32,7 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, top }: {
 }) {
   const name = buddy?.name?.trim() || "伙伴";
   const many = data.missions.length > 1;
+  const chrome = useViewChrome();
   return (
     <nav className={h.leftInner} aria-label="Task">
       <div className={h.slot}>
@@ -43,6 +44,7 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, top }: {
               <span className={h.buddyFigure} data-buddy-figure="left"><BuddyMark buddy={buddy} place="sheet" active={speaking} /></span>
             </button>
             {view.kind !== "home" && !phone ? <button type="button" className={h.icon} aria-label="回到首页" title="回到首页" onClick={() => go(HOME_HREF)}><House {...ICON} /></button> : null}
+            {phone ? <span className={h.slotTrail}>{chrome.trail}</span> : null}
           </>
         )}
       </div>

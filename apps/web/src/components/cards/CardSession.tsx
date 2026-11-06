@@ -28,6 +28,7 @@ import { MergeAction } from "@/components/work/MergeAction";
 import { QuestionDecision } from "@/components/work/decisions";
 import { PendingBoxes, PendingChip } from "@/components/work/DecisionBox";
 import { useViewChrome } from "@/components/home/view";
+import { useConversationScroll } from "@/conversation/useConversationScroll";
 import { commitText, placeText, shortPlace } from "@/lib/work/merge";
 import type { TLocalSessionSummary } from "@/lib/local/runner";
 import s from "@/styles/v2-session.module.css";
@@ -46,6 +47,8 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
   const { detail, missing, refresh } = useCardDetail(cardId);
   const local = useLocalRunner();
   const handheld = useHandheld();
+  // 和对话列一样：打开落在最新一条，往下长时跟着；本人往上翻了就不拉回。
+  const scroll = useConversationScroll({ streaming: false, resetKey: cardId });
   const ready = local.phase === "ready";
   const session = ready ? latestSessionFor(local.sessions, { cardId }) : null;
   const { view } = useSessionEvents(local.runner, session?.id ?? null);
@@ -119,11 +122,14 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
   const chat = (
     <PendingBoxes>
       <div className={s.chat}>
-        <div className={s.scroll}>
-          {session ? (
-            <SessionTranscript entries={view.entries} agentName={agentName} canAct={canAct} lead={`交代：${item.title}${item.card?.criterion ? ` · 按「${item.card.criterion.text}」验收` : ""}`}
-              onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={asking} asking={question} />
-          ) : <CloudTimeline run={detail.runs[0] ?? null} title={item.title} />}
+        <div className={s.scroll} ref={scroll.scrollRef}>
+          <div ref={scroll.contentRef}>
+            {session ? (
+              <SessionTranscript entries={view.entries} agentName={agentName} canAct={canAct} lead={`交代：${item.title}${item.card?.criterion ? ` · 按「${item.card.criterion.text}」验收` : ""}`}
+                onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={asking} asking={question} />
+            ) : <CloudTimeline run={detail.runs[0] ?? null} title={item.title} />}
+          </div>
+          <div ref={scroll.reserveRef} aria-hidden />
         </div>
         <PendingChip />
         {agent ? <SessionComposer placeholder={`发给${agentName}…`} disabled={!canAct} onSend={say} /> : null}
