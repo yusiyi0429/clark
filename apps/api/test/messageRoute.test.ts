@@ -16,7 +16,13 @@ describe("首页「自动」发给谁", () => {
     expect(routeMessage("今天天气", TASKS)).toEqual({ target: "main" });
   });
 
-  it("句子里有完整的 Task 名字就发给那件，几件都有时取名字最长的", () => {
+  it("恰好一件命中才发给它：两件各被提到一个独有的词就发给伙伴；日期、时间这种纯数字不算词", () => {
+    expect(routeMessage("V2 的本机验收和会议回流一起看下", TASKS)).toEqual({ target: "main" });
+    expect(routeMessage("对接打通和 V1 哪个先", TASKS)).toEqual({ target: "main" });
+    expect(routeMessage("18 号下午开会", TASKS)).toEqual({ target: "main" });
+  });
+
+  it("句子里有完整的 Task 名字就算命中，名字一件套一件时只算最长的", () => {
     expect(routeMessage("对接打通这件今天能交吗", TASKS)).toEqual({ target: { taskId: "link" } });
     // 「上线」两件都有，但完整名字只出现了一件。
     expect(routeMessage("11/18 上线 V1 还差什么", TASKS)).toEqual({ target: { taskId: "v1" } });
