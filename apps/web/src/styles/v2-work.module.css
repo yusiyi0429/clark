@@ -1,43 +1,12 @@
 /*
- * V2 的几样小件（新首页换掉老三栏以后还在用的）：链路记号、岗位头像、本机的位置、对话里伙伴另外说的一句（验收结果、全部完成）、
- * 合并的那一行。只用现有 token。
+ * V2 的几样小件（新首页换掉老三栏以后还在用的）：本机的位置、合并的那一行。只用现有 token。
  */
 .dim { color: var(--ink-faint); }
 .m { color: var(--ink-muted); font-size: 12px; }
-.acts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .rowActs { display: flex; flex-wrap: wrap; gap: 8px; }
-.inline { display: flex; flex: 1; gap: 6px; min-width: 180px; }
-.inline input { flex: 1; min-width: 0; height: 28px; padding: 0 10px; border: 1px solid var(--field-border); border-radius: var(--r-control); background: var(--field-bg); color: var(--ink); font: inherit; font-size: 12.5px; }
-
-/* 链路记号：空心圈 已排队、转动的半圈 进行中、实心勾 已完成、虚线圈 待开工。 */
-.sg { position: relative; display: inline-block; flex: none; width: 14px; height: 14px; border-radius: 50%; }
-.sg[data-state="queued"] { box-shadow: inset 0 0 0 1.5px var(--field-placeholder); }
-.sg[data-state="draft"] { border: 1.5px dashed var(--field-placeholder); }
-.sg[data-state="doing"] { box-shadow: inset 0 0 0 1.5px color-mix(in oklab, var(--confirmed) 28%, var(--surface)); }
-.sg[data-state="doing"]::after { content: ""; position: absolute; inset: 0; border: 1.5px solid transparent; border-top-color: var(--confirmed); border-right-color: var(--confirmed); border-radius: 50%; animation: spin 1.1s linear infinite; }
-.sg[data-state="done"] { background: var(--confirmed); }
-.sg[data-state="done"]::after { content: ""; position: absolute; left: 4.6px; top: 2.6px; width: 3.4px; height: 6.4px; border: solid var(--surface); border-width: 0 1.6px 1.6px 0; transform: rotate(45deg); }
-.sg[data-size="xs"] { width: 11px; height: 11px; }
-.sg[data-size="xs"][data-state="done"]::after { left: 3.5px; top: 1.8px; width: 2.8px; height: 5px; border-width: 0 1.4px 1.4px 0; }
-@keyframes spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .sg[data-state="doing"]::after { animation: none; } }
-
-/* 岗位头像：方的，干活 / 验收 / 挑刺三种底色；人自己是圆的。 */
-.ra { display: inline-grid; flex: none; place-items: center; width: 24px; height: 24px; border-radius: 7px; font-size: 12px; font-weight: 700; }
-.ra[data-size="s"] { width: 20px; height: 20px; border-radius: 6px; font-size: 11px; }
-.ra[data-kind="worker"] { background: color-mix(in oklab, var(--accent) 12%, var(--surface)); color: var(--brand-deep); }
-.ra[data-kind="reviewer"] { background: var(--confirmed-wash); color: var(--confirmed); }
-.ra[data-kind="critic"] { background: var(--judgment-wash); color: var(--judgment); }
-.ra[data-kind="self"] { border-radius: 50%; background: var(--surface); box-shadow: inset 0 0 0 1px var(--hairline-strong); color: var(--ink-muted); }
 
 /* 本机 ▮▮▯：一格一个位置。 */
 .slots { display: inline-flex; gap: 3px; vertical-align: -2px; }
 .slot { width: 7px; height: 13px; border-radius: 2.5px; box-shadow: inset 0 0 0 1.5px var(--hairline-strong); }
 .slot[data-on] { background: var(--confirmed); box-shadow: none; }
 
-/* 伙伴另外说的一句：验收结果、这一单全部完成。 */
-.note { display: flex; align-items: flex-start; gap: 10px; margin: 4px 0 12px; padding: 10px 12px; border-radius: 14px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--hairline-strong); color: var(--ink); }
-.note .sg { margin-top: 3px; }
-.tx { display: grid; flex: 1; gap: 6px; min-width: 0; }
-.tx .m { color: var(--ink-faint); font-size: 12px; }
-.note blockquote { margin: 0; padding: 6px 10px; border-radius: 9px; background: color-mix(in oklab, var(--ink) 2.5%, var(--surface)); color: var(--ink); white-space: pre-wrap; }

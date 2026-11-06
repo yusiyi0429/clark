@@ -9,7 +9,7 @@
  * 状态只在内存里：同一个页面会话内跨页面保留，刷新就没了。
  */
 import type {
-  TLocalCreateSessionRequest, TLocalFolder, TLocalMergeResponse, TLocalModelProfile, TLocalPermissionRequestView, TLocalPlanEntry, TLocalQuestionRequestView,
+  TLocalBackgroundItem, TLocalCreateSessionRequest, TLocalFolder, TLocalMergeResponse, TLocalModelProfile, TLocalPermissionRequestView, TLocalPlanEntry, TLocalQuestionRequestView,
   TLocalSessionEvent, TLocalSessionStatus, TLocalSessionSummary, TLocalUsage, TLocalWorkspace,
 } from "@warmap/contracts";
 import { LocalRunnerError, type EventWatch, type LocalRunner } from "./runner";
@@ -116,6 +116,14 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
     emit(s, { type: "tool_call", toolUseId, name, title, input: {} });
     emit(s, { type: "tool_result", toolUseId, isError: false, preview: "完成" });
   };
+  /** 会话里的后台任务（子 agent、后台命令）：摘要里留一份，再报一条 background 事件（同本机程序，按 id 覆盖）。 */
+  const background = (s: MockSession, item: TLocalBackgroundItem) => {
+    s.summary = { ...s.summary, background: [...(s.summary.background ?? []).filter((entry) => entry.id !== item.id), item] };
+    emit(s, { type: "background", item });
+  };
+  const finishBackground = (s: MockSession, state: "done" | "stopped") => {
+    for (const item of s.summary.background ?? []) if (item.state === "running") background(s, { ...item, state, finishedAt: now(), stoppable: false });
+  };
   const turnEnd = (s: MockSession, text: string | null, errorKind?: "interrupted") => {
     const usage = { ...ZERO, inputTokens: 1200, outputTokens: 320, costUsd: 0.004 };
     s.summary = { ...s.summary, usage: { ...s.summary.usage, inputTokens: s.summary.usage.inputTokens + 1200, outputTokens: s.summary.usage.outputTokens + 320, costUsd: (s.summary.usage.costUsd ?? 0) + 0.004 } };
@@ -125,7 +133,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
   const script: Step[] = [
     (s) => { setStatus(s, "running"); noteWorkspace(s); emit(s, { type: "agent_info", agent: "claude-code", version: "2.1.318", model: s.summary.modelLabel, permissionMode: "manual" }); },
     (s) => { emit(s, { type: "assistant_text", text: "先读一下交代和相关代码，列个计划。" }); plan(s, 0); },
-    (s) => { tool(s, "Read", "读 apps/web/src/app/manifest.ts"); plan(s, 1); },
+    (s) => { tool(s, "Read", "读 apps/web/src/app/manifest.ts"); plan(s, 1); background(s, { id: `agent-${++seqId}`, title: "读相关代码", kind: "subagent", state: "running", startedAt: now(), finishedAt: null, stoppable: true }); },
     (s) => {
       const request: TLocalPermissionRequestView = { requestId: `perm-${++seqId}`, toolName: "Bash", title: "运行 pnpm --filter @warmap/web test", input: { command: "pnpm --filter @warmap/web test" }, outsidePaths: [], canAllowForSession: true, requestedAt: now() };
       s.pending = request;
@@ -135,7 +143,11 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
       return "wait";
     },
     (s) => {
-      if (!s.denied) tool(s, "Bash", "运行 pnpm --filter @warmap/web test");
+      if (!s.denied) {
+        tool(s, "Bash", "运行 pnpm --filter @warmap/web test");
+        for (const item of s.summary.background ?? []) if (item.kind === "subagent" && item.state === "running") background(s, { ...item, state: "done", finishedAt: now(), stoppable: false });
+        background(s, { id: `cmd-${++seqId}`, title: "pnpm --filter @warmap/web test --watch", kind: "command", state: "running", startedAt: now(), finishedAt: null, stoppable: true });
+      }
       // 执行方问本人（AskUserQuestion）：会话转成 idle（等你回复），摘要带 pendingQuestion。
       const request: TLocalQuestionRequestView = { requestId: `q-${++seqId}`, askedAt: now(), questions: [{
         header: "安装说明", question: "旧的安装说明要不要一起删掉？", multiSelect: false,
@@ -151,6 +163,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
     (s) => {
       plan(s, 3);
       const ws = s.summary.workspace;
+      finishBackground(s, "done");
       emit(s, { type: "handback", summary: "改完了，测试都过。", criteria: [{ index: 1, result: "met", evidence: "测试 12/12 通过" }, { index: 2, result: "met", evidence: "交回说明.md" }], outputKeys: [],
         ...(ws?.kind === "worktree" ? { commit: sha(`${s.summary.id}:handback`) } : {}) });
       turnEnd(s, "改完了，已交回。");
@@ -266,6 +279,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
       const s = must(id);
       if (s.timer) { clearTimeout(s.timer); s.timer = null; }
       s.paused = true;
+      finishBackground(s, "stopped");
       setStatus(s, "exited", "强停");
       return summaryOf(s);
     },
@@ -287,6 +301,13 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
       emit(s, { type: "question_resolved", requestId, choices: body.choices, text: body.text ?? null });
       s.paused = false;
       advance(s);
+      return summaryOf(s);
+    },
+    stopBackground: async (id, itemId) => {
+      const s = must(id);
+      const item = s.summary.background?.find((entry) => entry.id === itemId);
+      if (!item || item.state !== "running") throw new LocalRunnerError("conflict", "这个后台任务已经不在跑了", 409);
+      background(s, { ...item, state: "stopped", finishedAt: now(), stoppable: false });
       return summaryOf(s);
     },
     mergeSession: async (id): Promise<TLocalMergeResponse> => {

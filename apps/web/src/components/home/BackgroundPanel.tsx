@@ -36,9 +36,9 @@ export function BackgroundPanel({ items, resources, model, onStop, onCollapse }:
   };
   const row = (item: BackgroundItem) => (
     <li key={item.id} className={h.bgRow} data-state={item.state} data-testid="bg-row">
-      <StateIcon state={item.state === "failed" ? "failed" : item.state} />
+      <StateIcon state={item.state} />
       <span className={h.bgTitle} title={item.title}>{item.title}</span>
-      <span className={h.bgTime}>{item.state === "failed" ? "失败" : item.state === "queued" ? "已排队" : duration(item.startedAt, item.finishedAt ?? now)}</span>
+      <span className={h.bgTime}>{item.state === "failed" ? "失败" : item.state === "stopped" ? "已停止" : item.state === "queued" ? "已排队" : duration(item.startedAt, item.finishedAt ?? now)}</span>
       {item.stoppable && (item.state === "running" || item.state === "queued") ? (
         <button type="button" className={h.icon} aria-label={`停止 ${item.title}`} title="停止" disabled={stopping === item.id} onClick={() => void stop(item)}><Square {...ICON} /></button>
       ) : <span className={h.bgStopGap} />}

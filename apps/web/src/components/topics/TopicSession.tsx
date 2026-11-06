@@ -92,14 +92,14 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
   };
   const decide = async (requestId: string, decision: "allow" | "deny", { forSession, message }: DecideOptions) => {
     if (!session) return;
-    try { await local.runner.decidePermission(session.id, requestId, { decision, ...(forSession ? { allowForSession: true } : {}), ...(message ? { message } : {}) }); }
+    try { await local.runner.decidePermission(session.id, requestId, { decision, ...(forSession ? { allowForSession: true } : {}), ...(message ? { message } : {}) }); scroll.jumpToLatest(); }
     catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没成功，请重试" }); }
   };
   // Claude Code 在问本人：选项框放在对话最后。
   const question = session ? view.question ?? session.pendingQuestion ?? null : null;
   const answer = async (body: TLocalQuestionAnswerRequest) => {
     if (!session || !question) return;
-    try { await local.runner.answerQuestion(session.id, question.requestId, body); await local.refresh(); }
+    try { await local.runner.answerQuestion(session.id, question.requestId, body); await local.refresh(); scroll.jumpToLatest(); }
     catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没成功，请重试" }); }
   };
   const asking = question ? <QuestionDecision key={question.requestId} request={question} blocked={canAct ? null : "到电脑上处理"} onAnswer={answer} /> : null;

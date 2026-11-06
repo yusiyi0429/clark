@@ -3,7 +3,7 @@
 /**
  * 首页（新首页设计第 4.1 条）是「此刻」：
  * 1. 等你：所有要你拿主意的事合在一起，一件一行；短的（批准、单选、接下、采纳）就在这一行答，长的点进去答。没有就不显示。
- * 2. 本月的 Task：一件一行，标题和一句现状，点了进那件 Task 的管线。
+ * 2. Task：按 Mission 分组，一件一行，标题和一句现状，点了进那件 Task 的管线。之前月份没了结的 Mission 标出月份（不按月份硬切）。
  * 3. 底部输入框：左边「发给」默认自动，也能选伙伴或某件 Task；发出去以后直接跳进那条管线的对话。首页自己不存对话。
  */
 import { useEffect, useRef, useState } from "react";
@@ -16,7 +16,7 @@ import { decideProposal } from "@/lib/team/roles";
 import { canCommandHere, decide } from "@/lib/work/actions";
 import { mergeCard } from "@/lib/work/merge";
 import { showWorkspaceToast } from "@/lib/toast";
-import { statusLine, taskHref } from "@/lib/home/derive";
+import { monthLabel, statusLine, taskHref, waitingHref } from "@/lib/home/derive";
 import type { RouteTarget, WaitingItem, WorkHomeData } from "@/lib/home/types";
 import type { WorkHomeApi } from "@/lib/home/useWorkHome";
 import h from "@/styles/home.module.css";
@@ -33,10 +33,9 @@ export function HomeView({ data, api, buddy, loading, go, route, onSend }: {
   loading: boolean;
   go: (href: string) => void;
   /** 「自动」会发去哪（打字时实时显示）。 */
-  route: (text: string) => RouteTarget;
+  route: (text: string) => Promise<RouteTarget>;
   onSend: (text: string, target: SendTarget) => void;
 }) {
-  const many = data.missions.length > 1;
   const tasks = data.missions.flatMap((mission) => mission.tasks);
   return (
     <div className={h.homeView} data-testid="home-view">
@@ -48,19 +47,19 @@ export function HomeView({ data, api, buddy, loading, go, route, onSend }: {
               <WaitingList items={data.waiting} api={api} go={go} />
             </section>
           ) : null}
-          <section aria-label="本月" className={h.section}>
-            {data.missions.map((mission) => (
+          <section aria-label="Task" className={h.section}>
+            {data.missions.filter((mission) => mission.tasks.length).map((mission) => (
               <div key={mission.missionId} className={h.taskList}>
-                <p className={h.sectionTitle}>{many ? mission.title : "本月"}</p>
+                <p className={h.sectionTitle}>{mission.title}{mission.period !== data.period ? <span>{monthLabel(mission.period)}</span> : null}</p>
                 {mission.tasks.map((task) => (
                   <button key={task.taskId} type="button" className={h.taskLine} onClick={() => go(taskHref(task.taskId))} data-testid="home-task">
                     <span className={h.taskLineName}>{task.name}</span>
-                    <span className={h.taskLineStatus} data-waiting={task.summary.waiting && !task.delivered ? "" : undefined}>{statusLine(task)}</span>
+                    <span className={h.taskLineStatus} data-waiting={task.summary.needsYou && !task.completedAt ? "" : undefined}>{statusLine(task)}</span>
                   </button>
                 ))}
               </div>
             ))}
-            {data.missions.length || loading ? null : <p className={h.empty}>本月还没有 Task</p>}
+            {tasks.length || loading ? null : <p className={h.empty}>本月还没有 Task</p>}
           </section>
         </div>
       </div>
@@ -71,13 +70,17 @@ export function HomeView({ data, api, buddy, loading, go, route, onSend }: {
 
 type Action = { label: string; primary?: boolean; run: () => Promise<unknown> };
 
-/** 等你的一件：短的给就地答的按钮。本机上的批准、提问只在跑它的这台电脑上能答（手机上点进去看）。 */
+/**
+ * 等你的一件：短的给就地答的按钮。本机上的批准、提问、合回只在那台电脑上能答（契约的 deviceId；手机上、别的电脑上点进去看），
+ * 答案直接回给那个子会话（设计第 4.1 条：直接跟子会话说话的入口之一）。
+ */
 function useActions(api: WorkHomeApi) {
   const local = useLocalRunner();
   const handheld = useHandheld();
   const ready = local.phase === "ready";
   return (item: WaitingItem): Action[] => {
-    const worker = item.ref.workerKey ? api.work.workers.find((entry) => entry.key === item.ref.workerKey) : undefined;
+    if (item.deviceId && api.deviceId && item.deviceId !== api.deviceId) return [];
+    const worker = item.sessionId ? api.work.workers.find((entry) => entry.session?.id === item.sessionId) : undefined;
     if (worker && (item.kind === "approval" || item.kind === "question") && !canCommandHere(worker, ready, handheld)) return [];
     if (item.kind === "approval" && worker) return [{ label: "批准", primary: true, run: () => decide(local.runner, worker, "allow") }];
     if (item.kind === "question" && worker?.session?.pendingQuestion) {
@@ -90,18 +93,18 @@ function useActions(api: WorkHomeApi) {
         run: () => local.runner.answerQuestion(session.id, question.requestId, { choices: [[question.questions[0]!.options[order[index]!]!.label]] }),
       }));
     }
-    if (item.kind === "role" && item.ref.proposalId) {
-      const id = item.ref.proposalId;
+    if (item.kind === "role" && item.open.kind === "role") {
+      const id = item.open.id;
       return [{ label: "采纳", primary: true, run: () => decideProposal(id, "accept") }, { label: "不要", run: () => decideProposal(id, "dismiss") }];
     }
-    if (item.kind === "assigned" && item.ref.notificationId) {
-      const id = item.ref.notificationId;
+    if (item.kind === "assigned" && item.notificationId) {
+      const id = item.notificationId;
       return [{ label: "接下", primary: true, run: async () => { const result = await api.member.markSeen([id]); if (!result.ok) throw new Error(result.error); } }];
     }
-    if (item.kind === "merge" && item.ref.sessionId) {
-      const session = local.sessions.find((entry) => entry.id === item.ref.sessionId);
+    if (item.kind === "merge" && item.sessionId) {
+      const session = local.sessions.find((entry) => entry.id === item.sessionId);
       if (!session || handheld) return [];
-      return [{ label: "再合并", primary: true, run: async () => { const result = await mergeCard(local.runner, session, item.source ?? ""); if (!result.ok) throw new Error(result.text); } }];
+      return [{ label: "合并", primary: true, run: async () => { const result = await mergeCard(local.runner, session, item.source ?? ""); if (!result.ok) throw new Error(result.text); } }];
     }
     return [];
   };
@@ -123,7 +126,7 @@ export function WaitingList({ items, api, go }: { items: WaitingItem[]; api: Wor
         const buttons = actions(item);
         return (
           <li key={item.id} className={h.wait} data-kind={item.kind}>
-            <button type="button" className={h.waitMain} onClick={() => go(item.href)}>
+            <button type="button" className={h.waitMain} onClick={() => go(waitingHref(item))}>
               <i className={h.waitDot} aria-hidden />
               <span className={h.waitText}>
                 <span className={h.waitTitle}>{item.title}</span>
@@ -146,20 +149,26 @@ export function WaitingList({ items, api, go }: { items: WaitingItem[]; api: Wor
 
 /**
  * 首页底部的输入框：「发给」默认自动；回车发出，跳进那条对话。
- * 自动时，停下打字约 300ms 后标签写出会发去哪（「自动 · Task 2」），发之前就能改（设计第 4.1 条）。
+ * 自动只在管线之间选（伙伴或某件 Task，不直接发给子会话）：停下打字约 300ms 后问一次分发接口，标签写出会发去哪（「自动 · Task 2」），
+ * 发之前就能改（设计第 4.1 条）。问得慢、先问的后回来时，只认最后一次。
  */
-function HomeComposer({ buddy, tasks, route, onSend }: { buddy: Buddy | null; tasks: { taskId: string; name: string }[]; route: (text: string) => RouteTarget; onSend: (text: string, target: SendTarget) => void }) {
+function HomeComposer({ buddy, tasks, route, onSend }: { buddy: Buddy | null; tasks: { taskId: string; name: string }[]; route: (text: string) => Promise<RouteTarget>; onSend: (text: string, target: SendTarget) => void }) {
   const [text, setText] = useState("");
   const [target, setTarget] = useState<SendTarget>("auto");
   const [guess, setGuess] = useState<RouteTarget>("main");
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLSpanElement>(null);
+  const asked = useRef(0);
   const name = buddy?.name?.trim() || "伙伴";
   const nameOf = (value: RouteTarget) => (value === "main" ? name : tasks.find((task) => task.taskId === value.taskId)?.name ?? name);
   useEffect(() => {
     if (target !== "auto") return;
     const value = text.trim();
-    const timer = window.setTimeout(() => setGuess(value ? route(value) : "main"), 300);
+    const timer = window.setTimeout(() => {
+      const ask = ++asked.current;
+      if (!value) { setGuess("main"); return; }
+      void route(value).then((next) => { if (ask === asked.current) setGuess(next); });
+    }, 300);
     return () => window.clearTimeout(timer);
   }, [text, target, route]);
   const label = target === "auto" ? (text.trim() ? `自动 · ${nameOf(guess)}` : "自动") : nameOf(target);

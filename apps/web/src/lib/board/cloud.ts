@@ -6,6 +6,7 @@ import type {
   TAcceptCardDraftsRequest, TCardBoardResponse, TCardBriefResponse, TCardDetailResponse, TCardPlanBriefResponse, TCardPlanView, TCardSplitListResponse, TCardSplitRequestView, TCardTaskView,
   TCreateLocalDeviceRequest, TCreateLocalDeviceResponse, TLocalDeviceView, TPatchCardRequest, TResearchTopicView,
   TTopicBriefResponse, TTopicDetailResponse, TTopicVersionView, TWorkersResponse,
+  TBackgroundResponse, TClaimSessionStartsResponse, TRouteResponse, TTaskFeedResponse, TTaskPipelineResponse, TWorkHomeResponse,
 } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
 
@@ -50,8 +51,9 @@ const task = (taskId: string) => ({ path: { taskId } });
 // ── 看板 ──
 export const readBoard = (taskId: string) => maybe<TCardBoardResponse>(browserApi.GET("/api/plan-tasks/{taskId}/cards", { params: task(taskId) }));
 export const planCards = (taskId: string, hint?: string) => unwrap<TCardPlanView>(browserApi.POST("/api/plan-tasks/{taskId}/card-plans", { params: task(taskId), body: hint ? { hint } : {} }) as Promise<Result<TCardPlanView>>);
-export const acceptDrafts = (taskId: string, drafts: TAcceptCardDraftsRequest["drafts"]) =>
-  unwrap(browserApi.POST("/api/plan-tasks/{taskId}/card-drafts/accept", { params: task(taskId), body: { drafts } })).then((data) => data.cards as TCardTaskView[]);
+/** start：新首页第 4.4 节，交给 Agent 的卡同时登记要开工（配对的电脑上的网页认领后开）。 */
+export const acceptDrafts = (taskId: string, drafts: TAcceptCardDraftsRequest["drafts"], start = false) =>
+  unwrap(browserApi.POST("/api/plan-tasks/{taskId}/card-drafts/accept", { params: task(taskId), body: { drafts, ...(start ? { start } : {}) } })).then((data) => data.cards as TCardTaskView[]);
 export const dismissDraft = (draftId: string) => unwrap(browserApi.POST("/api/card-drafts/{id}/dismiss", { params: id(draftId) }));
 export const shipPending = (taskId: string, statement?: string) =>
   unwrap(browserApi.POST("/api/plan-tasks/{taskId}/deliverable/versions/from-pending", { params: task(taskId), body: statement ? { statement } : {} }));
@@ -82,7 +84,9 @@ export const readWorkers = () => maybe<TWorkersResponse>(browserApi.GET("/api/me
 // ── 本机设备 ──
 export const listDevices = () => maybe(browserApi.GET("/api/me/local-devices")).then((data) => (data?.devices ?? []) as TLocalDeviceView[]);
 export const createDevice = (body: TCreateLocalDeviceRequest) => unwrap<TCreateLocalDeviceResponse>(browserApi.POST("/api/me/local-devices", { body }) as Promise<Result<TCreateLocalDeviceResponse>>);
-export const revokeDevice = (deviceId: string) => unwrap(browserApi.DELETE("/api/me/local-devices/{id}", { params: id(deviceId) }));
+/** 回 204，没有回包。 */
+export const revokeDevice = (deviceId: string) => unwrap(browserApi.DELETE("/api/me/local-devices/{id}", { params: id(deviceId) }))
+  .then(() => undefined, (error: unknown) => { if (!(error instanceof CloudError && error.status === 204)) throw error; });
 
 // ── 调研专题 ──
 export const listTopics = (status: "active" | "archived" = "active") =>
@@ -95,3 +99,15 @@ export const readTopicVersion = (topicId: string, number: number) =>
 /** critics：评审会用的挑刺岗位 id（本人点的），不传用团队里的前三个。 */
 export const topicBrief = (topicId: string, critics?: string[]) =>
   unwrap<TTopicBriefResponse>(browserApi.GET("/api/me/topics/{id}/brief", { params: { path: { id: topicId }, ...(critics?.length ? { query: { critics: critics.join(",") } } : {}) } }) as Promise<Result<TTopicBriefResponse>>);
+
+// ── 新首页（workHome.ts）：B 的实现到之前这几个读接口是 404，网页回落到上面几份数据自己拼（lib/home/derive.ts）──
+export const readWorkHome = () => maybe<TWorkHomeResponse>(browserApi.GET("/api/me/work-home") as Promise<Result<TWorkHomeResponse>>);
+export const readBackground = (scope: string) => maybe<TBackgroundResponse>(browserApi.GET("/api/me/background", { params: { query: { scope } } }) as Promise<Result<TBackgroundResponse>>);
+export const readTaskFeed = (taskId: string) => maybe<TTaskFeedResponse>(browserApi.GET("/api/me/tasks/{taskId}/feed", { params: task(taskId) }) as Promise<Result<TTaskFeedResponse>>);
+/** Task 管线的对话（第一次打开时建）；收发走现有对话接口，scope 是 plan-task:<taskId>。 */
+export const openPipeline = (taskId: string) => maybe<TTaskPipelineResponse>(browserApi.POST("/api/me/tasks/{taskId}/pipeline", { params: task(taskId) }) as Promise<Result<TTaskPipelineResponse>>);
+export const routeMessage = (text: string) => maybe<TRouteResponse>(browserApi.POST("/api/me/route", { body: { text } }) as Promise<Result<TRouteResponse>>);
+/** 认领「要开工」：一条只给一处；本机起不来就 release 放回去。 */
+export const claimStarts = (deviceId: string) => maybe<TClaimSessionStartsResponse>(browserApi.POST("/api/me/session-starts/claim", { body: { deviceId } }) as Promise<Result<TClaimSessionStartsResponse>>);
+export const releaseStart = (startId: string) => unwrap(browserApi.POST("/api/me/session-starts/{id}/release", { params: id(startId) }))
+  .then(() => undefined, (error: unknown) => { if (!(error instanceof CloudError && error.status === 204)) throw error; });

@@ -4,10 +4,10 @@
  * 展示区里的两种对话：
  * - 总管线：伙伴唯一的对话（总线程），一直聊下去；页头正中是伙伴形象（从左上角飞过来）。
  * - Task 管线：每件 Task 一条单独的对话。先聊计划，规划员拆好后在对话里给出开工的选项框；开了以后写开了哪几个子会话，
- *   验收结果、这一单全部完成也由网页按时间插进这条对话。B 的对话接口到之前是这个标签页里的假对话（lib/home/pipeline）。
+ *   验收行（过了、受阻、约定都达到、返工）也由网页按时间插进这条对话。B 的接口没上时是这个标签页里的假对话（lib/home/pipeline）。
  * 首页输入框发来的话（outbox）进了对应的对话就发出去。
  */
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Info } from "lucide-react";
 import type { THomePlanTask } from "@warmap/contracts";
 import { BuddyMark } from "@/components/buddy/BuddyMark";
@@ -15,16 +15,16 @@ import type { Buddy } from "@/components/buddy/useBuddy";
 import { ChatColumn } from "@/components/rail/ChatPane";
 import { PendingBoxes, PendingChip } from "@/components/work/DecisionBox";
 import { WorkTimeline, type TimedBlock } from "@/components/work/WorkTimeline";
-import { workNotes } from "@/components/work/WorkNotes";
 import type { ConversationData } from "@/conversation/useConversation";
 import { useConversation } from "@/conversation/useConversation";
+import { openPipeline } from "@/lib/board/cloud";
 import { usePipelineConversation } from "@/lib/home/pipeline";
 import { infoHref } from "@/lib/home/derive";
 import type { HomeTask, SubSession } from "@/lib/home/types";
 import type { WorkHomeApi } from "@/lib/home/useWorkHome";
 import { useHandheld } from "@/components/ui/useHandheld";
 import { PlanDecision, PlanningLine, StartedRecord } from "./PlanDecision";
-import { BlockedDecision, MergeDecision } from "./TaskDecisions";
+import { feedBlocks, useTaskFeed } from "./TaskFeed";
 import { subHref } from "./LeftColumn";
 import { useDarkScheme, useViewChrome } from "./view";
 import h from "@/styles/home.module.css";
@@ -71,7 +71,7 @@ export function BuddyView({ buddy, outbox, consume, onSpeaking }: { buddy: Buddy
   );
 }
 
-export function PipelineView({ task, home, api, buddy, outbox, consume, go, onSplit }: {
+type PipelineProps = {
   task: THomePlanTask;
   home: HomeTask | null;
   api: WorkHomeApi;
@@ -80,22 +80,55 @@ export function PipelineView({ task, home, api, buddy, outbox, consume, go, onSp
   consume: (id: number) => void;
   go: (href: string) => void;
   onSplit: (taskId: string) => void;
-}) {
+};
+
+/** B 的 Task 管线（live）用真的对话；接口没上时是这个标签页里的假对话（lib/home/pipeline）。 */
+export function PipelineView(props: PipelineProps) {
+  return props.api.live ? <LivePipeline {...props} /> : <MockPipeline {...props} />;
+}
+
+/** 第一次打开时建这件 Task 的管线对话（POST /api/me/tasks/:taskId/pipeline），收发走现有对话接口，scope 是 plan-task:<taskId>。 */
+function LivePipeline(props: PipelineProps) {
+  const { taskId } = props.task;
+  const [scope, setScope] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void openPipeline(taskId).then((answer) => answer?.scope ?? `plan-task:${taskId}`, () => `plan-task:${taskId}`).then((next) => { if (alive) setScope(next); });
+    return () => { alive = false; };
+  }, [taskId]);
+  return scope ? <LivePipelineBody scope={scope} {...props} /> : <div className={h.convo} aria-busy />;
+}
+
+function LivePipelineBody({ scope, ...props }: PipelineProps & { scope: string }) {
+  const data = useConversation(scope);
+  return <PipelineBody data={data} {...props} />;
+}
+
+function MockPipeline(props: PipelineProps) {
+  const { task, api, onSplit } = props;
+  const board = api.work.boards[task.taskId] ?? null;
+  // 已经拆过、开过的 Task，假对话开头不再问「先怎么开始」（刷新后不会再拆一遍）；看板读到以前先不开对话：要先知道拆没拆过。
+  const begun = !!(board?.plan || board?.drafts.length || api.work.workers.some((worker) => worker.taskId === task.taskId));
+  const pipelineTask = useMemo(() => ({ taskId: task.taskId, name: task.name, criteria: task.criteria }), [task.taskId, task.name, task.criteria]);
+  const data = usePipelineConversation(board ? pipelineTask : null, { split: () => onSplit(task.taskId) }, begun);
+  return <PipelineBody data={data} {...props} />;
+}
+
+/**
+ * Task 管线的对话，网页按时间插进去的几块：规划员在拆（一行）、拆好的派活单（开工的选项框）、开了哪几个子会话、
+ * 验收行（过了、受阻、约定都达到、返工，TaskFeed）。
+ */
+function PipelineBody({ data, task, home, api, buddy, outbox, consume, go }: PipelineProps & { data: ConversationData }) {
   const chrome = useViewChrome();
   const dark = useDarkScheme();
   const handheld = useHandheld();
   const { work } = api;
   const board = work.boards[task.taskId] ?? null;
   const mine = useMemo(() => work.workers.filter((worker) => worker.taskId === task.taskId), [work.workers, task.taskId]);
-  // 已经拆过、开过的 Task，假对话开头不再问「先怎么开始」（刷新后不会再拆一遍）。
-  const begun = !!(board?.plan || board?.drafts.length || mine.length);
-  // 看板读到以前先不开对话：要先知道拆没拆过。
-  const pipelineTask = useMemo(() => ({ taskId: task.taskId, name: task.name, criteria: task.criteria }), [task.taskId, task.name, task.criteria]);
-  const data = usePipelineConversation(board ? pipelineTask : null,
-    { split: () => onSplit(task.taskId) }, begun);
   useOutbox(data, task.taskId, outbox, consume);
+  const feed = useTaskFeed(task.taskId, board, api);
   const subs = useMemo(() => home?.subSessions ?? [], [home]);
-  const changed = work.refresh;
+  const changed = api.refresh;
   const blocks = useMemo<TimedBlock[]>(() => {
     const list: TimedBlock[] = [];
     const planner = mine.find((worker) => worker.kind === "plan" && worker.state !== "done");
@@ -114,17 +147,9 @@ export function PipelineView({ task, home, api, buddy, outbox, consume, go, onSp
     if (first && cardSubs.length) {
       list.push({ key: `started:${task.taskId}`, at: first, node: <StartedRecord subs={[...cardSubs].sort(byTitle(cards))} onOpen={(sub: SubSession) => go(subHref(sub))} /> });
     }
-    // 验收以后要你拍板的：受阻（按这个改 / 我去看看 / 仍然通过）、验收过了还没合回（合进 main / 先不合）。
-    for (const worker of cards) {
-      const handback = worker.item!.card?.handback;
-      const at = handback?.finishedAt ?? worker.endedAt ?? new Date().toISOString();
-      if (worker.state === "doing" && worker.mark === "blocked") list.push({ key: `blocked:${worker.key}`, at, node: <BlockedDecision worker={worker} go={go} onChanged={() => void changed()} /> });
-      if (worker.state === "done" && worker.session?.workspace?.kind === "worktree") list.push({ key: `merge:${worker.key}`, at: `${at}~`, node: <MergeDecision worker={worker} onChanged={() => void changed()} /> });
-    }
-    list.push(...workNotes({ workers: mine, tasks: [task], boards: work.boards,
-      on: { openWorker: (key) => { const worker = mine.find((entry) => entry.key === key); if (worker?.cardId) go(subHref({ kind: "card", id: worker.cardId })); }, openTask: (taskId) => go(infoHref(taskId)), changed: () => void changed() } }));
+    list.push(...feedBlocks({ items: feed, workers: mine, taskId: task.taskId, go, onSay: (text) => void data.send(text, []), onChanged: () => void changed() }));
     return list;
-  }, [mine, board, task, work.roles, work.boards, handheld, changed, data, subs, go]);
+  }, [mine, board, task, work.roles, handheld, changed, data, subs, go, feed]);
   return (
     <PendingBoxes>
       <div className={h.convo} data-testid="pipeline-view">

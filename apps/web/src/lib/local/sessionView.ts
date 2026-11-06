@@ -64,6 +64,9 @@ export function foldEvent(view: SessionView, event: TLocalSessionEvent): Session
       if (event.status === "running") next.interrupted = false;
       if (event.status === "failed") next.entries = [...view.entries, { kind: "notice", ...base, level: "error", text: event.reason ?? "执行方异常退出" }];
       return next;
+    // 后台任务（子 agent、后台命令）不进对话记录：右栏读会话摘要里的 background。
+    case "background":
+      return next;
     case "agent_info":
       next.agentVersion = event.version;
       return next;

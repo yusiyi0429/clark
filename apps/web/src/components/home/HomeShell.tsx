@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ChevronLeft, ListTodo } from "lucide-react";
+import type { THomePlanTask } from "@warmap/contracts";
 import type { Account } from "@/components/AccountMenu";
 import { useBuddy } from "@/components/buddy/useBuddy";
 import { CardSession } from "@/components/cards/CardSession";
@@ -25,15 +26,17 @@ import { ShellToast } from "@/components/rail/V2Shell";
 import { WorkspaceContext, type WorkspaceApi } from "@/components/shell/WorkspaceContext";
 import { useHandheld } from "@/components/ui/useHandheld";
 import { LocalRunnerProvider, useLocalRunner } from "@/lib/local/LocalRunnerProvider";
-import { planStartRequest, readLast } from "@/lib/local/start";
+import { planStartRequest, readLast, startTopic } from "@/lib/local/start";
 import { useAutoReturn } from "@/lib/board/useAutoReturn";
-import { listSplits, registerSplit, removeSplit } from "@/lib/board/cloud";
+import { claimStarts, listSplits, registerSplit, releaseStart, removeSplit, routeMessage } from "@/lib/board/cloud";
+import { gateOf, gateText } from "@/components/board/MonthLanes";
 import { showWorkspaceToast } from "@/lib/toast";
 import { modelForTier } from "@/lib/team/roles";
 import { startBatch, startedText, type StartPlan } from "@/lib/work/queue";
 import type { Worker } from "@/lib/work/workers";
 import { HOME_HREF, routeText } from "@/lib/home/derive";
-import type { BackgroundItem } from "@/lib/home/types";
+import type { BackgroundItem, RouteTarget } from "@/lib/home/types";
+import { useBackground } from "@/lib/home/useBackground";
 import { useWorkHome } from "@/lib/home/useWorkHome";
 import { BackgroundPanel, BackgroundStrip } from "./BackgroundPanel";
 import { BuddyView, PipelineView, type Outbox } from "./Conversations";
@@ -47,6 +50,8 @@ const PANEL_KEY = "tianshu-home-panel-v1";
 /** 伙伴这一轮调了「登记拆卡」（useConversation 发出）。 */
 const SPLIT_EVENT = "card-split-registered";
 const FLIGHT_MS = 280;
+/** 认领到了开不起来、放回去以后，隔一会再认领；树上一直挂着要开工的，也隔一会再看一次（别处认领了又没开、过期了）。 */
+const CLAIM_RETRY_MS = 60_000;
 const FLIGHT_EASE = "cubic-bezier(0.2, 0.8, 0.2, 1)";
 const ICON = { size: 16, strokeWidth: 1.5, "aria-hidden": true } as const;
 
@@ -113,11 +118,15 @@ function HomeFrame({ account }: { account: Account }) {
     ], { duration: FLIGHT_MS, easing: FLIGHT_EASE });
   }, [view.kind, handheld]);
 
-  // ---- 首页输入框：自动（先用关键词）、伙伴、某件 Task；跳进那条对话，那边发出去 ----
+  // ---- 首页输入框：自动（只在管线之间选：伙伴或某件 Task）、伙伴、某件 Task；跳进那条对话，那边发出去 ----
+  // 自动走 B 的 POST /api/me/route（只按关键词）；接口没上时网页按同样的规则自己分。
   const tasks = useMemo(() => work.plan?.tasks ?? [], [work.plan]);
-  const route = useCallback((text: string) => routeText(text, tasks), [tasks]);
-  const send = useCallback((text: string, target: SendTarget) => {
-    const resolved = target === "auto" ? route(text) : target;
+  const route = useCallback(async (text: string): Promise<RouteTarget> => {
+    if (api.live) { const answer = await routeMessage(text).catch(() => null); if (answer) return answer.target; }
+    return routeText(text, tasks);
+  }, [api.live, tasks]);
+  const send = useCallback(async (text: string, target: SendTarget) => {
+    const resolved = target === "auto" ? await route(text) : target;
     outboxId.current += 1;
     setOutbox({ id: outboxId.current, target: resolved === "main" ? "main" : resolved.taskId, text });
     go(resolved === "main" ? "/me/work/buddy" : `/me/work/tasks/${encodeURIComponent(resolved.taskId)}`);
@@ -127,9 +136,11 @@ function HomeFrame({ account }: { account: Account }) {
   // ---- 开规划员、开卡（一次交给本机）----
   const here = local.phase === "ready" && !handheld;
   const changed = useCallback(() => { void api.refresh(); }, [api]);
-  const start = useCallback(async (cards: Worker[], planners: { taskId: string; splitId?: string }[]) => {
+  /** 一批交给本机：开了哪几张卡（卡 id）。 */
+  const start = useCallback(async (cards: Worker[], planners: { taskId: string; splitId?: string }[]): Promise<Set<string>> => {
+    const opened = new Set<string>();
     const cwd = local.folders.find((folder) => folder.id === readLast().folderId)?.path ?? local.folders[0]?.path;
-    if (!cwd && cards.length) { showWorkspaceToast({ text: "先在插件页加一个文件夹" }); return; }
+    if (!cwd && cards.length) { showWorkspaceToast({ text: "先在插件页加一个文件夹" }); return opened; }
     const roles = work.roles?.roles ?? [];
     const plans: StartPlan[] = cards.flatMap((worker) => {
       const role = roles.find((entry) => entry.id === worker.role.id) ?? null;
@@ -148,6 +159,7 @@ function HomeFrame({ account }: { account: Account }) {
       })));
       const ready = jobs.filter((job): job is typeof job & { request: NonNullable<typeof job.request> } => !!job.request);
       const result = await startBatch(local.runner, plans, ready.map((job) => job.request));
+      plans.forEach((plan, index) => { if (result.opened[index]) opened.add(plan.item.id); });
       const missed = [...jobs.filter((job) => !job.request), ...ready.filter((_, index) => !result.opened[plans.length + index])];
       await giveBack(missed);
       await local.refresh();
@@ -158,6 +170,7 @@ function HomeFrame({ account }: { account: Account }) {
       showWorkspaceToast({ text: error instanceof Error ? error.message : "没开起来，请重试" });
       changed();
     }
+    return opened;
   }, [local, work.roles, changed]);
   const split = useCallback(async (taskId: string) => {
     if (here) { await start([], [{ taskId }]); return; }
@@ -167,11 +180,16 @@ function HomeFrame({ account }: { account: Account }) {
 
   // 等开工的卡和拆卡登记：这台电脑连着本机时自己开（每件只试一次，没开成的照旧等开工）。
   // 同一台电脑开着几个标签页时排着来（Web Locks），轮到时先读本机现在的会话，已经有会话的卡不再开。
-  // B 的「登记 + 认领」（session-starts/claim）接上以后，换成认领到的才开，别的电脑也不会重复开。
+  // B 的「登记 + 认领」在时（live），登记了要开工的卡和专题走下面的认领；这里开拆卡登记（照旧：先删登记，删成了才开），
+  // 和没登记、等开工的卡（派活单在这台电脑上马上开、有几张没开起来的，再试一次）。
+  const subs = useMemo(() => [...data.missions.flatMap((mission) => mission.tasks.flatMap((task) => task.subSessions)), ...data.other.subSessions], [data]);
+  const autoStartKey = subs.filter((sub) => sub.autoStart).map((sub) => sub.id).sort().join(",");
   const tried = useRef(new Set<string>());
   useEffect(() => {
     if (!here) return;
-    const waiting = work.workers.filter((worker) => worker.reason === "start" && !tried.current.has(worker.key) && ((worker.kind === "card" && worker.item) || worker.splitId));
+    const claimable = new Set(autoStartKey ? autoStartKey.split(",") : []);
+    const waiting = work.workers.filter((worker) => worker.reason === "start" && !tried.current.has(worker.key)
+      && ((worker.kind === "card" && worker.item && !(api.live && worker.cardId && claimable.has(worker.cardId))) || worker.splitId));
     if (!waiting.length) return;
     waiting.forEach((worker) => tried.current.add(worker.key));
     const run = async () => {
@@ -182,7 +200,46 @@ function HomeFrame({ account }: { account: Account }) {
       if (cards.length || planners.length) await start(cards, planners);
     };
     void (typeof navigator !== "undefined" && navigator.locks ? navigator.locks.request("tianshu-auto-start", run) : run());
-  }, [here, work.workers, start, local.runner, local.sessions]);
+  }, [here, api.live, autoStartKey, work.workers, start, local.runner, local.sessions]);
+
+  // 自动开工（第 4.4 节，B 的契约）：树上有登记了要开工的子会话，就在这台配对的电脑上认领（一条只给一处），认领到的交给本机；
+  // 开不起来的放回去（release），隔一会再认领。已经在这台电脑上跑着的不再开。没加文件夹、没有模型时开不起来，先不认领。
+  // 只在要开工的那几个变了、或隔一会时再看（不跟着每次刷新）。
+  const claiming = useRef(false);
+  const latest = useRef({ workers: work.workers, subs, start, local, changed });
+  useEffect(() => { latest.current = { workers: work.workers, subs, start, local, changed }; });
+  const [claimTick, setClaimTick] = useState(0);
+  const canOpen = local.folders.length > 0 && local.models.length > 0;
+  useEffect(() => {
+    const deviceId = api.deviceId;
+    if (!here || !api.live || !deviceId || !canOpen || !autoStartKey || claiming.current) return;
+    claiming.current = true;
+    const run = async () => {
+      const { workers, subs, start, local, changed } = latest.current;
+      const claimed = (await claimStarts(deviceId).catch(() => null))?.starts ?? [];
+      if (!claimed.length) return;
+      const sessions = await local.runner.listSessions().catch(() => local.sessions);
+      const busy = new Set(sessions.flatMap((session) => [session.subject.cardId, session.subject.topicId].filter((id): id is string => !!id)));
+      const cards = claimed.flatMap((entry) => {
+        const worker = entry.kind === "card" && entry.cardId && !busy.has(entry.cardId) ? workers.find((candidate) => candidate.cardId === entry.cardId && candidate.item) : undefined;
+        return worker ? [worker] : [];
+      });
+      const opened = cards.length ? await start(cards, []) : new Set<string>();
+      const model = local.models.find((entry) => entry.isDefault) ?? local.models[0];
+      for (const entry of claimed) {
+        if (entry.kind !== "topic" || !entry.topicId || busy.has(entry.topicId) || !model) continue;
+        const title = subs.find((sub) => sub.id === entry.topicId)?.title ?? "";
+        try { await startTopic(local.runner, { id: entry.topicId, title }, model); opened.add(entry.topicId); } catch { /* 放回去 */ }
+      }
+      const done = (id: string | null) => !!id && (opened.has(id) || busy.has(id));
+      await Promise.all(claimed.filter((entry) => !done(entry.cardId ?? entry.topicId)).map((entry) => releaseStart(entry.id).catch(() => undefined)));
+      if (opened.size) { await local.refresh(); changed(); }
+    };
+    let retry = 0;
+    void (typeof navigator !== "undefined" && navigator.locks ? navigator.locks.request("tianshu-auto-start", run) : run())
+      .finally(() => { claiming.current = false; retry = window.setTimeout(() => setClaimTick((n) => n + 1), CLAIM_RETRY_MS); });
+    return () => window.clearTimeout(retry);
+  }, [here, api.live, api.deviceId, canOpen, autoStartKey, claimTick]);
 
   // 伙伴在这个标签页的回复里登记了拆卡：这一轮之前没见过的登记，本机连着就直接开规划员。
   const knownSplits = useRef(new Set<string>());
@@ -205,12 +262,19 @@ function HomeFrame({ account }: { account: Account }) {
   useAutoReturn(local.runner, here, allCards, local.sessions, changed);
 
   // ---- 后台任务 ----
-  const items = api.background(scopeOf(view));
+  const [stopped, setStopped] = useState<ReadonlySet<string>>(() => new Set());
+  const items = useBackground(scopeOf(view), api, stopped);
   const running = items.filter((item) => item.state === "running" || item.state === "queued").length;
   const model = local.models.find((entry) => entry.isDefault)?.label ?? local.models[0]?.label ?? null;
+  // 规划员、验收员停会话；子 agent、后台命令只停那一项，会话接着做。
   const stop = async (item: BackgroundItem) => {
     if (!item.sessionId) return;
-    try { await local.runner.kill(item.sessionId); await local.refresh(); changed(); }
+    try {
+      if ((item.kind === "subagent" || item.kind === "command") && item.itemId) await local.runner.stopBackground(item.sessionId, item.itemId);
+      else { await local.runner.kill(item.sessionId); setStopped((current) => new Set(current).add(item.sessionId!)); }
+      await local.refresh();
+      changed();
+    }
     catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没停下，请重试" }); }
   };
   const panel = (extra: { onCollapse?: () => void; onClose?: () => void }) => (
@@ -223,24 +287,32 @@ function HomeFrame({ account }: { account: Account }) {
   }), [go, account.personId]);
 
   // ---- 展示区 ----
-  const planTask = (taskId: string) => tasks.find((task) => task.taskId === taskId) ?? null;
   const homeTask = (taskId: string) => data.missions.flatMap((mission) => mission.tasks).find((task) => task.taskId === taskId) ?? null;
+  // 本月计划里的 Task 带标准；之前月份没了结、留在树上的（B 的 work-home 才有）只有名字和一行小字。
+  const planTask = (taskId: string): THomePlanTask | null => {
+    const found = tasks.find((task) => task.taskId === taskId);
+    if (found) return found;
+    const home = homeTask(taskId);
+    return home ? { taskId, missionId: home.missionId, name: home.name, doneDefinition: home.subtitle, criteria: [] } : null;
+  };
   const chrome = useMemo(() => (handheld ? {
     lead: <button type="button" className={h.icon} aria-label="返回" onClick={() => go(HOME_HREF)} data-testid="phone-back"><ChevronLeft {...ICON} /></button>,
     trail: <button type="button" className={h.icon} aria-label="后台任务" onClick={() => setSheet(true)} data-testid="phone-background"><ListTodo {...ICON} />{running ? <em className={h.badge}>{running}</em> : null}</button>,
   } : { lead: null, trail: null }), [handheld, go, running]);
   const display = (current: View) => {
     switch (current.kind) {
-      case "home": return <HomeView data={data} api={api} buddy={buddy} loading={!work.plan} go={go} route={route} onSend={send} />;
+      case "home": return <HomeView data={data} api={api} buddy={buddy} loading={!api.ready} go={go} route={route} onSend={send} />;
       case "buddy": return <BuddyView buddy={buddy} outbox={outbox} consume={consume} onSpeaking={setSpeaking} />;
       case "task": {
         const task = planTask(current.taskId);
         return task ? <PipelineView key={task.taskId} task={task} home={homeTask(task.taskId)} api={api} buddy={buddy} outbox={outbox} consume={consume} go={go} onSplit={(taskId) => void split(taskId)} />
-          : <Missing loading={!work.plan} onGone={() => { if (outbox?.target === current.taskId) consume(outbox.id); }} />;
+          : <Missing loading={!api.ready} onGone={() => { if (outbox?.target === current.taskId) consume(outbox.id); }} />;
       }
       case "info": {
         const task = planTask(current.taskId);
-        return task && work.plan ? <TaskInfo plan={work.plan} task={task} go={go} /> : <Missing loading={!work.plan} />;
+        if (!task) return <Missing loading={!api.ready} />;
+        const mission = data.missions.find((entry) => entry.missionId === task.missionId)?.title ?? null;
+        return <TaskInfo task={task} mission={mission} gate={work.plan ? gateText(gateOf(work.plan, task.missionId)) : null} go={go} />;
       }
       case "card": return <CardSession key={current.id} cardId={current.id} embedded />;
       case "topic": return <TopicSession key={current.id} topicId={current.id} embedded />;
@@ -248,7 +320,7 @@ function HomeFrame({ account }: { account: Account }) {
   };
 
   const left = (
-    <LeftColumn data={data} view={view} buddy={buddy} speaking={speaking} go={go} phone={handheld}
+    <LeftColumn data={data} view={view} buddy={buddy} speaking={speaking} go={go} phone={handheld} account={account}
       top={handheld && data.waiting.length ? (
         <section aria-label="等你" className={h.phoneWaiting}>
           <p className={h.sectionTitle}>等你 <span>{data.waiting.length}</span></p>

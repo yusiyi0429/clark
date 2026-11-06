@@ -50,13 +50,15 @@ export function usePipelineConversation(task: PipelineTask | null, handlers: Pip
   const thread = useSyncExternalStore(subscribe, () => threads.get(taskId) ?? EMPTY, () => EMPTY);
   const handlersRef = useRef(handlers);
   useEffect(() => { handlersRef.current = handlers; });
+  // 开头那句：对话开了就摆出来；首页发来的那句可能先到（子组件的 effect 先跑），发的时候没有开头也先补上（send 跟着 task 换，拿的是这一次的）。
   useEffect(() => { if (task && !threads.has(task.taskId)) put(task.taskId, () => ({ messages: [opening(task, begun)], streaming: false })); }, [task, begun]);
 
   const send = useCallback(async (message: string, _references: unknown[], options: { answers?: { input: TAskAnswerInput; record: TAskAnswerRecord } } = {}) => {
     if (!taskId) return false;
     const now = new Date().toISOString();
-    put(taskId, (current) => ({ streaming: true, messages: [...current.messages, {
-      sequence: current.messages.length + 1, role: "user", content: message, createdAt: now, ...(options.answers ? { answers: options.answers.record } : {}),
+    const seed = !threads.has(taskId) && task ? [opening(task, begun)] : [];
+    put(taskId, (current) => ({ streaming: true, messages: [...seed, ...current.messages, {
+      sequence: seed.length + current.messages.length + 1, role: "user", content: message, createdAt: now, ...(options.answers ? { answers: options.answers.record } : {}),
     }] }));
     await new Promise((resolve) => window.setTimeout(resolve, 700));
     put(taskId, (current) => ({ streaming: false, messages: [...current.messages, {
@@ -65,13 +67,14 @@ export function usePipelineConversation(task: PipelineTask | null, handlers: Pip
     // 回完这一句再开规划员：「拆卡中」那一行排在伙伴这句话后面。
     if (options.answers?.record.items[0]?.answer === SPLIT_LABEL) handlersRef.current.split();
     return true;
-  }, [taskId]);
+  }, [taskId, task, begun]);
 
   return useMemo(() => ({
     scope: `pipeline:${taskId}`, viewingMaterialEditable: false, messages: thread.messages,
     status: thread.streaming ? "streaming" : "complete", streaming: thread.streaming, thinking: thread.streaming, partial: "", stage: "thinking", startedAt: thread.streaming ? Date.now() : 0,
     route: null, progress: { label: null, checked: 0 }, steps: [], readScope: null, rescope: async () => false, thought: null, error: null, recovery: null, lastReply: null,
-    historyStatus: "ready", historyError: null, historyWaiting: null, retryHistory: noop, attachments: [], uploading: false, attachmentError: null,
+    // 看板读到以前（taskId 为空）算还在读：首页发来的那句等对话开了再发，不会先被吃掉。
+    historyStatus: taskId ? "ready" : "loading", historyError: null, historyWaiting: null, retryHistory: noop, attachments: [], uploading: false, attachmentError: null,
     uploadFiles: async () => undefined, removeAttachment: noop, send, stop: noop,
   }) as unknown as ConversationData, [taskId, thread, send]);
 }

@@ -58,6 +58,8 @@ export interface LocalRunner {
   mergeSession(id: string): Promise<TLocalMergeResponse>;
   /** 回答执行方的提问：choices 是每个问题选中的选项，text 是另外写的话；已答或已作废是 409。 */
   answerQuestion(id: string, requestId: string, body: TLocalQuestionAnswerRequest): Promise<TLocalSessionSummary>;
+  /** 停会话里的一个后台任务（子 agent、后台命令），会话本身不停；不在跑、进程已退出、没有这一项是 409。 */
+  stopBackground(id: string, itemId: string): Promise<TLocalSessionSummary>;
   /** 读一个会话的事件流，断了自己重连（带 Last-Event-ID），直到 signal 中止。 */
   watch(id: string, watch: EventWatch): Promise<void>;
 }

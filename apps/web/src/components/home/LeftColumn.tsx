@@ -3,14 +3,16 @@
 /**
  * 左栏（新首页设计第 3 节）：最上面是伙伴形象，点了进总管线；进去以后这个位置换成「回到首页」。
  * 在 Task 管线、详情、子会话里，伙伴形象右边多一个回首页的小图标。手机首屏这一行右端是后台任务的图标（和对话页头同一个）。
- * 下面是 Mission 名（只有一个 Mission 时不写）和 Task：标题加一行小字，标题右边的信息图标鼠标移上去才显示（手机上一直显示）。
+ * 下面按 Mission 分组（之前月份没了结的 Mission 标出「10 月」，不按月份硬切）列 Task：标题加一行小字，标题右边的信息图标鼠标移上去才显示（手机上一直显示）。
  * Task 下面缩进一条竖线，是子会话，一行一个，状态用图标。不归任何 Task 的子会话放在最下面一组「其他」，没有就不显示。
+ * 最底下一行是本人：头像加名字，点开是原来的个人菜单（设置、伙伴形象、换头像、退出登录…），旁边是插件页。
  */
 import { useState, type ReactNode } from "react";
-import { House, Info } from "lucide-react";
+import { House, Info, Puzzle } from "lucide-react";
+import { AccountMenu, type Account } from "@/components/AccountMenu";
 import { BuddyMark } from "@/components/buddy/BuddyMark";
 import type { Buddy } from "@/components/buddy/useBuddy";
-import { BUDDY_HREF, HOME_HREF, cardHref, infoHref, taskHref, topicHref } from "@/lib/home/derive";
+import { BUDDY_HREF, HOME_HREF, cardHref, infoHref, monthLabel, taskHref, topicHref } from "@/lib/home/derive";
 import type { HomeTask, SubSession, WorkHomeData } from "@/lib/home/types";
 import { StateIcon } from "./StateIcon";
 import { useViewChrome, type View } from "./view";
@@ -19,7 +21,7 @@ import h from "@/styles/home.module.css";
 const ICON = { size: 16, strokeWidth: 1.5, "aria-hidden": true } as const;
 export const subHref = (sub: Pick<SubSession, "kind" | "id">) => (sub.kind === "card" ? cardHref(sub.id) : topicHref(sub.id));
 
-export function LeftColumn({ data, view, buddy, speaking, go, phone, top }: {
+export function LeftColumn({ data, view, buddy, speaking, go, phone, account, top }: {
   data: WorkHomeData;
   view: View;
   buddy: Buddy | null;
@@ -27,11 +29,11 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, top }: {
   speaking: boolean;
   go: (href: string) => void;
   phone: boolean;
+  account: Account;
   /** 手机首屏：伙伴下面先放「等你」。 */
   top?: ReactNode;
 }) {
   const name = buddy?.name?.trim() || "伙伴";
-  const many = data.missions.length > 1;
   const chrome = useViewChrome();
   return (
     <nav className={h.leftInner} aria-label="Task">
@@ -50,9 +52,9 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, top }: {
       </div>
       {top}
       <div className={h.tree}>
-        {data.missions.map((mission) => (
+        {data.missions.filter((mission) => mission.tasks.length).map((mission) => (
           <section key={mission.missionId} aria-label={mission.title} className={h.group}>
-            {many ? <p className={h.groupTitle}>{mission.title}</p> : null}
+            <p className={h.groupTitle}>{mission.title}{mission.period !== data.period ? <span>{monthLabel(mission.period)}</span> : null}</p>
             {mission.tasks.map((task) => <TaskNode key={task.taskId} task={task} view={view} go={go} />)}
           </section>
         ))}
@@ -63,15 +65,19 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, top }: {
           </section>
         ) : null}
       </div>
+      <div className={h.me}>
+        <AccountMenu account={account} onNavigate={go} />
+        <button type="button" className={h.icon} aria-label="插件" title="插件" onClick={() => go("/me/plugins")}><Puzzle {...ICON} /></button>
+      </div>
     </nav>
   );
 }
 
-/** 完成的子会话收进折叠的「已完成 N」（设计第 4.5 条），不删，点开还能看；Task 交付以后全部收进去，Task 行打勾。 */
+/** 完成的子会话（验收过、合回了）收进折叠的「已完成 N」（设计第 4.5 条），不删，点开还能看；本人确认 Task 完成以后全部收进去，Task 行打勾。 */
 function TaskNode({ task, view, go }: { task: HomeTask; view: View; go: (href: string) => void }) {
   const here = (view.kind === "task" || view.kind === "info") && view.taskId === task.taskId;
   const [open, setOpen] = useState(false);
-  const folded = task.subSessions.filter((sub) => task.delivered || sub.state === "done");
+  const folded = task.subSessions.filter((sub) => task.completedAt || sub.state === "done");
   const live = task.subSessions.filter((sub) => !folded.includes(sub));
   const viewing = folded.some((sub) => (view.kind === "card" || view.kind === "topic") && view.kind === sub.kind && view.id === sub.id);
   const expanded = open || viewing;
@@ -79,7 +85,7 @@ function TaskNode({ task, view, go }: { task: HomeTask; view: View; go: (href: s
     <div className={h.taskNode} data-testid="tree-task">
       <div className={h.taskRow} data-current={view.kind === "task" && here ? "" : undefined}>
         <button type="button" className={h.taskMain} onClick={() => go(taskHref(task.taskId))} aria-current={view.kind === "task" && here ? "page" : undefined}>
-          <span className={h.taskName}>{task.name}{task.delivered ? <StateIcon state="done" /> : null}</span>
+          <span className={h.taskName}>{task.name}{task.completedAt ? <StateIcon state="done" /> : null}</span>
           {task.subtitle ? <span className={h.taskSub}>{task.subtitle}</span> : null}
         </button>
         <button type="button" className={h.info} aria-label={`${task.name} 详情`} title="详情" aria-pressed={view.kind === "info" && here}

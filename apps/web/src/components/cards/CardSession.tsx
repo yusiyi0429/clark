@@ -47,7 +47,7 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
   const { detail, missing, refresh } = useCardDetail(cardId);
   const local = useLocalRunner();
   const handheld = useHandheld();
-  // 和对话列一样：打开落在最新一条，往下长时跟着；本人往上翻了就不拉回。
+  // 和对话列一样：打开落在最新一条，往下长时跟着；本人往上翻了就不拉回。在选项框里批了、答了，接着跟到最新（键盘在框里操作会被当成往上翻）。
   const scroll = useConversationScroll({ streaming: false, resetKey: cardId });
   const ready = local.phase === "ready";
   const session = ready ? latestSessionFor(local.sessions, { cardId }) : null;
@@ -84,14 +84,14 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
 
   const decide = async (requestId: string, decision: "allow" | "deny", { forSession, message }: DecideOptions) => {
     if (!session) return;
-    try { await local.runner.decidePermission(session.id, requestId, { decision, ...(forSession ? { allowForSession: true } : {}), ...(message ? { message } : {}) }); }
+    try { await local.runner.decidePermission(session.id, requestId, { decision, ...(forSession ? { allowForSession: true } : {}), ...(message ? { message } : {}) }); scroll.jumpToLatest(); }
     catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没成功，请重试" }); }
   };
   // 执行方在问本人：事件流里最新的那次，没收到事件时照会话摘要。
   const question = session ? view.question ?? session.pendingQuestion ?? null : null;
   const answer = async (body: TLocalQuestionAnswerRequest) => {
     if (!session || !question) return;
-    try { await local.runner.answerQuestion(session.id, question.requestId, body); await local.refresh(); }
+    try { await local.runner.answerQuestion(session.id, question.requestId, body); await local.refresh(); scroll.jumpToLatest(); }
     catch (error) { showWorkspaceToast({ text: error instanceof Error ? error.message : "没成功，请重试" }); }
   };
   const say = async (text: string) => {

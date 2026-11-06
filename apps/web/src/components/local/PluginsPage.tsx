@@ -25,6 +25,14 @@ const ago = (iso: string | null) => {
   const minutes = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60_000));
   return minutes < 1 ? "刚刚同步" : minutes < 60 ? `${minutes} 分钟前同步` : minutes < 1440 ? `${Math.round(minutes / 60)} 小时前同步` : `${Math.round(minutes / 1440)} 天前同步`;
 };
+// 吊销了「这台」：这台电脑上的网页都不再自动关联（关联会给它再发令牌，等于没吊销），回来靠手点「关联」。
+const relinkKey = "tianshu-revoked-device";
+const holdRelink = (deviceId: string | null) => {
+  try { if (deviceId) localStorage.setItem(relinkKey, deviceId); else localStorage.removeItem(relinkKey); } catch { /* 存不了就照常自动关联 */ }
+};
+const relinkHeld = (deviceId: string) => {
+  try { return localStorage.getItem(relinkKey) === deviceId; } catch { return false; }
+};
 
 export function PluginsPage({ account }: { account: Account }) {
   const handheld = useHandheld();
@@ -48,7 +56,7 @@ function LocalSection({ personName, handheld }: { personName: string; handheld: 
   const ready = local.phase === "ready";
   // 配对好、还没关联云端：自动关联一次（拿设备令牌交给本机）。
   useEffect(() => {
-    if (!ready || !status || status.cloud.linked || linking || handheld) return;
+    if (!ready || !status || status.cloud.linked || linking || handheld || relinkHeld(status.deviceId)) return;
     setLinking(true);
     void linkCloud(local.runner, status, personName).then(() => local.refresh()).catch(() => undefined).finally(() => setLinking(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -73,7 +81,7 @@ function LocalSection({ personName, handheld }: { personName: string; handheld: 
         <div className={s.cardSide}>
           {ready ? <span className={s.state} data-tone="done">已连接</span> : null}
           {ready && agent?.installed && !agent.loggedIn && !handheld ? <HeroButton variant="secondary" size="sm" onPress={() => void local.runner.login().then(() => local.refresh())}>登录 Claude</HeroButton> : null}
-          {ready && status && !status.cloud.linked && !linking && !handheld ? <HeroButton variant="secondary" size="sm" onPress={() => { setLinking(true); void linkCloud(local.runner, status, personName).then(() => local.refresh()).catch((error) => showWorkspaceToast({ text: error instanceof Error ? error.message : "没关联上" })).finally(() => setLinking(false)); }}>关联</HeroButton> : null}
+          {ready && status && !status.cloud.linked && !linking && !handheld ? <HeroButton variant="secondary" size="sm" onPress={() => { setLinking(true); void linkCloud(local.runner, status, personName).then(() => { holdRelink(null); return local.refresh(); }).catch((error) => showWorkspaceToast({ text: error instanceof Error ? error.message : "没关联上" })).finally(() => setLinking(false)); }}>关联</HeroButton> : null}
         </div>
       </div>
       {ready && !handheld ? <ModelsAndFolders /> : null}
@@ -205,21 +213,30 @@ function ModelsAndFolders() {
 function DevicesSection() {
   const local = useLocalRunner();
   const [devices, setDevices] = useState<TLocalDeviceView[] | null>(null);
-  const load = () => void listDevices().then(setDevices).catch(() => setDevices([]));
+  // 这页吊销的留在页上：列表只回没吊销的，重新拉掉了就接在后面；列表里又有了（重新关联过）就不算吊销。
+  const [revoked, setRevoked] = useState<TLocalDeviceView[]>([]);
+  const load = () => void listDevices().then((list) => { setDevices(list); setRevoked((gone) => gone.filter((device) => !list.some((entry) => entry.id === device.id))); }).catch(() => setDevices([]));
   useEffect(load, [local.status?.cloud.linked]);
-  if (!devices?.length) return null;
+  const rows = [...(devices ?? []), ...revoked.filter((device) => !devices?.some((entry) => entry.id === device.id))];
+  if (!rows.length) return null;
   const here = local.status?.deviceId ?? null;
+  const revoke = (device: TLocalDeviceView) => void revokeDevice(device.id).then(() => {
+    if (device.id === here) holdRelink(device.id);
+    setRevoked((gone) => [...gone, device]);
+    showWorkspaceToast({ text: `已吊销 ${device.name}` });
+  }).catch(() => showWorkspaceToast({ text: "没吊销成功，请重试" }));
   return (
     <section className={s.section} aria-label="本机设备">
       <p className={s.lab}>本机设备</p>
       <div className={s.block}>
-        {devices.map((device) => (
+        {rows.map((device) => (
           <div key={device.id} className={s.line}>
             <b>{device.name}</b>
             {device.id === here ? <span className={s.badge}>这台</span> : null}
             <small className={s.faint}>{device.appVersion ? `v${device.appVersion} · ` : ""}{ago(device.lastSyncAt)}</small>
             <span className={s.grow} />
-            <HeroButton variant="ghost" size="sm" onPress={() => void revokeDevice(device.id).then(() => { showWorkspaceToast({ text: `已吊销 ${device.name}` }); load(); }).catch(() => showWorkspaceToast({ text: "没吊销成功，请重试" }))}>吊销</HeroButton>
+            {revoked.some((entry) => entry.id === device.id) ? <span className={s.state}>已吊销</span>
+              : <HeroButton variant="ghost" size="sm" onPress={() => revoke(device)}>吊销</HeroButton>}
           </div>
         ))}
       </div>

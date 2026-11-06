@@ -75,11 +75,12 @@ export function PlanDecision({ task, drafts, roles, handheld, onSay, onChanged }
     try {
       for (const draft of drafts.filter((entry) => edits[entry.id]?.dropped)) await dismissDraft(draft.id).catch(() => undefined);
       // 换过岗位的随放进看板一起记到卡上（没有岗位的是人自己的活）。
+      // 这台电脑能开就马上开（带上每张卡选的模型）；开不了（手机、本机没连）就登记要开工，配对的电脑上开着的网页认领后开（第 4.4 节）。
       const cards = await acceptDrafts(task.taskId, kept.map((draft) => {
         const role = roleOf(draft);
         const changed = (role?.id || null) !== (draftRole(draft)?.id ?? null);
         return { id: draft.id, ...(edits[draft.id]?.title?.trim() ? { title: edits[draft.id]!.title!.trim() } : {}), ...(changed ? { roleId: role?.id || null } : {}) };
-      }));
+      }), !(ready && folder));
       const plans: StartPlan[] = kept.flatMap((draft, index) => {
         const item = cards[index];
         const role = roleOf(draft);

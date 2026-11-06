@@ -1,21 +1,24 @@
 "use client";
 
 /**
- * 新首页的数据（第 7 节草案的形状）。B 的 GET /api/me/work-home 到之前由现有数据拼（derive.ts）：
- * 本月计划、worker（云端列表合本机实时会话）、通知、岗位建议、合不回的卡。换成 B 的接口时只换这里的来源，组件不动。
- * 后台任务（GET /api/me/background 草案）同样在这里按展示区的范围取。
+ * 新首页的数据（B 的契约 workHome.ts）。GET /api/me/work-home 有就用它；B 的实现没上（404）时由现有数据照同一个形状拼（derive.ts）。
+ * live：云端的新首页接口在不在。后台任务、Task 管线的验收行、自动分发、Task 管线对话、自动开工都跟着它走两条路之一。
+ * 会话、看板、worker 这几份照旧读（Task 管线里的派活单、选项框、开工要用），云端接口在时只用来补本机的实时部分。
  */
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { TWorkHomeResponse } from "@warmap/contracts";
 import { useHomePlan } from "@/components/member/home/useHomePlan";
 import { useMemberHome } from "@/components/member/useMemberHome";
-import { useHandheld } from "@/components/ui/useHandheld";
+import { readWorkHome } from "@/lib/board/cloud";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { useMergeIssues } from "@/lib/work/merge";
 import { useWork } from "@/lib/work/useWork";
-import { backgroundItems, deriveWorkHome } from "./derive";
-import type { BackgroundItem, BackgroundScope } from "./types";
+import { deriveWorkHome, webNotices } from "./derive";
+import type { WorkHomeData } from "./types";
 
-type MockChild = BackgroundItem & { taskId: string | null; cardId: string | null; topicId: string | null };
+const POLL_MS = 5000;
+/** 接口还没有（404）时隔一会再问一次：B 的实现上线以后，开着的页面不用刷新也能切过去。 */
+const RECHECK_MS = 60_000;
 
 export function useWorkHome() {
   const planHook = useHomePlan();
@@ -23,42 +26,31 @@ export function useWorkHome() {
   const member = useMemberHome();
   const merges = useMergeIssues();
   const local = useLocalRunner();
-  const handheld = useHandheld();
-  const data = useMemo(() => deriveWorkHome({
-    plan: work.plan, workers: work.workers, boards: work.boards, proposals: work.proposals, merges,
-    notices: { notifications: member.notifications, rounds: member.rounds, unreadThreads: member.unreadThreads, unreadMissionGroups: member.unreadMissionGroups },
-  }), [work.plan, work.workers, work.boards, work.proposals, merges, member.notifications, member.rounds, member.unreadThreads, member.unreadMissionGroups]);
+  const deviceId = local.status?.deviceId ?? null;
+  const [remote, setRemote] = useState<TWorkHomeResponse | null>(null);
+  /** null：还没问过；false：接口还没有（404）。 */
+  const [live, setLive] = useState<boolean | null>(null);
 
-  // 子会话里 Claude Code 开的子 agent、后台命令：本机程序还没报（D 在做）。用假本机程序时照它的卡会话补两种各一条，好看出样子。
-  const mockChildren = useMemo<MockChild[]>(() => {
-    if (local.runner.kind !== "mock") return [];
-    return local.sessions.flatMap((session): MockChild[] => {
-      const cardId = session.subject.kind === "card" ? session.subject.cardId ?? null : null;
-      if (!cardId) return [];
-      const taskId = work.workers.find((worker) => worker.cardId === cardId)?.taskId ?? null;
-      const live = session.status === "running" || session.status === "starting" || session.status === "waiting_permission";
-      const ended = session.status === "exited" || session.status === "failed";
-      if (!live && !ended) return [];
-      return [
-        { id: `cmd:${session.id}`, kind: "command", title: "pnpm test", state: live ? "running" : "done", startedAt: session.createdAt, finishedAt: live ? null : session.updatedAt, stoppable: false, taskId, cardId, topicId: null },
-        ...(ended ? [{ id: `sub:${session.id}`, kind: "subagent" as const, title: "读相关代码", state: "done" as const, startedAt: session.createdAt, finishedAt: session.updatedAt, stoppable: false, taskId, cardId, topicId: null }] : []),
-      ];
-    });
-  }, [local.runner.kind, local.sessions, work.workers]);
+  const loadRemote = useCallback(async () => {
+    const data = await readWorkHome().catch(() => undefined);
+    if (data === undefined) return;
+    setLive(data !== null);
+    setRemote(data);
+  }, []);
+  useEffect(() => {
+    if (live === null) void loadRemote();
+    const timer = window.setInterval(() => { if (document.visibilityState === "visible") void loadRemote(); }, live === false ? RECHECK_MS : POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [loadRemote, live]);
 
-  // 拆完的规划员：云端和 worker 列表里拆完就不再列（派活单接着出），已完成那组由这台电脑上的会话补上。
-  const finishedPlans = useMemo<MockChild[]>(() => local.sessions.flatMap((session): MockChild[] => {
-    const { subject } = session;
-    if (subject.kind !== "plan" || (session.status !== "exited" && session.status !== "failed")) return [];
-    return [{ id: `plan:${session.id}`, kind: "plan", title: "拆卡", state: session.status === "failed" ? "failed" : "done", startedAt: session.createdAt, finishedAt: session.updatedAt,
-      stoppable: false, sessionId: session.id, taskId: subject.taskId ?? null, cardId: null, topicId: null }];
-  }), [local.sessions]);
+  const notices = useMemo(() => ({ notifications: member.notifications, rounds: member.rounds, unreadThreads: member.unreadThreads, unreadMissionGroups: member.unreadMissionGroups }),
+    [member.notifications, member.rounds, member.unreadThreads, member.unreadMissionGroups]);
+  const derived = useMemo(() => deriveWorkHome({ plan: work.plan, workers: work.workers, boards: work.boards, proposals: work.proposals, merges, notices, deviceId, sessions: local.sessions }),
+    [work.plan, work.workers, work.boards, work.proposals, merges, notices, deviceId, local.sessions]);
+  const data = useMemo<WorkHomeData>(() => (remote ? { ...remote, waiting: [...remote.waiting, ...webNotices(notices)] } : derived), [remote, derived, notices]);
 
-  const canStop = local.phase === "ready" && !handheld;
-  const background = useCallback((scope: BackgroundScope) => backgroundItems({ workers: work.workers, scope, canStop, local: [...finishedPlans, ...mockChildren] }),
-    [work.workers, canStop, finishedPlans, mockChildren]);
-  const refresh = useCallback(async () => { await Promise.all([work.refresh(), member.refresh()]); }, [work, member]);
-  return { data, work, member, background, refresh };
+  const refresh = useCallback(async () => { await Promise.all([work.refresh(), member.refresh(), loadRemote()]); }, [work, member, loadRemote]);
+  return { data, live: live === true, ready: live !== null && (live || !!work.plan), work, member, deviceId, refresh };
 }
 
 export type WorkHomeApi = ReturnType<typeof useWorkHome>;
