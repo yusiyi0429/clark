@@ -111,6 +111,14 @@
 .doc th { color: var(--ink-faint); font-weight: 500; }
 .doc[data-outline] p, .doc[data-outline] li { color: var(--ink-faint); }
 
+/* 「评审」那一版：分歧和建议，一块一张卡。 */
+.review { display: grid; gap: 10px; max-width: 680px; }
+.reviewHead { margin: 0; color: var(--ink); font-size: 15px; font-weight: 650; }
+.reviewBlock { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid #dfe4e9; border-radius: 14px; background: var(--surface); }
+.reviewBlock h3 { margin: 0; color: var(--ink); font-size: 13.5px; font-weight: 650; }
+.reviewBlock[data-kind="split"] { border-left: 3px solid var(--judgment); }
+.reviewBlock[data-kind="advice"] { border-left: 3px solid var(--confirmed); }
+
 @media (max-width: 959px) {
   .head { grid-template-columns: auto minmax(0, 1fr); border-bottom: 0; padding-inline: 14px; }
   .exec { display: none; }

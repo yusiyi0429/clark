@@ -3,6 +3,7 @@
 /**
  * 调研专题页（/me/topics/[id]，第 9 节，原型 v8.4 专题子会话）：左边和本机的 Claude Code 对话，右边当前一版（Markdown），可切到以前的版本，
  * 「存进飞书」「放进下一版」。先出提纲：提纲那一版下面有「按这个提纲写」。
+ * 有了正文以后能开「评审会」（第 19.1、19.6 节）：选 2–3 个挑刺的岗位，本机并行挑刺、合成一份，存成「评审」那一版，按「分歧和建议」排版。
  * 版本由本机经同步报到云端；对话全文只在本机。手机和别的电脑上只能看版本。
  */
 import { useCallback, useEffect, useState } from "react";
@@ -21,6 +22,7 @@ import { startTopic } from "@/lib/local/start";
 import { WAIT_LABEL, canCommand, waitTone } from "@/lib/board/cards";
 import { addTopicVersionToPending, patchTopic, readTopic, readTopicVersion } from "@/lib/board/cloud";
 import { REMARK_PLUGINS } from "@/lib/markdown";
+import { ReviewDialog, ReviewDoc, isReview, reviewText } from "./Review";
 import { showWorkspaceToast } from "@/lib/toast";
 import s from "@/styles/v2-session.module.css";
 
@@ -32,6 +34,7 @@ export function TopicSession({ topicId }: { topicId: string }) {
   const [picked, setPicked] = useState<number | null>(null);
   const [version, setVersion] = useState<TTopicVersionView | null>(null);
   const [starting, setStarting] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
   const load = useCallback(async () => {
     try {
       const data = await readTopic(topicId);
@@ -70,6 +73,7 @@ export function TopicSession({ topicId }: { topicId: string }) {
 
   const { topic } = detail;
   const shown = version ?? detail.current;
+  const hasDraft = detail.versions.some((entry) => entry.kind === "draft");
   const wait = session ? localWait(view) : null;
   const say = async (text: string) => {
     if (!session) return false;
@@ -97,6 +101,7 @@ export function TopicSession({ topicId }: { topicId: string }) {
         <b>{topic.title}</b>
         {shown ? <small>{shown.label}</small> : null}
         <span className={s.grow} />
+        {hasDraft && canAct ? <HeroButton variant="secondary" size="sm" onPress={() => setReviewing(true)}>评审会</HeroButton> : null}
         {shown?.feishuUrl ? <a href={shown.feishuUrl} target="_blank" rel="noopener noreferrer" className={s.tag} data-tone="done">已存进飞书</a>
           : shown && canAct ? <HeroButton variant="secondary" size="sm" onPress={() => void say(`把「${shown.label}」存进飞书，存好把地址交回来。`)}>存进飞书</HeroButton> : null}
         {shown && topic.planTaskId && !handheld ? (shown.deliverable ? <span className={s.tag} data-tone="ver">{shown.deliverable.state === "included" ? `已纳入 v${shown.deliverable.versionNumber}` : `v${shown.deliverable.versionNumber} 准备中`}</span>
@@ -112,7 +117,7 @@ export function TopicSession({ topicId }: { topicId: string }) {
       {shown ? (
         <>
           {shown.note ? <p className={s.note}>{shown.note}</p> : null}
-          <article className={s.doc} data-outline={shown.kind === "outline" || undefined}><Markdown remarkPlugins={REMARK_PLUGINS}>{shown.body}</Markdown></article>
+          {isReview(shown) ? <ReviewDoc body={shown.body} /> : <article className={s.doc} data-outline={shown.kind === "outline" || undefined}><Markdown remarkPlugins={REMARK_PLUGINS}>{shown.body}</Markdown></article>}
           {shown.kind === "outline" && shown.number === detail.current?.number && canAct ? <div className={s.actions}><HeroButton variant="primary" size="sm" onPress={() => void say("按这个提纲写。")}>按这个提纲写</HeroButton></div> : null}
         </>
       ) : <p className={s.faint}>还没有版本</p>}
@@ -147,6 +152,7 @@ export function TopicSession({ topicId }: { topicId: string }) {
           {doc}
         </div>
       )}
+      {reviewing ? <ReviewDialog onClose={() => setReviewing(false)} onStart={async (critics) => { if (await say(reviewText(critics))) { setReviewing(false); showWorkspaceToast({ text: "评审会开始了" }); } }} /> : null}
       {starting ? <StartDialog title={topic.title} needsFolder={false} onClose={() => setStarting(false)} onStart={async (model) => {
         await startTopic(local.runner, topic, model);
         setStarting(false);
