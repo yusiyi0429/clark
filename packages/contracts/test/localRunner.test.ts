@@ -5,6 +5,7 @@ import {
   LocalCreateSessionRequest, LocalModelProfileUpsert, LocalModelProfile, LocalPermissionDecisionRequest, LocalSessionEvent,
   LocalSyncBatchRequest, LocalPairingStatusResponse, LocalSendMessageRequest, LOCAL_RUNNER_ROUTES,
   LocalCreateSessionBatchRequest, LocalCreateSessionBatchResponse, LocalSettingsPatch, LocalSessionSummary, LocalHealthResponse,
+  LocalVerifyBriefResponse, LOCAL_RUNNER_VERIFY_BRIEF_PATH,
 } from "../src/index.js";
 
 const sessionId = "6b0f3a52-4d0c-4c1e-9a43-1f7d2c9b8e10";
@@ -101,6 +102,36 @@ describe("本机程序契约", () => {
     expect(LocalSessionSummary.properties).toHaveProperty("queuePosition");
     expect(LocalHealthResponse.properties).toHaveProperty("slots");
     expect(LOCAL_RUNNER_ROUTES.createSessionBatch).toEqual({ method: "POST", path: "/v1/sessions/batch", auth: true });
+  });
+
+  it("规划员和验收员：会话种类、派活单草稿、验收结论、验收交代（V2 设计第 21 节）", () => {
+    expect(Value.Check(LocalCreateSessionRequest, { subject: { kind: "plan", taskId: "task-9" }, title: "拆卡：登录改版", firstMessage: "拆卡交代" })).toBe(true);
+    const slots = { max: 3, running: 1, queued: 0 };
+    const at = "2026-11-06T02:00:00.000Z";
+    const handbackKey = `${deviceId}:${sessionId}:4`;
+    const plan = { key: `${deviceId}:${sessionId}:2`, sessionId, subject: { kind: "plan", taskId: "task-9" }, occurredAt: at };
+    const verify = { key: `${deviceId}:${sessionId}:3`, sessionId, subject: { kind: "verify", cardId: "card-1", handbackKey }, occurredAt: at };
+    const card = { title: "改登录页", brief: "按约定第 1 条改", doneDefinition: "页面能登录\n有截图", criterionIndex: 1, role: "前端", modelTier: "normal", why: null };
+    const cardPlan = { revision: 1, summary: "两件", steps: [{ title: "先改页面", detail: null }], risks: [], cards: [card, { ...card, criterionIndex: null, role: null }], modelLabel: "haiku", roleId: null, roleVersion: null };
+    const verdict = {
+      passed: false, summary: "第 2 条没证据", beyondScope: ["顺手补个测试"], modelLabel: "haiku", roleId: sessionId, roleVersion: 3,
+      criteria: [{ index: 1, verdict: "met", reason: "能登录", evidence: "截图 A1", fix: null }, { index: 2, verdict: "unmet", reason: "没截图", evidence: null, fix: "补截图" }],
+    };
+    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots, items: [{ ...plan, type: "card_plan", data: cardPlan }, { ...verify, type: "verdict", data: verdict }] })).toBe(true);
+    // 派活单至少一件、最多 8 件，档位只认三档；结论至少判一条
+    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots, items: [{ ...plan, type: "card_plan", data: { ...cardPlan, cards: [] } }] })).toBe(false);
+    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots, items: [{ ...plan, type: "card_plan", data: { ...cardPlan, cards: Array.from({ length: 9 }, () => card) } }] })).toBe(false);
+    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots, items: [{ ...plan, type: "card_plan", data: { ...cardPlan, cards: [{ ...card, modelTier: "max" }] } }] })).toBe(false);
+    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots, items: [{ ...verify, type: "verdict", data: { ...verdict, criteria: [] } }] })).toBe(false);
+    // 卡的会话和验收会话里的结论事件：没过、第几次、受阻没有、送回的改法
+    const base = { seq: 9, at, sessionId };
+    expect(Value.Check(LocalSessionEvent, { ...base, type: "verdict", handbackKey, passed: false, summary: "x", criteria: verdict.criteria, beyondScope: [], failStreak: 2, blocked: true, returnText: "验收没过：…" })).toBe(true);
+    expect(Value.Check(LocalSessionEvent, { ...base, type: "verdict", handbackKey, passed: true, summary: "x", criteria: verdict.criteria, beyondScope: [], failStreak: 0, blocked: false })).toBe(false);
+    // 验收交代：第一句话、交回时的完成标准、验收员岗位（可空）、之前连续没过几次
+    expect(LOCAL_RUNNER_VERIFY_BRIEF_PATH).toBe("/api/local-runner/verify-brief");
+    const role = { id: sessionId, name: "验收员", kind: "reviewer", dutiesMd: "逐条判", practiceMd: "", acceptanceMd: "", tools: ["tianshu"], modelTier: "light", version: 1 };
+    expect(Value.Check(LocalVerifyBriefResponse, { markdown: "# 验收", criteria: ["页面能登录", "有截图"], role, failStreak: 1 })).toBe(true);
+    expect(Value.Check(LocalVerifyBriefResponse, { markdown: "# 验收", criteria: [], role: null, failStreak: 0 })).toBe(false);
   });
 
   it("配对口令只在批准后出现；路由表里只有健康和配对不要口令", () => {
