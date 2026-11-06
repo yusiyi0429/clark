@@ -51,14 +51,16 @@ const QUEUE: Record<QueueReason, TWorkerQueueReason> = { start: "not_dispatched"
 const EPOCH = new Date(0).toISOString();
 const at = (worker: Worker) => worker.endedAt ?? worker.startedAt ?? worker.requestedAt ?? worker.item?.updatedAt ?? EPOCH;
 
-/** 卡验收过以后合回到哪了：这台电脑上的工作树合过了是 merged；合不回（本机报了原因），或过了还没合（本机还不会自己合），是 needs_merge。 */
+/** 卡验收过以后合回到哪了：这台电脑上的工作树合过了是 merged；本机没能自动合回（needsMerge 带原因），或本人点合并没合成，是 needs_merge。 */
 function mergeOf({ cardId, at: when, ws, git }: { cardId: string; at: string; ws: TLocalWorkspace | null; git: TCardGit | null }, merges: MergeIssue[]): TCardMerge | null {
   const issue = merges.find((entry) => entry.cardId === cardId);
   const base = ws?.kind === "worktree" ? ws.baseBranch : git?.baseBranch ?? null;
   if (issue) return { state: "needs_merge", commit: null, baseBranch: base, reason: null, message: issue.text, at: when };
   if (ws?.kind !== "worktree") return null;
   if (ws.mergedCommit) return { state: "merged", commit: ws.mergedCommit, baseBranch: ws.baseBranch, reason: null, message: null, at: when };
-  return { state: "needs_merge", commit: null, baseBranch: ws.baseBranch, reason: null, message: null, at: when };
+  // 本机验收过就自己试着合回（「验收过就合回」），合不了或关了才报 needsMerge 等你合；还没报的是正在合，不算等你。
+  if (ws.needsMerge) return { state: "needs_merge", commit: null, baseBranch: ws.baseBranch, reason: ws.needsMerge.reason, message: ws.needsMerge.message, at: when };
+  return null;
 }
 function cardMerge(worker: Worker, merges: MergeIssue[]): TCardMerge | null {
   if (worker.kind !== "card" || worker.state !== "done" || !worker.cardId) return null;
@@ -338,22 +340,21 @@ export function deriveFeed({ cards, workers, criteria, merges, sessions = [] }: 
 // ── 后台任务（契约 BackgroundItem）──
 
 const LIVE = new Set<TLocalSessionSummary["status"]>(["starting", "running", "waiting_permission", "queued", "idle"]);
+/** 规划员、验收员：交完收工（done）是完成；退出了（停下、强停、本机程序重启）是停了。 */
 const sessionState = (status: TLocalSessionSummary["status"]): BackgroundItem["state"] =>
-  status === "queued" ? "queued" : status === "exited" ? "done" : status === "failed" ? "failed" : "running";
+  status === "queued" ? "queued" : status === "done" ? "done" : status === "exited" ? "stopped" : status === "failed" ? "failed" : "running";
 const verifyTitle = (title: string) => `验收「${title.replace(/^验收[:：]\s*/, "")}」`;
 
 /**
  * 这台电脑上本机程序报的：规划员（拆卡）、验收员（验收「卡」）两种会话，和各会话里 Claude Code 开的子 agent、后台命令。
  * id 和云端同一套（plan:<会话>、verify:<会话>、bg:<会话>:<task_id>），合并时这里的为准（实时）。卡的会话只带卡 id，Task 由 taskOfCard 查。
  */
-export function localBackground({ sessions, deviceId, canStop, today, stopped = new Set(), taskOfCard, taskOfTopic = () => null }: {
+export function localBackground({ sessions, deviceId, canStop, today, taskOfCard, taskOfTopic = () => null }: {
   sessions: TLocalSessionSummary[];
   deviceId: string | null;
   canStop: boolean;
   /** 公司时区的今天：结束了的只列今天结束的（契约：进行中的，加今天结束的）。 */
   today: string;
-  /** 在这里点了停止的规划员、验收员会话：退出了算「已停止」，不算完成。 */
-  stopped?: ReadonlySet<string>;
   taskOfCard: (cardId: string) => string | null;
   taskOfTopic?: (topicId: string) => string | null;
 }): BackgroundItem[] {
@@ -364,10 +365,9 @@ export function localBackground({ sessions, deviceId, canStop, today, stopped = 
     const topicId = subject.topicId ?? null;
     const taskId = subject.taskId ?? (cardId ? taskOfCard(cardId) : topicId ? taskOfTopic(topicId) : null);
     const where = { sessionId: session.id, deviceId, taskId, cardId, topicId };
-    const state = sessionState(session.status);
     const own: BackgroundItem[] = subject.kind === "plan" || subject.kind === "verify" ? [{
       id: `${subject.kind}:${session.id}`, kind: subject.kind, title: subject.kind === "plan" ? "拆卡" : verifyTitle(session.title),
-      state: state === "done" && stopped.has(session.id) ? "stopped" : state, startedAt: session.createdAt, finishedAt: LIVE.has(session.status) ? null : session.updatedAt,
+      state: sessionState(session.status), startedAt: session.createdAt, finishedAt: LIVE.has(session.status) ? null : session.updatedAt,
       stoppable: canStop && LIVE.has(session.status), itemId: null, ...where,
     }] : [];
     const children = (session.background ?? []).map((item): BackgroundItem => ({

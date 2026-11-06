@@ -2,7 +2,7 @@
 
 /**
  * 插件页（/me/plugins，第 11.1、11.3 节）：本机程序（连上没有、版本、Claude Code 登录没有）、能用的模型、允许的文件夹、
- * 「带上个人配置」开关、本机设备列表和吊销。连本机的三种浏览器授权结果各有样子：等授权、拒过（指到站点设置）、连上。
+ * 「带上个人配置」「验收过就合回」开关、本机设备列表和吊销。连本机的三种浏览器授权结果各有样子：等授权、拒过（指到站点设置）、连上。
  * 没装本机程序时给安装命令和「复制」，不写为什么要装。手机上是「我」：个人菜单在最上面，本机只能看。
  */
 import { useEffect, useState } from "react";
@@ -89,6 +89,13 @@ function LocalSection({ personName, handheld }: { personName: string; handheld: 
         <label className={s.toggle}>
           <input type="checkbox" checked={status?.settings.includePersonalConfigByDefault ?? false} onChange={(event) => void local.setIncludePersonal(event.target.checked)} />
           <span>带上个人配置</span>
+        </label>
+      ) : null}
+      {ready && !handheld && status ? (
+        <label className={s.toggle}>
+          <input type="checkbox" checked={status.settings.autoMerge}
+            onChange={(event) => void local.runner.patchSettings({ autoMerge: event.target.checked }).then(() => local.refresh()).catch(() => showWorkspaceToast({ text: "没改成，请重试" }))} />
+          <span>验收过就合回</span>
         </label>
       ) : null}
       {ready && !handheld && status ? (

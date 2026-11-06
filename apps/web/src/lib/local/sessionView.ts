@@ -143,9 +143,10 @@ export function foldEvent(view: SessionView, event: TLocalSessionEvent): Session
 
 export const foldEvents = (events: TLocalSessionEvent[], view: SessionView = EMPTY_VIEW) => events.reduce(foldEvent, view);
 
-/** 本机报的标记：有权限请求没答 → 等你批准；本人点了停下（或强停、异常退出）→ 已暂停；一轮停下等人说话 → 等你回复。交回了就不算等。 */
+/** 本机报的标记：有权限请求没答 → 等你批准；本人点了停下（或强停、异常退出）→ 已暂停；一轮停下等人说话 → 等你回复。交回了就不算等；交完收工（done）不等。 */
 export function localWait(view: SessionView): LocalWait | null {
   if (view.pending.length || view.status === "waiting_permission") return "approval";
+  if (view.status === "done") return null;
   if (view.status === "exited" || view.status === "failed") return view.handedBack ? null : "paused";
   if (view.status === "idle") return view.handedBack ? null : view.interrupted ? "paused" : "reply";
   return null;

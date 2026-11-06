@@ -289,9 +289,10 @@ describe("执行方问本人、卡等前面的卡", () => {
     expect(remote).toMatchObject({ state: "queued", reason: "after", waitingFor: ["先搭骨架"] });
   });
 
-  it("假本机程序：批准以后问一个单选问题，答了接着做；答过再答是 409。带 after 的卡等前面的卡合回才开工作树、开始", async () => {
+  it("假本机程序：批准以后问一个单选问题，答了接着做；答过再答是 409。「验收过就合回」关着时验收过了记 needsMerge；带 after 的卡等前面的卡合回才开工作树、开始", async () => {
     vi.useFakeTimers();
     const runner = createMockRunner({ stepMs: 10 });
+    await runner.patchSettings({ autoMerge: false });
     const first = await runner.createSession({ subject: { kind: "card", cardId: "c1" }, title: "Skeleton", cwd: "C:\\work\\tianshu", firstMessage: "交代" });
     const second = await runner.createSession({ subject: { kind: "card", cardId: "c2" }, title: "Rows", cwd: "C:\\work\\tianshu", firstMessage: "交代", after: ["c1"] });
     expect(second).toMatchObject({ status: "queued", waitingFor: ["c1"] });
@@ -306,12 +307,29 @@ describe("执行方问本人、卡等前面的卡", () => {
     await runner.answerQuestion(first.id, asked.pendingQuestion!.requestId, { choices: [["删掉"]] });
     await expect(runner.answerQuestion(first.id, asked.pendingQuestion!.requestId, { choices: [["删掉"]] })).rejects.toMatchObject({ status: 409 });
     await vi.advanceTimersByTimeAsync(200);
+    expect((await runner.getSession(first.id)).session.workspace).toMatchObject({ mergedCommit: null, needsMerge: { reason: "auto_merge_off" } });
     await runner.mergeSession(first.id);
     await runner.mergeSession(first.id);
+    expect((await runner.getSession(first.id)).session.workspace).not.toHaveProperty("needsMerge");
     const started = (await runner.getSession(second.id)).session;
     expect(started.waitingFor).toBeUndefined();
     expect(started.workspace).toMatchObject({ kind: "worktree", branch: "tianshu/c2-rows" });
     expect(started.status).not.toBe("queued");
+    vi.useRealTimers();
+  });
+
+  it("「验收过就合回」开着（默认）：交回、验收员收工以后自己合回，等它的卡接着开工作树", async () => {
+    vi.useFakeTimers();
+    const runner = createMockRunner({ stepMs: 10 });
+    const first = await runner.createSession({ subject: { kind: "card", cardId: "c1" }, title: "Skeleton", cwd: "C:\\work\\tianshu", firstMessage: "交代" });
+    const second = await runner.createSession({ subject: { kind: "card", cardId: "c2" }, title: "Rows", cwd: "C:\\work\\tianshu", firstMessage: "交代", after: ["c1"] });
+    await vi.advanceTimersByTimeAsync(60);
+    await runner.decidePermission(first.id, (await runner.getSession(first.id)).pendingPermissions[0]!.requestId, { decision: "allow" });
+    await vi.advanceTimersByTimeAsync(30);
+    await runner.answerQuestion(first.id, (await runner.getSession(first.id)).session.pendingQuestion!.requestId, { choices: [["删掉"]] });
+    await vi.advanceTimersByTimeAsync(200);
+    expect((await runner.getSession(first.id)).session.workspace).toMatchObject({ mergedCommit: expect.any(String) });
+    expect((await runner.getSession(second.id)).session.workspace).toMatchObject({ kind: "worktree", branch: "tianshu/c2-rows" });
     vi.useRealTimers();
   });
 });
@@ -335,7 +353,7 @@ describe("假本机程序的排队（同真程序的规矩）", () => {
     vi.useRealTimers();
   });
 
-  it("排队先后：验收员、规划员、执行的；执行的交回以后本机自己接一个验收员，规划员拆完退出", async () => {
+  it("排队先后：验收员、规划员、执行的；执行的交回以后本机自己接一个验收员，规划员、验收员交完收工（done）", async () => {
     vi.useFakeTimers();
     const runner = createMockRunner({ stepMs: 10, onPlanned: vi.fn() });
     await runner.patchSettings({ maxConcurrent: 1 });
@@ -353,8 +371,8 @@ describe("假本机程序的排队（同真程序的规矩）", () => {
     expect((await runner.listSessions()).find((s) => s.id === verifier!.id)?.status).toBe("starting");
     await vi.advanceTimersByTimeAsync(200);
     const status = async (id: string) => (await runner.listSessions()).find((s) => s.id === id)?.status;
-    expect(await status(verifier!.id)).toBe("exited");
-    expect(await status(planner!.id)).toBe("exited");
+    expect(await status(verifier!.id)).toBe("done");
+    expect(await status(planner!.id)).toBe("done");
     // 执行的跑到权限请求：批准、回答一句，交回后接上 c2 的验收员。
     await vi.advanceTimersByTimeAsync(100);
     const pending = (await runner.getSession(second!.id)).pendingPermissions[0]!;
@@ -364,6 +382,8 @@ describe("假本机程序的排队（同真程序的规矩）", () => {
     await vi.advanceTimersByTimeAsync(100);
     const chained = (await runner.listSessions()).find((s) => s.subject.kind === "verify" && s.subject.cardId === "c2");
     expect(chained).toBeDefined();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(await status(chained!.id)).toBe("done");
     vi.useRealTimers();
   });
 });

@@ -75,7 +75,7 @@ export function useWork({ planHook }: { planHook: ReturnType<typeof useHomePlan>
   const ready = local.phase === "ready";
   const sessions = useMemo(() => (ready ? local.sessions : []), [ready, local.sessions]);
   const deviceName = devices.find((device) => device.id === local.status?.deviceId)?.name ?? (ready ? "这台电脑" : null);
-  const planKey = sessions.filter((session) => session.subject.kind === "plan" && session.status !== "exited").map((session) => session.id).join("|");
+  const planKey = sessions.filter((session) => session.subject.kind === "plan" && session.status !== "exited" && session.status !== "done").map((session) => session.id).join("|");
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { void load(); }, [planKey]);
 

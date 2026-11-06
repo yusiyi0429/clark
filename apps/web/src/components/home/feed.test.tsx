@@ -59,10 +59,12 @@ describe("Task 管线里的验收行（第 4.5 条）", () => {
     const elsewhere = render([item], [passedWorker()]);
     expect(elsewhere.blocks).toHaveLength(1);
     expect(text(elsewhere.html)).toContain("还没合回");
-    const here = session({ workspace: { kind: "worktree", folder: "C:\\w", path: "C:\\w\\.wt", branch: "tianshu/greet", baseBranch: "main", baseCommit: "a".repeat(40), mergedCommit: null } });
+    const here = session({ workspace: { kind: "worktree", folder: "C:\\w", path: "C:\\w\\.wt", branch: "tianshu/greet", baseBranch: "main", baseCommit: "a".repeat(40), mergedCommit: null,
+      needsMerge: { reason: "not_ready", message: "交回以后卡又改过" } } });
     const onThis = render([item], [{ ...passedWorker(), session: here }], [here]);
     expect(onThis.blocks.map((block) => block.key)).toEqual(["p1", "p1:merge"]);
     expect(text(onThis.html)).toMatch(/合进 main.*推荐.*先不合/);
+    expect(text(onThis.html)).toContain("交回以后卡又改过");
   });
 
   it("受阻：「按这个改（推荐）/ 我去看看 / 仍然通过」，改法写在框里；不在这台电脑上没有「按这个改」", () => {

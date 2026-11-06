@@ -59,6 +59,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
   let linked = false;
   let includePersonal = false;
   let maxConcurrent = 3;
+  let autoMerge = true;
   let seqId = 0;
   /** 占着位置的：开工中、进行中、等你批准（一轮做完在等你回复的不占）。 */
   const OCCUPYING = new Set<TLocalSessionStatus>(["starting", "running", "waiting_permission"]);
@@ -190,7 +191,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
       turnEnd(s, "拆好了，派活单交上去了。");
       const subject = s.summary.subject;
       if (subject.kind === "plan" && subject.taskId) onPlanned?.(subject.taskId);
-      setStatus(s, "exited");
+      setStatus(s, "done");
       return "wait";
     },
   ];
@@ -198,8 +199,33 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
     (s) => started(s, "plan"),
     (s) => { emit(s, { type: "assistant_text", text: "逐条对照约定看交回的证据。" }); plan(s, 0, VERIFIER); },
     (s) => { plan(s, 1, VERIFIER); tool(s, "submit_verdict", "交验收结果"); },
-    (s) => { plan(s, 2, VERIFIER); turnEnd(s, "2/2 达到。"); setStatus(s, "exited"); return "wait"; },
+    (s) => { plan(s, 2, VERIFIER); turnEnd(s, "2/2 达到。"); setStatus(s, "done"); afterVerdict(s); return "wait"; },
   ];
+
+  /** 合回：主文件夹记上提交，工作树清掉；等这张卡的卡少等一张，都合回了就开工作树、排进队里。 */
+  const mergeInto = (s: MockSession) => {
+    const ws = s.summary.workspace;
+    if (ws?.kind !== "worktree") return null;
+    const commit = sha(`${s.summary.id}:merge`);
+    s.summary = { ...s.summary, workspace: { kind: "worktree", folder: ws.folder, path: ws.path, branch: ws.branch, baseBranch: ws.baseBranch, baseCommit: ws.baseCommit, mergedCommit: commit } };
+    emit(s, { type: "notice", level: "info", code: "merged", text: `已合回 ${ws.baseBranch}（${commit.slice(0, 7)}），工作树已清理，分支 ${ws.branch} 保留` });
+    const cardId = s.summary.subject.cardId;
+    for (const other of sessions.values()) {
+      if (!cardId || !other.summary.waitingFor?.includes(cardId)) continue;
+      const rest = other.summary.waitingFor.filter((entry) => entry !== cardId);
+      other.summary = rest.length ? { ...other.summary, waitingFor: rest } : { ...other.summary, waitingFor: undefined, workspace: other.waits?.workspace };
+    }
+    promote();
+    return commit;
+  };
+  /** 验收员交完（假的一律算过）：「验收过就合回」开着就合回那张卡，关着就记下要本人合。 */
+  const afterVerdict = (verify: MockSession) => {
+    const card = [...sessions.values()].find((other) => other.summary.subject.kind === "card" && other.summary.subject.cardId === verify.summary.subject.cardId);
+    const ws = card?.summary.workspace;
+    if (!card || ws?.kind !== "worktree" || ws.mergedCommit) return;
+    if (autoMerge) { mergeInto(card); return; }
+    card.summary = { ...card.summary, workspace: { ...ws, needsMerge: { reason: "auto_merge_off", message: "「验收过就合回」关着，等你合" } } };
+  };
 
   const advance = (s: MockSession) => {
     if (s.timer || s.paused) return;
@@ -227,14 +253,15 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
       activeSessions: slots().running,
       slots: slots(),
       cloud: { linked, apiBaseUrl: linked ? location.origin : null, personName: null, outbox: { pending: 0, lastSyncedAt: linked ? now() : null, lastError: null } },
-      settings: { includePersonalConfigByDefault: includePersonal, allowedOrigins: [typeof location === "undefined" ? "" : location.origin], paused: false, maxConcurrent },
+      settings: { includePersonalConfigByDefault: includePersonal, allowedOrigins: [typeof location === "undefined" ? "" : location.origin], paused: false, maxConcurrent, autoMerge },
     }),
     login: async () => undefined,
     linkCloud: async (body) => { linked = true; return { linked, apiBaseUrl: body.apiBaseUrl, personName: body.personName ?? null, outbox: { pending: 0, lastSyncedAt: null, lastError: null } }; },
     patchSettings: async (patch) => {
       if (patch.includePersonalConfigByDefault !== undefined) includePersonal = patch.includePersonalConfigByDefault;
       if (patch.maxConcurrent !== undefined) { maxConcurrent = patch.maxConcurrent; promote(); }
-      return { includePersonalConfigByDefault: includePersonal, allowedOrigins: [], paused: Boolean(patch.paused), maxConcurrent };
+      if (patch.autoMerge !== undefined) autoMerge = patch.autoMerge;
+      return { includePersonalConfigByDefault: includePersonal, allowedOrigins: [], paused: Boolean(patch.paused), maxConcurrent, autoMerge };
     },
     listModels: async () => MODELS,
     putModel: async (id, body) => ({ id, label: body.label, source: body.source, agent: "claude-code", baseUrl: body.baseUrl ?? null, model: body.model, smallModel: body.smallModel ?? null, webSearch: body.webSearch ?? false, hasKey: Boolean(body.apiKey), isDefault: Boolean(body.isDefault) }),
@@ -265,7 +292,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
       }
       if (was === "running") { emit(s, { type: "notice", level: "info", code: "interjection_next_step", text: "下一步生效" }); return { delivery: "next_step" }; }
       advance(s);
-      return { delivery: was === "exited" ? "resumed" : "new_turn" };
+      return { delivery: was === "exited" || was === "done" ? "resumed" : "new_turn" };
     },
     interrupt: async (id) => {
       const s = must(id);
@@ -318,17 +345,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
       const busy = [...sessions.values()].some((other) => other.summary.subject.cardId === s.summary.subject.cardId && (other.summary.status === "queued" || OCCUPYING.has(other.summary.status)));
       if (busy) throw new LocalRunnerError("conflict", "卡或它的验收员还在跑，停下再合", 409);
       if (s.mergeTries++ === 0) return { merged: false, reason: "dirty", message: "主文件夹有没提交的改动", files: ["README.md", "apps/web/src/app/page.tsx"] };
-      const commit = sha(`${id}:merge`);
-      s.summary = { ...s.summary, workspace: { ...ws, mergedCommit: commit } };
-      emit(s, { type: "notice", level: "info", code: "merged", text: `已合回 ${ws.baseBranch}（${commit.slice(0, 7)}），工作树已清理，分支 ${ws.branch} 保留` });
-      // 等这张卡的卡：少等一张；都合回了就开工作树、排进队里。
-      const cardId = s.summary.subject.cardId;
-      for (const other of sessions.values()) {
-        if (!cardId || !other.summary.waitingFor?.includes(cardId)) continue;
-        const rest = other.summary.waitingFor.filter((entry) => entry !== cardId);
-        other.summary = rest.length ? { ...other.summary, waitingFor: rest } : { ...other.summary, waitingFor: undefined, workspace: other.waits?.workspace };
-      }
-      promote();
+      const commit = mergeInto(s)!;
       return { merged: true, commit, session: summaryOf(s) };
     },
     watch: async (id: string, { after, onEvent, onLink, signal }: EventWatch) => {

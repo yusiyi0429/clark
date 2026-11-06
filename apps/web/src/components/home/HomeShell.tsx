@@ -262,8 +262,7 @@ function HomeFrame({ account }: { account: Account }) {
   useAutoReturn(local.runner, here, allCards, local.sessions, changed);
 
   // ---- 后台任务 ----
-  const [stopped, setStopped] = useState<ReadonlySet<string>>(() => new Set());
-  const items = useBackground(scopeOf(view), api, stopped);
+  const items = useBackground(scopeOf(view), api);
   const running = items.filter((item) => item.state === "running" || item.state === "queued").length;
   const model = local.models.find((entry) => entry.isDefault)?.label ?? local.models[0]?.label ?? null;
   // 规划员、验收员停会话；子 agent、后台命令只停那一项，会话接着做。
@@ -271,7 +270,7 @@ function HomeFrame({ account }: { account: Account }) {
     if (!item.sessionId) return;
     try {
       if ((item.kind === "subagent" || item.kind === "command") && item.itemId) await local.runner.stopBackground(item.sessionId, item.itemId);
-      else { await local.runner.kill(item.sessionId); setStopped((current) => new Set(current).add(item.sessionId!)); }
+      else await local.runner.kill(item.sessionId);
       await local.refresh();
       changed();
     }

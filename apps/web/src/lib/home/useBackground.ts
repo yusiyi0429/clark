@@ -15,8 +15,7 @@ import type { WorkHomeApi } from "./useWorkHome";
 
 const POLL_MS = 5000;
 
-/** stopped：在这里点了停止的规划员、验收员会话（退出了算「已停止」）。 */
-export function useBackground(scope: BackgroundScope, api: WorkHomeApi, stopped: ReadonlySet<string>): BackgroundItem[] {
+export function useBackground(scope: BackgroundScope, api: WorkHomeApi): BackgroundItem[] {
   const local = useLocalRunner();
   const handheld = useHandheld();
   const [cloud, setCloud] = useState<{ scope: string; items: BackgroundItem[] } | null>(null);
@@ -42,8 +41,8 @@ export function useBackground(scope: BackgroundScope, api: WorkHomeApi, stopped:
   // 本机报的时间是这台电脑的钟，「今天」也按这台电脑算（公司时区）。
   const today = calendarDate(new Date().toISOString());
   const here = useMemo(() => (local.phase === "ready"
-    ? localBackground({ sessions: local.sessions, deviceId: api.deviceId, canStop: !handheld, today, stopped, taskOfCard, taskOfTopic })
-    : []), [local.phase, local.sessions, api.deviceId, handheld, today, stopped, taskOfCard, taskOfTopic]);
+    ? localBackground({ sessions: local.sessions, deviceId: api.deviceId, canStop: !handheld, today, taskOfCard, taskOfTopic })
+    : []), [local.phase, local.sessions, api.deviceId, handheld, today, taskOfCard, taskOfTopic]);
   return useMemo(() => {
     // 云端的只给看：停只能在跑它的那台电脑上经本机程序停，这台电脑上的由下面本机那份（同一个 id）给停止。
     const base = api.live ? (cloud?.scope === scope ? cloud.items : []).map((item) => ({ ...item, stoppable: false })) : workerBackground(workers);

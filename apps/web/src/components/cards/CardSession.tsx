@@ -275,7 +275,7 @@ function ResultPane({ detail, session, view, canAct, wait, stage, handheld, read
           {stage === "todo" && !view ? <HeroButton variant="primary" onPress={onStart} isDisabled={!ready}>开始</HeroButton> : null}
           {canAct && live ? <HeroButton variant="secondary" onPress={() => onControl("interrupt")}>停下</HeroButton> : null}
           {canAct && paused && !live ? <HeroButton variant="primary" onPress={onResume}>继续</HeroButton> : null}
-          {canAct && view && status !== "exited" && status !== "failed" ? <HeroButton variant="ghost" onPress={() => onControl("kill")}>强停</HeroButton> : null}
+          {canAct && view && status !== "exited" && status !== "done" && status !== "failed" ? <HeroButton variant="ghost" onPress={() => onControl("kill")}>强停</HeroButton> : null}
         </div>
       ) : null}
       {!agent && item.status !== "done" ? <div className={s.actions}><Link href={`/me/tasks/${encodeURIComponent(item.id)}`} className={s.link}>打开事项</Link></div> : null}

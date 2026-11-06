@@ -31,6 +31,8 @@ const plan = {
   ],
 } as unknown as THomePlanResponse;
 const WORKTREE = { kind: "worktree" as const, folder: "C:\\w", path: "C:\\w\\.wt\\c5", branch: "tianshu/c5", baseBranch: "main", baseCommit: "a".repeat(40), mergedCommit: null };
+/** 本机没能自动合回、等本人合（「验收过就合回」关着）。 */
+const HOLD = { reason: "auto_merge_off" as const, message: "「验收过就合回」关着，等你合" };
 /** 看板上的卡（交给 Agent 做的，带最近一次交回）。 */
 const boardCard = (id: string, title: string, handback: Record<string, unknown>, criterion: number | null = null): CardItem => ({
   id, title, updatedAt: "2026-11-06T05:00:00Z", card: { executor: "claude_code", role: null, criterion: criterion ? { index: criterion, text: "x" } : null, handback: {
@@ -38,9 +40,9 @@ const boardCard = (id: string, title: string, handback: Record<string, unknown>,
     createdAt: "2026-11-06T04:30:00Z", finishedAt: "2026-11-06T05:00:00Z", git: null, ...handback,
   } },
 }) as unknown as CardItem;
-const cardSessionWith = (cardId: string, mergedCommit: string | null) => session({
+const cardSessionWith = (cardId: string, workspace: { mergedCommit?: string; needsMerge?: typeof HOLD }) => session({
   id: `00000000-0000-4000-8000-${cardId.padStart(12, "0").slice(-12).replace(/[^0-9a-f]/g, "0")}`, subject: { kind: "card", cardId }, status: "exited",
-  workspace: { ...WORKTREE, mergedCommit },
+  workspace: { ...WORKTREE, ...workspace },
 });
 const withHandback = (base: Worker, handback: Record<string, unknown>, criterion: number | null = null): Worker => ({
   ...base, item: { id: base.cardId, createdAt: "2026-11-07T03:00:00Z", card: { criterion: criterion ? { index: criterion, text: "x" } : null, handback: {
@@ -93,11 +95,14 @@ describe("新首页的数据（B 的 work-home 没上时照契约的形状拼）
     expect(blocked.waiting.map((entry) => [entry.kind, entry.title, waitingHref(entry)])).toEqual([["verdict", "受阻", "/me/work/tasks/t1"]]);
   });
 
-  it("验收过了、工作树里还没合回：子会话是等你合回，等你里一条「合进 main」；合回了才折进已完成", () => {
-    const passed = { ...worker({ key: "card:c5", cardId: "c5", title: "greet", stage: "done", finishedAt: "2026-11-07T05:00:00Z" }), workspace: WORKTREE };
+  it("验收过了、本机没能自动合回（needsMerge）：子会话是等你合回，等你里一条「合进 main」；本机还在自己合的不算等你；合回了折进已完成", () => {
+    const passed = { ...worker({ key: "card:c5", cardId: "c5", title: "greet", stage: "done", finishedAt: "2026-11-07T05:00:00Z" }), workspace: { ...WORKTREE, needsMerge: HOLD } };
     const home = deriveWorkHome({ plan, workers: [passed], boards: {}, proposals: [], merges: [], notices: null, deviceId: null });
-    expect(home.missions[0]!.tasks[0]!.subSessions[0]).toMatchObject({ state: "waiting", waiting: "merge", merge: { state: "needs_merge", baseBranch: "main" } });
+    expect(home.missions[0]!.tasks[0]!.subSessions[0]).toMatchObject({ state: "waiting", waiting: "merge", merge: { state: "needs_merge", baseBranch: "main", reason: "auto_merge_off" } });
     expect(home.waiting).toEqual([expect.objectContaining({ kind: "merge", title: "合进 main", open: { kind: "card", id: "c5" } })]);
+    const merging = deriveWorkHome({ plan, workers: [{ ...passed, workspace: WORKTREE }], boards: {}, proposals: [], merges: [], notices: null, deviceId: null });
+    expect(merging.missions[0]!.tasks[0]!.subSessions[0]).toMatchObject({ state: "done", waiting: null, merge: null });
+    expect(merging.waiting).toEqual([]);
     const merged = deriveWorkHome({ plan, workers: [{ ...passed, workspace: { ...WORKTREE, mergedCommit: "b".repeat(40) } }], boards: {}, proposals: [], merges: [], notices: null, deviceId: null });
     expect(merged.missions[0]!.tasks[0]!.subSessions[0]).toMatchObject({ state: "done", waiting: null, merge: { state: "merged", baseBranch: "main" } });
     expect(merged.waiting).toEqual([]);
@@ -108,7 +113,7 @@ describe("树上的卡：worker 列表只有今天完成的，看板补上之前
   it("昨天过了、合回了的卡折进已完成；昨天过了、这台电脑上没合回的还在等你合", () => {
     const boards = { t1: { plan: null, cards: [boardCard("c7", "昨天的", {}), boardCard("c8", "没合的", {})] } };
     const home = deriveWorkHome({ plan, workers: [], boards, proposals: [], merges: [], notices: null, deviceId: "dev-1",
-      sessions: [cardSessionWith("c7", "b".repeat(40)), cardSessionWith("c8", null)] });
+      sessions: [cardSessionWith("c7", { mergedCommit: "b".repeat(40) }), cardSessionWith("c8", { needsMerge: HOLD })] });
     const subs = home.missions[0]!.tasks[0]!.subSessions;
     expect(subs.map((sub) => [sub.id, sub.state, sub.waiting])).toEqual([["c8", "waiting", "merge"], ["c7", "done", null]]);
     expect(home.waiting).toEqual([expect.objectContaining({ kind: "merge", title: "合进 main", open: { kind: "card", id: "c8" }, taskId: "t1", deviceId: "dev-1" })]);
@@ -133,7 +138,7 @@ describe("Task 管线里的验收行（B 的 feed 没上时由看板上的卡拼
   const base = (cardId: string, title: string, extra: Partial<TWorkerItem> = {}) => worker({ key: `card:${cardId}`, cardId, title, stage: "done", finishedAt: "2026-11-07T05:00:00Z", ...extra });
 
   it("过了一行从看板上的卡拼（昨天过的也在），带合回结果；受阻从还在做的卡拼；第一次没过、推翻了的不出", () => {
-    const items = deriveFeed({ criteria: ["a", "b"], merges: [], sessions: [cardSessionWith("c1", "b".repeat(40))],
+    const items = deriveFeed({ criteria: ["a", "b"], merges: [], sessions: [cardSessionWith("c1", { mergedCommit: "b".repeat(40) })],
       cards: [boardCard("c1", "greet", {}), boardCard("c4", "推翻的", { overruled: true }), boardCard("c3", "样式", { outcome: "fail" })],
       workers: [
         withHandback(base("c2", "接口", { stage: "doing", wait: "blocked" }), { outcome: "fail", returnText: "补上 404", finishedAt: "2026-11-07T05:10:00Z" }),
@@ -170,7 +175,7 @@ describe("后台任务", () => {
       { id: "t-2", title: "pnpm test --watch", kind: "command", state: "running", startedAt: "2026-11-07T04:04:00Z", finishedAt: null, stoppable: true },
     ],
   });
-  const verifier = session({ id: "00000000-0000-4000-8000-0000000000c3", subject: { kind: "verify", cardId: "c3" }, title: "验收：改样式", status: "exited" });
+  const verifier = session({ id: "00000000-0000-4000-8000-0000000000c3", subject: { kind: "verify", cardId: "c3" }, title: "验收：改样式", status: "done" });
   const here = localBackground({ sessions: [planner, card, verifier], deviceId: "dev-1", canStop: true, today: "2026-11-07", taskOfCard: (cardId) => (cardId === "c1" || cardId === "c3" ? "t1" : null) });
 
   it("这台电脑上的：规划员写拆卡，验收员写验收「卡」，会话里的子 agent、后台命令各一条（id 和云端同一套），卡的会话本身不是", () => {
@@ -184,14 +189,17 @@ describe("后台任务", () => {
     expect(localBackground({ sessions: [card], deviceId: null, canStop: false, today: "2026-11-07", taskOfCard: () => null }).every((entry) => !entry.stoppable)).toBe(true);
   });
 
-  it("结束了的只列今天（公司时区）结束的；在这里停掉的验收员是已停止；专题会话里的挂到它所在的 Task", () => {
-    const old = session({ id: "00000000-0000-4000-8000-0000000000d4", subject: { kind: "verify", cardId: "c3" }, title: "验收：旧", status: "exited", updatedAt: "2026-11-05T04:00:00Z" });
-    const lateNight = session({ id: "00000000-0000-4000-8000-0000000000d5", subject: { kind: "plan", taskId: "t1" }, status: "exited", updatedAt: "2026-11-06T22:30:00Z" });
+  it("结束了的只列今天（公司时区）结束的；交完收工（done）是完成，退出了（停下、强停）是已停止；专题会话里的挂到它所在的 Task", () => {
+    const old = session({ id: "00000000-0000-4000-8000-0000000000d4", subject: { kind: "verify", cardId: "c3" }, title: "验收：旧", status: "done", updatedAt: "2026-11-05T04:00:00Z" });
+    const lateNight = session({ id: "00000000-0000-4000-8000-0000000000d5", subject: { kind: "plan", taskId: "t1" }, status: "done", updatedAt: "2026-11-06T22:30:00Z" });
+    const killed = session({ id: "00000000-0000-4000-8000-0000000000d7", subject: { kind: "verify", cardId: "c3" }, title: "验收：停掉的", status: "exited" });
     const topic = session({ id: "00000000-0000-4000-8000-0000000000d6", subject: { kind: "topic", topicId: "tp1" }, title: "起名字",
       background: [{ id: "x", title: "查资料", kind: "subagent", state: "running", startedAt: "2026-11-07T04:00:00Z", finishedAt: null, stoppable: true }] });
-    const items = localBackground({ sessions: [old, lateNight, verifier, topic], deviceId: null, canStop: true, today: "2026-11-07", stopped: new Set([verifier.id]),
+    const items = localBackground({ sessions: [old, lateNight, verifier, killed, topic], deviceId: null, canStop: true, today: "2026-11-07",
       taskOfCard: () => null, taskOfTopic: (topicId) => (topicId === "tp1" ? "t1" : null) });
-    expect(items.map((entry) => [entry.id.split(":")[0], entry.state])).toEqual([["plan", "done"], ["verify", "stopped"], ["bg", "running"]]);
+    expect(items.map((entry) => [entry.id.split(":")[0], entry.title, entry.state])).toEqual([
+      ["plan", "拆卡", "done"], ["verify", "验收「改样式」", "done"], ["verify", "验收「停掉的」", "stopped"], ["bg", "查资料", "running"],
+    ]);
     expect(inScope(items, "task:t1").map((entry) => entry.title)).toEqual(["拆卡", "查资料"]);
   });
 
