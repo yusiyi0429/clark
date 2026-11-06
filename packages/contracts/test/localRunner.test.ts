@@ -4,6 +4,7 @@ import { Value } from "@sinclair/typebox/value";
 import {
   LocalCreateSessionRequest, LocalModelProfileUpsert, LocalModelProfile, LocalPermissionDecisionRequest, LocalSessionEvent,
   LocalSyncBatchRequest, LocalPairingStatusResponse, LocalSendMessageRequest, LOCAL_RUNNER_ROUTES,
+  LocalCreateSessionBatchRequest, LocalCreateSessionBatchResponse, LocalSettingsPatch, LocalSessionSummary, LocalHealthResponse,
 } from "../src/index.js";
 
 const sessionId = "6b0f3a52-4d0c-4c1e-9a43-1f7d2c9b8e10";
@@ -53,32 +54,53 @@ describe("本机程序契约", () => {
   it("事件带序号、会话和类型，类型之外的字段拒收", () => {
     const base = { seq: 3, at: "2026-11-06T02:00:00.000Z", sessionId };
     expect(Value.Check(LocalSessionEvent, { ...base, type: "assistant_text", text: "好" })).toBe(true);
-    expect(Value.Check(LocalSessionEvent, { ...base, type: "plan", entries: [{ content: "写测试", status: "in_progress" }] })).toBe(true);
+    const progress = { done: 1, total: 3, step: 2, current: "写测试" };
+    expect(Value.Check(LocalSessionEvent, { ...base, type: "plan", entries: [{ content: "读代码", status: "completed" }, { content: "写测试", status: "in_progress" }, { content: "提交", status: "pending" }], progress })).toBe(true);
+    // 计划事件一定带「第几步 / 共几步」
+    expect(Value.Check(LocalSessionEvent, { ...base, type: "plan", entries: [{ content: "写测试", status: "in_progress" }] })).toBe(false);
     expect(Value.Check(LocalSessionEvent, { ...base, type: "assistant_text", text: "好", raw: {} })).toBe(false);
     expect(Value.Check(LocalSessionEvent, { ...base, seq: 0, type: "assistant_text", text: "好" })).toBe(false);
   });
 
   it("同步载荷带幂等键；产出物有大小上限；不收未知类型", () => {
+    const slots = { max: 3, running: 2, queued: 1 };
     const item = { key: `${deviceId}:${sessionId}:7`, sessionId, subject: { kind: "card", cardId: "task-1" }, occurredAt: "2026-11-06T02:00:00.000Z" };
-    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", items: [
+    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots, items: [
       { ...item, type: "status", data: { status: "running", title: "修登录页", agent: "claude-code", modelLabel: "订阅" } },
       { ...item, type: "cost", data: { modelLabel: "订阅", usage: { inputTokens: 1, outputTokens: 2, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null } } },
     ] })).toBe(true);
-    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", items: [] })).toBe(false);
+    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots, items: [] })).toBe(false);
+    // 每一批都带本机的位置数
+    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", items: [{ ...item, type: "status", data: { status: "queued", title: "x", agent: "claude-code", modelLabel: "订阅" } }] })).toBe(false);
+    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots, items: [{ ...item, type: "status", data: { status: "queued", title: "x", agent: "claude-code", modelLabel: "订阅" } }] })).toBe(true);
     // 交回点名产出和证据；专题新的一版、存进飞书的地址
     const topic = { ...item, subject: { kind: "topic", topicId: "t-1" } };
-    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", items: [
+    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots, items: [
       { ...item, type: "handback", data: { summary: "做完了", criteria: [{ index: 1, result: "met", evidence: "a.md" }], outputKeys: [`${deviceId}:${sessionId}:3`] } },
       { ...topic, type: "topic_version", data: { number: 3, kind: "review", label: null, note: "合成了三方意见", body: "# 分歧和建议" } },
       { ...topic, type: "topic_version_feishu", data: { number: 3, feishuUrl: "https://x.feishu.cn/docx/abc" } },
     ] })).toBe(true);
-    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", items: [{ ...item, type: "handback", data: { summary: "x", criteria: [] } }] })).toBe(false);
-    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", items: [{ ...topic, type: "topic_version", data: { number: 1, kind: "final", label: null, note: null, body: "x" } }] })).toBe(false);
-    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", items: [{ ...topic, type: "topic_version_feishu", data: { number: 1, feishuUrl: "http://x" } }] })).toBe(false);
-    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", items: [{ ...item, type: "repo_files", data: {} }] })).toBe(false);
-    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", items: [{ ...item, type: "artifact", data: {
+    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots, items: [{ ...item, type: "handback", data: { summary: "x", criteria: [] } }] })).toBe(false);
+    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots, items: [{ ...topic, type: "topic_version", data: { number: 1, kind: "final", label: null, note: null, body: "x" } }] })).toBe(false);
+    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots, items: [{ ...topic, type: "topic_version_feishu", data: { number: 1, feishuUrl: "http://x" } }] })).toBe(false);
+    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots, items: [{ ...item, type: "repo_files", data: {} }] })).toBe(false);
+    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots, items: [{ ...item, type: "artifact", data: {
       artifactId: "a1", title: "方案", fileName: "a.md", mimeType: "text/markdown", size: 11 * 1024 * 1024, sha256: "0".repeat(64), contentBase64: "",
     } }] })).toBe(false);
+  });
+
+  it("一批开工、同时跑的上限和排队位置", () => {
+    const one = { subject: { kind: "card", cardId: "task-1" }, title: "修登录页", firstMessage: "开始" };
+    expect(Value.Check(LocalCreateSessionBatchRequest, { items: [one, { ...one, subject: { kind: "card", cardId: "task-2" } }] })).toBe(true);
+    expect(Value.Check(LocalCreateSessionBatchRequest, { items: [] })).toBe(false);
+    expect(Value.Check(LocalCreateSessionBatchRequest, { items: Array.from({ length: 21 }, () => one) })).toBe(false);
+    expect(Value.Check(LocalCreateSessionBatchResponse, { results: [{ ok: false, error: { code: "folder_not_allowed", message: "x" } }] })).toBe(true);
+    expect(Value.Check(LocalSettingsPatch, { maxConcurrent: 5 })).toBe(true);
+    expect(Value.Check(LocalSettingsPatch, { maxConcurrent: 0 })).toBe(false);
+    expect(Value.Check(LocalSettingsPatch, { maxConcurrent: 11 })).toBe(false);
+    expect(LocalSessionSummary.properties).toHaveProperty("queuePosition");
+    expect(LocalHealthResponse.properties).toHaveProperty("slots");
+    expect(LOCAL_RUNNER_ROUTES.createSessionBatch).toEqual({ method: "POST", path: "/v1/sessions/batch", auth: true });
   });
 
   it("配对口令只在批准后出现；路由表里只有健康和配对不要口令", () => {

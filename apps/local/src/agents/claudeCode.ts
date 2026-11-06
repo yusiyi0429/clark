@@ -5,6 +5,7 @@ import type { EventBody } from "../eventLog.js";
 import { AgentStartError, type AgentAdapter, type AgentLaunch, type AgentRun, type PermissionAnswer } from "./types.js";
 import { buildClaudeArgs, childEnv, describeTool, homeDir, personalSettingsSetKey, versionAtLeast } from "./claudeEnv.js";
 import { outsidePaths, suggestionsReachOutside, type PathScope } from "./pathGuard.js";
+import { planProgress } from "../plan.js";
 
 /** 低于这个版本不保证兼容：11/05 实测基于 2.1.318；权限模式 default 改名 manual 也在 2.1.3xx。 */
 export const MIN_CLAUDE_VERSION = "2.1.300";
@@ -224,7 +225,7 @@ class ClaudeRun implements AgentRun {
               const entries = c.input.todos
                 .filter((t: Json) => typeof t?.content === "string")
                 .map((t: Json) => ({ content: t.content, status: ["pending", "in_progress", "completed"].includes(t.status) ? t.status : "pending" }));
-              this.emit({ type: "plan", entries });
+              this.emit({ type: "plan", entries, progress: planProgress(entries) });
             }
           }
         }

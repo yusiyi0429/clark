@@ -46,7 +46,17 @@ export const LocalSessionKind = Type.Union([Type.Literal("card"), Type.Literal("
 
 // ───────────────────────── 健康与配对 ─────────────────────────
 
-/** GET /v1/health：不需要口令，只要来源在白名单里。网页据此判断「装了没、配对没」。 */
+/**
+ * 本机同时跑的位置（V2 设计 20.6，界面上的「资源 · 本机 ▮▮▯」）：max 是上限（本机设置 maxConcurrent，默认 3）；
+ * running 是占着位置的会话（开工中、进行中、等你批准；一轮做完在等你回复的不占）；queued 是等空位的。
+ */
+export const LocalSlots = Type.Object({
+  max: Type.Integer({ minimum: 1, maximum: 10 }),
+  running: Type.Integer({ minimum: 0 }),
+  queued: Type.Integer({ minimum: 0 }),
+}, strict);
+
+/** GET /v1/health：不需要口令，只要来源在白名单里。网页据此判断「装了没、配对没」，资源栏也读这里的 slots。 */
 export const LocalHealthResponse = Type.Object({
   app: Type.Literal("tianshu-local"),
   version: Type.String(),
@@ -54,6 +64,7 @@ export const LocalHealthResponse = Type.Object({
   platform: Type.Union([Type.Literal("win32"), Type.Literal("darwin"), Type.Literal("linux")]),
   /** 请求里带的口令是否有效；没带就是 false。 */
   tokenValid: Type.Boolean(),
+  slots: LocalSlots,
 }, strict);
 
 /** POST /v1/pairings：网页发起配对。本机弹出确认框，显示同一个四位确认码，本人点「允许」才发口令。 */
@@ -123,9 +134,12 @@ export const LocalSettings = Type.Object({
   allowedOrigins: Type.Array(Type.String()),
   /** 「暂停全部」后为 true：进行中的会话停下，不接新会话、不续接旧会话；只能在托盘里恢复。 */
   paused: Type.Boolean(),
+  /** 同时最多跑几个（默认 3，插件页可改）。超出的排队，先来先跑；调大时立刻从队里接上。 */
+  maxConcurrent: Type.Integer({ minimum: 1, maximum: 10 }),
 }, strict);
 export const LocalSettingsPatch = Type.Object({
   includePersonalConfigByDefault: Type.Optional(Type.Boolean()),
+  maxConcurrent: Type.Optional(Type.Integer({ minimum: 1, maximum: 10 })),
   /** 网页只能暂停（true）；传 false 会被拒（409），恢复只能在本机托盘里点。 */
   paused: Type.Optional(Type.Boolean()),
 }, strict);
@@ -135,7 +149,9 @@ export const LocalStatusResponse = Type.Object({
   deviceId: Uuid,
   version: Type.String(),
   agents: Type.Array(LocalAgentStatus),
+  /** 等于 slots.running（留着兼容）。 */
   activeSessions: Type.Integer({ minimum: 0 }),
+  slots: LocalSlots,
   cloud: LocalCloudLinkView,
   settings: LocalSettings,
 }, strict);
@@ -217,6 +233,8 @@ export const LocalFolderPickResponse = Type.Object({ folder: Nullable(LocalFolde
 // ───────────────────────── 会话 ─────────────────────────
 
 export const LocalSessionStatus = Type.Union([
+  /** 等空位：本机同时跑的已满，先来先跑，有空位自动开始；本机程序重启后照样排着。界面上叫「等空位」。 */
+  Type.Literal("queued"),
   Type.Literal("starting"),
   Type.Literal("running"),
   /** 有权限请求挂起，等网页批准或拒绝。 */
@@ -300,6 +318,8 @@ export const LocalSessionSummary = Type.Object({
   updatedAt: Instant,
   lastSeq: Type.Integer({ minimum: 0 }),
   pendingPermissions: Type.Integer({ minimum: 0 }),
+  /** 排队时是第几个（1 起），没在排队为 null。 */
+  queuePosition: Nullable(Type.Integer({ minimum: 1 })),
   usage: LocalUsage,
 }, strict);
 export const LocalSessionListResponse = Type.Object({ sessions: Type.Array(LocalSessionSummary) }, strict);
@@ -325,6 +345,19 @@ export const LocalPermissionRequestView = Type.Object({
 export const LocalSessionDetailResponse = Type.Object({
   session: LocalSessionSummary,
   pendingPermissions: Type.Array(LocalPermissionRequestView),
+}, strict);
+
+/**
+ * POST /v1/sessions/batch：一次开工多件（派活单点一次「开工」）。每件和单开一件一样；按给的顺序排，有空位的马上开，满了的进队列（status = queued）。
+ * 开工只能由本人在这台电脑的网页上点，云端不发指令。
+ */
+export const LocalCreateSessionBatchRequest = Type.Object({ items: Type.Array(LocalCreateSessionRequest, { minItems: 1, maxItems: 20 }) }, strict);
+/** 每件一个结果，顺序和请求一样：成了给会话（可能是 queued），没成给错误（这一件不留记录，别的照常）。 */
+export const LocalCreateSessionBatchResponse = Type.Object({
+  results: Type.Array(Type.Union([
+    Type.Object({ ok: Type.Literal(true), session: LocalSessionSummary }, strict),
+    Type.Object({ ok: Type.Literal(false), error: Type.Object({ code: LocalRunnerErrorCode, message: Type.String() }, strict) }, strict),
+  ])),
 }, strict);
 
 /**
@@ -381,6 +414,17 @@ export const LocalTopicVersionKind = Type.Union([Type.Literal("outline"), Type.L
 const SyncKey = Type.String({ minLength: 10, maxLength: 200 });
 
 /**
+ * 计划进度（派活单上的「第 3/6 步」）：done 做完几条，total 共几条，step 是第几步（正在做的那条是第几条；没有正在做的就是做完的条数），
+ * current 是正在做的那条的标题（没有为 null）。
+ */
+export const LocalPlanProgress = Type.Object({
+  done: Type.Integer({ minimum: 0 }),
+  total: Type.Integer({ minimum: 0 }),
+  step: Type.Integer({ minimum: 0 }),
+  current: Nullable(Type.String()),
+}, strict);
+
+/**
  * GET /v1/sessions/:id/events（text/event-stream）。每条 `id: <seq>` + `data: <JSON>`。
  * 断线后带 Last-Event-ID 重连，本机从会话事件日志补发其后的全部事件；也可用 ?after=<seq>。
  * 事件已归一化，不随执行方变：Claude Code 和以后的 Codex 都映射到这几种。
@@ -392,7 +436,7 @@ export const LocalSessionEvent = Type.Union([
   ev("assistant_text", { text: Type.String() }),
   ev("tool_call", { toolUseId: Type.String(), name: Type.String(), title: Type.String(), input: Type.Record(Type.String(), Type.Unknown()) }),
   ev("tool_result", { toolUseId: Type.String(), isError: Type.Boolean(), preview: Type.String() }),
-  ev("plan", { entries: Type.Array(LocalPlanEntry) }),
+  ev("plan", { entries: Type.Array(LocalPlanEntry), progress: LocalPlanProgress }),
   ev("permission_request", { request: LocalPermissionRequestView }),
   ev("permission_resolved", { requestId: Type.String(), decision: Type.Union([Type.Literal("allow"), Type.Literal("deny")]), message: Type.Optional(Type.String()), allowForSession: Type.Boolean() }),
   ev("turn_end", {
@@ -426,7 +470,7 @@ export const LocalSyncItem = Type.Union([
   syncItem("status", Type.Object({
     status: LocalSessionStatus, title: Type.String(), agent: LocalAgentKind, modelLabel: Type.String(),
   }, strict)),
-  syncItem("plan", Type.Object({ entries: Type.Array(LocalPlanEntry, { maxItems: 100 }) }, strict)),
+  syncItem("plan", Type.Object({ entries: Type.Array(LocalPlanEntry, { maxItems: 100 }), progress: LocalPlanProgress }, strict)),
   /** 证据：一段说明、日志片段、链接（PR 等）、改动摘要。不传完整工具输出。 */
   syncItem("evidence", Type.Object({
     kind: Type.Union([Type.Literal("note"), Type.Literal("log"), Type.Literal("link"), Type.Literal("diff_summary")]),
@@ -476,6 +520,8 @@ export const LocalSyncItem = Type.Union([
 export const LocalSyncBatchRequest = Type.Object({
   deviceId: Uuid,
   runnerVersion: Type.String(),
+  /** 发这一批时本机的位置数（云端的 worker 列表和「资源」用）。 */
+  slots: LocalSlots,
   items: Type.Array(LocalSyncItem, { minItems: 1, maxItems: 50 }),
 }, strict);
 export const LocalSyncBatchResponse = Type.Object({
@@ -526,6 +572,10 @@ export type TLocalPlanEntry = Static<typeof LocalPlanEntry>;
 export type TLocalHandbackCriterion = Static<typeof LocalHandbackCriterion>;
 export type TLocalTopicVersionKind = Static<typeof LocalTopicVersionKind>;
 export type TLocalRole = Static<typeof LocalRole>;
+export type TLocalSlots = Static<typeof LocalSlots>;
+export type TLocalPlanProgress = Static<typeof LocalPlanProgress>;
+export type TLocalCreateSessionBatchRequest = Static<typeof LocalCreateSessionBatchRequest>;
+export type TLocalCreateSessionBatchResponse = Static<typeof LocalCreateSessionBatchResponse>;
 export type TLocalRoleTool = Static<typeof LocalRoleTool>;
 export type TLocalSessionEvent = Static<typeof LocalSessionEvent>;
 export type TLocalSyncItem = Static<typeof LocalSyncItem>;
@@ -559,6 +609,7 @@ export const LOCAL_RUNNER_ROUTES = {
   deleteFolder: { method: "DELETE", path: "/v1/folders/:id", auth: true },
   listSessions: { method: "GET", path: "/v1/sessions", auth: true },
   createSession: { method: "POST", path: "/v1/sessions", auth: true },
+  createSessionBatch: { method: "POST", path: "/v1/sessions/batch", auth: true },
   getSession: { method: "GET", path: "/v1/sessions/:id", auth: true },
   sessionEvents: { method: "GET", path: "/v1/sessions/:id/events", auth: true },
   sendMessage: { method: "POST", path: "/v1/sessions/:id/messages", auth: true },

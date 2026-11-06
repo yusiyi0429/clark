@@ -42,6 +42,9 @@ tianshu-local version
 | `src/pairing.ts` | 配对（本机弹框确认码）、口令只存哈希 |
 | `src/sessions.ts` | 会话状态机、权限挂起、插话、停下、强停、续接、交产出物和交回、喂发件箱 |
 | `src/agents/claudeCode.ts`、`claudeEnv.ts` | 拉起 Claude Code、参数、环境变量白名单、stream-json 归一化 |
+| `src/agents/pathGuard.ts` | 权限请求里认越界路径、放行建议越界就不给「这张卡都允许」（ADR 0031） |
+| `src/rolePrompt.ts`、`src/agents/feishuPlugin.ts` | 工作规矩和岗位进追加的系统提示词、挑刺子 agent、评审会那句话；岗位要飞书时挂的会话插件（ADR 0033） |
+| `src/sessionMcp.ts` | 本会话 MCP：卡交产出物、证据、交回；专题存版本、报飞书地址 |
 | `src/agents/claudeSetup.ts` | 检测、安装、登录 Claude Code |
 | `src/agents/codex.ts` | Codex 占位（12 月） |
 | `src/eventLog.ts` | 每会话事件日志 |

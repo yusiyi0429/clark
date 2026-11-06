@@ -65,6 +65,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
     cloudLinked: async () => Boolean(await cloud.target()),
     paused: () => settings.get().paused,
     skillsDir: opts.skillsDir ?? join(homeDir(), ".claude", "skills"),
+    maxConcurrent: () => settings.get().maxConcurrent,
     adapters: {
       "claude-code": new ClaudeCodeAdapter(opts.claudeBin ? async () => opts.claudeBin! : () => claude.bin()),
       codex: new CodexAdapter(),
@@ -72,6 +73,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
     onChange: updateTray,
   });
   sessionsRef = sessions;
+  outbox.slots = () => sessions.slots();
   const server = createServer({
     config, version: VERSION, tokens, pairings, sessions, log, models, folders, claude, cloud, settings,
     pickFolder: () => desktop.pickFolder(),

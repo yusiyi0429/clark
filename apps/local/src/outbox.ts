@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { Value } from "@sinclair/typebox/value";
 import {
   LOCAL_RUNNER_SYNC_PATH, LocalSyncBatchResponse, LocalSyncItem,
-  type TLocalSyncItem, type TLocalOutboxStatus, type TLocalSyncBatchRequest,
+  type TLocalSyncItem, type TLocalOutboxStatus, type TLocalSyncBatchRequest, type TLocalSlots,
 } from "@warmap/contracts";
 import { readJson, writeJsonAtomic, nowIso } from "./store.js";
 
@@ -27,6 +27,8 @@ const isItemRejection = (status: number) => status >= 400 && status < 500 && ![4
 export class Outbox {
   private readonly file: string;
   private readonly blobDir: string;
+  /** 发每一批时带上本机的位置数（app 接好会话管理后替换）。 */
+  slots: () => TLocalSlots = () => ({ max: 3, running: 0, queued: 0 });
   private state: State;
   private timer: NodeJS.Timeout | null = null;
   private flushing: Promise<void> | null = null;
@@ -127,7 +129,7 @@ export class Outbox {
       items.push(item);
       bytes += size;
     }
-    const body: TLocalSyncBatchRequest = { deviceId: this.meta.deviceId, runnerVersion: this.meta.runnerVersion, items };
+    const body: TLocalSyncBatchRequest = { deviceId: this.meta.deviceId, runnerVersion: this.meta.runnerVersion, slots: this.slots(), items };
     let error: string | null = null;
     let retryNow = false;
     try {

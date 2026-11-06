@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSyn
 import { basename, extname, join, resolve } from "node:path";
 import type {
   TLocalAgentKind, TLocalCreateSessionRequest, TLocalHandbackCriterion, TLocalPermissionRequestView, TLocalRole, TLocalSendMessageRequest, TLocalSendMessageResponse,
-  TLocalSessionKind, TLocalSessionStatus, TLocalSessionSubject, TLocalSessionSummary, TLocalSyncItem, TLocalTopicVersionKind, TLocalUsage,
+  TLocalSessionKind, TLocalSessionStatus, TLocalSlots, TLocalSessionSubject, TLocalSessionSummary, TLocalSyncItem, TLocalTopicVersionKind, TLocalUsage,
 } from "@warmap/contracts";
 import { readJson, writeJsonAtomic, nowIso } from "./store.js";
 import type { EventLog, EventBody } from "./eventLog.js";
@@ -71,6 +71,8 @@ export interface SessionDeps {
   cloudLinked?: () => Promise<boolean>;
   /** 托盘或网页暂停后，不开新会话、不续接旧会话。 */
   paused?: () => boolean;
+  /** 同时最多跑几个（本机设置 maxConcurrent）。 */
+  maxConcurrent?: () => number;
   /** 本人已装的技能目录（找 lark-* 飞书技能，岗位要飞书时挂给会话）。 */
   skillsDir?: string;
   onChange?: () => void;
@@ -126,7 +128,7 @@ export class SessionManager {
 
   private summary(rec: SessionRecord): TLocalSessionSummary {
     const { mcpSecret: _s, syncSeq: _q, outputs: _o, handedBack: _h, versionNumber: _v, lastVersion: _l, role: _r, critics: _c, ...rest } = rec;
-    return { ...rest, lastSeq: this.d.log.lastSeq(rec.id), pendingPermissions: this.pending.get(rec.id)?.size ?? 0 };
+    return { ...rest, lastSeq: this.d.log.lastSeq(rec.id), pendingPermissions: this.pending.get(rec.id)?.size ?? 0, queuePosition: this.queuePosition(rec) };
   }
 
   list(): TLocalSessionSummary[] {
@@ -143,6 +145,21 @@ export class SessionManager {
     const rec = this.records.get(id) ?? this.launching.get(id);
     if (!rec) throw new SessionError("not_found", "没有这个会话");
     return rec.subject.kind;
+  }
+
+  /** 排队时是第几个（先来先跑）；没在排队为 null。 */
+  private queuePosition(rec: SessionRecord): number | null {
+    if (rec.status !== "queued") return null;
+    return this.queue().indexOf(rec) + 1;
+  }
+
+  private queue(): SessionRecord[] {
+    return [...this.records.values()].filter((r) => r.status === "queued").sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+
+  /** 资源栏的「本机 ▮▮▯」。 */
+  slots(): TLocalSlots {
+    return { max: this.d.maxConcurrent?.() ?? 3, running: this.activeCount(), queued: this.queue().length };
   }
 
   activeCount(): number {
@@ -306,7 +323,7 @@ export class SessionManager {
         if (!this.pending.get(rec.id)?.size && rec.status === "waiting_permission") this.setStatus(rec, "running");
         break;
       case "plan":
-        this.sync(rec, { type: "plan", data: { entries: e.entries.slice(0, 100) } });
+        this.sync(rec, { type: "plan", data: { entries: e.entries.slice(0, 100), progress: e.progress } });
         break;
       case "turn_end": {
         const u = rec.usage;
