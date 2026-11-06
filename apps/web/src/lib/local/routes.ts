@@ -30,6 +30,7 @@ export const LOCAL_RUNNER_ROUTES: Contracts["LOCAL_RUNNER_ROUTES"] = {
   deleteFolder: { method: "DELETE", path: "/v1/folders/:id", auth: true },
   listSessions: { method: "GET", path: "/v1/sessions", auth: true },
   createSession: { method: "POST", path: "/v1/sessions", auth: true },
+  createSessionBatch: { method: "POST", path: "/v1/sessions/batch", auth: true },
   getSession: { method: "GET", path: "/v1/sessions/:id", auth: true },
   sessionEvents: { method: "GET", path: "/v1/sessions/:id/events", auth: true },
   sendMessage: { method: "POST", path: "/v1/sessions/:id/messages", auth: true },

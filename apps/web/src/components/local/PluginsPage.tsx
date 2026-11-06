@@ -83,6 +83,15 @@ function LocalSection({ personName, handheld }: { personName: string; handheld: 
           <span>带上个人配置</span>
         </label>
       ) : null}
+      {ready && !handheld && status ? (
+        <label className={s.toggle}>
+          <span>同时跑</span>
+          <select className={s.select} value={status.settings.maxConcurrent} aria-label="同时跑几个"
+            onChange={(event) => void local.runner.patchSettings({ maxConcurrent: Number(event.target.value) }).then(() => local.refresh()).catch(() => showWorkspaceToast({ text: "没改成，请重试" }))}>
+            {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n} 个</option>)}
+          </select>
+        </label>
+      ) : null}
       {ready && !handheld ? <div className={s.footActions}><HeroButton variant="ghost" size="sm" onPress={() => void local.unpair()}>取消配对</HeroButton></div> : null}
     </section>
   );

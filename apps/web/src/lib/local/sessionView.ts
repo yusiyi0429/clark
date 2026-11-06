@@ -101,6 +101,10 @@ export function foldEvent(view: SessionView, event: TLocalSessionEvent): Session
       if (event.code === "interjection_next_step") return next;
       next.entries = [...view.entries, { kind: "notice", ...base, level: event.level, text: event.text }];
       return next;
+    case "version":
+      next.entries = [...view.entries, { kind: "notice", ...base, level: "info", text: `存了${event.label ?? `第 ${event.number} 版`}` }];
+      next.lastActivity = { at: event.at, text: `存了${event.label ?? `第 ${event.number} 版`}` };
+      return next;
   }
 }
 

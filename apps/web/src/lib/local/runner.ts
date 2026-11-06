@@ -3,14 +3,14 @@
  * 接口和类型照 packages/contracts/src/localRunner.ts，两边不各写一份。
  */
 import type {
-  TLocalCloudLinkRequest, TLocalCloudLinkView, TLocalCreateSessionRequest, TLocalFolder, TLocalHealthResponse,
+  TLocalCloudLinkRequest, TLocalCloudLinkView, TLocalCreateSessionBatchResponse, TLocalCreateSessionRequest, TLocalFolder, TLocalHealthResponse,
   TLocalModelProfile, TLocalModelProfileUpsert, TLocalPairingStartResponse, TLocalPairingStatusResponse,
-  TLocalPermissionDecisionRequest, TLocalRunnerErrorCode, TLocalSendMessageResponse, TLocalSessionDetailResponse,
+  TLocalPermissionDecisionRequest, TLocalRunnerErrorCode, TLocalSendMessageRequest, TLocalSendMessageResponse, TLocalSessionDetailResponse,
   TLocalSessionEvent, TLocalSessionSummary, TLocalSettings, TLocalSettingsPatch, TLocalStatusResponse,
 } from "@warmap/contracts";
 
 export type {
-  TLocalFolder, TLocalHealthResponse, TLocalModelProfile, TLocalPermissionRequestView, TLocalPlanEntry, TLocalSessionEvent,
+  TLocalCreateSessionRequest, TLocalFolder, TLocalHealthResponse, TLocalModelProfile, TLocalPermissionRequestView, TLocalPlanEntry, TLocalRole, TLocalSessionEvent,
   TLocalSessionStatus, TLocalSessionSummary, TLocalStatusResponse, TLocalUsage,
 } from "@warmap/contracts";
 
@@ -45,8 +45,11 @@ export interface LocalRunner {
   removeFolder(id: string): Promise<void>;
   listSessions(): Promise<TLocalSessionSummary[]>;
   createSession(body: TLocalCreateSessionRequest): Promise<TLocalSessionSummary>;
+  /** 一次开工多件：结果按请求顺序，有空位的马上开，满了的是 queued。 */
+  createSessionBatch(items: TLocalCreateSessionRequest[]): Promise<TLocalCreateSessionBatchResponse["results"]>;
   getSession(id: string): Promise<TLocalSessionDetailResponse>;
-  sendMessage(id: string, text: string): Promise<TLocalSendMessageResponse>;
+  /** 说一句；kind=review 是专题开评审会（text 可不填）。 */
+  sendMessage(id: string, text: string, kind?: TLocalSendMessageRequest["kind"]): Promise<TLocalSendMessageResponse>;
   interrupt(id: string): Promise<TLocalSessionSummary>;
   kill(id: string): Promise<TLocalSessionSummary>;
   decidePermission(id: string, requestId: string, body: TLocalPermissionDecisionRequest): Promise<TLocalSessionSummary>;

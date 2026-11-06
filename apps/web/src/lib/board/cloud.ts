@@ -5,7 +5,7 @@
 import type {
   TAcceptCardDraftsRequest, TCardBoardResponse, TCardBriefResponse, TCardDetailResponse, TCardPlanView, TCardTaskView,
   TCreateLocalDeviceRequest, TCreateLocalDeviceResponse, TLocalDeviceView, TPatchCardRequest, TResearchTopicView,
-  TTopicBriefResponse, TTopicDetailResponse, TTopicVersionView,
+  TTopicBriefResponse, TTopicDetailResponse, TTopicVersionView, TWorkersResponse,
 } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
 
@@ -68,6 +68,9 @@ export const overrule = (cardId: string, handbackId: string, reason: string) =>
 export const retryAcceptance = (cardId: string, handbackId: string) => unwrap(browserApi.POST("/api/me/cards/{id}/handbacks/{handbackId}/retry", { params: handback(cardId, handbackId) }));
 export const markReturned = (cardId: string, handbackId: string) => unwrap(browserApi.POST("/api/me/cards/{id}/handbacks/{handbackId}/returned", { params: handback(cardId, handbackId) }));
 
+// ── worker（跨 Task）──
+export const readWorkers = () => maybe<TWorkersResponse>(browserApi.GET("/api/me/workers") as Promise<Result<TWorkersResponse>>);
+
 // ── 本机设备 ──
 export const listDevices = () => maybe(browserApi.GET("/api/me/local-devices")).then((data) => (data?.devices ?? []) as TLocalDeviceView[]);
 export const createDevice = (body: TCreateLocalDeviceRequest) => unwrap<TCreateLocalDeviceResponse>(browserApi.POST("/api/me/local-devices", { body }) as Promise<Result<TCreateLocalDeviceResponse>>);
@@ -81,4 +84,6 @@ export const readTopic = (topicId: string) => maybe<TTopicDetailResponse>(browse
 export const patchTopic = (topicId: string, body: { title?: string; status?: "active" | "archived" }) => unwrap(browserApi.PATCH("/api/me/topics/{id}", { params: id(topicId), body }));
 export const readTopicVersion = (topicId: string, number: number) =>
   unwrap<TTopicVersionView>(browserApi.GET("/api/me/topics/{id}/versions/{number}", { params: { path: { id: topicId, number } } }) as Promise<Result<TTopicVersionView>>);
-export const topicBrief = (topicId: string) => unwrap<TTopicBriefResponse>(browserApi.GET("/api/me/topics/{id}/brief", { params: id(topicId) }));
+/** critics：评审会用的挑刺岗位 id（本人点的），不传用团队里的前三个。 */
+export const topicBrief = (topicId: string, critics?: string[]) =>
+  unwrap<TTopicBriefResponse>(browserApi.GET("/api/me/topics/{id}/brief", { params: { path: { id: topicId }, ...(critics?.length ? { query: { critics: critics.join(",") } } : {}) } }) as Promise<Result<TTopicBriefResponse>>);

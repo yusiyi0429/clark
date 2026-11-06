@@ -18,14 +18,14 @@ const base: TTaskView = {
   owner: { personId: "p1", name: "孙铭泽" }, collaborators: [], latestProgress: null, returnReason: null, origin: null, awaitingAcceptance: false, planTaskId: "t1", blocker: null,
   createdAt: "2026-11-06T01:00:00Z", updatedAt: "2026-11-06T01:00:00Z",
 };
-const facet = (card: Partial<TTaskCard>): TTaskCard => ({ stage: "todo", wait: null, executor: "claude_code", model: null, criterion: null, run: null, handback: null, deliverable: null, ...card });
+const facet = (card: Partial<TTaskCard>): TTaskCard => ({ stage: "todo", wait: null, executor: "claude_code", role: null, model: null, criterion: null, run: null, handback: null, deliverable: null, ...card });
 const item = (id: string, card: Partial<TTaskCard> | null, extra: Partial<TTaskView> = {}): CardItem => ({ ...base, id, title: `卡 ${id}`, ...extra, ...(card ? { card: facet(card) } : {}) });
 const task: THomePlanTask = { taskId: "t1", missionId: "m1", name: "看板与派活跑通", doneDefinition: null, criteria: ["能拆卡", "能开工"], responsibleId: null };
-const draft: TCardDraftView = { id: "00000000-0000-4000-8000-0000000000d1", planId: "00000000-0000-4000-8000-0000000000a1", position: 0, title: "草稿一", brief: "", doneDefinition: "完成", criterionIndex: 1, executor: "claude_code", modelTier: "normal", why: null };
+const draft: TCardDraftView = { id: "00000000-0000-4000-8000-0000000000d1", planId: "00000000-0000-4000-8000-0000000000a1", position: 0, title: "草稿一", brief: "", doneDefinition: "完成", criterionIndex: 1, executor: "claude_code", modelTier: "normal", why: null, role: null, suggestPresetKey: null };
 const board = (cards: CardItem[], drafts: TCardDraftView[] = []): TaskBoard => ({ taskId: "t1", criteria: [{ index: 1, text: "能拆卡" }, { index: 2, text: "能开工" }], cards, drafts, plan: null, pending: [], nextVersion: 2, fallback: false });
 const session = (cardId: string, extra: Partial<TLocalSessionSummary> = {}): TLocalSessionSummary => ({
   id: `00000000-0000-4000-8000-00000000${cardId.padStart(4, "0")}`, subject: { kind: "card", cardId }, title: cardId, agent: "claude-code", modelProfileId: "subscription", modelLabel: "订阅",
-  cwd: "C:\\w", status: "running", includePersonalConfig: false, createdAt: "2026-11-06T01:00:00Z", updatedAt: "2026-11-06T01:00:00Z", lastSeq: 1, pendingPermissions: 0,
+  cwd: "C:\\w", status: "running", includePersonalConfig: false, createdAt: "2026-11-06T01:00:00Z", updatedAt: "2026-11-06T01:00:00Z", lastSeq: 1, pendingPermissions: 0, queuePosition: null,
   usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null }, ...extra,
 });
 

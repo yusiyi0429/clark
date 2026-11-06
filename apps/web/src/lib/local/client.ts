@@ -2,7 +2,7 @@
  * 真本机程序的客户端：直连 http://127.0.0.1:<端口>，口令放在 x-tianshu-local-token 头里。
  * 事件流不能用 EventSource（带不了口令头），用 fetch 读 SSE，断了带 Last-Event-ID 重连（RFC 第 4 节）。
  */
-import type { TLocalSessionEvent } from "@warmap/contracts";
+import type { TLocalCreateSessionBatchResponse, TLocalSessionEvent } from "@warmap/contracts";
 import { LOCAL_RUNNER_DEFAULT_PORT, LOCAL_RUNNER_ROUTES, LOCAL_RUNNER_TOKEN_HEADER } from "./routes";
 import { LocalRunnerError, type EventWatch, type LocalRunner } from "./runner";
 
@@ -122,8 +122,9 @@ export function createHttpRunner(base = localRunnerBase(), token: () => string =
     removeFolder: async (id) => { await call("deleteFolder", { id }); },
     listSessions: async () => (await call<{ sessions: Awaited<ReturnType<LocalRunner["listSessions"]>> }>("listSessions")).sessions,
     createSession: (body) => call("createSession", {}, body),
+    createSessionBatch: async (items) => (await call<TLocalCreateSessionBatchResponse>("createSessionBatch", {}, { items })).results,
     getSession: (id) => call("getSession", { id }),
-    sendMessage: (id, text) => call("sendMessage", { id }, { text }),
+    sendMessage: (id, text, kind) => call("sendMessage", { id }, kind === "review" ? { kind, ...(text ? { text } : {}) } : { text }),
     interrupt: async (id) => (await call<{ session: Awaited<ReturnType<LocalRunner["interrupt"]>> }>("interrupt", { id }, {})).session,
     kill: async (id) => (await call<{ session: Awaited<ReturnType<LocalRunner["kill"]>> }>("kill", { id }, {})).session,
     decidePermission: async (id, requestId, body) => (await call<{ session: Awaited<ReturnType<LocalRunner["kill"]>> }>("decidePermission", { id, requestId }, body)).session,
