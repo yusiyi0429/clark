@@ -1,7 +1,7 @@
 import type { TLocalRole, TLocalRoleTool, TLocalSessionKind, TLocalVerdictCriterion } from "@warmap/contracts";
 
 /**
- * 会话追加的系统提示词（--append-system-prompt-file）、挑刺子 agent 的定义（--agents）、评审会的那句话（ADR 0033）。
+ * 会话追加的系统提示词（--append-system-prompt-file）、挑刺子 agent 的定义（--agents）、评审会的那句话（ADR 0037）。
  * 工作规矩写在这里（V2 设计 6.6），岗位的职责、做法、验收口径原样接在后面。都写在本机程序自己的数据目录，不进本人的仓库。
  */
 

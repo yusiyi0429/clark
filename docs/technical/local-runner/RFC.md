@@ -1,6 +1,6 @@
 # RFC：天枢本机程序（apps/local）
 
-v0.1 · 2026-11-06 · 第一版（Windows 先行）。决策见 ADR [0028](../../adr/0028-local-runner-single-binary-with-bun.md)（打包）、[0029](../../adr/0029-local-runner-keys-stay-on-device.md)（钥匙）、[0030](../../adr/0030-local-runner-sessions-clean-by-default.md)（会话默认干净）、[0031](../../adr/0031-local-runner-outside-paths-flagged-not-denied.md)（越界路径）、[0032](../../adr/0032-local-runner-release-and-code-signing.md)（发布与签名，待本人定）、[0033](../../adr/0033-local-runner-roles-via-cli-flags.md)（岗位进会话）；接口以 `packages/contracts/src/localRunner.ts` 为准；装、卸、排错见 [runbook](../../guides/local-runner.md)。
+v0.1 · 2026-11-06 · 第一版（Windows 先行）。决策见 ADR [0028](../../adr/0028-local-runner-single-binary-with-bun.md)（打包）、[0029](../../adr/0029-local-runner-keys-stay-on-device.md)（钥匙）、[0030](../../adr/0030-local-runner-sessions-clean-by-default.md)（会话默认干净）、[0031](../../adr/0031-local-runner-outside-paths-flagged-not-denied.md)（越界路径）、[0032](../../adr/0032-local-runner-release-and-code-signing.md)（发布与签名，待本人定）、[0037](../../adr/0037-local-runner-roles-via-cli-flags.md)（岗位进会话）；接口以 `packages/contracts/src/localRunner.ts` 为准；装、卸、排错见 [runbook](../../guides/local-runner.md)。
 
 ## 0. 一句话
 
@@ -78,7 +78,7 @@ claude -p --input-format stream-json --output-format stream-json --verbose
               [,"claudeMdExcludes":["<主目录>/.claude/**","<主目录>/CLAUDE.md","<主目录>/CLAUDE.local.md"]]（干净会话）
               [,"env":{ANTHROPIC_BASE_URL,ANTHROPIC_MODEL,ANTHROPIC_DEFAULT_HAIKU_MODEL}（网关）]}
   [--model <订阅时选的模型>]
-  --append-system-prompt-file <sessions/<id>/system.md>   # 工作规矩 + 岗位（ADR 0033）
+  --append-system-prompt-file <sessions/<id>/system.md>   # 工作规矩 + 岗位（ADR 0037）
   [--agents <sessions/<id>/agents.json>]                 # 专题的挑刺子 agent
   [--plugin-dir <数据目录/plugins/tianshu-feishu>]        # 岗位要飞书时
   [--disallowedTools WebSearch]        # 模型配置的 webSearch 关着时（网关默认关，实测白名单除外）
@@ -102,7 +102,7 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
 
 状态：`starting → running ⇄ waiting_permission → idle → running …`；进程退出为 `exited`（正常、强停）或 `failed`（异常退出码）。本机程序重启时，上次还活着的会话一律记为 `exited`，再发一句话就 `--resume` 续上。会话 id 同时是 Claude Code 的 `--session-id`。
 
-开工请求可带 `role`（岗位）和专题的 `critics`（挑刺岗位，最多 3 个），进会话的方式见 ADR 0033；网页「说一句」带 `kind: "review"` 就是专题的评审会：本机替本人说一句，让会话同时调用挑刺子 agent、合成「分歧和建议」存成 kind = review 的一版（11/06 真跑 haiku 验证过并行和存版本）。
+开工请求可带 `role`（岗位）和专题的 `critics`（挑刺岗位，最多 3 个），进会话的方式见 ADR 0037；网页「说一句」带 `kind: "review"` 就是专题的评审会：本机替本人说一句，让会话同时调用挑刺子 agent、合成「分歧和建议」存成 kind = review 的一版（11/06 真跑 haiku 验证过并行和存版本）。
 
 **同时跑的上限和队列（V2 设计 20.6，11/06）**：派活单点一次「开工」用 `POST /v1/sessions/batch` 把一批交给本机（最多 20 件，逐件给结果，开不了的那件不留记录）。同时最多跑 `maxConcurrent` 个（本机设置，默认 3，插件页可改）；占位置的是 starting、running、waiting_permission，一轮做完在等本人回复的 idle 不占。满了（或前面还有人在排）就进队，状态 `queued`（界面叫「等空位」），摘要里 `queuePosition` 是排第几；先来先跑，按进队先后（`queueOrder`，一批里同一毫秒的也分得清）。有空位就自动从队头接上：一轮做完、结束、失败、排队时取消、调大上限、托盘恢复、本机程序启动好以后都会接一次；暂停和关机时不接，暂停时也不收新开工。排着的「停下」「强停」都是取消（出队，不能再续）；排着的不能说一句。给已开工的会话说一句、续接已停下的会话不走队列（本人在网页上的直接操作），可能短暂超过上限。本机程序重启后，排着的照原样排着，刚从队里拉起、还没开始就断了的放回原位；有空位就接上，用新开（`--session-id`）不用续接。健康状态、本机状态、每一批同步载荷都带 `slots { max, running, queued }`；status 同步条目在 queued 时带 `queuePosition`，前面的走了就给还在排的每件重报新位置。计划事件和 plan 条目带 `progress`（第几步 / 共几步）。假 claude 测顺序、让位、取消、调上限、暂停、重启（`test/queue.test.ts`），真跑 haiku：上限 1、同时开 2 件，第 2 件排第 1，第 1 件这一轮做完马上接上（`.scratch/local-runner/实验/K_排队真跑结果.json`，两件共约 $0.002）。
 

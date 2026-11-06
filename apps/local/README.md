@@ -44,7 +44,7 @@ tianshu-local version
 | `src/plan.ts` | 计划条目算「第几步 / 共几步」 |
 | `src/agents/claudeCode.ts`、`claudeEnv.ts` | 拉起 Claude Code、参数、环境变量白名单、stream-json 归一化 |
 | `src/agents/pathGuard.ts` | 权限请求里认越界路径、放行建议越界就不给「这张卡都允许」（ADR 0031） |
-| `src/rolePrompt.ts`、`src/agents/feishuPlugin.ts` | 四种会话的工作规矩和岗位进追加的系统提示词、挑刺子 agent、评审会那句话、验收没过的改法；岗位要飞书时挂的会话插件（ADR 0033） |
+| `src/rolePrompt.ts`、`src/agents/feishuPlugin.ts` | 四种会话的工作规矩和岗位进追加的系统提示词、挑刺子 agent、评审会那句话、验收没过的改法；岗位要飞书时挂的会话插件（ADR 0037） |
 | `src/sessionMcp.ts` | 本会话 MCP：卡交产出物、证据、交回；专题存版本、报飞书地址；规划员交计划（propose_plan）；验收员交结论（submit_verdict） |
 | `src/agents/claudeSetup.ts` | 检测、安装、登录 Claude Code |
 | `src/agents/codex.ts` | Codex 占位（12 月） |

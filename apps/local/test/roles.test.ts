@@ -1,4 +1,4 @@
-// 岗位进会话、挑刺岗位、评审会、工具名单决定挂什么（V2 设计 19.5，ADR 0033）。
+// 岗位进会话、挑刺岗位、评审会、工具名单决定挂什么（V2 设计 19.5，ADR 0037）。
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";

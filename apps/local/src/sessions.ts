@@ -420,7 +420,7 @@ export class SessionManager {
     // 每次拉起换一个本会话密钥，进程退出即作废：会话里跑的命令就算读到它，也只在这一次进程活着时有用。
     rec.mcpSecret = randomBytes(24).toString("hex");
     if (this.records.has(rec.id)) this.save(rec);
-    // 岗位的工具名单决定挂什么、给什么（ADR 0033）；没配岗位时照旧全给。
+    // 岗位的工具名单决定挂什么、给什么（ADR 0037）；没配岗位时照旧全给。
     const has = (t: TLocalRole["tools"][number]) => !rec.role || rec.role.tools.includes(t);
     const linked = Boolean(await this.d.cloudLinked?.());
     const tools = { cloud: linked && (has("tianshu") || has("web_search")), search: has("web_search") };

@@ -284,7 +284,7 @@ export const LocalRoleTool = Type.Union([Type.Literal("tianshu"), Type.Literal("
 const RoleText = Type.String({ maxLength: 8000 });
 /**
  * 岗位（V2 设计第 19 节）：和云端交代里的 RoleBrief 同形，网页可原样转给本机。
- * 本机把职责、做法、验收口径写进会话追加的系统提示词（不往本人的仓库写文件，ADR 0033）；tools 决定挂哪些插件、给哪些工具。
+ * 本机把职责、做法、验收口径写进会话追加的系统提示词（不往本人的仓库写文件，ADR 0037）；tools 决定挂哪些插件、给哪些工具。
  * modelTier 由网页按档位挑好模型（modelProfileId），本机不看；id、kind、version 只用来显示和留痕。
  */
 export const LocalRole = Type.Object({
