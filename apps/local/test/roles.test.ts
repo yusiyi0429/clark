@@ -2,7 +2,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { api, pair, startTestRunner, tempDir } from "./helpers.js";
+import { api, pair, startTestRunner, tempDir, ORIGIN } from "./helpers.js";
 import { ensureFeishuPlugin } from "../src/agents/feishuPlugin.js";
 
 const trace = (dir: string) => readFileSync(join(dir, ".fake-claude-trace.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((l) => l.argv);
@@ -127,6 +127,27 @@ describe("岗位", () => {
     rmSync(join(sk, "lark-doc", "SKILL.md"));
     expect(ensureFeishuPlugin(data, sk)).toBeNull();
     expect(existsSync(join(sk, "lark-doc"))).toBe(true);
+  });
+
+  it("挑刺子 agent 拿天枢的搜索，要这个会话本身有搜索：主岗位名单里没有 web_search 时（整场都禁了它）不给", async () => {
+    expect((await api(t.port, token, "PUT", "/v1/cloud", { apiBaseUrl: ORIGIN, token: "cloud-token-0123456789abcdef" })).status).toBe(200);
+    try {
+      const critics = [role("反方", ["web_search"])];
+      const agentsOf = async (tools: string[]) => {
+        const s = await api(t.port, token, "POST", "/v1/sessions", { subject: { kind: "topic", topicId: `t-${tools.join("-")}` }, title: "x", firstMessage: "hi", role: role("调研员", tools), critics });
+        expect(s.status).toBe(200);
+        const argv: string[] = trace(s.body.cwd).at(-1).argv;
+        await kill(s.body.id);
+        return { critic: JSON.parse(readFileSync(after(argv, "--agents")!, "utf8"))["critic-1"].tools as string[], disallowed: after(argv, "--disallowedTools")?.split(",") ?? [] };
+      };
+      const noSearch = await agentsOf(["tianshu"]); // 挂了天枢 MCP（读事项），但没有搜索
+      expect(noSearch.disallowed).toContain("mcp__tianshu__web_search");
+      expect(noSearch.critic).toEqual(["Read", "Grep", "Glob"]);
+      const withSearch = await agentsOf(["tianshu", "web_search"]);
+      expect(withSearch.critic).toEqual(["Read", "Grep", "Glob", "mcp__tianshu__web_search"]);
+    } finally {
+      await api(t.port, token, "DELETE", "/v1/cloud");
+    }
   });
 
   it("专题带挑刺岗位：每个挑刺岗位是一个只读子 agent；评审会那句话点名它们和最近一版；卡不收挑刺岗位、不能开评审会", async () => {

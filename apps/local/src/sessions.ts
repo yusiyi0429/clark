@@ -372,7 +372,8 @@ export class SessionManager {
     let agentsPath: string | null = null;
     if (rec.subject.kind === "topic" && rec.critics.length) {
       agentsPath = join(dir, "agents.json");
-      writeJsonAtomic(agentsPath, criticAgents(rec.critics, tools.cloud ? `mcp__${CLOUD_MCP_NAME}__web_search` : null));
+      // 主岗位名单里没有 web_search 时整场都禁了它（disallowedTools），挑刺子 agent 也就不给。
+      writeJsonAtomic(agentsPath, criticAgents(rec.critics, tools.cloud && tools.search ? `mcp__${CLOUD_MCP_NAME}__web_search` : null));
     }
     const run = await adapter.start({
       sessionId: rec.id, cwd: rec.cwd, resume, model, includePersonalConfig: rec.includePersonalConfig,
