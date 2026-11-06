@@ -59,7 +59,9 @@ type OutputRow = { id: string; kind: "artifact" | "evidence"; title: string; fil
   text: string | null; extracted_text: string | null };
 
 /** 谁验的：cloud 是云端的验收作业，local 是本人电脑上的验收员（同步条目 verdict）。 */
-export type Verifier = { source: "cloud" | "local"; modelLabel: string | null; roleId: string | null; roleVersion: number | null; runId: string | null };
+export type Verifier = { source: "cloud" | "local"; modelLabel: string | null; roleId: string | null; roleVersion: number | null; runId: string | null;
+  /** 本机验收员验的那个提交（卡在工作树里做时，ADR 0038）；云端和在文件夹里做的为 null。 */
+  commit: string | null };
 
 /**
  * 一次交回有了验收结论，在调用方的事务里落下（云端作业和本机验收员共用）：结论、改法（没过时固定格式拼）、谁验的；
@@ -72,10 +74,10 @@ export async function settleHandback(client: PoolClient, row: HandbackRow, resul
   const outcome = met === result.criteria.length ? "pass" : "fail";
   const locked = (await client.query("SELECT id::text,owner_id,status,plan_task_id FROM tasks WHERE id=$1 FOR UPDATE", [row.task_id])).rows[0] as TaskRow;
   const saved = await client.query(`UPDATE card_handbacks SET status='done',result=$3::jsonb,outcome=$4,return_text=$5,finished_at=$6,error=NULL,
-    verifier_source=$7,verifier_model=$8,verifier_role_id=$9,verifier_role_version=$10,verify_run_id=$11
+    verifier_source=$7,verifier_model=$8,verifier_role_id=$9,verifier_role_version=$10,verify_run_id=$11,verified_commit=$12
     WHERE id=$1 AND (($2::uuid IS NULL AND outcome IS NULL AND overruled_at IS NULL) OR (run_token=$2 AND status='running'))`,
   [row.id, token, JSON.stringify(result), outcome, outcome === "fail" ? returnText(row.criteria, result) : null, now,
-    verifier.source, verifier.modelLabel, verifier.roleId, verifier.roleVersion, verifier.runId]);
+    verifier.source, verifier.modelLabel, verifier.roleId, verifier.roleVersion, verifier.runId, verifier.commit]);
   if (!saved.rowCount) return { saved: false, outcome, proposal: null };
   // 旧的一次交回验完了，新的已经交上来：只记结论，不动卡。
   const latest = (await client.query("SELECT max(attempt)::int AS n FROM card_handbacks WHERE task_id=$1", [row.task_id])).rows[0].n as number;
@@ -182,7 +184,7 @@ export function createCardAcceptanceQueue(options: { pool: Pool; storageDir: str
       const result: StoredAcceptance = { headline: candidate.headline, beyondScope: candidate.beyondScope,
         criteria: [...candidate.criteria].sort((a, b) => a.index - b.index) };
       const { proposal } = await inTransaction(options.pool, (client) => settleHandback(client, row, result,
-        { source: "cloud", modelLabel: options.modelLabel, roleId: reviewer?.id ?? null, roleVersion: reviewer?.version ?? null, runId: null }, token, options.now()));
+        { source: "cloud", modelLabel: options.modelLabel, roleId: reviewer?.id ?? null, roleVersion: reviewer?.version ?? null, runId: null, commit: null }, token, options.now()));
       if (proposal) options.onProposal(proposal);
     } catch (cause) {
       // 关闭时放回队列，下次启动接着验；其余算这次没验完，可以重试。

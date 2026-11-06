@@ -7,7 +7,7 @@ import { planTaskViewer, type PlanTaskAccess } from "./planTaskAccess.js";
 import type { PeopleDirectory } from "./peopleDirectory.js";
 import { personDisplayNames } from "./people.js";
 import { openPlanTask } from "./taskAgreements.js";
-import { CARD_COLUMNS, cardsOf, effectiveOutcome, handbackBrief, nextVersions, type CardRow, type HandbackRow, type StoredAcceptance } from "./cardProjection.js";
+import { CARD_COLUMNS, cardGit, cardsOf, effectiveOutcome, handbackBrief, nextVersions, type CardRow, type HandbackRow, type StoredAcceptance } from "./cardProjection.js";
 import { outputView, recentRuns, runView, type OutputRow } from "./localDevices.js";
 import type { Query } from "./meetingStore.js";
 import { UUID_PATTERN } from "./meetingStore.js";
@@ -99,13 +99,14 @@ export async function planExpectedSeconds(q: Query): Promise<number> {
 
 /** 准备中的东西（version_id 为空的）。 */
 export async function pendingItems(q: Query, planTaskId: string): Promise<TPendingDeliverableItem[]> {
-  const rows = (await q(`SELECT p.id,p.added_at,h.task_id::text AS card_id,t.title AS card_title,tv.id AS topic_version_id,tv.topic_id,tv.label,rt.title AS topic_title
+  const rows = (await q(`SELECT p.id,p.added_at,h.task_id::text AS card_id,t.title AS card_title,h.git,h.verified_commit,tv.id AS topic_version_id,tv.topic_id,tv.label,rt.title AS topic_title
     FROM deliverable_pending_items p LEFT JOIN card_handbacks h ON h.id=p.handback_id LEFT JOIN tasks t ON t.id=h.task_id
     LEFT JOIN topic_versions tv ON tv.id=p.topic_version_id LEFT JOIN research_topics rt ON rt.id=tv.topic_id
     WHERE p.plan_task_id=$1 AND p.version_id IS NULL ORDER BY p.added_at,p.id`, [planTaskId])).rows as { id: string; added_at: Date; card_id: string | null;
-    card_title: string | null; topic_version_id: string | null; topic_id: string | null; label: string | null; topic_title: string | null }[];
+    card_title: string | null; git: HandbackRow["git"]; verified_commit: string | null; topic_version_id: string | null; topic_id: string | null; label: string | null;
+    topic_title: string | null }[];
   return rows.map((row) => ({ id: row.id, kind: row.card_id ? "card" : "topic", title: row.card_id ? row.card_title! : `${row.topic_title} · ${row.label}`,
-    cardId: row.card_id, topicId: row.topic_id, topicVersionId: row.topic_version_id, addedAt: row.added_at.toISOString() }));
+    cardId: row.card_id, topicId: row.topic_id, topicVersionId: row.topic_version_id, addedAt: row.added_at.toISOString(), git: cardGit(row) }));
 }
 
 /** GET /api/plan-tasks/:taskId/cards */

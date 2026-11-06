@@ -1,4 +1,4 @@
-import type { TCardHandbackBrief, TCardModel, TCardWait, TCriterionVerdict, TDeliverableInclusion, TLocalHandbackCriterion, TTaskCard, TTaskView } from "@warmap/contracts";
+import type { TCardGit, TCardHandbackBrief, TCardModel, TCardWait, TCriterionVerdict, TDeliverableInclusion, TLocalGitRef, TLocalHandbackCriterion, TTaskCard, TTaskView } from "@warmap/contracts";
 import { runBrief, type RunRow } from "./localDevices.js";
 import type { Query } from "./meetingStore.js";
 import { roleRef, rolesById } from "./roles.js";
@@ -15,7 +15,8 @@ export type HandbackRow = { id: string; task_id: string; run_id: string | null; 
   summary: string | null; output_ids: string[]; status: TCardHandbackBrief["status"]; started_at: Date | null; finished_at: Date | null; error: string | null;
   result: StoredAcceptance | null; outcome: "pass" | "fail" | null; return_text: string | null; returned_at: Date | null; overruled_at: Date | null;
   overruled_by: string | null; overrule_reason: string | null; created_at: Date;
-  verifier_source: "cloud" | "local" | null; verifier_model: string | null; verifier_role_id: string | null; verifier_role_version: number | null };
+  verifier_source: "cloud" | "local" | null; verifier_model: string | null; verifier_role_id: string | null; verifier_role_version: number | null;
+  git: TLocalGitRef | null; verified_commit: string | null };
 export type CardRow = { id: string; status: TTaskView["status"]; executor: TTaskCard["executor"]; model: TCardModel | null; brief: string | null;
   criterion_index: number | null; criterion_text: string | null; plan_task_id: string | null; done_definition: string | null; mission_id: string | null;
   role_id: string | null };
@@ -35,11 +36,14 @@ export function failStreak(handbacks: HandbackRow[]): number {
   return streak;
 }
 
+/** 交回的分支和提交、验的提交（卡在工作树里做时才有，ADR 0038）。 */
+export const cardGit = (row: Pick<HandbackRow, "git" | "verified_commit">): TCardGit | null => row.git ? { ...row.git, verifiedCommit: row.verified_commit } : null;
+
 export function handbackBrief(row: HandbackRow): TCardHandbackBrief {
   const criteria = row.result?.criteria ?? [];
   return { id: row.id, attempt: row.attempt, status: row.status, outcome: row.outcome, met: criteria.filter((item) => item.verdict === "met").length, total: criteria.length,
     headline: row.result?.headline ?? null, returnText: row.return_text, returnedAt: row.returned_at?.toISOString() ?? null, overruled: row.overruled_at !== null,
-    createdAt: row.created_at.toISOString(), finishedAt: row.finished_at?.toISOString() ?? null };
+    createdAt: row.created_at.toISOString(), finishedAt: row.finished_at?.toISOString() ?? null, git: cardGit(row) };
 }
 
 /** 列和标记（第 3 节）：handbacks、runs 都是新的在前。 */

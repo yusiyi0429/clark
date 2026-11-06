@@ -105,7 +105,7 @@ export async function listWorkers(deps: { q: Query; planTasks: PlanTaskSource; n
     const run = card.card.run;
     const role = card.card.role!;
     const base = { key: `card:${card.id}`, kind: "card" as const, cardId: card.id, topicId: null, title: card.title, task: taskOf(row.plan_task_id),
-      mission: missionOf(row.mission_id), cost: cardCosts.get(card.id) ?? null, stage: card.card.stage };
+      mission: missionOf(row.mission_id), cost: cardCosts.get(card.id) ?? null, stage: card.card.stage, git: card.card.handback?.git ?? null };
     const local = run ? { where: "local" as const, deviceId: run.deviceId, deviceName: run.deviceName, modelLabel: run.modelLabel } : null;
     if (card.card.stage === "todo" && run && isQueued(run.state)) {
       // 本机收下了、在等空位（还没开工，卡在待开始）；那台电脑不在线时算等本机上线。
@@ -150,7 +150,7 @@ export async function listWorkers(deps: { q: Query; planTasks: PlanTaskSource; n
     const run = topicRuns.get(topic.id);
     if (!role || (run && !ACTIVE.has(run.state))) continue;
     const base = { key: `topic:${topic.id}`, kind: "topic" as const, cardId: null, topicId: topic.id, title: topic.title, role: roleRef(role),
-      task: taskOf(topic.plan_task_id), mission: missionOf(topic.mission_id), cost: topicCosts.get(topic.id) ?? null, finishedAt: null };
+      task: taskOf(topic.plan_task_id), mission: missionOf(topic.mission_id), cost: topicCosts.get(topic.id) ?? null, finishedAt: null, git: null };
     if (!run) {
       drafts.push({ ...base, group: "queued", step: null, resource: null, startedAt: null, elapsedSeconds: null, stage: "todo", wait: null, needsYou: false,
         queueReason: "not_dispatched", queuePosition: null });
@@ -163,7 +163,7 @@ export async function listWorkers(deps: { q: Query; planTasks: PlanTaskSource; n
     if (!planner) break;
     const task = taskOf(run.plan_task_id)!;
     drafts.push({ key: `plan:${run.id}`, kind: "plan", cardId: null, topicId: null, title: task.name, role: roleRef(planner), task,
-      mission: missionOf(planTasks.get(task.id)?.missionId ?? null), stage: "doing", ...session(run) });
+      mission: missionOf(planTasks.get(task.id)?.missionId ?? null), stage: "doing", git: null, ...session(run) });
   }
 
   // #号：同一岗位按开工时间排（等开工的排在后面）。

@@ -193,6 +193,46 @@ describe("拆卡和验收在本机（第 21 节）", { timeout: 30_000 }, () => 
     } finally { await f.close(); }
   });
 
+  it("卡在自己的工作树里做（ADR 0038）：交回记分支和提交、结论记验的提交；卡的详情、看板上的卡、worker 行、准备中都看得到；在文件夹里做的为空", async () => {
+    const f = await localFixture();
+    try {
+      const dev = (await f.call("POST", "/api/me/roles", { name: "开发", family: "dev", kind: "worker" })).json().id as string;
+      const withRole = async (title: string) => {
+        const id = await f.card(title);
+        await f.call("PATCH", `/api/me/cards/${id}`, { version: 1, roleId: dev, executor: "claude_code" });
+        return id;
+      };
+      const [inTree, inFolder] = [await withRole("改登录页"), await withRole("写说明")];
+      const git = { branch: "tianshu/1a2b3c4d-login", baseBranch: "main", baseCommit: "a".repeat(40), commit: "b".repeat(40) };
+      const claims = [{ index: 1, result: "met", evidence: "页面改好了" }, { index: 2, result: "met", evidence: "评审过了" }];
+      const handedBack = await f.sync({ kind: "card", cardId: inTree }, [["handback", { summary: "做完了", criteria: claims, outputKeys: [], git }]]);
+      expect(handedBack.rejected).toEqual([]);
+      await f.sync({ kind: "card", cardId: inFolder }, [["handback", { summary: "做完了", criteria: claims, outputKeys: [] }]]);
+      const handback = (await f.t.sql("SELECT id::text,client_id FROM card_handbacks WHERE task_id=$1", [inTree]))[0] as { id: string; client_id: string };
+
+      const before = { ...git, verifiedCommit: null };
+      const detail = async (card: string) => (await f.call("GET", `/api/me/cards/${card}`)).json();
+      expect((await detail(inTree)).handbacks[0].git).toEqual(before);
+      expect((await detail(inTree)).task.card.handback.git).toEqual(before);
+      expect((await detail(inFolder)).handbacks[0].git).toBeNull();
+      const board = (await f.call("GET", "/api/plan-tasks/task-open/cards")).json();
+      expect(board.cards.find((card: { id: string }) => card.id === inTree).card.handback.git).toEqual(before);
+      const workers = async () => { const body = (await f.call("GET", "/api/me/workers")).json(); return [...body.running, ...body.queued, ...body.done]; };
+      expect((await workers()).find((item: { key: string }) => item.key === `verify:${inTree}`).git).toEqual(before);
+      expect((await workers()).find((item: { key: string }) => item.key === `verify:${inFolder}`).git).toBeNull();
+
+      // 验收员验的是交回的那个提交：过了以后卡进准备中，验的提交跟着出来。
+      const verdict = { passed: true, summary: "改动对得上", beyondScope: [], modelLabel: "订阅 · Opus", roleId: null, roleVersion: null, commit: "b".repeat(40),
+        criteria: [1, 2].map((index) => ({ index, verdict: "met", reason: "对得上", evidence: null, fix: null })) };
+      expect((await f.sync({ kind: "verify", cardId: inTree, handbackKey: handback.client_id }, [["verdict", verdict]])).rejected).toEqual([]);
+      const after = { ...git, verifiedCommit: "b".repeat(40) };
+      expect((await detail(inTree)).handbacks[0]).toMatchObject({ outcome: "pass", git: after });
+      expect((await f.call("GET", "/api/plan-tasks/task-open/cards")).json().pending).toMatchObject([{ kind: "card", cardId: inTree, git: after }]);
+      expect((await workers()).find((item: { key: string }) => item.key === `card:${inTree}`)).toMatchObject({ stage: "done", git: after });
+      expect(await f.t.sql("SELECT verified_commit FROM card_handbacks WHERE id=$1", [handback.id])).toEqual([{ verified_commit: "b".repeat(40) }]);
+    } finally { await f.close(); }
+  });
+
   it("get_task_context：本人看得到的 Task 才读，本体按本人授权读、每条事实带 cite:world:<id>@<版本>；带 Mission、约定、上一版交付物和评审；个人令牌和本机设备令牌都能调", async () => {
     const reads: { viewer: CompanyViewer; request: CompanyRequest }[] = [];
     const companyReader: CompanyReader = { async read(viewer, request) {
