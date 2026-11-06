@@ -19,7 +19,7 @@ const item = (extra: Partial<TWorkerItem>): TWorkerItem => ({
   key: "card:c1", kind: "card", cardId: "c1", topicId: null, title: "同时跑的上限和排队", role: ROLE, workerNo: 1,
   task: { id: "t1", name: "本机程序第一版" }, mission: null, step: { n: 4, total: 7, label: "跑测试" },
   resource: { where: "local", deviceId: null, deviceName: "ThinkPad", modelLabel: "Sonnet" }, startedAt: "2026-11-06T04:00:00Z", elapsedSeconds: 840,
-  finishedAt: null, cost: null, stage: "doing", wait: null, needsYou: false, queueReason: null, ...extra,
+  finishedAt: null, cost: null, stage: "doing", wait: null, needsYou: false, queueReason: null, queuePosition: null, ...extra,
 });
 const session = (extra: Partial<TLocalSessionSummary>): TLocalSessionSummary => ({
   id: "00000000-0000-4000-8000-0000000000a1", subject: { kind: "card", cardId: "c1" }, title: "x", agent: "claude-code", modelProfileId: "subscription", modelLabel: "订阅 · Sonnet",
@@ -32,6 +32,7 @@ describe("worker 和链路", () => {
   it("云端三格照搬；带岗位没开工的是「等开工」；验收中是云端的验收员", () => {
     expect(toWorker(item({ stage: "todo", queueReason: "not_dispatched", startedAt: null, step: null }), ctx())).toMatchObject({ state: "queued", reason: "start", mark: null });
     expect(toWorker(item({ stage: "todo", queueReason: "device_offline" }), ctx())).toMatchObject({ state: "queued", reason: "offline" });
+    expect(toWorker(item({ stage: "todo", queueReason: "slot", queuePosition: 3 }), ctx())).toMatchObject({ state: "queued", reason: "slot", queuePos: 3 });
     const reviewing = toWorker(item({ stage: "review", wait: "reviewing", role: { id: "00000000-0000-4000-8000-000000000009", name: "验收员", kind: "reviewer" },
       resource: { where: "cloud", deviceId: null, deviceName: null, modelLabel: "DeepSeek" } }), ctx());
     expect(reviewing).toMatchObject({ state: "doing", mark: "reviewing", where: "cloud", role: { name: "验收员", kind: "reviewer" } });

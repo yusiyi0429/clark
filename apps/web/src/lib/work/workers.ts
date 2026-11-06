@@ -46,7 +46,7 @@ export type Worker = {
   endedAt: string | null;
   costUsd: number | null;
   tokens: number;
-  /** 已排队里排第几（本机报的）。 */
+  /** 已排队里排第几（本机报的；云端转来的，这台电脑上以本机会话为准）。 */
   queuePos: number | null;
   /** 等你批准时要做的事（「运行 pnpm test」），命令单独给。 */
   ask: { text: string; command: string | null } | null;
@@ -67,7 +67,7 @@ export function toWorker(entry: TWorkerItem, { sessions, cards, deviceName }: { 
   let state: ChainState = entry.stage === "todo" ? "queued" : entry.stage === "done" ? "done" : "doing";
   let reason: QueueReason | null = state === "queued" ? REASON[entry.queueReason ?? "not_dispatched"] : null;
   let mark: WorkerMark | null = state === "doing" ? entry.wait : null;
-  let queuePos: number | null = null;
+  let queuePos: number | null = entry.queuePosition;
   // 本机的更新：排队、开工、等你批准、等你回复、已暂停以这台电脑为准；验收中、验收没过、受阻只有云端知道。
   if (session && state !== "done" && mark !== "reviewing" && mark !== "review_failed" && mark !== "blocked") {
     if (session.status === "queued") { state = "queued"; reason = "slot"; mark = null; queuePos = session.queuePosition; }
