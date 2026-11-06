@@ -84,7 +84,7 @@ function show(e) {
   else if (t === 'tool_call') log('  · ' + e.title);
   else if (t === 'tool_result') log('    ' + (e.isError ? '✗ ' : '✓ ') + e.preview.slice(0, 160));
   else if (t === 'permission_request') {
-    const out = e.request.outsidePaths;
+    const out = e.request.outsidePaths || []; // 升级前记下的事件没有这个字段
     const d = document.createElement('div'); d.className = out.length ? 'perm out' : 'perm'; d.id = 'p-' + e.request.requestId;
     const btn = (text, onclick) => { const b = document.createElement('button'); b.textContent = text; b.onclick = onclick; return b; };
     if (out.length) { const w = document.createElement('div'); w.className = 'why'; w.textContent = '越界（不在允许的文件夹里）：' + out.join('、'); d.append(w); }

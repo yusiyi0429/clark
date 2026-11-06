@@ -13,9 +13,10 @@ export function homeDir(): string {
  * 会把 ~/.claude/rules/*.md、~/.claude/CLAUDE.md 当成「项目规则」读进来，--setting-sources 管不住，换 CLAUDE_CONFIG_DIR 也不行（11/06 实测）。
  * 用 claudeMdExcludes 排除主目录这一层；仓库自己的 CLAUDE.md 照常读。Claude Code 按正斜杠的绝对路径匹配。
  */
-export function personalMemoryExcludes(home: string): string[] {
-  const h = home.replace(/\\/g, "/").replace(/\/$/, "");
-  return [`${h}/.claude/**`, `${h}/CLAUDE.md`, `${h}/CLAUDE.local.md`];
+export function personalMemoryExcludes(...homes: string[]): string[] {
+  // 主目录按磁盘实际大小写和按环境变量的写法各给一份：Claude Code 用哪种拼法算路径不确定，它按大小写敏感匹配。
+  return [...new Set(homes.map((home) => home.replace(/\\/g, "/").replace(/\/$/, "")))]
+    .flatMap((h) => [`${h}/.claude/**`, `${h}/CLAUDE.md`, `${h}/CLAUDE.local.md`]);
 }
 
 /**
@@ -79,7 +80,7 @@ export function buildClaudeArgs(launch: AgentLaunch): { args: string[]; env: Rec
   const env: Record<string, string> = { DISABLE_AUTOUPDATER: "1", ...launch.mcpEnv };
   // WebFetch 抓取前默认连 api.anthropic.com 做域名检查，国内网络连不上就整个失败（11/06 实测）。每个会话都关掉。
   const settings: { skipWebFetchPreflight: true; claudeMdExcludes?: string[]; env?: Record<string, string> } = { skipWebFetchPreflight: true };
-  if (!launch.includePersonalConfig) settings.claudeMdExcludes = personalMemoryExcludes(homeDir());
+  if (!launch.includePersonalConfig) settings.claudeMdExcludes = personalMemoryExcludes(homeDir(), homedir());
   const m = launch.model;
   if (m.source === "gateway") {
     if (!m.baseUrl || !m.model) throw new Error("网关模型缺地址或模型名");

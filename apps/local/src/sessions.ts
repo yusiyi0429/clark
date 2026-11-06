@@ -220,8 +220,8 @@ export class SessionManager {
     const run = await adapter.start({
       sessionId: rec.id, cwd: rec.cwd, resume, model, includePersonalConfig: rec.includePersonalConfig,
       mcpConfigPath: mcp.path, mcpEnv: mcp.env, allowedTools: mcp.allowedTools,
-      // 每次现查：会话途中本人移除了文件夹，之后的请求就算越界。
-      isAllowedPath: (p) => isInside(rec.cwd, p) || this.d.folders.contains(p),
+      // 每次现查：会话途中本人移除了文件夹，之后的请求（包括工作目录里的）就算越界。
+      allowedRoots: () => [...(this.d.folders.isAllowed(rec.cwd) ? [rec.cwd] : []), ...this.d.folders.list().map((f) => f.path)],
     });
     if (this.cancelled.delete(rec.id)) {
       await run.kill();

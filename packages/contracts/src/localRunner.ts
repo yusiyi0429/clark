@@ -289,7 +289,10 @@ export const LocalPermissionRequestView = Type.Object({
    * 文件类工具按字段取路径；Bash、PowerShell 是从命令里尽力认，可能认不全。本机不自动拒绝，由本人决定（ADR 0031）。
    */
   outsidePaths: Type.Array(Type.String(), { maxItems: 20 }),
-  /** 可以「这张卡都允许」：Claude Code 给了放行建议，且这一步没越界。放行只在本会话内有效，不写进仓库或本人的设置。 */
+  /**
+   * 可以「这张卡都允许」：Claude Code 给了放行建议，这一步没越界，且建议要放开的范围（加进来的目录、放行规则里的路径）也都在允许的文件夹里。
+   * 放行只在本会话内有效，不写进仓库或本人的设置。
+   */
   canAllowForSession: Type.Boolean(),
   requestedAt: Instant,
 }, strict);
