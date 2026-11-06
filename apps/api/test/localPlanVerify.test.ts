@@ -196,6 +196,28 @@ describe("拆卡和验收在本机（第 21 节）", { timeout: 30_000 }, () => 
     } finally { await f.close(); }
   });
 
+  it("卡的先后只算 Agent 做的卡：要等的卡是本人自己做的就不等（只等它的卡可以直接开始）；看板、卡的详情一样；执行方后来改了跟着变", async () => {
+    const f = await localFixture();
+    try {
+      await f.sync({ kind: "plan", taskId: "task-open" }, [["card_plan", plan(1, [{ title: "Agent 做" }, { title: "本人约人" }, { title: "总验收", after: [1, 2] },
+        { title: "只等本人的", after: [2] }])]]);
+      const drafts = (await f.call("GET", "/api/plan-tasks/task-open/cards")).json().drafts as { id: string; title: string }[];
+      const id = (title: string) => drafts.find((item) => item.title === title)!.id;
+      const cards = (await f.call("POST", "/api/plan-tasks/task-open/card-drafts/accept", { drafts: [{ id: id("Agent 做") },
+        { id: id("本人约人"), executor: "self" }, { id: id("总验收") }, { id: id("只等本人的") }] })).json().cards as
+        { id: string; version: number; title: string; card: { after: string[]; executor: string } }[];
+      const [agent, self, total, onlySelf] = cards;
+      expect(self.card.executor).toBe("self");
+      expect([total.card.after, onlySelf.card.after]).toEqual([[agent.id], []]);
+      const after = async (card: string) => (await f.call("GET", `/api/me/cards/${card}`)).json().task.card.after;
+      const onBoard = async (card: string) => (await f.call("GET", "/api/plan-tasks/task-open/cards")).json().cards.find((item: { id: string }) => item.id === card).card.after;
+      expect([await after(total.id), await onBoard(total.id), await after(onlySelf.id), await onBoard(onlySelf.id)]).toEqual([[agent.id], [agent.id], [], []]);
+      // 「本人约人」改成交给 Claude Code：两张卡都要等它了。
+      expect((await f.call("PATCH", `/api/me/cards/${self.id}`, { version: self.version, executor: "claude_code" })).statusCode).toBe(200);
+      expect([await after(total.id), await after(onlySelf.id)]).toEqual([[agent.id, self.id], [self.id]]);
+    } finally { await f.close(); }
+  });
+
   it("卡的先后：派活单写要等前面哪几件，放进看板以后换成那几张卡的 id（先放后放都对得上）；本机报在等前面的卡，worker 行写等哪几张；不写先后的照旧", async () => {
     const f = await localFixture();
     try {
