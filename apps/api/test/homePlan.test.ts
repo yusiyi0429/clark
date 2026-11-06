@@ -286,7 +286,8 @@ describe("首页计划",()=>{
           expect(res.json().tasks).toEqual(expected);
         } finally { await app.close(); }
       }
-      expect(calls.filter(({url})=>url.searchParams.get("type")==="Task")).toHaveLength(1);
+      // 首页按 Mission 的域读 Task（domain_id）；CEO 目标快照按周期列 Task（type=Task&period，本体上下文 V1 加的）是另一条读，不算在这里。
+      expect(calls.filter(({url})=>url.searchParams.get("type")==="Task"&&url.searchParams.has("domain_id"))).toHaveLength(1);
       expect(calls.every(({method})=>method==="GET")).toBe(true);
     } finally { vi.unstubAllGlobals(); clearWorldReadCache(); await f.t.close(); }
   },30_000);
