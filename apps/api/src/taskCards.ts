@@ -1,8 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import type { TAcceptCardDraftsRequest, TCardBoardResponse, TCardBriefResponse, TCardDetailResponse, TCardHandbackBrief, TCardHandbackView, TCardModel, TCardPlanView, TCardTaskView,
-  TCardWait, TCriterionVerdict, TDeliverableInclusion, TLocalHandbackCriterion, TPatchCardRequest, TPendingDeliverableItem, TTaskCard, TTaskView } from "@warmap/contracts";
-import { findOwnTask, DeliverableError, type OwnTask } from "./taskDeliverables.js";
+  TCardWait, TCriterionVerdict, TDeliverableInclusion, TLocalHandbackCriterion, TPatchCardRequest, TPendingDeliverableItem, TTaskAgreementResponse, TTaskCard,
+  TTaskView } from "@warmap/contracts";
+import { DeliverableError, type OwnTask } from "./taskDeliverables.js";
+import { planTaskViewer, type PlanTaskAccess } from "./planTaskAccess.js";
+import type { PeopleDirectory } from "./peopleDirectory.js";
+import { personDisplayNames } from "./people.js";
+import { openPlanTask } from "./taskAgreements.js";
 import { outputView, recentRuns, runBrief, runView, type OutputRow, type RunRow } from "./localDevices.js";
 import type { Query } from "./meetingStore.js";
 import { UUID_PATTERN } from "./meetingStore.js";
@@ -17,7 +22,19 @@ import { createInTransaction, getTaskViews, taskStandards } from "./tasks.js";
  */
 
 export class CardError extends Error {
-  constructor(public readonly status: 400 | 403 | 404 | 409 | 413, public readonly code: string, message: string, public readonly latestTask?: TTaskView) { super(message); }
+  constructor(public readonly status: 400 | 403 | 404 | 409 | 413 | 503, public readonly code: string, message: string, public readonly latestTask?: TTaskView) { super(message); }
+}
+
+/** 卡挂的 Task：V1 的 openPlanTask 找到的（谁能看照它判：负责人、Mission 负责人、战场负责人、CEO、约定里的认可人）和此刻的约定。 */
+export type CardPlanTask = PlanTaskAccess & { agreement: TTaskAgreementResponse };
+/** 按人打开一个 Task；看不到、找不到抛 DeliverableError（404）。 */
+export type OpenPlanTask = (personId: string, planTaskId: string) => Promise<CardPlanTask>;
+
+export function planTaskOpener(q: Query, planTasks: PlanTaskSource, directory: PeopleDirectory, now: () => Date): OpenPlanTask {
+  return async (personId, planTaskId) => {
+    const { access, agreement } = await openPlanTask(q, planTasks, planTaskViewer(directory, personId), now(), planTaskId, personDisplayNames(directory));
+    return { ...access, agreement };
+  };
 }
 
 /** 一次交回在库里的验收结论。 */
@@ -107,9 +124,9 @@ export async function cardTaskViews(q: Query, ids: string[], names: Map<string, 
   return (await getTaskViews(q, ids, names)).flatMap((task) => cards.has(task.id) ? [{ ...task, card: cards.get(task.id)! }] : []);
 }
 
-/** 看板只给 Task 负责人：本人 Mission 下的 Task，本体登记了别人做负责人时不给。 */
-export async function boardTask(q: Query, planTasks: PlanTaskSource, personId: string, now: Date, taskId: string): Promise<OwnTask> {
-  const own = await findOwnTask(q, planTasks, personId, now, taskId).catch((cause) => {
+/** 看板只给 Task 负责人（本体没登记负责人时是 Mission 负责人）；能看但不是负责人的 403，看不到的 404。 */
+export async function boardTask(open: OpenPlanTask, personId: string, taskId: string): Promise<CardPlanTask> {
+  const own = await open(personId, taskId).catch((cause) => {
     if (cause instanceof DeliverableError) throw new CardError(cause.status, cause.code, cause.message);
     throw cause;
   });
@@ -117,12 +134,16 @@ export async function boardTask(q: Query, planTasks: PlanTaskSource, personId: s
   return own;
 }
 
-/** 对话从 Task 页发出时带给 Chat 的这个 Task（pageGuides.ts 的 TaskPageFacts）：本人 Mission 下读不到为 null；看板各列几张卡只给负责人。 */
-export async function taskPageFacts(q: Query, planTasks: PlanTaskSource, personId: string, now: Date, taskId: string): Promise<TaskPageFacts | null> {
-  const own = await findOwnTask(q, planTasks, personId, now, taskId).catch((cause) => {
+/** 卡挂的 Task，看不到、找不到为 null（其余错误照抛）。 */
+export const planTaskOrNull = (open: OpenPlanTask, personId: string) => (planTaskId: string): Promise<CardPlanTask | null> =>
+  open(personId, planTaskId).catch((cause) => {
     if (cause instanceof DeliverableError) return null;
     throw cause;
   });
+
+/** 对话从 Task 页发出时带给 Chat 的这个 Task（pageGuides.ts 的 TaskPageFacts）：看不到为 null；看板各列几张卡只给负责人。 */
+export async function taskPageFacts(q: Query, open: OpenPlanTask, personId: string, taskId: string): Promise<TaskPageFacts | null> {
+  const own = await planTaskOrNull(open, personId)(taskId);
   if (!own) return null;
   if (!own.canEdit) return { name: own.task.name, criteria: own.criteria.length, cards: null };
   const rows = (await q(`SELECT ${CARD_COLUMNS} FROM tasks WHERE plan_task_id=$1 AND owner_id=$2 AND status<>'returned'`, [taskId, personId])).rows as CardRow[];

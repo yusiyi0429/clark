@@ -8,7 +8,8 @@ import { authenticatePersonalToken } from "./personalTokens.js";
 import type { SessionPerson } from "./routes/shared.js";
 
 export const MCP_SCOPES = ["tianshu:read", "tianshu:write"];
-export const MCP_WRITE_TOOLS = new Set(["create_item", "update_item", "delete_item", "return_item", "accept_item", "append_progress", "update_status", "submit_for_acceptance", "add_link", "save_review_draft", "edit_mission_card", "report_task_repair_receipt"]);
+// add_deliverable_version：约定与对表 V1 新加的写工具（交一版交付物链接），只在本人要求时用。
+export const MCP_WRITE_TOOLS = new Set(["create_item", "update_item", "delete_item", "return_item", "accept_item", "append_progress", "update_status", "submit_for_acceptance", "add_link", "save_review_draft", "edit_mission_card", "report_task_repair_receipt", "add_deliverable_version"]);
 const ACCESS_SECONDS = 15 * 60;
 const GRANT_MS = 90 * 86_400_000;
 const digest = (value: string, pepper: string) => createHmac("sha256", pepper).update(`mcp-oauth:${value}`).digest("hex");

@@ -133,7 +133,8 @@ import { registerRoleRoutes } from "./routes/roles.js";
 import { registerWorkerRoutes } from "./routes/workers.js";
 import { registerTopicRoutes } from "./routes/topics.js";
 import { registerTaskCardRoutes, type BoardAgents } from "./routes/taskCards.js";
-import { taskPageFacts } from "./taskCards.js";
+import { planTaskOpener, taskPageFacts } from "./taskCards.js";
+import { registerAgreementRoutes } from "./routes/agreements.js";
 import type { DeliverableAgents, DeliverableQueue } from "./deliverableReview.js";
 import type { ArticleFetcher } from "./articleText.js";
 import { personDisplayNames } from "./people.js";
@@ -469,6 +470,8 @@ export async function buildApp({
   const world = createWorldReader({ q: pool.query.bind(pool), env });
   // 首页 Task 行：本体配了、实例也开了读（和其他读本体的地方同一个开关），或配了 TK 只读实例，才从本体读（只读），否则没有 Task。
   const planTaskSource = planTasks ?? worldPlanTaskSource(pool.query.bind(pool), env, world.enabled);
+  // Task 页带进对话时按看的人打开这个 Task（谁能看照约定 V1 的规则）。
+  const openPlanTaskForPage = planTaskOpener(pool.query.bind(pool), planTaskSource, peopleDirectory, now);
   // 第二个只读实例（TK scope，写死只读）：默认关闭；开了也只做健康探测和快照缓存，还没接进战场卡与 read_ontology。
   const worldTk = env.worldTk ? createWorldReader({ q: pool.query.bind(pool), env: env.worldTk }) : undefined;
   const baseGlobalContext = () => globalConversationContext(pool.query.bind(pool), now(), personDisplayNames(peopleDirectory));
@@ -497,7 +500,7 @@ export async function buildApp({
   // 首页走独立 Chat 时只建这一个客户端（首页分段的「人 × 视角」互斥在它里面）；转发的每一句记下进了哪一段，纪要据此去读。
   const chat = env.chatServiceUrl ? createChatService({ baseUrl: env.chatServiceUrl, token: env.internalChatToken, rotation: env.chatSessionRotation === true,
     ...(env.chatPageContext ? { pageGuide: (path: string, viewer: { personId: string }) =>
-      pageFor(path, (taskId) => taskPageFacts(pool.query.bind(pool), planTaskSource, viewer.personId, now(), taskId)) } : {}),
+      pageFor(path, (taskId) => taskPageFacts(pool.query.bind(pool), openPlanTaskForPage, viewer.personId, taskId)) } : {}),
     onSegment: (viewer, segment) => recordChatSegment(pool.query.bind(pool), viewer, segment) }) : undefined;
   // 会话纪要（后台，CONVERSATION_DIGEST_MODEL / CONVERSATION_DIGEST_THINKING，不配时 LIGHT_MODEL、不开思考）与回看。
   const conversationDigests = createConversationDigests({ pool, chat, baseUrl: env.piBaseUrl, apiKey: env.piApiKey,
@@ -801,6 +804,7 @@ export async function buildApp({
   registerSeenMarkRoutes(app, ctx);
   registerMissionCardRoutes(app, ctx, missionCardAnnotationAgent, missionCardReviewAgent);
   registerDeliverableRoutes(app, ctx, { agents: deliverableAgents, fetchArticle: deliverableFetcher });
+  registerAgreementRoutes(app, ctx);
   registerMyRadarRoutes(app, ctx);
   registerMonthlyReviewRoutes(app, ctx);
   registerRequestRoutes(app, ctx, deliveryAgent);

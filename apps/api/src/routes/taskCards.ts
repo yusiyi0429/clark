@@ -12,8 +12,8 @@ import { createRoleProposalAgent, type RoleProposalAgent } from "../roleProposal
 import { createRoleProposalQueue } from "../roleProposals.js";
 import { RoleError } from "../roles.js";
 import { personDisplayNames } from "../people.js";
-import { findOwnTask, type OwnTask } from "../taskDeliverables.js";
-import { acceptCardDrafts, boardTask, CardError, cardBrief, createCardPlan, dismissCardDraft, patchCard, readBoard, readCardDetail } from "../taskCards.js";
+import { acceptCardDrafts, boardTask, CardError, cardBrief, createCardPlan, dismissCardDraft, patchCard, planTaskOpener, planTaskOrNull, readBoard,
+  readCardDetail } from "../taskCards.js";
 import type { AppInstance, Guard, RouteContext } from "./shared.js";
 
 const taskParams = Type.Object({ taskId: Type.String({ minLength: 1 }) });
@@ -35,9 +35,9 @@ export function registerTaskCardRoutes(app: AppInstance, ctx: RouteContext, deps
   const names = () => personDisplayNames(ctx.peopleDirectory);
   const model = { query: q, baseUrl: env.review?.baseUrl ?? env.piBaseUrl, apiKey: env.review?.apiKey ?? env.piApiKey,
     modelId: env.review?.model ?? env.heavyModel, thinking: env.review?.thinking };
-  /** 卡挂的 Task（推进人自己 Mission 下的），读不到为 null。 */
-  const planTaskOf = (personId: string) => (planTaskId: string): Promise<OwnTask | null> =>
-    findOwnTask(q, ctx.planTasks, personId, ctx.now(), planTaskId).catch(() => null);
+  const open = planTaskOpener(q, ctx.planTasks, ctx.peopleDirectory, ctx.now);
+  /** 卡挂的 Task（推进人看得到的），读不到为 null。 */
+  const planTaskOf = (personId: string) => planTaskOrNull(open, personId);
   const plans = createCardPlanQueue({ pool, now: ctx.now, onError: () => app.log.error("card plan failed"), agent: deps.agents?.plan ?? createCardPlanAgent(model),
     planTask: (ownerId, planTaskId) => planTaskOf(ownerId)(planTaskId) });
   const proposals = createRoleProposalQueue({ pool, onError: () => app.log.error("role proposal failed"), agent: deps.agents?.proposal
@@ -70,7 +70,7 @@ export function registerTaskCardRoutes(app: AppInstance, ctx: RouteContext, deps
       throw cause;
     }
   };
-  const board = (personId: string, taskId: string) => boardTask(q, ctx.planTasks, personId, ctx.now(), taskId);
+  const board = (personId: string, taskId: string) => boardTask(open, personId, taskId);
 
   app.get("/api/plan-tasks/:taskId/cards", { preHandler: requireMember, schema: { params: taskParams, response: { 200: CardBoardResponse } } }, async (req, reply) =>
     handle(reply, async () => readBoard(q, await board(req.person!.personId, req.params.taskId), names())));

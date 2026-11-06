@@ -199,6 +199,7 @@ describe("migration", () => {
         "222_person_rail_backgrounds.sql",
         "223_buddy_personality.sql",
         "224_person_avatars.sql",
+        "225_task_agreement_notes.sql",
         "226_cards.sql",
         "227_research_topics.sql",
         "228_local_runs.sql",

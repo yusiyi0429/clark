@@ -65,6 +65,30 @@ describe("首页 Task 行的本体来源", () => {
     expect(await createWorldPlanTaskSource(main.world)([{ ...loaded, id: "other" }])).toEqual([]);
   });
 
+  it("约定（12 月起本体字段，这里是假数据）：标准组件上的 proof、acceptor 和块上的 exclusions 带进 agreement；认可人换成天枢的人，对不上为 null；没有这几项不带", async () => {
+    const withAgreement = (id: string, components: Record<string, unknown>[], exclusions?: unknown) => {
+      const object = taskObject(id, id, ref("<mission-1>"), []);
+      object.business.blocks[0] = { id: "definition", value: { components: components.map((item, index) => ({ id: `c${index}`, ...item })),
+        ...(exclusions === undefined ? {} : { exclusions }) } } as never;
+      return object;
+    };
+    const { world } = stubWorld({
+      "<task-a>": withAgreement("<task-a>", [
+        { type: "acceptance_criterion", text: "纪要能读回", proof: " 读回截图 ", acceptor: "<principal:siyi>" },
+        { type: "acceptance_criterion", text: "两人实测通过", acceptor: { principal_id: "<principal:stranger>" } },
+        { type: "exclusion", text: "不含飞书推送" },
+      ], ["不含 M2"]),
+      "<task-b>": withAgreement("<task-b>", [{ type: "outcome", text: "方案定稿", proof: "评审会纪要" }]),
+      "<task-c>": withAgreement("<task-c>", [{ type: "acceptance_criterion", text: "只有标准" }]),
+    });
+    const personOf = (principal: string) => principal === "<principal:siyi>" ? "siyi" : null;
+    const tasks = await createWorldPlanTaskSource(world, { personOf })([{ id: "execution-one", code: "execution-one" }]);
+    expect(tasks.find((task) => task.taskId === "<task-a>")?.agreement).toEqual({ proofs: ["读回截图", null], acceptorIds: ["siyi", null], exclusions: ["不含 M2", "不含飞书推送"] });
+    // 没有验收标准时，完成定义那一条上的 proof 就是这一条的约定。
+    expect(tasks.find((task) => task.taskId === "<task-b>")).toMatchObject({ criteria: [], doneDefinition: "方案定稿", agreement: { proofs: ["评审会纪要"], acceptorIds: [null], exclusions: [] } });
+    expect(tasks.find((task) => task.taskId === "<task-c>")).not.toHaveProperty("agreement");
+  });
+
   it("Mission 在本体里找不到：这个 Mission 没有 Task，不报错、不列对象", async () => {
     const { world, calls } = stubWorld({ "<task-a>": taskObject("<task-a>", "回流方案定稿", ref("<mission-1>"), []) });
     expect(await createWorldPlanTaskSource(world)([{ id: "execution-two", code: "execution-two" }])).toEqual([]);

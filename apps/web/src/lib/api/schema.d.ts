@@ -2425,6 +2425,58 @@ export interface paths {
         patch: operations["patchDeliverableNote"];
         trace?: never;
     };
+    "/api/plan-tasks/{taskId}/agreement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 一个 Task 的约定：每条标准用什么证明、谁来认，这次不包括什么；先读本体，没有再读天枢 11 月的补充，两样都没有只给标准原文；标出来源和标准有没有改过（负责人、Mission 负责人、战场负责人、CEO、约定里的认可人能看） */
+        get: operations["getTaskAgreement"];
+        /** 存 11 月的补充（负责人、Mission 负责人）：整份覆盖、留修改记录；约定来自本体时 409 AGREEMENT_FROM_WORLD，没有标准时 409 NO_CRITERIA，认可人不在人员目录 400 UNKNOWN_PERSON */
+        put: operations["putTaskAgreement"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/plan-tasks/{taskId}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 对表（不调模型）：约定和最新一版的参考评审摆在一起，每条标出有证据、差、评审中、还没交付物、要 X 确认之一，顶上一句结论（还不能交 / 可以交）；评审的「下次可以做」单独附在后面 */
+        get: operations["checkTask"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/plan-tasks/{taskId}/check/notify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 「请 X 看」（负责人）：给这一条约定的认可人推一条飞书私聊，带 Task 的链接；同一条一天最多推一次。personId 和约定里的认可人对不上 400 NOT_ACCEPTOR；这一条还不是「要 X 确认」409 NOT_AWAITING_ACCEPTOR；认可人没关联飞书 409 ACCEPTOR_NOT_ON_FEISHU；飞书没接 503 FEISHU_NOT_CONFIGURED */
+        post: operations["notifyCheckAcceptor"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/battlefield-progress": {
         parameters: {
             query?: never;
@@ -11023,6 +11075,7 @@ export interface components {
                             upheld: boolean | null;
                         } | null;
                     }[];
+                    beyondScope: string[];
                     error: string | null;
                 };
                 deliveredAt: string | null;
@@ -11087,6 +11140,7 @@ export interface components {
                         upheld: boolean | null;
                     } | null;
                 }[];
+                beyondScope: string[];
                 error: string | null;
             };
             deliveredAt: string | null;
@@ -11143,6 +11197,7 @@ export interface components {
                     upheld: boolean | null;
                 } | null;
             }[];
+            beyondScope: string[];
             error: string | null;
         };
         ReviewCriterion: {
@@ -11175,6 +11230,90 @@ export interface components {
             why?: string;
             lesson?: string | null;
             dismissed?: boolean;
+        };
+        TaskAgreementResponse: {
+            taskId: string;
+            taskName: string;
+            missionId: string;
+            basis: "acceptance" | "definition" | "none";
+            source: "world" | "tianshu" | "none";
+            criteria: {
+                index: number;
+                text: string;
+                proof: string | null;
+                acceptor: {
+                    personId: string;
+                    name: string;
+                } | null;
+            }[];
+            exclusions: string[];
+            complete: boolean;
+            basisChanged: boolean;
+            canEdit: boolean;
+            updatedBy: {
+                personId: string;
+                name: string;
+            } | null;
+            updatedAt: string | null;
+        };
+        PutTaskAgreementRequest: {
+            criteria: {
+                index: number;
+                proof: string | null;
+                acceptorId: string | null;
+            }[];
+            exclusions: string[];
+        };
+        TaskCheckResponse: {
+            taskId: string;
+            verdict: "ready" | "not_ready";
+            conclusion: string;
+            notices: {
+                code: "basis_changed" | "agreement_incomplete";
+                text: string;
+            }[];
+            source: "world" | "tianshu" | "none";
+            criteria: {
+                index: number;
+                text: string;
+                status: "evidenced" | "gap" | "reviewing" | "no_deliverable" | "needs_acceptor";
+                proof: string | null;
+                acceptor: {
+                    personId: string;
+                    name: string;
+                } | null;
+                evidence: {
+                    /** Format: uuid */
+                    versionId: string;
+                    versionNumber: number;
+                    items: {
+                        /** Format: uuid */
+                        id: string;
+                        kind: "file" | "image" | "link";
+                        name: string;
+                        url: string | null;
+                    }[];
+                    locator: string | null;
+                } | null;
+                gap: string | null;
+                notifiedToday: boolean;
+            }[];
+            version: {
+                /** Format: uuid */
+                id: string;
+                number: number;
+                reviewStatus: "queued" | "running" | "done" | "failed";
+                deliveredAt: string | null;
+            } | null;
+            beyondScope: string[];
+            canNotify: boolean;
+        };
+        CheckNotifyRequest: {
+            index: number;
+            personId: string;
+        };
+        CheckNotifyResponse: {
+            status: "sent" | "already_sent";
         };
         HomePlanMission: {
             missionId: string;
@@ -23298,6 +23437,255 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getTaskAgreement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 约定 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAgreementResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    putTaskAgreement: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutTaskAgreementRequest"];
+            };
+        };
+        responses: {
+            /** @description 存好后的约定 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskAgreementResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    checkTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 对表结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskCheckResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    notifyCheckAcceptor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckNotifyRequest"];
+            };
+        };
+        responses: {
+            /** @description 推了，或今天已经推过 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckNotifyResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

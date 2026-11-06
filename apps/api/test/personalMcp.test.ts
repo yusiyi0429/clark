@@ -32,7 +32,7 @@ describe("个人令牌与执行事项 MCP", () => {
       expect(initialized.json().result.instructions).not.toContain("不用等用户开口");
       expect(initialized.json().result.instructions).not.toContain("◆");
       const tools = await send(2, "tools/list");
-      expect(tools.json().result.tools.map((tool: { name: string }) => tool.name)).toEqual(["list_my_items", "create_item", "get_item", "append_progress", "update_status", "submit_for_acceptance", "add_link", "update_item", "delete_item", "return_item", "accept_item", "get_mission_card", "edit_mission_card", "list_pending", "get_my_review", "save_review_draft"]);
+      expect(tools.json().result.tools.map((tool: { name: string }) => tool.name)).toEqual(["list_my_items", "create_item", "get_item", "append_progress", "update_status", "submit_for_acceptance", "add_link", "update_item", "delete_item", "return_item", "accept_item", "get_mission_card", "edit_mission_card", "get_task_agreement", "check_task", "add_deliverable_version", "list_pending", "get_my_review", "save_review_draft"]);
       const invoke = async (id: number, name: string, args: Record<string, unknown>) => (await send(id, "tools/call", { name, arguments: args })).json().result;
       const listed = await invoke(3, "list_my_items", {});
       expect(JSON.parse(listed.content[0].text).items.some((item: { id: string }) => item.id === task.id)).toBe(true);
@@ -76,7 +76,7 @@ describe("个人令牌与执行事项 MCP", () => {
       const before = JSON.parse((await invoke(1, "list_my_items", {})).content[0].text);
       // 每个 Mission 带它下面的 Task（和首页同一个来源），Agent 照着填 planTaskId。
       expect(before.missions).toEqual([
-        { id: "execution-one", title: "上线", battlefield: "增长战场", tasks: [{ taskId: "t1", name: "回流方案定稿" }] },
+        { id: "execution-one", title: "上线", battlefield: "增长战场", tasks: [{ taskId: "t1", name: "回流方案定稿", criteriaCount: 1, agreementComplete: false }] },
         { id: "execution-two", title: "验证", battlefield: "增长战场", tasks: [] },
       ]);
       expect(asked).toEqual([[{ id: "execution-one", code: "execution-one" }, { id: "execution-two", code: "execution-two" }]]);
