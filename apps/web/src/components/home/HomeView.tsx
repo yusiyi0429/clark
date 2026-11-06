@@ -170,7 +170,7 @@ export function WaitingList({ items, api, go }: { items: WaitingItem[]; api: Wor
  * 首页底部的输入框（5.4.3「输入框和『发给』」）：ComposerPill，占位「说点什么…」；左下「发给」默认自动，回车发出，跳进那条对话。
  * 「发给」是选择器的触发器：「发给」淡色 + 目标墨色 + ChevronDown；点开是弹层：自动、伙伴，再按 Mission 列出 Task，当前那项行尾一个勾。
  */
-function HomeComposer({ buddy, missions, route, onSend }: { buddy: Buddy | null; missions: HomeMission[]; route: (text: string) => Promise<RouteTarget>; onSend: (text: string, target: SendTarget) => void }) {
+export function HomeComposer({ buddy, missions, route, onSend }: { buddy: Buddy | null; missions: HomeMission[]; route: (text: string) => Promise<RouteTarget>; onSend: (text: string, target: SendTarget) => void }) {
   const [text, setText] = useState("");
   const [target, setTarget] = useState<SendTarget>("auto");
   const [guess, setGuess] = useState<RouteTarget>("main");

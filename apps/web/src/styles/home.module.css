@@ -238,7 +238,7 @@ button.bgLabel:hover { background: var(--default-soft); }
 .strip:hover { background: var(--default-soft); color: var(--ink-muted); }
 
 /* ---------- 手机 ---------- */
-.app[data-phone] { grid-template-columns: minmax(0, 1fr); }
+.app[data-phone] { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
 .app[data-phone] .left { box-shadow: none; background: var(--surface); }
 /* 手机首屏兼首页（5.7）：伙伴台宽 100%、高 160 → 「今天」行（行尾后台任务按钮，不能点）→ 等你 → 树 → 本人行（跟在树后面，不贴底）。整页一起滚，左右留白 16。 */
 .app[data-phone] .leftInner { overflow-y: auto; padding: calc(var(--space-2) + env(safe-area-inset-top, 0px)) var(--space-4) env(safe-area-inset-bottom, 0px); }
@@ -277,3 +277,7 @@ button.bgLabel:hover { background: var(--default-soft); }
 .crumb { display: inline; padding: 0; border: 0; background: none; color: var(--ink-faint); font: inherit; font-size: var(--text-xs); font-weight: 400; cursor: pointer; }
 .crumb:hover { color: var(--ink-muted); }
 .crumb:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+
+/* 手机首屏底部固定的首页输入框（5.7、5.9 第 3 条）：左右留白 16，让出安全区。 */
+.phoneComposer { padding: var(--space-2) var(--space-4) calc(var(--space-2) + env(safe-area-inset-bottom, 0px)); background: var(--surface); }
+.phoneComposer .composerDock { width: 100%; margin: 0; }

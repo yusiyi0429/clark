@@ -39,7 +39,7 @@ import { useBackground } from "@/lib/home/useBackground";
 import { useWorkHome } from "@/lib/home/useWorkHome";
 import { BackgroundPanel, BackgroundStrip, useMachine } from "./BackgroundPanel";
 import { BuddyView, PipelineView, type Outbox } from "./Conversations";
-import { HomeView, WaitingList, type SendTarget } from "./HomeView";
+import { HomeComposer, HomeView, WaitingList, type SendTarget } from "./HomeView";
 import { LeftColumn } from "./LeftColumn";
 import { TaskInfo } from "./TaskInfo";
 import { ViewChrome, PAGE_TITLE, scopeOf, viewOf, type View } from "./view";
@@ -291,9 +291,9 @@ function HomeFrame({ account }: { account: Account }) {
   const backgroundButton = useMemo(() => (
     <button type="button" className={h.icon} aria-label="后台任务" title="后台任务" onClick={() => setSheet(true)} data-testid="phone-background">
       {running ? <span className={h.runningCount}><LoaderCircle {...ICON} />{running}</span> : <ListChecks {...ICON} />}
-      {machine.alert ? <i className={h.cornerDot} aria-hidden /> : null}
+      {machine.alert && !handheld ? <i className={h.cornerDot} aria-hidden /> : null}
     </button>
-  ), [running, machine.alert]);
+  ), [running, machine.alert, handheld]);
   // 子会话页头的上一级：它挂在哪件 Task 下（树上找），点了回到那件 Task 的管线。
   const subId = view.kind === "card" || view.kind === "topic" ? view.id : null;
   const owner = subId ? data.missions.flatMap((mission) => mission.tasks).find((task) => task.subSessions.some((sub) => sub.id === subId)) ?? null : null;
@@ -352,7 +352,11 @@ function HomeFrame({ account }: { account: Account }) {
       <WorkspaceContext.Provider value={workspace}>
         <ViewChrome.Provider value={chrome}>
           <div className={h.app} data-phone="" data-view={view.kind} data-scheme="auto" data-testid="work-home">
-            {view.kind === "home" ? <aside className={h.left}>{left}</aside> : <main className={h.display}>{display(view)}</main>}
+            {/* 首屏兼首页（5.7）：左栏那几样，底部固定首页的输入框（带「发给」）。 */}
+            {view.kind === "home" ? <>
+              <aside className={h.left}>{left}</aside>
+              <div className={h.phoneComposer}><HomeComposer buddy={buddy} missions={data.missions.filter((mission) => mission.tasks.length)} route={route} onSend={send} /></div>
+            </> : <main className={h.display}>{display(view)}</main>}
             {sheet ? (
               <div className={h.sheetBackdrop} onClick={() => setSheet(false)}>
                 <div className={h.sheet} role="dialog" aria-modal="true" aria-label="后台任务" onClick={(event) => event.stopPropagation()}>
