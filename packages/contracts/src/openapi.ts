@@ -1,5 +1,6 @@
 import type { JsonSchema, OpenAPIV3 } from "./types/JsonSchemaTypes.js";
 import { taskQualityPaths, taskQualitySchemas } from "./taskQualityOpenapi.js";
+import { boardPaths, boardSchemas } from "./boardOpenapi.js";
 import { AcceptIssueDraftRequest, IssueDraftResponse } from "./issueDrafts.js";
 import {
   RequestStep, RequestPerson, RequestRecipientView, RequestQuestionView, RequestClarification, RequestView, RequestResponse,
@@ -3137,6 +3138,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
           },
         },
       },
+      ...boardPaths,
     },
     components: {
       schemas: {
@@ -3494,6 +3496,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         ExecuteCollectionActionRequest: ExecuteCollectionActionRequest as JsonSchema,
         ScheduleItem: ScheduleItem as JsonSchema,
         ScheduleListResponse: ScheduleListResponse as JsonSchema,
+        ...boardSchemas,
       },
     },
   };
