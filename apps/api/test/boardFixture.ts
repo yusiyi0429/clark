@@ -19,7 +19,8 @@ export const BOARD_TASKS: THomePlanTask[] = [
 
 export async function boardFixture(runtime: Parameters<typeof createTestApp>[2] = {}, seed: Parameters<typeof createTestApp>[0] = {}) {
   const storage = await mkdtemp(join(tmpdir(), "board-"));
-  const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED, materialStorageDir: storage, ...seed }, undefined, {
+  // 看板原有的测试跑云端拆卡和云端验收（BOARD_CLOUD_AGENTS）；第 21 节本机那条路的测试传 boardCloudAgents: false。
+  const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED, materialStorageDir: storage, boardCloudAgents: true, ...seed }, undefined, {
     monthlyNow: () => BOARD_NOW,
     planTasks: async (missions) => BOARD_TASKS.filter((task) => missions.some((mission) => mission.id === task.missionId)),
     deliverableAgents: { review: { async review(input) {

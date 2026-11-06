@@ -14,7 +14,8 @@ export type StoredAcceptance = { headline: string | null; criteria: { index: num
 export type HandbackRow = { id: string; task_id: string; run_id: string | null; owner_id: string; attempt: number; criteria: string[]; claims: TLocalHandbackCriterion[];
   summary: string | null; output_ids: string[]; status: TCardHandbackBrief["status"]; started_at: Date | null; finished_at: Date | null; error: string | null;
   result: StoredAcceptance | null; outcome: "pass" | "fail" | null; return_text: string | null; returned_at: Date | null; overruled_at: Date | null;
-  overruled_by: string | null; overrule_reason: string | null; created_at: Date };
+  overruled_by: string | null; overrule_reason: string | null; created_at: Date;
+  verifier_source: "cloud" | "local" | null; verifier_model: string | null; verifier_role_id: string | null; verifier_role_version: number | null };
 export type CardRow = { id: string; status: TTaskView["status"]; executor: TTaskCard["executor"]; model: TCardModel | null; brief: string | null;
   criterion_index: number | null; criterion_text: string | null; plan_task_id: string | null; done_definition: string | null; mission_id: string | null;
   role_id: string | null };
@@ -64,7 +65,7 @@ export async function cardsOf(q: Query, rows: CardRow[]): Promise<Map<string, TT
   const handbacks = (await q("SELECT * FROM card_handbacks WHERE task_id=ANY($1::uuid[]) ORDER BY attempt DESC", [ids])).rows as HandbackRow[];
   // 每张卡最近两次执行：最近一次给摘要和标记，两次都异常退出算受阻。
   const runs = (await q(`SELECT * FROM (SELECT r.*,d.name AS device_name,row_number() OVER (PARTITION BY r.task_id ORDER BY r.started_at DESC,r.id) AS n
-    FROM local_runs r LEFT JOIN local_devices d ON d.owner_id=r.owner_id AND d.id=r.device_id WHERE r.task_id=ANY($1::uuid[])) x
+    FROM local_runs r LEFT JOIN local_devices d ON d.owner_id=r.owner_id AND d.id=r.device_id WHERE r.task_id=ANY($1::uuid[]) AND r.kind='card') x
     WHERE n<=2 ORDER BY started_at DESC,id`, [ids])).rows as RunRow[];
   const inclusions = (await q(`SELECT h.task_id::text,v.number,p.version_id FROM deliverable_pending_items p JOIN card_handbacks h ON h.id=p.handback_id
     LEFT JOIN deliverable_versions v ON v.id=p.version_id WHERE h.task_id=ANY($1::uuid[]) ORDER BY p.added_at DESC`, [ids])).rows as { task_id: string; number: number | null; version_id: string | null }[];

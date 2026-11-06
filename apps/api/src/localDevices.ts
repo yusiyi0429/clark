@@ -57,7 +57,7 @@ export async function deviceOfToken(q: Query, tokenId: string): Promise<{ ownerI
   return row ? { ownerId: row.owner_id, id: row.id } : null;
 }
 
-export type RunRow = { id: string; owner_id: string; device_id: string; device_name: string | null; kind: "card" | "topic"; task_id: string | null; topic_id: string | null;
+export type RunRow = { id: string; owner_id: string; device_id: string; device_name: string | null; kind: "card" | "topic" | "plan" | "verify"; task_id: string | null; topic_id: string | null;
   title: string | null; model_label: string | null; state: TLocalSessionStatus; plan: TLocalPlanEntry[]; plan_progress: TLocalRunPlanProgress | null;
   last_activity: TLocalRunActivity | null;
   timeline: TLocalRunActivity[]; tokens: { input: number; output: number; cacheRead: number; cacheWrite: number }; cost_usd: string | null;
@@ -75,10 +75,10 @@ export function runBrief(row: RunRow): TLocalRunBrief {
 }
 export const runView = (row: RunRow): TLocalRunView => ({ ...runBrief(row), planEntries: row.plan, timeline: row.timeline });
 
-/** 某张卡或某个专题最近的几次执行，新的在前。 */
+/** 某张卡或某个专题最近的几次执行，新的在前。卡只算执行会话（验收员的会话也挂这张卡，不算）。 */
 export async function recentRuns(q: Query, subject: { taskId: string } | { topicId: string }, limit: number): Promise<RunRow[]> {
-  const [column, id] = "taskId" in subject ? ["task_id", subject.taskId] : ["topic_id", subject.topicId];
-  return (await q(`${RUN_SELECT} WHERE r.${column}=$1 ORDER BY r.started_at DESC,r.id LIMIT $2`, [id, limit])).rows as RunRow[];
+  const [column, id, kind] = "taskId" in subject ? ["task_id", subject.taskId, "card"] : ["topic_id", subject.topicId, "topic"];
+  return (await q(`${RUN_SELECT} WHERE r.${column}=$1 AND r.kind=$3 ORDER BY r.started_at DESC,r.id LIMIT $2`, [id, limit, kind])).rows as RunRow[];
 }
 
 /** 每张卡（或专题）最近一次执行；ids 里没有执行过的不在结果里。 */

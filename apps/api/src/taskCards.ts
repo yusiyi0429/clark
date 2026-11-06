@@ -13,7 +13,10 @@ import type { Query } from "./meetingStore.js";
 import { UUID_PATTERN } from "./meetingStore.js";
 import type { PlanTaskSource } from "./planTasks.js";
 import type { TaskPageFacts } from "./pageGuides.js";
-import { ownRole, roleBrief, roleRef, rolesById, type RoleRow } from "./roles.js";
+import { ensurePresetRole, ownRole, roleBrief, roleRef, rolesById, type RoleRow } from "./roles.js";
+
+/** 没配岗位的卡兜底用的预设（roles/presets/general/executor.md）。 */
+const DEFAULT_WORKER_PRESET = "executor";
 import { createInTransaction, getTaskViews, taskStandards } from "./tasks.js";
 
 /**
@@ -80,9 +83,11 @@ export async function taskPageFacts(q: Query, open: OpenPlanTask, personId: stri
   return { name: own.task.name, criteria: own.criteria.length, cards };
 }
 
-type PlanRow = { id: string; status: TCardPlanView["status"]; hint: string | null; error: string | null; created_at: Date; started_at: Date | null; finished_at: Date | null };
+type PlanRow = { id: string; status: TCardPlanView["status"]; hint: string | null; error: string | null; created_at: Date; started_at: Date | null; finished_at: Date | null;
+  source: "cloud" | "local"; summary: string | null; steps: TCardPlanView["steps"]; risks: string[]; revision: number | null };
 export const planView = (row: PlanRow, expectedSeconds: number): TCardPlanView => ({ id: row.id, status: row.status, hint: row.hint, error: row.status === "failed" ? row.error : null,
-  createdAt: row.created_at.toISOString(), startedAt: row.started_at?.toISOString() ?? null, finishedAt: row.finished_at?.toISOString() ?? null, expectedSeconds });
+  createdAt: row.created_at.toISOString(), startedAt: row.started_at?.toISOString() ?? null, finishedAt: row.finished_at?.toISOString() ?? null, expectedSeconds,
+  source: row.source, summary: row.summary, steps: row.steps, risks: row.risks, revision: row.revision });
 
 /** 拆卡预计用时：最近 20 次拆完的中位数，30 秒到 10 分钟之间；还没有拆完过的按 1 分钟。 */
 export async function planExpectedSeconds(q: Query): Promise<number> {
@@ -138,7 +143,8 @@ export function handbackView(row: HandbackRow, names: Map<string, string>, expec
     result: row.result ? { criteria: row.result.criteria.map((item) => ({ ...item, text: row.criteria[item.index - 1] ?? "" })), beyondScope: row.result.beyondScope } : null,
     error: row.status === "failed" ? row.error : null, startedAt: row.started_at?.toISOString() ?? null, expectedSeconds,
     overrule: row.overruled_at && row.overruled_by && row.overrule_reason
-      ? { by: { personId: row.overruled_by, name: names.get(row.overruled_by) ?? row.overruled_by }, at: row.overruled_at.toISOString(), reason: row.overrule_reason } : null };
+      ? { by: { personId: row.overruled_by, name: names.get(row.overruled_by) ?? row.overruled_by }, at: row.overruled_at.toISOString(), reason: row.overrule_reason } : null,
+    verifier: row.verifier_source ? { source: row.verifier_source, modelLabel: row.verifier_model, roleId: row.verifier_role_id, roleVersion: row.verifier_role_version } : null };
 }
 
 /** 验收预计用时：最近 20 次验收完的中位数，30 秒到 10 分钟之间；还没有验收过的按 90 秒。 */
@@ -248,8 +254,9 @@ export async function createCardPlan(q: Query, own: OwnTask, hint: string | unde
 /**
  * 放进看板（Task 负责人）：草稿变成执行事项，推进人是本人，挂这个 Task 和它的 Mission，来源记「自己建」；草稿 id 当建事项的幂等键。
  * 可以顺手改标题、交代、完成标准、执行方。已经处理过的草稿 409。
+ * 交给 Claude Code 的卡都要有岗位（worker 列表按岗位列）：没配时照草稿建议的预设、没建议时照「执行员」预设给本人加上并挂上。
  */
-export async function acceptCardDrafts(pool: Pool, own: OwnTask, input: TAcceptCardDraftsRequest, names: Map<string, string>): Promise<TCardTaskView[]> {
+export async function acceptCardDrafts(pool: Pool, own: OwnTask, input: TAcceptCardDraftsRequest, names: Map<string, string>, now: Date): Promise<TCardTaskView[]> {
   const ids: string[] = [];
   const client = await pool.connect();
   try {
@@ -265,9 +272,12 @@ export async function acceptCardDrafts(pool: Pool, own: OwnTask, input: TAcceptC
         : new CardError(409, "DRAFT_DECIDED", "这张草稿已经处理过了");
       const index = draft.criterion_index && own.criteria[draft.criterion_index - 1] ? draft.criterion_index : null;
       if (edit.roleId) await ownRole(client.query.bind(client), own.viewerId, edit.roleId);
+      const executor = edit.executor ?? draft.executor;
+      let roleId = edit.roleId === undefined ? draft.role_id : edit.roleId;
+      if (!roleId && executor === "claude_code") roleId = (await (draft.suggest_preset_key ? ensurePresetRole(client, own.viewerId, draft.suggest_preset_key, now) : null)
+        ?? await ensurePresetRole(client, own.viewerId, DEFAULT_WORKER_PRESET, now))?.id ?? null;
       await client.query("UPDATE tasks SET executor=$2,brief=$3,criterion_index=$4,criterion_text=$5,role_id=$6 WHERE id=$1",
-        [created.task.id, edit.executor ?? draft.executor, (edit.brief ?? draft.brief).trim() || null, index, index ? own.criteria[index - 1] : null,
-          edit.roleId === undefined ? draft.role_id : edit.roleId]);
+        [created.task.id, executor, (edit.brief ?? draft.brief).trim() || null, index, index ? own.criteria[index - 1] : null, roleId]);
       await client.query("UPDATE card_drafts SET status='accepted',task_id=$2,decided_at=now() WHERE id=$1", [draft.id, created.task.id]);
       ids.push(created.task.id);
     }

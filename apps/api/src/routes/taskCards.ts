@@ -1,20 +1,22 @@
 import { Type } from "@sinclair/typebox";
 import type { FastifyReply } from "fastify";
-import { AcceptCardDraftsRequest, AcceptCardDraftsResponse, CardBoardResponse, CardBriefResponse, CardDetailResponse, CardPlanView, CardTaskView, CreateCardPlanRequest,
-  AddPendingDeliverableRequest, CreateVersionFromPendingRequest, DeliverableVersion, OverruleCardHandbackRequest, PatchCardRequest, PendingDeliverableItem } from "@warmap/contracts";
+import { AcceptCardDraftsRequest, AcceptCardDraftsResponse, CardBoardResponse, CardBriefResponse, CardDetailResponse, CardPlanBriefResponse, CardPlanView, CardSplitListResponse,
+  CardSplitRequestView, CardTaskView, CreateCardPlanRequest, AddPendingDeliverableRequest, CreateVersionFromPendingRequest, DeliverableVersion, OverruleCardHandbackRequest,
+  PatchCardRequest, PendingDeliverableItem } from "@warmap/contracts";
 import { createArticleFetcher, type ArticleFetcher } from "../articleText.js";
 import { createCardAcceptanceQueue, markHandbackReturned, overruleHandback, retryHandback } from "../cardAcceptance.js";
 import { createCardAcceptanceAgent, type CardAcceptanceAgent } from "../cardAcceptanceAgent.js";
 import { addPendingTopicVersion, createVersionFromPending, removePending } from "../cardDeliverables.js";
 import { createCardPlanAgent, type CardPlanAgent } from "../cardPlanAgent.js";
 import { createCardPlanQueue } from "../cardPlanner.js";
+import { closeCardSplit, listCardSplits, planBrief, registerCardSplit } from "../cardSplits.js";
 import { createRoleProposalAgent, type RoleProposalAgent } from "../roleProposalAgent.js";
 import { createRoleProposalQueue } from "../roleProposals.js";
 import { RoleError } from "../roles.js";
 import { agreementSnapshot } from "../taskAgreements.js";
 import { personDisplayNames } from "../people.js";
 import { acceptCardDrafts, boardTask, CardError, cardBrief, createCardPlan, dismissCardDraft, patchCard, planTaskOpener, planTaskOrNull, readBoard,
-  readCardDetail } from "../taskCards.js";
+  readCardDetail, type CardPlanTask } from "../taskCards.js";
 import type { AppInstance, Guard, RouteContext } from "./shared.js";
 
 const taskParams = Type.Object({ taskId: Type.String({ minLength: 1 }) });
@@ -24,15 +26,19 @@ const handbackParams = Type.Object({ id: Type.String({ minLength: 1 }), handback
 /** 看板的三个作业：拆卡、Agent 验收、提岗位修改。换成别的服务来跑时，只换这三个实现。 */
 export type BoardAgents = { plan: CardPlanAgent; acceptance: CardAcceptanceAgent; proposal: RoleProposalAgent };
 
+/** 本机那一侧（routes/local.ts）要用的：新交回排云端验收（开关关着时什么也不做）、岗位修改排队、按人读卡挂的 Task。 */
+export type BoardHooks = { enqueueAcceptance: (handbackId: string) => void; enqueueProposal: (proposalId: string) => void;
+  planTask: (personId: string, planTaskId: string) => Promise<CardPlanTask | null> };
+
 /**
  * 执行看板（契约 taskCards.ts）：Task 页看板、拆卡和草稿、卡的详情、改卡、开工交代、Agent 验收的推翻、重试和「已送到」。成员工作台的人才有。
  * 拆卡、Agent 验收、提岗位修改在后台队列里跑；拆卡和验收照参考评审用 REVIEW_*（没配时用 PI_* 的 heavy 模型），提岗位修改用 PI_* 的 light 模型。
+ * 第 21 节：拆卡和验收改在本人电脑上，云端的两个作业只在 BOARD_CLOUD_AGENTS=1 时开；登记拆卡、规划员交代在这里。
  * agents、fetchArticle 可注入（测试用假实现）。
- * 返回 Agent 验收的入队（本机上报新交回时用）。
  */
-export function registerTaskCardRoutes(app: AppInstance, ctx: RouteContext, deps: { agents?: Partial<BoardAgents>; fetchArticle?: ArticleFetcher } = {}):
-  { enqueueAcceptance: (handbackId: string) => void } {
-  const { q, pool, fail, requirePerson, env } = ctx;
+export function registerTaskCardRoutes(app: AppInstance, ctx: RouteContext, deps: { agents?: Partial<BoardAgents>; fetchArticle?: ArticleFetcher } = {}): BoardHooks {
+  const { q, pool, fail, requirePerson, requireServiceToken, env } = ctx;
+  const cloud = Boolean(env.boardCloudAgents);
   const names = () => personDisplayNames(ctx.peopleDirectory);
   const model = { query: q, baseUrl: env.review?.baseUrl ?? env.piBaseUrl, apiKey: env.review?.apiKey ?? env.piApiKey,
     modelId: env.review?.model ?? env.heavyModel, thinking: env.review?.thinking };
@@ -45,12 +51,12 @@ export function registerTaskCardRoutes(app: AppInstance, ctx: RouteContext, deps
     ?? createRoleProposalAgent({ query: q, baseUrl: env.piBaseUrl, apiKey: env.piApiKey, modelId: env.lightModel, thinking: "off" }) });
   const acceptance = createCardAcceptanceQueue({ pool, storageDir: ctx.materialStorageDir, now: ctx.now, onError: () => app.log.error("card acceptance failed"),
     agent: deps.agents?.acceptance ?? createCardAcceptanceAgent(model), fetchArticle: deps.fetchArticle ?? createArticleFetcher(),
-    onProposal: (id) => { void proposals.enqueue(id); }, planTask: (ownerId, planTaskId) => planTaskOf(ownerId)(planTaskId) });
+    onProposal: (id) => { void proposals.enqueue(id); }, planTask: (ownerId, planTaskId) => planTaskOf(ownerId)(planTaskId), modelLabel: model.modelId });
   app.decorate("cardPlans", plans);
   app.decorate("cardAcceptance", acceptance);
   app.decorate("roleProposals", proposals);
   let recovery: ReturnType<typeof setInterval> | undefined;
-  const recover = () => Promise.all([plans.recover(), acceptance.recover(), proposals.recover()]).catch(() => app.log.error("board queue recovery failed"));
+  const recover = () => Promise.all([...cloud ? [plans.recover(), acceptance.recover()] : [], proposals.recover()]).catch(() => app.log.error("board queue recovery failed"));
   app.addHook("onReady", async () => {
     await recover();
     recovery = setInterval(() => { void recover(); }, 60_000);
@@ -72,20 +78,39 @@ export function registerTaskCardRoutes(app: AppInstance, ctx: RouteContext, deps
     }
   };
   const board = (personId: string, taskId: string) => boardTask(open, personId, taskId);
+  const cloudOff = (reply: FastifyReply) => fail(reply, 409, "CLOUD_AGENTS_OFF", "拆卡和验收在本人电脑上做，云端这一路没开");
 
   app.get("/api/plan-tasks/:taskId/cards", { preHandler: requireMember, schema: { params: taskParams, response: { 200: CardBoardResponse } } }, async (req, reply) =>
     handle(reply, async () => readBoard(q, await board(req.person!.personId, req.params.taskId), names())));
 
   app.post("/api/plan-tasks/:taskId/card-plans", { preHandler: requireMember, schema: { params: taskParams, body: CreateCardPlanRequest,
     response: { 200: CardPlanView, 202: CardPlanView } } }, async (req, reply) => handle(reply, async () => {
-    const { plan, created } = await createCardPlan(q, await board(req.person!.personId, req.params.taskId), req.body.hint);
+    const own = await board(req.person!.personId, req.params.taskId);
+    if (!cloud) return cloudOff(reply);
+    const { plan, created } = await createCardPlan(q, own, req.body.hint);
     if (created) void plans.enqueue(plan.id);
     return reply.status(created ? 202 : 200).send(plan);
   }));
 
   app.post("/api/plan-tasks/:taskId/card-drafts/accept", { preHandler: requireMember, schema: { params: taskParams, body: AcceptCardDraftsRequest,
     response: { 200: AcceptCardDraftsResponse } } }, async (req, reply) => handle(reply, async () =>
-    ({ cards: await acceptCardDrafts(pool, await board(req.person!.personId, req.params.taskId), req.body, names()) })));
+    ({ cards: await acceptCardDrafts(pool, await board(req.person!.personId, req.params.taskId), req.body, names(), ctx.now()) })));
+
+  // 登记拆卡（第 21 节）：只记下本人要拆这个 Task，不起作业；网页在本人电脑上开规划员，开了以后去掉登记。
+  app.post("/api/plan-tasks/:taskId/card-splits", { preHandler: requireMember, schema: { params: taskParams,
+    response: { 200: CardSplitRequestView, 201: CardSplitRequestView } } }, async (req, reply) => handle(reply, async () => {
+    const { request, created } = await registerCardSplit(q, await board(req.person!.personId, req.params.taskId), "web", ctx.now());
+    return reply.status(created ? 201 : 200).send(request);
+  }));
+
+  app.get("/api/me/card-splits", { preHandler: requireMember, schema: { response: { 200: CardSplitListResponse } } }, async (req) =>
+    ({ requests: await listCardSplits(q, req.person!.personId) }));
+
+  app.delete("/api/me/card-splits/:id", { preHandler: requireMember, schema: { params: idParams } }, async (req, reply) =>
+    await closeCardSplit(q, req.person!.personId, req.params.id, ctx.now()) ? reply.status(204).send() : fail(reply, 404, "NOT_FOUND", "找不到这条登记"));
+
+  app.get("/api/plan-tasks/:taskId/plan-brief", { preHandler: requireMember, schema: { params: taskParams, response: { 200: CardPlanBriefResponse } } }, async (req, reply) =>
+    handle(reply, async () => planBrief(q, await board(req.person!.personId, req.params.taskId))));
 
   app.post("/api/card-drafts/:id/dismiss", { preHandler: requireMember, schema: { params: idParams } }, async (req, reply) => handle(reply, async () => {
     await dismissCardDraft(q, req.person!.personId, req.params.id, (planTaskId) => board(req.person!.personId, planTaskId));
@@ -115,6 +140,7 @@ export function registerTaskCardRoutes(app: AppInstance, ctx: RouteContext, deps
     if (proposal) void proposals.enqueue(proposal);
   }, OverruleCardHandbackRequest);
   handbackAction("/api/me/cards/:id/handbacks/:handbackId/retry", async (personId, cardId, handbackId) => {
+    if (!cloud) throw new CardError(409, "CLOUD_AGENTS_OFF", "验收在本人电脑上做，云端这一路没开");
     await retryHandback(pool, personId, cardId, handbackId);
     void acceptance.enqueue(handbackId);
   });
@@ -138,7 +164,19 @@ export function registerTaskCardRoutes(app: AppInstance, ctx: RouteContext, deps
     return reply.status(201).send(version);
   }));
 
-  return { enqueueAcceptance: (handbackId) => { void acceptance.enqueue(handbackId); } };
+  // 伙伴的「登记拆卡」（工具名 register_card_split）：照 /internal/me/workers，INTERNAL_CHAT_TOKEN 加 X-Owner-Id；没配时不注册，不进公开 OpenAPI。
+  if (env.internalChatToken) app.post("/internal/plan-tasks/:taskId/card-splits", { onRequest: requireServiceToken(env.internalChatToken),
+    schema: { params: taskParams, response: { 200: CardSplitRequestView, 201: CardSplitRequestView } } }, async (req, reply) => {
+    const id = req.headers["x-owner-id"];
+    if (typeof id !== "string" || !ctx.peopleDirectory.searchPeople(undefined).some((person) => person.personId === id)) return fail(reply, 404, "OWNER_NOT_FOUND", "提问人不在人员目录");
+    return handle(reply, async () => {
+      const { request, created } = await registerCardSplit(q, await board(id, req.params.taskId), "buddy", ctx.now());
+      return reply.status(created ? 201 : 200).send(request);
+    });
+  });
+
+  return { enqueueAcceptance: (handbackId) => { if (cloud) void acceptance.enqueue(handbackId); }, enqueueProposal: (proposalId) => { void proposals.enqueue(proposalId); },
+    planTask: (personId, planTaskId) => planTaskOf(personId)(planTaskId) };
 }
 
 declare module "fastify" {

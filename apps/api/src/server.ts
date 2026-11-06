@@ -106,6 +106,8 @@ const env: AppEnv = {
   // 交付物评审与版本说明（可选，指向 TokenHub）：不配时用 PI_BASE_URL / PI_API_KEY / HEAVY_MODEL、思考 medium。
   review: { model: process.env.REVIEW_MODEL || undefined, baseUrl: process.env.REVIEW_BASE_URL || undefined,
     apiKey: process.env.REVIEW_API_KEY || undefined, thinking: process.env.REVIEW_THINKING || undefined },
+  // 云端拆卡和云端 Agent 验收（缺省关，拆卡和验收在本人电脑上做）。
+  boardCloudAgents: process.env.BOARD_CLOUD_AGENTS === "1",
   buildSha: process.env.BUILD_SHA ?? "dev",
   materialStorageDir: process.env.MEETING_MATERIAL_STORAGE_DIR,
   conversationAttachmentStorageDir: process.env.CONVERSATION_ATTACHMENT_STORAGE_DIR,

@@ -221,6 +221,27 @@ export async function reviewerRole(q: Query, ownerId: string): Promise<RoleRow |
     ORDER BY (owner_id IS NULL), created_at, preset_key LIMIT 1`, [ownerId])).rows[0] as RoleRow | undefined ?? null;
 }
 
+/** 是不是规划员（从预设 planner 加的，或名字就叫「规划员」）：派活单不派给它。 */
+export const isPlannerRole = (row: Pick<RoleRow, "preset_key" | "name">) => row.preset_key === "planner" || row.name === "规划员";
+
+/** 规划员（第 21 节）：本人团队里没归档的规划员（从预设 planner 加的，或名字就叫「规划员」），没有时用预设的。 */
+export async function plannerRole(q: Query, ownerId: string): Promise<RoleRow | null> {
+  return (await q(`SELECT * FROM roles WHERE archived_at IS NULL AND ((owner_id=$1 AND (preset_key='planner' OR name='规划员')) OR (owner_id IS NULL AND preset_key='planner'))
+    ORDER BY (owner_id IS NULL), created_at LIMIT 1`, [ownerId])).rows[0] as RoleRow | undefined ?? null;
+}
+
+/**
+ * 本人从某个预设加的岗位（没归档的）；还没加过就照预设复制一份给本人（同 POST /api/me/roles 的从预设加）。预设不在了为 null。
+ * 在调用方的事务里跑。派活单放进看板时给没配岗位的卡兜底用。
+ */
+export async function ensurePresetRole(client: PoolClient, ownerId: string, presetKey: string, now: Date): Promise<RoleRow | null> {
+  await client.query(`INSERT INTO roles(id,owner_id,preset_key,preset_version,name,family,kind,duties_md,practice_md,acceptance_md,tools,model_tier,created_at,updated_at,updated_by)
+    SELECT $1,$2,preset_key,version,name,family,kind,duties_md,practice_md,acceptance_md,tools,model_tier,$4,$4,$2 FROM roles
+    WHERE owner_id IS NULL AND preset_key=$3 AND archived_at IS NULL
+    ON CONFLICT (owner_id,preset_key) WHERE owner_id IS NOT NULL AND preset_key IS NOT NULL AND archived_at IS NULL DO NOTHING`, [randomUUID(), ownerId, presetKey, now]);
+  return (await client.query("SELECT * FROM roles WHERE owner_id=$1 AND preset_key=$2 AND archived_at IS NULL", [ownerId, presetKey])).rows[0] as RoleRow | undefined ?? null;
+}
+
 /** 评审会的挑刺岗位：本人点了的（要是本人没归档的挑刺岗位），没点时取本人的前 3 个。 */
 export async function criticRoles(q: Query, ownerId: string, picked?: string[]): Promise<RoleRow[]> {
   const rows = (await q("SELECT * FROM roles WHERE owner_id=$1 AND kind='critic' AND archived_at IS NULL ORDER BY created_at,id", [ownerId])).rows as RoleRow[];
