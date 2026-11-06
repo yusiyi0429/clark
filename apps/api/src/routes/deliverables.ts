@@ -109,7 +109,7 @@ export function registerDeliverableRoutes(app: AppInstance, ctx: RouteContext, d
     return version;
   });
   versionRoute("/api/plan-tasks/:taskId/deliverable/versions/:versionId/criteria/:index/dissent", async (task, versionId, body: { reason: string }, index) => {
-    const version = await dissentCriterion(q, task, versionId, index, body.reason);
+    const version = await dissentCriterion(q, task, versionId, index, body.reason, ctx.now());
     void queue.enqueueReview(versionId);
     return version;
   }, { body: DeliverableDissentRequest, index: true });

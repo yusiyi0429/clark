@@ -281,8 +281,8 @@ export async function patchVersionNote(q: Query, own: OwnTask, versionId: string
   return readVersion(q, own.task.taskId, versionId);
 }
 
-/** 不同意某一条：只对评完的部分 / 未达到，一次只重评一条；带着本人的理由重评（调用方开始评审）。 */
-export async function dissentCriterion(q: Query, own: OwnTask, versionId: string, index: number, reason: string): Promise<TDeliverableVersion> {
+/** 不同意某一条：只对评完的部分 / 未达到，一次只重评一条；带着本人的理由重评（调用方开始评审），用时从此刻重新算。 */
+export async function dissentCriterion(q: Query, own: OwnTask, versionId: string, index: number, reason: string, now: Date): Promise<TDeliverableVersion> {
   requireEdit(own);
   const text = reason.trim();
   if (!text) throw new DeliverableError(400, "INVALID_INPUT", "写一句为什么");
@@ -293,8 +293,8 @@ export async function dissentCriterion(q: Query, own: OwnTask, versionId: string
   if (criterion.verdict === "met") throw new DeliverableError(409, "ALREADY_MET", "这一条已经达到了");
   if (row.review.criteria.some((item) => item.dissent?.upheld === null)) throw new DeliverableError(409, "DISSENT_PENDING", "还有一条在重评");
   const review: StoredReview = { ...row.review, criteria: row.review.criteria.map((item) => item.index === index ? { ...item, dissent: { reason: text, upheld: null } } : item) };
-  await q(`UPDATE deliverable_versions SET review=$2::jsonb,review_status='running',review_run_token=NULL,review_error=NULL,review_phase=$3::jsonb
-    WHERE id=$1 AND review_status='done'`, [versionId, JSON.stringify(review), JSON.stringify({ step: 1, total: 1, label: `重评第 ${index} 条` })]);
+  await q(`UPDATE deliverable_versions SET review=$2::jsonb,review_status='running',review_run_token=NULL,review_error=NULL,review_phase=$3::jsonb,
+    review_started_at=$4,review_finished_at=NULL WHERE id=$1 AND review_status='done'`, [versionId, JSON.stringify(review), JSON.stringify({ step: 1, total: 1, label: `重评第 ${index} 条` }), now]);
   return readVersion(q, own.task.taskId, versionId);
 }
 
