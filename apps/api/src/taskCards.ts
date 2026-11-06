@@ -258,7 +258,7 @@ export async function createCardPlan(q: Query, own: OwnTask, hint: string | unde
  * 交给 Claude Code 的卡都要有岗位（worker 列表按岗位列）：没配时照草稿建议的预设、没建议时照「执行员」预设给本人加上并挂上。
  */
 export async function acceptCardDrafts(pool: Pool, own: OwnTask, input: TAcceptCardDraftsRequest, names: Map<string, string>, now: Date): Promise<TCardTaskView[]> {
-  const ids: string[] = [];
+  const ids: string[] = [], plans = new Set<string>();
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -281,7 +281,14 @@ export async function acceptCardDrafts(pool: Pool, own: OwnTask, input: TAcceptC
         [created.task.id, executor, (edit.brief ?? draft.brief).trim() || null, index, index ? own.criteria[index - 1] : null, roleId]);
       await client.query("UPDATE card_drafts SET status='accepted',task_id=$2,decided_at=now() WHERE id=$1", [draft.id, created.task.id]);
       ids.push(created.task.id);
+      plans.add(draft.plan_id);
     }
+    // 先后：草稿要等的那几张草稿放进看板了，换成它们的卡 id（先放后放都对得上；不要了的那张不等）。
+    await client.query(`UPDATE tasks t SET after_card_ids=w.ids FROM (
+      SELECT d.task_id,coalesce(array_agg(a.task_id ORDER BY a.position) FILTER (WHERE a.task_id IS NOT NULL),'{}') AS ids
+      FROM card_drafts d LEFT JOIN card_drafts a ON a.id=ANY(d.after_draft_ids) AND a.status='accepted'
+      WHERE d.plan_id=ANY($1::uuid[]) AND d.status='accepted' AND d.task_id IS NOT NULL AND cardinality(d.after_draft_ids)>0 GROUP BY d.task_id) w
+      WHERE t.id=w.task_id`, [[...plans]]);
     await client.query("COMMIT");
   } catch (cause) { await client.query("ROLLBACK").catch(() => undefined); throw cause; }
   finally { client.release(); }

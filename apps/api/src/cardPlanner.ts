@@ -132,12 +132,15 @@ export async function saveLocalCardPlan(client: PoolClient, input: { ownerId: st
     return { roleId: null, preset: roles.find((role) => role.owner_id === null && (role.preset_key === name || role.name === name))?.preset_key ?? null };
   };
   const start = (await client.query("SELECT coalesce(max(position)+1,0)::int AS n FROM card_drafts WHERE plan_id=$1", [planId])).rows[0].n as number;
+  // 先后（after）是这次派活单里的位置（从 1 起），存成那几张草稿的 id。
+  const ids = plan.cards.map(() => randomUUID());
   for (const [position, card] of plan.cards.entries()) {
     const { roleId, preset } = roleOf(card.role);
     const index = card.criterionIndex && own.criteria[card.criterionIndex - 1] ? card.criterionIndex : null;
-    await client.query(`INSERT INTO card_drafts(id,plan_id,plan_task_id,owner_id,position,title,brief,done_definition,criterion_index,executor,model_tier,why,role_id,suggest_preset_key)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'claude_code',$10,$11,$12,$13)`, [randomUUID(), planId, own.task.taskId, ownerId, start + position, card.title.trim(),
-      card.brief.trim(), standardLines(card.doneDefinition), index, card.modelTier, card.why?.trim() || null, roleId, preset]);
+    await client.query(`INSERT INTO card_drafts(id,plan_id,plan_task_id,owner_id,position,title,brief,done_definition,criterion_index,executor,model_tier,why,role_id,suggest_preset_key,
+      after_draft_ids) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'claude_code',$10,$11,$12,$13,$14::uuid[])`, [ids[position], planId, own.task.taskId, ownerId, start + position, card.title.trim(),
+      card.brief.trim(), standardLines(card.doneDefinition), index, card.modelTier, card.why?.trim() || null, roleId, preset,
+      [...new Set(card.after ?? [])].map((after) => ids[after - 1])]);
   }
   return true;
 }

@@ -176,9 +176,11 @@ async function applyType(client: PoolClient, deps: { storageDir: string }, owner
   switch (item.type) {
     case "status": {
       if (seq <= Number(run.state_seq)) return {};
-      const { status, title, modelLabel } = item.data;
-      await client.query(`UPDATE local_runs SET state=$2,state_seq=$3,title=$4,model_label=$5,ended_at=$6,running_at=COALESCE(running_at,$7) WHERE id=$1`,
-        [run.id, status, seq, title, modelLabel, status === "exited" || status === "failed" ? at : null, status === "running" ? at : null]);
+      const { status, title, modelLabel, waitingFor } = item.data;
+      // waitingFor：排着、在等前面的卡（只有 queued 带）；别的状态清掉。
+      await client.query(`UPDATE local_runs SET state=$2,state_seq=$3,title=$4,model_label=$5,ended_at=$6,running_at=COALESCE(running_at,$7),waiting_for=$8 WHERE id=$1`,
+        [run.id, status, seq, title, modelLabel, status === "exited" || status === "failed" ? at : null, status === "running" ? at : null,
+          status === "queued" && waitingFor?.length ? waitingFor : null]);
       await note(client, run, at, status === "starting" ? `${STATUS_TEXT.starting}（${modelLabel}）` : STATUS_TEXT[status], MILESTONE_STATES.has(status));
       return {};
     }
@@ -243,6 +245,8 @@ async function applyType(client: PoolClient, deps: { storageDir: string }, owner
       if (run.kind !== "plan" || !planned) throw new SyncReject("INVALID_SUBJECT", "派活单只收规划员的会话");
       if (!item.data.summary.trim() || item.data.cards.some((card) => !card.title.trim() || !standardLines(card.doneDefinition)))
         throw new SyncReject("INVALID_PLAN", "计划要有一句话总结，每件派活单要有标题和完成标准");
+      if (item.data.cards.some((card, index) => (card.after ?? []).some((after) => after > index)))
+        throw new SyncReject("INVALID_PLAN", "一件只能等排在它前面的几件（after 写前面的位置，从 1 起）");
       const saved = await saveLocalCardPlan(client, { ownerId: owner.personId, runId: run.id, own: planned, plan: item.data, at });
       await note(client, run, at, saved ? `出了派活单（第 ${item.data.revision} 次，${item.data.cards.length} 件）` : "旧的派活单晚到了", true);
       return {};

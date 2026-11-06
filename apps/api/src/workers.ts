@@ -1,7 +1,7 @@
 import type { TLocalRunPlanProgress, TLocalSlots, TWorkerCost, TWorkerItem, TWorkerMark, TWorkersResponse } from "@warmap/contracts";
 import { ownMissions, planTaskMissions } from "./homePlan.js";
 import { latestRuns, RUN_SELECT, runBrief, type RunRow } from "./localDevices.js";
-import type { Query } from "./meetingStore.js";
+import { UUID_PATTERN, type Query } from "./meetingStore.js";
 import { companyPeriod } from "./monthlyPlans.js";
 import { readPlanTasks, type PlanTaskSource } from "./planTasks.js";
 import { plannerRole, reviewerRole, roleRef, rolesById } from "./roles.js";
@@ -44,8 +44,15 @@ export async function listWorkers(deps: { q: Query; planTasks: PlanTaskSource; n
   const onlineDevices = devices.filter((device) => device.last_sync_at && device.last_sync_at.getTime() > since);
   const online = new Set(onlineDevices.map((device) => device.id));
   const slots = onlineDevices.flatMap((device) => device.slots ? [device.slots] : []);
+  // 等空位的排第几（在等前面的卡的不占位置，不算）；在等前面的卡的，等的是哪几张（本机报的 waitingFor，标题按本人的卡读）。
   const positions = new Map(((await q(`SELECT id::text,row_number() OVER (PARTITION BY device_id ORDER BY started_at,id)::int AS position FROM local_runs
-    WHERE owner_id=$1 AND state='queued'`, [ownerId])).rows as { id: string; position: number }[]).map((row) => [row.id, row.position]));
+    WHERE owner_id=$1 AND state='queued' AND waiting_for IS NULL`, [ownerId])).rows as { id: string; position: number }[]).map((row) => [row.id, row.position]));
+  const waits = (await q("SELECT id::text,waiting_for FROM local_runs WHERE owner_id=$1 AND state='queued' AND waiting_for IS NOT NULL", [ownerId])).rows as
+    { id: string; waiting_for: string[] }[];
+  const waitedIds = [...new Set(waits.flatMap((row) => row.waiting_for))];
+  const waitedTitles = new Map(waitedIds.some((id) => UUID_PATTERN.test(id)) ? ((await q("SELECT id::text,title FROM tasks WHERE owner_id=$1 AND id=ANY($2::uuid[])",
+    [ownerId, waitedIds.filter((id) => UUID_PATTERN.test(id))])).rows as { id: string; title: string }[]).map((row) => [row.id, row.title]) : []);
+  const waitingOf = (runId: string) => waits.find((row) => row.id === runId)?.waiting_for.map((cardId) => ({ cardId, title: waitedTitles.get(cardId) ?? "" })) ?? [];
   const elapsed = (start: string | null, end: Date = now) => start ? Math.max(0, Math.round((end.getTime() - Date.parse(start)) / 1000)) : null;
 
   // 卡：带岗位的、没退回的；完成的只要今天（公司时区）完成的。
@@ -105,13 +112,15 @@ export async function listWorkers(deps: { q: Query; planTasks: PlanTaskSource; n
     const run = card.card.run;
     const role = card.card.role!;
     const base = { key: `card:${card.id}`, kind: "card" as const, cardId: card.id, topicId: null, title: card.title, task: taskOf(row.plan_task_id),
-      mission: missionOf(row.mission_id), cost: cardCosts.get(card.id) ?? null, stage: card.card.stage, git: card.card.handback?.git ?? null };
+      mission: missionOf(row.mission_id), cost: cardCosts.get(card.id) ?? null, stage: card.card.stage, git: card.card.handback?.git ?? null, waitingFor: [] };
     const local = run ? { where: "local" as const, deviceId: run.deviceId, deviceName: run.deviceName, modelLabel: run.modelLabel } : null;
     if (card.card.stage === "todo" && run && isQueued(run.state)) {
-      // 本机收下了、在等空位（还没开工，卡在待开始）；那台电脑不在线时算等本机上线。
-      const queueReason = online.has(run.deviceId) ? "slot" as const : "device_offline" as const;
+      // 本机收下了、在等空位或等前面的卡（还没开工，卡在待开始）；那台电脑不在线时算等本机上线。
+      const waitingFor = waitingOf(run.id);
+      const queueReason = !online.has(run.deviceId) ? "device_offline" as const : waitingFor.length ? "prior_cards" as const : "slot" as const;
       drafts.push({ ...base, group: "queued", role, step: null, resource: local, startedAt: null, elapsedSeconds: null, finishedAt: null,
-        wait: null, needsYou: false, queueReason, queuePosition: queueReason === "slot" ? positions.get(run.id) ?? null : null });
+        wait: null, needsYou: false, queueReason, queuePosition: queueReason === "slot" ? positions.get(run.id) ?? null : null,
+        waitingFor: queueReason === "prior_cards" ? waitingFor : [] });
     } else if (card.card.stage === "todo") {
       drafts.push({ ...base, group: "queued", role, step: null, resource: null, startedAt: null, elapsedSeconds: null, finishedAt: null,
         wait: null, needsYou: false, queueReason: "not_dispatched", queuePosition: null });
@@ -150,7 +159,7 @@ export async function listWorkers(deps: { q: Query; planTasks: PlanTaskSource; n
     const run = topicRuns.get(topic.id);
     if (!role || (run && !ACTIVE.has(run.state))) continue;
     const base = { key: `topic:${topic.id}`, kind: "topic" as const, cardId: null, topicId: topic.id, title: topic.title, role: roleRef(role),
-      task: taskOf(topic.plan_task_id), mission: missionOf(topic.mission_id), cost: topicCosts.get(topic.id) ?? null, finishedAt: null, git: null };
+      task: taskOf(topic.plan_task_id), mission: missionOf(topic.mission_id), cost: topicCosts.get(topic.id) ?? null, finishedAt: null, git: null, waitingFor: [] };
     if (!run) {
       drafts.push({ ...base, group: "queued", step: null, resource: null, startedAt: null, elapsedSeconds: null, stage: "todo", wait: null, needsYou: false,
         queueReason: "not_dispatched", queuePosition: null });
@@ -163,7 +172,7 @@ export async function listWorkers(deps: { q: Query; planTasks: PlanTaskSource; n
     if (!planner) break;
     const task = taskOf(run.plan_task_id)!;
     drafts.push({ key: `plan:${run.id}`, kind: "plan", cardId: null, topicId: null, title: task.name, role: roleRef(planner), task,
-      mission: missionOf(planTasks.get(task.id)?.missionId ?? null), stage: "doing", git: null, ...session(run) });
+      mission: missionOf(planTasks.get(task.id)?.missionId ?? null), stage: "doing", git: null, waitingFor: [], ...session(run) });
   }
 
   // #号：同一岗位按开工时间排（等开工的排在后面）。

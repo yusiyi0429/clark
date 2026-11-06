@@ -210,6 +210,7 @@ describe("migration", () => {
         "233_local_sync_slots_progress_versions.sql",
         "234_local_plan_verify.sql",
         "235_card_handback_git.sql",
+        "236_card_after.sql",
       ]);
 
       // 幂等：重复执行不再变更
