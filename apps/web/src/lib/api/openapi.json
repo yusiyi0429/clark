@@ -81871,6 +81871,10 @@
                   "state": {
                     "anyOf": [
                       {
+                        "const": "queued",
+                        "type": "string"
+                      },
+                      {
                         "const": "starting",
                         "type": "string"
                       },
@@ -81912,6 +81916,7 @@
                     "required": [
                       "done",
                       "total",
+                      "step",
                       "current"
                     ],
                     "properties": {
@@ -81920,6 +81925,10 @@
                         "type": "integer"
                       },
                       "total": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "step": {
                         "minimum": 0,
                         "type": "integer"
                       },
@@ -82860,6 +82869,10 @@
                       "state": {
                         "anyOf": [
                           {
+                            "const": "queued",
+                            "type": "string"
+                          },
+                          {
                             "const": "starting",
                             "type": "string"
                           },
@@ -82901,6 +82914,7 @@
                         "required": [
                           "done",
                           "total",
+                          "step",
                           "current"
                         ],
                         "properties": {
@@ -82909,6 +82923,10 @@
                             "type": "integer"
                           },
                           "total": {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "step": {
                             "minimum": 0,
                             "type": "integer"
                           },
@@ -84201,6 +84219,10 @@
                             "state": {
                               "anyOf": [
                                 {
+                                  "const": "queued",
+                                  "type": "string"
+                                },
+                                {
                                   "const": "starting",
                                   "type": "string"
                                 },
@@ -84242,6 +84264,7 @@
                               "required": [
                                 "done",
                                 "total",
+                                "step",
                                 "current"
                               ],
                               "properties": {
@@ -84250,6 +84273,10 @@
                                   "type": "integer"
                                 },
                                 "total": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "step": {
                                   "minimum": 0,
                                   "type": "integer"
                                 },
@@ -85606,6 +85633,10 @@
                             "state": {
                               "anyOf": [
                                 {
+                                  "const": "queued",
+                                  "type": "string"
+                                },
+                                {
                                   "const": "starting",
                                   "type": "string"
                                 },
@@ -85647,6 +85678,7 @@
                               "required": [
                                 "done",
                                 "total",
+                                "step",
                                 "current"
                               ],
                               "properties": {
@@ -85655,6 +85687,10 @@
                                   "type": "integer"
                                 },
                                 "total": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "step": {
                                   "minimum": 0,
                                   "type": "integer"
                                 },
@@ -87075,6 +87111,10 @@
                           "state": {
                             "anyOf": [
                               {
+                                "const": "queued",
+                                "type": "string"
+                              },
+                              {
                                 "const": "starting",
                                 "type": "string"
                               },
@@ -87116,6 +87156,7 @@
                             "required": [
                               "done",
                               "total",
+                              "step",
                               "current"
                             ],
                             "properties": {
@@ -87124,6 +87165,10 @@
                                 "type": "integer"
                               },
                               "total": {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "step": {
                                 "minimum": 0,
                                 "type": "integer"
                               },
@@ -87441,6 +87486,10 @@
                 "state": {
                   "anyOf": [
                     {
+                      "const": "queued",
+                      "type": "string"
+                    },
+                    {
                       "const": "starting",
                       "type": "string"
                     },
@@ -87482,6 +87531,7 @@
                   "required": [
                     "done",
                     "total",
+                    "step",
                     "current"
                   ],
                   "properties": {
@@ -87490,6 +87540,10 @@
                       "type": "integer"
                     },
                     "total": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "step": {
                       "minimum": 0,
                       "type": "integer"
                     },
@@ -88697,6 +88751,10 @@
           "state": {
             "anyOf": [
               {
+                "const": "queued",
+                "type": "string"
+              },
+              {
                 "const": "starting",
                 "type": "string"
               },
@@ -88738,6 +88796,7 @@
             "required": [
               "done",
               "total",
+              "step",
               "current"
             ],
             "properties": {
@@ -88746,6 +88805,10 @@
                 "type": "integer"
               },
               "total": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "step": {
                 "minimum": 0,
                 "type": "integer"
               },
@@ -88871,6 +88934,10 @@
           "state": {
             "anyOf": [
               {
+                "const": "queued",
+                "type": "string"
+              },
+              {
                 "const": "starting",
                 "type": "string"
               },
@@ -88912,6 +88979,7 @@
             "required": [
               "done",
               "total",
+              "step",
               "current"
             ],
             "properties": {
@@ -88920,6 +88988,10 @@
                 "type": "integer"
               },
               "total": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "step": {
                 "minimum": 0,
                 "type": "integer"
               },
@@ -89390,6 +89462,10 @@
                   "state": {
                     "anyOf": [
                       {
+                        "const": "queued",
+                        "type": "string"
+                      },
+                      {
                         "const": "starting",
                         "type": "string"
                       },
@@ -89431,6 +89507,7 @@
                     "required": [
                       "done",
                       "total",
+                      "step",
                       "current"
                     ],
                     "properties": {
@@ -89439,6 +89516,10 @@
                         "type": "integer"
                       },
                       "total": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "step": {
                         "minimum": 0,
                         "type": "integer"
                       },
@@ -89953,6 +90034,10 @@
                         "state": {
                           "anyOf": [
                             {
+                              "const": "queued",
+                              "type": "string"
+                            },
+                            {
                               "const": "starting",
                               "type": "string"
                             },
@@ -89994,6 +90079,7 @@
                           "required": [
                             "done",
                             "total",
+                            "step",
                             "current"
                           ],
                           "properties": {
@@ -90002,6 +90088,10 @@
                               "type": "integer"
                             },
                             "total": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "step": {
                               "minimum": 0,
                               "type": "integer"
                             },
@@ -90367,6 +90457,10 @@
                       "state": {
                         "anyOf": [
                           {
+                            "const": "queued",
+                            "type": "string"
+                          },
+                          {
                             "const": "starting",
                             "type": "string"
                           },
@@ -90408,6 +90502,7 @@
                         "required": [
                           "done",
                           "total",
+                          "step",
                           "current"
                         ],
                         "properties": {
@@ -90416,6 +90511,10 @@
                             "type": "integer"
                           },
                           "total": {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "step": {
                             "minimum": 0,
                             "type": "integer"
                           },
@@ -90796,6 +90895,10 @@
                 "state": {
                   "anyOf": [
                     {
+                      "const": "queued",
+                      "type": "string"
+                    },
+                    {
                       "const": "starting",
                       "type": "string"
                     },
@@ -90837,6 +90940,7 @@
                   "required": [
                     "done",
                     "total",
+                    "step",
                     "current"
                   ],
                   "properties": {
@@ -90845,6 +90949,10 @@
                       "type": "integer"
                     },
                     "total": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "step": {
                       "minimum": 0,
                       "type": "integer"
                     },
@@ -92863,7 +92971,8 @@
           "stage",
           "wait",
           "needsYou",
-          "queueReason"
+          "queueReason",
+          "queuePosition"
         ],
         "properties": {
           "key": {
@@ -93248,6 +93357,17 @@
                 "type": "null"
               }
             ]
+          },
+          "queuePosition": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -93442,7 +93562,8 @@
                 "stage",
                 "wait",
                 "needsYou",
-                "queueReason"
+                "queueReason",
+                "queuePosition"
               ],
               "properties": {
                 "key": {
@@ -93822,6 +93943,17 @@
                           "type": "string"
                         }
                       ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "queuePosition": {
+                  "anyOf": [
+                    {
+                      "minimum": 1,
+                      "type": "integer"
                     },
                     {
                       "type": "null"
@@ -93855,7 +93987,8 @@
                 "stage",
                 "wait",
                 "needsYou",
-                "queueReason"
+                "queueReason",
+                "queuePosition"
               ],
               "properties": {
                 "key": {
@@ -94235,6 +94368,17 @@
                           "type": "string"
                         }
                       ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "queuePosition": {
+                  "anyOf": [
+                    {
+                      "minimum": 1,
+                      "type": "integer"
                     },
                     {
                       "type": "null"
@@ -94268,7 +94412,8 @@
                 "stage",
                 "wait",
                 "needsYou",
-                "queueReason"
+                "queueReason",
+                "queuePosition"
               ],
               "properties": {
                 "key": {
@@ -94648,6 +94793,17 @@
                           "type": "string"
                         }
                       ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "queuePosition": {
+                  "anyOf": [
+                    {
+                      "minimum": 1,
+                      "type": "integer"
                     },
                     {
                       "type": "null"

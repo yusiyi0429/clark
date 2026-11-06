@@ -41,10 +41,14 @@ export const CreateLocalDeviceResponse = Type.Object({
 }, strict);
 export const LocalDeviceListResponse = Type.Object({ devices: Type.Array(LocalDeviceView) }, strict);
 
-/** 计划条目走到哪：done / total 条做完，current 是正在做的那条（没有为 null）。 */
+/**
+ * 计划走到哪，照本机报的计划进度（本机程序契约 localRunner.ts 的 LocalPlanProgress，字段同名）：done / total 条做完；
+ * step 是第几步（正在做的那条是第几条，没有正在做的就是做完的条数）；current 是正在做的那条（没有为 null）。
+ */
 export const LocalRunPlanProgress = Type.Object({
   done: Type.Integer({ minimum: 0 }),
   total: Type.Integer({ minimum: 0 }),
+  step: Type.Integer({ minimum: 0 }),
   current: Nullable(Type.String()),
 }, strict);
 
@@ -59,7 +63,7 @@ export const LocalRunActivity = Type.Object({ at: Instant, text: Type.String({ m
 
 /**
  * 一次本机执行（一个本机会话，id 就是本机的 sessionId）在云端的摘要，本机是唯一写入方。
- * state 照本机的会话状态：starting、running、waiting_permission（等你批准）、idle（一轮结束等你说话）、exited（停下或本机程序重启）、failed。
+ * state 照本机的会话状态：queued（等空位）、starting、running、waiting_permission（等你批准）、idle（一轮结束等你说话）、exited（停下或本机程序重启）、failed。
  * lastActivity 是最近一条动静（状态变化、计划条目、交出的产出、证据、交回）；deviceName 是跑它的那台电脑。
  */
 export const LocalRunBrief = Type.Object({

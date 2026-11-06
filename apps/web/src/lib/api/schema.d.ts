@@ -13991,11 +13991,12 @@ export interface components {
                 /** Format: uuid */
                 deviceId: string;
                 deviceName: string;
-                state: "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
                 modelLabel: string | null;
                 plan: {
                     done: number;
                     total: number;
+                    step: number;
                     current: string | null;
                 };
                 lastActivity: {
@@ -14122,11 +14123,12 @@ export interface components {
                     /** Format: uuid */
                     deviceId: string;
                     deviceName: string;
-                    state: "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                    state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
                     modelLabel: string | null;
                     plan: {
                         done: number;
                         total: number;
+                        step: number;
                         current: string | null;
                     };
                     lastActivity: {
@@ -14304,11 +14306,12 @@ export interface components {
                         /** Format: uuid */
                         deviceId: string;
                         deviceName: string;
-                        state: "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                        state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
                         modelLabel: string | null;
                         plan: {
                             done: number;
                             total: number;
+                            step: number;
                             current: string | null;
                         };
                         lastActivity: {
@@ -14497,11 +14500,12 @@ export interface components {
                         /** Format: uuid */
                         deviceId: string;
                         deviceName: string;
-                        state: "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                        state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
                         modelLabel: string | null;
                         plan: {
                             done: number;
                             total: number;
+                            step: number;
                             current: string | null;
                         };
                         lastActivity: {
@@ -14691,11 +14695,12 @@ export interface components {
                         /** Format: uuid */
                         deviceId: string;
                         deviceName: string;
-                        state: "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                        state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
                         modelLabel: string | null;
                         plan: {
                             done: number;
                             total: number;
+                            step: number;
                             current: string | null;
                         };
                         lastActivity: {
@@ -14744,11 +14749,12 @@ export interface components {
                 /** Format: uuid */
                 deviceId: string;
                 deviceName: string;
-                state: "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
                 modelLabel: string | null;
                 plan: {
                     done: number;
                     total: number;
+                    step: number;
                     current: string | null;
                 };
                 lastActivity: {
@@ -14929,11 +14935,12 @@ export interface components {
             /** Format: uuid */
             deviceId: string;
             deviceName: string;
-            state: "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+            state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
             modelLabel: string | null;
             plan: {
                 done: number;
                 total: number;
+                step: number;
                 current: string | null;
             };
             lastActivity: {
@@ -14958,11 +14965,12 @@ export interface components {
             /** Format: uuid */
             deviceId: string;
             deviceName: string;
-            state: "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+            state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
             modelLabel: string | null;
             plan: {
                 done: number;
                 total: number;
+                step: number;
                 current: string | null;
             };
             lastActivity: {
@@ -15035,11 +15043,12 @@ export interface components {
                 /** Format: uuid */
                 deviceId: string;
                 deviceName: string;
-                state: "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
                 modelLabel: string | null;
                 plan: {
                     done: number;
                     total: number;
+                    step: number;
                     current: string | null;
                 };
                 lastActivity: {
@@ -15120,11 +15129,12 @@ export interface components {
                     /** Format: uuid */
                     deviceId: string;
                     deviceName: string;
-                    state: "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                    state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
                     modelLabel: string | null;
                     plan: {
                         done: number;
                         total: number;
+                        step: number;
                         current: string | null;
                     };
                     lastActivity: {
@@ -15186,11 +15196,12 @@ export interface components {
                     /** Format: uuid */
                     deviceId: string;
                     deviceName: string;
-                    state: "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                    state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
                     modelLabel: string | null;
                     plan: {
                         done: number;
                         total: number;
+                        step: number;
                         current: string | null;
                     };
                     lastActivity: {
@@ -15251,11 +15262,12 @@ export interface components {
                 /** Format: uuid */
                 deviceId: string;
                 deviceName: string;
-                state: "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
+                state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "failed";
                 modelLabel: string | null;
                 plan: {
                     done: number;
                     total: number;
+                    step: number;
                     current: string | null;
                 };
                 lastActivity: {
@@ -15570,6 +15582,7 @@ export interface components {
             wait: ("approval" | "reply" | "paused" | "reviewing" | "review_failed" | "blocked") | null;
             needsYou: boolean;
             queueReason: ("not_dispatched" | "slot" | "device_offline") | null;
+            queuePosition: number | null;
         };
         WorkerResources: {
             devices: {
@@ -15642,6 +15655,7 @@ export interface components {
                 wait: ("approval" | "reply" | "paused" | "reviewing" | "review_failed" | "blocked") | null;
                 needsYou: boolean;
                 queueReason: ("not_dispatched" | "slot" | "device_offline") | null;
+                queuePosition: number | null;
             }[];
             queued: {
                 key: string;
@@ -15688,6 +15702,7 @@ export interface components {
                 wait: ("approval" | "reply" | "paused" | "reviewing" | "review_failed" | "blocked") | null;
                 needsYou: boolean;
                 queueReason: ("not_dispatched" | "slot" | "device_offline") | null;
+                queuePosition: number | null;
             }[];
             done: {
                 key: string;
@@ -15734,6 +15749,7 @@ export interface components {
                 wait: ("approval" | "reply" | "paused" | "reviewing" | "review_failed" | "blocked") | null;
                 needsYou: boolean;
                 queueReason: ("not_dispatched" | "slot" | "device_offline") | null;
+                queuePosition: number | null;
             }[];
             resources: {
                 devices: {

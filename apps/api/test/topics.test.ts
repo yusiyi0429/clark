@@ -1,12 +1,10 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { THIRD, boardFixture } from "./boardFixture.js";
 
-const markdown = (title: string, text: string) => {
-  const buffer = Buffer.from(text);
-  return ["artifact", { artifactId: `a-${randomUUID().slice(0, 6)}`, title, fileName: `${title}.md`, mimeType: "text/markdown", size: buffer.length,
-    sha256: createHash("sha256").update(buffer).digest("hex"), contentBase64: buffer.toString("base64") }] as [string, unknown];
-};
+/** 本机存的一版：号由本机编，没起名时云端按种类起名。 */
+const version = (number: number, kind: "outline" | "draft" | "review", body: string) =>
+  ["topic_version", { number, kind, label: null, note: null, body }] as [string, unknown];
 
 describe("调研专题", () => {
   it("新建挂 Task 和岗位；本机报来的提纲、各稿、评审按顺序编号；详情带各版本、最新一版正文和本机执行；归档的不在列表里", async () => {
@@ -25,7 +23,7 @@ describe("调研专题", () => {
 
       const local = await f.local();
       await local.send({ kind: "topic", topicId: topic.id }, [["status", { status: "running", title: "竞品调研", agent: "claude-code", modelLabel: "订阅" }],
-        markdown("提纲", "# 提纲\n- 三家"), markdown("调研", "# 第一稿"), markdown("评审", "# 分歧和建议"), markdown("调研", "# 第二稿"),
+        version(1, "outline", "# 提纲\n- 三家"), version(2, "draft", "# 第一稿"), version(3, "review", "# 分歧和建议"), version(4, "draft", "# 第二稿"),
         ["status", { status: "idle", title: "竞品调研", agent: "claude-code", modelLabel: "订阅" }]]);
       const detail = (await f.call("GET", `/api/me/topics/${topic.id}`)).json();
       expect(detail.topic).toMatchObject({ latestVersion: { number: 4, kind: "draft", label: "第 2 版" }, run: { state: "idle", deviceName: "我的电脑" } });
@@ -36,6 +34,10 @@ describe("调研专题", () => {
       expect(detail.runs).toHaveLength(1);
       expect((await f.call("GET", `/api/me/topics/${topic.id}/versions/1`)).json()).toMatchObject({ kind: "outline", body: "# 提纲\n- 三家" });
       expect((await f.call("GET", `/api/me/topics/${topic.id}/versions/9`)).statusCode).toBe(404);
+      // 再开工时本机从交代里的 latestVersion 往下编号。
+      const again = (await f.call("GET", `/api/me/topics/${topic.id}/brief`)).json();
+      expect(again.latestVersion).toBe(4);
+      expect(again.markdown).toContain("已经存到第 4 版");
 
       await f.call("POST", "/api/plan-tasks/task-open/deliverable/pending", { topicVersionId: detail.versions[0].id });
       expect((await f.call("GET", `/api/me/topics/${topic.id}`)).json().versions[0].deliverable).toEqual({ state: "pending", versionNumber: 1 });

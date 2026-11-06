@@ -45,7 +45,8 @@ export function registerLocalRoutes(app: AppInstance, ctx: RouteContext, deps: {
     if (!identity) return fail(reply, 401, "UNAUTHORIZED", "设备令牌无效，请在天枢插件页重新配对");
     const device = await deviceOfToken(q, identity.tokenId);
     if (!device || device.id !== req.body.deviceId) return fail(reply, 403, "DEVICE_MISMATCH", "这把令牌不是这台电脑的");
-    await q("UPDATE local_devices SET last_sync_at=$3,app_version=$4 WHERE owner_id=$1 AND id=$2", [device.ownerId, device.id, ctx.now(), req.body.runnerVersion.slice(0, 40)]);
+    await q("UPDATE local_devices SET last_sync_at=$3,app_version=$4,slots=$5::jsonb WHERE owner_id=$1 AND id=$2",
+      [device.ownerId, device.id, ctx.now(), req.body.runnerVersion.slice(0, 40), JSON.stringify(req.body.slots)]);
     const { response, queued } = await applySyncBatch({ pool, storageDir: ctx.materialStorageDir, now: ctx.now, onError: () => app.log.error("local sync item failed") },
       identity.personId, req.body);
     if (queued.length) deps.onHandbacks(queued);

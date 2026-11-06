@@ -7,6 +7,7 @@ import { outputView, recentRuns, runBrief, runView, type OutputRow, type RunRow 
 import type { Query } from "./meetingStore.js";
 import { UUID_PATTERN } from "./meetingStore.js";
 import type { PlanTaskSource } from "./planTasks.js";
+import type { TaskPageFacts } from "./pageGuides.js";
 import { ownRole, roleBrief, roleRef, rolesById, type RoleRow } from "./roles.js";
 import { createInTransaction, getTaskViews, taskStandards } from "./tasks.js";
 
@@ -114,6 +115,20 @@ export async function boardTask(q: Query, planTasks: PlanTaskSource, personId: s
   });
   if (!own.canEdit) throw new CardError(403, "FORBIDDEN", "这个 Task 由负责人推进");
   return own;
+}
+
+/** 对话从 Task 页发出时带给 Chat 的这个 Task（pageGuides.ts 的 TaskPageFacts）：本人 Mission 下读不到为 null；看板各列几张卡只给负责人。 */
+export async function taskPageFacts(q: Query, planTasks: PlanTaskSource, personId: string, now: Date, taskId: string): Promise<TaskPageFacts | null> {
+  const own = await findOwnTask(q, planTasks, personId, now, taskId).catch((cause) => {
+    if (cause instanceof DeliverableError) return null;
+    throw cause;
+  });
+  if (!own) return null;
+  if (!own.canEdit) return { name: own.task.name, criteria: own.criteria.length, cards: null };
+  const rows = (await q(`SELECT ${CARD_COLUMNS} FROM tasks WHERE plan_task_id=$1 AND owner_id=$2 AND status<>'returned'`, [taskId, personId])).rows as CardRow[];
+  const cards = { todo: 0, doing: 0, review: 0, done: 0 };
+  for (const card of (await cardsOf(q, rows)).values()) cards[card.stage] += 1;
+  return { name: own.task.name, criteria: own.criteria.length, cards };
 }
 
 type PlanRow = { id: string; status: TCardPlanView["status"]; hint: string | null; error: string | null; created_at: Date; started_at: Date | null; finished_at: Date | null };
