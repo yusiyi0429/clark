@@ -9,6 +9,7 @@ import { useSourceNavigator } from "@/components/meeting/SourceViewer";
 import { useWorkspace } from "@/components/shell/WorkspaceContext";
 import { cleanDisplayText, shortSourceName } from "@/lib/displayText";
 import { registerCitationPanel, takePendingCitation, type CitationSurface } from "./citationBridge";
+import { WorldEvidence } from "./WorldSource";
 import d from "@/styles/decision-workspace.module.css";
 import s from "@/styles/citation-panel.module.css";
 
@@ -81,7 +82,8 @@ function PanelBody({ request, onClose }: { request: Request; onClose: () => void
     <div className={s.root} style={style} data-testid="citation-panel" data-surface={request.surface}>
       {issueId ? <IssueEvidence issueId={issueId} research={parsed.kind === "research"} trigger={request.trigger} onClose={onClose}
         onOpenIssue={() => navigate(`/issues/${encodeURIComponent(issueId)}`)} />
-        : <SourceInPanel request={request} />}
+        : parsed.kind === "world" ? <WorldEvidence citeRef={request.ref} trigger={request.trigger} onClose={onClose} />
+          : <SourceInPanel request={request} />}
     </div>
   );
 }
