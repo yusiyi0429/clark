@@ -123,6 +123,41 @@ it("新建时选了有 Task 的 Mission 才出「挂到 Task」，默认不挂�
   expect(actions.post.mock.calls[0][1].body).toMatchObject({ missionId: "m1", planTaskId: "t2" });
 });
 
+it("从某个 Task 的「我的事项」点进来：第二步预先选好它的 Mission 和 Task，建出来挂在这个 Task 下；那个 Mission 不在可选的里面时退回独立事项", async () => {
+  answerGets();
+  const preset = () => CreateTaskScreen({ missionId: "m1", taskId: "t2" });
+  let tree = render(preset);
+  await settle(2);
+  tree = render(preset);
+  (find(tree, (node) => node.props?.name === "title")!.props!.onChange as (event: { target: { value: string } }) => void)({ target: { value: "补一份验收记录" } });
+  tree = render(preset);
+  (find(tree, (node) => node.type === "form")!.props!.onSubmit as (event: { preventDefault: () => void }) => void)({ preventDefault() {} });
+  tree = render(preset);
+  expect(find(tree, (node) => node.props?.role === "switch")?.props?.["aria-checked"]).toBe(true);
+  expect(find(tree, (node) => node.type === "input" && node.props?.value === "m1")?.props?.checked).toBe(true);
+  expect(find(tree, (node) => node.type === "button" && node.props?.title === "真实会议跑通")?.props?.["aria-pressed"]).toBe(true);
+  actions.post.mockResolvedValue({ data: { id: "task-new" } });
+  for (let step = 0; step < 2; step++) {
+    tree = render(preset);
+    (find(tree, (node) => node.type === "form")!.props!.onSubmit as (event: { preventDefault: () => void }) => void)({ preventDefault() {} });
+  }
+  await vi.waitFor(() => expect(actions.post).toHaveBeenCalledOnce());
+  expect(actions.post.mock.calls[0][1].body).toMatchObject({ title: "补一份验收记录", missionId: "m1", planTaskId: "t2" });
+
+  main = [];
+  actions.get.mockReset();
+  answerGets();
+  const gone = () => CreateTaskScreen({ missionId: "m-old", taskId: "t9" });
+  render(gone, main);
+  await settle(2);
+  tree = render(gone, main);
+  (find(tree, (node) => node.props?.name === "title")!.props!.onChange as (event: { target: { value: string } }) => void)({ target: { value: "补一份验收记录" } });
+  tree = render(gone, main);
+  (find(tree, (node) => node.type === "form")!.props!.onSubmit as (event: { preventDefault: () => void }) => void)({ preventDefault() {} });
+  tree = render(gone, main);
+  expect(find(tree, (node) => node.props?.role === "switch")?.props?.["aria-checked"]).toBe(false);
+});
+
 it("编辑表单：所属 Mission 有 Task 时能改「挂到 Task」，换 Mission 清掉；没有 Task 的 Mission 不出", async () => {
   answerGets();
   const onSave = vi.fn();

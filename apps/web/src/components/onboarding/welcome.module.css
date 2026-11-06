@@ -17,7 +17,7 @@
 .details { margin-top: 28px; }
 .details:empty { margin-top: 0; }
 /* 给伙伴起名字：一页只有一个大的名字框，字居中。边和聚焦走 globals.css 的统一输入框样式。 */
-.buddyName { display: flex; justify-content: center; }
+.buddyName { display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .buddyNameInput { box-sizing: border-box; width: min(420px, 100%); height: 60px; padding: 0 20px; border-radius: 16px; font-size: 20px; text-align: center; }
 /* 连接外部工具这一步：设置里同一张表单，放在一块玻璃卡里。 */
 .connectPanel { width: min(560px, 100%); margin-inline: auto; padding: 20px 22px; text-align: left; }

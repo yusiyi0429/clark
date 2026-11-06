@@ -449,6 +449,7 @@ function RailConversation({
         onRestoreQuotes={ui.restoreQuotes}
         draftOwnerId={target.group?.viewerId}
         allowAttachments={!target.group}
+        buddyName={buddy?.name}
       />}
     </>
   );
