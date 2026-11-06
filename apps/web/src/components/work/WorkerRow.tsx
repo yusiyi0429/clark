@@ -12,6 +12,7 @@ import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { showWorkspaceToast } from "@/lib/toast";
 import type { RoleKind } from "@/lib/team/roles";
 import { canCommandHere, decide, overruleWorker, reply } from "@/lib/work/actions";
+import { shortPlace } from "@/lib/work/merge";
 import { CHAIN_LABEL, MARK_LABEL, QUEUE_LABEL, type ChainState, type Worker } from "@/lib/work/workers";
 import w from "@/styles/v2-work.module.css";
 
@@ -43,17 +44,19 @@ const hhmm = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString("zh
 /** 验收中：干活的是验收员（本机交回后自己接的；别的设备上看是云端转来的）。 */
 const reviewing = (worker: Worker) => worker.state === "doing" && worker.mark === "reviewing";
 
-/** 第二行：资源在前，Task 最后。 */
+/** 第二行：资源在前，再是在哪做（分支或文件夹），Task 最后。 */
 export function secondLine(worker: Worker, now: number, task: string | null): (string | ReactElement)[] {
   const tail = task ? [task] : [];
+  const place = worker.workspace ? shortPlace(worker.workspace) : null;
   const handback = worker.item?.card?.handback ?? null;
   const inclusion = worker.item?.card?.deliverable ?? null;
-  if (worker.state === "queued") return [<Resource key="r" where="local" model={worker.model} />, worker.queuePos ? `排第 ${worker.queuePos}` : null, ...tail].filter((part): part is string | ReactElement => !!part);
+  if (worker.state === "queued") return [<Resource key="r" where="local" model={worker.model} />, place, worker.queuePos ? `排第 ${worker.queuePos}` : null, ...tail].filter((part): part is string | ReactElement => !!part);
   if (worker.state === "done") {
-    return [handback ? `${handback.met}/${handback.total} 达到` : null, inclusion ? `${inclusion.state === "included" ? "已纳入" : "攒进"} v${inclusion.versionNumber}` : null, hhmm(worker.endedAt), ...tail].filter((part): part is string => !!part);
+    return [handback ? `${handback.met}/${handback.total} 达到` : null, inclusion ? `${inclusion.state === "included" ? "已纳入" : "攒进"} v${inclusion.versionNumber}` : null,
+      worker.workspace?.kind === "worktree" && worker.workspace.mergedCommit ? "已合并" : null, hhmm(worker.endedAt), ...tail].filter((part): part is string => !!part);
   }
   if (reviewing(worker)) return [<Resource key="r" where={worker.where ?? "local"} model={worker.model} />, (handback?.total ? `对照 ${handback.total} 条` : "逐条对照"), ...tail];
-  return [<Resource key="r" where={worker.where ?? "local"} model={worker.model} />, worker.step ? `第 ${worker.step.n}/${worker.step.total} 步` : null, minutes(worker.startedAt, now), ...tail]
+  return [<Resource key="r" where={worker.where ?? "local"} model={worker.model} />, place, worker.step ? `第 ${worker.step.n}/${worker.step.total} 步` : null, minutes(worker.startedAt, now), ...tail]
     .filter((part): part is string | ReactElement => !!part);
 }
 

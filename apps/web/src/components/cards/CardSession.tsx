@@ -24,6 +24,9 @@ import { useAutoReturn } from "@/lib/board/useAutoReturn";
 import { showWorkspaceToast } from "@/lib/toast";
 import { SessionComposer, SessionTranscript } from "./SessionTranscript";
 import { useCardDetail, type CardDetail } from "./useCardDetail";
+import { MergeAction } from "@/components/work/MergeAction";
+import { placeText, shortPlace } from "@/lib/work/merge";
+import type { TLocalSessionSummary } from "@/lib/local/runner";
 import s from "@/styles/v2-session.module.css";
 
 /** 回到新首页，锚着这张卡的 Task（V2 设计第 20.4 节；没打开新首页的人会被带回老首页）。 */
@@ -93,7 +96,7 @@ export function CardSession({ cardId }: { cardId: string }) {
 
   const pane = (
     <aside className={s.pane} aria-label="结果">
-      <ResultPane detail={detail} view={session ? view : null} canAct={canAct} wait={wait} stage={stage} handheld={handheld} ready={ready}
+      <ResultPane detail={detail} session={session} view={session ? view : null} canAct={canAct} wait={wait} stage={stage} handheld={handheld} ready={ready}
         onStart={() => setStarting(true)} onControl={(action) => void control(action)} onResume={() => void say("继续")} onChanged={() => void refresh()} />
     </aside>
   );
@@ -122,6 +125,7 @@ export function CardSession({ cardId }: { cardId: string }) {
         <div className={s.exec}>
           {role ? <span className={s.ex}><i>&gt;_</i>{role.name}</span> : null}
           {agent ? <span>{session ? `本机${sessionRunning ? " · 在跑" : ""}` : item.card?.run ? item.card.run.deviceName : ""}</span> : null}
+          {session?.workspace ? <span title={placeText(session.workspace)}>{shortPlace(session.workspace)}</span> : null}
         </div>
       </header>
       {handheld ? (
@@ -157,8 +161,8 @@ function CloudTimeline({ run, title }: { run: TLocalRunView | null; title: strin
   );
 }
 
-function ResultPane({ detail, view, canAct, wait, stage, handheld, ready, onStart, onControl, onResume, onChanged }: {
-  detail: CardDetail; view: SessionView | null; canAct: boolean; wait: string | null; stage: string; handheld: boolean; ready: boolean;
+function ResultPane({ detail, session, view, canAct, wait, stage, handheld, ready, onStart, onControl, onResume, onChanged }: {
+  detail: CardDetail; session: TLocalSessionSummary | null; view: SessionView | null; canAct: boolean; wait: string | null; stage: string; handheld: boolean; ready: boolean;
   onStart: () => void; onControl: (action: "interrupt" | "kill") => void; onResume: () => void; onChanged: () => void;
 }) {
   const item = detail.task;
@@ -173,6 +177,8 @@ function ResultPane({ detail, view, canAct, wait, stage, handheld, ready, onStar
   const live = status === "running" || status === "starting" || status === "waiting_permission";
   const paused = wait === "paused" || status === "idle";
   const model = view ? null : item.card?.model?.label;
+  // 在哪做：本机开工时说的（分支、从哪个提交开始、主文件夹没提交的改动没带进来），没收到时照会话摘要。
+  const place = view?.place ?? (session?.workspace ? placeText(session.workspace) : null);
   return (
     <>
       <div className={s.brief}>
@@ -181,6 +187,8 @@ function ResultPane({ detail, view, canAct, wait, stage, handheld, ready, onStar
         {item.card?.criterion ? <div className={s.meta}><span className={s.crit}>{circled(item.card.criterion.index)}</span><span>{item.card.criterion.text}</span></div> : null}
         {detail.brief ? <p className={s.text}>{detail.brief}</p> : null}
         {agent && (role || model || run?.modelLabel) ? <div className={s.meta}>{role ? <span className={s.ex}><i>&gt;_</i>{role.name}</span> : null}<span>{model ?? run?.modelLabel}</span></div> : null}
+        {view?.queuedBecause ? <div className={s.meta}><span>{view.queuedBecause}</span></div> : null}
+        {place ? <div className={s.meta}><span>{place}</span></div> : null}
       </div>
 
       {plan.length ? (
@@ -198,6 +206,7 @@ function ResultPane({ detail, view, canAct, wait, stage, handheld, ready, onStar
       ) : null}
 
       {handback ? <Acceptance cardId={item.id} handback={handback} canOverrule={!handheld} deliverable={deliverableLabel(item)} onChanged={onChanged} /> : null}
+      <MergeAction session={session} title={item.title} accepted={stage === "done"} onChanged={onChanged} />
 
       {detail.outputs.length ? (
         <div className={s.sec}>

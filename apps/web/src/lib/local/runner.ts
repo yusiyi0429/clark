@@ -3,7 +3,7 @@
  * 接口和类型照 packages/contracts/src/localRunner.ts，两边不各写一份。
  */
 import type {
-  TLocalCloudLinkRequest, TLocalCloudLinkView, TLocalCreateSessionBatchResponse, TLocalCreateSessionRequest, TLocalFolder, TLocalHealthResponse,
+  TLocalCloudLinkRequest, TLocalCloudLinkView, TLocalCreateSessionBatchResponse, TLocalCreateSessionRequest, TLocalFolder, TLocalHealthResponse, TLocalMergeResponse,
   TLocalModelProfile, TLocalModelProfileUpsert, TLocalPairingStartResponse, TLocalPairingStatusResponse,
   TLocalPermissionDecisionRequest, TLocalRunnerErrorCode, TLocalSendMessageRequest, TLocalSendMessageResponse, TLocalSessionDetailResponse,
   TLocalSessionEvent, TLocalSessionSummary, TLocalSettings, TLocalSettingsPatch, TLocalStatusResponse,
@@ -11,7 +11,7 @@ import type {
 
 export type {
   TLocalCreateSessionRequest, TLocalFolder, TLocalHealthResponse, TLocalModelProfile, TLocalPermissionRequestView, TLocalPlanEntry, TLocalRole, TLocalSessionEvent,
-  TLocalSessionStatus, TLocalSessionSummary, TLocalStatusResponse, TLocalUsage,
+  TLocalSessionStatus, TLocalSessionSummary, TLocalStatusResponse, TLocalUsage, TLocalWorkspace, TLocalMergeResponse,
 } from "@warmap/contracts";
 
 /** 本机接口回的错：code 照契约；network 是连不上（没装、没开、浏览器没给访问本机的授权）。 */
@@ -53,6 +53,8 @@ export interface LocalRunner {
   interrupt(id: string): Promise<TLocalSessionSummary>;
   kill(id: string): Promise<TLocalSessionSummary>;
   decidePermission(id: string, requestId: string, body: TLocalPermissionDecisionRequest): Promise<TLocalSessionSummary>;
+  /** 把卡的分支合回主文件夹（本人点了才合）；合不了回原因和文件，卡不在工作树、还在跑、交回后又改过、已合过是 409。 */
+  mergeSession(id: string): Promise<TLocalMergeResponse>;
   /** 读一个会话的事件流，断了自己重连（带 Last-Event-ID），直到 signal 中止。 */
   watch(id: string, watch: EventWatch): Promise<void>;
 }

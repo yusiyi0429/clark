@@ -35,6 +35,7 @@ import { FIELD_LABEL, decideProposal, modelForTier, type RoleProposalView } from
 import { canCommandHere, decide, overruleWorker, reply } from "@/lib/work/actions";
 import { startBatch, startedText, type StartPlan } from "@/lib/work/queue";
 import { useWork } from "@/lib/work/useWork";
+import { mergeCard, useMergeIssues } from "@/lib/work/merge";
 import { MARK_LABEL, isWaiting, workerName, type Worker } from "@/lib/work/workers";
 import { DispatchBlock, countsText } from "./DispatchBlock";
 import { Slots, WorkPanel, type PanelTab, type PanelView } from "./WorkPanel";
@@ -180,6 +181,7 @@ function WorkFrame({ account }: { account: Account }) {
     return () => window.removeEventListener(SPLIT_EVENT, handler);
   }, []);
   const allCards = useMemo(() => Object.values(work.boards).flatMap((board) => board.cards), [work.boards]);
+  const mergeIssues = useMergeIssues();
   useAutoReturn(local.runner, here, allCards, local.sessions, changed);
   const anchored = tasks.find((task) => task.taskId === anchorTaskId) ?? null;
   const previous = stack[stack.length - 2] ?? null;
@@ -221,7 +223,7 @@ function WorkFrame({ account }: { account: Account }) {
           <div className={w.left}>
             <MemberNoticeRail api={api} currentHref={pathname} home={home} plan={planHook} account={account} homeHref="/me/work"
               lead={<WaitingGroup workers={waiting} proposals={work.proposals} onOpen={openWorker} onChanged={changed} />}
-              leadCount={waiting.length + work.proposals.length} />
+              leadCount={waiting.length + work.proposals.length + mergeIssues.length} />
           </div>
         )}
         {chat}
@@ -246,11 +248,12 @@ const outcome = async (action: () => Promise<void>, settled: string): Promise<No
 /** 等你批准的那一行写成「开发 #1 要运行测试」那样：要做的事放标题，命令放下面。 */
 const askTitle = (worker: Worker) => worker.mark === "approval" ? `${workerName(worker)} ${worker.ask ? `要${worker.ask.command ? "运行命令" : worker.ask.text}` : MARK_LABEL.approval}` : `${workerName(worker)} ${MARK_LABEL[worker.mark!]}`;
 
-/** 左栏最上面一组「worker 等你」：等你批准、等你回复、验收没过、受阻，加岗位修改建议。每条带按钮。 */
+/** 左栏最上面一组「worker 等你」：等你批准、等你回复、验收没过、受阻，加岗位修改建议、合并不了的卡。每条带按钮。 */
 function WaitingGroup({ workers, proposals, onOpen, onChanged }: { workers: Worker[]; proposals: RoleProposalView[]; onOpen: (key: string) => void; onChanged: () => void }) {
   const local = useLocalRunner();
   const handheld = useHandheld();
   const ready = local.phase === "ready";
+  const merges = useMergeIssues();
   const notices: ActionNotice[] = workers.map((worker): ActionNotice => {
     const here = canCommandHere(worker, ready, handheld);
     const remote = (worker.mark === "approval" || worker.mark === "reply") && !here;
@@ -278,6 +281,18 @@ function WaitingGroup({ workers, proposals, onOpen, onChanged }: { workers: Work
       { label: "采纳", emphasis: true, run: () => outcome(() => decideProposal(proposal.id, "accept"), "已采纳") },
       { label: "不要", run: () => outcome(() => decideProposal(proposal.id, "dismiss"), "已丢掉") },
     ],
+  }))).concat(merges.map((issue): ActionNotice => ({
+    id: `merge:${issue.sessionId}`,
+    title: `「${issue.title}」合并不了`,
+    detail: issue.text,
+    tone: "amber",
+    onOpen: () => { if (issue.cardId) onOpen(`card:${issue.cardId}`); },
+    buttons: [{ label: "再合并", emphasis: true, run: () => outcome(async () => {
+      const session = local.sessions.find((entry) => entry.id === issue.sessionId);
+      if (!session) throw new Error("这台电脑上没有这张卡的会话");
+      const result = await mergeCard(local.runner, session, issue.title);
+      if (!result.ok) throw new Error(result.text);
+    }, "已合并") }],
   })));
   return <ActionNoticeCard id="worker-wait" title="worker 等你" mark="decision" notices={notices} onSettled={() => { void local.refresh(); onChanged(); }} />;
 }

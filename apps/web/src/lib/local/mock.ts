@@ -2,12 +2,14 @@
  * 假本机程序：和真程序同一个接口（LocalRunner），按脚本吐事件——开工、三步计划、一次权限请求、一次提问、交回。
  * 同时跑的上限默认 3：满了的会话是 queued（排第几），有会话停下、做完一轮或退出就接上：验收员先、规划员次、执行的最后，同一种先来先跑（V2 设计 20.6、21.1）。
  * 规划员（plan）按三步拆完就退出；执行的交回以后本机自己接一个验收员（verify，只读）。
+ * 卡的会话在哪做（ADR 0038）：第一个文件夹（C:\work\tianshu）当 git 仓库，每张卡一个工作树和分支，开工时说一句主文件夹没提交的改动没带进来；
+ * 别的文件夹当不是 git 仓库，同一个文件夹同时只做一张卡，别的排队（status 带原因）。合回：第一次回「主文件夹有没提交的改动」，再点就合上。
  * 开发时设 NEXT_PUBLIC_LOCAL_RUNNER=mock 切到它；测试里直接 createMockRunner()。
  * 状态只在内存里：同一个页面会话内跨页面保留，刷新就没了。
  */
 import type {
-  TLocalCreateSessionRequest, TLocalFolder, TLocalModelProfile, TLocalPermissionRequestView, TLocalPlanEntry,
-  TLocalSessionEvent, TLocalSessionStatus, TLocalSessionSummary, TLocalUsage,
+  TLocalCreateSessionRequest, TLocalFolder, TLocalMergeResponse, TLocalModelProfile, TLocalPermissionRequestView, TLocalPlanEntry,
+  TLocalSessionEvent, TLocalSessionStatus, TLocalSessionSummary, TLocalUsage, TLocalWorkspace,
 } from "@warmap/contracts";
 import { LocalRunnerError, type EventWatch, type LocalRunner } from "./runner";
 
@@ -24,6 +26,8 @@ type MockSession = {
   paused: boolean;
   /** 上一个权限请求被拒了：那一步不执行。 */
   denied: boolean;
+  /** 合回点了几次（假程序第一次回主文件夹不干净）。 */
+  mergeTries: number;
 };
 
 const ZERO: TLocalUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0 };
@@ -32,6 +36,9 @@ const PLANNER = ["读 Task 和约定", "读本体里的上下文", "列计划和
 const VERIFIER = ["对照约定逐条看", "交验收结果"];
 /** 排队先后：验收员 → 规划员 → 执行。 */
 const RANK: Record<string, number> = { verify: 0, plan: 1 };
+const FOLDER_BUSY = "这个文件夹不是 git 仓库，同时只做一张卡，等另一张这一轮做完";
+const REPO = "C:\\work\\tianshu";
+const sha = (seed: string) => Array.from({ length: 40 }, (_, i) => "0123456789abcdef"[(seed.charCodeAt(i % seed.length) + i * 7) % 16]).join("");
 
 const MODELS: TLocalModelProfile[] = [
   { id: "subscription", label: "订阅 · 默认", source: "subscription", agent: "claude-code", baseUrl: null, model: null, smallModel: null, webSearch: true, hasKey: false, isDefault: true },
@@ -78,11 +85,17 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
   const queue = () => [...sessions.values()].filter((s) => s.summary.status === "queued")
     .sort((a, b) => rank(a) - rank(b) || a.summary.createdAt.localeCompare(b.summary.createdAt));
   const renumber = () => queue().forEach((s, i) => { s.summary = { ...s.summary, queuePosition: i + 1 }; });
-  /** 有空位就按先后接上，其余的重新编号。 */
+  /** 不是 git 仓库的文件夹里已经有一张卡在做（同一个文件夹同时只做一张）。 */
+  const folderBusy = (s: MockSession) => {
+    const ws = s.summary.workspace;
+    return ws?.kind === "folder" && [...sessions.values()].some((other) => other !== s && other.summary.workspace?.kind === "folder"
+      && other.summary.workspace.folder === ws.folder && OCCUPYING.has(other.summary.status));
+  };
+  /** 有空位就按先后接上（文件夹被占着的跳过），其余的重新编号。 */
   const promote = () => {
     let free = maxConcurrent - slots().running;
     for (const s of queue()) {
-      if (free > 0) {
+      if (free > 0 && !folderBusy(s)) {
         free--;
         s.summary = { ...s.summary, queuePosition: null };
         setStatus(s, "starting");
@@ -107,7 +120,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
   };
 
   const script: Step[] = [
-    (s) => { setStatus(s, "running"); emit(s, { type: "agent_info", agent: "claude-code", version: "2.1.318", model: s.summary.modelLabel, permissionMode: "manual" }); },
+    (s) => { setStatus(s, "running"); noteWorkspace(s); emit(s, { type: "agent_info", agent: "claude-code", version: "2.1.318", model: s.summary.modelLabel, permissionMode: "manual" }); },
     (s) => { emit(s, { type: "assistant_text", text: "先读一下交代和相关代码，列个计划。" }); plan(s, 0); },
     (s) => { tool(s, "Read", "读 apps/web/src/app/manifest.ts"); plan(s, 1); },
     (s) => {
@@ -130,7 +143,9 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
     (s) => { tool(s, "Write", "写 交回说明.md"); emit(s, { type: "artifact", artifactId: `a${++seqId}`, title: "交回说明", fileName: "交回说明.md", size: 2048, sha256: "0".repeat(64) }); },
     (s) => {
       plan(s, 3);
-      emit(s, { type: "handback", summary: "改完了，测试都过。", criteria: [{ index: 1, result: "met", evidence: "测试 12/12 通过" }, { index: 2, result: "met", evidence: "交回说明.md" }], outputKeys: [] });
+      const ws = s.summary.workspace;
+      emit(s, { type: "handback", summary: "改完了，测试都过。", criteria: [{ index: 1, result: "met", evidence: "测试 12/12 通过" }, { index: 2, result: "met", evidence: "交回说明.md" }], outputKeys: [],
+        ...(ws?.kind === "worktree" ? { commit: sha(`${s.summary.id}:handback`) } : {}) });
       turnEnd(s, "改完了，已交回。");
       const subject = s.summary.subject;
       if (subject.kind === "card" && subject.cardId)
@@ -139,6 +154,11 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
       return "wait";
     },
   ];
+  /** 开工时告诉网页卡在哪做（同本机程序）。 */
+  const noteWorkspace = (s: MockSession) => {
+    const ws = s.summary.workspace;
+    if (ws?.kind === "worktree") emit(s, { type: "notice", level: "info", code: "workspace", text: `在工作树里做：分支 ${ws.branch}，从 ${ws.baseBranch} 的最新提交 ${ws.baseCommit.slice(0, 7)} 开始；主文件夹里没提交的改动没带进来` });
+  };
   const started = (s: MockSession, mode: string) => { setStatus(s, "running"); emit(s, { type: "agent_info", agent: "claude-code", version: "2.1.318", model: s.summary.modelLabel, permissionMode: mode }); };
   const planner: Step[] = [
     (s) => started(s, "manual"),
@@ -249,6 +269,19 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
       advance(s);
       return summaryOf(s);
     },
+    mergeSession: async (id): Promise<TLocalMergeResponse> => {
+      const s = must(id);
+      const ws = s.summary.workspace;
+      if (ws?.kind !== "worktree") throw new LocalRunnerError("conflict", "这张卡不在工作树里做，没有分支可合", 409);
+      if (ws.mergedCommit) throw new LocalRunnerError("conflict", "这张卡已经合回过了", 409);
+      const busy = [...sessions.values()].some((other) => other.summary.subject.cardId === s.summary.subject.cardId && (other.summary.status === "queued" || OCCUPYING.has(other.summary.status)));
+      if (busy) throw new LocalRunnerError("conflict", "卡或它的验收员还在跑，停下再合", 409);
+      if (s.mergeTries++ === 0) return { merged: false, reason: "dirty", message: "主文件夹有没提交的改动", files: ["README.md", "apps/web/src/app/page.tsx"] };
+      const commit = sha(`${id}:merge`);
+      s.summary = { ...s.summary, workspace: { ...ws, mergedCommit: commit } };
+      emit(s, { type: "notice", level: "info", code: "merged", text: `已合回 ${ws.baseBranch}（${commit.slice(0, 7)}），工作树已清理，分支 ${ws.branch} 保留` });
+      return { merged: true, commit, session: summaryOf(s) };
+    },
     watch: async (id: string, { after, onEvent, onLink, signal }: EventWatch) => {
       const s = must(id);
       onLink?.(true);
@@ -262,14 +295,21 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
     if (!token) throw new LocalRunnerError("unauthorized", "没配对", 401);
     const model = MODELS.find((m) => m.id === body.modelProfileId) ?? MODELS[0]!;
     const id = crypto.randomUUID();
-    const full = slots().running >= maxConcurrent;
+    const cardId = body.subject.kind === "card" ? body.subject.cardId : undefined;
+    const slug = body.title.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase().slice(0, 30);
+    const workspace: TLocalWorkspace | undefined = !cardId || !body.cwd ? undefined : body.cwd === REPO
+      ? { kind: "worktree", folder: REPO, path: `C:\\Users\\me\\.tianshu-local\\worktrees\\${cardId}`, branch: `tianshu/${cardId.slice(0, 8)}${slug ? `-${slug}` : ""}`,
+        baseBranch: "main", baseCommit: sha(`${cardId}:base`), mergedCommit: null }
+      : { kind: "folder", folder: body.cwd };
+    const busy = workspace?.kind === "folder" && [...sessions.values()].some((other) => other.summary.workspace?.kind === "folder" && other.summary.workspace.folder === workspace.folder && OCCUPYING.has(other.summary.status));
+    const full = slots().running >= maxConcurrent || busy;
     const s: MockSession = {
-      summary: { id, subject: body.subject, title: body.title, agent: "claude-code", modelProfileId: model.id, modelLabel: model.label, cwd: body.cwd ?? "topics", status: full ? "queued" : "starting", includePersonalConfig: Boolean(body.includePersonalConfig), createdAt: now(), updatedAt: now(), lastSeq: 0, pendingPermissions: 0, queuePosition: full ? slots().queued + 1 : null, usage: { ...ZERO } },
-      log: [], listeners: new Set(), script: body.subject.kind === "plan" ? planner : body.subject.kind === "verify" ? verifier : script, cursor: 0, timer: null, pending: null, paused: false, denied: false,
+      summary: { id, subject: body.subject, title: body.title, agent: "claude-code", modelProfileId: model.id, modelLabel: model.label, cwd: body.cwd ?? "topics", status: full ? "queued" : "starting", includePersonalConfig: Boolean(body.includePersonalConfig), createdAt: now(), updatedAt: now(), lastSeq: 0, pendingPermissions: 0, queuePosition: full ? slots().queued + 1 : null, usage: { ...ZERO }, ...(workspace ? { workspace } : {}) },
+      log: [], listeners: new Set(), script: body.subject.kind === "plan" ? planner : body.subject.kind === "verify" ? verifier : script, cursor: 0, timer: null, pending: null, paused: false, denied: false, mergeTries: 0,
     };
     sessions.set(id, s);
     if (full) renumber();
-    emit(s, { type: "status", status: s.summary.status });
+    emit(s, { type: "status", status: s.summary.status, ...(busy ? { reason: FOLDER_BUSY } : {}) });
     emit(s, { type: "user_message", text: body.firstMessage, source: "initial" });
     if (!full) advance(s);
     return summaryOf(s);

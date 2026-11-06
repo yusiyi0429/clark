@@ -30,12 +30,16 @@ export type SessionView = {
   interrupted: boolean;
   /** 最近一次交回之后没再说过话。 */
   handedBack: boolean;
+  /** 卡在哪做（本机开工时的 workspace 提示：分支、从哪个提交开始、主文件夹没提交的改动没带进来）。 */
+  place: string | null;
+  /** 排队的原因（本机说的，例如不是 git 仓库的文件夹同时只做一张卡）；不排了为 null。 */
+  queuedBecause: string | null;
 };
 
 export const EMPTY_VIEW: SessionView = {
   lastSeq: 0, status: null, startedAt: null, agentVersion: null, plan: [], entries: [], pending: [],
   usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null },
-  lastActivity: null, interrupted: false, handedBack: false,
+  lastActivity: null, interrupted: false, handedBack: false, place: null, queuedBecause: null,
 };
 
 const addUsage = (a: TLocalUsage, b: TLocalUsage): TLocalUsage => ({
@@ -51,6 +55,7 @@ export function foldEvent(view: SessionView, event: TLocalSessionEvent): Session
   switch (event.type) {
     case "status":
       next.status = event.status;
+      next.queuedBecause = event.status === "queued" ? event.reason ?? null : null;
       if (event.status === "running") next.interrupted = false;
       if (event.status === "failed") next.entries = [...view.entries, { kind: "notice", ...base, level: "error", text: event.reason ?? "执行方异常退出" }];
       return next;
@@ -99,6 +104,7 @@ export function foldEvent(view: SessionView, event: TLocalSessionEvent): Session
       return next;
     case "notice":
       if (event.code === "interjection_next_step") return next;
+      if (event.code === "workspace") next.place = event.text;
       next.entries = [...view.entries, { kind: "notice", ...base, level: event.level, text: event.text }];
       return next;
     case "version":

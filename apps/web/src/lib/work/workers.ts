@@ -5,17 +5,17 @@
  * 规划员、验收员也是 worker（第 21 节）：都在本机跑、占位置。云端列的 plan:<会话>、verify:<卡> 在这台电脑上有本机会话时以本机为准，
  * 云端还没列上的本机规划员照本机加一行；登记了还没开的拆卡（GET /api/me/card-splits，不在 worker 列表里）是「拆卡 · 等开工」。
  */
-import type { TCardSplitRequestView, TRoleRef, TWorkerItem, TWorkerMark } from "@warmap/contracts";
+import type { TCardSplitRequestView, TLocalWorkspace, TRoleRef, TWorkerItem, TWorkerMark } from "@warmap/contracts";
 import type { TLocalSessionSummary } from "@/lib/local/runner";
 import { localWaitOf, type CardItem } from "@/lib/board/cards";
 
 export type ChainState = "queued" | "doing" | "done";
-/** 等开工：本人确认了还没交给本机；等空位：本机同时跑的满了；等本机上线。 */
-export type QueueReason = "start" | "slot" | "offline";
+/** 等开工：本人确认了还没交给本机；等空位：本机同时跑的满了；等本机上线；等文件夹：不是 git 仓库的文件夹同时只做一张卡。 */
+export type QueueReason = "start" | "slot" | "offline" | "folder";
 export type WorkerMark = TWorkerMark;
 
 export const CHAIN_LABEL: Record<ChainState, string> = { queued: "已排队", doing: "进行中", done: "已完成" };
-export const QUEUE_LABEL: Record<QueueReason, string> = { start: "等开工", slot: "等空位", offline: "等本机上线" };
+export const QUEUE_LABEL: Record<QueueReason, string> = { start: "等开工", slot: "等空位", offline: "等本机上线", folder: "等文件夹空出来" };
 export const MARK_LABEL: Record<WorkerMark, string> = { approval: "等你批准", reply: "等你回复", paused: "已暂停", reviewing: "验收中", review_failed: "验收没过", blocked: "受阻" };
 /** 「等你」：要本人动手的几种。 */
 export const WAITING: WorkerMark[] = ["approval", "reply", "review_failed", "blocked"];
@@ -55,6 +55,8 @@ export type Worker = {
   ask: { text: string; command: string | null } | null;
   /** 这台电脑上本机的会话（能在这里批准、回复）。 */
   session: TLocalSessionSummary | null;
+  /** 卡在哪做（这台电脑上执行的会话报的：工作树和分支，或文件夹）。 */
+  workspace: TLocalWorkspace | null;
   /** 卡本身（看板接口来的，带交回和交付物）；专题没有。 */
   item: CardItem | null;
   /** 登记了还没开的规划员：哪条登记、什么时候登记的。 */
@@ -72,6 +74,12 @@ const OCCUPYING = new Set(["starting", "running", "waiting_permission"]);
 const ACTIVE = new Set(["queued", ...OCCUPYING]);
 /** 规划员、验收员的本机会话还算数的：在跑、排着，或一轮停下等回复。 */
 const LIVE = new Set([...ACTIVE, "idle"]);
+
+/** 排着是因为同一个不是 git 仓库的文件夹里另一张卡正在做。 */
+function folderBusy(session: TLocalSessionSummary, sessions: TLocalSessionSummary[]): boolean {
+  const ws = session.workspace;
+  return ws?.kind === "folder" && sessions.some((other) => other.id !== session.id && other.workspace?.kind === "folder" && other.workspace.folder === ws.folder && OCCUPYING.has(other.status));
+}
 
 /** 这条 worker 在这台电脑上的本机会话（最近的那个）。 */
 function ownSession(entry: Pick<TWorkerItem, "kind" | "key" | "cardId" | "topicId">, sessions: TLocalSessionSummary[]): TLocalSessionSummary | null {
@@ -91,7 +99,7 @@ export function toWorker(entry: TWorkerItem, { sessions, cards, deviceName }: { 
   let queuePos: number | null = entry.queuePosition;
   // 本机的更新：排队、开工、等你批准、等你回复、已暂停以这台电脑为准；验收中、验收没过、受阻只有云端知道。
   if (session && state !== "done" && mark !== "reviewing" && mark !== "review_failed" && mark !== "blocked") {
-    if (session.status === "queued") { state = "queued"; reason = "slot"; mark = null; queuePos = session.queuePosition; }
+    if (session.status === "queued") { state = "queued"; reason = folderBusy(session, sessions) ? "folder" : "slot"; mark = null; queuePos = session.queuePosition; }
     else { state = "doing"; reason = null; mark = localWaitOf(session); }
   }
   // 验收员在进行中就是验收中（等你批准、等你回复照本机）。
@@ -111,6 +119,7 @@ export function toWorker(entry: TWorkerItem, { sessions, cards, deviceName }: { 
     tokens: entry.cost ? entry.cost.inputTokens + entry.cost.outputTokens : session ? session.usage.inputTokens + session.usage.outputTokens : 0,
     ask: null,
     session,
+    workspace: session?.workspace ?? null,
     item: entry.cardId ? cards.get(entry.cardId) ?? null : null,
   };
   // 卡这一行：交回后本机已经接了验收员、云端还没换成验收员那一行时，先按本机写成验收员（排队时写等空位）；回复、说一句仍对执行的会话。
@@ -132,7 +141,7 @@ export function plannerWorkers({ sessions, splits, listed, tasks, deviceName }: 
 }): Worker[] {
   const base = (taskId: string, taskName: string | null, missionId: string | null): Omit<Worker, "key" | "state" | "reason" | "mark" | "queuePos" | "model" | "startedAt" | "session"> => ({
     kind: "plan", cardId: null, topicId: null, title: taskName ?? "拆卡", role: PLANNER, seq: 1, taskId, taskName, missionId,
-    doing: null, step: null, where: "local", device: deviceName, endedAt: null, costUsd: null, tokens: 0, ask: null, item: null,
+    doing: null, step: null, where: "local", device: deviceName, endedAt: null, costUsd: null, tokens: 0, ask: null, item: null, workspace: null,
   });
   const keys = new Set(listed.map((worker) => worker.key));
   const local = sessions.flatMap((session): Worker[] => {

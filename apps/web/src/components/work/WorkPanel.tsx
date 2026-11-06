@@ -18,6 +18,10 @@ import { gateOf } from "@/components/board/MonthLanes";
 import type { TaskBoard } from "@/lib/board/useTaskBoard";
 import { deliverableLabel } from "@/lib/board/cards";
 import type { RoleListResponse, RoleProposalView } from "@/lib/team/roles";
+import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
+import { useSessionEvents } from "@/lib/local/useSessionEvents";
+import { placeText } from "@/lib/work/merge";
+import { MergeAction } from "./MergeAction";
 import type { Resources } from "@/lib/work/useWork";
 import { CHAIN_LABEL, groupWorkers, resourceText, type ChainState, type Worker } from "@/lib/work/workers";
 import { AskRow, Chain, RoleAvatar, WorkerRow, marker } from "./WorkerRow";
@@ -231,6 +235,9 @@ function WorkerDetail({ worker, roles, now, wrap, onChanged }: { worker: Worker;
   const resource = worker.state === "queued" ? ["本机", worker.model, worker.queuePos ? `排第 ${worker.queuePos}` : null]
     : [resourceText(worker), worker.device, minutes, worker.costUsd !== null ? money(worker.costUsd) : null];
   const href = worker.cardId ? `/me/cards/${encodeURIComponent(worker.cardId)}` : worker.topicId ? `/me/topics/${encodeURIComponent(worker.topicId)}` : null;
+  const local = useLocalRunner();
+  // 这台电脑上的会话：开工时说的在哪做、排队的原因。
+  const { view } = useSessionEvents(local.runner, worker.session?.id ?? null);
   return (
     <>
       <div className={w.dtHead}>
@@ -241,11 +248,13 @@ function WorkerDetail({ worker, roles, now, wrap, onChanged }: { worker: Worker;
       {wrap(<>
         <AskRow worker={worker} onChanged={onChanged} boxed={false} />
         <dl className={w.kv}>
-          <dt>在干</dt><dd>{worker.doing ?? (worker.state === "queued" ? "还没开始" : "—")}</dd>
+          <dt>在干</dt><dd>{worker.doing ?? (worker.state === "queued" ? view.queuedBecause ?? "还没开始" : "—")}</dd>
           <dt>资源</dt><dd>{resource.filter(Boolean).join(" · ") || "—"}</dd>
+          {worker.workspace ? <><dt>在哪</dt><dd>{view.place ?? placeText(worker.workspace)}</dd></> : null}
           <dt>岗位</dt><dd>{role ? `${role.name} · 第 ${role.version} 版` : worker.role.name}</dd>
         </dl>
         {worker.cardId ? <CardExtras cardId={worker.cardId} worker={worker} onChanged={onChanged} /> : null}
+        <MergeAction session={worker.session} title={worker.title} accepted={worker.state === "done"} onChanged={onChanged} />
         {href ? <div className={w.rowActs}><Link href={href} className={w.mchip}>打开完整会话</Link></div> : null}
       </>)}
     </>

@@ -9,6 +9,7 @@ import { createMockRunner } from "@/lib/local/mock";
 import type { TLocalSessionSummary } from "@/lib/local/runner";
 import type { TaskBoard } from "@/lib/board/useTaskBoard";
 import { groupWorkers, isWaiting, plannerWorkers, toWorker, type Worker } from "@/lib/work/workers";
+import { mergeBlockedText, mergeCard, shortPlace } from "@/lib/work/merge";
 import { DispatchBlock, countsText, plannerText } from "./DispatchBlock";
 import { WorkerRow, secondLine } from "./WorkerRow";
 import { placeBlocks } from "./WorkTimeline";
@@ -182,6 +183,46 @@ describe("对话里插块和锚点", () => {
   it("锚到 Task 的地址", () => {
     expect(taskOfPath("/me/work/tasks/demo-task-1")).toBe("demo-task-1");
     expect(taskOfPath("/me/work")).toBeNull();
+  });
+});
+
+describe("卡在哪做和合并（ADR 0038）", () => {
+  const worktree = { kind: "worktree" as const, folder: "C:\\work\\tianshu", path: "C:\\data\\worktrees\\c1", branch: "tianshu/c1-board", baseBranch: "main",
+    baseCommit: "a".repeat(40), mergedCommit: null };
+  it("行里写分支，不是 git 仓库的写文件夹名；同一个文件夹另一张在做时排着写等文件夹空出来", () => {
+    const line = (worker: Worker) => renderToStaticMarkup(<>{secondLine(worker, Date.parse("2026-11-06T04:14:00Z"), null).map((part, i) => <span key={i}>{part}</span>)}</>);
+    expect(line(toWorker(item({}), ctx([session({ workspace: worktree })])))).toContain("tianshu/c1-board");
+    expect(shortPlace({ kind: "folder", folder: "C:\\work\\notes" })).toBe("notes");
+    const folder = { kind: "folder" as const, folder: "C:\\work\\notes" };
+    const other = session({ id: "00000000-0000-4000-8000-0000000000a9", subject: { kind: "card", cardId: "c9" }, status: "running", workspace: folder });
+    const waiting = toWorker(item({}), ctx([session({ status: "queued", queuePosition: 1, workspace: folder }), other]));
+    expect(waiting).toMatchObject({ state: "queued", reason: "folder" });
+    expect(line(waiting)).toContain("notes");
+  });
+
+  it("合不了的原因说人话：主文件夹不在基线分支、有没提交的改动、有冲突（列文件）", () => {
+    expect(mergeBlockedText({ merged: false, reason: "base_not_checked_out", message: "", files: [] }, "main")).toBe("主文件夹现在不在 main 分支上，切回去再合并");
+    expect(mergeBlockedText({ merged: false, reason: "dirty", message: "", files: ["a.ts", "b.ts"] }, "main")).toBe("主文件夹有没提交的改动：a.ts、b.ts");
+    expect(mergeBlockedText({ merged: false, reason: "conflict", message: "", files: ["1", "2", "3", "4", "5", "6"] }, "main")).toBe("有冲突：1、2、3、4、5 等 6 个。这次合并已放弃，主文件夹没动");
+  });
+
+  it("假本机程序：仓库文件夹里的卡在自己的分支上做；合并第一次回主文件夹不干净，再点合上，合过再点是 409 的原话", async () => {
+    vi.useFakeTimers();
+    const runner = createMockRunner({ stepMs: 10_000 });
+    const created = await runner.createSession({ subject: { kind: "card", cardId: "c1" }, title: "Board rows", cwd: "C:\\work\\tianshu", firstMessage: "交代" });
+    expect(created.workspace).toMatchObject({ kind: "worktree", branch: "tianshu/c1-board-rows", baseBranch: "main", mergedCommit: null });
+    expect((await mergeCard(runner, created, "Board rows"))).toEqual({ ok: false, text: "卡或它的验收员还在跑，停下再合" });
+    const stopped = await runner.kill(created.id);
+    expect(await mergeCard(runner, stopped, "Board rows")).toMatchObject({ ok: false, text: "主文件夹有没提交的改动：README.md、apps/web/src/app/page.tsx" });
+    const merged = await mergeCard(runner, stopped, "Board rows");
+    expect(merged.ok).toBe(true);
+    expect((await runner.getSession(created.id)).session.workspace).toMatchObject({ mergedCommit: merged.ok ? merged.commit : "" });
+    expect(await mergeCard(runner, stopped, "Board rows")).toEqual({ ok: false, text: "这张卡已经合回过了" });
+    const plain = await runner.createSession({ subject: { kind: "card", cardId: "c2" }, title: "笔记", cwd: "C:\\work\\project-2", firstMessage: "交代" });
+    const second = await runner.createSession({ subject: { kind: "card", cardId: "c3" }, title: "笔记二", cwd: "C:\\work\\project-2", firstMessage: "交代" });
+    expect(plain.workspace).toEqual({ kind: "folder", folder: "C:\\work\\project-2" });
+    expect(second.status).toBe("queued");
+    vi.useRealTimers();
   });
 });
 

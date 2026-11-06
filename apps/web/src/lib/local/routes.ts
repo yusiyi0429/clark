@@ -37,4 +37,5 @@ export const LOCAL_RUNNER_ROUTES: Contracts["LOCAL_RUNNER_ROUTES"] = {
   interrupt: { method: "POST", path: "/v1/sessions/:id/interrupt", auth: true },
   decidePermission: { method: "POST", path: "/v1/sessions/:id/permissions/:requestId", auth: true },
   kill: { method: "POST", path: "/v1/sessions/:id/kill", auth: true },
+  mergeSession: { method: "POST", path: "/v1/sessions/:id/merge", auth: true },
 };
