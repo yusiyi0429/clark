@@ -55,7 +55,7 @@
 .md ul, .md ol { margin: 0 0 6px; padding-left: 20px; }
 .md h1, .md h2, .md h3 { margin: 10px 0 4px; font-size: 13.5px; }
 .md[data-empty] { color: var(--field-placeholder); }
-.editor { width: 100%; min-height: 120px; padding: 8px 10px; border: 1px solid var(--accent); border-radius: 10px; outline: 0; resize: vertical; background: var(--field-bg); color: var(--ink); font: 12.5px/1.7 var(--font-mono); }
+.editor { width: 100%; min-height: 120px; padding: 8px 10px; border: 1px solid var(--accent); border-radius: 10px; outline: 0; resize: none; background: var(--field-bg); color: var(--ink); font: 12.5px/1.7 var(--font-mono); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .choice { height: 28px; padding: 0 11px; border: 0; border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--hairline-strong); color: var(--ink); font-size: 12.5px; cursor: pointer; }
 .choice[aria-checked="true"] { background: color-mix(in oklab, var(--accent) 9%, var(--surface)); box-shadow: inset 0 0 0 1.5px var(--accent); color: var(--brand-deep); font-weight: 600; }
