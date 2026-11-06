@@ -19708,7 +19708,7 @@
     "/api/me/work-home": {
       "get": {
         "operationId": "getWorkHome",
-        "summary": "新首页（DRI 工作台）：Mission → 本人负责的 Task → 子会话（卡、专题）的树，不归任何 Task 的「其他」，和跨来源的「等你」",
+        "summary": "新首页（DRI 工作台）：Mission → 本人负责、没了结的 Task → 子会话（卡、专题）的树，不归任何 Task 的「其他」，和跨来源的「等你」；不按月份硬切",
         "responses": {
           "200": {
             "description": "首页",
@@ -19887,6 +19887,64 @@
             }
           },
           "503": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/tasks/{taskId}/feed": {
+      "get": {
+        "operationId": "getTaskFeed",
+        "summary": "Task 管线里的验收行（Task 负责人）：卡验收过了（带合回结果）、受阻、约定都达到、合回后推翻开了返工卡，从旧到新；网页按时间插进 Task 管线",
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "验收行",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskFeedResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
             "description": "ApiError 统一错误",
             "content": {
               "application/json": {
@@ -104105,7 +104163,8 @@
           "sessionId",
           "deviceId",
           "autoStart",
-          "updatedAt"
+          "updatedAt",
+          "merge"
         ],
         "properties": {
           "id": {
@@ -104165,6 +104224,10 @@
                   },
                   {
                     "const": "verdict",
+                    "type": "string"
+                  },
+                  {
+                    "const": "merge",
                     "type": "string"
                   }
                 ]
@@ -104271,6 +104334,100 @@
           "updatedAt": {
             "format": "date-time",
             "type": "string"
+          },
+          "merge": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "state",
+                  "commit",
+                  "baseBranch",
+                  "reason",
+                  "message",
+                  "at"
+                ],
+                "properties": {
+                  "state": {
+                    "anyOf": [
+                      {
+                        "const": "merged",
+                        "type": "string"
+                      },
+                      {
+                        "const": "needs_merge",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "commit": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "baseBranch": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "const": "base_not_checked_out",
+                            "type": "string"
+                          },
+                          {
+                            "const": "dirty",
+                            "type": "string"
+                          },
+                          {
+                            "const": "conflict",
+                            "type": "string"
+                          },
+                          {
+                            "const": "auto_merge_off",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "message": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "at": {
+                    "format": "date-time",
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -104281,7 +104438,9 @@
           "running",
           "waiting",
           "queued",
-          "done"
+          "done",
+          "doneToday",
+          "needsYou"
         ],
         "properties": {
           "running": {
@@ -104299,6 +104458,14 @@
           "done": {
             "minimum": 0,
             "type": "integer"
+          },
+          "doneToday": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "needsYou": {
+            "minimum": 0,
+            "type": "integer"
           }
         }
       },
@@ -104313,6 +104480,7 @@
           "summary",
           "pipeline",
           "planning",
+          "completedAt",
           "subSessions"
         ],
         "properties": {
@@ -104344,7 +104512,9 @@
               "running",
               "waiting",
               "queued",
-              "done"
+              "done",
+              "doneToday",
+              "needsYou"
             ],
             "properties": {
               "running": {
@@ -104360,6 +104530,14 @@
                 "type": "integer"
               },
               "done": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "doneToday": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "needsYou": {
                 "minimum": 0,
                 "type": "integer"
               }
@@ -104393,6 +104571,17 @@
           "planning": {
             "type": "boolean"
           },
+          "completedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "subSessions": {
             "type": "array",
             "items": {
@@ -104409,7 +104598,8 @@
                 "sessionId",
                 "deviceId",
                 "autoStart",
-                "updatedAt"
+                "updatedAt",
+                "merge"
               ],
               "properties": {
                 "id": {
@@ -104469,6 +104659,10 @@
                         },
                         {
                           "const": "verdict",
+                          "type": "string"
+                        },
+                        {
+                          "const": "merge",
                           "type": "string"
                         }
                       ]
@@ -104575,6 +104769,100 @@
                 "updatedAt": {
                   "format": "date-time",
                   "type": "string"
+                },
+                "merge": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "state",
+                        "commit",
+                        "baseBranch",
+                        "reason",
+                        "message",
+                        "at"
+                      ],
+                      "properties": {
+                        "state": {
+                          "anyOf": [
+                            {
+                              "const": "merged",
+                              "type": "string"
+                            },
+                            {
+                              "const": "needs_merge",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "commit": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "baseBranch": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "reason": {
+                          "anyOf": [
+                            {
+                              "anyOf": [
+                                {
+                                  "const": "base_not_checked_out",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "dirty",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "conflict",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "auto_merge_off",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "message": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "at": {
+                          "format": "date-time",
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               }
             }
@@ -104587,6 +104875,7 @@
         "required": [
           "missionId",
           "title",
+          "period",
           "tasks"
         ],
         "properties": {
@@ -104595,6 +104884,10 @@
             "type": "string"
           },
           "title": {
+            "type": "string"
+          },
+          "period": {
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
             "type": "string"
           },
           "tasks": {
@@ -104610,6 +104903,7 @@
                 "summary",
                 "pipeline",
                 "planning",
+                "completedAt",
                 "subSessions"
               ],
               "properties": {
@@ -104641,7 +104935,9 @@
                     "running",
                     "waiting",
                     "queued",
-                    "done"
+                    "done",
+                    "doneToday",
+                    "needsYou"
                   ],
                   "properties": {
                     "running": {
@@ -104657,6 +104953,14 @@
                       "type": "integer"
                     },
                     "done": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "doneToday": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "needsYou": {
                       "minimum": 0,
                       "type": "integer"
                     }
@@ -104690,6 +104994,17 @@
                 "planning": {
                   "type": "boolean"
                 },
+                "completedAt": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
                 "subSessions": {
                   "type": "array",
                   "items": {
@@ -104706,7 +105021,8 @@
                       "sessionId",
                       "deviceId",
                       "autoStart",
-                      "updatedAt"
+                      "updatedAt",
+                      "merge"
                     ],
                     "properties": {
                       "id": {
@@ -104766,6 +105082,10 @@
                               },
                               {
                                 "const": "verdict",
+                                "type": "string"
+                              },
+                              {
+                                "const": "merge",
                                 "type": "string"
                               }
                             ]
@@ -104872,6 +105192,100 @@
                       "updatedAt": {
                         "format": "date-time",
                         "type": "string"
+                      },
+                      "merge": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "state",
+                              "commit",
+                              "baseBranch",
+                              "reason",
+                              "message",
+                              "at"
+                            ],
+                            "properties": {
+                              "state": {
+                                "anyOf": [
+                                  {
+                                    "const": "merged",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "needs_merge",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "commit": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "baseBranch": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "reason": {
+                                "anyOf": [
+                                  {
+                                    "anyOf": [
+                                      {
+                                        "const": "base_not_checked_out",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "dirty",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "conflict",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "auto_merge_off",
+                                        "type": "string"
+                                      }
+                                    ]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "message": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "at": {
+                                "format": "date-time",
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       }
                     }
                   }
@@ -104969,6 +105383,10 @@
               },
               {
                 "const": "role",
+                "type": "string"
+              },
+              {
+                "const": "merge",
                 "type": "string"
               }
             ]
@@ -105082,11 +105500,16 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
+          "period",
           "missions",
           "other",
           "waiting"
         ],
         "properties": {
+          "period": {
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "type": "string"
+          },
           "missions": {
             "type": "array",
             "items": {
@@ -105095,6 +105518,7 @@
               "required": [
                 "missionId",
                 "title",
+                "period",
                 "tasks"
               ],
               "properties": {
@@ -105103,6 +105527,10 @@
                   "type": "string"
                 },
                 "title": {
+                  "type": "string"
+                },
+                "period": {
+                  "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
                   "type": "string"
                 },
                 "tasks": {
@@ -105118,6 +105546,7 @@
                       "summary",
                       "pipeline",
                       "planning",
+                      "completedAt",
                       "subSessions"
                     ],
                     "properties": {
@@ -105149,7 +105578,9 @@
                           "running",
                           "waiting",
                           "queued",
-                          "done"
+                          "done",
+                          "doneToday",
+                          "needsYou"
                         ],
                         "properties": {
                           "running": {
@@ -105165,6 +105596,14 @@
                             "type": "integer"
                           },
                           "done": {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "doneToday": {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "needsYou": {
                             "minimum": 0,
                             "type": "integer"
                           }
@@ -105198,6 +105637,17 @@
                       "planning": {
                         "type": "boolean"
                       },
+                      "completedAt": {
+                        "anyOf": [
+                          {
+                            "format": "date-time",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
                       "subSessions": {
                         "type": "array",
                         "items": {
@@ -105214,7 +105664,8 @@
                             "sessionId",
                             "deviceId",
                             "autoStart",
-                            "updatedAt"
+                            "updatedAt",
+                            "merge"
                           ],
                           "properties": {
                             "id": {
@@ -105274,6 +105725,10 @@
                                     },
                                     {
                                       "const": "verdict",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "merge",
                                       "type": "string"
                                     }
                                   ]
@@ -105380,6 +105835,100 @@
                             "updatedAt": {
                               "format": "date-time",
                               "type": "string"
+                            },
+                            "merge": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "state",
+                                    "commit",
+                                    "baseBranch",
+                                    "reason",
+                                    "message",
+                                    "at"
+                                  ],
+                                  "properties": {
+                                    "state": {
+                                      "anyOf": [
+                                        {
+                                          "const": "merged",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "needs_merge",
+                                          "type": "string"
+                                        }
+                                      ]
+                                    },
+                                    "commit": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "baseBranch": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "reason": {
+                                      "anyOf": [
+                                        {
+                                          "anyOf": [
+                                            {
+                                              "const": "base_not_checked_out",
+                                              "type": "string"
+                                            },
+                                            {
+                                              "const": "dirty",
+                                              "type": "string"
+                                            },
+                                            {
+                                              "const": "conflict",
+                                              "type": "string"
+                                            },
+                                            {
+                                              "const": "auto_merge_off",
+                                              "type": "string"
+                                            }
+                                          ]
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "message": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "at": {
+                                      "format": "date-time",
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
                             }
                           }
                         }
@@ -105413,7 +105962,8 @@
                     "sessionId",
                     "deviceId",
                     "autoStart",
-                    "updatedAt"
+                    "updatedAt",
+                    "merge"
                   ],
                   "properties": {
                     "id": {
@@ -105473,6 +106023,10 @@
                             },
                             {
                               "const": "verdict",
+                              "type": "string"
+                            },
+                            {
+                              "const": "merge",
                               "type": "string"
                             }
                           ]
@@ -105579,6 +106133,100 @@
                     "updatedAt": {
                       "format": "date-time",
                       "type": "string"
+                    },
+                    "merge": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "state",
+                            "commit",
+                            "baseBranch",
+                            "reason",
+                            "message",
+                            "at"
+                          ],
+                          "properties": {
+                            "state": {
+                              "anyOf": [
+                                {
+                                  "const": "merged",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "needs_merge",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "commit": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "baseBranch": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "reason": {
+                              "anyOf": [
+                                {
+                                  "anyOf": [
+                                    {
+                                      "const": "base_not_checked_out",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "dirty",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "conflict",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "auto_merge_off",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "message": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "at": {
+                              "format": "date-time",
+                              "type": "string"
+                            }
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   }
                 }
@@ -105630,6 +106278,10 @@
                     },
                     {
                       "const": "role",
+                      "type": "string"
+                    },
+                    {
+                      "const": "merge",
                       "type": "string"
                     }
                   ]
@@ -106468,6 +107120,631 @@
                   "type": "string"
                 }
               }
+            }
+          }
+        }
+      },
+      "CardMerge": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "state",
+          "commit",
+          "baseBranch",
+          "reason",
+          "message",
+          "at"
+        ],
+        "properties": {
+          "state": {
+            "anyOf": [
+              {
+                "const": "merged",
+                "type": "string"
+              },
+              {
+                "const": "needs_merge",
+                "type": "string"
+              }
+            ]
+          },
+          "commit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "baseBranch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "const": "base_not_checked_out",
+                    "type": "string"
+                  },
+                  {
+                    "const": "dirty",
+                    "type": "string"
+                  },
+                  {
+                    "const": "conflict",
+                    "type": "string"
+                  },
+                  {
+                    "const": "auto_merge_off",
+                    "type": "string"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        }
+      },
+      "TaskFeedItem": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "kind",
+              "id",
+              "at",
+              "cardId",
+              "title",
+              "met",
+              "total",
+              "merge"
+            ],
+            "properties": {
+              "kind": {
+                "const": "card_passed",
+                "type": "string"
+              },
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "at": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "cardId": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "met": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "total": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "merge": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "state",
+                      "commit",
+                      "baseBranch",
+                      "reason",
+                      "message",
+                      "at"
+                    ],
+                    "properties": {
+                      "state": {
+                        "anyOf": [
+                          {
+                            "const": "merged",
+                            "type": "string"
+                          },
+                          {
+                            "const": "needs_merge",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "commit": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "baseBranch": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "reason": {
+                        "anyOf": [
+                          {
+                            "anyOf": [
+                              {
+                                "const": "base_not_checked_out",
+                                "type": "string"
+                              },
+                              {
+                                "const": "dirty",
+                                "type": "string"
+                              },
+                              {
+                                "const": "conflict",
+                                "type": "string"
+                              },
+                              {
+                                "const": "auto_merge_off",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "message": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "at": {
+                        "format": "date-time",
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "kind",
+              "id",
+              "at",
+              "cardId",
+              "title",
+              "handbackId",
+              "fix"
+            ],
+            "properties": {
+              "kind": {
+                "const": "card_blocked",
+                "type": "string"
+              },
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "at": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "cardId": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "handbackId": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "fix": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "kind",
+              "id",
+              "at",
+              "met",
+              "total"
+            ],
+            "properties": {
+              "kind": {
+                "const": "criteria_met",
+                "type": "string"
+              },
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "at": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "met": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "total": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            }
+          },
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "kind",
+              "id",
+              "at",
+              "cardId",
+              "title",
+              "fromCardId",
+              "reason"
+            ],
+            "properties": {
+              "kind": {
+                "const": "rework_opened",
+                "type": "string"
+              },
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "at": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "cardId": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "fromCardId": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "TaskFeedResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "id",
+                    "at",
+                    "cardId",
+                    "title",
+                    "met",
+                    "total",
+                    "merge"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "card_passed",
+                      "type": "string"
+                    },
+                    "id": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "at": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "cardId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "met": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "total": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "merge": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "state",
+                            "commit",
+                            "baseBranch",
+                            "reason",
+                            "message",
+                            "at"
+                          ],
+                          "properties": {
+                            "state": {
+                              "anyOf": [
+                                {
+                                  "const": "merged",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "needs_merge",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "commit": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "baseBranch": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "reason": {
+                              "anyOf": [
+                                {
+                                  "anyOf": [
+                                    {
+                                      "const": "base_not_checked_out",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "dirty",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "conflict",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "auto_merge_off",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "message": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "at": {
+                              "format": "date-time",
+                              "type": "string"
+                            }
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "id",
+                    "at",
+                    "cardId",
+                    "title",
+                    "handbackId",
+                    "fix"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "card_blocked",
+                      "type": "string"
+                    },
+                    "id": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "at": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "cardId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "handbackId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "fix": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "id",
+                    "at",
+                    "met",
+                    "total"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "criteria_met",
+                      "type": "string"
+                    },
+                    "id": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "at": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "met": {
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "total": {
+                      "minimum": 1,
+                      "type": "integer"
+                    }
+                  }
+                },
+                {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "id",
+                    "at",
+                    "cardId",
+                    "title",
+                    "fromCardId",
+                    "reason"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "rework_opened",
+                      "type": "string"
+                    },
+                    "id": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "at": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "cardId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "fromCardId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  }
+                }
+              ]
             }
           }
         }

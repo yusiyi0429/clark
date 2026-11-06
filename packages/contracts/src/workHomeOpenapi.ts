@@ -1,7 +1,7 @@
 import type { JsonSchema, OpenAPIV3 } from "./types/JsonSchemaTypes.js";
 import {
   BackgroundItem, BackgroundResponse, ClaimSessionStartsRequest, ClaimSessionStartsResponse, HomeMission, HomeTask, HomeTaskSummary, RouteRequest, RouteResponse,
-  SessionStartView, SubSession, TaskPipelineResponse, WaitingItem, WaitingTarget, WorkHomeResponse,
+  SessionStartView, SubSession, TaskPipelineResponse, WaitingItem, WaitingTarget, WorkHomeResponse, CardMerge, TaskFeedItem, TaskFeedResponse,
 } from "./workHome.js";
 
 /**
@@ -12,7 +12,7 @@ import {
 export const workHomeSchemas: Record<string, JsonSchema> = {
   SubSession, HomeTaskSummary, HomeTask, HomeMission, WaitingTarget, WaitingItem, WorkHomeResponse,
   BackgroundItem, BackgroundResponse, TaskPipelineResponse, RouteRequest, RouteResponse,
-  SessionStartView, ClaimSessionStartsRequest, ClaimSessionStartsResponse,
+  SessionStartView, ClaimSessionStartsRequest, ClaimSessionStartsResponse, CardMerge, TaskFeedItem, TaskFeedResponse,
 };
 
 const error = { description: "ApiError 统一错误", content: { "application/json": { schema: { $ref: "#/components/schemas/ApiError" } } } };
@@ -25,7 +25,7 @@ export const workHomePaths: OpenAPIV3.Document["paths"] = {
   "/api/me/work-home": {
     get: {
       operationId: "getWorkHome",
-      summary: "新首页（DRI 工作台）：Mission → 本人负责的 Task → 子会话（卡、专题）的树，不归任何 Task 的「其他」，和跨来源的「等你」",
+      summary: "新首页（DRI 工作台）：Mission → 本人负责、没了结的 Task → 子会话（卡、专题）的树，不归任何 Task 的「其他」，和跨来源的「等你」；不按月份硬切",
       responses: { "200": json("首页", "WorkHomeResponse"), ...errors(401, 403) },
     },
   },
@@ -43,6 +43,14 @@ export const workHomePaths: OpenAPIV3.Document["paths"] = {
       summary: "这件 Task 的管线对话（Task 负责人）：第一次打开时建，以后都返回同一条；收发消息走 /api/conversations/{scope}，scope 是 plan-task:<taskId>",
       parameters: path("taskId"),
       responses: { "200": json("已有的管线", "TaskPipelineResponse"), "201": json("新建的管线", "TaskPipelineResponse"), ...errors(401, 403, 404, 502, 503) },
+    },
+  },
+  "/api/me/tasks/{taskId}/feed": {
+    get: {
+      operationId: "getTaskFeed",
+      summary: "Task 管线里的验收行（Task 负责人）：卡验收过了（带合回结果）、受阻、约定都达到、合回后推翻开了返工卡，从旧到新；网页按时间插进 Task 管线",
+      parameters: path("taskId"),
+      responses: { "200": json("验收行", "TaskFeedResponse"), ...errors(401, 403, 404) },
     },
   },
   "/api/me/route": {

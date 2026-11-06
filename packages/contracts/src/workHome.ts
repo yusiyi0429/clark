@@ -11,6 +11,11 @@ import { WorkerQueueReason, WorkerResources } from "./workers.js";
  * - 自动开工（第 4.4 节）：管线里定了计划（派活单上选了「就按这个开始」）或伙伴开了探索子会话，云端只记一条「要开工」，
  *   由这台电脑上开着的天枢网页认领后拉起本机程序（和登记拆卡 → 网页开规划员同一条路，云端不指挥本机）；
  *   网页没开（比如在手机上）就一直排着，界面写「等本机上线」，下次在电脑上打开天枢就自己开。
+ * - 验收在 Task 管线（第 4.5 节）：本机验收员自动验；过了、受阻、约定都达到这几件事，网页按时间插进 Task 管线（GET /api/me/tasks/:taskId/feed），
+ *   总管线只看各件 Task 的汇总（summary 的 doneToday、needsYou）。验收过的卡本机自动合回，合不了的等你合（子会话 waiting = merge）。
+ * - 不按月份硬切（11/07 用户定）：月份只是检查点。左栏列「没了结」的 Task：本月 Mission 下本人负责的，加之前月份里本人负责、
+ *   还没了结、在天枢里动过（开过 Task 管线或挂着子会话）的。了结 = 本人确认完成（completedAt）、复盘时定了到此为止、或已延续成新月份的一件 Task
+ *   （后两种还没有数据）。子会话、Task 管线对话、后台任务都不看月份。
  *
  * 伙伴那一侧的选项框工具 ask_user（给晨星 / Chat 服务，支持之前只有本机子会话里的提问用选项框）：
  * - 参数照天枢自己对话里的 ask_user（conversations.ts 的 AskUserInput）：一次 1–4 题，每题 2–4 个选项 { label ≤ 40, detail? ≤ 120, recommended? }，
@@ -27,16 +32,32 @@ const Nullable = <T extends TSchema>(schema: T) => Type.Union([schema, Type.Null
 
 /**
  * 子会话的状态（左栏的图标）：queued 已排队（空心圈）、running 进行中（转圈）、waiting 等你（强调色小圆点）、done 已完成（勾）、failed 验收没过（叉）。
- * 对到卡和专题上：带岗位还没开工的、本机报等空位或等前面的卡的 → queued；验收中 → running；验收通过 → done；
- * 验收没过、改法还没送回执行方 → failed；等你批准、等你回复、受阻、已暂停 → waiting。
+ * 对到卡和专题上：带岗位还没开工的、本机报等空位或等前面的卡的 → queued；验收中 → running；验收通过（已合回，或不用合）→ done；
+ * 验收通过但没能自动合回 → waiting（merge）；验收没过、改法还没送回执行方 → failed；等你批准、等你回复、受阻、已暂停 → waiting。
+ * done 的子会话网页收进 Task 下面折叠的「已完成 N」，不删，点开还能看。
  */
 export const SubSessionState = Type.Union([Type.Literal("queued"), Type.Literal("running"), Type.Literal("waiting"), Type.Literal("done"), Type.Literal("failed")]);
 
 /**
  * 等你什么（只有 state = waiting 时可能有）：approval 等你批准（本机有权限请求没答）、question 等你回复（一轮做完在等你说话，或执行方在问你）、
- * verdict 验收结果等你拿主意（连续两次没过，受阻）。已暂停（停下了）也是等你（说一句就接着做），为 null。
+ * verdict 验收结果等你拿主意（连续两次没过，受阻）、merge 验收过了但本机没能自动合回，等你合（「合进 main / 先不合」）。
+ * 已暂停（停下了）也是等你（说一句就接着做），为 null。
  */
-export const SubSessionWaiting = Type.Union([Type.Literal("approval"), Type.Literal("question"), Type.Literal("verdict")]);
+export const SubSessionWaiting = Type.Union([Type.Literal("approval"), Type.Literal("question"), Type.Literal("verdict"), Type.Literal("merge")]);
+
+/**
+ * 卡验收过以后的合回（第 4.5 节，本机程序报的 merge 同步条目，同一次交回取最新的一条）：merged 已合进 baseBranch（commit 是合并后主文件夹上的提交）；
+ * needs_merge 没合，reason 说为什么（base_not_checked_out 主文件夹不在原分支上、dirty 主文件夹有没提交的改动、conflict 有冲突、
+ * auto_merge_off 本人关了「验收过就合回」），message 给人看，等你在这台电脑上合。卡不在工作树里做、或本机还没报，为 null。
+ */
+export const CardMerge = Type.Object({
+  state: Type.Union([Type.Literal("merged"), Type.Literal("needs_merge")]),
+  commit: Nullable(Type.String()),
+  baseBranch: Nullable(Type.String()),
+  reason: Nullable(Type.Union([Type.Literal("base_not_checked_out"), Type.Literal("dirty"), Type.Literal("conflict"), Type.Literal("auto_merge_off")])),
+  message: Nullable(Type.String()),
+  at: Instant,
+}, strict);
 
 /**
  * 一个子会话。id 是卡的 id（执行事项）或专题的 id，kind 说是哪种。
@@ -44,6 +65,7 @@ export const SubSessionWaiting = Type.Union([Type.Literal("approval"), Type.Lite
  * sessionId：最近一次本机执行（本机会话）的 id，没开过为 null；deviceId 是它在哪台电脑上。网页据此在那台电脑上接实时事件。
  * autoStart：已经登记了要开工、还没有哪台电脑接下（第 4.4 节）。在配对的电脑上开着的网页看到它就认领开工（POST /api/me/session-starts/claim）。
  * updatedAt：最近一次动静（本机报的、卡或专题改的），树上同一格按它排。
+ * merge：只有卡，最近一次验收通过的交回合回到哪了（见 CardMerge）；专题、还没过的卡为 null。
  */
 export const SubSession = Type.Object({
   id: Type.String({ minLength: 1 }),
@@ -57,21 +79,29 @@ export const SubSession = Type.Object({
   deviceId: Nullable(Type.String({ format: "uuid" })),
   autoStart: Type.Boolean(),
   updatedAt: Instant,
+  merge: Nullable(CardMerge),
 }, strict);
 
-/** 一件 Task 下面几个子会话在哪一格：首页 Task 一行的「2 个在跑 · 1 件等你」。waiting 含没过的（failed）。 */
+/**
+ * 一件 Task 下面几个子会话在哪一格：首页 Task 一行的「2 个在跑 · 1 件等你」。waiting 含没过的（failed）。
+ * 总管线的汇总（第 4.5 节，首页 Task 行和伙伴的汇总都用）：doneToday 今天（公司时区）验收通过的子会话数；needsYou 等你里归这件 Task 的条数。
+ */
 export const HomeTaskSummary = Type.Object({
   running: Type.Integer({ minimum: 0 }),
   waiting: Type.Integer({ minimum: 0 }),
   queued: Type.Integer({ minimum: 0 }),
   done: Type.Integer({ minimum: 0 }),
+  doneToday: Type.Integer({ minimum: 0 }),
+  needsYou: Type.Integer({ minimum: 0 }),
 }, strict);
 
 /**
- * 左栏一件 Task（本人这个月 Mission 下、本人是负责人的 Task，Mission 定好就出现，哪怕还没开始聊）。
+ * 左栏一件 Task：本人负责、没了结的（见文件头；本月的 Mission 定好就出现，哪怕还没开始聊）。
  * subtitle：标题下一行小字（完成定义或第一条标准，都没有为 null）。
  * pipeline.conversationId：这件 Task 的管线对话；还没开过为 null（POST /api/me/tasks/:taskId/pipeline 建）。对话的 scope 永远是 plan-task:<taskId>。
  * planning：规划员在拆这件 Task（本机的规划员会话还没结束，或登记了拆卡还没开）。
+ * completedAt：本人确认完成的时间（V1 的「交付」：最新一版交付物交付了）；交付以后又开了返工、或交付撤回了，回到 null。
+ * 不为 null 时网页把它下面的子会话全部收起，Task 行打勾；本月的照样列着，之前月份的了结了就不列。
  */
 export const HomeTask = Type.Object({
   taskId: Type.String({ minLength: 1 }),
@@ -81,12 +111,17 @@ export const HomeTask = Type.Object({
   summary: HomeTaskSummary,
   pipeline: Type.Object({ conversationId: Nullable(Type.String({ minLength: 1 })), scope: Type.String({ minLength: 1 }) }, strict),
   planning: Type.Boolean(),
+  completedAt: Nullable(Instant),
   subSessions: Type.Array(SubSession),
 }, strict);
 
+const Period = Type.String({ pattern: "^\\d{4}-(0[1-9]|1[0-2])$" });
+
+/** 树上一个 Mission：period 是它的月份（YYYY-MM），之前月份的网页标出「10 月」。 */
 export const HomeMission = Type.Object({
   missionId: Type.String({ minLength: 1 }),
   title: Type.String(),
+  period: Period,
   tasks: Type.Array(HomeTask),
 }, strict);
 
@@ -94,10 +129,12 @@ export const HomeMission = Type.Object({
  * 等你：要本人拿主意的事，跨所有来源，一件一行。
  * approval / question：子会话（或规划员、验收员）在等你批准、等你回复；verdict：卡连续两次验收没过（受阻）；
  * meeting：会议记录要你确认（你是责任人的决策、你负责的行动项、你主持的会要补归属或记录没生成），一场会一行；
- * mission_card：Mission Card 要你做的事（本人确认我的任务，或拍板人那一侧的待办）；role：岗位修改建议（采纳或不要）。
+ * mission_card：Mission Card 要你做的事（本人确认我的任务，或拍板人那一侧的待办）；role：岗位修改建议（采纳或不要）；
+ * merge：卡验收过了但本机没能自动合回，等你在那台电脑上合（open 是卡，deviceId 是那台电脑）。
  */
 export const WaitingKind = Type.Union([
   Type.Literal("approval"), Type.Literal("question"), Type.Literal("verdict"), Type.Literal("meeting"), Type.Literal("mission_card"), Type.Literal("role"),
+  Type.Literal("merge"),
 ]);
 
 /**
@@ -113,7 +150,7 @@ export const WaitingTarget = Type.Object({
 /**
  * 一件等你的事。id 稳定（同一件事每次一样），界面拿它做 key。title 是要你定的事，source 是小字（出自哪个子会话和 Task、哪场会、哪个战场）。
  * taskId：属于哪件 Task（Task 一行的「1 件等你」和 Task 管线里的提醒用），不属于为 null。
- * sessionId、deviceId：子会话那几种（approval、question）是哪个本机会话、在哪台电脑上；在这台电脑上的，网页就地批准、回答（本机程序接口），别处的只能打开看。
+ * sessionId、deviceId：子会话那几种（approval、question、merge）是哪个本机会话、在哪台电脑上；在这台电脑上的，网页就地批准、回答、合回（本机程序接口），别处的只能打开看。
  */
 export const WaitingItem = Type.Object({
   id: Type.String({ minLength: 1 }),
@@ -128,16 +165,42 @@ export const WaitingItem = Type.Object({
 }, strict);
 
 /**
- * GET /api/me/work-home（DRI 工作台）：左栏的树和首页的「等你」一次给全。
- * missions：本人这个月的 Mission（没有时回退到最近一个月，和本月页一样），每个下面是本人负责的 Task；
- * other.subSessions：不归任何 Task（或 Task 不在这个月的树上）的子会话，左栏最下面一组「其他」；
- * 子会话列没完成的，和这个月完成的。waiting：等你，最新的在前。
+ * GET /api/me/work-home（DRI 工作台）：左栏的树和首页的「等你」一次给全。伙伴的汇总读同一份（/internal/me/work-home，INTERNAL_CHAT_TOKEN 加 X-Owner-Id）。
+ * period：现在是哪个月（公司时区，YYYY-MM）。
+ * missions：有「没了结」的 Task 的 Mission（见文件头），本月的在前，之前月份的按月份从近到远；本月的 Mission 没有 Task 也列。每个下面是本人负责的 Task。
+ * 一件 Task 下面的子会话不看月份，全列（done 的网页折叠）。
+ * other.subSessions：不归任何 Task 的子会话，加 Task 不在树上（了结了、或不是本人负责）但还没完成的子会话，左栏最下面一组「其他」。
+ * waiting：等你，最新的在前。
  */
 export const WorkHomeResponse = Type.Object({
+  period: Period,
   missions: Type.Array(HomeMission),
   other: Type.Object({ subSessions: Type.Array(SubSession) }, strict),
   waiting: Type.Array(WaitingItem),
 }, strict);
+
+/**
+ * Task 管线里网页按时间插的一行（第 4.5 节，从卡和交回现算，不另存事件）。id 稳定，网页按它去重；at 是这件事发生的时间。
+ * - card_passed：一张卡验收过了（含本人「仍然通过」），met / total 几条达到，merge 是合回结果（「已合进 main」，或要你合的原因）。
+ * - card_blocked：一张卡连续两次没过（受阻），fix 是拼好的改法；网页给选项「按这个改（推荐）/ 我去看看 / 仍然通过」，
+ *   按这个改 = 照原来的送回（说一句 + /handbacks/:id/returned），仍然通过 = 推翻（/handbacks/:id/overrule）。
+ * - criteria_met：约定里的每一条都有验收通过的卡（met = total）；网页问「约定 n 条都达到了，交给认可人？（推荐）」，
+ *   接 V1 的出一版（/deliverable/versions/from-pending）、对表、请 X 看、交付。完成仍只由本人确认。
+ * - rework_opened：合回以后被推翻，管线在同一件 Task 下开了一张返工卡（cardId），fromCardId 是被推翻的那张，reason 是推翻的理由。
+ */
+const FeedBase = { id: Type.String({ minLength: 1 }), at: Instant };
+export const TaskFeedItem = Type.Union([
+  Type.Object({ kind: Type.Literal("card_passed"), ...FeedBase, cardId: Type.String({ format: "uuid" }), title: Type.String(),
+    met: Type.Integer({ minimum: 0 }), total: Type.Integer({ minimum: 0 }), merge: Nullable(CardMerge) }, strict),
+  Type.Object({ kind: Type.Literal("card_blocked"), ...FeedBase, cardId: Type.String({ format: "uuid" }), title: Type.String(),
+    handbackId: Type.String({ format: "uuid" }), fix: Nullable(Type.String()) }, strict),
+  Type.Object({ kind: Type.Literal("criteria_met"), ...FeedBase, met: Type.Integer({ minimum: 1 }), total: Type.Integer({ minimum: 1 }) }, strict),
+  Type.Object({ kind: Type.Literal("rework_opened"), ...FeedBase, cardId: Type.String({ format: "uuid" }), title: Type.String(),
+    fromCardId: Type.String({ format: "uuid" }), reason: Type.String() }, strict),
+]);
+
+/** GET /api/me/tasks/:taskId/feed（Task 负责人）：这件 Task 的验收行，从旧到新。 */
+export const TaskFeedResponse = Type.Object({ items: Type.Array(TaskFeedItem) }, strict);
 
 /**
  * 后台任务：不用对话的那些。plan 规划员拆卡、verify 验收员验收、merge 合回（只在本机，云端不列）、
@@ -241,6 +304,9 @@ export const BuddyOpenTopicResponse = Type.Object({ topicId: Type.String({ forma
 
 export type TSubSessionState = Static<typeof SubSessionState>;
 export type TSubSessionWaiting = Static<typeof SubSessionWaiting>;
+export type TCardMerge = Static<typeof CardMerge>;
+export type TTaskFeedItem = Static<typeof TaskFeedItem>;
+export type TTaskFeedResponse = Static<typeof TaskFeedResponse>;
 export type TSubSession = Static<typeof SubSession>;
 export type THomeTaskSummary = Static<typeof HomeTaskSummary>;
 export type THomeTask = Static<typeof HomeTask>;
