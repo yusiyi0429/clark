@@ -61,3 +61,11 @@ ALTER TABLE tasks ADD COLUMN rework_of_card_id UUID REFERENCES tasks (id) ON DEL
 -- 本机会话状态加 done（本机契约 b735df52）：规划员交了计划、验收员交了结论，这一轮做完就自己收工、进程退出；不占位置，再说一句会续上。
 ALTER TABLE local_runs DROP CONSTRAINT local_runs_state_check;
 ALTER TABLE local_runs ADD CONSTRAINT local_runs_state_check CHECK (state IN ('queued', 'starting', 'running', 'waiting_permission', 'idle', 'exited', 'failed', 'done'));
+
+-- 额度和真钱（设计第 11 节，本机契约 5328c906）：
+-- hold：这次执行停着等额度恢复（状态条目带的 LocalHold：{ reason: "usage_limit", until }），恢复接着做时报的那条不带，就清空。停着不占位置。
+-- money：网关模型（TokenHub 等）真花的钱，本机按价目表估的，按币种累计 { "CNY": 1.23, "USD": 0.4 }，不换算；订阅的用量不是钱，不记在这里。
+ALTER TABLE local_runs ADD COLUMN hold JSONB;
+ALTER TABLE local_runs ADD COLUMN money JSONB NOT NULL DEFAULT '{}';
+-- 设备最近一批同步报的订阅额度（LocalQuotaSync 的数组），给手机和别的电脑看；没报过为空。
+ALTER TABLE local_devices ADD COLUMN quota JSONB;
