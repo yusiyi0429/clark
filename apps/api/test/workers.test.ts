@@ -61,8 +61,10 @@ describe("worker 列表", () => {
         resource: { where: "cloud", deviceId: null, deviceName: null, modelLabel: "test-heavy-model" } });
       expect(item("等开工")).toMatchObject({ stage: "todo", queueReason: "not_dispatched", resource: null, startedAt: null, elapsedSeconds: null });
       expect(item("那台电脑关了")).toMatchObject({ queueReason: "device_offline", queuePosition: null, wait: null, resource: { deviceName: "另一台" } });
-      expect(item("等空位一")).toMatchObject({ queueReason: "slot", queuePosition: 1, wait: null, needsYou: false, resource: { deviceName: "我的电脑" } });
-      expect(item("等空位二")).toMatchObject({ queueReason: "slot", queuePosition: 2 });
+      // 等空位的还没开工：卡在待开始、不算开工时间。
+      expect(item("等空位一")).toMatchObject({ stage: "todo", queueReason: "slot", queuePosition: 1, wait: null, needsYou: false, startedAt: null,
+        resource: { deviceName: "我的电脑" } });
+      expect(item("等空位二")).toMatchObject({ stage: "todo", queueReason: "slot", queuePosition: 2 });
       expect(item("今天完成")).toMatchObject({ stage: "done", finishedAt: BOARD_NOW.toISOString() });
       expect(item("竞品调研")).toMatchObject({ kind: "topic", topicId: queuedTopic, role: { id: researcher.id }, queueReason: "not_dispatched",
         task: { id: "task-open" }, mission: { title: "内部版上线" } });
@@ -72,7 +74,7 @@ describe("worker 列表", () => {
       const numbers = (roleId: string) => [...body.running, ...body.queued, ...body.done].filter((entry: { role: { id: string } }) => entry.role.id === roleId)
         .map((entry: { workerNo: number }) => entry.workerNo).sort();
       expect(numbers(dev.id)).toEqual([1, 2, 3, 4, 5, 6, 7]);
-      expect([item("等开工").workerNo, item("今天完成").workerNo].sort()).toEqual([6, 7]);
+      expect(["等开工", "今天完成", "等空位一", "等空位二"].map((title) => item(title).workerNo).sort()).toEqual([4, 5, 6, 7]);
       expect(numbers(researcher.id)).toEqual([1, 2]);
       expect(item("竞品调研").workerNo).toBe(2);
 

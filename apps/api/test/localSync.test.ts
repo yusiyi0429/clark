@@ -123,7 +123,7 @@ describe("本机程序：设备令牌和单向上报", () => {
     } finally { await f.close(); }
   });
 
-  it("晚到的旧状态和旧计划丢掉；不是本人的卡、对不上的文件、乱写的幂等键永久拒收；已完成的卡状态不被改回去", async () => {
+  it("晚到的旧状态和旧计划丢掉；不是本人的卡、对不上的文件、乱写的幂等键永久拒收；等空位的卡留在未开始；已完成的卡状态不被改回去", async () => {
     const f = await fixture();
     try {
       const device = randomUUID();
@@ -146,6 +146,15 @@ describe("本机程序：设备令牌和单向上报", () => {
       expect(res.json().rejected.map((item: { code: string }) => item.code)).toEqual(["NOT_OWNER", "CHECKSUM_MISMATCH", "INVALID_KEY", "UNSUPPORTED_TYPE"]);
       expect(await f.t.sql("SELECT 1 FROM local_runs WHERE id=$1", [other.sessionId])).toEqual([]);
       expect(await f.t.sql("SELECT 1 FROM local_outputs")).toEqual([]);
+
+      // 本机满了、这张卡在等空位：还没开工，卡留在未开始；轮到它开工时才变进行中。
+      const waiting = await f.task("等空位的");
+      const queued = f.session(device, { kind: "card", cardId: waiting });
+      await f.sync(token, device, [queued.item(1, "status", { status: "queued", title: "等空位的", agent: "claude-code", modelLabel: "订阅" })]);
+      expect((await f.t.sql("SELECT status FROM tasks WHERE id=$1", [waiting]))[0].status).toBe("not_started");
+      expect((await f.t.sql("SELECT state,last_activity->>'text' AS text FROM local_runs WHERE id=$1", [queued.sessionId]))[0]).toEqual({ state: "queued", text: "等空位" });
+      await f.sync(token, device, [queued.item(2, "status", { status: "starting", title: "等空位的", agent: "claude-code", modelLabel: "订阅" })]);
+      expect((await f.t.sql("SELECT status FROM tasks WHERE id=$1", [waiting]))[0].status).toBe("in_progress");
 
       await f.t.sql("UPDATE tasks SET status='done' WHERE id=$1", [cardId]);
       const later = f.session(device, { kind: "card", cardId });

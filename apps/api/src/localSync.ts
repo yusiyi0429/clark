@@ -83,7 +83,8 @@ async function applyItem(deps: { pool: Pool; storageDir: string; now: () => Date
     const run = await lockRun(client, owner, item, at);
     const handbackId = await applyType(client, deps, owner, item, run, card, seq, at, written);
     await client.query("UPDATE local_runs SET last_seq=GREATEST(last_seq,$2),updated_at=$3 WHERE id=$1", [run.id, seq, deps.now()]);
-    if (card?.status === "not_started")
+    // 本机开工了，卡变进行中；本机报「等空位」（queued）还没开工，卡留在待开始。
+    if (card?.status === "not_started" && !(item.type === "status" && item.data.status === "queued"))
       await client.query("UPDATE tasks SET status='in_progress',version=version+1,updated_at=now() WHERE id=$1 AND status='not_started'", [card.id]);
     await client.query("COMMIT");
     return handbackId;

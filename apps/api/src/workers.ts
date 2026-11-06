@@ -83,7 +83,12 @@ export async function listWorkers(deps: { q: Query; planTasks: PlanTaskSource; n
     const base = { key: `card:${card.id}`, kind: "card" as const, cardId: card.id, topicId: null, title: card.title, task: taskOf(row.plan_task_id),
       mission: missionOf(row.mission_id), cost: cardCosts.get(card.id) ?? null, stage: card.card.stage };
     const local = run ? { where: "local" as const, deviceId: run.deviceId, deviceName: run.deviceName, modelLabel: run.modelLabel } : null;
-    if (card.card.stage === "todo") {
+    if (card.card.stage === "todo" && run && isQueued(run.state)) {
+      // 本机收下了、在等空位（还没开工，卡在待开始）；那台电脑不在线时算等本机上线。
+      const queueReason = online.has(run.deviceId) ? "slot" as const : "device_offline" as const;
+      drafts.push({ ...base, group: "queued", role, step: null, resource: local, startedAt: null, elapsedSeconds: null, finishedAt: null,
+        wait: null, needsYou: false, queueReason, queuePosition: queueReason === "slot" ? positions.get(run.id) ?? null : null });
+    } else if (card.card.stage === "todo") {
       drafts.push({ ...base, group: "queued", role, step: null, resource: null, startedAt: null, elapsedSeconds: null, finishedAt: null,
         wait: null, needsYou: false, queueReason: "not_dispatched", queuePosition: null });
     } else if (card.card.stage === "done") {
