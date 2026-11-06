@@ -23838,7 +23838,8 @@
                           "returnedAt",
                           "overruled",
                           "createdAt",
-                          "finishedAt"
+                          "finishedAt",
+                          "git"
                         ],
                         "properties": {
                           "id": {
@@ -23939,6 +23940,48 @@
                               {
                                 "format": "date-time",
                                 "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "git": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "branch",
+                                  "baseBranch",
+                                  "baseCommit",
+                                  "commit",
+                                  "verifiedCommit"
+                                ],
+                                "properties": {
+                                  "branch": {
+                                    "type": "string"
+                                  },
+                                  "baseBranch": {
+                                    "type": "string"
+                                  },
+                                  "baseCommit": {
+                                    "type": "string"
+                                  },
+                                  "commit": {
+                                    "type": "string"
+                                  },
+                                  "verifiedCommit": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                }
                               },
                               {
                                 "type": "null"
@@ -50390,7 +50433,8 @@
                       "returnedAt",
                       "overruled",
                       "createdAt",
-                      "finishedAt"
+                      "finishedAt",
+                      "git"
                     ],
                     "properties": {
                       "id": {
@@ -50491,6 +50535,48 @@
                           {
                             "format": "date-time",
                             "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "git": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "branch",
+                              "baseBranch",
+                              "baseCommit",
+                              "commit",
+                              "verifiedCommit"
+                            ],
+                            "properties": {
+                              "branch": {
+                                "type": "string"
+                              },
+                              "baseBranch": {
+                                "type": "string"
+                              },
+                              "baseCommit": {
+                                "type": "string"
+                              },
+                              "commit": {
+                                "type": "string"
+                              },
+                              "verifiedCommit": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            }
                           },
                           {
                             "type": "null"
@@ -51655,7 +51741,8 @@
                                   "returnedAt",
                                   "overruled",
                                   "createdAt",
-                                  "finishedAt"
+                                  "finishedAt",
+                                  "git"
                                 ],
                                 "properties": {
                                   "id": {
@@ -51756,6 +51843,48 @@
                                       {
                                         "format": "date-time",
                                         "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "git": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "type": "object",
+                                        "required": [
+                                          "branch",
+                                          "baseBranch",
+                                          "baseCommit",
+                                          "commit",
+                                          "verifiedCommit"
+                                        ],
+                                        "properties": {
+                                          "branch": {
+                                            "type": "string"
+                                          },
+                                          "baseBranch": {
+                                            "type": "string"
+                                          },
+                                          "baseCommit": {
+                                            "type": "string"
+                                          },
+                                          "commit": {
+                                            "type": "string"
+                                          },
+                                          "verifiedCommit": {
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
+                                          }
+                                        }
                                       },
                                       {
                                         "type": "null"
@@ -60445,7 +60574,8 @@
                           "returnedAt",
                           "overruled",
                           "createdAt",
-                          "finishedAt"
+                          "finishedAt",
+                          "git"
                         ],
                         "properties": {
                           "id": {
@@ -60546,6 +60676,48 @@
                               {
                                 "format": "date-time",
                                 "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "git": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "branch",
+                                  "baseBranch",
+                                  "baseCommit",
+                                  "commit",
+                                  "verifiedCommit"
+                                ],
+                                "properties": {
+                                  "branch": {
+                                    "type": "string"
+                                  },
+                                  "baseBranch": {
+                                    "type": "string"
+                                  },
+                                  "baseCommit": {
+                                    "type": "string"
+                                  },
+                                  "commit": {
+                                    "type": "string"
+                                  },
+                                  "verifiedCommit": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                }
                               },
                               {
                                 "type": "null"
@@ -62059,7 +62231,8 @@
                             "returnedAt",
                             "overruled",
                             "createdAt",
-                            "finishedAt"
+                            "finishedAt",
+                            "git"
                           ],
                           "properties": {
                             "id": {
@@ -62160,6 +62333,48 @@
                                 {
                                   "format": "date-time",
                                   "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "git": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "branch",
+                                    "baseBranch",
+                                    "baseCommit",
+                                    "commit",
+                                    "verifiedCommit"
+                                  ],
+                                  "properties": {
+                                    "branch": {
+                                      "type": "string"
+                                    },
+                                    "baseBranch": {
+                                      "type": "string"
+                                    },
+                                    "baseCommit": {
+                                      "type": "string"
+                                    },
+                                    "commit": {
+                                      "type": "string"
+                                    },
+                                    "verifiedCommit": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  }
                                 },
                                 {
                                   "type": "null"
@@ -63185,7 +63400,8 @@
                                   "returnedAt",
                                   "overruled",
                                   "createdAt",
-                                  "finishedAt"
+                                  "finishedAt",
+                                  "git"
                                 ],
                                 "properties": {
                                   "id": {
@@ -63286,6 +63502,48 @@
                                       {
                                         "format": "date-time",
                                         "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "git": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "type": "object",
+                                        "required": [
+                                          "branch",
+                                          "baseBranch",
+                                          "baseCommit",
+                                          "commit",
+                                          "verifiedCommit"
+                                        ],
+                                        "properties": {
+                                          "branch": {
+                                            "type": "string"
+                                          },
+                                          "baseBranch": {
+                                            "type": "string"
+                                          },
+                                          "baseCommit": {
+                                            "type": "string"
+                                          },
+                                          "commit": {
+                                            "type": "string"
+                                          },
+                                          "verifiedCommit": {
+                                            "anyOf": [
+                                              {
+                                                "type": "string"
+                                              },
+                                              {
+                                                "type": "null"
+                                              }
+                                            ]
+                                          }
+                                        }
                                       },
                                       {
                                         "type": "null"
@@ -64286,7 +64544,8 @@
                             "returnedAt",
                             "overruled",
                             "createdAt",
-                            "finishedAt"
+                            "finishedAt",
+                            "git"
                           ],
                           "properties": {
                             "id": {
@@ -64387,6 +64646,48 @@
                                 {
                                   "format": "date-time",
                                   "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "git": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "branch",
+                                    "baseBranch",
+                                    "baseCommit",
+                                    "commit",
+                                    "verifiedCommit"
+                                  ],
+                                  "properties": {
+                                    "branch": {
+                                      "type": "string"
+                                    },
+                                    "baseBranch": {
+                                      "type": "string"
+                                    },
+                                    "baseCommit": {
+                                      "type": "string"
+                                    },
+                                    "commit": {
+                                      "type": "string"
+                                    },
+                                    "verifiedCommit": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  }
                                 },
                                 {
                                   "type": "null"
@@ -68501,7 +68802,8 @@
                           "returnedAt",
                           "overruled",
                           "createdAt",
-                          "finishedAt"
+                          "finishedAt",
+                          "git"
                         ],
                         "properties": {
                           "id": {
@@ -68602,6 +68904,48 @@
                               {
                                 "format": "date-time",
                                 "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "git": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "branch",
+                                  "baseBranch",
+                                  "baseCommit",
+                                  "commit",
+                                  "verifiedCommit"
+                                ],
+                                "properties": {
+                                  "branch": {
+                                    "type": "string"
+                                  },
+                                  "baseBranch": {
+                                    "type": "string"
+                                  },
+                                  "baseCommit": {
+                                    "type": "string"
+                                  },
+                                  "commit": {
+                                    "type": "string"
+                                  },
+                                  "verifiedCommit": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                }
                               },
                               {
                                 "type": "null"
@@ -69878,7 +70222,8 @@
                                 "returnedAt",
                                 "overruled",
                                 "createdAt",
-                                "finishedAt"
+                                "finishedAt",
+                                "git"
                               ],
                               "properties": {
                                 "id": {
@@ -69979,6 +70324,48 @@
                                     {
                                       "format": "date-time",
                                       "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "git": {
+                                  "anyOf": [
+                                    {
+                                      "additionalProperties": false,
+                                      "type": "object",
+                                      "required": [
+                                        "branch",
+                                        "baseBranch",
+                                        "baseCommit",
+                                        "commit",
+                                        "verifiedCommit"
+                                      ],
+                                      "properties": {
+                                        "branch": {
+                                          "type": "string"
+                                        },
+                                        "baseBranch": {
+                                          "type": "string"
+                                        },
+                                        "baseCommit": {
+                                          "type": "string"
+                                        },
+                                        "commit": {
+                                          "type": "string"
+                                        },
+                                        "verifiedCommit": {
+                                          "anyOf": [
+                                            {
+                                              "type": "string"
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        }
+                                      }
                                     },
                                     {
                                       "type": "null"
@@ -70928,7 +71315,8 @@
                             "returnedAt",
                             "overruled",
                             "createdAt",
-                            "finishedAt"
+                            "finishedAt",
+                            "git"
                           ],
                           "properties": {
                             "id": {
@@ -71029,6 +71417,48 @@
                                 {
                                   "format": "date-time",
                                   "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "git": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "branch",
+                                    "baseBranch",
+                                    "baseCommit",
+                                    "commit",
+                                    "verifiedCommit"
+                                  ],
+                                  "properties": {
+                                    "branch": {
+                                      "type": "string"
+                                    },
+                                    "baseBranch": {
+                                      "type": "string"
+                                    },
+                                    "baseCommit": {
+                                      "type": "string"
+                                    },
+                                    "commit": {
+                                      "type": "string"
+                                    },
+                                    "verifiedCommit": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  }
                                 },
                                 {
                                   "type": "null"
@@ -88837,7 +89267,8 @@
                   "returnedAt",
                   "overruled",
                   "createdAt",
-                  "finishedAt"
+                  "finishedAt",
+                  "git"
                 ],
                 "properties": {
                   "id": {
@@ -88938,6 +89369,48 @@
                       {
                         "format": "date-time",
                         "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "git": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "branch",
+                          "baseBranch",
+                          "baseCommit",
+                          "commit",
+                          "verifiedCommit"
+                        ],
+                        "properties": {
+                          "branch": {
+                            "type": "string"
+                          },
+                          "baseBranch": {
+                            "type": "string"
+                          },
+                          "baseCommit": {
+                            "type": "string"
+                          },
+                          "commit": {
+                            "type": "string"
+                          },
+                          "verifiedCommit": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        }
                       },
                       {
                         "type": "null"
@@ -89835,7 +90308,8 @@
                       "returnedAt",
                       "overruled",
                       "createdAt",
-                      "finishedAt"
+                      "finishedAt",
+                      "git"
                     ],
                     "properties": {
                       "id": {
@@ -89936,6 +90410,48 @@
                           {
                             "format": "date-time",
                             "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "git": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "branch",
+                              "baseBranch",
+                              "baseCommit",
+                              "commit",
+                              "verifiedCommit"
+                            ],
+                            "properties": {
+                              "branch": {
+                                "type": "string"
+                              },
+                              "baseBranch": {
+                                "type": "string"
+                              },
+                              "baseCommit": {
+                                "type": "string"
+                              },
+                              "commit": {
+                                "type": "string"
+                              },
+                              "verifiedCommit": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            }
                           },
                           {
                             "type": "null"
@@ -90305,7 +90821,8 @@
           "cardId",
           "topicId",
           "topicVersionId",
-          "addedAt"
+          "addedAt",
+          "git"
         ],
         "properties": {
           "id": {
@@ -90364,6 +90881,48 @@
           "addedAt": {
             "format": "date-time",
             "type": "string"
+          },
+          "git": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "branch",
+                  "baseBranch",
+                  "baseCommit",
+                  "commit",
+                  "verifiedCommit"
+                ],
+                "properties": {
+                  "branch": {
+                    "type": "string"
+                  },
+                  "baseBranch": {
+                    "type": "string"
+                  },
+                  "baseCommit": {
+                    "type": "string"
+                  },
+                  "commit": {
+                    "type": "string"
+                  },
+                  "verifiedCommit": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -91256,7 +91815,8 @@
                             "returnedAt",
                             "overruled",
                             "createdAt",
-                            "finishedAt"
+                            "finishedAt",
+                            "git"
                           ],
                           "properties": {
                             "id": {
@@ -91357,6 +91917,48 @@
                                 {
                                   "format": "date-time",
                                   "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "git": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "branch",
+                                    "baseBranch",
+                                    "baseCommit",
+                                    "commit",
+                                    "verifiedCommit"
+                                  ],
+                                  "properties": {
+                                    "branch": {
+                                      "type": "string"
+                                    },
+                                    "baseBranch": {
+                                      "type": "string"
+                                    },
+                                    "baseCommit": {
+                                      "type": "string"
+                                    },
+                                    "commit": {
+                                      "type": "string"
+                                    },
+                                    "verifiedCommit": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  }
                                 },
                                 {
                                   "type": "null"
@@ -91739,7 +92341,8 @@
                 "cardId",
                 "topicId",
                 "topicVersionId",
-                "addedAt"
+                "addedAt",
+                "git"
               ],
               "properties": {
                 "id": {
@@ -91798,6 +92401,48 @@
                 "addedAt": {
                   "format": "date-time",
                   "type": "string"
+                },
+                "git": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "branch",
+                        "baseBranch",
+                        "baseCommit",
+                        "commit",
+                        "verifiedCommit"
+                      ],
+                      "properties": {
+                        "branch": {
+                          "type": "string"
+                        },
+                        "baseBranch": {
+                          "type": "string"
+                        },
+                        "baseCommit": {
+                          "type": "string"
+                        },
+                        "commit": {
+                          "type": "string"
+                        },
+                        "verifiedCommit": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               }
             }
@@ -92741,7 +93386,8 @@
                             "returnedAt",
                             "overruled",
                             "createdAt",
-                            "finishedAt"
+                            "finishedAt",
+                            "git"
                           ],
                           "properties": {
                             "id": {
@@ -92842,6 +93488,48 @@
                                 {
                                   "format": "date-time",
                                   "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "git": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "branch",
+                                    "baseBranch",
+                                    "baseCommit",
+                                    "commit",
+                                    "verifiedCommit"
+                                  ],
+                                  "properties": {
+                                    "branch": {
+                                      "type": "string"
+                                    },
+                                    "baseBranch": {
+                                      "type": "string"
+                                    },
+                                    "baseCommit": {
+                                      "type": "string"
+                                    },
+                                    "commit": {
+                                      "type": "string"
+                                    },
+                                    "verifiedCommit": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  }
                                 },
                                 {
                                   "type": "null"
@@ -93011,6 +93699,7 @@
           "overruled",
           "createdAt",
           "finishedAt",
+          "git",
           "runId",
           "criteria",
           "claims",
@@ -93122,6 +93811,48 @@
               {
                 "format": "date-time",
                 "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "git": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "branch",
+                  "baseBranch",
+                  "baseCommit",
+                  "commit",
+                  "verifiedCommit"
+                ],
+                "properties": {
+                  "branch": {
+                    "type": "string"
+                  },
+                  "baseBranch": {
+                    "type": "string"
+                  },
+                  "baseCommit": {
+                    "type": "string"
+                  },
+                  "commit": {
+                    "type": "string"
+                  },
+                  "verifiedCommit": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
               },
               {
                 "type": "null"
@@ -94283,7 +95014,8 @@
                           "returnedAt",
                           "overruled",
                           "createdAt",
-                          "finishedAt"
+                          "finishedAt",
+                          "git"
                         ],
                         "properties": {
                           "id": {
@@ -94384,6 +95116,48 @@
                               {
                                 "format": "date-time",
                                 "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "git": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "branch",
+                                  "baseBranch",
+                                  "baseCommit",
+                                  "commit",
+                                  "verifiedCommit"
+                                ],
+                                "properties": {
+                                  "branch": {
+                                    "type": "string"
+                                  },
+                                  "baseBranch": {
+                                    "type": "string"
+                                  },
+                                  "baseCommit": {
+                                    "type": "string"
+                                  },
+                                  "commit": {
+                                    "type": "string"
+                                  },
+                                  "verifiedCommit": {
+                                    "anyOf": [
+                                      {
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                }
                               },
                               {
                                 "type": "null"
@@ -94711,6 +95485,7 @@
                 "overruled",
                 "createdAt",
                 "finishedAt",
+                "git",
                 "runId",
                 "criteria",
                 "claims",
@@ -94822,6 +95597,48 @@
                     {
                       "format": "date-time",
                       "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "git": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "branch",
+                        "baseBranch",
+                        "baseCommit",
+                        "commit",
+                        "verifiedCommit"
+                      ],
+                      "properties": {
+                        "branch": {
+                          "type": "string"
+                        },
+                        "baseBranch": {
+                          "type": "string"
+                        },
+                        "baseCommit": {
+                          "type": "string"
+                        },
+                        "commit": {
+                          "type": "string"
+                        },
+                        "verifiedCommit": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
                     },
                     {
                       "type": "null"
@@ -100036,7 +100853,8 @@
           "wait",
           "needsYou",
           "queueReason",
-          "queuePosition"
+          "queuePosition",
+          "git"
         ],
         "properties": {
           "key": {
@@ -100440,6 +101258,48 @@
                 "type": "null"
               }
             ]
+          },
+          "git": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "branch",
+                  "baseBranch",
+                  "baseCommit",
+                  "commit",
+                  "verifiedCommit"
+                ],
+                "properties": {
+                  "branch": {
+                    "type": "string"
+                  },
+                  "baseBranch": {
+                    "type": "string"
+                  },
+                  "baseCommit": {
+                    "type": "string"
+                  },
+                  "commit": {
+                    "type": "string"
+                  },
+                  "verifiedCommit": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -100635,7 +101495,8 @@
                 "wait",
                 "needsYou",
                 "queueReason",
-                "queuePosition"
+                "queuePosition",
+                "git"
               ],
               "properties": {
                 "key": {
@@ -101034,6 +101895,48 @@
                     {
                       "minimum": 1,
                       "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "git": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "branch",
+                        "baseBranch",
+                        "baseCommit",
+                        "commit",
+                        "verifiedCommit"
+                      ],
+                      "properties": {
+                        "branch": {
+                          "type": "string"
+                        },
+                        "baseBranch": {
+                          "type": "string"
+                        },
+                        "baseCommit": {
+                          "type": "string"
+                        },
+                        "commit": {
+                          "type": "string"
+                        },
+                        "verifiedCommit": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
                     },
                     {
                       "type": "null"
@@ -101068,7 +101971,8 @@
                 "wait",
                 "needsYou",
                 "queueReason",
-                "queuePosition"
+                "queuePosition",
+                "git"
               ],
               "properties": {
                 "key": {
@@ -101467,6 +102371,48 @@
                     {
                       "minimum": 1,
                       "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "git": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "branch",
+                        "baseBranch",
+                        "baseCommit",
+                        "commit",
+                        "verifiedCommit"
+                      ],
+                      "properties": {
+                        "branch": {
+                          "type": "string"
+                        },
+                        "baseBranch": {
+                          "type": "string"
+                        },
+                        "baseCommit": {
+                          "type": "string"
+                        },
+                        "commit": {
+                          "type": "string"
+                        },
+                        "verifiedCommit": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
                     },
                     {
                       "type": "null"
@@ -101501,7 +102447,8 @@
                 "wait",
                 "needsYou",
                 "queueReason",
-                "queuePosition"
+                "queuePosition",
+                "git"
               ],
               "properties": {
                 "key": {
@@ -101900,6 +102847,48 @@
                     {
                       "minimum": 1,
                       "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "git": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "branch",
+                        "baseBranch",
+                        "baseCommit",
+                        "commit",
+                        "verifiedCommit"
+                      ],
+                      "properties": {
+                        "branch": {
+                          "type": "string"
+                        },
+                        "baseBranch": {
+                          "type": "string"
+                        },
+                        "baseCommit": {
+                          "type": "string"
+                        },
+                        "commit": {
+                          "type": "string"
+                        },
+                        "verifiedCommit": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
                     },
                     {
                       "type": "null"

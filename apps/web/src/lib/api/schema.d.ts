@@ -5442,6 +5442,13 @@ export interface components {
                         /** Format: date-time */
                         createdAt: string;
                         finishedAt: string | null;
+                        git: {
+                            branch: string;
+                            baseBranch: string;
+                            baseCommit: string;
+                            commit: string;
+                            verifiedCommit: string | null;
+                        } | null;
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -9473,6 +9480,13 @@ export interface components {
                     /** Format: date-time */
                     createdAt: string;
                     finishedAt: string | null;
+                    git: {
+                        branch: string;
+                        baseBranch: string;
+                        baseCommit: string;
+                        commit: string;
+                        verifiedCommit: string | null;
+                    } | null;
                 } | null;
                 deliverable: {
                     state: "pending" | "included";
@@ -9649,6 +9663,13 @@ export interface components {
                             /** Format: date-time */
                             createdAt: string;
                             finishedAt: string | null;
+                            git: {
+                                branch: string;
+                                baseBranch: string;
+                                baseCommit: string;
+                                commit: string;
+                                verifiedCommit: string | null;
+                            } | null;
                         } | null;
                         deliverable: {
                             state: "pending" | "included";
@@ -10973,6 +10994,13 @@ export interface components {
                         /** Format: date-time */
                         createdAt: string;
                         finishedAt: string | null;
+                        git: {
+                            branch: string;
+                            baseBranch: string;
+                            baseCommit: string;
+                            commit: string;
+                            verifiedCommit: string | null;
+                        } | null;
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -11190,6 +11218,13 @@ export interface components {
                         /** Format: date-time */
                         createdAt: string;
                         finishedAt: string | null;
+                        git: {
+                            branch: string;
+                            baseBranch: string;
+                            baseCommit: string;
+                            commit: string;
+                            verifiedCommit: string | null;
+                        } | null;
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -11340,6 +11375,13 @@ export interface components {
                             /** Format: date-time */
                             createdAt: string;
                             finishedAt: string | null;
+                            git: {
+                                branch: string;
+                                baseBranch: string;
+                                baseCommit: string;
+                                commit: string;
+                                verifiedCommit: string | null;
+                            } | null;
                         } | null;
                         deliverable: {
                             state: "pending" | "included";
@@ -11490,6 +11532,13 @@ export interface components {
                         /** Format: date-time */
                         createdAt: string;
                         finishedAt: string | null;
+                        git: {
+                            branch: string;
+                            baseBranch: string;
+                            baseCommit: string;
+                            commit: string;
+                            verifiedCommit: string | null;
+                        } | null;
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -12048,6 +12097,13 @@ export interface components {
                         /** Format: date-time */
                         createdAt: string;
                         finishedAt: string | null;
+                        git: {
+                            branch: string;
+                            baseBranch: string;
+                            baseCommit: string;
+                            commit: string;
+                            verifiedCommit: string | null;
+                        } | null;
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -12237,6 +12293,13 @@ export interface components {
                             /** Format: date-time */
                             createdAt: string;
                             finishedAt: string | null;
+                            git: {
+                                branch: string;
+                                baseBranch: string;
+                                baseCommit: string;
+                                commit: string;
+                                verifiedCommit: string | null;
+                            } | null;
                         } | null;
                         deliverable: {
                             state: "pending" | "included";
@@ -12376,6 +12439,13 @@ export interface components {
                         /** Format: date-time */
                         createdAt: string;
                         finishedAt: string | null;
+                        git: {
+                            branch: string;
+                            baseBranch: string;
+                            baseCommit: string;
+                            commit: string;
+                            verifiedCommit: string | null;
+                        } | null;
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -14972,6 +15042,13 @@ export interface components {
                 /** Format: date-time */
                 createdAt: string;
                 finishedAt: string | null;
+                git: {
+                    branch: string;
+                    baseBranch: string;
+                    baseCommit: string;
+                    commit: string;
+                    verifiedCommit: string | null;
+                } | null;
             } | null;
             deliverable: {
                 state: "pending" | "included";
@@ -15104,6 +15181,13 @@ export interface components {
                     /** Format: date-time */
                     createdAt: string;
                     finishedAt: string | null;
+                    git: {
+                        branch: string;
+                        baseBranch: string;
+                        baseCommit: string;
+                        commit: string;
+                        verifiedCommit: string | null;
+                    } | null;
                 } | null;
                 deliverable: {
                     state: "pending" | "included";
@@ -15162,6 +15246,13 @@ export interface components {
             topicVersionId: string | null;
             /** Format: date-time */
             addedAt: string;
+            git: {
+                branch: string;
+                baseBranch: string;
+                baseCommit: string;
+                commit: string;
+                verifiedCommit: string | null;
+            } | null;
         };
         CardBoardResponse: {
             taskId: string;
@@ -15295,6 +15386,13 @@ export interface components {
                         /** Format: date-time */
                         createdAt: string;
                         finishedAt: string | null;
+                        git: {
+                            branch: string;
+                            baseBranch: string;
+                            baseCommit: string;
+                            commit: string;
+                            verifiedCommit: string | null;
+                        } | null;
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -15353,6 +15451,13 @@ export interface components {
                 topicVersionId: string | null;
                 /** Format: date-time */
                 addedAt: string;
+                git: {
+                    branch: string;
+                    baseBranch: string;
+                    baseCommit: string;
+                    commit: string;
+                    verifiedCommit: string | null;
+                } | null;
             }[];
             nextVersion: number;
         };
@@ -15497,6 +15602,13 @@ export interface components {
                         /** Format: date-time */
                         createdAt: string;
                         finishedAt: string | null;
+                        git: {
+                            branch: string;
+                            baseBranch: string;
+                            baseCommit: string;
+                            commit: string;
+                            verifiedCommit: string | null;
+                        } | null;
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -15532,6 +15644,13 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
             finishedAt: string | null;
+            git: {
+                branch: string;
+                baseBranch: string;
+                baseCommit: string;
+                commit: string;
+                verifiedCommit: string | null;
+            } | null;
             runId: string | null;
             criteria: string[];
             claims: {
@@ -15698,6 +15817,13 @@ export interface components {
                         /** Format: date-time */
                         createdAt: string;
                         finishedAt: string | null;
+                        git: {
+                            branch: string;
+                            baseBranch: string;
+                            baseCommit: string;
+                            commit: string;
+                            verifiedCommit: string | null;
+                        } | null;
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -15761,6 +15887,13 @@ export interface components {
                 /** Format: date-time */
                 createdAt: string;
                 finishedAt: string | null;
+                git: {
+                    branch: string;
+                    baseBranch: string;
+                    baseCommit: string;
+                    commit: string;
+                    verifiedCommit: string | null;
+                } | null;
                 runId: string | null;
                 criteria: string[];
                 claims: {
@@ -16553,6 +16686,13 @@ export interface components {
             needsYou: boolean;
             queueReason: ("not_dispatched" | "slot" | "device_offline") | null;
             queuePosition: number | null;
+            git: {
+                branch: string;
+                baseBranch: string;
+                baseCommit: string;
+                commit: string;
+                verifiedCommit: string | null;
+            } | null;
         };
         WorkerResources: {
             devices: {
@@ -16626,6 +16766,13 @@ export interface components {
                 needsYou: boolean;
                 queueReason: ("not_dispatched" | "slot" | "device_offline") | null;
                 queuePosition: number | null;
+                git: {
+                    branch: string;
+                    baseBranch: string;
+                    baseCommit: string;
+                    commit: string;
+                    verifiedCommit: string | null;
+                } | null;
             }[];
             queued: {
                 key: string;
@@ -16673,6 +16820,13 @@ export interface components {
                 needsYou: boolean;
                 queueReason: ("not_dispatched" | "slot" | "device_offline") | null;
                 queuePosition: number | null;
+                git: {
+                    branch: string;
+                    baseBranch: string;
+                    baseCommit: string;
+                    commit: string;
+                    verifiedCommit: string | null;
+                } | null;
             }[];
             done: {
                 key: string;
@@ -16720,6 +16874,13 @@ export interface components {
                 needsYou: boolean;
                 queueReason: ("not_dispatched" | "slot" | "device_offline") | null;
                 queuePosition: number | null;
+                git: {
+                    branch: string;
+                    baseBranch: string;
+                    baseCommit: string;
+                    commit: string;
+                    verifiedCommit: string | null;
+                } | null;
             }[];
             resources: {
                 devices: {

@@ -50,7 +50,20 @@ export const CardCriterion = Type.Object({
 export const CardHandbackStatus = Type.Union([Type.Literal("queued"), Type.Literal("running"), Type.Literal("done"), Type.Literal("failed")]);
 
 /**
+ * 卡在自己的 git 工作树里做时（ADR 0038），这次交回在哪个分支、哪个提交：branch 从 baseBranch 的 baseCommit 开出来，commit 是交回那一刻分支上的提交；
+ * verifiedCommit 是本机验收员验的那个提交（还没验、或云端验的为 null）。合回主文件夹是本机的事，云端不记。
+ */
+export const CardGit = Type.Object({
+  branch: Type.String(),
+  baseBranch: Type.String(),
+  baseCommit: Type.String(),
+  commit: Type.String(),
+  verifiedCommit: Nullable(Type.String()),
+}, strict);
+
+/**
  * 最近一次交回的摘要。outcome：pass 通过、fail 没过，没出结论为 null；met / total 是几条达到。
+ * git：卡在工作树里做时交回的分支和提交、验的提交；在文件夹里做的为 null。
  * returnText 是没过时发回执行方的那段话（固定格式），returnedAt 是网页已经把它送到本机的时间。
  * overruled：本人推翻过这次验收。
  */
@@ -67,6 +80,7 @@ export const CardHandbackBrief = Type.Object({
   overruled: Type.Boolean(),
   createdAt: Instant,
   finishedAt: Nullable(Instant),
+  git: Nullable(CardGit),
 }, strict);
 
 /**
@@ -102,5 +116,6 @@ export type TCardWait = Static<typeof CardWait>;
 export type TCardCriterion = Static<typeof CardCriterion>;
 export type TCardHandbackStatus = Static<typeof CardHandbackStatus>;
 export type TCardHandbackBrief = Static<typeof CardHandbackBrief>;
+export type TCardGit = Static<typeof CardGit>;
 export type TDeliverableInclusion = Static<typeof DeliverableInclusion>;
 export type TTaskCard = Static<typeof TaskCard>;
