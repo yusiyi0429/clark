@@ -89,7 +89,7 @@ describe("手机宽度只能看", () => {
     expect(column(html, "todo")).not.toContain(">开始<");
     const request = { requestId: "r", toolName: "Bash", title: "运行 pnpm test", input: {}, outsidePaths: [] as string[], canAllowForSession: true, requestedAt: "2026-11-06T01:00:00Z" };
     const transcript = (canAct: boolean, extra: Partial<typeof request> = {}) =>
-      renderToStaticMarkup(<SessionTranscript entries={[{ kind: "permission", seq: 1, at: request.requestedAt, request: { ...request, ...extra }, decision: null }]} agentName="Claude Code" canAct={canAct} onDecide={vi.fn()} />);
+      renderToStaticMarkup(<SessionTranscript entries={[{ kind: "permission", seq: 1, at: request.requestedAt, request: { ...request, ...extra }, decision: null }]} agentName="Claude Code" canAct={canAct} live onDecide={vi.fn()} />);
     expect(transcript(false)).toContain("运行 pnpm test");
     expect(transcript(false)).not.toContain("批准");
     expect(transcript(true)).toContain("批准");

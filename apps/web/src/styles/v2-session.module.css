@@ -41,12 +41,28 @@
 .permission { border: 1px solid color-mix(in oklab, var(--ink) 10%, transparent); background: var(--surface); box-shadow: 0 1px 2px var(--sh-1), 0 8px 24px -12px var(--sh-3); }
 .who { display: block; margin-bottom: -2px; color: var(--ink-faint); font-size: 11.5px; font-weight: 600; }
 .me { align-self: flex-end; max-width: 86%; padding: 9px 12px; border-radius: 16px 16px 5px 16px; background: color-mix(in oklab, var(--accent) 13%, var(--surface)); color: var(--ink); font-size: 13.5px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
-.step { align-self: stretch; display: flex; align-items: baseline; gap: 7px; min-width: 0; padding: 0 2px; color: var(--ink-faint); font-size: 11.5px; line-height: 1.5; }
-.step + .step { margin-top: -6px; }
-.step time { flex: none; color: var(--field-placeholder); font-variant-numeric: tabular-nums; }
-.step span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.step:not([data-done]) span::after { content: " …"; }
-.step[data-error] span { color: var(--counter); }
+/*
+ * 工具调用行（设计 5.4.3）：连续的步骤折成一行（ChevronRight · N 步 · 最后一步 · 用时），点开一步一行、缩进 24；只有一步就直接是那一行。
+ * 一行是 状态图标 · 标题 · 时刻；云端时间线（CardSession 的 CloudTimeline）仍是 时刻 · 文字。字号和颜色在新首页里另见文件末尾。
+ */
+.step, .steps { font-size: 11.5px; line-height: 1.5; }
+.step { align-self: stretch; display: flex; align-items: center; gap: var(--space-2); min-width: 0; min-height: var(--row-28); padding: 0 var(--space-2); color: var(--ink-faint); }
+.feed > :is(.step, .steps) + :is(.step, .steps) { margin-top: -6px; }
+.step > svg { flex: none; color: var(--ink-faint); }
+.step time, .stepsTook { flex: none; color: var(--field-placeholder); font-variant-numeric: tabular-nums; }
+.stepText, .step > time + span, .stepsSummary { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stepsCount { flex: none; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.steps { align-self: stretch; display: grid; min-width: 0; }
+.stepsHead { display: flex; align-items: center; gap: var(--space-2); min-width: 0; height: var(--touch-hit, var(--row-28)); padding: 0 var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink-faint); font: inherit; text-align: left; cursor: pointer; transition: background-color var(--dur-fast) linear; }
+.stepsHead > svg { color: var(--ink-faint); }
+.stepsHead:hover { background: var(--default-soft); }
+.stepsHead:hover > svg { color: var(--ink-muted); }
+.stepsSummary { color: var(--ink-faint); }
+/* 展开、收起 --dur-base（箭头 140 用 home 的 .chevron）；减少动态效果时全局把过渡压成 0，直接切换。 */
+.stepsBody { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--dur-base) var(--ease-swift); }
+.steps[data-open] .stepsBody { grid-template-rows: 1fr; }
+.stepsBody > div { min-height: 0; overflow: hidden; }
+.stepsBody .step { margin-top: 2px; padding-left: calc(var(--space-2) + var(--space-6)); }
 .permission[data-outside] { border-color: color-mix(in oklab, var(--counter) 40%, transparent); }
 .outside { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; color: var(--counter); font: 12px/1.5 var(--font-mono); overflow-wrap: anywhere; }
 .decided { font-size: 12px; color: var(--ink-faint); }
@@ -155,8 +171,10 @@
 .page[data-embedded] .bubble { align-self: stretch; max-width: none; padding: 0; border-radius: 0; background: none; font-size: 15px; line-height: 1.85; }
 .page[data-embedded] .who { display: none; }
 .page[data-embedded] .me { max-width: 82%; padding: var(--space-2) var(--space-4); border-radius: var(--field-radius); background: var(--neutral-wash); font-size: 15px; line-height: 1.85; }
-.page[data-embedded] .step { color: var(--ink-muted); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); }
-.page[data-embedded] .step time { color: var(--ink-faint); font-size: var(--text-xs); }
+.page[data-embedded] .step, .page[data-embedded] .steps { font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); }
+.page[data-embedded] .step, .page[data-embedded] .stepsHead { color: var(--ink-muted); }
+.page[data-embedded] .step time, .page[data-embedded] .stepsTook { color: var(--ink-faint); font-size: var(--text-xs); }
+.page[data-embedded] .stepsHead:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .page[data-embedded] .evt { font-size: var(--text-xs); line-height: 16px; }
 .page[data-embedded] .composer { border-color: var(--field-border); }
 .page[data-embedded] .composer:focus-within { border-color: var(--field-border-focus); }
