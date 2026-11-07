@@ -15,7 +15,8 @@ import { PendingBoxes, PendingDock } from "@/components/work/DecisionBox";
 import { WorkTimeline, type TimedBlock } from "@/components/work/WorkTimeline";
 import type { ConversationData } from "@/conversation/useConversation";
 import { useConversation } from "@/conversation/useConversation";
-import { openProjectPipeline } from "@/lib/board/cloud";
+import { openProjectPipeline, planKey, type PlanTarget } from "@/lib/board/cloud";
+import type { Worker } from "@/lib/work/workers";
 import { usePipelineConversation } from "@/lib/home/pipeline";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { uploadToConversation } from "@/lib/home/attachments";
@@ -105,13 +106,9 @@ function useEscStopsReply(data: ConversationData) {
 
 /**
  * context：从 Mission 详情「问伙伴」带来的「关于：{Mission}」，输入框左上角一枚胶囊（14.5），去掉调 onClearContext。
- * head：项目还没挂目标、项目对话还没上的时候，项目页借总管线说话：页头写项目名和项目的 chip（16.3）。
  */
-export function BuddyView({ buddy, outbox, consume, onSpeaking, context = null, onClearContext, head, blocks = NO_BLOCKS }: {
+export function BuddyView({ buddy, outbox, consume, onSpeaking, context = null, onClearContext }: {
   buddy: Buddy | null; outbox: Outbox; consume: (id: number) => void; onSpeaking: (speaking: boolean) => void; context?: string | null; onClearContext?: () => void;
-  head?: { title: string; trail: ReactNode };
-  /** 项目页借总管线时项目自己的几块（转交）。 */
-  blocks?: TimedBlock[];
 }) {
   const data = useConversation("global");
   const chrome = useViewChrome();
@@ -126,12 +123,11 @@ export function BuddyView({ buddy, outbox, consume, onSpeaking, context = null, 
           head={(
             <header className={h.viewHead} data-flush="">
               {chrome.lead}
-              <h1 className={h.viewTitle} tabIndex={-1}>{head?.title ?? name}</h1>
-              {head?.trail}
+              <h1 className={h.viewTitle} tabIndex={-1}>{name}</h1>
               {chrome.trail}
             </header>
           )}
-          timeline={(current) => <WorkTimeline data={current} blocks={blocks} />}
+          timeline={(current) => <WorkTimeline data={current} blocks={NO_BLOCKS} />}
           dock={(latest) => <PendingDock latest={latest} />}
           input={(onHeight) => <ChatInput data={data} placeholder={`与${name}讨论…`} onHeight={onHeight}
             context={context ? { label: context, onClear: () => onClearContext?.() } : null} />} />
@@ -149,8 +145,9 @@ type PipelineProps = {
   outbox: Outbox;
   consume: (id: number) => void;
   go: (href: string) => void;
-  onSplit: (taskId: string) => void;
-  /** 拆卡登记没成的那件 Task（出「拆卡失败 · 重试」）。 */
+  /** 拆卡（一件 Task，或这个项目本身：没挂 Task 时也能拆，16.3）。 */
+  onSplit: (target: PlanTarget) => void;
+  /** 拆卡登记没成的那一个（planKey，出「拆卡失败 · 重试」）。 */
   splitFailed?: string | null;
   /** 这个标签页里自动开工没开起来的子会话 id：对话里那一行写「失败」加「手动开始」。 */
   startFailed?: ReadonlySet<string>;
@@ -197,7 +194,7 @@ function MockPipeline({ task, ...props }: PipelineProps & { task: THomePlanTask 
   // 已经拆过、开过的 Task，假对话开头不再问「先怎么开始」（刷新后不会再拆一遍）；看板读到以前先不开对话：要先知道拆没拆过。
   const begun = !!(board?.plan || board?.drafts.length || api.work.workers.some((worker) => worker.taskId === task.taskId));
   const pipelineTask = useMemo(() => ({ taskId: task.taskId, name: task.name, criteria: task.criteria }), [task.taskId, task.name, task.criteria]);
-  const data = usePipelineConversation(board ? pipelineTask : null, { split: () => onSplit(task.taskId) }, begun);
+  const data = usePipelineConversation(board ? pipelineTask : null, { split: () => onSplit({ taskId: task.taskId }) }, begun);
   return <PipelineBody data={data} {...props} />;
 }
 
@@ -217,8 +214,8 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
   const mine = useMemo(() => {
     const taskIds = new Set(project.goals.map((goal) => goal.taskId));
     const subIds = new Set(subs.map((sub) => sub.id));
-    return work.workers.filter((worker) => (!!worker.taskId && taskIds.has(worker.taskId)) || subIds.has(worker.cardId ?? worker.topicId ?? ""));
-  }, [work.workers, project.goals, subs]);
+    return work.workers.filter((worker) => (!!worker.taskId && taskIds.has(worker.taskId)) || worker.projectId === project.id || subIds.has(worker.cardId ?? worker.topicId ?? ""));
+  }, [work.workers, project.goals, project.id, subs]);
   const taskIds = useMemo(() => project.goals.map((goal) => goal.taskId), [project.goals]);
   const feed = useProjectFeed(project.id, taskIds, api);
   // 接手过来的（16.7）：分隔线后第一条是交接说明；带上了对话记录时原来那段收在最上面；文件夹 chip 写「拉到这台电脑」。
@@ -248,32 +245,40 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
       else if (item.kind === "transfer_declined") list.push({ key: item.id, at: item.at, node: <p className={h.line} data-testid="transfer-declined"><StateIcon state="stopped" />{item.by.name}没接</p> });
     }
     if (summary && received.history) list.push({ key: `history:${summary.transferId}`, at: "0000-01-01T00:00:00.000Z", node: <TransferHistory history={received.history} from={summary.from} /> });
-    for (const task of tasks) {
-      const board = work.boards[task.taskId] ?? null;
-      const ofTask = mine.filter((worker) => worker.taskId === task.taskId);
-      const planner = ofTask.find((worker) => worker.kind === "plan" && worker.state !== "done");
+    // 拆卡的几块，每件挂着的 Task 一组，项目本身（不挂 Task 的卡和派活单，16.3）一组：规划员在拆、拆卡失败、派活单、开了哪几个子会话。
+    const projectBoard = work.boards[planKey({ projectId: project.id })] ?? null;
+    const projectCards = new Set((projectBoard?.cards ?? []).map((card) => card.id));
+    const groups: { target: PlanTarget; name: string; of: (worker: Worker) => boolean }[] = [
+      ...tasks.map((task) => ({ target: { taskId: task.taskId }, name: task.name, of: (worker: Worker) => worker.taskId === task.taskId })),
+      { target: { projectId: project.id }, name: project.name, of: (worker: Worker) => !worker.taskId && (worker.projectId === project.id || projectCards.has(worker.cardId ?? "")) },
+    ];
+    for (const { target, name, of } of groups) {
+      const key = planKey(target);
+      const board = work.boards[key] ?? null;
+      const ofTarget = mine.filter(of);
+      const planner = ofTarget.find((worker) => worker.kind === "plan" && worker.state !== "done");
       if (planner) list.push({ key: `planning:${planner.key}`, at: planner.startedAt ?? planner.requestedAt ?? new Date().toISOString(), node: <PlanningLine planner={planner} /> });
       // 拆卡没做完（出了错才给兜底）：一行「拆卡失败」加「重试」（弱按钮）。
-      else if ((board?.plan?.status === "failed" && !board.drafts.length) || splitFailed === task.taskId) {
+      else if ((board?.plan?.status === "failed" && !board.drafts.length) || splitFailed === key) {
         const plan = board?.plan?.status === "failed" ? board.plan : null;
-        list.push({ key: `plan-failed:${plan?.id ?? task.taskId}`, at: plan ? plan.finishedAt ?? plan.createdAt : new Date().toISOString(), node: (
-          <p className={h.line} data-testid="plan-failed"><StateIcon state="failed" />拆卡失败<HeroButton variant="ghost" size="sm" onPress={() => onSplit(task.taskId)}>重试</HeroButton></p>
+        list.push({ key: `plan-failed:${plan?.id ?? key}`, at: plan ? plan.finishedAt ?? plan.createdAt : new Date().toISOString(), node: (
+          <p className={h.line} data-testid="plan-failed"><StateIcon state="failed" />拆卡失败<HeroButton variant="ghost" size="sm" onPress={() => onSplit(target)}>重试</HeroButton></p>
         ) });
       }
       if (board?.drafts.length) {
         // 拆好的时候（规划员拆完同步上来那一刻）；没有记录时当作现在，放在最后。
         list.push({ key: `plan:${board.drafts[0]!.id}`, at: board.plan?.finishedAt ?? board.plan?.createdAt ?? new Date().toISOString(), node: (
-          <PlanDecision task={task} drafts={board.drafts} roles={work.roles?.roles ?? []} handheld={handheld} onChanged={() => void changed()}
+          <PlanDecision target={target} name={name} drafts={board.drafts} roles={work.roles?.roles ?? []} handheld={handheld} onChanged={() => void changed()}
             onSay={(text) => data.send(text, [])} />
         ) });
       }
       // 开了以后：从最早那张卡开工的时候起，写开了哪几个子会话（按开工时间排在对话里）。
-      const cards = ofTask.filter((worker) => worker.kind === "card" && worker.item);
+      const cards = ofTarget.filter((worker) => worker.kind === "card" && worker.item);
       const first = cards.map((worker) => worker.item!.createdAt).sort()[0];
       const ids = new Set([...(board?.cards ?? []).map((card) => card.id), ...cards.map((worker) => worker.cardId)]);
       const cardSubs = subs.filter((sub) => sub.kind === "card" && ids.has(sub.id));
       if (first && cardSubs.length) {
-        list.push({ key: `started:${task.taskId}`, at: first, node: <StartedRecord task={task.name} subs={[...cardSubs].sort(byTitle(cards))} onOpen={(sub: SubSession) => go(subHref(sub))} /> });
+        list.push({ key: `started:${key}`, at: first, node: <StartedRecord task={name} subs={[...cardSubs].sort(byTitle(cards))} onOpen={(sub: SubSession) => go(subHref(sub))} /> });
       }
     }
     // 对话或伙伴开的探索子会话（专题）：开出时一行（5.4.3 事件行），按开出的时间排；点了进那个子会话。

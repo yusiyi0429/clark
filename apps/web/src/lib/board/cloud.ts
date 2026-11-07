@@ -8,7 +8,7 @@ import type {
   TTopicBriefResponse, TTopicDetailResponse, TTopicVersionView, TWorkersResponse,
   TBackgroundResponse, TClaimSessionStartsResponse, TRouteResponse, TWorkHomeResponse,
   TProject, TProjectDetailResponse, TProjectFeedResponse, TProjectGoal, TProjectListResponse, TProjectPipelineResponse, TUpdateProjectRequest,
-  THandoverSecretFinding, TProjectTransfer, TUpdateProjectTransferRequest, TConversationHistory,
+  THandoverSecretFinding, TProjectTransfer, TUpdateProjectTransferRequest, TConversationHistory, TProjectBoardResponse,
 } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
 
@@ -149,6 +149,23 @@ export const readTransferHistory = (transferId: string) =>
 /** 停掉还在云端排队、没有电脑接下的子会话（转交时选了「停掉」；回 204，没有在排的 404 也算停了）。电脑上已经在跑的经本机程序停。 */
 export const cancelStart = (kind: "card" | "topic", subId: string) => unwrap(browserApi.DELETE("/api/me/sub-sessions/{kind}/{id}/start", { params: { path: { kind, id: subId } } }))
   .then(() => undefined, (error: unknown) => { if (!(error instanceof CloudError && (error.status === 204 || error.status === 404))) throw error; });
+// ── 没挂 Task 的项目拆卡（16.3，projects.ts 的 ProjectBoardResponse）──
+/** 拆卡的对象：一件 Task，或一个没挂 Task 的项目。 */
+export type PlanTarget = { taskId: string } | { projectId: string };
+/** 看板、拆卡失败这些按它记：Task 是 taskId，项目是 project:<projectId>。 */
+export const planKey = (target: PlanTarget) => ("taskId" in target ? target.taskId : `project:${target.projectId}`);
+export const registerProjectSplit = (projectId: string) =>
+  unwrap<TCardSplitRequestView>(browserApi.POST("/api/me/projects/{projectId}/card-splits", { params: project(projectId) }) as Promise<Result<TCardSplitRequestView>>);
+/** 登记拆卡（伙伴或页面上的「拆一下」）：配对的电脑上开着的网页认领后开规划员。 */
+export const registerPlan = (target: PlanTarget) => ("taskId" in target ? registerSplit(target.taskId) : registerProjectSplit(target.projectId));
+export const projectPlanBrief = (projectId: string) =>
+  unwrap<TCardPlanBriefResponse>(browserApi.GET("/api/me/projects/{projectId}/plan-brief", { params: project(projectId) }) as Promise<Result<TCardPlanBriefResponse>>);
+/** 项目里不挂 Task 的卡、还没处理的草稿、最近一次计划；接口没上为 null。 */
+export const readProjectBoard = (projectId: string) =>
+  maybe<TProjectBoardResponse>(browserApi.GET("/api/me/projects/{projectId}/board", { params: project(projectId) }) as Promise<Result<TProjectBoardResponse>>);
+/** 放进看板（不挂 Task：不带预算，开工用本人的缺省预算）。 */
+export const acceptProjectDrafts = (projectId: string, drafts: TAcceptCardDraftsRequest["drafts"], start = false) =>
+  unwrap(browserApi.POST("/api/me/projects/{projectId}/card-drafts/accept", { params: project(projectId), body: { drafts, ...(start ? { start } : {}) } })).then((data) => data.cards as TCardTaskView[]);
 export const readProjectFeed = (projectId: string) =>
   maybe<TProjectFeedResponse>(browserApi.GET("/api/me/projects/{projectId}/feed", { params: project(projectId) }) as Promise<Result<TProjectFeedResponse>>);
 export const routeMessage = (text: string) => maybe<TRouteResponse>(browserApi.POST("/api/me/route", { body: { text } }) as Promise<Result<TRouteResponse>>);

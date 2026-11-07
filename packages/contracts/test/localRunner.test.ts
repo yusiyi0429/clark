@@ -7,7 +7,7 @@ import {
   LocalCreateSessionBatchRequest, LocalCreateSessionBatchResponse, LocalSettingsPatch, LocalSessionSummary, LocalHealthResponse,
   LocalVerifyBriefResponse, LOCAL_RUNNER_VERIFY_BRIEF_PATH, LocalMergeResponse, LocalVerdict, LocalQuestionAnswerRequest, LocalPlanCard, LocalBackgroundItem,
   LocalSettings, LocalMergeSync, LocalStatusResponse, LocalQuotaSource, LocalQuotaSync,
-  LocalFolder, LocalProjectFolder, LocalProjectListResponse, LocalProjectFolderRequest, LocalHandoverCheck, LocalProjectCloneRequest, LocalProjectCloneResponse,
+  LocalFolder, LocalProjectFolder, LocalProjectListResponse, LocalProjectFolderRequest, LocalHandoverCheck, LocalProjectCloneRequest, LocalProjectCloneResponse, ProjectTransfer,
   LocalTaskBudgetView, LocalBudgetListResponse, LocalBudgetUpdateRequest, LocalSendMessageRequest as SendMessage, LocalPermissionBrief, LOCAL_RUNNER_ATTACHMENT_PATH,
 } from "../src/index.js";
 
@@ -433,6 +433,11 @@ describe("本机程序契约", () => {
     for (const repoUrl of ["file:///C:/secret", "ext::sh -c touch% /tmp/x", "--upload-pack=x", "C:/repo"]) expect(Value.Check(LocalProjectCloneRequest, { repoUrl })).toBe(false);
     expect(Value.Check(LocalProjectCloneRequest, { repoUrl: "https://github.com/a/b.git", branch: "--orphan" })).toBe(false);
     expect(Value.Check(LocalProjectCloneResponse, { project: null, branch: null, fellBack: false })).toBe(true);
+    // 云端的转交存检查结果原样、clone 用同一个地址形状（6460ec84）
+    const transferClone = ProjectTransfer.properties.clone;
+    expect(Value.Check(transferClone, { repoUrl: "https://github.com/TokenkingOS/Chat_Service.git", branch: "handover/chat" })).toBe(true);
+    expect(Value.Check(transferClone, { repoUrl: "C:/Users/x/repo", branch: null })).toBe(false); // 本地路径拉不了：云端要给 null
+    expect(Value.Check(ProjectTransfer.properties.checkResult, check)).toBe(true);
     expect(LOCAL_RUNNER_ROUTES.cloneProject).toEqual({ method: "POST", path: "/v1/projects/:projectId/clone", auth: true });
   });
 

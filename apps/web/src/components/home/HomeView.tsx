@@ -16,7 +16,7 @@ import { HeroButton } from "@/components/HeroButton";
 import { FailedLine, failureOf, type Failure } from "@/components/work/DecisionBox";
 import { localOptions, oneTap } from "@/components/work/decisions";
 import { InputBar } from "./InputBar";
-import { acceptDrafts } from "@/lib/board/cloud";
+import { acceptDrafts, acceptProjectDrafts, planKey, type PlanTarget } from "@/lib/board/cloud";
 import { useLocalRunner, type LocalRunnerState } from "@/lib/local/LocalRunnerProvider";
 import { decideProposal } from "@/lib/team/roles";
 import { canCommandHere, decide } from "@/lib/work/actions";
@@ -167,12 +167,13 @@ function waitingActions(item: WaitingItem, api: Pick<WorkHomeApi, "deviceId" | "
     const base = session.workspace?.kind === "worktree" ? session.workspace.baseBranch : "main";
     return [{ label: `合进 ${base}`, done: "已合回", primary: true, run: async () => { const result = await mergeCard(local.runner, session, item.source ?? ""); if (!result.ok) throw new Error(result.text); } }];
   }
-  if (item.kind === "plan_start" && item.taskId) {
-    const taskId = item.taskId;
-    const drafts = api.work.boards[taskId]?.drafts ?? [];
+  // 计划等你开工：一件 Task 的，或没挂 Task 的项目的（16.3，taskId 为 null、projectId 有值）。
+  const target: PlanTarget | null = item.kind === "plan_start" ? (item.taskId ? { taskId: item.taskId } : item.projectId ? { projectId: item.projectId } : null) : null;
+  if (target) {
+    const drafts = (api.work.boards[planKey(target)]?.drafts ?? []).map((draft) => ({ id: draft.id }));
     if (!drafts.length) return [];
     return [
-      { label: "开始", done: "已开工", primary: true, run: () => acceptDrafts(taskId, drafts.map((draft) => ({ id: draft.id })), true) },
+      { label: "开始", done: "已开工", primary: true, run: () => ("taskId" in target ? acceptDrafts(target.taskId, drafts, true) : acceptProjectDrafts(target.projectId, drafts, true)) },
       { label: "改一改", href: waitingHref(item) },
     ];
   }

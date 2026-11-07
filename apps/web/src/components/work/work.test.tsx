@@ -30,8 +30,8 @@ const session = (extra: Partial<TLocalSessionSummary>): TLocalSessionSummary => 
   queuePosition: null, usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null }, ...extra,
 });
 const ctx = (sessions: TLocalSessionSummary[] = []) => ({ sessions, cards: new Map(), deviceName: "这台电脑" });
-const split = (id: string, taskId: string): TCardSplitRequestView => ({ id, taskId, taskName: taskId === "t1" ? "派活单" : "本机程序", missionId: "m1", origin: "web",
-  createdAt: taskId === "t1" ? "2026-11-06T04:00:00Z" : "2026-11-06T04:01:00Z" });
+const split = (id: string, taskId: string): TCardSplitRequestView => ({ id, taskId, taskName: taskId === "t1" ? "派活单" : "本机程序", missionId: "m1", projectId: null, projectName: null,
+  origin: "web", createdAt: taskId === "t1" ? "2026-11-06T04:00:00Z" : "2026-11-06T04:01:00Z" });
 
 describe("worker 和链路", () => {
   it("云端三格照搬；带岗位没开工的是「等开工」；验收中是云端的验收员", () => {
@@ -73,6 +73,18 @@ describe("worker 和链路", () => {
     expect(plannerText(workers[1]!, null)).toBe("拆卡 · 等开工");
     expect(plannerText(workers[0]!, { step: 2, total: 3 })).toBe("拆卡中 · 第 2/3 步");
     expect(plannerWorkers({ sessions: [{ ...plan, status: "exited" }], splits: [], listed: [], tasks, deviceName: null })).toEqual([]);
+  });
+
+  it("没挂 Task 的项目也能拆（16.3）：本机会话只带 projectId、登记只带项目，都是这个项目的规划员；同一个项目在拆时登记不重复列", () => {
+    const P = "00000000-0000-4000-8000-0000000000f1";
+    const plan = session({ id: "00000000-0000-4000-8000-0000000000a4", subject: { kind: "plan", projectId: P }, status: "running" });
+    const projectSplit = (id: string, projectId: string): TCardSplitRequestView => ({ id, taskId: null, taskName: null, missionId: null, projectId, projectName: "本机程序",
+      origin: "buddy", createdAt: "2026-11-06T04:02:00Z" });
+    const workers = plannerWorkers({ sessions: [plan], splits: [projectSplit("s3", P), projectSplit("s4", "00000000-0000-4000-8000-0000000000f2")], listed: [], tasks: [], deviceName: null });
+    expect(workers.map((worker) => [worker.key, worker.taskId, worker.projectId, worker.state])).toEqual([
+      [`plan:${plan.id}`, null, P, "doing"], ["split:s4", null, "00000000-0000-4000-8000-0000000000f2", "queued"],
+    ]);
+    expect(workers[1]!.title).toBe("本机程序");
   });
 
   it("云端的规划员、验收员行：这台电脑上有本机会话时以本机为准、不重复列；手机上照云端（验收员在跑是验收中，没起是等开工）", () => {
@@ -163,7 +175,7 @@ describe("开工（Task 管线里的选项框）", () => {
 
   it("拆好了：问「Task 名：这样开工？」，编号的几步，每步的岗位、对约定第几条，几个子会话；就按这个开始（推荐）/ 改一改 / 自己说；没有岗位的是我自己", () => {
     const html = renderToStaticMarkup(<LocalContext.Provider value={local}>
-      <PlanDecision task={task} drafts={[draft("00000000-0000-4000-8000-0000000000d1", "派活单组件"), draft("00000000-0000-4000-8000-0000000000d2", "和晨星对接口", { role: null, executor: "self" })]}
+      <PlanDecision target={{ taskId: task.taskId }} name={task.name} drafts={[draft("00000000-0000-4000-8000-0000000000d1", "派活单组件"), draft("00000000-0000-4000-8000-0000000000d2", "和晨星对接口", { role: null, executor: "self" })]}
         roles={[]} handheld={false} onSay={vi.fn()} onChanged={vi.fn()} />
     </LocalContext.Provider>);
     expect(html).toContain("派活单与 worker 链路：这样开工？");
@@ -176,6 +188,18 @@ describe("开工（Task 管线里的选项框）", () => {
     expect(html).toContain("改一改");
     expect(html).toContain("自己说…");
     expect(html).not.toContain(">开工<");
+    expect(html).toContain('data-testid="plan-mode"');
+  });
+
+  it("没挂 Task 的项目的派活单：框顶写项目名；没有预算那一栏（开工用本人的缺省预算）", () => {
+    const html = renderToStaticMarkup(<LocalContext.Provider value={local}>
+      <PlanDecision target={{ projectId: "00000000-0000-4000-8000-0000000000f1" }} name="本机程序" drafts={[draft("00000000-0000-4000-8000-0000000000d3", "接上 clone", { criterionIndex: null })]}
+        roles={[]} handheld={false} onSay={vi.fn()} onChanged={vi.fn()} />
+    </LocalContext.Provider>);
+    expect(html).toContain("本机程序：这样开工？");
+    expect(html).toContain("接上 clone");
+    expect(html).not.toContain('data-testid="plan-mode"');
+    expect(html).not.toContain("约定第");
   });
 
   it("规划员在拆：一行「拆卡 · 等开工」；本机在拆写第几步", () => {

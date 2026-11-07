@@ -12,7 +12,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Dropdown } from "@heroui/react";
 import { Check, ChevronDown, X } from "lucide-react";
-import type { TBudget, TBudgetMode, TCardDraftView, THomePlanTask } from "@warmap/contracts";
+import type { TBudget, TBudgetMode, TCardDraftView } from "@warmap/contracts";
 import { DecisionBox } from "@/components/work/DecisionBox";
 import { ApprovalDecision, QuestionDecision, awayChip } from "@/components/work/decisions";
 import { SegmentedSwitch } from "@/components/SegmentedSwitch";
@@ -24,7 +24,7 @@ import { planStep } from "@/lib/local/sessionView";
 import { useSessionEvents } from "@/lib/local/useSessionEvents";
 import { readLast, writeLast } from "@/lib/local/start";
 import type { TLocalModelProfile } from "@/lib/local/runner";
-import { acceptDrafts, dismissDraft, readTaskBudget } from "@/lib/board/cloud";
+import { acceptDrafts, acceptProjectDrafts, dismissDraft, readTaskBudget, type PlanTarget } from "@/lib/board/cloud";
 import { TIER_LABEL, draftRole, modelForTier, type CardRole, type RoleView } from "@/lib/team/roles";
 import { SLOT_CAP, startBatch, type StartPlan } from "@/lib/work/queue";
 import { QUEUE_LABEL, liveSessions, type Worker } from "@/lib/work/workers";
@@ -62,8 +62,12 @@ export function budgetOf(mode: TBudgetMode, limits: Limits): TBudget | null {
 }
 export const limitsOf = (budget: TBudget): Limits => ({ hours: budget.hours?.toString() ?? "", percent: budget.weeklyPercent?.toString() ?? "", money: budget.money?.amount.toString() ?? "" });
 
-export function PlanDecision({ task, drafts, roles, handheld, onSay, onChanged }: {
-  task: THomePlanTask;
+/**
+ * target：拆的是一件 Task，还是一个没挂 Task 的项目（16.3）；name 是框顶上的名字。项目的没有预算那一栏：不挂 Task，开工用本人的缺省预算。
+ */
+export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onChanged }: {
+  target: PlanTarget;
+  name: string;
   drafts: TCardDraftView[];
   roles: RoleView[];
   handheld: boolean;
@@ -82,15 +86,17 @@ export function PlanDecision({ task, drafts, roles, handheld, onSay, onChanged }
   const [limits, setLimits] = useState<Limits>(NO_LIMITS);
   const touched = useRef(false);
   const hoursRef = useRef<HTMLInputElement>(null);
+  const taskId = "taskId" in target ? target.taskId : null;
   useEffect(() => {
+    if (!taskId) return;
     let alive = true;
-    void readTaskBudget(task.taskId).then((found) => {
+    void readTaskBudget(taskId).then((found) => {
       if (!alive || !found || touched.current) return;
       setMode(found.budget.mode);
       setLimits(limitsOf(found.budget));
     }, () => undefined);
     return () => { alive = false; };
-  }, [task.taskId]);
+  }, [taskId]);
   const pickMode = (next: TBudgetMode) => { touched.current = true; setMode(next); if (next === "set") requestAnimationFrame(() => hoursRef.current?.focus()); };
   const setLimit = (key: keyof Limits, value: string) => { touched.current = true; setLimits((current) => ({ ...current, [key]: value })); };
   useEffect(() => { setFolderId((current) => current ?? local.folders.find((folder) => folder.id === readLast().folderId)?.id ?? local.folders[0]?.id ?? null); }, [local.folders]);
@@ -110,32 +116,34 @@ export function PlanDecision({ task, drafts, roles, handheld, onSay, onChanged }
   const start = async () => {
     if (!kept.length || busy) return;
     // 设预算却一项都没填对：停在填的地方。
-    const budget = budgetOf(mode, limits);
-    if (!budget) { hoursRef.current?.focus(); return; }
-    let target = folder;
-    if (ready && !target) {
-      target = await local.pickFolder();
-      if (!target) return;
-      setFolderId(target.id);
+    const budget = taskId ? budgetOf(mode, limits) : null;
+    if (taskId && !budget) { hoursRef.current?.focus(); return; }
+    let where = folder;
+    if (ready && !where) {
+      where = await local.pickFolder();
+      if (!where) return;
+      setFolderId(where.id);
     }
     setBusy(true);
     try {
       for (const draft of drafts.filter((entry) => edits[entry.id]?.dropped)) await dismissDraft(draft.id).catch(() => undefined);
       // 换过岗位的随放进看板一起记到卡上（没有岗位的是人自己的活）。
       // 这台电脑能开就马上开（带上每张卡选的模型）；开不了（手机、本机没连）就登记要开工，配对的电脑上开着的网页认领后开（第 4.4 节）。
-      const cards = await acceptDrafts(task.taskId, kept.map((draft) => {
+      const picked = kept.map((draft) => {
         const role = roleOf(draft);
         const changed = (role?.id || null) !== (draftRole(draft)?.id ?? null);
         return { id: draft.id, ...(edits[draft.id]?.title?.trim() ? { title: edits[draft.id]!.title!.trim() } : {}), ...(changed ? { roleId: role?.id || null } : {}) };
-      }), !(ready && target), touched.current ? budget : undefined);
+      });
+      const cards = taskId ? await acceptDrafts(taskId, picked, !(ready && where), touched.current && budget ? budget : undefined)
+        : await acceptProjectDrafts((target as { projectId: string }).projectId, picked, !(ready && where));
       const plans: StartPlan[] = kept.flatMap((draft, index) => {
         const item = cards[index];
         const role = roleOf(draft);
         const model = modelOf(draft);
-        return item && role && model ? [{ item, model, cwd: target?.path ?? "", role: roles.find((entry) => entry.id === role.id) ?? null }] : [];
+        return item && role && model ? [{ item, model, cwd: where?.path ?? "", role: roles.find((entry) => entry.id === role.id) ?? null }] : [];
       });
-      if (ready && target) {
-        writeLast({ folderId: target.id });
+      if (ready && where) {
+        writeLast({ folderId: where.id });
         await startBatch(local.runner, plans);
         await local.refresh();
       }
@@ -180,7 +188,7 @@ export function PlanDecision({ task, drafts, roles, handheld, onSay, onChanged }
       })}
     </ol>
     {agents ? <p className={h.stepSum}>{agents} 个子会话</p> : null}
-    <div className={x.mode} data-testid="plan-mode">
+    {taskId ? <div className={x.mode} data-testid="plan-mode">
       <SegmentedSwitch label="预算" segments={MODES} selected={mode} onSelect={pickMode} />
       {mode === "set" ? (
         <span className={x.limits}>
@@ -189,7 +197,7 @@ export function PlanDecision({ task, drafts, roles, handheld, onSay, onChanged }
           {gateway ? <label>¥<input inputMode="decimal" value={limits.money} aria-label="TokenHub 金额上限" onChange={(event) => setLimit("money", event.target.value)} />TokenHub</label> : null}
         </span>
       ) : null}
-    </div>
+    </div> : null}
     </>
   );
   const footer = ready ? <>
@@ -200,7 +208,7 @@ export function PlanDecision({ task, drafts, roles, handheld, onSay, onChanged }
   </> : null;
 
   return (
-    <DecisionBox kind="plan" testId="plan-decision" title={`${task.name}：这样开工？`} body={steps} busy={busy} footer={footer}
+    <DecisionBox kind="plan" testId="plan-decision" title={`${name}：这样开工？`} body={steps} busy={busy} footer={footer}
       options={editing ? [{ label: START_LABEL, recommended: true }, { label: "改好了" }] : [{ label: START_LABEL, recommended: true }, { label: "改一改" }]}
       onPick={([picked]) => (picked === 0 ? start() : setEditing(!editing))}
       // 管线正在回话时发不出去（send 回 false）：算失败，框里原处写「失败 · 重试」，打的字留着。

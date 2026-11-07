@@ -5,7 +5,7 @@ import {
   ReleaseSessionStartRequest, NotificationSettings, ClaimedSessionStart,
 } from "./workHome.js";
 import { CreateProjectRequest, Project, ProjectDetailResponse, ProjectFeedItem, ProjectFeedResponse, ProjectGoal, ProjectGoalLinkedItem, ProjectHandoverItem,
-  ProjectHandoverSummaryItem, ProjectListResponse, ProjectPipelineResponse, ProjectTransferDeclinedItem, UpdateProjectRequest } from "./projects.js";
+  ProjectHandoverSummaryItem, ProjectListResponse, ProjectPipelineResponse, ProjectTransferDeclinedItem, UpdateProjectRequest, ProjectBoardResponse } from "./projects.js";
 import { CreateProjectTransferRequest, HandoverSecretFinding, HandoverSecretsResponse, HandoverSection, PersonRef, ProjectTransfer,
   UpdateProjectTransferRequest } from "./projectTransfers.js";
 import { Budget, TaskBudgetResponse } from "./budget.js";
@@ -21,7 +21,7 @@ export const workHomeSchemas: Record<string, JsonSchema> = {
   BackgroundItem, BackgroundResponse, RouteRequest, RouteResponse,
   SessionStartView, ClaimSessionStartsRequest, ClaimSessionStartsResponse, CardMerge, TaskFeedItem, HomeItem, ReleaseSessionStartRequest,
   Project, ProjectListResponse, CreateProjectRequest, UpdateProjectRequest, ProjectGoal, ProjectDetailResponse, ProjectPipelineResponse, ProjectGoalLinkedItem,
-  ProjectFeedItem, ProjectFeedResponse, ProjectHandoverItem, ProjectHandoverSummaryItem, ProjectTransferDeclinedItem,
+  ProjectFeedItem, ProjectFeedResponse, ProjectBoardResponse, ProjectHandoverItem, ProjectHandoverSummaryItem, ProjectTransferDeclinedItem,
   PersonRef, HandoverSection, ProjectTransfer, CreateProjectTransferRequest, UpdateProjectTransferRequest, HandoverSecretFinding, HandoverSecretsResponse,
   NotificationSettings, Budget, TaskBudgetResponse, ClaimedSessionStart, SessionAttachment, SessionAttachmentUploadResponse,
 };
@@ -162,6 +162,39 @@ export const workHomePaths: OpenAPIV3.Document["paths"] = {
       summary: "项目对话里按时间插的行：挂上新目标（分隔线）、卡验收过了（带合回结果）、受阻、约定都达到、合回后推翻开了返工卡，从旧到新",
       parameters: path("projectId"),
       responses: { "200": json("项目动态", "ProjectFeedResponse"), ...errors(401, 403, 404) },
+    },
+  },
+  "/api/me/projects/{projectId}/board": {
+    get: {
+      operationId: "getProjectBoard",
+      summary: "没挂 Task 的项目拆卡（16.3）：项目里不挂 Task 的卡、还没处理的派活单草稿、最近一次计划",
+      parameters: path("projectId"),
+      responses: { "200": json("项目看板", "ProjectBoardResponse"), ...errors(401, 403, 404) },
+    },
+  },
+  "/api/me/projects/{projectId}/card-splits": {
+    post: {
+      operationId: "registerProjectCardSplit",
+      summary: "登记拆这个项目（16.3，没挂 Task 也能拆）：只记下来，网页在本人电脑上开规划员；已有一条没开工的回那一条（200）",
+      parameters: path("projectId"),
+      responses: { "200": json("已有的登记", "CardSplitRequestView"), "201": json("新登记", "CardSplitRequestView"), ...errors(401, 403, 404, 409) },
+    },
+  },
+  "/api/me/projects/{projectId}/plan-brief": {
+    get: {
+      operationId: "getProjectPlanBrief",
+      summary: "拆项目的规划员交代（16.3）：项目名、目标历史、已有的卡；每件派活单自带完成标准",
+      parameters: path("projectId"),
+      responses: { "200": json("交代", "CardPlanBriefResponse"), ...errors(401, 403, 404) },
+    },
+  },
+  "/api/me/projects/{projectId}/card-drafts/accept": {
+    post: {
+      operationId: "acceptProjectCardDrafts",
+      summary: "把项目的派活单草稿放进看板（16.3）：卡挂项目、不挂 Task；start=true 时交给 Agent 的卡同时登记要开工",
+      parameters: path("projectId"),
+      requestBody: body("AcceptCardDraftsRequest"),
+      responses: { "200": json("放进去的卡", "AcceptCardDraftsResponse"), ...errors(400, 401, 403, 404, 409) },
     },
   },
   "/api/me/projects/{projectId}/transfers": {

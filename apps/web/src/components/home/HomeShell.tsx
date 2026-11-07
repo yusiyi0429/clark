@@ -26,7 +26,7 @@ import { WorkspaceContext, type WorkspaceApi } from "@/components/shell/Workspac
 import { LocalRunnerProvider, useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { planStartRequest, readLast, startTopic } from "@/lib/local/start";
 import { useAutoReturn } from "@/lib/board/useAutoReturn";
-import { cancelStart, claimStarts, listSplits, registerSplit, releaseStart, removeSplit, routeMessage } from "@/lib/board/cloud";
+import { cancelStart, claimStarts, listSplits, planKey, registerPlan, releaseStart, removeSplit, routeMessage, type PlanTarget } from "@/lib/board/cloud";
 import { gateOf, gateText } from "@/components/board/MonthLanes";
 import { showWorkspaceToast } from "@/lib/toast";
 import { modelForTier } from "@/lib/team/roles";
@@ -182,7 +182,7 @@ function HomeFrame({ account }: { account: Account }) {
    * 一批交给本机：开了哪几张卡（卡 id）。没开起来时 onError 接着（拆卡写在管线里「拆卡失败 · 重试」）；
    * 没给 onError 的（自动开工）记进 startFailed，在管线里那一行写「失败 · 手动开始」。
    */
-  const start = useCallback(async (cards: Worker[], planners: { taskId: string; splitId?: string }[], onError?: () => void): Promise<Set<string>> => {
+  const start = useCallback(async (cards: Worker[], planners: (PlanTarget & { splitId?: string })[], onError?: () => void): Promise<Set<string>> => {
     const opened = new Set<string>();
     const cardIds = cards.flatMap((worker) => (worker.item ? [worker.item.id] : []));
     const cwd = local.folders.find((folder) => folder.id === readLast().folderId)?.path ?? local.folders[0]?.path;
@@ -199,10 +199,10 @@ function HomeFrame({ account }: { account: Account }) {
       if (!job.splitId) return job;
       try { await removeSplit(job.splitId); return job; } catch { return null; }
     }))).filter((job): job is NonNullable<typeof job> => !!job);
-    const giveBack = (jobs: { taskId: string; splitId?: string }[]) => Promise.all(jobs.map((job) => (job.splitId ? registerSplit(job.taskId).catch(() => undefined) : undefined)));
+    const giveBack = (jobs: (PlanTarget & { splitId?: string })[]) => Promise.all(jobs.map((job) => (job.splitId ? registerPlan(job).catch(() => undefined) : undefined)));
     try {
       const jobs = (await Promise.all(claimed.map(async (job) => {
-        try { return { ...job, request: await planStartRequest(job.taskId, local.models, cwd) }; } catch { return { ...job, request: null }; }
+        try { return { ...job, request: await planStartRequest(job, local.models, cwd) }; } catch { return { ...job, request: null }; }
       })));
       const ready = jobs.filter((job): job is typeof job & { request: NonNullable<typeof job.request> } => !!job.request);
       const result = await startBatch(local.runner, plans, ready.map((job) => job.request));
@@ -222,13 +222,13 @@ function HomeFrame({ account }: { account: Account }) {
     }
     return opened;
   }, [local, work.roles, changed, markStart]);
-  /** 拆卡登记没成的那件 Task：管线里出「拆卡失败 · 重试」（不弹 toast）。 */
+  /** 拆卡登记没成的那件 Task（或没挂 Task 的项目，planKey）：项目对话里出「拆卡失败 · 重试」（不弹 toast）。 */
   const [splitFailed, setSplitFailed] = useState<string | null>(null);
-  const split = useCallback(async (taskId: string) => {
+  const split = useCallback(async (target: PlanTarget) => {
     setSplitFailed(null);
-    if (here) { await start([], [{ taskId }], () => setSplitFailed(taskId)); return; }
-    try { await registerSplit(taskId); changed(); }
-    catch { setSplitFailed(taskId); }
+    if (here) { await start([], [target], () => setSplitFailed(planKey(target))); return; }
+    try { await registerPlan(target); changed(); }
+    catch { setSplitFailed(planKey(target)); }
   }, [here, start, changed]);
 
   // 等开工的卡和拆卡登记：这台电脑连着本机时自己开（每件只试一次，没开成的写在管线里「失败 · 手动开始」）。
@@ -249,7 +249,8 @@ function HomeFrame({ account }: { account: Account }) {
       const sessions = await local.runner.listSessions().catch(() => local.sessions);
       const busy = new Set(sessions.flatMap((session) => (session.subject.kind === "card" && session.subject.cardId ? [session.subject.cardId] : [])));
       const cards = waiting.filter((worker) => worker.item && !busy.has(worker.item.id));
-      const planners = waiting.flatMap((worker) => (worker.splitId && worker.taskId ? [{ taskId: worker.taskId, splitId: worker.splitId }] : []));
+      const planners = waiting.flatMap((worker): (PlanTarget & { splitId: string })[] => (!worker.splitId ? [] : worker.taskId ? [{ taskId: worker.taskId, splitId: worker.splitId }]
+        : worker.projectId ? [{ projectId: worker.projectId, splitId: worker.splitId }] : []));
       if (cards.length || planners.length) await start(cards, planners);
     };
     void (typeof navigator !== "undefined" && navigator.locks ? navigator.locks.request("tianshu-auto-start", run) : run());
@@ -341,7 +342,8 @@ function HomeFrame({ account }: { account: Account }) {
     onSplitEvent.current = async () => {
       const fresh = (await listSplits().catch(() => [])).filter((request) => !knownSplits.current.has(request.id));
       fresh.forEach((request) => { knownSplits.current.add(request.id); tried.current.add(`split:${request.id}`); });
-      if (here && fresh.length) await start([], fresh.map((request) => ({ taskId: request.taskId, splitId: request.id })));
+      const planners = fresh.flatMap((request): (PlanTarget & { splitId: string })[] => (request.taskId ? [{ taskId: request.taskId, splitId: request.id }] : request.projectId ? [{ projectId: request.projectId, splitId: request.id }] : []));
+      if (here && planners.length) await start([], planners);
       else changed();
     };
   });
@@ -423,15 +425,11 @@ function HomeFrame({ account }: { account: Account }) {
     key: `transfer:${project.transfer.id}`, at: project.transfer.startedAt,
     node: <TransferFlow project={project} transfer={project.transfer} onChanged={api.refresh} onStop={stopForTransfer} />,
   }] : []);
-  /** 项目对话（16.3）：页头项目名、文件夹 chip、「详情」，下面目标条。接口没上、又没有挂着的 Task 时（假对话要接一件 Task），借总管线说话。 */
+  /** 项目对话（16.3）：页头项目名、文件夹 chip、「详情」，下面目标条。没挂 Task 的项目也在自己的对话里拆卡、开工。 */
   const projectView = (project: Project) => {
     const goalTasks = project.goals.flatMap((goal) => { const task = planTask(goal.taskId); return task ? [task] : []; });
     const trail = <ProjectTrail project={project} go={go} />;
-    if (api.known && !api.live && !goalTasks.length) {
-      return <BuddyView key={project.id} buddy={buddy} outbox={outbox} consume={consume} onSpeaking={setSpeaking} context={`关于：${project.name}`}
-        head={{ title: project.name, trail }} blocks={projectBlocks(project)} />;
-    }
-    return <PipelineView key={project.id} project={project} tasks={goalTasks} api={api} buddy={buddy} outbox={outbox} consume={consume} go={go} onSplit={(taskId) => void split(taskId)} splitFailed={splitFailed}
+    return <PipelineView key={project.id} project={project} tasks={goalTasks} api={api} buddy={buddy} outbox={outbox} consume={consume} go={go} onSplit={(target) => void split(target)} splitFailed={splitFailed}
       startFailed={startFailed} onManualStart={(id) => void manualStart(id)} onSpeaking={setSpeaking} trail={trail} bar={<GoalBar project={project} />} blocks={projectBlocks(project)}
       onPulled={() => void projects.actions.reloadFolders()} />;
   };

@@ -36,6 +36,8 @@ export type Worker = {
   taskId: string | null;
   taskName: string | null;
   missionId: string | null;
+  /** 规划员拆的是一个没挂 Task 的项目时（16.3，本机会话或登记带的）：哪个项目。 */
+  projectId?: string | null;
   state: ChainState;
   reason: QueueReason | null;
   /** 等额度恢复（reason = quota）时恢复的时间：「等额度恢复 · 08:00」；读不到或不在等为 null。 */
@@ -155,25 +157,27 @@ export function toWorker(entry: TWorkerItem, { sessions, cards, deviceName }: { 
 export function plannerWorkers({ sessions, splits, listed, tasks, deviceName }: {
   sessions: TLocalSessionSummary[]; splits: TCardSplitRequestView[]; listed: Worker[]; tasks: { taskId: string; name: string; missionId: string | null }[]; deviceName: string | null;
 }): Worker[] {
-  const base = (taskId: string, taskName: string | null, missionId: string | null): Omit<Worker, "key" | "state" | "reason" | "holdUntil" | "mark" | "queuePos" | "model" | "startedAt" | "session"> => ({
-    kind: "plan", cardId: null, topicId: null, title: taskName ?? "拆卡", role: PLANNER, seq: 1, taskId, taskName, missionId,
+  const base = (taskId: string | null, taskName: string | null, missionId: string | null, projectId: string | null = null): Omit<Worker, "key" | "state" | "reason" | "holdUntil" | "mark" | "queuePos" | "model" | "startedAt" | "session"> => ({
+    kind: "plan", cardId: null, topicId: null, title: taskName ?? "拆卡", role: PLANNER, seq: 1, taskId, taskName, missionId, projectId,
     doing: null, step: null, where: "local", device: deviceName, endedAt: null, costUsd: null, tokens: 0, ask: null, item: null, workspace: null, git: null, waitingFor: null,
   });
   const keys = new Set(listed.map((worker) => worker.key));
   const local = sessions.flatMap((session): Worker[] => {
     const { subject } = session;
-    if (subject.kind !== "plan" || !subject.taskId || !LIVE.has(session.status) || keys.has(`plan:${session.id}`)) return [];
-    const task = tasks.find((entry) => entry.taskId === subject.taskId);
+    // 拆一件 Task（taskId），或一个没挂 Task 的项目（只带 projectId，16.3）。
+    if (subject.kind !== "plan" || !(subject.taskId || subject.projectId) || !LIVE.has(session.status) || keys.has(`plan:${session.id}`)) return [];
+    const task = subject.taskId ? tasks.find((entry) => entry.taskId === subject.taskId) : undefined;
     const held = session.hold ?? null;
     const queued = session.status === "queued" || !!held;
-    return [{ ...base(subject.taskId, task?.name ?? null, task?.missionId ?? null), key: `plan:${session.id}`, state: queued ? "queued" : "doing",
+    return [{ ...base(subject.taskId ?? null, task?.name ?? null, task?.missionId ?? null, subject.taskId ? null : subject.projectId ?? null), key: `plan:${session.id}`, state: queued ? "queued" : "doing",
       reason: held ? "quota" : queued ? "slot" : null, holdUntil: held?.until ?? null,
       mark: queued ? null : localWaitOf(session), queuePos: session.queuePosition, model: session.modelLabel, startedAt: session.createdAt, session,
       costUsd: session.usage.costUsd, tokens: session.usage.inputTokens + session.usage.outputTokens }];
   });
-  const busy = new Set([...listed, ...local].filter((worker) => worker.kind === "plan" && worker.state !== "done").map((worker) => worker.taskId));
-  const waiting = splits.filter((request) => !busy.has(request.taskId)).map((request): Worker => ({
-    ...base(request.taskId, request.taskName, request.missionId), key: `split:${request.id}`, state: "queued", reason: "start", holdUntil: null, mark: null, queuePos: null, model: null,
+  const target = (taskId: string | null, projectId: string | null | undefined) => taskId ?? `project:${projectId}`;
+  const busy = new Set([...listed, ...local].filter((worker) => worker.kind === "plan" && worker.state !== "done").map((worker) => target(worker.taskId, worker.projectId)));
+  const waiting = splits.filter((request) => !busy.has(target(request.taskId, request.projectId))).map((request): Worker => ({
+    ...base(request.taskId, request.taskName ?? request.projectName, request.missionId, request.taskId ? null : request.projectId), key: `split:${request.id}`, state: "queued", reason: "start", holdUntil: null, mark: null, queuePos: null, model: null,
     startedAt: null, session: null, splitId: request.id, requestedAt: request.createdAt,
   }));
   return [...local, ...waiting];

@@ -25,7 +25,8 @@ export function useWorkHome() {
   const [remote, setRemote] = useState<TWorkHomeResponse | null>(null);
   // 项目上挂着的之前月份没了结的 Task 也读看板（派活单、卡、认领开工都要用）。
   const treeTaskIds = useMemo(() => remote?.projects.flatMap((project) => project.goals.map((goal) => goal.taskId)) ?? [], [remote]);
-  const work = useWork({ planHook, extraTaskIds: treeTaskIds });
+  const projectIds = useMemo(() => remote?.projects.map((project) => project.projectId) ?? [], [remote]);
+  const work = useWork({ planHook, extraTaskIds: treeTaskIds, projectIds });
   const member = useMemberHome();
   const merges = useMergeIssues();
   const local = useLocalRunner();
