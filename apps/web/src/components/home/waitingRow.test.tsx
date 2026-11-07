@@ -6,6 +6,7 @@ vi.mock("@/lib/board/cloud", async (importOriginal) => ({ ...(await importOrigin
 
 import { acceptDrafts } from "@/lib/board/cloud";
 import { relativeDayTime } from "@/lib/companyTime";
+import { waitingHref } from "@/lib/home/derive";
 import type { WaitingItem } from "@/lib/home/types";
 import type { WorkHomeApi } from "@/lib/home/useWorkHome";
 import { LocalContext, type LocalRunnerState } from "@/lib/local/LocalRunnerProvider";
@@ -80,7 +81,8 @@ describe("等你行的截止（5.4.4「时间只写截止」）", () => {
 describe("就地答（9.6，契约 WaitingAnswer）", () => {
   it("inline_local：在 deviceId 那台电脑上、本机就绪才画按钮", () => {
     const home = api({ workers: [approvalWorker] });
-    expect(waitingAnswer(approval(), { api: home, local: local(), handheld: false })).toMatchObject({ actions: [{ label: "批准", done: "已批准", primary: true }], away: null });
+    // 批准旁边是「换个做法」：进那个子会话去说（5.4.4、9.6）。
+    expect(waitingAnswer(approval(), { api: home, local: local(), handheld: false })).toMatchObject({ actions: [{ label: "批准", done: "已批准", primary: true }, { label: "换个做法", href: waitingHref(approval()) }], away: null });
     const html = render([approval()], { home });
     expect(text(html)).toContain("批准");
     expect(html).not.toContain("wait-away");

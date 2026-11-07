@@ -6,7 +6,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { calendarDate } from "@/lib/companyTime";
-import { useHandheld } from "@/components/ui/useHandheld";
+import { usePhone } from "@/components/home/usePhone";
 import { readBackground } from "@/lib/board/cloud";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { inScope, localBackground, mergeBackground, workerBackground } from "./derive";
@@ -18,7 +18,7 @@ const POLL_MS = 5000;
 /** scope 为 resources（二级页、月份页）时右栏只有资源块，不列后台任务，也不用去取（云端这时 items 为空）。 */
 export function useBackground(scope: BackgroundScope, api: WorkHomeApi): BackgroundItem[] {
   const local = useLocalRunner();
-  const handheld = useHandheld();
+  const handheld = usePhone();
   const [cloud, setCloud] = useState<{ scope: string; items: BackgroundItem[] } | null>(null);
   useEffect(() => {
     if (!api.live || scope === "resources") return;

@@ -21,29 +21,31 @@ import { usePipelineConversation } from "@/lib/home/pipeline";
 import { infoHref } from "@/lib/home/derive";
 import type { HomeTask, SubSession } from "@/lib/home/types";
 import type { WorkHomeApi } from "@/lib/home/useWorkHome";
-import { useHandheld } from "@/components/ui/useHandheld";
 import { PlanDecision, PlanningLine, StartedRecord } from "./PlanDecision";
 import { feedBlocks, useTaskFeed } from "./TaskFeed";
-import { subHref } from "./LeftColumn";
+import { subHref, treeState } from "./LeftColumn";
 import { useViewChrome } from "./view";
+import { usePhone } from "./usePhone";
 import h from "@/styles/home.module.css";
 
 import { ICON, StateIcon } from "./StateIcon";
 import { HeroButton } from "@/components/HeroButton";
 
 /** 首页输入框发来、等着进对话的一句。 */
-export type Outbox = { id: number; target: "main" | string; text: string } | null;
+export type OutboxEntry = { id: number; target: "main" | string; text: string };
+/** 排着的几句（按发出的先后），每条对话只取给自己的。 */
+export type Outbox = OutboxEntry[];
 
-/** 对话读好了、没在回答时，把 outbox 里给这条对话的那句发出去。 */
+/** 对话读好了、没在回答时，把 outbox 里给这条对话的第一句发出去（一次一句，回完再发下一句）。 */
 function useOutbox(data: ConversationData, key: "main" | string, outbox: Outbox, consume: (id: number) => void) {
-  const sent = useRef<number | null>(null);
+  const sent = useRef(new Set<number>());
+  const next = outbox.find((entry) => entry.target === key && !sent.current.has(entry.id)) ?? null;
   useEffect(() => {
-    if (!outbox || outbox.target !== key || sent.current === outbox.id) return;
-    if (data.historyStatus !== "ready" || data.streaming) return;
-    sent.current = outbox.id;
-    consume(outbox.id);
-    void data.send(outbox.text, []);
-  }, [outbox, key, data, consume]);
+    if (!next || data.historyStatus !== "ready" || data.streaming) return;
+    sent.current.add(next.id);
+    consume(next.id);
+    void data.send(next.text, []);
+  }, [next, data, consume]);
 }
 
 /**
@@ -103,12 +105,19 @@ type PipelineProps = {
   onSplit: (taskId: string) => void;
   /** 拆卡登记没成（出「拆卡失败 · 重试」）。 */
   splitFailed?: boolean;
+  /** 这个标签页里自动开工没开起来的子会话 id：管线里那一行写「失败」加「手动开始」。 */
+  startFailed?: ReadonlySet<string>;
+  onManualStart?: (subId: string) => void;
   /** 伙伴在这条管线里说话（伙伴台换成「在说」）。 */
   onSpeaking: (speaking: boolean) => void;
 };
 
-/** B 的 Task 管线（live）用真的对话；接口没上时是这个标签页里的假对话（lib/home/pipeline）。 */
+/**
+ * B 的 Task 管线（live）用真的对话；接口确定没上（404）时是这个标签页里的假对话（lib/home/pipeline）。
+ * 还不知道（首页接口第一次还没回、或一直出错）时先空着等：不开假对话（写进去的话会丢，「拆成几步」还会真的开规划员）。
+ */
 export function PipelineView(props: PipelineProps) {
+  if (!props.api.known) return <div className={h.convo} aria-busy />;
   return props.api.live ? <LivePipeline {...props} /> : <MockPipeline {...props} />;
 }
 
@@ -143,9 +152,9 @@ function MockPipeline(props: PipelineProps) {
  * Task 管线的对话，网页按时间插进去的几块：规划员在拆（一行）、拆好的派活单（开工的选项框）、开了哪几个子会话、
  * 验收行（过了、受阻、约定都达到、返工，TaskFeed）。
  */
-function PipelineBody({ data, task, home, api, buddy, outbox, consume, go, onSpeaking, onSplit, splitFailed }: PipelineProps & { data: ConversationData }) {
+function PipelineBody({ data, task, home, api, buddy, outbox, consume, go, onSpeaking, onSplit, splitFailed, startFailed, onManualStart }: PipelineProps & { data: ConversationData }) {
   const chrome = useViewChrome();
-  const handheld = useHandheld();
+  const handheld = usePhone();
   const { work } = api;
   useEscStopsReply(data);
   useEffect(() => { onSpeaking(data.streaming); return () => onSpeaking(false); }, [data.streaming, onSpeaking]);
@@ -155,6 +164,9 @@ function PipelineBody({ data, task, home, api, buddy, outbox, consume, go, onSpe
   const feed = useTaskFeed(task.taskId, board, api);
   const subs = useMemo(() => home?.subSessions ?? [], [home]);
   const changed = api.refresh;
+  // 专题行排在第一次看到它的时候（契约没有开出时间；updatedAt 会跟着动，用它排这一行会在对话里跳）。
+  const seen = useRef(new Map<string, string>());
+  const firstSeen = (id: string, at: string) => { if (!seen.current.has(id)) seen.current.set(id, at); return seen.current.get(id)!; };
   const blocks = useMemo<TimedBlock[]>(() => {
     const list: TimedBlock[] = [];
     const planner = mine.find((worker) => worker.kind === "plan" && worker.state !== "done");
@@ -180,9 +192,22 @@ function PipelineBody({ data, task, home, api, buddy, outbox, consume, go, onSpe
     if (first && cardSubs.length) {
       list.push({ key: `started:${task.taskId}`, at: first, node: <StartedRecord task={task.name} subs={[...cardSubs].sort(byTitle(cards))} onOpen={(sub: SubSession) => go(subHref(sub))} /> });
     }
+    // 管线或伙伴开的探索子会话（专题）：开出时一行（5.4.3 事件行），按开出的时间排；点了进那个子会话。
+    for (const sub of subs.filter((entry) => entry.kind === "topic")) {
+      list.push({ key: `topic:${sub.id}`, at: firstSeen(sub.id, sub.updatedAt), node: (
+        <p className={h.line} data-testid="topic-opened"><StateIcon state={treeState(sub.state)} /><button type="button" className={h.lineLink} onClick={() => go(subHref(sub))}>{sub.title}</button></p>
+      ) });
+    }
+    // 自动开工没开起来的（这个标签页里试过的）：那一行「失败」加「手动开始」（弱按钮，5.4.3、9.8：手动开始只有这一处）。
+    for (const sub of subs.filter((entry) => startFailed?.has(entry.id) && entry.state === "queued")) {
+      list.push({ key: `start-failed:${sub.id}`, at: new Date().toISOString(), node: (
+        <p className={h.line} data-testid="start-failed"><StateIcon state="failed" /><span className={h.lineMore}>{sub.title} · 失败</span>
+          {onManualStart ? <HeroButton variant="ghost" size="sm" onPress={() => onManualStart(sub.id)}>手动开始</HeroButton> : null}</p>
+      ) });
+    }
     list.push(...feedBlocks({ items: feed, workers: mine, taskId: task.taskId, go, onSay: (text) => void data.send(text, []), onChanged: () => void changed() }));
     return list;
-  }, [mine, board, task, work.roles, handheld, changed, data, subs, go, feed, onSplit, splitFailed]);
+  }, [mine, board, task, work.roles, handheld, changed, data, subs, go, feed, onSplit, splitFailed, startFailed, onManualStart]);
   return (
     <PendingBoxes>
       <div className={h.convo} data-testid="pipeline-view">

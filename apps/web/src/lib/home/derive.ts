@@ -35,8 +35,10 @@ export const HOME_HREF = "/me/work";
 export const monthLabel = (period: string) => `${Number(period.slice(5, 7))} 月`;
 
 /** 等你一行点了去哪儿：契约给的是目标（open），网页映射到路由；网页自己拼的通知直接带地址。 */
-export function waitingHref(item: Pick<WaitingItem, "open">): string {
+export function waitingHref(item: Pick<WaitingItem, "open"> & Partial<Pick<WaitingItem, "kind" | "taskId">>): string {
   const { open } = item;
+  // 受阻（验收两次没过）进 Task 管线：「按这个改 / 仍然通过」的选项框在管线里（5.4.4），云端给的目标是那张卡时也一样。
+  if (item.kind === "verdict" && item.taskId) return taskHref(item.taskId);
   switch (open.kind) {
     case "href": return open.href;
     case "card": return cardHref(open.id);
@@ -164,11 +166,23 @@ export function summarize(list: SubSession[], needsYou: number, today: string): 
  */
 export function statusParts(task: Pick<HomeTask, "summary" | "planning" | "completedAt" | "subSessions">): { needsYou: number; rest: string[] } {
   if (task.completedAt) return { needsYou: 0, rest: ["已完成"] };
+  // 契约的 failed 是「验收没过、改法还没送回」：第一次没过仍是进行中（5.4.2，重做中）。
   const running = task.subSessions.filter((sub) => sub.state === "running" || sub.state === "failed").length;
-  const { queued, doneToday, needsYou } = task.summary;
-  const rest = [task.planning ? "拆卡中" : null, running ? `进行中 ${running}` : null, queued ? `已排队 ${queued}` : null, doneToday ? `今天完成 ${doneToday}` : null]
+  // 停下了、没在等你答的（已暂停）不在等你里，单写一段。
+  const paused = task.subSessions.filter((sub) => sub.state === "waiting" && !sub.waiting).length;
+  const { queued, doneToday, done, needsYou } = task.summary;
+  const rest = [task.planning ? "拆卡中" : null, running ? `进行中 ${running}` : null, queued ? `已排队 ${queued}` : null, doneToday ? `今天完成 ${doneToday}` : null,
+    paused ? `已暂停 ${paused}` : null, done && !doneToday ? `已完成 ${done}` : null]
     .filter((part): part is string => !!part).slice(0, needsYou ? 2 : 3);
-  return { needsYou, rest: needsYou || rest.length ? rest : ["未开始"] };
+  // 「未开始」只给还没开过子会话、也没在拆的（5.4.4）。
+  return { needsYou, rest: needsYou || rest.length || task.subSessions.length ? rest : ["未开始"] };
+}
+
+/** Task 行的小字、首页 Task 行的行尾（5.4.2、5.4.4）：这个 Mission 下一个验收时间点「11/20 验收」（今天以后最近的，都过了取最后一个）。 */
+export function gateLabel(plan: Pick<THomePlanResponse, "gates" | "today"> | null, missionId: string): string | null {
+  const dates = (plan?.gates ?? []).filter((gate) => gate.missionId === missionId).map((gate) => gate.date).sort();
+  const date = dates.find((value) => value >= (plan?.today ?? "")) ?? dates[dates.length - 1];
+  return date ? `${date.slice(5).replace("-", "/")} 验收` : null;
 }
 export function statusLine(task: Pick<HomeTask, "summary" | "planning" | "completedAt" | "subSessions">): string {
   const { needsYou, rest } = statusParts(task);
@@ -216,12 +230,6 @@ export function deriveWorkHome({ plan, workers, boards, notices, proposals, merg
     ...tasks.flatMap((task) => mergeWaiting(taskSubs.get(task.taskId) ?? [], task, merges)), ...mergeWaiting(other, null, merges), ...orphanMerges(merges, all),
     ...planStartWaiting(tasks, boards), ...noticeWaiting(notices), ...proposalWaiting(proposals),
   ]);
-  // Task 行的小字（设计 5.4.2）：预算、加预算、管线最近一句结论都还没有数据时，写这个 Mission 下一个验收时间点「11/20 验收」。
-  const gateOf = (missionId: string) => {
-    const dates = (plan?.gates ?? []).filter((gate) => gate.missionId === missionId).map((gate) => gate.date).sort();
-    const date = dates.find((value) => value >= (plan?.today ?? "")) ?? dates[dates.length - 1];
-    return date ? `${date.slice(5).replace("-", "/")} 验收` : null;
-  };
   const missions: HomeMission[] = (plan?.missions ?? []).map((mission) => ({
     missionId: mission.missionId,
     title: mission.title,
@@ -232,7 +240,8 @@ export function deriveWorkHome({ plan, workers, boards, notices, proposals, merg
       const planning = workers.some((worker) => worker.kind === "plan" && worker.taskId === task.taskId && worker.state !== "done")
         || board?.plan?.status === "queued" || board?.plan?.status === "running";
       return {
-        taskId: task.taskId, missionId: mission.missionId, name: task.name, subtitle: gateOf(mission.missionId),
+        // subtitle 照契约是完成定义（没有就第一条标准）；Task 行行尾的「11/20 验收」网页另按计划算（gateLabel）。
+        taskId: task.taskId, missionId: mission.missionId, name: task.name, subtitle: task.doneDefinition || task.criteria[0] || null,
         summary: summarize(subSessions, waiting.filter((item) => item.taskId === task.taskId).length, today),
         pipeline: { conversationId: null, scope: `plan-task:${task.taskId}` }, planning,
         // 计划里只有交付状态没有时间；这里只用来判「交付了」（Task 打勾、子会话收起）。
@@ -286,7 +295,7 @@ function mergeWaiting(subs: SubSession[], task: { taskId: string; name: string }
   return subs.filter((sub) => sub.waiting === "merge").map((sub) => {
     const issue = merges.find((entry) => entry.cardId === sub.id);
     return {
-      id: `merge:${sub.id}`, kind: "merge", title: issue ? "合并不了" : `合进 ${sub.merge?.baseBranch ?? "原分支"}`,
+      id: `merge:${sub.id}`, kind: "merge", title: issue ? "无法合回" : `合进 ${sub.merge?.baseBranch ?? "原分支"}`,
       source: issue ? `${sub.title} · ${short(issue.text, 40)}` : [sub.title, task?.name].filter(Boolean).join(" · "),
       open: { kind: "card", id: sub.id }, taskId: task?.taskId ?? null, sessionId: sub.sessionId, deviceId: sub.deviceId, at: sub.merge?.at ?? sub.updatedAt, ...fields("inline_local"),
     };
@@ -297,7 +306,7 @@ function mergeWaiting(subs: SubSession[], task: { taskId: string; name: string }
 function orphanMerges(merges: MergeIssue[], subs: SubSession[]): WaitingItem[] {
   const shown = new Set(subs.map((sub) => sub.id));
   return merges.filter((issue) => !issue.cardId || !shown.has(issue.cardId)).map((issue) => ({
-    id: `merge:${issue.sessionId}`, kind: "merge", title: "合并不了", source: `${issue.title} · ${short(issue.text, 40)}`,
+    id: `merge:${issue.sessionId}`, kind: "merge", title: "无法合回", source: `${issue.title} · ${short(issue.text, 40)}`,
     open: issue.cardId ? { kind: "card", id: issue.cardId } : { kind: "href", href: HOME_HREF }, taskId: null, sessionId: issue.sessionId, deviceId: null, at: null, ...fields("inline_local"),
   }));
 }
@@ -315,7 +324,8 @@ function noticeWaiting(notices: NoticeSources | null): WaitingItem[] {
     open: { kind: "meeting", id: item.objectId }, at: item.createdAt, notificationId: item.id, ...NONE, ...fields("open"),
   }));
   const rounds = notices.rounds.filter((round) => round.todo).map((round): WaitingItem => {
-    const mine = round.cards.find((card) => card.mine && card.contentVisible !== false);
+    // 拍板人那一侧没有自己的卡：打开这一轮的第一张卡，卡页上有整轮的进度（老通知栏点进去也是这样）。
+    const mine = round.cards.find((card) => card.mine && card.contentVisible !== false) ?? round.cards.find((card) => card.contentVisible !== false);
     return {
       id: `round:${round.roundId}`, kind: "mission_card", title: round.todo!, source: `${round.battlefieldName} · Mission Card`,
       open: mine ? { kind: "mission_card", id: mine.cardId } : { kind: "mission_card", id: round.roundId, round: true }, at: round.openedAt, ...NONE, ...fields("open"),
@@ -478,14 +488,15 @@ export function groupBackground(items: BackgroundItem[]): { running: BackgroundI
   };
 }
 
-/** 用时：「12 秒」「3 分」「1 小时 5 分」。 */
+/** 用时（5.6）：「12 秒」「3 分 12 秒」「1 小时 5 分」；整分不写「0 秒」，整点不写「0 分」。 */
 export function duration(from: string | null, to: string | number | null): string | null {
   if (!from) return null;
   const end = typeof to === "string" ? Date.parse(to) : to ?? Date.now();
   const seconds = Math.max(0, Math.round((end - Date.parse(from)) / 1000));
   if (seconds < 60) return `${seconds} 秒`;
-  const minutes = Math.round(seconds / 60);
-  return minutes < 60 ? `${minutes} 分` : `${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分`;
+  if (seconds < 3600) { const rest = seconds % 60; return `${Math.floor(seconds / 60)} 分${rest ? ` ${rest} 秒` : ""}`; }
+  const minutes = Math.floor(seconds / 60) % 60;
+  return `${Math.floor(seconds / 3600)} 小时${minutes ? ` ${minutes} 分` : ""}`;
 }
 
 /** 关键词：Task 名，和标准、完成定义里四个字以上的片段。 */

@@ -53,7 +53,8 @@ export function useWorkHome() {
   const refresh = useCallback(async () => { await Promise.all([work.refresh(), member.refresh(), loadRemote()]); }, [work, member, loadRemote]);
   // 计划（Mission / Task，来自本体）读不到：树和首页写「本体读取失败」加「重试」，不画成空树（5.4.2、5.4.4）。
   const planFailed = !work.plan && !!planHook.error;
-  return { data, live: live === true, ready: live !== null && (live || !!work.plan), planFailed, retryPlan: planHook.refresh, work, member, deviceId, refresh };
+  // known：云端接口在不在已经知道了（问到过一次）。还不知道（第一次还没回、或一直出错）时不当成「没上」：管线等着、不开假对话，也不走不认领的老开工路。
+  return { data, live: live === true, known: live !== null, ready: live !== null && (live || !!work.plan), planFailed, retryPlan: planHook.refresh, work, member, deviceId, refresh };
 }
 
 export type WorkHomeApi = ReturnType<typeof useWorkHome>;

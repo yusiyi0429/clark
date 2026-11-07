@@ -11,7 +11,7 @@
 import { useState } from "react";
 import type { TTaskFeedItem } from "@warmap/contracts";
 import { DecisionBox } from "@/components/work/DecisionBox";
-import { useHandheld } from "@/components/ui/useHandheld";
+import { usePhone } from "./usePhone";
 import { markReturned, overrule } from "@/lib/board/cloud";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { canCommandHere, reply } from "@/lib/work/actions";
@@ -32,7 +32,7 @@ type Blocked = Extract<TTaskFeedItem, { kind: "card_blocked" }>;
 
 export function BlockedDecision({ item, worker, go, onChanged }: { item: Blocked; worker: Worker | null; go: (href: string) => void; onChanged: () => void }) {
   const local = useLocalRunner();
-  const handheld = useHandheld();
+  const handheld = usePhone();
   // 送回去、算通过以后，到下一次交回之前云端还是受阻：这里记着答过了，不再给选项（免得改法送两遍）。
   const [answer, setAnswer] = useState<string | null>(() => answeredOf(item.id));
   const here = !!worker && canCommandHere(worker, local.phase === "ready", handheld);

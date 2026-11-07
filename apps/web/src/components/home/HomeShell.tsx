@@ -23,7 +23,6 @@ import { CardSession } from "@/components/cards/CardSession";
 import { TopicSession } from "@/components/topics/TopicSession";
 import { ShellToast } from "@/components/rail/V2Shell";
 import { WorkspaceContext, type WorkspaceApi } from "@/components/shell/WorkspaceContext";
-import { useHandheld } from "@/components/ui/useHandheld";
 import { LocalRunnerProvider, useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { planStartRequest, readLast, startTopic } from "@/lib/local/start";
 import { useAutoReturn } from "@/lib/board/useAutoReturn";
@@ -33,15 +32,17 @@ import { showWorkspaceToast } from "@/lib/toast";
 import { modelForTier } from "@/lib/team/roles";
 import { startBatch, type StartPlan } from "@/lib/work/queue";
 import type { Worker } from "@/lib/work/workers";
-import { HOME_HREF, emptyMonth, monthLabel, routeText, todayLabel } from "@/lib/home/derive";
+import { HOME_HREF, emptyMonth, gateLabel, monthLabel, routeText, todayLabel } from "@/lib/home/derive";
+import { HeroButton } from "@/components/HeroButton";
 import type { BackgroundItem, RouteTarget } from "@/lib/home/types";
 import { useBackground } from "@/lib/home/useBackground";
 import { useWorkHome } from "@/lib/home/useWorkHome";
 import { BackgroundPanel, BackgroundStrip, useMachine } from "./BackgroundPanel";
-import { BuddyView, PipelineView, type Outbox } from "./Conversations";
+import { BuddyView, PipelineView, type Outbox, type OutboxEntry } from "./Conversations";
 import { HomeComposer, HomeView, WaitingList, type SendTarget } from "./HomeView";
 import { LeftColumn } from "./LeftColumn";
-import { TaskInfo } from "./TaskInfo";
+import { ForeignTaskInfo, TaskInfo } from "./TaskInfo";
+import { usePhone } from "./usePhone";
 import { ViewChrome, PAGE_TITLE, monthHref, scopeOf, viewOf, type View } from "./view";
 import { MONTH_PAGE, SECONDARY_PAGES, type SecondaryPageProps } from "./pages";
 import { SecondaryFallback } from "./SecondaryFallback";
@@ -54,6 +55,8 @@ const PANEL_KEY = "tianshu-home-panel-v1";
 const SPLIT_EVENT = "card-split-registered";
 /** 认领到了开不起来、放回去以后，隔一会再认领；树上一直挂着要开工的，也隔一会再看一次（别处认领了又没开、过期了）。 */
 const CLAIM_RETRY_MS = 60_000;
+/** 认领到了、但看板和 worker 还没刷新到这张卡（放回去了）：很快再认领一次，不等一分钟。 */
+const CLAIM_SOON_MS = 3_000;
 
 export function HomeShell({ account }: { account: Account }) {
   return (
@@ -68,15 +71,22 @@ function HomeFrame({ account }: { account: Account }) {
   const router = useRouter();
   const pathname = usePathname();
   const view = viewOf(pathname);
-  const handheld = useHandheld();
+  // 手机排布只看宽度（≤959）；平板横放、触屏电脑照样三栏，也照样能开本机程序（5.4.1、5.7）。
+  const handheld = usePhone();
   const local = useLocalRunner();
   const { buddy } = useBuddy();
   const api = useWorkHome();
   const { data, work } = api;
   const [panelOpen, setPanelOpen] = useState(true);
   const [sheet, setSheet] = useState(false);
+  // 抽屉收起有 160ms 的出场（5.7），放完再拿掉。
+  const [sheetClosing, setSheetClosing] = useState(false);
+  const closeSheet = useCallback(() => {
+    setSheetClosing(true);
+    window.setTimeout(() => { setSheet(false); setSheetClosing(false); }, 160);
+  }, []);
   const [speaking, setSpeaking] = useState(false);
-  const [outbox, setOutbox] = useState<Outbox>(null);
+  const [outbox, setOutbox] = useState<Outbox>([]);
   const outboxId = useRef(0);
 
   // 右栏：记住本人上次开没开；没记过时 1280 以下默认收起。
@@ -85,12 +95,23 @@ function HomeFrame({ account }: { account: Account }) {
   }, []);
   const togglePanel = (open: boolean) => { setPanelOpen(open); try { localStorage.setItem(PANEL_KEY, open ? "open" : "closed"); } catch { /* 下次按宽度 */ } };
   useEffect(() => { setSheet(false); }, [pathname]);
+  // 换了展示区的内容：焦点落到页头上（5.2 交互状态）。新内容自己抢了焦点（选项框、输入框）就不动；第一次打开页面不动。
+  const firstPath = useRef(true);
+  useEffect(() => {
+    if (firstPath.current) { firstPath.current = false; return; }
+    const frame = window.requestAnimationFrame(() => {
+      const main = document.querySelector("main");
+      if (main?.contains(document.activeElement) && document.activeElement !== main) return;
+      main?.querySelector<HTMLElement>('h1[tabindex="-1"]')?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [pathname]);
   useEffect(() => {
     if (!sheet) return;
-    const close = (event: KeyboardEvent) => { if (event.key === "Escape") setSheet(false); };
+    const close = (event: KeyboardEvent) => { if (event.key === "Escape") closeSheet(); };
     window.addEventListener("keydown", close);
     return () => window.removeEventListener("keydown", close);
-  }, [sheet]);
+  }, [sheet, closeSheet]);
 
   // ---- 切展示区：新首页里的地址 pushState，离开新首页（老页面、M2）整页跳 ----
   const go = useCallback((href: string) => {
@@ -120,22 +141,39 @@ function HomeFrame({ account }: { account: Account }) {
   const send = useCallback(async (text: string, target: SendTarget) => {
     const resolved = target === "auto" ? await route(text) : target;
     outboxId.current += 1;
-    setOutbox({ id: outboxId.current, target: resolved === "main" ? "main" : resolved.taskId, text });
+    // 每句排在队里，按对话各发各的：连着发、或那条对话正在回话时，前一句不会被后一句顶掉。
+    const entry: OutboxEntry = { id: outboxId.current, target: resolved === "main" ? "main" : resolved.taskId, text };
+    setOutbox((queue) => [...queue, entry]);
     go(resolved === "main" ? "/me/work/buddy" : `/me/work/tasks/${encodeURIComponent(resolved.taskId)}`);
   }, [route, go]);
-  const consume = useCallback((id: number) => setOutbox((current) => (current?.id === id ? null : current)), []);
+  const consume = useCallback((id: number) => setOutbox((queue) => queue.filter((entry) => entry.id !== id)), []);
 
   // ---- 开规划员、开卡（一次交给本机）----
   const here = local.phase === "ready" && !handheld;
   const changed = useCallback(() => { void api.refresh(); }, [api]);
   /**
+   * 这个标签页里自动开工没开起来的子会话（卡 id、专题 id）：Task 管线里那一行出「失败」加「手动开始」（5.4.3、9.8，手动开始只有这一处），
+   * 不弹提示。开起来了、或换了文件夹和模型（自动再试）就去掉。
+   */
+  const [startFailed, setStartFailed] = useState<ReadonlySet<string>>(() => new Set());
+  const markStart = useCallback((ids: string[], failed: boolean) => {
+    if (!ids.length) return;
+    setStartFailed((current) => {
+      const next = new Set(current);
+      ids.forEach((id) => (failed ? next.add(id) : next.delete(id)));
+      return next.size === current.size && ids.every((id) => current.has(id) === failed) ? current : next;
+    });
+  }, []);
+  /**
    * 一批交给本机：开了哪几张卡（卡 id）。没开起来时 onError 接着（拆卡写在管线里「拆卡失败 · 重试」）；
-   * 自动开工的没地方写（「手动开始」那一行要等数据分得出「自动开工失败」），先照旧提示一句。
+   * 没给 onError 的（自动开工）记进 startFailed，在管线里那一行写「失败 · 手动开始」。
    */
   const start = useCallback(async (cards: Worker[], planners: { taskId: string; splitId?: string }[], onError?: () => void): Promise<Set<string>> => {
     const opened = new Set<string>();
+    const cardIds = cards.flatMap((worker) => (worker.item ? [worker.item.id] : []));
     const cwd = local.folders.find((folder) => folder.id === readLast().folderId)?.path ?? local.folders[0]?.path;
-    if (!cwd && cards.length) { showWorkspaceToast({ text: "先在连接页加一个文件夹" }); return opened; }
+    if (!cwd && cards.length) { if (onError) onError(); else markStart(cardIds, true); if (!planners.length) return opened; cards = []; }
+    const tryIds = cards.flatMap((worker) => (worker.item ? [worker.item.id] : []));
     const roles = work.roles?.roles ?? [];
     const plans: StartPlan[] = cards.flatMap((worker) => {
       const role = roles.find((entry) => entry.id === worker.role.id) ?? null;
@@ -157,16 +195,19 @@ function HomeFrame({ account }: { account: Account }) {
       plans.forEach((plan, index) => { if (result.opened[index]) opened.add(plan.item.id); });
       const missed = [...jobs.filter((job) => !job.request), ...ready.filter((_, index) => !result.opened[plans.length + index])];
       await giveBack(missed);
+      markStart([...opened], false);
+      const notOpened = tryIds.filter((id) => !opened.has(id));
+      if (notOpened.length) { if (onError) onError(); else markStart(notOpened, true); }
       await local.refresh();
       changed();
-    } catch (error) {
+    } catch {
       await giveBack(claimed);
       if (onError) onError();
-      else showWorkspaceToast({ text: error instanceof Error ? error.message : "没开起来，请重试" });
+      else markStart(tryIds, true);
       changed();
     }
     return opened;
-  }, [local, work.roles, changed]);
+  }, [local, work.roles, changed, markStart]);
   /** 拆卡登记没成的那件 Task：管线里出「拆卡失败 · 重试」（不弹 toast）。 */
   const [splitFailed, setSplitFailed] = useState<string | null>(null);
   const split = useCallback(async (taskId: string) => {
@@ -176,18 +217,18 @@ function HomeFrame({ account }: { account: Account }) {
     catch { setSplitFailed(taskId); }
   }, [here, start, changed]);
 
-  // 等开工的卡和拆卡登记：这台电脑连着本机时自己开（每件只试一次，没开成的照旧等开工）。
+  // 等开工的卡和拆卡登记：这台电脑连着本机时自己开（每件只试一次，没开成的写在管线里「失败 · 手动开始」）。
   // 同一台电脑开着几个标签页时排着来（Web Locks），轮到时先读本机现在的会话，已经有会话的卡不再开。
-  // B 的「登记 + 认领」在时（live），登记了要开工的卡和专题走下面的认领；这里开拆卡登记（照旧：先删登记，删成了才开），
-  // 和没登记、等开工的卡（派活单在这台电脑上马上开、有几张没开起来的，再试一次）。
+  // 云端接口在不在还不知道时不开（不知道该不该认领）。B 的「登记 + 认领」在时（live），卡和专题只走下面的认领（一条只给一处：
+  // 别的电脑认领了、还没报上来的卡在这里也是「等开工」，不能不认领就开）；这里只开拆卡登记（照旧：先删登记，删成了才开）。
+  // 接口没上（404）时照旧：没登记、等开工的卡也在这里开。
   const subs = useMemo(() => [...data.missions.flatMap((mission) => mission.tasks.flatMap((task) => task.subSessions)), ...data.other.subSessions], [data]);
   const autoStartKey = subs.filter((sub) => sub.autoStart).map((sub) => sub.id).sort().join(",");
   const tried = useRef(new Set<string>());
   useEffect(() => {
-    if (!here) return;
-    const claimable = new Set(autoStartKey ? autoStartKey.split(",") : []);
+    if (!here || !api.known) return;
     const waiting = work.workers.filter((worker) => worker.reason === "start" && !tried.current.has(worker.key)
-      && ((worker.kind === "card" && worker.item && !(api.live && worker.cardId && claimable.has(worker.cardId))) || worker.splitId));
+      && ((!api.live && worker.kind === "card" && worker.item) || worker.splitId));
     if (!waiting.length) return;
     waiting.forEach((worker) => tried.current.add(worker.key));
     const run = async () => {
@@ -198,28 +239,33 @@ function HomeFrame({ account }: { account: Account }) {
       if (cards.length || planners.length) await start(cards, planners);
     };
     void (typeof navigator !== "undefined" && navigator.locks ? navigator.locks.request("tianshu-auto-start", run) : run());
-  }, [here, api.live, autoStartKey, work.workers, start, local.runner, local.sessions]);
+  }, [here, api.known, api.live, work.workers, start, local.runner, local.sessions]);
 
   // 自动开工（第 4.4 节，B 的契约）：树上有登记了要开工的子会话，就在这台配对的电脑上认领（一条只给一处），认领到的交给本机；
-  // 开不起来的放回去（release），隔一会再认领。已经在这台电脑上跑着的不再开。没加文件夹、没有模型时开不起来，先不认领。
-  // 只在要开工的那几个变了、或隔一会时再看（不跟着每次刷新）。
+  // 开不起来的放回去（release），隔一会再认领。已经在这台电脑上跑着的不再开。没有模型时开不起来，先不认领；
+  // 专题不要文件夹（本机给它建专用目录）：没加文件夹时卡开不起来（记成「失败 · 手动开始」），专题照开。
+  // 认领到的卡在看板、worker 里还没刷新到（首页接口比看板先报）：放回去，3 秒后再认领，不等一分钟。
+  // 只在要开工的那几个变了、或隔一会时再看（不跟着每次刷新）；认领进行中要开工的又变了，认领完马上再看一次。
   const claiming = useRef(false);
-  const latest = useRef({ workers: work.workers, subs, start, local, changed });
-  useEffect(() => { latest.current = { workers: work.workers, subs, start, local, changed }; });
+  const latest = useRef({ workers: work.workers, subs, start, local, changed, autoStartKey });
+  useEffect(() => { latest.current = { workers: work.workers, subs, start, local, changed, autoStartKey }; });
   const [claimTick, setClaimTick] = useState(0);
-  const canOpen = local.folders.length > 0 && local.models.length > 0;
+  const canOpen = local.models.length > 0;
   useEffect(() => {
     const deviceId = api.deviceId;
     if (!here || !api.live || !deviceId || !canOpen || !autoStartKey || claiming.current) return;
     claiming.current = true;
+    let soon = false;
     const run = async () => {
-      const { workers, subs, start, local, changed } = latest.current;
       const claimed = (await claimStarts(deviceId).catch(() => null))?.starts ?? [];
       if (!claimed.length) return;
+      const { workers, subs, start, local, changed } = latest.current;
       const sessions = await local.runner.listSessions().catch(() => local.sessions);
       const busy = new Set(sessions.flatMap((session) => [session.subject.cardId, session.subject.topicId].filter((id): id is string => !!id)));
       const cards = claimed.flatMap((entry) => {
-        const worker = entry.kind === "card" && entry.cardId && !busy.has(entry.cardId) ? workers.find((candidate) => candidate.cardId === entry.cardId && candidate.item) : undefined;
+        if (entry.kind !== "card" || !entry.cardId || busy.has(entry.cardId)) return [];
+        const worker = workers.find((candidate) => candidate.cardId === entry.cardId && candidate.item);
+        if (!worker) soon = true;
         return worker ? [worker] : [];
       });
       const opened = cards.length ? await start(cards, []) : new Set<string>();
@@ -227,17 +273,45 @@ function HomeFrame({ account }: { account: Account }) {
       for (const entry of claimed) {
         if (entry.kind !== "topic" || !entry.topicId || busy.has(entry.topicId) || !model) continue;
         const title = subs.find((sub) => sub.id === entry.topicId)?.title ?? "";
-        try { await startTopic(local.runner, { id: entry.topicId, title }, model); opened.add(entry.topicId); } catch { /* 放回去 */ }
+        try { await startTopic(local.runner, { id: entry.topicId, title }, model); opened.add(entry.topicId); markStart([entry.topicId], false); }
+        catch { markStart([entry.topicId], true); }
       }
       const done = (id: string | null) => !!id && (opened.has(id) || busy.has(id));
       await Promise.all(claimed.filter((entry) => !done(entry.cardId ?? entry.topicId)).map((entry) => releaseStart(entry.id, deviceId).catch(() => undefined)));
       if (opened.size) { await local.refresh(); changed(); }
+      else if (soon) changed();
     };
+    const key = autoStartKey;
     let retry = 0;
     void (typeof navigator !== "undefined" && navigator.locks ? navigator.locks.request("tianshu-auto-start", run) : run())
-      .finally(() => { claiming.current = false; retry = window.setTimeout(() => setClaimTick((n) => n + 1), CLAIM_RETRY_MS); });
+      .finally(() => {
+        claiming.current = false;
+        const delay = latest.current.autoStartKey !== key ? 0 : soon ? CLAIM_SOON_MS : CLAIM_RETRY_MS;
+        retry = window.setTimeout(() => setClaimTick((n) => n + 1), delay);
+      });
     return () => window.clearTimeout(retry);
-  }, [here, api.live, api.deviceId, canOpen, autoStartKey, claimTick]);
+  }, [here, api.live, api.deviceId, canOpen, autoStartKey, claimTick, markStart]);
+  // 换了文件夹或模型（比如没开成以后去连接页加了文件夹）：没开成的再自动试一次。
+  const setupKey = `${local.folders.map((folder) => folder.id).join(",")}|${local.models.map((entry) => entry.id).join(",")}`;
+  const lastSetup = useRef(setupKey);
+  useEffect(() => {
+    if (lastSetup.current === setupKey) return;
+    lastSetup.current = setupKey;
+    tried.current.clear();
+    setStartFailed(new Set());
+    setClaimTick((n) => n + 1);
+  }, [setupKey]);
+  /** 「手动开始」：只开这一个（卡交给本机、专题照专题开），没开起来照旧写「失败」。 */
+  const manualStart = useCallback(async (subId: string) => {
+    const { workers, subs } = latest.current;
+    const worker = workers.find((candidate) => candidate.cardId === subId && candidate.item);
+    if (worker) { await start([worker], []); return; }
+    const sub = subs.find((entry) => entry.id === subId && entry.kind === "topic");
+    const model = local.models.find((entry) => entry.isDefault) ?? local.models[0];
+    if (!sub || !model) { markStart([subId], true); return; }
+    try { await startTopic(local.runner, { id: sub.id, title: sub.title }, model); markStart([subId], false); await local.refresh(); changed(); }
+    catch { markStart([subId], true); }
+  }, [start, markStart, changed, local]);
 
   // 伙伴在这个标签页的回复里登记了拆卡：这一轮之前没见过的登记，本机连着就直接开规划员。
   const knownSplits = useRef(new Set<string>());
@@ -322,12 +396,18 @@ function HomeFrame({ account }: { account: Account }) {
       case "buddy": return <BuddyView buddy={buddy} outbox={outbox} consume={consume} onSpeaking={setSpeaking} />;
       case "task": {
         const task = planTask(current.taskId);
-        return task ? <PipelineView key={task.taskId} task={task} home={homeTask(task.taskId)} api={api} buddy={buddy} outbox={outbox} consume={consume} go={go} onSplit={(taskId) => void split(taskId)} splitFailed={splitFailed === task.taskId} onSpeaking={setSpeaking} />
-          : <Missing loading={!api.ready} onGone={() => { if (outbox?.target === current.taskId) consume(outbox.id); }} />;
+        if (task) {
+          return <PipelineView key={task.taskId} task={task} home={homeTask(task.taskId)} api={api} buddy={buddy} outbox={outbox} consume={consume} go={go} onSplit={(taskId) => void split(taskId)} splitFailed={splitFailed === task.taskId}
+            startFailed={startFailed} onManualStart={(id) => void manualStart(id)} onSpeaking={setSpeaking} />;
+        }
+        if (!api.ready) return <Missing loading={!api.planFailed} onRetry={api.planFailed ? () => void api.retryPlan() : undefined} />;
+        // 不在本人的计划和树上（别人的 Task：请你认可、飞书「请 X 看」；之前月份了结了的）：没有管线可看，去只读的详情（9.8、9.10）。
+        return <ForeignTaskInfo key={current.taskId} taskId={current.taskId} go={go} redirect onMount={() => outbox.filter((entry) => entry.target === current.taskId).forEach((entry) => consume(entry.id))} />;
       }
       case "info": {
         const task = planTask(current.taskId);
-        if (!task) return <Missing loading={!api.ready} />;
+        if (!task && !api.ready) return <Missing loading={!api.planFailed} onRetry={api.planFailed ? () => void api.retryPlan() : undefined} />;
+        if (!task) return <ForeignTaskInfo key={current.taskId} taskId={current.taskId} go={go} />;
         const mission = data.missions.find((entry) => entry.missionId === task.missionId)?.title ?? null;
         return <TaskInfo task={task} mission={mission} gate={work.plan ? gateText(gateOf(work.plan, task.missionId)) : null} go={go} />;
       }
@@ -344,11 +424,12 @@ function HomeFrame({ account }: { account: Account }) {
       }
     }
   };
-  // 连接要处理（本人行的琥珀点，设计 9.4）：这台电脑没就绪。额度用完、飞书授权失效等 D、B 的字段到了再加。
-  const alert = !handheld && machine.alert;
+  // 连接要处理（本人行的琥珀点，设计 9.4）：这台电脑没就绪，或额度用完（≤10%）。飞书授权失效等 B 的字段到了再加。
+  const alert = (!handheld && machine.alert) || machine.quotaAlert === "danger";
 
   const left = (
     <LeftColumn data={data} view={view} buddy={buddy} speaking={speaking} go={go} phone={handheld} account={account} month={month} onRetryPlan={api.planFailed ? () => void api.retryPlan() : null}
+      gateFor={(missionId) => gateLabel(work.plan, missionId)}
       today={todayLabel(work.plan?.today ?? null)} alert={alert} trail={handheld ? backgroundButton : null}
       top={handheld && data.waiting.length ? (
         <section aria-label="等你" className={h.phoneWaiting}>
@@ -369,7 +450,7 @@ function HomeFrame({ account }: { account: Account }) {
               <div className={h.phoneComposer}><HomeComposer buddy={buddy} missions={data.missions.filter((mission) => mission.tasks.length)} route={route} onSend={send} /></div>
             </> : <main className={h.display}>{display(view)}</main>}
             {sheet ? (
-              <div className={h.sheetBackdrop} onClick={() => setSheet(false)}>
+              <div className={h.sheetBackdrop} data-closing={sheetClosing ? "" : undefined} onClick={closeSheet}>
                 <div className={h.sheet} role="dialog" aria-modal="true" aria-label="后台任务" onClick={(event) => event.stopPropagation()}>
                   <span className={h.grabber} aria-hidden />
                   {panel({})}
@@ -409,7 +490,11 @@ function SecondaryFrame({ title, go, children }: { title: string; go: (href: str
   );
 }
 
-function Missing({ loading, onGone }: { loading: boolean; onGone?: () => void }) {
-  useEffect(() => { if (!loading) onGone?.(); }, [loading, onGone]);
-  return <div className={h.missing} aria-busy={loading || undefined}>{loading ? null : <p>没有这件 Task</p>}</div>;
+/** 还在读（空着、aria-busy）；计划（本体）读不到时是「本体读取失败」加「重试」，和树上同一行（5.4.2、5.4.4）。 */
+function Missing({ loading, onRetry }: { loading: boolean; onRetry?: () => void }) {
+  return (
+    <div className={h.missing} aria-busy={loading || undefined}>
+      {onRetry ? <p className={h.planFailed}>本体读取失败<HeroButton variant="ghost" size="sm" onPress={onRetry}>重试</HeroButton></p> : null}
+    </div>
+  );
 }

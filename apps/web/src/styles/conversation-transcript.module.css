@@ -160,6 +160,9 @@
  */
 :global([data-scheme="auto"]) .prose :is(h1,h2,h3,h4,h5,h6){font-size:15px!important;font-weight:600;line-height:var(--lh-row)}
 :global([data-scheme="auto"]) .pulse{width:6px;height:6px}
+/* 新首页里本人的气泡和子会话里同一个形状（5.4.3）：圆角 --field-radius（20）、内边距 8/16；一轮和下一轮之间 32。 */
+:global([data-scheme="auto"]) .user{padding:var(--space-2) var(--space-4);border-radius:var(--field-radius);margin-bottom:var(--space-8)}
+:global([data-scheme="auto"]) .assistant{margin-bottom:var(--space-8)}
 /* 新首页里现场行的间距、「停止」的圆角读变量；悬停只换底，字色不变（5.4.1 交互状态表）。 */
 :global([data-scheme="auto"]) .thinking{gap:var(--space-2)}
 :global([data-scheme="auto"]) .thinking button{border-radius:var(--r-control)}

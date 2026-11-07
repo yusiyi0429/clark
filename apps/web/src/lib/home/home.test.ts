@@ -4,7 +4,7 @@ import type { TLocalSessionSummary } from "@/lib/local/runner";
 import { toWorker, type Worker } from "@/lib/work/workers";
 import type { MemberNotification } from "@/components/member/useMemberHome";
 import {
-  deriveFeed, deriveWorkHome, duration, toSubSession, groupBackground, inScope, localBackground, mergeBackground, emptyMonth, queueText, routeText, sortWaiting, statusLine, waitingHref, workerBackground,
+  deriveFeed, deriveWorkHome, duration, gateLabel, toSubSession, groupBackground, inScope, localBackground, mergeBackground, emptyMonth, queueText, routeText, sortWaiting, statusLine, waitingHref, workerBackground,
 } from "./derive";
 import type { BackgroundItem, WaitingItem } from "./types";
 import type { CardItem } from "@/lib/board/cards";
@@ -73,7 +73,11 @@ describe("新首页的数据（B 的 work-home 没上时照契约的形状拼）
       ["c1", "waiting", "approval", null], ["c4", "running", null, null], ["c2", "queued", null, "slot"], ["c3", "done", null, null],
     ]);
     expect(v2.pipeline).toEqual({ conversationId: null, scope: "plan-task:t1" });
-    expect(v2.subtitle).toBe("11/20 验收");
+    // subtitle 照契约是完成定义；Task 行的「11/20 验收」网页按计划另算（今天以后最近的那个）。
+    expect(v2.subtitle).toBe("本机派活、岗位与本机验收跑通");
+    expect(data.missions[0]!.tasks[1]!.subtitle).toBe("约定、对表与参考评审");
+    expect(gateLabel(plan, "m1")).toBe("11/20 验收");
+    expect(gateLabel(plan, "m2")).toBeNull();
     expect(data.missions[0]!.tasks[1]!.completedAt).not.toBeNull();
     expect(data.other.subSessions).toEqual([expect.objectContaining({ id: "tp1", kind: "topic" })]);
   });
@@ -83,9 +87,13 @@ describe("新首页的数据（B 的 work-home 没上时照契约的形状拼）
     expect(v2!.summary).toMatchObject({ running: 1, waiting: 1, queued: 1, done: 1, doneToday: 1, needsYou: 1 });
     expect(statusLine(v2!)).toBe("等你 1 · 进行中 1 · 已排队 1");
     expect(statusLine(v1!)).toBe("已完成");
-    const idle = { ...v2!, completedAt: null, subSessions: [], summary: { ...v2!.summary, queued: 0, doneToday: 0, needsYou: 0 } };
+    const idle = { ...v2!, completedAt: null, subSessions: [], summary: { ...v2!.summary, queued: 0, done: 0, doneToday: 0, needsYou: 0 } };
     expect(statusLine({ ...idle, planning: true })).toBe("拆卡中");
     expect(statusLine({ ...idle, planning: false })).toBe("未开始");
+    // 开过子会话的不写「未开始」：之前完成的写「已完成 N」，停下了的写「已暂停 N」。
+    const old = v2!.subSessions.find((sub) => sub.state === "done")!;
+    expect(statusLine({ ...idle, subSessions: [old], summary: { ...idle.summary, done: 1 } })).toBe("已完成 1");
+    expect(statusLine({ ...idle, subSessions: [{ ...old, state: "waiting", waiting: null }] })).toBe("已暂停 1");
   });
 
   it("等你：子会话的批准、会议记录待确认；群消息只是让你知道，不进（设计 9.6）；去哪儿看由 open 映射到路由；受阻去 Task 管线；第一次没过自动重做，不在这里", () => {
@@ -131,10 +139,15 @@ describe("树上的卡：worker 列表只有今天完成的，看板补上之前
     expect(both.missions[0]!.tasks[0]!.subSessions.map((sub) => [sub.id, sub.state])).toEqual([["c9", "waiting"]]);
   });
 
+  it("受阻（验收两次没过）进 Task 管线：云端给的目标是那张卡时也一样（选项框在管线里）", () => {
+    expect(waitingHref({ kind: "verdict", taskId: "t1", open: { kind: "card", id: "c1" } })).toBe("/me/work/tasks/t1");
+    expect(waitingHref({ kind: "approval", taskId: "t1", open: { kind: "card", id: "c1" } })).toBe("/me/work/cards/c1");
+  });
+
   it("合不回、但树上没有那张卡的，照样在等你里", () => {
     const home = deriveWorkHome({ plan, workers: [], boards: {}, proposals: [], notices: null, deviceId: null,
       merges: [{ sessionId: "s-1", cardId: "c-old", title: "旧卡", text: "主文件夹有没提交的改动" }] });
-    expect(home.waiting).toEqual([expect.objectContaining({ kind: "merge", title: "合并不了", open: { kind: "card", id: "c-old" } })]);
+    expect(home.waiting).toEqual([expect.objectContaining({ kind: "merge", title: "无法合回", open: { kind: "card", id: "c-old" } })]);
   });
 });
 
@@ -225,8 +238,10 @@ describe("后台任务", () => {
     expect(groups.running.map((entry) => entry.id)).toEqual(["b", "a"]);
     expect(groups.finished.map((entry) => entry.id)).toEqual(["d", "c"]);
     expect(duration("2026-11-07T04:00:00Z", "2026-11-07T04:00:30Z")).toBe("30 秒");
-    expect(duration("2026-11-07T04:00:00Z", "2026-11-07T04:12:10Z")).toBe("12 分");
+    expect(duration("2026-11-07T04:00:00Z", "2026-11-07T04:12:10Z")).toBe("12 分 10 秒");
+    expect(duration("2026-11-07T04:00:00Z", "2026-11-07T04:12:00Z")).toBe("12 分");
     expect(duration("2026-11-07T04:00:00Z", "2026-11-07T05:05:00Z")).toBe("1 小时 5 分");
+    expect(duration("2026-11-07T04:00:00Z", "2026-11-07T05:00:30Z")).toBe("1 小时");
   });
 });
 

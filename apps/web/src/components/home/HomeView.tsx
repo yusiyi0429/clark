@@ -15,18 +15,18 @@ import type { Buddy } from "@/components/buddy/useBuddy";
 import { HeroButton } from "@/components/HeroButton";
 import { FailedLine } from "@/components/work/DecisionBox";
 import { localOptions, oneTap } from "@/components/work/decisions";
-import { useHandheld } from "@/components/ui/useHandheld";
 import { ComposerAction, ComposerPill } from "@/conversation/ComposerPill";
 import { acceptDrafts } from "@/lib/board/cloud";
 import { useLocalRunner, type LocalRunnerState } from "@/lib/local/LocalRunnerProvider";
 import { decideProposal } from "@/lib/team/roles";
 import { canCommandHere, decide } from "@/lib/work/actions";
 import { mergeCard } from "@/lib/work/merge";
-import { monthLabel, statusParts, taskHref, waitingHref } from "@/lib/home/derive";
+import { gateLabel, monthLabel, statusParts, taskHref, waitingHref } from "@/lib/home/derive";
 import { relativeDayTime } from "@/lib/companyTime";
 import type { HomeMission, RouteTarget, WaitingItem, WorkHomeData } from "@/lib/home/types";
 import type { WorkHomeApi } from "@/lib/home/useWorkHome";
 import { ICON } from "./StateIcon";
+import { usePhone } from "./usePhone";
 import h from "@/styles/home.module.css";
 import x from "@/styles/decision-box.module.css";
 
@@ -67,6 +67,8 @@ export function HomeView({ data, api, buddy, today, go, route, onSend }: {
                   <p className={h.sectionTitle}>{mission.period !== data.period ? <span>{monthLabel(mission.period)} · </span> : null}{mission.title}</p>
                   {mission.tasks.map((task) => {
                     const { needsYou, rest } = statusParts(task);
+                    // 行尾是这个 Mission 下一个验收时间点（网页按计划算；云端的 subtitle 是完成定义，不放这里）。
+                    const gate = gateLabel(api.work.plan, task.missionId);
                     return (
                       <button key={task.taskId} type="button" className={h.taskLine} onClick={() => go(taskHref(task.taskId))} data-testid="home-task">
                         <span className={h.taskText}>
@@ -76,7 +78,7 @@ export function HomeView({ data, api, buddy, today, go, route, onSend }: {
                             {rest.length ? <span>{needsYou ? " · " : ""}{rest.join(" · ")}</span> : null}
                           </span>
                         </span>
-                        {task.subtitle ? <span className={h.taskGate}>{task.subtitle}</span> : null}
+                        {gate ? <span className={h.taskGate}>{gate}</span> : null}
                       </button>
                     );
                   })}
@@ -99,7 +101,8 @@ export type WaitingRowAnswer = { actions: Action[]; away: string | null };
 
 /**
  * 等你一行的行尾（5.4.4「就地答」、9.6，契约 WaitingAnswer）：
- * - inline_local（批准、回答、合回）要本机办：只在 deviceId 那台电脑上画按钮，答案直接回给那个子会话；单选（最多 3 个短选项）才就地答。
+ * - inline_local（批准、回答、合回）要本机办：只在 deviceId 那台电脑上画按钮，答案直接回给那个子会话；单选、最多 2 个短选项才就地答（3 个的点进去答，不藏第三个）。
+ *   批准旁边是「换个做法」（进那个子会话说）。
  *   别处（手机、别的电脑、本机没就绪）画「等你 · {deviceName}」，整行点进去看。
  * - inline（开工、岗位建议）走云端，手机上也能：开工「开始」= 接受派活单并登记开工（配对的电脑上开着的网页认领后开，同 PlanDecision 开不了本机时），
  *   「改一改」进 Task 管线；岗位建议「采纳 / 不要」。
@@ -116,11 +119,11 @@ function waitingActions(item: WaitingItem, api: Pick<WorkHomeApi, "deviceId" | "
   if (item.deviceId && item.deviceId !== api.deviceId) return [];
   const worker = item.sessionId ? api.work.workers.find((entry) => entry.session?.id === item.sessionId) : undefined;
   if (worker && (item.kind === "approval" || item.kind === "question") && !canCommandHere(worker, ready, handheld)) return [];
-  if (item.kind === "approval" && worker) return [{ label: "批准", done: "已批准", primary: true, run: () => decide(local.runner, worker, "allow") }];
+  if (item.kind === "approval" && worker) return [{ label: "批准", done: "已批准", primary: true, run: () => decide(local.runner, worker, "allow") }, { label: "换个做法", href: waitingHref(item) }];
   if (item.kind === "question" && worker?.session?.pendingQuestion) {
     const question = worker.session.pendingQuestion;
     const session = worker.session;
-    if (!oneTap(question) || question.questions[0]!.options.length > 3) return [];
+    if (!oneTap(question) || question.questions[0]!.options.length > 2) return [];
     const { options, order } = localOptions(question.questions[0]!.options);
     return options.slice(0, 2).map((option, index) => ({
       label: option.label, done: "已回答", primary: index === 0,
@@ -151,7 +154,7 @@ function waitingActions(item: WaitingItem, api: Pick<WorkHomeApi, "deviceId" | "
 
 function useActions(api: WorkHomeApi) {
   const local = useLocalRunner();
-  const handheld = useHandheld();
+  const handheld = usePhone();
   return (item: WaitingItem) => waitingAnswer(item, { api, local, handheld });
 }
 
@@ -177,14 +180,19 @@ export function WaitingList({ items, api, go }: { items: WaitingItem[]; api: Wor
   const [state, setState] = useState<Record<string, { busy?: boolean; done?: string; failed?: RunAction; reason?: string }>>({});
   const timers = useRef<number[]>([]);
   useEffect(() => () => timers.current.forEach((timer) => window.clearTimeout(timer)), []);
+  // 一行的状态按「这一次请求」记：同一个子会话接着又要批准、又问的，等你行的 id 不变，at（这次请求的时间）变了就是新的一行，不沿用「已批准」。
+  // 刷新收走以后也清掉，同一条再来时照样有按钮。
+  const keyOf = (item: WaitingItem) => `${item.id}|${item.at ?? ""}`;
+  const forget = (key: string) => setState((current) => { const { [key]: _gone, ...rest } = current; return rest; });
   const run = async (item: WaitingItem, action: RunAction) => {
-    setState((current) => ({ ...current, [item.id]: { busy: true } }));
+    const key = keyOf(item);
+    setState((current) => ({ ...current, [key]: { busy: true } }));
     try {
       await action.run();
-      setState((current) => ({ ...current, [item.id]: { done: action.done } }));
-      timers.current.push(window.setTimeout(() => { void Promise.all([local.refresh(), api.refresh()]); }, 2000));
+      setState((current) => ({ ...current, [key]: { done: action.done } }));
+      timers.current.push(window.setTimeout(() => { void Promise.all([local.refresh(), api.refresh()]).finally(() => forget(key)); }, 2000));
     } catch (error) {
-      setState((current) => ({ ...current, [item.id]: { failed: action, reason: error instanceof Error ? error.message : undefined } }));
+      setState((current) => ({ ...current, [key]: { failed: action, reason: error instanceof Error ? error.message : undefined } }));
     }
   };
   const now = Date.now();
@@ -192,7 +200,7 @@ export function WaitingList({ items, api, go }: { items: WaitingItem[]; api: Wor
     <ul className={h.waiting} data-testid="waiting-list">
       {items.map((item) => {
         const { actions, away } = answer(item);
-        const row = state[item.id];
+        const row = state[keyOf(item)];
         const due = item.dueAt && item.kind !== "quota" ? dueText(item.dueAt, now) : null;
         const from = [item.person?.name, item.source].filter(Boolean).join(" · ");
         return (

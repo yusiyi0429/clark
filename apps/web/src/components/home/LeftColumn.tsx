@@ -11,7 +11,7 @@
  * 4. 本人行：贴底，头像 24 + 名字，点开个人菜单。
  * 树的键盘：↑↓ 移动，回车打开，→ 展开折叠，← 收起。
  */
-import { useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { ChevronRight, Ellipsis, House, Info } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
 import type { Account } from "@/components/AccountMenu";
@@ -21,6 +21,7 @@ import { BUDDY_HREF, HOME_HREF, cardHref, infoHref, monthLabel, queueText, taskH
 import type { THomeItem as HomeItem } from "@warmap/contracts";
 import type { HomeTask, SubSession, WorkHomeData } from "@/lib/home/types";
 import { PersonAvatar } from "@/components/avatar/PersonAvatar";
+import { useDictationSignal } from "@/conversation/dictationSignal";
 import { PersonRow } from "./PersonMenu";
 import { ICON, StateIcon } from "./StateIcon";
 import { pageHref, type View } from "./view";
@@ -28,7 +29,7 @@ import h from "@/styles/home.module.css";
 
 export const subHref = (sub: Pick<SubSession, "kind" | "id">) => (sub.kind === "card" ? cardHref(sub.id) : topicHref(sub.id));
 
-export function LeftColumn({ data, view, buddy, speaking, go, phone, account, today, alert, trail, top, month, onRetryPlan }: {
+export function LeftColumn({ data, view, buddy, speaking, go, phone, account, today, alert, trail, top, month, onRetryPlan, gateFor }: {
   data: WorkHomeData;
   view: View;
   buddy: Buddy | null;
@@ -49,16 +50,22 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
   month?: { href: string; label: string } | null;
   /** 计划读不到：树最上面一行「本体读取失败」加「重试」。 */
   onRetryPlan?: (() => void) | null;
+  /** Task 行的小字（5.4.2）：这个 Mission 下一个验收时间点「11/20 验收」；预算、管线结论还没有数据。 */
+  gateFor?: (missionId: string) => string | null;
 }) {
   const name = buddy?.name?.trim() || "伙伴";
   const atHome = view.kind === "home" || view.kind === "month";
+  // 等你的计数只在首页不写（首页下面就是等你那一块）；月份页上照写。
+  const showCount = view.kind !== "home";
   const pipelineWaiting = new Set(data.waiting.filter((item) => item.open.kind === "task" && item.taskId).map((item) => item.taskId!));
   const tree = useRef<HTMLDivElement>(null);
+  // 听写时台上的伙伴跟着声音动（5.4.2、9.2），哪个输入框在听都算。
+  const dictation = useDictationSignal();
   return (
     <nav className={h.leftInner} aria-label="导航">
       <div className={h.stage} data-current={view.kind === "buddy" ? "" : undefined}>
         <button type="button" className={h.stageHit} aria-label={name} aria-current={view.kind === "buddy" ? "page" : undefined} onClick={() => go(BUDDY_HREF)} data-testid="buddy-entry">
-          <BuddyMark buddy={buddy} place="stage" active={speaking} listening={view.kind === "buddy" && !speaking} />
+          <BuddyMark buddy={buddy} place="stage" active={speaking} listening={!!dictation || (view.kind === "buddy" && !speaking)} level={dictation?.level ?? 0} />
         </button>
         <span className={h.stageMore}>
           <HeroButton variant="ghost" size="sm" isIconOnly title="伙伴" aria-label="伙伴" onPress={() => go(pageHref("buddy"))}><Ellipsis {...ICON} /></HeroButton>
@@ -67,15 +74,15 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
       {phone ? (
         <div className={h.today} data-phone="">
           <span className={h.todayIcon}><House {...ICON} /></span><span className={h.todayText}>{today}</span>
-          {month ? <button type="button" className={h.chip} onClick={() => go(month.href)}>{month.label}</button> : null}
+          {month ? <button type="button" className={h.statusChip} onClick={() => go(month.href)}>{month.label}</button> : null}
           {trail ? <span className={h.todayTrail}>{trail}</span> : null}
         </div>
       ) : (
         <button type="button" className={h.today} aria-current={atHome ? "page" : undefined} onClick={() => go(HOME_HREF)} data-testid="today-row">
           <span className={h.todayIcon}><House {...ICON} /></span><span className={h.todayText}>{today}</span>
           {/* 行尾的月份 chip：整行是一个按钮，chip 点了单独进月份页（键盘从「等你」那一行进）。 */}
-          {month ? <span className={h.chip} data-testid="month-chip" onClick={(event) => { event.stopPropagation(); go(month.href); }}>{month.label}</span> : null}
-          {!atHome && data.waiting.length ? <span className={h.count}><i aria-hidden />{data.waiting.length}</span> : null}
+          {month ? <span className={h.statusChip} data-testid="month-chip" onClick={(event) => { event.stopPropagation(); go(month.href); }}>{month.label}</span> : null}
+          {showCount && data.waiting.length ? <span className={h.count}><i aria-hidden />{data.waiting.length}</span> : null}
         </button>
       )}
       {top}
@@ -84,7 +91,7 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
         {data.missions.filter((mission) => mission.tasks.length).map((mission) => (
           <section key={mission.missionId} aria-label={mission.title} className={h.group}>
             <p className={h.groupTitle}>{mission.period !== data.period ? <span>{monthLabel(mission.period)} · </span> : null}{mission.title}</p>
-            {mission.tasks.map((task) => <TaskNode key={task.taskId} task={task} view={view} go={go} waiting={pipelineWaiting.has(task.taskId)} personId={account.personId} />)}
+            {mission.tasks.map((task) => <TaskNode key={task.taskId} task={task} view={view} go={go} waiting={pipelineWaiting.has(task.taskId)} personId={account.personId} gate={gateFor?.(task.missionId) ?? null} />)}
           </section>
         ))}
         {data.other.subSessions.length || data.other.items.length ? (
@@ -122,7 +129,7 @@ function treeKeys(event: KeyboardEvent<HTMLDivElement>, root: HTMLDivElement | n
  * 完成的子会话（验收过、合回了）和做完的本人事项收进折叠的「已完成 N」（设计第 4.5 条、9.10）；本人确认 Task 完成以后全部收进去，Task 行打勾、变淡。
  * 一枝里先是子会话（等你、进行中的状态图标挨着 Task 行），再是本人的事项（头像领头的一块），最后是「已完成 N」。
  */
-function TaskNode({ task, view, go, waiting, personId }: { task: HomeTask; view: View; go: (href: string) => void; waiting: boolean; personId?: string | null }) {
+function TaskNode({ task, view, go, waiting, personId, gate }: { task: HomeTask; view: View; go: (href: string) => void; waiting: boolean; personId?: string | null; gate: string | null }) {
   const here = (view.kind === "task" || view.kind === "info") && view.taskId === task.taskId;
   const [open, setOpen] = useState(false);
   const folded = task.subSessions.filter((sub) => task.completedAt || sub.state === "done");
@@ -131,7 +138,9 @@ function TaskNode({ task, view, go, waiting, personId }: { task: HomeTask; view:
   const items = task.items.filter((item) => !doneItems.includes(item));
   const foldCount = folded.length + doneItems.length;
   const viewing = folded.some((sub) => (view.kind === "card" || view.kind === "topic") && view.kind === sub.kind && view.id === sub.id);
-  const expanded = open || viewing;
+  // 正在看一个收起来的子会话时自动展开一次；之后本人收起就收起（不强开着）。
+  useEffect(() => { if (viewing) setOpen(true); }, [viewing]);
+  const expanded = open;
   const info = view.kind === "info" && here;
   return (
     <div className={h.taskNode} data-testid="tree-task" data-done={task.completedAt ? "" : undefined}>
@@ -140,7 +149,7 @@ function TaskNode({ task, view, go, waiting, personId }: { task: HomeTask; view:
           <span className={h.slotState}>{task.completedAt ? <StateIcon state="done" /> : waiting ? <StateIcon state="waiting" /> : null}</span>
           <span className={h.taskText}>
             <span className={h.taskName}>{task.name}</span>
-            {task.subtitle ? <span className={h.taskSub}>{task.subtitle}</span> : null}
+            {gate ? <span className={h.taskSub}>{gate}</span> : null}
           </span>
         </button>
         <span className={h.info} data-on={info ? "" : undefined}>
@@ -167,6 +176,12 @@ function TaskNode({ task, view, go, waiting, personId }: { task: HomeTask; view:
   );
 }
 
+/**
+ * 树上的状态图标：契约的 failed 是「验收没过、改法还没送回」，第一次没过照 5.4.2 仍是进行中（不画叉；第二次没过是受阻，走等你）。
+ * 叉只给程序层面的失败（后台任务那边）。
+ */
+export const treeState = (state: SubSession["state"]): SubSession["state"] => (state === "failed" ? "running" : state);
+
 /** flat：「其他」组里的，没有上一级，不缩进、不画竖线（状态位在 x=16，名字在 x=40）。 */
 function Subs({ subs, view, go, flat = false }: { subs: SubSession[]; view: View; go: (href: string) => void; flat?: boolean }) {
   return (
@@ -177,7 +192,7 @@ function Subs({ subs, view, go, flat = false }: { subs: SubSession[]; view: View
         return (
           <li key={`${sub.kind}:${sub.id}`}>
             <button type="button" className={h.sub} data-state={sub.state} aria-current={current ? "page" : undefined} onClick={() => go(subHref(sub))} data-tree-row="" data-testid="tree-sub">
-              <StateIcon state={sub.state} /><span className={h.subName}>{sub.title}</span>
+              <StateIcon state={treeState(sub.state)} /><span className={h.subName}>{sub.title}</span>
               {reason ? <span className={h.subReason}>{reason}</span> : null}
             </button>
           </li>

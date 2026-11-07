@@ -88,8 +88,9 @@ export function BackgroundPanel({ items, resources, model, onStop, onCollapse, h
   const machine = useMachine(resources.quota);
   const [stopping, setStopping] = useState<string | null>(null);
   const failed = groups.finished.filter((item) => item.state === "failed").length;
-  const [open, setOpen] = useState(false);
-  const finishedOpen = open || failed > 0;
+  // 有失败时默认展开「已完成」；本人点过（收起或展开）就照本人的来（5.4.5）。
+  const [open, setOpen] = useState<boolean | null>(null);
+  const finishedOpen = open ?? failed > 0;
   const [acting, setActing] = useState(false);
   /** 没停下：那一行停止按钮的位置写「失败 · 重试」（原因在 title 里），不弹 toast。 */
   const [stopFailed, setStopFailed] = useState<{ id: string; reason: string } | null>(null);
