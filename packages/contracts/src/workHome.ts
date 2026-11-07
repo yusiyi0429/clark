@@ -5,19 +5,19 @@ import { RoleRef } from "./roles.js";
 import { WorkerQueueReason, WorkerResources } from "./workers.js";
 
 /**
- * 新首页：伙伴总管线 + 每件 Task 一条 Task 管线 + 子会话（设计《新首页_伙伴总管线与Task管线_2026-11-07》第 2、4、7 节）。
+ * 新首页：伙伴总管线 + 项目（每月目标挂在项目上，第 16 节）+ 子会话（设计《新首页_伙伴总管线与Task管线_2026-11-07》第 2、4、7、16 节）。
  *
  * - 子会话：本机程序里能对话的会话，只有执行（卡）和探索（专题）两种；规划员、验收员、合回不算子会话，是后台任务。
- * - Task 管线：每人每件 Task 一条单独的伙伴对话，对话 scope 是 plan-task:<taskId>（conversations.ts 的 ConversationScope），
- *   和总管线（global）各是各的历史；接了 Chat 服务时是 Chat 里单独的一段对话，天枢记「Task → 对话」的对应。
+ * - 项目对话（第 16 节，替换原来的 Task 管线）：每个项目一条单独的伙伴对话，scope 是 project:<projectId>（conversations.ts 的 ConversationScope），
+ *   和总管线（global）各是各的历史；接了 Chat 服务时是 Chat 里单独的一段对话，天枢记「项目 → 对话」的对应。项目和每月目标见 projects.ts。
  * - 自动开工（第 4.4 节）：管线里定了计划（派活单上选了「就按这个开始」）或伙伴开了探索子会话，云端只记一条「要开工」，
  *   由这台电脑上开着的天枢网页认领后拉起本机程序（和登记拆卡 → 网页开规划员同一条路，云端不指挥本机）；
  *   网页没开（比如在手机上）就一直排着，界面写「等本机上线」，下次在电脑上打开天枢就自己开。
- * - 验收在 Task 管线（第 4.5 节）：本机验收员自动验；过了、受阻、约定都达到这几件事，网页按时间插进 Task 管线（GET /api/me/tasks/:taskId/feed），
- *   总管线只看各件 Task 的汇总（summary 的 doneToday、needsYou）。验收过的卡本机自动合回，合不了的等你合（子会话 waiting = merge）。
- * - 不按月份硬切（11/07 用户定）：月份只是检查点。左栏列「没了结」的 Task：本月 Mission 下本人负责的，加之前月份里本人负责、
- *   还没了结、在天枢里动过（开过 Task 管线或挂着子会话）的。了结 = 本人确认完成（completedAt）、复盘时定了到此为止、或已延续成新月份的一件 Task
- *   （后两种还没有数据）。子会话、Task 管线对话、后台任务都不看月份。
+ * - 验收在项目对话（第 4.5、16.3 节）：本机验收员自动验；过了、受阻、约定都达到这几件事，网页按时间插进项目对话（GET /api/me/projects/:projectId/feed），
+ *   总管线只看各项目的汇总（summary 的 doneToday、needsYou）。验收过的卡本机自动合回，合不了的等你合（子会话 waiting = merge）。
+ * - 不按月份硬切（11/07 用户定）：月份只是检查点。项目常驻；项目下的目标是挂着的「没了结」的 Task：本月 Mission 下本人负责的，
+ *   加之前月份里本人负责、还没了结、在天枢里动过的。了结 = 本人确认完成（completedAt）、到此为止、或已延续成新月份的一件 Task。
+ *   子会话、项目对话、后台任务都不看月份。
  *
  * 伙伴那一侧的选项框工具 ask_user（给晨星 / Chat 服务，支持之前只有本机子会话里的提问用选项框）：
  * - 参数照天枢自己对话里的 ask_user（conversations.ts 的 AskUserInput）：一次 1–4 题，每题 2–4 个选项 { label ≤ 40, detail? ≤ 120, recommended? }，
@@ -118,43 +118,70 @@ export const HomeItem = Type.Object({
   updatedAt: Instant,
 }, strict);
 
+const Period = Type.String({ pattern: "^\\d{4}-(0[1-9]|1[0-2])$" });
+
 /**
- * 左栏一件 Task：本人负责、没了结的（见文件头；本月的 Mission 定好就出现，哪怕还没开始聊）。
- * subtitle：标题下一行小字（完成定义或第一条标准，都没有为 null）。
- * pipeline.conversationId：这件 Task 的管线对话；还没开过为 null（POST /api/me/tasks/:taskId/pipeline 建）。对话的 scope 永远是 plan-task:<taskId>。
- * planning：规划员在拆这件 Task（本机的规划员会话还没结束，或登记了拆卡还没开）。
- * completedAt：本人确认完成的时间（V1 的「交付」：最新一版交付物交付了）；交付以后又开了返工、或交付撤回了，回到 null。
- * 不为 null 时网页把它下面的子会话全部收起，Task 行打勾；本月的照样列着，之前月份的了结了就不列。
- * items：本人在这件 Task 下自己做的执行事项（没完成的，和这件 Task 还在树上时完成了的）。
+ * 项目行上的一件目标：挂着、没了结的 Task（本月的，加之前月份没了结的；本月的了结了照样列，completedAt 不为 null）。
+ * 16.2 副标题「{月} 月 · {Task 名} · {截止} 验收」、项目页目标条的「名字、截止、标准 1/3」用它。
+ * dueDate 是验收截止日（YYYY-MM-DD）：本体的 Task 没有截止日，取它所在月份的最后一天。
+ * criteriaMet / criteriaTotal：标准几条达到（每条至少一张对它的卡、最近一次有结论的交回算通过）/ 一共几条（本体没写标准时是完成定义那一条，都没有为 0）。
+ * criteria 是标准原文（目标条点开逐条看）；completedAt 是本人确认完成的时间。
  */
-export const HomeTask = Type.Object({
+export const HomeProjectGoal = Type.Object({
   taskId: Type.String({ minLength: 1 }),
   missionId: Type.String({ minLength: 1 }),
   name: Type.String(),
-  subtitle: Nullable(Type.String()),
+  period: Period,
+  dueDate: Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" }),
+  criteria: Type.Array(Type.String()),
+  criteriaMet: Type.Integer({ minimum: 0 }),
+  criteriaTotal: Type.Integer({ minimum: 0 }),
+  completedAt: Nullable(Instant),
+}, strict);
+
+/**
+ * 左栏一个项目（16.2，没归档的）：
+ * - goals：挂着的目标（见 HomeProjectGoal），截止早的在前；空的就是「本月没有目标」。
+ * - budget：挂着的 Task 里预算用到 80% 以上的（本机报的 budget 条目，取用得最多的那件），副标题优先写「预算 {percent}%」（--warning）；没有为 null。
+ * - 副标题按这个顺序取第一个有的：budget → goals[0] →「本月没有目标 · {lastActivityAt}」。
+ * - summary、planning、subSessions、items 的规矩同原来的 Task 行：子会话、事项是这个项目里的（挂着的 Task 下的，和直接放在项目里的）。
+ * - pipeline.conversationId：项目对话，还没开过为 null（POST /api/me/projects/:projectId/pipeline 建）；scope 永远是 project:<projectId>。
+ * - lastActivityAt：最近一次动静（子会话、事项、挂接、建项目），排序和副标题用。
+ */
+export const HomeProject = Type.Object({
+  projectId: Type.String({ format: "uuid" }),
+  name: Type.String(),
+  goals: Type.Array(HomeProjectGoal),
+  budget: Nullable(Type.Object({ state: Type.Union([Type.Literal("warning"), Type.Literal("exhausted")]), percent: Type.Integer({ minimum: 0 }),
+    taskId: Type.String({ minLength: 1 }) }, strict)),
+  lastActivityAt: Instant,
   summary: HomeTaskSummary,
   pipeline: Type.Object({ conversationId: Nullable(Type.String({ minLength: 1 })), scope: Type.String({ minLength: 1 }) }, strict),
   planning: Type.Boolean(),
-  completedAt: Nullable(Instant),
   subSessions: Type.Array(SubSession),
   items: Type.Array(HomeItem),
 }, strict);
 
-const Period = Type.String({ pattern: "^\\d{4}-(0[1-9]|1[0-2])$" });
-
-/** 树上一个 Mission：period 是它的月份（YYYY-MM），之前月份的网页标出「10 月」。 */
-export const HomeMission = Type.Object({
+/** 首页「本月」里的一件 Task（16.4）：project 是挂在哪个项目（点了进项目）；没挂上为 null，网页画「挂到…」（选现有项目或新建）。 */
+export const HomeMonthTask = Type.Object({
+  taskId: Type.String({ minLength: 1 }),
+  name: Type.String(),
+  completedAt: Nullable(Instant),
+  project: Nullable(Type.Object({ projectId: Type.String({ format: "uuid" }), name: Type.String() }, strict)),
+}, strict);
+/** 「本月」按 Mission 分组：本人这个月的 Mission（本月没有就是本人最近一个月的，同「看得见的 Mission」），下面是本人负责的 Task。没有 Task 的 Mission 也列。 */
+export const HomeMonthMission = Type.Object({
   missionId: Type.String({ minLength: 1 }),
   title: Type.String(),
   period: Period,
-  tasks: Type.Array(HomeTask),
+  tasks: Type.Array(HomeMonthTask),
 }, strict);
 
 /**
  * 等你：要本人拿主意、不拿就有事卡住的，才进来（设计 9.6）；只是让你知道的（群消息、协作进展、文档变更、雷达、第一次没过）不进。一件一行。
  * approval / question：子会话（或规划员、验收员）在等你批准、等你回复；verdict：卡连续两次验收没过（受阻）；
  * merge：卡验收过了但本机没能自动合回，等你在那台电脑上合（open 是卡，deviceId 是那台电脑）；
- * plan_start：规划员出了派活单，计划等你开工（open 是 Task 管线，就地「开工」= 接受草稿带 start）；
+ * plan_start：规划员出了派活单，计划等你开工（open 是项目对话，就地「开工」= 接受草稿带 start）；
  * meeting：会议记录要你确认（你是责任人的决策、你负责的行动项、你主持的会要补归属或记录没生成），一场会一行；
  * mission_card：Mission Card 要你做的事（本人确认我的任务，或拍板人那一侧的待办），dueAt 是本人确认截止的时间；
  * acceptance：请你认可——别人的 Task 有一条约定由你来认，负责人请你看了（person 是对方，open 是只读的 Task 详情）；
@@ -170,15 +197,15 @@ export const WaitingKind = Type.Union([
 ]);
 
 /**
- * 去哪儿看：card、topic 是子会话（id 是卡或专题的 id），task 是 Task 管线（id 是 Task id），meeting 是会议（id 是会议 id），
+ * 去哪儿看：card、topic 是子会话（id 是卡或专题的 id），project 是项目对话（id 是项目 id），meeting 是会议（id 是会议 id），
  * mission_card 是个人 Mission Card（id 是任务卡 id，拍板人那一侧没有具体某张卡时是轮次 id，round = true），role 是岗位修改建议（id 是建议 id），
  * task_detail 是 Task 详情（别人的 Task 只读，id 是 Task id），month 是月份页（id 是 YYYY-MM），connections 是连接页（id 固定 "this_computer"）。
- * focus（设计 14.3）：子会话（卡、专题、规划员、验收员）的提问和批准由 Task 管线转达，kind = task 时带上是哪个框：sessionId 是那个本机会话，
+ * focus（设计 14.3）：子会话（卡、专题、规划员、验收员）的提问和批准由项目对话转达，kind = project 时带上是哪个框：sessionId 是那个本机会话，
  * requestId 是那次提问或批准（同 WaitingItem.question / permission 的 requestId；老版本本机程序没报时为 null，定位到那个会话最新的框）。
- * 网页落在 Task 管线的那个框上，焦点放在推荐的选项上。不挂 Task（或 Task 不在树上）的子会话没有管线，照旧打开子会话（card / topic），不带 focus。
+ * 网页落在项目对话的那个框上，焦点放在推荐的选项上。不在任何项目里的子会话照旧打开子会话（card / topic），不带 focus。
  */
 export const WaitingTarget = Type.Object({
-  kind: Type.Union([Type.Literal("card"), Type.Literal("topic"), Type.Literal("task"), Type.Literal("meeting"), Type.Literal("mission_card"), Type.Literal("role"),
+  kind: Type.Union([Type.Literal("card"), Type.Literal("topic"), Type.Literal("project"), Type.Literal("meeting"), Type.Literal("mission_card"), Type.Literal("role"),
     Type.Literal("task_detail"), Type.Literal("month"), Type.Literal("connections")]),
   id: Type.String({ minLength: 1 }),
   round: Type.Optional(Type.Boolean()),
@@ -196,8 +223,8 @@ export const WaitingAnswer = Type.Union([Type.Literal("inline"), Type.Literal("i
 
 /**
  * 一件等你的事。id 稳定（同一件事每次一样），界面拿它做 key。title 是要你定的事，source 是小字（出自哪件 Task、哪场会、哪个战场）。
- * 子会话的提问和批准（approval、question）source 只写 Task 名（14.3），不挂 Task 的写子会话的名字。
- * taskId：属于哪件 Task（Task 一行的「1 件等你」和 Task 管线里的提醒用），不属于为 null。
+ * 子会话的提问和批准（approval、question）source 只写项目名（14.3），不在项目里的写子会话的名字。
+ * taskId：属于哪件 Task，不属于为 null；projectId：属于哪个项目（项目行的「1 件等你」和项目对话里的提醒用），不属于为 null。
  * sessionId、deviceId、deviceName：子会话那几种（approval、question、merge）是哪个本机会话、在哪台电脑上；在这台电脑上的，网页就地批准、回答、合回（本机程序接口），别处的只能打开看。
  * dueAt：有截止时间的（Mission Card 本人确认截止、复盘窗口关闭）写上，网页离截止不到 24 小时换警告档；没有为 null。
  * person：acceptance 是请你认可的那个人（负责人），别的为 null。month：只有 kind = month 有（step、period）。
@@ -215,6 +242,7 @@ export const WaitingItem = Type.Object({
   at: Nullable(Instant),
   open: WaitingTarget,
   taskId: Nullable(Type.String({ minLength: 1 })),
+  projectId: Nullable(Type.String({ format: "uuid" })),
   sessionId: Nullable(Type.String({ format: "uuid" })),
   deviceId: Nullable(Type.String({ format: "uuid" })),
   deviceName: Nullable(Type.String()),
@@ -227,27 +255,29 @@ export const WaitingItem = Type.Object({
 }, strict);
 
 /**
- * GET /api/me/work-home（DRI 工作台）：左栏的树和首页的「等你」一次给全。伙伴的汇总读同一份（/internal/me/work-home，INTERNAL_CHAT_TOKEN 加 X-Owner-Id）。
+ * GET /api/me/work-home（DRI 工作台，第 16 节的 v2）：左栏的项目、首页的「本月」和「等你」一次给全。伙伴的汇总读同一份（/internal/me/work-home，INTERNAL_CHAT_TOKEN 加 X-Owner-Id）。
  * period：现在是哪个月（公司时区，YYYY-MM）。
- * missions：有「没了结」的 Task 的 Mission（见文件头），本月的在前，之前月份的按月份从近到远；本月的 Mission 没有 Task 也列。每个下面是本人负责的 Task。
- * 一件 Task 下面的子会话不看月份，全列（done 的网页折叠）。
- * other.subSessions：不归任何 Task 的子会话，加 Task 不在树上（了结了、或不是本人负责）但还没完成的子会话，左栏最下面一组「其他」；
- * other.items：没挂 Mission、没完成没退回的执行事项（设计 9.10），新的在前：待归位的（会议或 Agent 分派给本人的），和本人自己建的独立事项（10/26 的规矩允许不挂 Mission）。
+ * projects：没归档的项目（16.2 排序）：有等你的在前（summary.needsYou > 0），然后是有目标的、按最早的截止日，最后按最近动静从近到远。不按 Mission 分组。
+ * archivedCount：归档了几个（左栏「已归档 N」，点开读 GET /api/me/projects）。
+ * month：「本月」（16.4），替换原来的「各 Mission 的 Task」。
+ * other.subSessions：不在任何项目里的子会话（上线前留下的），加挂在了结了的 Task 下、还没完成的；other.items：没挂 Mission 的待归位事项（9.10），新的在前。
  * waiting：等你。排序（设计 9.6）：先是卡住正在跑的活的（approval、question、quota），再是有截止时间的（dueAt 早的在前），其余按 at 新的在前。
  */
 export const WorkHomeResponse = Type.Object({
   period: Period,
-  missions: Type.Array(HomeMission),
+  projects: Type.Array(HomeProject),
+  archivedCount: Type.Integer({ minimum: 0 }),
+  month: Type.Object({ missions: Type.Array(HomeMonthMission) }, strict),
   other: Type.Object({ subSessions: Type.Array(SubSession), items: Type.Array(HomeItem) }, strict),
   waiting: Type.Array(WaitingItem),
 }, strict);
 
 /**
- * Task 管线里网页按时间插的一行（第 4.5 节，从卡和交回现算，不另存事件）。id 稳定，网页按它去重；at 是这件事发生的时间。
+ * 项目对话（原 Task 管线）里网页按时间插的一行（第 4.5 节，从卡和交回现算，不另存事件）。id 稳定，网页按它去重；at 是这件事发生的时间。
  * - card_passed：一张卡验收过了（含本人「仍然通过」），met / total 几条达到，merge 是合回结果（「已合进 main」，或要你合的原因）。
  * - card_blocked：一张卡连续两次没过（受阻），fix 是拼好的改法；网页给选项「按这个改（推荐）/ 我去看看 / 仍然通过」，
  *   按这个改 = 照原来的送回（说一句 + /handbacks/:id/returned），仍然通过 = 推翻（/handbacks/:id/overrule）。
- * - criteria_met：约定里的每一条都有验收通过的卡（met = total）；网页问「约定 n 条都达到了，交给认可人？（推荐）」，
+ * - criteria_met：taskId 这件 Task 约定里的每一条都有验收通过的卡（met = total）；网页问「约定 n 条都达到了，交给认可人？（推荐）」，
  *   接 V1 的出一版（/deliverable/versions/from-pending）、对表、请 X 看、交付。完成仍只由本人确认。
  * - rework_opened：合回以后被推翻，管线在同一件 Task 下开了一张返工卡（cardId），fromCardId 是被推翻的那张，reason 是推翻的理由。
  */
@@ -257,7 +287,8 @@ export const TaskFeedItem = Type.Union([
     met: Type.Integer({ minimum: 0 }), total: Type.Integer({ minimum: 0 }), merge: Nullable(CardMerge) }, strict),
   Type.Object({ kind: Type.Literal("card_blocked"), ...FeedBase, cardId: Type.String({ format: "uuid" }), title: Type.String(),
     handbackId: Type.String({ format: "uuid" }), fix: Nullable(Type.String()) }, strict),
-  Type.Object({ kind: Type.Literal("criteria_met"), ...FeedBase, met: Type.Integer({ minimum: 1 }), total: Type.Integer({ minimum: 1 }) }, strict),
+  Type.Object({ kind: Type.Literal("criteria_met"), ...FeedBase, taskId: Type.String({ minLength: 1 }), met: Type.Integer({ minimum: 1 }),
+    total: Type.Integer({ minimum: 1 }) }, strict),
   Type.Object({ kind: Type.Literal("rework_opened"), ...FeedBase, cardId: Type.String({ format: "uuid" }), title: Type.String(),
     fromCardId: Type.String({ format: "uuid" }), reason: Type.String() }, strict),
 ]);
@@ -300,7 +331,7 @@ export const BackgroundItem = Type.Object({
 
 /**
  * GET /api/me/background?scope=…：右栏跟着展示区走，看哪条对话就列哪条开出去的后台任务。
- * scope：main（首页和总管线：本人全部）、task:<taskId>（Task 管线和 Task 详情：这件 Task 的规划员，加它下面各子会话的）、
+ * scope：main（首页和总管线：本人全部）、project:<projectId>（项目对话和详情：挂着的 Task 的规划员，加项目里各子会话的）、task:<taskId>（这件 Task 的规划员和它下面各子会话的）、
  * card:<卡 id>（这张卡的验收员和它会话里的子 agent、后台命令）、topic:<专题 id>（这个专题会话里的）。
  * items：进行中的（按开始时间）在前，然后是今天（公司时区）结束的（新的在前）。resources 是右栏第一行：本机在不在线、几个位置用了几个、今天的花费（同 /api/me/workers）。
  * 云端的数据给手机用；在配对的电脑上，网页以本机程序的实时事件为准，合并进来。
@@ -310,38 +341,27 @@ export const BackgroundResponse = Type.Object({
   resources: WorkerResources,
 }, strict);
 /**
- * 右栏跟着什么（设计第 5 节）：首页、总管线 → main；Task 管线、Task 详情 → task:<taskId>；子会话 → card:<id> / topic:<id>；
+ * 右栏跟着什么（设计第 5 节）：首页、总管线 → main；项目对话、项目详情 → project:<projectId>；子会话 → card:<id> / topic:<id>；
  * 二级页、月份页 → resources（只要资源块，items 为空）。
  */
 export const BackgroundQuery = Type.Object({
-  scope: Type.String({ pattern: "^(main|resources|task:.{1,128}|card:[0-9a-fA-F-]{36}|topic:[0-9a-fA-F-]{36})$" }),
-}, strict);
-
-/**
- * POST /api/me/tasks/:taskId/pipeline（Task 负责人）：这件 Task 的管线对话，第一次打开时建，以后都返回同一条（201 新建、200 已有）。
- * 没接 Chat 时，同时到的首次请求可能都回 201，但拿到的是同一条对话；网页不要靠 201、200 区分。
- * 收发消息、接上、停止都走现有的对话接口，scope 用这里给的 plan-task:<taskId>（/api/conversations/{scope}/messages 等）。
- * conversationId 是 Chat 服务里那段对话的 id（没接 Chat 时是天枢自己的对话 id），只作标识，网页不用拿它调 Chat。
- */
-export const TaskPipelineResponse = Type.Object({
-  taskId: Type.String({ minLength: 1 }),
-  conversationId: Type.String({ minLength: 1 }),
-  scope: Type.String({ minLength: 1 }),
+  scope: Type.String({ pattern: "^(main|resources|task:.{1,128}|project:[0-9a-fA-F-]{36}|card:[0-9a-fA-F-]{36}|topic:[0-9a-fA-F-]{36})$" }),
 }, strict);
 
 /** POST /api/me/route：首页输入框选「自动」时，这一句发给谁。 */
 export const RouteRequest = Type.Object({ text: Type.String({ minLength: 1, maxLength: 20_000 }) }, strict);
 
 /**
- * 发给谁：main 是伙伴的总管线；{ taskId } 是那件 Task 的管线。先不用模型：句子里提到了哪件 Task 名字或标准里的词，就发给那件；
- * 提到的词几件 Task 都有、分不出来，或什么都没提到，发给伙伴。
+ * 发给谁（16.4）：main 是伙伴的总管线；{ projectId } 是那个项目的对话。先不用模型：句子里提到了哪个项目的名字，或它挂着的 Task 的名字、标准里的词，
+ * 就发给那个项目；几个项目都有、分不出来，或什么都没提到，发给伙伴。
  */
 export const RouteResponse = Type.Object({
-  target: Type.Union([Type.Literal("main"), Type.Object({ taskId: Type.String({ minLength: 1 }) }, strict)]),
+  target: Type.Union([Type.Literal("main"), Type.Object({ projectId: Type.String({ format: "uuid" }) }, strict)]),
 }, strict);
 
 /**
- * 一条「要开工」（第 4.4 节）：卡（kind = card，cardId）或专题（kind = topic，topicId）。taskId 是挂的 Task（专题可以不挂）。
+ * 一条「要开工」（第 4.4 节）：卡（kind = card，cardId）或专题（kind = topic，topicId）。taskId 是挂的 Task（专题可以不挂），
+ * projectId 是在哪个项目里（本机在这个项目在这台电脑上绑的文件夹里跑；不在项目里为 null）。
  * 来自管线里定了的计划（派活单上选了「就按这个开始」，接受草稿时带 start: true）或伙伴开的探索子会话。
  */
 export const SessionStartView = Type.Object({
@@ -350,6 +370,7 @@ export const SessionStartView = Type.Object({
   cardId: Nullable(Type.String({ format: "uuid" })),
   topicId: Nullable(Type.String({ format: "uuid" })),
   taskId: Nullable(Type.String({ minLength: 1 })),
+  projectId: Nullable(Type.String({ format: "uuid" })),
   requestedAt: Instant,
 }, strict);
 
@@ -372,11 +393,13 @@ export const ClaimSessionStartsResponse = Type.Object({ starts: Type.Array(Claim
 
 /**
  * 伙伴开探索子会话（工具 open_topic，/internal/me/topics，照 /internal 的 INTERNAL_CHAT_TOKEN 加 X-Owner-Id，不进公开 OpenAPI）：
- * 建一个专题并登记要开工，不用本人同意。planTaskId 是归到哪件 Task（本人负责的）；不归任何 Task 不带，子会话挂在「其他」。
+ * 建一个专题并登记要开工，不用本人同意。projectId 是在哪个项目里（本人的、没归档的）；planTaskId 是归到哪件 Task（本人负责的，带了就在它挂的项目里）。
+ * 两样都不带，子会话挂在「其他」。
  */
 export const BuddyOpenTopicRequest = Type.Object({
   title: Type.String({ minLength: 1, maxLength: 60 }),
   planTaskId: Type.Optional(Type.String({ minLength: 1 })),
+  projectId: Type.Optional(Type.String({ format: "uuid" })),
 }, strict);
 export const BuddyOpenTopicResponse = Type.Object({ topicId: Type.String({ format: "uuid" }), start: SessionStartView }, strict);
 
@@ -387,8 +410,10 @@ export type TTaskFeedItem = Static<typeof TaskFeedItem>;
 export type TTaskFeedResponse = Static<typeof TaskFeedResponse>;
 export type TSubSession = Static<typeof SubSession>;
 export type THomeTaskSummary = Static<typeof HomeTaskSummary>;
-export type THomeTask = Static<typeof HomeTask>;
-export type THomeMission = Static<typeof HomeMission>;
+export type THomeProjectGoal = Static<typeof HomeProjectGoal>;
+export type THomeProject = Static<typeof HomeProject>;
+export type THomeMonthTask = Static<typeof HomeMonthTask>;
+export type THomeMonthMission = Static<typeof HomeMonthMission>;
 export type TWaitingKind = Static<typeof WaitingKind>;
 export type TWaitingAnswer = Static<typeof WaitingAnswer>;
 export type THomeItem = Static<typeof HomeItem>;
@@ -400,7 +425,6 @@ export type TBackgroundState = Static<typeof BackgroundState>;
 export type TBackgroundItem = Static<typeof BackgroundItem>;
 export type TBackgroundResponse = Static<typeof BackgroundResponse>;
 export type TBackgroundQuery = Static<typeof BackgroundQuery>;
-export type TTaskPipelineResponse = Static<typeof TaskPipelineResponse>;
 export type TRouteRequest = Static<typeof RouteRequest>;
 export type TRouteResponse = Static<typeof RouteResponse>;
 export type TSessionStartView = Static<typeof SessionStartView>;

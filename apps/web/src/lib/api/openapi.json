@@ -20189,7 +20189,7 @@
     "/api/me/work-home": {
       "get": {
         "operationId": "getWorkHome",
-        "summary": "新首页（DRI 工作台）：Mission → 本人负责、没了结的 Task → 子会话（卡、专题）的树，不归任何 Task 的「其他」，和跨来源的「等你」；不按月份硬切",
+        "summary": "新首页 v2（DRI 工作台，第 16 节）：没归档的项目（挂着的目标、子会话、事项）、「本月」按 Mission 列这个月的 Task 和挂在哪个项目、「其他」和跨来源的「等你」",
         "responses": {
           "200": {
             "description": "首页",
@@ -20227,7 +20227,7 @@
     "/api/me/background": {
       "get": {
         "operationId": "getBackground",
-        "summary": "后台任务（右栏）：scope=main | resources | task:<taskId> | card:<卡 id> | topic:<专题 id>；规划员、验收员、子会话里的子 agent 和后台命令，加资源摘要（resources 只要资源块）",
+        "summary": "后台任务（右栏）：scope=main | resources | project:<项目 id> | task:<taskId> | card:<卡 id> | topic:<专题 id>；规划员、验收员、子会话里的子 agent 和后台命令，加资源摘要（resources 只要资源块）",
         "parameters": [
           {
             "name": "scope",
@@ -20292,11 +20292,257 @@
         }
       }
     },
-    "/api/me/tasks/{taskId}/pipeline": {
+    "/api/me/projects": {
+      "get": {
+        "operationId": "listProjects",
+        "summary": "本人全部项目（含归档的）：没归档的在前，各自按最近动静从近到远",
+        "responses": {
+          "200": {
+            "description": "项目",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
       "post": {
-        "operationId": "openTaskPipeline",
-        "summary": "这件 Task 的管线对话（Task 负责人）：第一次打开时建，以后都返回同一条；收发消息走 /api/conversations/{scope}，scope 是 plan-task:<taskId>",
+        "operationId": "createProject",
+        "summary": "建一个项目；带 taskId 时顺手把这件本人负责的 Task 挂上来（原来挂在别处就移过来）",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProjectRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "建好的项目",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/projects/{projectId}": {
+      "get": {
+        "operationId": "getProject",
+        "summary": "项目详情：目标历史（每月挂过的 Task 和判定，月份从近到远）；当前 Task 的标准、约定、交付物照 Task 详情的接口按 taskId 读",
         "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "项目详情",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDetailResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateProject",
+        "summary": "改名、归档（archived: true）、恢复（archived: false）",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProjectRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "改好的项目",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/projects/{projectId}/goals/{taskId}": {
+      "put": {
+        "operationId": "linkProjectGoal",
+        "summary": "把一件本人负责的 Task 挂到这个项目（原来挂在别处就移过来）；归档了的项目不能挂（409）",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
           {
             "name": "taskId",
             "in": "path",
@@ -20308,21 +20554,146 @@
         ],
         "responses": {
           "200": {
-            "description": "已有的管线",
+            "description": "这条挂接",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskPipelineResponse"
+                  "$ref": "#/components/schemas/ProjectGoal"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "unlinkProjectGoal",
+        "summary": "把这件 Task 从项目上取下来，回到「本月」里没挂的状态",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "取下来了"
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/projects/{projectId}/pipeline": {
+      "post": {
+        "operationId": "openProjectPipeline",
+        "summary": "这个项目的对话：第一次打开时建，以后都返回同一条；收发消息走 /api/conversations/{scope}，scope 是 project:<projectId>",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "已有的项目对话",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectPipelineResponse"
                 }
               }
             }
           },
           "201": {
-            "description": "新建的管线",
+            "description": "新建的项目对话",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskPipelineResponse"
+                  "$ref": "#/components/schemas/ProjectPipelineResponse"
                 }
               }
             }
@@ -20380,13 +20751,13 @@
         }
       }
     },
-    "/api/me/tasks/{taskId}/feed": {
+    "/api/me/projects/{projectId}/feed": {
       "get": {
-        "operationId": "getTaskFeed",
-        "summary": "Task 管线里的验收行（Task 负责人）：卡验收过了（带合回结果）、受阻、约定都达到、合回后推翻开了返工卡，从旧到新；网页按时间插进 Task 管线",
+        "operationId": "getProjectFeed",
+        "summary": "项目对话里按时间插的行：挂上新目标（分隔线）、卡验收过了（带合回结果）、受阻、约定都达到、合回后推翻开了返工卡，从旧到新",
         "parameters": [
           {
-            "name": "taskId",
+            "name": "projectId",
             "in": "path",
             "required": true,
             "schema": {
@@ -20396,11 +20767,11 @@
         ],
         "responses": {
           "200": {
-            "description": "验收行",
+            "description": "项目动态",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskFeedResponse"
+                  "$ref": "#/components/schemas/ProjectFeedResponse"
                 }
               }
             }
@@ -20441,7 +20812,7 @@
     "/api/me/route": {
       "post": {
         "operationId": "routeMessage",
-        "summary": "首页「自动」发给谁：句子里提到了哪件 Task 的名字或标准里的词就发给那件 Task 的管线，分不出来或没提到发给伙伴；不用模型",
+        "summary": "首页「自动」发给谁：句子里提到了哪个项目的名字、或它挂着的 Task 的名字和标准里的词就发给那个项目，分不出来或没提到发给伙伴；不用模型",
         "requestBody": {
           "required": true,
           "content": {
@@ -27290,7 +27661,7 @@
         ],
         "properties": {
           "scope": {
-            "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|plan-task:.{1,128})$",
+            "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|project:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
             "description": "global 或稳定对象 scope",
             "type": "string"
           },
@@ -28318,7 +28689,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|plan-task:.{1,128})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|project:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -28352,7 +28723,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|plan-task:.{1,128})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|project:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -28410,7 +28781,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|plan-task:.{1,128})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|project:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -28469,7 +28840,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|plan-task:.{1,128})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|project:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -28577,7 +28948,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|plan-task:.{1,128})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|project:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -28651,7 +29022,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|plan-task:.{1,128})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|project:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -28688,7 +29059,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|plan-task:.{1,128})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|project:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -28740,7 +29111,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|plan-task:.{1,128})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|project:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -28789,7 +29160,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|plan-task:.{1,128})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|project:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -28831,7 +29202,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|plan-task:.{1,128})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|project:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -28870,7 +29241,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|plan-task:.{1,128})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|project:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -28934,7 +29305,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|plan-task:.{1,128})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|project:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -28984,7 +29355,7 @@
                 "type": "string"
               },
               "scope": {
-                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|plan-task:.{1,128})$",
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|project:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
                 "description": "global 或稳定对象 scope",
                 "type": "string"
               },
@@ -106069,20 +106440,19 @@
           }
         }
       },
-      "HomeTask": {
+      "HomeProjectGoal": {
         "additionalProperties": false,
         "type": "object",
         "required": [
           "taskId",
           "missionId",
           "name",
-          "subtitle",
-          "summary",
-          "pipeline",
-          "planning",
-          "completedAt",
-          "subSessions",
-          "items"
+          "period",
+          "dueDate",
+          "criteria",
+          "criteriaMet",
+          "criteriaTotal",
+          "completedAt"
         ],
         "properties": {
           "taskId": {
@@ -106096,15 +106466,169 @@
           "name": {
             "type": "string"
           },
-          "subtitle": {
+          "period": {
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "type": "string"
+          },
+          "dueDate": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "type": "string"
+          },
+          "criteria": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "criteriaMet": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "criteriaTotal": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "completedAt": {
             "anyOf": [
               {
+                "format": "date-time",
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ]
+          }
+        }
+      },
+      "HomeProject": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "projectId",
+          "name",
+          "goals",
+          "budget",
+          "lastActivityAt",
+          "summary",
+          "pipeline",
+          "planning",
+          "subSessions",
+          "items"
+        ],
+        "properties": {
+          "projectId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "goals": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "taskId",
+                "missionId",
+                "name",
+                "period",
+                "dueDate",
+                "criteria",
+                "criteriaMet",
+                "criteriaTotal",
+                "completedAt"
+              ],
+              "properties": {
+                "taskId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "missionId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "period": {
+                  "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                  "type": "string"
+                },
+                "dueDate": {
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                  "type": "string"
+                },
+                "criteria": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "criteriaMet": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "criteriaTotal": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "completedAt": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "budget": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "state",
+                  "percent",
+                  "taskId"
+                ],
+                "properties": {
+                  "state": {
+                    "anyOf": [
+                      {
+                        "const": "warning",
+                        "type": "string"
+                      },
+                      {
+                        "const": "exhausted",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "percent": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "taskId": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lastActivityAt": {
+            "format": "date-time",
+            "type": "string"
           },
           "summary": {
             "additionalProperties": false,
@@ -106171,17 +106695,6 @@
           },
           "planning": {
             "type": "boolean"
-          },
-          "completedAt": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
           },
           "subSessions": {
             "type": "array",
@@ -106547,7 +107060,61 @@
           }
         }
       },
-      "HomeMission": {
+      "HomeMonthTask": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "taskId",
+          "name",
+          "completedAt",
+          "project"
+        ],
+        "properties": {
+          "taskId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "completedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "project": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "projectId",
+                  "name"
+                ],
+                "properties": {
+                  "projectId": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "HomeMonthMission": {
         "additionalProperties": false,
         "type": "object",
         "required": [
@@ -106575,37 +107142,734 @@
               "type": "object",
               "required": [
                 "taskId",
-                "missionId",
                 "name",
-                "subtitle",
-                "summary",
-                "pipeline",
-                "planning",
                 "completedAt",
-                "subSessions",
-                "items"
+                "project"
               ],
               "properties": {
                 "taskId": {
                   "minLength": 1,
                   "type": "string"
                 },
-                "missionId": {
-                  "minLength": 1,
-                  "type": "string"
-                },
                 "name": {
                   "type": "string"
                 },
-                "subtitle": {
+                "completedAt": {
                   "anyOf": [
                     {
+                      "format": "date-time",
                       "type": "string"
                     },
                     {
                       "type": "null"
                     }
                   ]
+                },
+                "project": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "projectId",
+                        "name"
+                      ],
+                      "properties": {
+                        "projectId": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "WaitingTarget": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "id"
+        ],
+        "properties": {
+          "kind": {
+            "anyOf": [
+              {
+                "const": "card",
+                "type": "string"
+              },
+              {
+                "const": "topic",
+                "type": "string"
+              },
+              {
+                "const": "project",
+                "type": "string"
+              },
+              {
+                "const": "meeting",
+                "type": "string"
+              },
+              {
+                "const": "mission_card",
+                "type": "string"
+              },
+              {
+                "const": "role",
+                "type": "string"
+              },
+              {
+                "const": "task_detail",
+                "type": "string"
+              },
+              {
+                "const": "month",
+                "type": "string"
+              },
+              {
+                "const": "connections",
+                "type": "string"
+              }
+            ]
+          },
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "round": {
+            "type": "boolean"
+          },
+          "focus": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "sessionId",
+              "requestId"
+            ],
+            "properties": {
+              "sessionId": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "requestId": {
+                "anyOf": [
+                  {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "WaitingItem": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "source",
+          "at",
+          "open",
+          "taskId",
+          "projectId",
+          "sessionId",
+          "deviceId",
+          "deviceName",
+          "dueAt",
+          "answer",
+          "person",
+          "month",
+          "question",
+          "permission"
+        ],
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "const": "approval",
+                "type": "string"
+              },
+              {
+                "const": "question",
+                "type": "string"
+              },
+              {
+                "const": "verdict",
+                "type": "string"
+              },
+              {
+                "const": "meeting",
+                "type": "string"
+              },
+              {
+                "const": "mission_card",
+                "type": "string"
+              },
+              {
+                "const": "role",
+                "type": "string"
+              },
+              {
+                "const": "merge",
+                "type": "string"
+              },
+              {
+                "const": "plan_start",
+                "type": "string"
+              },
+              {
+                "const": "acceptance",
+                "type": "string"
+              },
+              {
+                "const": "month",
+                "type": "string"
+              },
+              {
+                "const": "device",
+                "type": "string"
+              },
+              {
+                "const": "quota",
+                "type": "string"
+              }
+            ]
+          },
+          "title": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "open": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "kind",
+              "id"
+            ],
+            "properties": {
+              "kind": {
+                "anyOf": [
+                  {
+                    "const": "card",
+                    "type": "string"
+                  },
+                  {
+                    "const": "topic",
+                    "type": "string"
+                  },
+                  {
+                    "const": "project",
+                    "type": "string"
+                  },
+                  {
+                    "const": "meeting",
+                    "type": "string"
+                  },
+                  {
+                    "const": "mission_card",
+                    "type": "string"
+                  },
+                  {
+                    "const": "role",
+                    "type": "string"
+                  },
+                  {
+                    "const": "task_detail",
+                    "type": "string"
+                  },
+                  {
+                    "const": "month",
+                    "type": "string"
+                  },
+                  {
+                    "const": "connections",
+                    "type": "string"
+                  }
+                ]
+              },
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "round": {
+                "type": "boolean"
+              },
+              "focus": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "sessionId",
+                  "requestId"
+                ],
+                "properties": {
+                  "sessionId": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "requestId": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "taskId": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "projectId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sessionId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "deviceId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "deviceName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dueAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "answer": {
+            "anyOf": [
+              {
+                "const": "inline",
+                "type": "string"
+              },
+              {
+                "const": "inline_local",
+                "type": "string"
+              },
+              {
+                "const": "open",
+                "type": "string"
+              }
+            ]
+          },
+          "person": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "personId",
+                  "name"
+                ],
+                "properties": {
+                  "personId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "month": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "step",
+                  "period"
+                ],
+                "properties": {
+                  "step": {
+                    "anyOf": [
+                      {
+                        "const": "review",
+                        "type": "string"
+                      },
+                      {
+                        "const": "finalize",
+                        "type": "string"
+                      },
+                      {
+                        "const": "continue",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "period": {
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "question": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "requestId",
+                  "questions",
+                  "askedAt"
+                ],
+                "properties": {
+                  "requestId": {
+                    "minLength": 1,
+                    "maxLength": 120,
+                    "type": "string"
+                  },
+                  "questions": {
+                    "minItems": 1,
+                    "maxItems": 10,
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "question",
+                        "header",
+                        "options",
+                        "multiSelect"
+                      ],
+                      "properties": {
+                        "question": {
+                          "minLength": 1,
+                          "maxLength": 2000,
+                          "type": "string"
+                        },
+                        "header": {
+                          "maxLength": 100,
+                          "type": "string"
+                        },
+                        "options": {
+                          "maxItems": 10,
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "label",
+                              "description"
+                            ],
+                            "properties": {
+                              "label": {
+                                "minLength": 1,
+                                "maxLength": 200,
+                                "type": "string"
+                              },
+                              "description": {
+                                "maxLength": 1000,
+                                "type": "string"
+                              }
+                            }
+                          }
+                        },
+                        "multiSelect": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  },
+                  "askedAt": {
+                    "format": "date-time",
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "permission": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "requestId",
+                  "toolName",
+                  "title",
+                  "outsidePaths"
+                ],
+                "properties": {
+                  "requestId": {
+                    "minLength": 1,
+                    "maxLength": 120,
+                    "type": "string"
+                  },
+                  "toolName": {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "title": {
+                    "maxLength": 500,
+                    "type": "string"
+                  },
+                  "outsidePaths": {
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "WorkHomeResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "period",
+          "projects",
+          "archivedCount",
+          "month",
+          "other",
+          "waiting"
+        ],
+        "properties": {
+          "period": {
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "type": "string"
+          },
+          "projects": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "projectId",
+                "name",
+                "goals",
+                "budget",
+                "lastActivityAt",
+                "summary",
+                "pipeline",
+                "planning",
+                "subSessions",
+                "items"
+              ],
+              "properties": {
+                "projectId": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "goals": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "taskId",
+                      "missionId",
+                      "name",
+                      "period",
+                      "dueDate",
+                      "criteria",
+                      "criteriaMet",
+                      "criteriaTotal",
+                      "completedAt"
+                    ],
+                    "properties": {
+                      "taskId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "missionId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "period": {
+                        "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                        "type": "string"
+                      },
+                      "dueDate": {
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                        "type": "string"
+                      },
+                      "criteria": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "criteriaMet": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "criteriaTotal": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "completedAt": {
+                        "anyOf": [
+                          {
+                            "format": "date-time",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                "budget": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "state",
+                        "percent",
+                        "taskId"
+                      ],
+                      "properties": {
+                        "state": {
+                          "anyOf": [
+                            {
+                              "const": "warning",
+                              "type": "string"
+                            },
+                            {
+                              "const": "exhausted",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "percent": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "taskId": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "lastActivityAt": {
+                  "format": "date-time",
+                  "type": "string"
                 },
                 "summary": {
                   "additionalProperties": false,
@@ -106672,17 +107936,6 @@
                 },
                 "planning": {
                   "type": "boolean"
-                },
-                "completedAt": {
-                  "anyOf": [
-                    {
-                      "format": "date-time",
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
                 },
                 "subSessions": {
                   "type": "array",
@@ -107048,653 +108301,64 @@
                 }
               }
             }
-          }
-        }
-      },
-      "WaitingTarget": {
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "kind",
-          "id"
-        ],
-        "properties": {
-          "kind": {
-            "anyOf": [
-              {
-                "const": "card",
-                "type": "string"
-              },
-              {
-                "const": "topic",
-                "type": "string"
-              },
-              {
-                "const": "task",
-                "type": "string"
-              },
-              {
-                "const": "meeting",
-                "type": "string"
-              },
-              {
-                "const": "mission_card",
-                "type": "string"
-              },
-              {
-                "const": "role",
-                "type": "string"
-              },
-              {
-                "const": "task_detail",
-                "type": "string"
-              },
-              {
-                "const": "month",
-                "type": "string"
-              },
-              {
-                "const": "connections",
-                "type": "string"
-              }
-            ]
           },
-          "id": {
-            "minLength": 1,
-            "type": "string"
-          },
-          "round": {
-            "type": "boolean"
-          },
-          "focus": {
-            "additionalProperties": false,
-            "type": "object",
-            "required": [
-              "sessionId",
-              "requestId"
-            ],
-            "properties": {
-              "sessionId": {
-                "format": "uuid",
-                "type": "string"
-              },
-              "requestId": {
-                "anyOf": [
-                  {
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              }
-            }
-          }
-        }
-      },
-      "WaitingItem": {
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "id",
-          "kind",
-          "title",
-          "source",
-          "at",
-          "open",
-          "taskId",
-          "sessionId",
-          "deviceId",
-          "deviceName",
-          "dueAt",
-          "answer",
-          "person",
-          "month",
-          "question",
-          "permission"
-        ],
-        "properties": {
-          "id": {
-            "minLength": 1,
-            "type": "string"
-          },
-          "kind": {
-            "anyOf": [
-              {
-                "const": "approval",
-                "type": "string"
-              },
-              {
-                "const": "question",
-                "type": "string"
-              },
-              {
-                "const": "verdict",
-                "type": "string"
-              },
-              {
-                "const": "meeting",
-                "type": "string"
-              },
-              {
-                "const": "mission_card",
-                "type": "string"
-              },
-              {
-                "const": "role",
-                "type": "string"
-              },
-              {
-                "const": "merge",
-                "type": "string"
-              },
-              {
-                "const": "plan_start",
-                "type": "string"
-              },
-              {
-                "const": "acceptance",
-                "type": "string"
-              },
-              {
-                "const": "month",
-                "type": "string"
-              },
-              {
-                "const": "device",
-                "type": "string"
-              },
-              {
-                "const": "quota",
-                "type": "string"
-              }
-            ]
-          },
-          "title": {
-            "minLength": 1,
-            "type": "string"
-          },
-          "source": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "open": {
-            "additionalProperties": false,
-            "type": "object",
-            "required": [
-              "kind",
-              "id"
-            ],
-            "properties": {
-              "kind": {
-                "anyOf": [
-                  {
-                    "const": "card",
-                    "type": "string"
-                  },
-                  {
-                    "const": "topic",
-                    "type": "string"
-                  },
-                  {
-                    "const": "task",
-                    "type": "string"
-                  },
-                  {
-                    "const": "meeting",
-                    "type": "string"
-                  },
-                  {
-                    "const": "mission_card",
-                    "type": "string"
-                  },
-                  {
-                    "const": "role",
-                    "type": "string"
-                  },
-                  {
-                    "const": "task_detail",
-                    "type": "string"
-                  },
-                  {
-                    "const": "month",
-                    "type": "string"
-                  },
-                  {
-                    "const": "connections",
-                    "type": "string"
-                  }
-                ]
-              },
-              "id": {
-                "minLength": 1,
-                "type": "string"
-              },
-              "round": {
-                "type": "boolean"
-              },
-              "focus": {
-                "additionalProperties": false,
-                "type": "object",
-                "required": [
-                  "sessionId",
-                  "requestId"
-                ],
-                "properties": {
-                  "sessionId": {
-                    "format": "uuid",
-                    "type": "string"
-                  },
-                  "requestId": {
-                    "anyOf": [
-                      {
-                        "minLength": 1,
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  }
-                }
-              }
-            }
-          },
-          "taskId": {
-            "anyOf": [
-              {
-                "minLength": 1,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "sessionId": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "deviceId": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "deviceName": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "dueAt": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "answer": {
-            "anyOf": [
-              {
-                "const": "inline",
-                "type": "string"
-              },
-              {
-                "const": "inline_local",
-                "type": "string"
-              },
-              {
-                "const": "open",
-                "type": "string"
-              }
-            ]
-          },
-          "person": {
-            "anyOf": [
-              {
-                "additionalProperties": false,
-                "type": "object",
-                "required": [
-                  "personId",
-                  "name"
-                ],
-                "properties": {
-                  "personId": {
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "name": {
-                    "type": "string"
-                  }
-                }
-              },
-              {
-                "type": "null"
-              }
-            ]
+          "archivedCount": {
+            "minimum": 0,
+            "type": "integer"
           },
           "month": {
-            "anyOf": [
-              {
-                "additionalProperties": false,
-                "type": "object",
-                "required": [
-                  "step",
-                  "period"
-                ],
-                "properties": {
-                  "step": {
-                    "anyOf": [
-                      {
-                        "const": "review",
-                        "type": "string"
-                      },
-                      {
-                        "const": "finalize",
-                        "type": "string"
-                      },
-                      {
-                        "const": "continue",
-                        "type": "string"
-                      }
-                    ]
-                  },
-                  "period": {
-                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
-                    "type": "string"
-                  }
-                }
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "question": {
-            "anyOf": [
-              {
-                "additionalProperties": false,
-                "type": "object",
-                "required": [
-                  "requestId",
-                  "questions",
-                  "askedAt"
-                ],
-                "properties": {
-                  "requestId": {
-                    "minLength": 1,
-                    "maxLength": 120,
-                    "type": "string"
-                  },
-                  "questions": {
-                    "minItems": 1,
-                    "maxItems": 10,
-                    "type": "array",
-                    "items": {
-                      "additionalProperties": false,
-                      "type": "object",
-                      "required": [
-                        "question",
-                        "header",
-                        "options",
-                        "multiSelect"
-                      ],
-                      "properties": {
-                        "question": {
-                          "minLength": 1,
-                          "maxLength": 2000,
-                          "type": "string"
-                        },
-                        "header": {
-                          "maxLength": 100,
-                          "type": "string"
-                        },
-                        "options": {
-                          "maxItems": 10,
-                          "type": "array",
-                          "items": {
-                            "additionalProperties": false,
-                            "type": "object",
-                            "required": [
-                              "label",
-                              "description"
-                            ],
-                            "properties": {
-                              "label": {
-                                "minLength": 1,
-                                "maxLength": 200,
-                                "type": "string"
-                              },
-                              "description": {
-                                "maxLength": 1000,
-                                "type": "string"
-                              }
-                            }
-                          }
-                        },
-                        "multiSelect": {
-                          "type": "boolean"
-                        }
-                      }
-                    }
-                  },
-                  "askedAt": {
-                    "format": "date-time",
-                    "type": "string"
-                  }
-                }
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "permission": {
-            "anyOf": [
-              {
-                "additionalProperties": false,
-                "type": "object",
-                "required": [
-                  "requestId",
-                  "toolName",
-                  "title",
-                  "outsidePaths"
-                ],
-                "properties": {
-                  "requestId": {
-                    "minLength": 1,
-                    "maxLength": 120,
-                    "type": "string"
-                  },
-                  "toolName": {
-                    "maxLength": 200,
-                    "type": "string"
-                  },
-                  "title": {
-                    "maxLength": 500,
-                    "type": "string"
-                  },
-                  "outsidePaths": {
-                    "maxItems": 20,
-                    "type": "array",
-                    "items": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "missions"
+            ],
+            "properties": {
+              "missions": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "missionId",
+                    "title",
+                    "period",
+                    "tasks"
+                  ],
+                  "properties": {
+                    "missionId": {
+                      "minLength": 1,
                       "type": "string"
-                    }
-                  }
-                }
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        }
-      },
-      "WorkHomeResponse": {
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "period",
-          "missions",
-          "other",
-          "waiting"
-        ],
-        "properties": {
-          "period": {
-            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
-            "type": "string"
-          },
-          "missions": {
-            "type": "array",
-            "items": {
-              "additionalProperties": false,
-              "type": "object",
-              "required": [
-                "missionId",
-                "title",
-                "period",
-                "tasks"
-              ],
-              "properties": {
-                "missionId": {
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "title": {
-                  "type": "string"
-                },
-                "period": {
-                  "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
-                  "type": "string"
-                },
-                "tasks": {
-                  "type": "array",
-                  "items": {
-                    "additionalProperties": false,
-                    "type": "object",
-                    "required": [
-                      "taskId",
-                      "missionId",
-                      "name",
-                      "subtitle",
-                      "summary",
-                      "pipeline",
-                      "planning",
-                      "completedAt",
-                      "subSessions",
-                      "items"
-                    ],
-                    "properties": {
-                      "taskId": {
-                        "minLength": 1,
-                        "type": "string"
-                      },
-                      "missionId": {
-                        "minLength": 1,
-                        "type": "string"
-                      },
-                      "name": {
-                        "type": "string"
-                      },
-                      "subtitle": {
-                        "anyOf": [
-                          {
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "period": {
+                      "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                      "type": "string"
+                    },
+                    "tasks": {
+                      "type": "array",
+                      "items": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "taskId",
+                          "name",
+                          "completedAt",
+                          "project"
+                        ],
+                        "properties": {
+                          "taskId": {
+                            "minLength": 1,
                             "type": "string"
                           },
-                          {
-                            "type": "null"
-                          }
-                        ]
-                      },
-                      "summary": {
-                        "additionalProperties": false,
-                        "type": "object",
-                        "required": [
-                          "running",
-                          "waiting",
-                          "queued",
-                          "done",
-                          "doneToday",
-                          "needsYou"
-                        ],
-                        "properties": {
-                          "running": {
-                            "minimum": 0,
-                            "type": "integer"
+                          "name": {
+                            "type": "string"
                           },
-                          "waiting": {
-                            "minimum": 0,
-                            "type": "integer"
-                          },
-                          "queued": {
-                            "minimum": 0,
-                            "type": "integer"
-                          },
-                          "done": {
-                            "minimum": 0,
-                            "type": "integer"
-                          },
-                          "doneToday": {
-                            "minimum": 0,
-                            "type": "integer"
-                          },
-                          "needsYou": {
-                            "minimum": 0,
-                            "type": "integer"
-                          }
-                        }
-                      },
-                      "pipeline": {
-                        "additionalProperties": false,
-                        "type": "object",
-                        "required": [
-                          "conversationId",
-                          "scope"
-                        ],
-                        "properties": {
-                          "conversationId": {
+                          "completedAt": {
                             "anyOf": [
                               {
-                                "minLength": 1,
+                                "format": "date-time",
                                 "type": "string"
                               },
                               {
@@ -107702,385 +108366,29 @@
                               }
                             ]
                           },
-                          "scope": {
-                            "minLength": 1,
-                            "type": "string"
-                          }
-                        }
-                      },
-                      "planning": {
-                        "type": "boolean"
-                      },
-                      "completedAt": {
-                        "anyOf": [
-                          {
-                            "format": "date-time",
-                            "type": "string"
-                          },
-                          {
-                            "type": "null"
-                          }
-                        ]
-                      },
-                      "subSessions": {
-                        "type": "array",
-                        "items": {
-                          "additionalProperties": false,
-                          "type": "object",
-                          "required": [
-                            "id",
-                            "kind",
-                            "title",
-                            "state",
-                            "waiting",
-                            "queueReason",
-                            "role",
-                            "sessionId",
-                            "deviceId",
-                            "autoStart",
-                            "updatedAt",
-                            "merge",
-                            "holdUntil"
-                          ],
-                          "properties": {
-                            "id": {
-                              "minLength": 1,
-                              "type": "string"
-                            },
-                            "kind": {
-                              "anyOf": [
-                                {
-                                  "const": "card",
-                                  "type": "string"
-                                },
-                                {
-                                  "const": "topic",
-                                  "type": "string"
-                                }
-                              ]
-                            },
-                            "title": {
-                              "type": "string"
-                            },
-                            "state": {
-                              "anyOf": [
-                                {
-                                  "const": "queued",
-                                  "type": "string"
-                                },
-                                {
-                                  "const": "running",
-                                  "type": "string"
-                                },
-                                {
-                                  "const": "waiting",
-                                  "type": "string"
-                                },
-                                {
-                                  "const": "done",
-                                  "type": "string"
-                                },
-                                {
-                                  "const": "failed",
-                                  "type": "string"
-                                }
-                              ]
-                            },
-                            "waiting": {
-                              "anyOf": [
-                                {
-                                  "anyOf": [
-                                    {
-                                      "const": "approval",
-                                      "type": "string"
-                                    },
-                                    {
-                                      "const": "question",
-                                      "type": "string"
-                                    },
-                                    {
-                                      "const": "verdict",
-                                      "type": "string"
-                                    },
-                                    {
-                                      "const": "merge",
-                                      "type": "string"
-                                    }
-                                  ]
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ]
-                            },
-                            "queueReason": {
-                              "anyOf": [
-                                {
-                                  "anyOf": [
-                                    {
-                                      "const": "not_dispatched",
-                                      "type": "string"
-                                    },
-                                    {
-                                      "const": "slot",
-                                      "type": "string"
-                                    },
-                                    {
-                                      "const": "device_offline",
-                                      "type": "string"
-                                    },
-                                    {
-                                      "const": "prior_cards",
-                                      "type": "string"
-                                    },
-                                    {
-                                      "const": "quota",
-                                      "type": "string"
-                                    }
-                                  ]
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ]
-                            },
-                            "role": {
-                              "anyOf": [
-                                {
-                                  "additionalProperties": false,
-                                  "type": "object",
-                                  "required": [
-                                    "id",
-                                    "name",
-                                    "kind"
-                                  ],
-                                  "properties": {
-                                    "id": {
-                                      "format": "uuid",
-                                      "type": "string"
-                                    },
-                                    "name": {
-                                      "minLength": 1,
-                                      "type": "string"
-                                    },
-                                    "kind": {
-                                      "anyOf": [
-                                        {
-                                          "const": "worker",
-                                          "type": "string"
-                                        },
-                                        {
-                                          "const": "reviewer",
-                                          "type": "string"
-                                        },
-                                        {
-                                          "const": "critic",
-                                          "type": "string"
-                                        }
-                                      ]
-                                    }
+                          "project": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "projectId",
+                                  "name"
+                                ],
+                                "properties": {
+                                  "projectId": {
+                                    "format": "uuid",
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
                                   }
-                                },
-                                {
-                                  "type": "null"
                                 }
-                              ]
-                            },
-                            "sessionId": {
-                              "anyOf": [
-                                {
-                                  "format": "uuid",
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ]
-                            },
-                            "deviceId": {
-                              "anyOf": [
-                                {
-                                  "format": "uuid",
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ]
-                            },
-                            "autoStart": {
-                              "type": "boolean"
-                            },
-                            "updatedAt": {
-                              "format": "date-time",
-                              "type": "string"
-                            },
-                            "merge": {
-                              "anyOf": [
-                                {
-                                  "additionalProperties": false,
-                                  "type": "object",
-                                  "required": [
-                                    "state",
-                                    "commit",
-                                    "baseBranch",
-                                    "reason",
-                                    "message",
-                                    "at"
-                                  ],
-                                  "properties": {
-                                    "state": {
-                                      "anyOf": [
-                                        {
-                                          "const": "merged",
-                                          "type": "string"
-                                        },
-                                        {
-                                          "const": "needs_merge",
-                                          "type": "string"
-                                        }
-                                      ]
-                                    },
-                                    "commit": {
-                                      "anyOf": [
-                                        {
-                                          "type": "string"
-                                        },
-                                        {
-                                          "type": "null"
-                                        }
-                                      ]
-                                    },
-                                    "baseBranch": {
-                                      "anyOf": [
-                                        {
-                                          "type": "string"
-                                        },
-                                        {
-                                          "type": "null"
-                                        }
-                                      ]
-                                    },
-                                    "reason": {
-                                      "anyOf": [
-                                        {
-                                          "anyOf": [
-                                            {
-                                              "const": "base_not_checked_out",
-                                              "type": "string"
-                                            },
-                                            {
-                                              "const": "dirty",
-                                              "type": "string"
-                                            },
-                                            {
-                                              "const": "conflict",
-                                              "type": "string"
-                                            },
-                                            {
-                                              "const": "auto_merge_off",
-                                              "type": "string"
-                                            },
-                                            {
-                                              "const": "not_ready",
-                                              "type": "string"
-                                            }
-                                          ]
-                                        },
-                                        {
-                                          "type": "null"
-                                        }
-                                      ]
-                                    },
-                                    "message": {
-                                      "anyOf": [
-                                        {
-                                          "type": "string"
-                                        },
-                                        {
-                                          "type": "null"
-                                        }
-                                      ]
-                                    },
-                                    "at": {
-                                      "format": "date-time",
-                                      "type": "string"
-                                    }
-                                  }
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ]
-                            },
-                            "holdUntil": {
-                              "anyOf": [
-                                {
-                                  "format": "date-time",
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ]
-                            }
-                          }
-                        }
-                      },
-                      "items": {
-                        "type": "array",
-                        "items": {
-                          "additionalProperties": false,
-                          "type": "object",
-                          "required": [
-                            "id",
-                            "title",
-                            "status",
-                            "dueDate",
-                            "awaitingAcceptance",
-                            "updatedAt"
-                          ],
-                          "properties": {
-                            "id": {
-                              "format": "uuid",
-                              "type": "string"
-                            },
-                            "title": {
-                              "type": "string"
-                            },
-                            "status": {
-                              "anyOf": [
-                                {
-                                  "const": "not_started",
-                                  "type": "string"
-                                },
-                                {
-                                  "const": "in_progress",
-                                  "type": "string"
-                                },
-                                {
-                                  "const": "done",
-                                  "type": "string"
-                                }
-                              ]
-                            },
-                            "dueDate": {
-                              "anyOf": [
-                                {
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ]
-                            },
-                            "awaitingAcceptance": {
-                              "type": "boolean"
-                            },
-                            "updatedAt": {
-                              "format": "date-time",
-                              "type": "string"
-                            }
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
                           }
                         }
                       }
@@ -108475,6 +108783,7 @@
                 "at",
                 "open",
                 "taskId",
+                "projectId",
                 "sessionId",
                 "deviceId",
                 "deviceName",
@@ -108586,7 +108895,7 @@
                           "type": "string"
                         },
                         {
-                          "const": "task",
+                          "const": "project",
                           "type": "string"
                         },
                         {
@@ -108653,6 +108962,17 @@
                   "anyOf": [
                     {
                       "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "projectId": {
+                  "anyOf": [
+                    {
+                      "format": "uuid",
                       "type": "string"
                     },
                     {
@@ -109656,29 +109976,6 @@
           }
         }
       },
-      "TaskPipelineResponse": {
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "taskId",
-          "conversationId",
-          "scope"
-        ],
-        "properties": {
-          "taskId": {
-            "minLength": 1,
-            "type": "string"
-          },
-          "conversationId": {
-            "minLength": 1,
-            "type": "string"
-          },
-          "scope": {
-            "minLength": 1,
-            "type": "string"
-          }
-        }
-      },
       "RouteRequest": {
         "additionalProperties": false,
         "type": "object",
@@ -109710,11 +110007,11 @@
                 "additionalProperties": false,
                 "type": "object",
                 "required": [
-                  "taskId"
+                  "projectId"
                 ],
                 "properties": {
-                  "taskId": {
-                    "minLength": 1,
+                  "projectId": {
+                    "format": "uuid",
                     "type": "string"
                   }
                 }
@@ -109732,6 +110029,7 @@
           "cardId",
           "topicId",
           "taskId",
+          "projectId",
           "requestedAt"
         ],
         "properties": {
@@ -109784,6 +110082,17 @@
               }
             ]
           },
+          "projectId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "requestedAt": {
             "format": "date-time",
             "type": "string"
@@ -109821,6 +110130,7 @@
                 "cardId",
                 "topicId",
                 "taskId",
+                "projectId",
                 "requestedAt",
                 "budget"
               ],
@@ -109867,6 +110177,17 @@
                   "anyOf": [
                     {
                       "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "projectId": {
+                  "anyOf": [
+                    {
+                      "format": "uuid",
                       "type": "string"
                     },
                     {
@@ -110258,6 +110579,7 @@
               "kind",
               "id",
               "at",
+              "taskId",
               "met",
               "total"
             ],
@@ -110272,6 +110594,10 @@
               },
               "at": {
                 "format": "date-time",
+                "type": "string"
+              },
+              "taskId": {
+                "minLength": 1,
                 "type": "string"
               },
               "met": {
@@ -110326,285 +110652,6 @@
             }
           }
         ]
-      },
-      "TaskFeedResponse": {
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "items"
-        ],
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "anyOf": [
-                {
-                  "additionalProperties": false,
-                  "type": "object",
-                  "required": [
-                    "kind",
-                    "id",
-                    "at",
-                    "cardId",
-                    "title",
-                    "met",
-                    "total",
-                    "merge"
-                  ],
-                  "properties": {
-                    "kind": {
-                      "const": "card_passed",
-                      "type": "string"
-                    },
-                    "id": {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "at": {
-                      "format": "date-time",
-                      "type": "string"
-                    },
-                    "cardId": {
-                      "format": "uuid",
-                      "type": "string"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "met": {
-                      "minimum": 0,
-                      "type": "integer"
-                    },
-                    "total": {
-                      "minimum": 0,
-                      "type": "integer"
-                    },
-                    "merge": {
-                      "anyOf": [
-                        {
-                          "additionalProperties": false,
-                          "type": "object",
-                          "required": [
-                            "state",
-                            "commit",
-                            "baseBranch",
-                            "reason",
-                            "message",
-                            "at"
-                          ],
-                          "properties": {
-                            "state": {
-                              "anyOf": [
-                                {
-                                  "const": "merged",
-                                  "type": "string"
-                                },
-                                {
-                                  "const": "needs_merge",
-                                  "type": "string"
-                                }
-                              ]
-                            },
-                            "commit": {
-                              "anyOf": [
-                                {
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ]
-                            },
-                            "baseBranch": {
-                              "anyOf": [
-                                {
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ]
-                            },
-                            "reason": {
-                              "anyOf": [
-                                {
-                                  "anyOf": [
-                                    {
-                                      "const": "base_not_checked_out",
-                                      "type": "string"
-                                    },
-                                    {
-                                      "const": "dirty",
-                                      "type": "string"
-                                    },
-                                    {
-                                      "const": "conflict",
-                                      "type": "string"
-                                    },
-                                    {
-                                      "const": "auto_merge_off",
-                                      "type": "string"
-                                    },
-                                    {
-                                      "const": "not_ready",
-                                      "type": "string"
-                                    }
-                                  ]
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ]
-                            },
-                            "message": {
-                              "anyOf": [
-                                {
-                                  "type": "string"
-                                },
-                                {
-                                  "type": "null"
-                                }
-                              ]
-                            },
-                            "at": {
-                              "format": "date-time",
-                              "type": "string"
-                            }
-                          }
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  }
-                },
-                {
-                  "additionalProperties": false,
-                  "type": "object",
-                  "required": [
-                    "kind",
-                    "id",
-                    "at",
-                    "cardId",
-                    "title",
-                    "handbackId",
-                    "fix"
-                  ],
-                  "properties": {
-                    "kind": {
-                      "const": "card_blocked",
-                      "type": "string"
-                    },
-                    "id": {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "at": {
-                      "format": "date-time",
-                      "type": "string"
-                    },
-                    "cardId": {
-                      "format": "uuid",
-                      "type": "string"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "handbackId": {
-                      "format": "uuid",
-                      "type": "string"
-                    },
-                    "fix": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  }
-                },
-                {
-                  "additionalProperties": false,
-                  "type": "object",
-                  "required": [
-                    "kind",
-                    "id",
-                    "at",
-                    "met",
-                    "total"
-                  ],
-                  "properties": {
-                    "kind": {
-                      "const": "criteria_met",
-                      "type": "string"
-                    },
-                    "id": {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "at": {
-                      "format": "date-time",
-                      "type": "string"
-                    },
-                    "met": {
-                      "minimum": 1,
-                      "type": "integer"
-                    },
-                    "total": {
-                      "minimum": 1,
-                      "type": "integer"
-                    }
-                  }
-                },
-                {
-                  "additionalProperties": false,
-                  "type": "object",
-                  "required": [
-                    "kind",
-                    "id",
-                    "at",
-                    "cardId",
-                    "title",
-                    "fromCardId",
-                    "reason"
-                  ],
-                  "properties": {
-                    "kind": {
-                      "const": "rework_opened",
-                      "type": "string"
-                    },
-                    "id": {
-                      "minLength": 1,
-                      "type": "string"
-                    },
-                    "at": {
-                      "format": "date-time",
-                      "type": "string"
-                    },
-                    "cardId": {
-                      "format": "uuid",
-                      "type": "string"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "fromCardId": {
-                      "format": "uuid",
-                      "type": "string"
-                    },
-                    "reason": {
-                      "type": "string"
-                    }
-                  }
-                }
-              ]
-            }
-          }
-        }
       },
       "HomeItem": {
         "additionalProperties": false,
@@ -110670,6 +110717,1073 @@
           "deviceId": {
             "format": "uuid",
             "type": "string"
+          }
+        }
+      },
+      "Project": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "projectId",
+          "name",
+          "archivedAt",
+          "createdAt",
+          "lastActivityAt"
+        ],
+        "properties": {
+          "projectId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "maxLength": 60,
+            "type": "string"
+          },
+          "archivedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "lastActivityAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ProjectListResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "projects"
+        ],
+        "properties": {
+          "projects": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "projectId",
+                "name",
+                "archivedAt",
+                "createdAt",
+                "lastActivityAt"
+              ],
+              "properties": {
+                "projectId": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "name": {
+                  "minLength": 1,
+                  "maxLength": 60,
+                  "type": "string"
+                },
+                "archivedAt": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "createdAt": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "lastActivityAt": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "CreateProjectRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "maxLength": 60,
+            "type": "string"
+          },
+          "taskId": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "UpdateProjectRequest": {
+        "additionalProperties": false,
+        "minProperties": 1,
+        "type": "object",
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "maxLength": 60,
+            "type": "string"
+          },
+          "archived": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ProjectGoal": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "taskId",
+          "taskName",
+          "missionId",
+          "missionTitle",
+          "period",
+          "verdict",
+          "source",
+          "linkedAt"
+        ],
+        "properties": {
+          "taskId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "taskName": {
+            "type": "string"
+          },
+          "missionId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "missionTitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "period": {
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "type": "string"
+          },
+          "verdict": {
+            "anyOf": [
+              {
+                "const": "open",
+                "type": "string"
+              },
+              {
+                "const": "completed",
+                "type": "string"
+              },
+              {
+                "const": "stopped",
+                "type": "string"
+              },
+              {
+                "const": "continued",
+                "type": "string"
+              }
+            ]
+          },
+          "source": {
+            "anyOf": [
+              {
+                "const": "auto",
+                "type": "string"
+              },
+              {
+                "const": "owner",
+                "type": "string"
+              },
+              {
+                "const": "migration",
+                "type": "string"
+              }
+            ]
+          },
+          "linkedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        }
+      },
+      "ProjectDetailResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "project",
+          "period",
+          "goals"
+        ],
+        "properties": {
+          "project": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "projectId",
+              "name",
+              "archivedAt",
+              "createdAt",
+              "lastActivityAt"
+            ],
+            "properties": {
+              "projectId": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "name": {
+                "minLength": 1,
+                "maxLength": 60,
+                "type": "string"
+              },
+              "archivedAt": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "createdAt": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "lastActivityAt": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          "period": {
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "type": "string"
+          },
+          "goals": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "taskId",
+                "taskName",
+                "missionId",
+                "missionTitle",
+                "period",
+                "verdict",
+                "source",
+                "linkedAt"
+              ],
+              "properties": {
+                "taskId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "taskName": {
+                  "type": "string"
+                },
+                "missionId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "missionTitle": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "period": {
+                  "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                  "type": "string"
+                },
+                "verdict": {
+                  "anyOf": [
+                    {
+                      "const": "open",
+                      "type": "string"
+                    },
+                    {
+                      "const": "completed",
+                      "type": "string"
+                    },
+                    {
+                      "const": "stopped",
+                      "type": "string"
+                    },
+                    {
+                      "const": "continued",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "source": {
+                  "anyOf": [
+                    {
+                      "const": "auto",
+                      "type": "string"
+                    },
+                    {
+                      "const": "owner",
+                      "type": "string"
+                    },
+                    {
+                      "const": "migration",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "linkedAt": {
+                  "format": "date-time",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ProjectPipelineResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "projectId",
+          "conversationId",
+          "scope"
+        ],
+        "properties": {
+          "projectId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "conversationId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "scope": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "ProjectGoalLinkedItem": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "id",
+          "at",
+          "period",
+          "taskId",
+          "taskName"
+        ],
+        "properties": {
+          "kind": {
+            "const": "goal_linked",
+            "type": "string"
+          },
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "period": {
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "type": "string"
+          },
+          "taskId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "taskName": {
+            "type": "string"
+          }
+        }
+      },
+      "ProjectFeedItem": {
+        "anyOf": [
+          {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "kind",
+                  "id",
+                  "at",
+                  "cardId",
+                  "title",
+                  "met",
+                  "total",
+                  "merge"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "card_passed",
+                    "type": "string"
+                  },
+                  "id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "at": {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "cardId": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "met": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "total": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "merge": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "state",
+                          "commit",
+                          "baseBranch",
+                          "reason",
+                          "message",
+                          "at"
+                        ],
+                        "properties": {
+                          "state": {
+                            "anyOf": [
+                              {
+                                "const": "merged",
+                                "type": "string"
+                              },
+                              {
+                                "const": "needs_merge",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "commit": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "baseBranch": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "reason": {
+                            "anyOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "const": "base_not_checked_out",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "dirty",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "conflict",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "auto_merge_off",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "not_ready",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "message": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "at": {
+                            "format": "date-time",
+                            "type": "string"
+                          }
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "kind",
+                  "id",
+                  "at",
+                  "cardId",
+                  "title",
+                  "handbackId",
+                  "fix"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "card_blocked",
+                    "type": "string"
+                  },
+                  "id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "at": {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "cardId": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "handbackId": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "fix": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "kind",
+                  "id",
+                  "at",
+                  "taskId",
+                  "met",
+                  "total"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "criteria_met",
+                    "type": "string"
+                  },
+                  "id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "at": {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "taskId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "met": {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "total": {
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                }
+              },
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "kind",
+                  "id",
+                  "at",
+                  "cardId",
+                  "title",
+                  "fromCardId",
+                  "reason"
+                ],
+                "properties": {
+                  "kind": {
+                    "const": "rework_opened",
+                    "type": "string"
+                  },
+                  "id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "at": {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "cardId": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "fromCardId": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "kind",
+              "id",
+              "at",
+              "period",
+              "taskId",
+              "taskName"
+            ],
+            "properties": {
+              "kind": {
+                "const": "goal_linked",
+                "type": "string"
+              },
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "at": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "period": {
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                "type": "string"
+              },
+              "taskId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "taskName": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "ProjectFeedResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "kind",
+                        "id",
+                        "at",
+                        "cardId",
+                        "title",
+                        "met",
+                        "total",
+                        "merge"
+                      ],
+                      "properties": {
+                        "kind": {
+                          "const": "card_passed",
+                          "type": "string"
+                        },
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "at": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "cardId": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "met": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "total": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "merge": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "state",
+                                "commit",
+                                "baseBranch",
+                                "reason",
+                                "message",
+                                "at"
+                              ],
+                              "properties": {
+                                "state": {
+                                  "anyOf": [
+                                    {
+                                      "const": "merged",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "needs_merge",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "commit": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "baseBranch": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "reason": {
+                                  "anyOf": [
+                                    {
+                                      "anyOf": [
+                                        {
+                                          "const": "base_not_checked_out",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "dirty",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "conflict",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "auto_merge_off",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "not_ready",
+                                          "type": "string"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "message": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "at": {
+                                  "format": "date-time",
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "kind",
+                        "id",
+                        "at",
+                        "cardId",
+                        "title",
+                        "handbackId",
+                        "fix"
+                      ],
+                      "properties": {
+                        "kind": {
+                          "const": "card_blocked",
+                          "type": "string"
+                        },
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "at": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "cardId": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "handbackId": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "fix": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "kind",
+                        "id",
+                        "at",
+                        "taskId",
+                        "met",
+                        "total"
+                      ],
+                      "properties": {
+                        "kind": {
+                          "const": "criteria_met",
+                          "type": "string"
+                        },
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "at": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "taskId": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "met": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "total": {
+                          "minimum": 1,
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "kind",
+                        "id",
+                        "at",
+                        "cardId",
+                        "title",
+                        "fromCardId",
+                        "reason"
+                      ],
+                      "properties": {
+                        "kind": {
+                          "const": "rework_opened",
+                          "type": "string"
+                        },
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "at": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "cardId": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "fromCardId": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "reason": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  ]
+                },
+                {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "id",
+                    "at",
+                    "period",
+                    "taskId",
+                    "taskName"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "goal_linked",
+                      "type": "string"
+                    },
+                    "id": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "at": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "period": {
+                      "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                      "type": "string"
+                    },
+                    "taskId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "taskName": {
+                      "type": "string"
+                    }
+                  }
+                }
+              ]
+            }
           }
         }
       },
@@ -110884,6 +111998,7 @@
           "cardId",
           "topicId",
           "taskId",
+          "projectId",
           "requestedAt",
           "budget"
         ],
@@ -110930,6 +112045,17 @@
             "anyOf": [
               {
                 "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "projectId": {
+            "anyOf": [
+              {
+                "format": "uuid",
                 "type": "string"
               },
               {

@@ -6,7 +6,7 @@ const strict = { additionalProperties: false } as const;
  * 输入框附件（新首页设计 14.5）：首页、总管线、Task 管线、子会话四处一样。每个不超过 30 MB，一条最多 20 个。
  * 只认扩展名（网页先挡，云端再挡一次）；加不上的网页在框里写「文件名：格式不支持」「超过 30 MB」「最多 20 个」。
  * 送到哪：
- * - 总管线（scope global）、Task 管线（scope plan-task:<id>）：照旧 POST /api/conversations/:scope/attachments，云端转给 Chat（图片当图片、文档抽文字），
+ * - 总管线（scope global）、项目对话（scope project:<id>）：照旧 POST /api/conversations/:scope/attachments，云端转给 Chat（图片当图片、文档抽文字），
  *   回执的 id 随消息的 attachments 发出去。
  * - 子会话（卡、专题）：POST /api/me/sub-sessions/:kind/:id/attachments 存在云端；网页给本机程序说那一句时带上附件的 id（LocalSendMessageRequest.attachments），
  *   本机按 id 从 GET /api/local-runner/attachments/:id 取回，存进这件 Task 的工作区，路径交给 Claude Code。

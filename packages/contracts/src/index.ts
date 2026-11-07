@@ -65,6 +65,7 @@ export * from "./roles.js";
 export * from "./workers.js";
 export * from "./cardSplits.js";
 export * from "./workHome.js";
+export * from "./projects.js";
 export * from "./budget.js";
 export * from "./attachments.js";
 export * from "./taskContinuity.js";

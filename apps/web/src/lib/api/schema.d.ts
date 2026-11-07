@@ -4884,7 +4884,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 新首页（DRI 工作台）：Mission → 本人负责、没了结的 Task → 子会话（卡、专题）的树，不归任何 Task 的「其他」，和跨来源的「等你」；不按月份硬切 */
+        /** 新首页 v2（DRI 工作台，第 16 节）：没归档的项目（挂着的目标、子会话、事项）、「本月」按 Mission 列这个月的 Task 和挂在哪个项目、「其他」和跨来源的「等你」 */
         get: operations["getWorkHome"];
         put?: never;
         post?: never;
@@ -4901,7 +4901,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 后台任务（右栏）：scope=main | resources | task:<taskId> | card:<卡 id> | topic:<专题 id>；规划员、验收员、子会话里的子 agent 和后台命令，加资源摘要（resources 只要资源块） */
+        /** 后台任务（右栏）：scope=main | resources | project:<项目 id> | task:<taskId> | card:<卡 id> | topic:<专题 id>；规划员、验收员、子会话里的子 agent 和后台命令，加资源摘要（resources 只要资源块） */
         get: operations["getBackground"];
         put?: never;
         post?: never;
@@ -4911,7 +4911,61 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/me/tasks/{taskId}/pipeline": {
+    "/api/me/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人全部项目（含归档的）：没归档的在前，各自按最近动静从近到远 */
+        get: operations["listProjects"];
+        put?: never;
+        /** 建一个项目；带 taskId 时顺手把这件本人负责的 Task 挂上来（原来挂在别处就移过来） */
+        post: operations["createProject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/projects/{projectId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 项目详情：目标历史（每月挂过的 Task 和判定，月份从近到远）；当前 Task 的标准、约定、交付物照 Task 详情的接口按 taskId 读 */
+        get: operations["getProject"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 改名、归档（archived: true）、恢复（archived: false） */
+        patch: operations["updateProject"];
+        trace?: never;
+    };
+    "/api/me/projects/{projectId}/goals/{taskId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 把一件本人负责的 Task 挂到这个项目（原来挂在别处就移过来）；归档了的项目不能挂（409） */
+        put: operations["linkProjectGoal"];
+        post?: never;
+        /** 把这件 Task 从项目上取下来，回到「本月」里没挂的状态 */
+        delete: operations["unlinkProjectGoal"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/projects/{projectId}/pipeline": {
         parameters: {
             query?: never;
             header?: never;
@@ -4920,23 +4974,23 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 这件 Task 的管线对话（Task 负责人）：第一次打开时建，以后都返回同一条；收发消息走 /api/conversations/{scope}，scope 是 plan-task:<taskId> */
-        post: operations["openTaskPipeline"];
+        /** 这个项目的对话：第一次打开时建，以后都返回同一条；收发消息走 /api/conversations/{scope}，scope 是 project:<projectId> */
+        post: operations["openProjectPipeline"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/me/tasks/{taskId}/feed": {
+    "/api/me/projects/{projectId}/feed": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Task 管线里的验收行（Task 负责人）：卡验收过了（带合回结果）、受阻、约定都达到、合回后推翻开了返工卡，从旧到新；网页按时间插进 Task 管线 */
-        get: operations["getTaskFeed"];
+        /** 项目对话里按时间插的行：挂上新目标（分隔线）、卡验收过了（带合回结果）、受阻、约定都达到、合回后推翻开了返工卡，从旧到新 */
+        get: operations["getProjectFeed"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4954,7 +5008,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 首页「自动」发给谁：句子里提到了哪件 Task 的名字或标准里的词就发给那件 Task 的管线，分不出来或没提到发给伙伴；不用模型 */
+        /** 首页「自动」发给谁：句子里提到了哪个项目的名字、或它挂着的 Task 的名字和标准里的词就发给那个项目，分不出来或没提到发给伙伴；不用模型 */
         post: operations["routeMessage"];
         delete?: never;
         options?: never;
@@ -17393,11 +17447,39 @@ export interface components {
             doneToday: number;
             needsYou: number;
         };
-        HomeTask: {
+        HomeProjectGoal: {
             taskId: string;
             missionId: string;
             name: string;
-            subtitle: string | null;
+            period: string;
+            dueDate: string;
+            criteria: string[];
+            criteriaMet: number;
+            criteriaTotal: number;
+            completedAt: string | null;
+        };
+        HomeProject: {
+            /** Format: uuid */
+            projectId: string;
+            name: string;
+            goals: {
+                taskId: string;
+                missionId: string;
+                name: string;
+                period: string;
+                dueDate: string;
+                criteria: string[];
+                criteriaMet: number;
+                criteriaTotal: number;
+                completedAt: string | null;
+            }[];
+            budget: {
+                state: "warning" | "exhausted";
+                percent: number;
+                taskId: string;
+            } | null;
+            /** Format: date-time */
+            lastActivityAt: string;
             summary: {
                 running: number;
                 waiting: number;
@@ -17411,7 +17493,6 @@ export interface components {
                 scope: string;
             };
             planning: boolean;
-            completedAt: string | null;
             subSessions: {
                 id: string;
                 kind: "card" | "topic";
@@ -17452,15 +17533,117 @@ export interface components {
                 updatedAt: string;
             }[];
         };
-        HomeMission: {
+        HomeMonthTask: {
+            taskId: string;
+            name: string;
+            completedAt: string | null;
+            project: {
+                /** Format: uuid */
+                projectId: string;
+                name: string;
+            } | null;
+        };
+        HomeMonthMission: {
             missionId: string;
             title: string;
             period: string;
             tasks: {
                 taskId: string;
-                missionId: string;
                 name: string;
-                subtitle: string | null;
+                completedAt: string | null;
+                project: {
+                    /** Format: uuid */
+                    projectId: string;
+                    name: string;
+                } | null;
+            }[];
+        };
+        WaitingTarget: {
+            kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections";
+            id: string;
+            round?: boolean;
+            focus?: {
+                /** Format: uuid */
+                sessionId: string;
+                requestId: string | null;
+            };
+        };
+        WaitingItem: {
+            id: string;
+            kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota";
+            title: string;
+            source: string | null;
+            at: string | null;
+            open: {
+                kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections";
+                id: string;
+                round?: boolean;
+                focus?: {
+                    /** Format: uuid */
+                    sessionId: string;
+                    requestId: string | null;
+                };
+            };
+            taskId: string | null;
+            projectId: string | null;
+            sessionId: string | null;
+            deviceId: string | null;
+            deviceName: string | null;
+            dueAt: string | null;
+            answer: "inline" | "inline_local" | "open";
+            person: {
+                personId: string;
+                name: string;
+            } | null;
+            month: {
+                step: "review" | "finalize" | "continue";
+                period: string;
+            } | null;
+            question: {
+                requestId: string;
+                questions: {
+                    question: string;
+                    header: string;
+                    options: {
+                        label: string;
+                        description: string;
+                    }[];
+                    multiSelect: boolean;
+                }[];
+                /** Format: date-time */
+                askedAt: string;
+            } | null;
+            permission: {
+                requestId: string;
+                toolName: string;
+                title: string;
+                outsidePaths: string[];
+            } | null;
+        };
+        WorkHomeResponse: {
+            period: string;
+            projects: {
+                /** Format: uuid */
+                projectId: string;
+                name: string;
+                goals: {
+                    taskId: string;
+                    missionId: string;
+                    name: string;
+                    period: string;
+                    dueDate: string;
+                    criteria: string[];
+                    criteriaMet: number;
+                    criteriaTotal: number;
+                    completedAt: string | null;
+                }[];
+                budget: {
+                    state: "warning" | "exhausted";
+                    percent: number;
+                    taskId: string;
+                } | null;
+                /** Format: date-time */
+                lastActivityAt: string;
                 summary: {
                     running: number;
                     waiting: number;
@@ -17474,7 +17657,6 @@ export interface components {
                     scope: string;
                 };
                 planning: boolean;
-                completedAt: string | null;
                 subSessions: {
                     id: string;
                     kind: "card" | "topic";
@@ -17515,134 +17697,24 @@ export interface components {
                     updatedAt: string;
                 }[];
             }[];
-        };
-        WaitingTarget: {
-            kind: "card" | "topic" | "task" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections";
-            id: string;
-            round?: boolean;
-            focus?: {
-                /** Format: uuid */
-                sessionId: string;
-                requestId: string | null;
-            };
-        };
-        WaitingItem: {
-            id: string;
-            kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota";
-            title: string;
-            source: string | null;
-            at: string | null;
-            open: {
-                kind: "card" | "topic" | "task" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections";
-                id: string;
-                round?: boolean;
-                focus?: {
-                    /** Format: uuid */
-                    sessionId: string;
-                    requestId: string | null;
-                };
-            };
-            taskId: string | null;
-            sessionId: string | null;
-            deviceId: string | null;
-            deviceName: string | null;
-            dueAt: string | null;
-            answer: "inline" | "inline_local" | "open";
-            person: {
-                personId: string;
-                name: string;
-            } | null;
+            archivedCount: number;
             month: {
-                step: "review" | "finalize" | "continue";
-                period: string;
-            } | null;
-            question: {
-                requestId: string;
-                questions: {
-                    question: string;
-                    header: string;
-                    options: {
-                        label: string;
-                        description: string;
-                    }[];
-                    multiSelect: boolean;
-                }[];
-                /** Format: date-time */
-                askedAt: string;
-            } | null;
-            permission: {
-                requestId: string;
-                toolName: string;
-                title: string;
-                outsidePaths: string[];
-            } | null;
-        };
-        WorkHomeResponse: {
-            period: string;
-            missions: {
-                missionId: string;
-                title: string;
-                period: string;
-                tasks: {
-                    taskId: string;
+                missions: {
                     missionId: string;
-                    name: string;
-                    subtitle: string | null;
-                    summary: {
-                        running: number;
-                        waiting: number;
-                        queued: number;
-                        done: number;
-                        doneToday: number;
-                        needsYou: number;
-                    };
-                    pipeline: {
-                        conversationId: string | null;
-                        scope: string;
-                    };
-                    planning: boolean;
-                    completedAt: string | null;
-                    subSessions: {
-                        id: string;
-                        kind: "card" | "topic";
-                        title: string;
-                        state: "queued" | "running" | "waiting" | "done" | "failed";
-                        waiting: ("approval" | "question" | "verdict" | "merge") | null;
-                        queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota") | null;
-                        role: {
+                    title: string;
+                    period: string;
+                    tasks: {
+                        taskId: string;
+                        name: string;
+                        completedAt: string | null;
+                        project: {
                             /** Format: uuid */
-                            id: string;
+                            projectId: string;
                             name: string;
-                            kind: "worker" | "reviewer" | "critic";
                         } | null;
-                        sessionId: string | null;
-                        deviceId: string | null;
-                        autoStart: boolean;
-                        /** Format: date-time */
-                        updatedAt: string;
-                        merge: {
-                            state: "merged" | "needs_merge";
-                            commit: string | null;
-                            baseBranch: string | null;
-                            reason: ("base_not_checked_out" | "dirty" | "conflict" | "auto_merge_off" | "not_ready") | null;
-                            message: string | null;
-                            /** Format: date-time */
-                            at: string;
-                        } | null;
-                        holdUntil: string | null;
-                    }[];
-                    items: {
-                        /** Format: uuid */
-                        id: string;
-                        title: string;
-                        status: "not_started" | "in_progress" | "done";
-                        dueDate: string | null;
-                        awaitingAcceptance: boolean;
-                        /** Format: date-time */
-                        updatedAt: string;
                     }[];
                 }[];
-            }[];
+            };
             other: {
                 subSessions: {
                     id: string;
@@ -17691,7 +17763,7 @@ export interface components {
                 source: string | null;
                 at: string | null;
                 open: {
-                    kind: "card" | "topic" | "task" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections";
+                    kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections";
                     id: string;
                     round?: boolean;
                     focus?: {
@@ -17701,6 +17773,7 @@ export interface components {
                     };
                 };
                 taskId: string | null;
+                projectId: string | null;
                 sessionId: string | null;
                 deviceId: string | null;
                 deviceName: string | null;
@@ -17825,17 +17898,13 @@ export interface components {
                 }[];
             };
         };
-        TaskPipelineResponse: {
-            taskId: string;
-            conversationId: string;
-            scope: string;
-        };
         RouteRequest: {
             text: string;
         };
         RouteResponse: {
             target: "main" | {
-                taskId: string;
+                /** Format: uuid */
+                projectId: string;
             };
         };
         SessionStartView: {
@@ -17845,6 +17914,7 @@ export interface components {
             cardId: string | null;
             topicId: string | null;
             taskId: string | null;
+            projectId: string | null;
             /** Format: date-time */
             requestedAt: string;
         };
@@ -17860,6 +17930,7 @@ export interface components {
                 cardId: string | null;
                 topicId: string | null;
                 taskId: string | null;
+                projectId: string | null;
                 /** Format: date-time */
                 requestedAt: string;
                 budget: {
@@ -17920,6 +17991,7 @@ export interface components {
             id: string;
             /** Format: date-time */
             at: string;
+            taskId: string;
             met: number;
             total: number;
         } | {
@@ -17935,8 +18007,163 @@ export interface components {
             fromCardId: string;
             reason: string;
         };
-        TaskFeedResponse: {
-            items: ({
+        HomeItem: {
+            /** Format: uuid */
+            id: string;
+            title: string;
+            status: "not_started" | "in_progress" | "done";
+            dueDate: string | null;
+            awaitingAcceptance: boolean;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        ReleaseSessionStartRequest: {
+            /** Format: uuid */
+            deviceId: string;
+        };
+        Project: {
+            /** Format: uuid */
+            projectId: string;
+            name: string;
+            archivedAt: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            lastActivityAt: string | null;
+        };
+        ProjectListResponse: {
+            projects: {
+                /** Format: uuid */
+                projectId: string;
+                name: string;
+                archivedAt: string | null;
+                /** Format: date-time */
+                createdAt: string;
+                lastActivityAt: string | null;
+            }[];
+        };
+        CreateProjectRequest: {
+            name: string;
+            taskId?: string;
+        };
+        UpdateProjectRequest: {
+            name?: string;
+            archived?: boolean;
+        };
+        ProjectGoal: {
+            taskId: string;
+            taskName: string;
+            missionId: string;
+            missionTitle: string | null;
+            period: string;
+            verdict: "open" | "completed" | "stopped" | "continued";
+            source: "auto" | "owner" | "migration";
+            /** Format: date-time */
+            linkedAt: string;
+        };
+        ProjectDetailResponse: {
+            project: {
+                /** Format: uuid */
+                projectId: string;
+                name: string;
+                archivedAt: string | null;
+                /** Format: date-time */
+                createdAt: string;
+                lastActivityAt: string | null;
+            };
+            period: string;
+            goals: {
+                taskId: string;
+                taskName: string;
+                missionId: string;
+                missionTitle: string | null;
+                period: string;
+                verdict: "open" | "completed" | "stopped" | "continued";
+                source: "auto" | "owner" | "migration";
+                /** Format: date-time */
+                linkedAt: string;
+            }[];
+        };
+        ProjectPipelineResponse: {
+            /** Format: uuid */
+            projectId: string;
+            conversationId: string;
+            scope: string;
+        };
+        ProjectGoalLinkedItem: {
+            /** @constant */
+            kind: "goal_linked";
+            id: string;
+            /** Format: date-time */
+            at: string;
+            period: string;
+            taskId: string;
+            taskName: string;
+        };
+        ProjectFeedItem: ({
+            /** @constant */
+            kind: "card_passed";
+            id: string;
+            /** Format: date-time */
+            at: string;
+            /** Format: uuid */
+            cardId: string;
+            title: string;
+            met: number;
+            total: number;
+            merge: {
+                state: "merged" | "needs_merge";
+                commit: string | null;
+                baseBranch: string | null;
+                reason: ("base_not_checked_out" | "dirty" | "conflict" | "auto_merge_off" | "not_ready") | null;
+                message: string | null;
+                /** Format: date-time */
+                at: string;
+            } | null;
+        } | {
+            /** @constant */
+            kind: "card_blocked";
+            id: string;
+            /** Format: date-time */
+            at: string;
+            /** Format: uuid */
+            cardId: string;
+            title: string;
+            /** Format: uuid */
+            handbackId: string;
+            fix: string | null;
+        } | {
+            /** @constant */
+            kind: "criteria_met";
+            id: string;
+            /** Format: date-time */
+            at: string;
+            taskId: string;
+            met: number;
+            total: number;
+        } | {
+            /** @constant */
+            kind: "rework_opened";
+            id: string;
+            /** Format: date-time */
+            at: string;
+            /** Format: uuid */
+            cardId: string;
+            title: string;
+            /** Format: uuid */
+            fromCardId: string;
+            reason: string;
+        }) | {
+            /** @constant */
+            kind: "goal_linked";
+            id: string;
+            /** Format: date-time */
+            at: string;
+            period: string;
+            taskId: string;
+            taskName: string;
+        };
+        ProjectFeedResponse: {
+            items: (({
                 /** @constant */
                 kind: "card_passed";
                 id: string;
@@ -17974,6 +18201,7 @@ export interface components {
                 id: string;
                 /** Format: date-time */
                 at: string;
+                taskId: string;
                 met: number;
                 total: number;
             } | {
@@ -17988,21 +18216,16 @@ export interface components {
                 /** Format: uuid */
                 fromCardId: string;
                 reason: string;
+            }) | {
+                /** @constant */
+                kind: "goal_linked";
+                id: string;
+                /** Format: date-time */
+                at: string;
+                period: string;
+                taskId: string;
+                taskName: string;
             })[];
-        };
-        HomeItem: {
-            /** Format: uuid */
-            id: string;
-            title: string;
-            status: "not_started" | "in_progress" | "done";
-            dueDate: string | null;
-            awaitingAcceptance: boolean;
-            /** Format: date-time */
-            updatedAt: string;
-        };
-        ReleaseSessionStartRequest: {
-            /** Format: uuid */
-            deviceId: string;
         };
         NotificationSettings: {
             feishu: boolean;
@@ -18036,6 +18259,7 @@ export interface components {
             cardId: string | null;
             topicId: string | null;
             taskId: string | null;
+            projectId: string | null;
             /** Format: date-time */
             requestedAt: string;
             budget: {
@@ -35149,33 +35373,349 @@ export interface operations {
             };
         };
     };
-    openTaskPipeline: {
+    listProjects: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 项目 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectListResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    createProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProjectRequest"];
+            };
+        };
+        responses: {
+            /** @description 建好的项目 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getProject: {
         parameters: {
             query?: never;
             header?: never;
             path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 项目详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDetailResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    updateProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProjectRequest"];
+            };
+        };
+        responses: {
+            /** @description 改好的项目 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    linkProjectGoal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
                 taskId: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description 已有的管线 */
+            /** @description 这条挂接 */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TaskPipelineResponse"];
+                    "application/json": components["schemas"]["ProjectGoal"];
                 };
             };
-            /** @description 新建的管线 */
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    unlinkProjectGoal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 取下来了 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    openProjectPipeline: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已有的项目对话 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectPipelineResponse"];
+                };
+            };
+            /** @description 新建的项目对话 */
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TaskPipelineResponse"];
+                    "application/json": components["schemas"]["ProjectPipelineResponse"];
                 };
             };
             /** @description ApiError 统一错误 */
@@ -35225,24 +35765,24 @@ export interface operations {
             };
         };
     };
-    getTaskFeed: {
+    getProjectFeed: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                taskId: string;
+                projectId: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description 验收行 */
+            /** @description 项目动态 */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TaskFeedResponse"];
+                    "application/json": components["schemas"]["ProjectFeedResponse"];
                 };
             };
             /** @description ApiError 统一错误 */

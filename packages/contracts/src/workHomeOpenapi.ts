@@ -1,21 +1,25 @@
 import type { JsonSchema, OpenAPIV3 } from "./types/JsonSchemaTypes.js";
 import {
-  BackgroundItem, BackgroundResponse, ClaimSessionStartsRequest, ClaimSessionStartsResponse, HomeMission, HomeTask, HomeTaskSummary, RouteRequest, RouteResponse,
-  SessionStartView, SubSession, TaskPipelineResponse, WaitingItem, WaitingTarget, WorkHomeResponse, CardMerge, TaskFeedItem, TaskFeedResponse, HomeItem, ReleaseSessionStartRequest,
-  NotificationSettings, ClaimedSessionStart,
+  BackgroundItem, BackgroundResponse, ClaimSessionStartsRequest, ClaimSessionStartsResponse, HomeMonthMission, HomeMonthTask, HomeProject, HomeProjectGoal,
+  HomeTaskSummary, RouteRequest, RouteResponse, SessionStartView, SubSession, WaitingItem, WaitingTarget, WorkHomeResponse, CardMerge, TaskFeedItem, HomeItem,
+  ReleaseSessionStartRequest, NotificationSettings, ClaimedSessionStart,
 } from "./workHome.js";
+import { CreateProjectRequest, Project, ProjectDetailResponse, ProjectFeedItem, ProjectFeedResponse, ProjectGoal, ProjectGoalLinkedItem, ProjectListResponse,
+  ProjectPipelineResponse, UpdateProjectRequest } from "./projects.js";
 import { Budget, TaskBudgetResponse } from "./budget.js";
 import { SessionAttachment, SessionAttachmentUploadResponse } from "./attachments.js";
 
 /**
- * 新首页（伙伴总管线 + Task 管线 + 子会话）的 OpenAPI 路径，手工列出，在 openapi.ts 里展开。
+ * 新首页（伙伴总管线 + 项目 + 子会话）的 OpenAPI 路径，手工列出，在 openapi.ts 里展开。
  * 伙伴开探索子会话（/internal/me/topics）只给 Chat 服务调，不在这里列。
  */
 
 export const workHomeSchemas: Record<string, JsonSchema> = {
-  SubSession, HomeTaskSummary, HomeTask, HomeMission, WaitingTarget, WaitingItem, WorkHomeResponse,
-  BackgroundItem, BackgroundResponse, TaskPipelineResponse, RouteRequest, RouteResponse,
-  SessionStartView, ClaimSessionStartsRequest, ClaimSessionStartsResponse, CardMerge, TaskFeedItem, TaskFeedResponse, HomeItem, ReleaseSessionStartRequest,
+  SubSession, HomeTaskSummary, HomeProjectGoal, HomeProject, HomeMonthTask, HomeMonthMission, WaitingTarget, WaitingItem, WorkHomeResponse,
+  BackgroundItem, BackgroundResponse, RouteRequest, RouteResponse,
+  SessionStartView, ClaimSessionStartsRequest, ClaimSessionStartsResponse, CardMerge, TaskFeedItem, HomeItem, ReleaseSessionStartRequest,
+  Project, ProjectListResponse, CreateProjectRequest, UpdateProjectRequest, ProjectGoal, ProjectDetailResponse, ProjectPipelineResponse, ProjectGoalLinkedItem,
+  ProjectFeedItem, ProjectFeedResponse,
   NotificationSettings, Budget, TaskBudgetResponse, ClaimedSessionStart, SessionAttachment, SessionAttachmentUploadResponse,
 };
 
@@ -87,38 +91,80 @@ export const workHomePaths: OpenAPIV3.Document["paths"] = {
   "/api/me/work-home": {
     get: {
       operationId: "getWorkHome",
-      summary: "新首页（DRI 工作台）：Mission → 本人负责、没了结的 Task → 子会话（卡、专题）的树，不归任何 Task 的「其他」，和跨来源的「等你」；不按月份硬切",
+      summary: "新首页 v2（DRI 工作台，第 16 节）：没归档的项目（挂着的目标、子会话、事项）、「本月」按 Mission 列这个月的 Task 和挂在哪个项目、「其他」和跨来源的「等你」",
       responses: { "200": json("首页", "WorkHomeResponse"), ...errors(401, 403) },
     },
   },
   "/api/me/background": {
     get: {
       operationId: "getBackground",
-      summary: "后台任务（右栏）：scope=main | resources | task:<taskId> | card:<卡 id> | topic:<专题 id>；规划员、验收员、子会话里的子 agent 和后台命令，加资源摘要（resources 只要资源块）",
+      summary: "后台任务（右栏）：scope=main | resources | project:<项目 id> | task:<taskId> | card:<卡 id> | topic:<专题 id>；规划员、验收员、子会话里的子 agent 和后台命令，加资源摘要（resources 只要资源块）",
       parameters: [{ name: "scope", in: "query", required: true, schema: { type: "string" } }],
       responses: { "200": json("后台任务", "BackgroundResponse"), ...errors(400, 401, 403, 404) },
     },
   },
-  "/api/me/tasks/{taskId}/pipeline": {
+  "/api/me/projects": {
+    get: {
+      operationId: "listProjects",
+      summary: "本人全部项目（含归档的）：没归档的在前，各自按最近动静从近到远",
+      responses: { "200": json("项目", "ProjectListResponse"), ...errors(401, 403) },
+    },
     post: {
-      operationId: "openTaskPipeline",
-      summary: "这件 Task 的管线对话（Task 负责人）：第一次打开时建，以后都返回同一条；收发消息走 /api/conversations/{scope}，scope 是 plan-task:<taskId>",
-      parameters: path("taskId"),
-      responses: { "200": json("已有的管线", "TaskPipelineResponse"), "201": json("新建的管线", "TaskPipelineResponse"), ...errors(401, 403, 404, 502, 503) },
+      operationId: "createProject",
+      summary: "建一个项目；带 taskId 时顺手把这件本人负责的 Task 挂上来（原来挂在别处就移过来）",
+      requestBody: body("CreateProjectRequest"),
+      responses: { "201": json("建好的项目", "Project"), ...errors(400, 401, 403, 404) },
     },
   },
-  "/api/me/tasks/{taskId}/feed": {
+  "/api/me/projects/{projectId}": {
     get: {
-      operationId: "getTaskFeed",
-      summary: "Task 管线里的验收行（Task 负责人）：卡验收过了（带合回结果）、受阻、约定都达到、合回后推翻开了返工卡，从旧到新；网页按时间插进 Task 管线",
-      parameters: path("taskId"),
-      responses: { "200": json("验收行", "TaskFeedResponse"), ...errors(401, 403, 404) },
+      operationId: "getProject",
+      summary: "项目详情：目标历史（每月挂过的 Task 和判定，月份从近到远）；当前 Task 的标准、约定、交付物照 Task 详情的接口按 taskId 读",
+      parameters: path("projectId"),
+      responses: { "200": json("项目详情", "ProjectDetailResponse"), ...errors(401, 403, 404) },
+    },
+    patch: {
+      operationId: "updateProject",
+      summary: "改名、归档（archived: true）、恢复（archived: false）",
+      parameters: path("projectId"),
+      requestBody: body("UpdateProjectRequest"),
+      responses: { "200": json("改好的项目", "Project"), ...errors(400, 401, 403, 404) },
+    },
+  },
+  "/api/me/projects/{projectId}/goals/{taskId}": {
+    put: {
+      operationId: "linkProjectGoal",
+      summary: "把一件本人负责的 Task 挂到这个项目（原来挂在别处就移过来）；归档了的项目不能挂（409）",
+      parameters: path("projectId", "taskId"),
+      responses: { "200": json("这条挂接", "ProjectGoal"), ...errors(401, 403, 404, 409) },
+    },
+    delete: {
+      operationId: "unlinkProjectGoal",
+      summary: "把这件 Task 从项目上取下来，回到「本月」里没挂的状态",
+      parameters: path("projectId", "taskId"),
+      responses: { "204": { description: "取下来了" }, ...errors(401, 403, 404) },
+    },
+  },
+  "/api/me/projects/{projectId}/pipeline": {
+    post: {
+      operationId: "openProjectPipeline",
+      summary: "这个项目的对话：第一次打开时建，以后都返回同一条；收发消息走 /api/conversations/{scope}，scope 是 project:<projectId>",
+      parameters: path("projectId"),
+      responses: { "200": json("已有的项目对话", "ProjectPipelineResponse"), "201": json("新建的项目对话", "ProjectPipelineResponse"), ...errors(401, 403, 404, 502, 503) },
+    },
+  },
+  "/api/me/projects/{projectId}/feed": {
+    get: {
+      operationId: "getProjectFeed",
+      summary: "项目对话里按时间插的行：挂上新目标（分隔线）、卡验收过了（带合回结果）、受阻、约定都达到、合回后推翻开了返工卡，从旧到新",
+      parameters: path("projectId"),
+      responses: { "200": json("项目动态", "ProjectFeedResponse"), ...errors(401, 403, 404) },
     },
   },
   "/api/me/route": {
     post: {
       operationId: "routeMessage",
-      summary: "首页「自动」发给谁：句子里提到了哪件 Task 的名字或标准里的词就发给那件 Task 的管线，分不出来或没提到发给伙伴；不用模型",
+      summary: "首页「自动」发给谁：句子里提到了哪个项目的名字、或它挂着的 Task 的名字和标准里的词就发给那个项目，分不出来或没提到发给伙伴；不用模型",
       requestBody: body("RouteRequest"),
       responses: { "200": json("发给谁", "RouteResponse"), ...errors(400, 401, 403) },
     },
