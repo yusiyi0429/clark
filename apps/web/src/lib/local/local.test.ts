@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { TLocalSessionEvent } from "@warmap/contracts";
 import { parseSse } from "./client";
-import { phaseOf } from "./connection";
+import { pairedElsewhere, phaseOf } from "./connection";
 import { createMockRunner } from "./mock";
 import { EMPTY_VIEW, foldEvent, foldEvents, localWait, planStep } from "./sessionView";
 
@@ -27,6 +27,12 @@ describe("连本机的三种浏览器授权结果", () => {
   it("浏览器放行了还连不上（或浏览器不报授权状态）：没装或没开", () => {
     expect(phaseOf({ health: "failed", permission: "granted" })).toBe("offline");
     expect(phaseOf({ health: "failed", permission: "unknown" })).toBe("offline");
+  });  it("同一台电脑换了账号：本机关联的是别人就按没配对算；没关联、或不知道本人是谁时不算别人", () => {
+    const linked = (personName: string | null, isLinked = true) => ({ cloud: { linked: isLinked, personName } });
+    expect(pairedElsewhere(linked("孙铭泽"), "林知行")).toBe(true);
+    expect(pairedElsewhere(linked("孙铭泽"), "孙铭泽")).toBe(false);
+    expect(pairedElsewhere(linked(null, false), "林知行")).toBe(false);
+    expect(pairedElsewhere(linked("孙铭泽"), undefined)).toBe(false);
   });
 });
 

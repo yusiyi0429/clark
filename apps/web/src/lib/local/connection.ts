@@ -24,6 +24,14 @@ export async function readBrowserPermission(): Promise<BrowserPermission> {
   return "unknown";
 }
 
+/**
+ * 本机程序关联的是别人（同一台电脑换了账号登录）：按没配对显示，不读它的会话和后台。
+ * 本机只报关联时网页给的名字（cloud.personName），没有人的 id；没关联、或不知道本人是谁时不算别人。
+ */
+export function pairedElsewhere(status: { cloud: { linked: boolean; personName: string | null } }, personName: string | undefined): boolean {
+  return !!personName && status.cloud.linked && !!status.cloud.personName && status.cloud.personName !== personName.slice(0, 60);
+}
+
 /** 一次探测的结果折成阶段：health 成功看口令；失败看浏览器授权；还没回来、浏览器在问就是 prompt。 */
 export function phaseOf(probe: { health: "ok" | "failed" | "waiting"; tokenValid?: boolean; permission: BrowserPermission }): LocalPhase {
   if (probe.health === "ok") return probe.tokenValid ? "ready" : "unpaired";

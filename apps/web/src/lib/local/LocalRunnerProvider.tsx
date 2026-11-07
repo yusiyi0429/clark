@@ -10,7 +10,7 @@ import type { TLocalFolder, TLocalModelProfile, TLocalSessionSummary, TLocalStat
 import { LocalRunnerError, type LocalRunner } from "./runner";
 import { createHttpRunner, writeLocalToken } from "./client";
 import { createMockRunner } from "./mock";
-import { phaseOf, readBrowserPermission, type LocalPhase } from "./connection";
+import { pairedElsewhere, phaseOf, readBrowserPermission, type LocalPhase } from "./connection";
 import { HANDHELD_QUERY } from "@/components/ui/useHandheld";
 import { setMockAgents } from "@/lib/board/cards";
 import { planCards } from "@/lib/board/cloud";
@@ -79,8 +79,8 @@ export function LocalRunnerProvider({ children, runner: given, personName }: { c
   const alive = useRef(true);
   const inFlight = useRef<Promise<void> | null>(null);
 
-  const loadPaired = useCallback(async () => {
-    const [nextStatus, nextModels, nextFolders, nextSessions] = await Promise.all([runner.status(), runner.listModels(), runner.listFolders(), runner.listSessions()]);
+  const loadPaired = useCallback(async (nextStatus: TLocalStatusResponse) => {
+    const [nextModels, nextFolders, nextSessions] = await Promise.all([runner.listModels(), runner.listFolders(), runner.listSessions()]);
     if (!alive.current) return;
     setStatus(nextStatus);
     setModels(nextModels);
@@ -101,8 +101,11 @@ export function LocalRunnerProvider({ children, runner: given, personName }: { c
         const result = await health;
         if (!alive.current) return;
         setVersion(result.version);
-        const next = phaseOf({ health: "ok", tokenValid: result.tokenValid, permission: "granted" });
-        if (next === "ready") await loadPaired();
+        let next = phaseOf({ health: "ok", tokenValid: result.tokenValid, permission: "granted" });
+        const nextStatus = next === "ready" ? await runner.status() : null;
+        // 这台电脑关联的是别人：和没配对一样，不读它的会话。
+        if (nextStatus && pairedElsewhere(nextStatus, personName)) next = "unpaired";
+        if (nextStatus && next === "ready") await loadPaired(nextStatus);
         else { setStatus(null); setSessions([]); }
         setPhase(next);
       } catch {
@@ -116,7 +119,7 @@ export function LocalRunnerProvider({ children, runner: given, personName }: { c
       }
     })();
     return inFlight.current;
-  }, [runner, loadPaired]);
+  }, [runner, loadPaired, personName]);
 
   // 手机和触屏上不连本机（第 13 节：手机只看）：不探，免得一直报连不上。
   const [handheld] = useState(() => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(HANDHELD_QUERY).matches);
@@ -166,6 +169,9 @@ export function LocalRunnerProvider({ children, runner: given, personName }: { c
         const answer = await runner.pairingStatus(started.pairingId);
         if (answer.status === "approved" && answer.token) {
           if (runner.kind === "http") writeLocalToken(answer.token);
+          // 本人在这台电脑上点了允许：原来关联的是别人，就改关联到本人（一台电脑一个人）。
+          const paired = runner.kind === "http" && personName ? await runner.status().catch(() => null) : null;
+          if (paired && pairedElsewhere(paired, personName)) await linkCloud(runner, paired, personName!).catch(() => undefined);
           setPairing(null);
           await refresh();
           return;
@@ -177,7 +183,7 @@ export function LocalRunnerProvider({ children, runner: given, personName }: { c
       setPairing(null);
       setError(cause instanceof LocalRunnerError ? cause.message : "配对没成功，请重试");
     }
-  }, [runner, refresh]);
+  }, [runner, refresh, personName]);
 
   const unpair = useCallback(async () => {
     try { await runner.unpair(); } catch { /* 口令已失效也照样清掉 */ }
