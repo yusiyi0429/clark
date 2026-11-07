@@ -2,6 +2,7 @@ import { Type } from "@sinclair/typebox";
 import { BuddyOpenTopicRequest, BuddyOpenTopicResponse, ClaimSessionStartsRequest, ClaimSessionStartsResponse, ReleaseSessionStartRequest } from "@warmap/contracts";
 import { createTopic, TopicError } from "../researchTopics.js";
 import { ensurePresetRole, RoleError } from "../roles.js";
+import { readBudgetDefault, readTaskBudget } from "../budgets.js";
 import { claimStarts, releaseStart, requestStarts } from "../sessionStarts.js";
 import { boardTask, CardError, planTaskOpener } from "../taskCards.js";
 import type { AppInstance, Guard, RouteContext } from "./shared.js";
@@ -24,7 +25,11 @@ export function registerSessionStartRoutes(app: AppInstance, ctx: RouteContext):
 
   app.post("/api/me/session-starts/claim", { preHandler: requireMember, schema: { body: ClaimSessionStartsRequest, response: { 200: ClaimSessionStartsResponse } } },
     async (req, reply) => {
-      const starts = await claimStarts(q, req.person!.personId, req.body.deviceId, ctx.now());
+      const ownerId = req.person!.personId;
+      const claimed = await claimStarts(q, ownerId, req.body.deviceId, ctx.now());
+      // 每条带这件 Task 此刻的预算（不挂 Task 的专题用本人的缺省），本机按它跑。
+      const starts = claimed && await Promise.all(claimed.map(async (start) =>
+        ({ ...start, budget: start.taskId ? (await readTaskBudget(q, ownerId, start.taskId)).budget : await readBudgetDefault(q, ownerId) })));
       return starts ? { starts } : fail(reply, 404, "DEVICE_NOT_FOUND", "这台电脑没配对，或已经解除配对");
     });
 

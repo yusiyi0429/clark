@@ -1,4 +1,5 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
+import { Budget } from "./budget.js";
 import { RoleRef } from "./roles.js";
 import { WorkerQueueReason, WorkerResources } from "./workers.js";
 
@@ -347,7 +348,13 @@ export const SessionStartView = Type.Object({
 export const ClaimSessionStartsRequest = Type.Object({ deviceId: Type.String({ format: "uuid" }) }, strict);
 /** POST /api/me/session-starts/:id/release 的 body：认领它的那台电脑。 */
 export const ReleaseSessionStartRequest = Type.Object({ deviceId: Type.String({ format: "uuid" }) }, strict);
-export const ClaimSessionStartsResponse = Type.Object({ starts: Type.Array(SessionStartView) }, strict);
+/**
+ * 认领到的一条，带这件 Task 此刻的预算（设计 11.3、11.4，契约 budget.ts）：Task 单独设过的，没设过是本人的缺省；不挂 Task 的专题是本人的缺省。
+ * 本机按它跑这张卡（模型、思考强度、多 agent、到 80%/100% 怎么办）；每开一张卡认领一次，所以中途改了预算，下一张卡就拿到新的。
+ * 一张卡跑着时预算改了怎么办由本机程序定。
+ */
+export const ClaimedSessionStart = Type.Object({ ...SessionStartView.properties, budget: Budget }, strict);
+export const ClaimSessionStartsResponse = Type.Object({ starts: Type.Array(ClaimedSessionStart) }, strict);
 
 /**
  * 伙伴开探索子会话（工具 open_topic，/internal/me/topics，照 /internal 的 INTERNAL_CHAT_TOKEN 加 X-Owner-Id，不进公开 OpenAPI）：

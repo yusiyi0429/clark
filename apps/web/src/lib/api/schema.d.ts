@@ -17664,6 +17664,15 @@ export interface components {
                 taskId: string | null;
                 /** Format: date-time */
                 requestedAt: string;
+                budget: {
+                    mode: "auto" | "set" | "unlimited";
+                    hours: number | null;
+                    weeklyPercent: number | null;
+                    money: {
+                        amount: number;
+                        currency: "CNY" | "USD";
+                    } | null;
+                };
             }[];
         };
         CardMerge: {
@@ -17821,6 +17830,25 @@ export interface components {
                 } | null;
             };
             inherited: boolean;
+        };
+        ClaimedSessionStart: {
+            /** Format: uuid */
+            id: string;
+            kind: "card" | "topic";
+            cardId: string | null;
+            topicId: string | null;
+            taskId: string | null;
+            /** Format: date-time */
+            requestedAt: string;
+            budget: {
+                mode: "auto" | "set" | "unlimited";
+                hours: number | null;
+                weeklyPercent: number | null;
+                money: {
+                    amount: number;
+                    currency: "CNY" | "USD";
+                } | null;
+            };
         };
     };
     responses: never;

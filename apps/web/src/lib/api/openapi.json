@@ -108657,7 +108657,8 @@
                 "cardId",
                 "topicId",
                 "taskId",
-                "requestedAt"
+                "requestedAt",
+                "budget"
               ],
               "properties": {
                 "id": {
@@ -108712,6 +108713,92 @@
                 "requestedAt": {
                   "format": "date-time",
                   "type": "string"
+                },
+                "budget": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "mode",
+                    "hours",
+                    "weeklyPercent",
+                    "money"
+                  ],
+                  "properties": {
+                    "mode": {
+                      "anyOf": [
+                        {
+                          "const": "auto",
+                          "type": "string"
+                        },
+                        {
+                          "const": "set",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unlimited",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "hours": {
+                      "anyOf": [
+                        {
+                          "exclusiveMinimum": 0,
+                          "maximum": 1000,
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "weeklyPercent": {
+                      "anyOf": [
+                        {
+                          "minimum": 1,
+                          "maximum": 100,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "money": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "amount",
+                            "currency"
+                          ],
+                          "properties": {
+                            "amount": {
+                              "exclusiveMinimum": 0,
+                              "maximum": 1000000,
+                              "type": "number"
+                            },
+                            "currency": {
+                              "anyOf": [
+                                {
+                                  "const": "CNY",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "USD",
+                                  "type": "string"
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
                 }
               }
             }
@@ -109621,6 +109708,160 @@
           },
           "inherited": {
             "type": "boolean"
+          }
+        }
+      },
+      "ClaimedSessionStart": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "cardId",
+          "topicId",
+          "taskId",
+          "requestedAt",
+          "budget"
+        ],
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "const": "card",
+                "type": "string"
+              },
+              {
+                "const": "topic",
+                "type": "string"
+              }
+            ]
+          },
+          "cardId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "topicId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "taskId": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "requestedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "budget": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "mode",
+              "hours",
+              "weeklyPercent",
+              "money"
+            ],
+            "properties": {
+              "mode": {
+                "anyOf": [
+                  {
+                    "const": "auto",
+                    "type": "string"
+                  },
+                  {
+                    "const": "set",
+                    "type": "string"
+                  },
+                  {
+                    "const": "unlimited",
+                    "type": "string"
+                  }
+                ]
+              },
+              "hours": {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0,
+                    "maximum": 1000,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "weeklyPercent": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "maximum": 100,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "money": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "amount",
+                      "currency"
+                    ],
+                    "properties": {
+                      "amount": {
+                        "exclusiveMinimum": 0,
+                        "maximum": 1000000,
+                        "type": "number"
+                      },
+                      "currency": {
+                        "anyOf": [
+                          {
+                            "const": "CNY",
+                            "type": "string"
+                          },
+                          {
+                            "const": "USD",
+                            "type": "string"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
           }
         }
       }

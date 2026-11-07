@@ -52,6 +52,9 @@ describe("自动开工（第 4.4 节）", { timeout: 30_000 }, () => {
       const budget = { mode: "set", hours: 2.5, weeklyPercent: 10, money: { amount: 30, currency: "CNY" } };
       expect((await f.call("POST", "/api/plan-tasks/task-open/card-drafts/accept", { drafts: [{ id: draft }], start: true, budget })).statusCode).toBe(200);
       expect((await f.call("GET", "/api/me/tasks/task-open/budget")).json()).toEqual({ taskId: "task-open", budget, inherited: false });
+      // 认领开工的回执带这件 Task 的预算，本机按它跑。
+      expect(((await f.claim(f.machine.device)).json().starts as { taskId: string; budget: unknown }[]).map((start) => [start.taskId, start.budget]))
+        .toEqual([["task-open", budget]]);
 
       const changed = await f.call("PUT", "/api/me/tasks/task-open/budget", { ...AUTO, hours: null, weeklyPercent: 20, mode: "set" });
       expect(changed.json()).toEqual({ taskId: "task-open", budget: { ...AUTO, mode: "set", weeklyPercent: 20 }, inherited: false });
