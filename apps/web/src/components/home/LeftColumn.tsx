@@ -12,12 +12,11 @@
  */
 import { useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { ChevronRight, Ellipsis, House, Info } from "lucide-react";
-import type { TWorkerQueueReason } from "@warmap/contracts";
 import { HeroButton } from "@/components/HeroButton";
 import type { Account } from "@/components/AccountMenu";
 import { BuddyMark } from "@/components/buddy/BuddyMark";
 import type { Buddy } from "@/components/buddy/useBuddy";
-import { BUDDY_HREF, HOME_HREF, cardHref, infoHref, monthLabel, taskHref, topicHref } from "@/lib/home/derive";
+import { BUDDY_HREF, HOME_HREF, cardHref, infoHref, monthLabel, queueText, taskHref, topicHref } from "@/lib/home/derive";
 import type { HomeTask, SubSession, WorkHomeData } from "@/lib/home/types";
 import { PersonRow } from "./PersonMenu";
 import { ICON, StateIcon } from "./StateIcon";
@@ -25,7 +24,6 @@ import { pageHref, type View } from "./view";
 import h from "@/styles/home.module.css";
 
 export const subHref = (sub: Pick<SubSession, "kind" | "id">) => (sub.kind === "card" ? cardHref(sub.id) : topicHref(sub.id));
-const QUEUE_TEXT: Record<TWorkerQueueReason, string> = { not_dispatched: "等开工", slot: "等空位", device_offline: "等本机上线", prior_cards: "等前面的卡" };
 
 export function LeftColumn({ data, view, buddy, speaking, go, phone, account, today, alert, trail, top, month, onRetryPlan }: {
   data: WorkHomeData;
@@ -163,7 +161,7 @@ function Subs({ subs, view, go, flat = false }: { subs: SubSession[]; view: View
     <ul className={h.subs} data-flat={flat ? "" : undefined}>
       {subs.map((sub) => {
         const current = (view.kind === "card" || view.kind === "topic") && view.kind === sub.kind && view.id === sub.id;
-        const reason = sub.state === "queued" && sub.queueReason ? QUEUE_TEXT[sub.queueReason] : null;
+        const reason = sub.state === "queued" && sub.queueReason ? queueText(sub.queueReason, sub.holdUntil) : null;
         return (
           <li key={`${sub.kind}:${sub.id}`}>
             <button type="button" className={h.sub} data-state={sub.state} aria-current={current ? "page" : undefined} onClick={() => go(subHref(sub))} data-tree-row="" data-testid="tree-sub">

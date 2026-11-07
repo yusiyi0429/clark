@@ -281,11 +281,10 @@ function HomeFrame({ account }: { account: Account }) {
     showToast: (text: string) => showWorkspaceToast({ text }), homeCards: [], quote: () => undefined, compose: () => undefined, viewerId: account.personId ?? null,
   }), [go, account.personId]);
 
-  // 空月份（本月还没有 Mission）：「今天」行出「11 月待敲定」chip，「等你」里同时有一行，点了进月份页（5.4.4）。
-  // 本月没有 Mission 时计划回退到最近一个有 Mission 的月份（fallbackFrom 不为空），本月按 today 算。
-  const thisMonth = work.plan?.today.slice(0, 7) ?? null;
-  const month = work.plan && thisMonth && (work.plan.fallbackFrom !== null || !data.missions.some((mission) => mission.period === thisMonth))
-    ? { href: monthHref(thisMonth), label: `${monthLabel(thisMonth)}待敲定` } : null;
+  // 「今天」行行尾的月份 chip（5.4.2）：等你里月份那一条——复盘窗口里写「复盘」，新月份的草稿到了（或本月还空着）写「12 月待敲定」；
+  // 「延续到哪」只在等你里。点了进月份页。
+  const monthItem = data.waiting.find((item) => item.kind === "month" && item.month && item.month.step !== "continue")?.month ?? null;
+  const month = monthItem ? { href: monthHref(monthItem.period), label: monthItem.step === "review" ? "复盘" : `${monthLabel(monthItem.period)}待敲定` } : null;
 
   // ---- 展示区 ----
   const homeTask = (taskId: string) => data.missions.flatMap((mission) => mission.tasks).find((task) => task.taskId === taskId) ?? null;
@@ -316,7 +315,7 @@ function HomeFrame({ account }: { account: Account }) {
   useTabTitle(data.waiting.length);
   const display = (current: View) => {
     switch (current.kind) {
-      case "home": return <HomeView data={data} api={api} buddy={buddy} today={todayLabel(work.plan?.today ?? null)} month={month} go={go} route={route} onSend={send} />;
+      case "home": return <HomeView data={data} api={api} buddy={buddy} today={todayLabel(work.plan?.today ?? null)} go={go} route={route} onSend={send} />;
       case "buddy": return <BuddyView buddy={buddy} outbox={outbox} consume={consume} onSpeaking={setSpeaking} />;
       case "task": {
         const task = planTask(current.taskId);

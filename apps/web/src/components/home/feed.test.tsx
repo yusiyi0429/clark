@@ -19,7 +19,7 @@ const item = (extra: Partial<TWorkerItem>): TWorkerItem => ({
   key: `card:${CARD}`, kind: "card", cardId: CARD, topicId: null, title: "greet", role: ROLE, workerNo: 1,
   task: { id: "t1", name: "11/30 上线 V2" }, mission: null, step: null,
   resource: { where: "local", deviceId: null, deviceName: "ThinkPad", modelLabel: "Sonnet" }, startedAt: "2026-11-07T04:00:00Z", elapsedSeconds: 60,
-  finishedAt: null, cost: null, stage: "doing", wait: null, needsYou: false, queueReason: null, queuePosition: null, git: null, waitingFor: [], ...extra,
+  finishedAt: null, cost: null, stage: "doing", wait: null, needsYou: false, queueReason: null, holdUntil: null, queuePosition: null, git: null, waitingFor: [], ...extra,
 });
 const session = (extra: Partial<TLocalSessionSummary>): TLocalSessionSummary => ({
   id: "00000000-0000-4000-8000-0000000000a1", subject: { kind: "card", cardId: CARD }, title: "greet", agent: "claude-code", modelProfileId: "subscription", modelLabel: "Sonnet",

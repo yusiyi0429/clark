@@ -27,14 +27,12 @@ import h from "@/styles/home.module.css";
 
 export type SendTarget = "auto" | RouteTarget;
 
-export function HomeView({ data, api, buddy, today, month, go, route, onSend }: {
+export function HomeView({ data, api, buddy, today, go, route, onSend }: {
   data: WorkHomeData;
   api: WorkHomeApi;
   buddy: Buddy | null;
   /** 「11 月 7 日 周六」：页头和「今天」行一样。 */
   today: string;
-  /** 空月份：「等你」里一行「11 月待敲定」，点了进月份页。 */
-  month: { href: string; label: string } | null;
   go: (href: string) => void;
   /** 「自动」会发去哪（打字时实时显示）。 */
   route: (text: string) => Promise<RouteTarget>;
@@ -46,15 +44,10 @@ export function HomeView({ data, api, buddy, today, month, go, route, onSend }: 
       <header className={h.viewHead}><h1 className={h.viewTitle} tabIndex={-1}>{today}</h1></header>
       <div className={h.homeScroll}>
         <div className={h.homeInner}>
-          {data.waiting.length || month ? (
+          {data.waiting.length ? (
             <section aria-label="等你" className={h.section}>
-              <p className={h.sectionTitle}>等你 <span>{data.waiting.length + (month ? 1 : 0)}</span></p>
-              {month ? (
-                <ul className={h.waiting}>
-                  <li className={h.wait}><button type="button" className={h.waitMain} onClick={() => go(month.href)}><span className={h.waitTitle}>{month.label}</span></button></li>
-                </ul>
-              ) : null}
-              {data.waiting.length ? <WaitingList items={data.waiting} api={api} go={go} /> : null}
+              <p className={h.sectionTitle}>等你 <span>{data.waiting.length}</span></p>
+              <WaitingList items={data.waiting} api={api} go={go} />
             </section>
           ) : null}
           {api.planFailed ? (
@@ -121,10 +114,6 @@ function useActions(api: WorkHomeApi) {
     if (item.kind === "role" && item.open.kind === "role") {
       const id = item.open.id;
       return [{ label: "采纳", done: "已采纳", primary: true, run: () => decideProposal(id, "accept") }, { label: "不要", done: "已回答", run: () => decideProposal(id, "dismiss") }];
-    }
-    if (item.kind === "assigned" && item.notificationId) {
-      const id = item.notificationId;
-      return [{ label: "接下", done: "已接下", primary: true, run: async () => { const result = await api.member.markSeen([id]); if (!result.ok) throw new Error(result.error); } }];
     }
     if (item.kind === "merge" && item.sessionId) {
       const session = local.sessions.find((entry) => entry.id === item.sessionId);

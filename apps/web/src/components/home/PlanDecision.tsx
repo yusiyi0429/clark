@@ -29,6 +29,7 @@ import { SLOT_CAP, startBatch, type StartPlan } from "@/lib/work/queue";
 import { QUEUE_LABEL, liveSessions, type Worker } from "@/lib/work/workers";
 import type { SubSession } from "@/lib/home/types";
 import { ICON as STATE_ICON, StateIcon } from "./StateIcon";
+import { queueText } from "@/lib/home/derive";
 import h from "@/styles/home.module.css";
 
 const ICON = STATE_ICON;
@@ -201,12 +202,11 @@ export function PlanningLine({ planner }: { planner: Worker }) {
   );
 }
 
-const QUEUE_TEXT: Record<string, string> = { not_dispatched: "等开工", slot: "等空位", device_offline: "等本机上线", prior_cards: "等前面的卡" };
 const WAIT_TEXT: Record<string, string> = { approval: "等你批准", question: "等你回复", verdict: "受阻", merge: "等你合回" };
 /** 事件行的阶段（5.6 状态词）。 */
 export function subStage(sub: SubSession): string {
   switch (sub.state) {
-    case "queued": return `已排队${sub.queueReason ? ` · ${QUEUE_TEXT[sub.queueReason] ?? ""}` : ""}`;
+    case "queued": return `已排队${sub.queueReason ? ` · ${queueText(sub.queueReason, sub.holdUntil)}` : ""}`;
     case "waiting": return sub.waiting ? WAIT_TEXT[sub.waiting] ?? "等你" : "等你回复";
     case "done": return "已完成";
     case "failed": return "失败";

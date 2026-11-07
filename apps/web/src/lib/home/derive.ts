@@ -3,7 +3,8 @@
  * 由网页现有的几份数据照契约的形状拼出来——本月计划（Mission、Task）、云端的 worker 列表合进本机的实时会话（lib/work）、
  * 通知（会议、Mission Card、群消息）、岗位建议、合不回的卡。都是纯函数；B 的接口上了以后只用来补本机的实时部分。
  */
-import type { TCardGit, TCardMerge, THomePlanResponse, TLocalWorkspace, TMissionRoundSummary, TSubSessionWaiting, TWorkerQueueReason } from "@warmap/contracts";
+import type { TCardGit, TCardMerge, THomeItem, THomePlanResponse, TLocalWorkspace, TMissionRoundSummary, TSubSessionWaiting, TTaskView, TWaitingAnswer, TWorkerQueueReason } from "@warmap/contracts";
+import { monthHref, pageHref } from "@/components/home/pageKeys";
 import { isAgentCard, type CardItem } from "@/lib/board/cards";
 import { calendarDate } from "@/lib/companyTime";
 import type { MemberNotification, UnreadMissionGroup } from "@/components/member/useMemberHome";
@@ -11,6 +12,7 @@ import type { TLocalSessionSummary } from "@/lib/local/runner";
 import type { RoleProposalView } from "@/lib/team/roles";
 import { FIELD_LABEL } from "@/lib/team/roles";
 import type { MergeIssue } from "@/lib/work/merge";
+import { clock } from "./quota";
 import { MARK_LABEL, type QueueReason, type Worker } from "@/lib/work/workers";
 import type { BackgroundItem, BackgroundScope, FeedItem, HomeMission, HomeTask, RouteTarget, SubSession, WaitingItem, WorkHomeData } from "./types";
 
@@ -44,10 +46,20 @@ export function waitingHref(item: Pick<WaitingItem, "open">): string {
     // 具体某张卡去那张卡；拍板人那一侧没有具体的卡（轮次），去原来列着轮次的首页通知栏。
     case "mission_card": return open.round ? "/me" : `/me/mission-cards/${encodeURIComponent(open.id)}`;
     case "role": return "/me/team";
+    // 别人请你认可的 Task：只读的 Task 详情；月份页；连接页（这台电脑那一组）。
+    case "task_detail": return infoHref(open.id);
+    case "month": return monthHref(open.id);
+    case "connections": return pageHref("connections");
   }
 }
 
-const QUEUE: Record<QueueReason, TWorkerQueueReason> = { start: "not_dispatched", slot: "slot", offline: "device_offline", folder: "slot", after: "prior_cards" };
+/** 已排队的原因（子会话行、事件行）：等额度恢复带恢复的时刻「等额度恢复 · 08:00」。 */
+const QUEUE_TEXT: Record<TWorkerQueueReason, string> = { not_dispatched: "等开工", slot: "等空位", device_offline: "等本机上线", prior_cards: "等前面的卡", quota: "等额度恢复" };
+export function queueText(reason: TWorkerQueueReason, holdUntil: string | null): string {
+  return reason === "quota" && holdUntil ? `${QUEUE_TEXT.quota} · ${clock(holdUntil, Date.now())}` : QUEUE_TEXT[reason];
+}
+
+const QUEUE: Record<QueueReason, TWorkerQueueReason> = { start: "not_dispatched", slot: "slot", offline: "device_offline", folder: "slot", after: "prior_cards", quota: "quota" };
 const EPOCH = new Date(0).toISOString();
 const at = (worker: Worker) => worker.endedAt ?? worker.startedAt ?? worker.requestedAt ?? worker.item?.updatedAt ?? EPOCH;
 
@@ -86,7 +98,7 @@ function boardSub(card: CardItem, sessions: TLocalSessionSummary[], merges: Merg
   const waiting = merge?.state === "needs_merge";
   return {
     id: card.id, kind: "card", title: card.title, state: waiting ? "waiting" : "done", waiting: waiting ? "merge" : null, queueReason: null,
-    role: card.card?.role ?? null, sessionId: session?.id ?? null, deviceId: session ? deviceId : null, autoStart: false, updatedAt: when, merge,
+    role: card.card?.role ?? null, sessionId: session?.id ?? null, deviceId: session ? deviceId : null, autoStart: false, updatedAt: when, merge, holdUntil: null,
   };
 }
 
@@ -118,6 +130,7 @@ export function toSubSession(worker: Worker, merges: MergeIssue[] = [], deviceId
   return {
     id, kind: worker.kind === "topic" ? "topic" : "card", title: worker.title, ...(verifying ? { state: "running" as const, waiting: null } : subState(worker, merge)),
     queueReason: worker.state === "queued" && worker.reason ? QUEUE[worker.reason] : null,
+    holdUntil: worker.state === "queued" && worker.reason === "quota" ? worker.holdUntil : null,
     role: worker.role, sessionId: worker.session?.id ?? null, deviceId: worker.session ? deviceId : null, autoStart: false, updatedAt: at(worker), merge,
   };
 }
@@ -171,7 +184,7 @@ const short = (text: string, max = 28) => (text.length > max ? `${text.slice(0, 
 export function deriveWorkHome({ plan, workers, boards, notices, proposals, merges, deviceId, sessions = [] }: {
   plan: THomePlanResponse | null;
   workers: Worker[];
-  boards: Record<string, { plan: { status: string } | null; cards?: CardItem[] } | undefined>;
+  boards: Record<string, { plan: { status: string } | null; cards?: CardItem[]; drafts?: unknown[] } | undefined>;
   notices: NoticeSources | null;
   proposals: RoleProposalView[];
   merges: MergeIssue[];
@@ -195,11 +208,11 @@ export function deriveWorkHome({ plan, workers, boards, notices, proposals, merg
   }));
   const other = sortSubSessions(subs((worker) => !worker.taskId || !known.has(worker.taskId)));
   const all = [...[...taskSubs.values()].flat(), ...other];
-  const waiting = [
+  const waiting = sortWaiting([
     ...workerWaiting(workers, deviceId),
     ...tasks.flatMap((task) => mergeWaiting(taskSubs.get(task.taskId) ?? [], task, merges)), ...mergeWaiting(other, null, merges), ...orphanMerges(merges, all),
-    ...noticeWaiting(notices), ...proposalWaiting(proposals),
-  ];
+    ...planStartWaiting(tasks, boards), ...noticeWaiting(notices), ...proposalWaiting(proposals), ...monthWaiting(plan),
+  ]);
   // Task 行的小字（设计 5.4.2）：预算、加预算、管线最近一句结论都还没有数据时，写这个 Mission 下一个验收时间点「11/20 验收」。
   const gateOf = (missionId: string) => {
     const dates = (plan?.gates ?? []).filter((gate) => gate.missionId === missionId).map((gate) => gate.date).sort();
@@ -222,6 +235,7 @@ export function deriveWorkHome({ plan, workers, boards, notices, proposals, merg
         // 计划里只有交付状态没有时间；这里只用来判「交付了」（Task 打勾、子会话收起）。
         completedAt: task.deliverable?.status === "delivered" ? `${today}T00:00:00.000Z` : null,
         subSessions,
+        items: ownItems((plan?.activities ?? []).map((activity) => activity.item).filter((item) => item.planTaskId === task.taskId)),
       };
     }),
   }));
@@ -229,7 +243,7 @@ export function deriveWorkHome({ plan, workers, boards, notices, proposals, merg
     // 本月按今天算：本月没有 Mission 时计划回退到上个月（fallbackFrom），那些 Mission 前面加「10 月 · 」。
     period: today.slice(0, 7),
     missions,
-    other: { subSessions: other },
+    other: { subSessions: other, items: ownItems(plan?.unplaced ?? []) },
     waiting,
   };
 }
@@ -260,7 +274,7 @@ function workerWaiting(workers: Worker[], deviceId: string | null): WaitingItem[
       : worker.kind === "topic" && worker.topicId ? { kind: "topic" as const, id: worker.topicId }
       : (worker.kind === "card" || worker.kind === "verify") && worker.cardId ? { kind: "card" as const, id: worker.cardId }
       : worker.taskId ? { kind: "task" as const, id: worker.taskId } : { kind: "href" as const, href: HOME_HREF };
-    return [{ id: `worker:${worker.key}`, kind, title: askTitle(worker), source, open, ...base }];
+    return [{ id: `worker:${worker.key}`, kind, title: askTitle(worker), source, open, ...base, ...fields("inline_local") }];
   });
 }
 
@@ -271,7 +285,7 @@ function mergeWaiting(subs: SubSession[], task: { taskId: string; name: string }
     return {
       id: `merge:${sub.id}`, kind: "merge", title: issue ? "合并不了" : `合进 ${sub.merge?.baseBranch ?? "原分支"}`,
       source: issue ? `${sub.title} · ${short(issue.text, 40)}` : [sub.title, task?.name].filter(Boolean).join(" · "),
-      open: { kind: "card", id: sub.id }, taskId: task?.taskId ?? null, sessionId: sub.sessionId, deviceId: sub.deviceId, at: sub.merge?.at ?? sub.updatedAt,
+      open: { kind: "card", id: sub.id }, taskId: task?.taskId ?? null, sessionId: sub.sessionId, deviceId: sub.deviceId, at: sub.merge?.at ?? sub.updatedAt, ...fields("inline_local"),
     };
   });
 }
@@ -281,48 +295,77 @@ function orphanMerges(merges: MergeIssue[], subs: SubSession[]): WaitingItem[] {
   const shown = new Set(subs.map((sub) => sub.id));
   return merges.filter((issue) => !issue.cardId || !shown.has(issue.cardId)).map((issue) => ({
     id: `merge:${issue.sessionId}`, kind: "merge", title: "合并不了", source: `${issue.title} · ${short(issue.text, 40)}`,
-    open: issue.cardId ? { kind: "card", id: issue.cardId } : { kind: "href", href: HOME_HREF }, taskId: null, sessionId: issue.sessionId, deviceId: null, at: null,
+    open: issue.cardId ? { kind: "card", id: issue.cardId } : { kind: "href", href: HOME_HREF }, taskId: null, sessionId: issue.sessionId, deviceId: null, at: null, ...fields("inline_local"),
   }));
 }
 
 const NONE = { taskId: null, sessionId: null, deviceId: null } as const;
+
+/** 契约 9.6 加的几项（回退路径）：截止、电脑名、对方、月份先不填；answer 照能不能就地答。 */
+const fields = (answer: TWaitingAnswer) => ({ answer, dueAt: null, deviceName: null, person: null, month: null });
 
 function noticeWaiting(notices: NoticeSources | null): WaitingItem[] {
   if (!notices) return [];
   const unread = notices.notifications.filter((item) => !item.readAt);
   const meetings = unread.filter((item) => item.kind === "meeting_card_pending").map((item): WaitingItem => ({
     id: `notice:${item.id}`, kind: "meeting", title: item.subject ?? item.text, source: item.source ?? "会议记录待确认",
-    open: { kind: "meeting", id: item.objectId }, at: item.createdAt, notificationId: item.id, ...NONE,
-  }));
-  const assigned = unread.filter((item) => item.kind === "meeting_action_assigned").map((item): WaitingItem => ({
-    id: `notice:${item.id}`, kind: "assigned", title: item.subject ?? item.text, source: item.source ? `「${item.source}」分给你` : "会后分给你",
-    open: { kind: "href", href: `/me/tasks/${encodeURIComponent(item.objectId)}` }, at: item.createdAt, notificationId: item.id, ...NONE,
+    open: { kind: "meeting", id: item.objectId }, at: item.createdAt, notificationId: item.id, ...NONE, ...fields("open"),
   }));
   const rounds = notices.rounds.filter((round) => round.todo).map((round): WaitingItem => {
     const mine = round.cards.find((card) => card.mine && card.contentVisible !== false);
     return {
       id: `round:${round.roundId}`, kind: "mission_card", title: round.todo!, source: `${round.battlefieldName} · Mission Card`,
-      open: mine ? { kind: "mission_card", id: mine.cardId } : { kind: "mission_card", id: round.roundId, round: true }, at: round.openedAt, ...NONE,
+      open: mine ? { kind: "mission_card", id: mine.cardId } : { kind: "mission_card", id: round.roundId, round: true }, at: round.openedAt, ...NONE, ...fields("open"),
     };
   });
-  const threads = notices.unreadThreads.map((thread): WaitingItem => ({
-    id: `thread:${thread.objectType}:${thread.objectId}`, kind: "thread", title: thread.title, source: `${thread.unread} 条新消息`,
-    open: { kind: "href", href: thread.href }, at: null, ...NONE,
-  })).concat(notices.unreadMissionGroups.map((group): WaitingItem => ({
-    id: `thread:mission-card:${group.cardId}`, kind: "thread", title: group.title, source: `${group.unread} 条新消息`, open: { kind: "href", href: group.href }, at: null, ...NONE,
-  })));
-  return [...meetings, ...rounds, ...assigned, ...threads];
+  return [...meetings, ...rounds];
 }
 
 function proposalWaiting(proposals: RoleProposalView[]): WaitingItem[] {
   return proposals.map((proposal) => ({
     id: `proposal:${proposal.id}`, kind: "role", title: `${proposal.role.name}的${FIELD_LABEL[proposal.field]}改一句`,
-    source: "岗位修改建议", open: { kind: "role", id: proposal.id }, at: proposal.createdAt, ...NONE,
+    source: "岗位修改建议", open: { kind: "role", id: proposal.id }, at: proposal.createdAt, ...NONE, ...fields("inline"),
   }));
 }
 
-/** 契约的 waiting 只有要拿主意的七种；会后分给你、群消息是网页从通知拼的，接在后面（B 的说明：要的话网页自己拼）。 */
-export const webNotices = (notices: NoticeSources | null) => noticeWaiting(notices).filter((item) => item.kind === "assigned" || item.kind === "thread");
+/** 计划等你开工（9.6）：规划员出了派活单、还没开工的 Task。就地「开始」= 接受草稿登记开工。 */
+function planStartWaiting(tasks: { taskId: string; name: string }[], boards: Record<string, { drafts?: unknown[] } | undefined>): WaitingItem[] {
+  return tasks.filter((task) => boards[task.taskId]?.drafts?.length).map((task) => ({
+    id: `plan_start:${task.taskId}`, kind: "plan_start", title: `${task.name}：这样开工？`, source: `${boards[task.taskId]!.drafts!.length} 步`,
+    open: { kind: "task", id: task.taskId }, taskId: task.taskId, sessionId: null, deviceId: null, at: null, ...fields("inline"),
+  }));
+}
+
+/**
+ * 空月份（5.4.4）：本月还没有 Mission（计划回退到上个月，或计划里没有本月的）时，「等你」里一行「11 月待敲定」，点了进月份页；
+ * 「今天」行行尾的月份 chip 也从这一条来。云端给了月份那几条（复盘、待敲定、延续）就用云端的。
+ */
+export function monthWaiting(plan: THomePlanResponse | null): WaitingItem[] {
+  if (!plan) return [];
+  const period = plan.today.slice(0, 7);
+  if (!plan.fallbackFrom && plan.missions.length && plan.period === period) return [];
+  return [{
+    id: `month:${period}:finalize`, kind: "month", title: `${monthLabel(period)}待敲定`, source: null, open: { kind: "month", id: period },
+    ...NONE, at: null, ...fields("open"), month: { step: "finalize", period },
+  }];
+}
+
+/** 「等你」的顺序（9.6）：卡住正在跑的活的（批准、回答、额度）在前，再是有截止的（早的在前），其余按时间新的在前。 */
+const BLOCKING = new Set<WaitingItem["kind"]>(["approval", "question", "quota"]);
+export function sortWaiting(items: WaitingItem[]): WaitingItem[] {
+  const rank = (item: WaitingItem) => (BLOCKING.has(item.kind) ? 0 : item.dueAt ? 1 : 2);
+  return [...items].sort((a, b) => rank(a) - rank(b)
+    || (rank(a) === 1 ? a.dueAt!.localeCompare(b.dueAt!) : (b.at ?? "").localeCompare(a.at ?? "")));
+}
+
+/** 本人自己做的执行事项（9.10：没有岗位、不交给 Agent 的），挂在 Task 下；退回的不列，做完的照样列（Task 还在树上）。 */
+function ownItems(items: TTaskView[]): THomeItem[] {
+  return items.filter((item) => !isAgentCard(item) && item.status !== "returned").map((item) => ({
+    id: item.id, title: item.title, status: item.status === "done" ? "done" : item.status === "in_progress" ? "in_progress" : "not_started",
+    dueDate: item.dueDate, awaitingAcceptance: item.awaitingAcceptance, updatedAt: item.updatedAt,
+  }));
+}
+
 
 // ── Task 管线里的验收行（契约 TaskFeedItem；B 的 /feed 没上时由看板上的卡拼）──
 
@@ -388,12 +431,12 @@ export function localBackground({ sessions, deviceId, canStop, today, taskOfCard
     const where = { sessionId: session.id, deviceId, taskId, cardId, topicId };
     const own: BackgroundItem[] = subject.kind === "plan" || subject.kind === "verify" ? [{
       id: `${subject.kind}:${session.id}`, kind: subject.kind, title: subject.kind === "plan" ? "拆卡" : verifyTitle(session.title),
-      state: sessionState(session.status), startedAt: session.createdAt, finishedAt: LIVE.has(session.status) ? null : session.updatedAt,
-      stoppable: canStop && LIVE.has(session.status), itemId: null, ...where,
+      state: session.hold ? "queued" : sessionState(session.status), startedAt: session.createdAt, finishedAt: LIVE.has(session.status) ? null : session.updatedAt,
+      stoppable: canStop && LIVE.has(session.status), itemId: null, holdUntil: session.hold?.until ?? null, ...where,
     }] : [];
     const children = (session.background ?? []).map((item): BackgroundItem => ({
       id: `bg:${session.id}:${item.id}`, kind: item.kind, title: item.title, state: item.state, startedAt: item.startedAt, finishedAt: item.finishedAt,
-      stoppable: canStop && item.stoppable, itemId: item.id, ...where,
+      stoppable: canStop && item.stoppable, itemId: item.id, holdUntil: null, ...where,
     }));
     return [...own, ...children].filter(recent);
   });
@@ -405,6 +448,7 @@ export function workerBackground(workers: Worker[]): BackgroundItem[] {
     id: worker.key, kind: worker.kind as "plan" | "verify", title: worker.kind === "plan" ? "拆卡" : verifyTitle(worker.title),
     state: worker.state === "done" ? "done" : worker.state === "queued" ? "queued" : "running", startedAt: worker.startedAt, finishedAt: worker.endedAt,
     stoppable: false, sessionId: null, itemId: null, deviceId: null, taskId: worker.taskId, cardId: worker.kind === "verify" ? worker.cardId : null, topicId: null,
+    holdUntil: worker.state === "queued" && worker.reason === "quota" ? worker.holdUntil : null,
   }));
 }
 

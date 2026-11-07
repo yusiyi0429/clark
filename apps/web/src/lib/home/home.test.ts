@@ -4,9 +4,9 @@ import type { TLocalSessionSummary } from "@/lib/local/runner";
 import { toWorker, type Worker } from "@/lib/work/workers";
 import type { MemberNotification } from "@/components/member/useMemberHome";
 import {
-  deriveFeed, deriveWorkHome, duration, groupBackground, inScope, localBackground, mergeBackground, routeText, statusLine, waitingHref, workerBackground,
+  deriveFeed, deriveWorkHome, duration, groupBackground, inScope, localBackground, mergeBackground, monthWaiting, queueText, routeText, sortWaiting, statusLine, waitingHref, workerBackground,
 } from "./derive";
-import type { BackgroundItem } from "./types";
+import type { BackgroundItem, WaitingItem } from "./types";
 import type { CardItem } from "@/lib/board/cards";
 
 const ROLE = { id: "00000000-0000-4000-8000-000000000001", name: "开发", kind: "worker" as const };
@@ -14,7 +14,7 @@ const item = (extra: Partial<TWorkerItem>): TWorkerItem => ({
   key: "card:c1", kind: "card", cardId: "c1", topicId: null, title: "接上首页数据", role: ROLE, workerNo: 1,
   task: { id: "t1", name: "11/30 上线 V2" }, mission: null, step: null,
   resource: { where: "local", deviceId: null, deviceName: "ThinkPad", modelLabel: "Sonnet" }, startedAt: "2026-11-07T04:00:00Z", elapsedSeconds: 60,
-  finishedAt: null, cost: null, stage: "doing", wait: null, needsYou: false, queueReason: null, queuePosition: null, git: null, waitingFor: [], ...extra,
+  finishedAt: null, cost: null, stage: "doing", wait: null, needsYou: false, queueReason: null, holdUntil: null, queuePosition: null, git: null, waitingFor: [], ...extra,
 });
 const session = (extra: Partial<TLocalSessionSummary>): TLocalSessionSummary => ({
   id: "00000000-0000-4000-8000-0000000000a1", subject: { kind: "plan", taskId: "t1" }, title: "拆卡", agent: "claude-code", modelProfileId: "subscription", modelLabel: "Sonnet",
@@ -88,10 +88,12 @@ describe("新首页的数据（B 的 work-home 没上时照契约的形状拼）
     expect(statusLine({ ...idle, planning: false })).toBe("未开始");
   });
 
-  it("等你：子会话的批准、会议记录待确认、群里的新消息；去哪儿看由 open 映射到路由；受阻去 Task 管线；第一次没过自动重做，不在这里", () => {
+  it("等你：子会话的批准、会议记录待确认；群消息只是让你知道，不进（设计 9.6）；去哪儿看由 open 映射到路由；受阻去 Task 管线；第一次没过自动重做，不在这里", () => {
     expect(data.waiting.map((entry) => [entry.kind, waitingHref(entry)])).toEqual([
-      ["approval", "/me/work/cards/c1"], ["meeting", "/me/meetings/mt1"], ["thread", "/me/issues/i1"],
+      ["approval", "/me/work/cards/c1"], ["meeting", "/me/meetings/mt1"],
     ]);
+    // 能不能就地答：批准要本机办；会后确认点开去答。
+    expect(data.waiting.map((entry) => entry.answer)).toEqual(["inline_local", "open"]);
     expect(data.waiting[0]).toMatchObject({ title: "等你批准", source: "接上首页数据 · 11/30 上线 V2", taskId: "t1", open: { kind: "card", id: "c1" } });
     const blocked = deriveWorkHome({ plan, workers: [worker({ key: "card:c9", cardId: "c9", wait: "blocked" })], boards: {}, proposals: [], merges: [], notices: null, deviceId: null });
     expect(blocked.waiting.map((entry) => [entry.kind, entry.title, waitingHref(entry)])).toEqual([["verdict", "受阻", "/me/work/tasks/t1"]]);
@@ -235,5 +237,52 @@ describe("首页输入框的「自动」（B 的 /route 没上时，规则相同
     expect(routeText("验收员逐条判的口径再看一下", tasks)).toEqual({ taskId: "t1" });
     expect(routeText("今天下午有什么会", tasks)).toBe("main");
     expect(routeText("11/18 上线 V1 和 11/30 上线 V2 哪个先", tasks)).toBe("main");
+  });
+});
+
+describe("等你按设计 9.6（契约增补二）", () => {
+  const row = (extra: Partial<WaitingItem>): WaitingItem => ({
+    id: extra.id ?? "x", kind: "meeting", title: "t", source: null, open: { kind: "meeting", id: "m" }, taskId: null, sessionId: null, deviceId: null,
+    at: null, dueAt: null, deviceName: null, person: null, month: null, answer: "open", ...extra,
+  });
+
+  it("顺序：卡住正在跑的活的（批准、回答、额度）在前，有截止的按截止早的在前，其余按时间新的在前", () => {
+    const sorted = sortWaiting([
+      row({ id: "old", at: "2026-11-01T00:00:00Z" }), row({ id: "due-late", kind: "mission_card", dueAt: "2026-11-09T00:00:00Z" }),
+      row({ id: "new", at: "2026-11-06T00:00:00Z" }), row({ id: "quota", kind: "quota" }), row({ id: "due-soon", kind: "month", dueAt: "2026-11-08T00:00:00Z" }),
+      row({ id: "approve", kind: "approval", answer: "inline_local" }),
+    ]);
+    expect(sorted.map((entry) => entry.id)).toEqual(["quota", "approve", "due-soon", "due-late", "new", "old"]);
+  });
+
+  it("新目标：别人请你认可的是只读 Task 详情，月份去月份页，电脑和额度去连接页", () => {
+    expect(waitingHref(row({ open: { kind: "task_detail", id: "t9" } }))).toBe("/me/work/tasks/t9/info");
+    expect(waitingHref(row({ open: { kind: "month", id: "2026-12" } }))).toBe("/me/work/month/2026-12");
+    expect(waitingHref(row({ open: { kind: "connections", id: "this_computer" } }))).toBe("/me/work/settings/connections");
+  });
+
+  it("本月没有 Mission（计划回退到上个月）：等你里一条「11 月待敲定」，去月份页；本月有 Mission 时没有", () => {
+    const empty = monthWaiting({ ...plan, period: "2026-10", fallbackFrom: "2026-10" } as unknown as THomePlanResponse);
+    expect(empty).toEqual([expect.objectContaining({ kind: "month", title: "11 月待敲定", month: { step: "finalize", period: "2026-11" }, open: { kind: "month", id: "2026-11" } })]);
+    expect(monthWaiting({ ...plan, fallbackFrom: null } as unknown as THomePlanResponse)).toEqual([]);
+  });
+
+  it("派活单拆好了还没开工：等你里一条「这样开工？」，就地答（走云端）", () => {
+    const home = deriveWorkHome({ plan, workers: [], boards: { t1: { plan: null, drafts: [{}, {}] } }, proposals: [], merges: [], notices: null, deviceId: null });
+    expect(home.waiting).toEqual([expect.objectContaining({ kind: "plan_start", title: "11/30 上线 V2：这样开工？", source: "2 步", answer: "inline", open: { kind: "task", id: "t1" } })]);
+  });
+
+  it("本人自己做的执行事项挂在 Task 下（9.10），退回的不列；待归位的在其他里", () => {
+    const view = (id: string, extra: Record<string, unknown>) => ({ id, title: id, status: "in_progress", dueDate: null, awaitingAcceptance: false, updatedAt: "2026-11-06T00:00:00Z", planTaskId: "t1", card: null, ...extra });
+    const withItems = { ...plan, activities: [{ item: view("mine", {}) }, { item: view("back", { status: "returned" }) }], unplaced: [view("loose", { planTaskId: null })] } as unknown as THomePlanResponse;
+    const home = deriveWorkHome({ plan: withItems, workers: [], boards: {}, proposals: [], merges: [], notices: null, deviceId: null });
+    expect(home.missions[0]!.tasks.find((task) => task.taskId === "t1")!.items.map((entry) => entry.id)).toEqual(["mine"]);
+    expect(home.other.items.map((entry) => entry.id)).toEqual(["loose"]);
+  });
+
+  it("等额度恢复：已排队的原因带恢复的时刻", () => {
+    expect(queueText("quota", null)).toBe("等额度恢复");
+    expect(queueText("quota", new Date(new Date().setHours(8, 0, 0, 0) + 86_400_000 * 0).toISOString())).toMatch(/^等额度恢复 · (\d+\/\d+ )?08:00$/);
+    expect(queueText("slot", null)).toBe("等空位");
   });
 });
