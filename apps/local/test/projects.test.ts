@@ -24,7 +24,7 @@ async function until<T>(fn: () => Promise<T | null | undefined | false> | T | nu
 const git = (cwd: string, ...args: string[]) => execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 
 describe("项目的文件夹", { timeout: 40_000 }, () => {
-  it("按项目记住文件夹、连接页看得到挂在哪；卡和专题不指定目录就在项目的文件夹里做，没绑的卡用项目专用目录；subject 带 projectId 上报，验收员跟着卡；删文件夹解绑", async () => {
+  it("按项目记住文件夹、连接页看得到挂在哪；卡、专题、只带项目的规划员不指定目录就在项目的文件夹里做，没绑的卡用项目专用目录；subject 带 projectId 上报，验收员跟着卡；删文件夹解绑", async () => {
     const repo = tempDir("tl-proj-repo-");
     git(repo, "init", "-q", "-b", "main");
     git(repo, "config", "user.name", "测试");
@@ -72,6 +72,20 @@ describe("项目的文件夹", { timeout: 40_000 }, () => {
       expect(loose.workspace).toEqual({ kind: "folder", folder: join(t.dataDir, "projects", "77777777-7777-4777-8777-777777777772") });
       // 不带项目也不指定目录的卡照旧不行
       expect((await call("POST", "/v1/sessions", { subject: { kind: "card", cardId: "card-x" }, title: "x", firstMessage: "做" })).status).toBe(400);
+      // 拆没挂 Task 的项目（16.3）：规划员只带 projectId，在项目的文件夹里跑；没绑文件夹时用按项目建的规划目录；Task、项目都不带不行
+      const planner = (await call("POST", "/v1/sessions", { subject: { kind: "plan", projectId: "77777777-7777-4777-8777-777777777771" }, title: "拆卡：天枢本机程序", firstMessage: "拆" })).body;
+      expect(planner.cwd.toLowerCase()).toBe(repo.toLowerCase());
+      const loosePlanner = (await call("POST", "/v1/sessions", { subject: { kind: "plan", projectId: "77777777-7777-4777-8777-777777777772" }, title: "拆卡", firstMessage: "拆" })).body;
+      expect(loosePlanner.cwd).toBe(join(t.dataDir, "plans", "77777777-7777-4777-8777-777777777772"));
+      expect((await call("POST", "/v1/sessions", { subject: { kind: "plan" }, title: "x", firstMessage: "拆" })).status).toBe(400);
+      // 派活单照旧经 card_plan 报上去，subject 只带 projectId
+      const plannerSecret = JSON.parse(readFileSync(join(t.dataDir, "sessions", planner.id, "session.json"), "utf8")).mcpSecret;
+      await raw(t.port, {
+        method: "POST", path: `/internal/sessions/${planner.id}/mcp`, headers: { "x-tianshu-session-secret": plannerSecret, "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "propose_plan", arguments: { summary: "拆一件", cards: [{ title: "改页面", brief: "改", doneDefinition: "页面能打开", modelTier: "normal" }] } } }),
+      });
+      const planItem = await until(() => JSON.parse(readFileSync(join(t.dataDir, "outbox.json"), "utf8")).entries.map((e: any) => e.item).find((i: any) => i.type === "card_plan"));
+      expect(planItem.subject).toEqual({ kind: "plan", projectId: "77777777-7777-4777-8777-777777777771" });
 
       // 上报：subject 带 projectId
       await until(async () => (await call("GET", `/v1/sessions/${card.id}`)).body.session.status === "idle");

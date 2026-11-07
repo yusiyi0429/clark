@@ -531,7 +531,7 @@ export class SessionManager {
     if (subject.handbackKey) throw new SessionError("validation", "handbackKey 由本机填");
     if (subject.kind === "card" && !subject.cardId) throw new SessionError("validation", "卡的会话要带 cardId");
     if (subject.kind === "topic" && !subject.topicId) throw new SessionError("validation", "专题的会话要带 topicId");
-    if (subject.kind === "plan" && !subject.taskId) throw new SessionError("validation", "规划员的会话要带 taskId");
+    if (subject.kind === "plan" && !subject.taskId && !subject.projectId) throw new SessionError("validation", "规划员的会话要带 taskId 或 projectId");
     if (subject.kind !== "topic" && req.critics?.length) throw new SessionError("validation", "挑刺岗位只给专题的评审会用");
     if (subject.kind !== "card" && req.after?.length) throw new SessionError("validation", "只有卡能等别的卡");
     let cwd: string;
@@ -546,7 +546,7 @@ export class SessionManager {
     } else if (subject.kind === "topic") {
       cwd = this.d.folders.ownDir("topics", subject.topicId!);
     } else if (subject.kind === "plan") {
-      cwd = this.d.folders.ownDir("plans", subject.taskId!);
+      cwd = this.d.folders.ownDir("plans", (subject.taskId ?? subject.projectId)!);
     } else if (subject.projectId) {
       // 项目没绑文件夹：卡在本机给这个项目建的专用目录里做（不是 git 仓库，同一时间一张卡）
       cwd = this.d.folders.ownDir("projects", subject.projectId);
