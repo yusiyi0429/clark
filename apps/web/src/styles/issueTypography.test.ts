@@ -21,10 +21,10 @@ describe("议题页排印", () => {
     for (const size of sizes) expect(size).toBeGreaterThanOrEqual(12);
   });
 
-  it("全局 token：三个字号 20 / 16 / 13 + 标签 12，两种字重，三级墨色 + 强调色，行长 600", () => {
+  it("全局 token：三个字号 20 / 16 / 12 + 标签 12（新首页 14.1：小字从 13 并到 12），两种字重，三级墨色 + 强调色，行长 600", () => {
     const token = (name: string) => globals.match(new RegExp(`--${name}:\\s*([^;]+);`))?.[1].trim();
     expect([token("doc-type-title"), token("doc-type-section"), token("doc-type-body"), token("doc-type-meta"), token("doc-type-tag")])
-      .toEqual(["20px", "16px", "16px", "13px", "12px"]);
+      .toEqual(["20px", "16px", "16px", "12px", "12px"]);
     expect([token("doc-weight-regular"), token("doc-weight-strong")]).toEqual(["400", "600"]);
     // 三级墨色 + 强调色接到底层墨色变量上，深色时跟着换（新首页设计 5.2）。
     expect(["doc-ink-1", "doc-ink-2", "doc-ink-3", "doc-ink-accent"].map(token)).toEqual(["var(--ink)", "var(--ink-muted)", "var(--ink-faint)", "var(--tianshu-blue-secondary, #3c66bf)"]);
@@ -74,14 +74,14 @@ describe("议题页排印", () => {
     expect(issue).toMatch(/\.discussion>header>span\{[^}]*font-size:var\(--doc-type-tag\)/);
   });
 
-  it("字号白名单：议题页桌面规则与各共享 doc 段的字号只有 16 / 13 + 标签 12", () => {
+  it("字号白名单：议题页桌面规则与各共享 doc 段的字号只有 16 / 12（14.1）", () => {
     const desktop = issue.slice(0, issue.indexOf(".close .backIcon"));
     const tokens = new Set([...desktop.matchAll(/font-size:\s*var\(--doc-type-([a-z]+)\)/g)].map((match) => match[1]));
     for (const file of ["./decision-workspace.module.css", "./header-capsule.module.css", "./segmented-switch.module.css", "./thread-members.module.css"])
       for (const { body } of docRules(css(file))) for (const match of body.matchAll(/font-size:\s*var\(--doc-type-([a-z]+)\)/g)) tokens.add(match[1]);
     expect([...tokens].sort()).toEqual(["body", "meta", "section", "tag"]);
     const px = (name: string) => globals.match(new RegExp(`--doc-type-${name}:\s*([^;]+);`))?.[1].trim();
-    expect([...new Set([...tokens].map(px))].sort()).toEqual(["12px", "13px", "16px"]);
+    expect([...new Set([...tokens].map(px))].sort()).toEqual(["12px", "16px"]);
   });
 
   it("历史分层不靠颜色：doc 段去掉小圆点、条目的底色与描边，改成发丝线列表；琥珀提示换成浅灰", () => {

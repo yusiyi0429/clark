@@ -83,8 +83,8 @@ describe("手持字号与首屏", () => {
 });
 
 describe("实测补漏：对话层、会后页、三屏触屏", () => {
-  it("手机对话正文 16（原来缩到 14）、小字 13", () => {
-    expect(css("./conversation-transcript.module.css")).toContain("@media(max-width:959px){.assistant,.user{font-size:16px;line-height:1.75}.meta,.pageTag{font-size:13px}");
+  it("手机对话正文 16（原来缩到 14）、小字 14（14.1 三档）", () => {
+    expect(css("./conversation-transcript.module.css")).toContain("@media(max-width:959px){.assistant,.user{font-size:16px;line-height:1.75}.meta,.pageTag{font-size:14px}");
   });
 
   it("会后页「确认 / 忽略」44 高、14 字；角标 13", () => {
