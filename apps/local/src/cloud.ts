@@ -16,16 +16,16 @@ export class CloudLink {
     this.file = join(dataDir, "cloud.json");
   }
 
-  private meta() { return readJson<{ apiBaseUrl?: string; personName?: string }>(this.file, {}); }
+  private meta() { return readJson<{ apiBaseUrl?: string; personName?: string | null; personId?: string | null }>(this.file, {}); }
 
   /** 云端地址必须和允许直连的网页同源，免得被指到别处把结果送出去。 */
   originAllowed(apiBaseUrl: string): boolean {
     try { return this.allowedOrigins.includes(new URL(apiBaseUrl).origin); } catch { return false; }
   }
 
-  async link(apiBaseUrl: string, token: string, personName?: string): Promise<void> {
+  async link(apiBaseUrl: string, token: string, person: { personName?: string; personId?: string }): Promise<void> {
     await this.secrets.set(TOKEN_KEY, token);
-    writeJsonAtomic(this.file, { apiBaseUrl: new URL(apiBaseUrl).toString(), personName: personName ?? null });
+    writeJsonAtomic(this.file, { apiBaseUrl: new URL(apiBaseUrl).toString(), personName: person.personName ?? null, personId: person.personId ?? null });
     this.outbox?.kick();
   }
 
@@ -52,6 +52,7 @@ export class CloudLink {
       linked: Boolean(m.apiBaseUrl),
       apiBaseUrl: m.apiBaseUrl ?? null,
       personName: m.personName ?? null,
+      personId: m.personId ?? null,
       outbox: this.outbox?.status() ?? { pending: 0, lastSyncedAt: null, lastError: null },
     };
   }

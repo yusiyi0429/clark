@@ -154,7 +154,7 @@ export function createServer(d: ServerDeps): http.Server {
     linkCloud: async (c) => {
       const b = validate(LocalCloudLinkRequest, c.body);
       if (!d.cloud.originAllowed(b.apiBaseUrl)) throw new HttpError(400, "validation", "云端地址必须是允许的天枢来源");
-      await d.cloud.link(b.apiBaseUrl, b.token, b.personName);
+      await d.cloud.link(b.apiBaseUrl, b.token, { personName: b.personName, personId: b.personId });
       return d.cloud.view();
     },
     unlinkCloud: async () => { await d.cloud.unlink(); return d.cloud.view(); },

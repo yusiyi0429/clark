@@ -146,6 +146,11 @@ export const LocalCloudLinkView = Type.Object({
   linked: Type.Boolean(),
   apiBaseUrl: Nullable(Type.String()),
   personName: Nullable(Type.String()),
+  /**
+   * 关联的是谁（关联时网页传来的天枢人员 id）：网页拿它和登录的人比，对不上就把这台电脑当未配对，不显示别人的本机会话。
+   * 没关联、或者是老的关联（当时没传 personId）时为 null。
+   */
+  personId: Nullable(Type.String()),
   outbox: LocalOutboxStatus,
 }, strict);
 
@@ -278,6 +283,8 @@ export const LocalCloudLinkRequest = Type.Object({
   apiBaseUrl: Type.String({ minLength: 8, maxLength: 200 }),
   token: Type.String({ minLength: 16, maxLength: 400, pattern: SECRET_CHARS }),
   personName: Type.Optional(Type.String({ maxLength: 60 })),
+  /** 关联的是谁：云端 me 里的人员 id，本机存下来，GET /v1/status 和 /v1/cloud 原样给回（见 LocalCloudLinkView）。 */
+  personId: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
 }, strict);
 
 // ───────────────────────── 模型与文件夹 ─────────────────────────
