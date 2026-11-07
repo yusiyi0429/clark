@@ -8,7 +8,10 @@ import { UUID_PATTERN, type Query } from "./meetingStore.js";
  * 认领了 5 分钟还没了结的（网页认领后关掉了），别处可以再认领；本机拒了，网页放回。
  */
 
-type StartRow = { id: string; kind: "card" | "topic"; card_id: string | null; topic_id: string | null; plan_task_id: string | null; requested_at: Date };
+/** 认领的有效期：过了还没了结，别处可以再认领（首页的 autoStart 用同一个）。 */
+export const CLAIM_TTL = "5 minutes";
+
+type StartRow ={ id: string; kind: "card" | "topic"; card_id: string | null; topic_id: string | null; plan_task_id: string | null; requested_at: Date };
 const startView = (row: StartRow): TSessionStartView => ({ id: row.id, kind: row.kind, cardId: row.card_id, topicId: row.topic_id, taskId: row.plan_task_id,
   requestedAt: row.requested_at.toISOString() });
 
@@ -35,17 +38,18 @@ export async function requestStarts(q: Query, input: { ownerId: string; origin: 
 export async function claimStarts(q: Query, ownerId: string, deviceId: string, now: Date): Promise<TSessionStartView[] | null> {
   if (!(await q("SELECT 1 FROM local_devices WHERE owner_id=$1 AND id=$2 AND revoked_at IS NULL", [ownerId, deviceId])).rowCount) return null;
   const rows = (await q(`WITH claimed AS (UPDATE session_starts s SET claimed_at=$3,claimed_device=$2
-    WHERE s.owner_id=$1 AND s.closed_at IS NULL AND (s.claimed_at IS NULL OR s.claimed_at < $3::timestamptz - interval '5 minutes')
+    WHERE s.owner_id=$1 AND s.closed_at IS NULL AND (s.claimed_at IS NULL OR s.claimed_at < $3::timestamptz - interval '${CLAIM_TTL}')
       AND (s.kind='card' AND EXISTS (SELECT 1 FROM tasks t WHERE t.id=s.card_id AND t.status NOT IN ('done','returned'))
         OR s.kind='topic' AND EXISTS (SELECT 1 FROM research_topics r WHERE r.id=s.topic_id AND r.status='active'))
     RETURNING s.*) SELECT * FROM claimed ORDER BY requested_at,id`, [ownerId, deviceId, now])).rows as StartRow[];
   return rows.map(startView);
 }
 
-/** 放回（本机拒了）：本人的、没了结的才放回；否则 false。 */
-export async function releaseStart(q: Query, ownerId: string, id: string): Promise<boolean> {
+/** 放回（本机拒了）：本人的、没了结的、还归这台电脑认领的才放回（认领过期后别处重新认领了的不动）；否则 false。 */
+export async function releaseStart(q: Query, ownerId: string, id: string, deviceId: string): Promise<boolean> {
   if (!UUID_PATTERN.test(id)) return false;
-  return Boolean((await q("UPDATE session_starts SET claimed_at=NULL,claimed_device=NULL WHERE id=$1 AND owner_id=$2 AND closed_at IS NULL", [id, ownerId])).rowCount);
+  return Boolean((await q("UPDATE session_starts SET claimed_at=NULL,claimed_device=NULL WHERE id=$1 AND owner_id=$2 AND claimed_device=$3 AND closed_at IS NULL",
+    [id, ownerId, deviceId])).rowCount);
 }
 
 /** 本机报上这张卡或专题的第一条执行：了结它没了结的那条。 */

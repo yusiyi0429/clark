@@ -45,6 +45,8 @@ async function fakeChat(options: {
   upload?: (request: ChatRequest) => unknown;
   /** POST /turns/:id/cancel（本人点停止）；没给时 404。 */
   cancel?: (res: ServerResponse, request: ChatRequest) => void;
+  /** POST /conversations 开段之前先等它（模拟 Chat 卡住、或开段期间别的进程先登记了）。 */
+  beforeCreate?: () => Promise<void>;
 } = {}) {
   const requests: ChatRequest[] = [];
   const now = () => new Date().toISOString();
@@ -69,6 +71,7 @@ async function fakeChat(options: {
     if (req.headers.authorization !== `Bearer ${CHAT_TOKEN}`) return send(401, { error: { code: "UNAUTHORIZED", message: "内部服务凭据无效" } });
     if (request.method === "GET" && request.url === "/conversations") return send(200, { conversations: listed.slice(0, 50) });
     if (request.method === "POST" && request.url === "/conversations") {
+      await options.beforeCreate?.();
       const created = { conversationId: randomUUID(), createdAt: now(), updatedAt: now() };
       listed.unshift(created);
       conversations.unshift(created.conversationId);
@@ -967,6 +970,100 @@ describe("Task 管线走 Chat（plan-task:<taskId>，新首页）", () => {
       expect(chat.requests).toEqual([]);
       expect(await f.t.sql("SELECT * FROM task_pipelines")).toEqual([]);
     } finally {
+      await f.close();
+      await chat.close();
+    }
+  }, 30_000);
+
+  /** 截下这段时间写出的结构化日志里某个 event 的几行。 */
+  const captureLogs = () => {
+    const lines: string[] = [];
+    const write = process.stdout.write.bind(process.stdout);
+    vi.spyOn(process.stdout, "write").mockImplementation(((chunk: string | Uint8Array, ...rest: unknown[]) => {
+      lines.push(String(chunk));
+      return (write as (...args: unknown[]) => boolean)(chunk, ...rest);
+    }) as typeof process.stdout.write);
+    return (event: string) => lines.flatMap((line) => line.split("\n")).filter((line) => line.includes(`"event":"${event}"`)).map((line) => JSON.parse(line) as Record<string, unknown>);
+  };
+  const globalReads = (chat: Awaited<ReturnType<typeof fakeChat>>) =>
+    chat.requests.filter((request) => request.method === "GET" && request.url.includes("/messages")).map((request) => request.url.split("/")[2]);
+
+  it("Chat 开段卡住时不占着数据库连接和事务；15 秒没回应回 503，只记一条 id 不明的孤儿段日志", async () => {
+    let created!: () => void;
+    const reached = new Promise<void>((resolve) => { created = resolve; });
+    const chat = await fakeChat({ conversations: ["main-segment"], beforeCreate: () => { created(); return new Promise<void>(() => undefined); } });
+    const f = await pipelineFixture(chat);
+    const logs = captureLogs();
+    try {
+      const pending = f.call("POST", "/api/me/tasks/task-open/pipeline");
+      await reached;
+      // Chat 卡着的时候，这个库里没有开着事务等着的连接。
+      expect(await f.t.sql("SELECT pid FROM pg_stat_activity WHERE datname = current_database() AND state = 'idle in transaction'")).toEqual([]);
+      const started = Date.now();
+      const res = await pending;
+      expect([res.statusCode, res.json().code]).toEqual([503, "CHAT_UNAVAILABLE"]);
+      expect(Date.now() - started).toBeLessThan(20_000);
+      expect(await f.t.sql("SELECT * FROM task_pipelines")).toEqual([]);
+      expect(logs("chat_service.pipeline_orphan")).toEqual([expect.objectContaining({ conversationId: null })]);
+    } finally {
+      vi.restoreAllMocks();
+      await f.close();
+      await chat.close();
+    }
+  }, 40_000);
+
+  it("Chat 开了段、天枢没登记上：这段记成孤儿段（日志带 id），总管线读历史、发一句仍进原来那段", async () => {
+    const chat = await fakeChat({ conversations: ["main-segment"] });
+    const f = await pipelineFixture(chat);
+    const logs = captureLogs();
+    try {
+      await f.t.sql(`CREATE FUNCTION refuse_pipeline() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'connection lost'; END $$;
+        CREATE TRIGGER refuse_pipeline BEFORE INSERT ON task_pipelines FOR EACH ROW EXECUTE FUNCTION refuse_pipeline();`);
+      expect((await f.call("POST", "/api/me/tasks/task-open/pipeline")).statusCode).toBe(500);
+      const orphan = chat.conversations[0];
+      expect(orphan).not.toBe("main-segment");
+      // Chat 那边这段是最新的一段。
+      expect(chat.listed[0].conversationId).toBe(orphan);
+      expect(logs("chat_service.pipeline_orphan")).toEqual([expect.objectContaining({ conversationId: orphan })]);
+
+      await history(f, "global");
+      expect(globalReads(chat)).toEqual(["main-segment"]);
+      expect((await say(f, "global", { message: "今天先做什么" })).statusCode).toBe(200);
+      expect(chat.turns().at(-1)!.url).toBe("/conversations/main-segment/turns");
+
+      // 登记恢复以后再开：开新的一段并记下，总管线还是原来那段。
+      await f.t.sql("DROP TRIGGER refuse_pipeline ON task_pipelines");
+      const again = await f.call("POST", "/api/me/tasks/task-open/pipeline");
+      expect(again.statusCode).toBe(201);
+      expect(again.json().conversationId).not.toBe(orphan);
+      expect((await say(f, "global", { message: "还有呢" })).statusCode).toBe(200);
+      expect(chat.turns().at(-1)!.url).toBe("/conversations/main-segment/turns");
+    } finally {
+      vi.restoreAllMocks();
+      await f.close();
+      await chat.close();
+    }
+  }, 30_000);
+
+  it("开段期间这件已经登记了别的段：用已登记的那段（200），刚开的那段记成孤儿段，总管线不用它", async () => {
+    let f!: Awaited<ReturnType<typeof boardFixture>>;
+    const chat = await fakeChat({ conversations: ["main-segment"], beforeCreate: async () => {
+      await f.t.sql("INSERT INTO task_pipelines (owner_id, plan_task_id, conversation_id) VALUES ($1, 'task-open', 'elsewhere')", [TEST_MEMBER.personId]);
+    } });
+    f = await pipelineFixture(chat);
+    const logs = captureLogs();
+    try {
+      const res = await f.call("POST", "/api/me/tasks/task-open/pipeline");
+      expect([res.statusCode, res.json().conversationId]).toEqual([200, "elsewhere"]);
+      const orphan = chat.conversations[0];
+      expect(orphan).not.toBe("main-segment");
+      expect(logs("chat_service.pipeline_orphan")).toEqual([expect.objectContaining({ conversationId: orphan })]);
+      expect(await f.t.sql("SELECT conversation_id FROM task_pipelines")).toEqual([{ conversation_id: "elsewhere" }]);
+
+      await history(f, "global");
+      expect(globalReads(chat)).toEqual(["main-segment"]);
+    } finally {
+      vi.restoreAllMocks();
       await f.close();
       await chat.close();
     }

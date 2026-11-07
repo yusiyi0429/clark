@@ -3,21 +3,23 @@ import type { TBackgroundItem, TBackgroundResponse, TBackgroundState, TCard, TCa
 import { ACTIVE_CONVERSATION_WHERE } from "./conversations.js";
 import { assembleWaiting, HELD } from "./homeWaiting.js";
 import { planTaskMissions, type MissionRow } from "./homePlan.js";
+import { failStreak, type HandbackRow } from "./cardProjection.js";
 import { latestRuns, type RunRow } from "./localDevices.js";
-import type { Query } from "./meetingStore.js";
+import { UUID_PATTERN, type Query } from "./meetingStore.js";
 import { companyPeriod } from "./monthlyPlans.js";
 import { readPlanTasks, type PlanTask, type PlanTaskSource } from "./planTasks.js";
 import { roleRef, rolesById } from "./roles.js";
 import type { MissionRoundPerson } from "./missionRounds.js";
+import { CLAIM_TTL } from "./sessionStarts.js";
 import { CardError, cardTaskViews, effectiveOutcome } from "./taskCards.js";
 import { getTaskViews, listUnplacedTasks } from "./tasks.js";
-import { ACTIVE, heldRuns, workerResources } from "./workers.js";
+import { ACTIVE, awaitsQuota, heldRuns, workerResources } from "./workers.js";
 import { shanghaiDate } from "./workdays.js";
 
 /**
  * 新首页（契约 workHome.ts，设计《新首页_伙伴总管线与Task管线》第 2、4、7、10.3 节）：左栏的树（Mission → 本人负责的 Task → 子会话和自己做的事项）、「等你」、右栏的后台任务。
  * 子会话的状态和 worker 列表（workers.ts）同一套判断：设备 10 分钟内上报过算在线，本机的会话还在但电脑不在线算等本机上线，本机报 queued 算等空位，
- * 本机报了 hold（订阅额度用完）算等额度恢复。「等你」的组装在 homeWaiting.ts。
+ * 本机报了 hold（订阅额度用完）、那台电脑在线、恢复时间没到算等额度恢复。「等你」的组装在 homeWaiting.ts。
  */
 
 const SHANGHAI_DAY = (column: string, param: string) =>
@@ -129,8 +131,9 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
   const taskById = new Map(tasks.map((task) => [task.taskId, task]));
   const devices = (await workerResources(q, ownerId, now)).devices;
   const online = new Set(devices.filter((device) => device.online).map((device) => device.id));
-  const starts = (await q("SELECT card_id::text,topic_id::text FROM session_starts WHERE owner_id=$1 AND closed_at IS NULL", [ownerId])).rows as
-    { card_id: string | null; topic_id: string | null }[];
+  // 还没有哪台电脑接下的：没了结、没人认领或认领过期（和 sessionStarts.ts 的 claimStarts 同一个条件，别处可以再认领）。
+  const starts = (await q(`SELECT card_id::text,topic_id::text FROM session_starts WHERE owner_id=$1 AND closed_at IS NULL
+    AND (claimed_at IS NULL OR claimed_at < $2::timestamptz - interval '${CLAIM_TTL}')`, [ownerId, now])).rows as { card_id: string | null; topic_id: string | null }[];
   const autoStart = new Set(starts.map((row) => (row.card_id ?? row.topic_id)!));
   /** 还没开过的：登记了要开工、本人又没有在线的电脑，是等本机上线；别的是等开工。 */
   const notStarted = (id: string): TWorkerQueueReason => autoStart.has(id) && !online.size ? "device_offline" : "not_dispatched";
@@ -138,29 +141,37 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
     { id: string }[]).map((row) => row.id));
   const held = await heldRuns(q, ownerId);
   /**
-   * 本机的会话停着等额度恢复：等额度恢复；会话还在、那台电脑不在线：等本机上线；本机报 queued：等空位（在等前面的卡时是等前面的卡）。都不是为 null。
+   * 本机的会话停着等额度恢复（那台电脑在线、恢复时间没到）：等额度恢复；会话还在或停着等额度、那台电脑不在线：等本机上线；
+   * 本机报 queued：等空位（在等前面的卡时是等前面的卡）。都不是为 null。
    */
-  const queuedBy = (run: { id: string; deviceId: string; state: string }): TWorkerQueueReason | null => held.has(run.id) ? "quota"
-    : ACTIVE.has(run.state) && !online.has(run.deviceId) ? "device_offline" : run.state === "queued" ? priorWaits.has(run.id) ? "prior_cards" : "slot" : null;
+  const queuedBy = (run: { id: string; deviceId: string; state: string }): TWorkerQueueReason | null =>
+    held.has(run.id) && awaitsQuota(held.get(run.id) ?? null, run.deviceId, online, now) ? "quota"
+      : (ACTIVE.has(run.state) || held.has(run.id)) && !online.has(run.deviceId) ? "device_offline"
+        : run.state === "queued" ? priorWaits.has(run.id) ? "prior_cards" : "slot" : null;
   const holdUntil = (queueReason: TWorkerQueueReason | null, runId: string | undefined) => {
     const until = queueReason === "quota" && runId ? held.get(runId) : null;
     return until ? new Date(until).toISOString() : null;
   };
 
   // 卡：带岗位或交给 Claude Code 的、没退回的。完成的：挂在树上 Task 下的都列（不看月份），不挂 Task 的只要这个月（公司时区）完成的；
-  // 挂在不在树上的 Task（了结了、不是本人负责）下、已完成的不列。
+  // 挂在不在树上的 Task（了结了、不是本人负责）下、已完成的不列。没能自动合回的（最近一次算通过的交回上本机报了 merged = false）还在等你合，
+  // 不看月份、不看 Task 在不在树上，一律列（不在树上的进「其他」）。
   const cardRows = (await q(`SELECT id::text,acceptance->>'at' AS accepted_at FROM tasks WHERE owner_id=$1 AND status<>'returned' AND (role_id IS NOT NULL OR executor='claude_code')
       AND (status<>'done' OR plan_task_id=ANY($3::text[]) OR (plan_task_id IS NULL
-        AND date_trunc('month',(acceptance->>'at')::timestamptz AT TIME ZONE 'Asia/Shanghai')=date_trunc('month',$2::timestamptz AT TIME ZONE 'Asia/Shanghai')))
+        AND date_trunc('month',(acceptance->>'at')::timestamptz AT TIME ZONE 'Asia/Shanghai')=date_trunc('month',$2::timestamptz AT TIME ZONE 'Asia/Shanghai'))
+        OR (SELECT h.merge->>'merged' FROM card_handbacks h WHERE h.task_id=tasks.id AND h.status='done'
+          AND (h.outcome='pass' AND h.overruled_at IS NULL OR h.outcome='fail' AND h.overruled_at IS NOT NULL) ORDER BY h.attempt DESC LIMIT 1)='false')
     ORDER BY created_at,id`, [ownerId, now, tasks.map((task) => task.taskId)])).rows as { id: string; accepted_at: string | null }[];
   const acceptedAt = new Map(cardRows.map((row) => [row.id, row.accepted_at]));
   const cards = await cardTaskViews(q, cardRows.map((row) => row.id), deps.names);
   // 合回：每张卡最近一次算通过的交回（推翻过的按本人的判断算）上本机报的合回结果，和交回那次执行在哪台电脑。
   const handbacks = cards.length ? (await q(`SELECT h.task_id::text,h.status,h.outcome,h.overruled_at,h.merge,h.run_id::text,r.device_id::text
     FROM card_handbacks h LEFT JOIN local_runs r ON r.id=h.run_id WHERE h.task_id=ANY($1::uuid[]) ORDER BY h.attempt DESC`, [cards.map((view) => view.id)])).rows as
-    { task_id: string; status: string; outcome: "pass" | "fail" | null; overruled_at: Date | null; merge: StoredMerge | null; run_id: string | null; device_id: string | null }[] : [];
+    { task_id: string; status: HandbackRow["status"]; outcome: "pass" | "fail" | null; overruled_at: Date | null; merge: StoredMerge | null; run_id: string | null; device_id: string | null }[] : [];
   const passed = new Map<string, (typeof handbacks)[number]>();
   for (const row of handbacks) if (!passed.has(row.task_id) && row.status === "done" && effectiveOutcome(row) === "pass") passed.set(row.task_id, row);
+  /** 连续两次验收没过（受阻、等你拿主意）；卡的标记 blocked 还包括执行连续两次异常退出，那种首页算已暂停。 */
+  const reviewBlocked = (cardId: string) => failStreak(handbacks.filter((row) => row.task_id === cardId)) >= 2;
 
   const subs: HomeSub[] = [];
   for (const view of cards) {
@@ -178,8 +189,10 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
       // 还没开工；本机收下了在等空位、等前面的卡、等额度恢复时照本机报的。
       state = "queued";
       queueReason = run ? queuedBy(run) ?? notStarted(view.id) : notStarted(view.id);
-    } else if (run && (queueReason = queuedBy(run))) state = "queued";
-    else if (wait === "blocked") [state, waiting] = ["waiting", "verdict"];
+    } else if (wait === "blocked" && reviewBlocked(view.id)) [state, waiting] = ["waiting", "verdict"];
+    // 连续两次验收没过要你拿主意，不用等电脑：排在排队前面。
+    else if (run && (queueReason = queuedBy(run))) state = "queued";
+    else if (wait === "blocked") state = "waiting";
     else if (wait === "review_failed") state = "failed";
     else if (wait === "approval") [state, waiting] = ["waiting", "approval"];
     else if (wait === "reply") [state, waiting] = ["waiting", "question"];
@@ -187,14 +200,14 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
     subs.push({ ...base, state, waiting, queueReason, holdUntil: holdUntil(queueReason, run?.id) });
   }
 
-  // 专题：没归档的都列；最近一次本机执行定状态。
+  // 专题：没归档的都列；最近一次本机执行定状态。专题没有「完成」：会话停了、交完收工、异常退出都算已暂停（等你说一句接着做）。
   const topics = (await q("SELECT id::text,title,role_id::text,plan_task_id,updated_at FROM research_topics WHERE owner_id=$1 AND status='active' ORDER BY created_at,id",
     [ownerId])).rows as { id: string; title: string; role_id: string | null; plan_task_id: string | null; updated_at: Date }[];
   const topicRuns = await latestRuns(q, "topic_id", topics.map((topic) => topic.id), "topic");
   const topicRoles = await rolesById(q, topics.map((topic) => topic.role_id));
   const TOPIC_STATES: Record<RunRow["state"], [TSubSessionState, TSubSession["waiting"]]> = { queued: ["queued", null], starting: ["running", null],
-    running: ["running", null], waiting_permission: ["waiting", "approval"], idle: ["waiting", "question"], exited: ["done", null], failed: ["waiting", null],
-    done: ["done", null] };
+    running: ["running", null], waiting_permission: ["waiting", "approval"], idle: ["waiting", "question"], exited: ["waiting", null], failed: ["waiting", null],
+    done: ["waiting", null] };
   for (const topic of topics) {
     const run = topicRuns.get(topic.id);
     const role = topic.role_id ? topicRoles.get(topic.role_id) : undefined;
@@ -247,7 +260,7 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
   const homeMissions: THomeMission[] = missions.map((mission) => ({ missionId: mission.id, title: mission.title, period: mission.period,
     tasks: tasks.filter((task) => task.missionId === mission.id).map(homeTask) }));
 
-  // 其他：不挂 Task 的，和挂在不在树上的 Task 下、还没完成的（已完成的在取卡时就没取）。
+  // 其他：不挂 Task 的，和挂在不在树上的 Task 下、还没完成的（已完成的在取卡时就没取，等你合的除外）。
   return { period, missions: homeMissions, other: { subSessions: subs.filter((sub) => !onTree(sub)).sort(order).map(view), items: unplaced.map(homeItem) }, waiting };
 }
 
@@ -266,7 +279,8 @@ export async function readBackground(deps: { q: Query; now: Date; planTasks: Pla
   if (scope.kind === "resources") return { items: [], resources: await workerResources(q, ownerId, now) };
   if (scope.kind === "card" || scope.kind === "topic") {
     const table = scope.kind === "card" ? "tasks" : "research_topics";
-    if (!(await q(`SELECT 1 FROM ${table} WHERE id=$1 AND owner_id=$2`, [scope.id, ownerId])).rows.length)
+    // 契约只限了字符和长度，不是 UUID 的先挡掉（id 是 uuid 列，直接查会报错）。
+    if (!UUID_PATTERN.test(scope.id) || !(await q(`SELECT 1 FROM ${table} WHERE id=$1 AND owner_id=$2`, [scope.id, ownerId])).rows.length)
       throw new CardError(404, "NOT_FOUND", scope.kind === "card" ? "找不到这张卡" : "找不到这个专题");
   }
   /** 一项挂在哪：Task（规划员拆的、卡或专题挂的）、卡、专题。 */
@@ -274,28 +288,32 @@ export async function readBackground(deps: { q: Query; now: Date; planTasks: Pla
     || (scope.kind === "task" ? at.taskId === scope.id : scope.kind === "card" ? at.cardId === scope.id : at.topicId === scope.id);
   const items: TBackgroundItem[] = [];
 
-  // 规划员、验收员：还在的、停着等额度恢复的，和今天结束的。
+  // 规划员、验收员：还在的、停着等额度恢复的（那台电脑在线、恢复时间没到），和今天结束的。
+  const resources = await workerResources(q, ownerId, now);
+  const online = new Set(resources.devices.filter((device) => device.online).map((device) => device.id));
   const runs = (await q(`SELECT r.id::text,r.kind,r.state,r.title,r.device_id::text,r.task_id::text,r.plan_task_id,r.started_at,r.ended_at,t.title AS card_title,t.plan_task_id AS card_task,
-      CASE WHEN ${HELD} THEN r.hold->>'until' END AS hold_until,${HELD} AS held,
+      CASE WHEN ${HELD} THEN r.hold->>'until' END AS hold_until,${HELD} AS held,COALESCE(${SHANGHAI_DAY("r.ended_at", "$3")},false) AS ended_today,
       CASE WHEN r.kind='plan' THEN EXISTS (SELECT 1 FROM card_plans p WHERE p.run_id=r.id) ELSE EXISTS (SELECT 1 FROM card_handbacks h WHERE h.verify_run_id=r.id) END AS delivered
     FROM local_runs r LEFT JOIN tasks t ON t.id=r.task_id
     WHERE r.owner_id=$1 AND r.kind IN ('plan','verify') AND (r.state=ANY($2::text[]) OR ${HELD} OR ${SHANGHAI_DAY("r.ended_at", "$3")})`, [ownerId, [...ACTIVE], now])).rows as
     { id: string; kind: "plan" | "verify"; state: string; title: string | null; device_id: string; task_id: string | null; plan_task_id: string | null; started_at: Date;
-      ended_at: Date | null; card_title: string | null; card_task: string | null; hold_until: string | null; held: boolean; delivered: boolean }[];
+      ended_at: Date | null; card_title: string | null; card_task: string | null; hold_until: string | null; held: boolean; ended_today: boolean; delivered: boolean }[];
   const planTaskIds = runs.some((run) => run.kind === "plan")
     ? new Map((await treeTasks(q, deps.planTasks, ownerId, now, deps.chat)).tasks.map((task) => [task.taskId, task.name])) : new Map<string, string>();
   for (const run of runs) {
     const plan = run.kind === "plan";
     const at = plan ? { taskId: run.plan_task_id, cardId: null, topicId: null } : { taskId: run.card_task, cardId: run.task_id, topicId: null };
-    if (!inScope(at)) continue;
+    const quota = run.held && awaitsQuota(run.hold_until, run.device_id, online, now);
+    // 报了 hold 却不算等额度（电脑不在线、恢复时间过了）的，照没报 hold 算：会话退出了、又不是今天结束的不列。
+    if (!inScope(at) || (!quota && !ACTIVE.has(run.state) && !run.ended_today)) continue;
     // 停着等额度恢复的在排队；交完收工（done）是完成；会话退出了：交了派活单（规划员）、交了结论（验收员）算完成，没交算被停了。
-    const state: TBackgroundState = run.held || run.state === "queued" ? "queued" : ACTIVE.has(run.state) ? "running" : run.state === "failed" ? "failed"
+    const state: TBackgroundState = quota || run.state === "queued" ? "queued" : ACTIVE.has(run.state) ? "running" : run.state === "failed" ? "failed"
       : run.state === "done" || run.delivered ? "done" : "stopped";
     const open = state === "queued" || state === "running";
     const title = plan ? `拆卡：${planTaskIds.get(run.plan_task_id!) ?? run.title ?? run.plan_task_id}` : run.title ?? `验收：${run.card_title ?? ""}`;
     items.push({ id: `${run.kind}:${run.id}`, title, kind: run.kind, state, startedAt: run.started_at.toISOString(), finishedAt: open ? null : run.ended_at?.toISOString() ?? null,
       stoppable: ACTIVE.has(run.state), sessionId: run.id, itemId: null, deviceId: run.device_id, ...at,
-      holdUntil: run.hold_until ? new Date(run.hold_until).toISOString() : null });
+      holdUntil: quota && run.hold_until ? new Date(run.hold_until).toISOString() : null });
   }
 
   // 子会话里的子 agent、后台命令（本机报的 background 同步条目）。
@@ -317,5 +335,5 @@ export async function readBackground(deps: { q: Query; now: Date; planTasks: Pla
   const open = (item: TBackgroundItem) => item.state === "queued" || item.state === "running";
   items.sort((a, b) => Number(open(b)) - Number(open(a))
     || (open(a) ? (a.startedAt ?? "").localeCompare(b.startedAt ?? "") : (b.finishedAt ?? "").localeCompare(a.finishedAt ?? "")));
-  return { items, resources: await workerResources(q, ownerId, now) };
+  return { items, resources };
 }

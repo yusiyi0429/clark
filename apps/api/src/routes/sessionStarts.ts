@@ -1,5 +1,5 @@
 import { Type } from "@sinclair/typebox";
-import { BuddyOpenTopicRequest, BuddyOpenTopicResponse, ClaimSessionStartsRequest, ClaimSessionStartsResponse } from "@warmap/contracts";
+import { BuddyOpenTopicRequest, BuddyOpenTopicResponse, ClaimSessionStartsRequest, ClaimSessionStartsResponse, ReleaseSessionStartRequest } from "@warmap/contracts";
 import { createTopic, TopicError } from "../researchTopics.js";
 import { ensurePresetRole, RoleError } from "../roles.js";
 import { claimStarts, releaseStart, requestStarts } from "../sessionStarts.js";
@@ -28,8 +28,9 @@ export function registerSessionStartRoutes(app: AppInstance, ctx: RouteContext):
       return starts ? { starts } : fail(reply, 404, "DEVICE_NOT_FOUND", "这台电脑没配对，或已经解除配对");
     });
 
-  app.post("/api/me/session-starts/:id/release", { preHandler: requireMember, schema: { params: Type.Object({ id: Type.String({ minLength: 1 }) }) } }, async (req, reply) =>
-    await releaseStart(q, req.person!.personId, req.params.id) ? reply.status(204).send() : fail(reply, 404, "NOT_FOUND", "找不到这条要开工"));
+  app.post("/api/me/session-starts/:id/release", { preHandler: requireMember,
+    schema: { params: Type.Object({ id: Type.String({ minLength: 1 }) }), body: ReleaseSessionStartRequest } }, async (req, reply) =>
+    await releaseStart(q, req.person!.personId, req.params.id, req.body.deviceId) ? reply.status(204).send() : fail(reply, 404, "NOT_FOUND", "找不到这条要开工"));
 
   // 伙伴开探索子会话（工具 open_topic）：照 /internal/plan-tasks/:taskId/card-splits，INTERNAL_CHAT_TOKEN 加 X-Owner-Id；没配时不注册，不进公开 OpenAPI。
   // 建专题、配调研员、登记要开工在一个事务里，不用本人同意。

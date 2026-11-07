@@ -24,6 +24,12 @@ const home = async (f: BoardFixture) => {
   expect(res.statusCode).toBe(200);
   return res.json();
 };
+/** 卡在做、连续两次验收没过（受阻）：两次交回都验完、没过，改法都送回了。 */
+async function failedTwice(f: BoardFixture, cardId: string) {
+  await f.t.sql("UPDATE tasks SET status='in_progress' WHERE id=$1", [cardId]);
+  for (const attempt of [1, 2]) await f.t.sql(`INSERT INTO card_handbacks(id,task_id,owner_id,client_id,attempt,criteria,status,outcome,returned_at)
+    VALUES($1,$2,$3,$4,$5,'["有方案文档","有评审结论"]'::jsonb,'done','fail',$6)`, [randomUUID(), cardId, TEST_MEMBER.personId, `k${attempt}-${randomUUID()}`, attempt, BOARD_NOW]);
+}
 
 describe("新首页", { timeout: 30_000 }, () => {
   it("树：本人 Mission 下本人负责的 Task，下面是卡和专题，状态照本机报的和卡的标记对；不归树上 Task 的进「其他」；登记了开工的标出来；拆卡登记了算在拆", async () => {
@@ -57,7 +63,7 @@ describe("新首页", { timeout: 30_000 }, () => {
       const approval = await laptop.send({ kind: "card", cardId: ids["等批准"] }, [status("waiting_permission", "等批准")]);
       await laptop.send({ kind: "card", cardId: ids["等回复"] }, [status("idle", "等回复")]);
       await laptop.send({ kind: "card", cardId: ids["跑着"] }, [status("running", "跑着")]);
-      for (let i = 0; i < 2; i++) await laptop.send({ kind: "card", cardId: ids["受阻"] }, [status("failed", "受阻")]);
+      await failedTwice(f, ids["受阻"]);
       await laptop.handBack(ids["没过"]);
       await f.t.sql("UPDATE card_handbacks SET status='done',outcome='fail' WHERE task_id=$1", [ids["没过"]]);
       await laptop.handBack(ids["验收中"]);
@@ -117,7 +123,7 @@ describe("新首页", { timeout: 30_000 }, () => {
       const { dev, ids } = await withRoleCards(f, ["等批准", "受阻", "在验的卡"]);
       const laptop = await f.local();
       const approval = await laptop.send({ kind: "card", cardId: ids["等批准"] }, [status("waiting_permission", "等批准")]);
-      for (let i = 0; i < 2; i++) await laptop.send({ kind: "card", cardId: ids["受阻"] }, [status("failed", "受阻")]);
+      await failedTwice(f, ids["受阻"]);
       const planner = await laptop.send({ kind: "plan", taskId: "task-open" } as never, [status("idle", "拆卡")]);
       await laptop.handBack(ids["在验的卡"]);
       const handbackKey = (await f.t.sql("SELECT client_id FROM card_handbacks WHERE task_id=$1", [ids["在验的卡"]]))[0].client_id as string;
@@ -259,6 +265,9 @@ describe("新首页", { timeout: 30_000 }, () => {
       expect(othersCard.statusCode).toBe(200);
       expect((await f.call("GET", `/api/me/background?scope=card:${othersCard.json().id}`)).statusCode).toBe(404);
       expect((await f.call("GET", `/api/me/background?scope=topic:${randomUUID()}`)).statusCode).toBe(404);
+      // 字符和长度对、却不是 UUID 的也是找不到（不是 500）。
+      expect((await f.call("GET", `/api/me/background?scope=card:${"-".repeat(36)}`)).statusCode).toBe(404);
+      expect((await f.call("GET", "/api/me/background?scope=topic:0123456789abcdef0123456789abcdef----")).statusCode).toBe(404);
       expect((await f.call("GET", "/api/me/background?scope=everything")).statusCode).toBe(400);
     } finally { await f.close(); }
   });
@@ -356,6 +365,88 @@ describe("新首页", { timeout: 30_000 }, () => {
       expect(task.items.map((item: { id: string; title: string; status: string; awaitingAcceptance: boolean }) => [item.id, item.title, item.status, item.awaitingAcceptance]))
         .toEqual([[own, "自己做的", "not_started", false], [ownDone, "自己做完的", "done", false]]);
       expect(body.other.items.map((item: { id: string; title: string }) => [item.id, item.title])).toEqual([[unplaced, "待归位的"]]);
+    } finally { await f.close(); }
+  });
+
+  it("没能自动合回的卡不看月份、不看 Task 在不在树上：所挂 Task 了结了、不挂 Task 跨了月，照样等你合（进其他）；合进去了的照旧不列", async () => {
+    const october: THomePlanTask[] = [{ taskId: "oct-delivered", missionId: "oct", name: "上月交付了的", doneDefinition: null, criteria: [] }];
+    const f = await boardFixture({ planTasks: async (missions) => [...BOARD_TASKS, ...october].filter((task) => missions.some((mission) => mission.id === task.missionId)) },
+      { boardCloudAgents: false });
+    try {
+      await f.t.sql(`INSERT INTO missions(id,version,code,period,title,owner_id,capability_id,battlefield_ids,outcome,milestones,source_ref,source_document_id,source_revision,source_title)
+        VALUES('oct',1,'oct','2026-10','十月的 Mission',$1,'method','["growth"]','目标','[]','fixture://b','fixture',1,'fixture')`, [TEST_MEMBER.personId]);
+      const titles = ["了结的 Task·没合回", "了结的 Task·合回了", "不挂 Task·没合回", "不挂 Task·合回了"];
+      const { ids } = await withRoleCards(f, titles);
+      const laptop = await f.local();
+      for (const title of titles) {
+        const merged = title.endsWith("合回了");
+        const handback = await laptop.handBack(ids[title]);
+        await f.t.sql("UPDATE card_handbacks SET status='done',outcome='pass',merge=$2::jsonb WHERE id=$1", [handback, JSON.stringify({ merged,
+          commit: merged ? "abc123" : null, baseBranch: "main", reason: merged ? null : "dirty", message: merged ? null : "主文件夹有没提交的改动", auto: true,
+          at: "2026-10-31T15:05:00.000Z", seq: 1 })]);
+        // 10/31 23:00（公司时区）验收通过：已经是上个月。
+        await f.t.sql("UPDATE tasks SET status='done',acceptance=jsonb_build_object('at','2026-10-31T15:00:00.000Z') WHERE id=$1", [ids[title]]);
+        if (title.startsWith("了结")) await f.t.sql("UPDATE tasks SET mission_id='oct',plan_task_id='oct-delivered' WHERE id=$1", [ids[title]]);
+        else await f.t.sql("UPDATE tasks SET mission_id=NULL,step_order=NULL,plan_task_id=NULL WHERE id=$1", [ids[title]]);
+      }
+      // 上个月的 Task 交付了（了结），不在树上。
+      await f.t.sql(`INSERT INTO deliverable_versions(id,task_id,mission_id,author_id,number,task_name,basis,criteria,delivered_at)
+        VALUES($1,'oct-delivered','oct',$2,1,'x','acceptance','[]','2026-11-02T00:00:00.000Z')`, [randomUUID(), TEST_MEMBER.personId]);
+
+      const body = await home(f);
+      expect(body.missions.flatMap((m: { tasks: { taskId: string }[] }) => m.tasks.map((t) => t.taskId))).toEqual(["task-open"]);
+      expect(body.other.subSessions.map((sub: Sub) => [sub.title, sub.state, sub.waiting]).sort())
+        .toEqual([["不挂 Task·没合回", "waiting", "merge"], ["了结的 Task·没合回", "waiting", "merge"]]);
+      const merges = body.waiting.filter((item: { kind: string }) => item.kind === "merge");
+      expect(merges.map((item: { id: string; taskId: string | null; deviceId: string }) => [item.id, item.taskId, item.deviceId]).sort())
+        .toEqual([[`merge:card:${ids["不挂 Task·没合回"]}`, null, laptop.device], [`merge:card:${ids["了结的 Task·没合回"]}`, null, laptop.device]].sort());
+    } finally { await f.close(); }
+  });
+
+  it("执行异常退出一次、连续两次都是已暂停（不算在跑、不进等你）；只有连续两次验收没过是受阻、等你拿主意。专题停了、异常退出都是已暂停，没有完成", async () => {
+    const f = await boardFixture({}, { boardCloudAgents: false });
+    try {
+      const { ids } = await withRoleCards(f, ["退出一次", "退出两次", "两次没过", "两次没过·电脑关了"]);
+      const laptop = await f.local();
+      await laptop.send({ kind: "card", cardId: ids["退出一次"] }, [status("running", "退出一次"), status("failed", "退出一次")]);
+      for (let i = 0; i < 2; i++) await laptop.send({ kind: "card", cardId: ids["退出两次"] }, [status("failed", "退出两次")]);
+      await failedTwice(f, ids["两次没过"]);
+      // 两次没过、会话还开着的那台电脑关了：照样等你拿主意（不用等电脑），不算等本机上线。
+      const desktop = await f.local("另一台");
+      await desktop.send({ kind: "card", cardId: ids["两次没过·电脑关了"] }, [status("idle", "两次没过·电脑关了")]);
+      await failedTwice(f, ids["两次没过·电脑关了"]);
+      await f.t.sql("UPDATE local_devices SET last_sync_at=$2 WHERE id=$1", [desktop.device, new Date(BOARD_NOW.getTime() - 60 * 60_000)]);
+      const [stopped, crashed, offTree] = [randomUUID(), randomUUID(), randomUUID()];
+      await f.t.sql(`INSERT INTO research_topics(id,owner_id,title,plan_task_id,mission_id) VALUES($1,$4,'停了的专题','task-open','mine'),($2,$4,'崩了的专题','task-open','mine'),
+        ($3,$4,'挂在别人 Task 下停了的','task-theirs','mine')`, [stopped, crashed, offTree, TEST_MEMBER.personId]);
+      await laptop.send({ kind: "topic", topicId: stopped }, [status("running", "停了的专题"), status("exited", "停了的专题")]);
+      await laptop.send({ kind: "topic", topicId: crashed }, [status("failed", "崩了的专题")]);
+      await laptop.send({ kind: "topic", topicId: offTree }, [status("exited", "挂在别人 Task 下停了的")]);
+
+      const body = await home(f);
+      const task = body.missions[0].tasks[0];
+      const sub = (id: string) => task.subSessions.find((item: Sub) => item.id === id);
+      for (const id of [ids["退出一次"], ids["退出两次"], stopped, crashed]) expect(sub(id)).toMatchObject({ state: "waiting", waiting: null, queueReason: null });
+      for (const id of [ids["两次没过"], ids["两次没过·电脑关了"]]) expect(sub(id)).toMatchObject({ state: "waiting", waiting: "verdict", queueReason: null });
+      expect(task.summary).toMatchObject({ running: 0, waiting: 6, done: 0, needsYou: 2 });
+      expect(body.waiting.filter((item: { kind: string }) => item.kind === "verdict").map((item: { id: string; title: string }) => [item.id, item.title]).sort())
+        .toEqual([[`verdict:card:${ids["两次没过"]}`, "验收两次没过"], [`verdict:card:${ids["两次没过·电脑关了"]}`, "验收两次没过"]].sort());
+      expect(body.other.subSessions.map((item: Sub) => [item.title, item.state, item.waiting])).toEqual([["挂在别人 Task 下停了的", "waiting", null]]);
+    } finally { await f.close(); }
+  });
+
+  it("autoStart：认领了 5 分钟以内的不算（已经有电脑接下了），认领超过 5 分钟没了结的又算", async () => {
+    const f = await boardFixture({}, { boardCloudAgents: false });
+    try {
+      const { ids } = await withRoleCards(f, ["刚认领", "认领过期", "没认领"]);
+      const laptop = await f.local();
+      const claimed = { "刚认领": new Date(BOARD_NOW.getTime() - 60_000), "认领过期": new Date(BOARD_NOW.getTime() - 6 * 60_000), "没认领": null };
+      for (const [title, at] of Object.entries(claimed))
+        await f.t.sql("INSERT INTO session_starts(id,owner_id,kind,card_id,plan_task_id,origin,requested_at,claimed_at,claimed_device) VALUES($1,$2,'card',$3,'task-open','web',$4,$5,$6)",
+          [randomUUID(), TEST_MEMBER.personId, ids[title], BOARD_NOW, at, at ? laptop.device : null]);
+      const subs = (await home(f)).missions[0].tasks[0].subSessions as Sub[];
+      expect(Object.fromEntries(Object.keys(claimed).map((title) => [title, subs.find((sub) => sub.id === ids[title])!.autoStart])))
+        .toEqual({ "刚认领": false, "认领过期": true, "没认领": true });
     } finally { await f.close(); }
   });
 

@@ -26,7 +26,7 @@ const status = (state: string, title: string, hold?: { reason: string; until: st
   ["status", { status: state, title, agent: "claude-code", modelLabel: "订阅 · Sonnet", ...(hold ? { hold } : {}) }] as [string, unknown];
 
 describe("首页等你：扩的几种", { timeout: 30_000 }, () => {
-  it("计划等你开工：树上的 Task 最近一次拆卡的派活单还有没处理的草稿；算进这件 Task 的「N 件等你」；最近一次还没出、不在树上的 Task 不出", async () => {
+  it("计划等你开工：树上的 Task 本人所有还开着的草稿（同看板，不只看最近一次拆卡），时间取那些草稿所属计划里最新的；算进这件 Task 的「N 件等你」；不在树上的 Task 不出", async () => {
     const f = await boardFixture({}, { boardCloudAgents: false });
     try {
       const plan = async (taskId: string, missionId: string, created: string, finished: string | null, drafts: string[]) => {
@@ -38,21 +38,26 @@ describe("首页等你：扩的几种", { timeout: 30_000 }, () => {
             VALUES($1,$2,$3,$4,$5,$6,'有结果','claude_code','normal',$7)`, [randomUUID(), id, taskId, TEST_MEMBER.personId, position, `草稿 ${position}`, draftStatus]);
         return id;
       };
-      await plan("task-open", "mine", "2026-11-05T01:00:00Z", "2026-11-05T01:05:00Z", ["open"]);
+      const earlier = await plan("task-open", "mine", "2026-11-05T01:00:00Z", "2026-11-05T01:05:00Z", ["open"]);
       const latest = await plan("task-open", "mine", "2026-11-06T01:00:00Z", "2026-11-06T01:10:00Z", ["open", "open", "dismissed", "accepted"]);
       // 别人负责的 Task 不在树上。
       await plan("task-theirs", "mine", "2026-11-06T01:00:00Z", "2026-11-06T01:10:00Z", ["open"]);
 
       let items = await waiting(f, "plan_start");
-      expect(items).toEqual([{ id: `plan_start:${latest}`, kind: "plan_start", title: "对话质量达标：计划等你开工", source: "2 件等你开工",
+      expect(items).toEqual([{ id: `plan_start:${latest}`, kind: "plan_start", title: "对话质量达标：计划等你开工", source: "3 件等你开工",
         at: "2026-11-06T01:10:00.000Z", open: { kind: "task", id: "task-open" }, taskId: "task-open", sessionId: null, deviceId: null, deviceName: null,
         dueAt: null, answer: "inline", person: null, month: null }]);
       const task = (await f.call("GET", "/api/me/work-home")).json().missions[0].tasks[0];
       expect(task.summary.needsYou).toBe(1);
+      // 和看板上开着的草稿一样多。
+      expect((await f.call("GET", "/api/plan-tasks/task-open/cards")).json().drafts).toHaveLength(3);
 
-      // 又开始拆了一次、还没出派活单：上一次的草稿不算在等开工。
+      // 又开始拆了一次、还没出派活单（或这次失败了）：之前的草稿还开着，照样等你开工。
       await plan("task-open", "mine", "2026-11-06T01:30:00Z", null, []);
-      expect(await waiting(f, "plan_start")).toEqual([]);
+      expect((await waiting(f, "plan_start")).map((item) => [item.id, item.source, item.at])).toEqual([[`plan_start:${latest}`, "3 件等你开工", "2026-11-06T01:10:00.000Z"]]);
+      // 最近那次的草稿都处理了：还剩更早那次的 1 件。
+      await f.t.sql("UPDATE card_drafts SET status='dismissed' WHERE plan_id=$1", [latest]);
+      expect((await waiting(f, "plan_start")).map((item) => [item.id, item.source, item.at])).toEqual([[`plan_start:${earlier}`, "1 件等你开工", "2026-11-05T01:05:00.000Z"]]);
     } finally { await f.close(); }
   });
 
@@ -70,6 +75,13 @@ describe("首页等你：扩的几种", { timeout: 30_000 }, () => {
       await ask("task-other", 1, THIRD.personId, "2026-11-06T01:00:00.000Z");
       await ask("task-theirs", 1, TEST_MEMBER.personId, "2026-10-29T01:00:00.000Z");
       await ask("ghost", 1, TEST_MEMBER.personId, "2026-11-06T01:00:00.000Z");
+      // 负责人（other 的 Mission 负责人）在约定里把这两条的认可人写成本人。
+      const third = await f.t.app.inject({ method: "POST", url: "/api/auth/login", headers: { origin: f.t.publicOrigin }, payload: { loginId: THIRD.loginId, passcode: THIRD.passcode } });
+      const thirdCookie = (third.headers["set-cookie"] as string).split(";")[0];
+      const acceptor = async (taskId: string, index: number, personId: string) => expect((await f.call("PUT", `/api/plan-tasks/${encodeURIComponent(taskId)}/agreement`,
+        { criteria: [{ index, proof: null, acceptorId: personId }], exclusions: [] }, thirdCookie)).statusCode).toBe(200);
+      await acceptor("task-other", 1, TEST_MEMBER.personId);
+      await acceptor("world:t:9", 2, TEST_MEMBER.personId);
 
       let items = await waiting(f, "acceptance");
       expect(items).toEqual([
@@ -80,11 +92,16 @@ describe("首页等你：扩的几种", { timeout: 30_000 }, () => {
           person: { personId: THIRD.personId, name: "测试丙" } }),
       ]);
 
+      // 负责人把第 2 条的认可人换成了别人：本人跟这件 Task 再没关系，这条不再出（Task 名、负责人也不透露）。
+      await acceptor("world:t:9", 2, THIRD.personId);
+      items = await waiting(f, "acceptance");
+      expect(items.map((item) => item.id)).toEqual(["acceptance:task-other:1"]);
+
       // 最新一版交付了：不用再认了。
       await f.t.sql(`INSERT INTO deliverable_versions(id,task_id,mission_id,author_id,number,task_name,basis,criteria,delivered_at)
         VALUES($1,'task-other','other',$2,1,'x','acceptance','[]','2026-11-06T01:30:00Z')`, [randomUUID(), THIRD.personId]);
       items = await waiting(f, "acceptance");
-      expect(items.map((item) => item.id)).toEqual(["acceptance:world:t:9:2"]);
+      expect(items).toEqual([]);
     } finally { await f.close(); }
   });
 
@@ -191,6 +208,39 @@ describe("首页等你：扩的几种", { timeout: 30_000 }, () => {
       // 额度（截止早的先）、批准，然后是有截止的复盘（11/06 在 10 月的复盘窗口里），其余新的在前。
       expect(items.map((item) => item.id)).toEqual([`quota:${laptop.device}`, `quota:${desktop.device}`, `approval:card:${asking}`, "month:review:2026-10",
         `role:${proposal}`]);
+    } finally { await f.close(); }
+  });
+
+  it("额度：恢复时间已过的不算停着等额度；电脑不在线时停着的算在等本机上线（进「电脑不在线」那条），不出额度那条；后台任务和 worker 列表一样", async () => {
+    let now = BOARD_NOW;
+    const f = await boardFixture({ monthlyNow: () => now }, { boardCloudAgents: false });
+    try {
+      const laptop = await f.local("我的电脑");
+      const desktop = await f.local("另一台");
+      const [future, past] = [await roleCard(f, "还没到点"), await roleCard(f, "已经过点")];
+      await laptop.send({ kind: "card", cardId: future }, [status("idle", "还没到点", { reason: "usage_limit", until: "2026-11-06T05:00:00.000Z" })]);
+      const heldPlan = await laptop.send({ kind: "plan", taskId: "task-open" } as never, [status("exited", "拆卡", { reason: "usage_limit", until: null })]);
+      await desktop.send({ kind: "card", cardId: past }, [status("idle", "已经过点", { reason: "usage_limit", until: "2026-11-06T01:30:00.000Z" })]);
+      const sub = async (id: string) => (await f.call("GET", "/api/me/work-home")).json().missions[0].tasks[0].subSessions.find((item: { id: string }) => item.id === id);
+      const worker = async (id: string) => {
+        const body = (await f.call("GET", "/api/me/workers")).json();
+        return [...body.running, ...body.queued].find((item: { cardId: string | null }) => item.cardId === id);
+      };
+
+      // 两台都在线：过了恢复时间的那台不出额度，也不算等额度。
+      expect((await waiting(f, "quota")).map((item) => [item.id, item.source])).toEqual([[`quota:${laptop.device}`, "2 件停着"]]);
+      expect(await sub(past)).toMatchObject({ queueReason: null, holdUntil: null });
+      expect(await worker(past)).toMatchObject({ queueReason: null, holdUntil: null, wait: null, needsYou: false });
+
+      // 第二天下午：两台电脑都合上了（10 分钟以上没上报）。停着的三件都在等本机上线，不再出额度。
+      now = new Date("2026-11-07T07:00:00.000Z");
+      expect(await waiting(f, "quota")).toEqual([]);
+      expect((await waiting(f, "device")).map((item) => item.title)).toEqual(["电脑不在线 · 3 件在等"]);
+      expect(await sub(future)).toMatchObject({ state: "queued", queueReason: "device_offline", holdUntil: null });
+      expect(await worker(future)).toMatchObject({ queueReason: "device_offline", holdUntil: null });
+      // 后台任务：昨天停下的规划员不再当成排队等额度（不是今天结束的，不列）。
+      const background = (await f.call("GET", "/api/me/background?scope=main")).json();
+      expect(background.items.find((item: { id: string }) => item.id === `plan:${heldPlan}`)).toBeUndefined();
     } finally { await f.close(); }
   });
 });

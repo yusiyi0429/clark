@@ -99,6 +99,30 @@ describe("worker 列表", { timeout: 30_000 }, () => {
     } finally { await f.close(); }
   });
 
+  it("执行异常退出一次的卡算已暂停（不是进行中里没有标记的一行）；停着等额度恢复的卡在看板上不算等你回复", async () => {
+    const f = await boardFixture({}, { boardCloudAgents: false });
+    try {
+      const dev = (await f.call("POST", "/api/me/roles", { name: "开发", family: "dev", kind: "worker" })).json();
+      const ids: Record<string, string> = {};
+      for (const title of ["崩了一次", "等额度"]) {
+        ids[title] = await f.card(title);
+        await f.call("PATCH", `/api/me/cards/${ids[title]}`, { version: 1, roleId: dev.id, executor: "claude_code" });
+      }
+      const laptop = await f.local();
+      await laptop.send({ kind: "card", cardId: ids["崩了一次"] }, [status("running", "崩了一次"), status("failed", "崩了一次")]);
+      await laptop.send({ kind: "card", cardId: ids["等额度"] }, [["status", { status: "idle", title: "等额度", agent: "claude-code", modelLabel: "订阅 · Sonnet",
+        hold: { reason: "usage_limit", until: "2026-11-06T05:00:00.000Z" } }]]);
+      const body = (await f.call("GET", "/api/me/workers")).json();
+      expect(body.running.find((item: { cardId: string }) => item.cardId === ids["崩了一次"])).toMatchObject({ stage: "doing", wait: "paused", needsYou: false, queueReason: null });
+      expect(body.queued.find((item: { cardId: string }) => item.cardId === ids["等额度"])).toMatchObject({ queueReason: "quota", wait: null });
+      const board = (await f.call("GET", "/api/plan-tasks/task-open/cards")).json();
+      const card = (title: string) => board.cards.find((item: { id: string }) => item.id === ids[title]).card;
+      expect([card("崩了一次").stage, card("崩了一次").wait]).toEqual(["doing", "paused"]);
+      expect([card("等额度").stage, card("等额度").wait]).toEqual(["doing", null]);
+      expect((await f.call("GET", `/api/me/tasks/${ids["等额度"]}`)).json().task.card.wait).toBeNull();
+    } finally { await f.close(); }
+  });
+
   it("心跳：本机闲着时每 5 分钟发一批空的，一直算在线、位置数跟着刷新；10 分钟没同步算不在线", async () => {
     let clock = BOARD_NOW;
     const f = await boardFixture({ monthlyNow: () => clock });

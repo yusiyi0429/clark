@@ -59,11 +59,11 @@ describe("自动开工（第 4.4 节）", { timeout: 30_000 }, () => {
       expect(await f.claimed(other.device)).toEqual([]);
 
       // 本机拒了，放回；又能认领了，两台同时认领只有一台拿到。不存在的放回 404。
-      expect((await f.call("POST", `/api/me/session-starts/${first[0].id}/release`)).statusCode).toBe(204);
+      expect((await f.call("POST", `/api/me/session-starts/${first[0].id}/release`, { deviceId: f.machine.device })).statusCode).toBe(204);
       const both = await Promise.all([f.claimed(other.device), f.claimed(f.machine.device)]);
       expect(both.flat().map((start) => start.id)).toEqual([first[0].id]);
-      expect((await f.call("POST", `/api/me/session-starts/${randomUUID()}/release`)).statusCode).toBe(404);
-      expect((await f.call("POST", "/api/me/session-starts/not-a-uuid/release")).statusCode).toBe(404);
+      expect((await f.call("POST", `/api/me/session-starts/${randomUUID()}/release`, { deviceId: f.machine.device })).statusCode).toBe(404);
+      expect((await f.call("POST", "/api/me/session-starts/not-a-uuid/release", { deviceId: f.machine.device })).statusCode).toBe(404);
 
       // 认领后网页关了：5 分钟内拿不到，超过 5 分钟能再认领。
       await f.t.sql("UPDATE session_starts SET claimed_at=$2 WHERE id=$1", [first[0].id, new Date(BOARD_NOW.getTime() - 4 * 60_000)]);
@@ -86,7 +86,30 @@ describe("自动开工（第 4.4 节）", { timeout: 30_000 }, () => {
       expect(await f.t.sql("SELECT count(*)::int AS n FROM session_starts WHERE closed_at IS NULL")).toEqual([{ n: 0 }]);
       await f.t.sql("UPDATE session_starts SET claimed_at=NULL,claimed_device=NULL");
       expect(await f.claimed(f.machine.device)).toEqual([]);
-      expect((await f.call("POST", `/api/me/session-starts/${first[0].id}/release`)).statusCode).toBe(404);
+      expect((await f.call("POST", `/api/me/session-starts/${first[0].id}/release`, { deviceId: f.machine.device })).statusCode).toBe(404);
+    } finally { await f.close(); }
+  });
+
+  it("放回只放这台电脑认领的那条：认领过期后别的电脑重新认领了，原来那台迟到的放回 404，认领还在别的电脑那里", async () => {
+    const f = await fixture();
+    try {
+      const card = await f.card("跑题库");
+      await f.t.sql(`INSERT INTO session_starts(id,owner_id,kind,card_id,plan_task_id,origin,requested_at) VALUES($1,$2,'card',$3,'task-open','web',$4)`,
+        [randomUUID(), TEST_MEMBER.personId, card, BOARD_NOW]);
+      const [start] = await f.claimed(f.machine.device);
+      await f.t.sql("UPDATE session_starts SET claimed_at=$2 WHERE id=$1", [start.id, new Date(BOARD_NOW.getTime() - 6 * 60_000)]);
+      const other = await f.local("另一台");
+      expect((await f.claimed(other.device)).map((item) => item.id)).toEqual([start.id]);
+
+      const stale = await f.call("POST", `/api/me/session-starts/${start.id}/release`, { deviceId: f.machine.device });
+      expect([stale.statusCode, stale.json().code]).toEqual([404, "NOT_FOUND"]);
+      expect(await f.t.sql("SELECT claimed_device FROM session_starts WHERE id=$1", [start.id])).toEqual([{ claimed_device: other.device }]);
+      expect(await f.claimed(f.machine.device)).toEqual([]);
+      // 不带 deviceId 的放回不收。
+      expect((await f.call("POST", `/api/me/session-starts/${start.id}/release`)).statusCode).toBe(400);
+
+      expect((await f.call("POST", `/api/me/session-starts/${start.id}/release`, { deviceId: other.device })).statusCode).toBe(204);
+      expect((await f.claimed(f.machine.device)).map((item) => item.id)).toEqual([start.id]);
     } finally { await f.close(); }
   });
 

@@ -28,7 +28,8 @@ export async function taskPipelineConversation(q: Query, ownerId: string, taskId
 
 /**
  * 这件 Task 的管线对话，第一次时建。调用方先核对本人是负责人（boardTask）。
- * 接了 Chat：没有就在事务里按「人 × Task」加锁、再查一次、在 Chat 开一段、记下、提交，两个并发请求只开一段。
+ * 接了 Chat：不占数据库连接等 Chat。在 Chat 的排队里（同一个人同一视角，chatService.ts 的 createConversation）再查一次、开一段、记下；
+ * 记的时候这件已经登记了别的段（别的进程先记了）就用登记着的那段。
  * created：这次新建的。
  */
 export async function ensureTaskPipeline(deps: { pool: Pool; chat?: ChatService }, viewer: { personId: string }, taskId: string, requestId: string):
@@ -39,28 +40,16 @@ export async function ensureTaskPipeline(deps: { pool: Pool; chat?: ChatService 
     const existed = (await deps.pool.query(`SELECT 1 FROM conversations WHERE ${ACTIVE_CONVERSATION_WHERE} LIMIT 1`, [owner, scope])).rowCount;
     return { conversationId: await ensureMainConversation(deps.pool, owner, scope), created: !existed };
   }
-  const found = await taskPipelineConversation(deps.pool.query.bind(deps.pool), owner, taskId);
+  const q: Query = deps.pool.query.bind(deps.pool);
+  const found = await taskPipelineConversation(q, owner, taskId);
   if (found) return { conversationId: found, created: false };
-  const chat = deps.chat;
-  const client = await deps.pool.connect();
-  try {
-    await client.query("BEGIN");
-    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`task-pipeline|${owner}|${taskId}`]);
-    const locked = await taskPipelineConversation(client.query.bind(client), owner, taskId);
-    if (locked) {
-      await client.query("COMMIT");
-      return { conversationId: locked, created: false };
-    }
-    // 记下并提交在 Chat 的排队里做完（createConversation 的 register），总管线判段时一定看得到这一段是 Task 管线。
-    const conversationId = await chat.createConversation(pipelineViewer(owner), requestId, async (id) => {
-      await client.query("INSERT INTO task_pipelines (owner_id, plan_task_id, conversation_id) VALUES ($1, $2, $3)", [owner, taskId, id]);
-      await client.query("COMMIT");
-    });
-    return { conversationId, created: true };
-  } catch (error) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw error;
-  } finally {
-    client.release();
-  }
+  return deps.chat.createConversation(pipelineViewer(owner), requestId, {
+    existing: () => taskPipelineConversation(q, owner, taskId),
+    register: async (id) => {
+      const inserted = (await q("INSERT INTO task_pipelines (owner_id, plan_task_id, conversation_id) VALUES ($1, $2, $3) ON CONFLICT (owner_id, plan_task_id) DO NOTHING",
+        [owner, taskId, id])).rowCount;
+      // 没插进去：这件已经登记了，读那一条（task_pipelines 不删行）。
+      return inserted ? id : (await taskPipelineConversation(q, owner, taskId)) as string;
+    },
+  });
 }

@@ -235,6 +235,9 @@ async function inTransaction<T>(pool: Pool, work: (client: PoolClient) => Promis
   finally { client.release(); }
 }
 
+/** 推翻的理由接成一句：末尾已经有句号、问号、感叹号的不再加句号。 */
+const sentence = (text: string) => /[。？！.?!]$/.test(text) ? text : `${text}。`;
+
 /**
  * 返工卡（新首页第 4.5 节）：已合回的卡验收被推翻时，在同一件 Task、同一个 Mission 下开一张新卡，推进人、完成定义、岗位、对的标准照原卡，
  * 交代后面写明上一张已合回、推翻的理由，交给 Claude Code，记下是从哪张卡开出来的；挂了 Task 的登记自动开工（要开工的登记要 Task）。
@@ -246,7 +249,7 @@ async function openReworkCard(client: PoolClient, ownerId: string, cardId: strin
   const created = await createInTransaction(client, ownerId, names, { clientId: randomUUID(), title: `返工：${card.title}`.slice(0, 120), missionId: card.mission_id,
     doneDefinition: card.done_definition ?? undefined, planTaskId: card.plan_task_id ?? undefined, source: "self" });
   if (!("task" in created)) throw new Error("返工卡没建成");
-  const tail = `上一张已合回，验收被推翻：${reason}。在现有代码上改，不要回退已合进去的改动。`;
+  const tail = `上一张已合回，验收被推翻：${sentence(reason)}在现有代码上改，不要回退已合进去的改动。`;
   const brief = card.brief?.trim() ? `${card.brief.trim().slice(0, BRIEF_MAX - tail.length - 2)}\n\n${tail}` : tail;
   await client.query("UPDATE tasks SET executor='claude_code',brief=$2,role_id=$3,criterion_index=$4,criterion_text=$5,rework_of_card_id=$6 WHERE id=$1",
     [created.task.id, brief, card.role_id, card.criterion_index, card.criterion_text, cardId]);
@@ -257,6 +260,7 @@ async function openReworkCard(client: PoolClient, ownerId: string, cardId: strin
 /**
  * 推翻（只有推进人，只推翻最近一次有结论的交回）：
  * - 通过的推翻、这次交回已合回（card_handbacks.merge.merged）：卡照旧完成，从准备中拿掉，不写改法（执行方的会话已经结束），另开一张返工卡（openReworkCard），已合进去的不撤回。
+ * - 通过的推翻、在工作树里做（git 不为空）、本机验收员判的，而合回结果还没报上来：409 MERGE_PENDING，等报上来再推翻。
  * - 通过的推翻（没合回）：卡回进行中，验收记录清掉，从准备中拿掉（已经进了某一版的不能推翻）；推翻的原因当改法，等网页送回执行方。
  * - 没过的推翻（「仍然通过」）：卡完成、进准备中，验收记录写本人，verdict 写推翻的原因。
  * 两个方向都记一条要写的岗位修改，返回它的 id（没记为 null），调用方提交后排队。
@@ -272,6 +276,8 @@ export function overruleHandback(pool: Pool, ownerId: string, cardId: string, ha
     if (row.attempt !== latest) throw new CardError(409, "NOT_LATEST", "只能推翻最近一次交回的验收");
     const who = names.get(ownerId) ?? ownerId;
     if (row.outcome === "pass") {
+      // 在工作树里做的（git 不为空），本机验收员判过了会自动合回，合回结果晚到的话推翻时选错路：等它报上来再推翻。云端判过的本机不合回，照旧。
+      if (row.git && !row.merge && row.verifier_source === "local") throw new CardError(409, "MERGE_PENDING", "这张卡的合回结果还没报上来，等电脑上线以后再推翻");
       const pending = (await client.query("SELECT version_id FROM deliverable_pending_items WHERE handback_id=$1", [handbackId])).rows[0] as { version_id: string | null } | undefined;
       if (pending?.version_id) throw new CardError(409, "ALREADY_INCLUDED", "这张卡已经进了交付物的某一版，不能推翻");
       await client.query("DELETE FROM deliverable_pending_items WHERE handback_id=$1", [handbackId]);
@@ -283,7 +289,7 @@ export function overruleHandback(pool: Pool, ownerId: string, cardId: string, ha
       }
       if (task.status === "done") await client.query("UPDATE tasks SET status='in_progress',acceptance=NULL,version=version+1,updated_at=now() WHERE id=$1", [cardId]);
       await client.query(`UPDATE card_handbacks SET overruled_at=$2,overruled_by=$3,overrule_reason=$4,return_text=$5,returned_at=NULL WHERE id=$1`,
-        [handbackId, now, ownerId, text, `验收被推翻：${text}。改完再交回。`]);
+        [handbackId, now, ownerId, text, `验收被推翻：${sentence(text)}改完再交回。`]);
       await tellGroup(client, cardId, ownerId, `${who}推翻了 Agent 验收，卡回到进行中：${text}`);
     } else {
       if (task.status !== "done" && task.status !== "returned")

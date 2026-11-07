@@ -192,10 +192,15 @@ export function createChatService(options: {
     }
     return { messages, runs };
   };
-  /** 总管线的段：去掉 Task 管线那几段（conversations() 本身照旧给全部，纪要核对隐藏的段要全部）。 */
+  /**
+   * 不是总管线的段：给 Task 管线开了、天枢却没记成 Task 管线的那几段（登记失败，或这件 Task 已经登记了别的段）。
+   * Chat 没有删段的接口，只能在总管线挑段时和 Task 管线那几段一起排除；放在内存里（api 一个环境一个进程），重启后靠日志（chat_service.pipeline_orphan）查。
+   */
+  const orphanSegments = new Set<string>();
+  /** 总管线的段：去掉 Task 管线那几段和孤儿段（conversations() 本身照旧给全部，纪要核对隐藏的段要全部）。 */
   const mainConversations = async (viewer: ChatViewer, requestId: string) => {
     const [list, pipelines] = await Promise.all([conversations(viewer, requestId), options.pipelines?.(viewer)]);
-    return pipelines?.size ? list.filter((item) => !pipelines.has(item.conversationId)) : list;
+    return list.filter((item) => !pipelines?.has(item.conversationId) && !orphanSegments.has(item.conversationId));
   };
   /** 开了分段时「当前这段」是最新开的那段（「继续」旧段会更新旧段的时间，但不让它变成当前段）；关着时照旧是最近更新的那段。 */
   const newestFirst = (list: ChatConversation[]) => (rotation ? [...list].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)) : list);
@@ -268,15 +273,39 @@ export function createChatService(options: {
       return value;
     },
     /**
-     * 在 Chat 里开一段新对话（Task 管线用）。register 是开好之后天枢记下这一段（插 task_pipelines 并提交）：
-     * 和总管线的「判段 + 新建」排在同一个队里做，记下之前总管线不会把这一段当成最新的一段。
+     * Task 管线那一段：先查天枢记下的（existing），没有就在 Chat 开一段（最多等 15 秒），再记下（register 返回这件 Task 登记着的那段）。
+     * 和总管线的「判段 + 新建」排在同一个队里做：记下之前总管线不会把这一段当成最新的一段，同一个人同时打开也只开一段。
+     * 开了没记成的那段（登记失败，或这件已经登记了别的段）记成孤儿段，总管线不用；开段没拿到回应时不知道 id，只记日志。
+     * created：这次开的段记下了。
      */
-    async createConversation(viewer: ChatViewer, requestId: string, register?: (conversationId: string) => Promise<void>): Promise<string> {
+    async createConversation(viewer: ChatViewer, requestId: string, link: { existing: () => Promise<string | null>; register: (conversationId: string) => Promise<string> }):
+      Promise<{ conversationId: string; created: boolean }> {
       return exclusive(`${viewer.personId}|${viewer.role}`, async () => {
-        const { conversationId } = await json<{ conversationId: string }>(viewer, requestId, "/conversations",
-          { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
-        await register?.(conversationId);
-        return conversationId;
+        const existing = await link.existing();
+        if (existing) return { conversationId: existing, created: false };
+        let conversationId: string;
+        try {
+          ({ conversationId } = await json<{ conversationId: string }>(viewer, requestId, "/conversations",
+            { method: "POST", headers: { "content-type": "application/json" }, body: "{}", signal: AbortSignal.timeout(15_000) }));
+        } catch (error) {
+          // Chat 回了拒绝就是没开；超时、连接断、回应读不出时 Chat 那边可能已经开了一段。
+          if (error instanceof ChatServiceError && error.code !== "CHAT_UNAVAILABLE") throw error;
+          logEvent({ event: "chat_service.pipeline_orphan", requestId, conversationId: null, error: (error as Error)?.message });
+          throw new ChatServiceError(503, "CHAT_UNAVAILABLE", "对话服务暂时连不上。");
+        }
+        const orphan = (reason: string) => {
+          orphanSegments.add(conversationId);
+          logEvent({ event: "chat_service.pipeline_orphan", requestId, conversationId, reason });
+        };
+        let registered: string;
+        try {
+          registered = await link.register(conversationId);
+        } catch (error) {
+          orphan("register_failed");
+          throw error;
+        }
+        if (registered !== conversationId) orphan("already_registered");
+        return { conversationId: registered, created: registered === conversationId };
       });
     },
     /** 界面上的一条连续对话：拼几段，从新往旧读，拼够 HISTORY_MESSAGES 条就不再往前读（当前这段总会读）。带 target 时只读那一段。 */

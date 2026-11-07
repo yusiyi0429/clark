@@ -12,14 +12,18 @@ async function reworkFixture() {
   const f = await boardFixture({ boardAgents: { acceptance } });
   const local = await f.local();
   const worker = (await f.call("POST", "/api/me/roles", { name: "开发", family: "dev", kind: "worker", practiceMd: "先写测试", acceptanceMd: "测试都过" })).json();
-  /** 一张交给 Claude Code 的卡，交回、Agent 验收通过，这次交回的合回结果直接往 card_handbacks.merge 写库造。 */
-  const passedCard = async (title: string, merge: object | null) => {
+  /**
+   * 一张交给 Claude Code 的卡，交回、Agent 验收通过，这次交回的合回结果直接往 card_handbacks.merge 写库造；git 给了就是在工作树里做的。
+   * verifier 改写是谁判的（默认照云端验收作业）。
+   */
+  const passedCard = async (title: string, merge: object | null, git: object | null = null, verifier: "cloud" | "local" = "cloud") => {
     const id = await f.card(title);
     expect((await f.call("PATCH", `/api/me/cards/${id}`, { version: 1, executor: "claude_code", criterionIndex: 2, roleId: worker.id, brief: "照设计稿做登录页" }))
       .statusCode).toBe(200);
     const handback = await local.handBack(id);
     await f.t.app.cardAcceptance.idle();
-    await f.t.sql("UPDATE card_handbacks SET merge=$2::jsonb WHERE id=$1", [handback, merge === null ? null : JSON.stringify(merge)]);
+    await f.t.sql("UPDATE card_handbacks SET merge=$2::jsonb,git=$3::jsonb,verifier_source=$4 WHERE id=$1",
+      [handback, merge === null ? null : JSON.stringify(merge), git === null ? null : JSON.stringify(git), verifier]);
     return { id, handback };
   };
   return { ...f, worker, passedCard };
@@ -67,6 +71,30 @@ describe("合回后推翻 → 返工卡", { timeout: 30_000 }, () => {
     } finally { await f.close(); }
   });
 
+  it("在工作树里做、本机验收员判过、合回结果还没报上来：推翻回 409 MERGE_PENDING，卡和交回都不动；报上来已合回以后再推翻开返工卡；云端判过的本机不合回，照旧推翻", async () => {
+    const f = await reworkFixture();
+    try {
+      const git = { branch: "tianshu/card-login", baseBranch: "main", baseCommit: "b".repeat(40), commit: "c".repeat(40) };
+      const cloud = await f.passedCard("云端验的", null, git);
+      expect((await f.call("POST", `/api/me/cards/${cloud.id}/handbacks/${cloud.handback}/overrule`, { reason: "录屏不是新人" })).json().task)
+        .toMatchObject({ status: "in_progress" });
+      const { id, handback } = await f.passedCard("做登录页", null, git, "local");
+      const res = await f.call("POST", `/api/me/cards/${id}/handbacks/${handback}/overrule`, { reason: "登录失败没有提示" });
+      expect([res.statusCode, res.json().code]).toEqual([409, "MERGE_PENDING"]);
+      expect(await f.t.sql("SELECT status FROM tasks WHERE id=$1", [id])).toEqual([{ status: "done" }]);
+      expect(await f.t.sql("SELECT overruled_at,return_text FROM card_handbacks WHERE id=$1", [handback])).toEqual([{ overruled_at: null, return_text: null }]);
+      expect((await f.call("GET", "/api/plan-tasks/task-open/cards")).json().pending).toMatchObject([{ cardId: id }]);
+
+      await f.t.sql("UPDATE card_handbacks SET merge=$2::jsonb WHERE id=$1", [handback, JSON.stringify({ merged: true, commit: "d".repeat(40), baseBranch: "main",
+        reason: null, message: null, auto: true, at: "2026-11-06T03:10:00.000Z" })]);
+      const later = await f.call("POST", `/api/me/cards/${id}/handbacks/${handback}/overrule`, { reason: "登录失败没有提示。" });
+      expect(later.json().task).toMatchObject({ id, status: "done" });
+      // 理由末尾已经有句号，不再加一个。
+      expect(await f.t.sql("SELECT brief FROM tasks WHERE rework_of_card_id=$1", [id]))
+        .toEqual([{ brief: "照设计稿做登录页\n\n上一张已合回，验收被推翻：登录失败没有提示。在现有代码上改，不要回退已合进去的改动。" }]);
+    } finally { await f.close(); }
+  });
+
   it("没合回（合不了、没报）的推翻照旧：卡回进行中、推翻的原因等着送回，不开返工卡", async () => {
     const f = await reworkFixture();
     try {
@@ -79,6 +107,10 @@ describe("合回后推翻 → 返工卡", { timeout: 30_000 }, () => {
           handback: { overruled: true, returnText: "验收被推翻：录屏不是新人。改完再交回。" } } });
       }
       expect(await f.t.sql("SELECT 1 FROM tasks WHERE rework_of_card_id IS NOT NULL")).toEqual([]);
+      // 理由末尾已经有问号、感叹号时不再加句号。
+      const asked = await f.passedCard("理由带问号的", null);
+      expect((await f.call("POST", `/api/me/cards/${asked.id}/handbacks/${asked.handback}/overrule`, { reason: "录屏是新人吗？" })).json().task)
+        .toMatchObject({ card: { handback: { returnText: "验收被推翻：录屏是新人吗？改完再交回。" } } });
     } finally { await f.close(); }
   });
 });

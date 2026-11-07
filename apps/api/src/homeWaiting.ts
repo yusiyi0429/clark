@@ -1,12 +1,12 @@
 import type { TCardTaskView, TMissionRoundSummary, TWaitingItem, TWorkerResources } from "@warmap/contracts";
+import { HOLD_STATES } from "./cardProjection.js";
 import { FEISHU_NOTIFY_KIND } from "./feishu/notify.js";
 import type { Query } from "./meetingStore.js";
 import type { MissionRoundPerson } from "./missionRounds.js";
-import { locatePlanTask } from "./planTaskAccess.js";
 import { listProposals } from "./roles.js";
-import { parseNotifyKey } from "./taskAgreements.js";
+import { openPlanTask, parseNotifyKey } from "./taskAgreements.js";
 import { DeliverableError } from "./taskDeliverables.js";
-import { HOLD_STATES } from "./workers.js";
+import { awaitsQuota } from "./workers.js";
 import { shanghaiDate, shanghaiLabel } from "./workdays.js";
 import type { HomeSub, TreeTask, WorkHomeDeps } from "./workHome.js";
 
@@ -16,7 +16,7 @@ import type { HomeSub, TreeTask, WorkHomeDeps } from "./workHome.js";
  * 月份（复盘、之前月份还有没了结的），电脑不在线而有活在等本机，订阅额度用完有活停着。
  */
 
-/** 本机报了 hold、停着等额度恢复的会话（别名 r 指 local_runs）。 */
+/** 本机报了 hold 的会话（别名 r 指 local_runs）：不论还算不算等额度恢复（workers.ts 的 awaitsQuota），都不是等你回复。 */
 export const HELD = `(r.hold IS NOT NULL AND r.state=ANY('{${HOLD_STATES.join(",")}}'::text[]))`;
 /** 「请 X 看」多久以内的还算在等你认可。 */
 const ACCEPTANCE_DAYS = 7;
@@ -92,7 +92,8 @@ export async function assembleWaiting(input: WaitingInput): Promise<TWaitingItem
       add({ id: `merge:card:${sub.id}`, kind: "merge", title: "没能自动合回", source, at: sub.merge.at, open: { kind: "card", id: sub.id }, taskId,
         sessionId: sub.mergeRun?.sessionId ?? null, deviceId: sub.mergeRun?.deviceId ?? null, answer: "inline_local" });
   }
-  for (const view of cards) if (view.card.wait === "blocked") {
+  // 受阻只算连续两次验收没过（子会话 waiting = verdict）；执行连续两次异常退出是已暂停，不在这里。
+  for (const view of cards) if (subs.some((sub) => sub.id === view.id && sub.waiting === "verdict")) {
     const taskId = treeTask(view.planTaskId);
     add({ id: `verdict:card:${view.id}`, kind: "verdict", title: "验收两次没过", source: [view.title, taskName(taskId)].filter(Boolean).join(" · "),
       at: view.card.handback?.createdAt ?? null, open: { kind: "card", id: view.id }, taskId, answer: "open" });
@@ -111,25 +112,29 @@ export async function assembleWaiting(input: WaitingInput): Promise<TWaitingItem
       sessionId: run.id, deviceId: run.device_id, answer: "inline_local" });
   }
 
-  // 订阅额度用完：一台电脑一条，停着几件（子会话按树上的状态，规划员、验收员按会话），截止是最早恢复的时间（到点本机自己接着做）。
+  // 订阅额度用完：一台在线的电脑一条，停着几件（子会话按树上的状态，规划员、验收员按会话），截止是最早恢复的时间（到点本机自己接着做）。
+  // 恢复时间过了的不算；电脑不在线的本机接不着做，算进下面「电脑不在线」那条。
+  const online = new Set(input.devices.filter((device) => device.online).map((device) => device.id));
   const heldHelpers = (await q(`SELECT r.device_id::text,r.hold->>'until' AS until FROM local_runs r WHERE r.owner_id=$1 AND r.kind IN ('plan','verify') AND ${HELD}`,
     [ownerId])).rows as { device_id: string; until: string | null }[];
   const holds = new Map<string, (string | null)[]>();
   for (const [deviceId, until] of [...subs.filter((sub) => sub.queueReason === "quota" && sub.deviceId).map((sub) => [sub.deviceId!, sub.holdUntil] as const),
-    ...heldHelpers.map((row) => [row.device_id, row.until] as const)]) holds.set(deviceId, [...holds.get(deviceId) ?? [], until]);
+    ...heldHelpers.filter((row) => awaitsQuota(row.until, row.device_id, online, deps.now)).map((row) => [row.device_id, row.until] as const)])
+    holds.set(deviceId, [...holds.get(deviceId) ?? [], until]);
   for (const [deviceId, untils] of holds) {
     const earliest = untils.filter((until): until is string => Boolean(until)).map((until) => new Date(until).toISOString()).sort()[0] ?? null;
     add({ id: `quota:${deviceId}`, kind: "quota", title: earliest ? `Claude 订阅额度用完 · ${shanghaiLabel(new Date(earliest)).slice(-5)} 恢复` : "Claude 订阅额度用完",
       source: `${untils.length} 件停着`, at: null, open: { kind: "connections", id: "this_computer" }, deviceId, dueAt: earliest, answer: "open" });
   }
 
-  // 计划等你开工：树上的 Task 最近一次拆卡出了派活单、还有没处理的草稿；就地「开工」= 接受草稿带 start。
+  // 计划等你开工：树上的 Task 本人还开着的草稿（同看板 readBoard，哪次拆卡出的都算）；时间和 id 取这些草稿所属计划里最新的那次。就地「开工」= 接受草稿带 start。
   const tree = [...taskById.keys()];
-  const plans = tree.length ? (await q(`SELECT p.id::text,p.plan_task_id,COALESCE(p.finished_at,p.created_at) AS at,
-      (SELECT count(*)::int FROM card_drafts d WHERE d.plan_id=p.id AND d.owner_id=$1 AND d.status='open') AS drafts
-    FROM (SELECT DISTINCT ON (plan_task_id) * FROM card_plans WHERE owner_id=$1 AND plan_task_id=ANY($2::text[]) ORDER BY plan_task_id,created_at DESC) p`,
+  const plans = tree.length ? (await q(`SELECT DISTINCT ON (d.plan_task_id) p.id::text,d.plan_task_id,COALESCE(p.finished_at,p.created_at) AS at,
+      count(*) OVER (PARTITION BY d.plan_task_id)::int AS drafts
+    FROM card_drafts d JOIN card_plans p ON p.id=d.plan_id WHERE d.owner_id=$1 AND d.status='open' AND d.plan_task_id=ANY($2::text[])
+    ORDER BY d.plan_task_id,COALESCE(p.finished_at,p.created_at) DESC,p.id`,
   [ownerId, tree])).rows as { id: string; plan_task_id: string; at: Date; drafts: number }[] : [];
-  for (const plan of plans) if (plan.drafts > 0)
+  for (const plan of plans)
     add({ id: `plan_start:${plan.id}`, kind: "plan_start", title: `${taskName(plan.plan_task_id)}：计划等你开工`, source: `${plan.drafts} 件等你开工`,
       at: plan.at.toISOString(), open: { kind: "task", id: plan.plan_task_id }, taskId: plan.plan_task_id, answer: "inline" });
 
@@ -172,19 +177,22 @@ export async function assembleWaiting(input: WaitingInput): Promise<TWaitingItem
   const askedTasks = [...new Set([...asks.values()].map((ask) => ask.taskId))];
   const delivered = new Set(askedTasks.length ? ((await q(`SELECT task_id FROM (SELECT DISTINCT ON (task_id) task_id,delivered_at FROM deliverable_versions
     WHERE task_id=ANY($1::text[]) ORDER BY task_id,number DESC) v WHERE delivered_at IS NOT NULL`, [askedTasks])).rows as { task_id: string }[]).map((row) => row.task_id) : []);
-  const located = new Map<string, { name: string; ownerId: string } | null>();
+  const located = new Map<string, { name: string; ownerId: string; acceptors: Map<number, string | null> } | null>();
   for (const ask of asks.values()) {
     if (delivered.has(ask.taskId)) continue;
     if (!located.has(ask.taskId)) {
-      // 本人是认可人，读得到这件 Task（先在本人的 Mission 里找，再在公司当期的里找，有缓存）；读不到就不列。
-      const access = await locatePlanTask(q, deps.planTasks, { personId: ownerId, isCeo: false }, deps.now, ask.taskId).catch((cause: unknown) => {
+      // 和 Task 详情同一个口径（openPlanTask）：本人看不了这件 Task 就不列。下面还要求本人现在仍是那一条的认可人，
+      // 认可人本来就看得了，所以这里不用分辨本人是不是 CEO。
+      const opened = await openPlanTask(q, deps.planTasks, { personId: ownerId, isCeo: false }, deps.now, ask.taskId, deps.names).catch((cause: unknown) => {
         if (cause instanceof DeliverableError) return null;
         throw cause;
       });
-      located.set(ask.taskId, access && { name: access.task.name, ownerId: access.ownerId });
+      located.set(ask.taskId, opened && { name: opened.access.task.name, ownerId: opened.access.ownerId,
+        acceptors: new Map(opened.agreement.criteria.map((item) => [item.index, item.acceptor?.personId ?? null])) });
     }
     const task = located.get(ask.taskId);
-    if (!task) continue;
+    // 负责人后来把这一条的认可人换了、或删了这一条：不再请本人认。
+    if (!task || task.acceptors.get(ask.index) !== ownerId) continue;
     add({ id: `acceptance:${ask.taskId}:${ask.index}`, kind: "acceptance", title: `请你认可「${task.name}」第 ${ask.index} 条`, source: null, at: ask.at.toISOString(),
       open: { kind: "task_detail", id: ask.taskId }, taskId: treeTask(ask.taskId), answer: "open",
       person: { personId: task.ownerId, name: deps.names.get(task.ownerId) ?? task.ownerId } });
@@ -210,8 +218,10 @@ export async function assembleWaiting(input: WaitingInput): Promise<TWaitingItem
     add({ id: `month:continue:${period}`, kind: "month", title: `${Number(period.slice(5))} 月还有 ${count} 件没了结`, source: null, at: null,
       open: { kind: "month", id: period }, answer: "open", month: { step: "continue", period } });
 
-  // 电脑（设计 9.9）：本人一台在线的电脑都没有，而有活在等本机（还没开的子会话，含登记了要开工的；会话还在但电脑不在线的；没开的拆卡登记）。
-  const waitingForDevice = subs.filter((sub) => sub.queueReason === "device_offline" || sub.queueReason === "not_dispatched").length + input.openSplits;
+  // 电脑（设计 9.9）：本人一台在线的电脑都没有，而有活在等本机（还没开的子会话，含登记了要开工的；会话还在或停着等额度、但电脑不在线的，
+  // 规划员、验收员停着等额度的也算；没开的拆卡登记）。
+  const waitingForDevice = subs.filter((sub) => sub.queueReason === "device_offline" || sub.queueReason === "not_dispatched").length + input.openSplits
+    + heldHelpers.filter((row) => !online.has(row.device_id)).length;
   if (waitingForDevice && !input.devices.some((device) => device.online))
     add({ id: "device:this_computer", kind: "device", title: input.devices.length ? `电脑不在线 · ${waitingForDevice} 件在等` : "还没有配对的电脑",
       source: input.devices.length ? null : `${waitingForDevice} 件在等`, at: null, open: { kind: "connections", id: "this_computer" }, answer: "open" });
