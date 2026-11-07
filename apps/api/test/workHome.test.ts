@@ -97,6 +97,13 @@ describe("新首页", { timeout: 30_000 }, () => {
       expect(task).toMatchObject({ goals: [{ taskId: "task-open", missionId: "mine", name: "对话质量达标", period: "2026-11", dueDate: "2026-11-30",
         criteriaTotal: 2, criteriaMet: 0, completedAt: null }], budget: null,
         pipeline: { conversationId: null, scope: `project:${task.projectId}` }, planning: false });
+      // 截止取 Mission 的验收时间点（同「本月」）：今天（11/6）以后最近的那个；都过了取最后一个；没写取月底（上面那次）。
+      const due = async () => projectOf(await home(f)).goals[0].dueDate;
+      await f.t.sql(`UPDATE missions SET milestones='["11/28 复核","11/12 验收：题库打分"]' WHERE id='mine'`);
+      expect(await due()).toBe("2026-11-12");
+      await f.t.sql(`UPDATE missions SET milestones='["11/2 启动","11/5 中检"]' WHERE id='mine'`);
+      expect(await due()).toBe("2026-11-05");
+      await f.t.sql(`UPDATE missions SET milestones='[]' WHERE id='mine'`);
       const state = (id: string) => { const sub = find(body, id); return [sub.state, sub.waiting, sub.queueReason]; };
       expect(state(ids["等开工"])).toEqual(["queued", null, "not_dispatched"]);
       // 有在线的电脑了：登记了要开工的等网页认领（等开工），还标着 autoStart。
