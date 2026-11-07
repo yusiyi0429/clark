@@ -2,13 +2,19 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { THomeItem } from "@warmap/contracts";
 import type { HomeTask, WorkHomeData } from "@/lib/home/types";
+import { NO_EDITS, deriveProjects, sortProjects } from "@/lib/home/projects";
 import { LeftColumn, planOrder } from "./LeftColumn";
 
 const data = { period: "2026-11", missions: [], waiting: [], other: { subSessions: [], items: [] } } as unknown as WorkHomeData;
-const render = (extra: Partial<Parameters<typeof LeftColumn>[0]>) => renderToStaticMarkup(
-  <LeftColumn data={data} view={{ kind: "home" }} buddy={null} speaking={false} go={() => undefined} phone={false}
-    account={{ displayName: "孙铭泽", role: "member" }} today="11 月 7 日 周六" alert={false} {...extra} />,
-);
+const render = (extra: Partial<Parameters<typeof LeftColumn>[0]>) => {
+  const used = extra.data ?? data;
+  const { projects } = deriveProjects(used, NO_EDITS, () => "11/20");
+  return renderToStaticMarkup(
+    <LeftColumn data={used} view={{ kind: "home" }} buddy={null} speaking={false} go={() => undefined} phone={false}
+      account={{ displayName: "孙铭泽", role: "member" }} today="11 月 7 日 周六" alert={false}
+      projects={sortProjects(projects)} archived={[]} onCreate={() => "x"} {...extra} />,
+  );
+};
 
 describe("左栏：计划读不到、空月份（5.4.2、5.4.4）", () => {
   it("计划读不到时树最上面一行「本体读取失败」加「重试」，不画成空树", () => {
@@ -36,53 +42,47 @@ const withTask = (items: THomeItem[], extra: Partial<HomeTask> = {}) => ({
   }] }],
 }) as unknown as WorkHomeData;
 
-describe("左栏：本人自己做的事项（9.10）", () => {
-  it("Task 下面列本人事项：标题加行尾截止日「11/12」，是树里能用方向键走到的一行", () => {
-    const html = render({ data: withTask([item("00000000-0000-4000-8000-000000000001", "写验收清单", { dueDate: "2026-11-12" })]) });
-    expect(html).toMatch(/data-testid="tree-task".*data-testid="tree-item"[^>]*>.*写验收清单.*11\/12/);
-    expect(html).toMatch(/<button[^>]*data-tree-row=""[^>]*data-testid="tree-item"/);
-    expect(html).toMatch(/data-testid="tree-item"><span[^>]*aria-hidden="true"><\/span><span[^>]*>写验收清单/);
-    expect(html).not.toMatch(/data-testid="tree-item"><span[^>]*role="img"/);
+describe("左栏：项目（16.2）", () => {
+  it("「项目」组头右边一个「+」；项目行两行：名字，第二行「11 月 · Task · 截止 验收」；信息按钮进项目详情", () => {
+    const html = render({ data: withTask([]) });
+    expect(html).toMatch(/项目<\/span><button[^>]*aria-label="新建项目"/);
+    expect(html).toMatch(/data-testid="tree-project".*首页改版.*11 月 · 左栏 · 11\/20 验收/);
+    expect(html).toContain('aria-label="首页改版 详情"');
   });
 
-  it("交了等验收的行尾写「待验收」，不写截止日；没有截止日也不等验收的行尾不写", () => {
-    const html = render({ data: withTask([
-      item("00000000-0000-4000-8000-000000000001", "写验收清单", { dueDate: "2026-11-12", awaitingAcceptance: true }),
-      item("00000000-0000-4000-8000-000000000002", "约评审"),
-    ]) });
-    expect(html).toMatch(/写验收清单.*待验收/);
-    expect(html).not.toContain("11/12");
-    expect(html).toMatch(/约评审<\/span><\/button>/);
+  it("没有 Mission 分组：不再画 Mission 行", () => {
+    expect(render({ data: withTask([]) })).not.toContain("tree-mission");
   });
 
-  it("没有「已完成 N」：做完的事项排在后面、变淡", () => {
-    const html = render({ data: withTask([item("00000000-0000-4000-8000-000000000001", "写验收清单", { status: "done" }), item("00000000-0000-4000-8000-000000000002", "约评审")]) });
+  it("本人事项在项目下面：标题加行尾截止日；做完的排后、变淡", () => {
+    const html = render({ data: withTask([item("00000000-0000-4000-8000-000000000001", "写验收清单", { status: "done" }), item("00000000-0000-4000-8000-000000000002", "约评审", { dueDate: "2026-11-12" })]) });
+    expect(html).toMatch(/data-testid="tree-project".*约评审.*11\/12.*data-state="done"[^>]*data-tree-row=""[^>]*data-testid="tree-item".*写验收清单/);
     expect(html).not.toContain("已完成");
-    expect(html).toMatch(/约评审.*data-state="done"[^>]*data-tree-row=""[^>]*data-testid="tree-item".*写验收清单/);
   });
 
-  it("待归位的事项进「其他」：没有子会话也画这一组", () => {
+  it("会话默认收成一行「会话 N」加一格一个的小方块，不列出来、不画蓝点", () => {
+    const sub = (id: string, state: string, waiting: unknown = null) => ({ id, kind: "card", title: `卡${id}`, state, waiting, updatedAt: "a", queueReason: null, holdUntil: null });
+    const html = render({ data: withTask([], { subSessions: [sub("1", "running"), sub("2", "waiting", "question"), sub("3", "done")] as never }) });
+    expect(html).toMatch(/aria-expanded="false"[^>]*data-testid="tree-subs".*会话 3/);
+    expect(html.match(/<i data-state=/g)?.length).toBe(3);
+    expect(html).not.toContain("卡1");
+  });
+
+  it("有已归档的：一行「已归档 N」，默认收起", () => {
+    const { projects } = deriveProjects(withTask([]), NO_EDITS, () => null);
+    const html = render({ data: withTask([]), projects: [], archived: projects });
+    expect(html).toMatch(/aria-expanded="false"[^>]*data-testid="tree-archived".*已归档 1/);
+    expect(html).not.toContain('data-testid="tree-project"');
+  });
+
+  it("待归位的事项进「其他」：没有会话也画这一组", () => {
     expect(render({})).not.toContain('aria-label="其他"');
     const html = render({ data: { ...data, other: { subSessions: [], items: [item("00000000-0000-4000-8000-000000000003", "整理会议纪要", { dueDate: "2026-11-09" })] } } });
     expect(html).toMatch(/aria-label="其他".*其他.*data-testid="tree-item".*整理会议纪要.*11\/09/);
   });
 });
 
-describe("Mission 行和「子会话 N」（14.2）", () => {
-  const sub = (id: string, state: string, waiting: unknown = null) => ({ id, kind: "card", title: `卡${id}`, state, waiting, updatedAt: "a", queueReason: null, holdUntil: null });
-  it("Mission 行能点、进 Mission 详情", () => {
-    const html = render({ data: withTask([]) });
-    expect(html).toMatch(/<button[^>]*data-testid="tree-mission"[^>]*>.*首页改版/);
-  });
-  it("子会话默认收成一行「子会话 N」加一格一个的小方块，不列出来、不画蓝点", () => {
-    const html = render({ data: withTask([], { subSessions: [sub("1", "running"), sub("2", "waiting", "question"), sub("3", "done")] as never }) });
-    expect(html).toMatch(/aria-expanded="false"[^>]*data-testid="tree-subs".*子会话 3/);
-    expect(html.match(/<i data-state=/g)?.length).toBe(3);
-    expect(html).not.toContain("卡1");
-  });
-});
-
-describe("子会话的先后（照派活单）", () => {
+describe("会话的先后（照派活单）", () => {
   it("卡按看板里建出来的先后，没读到的和专题在后面", () => {
     const sub = (id: string, kind: "card" | "topic", updatedAt: string) => ({ id, kind, updatedAt }) as unknown as HomeTask["subSessions"][number];
     const at = new Map([["c1", "2026-11-07T01:00:00.001Z"], ["c2", "2026-11-07T01:00:00.002Z"], ["c3", "2026-11-07T01:00:00.003Z"]]);

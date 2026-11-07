@@ -43,6 +43,10 @@ import { HomeComposer, HomeView, WaitingList, type SendTarget } from "./HomeView
 import { LeftColumn } from "./LeftColumn";
 import { ForeignTaskInfo, TaskInfo } from "./TaskInfo";
 import { MissionInfo } from "./MissionInfo";
+import { ProjectInfo } from "./ProjectInfo";
+import { GoalBar, MonthRule, ProjectTrail } from "./ProjectParts";
+import { useProjects } from "./useProjects";
+import { conversationTask, projectHref, type Project } from "@/lib/home/projects";
 import { usePhone } from "./usePhone";
 import { ViewChrome, PAGE_TITLE, monthHref, scopeOf, viewOf, type View } from "./view";
 import { MONTH_PAGE, SECONDARY_PAGES, type SecondaryPageProps } from "./pages";
@@ -137,9 +141,19 @@ function HomeFrame({ account }: { account: Account }) {
   }, [go, handheld]);
 
   // ---- 首页输入框：自动（只在管线之间选：伙伴或某件 Task）、伙伴、某件 Task；跳进那条对话，那边发出去 ----
+  // ---- 项目（第 16 节）：B 的首页数据 v2 到了以前从树上推（useProjects）----
+  const dueOf = useCallback((missionId: string) => gateLabel(work.plan, missionId)?.replace(" 验收", "") ?? null, [work.plan]);
+  const projects = useProjects(data, dueOf);
+  const projectsRef = useRef<Project[]>([]);
+  projectsRef.current = projects.all;
+  const projectOfTask = (taskId: string) => projects.all.find((project) => project.tasks.some((task) => task.taskId === taskId)) ?? null;
   // 自动走 B 的 POST /api/me/route（只按关键词）；接口没上时网页按同样的规则自己分。
+  // 先看是不是说到了哪个项目的名字（16.4：关键词也从项目名里取），说到了就发给它现在接的那件 Task。
   const tasks = useMemo(() => work.plan?.tasks ?? [], [work.plan]);
   const route = useCallback(async (text: string): Promise<RouteTarget> => {
+    const named = projectsRef.current.filter((project) => !project.archived && project.name.length >= 2 && text.includes(project.name));
+    const goal = named.length === 1 ? conversationTask(named[0]!) : null;
+    if (goal) return { taskId: goal.taskId };
     if (api.live) { const answer = await routeMessage(text).catch(() => null); if (answer) return answer.target; }
     return routeText(text, tasks);
   }, [api.live, tasks]);
@@ -149,7 +163,8 @@ function HomeFrame({ account }: { account: Account }) {
     // 每句排在队里，按对话各发各的：连着发、或那条对话正在回话时，前一句不会被后一句顶掉。
     const entry: OutboxEntry = { id: outboxId.current, target: resolved === "main" ? "main" : resolved.taskId, text, files };
     setOutbox((queue) => [...queue, entry]);
-    go(resolved === "main" ? "/me/work/buddy" : `/me/work/tasks/${encodeURIComponent(resolved.taskId)}`);
+    const project = resolved === "main" ? null : projectsRef.current.find((entry) => entry.tasks.some((task) => task.taskId === resolved.taskId));
+    go(resolved === "main" ? "/me/work/buddy" : project ? projectHref(project.id) : `/me/work/tasks/${encodeURIComponent(resolved.taskId)}`);
   }, [route, go]);
   const consume = useCallback((id: number) => setOutbox((queue) => queue.filter((entry) => entry.id !== id)), []);
 
@@ -346,7 +361,10 @@ function HomeFrame({ account }: { account: Account }) {
   useAutoReturn(local.runner, here, allCards, local.sessions, changed);
 
   // ---- 后台任务 ----
-  const items = useBackground(scopeOf(view), api);
+  // 项目页的后台任务：项目对话现在接的那件 Task 的。
+  const viewedProject = view.kind === "project" || view.kind === "projectInfo" ? projects.all.find((project) => project.id === view.id) ?? null : null;
+  const viewedGoal = viewedProject ? conversationTask(viewedProject) : null;
+  const items = useBackground(viewedGoal ? `task:${viewedGoal.taskId}` : scopeOf(view), api);
   const machine = useMachine(work.resources.quota);
   const running = items.filter((item) => item.state === "running" || item.state === "queued").length;
   // 规划员、验收员停会话；子 agent、后台命令只停那一项，会话接着做。
@@ -401,9 +419,37 @@ function HomeFrame({ account }: { account: Account }) {
     trail: backgroundButton, parent,
   } : { lead: null, trail: null, parent }), [handheld, go, backgroundButton, parent]);
   useTabTitle(data.waiting.length);
+  /** 一件 Task 的对话；挂在项目上的，页头换成项目（16.3）：项目名、文件夹 chip、「详情」，下面目标条，最上面「{月} 月目标」。 */
+  const pipeline = (task: THomePlanTask, project: Project | null) => {
+    const goal = project?.goals.find((entry) => entry.taskId === task.taskId) ?? null;
+    const chromeOf = project ? {
+      name: project.name,
+      trail: <ProjectTrail project={project} go={go} />,
+      bar: <GoalBar project={project} criteriaOf={(taskId) => planTask(taskId)?.criteria ?? []} />,
+      rule: goal ? <MonthRule goal={goal} /> : null,
+    } : undefined;
+    return <PipelineView key={task.taskId} task={task} home={homeTask(task.taskId)} api={api} buddy={buddy} outbox={outbox} consume={consume} go={go} onSplit={(taskId) => void split(taskId)} splitFailed={splitFailed === task.taskId}
+      startFailed={startFailed} onManualStart={(id) => void manualStart(id)} onSpeaking={setSpeaking} project={chromeOf} />;
+  };
   const display = (current: View) => {
     switch (current.kind) {
-      case "home": return <HomeView data={data} api={api} buddy={buddy} today={todayLabel(work.plan?.today ?? null)} go={go} route={route} onSend={send} />;
+      case "home": return <HomeView data={data} api={api} buddy={buddy} today={todayLabel(work.plan?.today ?? null)} go={go} route={route} onSend={send} projects={projects} />;
+      case "project": {
+        const project = projects.all.find((entry) => entry.id === current.id);
+        if (!project) return <Missing loading={!api.ready} onRetry={api.planFailed ? () => void api.retryPlan() : undefined} />;
+        const goal = conversationTask(project);
+        const task = goal ? planTask(goal.taskId) : null;
+        if (!task) {
+          return <BuddyView key={project.id} buddy={buddy} outbox={outbox} consume={consume} onSpeaking={setSpeaking} context={`关于：${project.name}`}
+            head={{ title: project.name, trail: <ProjectTrail project={project} go={go} /> }} />;
+        }
+        return pipeline(task, project);
+      }
+      case "projectInfo": {
+        const project = projects.all.find((entry) => entry.id === current.id);
+        if (!project) return <Missing loading={!api.ready} onRetry={api.planFailed ? () => void api.retryPlan() : undefined} />;
+        return <ProjectInfo key={project.id} project={project} period={data.period} go={go} actions={projects.actions} doneDefinitionOf={(taskId) => planTask(taskId)?.doneDefinition ?? null} />;
+      }
       case "buddy": return <BuddyView buddy={buddy} outbox={outbox} consume={consume} onSpeaking={setSpeaking} context={buddyContext} onClearContext={() => setBuddyContext(null)} />;
       case "mission": {
         const mission = data.missions.find((entry) => entry.missionId === current.id);
@@ -413,10 +459,7 @@ function HomeFrame({ account }: { account: Account }) {
       }
       case "task": {
         const task = planTask(current.taskId);
-        if (task) {
-          return <PipelineView key={task.taskId} task={task} home={homeTask(task.taskId)} api={api} buddy={buddy} outbox={outbox} consume={consume} go={go} onSplit={(taskId) => void split(taskId)} splitFailed={splitFailed === task.taskId}
-            startFailed={startFailed} onManualStart={(id) => void manualStart(id)} onSpeaking={setSpeaking} />;
-        }
+        if (task) return pipeline(task, projectOfTask(task.taskId));
         if (!api.ready) return <Missing loading={!api.planFailed} onRetry={api.planFailed ? () => void api.retryPlan() : undefined} />;
         // 不在本人的计划和树上（别人的 Task：请你认可、飞书「请 X 看」；之前月份了结了的）：没有管线可看，去只读的详情（9.8、9.10）。
         return <ForeignTaskInfo key={current.taskId} taskId={current.taskId} go={go} redirect onMount={() => outbox.filter((entry) => entry.target === current.taskId).forEach((entry) => consume(entry.id))} />;
@@ -446,7 +489,7 @@ function HomeFrame({ account }: { account: Account }) {
 
   const left = (
     <LeftColumn data={data} view={view} buddy={buddy} speaking={speaking} go={go} phone={handheld} account={account} month={month} onRetryPlan={api.planFailed ? () => void api.retryPlan() : null}
-      gateFor={(missionId) => gateLabel(work.plan, missionId)} cardAt={cardAt}
+      projects={projects.projects} archived={projects.archived} onCreate={projects.actions.create} cardAt={cardAt}
       today={todayLabel(work.plan?.today ?? null)} alert={alert} trail={handheld ? backgroundButton : null}
       top={handheld && data.waiting.length ? (
         <section aria-label="等你" className={h.phoneWaiting}>
@@ -464,7 +507,7 @@ function HomeFrame({ account }: { account: Account }) {
             {/* 首屏兼首页（5.7）：左栏那几样，底部固定首页的输入框（带「发给」）。 */}
             {view.kind === "home" ? <>
               <aside className={h.left}>{left}</aside>
-              <div className={h.phoneComposer}><HomeComposer buddy={buddy} missions={data.missions.filter((mission) => mission.tasks.length)} route={route} onSend={send} /></div>
+              <div className={h.phoneComposer}><HomeComposer buddy={buddy} projects={projects.projects} route={route} onSend={send} /></div>
             </> : <main className={h.display}>{display(view)}</main>}
             {sheet ? (
               <div className={h.sheetBackdrop} data-closing={sheetClosing ? "" : undefined} onClick={closeSheet}>

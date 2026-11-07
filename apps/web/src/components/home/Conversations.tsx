@@ -7,7 +7,7 @@
  *   验收行（过了、受阻、约定都达到、返工）也由网页按时间插进这条对话。B 的接口没上时是这个标签页里的假对话（lib/home/pipeline）。
  * 首页输入框发来的话（outbox）进了对应的对话就发出去。
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Info } from "lucide-react";
 import type { THomePlanTask } from "@warmap/contracts";
 import type { Buddy } from "@/components/buddy/useBuddy";
@@ -99,9 +99,13 @@ function useEscStopsReply(data: ConversationData) {
   }, [streaming, stop]);
 }
 
-/** context：从 Mission 详情「问伙伴」带来的「关于：{Mission}」，输入框左上角一枚胶囊（14.5），去掉调 onClearContext。 */
-export function BuddyView({ buddy, outbox, consume, onSpeaking, context = null, onClearContext }: {
+/**
+ * context：从 Mission 详情「问伙伴」带来的「关于：{Mission}」，输入框左上角一枚胶囊（14.5），去掉调 onClearContext。
+ * head：项目还没挂目标、项目对话还没上的时候，项目页借总管线说话：页头写项目名和项目的 chip（16.3）。
+ */
+export function BuddyView({ buddy, outbox, consume, onSpeaking, context = null, onClearContext, head }: {
   buddy: Buddy | null; outbox: Outbox; consume: (id: number) => void; onSpeaking: (speaking: boolean) => void; context?: string | null; onClearContext?: () => void;
+  head?: { title: string; trail: ReactNode };
 }) {
   const data = useConversation("global");
   const chrome = useViewChrome();
@@ -116,7 +120,8 @@ export function BuddyView({ buddy, outbox, consume, onSpeaking, context = null, 
           head={(
             <header className={h.viewHead} data-flush="">
               {chrome.lead}
-              <h1 className={h.viewTitle} tabIndex={-1}>{name}</h1>
+              <h1 className={h.viewTitle} tabIndex={-1}>{head?.title ?? name}</h1>
+              {head?.trail}
               {chrome.trail}
             </header>
           )}
@@ -145,6 +150,11 @@ type PipelineProps = {
   onManualStart?: (subId: string) => void;
   /** 伙伴在这条管线里说话（伙伴台换成「在说」）。 */
   onSpeaking: (speaking: boolean) => void;
+  /**
+   * 放在项目页里（16.3）：页头写项目名、右边是项目的 chip 和「详情」，页头下是目标条，对话最上面一条「{月} 月目标：{Task}」。
+   * 项目对话（scope project:<id>）没上以前，项目页接的是这个项目本月那件 Task 的管线。
+   */
+  project?: { name: string; trail: ReactNode; bar: ReactNode; rule: ReactNode };
 };
 
 /**
@@ -187,7 +197,7 @@ function MockPipeline(props: PipelineProps) {
  * Task 管线的对话，网页按时间插进去的几块：规划员在拆（一行）、拆好的派活单（开工的选项框）、开了哪几个子会话、
  * 验收行（过了、受阻、约定都达到、返工，TaskFeed）。
  */
-function PipelineBody({ data, task, home, api, buddy, outbox, consume, go, onSpeaking, onSplit, splitFailed, startFailed, onManualStart }: PipelineProps & { data: ConversationData }) {
+function PipelineBody({ data, task, home, api, buddy, outbox, consume, go, onSpeaking, onSplit, splitFailed, startFailed, onManualStart, project }: PipelineProps & { data: ConversationData }) {
   const chrome = useViewChrome();
   const handheld = usePhone();
   const { work } = api;
@@ -205,6 +215,8 @@ function PipelineBody({ data, task, home, api, buddy, outbox, consume, go, onSpe
   const firstSeen = (id: string, at: string) => { if (!seen.current.has(id)) seen.current.set(id, at); return seen.current.get(id)!; };
   const blocks = useMemo<TimedBlock[]>(() => {
     const list: TimedBlock[] = [];
+    // 换月份的分隔线排在这件 Task 的对话最前面（项目对话并起来以后按挂上的时间排）。
+    if (project?.rule) list.push({ key: `month:${task.taskId}`, at: "0000-01-01T00:00:00.000Z", node: project.rule });
     const planner = mine.find((worker) => worker.kind === "plan" && worker.state !== "done");
     if (planner) list.push({ key: `planning:${planner.key}`, at: planner.startedAt ?? planner.requestedAt ?? new Date().toISOString(), node: <PlanningLine planner={planner} /> });
     // 拆卡没做完（出了错才给兜底）：一行「拆卡失败」加「重试」（弱按钮）。
@@ -248,22 +260,26 @@ function PipelineBody({ data, task, home, api, buddy, outbox, consume, go, onSpe
     }));
     list.push(...feedBlocks({ items: feed, workers: mine, taskId: task.taskId, go, onSay: (text) => data.send(text, []), onChanged: () => void changed(), remoteAsks }));
     return list;
-  }, [mine, board, task, work.roles, handheld, changed, data, subs, go, feed, onSplit, splitFailed, startFailed, onManualStart, waiting]);
+  }, [mine, board, task, work.roles, handheld, changed, data, subs, go, feed, onSplit, splitFailed, startFailed, onManualStart, waiting, project?.rule]);
+  const title = project?.name ?? task.name;
   return (
     <PendingBoxes>
       <div className={h.convo} data-testid="pipeline-view">
-        <ChatColumn data={data} buddy={buddy} label={task.name} tone="light"
+        <ChatColumn data={data} buddy={buddy} label={title} tone="light"
           head={(
-            <header className={h.viewHead} data-flush="">
-              {chrome.lead}
-              <h1 className={h.viewTitle} tabIndex={-1}>{task.name}</h1>
-              <button type="button" className={h.icon} aria-label="详情" title="详情" aria-pressed={false} onClick={() => go(infoHref(task.taskId))}><Info {...ICON} /></button>
-              {chrome.trail}
-            </header>
+            <>
+              <header className={h.viewHead} data-flush="">
+                {chrome.lead}
+                <h1 className={h.viewTitle} tabIndex={-1}>{title}</h1>
+                {project ? project.trail : <button type="button" className={h.icon} aria-label="详情" title="详情" aria-pressed={false} onClick={() => go(infoHref(task.taskId))}><Info {...ICON} /></button>}
+                {chrome.trail}
+              </header>
+              {project?.bar}
+            </>
           )}
           timeline={(current) => <WorkTimeline data={current} blocks={blocks} />}
           dock={(latest) => <PendingDock latest={latest} />}
-          input={(onHeight) => <ChatInput data={data} placeholder={`与${task.name}讨论…`} onHeight={onHeight} />} />
+          input={(onHeight) => <ChatInput data={data} placeholder={`与${title}讨论…`} onHeight={onHeight} />} />
       </div>
     </PendingBoxes>
   );
