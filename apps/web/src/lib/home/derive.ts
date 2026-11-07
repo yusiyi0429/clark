@@ -226,7 +226,8 @@ export function deriveWorkHome({ plan, workers, boards, notices, proposals, merg
     }),
   }));
   return {
-    period: plan?.period ?? today.slice(0, 7),
+    // 本月按今天算：本月没有 Mission 时计划回退到上个月（fallbackFrom），那些 Mission 前面加「10 月 · 」。
+    period: today.slice(0, 7),
     missions,
     other: { subSessions: other },
     waiting,
