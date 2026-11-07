@@ -1,4 +1,5 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
+import { Budget, BudgetMode } from "./budget.js";
 
 /**
  * 天枢本机程序（apps/local）的两份契约：
@@ -170,6 +171,9 @@ export const LocalSettingsPatch = Type.Object({
   paused: Type.Optional(Type.Boolean()),
 }, strict);
 
+/** 一笔钱：金额、币种（如 USD、CNY）、是不是估的。 */
+export const LocalMoney = Type.Object({ amount: Type.Number({ minimum: 0 }), currency: Type.String({ minLength: 1, maxLength: 10 }), estimated: Type.Boolean() }, strict);
+
 /**
  * 订阅的一个额度窗口（11/07 用 Claude Code 2.1.318 的 get_usage 和 rate_limit_event 实测）：
  * session 是 5 小时窗口（计划里有才有）；weekly_all 本周（所有模型）；weekly_scoped 本周某个模型的（model 是它的名字，如 Fable）。
@@ -183,34 +187,60 @@ export const LocalQuotaWindow = Type.Object({
   resetsAt: Nullable(Instant),
 }, strict);
 /**
- * 一个额度来源（现在只有本人的 Claude 订阅）。windows 只列计划里有的窗口；blockedUntil 用完时什么时候恢复（没用完为 null）；
- * plan 计划名（Claude Code 报的，如 max）；extraUsage 额外额度开没开（读不到为 null）；updatedAt 最近一次读到的时间（还没读到为 null）；
- * error 最近一次没读到的原因（读到了为 null）。账号邮箱、组织不在这里，也不出本机。
+ * 用量来源的种类（新首页设计 14.4）：subscription 订阅额度（剩多少百分比，按窗口重置）；api_balance API 余额（剩多少钱）；
+ * daily_spend 当天花了多少（TokenHub 这种按量付费的）。
+ */
+export const LocalUsageKind = Type.Union([Type.Literal("subscription"), Type.Literal("api_balance"), Type.Literal("daily_spend")]);
+/**
+ * 一个用量来源（右栏「用量」的一格，新首页设计 14.4）。来源不限几家，按这个形状往下排：
+ * - Claude 订阅（id claude）：本机向 Claude Code 读（get_usage，不发提示、不花 token），跑着的卡实时报的 rate_limit_event 也算进来；
+ * - Codex 订阅（id codex，装了 Codex 才有）：codex app-server 的 account/rateLimits/read（11/07 实测 0.159.2 约 5 秒，不花 token），按窗口长度认 5 小时和本周，
+ *   Codex 不报警戒线，只看到没到 100%；只显示，不挡卡；
+ * - TokenHub（id tokenhub:<网关主机>，kind daily_spend）：TokenHub 自己的统计（GET <网关主机>/api/tokavi/v1/log/usage，用本机存的那把钥匙，只能查这把钥匙所在的账户，
+ *   每人一个计费账户，就是本人的），amounts 是今天（本机 0 点起）、monthAmounts 是本月（1 日 0 点起）花了多少，按币种各一笔，estimated false，不换算；半小时一格；
+ * - 别的 API（MiniMax、DeepSeek 等，id api:<名字>，kind api_balance）：amounts 是余额。形状先留着，本机还没读。
+ * kind subscription 时：remainingPercent 是 100 减去用得最多的那个窗口（按模型分的周额度不算，除非只有它）；windows 只列计划里有的窗口；
+ * resetsAt 是剩得最少的那个窗口几点重置；blockedUntil 用完时几点恢复（没用完为 null）；plan 计划名（如 max、plus）；extraUsage 额外额度开没开（读不到为 null）。
+ * 别的 kind 这几项为 null、windows 为空。name 是显示名（Claude、Codex、TokenHub…）。updatedAt 最近一次读到的时间（还没读到为 null）；error 最近一次没读到的原因。
+ * 账号邮箱、组织、账户名不在这里，也不出本机。本机每 5 分钟（网页问状态时）读一次。
  */
 export const LocalQuotaSource = Type.Object({
-  source: Type.Literal("claude_subscription"),
-  plan: Nullable(Type.String({ maxLength: 40 })),
+  id: Type.String({ minLength: 1, maxLength: 80 }),
+  name: Type.String({ minLength: 1, maxLength: 40 }),
+  kind: LocalUsageKind,
+  remainingPercent: Nullable(Type.Integer({ minimum: 0, maximum: 100 })),
+  amounts: Type.Array(LocalMoney, { maxItems: 4 }),
+  monthAmounts: Type.Optional(Type.Array(LocalMoney, { maxItems: 4 })),
   windows: Type.Array(LocalQuotaWindow, { maxItems: 12 }),
+  resetsAt: Nullable(Instant),
   blockedUntil: Nullable(Instant),
+  plan: Nullable(Type.String({ maxLength: 40 })),
   extraUsage: Nullable(Type.Boolean()),
   updatedAt: Nullable(Instant),
   error: Nullable(Type.String({ maxLength: 300 })),
 }, strict);
-/** 同步给云端的额度：只带窗口（种类、模型名、百分比、状态、重置时间）、恢复时间和读到的时间；不带计划名、额外额度、出错原因。 */
+/** 同步给云端的用量：读到过的才带，不带计划名、额外额度、出错原因。 */
 export const LocalQuotaSync = Type.Object({
-  source: Type.Literal("claude_subscription"),
+  id: Type.String({ minLength: 1, maxLength: 80 }),
+  name: Type.String({ minLength: 1, maxLength: 40 }),
+  kind: LocalUsageKind,
+  remainingPercent: Nullable(Type.Integer({ minimum: 0, maximum: 100 })),
+  amounts: Type.Array(LocalMoney, { maxItems: 4 }),
+  monthAmounts: Type.Optional(Type.Array(LocalMoney, { maxItems: 4 })),
   windows: Type.Array(LocalQuotaWindow, { maxItems: 12 }),
+  resetsAt: Nullable(Instant),
   blockedUntil: Nullable(Instant),
   updatedAt: Instant,
 }, strict);
 
 /**
- * 这台电脑上 worker 能用的命令行工具（连接页「这台电脑」那组）：gh 是 GitHub，lark-cli 是飞书命令行。
+ * 这台电脑上的执行方和 worker 能用的命令行工具（右栏「这台电脑」逐项检查、连接页，新首页设计 14.4）：claude-code 是 Claude Code（照它自己报的登录，每次问状态现查），
+ * codex 是 Codex（codex login status），gh 是 GitHub，lark-cli 是飞书命令行。有一项不是 ready，网页就提醒。
  * state：ready 已登录；not_installed 没装；not_logged_in 没登录；expired 登录过期；unknown 还没查完。
- * account 登的是谁（GitHub 用户名、飞书里的名字），只在本机，不同步。checkedAt 上次查的时间（本机启动时和每 10 分钟查一次）。
+ * account 登的是谁（GitHub 用户名、飞书里的名字；Claude Code、Codex 为 null），只在本机，不同步。checkedAt 上次查的时间（Codex、gh、lark-cli 本机启动时和每 10 分钟查一次）。
  */
 export const LocalToolStatus = Type.Object({
-  kind: Type.Union([Type.Literal("gh"), Type.Literal("lark-cli")]),
+  kind: Type.Union([Type.Literal("claude-code"), Type.Literal("codex"), Type.Literal("gh"), Type.Literal("lark-cli")]),
   state: Type.Union([Type.Literal("ready"), Type.Literal("not_installed"), Type.Literal("not_logged_in"), Type.Literal("expired"), Type.Literal("unknown")]),
   version: Nullable(Type.String({ maxLength: 40 })),
   account: Nullable(Type.String({ maxLength: 100 })),
@@ -227,9 +257,9 @@ export const LocalStatusResponse = Type.Object({
   slots: LocalSlots,
   cloud: LocalCloudLinkView,
   settings: LocalSettings,
-  /** 额度（Claude 订阅）：本机向 Claude Code 读（get_usage，不发提示、不花 token），跑着的卡实时报的（rate_limit_event）也算进来。 */
-  quota: Type.Array(LocalQuotaSource, { maxItems: 4 }),
-  /** 命令行工具登没登录：gh、lark-cli。 */
+  /** 用量（见 LocalQuotaSource）：Claude 订阅、装了 Codex 时的 Codex 订阅、配了 TokenHub 时的 TokenHub 当天花费，以后还有别的 API。 */
+  quota: Type.Array(LocalQuotaSource, { maxItems: 16 }),
+  /** 这台电脑上的执行方和命令行工具登没登录（右栏「这台电脑」逐项检查）：Claude Code、Codex、gh、lark-cli。 */
   tools: Type.Array(LocalToolStatus, { maxItems: 8 }),
 }, strict);
 
@@ -400,6 +430,12 @@ export const LocalCreateSessionRequest = Type.Object({
    * 从基线分支最新的提交开出这张卡的工作树，自己开始。等着的时候还没有工作树（摘要不带 workspace）。
    */
   after: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 80 }), { maxItems: 8 })),
+  /**
+   * 这件归哪件 Task、那件 Task 此刻的预算（新首页设计 11.3、11.4）：网页把认领回执（POST /api/me/session-starts/claim）里的 taskId 和 budget 原样转来。
+   * 本机按 Task 记账：同一件 Task 的卡、规划员、验收员（随被验的卡）算在一起；taskId 为 null（不挂 Task 的专题）时只管这一个会话。
+   * 每次开工带的预算覆盖本机记着的那份（以最新的为准）。不带就是「自动」、不记账。
+   */
+  taskBudget: Type.Optional(Type.Object({ taskId: Nullable(Type.String({ minLength: 1, maxLength: 80 })), budget: Budget }, strict)),
 }, strict);
 
 /**
@@ -474,11 +510,31 @@ export const LocalBackgroundItem = Type.Object({
 }, strict);
 
 /**
- * 卡为什么停着等（不是等你回复，界面「等额度恢复 · HH:MM」）：usage_limit 是订阅额度用完了，until 是恢复的时间（读不到为 null）。
- * 停着不占位置。到点后 1 分钟本机先读一次额度，没用完就自己接着做：一轮做到一半的，进程还开着就往里说一句接着做，没开着就续上（--resume）；
- * 还没开始的照常排队开始。没开始的订阅卡在额度用完时也停在排队里、带这个原因。
+ * 卡为什么停着等（不是等你回复）。停着不占位置；没开始的也停在排队里、带这个原因。
+ * - usage_limit：订阅额度用完了（界面「等额度恢复 · HH:MM」），until 是恢复的时间（读不到为 null）。到点后 1 分钟本机先读一次额度，没用完就自己接着做：
+ *   一轮做到一半的，进程还开着就往里说一句接着做，没开着就续上（--resume）；还没开始的照常排队开始。
+ * - budget：这件 Task 的预算用完了（界面「等你加预算」），until 为 null。预算加了（PUT /v1/budgets 或下一次开工带来的）本机自己接着做，同上。
+ * - balance：TokenHub 余额不足（网关回 402），until 为 null。不重试、不自己接着做；本人说一句（比如充值以后）才接着做，停下就不再等。
+ * 本人说一句、停下、强停都不再等。
  */
-export const LocalHold = Type.Object({ reason: Type.Literal("usage_limit"), until: Nullable(Instant) }, strict);
+export const LocalHold = Type.Object({
+  reason: Type.Union([Type.Literal("usage_limit"), Type.Literal("budget"), Type.Literal("balance")]),
+  until: Nullable(Instant),
+}, strict);
+
+/** Claude Code 的思考强度（--effort）。 */
+export const LocalEffort = Type.Union([Type.Literal("low"), Type.Literal("medium"), Type.Literal("high"), Type.Literal("xhigh"), Type.Literal("max")]);
+/**
+ * 这次拉起实际怎么跑（卡行写模型和思考强度，新首页设计 11.3、11.5）：mode 是所属 Task 的预算模式（没带预算为 auto）；
+ * model 是传给 Claude Code 的模型（订阅按档位选的 opus、sonnet，网关是配置里的模型名）；effort 是思考强度（网关不传为 null）；
+ * multiAgent 是多 agent（ultracode）开没开，只有「无上限」的订阅会话开，额度到 95% 时对新的轮次关掉。每次拉起、续上时定，跑着时只有 multiAgent 会变。
+ */
+export const LocalRun = Type.Object({
+  mode: BudgetMode,
+  model: Nullable(Type.String({ maxLength: 120 })),
+  effort: Nullable(LocalEffort),
+  multiAgent: Type.Boolean(),
+}, strict);
 
 export const LocalSessionSummary = Type.Object({
   /** 同时就是 Claude Code 的 --session-id，续接用它。 */
@@ -506,8 +562,10 @@ export const LocalSessionSummary = Type.Object({
   waitingFor: Type.Optional(Type.Array(Type.String(), { minItems: 1, maxItems: 8 })),
   /** 这个会话里开过的后台任务（按开始的先后，最多留最近 50 个）；没有就不带。 */
   background: Type.Optional(Type.Array(LocalBackgroundItem, { maxItems: 50 })),
-  /** 停着等额度恢复（见 LocalHold）；没在等就不带。 */
+  /** 停着等（见 LocalHold）；没在等就不带。 */
   hold: Type.Optional(LocalHold),
+  /** 最近一次拉起时定的跑法（见 LocalRun）；还没拉起过（排着）不带。 */
+  run: Type.Optional(LocalRun),
 }, strict);
 export const LocalSessionListResponse = Type.Object({ sessions: Type.Array(LocalSessionSummary) }, strict);
 
@@ -552,13 +610,22 @@ export const LocalCreateSessionBatchResponse = Type.Object({
  * kind = review：专题开评审会（开工时带了 critics 才行），本机让会话并行起挑刺子 agent，合成「分歧和建议」存成 kind = review 的一版；
  * 这时 text 可不填，填了是本人对这次评审的补充要求。不带 kind 就是普通的一句话，text 必填。
  */
-/** 一句话带的附件（新首页 14.5）：云端存着的子会话附件，本机按 id 从 LOCAL_RUNNER_ATTACHMENT_PATH 取回，核对 sha256。 */
+/**
+ * 一句话带的附件（新首页 14.5）：云端存着的子会话附件，本机按 id 从 LOCAL_RUNNER_ATTACHMENT_PATH 取回，核对 sha256。
+ * 本机存进这件的工作区：会话的工作目录（卡的工作树、专题和规划员的专用目录）里的 .tianshu-attachments/<这句话的编号>/<文件名>
+ * （目录里放一个只写 * 的 .gitignore，不会被提交），再把路径写进给执行方的那句话（图片和 PDF 执行方能直接看）。
+ * 格式：图片 PNG、JPEG、GIF、WebP；文档 PDF、DOCX、XLSX、PPTX、CSV、TXT、MD、JSON、HTML、XML、YAML；代码和日志。每个不超过 30 MB，一句最多 20 个。
+ * 格式不支持、太大：400 validation；没连天枢、取不到、sha256 对不上：409 conflict。都是整句不发，会话里记一条 notice（attachment_failed），
+ * message 写「文件名：原因」，网页照 14.5 写在附件那一行下面。
+ */
 export const LocalAttachmentRef = Type.Object({
   id: Type.String({ format: "uuid" }),
   fileName: Type.String({ minLength: 1, maxLength: 255 }),
   size: Type.Integer({ minimum: 1 }),
   sha256: Type.String({ pattern: "^[0-9a-f]{64}$" }),
 }, strict);
+/** 存好了的附件：文件名、在本机的路径、大小（字节）。user_message 事件带上，网页画在本人气泡里。 */
+export const LocalSavedAttachment = Type.Object({ name: Type.String({ minLength: 1, maxLength: 255 }), path: Type.String(), size: Type.Integer({ minimum: 0 }) }, strict);
 export const LocalSendMessageRequest = Type.Object({
   kind: Type.Optional(Type.Union([Type.Literal("say"), Type.Literal("review")])),
   text: Type.Optional(Type.String({ minLength: 1, maxLength: 20000 })),
@@ -607,6 +674,47 @@ export const LocalQuestionAnswerRequest = Type.Object({
 
 /** POST /v1/sessions/:id/interrupt（停下，会话保留）与 /kill（强停，杀本会话进程树）的回执。 */
 export const LocalSessionActionResponse = Type.Object({ session: LocalSessionSummary }, strict);
+
+// ───────────────────────── 预算（新首页设计 11.3、11.4） ─────────────────────────
+
+/**
+ * 本机记着的一份预算和用了多少：一件 Task 一份（taskId），不挂 Task 的专题一个会话一份（sessionId）。
+ * spent 从这件 Task 第一个会话开工起算：
+ * - hours：真在跑的时长（status 是 starting、running 的时间；排队、等额度、等你批准、等你回复都不算），含规划员、验收员；
+ * - weeklyPercent：订阅本周额度（weekly_all）从开工起涨了几个百分点，整个账号的（含本人自己同时在用的），按整数涨；中途重置过就接着累加；读不到额度为 null；
+ * - money：网关这件 Task 花了多少，本机按 TokenHub 价目表一轮一轮估的（estimated true），币种照预算的币种（预算没设金额时照第一笔的），别的币种的不算；没花过为 null。
+ * ratio：设预算时各项「用了 ÷ 上限」里最大的那个；别的模式为 null。state：ok；warning 到了 80%（后面开的卡思考强度降一档、验收员用轻档，不打断）；
+ * exhausted 到了 100%（排着的不开始，跑着的收到一句「做完这一步就停，列出没做完的」，这一轮做完或 3 分钟后停下，会话都留着，hold.reason = budget）。
+ */
+export const LocalTaskBudgetView = Type.Object({
+  taskId: Nullable(Type.String({ minLength: 1, maxLength: 80 })),
+  sessionId: Nullable(Uuid),
+  budget: Budget,
+  spent: Type.Object({
+    hours: Type.Number({ minimum: 0 }),
+    weeklyPercent: Nullable(Type.Integer({ minimum: 0 })),
+    money: Nullable(LocalMoney),
+  }, strict),
+  ratio: Nullable(Type.Number({ minimum: 0 })),
+  state: Type.Union([Type.Literal("ok"), Type.Literal("warning"), Type.Literal("exhausted")]),
+  /** 第一个会话开工的时间（还没开工为 null）。 */
+  since: Nullable(Instant),
+  updatedAt: Instant,
+}, strict);
+/** GET /v1/budgets：本机记着的全部预算。 */
+export const LocalBudgetListResponse = Type.Object({ budgets: Type.Array(LocalTaskBudgetView) }, strict);
+/**
+ * PUT /v1/budgets：改一件 Task（taskId）或一个不挂 Task 的会话（sessionId）的预算，二选一，回改完的那份。
+ * 网页先把预算存到天枢（PUT /api/me/tasks/:taskId/budget），再交给本机：「加 50%」「加 50% 继续」就是带着加过的预算来一次。
+ * 马上生效：用完停着等的（hold.reason = budget）不再用完就自己接着做（进程开着的往里说一句，退出了的续上，排着的回到队里）；
+ * 收到「做完这一步就停」还没停下的，往里说一句不用停了。正跑着的进程不换模型和思考强度（下次拉起才按新的定），多 agent 在下一轮按新的模式开关。
+ * 本机还没见过这件 Task 也收下（之后开工就按它）。
+ */
+export const LocalBudgetUpdateRequest = Type.Object({
+  taskId: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
+  sessionId: Type.Optional(Uuid),
+  budget: Budget,
+}, strict);
 
 // ───────────────────────── 事件流 ─────────────────────────
 
@@ -723,7 +831,8 @@ export const LocalSessionEvent = Type.Union([
   /** hold：停着等额度恢复时带（见 LocalHold）。 */
   ev("status", { status: LocalSessionStatus, exitCode: Type.Optional(Nullable(Type.Integer())), reason: Type.Optional(Type.String()), hold: Type.Optional(LocalHold) }),
   ev("agent_info", { agent: LocalAgentKind, version: Type.String(), model: Nullable(Type.String()), permissionMode: Nullable(Type.String()) }),
-  ev("user_message", { text: Type.String(), source: Type.Union([Type.Literal("initial"), Type.Literal("web")]) }),
+  /** attachments：这句话带的附件（存好的，见 LocalAttachmentRef）；没有就不带。text 是本人说的原话，不含本机拼给执行方的附件路径。 */
+  ev("user_message", { text: Type.String(), source: Type.Union([Type.Literal("initial"), Type.Literal("web")]), attachments: Type.Optional(Type.Array(LocalSavedAttachment, { maxItems: 20 })) }),
   ev("assistant_text", { text: Type.String() }),
   ev("tool_call", { toolUseId: Type.String(), name: Type.String(), title: Type.String(), input: Type.Record(Type.String(), Type.Unknown()) }),
   ev("tool_result", { toolUseId: Type.String(), isError: Type.Boolean(), preview: Type.String() }),
@@ -741,8 +850,11 @@ export const LocalSessionEvent = Type.Union([
     text: Nullable(Type.String()),
     durationMs: Type.Integer({ minimum: 0 }),
     usage: LocalUsage,
-    /** usage_limit：订阅额度用完了（rate_limit_event rejected、usage_limit_reached、429），本机转成停着等恢复，不当成等你回复。 */
-    errorKind: Type.Optional(Type.Union([Type.Literal("auth"), Type.Literal("api"), Type.Literal("usage_limit"), Type.Literal("interrupted"), Type.Literal("other")])),
+    /**
+     * usage_limit：订阅额度用完了（rate_limit_event rejected、usage_limit_reached、429），本机转成停着等恢复，不当成等你回复。
+     * balance：网关余额不足（TokenHub 回 402），本机停着等本人（hold.reason = balance），不重试。
+     */
+    errorKind: Type.Optional(Type.Union([Type.Literal("auth"), Type.Literal("api"), Type.Literal("usage_limit"), Type.Literal("balance"), Type.Literal("interrupted"), Type.Literal("other")])),
   }),
   ev("artifact", { artifactId: Id, title: Type.String(), fileName: Type.String(), size: Type.Integer({ minimum: 0 }), sha256: Type.String() }),
   /** commit：卡在工作树里做时，交回那一刻分支上的提交（本机先把没提交的改动提交了）。 */
@@ -788,9 +900,6 @@ export const LocalMergeSync = Type.Object({
   auto: Type.Boolean(),
 }, strict);
 
-/** 一笔钱：金额、币种（如 USD、CNY）、是不是估的。 */
-export const LocalMoney = Type.Object({ amount: Type.Number({ minimum: 0 }), currency: Type.String({ minLength: 1, maxLength: 10 }), estimated: Type.Boolean() }, strict);
-
 const syncItem = <T extends string, D extends TSchema>(type: T, data: D) => Type.Object({
   /** 幂等键：<deviceId>:<sessionId>:<本机序号>。云端按它去重，重复提交返回 accepted。 */
   key: SyncKey,
@@ -819,8 +928,10 @@ export const LocalSyncItem = Type.Union([
     queuePosition: Type.Optional(Type.Integer({ minimum: 1 })),
     /** 只在 status = queued、卡在等前面的卡时带：还没合回的那几张的 cardId（派活单上「已排队 · 等前面的卡」）。少了一张就重发一条。 */
     waitingFor: Type.Optional(Type.Array(Type.String(), { minItems: 1, maxItems: 8 })),
-    /** 停着等额度恢复（见 LocalHold）：等的时候报一条带它的，恢复接着做时报的那条不带。 */
+    /** 停着等（见 LocalHold）：等的时候报一条带它的，接着做时报的那条不带。 */
     hold: Type.Optional(LocalHold),
+    /** 最近一次拉起时定的跑法（见 LocalRun，卡行写模型和思考强度）；还没拉起过不带。 */
+    run: Type.Optional(LocalRun),
     /**
      * status = idle 且执行方在问本人（AskUserQuestion）时带：原样的提问（同本机摘要的 pendingQuestion）。云端据此出「等你」，标题用原话，单选的就地答。
      * 不带的 idle 是这一轮做完停下了：云端不当成等你（新首页 9.6），卡照常交回进验收，单独开的子会话显示「已停下」。答完以后报的那条不带。
@@ -896,6 +1007,11 @@ export const LocalSyncItem = Type.Union([
   syncItem("background", LocalBackgroundItem),
   /** 卡合回的结果，见 LocalMergeSync。 */
   syncItem("merge", LocalMergeSync),
+  /**
+   * 预算变了（见 LocalTaskBudgetView）：state 变了（到 80%、到 100%、加了预算回落）和预算被改了时报一条，按报这一条的会话（这件 Task 里刚做完一轮的、或随便一个）。
+   * 云端照它画 Task 行的「预算 80%」、Task 管线里的「加 50%」和 100% 时的选项框、「等你」里那一行。同一件 Task 以 updatedAt 最新的一条为准。
+   */
+  syncItem("budget", LocalTaskBudgetView),
 ]);
 
 export const LocalSyncBatchRequest = Type.Object({
@@ -903,8 +1019,8 @@ export const LocalSyncBatchRequest = Type.Object({
   runnerVersion: Type.String(),
   /** 发这一批时本机的位置数（云端的 worker 列表和「资源」用）。 */
   slots: LocalSlots,
-  /** 本机读到的额度（读到过才带，见 LocalQuotaSync）：只有百分比、状态、重置时间，云端给手机看。 */
-  quota: Type.Optional(Type.Array(LocalQuotaSync, { maxItems: 4 })),
+  /** 本机读到的用量（读到过的才带，见 LocalQuotaSync）：订阅的百分比和窗口、TokenHub 的今天和本月，云端给手机看。 */
+  quota: Type.Optional(Type.Array(LocalQuotaSync, { maxItems: 16 })),
   /** 可以为空：本机开着、5 分钟里没别的要报时发一批空的当心跳，云端照样刷新本机的在线时间和位置数，回 accepted、rejected 都为空。 */
   items: Type.Array(LocalSyncItem, { maxItems: 50 }),
 }, strict);
@@ -962,12 +1078,19 @@ export type TLocalQuotaSource = Static<typeof LocalQuotaSource>;
 export type TLocalQuotaSync = Static<typeof LocalQuotaSync>;
 export type TLocalToolStatus = Static<typeof LocalToolStatus>;
 export type TLocalHold = Static<typeof LocalHold>;
+export type TLocalAttachmentRef = Static<typeof LocalAttachmentRef>;
+export type TLocalSavedAttachment = Static<typeof LocalSavedAttachment>;
+export type TLocalEffort = Static<typeof LocalEffort>;
+export type TLocalRun = Static<typeof LocalRun>;
+export type TLocalTaskBudgetView = Static<typeof LocalTaskBudgetView>;
+export type TLocalBudgetListResponse = Static<typeof LocalBudgetListResponse>;
+export type TLocalBudgetUpdateRequest = Static<typeof LocalBudgetUpdateRequest>;
+export type TLocalUsageKind = Static<typeof LocalUsageKind>;
 export type TLocalMoney = Static<typeof LocalMoney>;
 export type TLocalMergeSync = Static<typeof LocalMergeSync>;
 export type TLocalQuestion = Static<typeof LocalQuestion>;
 export type TLocalQuestionRequestView = Static<typeof LocalQuestionRequestView>;
 export type TLocalPermissionBrief = Static<typeof LocalPermissionBrief>;
-export type TLocalAttachmentRef = Static<typeof LocalAttachmentRef>;
 export type TLocalQuestionAnswerRequest = Static<typeof LocalQuestionAnswerRequest>;
 export type TLocalBackgroundItem = Static<typeof LocalBackgroundItem>;
 export type TLocalBackgroundItemKind = Static<typeof LocalBackgroundItemKind>;
@@ -1029,4 +1152,6 @@ export const LOCAL_RUNNER_ROUTES = {
   mergeSession: { method: "POST", path: "/v1/sessions/:id/merge", auth: true },
   answerQuestion: { method: "POST", path: "/v1/sessions/:id/questions/:requestId", auth: true },
   stopBackground: { method: "POST", path: "/v1/sessions/:id/background/:itemId/stop", auth: true },
+  listBudgets: { method: "GET", path: "/v1/budgets", auth: true },
+  putBudget: { method: "PUT", path: "/v1/budgets", auth: true },
 } as const;

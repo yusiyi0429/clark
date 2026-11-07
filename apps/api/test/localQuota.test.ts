@@ -10,7 +10,8 @@ const HOLD = { reason: "usage_limit", until: UNTIL };
 const status = (state: string, title: string, extra: Record<string, unknown> = {}) =>
   ["status", { status: state, title, agent: "claude-code", modelLabel: "订阅 · Sonnet", ...extra }] as [string, unknown];
 const usage = (inputTokens: number, outputTokens: number, costUsd: number | null) => ({ inputTokens, outputTokens, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd });
-const quota = (usedPercent: number, blockedUntil: string | null) => ({ source: "claude_subscription", blockedUntil, updatedAt: "2026-11-06T01:59:00.000Z",
+const quota = (usedPercent: number, blockedUntil: string | null) => ({ id: "claude", name: "Claude", kind: "subscription", remainingPercent: 100 - usedPercent,
+  amounts: [], resetsAt: blockedUntil, blockedUntil, updatedAt: "2026-11-06T01:59:00.000Z",
   windows: [{ kind: "session", model: null, usedPercent, state: blockedUntil ? "blocked" : "ok", resetsAt: blockedUntil },
     { kind: "weekly_scoped", model: "Fable", usedPercent: 40, state: "ok", resetsAt: "2026-11-10T00:00:00.000Z" }] });
 
@@ -92,6 +93,31 @@ describe("额度、停着等恢复、真钱花费", { timeout: 60_000 }, () => {
     } finally { await f.close(); }
   });
 
+  it("预算用完、余额不足的 hold 不算等额度恢复；budget 条目按 Task 存最新的一份，晚到的旧份不改", async () => {
+    const f = await boardFixture({}, { boardCloudAgents: false });
+    try {
+      const dev = (await f.call("POST", "/api/me/roles", { name: "开发", family: "dev", kind: "worker" })).json();
+      const id = await f.card("预算用完的卡");
+      await f.call("PATCH", `/api/me/cards/${id}`, { version: 1, roleId: dev.id, executor: "claude_code" });
+      const laptop = await computer(f);
+      const run = laptop.session({ kind: "card", cardId: id });
+      await run.send(1, status("running", "预算用完的卡"));
+      await run.send(2, status("idle", "预算用完的卡", { hold: { reason: "budget", until: null } }));
+      const body = (await f.call("GET", "/api/me/workers")).json();
+      expect([...body.running, ...body.queued, ...body.done].find((entry: { key: string }) => entry.key === `card:${id}`))
+        .toMatchObject({ queueReason: null, holdUntil: null });
+
+      const view = (state: string, hours: number, updatedAt: string) => ({ taskId: "task-open", sessionId: run.sessionId,
+        budget: { mode: "set", hours: 4, weeklyPercent: null, money: null }, spent: { hours, weeklyPercent: 12, money: null }, ratio: hours / 4, state,
+        since: "2026-11-06T01:00:00.000Z", updatedAt });
+      await run.send(3, ["budget", view("warning", 3.2, "2026-11-06T02:00:00.000Z")]);
+      await run.send(5, ["budget", view("exhausted", 4, "2026-11-06T03:00:00.000Z")]);
+      await run.send(4, ["budget", view("warning", 3.5, "2026-11-06T02:30:00.000Z")]); // 发件箱重试晚到的
+      expect(await f.t.sql("SELECT subject_key,view FROM local_task_budgets WHERE owner_id=$1", [TEST_MEMBER.personId]))
+        .toEqual([{ subject_key: "task:task-open", view: view("exhausted", 4, "2026-11-06T03:00:00.000Z") }]);
+    } finally { await f.close(); }
+  });
+
   it("花费只算网关的真钱：按币种分开，订阅的 costUsd 不算；token 都算；旧的 cost 条目（没有 source、money）照收", async () => {
     const f = await boardFixture({}, { boardCloudAgents: false });
     try {
@@ -164,6 +190,11 @@ describe("额度、停着等恢复、真钱花费", { timeout: 60_000 }, () => {
         { deviceId: laptop.device, deviceName: "我的电脑", ...quota(5, null) },
         { deviceId: desktop.device, deviceName: "另一台", ...quota(30, null) },
       ]);
+      // 改版前存下的旧形状（按 source、没有 id）不列，等本机下一次报新的。
+      await f.t.sql(`UPDATE local_devices SET quota='[{"source":"claude_subscription","windows":[],"blockedUntil":null,"updatedAt":"2026-11-06T01:00:00.000Z"}]' WHERE id=$1`,
+        [desktop.device]);
+      expect((await resources()).quota.map((entry: { deviceId: string }) => entry.deviceId)).toEqual([laptop.device]);
+      await desktop.post([], { quota: [quota(30, null)] });
       // 吊销的电脑不列。
       expect((await f.call("DELETE", `/api/me/local-devices/${desktop.device}`)).statusCode).toBe(204);
       expect((await resources()).quota.map((entry: { deviceId: string }) => entry.deviceId)).toEqual([laptop.device]);

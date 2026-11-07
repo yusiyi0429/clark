@@ -282,6 +282,15 @@ async function applyType(client: PoolClient, deps: Pick<SyncDeps, "storageDir" |
         paid ? paid.currency.toUpperCase() : null, paid?.amount ?? 0]);
       return {};
     }
+    case "budget": {
+      // 这件 Task（不挂 Task 的专题按会话）的预算用了多少：只存最新的一份（updatedAt 新的覆盖旧的），首页的预算提示以后读它。
+      const view = item.data;
+      const key = view.taskId ? `task:${view.taskId}` : `session:${view.sessionId ?? run.id}`;
+      await client.query(`INSERT INTO local_task_budgets(owner_id,subject_key,view,updated_at) VALUES($1,$2,$3::jsonb,$4)
+        ON CONFLICT (owner_id,subject_key) DO UPDATE SET view=EXCLUDED.view,updated_at=EXCLUDED.updated_at WHERE local_task_budgets.updated_at < EXCLUDED.updated_at`,
+      [owner.personId, key, JSON.stringify(view), view.updatedAt]);
+      return {};
+    }
     case "background": {
       // 会话里的子 agent、后台命令：按会话 + 本机的 id 覆盖，序号更小的晚到了不改。只给首页右栏显示，不记动静。
       const { id, kind, title, state, startedAt, finishedAt, stoppable } = item.data;

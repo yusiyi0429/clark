@@ -35,7 +35,8 @@ const costOf = (row: CostRow | undefined): TWorkerCost => !row ? ZERO
   : { inputTokens: Number(row.input ?? 0), outputTokens: Number(row.output ?? 0), costUsd: row.usd === null ? null : Number(row.usd),
     costCny: row.cny === null ? null : Number(row.cny) };
 /** 这次执行本机报了 hold（停着等额度）：返回恢复时间（读不到为 null）；没报为 undefined。 */
-export const holdOf = (run: Pick<RunRow, "state" | "hold">): string | null | undefined => run.hold && HOLD_STATES.includes(run.state) ? run.hold.until : undefined;
+export const holdOf = (run: Pick<RunRow, "state" | "hold">): string | null | undefined =>
+  run.hold?.reason === "usage_limit" && HOLD_STATES.includes(run.state) ? run.hold.until : undefined;
 /**
  * 报了 hold 的会话算「等额度恢复」：那台电脑在线，恢复时间没到（读不到算没到），到点本机自己接着做。
  * 电脑不在线时本机接不着做，算等本机上线；恢复时间过了还没接着做的，不再算等额度。
@@ -44,7 +45,7 @@ export const awaitsQuota = (until: string | null, deviceId: string, online: Set<
   online.has(deviceId) && (!until || Date.parse(until) > now.getTime());
 /** 本人报了 hold 的执行：会话 id → 恢复时间（读不到为 null）。卡的执行摘要不带 hold，按会话 id 查这里。 */
 export async function heldRuns(q: Query, ownerId: string): Promise<Map<string, string | null>> {
-  return new Map(((await q("SELECT id::text,hold->>'until' AS until FROM local_runs WHERE owner_id=$1 AND hold IS NOT NULL AND state=ANY($2::text[])",
+  return new Map(((await q("SELECT id::text,hold->>'until' AS until FROM local_runs WHERE owner_id=$1 AND hold->>'reason'='usage_limit' AND state=ANY($2::text[])",
     [ownerId, HOLD_STATES])).rows as { id: string; until: string | null }[]).map((row) => [row.id, row.until]));
 }
 /** 本机的会话在等空位（本机程序加了同时跑的上限以后会报 queued）。 */
@@ -238,8 +239,8 @@ export async function workerResources(q: Query, ownerId: string, now: Date): Pro
     running: slots.reduce((sum, slot) => sum + slot.running, 0),
     cap: slots.length ? slots.reduce((sum, slot) => sum + slot.max, 0) : null,
     cost: { today: costOf(today), month: costOf(month) },
-    // 额度：各台电脑最近一批报的（不管在不在线），没报过的不列。
-    quota: devices.flatMap((device) => (device.quota ?? []).map((quota) => ({ deviceId: device.id, deviceName: device.name, source: quota.source,
-      windows: quota.windows, blockedUntil: quota.blockedUntil, updatedAt: quota.updatedAt }))),
+    // 用量：各台电脑最近一批报的（不管在不在线），一项一条，没报过的不列；老版本本机程序报的旧形状（没有 id）不列。
+    quota: devices.flatMap((device) => (device.quota ?? []).filter((quota) => typeof quota.id === "string")
+      .map((quota) => ({ deviceId: device.id, deviceName: device.name, ...quota }))),
   };
 }

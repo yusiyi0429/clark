@@ -18,8 +18,8 @@ beforeAll(() => {
 const sub = { id: uuid, kind: "card", title: "修登录页", state: "waiting", waiting: "approval", queueReason: null, role: null, sessionId: uuid, deviceId: uuid,
   autoStart: false, updatedAt: at, merge: null, holdUntil: null };
 const resources = { devices: [], running: 0, cap: null, cost: { today: { inputTokens: 0, outputTokens: 0, costUsd: null, costCny: null },
-  month: { inputTokens: 0, outputTokens: 0, costUsd: null, costCny: null } }, quota: [{ deviceId: uuid, deviceName: "我的电脑", source: "claude_subscription",
-  windows: [{ kind: "weekly_all", model: null, usedPercent: 100, state: "blocked", resetsAt: at }], blockedUntil: at, updatedAt: at }] };
+  month: { inputTokens: 0, outputTokens: 0, costUsd: null, costCny: null } }, quota: [{ deviceId: uuid, deviceName: "我的电脑", id: "claude", name: "Claude",
+  kind: "subscription", remainingPercent: 0, amounts: [], resetsAt: at, windows: [{ kind: "weekly_all", model: null, usedPercent: 100, state: "blocked", resetsAt: at }], blockedUntil: at, updatedAt: at }] };
 
 describe("新首页契约", () => {
   it("首页：Mission → Task → 子会话，其他，等你", () => {

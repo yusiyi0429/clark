@@ -17031,8 +17031,20 @@ export interface components {
                 /** Format: uuid */
                 deviceId: string;
                 deviceName: string;
-                /** @constant */
-                source: "claude_subscription";
+                id: string;
+                name: string;
+                kind: "subscription" | "api_balance" | "daily_spend";
+                remainingPercent: number | null;
+                amounts: {
+                    amount: number;
+                    currency: string;
+                    estimated: boolean;
+                }[];
+                monthAmounts?: {
+                    amount: number;
+                    currency: string;
+                    estimated: boolean;
+                }[];
                 windows: {
                     kind: "session" | "weekly_all" | "weekly_scoped";
                     model: string | null;
@@ -17040,6 +17052,7 @@ export interface components {
                     state: "ok" | "warning" | "blocked";
                     resetsAt: string | null;
                 }[];
+                resetsAt: string | null;
                 blockedUntil: string | null;
                 /** Format: date-time */
                 updatedAt: string;
@@ -17251,8 +17264,20 @@ export interface components {
                     /** Format: uuid */
                     deviceId: string;
                     deviceName: string;
-                    /** @constant */
-                    source: "claude_subscription";
+                    id: string;
+                    name: string;
+                    kind: "subscription" | "api_balance" | "daily_spend";
+                    remainingPercent: number | null;
+                    amounts: {
+                        amount: number;
+                        currency: string;
+                        estimated: boolean;
+                    }[];
+                    monthAmounts?: {
+                        amount: number;
+                        currency: string;
+                        estimated: boolean;
+                    }[];
                     windows: {
                         kind: "session" | "weekly_all" | "weekly_scoped";
                         model: string | null;
@@ -17260,6 +17285,7 @@ export interface components {
                         state: "ok" | "warning" | "blocked";
                         resetsAt: string | null;
                     }[];
+                    resetsAt: string | null;
                     blockedUntil: string | null;
                     /** Format: date-time */
                     updatedAt: string;
@@ -17771,8 +17797,20 @@ export interface components {
                     /** Format: uuid */
                     deviceId: string;
                     deviceName: string;
-                    /** @constant */
-                    source: "claude_subscription";
+                    id: string;
+                    name: string;
+                    kind: "subscription" | "api_balance" | "daily_spend";
+                    remainingPercent: number | null;
+                    amounts: {
+                        amount: number;
+                        currency: string;
+                        estimated: boolean;
+                    }[];
+                    monthAmounts?: {
+                        amount: number;
+                        currency: string;
+                        estimated: boolean;
+                    }[];
                     windows: {
                         kind: "session" | "weekly_all" | "weekly_scoped";
                         model: string | null;
@@ -17780,6 +17818,7 @@ export interface components {
                         state: "ok" | "warning" | "blocked";
                         resetsAt: string | null;
                     }[];
+                    resetsAt: string | null;
                     blockedUntil: string | null;
                     /** Format: date-time */
                     updatedAt: string;

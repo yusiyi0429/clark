@@ -103126,8 +103126,13 @@
               "required": [
                 "deviceId",
                 "deviceName",
-                "source",
+                "id",
+                "name",
+                "kind",
+                "remainingPercent",
+                "amounts",
                 "windows",
+                "resetsAt",
                 "blockedUntil",
                 "updatedAt"
               ],
@@ -103139,11 +103144,100 @@
                 "deviceName": {
                   "type": "string"
                 },
-                "source": {
-                  "const": "claude_subscription",
+                "id": {
+                  "minLength": 1,
+                  "maxLength": 80,
                   "type": "string"
                 },
+                "name": {
+                  "minLength": 1,
+                  "maxLength": 40,
+                  "type": "string"
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "subscription",
+                      "type": "string"
+                    },
+                    {
+                      "const": "api_balance",
+                      "type": "string"
+                    },
+                    {
+                      "const": "daily_spend",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "remainingPercent": {
+                  "anyOf": [
+                    {
+                      "minimum": 0,
+                      "maximum": 100,
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "amounts": {
+                  "maxItems": 4,
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "amount",
+                      "currency",
+                      "estimated"
+                    ],
+                    "properties": {
+                      "amount": {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "currency": {
+                        "minLength": 1,
+                        "maxLength": 10,
+                        "type": "string"
+                      },
+                      "estimated": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                },
+                "monthAmounts": {
+                  "maxItems": 4,
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "amount",
+                      "currency",
+                      "estimated"
+                    ],
+                    "properties": {
+                      "amount": {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      "currency": {
+                        "minLength": 1,
+                        "maxLength": 10,
+                        "type": "string"
+                      },
+                      "estimated": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                },
                 "windows": {
+                  "maxItems": 12,
                   "type": "array",
                   "items": {
                     "additionalProperties": false,
@@ -103218,6 +103312,17 @@
                       }
                     }
                   }
+                },
+                "resetsAt": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "blockedUntil": {
                   "anyOf": [
@@ -104964,8 +105069,13 @@
                   "required": [
                     "deviceId",
                     "deviceName",
-                    "source",
+                    "id",
+                    "name",
+                    "kind",
+                    "remainingPercent",
+                    "amounts",
                     "windows",
+                    "resetsAt",
                     "blockedUntil",
                     "updatedAt"
                   ],
@@ -104977,11 +105087,100 @@
                     "deviceName": {
                       "type": "string"
                     },
-                    "source": {
-                      "const": "claude_subscription",
+                    "id": {
+                      "minLength": 1,
+                      "maxLength": 80,
                       "type": "string"
                     },
+                    "name": {
+                      "minLength": 1,
+                      "maxLength": 40,
+                      "type": "string"
+                    },
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "const": "subscription",
+                          "type": "string"
+                        },
+                        {
+                          "const": "api_balance",
+                          "type": "string"
+                        },
+                        {
+                          "const": "daily_spend",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "remainingPercent": {
+                      "anyOf": [
+                        {
+                          "minimum": 0,
+                          "maximum": 100,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "amounts": {
+                      "maxItems": 4,
+                      "type": "array",
+                      "items": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "amount",
+                          "currency",
+                          "estimated"
+                        ],
+                        "properties": {
+                          "amount": {
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "currency": {
+                            "minLength": 1,
+                            "maxLength": 10,
+                            "type": "string"
+                          },
+                          "estimated": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    },
+                    "monthAmounts": {
+                      "maxItems": 4,
+                      "type": "array",
+                      "items": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "amount",
+                          "currency",
+                          "estimated"
+                        ],
+                        "properties": {
+                          "amount": {
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "currency": {
+                            "minLength": 1,
+                            "maxLength": 10,
+                            "type": "string"
+                          },
+                          "estimated": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    },
                     "windows": {
+                      "maxItems": 12,
                       "type": "array",
                       "items": {
                         "additionalProperties": false,
@@ -105056,6 +105255,17 @@
                           }
                         }
                       }
+                    },
+                    "resetsAt": {
+                      "anyOf": [
+                        {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     },
                     "blockedUntil": {
                       "anyOf": [
@@ -109226,8 +109436,13 @@
                   "required": [
                     "deviceId",
                     "deviceName",
-                    "source",
+                    "id",
+                    "name",
+                    "kind",
+                    "remainingPercent",
+                    "amounts",
                     "windows",
+                    "resetsAt",
                     "blockedUntil",
                     "updatedAt"
                   ],
@@ -109239,11 +109454,100 @@
                     "deviceName": {
                       "type": "string"
                     },
-                    "source": {
-                      "const": "claude_subscription",
+                    "id": {
+                      "minLength": 1,
+                      "maxLength": 80,
                       "type": "string"
                     },
+                    "name": {
+                      "minLength": 1,
+                      "maxLength": 40,
+                      "type": "string"
+                    },
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "const": "subscription",
+                          "type": "string"
+                        },
+                        {
+                          "const": "api_balance",
+                          "type": "string"
+                        },
+                        {
+                          "const": "daily_spend",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "remainingPercent": {
+                      "anyOf": [
+                        {
+                          "minimum": 0,
+                          "maximum": 100,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "amounts": {
+                      "maxItems": 4,
+                      "type": "array",
+                      "items": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "amount",
+                          "currency",
+                          "estimated"
+                        ],
+                        "properties": {
+                          "amount": {
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "currency": {
+                            "minLength": 1,
+                            "maxLength": 10,
+                            "type": "string"
+                          },
+                          "estimated": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    },
+                    "monthAmounts": {
+                      "maxItems": 4,
+                      "type": "array",
+                      "items": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "amount",
+                          "currency",
+                          "estimated"
+                        ],
+                        "properties": {
+                          "amount": {
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "currency": {
+                            "minLength": 1,
+                            "maxLength": 10,
+                            "type": "string"
+                          },
+                          "estimated": {
+                            "type": "boolean"
+                          }
+                        }
+                      }
+                    },
                     "windows": {
+                      "maxItems": 12,
                       "type": "array",
                       "items": {
                         "additionalProperties": false,
@@ -109318,6 +109622,17 @@
                           }
                         }
                       }
+                    },
+                    "resetsAt": {
+                      "anyOf": [
+                        {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     },
                     "blockedUntil": {
                       "anyOf": [

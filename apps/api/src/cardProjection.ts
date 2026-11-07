@@ -59,7 +59,7 @@ function stageAndWait(row: CardRow, handbacks: HandbackRow[], runs: RunRow[]): P
   if (failStreak(handbacks) >= 2 || failedRuns) return { stage: "doing", wait: "blocked" };
   if (latest && effectiveOutcome(latest) === "fail" && !latest.returned_at) return { stage: "doing", wait: "review_failed" };
   // 停着等额度恢复的不是等你回复、也不是已暂停（契约的标记里没有额度，给 null）；停下了、异常退出了一次都算已暂停。
-  if (runs[0]?.hold && HOLD_STATES.includes(runs[0].state)) return { stage: "doing", wait: null };
+  if (runs[0]?.hold?.reason === "usage_limit" && HOLD_STATES.includes(runs[0].state)) return { stage: "doing", wait: null };
   // 一轮做完停下、没在问你（idle 不带 question）算已暂停（「已停下」），不是等你回复（新首页 9.6）。
   if (runs[0]?.state === "idle") return { stage: "doing", wait: askingQuestion(runs[0]) ? "reply" : "paused" };
   const waits: Partial<Record<RunRow["state"], TCardWait>> = { waiting_permission: "approval", exited: "paused", failed: "paused" };

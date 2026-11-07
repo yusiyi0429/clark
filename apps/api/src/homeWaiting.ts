@@ -18,8 +18,8 @@ import type { RunAsk } from "./localDevices.js";
  * 月份（复盘、之前月份还有没了结的），电脑不在线而有活在等本机，订阅额度用完有活停着。
  */
 
-/** 本机报了 hold 的会话（别名 r 指 local_runs）：不论还算不算等额度恢复（workers.ts 的 awaitsQuota），都不是等你回复。 */
-export const HELD = `(r.hold IS NOT NULL AND r.state=ANY('{${HOLD_STATES.join(",")}}'::text[]))`;
+/** 本机报了订阅额度用完（hold.reason = usage_limit）的会话（别名 r 指 local_runs）：不论还算不算等额度恢复（workers.ts 的 awaitsQuota），都不是等你回复。等预算、等余额的不在这里。 */
+export const HELD = `(COALESCE(r.hold->>'reason','')='usage_limit' AND r.state=ANY('{${HOLD_STATES.join(",")}}'::text[]))`;
 /** 「请 X 看」多久以内的还算在等你认可。 */
 const ACCEPTANCE_DAYS = 7;
 const DAY_MS = 24 * 60 * 60_000;

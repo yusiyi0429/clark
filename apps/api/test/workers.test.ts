@@ -102,7 +102,9 @@ describe("worker 列表", { timeout: 30_000 }, () => {
       expect((await internal({ authorization: "Bearer wrong", "x-owner-id": TEST_MEMBER.personId })).statusCode).toBe(401);
 
       // 答完以后这一轮做完停下（idle 不带提问）：已停下，不算等你。
-      await laptop.send({ kind: "topic", topicId: runningTopic }, [status("idle", "行业报告")]);
+      // 另开的这个会话晚一分钟开始，取「最近一次」时才稳定是它（两个会话的开始时间相同时按随机 id 决胜）。
+      const after = await laptop.send({ kind: "topic", topicId: runningTopic }, [status("idle", "行业报告")]);
+      await f.t.sql("UPDATE local_runs SET started_at=started_at+interval '1 minute' WHERE id=$1", [after]);
       expect((await f.call("GET", "/api/me/workers")).json().running.find((entry: { title: string }) => entry.title === "行业报告")).toMatchObject({ wait: "paused", needsYou: false });
     } finally { await f.close(); }
   });

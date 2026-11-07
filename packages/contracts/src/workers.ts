@@ -1,5 +1,5 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
-import { LocalQuotaWindow } from "./localRunner.js";
+import { LocalQuotaSync } from "./localRunner.js";
 import { RoleRef } from "./roles.js";
 import { CardGit, CardStage } from "./taskCardView.js";
 
@@ -94,8 +94,8 @@ export const WorkerItem = Type.Object({
  * 资源摘要：本人的设备（online 看最近一次上报的时间，10 分钟内算在线）；running 和 cap 取在线设备最近一批同步报的 slots（本机程序契约的 LocalSlots）：
  * running 是占着位置的会话数（slots.running 相加，含不带岗位的卡），cap 是同时跑的上限（slots.max 相加，没有在线设备报过为 null）；
  * 今天和本月的花费（按开工日、公司时区算，只算本机报的，云端验收的模型花费不在里面）。
- * quota：各台设备最近一批同步报的订阅额度（本机程序契约 LocalQuotaSync：窗口的种类、用了百分之几、状态、重置时间，用完时的恢复时间、读到的时间），
- * 给手机和别的电脑看；在这台电脑上，网页以本机程序 GET /v1/status 的 quota 为准。没报过的设备不列。
+ * quota：各台设备最近一批同步报的用量，一项一条（本机程序契约 LocalQuotaSync：id、名字、种类 subscription 订阅额度 / api_balance API 余额 / daily_spend 当天花费，
+ * 剩的百分比或金额、窗口、重置和恢复的时间、读到的时间），加上是哪台设备；给手机和别的电脑看，在这台电脑上网页以本机程序 GET /v1/status 的 quota 为准。没报过的设备不列。
  */
 export const WorkerResources = Type.Object({
   devices: Type.Array(Type.Object({
@@ -107,14 +107,7 @@ export const WorkerResources = Type.Object({
   running: Type.Integer({ minimum: 0 }),
   cap: Nullable(Type.Integer({ minimum: 1 })),
   cost: Type.Object({ today: WorkerCost, month: WorkerCost }, strict),
-  quota: Type.Array(Type.Object({
-    deviceId: Type.String({ format: "uuid" }),
-    deviceName: Type.String(),
-    source: Type.Literal("claude_subscription"),
-    windows: Type.Array(LocalQuotaWindow),
-    blockedUntil: Nullable(Instant),
-    updatedAt: Instant,
-  }, strict)),
+  quota: Type.Array(Type.Object({ deviceId: Type.String({ format: "uuid" }), deviceName: Type.String(), ...LocalQuotaSync.properties }, strict)),
 }, strict);
 
 /** GET /api/me/workers：进行中（等你的在前，再按开工时间）、已排队、已完成（今天，公司时区，新的在前），加资源摘要。 */
