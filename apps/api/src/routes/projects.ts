@@ -1,8 +1,9 @@
 import type { FastifyReply } from "fastify";
 import { Type } from "@sinclair/typebox";
-import { AcceptCardDraftsRequest, AcceptCardDraftsResponse, CardPlanBriefResponse, CardSplitRequestView, CreateProjectRequest, Project, ProjectBoardResponse,
+import { AcceptCardDraftsRequest, AcceptCardDraftsResponse, AnswerGoalChangeRequest, ProjectGoalChangedItem, CardPlanBriefResponse, CardSplitRequestView, CreateProjectRequest, Project, ProjectBoardResponse,
   ProjectDetailResponse, ProjectFeedResponse, ProjectGoalResponse, ProjectListResponse, ProjectPipelineResponse, UpdateProjectRequest } from "@warmap/contracts";
 import { projectPlanBrief, registerProjectCardSplit } from "../cardSplits.js";
+import { answerGoalChange, goalChangeItems } from "../goalChanges.js";
 import { ChatServiceError } from "../chatService.js";
 import { personDisplayNames } from "../people.js";
 import { createProject, goalView, linkGoal, listProjects, ownProject, projectDetail, projectGoalRows, projectOwners, projectReader, projectScope, projectView, unlinkGoal,
@@ -103,8 +104,13 @@ export function registerProjectRoutes(app: AppInstance, ctx: RouteContext): void
       const criteria = new Map(await Promise.all(goals.map(async (goal) =>
         [goal.task_id, (await boardTask(open, goal.owner_id, goal.task_id).catch(() => null))?.criteria ?? []] as const)));
       const transfers = (await decidedTransfers(q, project.id)).map((row) => transferView(row, personDisplayNames(ctx.peopleDirectory)));
-      return readProjectFeed(q, await projectOwners(q, project.id), project.id, goals, criteria, { viewer: personId, transfers });
+      // 月中 Task 改了或取消了的选项框（16.4）。
+      return readProjectFeed(q, await projectOwners(q, project.id), project.id, goals, criteria, { viewer: personId, transfers }, await goalChangeItems(q, project.id));
     }));
+
+  app.post("/api/me/projects/:projectId/goal-changes/:id", { preHandler: requireMember, schema: { params: Type.Object({ projectId: Type.String({ minLength: 1 }),
+    id: Type.String({ minLength: 1 }) }), body: AnswerGoalChangeRequest, response: { 200: ProjectGoalChangedItem } } }, async (req, reply) =>
+    handle(reply, () => answerGoalChange(q, req.person!.personId, req.params.projectId, req.params.id, req.body.answer, ctx.now())));
 
   // 没挂 Task 的项目也能拆卡（16.3）：看板、登记、规划员交代、放进看板。挂着 Task 的照旧走 /api/plan-tasks/:taskId/…。
   app.get("/api/me/projects/:projectId/board", { preHandler: requireMember, schema: { params: projectParams, response: { 200: ProjectBoardResponse } } },

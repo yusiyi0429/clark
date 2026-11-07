@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from "pg";
 import type { Query } from "./meetingStore.js";
+import { detectGoalChanges } from "./goalChanges.js";
 import { createProject, goalsOf, linkGoal, projectScope } from "./projects.js";
 
 /**
@@ -10,10 +11,11 @@ import { createProject, goalsOf, linkGoal, projectScope } from "./projects.js";
  * 2. 自动挂接：树上还没挂的 Task（本人取下来过的不算），按这个顺序找本人没归档的项目：延续关系里上一件挂的项目 → 之前月份同名、同 Mission 名的那件挂的项目
  *    → 上线迁移时按它所在 Mission 建的项目（迁移时本体没读到、后来才读到的 Task）。都找不到就留给本人在「本月」里选。
  * 敲定生效、从本体载入的 Task 都在下一次读首页时挂上；挂接时间是挂上的那一刻。
+ * 3. 月中（16.4）：本月挂上的 Task 改了或取消了，有还没做完的子会话时记一个「停掉 / 留着」的选项框（goalChanges.ts）。
  */
 
 export type SyncMission = { id: string; title: string; period: string };
-export type SyncTask = { taskId: string; missionId: string; name: string };
+export type SyncTask = { taskId: string; missionId: string; name: string; criteria?: string[] };
 
 /** 公司时区那个月的 1 号 0 点。 */
 const periodStart = (period: string) => new Date(`${period}-01T00:00:00+08:00`);
@@ -115,4 +117,5 @@ export async function syncProjects(pool: Pool, ownerId: string, missions: SyncMi
     const projectId = await autoProject(q, ownerId, task);
     if (projectId) await linkGoal(q, { projectId, ownerId, task, source: "auto", now });
   }
+  await detectGoalChanges(q, ownerId, tasks, now);
 }

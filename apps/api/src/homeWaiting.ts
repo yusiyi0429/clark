@@ -1,4 +1,5 @@
 import type { TCardTaskView, TMissionRoundSummary, TWaitingItem, TWorkerResources } from "@warmap/contracts";
+import { openGoalChanges } from "./goalChanges.js";
 import { HOLD_STATES } from "./cardProjection.js";
 import { FEISHU_NOTIFY_KIND } from "./feishu/notify.js";
 import type { Query } from "./meetingStore.js";
@@ -173,6 +174,12 @@ export async function assembleWaiting(input: WaitingInput): Promise<TWaitingItem
   for (const plan of projectPlans)
     add({ id: `plan_start:${plan.id}`, kind: "plan_start", title: `${projectName(plan.project_id)}：计划等你开工`, source: `${plan.drafts} 件等你开工`,
       at: plan.at.toISOString(), open: { kind: "project", id: plan.project_id }, projectId: plan.project_id, answer: "inline" });
+
+  // 月中 Task 改了或取消了（16.4）：还没答的「停掉 / 留着」，点开是项目对话。
+  for (const change of await openGoalChanges(q, ownerId, [...projectNames.keys()]))
+    add({ id: `goal_changed:${change.id}`, kind: "goal_changed", title: `${change.taskName}：${change.change === "cancelled" ? "Task 取消了" : "Task 改了"}`,
+      source: `${projectName(change.projectId)} · ${change.sessions.length} 个相关子会话`, at: change.at, open: { kind: "project", id: change.projectId },
+      taskId: treeTask(change.taskId), projectId: change.projectId, answer: "open" });
 
   // 会议记录：一场会一行。
   const pending = await deps.meetings(ownerId);

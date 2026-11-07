@@ -408,6 +408,49 @@ describe("项目", { timeout: 60_000 }, () => {
     } finally { await f.close(); }
   });
 
+  it("月中 Task 改了或取消了（16.4）：有还没做完的子会话时项目对话里出「停掉 / 留着」、等你一行；答一次；本体整个没读到不算取消；停掉了结排着的开工", async () => {
+    let tree: THomePlanTask[] = [...BOARD_TASKS, { taskId: "task-second", missionId: "mine", name: "第二件", doneDefinition: null, criteria: ["有结果"] }];
+    const f = await boardFixture({ planTasks: async (missions) => tree.filter((task) => missions.some((mission) => mission.id === task.missionId)) },
+      { boardCloudAgents: false });
+    try {
+      await skipBootstrap(f);
+      const { projectId } = await create(f, { name: "Chat 服务", taskId: "task-open" });
+      const card = await f.card("还在做的卡");
+      const changes = async () => (await f.call("GET", `/api/me/projects/${projectId}/feed`)).json().items.filter((item: { kind: string }) => item.kind === "goal_changed");
+      const waiting = async () => (await home(f)).waiting.filter((item: { kind: string }) => item.kind === "goal_changed");
+      expect(await waiting()).toEqual([]);
+
+      // 改了验收标准和名字：出框，快照换新，再读不重复。
+      tree = tree.map((task) => task.taskId === "task-open" ? { ...task, name: "对话质量达标（改）", criteria: [...task.criteria, "新加一条"] } : task);
+      expect(await waiting()).toMatchObject([{ title: "对话质量达标（改）：Task 改了", source: "Chat 服务 · 1 个相关子会话", open: { kind: "project", id: projectId },
+        projectId, taskId: "task-open", answer: "open" }]);
+      await home(f);
+      const [changed] = await changes();
+      expect(changed).toEqual({ kind: "goal_changed", id: changed.id, at: NOW, taskId: "task-open", taskName: "对话质量达标（改）", change: "changed",
+        sessions: [{ kind: "card", id: card, title: "还在做的卡" }], answer: null, answeredAt: null });
+      const answer = (id: string, value: string) => f.call("POST", `/api/me/projects/${projectId}/goal-changes/${id}`, { answer: value });
+      expect((await answer(changed.id, "keep")).json()).toMatchObject({ answer: "keep", answeredAt: NOW });
+      expect((await answer(changed.id, "stop")).json().code).toBe("ALREADY_ANSWERED");
+      expect((await answer(randomUUID(), "stop")).statusCode).toBe(404);
+      expect(await waiting()).toEqual([]);
+
+      // 本体整个没读到：不算取消。
+      tree = [];
+      await home(f);
+      expect(await changes()).toHaveLength(1);
+      // 同一个 Mission 别的 Task 读到了、这件没了：取消，只记一次；停掉了结还没被电脑接下的开工。
+      tree = BOARD_TASKS.filter((task) => task.taskId !== "task-open").concat({ taskId: "task-second", missionId: "mine", name: "第二件", doneDefinition: null, criteria: ["有结果"] });
+      await f.t.sql("INSERT INTO session_starts(id,owner_id,kind,card_id,plan_task_id,origin,requested_at) VALUES($1,$2,'card',$3,'task-open','web',$4)",
+        [randomUUID(), TEST_MEMBER.personId, card, BOARD_NOW]);
+      expect((await waiting()).map((item: { title: string }) => item.title)).toEqual(["对话质量达标（改）：Task 取消了"]);
+      await home(f);
+      const cancelled = (await changes()).filter((item: { change: string }) => item.change === "cancelled");
+      expect(cancelled).toHaveLength(1);
+      expect((await answer(cancelled[0].id, "stop")).json()).toMatchObject({ answer: "stop" });
+      expect(await f.t.sql("SELECT closed_at IS NOT NULL AS closed FROM session_starts WHERE card_id=$1", [card])).toEqual([{ closed: true }]);
+    } finally { await f.close(); }
+  });
+
   it("项目转交：撤回、不接（原负责人那边一行「X 没接」，项目留着）；停掉还在云端排队的子会话", async () => {
     const f = await boardFixture({}, { boardCloudAgents: false });
     try {

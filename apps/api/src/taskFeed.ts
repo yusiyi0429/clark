@@ -104,7 +104,7 @@ function transferItems(viewer: string, transfers: TProjectTransfer[]): TProjectF
  * 加每次挂上一件 Task 的分隔线（goal_linked）和转交那几行，从旧到新。criteria：每件 Task 的标准（读不到为空，不出「约定都达到」）。
  */
 export async function readProjectFeed(q: Query, owners: string[], projectId: string, goals: GoalRow[], criteria: Map<string, string[]>,
-  transfer: { viewer: string; transfers: TProjectTransfer[] } = { viewer: "", transfers: [] }): Promise<TProjectFeedResponse> {
+  transfer: { viewer: string; transfers: TProjectTransfer[] } = { viewer: "", transfers: [] }, extra: TProjectFeedItem[] = []): Promise<TProjectFeedResponse> {
   const taskIds = goals.map((goal) => goal.task_id);
   const cards = (await q(`SELECT ${FEED_CARD} FROM tasks WHERE owner_id=ANY($1::text[]) AND (plan_task_id=ANY($2::text[]) OR plan_task_id IS NULL AND project_id=$3)`,
     [owners, taskIds, projectId])).rows as FeedCard[];
@@ -115,6 +115,7 @@ export async function readProjectFeed(q: Query, owners: string[], projectId: str
     ...cardItems(cards, byCard),
     ...goals.flatMap((goal) => criteriaMetItem(cards, byCard, goal.task_id, criteria.get(goal.task_id) ?? [])),
     ...transferItems(transfer.viewer, transfer.transfers),
+    ...extra,
   ];
   return { items: items.sort(byTime) };
 }
