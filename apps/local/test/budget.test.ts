@@ -120,12 +120,14 @@ describe("TokenHub 自己报的花费", () => {
     await spend.refresh();
     expect(calls[0]).toBe(usageUrl(gateways[0]!.baseUrl, month, 1));
     expect(new URL(calls[0]!).searchParams.get("time_start")).toBe(month.toISOString());
+    const todayMoney = [{ amount: 1.75, currency: "CNY", estimated: false }];
+    const monthMoney = [{ amount: 11.75, currency: "CNY", estimated: false }, { amount: 2, currency: "USD", estimated: false }];
     expect(spend.view()).toEqual([{
-      source: "tokenhub", host: "tokenhub.corp.tokenkingos.com", account: "sunm", updatedAt: NOW.toISOString(), error: null,
-      today: [{ amount: 1.75, currency: "CNY", estimated: false }],
-      month: [{ amount: 11.75, currency: "CNY", estimated: false }, { amount: 2, currency: "USD", estimated: false }],
+      id: "tokenhub:tokenhub.corp.tokenkingos.com", name: "TokenHub", kind: "daily_spend", remainingPercent: null, amounts: todayMoney, monthAmounts: monthMoney, windows: [],
+      resetsAt: null, blockedUntil: null, plan: null, extraUsage: null, updatedAt: NOW.toISOString(), error: null,
     }]);
-    expect(spend.syncView()).toEqual([{ source: "tokenhub", today: spend.view()[0]!.today, month: spend.view()[0]!.month, updatedAt: NOW.toISOString() }]);
+    expect(JSON.stringify(spend.view())).not.toContain("sunm"); // 账户名不出本机
+    expect(spend.syncView()).toEqual([{ id: "tokenhub:tokenhub.corp.tokenkingos.com", name: "TokenHub", kind: "daily_spend", remainingPercent: null, amounts: todayMoney, monthAmounts: monthMoney, windows: [], resetsAt: null, blockedUntil: null, updatedAt: NOW.toISOString() }]);
     // 5 分钟内不再读
     const n = calls.length;
     await spend.refresh();
@@ -133,7 +135,7 @@ describe("TokenHub 自己报的花费", () => {
     // 钥匙不对：记原因，留着上次读到的
     gateways.splice(0, 3, { baseUrl: "https://tokenhub.corp.tokenkingos.com/api/anthropic", apiKey: "bad" });
     await spend.refresh(true);
-    expect(spend.view()).toEqual([expect.objectContaining({ account: null, error: "TokenHub 不认这把钥匙", today: [] })]);
+    expect(spend.view()).toEqual([expect.objectContaining({ error: "TokenHub 不认这把钥匙", amounts: [], updatedAt: null })]);
     expect(spend.syncView()).toEqual([]);
   });
 });
@@ -387,11 +389,11 @@ describe("TokenHub 余额不足和花费", { timeout: 60_000 }, () => {
       await h.waitStatus(b.id, "idle");
 
       // 状态里的 TokenHub 花费（TokenHub 自己的统计，不是本机估的）
-      const status = await until(async () => { const s = (await h.call("GET", "/v1/status")).body; return s.spend.length && s; });
-      expect(status.spend).toEqual([expect.objectContaining({ source: "tokenhub", host: "tokenhub.example.com", account: "sunm", today: [{ amount: 12.4, currency: "CNY", estimated: false }] })]);
+      const status = await until(async () => { const s = (await h.call("GET", "/v1/status")).body; return s.quota.some((q: any) => q.kind === "daily_spend") && s; });
+      expect(status.quota.find((q: any) => q.kind === "daily_spend")).toMatchObject({ id: "tokenhub:tokenhub.example.com", name: "TokenHub", amounts: [{ amount: 12.4, currency: "CNY", estimated: false }] });
       // 装了 Codex：额度里多一项 Codex 订阅
-      const withCodex = await until(async () => { const s = (await h.call("GET", "/v1/status")).body; return s.quota.some((q: any) => q.source === "codex_subscription") && s; });
-      expect(withCodex.quota.find((q: any) => q.source === "codex_subscription")).toMatchObject({ plan: "plus", windows: [{ kind: "session", usedPercent: 3 }, { kind: "weekly_all", usedPercent: 21 }] });
+      const withCodex = await until(async () => { const s = (await h.call("GET", "/v1/status")).body; return s.quota.some((q: any) => q.id === "codex") && s; });
+      expect(withCodex.quota.find((q: any) => q.id === "codex")).toMatchObject({ name: "Codex", kind: "subscription", remainingPercent: 79, plan: "plus", windows: [{ kind: "session", usedPercent: 3 }, { kind: "weekly_all", usedPercent: 21 }] });
       conforms(LocalStatusResponse, withCodex);
       conforms(LocalStatusResponse, status);
     } finally {

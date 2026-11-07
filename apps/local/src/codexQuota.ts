@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import type { TLocalQuotaSource, TLocalQuotaSync, TLocalQuotaWindow } from "@warmap/contracts";
-import { QUOTA_TTL_MS } from "./quota.js";
+import { QUOTA_TTL_MS, subscriptionSource, syncOf, type SubscriptionState } from "./quota.js";
 
 type Json = Record<string, any>;
 
@@ -13,7 +13,7 @@ const iso = (sec: unknown) => (typeof sec === "number" && sec > 0 ? new Date(sec
  * codex app-server 的 account/rateLimits/read 回执（11/07 实测 codex-cli 0.159.2：Plus 计划 primary 300 分钟、secondary 10080 分钟）→ 额度。
  * 到 100%（或 ordinaryUsageAllowed 为 false 时用得最多的那个窗口）算用完；Codex 不报警戒线，没有 warning。账号 id 不取。
  */
-export function codexQuotaFrom(res: Json): Pick<TLocalQuotaSource, "plan" | "windows" | "extraUsage" | "blockedUntil"> {
+export function codexQuotaFrom(res: Json): Pick<SubscriptionState, "plan" | "windows" | "extraUsage" | "blockedUntil"> {
   const snap = res.rateLimitsByLimitId?.codex ?? res.rateLimits ?? {};
   const windows: TLocalQuotaWindow[] = [];
   for (const w of [snap.primary, snap.secondary]) {
@@ -81,18 +81,15 @@ export function readCodexLimits(timeoutMs = 30_000): Promise<Json | null> {
 
 /** 本人 Codex 订阅的额度（新首页设计 11.1、11.5「Codex 那枚」）：只显示、同步，不挡卡（Codex 还没接成执行方）。缓存 5 分钟，只在内存里。 */
 export class CodexQuota {
-  private state: TLocalQuotaSource | null = null;
+  private state: SubscriptionState | null = null;
   private reading: Promise<void> | null = null;
   private triedAt = 0;
 
   constructor(private readonly read: () => Promise<Json | null> = readCodexLimits, private readonly now = () => Date.now()) {}
 
-  view(): TLocalQuotaSource[] { return this.state ? [this.state] : []; }
+  view(): TLocalQuotaSource[] { return this.state ? [subscriptionSource("codex", "Codex", this.state)] : []; }
 
-  syncView(): TLocalQuotaSync[] {
-    const s = this.state;
-    return s?.updatedAt ? [{ source: s.source, windows: s.windows, blockedUntil: s.blockedUntil, updatedAt: s.updatedAt }] : [];
-  }
+  syncView(): TLocalQuotaSync[] { return this.view().flatMap(syncOf); }
 
   /** 读一次：5 分钟内试过就不再读；没装 Codex 就什么都不列。从不抛错。 */
   refresh(force = false): Promise<void> {
@@ -101,10 +98,10 @@ export class CodexQuota {
     this.triedAt = this.now();
     this.reading = this.read()
       .then((res) => {
-        this.state = res ? { source: "codex_subscription", ...codexQuotaFrom(res), updatedAt: new Date(this.now()).toISOString(), error: null } : null;
+        this.state = res ? { ...codexQuotaFrom(res), updatedAt: new Date(this.now()).toISOString(), error: null } : null;
       })
       .catch((e: unknown) => {
-        const prev = this.state ?? { source: "codex_subscription" as const, plan: null, windows: [], extraUsage: null, blockedUntil: null, updatedAt: null };
+        const prev = this.state ?? { plan: null, windows: [], extraUsage: null, blockedUntil: null, updatedAt: null };
         this.state = { ...prev, error: (e instanceof Error ? e.message : String(e)).slice(0, 300) };
       })
       .finally(() => { this.reading = null; });

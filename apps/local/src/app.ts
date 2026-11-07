@@ -8,7 +8,8 @@ import { createSecretStore, type SecretStore } from "./secrets.js";
 import { ModelProfiles } from "./models.js";
 import { Folders } from "./folders.js";
 import { Outbox } from "./outbox.js";
-import { CloudLink, Settings, fetchVerifyBrief } from "./cloud.js";
+import { CloudLink, Settings, fetchAttachment, fetchVerifyBrief } from "./cloud.js";
+import { MAX_ATTACHMENT_BYTES } from "./attachments.js";
 import { SessionManager, type SessionDeps } from "./sessions.js";
 import { ClaudeSetup } from "./agents/claudeSetup.js";
 import { ClaudeCodeAdapter, readUsage, type ClaudeBin } from "./agents/claudeCode.js";
@@ -88,7 +89,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   });
   // Codex 订阅的额度：装了 Codex 才有，只显示、同步，不挡卡
   const codexQuota = new CodexQuota(opts.codexLimits ?? (() => readCodexLimits()));
-  outbox.quota = () => [...quota.syncView(), ...codexQuota.syncView()];
+  outbox.quota = () => [...quota.syncView(), ...codexQuota.syncView(), ...spend.syncView()];
   const tools = new CliTools(opts.toolsExec);
   const pricing = new GatewayPricing(baseFetch);
   // TokenHub 今天、本月花了多少：用本机存的网关钥匙读 TokenHub 自己的统计（每人一个计费账户）
@@ -101,7 +102,6 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
     }
     return out;
   }, baseFetch);
-  outbox.spend = () => spend.syncView();
   const budgets = new Budgets(config.dataDir);
   let sessionsRef: SessionManager | null = null;
   const updateTray = () => desktop.setState({ paired: tokens.count() > 0, running: sessionsRef?.activeCount() ?? 0, paused: settings.get().paused });
@@ -114,6 +114,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
     autoMerge: () => settings.get().autoMerge,
     quota, pricing, budgets, holdTiming: opts.holdTiming,
     verifyBrief: async (handbackKey) => fetchVerifyBrief(await cloud.target(), handbackKey, cloudFetch),
+    fetchAttachment: async (id) => fetchAttachment(await cloud.target(), id, cloudFetch, MAX_ATTACHMENT_BYTES),
     adapters: {
       "claude-code": new ClaudeCodeAdapter(claudeBin),
       codex: new CodexAdapter(),

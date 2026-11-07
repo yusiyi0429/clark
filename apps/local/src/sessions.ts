@@ -10,7 +10,7 @@ import {
   type TLocalSessionSummary, type TLocalSyncItem, type TLocalTopicVersionKind, type TLocalUsage, type TLocalVerdict, type TLocalVerdictCriterion,
   type TLocalWorkspace, type TLocalGitRef, type TLocalMergeResponse, type TLocalQuestionRequestView, type TLocalQuestionAnswerRequest,
   type TLocalBackgroundItem, type TLocalMergeHoldReason, type TLocalMergeSync, type TLocalModelTier, type TLocalHold, type TLocalMoney,
-  type TLocalRun, type TLocalTaskBudgetView, type TLocalBudgetUpdateRequest, type TBudgetMode,
+  type TLocalRun, type TLocalTaskBudgetView, type TLocalBudgetUpdateRequest, type TBudgetMode, type TLocalPermissionBrief, type TLocalSavedAttachment,
 } from "@warmap/contracts";
 import { readJson, writeJsonAtomic, nowIso } from "./store.js";
 import type { EventLog, EventBody } from "./eventLog.js";
@@ -18,6 +18,7 @@ import type { AgentAdapter, AgentRun, TurnModels } from "./agents/types.js";
 import type { QuotaTracker } from "./quota.js";
 import type { GatewayPricing } from "./pricing.js";
 import { Budgets, MULTI_AGENT_OFF_PERCENT, reworkRounds, runFor } from "./budget.js";
+import { AttachmentError, attachmentNote, saveAttachments, type FetchAttachment } from "./attachments.js";
 import type { ResolvedModel } from "./models.js";
 import type { ModelProfiles } from "./models.js";
 import { isInside, type Folders } from "./folders.js";
@@ -177,6 +178,8 @@ export interface SessionDeps {
   pricing?: GatewayPricing;
   /** 预算记账（新首页设计 11.3、11.4）。 */
   budgets?: Budgets;
+  /** 从天枢取回一句话的附件（新首页设计 14.5）；没连天枢时为空。 */
+  fetchAttachment?: FetchAttachment;
   /** 测试用：额度恢复后再等多久、不知道几点恢复时多久再试；预算用完后等这一轮做完最多多久、多久看一次时长。 */
   holdTiming?: { resumeAfterMs?: number; pollMs?: number; budgetGraceMs?: number; budgetTickMs?: number };
   onChange?: () => void;
@@ -212,6 +215,8 @@ export class SessionManager {
    * 否则第一次连接 401、它转去找 OAuth 再碰 403，整场会话都没有本会话 MCP（11/06 真跑 haiku 时碰到）。
    */
   private readonly launching = new Map<string, SessionRecord>();
+  /** 上次报给云端的「在问什么、在等批准哪一步」（变了才重报，见 askOf）。 */
+  private readonly sentAsk = new Map<string, string>();
   /** 上次报给云端的排队位置（位置变了才重报）。 */
   private readonly sentPosition = new Map<string, number>();
   private queueSeq = 0;
@@ -463,10 +468,29 @@ export class SessionManager {
     if (queuePosition === null) this.sentPosition.delete(rec.id);
     else this.sentPosition.set(rec.id, queuePosition);
     const waitingFor = this.waitingFor(rec);
+    const ask = this.askOf(rec);
+    this.sentAsk.set(rec.id, ask.key);
     this.sync(rec, { type: "status", data: {
       status: rec.status, title: rec.title, agent: rec.agent, modelLabel: rec.modelLabel, ...(queuePosition ? { queuePosition } : {}), ...(waitingFor.length ? { waitingFor } : {}),
-      ...(rec.hold ? { hold: rec.hold } : {}), ...(rec.run ? { run: rec.run } : {}),
+      ...(rec.hold ? { hold: rec.hold } : {}), ...(rec.run ? { run: rec.run } : {}), ...ask.data,
     } });
+  }
+
+  /**
+   * 状态条目里的「在问什么、在等批准哪一步」（云端的「等你」靠它，新首页设计 9.6）：idle 且在问本人带原样的提问；waiting_permission 带最早那条请求的
+   * 给人看的一行和越界路径（不传工具的完整输入）。规划员、验收员一样。
+   */
+  private askOf(rec: SessionRecord): { key: string; data: { question?: TLocalQuestionRequestView; permission?: TLocalPermissionBrief } } {
+    const question = rec.status === "idle" ? this.questions.get(rec.id) : undefined;
+    if (question) return { key: `q:${question.requestId}`, data: { question } };
+    const p = rec.status === "waiting_permission" ? [...(this.pending.get(rec.id)?.values() ?? [])][0] : undefined;
+    if (p) return { key: `p:${p.requestId}`, data: { permission: { requestId: p.requestId, toolName: p.toolName.slice(0, 200), title: p.title.slice(0, 500), outsidePaths: p.outsidePaths.slice(0, 20) } } };
+    return { key: "", data: {} };
+  }
+
+  /** 状态没变、在问的或在等批准的那一条变了（又来一条请求、批了一条还剩别的）：照样重报一条状态。 */
+  private resyncAsk(rec: SessionRecord) {
+    if ((this.sentAsk.get(rec.id) ?? "") !== this.askOf(rec).key) this.syncStatus(rec);
   }
 
   private must(id: string): SessionRecord {
@@ -726,6 +750,7 @@ export class SessionManager {
       case "permission_request":
         this.pending.get(rec.id)?.set(e.request.requestId, e.request);
         this.setStatus(rec, "waiting_permission");
+        this.resyncAsk(rec);
         break;
       case "permission_resolved":
         this.pending.get(rec.id)?.delete(e.requestId);
@@ -733,6 +758,7 @@ export class SessionManager {
         if (!this.pending.get(rec.id)?.size && rec.status === "waiting_permission") {
           this.setStatus(rec, this.inTurn.has(rec.id) && !this.questions.has(rec.id) ? "running" : "idle");
         }
+        this.resyncAsk(rec);
         break;
       case "agent_info":
         // 新的一轮开始（Claude Code 每轮开头都报 system/init）
@@ -747,6 +773,7 @@ export class SessionManager {
         // 执行方问本人：等你回复（不占位置），网页按问题和选项画按钮；后台子 agent 还有权限请求在等时仍是等你批准
         this.questions.set(rec.id, e.request);
         this.setStatus(rec, this.pending.get(rec.id)?.size ? "waiting_permission" : "idle");
+        this.resyncAsk(rec);
         break;
       case "question_resolved":
         this.questions.delete(rec.id);
@@ -838,20 +865,29 @@ export class SessionManager {
     const rec = this.must(id);
     if (rec.status === "queued") throw new SessionError("conflict", "还在等空位，开始后再说");
     if (rec.queuedMessage !== null && !this.starting.has(id)) throw new SessionError("conflict", "这件还没开始过（排队时取消了或没开起来），要做就重新开工");
+    if (req.kind === "review" && (rec.subject.kind !== "topic" || !rec.critics.length)) throw new SessionError("validation", "评审会只给开工时带了挑刺岗位的专题用");
+    if (req.kind !== "review" && !req.text && !req.attachments?.length) throw new SessionError("validation", "说一句要有内容");
+    // 附件（新首页设计 14.5）：先取回、存进工作区，有一个不行整句不发
+    let saved: TLocalSavedAttachment[] = [];
+    if (req.attachments?.length) {
+      try { saved = await saveAttachments(rec.cwd, req.attachments, this.d.fetchAttachment); } catch (e) {
+        if (!(e instanceof AttachmentError)) throw e;
+        // 会话里也记一笔（sha256 对不上、取不到时，执行方那边什么都没收到）
+        this.emit(rec, { type: "notice", level: "error", code: "attachment_failed", text: `附件没交给执行方：${e.message}` });
+        throw new SessionError(e.kind, e.message);
+      }
+    }
+    const note = saved.length ? attachmentNote(saved) : null;
+    const withNote = (t: string) => (note ? (t ? `${t}\n\n${note}` : note) : t);
     // 在等回答时说的一句就是回答（不选选项）
     const question = this.questions.get(id);
-    if (question && req.kind !== "review" && req.text) {
-      this.answerQuestion(id, question.requestId, { choices: question.questions.map(() => []), text: req.text });
+    if (question && req.kind !== "review" && (req.text || note)) {
+      if (saved.length) this.emit(rec, { type: "user_message", text: req.text ?? "", source: "web", attachments: saved });
+      this.answerQuestion(id, question.requestId, { choices: question.questions.map(() => []), text: withNote(req.text ?? "") });
       return { delivery: "next_step" };
     }
-    let text: string;
-    if (req.kind === "review") {
-      if (rec.subject.kind !== "topic" || !rec.critics.length) throw new SessionError("validation", "评审会只给开工时带了挑刺岗位的专题用");
-      text = reviewMessage(rec.critics, rec.lastVersion, req.text);
-    } else {
-      if (!req.text) throw new SessionError("validation", "说一句要有内容");
-      text = req.text;
-    }
+    const said = req.text ?? "";
+    const text = withNote(req.kind === "review" ? reviewMessage(rec.critics, rec.lastVersion, req.text) : said);
     // 本人说了一句：不再等（额度、预算、余额），照常发（额度还没恢复就再停着等）；余额不足的这个模型配置也放开（多半是充值了）
     if (rec.hold?.reason === "balance") this.releaseBalance(rec.modelProfileId);
     this.clearHold(rec);
@@ -871,7 +907,8 @@ export class SessionManager {
     const delivery: TLocalSendMessageResponse["delivery"] = resumed ? "resumed" : rec.status === "idle" ? "new_turn" : "next_step";
     const flip = delivery !== "next_step" ? this.syncMultiAgent(rec, run) : null;
     if (flip) await flip;
-    this.emit(rec, { type: "user_message", text, source: "web" });
+    // 事件里是本人说的原话和附件；给执行方的那句接上附件在哪
+    this.emit(rec, { type: "user_message", text: req.kind === "review" ? text : said, source: "web", ...(saved.length ? { attachments: saved } : {}) });
     run.send(text);
     if (delivery === "next_step") this.emit(rec, { type: "notice", level: "info", code: "interjection_next_step", text: "已送达，会在它下一步之前生效" });
     else this.setStatus(rec, "running");

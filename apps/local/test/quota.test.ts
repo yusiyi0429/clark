@@ -2,8 +2,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { quotaFromUsage, QuotaTracker, QUOTA_TTL_MS } from "../src/quota.js";
-import { CliTools, type ToolExec } from "../src/tools.js";
+import { quotaFromUsage, QuotaTracker, QUOTA_TTL_MS, subscriptionSource } from "../src/quota.js";
+import { CliTools, claudeTool, type ToolExec } from "../src/tools.js";
 import { costOf, evalExpr, GatewayPricing, inInterval, pricesUrl } from "../src/pricing.js";
 import { readUsage } from "../src/agents/claudeCode.js";
 import { CodexQuota, codexQuotaFrom } from "../src/codexQuota.js";
@@ -46,6 +46,9 @@ describe("额度", () => {
       ],
     });
     expect(JSON.stringify(q)).not.toContain("someone@example.com");
+    // 用量那一格：按模型分的周额度（Opus 81%）不算进剩多少，看 5 小时和本周的里用得最多的（40%）
+    expect(subscriptionSource("claude", "Claude", { ...q, updatedAt: null, error: null })).toMatchObject({ remainingPercent: 60, resetsAt: "2026-11-12T00:00:00.000Z" });
+    expect(subscriptionSource("claude", "Claude", { ...q, windows: [q.windows[2]!], updatedAt: null, error: null }).remainingPercent).toBe(19); // 只有它时才看它
     const full = quotaFromUsage({ rate_limits: { limits: [
       { kind: "session", percent: 100, severity: "critical", resets_at: "2026-11-07T10:00:00Z" },
       { kind: "weekly_all", percent: 100, resets_at: "2026-11-09T00:00:00Z" },
@@ -87,7 +90,9 @@ describe("额度", () => {
     expect(later.view()[0]!.blockedUntil).toBeNull();
     expect(later.blockedUntil()).toBe(Infinity); // 窗口用完了又不知道几点
     const [sync] = q.syncView();
-    expect(Object.keys(sync!).sort()).toEqual(["blockedUntil", "source", "updatedAt", "windows"]);
+    expect(Object.keys(sync!).sort()).toEqual(["amounts", "blockedUntil", "id", "kind", "name", "remainingPercent", "resetsAt", "updatedAt", "windows"]);
+    // 用量那一格：剩多少是 100 减去用得最多的窗口，几点重置跟着它
+    expect(sync).toMatchObject({ id: "claude", name: "Claude", kind: "subscription", remainingPercent: 0, resetsAt: "2026-11-07T09:00:00.000Z", amounts: [] });
     // 重启后照样认得（存在 quota.json）
     expect(new QuotaTracker(dir, read, () => now).blockedUntil()).toBe(resetsAt * 1000);
     // 读额度：5 分钟内读过（跑着的卡刚报过）就不再读，过了 5 分钟、force 照读
@@ -157,8 +162,9 @@ describe("Codex 订阅的额度", () => {
     const now = Date.parse("2026-11-07T08:00:00Z");
     const q = new CodexQuota(() => next(), () => now);
     await q.refresh();
-    expect(q.view()).toEqual([expect.objectContaining({ source: "codex_subscription", plan: "plus", error: null, updatedAt: "2026-11-07T08:00:00.000Z" })]);
-    expect(q.syncView()).toEqual([{ source: "codex_subscription", windows: q.view()[0]!.windows, blockedUntil: null, updatedAt: "2026-11-07T08:00:00.000Z" }]);
+    expect(q.view()).toEqual([expect.objectContaining({ id: "codex", name: "Codex", kind: "subscription", remainingPercent: 79, plan: "plus", error: null, updatedAt: "2026-11-07T08:00:00.000Z" })]);
+    expect(q.view()[0]!.resetsAt).toBe(new Date(1794383425 * 1000).toISOString()); // 剩得最少的是本周那个
+    expect(q.syncView()).toEqual([{ id: "codex", name: "Codex", kind: "subscription", remainingPercent: 79, amounts: [], windows: q.view()[0]!.windows, resetsAt: q.view()[0]!.resetsAt, blockedUntil: null, updatedAt: "2026-11-07T08:00:00.000Z" }]);
     next = async () => { throw new Error("Codex 没有响应握手"); };
     await q.refresh(true);
     expect(q.view()[0]).toMatchObject({ error: "Codex 没有响应握手", windows: q.view()[0]!.windows });
@@ -177,36 +183,48 @@ describe("命令行工具登没登录", () => {
   };
   const check = async (table: Parameters<typeof exec>[0], now = Date.parse("2026-11-07T00:00:00Z")) => {
     const t = new CliTools(exec(table), () => now);
-    expect(t.view().map((x) => x.state)).toEqual(["unknown", "unknown"]);
+    expect(t.view().map((x) => x.state)).toEqual(["unknown", "unknown", "unknown"]);
     await t.refresh();
     return t.view().map(({ checkedAt, ...rest }) => { expect(checkedAt).toBeTruthy(); return rest; });
   };
 
-  it("gh、lark-cli：没装、没登录、登着（是谁）、过期", async () => {
-    expect(await check({ "gh --version": null, "lark-cli --version": null })).toEqual([
+  it("Codex、gh、lark-cli：没装、没登录、登着（是谁）、过期；Claude Code 照它自己报的", async () => {
+    expect(claudeTool({ installed: false, loggedIn: false, version: null, loginExpiresAt: null }).state).toBe("not_installed");
+    expect(claudeTool({ installed: true, loggedIn: false, version: "2.1.318", loginExpiresAt: null }).state).toBe("not_logged_in");
+    expect(claudeTool({ installed: true, loggedIn: true, version: "2.1.318", loginExpiresAt: "2026-11-01T00:00:00Z" }, Date.parse("2026-11-07T00:00:00Z")).state).toBe("expired");
+    expect(claudeTool({ installed: true, loggedIn: true, version: "2.1.318", loginExpiresAt: null })).toMatchObject({ kind: "claude-code", state: "ready", version: "2.1.318", account: null });
+    const codexV = { stdout: "codex-cli 0.159.2\n" };
+    expect(await check({ "codex --version": null, "gh --version": null, "lark-cli --version": null })).toEqual([
+      { kind: "codex", state: "not_installed", version: null, account: null },
       { kind: "gh", state: "not_installed", version: null, account: null },
       { kind: "lark-cli", state: "not_installed", version: null, account: null },
     ]);
     const ghV = { stdout: "gh version 2.88.1 (2026-10-01)\n" };
     const larkV = { stdout: "lark-cli version 1.0.93\n" };
     expect(await check({
+      "codex --version": codexV, "codex login status": { stdout: "Logged in using ChatGPT\n" },
       "gh --version": ghV, "gh auth status --json hosts": { stdout: JSON.stringify({ hosts: { "github.com": [{ state: "success", active: true, login: "sean" }, { state: "success", active: false, login: "other" }] } }) },
       "lark-cli --version": larkV, "lark-cli auth status": { stdout: JSON.stringify({ identities: { user: { status: "valid", available: true, userName: "孙明泽", refreshExpiresAt: "2026-12-01T00:00:00Z" }, bot: { available: true } } }) },
     })).toEqual([
+      { kind: "codex", state: "ready", version: "0.159.2", account: null },
       { kind: "gh", state: "ready", version: "2.88.1", account: "sean" },
       { kind: "lark-cli", state: "ready", version: "1.0.93", account: "孙明泽" },
     ]);
     expect(await check({
+      "codex --version": codexV, "codex login status": { code: 1, stdout: "Not logged in\n" },
       "gh --version": ghV, "gh auth status --json hosts": { code: 1, stdout: JSON.stringify({ hosts: { "github.com": [{ state: "error", active: true, login: "sean" }] } }) },
       "lark-cli --version": larkV, "lark-cli auth status": { stdout: JSON.stringify({ identities: { user: { status: "valid", available: true, userName: "孙明泽", refreshExpiresAt: "2026-11-01T00:00:00Z" } } }) },
     })).toEqual([
+      { kind: "codex", state: "not_logged_in", version: "0.159.2", account: null },
       { kind: "gh", state: "expired", version: "2.88.1", account: "sean" },
       { kind: "lark-cli", state: "expired", version: "1.0.93", account: "孙明泽" },
     ]);
     expect(await check({
+      "codex --version": null,
       "gh --version": ghV, "gh auth status --json hosts": { code: 1, stdout: JSON.stringify({ hosts: {} }) },
       "lark-cli --version": larkV, "lark-cli auth status": { stdout: JSON.stringify({ identities: { bot: { available: true } } }) }, // 只有机器人身份
     })).toEqual([
+      { kind: "codex", state: "not_installed", version: null, account: null },
       { kind: "gh", state: "not_logged_in", version: "2.88.1", account: null },
       { kind: "lark-cli", state: "not_logged_in", version: "1.0.93", account: null },
     ]);
@@ -330,7 +348,7 @@ describe("额度用完：停着等，到点自动接着做", { timeout: 40_000 }
       expect(outboxItems(h.t.dataDir, a.id, "status").at(-1)).toMatchObject({ status: "idle", hold: { reason: "usage_limit", until } });
       // 状态接口里的额度：跑着的卡报的那一刻就有，订阅窗口用完、几点恢复
       const quota = (await h.call("GET", "/v1/status")).body.quota;
-      expect(quota).toEqual([expect.objectContaining({ source: "claude_subscription", blockedUntil: until })]);
+      expect(quota).toEqual([expect.objectContaining({ id: "claude", kind: "subscription", remainingPercent: 0, blockedUntil: until })]);
       expect(quota[0].windows).toContainEqual({ kind: "session", model: null, usedPercent: 100, state: "blocked", resetsAt: until });
 
       // 用完时新开的订阅卡排着等，不开始；排着时取消的就不再开始
@@ -561,9 +579,11 @@ describe("花费、档位、状态接口", { timeout: 40_000 }, () => {
     try {
       const tools = await until(async () => {
         const list = (await h.call("GET", "/v1/status")).body.tools;
-        return list[0].state !== "unknown" && list;
+        return list.find((x: any) => x.kind === "gh").state !== "unknown" && list;
       });
-      expect(tools.map((x: any) => [x.kind, x.state, x.account])).toEqual([["gh", "ready", "sean"], ["lark-cli", "not_installed", null]]);
+      // 这台电脑逐项：Claude Code（照它自己报的）、Codex、gh、飞书命令行
+      expect(tools.map((x: any) => x.kind)).toEqual(["claude-code", "codex", "gh", "lark-cli"]);
+      expect(tools.slice(1).map((x: any) => [x.kind, x.state, x.account])).toEqual([["codex", "not_installed", null], ["gh", "ready", "sean"], ["lark-cli", "not_installed", null]]);
       const status = (await h.call("GET", "/v1/status")).body;
       expect(Array.isArray(status.quota)).toBe(true);
       conforms(LocalStatusResponse, status);

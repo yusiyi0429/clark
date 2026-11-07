@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { Value } from "@sinclair/typebox/value";
 import {
   LOCAL_RUNNER_SYNC_PATH, LocalSyncBatchResponse, LocalSyncItem,
-  type TLocalSyncItem, type TLocalOutboxStatus, type TLocalSyncBatchRequest, type TLocalSlots, type TLocalQuotaSync, type TLocalSpendSync,
+  type TLocalSyncItem, type TLocalOutboxStatus, type TLocalSyncBatchRequest, type TLocalSlots, type TLocalQuotaSync,
 } from "@warmap/contracts";
 import { readJson, writeJsonAtomic, nowIso } from "./store.js";
 
@@ -34,8 +34,6 @@ export class Outbox {
   slots: () => TLocalSlots = () => ({ max: 3, running: 0, queued: 0 });
   /** 读到过的额度（只有百分比、状态、时间），每批都带（心跳也带），云端给手机看。 */
   quota: () => TLocalQuotaSync[] = () => [];
-  /** TokenHub 花了多少（读到过才带）。 */
-  spend: () => TLocalSpendSync[] = () => [];
   /** 有条目出队（云端收下或拒收）以后调：交回送到了，本机才去取验收交代。 */
   onSent: () => void = () => {};
   /** 同步回 401（令牌被拒）时调，带被拒的令牌：app 把关联标成没关联，网页会自己重新关联；条目留着，关联上以后接着发。 */
@@ -140,9 +138,8 @@ export class Outbox {
 
   private post(target: CloudTarget, items: TLocalSyncItem[]): Promise<Response> {
     const quota = this.quota();
-    const spend = this.spend();
     const body: TLocalSyncBatchRequest = {
-      deviceId: this.meta.deviceId, runnerVersion: this.meta.runnerVersion, slots: this.slots(), ...(quota.length ? { quota } : {}), ...(spend.length ? { spend } : {}), items,
+      deviceId: this.meta.deviceId, runnerVersion: this.meta.runnerVersion, slots: this.slots(), ...(quota.length ? { quota } : {}), items,
     };
     return this.fetchImpl(new URL(LOCAL_RUNNER_SYNC_PATH, target.apiBaseUrl), {
       method: "POST",

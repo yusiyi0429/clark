@@ -44,9 +44,24 @@ async function larkCli(exec: ToolExec, now: number): Promise<Omit<TLocalToolStat
   return { kind: "lark-cli", state: expired ? "expired" : "ready", version, account };
 }
 
+/** Codex：codex login status（11/07 实测 0.159.2：登着时退出码 0、写「Logged in using ChatGPT」，没登录时非 0）。 */
+async function codex(exec: ToolExec): Promise<Omit<TLocalToolStatus, "checkedAt">> {
+  const v = await exec("codex", ["--version"]);
+  if (!v) return { kind: "codex", state: "not_installed", version: null, account: null };
+  const st = await exec("codex", ["login", "status"]);
+  return { kind: "codex", state: st?.code === 0 && /logged in/i.test(st.stdout + st.stderr) ? "ready" : "not_logged_in", version: versionOf(v.stdout), account: null };
+}
+
+/** Claude Code 那一行（照它自己报的登录，状态接口每次现查）：登录到期了算过期。 */
+export function claudeTool(a: { installed: boolean; loggedIn: boolean; version: string | null; loginExpiresAt: string | null }, now = Date.now()): TLocalToolStatus {
+  const expired = a.loggedIn && a.loginExpiresAt !== null && Date.parse(a.loginExpiresAt) <= now;
+  const state = !a.installed ? "not_installed" : !a.loggedIn ? "not_logged_in" : expired ? "expired" : "ready";
+  return { kind: "claude-code", state, version: a.version, account: null, checkedAt: new Date(now).toISOString() };
+}
+
 /** worker 能用的命令行工具登没登录（连接页「这台电脑」）：本机程序启动时和每 10 分钟查一次，状态接口读缓存。 */
 export class CliTools {
-  private list: TLocalToolStatus[] = (["gh", "lark-cli"] as const).map((kind) => ({ kind, state: "unknown", version: null, account: null, checkedAt: null }));
+  private list: TLocalToolStatus[] = (["codex", "gh", "lark-cli"] as const).map((kind) => ({ kind, state: "unknown", version: null, account: null, checkedAt: null }));
   private timer: NodeJS.Timeout | null = null;
   private checking: Promise<void> | null = null;
 
@@ -55,7 +70,7 @@ export class CliTools {
   view(): TLocalToolStatus[] { return this.list; }
 
   refresh(): Promise<void> {
-    this.checking ??= Promise.all([gh(this.exec), larkCli(this.exec, this.now())])
+    this.checking ??= Promise.all([codex(this.exec), gh(this.exec), larkCli(this.exec, this.now())])
       .then((found) => { const at = nowIso(); this.list = found.map((t) => ({ ...t, checkedAt: at })); })
       .catch(() => undefined)
       .finally(() => { this.checking = null; });

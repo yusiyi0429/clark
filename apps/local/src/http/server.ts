@@ -20,6 +20,7 @@ import type { RunnerConfig } from "../config.js";
 import type { QuotaTracker } from "../quota.js";
 import type { GatewaySpend } from "../spend.js";
 import type { CodexQuota } from "../codexQuota.js";
+import { claudeTool } from "../tools.js";
 import type { CliTools } from "../tools.js";
 import { DEV_PAGE } from "./devPage.js";
 import { handleMcpMessage } from "../sessionMcp.js";
@@ -132,7 +133,7 @@ export function createServer(d: ServerDeps): http.Server {
       return {
         deviceId: d.config.deviceId, version: d.version, agents: [claude],
         activeSessions: d.sessions.activeCount(), slots: d.sessions.slots(), cloud: d.cloud.view(), settings: d.settings.get(),
-        quota: [...d.quota.view(), ...d.codexQuota.view()], tools: d.tools.view(), spend: d.spend.view(),
+        quota: [...d.quota.view(), ...d.codexQuota.view(), ...d.spend.view()], tools: [claudeTool(claude), ...d.tools.view()],
       };
     },
     installAgent: (c) => { agentMustBeClaude(c); if (!d.claude.install()) throw new HttpError(409, "conflict", "正在安装或登录中"); return { ok: true }; },

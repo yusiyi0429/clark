@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { Value } from "@sinclair/typebox/value";
-import { LOCAL_RUNNER_VERIFY_BRIEF_PATH, LocalVerifyBriefResponse, type TLocalCloudLinkView, type TLocalSettings, type TLocalSettingsPatch, type TLocalVerifyBriefResponse } from "@warmap/contracts";
+import { LOCAL_RUNNER_ATTACHMENT_PATH, LOCAL_RUNNER_VERIFY_BRIEF_PATH, LocalVerifyBriefResponse, type TLocalCloudLinkView, type TLocalSettings, type TLocalSettingsPatch, type TLocalVerifyBriefResponse } from "@warmap/contracts";
 import { readJson, writeJsonAtomic } from "./store.js";
 import type { SecretStore } from "./secrets.js";
 import type { CloudTarget, Outbox } from "./outbox.js";
@@ -72,6 +72,20 @@ export async function fetchVerifyBrief(target: CloudTarget | null, handbackKey: 
   const body = (await res.json()) as unknown;
   if (!Value.Check(LocalVerifyBriefResponse, body)) throw new Error("天枢的验收交代格式不对");
   return { kind: "ok", brief: body };
+}
+
+/**
+ * 从天枢取回一句话的一个附件（新首页设计 14.5，B 的 334f1ade）：GET <apiBaseUrl>/api/local-runner/attachments/:id，带本机的令牌，回文件原文。
+ * 说了超过 30 MB 的不往下读。sha256 由调用方按开工请求里的核对。
+ */
+export async function fetchAttachment(target: CloudTarget | null, id: string, fetchImpl: typeof fetch, maxBytes: number): Promise<{ bytes: Buffer; mimeType: string | null } | { tooLarge: true }> {
+  if (!target) throw new Error("没连天枢");
+  const url = new URL(LOCAL_RUNNER_ATTACHMENT_PATH.replace(":id", encodeURIComponent(id)), target.apiBaseUrl);
+  const res = await fetchImpl(url, { headers: { authorization: `Bearer ${target.token}` }, signal: AbortSignal.timeout(120_000) });
+  if (res.status === 404) throw new Error("天枢上没有这个附件");
+  if (!res.ok) throw new Error(res.status === 401 ? "云端令牌无效，请在天枢网页里重新连接本机" : `天枢返回 ${res.status}`);
+  if (Number(res.headers.get("content-length") ?? 0) > maxBytes) return { tooLarge: true };
+  return { bytes: Buffer.from(await res.arrayBuffer()), mimeType: res.headers.get("content-type") };
 }
 
 export class Settings {

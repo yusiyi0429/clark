@@ -1,5 +1,9 @@
 import { createHash } from "node:crypto";
-import type { TLocalMoney, TLocalSpendSource, TLocalSpendSync } from "@warmap/contracts";
+import type { TLocalMoney, TLocalQuotaSource, TLocalQuotaSync } from "@warmap/contracts";
+import { syncOf } from "./quota.js";
+
+/** 一个 TokenHub 计费账户在本机记着的样子（账户名只用来去重，不出本机）。 */
+interface Spend { host: string; account: string | null; today: TLocalMoney[]; month: TLocalMoney[]; updatedAt: string | null; error: string | null }
 
 type Json = Record<string, any>;
 
@@ -33,20 +37,22 @@ const moneyOf = (totals: Map<string, number>): TLocalMoney[] =>
  * 按币种加今天、本月的 wallet_charge。不是 TokenHub 的网关（没有这个接口）不列。读到的只在内存里，本机程序重启后重读。
  */
 export class GatewaySpend {
-  private readonly sources = new Map<string, TLocalSpendSource>();
+  private readonly sources = new Map<string, Spend>();
   private reading: Promise<void> | null = null;
   private triedAt = 0;
 
   constructor(private readonly gateways: () => Promise<Gateway[]>, private readonly fetchImpl: typeof fetch = fetch, private readonly now = () => Date.now()) {}
 
-  view(): TLocalSpendSource[] {
-    return [...this.sources.values()].slice(0, 4);
+  /** 右栏「用量」里 TokenHub 那一格（新首页设计 14.4：当天花费，按金额，不画圆圈）。 */
+  view(): TLocalQuotaSource[] {
+    return [...this.sources.values()].slice(0, 4).map((s) => ({
+      id: `tokenhub:${s.host}`, name: "TokenHub", kind: "daily_spend", remainingPercent: null, amounts: s.today, monthAmounts: s.month, windows: [],
+      resetsAt: null, blockedUntil: null, plan: null, extraUsage: null, updatedAt: s.updatedAt, error: s.error,
+    }));
   }
 
-  /** 同步给云端：读到过才带，只有今天、本月和时间。 */
-  syncView(): TLocalSpendSync[] {
-    return this.view().flatMap((s) => (s.updatedAt ? [{ source: s.source, today: s.today, month: s.month, updatedAt: s.updatedAt }] : []));
-  }
+  /** 同步给云端：读到过才带（没有主机以外的账户信息）。 */
+  syncView(): TLocalQuotaSync[] { return this.view().flatMap(syncOf); }
 
   /** 读一次。force 以外 5 分钟内试过就不再读；同时只读一次。从不抛错，没读到记在那一项的 error 里。 */
   refresh(force = false): Promise<void> {
@@ -71,10 +77,10 @@ export class GatewaySpend {
       try {
         const got = await this.read(g);
         if (!got) { this.sources.delete(id); continue; }
-        this.sources.set(id, { source: "tokenhub", host, account: got.account, today: got.today, month: got.month, updatedAt: new Date(this.now()).toISOString(), error: null });
+        this.sources.set(id, { host, account: got.account, today: got.today, month: got.month, updatedAt: new Date(this.now()).toISOString(), error: null });
       } catch (e) {
         this.sources.set(id, {
-          source: "tokenhub", host, account: prev?.account ?? null, today: prev?.today ?? [], month: prev?.month ?? [], updatedAt: prev?.updatedAt ?? null,
+          host, account: prev?.account ?? null, today: prev?.today ?? [], month: prev?.month ?? [], updatedAt: prev?.updatedAt ?? null,
           error: (e instanceof Error ? e.message : String(e)).slice(0, 300),
         });
       }

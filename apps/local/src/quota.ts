@@ -1,5 +1,38 @@
 import { join } from "node:path";
 import type { TLocalQuotaSource, TLocalQuotaSync, TLocalQuotaWindow } from "@warmap/contracts";
+
+/** 一个订阅在本机记着的样子（quota.json 里就是这个，旧文件多一个 source 字段也认）。 */
+export interface SubscriptionState {
+  plan: string | null;
+  windows: TLocalQuotaWindow[];
+  blockedUntil: string | null;
+  extraUsage: boolean | null;
+  updatedAt: string | null;
+  error: string | null;
+}
+
+/**
+ * 订阅 → 右栏「用量」的一格（新首页设计 14.4）：剩多少是 100 减去用得最多的那个窗口（按模型分的周额度不算，除非只有它），
+ * 几点重置跟着那个窗口。
+ */
+export function subscriptionSource(id: string, name: string, s: SubscriptionState): TLocalQuotaSource {
+  const main = s.windows.filter((w) => w.kind !== "weekly_scoped");
+  const pool = main.length ? main : s.windows;
+  const top = pool.length ? pool.reduce((a, b) => (b.usedPercent > a.usedPercent ? b : a)) : null;
+  return {
+    id, name, kind: "subscription", remainingPercent: top ? 100 - top.usedPercent : null, amounts: [], windows: s.windows, resetsAt: top?.resetsAt ?? null,
+    blockedUntil: s.blockedUntil, plan: s.plan, extraUsage: s.extraUsage, updatedAt: s.updatedAt, error: s.error,
+  };
+}
+
+/** 同步给云端的那一份：读到过才有，不带计划名、额外额度、出错原因。 */
+export function syncOf(q: TLocalQuotaSource): TLocalQuotaSync[] {
+  if (!q.updatedAt) return [];
+  return [{
+    id: q.id, name: q.name, kind: q.kind, remainingPercent: q.remainingPercent, amounts: q.amounts, ...(q.monthAmounts ? { monthAmounts: q.monthAmounts } : {}),
+    windows: q.windows, resetsAt: q.resetsAt, blockedUntil: q.blockedUntil, updatedAt: q.updatedAt,
+  }];
+}
 import { readJson, writeJsonAtomic } from "./store.js";
 
 type Json = Record<string, any>;
@@ -22,7 +55,7 @@ const pct = (v: unknown) => Math.min(100, Math.max(0, Math.round(Number(v) || 0)
  * get_usage 的回执（11/07 实测 Claude Code 2.1.318）→ 额度。只取 rate_limits.limits 里认得的窗口；邮箱、组织等账号信息不取。
  * 用完了几点恢复只看在用的窗口（is_active 不是 false）：没在用的模型的周额度满了不挡别的卡（真碰上了，跑着的卡会报 rejected）。
  */
-export function quotaFromUsage(resp: Json): Pick<TLocalQuotaSource, "plan" | "windows" | "extraUsage" | "blockedUntil"> {
+export function quotaFromUsage(resp: Json): Pick<SubscriptionState, "plan" | "windows" | "extraUsage" | "blockedUntil"> {
   const rl = resp.rate_limits ?? {};
   const windows: TLocalQuotaWindow[] = [];
   const blocked: string[] = [];
@@ -50,7 +83,7 @@ export function quotaFromUsage(resp: Json): Pick<TLocalQuotaSource, "plan" | "wi
  */
 export class QuotaTracker {
   private readonly file: string;
-  private state: TLocalQuotaSource | null;
+  private state: SubscriptionState | null;
   private reading: Promise<void> | null = null;
   /** 上次去读的时间（没读到也算）：读不到时不能每次轮询都起一个 Claude Code。 */
   private triedAt = 0;
@@ -58,17 +91,14 @@ export class QuotaTracker {
 
   constructor(dataDir: string, private readonly read: () => Promise<Json>, private readonly now = () => Date.now()) {
     this.file = join(dataDir, "quota.json");
-    this.state = readJson<TLocalQuotaSource | null>(this.file, null);
+    this.state = readJson<SubscriptionState | null>(this.file, null);
   }
 
   /** GET /v1/status 用：还没读过为空。 */
-  view(): TLocalQuotaSource[] { return this.state ? [this.state] : []; }
+  view(): TLocalQuotaSource[] { return this.state ? [subscriptionSource("claude", "Claude", this.state)] : []; }
 
-  /** 同步给云端用：读到过才带，只有窗口、恢复时间、读到的时间。 */
-  syncView(): TLocalQuotaSync[] {
-    const s = this.state;
-    return s?.updatedAt ? [{ source: s.source, windows: s.windows, blockedUntil: s.blockedUntil, updatedAt: s.updatedAt }] : [];
-  }
+  /** 同步给云端用：读到过才带。 */
+  syncView(): TLocalQuotaSync[] { return this.view().flatMap(syncOf); }
 
   /** 订阅额度用完、还没到恢复时间：恢复时间（毫秒；有窗口用完了又没给恢复时间为 Infinity）；没用完为 null。 */
   blockedUntil(): number | null {
@@ -108,7 +138,7 @@ export class QuotaTracker {
 
   /** 跑着的卡报的额度变化（rate_limit_event 的 rate_limit_info）：只改报到的窗口；rejected 就记下几点恢复。 */
   fromEvent(info: Json): void {
-    const s: TLocalQuotaSource = this.state ?? { source: "claude_subscription", plan: null, windows: [], blockedUntil: null, extraUsage: null, updatedAt: null, error: null };
+    const s: SubscriptionState = this.state ?? { plan: null, windows: [], blockedUntil: null, extraUsage: null, updatedAt: null, error: null };
     const windows = [...s.windows];
     const unified = info.unifiedWindows && typeof info.unifiedWindows === "object" ? info.unifiedWindows as Record<string, Json> : {};
     for (const [name, w] of Object.entries(unified)) {
@@ -127,8 +157,8 @@ export class QuotaTracker {
 
   private stamp() { return new Date(this.now()).toISOString(); }
 
-  private set(next: Omit<TLocalQuotaSource, "source">) {
-    this.state = { source: "claude_subscription", ...next };
+  private set(next: SubscriptionState) {
+    this.state = next;
     writeJsonAtomic(this.file, this.state);
     this.onChange();
   }
