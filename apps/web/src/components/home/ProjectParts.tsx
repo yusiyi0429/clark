@@ -38,7 +38,7 @@ function GoalLine({ goal, criteria: planned }: { goal: ProjectGoal; criteria: st
       <button type="button" className={h.goalMain} aria-expanded={open} onClick={() => setOpen(!open)} disabled={!criteria.length} data-testid="project-goal">
         <ChevronRight size={14} strokeWidth={1.8} aria-hidden className={h.chevron} data-open={open ? "" : undefined} />
         <span className={h.goalName}>{goal.name}</span>
-        {goal.due ? <span className={`${h.goalMeta} ${h.num}`}>{goal.due} 验收</span> : null}
+        <span className={`${h.goalMeta} ${h.num}`}>{goal.due} 验收</span>
         {criteria.length ? <span className={`${h.goalMeta} ${h.num}`}>{checked ? `标准 ${met}/${criteria.length}` : `标准 ${criteria.length} 条`}</span> : null}
       </button>
       {open ? (
@@ -52,12 +52,12 @@ function GoalLine({ goal, criteria: planned }: { goal: ProjectGoal; criteria: st
   );
 }
 
-/** 页头下的目标条：本月挂着的 Task 一件一行。criteriaOf 给计划里写的完成标准。 */
-export function GoalBar({ project, criteriaOf }: { project: Project; criteriaOf: (taskId: string) => string[] }) {
+/** 页头下的目标条：本月挂着的 Task 一件一行（标准原文是首页数据里的）。 */
+export function GoalBar({ project }: { project: Project }) {
   if (!project.current.length) return null;
   return (
     <ul className={h.goalBar} aria-label="本月目标" data-testid="goal-bar">
-      {project.current.map((goal) => <GoalLine key={goal.taskId} goal={goal} criteria={criteriaOf(goal.taskId)} />)}
+      {project.current.map((goal) => <GoalLine key={goal.taskId} goal={goal} criteria={goal.criteria} />)}
     </ul>
   );
 }
@@ -73,6 +73,6 @@ export function ProjectTrail({ project, go }: { project: Project; go: (href: str
 }
 
 /** 对话里换月份的分隔线：「11 月目标：{Task 名}」（居中，两边发丝线）。 */
-export function MonthRule({ goal }: { goal: ProjectGoal }) {
+export function MonthRule({ goal }: { goal: Pick<ProjectGoal, "period" | "name"> }) {
   return <p className={h.monthRule} role="separator" data-testid="month-rule">{Number(goal.period.slice(5))} 月目标：{goal.name}</p>;
 }

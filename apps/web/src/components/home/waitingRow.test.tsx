@@ -23,8 +23,8 @@ const NOW_ISO = new Date(NOW).toISOString();
 const at = (ms: number) => new Date(NOW + ms).toISOString();
 
 const wait = (extra: Partial<WaitingItem>): WaitingItem => ({
-  id: "w1", kind: "verdict", title: "greet 连续两次没过", source: "首页改版 · greet", at: "2026-11-07T03:00:00Z", open: { kind: "task", id: "t1" },
-  taskId: "t1", sessionId: null, deviceId: null, deviceName: null, dueAt: null, answer: "open", person: null, month: null, question: null, permission: null, ...extra,
+  id: "w1", kind: "verdict", title: "greet 连续两次没过", source: "首页改版 · greet", at: "2026-11-07T03:00:00Z", open: { kind: "project", id: "p1" },
+  taskId: "t1", projectId: "p1", sessionId: null, deviceId: null, deviceName: null, dueAt: null, answer: "open", person: null, month: null, question: null, permission: null, ...extra,
 });
 const local = (phase = "ready", sessions: unknown[] = []) => ({ runner: createMockRunner(), phase, version: null, status: null, models: [], folders: [], sessions, pairing: null, error: null,
   refresh: vi.fn(), pair: vi.fn(), unpair: vi.fn(), pickFolder: vi.fn(), setIncludePersonal: vi.fn() }) as unknown as LocalRunnerState;
@@ -125,12 +125,12 @@ describe("就地答（9.6，契约 WaitingAnswer）", () => {
     expect(waitingAnswer(item, { api: api({ workers: [worker] }), local: local(), handheld: false })).toEqual({ actions: [], away: null });
   });
 
-  it("开工（inline）：「开始」接受派活单并登记开工，「改一改」进 Task 管线；手机上也能", async () => {
+  it("开工（inline）：「开始」接受派活单并登记开工，「改一改」进项目对话；手机上也能", async () => {
     const home = api({ boards: { t1: { drafts: [{ id: "d1" }, { id: "d2" }] } } });
     const item = wait({ id: "plan_start:t1", kind: "plan_start", title: "首页改版：这样开工？", source: "2 步", answer: "inline" });
     const { actions, away } = waitingAnswer(item, { api: home, local: local("offline"), handheld: true });
     expect(away).toBeNull();
-    expect(actions).toMatchObject([{ label: "开始", done: "已开工", primary: true }, { label: "改一改", href: "/me/work/tasks/t1" }]);
+    expect(actions).toMatchObject([{ label: "开始", done: "已开工", primary: true }, { label: "改一改", href: "/me/work/projects/p1" }]);
     const start = actions[0]!;
     if (!("run" in start)) throw new Error("「开始」要能就地办");
     await start.run();

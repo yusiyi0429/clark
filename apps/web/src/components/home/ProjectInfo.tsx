@@ -2,28 +2,31 @@
 
 /**
  * 项目详情（新首页设计 16.3「详情」，替换 Task 详情的入口）。文档类页面（5.4.7）：
- * - 目标历史：每月一行，写月份、Task 名和判定（做完了「已完成」、本月的「进行中」、之前月份没了结的「未了结」）；
+ * - 目标历史：每月一行，写月份、Task 名和判定（GET /api/me/projects/:projectId 的 goals：已完成、已停止、已延续；没了结的本月写「进行中」、之前月份写「未了结」）；
  * - 文件夹：这台电脑上的哪个文件夹（连接页加过的那些），能换、能不绑；
- * - 改名、归档（归档的能取消）；
+ * - 改名、归档（归档的能取消），调 PATCH /api/me/projects/:projectId，没成写「失败 · 重试」；
  * - 当前那件 Task 的预算、完成标准、约定、交付物：沿用原来 Task 详情的样子（TaskBudget、TaskDeliverable）。
  */
 import { useEffect, useState } from "react";
+import type { TProjectGoalVerdict } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
+import { readProject } from "@/lib/board/cloud";
+import { FailedLine, failureOf, type Failure } from "@/components/work/DecisionBox";
 import type { Person, Transfer } from "@/lib/home/transfer";
 import { ArrowLeft } from "lucide-react";
 import { Dropdown } from "@heroui/react";
 import { HeroButton } from "@/components/HeroButton";
 import { TaskDeliverable } from "@/components/member/home/deliverable/TaskDeliverable";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
-import { conversationTask, projectHref, type Project } from "@/lib/home/projects";
+import { mainGoal, projectHref, type Project } from "@/lib/home/projects";
 import { useViewChrome } from "./view";
 import { TaskBudget } from "./TaskBudget";
 import { ICON } from "./StateIcon";
 import h from "@/styles/home.module.css";
 
 export type ProjectActions = {
-  rename: (id: string, name: string) => void;
-  archive: (id: string, archived: boolean) => void;
+  rename: (id: string, name: string) => Promise<void>;
+  archive: (id: string, archived: boolean) => Promise<void>;
   setFolder: (id: string, folder: string | null) => void;
   startTransfer: (project: Project, from: Person, to: Person) => void;
   updateTransfer: (projectId: string, patch: Partial<Transfer>) => void;
@@ -42,6 +45,24 @@ function usePeople(me: string): Person[] {
   return people;
 }
 
+type HistoryRow = { taskId: string; period: string; name: string; verdict: TProjectGoalVerdict };
+const VERDICT: Record<Exclude<TProjectGoalVerdict, "open">, string> = { completed: "已完成", stopped: "已停止", continued: "已延续" };
+
+/** 目标历史：项目详情接口的（月份从近到远）；读不到（接口没上）时用首页数据里挂着的，做完了算已完成。 */
+function useHistory(project: Project): HistoryRow[] {
+  const [rows, setRows] = useState<{ id: string; rows: HistoryRow[] } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void readProject(project.id).then((detail) => {
+      if (alive && detail) setRows({ id: project.id, rows: detail.goals.map((goal) => ({ taskId: goal.taskId, period: goal.period, name: goal.taskName, verdict: goal.verdict })) });
+    }, () => undefined);
+    return () => { alive = false; };
+  }, [project.id]);
+  if (rows?.id === project.id) return rows.rows;
+  return [...project.goals].sort((a, b) => b.period.localeCompare(a.period))
+    .map((goal) => ({ taskId: goal.taskId, period: goal.period, name: goal.name, verdict: goal.completedAt ? "completed" : "open" }));
+}
+
 export function ProjectInfo({ project, period, go, actions, doneDefinitionOf, me }: {
   project: Project;
   /** 这个月（YYYY-MM）。 */
@@ -57,10 +78,13 @@ export function ProjectInfo({ project, period, go, actions, doneDefinitionOf, me
   const chrome = useViewChrome();
   const local = useLocalRunner();
   const [name, setName] = useState(project.name);
-  const goal = conversationTask(project);
-  const verdict = (taskId: string, goalPeriod: string) => {
-    if (project.tasks.find((task) => task.taskId === taskId)?.completedAt) return "已完成";
-    return goalPeriod === period ? "进行中" : "未了结";
+  const [failed, setFailed] = useState<Failure | null>(null);
+  const history = useHistory(project);
+  const goal = mainGoal(project);
+  const verdict = (row: HistoryRow) => (row.verdict !== "open" ? VERDICT[row.verdict] : row.period === period ? "进行中" : "未了结");
+  const attempt = (run: () => Promise<unknown>) => {
+    const once = () => { setFailed(null); void run().catch((error) => setFailed(failureOf(error, once))); };
+    once();
   };
   const doneDefinition = goal ? doneDefinitionOf(goal.taskId) : null;
   return (
@@ -74,13 +98,13 @@ export function ProjectInfo({ project, period, go, actions, doneDefinitionOf, me
         <div className={h.infoInner}>
           <section aria-label="目标历史" className={h.section}>
             <p className={h.sectionTitle}>目标历史</p>
-            {project.goals.length ? (
+            {history.length ? (
               <ul className={h.history}>
-                {project.goals.map((entry) => (
+                {history.map((entry) => (
                   <li key={entry.taskId}>
                     <span className={h.num}>{Number(entry.period.slice(5))} 月</span>
                     <span className={h.historyName}>{entry.name}</span>
-                    <span className={h.statusChip} data-static="">{verdict(entry.taskId, entry.period)}</span>
+                    <span className={h.statusChip} data-static="">{verdict(entry)}</span>
                   </li>
                 ))}
               </ul>
@@ -102,10 +126,11 @@ export function ProjectInfo({ project, period, go, actions, doneDefinitionOf, me
           </section>
           <section aria-label="名字" className={h.section}>
             <p className={h.sectionTitle}>名字</p>
-            <form className={h.infoRow} onSubmit={(event) => { event.preventDefault(); if (name.trim() && name.trim() !== project.name) actions.rename(project.id, name.trim()); }}>
+            <form className={h.infoRow} onSubmit={(event) => { event.preventDefault(); const next = name.trim(); if (next && next !== project.name) attempt(() => actions.rename(project.id, next)); }}>
               <input className={h.projectName} value={name} maxLength={60} aria-label="项目名" onChange={(event) => setName(event.target.value)} data-testid="project-rename" />
               <HeroButton variant="tertiary" size="sm" type="submit" isDisabled={!name.trim() || name.trim() === project.name}>改名</HeroButton>
-              <HeroButton variant="ghost" size="sm" onPress={() => actions.archive(project.id, !project.archived)} data-testid="project-archive">{project.archived ? "取消归档" : "归档"}</HeroButton>
+              <HeroButton variant="ghost" size="sm" onPress={() => attempt(() => actions.archive(project.id, !project.archived))} data-testid="project-archive">{project.archived ? "取消归档" : "归档"}</HeroButton>
+              {failed ? <FailedLine inline {...failed} /> : null}
             </form>
           </section>
           <section aria-label="转交" className={h.section}>
@@ -138,7 +163,7 @@ export function ProjectInfo({ project, period, go, actions, doneDefinitionOf, me
               <p className={h.sectionTitle}>{Number(goal.period.slice(5))} 月目标 · {goal.name}</p>
               {goal.missionTitle || doneDefinition ? (
                 <div className={h.infoLead}>
-                  <span>{[goal.missionTitle, goal.due ? `${goal.due} 验收` : null].filter(Boolean).join(" · ")}</span>
+                  <span>{[goal.missionTitle, `${goal.due} 验收`].filter(Boolean).join(" · ")}</span>
                   {doneDefinition ? <p>{doneDefinition}</p> : null}
                 </div>
               ) : null}

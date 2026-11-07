@@ -3,12 +3,11 @@
 /**
  * 展示区里的两种对话：
  * - 总管线：伙伴唯一的对话（总线程），一直聊下去；页头标题是伙伴的名字（伙伴只在左栏的伙伴台上，说话时台上的它在动）。
- * - Task 管线：每件 Task 一条单独的对话。先聊计划，规划员拆好后在对话里给出开工的选项框；开了以后写开了哪几个子会话，
- *   验收行（过了、受阻、约定都达到、返工）也由网页按时间插进这条对话。B 的接口没上时是这个标签页里的假对话（lib/home/pipeline）。
+ * - 项目对话（16.3，原来的 Task 管线并进来了）：每个项目一条单独的对话。先聊计划，规划员拆好后在对话里给出开工的选项框；开了以后写开了哪几个子会话，
+ *   验收行（过了、受阻、约定都达到、返工）和挂上新 Task 的分隔线也由网页按时间插进这条对话。B 的接口没上时是这个标签页里的假对话（lib/home/pipeline）。
  * 首页输入框发来的话（outbox）进了对应的对话就发出去。
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Info } from "lucide-react";
 import type { THomePlanTask } from "@warmap/contracts";
 import type { Buddy } from "@/components/buddy/useBuddy";
 import { ChatColumn } from "@/components/rail/ChatPane";
@@ -16,22 +15,23 @@ import { PendingBoxes, PendingDock } from "@/components/work/DecisionBox";
 import { WorkTimeline, type TimedBlock } from "@/components/work/WorkTimeline";
 import type { ConversationData } from "@/conversation/useConversation";
 import { useConversation } from "@/conversation/useConversation";
-import { openPipeline } from "@/lib/board/cloud";
+import { openProjectPipeline } from "@/lib/board/cloud";
 import { usePipelineConversation } from "@/lib/home/pipeline";
 import { uploadToConversation } from "@/lib/home/attachments";
 import { useAnswerOptionFill } from "@/conversation/answerOptions";
 import { InputBar } from "./InputBar";
-import { infoHref } from "@/lib/home/derive";
-import type { HomeTask, SubSession } from "@/lib/home/types";
+import type { Project } from "@/lib/home/projects";
+import type { FeedItem, ProjectFeedItem, SubSession } from "@/lib/home/types";
 import type { WorkHomeApi } from "@/lib/home/useWorkHome";
 import { PlanDecision, PlanningLine, StartedRecord } from "./PlanDecision";
-import { feedBlocks, useTaskFeed } from "./TaskFeed";
+import { feedBlocks, useProjectFeed } from "./TaskFeed";
+import { MonthRule } from "./ProjectParts";
 import { subHref, subIcon } from "./LeftColumn";
 import { useViewChrome } from "./view";
 import { usePhone } from "./usePhone";
 import h from "@/styles/home.module.css";
 
-import { ICON, StateIcon } from "./StateIcon";
+import { StateIcon } from "./StateIcon";
 import { HeroButton } from "@/components/HeroButton";
 
 /** 首页输入框发来、等着进对话的一句。 */
@@ -139,46 +139,46 @@ export function BuddyView({ buddy, outbox, consume, onSpeaking, context = null, 
 }
 
 type PipelineProps = {
-  task: THomePlanTask;
-  home: HomeTask | null;
+  project: Project;
+  /** 挂着的本月 Task（本月计划里的，带标准）：规划员、派活单、开了哪几个子会话按件插进对话。 */
+  tasks: THomePlanTask[];
   api: WorkHomeApi;
   buddy: Buddy | null;
   outbox: Outbox;
   consume: (id: number) => void;
   go: (href: string) => void;
   onSplit: (taskId: string) => void;
-  /** 拆卡登记没成（出「拆卡失败 · 重试」）。 */
-  splitFailed?: boolean;
-  /** 这个标签页里自动开工没开起来的子会话 id：管线里那一行写「失败」加「手动开始」。 */
+  /** 拆卡登记没成的那件 Task（出「拆卡失败 · 重试」）。 */
+  splitFailed?: string | null;
+  /** 这个标签页里自动开工没开起来的子会话 id：对话里那一行写「失败」加「手动开始」。 */
   startFailed?: ReadonlySet<string>;
   onManualStart?: (subId: string) => void;
-  /** 伙伴在这条管线里说话（伙伴台换成「在说」）。 */
+  /** 伙伴在这条对话里说话（伙伴台换成「在说」）。 */
   onSpeaking: (speaking: boolean) => void;
-  /**
-   * 放在项目页里（16.3）：页头写项目名、右边是项目的 chip 和「详情」，页头下是目标条，对话最上面一条「{月} 月目标：{Task}」。
-   * 项目对话（scope project:<id>）没上以前，项目页接的是这个项目本月那件 Task 的管线。
-   */
-  project?: { name: string; trail: ReactNode; bar: ReactNode; rule: ReactNode; blocks?: TimedBlock[] };
+  /** 页头右边（项目的 chip 和「详情」）、页头下的目标条、项目自己的几块（转交，16.7）。 */
+  trail: ReactNode;
+  bar: ReactNode;
+  blocks?: TimedBlock[];
 };
 
 /**
- * B 的 Task 管线（live）用真的对话；接口确定没上（404）时是这个标签页里的假对话（lib/home/pipeline）。
+ * 项目对话（16.3）：B 的接口在（live）时是真的对话；接口确定没上（404）时是这个标签页里接本月那件 Task 的假对话（lib/home/pipeline）。
  * 还不知道（首页接口第一次还没回、或一直出错）时先空着等：不开假对话（写进去的话会丢，「拆成几步」还会真的开规划员）。
  */
 export function PipelineView(props: PipelineProps) {
   if (!props.api.known) return <div className={h.convo} aria-busy />;
-  return props.api.live ? <LivePipeline {...props} /> : <MockPipeline {...props} />;
+  return props.api.live ? <LivePipeline {...props} /> : props.tasks[0] ? <MockPipeline {...props} task={props.tasks[0]} /> : <div className={h.convo} aria-busy />;
 }
 
-/** 第一次打开时建这件 Task 的管线对话（POST /api/me/tasks/:taskId/pipeline），收发走现有对话接口，scope 是 plan-task:<taskId>。 */
+/** 第一次打开时建这个项目的对话（POST /api/me/projects/:projectId/pipeline），收发走现有对话接口，scope 是 project:<projectId>。 */
 function LivePipeline(props: PipelineProps) {
-  const { taskId } = props.task;
+  const { id, scope: fallback } = props.project;
   const [scope, setScope] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
-    void openPipeline(taskId).then((answer) => answer?.scope ?? `plan-task:${taskId}`, () => `plan-task:${taskId}`).then((next) => { if (alive) setScope(next); });
+    void openProjectPipeline(id).then((answer) => answer?.scope ?? fallback, () => fallback).then((next) => { if (alive) setScope(next); });
     return () => { alive = false; };
-  }, [taskId]);
+  }, [id, fallback]);
   return scope ? <LivePipelineBody scope={scope} {...props} /> : <div className={h.convo} aria-busy />;
 }
 
@@ -187,8 +187,8 @@ function LivePipelineBody({ scope, ...props }: PipelineProps & { scope: string }
   return <PipelineBody data={data} {...props} />;
 }
 
-function MockPipeline(props: PipelineProps) {
-  const { task, api, onSplit } = props;
+function MockPipeline({ task, ...props }: PipelineProps & { task: THomePlanTask }) {
+  const { api, onSplit } = props;
   const board = api.work.boards[task.taskId] ?? null;
   // 已经拆过、开过的 Task，假对话开头不再问「先怎么开始」（刷新后不会再拆一遍）；看板读到以前先不开对话：要先知道拆没拆过。
   const begun = !!(board?.plan || board?.drafts.length || api.work.workers.some((worker) => worker.taskId === task.taskId));
@@ -198,20 +198,25 @@ function MockPipeline(props: PipelineProps) {
 }
 
 /**
- * Task 管线的对话，网页按时间插进去的几块：规划员在拆（一行）、拆好的派活单（开工的选项框）、开了哪几个子会话、
- * 验收行（过了、受阻、约定都达到、返工，TaskFeed）。
+ * 项目对话，网页按时间插进去的几块：挂上一件 Task 的分隔线「{月} 月目标：{Task}」、每件 Task 的规划员在拆（一行）、拆好的派活单（开工的选项框）、
+ * 开了哪几个子会话，项目里开出的专题，验收行（过了、受阻、约定都达到、返工，TaskFeed）。
  */
-function PipelineBody({ data, task, home, api, buddy, outbox, consume, go, onSpeaking, onSplit, splitFailed, startFailed, onManualStart, project }: PipelineProps & { data: ConversationData }) {
+function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, onSpeaking, onSplit, splitFailed, startFailed, onManualStart, trail, bar, blocks: own }: PipelineProps & { data: ConversationData }) {
   const chrome = useViewChrome();
   const handheld = usePhone();
   const { work } = api;
   useEscStopsReply(data);
   useEffect(() => { onSpeaking(data.streaming); return () => onSpeaking(false); }, [data.streaming, onSpeaking]);
-  const board = work.boards[task.taskId] ?? null;
-  const mine = useMemo(() => work.workers.filter((worker) => worker.taskId === task.taskId), [work.workers, task.taskId]);
-  useOutbox(data, task.taskId, outbox, consume);
-  const feed = useTaskFeed(task.taskId, board, api);
-  const subs = useMemo(() => home?.subSessions ?? [], [home]);
+  useOutbox(data, project.id, outbox, consume);
+  const subs = project.subSessions;
+  // 这个项目里的 worker：挂着的 Task 下的，和项目里的子会话。
+  const mine = useMemo(() => {
+    const taskIds = new Set(project.goals.map((goal) => goal.taskId));
+    const subIds = new Set(subs.map((sub) => sub.id));
+    return work.workers.filter((worker) => (!!worker.taskId && taskIds.has(worker.taskId)) || subIds.has(worker.cardId ?? worker.topicId ?? ""));
+  }, [work.workers, project.goals, subs]);
+  const taskIds = useMemo(() => project.goals.map((goal) => goal.taskId), [project.goals]);
+  const feed = useProjectFeed(project.id, taskIds, api);
   const changed = api.refresh;
   const waiting = api.data.waiting;
   // 专题行排在第一次看到它的时候（契约没有开出时间；updatedAt 会跟着动，用它排这一行会在对话里跳）。
@@ -219,34 +224,40 @@ function PipelineBody({ data, task, home, api, buddy, outbox, consume, go, onSpe
   const firstSeen = (id: string, at: string) => { if (!seen.current.has(id)) seen.current.set(id, at); return seen.current.get(id)!; };
   const blocks = useMemo<TimedBlock[]>(() => {
     const list: TimedBlock[] = [];
-    // 换月份的分隔线排在这件 Task 的对话最前面（项目对话并起来以后按挂上的时间排）。
-    if (project?.rule) list.push({ key: `month:${task.taskId}`, at: "0000-01-01T00:00:00.000Z", node: project.rule });
-    // 项目自己的几块（转交，16.7）：按发生的时间插进对话。
-    if (project?.blocks) list.push(...project.blocks);
-    const planner = mine.find((worker) => worker.kind === "plan" && worker.state !== "done");
-    if (planner) list.push({ key: `planning:${planner.key}`, at: planner.startedAt ?? planner.requestedAt ?? new Date().toISOString(), node: <PlanningLine planner={planner} /> });
-    // 拆卡没做完（出了错才给兜底）：一行「拆卡失败」加「重试」（弱按钮）。
-    else if ((board?.plan?.status === "failed" && !board.drafts.length) || splitFailed) {
-      const plan = board?.plan?.status === "failed" ? board.plan : null;
-      list.push({ key: `plan-failed:${plan?.id ?? task.taskId}`, at: plan ? plan.finishedAt ?? plan.createdAt : new Date().toISOString(), node: (
-        <p className={h.line} data-testid="plan-failed"><StateIcon state="failed" />拆卡失败<HeroButton variant="ghost" size="sm" onPress={() => onSplit(task.taskId)}>重试</HeroButton></p>
-      ) });
+    // 挂上一件 Task：动态里的 goal_linked 按挂上的时间画分隔线；接口没上时本月那件排在对话最前面。
+    const linked = feed.filter((item): item is Extract<ProjectFeedItem, { kind: "goal_linked" }> => item.kind === "goal_linked");
+    if (api.live) for (const item of linked) list.push({ key: item.id, at: item.at, node: <MonthRule goal={{ period: item.period, name: item.taskName }} /> });
+    else if (project.current[0]) list.push({ key: `month:${project.current[0].taskId}`, at: "0000-01-01T00:00:00.000Z", node: <MonthRule goal={project.current[0]} /> });
+    if (own) list.push(...own);
+    for (const task of tasks) {
+      const board = work.boards[task.taskId] ?? null;
+      const ofTask = mine.filter((worker) => worker.taskId === task.taskId);
+      const planner = ofTask.find((worker) => worker.kind === "plan" && worker.state !== "done");
+      if (planner) list.push({ key: `planning:${planner.key}`, at: planner.startedAt ?? planner.requestedAt ?? new Date().toISOString(), node: <PlanningLine planner={planner} /> });
+      // 拆卡没做完（出了错才给兜底）：一行「拆卡失败」加「重试」（弱按钮）。
+      else if ((board?.plan?.status === "failed" && !board.drafts.length) || splitFailed === task.taskId) {
+        const plan = board?.plan?.status === "failed" ? board.plan : null;
+        list.push({ key: `plan-failed:${plan?.id ?? task.taskId}`, at: plan ? plan.finishedAt ?? plan.createdAt : new Date().toISOString(), node: (
+          <p className={h.line} data-testid="plan-failed"><StateIcon state="failed" />拆卡失败<HeroButton variant="ghost" size="sm" onPress={() => onSplit(task.taskId)}>重试</HeroButton></p>
+        ) });
+      }
+      if (board?.drafts.length) {
+        // 拆好的时候（规划员拆完同步上来那一刻）；没有记录时当作现在，放在最后。
+        list.push({ key: `plan:${board.drafts[0]!.id}`, at: board.plan?.finishedAt ?? board.plan?.createdAt ?? new Date().toISOString(), node: (
+          <PlanDecision task={task} drafts={board.drafts} roles={work.roles?.roles ?? []} handheld={handheld} onChanged={() => void changed()}
+            onSay={(text) => data.send(text, [])} />
+        ) });
+      }
+      // 开了以后：从最早那张卡开工的时候起，写开了哪几个子会话（按开工时间排在对话里）。
+      const cards = ofTask.filter((worker) => worker.kind === "card" && worker.item);
+      const first = cards.map((worker) => worker.item!.createdAt).sort()[0];
+      const ids = new Set([...(board?.cards ?? []).map((card) => card.id), ...cards.map((worker) => worker.cardId)]);
+      const cardSubs = subs.filter((sub) => sub.kind === "card" && ids.has(sub.id));
+      if (first && cardSubs.length) {
+        list.push({ key: `started:${task.taskId}`, at: first, node: <StartedRecord task={task.name} subs={[...cardSubs].sort(byTitle(cards))} onOpen={(sub: SubSession) => go(subHref(sub))} /> });
+      }
     }
-    if (board?.drafts.length) {
-      // 拆好的时候（规划员拆完同步上来那一刻）；没有记录时当作现在，放在最后。
-      list.push({ key: `plan:${board.drafts[0]!.id}`, at: board.plan?.finishedAt ?? board.plan?.createdAt ?? new Date().toISOString(), node: (
-        <PlanDecision task={task} drafts={board.drafts} roles={work.roles?.roles ?? []} handheld={handheld} onChanged={() => void changed()}
-          onSay={(text) => data.send(text, [])} />
-      ) });
-    }
-    // 开了以后：从最早那张卡开工的时候起，写开了哪几个子会话（按开工时间排在对话里）。
-    const cards = mine.filter((worker) => worker.kind === "card" && worker.item);
-    const first = cards.map((worker) => worker.item!.createdAt).sort()[0];
-    const cardSubs = subs.filter((sub) => sub.kind === "card");
-    if (first && cardSubs.length) {
-      list.push({ key: `started:${task.taskId}`, at: first, node: <StartedRecord task={task.name} subs={[...cardSubs].sort(byTitle(cards))} onOpen={(sub: SubSession) => go(subHref(sub))} /> });
-    }
-    // 管线或伙伴开的探索子会话（专题）：开出时一行（5.4.3 事件行），按开出的时间排；点了进那个子会话。
+    // 对话或伙伴开的探索子会话（专题）：开出时一行（5.4.3 事件行），按开出的时间排；点了进那个子会话。
     for (const sub of subs.filter((entry) => entry.kind === "topic")) {
       list.push({ key: `topic:${sub.id}`, at: firstSeen(sub.id, sub.updatedAt), node: (
         <p className={h.line} data-testid="topic-opened"><StateIcon {...subIcon(sub)} /><button type="button" className={h.lineLink} onClick={() => go(subHref(sub))}>{sub.title}</button></p>
@@ -259,33 +270,33 @@ function PipelineBody({ data, task, home, api, buddy, outbox, consume, go, onSpe
           {onManualStart ? <HeroButton variant="ghost" size="sm" onPress={() => onManualStart(sub.id)}>手动开始</HeroButton> : null}</p>
       ) });
     }
-    // 别的电脑上跑的子会话：等你里那一条（按本机会话对上卡、专题）带着原话，管线里照它写。
+    // 别的电脑上跑的子会话：等你里那一条（按本机会话对上卡、专题）带着原话，对话里照它写。
     const remoteAsks = new Map(subs.flatMap((sub) => {
       const item = sub.sessionId ? waiting.find((entry) => entry.sessionId === sub.sessionId && (entry.kind === "approval" || entry.kind === "question")) : undefined;
       return item ? [[sub.id, item] as const] : [];
     }));
-    list.push(...feedBlocks({ items: feed, workers: mine, taskId: task.taskId, go, onSay: (text) => data.send(text, []), onChanged: () => void changed(), remoteAsks }));
+    const checks = feed.filter((item): item is FeedItem => item.kind !== "goal_linked");
+    list.push(...feedBlocks({ items: checks, workers: mine, go, onSay: (text) => data.send(text, []), onChanged: () => void changed(), remoteAsks }));
     return list;
-  }, [mine, board, task, work.roles, handheld, changed, data, subs, go, feed, onSplit, splitFailed, startFailed, onManualStart, waiting, project?.rule, project?.blocks]);
-  const title = project?.name ?? task.name;
+  }, [mine, tasks, work.boards, work.roles, handheld, changed, data, subs, go, feed, onSplit, splitFailed, startFailed, onManualStart, waiting, own, api.live, project]);
   return (
     <PendingBoxes>
       <div className={h.convo} data-testid="pipeline-view">
-        <ChatColumn data={data} buddy={buddy} label={title} tone="light"
+        <ChatColumn data={data} buddy={buddy} label={project.name} tone="light"
           head={(
             <>
               <header className={h.viewHead} data-flush="">
                 {chrome.lead}
-                <h1 className={h.viewTitle} tabIndex={-1}>{title}</h1>
-                {project ? project.trail : <button type="button" className={h.icon} aria-label="详情" title="详情" aria-pressed={false} onClick={() => go(infoHref(task.taskId))}><Info {...ICON} /></button>}
+                <h1 className={h.viewTitle} tabIndex={-1}>{project.name}</h1>
+                {trail}
                 {chrome.trail}
               </header>
-              {project?.bar}
+              {bar}
             </>
           )}
           timeline={(current) => <WorkTimeline data={current} blocks={blocks} />}
           dock={(latest) => <PendingDock latest={latest} />}
-          input={(onHeight) => <ChatInput data={data} placeholder={`与${title}讨论…`} onHeight={onHeight} />} />
+          input={(onHeight) => <ChatInput data={data} placeholder={`与${project.name}讨论…`} onHeight={onHeight} />} />
       </div>
     </PendingBoxes>
   );

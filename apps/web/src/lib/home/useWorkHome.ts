@@ -2,8 +2,8 @@
 
 /**
  * 新首页的数据（B 的契约 workHome.ts）。GET /api/me/work-home 有就用它；B 的实现没上（404）时由现有数据照同一个形状拼（derive.ts）。
- * live：云端的新首页接口在不在。后台任务、Task 管线的验收行、自动分发、Task 管线对话、自动开工都跟着它走两条路之一。
- * 会话、看板、worker 这几份照旧读（Task 管线里的派活单、选项框、开工要用），云端接口在时只用来补本机的实时部分。
+ * live：云端的新首页接口在不在。后台任务、项目对话的验收行、自动分发、项目对话、自动开工、项目的增改都跟着它走两条路之一。
+ * 会话、看板、worker 这几份照旧读（项目对话里的派活单、选项框、开工要用），云端接口在时只用来补本机的实时部分。
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { TWorkHomeResponse } from "@warmap/contracts";
@@ -23,8 +23,8 @@ const RECHECK_MS = 60_000;
 export function useWorkHome() {
   const planHook = useHomePlan();
   const [remote, setRemote] = useState<TWorkHomeResponse | null>(null);
-  // 树上之前月份没了结的 Task 也读看板（派活单、卡、认领开工都要用）。
-  const treeTaskIds = useMemo(() => remote?.missions.flatMap((mission) => mission.tasks.map((task) => task.taskId)) ?? [], [remote]);
+  // 项目上挂着的之前月份没了结的 Task 也读看板（派活单、卡、认领开工都要用）。
+  const treeTaskIds = useMemo(() => remote?.projects.flatMap((project) => project.goals.map((goal) => goal.taskId)) ?? [], [remote]);
   const work = useWork({ planHook, extraTaskIds: treeTaskIds });
   const member = useMemberHome();
   const merges = useMergeIssues();

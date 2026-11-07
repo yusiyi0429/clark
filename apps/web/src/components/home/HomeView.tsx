@@ -4,8 +4,8 @@
  * 首页（新首页设计 5.4.4）：页头「11 月 7 日 周六」，从上到下是 等你（有才画）→ 各 Mission 的 Task → 输入框；区块之间 32，Mission 之间 16。
  * - 等你：一件两行（原话；来源 · 哪件 Task · 截止）。短的（批准、单选、合回、开工、岗位建议）在行尾就地答，推荐的那个是次按钮、另一个弱按钮；
  *   答完这一行变成状态词（「已批准」）停 2 秒再收走，不弹 toast。行首不放强调色点（组头已经写了「等你」）。
- * - Task 现状行：和左栏 Task 行同一个样子；小字「等你 1 · 进行中 2 · 已排队 1」（等你用计数样式），行尾「11/20 验收」。点了进 Task 管线。
- * - 输入框：InputBar（14.5）；框下面「发给」默认自动（打字停下 300ms 后问一次分发接口，只认最后一次），也能选伙伴或某件 Task；发出去以后跳进那条对话。
+ * - 本月（16.4）：按 Mission 分组列这个月的 Task，行尾「11/20 验收」，再是项目名 chip（点了进项目）；没挂上的是「挂到…」（选现有项目或新建）。
+ * - 输入框：InputBar（14.5）；框下面「发给」默认自动（打字停下 300ms 后问一次分发接口，只认最后一次），也能选伙伴或某个项目；发出去以后跳进那条对话。
  */
 import { useEffect, useRef, useState } from "react";
 import { Dropdown, Header } from "@heroui/react";
@@ -13,7 +13,7 @@ import { Check, ChevronDown, Plus } from "lucide-react";
 import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import type { Buddy } from "@/components/buddy/useBuddy";
 import { HeroButton } from "@/components/HeroButton";
-import { FailedLine } from "@/components/work/DecisionBox";
+import { FailedLine, failureOf, type Failure } from "@/components/work/DecisionBox";
 import { localOptions, oneTap } from "@/components/work/decisions";
 import { InputBar } from "./InputBar";
 import { acceptDrafts } from "@/lib/board/cloud";
@@ -21,11 +21,11 @@ import { useLocalRunner, type LocalRunnerState } from "@/lib/local/LocalRunnerPr
 import { decideProposal } from "@/lib/team/roles";
 import { canCommandHere, decide } from "@/lib/work/actions";
 import { mergeCard } from "@/lib/work/merge";
-import { gateLabel, missionHref, statusParts, taskHref, waitingHref } from "@/lib/home/derive";
-import { conversationTask, projectHref, type Project } from "@/lib/home/projects";
+import { gateLabel, missionHref, taskHref, waitingHref } from "@/lib/home/derive";
+import { projectHref, type Project } from "@/lib/home/projects";
 import type { ProjectsApi } from "./useProjects";
 import { relativeDayTime } from "@/lib/companyTime";
-import type { RouteTarget, WaitingItem, WorkHomeData } from "@/lib/home/types";
+import type { HomeMonthMission, RouteTarget, WaitingItem, WorkHomeData } from "@/lib/home/types";
 import type { WorkHomeApi } from "@/lib/home/useWorkHome";
 import { ICON } from "./StateIcon";
 import { usePhone } from "./usePhone";
@@ -47,8 +47,7 @@ export function HomeView({ data, api, buddy, today, go, route, onSend, projects 
   projects: ProjectsApi;
 }) {
   // 「本月」（16.4）：这个月的 Task 按 Mission 分组；之前月份没了结的在各自的项目里，不在这里列。
-  const missions = data.missions.filter((mission) => mission.tasks.length && mission.period === data.period);
-  const projectOf = (taskId: string) => projects.all.find((project) => project.tasks.some((task) => task.taskId === taskId)) ?? null;
+  const missions = data.month.missions.filter((mission) => mission.tasks.length && mission.period === data.period);
   return (
     <div className={h.homeView} data-testid="home-view">
       <header className={h.viewHead}><h1 className={h.viewTitle} tabIndex={-1}>{today}</h1></header>
@@ -72,29 +71,7 @@ export function HomeView({ data, api, buddy, today, go, route, onSend, projects 
                 <div key={mission.missionId} className={h.taskList}>
                   {/* Mission 名点了进只读的 Mission 详情（14.2）。 */}
                   <button type="button" className={h.missionTitle} onClick={() => go(missionHref(mission.missionId))} data-testid="month-mission">{mission.title}</button>
-                  {mission.tasks.map((task) => {
-                    const { needsYou, rest } = statusParts(task);
-                    // 行尾是这个 Mission 下一个验收时间点（网页按计划算；云端的 subtitle 是完成定义，不放这里）。
-                    const gate = gateLabel(api.work.plan, task.missionId);
-                    const project = projectOf(task.taskId);
-                    return (
-                      <div key={task.taskId} className={h.monthRow}>
-                        <button type="button" className={h.taskLine} onClick={() => go(project ? projectHref(project.id) : taskHref(task.taskId))} data-testid="home-task">
-                          <span className={h.taskText}>
-                            <span className={h.taskName}>{task.name}</span>
-                            <span className={h.taskSub}>
-                              {needsYou ? <span className={h.count}><i aria-hidden />等你 {needsYou}</span> : null}
-                              {rest.length ? <span>{needsYou ? " · " : ""}{rest.join(" · ")}</span> : null}
-                            </span>
-                          </span>
-                          {gate ? <span className={h.taskGate}>{gate}</span> : null}
-                        </button>
-                        {project ? <button type="button" className={h.statusChip} onClick={() => go(projectHref(project.id))} data-testid="task-project">{project.name}</button>
-                          : <AttachMenu taskName={task.name} projects={projects.projects} onPick={(projectId) => projects.actions.attach(task.taskId, projectId)}
-                            onCreate={() => projects.actions.attach(task.taskId, projects.actions.create(task.name))} />}
-                      </div>
-                    );
-                  })}
+                  {mission.tasks.map((task) => <MonthRow key={task.taskId} task={task} gate={gateLabel(api.work.plan, mission.missionId)} projects={projects} go={go} />)}
                 </div>
               ))}
             </section>
@@ -106,8 +83,36 @@ export function HomeView({ data, api, buddy, today, go, route, onSend, projects 
   );
 }
 
+/**
+ * 「本月」一行：Task 名（做完了小字「已完成」）、行尾这个 Mission 下一个验收时间点（网页按计划算），再是项目名 chip；
+ * 没挂上的「挂到…」：选现有项目（PUT 挂接）或用 Task 名新建一个挂上（POST 带 taskId）；没成在行尾写「失败 · 重试」。
+ */
+function MonthRow({ task, gate, projects, go }: { task: HomeMonthMission["tasks"][number]; gate: string | null; projects: ProjectsApi; go: (href: string) => void }) {
+  const [failed, setFailed] = useState<Failure | null>(null);
+  const attempt = (run: () => Promise<unknown>) => {
+    const once = () => { setFailed(null); void run().catch((error) => setFailed(failureOf(error, once))); };
+    once();
+  };
+  const { project } = task;
+  return (
+    <div className={h.monthRow}>
+      <button type="button" className={h.taskLine} onClick={() => go(project ? projectHref(project.projectId) : taskHref(task.taskId))} data-testid="home-task">
+        <span className={h.taskText}>
+          <span className={h.taskName}>{task.name}</span>
+          {task.completedAt ? <span className={h.taskSub}>已完成</span> : null}
+        </span>
+        {gate ? <span className={h.taskGate}>{gate}</span> : null}
+      </button>
+      {failed ? <FailedLine inline {...failed} />
+        : project ? <button type="button" className={h.statusChip} onClick={() => go(projectHref(project.projectId))} data-testid="task-project">{project.name}</button>
+        : <AttachMenu taskName={task.name} projects={projects.projects} onPick={(projectId) => attempt(() => projects.actions.attach(task.taskId, projectId))}
+          onCreate={() => attempt(() => projects.actions.create(task.name, task.taskId))} />}
+    </div>
+  );
+}
+
 type RunAction = { label: string; done: string; primary?: boolean; run: () => Promise<unknown> };
-/** 行尾的一个按钮：就地办（run），或点了去那件事里（href，开工的「改一改」进 Task 管线）。 */
+/** 行尾的一个按钮：就地办（run），或点了去那件事里（href，开工的「改一改」进项目对话）。 */
 type Action = RunAction | { label: string; primary?: boolean; href: string };
 /** away：这里答不了的 inline_local（手机、别的电脑、本机没就绪），行尾画「等你 · {电脑名}」chip。 */
 export type WaitingRowAnswer = { actions: Action[]; away: string | null };
@@ -118,7 +123,7 @@ export type WaitingRowAnswer = { actions: Action[]; away: string | null };
  *   批准旁边是「换个做法」（进那个子会话说）。
  *   别处（手机、别的电脑、本机没就绪）画「等你 · {deviceName}」，整行点进去看。
  * - inline（开工、岗位建议）走云端，手机上也能：开工「开始」= 接受派活单并登记开工（配对的电脑上开着的网页认领后开，同 PlanDecision 开不了本机时），
- *   「改一改」进 Task 管线；岗位建议「采纳 / 不要」。
+ *   「改一改」进项目对话；岗位建议「采纳 / 不要」。
  * - open 的（受阻、会后确认、Mission Card、请你认可、月份、电脑、额度）整行点进去。
  */
 export function waitingAnswer(item: WaitingItem, { api, local, handheld }: { api: Pick<WorkHomeApi, "deviceId" | "work">; local: LocalRunnerState; handheld: boolean }): WaitingRowAnswer {
@@ -277,8 +282,7 @@ function AttachMenu({ taskName, projects, onPick, onCreate }: { taskName: string
 
 /**
  * 首页底部的输入框（5.4.3「输入框和『发给』」、14.5、16.4）：InputBar，占位「说点什么…」；框下面「发给」默认自动，回车发出，跳进那条对话（附件到了那条对话再传）。
- * 「发给」是选择器的触发器：「发给」淡色 + 目标墨色 + ChevronDown；点开是弹层：自动、伙伴，再是各项目（有对话的），当前那项行尾一个勾。
- * 发给一个项目 = 发进它现在接的那件 Task 的对话（项目对话上了以后换成项目）。
+ * 「发给」是选择器的触发器：「发给」淡色 + 目标墨色 + ChevronDown；点开是弹层：自动、伙伴，再是各项目，当前那项行尾一个勾。
  */
 export function HomeComposer({ buddy, projects, route, onSend }: { buddy: Buddy | null; projects: Project[]; route: (text: string) => Promise<RouteTarget>; onSend: (text: string, target: SendTarget, files: File[]) => void }) {
   const [text, setText] = useState("");
@@ -286,9 +290,7 @@ export function HomeComposer({ buddy, projects, route, onSend }: { buddy: Buddy 
   const [guess, setGuess] = useState<RouteTarget>("main");
   const asked = useRef(0);
   const name = buddy?.name?.trim() || "伙伴";
-  const talking = projects.flatMap((project) => { const goal = conversationTask(project); return goal ? [{ project, taskId: goal.taskId }] : []; });
-  const nameOf = (value: RouteTarget) => (value === "main" ? name
-    : projects.find((project) => project.tasks.some((task) => task.taskId === value.taskId))?.name ?? name);
+  const nameOf = (value: RouteTarget) => (value === "main" ? name : projects.find((project) => project.id === value.projectId)?.name ?? name);
   useEffect(() => {
     if (target !== "auto") return;
     const value = text.trim();
@@ -301,9 +303,9 @@ export function HomeComposer({ buddy, projects, route, onSend }: { buddy: Buddy 
   }, [text, target, route]);
   const label = target === "auto" ? (text.trim() ? `自动 · ${nameOf(guess)}` : "自动") : nameOf(target);
   const send = async (value: string, files: File[]) => { onSend(value, target, files); return true; };
-  const keyOf = (value: SendTarget) => (value === "auto" || value === "main" ? value : `task:${value.taskId}`);
+  const keyOf = (value: SendTarget) => (value === "auto" || value === "main" ? value : `project:${value.projectId}`);
   const current = keyOf(target);
-  const pick = (key: string) => setTarget(key === "auto" || key === "main" ? key : { taskId: key.slice(5) });
+  const pick = (key: string) => setTarget(key === "auto" || key === "main" ? key : { projectId: key.slice("project:".length) });
   const item = (key: string, text: string) => (
     <Dropdown.Item key={key} id={key} textValue={text} className={h.menuItem}><span className={h.grow}>{text}</span>{current === key ? <Check {...ICON} /> : null}</Dropdown.Item>
   );
@@ -319,10 +321,10 @@ export function HomeComposer({ buddy, projects, route, onSend }: { buddy: Buddy 
                   {item("auto", "自动")}
                   {item("main", name)}
                 </Dropdown.Section>
-                {talking.length ? (
+                {projects.length ? (
                   <Dropdown.Section className={h.menuSection}>
                     <Header className={h.menuHeader}>项目</Header>
-                    {talking.map(({ project, taskId }) => item(`task:${taskId}`, project.name))}
+                    {projects.map((project) => item(`project:${project.id}`, project.name))}
                   </Dropdown.Section>
                 ) : null}
               </Dropdown.Menu>

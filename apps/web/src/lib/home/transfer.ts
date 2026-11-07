@@ -39,10 +39,10 @@ export const NOTE_TITLES = ["到哪了", "没做完的事", "关键决定和原�
  */
 export function draftNote(project: Project, from: Person): HandoverSection[] {
   const sections: HandoverSection[] = [
-    { title: "到哪了", lines: project.current.map((goal) => [`${Number(goal.period.slice(5))} 月目标：${goal.name}`, goal.due ? `${goal.due} 验收` : null].filter(Boolean).join(" · ")) },
+    { title: "到哪了", lines: project.current.map((goal) => `${Number(goal.period.slice(5))} 月目标：${goal.name} · ${goal.due} 验收`) },
     { title: "没做完的事", lines: [
       ...project.subSessions.filter((sub) => sub.state !== "done").map((sub) => sub.title),
-      ...project.tasks.flatMap((task) => task.items).filter((item) => item.status !== "done").map((item) => item.title),
+      ...project.items.filter((item) => item.status !== "done").map((item) => item.title),
     ] },
     { title: "代码在哪", lines: project.folder ? [project.folder] : [] },
     { title: "可以问谁", lines: [from.name] },

@@ -9,8 +9,9 @@ const me = { personId: "sun-mingze", name: "孙铭泽" };
 const chen = { personId: "chen-chenxing", name: "陈晨星" };
 const sub = (id: string, state: string) => ({ id, kind: "card", title: `卡${id}`, state, waiting: null, updatedAt: "a", queueReason: null, holdUntil: null, sessionId: `s${id}` });
 const project = (patch: Partial<Project> = {}): Project => ({
-  id: "p", name: "Chat 服务", folder: null, archived: false, goals: [], tasks: [], subSessions: [], waiting: 0, lastActivity: null, budget: null, transfer: null,
-  current: [{ taskId: "t1", missionId: "m1", missionTitle: "Chat", period: "2026-11", name: "回答的样子", due: "11/21" }], ...patch,
+  id: "p", name: "Chat 服务", folder: null, archived: false, goals: [], subSessions: [], items: [], waiting: 0, lastActivity: null, budget: null, transfer: null,
+  scope: "project:p",
+  current: [{ taskId: "t1", missionId: "m1", missionTitle: "Chat", period: "2026-11", name: "回答的样子", due: "11/21", criteria: [], completedAt: null }], ...patch,
 });
 const transfer = (patch: Partial<Transfer> = {}): Transfer => ({
   id: "x", projectId: "p", projectName: "Chat 服务", from: me, to: chen, status: "preparing", startedAt: "2026-11-07T10:00:00.000Z", decidedAt: null,

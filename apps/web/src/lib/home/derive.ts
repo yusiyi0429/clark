@@ -1,6 +1,6 @@
 /**
- * 新首页的数据：B 的 GET /api/me/work-home、/api/me/background、/api/me/tasks/:taskId/feed 回 404（实现还没上）时，
- * 由网页现有的几份数据照契约的形状拼出来——本月计划（Mission、Task）、云端的 worker 列表合进本机的实时会话（lib/work）、
+ * 新首页的数据：B 的 GET /api/me/work-home、/api/me/background、/api/me/projects/:projectId/feed 回 404（实现还没上）时，
+ * 由网页现有的几份数据照契约（第 16 节的 v2）的形状拼出来——本月计划（Mission、Task；每个 Mission 一个同名项目，同 16.5 的上线迁移）、云端的 worker 列表合进本机的实时会话（lib/work）、
  * 通知（会议、Mission Card、群消息）、岗位建议、合不回的卡。都是纯函数；B 的接口上了以后只用来补本机的实时部分。
  */
 import type { TCardGit, TCardMerge, THomeItem, THomePlanResponse, TLocalWorkspace, TMissionRoundSummary, TSubSessionWaiting, TTaskView, TWaitingAnswer, TWorkerQueueReason } from "@warmap/contracts";
@@ -14,7 +14,7 @@ import { FIELD_LABEL } from "@/lib/team/roles";
 import type { MergeIssue } from "@/lib/work/merge";
 import { clock } from "./quota";
 import { MARK_LABEL, type QueueReason, type Worker } from "@/lib/work/workers";
-import type { BackgroundItem, BackgroundScope, FeedItem, HomeMission, HomeTask, RouteTarget, SubSession, WaitingItem, WorkHomeData } from "./types";
+import type { BackgroundItem, BackgroundScope, FeedItem, HomeMonthMission, HomeProject, RouteTarget, SubSession, WaitingItem, WorkHomeData } from "./types";
 
 export type UnreadThread = { objectType: string; objectId: string; title: string; unread: number; href: string };
 export type NoticeSources = {
@@ -28,26 +28,30 @@ export const cardHref = (cardId: string) => `/me/work/cards/${encodeURIComponent
 export const topicHref = (topicId: string) => `/me/work/topics/${encodeURIComponent(topicId)}`;
 export const taskHref = (taskId: string) => `/me/work/tasks/${encodeURIComponent(taskId)}`;
 export const infoHref = (taskId: string) => `/me/work/tasks/${encodeURIComponent(taskId)}/info`;
-/** Task 管线里某个子会话的选项框的锚点（14.3：等你那一行、子会话页「去回答」跳过来落在它上面）。 */
+/** 项目对话里某个子会话的选项框的锚点（14.3：等你那一行、子会话页「去回答」跳过来落在它上面）。 */
 export const askAnchor = (sessionId: string) => `ask-${sessionId}`;
 export const BUDDY_HREF = "/me/work/buddy";
 export const missionHref = (missionId: string) => `/me/work/missions/${encodeURIComponent(missionId)}`;
 export const HOME_HREF = "/me/work";
+export const projectHref = (id: string) => `/me/work/projects/${encodeURIComponent(id)}`;
+export const projectInfoHref = (id: string) => `${projectHref(id)}/info`;
+/** 回退路径（B 的首页接口没上）里每个 Mission 一个同名项目（16.5 上线迁移的规矩），id 是 mission:<missionId>。 */
+export const missionProject = (missionId: string) => `mission:${missionId}`;
 
 /** 「2026-10」→「10 月」：之前月份没了结、留在树上的 Mission 标一下。 */
 export const monthLabel = (period: string) => `${Number(period.slice(5, 7))} 月`;
 
 /** 等你一行点了去哪儿：契约给的是目标（open），网页映射到路由；网页自己拼的通知直接带地址。 */
-export function waitingHref(item: Pick<WaitingItem, "open"> & Partial<Pick<WaitingItem, "kind" | "taskId">>): string {
+export function waitingHref(item: Pick<WaitingItem, "open"> & Partial<Pick<WaitingItem, "kind" | "projectId">>): string {
   const { open } = item;
-  // 受阻（验收两次没过）进 Task 管线：「按这个改 / 仍然通过」的选项框在管线里（5.4.4），云端给的目标是那张卡时也一样。
-  if (item.kind === "verdict" && item.taskId) return taskHref(item.taskId);
+  // 受阻（验收两次没过）进项目对话：「按这个改 / 仍然通过」的选项框在那里（5.4.4），云端给的目标是那张卡时也一样。
+  if (item.kind === "verdict" && item.projectId) return projectHref(item.projectId);
   switch (open.kind) {
     case "href": return open.href;
     case "card": return cardHref(open.id);
     case "topic": return topicHref(open.id);
-    // 子会话的提问和批准由 Task 管线转达（14.3）：落在管线里那个子会话的框上。
-    case "task": return open.focus ? `${taskHref(open.id)}#${askAnchor(open.focus.sessionId)}` : taskHref(open.id);
+    // 子会话的提问和批准由项目对话转达（14.3）：落在对话里那个子会话的框上。
+    case "project": return open.focus ? `${projectHref(open.id)}#${askAnchor(open.focus.sessionId)}` : projectHref(open.id);
     case "meeting": return `/me/meetings/${encodeURIComponent(open.id)}`;
     // 具体某张卡去那张卡；拍板人那一侧没有具体的卡（轮次），去原来列着轮次的首页通知栏。
     case "mission_card": return open.round ? "/me" : `/me/mission-cards/${encodeURIComponent(open.id)}`;
@@ -153,7 +157,7 @@ export const sortSubSessions = (list: SubSession[]) => [...list].sort((a, b) => 
 const sameDay = (iso: string, today: string) => calendarDate(iso) === today;
 
 /** 契约的汇总：waiting 含没过的；doneToday 今天验收通过的；needsYou 等你里归这件 Task 的条数。 */
-export function summarize(list: SubSession[], needsYou: number, today: string): HomeTask["summary"] {
+export function summarize(list: SubSession[], needsYou: number, today: string): HomeProject["summary"] {
   return {
     running: list.filter((entry) => entry.state === "running").length,
     waiting: list.filter((entry) => entry.state === "waiting" || entry.state === "failed").length,
@@ -165,11 +169,12 @@ export function summarize(list: SubSession[], needsYou: number, today: string): 
 }
 
 /**
- * 首页 Task 一行的现状（设计 5.4.4）：按紧急程度「等你 1 · 进行中 2 · 已排队 1 · 今天完成 3」，是 0 的不写，最多三段；
+ * 一个项目（或一件 Task）的现状（设计 5.4.4）：按紧急程度「等你 1 · 进行中 2 · 已排队 1 · 今天完成 3」，是 0 的不写，最多三段；
  * 规划员在拆，最前面是「拆卡中」；还没开过子会话是「未开始」；本人确认完成是「已完成」。
  * needsYou 单拿出来：首页那一行它用计数样式（圆点加数字），后面跟淡色的其余几段。
  */
-export function statusParts(task: Pick<HomeTask, "summary" | "planning" | "completedAt" | "subSessions">): { needsYou: number; rest: string[] } {
+export type StatusSource = Pick<HomeProject, "summary" | "planning" | "subSessions"> & { completedAt?: string | null };
+export function statusParts(task: StatusSource): { needsYou: number; rest: string[] } {
   if (task.completedAt) return { needsYou: 0, rest: ["已完成"] };
   // 契约的 failed 是「验收没过、改法还没送回」：第一次没过仍是进行中（5.4.2，重做中）。
   const running = task.subSessions.filter((sub) => sub.state === "running" || sub.state === "failed").length;
@@ -189,7 +194,7 @@ export function gateLabel(plan: Pick<THomePlanResponse, "gates" | "today"> | nul
   const date = dates.find((value) => value >= (plan?.today ?? "")) ?? dates[dates.length - 1];
   return date ? `${date.slice(5).replace("-", "/")} 验收` : null;
 }
-export function statusLine(task: Pick<HomeTask, "summary" | "planning" | "completedAt" | "subSessions">): string {
+export function statusLine(task: StatusSource): string {
   const { needsYou, rest } = statusParts(task);
   return [needsYou ? `等你 ${needsYou}` : null, ...rest].filter(Boolean).join(" · ");
 }
@@ -202,6 +207,25 @@ export function todayLabel(today: string | null): string {
 }
 
 const short = (text: string, max = 28) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
+
+/** 「2026-11」→「2026-11-30」：本体的 Task 没有截止日，验收截止取所在月份的最后一天（契约 HomeProjectGoal.dueDate）。 */
+export function monthEnd(period: string): string {
+  const [year, month] = period.split("-").map(Number) as [number, number];
+  return `${period}-${String(new Date(Date.UTC(year, month, 0)).getUTCDate()).padStart(2, "0")}`;
+}
+
+/** 项目的顺序（16.2）：有等你的在前，然后是有目标的、按最早的截止日，最后按最近动静从近到远。 */
+export function sortHomeProjects(projects: HomeProject[]): HomeProject[] {
+  const due = (project: HomeProject) => project.goals.map((goal) => goal.dueDate).sort()[0] ?? null;
+  return [...projects].sort((a, b) => {
+    if (!!a.summary.needsYou !== !!b.summary.needsYou) return a.summary.needsYou ? -1 : 1;
+    const [x, y] = [due(a), due(b)];
+    if (!!x !== !!y) return x ? -1 : 1;
+    return (x && y ? x.localeCompare(y) : 0) || b.lastActivityAt.localeCompare(a.lastActivityAt);
+  });
+}
+
+type ProjectRef = { projectId: string; name: string };
 
 export function deriveWorkHome({ plan, workers, boards, notices, proposals, merges, deviceId, sessions = [] }: {
   plan: THomePlanResponse | null;
@@ -230,36 +254,49 @@ export function deriveWorkHome({ plan, workers, boards, notices, proposals, merg
   }));
   const other = sortSubSessions(subs((worker) => !worker.taskId || !known.has(worker.taskId)));
   const all = [...[...taskSubs.values()].flat(), ...other];
+  // 每个 Mission 一个同名项目，它下面的 Task 都挂上去（16.5）；没有 Task 的 Mission 不建项目。
+  const missions = (plan?.missions ?? []).map((mission) => ({ mission, own: tasks.filter((task) => task.missionId === mission.missionId) }));
+  const refOf = new Map(missions.flatMap(({ mission, own }) => own.map((task) => [task.taskId, { projectId: missionProject(mission.missionId), name: mission.title }] as const)));
+  const projectOf = (taskId: string | null) => (taskId ? refOf.get(taskId) ?? null : null);
   const waiting = sortWaiting([
-    ...workerWaiting(workers, deviceId),
-    ...tasks.flatMap((task) => mergeWaiting(taskSubs.get(task.taskId) ?? [], task, merges)), ...mergeWaiting(other, null, merges), ...orphanMerges(merges, all),
-    ...planStartWaiting(tasks, boards), ...noticeWaiting(notices), ...proposalWaiting(proposals),
+    ...workerWaiting(workers, deviceId, projectOf),
+    ...tasks.flatMap((task) => mergeWaiting(taskSubs.get(task.taskId) ?? [], task, merges, projectOf)), ...mergeWaiting(other, null, merges, projectOf), ...orphanMerges(merges, all),
+    ...planStartWaiting(tasks, boards, projectOf), ...noticeWaiting(notices), ...proposalWaiting(proposals),
   ]);
-  const missions: HomeMission[] = (plan?.missions ?? []).map((mission) => ({
-    missionId: mission.missionId,
-    title: mission.title,
-    period: plan!.period,
-    tasks: tasks.filter((task) => task.missionId === mission.missionId).map((task): HomeTask => {
-      const subSessions = taskSubs.get(task.taskId) ?? [];
-      const board = boards[task.taskId];
-      const planning = workers.some((worker) => worker.kind === "plan" && worker.taskId === task.taskId && worker.state !== "done")
-        || board?.plan?.status === "queued" || board?.plan?.status === "running";
-      return {
-        // subtitle 照契约是完成定义（没有就第一条标准）；Task 行行尾的「11/20 验收」网页另按计划算（gateLabel）。
-        taskId: task.taskId, missionId: mission.missionId, name: task.name, subtitle: task.doneDefinition || task.criteria[0] || null,
-        summary: summarize(subSessions, waiting.filter((item) => item.taskId === task.taskId).length, today),
-        pipeline: { conversationId: null, scope: `plan-task:${task.taskId}` }, planning,
-        // 计划里只有交付状态没有时间；这里只用来判「交付了」（Task 打勾、子会话收起）。
-        completedAt: task.deliverable?.status === "delivered" ? `${today}T00:00:00.000Z` : null,
-        subSessions,
-        items: ownItems((plan?.activities ?? []).map((activity) => activity.item).filter((item) => item.planTaskId === task.taskId)),
-      };
-    }),
-  }));
+  const period = plan?.period ?? today.slice(0, 7);
+  // 计划里只有交付状态没有时间；这里只用来判「交付了」。
+  const completedAt = (task: (typeof tasks)[number]) => (task.deliverable?.status === "delivered" ? `${today}T00:00:00.000Z` : null);
+  const projects = missions.filter(({ own }) => own.length).map(({ mission, own }): HomeProject => {
+    const projectId = missionProject(mission.missionId);
+    const subSessions = sortSubSessions(own.flatMap((task) => taskSubs.get(task.taskId) ?? []));
+    const ids = new Set(own.map((task) => task.taskId));
+    const items = ownItems((plan?.activities ?? []).map((activity) => activity.item).filter((item) => !!item.planTaskId && ids.has(item.planTaskId)));
+    const planning = own.some((task) => workers.some((worker) => worker.kind === "plan" && worker.taskId === task.taskId && worker.state !== "done")
+      || boards[task.taskId]?.plan?.status === "queued" || boards[task.taskId]?.plan?.status === "running");
+    const latest = [...subSessions.map((sub) => sub.updatedAt), ...items.map((item) => item.updatedAt)].sort().at(-1);
+    return {
+      projectId, name: mission.title,
+      goals: own.map((task) => {
+        // 本体没写标准时是完成定义那一条（契约 criteriaTotal）。
+        const criteria = task.criteria.length ? task.criteria : task.doneDefinition ? [task.doneDefinition] : [];
+        return { taskId: task.taskId, missionId: mission.missionId, name: task.name, period, dueDate: monthEnd(period), criteria, criteriaMet: 0, criteriaTotal: criteria.length, completedAt: completedAt(task) };
+      }),
+      budget: null,
+      lastActivityAt: latest ?? `${today}T00:00:00.000Z`,
+      summary: summarize(subSessions, waiting.filter((item) => item.projectId === projectId).length, today),
+      pipeline: { conversationId: null, scope: `project:${projectId}` },
+      planning, subSessions, items,
+    };
+  });
   return {
-    // 本月按今天算：本月没有 Mission 时计划回退到上个月（fallbackFrom），那些 Mission 前面加「10 月 · 」。
+    // 本月按今天算：本月没有 Mission 时计划回退到上个月（fallbackFrom）。
     period: today.slice(0, 7),
-    missions,
+    projects: sortHomeProjects(projects),
+    archivedCount: 0,
+    month: { missions: missions.map(({ mission, own }): HomeMonthMission => ({
+      missionId: mission.missionId, title: mission.title, period,
+      tasks: own.map((task) => ({ taskId: task.taskId, name: task.name, completedAt: completedAt(task), project: projectOf(task.taskId) })),
+    })) },
     other: { subSessions: other, items: ownItems(plan?.unplaced ?? []) },
     waiting,
   };
@@ -278,35 +315,36 @@ export function askTitle(worker: Worker): string {
 /** 没过（第一次）不在这里：改法自动送回执行员重做，不打扰你；连续两次没过（受阻）才等你拍板。已暂停在子会话里说「继续」，也不在这里。 */
 const WORKER_KIND = { approval: "approval", reply: "question", blocked: "verdict" } as const satisfies Record<string, TSubSessionWaiting>;
 
-function workerWaiting(workers: Worker[], deviceId: string | null): WaitingItem[] {
+function workerWaiting(workers: Worker[], deviceId: string | null, projectOf: (taskId: string | null) => ProjectRef | null): WaitingItem[] {
   return workers.flatMap((worker): WaitingItem[] => {
     const who = worker.kind === "plan" ? "拆卡" : worker.kind === "verify" ? `验收「${worker.title}」` : worker.title;
-    // 提问和批准由 Task 管线转达（14.3）：来源只写 Task 名，点了落在管线里那个框上；不挂 Task 的写子会话的名字、照旧进子会话。
+    // 提问和批准由项目对话转达（14.3）：来源只写项目名，点了落在对话里那个框上；不在项目里的写子会话的名字、照旧进子会话。
     const sessionId = worker.session?.id ?? null;
-    const base = { taskId: worker.taskId, sessionId, deviceId: sessionId ? deviceId : null, at: worker.startedAt };
+    const project = projectOf(worker.taskId);
+    const base = { taskId: worker.taskId, projectId: project?.projectId ?? null, sessionId, deviceId: sessionId ? deviceId : null, at: worker.startedAt };
     const kind = worker.mark && worker.state === "doing" ? WORKER_KIND[worker.mark as keyof typeof WORKER_KIND] : undefined;
     if (!kind || (kind === "question" && !worker.session?.pendingQuestion)) return [];
-    const relayed = (kind === "approval" || kind === "question") && !!worker.taskId;
-    const source = relayed ? worker.taskName ?? who : [who, worker.taskName].filter(Boolean).join(" · ");
-    // 受阻在 Task 管线里拍板（按这个改 / 我去看看 / 仍然通过）；批准、回答在子会话里（规划员的在 Task 管线）。
-    const open = relayed && worker.taskId ? { kind: "task" as const, id: worker.taskId, ...(sessionId ? { focus: { sessionId, requestId: worker.session?.pendingQuestion?.requestId ?? null } } : {}) }
-      : kind === "verdict" && worker.taskId ? { kind: "task" as const, id: worker.taskId }
+    const relayed = (kind === "approval" || kind === "question") && !!project;
+    const source = relayed ? project.name : [who, worker.taskName].filter(Boolean).join(" · ");
+    // 受阻在项目对话里拍板（按这个改 / 我去看看 / 仍然通过）；批准、回答在子会话里（规划员的在项目对话）。
+    const open = relayed ? { kind: "project" as const, id: project.projectId, ...(sessionId ? { focus: { sessionId, requestId: worker.session?.pendingQuestion?.requestId ?? null } } : {}) }
+      : kind === "verdict" && project ? { kind: "project" as const, id: project.projectId }
       : worker.kind === "topic" && worker.topicId ? { kind: "topic" as const, id: worker.topicId }
       : (worker.kind === "card" || worker.kind === "verify") && worker.cardId ? { kind: "card" as const, id: worker.cardId }
-      : worker.taskId ? { kind: "task" as const, id: worker.taskId } : { kind: "href" as const, href: HOME_HREF };
+      : project ? { kind: "project" as const, id: project.projectId } : { kind: "href" as const, href: HOME_HREF };
     return [{ id: `worker:${worker.key}`, kind, title: askTitle(worker), source, open, ...base, ...fields("inline_local"),
       question: kind === "question" ? worker.session?.pendingQuestion ?? null : null }];
   });
 }
 
 /** 验收过了没合回的子会话：等你合（合不回的写原因）。 */
-function mergeWaiting(subs: SubSession[], task: { taskId: string; name: string } | null, merges: MergeIssue[]): WaitingItem[] {
+function mergeWaiting(subs: SubSession[], task: { taskId: string; name: string } | null, merges: MergeIssue[], projectOf: (taskId: string | null) => ProjectRef | null): WaitingItem[] {
   return subs.filter((sub) => sub.waiting === "merge").map((sub) => {
     const issue = merges.find((entry) => entry.cardId === sub.id);
     return {
       id: `merge:${sub.id}`, kind: "merge", title: issue ? "无法合回" : `合进 ${sub.merge?.baseBranch ?? "原分支"}`,
       source: issue ? `${sub.title} · ${short(issue.text, 40)}` : [sub.title, task?.name].filter(Boolean).join(" · "),
-      open: { kind: "card", id: sub.id }, taskId: task?.taskId ?? null, sessionId: sub.sessionId, deviceId: sub.deviceId, at: sub.merge?.at ?? sub.updatedAt, ...fields("inline_local"),
+      open: { kind: "card", id: sub.id }, taskId: task?.taskId ?? null, projectId: projectOf(task?.taskId ?? null)?.projectId ?? null, sessionId: sub.sessionId, deviceId: sub.deviceId, at: sub.merge?.at ?? sub.updatedAt, ...fields("inline_local"),
     };
   });
 }
@@ -316,11 +354,11 @@ function orphanMerges(merges: MergeIssue[], subs: SubSession[]): WaitingItem[] {
   const shown = new Set(subs.map((sub) => sub.id));
   return merges.filter((issue) => !issue.cardId || !shown.has(issue.cardId)).map((issue) => ({
     id: `merge:${issue.sessionId}`, kind: "merge", title: "无法合回", source: `${issue.title} · ${short(issue.text, 40)}`,
-    open: issue.cardId ? { kind: "card", id: issue.cardId } : { kind: "href", href: HOME_HREF }, taskId: null, sessionId: issue.sessionId, deviceId: null, at: null, ...fields("inline_local"),
+    open: issue.cardId ? { kind: "card", id: issue.cardId } : { kind: "href", href: HOME_HREF }, taskId: null, projectId: null, sessionId: issue.sessionId, deviceId: null, at: null, ...fields("inline_local"),
   }));
 }
 
-const NONE = { taskId: null, sessionId: null, deviceId: null } as const;
+const NONE = { taskId: null, projectId: null, sessionId: null, deviceId: null } as const;
 
 /** 契约 9.6 加的几项（回退路径）：截止、电脑名、对方、月份先不填；answer 照能不能就地答。 */
 const fields = (answer: TWaitingAnswer) => ({ answer, dueAt: null, deviceName: null, person: null, month: null, question: null, permission: null });
@@ -351,18 +389,22 @@ function proposalWaiting(proposals: RoleProposalView[]): WaitingItem[] {
 }
 
 /** 计划等你开工（9.6）：规划员出了派活单、还没开工的 Task。就地「开始」= 接受草稿登记开工。 */
-function planStartWaiting(tasks: { taskId: string; name: string }[], boards: Record<string, { drafts?: unknown[] } | undefined>): WaitingItem[] {
-  return tasks.filter((task) => boards[task.taskId]?.drafts?.length).map((task) => ({
-    id: `plan_start:${task.taskId}`, kind: "plan_start", title: `${task.name}：这样开工？`, source: `${boards[task.taskId]!.drafts!.length} 步`,
-    open: { kind: "task", id: task.taskId }, taskId: task.taskId, sessionId: null, deviceId: null, at: null, ...fields("inline"),
-  }));
+function planStartWaiting(tasks: { taskId: string; name: string }[], boards: Record<string, { drafts?: unknown[] } | undefined>, projectOf: (taskId: string | null) => ProjectRef | null): WaitingItem[] {
+  return tasks.filter((task) => boards[task.taskId]?.drafts?.length).map((task) => {
+    const project = projectOf(task.taskId);
+    return {
+      id: `plan_start:${task.taskId}`, kind: "plan_start", title: `${task.name}：这样开工？`, source: `${boards[task.taskId]!.drafts!.length} 步`,
+      open: project ? { kind: "project", id: project.projectId } : { kind: "href", href: HOME_HREF },
+      taskId: task.taskId, projectId: project?.projectId ?? null, sessionId: null, deviceId: null, at: null, ...fields("inline"),
+    };
+  });
 }
 
 /**
  * 空月份（5.4.4）：树上没有本月的 Mission（只有之前月份没了结的，或者一个都没有）时是本月（YYYY-MM），「今天」行出「11 月待敲定」chip；
  * 不是空月份为 null。今天还不知道（计划没读到）也为 null。「等你」里那一行以后由云端加种类，网页不自己造（主会话 11/07）。
  */
-export function emptyMonth(today: string | null, missions: Pick<HomeMission, "period">[]): string | null {
+export function emptyMonth(today: string | null, missions: Pick<HomeMonthMission, "period">[]): string | null {
   if (!today) return null;
   const period = today.slice(0, 7);
   return missions.some((mission) => mission.period === period) ? null : period;
@@ -385,15 +427,15 @@ function ownItems(items: TTaskView[]): THomeItem[] {
 }
 
 
-// ── Task 管线里的验收行（契约 TaskFeedItem；B 的 /feed 没上时由看板上的卡拼）──
+// ── 项目对话里的验收行（契约 TaskFeedItem；B 的项目 /feed 没上时由每件 Task 看板上的卡拼）──
 
 /**
  * 过了（含本人「仍然通过」）、受阻、约定都达到。过了的从看板上的卡拼（worker 列表只带今天完成的，隔天也要在）；受阻的卡还在做，从 worker 列表拼，
  * 已经送回（returnedAt）的不再问。合回后被推翻开的返工卡（rework_opened）要云端记谁推翻了谁，这里拼不出来，不出。
  * 第一次没过不出：改法自动送回重做，不打扰你。criteria 是看板的标准（没有标准时是完成定义那一条）。
  */
-export function deriveFeed({ cards, workers, criteria, merges, sessions = [] }: {
-  cards: CardItem[]; workers: Worker[]; criteria: string[]; merges: MergeIssue[]; sessions?: TLocalSessionSummary[];
+export function deriveFeed({ taskId, cards, workers, criteria, merges, sessions = [] }: {
+  taskId: string; cards: CardItem[]; workers: Worker[]; criteria: string[]; merges: MergeIssue[]; sessions?: TLocalSessionSummary[];
 }): FeedItem[] {
   const items: FeedItem[] = [];
   const met = new Map<number, string>();
@@ -414,7 +456,7 @@ export function deriveFeed({ cards, workers, criteria, merges, sessions = [] }: 
   }
   if (criteria.length && criteria.every((_, i) => met.has(i + 1))) {
     const last = [...met.values()].sort().pop()!;
-    items.push({ kind: "criteria_met", id: `criteria:${last}`, at: `${last}~`, met: criteria.length, total: criteria.length });
+    items.push({ kind: "criteria_met", id: `criteria:${taskId}:${last}`, at: `${last}~`, taskId, met: criteria.length, total: criteria.length });
   }
   return items.sort((a, b) => a.at.localeCompare(b.at));
 }
@@ -482,9 +524,16 @@ export function mergeBackground(cloud: BackgroundItem[], local: BackgroundItem[]
   ];
 }
 
-export function inScope(items: BackgroundItem[], scope: BackgroundScope): BackgroundItem[] {
+/**
+ * project:<id> 的范围：挂着的 Task 的规划员，加项目里各子会话的（契约 BackgroundQuery）。本机报的只知道 Task、卡、专题，由 members 认是不是这个项目的。
+ */
+export function inScope(items: BackgroundItem[], scope: BackgroundScope, members?: { taskIds: ReadonlySet<string>; subIds: ReadonlySet<string> }): BackgroundItem[] {
   if (scope === "main") return items;
   const [kind, id] = scope.split(/:(.*)/s) as [string, string];
+  if (kind === "project") {
+    const has = (value: string | null, set: ReadonlySet<string> | undefined) => !!value && !!set?.has(value);
+    return items.filter((item) => has(item.taskId, members?.taskIds) || has(item.cardId, members?.subIds) || has(item.topicId, members?.subIds));
+  }
   return items.filter((item) => (kind === "task" ? item.taskId === id : kind === "card" ? item.cardId === id : item.topicId === id));
 }
 
@@ -508,17 +557,18 @@ export function duration(from: string | null, to: string | number | null): strin
   return `${Math.floor(seconds / 3600)} 小时${minutes ? ` ${minutes} 分` : ""}`;
 }
 
-/** 关键词：Task 名，和标准、完成定义里四个字以上的片段。 */
-function keywords(task: { name: string; criteria: string[]; doneDefinition?: string | null }): string[] {
-  const pieces = [task.doneDefinition ?? "", ...task.criteria].flatMap((text) => text.split(/[\s,，。、；;：:（）()「」“”"'《》/|·\-—]+/)).filter((piece) => piece.length >= 4);
-  return [task.name.trim(), ...pieces].filter(Boolean);
+/** 关键词（16.4）：项目名（两个字以上）、挂着的 Task 名，和标准里四个字以上的片段。 */
+function keywords(project: Pick<HomeProject, "name" | "goals">): string[] {
+  const pieces = project.goals.flatMap((goal) => goal.criteria).flatMap((text) => text.split(/[\s,，。、；;：:（）()「」“”"'《》/|·\-—]+/)).filter((piece) => piece.length >= 4);
+  const name = project.name.trim();
+  return [name.length >= 2 ? name : "", ...project.goals.map((goal) => goal.name.trim()), ...pieces].filter(Boolean);
 }
 
 /**
- * 「自动」只在管线之间选（第 4.1 条）：消息里提到哪件 Task 的名字或标准里的词，就发给那件 Task；一件都没提到、或提到好几件，交给伙伴。
- * B 的 POST /api/me/route 没上时用这个，规则相同。
+ * 「自动」只在伙伴和各项目之间选（第 4.1 条、16.4）：消息里提到哪个项目的名字、它挂着的 Task 的名字或标准里的词，就发给那个项目；
+ * 一个都没提到、或提到好几个，交给伙伴。B 的 POST /api/me/route 没上时用这个，规则相同。
  */
-export function routeText(text: string, tasks: { taskId: string; name: string; criteria: string[]; doneDefinition?: string | null }[]): RouteTarget {
-  const hits = tasks.filter((task) => keywords(task).some((word) => text.includes(word)));
-  return hits.length === 1 ? { taskId: hits[0]!.taskId } : "main";
+export function routeText(text: string, projects: Pick<HomeProject, "projectId" | "name" | "goals">[]): RouteTarget {
+  const hits = projects.filter((project) => keywords(project).some((word) => text.includes(word)));
+  return hits.length === 1 ? { projectId: hits[0]!.projectId } : "main";
 }

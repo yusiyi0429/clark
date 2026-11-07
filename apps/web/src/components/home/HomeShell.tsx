@@ -32,7 +32,7 @@ import { showWorkspaceToast } from "@/lib/toast";
 import { modelForTier } from "@/lib/team/roles";
 import { startBatch, type StartPlan } from "@/lib/work/queue";
 import type { Worker } from "@/lib/work/workers";
-import { HOME_HREF, emptyMonth, gateLabel, monthLabel, routeText, todayLabel } from "@/lib/home/derive";
+import { HOME_HREF, emptyMonth, monthLabel, routeText, todayLabel } from "@/lib/home/derive";
 import { HeroButton } from "@/components/HeroButton";
 import type { BackgroundItem, RouteTarget } from "@/lib/home/types";
 import { useBackground } from "@/lib/home/useBackground";
@@ -44,11 +44,11 @@ import { LeftColumn } from "./LeftColumn";
 import { ForeignTaskInfo, TaskInfo } from "./TaskInfo";
 import { MissionInfo } from "./MissionInfo";
 import { ProjectInfo } from "./ProjectInfo";
-import { GoalBar, MonthRule, ProjectTrail } from "./ProjectParts";
+import { GoalBar, ProjectTrail } from "./ProjectParts";
 import { TransferFlow } from "./Transfer";
 import type { TimedBlock } from "@/components/work/WorkTimeline";
 import { useProjects } from "./useProjects";
-import { conversationTask, projectHref, type Project } from "@/lib/home/projects";
+import { projectHref, type Project } from "@/lib/home/projects";
 import { usePhone } from "./usePhone";
 import { ViewChrome, PAGE_TITLE, monthHref, scopeOf, viewOf, type View } from "./view";
 import { MONTH_PAGE, SECONDARY_PAGES, type SecondaryPageProps } from "./pages";
@@ -142,31 +142,23 @@ function HomeFrame({ account }: { account: Account }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [go, handheld]);
 
-  // ---- 首页输入框：自动（只在管线之间选：伙伴或某件 Task）、伙伴、某件 Task；跳进那条对话，那边发出去 ----
-  // ---- 项目（第 16 节）：B 的首页数据 v2 到了以前从树上推（useProjects）----
-  const dueOf = useCallback((missionId: string) => gateLabel(work.plan, missionId)?.replace(" 验收", "") ?? null, [work.plan]);
-  const projects = useProjects(data, dueOf);
-  const projectsRef = useRef<Project[]>([]);
-  projectsRef.current = projects.all;
-  const projectOfTask = (taskId: string) => projects.all.find((project) => project.tasks.some((task) => task.taskId === taskId)) ?? null;
-  // 自动走 B 的 POST /api/me/route（只按关键词）；接口没上时网页按同样的规则自己分。
-  // 先看是不是说到了哪个项目的名字（16.4：关键词也从项目名里取），说到了就发给它现在接的那件 Task。
+  // ---- 项目（第 16 节）：首页 v2 的 projects，增改调项目接口（useProjects）----
+  const projects = useProjects(data, api.refresh);
+  const projectOfTask = (taskId: string) => projects.all.find((project) => project.goals.some((goal) => goal.taskId === taskId)) ?? null;
+  // ---- 首页输入框：自动（只在伙伴和各项目之间选，16.4）、伙伴、某个项目；跳进那条对话，那边发出去 ----
+  // 自动走 B 的 POST /api/me/route（只按关键词：项目名、挂着的 Task 名和标准）；接口没上时网页按同样的规则自己分。
   const tasks = useMemo(() => work.plan?.tasks ?? [], [work.plan]);
   const route = useCallback(async (text: string): Promise<RouteTarget> => {
-    const named = projectsRef.current.filter((project) => !project.archived && project.name.length >= 2 && text.includes(project.name));
-    const goal = named.length === 1 ? conversationTask(named[0]!) : null;
-    if (goal) return { taskId: goal.taskId };
     if (api.live) { const answer = await routeMessage(text).catch(() => null); if (answer) return answer.target; }
-    return routeText(text, tasks);
-  }, [api.live, tasks]);
+    return routeText(text, data.projects);
+  }, [api.live, data.projects]);
   const send = useCallback(async (text: string, target: SendTarget, files: File[]) => {
     const resolved = target === "auto" ? await route(text) : target;
     outboxId.current += 1;
     // 每句排在队里，按对话各发各的：连着发、或那条对话正在回话时，前一句不会被后一句顶掉。
-    const entry: OutboxEntry = { id: outboxId.current, target: resolved === "main" ? "main" : resolved.taskId, text, files };
+    const entry: OutboxEntry = { id: outboxId.current, target: resolved === "main" ? "main" : resolved.projectId, text, files };
     setOutbox((queue) => [...queue, entry]);
-    const project = resolved === "main" ? null : projectsRef.current.find((entry) => entry.tasks.some((task) => task.taskId === resolved.taskId));
-    go(resolved === "main" ? "/me/work/buddy" : project ? projectHref(project.id) : `/me/work/tasks/${encodeURIComponent(resolved.taskId)}`);
+    go(resolved === "main" ? "/me/work/buddy" : projectHref(resolved.projectId));
   }, [route, go]);
   const consume = useCallback((id: number) => setOutbox((queue) => queue.filter((entry) => entry.id !== id)), []);
 
@@ -244,7 +236,7 @@ function HomeFrame({ account }: { account: Account }) {
   // 云端接口在不在还不知道时不开（不知道该不该认领）。B 的「登记 + 认领」在时（live），卡和专题只走下面的认领（一条只给一处：
   // 别的电脑认领了、还没报上来的卡在这里也是「等开工」，不能不认领就开）；这里只开拆卡登记（照旧：先删登记，删成了才开）。
   // 接口没上（404）时照旧：没登记、等开工的卡也在这里开。
-  const subs = useMemo(() => [...data.missions.flatMap((mission) => mission.tasks.flatMap((task) => task.subSessions)), ...data.other.subSessions], [data]);
+  const subs = useMemo(() => [...data.projects.flatMap((project) => project.subSessions), ...data.other.subSessions], [data]);
   const autoStartKey = subs.filter((sub) => sub.autoStart).map((sub) => sub.id).sort().join(",");
   const tried = useRef(new Set<string>());
   useEffect(() => {
@@ -363,10 +355,7 @@ function HomeFrame({ account }: { account: Account }) {
   useAutoReturn(local.runner, here, allCards, local.sessions, changed);
 
   // ---- 后台任务 ----
-  // 项目页的后台任务：项目对话现在接的那件 Task 的。
-  const viewedProject = view.kind === "project" || view.kind === "projectInfo" ? projects.all.find((project) => project.id === view.id) ?? null : null;
-  const viewedGoal = viewedProject ? conversationTask(viewedProject) : null;
-  const items = useBackground(viewedGoal ? `task:${viewedGoal.taskId}` : scopeOf(view), api);
+  const items = useBackground(scopeOf(view), api);
   const machine = useMachine(work.resources.quota);
   const running = items.filter((item) => item.state === "running" || item.state === "queued").length;
   // 规划员、验收员停会话；子 agent、后台命令只停那一项，会话接着做。
@@ -389,18 +378,17 @@ function HomeFrame({ account }: { account: Account }) {
   // 「今天」行行尾的月份 chip（5.4.2）：云端等你里月份那一条优先——复盘窗口里写「复盘」，新月份的草稿到了写「12 月待敲定」（「延续到哪」只在等你里）；
   // 没有时，树上没有本月的 Mission 就写「11 月待敲定」（网页按本月比较推出来）。点了进月份页。
   const monthItem = data.waiting.find((item) => item.kind === "month" && item.month && item.month.step !== "continue")?.month ?? null;
-  const empty = monthItem ? null : emptyMonth(work.plan?.today ?? null, data.missions);
+  const empty = monthItem ? null : emptyMonth(work.plan?.today ?? null, data.month.missions);
   const month = monthItem ? { href: monthHref(monthItem.period), label: monthItem.step === "review" ? "复盘" : `${monthLabel(monthItem.period)}待敲定` }
     : empty ? { href: monthHref(empty), label: `${monthLabel(empty)}待敲定` } : null;
 
   // ---- 展示区 ----
-  const homeTask = (taskId: string) => data.missions.flatMap((mission) => mission.tasks).find((task) => task.taskId === taskId) ?? null;
-  // 本月计划里的 Task 带标准；之前月份没了结、留在树上的（B 的 work-home 才有）只有名字和一行小字。
+  // 本月计划里的 Task 带完成定义；之前月份没了结、挂在项目上的（B 的 work-home 才有）照项目上的目标拼。
   const planTask = (taskId: string): THomePlanTask | null => {
     const found = tasks.find((task) => task.taskId === taskId);
     if (found) return found;
-    const home = homeTask(taskId);
-    return home ? { taskId, missionId: home.missionId, name: home.name, doneDefinition: home.subtitle, criteria: [] } : null;
+    const goal = data.projects.flatMap((project) => project.goals).find((entry) => entry.taskId === taskId);
+    return goal ? { taskId, missionId: goal.missionId, name: goal.name, doneDefinition: null, criteria: goal.criteria } : null;
   };
   // 手机的后台任务按钮（5.7）：没有在跑的是 ListChecks；有在跑的是转圈加数字。
   const backgroundButton = useMemo(() => (
@@ -410,11 +398,11 @@ function HomeFrame({ account }: { account: Account }) {
       {machine.quotaAlert ? <i className={h.cornerDot} data-tone={machine.quotaAlert === "danger" ? "danger" : undefined} aria-hidden /> : null}
     </button>
   ), [running, machine.quotaAlert]);
-  // 子会话页头的上一级：它挂在哪件 Task 下（树上找），点了回到那件 Task 的管线。
+  // 子会话页头的上一级：它在哪个项目里，点了回到项目对话。
   const subId = view.kind === "card" || view.kind === "topic" ? view.id : null;
-  const owner = subId ? data.missions.flatMap((mission) => mission.tasks).find((task) => task.subSessions.some((sub) => sub.id === subId)) ?? null : null;
+  const owner = subId ? projects.all.find((project) => project.subSessions.some((sub) => sub.id === subId)) ?? null : null;
   const parent = useMemo(() => (owner ? (
-    <button type="button" className={h.crumb} onClick={() => go(`/me/work/tasks/${encodeURIComponent(owner.taskId)}`)}>{owner.name} / </button>
+    <button type="button" className={h.crumb} onClick={() => go(projectHref(owner.id))}>{owner.name} / </button>
   ) : null), [owner, go]);
   const chrome = useMemo(() => (handheld ? {
     lead: <button type="button" className={h.icon} aria-label="返回" title="返回" onClick={() => go(HOME_HREF)} data-testid="phone-back"><ArrowLeft {...ICON} /></button>,
@@ -427,18 +415,16 @@ function HomeFrame({ account }: { account: Account }) {
     node: <TransferFlow project={project} transfer={project.transfer} onUpdate={(patch) => projects.actions.updateTransfer(project.id, patch)}
       onStop={async (ids) => { for (const id of ids) await local.runner.kill(id); await local.refresh(); changed(); }} />,
   }] : []);
-  /** 一件 Task 的对话；挂在项目上的，页头换成项目（16.3）：项目名、文件夹 chip、「详情」，下面目标条，最上面「{月} 月目标」。 */
-  const pipeline = (task: THomePlanTask, project: Project | null) => {
-    const goal = project?.goals.find((entry) => entry.taskId === task.taskId) ?? null;
-    const chromeOf = project ? {
-      name: project.name,
-      trail: <ProjectTrail project={project} go={go} />,
-      bar: <GoalBar project={project} criteriaOf={(taskId) => planTask(taskId)?.criteria ?? []} />,
-      rule: goal ? <MonthRule goal={goal} /> : null,
-      blocks: projectBlocks(project),
-    } : undefined;
-    return <PipelineView key={task.taskId} task={task} home={homeTask(task.taskId)} api={api} buddy={buddy} outbox={outbox} consume={consume} go={go} onSplit={(taskId) => void split(taskId)} splitFailed={splitFailed === task.taskId}
-      startFailed={startFailed} onManualStart={(id) => void manualStart(id)} onSpeaking={setSpeaking} project={chromeOf} />;
+  /** 项目对话（16.3）：页头项目名、文件夹 chip、「详情」，下面目标条。接口没上、又没有挂着的 Task 时（假对话要接一件 Task），借总管线说话。 */
+  const projectView = (project: Project) => {
+    const goalTasks = project.goals.flatMap((goal) => { const task = planTask(goal.taskId); return task ? [task] : []; });
+    const trail = <ProjectTrail project={project} go={go} />;
+    if (api.known && !api.live && !goalTasks.length) {
+      return <BuddyView key={project.id} buddy={buddy} outbox={outbox} consume={consume} onSpeaking={setSpeaking} context={`关于：${project.name}`}
+        head={{ title: project.name, trail }} blocks={projectBlocks(project)} />;
+    }
+    return <PipelineView key={project.id} project={project} tasks={goalTasks} api={api} buddy={buddy} outbox={outbox} consume={consume} go={go} onSplit={(taskId) => void split(taskId)} splitFailed={splitFailed}
+      startFailed={startFailed} onManualStart={(id) => void manualStart(id)} onSpeaking={setSpeaking} trail={trail} bar={<GoalBar project={project} />} blocks={projectBlocks(project)} />;
   };
   const display = (current: View) => {
     switch (current.kind) {
@@ -446,13 +432,7 @@ function HomeFrame({ account }: { account: Account }) {
       case "project": {
         const project = projects.all.find((entry) => entry.id === current.id);
         if (!project) return <Missing loading={!api.ready} onRetry={api.planFailed ? () => void api.retryPlan() : undefined} />;
-        const goal = conversationTask(project);
-        const task = goal ? planTask(goal.taskId) : null;
-        if (!task) {
-          return <BuddyView key={project.id} buddy={buddy} outbox={outbox} consume={consume} onSpeaking={setSpeaking} context={`关于：${project.name}`}
-            head={{ title: project.name, trail: <ProjectTrail project={project} go={go} /> }} blocks={projectBlocks(project)} />;
-        }
-        return pipeline(task, project);
+        return projectView(project);
       }
       case "projectInfo": {
         const project = projects.all.find((entry) => entry.id === current.id);
@@ -462,23 +442,26 @@ function HomeFrame({ account }: { account: Account }) {
       }
       case "buddy": return <BuddyView buddy={buddy} outbox={outbox} consume={consume} onSpeaking={setSpeaking} context={buddyContext} onClearContext={() => setBuddyContext(null)} />;
       case "mission": {
-        const mission = data.missions.find((entry) => entry.missionId === current.id);
+        const mission = data.month.missions.find((entry) => entry.missionId === current.id);
         if (!mission) return <Missing loading={!api.ready} onRetry={api.planFailed ? () => void api.retryPlan() : undefined} />;
         const cardId = work.plan?.missions.find((entry) => entry.missionId === current.id)?.cardId ?? null;
         return <MissionInfo key={mission.missionId} mission={mission} cardId={cardId} api={api} go={go} onAsk={() => { setBuddyContext(`关于：${mission.title}`); go("/me/work/buddy"); }} />;
       }
       case "task": {
+        // 老地址（等你、飞书链接）：Task 挂在哪个项目上就画那个项目的对话。
+        const project = projectOfTask(current.taskId);
+        if (project) return projectView(project);
         const task = planTask(current.taskId);
-        if (task) return pipeline(task, projectOfTask(task.taskId));
+        if (task) return <TaskInfo task={task} mission={data.month.missions.find((entry) => entry.missionId === task.missionId)?.title ?? null} gate={work.plan ? gateText(gateOf(work.plan, task.missionId)) : null} go={go} />;
         if (!api.ready) return <Missing loading={!api.planFailed} onRetry={api.planFailed ? () => void api.retryPlan() : undefined} />;
-        // 不在本人的计划和树上（别人的 Task：请你认可、飞书「请 X 看」；之前月份了结了的）：没有管线可看，去只读的详情（9.8、9.10）。
-        return <ForeignTaskInfo key={current.taskId} taskId={current.taskId} go={go} redirect onMount={() => outbox.filter((entry) => entry.target === current.taskId).forEach((entry) => consume(entry.id))} />;
+        // 不在本人的计划和项目上（别人的 Task：请你认可、飞书「请 X 看」；之前月份了结了的）：没有对话可看，去只读的详情（9.8、9.10）。
+        return <ForeignTaskInfo key={current.taskId} taskId={current.taskId} go={go} redirect />;
       }
       case "info": {
         const task = planTask(current.taskId);
         if (!task && !api.ready) return <Missing loading={!api.planFailed} onRetry={api.planFailed ? () => void api.retryPlan() : undefined} />;
         if (!task) return <ForeignTaskInfo key={current.taskId} taskId={current.taskId} go={go} />;
-        const mission = data.missions.find((entry) => entry.missionId === task.missionId)?.title ?? null;
+        const mission = data.month.missions.find((entry) => entry.missionId === task.missionId)?.title ?? null;
         return <TaskInfo task={task} mission={mission} gate={work.plan ? gateText(gateOf(work.plan, task.missionId)) : null} go={go} />;
       }
       case "card": return <CardSession key={current.id} cardId={current.id} embedded />;
@@ -499,7 +482,7 @@ function HomeFrame({ account }: { account: Account }) {
 
   const left = (
     <LeftColumn data={data} view={view} buddy={buddy} speaking={speaking} go={go} phone={handheld} account={account} month={month} onRetryPlan={api.planFailed ? () => void api.retryPlan() : null}
-      projects={projects.projects} archived={projects.archived} onCreate={projects.actions.create} cardAt={cardAt}
+      projects={projects.projects} archived={projects.archived} onCreate={(name) => projects.actions.create(name)} cardAt={cardAt}
       today={todayLabel(work.plan?.today ?? null)} alert={alert} trail={handheld ? backgroundButton : null}
       top={handheld && data.waiting.length ? (
         <section aria-label="等你" className={h.phoneWaiting}>

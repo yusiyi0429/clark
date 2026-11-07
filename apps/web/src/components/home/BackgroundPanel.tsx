@@ -57,10 +57,8 @@ export function useMachine(cloudQuota: Resources["quota"]) {
   // 用量（本机 status.quota，读不到用云端的）：剩 ≤25% 琥珀点、≤10% 或用完红点，和本机要处理的点是同一颗（5.4.5、5.6），看列出来的那几格。
   const now = Date.now();
   const here = ready ? usageCells(local.status?.quota ?? [], now) : [];
-  const usage = here.length ? here : usageCells(cloudQuota.map((entry) => ({
-    id: `claude:${entry.deviceId}`, name: "Claude", kind: "subscription" as const, remainingPercent: null, amounts: [], windows: entry.windows,
-    blockedUntil: entry.blockedUntil, updatedAt: entry.updatedAt, device: entry.deviceName,
-  })), now);
+  // 云端的一项一条（契约 WorkerResources.quota = 本机报的 LocalQuotaSync 加设备）：名字后面加「 · 设备名」。
+  const usage = here.length ? here : usageCells(cloudQuota.map((entry) => ({ ...entry, id: `${entry.id}:${entry.deviceId}`, device: entry.deviceName })), now);
   const quotaAlert = usage.some((cell) => cell.tone === "danger") ? "danger" as const : usage.some((cell) => cell.tone === "warning") ? "warning" as const : null;
   return { ready, word, alert, checks, action, usage, quotaAlert };
 }

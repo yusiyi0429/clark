@@ -30,15 +30,15 @@ export function useBackground(scope: BackgroundScope, api: WorkHomeApi): Backgro
   }, [api.live, scope]);
 
   const { workers } = api.work;
-  const { missions } = api.data;
-  // 卡、专题挂在哪件 Task：树上找（含之前验收过的卡），找不到再看 worker 列表。
-  const owner = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const task of missions.flatMap((mission) => mission.tasks)) for (const sub of task.subSessions) map.set(sub.id, task.taskId);
-    return map;
-  }, [missions]);
-  const taskOfCard = useCallback((cardId: string) => owner.get(cardId) ?? workers.find((worker) => worker.cardId === cardId)?.taskId ?? null, [owner, workers]);
-  const taskOfTopic = useCallback((topicId: string) => owner.get(topicId) ?? workers.find((worker) => worker.topicId === topicId)?.taskId ?? null, [owner, workers]);
+  const { projects } = api.data;
+  // 卡、专题挂在哪件 Task：worker 列表里找（首页 v2 的子会话在项目上，不带 Task）。
+  const taskOfCard = useCallback((cardId: string) => workers.find((worker) => worker.cardId === cardId)?.taskId ?? null, [workers]);
+  const taskOfTopic = useCallback((topicId: string) => workers.find((worker) => worker.topicId === topicId)?.taskId ?? null, [workers]);
+  // project:<id>：本机报的按挂着的 Task 和项目里的子会话认（云端那份已经按项目筛好）。
+  const members = useMemo(() => {
+    const project = scope.startsWith("project:") ? projects.find((entry) => `project:${entry.projectId}` === scope) : undefined;
+    return project ? { taskIds: new Set(project.goals.map((goal) => goal.taskId)), subIds: new Set(project.subSessions.map((sub) => sub.id)) } : undefined;
+  }, [projects, scope]);
   // 本机报的时间是这台电脑的钟，「今天」也按这台电脑算（公司时区）。
   const today = calendarDate(new Date().toISOString());
   const here = useMemo(() => (local.phase === "ready"
@@ -48,6 +48,6 @@ export function useBackground(scope: BackgroundScope, api: WorkHomeApi): Backgro
     // 云端的只给看：停只能在跑它的那台电脑上经本机程序停，这台电脑上的由下面本机那份（同一个 id）给停止。
     if (scope === "resources") return [];
     const base = api.live ? (cloud?.scope === scope ? cloud.items : []).map((item) => ({ ...item, stoppable: false })) : workerBackground(workers);
-    return inScope(mergeBackground(base, here), scope);
-  }, [api.live, cloud, scope, workers, here]);
+    return inScope(mergeBackground(base, here), scope, members);
+  }, [api.live, cloud, scope, workers, here, members]);
 }

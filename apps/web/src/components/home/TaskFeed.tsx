@@ -1,14 +1,15 @@
 "use client";
 
 /**
- * Task 管线里的验收行（新首页设计第 4.5 条，契约 GET /api/me/tasks/:taskId/feed）。网页按时间插进 Task 管线的对话：
+ * 项目对话里的验收行（新首页设计第 4.5 条、16.3，契约 GET /api/me/projects/:projectId/feed）。网页按时间插进项目对话：
  * - 过了：管线说的一句话「greet 验收过了（5/5），已合进 main」，鼠标移上去句尾出「推翻」（弱按钮；写原因；合回以后推翻由管线开返工子会话）；
  *   没合回的在这台电脑上接着问合不合。
  * - 受阻：选项框「按这个改（推荐）/ 我去看看 / 仍然通过」。
  * - 约定都达到：「约定 n 条都达到了，交给认可人？」——交给认可人 = 把攒着的出一版，到 Task 详情里对表、请认可人看、交付（V1 的面板）。
  * - 合回以后被推翻：一句「推翻了，开了返工「b」」，点了进返工的子会话。
  * - 子会话的提问和批准（14.3）：都在这里出选项框，框顶上一行写子会话名，答案直接回给那个子会话；子会话页里只留一行问题和「去回答」。
- * 第一次没过不出：改法自动送回重做，不打扰你。B 的接口没上时由看板上的卡拼（derive.ts 的 deriveFeed，没有返工那一种）。
+ * 挂上一件 Task（goal_linked）由项目对话自己画成分隔线，不在这里。
+ * 第一次没过不出：改法自动送回重做，不打扰你。B 的接口没上时由各件 Task 看板上的卡拼（derive.ts 的 deriveFeed，没有返工那一种）。
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { TLocalQuestionAnswerRequest, TTaskFeedItem } from "@warmap/contracts";
@@ -17,16 +18,15 @@ import { DecisionBox } from "@/components/work/DecisionBox";
 import { ApprovalDecision, QuestionDecision, awayChip } from "@/components/work/decisions";
 import type { TimedBlock } from "@/components/work/WorkTimeline";
 import { useHandheld } from "@/components/ui/useHandheld";
-import { CloudError, overrule, readTaskFeed, shipPending } from "@/lib/board/cloud";
+import { CloudError, overrule, readProjectFeed, shipPending } from "@/lib/board/cloud";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { useSessionEvents } from "@/lib/local/useSessionEvents";
 import { running } from "@/lib/local/sessionView";
-import type { TaskBoard } from "@/lib/board/useTaskBoard";
 import { canCommandHere } from "@/lib/work/actions";
 import { useMergeIssues } from "@/lib/work/merge";
 import type { Worker } from "@/lib/work/workers";
 import { askAnchor, cardHref, deriveFeed, infoHref } from "@/lib/home/derive";
-import type { FeedItem, WaitingItem } from "@/lib/home/types";
+import type { FeedItem, ProjectFeedItem, WaitingItem } from "@/lib/home/types";
 import type { WorkHomeApi } from "@/lib/home/useWorkHome";
 import { BlockedDecision, MergeDecision, answeredOf, markAnswered } from "./TaskDecisions";
 import f from "@/styles/task-feed.module.css";
@@ -35,38 +35,41 @@ const POLL_MS = 5000;
 /** 推翻的原因（OverruleCardHandbackRequest.reason 的上限）。 */
 const REASON_MAX = 200;
 
-/** board：这件 Task 的看板（所有的卡和标准；worker 列表只带今天完成的）。 */
-export function useTaskFeed(taskId: string, board: TaskBoard | null, api: WorkHomeApi): FeedItem[] {
+/** 项目对话的动态。接口没上时由挂着的各件 Task 的看板拼（所有的卡和标准；worker 列表只带今天完成的），没有 goal_linked。 */
+export function useProjectFeed(projectId: string, taskIds: readonly string[], api: WorkHomeApi): ProjectFeedItem[] {
   const merges = useMergeIssues();
   const local = useLocalRunner();
-  const [cloud, setCloud] = useState<{ taskId: string; items: FeedItem[] } | null>(null);
+  const [cloud, setCloud] = useState<{ projectId: string; items: ProjectFeedItem[] } | null>(null);
   useEffect(() => {
     if (!api.live) return;
     let alive = true;
-    const load = () => readTaskFeed(taskId).then((data) => { if (alive && data) setCloud({ taskId, items: data.items }); }, () => undefined);
+    const load = () => readProjectFeed(projectId).then((data) => { if (alive && data) setCloud({ projectId, items: data.items }); }, () => undefined);
     void load();
     const timer = window.setInterval(() => { if (document.visibilityState === "visible") void load(); }, POLL_MS);
     return () => { alive = false; window.clearInterval(timer); };
-  }, [api.live, taskId]);
-  const mine = useMemo(() => api.work.workers.filter((worker) => worker.taskId === taskId), [api.work.workers, taskId]);
-  const derived = useMemo(() => deriveFeed({ cards: board?.cards ?? [], workers: mine, criteria: board?.criteria.map((criterion) => criterion.text) ?? [], merges, sessions: local.sessions }),
-    [board, mine, merges, local.sessions]);
-  return api.live ? (cloud?.taskId === taskId ? cloud.items : []) : derived;
+  }, [api.live, projectId]);
+  const { boards, workers } = api.work;
+  const key = taskIds.join(",");
+  const derived = useMemo(() => key.split(",").filter(Boolean).flatMap((taskId) => {
+    const board = boards[taskId];
+    return deriveFeed({ taskId, cards: board?.cards ?? [], workers: workers.filter((worker) => worker.taskId === taskId), criteria: board?.criteria.map((criterion) => criterion.text) ?? [],
+      merges, sessions: local.sessions });
+  }).sort((a, b) => a.at.localeCompare(b.at)), [key, boards, workers, merges, local.sessions]);
+  return api.live ? (cloud?.projectId === projectId ? cloud.items : []) : derived;
 }
 
-/** 子会话页「去回答」、等你那一行跳过来的地址：Task 管线，锚在那个子会话的选项框上（定义在 derive，等你的地址也用它）。 */
+/** 子会话页「去回答」、等你那一行跳过来的地址：项目对话，锚在那个子会话的选项框上（定义在 derive，等你的地址也用它）。 */
 export { askAnchor } from "@/lib/home/derive";
 
 /**
  * 验收行变成对话里按时间插的几块；合不合回的选项框接在「过了」那一句后面。子会话在问、在等批准的，也在这里出选项框（14.3）。
- * onSay：「自己说」发进 Task 管线；发不出去（管线正在回话）时回 false。
+ * onSay：「自己说」发进项目对话；发不出去（对话正在回话）时回 false。
  */
-export function feedBlocks({ items, workers, taskId, go, onSay, onChanged, remoteAsks }: {
+export function feedBlocks({ items, workers, go, onSay, onChanged, remoteAsks }: {
   items: FeedItem[];
   workers: Worker[];
   /** 别的电脑上跑的子会话在问、在等批准：卡或专题的 id → 等你里那一条（带原话 question、要批准的那一步 permission，契约 aa6aba9e）。 */
   remoteAsks?: ReadonlyMap<string, WaitingItem>;
-  taskId: string;
   go: (href: string) => void;
   onSay: (text: string) => unknown;
   onChanged: () => void;
@@ -81,7 +84,7 @@ export function feedBlocks({ items, workers, taskId, go, onSay, onChanged, remot
         return blocks;
       }
       case "card_blocked": return [{ key: item.id, at: item.at, node: <BlockedDecision item={item} worker={workerOf(item.cardId)} go={go} onChanged={onChanged} /> }];
-      case "criteria_met": return [{ key: item.id, at: item.at, node: <CriteriaDecision item={item} taskId={taskId} go={go} onSay={onSay} /> }];
+      case "criteria_met": return [{ key: item.id, at: item.at, node: <CriteriaDecision item={item} go={go} onSay={onSay} /> }];
       case "rework_opened": return [{ key: item.id, at: item.at, node: (
         <p className={f.sentence} data-testid="feed-rework">
           <button type="button" className={f.sentenceLink} onClick={() => go(cardHref(item.cardId))}>推翻了，开了返工「{item.title}」</button>
@@ -139,7 +142,8 @@ type Met = Extract<TTaskFeedItem, { kind: "criteria_met" }>;
  * 约定都达到了：交给认可人 = 把攒着的出一版（没东西可攒也行，最新那版照旧），然后到 Task 详情里看对表、请认可人看、交付——
  * 评审要跑一会儿，请人看和交付都要等它评完，所以不在这里一口气做完。答过的（这台电脑上）不再问。
  */
-function CriteriaDecision({ item, taskId, go, onSay }: { item: Met; taskId: string; go: (href: string) => void; onSay: (text: string) => unknown }) {
+function CriteriaDecision({ item, go, onSay }: { item: Met; go: (href: string) => void; onSay: (text: string) => unknown }) {
+  const { taskId } = item;
   const [answer, setAnswer] = useState<string | null>(() => answeredOf(item.id));
   const title = `约定 ${item.total} 条都达到了，交给认可人？`;
   if (answer) return <DecisionBox kind="question" title={title} options={[]} onPick={() => undefined} resolved={answer} />;
@@ -151,7 +155,7 @@ function CriteriaDecision({ item, taskId, go, onSay }: { item: Met; taskId: stri
     settle("交给认可人");
     go(infoHref(taskId));
   };
-  // 自己说：发进 Task 管线；管线正在回话发不出去时算失败（框留着、写「失败 · 重试」），发出去了才收起。
+  // 自己说：发进项目对话；管线正在回话发不出去时算失败（框留着、写「失败 · 重试」），发出去了才收起。
   const say = async (text: string) => {
     if ((await onSay(text)) === false) throw new Error("没发出去");
     settle(text);
@@ -165,7 +169,7 @@ function CriteriaDecision({ item, taskId, go, onSay }: { item: Met; taskId: stri
 }
 
 /**
- * 子会话的提问和批准，由 Task 管线转达（14.3）：框顶上一行 12 淡色写子会话名，下面是问题和选项，答案直接回给那个子会话。
+ * 子会话的提问和批准，由项目对话转达（14.3）：框顶上一行 12 淡色写子会话名，下面是问题和选项，答案直接回给那个子会话。
  * 只有跑它的这台电脑上能答；别处只留问题和「等你 · {电脑名}」。从子会话页「去回答」跳来（地址带 #ask-会话）时滚到这里。
  */
 function SubSessionAsk({ worker, remote: item }: { worker: Worker; remote?: WaitingItem }) {

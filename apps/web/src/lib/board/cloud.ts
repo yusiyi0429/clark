@@ -6,7 +6,8 @@ import type {
   TBudget, TAcceptCardDraftsRequest, TCardBoardResponse, TCardBriefResponse, TCardDetailResponse, TCardPlanBriefResponse, TCardPlanView, TCardSplitListResponse, TCardSplitRequestView, TCardTaskView,
   TCreateLocalDeviceRequest, TCreateLocalDeviceResponse, TLocalDeviceView, TPatchCardRequest, TResearchTopicView,
   TTopicBriefResponse, TTopicDetailResponse, TTopicVersionView, TWorkersResponse,
-  TBackgroundResponse, TClaimSessionStartsResponse, TRouteResponse, TTaskFeedResponse, TTaskPipelineResponse, TWorkHomeResponse,
+  TBackgroundResponse, TClaimSessionStartsResponse, TRouteResponse, TWorkHomeResponse,
+  TProject, TProjectDetailResponse, TProjectFeedResponse, TProjectGoal, TProjectListResponse, TProjectPipelineResponse, TUpdateProjectRequest,
 } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
 
@@ -107,9 +108,24 @@ export const topicBrief = (topicId: string, critics?: string[]) =>
 // ── 新首页（workHome.ts）：B 的实现到之前这几个读接口是 404，网页回落到上面几份数据自己拼（lib/home/derive.ts）──
 export const readWorkHome = () => maybe<TWorkHomeResponse>(browserApi.GET("/api/me/work-home") as Promise<Result<TWorkHomeResponse>>);
 export const readBackground = (scope: string) => maybe<TBackgroundResponse>(browserApi.GET("/api/me/background", { params: { query: { scope } } }) as Promise<Result<TBackgroundResponse>>);
-export const readTaskFeed = (taskId: string) => maybe<TTaskFeedResponse>(browserApi.GET("/api/me/tasks/{taskId}/feed", { params: task(taskId) }) as Promise<Result<TTaskFeedResponse>>);
-/** Task 管线的对话（第一次打开时建）；收发走现有对话接口，scope 是 plan-task:<taskId>。 */
-export const openPipeline = (taskId: string) => maybe<TTaskPipelineResponse>(browserApi.POST("/api/me/tasks/{taskId}/pipeline", { params: task(taskId) }) as Promise<Result<TTaskPipelineResponse>>);
+// ── 项目（第 16 节，projects.ts）──
+const project = (projectId: string) => ({ path: { projectId } });
+export const listProjects = () => unwrap<TProjectListResponse>(browserApi.GET("/api/me/projects") as Promise<Result<TProjectListResponse>>);
+/** 建一个项目；带 taskId 时顺手把这件 Task 挂上来（「挂到… → 新建」）。 */
+export const createProject = (name: string, taskId?: string) =>
+  unwrap<TProject>(browserApi.POST("/api/me/projects", { body: taskId ? { name, taskId } : { name } }) as Promise<Result<TProject>>);
+export const readProject = (projectId: string) => maybe<TProjectDetailResponse>(browserApi.GET("/api/me/projects/{projectId}", { params: project(projectId) }) as Promise<Result<TProjectDetailResponse>>);
+/** 改名、归档（archived: true）、恢复（archived: false）。 */
+export const updateProject = (projectId: string, body: TUpdateProjectRequest) =>
+  unwrap<TProject>(browserApi.PATCH("/api/me/projects/{projectId}", { params: project(projectId), body }) as Promise<Result<TProject>>);
+/** 把一件 Task 挂到这个项目（原来挂在别处就移过来）。 */
+export const attachGoal = (projectId: string, taskId: string) =>
+  unwrap<TProjectGoal>(browserApi.PUT("/api/me/projects/{projectId}/goals/{taskId}", { params: { path: { projectId, taskId } } }) as Promise<Result<TProjectGoal>>);
+/** 项目对话（第一次打开时建）；收发走现有对话接口，scope 是 project:<projectId>。 */
+export const openProjectPipeline = (projectId: string) =>
+  maybe<TProjectPipelineResponse>(browserApi.POST("/api/me/projects/{projectId}/pipeline", { params: project(projectId) }) as Promise<Result<TProjectPipelineResponse>>);
+export const readProjectFeed = (projectId: string) =>
+  maybe<TProjectFeedResponse>(browserApi.GET("/api/me/projects/{projectId}/feed", { params: project(projectId) }) as Promise<Result<TProjectFeedResponse>>);
 export const routeMessage = (text: string) => maybe<TRouteResponse>(browserApi.POST("/api/me/route", { body: { text } }) as Promise<Result<TRouteResponse>>);
 /** 认领「要开工」：一条只给一处；本机起不来就 release 放回去（带认领它的这台电脑，只放回这台认领的那条；别处已经重新认领的回 404，照常忽略）。 */
 export const claimStarts = (deviceId: string) => maybe<TClaimSessionStartsResponse>(browserApi.POST("/api/me/session-starts/claim", { body: { deviceId } }) as Promise<Result<TClaimSessionStartsResponse>>);

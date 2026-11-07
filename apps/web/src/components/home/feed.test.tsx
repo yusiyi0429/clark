@@ -30,7 +30,7 @@ const local = (sessions: TLocalSessionSummary[]) => ({ runner: createMockRunner(
   refresh: vi.fn(), pair: vi.fn(), unpair: vi.fn(), pickFolder: vi.fn(), setIncludePersonal: vi.fn() }) as unknown as Parameters<typeof LocalContext.Provider>[0]["value"];
 const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
 const render = (items: FeedItem[], workers: Worker[], sessions: TLocalSessionSummary[] = []) => {
-  const blocks = feedBlocks({ items, workers, taskId: "t1", go: vi.fn(), onSay: vi.fn(), onChanged: vi.fn() });
+  const blocks = feedBlocks({ items, workers, go: vi.fn(), onSay: vi.fn(), onChanged: vi.fn() });
   const node: ReactNode = <>{blocks.map((block) => <div key={block.key}>{block.node}</div>)}</>;
   return { blocks, html: renderToStaticMarkup(<LocalContext.Provider value={local(sessions)}>{node}</LocalContext.Provider>) };
 };
@@ -78,7 +78,7 @@ describe("Task 管线里的验收行（第 4.5 条）", () => {
   });
 
   it("约定都达到：问「约定 3 条都达到了，交给认可人？」，交给认可人推荐、先不交、自己说", () => {
-    const html = text(render([{ kind: "criteria_met", id: "c1", at: "2026-11-07T06:00:00Z", met: 3, total: 3 }], []).html);
+    const html = text(render([{ kind: "criteria_met", id: "c1", at: "2026-11-07T06:00:00Z", taskId: "t1", met: 3, total: 3 }], []).html);
     expect(html).toMatch(/约定 3 条都达到了，交给认可人？.*交给认可人.*推荐.*先不交.*自己说…/);
   });
 

@@ -37,11 +37,11 @@ export function viewOf(pathname: string): View {
   return { kind: "home" };
 }
 
-/** 右栏跟着展示区走：首页和总管线列本人全部（B 的契约 scope=main），Task 管线和详情列这件 Task 的，子会话列它自己的；二级页、月份页只显示资源块（resources）。 */
+/** 右栏跟着展示区走：首页和总管线列本人全部（B 的契约 scope=main），项目对话和详情列这个项目的，Task 详情列这件 Task 的，子会话列它自己的；二级页、月份页只显示资源块（resources）。 */
 export function scopeOf(view: View): BackgroundScope {
   switch (view.kind) {
-    // 项目页的后台任务由外壳按项目对话接的那件 Task 换成 task:<id>（scopeOf 只看地址）。
-    case "home": case "buddy": case "mission": case "project": case "projectInfo": return "main";
+    case "home": case "buddy": case "mission": return "main";
+    case "project": case "projectInfo": return `project:${view.id}`;
     case "task": case "info": return `task:${view.taskId}`;
     case "card": return `card:${view.id}`;
     case "topic": return `topic:${view.id}`;

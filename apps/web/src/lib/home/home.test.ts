@@ -65,60 +65,63 @@ describe("新首页的数据（B 的 work-home 没上时照契约的形状拼）
     rounds: [], unreadThreads: [{ objectType: "issue", objectId: "i1", title: "验收口径", unread: 2, href: "/me/issues/i1" }], unreadMissionGroups: [],
   } });
 
-  it("Task 下是能对话的子会话（卡、专题），规划员和验收员不算；等你排在前面，第一次没过仍是进行中（重做中）；不归 Task 的进「其他」；本月的 Mission 没有 Task 也列（界面不画）", () => {
+  it("每个有 Task 的 Mission 一个同名项目（16.5），Task 都挂上；项目下是能对话的子会话（卡、专题），规划员和验收员不算；等你排在前面，第一次没过仍是进行中；不归 Task 的进「其他」；「本月」里没有 Task 的 Mission 也列", () => {
     expect(data.period).toBe("2026-11");
-    expect(data.missions.map((mission) => [mission.missionId, mission.period, mission.tasks.length])).toEqual([["m1", "2026-11", 2], ["m2", "2026-11", 0]]);
-    const v2 = data.missions[0]!.tasks[0]!;
-    expect(v2.subSessions.map((sub) => [sub.id, sub.state, sub.waiting, sub.queueReason])).toEqual([
+    expect(data.projects.map((project) => [project.projectId, project.name, project.goals.map((goal) => goal.taskId)])).toEqual([["mission:m1", "天枢 11 月", ["t1", "t2"]]]);
+    expect(data.archivedCount).toBe(0);
+    expect(data.month.missions.map((mission) => [mission.missionId, mission.period, mission.tasks.length])).toEqual([["m1", "2026-11", 2], ["m2", "2026-11", 0]]);
+    expect(data.month.missions[0]!.tasks[0]!.project).toEqual({ projectId: "mission:m1", name: "天枢 11 月" });
+    const project = data.projects[0]!;
+    expect(project.subSessions.map((sub) => [sub.id, sub.state, sub.waiting, sub.queueReason])).toEqual([
       ["c1", "waiting", "approval", null], ["c4", "running", null, null], ["c2", "queued", null, "slot"], ["c3", "done", null, null],
     ]);
-    expect(v2.pipeline).toEqual({ conversationId: null, scope: "plan-task:t1" });
-    // subtitle 照契约是完成定义；Task 行的「11/20 验收」网页按计划另算（今天以后最近的那个）。
-    expect(v2.subtitle).toBe("本机派活、岗位与本机验收跑通");
-    expect(data.missions[0]!.tasks[1]!.subtitle).toBe("约定、对表与参考评审");
+    expect(project.pipeline).toEqual({ conversationId: null, scope: "project:mission:m1" });
+    // 本体的 Task 没有截止日：取所在月份的最后一天；没写标准时是完成定义那一条。「本月」行尾的「11/20 验收」网页按计划另算。
+    expect(project.goals.map((goal) => [goal.dueDate, goal.criteriaTotal])).toEqual([["2026-11-30", 2], ["2026-11-30", 1]]);
     expect(gateLabel(plan, "m1")).toBe("11/20 验收");
     expect(gateLabel(plan, "m2")).toBeNull();
-    expect(data.missions[0]!.tasks[1]!.completedAt).not.toBeNull();
+    expect(project.goals[1]!.completedAt).not.toBeNull();
+    expect(data.month.missions[0]!.tasks[1]!.completedAt).not.toBeNull();
     expect(data.other.subSessions).toEqual([expect.objectContaining({ id: "tp1", kind: "topic" })]);
   });
 
   it("首页一行现状：按紧急程度等你、进行中（没过的在自动重做）、已排队、今天完成，最多三段；交付了是已完成；规划员在拆写拆卡中；什么都没有是未开始", () => {
-    const [v2, v1] = data.missions[0]!.tasks;
-    expect(v2!.summary).toMatchObject({ running: 1, waiting: 1, queued: 1, done: 1, doneToday: 1, needsYou: 1 });
-    expect(statusLine(v2!)).toBe("等你 1 · 进行中 1 · 已排队 1");
-    expect(statusLine(v1!)).toBe("已完成");
-    const idle = { ...v2!, completedAt: null, subSessions: [], summary: { ...v2!.summary, queued: 0, done: 0, doneToday: 0, needsYou: 0 } };
+    const v2 = data.projects[0]!;
+    expect(v2.summary).toMatchObject({ running: 1, waiting: 1, queued: 1, done: 1, doneToday: 1, needsYou: 1 });
+    expect(statusLine(v2)).toBe("等你 1 · 进行中 1 · 已排队 1");
+    expect(statusLine({ ...v2, completedAt: "2026-11-07T00:00:00.000Z" })).toBe("已完成");
+    const idle = { ...v2, completedAt: null, subSessions: [], summary: { ...v2.summary, queued: 0, done: 0, doneToday: 0, needsYou: 0 } };
     expect(statusLine({ ...idle, planning: true })).toBe("拆卡中");
     expect(statusLine({ ...idle, planning: false })).toBe("未开始");
     // 开过子会话的不写「未开始」：之前完成的写「已完成 N」，停下了的写「已停下 N」。
-    const old = v2!.subSessions.find((sub) => sub.state === "done")!;
+    const old = v2.subSessions.find((sub) => sub.state === "done")!;
     expect(statusLine({ ...idle, subSessions: [old], summary: { ...idle.summary, done: 1 } })).toBe("已完成 1");
     expect(statusLine({ ...idle, subSessions: [{ ...old, state: "waiting", waiting: null }] })).toBe("已停下 1");
   });
 
-  it("等你：子会话的批准、会议记录待确认；群消息只是让你知道，不进（设计 9.6）；去哪儿看由 open 映射到路由；受阻去 Task 管线；第一次没过自动重做，不在这里", () => {
+  it("等你：子会话的批准、会议记录待确认；群消息只是让你知道，不进（设计 9.6）；去哪儿看由 open 映射到路由；受阻去项目对话；第一次没过自动重做，不在这里", () => {
     expect(data.waiting.map((entry) => [entry.kind, waitingHref(entry)])).toEqual([
-      ["approval", "/me/work/tasks/t1"], ["meeting", "/me/meetings/mt1"],
+      ["approval", "/me/work/projects/mission%3Am1"], ["meeting", "/me/meetings/mt1"],
     ]);
     // 能不能就地答：批准要本机办；会后确认点开去答。
     expect(data.waiting.map((entry) => entry.answer)).toEqual(["inline_local", "open"]);
-    // 批准、提问由 Task 管线转达（14.3）：来源只写 Task 名，点了进 Task 管线（有本机会话时锚在那个框上）。
-    expect(data.waiting[0]).toMatchObject({ title: "等你批准", source: "11/30 上线 V2", taskId: "t1", open: { kind: "task", id: "t1" } });
-    expect(waitingHref({ open: { kind: "task", id: "t1", focus: { sessionId: "s1", requestId: null } } })).toBe("/me/work/tasks/t1#ask-s1");
+    // 批准、提问由项目对话转达（14.3）：来源只写项目名，点了进项目对话（有本机会话时锚在那个框上）。
+    expect(data.waiting[0]).toMatchObject({ title: "等你批准", source: "天枢 11 月", taskId: "t1", projectId: "mission:m1", open: { kind: "project", id: "mission:m1" } });
+    expect(waitingHref({ open: { kind: "project", id: "p1", focus: { sessionId: "s1", requestId: null } } })).toBe("/me/work/projects/p1#ask-s1");
     const blocked = deriveWorkHome({ plan, workers: [worker({ key: "card:c9", cardId: "c9", wait: "blocked" })], boards: {}, proposals: [], merges: [], notices: null, deviceId: null });
-    expect(blocked.waiting.map((entry) => [entry.kind, entry.title, waitingHref(entry)])).toEqual([["verdict", "受阻", "/me/work/tasks/t1"]]);
+    expect(blocked.waiting.map((entry) => [entry.kind, entry.title, waitingHref(entry)])).toEqual([["verdict", "受阻", "/me/work/projects/mission%3Am1"]]);
   });
 
   it("验收过了、本机没能自动合回（needsMerge）：子会话是等你合回，等你里一条「合进 main」；本机还在自己合的不算等你；合回了折进已完成", () => {
     const passed = { ...worker({ key: "card:c5", cardId: "c5", title: "greet", stage: "done", finishedAt: "2026-11-07T05:00:00Z" }), workspace: { ...WORKTREE, needsMerge: HOLD } };
     const home = deriveWorkHome({ plan, workers: [passed], boards: {}, proposals: [], merges: [], notices: null, deviceId: null });
-    expect(home.missions[0]!.tasks[0]!.subSessions[0]).toMatchObject({ state: "waiting", waiting: "merge", merge: { state: "needs_merge", baseBranch: "main", reason: "auto_merge_off" } });
+    expect(home.projects[0]!.subSessions[0]).toMatchObject({ state: "waiting", waiting: "merge", merge: { state: "needs_merge", baseBranch: "main", reason: "auto_merge_off" } });
     expect(home.waiting).toEqual([expect.objectContaining({ kind: "merge", title: "合进 main", open: { kind: "card", id: "c5" } })]);
     const merging = deriveWorkHome({ plan, workers: [{ ...passed, workspace: WORKTREE }], boards: {}, proposals: [], merges: [], notices: null, deviceId: null });
-    expect(merging.missions[0]!.tasks[0]!.subSessions[0]).toMatchObject({ state: "done", waiting: null, merge: null });
+    expect(merging.projects[0]!.subSessions[0]).toMatchObject({ state: "done", waiting: null, merge: null });
     expect(merging.waiting).toEqual([]);
     const merged = deriveWorkHome({ plan, workers: [{ ...passed, workspace: { ...WORKTREE, mergedCommit: "b".repeat(40) } }], boards: {}, proposals: [], merges: [], notices: null, deviceId: null });
-    expect(merged.missions[0]!.tasks[0]!.subSessions[0]).toMatchObject({ state: "done", waiting: null, merge: { state: "merged", baseBranch: "main" } });
+    expect(merged.projects[0]!.subSessions[0]).toMatchObject({ state: "done", waiting: null, merge: { state: "merged", baseBranch: "main" } });
     expect(merged.waiting).toEqual([]);
   });
 });
@@ -128,22 +131,22 @@ describe("树上的卡：worker 列表只有今天完成的，看板补上之前
     const boards = { t1: { plan: null, cards: [boardCard("c7", "昨天的", {}), boardCard("c8", "没合的", {})] } };
     const home = deriveWorkHome({ plan, workers: [], boards, proposals: [], merges: [], notices: null, deviceId: "dev-1",
       sessions: [cardSessionWith("c7", { mergedCommit: "b".repeat(40) }), cardSessionWith("c8", { needsMerge: HOLD })] });
-    const subs = home.missions[0]!.tasks[0]!.subSessions;
+    const subs = home.projects[0]!.subSessions;
     expect(subs.map((sub) => [sub.id, sub.state, sub.waiting])).toEqual([["c8", "waiting", "merge"], ["c7", "done", null]]);
-    expect(home.waiting).toEqual([expect.objectContaining({ kind: "merge", title: "合进 main", open: { kind: "card", id: "c8" }, taskId: "t1", deviceId: "dev-1" })]);
+    expect(home.waiting).toEqual([expect.objectContaining({ kind: "merge", title: "合进 main", open: { kind: "card", id: "c8" }, taskId: "t1", projectId: "mission:m1", deviceId: "dev-1" })]);
   });
 
   it("验收中云端只列验收员那条：卡在树上是进行中；卡本身也在列表里时不重复", () => {
     const verifying = worker({ key: "verify:c9", kind: "verify", cardId: "c9", title: "接口" });
     const only = deriveWorkHome({ plan, workers: [verifying], boards: {}, proposals: [], merges: [], notices: null, deviceId: null });
-    expect(only.missions[0]!.tasks[0]!.subSessions).toEqual([expect.objectContaining({ id: "c9", kind: "card", state: "running" })]);
+    expect(only.projects[0]!.subSessions).toEqual([expect.objectContaining({ id: "c9", kind: "card", state: "running" })]);
     const both = deriveWorkHome({ plan, workers: [verifying, worker({ key: "card:c9", cardId: "c9", title: "接口", wait: "approval" })], boards: {}, proposals: [], merges: [], notices: null, deviceId: null });
-    expect(both.missions[0]!.tasks[0]!.subSessions.map((sub) => [sub.id, sub.state])).toEqual([["c9", "waiting"]]);
+    expect(both.projects[0]!.subSessions.map((sub) => [sub.id, sub.state])).toEqual([["c9", "waiting"]]);
   });
 
-  it("受阻（验收两次没过）进 Task 管线：云端给的目标是那张卡时也一样（选项框在管线里）", () => {
-    expect(waitingHref({ kind: "verdict", taskId: "t1", open: { kind: "card", id: "c1" } })).toBe("/me/work/tasks/t1");
-    expect(waitingHref({ kind: "approval", taskId: "t1", open: { kind: "card", id: "c1" } })).toBe("/me/work/cards/c1");
+  it("受阻（验收两次没过）进项目对话：云端给的目标是那张卡时也一样（选项框在对话里）", () => {
+    expect(waitingHref({ kind: "verdict", projectId: "p1", open: { kind: "card", id: "c1" } })).toBe("/me/work/projects/p1");
+    expect(waitingHref({ kind: "approval", projectId: "p1", open: { kind: "card", id: "c1" } })).toBe("/me/work/cards/c1");
   });
 
   it("合不回、但树上没有那张卡的，照样在等你里", () => {
@@ -153,11 +156,11 @@ describe("树上的卡：worker 列表只有今天完成的，看板补上之前
   });
 });
 
-describe("Task 管线里的验收行（B 的 feed 没上时由看板上的卡拼）", () => {
+describe("项目对话里的验收行（B 的 feed 没上时由各件 Task 看板上的卡拼）", () => {
   const base = (cardId: string, title: string, extra: Partial<TWorkerItem> = {}) => worker({ key: `card:${cardId}`, cardId, title, stage: "done", finishedAt: "2026-11-07T05:00:00Z", ...extra });
 
   it("过了一行从看板上的卡拼（昨天过的也在），带合回结果；受阻从还在做的卡拼；第一次没过、推翻了的不出", () => {
-    const items = deriveFeed({ criteria: ["a", "b"], merges: [], sessions: [cardSessionWith("c1", { mergedCommit: "b".repeat(40) })],
+    const items = deriveFeed({ taskId: "t1", criteria: ["a", "b"], merges: [], sessions: [cardSessionWith("c1", { mergedCommit: "b".repeat(40) })],
       cards: [boardCard("c1", "greet", {}), boardCard("c4", "推翻的", { overruled: true }), boardCard("c3", "样式", { outcome: "fail" })],
       workers: [
         withHandback(base("c2", "接口", { stage: "doing", wait: "blocked" }), { outcome: "fail", returnText: "补上 404", finishedAt: "2026-11-07T05:10:00Z" }),
@@ -169,19 +172,19 @@ describe("Task 管线里的验收行（B 的 feed 没上时由看板上的卡拼
   });
 
   it("受阻已经按改法送回去（returnedAt）的不再问", () => {
-    const items = deriveFeed({ criteria: [], merges: [], cards: [],
+    const items = deriveFeed({ taskId: "t1", criteria: [], merges: [], cards: [],
       workers: [withHandback(base("c2", "接口", { stage: "doing", wait: "blocked" }), { outcome: "fail", returnedAt: "2026-11-07T05:20:00Z" })] });
     expect(items).toEqual([]);
   });
 
   it("约定的每一条都有过了的卡（含本人「仍然通过」的），问交给认可人；只差一条不问", () => {
-    const items = deriveFeed({ criteria: ["a", "b"], merges: [], workers: [], cards: [
+    const items = deriveFeed({ taskId: "t1", criteria: ["a", "b"], merges: [], workers: [], cards: [
       boardCard("c1", "一", {}, 1),
       boardCard("c2", "二", { outcome: "fail", overruled: true, finishedAt: "2026-11-07T06:00:00Z" }, 2),
     ] });
     expect(items.map((entry) => entry.kind)).toEqual(["card_passed", "card_passed", "criteria_met"]);
-    expect(items[2]).toMatchObject({ met: 2, total: 2 });
-    expect(deriveFeed({ criteria: ["a", "b"], merges: [], workers: [], cards: [boardCard("c1", "一", {}, 1)] }).map((entry) => entry.kind)).toEqual(["card_passed"]);
+    expect(items[2]).toMatchObject({ taskId: "t1", met: 2, total: 2 });
+    expect(deriveFeed({ taskId: "t1", criteria: ["a", "b"], merges: [], workers: [], cards: [boardCard("c1", "一", {}, 1)] }).map((entry) => entry.kind)).toEqual(["card_passed"]);
   });
 });
 
@@ -220,6 +223,10 @@ describe("后台任务", () => {
       ["plan", "拆卡", "done"], ["verify", "验收「改样式」", "done"], ["verify", "验收「停掉的」", "stopped"], ["bg", "查资料", "running"],
     ]);
     expect(inScope(items, "task:t1").map((entry) => entry.title)).toEqual(["拆卡", "查资料"]);
+    // 项目范围：挂着的 Task 的规划员，加项目里各子会话的。
+    expect(inScope(items, "project:p1", { taskIds: new Set(["t1"]), subIds: new Set() }).map((entry) => entry.title)).toEqual(["拆卡", "查资料"]);
+    expect(inScope(items, "project:p1", { taskIds: new Set(), subIds: new Set(["c3"]) }).map((entry) => entry.title)).toEqual(["验收「改样式」", "验收「停掉的」"]);
+    expect(inScope(items, "project:p1")).toEqual([]);
   });
 
   it("跟着展示区取范围；云端的和这台电脑上的合在一起，同一个 id 以这台电脑为准", () => {
@@ -248,18 +255,24 @@ describe("后台任务", () => {
 });
 
 describe("首页输入框的「自动」（B 的 /route 没上时，规则相同）", () => {
-  const tasks = plan.tasks;
-  it("只在管线之间选：提到 Task 名或标准里四个字以上的词就发给那件 Task；都没提到、或提到好几件，交给伙伴", () => {
-    expect(routeText("11/18 上线 V1 那件还差什么", tasks)).toEqual({ taskId: "t2" });
-    expect(routeText("验收员逐条判的口径再看一下", tasks)).toEqual({ taskId: "t1" });
-    expect(routeText("今天下午有什么会", tasks)).toBe("main");
-    expect(routeText("11/18 上线 V1 和 11/30 上线 V2 哪个先", tasks)).toBe("main");
+  const goal = (taskId: string, name: string, criteria: string[]) => ({ taskId, missionId: "m1", name, period: "2026-11", dueDate: "2026-11-30", criteria, criteriaMet: 0, criteriaTotal: criteria.length, completedAt: null });
+  const projects = [
+    { projectId: "p1", name: "天枢 V2", goals: [goal("t1", "11/30 上线 V2", ["本机派活跑通", "验收员逐条判"])] },
+    { projectId: "p2", name: "Chat 服务", goals: [goal("t2", "11/18 上线 V1", ["约定、对表与参考评审"])] },
+    { projectId: "p3", name: "A", goals: [] },
+  ];
+  it("只在伙伴和各项目之间选：提到项目名（两个字以上）、挂着的 Task 名或标准里四个字以上的词就发给那个项目；都没提到、或提到好几个，交给伙伴", () => {
+    expect(routeText("11/18 上线 V1 那件还差什么", projects)).toEqual({ projectId: "p2" });
+    expect(routeText("验收员逐条判的口径再看一下", projects)).toEqual({ projectId: "p1" });
+    expect(routeText("Chat 服务今天怎么样", projects)).toEqual({ projectId: "p2" });
+    expect(routeText("今天下午有什么会 A", projects)).toBe("main");
+    expect(routeText("11/18 上线 V1 和 11/30 上线 V2 哪个先", projects)).toBe("main");
   });
 });
 
 describe("等你按设计 9.6（契约增补二）", () => {
   const row = (extra: Partial<WaitingItem>): WaitingItem => ({
-    id: extra.id ?? "x", kind: "meeting", title: "t", source: null, open: { kind: "meeting", id: "m" }, taskId: null, sessionId: null, deviceId: null,
+    id: extra.id ?? "x", kind: "meeting", title: "t", source: null, open: { kind: "meeting", id: "m" }, taskId: null, projectId: null, sessionId: null, deviceId: null,
     at: null, dueAt: null, deviceName: null, person: null, month: null, question: null, permission: null, answer: "open", ...extra,
   });
 
@@ -289,14 +302,14 @@ describe("等你按设计 9.6（契约增补二）", () => {
 
   it("派活单拆好了还没开工：等你里一条「这样开工？」，就地答（走云端）", () => {
     const home = deriveWorkHome({ plan, workers: [], boards: { t1: { plan: null, drafts: [{}, {}] } }, proposals: [], merges: [], notices: null, deviceId: null });
-    expect(home.waiting).toEqual([expect.objectContaining({ kind: "plan_start", title: "11/30 上线 V2：这样开工？", source: "2 步", answer: "inline", open: { kind: "task", id: "t1" } })]);
+    expect(home.waiting).toEqual([expect.objectContaining({ kind: "plan_start", title: "11/30 上线 V2：这样开工？", source: "2 步", answer: "inline", open: { kind: "project", id: "mission:m1" }, projectId: "mission:m1" })]);
   });
 
-  it("本人自己做的执行事项挂在 Task 下（9.10），退回的不列；待归位的在其他里", () => {
+  it("本人自己做的执行事项在 Task 所在的项目里（9.10），退回的不列；待归位的在其他里", () => {
     const view = (id: string, extra: Record<string, unknown>) => ({ id, title: id, status: "in_progress", dueDate: null, awaitingAcceptance: false, updatedAt: "2026-11-06T00:00:00Z", planTaskId: "t1", card: null, ...extra });
     const withItems = { ...plan, activities: [{ item: view("mine", {}) }, { item: view("back", { status: "returned" }) }], unplaced: [view("loose", { planTaskId: null })] } as unknown as THomePlanResponse;
     const home = deriveWorkHome({ plan: withItems, workers: [], boards: {}, proposals: [], merges: [], notices: null, deviceId: null });
-    expect(home.missions[0]!.tasks.find((task) => task.taskId === "t1")!.items.map((entry) => entry.id)).toEqual(["mine"]);
+    expect(home.projects[0]!.items.map((entry) => entry.id)).toEqual(["mine"]);
     expect(home.other.items.map((entry) => entry.id)).toEqual(["loose"]);
   });
 

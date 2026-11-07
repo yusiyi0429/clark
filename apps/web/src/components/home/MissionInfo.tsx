@@ -3,15 +3,15 @@
 /**
  * Mission 详情（新首页设计 14.2）：只读。Mission 没有自己的管线——活都在下面的 Task 里干，跨 Task 的事问伙伴。
  * 页头：返回、Mission 名，右边 chip「Mission · 11 月」。正文（文档类页面，600）：目标一句话、验收标准（一条一行）、
- * 下面的 Task（一件一行，写现状汇总和验收日，点了进 Task 管线）、「问伙伴」次按钮（进总管线，输入框带「关于：Mission」）。
+ * 下面的 Task（一件一行，写验收日，做完了小字「已完成」，点了进它挂的项目）、「问伙伴」次按钮（进总管线，输入框带「关于：Mission」）。
  * 目标和验收标准取这个 Mission 所在的任务卡（GET /api/mission-cards/:cardId 里的 outcome、successEvidence）；读不到就只列 Task。
  * 设计里的「Mission Card ↗」不放：第 15 节定了新首页里不链到旧页面。
  */
 import { useEffect, useState } from "react";
 import { ArrowLeft, Circle } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
-import { gateLabel, monthLabel, statusLine, taskHref, HOME_HREF } from "@/lib/home/derive";
-import type { HomeMission } from "@/lib/home/types";
+import { gateLabel, monthLabel, projectHref, taskHref, HOME_HREF } from "@/lib/home/derive";
+import type { HomeMonthMission } from "@/lib/home/types";
 import type { WorkHomeApi } from "@/lib/home/useWorkHome";
 import { ICON } from "./StateIcon";
 import { useViewChrome } from "./view";
@@ -30,7 +30,7 @@ function missionOf(body: unknown, missionId: string): CardMission | null {
 }
 
 export function MissionInfo({ mission, cardId, api, go, onAsk }: {
-  mission: HomeMission;
+  mission: HomeMonthMission;
   /** 这个 Mission 所在的任务卡（本月计划里有）；之前月份的、没有卡的为 null。 */
   cardId: string | null;
   api: WorkHomeApi;
@@ -78,10 +78,10 @@ export function MissionInfo({ mission, cardId, api, go, onAsk }: {
                 {mission.tasks.map((task) => {
                   const gate = gateLabel(api.work.plan, mission.missionId);
                   return (
-                    <button key={task.taskId} type="button" className={h.taskLine} onClick={() => go(taskHref(task.taskId))}>
+                    <button key={task.taskId} type="button" className={h.taskLine} onClick={() => go(task.project ? projectHref(task.project.projectId) : taskHref(task.taskId))}>
                       <span className={h.taskText}>
                         <span className={h.taskName}>{task.name}</span>
-                        <span className={h.taskSub}>{statusLine(task)}</span>
+                        {task.completedAt ? <span className={h.taskSub}>已完成</span> : null}
                       </span>
                       {gate ? <span className={h.taskGate}>{gate}</span> : null}
                     </button>

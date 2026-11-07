@@ -1,23 +1,28 @@
 /**
  * 项目（新首页设计第 16 节）：一件一直做下去的事，没有「完成」，不做了就归档；每月的 Task 挂在项目上。
  *
- * B 的首页数据 v2（projects、month）和项目、挂接的接口还没出，这里先照 16.5 上线迁移的规矩从现有数据推出来：
- * 树上每个 Mission 一个同名项目，它下面的 Task 都挂上去（id 是 mission:<missionId>）。
- * 本人在这个标签页里做的新建、改名、归档、挂到、绑文件夹先记在内存里（ProjectEdits），刷新就没了——接口到了换成调接口，界面不动。
- * 网页不存业务数据，所以不写进浏览器存储。
+ * 数据是 B 的首页 v2（GET /api/me/work-home 的 projects、month）和项目接口（GET /api/me/projects，契约 projects.ts）；
+ * 这里把它们转成左栏、项目页、详情用的样子。绑文件夹是本机程序的事（按设备分别绑，云端不存），转交的接口还没出（16.7），
+ * 这两样先记在这个标签页的内存里（ProjectEdits），刷新就没了。网页不存业务数据，所以不写进浏览器存储。
  */
-import type { HomeTask, SubSession, WorkHomeData } from "./types";
+import type { THomeItem, TProject } from "@warmap/contracts";
 import { transferLine, type Transfer } from "./transfer";
+import type { HomeProject, SubSession, WorkHomeData } from "./types";
+
+export { projectHref, projectInfoHref } from "./derive";
 
 export type ProjectGoal = {
   taskId: string;
   missionId: string;
-  missionTitle: string;
+  /** Mission 名（「本月」里找得到才有）。 */
+  missionTitle: string | null;
   /** 这个目标是哪个月的（YYYY-MM）。 */
   period: string;
   name: string;
-  /** 截止「11/20」（这个 Mission 下一个验收时间点）；没有为 null。 */
-  due: string | null;
+  /** 验收截止「11/30」（契约 dueDate，Task 所在月份的最后一天）。 */
+  due: string;
+  criteria: string[];
+  completedAt: string | null;
 };
 
 export type Project = {
@@ -26,94 +31,60 @@ export type Project = {
   /** 绑定的文件夹（这台电脑上的名字）；没绑为 null。 */
   folder: string | null;
   archived: boolean;
-  /** 挂过的目标，新月份在前。 */
+  /** 挂着、没了结的目标（本月的，加之前月份没了结的），截止早的在前。 */
   goals: ProjectGoal[];
-  /** 这个月挂着的，按截止日。 */
+  /** 这个月挂着的。 */
   current: ProjectGoal[];
-  /** 挂着的 Task 在树上的样子（子会话、事项都在这里）。 */
-  tasks: HomeTask[];
   subSessions: SubSession[];
+  /** 本人在这个项目里自己做的执行事项。 */
+  items: THomeItem[];
+  /** 项目对话的 scope（project:<id>）。 */
+  scope: string;
   /** 有几件等你。 */
   waiting: number;
-  /** 最近一次动静（子会话、事项的更新时间里最晚的）。 */
+  /** 最近一次动静；没有为 null。 */
   lastActivity: string | null;
-  /** 预算用了多少（0–100+，到 80 写「预算 80%」）；还没有数据为 null。 */
-  budget: number | null;
+  /** 预算用到 80% 以上的那件（契约 HomeProject.budget）；没有为 null。 */
+  budget: { percent: number; state: "warning" | "exhausted" } | null;
   /** 正在转交或已经交出去的那一次（16.7）；撤回了、没接的算没有。 */
   transfer: Transfer | null;
 };
 
-/** 本人在这个标签页里做的改动（接口到了以后由云端记）。attach 的值为 null 是「没挂」。 */
-export type ProjectEdits = {
-  created: { id: string; name: string; createdAt: string }[];
-  names: Record<string, string>;
-  archived: Record<string, boolean>;
-  attach: Record<string, string | null>;
-  folders: Record<string, string | null>;
-  transfers: Record<string, Transfer>;
-};
-export const NO_EDITS: ProjectEdits = { created: [], names: {}, archived: {}, attach: {}, folders: {}, transfers: {} };
+/** 本人在这个标签页里做的、云端还不记的：绑文件夹（本机程序的接口到了换掉）、转交（B 的接口到了换掉）。 */
+export type ProjectEdits = { folders: Record<string, string | null>; transfers: Record<string, Transfer> };
+export const NO_EDITS: ProjectEdits = { folders: {}, transfers: {} };
 
-export const missionProject = (missionId: string) => `mission:${missionId}`;
-export const projectHref = (id: string) => `/me/work/projects/${encodeURIComponent(id)}`;
-export const projectInfoHref = (id: string) => `${projectHref(id)}/info`;
-
-const latest = (dates: (string | null | undefined)[]) => dates.filter((date): date is string => !!date).sort().at(-1) ?? null;
-
-/**
- * 推出项目列表：树上的每个 Mission 一个同名项目（16.5），加上本人新建的；Task 按 edits.attach 改挂或摘掉。
- * dueOf 给一件 Task 的截止日「11/20」（Mission 的下一个验收时间点）。
- */
-export function deriveProjects(data: Pick<WorkHomeData, "missions" | "waiting" | "period">, edits: ProjectEdits, dueOf: (missionId: string) => string | null): { projects: Project[]; unattached: ProjectGoal[] } {
-  const base = new Map<string, { name: string; createdAt: string | null }>();
-  for (const mission of data.missions) if (mission.tasks.length) base.set(missionProject(mission.missionId), { name: mission.title, createdAt: null });
-  for (const entry of edits.created) base.set(entry.id, { name: entry.name, createdAt: entry.createdAt });
-  const attached = new Map<string, { goal: ProjectGoal; task: HomeTask }[]>([...base.keys()].map((id) => [id, []]));
-  const unattached: ProjectGoal[] = [];
-  for (const mission of data.missions) {
-    for (const task of mission.tasks) {
-      const goal: ProjectGoal = { taskId: task.taskId, missionId: mission.missionId, missionTitle: mission.title, period: mission.period, name: task.name, due: dueOf(mission.missionId) };
-      const target = task.taskId in edits.attach ? edits.attach[task.taskId] : missionProject(mission.missionId);
-      const list = target ? attached.get(target) : undefined;
-      if (list) list.push({ goal, task }); else unattached.push(goal);
-    }
-  }
-  const projects = [...base.entries()].map(([id, { name, createdAt }]): Project => {
-    const entries = attached.get(id) ?? [];
-    const goals = entries.map((entry) => entry.goal).sort((a, b) => b.period.localeCompare(a.period));
-    const tasks = entries.map((entry) => entry.task);
-    const subSessions = tasks.flatMap((task) => task.subSessions);
-    const taskIds = new Set(tasks.map((task) => task.taskId));
-    const transfer = edits.transfers[id] ?? null;
-    const active = transfer && (transfer.status === "preparing" || transfer.status === "sent" || transfer.status === "accepted") ? transfer : null;
-    return {
-      id,
-      name: edits.names[id] ?? name,
-      folder: edits.folders[id] ?? null,
-      // 接走了的进「已归档」（原负责人这边只读，16.7）。
-      archived: !!edits.archived[id] || active?.status === "accepted",
-      goals,
-      current: goals.filter((goal) => goal.period === data.period).sort((a, b) => (a.due ?? "99/99").localeCompare(b.due ?? "99/99")),
-      tasks,
-      subSessions,
-      waiting: data.waiting.filter((item) => item.taskId && taskIds.has(item.taskId)).length,
-      lastActivity: latest([createdAt, ...subSessions.map((sub) => sub.updatedAt), ...tasks.flatMap((task) => task.items.map((item) => item.updatedAt))]),
-      budget: null,
-      transfer: active,
-    };
-  });
-  return { projects, unattached };
+/** 转交接走了的，原负责人这边进「已归档」（只读，16.7）。 */
+function activeTransfer(id: string, edits: ProjectEdits): Transfer | null {
+  const transfer = edits.transfers[id] ?? null;
+  return transfer && (transfer.status === "preparing" || transfer.status === "sent" || transfer.status === "accepted") ? transfer : null;
 }
 
-/** 排序（16.2）：有等你的在前；然后是这个月有目标的，按截止日；最后按最近活动。 */
-export function sortProjects(projects: Project[]): Project[] {
-  const due = (project: Project) => project.current[0]?.due ?? "99/99";
-  return [...projects].sort((a, b) => {
-    if (!!a.waiting !== !!b.waiting) return a.waiting ? -1 : 1;
-    if (!!a.current.length !== !!b.current.length) return a.current.length ? -1 : 1;
-    if (a.current.length) return due(a).localeCompare(due(b)) || a.name.localeCompare(b.name);
-    return (b.lastActivity ?? "").localeCompare(a.lastActivity ?? "");
-  });
+/** 首页 v2 的一个项目（没归档的，已经按 16.2 排好）。 */
+export function fromHome(project: HomeProject, data: Pick<WorkHomeData, "month" | "period">, edits: ProjectEdits): Project {
+  const missionTitle = (missionId: string) => data.month.missions.find((mission) => mission.missionId === missionId)?.title ?? null;
+  const goals = project.goals.map((goal): ProjectGoal => ({
+    taskId: goal.taskId, missionId: goal.missionId, missionTitle: missionTitle(goal.missionId), period: goal.period, name: goal.name,
+    due: goal.dueDate.slice(5).replace("-", "/"), criteria: goal.criteria, completedAt: goal.completedAt,
+  }));
+  const transfer = activeTransfer(project.projectId, edits);
+  return {
+    id: project.projectId, name: project.name, folder: edits.folders[project.projectId] ?? null, archived: transfer?.status === "accepted",
+    goals, current: goals.filter((goal) => goal.period === data.period),
+    subSessions: project.subSessions, items: project.items, scope: project.pipeline.scope,
+    waiting: project.summary.needsYou, lastActivity: project.lastActivityAt,
+    budget: project.budget ? { percent: project.budget.percent, state: project.budget.state } : null,
+    transfer,
+  };
+}
+
+/** 归档了的项目（GET /api/me/projects 里 archivedAt 不为 null 的）：首页数据里没有它的目标和会话，详情里的目标历史另读。 */
+export function fromListed(project: TProject, edits: ProjectEdits): Project {
+  return {
+    id: project.projectId, name: project.name, folder: edits.folders[project.projectId] ?? null, archived: true,
+    goals: [], current: [], subSessions: [], items: [], scope: `project:${project.projectId}`,
+    waiting: 0, lastActivity: project.lastActivityAt, budget: null, transfer: activeTransfer(project.projectId, edits),
+  };
 }
 
 /** 「2 小时前」「3 天前」。 */
@@ -130,11 +101,11 @@ export function ago(iso: string, now = Date.now()): string {
 export function projectLine(project: Project, now = Date.now()): { text: string; warning: boolean } {
   const handover = transferLine(project.transfer);
   if (handover) return { text: handover, warning: false };
-  if (project.budget !== null && project.budget >= 80) return { text: `预算 ${project.budget}%`, warning: true };
-  const goal = project.current[0];
-  if (goal) return { text: [`${Number(goal.period.slice(5))} 月`, goal.name, goal.due ? `${goal.due} 验收` : null].filter(Boolean).join(" · "), warning: false };
+  if (project.budget) return { text: `预算 ${project.budget.percent}%`, warning: true };
+  const goal = project.goals[0];
+  if (goal) return { text: [`${Number(goal.period.slice(5))} 月`, goal.name, `${goal.due} 验收`].join(" · "), warning: false };
   return { text: project.lastActivity ? `本月没有目标 · ${ago(project.lastActivity, now)}` : "本月没有目标", warning: false };
 }
 
-/** 项目对话现在接哪件 Task 的管线（B 的 project:<id> 对话到了以后换掉）：本月截止最早的那件，本月没有就最近一个月的。 */
-export const conversationTask = (project: Project): ProjectGoal | null => project.current[0] ?? project.goals[0] ?? null;
+/** 详情里「当前目标」那一块写哪件：本月截止最早的那件，本月没有就之前月份没了结的。 */
+export const mainGoal = (project: Project): ProjectGoal | null => project.current[0] ?? project.goals[0] ?? null;

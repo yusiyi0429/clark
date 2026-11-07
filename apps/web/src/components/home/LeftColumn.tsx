@@ -15,6 +15,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { ChevronRight, Ellipsis, House, Info, Plus } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
+import { FailedLine, failureOf, type Failure } from "@/components/work/DecisionBox";
 import type { Account } from "@/components/AccountMenu";
 import { BuddyMark } from "@/components/buddy/BuddyMark";
 import type { Buddy } from "@/components/buddy/useBuddy";
@@ -55,8 +56,8 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
   /** 项目（已排好序，16.2）和已归档的。 */
   projects: Project[];
   archived: Project[];
-  /** 新建一个项目，回它的 id（建好直接进项目页）。 */
-  onCreate: (name: string) => string;
+  /** 新建一个项目（POST /api/me/projects），回它的 id（建好直接进项目页）；没建成在组头下写「失败 · 重试」。 */
+  onCreate: (name: string) => Promise<string>;
   /** 卡建出来的时间（看板里的）：一个项目下的会话照派活单的先后排（和对话里「开了哪几个子会话」一样）。 */
   cardAt?: ReadonlyMap<string, string>;
 }) {
@@ -69,10 +70,13 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
   const [archivedOpen, setArchivedOpen] = useState(false);
   // 听写时台上的伙伴跟着声音动（5.4.2、9.2），哪个输入框在听都算。
   const dictation = useDictationSignal();
+  const [createFailed, setCreateFailed] = useState<Failure | null>(null);
   const create = (value: string) => {
     setNaming(false);
     const trimmed = value.trim();
-    if (trimmed) go(projectHref(onCreate(trimmed)));
+    if (!trimmed) return;
+    const run = () => { setCreateFailed(null); void onCreate(trimmed).then((id) => go(projectHref(id)), (error) => setCreateFailed(failureOf(error, run))); };
+    run();
   };
   return (
     <nav className={h.leftInner} aria-label="导航">
@@ -115,6 +119,7 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
                 if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setNaming(false); }
               }} />
           ) : null}
+          {createFailed ? <FailedLine {...createFailed} /> : null}
           {projects.map((project) => <ProjectNode key={project.id} project={project} view={view} go={go} personId={account.personId} cardAt={cardAt} />)}
           {archived.length ? (
             <>
@@ -163,11 +168,11 @@ function treeKeys(event: KeyboardEvent<HTMLDivElement>, root: HTMLDivElement | n
 function ProjectNode({ project, view, go, personId, cardAt }: { project: Project; view: View; go: (href: string) => void; personId?: string | null; cardAt?: ReadonlyMap<string, string> }) {
   // 老地址 /me/work/tasks/<id>（等你那一行、14.3 的定位）画的也是这个项目：那件 Task 挂在这里就算在看它。
   const here = ((view.kind === "project" || view.kind === "projectInfo") && view.id === project.id)
-    || ((view.kind === "task" || view.kind === "info") && project.tasks.some((task) => task.taskId === view.taskId));
+    || ((view.kind === "task" || view.kind === "info") && project.goals.some((goal) => goal.taskId === view.taskId));
   const page = here && (view.kind === "project" || view.kind === "task");
   const [open, setOpen] = useState(false);
   const subs = planOrder(project.subSessions, cardAt);
-  const items = project.tasks.flatMap((task) => task.items).sort((a, b) => Number(a.status === "done") - Number(b.status === "done"));
+  const items = [...project.items].sort((a, b) => Number(a.status === "done") - Number(b.status === "done"));
   const viewing = subs.some((sub) => (view.kind === "card" || view.kind === "topic") && view.kind === sub.kind && view.id === sub.id);
   // 正在看其中一个会话时自动展开一次；之后本人收起就收起（不强开着）。
   useEffect(() => { if (viewing) setOpen(true); }, [viewing]);

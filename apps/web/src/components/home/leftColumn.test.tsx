@@ -1,18 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { THomeItem } from "@warmap/contracts";
-import type { HomeTask, WorkHomeData } from "@/lib/home/types";
-import { NO_EDITS, deriveProjects, sortProjects } from "@/lib/home/projects";
+import type { HomeProject, SubSession, WorkHomeData } from "@/lib/home/types";
+import { NO_EDITS, fromHome } from "@/lib/home/projects";
 import { LeftColumn, planOrder } from "./LeftColumn";
 
-const data = { period: "2026-11", missions: [], waiting: [], other: { subSessions: [], items: [] } } as unknown as WorkHomeData;
+const data = { period: "2026-11", projects: [], archivedCount: 0, month: { missions: [] }, waiting: [], other: { subSessions: [], items: [] } } as unknown as WorkHomeData;
+const projectsOf = (used: WorkHomeData) => used.projects.map((project) => fromHome(project, used, NO_EDITS));
 const render = (extra: Partial<Parameters<typeof LeftColumn>[0]>) => {
   const used = extra.data ?? data;
-  const { projects } = deriveProjects(used, NO_EDITS, () => "11/20");
   return renderToStaticMarkup(
     <LeftColumn data={used} view={{ kind: "home" }} buddy={null} speaking={false} go={() => undefined} phone={false}
       account={{ displayName: "孙铭泽", role: "member" }} today="11 月 7 日 周六" alert={false}
-      projects={sortProjects(projects)} archived={[]} onCreate={() => "x"} {...extra} />,
+      projects={projectsOf(used)} archived={[]} onCreate={async () => "x"} {...extra} />,
   );
 };
 
@@ -34,19 +34,21 @@ describe("左栏：计划读不到、空月份（5.4.2、5.4.4）", () => {
 const item = (id: string, title: string, extra: Partial<THomeItem> = {}): THomeItem => ({
   id, title, status: "in_progress", dueDate: null, awaitingAcceptance: false, updatedAt: "2026-11-07T01:00:00.000Z", ...extra,
 });
-const withTask = (items: THomeItem[], extra: Partial<HomeTask> = {}) => ({
+const withTask = (items: THomeItem[], extra: Partial<HomeProject> = {}) => ({
   ...data,
-  missions: [{ missionId: "m1", title: "首页改版", period: "2026-11", tasks: [{
-    taskId: "t1", missionId: "m1", name: "左栏", subtitle: null, summary: { running: 0, waiting: 0, queued: 0, done: 0, doneToday: 0, needsYou: 0 },
-    pipeline: { conversationId: null, scope: "plan-task:t1" }, planning: false, completedAt: null, subSessions: [], items, ...extra,
-  }] }],
+  projects: [{
+    projectId: "p1", name: "首页改版", lastActivityAt: "2026-11-07T01:00:00.000Z", budget: null,
+    goals: [{ taskId: "t1", missionId: "m1", name: "左栏", period: "2026-11", dueDate: "2026-11-30", criteria: [], criteriaMet: 0, criteriaTotal: 0, completedAt: null }],
+    summary: { running: 0, waiting: 0, queued: 0, done: 0, doneToday: 0, needsYou: 0 },
+    pipeline: { conversationId: null, scope: "project:p1" }, planning: false, subSessions: [], items, ...extra,
+  }],
 }) as unknown as WorkHomeData;
 
 describe("左栏：项目（16.2）", () => {
   it("「项目」组头右边一个「+」；项目行两行：名字，第二行「11 月 · Task · 截止 验收」；信息按钮进项目详情", () => {
     const html = render({ data: withTask([]) });
     expect(html).toMatch(/项目<\/span><button[^>]*aria-label="新建项目"/);
-    expect(html).toMatch(/data-testid="tree-project".*首页改版.*11 月 · 左栏 · 11\/20 验收/);
+    expect(html).toMatch(/data-testid="tree-project".*首页改版.*11 月 · 左栏 · 11\/30 验收/);
     expect(html).toContain('aria-label="首页改版 详情"');
   });
 
@@ -69,8 +71,7 @@ describe("左栏：项目（16.2）", () => {
   });
 
   it("有已归档的：一行「已归档 N」，默认收起", () => {
-    const { projects } = deriveProjects(withTask([]), NO_EDITS, () => null);
-    const html = render({ data: withTask([]), projects: [], archived: projects });
+    const html = render({ data: withTask([]), projects: [], archived: projectsOf(withTask([])).map((project) => ({ ...project, archived: true })) });
     expect(html).toMatch(/aria-expanded="false"[^>]*data-testid="tree-archived".*已归档 1/);
     expect(html).not.toContain('data-testid="tree-project"');
   });
@@ -84,7 +85,7 @@ describe("左栏：项目（16.2）", () => {
 
 describe("会话的先后（照派活单）", () => {
   it("卡按看板里建出来的先后，没读到的和专题在后面", () => {
-    const sub = (id: string, kind: "card" | "topic", updatedAt: string) => ({ id, kind, updatedAt }) as unknown as HomeTask["subSessions"][number];
+    const sub = (id: string, kind: "card" | "topic", updatedAt: string) => ({ id, kind, updatedAt }) as unknown as SubSession;
     const at = new Map([["c1", "2026-11-07T01:00:00.001Z"], ["c2", "2026-11-07T01:00:00.002Z"], ["c3", "2026-11-07T01:00:00.003Z"]]);
     const list = [sub("c3", "card", "z"), sub("t1", "topic", "a"), sub("c1", "card", "y"), sub("c2", "card", "x")];
     expect(planOrder(list, at).map((entry) => entry.id)).toEqual(["c1", "c2", "c3", "t1"]);

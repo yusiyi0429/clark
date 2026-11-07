@@ -16,7 +16,8 @@ const today = (hours: number, minutes = 0) => { const at = new Date(); at.setHou
 const fresh = () => new Date().toISOString();
 const windows = (usedPercent: number) => [{ kind: "session" as const, model: null, usedPercent, state: usedPercent >= 100 ? "blocked" as const : "ok" as const, resetsAt: today(23, 30) }];
 const cloud = (deviceName: string, usedPercent: number, n: number): Resources["quota"][number] => ({
-  deviceId: `00000000-0000-4000-8000-0000000000d${n}`, deviceName, source: "claude_subscription", windows: windows(usedPercent), blockedUntil: null, updatedAt: fresh(),
+  deviceId: `00000000-0000-4000-8000-0000000000d${n}`, deviceName, id: "claude", name: "Claude", kind: "subscription", remainingPercent: null, amounts: [],
+  windows: windows(usedPercent), resetsAt: null, blockedUntil: null, updatedAt: fresh(),
 });
 const resources = (quota: Resources["quota"] = []): Resources => ({ local: { online: false, name: null, used: 0, cap: 3 }, models: [], todayUsd: null, quota });
 const local = (phase: LocalPhase, quota: unknown[] = [], tools: unknown[] = []) => ({
