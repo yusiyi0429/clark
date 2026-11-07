@@ -14,6 +14,7 @@ import { createMemoryRecall, memoryRecallModels, type MemoryRecall } from "./per
 import { createPersonalDistillation } from "./personalDistillation.js";
 import { createChatService } from "./chatService.js";
 import { pipelineConversationIds } from "./taskPipelines.js";
+import { projectPageFacts } from "./projects.js";
 import { pageFor } from "./pageGuides.js";
 import { createConversationDigests, recordChatSegment } from "./conversationDigests.js";
 import { createConversationRecall } from "./conversationRecall.js";
@@ -138,7 +139,7 @@ import { registerTopicRoutes } from "./routes/topics.js";
 import { registerWorkHomeRoutes } from "./routes/workHome.js";
 import { registerSessionStartRoutes } from "./routes/sessionStarts.js";
 import { registerTaskPipelineRoutes } from "./routes/taskPipelines.js";
-import { registerTaskFeedRoutes } from "./routes/taskFeed.js";
+import { registerProjectRoutes } from "./routes/projects.js";
 import { registerTaskContinuityRoutes } from "./routes/taskContinuity.js";
 import { registerTaskCardRoutes, type BoardAgents } from "./routes/taskCards.js";
 import { planTaskOpener, taskPageFacts } from "./taskCards.js";
@@ -521,7 +522,8 @@ export async function buildApp({
   // 首页走独立 Chat 时只建这一个客户端（首页分段的「人 × 视角」互斥在它里面）；转发的每一句记下进了哪一段，纪要据此去读。
   const chat = env.chatServiceUrl ? createChatService({ baseUrl: env.chatServiceUrl, token: env.internalChatToken, rotation: env.chatSessionRotation === true,
     ...(env.chatPageContext ? { pageGuide: (path: string, viewer: { personId: string }) =>
-      pageFor(path, (taskId) => taskPageFacts(pool.query.bind(pool), openPlanTaskForPage, viewer.personId, taskId)) } : {}),
+      pageFor(path, (taskId) => taskPageFacts(pool.query.bind(pool), openPlanTaskForPage, viewer.personId, taskId),
+        (projectId) => projectPageFacts(pool.query.bind(pool), viewer.personId, projectId)) } : {}),
     onSegment: (viewer, segment) => recordChatSegment(pool.query.bind(pool), viewer, segment),
     pipelines: (viewer) => pipelineConversationIds(pool.query.bind(pool), viewer.personId) }) : undefined;
   // 会话纪要（后台，CONVERSATION_DIGEST_MODEL / CONVERSATION_DIGEST_THINKING，不配时 LIGHT_MODEL、不开思考）与回看。
@@ -886,7 +888,7 @@ export async function buildApp({
   registerWorkHomeRoutes(app, ctx);
   registerSessionStartRoutes(app, ctx);
   registerTaskPipelineRoutes(app, ctx);
-  registerTaskFeedRoutes(app, ctx);
+  registerProjectRoutes(app, ctx);
   // 跨月延续、到此为止和月份页（routes/taskContinuity.ts）。
   registerTaskContinuityRoutes(app, ctx);
   const board = registerTaskCardRoutes(app, ctx, { agents: boardAgents, fetchArticle: deliverableFetcher });

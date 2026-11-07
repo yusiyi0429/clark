@@ -4,6 +4,7 @@ import { createTopic, TopicError } from "../researchTopics.js";
 import { ensurePresetRole, RoleError } from "../roles.js";
 import { readBudgetDefault, readTaskBudget } from "../budgets.js";
 import { claimStarts, releaseStart, requestStarts } from "../sessionStarts.js";
+import { ownProject } from "../projects.js";
 import { boardTask, CardError, planTaskOpener } from "../taskCards.js";
 import type { AppInstance, Guard, RouteContext } from "./shared.js";
 
@@ -45,6 +46,9 @@ export function registerSessionStartRoutes(app: AppInstance, ctx: RouteContext):
     if (typeof id !== "string" || !ctx.peopleDirectory.searchPeople(undefined).some((person) => person.personId === id)) return fail(reply, 404, "OWNER_NOT_FOUND", "提问人不在人员目录");
     try {
       const own = req.body.planTaskId ? await boardTask(open, id, req.body.planTaskId) : null;
+      // 指了项目的：要是本人的、没归档的；挂了 Task 的跟着 Task 挂的项目走（linkGoal 改的），不另记。
+      const project = req.body.projectId ? await ownProject(ctx.q, id, req.body.projectId) : null;
+      if (project?.archived_at) throw new CardError(409, "PROJECT_ARCHIVED", "这个项目已经归档了");
       const now = ctx.now();
       const client = await pool.connect();
       try {
@@ -52,6 +56,7 @@ export function registerSessionStartRoutes(app: AppInstance, ctx: RouteContext):
         const role = await ensurePresetRole(client, id, TOPIC_PRESET, now);
         const topic = await createTopic(client.query.bind(client), id, { title: req.body.title, ...own ? { planTaskId: own.task.taskId } : {}, ...role ? { roleId: role.id } : {} },
           async () => own, now);
+        if (project) await client.query("UPDATE research_topics SET project_id=$2 WHERE id=$1", [topic.id, project.id]);
         const [start] = await requestStarts(client.query.bind(client), { ownerId: id, origin: "buddy", now, items: [{ kind: "topic", topicId: topic.id, planTaskId: topic.planTaskId }] });
         await client.query("COMMIT");
         return reply.status(201).send({ topicId: topic.id, start });

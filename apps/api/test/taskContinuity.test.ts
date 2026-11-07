@@ -46,11 +46,13 @@ describe("跨月延续与月份", () => {
   let f: Awaited<ReturnType<typeof fixture>> | BoardFixture | undefined;
   afterEach(async () => { await f?.close(); f = undefined; });
 
-  it("Task 按 id 找：换到 12 月后 11 月的 Task 照样能打开约定、开管线；别人照样打不开；只按 Mission 列的来源找不到", async () => {
+  it("Task 按 id 找：换到 12 月后 11 月的 Task 照样能打开约定、挂到项目上开项目对话；别人照样打不开；只按 Mission 列的来源找不到", async () => {
     const g = f = await fixture({ now: DEC_NOW });
     const agreement = await g.call("GET", "/api/plan-tasks/task-open/agreement");
     expect([agreement.statusCode, agreement.json().missionId]).toEqual([200, "mine"]);
-    expect((await g.call("POST", "/api/me/tasks/task-open/pipeline")).statusCode).toBe(201);
+    const project = await g.call("POST", "/api/me/projects", { name: "对话质量", taskId: "task-open" });
+    expect(project.statusCode).toBe(201);
+    expect((await g.call("POST", `/api/me/projects/${project.json().projectId}/pipeline`)).statusCode).toBe(201);
     // 找到时记下 Task 在哪个 Mission（看得见的 Mission 用）。
     expect(await g.t.sql("SELECT task_id,mission_id FROM plan_task_missions ORDER BY task_id")).toEqual([{ task_id: "task-open", mission_id: "mine" }]);
     // 别人（不是负责人、Mission 负责人、战场负责人、CEO、认可人）打不开；本人打不开别人 Mission 下的。
@@ -64,7 +66,7 @@ describe("跨月延续与月份", () => {
     expect((await h.call("GET", "/api/plan-tasks/task-open/agreement")).statusCode).toBe(404);
   }, 120_000);
 
-  it("延续：没做完的卡、专题、待交付、拆卡登记、规划员和派活单挂到新 Task，管线接着用，约定复制成草稿；做完的卡和交付版本留下；可以重复调", async () => {
+  it("延续：没做完的卡、专题、待交付、拆卡登记、规划员和派活单挂到新 Task，新 Task 挂到旧 Task 的项目（项目对话接着用），约定复制成草稿；做完的卡和交付版本留下；可以重复调", async () => {
     const g = f = await fixture();
     const machine = await g.local();
     let seq = 0;
@@ -94,8 +96,8 @@ describe("跨月延续与月份", () => {
       [randomUUID(), MEMBER]);
     expect((await g.call("PUT", "/api/plan-tasks/task-open/agreement", { criteria: [{ index: 2, proof: "录屏链接", acceptorId: null }], exclusions: ["不含线上"] })).statusCode)
       .toBe(200);
-    const pipeline = (await g.call("POST", "/api/me/tasks/task-open/pipeline")).json().conversationId as string;
-    await g.t.sql("INSERT INTO task_pipelines(owner_id,plan_task_id,conversation_id) VALUES($1,'task-open','chat-conv-1')", [MEMBER]);
+    const project = (await g.call("POST", "/api/me/projects", { name: "对话质量", taskId: "task-open" })).json().projectId as string;
+    const pipeline = (await g.call("POST", `/api/me/projects/${project}/pipeline`)).json().conversationId as string;
     expect((await g.call("POST", "/api/me/tasks/task-open/stop", { note: "先停一下" })).statusCode).toBe(200);
 
     const continued = await g.call("POST", "/api/me/tasks/task-open/continuation", { toTaskId: "task-next" });
@@ -118,11 +120,13 @@ describe("跨月延续与月份", () => {
     expect(await g.t.sql("SELECT plan_task_id FROM card_drafts WHERE status='open'")).toEqual([{ plan_task_id: "task-next" }]);
     expect(await g.t.sql("SELECT plan_task_id,mission_id FROM card_plans")).toEqual([{ plan_task_id: "task-next", mission_id: "mine-dec" }]);
     expect(await g.t.sql("SELECT task_id FROM deliverable_versions")).toEqual([{ task_id: "task-open" }]);
-    expect(await g.t.sql("SELECT id::text,scope FROM conversations WHERE scope LIKE 'plan-task:%'")).toEqual([{ id: pipeline, scope: "plan-task:task-next" }]);
-    expect(await g.t.sql("SELECT plan_task_id,conversation_id FROM task_pipelines")).toEqual([{ plan_task_id: "task-next", conversation_id: "chat-conv-1" }]);
+    // 新 Task 挂到旧 Task 的项目上，旧 Task 照样挂着（那是 11 月的目标）。
+    expect(await g.t.sql("SELECT task_id,project_id::text,period FROM project_goals ORDER BY task_id")).toEqual([
+      { task_id: "task-next", project_id: project, period: "2026-12" }, { task_id: "task-open", project_id: project, period: "2026-11" }]);
     expect(await g.t.sql("SELECT * FROM task_stops")).toEqual([]);
-    // 新 Task 第一次打开管线就是旧的那段对话。
-    expect((await g.call("POST", "/api/me/tasks/task-next/pipeline")).json()).toMatchObject({ conversationId: pipeline });
+    // 项目对话还是原来那段，没有另开。
+    const reopened = await g.call("POST", `/api/me/projects/${project}/pipeline`);
+    expect([reopened.statusCode, reopened.json().conversationId]).toEqual([200, pipeline]);
 
     // 约定：复制成新 Task 的草稿，按原文对回新标准；本人存一次就成了正式的。
     const draft = (await g.call("GET", "/api/plan-tasks/task-next/agreement")).json();

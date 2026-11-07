@@ -3,7 +3,7 @@ import type { TContinueTaskResponse, TTaskRef, TTaskSettlement } from "@warmap/c
 import type { Query } from "./meetingStore.js";
 import type { PlanTaskAccess } from "./planTaskAccess.js";
 import { CardError } from "./taskCards.js";
-import { pipelineScope } from "./taskPipelines.js";
+import { linkGoal } from "./projects.js";
 import { renumberMission } from "./tasks.js";
 
 /**
@@ -69,7 +69,7 @@ const lockTask = (client: PoolClient, taskId: string) => client.query("SELECT pg
  * 写一条延续：旧 Task（from）→ 新 Task（to），一个事务，可以重复调（第二次起什么都不挪，moved 全是 0）。调用方先核对两件都是本人负责的。
  * - 没做完的卡和事项（不含已完成、已退回的）、还开着的专题、还没进版本的待交付条目、没关的拆卡登记、要开工还没了结的登记、规划员的会话和它出的计划、
  *   还没处理的派活单草稿，改挂到新 Task（卡、专题、拆卡登记、计划连 Mission 一起换）。卡对的那条标准按原文在新 Task 的标准里重新找序号，找不到算「其他」。
- * - 新 Task 的管线接着用旧管线那段对话（Chat 的 task_pipelines、没接 Chat 时 scope 为 plan-task 的对话）；新 Task 已经开过管线的不动。
+ * - 新 Task 挂到旧 Task 挂的那个项目上（第 16 节：延续 = 下个月的 Task 挂到同一个项目，项目对话一直延续）；新 Task 已经挂了的、旧 Task 没挂的不动。
  * - 旧 Task 的约定（11 月的补充）复制一份给新 Task 当草稿（draft_from）；新 Task 已经有的不复制。
  * - 做完的卡、交付版本留在旧 Task 上（那是这个月的成绩）。旧 Task 定过到此为止的，以这次为准，撤掉。
  * 旧 Task 已经延续到别的 Task 了 409 ALREADY_CONTINUED；新 Task 自己已经延续出去了 409 TARGET_CONTINUED。
@@ -119,11 +119,9 @@ export async function continueTask(pool: Pool, input: { from: PlanTaskAccess; to
       AND NOT (p.status IN ('queued','running') AND EXISTS (SELECT 1 FROM card_plans o WHERE o.plan_task_id=$2 AND o.status IN ('queued','running')))`,
     [fromId, toId, toMission, [...new Set((drafts.rows as { plan_id: string }[]).map((row) => row.plan_id))]]);
 
-    const chatPipeline = await client.query(`UPDATE task_pipelines p SET plan_task_id=$2 WHERE p.plan_task_id=$1
-      AND NOT EXISTS (SELECT 1 FROM task_pipelines o WHERE o.owner_id=p.owner_id AND o.plan_task_id=$2)`, [fromId, toId]);
-    const ownPipeline = await client.query(`UPDATE conversations c SET scope=$2 WHERE c.scope=$1 AND c.deleted_at IS NULL
-      AND NOT EXISTS (SELECT 1 FROM conversations o WHERE o.owner_id=c.owner_id AND o.scope=$2 AND o.deleted_at IS NULL AND o.archived_at IS NULL)`,
-    [pipelineScope(fromId), pipelineScope(toId)]);
+    const project = (await client.query(`SELECT g.project_id::text,p.owner_id FROM project_goals g JOIN projects p ON p.id=g.project_id
+      WHERE g.task_id=$1 AND NOT EXISTS (SELECT 1 FROM project_goals o WHERE o.task_id=$2)`, [fromId, toId])).rows[0] as { project_id: string; owner_id: string } | undefined;
+    if (project) await linkGoal(client.query.bind(client), { projectId: project.project_id, ownerId: project.owner_id, task: to.task, source: "auto", now });
 
     const agreement = await client.query(`INSERT INTO task_agreement_notes(task_id,basis,criteria,exclusions,basis_hash,revision,updated_by,updated_at,draft_from)
       SELECT $2,basis,criteria,exclusions,basis_hash,1,$3,$4,$1 FROM task_agreement_notes WHERE task_id=$1 ON CONFLICT (task_id) DO NOTHING`,
@@ -135,7 +133,7 @@ export async function continueTask(pool: Pool, input: { from: PlanTaskAccess; to
     await client.query("COMMIT");
     return { taskId: fromId, settlement, moved: { cards: cards.rowCount ?? 0, topics: topics.rowCount ?? 0, pending: pending.rowCount ?? 0,
       splits: splits.rowCount ?? 0, planners: planners.rowCount ?? 0, drafts: drafts.rowCount ?? 0,
-      pipeline: Boolean(chatPipeline.rowCount || ownPipeline.rowCount), agreement: Boolean(agreement.rowCount) } };
+      pipeline: Boolean(project), agreement: Boolean(agreement.rowCount) } };
   } catch (cause) {
     await client.query("ROLLBACK").catch(() => undefined);
     throw cause;

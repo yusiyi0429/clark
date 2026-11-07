@@ -3,6 +3,7 @@ import { BackgroundQuery, BackgroundResponse, RouteRequest, RouteResponse, WorkH
 import { routeMessage } from "../messageRoute.js";
 import { listMissionRoundCards, type MissionRoundPerson } from "../missionRounds.js";
 import { personDisplayNames } from "../people.js";
+import { goalsOf } from "../projects.js";
 import { CardError } from "../taskCards.js";
 import { readBackground, readWorkHome, treeTasks } from "../workHome.js";
 import type { AppInstance, Guard, RouteContext } from "./shared.js";
@@ -13,7 +14,7 @@ import type { AppInstance, Guard, RouteContext } from "./shared.js";
  * 没配 INTERNAL_CHAT_TOKEN 时不注册，不进公开 OpenAPI。
  */
 export function registerWorkHomeRoutes(app: AppInstance, ctx: RouteContext): void {
-  const { q, env, fail, requirePerson, requireServiceToken, peopleDirectory } = ctx;
+  const { q, pool, env, fail, requirePerson, requireServiceToken, peopleDirectory } = ctx;
   const requireMember: Guard = async (req, reply) => {
     await requirePerson(req, reply);
     if (reply.sent) return reply;
@@ -27,7 +28,7 @@ export function registerWorkHomeRoutes(app: AppInstance, ctx: RouteContext): voi
   };
   const workHome = (person: MissionRoundPerson) => {
     const now = ctx.now();
-    return readWorkHome({ q, planTasks: ctx.planTasks, now, names: personDisplayNames(peopleDirectory), chat: Boolean(ctx.chat),
+    return readWorkHome({ q, pool, planTasks: ctx.planTasks, now, names: personDisplayNames(peopleDirectory), chat: Boolean(ctx.chat),
       meetings: (personId) => app.meetingFollowThrough.cards.pendingFor(personId),
       missionRounds: (viewer) => listMissionRoundCards(q, peopleDirectory.searchPeople(undefined), env.sessionSecret, viewer, undefined, now) }, person);
   };
@@ -40,8 +41,18 @@ export function registerWorkHomeRoutes(app: AppInstance, ctx: RouteContext): voi
   app.get("/api/me/background", { preHandler: requireMember, schema: { querystring: BackgroundQuery, response: { 200: BackgroundResponse } } }, async (req, reply) =>
     handle(reply, () => readBackground({ q, now: ctx.now(), planTasks: ctx.planTasks }, req.person!.personId, req.query.scope)));
 
-  app.post("/api/me/route", { preHandler: requireMember, schema: { body: RouteRequest, response: { 200: RouteResponse } } }, async (req) =>
-    routeMessage(req.body.text, (await treeTasks(q, ctx.planTasks, req.person!.personId, ctx.now())).tasks));
+  // 「自动」发给谁：没归档的项目，带它的名字和挂着的 Task（名字、完成定义、标准）。
+  app.post("/api/me/route", { preHandler: requireMember, schema: { body: RouteRequest, response: { 200: RouteResponse } } }, async (req) => {
+    const personId = req.person!.personId;
+    const { tasks } = await treeTasks(q, ctx.planTasks, personId, ctx.now());
+    const goals = await goalsOf(q, personId);
+    const projects = (await q("SELECT id::text,name FROM projects WHERE owner_id=$1 AND archived_at IS NULL", [personId])).rows as { id: string; name: string }[];
+    return routeMessage(req.body.text, projects.map((project) => {
+      const linked = tasks.filter((task) => goals.get(task.taskId)?.project_id === project.id);
+      return { projectId: project.id, names: [project.name, ...linked.map((task) => task.name)],
+        text: linked.flatMap((task) => [task.doneDefinition ?? "", ...task.criteria]) };
+    }));
+  });
 
   if (!env.internalChatToken) return;
   // 伙伴读的是 DRI 工作台那一份（Mission Card 按本人这一侧看）。

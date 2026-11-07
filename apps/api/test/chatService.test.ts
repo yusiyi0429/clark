@@ -6,7 +6,7 @@ import { TEST_CEO, TEST_MEMBER, createTestApp } from "./helpers.js";
 import type { ConversationRuntime } from "../src/conversations.js";
 import { homeTurn } from "../src/homeTurn.js";
 import { CHAT_ROUTE } from "../src/chatService.js";
-import { boardFixture } from "./boardFixture.js";
+import { THIRD, boardFixture } from "./boardFixture.js";
 
 const CHAT_TOKEN = "chat-token-test";
 const RUN = "6f0c1a52-6d7e-4e57-9a51-0a9a4c3e2b10";
@@ -844,10 +844,17 @@ describe("首页对话带上本人所在页面（CHAT_PAGE_CONTEXT）", () => {
   });
 });
 
-describe("Task 管线走 Chat（plan-task:<taskId>，新首页）", () => {
+describe("项目对话走 Chat（project:<projectId>，新首页第 16 节）", () => {
   /** 本人负责 task-open（boardFixture）；Chat 里已有一段总管线 main-segment。 */
   const pipelineFixture = async (chat: Awaited<ReturnType<typeof fakeChat>>) =>
     boardFixture({}, { internalChatToken: CHAT_TOKEN, chatServiceUrl: chat.url, chatPageContext: true, boardCloudAgents: false });
+  /** 本人建一个项目，挂上 task-open。 */
+  const newProject = async (f: Awaited<ReturnType<typeof boardFixture>>) => {
+    const res = await f.call("POST", "/api/me/projects", { name: "对话质量", taskId: "task-open" });
+    expect(res.statusCode).toBe(201);
+    return res.json().projectId as string;
+  };
+  const open = (f: Awaited<ReturnType<typeof boardFixture>>, projectId: string) => f.call("POST", `/api/me/projects/${projectId}/pipeline`);
   const createdSegments = (chat: Awaited<ReturnType<typeof fakeChat>>) => chat.requests.filter((request) => request.method === "POST" && request.url === "/conversations");
   const say = (f: Awaited<ReturnType<typeof boardFixture>>, scope: string, payload: Record<string, unknown>) => f.t.app.inject({ method: "POST",
     url: `/api/conversations/${encodeURIComponent(scope)}/messages`, headers: { cookie: f.member, origin: f.t.publicOrigin, accept: "text/event-stream" }, payload });
@@ -858,36 +865,40 @@ describe("Task 管线走 Chat（plan-task:<taskId>，新首页）", () => {
     const chat = await fakeChat({ conversations: ["main-segment"] });
     const f = await pipelineFixture(chat);
     try {
-      const first = await f.call("POST", "/api/me/tasks/task-open/pipeline");
+      const projectId = await newProject(f);
+      const first = await open(f, projectId);
       expect(first.statusCode).toBe(201);
-      expect(first.json()).toEqual({ taskId: "task-open", conversationId: chat.conversations[0], scope: "plan-task:task-open" });
+      expect(first.json()).toEqual({ projectId, conversationId: chat.conversations[0], scope: `project:${projectId}` });
       expect(chat.conversations[0]).not.toBe("main-segment");
-      const again = await f.call("POST", "/api/me/tasks/task-open/pipeline");
+      const again = await open(f, projectId);
       expect([again.statusCode, again.json()]).toEqual([200, first.json()]);
       expect(createdSegments(chat)).toHaveLength(1);
-      // Task 管线那一段按 member 视角开（只在 DRI 工作台）。
+      // 项目对话那一段按 member 视角开（只在 DRI 工作台）。
       expect(createdSegments(chat)[0].headers).toMatchObject({ "x-owner-id": TEST_MEMBER.personId, "x-viewer-role": "member" });
 
-      // 同时打开另一件：只开一段，两个请求拿到同一段。
-      await f.t.sql("DELETE FROM task_pipelines");
+      // 同时打开：只开一段，两个请求拿到同一段。
+      await f.t.sql("DELETE FROM project_pipelines");
       const before = createdSegments(chat).length;
-      const both = await Promise.all([f.call("POST", "/api/me/tasks/task-open/pipeline"), f.call("POST", "/api/me/tasks/task-open/pipeline")]);
+      const both = await Promise.all([open(f, projectId), open(f, projectId)]);
       expect(both.map((res) => res.statusCode).sort()).toEqual([200, 201]);
       expect(new Set(both.map((res) => res.json().conversationId)).size).toBe(1);
       expect(createdSegments(chat)).toHaveLength(before + 1);
-      expect(await f.t.sql("SELECT plan_task_id, conversation_id FROM task_pipelines")).toEqual([{ plan_task_id: "task-open", conversation_id: both[0].json().conversationId }]);
+      expect(await f.t.sql("SELECT project_id, owner_id, conversation_id FROM project_pipelines")).toEqual([
+        { project_id: projectId, owner_id: TEST_MEMBER.personId, conversation_id: both[0].json().conversationId }]);
     } finally {
       await f.close();
       await chat.close();
     }
   }, 30_000);
 
-  it("Task 管线那段比总管线新：总管线的历史和发一句仍进原来那段；Task 管线发一句进自己那段，帧的 scope 是 plan-task，带上这件 Task 的页面，选项框作答转给 Chat", async () => {
+  it("项目对话那段比总管线新：总管线的历史和发一句仍进原来那段；项目对话发一句进自己那段，帧的 scope 是 project，带上这个项目的页面，选项框作答转给 Chat", async () => {
     const chat = await fakeChat({ conversations: ["main-segment"] });
     const f = await pipelineFixture(chat);
     try {
-      const pipeline = (await f.call("POST", "/api/me/tasks/task-open/pipeline")).json().conversationId as string;
-      // Chat 那边 Task 管线这段是最近更新的。
+      const projectId = await newProject(f);
+      const scope = `project:${projectId}`;
+      const pipeline = (await open(f, projectId)).json().conversationId as string;
+      // Chat 那边项目对话这段是最近更新的。
       expect(chat.listed[0].conversationId).toBe(pipeline);
 
       await history(f, "global");
@@ -896,26 +907,26 @@ describe("Task 管线走 Chat（plan-task:<taskId>，新首页）", () => {
       expect(chat.turns().at(-1)!.url).toBe("/conversations/main-segment/turns");
 
       const askId = randomUUID();
-      const sent = await say(f, "plan-task:task-open", { message: "就按推荐的来", answers: { askId, items: [{ questionId: "q1", option: 0 }] } });
+      const sent = await say(f, scope, { message: "就按推荐的来", answers: { askId, items: [{ questionId: "q1", option: 0 }] } });
       expect(sent.statusCode).toBe(200);
       const turn = chat.turns().at(-1)!;
       expect(turn.url).toBe(`/conversations/${pipeline}/turns`);
       expect(turn.headers).toMatchObject({ "x-owner-id": TEST_MEMBER.personId, "x-viewer-role": "member" });
       const command = JSON.parse(turn.body) as Record<string, unknown>;
       expect(command.answers).toEqual({ askId, items: [{ questionId: "q1", option: 0 }] });
-      expect(command.page).toMatchObject({ path: "/me/work/tasks/task-open", title: "Task：对话质量达标" });
+      expect(command.page).toEqual({ path: `/me/work/projects/${projectId}`, title: "项目：对话质量", guide: expect.stringContaining("现在挂着的目标：对话质量达标") });
       const received = events(sent.payload);
       expect(received.map((event) => event.type)).toEqual(["route", "message", "done"]);
-      expect(received.every((event) => event.scope === "plan-task:task-open")).toBe(true);
+      expect(received.every((event) => event.scope === scope)).toBe(true);
       // 没在 Chat 多开段，天枢自己的对话也没建。
       expect(createdSegments(chat)).toHaveLength(1);
-      expect(await f.t.sql("SELECT id FROM conversations WHERE scope LIKE 'plan-task:%'")).toEqual([]);
+      expect(await f.t.sql("SELECT id FROM conversations WHERE scope LIKE 'project:%'")).toEqual([]);
 
-      // 总管线和 Task 管线各留各的最近一轮：Task 管线这一轮在自己的线上接得上，总管线上不是它。
-      const follow = (scope: string) => f.t.app.inject({ method: "GET", url: `/api/conversations/${encodeURIComponent(scope)}/turns/${RUN}/stream`, headers: { cookie: f.member } });
-      const followed = await follow("plan-task:task-open");
+      // 总管线和项目对话各留各的最近一轮：项目对话这一轮在自己的线上接得上，总管线上不是它。
+      const follow = (target: string) => f.t.app.inject({ method: "GET", url: `/api/conversations/${encodeURIComponent(target)}/turns/${RUN}/stream`, headers: { cookie: f.member } });
+      const followed = await follow(scope);
       expect(followed.statusCode).toBe(200);
-      expect(events(followed.payload).at(-1)).toMatchObject({ type: "done", scope: "plan-task:task-open" });
+      expect(events(followed.payload).at(-1)).toMatchObject({ type: "done", scope });
       expect(events((await follow("global")).payload).every((event) => event.scope === "global")).toBe(true);
     } finally {
       await f.close();
@@ -938,19 +949,21 @@ describe("Task 管线走 Chat（plan-task:<taskId>，新首页）", () => {
     ], runs: [{ runId: r1, status: "completed" }, { runId: r2, status: "completed" }], nextCursor: null } } } });
     const f = await pipelineFixture(chat);
     try {
-      expect((await history(f, "plan-task:task-open")).json()).toEqual({ scope: "plan-task:task-open", messages: [] });
+      const projectId = await newProject(f);
+      const scope = `project:${projectId}`;
+      expect((await history(f, scope)).json()).toEqual({ scope, messages: [] });
       expect(chat.requests).toEqual([]);
 
-      await f.t.sql("INSERT INTO task_pipelines (owner_id, plan_task_id, conversation_id) VALUES ($1, 'task-open', 'pipe-1')", [TEST_MEMBER.personId]);
-      const read = (await history(f, "plan-task:task-open")).json();
-      expect(read.scope).toBe("plan-task:task-open");
+      await f.t.sql("INSERT INTO project_pipelines (project_id, owner_id, conversation_id) VALUES ($1, $2, 'pipe-1')", [projectId, TEST_MEMBER.personId]);
+      const read = (await history(f, scope)).json();
+      expect(read.scope).toBe(scope);
       expect(read.messages.map((item: { role: string; content: string; cards?: unknown; answers?: unknown }) => [item.role, item.content, item.cards, item.answers])).toEqual([
         ["user", "怎么拆", undefined, undefined],
         ["assistant", "有两种做法", [questions], undefined],
         ["user", "先补录屏", undefined, record],
         ["assistant", "好", undefined, undefined],
       ]);
-      // 总管线照旧只读 main-segment，看不到 Task 管线那段。
+      // 总管线照旧只读 main-segment，看不到项目对话那段。
       expect((await history(f, "global")).json().messages).toEqual([]);
       expect(chat.requests.filter((request) => request.url.includes("/messages")).map((request) => request.url.split("/")[2])).toEqual(["pipe-1", "main-segment"]);
     } finally {
@@ -959,20 +972,26 @@ describe("Task 管线走 Chat（plan-task:<taskId>，新首页）", () => {
     }
   }, 30_000);
 
-  it("不是这件 Task 的负责人 403、找不到 404：开管线、读历史、发一句、传附件都不找 Chat", async () => {
+  it("别人的项目、没有的项目都 404：开对话、读历史、发一句、传附件都不找 Chat", async () => {
     const chat = await fakeChat();
     const f = await pipelineFixture(chat);
     try {
-      for (const [taskId, status] of [["task-theirs", 403], ["task-nope", 404]] as const) {
-        expect((await f.call("POST", `/api/me/tasks/${taskId}/pipeline`)).statusCode).toBe(status);
-        expect((await history(f, `plan-task:${taskId}`)).statusCode).toBe(status);
-        expect((await say(f, `plan-task:${taskId}`, { message: "进展？" })).statusCode).toBe(status);
+      const theirs = randomUUID();
+      await f.t.sql("INSERT INTO projects (id, owner_id, name, created_at, updated_at) VALUES ($1, $2, '别人的项目', now(), now())", [theirs, THIRD.personId]);
+      const malformed = await open(f, "not-a-uuid");
+      expect([malformed.statusCode, malformed.json().code]).toEqual([404, "NOT_FOUND"]);
+      for (const projectId of [theirs, randomUUID()]) {
+        const scope = `project:${projectId}`;
+        const opened = await open(f, projectId);
+        expect([opened.statusCode, opened.json().code]).toEqual([404, "NOT_FOUND"]);
+        expect((await history(f, scope)).statusCode).toBe(404);
+        expect((await say(f, scope, { message: "进展？" })).statusCode).toBe(404);
         const upload = multipart("brief.md", "# 方案");
-        expect((await f.t.app.inject({ method: "POST", url: `/api/conversations/${encodeURIComponent(`plan-task:${taskId}`)}/attachments`,
-          headers: { cookie: f.member, origin: f.t.publicOrigin, ...upload.headers }, payload: upload.payload })).statusCode).toBe(status);
+        expect((await f.t.app.inject({ method: "POST", url: `/api/conversations/${encodeURIComponent(scope)}/attachments`,
+          headers: { cookie: f.member, origin: f.t.publicOrigin, ...upload.headers }, payload: upload.payload })).statusCode).toBe(404);
       }
       expect(chat.requests).toEqual([]);
-      expect(await f.t.sql("SELECT * FROM task_pipelines")).toEqual([]);
+      expect(await f.t.sql("SELECT * FROM project_pipelines")).toEqual([]);
     } finally {
       await f.close();
       await chat.close();
@@ -999,7 +1018,7 @@ describe("Task 管线走 Chat（plan-task:<taskId>，新首页）", () => {
     const f = await pipelineFixture(chat);
     const logs = captureLogs();
     try {
-      const pending = f.call("POST", "/api/me/tasks/task-open/pipeline");
+      const pending = open(f, await newProject(f));
       await reached;
       // Chat 卡着的时候，这个库里没有开着事务等着的连接。
       expect(await f.t.sql("SELECT pid FROM pg_stat_activity WHERE datname = current_database() AND state = 'idle in transaction'")).toEqual([]);
@@ -1007,7 +1026,7 @@ describe("Task 管线走 Chat（plan-task:<taskId>，新首页）", () => {
       const res = await pending;
       expect([res.statusCode, res.json().code]).toEqual([503, "CHAT_UNAVAILABLE"]);
       expect(Date.now() - started).toBeLessThan(20_000);
-      expect(await f.t.sql("SELECT * FROM task_pipelines")).toEqual([]);
+      expect(await f.t.sql("SELECT * FROM project_pipelines")).toEqual([]);
       expect(logs("chat_service.pipeline_orphan")).toEqual([expect.objectContaining({ conversationId: null })]);
     } finally {
       vi.restoreAllMocks();
@@ -1021,9 +1040,10 @@ describe("Task 管线走 Chat（plan-task:<taskId>，新首页）", () => {
     const f = await pipelineFixture(chat);
     const logs = captureLogs();
     try {
+      const projectId = await newProject(f);
       await f.t.sql(`CREATE FUNCTION refuse_pipeline() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'connection lost'; END $$;
-        CREATE TRIGGER refuse_pipeline BEFORE INSERT ON task_pipelines FOR EACH ROW EXECUTE FUNCTION refuse_pipeline();`);
-      expect((await f.call("POST", "/api/me/tasks/task-open/pipeline")).statusCode).toBe(500);
+        CREATE TRIGGER refuse_pipeline BEFORE INSERT ON project_pipelines FOR EACH ROW EXECUTE FUNCTION refuse_pipeline();`);
+      expect((await open(f, projectId)).statusCode).toBe(500);
       const orphan = chat.conversations[0];
       expect(orphan).not.toBe("main-segment");
       // Chat 那边这段是最新的一段。
@@ -1036,8 +1056,8 @@ describe("Task 管线走 Chat（plan-task:<taskId>，新首页）", () => {
       expect(chat.turns().at(-1)!.url).toBe("/conversations/main-segment/turns");
 
       // 登记恢复以后再开：开新的一段并记下，总管线还是原来那段。
-      await f.t.sql("DROP TRIGGER refuse_pipeline ON task_pipelines");
-      const again = await f.call("POST", "/api/me/tasks/task-open/pipeline");
+      await f.t.sql("DROP TRIGGER refuse_pipeline ON project_pipelines");
+      const again = await open(f, projectId);
       expect(again.statusCode).toBe(201);
       expect(again.json().conversationId).not.toBe(orphan);
       expect((await say(f, "global", { message: "还有呢" })).statusCode).toBe(200);
@@ -1049,20 +1069,22 @@ describe("Task 管线走 Chat（plan-task:<taskId>，新首页）", () => {
     }
   }, 30_000);
 
-  it("开段期间这件已经登记了别的段：用已登记的那段（200），刚开的那段记成孤儿段，总管线不用它", async () => {
+  it("开段期间这个项目已经登记了别的段：用已登记的那段（200），刚开的那段记成孤儿段，总管线不用它", async () => {
     let f!: Awaited<ReturnType<typeof boardFixture>>;
+    let projectId!: string;
     const chat = await fakeChat({ conversations: ["main-segment"], beforeCreate: async () => {
-      await f.t.sql("INSERT INTO task_pipelines (owner_id, plan_task_id, conversation_id) VALUES ($1, 'task-open', 'elsewhere')", [TEST_MEMBER.personId]);
+      await f.t.sql("INSERT INTO project_pipelines (project_id, owner_id, conversation_id) VALUES ($1, $2, 'elsewhere')", [projectId, TEST_MEMBER.personId]);
     } });
     f = await pipelineFixture(chat);
     const logs = captureLogs();
     try {
-      const res = await f.call("POST", "/api/me/tasks/task-open/pipeline");
+      projectId = await newProject(f);
+      const res = await open(f, projectId);
       expect([res.statusCode, res.json().conversationId]).toEqual([200, "elsewhere"]);
       const orphan = chat.conversations[0];
       expect(orphan).not.toBe("main-segment");
       expect(logs("chat_service.pipeline_orphan")).toEqual([expect.objectContaining({ conversationId: orphan })]);
-      expect(await f.t.sql("SELECT conversation_id FROM task_pipelines")).toEqual([{ conversation_id: "elsewhere" }]);
+      expect(await f.t.sql("SELECT conversation_id FROM project_pipelines")).toEqual([{ conversation_id: "elsewhere" }]);
 
       await history(f, "global");
       expect(globalReads(chat)).toEqual(["main-segment"]);

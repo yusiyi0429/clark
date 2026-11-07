@@ -42,7 +42,7 @@ export const ContinueTaskRequest = Type.Object({ toTaskId: Type.String({ minLeng
 /**
  * 延续写好了：settlement 是旧 Task 现在的了结（continued）；moved 是这次挂到新 Task 上的几样（重复调用时都是 0）：
  * cards 没做完的卡和自己做的事项，topics 专题，pending 待交付条目，splits 拆卡登记，planners 规划员会话，drafts 还没处理的派活单草稿，
- * pipeline 管线对话接过去了，agreement 约定复制成了新 Task 的草稿（新 Task 已经有约定时不复制）。
+ * pipeline 新 Task 挂到了旧 Task 的项目上（项目对话一直延续，第 16 节），agreement 约定复制成了新 Task 的草稿（新 Task 已经有约定时不复制）。
  */
 export const ContinueTaskResponse = Type.Object({
   taskId: Type.String({ minLength: 1 }),

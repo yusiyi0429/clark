@@ -5,6 +5,7 @@ import type { Query } from "./meetingStore.js";
 import type { MissionRoundPerson } from "./missionRounds.js";
 import { monthReviewAnswered } from "./monthPage.js";
 import { listProposals } from "./roles.js";
+import { CARD_PROJECT } from "./projects.js";
 import { openPlanTask, parseNotifyKey } from "./taskAgreements.js";
 import { DeliverableError } from "./taskDeliverables.js";
 import { awaitsQuota } from "./workers.js";
@@ -33,6 +34,8 @@ export type WaitingInput = {
   period: string;
   /** 树和「其他」里的子会话，卡的投影，树上的 Task（带月份）。 */
   subs: HomeSub[]; cards: TCardTaskView[]; taskById: Map<string, TreeTask>;
+  /** 一件 Task 挂在哪个项目（没挂为 null）；本人项目的名字（含归档的）。 */
+  taskProject: (taskId: string | null) => string | null; projectNames: Map<string, string>;
   /** 本人没吊销的电脑（在不在线照 workers.ts）；没关的拆卡登记几条（等本机开规划员）。 */
   devices: TWorkerResources["devices"]; openSplits: number;
 };
@@ -76,55 +79,62 @@ function byUrgency(a: TWaitingItem, b: TWaitingItem): number {
     || a.id.localeCompare(b.id);
 }
 
-/** 等你：一件一行，id 稳定。taskId 只填树上的 Task（Task 一行的「N 件等你」按它数）。 */
+/** 等你：一件一行，id 稳定。taskId 只填树上的 Task；projectId 是在哪个项目（项目行的「N 件等你」按它数），没写的按 taskId 挂的项目补。 */
 export async function assembleWaiting(input: WaitingInput): Promise<TWaitingItem[]> {
-  const { q, person, deps, subs, cards, taskById } = input;
+  const { q, person, deps, subs, cards, taskById, taskProject, projectNames } = input;
   const ownerId = person.personId;
   const deviceNames = new Map(((await q("SELECT id::text,name FROM local_devices WHERE owner_id=$1", [ownerId])).rows as { id: string; name: string }[])
     .map((row) => [row.id, row.name]));
   const treeTask = (id: string | null) => id && taskById.has(id) ? id : null;
   const taskName = (id: string | null) => id ? taskById.get(id)?.name ?? null : null;
+  const projectName = (id: string | null) => id ? projectNames.get(id) ?? null : null;
   const waiting: TWaitingItem[] = [];
   /** 没写的几样取默认：不属于 Task、没有本机会话、没有截止、不是别人请你、不是月份。设备名照 deviceId 取。 */
   const add = (item: Pick<TWaitingItem, "id" | "kind" | "title" | "source" | "at" | "open" | "answer"> & Partial<TWaitingItem>) => waiting.push({ taskId: null,
-    sessionId: null, deviceId: null, dueAt: null, person: null, month: null, question: null, permission: null, ...item, deviceName: item.deviceId ? deviceNames.get(item.deviceId) ?? null : null });
+    sessionId: null, deviceId: null, dueAt: null, person: null, month: null, question: null, permission: null, ...item,
+    projectId: item.projectId ?? taskProject(item.taskId ?? null), deviceName: item.deviceId ? deviceNames.get(item.deviceId) ?? null : null });
 
   for (const sub of subs) {
     const taskId = treeTask(sub.planTaskId);
     const source = [sub.title, taskName(taskId)].filter(Boolean).join(" · ");
-    // 提问和批准由 Task 管线转达（14.3）：点进去落在管线里那个框上，来源只写 Task 名；不挂树上 Task 的照旧打开子会话。
+    // 提问和批准由项目对话转达（14.3）：点进去落在项目对话里那个框上，来源只写项目名；不在项目里的照旧打开子会话。
     if (sub.waiting === "approval" || sub.waiting === "question")
-      add({ id: `${sub.waiting}:${sub.kind}:${sub.id}`, kind: sub.waiting, ...askFields(sub.waiting, sub.ask), source: taskName(taskId) ?? sub.title, at: sub.runUpdatedAt,
-        open: taskId && sub.sessionId ? { kind: "task", id: taskId, focus: { sessionId: sub.sessionId, requestId: askRequestId(sub.ask) } } : { kind: sub.kind, id: sub.id },
-        taskId, sessionId: sub.sessionId, deviceId: sub.deviceId, answer: "inline_local" });
+      add({ id: `${sub.waiting}:${sub.kind}:${sub.id}`, kind: sub.waiting, ...askFields(sub.waiting, sub.ask), source: projectName(sub.projectId) ?? sub.title, at: sub.runUpdatedAt,
+        open: sub.projectId && sub.sessionId ? { kind: "project", id: sub.projectId, focus: { sessionId: sub.sessionId, requestId: askRequestId(sub.ask) } }
+          : { kind: sub.kind, id: sub.id },
+        taskId, projectId: sub.projectId, sessionId: sub.sessionId, deviceId: sub.deviceId, answer: "inline_local" });
     // 验收过了、没能自动合回：在交回那次执行的那台电脑上合。
     if (sub.waiting === "merge" && sub.merge)
-      add({ id: `merge:card:${sub.id}`, kind: "merge", title: "没能自动合回", source, at: sub.merge.at, open: { kind: "card", id: sub.id }, taskId,
+      add({ id: `merge:card:${sub.id}`, kind: "merge", title: "没能自动合回", source, at: sub.merge.at, open: { kind: "card", id: sub.id }, taskId, projectId: sub.projectId,
         sessionId: sub.mergeRun?.sessionId ?? null, deviceId: sub.mergeRun?.deviceId ?? null, answer: "inline_local" });
   }
   // 受阻只算连续两次验收没过（子会话 waiting = verdict）；执行连续两次异常退出是已暂停，不在这里。
-  for (const view of cards) if (subs.some((sub) => sub.id === view.id && sub.waiting === "verdict")) {
+  for (const view of cards) {
+    const sub = subs.find((entry) => entry.id === view.id && entry.waiting === "verdict");
+    if (!sub) continue;
     const taskId = treeTask(view.planTaskId);
     add({ id: `verdict:card:${view.id}`, kind: "verdict", title: "验收两次没过", source: [view.title, taskName(taskId)].filter(Boolean).join(" · "),
-      at: view.card.handback?.createdAt ?? null, open: { kind: "card", id: view.id }, taskId, answer: "open" });
+      at: view.card.handback?.createdAt ?? null, open: { kind: "card", id: view.id }, taskId, projectId: sub.projectId, answer: "open" });
   }
   // 规划员、验收员在等批准、等回复（停着等额度恢复的不算）。
   // 只算真在问（idle 带提问）和在等批准的；一轮做完停下的不算（9.6）。
-  const helpers = (await q(`SELECT r.id::text,r.kind,r.state,r.device_id::text,r.plan_task_id,r.task_id::text,r.title,r.updated_at,r.ask,t.title AS card_title,t.plan_task_id AS card_task
+  const helpers = (await q(`SELECT r.id::text,r.kind,r.state,r.device_id::text,r.plan_task_id,r.task_id::text,r.title,r.updated_at,r.ask,t.title AS card_title,
+      t.plan_task_id AS card_task,CASE WHEN t.id IS NOT NULL THEN ${CARD_PROJECT("t")}::text END AS card_project
     FROM local_runs r LEFT JOIN tasks t ON t.id=r.task_id WHERE r.owner_id=$1 AND r.kind IN ('plan','verify')
       AND (r.state='waiting_permission' OR r.state='idle' AND r.ask->>'kind'='question') AND NOT ${HELD}`,
   [ownerId])).rows as { id: string; kind: "plan" | "verify"; state: string; device_id: string; plan_task_id: string | null; task_id: string | null; title: string | null;
-    updated_at: Date; ask: RunAsk | null; card_title: string | null; card_task: string | null }[];
+    updated_at: Date; ask: RunAsk | null; card_title: string | null; card_task: string | null; card_project: string | null }[];
   for (const run of helpers) {
     const kind = run.state === "waiting_permission" ? "approval" as const : "question" as const;
     const plan = run.kind === "plan";
-    // 规划员挂在 Task 上；验收员挂在卡上，卡的 Task 在树上时同样由 Task 管线转达（14.3）。来源只写 Task 名。
+    // 规划员挂在 Task 上（在 Task 挂的项目里）；验收员挂在卡上（在卡所在的项目里）。都由项目对话转达（14.3），来源只写项目名。
     const taskId = treeTask(plan ? run.plan_task_id : run.card_task);
-    const pipelineTask = plan ? run.plan_task_id : taskId;
+    const projectId = plan ? taskProject(run.plan_task_id) : run.card_project;
     add({ id: `${kind}:${run.kind}:${run.id}`, kind, ...askFields(kind, run.ask),
-      source: taskName(pipelineTask) ?? (plan ? run.title ?? run.plan_task_id : run.card_title), at: run.updated_at.toISOString(),
-      open: pipelineTask ? { kind: "task", id: pipelineTask, focus: { sessionId: run.id, requestId: askRequestId(run.ask) } } : { kind: "card", id: run.task_id! },
-      taskId, sessionId: run.id, deviceId: run.device_id, answer: "inline_local" });
+      source: projectName(projectId) ?? taskName(run.plan_task_id) ?? (plan ? run.title ?? run.plan_task_id : run.card_title), at: run.updated_at.toISOString(),
+      open: projectId ? { kind: "project", id: projectId, focus: { sessionId: run.id, requestId: askRequestId(run.ask) } }
+        : plan ? { kind: "task_detail", id: run.plan_task_id! } : { kind: "card", id: run.task_id! },
+      taskId, projectId, sessionId: run.id, deviceId: run.device_id, answer: "inline_local" });
   }
 
   // 订阅额度用完：一台在线的电脑一条，停着几件（子会话按树上的状态，规划员、验收员按会话），截止是最早恢复的时间（到点本机自己接着做）。
@@ -151,7 +161,8 @@ export async function assembleWaiting(input: WaitingInput): Promise<TWaitingItem
   [ownerId, tree])).rows as { id: string; plan_task_id: string; at: Date; drafts: number }[] : [];
   for (const plan of plans)
     add({ id: `plan_start:${plan.id}`, kind: "plan_start", title: `${taskName(plan.plan_task_id)}：计划等你开工`, source: `${plan.drafts} 件等你开工`,
-      at: plan.at.toISOString(), open: { kind: "task", id: plan.plan_task_id }, taskId: plan.plan_task_id, answer: "inline" });
+      at: plan.at.toISOString(), open: taskProject(plan.plan_task_id) ? { kind: "project", id: taskProject(plan.plan_task_id)! } : { kind: "task_detail", id: plan.plan_task_id },
+      taskId: plan.plan_task_id, answer: "inline" });
 
   // 会议记录：一场会一行。
   const pending = await deps.meetings(ownerId);

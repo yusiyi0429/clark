@@ -11,9 +11,13 @@ import { UUID_PATTERN, type Query } from "./meetingStore.js";
 /** 认领的有效期：过了还没了结，别处可以再认领（首页的 autoStart 用同一个）。 */
 export const CLAIM_TTL = "5 minutes";
 
-type StartRow ={ id: string; kind: "card" | "topic"; card_id: string | null; topic_id: string | null; plan_task_id: string | null; requested_at: Date };
+type StartRow ={ id: string; kind: "card" | "topic"; card_id: string | null; topic_id: string | null; plan_task_id: string | null; requested_at: Date;
+  project_id: string | null };
 const startView = (row: StartRow): TSessionStartView => ({ id: row.id, kind: row.kind, cardId: row.card_id, topicId: row.topic_id, taskId: row.plan_task_id,
-  requestedAt: row.requested_at.toISOString() });
+  projectId: row.project_id, requestedAt: row.requested_at.toISOString() });
+/** 一条要开工在哪个项目（session_starts 的别名 s）：挂的 Task 挂着的项目，其次是卡、专题自己记的。 */
+const START_PROJECT = `COALESCE((SELECT g.project_id FROM project_goals g WHERE g.task_id=s.plan_task_id),
+  (SELECT t.project_id FROM tasks t WHERE t.id=s.card_id),(SELECT r.project_id FROM research_topics r WHERE r.id=s.topic_id))::text AS project_id`;
 
 export type StartRequest = { kind: "card"; cardId: string; planTaskId: string } | { kind: "topic"; topicId: string; planTaskId: string | null };
 
@@ -22,9 +26,9 @@ export async function requestStarts(q: Query, input: { ownerId: string; origin: 
   const views: TSessionStartView[] = [];
   for (const item of input.items) {
     const [column, subject] = item.kind === "card" ? ["card_id", item.cardId] : ["topic_id", item.topicId];
-    const inserted = (await q(`INSERT INTO session_starts(id,owner_id,kind,${column},plan_task_id,origin,requested_at) VALUES($1,$2,$3,$4,$5,$6,$7)
-      ON CONFLICT DO NOTHING RETURNING *`, [randomUUID(), input.ownerId, item.kind, subject, item.planTaskId, input.origin, input.now])).rows[0] as StartRow | undefined;
-    const row = inserted ?? (await q(`SELECT * FROM session_starts WHERE ${column}=$1 AND closed_at IS NULL`, [subject])).rows[0] as StartRow;
+    await q(`INSERT INTO session_starts(id,owner_id,kind,${column},plan_task_id,origin,requested_at) VALUES($1,$2,$3,$4,$5,$6,$7)
+      ON CONFLICT DO NOTHING`, [randomUUID(), input.ownerId, item.kind, subject, item.planTaskId, input.origin, input.now]);
+    const row = (await q(`SELECT s.*,${START_PROJECT} FROM session_starts s WHERE s.${column}=$1 AND s.closed_at IS NULL`, [subject])).rows[0] as StartRow;
     views.push(startView(row));
   }
   return views;
@@ -41,7 +45,7 @@ export async function claimStarts(q: Query, ownerId: string, deviceId: string, n
     WHERE s.owner_id=$1 AND s.closed_at IS NULL AND (s.claimed_at IS NULL OR s.claimed_at < $3::timestamptz - interval '${CLAIM_TTL}')
       AND (s.kind='card' AND EXISTS (SELECT 1 FROM tasks t WHERE t.id=s.card_id AND t.status NOT IN ('done','returned'))
         OR s.kind='topic' AND EXISTS (SELECT 1 FROM research_topics r WHERE r.id=s.topic_id AND r.status='active'))
-    RETURNING s.*) SELECT * FROM claimed ORDER BY requested_at,id`, [ownerId, deviceId, now])).rows as StartRow[];
+    RETURNING s.*) SELECT s.*,${START_PROJECT} FROM claimed s ORDER BY s.requested_at,s.id`, [ownerId, deviceId, now])).rows as StartRow[];
   return rows.map(startView);
 }
 

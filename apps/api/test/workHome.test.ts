@@ -16,6 +16,13 @@ const approving = (title: string) => ["status", { status: "waiting_permission", 
   [string, unknown];
 type Sub = { id: string; kind: string; title: string; state: string; waiting: string | null; queueReason: string | null; autoStart: boolean; sessionId: string | null;
   deviceId: string | null; role: { id: string } | null };
+type Goal = { taskId: string; missionId: string; name: string; period: string; completedAt: string | null };
+type Proj = { projectId: string; name: string; goals: Goal[]; subSessions: Sub[]; summary: Record<string, number>; planning: boolean;
+  pipeline: { conversationId: string | null; scope: string }; items: { title: string }[] };
+/** 上线迁移按 Mission 建的同名项目（fixture 本人这个月的 Mission 叫「内部版上线」）。 */
+const projectOf = (body: { projects: Proj[] }, name = "内部版上线"): Proj => body.projects.find((project) => project.name === name)!;
+/** 所有子会话：各项目里的和「其他」里的。 */
+const allSubs = (body: { projects: Proj[]; other: { subSessions: Sub[] } }) => [...body.projects.flatMap((project) => project.subSessions), ...body.other.subSessions];
 
 async function withRoleCards(f: BoardFixture, titles: string[]) {
   const dev = (await f.call("POST", "/api/me/roles", { name: "开发", family: "dev", kind: "worker" })).json();
@@ -58,8 +65,7 @@ describe("新首页", { timeout: 30_000 }, () => {
 
       // 还没有在线的电脑：登记了要开工的是等本机上线。
       let body = await home(f);
-      const find = (b: typeof body, id: string): Sub => [...b.missions.flatMap((m: { tasks: { subSessions: Sub[] }[] }) => m.tasks.flatMap((t) => t.subSessions)),
-        ...b.other.subSessions].find((sub: Sub) => sub.id === id);
+      const find = (b: typeof body, id: string): Sub => allSubs(b).find((sub: Sub) => sub.id === id)!;
       expect(find(body, ids["自动开工"])).toMatchObject({ state: "queued", queueReason: "device_offline", autoStart: true });
       expect(find(body, ids["等开工"])).toMatchObject({ state: "queued", queueReason: "not_dispatched", autoStart: false });
 
@@ -83,11 +89,14 @@ describe("新首页", { timeout: 30_000 }, () => {
 
       body = await home(f);
       expect(body.period).toBe("2026-11");
-      expect(body.missions.map((m: { missionId: string; title: string; period: string; tasks: { taskId: string }[] }) => [m.missionId, m.title, m.period, m.tasks.map((t) => t.taskId)]))
-        .toEqual([["mine", "内部版上线", "2026-11", ["task-open"]]]);
-      const task = body.missions[0].tasks[0];
-      expect(task).toMatchObject({ taskId: "task-open", missionId: "mine", name: "对话质量达标", subtitle: "对话质量过 75 分",
-        pipeline: { conversationId: null, scope: "plan-task:task-open" }, planning: false, completedAt: null });
+      // 本月：本人这个月的 Mission 下本人负责的 Task，挂在上线迁移按 Mission 建的同名项目上。
+      const task = projectOf(body);
+      expect(body.month.missions).toEqual([{ missionId: "mine", title: "内部版上线", period: "2026-11", tasks: [{ taskId: "task-open", name: "对话质量达标",
+        completedAt: null, project: { projectId: task.projectId, name: "内部版上线" } }] }]);
+      expect(body.projects.map((project: Proj) => project.name)).toEqual(["内部版上线"]);
+      expect(task).toMatchObject({ goals: [{ taskId: "task-open", missionId: "mine", name: "对话质量达标", period: "2026-11", dueDate: "2026-11-30",
+        criteriaTotal: 2, criteriaMet: 0, completedAt: null }], budget: null,
+        pipeline: { conversationId: null, scope: `project:${task.projectId}` }, planning: false });
       const state = (id: string) => { const sub = find(body, id); return [sub.state, sub.waiting, sub.queueReason]; };
       expect(state(ids["等开工"])).toEqual(["queued", null, "not_dispatched"]);
       // 有在线的电脑了：登记了要开工的等网页认领（等开工），还标着 autoStart。
@@ -115,12 +124,13 @@ describe("新首页", { timeout: 30_000 }, () => {
       // 其他：挂在别人负责的 Task 上的卡、不挂 Task 的专题。本人自己做的不是子会话。
       expect(body.other.subSessions.map((sub: Sub) => [sub.title, sub.state]).sort()).toEqual([["挂在别人负责的 Task 上", "queued"], ["行业报告", "running"]]);
 
-      // 拆卡登记了：这件 Task 在拆。Task 管线的对话（没接 Chat 时是天枢自己 scope 为 plan-task:<id> 的对话）。
+      // 拆卡登记了：挂着的这件 Task 在拆，项目算在规划。项目对话（没接 Chat 时是天枢自己 scope 为 project:<id> 的对话）。
       expect((await f.call("POST", "/api/plan-tasks/task-open/card-splits")).statusCode).toBe(201);
       const conversation = randomUUID();
-      await f.t.sql("INSERT INTO conversations (id, owner_id, scope, pi_session_id) VALUES ($1, $2, 'plan-task:task-open', $3)", [conversation, TEST_MEMBER.personId, randomUUID()]);
+      await f.t.sql("INSERT INTO conversations (id, owner_id, scope, pi_session_id) VALUES ($1, $2, $3, $4)",
+        [conversation, TEST_MEMBER.personId, `project:${task.projectId}`, randomUUID()]);
       body = await home(f);
-      expect(body.missions[0].tasks[0]).toMatchObject({ planning: true, pipeline: { conversationId: conversation, scope: "plan-task:task-open" } });
+      expect(projectOf(body)).toMatchObject({ planning: true, pipeline: { conversationId: conversation, scope: `project:${task.projectId}` } });
     } finally { await f.close(); }
   });
 
@@ -163,21 +173,26 @@ describe("新首页", { timeout: 30_000 }, () => {
       const battlefield = (await f.t.sql("SELECT name FROM battlefield_config WHERE id='growth'"))[0].name as string;
 
       const body = await home(f);
+      const projectId = projectOf(body).projectId;
       const byId = new Map(body.waiting.map((item: { id: string }) => [item.id, item]));
       // 本机那几种（批准、回复）在那台电脑上就地答，带设备名；没截止、不是别人请你、不是月份。
       const local = { answer: "inline_local", deviceName: "我的电脑", dueAt: null, person: null, month: null, question: null, permission: null };
-      // 子会话的提问和批准由 Task 管线转达（14.3）：落在管线里那个框上（focus），来源只写 Task 名。
-      expect(byId.get(`approval:card:${ids["等批准"]}`)).toEqual({ id: `approval:card:${ids["等批准"]}`, kind: "approval", title: "等你批准", source: "对话质量达标",
-        at: "2026-11-06T01:10:00.000Z", open: { kind: "task", id: "task-open", focus: { sessionId: approval, requestId: null } }, taskId: "task-open", sessionId: approval,
-        deviceId: laptop.device, ...local });
-      // 在问本人：标题是第一个问题的原话，带原样的提问（就地答）。
-      expect(byId.get(`question:plan:${planner}`)).toEqual({ id: `question:plan:${planner}`, kind: "question", title: "先做哪一页？", source: "对话质量达标",
-        at: "2026-11-06T01:20:00.000Z", open: { kind: "task", id: "task-open", focus: { sessionId: planner, requestId: "q-1" } }, taskId: "task-open", sessionId: planner,
-        deviceId: laptop.device, ...local, question: QUESTION });
-      expect(byId.get(`approval:verify:${verifier}`)).toMatchObject({ kind: "approval", source: "对话质量达标", open: { kind: "task", id: "task-open", focus: { sessionId: verifier } },
-        taskId: "task-open", sessionId: verifier, answer: "inline_local" });
+      // 子会话的提问和批准由项目对话转达（14.3）：落在项目对话里那个框上（focus），来源只写项目名。
+      expect(byId.get(`approval:card:${ids["等批准"]}`)).toEqual({ id: `approval:card:${ids["等批准"]}`, kind: "approval", title: "等你批准", source: "内部版上线",
+        at: "2026-11-06T01:10:00.000Z", open: { kind: "project", id: projectId, focus: { sessionId: approval, requestId: null } }, taskId: "task-open", projectId,
+        sessionId: approval, deviceId: laptop.device, ...local });
+      // 在问本人：标题是第一个问题的原话，带原样的提问（就地答）。规划员在它拆的 Task 挂的项目里。
+      expect(byId.get(`question:plan:${planner}`)).toEqual({ id: `question:plan:${planner}`, kind: "question", title: "先做哪一页？", source: "内部版上线",
+        at: "2026-11-06T01:20:00.000Z", open: { kind: "project", id: projectId, focus: { sessionId: planner, requestId: "q-1" } }, taskId: "task-open", projectId,
+        sessionId: planner, deviceId: laptop.device, ...local, question: QUESTION });
+      expect(byId.get(`approval:verify:${verifier}`)).toMatchObject({ kind: "approval", source: "内部版上线", open: { kind: "project", id: projectId, focus: { sessionId: verifier } },
+        taskId: "task-open", projectId, sessionId: verifier, answer: "inline_local" });
       expect(byId.get(`verdict:card:${ids["受阻"]}`)).toMatchObject({ kind: "verdict", title: "验收两次没过", open: { kind: "card", id: ids["受阻"] }, taskId: "task-open",
-        answer: "open", deviceName: null, dueAt: null });
+        projectId, answer: "open", deviceName: null, dueAt: null });
+      // 不归项目的：会议、Mission Card 没有项目。项目的「N 件等你」：批准、回答、验收员、受阻，加按卡所在的 Task 归进来的岗位建议。
+      expect(byId.get(`meeting:${meeting}`)).toMatchObject({ projectId: null });
+      expect(byId.get(`role:${proposal}`)).toMatchObject({ projectId });
+      expect(projectOf(body).summary.needsYou).toBe(5);
       // 岗位修改建议就地采纳或不要；别的点开去答。
       expect(byId.get(`role:${proposal}`)).toMatchObject({ kind: "role", title: "开发：建议改做法", source: "受阻", at: "2026-11-06T01:40:00.000Z",
         open: { kind: "role", id: proposal }, answer: "inline" });
@@ -267,6 +282,10 @@ describe("新首页", { timeout: 30_000 }, () => {
       expect(await ids_(`card:${ids["交回了"]}`)).toEqual([`verify:${judged}`]);
       expect(await ids_(`topic:${topic}`)).toEqual([`bg:${topicRun}:t4`]);
       expect(main.items.map((item: { id: string }) => item.id)).toContain(`bg:${elsewhere}:t5`);
+      // 项目：挂着的 Task 的规划员，加项目里的卡（含验收员）和专题会话里的；挂在别人负责的 Task 上的卡不在项目里。别人的、找不到的项目 404。
+      const projectId = projectOf(await home(f)).projectId;
+      expect(await ids_(`project:${projectId}`)).toEqual(await ids_("task:task-open"));
+      expect((await f.call("GET", `/api/me/background?scope=project:${randomUUID()}`)).statusCode).toBe(404);
 
       // 别人的卡、找不到的专题 404；scope 写错 400。
       const third = await f.t.app.inject({ method: "POST", url: "/api/auth/login", headers: { origin: f.t.publicOrigin }, payload: { loginId: THIRD.loginId, passcode: THIRD.passcode } });
@@ -283,7 +302,7 @@ describe("新首页", { timeout: 30_000 }, () => {
     } finally { await f.close(); }
   });
 
-  it("跨月：本月的 Task 都在（交付了打勾，交付后开了返工回到没完成）；之前月份动过、没了结、本人负责的留在自己的 Mission 下；不在树上的 Task 下完成的子会话不进其他", async () => {
+  it("跨月：本月的 Task 都在（交付了打勾，交付后开了返工回到没完成）；之前月份动过、没了结、本人负责的挂在按它的 Mission 建的项目上；不在树上的 Task 下完成的子会话不进其他", async () => {
     const october: THomePlanTask[] = [
       { taskId: "oct-card", missionId: "oct", name: "上月挂着卡的", doneDefinition: null, criteria: [] },
       { taskId: "oct-talk", missionId: "oct", name: "上月聊过的", doneDefinition: null, criteria: [] },
@@ -303,8 +322,9 @@ describe("新首页", { timeout: 30_000 }, () => {
       await moveTo("交付了·没完成", "oct-delivered");
       await moveTo("别人负责的", "oct-theirs");
       await f.t.sql("UPDATE tasks SET status='done',acceptance=jsonb_build_object('at','2026-10-29T02:00:00.000Z') WHERE id=$1", [ids["交付了·完成"]]);
-      // 只开过 Task 管线（没接 Chat 时是天枢自己的对话）：在本人最近几个月的 Mission 里找到。
-      await f.t.sql("INSERT INTO conversations (id, owner_id, scope, pi_session_id) VALUES ($1, $2, 'plan-task:oct-talk', $3)", [randomUUID(), TEST_MEMBER.personId, randomUUID()]);
+      // 只开过 Task 管线（上线前的数据，没接 Chat 时是天枢自己的对话）：在本人最近几个月的 Mission 里找到；上线迁移时并进项目对话。
+      const talk = randomUUID();
+      await f.t.sql("INSERT INTO conversations (id, owner_id, scope, pi_session_id) VALUES ($1, $2, 'plan-task:oct-talk', $3)", [talk, TEST_MEMBER.personId, randomUUID()]);
       // 开管线时找过这件 Task（locatePlanTask），记下了它在哪个 Mission。
       await f.t.sql("INSERT INTO plan_task_missions(task_id,mission_id,seen_at) VALUES('oct-talk','oct',now())");
       const deliver = (taskId: string, missionId: string, at: string) => f.t.sql(`INSERT INTO deliverable_versions(id,task_id,mission_id,author_id,number,task_name,basis,criteria,delivered_at)
@@ -314,22 +334,30 @@ describe("新首页", { timeout: 30_000 }, () => {
 
       let body = await home(f);
       expect(body.period).toBe("2026-11");
-      // 本月的在前；上个月的只留动过、没了结、本人负责的。
-      expect(body.missions.map((m: { missionId: string; period: string; tasks: { taskId: string }[] }) => [m.missionId, m.period, m.tasks.map((t) => t.taskId)]))
-        .toEqual([["mine", "2026-11", ["task-open"]], ["oct", "2026-10", ["oct-card", "oct-talk"]]]);
+      // 本月只列这个月的 Mission；上个月的只留动过、没了结、本人负责的，挂在按十月的 Mission 建的项目上。
+      expect(body.month.missions.map((m: { missionId: string; tasks: { taskId: string }[] }) => [m.missionId, m.tasks.map((t) => t.taskId)])).toEqual([["mine", ["task-open"]]]);
+      const october = projectOf(body, "十月的 Mission");
+      expect(body.projects.map((project: Proj) => [project.name, project.goals.map((goal) => [goal.taskId, goal.period])]).sort())
+        .toEqual([["十月的 Mission", [["oct-card", "2026-10"], ["oct-talk", "2026-10"]]], ["内部版上线", [["task-open", "2026-11"]]]].sort());
       // 本月交付了的照列、打勾。
-      expect(body.missions[0].tasks[0].completedAt).toBe("2026-11-05T00:00:00.000Z");
-      expect(body.missions[1].tasks[0]).toMatchObject({ completedAt: null, subSessions: [{ id: ids["上月的卡"], state: "queued" }] });
+      expect(projectOf(body).goals[0].completedAt).toBe("2026-11-05T00:00:00.000Z");
+      expect(october).toMatchObject({ goals: [{ taskId: "oct-card", completedAt: null, dueDate: "2026-10-31" }, { taskId: "oct-talk", completedAt: null }],
+        subSessions: [{ id: ids["上月的卡"], state: "queued" }] });
+      // 上个月那件只开过的 Task 管线并进了项目对话；挂接时间是那个月的月初（项目对话里的分隔线落在它前面）。
+      expect(await f.t.sql("SELECT scope FROM conversations WHERE id=$1", [talk])).toEqual([{ scope: `project:${october.projectId}` }]);
+      expect(october.pipeline.conversationId).toBe(talk);
+      expect((await f.t.sql("SELECT linked_at FROM project_goals WHERE task_id='oct-talk'"))[0].linked_at.toISOString()).toBe("2026-09-30T16:00:00.000Z");
       // 不在树上的 Task 下：没完成的进其他，完成的不列。
       expect(body.other.subSessions.map((sub: Sub) => sub.title).sort()).toEqual(["交付了·没完成", "别人负责的"].sort());
-      // 「自动」发给谁用同一份 Task。
-      expect((await f.call("POST", "/api/me/route", { text: "上月聊过的那件怎么样了" })).json()).toEqual({ target: { taskId: "oct-talk" } });
-      expect((await f.call("POST", "/api/me/route", { text: "上月交付了的还要改吗" })).json()).toEqual({ target: "main" });
+      // 「自动」发给谁：项目名和挂着的 Task 名都算；「上月」只有十月那个项目有。
+      expect((await f.call("POST", "/api/me/route", { text: "上月聊过的那件怎么样了" })).json()).toEqual({ target: { projectId: october.projectId } });
+      expect((await f.call("POST", "/api/me/route", { text: "内部版上线这边怎么样" })).json()).toEqual({ target: { projectId: projectOf(body).projectId } });
+      expect((await f.call("POST", "/api/me/route", { text: "今天天气" })).json()).toEqual({ target: "main" });
 
       // 交付以后在这件 Task 下开了返工卡：回到没完成。
       await f.t.sql("UPDATE tasks SET rework_of_card_id=$2,created_at='2026-11-05T05:00:00Z' WHERE id=$1", [ids["本月的卡"], ids["上月的卡"]]);
       body = await home(f);
-      expect(body.missions[0].tasks[0].completedAt).toBeNull();
+      expect(projectOf(body).goals[0].completedAt).toBeNull();
     } finally { await f.close(); }
   });
 
@@ -364,7 +392,7 @@ describe("新首页", { timeout: 30_000 }, () => {
       await f.t.sql("UPDATE tasks SET status='done' WHERE id=$1", [standaloneDone]);
 
       const body = await home(f);
-      const task = body.missions[0].tasks[0];
+      const task = projectOf(body);
       const sub = (title: string) => task.subSessions.find((item: Sub) => item.id === ids[title]);
       expect(sub("合进去了")).toMatchObject({ state: "done", waiting: null,
         merge: { state: "merged", commit: "abc123", baseBranch: "main", reason: null, message: null, at: "2026-11-06T01:40:00.000Z" } });
@@ -373,9 +401,9 @@ describe("新首页", { timeout: 30_000 }, () => {
       expect(sub("没报合回")).toMatchObject({ state: "done", waiting: null, merge: null });
       expect(body.waiting.find((item: { id: string }) => item.id === `merge:card:${ids["没合回"]}`)).toEqual({ id: `merge:card:${ids["没合回"]}`, kind: "merge",
         title: "没能自动合回", source: "没合回 · 对话质量达标", at: "2026-11-06T01:45:00.000Z", open: { kind: "card", id: ids["没合回"] }, taskId: "task-open",
-        sessionId: runs["没合回"], deviceId: laptop.device, deviceName: "我的电脑", dueAt: null, answer: "inline_local", person: null, month: null, question: null, permission: null });
+        projectId: projectOf(body).projectId, sessionId: runs["没合回"], deviceId: laptop.device, deviceName: "我的电脑", dueAt: null, answer: "inline_local", person: null, month: null, question: null, permission: null });
       expect(body.waiting.filter((item: { kind: string }) => item.kind === "merge")).toHaveLength(1);
-      // 今天验收通过的 3 件（等你合的也算验收过了），昨天的不算；等你里归这件 Task 的 1 条。
+      // 今天验收通过的 3 件（等你合的也算验收过了），昨天的不算；等你里归这个项目的 1 条。
       expect(task.summary).toMatchObject({ done: 3, waiting: 1, doneToday: 3, needsYou: 1 });
 
       expect(task.items.map((item: { id: string; title: string; status: string; awaitingAcceptance: boolean }) => [item.id, item.title, item.status, item.awaitingAcceptance]))
@@ -410,7 +438,7 @@ describe("新首页", { timeout: 30_000 }, () => {
         VALUES($1,'oct-delivered','oct',$2,1,'x','acceptance','[]','2026-11-02T00:00:00.000Z')`, [randomUUID(), TEST_MEMBER.personId]);
 
       const body = await home(f);
-      expect(body.missions.flatMap((m: { tasks: { taskId: string }[] }) => m.tasks.map((t) => t.taskId))).toEqual(["task-open"]);
+      expect(body.projects.flatMap((project: Proj) => project.goals.map((goal) => goal.taskId))).toEqual(["task-open"]);
       expect(body.other.subSessions.map((sub: Sub) => [sub.title, sub.state, sub.waiting]).sort())
         .toEqual([["不挂 Task·没合回", "waiting", "merge"], ["了结的 Task·没合回", "waiting", "merge"]]);
       const merges = body.waiting.filter((item: { kind: string }) => item.kind === "merge");
@@ -432,13 +460,13 @@ describe("新首页", { timeout: 30_000 }, () => {
       await laptop.send({ kind: "topic", topicId: topic }, [status("idle", "做完一轮的专题")]);
       // 答完了（本机报的下一条 idle 不带提问）：那一行收走。
       const body = await home(f);
-      const sub = (id: string) => body.missions[0].tasks[0].subSessions.find((item: Sub) => item.id === id);
+      const sub = (id: string) => projectOf(body).subSessions.find((item: Sub) => item.id === id);
       for (const id of [ids["做完一轮"], topic]) expect(sub(id)).toMatchObject({ state: "waiting", waiting: null });
       expect(sub(ids["在问"])).toMatchObject({ state: "waiting", waiting: "question" });
       expect(sub(ids["要批准"])).toMatchObject({ state: "waiting", waiting: "approval" });
       expect(body.waiting.map((item: { kind: string; title: string; question: unknown; permission: unknown }) => [item.kind, item.title, item.question, item.permission]))
         .toEqual([["approval", "运行 pnpm test", null, PERMISSION], ["question", "先做哪一页？", QUESTION, null]]);
-      expect(body.missions[0].tasks[0].summary).toMatchObject({ needsYou: 2 });
+      expect(projectOf(body).summary).toMatchObject({ needsYou: 2 });
       // 卡的标记（看板、卡详情）也一样：做完一轮是已暂停，在问是等你回复。
       const cards = (await f.call("GET", "/api/plan-tasks/task-open/cards")).json().cards as { id: string; card: { wait: string | null } }[];
       expect([ids["做完一轮"], ids["在问"]].map((id) => cards.find((item) => item.id === id)!.card.wait)).toEqual(["paused", "reply"]);
@@ -472,7 +500,7 @@ describe("新首页", { timeout: 30_000 }, () => {
       await laptop.send({ kind: "topic", topicId: offTree }, [status("exited", "挂在别人 Task 下停了的")]);
 
       const body = await home(f);
-      const task = body.missions[0].tasks[0];
+      const task = projectOf(body);
       const sub = (id: string) => task.subSessions.find((item: Sub) => item.id === id);
       for (const id of [ids["退出一次"], ids["退出两次"], stopped, crashed]) expect(sub(id)).toMatchObject({ state: "waiting", waiting: null, queueReason: null });
       for (const id of [ids["两次没过"], ids["两次没过·电脑关了"]]) expect(sub(id)).toMatchObject({ state: "waiting", waiting: "verdict", queueReason: null });
@@ -492,7 +520,7 @@ describe("新首页", { timeout: 30_000 }, () => {
       for (const [title, at] of Object.entries(claimed))
         await f.t.sql("INSERT INTO session_starts(id,owner_id,kind,card_id,plan_task_id,origin,requested_at,claimed_at,claimed_device) VALUES($1,$2,'card',$3,'task-open','web',$4,$5,$6)",
           [randomUUID(), TEST_MEMBER.personId, ids[title], BOARD_NOW, at, at ? laptop.device : null]);
-      const subs = (await home(f)).missions[0].tasks[0].subSessions as Sub[];
+      const subs = projectOf(await home(f)).subSessions as Sub[];
       expect(Object.fromEntries(Object.keys(claimed).map((title) => [title, subs.find((sub) => sub.id === ids[title])!.autoStart])))
         .toEqual({ "刚认领": false, "认领过期": true, "没认领": true });
     } finally { await f.close(); }
@@ -516,7 +544,7 @@ describe("新首页", { timeout: 30_000 }, () => {
       expect(byId.get(`plan:${heldPlan}`)).toMatchObject({ state: "queued", finishedAt: null, holdUntil: "2026-11-06T05:00:00.000Z" });
 
       const body = await home(f);
-      expect(body.missions[0].tasks[0].subSessions.find((sub: Sub) => sub.id === ids["等额度"]))
+      expect(projectOf(body).subSessions.find((sub: Sub) => sub.id === ids["等额度"]))
         .toMatchObject({ state: "queued", waiting: null, queueReason: "quota", holdUntil: "2026-11-06T05:00:00.000Z", sessionId: heldCard });
       // 停着等额度的不算等你回复，交完收工的也不算。
       expect(body.waiting.filter((item: { sessionId: string | null }) => [donePlan, heldPlan, heldCard].includes(item.sessionId as string))).toEqual([]);
@@ -534,11 +562,17 @@ describe("新首页", { timeout: 30_000 }, () => {
     } finally { await f.close(); }
   });
 
-  it("「自动」发给谁：按本人负责的 Task 分；CEO 视角 403，没登录 401", async () => {
+  it("「自动」发给谁：按本人的项目分（项目名、挂着的 Task 名和标准）；CEO 视角 403，没登录 401", async () => {
     const f = await boardFixture({}, { boardCloudAgents: false });
     try {
-      expect((await f.call("POST", "/api/me/route", { text: "对话质量达标这件怎么样" })).json()).toEqual({ target: { taskId: "task-open" } });
-      expect((await f.call("POST", "/api/me/route", { text: "题库打分出来了吗" })).json()).toEqual({ target: { taskId: "task-open" } });
+      // 还没建过项目：都发给伙伴。第一次读首页时按 Mission 建了项目，Task 挂上去。
+      expect((await f.call("POST", "/api/me/route", { text: "对话质量达标这件怎么样" })).json()).toEqual({ target: "main" });
+      const projectId = projectOf(await home(f)).projectId;
+      expect((await f.call("POST", "/api/me/route", { text: "对话质量达标这件怎么样" })).json()).toEqual({ target: { projectId } });
+      expect((await f.call("POST", "/api/me/route", { text: "题库打分出来了吗" })).json()).toEqual({ target: { projectId } });
+      // 归档了的项目不算。
+      expect((await f.call("PATCH", `/api/me/projects/${projectId}`, { archived: true })).statusCode).toBe(200);
+      expect((await f.call("POST", "/api/me/route", { text: "题库打分出来了吗" })).json()).toEqual({ target: "main" });
       // 别人负责的 Task 不算。
       expect((await f.call("POST", "/api/me/route", { text: "别人负责的那件" })).json()).toEqual({ target: "main" });
       expect((await f.call("POST", "/api/me/route", { text: "今天天气" })).json()).toEqual({ target: "main" });

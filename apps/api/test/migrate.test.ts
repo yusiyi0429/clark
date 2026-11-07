@@ -217,7 +217,7 @@ describe("migration", () => {
         "241_budgets.sql",
         "242_run_ask.sql",
         "243_session_attachments.sql",
-        "244_local_task_budgets.sql",
+        "244_local_task_budgets.sql", "245_projects.sql",
       ]);
 
       // 幂等：重复执行不再变更

@@ -56,7 +56,7 @@ export function waitingPath(open: TWaitingTarget): string {
   switch (open.kind) {
     case "card": return `/me/work/cards/${id}`;
     case "topic": return `/me/work/topics/${id}`;
-    case "task": return `/me/work/tasks/${id}`;
+    case "project": return `/me/work/projects/${id}`;
     case "task_detail": return `/me/work/tasks/${id}/info`;
     case "month": return `/me/work/month/${id}`;
     case "connections": return "/me/work/settings/connections";

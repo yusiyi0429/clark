@@ -16,7 +16,7 @@ import type { Static, TSchema } from "@sinclair/typebox";
  *   开了分段（CHAT_SESSION_ROTATION）：那段闲置满 12 小时或跨过北京时间凌晨 4 点，发句、传附件时新开一段（conversationSegments.ts）；
  *   界面拼最近 7 天的几段，段之间一行日期；「继续」进那一轮所在的段。
  * - 格式：Chat 的历史和事件翻成天枢现有对话的格式，界面不用改。Chat 没有的（步骤、范围标签、工具卡、出处标记）就没有。
- * - Task 管线（新首页，workHome.ts）：每人每件 Task 在 Chat 里单独一段（天枢记在 task_pipelines，taskPipelines.ts）。
+ * - 项目对话（新首页第 16 节，projects.ts）：每人每个项目在 Chat 里单独一段（天枢记在 project_pipelines，以前 Task 管线的段在 task_pipelines，taskPipelines.ts）。
  *   带 target 的调用只认那一段：不判段、不记纪要；总管线挑段时排除这些段（pipelines）。
  */
 
@@ -24,8 +24,8 @@ export type ChatViewer = { personId: string; role: "ceo" | "member" };
 export type ChatConversation = { conversationId: string; createdAt: string; updatedAt: string };
 /** 首页这一句进了哪一段（纪要据此记下这段有新内容，conversationDigests.ts）。 */
 export type ChatSegmentActivity = { conversationId: string; startedAt: Date };
-/** Task 管线那一段：Chat 里的段 id、天枢这边的 scope（plan-task:<taskId>）和 Task id。 */
-export type ChatTarget = { conversationId: string; scope: string; taskId: string };
+/** 项目对话那一段：Chat 里的段 id、天枢这边的 scope（project:<projectId>）和项目 id。 */
+export type ChatTarget = { conversationId: string; scope: string; projectId: string };
 
 /** 开流之前就失败：路由按天枢的错误格式回给界面。 */
 export class ChatServiceError extends Error {
@@ -42,7 +42,7 @@ type ChatRun = { runId: string; status: string };
 type ChatMessagePage = { messages: ChatMessage[]; nextCursor: string | null; runs: ChatRun[] };
 type ChatEvent = { type: string; [key: string]: unknown };
 /**
- * 网页里问的那一轮（每人每视角每条线最近一轮：总管线和各 Task 管线各留各的）：翻好的事件全留着，界面切走、刷新、断线回来时先补发、再跟着往下写（follow）。
+ * 网页里问的那一轮（每人每视角每条线最近一轮：总管线和各项目对话各留各的）：翻好的事件全留着，界面切走、刷新、断线回来时先补发、再跟着往下写（follow）。
  * 写完也留着，直到这个人问下一句；api 一个环境一个进程，放在内存里。frame 为 null 表示这一轮结束了。
  */
 type LiveTurn = { runId?: string; startedAt: number; frames: string[]; listeners: Set<(frame: string | null) => void>; finished: boolean };
@@ -150,7 +150,7 @@ export function createChatService(options: {
   onSegment?: (viewer: ChatViewer, segment: ChatSegmentActivity) => Promise<void>;
   /** 页面目录（CHAT_PAGE_CONTEXT=1 才给）：本人在二级页面问时，这一轮带上 page（这页的名字和说明；Task 页按本人读到的 Task 现算）。Chat 不收多余字段，没接 page 之前别开。 */
   pageGuide?: (path: string, viewer: ChatViewer) => Promise<PageGuide | null>;
-  /** 本人的 Task 管线那几段（task_pipelines）：总管线挑段时排除，不当成首页的段。 */
+  /** 本人的项目对话那几段（project_pipelines，和以前的 task_pipelines）：总管线挑段时排除，不当成首页的段。 */
   pipelines?: (viewer: ChatViewer) => Promise<Set<string>>;
 }) {
   if (!options.token) throw new Error("CHAT_SERVICE_URL 需要同时配置 INTERNAL_CHAT_TOKEN");
@@ -193,11 +193,11 @@ export function createChatService(options: {
     return { messages, runs };
   };
   /**
-   * 不是总管线的段：给 Task 管线开了、天枢却没记成 Task 管线的那几段（登记失败，或这件 Task 已经登记了别的段）。
-   * Chat 没有删段的接口，只能在总管线挑段时和 Task 管线那几段一起排除；放在内存里（api 一个环境一个进程），重启后靠日志（chat_service.pipeline_orphan）查。
+   * 不是总管线的段：给项目对话开了、天枢却没记成项目对话的那几段（登记失败，或这个项目已经登记了别的段）。
+   * Chat 没有删段的接口，只能在总管线挑段时和项目对话那几段一起排除；放在内存里（api 一个环境一个进程），重启后靠日志（chat_service.pipeline_orphan）查。
    */
   const orphanSegments = new Set<string>();
-  /** 总管线的段：去掉 Task 管线那几段和孤儿段（conversations() 本身照旧给全部，纪要核对隐藏的段要全部）。 */
+  /** 总管线的段：去掉项目对话那几段和孤儿段（conversations() 本身照旧给全部，纪要核对隐藏的段要全部）。 */
   const mainConversations = async (viewer: ChatViewer, requestId: string) => {
     const [list, pipelines] = await Promise.all([conversations(viewer, requestId), options.pipelines?.(viewer)]);
     return list.filter((item) => !pipelines?.has(item.conversationId) && !orphanSegments.has(item.conversationId));
@@ -248,7 +248,7 @@ export function createChatService(options: {
     void options.onSegment(viewer, { conversationId: conversation.conversationId, startedAt: new Date(conversation.createdAt) })
       .catch((error) => logEvent({ event: "chat_service.segment_record_failed", requestId, error: (error as Error)?.message }));
   };
-  /** 每人每视角每条线网页里问的最近一轮（LiveTurn）：键带上 scope，总管线和各 Task 管线互不覆盖。 */
+  /** 每人每视角每条线网页里问的最近一轮（LiveTurn）：键带上 scope，总管线和各项目对话互不覆盖。 */
   const liveTurns = new Map<string, LiveTurn>();
   const liveKey = (viewer: ChatViewer, scope: string) => `${viewer.personId}|${viewer.role}|${scope}`;
   /** 本人点了停止的那几轮：Chat 随后回的「已停止」原样给界面，不当成 Chat 停机。 */
@@ -273,7 +273,7 @@ export function createChatService(options: {
       return value;
     },
     /**
-     * Task 管线那一段：先查天枢记下的（existing），没有就在 Chat 开一段（最多等 15 秒），再记下（register 返回这件 Task 登记着的那段）。
+     * 项目对话那一段：先查天枢记下的（existing），没有就在 Chat 开一段（最多等 15 秒），再记下（register 返回这个项目登记着的那段）。
      * 和总管线的「判段 + 新建」排在同一个队里做：记下之前总管线不会把这一段当成最新的一段，同一个人同时打开也只开一段。
      * 开了没记成的那段（登记失败，或这件已经登记了别的段）记成孤儿段，总管线不用；开段没拿到回应时不知道 id，只记日志。
      * created：这次开的段记下了。
@@ -345,7 +345,7 @@ export function createChatService(options: {
      * 发一句，把 Chat 的事件逐块翻好转给界面。开流前的拒绝抛 ChatServiceError；开流后在这里收尾。
      * 界面断开（切走、锁屏、刷新、关页面）不算停止：照样读到 Chat 写完，回答照常存下；网页里问的那一轮留在 liveTurns，回来时接上（follow）。
      * 停止只走 cancel（本人点「停止」）。
-     * 带 target（Task 管线）：只进那一段，不判段、不记纪要；没带页面路径时按这件 Task 的页面（/me/work/tasks/<id>），Chat 就知道说的是哪件 Task。
+     * 带 target（项目对话）：只进那一段，不判段、不记纪要；没带页面路径时按这个项目的页面（/me/work/projects/<id>），Chat 就知道说的是哪个项目。
      */
     async relay(viewer: ChatViewer, requestId: string, body: TConversationMessageRequest, reply: FastifyReply, via?: HomeTurnVia, target?: ChatTarget): Promise<void> {
       const startedAt = Date.now();
@@ -356,7 +356,7 @@ export function createChatService(options: {
         : resumed ? { conversation: resumed, started: false } : await segment(viewer, requestId, !body.attachments?.length);
       if (!target) record(viewer, requestId, current.conversation);
       const id = current.conversation.conversationId;
-      const pagePath = body.pagePath ?? (target ? `/me/work/tasks/${encodeURIComponent(target.taskId)}` : undefined);
+      const pagePath = body.pagePath ?? (target ? `/me/work/projects/${encodeURIComponent(target.projectId)}` : undefined);
       const page = pagePath && options.pageGuide ? await options.pageGuide(pagePath, viewer) : null;
       const upstream = await call(viewer, requestId, `/conversations/${id}/turns`, {
         method: "POST", headers: { "content-type": "application/json", accept: "text/event-stream" },
@@ -446,7 +446,7 @@ export function createChatService(options: {
         logEvent({ event: "chat_service.turn", requestId, runId, outcome, ...(clientClosed ? { clientClosed: true } : {}),
           conversationId: current.conversation.conversationId, ...(current.started ? { newSegment: true } : {}) });
         if (runId) stoppedRuns.delete(runId);
-        // 这一轮写完的时刻记成这段最后一次发言（纪要闲置 15 分钟后才写）。Task 管线的段不记纪要。
+        // 这一轮写完的时刻记成这段最后一次发言（纪要闲置 15 分钟后才写）。项目对话的段不记纪要。
         if (!target) record(viewer, requestId, current.conversation);
         if (!reply.raw.writableEnded) reply.raw.end();
         if (live) {
@@ -465,7 +465,7 @@ export function createChatService(options: {
 
     /**
      * 接上本人网页里问的那一轮（切走、刷新、断线回来）：先补发已有的事件，还在写就跟着往下写到结束。
-     * 不是这一轮（或这个进程里没有：api 重启过）返回 false，路由回 204。scope 是哪条线（Task 管线是 plan-task:<taskId>）。
+     * 不是这一轮（或这个进程里没有：api 重启过）返回 false，路由回 204。scope 是哪条线（项目对话是 project:<projectId>）。
      */
     follow(viewer: ChatViewer, runId: string, reply: FastifyReply, scope = "global"): boolean {
       const live = liveTurns.get(liveKey(viewer, scope));
