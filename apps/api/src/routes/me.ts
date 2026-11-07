@@ -1,6 +1,7 @@
 import type { FastifyReply } from "fastify";
-import { Buddy, BuddyOrNull, MAX_AVATAR_IMAGE_BYTES, MAX_RAIL_IMAGE_BYTES, PersonAvatarsResponse, PersonalProfileView, RailBackground, SaveAvatarRequest, SaveRailBackgroundRequest, SavedAvatar, UpdatePersonalProfileRequest } from "@warmap/contracts";
+import { Buddy, BuddyOrNull, NotificationSettings, MAX_AVATAR_IMAGE_BYTES, MAX_RAIL_IMAGE_BYTES, PersonAvatarsResponse, PersonalProfileView, RailBackground, SaveAvatarRequest, SaveRailBackgroundRequest, SavedAvatar, UpdatePersonalProfileRequest } from "@warmap/contracts";
 import { BUDDY_NAME_UNITS, buddyNameUnits, readBuddy, saveBuddy } from "../buddy.js";
+import { readNotificationSettings, writeNotificationSettings } from "../homePush.js";
 import { RailBackgroundError, readRailBackground, readRailImage, saveRailBackground } from "../railBackground.js";
 import { AvatarError, deleteAvatar, listAvatarVersions, readAvatar, saveAvatar } from "../avatar.js";
 import { Type } from "@sinclair/typebox";
@@ -51,6 +52,14 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
     await q("INSERT INTO person_profiles (person_id, gender) VALUES ($1, $2) ON CONFLICT (person_id) DO UPDATE SET gender = EXCLUDED.gender", [person.personId, gender]);
     return { personId: person.personId, displayName: names().get(person.personId) ?? person.personId, gender };
   });
+
+  // 「偏好」里的通知开关（新首页 13.2）：本人读写，飞书通知缺省开。
+  app.get("/api/me/notification-settings", { preHandler: requirePerson, schema: { response: { 200: NotificationSettings } } }, async (req, reply) => {
+    reply.header("Cache-Control", "no-store");
+    return readNotificationSettings(q, req.person!.personId);
+  });
+  app.put("/api/me/notification-settings", { preHandler: requirePerson, schema: { body: NotificationSettings, response: { 200: NotificationSettings } } }, async (req) =>
+    writeNotificationSettings(q, req.person!.personId, req.body));
 
   // 伙伴也只有本人读写：名字按宽度算（buddyNameUnits），全是空白或超宽契约的长度挡不住，这里挡。
   app.get("/api/me/buddy", { preHandler: requirePerson, schema: { response: { 200: BuddyOrNull } } }, async (req, reply) => {

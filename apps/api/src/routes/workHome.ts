@@ -32,6 +32,9 @@ export function registerWorkHomeRoutes(app: AppInstance, ctx: RouteContext): voi
       missionRounds: (viewer) => listMissionRoundCards(q, peopleDirectory.searchPeople(undefined), env.sessionSecret, viewer, undefined, now) }, person);
   };
 
+  // 飞书推送（homePush.ts，server.ts 注册后台任务）读同一份首页。
+  app.decorate("readWorkHome", workHome);
+
   app.get("/api/me/work-home", { preHandler: requireMember, schema: { response: { 200: WorkHomeResponse } } }, async (req) => workHome(req.person!));
 
   app.get("/api/me/background", { preHandler: requireMember, schema: { querystring: BackgroundQuery, response: { 200: BackgroundResponse } } }, async (req, reply) =>
@@ -47,4 +50,11 @@ export function registerWorkHomeRoutes(app: AppInstance, ctx: RouteContext): voi
     if (typeof id !== "string" || !peopleDirectory.searchPeople(undefined).some((person) => person.personId === id)) return fail(reply, 404, "OWNER_NOT_FOUND", "提问人不在人员目录");
     return workHome({ personId: id, role: "member" });
   });
+}
+
+declare module "fastify" {
+  interface FastifyInstance {
+    /** 本人的新首页（和 GET /api/me/work-home 同一份）；飞书推送的后台任务读它。 */
+    readWorkHome: (person: MissionRoundPerson) => ReturnType<typeof readWorkHome>;
+  }
 }

@@ -388,3 +388,13 @@ export type TReleaseSessionStartRequest = Static<typeof ReleaseSessionStartReque
 export type TClaimSessionStartsResponse = Static<typeof ClaimSessionStartsResponse>;
 export type TBuddyOpenTopicRequest = Static<typeof BuddyOpenTopicRequest>;
 export type TBuddyOpenTopicResponse = Static<typeof BuddyOpenTopicResponse>;
+
+/**
+ * GET / PUT /api/me/notification-settings（本人，CEO 和 DRI 都有）：「偏好」里的通知开关（设计 13.1、13.2），存在服务端。
+ * feishu：飞书通知，缺省开。开着时天枢只把三类事推到本人和天枢机器人的单聊（「天枢伙伴」那条对话）：
+ * 卡住正在跑的活、而本人 10 分钟内没打开天枢的（验收两次没过、额度用完要定、批准等了 10 分钟）；要本人确认、离截止不到 24 小时的（Mission Card、复盘）；
+ * CEO 要拍板的（原有的规矩）。10 分钟里的几件合成一条，22:00 到 08:00 不推、攒到 08:00；每件带一个打开天枢那一处的链接，不放批准、回答这类操作。
+ * 没关联飞书的人开着也收不到。
+ */
+export const NotificationSettings = Type.Object({ feishu: Type.Boolean() }, strict);
+export type TNotificationSettings = Static<typeof NotificationSettings>;

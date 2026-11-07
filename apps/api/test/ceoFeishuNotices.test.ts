@@ -37,6 +37,10 @@ describe("一号位要动手的事主动发飞书", () => {
     expect(sent[1].payload.links[0].path).toMatch(/^\/issues\//);
     expect(sent[0]).toMatchObject({ dedupe_key: `feishu.notify:ceo-m2:${TEST_CEO.personId}:2026-10`, payload: { title: "复盘与拆解开始了", links: [{ path: "/m2/" }] } });
     expect(await tickAt("2026-10-30T02:00:00Z")).toHaveLength(2);
+    // 「偏好」里关了飞书通知：不再发。
+    await t.sql("DELETE FROM jobs");
+    await t.sql("INSERT INTO person_notify(person_id,feishu) VALUES($1,false)", [TEST_CEO.personId]);
+    expect(await tickAt("2026-10-30T02:00:00Z")).toEqual([]);
   });
 
   it("周五到周一：本人那份周复盘起草好了等确认才发，周一看的是上一周", async () => {

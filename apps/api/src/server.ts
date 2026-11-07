@@ -30,6 +30,7 @@ import { createPersonalReviewDraftAgent } from "./personalReviewAgent.js";
 import { createMonthlyReviewAssessAgent, createMonthlyReviewDraftAgent, createMonthlyReviewSummaryAgent } from "./monthlyReviewAgents.js";
 import { createMonthlyReviewScheduler } from "./monthlyReviewScheduler.js";
 import { createMissionRoundScheduler } from "./missionRoundScheduler.js";
+import { homePushJobs } from "./homePush.js";
 import { createCollectorRawPurgeScheduler } from "./collectorDistill.js";
 import { createWeeklyReviewDraftAgent } from "./weeklyReviewAgent.js";
 import { createWeeklyReviewService } from "./weeklyReviewService.js";
@@ -301,14 +302,17 @@ const usageJobs = usageReportJobs(pool.query.bind(pool), peopleDirectory, now);
 const summaryJobs = app.battlefieldSummaries.jobs();
 // 一号位要动手的事主动私信到飞书（复盘与拆解开放、周复盘待确认、红色议题）：配了飞书才发。
 const ceoNoticeJobs = feishuClient ? ceoFeishuNoticeJobs({ pool, people: () => peopleDirectory.searchPeople(undefined), now }) : { handlers: {}, recurring: [] };
+// 新首页「等你」里急的几件推到本人的「天枢伙伴」单聊（设计 13.2）：配了飞书才发。
+const homePush = feishuClient ? homePushJobs({ pool, now, people: () => peopleDirectory.searchPeople(undefined).filter(canUseMemberView).map((person) => person.personId),
+  readHome: (personId) => app.readWorkHome({ personId, role: "member" }) }) : { handlers: {}, recurring: [] };
 const jobWorker = createJobWorker({
   pool,
   handlers: {
-    ...exampleJobHandlers, ...feishuTokens?.handlers, ...followThroughJobs.handlers, ...docChangeJobs.handlers, ...app.collectionJobs.handlers, ...usageJobs.handlers, ...summaryJobs.handlers, ...ceoNoticeJobs.handlers, ...app.taskPlacementJobs,
+    ...exampleJobHandlers, ...feishuTokens?.handlers, ...followThroughJobs.handlers, ...docChangeJobs.handlers, ...app.collectionJobs.handlers, ...usageJobs.handlers, ...summaryJobs.handlers, ...ceoNoticeJobs.handlers, ...homePush.handlers, ...app.taskPlacementJobs,
     ...(env.feishu ? feishuEventJobs(pool, mergeFeishuEventHandlers(followThroughJobs.feishuEvents, docChangeJobs.feishuEvents, app.feishuChat?.events ?? {})) : {}),
     ...(feishuClient ? feishuNotifyJobs({ pool, client: feishuClient, publicOrigin: env.publicOrigin }) : {}),
   },
-  recurring: [...(feishuTokens?.recurring ?? []), ...followThroughJobs.recurring, ...app.collectionJobs.recurring, ...usageJobs.recurring, ...summaryJobs.recurring, ...ceoNoticeJobs.recurring],
+  recurring: [...(feishuTokens?.recurring ?? []), ...followThroughJobs.recurring, ...app.collectionJobs.recurring, ...usageJobs.recurring, ...summaryJobs.recurring, ...ceoNoticeJobs.recurring, ...homePush.recurring],
 });
 let feishuEvents: { close: () => void } | undefined;
 app.addHook("onClose", async () => {

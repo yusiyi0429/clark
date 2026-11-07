@@ -111,6 +111,7 @@ import { createCollectionAgent, type CollectionAgent } from "./collectionAgent.j
 import { collectionJobs, type CollectionDeps } from "./collections.js";
 import { createFeishuBitable, createMockBitable, type BitableAdapter } from "./feishu/bitable.js";
 import { feishuNotifier } from "./feishu/notify.js";
+import { createPresence } from "./homePush.js";
 import { registerCollectionRoutes } from "./routes/collections.js";
 import type { JobHandler, RecurringJob } from "./jobs.js";
 import { registerCollectorRoutes } from "./routes/collector.js";
@@ -659,7 +660,10 @@ export async function buildApp({
   const requestContext = new WeakMap<FastifyRequest, RequestContext>();
   // 使用周报的「哪天用过」：登录后发问或改动（非 GET 的请求；上手步骤上报本身不算），一人一天记一次。页面打开、轮询不算。
   const usage = createUsageTracker(q, now);
+  // 本人在网页上打开着天枢（浏览器会话的请求，含轮询）：飞书推送据此判断本人在不在天枢里（homePush.ts）。
+  const presence = createPresence(q, now);
   app.addHook("onResponse", async (req, reply) => {
+    if (req.person) presence(req.person.personId);
     if (req.person && reply.statusCode < 400 && req.method !== "GET" && req.method !== "HEAD" && req.routeOptions.url !== "/api/me/usage/onboarding-step") {
       usage.active(req.person.personId);
     }
