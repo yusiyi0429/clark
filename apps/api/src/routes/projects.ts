@@ -1,14 +1,15 @@
 import type { FastifyReply } from "fastify";
 import { Type } from "@sinclair/typebox";
-import { CreateProjectRequest, Project, ProjectDetailResponse, ProjectFeedResponse, ProjectGoalResponse, ProjectListResponse, ProjectPipelineResponse,
-  UpdateProjectRequest } from "@warmap/contracts";
+import { AcceptCardDraftsRequest, AcceptCardDraftsResponse, CardPlanBriefResponse, CardSplitRequestView, CreateProjectRequest, Project, ProjectBoardResponse,
+  ProjectDetailResponse, ProjectFeedResponse, ProjectGoalResponse, ProjectListResponse, ProjectPipelineResponse, UpdateProjectRequest } from "@warmap/contracts";
+import { projectPlanBrief, registerProjectCardSplit } from "../cardSplits.js";
 import { ChatServiceError } from "../chatService.js";
 import { personDisplayNames } from "../people.js";
 import { createProject, goalView, linkGoal, listProjects, ownProject, projectDetail, projectGoalRows, projectOwners, projectReader, projectScope, projectView, unlinkGoal,
   updateProject } from "../projects.js";
 import { decidedTransfers, handedAway, openTransfers, transferView } from "../projectTransfers.js";
 import { readProjectFeed } from "../taskFeed.js";
-import { boardTask, CardError, planTaskOpener } from "../taskCards.js";
+import { acceptProjectCardDrafts, boardTask, CardError, planTaskOpener, readProjectBoard } from "../taskCards.js";
 import { ensureProjectPipeline } from "../taskPipelines.js";
 import { settlementsOf } from "../taskContinuity.js";
 import type { AppInstance, Guard, RouteContext } from "./shared.js";
@@ -20,7 +21,7 @@ const goalParams = Type.Object({ projectId: Type.String({ minLength: 1 }), taskI
  * 项目（契约 projects.ts，设计《新首页》第 16 节）：本人的项目、挂接、项目详情、项目对话、项目动态。DRI 工作台的人才有，只给本人。
  */
 export function registerProjectRoutes(app: AppInstance, ctx: RouteContext): void {
-  const { q, pool, fail, requirePerson } = ctx;
+  const { q, pool, env, fail, requirePerson, requireServiceToken } = ctx;
   const open = planTaskOpener(q, ctx.planTasks, ctx.peopleDirectory, ctx.now);
   const requireMember: Guard = async (req, reply) => {
     await requirePerson(req, reply);
@@ -39,6 +40,12 @@ export function registerProjectRoutes(app: AppInstance, ctx: RouteContext): void
     const open = await openTransfers(q, projectIds);
     const away = new Map((await handedAway(q, personId)).map((row) => [row.project_id, row]));
     return new Map(projectIds.flatMap((id) => { const row = open.get(id) ?? away.get(id); return row ? [[id, transferView(row, names)] as const] : []; }));
+  };
+  /** 本人的、没归档的项目（要往里放东西的几步用）。 */
+  const activeProject = async (personId: string, projectId: string) => {
+    const project = await ownProject(q, personId, projectId);
+    if (project.archived_at) throw new CardError(409, "PROJECT_ARCHIVED", "这个项目已经归档了");
+    return project;
   };
   /** 挂一件本人负责的 Task（boardTask 核对负责人）。 */
   const link = async (personId: string, projectId: string, taskId: string) => {
@@ -98,4 +105,40 @@ export function registerProjectRoutes(app: AppInstance, ctx: RouteContext): void
       const transfers = (await decidedTransfers(q, project.id)).map((row) => transferView(row, personDisplayNames(ctx.peopleDirectory)));
       return readProjectFeed(q, await projectOwners(q, project.id), project.id, goals, criteria, { viewer: personId, transfers });
     }));
+
+  // 没挂 Task 的项目也能拆卡（16.3）：看板、登记、规划员交代、放进看板。挂着 Task 的照旧走 /api/plan-tasks/:taskId/…。
+  app.get("/api/me/projects/:projectId/board", { preHandler: requireMember, schema: { params: projectParams, response: { 200: ProjectBoardResponse } } },
+    async (req, reply) => handle(reply, async () => {
+      const project = await ownProject(q, req.person!.personId, req.params.projectId);
+      return readProjectBoard(q, req.person!.personId, project.id, personDisplayNames(ctx.peopleDirectory));
+    }));
+
+  app.post("/api/me/projects/:projectId/card-splits", { preHandler: requireMember, schema: { params: projectParams,
+    response: { 200: CardSplitRequestView, 201: CardSplitRequestView } } }, async (req, reply) => handle(reply, async () => {
+    const project = await activeProject(req.person!.personId, req.params.projectId);
+    const { request, created } = await registerProjectCardSplit(q, req.person!.personId, project.id, "web", ctx.now());
+    return reply.status(created ? 201 : 200).send(request);
+  }));
+
+  app.get("/api/me/projects/:projectId/plan-brief", { preHandler: requireMember, schema: { params: projectParams, response: { 200: CardPlanBriefResponse } } },
+    async (req, reply) => handle(reply, async () => projectPlanBrief(q, await ownProject(q, req.person!.personId, req.params.projectId))));
+
+  // 带的 budget 不存（没有 Task 可挂），开工用本人的缺省预算。
+  app.post("/api/me/projects/:projectId/card-drafts/accept", { preHandler: requireMember, schema: { params: projectParams, body: AcceptCardDraftsRequest,
+    response: { 200: AcceptCardDraftsResponse } } }, async (req, reply) => handle(reply, async () => {
+    const project = await activeProject(req.person!.personId, req.params.projectId);
+    return { cards: await acceptProjectCardDrafts(pool, req.person!.personId, project.id, req.body, personDisplayNames(ctx.peopleDirectory), ctx.now()) };
+  }));
+
+  // 伙伴在项目对话里登记拆这个项目（register_card_split 带 projectId）：照 /internal/plan-tasks/:taskId/card-splits，INTERNAL_CHAT_TOKEN 加 X-Owner-Id；没配时不注册。
+  if (env.internalChatToken) app.post("/internal/me/projects/:projectId/card-splits", { onRequest: requireServiceToken(env.internalChatToken),
+    schema: { params: projectParams, response: { 200: CardSplitRequestView, 201: CardSplitRequestView } } }, async (req, reply) => {
+    const id = req.headers["x-owner-id"];
+    if (typeof id !== "string" || !ctx.peopleDirectory.searchPeople(undefined).some((person) => person.personId === id)) return fail(reply, 404, "OWNER_NOT_FOUND", "提问人不在人员目录");
+    return handle(reply, async () => {
+      const project = await activeProject(id, req.params.projectId);
+      const { request, created } = await registerProjectCardSplit(q, id, project.id, "buddy", ctx.now());
+      return reply.status(created ? 201 : 200).send(request);
+    });
+  });
 }

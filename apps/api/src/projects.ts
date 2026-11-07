@@ -126,7 +126,7 @@ export async function goalsOf(q: Query, ownerId: string): Promise<Map<string, Go
 }
 
 /** 判定：照 taskContinuity 的了结（确认完成、到此为止、已延续），没了结是 open。 */
-async function verdicts(q: Query, taskIds: string[]): Promise<Map<string, TProjectGoalVerdict>> {
+export async function verdicts(q: Query, taskIds: string[]): Promise<Map<string, TProjectGoalVerdict>> {
   const settled = await settlementsOf(q, taskIds);
   return new Map(taskIds.map((id) => [id, settled.get(id)?.kind ?? "open"] as const));
 }

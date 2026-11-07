@@ -8,9 +8,10 @@ import { htmlToText } from "./meetingEvidence.js";
 import { UUID_PATTERN } from "./meetingStore.js";
 import { taskStandards } from "./tasks.js";
 import { settleHandback } from "./cardAcceptance.js";
-import { saveLocalCardPlan, standardLines } from "./cardPlanner.js";
+import { saveLocalCardPlan, standardLines, type PlanTarget } from "./cardPlanner.js";
 import type { HandbackRow } from "./cardProjection.js";
 import type { CardPlanTask } from "./taskCards.js";
+import { ownProject } from "./projects.js";
 import { closeStartsFor } from "./sessionStarts.js";
 import { latestSuccessor } from "./taskContinuity.js";
 
@@ -26,6 +27,7 @@ export class SyncReject extends Error {
 
 type Owner = { personId: string; deviceId: string };
 type RunRow = { id: string; owner_id: string; kind: "card" | "topic" | "plan" | "verify"; task_id: string | null; topic_id: string | null; plan_task_id: string | null;
+  project_id: string | null;
   state_seq: string; plan_seq: string;
   plan: TLocalPlanEntry[]; timeline: TLocalRunActivity[]; last_activity: TLocalRunActivity | null; running_at: Date | null };
 type CardRow = { id: string; owner_id: string; status: string; executor: string | null; done_definition: string | null };
@@ -93,9 +95,9 @@ async function applyItem(deps: SyncDeps, owner: Owner, item: TLocalSyncItem): Pr
     item = { ...item, subject: { ...item.subject, taskId: await latestSuccessor(deps.pool.query.bind(deps.pool), item.subject.taskId) } };
   const at = new Date(item.occurredAt);
   if (Number.isNaN(at.valueOf())) throw new SyncReject("INVALID_TIME", "occurredAt 不是合法时间");
-  // 规划员的派活单要读本体里的 Task（不在事务里读）：本人是负责人才收。已经收过的重发不再读。
+  // 规划员的派活单要读本体里的 Task（不在事务里读）：本人是负责人才收；拆项目的（16.3）本人是项目负责人才收。已经收过的重发不再读。
   const repeated = item.type === "card_plan" && Boolean((await deps.pool.query("SELECT 1 FROM local_sync_items WHERE key=$1", [item.key])).rowCount);
-  const planned = item.type === "card_plan" && !repeated ? await plannedTask(deps, owner, item) : null;
+  const planned = item.type === "card_plan" && !repeated ? await plannedTarget(deps, owner, item) : null;
   const written: string[] = [];
   const client = await deps.pool.connect();
   try {
@@ -119,24 +121,33 @@ async function applyItem(deps: SyncDeps, owner: Owner, item: TLocalSyncItem): Pr
   } finally { client.release(); }
 }
 
-/** 规划员拆的那个 Task：本人打得开、而且是负责人（看板只给负责人）。 */
-async function plannedTask(deps: SyncDeps, owner: Owner, item: TLocalSyncItem): Promise<CardPlanTask> {
-  const taskId = item.subject.kind === "plan" ? item.subject.taskId : undefined;
-  if (!taskId) throw new SyncReject("INVALID_SUBJECT", "派活单要挂在规划员的会话上（带 taskId）");
+/** 规划员拆的那个 Task（本人打得开、而且是负责人，看板只给负责人），或没挂 Task 的那个项目（本人是项目负责人）。 */
+async function plannedTarget(deps: SyncDeps, owner: Owner, item: TLocalSyncItem): Promise<PlanTarget> {
+  const { kind, taskId, projectId } = item.subject;
+  if (kind !== "plan" || (!taskId && !projectId)) throw new SyncReject("INVALID_SUBJECT", "派活单要挂在规划员的会话上（带 taskId 或 projectId）");
+  if (!taskId) {
+    await ownProject(deps.pool.query.bind(deps.pool), owner.personId, projectId!).catch(() => { throw new SyncReject("NOT_FOUND", "找不到这个项目"); });
+    return { taskId: null, missionId: null, projectId: projectId!, criteria: [] };
+  }
   const own = await deps.planTask(owner.personId, taskId);
   if (!own) throw new SyncReject("NOT_FOUND", "找不到这个 Task");
   if (!own.canEdit) throw new SyncReject("NOT_OWNER", "这个 Task 由负责人推进，派活单只收负责人的");
-  return own;
+  return { taskId, missionId: own.task.missionId, projectId: null, criteria: own.criteria };
 }
 
 /**
  * 会话挂的东西要是本人的：卡（执行事项）和验收员验的那张卡返回卡的几列；专题返回 null；规划员的会话挂的是本体里的 Task，
- * 这里只核对带了 taskId（派活单另外核对负责人）。
+ * 这里只核对带了 taskId（派活单另外核对负责人）；拆项目的（16.3）不带 taskId、带 projectId，项目要是本人的。
  */
 async function lockSubject(client: PoolClient, owner: Owner, item: TLocalSyncItem): Promise<CardRow | null> {
-  const { kind, cardId, topicId, taskId, handbackKey } = item.subject;
+  const { kind, cardId, topicId, taskId, projectId, handbackKey } = item.subject;
   if (kind === "plan") {
-    if (!taskId) throw new SyncReject("INVALID_SUBJECT", "规划员的会话要带 taskId");
+    if (!taskId && !projectId) throw new SyncReject("INVALID_SUBJECT", "规划员的会话要带 taskId 或 projectId");
+    if (!taskId) {
+      const project = (await client.query("SELECT owner_id FROM projects WHERE id=$1", [projectId])).rows[0] as { owner_id: string } | undefined;
+      if (!project) throw new SyncReject("NOT_FOUND", "找不到这个项目");
+      if (project.owner_id !== owner.personId) throw new SyncReject("NOT_OWNER", "这个项目不是你的");
+    }
     return null;
   }
   const onCard = kind === "card" || kind === "verify";
@@ -154,13 +165,16 @@ async function lockSubject(client: PoolClient, owner: Owner, item: TLocalSyncIte
 
 /** 这次执行的摘要行：第一次见到时建，之后锁住改。 */
 async function lockRun(client: PoolClient, owner: Owner, item: TLocalSyncItem, at: Date): Promise<RunRow> {
-  const { kind, cardId, topicId, taskId } = item.subject;
-  const created = await client.query(`INSERT INTO local_runs(id,owner_id,device_id,kind,task_id,topic_id,plan_task_id,started_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$8)
-    ON CONFLICT (id) DO NOTHING`, [item.sessionId, owner.personId, owner.deviceId, kind, kind === "card" || kind === "verify" ? cardId : null,
-    kind === "topic" ? topicId : null, kind === "plan" ? taskId : null, at]);
+  const { kind, cardId, topicId } = item.subject;
+  // 规划员：拆 Task 的记 plan_task_id，拆项目的（16.3，不带 taskId）记 project_id。
+  const taskId = kind === "plan" ? item.subject.taskId ?? null : null;
+  const projectId = kind === "plan" && !taskId ? item.subject.projectId ?? null : null;
+  const created = await client.query(`INSERT INTO local_runs(id,owner_id,device_id,kind,task_id,topic_id,plan_task_id,project_id,started_at,updated_at)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$9) ON CONFLICT (id) DO NOTHING`, [item.sessionId, owner.personId, owner.deviceId, kind,
+    kind === "card" || kind === "verify" ? cardId : null, kind === "topic" ? topicId : null, taskId, projectId, at]);
   const run = (await client.query("SELECT * FROM local_runs WHERE id=$1 FOR UPDATE", [item.sessionId])).rows[0] as RunRow;
   if (run.owner_id !== owner.personId) throw new SyncReject("NOT_OWNER", "这次执行不是你的");
-  const same = kind === "topic" ? run.topic_id === topicId : kind === "plan" ? run.plan_task_id === taskId : run.task_id === cardId;
+  const same = kind === "topic" ? run.topic_id === topicId : kind === "plan" ? run.plan_task_id === taskId && run.project_id === projectId : run.task_id === cardId;
   if (run.kind !== kind || !same) throw new SyncReject("SUBJECT_MISMATCH", "这次执行属于另一张卡、专题或 Task");
   // 开工（本机第一次报这次执行）时记下卡的岗位版本。
   if (created.rowCount && kind === "card")
@@ -182,7 +196,7 @@ async function note(client: PoolClient, run: RunRow, at: Date, text: string, mil
 }
 
 async function applyType(client: PoolClient, deps: Pick<SyncDeps, "storageDir" | "now">, owner: Owner, item: TLocalSyncItem, run: RunRow, card: CardRow | null,
-  seq: number, at: Date, written: string[], planned: CardPlanTask | null): Promise<Applied> {
+  seq: number, at: Date, written: string[], planned: PlanTarget | null): Promise<Applied> {
   switch (item.type) {
     case "status": {
       if (seq <= Number(run.state_seq)) return {};
@@ -262,7 +276,7 @@ async function applyType(client: PoolClient, deps: Pick<SyncDeps, "storageDir" |
         throw new SyncReject("INVALID_PLAN", "计划要有一句话总结，每件派活单要有标题和完成标准");
       if (item.data.cards.some((card, index) => (card.after ?? []).some((after) => after > index)))
         throw new SyncReject("INVALID_PLAN", "一件只能等排在它前面的几件（after 写前面的位置，从 1 起）");
-      const saved = await saveLocalCardPlan(client, { ownerId: owner.personId, runId: run.id, own: planned, plan: item.data, at });
+      const saved = await saveLocalCardPlan(client, { ownerId: owner.personId, runId: run.id, target: planned, plan: item.data, at });
       await note(client, run, at, saved ? `出了派活单（第 ${item.data.revision} 次，${item.data.cards.length} 件）` : "旧的派活单晚到了", true);
       return {};
     }

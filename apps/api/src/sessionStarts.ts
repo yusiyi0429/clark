@@ -19,7 +19,7 @@ const startView = (row: StartRow): TSessionStartView => ({ id: row.id, kind: row
 const START_PROJECT = `COALESCE((SELECT g.project_id FROM project_goals g WHERE g.task_id=s.plan_task_id),
   (SELECT t.project_id FROM tasks t WHERE t.id=s.card_id),(SELECT r.project_id FROM research_topics r WHERE r.id=s.topic_id))::text AS project_id`;
 
-export type StartRequest = { kind: "card"; cardId: string; planTaskId: string } | { kind: "topic"; topicId: string; planTaskId: string | null };
+export type StartRequest = { kind: "card"; cardId: string; planTaskId: string | null } | { kind: "topic"; topicId: string; planTaskId: string | null };
 
 /** 登记要开工：同一张卡、同一个专题已有一条没了结的就不再插（唯一索引），返回的是那一条。顺序和 items 一样。 */
 export async function requestStarts(q: Query, input: { ownerId: string; origin: "web" | "buddy"; now: Date; items: StartRequest[] }): Promise<TSessionStartView[]> {

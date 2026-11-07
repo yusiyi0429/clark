@@ -231,10 +231,13 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
   const onProject = (projectId: string | null) => projectId !== null && activeIds.has(projectId);
 
   // 规划员在拆：本机的规划员会话还没结束，或登记了拆卡还没开。
-  const planRuns = (await q("SELECT plan_task_id FROM local_runs WHERE owner_id=$1 AND kind='plan' AND state=ANY($2::text[])",
-    [ownerId, [...ACTIVE]])).rows as { plan_task_id: string }[];
-  const splits = (await q("SELECT plan_task_id FROM card_split_requests WHERE owner_id=$1 AND closed_at IS NULL", [ownerId])).rows as { plan_task_id: string }[];
-  const planning = new Set([...planRuns.map((run) => run.plan_task_id), ...splits.map((row) => row.plan_task_id)]);
+  // 拆 Task 的按 Task 记，拆项目的（16.3）按项目记。
+  const planRuns = (await q("SELECT plan_task_id,project_id::text FROM local_runs WHERE owner_id=$1 AND kind='plan' AND state=ANY($2::text[])",
+    [ownerId, [...ACTIVE]])).rows as { plan_task_id: string | null; project_id: string | null }[];
+  const splits = (await q("SELECT plan_task_id,project_id::text FROM card_split_requests WHERE owner_id=$1 AND closed_at IS NULL", [ownerId])).rows as
+    { plan_task_id: string | null; project_id: string | null }[];
+  const planning = new Set([...planRuns, ...splits].flatMap((row) => row.plan_task_id ? [row.plan_task_id] : []));
+  const planningProjects = new Set([...planRuns, ...splits].flatMap((row) => !row.plan_task_id && row.project_id ? [row.project_id] : []));
   // 项目对话：接了 Chat 记在 project_pipelines；没接时是天枢自己 scope 为 project:<id> 的对话。
   const pipelines = new Map(active.length ? (deps.chat
     ? (await q("SELECT project_id::text AS project,conversation_id AS id FROM project_pipelines WHERE owner_id=$1 AND project_id=ANY($2::uuid[])", [ownerId, [...activeIds]])).rows
@@ -298,7 +301,7 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
         doneToday: mine.filter((sub) => sub.acceptedAt && shanghaiDate(new Date(sub.acceptedAt)) === today).length,
         needsYou: waiting.filter((item) => item.projectId === row.id).length },
       pipeline: { conversationId: pipelines.get(row.id) ?? null, scope: projectScope(row.id) },
-      planning: projectGoals.some((goal) => planning.has(goal.taskId)), subSessions: mine.map(view), items: items.map(homeItem),
+      planning: planningProjects.has(row.id) || projectGoals.some((goal) => planning.has(goal.taskId)), subSessions: mine.map(view), items: items.map(homeItem),
       transfer: transfer ? transferView(transfer, deps.names) : null };
   });
   // 16.2：有等你的在前；然后是有目标的、按最早的截止日；最后按最近动静从近到远。
@@ -354,12 +357,14 @@ export async function readBackground(deps: { q: Query; now: Date; planTasks: Pla
   // 规划员、验收员：还在的、停着等额度恢复的（那台电脑在线、恢复时间没到），和今天结束的。
   const resources = await workerResources(q, ownerId, now);
   const online = new Set(resources.devices.filter((device) => device.online).map((device) => device.id));
-  const runs = (await q(`SELECT r.id::text,r.kind,r.state,r.title,r.device_id::text,r.task_id::text,r.plan_task_id,r.started_at,r.ended_at,t.title AS card_title,t.plan_task_id AS card_task,
+  const runs = (await q(`SELECT r.id::text,r.kind,r.state,r.title,r.device_id::text,r.task_id::text,r.plan_task_id,r.project_id::text,pr.name AS project_name,r.started_at,r.ended_at,
+      t.title AS card_title,t.plan_task_id AS card_task,
       CASE WHEN ${HELD} THEN r.hold->>'until' END AS hold_until,${HELD} AS held,COALESCE(${SHANGHAI_DAY("r.ended_at", "$3")},false) AS ended_today,
       CASE WHEN r.kind='plan' THEN EXISTS (SELECT 1 FROM card_plans p WHERE p.run_id=r.id) ELSE EXISTS (SELECT 1 FROM card_handbacks h WHERE h.verify_run_id=r.id) END AS delivered
-    FROM local_runs r LEFT JOIN tasks t ON t.id=r.task_id
+    FROM local_runs r LEFT JOIN tasks t ON t.id=r.task_id LEFT JOIN projects pr ON pr.id=r.project_id
     WHERE r.owner_id=$1 AND r.kind IN ('plan','verify') AND (r.state=ANY($2::text[]) OR ${HELD} OR ${SHANGHAI_DAY("r.ended_at", "$3")})`, [ownerId, [...ACTIVE], now])).rows as
-    { id: string; kind: "plan" | "verify"; state: string; title: string | null; device_id: string; task_id: string | null; plan_task_id: string | null; started_at: Date;
+    { id: string; kind: "plan" | "verify"; state: string; title: string | null; device_id: string; task_id: string | null; plan_task_id: string | null; project_id: string | null;
+      project_name: string | null; started_at: Date;
       ended_at: Date | null; card_title: string | null; card_task: string | null; hold_until: string | null; held: boolean; ended_today: boolean; delivered: boolean }[];
   const planTaskIds = runs.some((run) => run.kind === "plan")
     ? new Map((await treeTasks(q, deps.planTasks, ownerId, now)).tasks.map((task) => [task.taskId, task.name])) : new Map<string, string>();
@@ -368,12 +373,14 @@ export async function readBackground(deps: { q: Query; now: Date; planTasks: Pla
     const at = plan ? { taskId: run.plan_task_id, cardId: null, topicId: null } : { taskId: run.card_task, cardId: run.task_id, topicId: null };
     const quota = run.held && awaitsQuota(run.hold_until, run.device_id, online, now);
     // 报了 hold 却不算等额度（电脑不在线、恢复时间过了）的，照没报 hold 算：会话退出了、又不是今天结束的不列。
-    if (!inScope(at) || (!quota && !ACTIVE.has(run.state) && !run.ended_today)) continue;
+    // 拆项目的规划员（16.3）不挂 Task，在它拆的那个项目里。
+    const inProject = scope.kind === "project" && run.project_id === scope.id;
+    if (!(inScope(at) || inProject) || (!quota && !ACTIVE.has(run.state) && !run.ended_today)) continue;
     // 停着等额度恢复的在排队；交完收工（done）是完成；会话退出了：交了派活单（规划员）、交了结论（验收员）算完成，没交算被停了。
     const state: TBackgroundState = quota || run.state === "queued" ? "queued" : ACTIVE.has(run.state) ? "running" : run.state === "failed" ? "failed"
       : run.state === "done" || run.delivered ? "done" : "stopped";
     const open = state === "queued" || state === "running";
-    const title = plan ? `拆卡：${planTaskIds.get(run.plan_task_id!) ?? run.title ?? run.plan_task_id}` : run.title ?? `验收：${run.card_title ?? ""}`;
+    const title = plan ? `拆卡：${run.project_name ?? planTaskIds.get(run.plan_task_id!) ?? run.title ?? run.plan_task_id}` : run.title ?? `验收：${run.card_title ?? ""}`;
     items.push({ id: `${run.kind}:${run.id}`, title, kind: run.kind, state, startedAt: run.started_at.toISOString(), finishedAt: open ? null : run.ended_at?.toISOString() ?? null,
       stoppable: ACTIVE.has(run.state), sessionId: run.id, itemId: null, deviceId: run.device_id, ...at,
       holdUntil: quota && run.hold_until ? new Date(run.hold_until).toISOString() : null });
@@ -381,14 +388,14 @@ export async function readBackground(deps: { q: Query; now: Date; planTasks: Pla
 
   // 子会话里的子 agent、后台命令（本机报的 background 同步条目）。
   const background = (await q(`SELECT b.item_id,b.kind,b.title,b.state,b.started_at,b.finished_at,b.stoppable,r.id::text AS run_id,r.state AS run_state,r.device_id::text,
-      r.task_id::text,r.topic_id::text,COALESCE(r.plan_task_id,t.plan_task_id,rt.plan_task_id) AS plan_task_id
+      r.task_id::text,r.topic_id::text,COALESCE(r.plan_task_id,t.plan_task_id,rt.plan_task_id) AS plan_task_id,r.project_id::text AS plan_project
     FROM local_background_items b JOIN local_runs r ON r.id=b.run_id LEFT JOIN tasks t ON t.id=r.task_id LEFT JOIN research_topics rt ON rt.id=r.topic_id
     WHERE b.owner_id=$1 AND (b.state='running' OR ${SHANGHAI_DAY("COALESCE(b.finished_at,b.updated_at)", "$2")})`, [ownerId, now])).rows as
     { item_id: string; kind: "subagent" | "command"; title: string; state: TBackgroundState; started_at: Date; finished_at: Date | null; stoppable: boolean; run_id: string;
-      run_state: string; device_id: string; task_id: string | null; topic_id: string | null; plan_task_id: string | null }[];
+      run_state: string; device_id: string; task_id: string | null; topic_id: string | null; plan_task_id: string | null; plan_project: string | null }[];
   for (const row of background) {
     const at = { taskId: row.plan_task_id, cardId: row.task_id, topicId: row.topic_id };
-    if (!inScope(at)) continue;
+    if (!inScope(at) && !(scope.kind === "project" && row.plan_project === scope.id)) continue;
     items.push({ id: `bg:${row.run_id}:${row.item_id}`, title: row.title, kind: row.kind, state: row.state, startedAt: row.started_at.toISOString(),
       finishedAt: row.finished_at?.toISOString() ?? null, stoppable: row.stoppable && row.state === "running" && ACTIVE.has(row.run_state),
       sessionId: row.run_id, itemId: row.item_id, deviceId: row.device_id, ...at, holdUntil: null });

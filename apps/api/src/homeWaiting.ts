@@ -118,18 +118,19 @@ export async function assembleWaiting(input: WaitingInput): Promise<TWaitingItem
   }
   // 规划员、验收员在等批准、等回复（停着等额度恢复的不算）。
   // 只算真在问（idle 带提问）和在等批准的；一轮做完停下的不算（9.6）。
-  const helpers = (await q(`SELECT r.id::text,r.kind,r.state,r.device_id::text,r.plan_task_id,r.task_id::text,r.title,r.updated_at,r.ask,t.title AS card_title,
+  const helpers = (await q(`SELECT r.id::text,r.kind,r.state,r.device_id::text,r.plan_task_id,r.project_id::text,r.task_id::text,r.title,r.updated_at,r.ask,t.title AS card_title,
       t.plan_task_id AS card_task,CASE WHEN t.id IS NOT NULL THEN ${CARD_PROJECT("t")}::text END AS card_project
     FROM local_runs r LEFT JOIN tasks t ON t.id=r.task_id WHERE r.owner_id=$1 AND r.kind IN ('plan','verify')
       AND (r.state='waiting_permission' OR r.state='idle' AND r.ask->>'kind'='question') AND NOT ${HELD}`,
-  [ownerId])).rows as { id: string; kind: "plan" | "verify"; state: string; device_id: string; plan_task_id: string | null; task_id: string | null; title: string | null;
+  [ownerId])).rows as { id: string; kind: "plan" | "verify"; state: string; device_id: string; plan_task_id: string | null; project_id: string | null; task_id: string | null;
+    title: string | null;
     updated_at: Date; ask: RunAsk | null; card_title: string | null; card_task: string | null; card_project: string | null }[];
   for (const run of helpers) {
     const kind = run.state === "waiting_permission" ? "approval" as const : "question" as const;
     const plan = run.kind === "plan";
-    // 规划员挂在 Task 上（在 Task 挂的项目里）；验收员挂在卡上（在卡所在的项目里）。都由项目对话转达（14.3），来源只写项目名。
+    // 规划员挂在 Task 上（在 Task 挂的项目里），拆项目的（16.3）挂在项目上；验收员挂在卡上（在卡所在的项目里）。都由项目对话转达（14.3），来源只写项目名。
     const taskId = treeTask(plan ? run.plan_task_id : run.card_task);
-    const projectId = plan ? taskProject(run.plan_task_id) : run.card_project;
+    const projectId = plan ? run.project_id ?? taskProject(run.plan_task_id) : run.card_project;
     add({ id: `${kind}:${run.kind}:${run.id}`, kind, ...askFields(kind, run.ask),
       source: projectName(projectId) ?? taskName(run.plan_task_id) ?? (plan ? run.title ?? run.plan_task_id : run.card_title), at: run.updated_at.toISOString(),
       open: projectId ? { kind: "project", id: projectId, focus: { sessionId: run.id, requestId: askRequestId(run.ask) } }
@@ -163,6 +164,15 @@ export async function assembleWaiting(input: WaitingInput): Promise<TWaitingItem
     add({ id: `plan_start:${plan.id}`, kind: "plan_start", title: `${taskName(plan.plan_task_id)}：计划等你开工`, source: `${plan.drafts} 件等你开工`,
       at: plan.at.toISOString(), open: taskProject(plan.plan_task_id) ? { kind: "project", id: taskProject(plan.plan_task_id)! } : { kind: "task_detail", id: plan.plan_task_id },
       taskId: plan.plan_task_id, answer: "inline" });
+  // 没挂 Task 的项目拆出来的（16.3）：本人项目里还开着的项目草稿，一个项目一条，就地「开工」= POST /api/me/projects/:projectId/card-drafts/accept 带 start。
+  const ownProjects = [...projectNames.keys()];
+  const projectPlans = ownProjects.length ? (await q(`SELECT DISTINCT ON (d.project_id) p.id::text,d.project_id::text,COALESCE(p.finished_at,p.created_at) AS at,
+      count(*) OVER (PARTITION BY d.project_id)::int AS drafts
+    FROM card_drafts d JOIN card_plans p ON p.id=d.plan_id WHERE d.owner_id=$1 AND d.status='open' AND d.plan_task_id IS NULL AND d.project_id=ANY($2::uuid[])
+    ORDER BY d.project_id,COALESCE(p.finished_at,p.created_at) DESC,p.id`, [ownerId, ownProjects])).rows as { id: string; project_id: string; at: Date; drafts: number }[] : [];
+  for (const plan of projectPlans)
+    add({ id: `plan_start:${plan.id}`, kind: "plan_start", title: `${projectName(plan.project_id)}：计划等你开工`, source: `${plan.drafts} 件等你开工`,
+      at: plan.at.toISOString(), open: { kind: "project", id: plan.project_id }, projectId: plan.project_id, answer: "inline" });
 
   // 会议记录：一场会一行。
   const pending = await deps.meetings(ownerId);

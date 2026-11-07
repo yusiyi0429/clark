@@ -106,8 +106,11 @@ export type CardPlanQueue = ReturnType<typeof createCardPlanQueue>;
  * 本人让它改、再出一次（revision 更大）时换上新的计划，上一次还没处理的草稿收起来，新草稿接在后面；晚到的旧一次不收（返回 false）。
  * 岗位按本人团队里的 id、名字或预设 key 对，对不上再按预设的 key 或名字建议加哪个；对约定第几条超出范围的当没对上。
  */
-export async function saveLocalCardPlan(client: PoolClient, input: { ownerId: string; runId: string; own: OwnTask; plan: TLocalCardPlan; at: Date }): Promise<boolean> {
-  const { ownerId, runId, own, plan, at } = input;
+/** 派活单挂哪：拆 Task 的带 taskId、missionId 和验收标准；拆项目（16.3）的只带 projectId，criteria 为空（对约定第几条一律不存）。 */
+export type PlanTarget = { taskId: string | null; missionId: string | null; projectId: string | null; criteria: string[] };
+
+export async function saveLocalCardPlan(client: PoolClient, input: { ownerId: string; runId: string; target: PlanTarget; plan: TLocalCardPlan; at: Date }): Promise<boolean> {
+  const { ownerId, runId, target, plan, at } = input;
   const existing = (await client.query("SELECT id,revision FROM card_plans WHERE run_id=$1 FOR UPDATE", [runId])).rows[0] as { id: string; revision: number } | undefined;
   if (existing && existing.revision >= plan.revision) return false;
   // 可空的文字经接口校验会变成空串（Fastify 的类型转换），空串当没写。
@@ -119,8 +122,9 @@ export async function saveLocalCardPlan(client: PoolClient, input: { ownerId: st
       [planId, ...values]);
     await client.query("UPDATE card_drafts SET status='dismissed',decided_at=$2 WHERE plan_id=$1 AND status='open'", [planId, at]);
   } else {
-    await client.query(`INSERT INTO card_plans(id,plan_task_id,mission_id,owner_id,status,source,run_id,revision,summary,steps,risks,model_label,role_id,role_version,finished_at)
-      VALUES($1,$2,$3,$4,'done','local',$5,$6,$7,$8::jsonb,$9::jsonb,$10,$11,$12,$13)`, [planId, own.task.taskId, own.task.missionId, ownerId, runId, ...values]);
+    await client.query(`INSERT INTO card_plans(id,plan_task_id,mission_id,owner_id,status,source,run_id,revision,summary,steps,risks,model_label,role_id,role_version,finished_at,project_id)
+      VALUES($1,$2,$3,$4,'done','local',$5,$6,$7,$8::jsonb,$9::jsonb,$10,$11,$12,$13,$14)`,
+    [planId, target.taskId, target.missionId, ownerId, runId, ...values, target.taskId ? null : target.projectId]);
   }
   const roles = (await client.query(`SELECT * FROM roles WHERE kind='worker' AND archived_at IS NULL AND (owner_id=$1 OR owner_id IS NULL) ORDER BY created_at,preset_key`,
     [ownerId])).rows as RoleRow[];
@@ -136,11 +140,11 @@ export async function saveLocalCardPlan(client: PoolClient, input: { ownerId: st
   const ids = plan.cards.map(() => randomUUID());
   for (const [position, card] of plan.cards.entries()) {
     const { roleId, preset } = roleOf(card.role);
-    const index = card.criterionIndex && own.criteria[card.criterionIndex - 1] ? card.criterionIndex : null;
+    const index = card.criterionIndex && target.criteria[card.criterionIndex - 1] ? card.criterionIndex : null;
     await client.query(`INSERT INTO card_drafts(id,plan_id,plan_task_id,owner_id,position,title,brief,done_definition,criterion_index,executor,model_tier,why,role_id,suggest_preset_key,
-      after_draft_ids) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'claude_code',$10,$11,$12,$13,$14::uuid[])`, [ids[position], planId, own.task.taskId, ownerId, start + position, card.title.trim(),
+      after_draft_ids,project_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'claude_code',$10,$11,$12,$13,$14::uuid[],$15)`, [ids[position], planId, target.taskId, ownerId, start + position, card.title.trim(),
       card.brief.trim(), standardLines(card.doneDefinition), index, card.modelTier, card.why?.trim() || null, roleId, preset,
-      [...new Set(card.after ?? [])].map((after) => ids[after - 1])]);
+      [...new Set(card.after ?? [])].map((after) => ids[after - 1]), target.taskId ? null : target.projectId]);
   }
   return true;
 }

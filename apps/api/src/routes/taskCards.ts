@@ -16,6 +16,7 @@ import { createRoleProposalQueue } from "../roleProposals.js";
 import { RoleError } from "../roles.js";
 import { agreementSnapshot } from "../taskAgreements.js";
 import { personDisplayNames } from "../people.js";
+import { ownProject } from "../projects.js";
 import { acceptCardDrafts, boardTask, CardError, cardBrief, createCardPlan, dismissCardDraft, patchCard, planTaskOpener, planTaskOrNull, readBoard,
   readCardDetail, type CardPlanTask } from "../taskCards.js";
 import type { AppInstance, Guard, RouteContext } from "./shared.js";
@@ -120,7 +121,8 @@ export function registerTaskCardRoutes(app: AppInstance, ctx: RouteContext, deps
     handle(reply, async () => planBrief(q, await board(req.person!.personId, req.params.taskId))));
 
   app.post("/api/card-drafts/:id/dismiss", { preHandler: requireMember, schema: { params: idParams } }, async (req, reply) => handle(reply, async () => {
-    await dismissCardDraft(q, req.person!.personId, req.params.id, (planTaskId) => board(req.person!.personId, planTaskId));
+    await dismissCardDraft(q, req.person!.personId, req.params.id, (planTaskId) => board(req.person!.personId, planTaskId),
+      (projectId) => ownProject(q, req.person!.personId, projectId));
     return reply.status(204).send();
   }));
 
