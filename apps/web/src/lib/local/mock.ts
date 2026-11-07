@@ -253,7 +253,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
       agents: [{ kind: "claude-code", installed: true, version: "2.1.318", path: null, loggedIn: true, authMethod: "claude.ai", subscriptionType: "max", loginExpiresAt: null, minimumVersion: "2.1.300", compatible: true, setup: { phase: "idle", startedAt: null, loginUrl: null, error: null } }],
       activeSessions: slots().running,
       slots: slots(),
-      cloud: { linked, apiBaseUrl: linked ? location.origin : null, personName: null, outbox: { pending: 0, lastSyncedAt: linked ? now() : null, lastError: null } },
+      cloud: { linked, apiBaseUrl: linked ? location.origin : null, personName: null, personId: null, outbox: { pending: 0, lastSyncedAt: linked ? now() : null, lastError: null } },
       settings: { includePersonalConfigByDefault: includePersonal, allowedOrigins: [typeof location === "undefined" ? "" : location.origin], paused: false, maxConcurrent, autoMerge },
       // 用量：Claude 订阅 5 小时窗口用了八成多（右栏那一格出琥珀），本周四成；TokenHub 今天花了一点。
       quota: [
@@ -268,7 +268,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
       tools: (["claude-code", "codex", "gh", "lark-cli"] as const).map((kind) => ({ kind, state: "ready" as const, version: null, account: null, checkedAt: now() })),
     }),
     login: async () => undefined,
-    linkCloud: async (body) => { linked = true; return { linked, apiBaseUrl: body.apiBaseUrl, personName: body.personName ?? null, outbox: { pending: 0, lastSyncedAt: null, lastError: null } }; },
+    linkCloud: async (body) => { linked = true; return { linked, apiBaseUrl: body.apiBaseUrl, personName: body.personName ?? null, personId: body.personId ?? null, outbox: { pending: 0, lastSyncedAt: null, lastError: null } }; },
     patchSettings: async (patch) => {
       if (patch.includePersonalConfigByDefault !== undefined) includePersonal = patch.includePersonalConfigByDefault;
       if (patch.maxConcurrent !== undefined) { maxConcurrent = patch.maxConcurrent; promote(); }

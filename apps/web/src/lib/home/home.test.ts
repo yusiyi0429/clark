@@ -227,6 +227,9 @@ describe("后台任务", () => {
     expect(inScope(items, "project:p1", { taskIds: new Set(["t1"]), subIds: new Set() }).map((entry) => entry.title)).toEqual(["拆卡", "查资料"]);
     expect(inScope(items, "project:p1", { taskIds: new Set(), subIds: new Set(["c3"]) }).map((entry) => entry.title)).toEqual(["验收「改样式」", "验收「停掉的」"]);
     expect(inScope(items, "project:p1")).toEqual([]);
+    // 拆没挂 Task 的项目的规划员：本机只知道会话（16.3），按会话 id 认。
+    const projectPlanner = { ...items[0]!, id: "plan:s-project", taskId: null, sessionId: "s-project" };
+    expect(inScope([projectPlanner], "project:p1", { taskIds: new Set(), subIds: new Set(), sessionIds: new Set(["s-project"]) })).toHaveLength(1);
   });
 
   it("跟着展示区取范围；云端的和这台电脑上的合在一起，同一个 id 以这台电脑为准", () => {

@@ -533,14 +533,15 @@ export function mergeBackground(cloud: BackgroundItem[], local: BackgroundItem[]
 }
 
 /**
- * project:<id> 的范围：挂着的 Task 的规划员，加项目里各子会话的（契约 BackgroundQuery）。本机报的只知道 Task、卡、专题，由 members 认是不是这个项目的。
+ * project:<id> 的范围：挂着的 Task 的规划员、拆这个项目本身的规划员，加项目里各子会话的（契约 BackgroundQuery）。
+ * 本机报的只知道 Task、卡、专题和会话，由 members 认是不是这个项目的（拆项目本身的规划员按会话 id 认）。
  */
-export function inScope(items: BackgroundItem[], scope: BackgroundScope, members?: { taskIds: ReadonlySet<string>; subIds: ReadonlySet<string> }): BackgroundItem[] {
+export function inScope(items: BackgroundItem[], scope: BackgroundScope, members?: { taskIds: ReadonlySet<string>; subIds: ReadonlySet<string>; sessionIds?: ReadonlySet<string> }): BackgroundItem[] {
   if (scope === "main") return items;
   const [kind, id] = scope.split(/:(.*)/s) as [string, string];
   if (kind === "project") {
     const has = (value: string | null, set: ReadonlySet<string> | undefined) => !!value && !!set?.has(value);
-    return items.filter((item) => has(item.taskId, members?.taskIds) || has(item.cardId, members?.subIds) || has(item.topicId, members?.subIds));
+    return items.filter((item) => has(item.taskId, members?.taskIds) || has(item.cardId, members?.subIds) || has(item.topicId, members?.subIds) || has(item.sessionId, members?.sessionIds));
   }
   return items.filter((item) => (kind === "task" ? item.taskId === id : kind === "card" ? item.cardId === id : item.topicId === id));
 }

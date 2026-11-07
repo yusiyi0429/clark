@@ -13,7 +13,8 @@ import { AccountMenu, type Account } from "@/components/AccountMenu";
 import { HeroButton } from "@/components/HeroButton";
 import { useHandheld } from "@/components/ui/useHandheld";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
-import { linkCloud } from "@/lib/local/link";
+import { linkCloud, linkPerson, type LinkPerson } from "@/lib/local/link";
+import { needsRelink } from "@/lib/local/connection";
 import { listDevices, revokeDevice } from "@/lib/board/cloud";
 import { showWorkspaceToast } from "@/lib/toast";
 import s from "@/styles/v2-local.module.css";
@@ -33,20 +34,20 @@ export function PluginsPage({ account }: { account: Account }) {
       <div className={s.wrap}>
         {handheld ? <div className={s.meHead}><h1>我</h1><AccountMenu account={account} /></div> : <h1 className={s.pageTitle}>连接</h1>}
         {handheld ? <Link href="/me/team" className={s.row}><UsersRound size={16} aria-hidden /><b>岗位</b><span className={s.grow} /><ChevronRight size={16} aria-hidden /></Link> : null}
-        <LocalSection personName={account.displayName} handheld={handheld} />
-        <DevicesSection personName={account.displayName} />
+        <LocalSection person={linkPerson(account)} handheld={handheld} />
+        <DevicesSection person={linkPerson(account)} />
       </div>
     </div>
   );
 }
 
-export function LocalSection({ personName, handheld }: { personName: string; handheld: boolean }) {
+export function LocalSection({ person, handheld }: { person: LinkPerson; handheld: boolean }) {
   const local = useLocalRunner();
   const [linking, setLinking] = useState(false);
   const status = local.status;
   const agent = status?.agents.find((entry) => entry.kind === "claude-code") ?? null;
   const ready = local.phase === "ready";
-  // 配对好、还没关联云端的自动关联由 LocalRunnerProvider 一处管；这里只留没关联上时的「关联」按钮。
+  // 配对好、还没关联云端的自动关联由 LocalRunnerProvider 一处管；这里只留没关联上、或老关联没记下是谁时的「关联」按钮。
 
   return (
     <section className={s.section} aria-label="本机程序">
@@ -67,7 +68,7 @@ export function LocalSection({ personName, handheld }: { personName: string; han
         <div className={s.cardSide}>
           {ready ? <span className={s.state} data-tone="done">已连接</span> : null}
           {ready && agent?.installed && !agent.loggedIn && !handheld ? <HeroButton variant="secondary" size="sm" onPress={() => void local.runner.login().then(() => local.refresh())}>登录 Claude</HeroButton> : null}
-          {ready && status && !status.cloud.linked && !linking && !handheld ? <HeroButton variant="secondary" size="sm" onPress={() => { setLinking(true); void linkCloud(local.runner, status, personName).then(() => local.refresh()).catch((error) => showWorkspaceToast({ text: error instanceof Error ? error.message : "没关联上" })).finally(() => setLinking(false)); }}>关联</HeroButton> : null}
+          {ready && status && (!status.cloud.linked || needsRelink(status)) && !linking && !handheld ? <HeroButton variant="secondary" size="sm" onPress={() => { setLinking(true); void linkCloud(local.runner, status, person).then(() => local.refresh()).catch((error) => showWorkspaceToast({ text: error instanceof Error ? error.message : "没关联上" })).finally(() => setLinking(false)); }}>关联</HeroButton> : null}
         </div>
       </div>
       {ready && !handheld ? <ModelsAndFolders /> : null}
@@ -207,7 +208,7 @@ function ModelsAndFolders() {
  * 本机设备（新首页设计 12.1 第 7 条）：吊销的正好是这台时，当场重新关联（这台电脑拿一把新令牌，被吊销的那一行留着写「已吊销」）；
  * 被吊销的设备只写「已吊销」，不再有按钮。
  */
-export function DevicesSection({ personName }: { personName: string }) {
+export function DevicesSection({ person }: { person: LinkPerson }) {
   const local = useLocalRunner();
   const [devices, setDevices] = useState<TLocalDeviceView[] | null>(null);
   // 这页吊销的留在页上：列表只回没吊销的，重新拉掉了就接在后面；列表里又有了（重新关联过）就不算吊销。
@@ -221,7 +222,7 @@ export function DevicesSection({ personName }: { personName: string }) {
   const revoke = (device: TLocalDeviceView) => void revokeDevice(device.id).then(async () => {
     setFailed(null);
     setRevoked((gone) => [...gone, device]);
-    if (device.id === here && local.status) { await linkCloud(local.runner, local.status, personName).catch(() => undefined); await local.refresh(); load(); }
+    if (device.id === here && local.status) { await linkCloud(local.runner, local.status, person).catch(() => undefined); await local.refresh(); load(); }
   }).catch(() => setFailed(device.id));
   return (
     <section className={s.section} aria-label="本机设备">

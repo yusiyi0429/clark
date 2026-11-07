@@ -56,6 +56,7 @@ import { SecondaryFallback } from "./SecondaryFallback";
 import { ICON } from "./StateIcon";
 import { useTabTitle } from "./useTabTitle";
 import h from "@/styles/home.module.css";
+import { linkPerson } from "@/lib/local/link";
 
 const PANEL_KEY = "tianshu-home-panel-v1";
 /** 伙伴这一轮调了「登记拆卡」（useConversation 发出）。 */
@@ -67,7 +68,7 @@ const CLAIM_SOON_MS = 3_000;
 
 export function HomeShell({ account }: { account: Account }) {
   return (
-    <LocalRunnerProvider personName={account.displayName}>
+    <LocalRunnerProvider person={linkPerson(account)}>
       <HomeFrame account={account} />
       <ShellToast />
     </LocalRunnerProvider>

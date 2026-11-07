@@ -224,7 +224,7 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
   const local = useLocalRunner();
   const pull = received.clone && !project.folder && local.phase === "ready" && !handheld
     ? <ProjectPull projectId={project.id} name={project.name} clone={received.clone} onPulled={() => onPulled?.()} /> : null;
-  // 交出去了（原负责人这边）：只读，不能发。
+  // 交出去了（原负责人这边）：只读，不能发（输入框画成空的；不给 input 时 ChatColumn 会退回它自己的输入框）。
   const readOnly = project.transfer?.status === "accepted";
   const changed = api.refresh;
   const waiting = api.data.waiting;
@@ -323,7 +323,7 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
           )}
           timeline={(current) => <WorkTimeline data={current} blocks={blocks} />}
           dock={(latest) => <PendingDock latest={latest} />}
-          input={readOnly ? undefined : (onHeight) => <ChatInput data={data} placeholder={`与${project.name}讨论…`} onHeight={onHeight} />} />
+          input={readOnly ? () => null : (onHeight) => <ChatInput data={data} placeholder={`与${project.name}讨论…`} onHeight={onHeight} />} />
       </div>
     </PendingBoxes>
   );

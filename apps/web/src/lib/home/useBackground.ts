@@ -34,11 +34,14 @@ export function useBackground(scope: BackgroundScope, api: WorkHomeApi): Backgro
   // 卡、专题挂在哪件 Task：worker 列表里找（首页 v2 的子会话在项目上，不带 Task）。
   const taskOfCard = useCallback((cardId: string) => workers.find((worker) => worker.cardId === cardId)?.taskId ?? null, [workers]);
   const taskOfTopic = useCallback((topicId: string) => workers.find((worker) => worker.topicId === topicId)?.taskId ?? null, [workers]);
-  // project:<id>：本机报的按挂着的 Task 和项目里的子会话认（云端那份已经按项目筛好）。
+  // project:<id>：本机报的按挂着的 Task、项目里的子会话、拆这个项目的规划员会话（只带 projectId，16.3）认（云端那份已经按项目筛好）。
   const members = useMemo(() => {
     const project = scope.startsWith("project:") ? projects.find((entry) => `project:${entry.projectId}` === scope) : undefined;
-    return project ? { taskIds: new Set(project.goals.map((goal) => goal.taskId)), subIds: new Set(project.subSessions.map((sub) => sub.id)) } : undefined;
-  }, [projects, scope]);
+    return project ? {
+      taskIds: new Set(project.goals.map((goal) => goal.taskId)), subIds: new Set(project.subSessions.map((sub) => sub.id)),
+      sessionIds: new Set(local.sessions.filter((session) => session.subject.kind === "plan" && !session.subject.taskId && session.subject.projectId === project.projectId).map((session) => session.id)),
+    } : undefined;
+  }, [projects, scope, local.sessions]);
   // 本机报的时间是这台电脑的钟，「今天」也按这台电脑算（公司时区）。
   const today = calendarDate(new Date().toISOString());
   const here = useMemo(() => (local.phase === "ready"

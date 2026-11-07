@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { TLocalSessionEvent } from "@warmap/contracts";
 import { parseSse } from "./client";
-import { phaseOf } from "./connection";
+import { needsRelink, pairedElsewhere, phaseOf } from "./connection";
 import { createMockRunner } from "./mock";
 import { EMPTY_VIEW, foldEvent, foldEvents, localWait, planStep } from "./sessionView";
 
@@ -27,6 +27,17 @@ describe("连本机的三种浏览器授权结果", () => {
   it("浏览器放行了还连不上（或浏览器不报授权状态）：没装或没开", () => {
     expect(phaseOf({ health: "failed", permission: "granted" })).toBe("offline");
     expect(phaseOf({ health: "failed", permission: "unknown" })).toBe("offline");
+  });  it("同一台电脑换了账号：本机关联的是别人（按人员 id）就按没配对算；没关联、老关联、或不知道本人是谁时不算别人", () => {
+    const linked = (personId: string | null, isLinked = true) => ({ cloud: { linked: isLinked, personId } });
+    expect(pairedElsewhere(linked("sun-mingze"), "browser-dri")).toBe(true);
+    expect(pairedElsewhere(linked("sun-mingze"), "sun-mingze")).toBe(false);
+    expect(pairedElsewhere(linked(null, false), "browser-dri")).toBe(false);
+    expect(pairedElsewhere(linked("sun-mingze"), null)).toBe(false);
+    // 老关联（没记下是谁）：不当别人，连接页再给一次「关联」。
+    expect(pairedElsewhere(linked(null), "browser-dri")).toBe(false);
+    expect(needsRelink(linked(null))).toBe(true);
+    expect(needsRelink(linked("sun-mingze"))).toBe(false);
+    expect(needsRelink(linked(null, false))).toBe(false);
   });
 });
 
