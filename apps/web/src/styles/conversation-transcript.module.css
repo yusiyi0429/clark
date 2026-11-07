@@ -1,4 +1,4 @@
-.assistant,.user{font-size:15px;line-height:1.85;overflow-wrap:anywhere}
+.assistant,.user{font-size:16px;line-height:1.85;overflow-wrap:anywhere}
 .assistant{margin:0 0 34px;padding:0;border:0;background:none;color:#ececef}
 .user{width:fit-content;max-width:82%;margin:0 0 30px auto;padding:11px 19px;border-radius:22px;background:#ffffff12;color:#f5f5f7;box-shadow:inset 0 1px 0 #ffffff06}
 .meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 12px;font-size:12px;line-height:1.5;color:#a5a5af}
@@ -6,12 +6,12 @@
 .prose p{margin:0 0 16px}.prose ul,.prose ol{padding-left:24px;margin:12px 0 18px}.prose ul{list-style:disc}.prose ol{list-style:decimal}.prose li{padding-left:3px;margin:6px 0}
 /* 用户自己的消息（多半是语音输入整理过的）：换行按原样分行；分点紧凑些，像输入框里那样。 */
 .user .prose p{white-space:pre-line;margin-bottom:8px}.user .prose ul,.user .prose ol{margin:6px 0 8px}.user .prose li{margin:2px 0}
-.prose h1,.prose h2,.prose h3{font-size:17px!important;line-height:1.5;margin:24px 0 12px!important;letter-spacing:0!important}
+.prose h1,.prose h2,.prose h3{font-size:16px!important;line-height:1.5;margin:24px 0 12px!important;letter-spacing:0!important}
 .prose strong{font-weight:600;color:#f7f7f9}.prose a{color:#a9caff;text-decoration:underline;text-underline-offset:3px}
 .prose pre{overflow:auto;padding:16px;background:#18181b;border-radius:12px}.prose code{font-size:.9em}.prose table{display:block;overflow-x:auto;border-collapse:collapse;max-width:100%}.prose td,.prose th{padding:8px 12px;border-bottom:1px solid #ffffff20;text-align:left}
-.sources{margin-top:18px;color:#aaaab5;font-size:12px}.sources summary{cursor:pointer;width:fit-content}.sources a{display:block;color:#d3d8e2;text-decoration:none;padding:10px 0;border-bottom:1px solid #ffffff0d}.sources a:hover{color:#a9caff}.sources a span{display:block;color:#8f929d;font-size:11px}.sources p{font-size:11px}
+.sources{margin-top:18px;color:#aaaab5;font-size:12px}.sources summary{cursor:pointer;width:fit-content}.sources a{display:block;color:#d3d8e2;text-decoration:none;padding:10px 0;border-bottom:1px solid #ffffff0d}.sources a:hover{color:#a9caff}.sources a span{display:block;color:#8f929d;font-size:12px}.sources p{font-size:12px}
 /* 现场行（新首页设计 5.4.3）：颜色读变量，深色下跟着变；用时等宽数字。 */
-.thinking{display:flex;align-items:center;gap:9px;min-width:0;margin:4px 0 30px;color:var(--ink-faint);font-size:13px;min-height:30px}.elapsed{font-variant-numeric:tabular-nums;color:var(--ink-faint)}.thinking button{flex:none;margin-left:auto;border:0;background:none;color:var(--ink-faint);font-size:12px;cursor:pointer;padding:6px 10px;border-radius:9px}.thinking button:hover{background:var(--default-soft);color:var(--ink-muted)}
+.thinking{display:flex;align-items:center;gap:9px;min-width:0;margin:4px 0 30px;color:var(--ink-faint);font-size:14px;min-height:30px}.elapsed{font-variant-numeric:tabular-nums;color:var(--ink-faint)}.thinking button{flex:none;margin-left:auto;border:0;background:none;color:var(--ink-faint);font-size:12px;cursor:pointer;padding:6px 10px;border-radius:9px}.thinking button:hover{background:var(--default-soft);color:var(--ink-muted)}
 .pulse{flex:none;width:7px;height:7px;background:var(--ink-faint);border-radius:50%;animation:breathe 1.8s ease-in-out infinite}@keyframes breathe{50%{opacity:.3;transform:scale(.8)}}
 /*
  * 进度行在窄宽度下（收起的对话框、右列）按优先级让位：圆点、阶段、停止不压缩、不换行；先截断细节（最少留 6 个字宽），再截断用时。
@@ -37,8 +37,8 @@
  * 思考过程（模型返回的思考摘要）：正文开始前在进度行上方滚动，只露最近四行。有人会读：13px、比正文浅一级的灰（与正文分层），不整片蒙淡；
  * 超过四行、最上面一行被切开时（data-clipped）只把那一行淡出。
  */
-.thinkingStream{display:flex;flex-direction:column;justify-content:flex-end;max-height:calc(13px * 1.6 * 4);overflow:hidden;margin:6px 0 0;font-size:13px;line-height:1.6;color:var(--ink-muted)}
-.thinkingStream[data-clipped]{-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 calc(13px * 1.6));mask-image:linear-gradient(to bottom,transparent 0,#000 calc(13px * 1.6))}
+.thinkingStream{display:flex;flex-direction:column;justify-content:flex-end;max-height:calc(14px * 1.6 * 4);overflow:hidden;margin:6px 0 0;font-size:14px;line-height:1.6;color:var(--ink-muted)}
+.thinkingStream[data-clipped]{-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 calc(14px * 1.6));mask-image:linear-gradient(to bottom,transparent 0,#000 calc(14px * 1.6))}
 .thinkingStream p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
 /* 对话层放大 / 收起的 240ms 里（app-shell .historySheet[data-resizing]）遮罩先摘掉，过渡结束复原。 */
 :global([data-resizing]) .thinkingStream[data-clipped]{-webkit-mask-image:none;mask-image:none}
@@ -47,10 +47,10 @@
 .thoughtToggle{padding:0;border:0;background:none;color:inherit;font:inherit;cursor:pointer;text-decoration:underline;text-decoration-color:transparent;text-underline-offset:3px}
 .thoughtToggle:hover{text-decoration-color:currentColor}
 .meta .thoughtToggle:not(:first-child)::before{content:'·';margin-right:6px;display:inline-block;text-decoration:none}
-.thoughtFull{max-height:50vh;overflow:auto;margin:-4px 0 16px;padding:0 0 0 12px;border-left:1px solid #ffffff20;font-size:13px;line-height:1.7;color:#aaaab5;white-space:pre-wrap;overflow-wrap:anywhere}
+.thoughtFull{max-height:50vh;overflow:auto;margin:-4px 0 16px;padding:0 0 0 12px;border-left:1px solid #ffffff20;font-size:14px;line-height:1.7;color:#aaaab5;white-space:pre-wrap;overflow-wrap:anywhere}
 :global([data-tone=light]) .thoughtFull{border-left-color:var(--hairline);color:var(--ink-muted)}
 @media(min-width:1800px){.assistant,.user{font-size:16px}}
-@media(max-width:599px){.assistant,.user{font-size:14px}.user{max-width:90%;padding:10px 15px}.meta{font-size:11px}.assistant{margin-bottom:28px}}
+@media(max-width:599px){.assistant,.user{font-size:14px}.user{max-width:90%;padding:10px 15px}.meta{font-size:12px}.assistant{margin-bottom:28px}}
 @media(prefers-reduced-motion:reduce){.pulse{animation:none}}
 
 /* Light tone: the record inside a monthly / meeting workspace sits on that material's light gradient. */
@@ -70,13 +70,13 @@
 :global([data-tone=light]) .pulse{background:var(--ink-faint)}
 
 /* 对话记录读到哪一步：载入中一行浅灰小字；没读到一块浅色提示 + 重试（没载入不等于没有记录）。 */
-.historyLoading{display:flex;align-items:center;gap:8px;margin:4px 0 24px;color:#a5a5af;font-size:13px;line-height:1.6}
+.historyLoading{display:flex;align-items:center;gap:8px;margin:4px 0 24px;color:#a5a5af;font-size:14px;line-height:1.6}
 .historyLoading::before{content:'';flex:none;width:6px;height:6px;border-radius:50%;background:currentColor;animation:breathe 1.8s ease-in-out infinite}
-.historyError{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin:4px 0 28px;padding:10px 14px;border-radius:12px;background:#ffffff0d;color:#e9c3b9;font-size:13px;line-height:1.7;overflow-wrap:anywhere}
+.historyError{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin:4px 0 28px;padding:10px 14px;border-radius:12px;background:#ffffff0d;color:#e9c3b9;font-size:14px;line-height:1.7;overflow-wrap:anywhere}
 .historyError p{flex:1 1 220px;min-width:0;margin:0}
 .historyError button{flex:none;display:inline-flex;align-items:center;gap:4px;min-height:32px;padding:0 12px;border-radius:999px;color:inherit;font-weight:600}
 /* 连接类自己重试过仍没读到：和载入中同一行灰字，后面一个小「重试」，不用醒目的底色。 */
-.historyPaused{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin:4px 0 24px;color:#a5a5af;font-size:13px;line-height:1.6}
+.historyPaused{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin:4px 0 24px;color:#a5a5af;font-size:14px;line-height:1.6}
 .historyPaused p{margin:0}
 .historyPaused button{flex:none;display:inline-flex;align-items:center;gap:4px;min-height:28px;padding:0 10px;border-radius:999px;color:inherit}
 :global([data-tone=light]) .historyLoading,:global([data-tone=light]) .historyPaused{color:var(--ink-faint)}
@@ -109,7 +109,7 @@
 @media(prefers-reduced-motion:reduce){.jumpDots i{animation:none;opacity:.6}.jumpDock .jump{transition:none}}
 
 /* 回答末尾的选项（10/11 首演版定稿）：最新一条回答下一行文字按钮，字号同辅助文字，无底色，不抢正文。新首页里画成选项框的选项行（文件末尾）。 */
-.options{display:flex;flex-wrap:wrap;gap:2px 16px;margin:-22px 0 30px;font-size:13px;line-height:1.6}
+.options{display:flex;flex-wrap:wrap;gap:2px 16px;margin:-22px 0 30px;font-size:14px;line-height:1.6}
 .options button{padding:3px 0;border:0;background:none;color:var(--ink-faint);font:inherit;cursor:pointer;border-radius:4px}
 .options button:hover{color:var(--ink)}
 .options button:focus-visible{outline:1px solid var(--focus);outline-offset:2px}
@@ -124,7 +124,7 @@
  * 手持字号（docs/superpowers/specs/2026-10-12-mobile-foldable.md §2、§3.2）：手机上对话正文原来反而缩到 14、消息眉题 11、用时与来源 11–12，
  * 是照电脑缩的。手持（≤959）正文 16、行高 1.75；消息眉题、页面标签、用时 13；思考那一行 14、「展开」类小钮 13 + 热区 44；来源 13。
  */
-@media(max-width:959px){.assistant,.user{font-size:16px;line-height:1.75}.meta,.pageTag{font-size:13px}.thinking{font-size:14px}.thinking button{min-height:44px;font-size:13px}.sources,.sources a span,.sources p{font-size:13px}}
+@media(max-width:959px){.assistant,.user{font-size:16px;line-height:1.75}.meta,.pageTag{font-size:14px}.thinking{font-size:14px}.thinking button{min-height:44px;font-size:14px}.sources,.sources a span,.sources p{font-size:14px}}
 /* 「回到最新」圆钮：手持与触屏热区 44（视觉 38 不变，透明外扩）。 */
 @media(max-width:959px),(pointer:coarse){.jumpDock .jump::after{content:"";position:absolute;inset:-4px;border-radius:50%}}
 
@@ -150,7 +150,7 @@
 /* 进行中：范围标签在进度行之下、步骤之上。 */
 .liveScope{margin:2px 0 6px;font-size:12px;color:var(--ink-faint)}
 :global([data-tone=light]) .liveScope{color:var(--ink-faint)}
-@media(max-width:959px){.trace,.carried,.liveScope{font-size:13px}.trace a{min-height:32px}}
+@media(max-width:959px){.trace,.carried,.liveScope{font-size:14px}.trace a{min-height:32px}}
 
 /*
  * 新首页（外壳带 data-scheme="auto"，设计 5.2、5.4.3），老页面不变：
@@ -158,8 +158,10 @@
  * 每条回答的用时只在鼠标移上去、或键盘焦点进来时出现，放在那一行末尾（不挤动「已思考」）；
  * 回答末尾的选项照选项框的选项行画（decision-box.module.css 的 .option / .key，同一套变量）：序号 + 文字，悬停 --default-soft，焦点 --focus 外框；手持不显示序号、行高 48。
  */
-:global([data-scheme="auto"]) .prose :is(h1,h2,h3,h4,h5,h6){font-size:15px!important;font-weight:600;line-height:var(--lh-row)}
+:global([data-scheme="auto"]) .prose :is(h1,h2,h3,h4,h5,h6){font-size:16px!important;font-weight:600;line-height:var(--lh-row)}
 :global([data-scheme="auto"]) .pulse{width:6px;height:6px}
+/* 新首页的对话正文（14.1）：伙伴、管线、子会话、本人气泡都是 16，行高 26，各种宽度都一样。 */
+:global([data-scheme="auto"]) :is(.assistant,.user){font-size:16px;line-height:26px}
 /* 新首页里本人的气泡和子会话里同一个形状（5.4.3）：圆角 --field-radius（20）、内边距 8/16；一轮和下一轮之间 32。 */
 :global([data-scheme="auto"]) .user{padding:var(--space-2) var(--space-4);border-radius:var(--field-radius);margin-bottom:var(--space-8)}
 :global([data-scheme="auto"]) .assistant{margin-bottom:var(--space-8)}

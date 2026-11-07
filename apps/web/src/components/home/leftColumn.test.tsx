@@ -55,20 +55,30 @@ describe("左栏：本人自己做的事项（9.10）", () => {
     expect(html).toMatch(/约评审<\/span><\/button>/);
   });
 
-  it("做完的事项收进「已完成 N」（默认收起）；Task 确认完成后本人事项全部收进去", () => {
+  it("没有「已完成 N」：做完的事项排在后面、变淡", () => {
     const html = render({ data: withTask([item("00000000-0000-4000-8000-000000000001", "写验收清单", { status: "done" }), item("00000000-0000-4000-8000-000000000002", "约评审")]) });
-    expect(html).toContain("已完成 1");
-    expect(html).not.toContain("写验收清单");
-    expect(html).toContain("约评审");
-    const closed = render({ data: withTask([item("00000000-0000-4000-8000-000000000002", "约评审")], { completedAt: "2026-11-07T02:00:00.000Z" }) });
-    expect(closed).toContain("已完成 1");
-    expect(closed).not.toContain("约评审");
+    expect(html).not.toContain("已完成");
+    expect(html).toMatch(/约评审.*data-state="done"[^>]*data-tree-row=""[^>]*data-testid="tree-item".*写验收清单/);
   });
 
   it("待归位的事项进「其他」：没有子会话也画这一组", () => {
     expect(render({})).not.toContain('aria-label="其他"');
     const html = render({ data: { ...data, other: { subSessions: [], items: [item("00000000-0000-4000-8000-000000000003", "整理会议纪要", { dueDate: "2026-11-09" })] } } });
     expect(html).toMatch(/aria-label="其他".*其他.*data-testid="tree-item".*整理会议纪要.*11\/09/);
+  });
+});
+
+describe("Mission 行和「子会话 N」（14.2）", () => {
+  const sub = (id: string, state: string, waiting: unknown = null) => ({ id, kind: "card", title: `卡${id}`, state, waiting, updatedAt: "a", queueReason: null, holdUntil: null });
+  it("Mission 行能点、进 Mission 详情", () => {
+    const html = render({ data: withTask([]) });
+    expect(html).toMatch(/<button[^>]*data-testid="tree-mission"[^>]*>.*首页改版/);
+  });
+  it("子会话默认收成一行「子会话 N」加一格一个的小方块，不列出来、不画蓝点", () => {
+    const html = render({ data: withTask([], { subSessions: [sub("1", "running"), sub("2", "waiting", "question"), sub("3", "done")] as never }) });
+    expect(html).toMatch(/aria-expanded="false"[^>]*data-testid="tree-subs".*子会话 3/);
+    expect(html.match(/<i data-state=/g)?.length).toBe(3);
+    expect(html).not.toContain("卡1");
   });
 });
 

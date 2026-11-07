@@ -54,11 +54,11 @@ describe("进度行在窄宽度下", () => {
 
 describe("思考区可读", () => {
   const rules = css("conversation-transcript.module.css");
-  it("13px、比正文浅一级的灰；不整片蒙淡，只在被切开时淡出最上面一行", () => {
+  it("14px（14.1 三档）、比正文浅一级的灰；不整片蒙淡，只在被切开时淡出最上面一行", () => {
     const base = /\.thinkingStream\{[^}]*\}/.exec(rules)?.[0] ?? "";
-    expect(base).toContain("font-size:13px");
+    expect(base).toContain("font-size:14px");
     expect(base).not.toContain("mask-image");
-    expect(rules).toMatch(/\.thinkingStream\[data-clipped\]\{[^}]*mask-image:linear-gradient\(to bottom,transparent 0,#000 calc\(13px \* 1\.6\)\)/);
+    expect(rules).toMatch(/\.thinkingStream\[data-clipped\]\{[^}]*mask-image:linear-gradient\(to bottom,transparent 0,#000 calc\(14px \* 1\.6\)\)/);
     // 浅色档读变量（新首页设计 5.2：深色下跟着变）：思考流比正文浅一级（--ink-muted），进度细节再浅一级（--ink-faint）。
     expect(rules).toMatch(/:global\(\[data-tone=light\]\) \.thinkingStream\{color:var\(--ink-muted\)\}/);
     expect(rules).toMatch(/:global\(\[data-tone=light\]\) \.progressDetail\{color:var\(--ink-faint\)\}/);

@@ -5,19 +5,20 @@
  * 1. 伙伴台：正方形，伙伴居中；点了进总管线。伙伴不飞走：在总管线时台子铺选中底、伙伴换成「在听」；任何管线里伙伴在说话时是「在说」。
  *    鼠标移上去右上角出「⋯」，点开「伙伴」二级页。
  * 2. 「今天」行：House +「11 月 7 日 周六」，就是首页（Esc 也回这里）；不在首页时行尾是等你的计数。
- * 3. Mission → Task → 子会话：Mission 组头总是画（之前月份没了结的前面加「10 月 · 」）；Task 行 48 高两行，左边 16 宽的状态位，
- *    右边信息按钮；子会话行 32 高，状态图标对齐 Task 标题；本人自己做的事项（9.10）同一枝、同一种行，行首是本人 16 的头像，排在子会话后面；
- *    做完的收进「已完成 N」；不归 Task 的子会话和待归位的事项进「其他」。
+ * 3. Mission → Task → 子会话：Mission 行 32 高能点（target 图标 + 名字，之前月份没了结的前面加「10 月 · 」），点开只读的 Mission 详情（14.2）；
+ *    Task 行 48 高两行，左边 16 宽的状态位，右边信息按钮；子会话默认收成一行「子会话 N」加一排小方块（一格一个、按状态上色），
+ *    点开才一行一行列出来（28 高、12 字），子会话上不画蓝点；本人自己做的事项（9.10）排在后面，行首是本人 16 的头像，做完的变淡；
+ *    不归 Task 的子会话和待归位的事项进「其他」。
  * 4. 本人行：贴底，头像 24 + 名字，点开个人菜单。
  * 树的键盘：↑↓ 移动，回车打开，→ 展开折叠，← 收起。
  */
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { ChevronRight, Ellipsis, House, Info } from "lucide-react";
+import { ChevronRight, Ellipsis, House, Info, Target } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
 import type { Account } from "@/components/AccountMenu";
 import { BuddyMark } from "@/components/buddy/BuddyMark";
 import type { Buddy } from "@/components/buddy/useBuddy";
-import { BUDDY_HREF, HOME_HREF, cardHref, infoHref, monthLabel, queueText, taskHref, topicHref } from "@/lib/home/derive";
+import { BUDDY_HREF, HOME_HREF, cardHref, infoHref, missionHref, monthLabel, queueText, taskHref, topicHref } from "@/lib/home/derive";
 import type { THomeItem as HomeItem } from "@warmap/contracts";
 import type { HomeTask, SubSession, WorkHomeData } from "@/lib/home/types";
 import { PersonAvatar } from "@/components/avatar/PersonAvatar";
@@ -92,7 +93,10 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
         {onRetryPlan ? <p className={h.planFailed} data-testid="plan-read-failed">本体读取失败<HeroButton variant="ghost" size="sm" onPress={onRetryPlan}>重试</HeroButton></p> : null}
         {data.missions.filter((mission) => mission.tasks.length).map((mission) => (
           <section key={mission.missionId} aria-label={mission.title} className={h.group}>
-            <p className={h.groupTitle}>{mission.period !== data.period ? <span>{monthLabel(mission.period)} · </span> : null}{mission.title}</p>
+            <button type="button" className={h.missionRow} aria-current={view.kind === "mission" && view.id === mission.missionId ? "page" : undefined}
+              onClick={() => go(missionHref(mission.missionId))} data-tree-row="" data-testid="tree-mission">
+              <Target size={14} strokeWidth={1.8} aria-hidden /><span className={h.subName}>{mission.period !== data.period ? <span>{monthLabel(mission.period)} · </span> : null}{mission.title}</span>
+            </button>
             {mission.tasks.map((task) => <TaskNode key={task.taskId} task={task} view={view} go={go} waiting={pipelineWaiting.has(task.taskId)} personId={account.personId} gate={gateFor?.(task.missionId) ?? null} cardAt={cardAt} />)}
           </section>
         ))}
@@ -109,7 +113,7 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
   );
 }
 
-/** 树的键盘：在树里的可聚焦行之间 ↑↓；→ / ← 展开、收起「已完成 N」（焦点在那一行时）。回车由按钮自己打开。 */
+/** 树的键盘：在树里的可聚焦行之间 ↑↓；→ / ← 展开、收起「子会话 N」（焦点在那一行时）。回车由按钮自己打开。 */
 function treeKeys(event: KeyboardEvent<HTMLDivElement>, root: HTMLDivElement | null) {
   if (!root) return;
   const rows = [...root.querySelectorAll<HTMLElement>("[data-tree-row]")];
@@ -128,21 +132,17 @@ function treeKeys(event: KeyboardEvent<HTMLDivElement>, root: HTMLDivElement | n
 }
 
 /**
- * 完成的子会话（验收过、合回了）和做完的本人事项收进折叠的「已完成 N」（设计第 4.5 条、9.10）；本人确认 Task 完成以后全部收进去，Task 行打勾、变淡。
- * 一枝里先是子会话（等你、进行中的状态图标挨着 Task 行），再是本人的事项（头像领头的一块），最后是「已完成 N」。
+ * 一枝里先是「子会话 N」（默认收起，正在看其中一个时自动展开一次），再是本人的事项（头像领头，做完的变淡）。
+ * 本人确认 Task 完成以后 Task 行打勾、变淡。
  */
 function TaskNode({ task, view, go, waiting, personId, gate, cardAt }: { task: HomeTask; view: View; go: (href: string) => void; waiting: boolean; personId?: string | null; gate: string | null; cardAt?: ReadonlyMap<string, string> }) {
   const here = (view.kind === "task" || view.kind === "info") && view.taskId === task.taskId;
   const [open, setOpen] = useState(false);
-  const folded = task.subSessions.filter((sub) => task.completedAt || sub.state === "done");
-  const live = planOrder(task.subSessions.filter((sub) => !folded.includes(sub)), cardAt);
-  const doneItems = task.items.filter((item) => task.completedAt || item.status === "done");
-  const items = task.items.filter((item) => !doneItems.includes(item));
-  const foldCount = folded.length + doneItems.length;
-  const viewing = folded.some((sub) => (view.kind === "card" || view.kind === "topic") && view.kind === sub.kind && view.id === sub.id);
-  // 正在看一个收起来的子会话时自动展开一次；之后本人收起就收起（不强开着）。
+  const subs = planOrder(task.subSessions, cardAt);
+  const items = [...task.items].sort((a, b) => Number(a.status === "done") - Number(b.status === "done"));
+  const viewing = subs.some((sub) => (view.kind === "card" || view.kind === "topic") && view.kind === sub.kind && view.id === sub.id);
+  // 正在看其中一个子会话时自动展开一次；之后本人收起就收起（不强开着）。
   useEffect(() => { if (viewing) setOpen(true); }, [viewing]);
-  const expanded = open;
   const info = view.kind === "info" && here;
   return (
     <div className={h.taskNode} data-testid="tree-task" data-done={task.completedAt ? "" : undefined}>
@@ -159,19 +159,18 @@ function TaskNode({ task, view, go, waiting, personId, gate, cardAt }: { task: H
             onPress={() => go(info ? taskHref(task.taskId) : infoHref(task.taskId))} data-testid="task-info"><Info {...ICON} /></HeroButton>
         </span>
       </div>
-      {live.length || items.length || foldCount ? (
+      {subs.length || items.length ? (
         <div className={h.branch}>
-          {live.length ? <Subs subs={live} view={view} go={go} /> : null}
-          {items.length ? <Items items={items} personId={personId} go={go} /> : null}
-          {foldCount ? (
+          {subs.length ? (
             <>
-              <button type="button" className={h.foldToggle} aria-expanded={expanded} onClick={() => setOpen(!expanded)} data-tree-row="" data-testid="tree-done">
-                <ChevronRight {...ICON} className={h.chevron} data-open={expanded ? "" : undefined} />已完成 {foldCount}
+              <button type="button" className={h.foldToggle} aria-expanded={open} onClick={() => setOpen(!open)} data-tree-row="" data-testid="tree-subs">
+                <ChevronRight size={14} strokeWidth={1.8} aria-hidden className={h.chevron} data-open={open ? "" : undefined} />子会话 {subs.length}
+                {open ? null : <span className={h.cells} aria-hidden>{subs.map((sub) => <i key={`${sub.kind}:${sub.id}`} data-state={subIcon(sub).state} />)}</span>}
               </button>
-              {expanded && folded.length ? <Subs subs={folded} view={view} go={go} /> : null}
-              {expanded && doneItems.length ? <Items items={doneItems} personId={personId} go={go} /> : null}
+              {open ? <Subs subs={subs} view={view} go={go} /> : null}
             </>
           ) : null}
+          {items.length ? <Items items={items} personId={personId} go={go} /> : null}
         </div>
       ) : null}
     </div>

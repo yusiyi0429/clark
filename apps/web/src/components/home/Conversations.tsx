@@ -69,7 +69,10 @@ function useEscStopsReply(data: ConversationData) {
   }, [streaming, stop]);
 }
 
-export function BuddyView({ buddy, outbox, consume, onSpeaking }: { buddy: Buddy | null; outbox: Outbox; consume: (id: number) => void; onSpeaking: (speaking: boolean) => void }) {
+/** context：从 Mission 详情「问伙伴」带来的「关于：{Mission}」，输入框左上角一枚胶囊（14.5），去掉调 onClearContext。 */
+export function BuddyView({ buddy, outbox, consume, onSpeaking, context = null, onClearContext }: {
+  buddy: Buddy | null; outbox: Outbox; consume: (id: number) => void; onSpeaking: (speaking: boolean) => void; context?: string | null; onClearContext?: () => void;
+}) {
   const data = useConversation("global");
   const chrome = useViewChrome();
   useOutbox(data, "main", outbox, consume);

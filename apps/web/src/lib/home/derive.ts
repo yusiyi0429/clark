@@ -31,6 +31,7 @@ export const infoHref = (taskId: string) => `/me/work/tasks/${encodeURIComponent
 /** Task 管线里某个子会话的选项框的锚点（14.3：等你那一行、子会话页「去回答」跳过来落在它上面）。 */
 export const askAnchor = (sessionId: string) => `ask-${sessionId}`;
 export const BUDDY_HREF = "/me/work/buddy";
+export const missionHref = (missionId: string) => `/me/work/missions/${encodeURIComponent(missionId)}`;
 export const HOME_HREF = "/me/work";
 
 /** 「2026-10」→「10 月」：之前月份没了结、留在树上的 Mission 标一下。 */

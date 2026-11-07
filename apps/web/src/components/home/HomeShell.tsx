@@ -42,6 +42,7 @@ import { BuddyView, PipelineView, type Outbox, type OutboxEntry } from "./Conver
 import { HomeComposer, HomeView, WaitingList, type SendTarget } from "./HomeView";
 import { LeftColumn } from "./LeftColumn";
 import { ForeignTaskInfo, TaskInfo } from "./TaskInfo";
+import { MissionInfo } from "./MissionInfo";
 import { usePhone } from "./usePhone";
 import { ViewChrome, PAGE_TITLE, monthHref, scopeOf, viewOf, type View } from "./view";
 import { MONTH_PAGE, SECONDARY_PAGES, type SecondaryPageProps } from "./pages";
@@ -87,6 +88,8 @@ function HomeFrame({ account }: { account: Account }) {
   }, []);
   const [speaking, setSpeaking] = useState(false);
   const [outbox, setOutbox] = useState<Outbox>([]);
+  /** 从 Mission 详情点「问伙伴」带进总管线的上下文（输入框左上角「关于：{Mission}」胶囊，14.2、14.5）。 */
+  const [buddyContext, setBuddyContext] = useState<string | null>(null);
   const outboxId = useRef(0);
 
   // 右栏：记住本人上次开没开；没记过时 1280 以下默认收起。
@@ -402,7 +405,13 @@ function HomeFrame({ account }: { account: Account }) {
   const display = (current: View) => {
     switch (current.kind) {
       case "home": return <HomeView data={data} api={api} buddy={buddy} today={todayLabel(work.plan?.today ?? null)} go={go} route={route} onSend={send} />;
-      case "buddy": return <BuddyView buddy={buddy} outbox={outbox} consume={consume} onSpeaking={setSpeaking} />;
+      case "buddy": return <BuddyView buddy={buddy} outbox={outbox} consume={consume} onSpeaking={setSpeaking} context={buddyContext} onClearContext={() => setBuddyContext(null)} />;
+      case "mission": {
+        const mission = data.missions.find((entry) => entry.missionId === current.id);
+        if (!mission) return <Missing loading={!api.ready} onRetry={api.planFailed ? () => void api.retryPlan() : undefined} />;
+        const cardId = work.plan?.missions.find((entry) => entry.missionId === current.id)?.cardId ?? null;
+        return <MissionInfo key={mission.missionId} mission={mission} cardId={cardId} api={api} go={go} onAsk={() => { setBuddyContext(`关于：${mission.title}`); go("/me/work/buddy"); }} />;
+      }
       case "task": {
         const task = planTask(current.taskId);
         if (task) {
