@@ -121,6 +121,8 @@ class ClaudeRun implements AgentRun {
   private apiRetried = false;
   /** 这一轮碰到订阅额度用完了（rate_limit_event rejected、usage_limit_reached）。 */
   private limitHit = false;
+  /** 这一轮网关说余额不足（billing_error）。 */
+  private balanceHit = false;
 
   constructor(
     private readonly child: ChildProcessWithoutNullStreams, private readonly sessionId: string, private readonly scope: PathScope,
@@ -201,6 +203,11 @@ class ClaudeRun implements AgentRun {
 
   isWaiting(requestId: string): boolean {
     return this.permissions.has(requestId) || this.questions.has(requestId);
+  }
+
+  async setMultiAgent(on: boolean): Promise<boolean> {
+    const r = await this.control({ subtype: "apply_flag_settings", settings: { ultracode: on } }, 10_000);
+    return r.subtype === "success";
   }
 
   async stopTask(taskId: string): Promise<boolean> {
@@ -381,6 +388,8 @@ class ClaudeRun implements AgentRun {
         // 订阅额度用完时 Claude Code 自己补一条助手消息：error rate_limit、api_error usage_limit_reached（文字会变，不看文字）。
         // 只有 error rate_limit 的是别的 429（限流），照旧算模型服务的错，不当成额度用完
         if (this.subscription && ev.api_error === "usage_limit_reached") this.limitHit = true;
+        // 网关余额不足（TokenHub 回 402，Claude Code 记成 billing_error）：停着等本人，不重试
+        if (!this.subscription && (ev.error === "billing_error" || ev.api_error === "billing_error")) this.balanceHit = true;
         const msgId = ev.message?.id;
         if (typeof msgId === "string" && !ev.error) {
           const model = String(ev.message?.model ?? "");
@@ -421,9 +430,12 @@ class ClaudeRun implements AgentRun {
         const interrupted = this.interrupting && ev.subtype === "error_during_execution";
         const apiRetried = this.apiRetried;
         const limited = this.limitHit;
+        // 余额不足：TokenHub 回 402，正文是 Insufficient wallet balance（tokavi-tokenhub f31dd05 的 exception_handler）
+        const balance = !this.subscription && (this.balanceHit || ev.api_error_status === 402 || /insufficient wallet balance/i.test(String(ev.result ?? "")));
         this.interrupting = false;
         this.apiRetried = false;
         this.limitHit = false;
+        this.balanceHit = false;
         this.lastTurn = turnModelsOf(ev, this.turnIds);
         this.turnIds = new Map();
         const isError = Boolean(ev.is_error) || ev.subtype !== "success";
@@ -436,7 +448,7 @@ class ClaudeRun implements AgentRun {
           durationMs: Math.max(0, Math.round(Number(ev.duration_ms) || 0)),
           usage: usageOf(ev),
           // 拒连、超时没有 HTTP 状态码，但这一轮重试过就算模型服务的错。
-          ...(isError ? { errorKind: interrupted ? "interrupted" : auth ? "auth" : limited ? "usage_limit" : ev.api_error_status || apiRetried ? "api" : "other" } : {}),
+          ...(isError ? { errorKind: interrupted ? "interrupted" : auth ? "auth" : limited ? "usage_limit" : balance ? "balance" : ev.api_error_status || apiRetried ? "api" : "other" } : {}),
         } as EventBody);
         return;
       }

@@ -18,6 +18,9 @@ import { createServer } from "./http/server.js";
 import { QuotaTracker } from "./quota.js";
 import { CliTools, type ToolExec } from "./tools.js";
 import { GatewayPricing } from "./pricing.js";
+import { GatewaySpend } from "./spend.js";
+import { Budgets } from "./budget.js";
+import { CodexQuota, readCodexLimits } from "./codexQuota.js";
 import { createDesktop, openUrl, type Desktop, type MenuAction } from "./desktop/index.js";
 
 export interface RunnerOptions {
@@ -37,6 +40,8 @@ export interface RunnerOptions {
   toolsExec?: ToolExec;
   /** 测试用：停着等额度时的等待时长。 */
   holdTiming?: SessionDeps["holdTiming"];
+  /** 读本人 Codex 订阅的额度（测试里换成假的；没装回 null）。 */
+  codexLimits?: () => Promise<Record<string, unknown> | null>;
   onQuit?: () => void;
 }
 
@@ -81,9 +86,23 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
     if (!bin) throw new Error("这台电脑上没找到 Claude Code");
     return readUsage(bin, config.dataDir);
   });
-  outbox.quota = () => quota.syncView();
+  // Codex 订阅的额度：装了 Codex 才有，只显示、同步，不挡卡
+  const codexQuota = new CodexQuota(opts.codexLimits ?? (() => readCodexLimits()));
+  outbox.quota = () => [...quota.syncView(), ...codexQuota.syncView()];
   const tools = new CliTools(opts.toolsExec);
   const pricing = new GatewayPricing(baseFetch);
+  // TokenHub 今天、本月花了多少：用本机存的网关钥匙读 TokenHub 自己的统计（每人一个计费账户）
+  const spend = new GatewaySpend(async () => {
+    const out: { baseUrl: string; apiKey: string }[] = [];
+    for (const p of await models.list()) {
+      if (p.source !== "gateway" || !p.hasKey) continue;
+      const m = await models.resolve(p.id);
+      if (m?.baseUrl && m.apiKey) out.push({ baseUrl: m.baseUrl, apiKey: m.apiKey });
+    }
+    return out;
+  }, baseFetch);
+  outbox.spend = () => spend.syncView();
+  const budgets = new Budgets(config.dataDir);
   let sessionsRef: SessionManager | null = null;
   const updateTray = () => desktop.setState({ paired: tokens.count() > 0, running: sessionsRef?.activeCount() ?? 0, paused: settings.get().paused });
   const sessions = new SessionManager({
@@ -93,7 +112,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
     skillsDir: opts.skillsDir ?? join(homeDir(), ".claude", "skills"),
     maxConcurrent: () => settings.get().maxConcurrent,
     autoMerge: () => settings.get().autoMerge,
-    quota, pricing, holdTiming: opts.holdTiming,
+    quota, pricing, budgets, holdTiming: opts.holdTiming,
     verifyBrief: async (handbackKey) => fetchVerifyBrief(await cloud.target(), handbackKey, cloudFetch),
     adapters: {
       "claude-code": new ClaudeCodeAdapter(claudeBin),
@@ -107,7 +126,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   // 交回送到天枢以后去取验收交代。
   outbox.onSent = () => void sessions.pullBriefs();
   const server = createServer({
-    config, version: VERSION, tokens, pairings, sessions, log, models, folders, claude, cloud, settings, quota, tools,
+    config, version: VERSION, tokens, pairings, sessions, log, models, folders, claude, cloud, settings, quota, codexQuota, tools, spend,
     pickFolder: () => desktop.pickFolder(),
     fetchImpl: cloudFetch,
     onSettingsChange: updateTray,

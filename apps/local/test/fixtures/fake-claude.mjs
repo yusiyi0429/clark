@@ -52,6 +52,18 @@ function startTurn(text) {
   appendFileSync(TURNS, JSON.stringify({ turnText: text, sid }) + "\n");
   if (live.usageLimit) { limitHit(live.usageLimit); return; }
   if (live.rateInfo) out({ type: "rate_limit_event", rate_limit_info: live.rateInfo });
+  if (live.balance) {
+    // 网关余额不足：TokenHub 回 402（tokavi-tokenhub f31dd05），Claude Code 记成 billing_error
+    out({ type: "assistant", error: "billing_error", message: { content: [{ type: "text", text: "API Error: 402 Insufficient wallet balance!" }] }, parent_tool_use_id: null });
+    out({ type: "result", subtype: "success", is_error: true, result: 'API Error: 402 {"msg":"Insufficient wallet balance! balance must be higher than stop line."}', api_error_status: 402, duration_ms: 5, usage: {}, model_usage_since_last_result: {} });
+    return;
+  }
+  if (live.work) {
+    // 干活的一轮：不要权限，work.ms 后做完；中途收到「预算用完了…就停下」就提前收尾（ignoreStop 时不理，等本机打断）
+    out({ type: "assistant", message: { content: [{ type: "text", text: `开始做：${text}` }] }, parent_tool_use_id: null });
+    turn = { permId: null, work: true, timer: setTimeout(() => { out({ type: "assistant", message: { content: [{ type: "text", text: "做完了" }] }, parent_tool_use_id: null }); finish(true, "做完了"); }, live.work.ms ?? 200) };
+    return;
+  }
   if (mode === "gateway_down") {
     // 11/06 假网关实测：每次重试一条 api_retry，最后 result 是 success + is_error，拒连时没有 api_error_status。
     for (let a = 1; a <= 2; a++) out({ type: "system", subtype: "api_retry", attempt: a, max_retries: 2, retry_delay_ms: 500 * a, error_status: null, error: "unknown" });
@@ -211,8 +223,13 @@ rl.on("line", (line) => {
     sys({ subtype: "task_updated", task_id: id, patch: { status: "killed", end_time: Date.now() } });
     sys({ subtype: "task_notification", task_id: id, status: "stopped", output_file: "", summary: "" });
     out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: {} } });
+  } else if (msg.type === "control_request" && msg.request.subtype === "apply_flag_settings") {
+    // 跑着时改设置（多 agent 开关）：记进 trace
+    appendFileSync(TRACE, JSON.stringify({ applyFlags: msg.request.settings, sid }) + "\n");
+    out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id } });
   } else if (msg.type === "control_request" && msg.request.subtype === "interrupt") {
     out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: { still_queued: [] } } });
+    if (turn?.timer) clearTimeout(turn.timer);
     if (turn) {
       out({ type: "control_cancel_request", request_id: turn.permId });
       finish(false, "");
@@ -247,7 +264,12 @@ rl.on("line", (line) => {
   } else if (msg.type === "user") {
     if (turn) {
       // 进行中插话：下一个工具步骤之前读到。
+      appendFileSync(TURNS, JSON.stringify({ interjection: msg.message.content, sid }) + "\n");
       out({ type: "assistant", message: { content: [{ type: "text", text: `插话收到：${msg.message.content}` }] }, parent_tool_use_id: null });
+      if (turn.work && /预算用完了/.test(msg.message.content) && !readCfg().ignoreStop) {
+        clearTimeout(turn.timer);
+        turn.timer = setTimeout(() => { out({ type: "assistant", message: { content: [{ type: "text", text: "停下了，没做完的：收尾" }] }, parent_tool_use_id: null }); finish(true, "停下了"); }, 30);
+      }
     } else {
       startTurn(msg.message.content);
     }

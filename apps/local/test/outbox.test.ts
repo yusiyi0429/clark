@@ -39,7 +39,19 @@ describe("发件箱", () => {
     await box.flush();
     box.stop();
     expect(cloud.calls[1]!.body.quota).toEqual(quota);
+    expect(cloud.calls[1]!.body).not.toHaveProperty("spend");
     expect(Value.Check(LocalSyncBatchRequest, cloud.calls[1]!.body)).toBe(true);
+  });
+
+  it("每批带读到过的 TokenHub 花费：只有今天、本月、读到的时间（没有主机、账户名）", async () => {
+    const cloud = fakeCloud((keys) => json({ accepted: keys, rejected: [] }));
+    const box = new Outbox(tempDir(), target, meta, cloud.fetchImpl);
+    const spend = [{ source: "tokenhub" as const, today: [{ amount: 12.4, currency: "CNY", estimated: false }], month: [{ amount: 230, currency: "CNY", estimated: false }], updatedAt: "2026-11-07T08:00:00.000Z" }];
+    box.spend = () => spend;
+    await box.heartbeat(true);
+    box.stop();
+    expect(cloud.calls[0]!.body.spend).toEqual(spend);
+    expect(Value.Check(LocalSyncBatchRequest, cloud.calls[0]!.body)).toBe(true);
   });
 
   it("没关联云端时只排队，落盘，重启后还在；同一幂等键只排一次", async () => {

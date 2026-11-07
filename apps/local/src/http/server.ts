@@ -4,7 +4,7 @@ import { Value } from "@sinclair/typebox/value";
 import {
   LOCAL_RUNNER_PROTOCOL, LOCAL_RUNNER_ROUTES, LOCAL_RUNNER_TOKEN_HEADER,
   LocalPairingStartRequest, LocalAgentLoginCodeRequest, LocalCloudLinkRequest, LocalSettingsPatch, LocalModelProfileUpsert,
-  LocalCreateSessionRequest, LocalCreateSessionBatchRequest, LocalSendMessageRequest, LocalPermissionDecisionRequest, LocalQuestionAnswerRequest,
+  LocalCreateSessionRequest, LocalCreateSessionBatchRequest, LocalSendMessageRequest, LocalPermissionDecisionRequest, LocalQuestionAnswerRequest, LocalBudgetUpdateRequest,
   type TLocalRunnerErrorCode, type TLocalStatusResponse, type TLocalHealthResponse,
 } from "@warmap/contracts";
 import { checkHost, checkJson, checkOrigin, corsHeaders, preflightHeaders, type Rejection } from "./security.js";
@@ -18,6 +18,8 @@ import type { ClaudeSetup } from "../agents/claudeSetup.js";
 import type { CloudLink, Settings } from "../cloud.js";
 import type { RunnerConfig } from "../config.js";
 import type { QuotaTracker } from "../quota.js";
+import type { GatewaySpend } from "../spend.js";
+import type { CodexQuota } from "../codexQuota.js";
 import type { CliTools } from "../tools.js";
 import { DEV_PAGE } from "./devPage.js";
 import { handleMcpMessage } from "../sessionMcp.js";
@@ -35,6 +37,8 @@ export interface ServerDeps {
   cloud: CloudLink;
   settings: Settings;
   quota: QuotaTracker;
+  spend: GatewaySpend;
+  codexQuota: CodexQuota;
   tools: CliTools;
   pickFolder: () => Promise<string | null>;
   onSettingsChange?: () => void;
@@ -123,10 +127,12 @@ export function createServer(d: ServerDeps): http.Server {
       const claude = await d.claude.status();
       // 额度读缓存；超过 5 分钟没读过就在后台读一次（不发提示、不花 token），下一次轮询就有了
       if (claude.installed && claude.loggedIn) void d.quota.refresh();
+      void d.spend.refresh(); // TokenHub 今天、本月花了多少：同样 5 分钟读一次
+      void d.codexQuota.refresh(); // Codex 订阅的额度（没装就不列）
       return {
         deviceId: d.config.deviceId, version: d.version, agents: [claude],
         activeSessions: d.sessions.activeCount(), slots: d.sessions.slots(), cloud: d.cloud.view(), settings: d.settings.get(),
-        quota: d.quota.view(), tools: d.tools.view(),
+        quota: [...d.quota.view(), ...d.codexQuota.view()], tools: d.tools.view(), spend: d.spend.view(),
       };
     },
     installAgent: (c) => { agentMustBeClaude(c); if (!d.claude.install()) throw new HttpError(409, "conflict", "正在安装或登录中"); return { ok: true }; },
@@ -198,6 +204,8 @@ export function createServer(d: ServerDeps): http.Server {
     mergeSession: (c) => d.sessions.merge(c.params.id!),
     answerQuestion: (c) => ({ session: d.sessions.answerQuestion(c.params.id!, c.params.requestId!, validate(LocalQuestionAnswerRequest, c.body)) }),
     stopBackground: async (c) => ({ session: await d.sessions.stopBackground(c.params.id!, c.params.itemId!) }),
+    listBudgets: () => ({ budgets: d.sessions.budgets() }),
+    putBudget: (c) => d.sessions.setBudget(validate(LocalBudgetUpdateRequest, c.body)),
   };
 
   function agentMustBeClaude(c: Ctx) {

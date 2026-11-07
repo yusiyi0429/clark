@@ -178,6 +178,36 @@ describe("规划员和验收员", { timeout: 30_000 }, () => {
     }
   });
 
+  it("无上限（11.3）：验收员用重档（Opus high，不开多 agent），连续没过 3 次才受阻；自动的第 2 次就受阻", async () => {
+    const h = await setup(3);
+    try {
+      h.fake({ verdict: FAILING });
+      h.cloud.setBrief(() => ({ status: 200, body: { markdown: "# 验收交代", criteria: CRITERIA, role: REVIEWER, failStreak: 1 } }));
+      const unlimited = { mode: "unlimited", hours: null, weeklyPercent: null, money: null };
+      const a = await h.open({ ...h.card("A"), taskBudget: { taskId: "T-9", budget: unlimited } });
+      await h.allow(a.id);
+      await h.waitStatus(a.id, "idle");
+      await h.handBack(a.id);
+      const v = await until(async () => (await h.verifies())[0]);
+      await h.waitStatus(v.id, "done");
+      expect(h.events(a.id).find((e) => e.type === "verdict")).toMatchObject({ passed: false, failStreak: 2, blocked: false });
+      const argv = h.argvOf(v.id);
+      expect([flag(argv, "--model"), flag(argv, "--effort")]).toEqual(["opus", "high"]); // 岗位是轻档，无上限改用重档
+      expect(JSON.parse(flag(argv, "--settings")!).ultracode).toBeUndefined();
+      // 自动（没带预算）：同样第 2 次没过就受阻
+      const b = await h.open(h.card("B"));
+      await h.allow(b.id);
+      await h.waitStatus(b.id, "idle");
+      await h.handBack(b.id);
+      const vb = await until(async () => (await h.verifies()).find((x) => x.subject.cardId === "B"));
+      await h.waitStatus(vb.id, "done");
+      expect(h.events(b.id).find((e) => e.type === "verdict")).toMatchObject({ passed: false, failStreak: 2, blocked: true });
+      expect(flag(h.argvOf(vb.id), "--model")).toBe("haiku");
+    } finally {
+      await h.t.cleanup();
+    }
+  });
+
   it("没过：卡的会话里有结论和改法，经「说一句」送回执行会话，改完再交回自动再验；第二次没过停在受阻；过了没有改法", async () => {
     const h = await setup(3);
     try {

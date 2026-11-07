@@ -78,6 +78,22 @@ export class QuotaTracker {
     return s.windows.some((w) => w.state === "blocked" && !w.resetsAt) ? Infinity : null;
   }
 
+  /** 本周（所有模型）用了几个百分点：预算记「开工后涨了几个点」用；读不到为 null。 */
+  weeklyPercent(): number | null {
+    return this.state?.windows.find((w) => w.kind === "weekly_all")?.usedPercent ?? null;
+  }
+
+  /** 5 小时和本周（所有模型）里用得最多的百分比（按模型分的不算）：「无上限」到 95% 对新的轮次关掉多 agent；读不到为 null。 */
+  usedPercent(): number | null {
+    const ws = this.state?.windows.filter((w) => w.kind !== "weekly_scoped") ?? [];
+    return ws.length ? Math.max(...ws.map((w) => w.usedPercent)) : null;
+  }
+
+  /** 到了警戒线（Claude Code 报 warning，按模型分的不算）：「自动」「设预算」后面拉起的思考强度降一档。 */
+  warning(): boolean {
+    return Boolean(this.state?.windows.some((w) => w.kind !== "weekly_scoped" && w.state === "warning"));
+  }
+
   /** 读一次（get_usage）。force 以外 5 分钟内读过、试过就不再读；同时只读一次。从不抛错，没读到记在 error 里。 */
   refresh(force = false): Promise<void> {
     const at = Math.max(this.triedAt, this.state?.updatedAt ? Date.parse(this.state.updatedAt) : 0);

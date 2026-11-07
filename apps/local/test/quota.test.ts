@@ -6,6 +6,7 @@ import { quotaFromUsage, QuotaTracker, QUOTA_TTL_MS } from "../src/quota.js";
 import { CliTools, type ToolExec } from "../src/tools.js";
 import { costOf, evalExpr, GatewayPricing, inInterval, pricesUrl } from "../src/pricing.js";
 import { readUsage } from "../src/agents/claudeCode.js";
+import { CodexQuota, codexQuotaFrom } from "../src/codexQuota.js";
 import { Value } from "@sinclair/typebox/value";
 import { LocalSessionSummary, LocalStatusResponse } from "@warmap/contracts";
 import { registerFormats } from "../src/store.js";
@@ -126,6 +127,44 @@ describe("额度", () => {
     expect(trace.find((l) => l.getUsage)?.getUsage).toEqual({ subtype: "get_usage", skip_behaviors: true });
     expect(existsSync(join(dir, ".fake-claude-turns.jsonl"))).toBe(false); // 没开过一轮
     expect(trace[0].argv).toEqual(expect.arrayContaining(["--no-session-persistence", "--strict-mcp-config"]));
+  });
+});
+
+describe("Codex 订阅的额度", () => {
+  /** 11/07 实测 codex-cli 0.159.2 的 account/rateLimits/read（Plus 计划，只留本机用到的字段）。 */
+  const CODEX = {
+    ordinaryUsageAllowed: true, accountId: "acc-1",
+    rateLimits: { limitId: "codex", planType: "plus", primary: { usedPercent: 0, windowDurationMins: 300, resetsAt: 1794049466 }, secondary: { usedPercent: 21, windowDurationMins: 10080, resetsAt: 1794383425 } },
+    rateLimitsByLimitId: { codex: { limitId: "codex", planType: "plus", primary: { usedPercent: 0, windowDurationMins: 300, resetsAt: 1794049466 }, secondary: { usedPercent: 21, windowDurationMins: 10080, resetsAt: 1794383425 } } },
+    rateLimitResetCredits: { availableCount: 2, credits: null },
+  };
+  it("按窗口长度认 5 小时和本周（不按先后）；到 100% 或不许用了算用完；没装不列；读不到记原因；同步只带窗口和时间", async () => {
+    expect(codexQuotaFrom(CODEX)).toEqual({
+      plan: "plus", extraUsage: null, blockedUntil: null,
+      windows: [
+        { kind: "session", model: null, usedPercent: 0, state: "ok", resetsAt: new Date(1794049466 * 1000).toISOString() },
+        { kind: "weekly_all", model: null, usedPercent: 21, state: "ok", resetsAt: new Date(1794383425 * 1000).toISOString() },
+      ],
+    });
+    // 先后反过来、多一个认不得的窗口
+    const swapped = { rateLimits: { planType: "pro", primary: { usedPercent: 100, windowDurationMins: 10080, resetsAt: 1794383425 }, secondary: { usedPercent: 50, windowDurationMins: 300, resetsAt: 1794049466 } } };
+    expect(codexQuotaFrom(swapped).windows.map((w) => [w.kind, w.state])).toEqual([["weekly_all", "blocked"], ["session", "ok"]]);
+    expect(codexQuotaFrom(swapped).blockedUntil).toBe(new Date(1794383425 * 1000).toISOString());
+    expect(codexQuotaFrom({ ...CODEX, ordinaryUsageAllowed: false }).windows[1]!.state).toBe("blocked");
+    expect(JSON.stringify(codexQuotaFrom(CODEX))).not.toContain("acc-1");
+
+    let next: () => Promise<any> = async () => CODEX;
+    const now = Date.parse("2026-11-07T08:00:00Z");
+    const q = new CodexQuota(() => next(), () => now);
+    await q.refresh();
+    expect(q.view()).toEqual([expect.objectContaining({ source: "codex_subscription", plan: "plus", error: null, updatedAt: "2026-11-07T08:00:00.000Z" })]);
+    expect(q.syncView()).toEqual([{ source: "codex_subscription", windows: q.view()[0]!.windows, blockedUntil: null, updatedAt: "2026-11-07T08:00:00.000Z" }]);
+    next = async () => { throw new Error("Codex 没有响应握手"); };
+    await q.refresh(true);
+    expect(q.view()[0]).toMatchObject({ error: "Codex 没有响应握手", windows: q.view()[0]!.windows });
+    next = async () => null; // 卸载了
+    await q.refresh(true);
+    expect(q.view()).toEqual([]);
   });
 });
 

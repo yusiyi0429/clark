@@ -1,4 +1,4 @@
-import type { TLocalAgentKind, TLocalModelTier } from "@warmap/contracts";
+import type { TLocalAgentKind, TLocalEffort } from "@warmap/contracts";
 import type { EventBody } from "../eventLog.js";
 import type { ResolvedModel } from "../models.js";
 
@@ -9,8 +9,11 @@ export interface AgentLaunch {
   /** true：用 --resume 续上这个会话；false：用 --session-id 新开。 */
   resume: boolean;
   model: ResolvedModel;
-  /** 这件的档位：订阅模型按它选模型（配置里没写模型名时）和思考强度。 */
-  tier: TLocalModelTier;
+  /**
+   * 这次怎么跑（本机按档位、预算模式和额度定好的，见 SessionManager.runFor）：只对订阅生效——model 是配置里没写模型名时传的 --model，
+   * effort 是 --effort，multiAgent 开多 agent（ultracode）。网关模型用配置里的模型名，不传思考强度，不开多 agent。
+   */
+  run: { model: string; effort: TLocalEffort; multiAgent: boolean };
   includePersonalConfig: boolean;
   /** 本会话要带的 MCP 配置文件路径（本机程序写好的 JSON），以及要预先放行的工具名。 */
   mcpConfigPath: string | null;
@@ -49,6 +52,8 @@ export interface AgentRun {
   respondQuestion(requestId: string, answers: Record<string, string>): boolean;
   /** 执行方还在等这个权限请求或提问的答复（后台子 agent 的请求可能跨过主轮的结束）。 */
   isWaiting(requestId: string): boolean;
+  /** 多 agent（ultracode）开或关，下一轮起生效（Claude Code 的 apply_flag_settings，11/07 实测）。执行方答应了返回 true。 */
+  setMultiAgent(on: boolean): Promise<boolean>;
   /** 停一个后台任务（子 agent、后台命令），会话本身不停。执行方答应了返回 true；之后会来一条 background 事件（stopped）。 */
   stopTask(taskId: string): Promise<boolean>;
   /** 强停：只杀本进程树。 */

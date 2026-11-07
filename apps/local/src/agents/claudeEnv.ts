@@ -1,7 +1,6 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { TLocalModelTier } from "@warmap/contracts";
 import type { AgentLaunch } from "./types.js";
 
 /** 本人主目录（Windows 上按磁盘实际大小写，和 Claude Code 自己算出的路径一致）。 */
@@ -62,13 +61,6 @@ export const PERMISSION_ARGS = [
   "--permission-prompt-tool", "stdio",
 ];
 
-/** 订阅模型按档位跑什么：重活 Opus high、普通 Opus medium、轻活 Sonnet low（新首页设计 11.3「自动」）。 */
-export const TIER_RUN: Record<TLocalModelTier, { model: string; effort: string }> = {
-  strong: { model: "opus", effort: "high" },
-  normal: { model: "opus", effort: "medium" },
-  light: { model: "sonnet", effort: "low" },
-};
-
 /**
  * 拉起参数。默认会话干净：只读项目和本地设置、只带本会话的 MCP；打开 includePersonalConfig 才带本人全局配置。
  * 网关模型：地址和模型名放 --settings 的 env（盖过本人全局配置，11/05 实测）；钥匙只放进程环境变量，不进命令行
@@ -92,7 +84,7 @@ export function buildClaudeArgs(launch: AgentLaunch): { args: string[]; env: Rec
   // MCP 配置文件里用 ${变量名} 引用的密钥和令牌，经子进程环境变量交给 Claude Code。
   const env: Record<string, string> = { DISABLE_AUTOUPDATER: "1", ...launch.mcpEnv };
   // WebFetch 抓取前默认连 api.anthropic.com 做域名检查，国内网络连不上就整个失败（11/06 实测）。每个会话都关掉。
-  const settings: { skipWebFetchPreflight: true; claudeMdExcludes?: string[]; env?: Record<string, string> } = { skipWebFetchPreflight: true };
+  const settings: { skipWebFetchPreflight: true; claudeMdExcludes?: string[]; env?: Record<string, string>; ultracode?: true } = { skipWebFetchPreflight: true };
   if (!launch.includePersonalConfig) settings.claudeMdExcludes = personalMemoryExcludes(homeDir(), homedir());
   const m = launch.model;
   if (m.source === "gateway") {
@@ -107,8 +99,10 @@ export function buildClaudeArgs(launch: AgentLaunch): { args: string[]; env: Rec
     env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
     Object.assign(env, GATEWAY_FAIL_FAST);
   } else {
-    // 订阅：配置里没写模型名（本人的 Claude 订阅）就按档位选，不然每一档都跑账号默认的 Opus；思考强度也按档位传（新首页设计 11.3「自动」）
-    args.push("--model", m.model ?? TIER_RUN[launch.tier].model, "--effort", TIER_RUN[launch.tier].effort);
+    // 订阅：配置里没写模型名（本人的 Claude 订阅）就按定好的跑法选（档位、预算模式），不然每一档都跑账号默认的 Opus；思考强度也传（新首页设计 11.3）
+    args.push("--model", m.model ?? launch.run.model, "--effort", launch.run.effort);
+    // 「无上限」开多 agent：会话级的 ultracode 设置（11/07 实测订阅的 Opus 可用，跑着时用 apply_flag_settings 关、开）
+    if (launch.run.multiAgent) settings.ultracode = true;
   }
   args.push("--settings", JSON.stringify(settings));
   return { args, env };
