@@ -40,7 +40,8 @@ import { recoverStaleMissionDrafts } from "./missionRounds.js";
 import { recoverInterruptedOutcome } from "./outcome.js";
 import { personDisplayNames } from "./people.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR } from "./meetingRecordings.js";
-import { resolveWorldEnv, resolveWorldTkEnv } from "./worldClient.js";
+import { resolveWorldEnv, resolveWorldTkEnv, WorldClient, worldConfigured } from "./worldClient.js";
+import { missionAutoLoadJobs } from "./missionAutoLoad.js";
 import { createJobWorker, exampleJobHandlers } from "./jobs.js";
 import { usageReportJobs } from "./usage.js";
 import { resolveFeishuEnv } from "./feishu/config.js";
@@ -305,14 +306,18 @@ const ceoNoticeJobs = feishuClient ? ceoFeishuNoticeJobs({ pool, people: () => p
 // 新首页「等你」里急的几件推到本人的「天枢伙伴」单聊（设计 13.2）：配了飞书才发。
 const homePush = feishuClient ? homePushJobs({ pool, now, people: () => peopleDirectory.searchPeople(undefined).filter(canUseMemberView).map((person) => person.personId),
   readHome: (personId) => app.readWorkHome({ personId, role: "member" }) }) : { handlers: {}, recurring: [] };
+// 每天从本体载入本月和下月的 Mission（设计 10.5，代替手动跑 missions:load-world）：TIANSHU_AUTO_LOAD_MISSIONS=1 且本体配了才开，缺省关；只读本体、用主实例。
+const autoLoadMissions = process.env.TIANSHU_AUTO_LOAD_MISSIONS === "1";
+const missionLoadJobs = missionAutoLoadJobs({ enabled: autoLoadMissions, pool, now,
+  world: autoLoadMissions && worldConfigured(env) ? new WorldClient(pool.query.bind(pool), env) : null });
 const jobWorker = createJobWorker({
   pool,
   handlers: {
-    ...exampleJobHandlers, ...feishuTokens?.handlers, ...followThroughJobs.handlers, ...docChangeJobs.handlers, ...app.collectionJobs.handlers, ...usageJobs.handlers, ...summaryJobs.handlers, ...ceoNoticeJobs.handlers, ...homePush.handlers, ...app.taskPlacementJobs,
+    ...exampleJobHandlers, ...feishuTokens?.handlers, ...followThroughJobs.handlers, ...docChangeJobs.handlers, ...app.collectionJobs.handlers, ...usageJobs.handlers, ...summaryJobs.handlers, ...ceoNoticeJobs.handlers, ...homePush.handlers, ...app.taskPlacementJobs, ...missionLoadJobs.handlers,
     ...(env.feishu ? feishuEventJobs(pool, mergeFeishuEventHandlers(followThroughJobs.feishuEvents, docChangeJobs.feishuEvents, app.feishuChat?.events ?? {})) : {}),
     ...(feishuClient ? feishuNotifyJobs({ pool, client: feishuClient, publicOrigin: env.publicOrigin }) : {}),
   },
-  recurring: [...(feishuTokens?.recurring ?? []), ...followThroughJobs.recurring, ...app.collectionJobs.recurring, ...usageJobs.recurring, ...summaryJobs.recurring, ...ceoNoticeJobs.recurring, ...homePush.recurring],
+  recurring: [...(feishuTokens?.recurring ?? []), ...followThroughJobs.recurring, ...app.collectionJobs.recurring, ...usageJobs.recurring, ...summaryJobs.recurring, ...ceoNoticeJobs.recurring, ...homePush.recurring, ...missionLoadJobs.recurring],
 });
 let feishuEvents: { close: () => void } | undefined;
 app.addHook("onClose", async () => {

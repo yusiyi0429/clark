@@ -85,7 +85,7 @@ describe("约定：读的顺序", () => {
       const empty = (await f.call("GET", "/api/plan-tasks/t-plain/agreement")).json();
       expect(empty).toEqual({ taskId: "t-plain", taskName: "对话质量达标", missionId: "mine", basis: "acceptance", source: "none",
         criteria: [{ index: 1, text: "有题库打分结果", proof: null, acceptor: null }, { index: 2, text: "有新人上手录屏", proof: null, acceptor: null }],
-        exclusions: [], complete: false, basisChanged: false, canEdit: true, updatedBy: null, updatedAt: null });
+        exclusions: [], complete: false, basisChanged: false, canEdit: true, updatedBy: null, updatedAt: null, draftFrom: null });
 
       const saved = await f.put("t-plain", { criteria: [{ index: 1, proof: "  题库评测报告  ", acceptorId: THIRD.personId }, { index: 2, proof: "3 分钟录屏", acceptorId: null }],
         exclusions: ["不含线上 A/B", " 不含线上 A/B ", "不改题库"] });

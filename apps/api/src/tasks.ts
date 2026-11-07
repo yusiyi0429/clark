@@ -3,6 +3,7 @@ import type { Pool, PoolClient } from "pg";
 import type { TAcceptMyTaskRequest, TAddTaskCollaboratorsRequest, TCreateMyTaskRequest, TPatchMyTaskRequest, TReturnMyTaskRequest, TStandaloneMyTaskRequest,
   TTaskAcceptance, TTaskDetailResponse, TTaskProgressSource, TTaskStandardCheck, TTaskSubmission, TTaskView } from "@warmap/contracts";
 import { companyPeriod } from "./monthlyPlans.js";
+import { visibleMissions } from "./visibleMissions.js";
 import { UUID_PATTERN, type Query } from "./meetingStore.js";
 import { insertNotification } from "./notifications.js";
 import { listTaskProgress } from "./taskProgress.js";
@@ -160,7 +161,8 @@ const validDates = (start: string | null, due: string | null) =>
   (!start || validDate(start)) && (!due || validDate(due)) && (!start || !due || start <= due);
 
 /**
- * 本人能挂执行事项的 Mission：本人的、不是占位、月份未过；有任务卡的要等卡所在轮次确认，
+ * 本人能挂执行事项的 Mission：本人的、不是占位，月份未过或看得见（visibleMissions：本月没有时退回本人最近一个月的，
+ * 加之前月份里还有没了结 Task 的）；有任务卡的要等卡所在轮次确认，
  * 没有任务卡的（从本体载入的）不用等。事项上显示所属 Mission 也是同一条（TASK_SELECT 的 mission_title）：
  * 卡被退回、重新准备时，事项和私聊读不到这个 Mission。战场名取任务卡轮次的战场，没有卡时取 Mission 的第一个战场，再没有取能力域名。
  */
@@ -168,14 +170,16 @@ const AVAILABLE_MISSIONS = `SELECT m.id,m.code,m.title,m.period,COALESCE(rb.name
   LEFT JOIN personal_mission_cards c ON c.id=m.personal_mission_card_id LEFT JOIN mission_rounds r ON r.id=c.round_id
   LEFT JOIN battlefield_config rb ON rb.id=r.battlefield_id LEFT JOIN battlefield_config mb ON mb.id=m.battlefield_ids->>0
   LEFT JOIN capability_config cap ON cap.id=m.capability_id
-  WHERE m.owner_id=$1 AND NOT m.placeholder AND m.period >= $2 AND (c.id IS NULL OR r.status='confirmed')`;
+  WHERE m.owner_id=$1 AND NOT m.placeholder AND (m.period >= $2 OR m.id=ANY($3::text[])) AND (c.id IS NULL OR r.status='confirmed')`;
 type AvailableMission = { id: string; code: string; title: string; period: string; battlefield: string };
+const availableParams = async (q: Query, ownerId: string, now: Date) =>
+  [ownerId, companyPeriod(now), (await visibleMissions(q, now, { ownerId })).map((mission) => mission.id)];
 export async function missionAvailable(q: Query, ownerId: string, missionId: string, now: Date): Promise<boolean> {
-  return !!(await q(`${AVAILABLE_MISSIONS} AND m.id=$3`, [ownerId, companyPeriod(now), missionId])).rowCount;
+  return !!(await q(`${AVAILABLE_MISSIONS} AND m.id=$4`, [...await availableParams(q, ownerId, now), missionId])).rowCount;
 }
 /** 本人此刻能挂执行事项的 Mission（与 missionAvailable 同一口径）。 */
 export async function listAvailableMissions(q: Query, ownerId: string, now: Date): Promise<AvailableMission[]> {
-  return (await q(`${AVAILABLE_MISSIONS} ORDER BY m.period,m.code,m.id`, [ownerId, companyPeriod(now)])).rows as AvailableMission[];
+  return (await q(`${AVAILABLE_MISSIONS} ORDER BY m.period,m.code,m.id`, await availableParams(q, ownerId, now))).rows as AvailableMission[];
 }
 export async function renumberMission(client: PoolClient, missionId: string): Promise<void> {
   await client.query(`WITH numbered AS (SELECT id,row_number() OVER (ORDER BY step_order NULLS LAST,created_at,id)::int AS ord

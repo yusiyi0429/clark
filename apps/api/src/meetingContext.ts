@@ -1,13 +1,15 @@
 import { companyPeriod } from "./monthlyPlans.js";
 import type { Query } from "./meetingStore.js";
 import { taskStandards } from "./tasks.js";
+import { visibleMissions } from "./visibleMissions.js";
 import type { WorldSnapshot } from "./worldReader.js";
 
 /**
  * 会后解读与影响分析用的公司地图（只读）：
  * - 长期：公司长期 outcome（LTCO）、各战场长期目标（六个月 outcome）、本体里的长期目标（LTO）与本期目标；
  * - 本月：本月计划的公司 outcome 与各战场 outcome；
- * - 每个人：本月 Mission（outcome、时间边界）。影响分析另带每个人手上还没完成的 Task 和验收项。
+ * - 每个人：看得见的 Mission（visibleMissions：本月的，本月没有时退回这个人最近一个月的，加之前月份还有没了结 Task 的；带月份、outcome、时间边界）。
+ *   影响分析另带每个人手上还没完成的 Task 和验收项。
  * 这些字段本身不多，全部带上（议题 3 第五轮：会上可能讨论长期方向的调整）。
  */
 export type InterpretationContext = {
@@ -16,7 +18,7 @@ export type InterpretationContext = {
   battlefields: { id: string; name: string; ownerName: string; longTermOutcome: string | null; monthOutcome: string | null }[];
   /** 本体里的目标（读到才有）：每个责任单元的 LTO 与本期目标。 */
   worldGoals: { unit: string; lto: string | null; periodGoals: { title: string; outcome: string | null }[] }[];
-  people: { personId: string; name: string; missions: { id: string; code: string; title: string; outcome: string; timeBoundary: string }[] }[];
+  people: { personId: string; name: string; missions: { id: string; code: string; period: string; title: string; outcome: string; timeBoundary: string }[] }[];
 };
 
 export type ImpactCandidateTask = {
@@ -33,18 +35,20 @@ const clip = (text: string | null | undefined, max: number) => {
 
 export async function meetingInterpretationContext(q: Query, now: Date, names: Map<string, string>, world?: WorldSnapshot | null): Promise<InterpretationContext> {
   const period = companyPeriod(now);
-  const [strategy, plan, battlefields, missions] = await Promise.all([
+  const [strategy, plan, battlefields, visible] = await Promise.all([
     q("SELECT ltco FROM company_strategy_config WHERE id = 'default'"),
     q("SELECT company_outcome, battlefields FROM monthly_plans WHERE period = $1 ORDER BY version DESC LIMIT 1", [period]),
     q("SELECT id, name, owner_id, six_month_outcome FROM battlefield_config ORDER BY sort_order, id"),
-    q(`SELECT id, code, title, owner_id, outcome, time_boundary FROM missions WHERE period = $1 AND NOT placeholder ORDER BY owner_id, code`, [period]),
+    visibleMissions(q, now),
   ]);
+  const missions = await q(`SELECT id, code, period, title, owner_id, outcome, time_boundary FROM missions WHERE id = ANY($1::text[])
+    ORDER BY owner_id, period DESC, code`, [visible.map((mission) => mission.id)]);
   const planRow = plan.rows[0] as { company_outcome: string; battlefields: { battlefieldId: string; outcome: string }[] } | undefined;
   const monthOutcome = new Map((planRow?.battlefields ?? []).map((item) => [item.battlefieldId, item.outcome]));
   const people = new Map<string, InterpretationContext["people"][number]>();
-  for (const row of missions.rows as { id: string; code: string; title: string; owner_id: string; outcome: string; time_boundary: string }[]) {
+  for (const row of missions.rows as { id: string; code: string; period: string; title: string; owner_id: string; outcome: string; time_boundary: string }[]) {
     const person = people.get(row.owner_id) ?? { personId: row.owner_id, name: names.get(row.owner_id) ?? row.owner_id, missions: [] };
-    person.missions.push({ id: row.id, code: row.code, title: row.title, outcome: clip(row.outcome, 400) ?? "", timeBoundary: clip(row.time_boundary, 120) ?? "" });
+    person.missions.push({ id: row.id, code: row.code, period: row.period, title: row.title, outcome: clip(row.outcome, 400) ?? "", timeBoundary: clip(row.time_boundary, 120) ?? "" });
     people.set(row.owner_id, person);
   }
   return {
