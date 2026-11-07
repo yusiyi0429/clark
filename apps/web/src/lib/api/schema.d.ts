@@ -17460,6 +17460,11 @@ export interface components {
             kind: "card" | "topic" | "task" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections";
             id: string;
             round?: boolean;
+            focus?: {
+                /** Format: uuid */
+                sessionId: string;
+                requestId: string | null;
+            };
         };
         WaitingItem: {
             id: string;
@@ -17471,6 +17476,11 @@ export interface components {
                 kind: "card" | "topic" | "task" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections";
                 id: string;
                 round?: boolean;
+                focus?: {
+                    /** Format: uuid */
+                    sessionId: string;
+                    requestId: string | null;
+                };
             };
             taskId: string | null;
             sessionId: string | null;
@@ -17624,6 +17634,11 @@ export interface components {
                     kind: "card" | "topic" | "task" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections";
                     id: string;
                     round?: boolean;
+                    focus?: {
+                        /** Format: uuid */
+                        sessionId: string;
+                        requestId: string | null;
+                    };
                 };
                 taskId: string | null;
                 sessionId: string | null;

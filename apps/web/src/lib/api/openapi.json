@@ -106745,6 +106745,31 @@
           },
           "round": {
             "type": "boolean"
+          },
+          "focus": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "sessionId",
+              "requestId"
+            ],
+            "properties": {
+              "sessionId": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "requestId": {
+                "anyOf": [
+                  {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
           }
         }
       },
@@ -106905,6 +106930,31 @@
               },
               "round": {
                 "type": "boolean"
+              },
+              "focus": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "sessionId",
+                  "requestId"
+                ],
+                "properties": {
+                  "sessionId": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "requestId": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
               }
             }
           },
@@ -108211,6 +108261,31 @@
                     },
                     "round": {
                       "type": "boolean"
+                    },
+                    "focus": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "sessionId",
+                        "requestId"
+                      ],
+                      "properties": {
+                        "sessionId": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
                     }
                   }
                 },

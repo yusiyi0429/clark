@@ -173,12 +173,16 @@ export const WaitingKind = Type.Union([
  * 去哪儿看：card、topic 是子会话（id 是卡或专题的 id），task 是 Task 管线（id 是 Task id），meeting 是会议（id 是会议 id），
  * mission_card 是个人 Mission Card（id 是任务卡 id，拍板人那一侧没有具体某张卡时是轮次 id，round = true），role 是岗位修改建议（id 是建议 id），
  * task_detail 是 Task 详情（别人的 Task 只读，id 是 Task id），month 是月份页（id 是 YYYY-MM），connections 是连接页（id 固定 "this_computer"）。
+ * focus（设计 14.3）：子会话（卡、专题、规划员、验收员）的提问和批准由 Task 管线转达，kind = task 时带上是哪个框：sessionId 是那个本机会话，
+ * requestId 是那次提问或批准（同 WaitingItem.question / permission 的 requestId；老版本本机程序没报时为 null，定位到那个会话最新的框）。
+ * 网页落在 Task 管线的那个框上，焦点放在推荐的选项上。不挂 Task（或 Task 不在树上）的子会话没有管线，照旧打开子会话（card / topic），不带 focus。
  */
 export const WaitingTarget = Type.Object({
   kind: Type.Union([Type.Literal("card"), Type.Literal("topic"), Type.Literal("task"), Type.Literal("meeting"), Type.Literal("mission_card"), Type.Literal("role"),
     Type.Literal("task_detail"), Type.Literal("month"), Type.Literal("connections")]),
   id: Type.String({ minLength: 1 }),
   round: Type.Optional(Type.Boolean()),
+  focus: Type.Optional(Type.Object({ sessionId: Type.String({ format: "uuid" }), requestId: Nullable(Type.String({ minLength: 1 })) }, strict)),
 }, strict);
 
 /**
@@ -191,7 +195,8 @@ export const WaitingTarget = Type.Object({
 export const WaitingAnswer = Type.Union([Type.Literal("inline"), Type.Literal("inline_local"), Type.Literal("open")]);
 
 /**
- * 一件等你的事。id 稳定（同一件事每次一样），界面拿它做 key。title 是要你定的事，source 是小字（出自哪个子会话和 Task、哪场会、哪个战场）。
+ * 一件等你的事。id 稳定（同一件事每次一样），界面拿它做 key。title 是要你定的事，source 是小字（出自哪件 Task、哪场会、哪个战场）。
+ * 子会话的提问和批准（approval、question）source 只写 Task 名（14.3），不挂 Task 的写子会话的名字。
  * taskId：属于哪件 Task（Task 一行的「1 件等你」和 Task 管线里的提醒用），不属于为 null。
  * sessionId、deviceId、deviceName：子会话那几种（approval、question、merge）是哪个本机会话、在哪台电脑上；在这台电脑上的，网页就地批准、回答、合回（本机程序接口），别处的只能打开看。
  * dueAt：有截止时间的（Mission Card 本人确认截止、复盘窗口关闭）写上，网页离截止不到 24 小时换警告档；没有为 null。

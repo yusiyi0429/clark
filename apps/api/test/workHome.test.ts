@@ -166,12 +166,15 @@ describe("新首页", { timeout: 30_000 }, () => {
       const byId = new Map(body.waiting.map((item: { id: string }) => [item.id, item]));
       // 本机那几种（批准、回复）在那台电脑上就地答，带设备名；没截止、不是别人请你、不是月份。
       const local = { answer: "inline_local", deviceName: "我的电脑", dueAt: null, person: null, month: null, question: null, permission: null };
-      expect(byId.get(`approval:card:${ids["等批准"]}`)).toEqual({ id: `approval:card:${ids["等批准"]}`, kind: "approval", title: "等你批准", source: "等批准 · 对话质量达标",
-        at: "2026-11-06T01:10:00.000Z", open: { kind: "card", id: ids["等批准"] }, taskId: "task-open", sessionId: approval, deviceId: laptop.device, ...local });
+      // 子会话的提问和批准由 Task 管线转达（14.3）：落在管线里那个框上（focus），来源只写 Task 名。
+      expect(byId.get(`approval:card:${ids["等批准"]}`)).toEqual({ id: `approval:card:${ids["等批准"]}`, kind: "approval", title: "等你批准", source: "对话质量达标",
+        at: "2026-11-06T01:10:00.000Z", open: { kind: "task", id: "task-open", focus: { sessionId: approval, requestId: null } }, taskId: "task-open", sessionId: approval,
+        deviceId: laptop.device, ...local });
       // 在问本人：标题是第一个问题的原话，带原样的提问（就地答）。
-      expect(byId.get(`question:plan:${planner}`)).toEqual({ id: `question:plan:${planner}`, kind: "question", title: "先做哪一页？", source: "拆卡 · 对话质量达标",
-        at: "2026-11-06T01:20:00.000Z", open: { kind: "task", id: "task-open" }, taskId: "task-open", sessionId: planner, deviceId: laptop.device, ...local, question: QUESTION });
-      expect(byId.get(`approval:verify:${verifier}`)).toMatchObject({ kind: "approval", source: "验收 · 在验的卡", open: { kind: "card", id: ids["在验的卡"] },
+      expect(byId.get(`question:plan:${planner}`)).toEqual({ id: `question:plan:${planner}`, kind: "question", title: "先做哪一页？", source: "对话质量达标",
+        at: "2026-11-06T01:20:00.000Z", open: { kind: "task", id: "task-open", focus: { sessionId: planner, requestId: "q-1" } }, taskId: "task-open", sessionId: planner,
+        deviceId: laptop.device, ...local, question: QUESTION });
+      expect(byId.get(`approval:verify:${verifier}`)).toMatchObject({ kind: "approval", source: "对话质量达标", open: { kind: "task", id: "task-open", focus: { sessionId: verifier } },
         taskId: "task-open", sessionId: verifier, answer: "inline_local" });
       expect(byId.get(`verdict:card:${ids["受阻"]}`)).toMatchObject({ kind: "verdict", title: "验收两次没过", open: { kind: "card", id: ids["受阻"] }, taskId: "task-open",
         answer: "open", deviceName: null, dueAt: null });

@@ -53,6 +53,9 @@ export function reviewWindow(now: Date): { period: string; closesAt: string } | 
   return { period: start.toISOString().slice(0, 7), closesAt: closesAt.toISOString() };
 }
 
+/** 管线里那个框是哪一次提问或批准（老版本本机程序没报时为 null）。 */
+const askRequestId = (ask: RunAsk | null) => ask?.request.requestId ?? null;
+
 /** 等你那一行的原话和就地答要的东西：在问的用第一个问题的原话，等批准的用那一步给人看的那一行；老版本本机程序没报时退回泛称。 */
 function askFields(kind: "approval" | "question", ask: RunAsk | null): Pick<TWaitingItem, "title" | "question" | "permission"> {
   if (kind === "question") return ask?.kind === "question" ? { title: ask.request.questions[0].question, question: ask.request, permission: null }
@@ -89,9 +92,11 @@ export async function assembleWaiting(input: WaitingInput): Promise<TWaitingItem
   for (const sub of subs) {
     const taskId = treeTask(sub.planTaskId);
     const source = [sub.title, taskName(taskId)].filter(Boolean).join(" · ");
+    // 提问和批准由 Task 管线转达（14.3）：点进去落在管线里那个框上，来源只写 Task 名；不挂树上 Task 的照旧打开子会话。
     if (sub.waiting === "approval" || sub.waiting === "question")
-      add({ id: `${sub.waiting}:${sub.kind}:${sub.id}`, kind: sub.waiting, ...askFields(sub.waiting, sub.ask), source, at: sub.runUpdatedAt,
-        open: { kind: sub.kind, id: sub.id }, taskId, sessionId: sub.sessionId, deviceId: sub.deviceId, answer: "inline_local" });
+      add({ id: `${sub.waiting}:${sub.kind}:${sub.id}`, kind: sub.waiting, ...askFields(sub.waiting, sub.ask), source: taskName(taskId) ?? sub.title, at: sub.runUpdatedAt,
+        open: taskId && sub.sessionId ? { kind: "task", id: taskId, focus: { sessionId: sub.sessionId, requestId: askRequestId(sub.ask) } } : { kind: sub.kind, id: sub.id },
+        taskId, sessionId: sub.sessionId, deviceId: sub.deviceId, answer: "inline_local" });
     // 验收过了、没能自动合回：在交回那次执行的那台电脑上合。
     if (sub.waiting === "merge" && sub.merge)
       add({ id: `merge:card:${sub.id}`, kind: "merge", title: "没能自动合回", source, at: sub.merge.at, open: { kind: "card", id: sub.id }, taskId,
@@ -113,10 +118,13 @@ export async function assembleWaiting(input: WaitingInput): Promise<TWaitingItem
   for (const run of helpers) {
     const kind = run.state === "waiting_permission" ? "approval" as const : "question" as const;
     const plan = run.kind === "plan";
+    // 规划员挂在 Task 上；验收员挂在卡上，卡的 Task 在树上时同样由 Task 管线转达（14.3）。来源只写 Task 名。
+    const taskId = treeTask(plan ? run.plan_task_id : run.card_task);
+    const pipelineTask = plan ? run.plan_task_id : taskId;
     add({ id: `${kind}:${run.kind}:${run.id}`, kind, ...askFields(kind, run.ask),
-      source: plan ? `拆卡 · ${taskName(run.plan_task_id) ?? run.title ?? run.plan_task_id}` : `验收 · ${run.card_title ?? ""}`, at: run.updated_at.toISOString(),
-      open: plan ? { kind: "task", id: run.plan_task_id! } : { kind: "card", id: run.task_id! }, taskId: treeTask(plan ? run.plan_task_id : run.card_task),
-      sessionId: run.id, deviceId: run.device_id, answer: "inline_local" });
+      source: taskName(pipelineTask) ?? (plan ? run.title ?? run.plan_task_id : run.card_title), at: run.updated_at.toISOString(),
+      open: pipelineTask ? { kind: "task", id: pipelineTask, focus: { sessionId: run.id, requestId: askRequestId(run.ask) } } : { kind: "card", id: run.task_id! },
+      taskId, sessionId: run.id, deviceId: run.device_id, answer: "inline_local" });
   }
 
   // 订阅额度用完：一台在线的电脑一条，停着几件（子会话按树上的状态，规划员、验收员按会话），截止是最早恢复的时间（到点本机自己接着做）。
