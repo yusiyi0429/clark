@@ -5,7 +5,8 @@ import {
   ReleaseSessionStartRequest, NotificationSettings, ClaimedSessionStart,
 } from "./workHome.js";
 import { CreateProjectRequest, Project, ProjectDetailResponse, ProjectFeedItem, ProjectFeedResponse, ProjectGoal, ProjectGoalLinkedItem, ProjectHandoverItem,
-  ProjectHandoverSummaryItem, ProjectListResponse, ProjectPipelineResponse, ProjectTransferDeclinedItem, UpdateProjectRequest, ProjectBoardResponse } from "./projects.js";
+  ProjectHandoverSummaryItem, ProjectListResponse, ProjectPipelineResponse, ProjectTransferDeclinedItem, UpdateProjectRequest, ProjectBoardResponse, ProjectGoalChangedItem,
+  AnswerGoalChangeRequest } from "./projects.js";
 import { CreateProjectTransferRequest, HandoverSecretFinding, HandoverSecretsResponse, HandoverSection, PersonRef, ProjectTransfer,
   UpdateProjectTransferRequest } from "./projectTransfers.js";
 import { Budget, TaskBudgetResponse } from "./budget.js";
@@ -21,7 +22,7 @@ export const workHomeSchemas: Record<string, JsonSchema> = {
   BackgroundItem, BackgroundResponse, RouteRequest, RouteResponse,
   SessionStartView, ClaimSessionStartsRequest, ClaimSessionStartsResponse, CardMerge, TaskFeedItem, HomeItem, ReleaseSessionStartRequest,
   Project, ProjectListResponse, CreateProjectRequest, UpdateProjectRequest, ProjectGoal, ProjectDetailResponse, ProjectPipelineResponse, ProjectGoalLinkedItem,
-  ProjectFeedItem, ProjectFeedResponse, ProjectBoardResponse, ProjectHandoverItem, ProjectHandoverSummaryItem, ProjectTransferDeclinedItem,
+  ProjectFeedItem, ProjectFeedResponse, ProjectBoardResponse, ProjectGoalChangedItem, AnswerGoalChangeRequest, ProjectHandoverItem, ProjectHandoverSummaryItem, ProjectTransferDeclinedItem,
   PersonRef, HandoverSection, ProjectTransfer, CreateProjectTransferRequest, UpdateProjectTransferRequest, HandoverSecretFinding, HandoverSecretsResponse,
   NotificationSettings, Budget, TaskBudgetResponse, ClaimedSessionStart, SessionAttachment, SessionAttachmentUploadResponse,
 };
@@ -162,6 +163,15 @@ export const workHomePaths: OpenAPIV3.Document["paths"] = {
       summary: "项目对话里按时间插的行：挂上新目标（分隔线）、卡验收过了（带合回结果）、受阻、约定都达到、合回后推翻开了返工卡，从旧到新",
       parameters: path("projectId"),
       responses: { "200": json("项目动态", "ProjectFeedResponse"), ...errors(401, 403, 404) },
+    },
+  },
+  "/api/me/projects/{projectId}/goal-changes/{id}": {
+    post: {
+      operationId: "answerGoalChange",
+      summary: "答月中 Task 改了或取消了的选项框（16.4）：停掉或留着和它有关的子会话",
+      parameters: path("projectId", "id"),
+      requestBody: body("AnswerGoalChangeRequest"),
+      responses: { "200": json("答完的那一行", "ProjectGoalChangedItem"), ...errors(400, 401, 403, 404, 409) },
     },
   },
   "/api/me/projects/{projectId}/board": {

@@ -1,5 +1,6 @@
 import { Type, type Static } from "@sinclair/typebox";
 import { MissionCardField } from "./missionCards.js";
+import { NullableInteger } from "./nullable.js";
 
 /** 批注独立于群聊、私聊和修改建议；选区坐标只是渲染后纯文字中的定位提示。 */
 const Anchor = {
@@ -34,7 +35,7 @@ export const MissionCardAnnotationView = Type.Object({
   options: Type.Array(Type.String(), { maxItems: 4 }),
   answer: Type.Union([Type.String(), Type.Null()]),
   note: Type.Union([Type.String(), Type.Null()]),
-  appliedVersion: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
+  appliedVersion: NullableInteger({ minimum: 1 }),
   canAnswer: Type.Boolean(),
   canRetry: Type.Boolean(),
   canResolve: Type.Boolean(),

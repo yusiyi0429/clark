@@ -2,6 +2,7 @@ import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import { LocalQuotaSync } from "./localRunner.js";
 import { RoleRef } from "./roles.js";
 import { CardGit, CardStage } from "./taskCardView.js";
+import { NullableInteger, NullableNumber } from "./nullable.js";
 
 /**
  * worker 列表（V2 设计第 20 节）：不做看板，以「资源」和「worker」呈现。worker 是岗位这一趟派出去的执行（一张带岗位的卡、一个带岗位的专题，
@@ -45,8 +46,8 @@ export const WorkerResource = Type.Object({
 export const WorkerCost = Type.Object({
   inputTokens: Type.Integer({ minimum: 0 }),
   outputTokens: Type.Integer({ minimum: 0 }),
-  costUsd: Nullable(Type.Number({ minimum: 0 })),
-  costCny: Nullable(Type.Number({ minimum: 0 })),
+  costUsd: NullableNumber({ minimum: 0 }),
+  costCny: NullableNumber({ minimum: 0 }),
 }, strict);
 
 /**
@@ -77,14 +78,14 @@ export const WorkerItem = Type.Object({
   step: Nullable(Type.Object({ n: Type.Integer({ minimum: 1 }), total: Type.Integer({ minimum: 1 }), label: Type.String() }, strict)),
   resource: Nullable(WorkerResource),
   startedAt: Nullable(Instant),
-  elapsedSeconds: Nullable(Type.Integer({ minimum: 0 })),
+  elapsedSeconds: NullableInteger({ minimum: 0 }),
   finishedAt: Nullable(Instant),
   cost: Nullable(WorkerCost),
   stage: CardStage,
   wait: Nullable(WorkerMark),
   needsYou: Type.Boolean(),
   queueReason: Nullable(WorkerQueueReason),
-  queuePosition: Nullable(Type.Integer({ minimum: 1 })),
+  queuePosition: NullableInteger({ minimum: 1 }),
   git: Nullable(CardGit),
   waitingFor: Type.Array(Type.Object({ cardId: Type.String({ minLength: 1 }), title: Type.String() }, strict)),
   holdUntil: Nullable(Instant),
@@ -105,7 +106,7 @@ export const WorkerResources = Type.Object({
     online: Type.Boolean(),
   }, strict)),
   running: Type.Integer({ minimum: 0 }),
-  cap: Nullable(Type.Integer({ minimum: 1 })),
+  cap: NullableInteger({ minimum: 1 }),
   cost: Type.Object({ today: WorkerCost, month: WorkerCost }, strict),
   quota: Type.Array(Type.Object({ deviceId: Type.String({ format: "uuid" }), deviceName: Type.String(), ...LocalQuotaSync.properties }, strict)),
 }, strict);

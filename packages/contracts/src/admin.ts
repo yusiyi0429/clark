@@ -1,4 +1,5 @@
 import { Type, type Static } from "@sinclair/typebox";
+import { NullableInteger } from "./nullable.js";
 
 /**
  * 管理员视图（已定设计第 10 节）：只给 TIANSHU_ADMIN_PERSON_IDS 里的人，其他人一律 404。
@@ -100,7 +101,7 @@ export const AdminIssue = Type.Object({
   name: Type.String(),
   target: Type.Union([Type.String(), Type.Null()]),
   code: Type.Union([Type.String(), Type.Null()]),
-  attempts: Type.Union([Type.Integer({ minimum: 0 }), Type.Null()]),
+  attempts: NullableInteger({ minimum: 0 }),
   at: Instant,
   retryable: Type.Boolean(),
   acknowledged: Type.Union([AdminMark, Type.Null()]),

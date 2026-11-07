@@ -1,4 +1,5 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
+import { NullableInteger, NullableNumber } from "./nullable.js";
 
 const strict = { additionalProperties: false } as const;
 const Nullable = <T extends TSchema>(schema: T) => Type.Union([schema, Type.Null()]);
@@ -16,8 +17,8 @@ export const BudgetMode = Type.Union([Type.Literal("auto"), Type.Literal("set"),
  */
 export const Budget = Type.Object({
   mode: BudgetMode,
-  hours: Nullable(Type.Number({ exclusiveMinimum: 0, maximum: 1000 })),
-  weeklyPercent: Nullable(Type.Integer({ minimum: 1, maximum: 100 })),
+  hours: NullableNumber({ exclusiveMinimum: 0, maximum: 1000 }),
+  weeklyPercent: NullableInteger({ minimum: 1, maximum: 100 }),
   money: Nullable(Type.Object({ amount: Type.Number({ exclusiveMinimum: 0, maximum: 1_000_000 }), currency: Type.Union([Type.Literal("CNY"), Type.Literal("USD")]) }, strict)),
 }, strict);
 
