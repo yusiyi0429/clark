@@ -14,6 +14,7 @@ const hooks = vi.hoisted(() => ({ values: [] as unknown[], index: 0, refs: [] as
 }));
 vi.mock("react", async (original) => ({ ...(await original<typeof import("react")>()), useState: hooks.useState, useRef: hooks.useRef }));
 
+import { HeroButton } from "@/components/HeroButton";
 import { DeliverableComposer } from "./DeliverableComposer";
 
 type Node = { type?: unknown; props?: Record<string, unknown> };
@@ -31,7 +32,8 @@ const render = (startWithStatement = false) => {
   hooks.index = 0; hooks.refIndex = 0;
   return nodes(DeliverableComposer({ previous: null, startWithStatement, onSubmit: async () => null, onCancel: null }) as ReactElement);
 };
-const press = (tree: Node[], label: string) => (tree.find((node) => node.type === "button" && text(node) === label)!.props!.onClick as () => void)();
+/** 按钮是 HeroButton（新首页设计 5.2 的四种按钮），按下是 onPress。 */
+const press = (tree: Node[], label: string) => (tree.find((node) => node.type === HeroButton && text(node) === label)!.props!.onPress as () => void)();
 const statement = (tree: Node[]) => tree.find((node) => node.type === "textarea");
 
 beforeEach(() => { hooks.values = []; hooks.refs = []; });

@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * 验收标准逐条：评完是 ✓ 达到、◐ 部分、✗ 未达到加一句理由，没评或评审中是空心圈。
+ * 验收标准逐条：评完是勾（达到）、叉（未达到，--danger）、行尾中性 chip「部分达到」，加一句理由；没评或评审中结论位空着。
  * 没达到的默认展开「依据 / 怎么补」，达到的点一下再看依据。没达到的条目旁边「我不同意」：写一句为什么，带着这句话重评这一条；
  * 重评以后还是没达到，这一条标「本人有异议」（有异议的条目不能交付）。
  * 约定与对表（Agreement.tsx）挂在这里：标题行右边的 tools（标准改过、对表），列表上面的 lead（结论），每条下面的 below（约定、对表结果），
@@ -10,12 +10,15 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Check, ChevronRight, X } from "lucide-react";
 import type { TReviewCriterion } from "@warmap/contracts";
+import { HeroButton } from "@/components/HeroButton";
 import d from "@/styles/task-deliverable.module.css";
 
+const ICON = { size: 16, strokeWidth: 1.8 } as const;
+
+/** 行首 16 宽的结论位（新首页设计 5.4.7）：达到 Check（--ink-muted）、未达到 X（--danger）；部分达到和没结论时空着（部分达到的 chip 在行尾）。 */
 function Mark({ verdict }: { verdict: TReviewCriterion["verdict"] | null }) {
-  if (verdict === "met") return <span className={d.mark} data-verdict="met"><Check size={13} strokeWidth={2.6} aria-label="达到" /></span>;
-  if (verdict === "unmet") return <span className={d.mark} data-verdict="unmet"><X size={13} strokeWidth={2.6} aria-label="未达到" /></span>;
-  if (verdict === "partial") return <span className={d.mark} data-verdict="partial" aria-label="部分达到" />;
+  if (verdict === "met") return <span className={d.mark} data-verdict="met"><Check {...ICON} aria-label="达到" /></span>;
+  if (verdict === "unmet") return <span className={d.mark} data-verdict="unmet"><X {...ICON} aria-label="未达到" /></span>;
   return <span className={d.mark} aria-hidden="true" />;
 }
 
@@ -34,8 +37,8 @@ function Dissent({ onSend, onCancel }: { onSend: (reason: string) => Promise<str
     <form className={d.dissent} onSubmit={(event) => void submit(event)}>
       <input value={reason} maxLength={200} autoFocus disabled={busy} placeholder="说一句为什么" aria-label="不同意的理由"
         onChange={(event) => setReason(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") onCancel(); }} />
-      <button type="submit" className={d.plain} disabled={busy || !reason.trim()}>重评</button>
-      <button type="button" className={d.quiet} onClick={onCancel} disabled={busy}>取消</button>
+      <HeroButton type="submit" variant="tertiary" size="sm" isDisabled={busy || !reason.trim()}>重评</HeroButton>
+      <HeroButton variant="ghost" size="sm" onPress={onCancel} isDisabled={busy}>取消</HeroButton>
       {error ? <p className={d.error} role="alert">{error}</p> : null}
     </form>
   );
@@ -69,9 +72,10 @@ export function CriteriaList({ title, texts, results, canDissent, onDissent, too
           const expanded = open[row.index] ?? (row.verdict === "partial" || row.verdict === "unmet");
           const details = Boolean(row.evidence || row.fix);
           const pending = row.dissent?.upheld === null;
+          const verdict = results ? row.verdict : markOf?.(row.index) ?? null;
           return (
             <li key={row.index} className={d.criterion} data-verdict={row.verdict ?? undefined}>
-              <Mark verdict={results ? row.verdict : markOf?.(row.index) ?? null} />
+              <Mark verdict={verdict} />
               <div className={d.criterionBody}>
                 <p className={d.criterionText}>{row.text}</p>
                 {below?.(row.index)}
@@ -96,14 +100,15 @@ export function CriteriaList({ title, texts, results, canDissent, onDissent, too
                 ) : null}
               </div>
               <div className={d.criterionTools}>
+                {verdict === "partial" ? <span className={d.partial} data-verdict="partial">部分达到</span> : null}
                 {details ? (
-                  <button type="button" className={d.toggle} aria-expanded={expanded} aria-label={expanded ? "收起依据" : "看依据"}
-                    onClick={() => setOpen((current) => ({ ...current, [row.index]: !expanded }))}>
-                    <ChevronRight size={15} aria-hidden="true" />
-                  </button>
+                  <HeroButton variant="ghost" size="sm" isIconOnly className={d.toggle} aria-expanded={expanded} aria-label={expanded ? "收起依据" : "看依据"} title={expanded ? "收起" : "展开"}
+                    onPress={() => setOpen((current) => ({ ...current, [row.index]: !expanded }))}>
+                    <ChevronRight {...ICON} aria-hidden="true" />
+                  </HeroButton>
                 ) : null}
                 {canDissent && (row.verdict === "partial" || row.verdict === "unmet") && !row.dissent && dissenting !== row.index ? (
-                  <button type="button" className={d.quiet} onClick={() => setDissenting(row.index)}>我不同意</button>
+                  <HeroButton variant="ghost" size="sm" onPress={() => setDissenting(row.index)}>我不同意</HeroButton>
                 ) : null}
               </div>
             </li>

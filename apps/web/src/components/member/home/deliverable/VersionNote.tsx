@@ -6,6 +6,7 @@
  */
 import { useEffect, useState } from "react";
 import type { TDeliverableNotePatch, TDeliverableVersion } from "@warmap/contracts";
+import { HeroButton } from "@/components/HeroButton";
 import { BuddyMark } from "@/components/buddy/BuddyMark";
 import { useBuddy } from "@/components/buddy/useBuddy";
 import { since } from "./deliverableFormat";
@@ -68,8 +69,8 @@ export function VersionNote({ version, canEdit, onPatch, onWithdraw }: {
               <label className={d.noteField}><span>为什么变了</span><textarea value={draft.why} maxLength={300} rows={2} disabled={busy} onChange={(event) => setDraft({ ...draft, why: event.target.value })} /></label>
               <label className={d.noteField}><span>经验</span><textarea value={draft.lesson} maxLength={200} rows={2} disabled={busy} onChange={(event) => setDraft({ ...draft, lesson: event.target.value })} /></label>
               <div className={d.noteTools}>
-                <button type="button" className={d.quiet} disabled={busy} onClick={() => setDraft(null)}>取消</button>
-                <button type="button" className={d.plain} disabled={busy || !draft.achieved.trim()} onClick={() => void save()}>保存</button>
+                <HeroButton variant="ghost" size="sm" isDisabled={busy} onPress={() => setDraft(null)}>取消</HeroButton>
+                <HeroButton variant="tertiary" size="sm" isDisabled={busy || !draft.achieved.trim()} onPress={() => void save()}>保存</HeroButton>
               </div>
             </div>
           ) : (
@@ -80,9 +81,9 @@ export function VersionNote({ version, canEdit, onPatch, onWithdraw }: {
               {note.lesson ? <p>经验：{note.lesson}</p> : null}
               {canEdit ? (
                 <div className={d.noteTools}>
-                  <button type="button" className={d.quiet} disabled={busy}
-                    onClick={() => setDraft({ achieved: note.achieved ?? "", gain: note.gain ?? "", why: note.why ?? "", lesson: note.lesson ?? "" })}>改一改</button>
-                  <button type="button" className={d.quiet} disabled={busy} onClick={() => void run(() => onPatch({ dismissed: true }))}>不要这段</button>
+                  <HeroButton variant="ghost" size="sm" isDisabled={busy}
+                    onPress={() => setDraft({ achieved: note.achieved ?? "", gain: note.gain ?? "", why: note.why ?? "", lesson: note.lesson ?? "" })}>改一改</HeroButton>
+                  <HeroButton variant="ghost" size="sm" isDisabled={busy} onPress={() => void run(() => onPatch({ dismissed: true }))}>不要这段</HeroButton>
                 </div>
               ) : null}
             </div>
@@ -91,7 +92,7 @@ export function VersionNote({ version, canEdit, onPatch, onWithdraw }: {
       ) : null}
       <p className={d.delivered}>
         <span>已交付 · {since(version.deliveredAt, now)}</span>
-        {canEdit ? <button type="button" className={d.quiet} disabled={busy} onClick={() => void run(onWithdraw)}>撤回</button> : null}
+        {canEdit ? <HeroButton variant="ghost" size="sm" isDisabled={busy} onPress={() => void run(onWithdraw)}>撤回</HeroButton> : null}
       </p>
       {error ? <p className={d.error} role="alert">{error}</p> : null}
     </section>

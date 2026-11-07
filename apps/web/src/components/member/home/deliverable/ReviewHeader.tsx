@@ -1,13 +1,19 @@
 "use client";
 
 /**
- * 交付物面板最上面的结论：评审中是几步走到哪、已用和预计；没评完给「重新评审」；评完是圆环（几条达到）、一句结论、
+ * 交付物面板最上面的结论：评审中是几步走到哪（勾、转圈、空心圈）、已用和预计；没评完给「重新评审」；评完是圆环（墨色，几条达到）、一句结论、
  * 一两句概况、按哪套标准评 · 读了几份 · 用时，以及和上一版比多达到了什么。
  */
 import { useEffect, useState } from "react";
+import { Check, Circle, LoaderCircle } from "lucide-react";
 import type { TDeliverableVersion, TReviewBasis } from "@warmap/contracts";
+import { HeroButton } from "@/components/HeroButton";
 import { about, clock, duration, reviewSteps } from "./deliverableFormat";
 import d from "@/styles/task-deliverable.module.css";
+
+const ICON = { size: 16, strokeWidth: 1.8 } as const;
+/** 几步的状态图标（和新首页的树、事件行同一套）：做完是勾、正在做是转圈、没到是空心圈。 */
+const STEP_ICON = { done: Check, now: LoaderCircle, todo: Circle } as const;
 
 function useNow(active: boolean) {
   const [now, setNow] = useState(() => Date.now());
@@ -31,6 +37,11 @@ function Ring({ met, total, ready }: { met: number; total: number; ready: boolea
   );
 }
 
+function Step({ state, label }: { state: keyof typeof STEP_ICON; label: string }) {
+  const Icon = STEP_ICON[state];
+  return <li data-state={state}><Icon {...ICON} aria-hidden="true" />{label}</li>;
+}
+
 export function ReviewHeader({ version, basis, criteriaCount, canEdit, onRetry }: {
   version: TDeliverableVersion;
   basis: TReviewBasis;
@@ -50,7 +61,7 @@ export function ReviewHeader({ version, basis, criteriaCount, canEdit, onRetry }
       <div className={d.reviewing} role="status" aria-live="polite">
         <ol className={d.steps}>
           {steps.map((label, index) => (
-            <li key={label} data-state={index + 1 < current ? "done" : index + 1 === current ? "now" : undefined}><i aria-hidden="true" />{label}</li>
+            <Step key={label} state={index + 1 < current ? "done" : index + 1 === current ? "now" : "todo"} label={label} />
           ))}
         </ol>
         <p className={d.elapsed}>已用 {clock((now - started) / 1000)} / {about(review.expectedSeconds)}</p>
@@ -61,7 +72,7 @@ export function ReviewHeader({ version, basis, criteriaCount, canEdit, onRetry }
     return (
       <div className={d.failed} role="alert">
         <span>{review.error ?? "评审没做完"}</span>
-        {canEdit ? <button type="button" className={d.plain} onClick={onRetry}>重新评审</button> : null}
+        {canEdit ? <HeroButton variant="tertiary" size="sm" onPress={onRetry}>重新评审</HeroButton> : null}
       </div>
     );
   }
