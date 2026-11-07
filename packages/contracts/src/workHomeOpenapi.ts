@@ -1,7 +1,7 @@
 import type { JsonSchema, OpenAPIV3 } from "./types/JsonSchemaTypes.js";
 import {
   BackgroundItem, BackgroundResponse, ClaimSessionStartsRequest, ClaimSessionStartsResponse, HomeMission, HomeTask, HomeTaskSummary, RouteRequest, RouteResponse,
-  SessionStartView, SubSession, TaskPipelineResponse, WaitingItem, WaitingTarget, WorkHomeResponse, CardMerge, TaskFeedItem, TaskFeedResponse, HomeItem,
+  SessionStartView, SubSession, TaskPipelineResponse, WaitingItem, WaitingTarget, WorkHomeResponse, CardMerge, TaskFeedItem, TaskFeedResponse, HomeItem, ReleaseSessionStartRequest,
 } from "./workHome.js";
 
 /**
@@ -12,7 +12,7 @@ import {
 export const workHomeSchemas: Record<string, JsonSchema> = {
   SubSession, HomeTaskSummary, HomeTask, HomeMission, WaitingTarget, WaitingItem, WorkHomeResponse,
   BackgroundItem, BackgroundResponse, TaskPipelineResponse, RouteRequest, RouteResponse,
-  SessionStartView, ClaimSessionStartsRequest, ClaimSessionStartsResponse, CardMerge, TaskFeedItem, TaskFeedResponse, HomeItem,
+  SessionStartView, ClaimSessionStartsRequest, ClaimSessionStartsResponse, CardMerge, TaskFeedItem, TaskFeedResponse, HomeItem, ReleaseSessionStartRequest,
 };
 
 const error = { description: "ApiError 统一错误", content: { "application/json": { schema: { $ref: "#/components/schemas/ApiError" } } } };
@@ -72,8 +72,9 @@ export const workHomePaths: OpenAPIV3.Document["paths"] = {
   "/api/me/session-starts/{id}/release": {
     post: {
       operationId: "releaseSessionStart",
-      summary: "本机没开起来：把认领的那条放回去，下次再认领",
+      summary: "本机没开起来：把这台电脑认领的那条放回去，下次再认领（别处已经重新认领的不动，回 404）",
       parameters: path("id"),
+      requestBody: body("ReleaseSessionStartRequest"),
       responses: { "204": { description: "放回去了" }, ...errors(401, 403, 404) },
     },
   },

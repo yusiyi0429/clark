@@ -20086,7 +20086,7 @@
     "/api/me/session-starts/{id}/release": {
       "post": {
         "operationId": "releaseSessionStart",
-        "summary": "本机没开起来：把认领的那条放回去，下次再认领",
+        "summary": "本机没开起来：把这台电脑认领的那条放回去，下次再认领（别处已经重新认领的不动，回 404）",
         "parameters": [
           {
             "name": "id",
@@ -20097,6 +20097,16 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReleaseSessionStartRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "204": {
             "description": "放回去了"
@@ -108961,6 +108971,19 @@
           },
           "updatedAt": {
             "format": "date-time",
+            "type": "string"
+          }
+        }
+      },
+      "ReleaseSessionStartRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "deviceId"
+        ],
+        "properties": {
+          "deviceId": {
+            "format": "uuid",
             "type": "string"
           }
         }

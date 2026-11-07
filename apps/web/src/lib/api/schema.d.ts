@@ -4899,7 +4899,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 本机没开起来：把认领的那条放回去，下次再认领 */
+        /** 本机没开起来：把这台电脑认领的那条放回去，下次再认领（别处已经重新认领的不动，回 404） */
         post: operations["releaseSessionStart"];
         delete?: never;
         options?: never;
@@ -17727,6 +17727,10 @@ export interface components {
             awaitingAcceptance: boolean;
             /** Format: date-time */
             updatedAt: string;
+        };
+        ReleaseSessionStartRequest: {
+            /** Format: uuid */
+            deviceId: string;
         };
     };
     responses: never;
@@ -34439,7 +34443,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReleaseSessionStartRequest"];
+            };
+        };
         responses: {
             /** @description 放回去了 */
             204: {
