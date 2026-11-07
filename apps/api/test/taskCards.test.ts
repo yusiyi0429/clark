@@ -43,6 +43,9 @@ describe("执行看板：卡的投影和看板接口", { timeout: 30_000 }, () =
       await status(f, ids.returned, "returned");
       await run(f, ids.approval, "waiting_permission", 1);
       await run(f, ids.reply, "idle", 1);
+      // 执行方在问本人（本机 idle 带 question）才是等你回复；不带的 idle 是一轮做完停下（已暂停，见新首页的测试）。
+      await f.t.sql("UPDATE local_runs SET ask=$2::jsonb WHERE task_id=$1", [ids.reply, JSON.stringify({ kind: "question", request: { requestId: "q-1",
+        questions: [{ question: "先做哪一页？", header: "顺序", options: [], multiSelect: false }], askedAt: "2026-11-06T01:00:00.000Z" } })]);
       await run(f, ids.paused, "exited", 1);
       await handback(f, ids.review, 1, { status: "queued" });
       await handback(f, ids.failedOnce, 1, { outcome: "fail", verdicts: ["met", "partial"] });

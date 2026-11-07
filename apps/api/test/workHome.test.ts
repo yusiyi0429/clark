@@ -7,6 +7,13 @@ import { BOARD_NOW, BOARD_TASKS, boardFixture, THIRD, type BoardFixture } from "
 /** 新首页（契约 workHome.ts）：左栏的树、等你、右栏的后台任务。本机那条路（云端拆卡、验收关着）。 */
 
 const status = (state: string, title: string) => ["status", { status: state, title, agent: "claude-code", modelLabel: "订阅 · Sonnet" }] as [string, unknown];
+/** 执行方在问本人（本机 idle 带 question）、在等批准（waiting_permission 带 permission）；不带提问的 idle 是一轮做完停下了（新首页 9.6）。 */
+const QUESTION = { requestId: "q-1", questions: [{ question: "先做哪一页？", header: "顺序", options: [{ label: "登录页", description: "" }, { label: "首页", description: "" }],
+  multiSelect: false }], askedAt: "2026-11-06T01:00:00.000Z" };
+const PERMISSION = { requestId: "p-1", toolName: "Bash", title: "运行 pnpm test", outsidePaths: [] };
+const asking = (title: string) => ["status", { status: "idle", title, agent: "claude-code", modelLabel: "订阅 · Sonnet", question: QUESTION }] as [string, unknown];
+const approving = (title: string) => ["status", { status: "waiting_permission", title, agent: "claude-code", modelLabel: "订阅 · Sonnet", permission: PERMISSION }] as
+  [string, unknown];
 type Sub = { id: string; kind: string; title: string; state: string; waiting: string | null; queueReason: string | null; autoStart: boolean; sessionId: string | null;
   deviceId: string | null; role: { id: string } | null };
 
@@ -61,7 +68,7 @@ describe("新首页", { timeout: 30_000 }, () => {
       await laptop.send({ kind: "card", cardId: ids["等前面的卡"] }, [["status", { status: "queued", title: "等前面的卡", agent: "claude-code", modelLabel: "订阅 · Sonnet",
         waitingFor: [ids["等空位"]] }]]);
       const approval = await laptop.send({ kind: "card", cardId: ids["等批准"] }, [status("waiting_permission", "等批准")]);
-      await laptop.send({ kind: "card", cardId: ids["等回复"] }, [status("idle", "等回复")]);
+      await laptop.send({ kind: "card", cardId: ids["等回复"] }, [asking("等回复")]);
       await laptop.send({ kind: "card", cardId: ids["跑着"] }, [status("running", "跑着")]);
       await failedTwice(f, ids["受阻"]);
       await laptop.handBack(ids["没过"]);
@@ -124,7 +131,7 @@ describe("新首页", { timeout: 30_000 }, () => {
       const laptop = await f.local();
       const approval = await laptop.send({ kind: "card", cardId: ids["等批准"] }, [status("waiting_permission", "等批准")]);
       await failedTwice(f, ids["受阻"]);
-      const planner = await laptop.send({ kind: "plan", taskId: "task-open" } as never, [status("idle", "拆卡")]);
+      const planner = await laptop.send({ kind: "plan", taskId: "task-open" } as never, [asking("拆卡")]);
       await laptop.handBack(ids["在验的卡"]);
       const handbackKey = (await f.t.sql("SELECT client_id FROM card_handbacks WHERE task_id=$1", [ids["在验的卡"]]))[0].client_id as string;
       const verifier = await laptop.send({ kind: "verify", cardId: ids["在验的卡"], handbackKey } as never, [status("waiting_permission", "验收：在验的卡")]);
@@ -158,11 +165,12 @@ describe("新首页", { timeout: 30_000 }, () => {
       const body = await home(f);
       const byId = new Map(body.waiting.map((item: { id: string }) => [item.id, item]));
       // 本机那几种（批准、回复）在那台电脑上就地答，带设备名；没截止、不是别人请你、不是月份。
-      const local = { answer: "inline_local", deviceName: "我的电脑", dueAt: null, person: null, month: null };
+      const local = { answer: "inline_local", deviceName: "我的电脑", dueAt: null, person: null, month: null, question: null, permission: null };
       expect(byId.get(`approval:card:${ids["等批准"]}`)).toEqual({ id: `approval:card:${ids["等批准"]}`, kind: "approval", title: "等你批准", source: "等批准 · 对话质量达标",
         at: "2026-11-06T01:10:00.000Z", open: { kind: "card", id: ids["等批准"] }, taskId: "task-open", sessionId: approval, deviceId: laptop.device, ...local });
-      expect(byId.get(`question:plan:${planner}`)).toEqual({ id: `question:plan:${planner}`, kind: "question", title: "等你回复", source: "拆卡 · 对话质量达标",
-        at: "2026-11-06T01:20:00.000Z", open: { kind: "task", id: "task-open" }, taskId: "task-open", sessionId: planner, deviceId: laptop.device, ...local });
+      // 在问本人：标题是第一个问题的原话，带原样的提问（就地答）。
+      expect(byId.get(`question:plan:${planner}`)).toEqual({ id: `question:plan:${planner}`, kind: "question", title: "先做哪一页？", source: "拆卡 · 对话质量达标",
+        at: "2026-11-06T01:20:00.000Z", open: { kind: "task", id: "task-open" }, taskId: "task-open", sessionId: planner, deviceId: laptop.device, ...local, question: QUESTION });
       expect(byId.get(`approval:verify:${verifier}`)).toMatchObject({ kind: "approval", source: "验收 · 在验的卡", open: { kind: "card", id: ids["在验的卡"] },
         taskId: "task-open", sessionId: verifier, answer: "inline_local" });
       expect(byId.get(`verdict:card:${ids["受阻"]}`)).toMatchObject({ kind: "verdict", title: "验收两次没过", open: { kind: "card", id: ids["受阻"] }, taskId: "task-open",
@@ -362,7 +370,7 @@ describe("新首页", { timeout: 30_000 }, () => {
       expect(sub("没报合回")).toMatchObject({ state: "done", waiting: null, merge: null });
       expect(body.waiting.find((item: { id: string }) => item.id === `merge:card:${ids["没合回"]}`)).toEqual({ id: `merge:card:${ids["没合回"]}`, kind: "merge",
         title: "没能自动合回", source: "没合回 · 对话质量达标", at: "2026-11-06T01:45:00.000Z", open: { kind: "card", id: ids["没合回"] }, taskId: "task-open",
-        sessionId: runs["没合回"], deviceId: laptop.device, deviceName: "我的电脑", dueAt: null, answer: "inline_local", person: null, month: null });
+        sessionId: runs["没合回"], deviceId: laptop.device, deviceName: "我的电脑", dueAt: null, answer: "inline_local", person: null, month: null, question: null, permission: null });
       expect(body.waiting.filter((item: { kind: string }) => item.kind === "merge")).toHaveLength(1);
       // 今天验收通过的 3 件（等你合的也算验收过了），昨天的不算；等你里归这件 Task 的 1 条。
       expect(task.summary).toMatchObject({ done: 3, waiting: 1, doneToday: 3, needsYou: 1 });
@@ -405,6 +413,38 @@ describe("新首页", { timeout: 30_000 }, () => {
       const merges = body.waiting.filter((item: { kind: string }) => item.kind === "merge");
       expect(merges.map((item: { id: string; taskId: string | null; deviceId: string }) => [item.id, item.taskId, item.deviceId]).sort())
         .toEqual([[`merge:card:${ids["不挂 Task·没合回"]}`, null, laptop.device], [`merge:card:${ids["了结的 Task·没合回"]}`, null, laptop.device]].sort());
+    } finally { await f.close(); }
+  });
+
+  it("一轮做完停下（idle 不带提问）：卡和专题都是已停下（waiting / null），不进等你；真在问、在等批准才进，标题用原话，带提问、要批准的那一步", async () => {
+    const f = await boardFixture({}, { boardCloudAgents: false });
+    try {
+      const { ids } = await withRoleCards(f, ["做完一轮", "在问", "要批准"]);
+      const laptop = await f.local();
+      await laptop.send({ kind: "card", cardId: ids["做完一轮"] }, [status("running", "做完一轮"), status("idle", "做完一轮")]);
+      const asked = await laptop.send({ kind: "card", cardId: ids["在问"] }, [asking("在问")]);
+      await laptop.send({ kind: "card", cardId: ids["要批准"] }, [approving("要批准")]);
+      const topic = randomUUID();
+      await f.t.sql("INSERT INTO research_topics(id,owner_id,title,plan_task_id,mission_id) VALUES($1,$2,'做完一轮的专题','task-open','mine')", [topic, TEST_MEMBER.personId]);
+      await laptop.send({ kind: "topic", topicId: topic }, [status("idle", "做完一轮的专题")]);
+      // 答完了（本机报的下一条 idle 不带提问）：那一行收走。
+      const body = await home(f);
+      const sub = (id: string) => body.missions[0].tasks[0].subSessions.find((item: Sub) => item.id === id);
+      for (const id of [ids["做完一轮"], topic]) expect(sub(id)).toMatchObject({ state: "waiting", waiting: null });
+      expect(sub(ids["在问"])).toMatchObject({ state: "waiting", waiting: "question" });
+      expect(sub(ids["要批准"])).toMatchObject({ state: "waiting", waiting: "approval" });
+      expect(body.waiting.map((item: { kind: string; title: string; question: unknown; permission: unknown }) => [item.kind, item.title, item.question, item.permission]))
+        .toEqual([["approval", "运行 pnpm test", null, PERMISSION], ["question", "先做哪一页？", QUESTION, null]]);
+      expect(body.missions[0].tasks[0].summary).toMatchObject({ needsYou: 2 });
+      // 卡的标记（看板、卡详情）也一样：做完一轮是已暂停，在问是等你回复。
+      const cards = (await f.call("GET", "/api/plan-tasks/task-open/cards")).json().cards as { id: string; card: { wait: string | null } }[];
+      expect([ids["做完一轮"], ids["在问"]].map((id) => cards.find((item) => item.id === id)!.card.wait)).toEqual(["paused", "reply"]);
+      // 答完：本机在同一个会话里报下一条不带提问的 idle，那一行收走。
+      const answered = await f.t.app.inject({ method: "POST", url: "/api/local-runner/sync", headers: { authorization: `Bearer ${laptop.token}` }, payload: {
+        deviceId: laptop.device, runnerVersion: "0.1.0", slots: { max: 3, running: 1, queued: 0 }, items: [{ key: `${laptop.device}:${asked}:2`, sessionId: asked,
+          subject: { kind: "card", cardId: ids["在问"] }, occurredAt: "2026-11-06T01:05:00.000Z", type: "status", data: status("idle", "在问")[1] }] } });
+      expect(answered.json().rejected).toEqual([]);
+      expect((await home(f)).waiting.map((item: { kind: string }) => item.kind)).toEqual(["approval"]);
     } finally { await f.close(); }
   });
 

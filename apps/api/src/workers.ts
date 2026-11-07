@@ -1,7 +1,7 @@
 import type { TLocalQuotaSync, TLocalRunPlanProgress, TLocalSlots, TWorkerCost, TWorkerItem, TWorkerMark, TWorkerResources, TWorkersResponse } from "@warmap/contracts";
 import { ownMissions, planTaskMissions } from "./homePlan.js";
 import { HOLD_STATES } from "./cardProjection.js";
-import { latestRuns, RUN_SELECT, runBrief, type RunRow } from "./localDevices.js";
+import { askingQuestion, latestRuns, RUN_SELECT, runBrief, type RunRow } from "./localDevices.js";
 import { UUID_PATTERN, type Query } from "./meetingStore.js";
 import { companyPeriod } from "./monthlyPlans.js";
 import { readPlanTasks, type PlanTaskSource } from "./planTasks.js";
@@ -119,7 +119,7 @@ export async function listWorkers(deps: { q: Query; planTasks: PlanTaskSource; n
     const queueReason = holdUntil !== undefined ? "quota" as const : (ACTIVE.has(run.state) || hold !== undefined) && !online.has(run.device_id) ? "device_offline" as const
       : isQueued(run.state) ? "slot" as const : null;
     const wait: TWorkerMark | null = queueReason || hold !== undefined ? null
-      : run.state === "waiting_permission" ? "approval" : run.state === "idle" ? "reply" : ACTIVE.has(run.state) ? null : "paused";
+      : run.state === "waiting_permission" ? "approval" : run.state === "idle" ? askingQuestion(run) ? "reply" : "paused" : ACTIVE.has(run.state) ? null : "paused";
     return { group: queueReason ? "queued" as const : "running" as const, step: step(brief.plan),
       resource: { where: "local" as const, deviceId: brief.deviceId, deviceName: brief.deviceName, modelLabel: brief.modelLabel },
       startedAt: brief.startedAt, elapsedSeconds: elapsed(brief.startedAt), finishedAt: null,

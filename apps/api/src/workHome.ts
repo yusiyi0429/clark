@@ -4,7 +4,7 @@ import { ACTIVE_CONVERSATION_WHERE } from "./conversations.js";
 import { assembleWaiting, HELD } from "./homeWaiting.js";
 import { planTaskMissions, type MissionRow } from "./homePlan.js";
 import { failStreak, type HandbackRow } from "./cardProjection.js";
-import { latestRuns, type RunRow } from "./localDevices.js";
+import { askingQuestion, latestRuns, type RunAsk, type RunRow } from "./localDevices.js";
 import { UUID_PATTERN, type Query } from "./meetingStore.js";
 import { companyPeriod } from "./monthlyPlans.js";
 import { readPlanTasks, type PlanTask, type PlanTaskSource } from "./planTasks.js";
@@ -77,7 +77,9 @@ const cardMerge = (stored: StoredMerge): TCardMerge => ({ state: stored.merged ?
 
 /** 树和等你共用的子会话：外加挂的 Task、最近一次执行的时间、验收通过的时间（卡），以及交回那次执行在哪（等你合回用）。 */
 export type HomeSub = TSubSession & { planTaskId: string | null; runUpdatedAt: string | null; acceptedAt: string | null;
-  mergeRun: { sessionId: string | null; deviceId: string | null } | null };
+  mergeRun: { sessionId: string | null; deviceId: string | null } | null;
+  /** 最近一次执行在问本人的提问、在等批准的那一步（等你那一行用原话、就地答）。 */
+  ask: RunAsk | null };
 type MeetingPending = { meetings: TMyMeetingCard[]; confirms: TMyMeetingConfirm[] };
 
 export type WorkHomeDeps = {
@@ -140,6 +142,9 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
   /** 连续两次验收没过（受阻、等你拿主意）；卡的标记 blocked 还包括执行连续两次异常退出，那种首页算已暂停。 */
   const reviewBlocked = (cardId: string) => failStreak(handbacks.filter((row) => row.task_id === cardId)) >= 2;
 
+  const runIds = cards.flatMap((view) => view.card.run ? [view.card.run.id] : []);
+  const asks = new Map(runIds.length ? ((await q("SELECT id::text,ask FROM local_runs WHERE id=ANY($1::uuid[]) AND ask IS NOT NULL", [runIds])).rows as
+    { id: string; ask: RunAsk }[]).map((row) => [row.id, row.ask]) : []);
   const subs: HomeSub[] = [];
   for (const view of cards) {
     const { stage, wait, run, role } = view.card;
@@ -147,7 +152,8 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
     const merge = pass?.merge ? cardMerge(pass.merge) : null;
     const base = { id: view.id, kind: "card" as const, title: view.title, role, sessionId: run?.id ?? null, deviceId: run?.deviceId ?? null,
       autoStart: autoStart.has(view.id), updatedAt: latest(view.updatedAt, run?.updatedAt), planTaskId: view.planTaskId, runUpdatedAt: run?.updatedAt ?? null,
-      merge, acceptedAt: stage === "done" ? acceptedAt.get(view.id) ?? null : null, mergeRun: pass ? { sessionId: pass.run_id, deviceId: pass.device_id } : null };
+      merge, acceptedAt: stage === "done" ? acceptedAt.get(view.id) ?? null : null, mergeRun: pass ? { sessionId: pass.run_id, deviceId: pass.device_id } : null,
+      ask: run ? asks.get(run.id) ?? null : null };
     let state: TSubSessionState = "running", waiting: TSubSession["waiting"] = null, queueReason: TWorkerQueueReason | null = null;
     // 验收过了：合进去了（或不用合、本机没报）是完成；没能自动合回是等你合。
     if (stage === "done") [state, waiting] = merge?.state === "needs_merge" ? ["waiting", "merge"] : ["done", null];
@@ -180,15 +186,16 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
     const role = topic.role_id ? topicRoles.get(topic.role_id) : undefined;
     const base = { id: topic.id, kind: "topic" as const, title: topic.title, role: role ? roleRef(role) : null, sessionId: run?.id ?? null, deviceId: run?.device_id ?? null,
       autoStart: autoStart.has(topic.id), updatedAt: latest(topic.updated_at, run?.updated_at), planTaskId: topic.plan_task_id, runUpdatedAt: run?.updated_at.toISOString() ?? null,
-      merge: null, acceptedAt: null, mergeRun: null };
+      merge: null, acceptedAt: null, mergeRun: null, ask: run?.ask ?? null };
     if (!run) { subs.push({ ...base, state: "queued", waiting: null, queueReason: notStarted(topic.id), holdUntil: null }); continue; }
     const queueReason = queuedBy({ id: run.id, deviceId: run.device_id, state: run.state });
-    const [state, waiting] = queueReason ? ["queued" as const, null] : TOPIC_STATES[run.state];
+    // 一轮做完停下、没在问你：已停下（waiting / null），不进等你（9.6）。
+    const [state, waiting] = queueReason ? ["queued" as const, null] : run.state === "idle" && !askingQuestion(run) ? ["waiting" as const, null] : TOPIC_STATES[run.state];
     subs.push({ ...base, state, waiting, queueReason, holdUntil: holdUntil(queueReason, run.id) });
   }
 
   const order = (a: HomeSub, b: HomeSub) => STATE_ORDER.indexOf(a.state) - STATE_ORDER.indexOf(b.state) || b.updatedAt.localeCompare(a.updatedAt);
-  const view = ({ planTaskId: _task, runUpdatedAt: _at, acceptedAt: _accepted, mergeRun: _run, ...sub }: HomeSub): TSubSession => sub;
+  const view = ({ planTaskId: _task, runUpdatedAt: _at, acceptedAt: _accepted, mergeRun: _run, ask: _ask, ...sub }: HomeSub): TSubSession => sub;
   const onTree = (sub: HomeSub) => sub.planTaskId !== null && taskById.has(sub.planTaskId);
 
   // 规划员在拆：本机的规划员会话还没结束，或登记了拆卡还没开。

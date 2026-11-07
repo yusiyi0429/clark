@@ -10,6 +10,7 @@ import { DeliverableError } from "./taskDeliverables.js";
 import { awaitsQuota } from "./workers.js";
 import { shanghaiDate, shanghaiLabel } from "./workdays.js";
 import type { HomeSub, TreeTask, WorkHomeDeps } from "./workHome.js";
+import type { RunAsk } from "./localDevices.js";
 
 /**
  * 首页的「等你」（契约 WaitingItem，设计 9.6）：要本人拿主意、不拿就有事卡住的，才进来。
@@ -52,6 +53,14 @@ export function reviewWindow(now: Date): { period: string; closesAt: string } | 
   return { period: start.toISOString().slice(0, 7), closesAt: closesAt.toISOString() };
 }
 
+/** 等你那一行的原话和就地答要的东西：在问的用第一个问题的原话，等批准的用那一步给人看的那一行；老版本本机程序没报时退回泛称。 */
+function askFields(kind: "approval" | "question", ask: RunAsk | null): Pick<TWaitingItem, "title" | "question" | "permission"> {
+  if (kind === "question") return ask?.kind === "question" ? { title: ask.request.questions[0].question, question: ask.request, permission: null }
+    : { title: "等你回复", question: null, permission: null };
+  return ask?.kind === "permission" && ask.request.title ? { title: ask.request.title, question: null, permission: ask.request }
+    : { title: "等你批准", question: null, permission: ask?.kind === "permission" ? ask.request : null };
+}
+
 /**
  * 排序（设计 9.6）：先是卡住正在跑的活的（批准、回答、额度），再是有截止时间的，其余在后；
  * 每一组里截止早的在前（没有截止的在有截止的后面），再按 at 新的在前（没有 at 的最后）。
@@ -75,13 +84,13 @@ export async function assembleWaiting(input: WaitingInput): Promise<TWaitingItem
   const waiting: TWaitingItem[] = [];
   /** 没写的几样取默认：不属于 Task、没有本机会话、没有截止、不是别人请你、不是月份。设备名照 deviceId 取。 */
   const add = (item: Pick<TWaitingItem, "id" | "kind" | "title" | "source" | "at" | "open" | "answer"> & Partial<TWaitingItem>) => waiting.push({ taskId: null,
-    sessionId: null, deviceId: null, dueAt: null, person: null, month: null, ...item, deviceName: item.deviceId ? deviceNames.get(item.deviceId) ?? null : null });
+    sessionId: null, deviceId: null, dueAt: null, person: null, month: null, question: null, permission: null, ...item, deviceName: item.deviceId ? deviceNames.get(item.deviceId) ?? null : null });
 
   for (const sub of subs) {
     const taskId = treeTask(sub.planTaskId);
     const source = [sub.title, taskName(taskId)].filter(Boolean).join(" · ");
     if (sub.waiting === "approval" || sub.waiting === "question")
-      add({ id: `${sub.waiting}:${sub.kind}:${sub.id}`, kind: sub.waiting, title: sub.waiting === "approval" ? "等你批准" : "等你回复", source, at: sub.runUpdatedAt,
+      add({ id: `${sub.waiting}:${sub.kind}:${sub.id}`, kind: sub.waiting, ...askFields(sub.waiting, sub.ask), source, at: sub.runUpdatedAt,
         open: { kind: sub.kind, id: sub.id }, taskId, sessionId: sub.sessionId, deviceId: sub.deviceId, answer: "inline_local" });
     // 验收过了、没能自动合回：在交回那次执行的那台电脑上合。
     if (sub.waiting === "merge" && sub.merge)
@@ -95,14 +104,16 @@ export async function assembleWaiting(input: WaitingInput): Promise<TWaitingItem
       at: view.card.handback?.createdAt ?? null, open: { kind: "card", id: view.id }, taskId, answer: "open" });
   }
   // 规划员、验收员在等批准、等回复（停着等额度恢复的不算）。
-  const helpers = (await q(`SELECT r.id::text,r.kind,r.state,r.device_id::text,r.plan_task_id,r.task_id::text,r.title,r.updated_at,t.title AS card_title,t.plan_task_id AS card_task
-    FROM local_runs r LEFT JOIN tasks t ON t.id=r.task_id WHERE r.owner_id=$1 AND r.kind IN ('plan','verify') AND r.state IN ('waiting_permission','idle') AND NOT ${HELD}`,
+  // 只算真在问（idle 带提问）和在等批准的；一轮做完停下的不算（9.6）。
+  const helpers = (await q(`SELECT r.id::text,r.kind,r.state,r.device_id::text,r.plan_task_id,r.task_id::text,r.title,r.updated_at,r.ask,t.title AS card_title,t.plan_task_id AS card_task
+    FROM local_runs r LEFT JOIN tasks t ON t.id=r.task_id WHERE r.owner_id=$1 AND r.kind IN ('plan','verify')
+      AND (r.state='waiting_permission' OR r.state='idle' AND r.ask->>'kind'='question') AND NOT ${HELD}`,
   [ownerId])).rows as { id: string; kind: "plan" | "verify"; state: string; device_id: string; plan_task_id: string | null; task_id: string | null; title: string | null;
-    updated_at: Date; card_title: string | null; card_task: string | null }[];
+    updated_at: Date; ask: RunAsk | null; card_title: string | null; card_task: string | null }[];
   for (const run of helpers) {
     const kind = run.state === "waiting_permission" ? "approval" as const : "question" as const;
     const plan = run.kind === "plan";
-    add({ id: `${kind}:${run.kind}:${run.id}`, kind, title: kind === "approval" ? "等你批准" : "等你回复",
+    add({ id: `${kind}:${run.kind}:${run.id}`, kind, ...askFields(kind, run.ask),
       source: plan ? `拆卡 · ${taskName(run.plan_task_id) ?? run.title ?? run.plan_task_id}` : `验收 · ${run.card_title ?? ""}`, at: run.updated_at.toISOString(),
       open: plan ? { kind: "task", id: run.plan_task_id! } : { kind: "card", id: run.task_id! }, taskId: treeTask(plan ? run.plan_task_id : run.card_task),
       sessionId: run.id, deviceId: run.device_id, answer: "inline_local" });

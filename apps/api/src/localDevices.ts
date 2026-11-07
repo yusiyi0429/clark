@@ -1,5 +1,5 @@
 import type { Pool } from "pg";
-import type { TCreateLocalDeviceRequest, TCreateLocalDeviceResponse, TLocalDeviceView, TLocalHold, TLocalOutputView, TLocalPlanEntry, TLocalRunActivity,
+import type { TLocalPermissionBrief, TLocalQuestionRequestView, TCreateLocalDeviceRequest, TCreateLocalDeviceResponse, TLocalDeviceView, TLocalHold, TLocalOutputView, TLocalPlanEntry, TLocalRunActivity,
   TLocalRunBrief, TLocalRunPlanProgress, TLocalRunView, TLocalSessionStatus } from "@warmap/contracts";
 import type { Query } from "./meetingStore.js";
 import { issueLocalToken } from "./personalTokens.js";
@@ -64,7 +64,12 @@ export type RunRow = { id: string; owner_id: string; device_id: string; device_n
   timeline: TLocalRunActivity[]; tokens: { input: number; output: number; cacheRead: number; cacheWrite: number }; cost_usd: string | null;
   /** hold：停着等额度恢复（本机状态条目带的）；money：网关模型真花的钱，按币种累计。 */
   hold: TLocalHold | null; money: Record<string, number>;
+  /** 最近一次状态里在问本人（idle 带 question）或在等批准的那一步（waiting_permission 带 permission）；没有为 null（迁移 242）。 */
+  ask: RunAsk | null;
   started_at: Date; running_at: Date | null; ended_at: Date | null; updated_at: Date };
+export type RunAsk = { kind: "question"; request: TLocalQuestionRequestView } | { kind: "permission"; request: TLocalPermissionBrief };
+/** 真在问本人（不是一轮做完停下）。 */
+export const askingQuestion = (run: Pick<RunRow, "state" | "ask">) => run.state === "idle" && run.ask?.kind === "question";
 export const RUN_SELECT = `SELECT r.*,d.name AS device_name FROM local_runs r LEFT JOIN local_devices d ON d.owner_id=r.owner_id AND d.id=r.device_id`;
 
 export function runBrief(row: RunRow): TLocalRunBrief {

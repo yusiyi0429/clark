@@ -17486,6 +17486,26 @@ export interface components {
                 step: "review" | "finalize" | "continue";
                 period: string;
             } | null;
+            question: {
+                requestId: string;
+                questions: {
+                    question: string;
+                    header: string;
+                    options: {
+                        label: string;
+                        description: string;
+                    }[];
+                    multiSelect: boolean;
+                }[];
+                /** Format: date-time */
+                askedAt: string;
+            } | null;
+            permission: {
+                requestId: string;
+                toolName: string;
+                title: string;
+                outsidePaths: string[];
+            } | null;
         };
         WorkHomeResponse: {
             period: string;
@@ -17618,6 +17638,26 @@ export interface components {
                 month: {
                     step: "review" | "finalize" | "continue";
                     period: string;
+                } | null;
+                question: {
+                    requestId: string;
+                    questions: {
+                        question: string;
+                        header: string;
+                        options: {
+                            label: string;
+                            description: string;
+                        }[];
+                        multiSelect: boolean;
+                    }[];
+                    /** Format: date-time */
+                    askedAt: string;
+                } | null;
+                permission: {
+                    requestId: string;
+                    toolName: string;
+                    title: string;
+                    outsidePaths: string[];
                 } | null;
             }[];
         };

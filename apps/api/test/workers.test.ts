@@ -4,6 +4,10 @@ import { TEST_MEMBER } from "./helpers.js";
 import { BOARD_NOW, boardFixture } from "./boardFixture.js";
 
 const status = (state: string, title: string) => ["status", { status: state, title, agent: "claude-code", modelLabel: "订阅 · Sonnet" }] as [string, unknown];
+/** 执行方在问本人（本机 idle 带 question）；不带的 idle 是一轮做完停下了（新首页 9.6）。 */
+const QUESTION = { requestId: "q-1", questions: [{ question: "先做哪一页？", header: "顺序", options: [{ label: "登录页", description: "" }, { label: "首页", description: "" }],
+  multiSelect: false }], askedAt: "2026-11-06T01:00:00.000Z" };
+const asking = (title: string) => ["status", { status: "idle", title, agent: "claude-code", modelLabel: "订阅 · Sonnet", question: QUESTION }] as [string, unknown];
 
 describe("worker 列表", { timeout: 30_000 }, () => {
   it("带岗位的卡和专题按进行中、已排队、已完成（今天）列出；等你的排在最前；验收中的是云端的验收员；等空位的排第几；资源取在线设备报的位置数；伙伴读的是同一份", async () => {
@@ -42,7 +46,7 @@ describe("worker 列表", { timeout: 30_000 }, () => {
       const queuedTopic = randomUUID(), runningTopic = randomUUID();
       await f.t.sql(`INSERT INTO research_topics(id,owner_id,title,role_id,plan_task_id,mission_id) VALUES($1,$3,'竞品调研',$4,'task-open','mine'),($2,$3,'行业报告',$4,NULL,NULL)`,
         [queuedTopic, runningTopic, TEST_MEMBER.personId, researcher.id]);
-      await laptop.send({ kind: "topic", topicId: runningTopic }, [status("idle", "行业报告")]);
+      await laptop.send({ kind: "topic", topicId: runningTopic }, [asking("行业报告")]);
 
       const res = await f.call("GET", "/api/me/workers");
       expect(res.statusCode).toBe(200);
@@ -96,6 +100,10 @@ describe("worker 列表", { timeout: 30_000 }, () => {
       expect(viaChat.json()).toEqual(body);
       expect((await internal({ authorization: "Bearer chat-token", "x-owner-id": "nobody" })).statusCode).toBe(404);
       expect((await internal({ authorization: "Bearer wrong", "x-owner-id": TEST_MEMBER.personId })).statusCode).toBe(401);
+
+      // 答完以后这一轮做完停下（idle 不带提问）：已停下，不算等你。
+      await laptop.send({ kind: "topic", topicId: runningTopic }, [status("idle", "行业报告")]);
+      expect((await f.call("GET", "/api/me/workers")).json().running.find((entry: { title: string }) => entry.title === "行业报告")).toMatchObject({ wait: "paused", needsYou: false });
     } finally { await f.close(); }
   });
 

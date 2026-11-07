@@ -1,5 +1,5 @@
 import type { TCardGit, TCardHandbackBrief, TCardModel, TCardWait, TCriterionVerdict, TDeliverableInclusion, TLocalGitRef, TLocalHandbackCriterion, TTaskCard, TTaskView } from "@warmap/contracts";
-import { runBrief, type RunRow } from "./localDevices.js";
+import { askingQuestion, runBrief, type RunRow } from "./localDevices.js";
 import type { Query } from "./meetingStore.js";
 import { roleRef, rolesById } from "./roles.js";
 
@@ -60,7 +60,9 @@ function stageAndWait(row: CardRow, handbacks: HandbackRow[], runs: RunRow[]): P
   if (latest && effectiveOutcome(latest) === "fail" && !latest.returned_at) return { stage: "doing", wait: "review_failed" };
   // 停着等额度恢复的不是等你回复、也不是已暂停（契约的标记里没有额度，给 null）；停下了、异常退出了一次都算已暂停。
   if (runs[0]?.hold && HOLD_STATES.includes(runs[0].state)) return { stage: "doing", wait: null };
-  const waits: Partial<Record<RunRow["state"], TCardWait>> = { waiting_permission: "approval", idle: "reply", exited: "paused", failed: "paused" };
+  // 一轮做完停下、没在问你（idle 不带 question）算已暂停（「已停下」），不是等你回复（新首页 9.6）。
+  if (runs[0]?.state === "idle") return { stage: "doing", wait: askingQuestion(runs[0]) ? "reply" : "paused" };
+  const waits: Partial<Record<RunRow["state"], TCardWait>> = { waiting_permission: "approval", exited: "paused", failed: "paused" };
   return { stage: "doing", wait: runs[0] ? waits[runs[0].state] ?? null : null };
 }
 

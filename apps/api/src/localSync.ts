@@ -36,7 +36,7 @@ const ARTIFACT_TYPES: Record<string, string> = {
   ".md": "text/markdown", ".markdown": "text/markdown", ".txt": "text/plain", ".html": "text/html", ".htm": "text/html", ".pdf": "application/pdf",
   ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
 };
-const STATUS_TEXT: Record<TLocalSessionStatus, string> = { queued: "等空位", starting: "开工", running: "在做", waiting_permission: "等你批准", idle: "等你回复", exited: "停下了", failed: "异常退出", done: "做完收工" };
+const STATUS_TEXT: Record<TLocalSessionStatus, string> = { queued: "等空位", starting: "开工", running: "在做", waiting_permission: "等你批准", idle: "在问你", exited: "停下了", failed: "异常退出", done: "做完收工" };
 /** 会话结束了的几种（记结束时间）：停下了、异常退出、规划员和验收员交完收工。 */
 const ENDED_STATES = new Set<TLocalSessionStatus>(["exited", "failed", "done"]);
 const MILESTONE_STATES = new Set<TLocalSessionStatus>(["starting", ...ENDED_STATES]);
@@ -186,13 +186,17 @@ async function applyType(client: PoolClient, deps: Pick<SyncDeps, "storageDir" |
   switch (item.type) {
     case "status": {
       if (seq <= Number(run.state_seq)) return {};
-      const { status, title, modelLabel, waitingFor, hold } = item.data;
+      const { status, title, modelLabel, waitingFor, hold, question, permission } = item.data;
       // waitingFor：排着、在等前面的卡（只有 queued 带）；别的状态清掉。hold：停着等额度恢复，恢复接着做时报的那条不带，就清掉。
-      await client.query(`UPDATE local_runs SET state=$2,state_seq=$3,title=$4,model_label=$5,ended_at=$6,running_at=COALESCE(running_at,$7),waiting_for=$8,hold=$9::jsonb
-        WHERE id=$1`, [run.id, status, seq, title, modelLabel, ENDED_STATES.has(status) ? at : null, status === "running" ? at : null,
-        status === "queued" && waitingFor?.length ? waitingFor : null, hold ? JSON.stringify({ reason: hold.reason, until: hold.until }) : null]);
-      await note(client, run, at, hold ? "额度用完，等恢复" : status === "starting" ? `${STATUS_TEXT.starting}（${modelLabel}）` : STATUS_TEXT[status],
-        MILESTONE_STATES.has(status));
+      // ask：在问本人（idle 带 question）、在等批准的那一步（waiting_permission 带 permission）；别的状态、不带的清掉（新首页 9.6）。
+      const ask = status === "idle" && question ? { kind: "question", request: question }
+        : status === "waiting_permission" && permission ? { kind: "permission", request: permission } : null;
+      await client.query(`UPDATE local_runs SET state=$2,state_seq=$3,title=$4,model_label=$5,ended_at=$6,running_at=COALESCE(running_at,$7),waiting_for=$8,hold=$9::jsonb,
+        ask=$10::jsonb WHERE id=$1`, [run.id, status, seq, title, modelLabel, ENDED_STATES.has(status) ? at : null, status === "running" ? at : null,
+        status === "queued" && waitingFor?.length ? waitingFor : null, hold ? JSON.stringify({ reason: hold.reason, until: hold.until }) : null,
+        ask ? JSON.stringify(ask) : null]);
+      await note(client, run, at, hold ? "额度用完，等恢复" : status === "starting" ? `${STATUS_TEXT.starting}（${modelLabel}）`
+        : status === "idle" && !question ? "这一轮做完了" : STATUS_TEXT[status], MILESTONE_STATES.has(status));
       return {};
     }
     case "plan": {

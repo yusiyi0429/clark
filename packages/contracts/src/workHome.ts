@@ -1,5 +1,6 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import { Budget } from "./budget.js";
+import { LocalPermissionBrief, LocalQuestionRequestView } from "./localRunner.js";
 import { RoleRef } from "./roles.js";
 import { WorkerQueueReason, WorkerResources } from "./workers.js";
 
@@ -36,13 +37,14 @@ const Nullable = <T extends TSchema>(schema: T) => Type.Union([schema, Type.Null
  * 对到卡和专题上：带岗位还没开工的、本机报等空位或等前面的卡的 → queued；验收中 → running；验收通过（已合回，或不用合）→ done；
  * 验收通过但没能自动合回 → waiting（merge）；验收没过、改法还没送回执行方 → failed；等你批准、等你回复、受阻、已暂停 → waiting。
  * 卡的会话停下了或异常退出了（还没交回、没在等额度）算已暂停；连续两次异常退出也是已暂停（不是验收没过）。
+ * 一轮做完停下、没在问你（本机报 idle 不带 question）也是已暂停（网页写「已停下」），不是等你：卡照常交回进验收，单独开的子会话等你想接着时说一句。
  * 专题没有「完成」：会话停下了、异常退出了都算已暂停（waiting），归档后不列。
  * done 的子会话网页收进 Task 下面折叠的「已完成 N」，不删，点开还能看。
  */
 export const SubSessionState = Type.Union([Type.Literal("queued"), Type.Literal("running"), Type.Literal("waiting"), Type.Literal("done"), Type.Literal("failed")]);
 
 /**
- * 等你什么（只有 state = waiting 时可能有）：approval 等你批准（本机有权限请求没答）、question 等你回复（一轮做完在等你说话，或执行方在问你）、
+ * 等你什么（只有 state = waiting 时可能有）：approval 等你批准（本机有权限请求没答）、question 执行方在问你（本机报 idle 带 question；一轮做完停下不算）、
  * verdict 验收结果等你拿主意（连续两次验收没过，受阻）、merge 验收过了但本机没能自动合回，等你合（「合进 main / 先不合」）。
  * 已暂停（停下了）也是等你（说一句就接着做），为 null。
  */
@@ -194,6 +196,11 @@ export const WaitingAnswer = Type.Union([Type.Literal("inline"), Type.Literal("i
  * sessionId、deviceId、deviceName：子会话那几种（approval、question、merge）是哪个本机会话、在哪台电脑上；在这台电脑上的，网页就地批准、回答、合回（本机程序接口），别处的只能打开看。
  * dueAt：有截止时间的（Mission Card 本人确认截止、复盘窗口关闭）写上，网页离截止不到 24 小时换警告档；没有为 null。
  * person：acceptance 是请你认可的那个人（负责人），别的为 null。month：只有 kind = month 有（step、period）。
+ * question、permission（新首页 9.6、5.4.4）：只有真在问、真在等批准才进「等你」，一轮做完停下的不进（卡照常交回进验收，子会话「已停下」）。
+ *   question：kind = question 时本机报的原样提问（LocalQuestionRequestView），title 是第一个问题的原话；只有一个问题、单选、最多 3 个选项时就地答，
+ *   在那台电脑上用本机程序 POST /v1/sessions/:sessionId/questions/:requestId 回答。
+ *   permission：kind = approval 时在等批准的那一步（LocalPermissionBrief），title 是它给人看的那一行（「运行 pnpm test」），就地「批准」，
+ *   有越界路径（outsidePaths）时只能点进去「允许这一次」。老版本的本机程序不报这两样时为 null，标题退回「等你回复」「等你批准」。别的种类都为 null。
  */
 export const WaitingItem = Type.Object({
   id: Type.String({ minLength: 1 }),
@@ -210,6 +217,8 @@ export const WaitingItem = Type.Object({
   answer: WaitingAnswer,
   person: Nullable(Type.Object({ personId: Type.String({ minLength: 1 }), name: Type.String() }, strict)),
   month: Nullable(Type.Object({ step: Type.Union([Type.Literal("review"), Type.Literal("finalize"), Type.Literal("continue")]), period: Period }, strict)),
+  question: Nullable(LocalQuestionRequestView),
+  permission: Nullable(LocalPermissionBrief),
 }, strict);
 
 /**
