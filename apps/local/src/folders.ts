@@ -1,7 +1,10 @@
 import { mkdirSync, realpathSync } from "node:fs";
 import { basename, dirname, join, parse, relative, isAbsolute, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
-import type { TLocalFolder } from "@warmap/contracts";
+import type { TLocalFolder, TLocalProjectFolder } from "@warmap/contracts";
+
+/** 一个项目在这台电脑上绑的文件夹（projects.json）。 */
+interface ProjectBinding { folderId: string | null; name: string | null; updatedAt: string }
 import { readJson, writeJsonAtomic, nowIso } from "./store.js";
 import { homeDir } from "./agents/claudeEnv.js";
 
@@ -39,7 +42,11 @@ export function insideAny(roots: string[]): (p: string) => boolean {
 /** 本人允许本机程序读写的文件夹，只能经本机系统选择框添加。调研专题另有本机程序自己的专用目录。 */
 export class Folders {
   private readonly file: string;
-  constructor(private readonly dataDir: string, private readonly home: string = homeDir()) { this.file = join(dataDir, "folders.json"); }
+  private readonly projectsFile: string;
+  constructor(private readonly dataDir: string, private readonly home: string = homeDir()) {
+    this.file = join(dataDir, "folders.json");
+    this.projectsFile = join(dataDir, "projects.json");
+  }
 
   /** 不合规矩的旧条目（这条规矩之前加的）不算数。 */
   list(): TLocalFolder[] {
@@ -75,12 +82,48 @@ export class Folders {
   remove(id: string): boolean {
     const list = this.list();
     if (!list.some((f) => f.id === id)) return false;
-    writeJsonAtomic(this.file, list.filter((f) => f.id !== id));
+    writeJsonAtomic(this.file, list.filter((f) => f.id !== id)); // 绑着它的项目读出来就是没绑（只认还在允许列表里的文件夹）
     return true;
   }
 
-  /** 专题、规划员没给目录时用的专用目录（在本机程序的数据目录里）。 */
-  ownDir(group: "topics" | "plans", id: string): string {
+  // ───────── 项目在这台电脑上的文件夹（新首页设计 16.6） ─────────
+
+  private bindings(): Record<string, ProjectBinding> {
+    return readJson<Record<string, ProjectBinding>>(this.projectsFile, {});
+  }
+
+  private projectView(projectId: string, b: ProjectBinding): TLocalProjectFolder {
+    const f = b.folderId ? this.list().find((x) => x.id === b.folderId) : undefined;
+    return { projectId, name: b.name, folder: f ? { id: f.id, path: f.path, label: f.label } : null, updatedAt: b.updatedAt };
+  }
+
+  projects(): TLocalProjectFolder[] {
+    return Object.entries(this.bindings()).map(([id, b]) => this.projectView(id, b));
+  }
+
+  /** 绑到一个允许的文件夹（null 是解绑）。文件夹不在允许的列表里回 null。 */
+  bindProject(projectId: string, folderId: string | null, name?: string): TLocalProjectFolder | null {
+    if (folderId && !this.list().some((f) => f.id === folderId)) return null;
+    const bindings = this.bindings();
+    bindings[projectId] = { folderId, name: name ?? bindings[projectId]?.name ?? null, updatedAt: nowIso() };
+    writeJsonAtomic(this.projectsFile, bindings);
+    return this.projectView(projectId, bindings[projectId]!);
+  }
+
+  /** 项目在这台电脑上绑的文件夹的路径（没绑、或文件夹已不在允许的列表里为 null）。 */
+  projectFolder(projectId: string): string | null {
+    const id = this.bindings()[projectId]?.folderId;
+    return (id && this.list().find((f) => f.id === id)?.path) || null;
+  }
+
+  /** 连接页的文件夹列表：每个文件夹挂着哪几个项目。 */
+  listWithProjects(): TLocalFolder[] {
+    const bindings = Object.entries(this.bindings());
+    return this.list().map((f) => ({ ...f, projects: bindings.filter(([, b]) => b.folderId === f.id).map(([projectId, b]) => ({ projectId, name: b.name })) }));
+  }
+
+  /** 专题、规划员没给目录时用的专用目录；没绑文件夹的项目，卡在 projects/<项目 id> 里做（都在本机程序的数据目录里）。 */
+  ownDir(group: "topics" | "plans" | "projects", id: string): string {
     const dir = join(this.dataDir, group, id.replace(/[^A-Za-z0-9_-]/g, "_"));
     mkdirSync(dir, { recursive: true });
     return dir;
@@ -92,6 +135,6 @@ export class Folders {
   }
 
   isAllowed(cwd: string): boolean {
-    return this.contains(cwd) || ["topics", "plans", "worktrees"].some((g) => isInside(join(this.dataDir, g), cwd));
+    return this.contains(cwd) || ["topics", "plans", "projects", "worktrees"].some((g) => isInside(join(this.dataDir, g), cwd));
   }
 }

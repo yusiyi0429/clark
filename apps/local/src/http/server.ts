@@ -4,7 +4,7 @@ import { Value } from "@sinclair/typebox/value";
 import {
   LOCAL_RUNNER_PROTOCOL, LOCAL_RUNNER_ROUTES, LOCAL_RUNNER_TOKEN_HEADER,
   LocalPairingStartRequest, LocalAgentLoginCodeRequest, LocalCloudLinkRequest, LocalSettingsPatch, LocalModelProfileUpsert,
-  LocalCreateSessionRequest, LocalCreateSessionBatchRequest, LocalSendMessageRequest, LocalPermissionDecisionRequest, LocalQuestionAnswerRequest, LocalBudgetUpdateRequest,
+  LocalCreateSessionRequest, LocalCreateSessionBatchRequest, LocalSendMessageRequest, LocalPermissionDecisionRequest, LocalQuestionAnswerRequest, LocalBudgetUpdateRequest, LocalProjectFolderRequest,
   type TLocalRunnerErrorCode, type TLocalStatusResponse, type TLocalHealthResponse,
 } from "@warmap/contracts";
 import { checkHost, checkJson, checkOrigin, corsHeaders, preflightHeaders, type Rejection } from "./security.js";
@@ -174,7 +174,7 @@ export function createServer(d: ServerDeps): http.Server {
       }
     },
     deleteModel: async (c) => { if (!(await d.models.remove(c.params.id!))) throw new HttpError(404, "not_found", "没有这个模型配置，或是内置配置"); return { ok: true }; },
-    listFolders: () => ({ folders: d.folders.list() }),
+    listFolders: () => ({ folders: d.folders.listWithProjects() }),
     pickFolder: async () => {
       const p = await d.pickFolder();
       if (!p) return { folder: null };
@@ -207,6 +207,13 @@ export function createServer(d: ServerDeps): http.Server {
     stopBackground: async (c) => ({ session: await d.sessions.stopBackground(c.params.id!, c.params.itemId!) }),
     listBudgets: () => ({ budgets: d.sessions.budgets() }),
     putBudget: (c) => d.sessions.setBudget(validate(LocalBudgetUpdateRequest, c.body)),
+    listProjects: () => ({ projects: d.folders.projects() }),
+    putProjectFolder: (c) => {
+      const b = validate(LocalProjectFolderRequest, c.body);
+      const r = d.folders.bindProject(c.params.projectId!, b.folderId, b.name);
+      if (!r) throw new HttpError(404, "not_found", "没有这个文件夹，先选文件夹");
+      return r;
+    },
   };
 
   function agentMustBeClaude(c: Ctx) {

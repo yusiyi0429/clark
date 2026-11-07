@@ -535,8 +535,10 @@ export class SessionManager {
     if (subject.kind !== "topic" && req.critics?.length) throw new SessionError("validation", "挑刺岗位只给专题的评审会用");
     if (subject.kind !== "card" && req.after?.length) throw new SessionError("validation", "只有卡能等别的卡");
     let cwd: string;
-    if (req.cwd) {
-      cwd = resolve(req.cwd);
+    // 不指定目录时：项目在这台电脑上绑的文件夹（新首页设计 16.6）
+    const projectDir = !req.cwd && subject.projectId ? this.d.folders.projectFolder(subject.projectId) : null;
+    if (req.cwd || projectDir) {
+      cwd = resolve(req.cwd ?? projectDir!);
       if (!existsSync(cwd) || !statSync(cwd).isDirectory()) throw new SessionError("validation", "工作目录不存在");
       // 按磁盘上的实际大小写：Claude Code 排除本人全局记忆（claudeMdExcludes）是按路径大小写匹配的。
       cwd = realpathSync.native(cwd);
@@ -545,6 +547,9 @@ export class SessionManager {
       cwd = this.d.folders.ownDir("topics", subject.topicId!);
     } else if (subject.kind === "plan") {
       cwd = this.d.folders.ownDir("plans", subject.taskId!);
+    } else if (subject.projectId) {
+      // 项目没绑文件夹：卡在本机给这个项目建的专用目录里做（不是 git 仓库，同一时间一张卡）
+      cwd = this.d.folders.ownDir("projects", subject.projectId);
     } else {
       throw new SessionError("validation", "卡的会话要指定工作目录");
     }
@@ -1599,7 +1604,7 @@ export class SessionManager {
   private queueVerify(card: SessionRecord, handbackKey: string, commit: string | null) {
     const now = nowIso();
     const rec: SessionRecord = {
-      id: randomUUID(), subject: { kind: "verify", cardId: card.subject.cardId!, handbackKey }, title: `验收：${card.title}`.slice(0, 120),
+      id: randomUUID(), subject: { kind: "verify", cardId: card.subject.cardId!, handbackKey, ...(card.subject.projectId ? { projectId: card.subject.projectId } : {}) }, title: `验收：${card.title}`.slice(0, 120),
       agent: card.agent, modelProfileId: card.modelProfileId, modelLabel: card.modelLabel, cwd: card.cwd, includePersonalConfig: false,
       createdAt: now, updatedAt: now, status: "queued", usage: zeroUsage(), syncSeq: 0, mcpSecret: "", outputs: [], versionNumber: 0, lastVersion: null,
       role: null, modelTier: null, critics: [], queuedMessage: null, queueOrder: ++this.queueSeq,
