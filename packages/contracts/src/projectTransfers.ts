@@ -34,8 +34,10 @@ export const HandoverNote = Type.Array(HandoverSection, { maxItems: 12 });
  * - status、startedAt（发起的时间）、decidedAt（最近一次发出 / 接手 / 不接 / 撤回的时间，还在准备为 null）。
  * - includeHistory：带不带对话记录，默认不带。
  * - running：有在跑的会话时本人选的「等做完再转 / 停掉」；check：绑了文件夹时选的「等本机检查 / 不检查直接转」；还没问到或用不着为 null。
- * - note：交接说明；云端在发起时和存下本机检查结果时按云端的东西拼一份（到哪了、没做完的事、代码在哪、可以问谁），
- *   「关键决定和原因」「怎么跑起来」「坑」由管线读了对话写（伙伴经 /internal 改）；还没有为 null。
+ * - note：交接说明。发起时和存下本机检查结果（PATCH checkResult）时 note 先变成 null，云端在后台调模型写（和战场进展汇总同一套模型配置），
+ *   材料是原负责人的项目对话、目标历史和判定、交付物、没做完的卡和专题、本机检查结果，七段一次写完（环境变量、账号只写名字和找谁要，不写值），
+ *   写出来像密钥的让模型改掉；模型没配、出错、超时（约 90 秒）退回按云端的东西拼的四段（到哪了、没做完的事、代码在哪、可以问谁）。
+ *   null 就是「正在写」，网页隔几秒 GET 一次；写的过程中本人改了（PATCH note）就不覆盖。本人和伙伴（/internal）都是整份交上来。
  * - checkResult：本机程序的交接检查（D 的 POST /v1/projects/:projectId/handover-check 原样转来）；没检查为 null。
  * - clone：接手人「拉到这台电脑」用的仓库地址和分支（检查结果里 origin（没有就第一个）远端；分支取 handover/ 开头的没推完分支，没有就当前分支），
  *   形状同本机的 POST /v1/projects/:projectId/clone（LocalRepoUrl、LocalBranchName）。不是 git、远端不是 https://、ssh://、git@ 开头（本地路径、file:// 等）为 null。
