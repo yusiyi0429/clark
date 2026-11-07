@@ -15,6 +15,7 @@ import { CardError, cardTaskViews, effectiveOutcome } from "./taskCards.js";
 import { getTaskViews } from "./tasks.js";
 import { ACTIVE, awaitsQuota, heldRuns, workerResources } from "./workers.js";
 import { shanghaiDate } from "./workdays.js";
+import { milestoneDate } from "./monthPlan.js";
 import { settlementsOf } from "./taskContinuity.js";
 import { visibleMissions } from "./visibleMissions.js";
 import { taskBasis } from "./planTaskAccess.js";
@@ -97,7 +98,7 @@ export type WorkHomeDeps = {
   missionRounds: (person: MissionRoundPerson) => Promise<TCard[]>;
 };
 
-/** 这个月（YYYY-MM）的最后一天（YYYY-MM-DD）：本体的 Task 没有截止日，项目行的「{截止} 验收」取它所在月份的月底。 */
+/** 这个月（YYYY-MM）的最后一天（YYYY-MM-DD）：Mission 没写验收时间点时，项目行的「{截止} 验收」取它所在月份的月底。 */
 const monthEnd = (period: string) => {
   const [year, month] = period.split("-").map(Number);
   return new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
@@ -273,16 +274,25 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
     [[...activeIds], ownerId])).rows as GoalRow[] : [];
   const othersSettled = await settlementsOf(q, othersGoals.map((goal) => goal.task_id));
   const transfers = await openTransfers(q, [...activeIds]);
+  // 目标的截止：所在 Mission 的验收时间点（同首页「本月」的 gateLabel：今天以后最近的，都过了取最后一个），没写取月底。
+  const goalMissions = [...new Set([...goalTasks.map((task) => task.missionId), ...othersGoals.map((goal) => goal.mission_id)])];
+  const gateDates = new Map(goalMissions.length ? ((await q("SELECT id,period,milestones FROM missions WHERE id=ANY($1::text[])", [goalMissions])).rows as
+    { id: string; period: string; milestones: string[] }[]).map((mission) => [mission.id,
+    mission.milestones.flatMap((text) => milestoneDate(text, mission.period) ?? []).sort()]) : []);
+  const dueDate = (missionId: string, period: string) => {
+    const dates = gateDates.get(missionId) ?? [];
+    return dates.find((date) => date >= today) ?? dates.at(-1) ?? monthEnd(period);
+  };
   const goalOfOthers = (goal: GoalRow): THomeProjectGoal | null => {
     const settled = othersSettled.get(goal.task_id);
     if (settled && !(settled.kind === "completed" && goal.period === period)) return null;
-    return { taskId: goal.task_id, missionId: goal.mission_id, name: goal.task_name, period: goal.period, dueDate: monthEnd(goal.period), criteria: [], criteriaMet: 0,
+    return { taskId: goal.task_id, missionId: goal.mission_id, name: goal.task_name, period: goal.period, dueDate: dueDate(goal.mission_id, goal.period), criteria: [], criteriaMet: 0,
       criteriaTotal: 0, completedAt: settled ? new Date(settled.at).toISOString() : null,
       responsible: { personId: goal.owner_id, name: deps.names.get(goal.owner_id) ?? goal.owner_id } };
   };
   const homeProjects = active.map((row): THomeProject => {
     const projectGoals: THomeProjectGoal[] = goalTasks.filter((task) => taskProject(task.taskId) === row.id).map((task): THomeProjectGoal => ({ taskId: task.taskId,
-      missionId: task.missionId, name: task.name, period: task.period, dueDate: monthEnd(task.period), criteria: criteriaOf.get(task.taskId)!,
+      missionId: task.missionId, name: task.name, period: task.period, dueDate: dueDate(task.missionId, task.period), criteria: criteriaOf.get(task.taskId)!,
       criteriaMet: met.get(task.taskId) ?? 0, criteriaTotal: criteriaOf.get(task.taskId)!.length, completedAt: task.completedAt, responsible: null }))
       .concat(othersGoals.filter((goal) => goal.project_id === row.id).flatMap((goal) => goalOfOthers(goal) ?? []))
       .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || a.name.localeCompare(b.name));
