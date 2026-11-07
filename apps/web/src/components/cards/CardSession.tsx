@@ -3,12 +3,13 @@
 /**
  * 卡的子会话页（/me/cards/[id]，原型 v8.4 renderSess + cardPane，第 11.1 节）：左边和执行方对话（本机实时），右边结果。
  * 右边从上到下：交代（所属 Task、对的那条标准、岗位和模型）、计划条目、完成标准、Agent 验收、产出、动作。卡上写岗位名，不写执行方（第 19.6 节）。
- * 只有这台电脑上的本机程序在跑这张卡、而且不是手机时，才能开始、插话、停下、批权限；别处只看云端同步来的摘要。
+ * 只有这台电脑上的本机程序在跑这张卡、而且不是手机时，才能开始、插话、停止、批权限；别处只看云端同步来的摘要。
  * 手机上分「结果」「对话」两个标签。
  */
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronLeft, Info } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Check, ChevronLeft, Info, X } from "lucide-react";
 import type { TCardHandbackView, TLocalQuestionAnswerRequest, TLocalRunView } from "@warmap/contracts";
 import { HeroButton } from "@/components/HeroButton";
 import { useHandheld } from "@/components/ui/useHandheld";
@@ -17,17 +18,19 @@ import { latestSessionFor, useLocalRunner } from "@/lib/local/LocalRunnerProvide
 import { useSessionEvents } from "@/lib/local/useSessionEvents";
 import { localWait, planStep, running, type SessionView } from "@/lib/local/sessionView";
 import { startCard } from "@/lib/local/start";
-import { STAGES, WAIT_LABEL, boardCards, canCommand, circled, deliverableLabel, isAgentCard, waitTone } from "@/lib/board/cards";
+import { STAGES, WAIT_LABEL, boardCards, canCommand, circled, deliverableLabel, isAgentCard, waitTone, type CardStage, type CardWait } from "@/lib/board/cards";
 import { overrule, retryAcceptance } from "@/lib/board/cloud";
 import { cardRole } from "@/lib/team/roles";
 import { useAutoReturn } from "@/lib/board/useAutoReturn";
 import { showWorkspaceToast } from "@/lib/toast";
-import { SessionComposer, SessionTranscript, type DecideOptions } from "./SessionTranscript";
+import { RelayLine, SessionComposer, SessionTranscript, sayToSession, sessionEnded, type DecideOptions } from "./SessionTranscript";
 import { useCardDetail, type CardDetail } from "./useCardDetail";
 import { MergeAction } from "@/components/work/MergeAction";
-import { QuestionDecision } from "@/components/work/decisions";
+import { QuestionDecision, awayChip, questionTitle } from "@/components/work/decisions";
+import { askAnchor } from "@/components/home/TaskFeed";
 import { FailedLine, PendingBoxes, PendingDock, failureOf, type Failure } from "@/components/work/DecisionBox";
 import { useViewChrome } from "@/components/home/view";
+import { ICON } from "@/components/home/StateIcon";
 import { useConversationScroll } from "@/conversation/useConversationScroll";
 import { commitText, placeText, shortPlace } from "@/lib/work/merge";
 import type { TLocalSessionSummary } from "@/lib/local/runner";
@@ -35,15 +38,31 @@ import s from "@/styles/v2-session.module.css";
 
 /** 回到新首页，锚着这张卡的 Task（V2 设计第 20.4 节；没打开新首页的人会被带回老首页）。 */
 const workHref = (taskId: string | null) => (taskId ? `/me/work/tasks/${encodeURIComponent(taskId)}` : "/me/work");
-const ICON = { size: 16, strokeWidth: 1.5, "aria-hidden": true } as const;
 
-const VERDICT: Record<string, string> = { met: "达到", partial: "部分", unmet: "未达到" };
+const VERDICT: Record<string, string> = { met: "达到", partial: "部分达到", unmet: "未达到" };
 const money = (usd: number | null) => (usd === null ? null : `约 $${usd.toFixed(usd < 1 ? 3 : 2)}`);
+
+/**
+ * 新首页页头的状态 chip（5.4.3「状态 chip」、5.6 状态词）：中性、警告、等你（中性底加强调色圆点）三档；新首页不用成功色。
+ * 第一次验收没过不是单独的状态：进行中，阶段「重做中」。away：不在这台电脑上、又在等你时写「等你 · {电脑名}」。
+ */
+export function stateChip(wait: CardWait | null, stage: CardStage, away: string | null): { text: string; tone: "neutral" | "warn" | "wait" } {
+  if (wait === "approval" || wait === "reply") return { text: away ?? WAIT_LABEL[wait], tone: "wait" };
+  if (wait === "blocked") return { text: "受阻", tone: "warn" };
+  if (wait === "paused") return { text: "已停止", tone: "neutral" };
+  if (wait === "review_failed") return { text: "重做中", tone: "neutral" };
+  return { text: stage === "todo" ? "已排队" : STAGES.find((entry) => entry.id === stage)?.label ?? "进行中", tone: "neutral" };
+}
 
 /** embedded：放在新首页的展示区里——没有返回键（左栏就是导航），页头右边的信息图标在「对话」和「结果」之间切。 */
 export function CardSession({ cardId, embedded = false }: { cardId: string; embedded?: boolean }) {
   const chrome = useViewChrome();
-  const [details, setDetails] = useState(false);
+  const router = useRouter();
+  /** 看结果还是对话；没选过时，子会话不在这台电脑上（手机、别的电脑、还没开）先看摘要（5.4.3）。 */
+  const [details, setDetails] = useState<boolean | null>(null);
+  /** 页头点了「推翻」：打开结果、推翻的原因框直接展开。 */
+  const [flipping, setFlipping] = useState(false);
+  const [headFailed, setHeadFailed] = useState<Failure | null>(null);
   const { detail, missing, refresh } = useCardDetail(cardId);
   const local = useLocalRunner();
   const handheld = useHandheld();
@@ -80,16 +99,20 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
   const stage = card.stage;
   const taskId = item.planTaskId;
   const backHref = workHref(taskId);
-  const sessionRunning = session ? running(view.status ?? session.status) : false;
+  const status = view.status ?? session?.status ?? null;
+  const sessionRunning = session ? running(status) : false;
+  const ended = !!session && sessionEnded(status);
+  const run = detail.runs[0] ?? null;
+  const device = run?.deviceName ?? item.card?.run?.deviceName ?? null;
 
-  // 没成的不弹 toast：批准、回答交给选项框，发消息交给输入框，停下交给那排按钮，各自在原处写「失败 · 重试」。
+  // 没成的不弹 toast：批准、回答交给选项框，发消息交给输入框，停止交给那排按钮，各自在原处写「失败 · 重试」。
   const decide = async (requestId: string, decision: "allow" | "deny", { forSession, message }: DecideOptions) => {
     if (!session) return;
     await local.runner.decidePermission(session.id, requestId, { decision, ...(forSession ? { allowForSession: true } : {}), ...(message ? { message } : {}) });
     scroll.jumpToLatest();
   };
-  // 执行方在问本人：事件流里最新的那次，没收到事件时照会话摘要。
-  const question = session ? view.question ?? session.pendingQuestion ?? null : null;
+  // 执行方在问本人：连上事件流以后只认事件流（答过、作废了就是没有），还没连上时照会话摘要。
+  const question = session ? (view.lastSeq ? view.question : session.pendingQuestion ?? null) : null;
   const answer = async (body: TLocalQuestionAnswerRequest) => {
     if (!session || !question) return;
     await local.runner.answerQuestion(session.id, question.requestId, body);
@@ -98,8 +121,7 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
   };
   const say = async (text: string) => {
     if (!session) return false;
-    await local.runner.sendMessage(session.id, text);
-    return true;
+    return sayToSession(local.runner, session.id, view.pending, text);
   };
   const control = async (action: "interrupt" | "kill") => {
     if (!session) return;
@@ -109,32 +131,38 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
 
   const pane = (
     <aside className={s.pane} aria-label="结果">
-      <ResultPane detail={detail} session={session} view={session ? view : null} canAct={canAct} wait={wait} stage={stage} handheld={handheld} ready={ready}
+      <ResultPane detail={detail} session={session} view={session ? view : null} canAct={canAct} wait={wait} stage={stage} handheld={handheld} ready={ready} embedded={embedded}
+        flipping={flipping} onFlipDone={() => setFlipping(false)}
         onStart={embedded ? undefined : () => setStarting(true)} onControl={control} onResume={() => say("继续")} onChanged={() => void refresh()} />
     </aside>
   );
-  // 执行方在问本人：选项框放在对话最后（问的那一处）；手机、别的电脑上灰着。
-  const asking = question ? <QuestionDecision key={question.requestId} request={question} blocked={canAct ? null : "到电脑上处理"} onAnswer={answer} /> : null;
+  // 执行方在问本人：选项框放在对话最后（问的那一处）；手机、别的电脑上只留问题和「等你 · {电脑名}」。会话停了收成「已失效」。
+  // 新首页里提问、批准由 Task 管线转达（14.3）：这里只一行原话加「去回答」，点了跳到 Task 管线那个框。
+  const relay = embedded && taskId && session && !ended ? () => router.push(`${workHref(taskId)}#${askAnchor(session.id)}`) : null;
+  const asking = !question ? null : relay ? <RelayLine text={questionTitle(question)} onGo={relay} />
+    : <QuestionDecision key={question.requestId} request={question} blocked={canAct ? null : awayChip(device)} expired={ended} onAnswer={answer} />;
+  const dock = <PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} />;
+  // 新首页里输入框只在这台电脑上跑着这张卡时出（别处看摘要）；老页面照旧灰着。
+  const composer = agent && (session || !embedded)
+    ? <SessionComposer placeholder={`给${item.title}插话…`} disabled={!canAct} onSend={say} dock={dock} />
+    : <div className={s.composerDock}>{dock}</div>;
   const chat = (
     <PendingBoxes>
       <div className={s.chat}>
         <div className={s.scroll} ref={scroll.scrollRef}>
           <div ref={scroll.contentRef}>
             {session ? (
-              <SessionTranscript entries={view.entries} agentName={agentName} canAct={canAct} live={sessionRunning} lead={`交代：${item.title}${item.card?.criterion ? ` · 按「${item.card.criterion.text}」验收` : ""}`}
+              <SessionTranscript entries={view.entries} agentName={agentName} canAct={canAct} device={device} live={sessionRunning} ended={ended} relay={relay} lead={`交代：${item.title}${item.card?.criterion ? ` · 按「${item.card.criterion.text}」验收` : ""}`}
                 onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={asking} asking={question} />
-            ) : <CloudTimeline run={detail.runs[0] ?? null} title={item.title} />}
+            ) : <CloudTimeline run={run} title={item.title} />}
           </div>
           <div ref={scroll.reserveRef} aria-hidden />
         </div>
-        <PendingDock latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} />
-        {agent ? <SessionComposer placeholder={`发给${agentName}…`} disabled={!canAct} onSend={say} /> : null}
+        {composer}
       </div>
     </PendingBoxes>
   );
 
-  const state = wait ? <span className={s.tag} data-tone={waitTone(wait)}>{WAIT_LABEL[wait]}</span>
-    : <span className={s.tag} data-tone={stage === "done" ? "done" : stage === "todo" ? undefined : "ver"}>{STAGES.find((entry) => entry.id === stage)?.label}</span>;
   const starter = starting ? <StartDialog title={item.title} role={role} onClose={() => setStarting(false)} onStart={async (model, folder, picked) => {
     const begun = performance.now();
     const created = await startCard(local.runner, item, model, folder?.path ?? "", picked);
@@ -142,23 +170,35 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
     setStarting(false);
     await local.refresh();
   }} /> : null;
-  // 新首页的展示区：一行页头（名字、状态、在哪做、信息图标），下面是对话；点信息图标换成结果（交代、计划、标准、验收、产出、合回）。
+  // 新首页的展示区（5.4.3「页头」）：上一级 / 名字，右边状态 chip、模型 chip、「停止」或「推翻」（弱按钮）、信息图标；下面是对话，点信息图标换成结果。
   if (embedded) {
+    const showPane = details ?? !session;
+    const chipOf = stateChip(wait, stage, !canAct && device ? awayChip(device) : null);
+    const model = run?.modelLabel ?? item.card?.model?.label ?? null;
+    const handback = detail.handbacks[0] ?? null;
+    const canFlip = !handheld && !!handback && handback.status === "done" && !handback.overruled && handback.outcome === "pass" && !deliverableLabel(item)?.startsWith("已纳入");
+    const headAct = (action: () => Promise<unknown>) => { setHeadFailed(null); action().catch((error: unknown) => setHeadFailed(failureOf(error, () => headAct(action)))); };
+    const stop = canAct && session && !ended ? <HeroButton variant="ghost" size="sm" onPress={() => headAct(() => control(sessionRunning ? "interrupt" : "kill"))}>停止</HeroButton>
+      : canFlip ? <HeroButton variant="ghost" size="sm" onPress={() => { setDetails(true); setFlipping(true); }}>推翻</HeroButton> : null;
     return (
       <div className={s.page} data-embedded="" data-testid="card-session">
         <header className={s.embedHead}>
           {chrome.lead}
           <b className={s.embedTitle}>{chrome.parent}{item.title}</b>
-          {state}
+          <span className={s.stateChip} data-tone={chipOf.tone}>{chipOf.tone === "wait" ? <i aria-hidden /> : null}{chipOf.text}</span>
+          {model ? <span className={s.stateChip} data-tone="neutral">{model}</span> : null}
           <span className={s.exec}>{session?.workspace ? <span title={placeText(session.workspace)}>{shortPlace(session.workspace)}</span> : null}</span>
-          <button type="button" className={s.iconBtn} aria-label="结果" title="结果" aria-pressed={details} onClick={() => setDetails(!details)} data-testid="session-details"><Info {...ICON} /></button>
+          {headFailed ? <FailedLine inline {...headFailed} /> : stop}
+          <HeroButton variant="ghost" size="sm" isIconOnly aria-label="结果" title="结果" data-pressed={showPane || undefined} onPress={() => setDetails(!showPane)} data-testid="session-details"><Info {...ICON} aria-hidden /></HeroButton>
           {chrome.trail}
         </header>
-        <div className={s.body} data-solo="">{details ? <div className={s.paneScroll}>{pane}</div> : chat}</div>
+        <div className={s.body} data-solo="">{showPane ? <div className={s.paneScroll}>{pane}</div> : chat}</div>
         {starter}
       </div>
     );
   }
+  const state = wait ? <span className={s.tag} data-tone={waitTone(wait)}>{WAIT_LABEL[wait]}</span>
+    : <span className={s.tag} data-tone={stage === "done" ? "done" : stage === "todo" ? undefined : "ver"}>{STAGES.find((entry) => entry.id === stage)?.label}</span>;
   return (
     <div className={s.page} data-testid="card-session">
       <header className={s.head}>
@@ -170,7 +210,7 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
         </div>
         <div className={s.exec}>
           {role ? <span className={s.ex}><i>&gt;_</i>{role.name}</span> : null}
-          {agent ? <span>{session ? `本机${sessionRunning ? " · 在跑" : ""}` : item.card?.run ? item.card.run.deviceName : ""}</span> : null}
+          {agent ? <span>{session ? `本机${sessionRunning ? " · 进行中" : ""}` : item.card?.run ? item.card.run.deviceName : ""}</span> : null}
           {session?.workspace ? <span title={placeText(session.workspace)}>{shortPlace(session.workspace)}</span> : item.card?.handback?.git ? <span>{item.card.handback.git.branch}</span> : null}
         </div>
       </header>
@@ -201,13 +241,17 @@ function CloudTimeline({ run, title }: { run: TLocalRunView | null; title: strin
   );
 }
 
-function ResultPane({ detail, session, view, canAct, wait, stage, handheld, ready, onStart, onControl, onResume, onChanged }: {
+function ResultPane({ detail, session, view, canAct, wait, stage, handheld, ready, embedded, flipping, onFlipDone, onStart, onControl, onResume, onChanged }: {
   detail: CardDetail; session: TLocalSessionSummary | null; view: SessionView | null; canAct: boolean; wait: string | null; stage: string; handheld: boolean; ready: boolean;
+  /** 新首页里：停止、推翻在页头（5.4.3），这里只留「继续」；不写订阅按标价折算的花费（11.2）。 */
+  embedded: boolean;
+  /** 页头点了「推翻」：推翻的原因框直接展开。 */
+  flipping: boolean; onFlipDone: () => void;
   /** 新首页里没有常驻的「开始」（设计 9.8）：自动开工失败时由 Task 管线那一行出「手动开始」。 */
   onStart?: () => void; onControl: (action: "interrupt" | "kill") => Promise<unknown>; onResume: () => Promise<unknown>; onChanged: () => void;
 }) {
   const item = detail.task;
-  // 停下、继续、强停没成：那排按钮后面写「失败 · 重试」（原因在 title 里），不弹 toast。
+  // 停止、继续没成：那排按钮后面写「失败 · 重试」（原因在 title 里），不弹 toast。
   const [failed, setFailed] = useState<{ retry: () => void; reason: string } | null>(null);
   const act = (action: () => Promise<unknown>) => { setFailed(null); action().catch((error: unknown) => setFailed({ retry: () => act(action), reason: error instanceof Error ? error.message : "" })); };
   const run = detail.runs[0] ?? null;
@@ -251,7 +295,7 @@ function ResultPane({ detail, session, view, canAct, wait, stage, handheld, read
         </div>
       ) : null}
 
-      {handback ? <Acceptance cardId={item.id} handback={handback} canOverrule={!handheld} deliverable={deliverableLabel(item)} onChanged={onChanged} /> : null}
+      {handback ? <Acceptance cardId={item.id} handback={handback} canOverrule={!handheld} deliverable={deliverableLabel(item)} onChanged={onChanged} flipping={flipping} onFlipDone={onFlipDone} hideFlip={embedded} /> : null}
       <MergeAction session={session} title={item.title} accepted={stage === "done"} onChanged={onChanged} />
 
       {detail.outputs.length ? (
@@ -268,14 +312,14 @@ function ResultPane({ detail, session, view, canAct, wait, stage, handheld, read
         </div>
       ) : null}
 
-      {usage && usage.tokens ? <p className={s.cost}>{usage.tokens.toLocaleString("zh-CN")} tokens{money(usage.cost) ? ` · ${money(usage.cost)}` : ""}</p> : null}
+      {usage && usage.tokens && !embedded ? <p className={s.cost}>{usage.tokens.toLocaleString("zh-CN")} tokens{money(usage.cost) ? ` · ${money(usage.cost)}` : ""}</p> : null}
 
       {agent && !handheld ? (
         <div className={s.actions}>
           {stage === "todo" && !view && onStart ? <HeroButton variant="primary" onPress={onStart} isDisabled={!ready}>开始</HeroButton> : null}
-          {canAct && live ? <HeroButton variant="secondary" onPress={() => act(() => onControl("interrupt"))}>停下</HeroButton> : null}
-          {canAct && paused && !live ? <HeroButton variant="primary" onPress={() => act(onResume)}>继续</HeroButton> : null}
-          {canAct && view && status !== "exited" && status !== "done" && status !== "failed" ? <HeroButton variant="ghost" onPress={() => act(() => onControl("kill"))}>强停</HeroButton> : null}
+          {canAct && live && !embedded ? <HeroButton variant="secondary" onPress={() => act(() => onControl("interrupt"))}>停止</HeroButton> : null}
+          {canAct && paused && !live ? <HeroButton variant={embedded ? "ghost" : "primary"} size={embedded ? "sm" : undefined} onPress={() => act(onResume)}>继续</HeroButton> : null}
+          {canAct && view && !embedded && status !== "exited" && status !== "done" && status !== "failed" ? <HeroButton variant="ghost" onPress={() => act(() => onControl("kill"))}>强停</HeroButton> : null}
           {failed ? <FailedLine inline reason={failed.reason} onRetry={failed.retry} /> : null}
         </div>
       ) : null}
@@ -284,23 +328,36 @@ function ResultPane({ detail, session, view, canAct, wait, stage, handheld, read
   );
 }
 
-/** Agent 验收：逐条达到 / 部分 / 未达到，带理由和怎么补；本人能推翻（通过的退回去，没过的直接算通过）。 */
-export function Acceptance({ cardId, handback, canOverrule, deliverable, onChanged }: { cardId: string; handback: TCardHandbackView; canOverrule: boolean; deliverable: string | null; onChanged: () => void }) {
+/** 单条标准的结论（5.4.7）：达到 = 勾（--ink-muted），未达到 = 叉（--danger），部分达到 = 中性 chip。 */
+function Verdict({ verdict }: { verdict: string }) {
+  if (verdict === "met") return <span className={s.verdict} data-verdict="met"><Check {...ICON} aria-hidden />{VERDICT.met}</span>;
+  if (verdict === "unmet") return <span className={s.verdict} data-verdict="unmet"><X {...ICON} aria-hidden />{VERDICT.unmet}</span>;
+  return <span className={s.verdict}>{VERDICT[verdict] ?? verdict}</span>;
+}
+
+/** Agent 验收：逐条达到 / 部分达到 / 未达到，带理由和怎么补；本人能推翻（通过的退回去，没过的直接算通过）。 */
+export function Acceptance({ cardId, handback, canOverrule, deliverable, onChanged, flipping = false, onFlipDone, hideFlip = false }: {
+  cardId: string; handback: TCardHandbackView; canOverrule: boolean; deliverable: string | null; onChanged: () => void;
+  /** 页头点了「推翻」：原因框直接展开。hideFlip：「推翻」在页头，这里不再放一个。 */
+  flipping?: boolean; onFlipDone?: () => void; hideFlip?: boolean;
+}) {
   const [reason, setReason] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState<Failure | null>(null);
+  useEffect(() => { if (flipping) setReason((current) => current ?? ""); }, [flipping]);
   const verdicts = useMemo(() => handback.result?.criteria ?? [], [handback.result]);
+  const close = () => { setReason(null); onFlipDone?.(); };
   const run = async (action: () => Promise<unknown>) => {
     setBusy(true);
     setFailed(null);
-    try { await action(); setReason(null); onChanged(); }
+    try { await action(); close(); onChanged(); }
     catch (error) { setFailed(failureOf(error, () => void run(action))); }
     finally { setBusy(false); }
   };
-  const head = handback.status === "queued" || handback.status === "running" ? "Agent 验收中"
-    : handback.status === "failed" ? "验收没跑完"
-    : handback.outcome === "pass" ? `Agent 验收通过 · ${handback.met}/${handback.total}${deliverable ? ` · ${deliverable}` : ""}`
-    : `验收没过 · ${handback.met}/${handback.total} 条达到`;
+  const head = handback.status === "queued" || handback.status === "running" ? "验收中"
+    : handback.status === "failed" ? "验收失败"
+    : handback.outcome === "pass" ? `验收过了 · ${handback.met}/${handback.total}${deliverable ? ` · ${deliverable}` : ""}`
+    : `未通过 · ${handback.met}/${handback.total} 条达到`;
   const canFlip = canOverrule && handback.status === "done" && !handback.overruled && !(handback.outcome === "pass" && deliverable?.startsWith("已纳入"));
   return (
     <div className={s.sec} data-testid="acceptance">
@@ -309,7 +366,7 @@ export function Acceptance({ cardId, handback, canOverrule, deliverable, onChang
         <ol className={s.verdicts}>
           {verdicts.map((row) => (
             <li key={row.index} data-verdict={row.verdict}>
-              <span className={s.verdict}>{VERDICT[row.verdict] ?? row.verdict}</span>
+              <Verdict verdict={row.verdict} />
               <span>{row.text}</span>
               {row.reason ? <small>{row.reason}</small> : null}
               {row.fix && row.verdict !== "met" ? <small>怎么补：{row.fix}</small> : null}
@@ -323,13 +380,13 @@ export function Acceptance({ cardId, handback, canOverrule, deliverable, onChang
         <form className={s.reason} onSubmit={(event) => { event.preventDefault(); if (reason.trim()) void run(() => overrule(cardId, handback.id, reason.trim())); }}>
           <input autoFocus value={reason} maxLength={200} placeholder="原因" aria-label="推翻的原因" onChange={(event) => setReason(event.target.value)} />
           <HeroButton variant="primary" size="sm" type="submit" isDisabled={busy || !reason.trim()}>{handback.outcome === "pass" ? "推翻" : "仍然通过"}</HeroButton>
-          <HeroButton variant="ghost" size="sm" onPress={() => setReason(null)}>取消</HeroButton>
+          <HeroButton variant="ghost" size="sm" onPress={close}>取消</HeroButton>
           {failed && !busy ? <FailedLine inline {...failed} /> : null}
         </form>
       ) : (
         <div className={s.actions}>
-          {canFlip ? <HeroButton variant="secondary" size="sm" onPress={() => setReason("")}>{handback.outcome === "pass" ? "推翻验收" : "仍然通过"}</HeroButton> : null}
-          {canOverrule && handback.status === "failed" ? <HeroButton variant="secondary" size="sm" isDisabled={busy} onPress={() => void run(() => retryAcceptance(cardId, handback.id))}>重新验收</HeroButton> : null}
+          {canFlip && !(hideFlip && handback.outcome === "pass") ? <HeroButton variant="ghost" size="sm" onPress={() => setReason("")}>{handback.outcome === "pass" ? "推翻" : "仍然通过"}</HeroButton> : null}
+          {canOverrule && handback.status === "failed" ? <HeroButton variant="ghost" size="sm" isDisabled={busy} onPress={() => void run(() => retryAcceptance(cardId, handback.id))}>重新验收</HeroButton> : null}
           {failed && !busy ? <FailedLine inline {...failed} /> : null}
         </div>
       )}

@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * 卡验收过了以后的「合并」（ADR 0038）：把卡的分支合回主文件夹，只在这台电脑上点（本机会话在这里）。
- * 合上了写「已合并」和提交；合不了、或本机没自动合回（needsMerge），在按钮旁写原因（左栏「worker 等你」也列一条）。卡不在工作树里做时什么都不出。
+ * 卡验收过了以后的「合进 main」（ADR 0038）：把卡的分支合回主文件夹，只在这台电脑上点（本机会话在这里）。
+ * 合上了写「已合进 main」和提交；合不了、或本机没自动合回（needsMerge），在按钮旁写原因（左栏「worker 等你」也列一条）。卡不在工作树里做时什么都不出。
  */
 import { useState } from "react";
 import { HeroButton } from "@/components/HeroButton";
@@ -19,7 +19,7 @@ export function MergeAction({ session, title, accepted, onChanged }: { session: 
   const [busy, setBusy] = useState(false);
   const ws = session?.workspace;
   if (!session || ws?.kind !== "worktree") return null;
-  if (ws.mergedCommit) return <span className={w.dim} data-testid="merged">已合并 · {ws.mergedCommit.slice(0, 7)}</span>;
+  if (ws.mergedCommit) return <span className={w.dim} data-testid="merged">已合进 {ws.baseBranch} · {ws.mergedCommit.slice(0, 7)}</span>;
   if (!accepted || handheld || local.phase !== "ready") return null;
   const merge = async () => {
     setBusy(true);
@@ -31,7 +31,7 @@ export function MergeAction({ session, title, accepted, onChanged }: { session: 
   };
   return (
     <div className={w.rowActs} data-testid="merge-action">
-      <HeroButton variant="secondary" size="sm" isDisabled={busy} onPress={() => void merge()}>合并</HeroButton>
+      <HeroButton variant="tertiary" size="sm" isDisabled={busy} onPress={() => void merge()}>合进 {ws.baseBranch}</HeroButton>
       {issue || ws.needsMerge ? <span className={w.m}>{issue?.text ?? ws.needsMerge?.message}</span> : null}
     </div>
   );
