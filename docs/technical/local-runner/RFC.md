@@ -161,7 +161,10 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
 - 一个项目在这台电脑上对应一个文件夹，存在本机（`projects.json`），不报给云端。文件夹照旧只能经本机选择框加进允许列表（`POST /v1/folders/pick`），再 `PUT /v1/projects/:projectId/folder { folderId | null, name? }` 绑上或解绑；`GET /v1/projects` 列出这台电脑上记着的项目和文件夹；`GET /v1/folders` 每个文件夹带 `projects[{ projectId, name }]`（连接页看挂在哪）。名字只用来显示。文件夹从允许列表删掉后，绑着它的项目读出来就是没绑。
 - 开工的 `subject` 可带 `projectId`（天枢的 project_id）。不指定 `cwd` 时：项目绑了文件夹就在那里做（卡在 git 仓库里照样开自己的工作树；专题、规划员直接在那个文件夹）；没绑时卡在本机程序数据目录的 `projects/<项目 id>/` 里做（不是 git 仓库，同一时间一张卡，前后几张卡看得到彼此留下的东西），专题、规划员照旧用各自的专用目录；不带项目又不指定目录的卡照旧 400。指定了 `cwd` 的照旧用 `cwd`。
 - 上报：`subject` 在每条同步条目里都有，所以状态、花费、交回等都带 `projectId`；本机起的验收员跟着被验的卡带上。
-- 项目转交（16.7）没做（第二批）。
+- 项目转交（11/07 晚，16.7）本机三件：
+  - 交接检查 `POST /v1/projects/:projectId/handover-check`：只看 git，不调模型。项目绑的文件夹的当前分支、远端（地址里的账号口令去掉）、没提交的文件（含没加进 git 的，最多 200 个加总数，改名算一个）、没推完的本地分支（没有上游的、比上游多的，卡的 `tianshu/…` 分支也在里面）；不是仓库时列最近改过的 30 个文件（跳过 node_modules、.git 等）；没绑为空。网页把结果交给天枢写交接说明，本机不报给云端。
+  - 接手以后「拉到这台电脑」`POST /v1/projects/:projectId/clone { repoUrl, branch?, name? }`：先弹系统选择框让本人选放在哪，在里面 `git clone -- <地址> <名字>`（只收 https://、ssh://、git@ 开头的地址，不经 shell，`GIT_TERMINAL_PROMPT=0` 不弹输入口令，用本人电脑上已有的 git 登录），再 `git switch <交接分支>`（远端没有就留在默认分支，`fellBack: true`），加进允许的文件夹、绑到项目。取消回 `project: null`；那里已有同名文件夹、选的地方不许用回 400；拉不下来回 409「没拉下来：」加 git 的报错（地址里的口令去掉）。同步等 clone 做完才回（最多 15 分钟），网页显示用时。
+  - 原负责人那边：网页 `PUT /v1/projects/:projectId/folder { folderId: null }` 解绑，不动文件，文件夹也还在允许的列表里；本机不另开接口。
 - 测试：`test/projects.test.ts`。
 
 **一句话带附件（11/07 下午，新首页设计 14.5）**：
@@ -260,6 +263,7 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
 - 第十轮（11/07 下午，三种模式和预算、TokenHub 花费、Codex 额度）：单测 121 条（新增 `test/budget.test.ts` 8 条、`test/quota.test.ts` Codex 1 条、`test/planVerify.test.ts` 无上限的验收员 1 条、`test/outbox.test.ts` 同步带花费 1 条），契约 100 条。假 claude 加了干活的一轮（不要权限、按时做完，收到「预算用完了」提前收尾或不理）、余额不足（402、billing_error）、跑着时改设置（apply_flag_settings 记进 trace）。用假 claude 跑通：本周额度到 80% 后面开的卡降一档、「加 50%」回落；到 100% 跑着的做完这一步停下、排着的不开始；加了预算往开着的进程说一句接着做、排着的开始；时长到点不理就打断，停着等的时间不算；停之前加了预算说不用停；无上限的参数和 95% 关多 agent；余额不足停着等、说一句放开。28 处变异都有测试失败。消融删了两处：不是 TokenHub 的网关一小时内不再试、网关每轮做完强制重读花费（5 分钟读一次就够）。真机（不发提示、不花 token）：订阅的 Opus 上 `--settings {"ultracode":true}` 生效（`ultracodeAvailable: true`），`apply_flag_settings` 关、开都生效，`--effort max` 接受；`codex app-server` 的 `account/rateLimits/read` 约 5 秒读到 Plus 的 5 小时（0%）和本周（21%）两个窗口、2 次重置。TokenHub `/log/usage` 和 402 照 tokavi-tokenhub f31dd05 的源码写，没用真钥匙调。
 - 第十一轮（11/07 下午，「等你」两个字段、这台电脑逐项、用量来源通用形状、附件）：单测 124 条（新增 `test/attachments.test.ts` 4 条：附件的格式、文件名、存放、同名、大小、取不到、sha256 对不上、整句不发、工作树里不进提交、只发附件、没连天枢；状态条目带提问和批准那一步、批了以后不带；`test/quota.test.ts` Codex、Claude Code 的登录和用量格子的剩余百分比），契约 100 条。21 处变异 20 处有测试失败；没抓到的一处是「在问的那一条变了而状态没变时重报」：主轮的提问总伴随状态变化，只有后台子 agent 在一轮做完以后才问时才用得上，假 claude 没有这个顺序，按正确性留着。附件接口照 B 的 334f1ade 写，没和真的天枢联调。
 - 第十二轮（11/07 晚，项目的文件夹）：单测 125 条（新增 `test/projects.test.ts` 1 条：绑、解绑、改名、不在允许列表的 404、文件夹列表带项目、卡在项目仓库开工作树、专题在项目文件夹、没绑的卡用项目专用目录、不带项目的卡 400、上报带 projectId、验收员跟着卡、删文件夹后没绑），契约 101 条。8 处变异 7 处有测试失败；没抓到的是「删文件夹时改写绑定」，读的时候已经只认还在允许列表里的文件夹，那段改写多余，按消融删了。
+- 第十三轮（11/07 晚，项目转交）：单测 128 条（新增 `test/handover.test.ts` 3 条：交接检查的分支、远端去口令、没提交的、改名、没推完的分支、不是仓库时最近改过的文件和排序、没绑；clone 切交接分支、没有就默认分支、拉不下来；接口的选位置、clone、绑定、交接检查、重名、坏地址、拉不下来、取消、解绑不动文件），契约 101 条。11 处变异都有测试失败（补了改名和排序两条才抓到）。clone 在测试里换成从本地 bare 仓库拉，没用真的 GitHub 试。
 - 和云端联调（11/06）：本机程序分支 + `claude/v2-board-api` 的接收端合进临时分支 `claude/local-runner-sync-e2e`（只在本机），时间机器起 API，真程序 + 真 Claude Code（haiku）走通配对 → 建设备令牌 → 关联云端 → 开卡 → 交产出物和交回 → 云端收到（13 条、2 份产出、1 条交回排队、卡变进行中）→ 断网时排队 6 条 → 恢复后自动补发 → 原样重发 6 条全部 accepted、表里不重复。44 秒，$0.0043。记录在 `.scratch/local-runner/实验/I_云端联调.md`。
 - 真机：编出的 exe + 真 Claude Code 2.1.318（haiku），冒烟命令走完配对 → 开工 → 事件 → 3 次批准 → 插话下一步生效（b.txt 改成 22）→ 新一轮 → 停下（interrupted）→ 强停（exited），花费 $0.003；另一次验证本会话 MCP 交证据和交回。真实调用共 2 次会话（4 轮）。
 - 托盘模式：配对确认框、选文件夹框、托盘图标/提示/菜单、暂停与恢复、菜单退出都在 Windows 11 上截图验证（`.scratch/local-runner/实验/截图/`）。
