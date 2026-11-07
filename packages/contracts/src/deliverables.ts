@@ -1,8 +1,8 @@
 import { Type, type Static } from "@sinclair/typebox";
 
 /**
- * Task 的交付物（spec 5.2–5.4）：一个本体 Task 一个交付物，交付物有多个版本；每个版本自动评审一次，
- * 每一条验收标准都「达到」才能交付。交付以后伙伴写这一版的说明（默认认可）。Co-Agent 的评判第二批再接。
+ * Task 的交付物（spec 5.2–5.4）：一个本体 Task 一个交付物，交付物有多个版本；每个版本自动做一次参考评审（有约定时按约定里的「用什么证明」判）。
+ * 评审只作参考、不卡交付（11/03 定）：最新一版评审跑完就能交，交付由本人点。交付以后伙伴写这一版的说明（默认认可）。Co-Agent 的评判第二批再接。
  */
 
 /** 一个版本里的一样东西：文件（PDF、Word、Markdown、HTML）、图片、链接。read 是评审能不能读到它。 */
@@ -44,6 +44,7 @@ export const ReviewBasis = Type.Union([Type.Literal("acceptance"), Type.Literal(
 /**
  * 一个版本的评审，只作参考（11/03 定）：不卡交付，也不用来算进展。phase 是评审中走到哪一步（step / total，label 如「对照第 2 条」）；
  * expectedSeconds 是预计用时。score 是达标度（达到 100、部分 50、未达到 0 的平均），met / total 是几条达到；ready 是每一条都达到。
+ * beyondScope 是约定外的改进建议（「下次可以做」），不算进部分达到、未达到；11/06 以前的报告为空。
  */
 export const DeliverableReview = Type.Object({
   status: Type.Union([Type.Literal("queued"), Type.Literal("running"), Type.Literal("done"), Type.Literal("failed")]),
@@ -63,6 +64,7 @@ export const DeliverableReview = Type.Object({
   total: Type.Integer({ minimum: 0 }),
   ready: Type.Boolean(),
   criteria: Type.Array(ReviewCriterion),
+  beyondScope: Type.Array(Type.String()),
   error: Type.Union([Type.String(), Type.Null()]),
 }, { additionalProperties: false });
 

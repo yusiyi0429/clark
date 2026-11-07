@@ -404,8 +404,8 @@ describe("本机程序契约", () => {
     const at = "2026-11-07T07:00:00.000Z";
     const folder = { id: "f1a2b3c4d5e6", path: "D:/repo", label: "repo", addedAt: at };
     expect(Value.Check(LocalFolder, folder)).toBe(true); // 选文件夹的回执不带 projects
-    expect(Value.Check(LocalFolder, { ...folder, projects: [{ projectId: "p-1", name: "天枢本机程序" }, { projectId: "p-2", name: null }] })).toBe(true);
-    const bound = { projectId: "p-1", name: "天枢本机程序", folder: { id: folder.id, path: folder.path, label: folder.label }, updatedAt: at };
+    expect(Value.Check(LocalFolder, { ...folder, projects: [{ projectId: "11111111-1111-4111-8111-111111111111", name: "天枢本机程序" }, { projectId: "22222222-2222-4222-8222-222222222222", name: null }] })).toBe(true);
+    const bound = { projectId: "11111111-1111-4111-8111-111111111111", name: "天枢本机程序", folder: { id: folder.id, path: folder.path, label: folder.label }, updatedAt: at };
     expect(Value.Check(LocalProjectFolder, bound)).toBe(true);
     expect(Value.Check(LocalProjectFolder, { ...bound, folder: null })).toBe(true);
     expect(Value.Check(LocalProjectListResponse, { projects: [bound] })).toBe(true);
@@ -413,14 +413,14 @@ describe("本机程序契约", () => {
     expect(Value.Check(LocalProjectFolderRequest, { folderId: null })).toBe(true);
     expect(Value.Check(LocalProjectFolderRequest, { path: "D:/repo" })).toBe(false); // 网页不能直接写路径
     expect(LOCAL_RUNNER_ROUTES.putProjectFolder).toEqual({ method: "PUT", path: "/v1/projects/:projectId/folder", auth: true });
-    const subject = { kind: "card", cardId: "c1", projectId: "p-1" };
+    const subject = { kind: "card", cardId: "c1", projectId: "11111111-1111-4111-8111-111111111111" };
     expect(Value.Check(LocalCreateSessionRequest, { subject, title: "x", firstMessage: "做" })).toBe(true);
     const item = { key: `${deviceId}:${sessionId}:1`, sessionId, subject, occurredAt: at, type: "status", data: { status: "running", title: "x", agent: "claude-code", modelLabel: "订阅" } };
     expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots: { max: 3, running: 0, queued: 0 }, items: [item] })).toBe(true);
 
     // 项目转交（16.7）：交接检查只有 git 状态；接手后 clone
     const check = {
-      projectId: "p-1", checkedAt: at, folder: { path: "D:/repo", label: "repo" },
+      projectId: "11111111-1111-4111-8111-111111111111", checkedAt: at, folder: { path: "D:/repo", label: "repo" },
       git: { branch: "main", remotes: [{ name: "origin", url: "https://github.com/TokenkingOS/Chat_Service.git" }], uncommitted: ["src/a.ts"], uncommittedCount: 1,
         unpushed: [{ branch: "main", upstream: "origin/main", ahead: 2 }, { branch: "tianshu/abc", upstream: null, ahead: null }] },
       recentFiles: null,

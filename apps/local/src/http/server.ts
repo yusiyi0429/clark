@@ -215,14 +215,14 @@ export function createServer(d: ServerDeps): http.Server {
     listProjects: () => ({ projects: d.folders.projects() }),
     putProjectFolder: (c) => {
       const b = validate(LocalProjectFolderRequest, c.body);
-      const r = d.folders.bindProject(c.params.projectId!, b.folderId, b.name);
+      const r = d.folders.bindProject(projectIdOf(c), b.folderId, b.name);
       if (!r) throw new HttpError(404, "not_found", "没有这个文件夹，先选文件夹");
       return r;
     },
     // 交接检查（16.7）：项目绑的文件夹现在什么样，只看 git
     handoverCheck: async (c) => {
-      const p = d.folders.projects().find((x) => x.projectId === c.params.projectId);
-      return handoverCheck(c.params.projectId!, p?.folder ? { path: p.folder.path, label: p.folder.label } : null);
+      const p = d.folders.projects().find((x) => x.projectId === projectIdOf(c));
+      return handoverCheck(projectIdOf(c), p?.folder ? { path: p.folder.path, label: p.folder.label } : null);
     },
     // 接手以后「拉到这台电脑」（16.7）：本人选放在哪，clone、切到交接分支、加进允许的文件夹、绑到项目
     cloneProject: async (c) => {
@@ -239,9 +239,16 @@ export function createServer(d: ServerDeps): http.Server {
         throw new HttpError(409, "conflict", `没拉下来：${stripCredentials(e instanceof Error ? e.message : String(e)).replace(/(https?:\/\/)[^/@\s]*@/g, "$1").slice(0, 400)}`);
       }
       const folder = d.folders.add(dest);
-      return { project: d.folders.bindProject(c.params.projectId!, folder.id), ...got };
+      return { project: d.folders.bindProject(projectIdOf(c), folder.id), ...got };
     },
   };
+
+  /** 项目 id 是天枢给的 uuid（和 projects.ts 一致）。 */
+  function projectIdOf(c: Ctx): string {
+    const id = c.params.projectId ?? "";
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw new HttpError(400, "validation", "项目 id 不对");
+    return id;
+  }
 
   function agentMustBeClaude(c: Ctx) {
     if (c.params.agent === "codex") throw new HttpError(501, "not_implemented", "Codex 12 月接入");

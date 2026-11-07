@@ -324,7 +324,7 @@ export const LocalModelProfileUpsert = Type.Object({
 }, strict);
 
 /** 文件夹挂在哪个项目上（项目 id 是天枢给的，name 是绑定时网页带来的名字，只用来显示）。 */
-export const LocalFolderProject = Type.Object({ projectId: Type.String({ minLength: 1, maxLength: 80 }), name: Nullable(Type.String({ maxLength: 120 })) }, strict);
+export const LocalFolderProject = Type.Object({ projectId: Uuid, name: Nullable(Type.String({ maxLength: 120 })) }, strict);
 /**
  * 本人允许本机程序读写的文件夹。只能经本机弹出的系统选择框添加（POST /v1/folders/pick），网页不能直接写路径。
  * projects：这个文件夹在这台电脑上挂着哪几个项目（新首页设计 16.6，连接页的文件夹列表用）；GET /v1/folders 总会带，选文件夹的回执不带。
@@ -342,7 +342,7 @@ export const LocalFolder = Type.Object({
  * 专题、规划员照旧用各自的专用目录。
  */
 export const LocalProjectFolder = Type.Object({
-  projectId: Type.String({ minLength: 1, maxLength: 80 }),
+  projectId: Uuid,
   name: Nullable(Type.String({ maxLength: 120 })),
   folder: Nullable(Type.Object({ id: Id, path: Type.String(), label: Type.String() }, strict)),
   updatedAt: Instant,
@@ -368,7 +368,7 @@ export const LocalProjectFolderRequest = Type.Object({
  * 账号口令、文件内容都不在结果里。
  */
 export const LocalHandoverCheck = Type.Object({
-  projectId: Type.String({ minLength: 1, maxLength: 80 }),
+  projectId: Uuid,
   checkedAt: Instant,
   folder: Nullable(Type.Object({ path: Type.String(), label: Type.String() }, strict)),
   git: Nullable(Type.Object({
@@ -429,10 +429,11 @@ export const LocalSessionSubject = Type.Object({
   /** 只有 kind=verify（本机填）：验的是哪一次交回，就是那条 handback 同步条目的 key。 */
   handbackKey: Type.Optional(SyncKey),
   /**
-   * 所属项目（新首页设计 16，天枢给的 project_id）：网页开工时带；验收员由本机随被验的卡带上。subject 在每条同步条目里都有，状态上报就带着它。
+   * 所属项目（新首页设计 16，天枢的项目 id）：网页把认领回执里的 SessionStartView.projectId（不为 null 时）原样放进来；验收员由本机随被验的卡带上。
+   * subject 在每条同步条目里都有，状态上报就带着它（云端从 item.subject.projectId 取）。
    * 带了而不指定 cwd 时，本机在这个项目在这台电脑上绑的文件夹里做（见 LocalProjectFolder）。
    */
-  projectId: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
+  projectId: Type.Optional(Uuid),
 }, strict);
 
 export const LocalUsage = Type.Object({

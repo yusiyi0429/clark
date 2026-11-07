@@ -49,7 +49,7 @@ describe("交接检查（只看 git）", () => {
     git(work, "branch", "tianshu/abc12345-card");
     git(work, "mv", "old.md", "renamed.md"); // 改名：一个文件，不是两个
     const at = new Date("2026-11-07T10:00:00Z");
-    const r = await handoverCheck("p-1", { path: work, label: "work" }, at);
+    const r = await handoverCheck("11111111-1111-4111-8111-111111111111", { path: work, label: "work" }, at);
     conforms(LocalHandoverCheck, r);
     expect(r.git).toEqual({
       branch: "main",
@@ -68,12 +68,12 @@ describe("交接检查（只看 git）", () => {
     writeFileSync(join(plain, "sub", "新.md"), "x");
     mkdirSync(join(plain, "node_modules"));
     writeFileSync(join(plain, "node_modules", "x.js"), "x");
-    const p = await handoverCheck("p-2", { path: plain, label: "plain" }, at);
+    const p = await handoverCheck("22222222-2222-4222-8222-222222222222", { path: plain, label: "plain" }, at);
     conforms(LocalHandoverCheck, p);
     expect(p.git).toBeNull();
     expect(p.recentFiles!.map((f) => f.path)).toEqual(["sub/新.md", "a-旧.md"]);
     // 没绑
-    expect(await handoverCheck("p-3", null, at)).toEqual({ projectId: "p-3", checkedAt: at.toISOString(), folder: null, git: null, recentFiles: null });
+    expect(await handoverCheck("66666666-6666-4666-8666-666666666666", null, at)).toEqual({ projectId: "66666666-6666-4666-8666-666666666666", checkedAt: at.toISOString(), folder: null, git: null, recentFiles: null });
   });
 
   it("clone：切到交接分支；远端没有就留在默认分支；拉不下来抛 git 的报错", async () => {
@@ -98,33 +98,33 @@ describe("接手和交出（本机接口）", { timeout: 40_000 }, () => {
       const token = await pair(t.port);
       const call = (method: string, path: string, body?: unknown) => api(t.port, token, method, path, body);
       const url = "https://github.com/TokenkingOS/Chat_Service.git";
-      const got = await call("POST", "/v1/projects/p-chat/clone", { repoUrl: url, branch: "handover/chat" });
+      const got = await call("POST", "/v1/projects/33333333-3333-4333-8333-333333333333/clone", { repoUrl: url, branch: "handover/chat" });
       expect(got.status, JSON.stringify(got.body)).toBe(200);
       conforms(LocalProjectCloneResponse, got.body);
       const dest = join(parent, "Chat_Service");
-      expect(got.body).toMatchObject({ branch: "handover/chat", fellBack: false, project: { projectId: "p-chat", folder: { path: dest, label: "Chat_Service" } } });
+      expect(got.body).toMatchObject({ branch: "handover/chat", fellBack: false, project: { projectId: "33333333-3333-4333-8333-333333333333", folder: { path: dest, label: "Chat_Service" } } });
       expect(existsSync(join(dest, "readme.md"))).toBe(true);
-      expect((await call("GET", "/v1/folders")).body.folders).toEqual([expect.objectContaining({ path: dest, projects: [{ projectId: "p-chat", name: null }] })]);
+      expect((await call("GET", "/v1/folders")).body.folders).toEqual([expect.objectContaining({ path: dest, projects: [{ projectId: "33333333-3333-4333-8333-333333333333", name: null }] })]);
 
       // 交接检查：走项目绑的文件夹
-      const check = (await call("POST", "/v1/projects/p-chat/handover-check", {})).body;
+      const check = (await call("POST", "/v1/projects/33333333-3333-4333-8333-333333333333/handover-check", {})).body;
       conforms(LocalHandoverCheck, check);
-      expect(check).toMatchObject({ projectId: "p-chat", folder: { path: dest }, git: { branch: "handover/chat", uncommittedCount: 0 } });
-      expect((await call("POST", "/v1/projects/p-none/handover-check", {})).body).toMatchObject({ folder: null, git: null, recentFiles: null });
+      expect(check).toMatchObject({ projectId: "33333333-3333-4333-8333-333333333333", folder: { path: dest }, git: { branch: "handover/chat", uncommittedCount: 0 } });
+      expect((await call("POST", "/v1/projects/44444444-4444-4444-8444-444444444444/handover-check", {})).body).toMatchObject({ folder: null, git: null, recentFiles: null });
 
       // 那里已经有了：400；地址不对：400；拉不下来：409，原因写明；取消：project 为 null
-      const again = await call("POST", "/v1/projects/p-chat/clone", { repoUrl: url });
+      const again = await call("POST", "/v1/projects/33333333-3333-4333-8333-333333333333/clone", { repoUrl: url });
       expect([again.status, again.body.error.message]).toEqual([400, `${parent} 里已经有「Chat_Service」了，换个地方，或者直接选那个文件夹绑上`]);
-      expect((await call("POST", "/v1/projects/p-chat/clone", { repoUrl: "file:///C:/x" })).status).toBe(400);
-      const gone = await call("POST", "/v1/projects/p-gone/clone", { repoUrl: "https://github.com/TokenkingOS/Gone.git" });
+      expect((await call("POST", "/v1/projects/33333333-3333-4333-8333-333333333333/clone", { repoUrl: "file:///C:/x" })).status).toBe(400);
+      const gone = await call("POST", "/v1/projects/55555555-5555-4555-8555-555555555555/clone", { repoUrl: "https://github.com/TokenkingOS/Gone.git" });
       expect(gone.status).toBe(409);
       expect(gone.body.error.message).toMatch(/^没拉下来：/);
       expect(existsSync(join(parent, "Gone"))).toBe(false);
       pick = null;
-      expect((await call("POST", "/v1/projects/p-chat/clone", { repoUrl: url, name: "另一份" })).body).toEqual({ project: null, branch: null, fellBack: false });
+      expect((await call("POST", "/v1/projects/33333333-3333-4333-8333-333333333333/clone", { repoUrl: url, name: "另一份" })).body).toEqual({ project: null, branch: null, fellBack: false });
 
       // 原负责人那边：解绑，不动文件，文件夹也还在允许的列表里
-      expect((await call("PUT", "/v1/projects/p-chat/folder", { folderId: null })).body.folder).toBeNull();
+      expect((await call("PUT", "/v1/projects/33333333-3333-4333-8333-333333333333/folder", { folderId: null })).body.folder).toBeNull();
       expect(existsSync(join(dest, "readme.md"))).toBe(true);
       expect((await call("GET", "/v1/folders")).body.folders).toEqual([expect.objectContaining({ path: dest, projects: [] })]);
     } finally {
