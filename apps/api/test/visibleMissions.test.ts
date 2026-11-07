@@ -89,11 +89,17 @@ describe("看得见的 Mission：本月没有就退回这个人最近一个月�
       .toEqual([["m-oct-ceo", ["T-oct-member"]], ["m-oct-a", []], ["m-oct-b", []]]);
   }, 30_000);
 
-  it("本月已经从本体载入过：本月没有的人不退回（斯一 10/24），只剩还有没了结 Task 的", async () => {
+  it("按人退回：A 的 11 月 Mission 已经从本体载入了，B 本月没有，B 仍然退回自己的 10 月（M2 一个人一个人写进本体）", async () => {
     await seed();
-    await item("m-oct-b", "T-oct-b");
     await fromWorld("m-nov-ceo", "w-nov");
-    expect((await visibleMissions(q(), NOW, { ownerId: MEMBER })).map(({ id, carried }) => [id, carried])).toEqual([["m-oct-b", true]]);
+    expect((await visibleMissions(q(), NOW, { ownerId: MEMBER })).map(({ id, period, carried }) => [id, period, carried]))
+      .toEqual([["m-oct-a", "2026-10", false], ["m-oct-b", "2026-10", false]]);
+    expect(ids(await visibleMissions(q(), NOW, { ownerId: CEO }))).toEqual(["m-nov-ceo"]);
+    // 全公司（伙伴全局上下文、会议解读）和左栏也是各按各的。
+    expect(ids(await visibleMissions(q(), NOW))).toEqual(["m-nov-ceo", "m-oct-a", "m-oct-b"]);
+    expect(ids(await visibleMissions(q(), NOW, { personId: MEMBER }))).toEqual(["m-oct-a", "m-oct-b"]);
+    // 能挂执行事项的 Mission 也一样。
+    expect(ids(await listAvailableMissions(q(), MEMBER, NOW))).toEqual(["m-oct-a", "m-oct-b"]);
   }, 30_000);
 
   it("能挂执行事项的 Mission：退回的那个月和还有没了结 Task 的都能挂；之后月份的照旧能挂", async () => {

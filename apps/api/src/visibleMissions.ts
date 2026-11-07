@@ -3,8 +3,8 @@ import { companyPeriod } from "./monthlyPlans.js";
 
 /**
  * 看得见的 Mission（设计《新首页》10.3、10.9 第 2 条）：月份只是检查点，不按日历一刀切。
- * - 每个人「这个月」的 Mission：本月有就是本月的；本月一个都没有时退回这个人最近一个有 Mission 的月份。
- *   这个月已经从本体载入过（表里有本月的本体行）就不退回：本体里没有这个人的就是没有（斯一 10/24，和首页 homePlan.ownMissions 同一条）。
+ * - 每个人「这个月」的 Mission：本月有就是本月的；这个人本月一个都没有时退回他自己最近一个有 Mission 的月份。按人判断，
+ *   别人的本月 Mission 已经从本体载入了也照样退回：M2 是一个人一个人写进本体的，按「有人载入了就都不退回」的话，第一条写进去那一刻其他人会一起变空（11/07 用户定）。
  * - 再加还有没了结、在天枢里动过的 Task 的 Mission（carried）。
  *   动过：挂过执行事项或卡（退回的不算）、开过专题、出过交付版本、开过 Task 管线（管线没有 Mission，按 plan_task_missions 记的对上）。
  *   了结：本人确认完成（最新一版交付了、之后没开返工卡）、到此为止、已延续（taskContinuity.ts）。
@@ -32,8 +32,7 @@ export const UNSETTLED = (column: string) => `NOT EXISTS (SELECT 1 FROM task_sto
 export async function visibleMissions(q: Query, now: Date, scope?: VisibleScope): Promise<VisibleMission[]> {
   const owner = scope && "ownerId" in scope ? scope.ownerId : null;
   const person = scope && "personId" in scope ? scope.personId : null;
-  const rows = (await q(`WITH loaded AS (SELECT EXISTS (SELECT 1 FROM missions WHERE period=$1 AND world_object_id IS NOT NULL) AS v),
-      shown AS (SELECT owner_id, CASE WHEN bool_or(period=$1) THEN $1 WHEN (SELECT v FROM loaded) THEN NULL ELSE max(period) END AS period
+  const rows = (await q(`WITH shown AS (SELECT owner_id, CASE WHEN bool_or(period=$1) THEN $1 ELSE max(period) END AS period
         FROM missions WHERE NOT placeholder AND period<=$1 AND ($2::text IS NULL OR owner_id=$2) GROUP BY owner_id),
       touched AS (
         SELECT plan_task_id AS task_id,mission_id,owner_id AS person_id FROM tasks WHERE plan_task_id IS NOT NULL AND mission_id IS NOT NULL AND status<>'returned'
