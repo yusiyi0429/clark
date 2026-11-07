@@ -27,7 +27,7 @@ import h from "@/styles/home.module.css";
 export const subHref = (sub: Pick<SubSession, "kind" | "id">) => (sub.kind === "card" ? cardHref(sub.id) : topicHref(sub.id));
 const QUEUE_TEXT: Record<TWorkerQueueReason, string> = { not_dispatched: "等开工", slot: "等空位", device_offline: "等本机上线", prior_cards: "等前面的卡" };
 
-export function LeftColumn({ data, view, buddy, speaking, go, phone, account, today, alert, trail, top }: {
+export function LeftColumn({ data, view, buddy, speaking, go, phone, account, today, alert, trail, top, month, onRetryPlan }: {
   data: WorkHomeData;
   view: View;
   buddy: Buddy | null;
@@ -44,6 +44,10 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
   trail?: ReactNode;
   /** 手机首屏：「今天」行下面先放「等你」。 */
   top?: ReactNode;
+  /** 月份 chip（「11 月待敲定」）：点了进月份页。 */
+  month?: { href: string; label: string } | null;
+  /** 计划读不到：树最上面一行「本体读取失败」加「重试」。 */
+  onRetryPlan?: (() => void) | null;
 }) {
   const name = buddy?.name?.trim() || "伙伴";
   const atHome = view.kind === "home" || view.kind === "month";
@@ -62,16 +66,20 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
       {phone ? (
         <div className={h.today} data-phone="">
           <span className={h.todayIcon}><House {...ICON} /></span><span className={h.todayText}>{today}</span>
+          {month ? <button type="button" className={h.chip} onClick={() => go(month.href)}>{month.label}</button> : null}
           {trail ? <span className={h.todayTrail}>{trail}</span> : null}
         </div>
       ) : (
         <button type="button" className={h.today} aria-current={atHome ? "page" : undefined} onClick={() => go(HOME_HREF)} data-testid="today-row">
           <span className={h.todayIcon}><House {...ICON} /></span><span className={h.todayText}>{today}</span>
+          {/* 行尾的月份 chip：整行是一个按钮，chip 点了单独进月份页（键盘从「等你」那一行进）。 */}
+          {month ? <span className={h.chip} data-testid="month-chip" onClick={(event) => { event.stopPropagation(); go(month.href); }}>{month.label}</span> : null}
           {!atHome && data.waiting.length ? <span className={h.count}><i aria-hidden />{data.waiting.length}</span> : null}
         </button>
       )}
       {top}
       <div className={h.tree} ref={tree} onKeyDown={(event) => treeKeys(event, tree.current)}>
+        {onRetryPlan ? <p className={h.planFailed} data-testid="plan-read-failed">本体读取失败<HeroButton variant="ghost" size="sm" onPress={onRetryPlan}>重试</HeroButton></p> : null}
         {data.missions.filter((mission) => mission.tasks.length).map((mission) => (
           <section key={mission.missionId} aria-label={mission.title} className={h.group}>
             <p className={h.groupTitle}>{mission.period !== data.period ? <span>{monthLabel(mission.period)} · </span> : null}{mission.title}</p>

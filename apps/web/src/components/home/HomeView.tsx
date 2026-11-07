@@ -27,12 +27,14 @@ import h from "@/styles/home.module.css";
 
 export type SendTarget = "auto" | RouteTarget;
 
-export function HomeView({ data, api, buddy, today, go, route, onSend }: {
+export function HomeView({ data, api, buddy, today, month, go, route, onSend }: {
   data: WorkHomeData;
   api: WorkHomeApi;
   buddy: Buddy | null;
   /** 「11 月 7 日 周六」：页头和「今天」行一样。 */
   today: string;
+  /** 空月份：「等你」里一行「11 月待敲定」，点了进月份页。 */
+  month: { href: string; label: string } | null;
   go: (href: string) => void;
   /** 「自动」会发去哪（打字时实时显示）。 */
   route: (text: string) => Promise<RouteTarget>;
@@ -44,10 +46,20 @@ export function HomeView({ data, api, buddy, today, go, route, onSend }: {
       <header className={h.viewHead}><h1 className={h.viewTitle} tabIndex={-1}>{today}</h1></header>
       <div className={h.homeScroll}>
         <div className={h.homeInner}>
-          {data.waiting.length ? (
+          {data.waiting.length || month ? (
             <section aria-label="等你" className={h.section}>
-              <p className={h.sectionTitle}>等你 <span>{data.waiting.length}</span></p>
-              <WaitingList items={data.waiting} api={api} go={go} />
+              <p className={h.sectionTitle}>等你 <span>{data.waiting.length + (month ? 1 : 0)}</span></p>
+              {month ? (
+                <ul className={h.waiting}>
+                  <li className={h.wait}><button type="button" className={h.waitMain} onClick={() => go(month.href)}><span className={h.waitTitle}>{month.label}</span></button></li>
+                </ul>
+              ) : null}
+              {data.waiting.length ? <WaitingList items={data.waiting} api={api} go={go} /> : null}
+            </section>
+          ) : null}
+          {api.planFailed ? (
+            <section aria-label="Task" className={h.section}>
+              <p className={h.planFailed} data-testid="plan-read-failed">本体读取失败<HeroButton variant="ghost" size="sm" onPress={() => void api.retryPlan()}>重试</HeroButton></p>
             </section>
           ) : null}
           {missions.length ? (

@@ -33,7 +33,7 @@ import { showWorkspaceToast } from "@/lib/toast";
 import { modelForTier } from "@/lib/team/roles";
 import { startBatch, type StartPlan } from "@/lib/work/queue";
 import type { Worker } from "@/lib/work/workers";
-import { HOME_HREF, routeText, todayLabel } from "@/lib/home/derive";
+import { HOME_HREF, monthLabel, routeText, todayLabel } from "@/lib/home/derive";
 import type { BackgroundItem, RouteTarget } from "@/lib/home/types";
 import { useBackground } from "@/lib/home/useBackground";
 import { useWorkHome } from "@/lib/home/useWorkHome";
@@ -42,7 +42,7 @@ import { BuddyView, PipelineView, type Outbox } from "./Conversations";
 import { HomeComposer, HomeView, WaitingList, type SendTarget } from "./HomeView";
 import { LeftColumn } from "./LeftColumn";
 import { TaskInfo } from "./TaskInfo";
-import { ViewChrome, PAGE_TITLE, scopeOf, viewOf, type View } from "./view";
+import { ViewChrome, PAGE_TITLE, monthHref, scopeOf, viewOf, type View } from "./view";
 import { MONTH_PAGE, SECONDARY_PAGES, type SecondaryPageProps } from "./pages";
 import { SecondaryFallback } from "./SecondaryFallback";
 import { ICON } from "./StateIcon";
@@ -281,6 +281,12 @@ function HomeFrame({ account }: { account: Account }) {
     showToast: (text: string) => showWorkspaceToast({ text }), homeCards: [], quote: () => undefined, compose: () => undefined, viewerId: account.personId ?? null,
   }), [go, account.personId]);
 
+  // 空月份（本月还没有 Mission）：「今天」行出「11 月待敲定」chip，「等你」里同时有一行，点了进月份页（5.4.4）。
+  // 本月没有 Mission 时计划回退到最近一个有 Mission 的月份（fallbackFrom 不为空），本月按 today 算。
+  const thisMonth = work.plan?.today.slice(0, 7) ?? null;
+  const month = work.plan && thisMonth && (work.plan.fallbackFrom !== null || !data.missions.some((mission) => mission.period === thisMonth))
+    ? { href: monthHref(thisMonth), label: `${monthLabel(thisMonth)}待敲定` } : null;
+
   // ---- 展示区 ----
   const homeTask = (taskId: string) => data.missions.flatMap((mission) => mission.tasks).find((task) => task.taskId === taskId) ?? null;
   // 本月计划里的 Task 带标准；之前月份没了结、留在树上的（B 的 work-home 才有）只有名字和一行小字。
@@ -310,7 +316,7 @@ function HomeFrame({ account }: { account: Account }) {
   useTabTitle(data.waiting.length);
   const display = (current: View) => {
     switch (current.kind) {
-      case "home": return <HomeView data={data} api={api} buddy={buddy} today={todayLabel(work.plan?.today ?? null)} go={go} route={route} onSend={send} />;
+      case "home": return <HomeView data={data} api={api} buddy={buddy} today={todayLabel(work.plan?.today ?? null)} month={month} go={go} route={route} onSend={send} />;
       case "buddy": return <BuddyView buddy={buddy} outbox={outbox} consume={consume} onSpeaking={setSpeaking} />;
       case "task": {
         const task = planTask(current.taskId);
@@ -340,7 +346,7 @@ function HomeFrame({ account }: { account: Account }) {
   const alert = !handheld && machine.alert;
 
   const left = (
-    <LeftColumn data={data} view={view} buddy={buddy} speaking={speaking} go={go} phone={handheld} account={account}
+    <LeftColumn data={data} view={view} buddy={buddy} speaking={speaking} go={go} phone={handheld} account={account} month={month} onRetryPlan={api.planFailed ? () => void api.retryPlan() : null}
       today={todayLabel(work.plan?.today ?? null)} alert={alert} trail={handheld ? backgroundButton : null}
       top={handheld && data.waiting.length ? (
         <section aria-label="等你" className={h.phoneWaiting}>

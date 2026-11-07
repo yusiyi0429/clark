@@ -46,10 +46,32 @@ function useOutbox(data: ConversationData, key: "main" | string, outbox: Outbox,
   }, [outbox, key, data, consume]);
 }
 
+/**
+ * Esc 的顺序（5.4.2「今天」行）：菜单 → 「自己说」 → 抽屉 → 停止正在流式输出的回复 → 回首页。
+ * 回复在写时，没人要的 Esc 先停下它（和 Claude Code 里 Esc 打断回复一样），外壳看到 defaultPrevented 就不回首页。
+ * 捕获阶段挂在 window 上，排在外壳的 Esc 前面；输入框、菜单、弹层、选项框里的 Esc 照它们自己的来。
+ */
+function useEscStopsReply(data: ConversationData) {
+  const { streaming, stop } = data;
+  useEffect(() => {
+    if (!streaming) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || event.isComposing) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable=\"true\"], [role=dialog], [role=menu], [role=listbox]")) return;
+      event.preventDefault();
+      stop();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [streaming, stop]);
+}
+
 export function BuddyView({ buddy, outbox, consume, onSpeaking }: { buddy: Buddy | null; outbox: Outbox; consume: (id: number) => void; onSpeaking: (speaking: boolean) => void }) {
   const data = useConversation("global");
   const chrome = useViewChrome();
   useOutbox(data, "main", outbox, consume);
+  useEscStopsReply(data);
   useEffect(() => { onSpeaking(data.streaming); return () => onSpeaking(false); }, [data.streaming, onSpeaking]);
   const name = buddy?.name?.trim() || "伙伴";
   return (
@@ -125,6 +147,7 @@ function PipelineBody({ data, task, home, api, buddy, outbox, consume, go, onSpe
   const chrome = useViewChrome();
   const handheld = useHandheld();
   const { work } = api;
+  useEscStopsReply(data);
   useEffect(() => { onSpeaking(data.streaming); return () => onSpeaking(false); }, [data.streaming, onSpeaking]);
   const board = work.boards[task.taskId] ?? null;
   const mine = useMemo(() => work.workers.filter((worker) => worker.taskId === task.taskId), [work.workers, task.taskId]);

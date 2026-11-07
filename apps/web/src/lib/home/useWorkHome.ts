@@ -50,7 +50,9 @@ export function useWorkHome() {
   const data = useMemo<WorkHomeData>(() => (remote ? { ...remote, waiting: [...remote.waiting, ...webNotices(notices)] } : derived), [remote, derived, notices]);
 
   const refresh = useCallback(async () => { await Promise.all([work.refresh(), member.refresh(), loadRemote()]); }, [work, member, loadRemote]);
-  return { data, live: live === true, ready: live !== null && (live || !!work.plan), work, member, deviceId, refresh };
+  // 计划（Mission / Task，来自本体）读不到：树和首页写「本体读取失败」加「重试」，不画成空树（5.4.2、5.4.4）。
+  const planFailed = !work.plan && !!planHook.error;
+  return { data, live: live === true, ready: live !== null && (live || !!work.plan), planFailed, retryPlan: planHook.refresh, work, member, deviceId, refresh };
 }
 
 export type WorkHomeApi = ReturnType<typeof useWorkHome>;
