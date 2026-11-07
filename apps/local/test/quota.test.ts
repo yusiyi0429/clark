@@ -6,7 +6,17 @@ import { quotaFromUsage, QuotaTracker, QUOTA_TTL_MS } from "../src/quota.js";
 import { CliTools, type ToolExec } from "../src/tools.js";
 import { costOf, evalExpr, GatewayPricing, inInterval, pricesUrl } from "../src/pricing.js";
 import { readUsage } from "../src/agents/claudeCode.js";
+import { Value } from "@sinclair/typebox/value";
+import { LocalSessionSummary, LocalStatusResponse } from "@warmap/contracts";
+import { registerFormats } from "../src/store.js";
 import { api, pair, startTestRunner, tempDir, FAKE_CLAUDE } from "./helpers.js";
+
+registerFormats();
+/** 本机回给网页的东西都得合契约（摘要是严格的：多一个字段也不行）。 */
+const conforms = (schema: Parameters<typeof Value.Check>[0], value: unknown) => {
+  const errors = [...Value.Errors(schema, value)].map((e) => `${e.path} ${e.message}`);
+  expect(errors).toEqual([]);
+};
 
 /** 11/07 实测 get_usage 回执的样子（假 claude 默认回的就是这个）。 */
 const USAGE = {
@@ -24,7 +34,7 @@ const USAGE = {
 };
 
 describe("额度", () => {
-  it("get_usage 的回执：只取认得的窗口，到 100% 算用完、几点恢复；邮箱、组织不取", () => {
+  it("get_usage 的回执：只取认得的窗口，到 100% 算用完、几点恢复（只看在用的窗口）；邮箱、组织不取", async () => {
     const q = quotaFromUsage(USAGE);
     expect(q).toEqual({
       plan: "max", extraUsage: false, blockedUntil: null,
@@ -38,12 +48,21 @@ describe("额度", () => {
     const full = quotaFromUsage({ rate_limits: { limits: [
       { kind: "session", percent: 100, severity: "critical", resets_at: "2026-11-07T10:00:00Z" },
       { kind: "weekly_all", percent: 100, resets_at: "2026-11-09T00:00:00Z" },
+      { kind: "weekly_scoped", percent: 100, resets_at: "2026-11-10T00:00:00Z", scope: { model: { display_name: "Fable" } }, is_active: false },
     ] } });
-    expect(full.windows.map((w) => w.state)).toEqual(["blocked", "blocked"]);
-    expect(full.blockedUntil).toBe("2026-11-09T00:00:00.000Z"); // 两个都用完：等晚的那个
+    expect(full.windows.map((w) => w.state)).toEqual(["blocked", "blocked", "blocked"]);
+    expect(full.blockedUntil).toBe("2026-11-09T00:00:00.000Z"); // 两个都用完：等晚的那个；没在用的模型满了不算
+    // 只有没在用的模型满了：本机不算用完（跑着的卡真碰上了会报 rejected）
+    const idle = new QuotaTracker(tempDir("tl-quota-"), async () => ({ rate_limits: { limits: [
+      { kind: "weekly_all", percent: 40, resets_at: "2026-11-12T00:00:00Z", is_active: true },
+      { kind: "weekly_scoped", percent: 100, resets_at: "2026-11-10T00:00:00Z", scope: { model: { display_name: "Fable" } }, is_active: false },
+    ] } }), () => Date.parse("2026-11-07T00:00:00Z"));
+    await idle.refresh(true);
+    expect(idle.view()[0]!.windows[1]!.state).toBe("blocked");
+    expect(idle.blockedUntil()).toBeNull();
   });
 
-  it("跑着的卡报的额度变化：rejected 记下几点恢复，过了点就不算用完；存在数据目录，重启还认得；同步只带百分比、状态、时间", async () => {
+  it("跑着的卡报的额度变化：rejected 记下几点恢复，过了点就不算用完；没给时间的 rejected 不沿用旧的时间；存在数据目录，重启还认得；同步只带百分比、状态、时间", async () => {
     const dir = tempDir("tl-quota-");
     let now = Date.parse("2026-11-07T08:00:00Z");
     let reads = 0;
@@ -59,6 +78,13 @@ describe("额度", () => {
       { kind: "session", model: null, usedPercent: 100, state: "blocked", resetsAt: "2026-11-07T09:00:00.000Z" },
       { kind: "weekly_all", model: null, usedPercent: 42, state: "ok", resetsAt: "2026-11-08T09:00:00.000Z" },
     ]);
+    // 后来又来一条没给时间的 rejected：不沿用上一次已经过了的时间（过了点就当没用完会一直重试）
+    const later = new QuotaTracker(tempDir("tl-quota-"), read, () => resetsAt * 1000 + 3_600_000);
+    later.fromEvent({ status: "rejected", resetsAt, unifiedWindows: { five_hour: { utilization: 1, resetsAt, status: "rejected" } } });
+    expect(later.blockedUntil()).toBeNull();
+    later.fromEvent({ status: "rejected", unifiedWindows: { five_hour: { utilization: 1, status: "rejected" } } });
+    expect(later.view()[0]!.blockedUntil).toBeNull();
+    expect(later.blockedUntil()).toBe(Infinity); // 窗口用完了又不知道几点
     const [sync] = q.syncView();
     expect(Object.keys(sync!).sort()).toEqual(["blockedUntil", "source", "updatedAt", "windows"]);
     // 重启后照样认得（存在 quota.json）
@@ -188,7 +214,7 @@ describe("网关的真钱（照 TokenHub 价目表）", () => {
     }) as unknown as typeof fetch;
     const p = new GatewayPricing(fetchImpl, () => at.getTime());
     const gw = { baseUrl: "https://tokenhub.corp.tokenkingos.com/api/anthropic", apiKey: "test-key" };
-    const turn = { models: [{ model: "deepseek-v4", inputTokens: 1000, outputTokens: 200, cacheReadTokens: 3000, cacheWriteTokens: 0, costBasis: "unknown" }], requests: 2 };
+    const turn = { models: [{ model: "deepseek-v4", inputTokens: 1000, outputTokens: 200, cacheReadTokens: 3000, cacheWriteTokens: 0, costBasis: "unknown", requests: 2 }] };
     expect(await p.money(gw, turn, at)).toEqual({ amount: 0.0051, currency: "CNY", estimated: true });
     expect(await p.money(gw, turn, at)).toEqual({ amount: 0.0051, currency: "CNY", estimated: true });
     expect(calls).toEqual([{ url: pricesUrl(gw.baseUrl, "deepseek-v4"), key: "test-key" }]); // 缓存住了
@@ -253,12 +279,13 @@ describe("额度用完：停着等，到点自动接着做", { timeout: 40_000 }
   it("一轮碰壁：停在「等额度恢复」（不算出错）；排着的订阅卡不开始，取消的不再开始；到点往开着的进程里说一句，排着的接上", async () => {
     const h = await setup();
     try {
-      const resetsAt = Math.floor(Date.now() / 1000) + 4; // 留够拉起的时间：机器忙时开一个会话要一两秒
+      const resetsAt = Math.floor(Date.now() / 1000) + 6; // 留够拉起的时间：机器忙时开一个会话要一两秒
       const until = new Date(resetsAt * 1000).toISOString();
       h.fake({ usageLimit: { resetsAt } });
       const a = await h.open("A");
       const held = await h.waitStatus(a.id, "idle");
       expect(held.hold).toEqual({ reason: "usage_limit", until });
+      conforms(LocalSessionSummary, held);
       expect(h.events(a.id).find((e) => e.type === "turn_end")).toMatchObject({ isError: true, errorKind: "usage_limit" });
       expect(h.events(a.id).filter((e) => e.type === "status").at(-1)).toMatchObject({ status: "idle", hold: { reason: "usage_limit", until } });
       expect(outboxItems(h.t.dataDir, a.id, "status").at(-1)).toMatchObject({ status: "idle", hold: { reason: "usage_limit", until } });
@@ -270,6 +297,7 @@ describe("额度用完：停着等，到点自动接着做", { timeout: 40_000 }
       // 用完时新开的订阅卡排着等，不开始；排着时取消的就不再开始
       const b = await h.open("B");
       expect(b).toMatchObject({ status: "queued", hold: { reason: "usage_limit", until } });
+      conforms(LocalSessionSummary, b);
       const c = await h.open("C");
       expect(c.status).toBe("queued");
       expect((await h.call("POST", `/v1/sessions/${c.id}/kill`, {})).body.session.status).toBe("exited");
@@ -286,6 +314,7 @@ describe("额度用完：停着等，到点自动接着做", { timeout: 40_000 }
       // A 没重开进程，是往开着的进程里说的；C 从没开始过
       expect(argvOf(h.work, a.id)).toHaveLength(1);
       expect(turns(h.work, a.id)).toEqual([`做 A`, CONTINUE]);
+      conforms(LocalSessionSummary, await h.session(a.id));
       expect(argvOf(h.work, c.id)).toHaveLength(0);
       expect(h.events(a.id).some((e) => e.type === "notice" && e.code === "usage_resumed")).toBe(true);
       expect(outboxItems(h.t.dataDir, a.id, "status").at(-1).hold).toBeUndefined();
@@ -303,7 +332,7 @@ describe("额度用完：停着等，到点自动接着做", { timeout: 40_000 }
       const b = await h.open("B");
       expect(b.status).toBe("queued");
       expect(b.hold).toBeUndefined(); // 这时额度还没用完，是在等空位
-      const resetsAt = Math.floor(Date.now() / 1000) + 3;
+      const resetsAt = Math.floor(Date.now() / 1000) + 5;
       const resetIso = new Date(resetsAt * 1000).toISOString();
       // A 批了以后这一轮里才报用完（跑着的卡报的 rate_limit_event），这一轮照常做完
       h.fake({ rateInfoOnAllow: { status: "rejected", resetsAt, rateLimitType: "five_hour", utilization: 1, unifiedWindows: { five_hour: { utilization: 1, resetsAt, status: "rejected" } } } });
@@ -330,7 +359,7 @@ describe("额度用完：停着等，到点自动接着做", { timeout: 40_000 }
   it("碰壁就退出的：也是停着等（不算失败），到点续接（--resume）再说一句；本人说一句、停下就不再等", async () => {
     const h = await setup();
     try {
-      const resetsAt = Math.floor(Date.now() / 1000) + 4;
+      const resetsAt = Math.floor(Date.now() / 1000) + 5;
       h.fake({ usageLimit: { resetsAt, exit: true } });
       const a = await h.open("A");
       const held = await h.waitStatus(a.id, "exited");
@@ -363,13 +392,77 @@ describe("额度用完：停着等，到点自动接着做", { timeout: 40_000 }
   });
 });
 
+describe("额度用完：不该停、不该乱续的情况（11/07 评审）", { timeout: 40_000 }, () => {
+  const PLAN = { summary: "拆一件", steps: [{ title: "改页面" }], risks: [], cards: [{ title: "改登录页", brief: "改", doneDefinition: "能登录", modelTier: "normal" }] };
+
+  it("只有 rate_limit 的别的 429 不算额度用完；不知道几点恢复的不马上接着做（额度读着没满也等）；本人说一句照常发", async () => {
+    const h = await setup();
+    try {
+      h.fake({ usageLimit: { plain429: true } });
+      const a = await h.open("A");
+      const idle = await h.waitStatus(a.id, "idle");
+      expect(idle.hold).toBeUndefined();
+      expect(h.events(a.id).find((e) => e.type === "turn_end")).toMatchObject({ isError: true, errorKind: "api" });
+      expect(idle.usage.costUsd).toBe(0); // 这一轮没调成模型（用量是 {}）：算 0，累计的标价不变成 null
+      // 碰壁了却没给恢复时间（Claude Code 说用完、额度读着没满）：停着等，不马上「接着做 → 又碰壁」
+      h.fake({ usageLimit: {} });
+      expect((await h.call("POST", `/v1/sessions/${a.id}/messages`, { text: "再来" })).body.delivery).toBe("new_turn");
+      await until(async () => (await h.session(a.id)).hold || null);
+      expect((await h.session(a.id)).hold).toEqual({ reason: "usage_limit", until: null });
+      await new Promise((r) => setTimeout(r, 2_000));
+      expect(turns(h.work, a.id)).toEqual(["做 A", "再来"]); // 没有自己接着做
+      expect((await h.session(a.id)).hold).toBeTruthy();
+      h.fake({});
+      expect((await h.call("POST", `/v1/sessions/${a.id}/messages`, { text: "接着" })).body.delivery).toBe("new_turn");
+      expect((await h.waitStatus(a.id, "waiting_permission")).hold).toBeUndefined();
+    } finally {
+      await h.t.cleanup();
+    }
+  });
+
+  it("规划员交了计划、同一轮接下来碰壁：照样收工（done），不留「等额度恢复」", async () => {
+    const h = await setup();
+    try {
+      h.fake({ plan: PLAN, usageLimitAfterSubmit: { resetsAt: Math.floor(Date.now() / 1000) + 600 } });
+      const r = await h.call("POST", "/v1/sessions", { subject: { kind: "plan", taskId: "T1" }, title: "拆卡：T1", cwd: h.work, firstMessage: "拆卡交代" });
+      expect(r.status, JSON.stringify(r.body)).toBe(200);
+      const done = await h.waitStatus(r.body.id, "done");
+      expect(done.hold).toBeUndefined();
+      expect(h.events(r.body.id).find((e) => e.type === "turn_end")).toMatchObject({ errorKind: "usage_limit" });
+      expect(outboxItems(h.t.dataDir, r.body.id, "status").at(-1)).toMatchObject({ status: "done" });
+      expect(outboxItems(h.t.dataDir, r.body.id, "status").at(-1).hold).toBeUndefined();
+    } finally {
+      await h.t.cleanup();
+    }
+  });
+
+  it("暂停全部不取消等额度：恢复以后照样到点接着做", async () => {
+    const h = await setup();
+    try {
+      const resetsAt = Math.floor(Date.now() / 1000) + 5;
+      h.fake({ usageLimit: { resetsAt } });
+      const a = await h.open("A");
+      await h.waitStatus(a.id, "idle");
+      expect((await h.call("PATCH", "/v1/settings", { paused: true })).status).toBe(200);
+      expect((await h.session(a.id)).hold).toEqual({ reason: "usage_limit", until: new Date(resetsAt * 1000).toISOString() });
+      h.fake({});
+      h.t.menu("resume"); // 托盘「恢复」（网页不能替本人恢复）
+      await h.waitStatus(a.id, "waiting_permission");
+      expect(turns(h.work, a.id)).toEqual(["做 A", CONTINUE]);
+    } finally {
+      await h.t.cleanup();
+    }
+  });
+});
+
 describe("花费、档位、状态接口", { timeout: 40_000 }, () => {
   it("订阅：标价照算、带来源和模型、没有真钱；网关：Claude Code 瞎算的不算，按价目表估真钱", async () => {
     const prices: string[] = [];
     const fetchImpl = (async (url: string) => {
       if (String(url).includes("/api/tokavi/v1/model/prices")) {
         prices.push(String(url));
-        return new Response(JSON.stringify({ model_name: "deepseek-v4", price_info: { strategy: "input-tiered", unit: "1M-token", currency: "CNY", tiers: [{ range: "[0, inf)", input: 2, output: 8 }] } }), { status: 200 });
+        // 两档：一次请求 500 以内便宜。这一轮 4 次请求共 1000 输入，按平均 250 选便宜的一档（按整轮 1000 就是贵的）
+        return new Response(JSON.stringify({ model_name: "deepseek-v4", price_info: { strategy: "input-tiered", unit: "1M-token", currency: "CNY", tiers: [{ range: "[0, 500]", input: 2, output: 8 }, { range: "(500, inf)", input: 4, output: 16 }] } }), { status: 200 });
       }
       throw new Error("offline");
     }) as unknown as typeof fetch;
@@ -386,7 +479,7 @@ describe("花费、档位、状态接口", { timeout: 40_000 }, () => {
 
       const put = await h.call("PUT", "/v1/models/th", { label: "TokenHub", source: "gateway", baseUrl: "https://tokenhub.example.com/api/anthropic", model: "deepseek-v4", apiKey: "test-key" });
       expect(put.status).toBe(200);
-      h.fake({ iterations: 1, modelUsage: { "deepseek-v4": { costUSD: 0.5, costBasis: "unknown", inputTokens: 1000, outputTokens: 200, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 } } });
+      h.fake({ modelUsage: { "deepseek-v4": { costUSD: 0.5, costBasis: "unknown", inputTokens: 1000, outputTokens: 200, cacheReadInputTokens: 0, cacheCreationInputTokens: 0 } } });
       const g = await h.open("G", { modelProfileId: "th" });
       const gperm = await until(async () => (await h.call("GET", `/v1/sessions/${g.id}`)).body.pendingPermissions[0]);
       await h.call("POST", `/v1/sessions/${g.id}/permissions/${encodeURIComponent(gperm.requestId)}`, { decision: "deny", message: "不用写" });
@@ -434,6 +527,7 @@ describe("花费、档位、状态接口", { timeout: 40_000 }, () => {
       expect(tools.map((x: any) => [x.kind, x.state, x.account])).toEqual([["gh", "ready", "sean"], ["lark-cli", "not_installed", null]]);
       const status = (await h.call("GET", "/v1/status")).body;
       expect(Array.isArray(status.quota)).toBe(true);
+      conforms(LocalStatusResponse, status);
     } finally {
       await h.t.cleanup();
     }

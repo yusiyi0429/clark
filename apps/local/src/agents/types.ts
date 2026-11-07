@@ -63,9 +63,12 @@ export interface AgentRun {
   readonly lastTurn: TurnModels | null;
 }
 
-/** 一轮里一个模型用了多少（Claude Code 的 model_usage_since_last_result）。costBasis：list 是官方模型按标价算的，unknown 是网关模型。 */
-export interface TurnModelUsage { model: string; inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; costBasis: string | null }
-export interface TurnModels { models: TurnModelUsage[]; requests: number | null }
+/**
+ * 一轮里一个模型用了多少（Claude Code 的 model_usage_since_last_result）。costBasis：list 是官方模型按标价算的，unknown 是网关模型。
+ * requests：这一轮给它发了几次请求（数不出为 null）。
+ */
+export interface TurnModelUsage { model: string; inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; costBasis: string | null; requests: number | null }
+export interface TurnModels { models: TurnModelUsage[] }
 
 /**
  * 执行方适配器。Claude Code 已实现；Codex 12 月按同一接口接（见 codex.ts 里的协议对照）。

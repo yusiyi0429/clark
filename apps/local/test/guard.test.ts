@@ -183,7 +183,19 @@ describe("越界路径识别", () => {
       "lark-cli mail +draft-send --id d", "lark-cli docs +update --doc x --markdown y", "lark-cli docs +create --title x", "lark-cli drive +upload --file a.md",
       "lark-cli drive +push", "lark-cli sheets +cells-set --range A1 --value 1", "lark-cli calendar +create --summary 会", "lark-cli task +complete --id t",
       "lark-cli base +record-batch-update", "lark-cli api POST /open-apis/im/v1/messages", "lark-cli auth login",
-      "lark-cli api GET /open-apis/im/v1/chats", // 直接调接口：读的也问（接口路径看着像工作树外面的路径） "lark-cli event consume im.message.receive_v1",
+      "lark-cli api GET /open-apis/im/v1/chats", // 直接调接口：读的也问（接口路径看着像工作树外面的路径）
+      "lark-cli event consume im.message.receive_v1",
+      // 11/07 评审：覆盖妙记总结是写；正文里的 --help、--dry-run 不算；--text --dry-run 时 --dry-run 是要发的字；
+      // 套在 $( )、反引号里的写；同一段里第二次出现的写；按资源调方法多写一个 get
+      "lark-cli minutes +summary --minute-token obcn1 --summary 新总结",
+      'lark-cli im +messages-send --chat-id oc_1 --markdown "用法见 lark-cli --help"',
+      'lark-cli docs +create --title 说明 --markdown "先跑 deploy.sh --dry-run"',
+      "lark-cli im +messages-send --chat-id oc_1 --text --dry-run",
+      "lark-cli docs +fetch --doc $(lark-cli im +messages-send --chat-id oc_1 --text hi)",
+      "lark-cli docs +fetch --doc `lark-cli im +messages-send --text hi`",
+      "lark-cli docs +fetch --doc x && echo lark-cli im +messages-send --text y",
+      "lark-cli im messages delete get --message-id om_x --yes",
+      "lark`-cli im +messages-send --chat-id oc_1 --text hi", // PowerShell 的反引号转义：按词认不出 lark-cli
       "lark-cli --as user im +messages-search --query x", "lark-cli", "lark-cli docs +fetch --doc x; lark-cli im +messages-send --text y",
       "lark-cli docs +history-revert-status --doc x",
     ]) {

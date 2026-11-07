@@ -8,7 +8,7 @@ type Json = Record<string, any>;
  * - 价目表：GET {网关主机}/api/tokavi/v1/model/prices?model_name=…，带本机存的钥匙（x-api-key），回 { model_name, price_info }；缓存 1 小时。
  * - 两种策略：input-tiered 按一次请求的输入长度选档；peak-low-timed 按调用时刻在价目表时区里落在哪个时段选价格段（reference 是别的段乘倍率）。
  * - 输入长度按 TokenHub 的口径算（含缓存读写）；Claude Code 的请求都带缓存标记，按显式缓存的单价，价目表没给缓存价就按输入价。
- * 和 TokenHub 实际扣的会有出入，都标「估」：节假日按周一到周五算工作日（TokenHub 用国内节假日表）；一轮里几次请求按平均长度选档；币种照价目表，不换算。
+ * 和 TokenHub 实际扣的会有出入，都标「估」：节假日按周一到周五算工作日（TokenHub 用国内节假日表）；一轮里几次请求按平均长度选档（数不出次数时按整轮）；币种照价目表，不换算。
  */
 const UNIT: Record<string, number> = { "1M-token": 1e6, "1k-token": 1e3, "1-token": 1 };
 const SIZE: Record<string, number> = { k: 1e3, K: 1e3, M: 1e6, G: 1e9, Ki: 2 ** 10, Mi: 2 ** 20, Gi: 2 ** 30 };
@@ -161,13 +161,12 @@ export class GatewayPricing {
   async money(gateway: { baseUrl: string | null; apiKey: string | null }, turn: TurnModels | null, at = new Date(this.now())): Promise<TLocalMoney | null> {
     if (!gateway.baseUrl || !gateway.apiKey || !turn?.models.length) return null;
     const totals = new Map<string, number>();
-    const requests = turn.requests && turn.models.length === 1 ? turn.requests : null;
     for (const m of turn.models) {
       const price = await this.price(gateway.baseUrl, gateway.apiKey, m.model);
       if (!price) return null;
       const input = m.inputTokens + m.cacheReadTokens + m.cacheWriteTokens;
       try {
-        const c = costOf({ input, cacheRead: m.cacheReadTokens, cacheWrite: m.cacheWriteTokens, output: m.outputTokens, perRequestInput: input / Math.max(1, requests ?? 1) }, price, at);
+        const c = costOf({ input, cacheRead: m.cacheReadTokens, cacheWrite: m.cacheWriteTokens, output: m.outputTokens, perRequestInput: input / Math.max(1, m.requests ?? 1) }, price, at);
         if (!c.currency) return null;
         totals.set(c.currency, (totals.get(c.currency) ?? 0) + c.amount);
       } catch { return null; }

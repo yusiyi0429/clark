@@ -18,18 +18,24 @@ const iso = (v: unknown): string | null => {
 };
 const pct = (v: unknown) => Math.min(100, Math.max(0, Math.round(Number(v) || 0)));
 
-/** get_usage 的回执（11/07 实测 Claude Code 2.1.318）→ 额度。只取 rate_limits.limits 里认得的窗口；邮箱、组织等账号信息不取。 */
+/**
+ * get_usage 的回执（11/07 实测 Claude Code 2.1.318）→ 额度。只取 rate_limits.limits 里认得的窗口；邮箱、组织等账号信息不取。
+ * 用完了几点恢复只看在用的窗口（is_active 不是 false）：没在用的模型的周额度满了不挡别的卡（真碰上了，跑着的卡会报 rejected）。
+ */
 export function quotaFromUsage(resp: Json): Pick<TLocalQuotaSource, "plan" | "windows" | "extraUsage" | "blockedUntil"> {
   const rl = resp.rate_limits ?? {};
   const windows: TLocalQuotaWindow[] = [];
+  const blocked: string[] = [];
   for (const l of Array.isArray(rl.limits) ? rl.limits : []) {
     if (!KINDS.has(l?.kind)) continue;
     const usedPercent = pct(l.percent);
     const state: TLocalQuotaWindow["state"] = usedPercent >= 100 ? "blocked" : l.severity === "warning" || l.severity === "critical" ? "warning" : "ok";
     const name = l.scope?.model?.display_name;
-    windows.push({ kind: l.kind, model: typeof name === "string" && name ? name.slice(0, 60) : null, usedPercent, state, resetsAt: iso(l.resets_at) });
+    const w: TLocalQuotaWindow = { kind: l.kind, model: typeof name === "string" && name ? name.slice(0, 60) : null, usedPercent, state, resetsAt: iso(l.resets_at) };
+    windows.push(w);
+    if (state === "blocked" && l.is_active !== false && w.resetsAt) blocked.push(w.resetsAt);
   }
-  const blocked = windows.filter((w) => w.state === "blocked").map((w) => w.resetsAt).filter((t): t is string => Boolean(t)).sort();
+  blocked.sort();
   return {
     plan: typeof resp.subscription_type === "string" ? resp.subscription_type.slice(0, 40) : null,
     windows: windows.slice(0, 12),
@@ -64,12 +70,12 @@ export class QuotaTracker {
     return s?.updatedAt ? [{ source: s.source, windows: s.windows, blockedUntil: s.blockedUntil, updatedAt: s.updatedAt }] : [];
   }
 
-  /** 订阅额度用完、还没到恢复时间：恢复时间（毫秒；用完了但不知道几点恢复为 Infinity）；没用完为 null。 */
+  /** 订阅额度用完、还没到恢复时间：恢复时间（毫秒；有窗口用完了又没给恢复时间为 Infinity）；没用完为 null。 */
   blockedUntil(): number | null {
     const s = this.state;
     if (!s) return null;
     if (s.blockedUntil) { const t = Date.parse(s.blockedUntil); return t > this.now() ? t : null; }
-    return s.windows.some((w) => w.state === "blocked") ? Infinity : null;
+    return s.windows.some((w) => w.state === "blocked" && !w.resetsAt) ? Infinity : null;
   }
 
   /** 读一次（get_usage）。force 以外 5 分钟内读过、试过就不再读；同时只读一次。从不抛错，没读到记在 error 里。 */
@@ -99,7 +105,7 @@ export class QuotaTracker {
       const i = windows.findIndex((x) => x.kind === kind && x.model === null);
       if (i >= 0) windows[i] = next; else windows.push(next);
     }
-    const blockedUntil = info.status === "rejected" ? iso(info.resetsAt) ?? s.blockedUntil : null;
+    const blockedUntil = info.status === "rejected" ? iso(info.resetsAt) : null;
     this.set({ ...s, windows: windows.slice(0, 12), blockedUntil, updatedAt: this.stamp() });
   }
 

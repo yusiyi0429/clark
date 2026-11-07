@@ -17,7 +17,21 @@ const TRACE = join(home, ".fake-claude-trace.jsonl");
 /** 每一轮收到的话另记一份（不混进 trace：别的测试拿 trace 的最后一行当最近一次拉起）。 */
 const TURNS = join(home, ".fake-claude-turns.jsonl");
 appendFileSync(TRACE, JSON.stringify({ pid: process.pid, argv, envKeys: Object.keys(process.env), authToken: process.env.ANTHROPIC_AUTH_TOKEN ?? null, sessionSecret: process.env.TIANSHU_SESSION_SECRET ?? null, cloudToken: process.env.TIANSHU_CLOUD_TOKEN ?? null, maxRetries: process.env.CLAUDE_CODE_MAX_RETRIES ?? null, apiTimeout: process.env.API_TIMEOUT_MS ?? null }) + "\n");
-const out = (o) => process.stdout.write(JSON.stringify(o) + "\n");
+// 每条助手消息带 id（一次请求一个，本机按它数这一轮发了几次请求）；碰壁、出错时补的那条没有
+let msgSeq = 0;
+const out = (o) => {
+  if (o.type === "assistant" && o.message && !o.error && !o.message.id) o.message = { id: `msg_${process.pid}_${++msgSeq}`, model: "claude-haiku-5-5", ...o.message };
+  process.stdout.write(JSON.stringify(o) + "\n");
+};
+/** 碰壁：rate_limit_event rejected → 助手补一条 rate_limit / usage_limit_reached → 429 的 result（照社区复现和程序里的字符串）。plain429：只有 rate_limit 的别的 429。 */
+function limitHit(limit) {
+  const resetsAt = limit.resetsAt;
+  if (!limit.plain429) out({ type: "rate_limit_event", rate_limit_info: { status: "rejected", resetsAt, rateLimitType: "five_hour", utilization: 1, isUsingOverage: false, unifiedWindows: { five_hour: { utilization: 1, resetsAt, status: "rejected" } } } });
+  out({ type: "assistant", error: "rate_limit", ...(limit.plain429 ? {} : { api_error: "usage_limit_reached" }), message: { content: [{ type: "text", text: "You've hit your limit · resets 3pm" }] }, parent_tool_use_id: null });
+  if (limit.exit) process.exit(1);
+  out({ type: "result", subtype: "success", is_error: true, result: "You've hit your limit · resets 3pm", api_error_status: 429, duration_ms: 5, usage: {}, model_usage_since_last_result: {} });
+  turn = null;
+}
 const mode = cfg.mode ?? "normal";
 
 let turn = null; // { permId, timer }
@@ -36,14 +50,7 @@ function startTurn(text) {
   // 这一串照社区复现和 Claude Code 程序里的字符串，没真机复现过
   const live = readCfg();
   appendFileSync(TURNS, JSON.stringify({ turnText: text, sid }) + "\n");
-  if (live.usageLimit) {
-    const resetsAt = live.usageLimit.resetsAt;
-    out({ type: "rate_limit_event", rate_limit_info: { status: "rejected", resetsAt, rateLimitType: "five_hour", utilization: 1, isUsingOverage: false, unifiedWindows: { five_hour: { utilization: 1, resetsAt, status: "rejected" } } } });
-    out({ type: "assistant", error: "rate_limit", api_error: "usage_limit_reached", message: { content: [{ type: "text", text: "You've hit your limit · resets 3pm" }] }, parent_tool_use_id: null });
-    if (live.usageLimit.exit) process.exit(1);
-    out({ type: "result", subtype: "success", is_error: true, result: "You've hit your limit · resets 3pm", api_error_status: 429, duration_ms: 5, usage: {} });
-    return;
-  }
+  if (live.usageLimit) { limitHit(live.usageLimit); return; }
   if (live.rateInfo) out({ type: "rate_limit_event", rate_limit_info: live.rateInfo });
   if (mode === "gateway_down") {
     // 11/06 假网关实测：每次重试一条 api_retry，最后 result 是 success + is_error，拒连时没有 api_error_status。
@@ -96,6 +103,9 @@ async function readOnlyTurn() {
   }
   appendFileSync(TRACE, JSON.stringify({ readOnlyTurn: sid, turn: turns, tools, called: result ? name : null, result }) + "\n");
   if (!turn) return; // 途中被停下，这一轮已经结束
+  // 交完以后这一轮接下来的请求碰壁（现读配置）
+  const after = readCfg().usageLimitAfterSubmit;
+  if (result && after) { limitHit(after); return; }
   out({ type: "assistant", message: { content: [{ type: "text", text: result ? "交好了" : "看完了" }] }, parent_tool_use_id: null });
   finish(true, result ? "交好了" : "看完了");
 }
@@ -160,7 +170,7 @@ function agentDone() {
 
 function finish(ok, text) {
   out({ type: "result", subtype: ok ? "success" : "error_during_execution", is_error: !ok, result: text, duration_ms: 12, total_cost_usd: 0.01 * turns,
-    usage: { input_tokens: 3, output_tokens: 5, cache_read_input_tokens: 7, cache_creation_input_tokens: 11, ...(cfg.iterations ? { iterations: Array.from({ length: cfg.iterations }, () => ({})) } : {}) },
+    usage: { input_tokens: 3, output_tokens: 5, cache_read_input_tokens: 7, cache_creation_input_tokens: 11, iterations: [] },
     model_usage_since_last_result: cfg.modelUsage ?? { "claude-haiku-5-5": { costUSD: 0.01 } } });
   turn = null;
 }

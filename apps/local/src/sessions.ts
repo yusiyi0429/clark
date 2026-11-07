@@ -257,7 +257,7 @@ export class SessionManager {
     const {
       mcpSecret: _s, syncSeq: _q, outputs: _o, versionNumber: _v, lastVersion: _l, role: _r, critics: _c, queuedMessage: _m, queueOrder: _n,
       parentId: _p, briefPending: _b, criteria: _cr, failStreak: _f, submitted: _sb, nudged: _nd, workspace, commit: _cm, after: _af, passed: _ps,
-      background, hold, holdSince: _hs, ...rest
+      background, hold, holdSince: _hs, modelTier: _mt, ...rest
     } = rec;
     const question = this.questions.get(rec.id);
     const waitingFor = this.waitingFor(rec);
@@ -765,6 +765,8 @@ export class SessionManager {
     // 订阅额度用完时 Claude Code 可能不交结果、直接退出：也是停着等额度，不算失败
     const limited = !killed && !finished && code !== 0 && (Boolean(rec.hold) || (this.subscription(rec) && this.blocked() !== null));
     if (limited && !rec.hold) this.markHold(rec);
+    // 交完收工、正常退出（本机关的：合回前、交完结论）的不再等；关机时留着，下次启动接着等
+    if (rec.hold && !limited && (finished || code === 0) && !this.holdQueue) this.clearHold(rec);
     if (finished) this.setStatus(rec, "done", { exitCode: code, reason: rec.subject.kind === "plan" ? "计划交了" : "验收完了" });
     else this.setStatus(rec, killed || code === 0 || limited ? "exited" : "failed", { exitCode: code, reason: killed ? "已强停" : limited ? HOLD_REASON : undefined });
     this.d.log.evict(rec.id);
@@ -829,9 +831,10 @@ export class SessionManager {
     });
   }
 
-  async interrupt(id: string): Promise<TLocalSessionSummary> {
+  /** keepHold：托盘、网页的「暂停全部」只是先不接着做，恢复后照样到点接着做（本人点这一件的停下才不再等）。 */
+  async interrupt(id: string, keepHold = false): Promise<TLocalSessionSummary> {
     const rec = this.must(id);
-    const held = this.clearHold(rec); // 停下：不再等额度、到点也不自动接着做
+    const held = !keepHold && this.clearHold(rec); // 停下：不再等额度、到点也不自动接着做
     if (this.cancelQueued(rec)) return this.summary(rec);
     if (held) this.noteHold(rec);
     const run = this.runs.get(id);
@@ -933,7 +936,7 @@ export class SessionManager {
 
   /** 托盘「暂停全部」：所有进行中的会话都停下（会话保留）。 */
   async interruptAll(): Promise<void> {
-    await Promise.all([...this.runs.keys()].map((id) => this.interrupt(id).catch(() => undefined)));
+    await Promise.all([...this.runs.keys()].map((id) => this.interrupt(id, true).catch(() => undefined)));
   }
 
   /**
@@ -1073,15 +1076,16 @@ export class SessionManager {
     }
   }
 
-  /** 到点了：额度没在用完的状态，而且过了恢复时间 1 分钟；不知道几点恢复时，等读过一次额度（或隔一会儿）再试。 */
+  /**
+   * 到点了：额度没在用完的状态，而且过了恢复时间 1 分钟。不知道几点恢复时隔一会儿（5 分钟）再试：读到的额度说没用完也等，
+   * 免得 Claude Code 说碰壁、额度却说没满时一直「接着做 → 又碰壁」。
+   */
   private holdDue(rec: SessionRecord): boolean {
     const h = rec.hold;
     if (!h || !["queued", "idle", "exited"].includes(rec.status) || this.blocked() !== null) return false;
     const now = Date.now();
     if (h.until) return now >= Date.parse(h.until) + this.timing().resumeAfterMs;
-    const since = Date.parse(rec.holdSince ?? "") || 0;
-    const read = Date.parse(this.d.quota?.view()[0]?.updatedAt ?? "") || 0;
-    return read > since || now >= since + this.timing().pollMs;
+    return now >= (Date.parse(rec.holdSince ?? "") || 0) + this.timing().pollMs;
   }
 
   /** 接着做：排着的回到队里；一轮做完停着的往开着的进程里说一句；进程不在了就续接（--resume）再说。 */

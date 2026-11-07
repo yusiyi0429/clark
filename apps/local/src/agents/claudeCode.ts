@@ -60,10 +60,12 @@ const isoOf = (ms: unknown) => (typeof ms === "number" && ms > 0 ? new Date(ms).
 function usageOf(result: Json): TLocalUsage {
   const u = result.usage ?? {};
   // result.usage 是本轮的；total_cost_usd 是整个会话累计的，本轮花费看 model_usage_since_last_result（11/05 日志核对过）。
-  // 网关模型的 costBasis 是 unknown：Claude Code 按 Opus 价瞎算（DeepSeek 高估约 17 倍），不算；没有 costBasis 的旧版本照旧算
+  // 网关模型的 costBasis 是 unknown：Claude Code 按 Opus 价瞎算（DeepSeek 高估约 17 倍），这一轮不算；没有 costBasis 的旧版本照旧算。
+  // 这一轮没调成模型（出错、碰壁）时是 {}，算 0（不然本会话累计的标价就一直是 null 了）
   const since = result.model_usage_since_last_result as Record<string, Json> | undefined;
-  const listed = since ? Object.values(since).filter((m) => m.costBasis === undefined || m.costBasis === "list") : [];
-  const cost = listed.length ? listed.reduce((s, m) => s + (Number(m.costUSD) || 0), 0) : null;
+  const models = since ? Object.values(since) : [];
+  const unpriced = models.some((m) => m.costBasis !== undefined && m.costBasis !== "list");
+  const cost = since && !unpriced ? models.reduce((s, m) => s + (Number(m.costUSD) || 0), 0) : null;
   return {
     inputTokens: Number(u.input_tokens) || 0,
     outputTokens: Number(u.output_tokens) || 0,
@@ -73,18 +75,25 @@ function usageOf(result: Json): TLocalUsage {
   };
 }
 
-/** 这一轮每个模型用了多少、发了几次请求（给本机按价目表算网关的钱）。 */
-function turnModelsOf(result: Json): TurnModels | null {
+/**
+ * 这一轮每个模型用了多少、发了几次请求（给本机按价目表算网关的钱）。请求次数按这一轮里不同的助手消息 id 数（主循环和子 agent 都算）：
+ * TokenHub 上 result 的 usage.iterations 总是空的（11/06 真机记录）。助手消息里的模型名是上游回的（不带前缀），result 里的是配置的（可能带 wangsu/ 这种前缀）。
+ */
+function turnModelsOf(result: Json, ids: Map<string, Set<string>>): TurnModels | null {
   const since = result.model_usage_since_last_result as Record<string, Json> | undefined;
   if (!since) return null;
   const n = (v: unknown) => Math.max(0, Number(v) || 0);
-  const iterations = result.usage?.iterations;
+  const keys = Object.keys(since);
+  const requestsOf = (key: string): number | null => {
+    const sets = keys.length === 1 ? [...ids.values()] : [...ids.entries()].filter(([m]) => m === key || key.endsWith(`/${m}`) || m.endsWith(`/${key}`)).map(([, s]) => s);
+    const count = new Set(sets.flatMap((s) => [...s])).size;
+    return count || null;
+  };
   return {
     models: Object.entries(since).map(([model, m]) => ({
       model, inputTokens: n(m.inputTokens), outputTokens: n(m.outputTokens), cacheReadTokens: n(m.cacheReadInputTokens), cacheWriteTokens: n(m.cacheCreationInputTokens),
-      costBasis: typeof m.costBasis === "string" ? m.costBasis : null,
+      costBasis: typeof m.costBasis === "string" ? m.costBasis : null, requests: requestsOf(model),
     })),
-    requests: Array.isArray(iterations) ? iterations.length : null,
   };
 }
 
@@ -104,6 +113,8 @@ class ClaudeRun implements AgentRun {
   /** 退出已经报给会话（onExit 都跑过了）。 */
   private readonly exitReported = new Promise<void>((r) => { this.markReported = r; });
   lastTurn: TurnModels | null = null;
+  /** 这一轮见过的助手消息 id（按助手消息里的模型名分）：数请求次数。 */
+  private turnIds = new Map<string, Set<string>>();
   private interrupting = false;
   private exited = false;
   private authFailed = false;
@@ -367,8 +378,15 @@ class ClaudeRun implements AgentRun {
         return;
       }
       case "assistant": {
-        // 订阅额度用完时 Claude Code 自己补一条助手消息：error rate_limit、api_error usage_limit_reached（文字会变，不看文字）
-        if (this.subscription && (ev.error === "rate_limit" || ev.api_error === "usage_limit_reached")) this.limitHit = true;
+        // 订阅额度用完时 Claude Code 自己补一条助手消息：error rate_limit、api_error usage_limit_reached（文字会变，不看文字）。
+        // 只有 error rate_limit 的是别的 429（限流），照旧算模型服务的错，不当成额度用完
+        if (this.subscription && ev.api_error === "usage_limit_reached") this.limitHit = true;
+        const msgId = ev.message?.id;
+        if (typeof msgId === "string" && !ev.error) {
+          const model = String(ev.message?.model ?? "");
+          if (!this.turnIds.has(model)) this.turnIds.set(model, new Set());
+          this.turnIds.get(model)!.add(msgId);
+        }
         if (ev.error === "authentication_failed") this.authFailure("Claude 还没登录或登录已失效，请在天枢里登录 Claude。");
         else if (!ev.error) this.apiRetried = false; // 重试后模型又答上来了：这一轮之后再出错不算模型服务的错
         if (ev.parent_tool_use_id) return; // 子代理内部的步骤不逐条上屏
@@ -406,7 +424,8 @@ class ClaudeRun implements AgentRun {
         this.interrupting = false;
         this.apiRetried = false;
         this.limitHit = false;
-        this.lastTurn = turnModelsOf(ev);
+        this.lastTurn = turnModelsOf(ev, this.turnIds);
+        this.turnIds = new Map();
         const isError = Boolean(ev.is_error) || ev.subtype !== "success";
         const auth = this.authFailed || ev.api_error_status === 401;
         if (auth && !this.authFailed) this.authFailure("Claude 登录已失效，请在天枢里重新登录 Claude。");

@@ -173,10 +173,11 @@ function binsInstalled(cmd: string, dirs: string[]): boolean {
  * 而且名字里没有写的词；按资源调方法的 list、get、search、query、mget；auth status、list、check、scopes；schema、help、version；
  * 带 --help、--dry-run 的。别的照样问本人：发消息、发邮件、改文档、建日程、改表格等写操作，登录登出，直接调接口（api），看不出是读的（宁可多问）。
  */
-const LARK_READ_TAIL = new Set(["list", "search", "get", "mget", "query", "fetch", "read", "status", "agenda", "detail", "info", "preview", "inspect", "freebusy", "find", "download", "summary"]);
+const LARK_READ_TAIL = new Set(["list", "search", "get", "mget", "query", "fetch", "read", "status", "agenda", "detail", "info", "preview", "inspect", "freebusy", "find", "download"]);
 const LARK_WRITE_PART = new Set(["send", "create", "update", "edit", "delete", "remove", "add", "set", "put", "revert", "move", "copy", "upload", "reply", "forward", "trash", "modify", "share", "submit", "push", "sync", "import", "rename", "clear", "insert", "enable", "disable", "bind", "unbind", "complete", "reopen", "assign", "transfer", "invite", "join", "leave", "end", "rsvp"]);
 function larkRead(words: string[]): boolean {
-  if (words.some((w) => /^(--help|-h|--dry-run|--version)$/.test(w))) return true;
+  // 看帮助、只演练：只认放在最后、前面不是参数名的（--text --dry-run 时 --dry-run 是要发的字）
+  if (/^(--help|-h|--dry-run|--version)$/.test(words.at(-1) ?? "") && !(words.at(-2) ?? "").startsWith("-")) return true;
   const head: string[] = [];
   for (const w of words) { if (w.startsWith("-")) break; head.push(w); }
   const [a, b] = head.map((w) => w.toLowerCase());
@@ -189,10 +190,13 @@ function larkRead(words: string[]): boolean {
     if (parts.some((p) => LARK_WRITE_PART.has(p))) return false;
     return LARK_READ_TAIL.has(parts.at(-1)!) || parts[0] === "get" || parts[0] === "search";
   }
-  return head.length >= 3 && ["list", "get", "search", "query", "mget"].includes(head.at(-1)!.toLowerCase());
+  return head.length === 3 && ["list", "get", "search", "query", "mget"].includes(head[2]!.toLowerCase());
 }
-/** 命令里有一次 lark-cli 不是读的。 */
+/**
+ * 命令里有一次 lark-cli 不是读的。套在 $( )、反引号、<( ) 里的认不清，一律当成不是读的；反引号也挡住 PowerShell 里 lark`-cli 这种拆开的写法。
+ */
 function larkWrites(cmd: string): boolean {
+  if (/lark/i.test(cmd) && /\$\(|`|<\(/.test(cmd)) return true;
   for (const m of cmd.matchAll(/\blark-cli\b([^;&|\n]*)/gi)) {
     if (!larkRead(m[1]!.trim().split(/\s+/).filter(Boolean))) return true;
   }

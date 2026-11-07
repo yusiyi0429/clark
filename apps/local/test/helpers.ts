@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { startRunner, type Runner, type RunnerOptions } from "../src/app.js";
 import type { ToolExec } from "../src/tools.js";
 import { FileSecretStore } from "../src/secrets.js";
-import { HeadlessDesktop } from "../src/desktop/index.js";
+import { HeadlessDesktop, type MenuAction } from "../src/desktop/index.js";
 
 export const ORIGIN = "https://tk.tokenkingos.com";
 export const FAKE_CLAUDE = fileURLToPath(new URL("./fixtures/fake-claude.mjs", import.meta.url));
@@ -24,6 +24,9 @@ export async function startTestRunner(opts: {
   const desktop = new HeadlessDesktop();
   desktop.confirm = async () => opts.approvePairing ?? true;
   desktop.pickFolder = async () => (typeof opts.pickFolder === "function" ? opts.pickFolder() : opts.pickFolder ?? null);
+  // 托盘菜单：测试里直接点（暂停、恢复）
+  let menu: (a: MenuAction) => void = () => {};
+  Object.assign(desktop, { start: async (fn: (a: MenuAction) => void) => { menu = fn; } });
   const runner: Runner = await startRunner({
     dataDir, port: 0 as unknown as number, headless: true, desktop, secrets: new FileSecretStore(dataDir),
     claudeBin: { command: process.execPath, prefixArgs: [FAKE_CLAUDE] }, fetchImpl: opts.fetchImpl, allowedOrigins: [ORIGIN],
@@ -36,6 +39,7 @@ export async function startTestRunner(opts: {
   runner.config.port = port; // 监听随机端口时，Host 检查要按实际端口
   return {
     runner, dataDir, port,
+    menu: (a: MenuAction) => menu(a),
     async cleanup() { await runner.close(); try { rmSync(dataDir, { recursive: true, force: true }); } catch { /* Windows 上偶尔占用 */ } },
   };
 }
