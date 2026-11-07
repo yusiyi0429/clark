@@ -7,6 +7,7 @@
  * 网页不存业务数据，所以不写进浏览器存储。
  */
 import type { HomeTask, SubSession, WorkHomeData } from "./types";
+import { transferLine, type Transfer } from "./transfer";
 
 export type ProjectGoal = {
   taskId: string;
@@ -38,6 +39,8 @@ export type Project = {
   lastActivity: string | null;
   /** 预算用了多少（0–100+，到 80 写「预算 80%」）；还没有数据为 null。 */
   budget: number | null;
+  /** 正在转交或已经交出去的那一次（16.7）；撤回了、没接的算没有。 */
+  transfer: Transfer | null;
 };
 
 /** 本人在这个标签页里做的改动（接口到了以后由云端记）。attach 的值为 null 是「没挂」。 */
@@ -47,8 +50,9 @@ export type ProjectEdits = {
   archived: Record<string, boolean>;
   attach: Record<string, string | null>;
   folders: Record<string, string | null>;
+  transfers: Record<string, Transfer>;
 };
-export const NO_EDITS: ProjectEdits = { created: [], names: {}, archived: {}, attach: {}, folders: {} };
+export const NO_EDITS: ProjectEdits = { created: [], names: {}, archived: {}, attach: {}, folders: {}, transfers: {} };
 
 export const missionProject = (missionId: string) => `mission:${missionId}`;
 export const projectHref = (id: string) => `/me/work/projects/${encodeURIComponent(id)}`;
@@ -80,11 +84,14 @@ export function deriveProjects(data: Pick<WorkHomeData, "missions" | "waiting" |
     const tasks = entries.map((entry) => entry.task);
     const subSessions = tasks.flatMap((task) => task.subSessions);
     const taskIds = new Set(tasks.map((task) => task.taskId));
+    const transfer = edits.transfers[id] ?? null;
+    const active = transfer && (transfer.status === "preparing" || transfer.status === "sent" || transfer.status === "accepted") ? transfer : null;
     return {
       id,
       name: edits.names[id] ?? name,
       folder: edits.folders[id] ?? null,
-      archived: !!edits.archived[id],
+      // 接走了的进「已归档」（原负责人这边只读，16.7）。
+      archived: !!edits.archived[id] || active?.status === "accepted",
       goals,
       current: goals.filter((goal) => goal.period === data.period).sort((a, b) => (a.due ?? "99/99").localeCompare(b.due ?? "99/99")),
       tasks,
@@ -92,6 +99,7 @@ export function deriveProjects(data: Pick<WorkHomeData, "missions" | "waiting" |
       waiting: data.waiting.filter((item) => item.taskId && taskIds.has(item.taskId)).length,
       lastActivity: latest([createdAt, ...subSessions.map((sub) => sub.updatedAt), ...tasks.flatMap((task) => task.items.map((item) => item.updatedAt))]),
       budget: null,
+      transfer: active,
     };
   });
   return { projects, unattached };
@@ -117,9 +125,11 @@ export function ago(iso: string, now = Date.now()): string {
 }
 
 /**
- * 项目行的第二行（16.2），按顺序取第一个有的：「预算 80%」（warning）→「{月} 月 · {Task 名} · {截止} 验收」→「本月没有目标 · {最近活动}」。
+ * 项目行的第二行（16.2），按顺序取第一个有的：转交中「等 {名字} 接手」/ 交出去了「已交给 {名字}」（16.7）→「预算 80%」（warning）→「{月} 月 · {Task 名} · {截止} 验收」→「本月没有目标 · {最近活动}」。
  */
 export function projectLine(project: Project, now = Date.now()): { text: string; warning: boolean } {
+  const handover = transferLine(project.transfer);
+  if (handover) return { text: handover, warning: false };
   if (project.budget !== null && project.budget >= 80) return { text: `预算 ${project.budget}%`, warning: true };
   const goal = project.current[0];
   if (goal) return { text: [`${Number(goal.period.slice(5))} 月`, goal.name, goal.due ? `${goal.due} 验收` : null].filter(Boolean).join(" · "), warning: false };

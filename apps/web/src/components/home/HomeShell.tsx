@@ -45,6 +45,8 @@ import { ForeignTaskInfo, TaskInfo } from "./TaskInfo";
 import { MissionInfo } from "./MissionInfo";
 import { ProjectInfo } from "./ProjectInfo";
 import { GoalBar, MonthRule, ProjectTrail } from "./ProjectParts";
+import { TransferFlow } from "./Transfer";
+import type { TimedBlock } from "@/components/work/WorkTimeline";
 import { useProjects } from "./useProjects";
 import { conversationTask, projectHref, type Project } from "@/lib/home/projects";
 import { usePhone } from "./usePhone";
@@ -419,6 +421,12 @@ function HomeFrame({ account }: { account: Account }) {
     trail: backgroundButton, parent,
   } : { lead: null, trail: null, parent }), [handheld, go, backgroundButton, parent]);
   useTabTitle(data.waiting.length);
+  /** 项目对话里项目自己的几块：转交（16.7）从「准备交接」那一刻起。 */
+  const projectBlocks = (project: Project): TimedBlock[] => (project.transfer ? [{
+    key: `transfer:${project.transfer.id}`, at: project.transfer.startedAt,
+    node: <TransferFlow project={project} transfer={project.transfer} onUpdate={(patch) => projects.actions.updateTransfer(project.id, patch)}
+      onStop={async (ids) => { for (const id of ids) await local.runner.kill(id); await local.refresh(); changed(); }} />,
+  }] : []);
   /** 一件 Task 的对话；挂在项目上的，页头换成项目（16.3）：项目名、文件夹 chip、「详情」，下面目标条，最上面「{月} 月目标」。 */
   const pipeline = (task: THomePlanTask, project: Project | null) => {
     const goal = project?.goals.find((entry) => entry.taskId === task.taskId) ?? null;
@@ -427,6 +435,7 @@ function HomeFrame({ account }: { account: Account }) {
       trail: <ProjectTrail project={project} go={go} />,
       bar: <GoalBar project={project} criteriaOf={(taskId) => planTask(taskId)?.criteria ?? []} />,
       rule: goal ? <MonthRule goal={goal} /> : null,
+      blocks: projectBlocks(project),
     } : undefined;
     return <PipelineView key={task.taskId} task={task} home={homeTask(task.taskId)} api={api} buddy={buddy} outbox={outbox} consume={consume} go={go} onSplit={(taskId) => void split(taskId)} splitFailed={splitFailed === task.taskId}
       startFailed={startFailed} onManualStart={(id) => void manualStart(id)} onSpeaking={setSpeaking} project={chromeOf} />;
@@ -441,14 +450,15 @@ function HomeFrame({ account }: { account: Account }) {
         const task = goal ? planTask(goal.taskId) : null;
         if (!task) {
           return <BuddyView key={project.id} buddy={buddy} outbox={outbox} consume={consume} onSpeaking={setSpeaking} context={`关于：${project.name}`}
-            head={{ title: project.name, trail: <ProjectTrail project={project} go={go} /> }} />;
+            head={{ title: project.name, trail: <ProjectTrail project={project} go={go} /> }} blocks={projectBlocks(project)} />;
         }
         return pipeline(task, project);
       }
       case "projectInfo": {
         const project = projects.all.find((entry) => entry.id === current.id);
         if (!project) return <Missing loading={!api.ready} onRetry={api.planFailed ? () => void api.retryPlan() : undefined} />;
-        return <ProjectInfo key={project.id} project={project} period={data.period} go={go} actions={projects.actions} doneDefinitionOf={(taskId) => planTask(taskId)?.doneDefinition ?? null} />;
+        return <ProjectInfo key={project.id} project={project} period={data.period} go={go} actions={projects.actions} doneDefinitionOf={(taskId) => planTask(taskId)?.doneDefinition ?? null}
+          me={{ personId: account.personId ?? "", name: account.displayName }} />;
       }
       case "buddy": return <BuddyView buddy={buddy} outbox={outbox} consume={consume} onSpeaking={setSpeaking} context={buddyContext} onClearContext={() => setBuddyContext(null)} />;
       case "mission": {

@@ -39,7 +39,7 @@ describe("项目从树上推（16.5 迁移的规矩）", () => {
 });
 
 describe("项目行（16.2）", () => {
-  const project = (patch: Partial<Project>): Project => ({ id: "p", name: "p", folder: null, archived: false, goals: [], current: [], tasks: [], subSessions: [], waiting: 0, lastActivity: null, budget: null, ...patch });
+  const project = (patch: Partial<Project>): Project => ({ id: "p", name: "p", folder: null, archived: false, goals: [], current: [], tasks: [], subSessions: [], waiting: 0, lastActivity: null, budget: null, transfer: null, ...patch });
   const goal = { taskId: "t1", missionId: "m1", missionTitle: "新首页", period: "2026-11", name: "对所有 DRI 开放", due: "11/21" };
 
   it("第二行按顺序取：预算 80%（琥珀）→ 本月目标 · 截止 → 本月没有目标 · 最近活动", () => {

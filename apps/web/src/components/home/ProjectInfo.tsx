@@ -7,7 +7,9 @@
  * - 改名、归档（归档的能取消）；
  * - 当前那件 Task 的预算、完成标准、约定、交付物：沿用原来 Task 详情的样子（TaskBudget、TaskDeliverable）。
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { browserApi } from "@/lib/api/client";
+import type { Person, Transfer } from "@/lib/home/transfer";
 import { ArrowLeft } from "lucide-react";
 import { Dropdown } from "@heroui/react";
 import { HeroButton } from "@/components/HeroButton";
@@ -23,16 +25,35 @@ export type ProjectActions = {
   rename: (id: string, name: string) => void;
   archive: (id: string, archived: boolean) => void;
   setFolder: (id: string, folder: string | null) => void;
+  startTransfer: (project: Project, from: Person, to: Person) => void;
+  updateTransfer: (projectId: string, patch: Partial<Transfer>) => void;
 };
 
-export function ProjectInfo({ project, period, go, actions, doneDefinitionOf }: {
+/** 人员目录（转给谁）：GET /api/people/directory，去掉自己。 */
+function usePeople(me: string): Person[] {
+  const [people, setPeople] = useState<Person[]>([]);
+  useEffect(() => {
+    let alive = true;
+    void browserApi.GET("/api/people/directory").then(({ data }) => {
+      if (alive && data) setPeople(data.people.filter((person) => person.personId !== me).map((person) => ({ personId: person.personId, name: person.displayName })));
+    }, () => undefined);
+    return () => { alive = false; };
+  }, [me]);
+  return people;
+}
+
+export function ProjectInfo({ project, period, go, actions, doneDefinitionOf, me }: {
   project: Project;
   /** 这个月（YYYY-MM）。 */
   period: string;
   go: (href: string) => void;
   actions: ProjectActions;
   doneDefinitionOf: (taskId: string) => string | null;
+  /** 本人（转出时是「从谁」）。 */
+  me: Person;
 }) {
+  const people = usePeople(me.personId);
+  const transfer = project.transfer;
   const chrome = useViewChrome();
   const local = useLocalRunner();
   const [name, setName] = useState(project.name);
@@ -86,6 +107,31 @@ export function ProjectInfo({ project, period, go, actions, doneDefinitionOf }: 
               <HeroButton variant="tertiary" size="sm" type="submit" isDisabled={!name.trim() || name.trim() === project.name}>改名</HeroButton>
               <HeroButton variant="ghost" size="sm" onPress={() => actions.archive(project.id, !project.archived)} data-testid="project-archive">{project.archived ? "取消归档" : "归档"}</HeroButton>
             </form>
+          </section>
+          <section aria-label="转交" className={h.section}>
+            <p className={h.sectionTitle}>转交</p>
+            <div className={h.infoRow}>
+              {transfer && transfer.status !== "accepted" ? (
+                <>
+                  <span className={h.line}>{transfer.status === "sent" ? `等 ${transfer.to.name} 接手` : `准备交接给 ${transfer.to.name}`}</span>
+                  <HeroButton variant="ghost" size="sm" onPress={() => actions.updateTransfer(project.id, { status: "withdrawn", decidedAt: new Date().toISOString() })} data-testid="transfer-withdraw">撤回</HeroButton>
+                </>
+              ) : transfer ? <span className={h.line}>已交给 {transfer.to.name}</span> : (
+                <Dropdown>
+                  <Dropdown.Trigger className={h.sendTo} data-testid="transfer-to"><b>转给…</b></Dropdown.Trigger>
+                  <Dropdown.Popover placement="bottom start" offset={8} className={h.pop}>
+                    <Dropdown.Menu aria-label="转给" className={`${h.menuList} ${h.menuScroll}`} onAction={(key) => {
+                      const person = people.find((entry) => entry.personId === key);
+                      if (!person) return;
+                      actions.startTransfer(project, me, person);
+                      go(projectHref(project.id));
+                    }}>
+                      {people.map((person) => <Dropdown.Item key={person.personId} id={person.personId} textValue={person.name} className={h.menuItem}>{person.name}</Dropdown.Item>)}
+                    </Dropdown.Menu>
+                  </Dropdown.Popover>
+                </Dropdown>
+              )}
+            </div>
           </section>
           {goal ? (
             <section aria-label="当前目标" className={h.section}>

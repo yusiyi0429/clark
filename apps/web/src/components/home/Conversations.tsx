@@ -40,6 +40,8 @@ export type OutboxEntry = { id: number; target: "main" | string; text: string; f
 /** 排着的几句（按发出的先后），每条对话只取给自己的。 */
 export type Outbox = OutboxEntry[];
 
+const NO_BLOCKS: TimedBlock[] = [];
+
 /** 对话读好了、没在回答时，把 outbox 里给这条对话的第一句发出去（一次一句，回完再发下一句）。 */
 function useOutbox(data: ConversationData, key: "main" | string, outbox: Outbox, consume: (id: number) => void) {
   const sent = useRef(new Set<number>());
@@ -103,9 +105,11 @@ function useEscStopsReply(data: ConversationData) {
  * context：从 Mission 详情「问伙伴」带来的「关于：{Mission}」，输入框左上角一枚胶囊（14.5），去掉调 onClearContext。
  * head：项目还没挂目标、项目对话还没上的时候，项目页借总管线说话：页头写项目名和项目的 chip（16.3）。
  */
-export function BuddyView({ buddy, outbox, consume, onSpeaking, context = null, onClearContext, head }: {
+export function BuddyView({ buddy, outbox, consume, onSpeaking, context = null, onClearContext, head, blocks = NO_BLOCKS }: {
   buddy: Buddy | null; outbox: Outbox; consume: (id: number) => void; onSpeaking: (speaking: boolean) => void; context?: string | null; onClearContext?: () => void;
   head?: { title: string; trail: ReactNode };
+  /** 项目页借总管线时项目自己的几块（转交）。 */
+  blocks?: TimedBlock[];
 }) {
   const data = useConversation("global");
   const chrome = useViewChrome();
@@ -125,7 +129,7 @@ export function BuddyView({ buddy, outbox, consume, onSpeaking, context = null, 
               {chrome.trail}
             </header>
           )}
-          timeline={(current) => <WorkTimeline data={current} blocks={[]} />}
+          timeline={(current) => <WorkTimeline data={current} blocks={blocks} />}
           dock={(latest) => <PendingDock latest={latest} />}
           input={(onHeight) => <ChatInput data={data} placeholder={`与${name}讨论…`} onHeight={onHeight}
             context={context ? { label: context, onClear: () => onClearContext?.() } : null} />} />
@@ -154,7 +158,7 @@ type PipelineProps = {
    * 放在项目页里（16.3）：页头写项目名、右边是项目的 chip 和「详情」，页头下是目标条，对话最上面一条「{月} 月目标：{Task}」。
    * 项目对话（scope project:<id>）没上以前，项目页接的是这个项目本月那件 Task 的管线。
    */
-  project?: { name: string; trail: ReactNode; bar: ReactNode; rule: ReactNode };
+  project?: { name: string; trail: ReactNode; bar: ReactNode; rule: ReactNode; blocks?: TimedBlock[] };
 };
 
 /**
@@ -217,6 +221,8 @@ function PipelineBody({ data, task, home, api, buddy, outbox, consume, go, onSpe
     const list: TimedBlock[] = [];
     // 换月份的分隔线排在这件 Task 的对话最前面（项目对话并起来以后按挂上的时间排）。
     if (project?.rule) list.push({ key: `month:${task.taskId}`, at: "0000-01-01T00:00:00.000Z", node: project.rule });
+    // 项目自己的几块（转交，16.7）：按发生的时间插进对话。
+    if (project?.blocks) list.push(...project.blocks);
     const planner = mine.find((worker) => worker.kind === "plan" && worker.state !== "done");
     if (planner) list.push({ key: `planning:${planner.key}`, at: planner.startedAt ?? planner.requestedAt ?? new Date().toISOString(), node: <PlanningLine planner={planner} /> });
     // 拆卡没做完（出了错才给兜底）：一行「拆卡失败」加「重试」（弱按钮）。
@@ -260,7 +266,7 @@ function PipelineBody({ data, task, home, api, buddy, outbox, consume, go, onSpe
     }));
     list.push(...feedBlocks({ items: feed, workers: mine, taskId: task.taskId, go, onSay: (text) => data.send(text, []), onChanged: () => void changed(), remoteAsks }));
     return list;
-  }, [mine, board, task, work.roles, handheld, changed, data, subs, go, feed, onSplit, splitFailed, startFailed, onManualStart, waiting, project?.rule]);
+  }, [mine, board, task, work.roles, handheld, changed, data, subs, go, feed, onSplit, splitFailed, startFailed, onManualStart, waiting, project?.rule, project?.blocks]);
   const title = project?.name ?? task.name;
   return (
     <PendingBoxes>

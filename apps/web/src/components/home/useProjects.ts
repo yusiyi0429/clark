@@ -5,7 +5,8 @@
  * 现在：项目从树上推（lib/home/projects 的 deriveProjects），新建、改名、归档、挂到、绑文件夹记在这个标签页的内存里。
  */
 import { useCallback, useMemo, useRef, useState } from "react";
-import { NO_EDITS, deriveProjects, sortProjects, type ProjectEdits } from "@/lib/home/projects";
+import { NO_EDITS, deriveProjects, sortProjects, type Project, type ProjectEdits } from "@/lib/home/projects";
+import type { Person, Transfer } from "@/lib/home/transfer";
 import type { WorkHomeData } from "@/lib/home/types";
 
 export function useProjects(data: Pick<WorkHomeData, "missions" | "waiting" | "period">, dueOf: (missionId: string) => string | null) {
@@ -24,7 +25,16 @@ export function useProjects(data: Pick<WorkHomeData, "missions" | "waiting" | "p
   const archive = useCallback((id: string, value: boolean) => setEdits((now) => ({ ...now, archived: { ...now.archived, [id]: value } })), []);
   const attach = useCallback((taskId: string, projectId: string | null) => setEdits((now) => ({ ...now, attach: { ...now.attach, [taskId]: projectId } })), []);
   const setFolder = useCallback((id: string, folder: string | null) => setEdits((now) => ({ ...now, folders: { ...now.folders, [id]: folder } })), []);
-  const actions = useMemo(() => ({ create, rename, archive, attach, setFolder }), [create, rename, archive, attach, setFolder]);
+  /** 转给某人（16.7）：开一次「准备交接」。 */
+  const startTransfer = useCallback((project: Project, from: Person, to: Person) => setEdits((now) => ({ ...now, transfers: { ...now.transfers, [project.id]: {
+    id: `transfer:${project.id}:${Date.now().toString(36)}`, projectId: project.id, projectName: project.name, from, to, status: "preparing",
+    startedAt: new Date().toISOString(), decidedAt: null, includeHistory: false, running: null, check: null, note: null,
+  } } })), []);
+  const updateTransfer = useCallback((projectId: string, patch: Partial<Transfer>) => setEdits((now) => {
+    const current = now.transfers[projectId];
+    return current ? { ...now, transfers: { ...now.transfers, [projectId]: { ...current, ...patch } } } : now;
+  }), []);
+  const actions = useMemo(() => ({ create, rename, archive, attach, setFolder, startTransfer, updateTransfer }), [create, rename, archive, attach, setFolder, startTransfer, updateTransfer]);
   return { all: projects, projects: live, archived, unattached, actions };
 }
 
