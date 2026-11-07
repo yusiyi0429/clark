@@ -23,7 +23,18 @@ type Pick = { option: number } | { text: string };
 type Draft = Record<string, Pick | undefined>;
 
 /** 对话时间线给提问卡的：发送、这一轮是否在进行、哪几组提问已经回答过（按 askId）。 */
-export const AskContext = createContext<{ send: ConversationData["send"]; streaming: boolean; answered: Set<string> } | null>(null);
+/**
+ * 提问卡的上下文：answered 哪几组答过；answers 每组的问答记录（本人的作答消息带着）；
+ * inline：新首页的对话（WorkTimeline）——答过的提问卡原处收成一行（选项框 resolved），不再另画本人那条问答记录气泡。
+ */
+export type AskContextValue = { send: ConversationData["send"]; streaming: boolean; answered: Set<string>; answers: Map<string, TAskAnswerRecord>; inline?: boolean };
+export const AskContext = createContext<AskContextValue | null>(null);
+
+/** 从对话里取每组提问的问答记录（刚发出、还没读回的那句也算）。 */
+export function askAnswers(messages: { answers?: TAskAnswerRecord }[]): { answered: Set<string>; answers: Map<string, TAskAnswerRecord> } {
+  const answers = new Map(messages.flatMap((message) => (message.answers ? [[message.answers.askId, message.answers] as const] : [])));
+  return { answered: new Set(answers.keys()), answers };
+}
 
 /** 本人这次的作答：交给服务端的答案，和先画出来的问答记录（与服务端存下的同形）。 */
 export function answersOf(card: QuestionsCard, draft: Draft): { input: TAskAnswerInput; record: TAskAnswerRecord } {

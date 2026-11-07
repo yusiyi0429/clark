@@ -22,12 +22,14 @@ const RECHECK_MS = 60_000;
 
 export function useWorkHome() {
   const planHook = useHomePlan();
-  const work = useWork({ planHook });
+  const [remote, setRemote] = useState<TWorkHomeResponse | null>(null);
+  // 树上之前月份没了结的 Task 也读看板（派活单、卡、认领开工都要用）。
+  const treeTaskIds = useMemo(() => remote?.missions.flatMap((mission) => mission.tasks.map((task) => task.taskId)) ?? [], [remote]);
+  const work = useWork({ planHook, extraTaskIds: treeTaskIds });
   const member = useMemberHome();
   const merges = useMergeIssues();
   const local = useLocalRunner();
   const deviceId = local.status?.deviceId ?? null;
-  const [remote, setRemote] = useState<TWorkHomeResponse | null>(null);
   /** null：还没问过；false：接口还没有（404）。 */
   const [live, setLive] = useState<boolean | null>(null);
 

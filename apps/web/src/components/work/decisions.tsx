@@ -165,8 +165,13 @@ export function AskDecision({ card }: { card: QuestionsCard }) {
   const answered = ask?.answered.has(card.askId) ?? false;
   const several = card.questions.length > 1;
   const order = [...question.options.keys()].sort((a, b) => Number(!!question.options[b]!.recommended) - Number(!!question.options[a]!.recommended));
-  // 答过的不再画框：下面本人那一句就是问答记录。
-  if (answered) return null;
+  // 答过的：新首页里原处收成一行（问题 · 答了什么），老页面下面本人那一句就是问答记录、这里不画。
+  if (answered) {
+    const record = ask?.inline ? ask.answers.get(card.askId) : undefined;
+    if (!record) return null;
+    const said = record.items.map((item) => item.answer ?? "跳过").join("；");
+    return <DecisionBox kind="question" testId="ask-decision" title={several ? `${card.questions.length} 个问题` : card.questions[0]!.question} options={[]} onPick={() => undefined} resolved={said} />;
+  }
   // 没发出去（管线正在回话、断网）算失败：原处写「失败 · 重试」。
   const send = async (next: Record<string, Pick | undefined>) => {
     if (!ask) return;

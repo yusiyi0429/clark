@@ -25,8 +25,8 @@ import type { TaskBoard } from "@/lib/board/useTaskBoard";
 import { canCommandHere } from "@/lib/work/actions";
 import { useMergeIssues } from "@/lib/work/merge";
 import type { Worker } from "@/lib/work/workers";
-import { cardHref, deriveFeed, infoHref } from "@/lib/home/derive";
-import type { FeedItem } from "@/lib/home/types";
+import { askAnchor, cardHref, deriveFeed, infoHref } from "@/lib/home/derive";
+import type { FeedItem, WaitingItem } from "@/lib/home/types";
 import type { WorkHomeApi } from "@/lib/home/useWorkHome";
 import { BlockedDecision, MergeDecision, answeredOf, markAnswered } from "./TaskDecisions";
 import f from "@/styles/task-feed.module.css";
@@ -54,16 +54,18 @@ export function useTaskFeed(taskId: string, board: TaskBoard | null, api: WorkHo
   return api.live ? (cloud?.taskId === taskId ? cloud.items : []) : derived;
 }
 
-/** 子会话页「去回答」跳过来的地址：Task 管线，锚在那个子会话的选项框上。 */
-export const askAnchor = (sessionId: string) => `ask-${sessionId}`;
+/** 子会话页「去回答」、等你那一行跳过来的地址：Task 管线，锚在那个子会话的选项框上（定义在 derive，等你的地址也用它）。 */
+export { askAnchor } from "@/lib/home/derive";
 
 /**
  * 验收行变成对话里按时间插的几块；合不合回的选项框接在「过了」那一句后面。子会话在问、在等批准的，也在这里出选项框（14.3）。
  * onSay：「自己说」发进 Task 管线；发不出去（管线正在回话）时回 false。
  */
-export function feedBlocks({ items, workers, taskId, go, onSay, onChanged }: {
+export function feedBlocks({ items, workers, taskId, go, onSay, onChanged, remoteAsks }: {
   items: FeedItem[];
   workers: Worker[];
+  /** 别的电脑上跑的子会话在问、在等批准：卡或专题的 id → 等你里那一条（带原话 question、要批准的那一步 permission，契约 aa6aba9e）。 */
+  remoteAsks?: ReadonlyMap<string, WaitingItem>;
   taskId: string;
   go: (href: string) => void;
   onSay: (text: string) => unknown;
@@ -93,8 +95,9 @@ export function feedBlocks({ items, workers, taskId, go, onSay, onChanged }: {
     if (worker.kind !== "card" && worker.kind !== "topic") return [];
     const session = worker.session;
     // 本机上正在跑的会话都挂一块（没在问时什么都不画），这样一问就出，不等会话列表刷新；停着的看摘要里有没有挂着的。
-    if (session ? !(running(session.status) || session.pendingPermissions > 0 || session.pendingQuestion) : worker.mark !== "approval") return [];
-    return [{ key: `ask:${worker.key}`, at: session?.updatedAt ?? worker.startedAt ?? new Date().toISOString(), node: <SubSessionAsk worker={worker} /> }];
+    const remote = session ? undefined : remoteAsks?.get(worker.cardId ?? worker.topicId ?? "");
+    if (session ? !(running(session.status) || session.pendingPermissions > 0 || session.pendingQuestion) : worker.mark !== "approval" && !remote) return [];
+    return [{ key: `ask:${worker.key}`, at: session?.updatedAt ?? worker.startedAt ?? new Date().toISOString(), node: <SubSessionAsk worker={worker} remote={remote} /> }];
   });
   return [...feed, ...asking];
 }
@@ -165,7 +168,7 @@ function CriteriaDecision({ item, taskId, go, onSay }: { item: Met; taskId: stri
  * 子会话的提问和批准，由 Task 管线转达（14.3）：框顶上一行 12 淡色写子会话名，下面是问题和选项，答案直接回给那个子会话。
  * 只有跑它的这台电脑上能答；别处只留问题和「等你 · {电脑名}」。从子会话页「去回答」跳来（地址带 #ask-会话）时滚到这里。
  */
-function SubSessionAsk({ worker }: { worker: Worker }) {
+function SubSessionAsk({ worker, remote: item }: { worker: Worker; remote?: WaitingItem }) {
   const local = useLocalRunner();
   const handheld = useHandheld();
   const session = worker.session;
@@ -187,8 +190,10 @@ function SubSessionAsk({ worker }: { worker: Worker }) {
     await local.runner.answerQuestion(session.id, question.requestId, body);
     await local.refresh();
   };
-  const remote = !session && worker.mark === "approval";
-  if (!question && !pending.length && !remote) return null;
+  // 别的电脑上跑的：照等你那一条写原话（问的什么、要批准哪一步），这里答不了，行尾「等你 · 电脑名」。
+  const remoteQuestion = !session && item?.kind === "question" ? item.question : null;
+  const remote = !session && !remoteQuestion && (worker.mark === "approval" || item?.kind === "approval");
+  if (!question && !pending.length && !remote && !remoteQuestion) return null;
   return (
     <div ref={ref} id={session ? askAnchor(session.id) : undefined} className={f.ask} data-testid="sub-ask">
       <p className={f.askFrom}>{worker.title}</p>
@@ -197,7 +202,8 @@ function SubSessionAsk({ worker }: { worker: Worker }) {
           { decision, ...(forSession ? { allowForSession: true } : {}), ...(message ? { message } : {}) }).then(() => local.refresh())} />
       ) : null}
       {question ? <QuestionDecision key={question.requestId} request={question} blocked={blocked} onAnswer={answer} /> : null}
-      {remote ? <DecisionBox kind="approval" title={worker.ask?.text ?? "等你批准"} options={[]} onPick={() => undefined} blocked={awayChip(worker.device)} /> : null}
+      {remoteQuestion ? <QuestionDecision key={remoteQuestion.requestId} request={remoteQuestion} blocked={awayChip(worker.device)} onAnswer={async () => undefined} /> : null}
+      {remote ? <DecisionBox kind="approval" title={item?.permission?.title ?? worker.ask?.text ?? "等你批准"} options={[]} onPick={() => undefined} blocked={awayChip(worker.device)} /> : null}
     </div>
   );
 }

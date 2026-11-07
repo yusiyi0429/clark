@@ -787,6 +787,17 @@ const syncItem = <T extends string, D extends TSchema>(type: T, data: D) => Type
   data,
 }, strict);
 
+/**
+ * 同步给云端的「在等批准的那一步」（status = waiting_permission 时带）：给人看的一行、越界路径，不传工具的完整输入（输入只在本机）。
+ * 云端「等你」那一行的标题就是 title（原话）。
+ */
+export const LocalPermissionBrief = Type.Object({
+  requestId: Type.String({ minLength: 1, maxLength: 120 }),
+  toolName: Type.String({ maxLength: 200 }),
+  title: Type.String({ maxLength: 500 }),
+  outsidePaths: Type.Array(Type.String(), { maxItems: 20 }),
+}, strict);
+
 export const LocalSyncItem = Type.Union([
   syncItem("status", Type.Object({
     status: LocalSessionStatus, title: Type.String(), agent: LocalAgentKind, modelLabel: Type.String(),
@@ -796,6 +807,13 @@ export const LocalSyncItem = Type.Union([
     waitingFor: Type.Optional(Type.Array(Type.String(), { minItems: 1, maxItems: 8 })),
     /** 停着等额度恢复（见 LocalHold）：等的时候报一条带它的，恢复接着做时报的那条不带。 */
     hold: Type.Optional(LocalHold),
+    /**
+     * status = idle 且执行方在问本人（AskUserQuestion）时带：原样的提问（同本机摘要的 pendingQuestion）。云端据此出「等你」，标题用原话，单选的就地答。
+     * 不带的 idle 是这一轮做完停下了：云端不当成等你（新首页 9.6），卡照常交回进验收，单独开的子会话显示「已停下」。答完以后报的那条不带。
+     */
+    question: Type.Optional(LocalQuestionRequestView),
+    /** status = waiting_permission 时带：在等批准的那一步（LocalPermissionBrief）。 */
+    permission: Type.Optional(LocalPermissionBrief),
   }, strict)),
   syncItem("plan", Type.Object({ entries: Type.Array(LocalPlanEntry, { maxItems: 100 }), progress: LocalPlanProgress }, strict)),
   /** 证据：一段说明、日志片段、链接（PR 等）、改动摘要。不传完整工具输出。 */
@@ -934,6 +952,7 @@ export type TLocalMoney = Static<typeof LocalMoney>;
 export type TLocalMergeSync = Static<typeof LocalMergeSync>;
 export type TLocalQuestion = Static<typeof LocalQuestion>;
 export type TLocalQuestionRequestView = Static<typeof LocalQuestionRequestView>;
+export type TLocalPermissionBrief = Static<typeof LocalPermissionBrief>;
 export type TLocalQuestionAnswerRequest = Static<typeof LocalQuestionAnswerRequest>;
 export type TLocalBackgroundItem = Static<typeof LocalBackgroundItem>;
 export type TLocalBackgroundItemKind = Static<typeof LocalBackgroundItemKind>;

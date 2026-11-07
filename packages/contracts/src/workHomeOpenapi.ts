@@ -2,7 +2,7 @@ import type { JsonSchema, OpenAPIV3 } from "./types/JsonSchemaTypes.js";
 import {
   BackgroundItem, BackgroundResponse, ClaimSessionStartsRequest, ClaimSessionStartsResponse, HomeMission, HomeTask, HomeTaskSummary, RouteRequest, RouteResponse,
   SessionStartView, SubSession, TaskPipelineResponse, WaitingItem, WaitingTarget, WorkHomeResponse, CardMerge, TaskFeedItem, TaskFeedResponse, HomeItem, ReleaseSessionStartRequest,
-  NotificationSettings,
+  NotificationSettings, ClaimedSessionStart,
 } from "./workHome.js";
 import { Budget, TaskBudgetResponse } from "./budget.js";
 
@@ -15,7 +15,7 @@ export const workHomeSchemas: Record<string, JsonSchema> = {
   SubSession, HomeTaskSummary, HomeTask, HomeMission, WaitingTarget, WaitingItem, WorkHomeResponse,
   BackgroundItem, BackgroundResponse, TaskPipelineResponse, RouteRequest, RouteResponse,
   SessionStartView, ClaimSessionStartsRequest, ClaimSessionStartsResponse, CardMerge, TaskFeedItem, TaskFeedResponse, HomeItem, ReleaseSessionStartRequest,
-  NotificationSettings, Budget, TaskBudgetResponse,
+  NotificationSettings, Budget, TaskBudgetResponse, ClaimedSessionStart,
 };
 
 const error = { description: "ApiError 统一错误", content: { "application/json": { schema: { $ref: "#/components/schemas/ApiError" } } } };

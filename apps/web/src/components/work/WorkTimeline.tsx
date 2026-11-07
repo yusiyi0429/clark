@@ -9,7 +9,7 @@ import { useMemo, type ReactNode } from "react";
 import { ConversationStatusSlot, ConversationThinking, ConversationTurns } from "@/conversation/Transcript";
 import { AnswerOptions } from "@/conversation/AnswerOptionRow";
 import { EntryCards } from "@/conversation/EntryCards";
-import { AskContext } from "@/conversation/AskPanel";
+import { AskContext, askAnswers } from "@/conversation/AskPanel";
 import { parseAnswerOptions } from "@/conversation/answerOptions";
 import { RescopeContext } from "@/conversation/ScopeChip";
 import { withoutSupersededCards } from "@/conversation/ConversationTimeline";
@@ -38,8 +38,8 @@ export function WorkTimeline({ data, blocks }: { data: ConversationData; blocks:
   const options = !data.streaming && last?.role === "assistant" ? parseAnswerOptions(last.content).options : [];
   const latestCards = useMemo(() => withoutSupersededCards(data.messages), [data.messages]);
   const placed = useMemo(() => placeBlocks(data.messages.map((message) => message.createdAt), blocks), [data.messages, blocks]);
-  const ask = useMemo(() => ({ send: data.send, streaming: data.streaming,
-    answered: new Set(data.messages.flatMap((message) => (message.answers ? [message.answers.askId] : []))) }), [data.send, data.streaming, data.messages]);
+  // 新首页的对话：答过的提问卡原处收成一行（inline），不另画本人那条问答记录。
+  const ask = useMemo(() => ({ send: data.send, streaming: data.streaming, ...askAnswers(data.messages), inline: true }), [data.send, data.streaming, data.messages]);
   const status = data.streaming ? (
     <ConversationStatusSlot>
       {data.thinking ? <ConversationThinking stage={data.stage} startedAt={data.startedAt} onStop={data.stop} route={data.route} progress={data.progress} steps={data.steps} thought={data.thought} readScope={data.readScope} /> : null}

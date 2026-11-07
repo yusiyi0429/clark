@@ -19,11 +19,12 @@ const THERE = "00000000-0000-4000-8000-00000000d002";
 const SESSION = "00000000-0000-4000-8000-0000000000a1";
 const NOW = Date.parse("2026-11-07T04:00:00Z");
 const HOUR = 3_600_000;
+const NOW_ISO = new Date(NOW).toISOString();
 const at = (ms: number) => new Date(NOW + ms).toISOString();
 
 const wait = (extra: Partial<WaitingItem>): WaitingItem => ({
   id: "w1", kind: "verdict", title: "greet 连续两次没过", source: "首页改版 · greet", at: "2026-11-07T03:00:00Z", open: { kind: "task", id: "t1" },
-  taskId: "t1", sessionId: null, deviceId: null, deviceName: null, dueAt: null, answer: "open", person: null, month: null, ...extra,
+  taskId: "t1", sessionId: null, deviceId: null, deviceName: null, dueAt: null, answer: "open", person: null, month: null, question: null, permission: null, ...extra,
 });
 const local = (phase = "ready", sessions: unknown[] = []) => ({ runner: createMockRunner(), phase, version: null, status: null, models: [], folders: [], sessions, pairing: null, error: null,
   refresh: vi.fn(), pair: vi.fn(), unpair: vi.fn(), pickFolder: vi.fn(), setIncludePersonal: vi.fn() }) as unknown as LocalRunnerState;
@@ -86,6 +87,18 @@ describe("就地答（9.6，契约 WaitingAnswer）", () => {
     const html = render([approval()], { home });
     expect(text(html)).toContain("批准");
     expect(html).not.toContain("wait-away");
+  });
+
+  it("契约的 permission、question（aa6aba9e）：有越界路径的不就地批、来源后面写越界路径；单选最多 3 个选项的就地答，三个都画", () => {
+    const home = api({ workers: [] });
+    const outside = approval({ permission: { requestId: "r1", toolName: "Write", title: "写 /etc/hosts", outsidePaths: ["/etc/hosts"] } });
+    expect(waitingAnswer(outside, { api: home, local: local(), handheld: false }).actions).toEqual([{ label: "去看看", href: waitingHref(outside) }]);
+    expect(text(render([outside], { home }))).toContain("越界：/etc/hosts");
+    const plain = approval({ permission: { requestId: "r2", toolName: "Bash", title: "运行 pnpm test", outsidePaths: [] } });
+    expect(waitingAnswer(plain, { api: home, local: local(), handheld: false }).actions.map((action) => action.label)).toEqual(["批准", "换个做法"]);
+    const options = ["A", "B", "C"].map((label) => ({ label, description: "" }));
+    const asked = approval({ kind: "question", question: { requestId: "q1", askedAt: NOW_ISO, questions: [{ header: "", question: "选哪个？", options, multiSelect: false }] } });
+    expect(waitingAnswer(asked, { api: home, local: local(), handheld: false }).actions.map((action) => action.label)).toEqual(["A", "B", "C"]);
   });
 
   it("别的电脑、手机、本机没就绪：不画按钮，画「等你 · 电脑名」，没有名字写「那台电脑」", () => {

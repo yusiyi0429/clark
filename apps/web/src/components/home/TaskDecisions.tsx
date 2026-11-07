@@ -57,7 +57,7 @@ export function BlockedDecision({ item, worker, go, onChanged }: { item: Blocked
   );
 }
 
-/** 只在跑这张卡的这台电脑上（有本机会话、在工作树里做）出；别处 Task 管线里那一行写「还没合回」。 */
+/** 只在跑这张卡的这台电脑上（有本机会话、在工作树里做）出；别处 Task 管线里那一行写「无法合回」。 */
 export function MergeDecision({ worker, onChanged }: { worker: Worker; onChanged: () => void }) {
   const local = useLocalRunner();
   const issue = useMergeIssues().find((entry) => entry.sessionId === worker.session?.id) ?? null;
@@ -65,7 +65,7 @@ export function MergeDecision({ worker, onChanged }: { worker: Worker; onChanged
   const session = worker.session;
   const ws = session?.workspace;
   if (!session || ws?.kind !== "worktree" || ws.mergedCommit || !(ws.needsMerge || issue)) return null;
-  const title = `「${worker.title}」还没合回`;
+  const title = `「${worker.title}」无法合回`;
   if (later) return <DecisionBox kind="question" title={title} options={[]} onPick={() => undefined} resolved="先不合" />;
   const merge = async () => {
     const result = await mergeCard(local.runner, session, worker.title);

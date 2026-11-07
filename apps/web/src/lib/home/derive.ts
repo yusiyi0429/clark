@@ -28,6 +28,8 @@ export const cardHref = (cardId: string) => `/me/work/cards/${encodeURIComponent
 export const topicHref = (topicId: string) => `/me/work/topics/${encodeURIComponent(topicId)}`;
 export const taskHref = (taskId: string) => `/me/work/tasks/${encodeURIComponent(taskId)}`;
 export const infoHref = (taskId: string) => `/me/work/tasks/${encodeURIComponent(taskId)}/info`;
+/** Task 管线里某个子会话的选项框的锚点（14.3：等你那一行、子会话页「去回答」跳过来落在它上面）。 */
+export const askAnchor = (sessionId: string) => `ask-${sessionId}`;
 export const BUDDY_HREF = "/me/work/buddy";
 export const HOME_HREF = "/me/work";
 
@@ -43,7 +45,8 @@ export function waitingHref(item: Pick<WaitingItem, "open"> & Partial<Pick<Waiti
     case "href": return open.href;
     case "card": return cardHref(open.id);
     case "topic": return topicHref(open.id);
-    case "task": return taskHref(open.id);
+    // 子会话的提问和批准由 Task 管线转达（14.3）：落在管线里那个子会话的框上。
+    case "task": return open.focus ? `${taskHref(open.id)}#${askAnchor(open.focus.sessionId)}` : taskHref(open.id);
     case "meeting": return `/me/meetings/${encodeURIComponent(open.id)}`;
     // 具体某张卡去那张卡；拍板人那一侧没有具体的卡（轮次），去原来列着轮次的首页通知栏。
     case "mission_card": return open.round ? "/me" : `/me/mission-cards/${encodeURIComponent(open.id)}`;
@@ -113,7 +116,8 @@ function subState(worker: Worker, merge: TCardMerge | null): Pick<SubSession, "s
   if (worker.state === "queued") return { state: "queued", waiting: null };
   switch (worker.mark) {
     case "approval": return { state: "waiting", waiting: "approval" };
-    case "reply": return { state: "waiting", waiting: "question" };
+    // 只有真在问（摘要带 pendingQuestion）才是等你回复；一轮做完停下的是「已停下」（waiting 没有具体等什么，契约 aa6aba9e）。
+    case "reply": return { state: "waiting", waiting: worker.session?.pendingQuestion ? "question" : null };
     case "blocked": return { state: "waiting", waiting: "verdict" };
     case "paused": return { state: "waiting", waiting: null };
     default: return { state: "running", waiting: null };
@@ -168,11 +172,11 @@ export function statusParts(task: Pick<HomeTask, "summary" | "planning" | "compl
   if (task.completedAt) return { needsYou: 0, rest: ["已完成"] };
   // 契约的 failed 是「验收没过、改法还没送回」：第一次没过仍是进行中（5.4.2，重做中）。
   const running = task.subSessions.filter((sub) => sub.state === "running" || sub.state === "failed").length;
-  // 停下了、没在等你答的（已暂停）不在等你里，单写一段。
+  // 停下了、没在问你的（已停下）不在等你里，单写一段。
   const paused = task.subSessions.filter((sub) => sub.state === "waiting" && !sub.waiting).length;
   const { queued, doneToday, done, needsYou } = task.summary;
   const rest = [task.planning ? "拆卡中" : null, running ? `进行中 ${running}` : null, queued ? `已排队 ${queued}` : null, doneToday ? `今天完成 ${doneToday}` : null,
-    paused ? `已暂停 ${paused}` : null, done && !doneToday ? `已完成 ${done}` : null]
+    paused ? `已停下 ${paused}` : null, done && !doneToday ? `已完成 ${done}` : null]
     .filter((part): part is string => !!part).slice(0, needsYou ? 2 : 3);
   // 「未开始」只给还没开过子会话、也没在拆的（5.4.4）。
   return { needsYou, rest: needsYou || rest.length || task.subSessions.length ? rest : ["未开始"] };
@@ -276,17 +280,21 @@ const WORKER_KIND = { approval: "approval", reply: "question", blocked: "verdict
 function workerWaiting(workers: Worker[], deviceId: string | null): WaitingItem[] {
   return workers.flatMap((worker): WaitingItem[] => {
     const who = worker.kind === "plan" ? "拆卡" : worker.kind === "verify" ? `验收「${worker.title}」` : worker.title;
-    const source = [who, worker.taskName].filter(Boolean).join(" · ");
+    // 提问和批准由 Task 管线转达（14.3）：来源只写 Task 名，点了落在管线里那个框上；不挂 Task 的写子会话的名字、照旧进子会话。
     const sessionId = worker.session?.id ?? null;
     const base = { taskId: worker.taskId, sessionId, deviceId: sessionId ? deviceId : null, at: worker.startedAt };
     const kind = worker.mark && worker.state === "doing" ? WORKER_KIND[worker.mark as keyof typeof WORKER_KIND] : undefined;
-    if (!kind) return [];
+    if (!kind || (kind === "question" && !worker.session?.pendingQuestion)) return [];
+    const relayed = (kind === "approval" || kind === "question") && !!worker.taskId;
+    const source = relayed ? worker.taskName ?? who : [who, worker.taskName].filter(Boolean).join(" · ");
     // 受阻在 Task 管线里拍板（按这个改 / 我去看看 / 仍然通过）；批准、回答在子会话里（规划员的在 Task 管线）。
-    const open = kind === "verdict" && worker.taskId ? { kind: "task" as const, id: worker.taskId }
+    const open = relayed && worker.taskId ? { kind: "task" as const, id: worker.taskId, ...(sessionId ? { focus: { sessionId, requestId: worker.session?.pendingQuestion?.requestId ?? null } } : {}) }
+      : kind === "verdict" && worker.taskId ? { kind: "task" as const, id: worker.taskId }
       : worker.kind === "topic" && worker.topicId ? { kind: "topic" as const, id: worker.topicId }
       : (worker.kind === "card" || worker.kind === "verify") && worker.cardId ? { kind: "card" as const, id: worker.cardId }
       : worker.taskId ? { kind: "task" as const, id: worker.taskId } : { kind: "href" as const, href: HOME_HREF };
-    return [{ id: `worker:${worker.key}`, kind, title: askTitle(worker), source, open, ...base, ...fields("inline_local") }];
+    return [{ id: `worker:${worker.key}`, kind, title: askTitle(worker), source, open, ...base, ...fields("inline_local"),
+      question: kind === "question" ? worker.session?.pendingQuestion ?? null : null }];
   });
 }
 
@@ -314,7 +322,7 @@ function orphanMerges(merges: MergeIssue[], subs: SubSession[]): WaitingItem[] {
 const NONE = { taskId: null, sessionId: null, deviceId: null } as const;
 
 /** 契约 9.6 加的几项（回退路径）：截止、电脑名、对方、月份先不填；answer 照能不能就地答。 */
-const fields = (answer: TWaitingAnswer) => ({ answer, dueAt: null, deviceName: null, person: null, month: null });
+const fields = (answer: TWaitingAnswer) => ({ answer, dueAt: null, deviceName: null, person: null, month: null, question: null, permission: null });
 
 function noticeWaiting(notices: NoticeSources | null): WaitingItem[] {
   if (!notices) return [];

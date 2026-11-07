@@ -12,6 +12,7 @@ import type { THomePlanTask } from "@warmap/contracts";
 import { TaskDeliverable } from "@/components/member/home/deliverable/TaskDeliverable";
 import { HOME_HREF, infoHref, taskHref } from "@/lib/home/derive";
 import { useViewChrome } from "./view";
+import { TaskBudget } from "./TaskBudget";
 import h from "@/styles/home.module.css";
 
 import { ICON } from "./StateIcon";
@@ -44,6 +45,8 @@ export function TaskInfo({ task, mission, gate, go, foreign = false }: {
               {task.doneDefinition ? <p>{task.doneDefinition}</p> : null}
             </div>
           ) : null}
+          {/* 预算（11.3）：本人的 Task 才能改；别人的只读详情不放。 */}
+          {foreign ? null : <TaskBudget key={task.taskId} taskId={task.taskId} />}
           <TaskDeliverable key={task.taskId} task={{ taskId: task.taskId }} checkOnOpen />
         </div>
       </div>

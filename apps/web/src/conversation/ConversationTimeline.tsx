@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { ConversationStatusSlot, ConversationThinking, ConversationTurns } from "./Transcript";
 import { AnswerOptions } from "./AnswerOptionRow";
 import { EntryCards } from "./EntryCards";
-import { AskContext } from "./AskPanel";
+import { AskContext, askAnswers } from "./AskPanel";
 import { parseAnswerOptions } from "./answerOptions";
 import { RescopeContext } from "./ScopeChip";
 import type { ConversationData, Message } from "./useConversation";
@@ -43,8 +43,7 @@ export function ConversationTimeline({ data }: { data: ConversationData }) {
   const options = !data.streaming && last?.role === "assistant" ? parseAnswerOptions(last.content).options : [];
   const latestCards = useMemo(() => withoutSupersededCards(data.messages), [data.messages]);
   // 提问卡：哪几组已经回答过（本人的作答消息带着问答记录，刚发出、还没读回的那句也算）。
-  const ask = useMemo(() => ({ send: data.send, streaming: data.streaming,
-    answered: new Set(data.messages.flatMap((message) => (message.answers ? [message.answers.askId] : []))) }), [data.send, data.streaming, data.messages]);
+  const ask = useMemo(() => ({ send: data.send, streaming: data.streaming, ...askAnswers(data.messages) }), [data.send, data.streaming, data.messages]);
   // 状态区：回答进行中一直占着位置。
   const status = data.streaming ? (
     <ConversationStatusSlot>

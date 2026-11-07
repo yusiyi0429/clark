@@ -3,7 +3,7 @@
  * 后端实现还在做，接口可能暂时 404：读的当成「还没有」，写的报一句「没成功」。
  */
 import type {
-  TAcceptCardDraftsRequest, TCardBoardResponse, TCardBriefResponse, TCardDetailResponse, TCardPlanBriefResponse, TCardPlanView, TCardSplitListResponse, TCardSplitRequestView, TCardTaskView,
+  TBudget, TAcceptCardDraftsRequest, TCardBoardResponse, TCardBriefResponse, TCardDetailResponse, TCardPlanBriefResponse, TCardPlanView, TCardSplitListResponse, TCardSplitRequestView, TCardTaskView,
   TCreateLocalDeviceRequest, TCreateLocalDeviceResponse, TLocalDeviceView, TPatchCardRequest, TResearchTopicView,
   TTopicBriefResponse, TTopicDetailResponse, TTopicVersionView, TWorkersResponse,
   TBackgroundResponse, TClaimSessionStartsResponse, TRouteResponse, TTaskFeedResponse, TTaskPipelineResponse, TWorkHomeResponse,
@@ -56,6 +56,8 @@ export const acceptDrafts = (taskId: string, drafts: TAcceptCardDraftsRequest["d
   unwrap(browserApi.POST("/api/plan-tasks/{taskId}/card-drafts/accept", { params: task(taskId), body: { drafts, ...(start ? { start } : {}), ...(budget ? { budget } : {}) } })).then((data) => data.cards as TCardTaskView[]);
 /** 这件 Task 现在的预算（11.3；没单独设过时是本人的缺省，inherited）：开工框的模式分段从它开始。 */
 export const readTaskBudget = (taskId: string) => maybe(browserApi.GET("/api/me/tasks/{taskId}/budget", { params: task(taskId) }));
+/** 改这件 Task 的预算（Task 详情里「预算」那一行，11.3）。 */
+export const saveTaskBudget = (taskId: string, budget: TBudget) => unwrap(browserApi.PUT("/api/me/tasks/{taskId}/budget", { params: task(taskId), body: budget }));
 export const dismissDraft = (draftId: string) => unwrap(browserApi.POST("/api/card-drafts/{id}/dismiss", { params: id(draftId) }));
 export const shipPending = (taskId: string, statement?: string) =>
   unwrap(browserApi.POST("/api/plan-tasks/{taskId}/deliverable/versions/from-pending", { params: task(taskId), body: statement ? { statement } : {} }));

@@ -116,8 +116,10 @@ function HomeFrame({ account }: { account: Account }) {
   // ---- 切展示区：新首页里的地址 pushState，离开新首页（老页面、M2）整页跳 ----
   const go = useCallback((href: string) => {
     if (!href.startsWith("/me/work")) { router.push(href); return; }
-    if (href === window.location.pathname) return;
+    // 带锚点的（Task 管线里某个框，14.3）：同一件 Task 换个框也要换地址，管线据此定位。
+    if (href === window.location.pathname + window.location.hash) return;
     window.history.pushState(null, "", href);
+    if (href.includes("#")) window.dispatchEvent(new HashChangeEvent("hashchange"));
   }, [router]);
   // Esc 回首页（「今天」行）：菜单、弹层、抽屉、输入框里的 Esc 由它们自己处理，这里只接没人要的。
   useEffect(() => {
@@ -247,8 +249,8 @@ function HomeFrame({ account }: { account: Account }) {
   // 认领到的卡在看板、worker 里还没刷新到（首页接口比看板先报）：放回去，3 秒后再认领，不等一分钟。
   // 只在要开工的那几个变了、或隔一会时再看（不跟着每次刷新）；认领进行中要开工的又变了，认领完马上再看一次。
   const claiming = useRef(false);
-  const latest = useRef({ workers: work.workers, subs, start, local, changed, autoStartKey });
-  useEffect(() => { latest.current = { workers: work.workers, subs, start, local, changed, autoStartKey }; });
+  const latest = useRef({ workers: work.workers, subs, start, local, changed, autoStartKey, reload: api.refresh });
+  useEffect(() => { latest.current = { workers: work.workers, subs, start, local, changed, autoStartKey, reload: api.refresh }; });
   const [claimTick, setClaimTick] = useState(0);
   const canOpen = local.models.length > 0;
   useEffect(() => {
@@ -259,12 +261,18 @@ function HomeFrame({ account }: { account: Account }) {
     const run = async () => {
       const claimed = (await claimStarts(deviceId).catch(() => null))?.starts ?? [];
       if (!claimed.length) return;
-      const { workers, subs, start, local, changed } = latest.current;
-      const sessions = await local.runner.listSessions().catch(() => local.sessions);
+      const sessions = await latest.current.local.runner.listSessions().catch(() => latest.current.local.sessions);
       const busy = new Set(sessions.flatMap((session) => [session.subject.cardId, session.subject.topicId].filter((id): id is string => !!id)));
-      const cards = claimed.flatMap((entry) => {
-        if (entry.kind !== "card" || !entry.cardId || busy.has(entry.cardId)) return [];
-        const worker = workers.find((candidate) => candidate.cardId === entry.cardId && candidate.item);
+      const find = (cardId: string) => latest.current.workers.find((candidate) => candidate.cardId === cardId && candidate.item);
+      const wanted = claimed.flatMap((entry) => (entry.kind === "card" && entry.cardId && !busy.has(entry.cardId) ? [entry.cardId] : []));
+      // 认领到的卡还没在读到的看板里（首页接口比看板先报、或是之前月份的 Task）：当场把看板和 worker 读来再开，不先放掉。
+      if (wanted.some((cardId) => !find(cardId))) {
+        await latest.current.reload();
+        await new Promise((resolve) => window.setTimeout(resolve, 50));
+      }
+      const { subs, start, local, changed } = latest.current;
+      const cards = wanted.flatMap((cardId) => {
+        const worker = find(cardId);
         if (!worker) soon = true;
         return worker ? [worker] : [];
       });

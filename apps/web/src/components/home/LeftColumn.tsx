@@ -23,7 +23,7 @@ import type { HomeTask, SubSession, WorkHomeData } from "@/lib/home/types";
 import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import { useDictationSignal } from "@/conversation/dictationSignal";
 import { PersonRow } from "./PersonMenu";
-import { ICON, StateIcon } from "./StateIcon";
+import { ICON, StateIcon, type IconState } from "./StateIcon";
 import { pageHref, type View } from "./view";
 import h from "@/styles/home.module.css";
 
@@ -195,6 +195,15 @@ export function planOrder(subs: SubSession[], cardAt?: ReadonlyMap<string, strin
  */
 export const treeState = (state: SubSession["state"]): SubSession["state"] => (state === "failed" ? "running" : state);
 
+/**
+ * 一个子会话的图标和读法（树、事件行共用）：第一次验收没过画进行中；停下了、没在问你（waiting 没有具体等什么）是「已停下」——
+ * Square、--ink-faint，不是等你（契约 aa6aba9e：一轮做完停下的不进等你）。
+ */
+export function subIcon(sub: Pick<SubSession, "state" | "waiting">): { state: IconState; label?: string } {
+  if (sub.state === "waiting" && !sub.waiting) return { state: "stopped", label: "已停下" };
+  return { state: treeState(sub.state) };
+}
+
 /** flat：「其他」组里的，没有上一级，不缩进、不画竖线（状态位在 x=16，名字在 x=40）。 */
 function Subs({ subs, view, go, flat = false }: { subs: SubSession[]; view: View; go: (href: string) => void; flat?: boolean }) {
   return (
@@ -205,7 +214,7 @@ function Subs({ subs, view, go, flat = false }: { subs: SubSession[]; view: View
         return (
           <li key={`${sub.kind}:${sub.id}`}>
             <button type="button" className={h.sub} data-state={sub.state} aria-current={current ? "page" : undefined} onClick={() => go(subHref(sub))} data-tree-row="" data-testid="tree-sub">
-              <StateIcon state={treeState(sub.state)} /><span className={h.subName}>{sub.title}</span>
+              <StateIcon {...subIcon(sub)} /><span className={h.subName}>{sub.title}</span>
               {reason ? <span className={h.subReason}>{reason}</span> : null}
             </button>
           </li>

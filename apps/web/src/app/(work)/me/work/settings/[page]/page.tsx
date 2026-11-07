@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { requireMember } from "@/lib/api/server";
-import { workEnabledFor } from "@/lib/work/gate";
 import { PAGE_KEYS } from "@/components/home/pageKeys";
 
 export const metadata: Metadata = { title: "天枢" };
@@ -10,7 +9,6 @@ export const metadata: Metadata = { title: "天枢" };
 export default async function Page({ params }: { params: Promise<{ page: string }> }) {
   const { page } = await params;
   if (!(PAGE_KEYS as readonly string[]).includes(page)) notFound();
-  const { session } = await requireMember(`/me/work/settings/${page}`);
-  if (!workEnabledFor(session.personId)) redirect("/me");
+  await requireMember(`/me/work/settings/${page}`);
   return null;
 }

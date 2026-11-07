@@ -30,6 +30,7 @@ import { SLOT_CAP, startBatch, type StartPlan } from "@/lib/work/queue";
 import { QUEUE_LABEL, liveSessions, type Worker } from "@/lib/work/workers";
 import type { SubSession } from "@/lib/home/types";
 import { ICON as STATE_ICON, StateIcon } from "./StateIcon";
+import { subIcon } from "./LeftColumn";
 import { queueText } from "@/lib/home/derive";
 import h from "@/styles/home.module.css";
 import x from "@/styles/decision-box.module.css";
@@ -45,9 +46,9 @@ type Edit = { title?: string; role?: CardRole | null; modelId?: string; dropped?
 export const START_LABEL = "就按这个开始";
 
 /** 开工的模式（11.3）：自动（默认）· 设预算 · 无上限。 */
-const MODES: { id: TBudgetMode; label: string }[] = [{ id: "auto", label: "自动" }, { id: "set", label: "设预算" }, { id: "unlimited", label: "无上限" }];
+export const MODES: { id: TBudgetMode; label: string }[] = [{ id: "auto", label: "自动" }, { id: "set", label: "设预算" }, { id: "unlimited", label: "无上限" }];
 /** 设预算时填的几项（字符串，照输入框原样）；不是有效数的那项不算。 */
-type Limits = { hours: string; percent: string; money: string };
+export type Limits = { hours: string; percent: string; money: string };
 const NO_LIMITS: Limits = { hours: "", percent: "", money: "" };
 const positive = (value: string, max: number) => { const n = Number(value); return value.trim() && Number.isFinite(n) && n > 0 && n <= max ? n : null; };
 /** 选的模式和填的上限 → 契约的 Budget；设预算却一项有效的上限都没有时为 null（发不出去）。 */
@@ -59,7 +60,7 @@ export function budgetOf(mode: TBudgetMode, limits: Limits): TBudget | null {
   const budget: TBudget = { mode, hours, weeklyPercent: percent !== null && Number.isInteger(percent) ? percent : null, money: amount !== null ? { amount, currency: "CNY" } : null };
   return budget.hours !== null || budget.weeklyPercent !== null || budget.money !== null ? budget : null;
 }
-const limitsOf = (budget: TBudget): Limits => ({ hours: budget.hours?.toString() ?? "", percent: budget.weeklyPercent?.toString() ?? "", money: budget.money?.amount.toString() ?? "" });
+export const limitsOf = (budget: TBudget): Limits => ({ hours: budget.hours?.toString() ?? "", percent: budget.weeklyPercent?.toString() ?? "", money: budget.money?.amount.toString() ?? "" });
 
 export function PlanDecision({ task, drafts, roles, handheld, onSay, onChanged }: {
   task: THomePlanTask;
@@ -261,9 +262,10 @@ const WAIT_TEXT: Record<string, string> = { approval: "等你批准", question: 
 export function subStage(sub: SubSession): string {
   switch (sub.state) {
     case "queued": return `已排队${sub.queueReason ? ` · ${queueText(sub.queueReason, sub.holdUntil)}` : ""}`;
-    case "waiting": return sub.waiting ? WAIT_TEXT[sub.waiting] ?? "等你" : "等你回复";
+    // 停下了、没在问你：「已停下」（契约 aa6aba9e）；第一次验收没过是进行中的「重做中」（5.4.2），不是失败。
+    case "waiting": return sub.waiting ? WAIT_TEXT[sub.waiting] ?? "等你" : "已停下";
     case "done": return "已完成";
-    case "failed": return "失败";
+    case "failed": return "重做中";
     default: return "进行中";
   }
 }
@@ -280,7 +282,7 @@ export function StartedRecord({ task, subs, onOpen }: { task: string; subs: SubS
         {subs.map((sub) => (
           <li key={sub.id}>
             <button type="button" className={h.event} onClick={() => onOpen(sub)} data-state={sub.state}>
-              <StateIcon state={sub.state} /><span className={h.eventName}>{sub.title}</span><span className={h.eventStage}> · {subStage(sub)}</span>
+              <StateIcon {...subIcon(sub)} /><span className={h.eventName}>{sub.title}</span><span className={h.eventStage}> · {subStage(sub)}</span>
             </button>
           </li>
         ))}

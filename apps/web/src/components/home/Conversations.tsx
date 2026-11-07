@@ -23,7 +23,7 @@ import type { HomeTask, SubSession } from "@/lib/home/types";
 import type { WorkHomeApi } from "@/lib/home/useWorkHome";
 import { PlanDecision, PlanningLine, StartedRecord } from "./PlanDecision";
 import { feedBlocks, useTaskFeed } from "./TaskFeed";
-import { subHref, treeState } from "./LeftColumn";
+import { subHref, subIcon } from "./LeftColumn";
 import { useViewChrome } from "./view";
 import { usePhone } from "./usePhone";
 import h from "@/styles/home.module.css";
@@ -164,6 +164,7 @@ function PipelineBody({ data, task, home, api, buddy, outbox, consume, go, onSpe
   const feed = useTaskFeed(task.taskId, board, api);
   const subs = useMemo(() => home?.subSessions ?? [], [home]);
   const changed = api.refresh;
+  const waiting = api.data.waiting;
   // 专题行排在第一次看到它的时候（契约没有开出时间；updatedAt 会跟着动，用它排这一行会在对话里跳）。
   const seen = useRef(new Map<string, string>());
   const firstSeen = (id: string, at: string) => { if (!seen.current.has(id)) seen.current.set(id, at); return seen.current.get(id)!; };
@@ -195,7 +196,7 @@ function PipelineBody({ data, task, home, api, buddy, outbox, consume, go, onSpe
     // 管线或伙伴开的探索子会话（专题）：开出时一行（5.4.3 事件行），按开出的时间排；点了进那个子会话。
     for (const sub of subs.filter((entry) => entry.kind === "topic")) {
       list.push({ key: `topic:${sub.id}`, at: firstSeen(sub.id, sub.updatedAt), node: (
-        <p className={h.line} data-testid="topic-opened"><StateIcon state={treeState(sub.state)} /><button type="button" className={h.lineLink} onClick={() => go(subHref(sub))}>{sub.title}</button></p>
+        <p className={h.line} data-testid="topic-opened"><StateIcon {...subIcon(sub)} /><button type="button" className={h.lineLink} onClick={() => go(subHref(sub))}>{sub.title}</button></p>
       ) });
     }
     // 自动开工没开起来的（这个标签页里试过的）：那一行「失败」加「手动开始」（弱按钮，5.4.3、9.8：手动开始只有这一处）。
@@ -205,9 +206,14 @@ function PipelineBody({ data, task, home, api, buddy, outbox, consume, go, onSpe
           {onManualStart ? <HeroButton variant="ghost" size="sm" onPress={() => onManualStart(sub.id)}>手动开始</HeroButton> : null}</p>
       ) });
     }
-    list.push(...feedBlocks({ items: feed, workers: mine, taskId: task.taskId, go, onSay: (text) => void data.send(text, []), onChanged: () => void changed() }));
+    // 别的电脑上跑的子会话：等你里那一条（按本机会话对上卡、专题）带着原话，管线里照它写。
+    const remoteAsks = new Map(subs.flatMap((sub) => {
+      const item = sub.sessionId ? waiting.find((entry) => entry.sessionId === sub.sessionId && (entry.kind === "approval" || entry.kind === "question")) : undefined;
+      return item ? [[sub.id, item] as const] : [];
+    }));
+    list.push(...feedBlocks({ items: feed, workers: mine, taskId: task.taskId, go, onSay: (text) => data.send(text, []), onChanged: () => void changed(), remoteAsks }));
     return list;
-  }, [mine, board, task, work.roles, handheld, changed, data, subs, go, feed, onSplit, splitFailed, startFailed, onManualStart]);
+  }, [mine, board, task, work.roles, handheld, changed, data, subs, go, feed, onSplit, splitFailed, startFailed, onManualStart, waiting]);
   return (
     <PendingBoxes>
       <div className={h.convo} data-testid="pipeline-view">

@@ -90,19 +90,21 @@ describe("新首页的数据（B 的 work-home 没上时照契约的形状拼）
     const idle = { ...v2!, completedAt: null, subSessions: [], summary: { ...v2!.summary, queued: 0, done: 0, doneToday: 0, needsYou: 0 } };
     expect(statusLine({ ...idle, planning: true })).toBe("拆卡中");
     expect(statusLine({ ...idle, planning: false })).toBe("未开始");
-    // 开过子会话的不写「未开始」：之前完成的写「已完成 N」，停下了的写「已暂停 N」。
+    // 开过子会话的不写「未开始」：之前完成的写「已完成 N」，停下了的写「已停下 N」。
     const old = v2!.subSessions.find((sub) => sub.state === "done")!;
     expect(statusLine({ ...idle, subSessions: [old], summary: { ...idle.summary, done: 1 } })).toBe("已完成 1");
-    expect(statusLine({ ...idle, subSessions: [{ ...old, state: "waiting", waiting: null }] })).toBe("已暂停 1");
+    expect(statusLine({ ...idle, subSessions: [{ ...old, state: "waiting", waiting: null }] })).toBe("已停下 1");
   });
 
   it("等你：子会话的批准、会议记录待确认；群消息只是让你知道，不进（设计 9.6）；去哪儿看由 open 映射到路由；受阻去 Task 管线；第一次没过自动重做，不在这里", () => {
     expect(data.waiting.map((entry) => [entry.kind, waitingHref(entry)])).toEqual([
-      ["approval", "/me/work/cards/c1"], ["meeting", "/me/meetings/mt1"],
+      ["approval", "/me/work/tasks/t1"], ["meeting", "/me/meetings/mt1"],
     ]);
     // 能不能就地答：批准要本机办；会后确认点开去答。
     expect(data.waiting.map((entry) => entry.answer)).toEqual(["inline_local", "open"]);
-    expect(data.waiting[0]).toMatchObject({ title: "等你批准", source: "接上首页数据 · 11/30 上线 V2", taskId: "t1", open: { kind: "card", id: "c1" } });
+    // 批准、提问由 Task 管线转达（14.3）：来源只写 Task 名，点了进 Task 管线（有本机会话时锚在那个框上）。
+    expect(data.waiting[0]).toMatchObject({ title: "等你批准", source: "11/30 上线 V2", taskId: "t1", open: { kind: "task", id: "t1" } });
+    expect(waitingHref({ open: { kind: "task", id: "t1", focus: { sessionId: "s1", requestId: null } } })).toBe("/me/work/tasks/t1#ask-s1");
     const blocked = deriveWorkHome({ plan, workers: [worker({ key: "card:c9", cardId: "c9", wait: "blocked" })], boards: {}, proposals: [], merges: [], notices: null, deviceId: null });
     expect(blocked.waiting.map((entry) => [entry.kind, entry.title, waitingHref(entry)])).toEqual([["verdict", "受阻", "/me/work/tasks/t1"]]);
   });
@@ -258,7 +260,7 @@ describe("首页输入框的「自动」（B 的 /route 没上时，规则相同
 describe("等你按设计 9.6（契约增补二）", () => {
   const row = (extra: Partial<WaitingItem>): WaitingItem => ({
     id: extra.id ?? "x", kind: "meeting", title: "t", source: null, open: { kind: "meeting", id: "m" }, taskId: null, sessionId: null, deviceId: null,
-    at: null, dueAt: null, deviceName: null, person: null, month: null, answer: "open", ...extra,
+    at: null, dueAt: null, deviceName: null, person: null, month: null, question: null, permission: null, answer: "open", ...extra,
   });
 
   it("顺序：卡住正在跑的活的（批准、回答、额度）在前，有截止的按截止早的在前，其余按时间新的在前", () => {

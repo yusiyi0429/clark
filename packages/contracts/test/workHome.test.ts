@@ -31,11 +31,15 @@ describe("新首页契约", () => {
           updatedAt: at }] }] }],
       other: { subSessions: [{ ...sub, kind: "topic", state: "queued", waiting: null, queueReason: "device_offline", sessionId: null, deviceId: null, autoStart: true }], items: [] },
       waiting: [{ id: `approval:${uuid}`, kind: "approval", title: "要运行命令", source: "修登录页 · 11/18 上线 V1", at, open: { kind: "card", id: uuid },
-        taskId: "T-1", sessionId: uuid, deviceId: uuid, deviceName: "我的电脑", dueAt: null, answer: "inline_local", person: null, month: null },
+        taskId: "T-1", sessionId: uuid, deviceId: uuid, deviceName: "我的电脑", dueAt: null, answer: "inline_local", person: null, month: null, question: null,
+        permission: { requestId: "p-1", toolName: "Bash", title: "要运行命令", outsidePaths: [] } },
+      { id: `question:${uuid}`, kind: "question", title: "先做哪一页？", source: null, at, open: { kind: "topic", id: uuid }, taskId: null, sessionId: uuid,
+        deviceId: uuid, deviceName: "我的电脑", dueAt: null, answer: "inline_local", person: null, month: null, permission: null,
+        question: { requestId: "q-1", askedAt: at, questions: [{ question: "先做哪一页？", header: "顺序", multiSelect: false, options: [{ label: "登录页", description: "" }] }] } },
       { id: "month:review:2026-10", kind: "month", title: "复盘 10 月", source: null, at, open: { kind: "month", id: "2026-10" }, taskId: null, sessionId: null,
-        deviceId: null, deviceName: null, dueAt: at, answer: "open", person: null, month: { step: "review", period: "2026-10" } },
+        deviceId: null, deviceName: null, dueAt: at, answer: "open", person: null, month: { step: "review", period: "2026-10" }, question: null, permission: null },
       { id: "acceptance:T-9:2", kind: "acceptance", title: "请你认可「交付」第 2 条", source: "陈创峰", at, open: { kind: "task_detail", id: "T-9" }, taskId: null,
-        sessionId: null, deviceId: null, deviceName: null, dueAt: null, answer: "open", person: { personId: "p-2", name: "陈创峰" }, month: null }],
+        sessionId: null, deviceId: null, deviceName: null, dueAt: null, answer: "open", person: { personId: "p-2", name: "陈创峰" }, month: null, question: null, permission: null }],
     };
     expect(Value.Check(WorkHomeResponse, home)).toBe(true);
     // 子会话只有卡和专题；规划员、验收员是后台任务。
@@ -78,7 +82,10 @@ describe("新首页契约", () => {
     expect(Value.Check(RouteResponse, { target: "main" })).toBe(true);
     expect(Value.Check(RouteResponse, { target: { taskId: "T-1" } })).toBe(true);
     expect(Value.Check(RouteResponse, { target: "task" })).toBe(false);
-    expect(Value.Check(ClaimSessionStartsResponse, { starts: [{ id: uuid, kind: "card", cardId: uuid, topicId: null, taskId: "T-1", requestedAt: at }] })).toBe(true);
+    const start = { id: uuid, kind: "card", cardId: uuid, topicId: null, taskId: "T-1", requestedAt: at };
+    expect(Value.Check(ClaimSessionStartsResponse, { starts: [{ ...start, budget: { mode: "set", hours: 2, weeklyPercent: null, money: { amount: 30, currency: "CNY" } } }] })).toBe(true);
+    // 认领回执每条都带预算。
+    expect(Value.Check(ClaimSessionStartsResponse, { starts: [start] })).toBe(false);
     expect(Value.Check(AcceptCardDraftsRequest, { drafts: [{ id: uuid }], start: true })).toBe(true);
   });
 

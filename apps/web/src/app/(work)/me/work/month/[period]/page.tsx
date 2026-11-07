@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { requireMember } from "@/lib/api/server";
-import { workEnabledFor } from "@/lib/work/gate";
 
 export const metadata: Metadata = { title: "天枢" };
 
@@ -9,7 +8,6 @@ export const metadata: Metadata = { title: "天枢" };
 export default async function Page({ params }: { params: Promise<{ period: string }> }) {
   const { period } = await params;
   if (!/^\d{4}-\d{2}$/.test(period)) notFound();
-  const { session } = await requireMember(`/me/work/month/${period}`);
-  if (!workEnabledFor(session.personId)) redirect("/me");
+  await requireMember(`/me/work/month/${period}`);
   return null;
 }

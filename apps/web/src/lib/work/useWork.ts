@@ -24,7 +24,11 @@ export type Resources = {
   quota: TWorkersResponse["resources"]["quota"];
 };
 
-export function useWork({ planHook }: { planHook: ReturnType<typeof useHomePlan> }) {
+/**
+ * extraTaskIds：本月计划以外、也在左栏树上的 Task（之前月份没了结的，B 的 work-home 给的）——它们的看板也读，
+ * 派活单、卡、开工都要用（不然认领到这些 Task 的卡时找不到卡）。
+ */
+export function useWork({ planHook, extraTaskIds = [] }: { planHook: ReturnType<typeof useHomePlan>; extraTaskIds?: string[] }) {
   const { plan, refresh: refreshPlan } = planHook;
   const local = useLocalRunner();
   const [boards, setBoards] = useState<Record<string, TaskBoard>>({});
@@ -34,17 +38,21 @@ export function useWork({ planHook }: { planHook: ReturnType<typeof useHomePlan>
   const [devices, setDevices] = useState<TLocalDeviceView[]>([]);
   const [splits, setSplits] = useState<TCardSplitRequestView[]>([]);
   const loading = useRef(false);
-  const taskIds = useMemo(() => plan?.tasks.map((task) => task.taskId) ?? [], [plan]);
+  const extraKey = [...new Set(extraTaskIds)].sort().join("|");
+  const taskIds = useMemo(() => {
+    const own = plan?.tasks.map((task) => task.taskId) ?? [];
+    return [...own, ...(extraKey ? extraKey.split("|") : []).filter((id) => !own.includes(id))];
+  }, [plan, extraKey]);
 
   const load = useCallback(async () => {
     if (!plan || loading.current) return;
     loading.current = true;
     try {
       const [entries, workers, requests] = await Promise.all([
-        Promise.all(plan.tasks.map(async (task) => {
-          const data = await readBoard(task.taskId).catch(() => undefined);
-          const board: TaskBoard | null = data ? { ...data, fallback: false } : fallbackBoard(plan, task.taskId);
-          return [task.taskId, board] as const;
+        Promise.all(taskIds.map(async (taskId) => {
+          const data = await readBoard(taskId).catch(() => undefined);
+          const board: TaskBoard | null = data ? { ...data, fallback: false } : fallbackBoard(plan, taskId);
+          return [taskId, board] as const;
         })),
         readWorkers().catch(() => undefined),
         listSplits().catch(() => undefined),
@@ -55,7 +63,7 @@ export function useWork({ planHook }: { planHook: ReturnType<typeof useHomePlan>
     } finally {
       loading.current = false;
     }
-  }, [plan]);
+  }, [plan, taskIds]);
   const loadRoles = useCallback(async () => {
     try { setRoles(await listRoles()); setProposals(await listProposals()); } catch { /* 留着上次的 */ }
   }, []);

@@ -2,6 +2,7 @@ import type { JsonSchema, OpenAPIV3 } from "./types/JsonSchemaTypes.js";
 import { taskQualityPaths, taskQualitySchemas } from "./taskQualityOpenapi.js";
 import { boardPaths, boardSchemas } from "./boardOpenapi.js";
 import { workHomePaths, workHomeSchemas } from "./workHomeOpenapi.js";
+import { taskContinuityPaths, taskContinuitySchemas } from "./taskContinuityOpenapi.js";
 import { AcceptIssueDraftRequest, IssueDraftResponse } from "./issueDrafts.js";
 import {
   RequestStep, RequestPerson, RequestRecipientView, RequestQuestionView, RequestClarification, RequestView, RequestResponse,
@@ -3205,6 +3206,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       },
       ...boardPaths,
       ...workHomePaths,
+      ...taskContinuityPaths,
     },
     components: {
       schemas: {
@@ -3570,6 +3572,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         ScheduleListResponse: ScheduleListResponse as JsonSchema,
         ...boardSchemas,
         ...workHomeSchemas,
+        ...taskContinuitySchemas,
       },
     },
   };

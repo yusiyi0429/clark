@@ -67,4 +67,7 @@
 @media (hover: none), (pointer: coarse) {
   .back.back, .skip.skip, .next.next, .start.start { min-height: 44px; }
 }
+/* 新首页里（外壳带 data-scheme="auto"）：「推荐」是中性小字，不用成功色；选项字重 400（5.2 只用 400/600）。 */
+:global([data-scheme="auto"]) .recommended { background: var(--neutral-wash); color: var(--ink-muted); font-weight: 400; }
+:global([data-scheme="auto"]) .optionText > span, :global([data-scheme="auto"]) .record dd { font-weight: 400; }
 @media (prefers-reduced-motion: reduce) { .page { animation: none; } .segment::before, .option { transition: none; } }

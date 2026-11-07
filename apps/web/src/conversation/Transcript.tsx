@@ -14,7 +14,7 @@ import { QuoteChips } from "./QuoteChips";
 import { pageContextBattlefield, readQuotedMessage } from "./quotes";
 import { createArrivalLog, rehypeArrival, type ArrivalLog } from "./arrival";
 import { parseAnswerOptions } from "./answerOptions";
-import { AnswerRecord } from "./AskPanel";
+import { AnswerRecord, AskContext } from "./AskPanel";
 import { splitStableBlocks, useSmoothText } from "./smoothText";
 import { CITATION_MARKDOWN, MemoryUsedProvider } from "./citations";
 import { holdOpenLink, remarkCitationMarks } from "./citationMarks";
@@ -174,6 +174,9 @@ function ConversationTurnBody({ message, ms, streaming = false, thought, steps }
   const battlefield = user ? pageContextBattlefield(message.content) : null;
   const memoryKey = streaming ? "" : (message.memoryUsed ?? []).join("|");
   const memoryUsed = useMemo(() => (memoryKey ? memoryKey.split("|") : NO_MEMORY), [memoryKey]);
+  // 新首页的对话里回答提问的那一句不另画：提问卡原处收成了一行（AskContext.inline）。
+  const ask = useContext(AskContext);
+  if (user && message.answers && ask?.inline) return null;
   return (
     <article className={user ? s.user : s.assistant} data-chat-role={message.role} aria-label={user ? "你" : "天枢"}
       data-testid={streaming ? "conversation-streaming-turn" : undefined} aria-busy={streaming || undefined}>

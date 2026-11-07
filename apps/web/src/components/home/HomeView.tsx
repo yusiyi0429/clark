@@ -118,16 +118,25 @@ export function waitingAnswer(item: WaitingItem, { api, local, handheld }: { api
 function waitingActions(item: WaitingItem, api: Pick<WorkHomeApi, "deviceId" | "work">, local: LocalRunnerState, ready: boolean, handheld: boolean): Action[] {
   if (item.deviceId && item.deviceId !== api.deviceId) return [];
   const worker = item.sessionId ? api.work.workers.find((entry) => entry.session?.id === item.sessionId) : undefined;
-  if (worker && (item.kind === "approval" || item.kind === "question") && !canCommandHere(worker, ready, handheld)) return [];
-  if (item.kind === "approval" && worker) return [{ label: "批准", done: "已批准", primary: true, run: () => decide(local.runner, worker, "allow") }, { label: "换个做法", href: waitingHref(item) }];
-  if (item.kind === "question" && worker?.session?.pendingQuestion) {
-    const question = worker.session.pendingQuestion;
-    const session = worker.session;
-    if (!oneTap(question) || question.questions[0]!.options.length > 2) return [];
+  // 批准、回答要在跑它的这台电脑上办（本机程序就绪、不是手机）。
+  const here = ready && !handheld && (worker ? canCommandHere(worker, ready, handheld) : !!item.sessionId && !!item.deviceId);
+  if ((item.kind === "approval" || item.kind === "question") && !here) return [];
+  const sessionId = item.sessionId;
+  if (item.kind === "approval" && sessionId) {
+    // 契约的 permission（aa6aba9e）：批的就是这一步；有越界路径的只能点进去「允许这一次」，不就地批。
+    const permission = item.permission;
+    if (permission?.outsidePaths.length) return [{ label: "去看看", href: waitingHref(item) }];
+    const allow = permission ? () => local.runner.decidePermission(sessionId, permission.requestId, { decision: "allow" }) : worker ? () => decide(local.runner, worker, "allow") : null;
+    return allow ? [{ label: "批准", done: "已批准", primary: true, run: allow }, { label: "换个做法", href: waitingHref(item) }] : [];
+  }
+  // 就地答：契约的 question（原样的提问），只有一个问题、单选、最多 3 个选项时；别的点进去答。
+  const question = item.kind === "question" ? item.question ?? worker?.session?.pendingQuestion ?? null : null;
+  if (question && sessionId) {
+    if (!oneTap(question) || question.questions[0]!.options.length > 3) return [];
     const { options, order } = localOptions(question.questions[0]!.options);
-    return options.slice(0, 2).map((option, index) => ({
+    return options.map((option, index) => ({
       label: option.label, done: "已回答", primary: index === 0,
-      run: () => local.runner.answerQuestion(session.id, question.requestId, { choices: [[question.questions[0]!.options[order[index]!]!.label]] }),
+      run: () => local.runner.answerQuestion(sessionId, question.requestId, { choices: [[question.questions[0]!.options[order[index]!]!.label]] }),
     }));
   }
   if (item.kind === "role" && item.open.kind === "role") {
@@ -202,7 +211,9 @@ export function WaitingList({ items, api, go }: { items: WaitingItem[]; api: Wor
         const { actions, away } = answer(item);
         const row = state[keyOf(item)];
         const due = item.dueAt && item.kind !== "quota" ? dueText(item.dueAt, now) : null;
-        const from = [item.person?.name, item.source].filter(Boolean).join(" · ");
+        // 批准那一行：越界路径写在来源后面（9.6、契约 permission.outsidePaths）。
+        const outside = item.permission?.outsidePaths.length ? `越界：${item.permission.outsidePaths.join("、")}` : null;
+        const from = [item.person?.name, item.source, outside].filter(Boolean).join(" · ");
         return (
           <li key={item.id} className={h.wait} data-kind={item.kind} data-done={row?.done ? "" : undefined}>
             <button type="button" className={h.waitMain} onClick={() => go(waitingHref(item))} title={!due && item.at ? relativeDayTime(item.at, new Date(now)) : undefined}>

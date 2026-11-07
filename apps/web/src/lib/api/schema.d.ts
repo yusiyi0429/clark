@@ -4962,6 +4962,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/tasks/{taskId}/continuation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 延续（这件 Task 的负责人）：接着做成另一件本人负责的 Task；没做完的卡、专题、待交付条目、拆卡登记、规划员挂过去，管线接着用，约定复制成草稿。可以重复调 */
+        post: operations["continueTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/tasks/{taskId}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 到此为止（这件 Task 的负责人）：这件 Task 了结了，不在左栏；可以补一句话。已经延续出去的 409 */
+        post: operations["stopTask"];
+        /** 撤销到此为止（这件 Task 的负责人）；本来就没定也回 204 */
+        delete: operations["unstopTask"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/months/{period}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 月份页：这个月本人的 Task（约定几条达到、交付第几版、还在跑和受阻的子会话、确认完成没有、了结和延续去了哪、复盘时怎么定的），和下个月 Co-Agent 的草稿（现在为 null） */
+        get: operations["getMonthPage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/months/{period}/tasks/{taskId}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 复盘时这件怎么办：继续做 / 改一改再做 / 到此为止，可以补一句话；选到此为止同时定了到此为止，改成别的就撤销 */
+        put: operations["decideMonthTask"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -12078,6 +12147,7 @@ export interface components {
                 name: string;
             } | null;
             updatedAt: string | null;
+            draftFrom: string | null;
         };
         PutTaskAgreementRequest: {
             criteria: {
@@ -17390,6 +17460,11 @@ export interface components {
             kind: "card" | "topic" | "task" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections";
             id: string;
             round?: boolean;
+            focus?: {
+                /** Format: uuid */
+                sessionId: string;
+                requestId: string | null;
+            };
         };
         WaitingItem: {
             id: string;
@@ -17401,6 +17476,11 @@ export interface components {
                 kind: "card" | "topic" | "task" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections";
                 id: string;
                 round?: boolean;
+                focus?: {
+                    /** Format: uuid */
+                    sessionId: string;
+                    requestId: string | null;
+                };
             };
             taskId: string | null;
             sessionId: string | null;
@@ -17415,6 +17495,26 @@ export interface components {
             month: {
                 step: "review" | "finalize" | "continue";
                 period: string;
+            } | null;
+            question: {
+                requestId: string;
+                questions: {
+                    question: string;
+                    header: string;
+                    options: {
+                        label: string;
+                        description: string;
+                    }[];
+                    multiSelect: boolean;
+                }[];
+                /** Format: date-time */
+                askedAt: string;
+            } | null;
+            permission: {
+                requestId: string;
+                toolName: string;
+                title: string;
+                outsidePaths: string[];
             } | null;
         };
         WorkHomeResponse: {
@@ -17534,6 +17634,11 @@ export interface components {
                     kind: "card" | "topic" | "task" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections";
                     id: string;
                     round?: boolean;
+                    focus?: {
+                        /** Format: uuid */
+                        sessionId: string;
+                        requestId: string | null;
+                    };
                 };
                 taskId: string | null;
                 sessionId: string | null;
@@ -17548,6 +17653,26 @@ export interface components {
                 month: {
                     step: "review" | "finalize" | "continue";
                     period: string;
+                } | null;
+                question: {
+                    requestId: string;
+                    questions: {
+                        question: string;
+                        header: string;
+                        options: {
+                            label: string;
+                            description: string;
+                        }[];
+                        multiSelect: boolean;
+                    }[];
+                    /** Format: date-time */
+                    askedAt: string;
+                } | null;
+                permission: {
+                    requestId: string;
+                    toolName: string;
+                    title: string;
+                    outsidePaths: string[];
                 } | null;
             }[];
         };
@@ -17664,6 +17789,15 @@ export interface components {
                 taskId: string | null;
                 /** Format: date-time */
                 requestedAt: string;
+                budget: {
+                    mode: "auto" | "set" | "unlimited";
+                    hours: number | null;
+                    weeklyPercent: number | null;
+                    money: {
+                        amount: number;
+                        currency: "CNY" | "USD";
+                    } | null;
+                };
             }[];
         };
         CardMerge: {
@@ -17821,6 +17955,207 @@ export interface components {
                 } | null;
             };
             inherited: boolean;
+        };
+        ClaimedSessionStart: {
+            /** Format: uuid */
+            id: string;
+            kind: "card" | "topic";
+            cardId: string | null;
+            topicId: string | null;
+            taskId: string | null;
+            /** Format: date-time */
+            requestedAt: string;
+            budget: {
+                mode: "auto" | "set" | "unlimited";
+                hours: number | null;
+                weeklyPercent: number | null;
+                money: {
+                    amount: number;
+                    currency: "CNY" | "USD";
+                } | null;
+            };
+        };
+        TaskRef: {
+            taskId: string;
+            name: string;
+            missionId: string;
+            period: string | null;
+        };
+        TaskSettlement: {
+            kind: "completed" | "stopped" | "continued";
+            /** Format: date-time */
+            at: string;
+            by: string | null;
+            note: string | null;
+            to: {
+                taskId: string;
+                name: string;
+                missionId: string;
+                period: string | null;
+            } | null;
+        };
+        ContinueTaskRequest: {
+            toTaskId: string;
+        };
+        ContinueTaskResponse: {
+            taskId: string;
+            settlement: {
+                kind: "completed" | "stopped" | "continued";
+                /** Format: date-time */
+                at: string;
+                by: string | null;
+                note: string | null;
+                to: {
+                    taskId: string;
+                    name: string;
+                    missionId: string;
+                    period: string | null;
+                } | null;
+            };
+            moved: {
+                cards: number;
+                topics: number;
+                pending: number;
+                splits: number;
+                planners: number;
+                drafts: number;
+                pipeline: boolean;
+                agreement: boolean;
+            };
+        };
+        StopTaskRequest: {
+            note?: string;
+        };
+        TaskSettlementResponse: {
+            taskId: string;
+            settlement: {
+                kind: "completed" | "stopped" | "continued";
+                /** Format: date-time */
+                at: string;
+                by: string | null;
+                note: string | null;
+                to: {
+                    taskId: string;
+                    name: string;
+                    missionId: string;
+                    period: string | null;
+                } | null;
+            };
+        };
+        MonthAnswer: {
+            choice: ("continue" | "revise" | "stop") | null;
+            note: string | null;
+        };
+        MonthTask: {
+            taskId: string;
+            missionId: string;
+            missionTitle: string;
+            name: string;
+            agreement: {
+                met: number;
+                total: number;
+            } | null;
+            version: number | null;
+            running: number;
+            blocked: number;
+            done: boolean;
+            settlement: {
+                kind: "completed" | "stopped" | "continued";
+                /** Format: date-time */
+                at: string;
+                by: string | null;
+                note: string | null;
+                to: {
+                    taskId: string;
+                    name: string;
+                    missionId: string;
+                    period: string | null;
+                } | null;
+            } | null;
+            continuedFrom: {
+                taskId: string;
+                name: string;
+                missionId: string;
+                period: string | null;
+            } | null;
+            answer: {
+                choice: ("continue" | "revise" | "stop") | null;
+                note: string | null;
+            } | null;
+        };
+        MonthDraft: {
+            period: string;
+            missions: {
+                id: string;
+                title: string;
+                tasks: {
+                    id: string;
+                    name: string;
+                    continuesFrom: {
+                        taskId: string;
+                        name: string;
+                        period: string;
+                        summary: string;
+                    } | null;
+                }[];
+            }[];
+        };
+        MonthPageResponse: {
+            period: string;
+            tasks: {
+                taskId: string;
+                missionId: string;
+                missionTitle: string;
+                name: string;
+                agreement: {
+                    met: number;
+                    total: number;
+                } | null;
+                version: number | null;
+                running: number;
+                blocked: number;
+                done: boolean;
+                settlement: {
+                    kind: "completed" | "stopped" | "continued";
+                    /** Format: date-time */
+                    at: string;
+                    by: string | null;
+                    note: string | null;
+                    to: {
+                        taskId: string;
+                        name: string;
+                        missionId: string;
+                        period: string | null;
+                    } | null;
+                } | null;
+                continuedFrom: {
+                    taskId: string;
+                    name: string;
+                    missionId: string;
+                    period: string | null;
+                } | null;
+                answer: {
+                    choice: ("continue" | "revise" | "stop") | null;
+                    note: string | null;
+                } | null;
+            }[];
+            draft: {
+                period: string;
+                missions: {
+                    id: string;
+                    title: string;
+                    tasks: {
+                        id: string;
+                        name: string;
+                        continuesFrom: {
+                            taskId: string;
+                            name: string;
+                            period: string;
+                            summary: string;
+                        } | null;
+                    }[];
+                }[];
+            } | null;
         };
     };
     responses: never;
@@ -34873,6 +35208,314 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    continueTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContinueTaskRequest"];
+            };
+        };
+        responses: {
+            /** @description 延续好了 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContinueTaskResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    stopTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StopTaskRequest"];
+            };
+        };
+        responses: {
+            /** @description 定了到此为止 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskSettlementResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    unstopTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 撤销了 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMonthPage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                period: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 月份页 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonthPageResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    decideMonthTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                period: string;
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MonthAnswer"];
+            };
+        };
+        responses: {
+            /** @description 存好了 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
