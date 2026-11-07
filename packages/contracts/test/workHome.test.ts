@@ -78,7 +78,10 @@ describe("新首页契约", () => {
     expect(Value.Check(RouteResponse, { target: "main" })).toBe(true);
     expect(Value.Check(RouteResponse, { target: { taskId: "T-1" } })).toBe(true);
     expect(Value.Check(RouteResponse, { target: "task" })).toBe(false);
-    expect(Value.Check(ClaimSessionStartsResponse, { starts: [{ id: uuid, kind: "card", cardId: uuid, topicId: null, taskId: "T-1", requestedAt: at }] })).toBe(true);
+    const start = { id: uuid, kind: "card", cardId: uuid, topicId: null, taskId: "T-1", requestedAt: at };
+    expect(Value.Check(ClaimSessionStartsResponse, { starts: [{ ...start, budget: { mode: "set", hours: 2, weeklyPercent: null, money: { amount: 30, currency: "CNY" } } }] })).toBe(true);
+    // 认领回执每条都带预算。
+    expect(Value.Check(ClaimSessionStartsResponse, { starts: [start] })).toBe(false);
     expect(Value.Check(AcceptCardDraftsRequest, { drafts: [{ id: uuid }], start: true })).toBe(true);
   });
 
