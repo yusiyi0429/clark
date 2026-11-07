@@ -305,7 +305,8 @@ export interface paths {
         get: operations["getMyFeishuConnection"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** 断开本人的飞书：删掉飞书账号的关联和授权（天枢里已有的会议、妙记不动）；之后飞书推送、拿妙记都停，要用再连 */
+        delete: operations["disconnectMyFeishu"];
         options?: never;
         head?: never;
         patch?: never;
@@ -4788,6 +4789,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/budget-default": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人新 Task 的缺省预算（「偏好」，设计 11.3）：没设过是自动 */
+        get: operations["getBudgetDefault"];
+        /** 改本人新 Task 的缺省预算；设预算时至少一项上限 */
+        put: operations["updateBudgetDefault"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/tasks/{taskId}/budget": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 这件 Task 的预算（Task 负责人）；没单独设过时是本人的缺省（inherited=true） */
+        get: operations["getTaskBudget"];
+        /** 改这件 Task 的预算（Task 负责人）；设预算时至少一项上限 */
+        put: operations["updateTaskBudget"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/notification-settings": {
         parameters: {
             query?: never;
@@ -5816,6 +5853,7 @@ export interface components {
             enabled: boolean;
             connected: boolean;
             calendar: boolean;
+            state: "not_connected" | "connected" | "expired";
         };
         WechatConnection: {
             state: "none" | "waiting" | "scanned" | "expired" | "connected" | "stale";
@@ -15625,6 +15663,15 @@ export interface components {
                 roleId?: string | null;
             }[];
             start?: boolean;
+            budget?: {
+                mode: "auto" | "set" | "unlimited";
+                hours: number | null;
+                weeklyPercent: number | null;
+                money: {
+                    amount: number;
+                    currency: "CNY" | "USD";
+                } | null;
+            };
         };
         AcceptCardDraftsResponse: {
             cards: {
@@ -17753,6 +17800,28 @@ export interface components {
         NotificationSettings: {
             feishu: boolean;
         };
+        Budget: {
+            mode: "auto" | "set" | "unlimited";
+            hours: number | null;
+            weeklyPercent: number | null;
+            money: {
+                amount: number;
+                currency: "CNY" | "USD";
+            } | null;
+        };
+        TaskBudgetResponse: {
+            taskId: string;
+            budget: {
+                mode: "auto" | "set" | "unlimited";
+                hours: number | null;
+                weeklyPercent: number | null;
+                money: {
+                    amount: number;
+                    currency: "CNY" | "USD";
+                } | null;
+            };
+            inherited: boolean;
+        };
     };
     responses: never;
     parameters: never;
@@ -19000,6 +19069,42 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    disconnectMyFeishu: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已断开（没连过也是 204） */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -34114,6 +34219,197 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getBudgetDefault: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 缺省预算 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Budget"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    updateBudgetDefault: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Budget"];
+            };
+        };
+        responses: {
+            /** @description 改好的缺省预算 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Budget"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getTaskBudget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Task 的预算 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskBudgetResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    updateTaskBudget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Budget"];
+            };
+        };
+        responses: {
+            /** @description 改好的预算 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskBudgetResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
