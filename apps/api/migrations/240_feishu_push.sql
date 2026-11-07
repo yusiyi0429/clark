@@ -1,6 +1,6 @@
 -- 新首页 13.2：飞书推送。
--- person_notify：本人「偏好」里的飞书通知开关（没有行 = 开），和最近一次在网页上打开天枢的时间（判断「本人在不在天枢里」）。
-CREATE TABLE person_notify (
+-- person_settings：本人的偏好（「我 › 偏好」）：飞书通知开关（没有行 = 开），和最近一次在网页上打开天枢的时间（判断「本人在不在天枢里」）。
+CREATE TABLE person_settings (
   person_id TEXT PRIMARY KEY,
   feishu BOOLEAN NOT NULL DEFAULT TRUE,
   web_seen_at TIMESTAMPTZ

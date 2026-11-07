@@ -29,12 +29,12 @@ const MAX_LINKS = 5;
 
 /** 本人的通知开关；没有行是开。 */
 export async function readNotificationSettings(q: Query, personId: string): Promise<TNotificationSettings> {
-  const row = (await q("SELECT feishu FROM person_notify WHERE person_id=$1", [personId])).rows[0] as { feishu: boolean } | undefined;
+  const row = (await q("SELECT feishu FROM person_settings WHERE person_id=$1", [personId])).rows[0] as { feishu: boolean } | undefined;
   return { feishu: row?.feishu ?? true };
 }
 
 export async function writeNotificationSettings(q: Query, personId: string, settings: TNotificationSettings): Promise<TNotificationSettings> {
-  await q("INSERT INTO person_notify(person_id,feishu) VALUES($1,$2) ON CONFLICT (person_id) DO UPDATE SET feishu=EXCLUDED.feishu", [personId, settings.feishu]);
+  await q("INSERT INTO person_settings(person_id,feishu) VALUES($1,$2) ON CONFLICT (person_id) DO UPDATE SET feishu=EXCLUDED.feishu", [personId, settings.feishu]);
   return settings;
 }
 
@@ -45,7 +45,7 @@ export function createPresence(q: Query, now: () => Date) {
     const at = now();
     if (at.getTime() - (written.get(personId) ?? 0) < 60_000) return;
     written.set(personId, at.getTime());
-    q("INSERT INTO person_notify(person_id,web_seen_at) VALUES($1,$2) ON CONFLICT (person_id) DO UPDATE SET web_seen_at=EXCLUDED.web_seen_at", [personId, at])
+    q("INSERT INTO person_settings(person_id,web_seen_at) VALUES($1,$2) ON CONFLICT (person_id) DO UPDATE SET web_seen_at=EXCLUDED.web_seen_at", [personId, at])
       .catch(() => written.delete(personId));
   };
 }
@@ -125,7 +125,7 @@ export function homePushJobs(deps: { pool: Pool; now: () => Date; people: () => 
     const at = deps.now();
     if (quiet(at)) return;
     const linked = new Set(((await q("SELECT person_id FROM feishu_identities")).rows as { person_id: string }[]).map((row) => row.person_id));
-    const settings = new Map(((await q("SELECT person_id,feishu,web_seen_at FROM person_notify")).rows as { person_id: string; feishu: boolean; web_seen_at: Date | null }[])
+    const settings = new Map(((await q("SELECT person_id,feishu,web_seen_at FROM person_settings")).rows as { person_id: string; feishu: boolean; web_seen_at: Date | null }[])
       .map((row) => [row.person_id, row]));
     for (const personId of deps.people()) {
       const setting = settings.get(personId);

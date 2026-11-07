@@ -1,5 +1,7 @@
+import type { FastifyReply } from "fastify";
 import { Type } from "@sinclair/typebox";
-import { TaskPipelineResponse } from "@warmap/contracts";
+import { Budget, TaskBudgetResponse, TaskPipelineResponse } from "@warmap/contracts";
+import { readTaskBudget, writeTaskBudget } from "../budgets.js";
 import { ChatServiceError } from "../chatService.js";
 import { boardTask, CardError, planTaskOpener } from "../taskCards.js";
 import { ensureTaskPipeline, pipelineScope } from "../taskPipelines.js";
@@ -32,4 +34,19 @@ export function registerTaskPipelineRoutes(app: AppInstance, ctx: RouteContext):
       throw cause;
     }
   });
+
+  // 这件 Task 的预算（设计 11.3，契约 budget.ts）：只给负责人；没单独设过是本人的缺省（inherited）。
+  const ownTask = async <T>(reply: FastifyReply, personId: string, taskId: string, work: () => Promise<T>) => {
+    try {
+      await boardTask(open, personId, taskId);
+      return await work();
+    } catch (cause) {
+      if (cause instanceof CardError) return fail(reply, cause.status, cause.code, cause.message);
+      throw cause;
+    }
+  };
+  app.get("/api/me/tasks/:taskId/budget", { preHandler: requireMember, schema: { params: taskParams, response: { 200: TaskBudgetResponse } } }, async (req, reply) =>
+    ownTask(reply, req.person!.personId, req.params.taskId, () => readTaskBudget(ctx.q, req.person!.personId, req.params.taskId)));
+  app.put("/api/me/tasks/:taskId/budget", { preHandler: requireMember, schema: { params: taskParams, body: Budget, response: { 200: TaskBudgetResponse } } },
+    async (req, reply) => ownTask(reply, req.person!.personId, req.params.taskId, () => writeTaskBudget(ctx.q, req.person!.personId, req.params.taskId, req.body, ctx.now())));
 }

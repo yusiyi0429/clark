@@ -44,7 +44,7 @@ export function ceoFeishuNoticeJobs({ pool, people, now }: { pool: Pool; people:
     const day = shanghaiDate(at);
     const weekday = new Date(`${day}T00:00:00Z`).getUTCDay();
     // 「偏好」里关了飞书通知的不发（新首页 13.2）。
-    const muted = new Set(((await q("SELECT person_id FROM person_notify WHERE NOT feishu")).rows as { person_id: string }[]).map((row) => row.person_id));
+    const muted = new Set(((await q("SELECT person_id FROM person_settings WHERE NOT feishu")).rows as { person_id: string }[]).map((row) => row.person_id));
     const ceos = people().filter((person) => person.roles.includes("ceo") && !muted.has(person.personId)).map((person) => person.personId);
     if (!ceos.length) return;
     const issues = (await q(

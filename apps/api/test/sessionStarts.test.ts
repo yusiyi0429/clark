@@ -37,6 +37,29 @@ async function fixture() {
 }
 
 describe("自动开工（第 4.4 节）", { timeout: 30_000 }, () => {
+  it("预算（设计 11.3）：缺省是自动、偏好里能改；Task 没单独设时用缺省；开工框带的预算存成 Task 的；设预算至少一项上限，别的模式清空上限；别人的 Task 不给", async () => {
+    const f = await fixture();
+    try {
+      const AUTO = { mode: "auto", hours: null, weeklyPercent: null, money: null };
+      expect((await f.call("GET", "/api/me/budget-default")).json()).toEqual(AUTO);
+      expect((await f.call("PUT", "/api/me/budget-default", { ...AUTO, mode: "set" })).statusCode).toBe(400);
+      expect((await f.call("PUT", "/api/me/budget-default", { mode: "unlimited", hours: 3, weeklyPercent: null, money: null })).json())
+        .toEqual({ ...AUTO, mode: "unlimited" });
+      expect((await f.call("GET", "/api/me/tasks/task-open/budget")).json()).toEqual({ taskId: "task-open", budget: { ...AUTO, mode: "unlimited" }, inherited: true });
+
+      await f.sync({ kind: "plan", taskId: "task-open" }, [[1, "card_plan", plan(["跑题库"])]]);
+      const draft = ((await f.call("GET", "/api/plan-tasks/task-open/cards")).json().drafts as { id: string }[])[0].id;
+      const budget = { mode: "set", hours: 2.5, weeklyPercent: 10, money: { amount: 30, currency: "CNY" } };
+      expect((await f.call("POST", "/api/plan-tasks/task-open/card-drafts/accept", { drafts: [{ id: draft }], start: true, budget })).statusCode).toBe(200);
+      expect((await f.call("GET", "/api/me/tasks/task-open/budget")).json()).toEqual({ taskId: "task-open", budget, inherited: false });
+
+      const changed = await f.call("PUT", "/api/me/tasks/task-open/budget", { ...AUTO, hours: null, weeklyPercent: 20, mode: "set" });
+      expect(changed.json()).toEqual({ taskId: "task-open", budget: { ...AUTO, mode: "set", weeklyPercent: 20 }, inherited: false });
+      expect((await f.call("PUT", "/api/me/tasks/task-open/budget", { ...AUTO, mode: "set" })).statusCode).toBe(400);
+      expect((await f.call("GET", "/api/me/tasks/task-theirs/budget")).statusCode).toBeGreaterThanOrEqual(403);
+    } finally { await f.close(); }
+  });
+
   it("接受草稿带 start：交给 Claude Code 的卡各登记一条要开工，本人做的和不带 start 的不登记；网页认领一条只给一处，放回后能再认领，认领 5 分钟没了结的别处能认领；本机报上第一条执行就了结", async () => {
     const f = await fixture();
     try {

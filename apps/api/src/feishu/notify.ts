@@ -33,7 +33,7 @@ export function feishuNotifyJobs({ pool, client, publicOrigin }: { pool: Pool; c
     [FEISHU_NOTIFY_KIND]: async (payload) => {
       const notice = payload as FeishuNotice;
       if (notice.source && PEER_SOURCES_MUTED_BY_SWITCH.has(notice.source)
-        && (await pool.query("SELECT 1 FROM person_notify WHERE person_id=$1 AND NOT feishu", [notice.personId])).rowCount) return;
+        && (await pool.query("SELECT 1 FROM person_settings WHERE person_id=$1 AND NOT feishu", [notice.personId])).rowCount) return;
       const openId = (await pool.query("SELECT open_id FROM feishu_identities WHERE person_id = $1", [notice.personId])).rows[0]?.open_id as string | undefined;
       if (!openId) return;
       await sendFeishuLinkCard(client, { type: "open_id", id: openId }, { title: notice.title, body: notice.body, links: notice.links }, publicOrigin);

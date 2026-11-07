@@ -4,6 +4,7 @@ import {
   SessionStartView, SubSession, TaskPipelineResponse, WaitingItem, WaitingTarget, WorkHomeResponse, CardMerge, TaskFeedItem, TaskFeedResponse, HomeItem, ReleaseSessionStartRequest,
   NotificationSettings,
 } from "./workHome.js";
+import { Budget, TaskBudgetResponse } from "./budget.js";
 
 /**
  * 新首页（伙伴总管线 + Task 管线 + 子会话）的 OpenAPI 路径，手工列出，在 openapi.ts 里展开。
@@ -14,7 +15,7 @@ export const workHomeSchemas: Record<string, JsonSchema> = {
   SubSession, HomeTaskSummary, HomeTask, HomeMission, WaitingTarget, WaitingItem, WorkHomeResponse,
   BackgroundItem, BackgroundResponse, TaskPipelineResponse, RouteRequest, RouteResponse,
   SessionStartView, ClaimSessionStartsRequest, ClaimSessionStartsResponse, CardMerge, TaskFeedItem, TaskFeedResponse, HomeItem, ReleaseSessionStartRequest,
-  NotificationSettings,
+  NotificationSettings, Budget, TaskBudgetResponse,
 };
 
 const error = { description: "ApiError 统一错误", content: { "application/json": { schema: { $ref: "#/components/schemas/ApiError" } } } };
@@ -24,6 +25,34 @@ const body = (schema: string) => ({ required: true, content: { "application/json
 const path = (...names: string[]) => names.map((name) => ({ name, in: "path" as const, required: true, schema: { type: "string" } }));
 
 export const workHomePaths: OpenAPIV3.Document["paths"] = {
+  "/api/me/budget-default": {
+    get: {
+      operationId: "getBudgetDefault",
+      summary: "本人新 Task 的缺省预算（「偏好」，设计 11.3）：没设过是自动",
+      responses: { "200": json("缺省预算", "Budget"), ...errors(401) },
+    },
+    put: {
+      operationId: "updateBudgetDefault",
+      summary: "改本人新 Task 的缺省预算；设预算时至少一项上限",
+      requestBody: body("Budget"),
+      responses: { "200": json("改好的缺省预算", "Budget"), ...errors(400, 401, 403) },
+    },
+  },
+  "/api/me/tasks/{taskId}/budget": {
+    get: {
+      operationId: "getTaskBudget",
+      summary: "这件 Task 的预算（Task 负责人）；没单独设过时是本人的缺省（inherited=true）",
+      parameters: path("taskId"),
+      responses: { "200": json("Task 的预算", "TaskBudgetResponse"), ...errors(401, 403, 404) },
+    },
+    put: {
+      operationId: "updateTaskBudget",
+      summary: "改这件 Task 的预算（Task 负责人）；设预算时至少一项上限",
+      parameters: path("taskId"),
+      requestBody: body("Budget"),
+      responses: { "200": json("改好的预算", "TaskBudgetResponse"), ...errors(400, 401, 403, 404) },
+    },
+  },
   "/api/me/notification-settings": {
     get: {
       operationId: "getNotificationSettings",

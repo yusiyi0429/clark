@@ -1,4 +1,5 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
+import { Budget } from "./budget.js";
 import { CriterionVerdict } from "./deliverables.js";
 import { LocalHandbackCriterion } from "./localRunner.js";
 import { LocalOutputView, LocalRunView } from "./localDevices.js";
@@ -117,6 +118,8 @@ export const AcceptCardDraftsRequest = Type.Object({
    * 不用再点开工：配对的电脑上开着的网页认领后交给本机程序（POST /api/me/session-starts/claim），手机上确认的排着「等本机上线」。不带或 false 照旧只放进看板。
    */
   start: Type.Optional(Type.Boolean()),
+  /** 开工框上方选的预算（设计 11.3）：带了就存成这件 Task 的预算（同 PUT /api/me/tasks/:taskId/budget）；不带不动。 */
+  budget: Type.Optional(Budget),
 }, strict);
 export const AcceptCardDraftsResponse = Type.Object({ cards: Type.Array(CardTaskView) }, strict);
 

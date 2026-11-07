@@ -39,7 +39,7 @@ describe("一号位要动手的事主动发飞书", () => {
     expect(await tickAt("2026-10-30T02:00:00Z")).toHaveLength(2);
     // 「偏好」里关了飞书通知：不再发。
     await t.sql("DELETE FROM jobs");
-    await t.sql("INSERT INTO person_notify(person_id,feishu) VALUES($1,false)", [TEST_CEO.personId]);
+    await t.sql("INSERT INTO person_settings(person_id,feishu) VALUES($1,false)", [TEST_CEO.personId]);
     expect(await tickAt("2026-10-30T02:00:00Z")).toEqual([]);
   });
 

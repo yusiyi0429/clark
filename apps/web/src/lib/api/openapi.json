@@ -1422,6 +1422,35 @@
             }
           }
         }
+      },
+      "delete": {
+        "operationId": "disconnectMyFeishu",
+        "summary": "断开本人的飞书：删掉飞书账号的关联和授权（天枢里已有的会议、妙记不动）；之后飞书推送、拿妙记都停，要用再连",
+        "responses": {
+          "204": {
+            "description": "已断开（没连过也是 204）"
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/me/wechat": {
@@ -19705,6 +19734,224 @@
         }
       }
     },
+    "/api/me/budget-default": {
+      "get": {
+        "operationId": "getBudgetDefault",
+        "summary": "本人新 Task 的缺省预算（「偏好」，设计 11.3）：没设过是自动",
+        "responses": {
+          "200": {
+            "description": "缺省预算",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Budget"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateBudgetDefault",
+        "summary": "改本人新 Task 的缺省预算；设预算时至少一项上限",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Budget"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "改好的缺省预算",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Budget"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/tasks/{taskId}/budget": {
+      "get": {
+        "operationId": "getTaskBudget",
+        "summary": "这件 Task 的预算（Task 负责人）；没单独设过时是本人的缺省（inherited=true）",
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Task 的预算",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskBudgetResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateTaskBudget",
+        "summary": "改这件 Task 的预算（Task 负责人）；设预算时至少一项上限",
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Budget"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "改好的预算",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskBudgetResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/notification-settings": {
       "get": {
         "operationId": "getNotificationSettings",
@@ -26217,7 +26464,8 @@
         "required": [
           "enabled",
           "connected",
-          "calendar"
+          "calendar",
+          "state"
         ],
         "properties": {
           "enabled": {
@@ -26228,6 +26476,22 @@
           },
           "calendar": {
             "type": "boolean"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "const": "not_connected",
+                "type": "string"
+              },
+              {
+                "const": "connected",
+                "type": "string"
+              },
+              {
+                "const": "expired",
+                "type": "string"
+              }
+            ]
           }
         }
       },
@@ -93207,6 +93471,92 @@
           },
           "start": {
             "type": "boolean"
+          },
+          "budget": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "mode",
+              "hours",
+              "weeklyPercent",
+              "money"
+            ],
+            "properties": {
+              "mode": {
+                "anyOf": [
+                  {
+                    "const": "auto",
+                    "type": "string"
+                  },
+                  {
+                    "const": "set",
+                    "type": "string"
+                  },
+                  {
+                    "const": "unlimited",
+                    "type": "string"
+                  }
+                ]
+              },
+              "hours": {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0,
+                    "maximum": 1000,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "weeklyPercent": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "maximum": 100,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "money": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "amount",
+                      "currency"
+                    ],
+                    "properties": {
+                      "amount": {
+                        "exclusiveMinimum": 0,
+                        "maximum": 1000000,
+                        "type": "number"
+                      },
+                      "currency": {
+                        "anyOf": [
+                          {
+                            "const": "CNY",
+                            "type": "string"
+                          },
+                          {
+                            "const": "USD",
+                            "type": "string"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
           }
         }
       },
@@ -109080,6 +109430,196 @@
         ],
         "properties": {
           "feishu": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Budget": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mode",
+          "hours",
+          "weeklyPercent",
+          "money"
+        ],
+        "properties": {
+          "mode": {
+            "anyOf": [
+              {
+                "const": "auto",
+                "type": "string"
+              },
+              {
+                "const": "set",
+                "type": "string"
+              },
+              {
+                "const": "unlimited",
+                "type": "string"
+              }
+            ]
+          },
+          "hours": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "maximum": 1000,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "weeklyPercent": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "maximum": 100,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "money": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "amount",
+                  "currency"
+                ],
+                "properties": {
+                  "amount": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 1000000,
+                    "type": "number"
+                  },
+                  "currency": {
+                    "anyOf": [
+                      {
+                        "const": "CNY",
+                        "type": "string"
+                      },
+                      {
+                        "const": "USD",
+                        "type": "string"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "TaskBudgetResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "taskId",
+          "budget",
+          "inherited"
+        ],
+        "properties": {
+          "taskId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "budget": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "mode",
+              "hours",
+              "weeklyPercent",
+              "money"
+            ],
+            "properties": {
+              "mode": {
+                "anyOf": [
+                  {
+                    "const": "auto",
+                    "type": "string"
+                  },
+                  {
+                    "const": "set",
+                    "type": "string"
+                  },
+                  {
+                    "const": "unlimited",
+                    "type": "string"
+                  }
+                ]
+              },
+              "hours": {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0,
+                    "maximum": 1000,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "weeklyPercent": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "maximum": 100,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "money": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "amount",
+                      "currency"
+                    ],
+                    "properties": {
+                      "amount": {
+                        "exclusiveMinimum": 0,
+                        "maximum": 1000000,
+                        "type": "number"
+                      },
+                      "currency": {
+                        "anyOf": [
+                          {
+                            "const": "CNY",
+                            "type": "string"
+                          },
+                          {
+                            "const": "USD",
+                            "type": "string"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          "inherited": {
             "type": "boolean"
           }
         }

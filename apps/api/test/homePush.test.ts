@@ -33,13 +33,13 @@ describe("飞书推送（新首页 13.2）", () => {
     expect((await call("PUT", { feishu: false })).json()).toEqual({ feishu: false });
     expect((await call("GET")).json()).toEqual({ feishu: false });
     expect((await call("PUT", { feishu: "no" })).statusCode).toBe(400);
-    expect((await t.sql("SELECT feishu, web_seen_at IS NOT NULL AS seen FROM person_notify WHERE person_id=$1", [TEST_MEMBER.personId]))).toEqual([{ feishu: false, seen: true }]);
+    expect((await t.sql("SELECT feishu, web_seen_at IS NOT NULL AS seen FROM person_settings WHERE person_id=$1", [TEST_MEMBER.personId]))).toEqual([{ feishu: false, seen: true }]);
   });
 
   it("只推三类里的两类（CEO 拍板在原来那条）：不在天枢时的受阻、额度、批准等了 10 分钟；离截止不到 24 小时的确认。同一件不推第二次，10 分钟里的合成一条", async () => {
     t = await createTestApp();
     await t.sql("INSERT INTO feishu_identities (person_id, open_id) VALUES ($1,'ou_member'),($2,'ou_ceo')", [TEST_MEMBER.personId, TEST_CEO.personId]);
-    await t.sql("INSERT INTO person_notify(person_id,feishu) VALUES($1,false)", [TEST_CEO.personId]);
+    await t.sql("INSERT INTO person_settings(person_id,feishu) VALUES($1,false)", [TEST_CEO.personId]);
     const T0 = "2026-11-07T02:00:00.000Z"; // 上海 10:00
     const verdict = item({ id: "verdict:card:c-1", kind: "verdict", title: "验收两次没过", source: "做登录页 · 对话质量达标", at: minutes(T0, -30) });
     const question = item({ id: "question:card:c-2", kind: "question", title: "等你回复", at: minutes(T0, -30), open: { kind: "card", id: "c-2" } });
@@ -63,7 +63,7 @@ describe("飞书推送（新首页 13.2）", () => {
 
     // 本人在天枢里（2 分钟前打开过）：新的受阻不推；离截止不到 24 小时的确认照推。
     const T1 = minutes(T0, 8 * 60);
-    await t.sql("INSERT INTO person_notify(person_id,web_seen_at) VALUES($1,$2) ON CONFLICT (person_id) DO UPDATE SET web_seen_at=EXCLUDED.web_seen_at",
+    await t.sql("INSERT INTO person_settings(person_id,web_seen_at) VALUES($1,$2) ON CONFLICT (person_id) DO UPDATE SET web_seen_at=EXCLUDED.web_seen_at",
       [TEST_MEMBER.personId, minutes(T1, -2)]);
     waiting.set(TEST_MEMBER.personId, [{ ...verdict, id: "verdict:card:c-9" }, laterCard]);
     expect((await tick(T1)).map((notice) => [notice.title, notice.links[0].path])).toEqual([["确认我的任务", "/me/mission-cards/mc-1"]]);
