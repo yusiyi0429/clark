@@ -422,6 +422,10 @@ describe("首页对话走独立 Chat（CHAT_SERVICE_URL）", () => {
       expect(forwarded.headers["content-type"]).toMatch(/^multipart\/form-data/);
       expect(forwarded.body).toContain('filename="brief.md"');
       expect(forwarded.body).toContain("# 渠道备忘");
+      // 认不得的类型（新首页 14.5 的清单以外）不转给 Chat。
+      const exe = await upload(multipart("tool.exe", "MZ"));
+      expect([exe.statusCode, exe.json().code, exe.json().message]).toEqual([400, "UNSUPPORTED_ATTACHMENT", "tool.exe：格式不支持"]);
+      expect(chat.requests.filter((request) => request.url.endsWith("/attachments"))).toHaveLength(1);
 
       await t.app.inject({ method: "POST", url: "/api/conversations/global/messages",
         headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream" }, payload: { message: "看看附件", attachments: [{ id: attachmentId }] } });

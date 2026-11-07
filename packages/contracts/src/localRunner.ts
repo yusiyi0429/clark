@@ -20,6 +20,11 @@ export const LOCAL_RUNNER_TOKEN_HEADER = "x-tianshu-local-token";
 export const LOCAL_RUNNER_SYNC_PATH = "/api/local-runner/sync";
 /** 云端「验收交代」（相对天枢 api 的根）：GET ?handbackKey=<交回条目的 key>，鉴权同上。本机在交回同步上去以后取它，起验收会话。 */
 export const LOCAL_RUNNER_VERIFY_BRIEF_PATH = "/api/local-runner/verify-brief";
+/**
+ * 云端子会话附件（相对天枢 api 的根，新首页 14.5）：GET /api/local-runner/attachments/:id 回文件原样（Content-Type 是它的类型，x-sha256 是摘要），鉴权同上，
+ * 只给附件主人配对的电脑。本机收到带 attachments 的一句话时按 id 取回，存进这件 Task 的工作区，把路径交给 Claude Code。
+ */
+export const LOCAL_RUNNER_ATTACHMENT_PATH = "/api/local-runner/attachments/:id";
 
 const Instant = Type.String({ format: "date-time" });
 const Id = Type.String({ minLength: 1, maxLength: 80, pattern: "^[A-Za-z0-9_-]+$" });
@@ -547,9 +552,18 @@ export const LocalCreateSessionBatchResponse = Type.Object({
  * kind = review：专题开评审会（开工时带了 critics 才行），本机让会话并行起挑刺子 agent，合成「分歧和建议」存成 kind = review 的一版；
  * 这时 text 可不填，填了是本人对这次评审的补充要求。不带 kind 就是普通的一句话，text 必填。
  */
+/** 一句话带的附件（新首页 14.5）：云端存着的子会话附件，本机按 id 从 LOCAL_RUNNER_ATTACHMENT_PATH 取回，核对 sha256。 */
+export const LocalAttachmentRef = Type.Object({
+  id: Type.String({ format: "uuid" }),
+  fileName: Type.String({ minLength: 1, maxLength: 255 }),
+  size: Type.Integer({ minimum: 1 }),
+  sha256: Type.String({ pattern: "^[0-9a-f]{64}$" }),
+}, strict);
 export const LocalSendMessageRequest = Type.Object({
   kind: Type.Optional(Type.Union([Type.Literal("say"), Type.Literal("review")])),
   text: Type.Optional(Type.String({ minLength: 1, maxLength: 20000 })),
+  /** 附件（最多 20 个）：本机取回存进工作区，路径和这句话一起交给执行方；只带附件不说话时 text 可以不填。 */
+  attachments: Type.Optional(Type.Array(LocalAttachmentRef, { minItems: 1, maxItems: 20 })),
 }, strict);
 export const LocalSendMessageResponse = Type.Object({
   /** next_step：进行中，下一步前送达；new_turn：开了新一轮；resumed：进程已退出，续接后送达。 */
@@ -953,6 +967,7 @@ export type TLocalMergeSync = Static<typeof LocalMergeSync>;
 export type TLocalQuestion = Static<typeof LocalQuestion>;
 export type TLocalQuestionRequestView = Static<typeof LocalQuestionRequestView>;
 export type TLocalPermissionBrief = Static<typeof LocalPermissionBrief>;
+export type TLocalAttachmentRef = Static<typeof LocalAttachmentRef>;
 export type TLocalQuestionAnswerRequest = Static<typeof LocalQuestionAnswerRequest>;
 export type TLocalBackgroundItem = Static<typeof LocalBackgroundItem>;
 export type TLocalBackgroundItemKind = Static<typeof LocalBackgroundItemKind>;

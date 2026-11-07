@@ -3,6 +3,9 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { Type } from "@sinclair/typebox";
 import {
   AcceptIssueDraftRequest,
+  ATTACHMENT_MAX_BYTES,
+  ATTACHMENT_MAX_COUNT,
+  attachmentKind,
   ConversationMessageRequest,
   ConversationScope,
   ConversationTurnParams,
@@ -857,6 +860,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
   });
 
   // 附件挂到这个人在这个页面的主对话（没有就建）；复用 Meeting 材料的受限解析器（PDF/DOCX/Markdown、同一大小/数量/超时限制），API 卷独立。
+  // 总管线、Task 管线接了 Chat 时（新首页 14.5）：类型照 attachments.ts（图片、文档、代码和日志），每个 30 MB、一次最多 20 个，原样转给 Chat。
   app.post(
     "/api/conversations/:scope/attachments",
     { preHandler: requirePerson, schema: { params: conversationParams }, bodyLimit: 101 * 1024 * 1024 },
@@ -866,8 +870,11 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
         if (await pipelineDenied(reply, req.person!, req.params.scope)) return reply;
         if (!await conversationScopeVisible(req.person!, req.params.scope)) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
         const files: { filename: string; mimetype: string; buffer: Buffer }[] = [];
-        for await (const part of req.files({ limits: { fileSize: MAX_MATERIAL_FILE_BYTES, files: MAX_MATERIAL_FILES } })) {
+        const toChat = Boolean(chat) && (req.params.scope === "global" || req.params.scope.startsWith("plan-task:"));
+        const limits = toChat ? { fileSize: ATTACHMENT_MAX_BYTES, files: ATTACHMENT_MAX_COUNT } : { fileSize: MAX_MATERIAL_FILE_BYTES, files: MAX_MATERIAL_FILES };
+        for await (const part of req.files({ limits })) {
           if (part.type !== "file" || part.fieldname !== "files") return fail(reply, 400, "INVALID_ATTACHMENT", "multipart 只接受 files 文件字段");
+          if (toChat && !attachmentKind(part.filename)) return fail(reply, 400, "UNSUPPORTED_ATTACHMENT", `${part.filename}：格式不支持`);
           files.push({ filename: part.filename, mimetype: part.mimetype, buffer: await part.toBuffer() });
         }
         if (!files.length) return fail(reply, 400, "INVALID_ATTACHMENT", "缺少附件文件");

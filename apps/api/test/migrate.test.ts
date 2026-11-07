@@ -216,6 +216,7 @@ describe("migration", () => {
         "240_feishu_push.sql",
         "241_budgets.sql",
         "242_run_ask.sql",
+        "243_session_attachments.sql",
       ]);
 
       // 幂等：重复执行不再变更
