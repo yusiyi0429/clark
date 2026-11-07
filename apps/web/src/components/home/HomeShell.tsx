@@ -60,7 +60,7 @@ const CLAIM_SOON_MS = 3_000;
 
 export function HomeShell({ account }: { account: Account }) {
   return (
-    <LocalRunnerProvider>
+    <LocalRunnerProvider personName={account.displayName}>
       <HomeFrame account={account} />
       <ShellToast />
     </LocalRunnerProvider>
@@ -331,6 +331,7 @@ function HomeFrame({ account }: { account: Account }) {
     return () => window.removeEventListener(SPLIT_EVENT, handler);
   }, []);
   const allCards = useMemo(() => Object.values(work.boards).flatMap((board) => board.cards), [work.boards]);
+  const cardAt = useMemo(() => new Map(allCards.map((card) => [card.id, card.createdAt])), [allCards]);
   useAutoReturn(local.runner, here, allCards, local.sessions, changed);
 
   // ---- 后台任务 ----
@@ -429,7 +430,7 @@ function HomeFrame({ account }: { account: Account }) {
 
   const left = (
     <LeftColumn data={data} view={view} buddy={buddy} speaking={speaking} go={go} phone={handheld} account={account} month={month} onRetryPlan={api.planFailed ? () => void api.retryPlan() : null}
-      gateFor={(missionId) => gateLabel(work.plan, missionId)}
+      gateFor={(missionId) => gateLabel(work.plan, missionId)} cardAt={cardAt}
       today={todayLabel(work.plan?.today ?? null)} alert={alert} trail={handheld ? backgroundButton : null}
       top={handheld && data.waiting.length ? (
         <section aria-label="等你" className={h.phoneWaiting}>

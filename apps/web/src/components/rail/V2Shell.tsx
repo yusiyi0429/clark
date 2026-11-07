@@ -40,7 +40,7 @@ export function V2Shell({ account, children }: { account: Account; children: Rea
   const router = useRouter();
   const section = sectionOf(pathname);
   return (
-    <LocalRunnerProvider>
+    <LocalRunnerProvider personName={account.displayName}>
       <div className={s.app} data-section={section} data-testid="v2-shell">
         <nav className={s.rail} aria-label="导航">
           {RAIL.map((item) => (

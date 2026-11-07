@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { THomeItem } from "@warmap/contracts";
 import type { HomeTask, WorkHomeData } from "@/lib/home/types";
-import { LeftColumn } from "./LeftColumn";
+import { LeftColumn, planOrder } from "./LeftColumn";
 
 const data = { period: "2026-11", missions: [], waiting: [], other: { subSessions: [], items: [] } } as unknown as WorkHomeData;
 const render = (extra: Partial<Parameters<typeof LeftColumn>[0]>) => renderToStaticMarkup(
@@ -69,5 +69,14 @@ describe("左栏：本人自己做的事项（9.10）", () => {
     expect(render({})).not.toContain('aria-label="其他"');
     const html = render({ data: { ...data, other: { subSessions: [], items: [item("00000000-0000-4000-8000-000000000003", "整理会议纪要", { dueDate: "2026-11-09" })] } } });
     expect(html).toMatch(/aria-label="其他".*其他.*data-testid="tree-item".*整理会议纪要.*11\/09/);
+  });
+});
+
+describe("子会话的先后（照派活单）", () => {
+  it("卡按看板里建出来的先后，没读到的和专题在后面", () => {
+    const sub = (id: string, kind: "card" | "topic", updatedAt: string) => ({ id, kind, updatedAt }) as unknown as HomeTask["subSessions"][number];
+    const at = new Map([["c1", "2026-11-07T01:00:00.001Z"], ["c2", "2026-11-07T01:00:00.002Z"], ["c3", "2026-11-07T01:00:00.003Z"]]);
+    const list = [sub("c3", "card", "z"), sub("t1", "topic", "a"), sub("c1", "card", "y"), sub("c2", "card", "x")];
+    expect(planOrder(list, at).map((entry) => entry.id)).toEqual(["c1", "c2", "c3", "t1"]);
   });
 });

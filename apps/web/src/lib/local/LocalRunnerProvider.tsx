@@ -14,6 +14,7 @@ import { phaseOf, readBrowserPermission, type LocalPhase } from "./connection";
 import { HANDHELD_QUERY } from "@/components/ui/useHandheld";
 import { setMockAgents } from "@/lib/board/cards";
 import { planCards } from "@/lib/board/cloud";
+import { linkCloud } from "./link";
 
 export type Pairing = { code: string; state: "waiting" | "denied" | "expired" | "failed" };
 
@@ -59,7 +60,11 @@ let mockRunner: LocalRunner | null = null;
 // 假规划员拆完时，用云端拆卡出一份派活单草稿（假装本机把 card_plan 同步上去了）。
 const sharedMock = () => (mockRunner ??= createMockRunner({ onPlanned: (taskId) => void planCards(taskId).catch(() => undefined) }));
 
-export function LocalRunnerProvider({ children, runner: given }: { children: ReactNode; runner?: LocalRunner }) {
+/**
+ * personName：本人的名字。给了就在这一处管「配对好、还没关联云端」——自动关联一次（拿设备令牌交给本机），
+ * 右栏、连接页、首页从哪配的对都一样，不各写一遍。关联没成，过一分钟再试。
+ */
+export function LocalRunnerProvider({ children, runner: given, personName }: { children: ReactNode; runner?: LocalRunner; personName?: string }) {
   const [runner] = useState<LocalRunner>(() => given ?? pickRunner());
   useEffect(() => { setMockAgents(runner.kind === "mock" && !given); return () => setMockAgents(false); }, [runner, given]);
   const [phase, setPhase] = useState<LocalPhase>("checking");
@@ -140,6 +145,15 @@ export function LocalRunnerProvider({ children, runner: given }: { children: Rea
       window.removeEventListener("focus", resume);
     };
   }, [phase, tick, refresh, handheld, given]);
+
+  const linking = useRef<string | null>(null);
+  useEffect(() => {
+    if (!personName || phase !== "ready" || !status || status.cloud.linked || runner.kind === "mock" || linking.current === status.deviceId) return;
+    const deviceId = status.deviceId;
+    linking.current = deviceId;
+    void linkCloud(runner, status, personName).then(() => refresh())
+      .catch(() => { window.setTimeout(() => { if (linking.current === deviceId) linking.current = null; }, 60_000); });
+  }, [personName, phase, status, runner, refresh]);
 
   const pair = useCallback(async () => {
     setError(null);

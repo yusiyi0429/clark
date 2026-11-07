@@ -29,7 +29,7 @@ import h from "@/styles/home.module.css";
 
 export const subHref = (sub: Pick<SubSession, "kind" | "id">) => (sub.kind === "card" ? cardHref(sub.id) : topicHref(sub.id));
 
-export function LeftColumn({ data, view, buddy, speaking, go, phone, account, today, alert, trail, top, month, onRetryPlan, gateFor }: {
+export function LeftColumn({ data, view, buddy, speaking, go, phone, account, today, alert, trail, top, month, onRetryPlan, gateFor, cardAt }: {
   data: WorkHomeData;
   view: View;
   buddy: Buddy | null;
@@ -52,6 +52,8 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
   onRetryPlan?: (() => void) | null;
   /** Task 行的小字（5.4.2）：这个 Mission 下一个验收时间点「11/20 验收」；预算、管线结论还没有数据。 */
   gateFor?: (missionId: string) => string | null;
+  /** 卡建出来的时间（看板里的）：一件 Task 下的子会话照派活单的先后排（和管线里「开了哪几个子会话」一样）。 */
+  cardAt?: ReadonlyMap<string, string>;
 }) {
   const name = buddy?.name?.trim() || "伙伴";
   const atHome = view.kind === "home" || view.kind === "month";
@@ -91,7 +93,7 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
         {data.missions.filter((mission) => mission.tasks.length).map((mission) => (
           <section key={mission.missionId} aria-label={mission.title} className={h.group}>
             <p className={h.groupTitle}>{mission.period !== data.period ? <span>{monthLabel(mission.period)} · </span> : null}{mission.title}</p>
-            {mission.tasks.map((task) => <TaskNode key={task.taskId} task={task} view={view} go={go} waiting={pipelineWaiting.has(task.taskId)} personId={account.personId} gate={gateFor?.(task.missionId) ?? null} />)}
+            {mission.tasks.map((task) => <TaskNode key={task.taskId} task={task} view={view} go={go} waiting={pipelineWaiting.has(task.taskId)} personId={account.personId} gate={gateFor?.(task.missionId) ?? null} cardAt={cardAt} />)}
           </section>
         ))}
         {data.other.subSessions.length || data.other.items.length ? (
@@ -129,11 +131,11 @@ function treeKeys(event: KeyboardEvent<HTMLDivElement>, root: HTMLDivElement | n
  * 完成的子会话（验收过、合回了）和做完的本人事项收进折叠的「已完成 N」（设计第 4.5 条、9.10）；本人确认 Task 完成以后全部收进去，Task 行打勾、变淡。
  * 一枝里先是子会话（等你、进行中的状态图标挨着 Task 行），再是本人的事项（头像领头的一块），最后是「已完成 N」。
  */
-function TaskNode({ task, view, go, waiting, personId, gate }: { task: HomeTask; view: View; go: (href: string) => void; waiting: boolean; personId?: string | null; gate: string | null }) {
+function TaskNode({ task, view, go, waiting, personId, gate, cardAt }: { task: HomeTask; view: View; go: (href: string) => void; waiting: boolean; personId?: string | null; gate: string | null; cardAt?: ReadonlyMap<string, string> }) {
   const here = (view.kind === "task" || view.kind === "info") && view.taskId === task.taskId;
   const [open, setOpen] = useState(false);
   const folded = task.subSessions.filter((sub) => task.completedAt || sub.state === "done");
-  const live = task.subSessions.filter((sub) => !folded.includes(sub));
+  const live = planOrder(task.subSessions.filter((sub) => !folded.includes(sub)), cardAt);
   const doneItems = task.items.filter((item) => task.completedAt || item.status === "done");
   const items = task.items.filter((item) => !doneItems.includes(item));
   const foldCount = folded.length + doneItems.length;
@@ -174,6 +176,17 @@ function TaskNode({ task, view, go, waiting, personId, gate }: { task: HomeTask;
       ) : null}
     </div>
   );
+}
+
+/** 派活单的先后：卡按看板里建出来的时间（一次开工建的几张按派活单的顺序建），没读到的和专题排在后面、按最近动静。 */
+export function planOrder(subs: SubSession[], cardAt?: ReadonlyMap<string, string>): SubSession[] {
+  const at = (sub: SubSession) => (sub.kind === "card" ? cardAt?.get(sub.id) : undefined);
+  return [...subs].sort((a, b) => {
+    const x = at(a), y = at(b);
+    if (x && y) return x.localeCompare(y);
+    if (x || y) return x ? -1 : 1;
+    return a.updatedAt.localeCompare(b.updatedAt);
+  });
 }
 
 /**

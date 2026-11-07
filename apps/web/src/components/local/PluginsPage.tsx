@@ -46,13 +46,7 @@ export function LocalSection({ personName, handheld }: { personName: string; han
   const status = local.status;
   const agent = status?.agents.find((entry) => entry.kind === "claude-code") ?? null;
   const ready = local.phase === "ready";
-  // 配对好、还没关联云端：自动关联一次（拿设备令牌交给本机）。
-  useEffect(() => {
-    if (!ready || !status || status.cloud.linked || linking || handheld) return;
-    setLinking(true);
-    void linkCloud(local.runner, status, personName).then(() => local.refresh()).catch(() => undefined).finally(() => setLinking(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, status?.cloud.linked]);
+  // 配对好、还没关联云端的自动关联由 LocalRunnerProvider 一处管；这里只留没关联上时的「关联」按钮。
 
   return (
     <section className={s.section} aria-label="本机程序">
