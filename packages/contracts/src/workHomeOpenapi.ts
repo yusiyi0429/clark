@@ -2,6 +2,7 @@ import type { JsonSchema, OpenAPIV3 } from "./types/JsonSchemaTypes.js";
 import {
   BackgroundItem, BackgroundResponse, ClaimSessionStartsRequest, ClaimSessionStartsResponse, HomeMission, HomeTask, HomeTaskSummary, RouteRequest, RouteResponse,
   SessionStartView, SubSession, TaskPipelineResponse, WaitingItem, WaitingTarget, WorkHomeResponse, CardMerge, TaskFeedItem, TaskFeedResponse, HomeItem, ReleaseSessionStartRequest,
+  NotificationSettings,
 } from "./workHome.js";
 
 /**
@@ -13,6 +14,7 @@ export const workHomeSchemas: Record<string, JsonSchema> = {
   SubSession, HomeTaskSummary, HomeTask, HomeMission, WaitingTarget, WaitingItem, WorkHomeResponse,
   BackgroundItem, BackgroundResponse, TaskPipelineResponse, RouteRequest, RouteResponse,
   SessionStartView, ClaimSessionStartsRequest, ClaimSessionStartsResponse, CardMerge, TaskFeedItem, TaskFeedResponse, HomeItem, ReleaseSessionStartRequest,
+  NotificationSettings,
 };
 
 const error = { description: "ApiError 统一错误", content: { "application/json": { schema: { $ref: "#/components/schemas/ApiError" } } } };
@@ -22,6 +24,19 @@ const body = (schema: string) => ({ required: true, content: { "application/json
 const path = (...names: string[]) => names.map((name) => ({ name, in: "path" as const, required: true, schema: { type: "string" } }));
 
 export const workHomePaths: OpenAPIV3.Document["paths"] = {
+  "/api/me/notification-settings": {
+    get: {
+      operationId: "getNotificationSettings",
+      summary: "本人的通知开关（「偏好」）：飞书通知，缺省开",
+      responses: { "200": json("通知开关", "NotificationSettings"), ...errors(401) },
+    },
+    put: {
+      operationId: "updateNotificationSettings",
+      summary: "改本人的通知开关",
+      requestBody: body("NotificationSettings"),
+      responses: { "200": json("改好的通知开关", "NotificationSettings"), ...errors(400, 401, 403) },
+    },
+  },
   "/api/me/work-home": {
     get: {
       operationId: "getWorkHome",
