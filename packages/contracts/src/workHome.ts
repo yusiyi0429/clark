@@ -304,6 +304,7 @@ export const BackgroundQuery = Type.Object({
 
 /**
  * POST /api/me/tasks/:taskId/pipeline（Task 负责人）：这件 Task 的管线对话，第一次打开时建，以后都返回同一条（201 新建、200 已有）。
+ * 没接 Chat 时，同时到的首次请求可能都回 201，但拿到的是同一条对话；网页不要靠 201、200 区分。
  * 收发消息、接上、停止都走现有的对话接口，scope 用这里给的 plan-task:<taskId>（/api/conversations/{scope}/messages 等）。
  * conversationId 是 Chat 服务里那段对话的 id（没接 Chat 时是天枢自己的对话 id），只作标识，网页不用拿它调 Chat。
  */
