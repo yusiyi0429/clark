@@ -217,7 +217,7 @@ export const WaitingItem = Type.Object({
  * missions：有「没了结」的 Task 的 Mission（见文件头），本月的在前，之前月份的按月份从近到远；本月的 Mission 没有 Task 也列。每个下面是本人负责的 Task。
  * 一件 Task 下面的子会话不看月份，全列（done 的网页折叠）。
  * other.subSessions：不归任何 Task 的子会话，加 Task 不在树上（了结了、或不是本人负责）但还没完成的子会话，左栏最下面一组「其他」；
- * other.items：待归位的事项（会议或 Agent 分派给本人、还没挂 Mission 的执行事项，没完成的；10/26 的规矩：只有本人自己建的可以不挂 Mission，那种是独立事项，不在这里）。
+ * other.items：没挂 Mission、没完成没退回的执行事项（设计 9.10），新的在前：待归位的（会议或 Agent 分派给本人的），和本人自己建的独立事项（10/26 的规矩允许不挂 Mission）。
  * waiting：等你。排序（设计 9.6）：先是卡住正在跑的活的（approval、question、quota），再是有截止时间的（dueAt 早的在前），其余按 at 新的在前。
  */
 export const WorkHomeResponse = Type.Object({

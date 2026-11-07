@@ -12,7 +12,7 @@ import { roleRef, rolesById } from "./roles.js";
 import type { MissionRoundPerson } from "./missionRounds.js";
 import { CLAIM_TTL } from "./sessionStarts.js";
 import { CardError, cardTaskViews, effectiveOutcome } from "./taskCards.js";
-import { getTaskViews, listUnplacedTasks } from "./tasks.js";
+import { getTaskViews } from "./tasks.js";
 import { ACTIVE, awaitsQuota, heldRuns, workerResources } from "./workers.js";
 import { shanghaiDate } from "./workdays.js";
 
@@ -235,13 +235,15 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
     : await Promise.all(tasks.map(async (task) => [task.taskId, ((await q(`SELECT id::text FROM conversations WHERE ${ACTIVE_CONVERSATION_WHERE} ORDER BY created_at ASC,id ASC LIMIT 1`,
       [ownerId, `plan-task:${task.taskId}`])).rows[0]?.id as string | undefined) ?? null] as const))) : []);
 
-  // 自己做的执行事项（设计 9.10）：没有岗位、不交给 Agent 的，挂在树上的 Task 下（退回的不列）；待归位的进「其他」。
+  // 自己做的执行事项（设计 9.10）：没有岗位、不交给 Agent 的，挂在树上的 Task 下（退回的不列）；没挂 Mission 的进「其他」。
   const homeItem = (item: TCardTaskView): THomeItem => ({ id: item.id, title: item.title, status: item.status as THomeItem["status"], dueDate: item.dueDate,
     awaitingAcceptance: item.awaitingAcceptance, updatedAt: item.updatedAt });
   const ownItems = tasks.length ? await getTaskViews(q, ((await q(`SELECT id::text FROM tasks WHERE owner_id=$1 AND plan_task_id=ANY($2::text[]) AND status<>'returned'
       AND role_id IS NULL AND executor IS DISTINCT FROM 'claude_code' ORDER BY created_at,id`, [ownerId, tasks.map((task) => task.taskId)])).rows as { id: string }[])
     .map((row) => row.id), deps.names) : [];
-  const unplaced = (await listUnplacedTasks(q, ownerId, deps.names)).filter((item) => !item.card.role && item.card.executor !== "claude_code");
+  // 「其他」里的事项（9.10）：没挂 Mission、没完成没退回的，会议或 Agent 分派来待归位的，和本人自己建的独立事项，新的在前。
+  const loose = await getTaskViews(q, ((await q(`SELECT id::text FROM tasks WHERE owner_id=$1 AND mission_id IS NULL AND status NOT IN ('done','returned')
+      AND role_id IS NULL AND executor IS DISTINCT FROM 'claude_code' ORDER BY created_at DESC,id`, [ownerId])).rows as { id: string }[]).map((row) => row.id), deps.names);
 
   const waiting = await assembleWaiting({ q, person, deps, period, subs, cards, taskById, devices, openSplits: splits.length });
   const today = shanghaiDate(now);
@@ -261,7 +263,7 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
     tasks: tasks.filter((task) => task.missionId === mission.id).map(homeTask) }));
 
   // 其他：不挂 Task 的，和挂在不在树上的 Task 下、还没完成的（已完成的在取卡时就没取，等你合的除外）。
-  return { period, missions: homeMissions, other: { subSessions: subs.filter((sub) => !onTree(sub)).sort(order).map(view), items: unplaced.map(homeItem) }, waiting };
+  return { period, missions: homeMissions, other: { subSessions: subs.filter((sub) => !onTree(sub)).sort(order).map(view), items: loose.map(homeItem) }, waiting };
 }
 
 /**

@@ -339,13 +339,16 @@ describe("新首页", { timeout: 30_000 }, () => {
         await f.t.sql("UPDATE tasks SET status='done',acceptance=jsonb_build_object('at',$2::text) WHERE id=$1",
           [ids[title], title === "昨天过的" ? "2026-11-05T01:00:00.000Z" : "2026-11-06T01:30:00.000Z"]);
       }
-      // 自己做的事项：没完成的、完成了的挂在 Task 下，退回的不列；待归位的（外部 Agent 建的、没挂 Mission）在其他。
+      // 自己做的事项：没完成的、完成了的挂在 Task 下，退回的不列；待归位的（外部 Agent 建的、没挂 Mission）和本人自己建的独立事项在其他（新的在前），做完的独立事项不列。
       const own = await f.card("自己做的");
       const ownDone = await f.card("自己做完的");
       await f.t.sql("UPDATE tasks SET status='done' WHERE id=$1", [ownDone]);
       await f.t.sql("UPDATE tasks SET status='returned',return_reason='不做了' WHERE id=$1", [await f.card("退回的")]);
       const unplaced = await f.card("待归位的");
       await f.t.sql("UPDATE tasks SET mission_id=NULL,step_order=NULL,plan_task_id=NULL,created_by='agent' WHERE id=$1", [unplaced]);
+      const [standalone, standaloneDone] = [await f.card("自己建的独立事项"), await f.card("做完的独立事项")];
+      await f.t.sql("UPDATE tasks SET mission_id=NULL,step_order=NULL,plan_task_id=NULL,created_at=now()+interval '1 minute' WHERE id=ANY($1::uuid[])", [[standalone, standaloneDone]]);
+      await f.t.sql("UPDATE tasks SET status='done' WHERE id=$1", [standaloneDone]);
 
       const body = await home(f);
       const task = body.missions[0].tasks[0];
@@ -364,7 +367,7 @@ describe("新首页", { timeout: 30_000 }, () => {
 
       expect(task.items.map((item: { id: string; title: string; status: string; awaitingAcceptance: boolean }) => [item.id, item.title, item.status, item.awaitingAcceptance]))
         .toEqual([[own, "自己做的", "not_started", false], [ownDone, "自己做完的", "done", false]]);
-      expect(body.other.items.map((item: { id: string; title: string }) => [item.id, item.title])).toEqual([[unplaced, "待归位的"]]);
+      expect(body.other.items.map((item: { id: string; title: string }) => [item.id, item.title])).toEqual([[standalone, "自己建的独立事项"], [unplaced, "待归位的"]]);
     } finally { await f.close(); }
   });
 
