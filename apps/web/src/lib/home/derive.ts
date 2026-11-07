@@ -127,8 +127,11 @@ export function toSubSession(worker: Worker, merges: MergeIssue[] = [], deviceId
   const id = worker.kind === "card" || verifying ? worker.cardId : worker.kind === "topic" ? worker.topicId : null;
   if (!id) return null;
   const merge = cardMerge(worker, merges);
+  // 专题没有「完成」（契约修正 b5c2e100）：会话停下了（本机报 done）、异常退出了都算已暂停，在子会话里说「继续」。
+  const topicStopped = worker.kind === "topic" && (worker.state === "done" || worker.session?.status === "done");
   return {
-    id, kind: worker.kind === "topic" ? "topic" : "card", title: worker.title, ...(verifying ? { state: "running" as const, waiting: null } : subState(worker, merge)),
+    id, kind: worker.kind === "topic" ? "topic" : "card", title: worker.title,
+    ...(verifying ? { state: "running" as const, waiting: null } : topicStopped ? { state: "waiting" as const, waiting: null } : subState(worker, merge)),
     queueReason: worker.state === "queued" && worker.reason ? QUEUE[worker.reason] : null,
     holdUntil: worker.state === "queued" && worker.reason === "quota" ? worker.holdUntil : null,
     role: worker.role, sessionId: worker.session?.id ?? null, deviceId: worker.session ? deviceId : null, autoStart: false, updatedAt: at(worker), merge,

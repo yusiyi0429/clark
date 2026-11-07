@@ -230,7 +230,7 @@ function HomeFrame({ account }: { account: Account }) {
         try { await startTopic(local.runner, { id: entry.topicId, title }, model); opened.add(entry.topicId); } catch { /* 放回去 */ }
       }
       const done = (id: string | null) => !!id && (opened.has(id) || busy.has(id));
-      await Promise.all(claimed.filter((entry) => !done(entry.cardId ?? entry.topicId)).map((entry) => releaseStart(entry.id).catch(() => undefined)));
+      await Promise.all(claimed.filter((entry) => !done(entry.cardId ?? entry.topicId)).map((entry) => releaseStart(entry.id, deviceId).catch(() => undefined)));
       if (opened.size) { await local.refresh(); changed(); }
     };
     let retry = 0;

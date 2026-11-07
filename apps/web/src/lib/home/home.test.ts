@@ -4,7 +4,7 @@ import type { TLocalSessionSummary } from "@/lib/local/runner";
 import { toWorker, type Worker } from "@/lib/work/workers";
 import type { MemberNotification } from "@/components/member/useMemberHome";
 import {
-  deriveFeed, deriveWorkHome, duration, groupBackground, inScope, localBackground, mergeBackground, monthWaiting, queueText, routeText, sortWaiting, statusLine, waitingHref, workerBackground,
+  deriveFeed, deriveWorkHome, duration, toSubSession, groupBackground, inScope, localBackground, mergeBackground, monthWaiting, queueText, routeText, sortWaiting, statusLine, waitingHref, workerBackground,
 } from "./derive";
 import type { BackgroundItem, WaitingItem } from "./types";
 import type { CardItem } from "@/lib/board/cards";
@@ -284,5 +284,12 @@ describe("等你按设计 9.6（契约增补二）", () => {
     expect(queueText("quota", null)).toBe("等额度恢复");
     expect(queueText("quota", new Date(new Date().setHours(8, 0, 0, 0) + 86_400_000 * 0).toISOString())).toMatch(/^等额度恢复 · (\d+\/\d+ )?08:00$/);
     expect(queueText("slot", null)).toBe("等空位");
+  });
+});
+
+describe("专题没有「完成」（契约修正 b5c2e100）", () => {
+  it("专题的会话停下了：已暂停（等你、没有具体等什么），不是已完成", () => {
+    const sub = toSubSession(worker({ key: "topic:tp1", kind: "topic", cardId: null, topicId: "tp1", title: "调研", stage: "done" }));
+    expect(sub).toMatchObject({ kind: "topic", state: "waiting", waiting: null });
   });
 });

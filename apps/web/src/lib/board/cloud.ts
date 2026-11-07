@@ -107,7 +107,7 @@ export const readTaskFeed = (taskId: string) => maybe<TTaskFeedResponse>(browser
 /** Task 管线的对话（第一次打开时建）；收发走现有对话接口，scope 是 plan-task:<taskId>。 */
 export const openPipeline = (taskId: string) => maybe<TTaskPipelineResponse>(browserApi.POST("/api/me/tasks/{taskId}/pipeline", { params: task(taskId) }) as Promise<Result<TTaskPipelineResponse>>);
 export const routeMessage = (text: string) => maybe<TRouteResponse>(browserApi.POST("/api/me/route", { body: { text } }) as Promise<Result<TRouteResponse>>);
-/** 认领「要开工」：一条只给一处；本机起不来就 release 放回去。 */
+/** 认领「要开工」：一条只给一处；本机起不来就 release 放回去（带认领它的这台电脑，只放回这台认领的那条；别处已经重新认领的回 404，照常忽略）。 */
 export const claimStarts = (deviceId: string) => maybe<TClaimSessionStartsResponse>(browserApi.POST("/api/me/session-starts/claim", { body: { deviceId } }) as Promise<Result<TClaimSessionStartsResponse>>);
-export const releaseStart = (startId: string) => unwrap(browserApi.POST("/api/me/session-starts/{id}/release", { params: id(startId) }))
+export const releaseStart = (startId: string, deviceId: string) => unwrap(browserApi.POST("/api/me/session-starts/{id}/release", { params: id(startId), body: { deviceId } }))
   .then(() => undefined, (error: unknown) => { if (!(error instanceof CloudError && error.status === 204)) throw error; });
