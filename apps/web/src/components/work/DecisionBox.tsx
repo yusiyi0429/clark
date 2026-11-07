@@ -25,7 +25,7 @@ const ICON = { size: 16, strokeWidth: 1.8 } as const;
 /** 出现后这么久不接按键和点击（--dur-base），免得正在打字的回车误按。 */
 const ARM_MS = 220;
 
-export function DecisionBox({ kind, title, body, options, onPick, other, multi, pager, aside, resolved, expired, blocked, busy, footer, outside, autoFocus = true, testId }: {
+export function DecisionBox({ kind, title, body, options, onPick, onTicks, initialPicks, other, multi, pager, aside, resolved, expired, blocked, busy, footer, outside, autoFocus = true, testId }: {
   kind: DecisionKind;
   /** 头部：问的是什么，只写一句。 */
   title: ReactNode;
@@ -34,8 +34,14 @@ export function DecisionBox({ kind, title, body, options, onPick, other, multi, 
   options: DecisionOption[];
   /** 选了第几个（单选点了就提交）。多选时是勾中的几个。note：提问时「自己说」里打了字又去点别的选项，打的字一起发出去。 */
   onPick: (picked: number[], note?: string) => void | Promise<unknown>;
-  /** 最后一项：点了就地展开输入。不给就没有这一项。 */
-  other?: { label?: string; placeholder?: string; onSubmit: (text: string) => void | Promise<unknown> };
+  /**
+   * 多选、而且框外已经有一个管整件的「提交」（几个问题一起发）时：勾一下就报一次勾中的几个，框里不再画自己的「提交」，
+   * 免得一个框里两个意思不同的「提交」。initialPicks：翻回这一页时已经勾过的。
+   */
+  onTicks?: (picked: number[]) => void;
+  initialPicks?: number[];
+  /** 最后一项：点了就地展开输入。不给就没有这一项。maxLength 和接这句话的接口上限一致，超了发不出去。 */
+  other?: { label?: string; placeholder?: string; maxLength?: number; onSubmit: (text: string) => void | Promise<unknown> };
   multi?: boolean;
   /** 几件一起来：第几件（从 0 起）、共几件、翻到哪件。 */
   pager?: { index: number; total: number; onGo: (index: number) => void };
@@ -74,10 +80,12 @@ export function DecisionBox({ kind, title, body, options, onPick, other, multi, 
   const disabled = !!blocked || !!busy || sending !== null;
   const live = !resolved && !expired && !blocked;
   usePendingBox(live ? rootRef : null, kind);
+  const startPicks = useRef(initialPicks);
+  startPicks.current = initialPicks;
 
-  // 换页（翻到另一件）时回到推荐的那个、收起输入。
+  // 换页（翻到另一件）时回到推荐的那个、收起输入；勾过的照框外记着的。
   const pageKey = pager ? pager.index : 0;
-  useEffect(() => { setSelected(recommended); setPicks([]); setWriting(false); setText(""); }, [pageKey, recommended]);
+  useEffect(() => { setSelected(recommended); setPicks(startPicks.current ?? []); setWriting(false); setText(""); }, [pageKey, recommended]);
   // 出现、翻页时：记下出现的时刻（220ms 内不接按键和点击）；本人没在别处打字时，焦点放到推荐的那个上。
   useEffect(() => {
     if (!live) return;
@@ -100,14 +108,22 @@ export function DecisionBox({ kind, title, body, options, onPick, other, multi, 
   const choose = (index: number) => {
     if (disabled || arming()) return;
     if (index === otherIndex) { setSelected(index); setWriting(true); requestAnimationFrame(() => textRef.current?.focus()); return; }
-    if (multi) { setSelected(index); setPicks((current) => (current.includes(index) ? current.filter((entry) => entry !== index) : [...current, index])); return; }
-    const note = kind === "question" && writing && text.trim() ? text.trim() : undefined;
-    void run(index, () => onPick([index], note));
+    if (multi) {
+      setSelected(index);
+      const next = picks.includes(index) ? picks.filter((entry) => entry !== index) : [...picks, index];
+      setPicks(next);
+      onTicks?.(next);
+      return;
+    }
+    void run(index, () => onPick([index], note()));
   };
+  /** 提问时「自己说」里打了字又去点选项（多选是点「提交」）：打的字一起发出去。 */
+  const note = () => (kind === "question" && writing && text.trim() ? text.trim() : undefined);
+  // 发出去了：收起输入、清掉字（框还留着时，再按回车不会把同一句又发一遍）。
   const sendText = () => {
     const value = text.trim();
     if (!value || disabled || !other || arming()) return;
-    void run(otherIndex, () => other.onSubmit(value));
+    void run(otherIndex, async () => { await other.onSubmit(value); setText(""); setWriting(false); });
   };
   const move = (to: number) => {
     const next = (to + total) % total;
@@ -194,7 +210,7 @@ export function DecisionBox({ kind, title, body, options, onPick, other, multi, 
             </button>
             {writing ? (
               <div className={x.write}>
-                <textarea ref={textRef} rows={2} maxLength={4000} value={text} placeholder={other.placeholder} aria-label={other.label ?? "自己说"} disabled={disabled}
+                <textarea ref={textRef} rows={2} maxLength={other.maxLength ?? 4000} value={text} placeholder={other.placeholder} aria-label={other.label ?? "自己说"} disabled={disabled}
                   onChange={(event) => setText(event.target.value)} />
                 <HeroButton variant="primary" size="sm" isIconOnly aria-label="发送" title="发送" isDisabled={disabled || !text.trim()} onPress={sendText}><ArrowUp {...ICON} aria-hidden /></HeroButton>
               </div>
@@ -202,9 +218,9 @@ export function DecisionBox({ kind, title, body, options, onPick, other, multi, 
           </>
         ) : null}
       </div>
-      {multi ? (
+      {multi && !onTicks ? (
         <div className={x.foot}><span className={x.grow} />
-          <HeroButton variant="primary" size="sm" isDisabled={disabled || !picks.length} onPress={() => void run(picks[0] ?? 0, () => onPick(picks))}>提交</HeroButton>
+          <HeroButton variant="primary" size="sm" isDisabled={disabled || !picks.length} onPress={() => void run(picks[0] ?? 0, () => onPick(picks, note()))}>提交</HeroButton>
         </div>
       ) : null}
       {failed && sending === null ? <FailedLine {...failed} /> : null}
@@ -309,18 +325,19 @@ export function useHiddenPending(): { count: number; jump: () => void } {
  * 输入框上方居中的那一条（5.4.3「问题提示条和『回到最新』」）：有没答的选项框滚出了可视区，出「1 个问题等你 ↑」（优先）；
  * 否则没到底时，出「回到最新 ↓」（没有圆点）。两样东西抢同一个位置，所以并成一个。
  */
-export function PendingDock({ latest }: { latest: { visible: boolean; jump: () => void } }) {
+export function PendingDock({ latest, above }: { latest: { visible: boolean; jump: () => void }; /** 放在输入框那一块里（子会话）：贴着它的上沿往上 12。 */ above?: boolean }) {
   const { count, jump } = useHiddenPending();
+  const anchor = above ? "above" : undefined;
   if (count) {
     return (
-      <button type="button" className={x.chip} onClick={jump} data-testid="pending-chip">
+      <button type="button" className={x.chip} data-anchor={anchor} onClick={jump} data-testid="pending-chip">
         <i className={x.chipDot} aria-hidden />{count} 个问题等你<ArrowUp {...ICON} aria-hidden />
       </button>
     );
   }
   if (!latest.visible) return null;
   return (
-    <button type="button" className={x.chip} onClick={latest.jump} data-testid="jump-latest">
+    <button type="button" className={x.chip} data-anchor={anchor} onClick={latest.jump} data-testid="jump-latest">
       回到最新<ArrowDown {...ICON} aria-hidden />
     </button>
   );
