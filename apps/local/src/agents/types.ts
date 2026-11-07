@@ -1,4 +1,4 @@
-import type { TLocalAgentKind } from "@warmap/contracts";
+import type { TLocalAgentKind, TLocalEffort } from "@warmap/contracts";
 import type { EventBody } from "../eventLog.js";
 import type { ResolvedModel } from "../models.js";
 
@@ -9,6 +9,11 @@ export interface AgentLaunch {
   /** true：用 --resume 续上这个会话；false：用 --session-id 新开。 */
   resume: boolean;
   model: ResolvedModel;
+  /**
+   * 这次怎么跑（本机按档位、预算模式和额度定好的，见 SessionManager.runFor）：只对订阅生效——model 是配置里没写模型名时传的 --model，
+   * effort 是 --effort，multiAgent 开多 agent（ultracode）。网关模型用配置里的模型名，不传思考强度，不开多 agent。
+   */
+  run: { model: string; effort: TLocalEffort; multiAgent: boolean };
   includePersonalConfig: boolean;
   /** 本会话要带的 MCP 配置文件路径（本机程序写好的 JSON），以及要预先放行的工具名。 */
   mcpConfigPath: string | null;
@@ -45,13 +50,30 @@ export interface AgentRun {
   respondPermission(requestId: string, answer: PermissionAnswer): boolean;
   /** 回答一次提问（AskUserQuestion）：answers 是「问题原文 → 回答」，执行方当成本人的回答。已答过或已撤回返回 false。 */
   respondQuestion(requestId: string, answers: Record<string, string>): boolean;
+  /** 执行方还在等这个权限请求或提问的答复（后台子 agent 的请求可能跨过主轮的结束）。 */
+  isWaiting(requestId: string): boolean;
+  /** 多 agent（ultracode）开或关，下一轮起生效（Claude Code 的 apply_flag_settings，11/07 实测）。执行方答应了返回 true。 */
+  setMultiAgent(on: boolean): Promise<boolean>;
+  /** 停一个后台任务（子 agent、后台命令），会话本身不停。执行方答应了返回 true；之后会来一条 background 事件（stopped）。 */
+  stopTask(taskId: string): Promise<boolean>;
   /** 强停：只杀本进程树。 */
   kill(): Promise<void>;
   /** 说完了：关掉输入，让执行方自己退出（验收员交完结论用）；一会儿还不退就强停。 */
   close(): void;
   onEvent(fn: (e: EventBody) => void): void;
   onExit(fn: (code: number | null) => void): void;
+  /** Claude Code 报的额度变化（rate_limit_event 的 rate_limit_info，原样）：只给本机记额度用，不进事件流。 */
+  onRateLimit(fn: (info: Record<string, unknown>) => void): void;
+  /** 上一轮每个模型用了多少、发了几次请求（result 里的）：给本机按价目表算网关的钱。还没有为 null。 */
+  readonly lastTurn: TurnModels | null;
 }
+
+/**
+ * 一轮里一个模型用了多少（Claude Code 的 model_usage_since_last_result）。costBasis：list 是官方模型按标价算的，unknown 是网关模型。
+ * requests：这一轮给它发了几次请求（数不出为 null）。
+ */
+export interface TurnModelUsage { model: string; inputTokens: number; outputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; costBasis: string | null; requests: number | null }
+export interface TurnModels { models: TurnModelUsage[] }
 
 /**
  * 执行方适配器。Claude Code 已实现；Codex 12 月按同一接口接（见 codex.ts 里的协议对照）。

@@ -135,6 +135,74 @@ describe("越界路径识别", () => {
     expect(ok("Task", { prompt: "x" })).toBe(false);
   });
 
+  it("工作树里跑仓库自己的脚本不用问；npx 之类只跑装好的；只用来排除、筛选的 .git 不算碰它（11/07 第二遍真跑里总验收那张被拦的命令）", () => {
+    const wt = join(root, "wt");
+    mkdirSync(join(wt, "node_modules", ".bin"), { recursive: true });
+    writeFileSync(join(wt, "node_modules", ".bin", win ? "vitest.cmd" : "vitest"), "");
+    const s: PathScope = { cwd: wt, home: homedir(), allowedRoots: () => [wt] };
+    const ok = (tool: string, command: string) => autoAllowed(tool, { command }, s);
+    const real = String.raw`git log --oneline -3; Get-Content package.json; Get-ChildItem -Recurse -File -Exclude .git | Where-Object { $_.FullName -notmatch '\\.git\\' } | Select-Object -ExpandProperty FullName; npm test 2>&1; "EXIT_CODE=$LASTEXITCODE"`;
+    expect(ok("PowerShell", real)).toBe(true);
+    expect(outsidePaths("PowerShell", { command: real }, s)).toEqual([]); // 正则不是路径
+    expect(autoAllowed("PowerShell", { command: real }, s, String.raw`\\.git\\`)).toBe(true); // Claude Code 把这个正则当成越界路径报上来也不算
+    expect(autoAllowed("PowerShell", { command: real }, s, join(homedir(), "x.txt"))).toBe(false); // 它报的别的越界路径照样算
+    for (const cmd of ["npm test", "npm run lint", "npm t", "pnpm test", "pnpm run build", "yarn test", "node --test", "npx vitest run", "npx --yes vitest run", "npm exec vitest", "pnpm exec vitest run"]) {
+      expect(ok("Bash", cmd), cmd).toBe(true);
+    }
+    for (const cmd of ["rg -n greet -g '!.git'", "grep -rn --exclude-dir=.git greet .", "Get-ChildItem -Recurse -Exclude .git,node_modules"]) {
+      expect(ok(cmd.startsWith("Get-") ? "PowerShell" : "Bash", cmd), cmd).toBe(true);
+    }
+    for (const cmd of [
+      "npm i", "npm ci", "npm install zod", "pnpm install", "pnpm add zod", "yarn add zod", "pip install x", "pnpm dlx create-x",
+      "npx create-x", "npx vitest@1 run", "npx @scope/tool", "npx -p vitest vitest run", "npm exec create-x", "npm x create-x", "bunx create-x", "npx ../.bin/vitest", "npx x/../vitest",
+      "git push", "curl https://x",
+    ]) {
+      expect(ok("Bash", cmd), cmd).toBe(false);
+    }
+    for (const cmd of [
+      "Get-ChildItem -Recurse | Where-Object { $_.Name -match '.git' } | Remove-Item", "rm -rf .git", "cat .git/config",
+      "Get-ChildItem -Exclude .git > .git/x", "Copy-Item x .claude/settings.json",
+    ]) {
+      expect(ok("PowerShell", cmd), cmd).toBe(false);
+    }
+  });
+
+  it("飞书命令行：工作树里只放行读的；发消息、发邮件、改文档等写操作和登录照样问，看不出是读的也问（新首页设计 11.5）", () => {
+    const ok = (command: string) => autoAllowed("Bash", { command }, scope);
+    for (const cmd of [
+      "lark-cli docs +fetch --doc https://x.feishu.cn/docx/abc", "lark-cli im +messages-search --query 周报", "lark-cli im +chat-messages-list --chat-id oc_1",
+      "lark-cli calendar +agenda", "lark-cli task +get-my-tasks", "lark-cli contact +search-user --query 孙", "lark-cli drive +search --query x",
+      "lark-cli sheets +cells-get --range A1:B2", "lark-cli base +record-list --table t", "lark-cli wiki +node-get --token w",
+      "lark-cli calendar events list --params '{}'", "lark-cli auth status", "lark-cli schema im.messages.create",
+      "lark-cli im +messages-send --help", "lark-cli mail +send --to a@b.c --dry-run", "lark-cli --version",
+    ]) {
+      expect(ok(cmd), cmd).toBe(true);
+    }
+    for (const cmd of [
+      "lark-cli im +messages-send --chat-id oc_1 --text 你好", "lark-cli im +messages-reply --message-id om_1 --text x", "lark-cli mail +send --to a@b.c",
+      "lark-cli mail +draft-send --id d", "lark-cli docs +update --doc x --markdown y", "lark-cli docs +create --title x", "lark-cli drive +upload --file a.md",
+      "lark-cli drive +push", "lark-cli sheets +cells-set --range A1 --value 1", "lark-cli calendar +create --summary 会", "lark-cli task +complete --id t",
+      "lark-cli base +record-batch-update", "lark-cli api POST /open-apis/im/v1/messages", "lark-cli auth login",
+      "lark-cli api GET /open-apis/im/v1/chats", // 直接调接口：读的也问（接口路径看着像工作树外面的路径）
+      "lark-cli event consume im.message.receive_v1",
+      // 11/07 评审：覆盖妙记总结是写；正文里的 --help、--dry-run 不算；--text --dry-run 时 --dry-run 是要发的字；
+      // 套在 $( )、反引号里的写；同一段里第二次出现的写；按资源调方法多写一个 get
+      "lark-cli minutes +summary --minute-token obcn1 --summary 新总结",
+      'lark-cli im +messages-send --chat-id oc_1 --markdown "用法见 lark-cli --help"',
+      'lark-cli docs +create --title 说明 --markdown "先跑 deploy.sh --dry-run"',
+      "lark-cli im +messages-send --chat-id oc_1 --text --dry-run",
+      "lark-cli docs +fetch --doc $(lark-cli im +messages-send --chat-id oc_1 --text hi)",
+      "lark-cli docs +fetch --doc `lark-cli im +messages-send --text hi`",
+      "lark-cli docs +fetch --doc x && echo lark-cli im +messages-send --text y",
+      "lark-cli im messages delete get --message-id om_x --yes",
+      "lark`-cli im +messages-send --chat-id oc_1 --text hi", // PowerShell 的反引号转义：按词认不出 lark-cli
+      "lark-cli --as user im +messages-search --query x", "lark-cli", "lark-cli docs +fetch --doc x; lark-cli im +messages-send --text y",
+      "lark-cli docs +history-revert-status --doc x",
+    ]) {
+      expect(ok(cmd), cmd).toBe(false);
+    }
+  });
+
   it("允许的文件夹：整个磁盘不行；旧版本加进来的不合规矩的条目不算数", () => {
     const dataDir = tempDir("tl-folders-");
     const f = new Folders(dataDir, join(tempDir("tl-home-"), "me"));
@@ -165,7 +233,7 @@ describe("会话里的越界请求、允许的文件夹、全局记忆、网关�
   const fake = (cfg: Record<string, unknown>) => writeFileSync(join(work, ".fake-claude.json"), JSON.stringify(cfg));
   const open = async (extra: Record<string, unknown> = {}) => {
     const s = await api(t.port, token, "POST", "/v1/sessions", { subject: { kind: "card", cardId: "c" }, title: "x", cwd: work, firstMessage: "hi", ...extra });
-    expect(s.status).toBe(200);
+    expect(s.status, JSON.stringify(s.body)).toBe(200);
     return s.body.id as string;
   };
   const pending = (id: string) => until(async () => (await api(t.port, token, "GET", `/v1/sessions/${id}`)).body.pendingPermissions[0]);

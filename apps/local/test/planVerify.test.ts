@@ -137,11 +137,11 @@ describe("规划员和验收员", { timeout: 30_000 }, () => {
 
       // A 这一轮做完让位：验收员先开，交完结论自己退出；接着规划员；最后 B
       await h.allow(a.id);
-      await until(async () => (await h.session(v.id)).session.status === "exited");
-      await h.waitStatus(p.id, "idle");
+      await until(async () => (await h.session(v.id)).session.status === "done");
+      await h.waitStatus(p.id, "done");
       await h.waitStatus(b.id, "waiting_permission");
       expect(h.started()).toEqual([a.id, v.id, p.id, b.id]);
-      expect(h.events(v.id).filter((e) => e.type === "status").at(-1)).toMatchObject({ status: "exited", reason: "验收完了" });
+      expect(h.events(v.id).filter((e) => e.type === "status").at(-1)).toMatchObject({ status: "done", reason: "验收完了" });
 
       // 参数：验收员、规划员不给改东西的工具（子 agent 也不给），只给自己的那个工具和读 Task 上下文；验收员用 Haiku，执行用默认的订阅
       const [av, vv, pv] = [h.argvOf(a.id), h.argvOf(v.id), h.argvOf(p.id)];
@@ -150,7 +150,7 @@ describe("规划员和验收员", { timeout: 30_000 }, () => {
       expect(flagList(vv, "--allowedTools")).toEqual(["mcp__tianshu-session__submit_verdict", "mcp__tianshu__get_task_context"]);
       expect(flagList(pv, "--allowedTools")).toEqual(["mcp__tianshu-session__propose_plan", "mcp__tianshu__get_task_context"]);
       expect(flagList(av, "--allowedTools")).toEqual(expect.arrayContaining(["mcp__tianshu-session__hand_back", "mcp__tianshu__get_task_context"]));
-      expect([flag(vv, "--model"), flag(av, "--model")]).toEqual(["haiku", null]);
+      expect([flag(vv, "--model"), flag(av, "--model")]).toEqual(["haiku", "opus"]); // 执行没说档位：按标准档 Opus
       // 验收员的提示词：验收规矩 + 交代里的验收员岗位
       const vPrompt = readFileSync(flag(vv, "--append-system-prompt-file")!, "utf8");
       expect(vPrompt).toContain("你是验收员：只读");
@@ -178,6 +178,36 @@ describe("规划员和验收员", { timeout: 30_000 }, () => {
     }
   });
 
+  it("无上限（11.3）：验收员用重档（Opus high，不开多 agent），连续没过 3 次才受阻；自动的第 2 次就受阻", async () => {
+    const h = await setup(3);
+    try {
+      h.fake({ verdict: FAILING });
+      h.cloud.setBrief(() => ({ status: 200, body: { markdown: "# 验收交代", criteria: CRITERIA, role: REVIEWER, failStreak: 1 } }));
+      const unlimited = { mode: "unlimited", hours: null, weeklyPercent: null, money: null };
+      const a = await h.open({ ...h.card("A"), taskBudget: { taskId: "T-9", budget: unlimited } });
+      await h.allow(a.id);
+      await h.waitStatus(a.id, "idle");
+      await h.handBack(a.id);
+      const v = await until(async () => (await h.verifies())[0]);
+      await h.waitStatus(v.id, "done");
+      expect(h.events(a.id).find((e) => e.type === "verdict")).toMatchObject({ passed: false, failStreak: 2, blocked: false });
+      const argv = h.argvOf(v.id);
+      expect([flag(argv, "--model"), flag(argv, "--effort")]).toEqual(["opus", "high"]); // 岗位是轻档，无上限改用重档
+      expect(JSON.parse(flag(argv, "--settings")!).ultracode).toBeUndefined();
+      // 自动（没带预算）：同样第 2 次没过就受阻
+      const b = await h.open(h.card("B"));
+      await h.allow(b.id);
+      await h.waitStatus(b.id, "idle");
+      await h.handBack(b.id);
+      const vb = await until(async () => (await h.verifies()).find((x) => x.subject.cardId === "B"));
+      await h.waitStatus(vb.id, "done");
+      expect(h.events(b.id).find((e) => e.type === "verdict")).toMatchObject({ passed: false, failStreak: 2, blocked: true });
+      expect(flag(h.argvOf(vb.id), "--model")).toBe("haiku");
+    } finally {
+      await h.t.cleanup();
+    }
+  });
+
   it("没过：卡的会话里有结论和改法，经「说一句」送回执行会话，改完再交回自动再验；第二次没过停在受阻；过了没有改法", async () => {
     const h = await setup(3);
     try {
@@ -190,7 +220,7 @@ describe("规划员和验收员", { timeout: 30_000 }, () => {
 
       await h.handBack(a.id);
       const v1 = await until(async () => (await h.verifies())[0]);
-      await h.waitStatus(v1.id, "exited");
+      await h.waitStatus(v1.id, "done");
       const first = h.events(a.id).filter((e) => e.type === "verdict");
       expect(first).toHaveLength(1);
       expect(first[0]).toMatchObject({ passed: false, failStreak: 1, blocked: false });
@@ -206,7 +236,7 @@ describe("规划员和验收员", { timeout: 30_000 }, () => {
       await h.handBack(a.id);
       const v2 = await until(async () => (await h.verifies())[1]);
       expect(v2.subject.handbackKey).not.toBe(v1.subject.handbackKey);
-      await h.waitStatus(v2.id, "exited");
+      await h.waitStatus(v2.id, "done");
       const second = h.events(a.id).filter((e) => e.type === "verdict")[1];
       expect(second).toMatchObject({ passed: false, failStreak: 2, blocked: true });
 
@@ -215,7 +245,7 @@ describe("规划员和验收员", { timeout: 30_000 }, () => {
       streak = 0;
       await h.handBack(a.id);
       const v3 = await until(async () => (await h.verifies())[2]);
-      await h.waitStatus(v3.id, "exited");
+      await h.waitStatus(v3.id, "done");
       expect(h.events(a.id).filter((e) => e.type === "verdict")[2]).toMatchObject({ passed: true, failStreak: 0, blocked: false, returnText: null });
       // 验完的验收员，本人想问它，说一句会续上
       expect((await h.call("POST", `/v1/sessions/${v3.id}/messages`, { text: "为什么过了" })).body.delivery).toBe("resumed");
@@ -241,7 +271,7 @@ describe("规划员和验收员", { timeout: 30_000 }, () => {
 
       // 连上天枢：交回送上去，取到交代，开始验收
       await h.link();
-      await h.waitStatus(v1.id, "exited");
+      await h.waitStatus(v1.id, "done");
       // 结论经发件箱送上去（入队后 300 毫秒发），可能比验收员退出晚一点
       expect((await until(() => h.cloud.items.find((i) => i.type === "verdict"))).subject.handbackKey).toBe(v1.subject.handbackKey);
 
@@ -274,7 +304,7 @@ describe("规划员和验收员", { timeout: 30_000 }, () => {
     const h2 = await setup(3, { reuse });
     try {
       const v4 = (await h2.verifies())[3];
-      await h2.waitStatus(v4.id, "exited");
+      await h2.waitStatus(v4.id, "done");
       expect(h2.started()).toContain(v4.id);
       // 交代里没配验收员岗位：用内置规矩、普通档（Sonnet）
       expect(flag(h2.argvOf(v4.id), "--model")).toBe("sonnet");
@@ -340,6 +370,32 @@ describe("规划员和验收员", { timeout: 30_000 }, () => {
       expect(readFileSync(join(h.t.dataDir, "sessions", p.id, "system.md"), "utf8")).toContain("after 写上它要等的那几件的位置");
       expect(systemPrompt("card", null, [], null)).toContain("不要在仓库里留报告或输出文件");
       expect(systemPrompt("verify", null, [], null)).toContain("完成标准没要求的新增或改动的文件");
+    } finally {
+      await h.t.cleanup();
+    }
+  });
+
+  it("规划员交了计划这一轮做完就收工（done，不停在等你回复）；「改一改」对它说一句：续上原来的对话，改完再交一次，又收工", async () => {
+    const h = await setup(3);
+    try {
+      h.fake({ plan: PLAN });
+      const p = await h.open({ subject: { kind: "plan", taskId: "T1" }, title: "拆卡：T1", cwd: h.work, firstMessage: "拆卡交代", role: PLANNER });
+      await h.waitStatus(p.id, "done");
+      const statuses = () => h.events(p.id).filter((e) => e.type === "status");
+      expect(statuses().map((e) => e.status)).not.toContain("idle");
+      expect(statuses().at(-1).reason).toBe("计划交了");
+      expect((await h.session(p.id)).session.status).toBe("done");
+
+      // 改一改：说一句，本机续上原来的对话（--resume），它改完再交一次（revision 2），又收工
+      const first = statuses().length;
+      const say = await h.call("POST", `/v1/sessions/${p.id}/messages`, { text: "改一改：补截图那件并进第一件" });
+      expect(say.body.delivery).toBe("resumed");
+      await until(() => statuses().length > first + 1 && statuses().at(-1).status === "done");
+      expect(statuses().map((e) => e.status).slice(first)).not.toContain("idle");
+      expect(h.trace().filter((l) => l.argv?.includes("--resume")).length).toBe(1);
+      const plans = await until(() => { const x = h.cloud.items.filter((i) => i.type === "card_plan"); return x.length === 2 ? x : null; });
+      expect(plans.map((i) => i.data.revision)).toEqual([1, 2]);
+      expect(h.events(p.id).filter((e) => e.type === "user_message").map((e) => e.text)).toEqual(["拆卡交代", "改一改：补截图那件并进第一件"]);
     } finally {
       await h.t.cleanup();
     }

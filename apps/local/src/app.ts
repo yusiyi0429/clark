@@ -8,13 +8,21 @@ import { createSecretStore, type SecretStore } from "./secrets.js";
 import { ModelProfiles } from "./models.js";
 import { Folders } from "./folders.js";
 import { Outbox } from "./outbox.js";
-import { CloudLink, Settings, fetchVerifyBrief } from "./cloud.js";
-import { SessionManager } from "./sessions.js";
+import { CloudLink, Settings, fetchAttachment, fetchVerifyBrief } from "./cloud.js";
+import { MAX_ATTACHMENT_BYTES } from "./attachments.js";
+import { cloneRepo } from "./handover.js";
+import { SessionManager, type SessionDeps } from "./sessions.js";
 import { ClaudeSetup } from "./agents/claudeSetup.js";
-import { ClaudeCodeAdapter, type ClaudeBin } from "./agents/claudeCode.js";
+import { ClaudeCodeAdapter, readUsage, type ClaudeBin } from "./agents/claudeCode.js";
 import { CodexAdapter } from "./agents/codex.js";
 import { homeDir } from "./agents/claudeEnv.js";
 import { createServer } from "./http/server.js";
+import { QuotaTracker } from "./quota.js";
+import { CliTools, type ToolExec } from "./tools.js";
+import { GatewayPricing } from "./pricing.js";
+import { GatewaySpend } from "./spend.js";
+import { Budgets } from "./budget.js";
+import { CodexQuota, readCodexLimits } from "./codexQuota.js";
 import { createDesktop, openUrl, type Desktop, type MenuAction } from "./desktop/index.js";
 
 export interface RunnerOptions {
@@ -30,6 +38,14 @@ export interface RunnerOptions {
   allowedOrigins?: string[];
   /** 本人已装技能的目录（找飞书技能）；默认 ~/.claude/skills。 */
   skillsDir?: string;
+  /** 测试用：替换查 gh、lark-cli 登录状态的执行（不去跑本人电脑上真装的）。 */
+  toolsExec?: ToolExec;
+  /** 测试用：停着等额度时的等待时长。 */
+  holdTiming?: SessionDeps["holdTiming"];
+  /** 接手项目时 clone 仓库（测试里换成从本地仓库 clone）。 */
+  cloneRepo?: typeof cloneRepo;
+  /** 读本人 Codex 订阅的额度（测试里换成假的；没装回 null）。 */
+  codexLimits?: () => Promise<Record<string, unknown> | null>;
   onQuit?: () => void;
 }
 
@@ -67,6 +83,29 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
     return res;
   };
   const claude = new ClaudeSetup(config.claudePath);
+  const claudeBin = opts.claudeBin ? async () => opts.claudeBin! : () => claude.bin();
+  // 额度：向 Claude Code 读（不发提示、不花 token），跑着的卡报的也算进来
+  const quota = new QuotaTracker(config.dataDir, async () => {
+    const bin = await claudeBin();
+    if (!bin) throw new Error("这台电脑上没找到 Claude Code");
+    return readUsage(bin, config.dataDir);
+  });
+  // Codex 订阅的额度：装了 Codex 才有，只显示、同步，不挡卡
+  const codexQuota = new CodexQuota(opts.codexLimits ?? (() => readCodexLimits()));
+  outbox.quota = () => [...quota.syncView(), ...codexQuota.syncView(), ...spend.syncView()];
+  const tools = new CliTools(opts.toolsExec);
+  const pricing = new GatewayPricing(baseFetch);
+  // TokenHub 今天、本月花了多少：用本机存的网关钥匙读 TokenHub 自己的统计（每人一个计费账户）
+  const spend = new GatewaySpend(async () => {
+    const out: { baseUrl: string; apiKey: string }[] = [];
+    for (const p of await models.list()) {
+      if (p.source !== "gateway" || !p.hasKey) continue;
+      const m = await models.resolve(p.id);
+      if (m?.baseUrl && m.apiKey) out.push({ baseUrl: m.baseUrl, apiKey: m.apiKey });
+    }
+    return out;
+  }, baseFetch);
+  const budgets = new Budgets(config.dataDir);
   let sessionsRef: SessionManager | null = null;
   const updateTray = () => desktop.setState({ paired: tokens.count() > 0, running: sessionsRef?.activeCount() ?? 0, paused: settings.get().paused });
   const sessions = new SessionManager({
@@ -75,20 +114,25 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
     paused: () => settings.get().paused,
     skillsDir: opts.skillsDir ?? join(homeDir(), ".claude", "skills"),
     maxConcurrent: () => settings.get().maxConcurrent,
+    autoMerge: () => settings.get().autoMerge,
+    quota, pricing, budgets, holdTiming: opts.holdTiming,
     verifyBrief: async (handbackKey) => fetchVerifyBrief(await cloud.target(), handbackKey, cloudFetch),
+    fetchAttachment: async (id) => fetchAttachment(await cloud.target(), id, cloudFetch, MAX_ATTACHMENT_BYTES),
     adapters: {
-      "claude-code": new ClaudeCodeAdapter(opts.claudeBin ? async () => opts.claudeBin! : () => claude.bin()),
+      "claude-code": new ClaudeCodeAdapter(claudeBin),
       codex: new CodexAdapter(),
     },
     onChange: updateTray,
   });
   sessionsRef = sessions;
+  quota.onChange = () => sessions.onQuotaChange();
   outbox.slots = () => sessions.slots();
   // 交回送到天枢以后去取验收交代。
   outbox.onSent = () => void sessions.pullBriefs();
   const server = createServer({
-    config, version: VERSION, tokens, pairings, sessions, log, models, folders, claude, cloud, settings,
+    config, version: VERSION, tokens, pairings, sessions, log, models, folders, claude, cloud, settings, quota, codexQuota, tools, spend,
     pickFolder: () => desktop.pickFolder(),
+    cloneRepo: opts.cloneRepo ?? cloneRepo,
     fetchImpl: cloudFetch,
     onSettingsChange: updateTray,
   });
@@ -96,6 +140,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   let closing: Promise<void> | null = null;
   const close = () => closing ??= (async () => {
     outbox.stop();
+    tools.stop();
     await sessions.shutdown();
     desktop.stop();
     await new Promise<void>((r) => server.close(() => r()));
@@ -118,6 +163,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   void sessions.pullBriefs();
   void sessions.pruneWorktrees();
   void sessions.releaseWaiting();
+  tools.start();
   await desktop.start((a) => void onMenu(a));
   updateTray();
   setInterval(updateTray, 10_000).unref();

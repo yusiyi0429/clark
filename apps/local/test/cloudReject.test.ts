@@ -2,7 +2,7 @@
 // 会话的天枢 MCP 碰到 401 时用同步接口确认一次：同步也 401 才算被拒（/mcp/me 不认设备令牌时不能把关联弄掉）。
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { api, pair, raw, startTestRunner, tempDir, ORIGIN } from "./helpers.js";
 
 async function until<T>(fn: () => Promise<T | null | undefined | false> | T | null | undefined | false, ms = 10_000): Promise<T> {
@@ -60,6 +60,40 @@ async function setup() {
 }
 
 describe("云端令牌被拒", { timeout: 30_000 }, () => {
+  it("闲着、没有待发的条目，设备在插件页被吊销：到点的心跳（一批空的）回 401，当成没关联；网页拿新令牌重新关联后心跳正常、原因清掉（11/07 第二遍真跑的路径）", async () => {
+    const h = await setup();
+    const beatAfter = async (ms: number) => {
+      // 定时器每分钟做的就是这一步；闲着满 5 分钟才真发
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(Date.now() + ms);
+      try { await h.t.runner.outbox.heartbeat(); } finally { vi.useRealTimers(); }
+    };
+    try {
+      h.cloud.state.valid = OLD;
+      expect((await h.link(OLD)).status).toBe(200);
+      await h.t.runner.outbox.heartbeat();
+      expect(h.cloud.state.syncCalls).toBe(1);
+      expect(await h.view()).toMatchObject({ linked: true, outbox: { pending: 0, lastError: null } });
+
+      h.cloud.state.valid = NEW; // 吊销：旧令牌云端不认了
+      await h.t.runner.outbox.heartbeat(); // 刚同步过，不到 5 分钟不发
+      expect([h.cloud.state.syncCalls, (await h.view()).linked]).toEqual([1, true]);
+      await beatAfter(5 * 60_000 + 1_000);
+      expect(h.cloud.state.syncCalls).toBe(2);
+      const v = await until(async () => { const x = await h.view(); return x.linked ? null : x; });
+      expect(v).toMatchObject({ apiBaseUrl: null, outbox: { pending: 0, lastError: "云端令牌无效，请在天枢网页里重新连接本机" } });
+      expect((await h.call("GET", "/v1/status")).body.cloud.linked).toBe(false);
+
+      // 网页看到没关联，拿新令牌重新关联（插件页就是这样做的）
+      expect((await h.link(NEW)).status).toBe(200);
+      await beatAfter(5 * 60_000 + 1_000);
+      expect(await h.view()).toMatchObject({ linked: true, outbox: { pending: 0, lastError: null } });
+    } finally {
+      vi.useRealTimers();
+      await h.t.cleanup();
+    }
+  });
+
   it("同步回 401：当成没关联、原因留着、发件箱不丢；重新关联后接着发", async () => {
     const h = await setup();
     try {

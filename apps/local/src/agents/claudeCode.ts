@@ -1,8 +1,8 @@
 import { spawn, execFile, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import type { TLocalPermissionRequestView, TLocalQuestion, TLocalUsage } from "@warmap/contracts";
+import type { TLocalBackgroundItem, TLocalPermissionRequestView, TLocalQuestion, TLocalUsage } from "@warmap/contracts";
 import type { EventBody } from "../eventLog.js";
-import { AgentStartError, type AgentAdapter, type AgentLaunch, type AgentRun, type PermissionAnswer } from "./types.js";
+import { AgentStartError, type AgentAdapter, type AgentLaunch, type AgentRun, type PermissionAnswer, type TurnModels } from "./types.js";
 import { buildClaudeArgs, childEnv, describeTool, homeDir, personalSettingsSetKey, versionAtLeast } from "./claudeEnv.js";
 import { autoAllowed, outsidePaths, suggestionsReachOutside, type PathScope } from "./pathGuard.js";
 import { planProgress } from "../plan.js";
@@ -49,17 +49,51 @@ function questionsOf(input: Json): TLocalQuestion[] {
   }));
 }
 
+/** 算子 agent 的后台任务种类（Claude Code 的 task_type）；别的（后台命令、监视、工作流等）都算 command。 */
+const AGENT_TASKS = new Set(["local_agent", "remote_agent", "in_process_teammate"]);
+/** Claude Code 的任务状态 → 契约里的 state。pending、paused 算还在跑。 */
+const TASK_STATE: Record<string, TLocalBackgroundItem["state"]> = {
+  pending: "running", running: "running", paused: "running", completed: "done", failed: "failed", killed: "stopped", stopped: "stopped",
+};
+const isoOf = (ms: unknown) => (typeof ms === "number" && ms > 0 ? new Date(ms).toISOString() : new Date().toISOString());
+
 function usageOf(result: Json): TLocalUsage {
   const u = result.usage ?? {};
   // result.usage 是本轮的；total_cost_usd 是整个会话累计的，本轮花费看 model_usage_since_last_result（11/05 日志核对过）。
+  // 网关模型的 costBasis 是 unknown：Claude Code 按 Opus 价瞎算（DeepSeek 高估约 17 倍），这一轮不算；没有 costBasis 的旧版本照旧算。
+  // 这一轮没调成模型（出错、碰壁）时是 {}，算 0（不然本会话累计的标价就一直是 null 了）
   const since = result.model_usage_since_last_result as Record<string, Json> | undefined;
-  const cost = since ? Object.values(since).reduce((s, m) => s + (Number(m.costUSD) || 0), 0) : null;
+  const models = since ? Object.values(since) : [];
+  const unpriced = models.some((m) => m.costBasis !== undefined && m.costBasis !== "list");
+  const cost = since && !unpriced ? models.reduce((s, m) => s + (Number(m.costUSD) || 0), 0) : null;
   return {
     inputTokens: Number(u.input_tokens) || 0,
     outputTokens: Number(u.output_tokens) || 0,
     cacheReadTokens: Number(u.cache_read_input_tokens) || 0,
     cacheWriteTokens: Number(u.cache_creation_input_tokens) || 0,
     costUsd: cost,
+  };
+}
+
+/**
+ * 这一轮每个模型用了多少、发了几次请求（给本机按价目表算网关的钱）。请求次数按这一轮里不同的助手消息 id 数（主循环和子 agent 都算）：
+ * TokenHub 上 result 的 usage.iterations 总是空的（11/06 真机记录）。助手消息里的模型名是上游回的（不带前缀），result 里的是配置的（可能带 wangsu/ 这种前缀）。
+ */
+function turnModelsOf(result: Json, ids: Map<string, Set<string>>): TurnModels | null {
+  const since = result.model_usage_since_last_result as Record<string, Json> | undefined;
+  if (!since) return null;
+  const n = (v: unknown) => Math.max(0, Number(v) || 0);
+  const keys = Object.keys(since);
+  const requestsOf = (key: string): number | null => {
+    const sets = keys.length === 1 ? [...ids.values()] : [...ids.entries()].filter(([m]) => m === key || key.endsWith(`/${m}`) || m.endsWith(`/${key}`)).map(([, s]) => s);
+    const count = new Set(sets.flatMap((s) => [...s])).size;
+    return count || null;
+  };
+  return {
+    models: Object.entries(since).map(([model, m]) => ({
+      model, inputTokens: n(m.inputTokens), outputTokens: n(m.outputTokens), cacheReadTokens: n(m.cacheReadInputTokens), cacheWriteTokens: n(m.cacheCreationInputTokens),
+      costBasis: typeof m.costBasis === "string" ? m.costBasis : null, requests: requestsOf(model),
+    })),
   };
 }
 
@@ -72,14 +106,27 @@ class ClaudeRun implements AgentRun {
   private readonly permissions = new Map<string, { req: Json; broad: boolean }>();
   /** 在等本人回答的提问（AskUserQuestion）。 */
   private readonly questions = new Map<string, Json>();
+  /** Claude Code 报来的任务（task_started 起）。visible：算不算后台任务（前台跑完的普通命令、它内部的任务不算）。 */
+  private readonly tasks = new Map<string, { item: TLocalBackgroundItem; visible: boolean }>();
+  private readonly rateFns: ((info: Json) => void)[] = [];
+  private markReported: () => void = () => {};
+  /** 退出已经报给会话（onExit 都跑过了）。 */
+  private readonly exitReported = new Promise<void>((r) => { this.markReported = r; });
+  lastTurn: TurnModels | null = null;
+  /** 这一轮见过的助手消息 id（按助手消息里的模型名分）：数请求次数。 */
+  private turnIds = new Map<string, Set<string>>();
   private interrupting = false;
   private exited = false;
   private authFailed = false;
   private apiRetried = false;
+  /** 这一轮碰到订阅额度用完了（rate_limit_event rejected、usage_limit_reached）。 */
+  private limitHit = false;
+  /** 这一轮网关说余额不足（billing_error）。 */
+  private balanceHit = false;
 
   constructor(
     private readonly child: ChildProcessWithoutNullStreams, private readonly sessionId: string, private readonly scope: PathScope,
-    private readonly autoAllowRoot: string | null,
+    private readonly autoAllowRoot: string | null, private readonly subscription: boolean,
   ) {
     child.stdout.setEncoding("utf8").on("data", (d: string) => this.onStdout(d));
     let errBuf = "";
@@ -93,7 +140,16 @@ class ClaudeRun implements AgentRun {
       this.exited = true;
       for (const r of this.hostRequests.values()) r({ subtype: "error", error: "process exited" });
       this.hostRequests.clear();
-      for (const fn of this.exitFns) fn(code);
+      // 退出时最后几行可能还没读完（额度用完时 Claude Code 报完 rate_limit_event 就退出）：读完再报退出，最多等 1 秒
+      let reported = false;
+      const report = () => {
+        if (reported) return;
+        reported = true;
+        for (const fn of this.exitFns) fn(code);
+        this.markReported();
+      };
+      if (child.stdout.readableEnded) report();
+      else { setTimeout(report, 1_000).unref(); child.stdout.once("end", report); }
     });
     child.stdin.on("error", () => { /* 进程已退出时写 stdin 会 EPIPE，由 exit 处理 */ });
   }
@@ -102,6 +158,8 @@ class ClaudeRun implements AgentRun {
   onEvent(fn: (e: EventBody) => void) { this.eventFns.push(fn); }
   onExit(fn: (code: number | null) => void) { this.exitFns.push(fn); }
   private emit(e: EventBody) { for (const fn of this.eventFns) fn(e); }
+
+  onRateLimit(fn: (info: Json) => void) { this.rateFns.push(fn); }
 
   private write(obj: Json) {
     if (this.exited) return;
@@ -143,6 +201,42 @@ class ClaudeRun implements AgentRun {
     return true;
   }
 
+  isWaiting(requestId: string): boolean {
+    return this.permissions.has(requestId) || this.questions.has(requestId);
+  }
+
+  async setMultiAgent(on: boolean): Promise<boolean> {
+    const r = await this.control({ subtype: "apply_flag_settings", settings: { ultracode: on } }, 10_000);
+    return r.subtype === "success";
+  }
+
+  async stopTask(taskId: string): Promise<boolean> {
+    const r = await this.control({ subtype: "stop_task", task_id: taskId }, 10_000);
+    return r.subtype === "success";
+  }
+
+  /** 任务开始或变了：记下，算后台任务的报给会话（状态、名字、能不能停有变化才报）。 */
+  private taskChanged(id: string, change: Partial<TLocalBackgroundItem>, visible?: boolean) {
+    const t = this.tasks.get(id);
+    if (!t) return;
+    const next: TLocalBackgroundItem = { ...t.item, ...change };
+    if (next.state !== "running") {
+      next.stoppable = false;
+      next.finishedAt ??= new Date().toISOString();
+    }
+    const shown = visible ?? t.visible;
+    const differs = (["title", "state", "finishedAt", "stoppable"] as const).some((k) => next[k] !== t.item[k]);
+    this.tasks.set(id, { item: next, visible: shown });
+    if (shown && (differs || !t.visible)) this.emit({ type: "background", item: next });
+    if (next.state === "running") return;
+    // 子 agent 结束了（多半是被停了），它还在等的权限请求作废（agent_id 就是它的 task_id），不然会话一直等你批准
+    for (const [requestId, p] of this.permissions) {
+      if (p.req.agent_id !== id) continue;
+      this.permissions.delete(requestId);
+      this.emit({ type: "permission_resolved", requestId, decision: "deny", message: "子 agent 已结束", allowForSession: false });
+    }
+  }
+
   respondQuestion(requestId: string, answers: Record<string, string>): boolean {
     const req = this.questions.get(requestId);
     if (!req) return false;
@@ -159,11 +253,12 @@ class ClaudeRun implements AgentRun {
   }
 
   kill(): Promise<void> {
-    if (this.exited || this.child.pid === undefined) return Promise.resolve();
+    if (this.child.pid === undefined) return Promise.resolve();
+    if (this.exited) return this.exitReported;
     const pid = this.child.pid;
     return new Promise((resolve) => {
       const done = () => resolve();
-      this.child.once("exit", done);
+      void this.exitReported.then(done);
       if (process.platform === "win32") {
         // 只杀自己 spawn 出来、记下的这个 PID 及其子进程。
         execFile("taskkill", ["/PID", String(pid), "/T", "/F"], { windowsHide: true }, () => setTimeout(done, 2_000));
@@ -245,6 +340,28 @@ class ClaudeRun implements AgentRun {
         return;
       }
       case "system": {
+        if (ev.subtype === "task_started" && typeof ev.task_id === "string" && !ev.ambient && !ev.skip_transcript) {
+          // 后台任务：子 agent 都算；命令只算放到后台的（前台跑完的普通命令不算）；Claude Code 别的任务算 command
+          const type = String(ev.task_type ?? "");
+          const kind = AGENT_TASKS.has(type) ? "subagent" : "command";
+          const visible = kind === "subagent" || type !== "local_bash" || ev.is_backgrounded === true;
+          // 名字用 Claude Code 给的说明（模型没写说明时它自己会填上命令）；不另外取命令和子 agent 的提示词，免得把整段命令、提示词同步到云端
+          const title = String(ev.description ?? "").trim().slice(0, 200) || (kind === "subagent" ? "子 agent" : "后台命令");
+          const item: TLocalBackgroundItem = { id: ev.task_id.slice(0, 120), title, kind, state: "running", startedAt: new Date().toISOString(), finishedAt: null, stoppable: true };
+          this.tasks.set(ev.task_id, { item, visible });
+          if (visible) this.emit({ type: "background", item });
+        } else if (ev.subtype === "task_updated" && typeof ev.task_id === "string") {
+          const p = ev.patch ?? {};
+          const state = TASK_STATE[String(p.status)];
+          this.taskChanged(ev.task_id, {
+            ...(state ? { state } : {}),
+            ...(typeof p.description === "string" && p.description.trim() ? { title: p.description.trim().slice(0, 200) } : {}),
+            ...(state && state !== "running" && p.end_time ? { finishedAt: isoOf(p.end_time) } : {}),
+          }, p.is_backgrounded === true ? true : undefined);
+        } else if (ev.subtype === "task_notification" && typeof ev.task_id === "string") {
+          const state = TASK_STATE[String(ev.status)];
+          if (state) this.taskChanged(ev.task_id, { state });
+        }
         if (ev.subtype === "init") {
           this.emit({ type: "agent_info", agent: "claude-code", version: String(ev.claude_code_version ?? ""), model: ev.model ?? null, permissionMode: ev.permissionMode ?? null });
         } else if (ev.subtype === "api_retry" && ev.error === "authentication_failed") {
@@ -259,7 +376,26 @@ class ClaudeRun implements AgentRun {
         }
         return;
       }
+      case "rate_limit_event": {
+        // 额度变化（只在百分比、重置时间、状态变了时来）：给本机记额度；rejected 就是用完了（用完的这一串没真机复现过，照社区复现和 Claude Code 程序里的字符串）
+        const info = ev.rate_limit_info;
+        if (!info || typeof info !== "object") return;
+        if (info.status === "rejected" && this.subscription) this.limitHit = true;
+        for (const fn of this.rateFns) fn(info);
+        return;
+      }
       case "assistant": {
+        // 订阅额度用完时 Claude Code 自己补一条助手消息：error rate_limit、api_error usage_limit_reached（文字会变，不看文字）。
+        // 只有 error rate_limit 的是别的 429（限流），照旧算模型服务的错，不当成额度用完
+        if (this.subscription && ev.api_error === "usage_limit_reached") this.limitHit = true;
+        // 网关余额不足（TokenHub 回 402，Claude Code 记成 billing_error）：停着等本人，不重试
+        if (!this.subscription && (ev.error === "billing_error" || ev.api_error === "billing_error")) this.balanceHit = true;
+        const msgId = ev.message?.id;
+        if (typeof msgId === "string" && !ev.error) {
+          const model = String(ev.message?.model ?? "");
+          if (!this.turnIds.has(model)) this.turnIds.set(model, new Set());
+          this.turnIds.get(model)!.add(msgId);
+        }
         if (ev.error === "authentication_failed") this.authFailure("Claude 还没登录或登录已失效，请在天枢里登录 Claude。");
         else if (!ev.error) this.apiRetried = false; // 重试后模型又答上来了：这一轮之后再出错不算模型服务的错
         if (ev.parent_tool_use_id) return; // 子代理内部的步骤不逐条上屏
@@ -293,8 +429,15 @@ class ClaudeRun implements AgentRun {
       case "result": {
         const interrupted = this.interrupting && ev.subtype === "error_during_execution";
         const apiRetried = this.apiRetried;
+        const limited = this.limitHit;
+        // 余额不足：TokenHub 回 402，正文是 Insufficient wallet balance（tokavi-tokenhub f31dd05 的 exception_handler）
+        const balance = !this.subscription && (this.balanceHit || ev.api_error_status === 402 || /insufficient wallet balance/i.test(String(ev.result ?? "")));
         this.interrupting = false;
         this.apiRetried = false;
+        this.limitHit = false;
+        this.balanceHit = false;
+        this.lastTurn = turnModelsOf(ev, this.turnIds);
+        this.turnIds = new Map();
         const isError = Boolean(ev.is_error) || ev.subtype !== "success";
         const auth = this.authFailed || ev.api_error_status === 401;
         if (auth && !this.authFailed) this.authFailure("Claude 登录已失效，请在天枢里重新登录 Claude。");
@@ -305,13 +448,51 @@ class ClaudeRun implements AgentRun {
           durationMs: Math.max(0, Math.round(Number(ev.duration_ms) || 0)),
           usage: usageOf(ev),
           // 拒连、超时没有 HTTP 状态码，但这一轮重试过就算模型服务的错。
-          ...(isError ? { errorKind: interrupted ? "interrupted" : auth ? "auth" : ev.api_error_status || apiRetried ? "api" : "other" } : {}),
+          ...(isError ? { errorKind: interrupted ? "interrupted" : auth ? "auth" : limited ? "usage_limit" : balance ? "balance" : ev.api_error_status || apiRetried ? "api" : "other" } : {}),
         } as EventBody);
         return;
       }
       default:
         return;
     }
+  }
+}
+
+/**
+ * 读本人订阅的额度：起一个不发提示的 Claude Code（不存会话、不读本人的全局设置），只发 initialize 和 get_usage，读完就关。
+ * 11/07 实测不花 token、get_usage 约 0.7 秒回。get_usage 是 Claude Code 自己标的实验接口，形状可能变。读不到抛错。
+ */
+export async function readUsage(bin: ClaudeBin, cwd: string, baseEnv: NodeJS.ProcessEnv = process.env, timeoutMs = 30_000): Promise<Json> {
+  const args = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--setting-sources", "project,local", "--strict-mcp-config", "--no-session-persistence"];
+  const child = spawn(bin.command, [...bin.prefixArgs, ...args], { cwd, env: childEnv(baseEnv, { DISABLE_AUTOUPDATER: "1" }), stdio: ["pipe", "pipe", "pipe"], windowsHide: true, shell: false });
+  const waiters = new Map<string, (r: Json) => void>();
+  let buf = "";
+  child.stdout.setEncoding("utf8").on("data", (d: string) => {
+    buf += d;
+    for (let i = buf.indexOf("\n"); i >= 0; i = buf.indexOf("\n")) {
+      const line = buf.slice(0, i).trim();
+      buf = buf.slice(i + 1);
+      let ev: Json;
+      try { ev = JSON.parse(line); } catch { continue; }
+      if (ev.type === "control_response") waiters.get(ev.response?.request_id)?.(ev.response);
+    }
+  });
+  child.stderr.resume();
+  const gone = new Promise<Json>((resolve) => { child.once("error", (e) => resolve({ subtype: "error", error: e.message })); child.once("exit", () => resolve({ subtype: "error", error: "Claude Code 退出了" })); });
+  const control = (id: string, request: Json) => Promise.race([
+    new Promise<Json>((resolve) => { waiters.set(id, resolve); child.stdin.write(`${JSON.stringify({ type: "control_request", request_id: id, request })}\n`); }),
+    gone,
+    new Promise<Json>((resolve) => setTimeout(() => resolve({ subtype: "error", error: "读额度超时" }), timeoutMs).unref()),
+  ]);
+  try {
+    const init = await control("u1", { subtype: "initialize" });
+    if (init.subtype !== "success") throw new Error(String(init.error ?? "Claude Code 没有响应握手"));
+    const usage = await control("u2", { subtype: "get_usage", skip_behaviors: true });
+    if (usage.subtype !== "success" || !usage.response) throw new Error(String(usage.error ?? "没读到额度"));
+    return usage.response;
+  } finally {
+    child.stdin.end();
+    setTimeout(() => { try { child.kill(); } catch { /* 已退出 */ } }, 5_000).unref();
   }
 }
 
@@ -336,7 +517,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       // Mac/Linux 上自成进程组，强停时整组杀掉。
       detached: process.platform !== "win32",
     });
-    const run = new ClaudeRun(child, launch.sessionId, { cwd: launch.cwd, home: homeDir(), allowedRoots: launch.allowedRoots }, launch.autoAllowRoot);
+    const run = new ClaudeRun(child, launch.sessionId, { cwd: launch.cwd, home: homeDir(), allowedRoots: launch.allowedRoots }, launch.autoAllowRoot, launch.model.source === "subscription");
     const spawned = await new Promise<Error | null>((resolve) => {
       child.once("spawn", () => resolve(null));
       child.once("error", (e) => resolve(e));

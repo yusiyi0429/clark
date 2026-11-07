@@ -1,10 +1,12 @@
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import type { TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import {
   LOCAL_RUNNER_PROTOCOL, LOCAL_RUNNER_ROUTES, LOCAL_RUNNER_TOKEN_HEADER,
   LocalPairingStartRequest, LocalAgentLoginCodeRequest, LocalCloudLinkRequest, LocalSettingsPatch, LocalModelProfileUpsert,
-  LocalCreateSessionRequest, LocalCreateSessionBatchRequest, LocalSendMessageRequest, LocalPermissionDecisionRequest, LocalQuestionAnswerRequest,
+  LocalCreateSessionRequest, LocalCreateSessionBatchRequest, LocalSendMessageRequest, LocalPermissionDecisionRequest, LocalQuestionAnswerRequest, LocalBudgetUpdateRequest, LocalProjectFolderRequest, LocalProjectCloneRequest,
   type TLocalRunnerErrorCode, type TLocalStatusResponse, type TLocalHealthResponse,
 } from "@warmap/contracts";
 import { checkHost, checkJson, checkOrigin, corsHeaders, preflightHeaders, type Rejection } from "./security.js";
@@ -17,6 +19,12 @@ import type { Folders } from "../folders.js";
 import type { ClaudeSetup } from "../agents/claudeSetup.js";
 import type { CloudLink, Settings } from "../cloud.js";
 import type { RunnerConfig } from "../config.js";
+import type { QuotaTracker } from "../quota.js";
+import type { GatewaySpend } from "../spend.js";
+import type { CodexQuota } from "../codexQuota.js";
+import { claudeTool } from "../tools.js";
+import { handoverCheck, repoName, stripCredentials, type cloneRepo } from "../handover.js";
+import type { CliTools } from "../tools.js";
 import { DEV_PAGE } from "./devPage.js";
 import { handleMcpMessage } from "../sessionMcp.js";
 
@@ -32,7 +40,13 @@ export interface ServerDeps {
   claude: ClaudeSetup;
   cloud: CloudLink;
   settings: Settings;
+  quota: QuotaTracker;
+  spend: GatewaySpend;
+  codexQuota: CodexQuota;
+  tools: CliTools;
   pickFolder: () => Promise<string | null>;
+  /** 接手项目时 clone 仓库（16.7；测试里换成从本地仓库 clone）。 */
+  cloneRepo: typeof cloneRepo;
   onSettingsChange?: () => void;
   /** 转发天枢 MCP 用；测试里换成桩。 */
   fetchImpl: typeof fetch;
@@ -115,10 +129,18 @@ export function createServer(d: ServerDeps): http.Server {
       return r;
     },
     unpair: (c) => { d.tokens.revoke(c.token!); return { ok: true }; },
-    status: async (): Promise<TLocalStatusResponse> => ({
-      deviceId: d.config.deviceId, version: d.version, agents: [await d.claude.status()],
-      activeSessions: d.sessions.activeCount(), slots: d.sessions.slots(), cloud: d.cloud.view(), settings: d.settings.get(),
-    }),
+    status: async (): Promise<TLocalStatusResponse> => {
+      const claude = await d.claude.status();
+      // 额度读缓存；超过 5 分钟没读过就在后台读一次（不发提示、不花 token），下一次轮询就有了
+      if (claude.installed && claude.loggedIn) void d.quota.refresh();
+      void d.spend.refresh(); // TokenHub 今天、本月花了多少：同样 5 分钟读一次
+      void d.codexQuota.refresh(); // Codex 订阅的额度（没装就不列）
+      return {
+        deviceId: d.config.deviceId, version: d.version, agents: [claude],
+        activeSessions: d.sessions.activeCount(), slots: d.sessions.slots(), cloud: d.cloud.view(), settings: d.settings.get(),
+        quota: [...d.quota.view(), ...d.codexQuota.view(), ...d.spend.view()], tools: [claudeTool(claude), ...d.tools.view()],
+      };
+    },
     installAgent: (c) => { agentMustBeClaude(c); if (!d.claude.install()) throw new HttpError(409, "conflict", "正在安装或登录中"); return { ok: true }; },
     loginAgent: async (c) => { agentMustBeClaude(c); if (!(await d.claude.login())) throw new HttpError(409, "conflict", "没装 Claude Code，或正在安装、登录中"); return { ok: true }; },
     loginAgentCode: (c) => {
@@ -157,7 +179,7 @@ export function createServer(d: ServerDeps): http.Server {
       }
     },
     deleteModel: async (c) => { if (!(await d.models.remove(c.params.id!))) throw new HttpError(404, "not_found", "没有这个模型配置，或是内置配置"); return { ok: true }; },
-    listFolders: () => ({ folders: d.folders.list() }),
+    listFolders: () => ({ folders: d.folders.listWithProjects() }),
     pickFolder: async () => {
       const p = await d.pickFolder();
       if (!p) return { folder: null };
@@ -187,7 +209,46 @@ export function createServer(d: ServerDeps): http.Server {
     kill: async (c) => ({ session: await d.sessions.kill(c.params.id!) }),
     mergeSession: (c) => d.sessions.merge(c.params.id!),
     answerQuestion: (c) => ({ session: d.sessions.answerQuestion(c.params.id!, c.params.requestId!, validate(LocalQuestionAnswerRequest, c.body)) }),
+    stopBackground: async (c) => ({ session: await d.sessions.stopBackground(c.params.id!, c.params.itemId!) }),
+    listBudgets: () => ({ budgets: d.sessions.budgets() }),
+    putBudget: (c) => d.sessions.setBudget(validate(LocalBudgetUpdateRequest, c.body)),
+    listProjects: () => ({ projects: d.folders.projects() }),
+    putProjectFolder: (c) => {
+      const b = validate(LocalProjectFolderRequest, c.body);
+      const r = d.folders.bindProject(projectIdOf(c), b.folderId, b.name);
+      if (!r) throw new HttpError(404, "not_found", "没有这个文件夹，先选文件夹");
+      return r;
+    },
+    // 交接检查（16.7）：项目绑的文件夹现在什么样，只看 git
+    handoverCheck: async (c) => {
+      const p = d.folders.projects().find((x) => x.projectId === projectIdOf(c));
+      return handoverCheck(projectIdOf(c), p?.folder ? { path: p.folder.path, label: p.folder.label } : null);
+    },
+    // 接手以后「拉到这台电脑」（16.7）：本人选放在哪，clone、切到交接分支、加进允许的文件夹、绑到项目
+    cloneProject: async (c) => {
+      const b = validate(LocalProjectCloneRequest, c.body);
+      const parent = await d.pickFolder();
+      if (!parent) return { project: null, branch: null, fellBack: false };
+      const name = (b.name ?? repoName(b.repoUrl)).replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_").replace(/^\.+/, "_").trim() || "repo";
+      const dest = join(parent, name);
+      const why = d.folders.rejectReason(dest);
+      if (why) throw new HttpError(400, "validation", why);
+      if (existsSync(dest)) throw new HttpError(400, "validation", `${parent} 里已经有「${name}」了，换个地方，或者直接选那个文件夹绑上`);
+      let got: Awaited<ReturnType<typeof cloneRepo>>;
+      try { got = await d.cloneRepo(b.repoUrl, dest, b.branch); } catch (e) {
+        throw new HttpError(409, "conflict", `没拉下来：${stripCredentials(e instanceof Error ? e.message : String(e)).replace(/(https?:\/\/)[^/@\s]*@/g, "$1").slice(0, 400)}`);
+      }
+      const folder = d.folders.add(dest);
+      return { project: d.folders.bindProject(projectIdOf(c), folder.id), ...got };
+    },
   };
+
+  /** 项目 id 是天枢给的 uuid（和 projects.ts 一致）。 */
+  function projectIdOf(c: Ctx): string {
+    const id = c.params.projectId ?? "";
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw new HttpError(400, "validation", "项目 id 不对");
+    return id;
+  }
 
   function agentMustBeClaude(c: Ctx) {
     if (c.params.agent === "codex") throw new HttpError(501, "not_implemented", "Codex 12 月接入");

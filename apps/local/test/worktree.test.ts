@@ -1,5 +1,5 @@
 // 卡在自己的 git 工作树里做（ADR 0038）：用真的临时 git 仓库测两张卡同时做、交回提交、验收员只看这张卡的改动、合回、不是仓库时排队、清理。
-// 假 claude 的配置（.fake-claude.json）提交在仓库里，工作树里也有；它的记录文件在 .gitignore 里，不进提交。
+// 假 claude 的配置（.fake-claude.json）提交在仓库里，工作树里也有；它的两个记录文件在 .gitignore 里，不进提交。
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -31,7 +31,7 @@ function repo(busy = false): string {
   git(dir, "config", "user.name", "测试");
   git(dir, "config", "user.email", "test@example.com");
   git(dir, "config", "core.autocrlf", "false");
-  writeFileSync(join(dir, ".gitignore"), ".fake-claude-trace.jsonl\n");
+  writeFileSync(join(dir, ".gitignore"), ".fake-claude-trace.jsonl\n.fake-claude-turns.jsonl\n");
   writeFileSync(join(dir, ".fake-claude.json"), JSON.stringify({ verdict: PASSING, ...(busy ? { writePath: join(dir, MAIN_FILE) } : {}) }));
   writeFileSync(join(dir, "readme.md"), "原来的\n");
   git(dir, "add", "-A");
@@ -60,14 +60,14 @@ function fakeCloud() {
   return { impl, items };
 }
 
-async function setup(folder: string, max = 3, dataDir?: string, token0?: string) {
+async function setup(folder: string, max = 3, dataDir?: string, token0?: string, autoMerge = false) {
   const cloud = fakeCloud();
   const t = await startTestRunner({ pickFolder: folder, fetchImpl: cloud.impl, dataDir });
   const token = token0 ?? await pair(t.port);
   const call = (method: string, path: string, body?: unknown) => api(t.port, token, method, path, body);
   if (!dataDir) {
     await call("POST", "/v1/folders/pick", {});
-    await call("PATCH", "/v1/settings", { maxConcurrent: max });
+    await call("PATCH", "/v1/settings", { maxConcurrent: max, autoMerge }); // 这些用例测本人点合并；自动合回另测
     expect((await call("PUT", "/v1/cloud", { apiBaseUrl: ORIGIN, token: "cloud-token-0123456789abcdef" })).status).toBe(200);
   }
   const session = async (id: string) => (await call("GET", `/v1/sessions/${id}`)).body;
@@ -96,8 +96,8 @@ async function setup(folder: string, max = 3, dataDir?: string, token0?: string)
   return { t, token, cloud, call, session, status, waitStatus, open, allow, events, handBack, verifierOf, merge };
 }
 
-// 每条要拉起几个假 claude 进程，机器忙时单条要好几秒：显式给 30 秒，不靠 vitest 默认的 5 秒或 package.json 里的参数
-describe("卡在自己的工作树里做", { timeout: 30_000 }, () => {
+// 每条要拉起几个假 claude 进程，全套并行跑时最长的一条要 30 秒上下：显式给 60 秒，不靠 vitest 默认的 5 秒或 package.json 里的参数
+describe("卡在自己的工作树里做", { timeout: 60_000 }, () => {
   it("同一个仓库两张卡同时做，各在自己的工作树；交回提交到卡的分支；验收员只看这张卡的改动；合回：有改动、不在基线分支、成了、冲突", async () => {
     const main = repo();
     const base = git(main, "rev-parse", "HEAD");
@@ -149,7 +149,7 @@ describe("卡在自己的工作树里做", { timeout: 30_000 }, () => {
       // 验收员在 A 的工作树里，交代后面接着开工以来的改动：只有 A 的，没有 B 的
       const v = await h.verifierOf("Card-A login");
       expect(v.cwd).toBe(wa.path);
-      await h.waitStatus(v.id, "exited");
+      await h.waitStatus(v.id, "done");
       const brief = h.events(v.id).find((e) => e.type === "user_message").text as string;
       expect(brief).toContain("# 验收交代");
       expect(brief).toContain(`分支 ${wa.branch} 的提交 ${head.slice(0, 7)}`);
@@ -187,7 +187,7 @@ describe("卡在自己的工作树里做", { timeout: 30_000 }, () => {
       // B 交回、验收，合回时和 A 的 hello.txt 冲突 → 放弃这次合并，主文件夹原样
       expect((await h.handBack(b.id)).isError).toBe(false);
       const vb = await h.verifierOf("Card-B");
-      await h.waitStatus(vb.id, "exited");
+      await h.waitStatus(vb.id, "done");
       expect(h.events(vb.id).find((e) => e.type === "user_message").text).not.toContain("a.txt");
       const before = git(main, "rev-parse", "HEAD");
       const conflict = await h.merge(b.id);
@@ -314,8 +314,8 @@ describe("卡在自己的工作树里做", { timeout: 30_000 }, () => {
       rmSync(join(b.workspace.path, "hello.txt")); // 只让 A 带 hello.txt，两张合回不冲突
       await h.handBack(a.id);
       await h.handBack(b.id);
-      await h.waitStatus((await h.verifierOf("A")).id, "exited");
-      await h.waitStatus((await h.verifierOf("B")).id, "exited");
+      await h.waitStatus((await h.verifierOf("A")).id, "done");
+      await h.waitStatus((await h.verifierOf("B")).id, "done");
       expect((await h.status(c.id))).toBe("queued"); // 交回、验收过了也不算，要合回
 
       // 合回 A：C 少等一张，同步上去
@@ -356,9 +356,93 @@ describe("卡在自己的工作树里做", { timeout: 30_000 }, () => {
       await h.waitStatus(a.id, "idle");
       expect(await h.status(c.id)).toBe("queued"); // A 一轮做完了，但还没验收
       await h.handBack(a.id);
-      await h.waitStatus((await h.verifierOf("A")).id, "exited");
+      await h.waitStatus((await h.verifierOf("A")).id, "done");
       await h.waitStatus(c.id, "waiting_permission"); // 验收过了：C 自己开始（在文件夹里做，照样问）
       expect((await h.session(c.id)).session.workspace).toEqual({ kind: "folder", folder: (await h.session(a.id)).session.workspace.folder });
+    } finally {
+      await h.t.cleanup();
+    }
+  });
+
+  it("验收过就合回（默认开）：主文件夹在原分支上、干净、没冲突时自己合回，报 merge；等它的卡接着自己开始，不用点", async () => {
+    const main = repo();
+    const h = await setup(main, 3, undefined, undefined, true);
+    try {
+      expect((await h.call("GET", "/v1/settings")).body.autoMerge).toBe(true);
+      const a = await h.open("A");
+      const c = await h.open("C", main, ["A"]);
+      expect(c.status).toBe("queued");
+      await h.waitStatus(a.id, "idle");
+      await h.handBack(a.id);
+      const handbackKey = (await until(() => h.cloud.items.find((i) => i.sessionId === a.id && i.type === "handback"))).key;
+      await h.waitStatus((await h.verifierOf("A")).id, "done");
+      const merged = await until(async () => { const s = (await h.session(a.id)).session; return s.workspace.mergedCommit ? s : null; });
+      expect(git(main, "rev-parse", "HEAD")).toBe(merged.workspace.mergedCommit);
+      expect(existsSync(join(main, "hello.txt"))).toBe(true);
+      expect(merged.workspace.needsMerge).toBeUndefined();
+      const item = await until(() => h.cloud.items.find((i) => i.sessionId === a.id && i.type === "merge"));
+      expect(item.data).toEqual({ handbackKey, merged: true, commit: merged.workspace.mergedCommit, baseBranch: "main", reason: null, message: null, auto: true });
+      expect(h.events(a.id).some((e) => e.type === "notice" && e.code === "merged")).toBe(true);
+      // C 等的 A 合回了：从最新的 main 开工作树，自己开始
+      const started = await until(async () => { const s = (await h.session(c.id)).session; return s.workspace ? s : null; });
+      expect(started.workspace.baseCommit).toBe(merged.workspace.mergedCommit);
+      await h.waitStatus(c.id, "idle");
+    } finally {
+      await h.t.cleanup();
+    }
+  });
+
+  it("验收过了但不自动合：主文件夹有改动（dirty）、关了自动合回（auto_merge_off）、交回以后卡又改过（not_ready）时记 needsMerge 等本人合，都报 merge；本人点了合并再报一条", async () => {
+    const main = repo();
+    const h = await setup(main, 3, undefined, undefined, true);
+    try {
+      const pass = async (title: string, before?: (a: any) => void) => {
+        const a = await h.open(title);
+        await h.waitStatus(a.id, "idle");
+        await h.handBack(a.id);
+        before?.(a);
+        await h.waitStatus((await h.verifierOf(title)).id, "done");
+        const s = await until(async () => { const x = (await h.session(a.id)).session; return x.workspace.needsMerge ? x : null; });
+        const item = await until(() => h.cloud.items.find((i) => i.sessionId === a.id && i.type === "merge"));
+        return { a, s, item };
+      };
+      // 主文件夹有没提交的改动
+      writeFileSync(join(main, "notes.txt"), "本人在主文件夹里写着的\n");
+      const d = await pass("D");
+      expect(d.s.workspace).toMatchObject({ mergedCommit: null, needsMerge: { reason: "dirty" } });
+      expect(d.item.data).toMatchObject({ merged: false, commit: null, reason: "dirty", auto: true, baseBranch: "main" });
+      expect(h.events(d.a.id).find((e) => e.type === "notice" && e.code === "merge_needed").text).toContain("验收过了，没自动合回");
+      // 主文件夹还没收拾就点合并：没合成，也报一条（auto false）
+      expect((await h.merge(d.a.id)).body).toMatchObject({ merged: false, reason: "dirty" });
+      expect((await until(() => h.cloud.items.find((i) => i.sessionId === d.a.id && i.type === "merge" && !i.data.auto))).data).toMatchObject({ merged: false, reason: "dirty" });
+      // 本人收拾好主文件夹，点合并：合回，needsMerge 没了，再报一条 auto false
+      rmSync(join(main, "notes.txt"));
+      const m = await h.merge(d.a.id);
+      expect(m.body.merged).toBe(true);
+      expect(m.body.session.workspace.needsMerge).toBeUndefined();
+      const manual = await until(() => h.cloud.items.find((i) => i.sessionId === d.a.id && i.type === "merge" && i.data.merged));
+      expect(manual.data).toMatchObject({ handbackKey: d.item.data.handbackKey, merged: true, commit: m.body.commit, reason: null, auto: false });
+
+      // 关了「验收过就合回」
+      expect((await h.call("PATCH", "/v1/settings", { autoMerge: false })).body.autoMerge).toBe(false);
+      const off = await pass("E");
+      expect(off.s.workspace.needsMerge).toEqual({ reason: "auto_merge_off", message: "没开「验收过就合回」，等你合" });
+      expect(off.item.data).toMatchObject({ merged: false, reason: "auto_merge_off", auto: true });
+      await h.call("PATCH", "/v1/settings", { autoMerge: true });
+      // 又交回：上一次的「要你合」作废，等这次验收；这次验收过了（开关已开）自己合回
+      await h.handBack(off.a.id);
+      expect((await h.session(off.a.id)).session.workspace.needsMerge).toBeUndefined();
+      await h.waitStatus((await h.verifierOf("E", 1)).id, "done");
+      await until(async () => (await h.session(off.a.id)).session.workspace.mergedCommit);
+
+      // 交回以后卡又提交过：只合验过的那个提交，不合
+      const changed = await pass("F", (a) => {
+        writeFileSync(join(a.workspace.path, "later.txt"), "交回以后又加的\n");
+        git(a.workspace.path, "add", "-A");
+        git(a.workspace.path, "-c", "user.name=测试", "-c", "user.email=test@example.com", "commit", "-q", "-m", "later");
+      });
+      expect(changed.s.workspace.needsMerge).toMatchObject({ reason: "not_ready", message: "交回以后卡又改过，等它再交回、验收过了再合" });
+      expect(git(main, "log", "--oneline").split("\n").some((l) => l.includes("天枢卡「F」"))).toBe(false);
     } finally {
       await h.t.cleanup();
     }

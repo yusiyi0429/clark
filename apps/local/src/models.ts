@@ -87,6 +87,11 @@ export class ModelProfiles {
     return true;
   }
 
+  /** 这个配置是订阅还是网关（没有这个配置为 null）：额度用完时只停订阅的卡。 */
+  sourceOf(id: string): "subscription" | "gateway" | null {
+    return this.stored().find((p) => p.id === id)?.source ?? null;
+  }
+
   /** 按档位挑模型（验收员由本机自己起时用）：和网页一样按模型名和名字认，认不出用默认的。 */
   forTier(tier: TLocalModelTier): string {
     const all = this.stored();

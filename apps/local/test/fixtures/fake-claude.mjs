@@ -7,14 +7,31 @@ import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 
 const argv = process.argv.slice(2);
-const sid = argv[argv.indexOf("--session-id") + 1] ?? argv[argv.indexOf("--resume") + 1];
+const sid = argv.includes("--session-id") ? argv[argv.indexOf("--session-id") + 1] : argv[argv.indexOf("--resume") + 1];
 let home = process.cwd();
 while (!existsSync(join(home, ".fake-claude.json")) && dirname(home) !== home) home = dirname(home);
 if (!existsSync(join(home, ".fake-claude.json"))) home = process.cwd();
-const cfg = existsSync(join(home, ".fake-claude.json")) ? JSON.parse(readFileSync(join(home, ".fake-claude.json"), "utf8")) : {};
+const readCfg = () => existsSync(join(home, ".fake-claude.json")) ? JSON.parse(readFileSync(join(home, ".fake-claude.json"), "utf8")) : {};
+const cfg = readCfg();
 const TRACE = join(home, ".fake-claude-trace.jsonl");
+/** 每一轮收到的话另记一份（不混进 trace：别的测试拿 trace 的最后一行当最近一次拉起）。 */
+const TURNS = join(home, ".fake-claude-turns.jsonl");
 appendFileSync(TRACE, JSON.stringify({ pid: process.pid, argv, envKeys: Object.keys(process.env), authToken: process.env.ANTHROPIC_AUTH_TOKEN ?? null, sessionSecret: process.env.TIANSHU_SESSION_SECRET ?? null, cloudToken: process.env.TIANSHU_CLOUD_TOKEN ?? null, maxRetries: process.env.CLAUDE_CODE_MAX_RETRIES ?? null, apiTimeout: process.env.API_TIMEOUT_MS ?? null }) + "\n");
-const out = (o) => process.stdout.write(JSON.stringify(o) + "\n");
+// 每条助手消息带 id（一次请求一个，本机按它数这一轮发了几次请求）；碰壁、出错时补的那条没有
+let msgSeq = 0;
+const out = (o) => {
+  if (o.type === "assistant" && o.message && !o.error && !o.message.id) o.message = { id: `msg_${process.pid}_${++msgSeq}`, model: "claude-haiku-5-5", ...o.message };
+  process.stdout.write(JSON.stringify(o) + "\n");
+};
+/** 碰壁：rate_limit_event rejected → 助手补一条 rate_limit / usage_limit_reached → 429 的 result（照社区复现和程序里的字符串）。plain429：只有 rate_limit 的别的 429。 */
+function limitHit(limit) {
+  const resetsAt = limit.resetsAt;
+  if (!limit.plain429) out({ type: "rate_limit_event", rate_limit_info: { status: "rejected", resetsAt, rateLimitType: "five_hour", utilization: 1, isUsingOverage: false, unifiedWindows: { five_hour: { utilization: 1, resetsAt, status: "rejected" } } } });
+  out({ type: "assistant", error: "rate_limit", ...(limit.plain429 ? {} : { api_error: "usage_limit_reached" }), message: { content: [{ type: "text", text: "You've hit your limit · resets 3pm" }] }, parent_tool_use_id: null });
+  if (limit.exit) process.exit(1);
+  out({ type: "result", subtype: "success", is_error: true, result: "You've hit your limit · resets 3pm", api_error_status: 429, duration_ms: 5, usage: {}, model_usage_since_last_result: {} });
+  turn = null;
+}
 const mode = cfg.mode ?? "normal";
 
 let turn = null; // { permId, timer }
@@ -29,6 +46,24 @@ function startTurn(text) {
     return;
   }
   out({ type: "system", subtype: "init", session_id: sid, model: "claude-haiku-5-5", permissionMode: "default", claude_code_version: "2.1.318" });
+  // 额度：每轮现读配置（测试中途改）。usageLimit 在时这一轮碰壁：rate_limit_event rejected → 助手报 rate_limit → 429 的 result（exit 时直接退出）；
+  // 这一串照社区复现和 Claude Code 程序里的字符串，没真机复现过
+  const live = readCfg();
+  appendFileSync(TURNS, JSON.stringify({ turnText: text, sid }) + "\n");
+  if (live.usageLimit) { limitHit(live.usageLimit); return; }
+  if (live.rateInfo) out({ type: "rate_limit_event", rate_limit_info: live.rateInfo });
+  if (live.balance) {
+    // 网关余额不足：TokenHub 回 402（tokavi-tokenhub f31dd05），Claude Code 记成 billing_error
+    out({ type: "assistant", error: "billing_error", message: { content: [{ type: "text", text: "API Error: 402 Insufficient wallet balance!" }] }, parent_tool_use_id: null });
+    out({ type: "result", subtype: "success", is_error: true, result: 'API Error: 402 {"msg":"Insufficient wallet balance! balance must be higher than stop line."}', api_error_status: 402, duration_ms: 5, usage: {}, model_usage_since_last_result: {} });
+    return;
+  }
+  if (live.work) {
+    // 干活的一轮：不要权限，work.ms 后做完；中途收到「预算用完了…就停下」就提前收尾（ignoreStop 时不理，等本机打断）
+    out({ type: "assistant", message: { content: [{ type: "text", text: `开始做：${text}` }] }, parent_tool_use_id: null });
+    turn = { permId: null, work: true, timer: setTimeout(() => { out({ type: "assistant", message: { content: [{ type: "text", text: "做完了" }] }, parent_tool_use_id: null }); finish(true, "做完了"); }, live.work.ms ?? 200) };
+    return;
+  }
   if (mode === "gateway_down") {
     // 11/06 假网关实测：每次重试一条 api_retry，最后 result 是 success + is_error，拒连时没有 api_error_status。
     for (let a = 1; a <= 2; a++) out({ type: "system", subtype: "api_retry", attempt: a, max_retries: 2, retry_delay_ms: 500 * a, error_status: null, error: "unknown" });
@@ -38,6 +73,8 @@ function startTurn(text) {
   out({ type: "assistant", message: { content: [{ type: "text", text: `收到：${text}` }] }, parent_tool_use_id: null });
   out({ type: "assistant", message: { content: [{ type: "tool_use", id: `toolu_todo${turns}`, name: "TodoWrite", input: { todos: [{ content: "写文件", status: "in_progress" }] } }] }, parent_tool_use_id: null });
   if (readOnly) { void readOnlyTurn(); return; }
+  // 配置里有 background：第一轮照 Claude Code 2.1.318 的样子开后台任务（11/07 真机抓的形状），这一轮马上结束，后台的接着跑
+  if (cfg.background && turns === 1) { backgroundTurn(); return; }
   // 配置里有 ask：第一轮先用「问用户」（AskUserQuestion）问本人，收到回答就结束这一轮
   if (cfg.ask && turns === 1) {
     const input = { questions: cfg.ask };
@@ -78,14 +115,75 @@ async function readOnlyTurn() {
   }
   appendFileSync(TRACE, JSON.stringify({ readOnlyTurn: sid, turn: turns, tools, called: result ? name : null, result }) + "\n");
   if (!turn) return; // 途中被停下，这一轮已经结束
+  // 交完以后这一轮接下来的请求碰壁（现读配置）
+  const after = readCfg().usageLimitAfterSubmit;
+  if (result && after) { limitHit(after); return; }
   out({ type: "assistant", message: { content: [{ type: "text", text: result ? "交好了" : "看完了" }] }, parent_tool_use_id: null });
   finish(true, result ? "交好了" : "看完了");
 }
 
+// 后台任务：一条后台命令（不停就一直跑）、一个子 agent（cfg.agentMs 后跑完，跑完 Claude Code 自己再开一轮）；
+// 再加一条前台跑完的命令和一个内部任务（ambient），这两个本机不该报。
+const tasks = new Map();
+const sys = (o) => out({ type: "system", ...o, uuid: `u-${Math.random()}`, session_id: sid });
+function backgroundTurn() {
+  out({ type: "assistant", message: { content: [{ type: "tool_use", id: "toolu_bg", name: "Bash", input: { command: "sleep 30", description: "后台等一会儿", run_in_background: true } }] }, parent_tool_use_id: null });
+  sys({ subtype: "task_started", task_id: "bgtask1", tool_use_id: "toolu_bg", description: "后台等一会儿", is_backgrounded: true, task_type: "local_bash" });
+  tasks.set("bgtask1", "toolu_bg");
+  out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "toolu_bg", content: "Command running in background with ID: bgtask1." }] }, parent_tool_use_id: null });
+  out({ type: "assistant", message: { content: [{ type: "tool_use", id: "toolu_ag", name: "Agent", input: { description: "数文件", prompt: "数一下", subagent_type: "Explore" } }] }, parent_tool_use_id: null });
+  sys({ subtype: "task_started", task_id: "agent1", tool_use_id: "toolu_ag", description: "数文件", subagent_type: "Explore", is_backgrounded: true, spawn_depth: 1, task_type: "local_agent" });
+  tasks.set("agent1", "toolu_ag");
+  out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "toolu_ag", content: "Async agent launched successfully." }] }, parent_tool_use_id: null });
+  // 前台跑完的普通命令、内部任务：不算后台任务
+  sys({ subtype: "task_started", task_id: "fg1", tool_use_id: "toolu_fg", description: "前台命令", is_backgrounded: false, task_type: "local_bash" });
+  sys({ subtype: "task_updated", task_id: "fg1", patch: { status: "completed", end_time: Date.now() } });
+  sys({ subtype: "task_started", task_id: "amb1", description: "内部", task_type: "dream", ambient: true });
+  if (cfg.moreTasks) {
+    // 先在前台跑、后来移到后台的命令（从那时起算后台任务），后来失败了。
+    // 真机结束时 task_updated 和 task_notification 都发；这里 fg2 只发前一种、fg3 只发后一种，两条路各自测到。
+    sys({ subtype: "task_started", task_id: "fg2", tool_use_id: "toolu_fg2", description: "", is_backgrounded: false, task_type: "local_bash" });
+    sys({ subtype: "task_updated", task_id: "fg2", patch: { is_backgrounded: true } });
+    sys({ subtype: "task_updated", task_id: "fg2", patch: { status: "failed", end_time: Date.now(), error: "exit 1" } });
+    sys({ subtype: "task_started", task_id: "fg3", tool_use_id: "toolu_fg3", description: "跑测试", is_backgrounded: true, task_type: "local_bash" });
+    sys({ subtype: "task_notification", task_id: "fg3", status: "completed", output_file: "", summary: "" });
+  }
+  // 后台子 agent 来要权限（agent_id 就是它的 task_id），批了它才跑完。subagentAsks 定它什么时候来：
+  // after 主轮结束后几十毫秒（11/07 真机抓到的顺序）；before 主轮结束前；question 主轮结束前，之后主轮又问本人。
+  const agentAsks = () => out({ type: "control_request", request_id: "perm-agent1", request: { subtype: "can_use_tool", tool_name: "Bash", input: { command: "ls" }, agent_id: "agent1", tool_use_id: "toolu_ag_ls" } });
+  if (cfg.subagentAsks === "question") {
+    agentAsks();
+    const input = { questions: [{ question: "接着做吗？", header: "接着", multiSelect: false, options: [{ label: "做", description: "" }, { label: "不做", description: "" }] }] };
+    out({ type: "assistant", message: { content: [{ type: "tool_use", id: "toolu_askbg", name: "AskUserQuestion", input }] }, parent_tool_use_id: null });
+    turn = { permId: "ask-bg", ask: true };
+    out({ type: "control_request", request_id: "ask-bg", request: { subtype: "can_use_tool", tool_name: "AskUserQuestion", input, tool_use_id: "toolu_askbg" } });
+    return;
+  }
+  if (cfg.subagentAsks === "before") agentAsks();
+  out({ type: "assistant", message: { content: [{ type: "text", text: "两件都开了，在后台跑" }] }, parent_tool_use_id: null });
+  finish(true, "两件都开了");
+  if (cfg.subagentAsks === "after") setTimeout(agentAsks, 30);
+  if (!cfg.subagentAsks) setTimeout(agentDone, cfg.agentMs ?? 300);
+}
+function agentDone() {
+  {
+    if (!tasks.has("agent1")) return;
+    tasks.delete("agent1");
+    sys({ subtype: "task_progress", task_id: "agent1", tool_use_id: "toolu_ag", description: "Running ls", usage: { total_tokens: 10, tool_uses: 1, duration_ms: 50 }, last_tool_name: "Bash" });
+    sys({ subtype: "task_updated", task_id: "agent1", patch: { status: "completed", end_time: Date.now() } });
+    sys({ subtype: "task_notification", task_id: "agent1", tool_use_id: "toolu_ag", status: "completed", output_file: "", summary: "2" });
+    // 子 agent 跑完，Claude Code 自己开一轮
+    turns += 1;
+    out({ type: "system", subtype: "init", session_id: sid, model: "claude-haiku-5-5", permissionMode: "default", claude_code_version: "2.1.318" });
+    out({ type: "assistant", message: { content: [{ type: "text", text: "子 agent 回来了：2 个文件" }] }, parent_tool_use_id: null });
+    finish(true, "子 agent 回来了");
+  }
+}
+
 function finish(ok, text) {
   out({ type: "result", subtype: ok ? "success" : "error_during_execution", is_error: !ok, result: text, duration_ms: 12, total_cost_usd: 0.01 * turns,
-    usage: { input_tokens: 3, output_tokens: 5, cache_read_input_tokens: 7, cache_creation_input_tokens: 11 },
-    model_usage_since_last_result: { "claude-haiku-5-5": { costUSD: 0.01 } } });
+    usage: { input_tokens: 3, output_tokens: 5, cache_read_input_tokens: 7, cache_creation_input_tokens: 11, iterations: [] },
+    model_usage_since_last_result: cfg.modelUsage ?? { "claude-haiku-5-5": { costUSD: 0.01 } } });
   turn = null;
 }
 
@@ -105,12 +203,40 @@ rl.on("line", (line) => {
   if (msg.type === "control_request" && msg.request.subtype === "initialize") {
     if (cfg.initDelayMs) { setTimeout(() => out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: { claude_code_version: cfg.version ?? "2.1.318", pid: process.pid } } }), cfg.initDelayMs); return; }
     out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: { claude_code_version: cfg.version ?? "2.1.318", pid: process.pid } } });
+  } else if (msg.type === "control_request" && msg.request.subtype === "get_usage") {
+    // 读额度（11/07 实测 2.1.318 的形状，只留本机用到的字段）
+    appendFileSync(TRACE, JSON.stringify({ getUsage: msg.request }) + "\n");
+    const usage = cfg.usage ?? { subscription_type: "max", rate_limits: { limits: [
+      { kind: "session", group: "session", percent: 12, severity: "normal", resets_at: "2026-11-07T10:00:00Z", scope: null, is_active: true },
+      { kind: "weekly_all", group: "weekly", percent: 40, severity: "normal", resets_at: "2026-11-12T00:00:00Z", scope: null, is_active: true },
+      { kind: "weekly_scoped", group: "weekly", percent: 81, severity: "warning", resets_at: "2026-11-12T00:00:00Z", scope: { model: { display_name: "Opus" } }, is_active: true },
+    ], extra_usage: { is_enabled: false } }, account: { email: "someone@example.com", organization: "Org" } };
+    out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: usage } });
+  } else if (msg.type === "control_request" && msg.request.subtype === "stop_task") {
+    const id = msg.request.task_id;
+    appendFileSync(TRACE, JSON.stringify({ stopTask: id }) + "\n");
+    if (!tasks.has(id)) {
+      out({ type: "control_response", response: { subtype: "error", request_id: msg.request_id, error: `no task ${id}` } });
+      return;
+    }
+    tasks.delete(id);
+    sys({ subtype: "task_updated", task_id: id, patch: { status: "killed", end_time: Date.now() } });
+    sys({ subtype: "task_notification", task_id: id, status: "stopped", output_file: "", summary: "" });
+    out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: {} } });
+  } else if (msg.type === "control_request" && msg.request.subtype === "apply_flag_settings") {
+    // 跑着时改设置（多 agent 开关）：记进 trace
+    appendFileSync(TRACE, JSON.stringify({ applyFlags: msg.request.settings, sid }) + "\n");
+    out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id } });
   } else if (msg.type === "control_request" && msg.request.subtype === "interrupt") {
     out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: { still_queued: [] } } });
+    if (turn?.timer) clearTimeout(turn.timer);
     if (turn) {
       out({ type: "control_cancel_request", request_id: turn.permId });
       finish(false, "");
     }
+  } else if (msg.type === "control_response" && msg.response.request_id === "perm-agent1") {
+    appendFileSync(TRACE, JSON.stringify({ subagentPermission: msg.response.response }) + "\n");
+    if (msg.response.response?.behavior === "allow" && cfg.subagentAsks !== "question") agentDone();
   } else if (msg.type === "control_response") {
     const r = msg.response.response;
     if (!turn || msg.response.request_id !== turn.permId) return;
@@ -123,6 +249,9 @@ rl.on("line", (line) => {
       return;
     }
     if (r.behavior === "allow") {
+      // 批了以后这一轮里才报额度变化（跑着的卡途中碰到）：现读配置
+      const late = readCfg().rateInfoOnAllow;
+      if (late) out({ type: "rate_limit_event", rate_limit_info: late });
       if (!cfg.writePath) writeFileSync("hello.txt", "你好");
       out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: `toolu_w${turns}`, content: "File created successfully" }] }, parent_tool_use_id: null });
       out({ type: "assistant", message: { content: [{ type: "text", text: r.updatedPermissions ? "写好了（本会话都允许）" : "写好了" }] }, parent_tool_use_id: null });
@@ -135,7 +264,12 @@ rl.on("line", (line) => {
   } else if (msg.type === "user") {
     if (turn) {
       // 进行中插话：下一个工具步骤之前读到。
+      appendFileSync(TURNS, JSON.stringify({ interjection: msg.message.content, sid }) + "\n");
       out({ type: "assistant", message: { content: [{ type: "text", text: `插话收到：${msg.message.content}` }] }, parent_tool_use_id: null });
+      if (turn.work && /预算用完了/.test(msg.message.content) && !readCfg().ignoreStop) {
+        clearTimeout(turn.timer);
+        turn.timer = setTimeout(() => { out({ type: "assistant", message: { content: [{ type: "text", text: "停下了，没做完的：收尾" }] }, parent_tool_use_id: null }); finish(true, "停下了"); }, 30);
+      }
     } else {
       startTurn(msg.message.content);
     }
