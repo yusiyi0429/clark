@@ -300,9 +300,9 @@ function HomeFrame({ account }: { account: Account }) {
   const backgroundButton = useMemo(() => (
     <button type="button" className={h.icon} aria-label="后台任务" title="后台任务" onClick={() => setSheet(true)} data-testid="phone-background">
       {running ? <span className={h.runningCount}><LoaderCircle {...ICON} />{running}</span> : <ListChecks {...ICON} />}
-      {machine.alert && !handheld ? <i className={h.cornerDot} aria-hidden /> : null}
+      {(machine.alert || machine.quotaAlert) && !handheld ? <i className={h.cornerDot} data-tone={!machine.alert && machine.quotaAlert === "danger" ? "danger" : undefined} aria-hidden /> : null}
     </button>
-  ), [running, machine.alert, handheld]);
+  ), [running, machine.alert, machine.quotaAlert, handheld]);
   // 子会话页头的上一级：它挂在哪件 Task 下（树上找），点了回到那件 Task 的管线。
   const subId = view.kind === "card" || view.kind === "topic" ? view.id : null;
   const owner = subId ? data.missions.flatMap((mission) => mission.tasks).find((task) => task.subSessions.some((sub) => sub.id === subId)) ?? null : null;

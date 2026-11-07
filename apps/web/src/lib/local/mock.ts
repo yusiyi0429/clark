@@ -254,6 +254,12 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
       slots: slots(),
       cloud: { linked, apiBaseUrl: linked ? location.origin : null, personName: null, outbox: { pending: 0, lastSyncedAt: linked ? now() : null, lastError: null } },
       settings: { includePersonalConfigByDefault: includePersonal, allowedOrigins: [typeof location === "undefined" ? "" : location.origin], paused: false, maxConcurrent, autoMerge },
+      // 订阅额度：5 小时窗口用了八成多（右栏额度行出琥珀），本周四成。
+      quota: [{ source: "claude_subscription", plan: "max", blockedUntil: null, extraUsage: false, updatedAt: now(), error: null, windows: [
+        { kind: "session", model: null, usedPercent: 83, state: "warning", resetsAt: new Date(Date.now() + 2 * 3_600_000).toISOString() },
+        { kind: "weekly_all", model: null, usedPercent: 40, state: "ok", resetsAt: new Date(Date.now() + 72 * 3_600_000).toISOString() },
+      ] }],
+      tools: [],
     }),
     login: async () => undefined,
     linkCloud: async (body) => { linked = true; return { linked, apiBaseUrl: body.apiBaseUrl, personName: body.personName ?? null, outbox: { pending: 0, lastSyncedAt: null, lastError: null } }; },

@@ -231,6 +231,21 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .resMeta { display: flex; align-items: center; gap: var(--space-2); color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; }
 .resModel { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .num { font-variant-numeric: tabular-nums; }
+/* 额度行（5.4.5）：名字 13 墨色、剩多少 13 等宽数字、重置时刻 12 淡；字下 4px 一条 2px 额度条，≤25% 琥珀、≤10% 或用完红；超过 15 分钟没更新整行变淡。整行能点。 */
+.quota { display: grid; align-content: center; gap: 4px; min-height: var(--row-36); margin: 0 calc(-1 * var(--space-2)); padding: 0 var(--space-2); border-radius: var(--r-control); cursor: pointer; }
+.quota:hover { background: var(--default-soft); }
+.quota[data-focus-visible], .quota:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.quotaLine { display: flex; align-items: baseline; gap: var(--space-2); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); }
+.quotaAmount { color: var(--ink); }
+.quotaTime { color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; }
+.quota[data-stale] .resName, .quota[data-stale] .quotaAmount { color: var(--ink-faint); }
+.quotaBar { display: block; height: 2px; overflow: hidden; border-radius: 1px; background: var(--hairline); }
+.quotaBar i { display: block; height: 100%; background: var(--ink-muted); }
+.quota[data-tone="warning"] .quotaBar i { background: var(--warning); }
+.quota[data-tone="danger"] .quotaBar i { background: var(--danger); }
+.quotaDetails { outline: none; }
+.quotaDetail { display: flex; align-items: center; min-height: var(--row-32); margin: 0; padding: 0 var(--space-3); color: var(--ink-muted); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); }
+.warnDot[data-tone="danger"], .cornerDot[data-tone="danger"] { background: var(--danger); }
 .bgBody { min-height: 0; overflow-y: auto; scrollbar-width: thin; padding: var(--space-2) var(--space-2) var(--space-4); }
 .bgGroup + .bgGroup { margin-top: var(--space-2); }
 .bgLabel { display: flex; align-items: center; gap: var(--space-1); width: 100%; height: var(--row-28); margin: 0; padding: 0 var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink-faint); font: inherit; font-size: var(--text-xs); font-weight: 600; line-height: 16px; text-align: left; }

@@ -11,12 +11,14 @@
  */
 import { useEffect, useState } from "react";
 import { ChevronRight, LoaderCircle, PanelRightClose, PanelRightOpen, Square, X } from "lucide-react";
+import { Popover } from "@heroui/react";
 import { HeroButton } from "@/components/HeroButton";
 import { Slots } from "@/components/work/Slots";
 import { FailedLine } from "@/components/work/DecisionBox";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import type { LocalPhase } from "@/lib/local/connection";
 import { duration, groupBackground } from "@/lib/home/derive";
+import { quotaRows, type QuotaRow } from "@/lib/home/quota";
 import type { BackgroundItem } from "@/lib/home/types";
 import type { Resources } from "@/lib/work/useWork";
 import { ICON } from "./StateIcon";
@@ -35,7 +37,32 @@ export function useMachine() {
     : paused ? { label: "继续", run: async () => { await local.runner.patchSettings({ paused: false }); await local.refresh(); } }
     : local.phase === "offline" || local.phase === "blocked" || local.phase === "prompt" ? { label: "重试", run: () => local.refresh() }
     : null;
-  return { word, alert, action };
+  // 额度（D 的 status.quota）：剩 ≤25% 琥珀点、≤10% 或用完红点，和本机要处理的点是同一颗（5.4.5、5.6）。
+  const quota = quotaRows(local.status?.quota ?? [], Date.now());
+  const quotaAlert = quota.some((row) => row.tone === "danger") ? "danger" as const : quota.some((row) => row.tone === "warning") ? "warning" as const : null;
+  return { word, alert, action, quota, quotaAlert };
+}
+
+/** 额度一行：名字、剩多少、几点重置，下面 2px 额度条；整行能点，弹层里是每个窗口的明细。 */
+function QuotaLine({ row }: { row: QuotaRow }) {
+  const time = row.stale ?? (row.resets ? (row.left === 0 ? `· ${row.resets}` : row.resets) : null);
+  return (
+    <Popover>
+      <Popover.Trigger className={h.quota} data-tone={row.tone} data-stale={row.stale ? "" : undefined} aria-label={`${row.name} ${row.amount}${row.resets ? ` ${row.resets}` : ""}`} data-testid="quota-row">
+        <span className={h.quotaLine}>
+          <span className={h.resName}>{row.name}</span>
+          <span className={`${h.quotaAmount} ${h.num}`}>{row.amount}</span>
+          {time ? <span className={`${h.quotaTime} ${h.num}`}>{time}</span> : null}
+        </span>
+        <span className={h.quotaBar} aria-hidden><i style={{ width: `${row.left}%` }} /></span>
+      </Popover.Trigger>
+      <Popover.Content placement="left top" offset={8} className={h.pop}>
+        <Popover.Dialog aria-label={`${row.name}的额度`} className={h.quotaDetails}>
+          {row.details.map((line) => <p key={line} className={`${h.quotaDetail} ${h.num}`}>{line}</p>)}
+        </Popover.Dialog>
+      </Popover.Content>
+    </Popover>
+  );
 }
 
 export function BackgroundPanel({ items, resources, model, onStop, onCollapse, handheld = false }: {
@@ -98,6 +125,7 @@ export function BackgroundPanel({ items, resources, model, onStop, onCollapse, h
           <span className={h.num}>{resources.local.used}/{resources.local.cap}</span>
           {model ? <span className={h.resModel}>{model}</span> : null}
         </div>
+        {machine.quota.map((row) => <QuotaLine key={row.name} row={row} />)}
       </div>
       <div className={h.bgBody}>
         {groups.running.length ? (
@@ -127,7 +155,7 @@ export function BackgroundStrip({ running, onExpand }: { running: number; onExpa
     <button type="button" className={h.strip} onClick={onExpand} aria-label={`展开，进行中 ${running}`} title="展开" data-testid="background-strip">
       <PanelRightOpen {...ICON} />
       {running ? <span className={h.runningCount}><LoaderCircle {...ICON} />{running}</span> : null}
-      {machine.alert ? <i className={h.warnDot} aria-label="这台电脑要处理" role="img" /> : null}
+      {machine.alert || machine.quotaAlert ? <i className={h.warnDot} data-tone={!machine.alert && machine.quotaAlert === "danger" ? "danger" : undefined} aria-label={machine.alert ? "这台电脑要处理" : "额度快用完了"} role="img" /> : null}
     </button>
   );
 }
