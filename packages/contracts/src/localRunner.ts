@@ -21,6 +21,8 @@ export const LOCAL_RUNNER_TOKEN_HEADER = "x-tianshu-local-token";
 export const LOCAL_RUNNER_SYNC_PATH = "/api/local-runner/sync";
 /** 云端「验收交代」（相对天枢 api 的根）：GET ?handbackKey=<交回条目的 key>，鉴权同上。本机在交回同步上去以后取它，起验收会话。 */
 export const LOCAL_RUNNER_VERIFY_BRIEF_PATH = "/api/local-runner/verify-brief";
+/** 本机取消息附件的云端接口（GET <apiBaseUrl><这个路径>/<附件 id>，带本机的令牌，回文件原文；B 出接口前是占位，见 LocalAttachmentRef）。 */
+export const LOCAL_RUNNER_ATTACHMENT_PATH = "/api/local-runner/attachments";
 
 const Instant = Type.String({ format: "date-time" });
 const Id = Type.String({ minLength: 1, maxLength: 80, pattern: "^[A-Za-z0-9_-]+$" });
@@ -182,63 +184,64 @@ export const LocalQuotaWindow = Type.Object({
   resetsAt: Nullable(Instant),
 }, strict);
 /**
- * 一个额度来源：claude_subscription 本人的 Claude 订阅；codex_subscription 本人的 Codex 订阅（装了 Codex 才有，codex app-server 的 account/rateLimits/read，
- * 不发提示、不花 token，11/07 实测 0.159.2 约 5 秒；按窗口长度认 5 小时（session）和本周（weekly_all），没有 warning，只看到没到 100%；只显示，不挡卡）。
- * windows 只列计划里有的窗口；blockedUntil 用完时什么时候恢复（没用完为 null）；plan 计划名（如 max、plus）；extraUsage 额外额度开没开（读不到为 null）；
- * updatedAt 最近一次读到的时间（还没读到为 null）；error 最近一次没读到的原因（读到了为 null）。账号邮箱、组织不在这里，也不出本机。
+ * 用量来源的种类（新首页设计 14.4）：subscription 订阅额度（剩多少百分比，按窗口重置）；api_balance API 余额（剩多少钱）；
+ * daily_spend 当天花了多少（TokenHub 这种按量付费的）。
  */
-export const LocalQuotaSourceKind = Type.Union([Type.Literal("claude_subscription"), Type.Literal("codex_subscription")]);
+export const LocalUsageKind = Type.Union([Type.Literal("subscription"), Type.Literal("api_balance"), Type.Literal("daily_spend")]);
+/**
+ * 一个用量来源（右栏「用量」的一格，新首页设计 14.4）。来源不限几家，按这个形状往下排：
+ * - Claude 订阅（id claude）：本机向 Claude Code 读（get_usage，不发提示、不花 token），跑着的卡实时报的 rate_limit_event 也算进来；
+ * - Codex 订阅（id codex，装了 Codex 才有）：codex app-server 的 account/rateLimits/read（11/07 实测 0.159.2 约 5 秒，不花 token），按窗口长度认 5 小时和本周，
+ *   Codex 不报警戒线，只看到没到 100%；只显示，不挡卡；
+ * - TokenHub（id tokenhub:<网关主机>，kind daily_spend）：TokenHub 自己的统计（GET <网关主机>/api/tokavi/v1/log/usage，用本机存的那把钥匙，只能查这把钥匙所在的账户，
+ *   每人一个计费账户，就是本人的），amounts 是今天（本机 0 点起）、monthAmounts 是本月（1 日 0 点起）花了多少，按币种各一笔，estimated false，不换算；半小时一格；
+ * - 别的 API（MiniMax、DeepSeek 等，id api:<名字>，kind api_balance）：amounts 是余额。形状先留着，本机还没读。
+ * kind subscription 时：remainingPercent 是 100 减去用得最多的那个窗口（按模型分的周额度不算，除非只有它）；windows 只列计划里有的窗口；
+ * resetsAt 是剩得最少的那个窗口几点重置；blockedUntil 用完时几点恢复（没用完为 null）；plan 计划名（如 max、plus）；extraUsage 额外额度开没开（读不到为 null）。
+ * 别的 kind 这几项为 null、windows 为空。name 是显示名（Claude、Codex、TokenHub…）。updatedAt 最近一次读到的时间（还没读到为 null）；error 最近一次没读到的原因。
+ * 账号邮箱、组织、账户名不在这里，也不出本机。本机每 5 分钟（网页问状态时）读一次。
+ */
 export const LocalQuotaSource = Type.Object({
-  source: LocalQuotaSourceKind,
-  plan: Nullable(Type.String({ maxLength: 40 })),
+  id: Type.String({ minLength: 1, maxLength: 80 }),
+  name: Type.String({ minLength: 1, maxLength: 40 }),
+  kind: LocalUsageKind,
+  remainingPercent: Nullable(Type.Integer({ minimum: 0, maximum: 100 })),
+  amounts: Type.Array(LocalMoney, { maxItems: 4 }),
+  monthAmounts: Type.Optional(Type.Array(LocalMoney, { maxItems: 4 })),
   windows: Type.Array(LocalQuotaWindow, { maxItems: 12 }),
+  resetsAt: Nullable(Instant),
   blockedUntil: Nullable(Instant),
+  plan: Nullable(Type.String({ maxLength: 40 })),
   extraUsage: Nullable(Type.Boolean()),
   updatedAt: Nullable(Instant),
   error: Nullable(Type.String({ maxLength: 300 })),
 }, strict);
-/** 同步给云端的额度：只带窗口（种类、模型名、百分比、状态、重置时间）、恢复时间和读到的时间；不带计划名、额外额度、出错原因。 */
+/** 同步给云端的用量：读到过的才带，不带计划名、额外额度、出错原因。 */
 export const LocalQuotaSync = Type.Object({
-  source: LocalQuotaSourceKind,
+  id: Type.String({ minLength: 1, maxLength: 80 }),
+  name: Type.String({ minLength: 1, maxLength: 40 }),
+  kind: LocalUsageKind,
+  remainingPercent: Nullable(Type.Integer({ minimum: 0, maximum: 100 })),
+  amounts: Type.Array(LocalMoney, { maxItems: 4 }),
+  monthAmounts: Type.Optional(Type.Array(LocalMoney, { maxItems: 4 })),
   windows: Type.Array(LocalQuotaWindow, { maxItems: 12 }),
+  resetsAt: Nullable(Instant),
   blockedUntil: Nullable(Instant),
   updatedAt: Instant,
 }, strict);
 
 /**
- * 这台电脑上 worker 能用的命令行工具（连接页「这台电脑」那组）：gh 是 GitHub，lark-cli 是飞书命令行。
+ * 这台电脑上的执行方和 worker 能用的命令行工具（右栏「这台电脑」逐项检查、连接页，新首页设计 14.4）：claude-code 是 Claude Code（照它自己报的登录，每次问状态现查），
+ * codex 是 Codex（codex login status），gh 是 GitHub，lark-cli 是飞书命令行。有一项不是 ready，网页就提醒。
  * state：ready 已登录；not_installed 没装；not_logged_in 没登录；expired 登录过期；unknown 还没查完。
- * account 登的是谁（GitHub 用户名、飞书里的名字），只在本机，不同步。checkedAt 上次查的时间（本机启动时和每 10 分钟查一次）。
+ * account 登的是谁（GitHub 用户名、飞书里的名字；Claude Code、Codex 为 null），只在本机，不同步。checkedAt 上次查的时间（Codex、gh、lark-cli 本机启动时和每 10 分钟查一次）。
  */
 export const LocalToolStatus = Type.Object({
-  kind: Type.Union([Type.Literal("gh"), Type.Literal("lark-cli")]),
+  kind: Type.Union([Type.Literal("claude-code"), Type.Literal("codex"), Type.Literal("gh"), Type.Literal("lark-cli")]),
   state: Type.Union([Type.Literal("ready"), Type.Literal("not_installed"), Type.Literal("not_logged_in"), Type.Literal("expired"), Type.Literal("unknown")]),
   version: Nullable(Type.String({ maxLength: 40 })),
   account: Nullable(Type.String({ maxLength: 100 })),
   checkedAt: Nullable(Instant),
-}, strict);
-
-/**
- * 一个 TokenHub 计费账户花了多少（新首页设计 11.2、13.1：右栏「TokenHub 今天 ¥x」）：TokenHub 自己的统计（GET <网关主机>/api/tokavi/v1/log/usage，
- * 用本机存的那把钥匙，只能查这把钥匙所在的账户），不是本机估的。today 从本机今天 0 点起，month 从本月 1 日 0 点起，按币种各一笔（estimated 为 false，不换算）；
- * 统计按半小时一格，最近半小时的可能还没进来。host 是网关主机；account 是 TokenHub 里的账户名，只在本机，不同步。
- * 本机每 5 分钟（网页问状态时）读一次；updatedAt 最近一次读到的时间，error 最近一次没读到的原因。
- */
-export const LocalSpendSource = Type.Object({
-  source: Type.Literal("tokenhub"),
-  host: Type.String({ maxLength: 200 }),
-  account: Nullable(Type.String({ maxLength: 100 })),
-  today: Type.Array(LocalMoney, { maxItems: 4 }),
-  month: Type.Array(LocalMoney, { maxItems: 4 }),
-  updatedAt: Nullable(Instant),
-  error: Nullable(Type.String({ maxLength: 300 })),
-}, strict);
-/** 同步给云端的花费：只带今天、本月和读到的时间；不带主机、账户名、出错原因。 */
-export const LocalSpendSync = Type.Object({
-  source: Type.Literal("tokenhub"),
-  today: Type.Array(LocalMoney, { maxItems: 4 }),
-  month: Type.Array(LocalMoney, { maxItems: 4 }),
-  updatedAt: Instant,
 }, strict);
 
 /** GET /v1/status */
@@ -251,12 +254,10 @@ export const LocalStatusResponse = Type.Object({
   slots: LocalSlots,
   cloud: LocalCloudLinkView,
   settings: LocalSettings,
-  /** 额度：Claude 订阅（本机向 Claude Code 读，get_usage，不发提示、不花 token，跑着的卡实时报的 rate_limit_event 也算进来）；装了 Codex 时还有 Codex 订阅。 */
-  quota: Type.Array(LocalQuotaSource, { maxItems: 4 }),
-  /** 命令行工具登没登录：gh、lark-cli。 */
+  /** 用量（见 LocalQuotaSource）：Claude 订阅、装了 Codex 时的 Codex 订阅、配了 TokenHub 时的 TokenHub 当天花费，以后还有别的 API。 */
+  quota: Type.Array(LocalQuotaSource, { maxItems: 16 }),
+  /** 这台电脑上的执行方和命令行工具登没登录（右栏「这台电脑」逐项检查）：Claude Code、Codex、gh、lark-cli。 */
   tools: Type.Array(LocalToolStatus, { maxItems: 8 }),
-  /** 网关的真钱（TokenHub 自己报的今天、本月花了多少，每人一个计费账户，就是本人的）：每个计费账户一项，配了网关模型、读到过才有。 */
-  spend: Type.Array(LocalSpendSource, { maxItems: 4 }),
 }, strict);
 
 /** POST /v1/agents/claude-code/login 的贴码兜底：浏览器显示一串代码而没有跳回时，本人贴进网页。 */
@@ -606,9 +607,21 @@ export const LocalCreateSessionBatchResponse = Type.Object({
  * kind = review：专题开评审会（开工时带了 critics 才行），本机让会话并行起挑刺子 agent，合成「分歧和建议」存成 kind = review 的一版；
  * 这时 text 可不填，填了是本人对这次评审的补充要求。不带 kind 就是普通的一句话，text 必填。
  */
+/**
+ * 一句话带的附件（新首页设计 14.5）：天枢里存着的文件，id 是天枢给的，name 是文件名（给人看、存盘用）。
+ * 本机按 id 从天枢取回（GET <apiBaseUrl>{LOCAL_RUNNER_ATTACHMENT_PATH}/<id>，带本机的令牌），存进这件的工作区：卡的工作目录（工作树）、专题和规划员的专用目录里的
+ * .tianshu-attachments/<这句话的编号>/<文件名>（目录里放一个只写 * 的 .gitignore，不会被提交），再把路径写进给执行方的那句话（图片和 PDF 执行方能直接看）。
+ * 格式：图片 PNG、JPEG、GIF、WebP；文档 PDF、DOCX、XLSX、PPTX、CSV、TXT、MD、JSON、HTML、XML、YAML；代码和日志。每个不超过 30 MB，一句最多 20 个。
+ * 格式不支持、太大：400 validation；没连天枢、取不到：409 conflict。都是整句不发，message 写「文件名：原因」，网页照 14.5 写在附件那一行下面。
+ */
+export const LocalAttachmentRef = Type.Object({ id: Type.String({ minLength: 1, maxLength: 120 }), name: Type.String({ minLength: 1, maxLength: 200 }) }, strict);
+/** 存好了的附件：文件名、在本机的路径、大小（字节）。user_message 事件带上，网页画在本人气泡里。 */
+export const LocalSavedAttachment = Type.Object({ name: Type.String({ minLength: 1, maxLength: 200 }), path: Type.String(), size: Type.Integer({ minimum: 0 }) }, strict);
 export const LocalSendMessageRequest = Type.Object({
   kind: Type.Optional(Type.Union([Type.Literal("say"), Type.Literal("review")])),
+  /** 带了附件时可以不说话。 */
   text: Type.Optional(Type.String({ minLength: 1, maxLength: 20000 })),
+  attachments: Type.Optional(Type.Array(LocalAttachmentRef, { minItems: 1, maxItems: 20 })),
 }, strict);
 export const LocalSendMessageResponse = Type.Object({
   /** next_step：进行中，下一步前送达；new_turn：开了新一轮；resumed：进程已退出，续接后送达。 */
@@ -809,7 +822,8 @@ export const LocalSessionEvent = Type.Union([
   /** hold：停着等额度恢复时带（见 LocalHold）。 */
   ev("status", { status: LocalSessionStatus, exitCode: Type.Optional(Nullable(Type.Integer())), reason: Type.Optional(Type.String()), hold: Type.Optional(LocalHold) }),
   ev("agent_info", { agent: LocalAgentKind, version: Type.String(), model: Nullable(Type.String()), permissionMode: Nullable(Type.String()) }),
-  ev("user_message", { text: Type.String(), source: Type.Union([Type.Literal("initial"), Type.Literal("web")]) }),
+  /** attachments：这句话带的附件（存好的，见 LocalAttachmentRef）；没有就不带。text 是本人说的原话，不含本机拼给执行方的附件路径。 */
+  ev("user_message", { text: Type.String(), source: Type.Union([Type.Literal("initial"), Type.Literal("web")]), attachments: Type.Optional(Type.Array(LocalSavedAttachment, { maxItems: 20 })) }),
   ev("assistant_text", { text: Type.String() }),
   ev("tool_call", { toolUseId: Type.String(), name: Type.String(), title: Type.String(), input: Type.Record(Type.String(), Type.Unknown()) }),
   ev("tool_result", { toolUseId: Type.String(), isError: Type.Boolean(), preview: Type.String() }),
@@ -887,6 +901,17 @@ const syncItem = <T extends string, D extends TSchema>(type: T, data: D) => Type
   data,
 }, strict);
 
+/**
+ * 同步给云端的「在等批准的那一步」（status = waiting_permission 时带）：给人看的一行、越界路径，不传工具的完整输入（输入只在本机）。
+ * 云端「等你」那一行的标题就是 title（原话）。
+ */
+export const LocalPermissionBrief = Type.Object({
+  requestId: Type.String({ minLength: 1, maxLength: 120 }),
+  toolName: Type.String({ maxLength: 200 }),
+  title: Type.String({ maxLength: 500 }),
+  outsidePaths: Type.Array(Type.String(), { maxItems: 20 }),
+}, strict);
+
 export const LocalSyncItem = Type.Union([
   syncItem("status", Type.Object({
     status: LocalSessionStatus, title: Type.String(), agent: LocalAgentKind, modelLabel: Type.String(),
@@ -898,6 +923,13 @@ export const LocalSyncItem = Type.Union([
     hold: Type.Optional(LocalHold),
     /** 最近一次拉起时定的跑法（见 LocalRun，卡行写模型和思考强度）；还没拉起过不带。 */
     run: Type.Optional(LocalRun),
+    /**
+     * status = idle 且执行方在问本人（AskUserQuestion）时带：原样的提问（同本机摘要的 pendingQuestion）。云端据此出「等你」，标题用原话，单选的就地答。
+     * 不带的 idle 是这一轮做完停下了：云端不当成等你（新首页 9.6），卡照常交回进验收，单独开的子会话显示「已停下」。答完以后报的那条不带。
+     */
+    question: Type.Optional(LocalQuestionRequestView),
+    /** status = waiting_permission 时带：在等批准的那一步（LocalPermissionBrief）。 */
+    permission: Type.Optional(LocalPermissionBrief),
   }, strict)),
   syncItem("plan", Type.Object({ entries: Type.Array(LocalPlanEntry, { maxItems: 100 }), progress: LocalPlanProgress }, strict)),
   /** 证据：一段说明、日志片段、链接（PR 等）、改动摘要。不传完整工具输出。 */
@@ -978,10 +1010,8 @@ export const LocalSyncBatchRequest = Type.Object({
   runnerVersion: Type.String(),
   /** 发这一批时本机的位置数（云端的 worker 列表和「资源」用）。 */
   slots: LocalSlots,
-  /** 本机读到的额度（读到过才带，见 LocalQuotaSync）：只有百分比、状态、重置时间，云端给手机看。 */
-  quota: Type.Optional(Type.Array(LocalQuotaSync, { maxItems: 4 })),
-  /** 网关花了多少（读到过才带，见 LocalSpendSync）：TokenHub 自己报的今天、本月。 */
-  spend: Type.Optional(Type.Array(LocalSpendSync, { maxItems: 4 })),
+  /** 本机读到的用量（读到过的才带，见 LocalQuotaSync）：订阅的百分比和窗口、TokenHub 的今天和本月，云端给手机看。 */
+  quota: Type.Optional(Type.Array(LocalQuotaSync, { maxItems: 16 })),
   /** 可以为空：本机开着、5 分钟里没别的要报时发一批空的当心跳，云端照样刷新本机的在线时间和位置数，回 accepted、rejected 都为空。 */
   items: Type.Array(LocalSyncItem, { maxItems: 50 }),
 }, strict);
@@ -1039,17 +1069,19 @@ export type TLocalQuotaSource = Static<typeof LocalQuotaSource>;
 export type TLocalQuotaSync = Static<typeof LocalQuotaSync>;
 export type TLocalToolStatus = Static<typeof LocalToolStatus>;
 export type TLocalHold = Static<typeof LocalHold>;
+export type TLocalAttachmentRef = Static<typeof LocalAttachmentRef>;
+export type TLocalSavedAttachment = Static<typeof LocalSavedAttachment>;
 export type TLocalEffort = Static<typeof LocalEffort>;
 export type TLocalRun = Static<typeof LocalRun>;
 export type TLocalTaskBudgetView = Static<typeof LocalTaskBudgetView>;
 export type TLocalBudgetListResponse = Static<typeof LocalBudgetListResponse>;
 export type TLocalBudgetUpdateRequest = Static<typeof LocalBudgetUpdateRequest>;
-export type TLocalSpendSource = Static<typeof LocalSpendSource>;
-export type TLocalSpendSync = Static<typeof LocalSpendSync>;
+export type TLocalUsageKind = Static<typeof LocalUsageKind>;
 export type TLocalMoney = Static<typeof LocalMoney>;
 export type TLocalMergeSync = Static<typeof LocalMergeSync>;
 export type TLocalQuestion = Static<typeof LocalQuestion>;
 export type TLocalQuestionRequestView = Static<typeof LocalQuestionRequestView>;
+export type TLocalPermissionBrief = Static<typeof LocalPermissionBrief>;
 export type TLocalQuestionAnswerRequest = Static<typeof LocalQuestionAnswerRequest>;
 export type TLocalBackgroundItem = Static<typeof LocalBackgroundItem>;
 export type TLocalBackgroundItemKind = Static<typeof LocalBackgroundItemKind>;
