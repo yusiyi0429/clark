@@ -5,7 +5,7 @@
 import type { TLocalPermissionRequestView, TLocalPlanEntry, TLocalQuestionRequestView, TLocalSessionEvent, TLocalSessionStatus, TLocalUsage } from "./runner";
 
 export type SessionEntry =
-  | { kind: "user"; seq: number; at: string; text: string }
+  | { kind: "user"; seq: number; at: string; text: string; attachments?: { name: string; size: number }[] }
   | { kind: "assistant"; seq: number; at: string; text: string }
   | { kind: "step"; seq: number; at: string; toolUseId: string; title: string; done: boolean; isError: boolean }
   | { kind: "permission"; seq: number; at: string; request: TLocalPermissionRequestView; decision: "allow" | "deny" | null }
@@ -71,7 +71,7 @@ export function foldEvent(view: SessionView, event: TLocalSessionEvent): Session
       next.agentVersion = event.version;
       return next;
     case "user_message":
-      next.entries = [...view.entries, { kind: "user", ...base, text: event.text }];
+      next.entries = [...view.entries, { kind: "user", ...base, text: event.text, ...(event.attachments?.length ? { attachments: event.attachments.map(({ name, size }) => ({ name, size })) } : {}) }];
       next.handedBack = false;
       return next;
     case "assistant_text":

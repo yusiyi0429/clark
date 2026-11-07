@@ -143,11 +143,11 @@ function HomeFrame({ account }: { account: Account }) {
     if (api.live) { const answer = await routeMessage(text).catch(() => null); if (answer) return answer.target; }
     return routeText(text, tasks);
   }, [api.live, tasks]);
-  const send = useCallback(async (text: string, target: SendTarget) => {
+  const send = useCallback(async (text: string, target: SendTarget, files: File[]) => {
     const resolved = target === "auto" ? await route(text) : target;
     outboxId.current += 1;
     // 每句排在队里，按对话各发各的：连着发、或那条对话正在回话时，前一句不会被后一句顶掉。
-    const entry: OutboxEntry = { id: outboxId.current, target: resolved === "main" ? "main" : resolved.taskId, text };
+    const entry: OutboxEntry = { id: outboxId.current, target: resolved === "main" ? "main" : resolved.taskId, text, files };
     setOutbox((queue) => [...queue, entry]);
     go(resolved === "main" ? "/me/work/buddy" : `/me/work/tasks/${encodeURIComponent(resolved.taskId)}`);
   }, [route, go]);

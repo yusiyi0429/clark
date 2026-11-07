@@ -18,6 +18,9 @@ import type { ConversationData } from "@/conversation/useConversation";
 import { useConversation } from "@/conversation/useConversation";
 import { openPipeline } from "@/lib/board/cloud";
 import { usePipelineConversation } from "@/lib/home/pipeline";
+import { uploadToConversation } from "@/lib/home/attachments";
+import { useAnswerOptionFill } from "@/conversation/answerOptions";
+import { InputBar } from "./InputBar";
 import { infoHref } from "@/lib/home/derive";
 import type { HomeTask, SubSession } from "@/lib/home/types";
 import type { WorkHomeApi } from "@/lib/home/useWorkHome";
@@ -32,7 +35,8 @@ import { ICON, StateIcon } from "./StateIcon";
 import { HeroButton } from "@/components/HeroButton";
 
 /** 首页输入框发来、等着进对话的一句。 */
-export type OutboxEntry = { id: number; target: "main" | string; text: string };
+/** files：首页输入框带的附件，到了那条对话再传（14.5）。 */
+export type OutboxEntry = { id: number; target: "main" | string; text: string; files: File[] };
 /** 排着的几句（按发出的先后），每条对话只取给自己的。 */
 export type Outbox = OutboxEntry[];
 
@@ -44,8 +48,34 @@ function useOutbox(data: ConversationData, key: "main" | string, outbox: Outbox,
     if (!next || data.historyStatus !== "ready" || data.streaming) return;
     sent.current.add(next.id);
     consume(next.id);
-    void data.send(next.text, []);
+    void sendWithFiles(data, next.text, next.files).catch(() => undefined);
   }, [next, data, consume]);
+}
+
+/** 先把附件传给这条对话（云端转给 Chat），回执随这句话发出去。 */
+async function sendWithFiles(data: ConversationData, text: string, files: File[]): Promise<boolean> {
+  const attachments = files.length ? await uploadToConversation(data.scope, files) : [];
+  return data.send(text, [], { attachments });
+}
+
+/**
+ * 总管线、Task 管线底下的输入框（14.5）：InputBar，回答进行中右边是停止；回答末尾的选项填进框里；草稿按对话存。
+ * context：「关于：{Mission}」胶囊，发出的这一句前面带上它，发完就去掉。
+ */
+function ChatInput({ data, placeholder, onHeight, context }: {
+  data: ConversationData; placeholder: string; onHeight: (height: number) => void; context?: { label: string; onClear: () => void } | null;
+}) {
+  const [fill, setFill] = useState<{ text: string; nonce: number } | null>(null);
+  useAnswerOptionFill(data.scope, (text) => setFill({ text, nonce: Date.now() }));
+  return (
+    <InputBar placeholder={placeholder} busy={data.streaming} onStop={data.stop} textRequired onHeight={onHeight} fill={fill} context={context}
+      draftKey={`tianshu-home-draft-v1:${data.scope}`}
+      onSend={async (text, files) => {
+        const ok = await sendWithFiles(data, context ? `${context.label}\n\n${text}` : text, files);
+        if (ok) context?.onClear();
+        return ok;
+      }} />
+  );
 }
 
 /**
@@ -91,7 +121,9 @@ export function BuddyView({ buddy, outbox, consume, onSpeaking, context = null, 
             </header>
           )}
           timeline={(current) => <WorkTimeline data={current} blocks={[]} />}
-          dock={(latest) => <PendingDock latest={latest} />} />
+          dock={(latest) => <PendingDock latest={latest} />}
+          input={(onHeight) => <ChatInput data={data} placeholder={`与${name}讨论…`} onHeight={onHeight}
+            context={context ? { label: context, onClear: () => onClearContext?.() } : null} />} />
       </div>
     </PendingBoxes>
   );
@@ -230,7 +262,8 @@ function PipelineBody({ data, task, home, api, buddy, outbox, consume, go, onSpe
             </header>
           )}
           timeline={(current) => <WorkTimeline data={current} blocks={blocks} />}
-          dock={(latest) => <PendingDock latest={latest} />} />
+          dock={(latest) => <PendingDock latest={latest} />}
+          input={(onHeight) => <ChatInput data={data} placeholder={`与${task.name}讨论…`} onHeight={onHeight} />} />
       </div>
     </PendingBoxes>
   );

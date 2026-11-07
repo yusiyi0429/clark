@@ -6,6 +6,7 @@
  * 只有这台电脑上的本机程序在跑这张卡、而且不是手机时，才能开始、插话、停止、批权限；别处只看云端同步来的摘要。
  * 手机上分「结果」「对话」两个标签。
  */
+import type { TLocalAttachmentRef } from "@warmap/contracts";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -119,9 +120,9 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
     await local.refresh();
     scroll.jumpToLatest();
   };
-  const say = async (text: string) => {
+  const say = async (text: string, attachments: TLocalAttachmentRef[] = []) => {
     if (!session) return false;
-    return sayToSession(local.runner, session.id, view.pending, text);
+    return sayToSession(local.runner, session.id, view.pending, text, attachments);
   };
   const control = async (action: "interrupt" | "kill") => {
     if (!session) return;
@@ -144,7 +145,7 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
   const dock = <PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} />;
   // 新首页里输入框只在这台电脑上跑着这张卡时出（别处看摘要）；老页面照旧灰着。
   const composer = agent && (session || !embedded)
-    ? <SessionComposer placeholder={`给${item.title}插话…`} disabled={!canAct} onSend={say} dock={dock} />
+    ? <SessionComposer placeholder={`给${item.title}插话…`} disabled={!canAct} onSend={say} dock={dock} subject={{ kind: "card", id: cardId }} />
     : <div className={s.composerDock}>{dock}</div>;
   const chat = (
     <PendingBoxes>

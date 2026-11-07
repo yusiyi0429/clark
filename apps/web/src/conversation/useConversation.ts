@@ -597,7 +597,9 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
    * （用时从 since 算），否则返回 false 交还调用方。
    */
   async function send(message: string, references: SentCardRef[], options: { resumeRunId?: string; scopeOverride?: TReadScopeParams;
-    answers?: { input: TAskAnswerInput; record: TAskAnswerRecord }; auto?: boolean; attach?: { runId: string; running: boolean; since?: number } } = {}): Promise<boolean> {
+    answers?: { input: TAskAnswerInput; record: TAskAnswerRecord }; auto?: boolean; attach?: { runId: string; running: boolean; since?: number };
+    /** 这一句带的附件（新首页的输入框自己传好了给回执）；不给时用输入条里待发的那几份。 */
+    attachments?: Attachment[] } = {}): Promise<boolean> {
     const input = message.trim();
     const attach = options.attach;
     if ((!input && !attach) || status === "streaming") return false;
@@ -625,9 +627,10 @@ ${input}` : input;
     setReadScope(null);
     setThought(null);
     setStatus("streaming");
-    const attachmentRefs = attachments.map((attachment) => ({ id: attachment.id }));
+    const sentAttachments = options.attachments ?? attachments;
+    const attachmentRefs = sentAttachments.map((attachment) => ({ id: attachment.id }));
     // 乐观渲染：引用的卡片、附的材料随这句一起立刻画出来，不等回答结束读回历史。
-    const turn = { ...pendingUserMessage(0, text, references, attachments), ...(options.answers ? { answers: options.answers.record } : {}) };
+    const turn = { ...pendingUserMessage(0, text, references, sentAttachments), ...(options.answers ? { answers: options.answers.record } : {}) };
     /** 发出前已有的最后一条：没连上之后读回历史，若这句已经排在它后面，就是其实送到了，不再重发。 */
     const lastSequence = messages.reduce((max, item) => Math.max(max, item.sequence), 0);
     if (attach) {

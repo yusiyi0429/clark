@@ -5,7 +5,7 @@
  * - 等你：一件两行（原话；来源 · 哪件 Task · 截止）。短的（批准、单选、合回、开工、岗位建议）在行尾就地答，推荐的那个是次按钮、另一个弱按钮；
  *   答完这一行变成状态词（「已批准」）停 2 秒再收走，不弹 toast。行首不放强调色点（组头已经写了「等你」）。
  * - Task 现状行：和左栏 Task 行同一个样子；小字「等你 1 · 进行中 2 · 已排队 1」（等你用计数样式），行尾「11/20 验收」。点了进 Task 管线。
- * - 输入框：ComposerPill；左下「发给」默认自动（打字停下 300ms 后问一次分发接口，只认最后一次），也能选伙伴或某件 Task；发出去以后跳进那条对话。
+ * - 输入框：InputBar（14.5）；框下面「发给」默认自动（打字停下 300ms 后问一次分发接口，只认最后一次），也能选伙伴或某件 Task；发出去以后跳进那条对话。
  */
 import { useEffect, useRef, useState } from "react";
 import { Dropdown, Header } from "@heroui/react";
@@ -15,7 +15,7 @@ import type { Buddy } from "@/components/buddy/useBuddy";
 import { HeroButton } from "@/components/HeroButton";
 import { FailedLine } from "@/components/work/DecisionBox";
 import { localOptions, oneTap } from "@/components/work/decisions";
-import { ComposerAction, ComposerPill } from "@/conversation/ComposerPill";
+import { InputBar } from "./InputBar";
 import { acceptDrafts } from "@/lib/board/cloud";
 import { useLocalRunner, type LocalRunnerState } from "@/lib/local/LocalRunnerProvider";
 import { decideProposal } from "@/lib/team/roles";
@@ -41,7 +41,7 @@ export function HomeView({ data, api, buddy, today, go, route, onSend }: {
   go: (href: string) => void;
   /** 「自动」会发去哪（打字时实时显示）。 */
   route: (text: string) => Promise<RouteTarget>;
-  onSend: (text: string, target: SendTarget) => void;
+  onSend: (text: string, target: SendTarget, files: File[]) => void;
 }) {
   const missions = data.missions.filter((mission) => mission.tasks.length);
   return (
@@ -244,10 +244,10 @@ export function WaitingList({ items, api, go }: { items: WaitingItem[]; api: Wor
 }
 
 /**
- * 首页底部的输入框（5.4.3「输入框和『发给』」）：ComposerPill，占位「说点什么…」；左下「发给」默认自动，回车发出，跳进那条对话。
+ * 首页底部的输入框（5.4.3「输入框和『发给』」、14.5）：InputBar，占位「说点什么…」；框下面「发给」默认自动，回车发出，跳进那条对话（附件到了那条对话再传）。
  * 「发给」是选择器的触发器：「发给」淡色 + 目标墨色 + ChevronDown；点开是弹层：自动、伙伴，再按 Mission 列出 Task，当前那项行尾一个勾。
  */
-export function HomeComposer({ buddy, missions, route, onSend }: { buddy: Buddy | null; missions: HomeMission[]; route: (text: string) => Promise<RouteTarget>; onSend: (text: string, target: SendTarget) => void }) {
+export function HomeComposer({ buddy, missions, route, onSend }: { buddy: Buddy | null; missions: HomeMission[]; route: (text: string) => Promise<RouteTarget>; onSend: (text: string, target: SendTarget, files: File[]) => void }) {
   const [text, setText] = useState("");
   const [target, setTarget] = useState<SendTarget>("auto");
   const [guess, setGuess] = useState<RouteTarget>("main");
@@ -266,12 +266,7 @@ export function HomeComposer({ buddy, missions, route, onSend }: { buddy: Buddy 
     return () => window.clearTimeout(timer);
   }, [text, target, route]);
   const label = target === "auto" ? (text.trim() ? `自动 · ${nameOf(guess)}` : "自动") : nameOf(target);
-  const send = () => {
-    const value = text.trim();
-    if (!value) return;
-    setText("");
-    onSend(value, target);
-  };
+  const send = async (value: string, files: File[]) => { onSend(value, target, files); return true; };
   const keyOf = (value: SendTarget) => (value === "auto" || value === "main" ? value : `task:${value.taskId}`);
   const current = keyOf(target);
   const pick = (key: string) => setTarget(key === "auto" || key === "main" ? key : { taskId: key.slice(5) });
@@ -280,8 +275,8 @@ export function HomeComposer({ buddy, missions, route, onSend }: { buddy: Buddy 
   );
   return (
     <div className={h.composerDock}>
-      <ComposerPill tone="agent" onSubmit={send}
-        leading={(
+      <InputBar placeholder="说点什么…" textRequired onText={setText} onSend={send} draftKey="tianshu-home-draft-v1:home"
+        under={(
           <Dropdown>
             <Dropdown.Trigger className={h.sendTo} data-testid="send-to"><span className={h.sendToLabel}>发给</span><b>{label}</b><ChevronDown {...ICON} /></Dropdown.Trigger>
             <Dropdown.Popover placement="top start" offset={8} className={h.pop}>
@@ -299,12 +294,7 @@ export function HomeComposer({ buddy, missions, route, onSend }: { buddy: Buddy 
               </Dropdown.Menu>
             </Dropdown.Popover>
           </Dropdown>
-        )}
-        field={(
-          <textarea rows={1} value={text} aria-label="说点什么" placeholder="说点什么…" onChange={(event) => setText(event.target.value)}
-            onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); send(); } }} />
-        )}
-        action={<ComposerAction state="send" isDisabled={!text.trim()} />} />
+        )} />
     </div>
   );
 }

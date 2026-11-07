@@ -59,7 +59,7 @@ describe("有没批的批准时，底下发一句话 = 换个做法（5.4.3）",
   it("没有要批的：照常插话", async () => {
     const r = runner();
     await sayToSession(r, "s1", [], "先跑测试");
-    expect(r.sendMessage).toHaveBeenCalledWith("s1", "先跑测试");
+    expect(r.sendMessage).toHaveBeenCalledWith("s1", "先跑测试", undefined, []);
     expect(r.decidePermission).not.toHaveBeenCalled();
   });
 
@@ -75,7 +75,15 @@ describe("有没批的批准时，底下发一句话 = 换个做法（5.4.3）",
     const long = "改".repeat(600);
     await sayToSession(r, "s1", pending, long);
     expect(r.decidePermission).toHaveBeenCalledWith("s1", "r1", { decision: "deny" });
-    expect(r.sendMessage).toHaveBeenCalledWith("s1", long);
+    expect(r.sendMessage).toHaveBeenCalledWith("s1", long, undefined, []);
+  });
+
+  it("带了附件（14.5）：批准那边只记换个做法，整句连附件照常插话", async () => {
+    const r = runner();
+    const file = { id: "00000000-0000-4000-8000-0000000000f1", fileName: "截图.png", size: 10, sha256: "a".repeat(64) };
+    await sayToSession(r, "s1", pending, "看这张图", [file]);
+    expect(r.decidePermission).toHaveBeenCalledWith("s1", "r1", { decision: "deny" });
+    expect(r.sendMessage).toHaveBeenCalledWith("s1", "看这张图", undefined, [file]);
   });
 });
 

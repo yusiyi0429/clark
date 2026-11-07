@@ -13,7 +13,9 @@ import { ChevronRight } from "lucide-react";
 import { questionNotice, type SessionEntry } from "@/lib/local/sessionView";
 import type { LocalRunner, TLocalPermissionRequestView, TLocalQuestionRequestView, TLocalSessionStatus } from "@/lib/local/runner";
 import { duration } from "@/lib/home/derive";
-import { ComposerAction, ComposerPill } from "@/conversation/ComposerPill";
+import { InputBar } from "@/components/home/InputBar";
+import { sizeText, uploadToSubSession } from "@/lib/home/attachments";
+import type { TLocalAttachmentRef, TSessionAttachment } from "@warmap/contracts";
 import { ApprovalDecision, DENY_MAX, awayChip } from "@/components/work/decisions";
 import { DecisionBox, FailedLine } from "@/components/work/DecisionBox";
 import { HeroButton } from "@/components/HeroButton";
@@ -96,12 +98,13 @@ export const sessionEnded = (status: TLocalSessionStatus | null) => status === "
  * 子会话底下的输入框发一句话（5.4.3「和底部输入框的关系」）：有没批的批准时，这句话 = 「换个做法：{这句话}」，批准框收起；
  * 超过「换个做法」的上限时批准那边只记换个做法，整句照常插话。没有要批的就是插话。
  */
-export async function sayToSession(runner: LocalRunner, sessionId: string, pending: TLocalPermissionRequestView[], text: string): Promise<boolean> {
+export async function sayToSession(runner: LocalRunner, sessionId: string, pending: TLocalPermissionRequestView[], text: string, attachments: TLocalAttachmentRef[] = []): Promise<boolean> {
   const waiting = pending[0];
-  if (!waiting) { await runner.sendMessage(sessionId, text); return true; }
-  const fits = text.length <= DENY_MAX;
-  await runner.decidePermission(sessionId, waiting.requestId, { decision: "deny", ...(fits ? { message: text } : {}) });
-  if (!fits) await runner.sendMessage(sessionId, text);
+  if (!waiting) { await runner.sendMessage(sessionId, text, undefined, attachments); return true; }
+  // 带了附件的，批准那边只记换个做法，整句（连附件）照常插话。
+  const fits = text.length <= DENY_MAX && !attachments.length;
+  await runner.decidePermission(sessionId, waiting.requestId, { decision: "deny", ...(fits && text ? { message: text } : {}) });
+  if (!fits) await runner.sendMessage(sessionId, text, undefined, attachments);
   return true;
 }
 
@@ -139,7 +142,18 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
       {lead ? <span className={s.evt}>{lead}</span> : null}
       {groupSteps(entries.filter((_, index) => index !== lastAsk)).map((entry) => {
         switch (entry.kind) {
-          case "user": return <div key={entry.seq} className={s.me}>{entry.text}</div>;
+          case "user": return (
+            <div key={entry.seq} className={s.me}>
+              {entry.attachments?.length ? (
+                <ul className={h.bubbleAtts} aria-label="附件">
+                  {entry.attachments.map((file, index) => (
+                    <li key={`${index}:${file.name}`} className={h.att}><span className={h.attName}><b title={file.name}>{file.name}</b><span className={h.num}>{sizeText(file.size)}</span></span></li>
+                  ))}
+                </ul>
+              ) : null}
+              {entry.text}
+            </div>
+          );
           case "assistant": return <div key={entry.seq} className={s.bubble}><small className={s.who}>{agentName}</small><p>{entry.text}</p></div>;
           case "steps": return entry.steps.length === 1 ? <StepRow key={entry.seq} step={entry.steps[0]!} live={live} /> : <StepGroup key={entry.seq} steps={entry.steps} live={live} />;
           case "asked": return <DecisionBox key={entry.seq} kind="question" title={entry.question} options={[]} onPick={noop} resolved={entry.answer ?? undefined} expired={entry.answer === null} />;
@@ -159,35 +173,18 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
 }
 
 /**
- * 子会话底下的输入框（5.4.3「输入框」）：和首页、管线一样是 ComposerPill，占位「给{子会话名}插话…」。发给执行方（进行中在下一个工具步骤生效）。
- * dock：「N 个问题等你 / 回到最新」那一条（PendingDock），放在输入框上方 12。
+ * 子会话底下的输入框（5.4.3「输入框」、14.5）：和首页、管线一样是 InputBar，占位「给{子会话名}插话…」。发给执行方（进行中在下一个工具步骤生效）。
+ * 附件先存到云端（POST /api/me/sub-sessions/:kind/:id/attachments），这句话带着引用交给本机，本机取回存进工作区；只带附件不说话也行。
+ * dock：「N 个问题等你 / 回到最新」那一条（PendingDock），放在输入框上方。
  */
-export function SessionComposer({ placeholder, disabled, onSend, dock }: { placeholder: string; disabled: boolean; onSend: (text: string) => Promise<boolean>; dock?: ReactNode }) {
-  const [text, setText] = useState("");
-  const [busy, setBusy] = useState(false);
-  /** 没发出去：字放回框里，框里原处写「失败 · 重试」（原因在 title 里），不弹 toast。 */
-  const [failed, setFailed] = useState<string | null>(null);
-  const send = async () => {
-    const value = text.trim();
-    if (!value || busy || disabled) return;
-    setBusy(true);
-    setFailed(null);
-    setText("");
-    const ok = await onSend(value).catch((error: unknown) => { setFailed(error instanceof Error ? error.message : ""); return false; });
-    if (!ok) setText(value);
-    setBusy(false);
-  };
+export function SessionComposer({ placeholder, disabled, onSend, dock, subject }: {
+  placeholder: string; disabled: boolean; onSend: (text: string, attachments: TLocalAttachmentRef[]) => Promise<boolean>; dock?: ReactNode;
+  subject: TSessionAttachment["subject"];
+}) {
   return (
     <div className={s.composerDock}>
-      {dock}
-      <ComposerPill tone="agent" onSubmit={() => void send()}
-        leading={failed !== null && !busy ? <FailedLine inline reason={failed} onRetry={() => void send()} /> : undefined}
-        field={(
-          <textarea rows={1} value={text} disabled={disabled} placeholder={placeholder} aria-label={placeholder}
-            onChange={(event) => setText(event.target.value)}
-            onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } }} />
-        )}
-        action={<ComposerAction state="send" isDisabled={disabled || busy || !text.trim()} />} />
+      <InputBar placeholder={placeholder} disabled={disabled} dock={dock} draftKey={`tianshu-home-draft-v1:${subject.kind}:${subject.id}`}
+        onSend={async (text, files) => onSend(text, files.length ? await uploadToSubSession(subject, files) : [])} />
     </div>
   );
 }

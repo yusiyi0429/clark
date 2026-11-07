@@ -201,6 +201,39 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 
 /* 输入框：ComposerPill，和对话列同宽；「发给」是选择器的触发器，样子同弱按钮、字重 400。 */
 .composerDock { width: min(680px, calc(100% - 2 * var(--space-6))); margin: 0 auto var(--space-4); }
+/* 输入框（14.5）：四处一样。空着是一行高的长条（48）：左「+」、中间字（16/24）、右麦克风或发送；附件和「关于」在框里、字的上方；「发给」在框下面。 */
+.inputDock { display: grid; gap: var(--space-2); }
+.bar { display: flex; flex-direction: column; gap: var(--space-1); padding: 7px; border: 1px solid var(--field-border); border-radius: 20px; background: var(--field-bg); color: var(--field-ink); box-shadow: var(--elev-2); transition: border-color var(--dur-fast) linear, background var(--dur-fast) linear; }
+.bar:focus-within, .bar[data-drag] { border-color: var(--field-border-focus); }
+.bar[data-drag] { background: var(--neutral-wash); }
+.barRow { display: flex; align-items: flex-end; gap: var(--space-1); }
+.barField { position: relative; display: flex; flex: 1; min-width: 0; }
+.barField textarea { display: block; flex: 1; min-width: 0; height: 32px; max-height: 168px; margin: 0; padding: 4px; border: 0; outline: 0; resize: none; overflow-y: auto; background: transparent; color: inherit; font: inherit; font-size: var(--doc-type-body); line-height: 24px; }
+.barField textarea::placeholder { color: var(--field-placeholder); }
+.barField textarea:disabled { cursor: not-allowed; }
+.barTool, .barSend { display: grid; flex: none; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--ink-muted); cursor: pointer; }
+.barTool:hover { background: var(--default-soft); color: var(--ink); }
+.barTool:disabled { cursor: not-allowed; opacity: .5; }
+.barSend { background: var(--accent); color: #ffffff; }
+.barSend:disabled { cursor: default; opacity: .5; }
+.barTool:focus-visible, .barSend:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.barContext { display: inline-flex; align-self: flex-start; align-items: center; gap: 6px; height: 24px; margin: 2px 0 0 4px; padding: 0 4px 0 8px; border-radius: var(--r-capsule, 999px); background: var(--neutral-wash); color: var(--ink-muted); font-size: var(--text-xs); line-height: 16px; }
+.barContext button { display: grid; padding: 0; border: 0; background: none; color: var(--ink-faint); cursor: pointer; }
+.atts { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; padding: 4px 4px 2px; list-style: none; }
+.att { position: relative; display: flex; flex: none; align-items: center; gap: var(--space-2); max-width: 220px; height: 56px; padding: 8px 12px 8px 10px; border-radius: var(--r-inset); background: var(--neutral-wash); }
+.att[data-image] { width: 56px; padding: 0; background: none; }
+.att img { display: block; width: 56px; height: 56px; border-radius: var(--r-control); object-fit: cover; box-shadow: 0 0 0 1px var(--hairline); }
+.attType { display: grid; flex: none; place-items: center; width: 28px; height: 32px; border-radius: 6px; background: var(--surface); box-shadow: 0 0 0 1px var(--hairline); color: var(--ink-muted); font-size: 9px; font-weight: 600; line-height: 1; text-transform: uppercase; }
+.attName { display: flex; flex-direction: column; min-width: 0; }
+.attName b { overflow: hidden; font-size: var(--text-base); font-weight: 400; line-height: var(--lh-row); text-overflow: ellipsis; white-space: nowrap; }
+.attName span { color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; }
+.attRemove { position: absolute; top: -6px; right: -6px; display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: var(--surface); box-shadow: 0 0 0 1px var(--hairline-strong); color: var(--ink-muted); cursor: pointer; opacity: 0; transition: opacity var(--dur-snap) var(--ease-swift); }
+.att:hover .attRemove, .att:focus-within .attRemove { opacity: 1; }
+.barError { display: flex; align-items: center; min-height: 24px; margin: 0; padding: 0 4px; color: var(--danger); font-size: var(--text-xs); line-height: 16px; }
+.barFailed { padding: 0 4px; }
+.barUnder { display: flex; align-items: center; gap: var(--space-2); padding: 0 4px; }
+/* 本人气泡里的附件（14.5）：靠右，图片 96。 */
+.bubbleAtts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); margin: 0 0 6px; padding: 0; list-style: none; }
 .sendTo { display: inline-flex; align-items: center; gap: var(--space-1); max-width: 320px; height: var(--row-32); padding: 0 var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink); font: inherit; font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); cursor: pointer; }
 .sendTo:hover, .sendTo[data-pressed] { background: var(--default-soft); }
 .sendToLabel { color: var(--ink-faint); }
@@ -344,6 +377,7 @@ button.bgLabel:hover { background: var(--default-soft); }
 /* 手机上的热区至少 44（5.2、5.7）：页头的返回、后台任务、信息按钮，「子会话 N」。 */
 .app[data-phone] .icon { min-width: var(--touch-hit, 44px); min-height: var(--touch-hit, 44px); }
 .app[data-phone] .foldToggle { min-height: var(--touch-hit, 44px); }
+.app[data-phone] .attRemove { opacity: 1; }
 /* 手机左右留白 16（5.2、5.7）：对话列、二级页、Task 详情。 */
 .app[data-phone] section[data-tone][data-variant="page"] { --gutter: var(--space-4); }
 .app[data-phone] :is(.pageInner, .infoInner) { padding-inline: var(--space-4); }

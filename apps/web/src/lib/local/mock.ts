@@ -286,7 +286,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
       catch (error) { return { ok: false as const, error: { code: error instanceof LocalRunnerError && error.code !== "network" ? error.code : "internal", message: error instanceof Error ? error.message : "没开起来" } }; }
     })),
     getSession: async (id) => { const s = must(id); return { session: summaryOf(s), pendingPermissions: s.pending ? [s.pending] : [] }; },
-    sendMessage: async (id, text, kind) => {
+    sendMessage: async (id, text, kind, attachments) => {
       const s = must(id);
       const was = s.summary.status;
       if (kind === "review") {

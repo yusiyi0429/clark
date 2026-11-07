@@ -6,6 +6,7 @@
  * 有了正文以后能开「评审会」（第 19.1、19.6 节）：选 2–3 个挑刺的岗位，本机并行挑刺、合成一份，存成「评审」那一版，按「分歧和建议」排版。
  * 版本由本机经同步报到云端；对话全文只在本机。手机和别的电脑上只能看版本。
  */
+import type { TLocalAttachmentRef } from "@warmap/contracts";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -93,9 +94,9 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
   const status = view.status ?? session?.status ?? null;
   const ended = !!session && sessionEnded(status);
   const device = topic.run?.deviceName ?? detail.runs[0]?.deviceName ?? null;
-  const say = async (text: string) => {
+  const say = async (text: string, attachments: TLocalAttachmentRef[] = []) => {
     if (!session) return false;
-    return sayToSession(local.runner, session.id, view.pending, text);
+    return sayToSession(local.runner, session.id, view.pending, text, attachments);
   };
   const decide = async (requestId: string, decision: "allow" | "deny", { forSession, message }: DecideOptions) => {
     if (!session) return;
@@ -169,7 +170,7 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
           <div ref={scroll.reserveRef} aria-hidden />
         </div>
         {session || !embedded
-          ? <SessionComposer placeholder={`给${topic.title}插话…`} disabled={!canAct} onSend={say} dock={<PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} />} />
+          ? <SessionComposer placeholder={`给${topic.title}插话…`} disabled={!canAct} onSend={say} subject={{ kind: "topic", id: topic.id }} dock={<PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} />} />
           : <div className={s.composerDock}><PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} /></div>}
       </div>
     </PendingBoxes>
