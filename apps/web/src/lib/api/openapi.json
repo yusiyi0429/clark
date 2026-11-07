@@ -20227,6 +20227,378 @@
           }
         }
       }
+    },
+    "/api/me/tasks/{taskId}/continuation": {
+      "post": {
+        "operationId": "continueTask",
+        "summary": "延续（这件 Task 的负责人）：接着做成另一件本人负责的 Task；没做完的卡、专题、待交付条目、拆卡登记、规划员挂过去，管线接着用，约定复制成草稿。可以重复调",
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContinueTaskRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "延续好了",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContinueTaskResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/tasks/{taskId}/stop": {
+      "post": {
+        "operationId": "stopTask",
+        "summary": "到此为止（这件 Task 的负责人）：这件 Task 了结了，不在左栏；可以补一句话。已经延续出去的 409",
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StopTaskRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "定了到此为止",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskSettlementResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "unstopTask",
+        "summary": "撤销到此为止（这件 Task 的负责人）；本来就没定也回 204",
+        "parameters": [
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "撤销了"
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/months/{period}": {
+      "get": {
+        "operationId": "getMonthPage",
+        "summary": "月份页：这个月本人的 Task（约定几条达到、交付第几版、还在跑和受阻的子会话、确认完成没有、了结和延续去了哪、复盘时怎么定的），和下个月 Co-Agent 的草稿（现在为 null）",
+        "parameters": [
+          {
+            "name": "period",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "月份页",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonthPageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/months/{period}/tasks/{taskId}/decision": {
+      "put": {
+        "operationId": "decideMonthTask",
+        "summary": "复盘时这件怎么办：继续做 / 改一改再做 / 到此为止，可以补一句话；选到此为止同时定了到此为止，改成别的就撤销",
+        "parameters": [
+          {
+            "name": "period",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MonthAnswer"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "存好了"
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -67880,7 +68252,8 @@
           "basisChanged",
           "canEdit",
           "updatedBy",
-          "updatedAt"
+          "updatedAt",
+          "draftFrom"
         ],
         "properties": {
           "taskId": {
@@ -68026,6 +68399,17 @@
             "anyOf": [
               {
                 "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "draftFrom": {
+            "anyOf": [
+              {
+                "minLength": 1,
                 "type": "string"
               },
               {
@@ -109081,6 +109465,1221 @@
         "properties": {
           "feishu": {
             "type": "boolean"
+          }
+        }
+      },
+      "TaskRef": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "taskId",
+          "name",
+          "missionId",
+          "period"
+        ],
+        "properties": {
+          "taskId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "missionId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "period": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "TaskSettlement": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "at",
+          "by",
+          "note",
+          "to"
+        ],
+        "properties": {
+          "kind": {
+            "anyOf": [
+              {
+                "const": "completed",
+                "type": "string"
+              },
+              {
+                "const": "stopped",
+                "type": "string"
+              },
+              {
+                "const": "continued",
+                "type": "string"
+              }
+            ]
+          },
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "by": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "to": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "taskId",
+                  "name",
+                  "missionId",
+                  "period"
+                ],
+                "properties": {
+                  "taskId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "missionId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "period": {
+                    "anyOf": [
+                      {
+                        "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ContinueTaskRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "toTaskId"
+        ],
+        "properties": {
+          "toTaskId": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "ContinueTaskResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "taskId",
+          "settlement",
+          "moved"
+        ],
+        "properties": {
+          "taskId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "settlement": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "kind",
+              "at",
+              "by",
+              "note",
+              "to"
+            ],
+            "properties": {
+              "kind": {
+                "anyOf": [
+                  {
+                    "const": "completed",
+                    "type": "string"
+                  },
+                  {
+                    "const": "stopped",
+                    "type": "string"
+                  },
+                  {
+                    "const": "continued",
+                    "type": "string"
+                  }
+                ]
+              },
+              "at": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "by": {
+                "anyOf": [
+                  {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "note": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "to": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "taskId",
+                      "name",
+                      "missionId",
+                      "period"
+                    ],
+                    "properties": {
+                      "taskId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "missionId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "period": {
+                        "anyOf": [
+                          {
+                            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          "moved": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "cards",
+              "topics",
+              "pending",
+              "splits",
+              "planners",
+              "drafts",
+              "pipeline",
+              "agreement"
+            ],
+            "properties": {
+              "cards": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "topics": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "pending": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "splits": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "planners": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "drafts": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "pipeline": {
+                "type": "boolean"
+              },
+              "agreement": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "StopTaskRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {
+          "note": {
+            "minLength": 1,
+            "maxLength": 200,
+            "type": "string"
+          }
+        }
+      },
+      "TaskSettlementResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "taskId",
+          "settlement"
+        ],
+        "properties": {
+          "taskId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "settlement": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "kind",
+              "at",
+              "by",
+              "note",
+              "to"
+            ],
+            "properties": {
+              "kind": {
+                "anyOf": [
+                  {
+                    "const": "completed",
+                    "type": "string"
+                  },
+                  {
+                    "const": "stopped",
+                    "type": "string"
+                  },
+                  {
+                    "const": "continued",
+                    "type": "string"
+                  }
+                ]
+              },
+              "at": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "by": {
+                "anyOf": [
+                  {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "note": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "to": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "taskId",
+                      "name",
+                      "missionId",
+                      "period"
+                    ],
+                    "properties": {
+                      "taskId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "missionId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "period": {
+                        "anyOf": [
+                          {
+                            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "MonthAnswer": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "choice",
+          "note"
+        ],
+        "properties": {
+          "choice": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "const": "continue",
+                    "type": "string"
+                  },
+                  {
+                    "const": "revise",
+                    "type": "string"
+                  },
+                  {
+                    "const": "stop",
+                    "type": "string"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "MonthTask": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "taskId",
+          "missionId",
+          "missionTitle",
+          "name",
+          "agreement",
+          "version",
+          "running",
+          "blocked",
+          "done",
+          "settlement",
+          "continuedFrom",
+          "answer"
+        ],
+        "properties": {
+          "taskId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "missionId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "missionTitle": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "agreement": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "met",
+                  "total"
+                ],
+                "properties": {
+                  "met": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "total": {
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "version": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "running": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "blocked": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "done": {
+            "type": "boolean"
+          },
+          "settlement": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "kind",
+                  "at",
+                  "by",
+                  "note",
+                  "to"
+                ],
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "const": "completed",
+                        "type": "string"
+                      },
+                      {
+                        "const": "stopped",
+                        "type": "string"
+                      },
+                      {
+                        "const": "continued",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "at": {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "by": {
+                    "anyOf": [
+                      {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "note": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "to": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "taskId",
+                          "name",
+                          "missionId",
+                          "period"
+                        ],
+                        "properties": {
+                          "taskId": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "missionId": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "period": {
+                            "anyOf": [
+                              {
+                                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "continuedFrom": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "taskId",
+                  "name",
+                  "missionId",
+                  "period"
+                ],
+                "properties": {
+                  "taskId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "missionId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "period": {
+                    "anyOf": [
+                      {
+                        "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "answer": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "choice",
+                  "note"
+                ],
+                "properties": {
+                  "choice": {
+                    "anyOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "const": "continue",
+                            "type": "string"
+                          },
+                          {
+                            "const": "revise",
+                            "type": "string"
+                          },
+                          {
+                            "const": "stop",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "note": {
+                    "anyOf": [
+                      {
+                        "maxLength": 200,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "MonthDraft": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "period",
+          "missions"
+        ],
+        "properties": {
+          "period": {
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "type": "string"
+          },
+          "missions": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "title",
+                "tasks"
+              ],
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "tasks": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "name",
+                      "continuesFrom"
+                    ],
+                    "properties": {
+                      "id": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "continuesFrom": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "taskId",
+                              "name",
+                              "period",
+                              "summary"
+                            ],
+                            "properties": {
+                              "taskId": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "period": {
+                                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                                "type": "string"
+                              },
+                              "summary": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "MonthPageResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "period",
+          "tasks",
+          "draft"
+        ],
+        "properties": {
+          "period": {
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "type": "string"
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "taskId",
+                "missionId",
+                "missionTitle",
+                "name",
+                "agreement",
+                "version",
+                "running",
+                "blocked",
+                "done",
+                "settlement",
+                "continuedFrom",
+                "answer"
+              ],
+              "properties": {
+                "taskId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "missionId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "missionTitle": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "agreement": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "met",
+                        "total"
+                      ],
+                      "properties": {
+                        "met": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "total": {
+                          "minimum": 1,
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "version": {
+                  "anyOf": [
+                    {
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "running": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "blocked": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "done": {
+                  "type": "boolean"
+                },
+                "settlement": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "kind",
+                        "at",
+                        "by",
+                        "note",
+                        "to"
+                      ],
+                      "properties": {
+                        "kind": {
+                          "anyOf": [
+                            {
+                              "const": "completed",
+                              "type": "string"
+                            },
+                            {
+                              "const": "stopped",
+                              "type": "string"
+                            },
+                            {
+                              "const": "continued",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "at": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "by": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "note": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "to": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "taskId",
+                                "name",
+                                "missionId",
+                                "period"
+                              ],
+                              "properties": {
+                                "taskId": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "missionId": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "period": {
+                                  "anyOf": [
+                                    {
+                                      "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "continuedFrom": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "taskId",
+                        "name",
+                        "missionId",
+                        "period"
+                      ],
+                      "properties": {
+                        "taskId": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "missionId": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "period": {
+                          "anyOf": [
+                            {
+                              "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "answer": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "choice",
+                        "note"
+                      ],
+                      "properties": {
+                        "choice": {
+                          "anyOf": [
+                            {
+                              "anyOf": [
+                                {
+                                  "const": "continue",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "revise",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "stop",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "note": {
+                          "anyOf": [
+                            {
+                              "maxLength": 200,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "draft": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "period",
+                  "missions"
+                ],
+                "properties": {
+                  "period": {
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                    "type": "string"
+                  },
+                  "missions": {
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "title",
+                        "tasks"
+                      ],
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "tasks": {
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "id",
+                              "name",
+                              "continuesFrom"
+                            ],
+                            "properties": {
+                              "id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "continuesFrom": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "type": "object",
+                                    "required": [
+                                      "taskId",
+                                      "name",
+                                      "period",
+                                      "summary"
+                                    ],
+                                    "properties": {
+                                      "taskId": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "period": {
+                                        "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                                        "type": "string"
+                                      },
+                                      "summary": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       }

@@ -156,6 +156,23 @@ describe("月份页（设计 10.4、10.5）", () => {
     expect(html).not.toContain("button--primary");
   });
 
+  it("已经延续出去的不再问怎么办，下面一行「已延续到 12 月的 X」；延续来的小字加「延续自 10 月的 X」", () => {
+    const data = monthFixture("2026-11");
+    data.tasks[0] = { ...data.tasks[0]!, continuedFrom: { taskId: "old", name: "首页改版一期", missionId: "m0", period: "2026-10" } };
+    const tasks = render(data).split('data-testid="month-task"').slice(1);
+    expect(text(tasks[0]!)).toContain("延续自 10 月的首页改版一期");
+    expect(tasks[0]).toContain('data-testid="month-decision"');
+    expect(tasks[2]).not.toContain('data-testid="month-decision"');
+    expect(text(tasks[2]!)).toContain("已延续到 12 月的复盘入口收尾");
+  });
+
+  it("选项和补的话都空时不发（接口会回 400）", async () => {
+    const request = vi.fn();
+    const source = httpMonthSource(request as unknown as typeof fetch, false);
+    await expect(source.decide("2026-11", "t1", { choice: null, note: "  " })).rejects.toThrow();
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it("没有 Task、没有草稿的部分不画；小字里是 0 的不写", () => {
     const html = render({ period: "2026-12", tasks: [], draft: null });
     expect(text(html)).not.toContain("的 Task");

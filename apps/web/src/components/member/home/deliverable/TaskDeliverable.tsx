@@ -19,7 +19,7 @@ import { HeroButton } from "@/components/HeroButton";
 import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import { useTaskDeliverable } from "./useTaskDeliverable";
 import { useTaskAgreement } from "./useTaskAgreement";
-import { AgreementLine, BeyondScope, CheckLine, CheckSummary, Exclusions, agreementBody } from "./Agreement";
+import { AgreementLine, BeyondScope, CheckLine, CheckSummary, DraftAgreement, Exclusions, agreementBody } from "./Agreement";
 import { ReviewHeader } from "./ReviewHeader";
 import { CriteriaList } from "./CriteriaList";
 import { VersionItems } from "./VersionItems";
@@ -132,6 +132,7 @@ export function TaskDeliverable({ task, activities, activityCount = 0, newItem, 
           onDissent={async (index, reason) => (selected ? result(await api.dissent(selected.id, index, reason)) : null)}
           tools={<>
             {agreement?.basisChanged ? <span className={d.changed}>标准改过</span> : null}
+            {agreement ? <DraftAgreement agreement={agreement} onConfirm={pact.save} /> : null}
             <span className={d.grow} />
             <HeroButton variant="tertiary" size="sm" isDisabled={pact.checking} onPress={() => void runCheck()}>{pact.checking ? "对表中…" : "对表"}</HeroButton>
           </>}

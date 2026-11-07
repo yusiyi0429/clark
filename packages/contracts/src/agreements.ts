@@ -43,6 +43,8 @@ export const TaskAgreementResponse = Type.Object({
   canEdit: Type.Boolean(),
   updatedBy: Type.Union([AgreementPerson, Type.Null()]),
   updatedAt: Type.Union([Type.String({ format: "date-time" }), Type.Null()]),
+  /** 延续来的约定草稿：从哪件 Task 复制来的（跨月延续，taskContinuity.ts）；本人存一次就成了正式的、回到 null。不是草稿为 null。 */
+  draftFrom: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
 }, { additionalProperties: false });
 
 /**

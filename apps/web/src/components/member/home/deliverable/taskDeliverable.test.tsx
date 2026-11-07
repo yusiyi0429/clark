@@ -61,7 +61,7 @@ const yang = { personId: "yang", name: "杨主任" };
 const agreement = (patch: Partial<TTaskAgreementResponse> = {}): TTaskAgreementResponse => ({
   taskId: "t1", taskName: task.name, missionId: "m1", basis: "acceptance", source: "none",
   criteria: criteria.map((text, index) => ({ index: index + 1, text, proof: null, acceptor: null })),
-  exclusions: [], complete: false, basisChanged: false, canEdit: true, updatedBy: null, updatedAt: null, ...patch,
+  exclusions: [], complete: false, basisChanged: false, canEdit: true, updatedBy: null, updatedAt: null, draftFrom: null, ...patch,
 });
 const row = (index: number, status: TTaskCheckCriterion["status"], patch: Partial<TTaskCheckCriterion> = {}): TTaskCheckCriterion => ({
   index, text: criteria[index - 1], status, proof: null, acceptor: null, evidence: null, gap: null, notifiedToday: false, ...patch,
@@ -263,6 +263,15 @@ describe("约定与对表", () => {
     const reader = render(deliverable({ canEdit: false, versions: [version()] }), pact({ check: ready({}, { canNotify: false }) }));
     expect(button(reader, "请杨主任看")).toBeNull();
     expect(text(item(reader, 1))).toContain("要杨主任确认");
+  });
+
+  it("延续来的约定（draftFrom）：标题行「延续来的约定」，能改的人旁边「确认」；不是草稿时没有", () => {
+    const draft = render(deliverable({ versions: [version()] }), pact({ agreement: agreement({ draftFrom: "old-task", source: "tianshu" }) }));
+    expect(draft).toContain('data-testid="agreement-draft"');
+    expect(button(draft, "确认")).not.toBeNull();
+    const readOnly = render(deliverable({ versions: [version()] }), pact({ agreement: agreement({ draftFrom: "old-task", canEdit: false }) }));
+    expect(button(readOnly, "确认")).toBeNull();
+    expect(render(deliverable({ versions: [version()] }), pact({ agreement: agreement() }))).not.toContain("延续来的约定");
   });
 
   it("标准改过：标题行小标「标准改过」，对表的提示里也有那一句", () => {

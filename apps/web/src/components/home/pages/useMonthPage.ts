@@ -1,52 +1,27 @@
 "use client";
 
 /**
- * 月份页的数据（设计 10.4、10.5、12.4）：接口由 B2 做（跨月延续），还没有。这里先定形状，页面只认这个形状：
- * - GET  /api/me/months/:period → MonthPageData：这个月的每件 Task 和天枢备好的状态（约定几条达到、交付第几版、还在跑的、受阻的、本人确认完成没有、复盘时怎么定的），
- *   以及下个月 Co-Agent 的草稿（Mission 和 Task，延续来的带「接着哪件」和那件现在的状态）。
+ * 月份页的数据（设计 10.4、10.5、12.4），形状照 B2 的契约（packages/contracts/src/taskContinuity.ts）：
+ * - GET  /api/me/months/:period → MonthPageData：这个月本人的每件 Task 和天枢备好的状态（约定几条达到、交付第几版、还在跑的、受阻的、本人确认完成没有、
+ *   了结了没有（完成 / 到此为止 / 已延续，延续去了哪）、从哪件延续来的、复盘时怎么定的），以及下个月 Co-Agent 的草稿（暂为 null，等溪南）。
  * - PUT  /api/me/months/:period/tasks/:taskId/decision，体 MonthAnswer → 204：复盘时这件怎么办（继续做 / 改一改再做 / 到此为止，可以补一句话）。
+ *   choice、note 不能都空（接口回 400，这里先拦下）；已经延续出去的选到此为止接口回 409。
  *   答案就是交给 Co-Agent 的「负责人 agent 参考信息」（怎么交在等溪南，10.8）。
  * 接口还没有（404）时：开发和测试里用假数据（monthFixture），生产里写「失败 · 重试」，不拿假数据冒充。换来源只换 MonthSource。
  */
 import { useCallback, useEffect, useState } from "react";
+import type { TMonthAnswer, TMonthChoice, TMonthDraft, TMonthPageResponse, TMonthTask } from "@warmap/contracts";
 
-export type MonthChoice = "continue" | "revise" | "stop";
+export type MonthChoice = TMonthChoice;
 /** 复盘时这件怎么办：选了哪个（只补一句话时为 null）和补的那句话。 */
-export type MonthAnswer = { choice: MonthChoice | null; note: string | null };
+export type MonthAnswer = TMonthAnswer;
+/** 这个月的一件 Task；settlement 不为 null 的已经了结（完成、到此为止、已延续），不再问怎么办。 */
+export type MonthTask = TMonthTask;
+export type MonthDraft = TMonthDraft;
+export type MonthPageData = TMonthPageResponse;
 
-export type MonthTask = {
-  taskId: string;
-  missionTitle: string;
-  name: string;
-  /** 约定达到了几条（有证据）/ 共几条；没有约定为 null。 */
-  agreement: { met: number; total: number } | null;
-  /** 交付到第几版；没交过为 null。 */
-  version: number | null;
-  /** 还在跑的子会话。 */
-  running: number;
-  /** 受阻的子会话（卡在哪）。 */
-  blocked: number;
-  /** 本人确认完成了（最近一次交付，之后没返工）：不问怎么办。 */
-  done: boolean;
-  /** 复盘时已经定了的；还没定为 null。 */
-  answer: MonthAnswer | null;
-};
-
-export type MonthDraftTask = {
-  id: string;
-  name: string;
-  /** 延续来的：接着上个月的哪件，那件现在的状态（一行，同上半部分的小字）。新起的为 null。 */
-  continuesFrom: { taskId: string; name: string; period: string; summary: string } | null;
-};
-export type MonthDraft = { period: string; missions: { id: string; title: string; tasks: MonthDraftTask[] }[] };
-
-export type MonthPageData = {
-  /** 这一页是哪个月（YYYY-MM）。 */
-  period: string;
-  tasks: MonthTask[];
-  /** 下个月 Co-Agent 的草稿；还没到为 null。 */
-  draft: MonthDraft | null;
-};
+/** 已经了结了（本人确认完成、到此为止、已延续出去）：不问怎么办。到此为止的仍能改回来，所以只看完成和延续。 */
+export const settled = (task: Pick<MonthTask, "done" | "settlement">) => task.done || task.settlement?.kind === "completed" || task.settlement?.kind === "continued";
 
 export type MonthSource = {
   load: (period: string) => Promise<MonthPageData>;
@@ -82,9 +57,12 @@ export function monthFixture(period: string): MonthPageData {
   return {
     period,
     tasks: [
-      { taskId: "fixture-home", missionTitle: "首页与派活", name: "新首页改版", agreement: { met: 2, total: 3 }, version: 2, running: 1, blocked: 0, done: false, answer: null },
-      { taskId: "fixture-meeting", missionTitle: "首页与派活", name: "会后写回本体", agreement: { met: 3, total: 3 }, version: 3, running: 0, blocked: 0, done: true, answer: null },
-      { taskId: "fixture-review", missionTitle: "复盘与拆解", name: "月度复盘入口", agreement: { met: 0, total: 2 }, version: null, running: 0, blocked: 1, done: false, answer: null },
+      { taskId: "fixture-home", missionId: "fixture-m1", missionTitle: "首页与派活", name: "新首页改版", agreement: { met: 2, total: 3 }, version: 2, running: 1, blocked: 0, done: false, settlement: null, continuedFrom: null, answer: null },
+      { taskId: "fixture-meeting", missionId: "fixture-m1", missionTitle: "首页与派活", name: "会后写回本体", agreement: { met: 3, total: 3 }, version: 3, running: 0, blocked: 0, done: true,
+        settlement: { kind: "completed", at: `${period}-20T08:00:00.000Z`, by: null, note: null, to: null }, continuedFrom: null, answer: null },
+      { taskId: "fixture-review", missionId: "fixture-m2", missionTitle: "复盘与拆解", name: "月度复盘入口", agreement: { met: 0, total: 2 }, version: null, running: 0, blocked: 1, done: false,
+        settlement: { kind: "continued", at: `${period}-28T08:00:00.000Z`, by: null, note: null, to: { taskId: "fixture-review-next", name: "复盘入口收尾", missionId: "fixture-m3", period: next } },
+        continuedFrom: null, answer: null },
     ],
     draft: {
       period: next,
@@ -120,6 +98,7 @@ export function httpMonthSource(request: typeof fetch = (...args) => fetch(...ar
       }
     },
     decide: async (period, taskId, answer) => {
+      if (!answer.choice && !answer.note?.trim()) throw new Error("选一个，或者补一句话");
       try { await call(`/api/me/months/${encodeURIComponent(period)}/tasks/${encodeURIComponent(taskId)}/decision`, { method: "PUT", body: JSON.stringify(answer) }); }
       catch (error) {
         if (!(error instanceof Missing) || !fallback) throw error instanceof Missing ? new Error("月份接口还没有") : error;

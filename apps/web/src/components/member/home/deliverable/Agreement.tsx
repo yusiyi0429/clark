@@ -31,6 +31,26 @@ export function agreementBody(agreement: TTaskAgreementResponse,
 
 const SOURCE_LABEL: Record<TAgreementSource, string | null> = { world: "本体", tianshu: "11 月补充", none: null };
 
+/**
+ * 延续来的约定（跨月延续把旧 Task 的约定复制成新 Task 的草稿，约定接口的 draftFrom）：一个「延续来的约定」chip，
+ * 能改的人旁边一个「确认」——原样存一次就成了正式的（draftFrom 回到 null）。要改的照常逐条改，存了也算确认。
+ */
+export function DraftAgreement({ agreement, onConfirm }: { agreement: TTaskAgreementResponse; onConfirm: (body: TPutTaskAgreementRequest) => Promise<string | null> }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!agreement.draftFrom) return null;
+  const confirm = async () => {
+    setBusy(true);
+    setError(await onConfirm(agreementBody(agreement, { exclusions: agreement.exclusions })));
+    setBusy(false);
+  };
+  return <>
+    <span className={d.changed} data-testid="agreement-draft">延续来的约定</span>
+    {agreement.canEdit ? <HeroButton variant="ghost" size="sm" isDisabled={busy} onPress={() => void confirm()}>确认</HeroButton> : null}
+    {error ? <span className={d.error} role="alert">{error}</span> : null}
+  </>;
+}
+
 export function AgreementLine({ criterion, source, canEdit, onSave }: {
   criterion: TAgreementCriterion;
   source: TAgreementSource;
