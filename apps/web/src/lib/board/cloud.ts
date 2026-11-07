@@ -51,9 +51,11 @@ const task = (taskId: string) => ({ path: { taskId } });
 // ── 看板 ──
 export const readBoard = (taskId: string) => maybe<TCardBoardResponse>(browserApi.GET("/api/plan-tasks/{taskId}/cards", { params: task(taskId) }));
 export const planCards = (taskId: string, hint?: string) => unwrap<TCardPlanView>(browserApi.POST("/api/plan-tasks/{taskId}/card-plans", { params: task(taskId), body: hint ? { hint } : {} }) as Promise<Result<TCardPlanView>>);
-/** start：新首页第 4.4 节，交给 Agent 的卡同时登记要开工（配对的电脑上的网页认领后开）。 */
-export const acceptDrafts = (taskId: string, drafts: TAcceptCardDraftsRequest["drafts"], start = false) =>
-  unwrap(browserApi.POST("/api/plan-tasks/{taskId}/card-drafts/accept", { params: task(taskId), body: { drafts, ...(start ? { start } : {}) } })).then((data) => data.cards as TCardTaskView[]);
+/** start：新首页第 4.4 节，交给 Agent 的卡同时登记要开工（配对的电脑上的网页认领后开）。budget：开工框上方选的预算（11.3），带了就存成这件 Task 的预算。 */
+export const acceptDrafts = (taskId: string, drafts: TAcceptCardDraftsRequest["drafts"], start = false, budget?: TAcceptCardDraftsRequest["budget"]) =>
+  unwrap(browserApi.POST("/api/plan-tasks/{taskId}/card-drafts/accept", { params: task(taskId), body: { drafts, ...(start ? { start } : {}), ...(budget ? { budget } : {}) } })).then((data) => data.cards as TCardTaskView[]);
+/** 这件 Task 现在的预算（11.3；没单独设过时是本人的缺省，inherited）：开工框的模式分段从它开始。 */
+export const readTaskBudget = (taskId: string) => maybe(browserApi.GET("/api/me/tasks/{taskId}/budget", { params: task(taskId) }));
 export const dismissDraft = (draftId: string) => unwrap(browserApi.POST("/api/card-drafts/{id}/dismiss", { params: id(draftId) }));
 export const shipPending = (taskId: string, statement?: string) =>
   unwrap(browserApi.POST("/api/plan-tasks/{taskId}/deliverable/versions/from-pending", { params: task(taskId), body: statement ? { statement } : {} }));
