@@ -10,23 +10,24 @@
 .prose strong{font-weight:600;color:#f7f7f9}.prose a{color:#a9caff;text-decoration:underline;text-underline-offset:3px}
 .prose pre{overflow:auto;padding:16px;background:#18181b;border-radius:12px}.prose code{font-size:.9em}.prose table{display:block;overflow-x:auto;border-collapse:collapse;max-width:100%}.prose td,.prose th{padding:8px 12px;border-bottom:1px solid #ffffff20;text-align:left}
 .sources{margin-top:18px;color:#aaaab5;font-size:12px}.sources summary{cursor:pointer;width:fit-content}.sources a{display:block;color:#d3d8e2;text-decoration:none;padding:10px 0;border-bottom:1px solid #ffffff0d}.sources a:hover{color:#a9caff}.sources a span{display:block;color:#8f929d;font-size:11px}.sources p{font-size:11px}
-.thinking{display:flex;align-items:center;gap:9px;min-width:0;margin:4px 0 30px;color:#aaaab5;font-size:13px;min-height:30px}.elapsed{font-variant-numeric:tabular-nums;color:#85858f}.thinking button{flex:none;margin-left:auto;border:0;background:none;color:#aaaab5;font-size:12px;cursor:pointer;padding:6px 10px;border-radius:9px}.thinking button:hover{background:#ffffff0c;color:white}
-.pulse{flex:none;width:7px;height:7px;background:#c5cedc;border-radius:50%;animation:breathe 1.8s ease-in-out infinite}@keyframes breathe{50%{opacity:.3;transform:scale(.8)}}
+/* 现场行（新首页设计 5.4.3）：颜色读变量，深色下跟着变；用时等宽数字。 */
+.thinking{display:flex;align-items:center;gap:9px;min-width:0;margin:4px 0 30px;color:var(--ink-faint);font-size:13px;min-height:30px}.elapsed{font-variant-numeric:tabular-nums;color:var(--ink-faint)}.thinking button{flex:none;margin-left:auto;border:0;background:none;color:var(--ink-faint);font-size:12px;cursor:pointer;padding:6px 10px;border-radius:9px}.thinking button:hover{background:var(--default-soft);color:var(--ink-muted)}
+.pulse{flex:none;width:7px;height:7px;background:var(--ink-faint);border-radius:50%;animation:breathe 1.8s ease-in-out infinite}@keyframes breathe{50%{opacity:.3;transform:scale(.8)}}
 /*
  * 进度行在窄宽度下（收起的对话框、右列）按优先级让位：圆点、阶段、停止不压缩、不换行；先截断细节（最少留 6 个字宽），再截断用时。
  * 行宽 <300 不显示细节，<220 连用时也不显示。阶段文字不会再被挤成竖排，圆点也不会被压扁裁掉。
  */
 .thinkingGroup{container-type:inline-size}
 .thinking>[role=status]{flex:none;white-space:nowrap}
+/* 没有阶段时状态区还在（读屏念得到后来的阶段），只是视觉上不占位置。 */
+.thinking>[role=status]:empty{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
 /* 进度行细节（在查什么、读到了什么、已查几项）：12px 标签，与阶段同色（比正文浅一级）；长了截断，不挤掉阶段、用时和停止。 */
-.progressDetail{flex:0 1000 auto;min-width:6em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:#aaaab5}
+.progressDetail{flex:0 1000 auto;min-width:6em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--ink-faint)}
 .elapsed{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @container (max-width:299px){.progressDetail{display:none}}
 @container (max-width:219px){.elapsed{display:none}}
 :global([data-tone=light]) .progressDetail{color:var(--ink-faint)}
-/* 中途升级提示（非深度档回答久了或连续检索）：13px，与进度行同色，放在进度行上方。正文开始后进度行淡化，不再抢正文。 */
-.thinkingNote{margin:4px 0 0;font-size:13px;line-height:1.6;color:#aaaab5}
-:global([data-tone=light]) .thinkingNote{color:var(--ink-faint)}
+/* 正文开始后进度行淡化，不再抢正文。 */
 .thinking{transition:opacity .3s ease}
 .thinkingGroup[data-stage=answering] .thinking{opacity:.6}
 /* 有步骤列表时（StepList）：进度行下沿收紧，步骤列表接在下面。 */
@@ -36,7 +37,7 @@
  * 思考过程（模型返回的思考摘要）：正文开始前在进度行上方滚动，只露最近四行。有人会读：13px、比正文浅一级的灰（与正文分层），不整片蒙淡；
  * 超过四行、最上面一行被切开时（data-clipped）只把那一行淡出。
  */
-.thinkingStream{display:flex;flex-direction:column;justify-content:flex-end;max-height:calc(13px * 1.6 * 4);overflow:hidden;margin:6px 0 0;font-size:13px;line-height:1.6;color:#aaaab5}
+.thinkingStream{display:flex;flex-direction:column;justify-content:flex-end;max-height:calc(13px * 1.6 * 4);overflow:hidden;margin:6px 0 0;font-size:13px;line-height:1.6;color:var(--ink-muted)}
 .thinkingStream[data-clipped]{-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 calc(13px * 1.6));mask-image:linear-gradient(to bottom,transparent 0,#000 calc(13px * 1.6))}
 .thinkingStream p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
 /* 对话层放大 / 收起的 240ms 里（app-shell .historySheet[data-resizing]）遮罩先摘掉，过渡结束复原。 */
@@ -107,17 +108,17 @@
 @keyframes jumpDot{0%,70%,100%{opacity:.25}35%{opacity:1}}
 @media(prefers-reduced-motion:reduce){.jumpDots i{animation:none;opacity:.6}.jumpDock .jump{transition:none}}
 
-/* 回答末尾的选项（10/11 首演版定稿）：最新一条回答下一行文字按钮，字号同辅助文字，无底色，不抢正文。 */
+/* 回答末尾的选项（10/11 首演版定稿）：最新一条回答下一行文字按钮，字号同辅助文字，无底色，不抢正文。新首页里画成选项框的选项行（文件末尾）。 */
 .options{display:flex;flex-wrap:wrap;gap:2px 16px;margin:-22px 0 30px;font-size:13px;line-height:1.6}
-.options button{padding:3px 0;border:0;background:none;color:#aaaab5;font:inherit;cursor:pointer;border-radius:4px}
-.options button:hover{color:#ececef}
-.options button:focus-visible{outline:1px solid #ffffff40;outline-offset:2px}
+.options button{padding:3px 0;border:0;background:none;color:var(--ink-faint);font:inherit;cursor:pointer;border-radius:4px}
+.options button:hover{color:var(--ink)}
+.options button:focus-visible{outline:1px solid var(--focus);outline-offset:2px}
 :global([data-tone=light]) .options button{color:var(--ink-faint)}
 :global([data-tone=light]) .options button:hover{color:var(--ink)}
 :global([data-tone=light]) .options button:focus-visible{outline-color:var(--focus)}
 @media(max-width:599px){.options{margin-top:-18px}}
 /* 共用对话里这句是在哪个战场页问的（巡检 P1-18）：低存在感的一行小字。 */
-.pageTag{margin:-2px 0 4px;font-size:12px;line-height:1.5;color:#a1a6b0}
+.pageTag{margin:-2px 0 4px;font-size:12px;line-height:1.5;color:var(--ink-faint)}
 :global([data-tone=light]) .pageTag{color:var(--ink-faint)}
 /*
  * 手持字号（docs/superpowers/specs/2026-10-12-mobile-foldable.md §2、§3.2）：手机上对话正文原来反而缩到 14、消息眉题 11、用时与来源 11–12，
@@ -134,14 +135,11 @@
 .prose :global(.katex-display>.katex){text-align:left}
 .prose :global(.katex-error){color:inherit!important}
 
-/* 这一轮用了备用模型或走过恢复：回答末尾一行很淡的 12px 小字，悬停看说明。 */
-.recoveryNote{width:fit-content;margin:12px 0 0;font-size:12px;line-height:1.5;color:#a5a5af;cursor:default}
-
-/* 转议题之后首页的留痕行：居中一行浅灰小字，像聊天里的系统消息；点击直达议题页。 */
-.trace{display:flex;justify-content:center;margin:-8px 0 32px;font-size:12px;line-height:1.5;color:#a5a5af}
-.trace a{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border:1px solid #ffffff1f;border-radius:999px;color:inherit;text-decoration:none;transition:color 140ms ease,border-color 140ms ease}
-.trace a:hover{color:#d7e5ff;border-color:#a9caff66}
-.trace a:focus-visible{outline:2px solid #3a83f788;outline-offset:2px}
+/* 转议题之后首页的留痕行：居中一行浅灰小字，像聊天里的系统消息；点击直达议题页。颜色读变量，深色下跟着变。 */
+.trace{display:flex;justify-content:center;margin:-8px 0 32px;font-size:12px;line-height:1.5;color:var(--ink-faint)}
+.trace a{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border:1px solid var(--hairline-strong);border-radius:999px;color:inherit;text-decoration:none;transition:color 140ms ease,border-color 140ms ease}
+.trace a:hover{color:var(--link);border-color:var(--hairline-strong)}
+.trace a:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 :global([data-tone=light]) .trace{color:var(--ink-faint)}
 :global([data-tone=light]) .trace a{border-color:var(--hairline-strong)}
 :global([data-tone=light]) .trace a:hover{color:var(--link);border-color:var(--hairline-strong)}
@@ -150,6 +148,28 @@
 .carried::before,.carried::after{content:"";flex:1 1 0;height:1px;background:#ffffff1a}
 :global([data-tone=light]) .carried::before,:global([data-tone=light]) .carried::after{background:var(--hairline)}
 /* 进行中：范围标签在进度行之下、步骤之上。 */
-.liveScope{margin:2px 0 6px;font-size:12px;color:#a5a5af}
+.liveScope{margin:2px 0 6px;font-size:12px;color:var(--ink-faint)}
 :global([data-tone=light]) .liveScope{color:var(--ink-faint)}
 @media(max-width:959px){.trace,.carried,.liveScope{font-size:13px}.trace a{min-height:32px}}
+
+/*
+ * 新首页（外壳带 data-scheme="auto"，设计 5.2、5.4.3），老页面不变：
+ * 消息里的 Markdown 标题不大于正文，15/600；现场行的呼吸点 6px，和其他小点一样大；
+ * 每条回答的用时只在鼠标移上去、或键盘焦点进来时出现，放在那一行末尾（不挤动「已思考」）；
+ * 回答末尾的选项照选项框的选项行画（decision-box.module.css 的 .option / .key，同一套变量）：序号 + 文字，悬停 --default-soft，焦点 --focus 外框；手持不显示序号、行高 48。
+ */
+:global([data-scheme="auto"]) .prose :is(h1,h2,h3,h4,h5,h6){font-size:15px!important;font-weight:600;line-height:var(--lh-row)}
+:global([data-scheme="auto"]) .pulse{width:6px;height:6px}
+/* 新首页里现场行的间距、「停止」的圆角读变量；悬停只换底，字色不变（5.4.1 交互状态表）。 */
+:global([data-scheme="auto"]) .thinking{gap:var(--space-2)}
+:global([data-scheme="auto"]) .thinking button{border-radius:var(--r-control)}
+:global([data-scheme="auto"]) .thinking button:hover{color:var(--ink-faint)}
+:global([data-scheme="auto"]) .meta .time{order:1;margin-left:auto;opacity:0;transition:opacity var(--dur-fast) linear}
+:global([data-scheme="auto"]) .assistant:hover .meta .time,:global([data-scheme="auto"]) .assistant:focus-within .meta .time{opacity:1}
+:global([data-scheme="auto"]) .meta .time+.thoughtToggle::before{content:none}
+:global([data-scheme="auto"]) .options{display:grid;gap:2px;font-size:var(--text-base);line-height:var(--lh-row);counter-reset:answer-option}
+:global([data-scheme="auto"]) .options button{display:grid;grid-template-columns:16px minmax(0,1fr);align-items:start;gap:var(--space-2);width:100%;min-height:var(--row-36);padding:var(--space-2);border-radius:var(--r-control);color:var(--ink);text-align:left;counter-increment:answer-option;transition:background-color var(--dur-fast) linear}
+:global([data-scheme="auto"]) .options button::before{content:counter(answer-option);content:counter(answer-option) / "";color:var(--ink-faint);font:var(--text-xs)/var(--lh-row) var(--font-sans);font-variant-numeric:tabular-nums}
+:global([data-scheme="auto"]) .options button:hover{background:var(--default-soft);color:var(--ink)}
+:global([data-scheme="auto"]) .options button:focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
+@media(max-width:959px),(pointer:coarse){:global([data-scheme="auto"]) .options button{min-height:48px;grid-template-columns:minmax(0,1fr)}:global([data-scheme="auto"]) .options button::before{display:none}}

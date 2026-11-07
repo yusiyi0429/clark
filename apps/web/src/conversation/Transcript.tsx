@@ -26,6 +26,10 @@ import s from "@/styles/conversation-transcript.module.css";
 import c from "@/styles/card-references.module.css";
 
 const seconds = (ms: number) => `${Math.max(1, Math.round(ms / 1000))} 秒`;
+/** 现场行的用时（5.4.3）：过 60 秒写「1 分 12 秒」。 */
+const liveClock = (ms: number) => { const total = Math.max(1, Math.round(ms / 1000)); return total < 60 ? `${total} 秒` : `${Math.floor(total / 60)} 分${total % 60 ? ` ${total % 60} 秒` : "钟"}`; };
+/** 预计：不到 1 分钟写「约 40 秒」，再长写「约 3 分钟」。 */
+const aboutText = (sec: number) => (sec < 60 ? `约 ${sec} 秒` : `约 ${Math.round(sec / 60)} 分钟`);
 
 /** 助手这一轮的实际用时：与前一条用户消息的创建时间差（历史里没有单独记录）。 */
 function turnMs(messages: Message[], index: number): number | undefined {
@@ -122,7 +126,6 @@ export function sameTurn(previous: TurnProps, next: TurnProps): boolean {
     && previous.thought?.text === next.thought?.text && previous.thought?.seconds === next.thought?.seconds
     && sameList(previous.steps, next.steps, (step) => `${step.id}:${step.status}:${step.result ?? ""}`)
     && a.role === b.role && a.content === b.content
-    && a.recoveryNote?.text === b.recoveryNote?.text && a.recoveryNote?.detail === b.recoveryNote?.detail
     && (a.memoryUsed ?? []).join("|") === (b.memoryUsed ?? []).join("|")
     && a.readScope?.label === b.readScope?.label && a.kind === b.kind && a.via === b.via && a.meta?.href === b.meta?.href && a.answers?.askId === b.answers?.askId
     && sameList(a.attachments, b.attachments, (item) => item.id)
@@ -176,7 +179,7 @@ function ConversationTurnBody({ message, ms, streaming = false, thought, steps }
       data-testid={streaming ? "conversation-streaming-turn" : undefined} aria-busy={streaming || undefined}>
       {!user && ms !== undefined ? (
         <div className={s.meta}>
-          <span>用时 {seconds(ms)}</span>
+          <span className={s.time}>用时 {seconds(ms)}</span>
           {thoughtToggle}
         </div>
       ) : !user && thoughtToggle ? (
@@ -226,10 +229,6 @@ function ConversationTurnBody({ message, ms, streaming = false, thought, steps }
           </MemoryUsedProvider>
         </div>
       )}
-      {/* 这一轮用了备用模型或走过恢复：末尾一行很淡的小字，悬停看具体一点的说明（不写模型名和英文原文）。 */}
-      {!user && !streaming && message.recoveryNote?.text ? (
-        <p className={s.recoveryNote} title={message.recoveryNote.detail || undefined} data-testid="conversation-recovery-note">{message.recoveryNote.text}</p>
-      ) : null}
     </article>
   );
 }
@@ -296,10 +295,11 @@ export function ConversationTurns({ messages, partial = "", footer, after, trail
   );
 }
 
-export const STAGE_COPY: Record<ThinkingStage, string> = { understanding: "正在理解问题", thinking: "正在思考", researching: "正在查资料", answering: "正在整理回答",
+/** 现场行的阶段（新首页设计 5.4.3）：拿到具体阶段以前（刚发出、模型在想）只有呼吸点，不写「正在思考」这类笼统的词。 */
+export const STAGE_COPY: Record<ThinkingStage, string | null> = { understanding: null, thinking: null, researching: "正在查资料", answering: "正在整理回答",
   connecting: "正在连接", offline: "等待网络" };
 /** 深度档（重要的战略问题），以及中途升级后的非深度档：进度行用同一口径。 */
-export const DEEP_STAGE_COPY: Record<ThinkingStage, string> = { ...STAGE_COPY, thinking: "正在深入思考" };
+export const DEEP_STAGE_COPY: Record<ThinkingStage, string | null> = { ...STAGE_COPY, thinking: "深入分析" };
 
 /**
  * 进度行的细节（系统生成）：查证时是最近一步在查什么 / 读到了什么；思考时是推理摘要里的中文要点，没有就沿用最近读到的内容；
@@ -333,8 +333,9 @@ export function ThinkingStream({ text }: { text: string }) {
 }
 
 /**
- * 回答进行中的一行（clark `ConversationThinking`）：脉冲点、阶段、在查什么 / 思考要点、已用秒数（深度档另附预计用时）、停止。
- * 非深度档中途升级时，上方多一行「这个问题需要更深入的分析，预计还需约 X 秒。」；正文开始后整行淡化。
+ * 回答进行中的一行（clark `ConversationThinking`）：脉冲点、阶段、在查什么 / 思考要点、用时 / 预计（深度档、中途升级才有预计）、停止。
+ * 非深度档中途升级（服务端给「预计还需约 X 秒」）不另起一行解释：阶段写「深入分析」，用时后面接「/ 约 N 秒」（升级那一刻的用时加 X）；
+ * 正文开始后不再写预计，整行淡化。
  */
 export function ConversationThinking({ stage, startedAt, onStop, route, progress, steps = [], thought, readScope }: {
   stage: ThinkingStage; startedAt: number; onStop: () => void;
@@ -354,19 +355,29 @@ export function ConversationThinking({ stage, startedAt, onStop, route, progress
     return () => clearInterval(timer);
   }, [startedAt]);
   const deep = route?.tier === "deep";
-  const escalation = !deep && stage !== "answering" ? progress?.escalation : null;
+  const escalated = deep ? null : progress?.escalation ?? null;
+  // 升级那一刻的用时：预计写整轮（用时 / 约 N 秒），服务端给的是「还需约 X 秒」。按这一轮（startedAt）记，换轮、重挂载不会把预计越推越后。
+  const escalationKey = escalated ? `${startedAt}:${escalated.expectSeconds}:${escalated.notice}` : null;
+  const [escalatedAt, setEscalatedAt] = useState(() => ({ key: escalationKey, ms: elapsed }));
+  if (escalatedAt.key !== escalationKey) setEscalatedAt({ key: escalationKey, ms: elapsed });
+  const answering = stage === "answering";
+  const escalation = answering ? null : escalated;
   const stepped = steps.length > 0;
   const detail = stepped ? null : progressDetail(stage, progress);
-  const answering = stage === "answering";
+  const phase = (deep || escalation ? DEEP_STAGE_COPY : STAGE_COPY)[stage];
+  // 没有可信的预计就不写：用时过了预计（深度档 2 分钟）就不再写。
+  const expectTotal = escalation ? Math.ceil((escalatedAt.ms / 1000 + escalation.expectSeconds) / 10) * 10 : null;
+  const estimate = answering ? null : deep ? (elapsed < 120_000 ? "约 1–2 分钟" : null)
+    : expectTotal !== null && elapsed / 1000 < expectTotal ? aboutText(expectTotal) : null;
   return (
     <div className={s.thinkingGroup} data-stage={stage} data-steps={stepped && !answering ? "" : undefined}>
-      {escalation ? <p className={s.thinkingNote} data-testid="conversation-escalation" aria-live="polite">{escalation.notice}</p> : null}
       {thought?.text && thought.seconds === null && stage !== "answering" ? <ThinkingStream text={thought.text} /> : null}
       <div className={s.thinking} data-testid="conversation-thinking" data-tier={route?.tier} data-stage={stage}>
         <span className={s.pulse} aria-hidden />
-        <span role="status">{(deep || escalation ? DEEP_STAGE_COPY : STAGE_COPY)[stage]}</span>
+        {/* 状态区一直在（读屏才念得到后来出现的阶段）；没有阶段时视觉上藏起。 */}
+        <span role="status">{phase ?? ""}</span>
         {detail ? <span className={s.progressDetail} data-testid="conversation-progress">{detail}</span> : null}
-        <span className={s.elapsed}>{seconds(elapsed)}{deep && stage !== "answering" ? " · 预计 1–2 分钟" : ""}</span>
+        <span className={s.elapsed}>{phase || detail ? "· " : ""}{liveClock(elapsed)}{estimate ? ` / ${estimate}` : ""}</span>
         <HeroButton variant="ghost" size="sm" onPress={onStop} aria-label="停止本次回答">
           停止
         </HeroButton>
