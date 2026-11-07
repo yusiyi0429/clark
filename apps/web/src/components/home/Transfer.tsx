@@ -17,6 +17,8 @@ import { draftNote, handoverRule, secretHits, type HandoverSection, type Transfe
 import { StateIcon } from "./StateIcon";
 import h from "@/styles/home.module.css";
 
+const noop = () => undefined;
+
 /** 还在跑（或排着、等你）的会话：转之前要问等做完还是停掉。 */
 const busy = (project: Project) => project.subSessions.filter((sub) => sub.state === "running" || sub.state === "queued" || sub.state === "waiting");
 
@@ -67,6 +69,8 @@ export function TransferFlow({ project, transfer, onUpdate, onStop }: {
         <DecisionBox kind="question" title={`有 ${running.length} 个会话在跑`} testId="transfer-running"
           options={[{ label: "等做完再转", recommended: true }, { label: "停掉" }]}
           onPick={([index]) => (index === 0 ? onUpdate({ running: "wait" }) : stop())} />
+      ) : transfer.running ? (
+        <DecisionBox kind="question" title="在跑的会话" options={[]} onPick={noop} resolved={transfer.running === "wait" ? "等做完再转" : "停掉"} />
       ) : null}
       {stopFailed ? <FailedLine {...stopFailed} /> : null}
       {waitRunning ? <p className={h.line}><StateIcon state="running" />等 {running.length} 个会话做完</p> : null}
@@ -74,6 +78,8 @@ export function TransferFlow({ project, transfer, onUpdate, onStop }: {
         <DecisionBox kind="question" title={`检查文件夹「${project.folder}」`} testId="transfer-check"
           options={[{ label: "等本机上线", recommended: true }, { label: "不检查直接转" }]}
           onPick={([index]) => onUpdate({ check: index === 0 ? "wait" : "skip" })} />
+      ) : transfer.check === "skip" ? (
+        <DecisionBox kind="question" title={`检查文件夹「${project.folder ?? ""}」`} options={[]} onPick={noop} resolved="不检查直接转" />
       ) : null}
       {waitCheck ? (
         <p className={h.line}><StateIcon state="queued" />检查文件夹 · 等本机上线
@@ -83,7 +89,7 @@ export function TransferFlow({ project, transfer, onUpdate, onStop }: {
         <HandoverCard note={transfer.note} to={transfer.to.name} sent={transfer.status !== "preparing"} includeHistory={transfer.includeHistory}
           onSend={(includeHistory) => onUpdate({ status: "sent", includeHistory, decidedAt: new Date().toISOString() })} />
       ) : null}
-      {transfer.status === "sent" ? <p className={h.line} data-testid="transfer-sent"><StateIcon state="waiting" />已交给 {transfer.to.name} · 等接手</p> : null}
+      {transfer.status === "sent" ? <p className={h.line} data-testid="transfer-sent"><StateIcon state="queued" />已交给 {transfer.to.name} · 等接手</p> : null}
       {transfer.status === "declined" ? <p className={h.line}><StateIcon state="stopped" />{transfer.to.name}没接</p> : null}
     </div>
   );
