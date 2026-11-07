@@ -220,10 +220,10 @@ export function DevicesSection({ personName }: { personName: string }) {
   const [revoked, setRevoked] = useState<TLocalDeviceView[]>([]);
   const load = () => void listDevices().then((list) => { setDevices(list); setRevoked((gone) => gone.filter((device) => !list.some((entry) => entry.id === device.id))); }).catch(() => setDevices([]));
   useEffect(load, [local.status?.cloud.linked]);
+  const [failed, setFailed] = useState<string | null>(null);
   const rows = [...(devices ?? []), ...revoked.filter((device) => !devices?.some((entry) => entry.id === device.id))];
   if (!rows.length) return null;
   const here = local.status?.deviceId ?? null;
-  const [failed, setFailed] = useState<string | null>(null);
   const revoke = (device: TLocalDeviceView) => void revokeDevice(device.id).then(async () => {
     setFailed(null);
     setRevoked((gone) => [...gone, device]);

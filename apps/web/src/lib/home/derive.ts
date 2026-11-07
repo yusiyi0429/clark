@@ -214,7 +214,7 @@ export function deriveWorkHome({ plan, workers, boards, notices, proposals, merg
   const waiting = sortWaiting([
     ...workerWaiting(workers, deviceId),
     ...tasks.flatMap((task) => mergeWaiting(taskSubs.get(task.taskId) ?? [], task, merges)), ...mergeWaiting(other, null, merges), ...orphanMerges(merges, all),
-    ...planStartWaiting(tasks, boards), ...noticeWaiting(notices), ...proposalWaiting(proposals), ...monthWaiting(plan),
+    ...planStartWaiting(tasks, boards), ...noticeWaiting(notices), ...proposalWaiting(proposals),
   ]);
   // Task 行的小字（设计 5.4.2）：预算、加预算、管线最近一句结论都还没有数据时，写这个 Mission 下一个验收时间点「11/20 验收」。
   const gateOf = (missionId: string) => {
@@ -340,17 +340,13 @@ function planStartWaiting(tasks: { taskId: string; name: string }[], boards: Rec
 }
 
 /**
- * 空月份（5.4.4）：本月还没有 Mission（计划回退到上个月，或计划里没有本月的）时，「等你」里一行「11 月待敲定」，点了进月份页；
- * 「今天」行行尾的月份 chip 也从这一条来。云端给了月份那几条（复盘、待敲定、延续）就用云端的。
+ * 空月份（5.4.4）：树上没有本月的 Mission（只有之前月份没了结的，或者一个都没有）时是本月（YYYY-MM），「今天」行出「11 月待敲定」chip；
+ * 不是空月份为 null。今天还不知道（计划没读到）也为 null。「等你」里那一行以后由云端加种类，网页不自己造（主会话 11/07）。
  */
-export function monthWaiting(plan: THomePlanResponse | null): WaitingItem[] {
-  if (!plan) return [];
-  const period = plan.today.slice(0, 7);
-  if (!plan.fallbackFrom && plan.missions.length && plan.period === period) return [];
-  return [{
-    id: `month:${period}:finalize`, kind: "month", title: `${monthLabel(period)}待敲定`, source: null, open: { kind: "month", id: period },
-    ...NONE, at: null, ...fields("open"), month: { step: "finalize", period },
-  }];
+export function emptyMonth(today: string | null, missions: Pick<HomeMission, "period">[]): string | null {
+  if (!today) return null;
+  const period = today.slice(0, 7);
+  return missions.some((mission) => mission.period === period) ? null : period;
 }
 
 /** 「等你」的顺序（9.6）：卡住正在跑的活的（批准、回答、额度）在前，再是有截止的（早的在前），其余按时间新的在前。 */

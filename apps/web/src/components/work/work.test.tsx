@@ -206,6 +206,11 @@ describe("对话里插块和锚点", () => {
     expect(viewOf("/me/work/tasks/demo%20task/info")).toEqual({ kind: "info", taskId: "demo task" });
     expect(viewOf("/me/work/cards/c1")).toEqual({ kind: "card", id: "c1" });
     expect(viewOf("/me/work/topics/tp1")).toEqual({ kind: "topic", id: "tp1" });
+    // 二级页、月份页（月份是 YYYY-MM，不是的落回首页）；右栏只要资源块。
+    expect(viewOf("/me/work/settings/connections")).toEqual({ kind: "page", page: "connections" });
+    expect(viewOf("/me/work/month/2026-11")).toEqual({ kind: "month", period: "2026-11" });
+    expect(viewOf("/me/work/month/11")).toEqual({ kind: "home" });
+    expect([viewOf("/me/work/settings/connections"), viewOf("/me/work/month/2026-11")].map(scopeOf)).toEqual(["resources", "resources"]);
     expect([viewOf("/me/work"), viewOf("/me/work/buddy"), viewOf("/me/work/tasks/t1/info"), viewOf("/me/work/cards/c1")].map(scopeOf)).toEqual(["main", "main", "task:t1", "card:c1"]);
   });
 });

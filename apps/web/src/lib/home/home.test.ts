@@ -4,7 +4,7 @@ import type { TLocalSessionSummary } from "@/lib/local/runner";
 import { toWorker, type Worker } from "@/lib/work/workers";
 import type { MemberNotification } from "@/components/member/useMemberHome";
 import {
-  deriveFeed, deriveWorkHome, duration, toSubSession, groupBackground, inScope, localBackground, mergeBackground, monthWaiting, queueText, routeText, sortWaiting, statusLine, waitingHref, workerBackground,
+  deriveFeed, deriveWorkHome, duration, toSubSession, groupBackground, inScope, localBackground, mergeBackground, emptyMonth, queueText, routeText, sortWaiting, statusLine, waitingHref, workerBackground,
 } from "./derive";
 import type { BackgroundItem, WaitingItem } from "./types";
 import type { CardItem } from "@/lib/board/cards";
@@ -261,10 +261,13 @@ describe("等你按设计 9.6（契约增补二）", () => {
     expect(waitingHref(row({ open: { kind: "connections", id: "this_computer" } }))).toBe("/me/work/settings/connections");
   });
 
-  it("本月没有 Mission（计划回退到上个月）：等你里一条「11 月待敲定」，去月份页；本月有 Mission 时没有", () => {
-    const empty = monthWaiting({ ...plan, period: "2026-10", fallbackFrom: "2026-10" } as unknown as THomePlanResponse);
-    expect(empty).toEqual([expect.objectContaining({ kind: "month", title: "11 月待敲定", month: { step: "finalize", period: "2026-11" }, open: { kind: "month", id: "2026-11" } })]);
-    expect(monthWaiting({ ...plan, fallbackFrom: null } as unknown as THomePlanResponse)).toEqual([]);
+  it("空月份（「今天」行的「11 月待敲定」）：树上没有本月的 Mission 时是本月；等你里不自己造那一行（以后云端加种类）", () => {
+    expect(emptyMonth("2026-11-07", [{ period: "2026-10" }])).toBe("2026-11");
+    expect(emptyMonth("2026-11-07", [])).toBe("2026-11");
+    expect(emptyMonth("2026-11-07", [{ period: "2026-10" }, { period: "2026-11" }])).toBeNull();
+    expect(emptyMonth(null, [])).toBeNull();
+    const fallback = deriveWorkHome({ plan: { ...plan, period: "2026-10", fallbackFrom: "2026-10" } as unknown as THomePlanResponse, workers: [], boards: {}, proposals: [], merges: [], notices: null, deviceId: null });
+    expect(fallback.waiting.some((item) => item.kind === "month")).toBe(false);
   });
 
   it("派活单拆好了还没开工：等你里一条「这样开工？」，就地答（走云端）", () => {

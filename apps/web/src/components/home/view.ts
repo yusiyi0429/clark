@@ -27,7 +27,7 @@ export function viewOf(pathname: string): View {
   if (parts[0] === "cards" && parts[1]) return { kind: "card", id: parts[1] };
   if (parts[0] === "topics" && parts[1]) return { kind: "topic", id: parts[1] };
   if (parts[0] === "settings" && isPage(parts[1])) return { kind: "page", page: parts[1] };
-  if (parts[0] === "month" && parts[1] && /^d{4}-d{2}$/.test(parts[1])) return { kind: "month", period: parts[1] };
+  if (parts[0] === "month" && parts[1] && /^\d{4}-\d{2}$/.test(parts[1])) return { kind: "month", period: parts[1] };
   return { kind: "home" };
 }
 

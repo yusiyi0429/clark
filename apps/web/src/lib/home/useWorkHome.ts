@@ -13,7 +13,7 @@ import { readWorkHome } from "@/lib/board/cloud";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { useMergeIssues } from "@/lib/work/merge";
 import { useWork } from "@/lib/work/useWork";
-import { deriveWorkHome, monthWaiting, sortWaiting } from "./derive";
+import { deriveWorkHome } from "./derive";
 import type { WorkHomeData } from "./types";
 
 const POLL_MS = 5000;
@@ -47,11 +47,8 @@ export function useWorkHome() {
     [member.notifications, member.rounds, member.unreadThreads, member.unreadMissionGroups]);
   const derived = useMemo(() => deriveWorkHome({ plan: work.plan, workers: work.workers, boards: work.boards, proposals: work.proposals, merges, notices, deviceId, sessions: local.sessions }),
     [work.plan, work.workers, work.boards, work.proposals, merges, notices, deviceId, local.sessions]);
-  // 云端的等你照契约（设计 9.6：群消息、会后分给你不进）；云端还没出月份那几条时，空月份这一条网页自己补（溪南的草稿到了以前云端没有 finalize）。
-  const data = useMemo<WorkHomeData>(() => (remote ? {
-    ...remote,
-    waiting: remote.waiting.some((item) => item.kind === "month") ? remote.waiting : sortWaiting([...remote.waiting, ...monthWaiting(work.plan)]),
-  } : derived), [remote, derived, work.plan]);
+  // 云端的等你照契约（设计 9.6：群消息、会后分给你不进）。
+  const data = useMemo<WorkHomeData>(() => remote ?? derived, [remote, derived]);
 
   const refresh = useCallback(async () => { await Promise.all([work.refresh(), member.refresh(), loadRemote()]); }, [work, member, loadRemote]);
   // 计划（Mission / Task，来自本体）读不到：树和首页写「本体读取失败」加「重试」，不画成空树（5.4.2、5.4.4）。
