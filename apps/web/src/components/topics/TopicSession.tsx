@@ -76,6 +76,9 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
   }, [autoStart, ready, detail, session]);
   const { view } = useSessionEvents(local.runner, session?.id ?? null);
   const canAct = canCommand({ ready, handheld, hasSession: !!session });
+  // 没成的不弹 toast：发消息交给输入框，批准、回答交给选项框，这页的按钮后面各自写「失败 · 重试」。
+  const [failed, setFailed] = useState<{ at: "doc" | "head"; retry: () => void; reason: string } | null>(null);
+  const act = (at: "doc" | "head", action: () => Promise<unknown>) => { setFailed(null); action().catch((error: unknown) => setFailed({ at, retry: () => act(at, action), reason: error instanceof Error ? error.message : "" })); };
 
   if (missing) return <div className={s.gone}><p>没有这个专题</p><Link href="/me/work">回到首页</Link></div>;
   if (!detail) return <div className={s.page} aria-busy />;
@@ -84,9 +87,6 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
   const shown = version ?? detail.current;
   const hasDraft = detail.versions.some((entry) => entry.kind === "draft");
   const wait = session ? localWait(view) : null;
-  // 没成的不弹 toast：发消息交给输入框，批准、回答交给选项框，这页的按钮后面各自写「失败 · 重试」。
-  const [failed, setFailed] = useState<{ at: "doc" | "head"; retry: () => void; reason: string } | null>(null);
-  const act = (at: "doc" | "head", action: () => Promise<unknown>) => { setFailed(null); action().catch((error: unknown) => setFailed({ at, retry: () => act(at, action), reason: error instanceof Error ? error.message : "" })); };
   const say = async (text: string) => {
     if (!session) return false;
     await local.runner.sendMessage(session.id, text);
