@@ -34,13 +34,15 @@ const Nullable = <T extends TSchema>(schema: T) => Type.Union([schema, Type.Null
  * 子会话的状态（左栏的图标）：queued 已排队（空心圈）、running 进行中（转圈）、waiting 等你（强调色小圆点）、done 已完成（勾）、failed 验收没过（叉）。
  * 对到卡和专题上：带岗位还没开工的、本机报等空位或等前面的卡的 → queued；验收中 → running；验收通过（已合回，或不用合）→ done；
  * 验收通过但没能自动合回 → waiting（merge）；验收没过、改法还没送回执行方 → failed；等你批准、等你回复、受阻、已暂停 → waiting。
+ * 卡的会话停下了或异常退出了（还没交回、没在等额度）算已暂停；连续两次异常退出也是已暂停（不是验收没过）。
+ * 专题没有「完成」：会话停下了、异常退出了都算已暂停（waiting），归档后不列。
  * done 的子会话网页收进 Task 下面折叠的「已完成 N」，不删，点开还能看。
  */
 export const SubSessionState = Type.Union([Type.Literal("queued"), Type.Literal("running"), Type.Literal("waiting"), Type.Literal("done"), Type.Literal("failed")]);
 
 /**
  * 等你什么（只有 state = waiting 时可能有）：approval 等你批准（本机有权限请求没答）、question 等你回复（一轮做完在等你说话，或执行方在问你）、
- * verdict 验收结果等你拿主意（连续两次没过，受阻）、merge 验收过了但本机没能自动合回，等你合（「合进 main / 先不合」）。
+ * verdict 验收结果等你拿主意（连续两次验收没过，受阻）、merge 验收过了但本机没能自动合回，等你合（「合进 main / 先不合」）。
  * 已暂停（停下了）也是等你（说一句就接着做），为 null。
  */
 export const SubSessionWaiting = Type.Union([Type.Literal("approval"), Type.Literal("question"), Type.Literal("verdict"), Type.Literal("merge")]);
@@ -215,7 +217,7 @@ export const WaitingItem = Type.Object({
  * missions：有「没了结」的 Task 的 Mission（见文件头），本月的在前，之前月份的按月份从近到远；本月的 Mission 没有 Task 也列。每个下面是本人负责的 Task。
  * 一件 Task 下面的子会话不看月份，全列（done 的网页折叠）。
  * other.subSessions：不归任何 Task 的子会话，加 Task 不在树上（了结了、或不是本人负责）但还没完成的子会话，左栏最下面一组「其他」；
- * other.items：待归位的事项（本人自己建、没挂 Mission 的执行事项，没完成的）。
+ * other.items：待归位的事项（会议或 Agent 分派给本人、还没挂 Mission 的执行事项，没完成的；10/26 的规矩：只有本人自己建的可以不挂 Mission，那种是独立事项，不在这里）。
  * waiting：等你。排序（设计 9.6）：先是卡住正在跑的活的（approval、question、quota），再是有截止时间的（dueAt 早的在前），其余按 at 新的在前。
  */
 export const WorkHomeResponse = Type.Object({
@@ -338,10 +340,12 @@ export const SessionStartView = Type.Object({
 /**
  * POST /api/me/session-starts/claim：配对的电脑上开着的网页认领还没人接的「要开工」，回的就是这次认领到的（别的标签页、别的电脑同时认领，一条只给一处）。
  * deviceId 是这台电脑的本机程序 id（本机 GET /v1/status），要是本人没吊销的设备。网页拿到后照常取交代、一批交给本机程序；
- * 本机报上第一条这张卡或专题的执行，这条就了结。开不起来（本机拒了）时 POST /api/me/session-starts/:id/release 放回去；
- * 认领了 5 分钟还没了结的，别处可以再认领（网页认领后关掉了）。
+ * 本机报上第一条这张卡或专题的执行，这条就了结。开不起来（本机拒了）时 POST /api/me/session-starts/:id/release 放回去（body 同样带 deviceId，
+ * 只放回这台电脑认领的那条，别处已经重新认领的不动，回 404）；认领了 5 分钟还没了结的，别处可以再认领（网页认领后关掉了）。
  */
 export const ClaimSessionStartsRequest = Type.Object({ deviceId: Type.String({ format: "uuid" }) }, strict);
+/** POST /api/me/session-starts/:id/release 的 body：认领它的那台电脑。 */
+export const ReleaseSessionStartRequest = Type.Object({ deviceId: Type.String({ format: "uuid" }) }, strict);
 export const ClaimSessionStartsResponse = Type.Object({ starts: Type.Array(SessionStartView) }, strict);
 
 /**
@@ -379,6 +383,7 @@ export type TRouteRequest = Static<typeof RouteRequest>;
 export type TRouteResponse = Static<typeof RouteResponse>;
 export type TSessionStartView = Static<typeof SessionStartView>;
 export type TClaimSessionStartsRequest = Static<typeof ClaimSessionStartsRequest>;
+export type TReleaseSessionStartRequest = Static<typeof ReleaseSessionStartRequest>;
 export type TClaimSessionStartsResponse = Static<typeof ClaimSessionStartsResponse>;
 export type TBuddyOpenTopicRequest = Static<typeof BuddyOpenTopicRequest>;
 export type TBuddyOpenTopicResponse = Static<typeof BuddyOpenTopicResponse>;
