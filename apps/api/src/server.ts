@@ -108,6 +108,8 @@ const env: AppEnv = {
     apiKey: process.env.REVIEW_API_KEY || undefined, thinking: process.env.REVIEW_THINKING || undefined },
   // 云端拆卡和云端 Agent 验收（缺省关，拆卡和验收在本人电脑上做）。
   boardCloudAgents: process.env.BOARD_CLOUD_AGENTS === "1",
+  // 天枢自己的月度计划和月末复盘（缺省关，复盘和月初拆解只走 M2）。
+  tianshuMonthlyCycle: process.env.TIANSHU_MONTHLY_CYCLE === "1",
   buildSha: process.env.BUILD_SHA ?? "dev",
   materialStorageDir: process.env.MEETING_MATERIAL_STORAGE_DIR,
   conversationAttachmentStorageDir: process.env.CONVERSATION_ATTACHMENT_STORAGE_DIR,
@@ -321,8 +323,11 @@ app.addHook("onClose", async () => {
   await collectorRawPurgeScheduler.close();
 });
 scheduler.start();
-monthlyScheduler.start();
-monthlyReviewScheduler.start();
+// 天枢自己的月度计划草案和月末复盘：TIANSHU_MONTHLY_CYCLE=1 才自动起（缺省关，走 M2）。
+if (env.tianshuMonthlyCycle) {
+  monthlyScheduler.start();
+  monthlyReviewScheduler.start();
+}
 missionRoundScheduler.start();
 jobWorker.start();
 collectorRawPurgeScheduler.start();

@@ -64,7 +64,7 @@ export function registerSystemRoutes(app: AppInstance, ctx: RouteContext, deps: 
       people: () => peopleDirectory.searchPeople(undefined), publicOrigin: env.publicOrigin, planTasks: ctx.planTasks,
       chat: env.chatServiceUrl ? createChatService({ baseUrl: env.chatServiceUrl, token: env.internalChatToken }) : undefined,
       deliverables: { storageDir: ctx.materialStorageDir, enqueueReview: (versionId) => app.deliverables.enqueueReview(versionId) }, search: deps.search,
-      company: ctx.company.company });
+      company: ctx.company.company, monthlyCycle: Boolean(env.tianshuMonthlyCycle) });
     reply.raw.on("close", () => { void server.close(); });
     await transport.handleRequest(req.raw, reply.raw, req.body);
   };

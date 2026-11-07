@@ -257,6 +257,11 @@ export type AppEnv = {
    * 关着时「拆卡」返回 409、交回不排云端验收、验收重试返回 409。本机程序还没接上规划员的手动测试环境打开它。
    */
   boardCloudAgents?: boolean;
+  /**
+   * 天枢自己那套月度计划和月末复盘（TIANSHU_MONTHLY_CYCLE=1 才开，新首页 13.1）：缺省关，复盘和月初拆解只走 M2。
+   * 关着时不自动起月度计划草案、不自动开月末复盘，MCP 的 list_pending 也不列个人复盘和月度计划；已有的行不动。
+   */
+  tianshuMonthlyCycle?: boolean;
   /** 会后提取等候选 Agent 的模型与思考强度（OUTCOME_MODEL 等，agentModels.ts）；不配时与之前一致。 */
   agentModels?: AgentModelEnv;
   materialStorageDir?: string;

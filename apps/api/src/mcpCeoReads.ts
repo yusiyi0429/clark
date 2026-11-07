@@ -14,12 +14,15 @@ type Context = { q: Query; secret: string; now: Date; names: Map<string, string>
   personId: string };
 const short = (value: string, max = 600) => value.length > max ? `${value.slice(0, max)}…` : value;
 
-/** 与 CEO 首页同源的待处理投影，只摘可读字段；Card actions 从不进入 MCP 结果。 */
-export async function listPending(ctx: Context) {
+/**
+ * 与 CEO 首页同源的待处理投影，只摘可读字段；Card actions 从不进入 MCP 结果。
+ * monthlyCycle：天枢自己的月度计划开着才列（缺省关，月初拆解走 M2）。
+ */
+export async function listPending(ctx: Context, monthlyCycle: boolean) {
   const period = companyPeriod(ctx.now);
   const person = { personId: ctx.personId, role: "ceo" as const };
   const [issues, meetingRows, monthly, rounds] = await Promise.all([
-    listPendingIssueCards(ctx.q, ctx.secret), listMeetingRows(ctx.q), getMonthlyPlanNotice(ctx.q, ctx.secret, ctx.now),
+    listPendingIssueCards(ctx.q, ctx.secret), listMeetingRows(ctx.q), monthlyCycle ? getMonthlyPlanNotice(ctx.q, ctx.secret, ctx.now) : null,
     listMissionRoundCards(ctx.q, ctx.people, ctx.secret, person, undefined, ctx.now),
   ]);
   const issueItems = issues.map((card) => {
