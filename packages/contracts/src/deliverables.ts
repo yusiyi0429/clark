@@ -1,4 +1,5 @@
 import { Type, type Static } from "@sinclair/typebox";
+import { NullableInteger } from "./nullable.js";
 
 /**
  * Task 的交付物（spec 5.2–5.4）：一个本体 Task 一个交付物，交付物有多个版本；每个版本自动做一次参考评审（有约定时按约定里的「用什么证明」判）。
@@ -11,8 +12,8 @@ export const DeliverableItem = Type.Object({
   kind: Type.Union([Type.Literal("file"), Type.Literal("image"), Type.Literal("link")]),
   name: Type.String({ minLength: 1 }),
   mimeType: Type.Union([Type.String(), Type.Null()]),
-  sizeBytes: Type.Union([Type.Integer({ minimum: 0 }), Type.Null()]),
-  pageCount: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
+  sizeBytes: NullableInteger({ minimum: 0 }),
+  pageCount: NullableInteger({ minimum: 1 }),
   url: Type.Union([Type.String(), Type.Null()]),
   read: Type.Union([Type.Literal("pending"), Type.Literal("read"), Type.Literal("unreadable")]),
   /** 读不了时的一句原因（如「打不开 · 请导出后上传」）。 */
@@ -59,7 +60,7 @@ export const DeliverableReview = Type.Object({
   gain: Type.Union([Type.String(), Type.Null()]),
   /** 这一版的材料和这个 Task 对不上时的一句话（像是哪个 Task 的就点名）；对得上为 null。 */
   mismatch: Type.Union([Type.String(), Type.Null()]),
-  score: Type.Union([Type.Integer({ minimum: 0, maximum: 100 }), Type.Null()]),
+  score: NullableInteger({ minimum: 0, maximum: 100 }),
   met: Type.Integer({ minimum: 0 }),
   total: Type.Integer({ minimum: 0 }),
   ready: Type.Boolean(),
@@ -109,8 +110,8 @@ export const TaskDeliverableResponse = Type.Object({
 /** 首页 Task 列表上的状态：未开始、评审中、迭代中（带达标度）、可以交付、已交付；version 是最新一版的编号，没有版本时为 null。 */
 export const TaskDeliverableStatus = Type.Object({
   status: Type.Union([Type.Literal("none"), Type.Literal("reviewing"), Type.Literal("iterating"), Type.Literal("ready"), Type.Literal("delivered")]),
-  score: Type.Union([Type.Integer({ minimum: 0, maximum: 100 }), Type.Null()]),
-  version: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
+  score: NullableInteger({ minimum: 0, maximum: 100 }),
+  version: NullableInteger({ minimum: 1 }),
 }, { additionalProperties: false });
 
 export const DeliverableDissentRequest = Type.Object({ reason: Type.String({ minLength: 1, maxLength: 200 }) }, { additionalProperties: false });

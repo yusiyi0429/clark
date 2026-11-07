@@ -1,4 +1,5 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
+import { NullableInteger } from "./nullable.js";
 
 /**
  * 岗位与团队（V2 设计第 19 节）：长期存在、会成长的是岗位；每次干活按岗位临时起执行实例，验完就丢，学到的写回岗位。
@@ -43,7 +44,7 @@ export const RoleView = Type.Object({
   ...RoleBrief.properties,
   family: RoleFamily,
   presetKey: Nullable(Type.String()),
-  presetVersion: Nullable(Type.Integer({ minimum: 1 })),
+  presetVersion: NullableInteger({ minimum: 1 }),
   updatedAt: Instant,
   updatedBy: Nullable(Person),
 }, strict);

@@ -1,4 +1,5 @@
 import { Type, type Static } from "@sinclair/typebox";
+import { NullableInteger } from "./nullable.js";
 
 /**
  * 工单 09 材料区：议题、执行事项的材料。群成员都能上传，只有主人能删；
@@ -164,7 +165,7 @@ export const MaterialAnnotationView = Type.Object(
     body: Type.String(),
     author: MaterialPerson,
     status: MaterialAnnotationStatus,
-    appliedVersion: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
+    appliedVersion: NullableInteger({ minimum: 1 }),
     /** no_change 时是 Co-Agent 的一句说明；failed 时是失败原因；declined 时是不采用的原因（可以没有）。 */
     note: Type.Union([Type.String(), Type.Null()]),
     /** 采用或不采用的人；能改的人自己「立即修改」时是他本人；还没处理为 null。 */

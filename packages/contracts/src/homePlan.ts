@@ -1,6 +1,7 @@
 import { Type, type Static } from "@sinclair/typebox";
 import { DateOnly, Period, TaskView } from "./tasks.js";
 import { TaskDeliverableStatus } from "./deliverables.js";
+import { NullableInteger } from "./nullable.js";
 
 /** 计划点名字最多 10 个字。 */
 const MarkLabel = Type.String({ minLength: 1, maxLength: 10 });
@@ -84,7 +85,7 @@ export const HomePlanActivity = Type.Object(
     column: Type.Union([Type.Literal("done"), Type.Literal("week"), Type.Literal("later")]),
     overdue: Type.Boolean(),
     lastActivityAt: Type.String({ minLength: 1 }),
-    idleDays: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
+    idleDays: NullableInteger({ minimum: 1 }),
   },
   { additionalProperties: false },
 );

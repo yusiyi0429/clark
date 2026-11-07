@@ -26474,14 +26474,10 @@
                                 "type": "integer"
                               },
                               "costUsd": {
-                                "anyOf": [
-                                  {
-                                    "minimum": 0,
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "null"
-                                  }
+                                "minimum": 0,
+                                "type": [
+                                  "number",
+                                  "null"
                                 ]
                               }
                             }
@@ -26999,14 +26995,10 @@
                               ]
                             },
                             "expectedVersion": {
-                              "anyOf": [
-                                {
-                                  "minimum": 0,
-                                  "type": "integer"
-                                },
-                                {
-                                  "type": "null"
-                                }
+                              "minimum": 0,
+                              "type": [
+                                "integer",
+                                "null"
                               ]
                             },
                             "before": {
@@ -27607,14 +27599,10 @@
                                   ]
                                 },
                                 "expectedVersion": {
-                                  "anyOf": [
-                                    {
-                                      "minimum": 0,
-                                      "type": "integer"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
+                                  "minimum": 0,
+                                  "type": [
+                                    "integer",
+                                    "null"
                                   ]
                                 },
                                 "before": {
@@ -28174,14 +28162,10 @@
                               ]
                             },
                             "actualVersion": {
-                              "anyOf": [
-                                {
-                                  "minimum": 0,
-                                  "type": "integer"
-                                },
-                                {
-                                  "type": "null"
-                                }
+                              "minimum": 0,
+                              "type": [
+                                "integer",
+                                "null"
                               ]
                             },
                             "error": {
@@ -40739,14 +40723,10 @@
             ]
           },
           "sourceVersion": {
-            "anyOf": [
-              {
-                "minimum": 1,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
+            "minimum": 1,
+            "type": [
+              "integer",
+              "null"
             ]
           },
           "basis": {
@@ -41114,14 +41094,10 @@
             ]
           },
           "appliedVersion": {
-            "anyOf": [
-              {
-                "minimum": 1,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
+            "minimum": 1,
+            "type": [
+              "integer",
+              "null"
             ]
           },
           "canAnswer": {
@@ -41549,14 +41525,10 @@
                   ]
                 },
                 "appliedVersion": {
-                  "anyOf": [
-                    {
-                      "minimum": 1,
-                      "type": "integer"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "minimum": 1,
+                  "type": [
+                    "integer",
+                    "null"
                   ]
                 },
                 "canAnswer": {
@@ -42120,14 +42092,10 @@
                 ]
               },
               "appliedVersion": {
-                "anyOf": [
-                  {
-                    "minimum": 1,
-                    "type": "integer"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "minimum": 1,
+                "type": [
+                  "integer",
+                  "null"
                 ]
               },
               "canAnswer": {
@@ -44018,14 +43986,10 @@
                   ]
                 },
                 "sourceVersion": {
-                  "anyOf": [
-                    {
-                      "minimum": 1,
-                      "type": "integer"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "minimum": 1,
+                  "type": [
+                    "integer",
+                    "null"
                   ]
                 },
                 "basis": {
@@ -44342,14 +44306,10 @@
                   ]
                 },
                 "appliedVersion": {
-                  "anyOf": [
-                    {
-                      "minimum": 1,
-                      "type": "integer"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "minimum": 1,
+                  "type": [
+                    "integer",
+                    "null"
                   ]
                 },
                 "stale": {
@@ -44686,14 +44646,10 @@
                 ]
               },
               "sourceVersion": {
-                "anyOf": [
-                  {
-                    "minimum": 1,
-                    "type": "integer"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "minimum": 1,
+                "type": [
+                  "integer",
+                  "null"
                 ]
               },
               "basis": {
@@ -45050,14 +45006,10 @@
                           ]
                         },
                         "sourceVersion": {
-                          "anyOf": [
-                            {
-                              "minimum": 1,
-                              "type": "integer"
-                            },
-                            {
-                              "type": "null"
-                            }
+                          "minimum": 1,
+                          "type": [
+                            "integer",
+                            "null"
                           ]
                         },
                         "basis": {
@@ -45421,14 +45373,10 @@
             ]
           },
           "appliedVersion": {
-            "anyOf": [
-              {
-                "minimum": 1,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
+            "minimum": 1,
+            "type": [
+              "integer",
+              "null"
             ]
           },
           "stale": {
@@ -45764,14 +45712,10 @@
                 ]
               },
               "appliedVersion": {
-                "anyOf": [
-                  {
-                    "minimum": 1,
-                    "type": "integer"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "minimum": 1,
+                "type": [
+                  "integer",
+                  "null"
                 ]
               },
               "stale": {
@@ -46581,13 +46525,9 @@
                 ]
               },
               "httpStatus": {
-                "anyOf": [
-                  {
-                    "type": "integer"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "integer",
+                  "null"
                 ]
               }
             }
@@ -46733,13 +46673,9 @@
                 ]
               },
               "httpStatus": {
-                "anyOf": [
-                  {
-                    "type": "integer"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "type": [
+                  "integer",
+                  "null"
                 ]
               }
             }
@@ -53098,14 +53034,10 @@
                             "type": "integer"
                           },
                           "costUsd": {
-                            "anyOf": [
-                              {
-                                "minimum": 0,
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
+                            "minimum": 0,
+                            "type": [
+                              "number",
+                              "null"
                             ]
                           }
                         }
@@ -54418,14 +54350,10 @@
                                         "type": "integer"
                                       },
                                       "costUsd": {
-                                        "anyOf": [
-                                          {
-                                            "minimum": 0,
-                                            "type": "number"
-                                          },
-                                          {
-                                            "type": "null"
-                                          }
+                                        "minimum": 0,
+                                        "type": [
+                                          "number",
+                                          "null"
                                         ]
                                       }
                                     }
@@ -56682,14 +56610,10 @@
                   ]
                 },
                 "appliedVersion": {
-                  "anyOf": [
-                    {
-                      "minimum": 1,
-                      "type": "integer"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "minimum": 1,
+                  "type": [
+                    "integer",
+                    "null"
                   ]
                 },
                 "note": {
@@ -57059,14 +56983,10 @@
             ]
           },
           "appliedVersion": {
-            "anyOf": [
-              {
-                "minimum": 1,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
+            "minimum": 1,
+            "type": [
+              "integer",
+              "null"
             ]
           },
           "note": {
@@ -57268,14 +57188,10 @@
                 ]
               },
               "appliedVersion": {
-                "anyOf": [
-                  {
-                    "minimum": 1,
-                    "type": "integer"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "minimum": 1,
+                "type": [
+                  "integer",
+                  "null"
                 ]
               },
               "note": {
@@ -59175,14 +59091,10 @@
                   ]
                 },
                 "attempts": {
-                  "anyOf": [
-                    {
-                      "minimum": 0,
-                      "type": "integer"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
                   ]
                 },
                 "at": {
@@ -63263,14 +63175,10 @@
                                 "type": "integer"
                               },
                               "costUsd": {
-                                "anyOf": [
-                                  {
-                                    "minimum": 0,
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "null"
-                                  }
+                                "minimum": 0,
+                                "type": [
+                                  "number",
+                                  "null"
                                 ]
                               }
                             }
@@ -64932,14 +64840,10 @@
                                   "type": "integer"
                                 },
                                 "costUsd": {
-                                  "anyOf": [
-                                    {
-                                      "minimum": 0,
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
+                                  "minimum": 0,
+                                  "type": [
+                                    "number",
+                                    "null"
                                   ]
                                 }
                               }
@@ -66113,14 +66017,10 @@
                                         "type": "integer"
                                       },
                                       "costUsd": {
-                                        "anyOf": [
-                                          {
-                                            "minimum": 0,
-                                            "type": "number"
-                                          },
-                                          {
-                                            "type": "null"
-                                          }
+                                        "minimum": 0,
+                                        "type": [
+                                          "number",
+                                          "null"
                                         ]
                                       }
                                     }
@@ -67269,14 +67169,10 @@
                                   "type": "integer"
                                 },
                                 "costUsd": {
-                                  "anyOf": [
-                                    {
-                                      "minimum": 0,
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
+                                  "minimum": 0,
+                                  "type": [
+                                    "number",
+                                    "null"
                                   ]
                                 }
                               }
@@ -67946,14 +67842,10 @@
                                       ]
                                     },
                                     "starsInPeriod": {
-                                      "anyOf": [
-                                        {
-                                          "minimum": 0,
-                                          "type": "integer"
-                                        },
-                                        {
-                                          "type": "null"
-                                        }
+                                      "minimum": 0,
+                                      "type": [
+                                        "integer",
+                                        "null"
                                       ]
                                     },
                                     "since": {
@@ -68202,26 +68094,18 @@
                 ]
               },
               "score": {
-                "anyOf": [
-                  {
-                    "minimum": 0,
-                    "maximum": 100,
-                    "type": "integer"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "minimum": 0,
+                "maximum": 100,
+                "type": [
+                  "integer",
+                  "null"
                 ]
               },
               "version": {
-                "anyOf": [
-                  {
-                    "minimum": 1,
-                    "type": "integer"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "minimum": 1,
+                "type": [
+                  "integer",
+                  "null"
                 ]
               }
             }
@@ -68262,26 +68146,18 @@
             ]
           },
           "score": {
-            "anyOf": [
-              {
-                "minimum": 0,
-                "maximum": 100,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
+            "minimum": 0,
+            "maximum": 100,
+            "type": [
+              "integer",
+              "null"
             ]
           },
           "version": {
-            "anyOf": [
-              {
-                "minimum": 1,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
+            "minimum": 1,
+            "type": [
+              "integer",
+              "null"
             ]
           }
         }
@@ -68438,25 +68314,17 @@
                         ]
                       },
                       "sizeBytes": {
-                        "anyOf": [
-                          {
-                            "minimum": 0,
-                            "type": "integer"
-                          },
-                          {
-                            "type": "null"
-                          }
+                        "minimum": 0,
+                        "type": [
+                          "integer",
+                          "null"
                         ]
                       },
                       "pageCount": {
-                        "anyOf": [
-                          {
-                            "minimum": 1,
-                            "type": "integer"
-                          },
-                          {
-                            "type": "null"
-                          }
+                        "minimum": 1,
+                        "type": [
+                          "integer",
+                          "null"
                         ]
                       },
                       "url": {
@@ -68653,15 +68521,11 @@
                       ]
                     },
                     "score": {
-                      "anyOf": [
-                        {
-                          "minimum": 0,
-                          "maximum": 100,
-                          "type": "integer"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "minimum": 0,
+                      "maximum": 100,
+                      "type": [
+                        "integer",
+                        "null"
                       ]
                     },
                     "met": {
@@ -68978,25 +68842,17 @@
                   ]
                 },
                 "sizeBytes": {
-                  "anyOf": [
-                    {
-                      "minimum": 0,
-                      "type": "integer"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
                   ]
                 },
                 "pageCount": {
-                  "anyOf": [
-                    {
-                      "minimum": 1,
-                      "type": "integer"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "minimum": 1,
+                  "type": [
+                    "integer",
+                    "null"
                   ]
                 },
                 "url": {
@@ -69193,15 +69049,11 @@
                 ]
               },
               "score": {
-                "anyOf": [
-                  {
-                    "minimum": 0,
-                    "maximum": 100,
-                    "type": "integer"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "minimum": 0,
+                "maximum": 100,
+                "type": [
+                  "integer",
+                  "null"
                 ]
               },
               "met": {
@@ -69477,25 +69329,17 @@
             ]
           },
           "sizeBytes": {
-            "anyOf": [
-              {
-                "minimum": 0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
             ]
           },
           "pageCount": {
-            "anyOf": [
-              {
-                "minimum": 1,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
+            "minimum": 1,
+            "type": [
+              "integer",
+              "null"
             ]
           },
           "url": {
@@ -69691,15 +69535,11 @@
             ]
           },
           "score": {
-            "anyOf": [
-              {
-                "minimum": 0,
-                "maximum": 100,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
+            "minimum": 0,
+            "maximum": 100,
+            "type": [
+              "integer",
+              "null"
             ]
           },
           "met": {
@@ -71551,14 +71391,10 @@
                                 "type": "integer"
                               },
                               "costUsd": {
-                                "anyOf": [
-                                  {
-                                    "minimum": 0,
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "null"
-                                  }
+                                "minimum": 0,
+                                "type": [
+                                  "number",
+                                  "null"
                                 ]
                               }
                             }
@@ -71842,14 +71678,10 @@
             "type": "string"
           },
           "idleDays": {
-            "anyOf": [
-              {
-                "minimum": 1,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
+            "minimum": 1,
+            "type": [
+              "integer",
+              "null"
             ]
           }
         }
@@ -72143,26 +71975,18 @@
                       ]
                     },
                     "score": {
-                      "anyOf": [
-                        {
-                          "minimum": 0,
-                          "maximum": 100,
-                          "type": "integer"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "minimum": 0,
+                      "maximum": 100,
+                      "type": [
+                        "integer",
+                        "null"
                       ]
                     },
                     "version": {
-                      "anyOf": [
-                        {
-                          "minimum": 1,
-                          "type": "integer"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "minimum": 1,
+                      "type": [
+                        "integer",
+                        "null"
                       ]
                     }
                   }
@@ -72983,14 +72807,10 @@
                                       "type": "integer"
                                     },
                                     "costUsd": {
-                                      "anyOf": [
-                                        {
-                                          "minimum": 0,
-                                          "type": "number"
-                                        },
-                                        {
-                                          "type": "null"
-                                        }
+                                      "minimum": 0,
+                                      "type": [
+                                        "number",
+                                        "null"
                                       ]
                                     }
                                   }
@@ -73274,14 +73094,10 @@
                   "type": "string"
                 },
                 "idleDays": {
-                  "anyOf": [
-                    {
-                      "minimum": 1,
-                      "type": "integer"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "minimum": 1,
+                  "type": [
+                    "integer",
+                    "null"
                   ]
                 }
               }
@@ -74088,14 +73904,10 @@
                                   "type": "integer"
                                 },
                                 "costUsd": {
-                                  "anyOf": [
-                                    {
-                                      "minimum": 0,
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
+                                  "minimum": 0,
+                                  "type": [
+                                    "number",
+                                    "null"
                                   ]
                                 }
                               }
@@ -74634,14 +74446,10 @@
                         "type": "boolean"
                       },
                       "days": {
-                        "anyOf": [
-                          {
-                            "minimum": 0,
-                            "type": "integer"
-                          },
-                          {
-                            "type": "null"
-                          }
+                        "minimum": 0,
+                        "type": [
+                          "integer",
+                          "null"
                         ]
                       },
                       "dueDate": {
@@ -74656,25 +74464,17 @@
                         ]
                       },
                       "neededDays": {
-                        "anyOf": [
-                          {
-                            "minimum": 0,
-                            "type": "integer"
-                          },
-                          {
-                            "type": "null"
-                          }
+                        "minimum": 0,
+                        "type": [
+                          "integer",
+                          "null"
                         ]
                       },
                       "leftDays": {
-                        "anyOf": [
-                          {
-                            "minimum": 0,
-                            "type": "integer"
-                          },
-                          {
-                            "type": "null"
-                          }
+                        "minimum": 0,
+                        "type": [
+                          "integer",
+                          "null"
                         ]
                       },
                       "canOpen": {
@@ -76453,14 +76253,10 @@
                         ]
                       },
                       "starsInPeriod": {
-                        "anyOf": [
-                          {
-                            "minimum": 0,
-                            "type": "integer"
-                          },
-                          {
-                            "type": "null"
-                          }
+                        "minimum": 0,
+                        "type": [
+                          "integer",
+                          "null"
                         ]
                       },
                       "since": {
@@ -76670,14 +76466,10 @@
                         ]
                       },
                       "starsInPeriod": {
-                        "anyOf": [
-                          {
-                            "minimum": 0,
-                            "type": "integer"
-                          },
-                          {
-                            "type": "null"
-                          }
+                        "minimum": 0,
+                        "type": [
+                          "integer",
+                          "null"
                         ]
                       },
                       "since": {
@@ -76884,14 +76676,10 @@
                               ]
                             },
                             "starsInPeriod": {
-                              "anyOf": [
-                                {
-                                  "minimum": 0,
-                                  "type": "integer"
-                                },
-                                {
-                                  "type": "null"
-                                }
+                              "minimum": 0,
+                              "type": [
+                                "integer",
+                                "null"
                               ]
                             },
                             "since": {
@@ -77195,14 +76983,10 @@
                               ]
                             },
                             "starsInPeriod": {
-                              "anyOf": [
-                                {
-                                  "minimum": 0,
-                                  "type": "integer"
-                                },
-                                {
-                                  "type": "null"
-                                }
+                              "minimum": 0,
+                              "type": [
+                                "integer",
+                                "null"
                               ]
                             },
                             "since": {
@@ -79241,13 +79025,9 @@
                   ]
                 },
                 "confidence": {
-                  "anyOf": [
-                    {
-                      "type": "number"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "type": [
+                    "number",
+                    "null"
                   ]
                 },
                 "group": {
@@ -83416,14 +83196,10 @@
                           ]
                         },
                         "expectedVersion": {
-                          "anyOf": [
-                            {
-                              "minimum": 0,
-                              "type": "integer"
-                            },
-                            {
-                              "type": "null"
-                            }
+                          "minimum": 0,
+                          "type": [
+                            "integer",
+                            "null"
                           ]
                         },
                         "before": {
@@ -84024,14 +83800,10 @@
                               ]
                             },
                             "expectedVersion": {
-                              "anyOf": [
-                                {
-                                  "minimum": 0,
-                                  "type": "integer"
-                                },
-                                {
-                                  "type": "null"
-                                }
+                              "minimum": 0,
+                              "type": [
+                                "integer",
+                                "null"
                               ]
                             },
                             "before": {
@@ -84591,14 +84363,10 @@
                           ]
                         },
                         "actualVersion": {
-                          "anyOf": [
-                            {
-                              "minimum": 0,
-                              "type": "integer"
-                            },
-                            {
-                              "type": "null"
-                            }
+                          "minimum": 0,
+                          "type": [
+                            "integer",
+                            "null"
                           ]
                         },
                         "error": {
@@ -84951,14 +84719,10 @@
                       ]
                     },
                     "expectedVersion": {
-                      "anyOf": [
-                        {
-                          "minimum": 0,
-                          "type": "integer"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "minimum": 0,
+                      "type": [
+                        "integer",
+                        "null"
                       ]
                     },
                     "before": {
@@ -85552,14 +85316,10 @@
                                   ]
                                 },
                                 "expectedVersion": {
-                                  "anyOf": [
-                                    {
-                                      "minimum": 0,
-                                      "type": "integer"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
+                                  "minimum": 0,
+                                  "type": [
+                                    "integer",
+                                    "null"
                                   ]
                                 },
                                 "before": {
@@ -86160,14 +85920,10 @@
                                       ]
                                     },
                                     "expectedVersion": {
-                                      "anyOf": [
-                                        {
-                                          "minimum": 0,
-                                          "type": "integer"
-                                        },
-                                        {
-                                          "type": "null"
-                                        }
+                                      "minimum": 0,
+                                      "type": [
+                                        "integer",
+                                        "null"
                                       ]
                                     },
                                     "before": {
@@ -86727,14 +86483,10 @@
                                   ]
                                 },
                                 "actualVersion": {
-                                  "anyOf": [
-                                    {
-                                      "minimum": 0,
-                                      "type": "integer"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
+                                  "minimum": 0,
+                                  "type": [
+                                    "integer",
+                                    "null"
                                   ]
                                 },
                                 "error": {
@@ -92052,14 +91804,10 @@
                         "type": "integer"
                       },
                       "costUsd": {
-                        "anyOf": [
-                          {
-                            "minimum": 0,
-                            "type": "number"
-                          },
-                          {
-                            "type": "null"
-                          }
+                        "minimum": 0,
+                        "type": [
+                          "number",
+                          "null"
                         ]
                       }
                     }
@@ -93105,14 +92853,10 @@
                             "type": "integer"
                           },
                           "costUsd": {
-                            "anyOf": [
-                              {
-                                "minimum": 0,
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
+                            "minimum": 0,
+                            "type": [
+                              "number",
+                              "null"
                             ]
                           }
                         }
@@ -93510,14 +93254,10 @@
             }
           },
           "revision": {
-            "anyOf": [
-              {
-                "minimum": 1,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
+            "minimum": 1,
+            "type": [
+              "integer",
+              "null"
             ]
           }
         }
@@ -93567,14 +93307,10 @@
             "type": "string"
           },
           "criterionIndex": {
-            "anyOf": [
-              {
-                "minimum": 1,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
+            "minimum": 1,
+            "type": [
+              "integer",
+              "null"
             ]
           },
           "role": {
@@ -94624,14 +94360,10 @@
                                   "type": "integer"
                                 },
                                 "costUsd": {
-                                  "anyOf": [
-                                    {
-                                      "minimum": 0,
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
+                                  "minimum": 0,
+                                  "type": [
+                                    "number",
+                                    "null"
                                   ]
                                 }
                               }
@@ -94928,14 +94660,10 @@
                   "type": "string"
                 },
                 "criterionIndex": {
-                  "anyOf": [
-                    {
-                      "minimum": 1,
-                      "type": "integer"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "minimum": 1,
+                  "type": [
+                    "integer",
+                    "null"
                   ]
                 },
                 "role": {
@@ -95183,14 +94911,10 @@
                     }
                   },
                   "revision": {
-                    "anyOf": [
-                      {
-                        "minimum": 1,
-                        "type": "integer"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "minimum": 1,
+                    "type": [
+                      "integer",
+                      "null"
                     ]
                   }
                 }
@@ -95427,27 +95151,19 @@
                 ]
               },
               "hours": {
-                "anyOf": [
-                  {
-                    "exclusiveMinimum": 0,
-                    "maximum": 1000,
-                    "type": "number"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "exclusiveMinimum": 0,
+                "maximum": 1000,
+                "type": [
+                  "number",
+                  "null"
                 ]
               },
               "weeklyPercent": {
-                "anyOf": [
-                  {
-                    "minimum": 1,
-                    "maximum": 100,
-                    "type": "integer"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "minimum": 1,
+                "maximum": 100,
+                "type": [
+                  "integer",
+                  "null"
                 ]
               },
               "money": {
@@ -96296,14 +96012,10 @@
                                   "type": "integer"
                                 },
                                 "costUsd": {
-                                  "anyOf": [
-                                    {
-                                      "minimum": 0,
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
+                                  "minimum": 0,
+                                  "type": [
+                                    "number",
+                                    "null"
                                   ]
                                 }
                               }
@@ -96643,14 +96355,10 @@
             ]
           },
           "criterionIndex": {
-            "anyOf": [
-              {
-                "minimum": 1,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
+            "minimum": 1,
+            "type": [
+              "integer",
+              "null"
             ]
           }
         }
@@ -97106,14 +96814,10 @@
                     ]
                   },
                   "roleVersion": {
-                    "anyOf": [
-                      {
-                        "minimum": 1,
-                        "type": "integer"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "minimum": 1,
+                    "type": [
+                      "integer",
+                      "null"
                     ]
                   }
                 }
@@ -97936,14 +97640,10 @@
                                 "type": "integer"
                               },
                               "costUsd": {
-                                "anyOf": [
-                                  {
-                                    "minimum": 0,
-                                    "type": "number"
-                                  },
-                                  {
-                                    "type": "null"
-                                  }
+                                "minimum": 0,
+                                "type": [
+                                  "number",
+                                  "null"
                                 ]
                               }
                             }
@@ -98365,14 +98065,10 @@
                       "type": "integer"
                     },
                     "costUsd": {
-                      "anyOf": [
-                        {
-                          "minimum": 0,
-                          "type": "number"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "minimum": 0,
+                      "type": [
+                        "number",
+                        "null"
                       ]
                     }
                   }
@@ -98908,14 +98604,10 @@
                           ]
                         },
                         "roleVersion": {
-                          "anyOf": [
-                            {
-                              "minimum": 1,
-                              "type": "integer"
-                            },
-                            {
-                              "type": "null"
-                            }
+                          "minimum": 1,
+                          "type": [
+                            "integer",
+                            "null"
                           ]
                         }
                       }
@@ -99020,14 +98712,10 @@
                   ]
                 },
                 "sizeBytes": {
-                  "anyOf": [
-                    {
-                      "minimum": 0,
-                      "type": "integer"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
                   ]
                 },
                 "url": {
@@ -99741,14 +99429,10 @@
                 "type": "integer"
               },
               "costUsd": {
-                "anyOf": [
-                  {
-                    "minimum": 0,
-                    "type": "number"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "minimum": 0,
+                "type": [
+                  "number",
+                  "null"
                 ]
               }
             }
@@ -99928,14 +99612,10 @@
                 "type": "integer"
               },
               "costUsd": {
-                "anyOf": [
-                  {
-                    "minimum": 0,
-                    "type": "number"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "minimum": 0,
+                "type": [
+                  "number",
+                  "null"
                 ]
               }
             }
@@ -100107,14 +99787,10 @@
             ]
           },
           "sizeBytes": {
-            "anyOf": [
-              {
-                "minimum": 0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
             ]
           },
           "url": {
@@ -100460,14 +100136,10 @@
                         "type": "integer"
                       },
                       "costUsd": {
-                        "anyOf": [
-                          {
-                            "minimum": 0,
-                            "type": "number"
-                          },
-                          {
-                            "type": "null"
-                          }
+                        "minimum": 0,
+                        "type": [
+                          "number",
+                          "null"
                         ]
                       }
                     }
@@ -101036,14 +100708,10 @@
                               "type": "integer"
                             },
                             "costUsd": {
-                              "anyOf": [
-                                {
-                                  "minimum": 0,
-                                  "type": "number"
-                                },
-                                {
-                                  "type": "null"
-                                }
+                              "minimum": 0,
+                              "type": [
+                                "number",
+                                "null"
                               ]
                             }
                           }
@@ -101463,14 +101131,10 @@
                             "type": "integer"
                           },
                           "costUsd": {
-                            "anyOf": [
-                              {
-                                "minimum": 0,
-                                "type": "number"
-                              },
-                              {
-                                "type": "null"
-                              }
+                            "minimum": 0,
+                            "type": [
+                              "number",
+                              "null"
                             ]
                           }
                         }
@@ -101905,14 +101569,10 @@
                       "type": "integer"
                     },
                     "costUsd": {
-                      "anyOf": [
-                        {
-                          "minimum": 0,
-                          "type": "number"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "minimum": 0,
+                      "type": [
+                        "number",
+                        "null"
                       ]
                     }
                   }
@@ -102229,14 +101889,10 @@
             "type": "string"
           },
           "latestVersion": {
-            "anyOf": [
-              {
-                "minimum": 1,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
+            "minimum": 1,
+            "type": [
+              "integer",
+              "null"
             ]
           }
         }
@@ -102506,14 +102162,10 @@
             ]
           },
           "presetVersion": {
-            "anyOf": [
-              {
-                "minimum": 1,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
+            "minimum": 1,
+            "type": [
+              "integer",
+              "null"
             ]
           },
           "updatedAt": {
@@ -102798,14 +102450,10 @@
                   ]
                 },
                 "presetVersion": {
-                  "anyOf": [
-                    {
-                      "minimum": 1,
-                      "type": "integer"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "minimum": 1,
+                  "type": [
+                    "integer",
+                    "null"
                   ]
                 },
                 "updatedAt": {
@@ -103819,25 +103467,17 @@
             "type": "integer"
           },
           "costUsd": {
-            "anyOf": [
-              {
-                "minimum": 0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
+            "minimum": 0,
+            "type": [
+              "number",
+              "null"
             ]
           },
           "costCny": {
-            "anyOf": [
-              {
-                "minimum": 0,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
+            "minimum": 0,
+            "type": [
+              "number",
+              "null"
             ]
           }
         }
@@ -104111,14 +103751,10 @@
             ]
           },
           "elapsedSeconds": {
-            "anyOf": [
-              {
-                "minimum": 0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
             ]
           },
           "finishedAt": {
@@ -104153,25 +103789,17 @@
                     "type": "integer"
                   },
                   "costUsd": {
-                    "anyOf": [
-                      {
-                        "minimum": 0,
-                        "type": "number"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "minimum": 0,
+                    "type": [
+                      "number",
+                      "null"
                     ]
                   },
                   "costCny": {
-                    "anyOf": [
-                      {
-                        "minimum": 0,
-                        "type": "number"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "minimum": 0,
+                    "type": [
+                      "number",
+                      "null"
                     ]
                   }
                 }
@@ -104271,14 +103899,10 @@
             ]
           },
           "queuePosition": {
-            "anyOf": [
-              {
-                "minimum": 1,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
+            "minimum": 1,
+            "type": [
+              "integer",
+              "null"
             ]
           },
           "git": {
@@ -104408,14 +104032,10 @@
             "type": "integer"
           },
           "cap": {
-            "anyOf": [
-              {
-                "minimum": 1,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
+            "minimum": 1,
+            "type": [
+              "integer",
+              "null"
             ]
           },
           "cost": {
@@ -104445,25 +104065,17 @@
                     "type": "integer"
                   },
                   "costUsd": {
-                    "anyOf": [
-                      {
-                        "minimum": 0,
-                        "type": "number"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "minimum": 0,
+                    "type": [
+                      "number",
+                      "null"
                     ]
                   },
                   "costCny": {
-                    "anyOf": [
-                      {
-                        "minimum": 0,
-                        "type": "number"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "minimum": 0,
+                    "type": [
+                      "number",
+                      "null"
                     ]
                   }
                 }
@@ -104487,25 +104099,17 @@
                     "type": "integer"
                   },
                   "costUsd": {
-                    "anyOf": [
-                      {
-                        "minimum": 0,
-                        "type": "number"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "minimum": 0,
+                    "type": [
+                      "number",
+                      "null"
                     ]
                   },
                   "costCny": {
-                    "anyOf": [
-                      {
-                        "minimum": 0,
-                        "type": "number"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "minimum": 0,
+                    "type": [
+                      "number",
+                      "null"
                     ]
                   }
                 }
@@ -104565,15 +104169,11 @@
                   ]
                 },
                 "remainingPercent": {
-                  "anyOf": [
-                    {
-                      "minimum": 0,
-                      "maximum": 100,
-                      "type": "integer"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "minimum": 0,
+                  "maximum": 100,
+                  "type": [
+                    "integer",
+                    "null"
                   ]
                 },
                 "amounts": {
@@ -105019,14 +104619,10 @@
                   ]
                 },
                 "elapsedSeconds": {
-                  "anyOf": [
-                    {
-                      "minimum": 0,
-                      "type": "integer"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
                   ]
                 },
                 "finishedAt": {
@@ -105061,25 +104657,17 @@
                           "type": "integer"
                         },
                         "costUsd": {
-                          "anyOf": [
-                            {
-                              "minimum": 0,
-                              "type": "number"
-                            },
-                            {
-                              "type": "null"
-                            }
+                          "minimum": 0,
+                          "type": [
+                            "number",
+                            "null"
                           ]
                         },
                         "costCny": {
-                          "anyOf": [
-                            {
-                              "minimum": 0,
-                              "type": "number"
-                            },
-                            {
-                              "type": "null"
-                            }
+                          "minimum": 0,
+                          "type": [
+                            "number",
+                            "null"
                           ]
                         }
                       }
@@ -105179,14 +104767,10 @@
                   ]
                 },
                 "queuePosition": {
-                  "anyOf": [
-                    {
-                      "minimum": 1,
-                      "type": "integer"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "minimum": 1,
+                  "type": [
+                    "integer",
+                    "null"
                   ]
                 },
                 "git": {
@@ -105536,14 +105120,10 @@
                   ]
                 },
                 "elapsedSeconds": {
-                  "anyOf": [
-                    {
-                      "minimum": 0,
-                      "type": "integer"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
                   ]
                 },
                 "finishedAt": {
@@ -105578,25 +105158,17 @@
                           "type": "integer"
                         },
                         "costUsd": {
-                          "anyOf": [
-                            {
-                              "minimum": 0,
-                              "type": "number"
-                            },
-                            {
-                              "type": "null"
-                            }
+                          "minimum": 0,
+                          "type": [
+                            "number",
+                            "null"
                           ]
                         },
                         "costCny": {
-                          "anyOf": [
-                            {
-                              "minimum": 0,
-                              "type": "number"
-                            },
-                            {
-                              "type": "null"
-                            }
+                          "minimum": 0,
+                          "type": [
+                            "number",
+                            "null"
                           ]
                         }
                       }
@@ -105696,14 +105268,10 @@
                   ]
                 },
                 "queuePosition": {
-                  "anyOf": [
-                    {
-                      "minimum": 1,
-                      "type": "integer"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "minimum": 1,
+                  "type": [
+                    "integer",
+                    "null"
                   ]
                 },
                 "git": {
@@ -106053,14 +105621,10 @@
                   ]
                 },
                 "elapsedSeconds": {
-                  "anyOf": [
-                    {
-                      "minimum": 0,
-                      "type": "integer"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "minimum": 0,
+                  "type": [
+                    "integer",
+                    "null"
                   ]
                 },
                 "finishedAt": {
@@ -106095,25 +105659,17 @@
                           "type": "integer"
                         },
                         "costUsd": {
-                          "anyOf": [
-                            {
-                              "minimum": 0,
-                              "type": "number"
-                            },
-                            {
-                              "type": "null"
-                            }
+                          "minimum": 0,
+                          "type": [
+                            "number",
+                            "null"
                           ]
                         },
                         "costCny": {
-                          "anyOf": [
-                            {
-                              "minimum": 0,
-                              "type": "number"
-                            },
-                            {
-                              "type": "null"
-                            }
+                          "minimum": 0,
+                          "type": [
+                            "number",
+                            "null"
                           ]
                         }
                       }
@@ -106213,14 +105769,10 @@
                   ]
                 },
                 "queuePosition": {
-                  "anyOf": [
-                    {
-                      "minimum": 1,
-                      "type": "integer"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "minimum": 1,
+                  "type": [
+                    "integer",
+                    "null"
                   ]
                 },
                 "git": {
@@ -106351,14 +105903,10 @@
                 "type": "integer"
               },
               "cap": {
-                "anyOf": [
-                  {
-                    "minimum": 1,
-                    "type": "integer"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "minimum": 1,
+                "type": [
+                  "integer",
+                  "null"
                 ]
               },
               "cost": {
@@ -106388,25 +105936,17 @@
                         "type": "integer"
                       },
                       "costUsd": {
-                        "anyOf": [
-                          {
-                            "minimum": 0,
-                            "type": "number"
-                          },
-                          {
-                            "type": "null"
-                          }
+                        "minimum": 0,
+                        "type": [
+                          "number",
+                          "null"
                         ]
                       },
                       "costCny": {
-                        "anyOf": [
-                          {
-                            "minimum": 0,
-                            "type": "number"
-                          },
-                          {
-                            "type": "null"
-                          }
+                        "minimum": 0,
+                        "type": [
+                          "number",
+                          "null"
                         ]
                       }
                     }
@@ -106430,25 +105970,17 @@
                         "type": "integer"
                       },
                       "costUsd": {
-                        "anyOf": [
-                          {
-                            "minimum": 0,
-                            "type": "number"
-                          },
-                          {
-                            "type": "null"
-                          }
+                        "minimum": 0,
+                        "type": [
+                          "number",
+                          "null"
                         ]
                       },
                       "costCny": {
-                        "anyOf": [
-                          {
-                            "minimum": 0,
-                            "type": "number"
-                          },
-                          {
-                            "type": "null"
-                          }
+                        "minimum": 0,
+                        "type": [
+                          "number",
+                          "null"
                         ]
                       }
                     }
@@ -106508,15 +106040,11 @@
                       ]
                     },
                     "remainingPercent": {
-                      "anyOf": [
-                        {
-                          "minimum": 0,
-                          "maximum": 100,
-                          "type": "integer"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "minimum": 0,
+                      "maximum": 100,
+                      "type": [
+                        "integer",
+                        "null"
                       ]
                     },
                     "amounts": {
@@ -108562,14 +108090,10 @@
                                           ]
                                         },
                                         "ahead": {
-                                          "anyOf": [
-                                            {
-                                              "minimum": 1,
-                                              "type": "integer"
-                                            },
-                                            {
-                                              "type": "null"
-                                            }
+                                          "minimum": 1,
+                                          "type": [
+                                            "integer",
+                                            "null"
                                           ]
                                         }
                                       }
@@ -110253,14 +109777,10 @@
                                                 ]
                                               },
                                               "ahead": {
-                                                "anyOf": [
-                                                  {
-                                                    "minimum": 1,
-                                                    "type": "integer"
-                                                  },
-                                                  {
-                                                    "type": "null"
-                                                  }
+                                                "minimum": 1,
+                                                "type": [
+                                                  "integer",
+                                                  "null"
                                                 ]
                                               }
                                             }
@@ -111708,14 +111228,10 @@
                 "type": "integer"
               },
               "cap": {
-                "anyOf": [
-                  {
-                    "minimum": 1,
-                    "type": "integer"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "minimum": 1,
+                "type": [
+                  "integer",
+                  "null"
                 ]
               },
               "cost": {
@@ -111745,25 +111261,17 @@
                         "type": "integer"
                       },
                       "costUsd": {
-                        "anyOf": [
-                          {
-                            "minimum": 0,
-                            "type": "number"
-                          },
-                          {
-                            "type": "null"
-                          }
+                        "minimum": 0,
+                        "type": [
+                          "number",
+                          "null"
                         ]
                       },
                       "costCny": {
-                        "anyOf": [
-                          {
-                            "minimum": 0,
-                            "type": "number"
-                          },
-                          {
-                            "type": "null"
-                          }
+                        "minimum": 0,
+                        "type": [
+                          "number",
+                          "null"
                         ]
                       }
                     }
@@ -111787,25 +111295,17 @@
                         "type": "integer"
                       },
                       "costUsd": {
-                        "anyOf": [
-                          {
-                            "minimum": 0,
-                            "type": "number"
-                          },
-                          {
-                            "type": "null"
-                          }
+                        "minimum": 0,
+                        "type": [
+                          "number",
+                          "null"
                         ]
                       },
                       "costCny": {
-                        "anyOf": [
-                          {
-                            "minimum": 0,
-                            "type": "number"
-                          },
-                          {
-                            "type": "null"
-                          }
+                        "minimum": 0,
+                        "type": [
+                          "number",
+                          "null"
                         ]
                       }
                     }
@@ -111865,15 +111365,11 @@
                       ]
                     },
                     "remainingPercent": {
-                      "anyOf": [
-                        {
-                          "minimum": 0,
-                          "maximum": 100,
-                          "type": "integer"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "minimum": 0,
+                      "maximum": 100,
+                      "type": [
+                        "integer",
+                        "null"
                       ]
                     },
                     "amounts": {
@@ -112290,27 +111786,19 @@
                       ]
                     },
                     "hours": {
-                      "anyOf": [
-                        {
-                          "exclusiveMinimum": 0,
-                          "maximum": 1000,
-                          "type": "number"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "exclusiveMinimum": 0,
+                      "maximum": 1000,
+                      "type": [
+                        "number",
+                        "null"
                       ]
                     },
                     "weeklyPercent": {
-                      "anyOf": [
-                        {
-                          "minimum": 1,
-                          "maximum": 100,
-                          "type": "integer"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "minimum": 1,
+                      "maximum": 100,
+                      "type": [
+                        "integer",
+                        "null"
                       ]
                     },
                     "money": {
@@ -113141,14 +112629,10 @@
                                           ]
                                         },
                                         "ahead": {
-                                          "anyOf": [
-                                            {
-                                              "minimum": 1,
-                                              "type": "integer"
-                                            },
-                                            {
-                                              "type": "null"
-                                            }
+                                          "minimum": 1,
+                                          "type": [
+                                            "integer",
+                                            "null"
                                           ]
                                         }
                                       }
@@ -113607,14 +113091,10 @@
                                                 ]
                                               },
                                               "ahead": {
-                                                "anyOf": [
-                                                  {
-                                                    "minimum": 1,
-                                                    "type": "integer"
-                                                  },
-                                                  {
-                                                    "type": "null"
-                                                  }
+                                                "minimum": 1,
+                                                "type": [
+                                                  "integer",
+                                                  "null"
                                                 ]
                                               }
                                             }
@@ -114190,14 +113670,10 @@
                                               ]
                                             },
                                             "ahead": {
-                                              "anyOf": [
-                                                {
-                                                  "minimum": 1,
-                                                  "type": "integer"
-                                                },
-                                                {
-                                                  "type": "null"
-                                                }
+                                              "minimum": 1,
+                                              "type": [
+                                                "integer",
+                                                "null"
                                               ]
                                             }
                                           }
@@ -116473,14 +115949,10 @@
                                   "type": "integer"
                                 },
                                 "costUsd": {
-                                  "anyOf": [
-                                    {
-                                      "minimum": 0,
-                                      "type": "number"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
+                                  "minimum": 0,
+                                  "type": [
+                                    "number",
+                                    "null"
                                   ]
                                 }
                               }
@@ -116777,14 +116249,10 @@
                   "type": "string"
                 },
                 "criterionIndex": {
-                  "anyOf": [
-                    {
-                      "minimum": 1,
-                      "type": "integer"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "minimum": 1,
+                  "type": [
+                    "integer",
+                    "null"
                   ]
                 },
                 "role": {
@@ -117032,14 +116500,10 @@
                     }
                   },
                   "revision": {
-                    "anyOf": [
-                      {
-                        "minimum": 1,
-                        "type": "integer"
-                      },
-                      {
-                        "type": "null"
-                      }
+                    "minimum": 1,
+                    "type": [
+                      "integer",
+                      "null"
                     ]
                   }
                 }
@@ -117710,14 +117174,10 @@
                                   ]
                                 },
                                 "ahead": {
-                                  "anyOf": [
-                                    {
-                                      "minimum": 1,
-                                      "type": "integer"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
+                                  "minimum": 1,
+                                  "type": [
+                                    "integer",
+                                    "null"
                                   ]
                                 }
                               }
@@ -118016,14 +117476,10 @@
                               ]
                             },
                             "ahead": {
-                              "anyOf": [
-                                {
-                                  "minimum": 1,
-                                  "type": "integer"
-                                },
-                                {
-                                  "type": "null"
-                                }
+                              "minimum": 1,
+                              "type": [
+                                "integer",
+                                "null"
                               ]
                             }
                           }
@@ -118170,27 +117626,19 @@
             ]
           },
           "hours": {
-            "anyOf": [
-              {
-                "exclusiveMinimum": 0,
-                "maximum": 1000,
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
+            "exclusiveMinimum": 0,
+            "maximum": 1000,
+            "type": [
+              "number",
+              "null"
             ]
           },
           "weeklyPercent": {
-            "anyOf": [
-              {
-                "minimum": 1,
-                "maximum": 100,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
+            "minimum": 1,
+            "maximum": 100,
+            "type": [
+              "integer",
+              "null"
             ]
           },
           "money": {
@@ -118269,27 +117717,19 @@
                 ]
               },
               "hours": {
-                "anyOf": [
-                  {
-                    "exclusiveMinimum": 0,
-                    "maximum": 1000,
-                    "type": "number"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "exclusiveMinimum": 0,
+                "maximum": 1000,
+                "type": [
+                  "number",
+                  "null"
                 ]
               },
               "weeklyPercent": {
-                "anyOf": [
-                  {
-                    "minimum": 1,
-                    "maximum": 100,
-                    "type": "integer"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "minimum": 1,
+                "maximum": 100,
+                "type": [
+                  "integer",
+                  "null"
                 ]
               },
               "money": {
@@ -118438,27 +117878,19 @@
                 ]
               },
               "hours": {
-                "anyOf": [
-                  {
-                    "exclusiveMinimum": 0,
-                    "maximum": 1000,
-                    "type": "number"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "exclusiveMinimum": 0,
+                "maximum": 1000,
+                "type": [
+                  "number",
+                  "null"
                 ]
               },
               "weeklyPercent": {
-                "anyOf": [
-                  {
-                    "minimum": 1,
-                    "maximum": 100,
-                    "type": "integer"
-                  },
-                  {
-                    "type": "null"
-                  }
+                "minimum": 1,
+                "maximum": 100,
+                "type": [
+                  "integer",
+                  "null"
                 ]
               },
               "money": {
@@ -119199,14 +118631,10 @@
             ]
           },
           "version": {
-            "anyOf": [
-              {
-                "minimum": 1,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
+            "minimum": 1,
+            "type": [
+              "integer",
+              "null"
             ]
           },
           "running": {
@@ -119578,14 +119006,10 @@
                   ]
                 },
                 "version": {
-                  "anyOf": [
-                    {
-                      "minimum": 1,
-                      "type": "integer"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "minimum": 1,
+                  "type": [
+                    "integer",
+                    "null"
                   ]
                 },
                 "running": {
