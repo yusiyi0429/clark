@@ -14,7 +14,7 @@ import type { TConversationCard, TLocalQuestionAnswerRequest, TLocalQuestionRequ
 import type { TLocalPermissionRequestView } from "@/lib/local/runner";
 import { AskContext, answersOf } from "@/conversation/AskPanel";
 import { HeroButton } from "@/components/HeroButton";
-import { DecisionBox, DecisionTag, type DecisionOption } from "./DecisionBox";
+import { DecisionBox, DecisionTag, FailedLine, failureOf, type DecisionOption, type Failure } from "./DecisionBox";
 import x from "@/styles/decision-box.module.css";
 
 /** Claude Code 把推荐的写在标签后面「(Recommended)」：去掉，标成推荐、放第一个。 */
@@ -27,25 +27,39 @@ export function localOptions(options: { label: string; description: string }[]):
 
 /** 行里、首页「等你」里写的那一句：第一个问题。 */
 export const questionTitle = (request: TLocalQuestionRequestView) => request.questions[0]!.question;
+/** 这里答不了时选项框头上的状态 chip（5.4.3、5.6「在 {哪} 答」）：等你 · 电脑名。 */
+export const awayChip = (device: string | null | undefined) => `等你 · ${device || "那台电脑"}`;
+
+/** 「自己说」「换个做法」的字数上限，和接这句话的接口一致：本机回答 4000（LocalQuestionAnswerRequest.text）、换个做法 500（LocalPermissionDecisionRequest.message）。 */
+const ANSWER_MAX = 4000;
+export const DENY_MAX = 500;
+/** 伙伴提问卡里「自己说」的上限（AskAnswerInput 的 text）。 */
+const ASK_TEXT_MAX = 1000;
+
 /** 一个单选问题：在首页那一行就能点着答。 */
 export const oneTap = (request: TLocalQuestionRequestView) => request.questions.length === 1 && !request.questions[0]!.multiSelect;
 
-export function QuestionDecision({ request, blocked, onAnswer, resolved }: {
+export function QuestionDecision({ request, blocked, onAnswer, resolved, expired }: {
   request: TLocalQuestionRequestView;
   blocked?: string | null;
   onAnswer: (body: TLocalQuestionAnswerRequest) => Promise<unknown>;
   resolved?: string | null;
+  /** 子会话停了：收成「已失效」。 */
+  expired?: boolean;
 }) {
   const [page, setPage] = useState(0);
   const [choices, setChoices] = useState<string[][]>(() => request.questions.map(() => []));
   const [notes, setNotes] = useState<string[]>(() => request.questions.map(() => ""));
   const [sending, setSending] = useState(false);
+  const [failed, setFailed] = useState<Failure | null>(null);
   const question = request.questions[page]!;
   const { options, order } = localOptions(question.options);
   const several = request.questions.length > 1;
+  const labelsOf = (picked: number[]) => picked.map((at) => question.options[order[at]!]!.label);
   const answered = (nextChoices: string[][], nextNotes: string[]) => request.questions.every((_, index) => nextChoices[index]!.length > 0 || !!nextNotes[index]);
+  // 几个问题的「问题：自己说的话」拼成一段：超过接口上限截掉尾巴，不然这一下怎么重试都发不出去。
   const finish = (nextChoices: string[][], nextNotes: string[]) => {
-    const text = nextNotes.map((note, index) => (note ? (several ? `${request.questions[index]!.question}：${note}` : note) : "")).filter(Boolean).join("\n");
+    const text = nextNotes.map((note, index) => (note ? (several ? `${request.questions[index]!.question}：${note}` : note) : "")).filter(Boolean).join("\n").slice(0, ANSWER_MAX);
     return onAnswer({ choices: nextChoices, ...(text ? { text } : {}) });
   };
   // 一个问题：点了就交。几个问题：答完一页自动翻到下一个没答的，全部答完「提交」才能点，一起发出。
@@ -57,13 +71,28 @@ export function QuestionDecision({ request, blocked, onAnswer, resolved }: {
     if (next >= 0) setPage(next);
     return undefined;
   };
-  const submit = async () => { setSending(true); try { await finish(choices, notes); } finally { setSending(false); } };
+  // 整件「提交」没成（问题作废了、本机连不上）：框底下原处写「失败 · 重试」。
+  const submit = async () => {
+    setSending(true);
+    setFailed(null);
+    try { await finish(choices, notes); }
+    catch (error) { setFailed(failureOf(error, () => void submit())); }
+    finally { setSending(false); }
+  };
+  // 几个问题时多选那一页：勾一下记一下，不翻页、不另画「提交」——整件只有底下那一个「提交」。
+  const ticking = several && question.multiSelect;
   return (
     <DecisionBox kind="question" testId="question-decision" title={question.question} options={options} multi={question.multiSelect} blocked={blocked} busy={sending}
-      resolved={resolved} pager={several ? { index: page, total: request.questions.length, onGo: setPage } : undefined}
-      onPick={(picked, note) => advance(choices.map((chosen, index) => (index === page ? picked.map((at) => question.options[order[at]!]!.label) : chosen)), notes.map((value, index) => (index === page ? note ?? "" : value)))}
-      other={{ placeholder: question.header || undefined, onSubmit: (text) => advance(choices.map((chosen, index) => (index === page ? [] : chosen)), notes.map((note, index) => (index === page ? text : note))) }}
-      footer={several ? <><span className={x.grow} /><HeroButton variant="primary" size="sm" isDisabled={sending || !answered(choices, notes)} onPress={() => void submit()}>提交</HeroButton></> : undefined} />
+      resolved={resolved} expired={expired} pager={several ? { index: page, total: request.questions.length, onGo: setPage } : undefined}
+      onPick={(picked, note) => advance(choices.map((chosen, index) => (index === page ? labelsOf(picked) : chosen)), notes.map((value, index) => (index === page ? note ?? "" : value)))}
+      onTicks={ticking ? (picked) => setChoices(choices.map((chosen, index) => (index === page ? labelsOf(picked) : chosen))) : undefined}
+      initialPicks={ticking ? choices[page]!.map((label) => order.findIndex((at) => question.options[at]!.label === label)).filter((at) => at >= 0) : undefined}
+      // 多选时自己说的话和勾中的一起发：这里只记字，不清掉勾。
+      other={{ placeholder: question.header || undefined, maxLength: ANSWER_MAX, onSubmit: (text) => advance(choices.map((chosen, index) => (index === page && !question.multiSelect ? [] : chosen)), notes.map((note, index) => (index === page ? text : note))) }}
+      footer={several ? <>
+        {failed && !sending ? <FailedLine inline {...failed} /> : null}
+        <span className={x.grow} /><HeroButton variant="primary" size="sm" isDisabled={sending || !answered(choices, notes)} onPress={() => void submit()}>提交</HeroButton>
+      </> : undefined} />
   );
 }
 
@@ -80,6 +109,7 @@ export function ApprovalDecision({ requests, blocked, onDecide }: {
 }) {
   const [page, setPage] = useState(0);
   const [allBusy, setAllBusy] = useState(false);
+  const [allFailed, setAllFailed] = useState<Failure | null>(null);
   const index = Math.min(page, requests.length - 1);
   const request = requests[index];
   if (!request) return null;
@@ -89,9 +119,13 @@ export function ApprovalDecision({ requests, blocked, onDecide }: {
   // 「同类以后都批准」只在这个子会话内放行；说明写清是哪一类（等宽字写工具），回车永远不会选它。
   const options: DecisionOption[] = outside.length ? [{ label: "批准" }]
     : [{ label: "批准", recommended: true }, ...(request.canAllowForSession ? [{ label: "同类以后都批准", noEnter: true, detail: <><code className={x.ruleCode}>{request.toolName}</code> · 这个子会话内</> }] : [])];
+  // 「全部批准」有一件没成（别处已经批了、本机连不上）：框底下写「失败 · 重试」。
   const allowAll = async () => {
     setAllBusy(true);
-    try { for (const entry of requests) await onDecide(entry, "allow", {}); } finally { setAllBusy(false); }
+    setAllFailed(null);
+    try { for (const entry of requests) await onDecide(entry, "allow", {}); }
+    catch (error) { setAllFailed(failureOf(error, () => void allowAll())); }
+    finally { setAllBusy(false); }
   };
   const plain = requests.every((entry) => !(entry.outsidePaths ?? []).length);
   return (
@@ -109,36 +143,62 @@ export function ApprovalDecision({ requests, blocked, onDecide }: {
       </>}
       options={options}
       onPick={([picked]) => onDecide(request, "allow", { forSession: picked === 1 && !outside.length })}
-      other={{ label: "换个做法", onSubmit: (message) => onDecide(request, "deny", { message }) }} />
+      footer={allFailed && !allBusy ? <FailedLine inline {...allFailed} /> : undefined}
+      other={{ label: "换个做法", maxLength: DENY_MAX, onSubmit: (message) => onDecide(request, "deny", { message }) }} />
   );
 }
 
 type QuestionsCard = Extract<TConversationCard, { kind: "questions" }>;
 type Pick = { option: number } | { text: string };
 
-/** 伙伴的提问卡：一题一页；答完最后一题作为下一句话发回（问答记录照旧显示成紧凑的一问一答）。 */
+/**
+ * 伙伴的提问卡：一题一页，答完一页翻到下一个没答的；一个问题点了就发，几个问题全部答完「提交」才能点、一起发出
+ * （作为下一句话发回，问答记录照旧显示成紧凑的一问一答）。
+ */
 export function AskDecision({ card }: { card: QuestionsCard }) {
   const ask = useContext(AskContext);
   const [page, setPage] = useState(0);
   const [draft, setDraft] = useState<Record<string, Pick | undefined>>({});
+  const [sending, setSending] = useState(false);
+  const [failed, setFailed] = useState<Failure | null>(null);
   const question = card.questions[page]!;
   const answered = ask?.answered.has(card.askId) ?? false;
-  const last = page === card.questions.length - 1;
+  const several = card.questions.length > 1;
   const order = [...question.options.keys()].sort((a, b) => Number(!!question.options[b]!.recommended) - Number(!!question.options[a]!.recommended));
   // 答过的不再画框：下面本人那一句就是问答记录。
   if (answered) return null;
-  const submit = (next: Record<string, Pick | undefined>) => {
-    setDraft(next);
-    if (!last) { setPage(page + 1); return undefined; }
-    if (!ask) return undefined;
+  // 没发出去（管线正在回话、断网）算失败：原处写「失败 · 重试」。
+  const send = async (next: Record<string, Pick | undefined>) => {
+    if (!ask) return;
     const answers = answersOf(card, next);
-    return ask.send(answers.record.items.map((item) => `${item.question}：${item.answer ?? "跳过"}`).join("\n"), [], { answers });
+    const sent = await ask.send(answers.record.items.map((item) => `${item.question}：${item.answer ?? "跳过"}`).join("\n"), [], { answers });
+    if (!sent) throw new Error("没发出去");
   };
+  const record = (next: Record<string, Pick | undefined>) => {
+    setDraft(next);
+    if (!several) return send(next);
+    const following = card.questions.findIndex((entry, index) => index > page && !next[entry.id]);
+    const open = following >= 0 ? following : card.questions.findIndex((entry) => !next[entry.id]);
+    if (open >= 0) setPage(open);
+    return undefined;
+  };
+  const submit = async () => {
+    setSending(true);
+    setFailed(null);
+    try { await send(draft); }
+    catch (error) { setFailed(failureOf(error, () => void submit())); }
+    finally { setSending(false); }
+  };
+  const complete = card.questions.every((entry) => !!draft[entry.id]);
   return (
-    <DecisionBox kind="question" testId="ask-decision" title={question.question} busy={!ask || ask.streaming}
+    <DecisionBox kind="question" testId="ask-decision" title={question.question} busy={!ask || ask.streaming || sending}
       options={order.map((at) => ({ label: question.options[at]!.label, detail: question.options[at]!.detail, recommended: question.options[at]!.recommended }))}
-      pager={card.questions.length > 1 ? { index: page, total: card.questions.length, onGo: setPage } : undefined}
-      onPick={([picked]) => submit({ ...draft, [question.id]: { option: order[picked!]! } })}
-      other={{ onSubmit: (text) => submit({ ...draft, [question.id]: { text } }) }} />
+      pager={several ? { index: page, total: card.questions.length, onGo: setPage } : undefined}
+      onPick={([picked]) => record({ ...draft, [question.id]: { option: order[picked!]! } })}
+      other={{ maxLength: ASK_TEXT_MAX, onSubmit: (text) => record({ ...draft, [question.id]: { text } }) }}
+      footer={several ? <>
+        {failed && !sending ? <FailedLine inline {...failed} /> : null}
+        <span className={x.grow} /><HeroButton variant="primary" size="sm" isDisabled={!ask || ask.streaming || sending || !complete} onPress={() => void submit()}>提交</HeroButton>
+      </> : undefined} />
   );
 }

@@ -9,12 +9,13 @@
  * 样子照设计 5.4.3「开工的特别规矩」：问题「{Task 名}：这样开工？」，编号的几步 14/20，每步下面一行「岗位 · 约定第 N 条」，再一行「N 个子会话」；
  * 岗位、模型、文件夹点了用弹层选（全站唯一那种弹层）。
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Dropdown } from "@heroui/react";
 import { Check, ChevronDown, X } from "lucide-react";
-import type { TCardDraftView, THomePlanTask } from "@warmap/contracts";
+import type { TBudget, TBudgetMode, TCardDraftView, THomePlanTask } from "@warmap/contracts";
 import { DecisionBox } from "@/components/work/DecisionBox";
-import { ApprovalDecision, QuestionDecision } from "@/components/work/decisions";
+import { ApprovalDecision, QuestionDecision, awayChip } from "@/components/work/decisions";
+import { SegmentedSwitch } from "@/components/SegmentedSwitch";
 import { useHandheld } from "@/components/ui/useHandheld";
 import { canCommandHere } from "@/lib/work/actions";
 import { Slots } from "@/components/work/Slots";
@@ -23,7 +24,7 @@ import { planStep } from "@/lib/local/sessionView";
 import { useSessionEvents } from "@/lib/local/useSessionEvents";
 import { readLast, writeLast } from "@/lib/local/start";
 import type { TLocalModelProfile } from "@/lib/local/runner";
-import { acceptDrafts, dismissDraft } from "@/lib/board/cloud";
+import { acceptDrafts, dismissDraft, readTaskBudget } from "@/lib/board/cloud";
 import { TIER_LABEL, draftRole, modelForTier, type CardRole, type RoleView } from "@/lib/team/roles";
 import { SLOT_CAP, startBatch, type StartPlan } from "@/lib/work/queue";
 import { QUEUE_LABEL, liveSessions, type Worker } from "@/lib/work/workers";
@@ -31,6 +32,7 @@ import type { SubSession } from "@/lib/home/types";
 import { ICON as STATE_ICON, StateIcon } from "./StateIcon";
 import { queueText } from "@/lib/home/derive";
 import h from "@/styles/home.module.css";
+import x from "@/styles/decision-box.module.css";
 
 const ICON = STATE_ICON;
 
@@ -41,6 +43,23 @@ export function draftWorkerRole(draft: TCardDraftView): CardRole | null {
 
 type Edit = { title?: string; role?: CardRole | null; modelId?: string; dropped?: boolean };
 export const START_LABEL = "就按这个开始";
+
+/** 开工的模式（11.3）：自动（默认）· 设预算 · 无上限。 */
+const MODES: { id: TBudgetMode; label: string }[] = [{ id: "auto", label: "自动" }, { id: "set", label: "设预算" }, { id: "unlimited", label: "无上限" }];
+/** 设预算时填的几项（字符串，照输入框原样）；不是有效数的那项不算。 */
+type Limits = { hours: string; percent: string; money: string };
+const NO_LIMITS: Limits = { hours: "", percent: "", money: "" };
+const positive = (value: string, max: number) => { const n = Number(value); return value.trim() && Number.isFinite(n) && n > 0 && n <= max ? n : null; };
+/** 选的模式和填的上限 → 契约的 Budget；设预算却一项有效的上限都没有时为 null（发不出去）。 */
+export function budgetOf(mode: TBudgetMode, limits: Limits): TBudget | null {
+  if (mode !== "set") return { mode, hours: null, weeklyPercent: null, money: null };
+  const hours = positive(limits.hours, 1000);
+  const percent = positive(limits.percent, 100);
+  const amount = positive(limits.money, 1_000_000);
+  const budget: TBudget = { mode, hours, weeklyPercent: percent !== null && Number.isInteger(percent) ? percent : null, money: amount !== null ? { amount, currency: "CNY" } : null };
+  return budget.hours !== null || budget.weeklyPercent !== null || budget.money !== null ? budget : null;
+}
+const limitsOf = (budget: TBudget): Limits => ({ hours: budget.hours?.toString() ?? "", percent: budget.weeklyPercent?.toString() ?? "", money: budget.money?.amount.toString() ?? "" });
 
 export function PlanDecision({ task, drafts, roles, handheld, onSay, onChanged }: {
   task: THomePlanTask;
@@ -57,6 +76,22 @@ export function PlanDecision({ task, drafts, roles, handheld, onSay, onChanged }
   const [edits, setEdits] = useState<Record<string, Edit>>({});
   const [folderId, setFolderId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // 模式从这件 Task 现在的预算开始（没设过是本人的缺省，读不到就是「自动」）；本人动过才随开工存回去。
+  const [mode, setMode] = useState<TBudgetMode>("auto");
+  const [limits, setLimits] = useState<Limits>(NO_LIMITS);
+  const touched = useRef(false);
+  const hoursRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    let alive = true;
+    void readTaskBudget(task.taskId).then((found) => {
+      if (!alive || !found || touched.current) return;
+      setMode(found.budget.mode);
+      setLimits(limitsOf(found.budget));
+    }, () => undefined);
+    return () => { alive = false; };
+  }, [task.taskId]);
+  const pickMode = (next: TBudgetMode) => { touched.current = true; setMode(next); if (next === "set") requestAnimationFrame(() => hoursRef.current?.focus()); };
+  const setLimit = (key: keyof Limits, value: string) => { touched.current = true; setLimits((current) => ({ ...current, [key]: value })); };
   useEffect(() => { setFolderId((current) => current ?? local.folders.find((folder) => folder.id === readLast().folderId)?.id ?? local.folders[0]?.id ?? null); }, [local.folders]);
   const workerRoles = useMemo(() => roles.filter((role) => role.kind === "worker"), [roles]);
   const folder = local.folders.find((entry) => entry.id === folderId) ?? null;
@@ -73,6 +108,9 @@ export function PlanDecision({ task, drafts, roles, handheld, onSay, onChanged }
 
   const start = async () => {
     if (!kept.length || busy) return;
+    // 设预算却一项都没填对：停在填的地方。
+    const budget = budgetOf(mode, limits);
+    if (!budget) { hoursRef.current?.focus(); return; }
     let target = folder;
     if (ready && !target) {
       target = await local.pickFolder();
@@ -88,7 +126,7 @@ export function PlanDecision({ task, drafts, roles, handheld, onSay, onChanged }
         const role = roleOf(draft);
         const changed = (role?.id || null) !== (draftRole(draft)?.id ?? null);
         return { id: draft.id, ...(edits[draft.id]?.title?.trim() ? { title: edits[draft.id]!.title!.trim() } : {}), ...(changed ? { roleId: role?.id || null } : {}) };
-      }), !(ready && target));
+      }), !(ready && target), touched.current ? budget : undefined);
       const plans: StartPlan[] = kept.flatMap((draft, index) => {
         const item = cards[index];
         const role = roleOf(draft);
@@ -109,6 +147,10 @@ export function PlanDecision({ task, drafts, roles, handheld, onSay, onChanged }
   };
 
   const agents = kept.filter((draft) => roleOf(draft)).length;
+  // 设预算只出这次计划用得到的那几项（11.3）：用订阅的出本周额度，用 TokenHub 的出金额；还不知道用哪个模型时只出本周额度。
+  const sources = new Set(kept.flatMap((draft) => { const model = modelOf(draft); return model ? [model.source] : []; }));
+  const subscription = sources.has("subscription") || !sources.size;
+  const gateway = sources.has("gateway");
   const steps = (
     <>
     <ol className={h.steps}>
@@ -137,6 +179,16 @@ export function PlanDecision({ task, drafts, roles, handheld, onSay, onChanged }
       })}
     </ol>
     {agents ? <p className={h.stepSum}>{agents} 个子会话</p> : null}
+    <div className={x.mode} data-testid="plan-mode">
+      <SegmentedSwitch label="预算" segments={MODES} selected={mode} onSelect={pickMode} />
+      {mode === "set" ? (
+        <span className={x.limits}>
+          <label><input ref={hoursRef} inputMode="decimal" value={limits.hours} aria-label="时长上限（小时）" onChange={(event) => setLimit("hours", event.target.value)} />小时</label>
+          {subscription ? <label><input inputMode="numeric" value={limits.percent} aria-label="本周额度上限（百分比）" onChange={(event) => setLimit("percent", event.target.value)} />% 本周额度</label> : null}
+          {gateway ? <label>¥<input inputMode="decimal" value={limits.money} aria-label="TokenHub 金额上限" onChange={(event) => setLimit("money", event.target.value)} />TokenHub</label> : null}
+        </span>
+      ) : null}
+    </div>
     </>
   );
   const footer = ready ? <>
@@ -150,7 +202,8 @@ export function PlanDecision({ task, drafts, roles, handheld, onSay, onChanged }
     <DecisionBox kind="plan" testId="plan-decision" title={`${task.name}：这样开工？`} body={steps} busy={busy} footer={footer}
       options={editing ? [{ label: START_LABEL, recommended: true }, { label: "改好了" }] : [{ label: START_LABEL, recommended: true }, { label: "改一改" }]}
       onPick={([picked]) => (picked === 0 ? start() : setEditing(!editing))}
-      other={{ onSubmit: (text) => onSay(text) }} />
+      // 管线正在回话时发不出去（send 回 false）：算失败，框里原处写「失败 · 重试」，打的字留着。
+      other={{ onSubmit: async (text) => { if ((await onSay(text)) === false) throw new Error("没发出去"); } }} />
   );
 }
 
@@ -185,8 +238,9 @@ export function PlanningLine({ planner }: { planner: Worker }) {
   const session = planner.state === "doing" ? planner.session : null;
   const { view } = useSessionEvents(local.runner, session?.id ?? null);
   const step = planStep(view.plan) ?? (planner.step ? { step: planner.step.n, total: planner.step.total } : null);
-  const blocked = canCommandHere(planner, local.phase === "ready", handheld) ? null : "到电脑上处理";
-  const question = session ? view.question ?? session.pendingQuestion ?? null : null;
+  const blocked = canCommandHere(planner, local.phase === "ready", handheld) ? null : awayChip(planner.device);
+  // 连上事件流以后只认事件流（答过、作废了就是没有），还没连上时照会话摘要。
+  const question = session ? (view.lastSeq ? view.question : session.pendingQuestion ?? null) : null;
   return (
     <>
       <p className={h.line} data-testid="planning-line"><StateIcon state={planner.state === "queued" ? "queued" : "running"} />{plannerText(planner, step)}</p>

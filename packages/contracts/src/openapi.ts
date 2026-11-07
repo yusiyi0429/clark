@@ -361,6 +361,11 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
             "401": errorResponse,
           },
         },
+        delete: {
+          operationId: "disconnectMyFeishu",
+          summary: "断开本人的飞书：删掉飞书账号的关联和授权（天枢里已有的会议、妙记不动）；之后飞书推送、拿妙记都停，要用再连",
+          responses: { "204": { description: "已断开（没连过也是 204）" }, "401": errorResponse, "403": errorResponse },
+        },
       },
       "/api/me/wechat": {
         get: {
