@@ -8,8 +8,12 @@ import type { LocalRunner, TLocalStatusResponse } from "./runner";
 
 export const deviceName = (os: TLocalDeviceOs) => (os === "darwin" ? "Mac" : os === "win32" ? "Windows 电脑" : "Linux 电脑");
 
-export async function linkCloud(runner: LocalRunner, status: TLocalStatusResponse, personName: string): Promise<void> {
+/** 关联的是谁：本机存下 personId，网页拿它和登录的人比（connection.ts pairedElsewhere）。 */
+export type LinkPerson = { personId: string | null; name: string };
+export const linkPerson = (account: { personId?: string | null; displayName: string }): LinkPerson => ({ personId: account.personId ?? null, name: account.displayName });
+
+export async function linkCloud(runner: LocalRunner, status: TLocalStatusResponse, person: LinkPerson): Promise<void> {
   const os = (await runner.health()).platform;
   const { token } = await createDevice({ deviceId: status.deviceId, name: deviceName(os), os });
-  await runner.linkCloud({ apiBaseUrl: window.location.origin, token, personName: personName.slice(0, 60) });
+  await runner.linkCloud({ apiBaseUrl: window.location.origin, token, personName: person.name.slice(0, 60), ...(person.personId ? { personId: person.personId } : {}) });
 }

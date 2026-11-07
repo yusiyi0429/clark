@@ -104169,15 +104169,11 @@
                   ]
                 },
                 "remainingPercent": {
-                  "anyOf": [
-                    {
-                      "minimum": 0,
-                      "maximum": 100,
-                      "type": "integer"
-                    },
-                    {
-                      "type": "null"
-                    }
+                  "minimum": 0,
+                  "maximum": 100,
+                  "type": [
+                    "integer",
+                    "null"
                   ]
                 },
                 "amounts": {
@@ -106044,15 +106040,11 @@
                       ]
                     },
                     "remainingPercent": {
-                      "anyOf": [
-                        {
-                          "minimum": 0,
-                          "maximum": 100,
-                          "type": "integer"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "minimum": 0,
+                      "maximum": 100,
+                      "type": [
+                        "integer",
+                        "null"
                       ]
                     },
                     "amounts": {
@@ -108098,14 +108090,10 @@
                                           ]
                                         },
                                         "ahead": {
-                                          "anyOf": [
-                                            {
-                                              "minimum": 1,
-                                              "type": "integer"
-                                            },
-                                            {
-                                              "type": "null"
-                                            }
+                                          "minimum": 1,
+                                          "type": [
+                                            "integer",
+                                            "null"
                                           ]
                                         }
                                       }
@@ -109789,14 +109777,10 @@
                                                 ]
                                               },
                                               "ahead": {
-                                                "anyOf": [
-                                                  {
-                                                    "minimum": 1,
-                                                    "type": "integer"
-                                                  },
-                                                  {
-                                                    "type": "null"
-                                                  }
+                                                "minimum": 1,
+                                                "type": [
+                                                  "integer",
+                                                  "null"
                                                 ]
                                               }
                                             }
@@ -111381,15 +111365,11 @@
                       ]
                     },
                     "remainingPercent": {
-                      "anyOf": [
-                        {
-                          "minimum": 0,
-                          "maximum": 100,
-                          "type": "integer"
-                        },
-                        {
-                          "type": "null"
-                        }
+                      "minimum": 0,
+                      "maximum": 100,
+                      "type": [
+                        "integer",
+                        "null"
                       ]
                     },
                     "amounts": {
@@ -112649,14 +112629,10 @@
                                           ]
                                         },
                                         "ahead": {
-                                          "anyOf": [
-                                            {
-                                              "minimum": 1,
-                                              "type": "integer"
-                                            },
-                                            {
-                                              "type": "null"
-                                            }
+                                          "minimum": 1,
+                                          "type": [
+                                            "integer",
+                                            "null"
                                           ]
                                         }
                                       }
@@ -113115,14 +113091,10 @@
                                                 ]
                                               },
                                               "ahead": {
-                                                "anyOf": [
-                                                  {
-                                                    "minimum": 1,
-                                                    "type": "integer"
-                                                  },
-                                                  {
-                                                    "type": "null"
-                                                  }
+                                                "minimum": 1,
+                                                "type": [
+                                                  "integer",
+                                                  "null"
                                                 ]
                                               }
                                             }
@@ -113698,14 +113670,10 @@
                                               ]
                                             },
                                             "ahead": {
-                                              "anyOf": [
-                                                {
-                                                  "minimum": 1,
-                                                  "type": "integer"
-                                                },
-                                                {
-                                                  "type": "null"
-                                                }
+                                              "minimum": 1,
+                                              "type": [
+                                                "integer",
+                                                "null"
                                               ]
                                             }
                                           }
@@ -117206,14 +117174,10 @@
                                   ]
                                 },
                                 "ahead": {
-                                  "anyOf": [
-                                    {
-                                      "minimum": 1,
-                                      "type": "integer"
-                                    },
-                                    {
-                                      "type": "null"
-                                    }
+                                  "minimum": 1,
+                                  "type": [
+                                    "integer",
+                                    "null"
                                   ]
                                 }
                               }
@@ -117512,14 +117476,10 @@
                               ]
                             },
                             "ahead": {
-                              "anyOf": [
-                                {
-                                  "minimum": 1,
-                                  "type": "integer"
-                                },
-                                {
-                                  "type": "null"
-                                }
+                              "minimum": 1,
+                              "type": [
+                                "integer",
+                                "null"
                               ]
                             }
                           }

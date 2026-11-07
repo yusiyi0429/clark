@@ -14,7 +14,7 @@ import { pairedElsewhere, phaseOf, readBrowserPermission, type LocalPhase } from
 import { HANDHELD_QUERY } from "@/components/ui/useHandheld";
 import { setMockAgents } from "@/lib/board/cards";
 import { planCards } from "@/lib/board/cloud";
-import { linkCloud } from "./link";
+import { linkCloud, type LinkPerson } from "./link";
 
 export type Pairing = { code: string; state: "waiting" | "denied" | "expired" | "failed" };
 
@@ -61,10 +61,14 @@ let mockRunner: LocalRunner | null = null;
 const sharedMock = () => (mockRunner ??= createMockRunner({ onPlanned: (taskId) => void planCards(taskId).catch(() => undefined) }));
 
 /**
- * personName：本人的名字。给了就在这一处管「配对好、还没关联云端」——自动关联一次（拿设备令牌交给本机），
+ * person：本人（人员 id 和名字）。给了就在这一处管「配对好、还没关联云端」——自动关联一次（拿设备令牌交给本机），
  * 右栏、连接页、首页从哪配的对都一样，不各写一遍。关联没成，过一分钟再试。
  */
-export function LocalRunnerProvider({ children, runner: given, personName }: { children: ReactNode; runner?: LocalRunner; personName?: string }) {
+export function LocalRunnerProvider({ children, runner: given, person: given_person }: { children: ReactNode; runner?: LocalRunner; person?: LinkPerson }) {
+  const personId = given_person?.personId ?? null;
+  const personName = given_person?.name;
+  // 调用方每次渲染都给新对象：按 id 和名字记住，免得下面的副作用跟着重跑。
+  const person = useMemo(() => (personName === undefined ? undefined : { personId, name: personName }), [personId, personName]);
   const [runner] = useState<LocalRunner>(() => given ?? pickRunner());
   useEffect(() => { setMockAgents(runner.kind === "mock" && !given); return () => setMockAgents(false); }, [runner, given]);
   const [phase, setPhase] = useState<LocalPhase>("checking");
@@ -104,7 +108,7 @@ export function LocalRunnerProvider({ children, runner: given, personName }: { c
         let next = phaseOf({ health: "ok", tokenValid: result.tokenValid, permission: "granted" });
         const nextStatus = next === "ready" ? await runner.status() : null;
         // 这台电脑关联的是别人：和没配对一样，不读它的会话。
-        if (nextStatus && pairedElsewhere(nextStatus, personName)) next = "unpaired";
+        if (nextStatus && pairedElsewhere(nextStatus, personId)) next = "unpaired";
         if (nextStatus && next === "ready") await loadPaired(nextStatus);
         else { setStatus(null); setSessions([]); }
         setPhase(next);
@@ -119,7 +123,7 @@ export function LocalRunnerProvider({ children, runner: given, personName }: { c
       }
     })();
     return inFlight.current;
-  }, [runner, loadPaired, personName]);
+  }, [runner, loadPaired, personId]);
 
   // 手机和触屏上不连本机（第 13 节：手机只看）：不探，免得一直报连不上。
   const [handheld] = useState(() => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(HANDHELD_QUERY).matches);
@@ -151,12 +155,12 @@ export function LocalRunnerProvider({ children, runner: given, personName }: { c
 
   const linking = useRef<string | null>(null);
   useEffect(() => {
-    if (!personName || phase !== "ready" || !status || status.cloud.linked || runner.kind === "mock" || linking.current === status.deviceId) return;
+    if (!person || phase !== "ready" || !status || status.cloud.linked || runner.kind === "mock" || linking.current === status.deviceId) return;
     const deviceId = status.deviceId;
     linking.current = deviceId;
-    void linkCloud(runner, status, personName).then(() => refresh())
+    void linkCloud(runner, status, person).then(() => refresh())
       .catch(() => { window.setTimeout(() => { if (linking.current === deviceId) linking.current = null; }, 60_000); });
-  }, [personName, phase, status, runner, refresh]);
+  }, [person, phase, status, runner, refresh]);
 
   const pair = useCallback(async () => {
     setError(null);
@@ -170,8 +174,8 @@ export function LocalRunnerProvider({ children, runner: given, personName }: { c
         if (answer.status === "approved" && answer.token) {
           if (runner.kind === "http") writeLocalToken(answer.token);
           // 本人在这台电脑上点了允许：原来关联的是别人，就改关联到本人（一台电脑一个人）。
-          const paired = runner.kind === "http" && personName ? await runner.status().catch(() => null) : null;
-          if (paired && pairedElsewhere(paired, personName)) await linkCloud(runner, paired, personName!).catch(() => undefined);
+          const paired = runner.kind === "http" && person ? await runner.status().catch(() => null) : null;
+          if (paired && person && pairedElsewhere(paired, personId)) await linkCloud(runner, paired, person).catch(() => undefined);
           setPairing(null);
           await refresh();
           return;
@@ -183,7 +187,7 @@ export function LocalRunnerProvider({ children, runner: given, personName }: { c
       setPairing(null);
       setError(cause instanceof LocalRunnerError ? cause.message : "配对没成功，请重试");
     }
-  }, [runner, refresh, personName]);
+  }, [runner, refresh, person, personId]);
 
   const unpair = useCallback(async () => {
     try { await runner.unpair(); } catch { /* 口令已失效也照样清掉 */ }

@@ -24,13 +24,18 @@ export async function readBrowserPermission(): Promise<BrowserPermission> {
   return "unknown";
 }
 
+type CloudLink = { cloud: { linked: boolean; personId: string | null } };
+
 /**
- * 本机程序关联的是别人（同一台电脑换了账号登录）：按没配对显示，不读它的会话和后台。
- * 本机只报关联时网页给的名字（cloud.personName），没有人的 id；没关联、或不知道本人是谁时不算别人。
+ * 本机程序关联的是别人（同一台电脑换了账号登录）：按没配对显示，不读它的会话和后台。按人员 id 比；
+ * 没关联、老的关联（当时没传 personId，见 needsRelink）、或不知道本人是谁时不算别人。
  */
-export function pairedElsewhere(status: { cloud: { linked: boolean; personName: string | null } }, personName: string | undefined): boolean {
-  return !!personName && status.cloud.linked && !!status.cloud.personName && status.cloud.personName !== personName.slice(0, 60);
+export function pairedElsewhere(status: CloudLink, personId: string | null | undefined): boolean {
+  return !!personId && status.cloud.linked && !!status.cloud.personId && status.cloud.personId !== personId;
 }
+
+/** 老的关联（没记下是谁）：连接页再给一次「关联」，点了就记上本人。 */
+export const needsRelink = (status: CloudLink) => status.cloud.linked && !status.cloud.personId;
 
 /** 一次探测的结果折成阶段：health 成功看口令；失败看浏览器授权；还没回来、浏览器在问就是 prompt。 */
 export function phaseOf(probe: { health: "ok" | "failed" | "waiting"; tokenValid?: boolean; permission: BrowserPermission }): LocalPhase {

@@ -10,12 +10,13 @@ import { BuddySettings } from "@/components/buddy/BuddySettings";
 import { DevicesSection, LocalSection } from "@/components/local/PluginsPage";
 import { PersonalProfileForm } from "@/components/PersonalProfileForm";
 import type { PageKey } from "./view";
+import { linkPerson } from "@/lib/local/link";
 
 export function SecondaryFallback({ page, account }: { page: PageKey; account: Account }) {
   switch (page) {
     case "profile": return <><AvatarEditor personId={account.personId ?? null} initial={avatarInitial(account.displayName)} onDone={() => undefined} /><PersonalProfileForm /></>;
     case "buddy": return <BuddySettings onDone={() => undefined} />;
-    case "connections": return <><LocalSection personName={account.displayName} handheld={false} /><DevicesSection personName={account.displayName} /></>;
+    case "connections": return <><LocalSection person={linkPerson(account)} handheld={false} /><DevicesSection person={linkPerson(account)} /></>;
     case "preferences": return null;
   }
 }

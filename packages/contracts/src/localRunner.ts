@@ -1,5 +1,6 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import { Budget, BudgetMode } from "./budget.js";
+import { NullableInteger, NullableNumber } from "./nullable.js";
 
 /**
  * 天枢本机程序（apps/local）的两份契约：
@@ -145,6 +146,11 @@ export const LocalCloudLinkView = Type.Object({
   linked: Type.Boolean(),
   apiBaseUrl: Nullable(Type.String()),
   personName: Nullable(Type.String()),
+  /**
+   * 关联的是谁（关联时网页传来的天枢人员 id）：网页拿它和登录的人比，对不上就把这台电脑当未配对，不显示别人的本机会话。
+   * 没关联、或者是老的关联（当时没传 personId）时为 null。
+   */
+  personId: Nullable(Type.String()),
   outbox: LocalOutboxStatus,
 }, strict);
 
@@ -208,7 +214,7 @@ export const LocalQuotaSource = Type.Object({
   id: Type.String({ minLength: 1, maxLength: 80 }),
   name: Type.String({ minLength: 1, maxLength: 40 }),
   kind: LocalUsageKind,
-  remainingPercent: Nullable(Type.Integer({ minimum: 0, maximum: 100 })),
+  remainingPercent: NullableInteger({ minimum: 0, maximum: 100 }),
   amounts: Type.Array(LocalMoney, { maxItems: 4 }),
   monthAmounts: Type.Optional(Type.Array(LocalMoney, { maxItems: 4 })),
   windows: Type.Array(LocalQuotaWindow, { maxItems: 12 }),
@@ -224,7 +230,7 @@ export const LocalQuotaSync = Type.Object({
   id: Type.String({ minLength: 1, maxLength: 80 }),
   name: Type.String({ minLength: 1, maxLength: 40 }),
   kind: LocalUsageKind,
-  remainingPercent: Nullable(Type.Integer({ minimum: 0, maximum: 100 })),
+  remainingPercent: NullableInteger({ minimum: 0, maximum: 100 }),
   amounts: Type.Array(LocalMoney, { maxItems: 4 }),
   monthAmounts: Type.Optional(Type.Array(LocalMoney, { maxItems: 4 })),
   windows: Type.Array(LocalQuotaWindow, { maxItems: 12 }),
@@ -277,6 +283,8 @@ export const LocalCloudLinkRequest = Type.Object({
   apiBaseUrl: Type.String({ minLength: 8, maxLength: 200 }),
   token: Type.String({ minLength: 16, maxLength: 400, pattern: SECRET_CHARS }),
   personName: Type.Optional(Type.String({ maxLength: 60 })),
+  /** 关联的是谁：云端 me 里的人员 id，本机存下来，GET /v1/status 和 /v1/cloud 原样给回（见 LocalCloudLinkView）。 */
+  personId: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
 }, strict);
 
 // ───────────────────────── 模型与文件夹 ─────────────────────────
@@ -376,7 +384,7 @@ export const LocalHandoverCheck = Type.Object({
     remotes: Type.Array(Type.Object({ name: Type.String({ maxLength: 100 }), url: Type.String({ maxLength: 500 }) }, strict), { maxItems: 10 }),
     uncommitted: Type.Array(Type.String(), { maxItems: 200 }),
     uncommittedCount: Type.Integer({ minimum: 0 }),
-    unpushed: Type.Array(Type.Object({ branch: Type.String({ maxLength: 250 }), upstream: Nullable(Type.String({ maxLength: 250 })), ahead: Nullable(Type.Integer({ minimum: 1 })) }, strict), { maxItems: 50 }),
+    unpushed: Type.Array(Type.Object({ branch: Type.String({ maxLength: 250 }), upstream: Nullable(Type.String({ maxLength: 250 })), ahead: NullableInteger({ minimum: 1 }) }, strict), { maxItems: 50 }),
   }, strict)),
   recentFiles: Nullable(Type.Array(Type.Object({ path: Type.String(), modifiedAt: Instant }, strict), { maxItems: 30 })),
 }, strict);
@@ -452,7 +460,7 @@ export const LocalUsage = Type.Object({
    * Claude Code 按 Anthropic 标价算的等价金额，只算官方模型（costBasis 为 list）；网关模型（costBasis 为 unknown，它按 Opus 价瞎算）为 null。
    * 订阅登录时这不是真花的钱；真钱看 cost 条目的 money。
    */
-  costUsd: Nullable(Type.Number({ minimum: 0 })),
+  costUsd: NullableNumber({ minimum: 0 }),
 }, strict);
 
 /** 岗位能用的工具（插件），和云端 roles.ts 的 RoleTool 一致。 */
@@ -631,7 +639,7 @@ export const LocalSessionSummary = Type.Object({
   lastSeq: Type.Integer({ minimum: 0 }),
   pendingPermissions: Type.Integer({ minimum: 0 }),
   /** 排队时是第几个（1 起），没在排队为 null。 */
-  queuePosition: Nullable(Type.Integer({ minimum: 1 })),
+  queuePosition: NullableInteger({ minimum: 1 }),
   usage: LocalUsage,
   /** 只有卡：在工作树还是文件夹里做（本机总会填；等前面的卡时还没有工作树，不带）。 */
   workspace: Type.Optional(LocalWorkspace),
@@ -771,10 +779,10 @@ export const LocalTaskBudgetView = Type.Object({
   budget: Budget,
   spent: Type.Object({
     hours: Type.Number({ minimum: 0 }),
-    weeklyPercent: Nullable(Type.Integer({ minimum: 0 })),
+    weeklyPercent: NullableInteger({ minimum: 0 }),
     money: Nullable(LocalMoney),
   }, strict),
-  ratio: Nullable(Type.Number({ minimum: 0 })),
+  ratio: NullableNumber({ minimum: 0 }),
   state: Type.Union([Type.Literal("ok"), Type.Literal("warning"), Type.Literal("exhausted")]),
   /** 第一个会话开工的时间（还没开工为 null）。 */
   since: Nullable(Instant),
@@ -825,7 +833,7 @@ export const LocalPlanCard = Type.Object({
   title: Type.String({ minLength: 1, maxLength: 120 }),
   brief: Type.String({ maxLength: 4000 }),
   doneDefinition: Type.String({ minLength: 1, maxLength: 500 }),
-  criterionIndex: Nullable(Type.Integer({ minimum: 1 })),
+  criterionIndex: NullableInteger({ minimum: 1 }),
   role: Nullable(Type.String({ minLength: 1, maxLength: 80 })),
   modelTier: LocalModelTier,
   why: Nullable(Type.String({ maxLength: 200 })),
@@ -845,7 +853,7 @@ export const LocalCardPlan = Type.Object({
   cards: Type.Array(LocalPlanCard, { minItems: 1, maxItems: 8 }),
   modelLabel: Type.String(),
   roleId: Nullable(Uuid),
-  roleVersion: Nullable(Type.Integer({ minimum: 1 })),
+  roleVersion: NullableInteger({ minimum: 1 }),
 }, strict);
 
 /** 验收员对一条完成标准的判定（对得上云端的 CardAcceptanceCriterion，少了 text：云端有交回时的标准快照）。fix 是没达到时怎么补。 */
@@ -867,7 +875,7 @@ export const LocalVerdict = Type.Object({
   beyondScope: Type.Array(Type.String({ minLength: 1, maxLength: 500 }), { maxItems: 10 }),
   modelLabel: Type.String(),
   roleId: Nullable(Uuid),
-  roleVersion: Nullable(Type.Integer({ minimum: 1 })),
+  roleVersion: NullableInteger({ minimum: 1 }),
   /** 验的是哪个提交（卡在工作树里做时就是交回的那个提交，验收员看的是 baseCommit 到它的改动）；卡在文件夹里做时不带。 */
   commit: Type.Optional(Sha),
 }, strict);
@@ -908,7 +916,7 @@ export const LocalPlanProgress = Type.Object({
  */
 export const LocalSessionEvent = Type.Union([
   /** hold：停着等额度恢复时带（见 LocalHold）。 */
-  ev("status", { status: LocalSessionStatus, exitCode: Type.Optional(Nullable(Type.Integer())), reason: Type.Optional(Type.String()), hold: Type.Optional(LocalHold) }),
+  ev("status", { status: LocalSessionStatus, exitCode: Type.Optional(NullableInteger()), reason: Type.Optional(Type.String()), hold: Type.Optional(LocalHold) }),
   ev("agent_info", { agent: LocalAgentKind, version: Type.String(), model: Nullable(Type.String()), permissionMode: Nullable(Type.String()) }),
   /** attachments：这句话带的附件（存好的，见 LocalAttachmentRef）；没有就不带。text 是本人说的原话，不含本机拼给执行方的附件路径。 */
   ev("user_message", { text: Type.String(), source: Type.Union([Type.Literal("initial"), Type.Literal("web")]), attachments: Type.Optional(Type.Array(LocalSavedAttachment, { maxItems: 20 })) }),

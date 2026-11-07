@@ -13,6 +13,7 @@ import { AccountMenu, type Account } from "@/components/AccountMenu";
 import { LocalRunnerProvider } from "@/lib/local/LocalRunnerProvider";
 import { TOAST_EVENT, toastDuration, type ToastDetail } from "@/lib/toast";
 import s from "@/styles/v2-shell.module.css";
+import { linkPerson } from "@/lib/local/link";
 
 export type V2Section = "chat" | "month" | "team" | "plugins";
 
@@ -40,7 +41,7 @@ export function V2Shell({ account, children }: { account: Account; children: Rea
   const router = useRouter();
   const section = sectionOf(pathname);
   return (
-    <LocalRunnerProvider personName={account.displayName}>
+    <LocalRunnerProvider person={linkPerson(account)}>
       <div className={s.app} data-section={section} data-testid="v2-shell">
         <nav className={s.rail} aria-label="导航">
           {RAIL.map((item) => (
