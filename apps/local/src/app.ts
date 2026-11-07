@@ -10,6 +10,7 @@ import { Folders } from "./folders.js";
 import { Outbox } from "./outbox.js";
 import { CloudLink, Settings, fetchAttachment, fetchVerifyBrief } from "./cloud.js";
 import { MAX_ATTACHMENT_BYTES } from "./attachments.js";
+import { cloneRepo } from "./handover.js";
 import { SessionManager, type SessionDeps } from "./sessions.js";
 import { ClaudeSetup } from "./agents/claudeSetup.js";
 import { ClaudeCodeAdapter, readUsage, type ClaudeBin } from "./agents/claudeCode.js";
@@ -41,6 +42,8 @@ export interface RunnerOptions {
   toolsExec?: ToolExec;
   /** 测试用：停着等额度时的等待时长。 */
   holdTiming?: SessionDeps["holdTiming"];
+  /** 接手项目时 clone 仓库（测试里换成从本地仓库 clone）。 */
+  cloneRepo?: typeof cloneRepo;
   /** 读本人 Codex 订阅的额度（测试里换成假的；没装回 null）。 */
   codexLimits?: () => Promise<Record<string, unknown> | null>;
   onQuit?: () => void;
@@ -129,6 +132,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   const server = createServer({
     config, version: VERSION, tokens, pairings, sessions, log, models, folders, claude, cloud, settings, quota, codexQuota, tools, spend,
     pickFolder: () => desktop.pickFolder(),
+    cloneRepo: opts.cloneRepo ?? cloneRepo,
     fetchImpl: cloudFetch,
     onSettingsChange: updateTray,
   });

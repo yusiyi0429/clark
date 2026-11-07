@@ -1,10 +1,12 @@
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import type { TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import {
   LOCAL_RUNNER_PROTOCOL, LOCAL_RUNNER_ROUTES, LOCAL_RUNNER_TOKEN_HEADER,
   LocalPairingStartRequest, LocalAgentLoginCodeRequest, LocalCloudLinkRequest, LocalSettingsPatch, LocalModelProfileUpsert,
-  LocalCreateSessionRequest, LocalCreateSessionBatchRequest, LocalSendMessageRequest, LocalPermissionDecisionRequest, LocalQuestionAnswerRequest, LocalBudgetUpdateRequest, LocalProjectFolderRequest,
+  LocalCreateSessionRequest, LocalCreateSessionBatchRequest, LocalSendMessageRequest, LocalPermissionDecisionRequest, LocalQuestionAnswerRequest, LocalBudgetUpdateRequest, LocalProjectFolderRequest, LocalProjectCloneRequest,
   type TLocalRunnerErrorCode, type TLocalStatusResponse, type TLocalHealthResponse,
 } from "@warmap/contracts";
 import { checkHost, checkJson, checkOrigin, corsHeaders, preflightHeaders, type Rejection } from "./security.js";
@@ -21,6 +23,7 @@ import type { QuotaTracker } from "../quota.js";
 import type { GatewaySpend } from "../spend.js";
 import type { CodexQuota } from "../codexQuota.js";
 import { claudeTool } from "../tools.js";
+import { handoverCheck, repoName, stripCredentials, type cloneRepo } from "../handover.js";
 import type { CliTools } from "../tools.js";
 import { DEV_PAGE } from "./devPage.js";
 import { handleMcpMessage } from "../sessionMcp.js";
@@ -42,6 +45,8 @@ export interface ServerDeps {
   codexQuota: CodexQuota;
   tools: CliTools;
   pickFolder: () => Promise<string | null>;
+  /** 接手项目时 clone 仓库（16.7；测试里换成从本地仓库 clone）。 */
+  cloneRepo: typeof cloneRepo;
   onSettingsChange?: () => void;
   /** 转发天枢 MCP 用；测试里换成桩。 */
   fetchImpl: typeof fetch;
@@ -213,6 +218,28 @@ export function createServer(d: ServerDeps): http.Server {
       const r = d.folders.bindProject(c.params.projectId!, b.folderId, b.name);
       if (!r) throw new HttpError(404, "not_found", "没有这个文件夹，先选文件夹");
       return r;
+    },
+    // 交接检查（16.7）：项目绑的文件夹现在什么样，只看 git
+    handoverCheck: async (c) => {
+      const p = d.folders.projects().find((x) => x.projectId === c.params.projectId);
+      return handoverCheck(c.params.projectId!, p?.folder ? { path: p.folder.path, label: p.folder.label } : null);
+    },
+    // 接手以后「拉到这台电脑」（16.7）：本人选放在哪，clone、切到交接分支、加进允许的文件夹、绑到项目
+    cloneProject: async (c) => {
+      const b = validate(LocalProjectCloneRequest, c.body);
+      const parent = await d.pickFolder();
+      if (!parent) return { project: null, branch: null, fellBack: false };
+      const name = (b.name ?? repoName(b.repoUrl)).replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_").replace(/^\.+/, "_").trim() || "repo";
+      const dest = join(parent, name);
+      const why = d.folders.rejectReason(dest);
+      if (why) throw new HttpError(400, "validation", why);
+      if (existsSync(dest)) throw new HttpError(400, "validation", `${parent} 里已经有「${name}」了，换个地方，或者直接选那个文件夹绑上`);
+      let got: Awaited<ReturnType<typeof cloneRepo>>;
+      try { got = await d.cloneRepo(b.repoUrl, dest, b.branch); } catch (e) {
+        throw new HttpError(409, "conflict", `没拉下来：${stripCredentials(e instanceof Error ? e.message : String(e)).replace(/(https?:\/\/)[^/@\s]*@/g, "$1").slice(0, 400)}`);
+      }
+      const folder = d.folders.add(dest);
+      return { project: d.folders.bindProject(c.params.projectId!, folder.id), ...got };
     },
   };
 
