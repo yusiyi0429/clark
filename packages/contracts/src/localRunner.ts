@@ -351,12 +351,48 @@ export const LocalProjectFolder = Type.Object({
 export const LocalProjectListResponse = Type.Object({ projects: Type.Array(LocalProjectFolder) }, strict);
 /**
  * PUT /v1/projects/:projectId/folder：把项目绑到一个已允许的文件夹（folderId，先经 POST /v1/folders/pick 选好），null 是解绑；name 是项目名（只用来显示，可不带）。
+ * 项目交出去以后（16.7），原负责人那边的网页传 null 解绑：只解绑，不动文件夹里的文件，文件夹也还在允许的列表里。
  * 文件夹不在允许的列表里回 404。删掉一个允许的文件夹（DELETE /v1/folders/:id）时，绑着它的项目一起解绑。
  */
 export const LocalProjectFolderRequest = Type.Object({
   folderId: Nullable(Id),
   name: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
 }, strict);
+
+/**
+ * POST /v1/projects/:projectId/handover-check（新首页设计 16.7「准备交接」）：项目绑的文件夹现在什么样，只看 git，不调模型。网页把结果交给天枢写交接说明。
+ * - folder：绑的文件夹（没绑为 null，这时 git、recentFiles 都是 null）。
+ * - git（是 git 仓库时）：branch 当前分支（不在分支上为 null）；remotes 远端（url 去掉了里面的账号口令）；uncommitted 没提交的文件（含没加进 git 的，相对仓库根，最多 200 个，
+ *   uncommittedCount 是总数）；unpushed 没推完的本地分支：没有上游的 ahead 为 null，有上游的是比上游多几个提交（卡的 tianshu/… 分支也在这里）。
+ * - recentFiles（不是 git 仓库时）：最近改过的文件（相对文件夹，跳过 node_modules、.git 这类目录，最多 30 个，新的在前）。
+ * 账号口令、文件内容都不在结果里。
+ */
+export const LocalHandoverCheck = Type.Object({
+  projectId: Type.String({ minLength: 1, maxLength: 80 }),
+  checkedAt: Instant,
+  folder: Nullable(Type.Object({ path: Type.String(), label: Type.String() }, strict)),
+  git: Nullable(Type.Object({
+    branch: Nullable(Type.String({ maxLength: 250 })),
+    remotes: Type.Array(Type.Object({ name: Type.String({ maxLength: 100 }), url: Type.String({ maxLength: 500 }) }, strict), { maxItems: 10 }),
+    uncommitted: Type.Array(Type.String(), { maxItems: 200 }),
+    uncommittedCount: Type.Integer({ minimum: 0 }),
+    unpushed: Type.Array(Type.Object({ branch: Type.String({ maxLength: 250 }), upstream: Nullable(Type.String({ maxLength: 250 })), ahead: Nullable(Type.Integer({ minimum: 1 })) }, strict), { maxItems: 50 }),
+  }, strict)),
+  recentFiles: Nullable(Type.Array(Type.Object({ path: Type.String(), modifiedAt: Instant }, strict), { maxItems: 30 })),
+}, strict);
+/**
+ * POST /v1/projects/:projectId/clone（16.7「接手」以后文件夹 chip 的「拉到这台电脑」）：本机先弹系统选择框让本人选放在哪（父文件夹），
+ * 在里面 git clone 仓库（文件夹名是 name，不给就用仓库名），切到 branch（交接分支；远端没有就留在默认分支，fellBack 为 true），加进允许的文件夹并绑到项目上。
+ * repoUrl 只收 https://、ssh://、git@ 开头的。用本人电脑上的 git 和它已有的登录，不弹输入口令（拿不到权限直接失败）。
+ * 本人在选择框点了取消：project 为 null。选的地方不许用（主目录本身等）、那里已经有同名文件夹：400 validation；clone 失败（没有仓库权限、地址不对、断网）：409 conflict，
+ * message 是「没拉下来：」加 git 的报错，网页写在 chip 上。可能要几分钟，网页显示用时。
+ */
+export const LocalProjectCloneRequest = Type.Object({
+  repoUrl: Type.String({ minLength: 8, maxLength: 500, pattern: "^(https://|ssh://|git@)[^\\s]+$" }),
+  branch: Type.Optional(Type.String({ minLength: 1, maxLength: 250, pattern: "^[^-\\s][^\\s]*$" })),
+  name: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
+}, strict);
+export const LocalProjectCloneResponse = Type.Object({ project: Nullable(LocalProjectFolder), branch: Nullable(Type.String()), fellBack: Type.Boolean() }, strict);
 export const LocalFolderListResponse = Type.Object({ folders: Type.Array(LocalFolder) }, strict);
 /**
  * POST /v1/folders/pick：本人在本机选择框里点了取消时 folder 为 null。
@@ -1117,6 +1153,9 @@ export type TLocalFolderProject = Static<typeof LocalFolderProject>;
 export type TLocalProjectFolder = Static<typeof LocalProjectFolder>;
 export type TLocalProjectListResponse = Static<typeof LocalProjectListResponse>;
 export type TLocalProjectFolderRequest = Static<typeof LocalProjectFolderRequest>;
+export type TLocalHandoverCheck = Static<typeof LocalHandoverCheck>;
+export type TLocalProjectCloneRequest = Static<typeof LocalProjectCloneRequest>;
+export type TLocalProjectCloneResponse = Static<typeof LocalProjectCloneResponse>;
 export type TLocalAttachmentRef = Static<typeof LocalAttachmentRef>;
 export type TLocalSavedAttachment = Static<typeof LocalSavedAttachment>;
 export type TLocalEffort = Static<typeof LocalEffort>;
@@ -1195,4 +1234,6 @@ export const LOCAL_RUNNER_ROUTES = {
   putBudget: { method: "PUT", path: "/v1/budgets", auth: true },
   listProjects: { method: "GET", path: "/v1/projects", auth: true },
   putProjectFolder: { method: "PUT", path: "/v1/projects/:projectId/folder", auth: true },
+  handoverCheck: { method: "POST", path: "/v1/projects/:projectId/handover-check", auth: true },
+  cloneProject: { method: "POST", path: "/v1/projects/:projectId/clone", auth: true },
 } as const;
