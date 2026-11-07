@@ -3,8 +3,9 @@ import { BuddyOpenTopicRequest, BuddyOpenTopicResponse, ClaimSessionStartsReques
 import { createTopic, TopicError } from "../researchTopics.js";
 import { ensurePresetRole, RoleError } from "../roles.js";
 import { readBudgetDefault, readTaskBudget } from "../budgets.js";
-import { claimStarts, releaseStart, requestStarts } from "../sessionStarts.js";
+import { cancelStart, claimStarts, releaseStart, requestStarts } from "../sessionStarts.js";
 import { ownProject } from "../projects.js";
+import { projectPaused } from "../projectTransfers.js";
 import { boardTask, CardError, planTaskOpener } from "../taskCards.js";
 import type { AppInstance, Guard, RouteContext } from "./shared.js";
 
@@ -38,6 +39,11 @@ export function registerSessionStartRoutes(app: AppInstance, ctx: RouteContext):
     schema: { params: Type.Object({ id: Type.String({ minLength: 1 }) }), body: ReleaseSessionStartRequest } }, async (req, reply) =>
     await releaseStart(q, req.person!.personId, req.params.id, req.body.deviceId) ? reply.status(204).send() : fail(reply, 404, "NOT_FOUND", "找不到这条要开工"));
 
+  // 停掉还在云端排队、没有电脑接下的子会话（16.7 准备交接的「停掉」、16.4 月中的「停掉」）：登记了要开工的那条了结掉，卡和专题留着。
+  app.delete("/api/me/sub-sessions/:kind/:id/start", { preHandler: requireMember,
+    schema: { params: Type.Object({ kind: Type.Union([Type.Literal("card"), Type.Literal("topic")]), id: Type.String({ minLength: 1 }) }) } }, async (req, reply) =>
+    await cancelStart(q, req.person!.personId, req.params.kind, req.params.id, ctx.now()) ? reply.status(204).send() : fail(reply, 404, "NOT_FOUND", "这个子会话没有在排队"));
+
   // 伙伴开探索子会话（工具 open_topic）：照 /internal/plan-tasks/:taskId/card-splits，INTERNAL_CHAT_TOKEN 加 X-Owner-Id；没配时不注册，不进公开 OpenAPI。
   // 建专题、配调研员、登记要开工在一个事务里，不用本人同意。
   if (env.internalChatToken) app.post("/internal/me/topics", { onRequest: requireServiceToken(env.internalChatToken),
@@ -49,6 +55,9 @@ export function registerSessionStartRoutes(app: AppInstance, ctx: RouteContext):
       // 指了项目的：要是本人的、没归档的；挂了 Task 的跟着 Task 挂的项目走（linkGoal 改的），不另记。
       const project = req.body.projectId ? await ownProject(ctx.q, id, req.body.projectId) : null;
       if (project?.archived_at) throw new CardError(409, "PROJECT_ARCHIVED", "这个项目已经归档了");
+      // 转交发出了还没接手，或接手人还没开口（16.7）：管线先不自己开子会话。
+      const inProject = project?.id ?? (own ? (await ctx.q("SELECT project_id::text FROM project_goals WHERE task_id=$1", [own.task.taskId])).rows[0]?.project_id as string | undefined : undefined);
+      if (inProject && await projectPaused(ctx.q, inProject)) throw new CardError(409, "PROJECT_PAUSED", "这个项目在交接，先等负责人开口");
       const now = ctx.now();
       const client = await pool.connect();
       try {

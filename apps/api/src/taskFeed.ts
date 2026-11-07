@@ -1,4 +1,4 @@
-import type { TCardMerge, TProjectFeedItem, TProjectFeedResponse, TTaskFeedItem } from "@warmap/contracts";
+import type { TCardMerge, TProjectFeedItem, TProjectFeedResponse, TProjectTransfer, TTaskFeedItem } from "@warmap/contracts";
 import { effectiveOutcome, failStreak, type HandbackRow } from "./cardProjection.js";
 import type { Query } from "./meetingStore.js";
 import type { GoalRow } from "./projects.js";
@@ -86,19 +86,35 @@ export async function criteriaMetCounts(q: Query, ownerId: string, tasks: { task
 }
 
 /**
- * GET /api/me/projects/:projectId/feed：项目里本人的卡（挂过的 Task 下的，和直接放在项目里的）的验收行，每件挂过的 Task 的「约定都达到」，
- * 加每次挂上一件 Task 的分隔线（goal_linked），从旧到新。criteria：每件 Task 的标准（读不到为空，不出「约定都达到」）。
+ * 转交那几行（16.7）：接手了的两边都有换人分隔线；接手人那边紧跟一条交接说明（同一时刻按 id，handover: 在 summary: 前面）；没接的只给原负责人一行。
  */
-export async function readProjectFeed(q: Query, ownerId: string, projectId: string, goals: GoalRow[], criteria: Map<string, string[]>): Promise<TProjectFeedResponse> {
+function transferItems(viewer: string, transfers: TProjectTransfer[]): TProjectFeedItem[] {
+  return transfers.flatMap((transfer): TProjectFeedItem[] => {
+    const at = transfer.decidedAt!;
+    if (transfer.status === "declined") return transfer.from.personId === viewer
+      ? [{ kind: "transfer_declined", id: `declined:${transfer.id}`, at, transferId: transfer.id, by: transfer.to }] : [];
+    return [{ kind: "handover", id: `handover:${transfer.id}`, at, transferId: transfer.id, from: transfer.from, to: transfer.to },
+      ...transfer.to.personId === viewer ? [{ kind: "handover_summary" as const, id: `summary:${transfer.id}`, at, transferId: transfer.id, from: transfer.from,
+        note: transfer.note ?? [] }] : []];
+  });
+}
+
+/**
+ * GET /api/me/projects/:projectId/feed：项目里的卡（挂过的 Task 下的，和直接放在项目里的；owners 是负责过这个项目的人）的验收行，每件挂过的 Task 的「约定都达到」，
+ * 加每次挂上一件 Task 的分隔线（goal_linked）和转交那几行，从旧到新。criteria：每件 Task 的标准（读不到为空，不出「约定都达到」）。
+ */
+export async function readProjectFeed(q: Query, owners: string[], projectId: string, goals: GoalRow[], criteria: Map<string, string[]>,
+  transfer: { viewer: string; transfers: TProjectTransfer[] } = { viewer: "", transfers: [] }): Promise<TProjectFeedResponse> {
   const taskIds = goals.map((goal) => goal.task_id);
-  const cards = (await q(`SELECT ${FEED_CARD} FROM tasks WHERE owner_id=$1 AND (plan_task_id=ANY($2::text[]) OR plan_task_id IS NULL AND project_id=$3)`,
-    [ownerId, taskIds, projectId])).rows as FeedCard[];
+  const cards = (await q(`SELECT ${FEED_CARD} FROM tasks WHERE owner_id=ANY($1::text[]) AND (plan_task_id=ANY($2::text[]) OR plan_task_id IS NULL AND project_id=$3)`,
+    [owners, taskIds, projectId])).rows as FeedCard[];
   const byCard = await handbacksOf(q, cards);
   const items: TProjectFeedItem[] = [
     ...goals.map((goal) => ({ kind: "goal_linked" as const, id: `goal:${goal.task_id}`, at: goal.linked_at.toISOString(), period: goal.period, taskId: goal.task_id,
       taskName: goal.task_name })),
     ...cardItems(cards, byCard),
     ...goals.flatMap((goal) => criteriaMetItem(cards, byCard, goal.task_id, criteria.get(goal.task_id) ?? [])),
+    ...transferItems(transfer.viewer, transfer.transfers),
   ];
   return { items: items.sort(byTime) };
 }

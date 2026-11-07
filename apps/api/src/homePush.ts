@@ -58,6 +58,7 @@ export function waitingPath(open: TWaitingTarget): string {
     case "topic": return `/me/work/topics/${id}`;
     case "project": return `/me/work/projects/${id}`;
     case "task_detail": return `/me/work/tasks/${id}/info`;
+    case "transfer": return `/me/work/transfers/${id}`;
     case "month": return `/me/work/month/${id}`;
     case "connections": return "/me/work/settings/connections";
     case "meeting": return `/me/meetings/${id}`;

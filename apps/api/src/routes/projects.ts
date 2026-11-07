@@ -3,7 +3,10 @@ import { Type } from "@sinclair/typebox";
 import { CreateProjectRequest, Project, ProjectDetailResponse, ProjectFeedResponse, ProjectGoalResponse, ProjectListResponse, ProjectPipelineResponse,
   UpdateProjectRequest } from "@warmap/contracts";
 import { ChatServiceError } from "../chatService.js";
-import { createProject, goalView, linkGoal, listProjects, ownProject, projectDetail, projectGoalRows, projectScope, projectView, unlinkGoal, updateProject } from "../projects.js";
+import { personDisplayNames } from "../people.js";
+import { createProject, goalView, linkGoal, listProjects, ownProject, projectDetail, projectGoalRows, projectOwners, projectReader, projectScope, projectView, unlinkGoal,
+  updateProject } from "../projects.js";
+import { decidedTransfers, handedAway, openTransfers, transferView } from "../projectTransfers.js";
 import { readProjectFeed } from "../taskFeed.js";
 import { boardTask, CardError, planTaskOpener } from "../taskCards.js";
 import { ensureProjectPipeline } from "../taskPipelines.js";
@@ -30,6 +33,13 @@ export function registerProjectRoutes(app: AppInstance, ctx: RouteContext): void
       throw cause;
     }
   };
+  /** 本人这几个项目的转交：正在转交的，和本人交出去了的。 */
+  const transfersOf = async (personId: string, projectIds: string[]) => {
+    const names = personDisplayNames(ctx.peopleDirectory);
+    const open = await openTransfers(q, projectIds);
+    const away = new Map((await handedAway(q, personId)).map((row) => [row.project_id, row]));
+    return new Map(projectIds.flatMap((id) => { const row = open.get(id) ?? away.get(id); return row ? [[id, transferView(row, names)] as const] : []; }));
+  };
   /** 挂一件本人负责的 Task（boardTask 核对负责人）。 */
   const link = async (personId: string, projectId: string, taskId: string) => {
     const own = await boardTask(open, personId, taskId);
@@ -38,7 +48,7 @@ export function registerProjectRoutes(app: AppInstance, ctx: RouteContext): void
   };
 
   app.get("/api/me/projects", { preHandler: requireMember, schema: { response: { 200: ProjectListResponse } } }, async (req) =>
-    ({ projects: await listProjects(q, req.person!.personId) }));
+    ({ projects: await listProjects(q, req.person!.personId, (ids) => transfersOf(req.person!.personId, ids)) }));
 
   app.post("/api/me/projects", { preHandler: requireMember, schema: { body: CreateProjectRequest, response: { 201: Project } } }, async (req, reply) => handle(reply, async () => {
     const personId = req.person!.personId;
@@ -50,7 +60,8 @@ export function registerProjectRoutes(app: AppInstance, ctx: RouteContext): void
   }));
 
   app.get("/api/me/projects/:projectId", { preHandler: requireMember, schema: { params: projectParams, response: { 200: ProjectDetailResponse } } }, async (req, reply) =>
-    handle(reply, () => projectDetail(q, req.person!.personId, req.params.projectId, ctx.now())));
+    handle(reply, () => projectDetail(q, req.person!.personId, req.params.projectId, ctx.now(),
+      async (id) => (await transfersOf(req.person!.personId, [id])).get(id) ?? null)));
 
   app.patch("/api/me/projects/:projectId", { preHandler: requireMember, schema: { params: projectParams, body: UpdateProjectRequest, response: { 200: Project } } },
     async (req, reply) => handle(reply, () => updateProject(q, req.person!.personId, req.params.projectId, req.body, ctx.now())));
@@ -75,14 +86,16 @@ export function registerProjectRoutes(app: AppInstance, ctx: RouteContext): void
     return reply.status(created ? 201 : 200).send({ projectId: project.id, conversationId, scope: projectScope(project.id) });
   }));
 
-  // 项目动态：每件挂过的 Task 的标准从本体读（读不到的那件不出「约定都达到」），卡的验收行照 Task 管线原来的算法。
+  // 项目动态：每件挂过的 Task 的标准从本体读（读不到的那件不出「约定都达到」），卡的验收行照 Task 管线原来的算法；
+  // 交出去之前负责过的人也能看（只读），卡读每个负责过的人的；换人、交接说明、没接那几行按看的人给（feed.ts 的 transferItems）。
   app.get("/api/me/projects/:projectId/feed", { preHandler: requireMember, schema: { params: projectParams, response: { 200: ProjectFeedResponse } } },
     async (req, reply) => handle(reply, async () => {
       const personId = req.person!.personId;
-      const project = await ownProject(q, personId, req.params.projectId);
+      const { row: project } = await projectReader(q, personId, req.params.projectId);
       const goals = await projectGoalRows(q, project.id);
       const criteria = new Map(await Promise.all(goals.map(async (goal) =>
-        [goal.task_id, (await boardTask(open, personId, goal.task_id).catch(() => null))?.criteria ?? []] as const)));
-      return readProjectFeed(q, personId, project.id, goals, criteria);
+        [goal.task_id, (await boardTask(open, goal.owner_id, goal.task_id).catch(() => null))?.criteria ?? []] as const)));
+      const transfers = (await decidedTransfers(q, project.id)).map((row) => transferView(row, personDisplayNames(ctx.peopleDirectory)));
+      return readProjectFeed(q, await projectOwners(q, project.id), project.id, goals, criteria, { viewer: personId, transfers });
     }));
 }

@@ -140,6 +140,7 @@ import { registerWorkHomeRoutes } from "./routes/workHome.js";
 import { registerSessionStartRoutes } from "./routes/sessionStarts.js";
 import { registerTaskPipelineRoutes } from "./routes/taskPipelines.js";
 import { registerProjectRoutes } from "./routes/projects.js";
+import { registerProjectTransferRoutes } from "./routes/projectTransfers.js";
 import { registerTaskContinuityRoutes } from "./routes/taskContinuity.js";
 import { registerTaskCardRoutes, type BoardAgents } from "./routes/taskCards.js";
 import { planTaskOpener, taskPageFacts } from "./taskCards.js";
@@ -889,6 +890,7 @@ export async function buildApp({
   registerSessionStartRoutes(app, ctx);
   registerTaskPipelineRoutes(app, ctx);
   registerProjectRoutes(app, ctx);
+  registerProjectTransferRoutes(app, ctx);
   // 跨月延续、到此为止和月份页（routes/taskContinuity.ts）。
   registerTaskContinuityRoutes(app, ctx);
   const board = registerTaskCardRoutes(app, ctx, { agents: boardAgents, fetchArticle: deliverableFetcher });

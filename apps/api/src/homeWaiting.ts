@@ -253,5 +253,14 @@ export async function assembleWaiting(input: WaitingInput): Promise<TWaitingItem
     add({ id: "device:this_computer", kind: "device", title: input.devices.length ? `电脑不在线 · ${waitingForDevice} 件在等` : "还没有配对的电脑",
       source: input.devices.length ? null : `${waitingForDevice} 件在等`, at: null, open: { kind: "connections", id: "this_computer" }, answer: "open" });
 
+  // 项目转交（16.7）：别人把项目交给本人、发出了还没接手的；点开是只读预览，「接手」「不接」。
+  const incoming = (await q(`SELECT t.id::text,t.project_id::text,t.from_id,t.decided_at,p.name FROM project_transfers t JOIN projects p ON p.id=t.project_id
+    WHERE t.to_id=$1 AND t.status='sent'`, [ownerId])).rows as { id: string; project_id: string; from_id: string; decided_at: Date; name: string }[];
+  for (const row of incoming) {
+    const from = { personId: row.from_id, name: deps.names.get(row.from_id) ?? row.from_id };
+    add({ id: `transfer:${row.id}`, kind: "transfer", title: `${from.name}把「${row.name}」交给你`, source: null, at: row.decided_at.toISOString(),
+      open: { kind: "transfer", id: row.id }, projectId: row.project_id, person: from, answer: "open" });
+  }
+
   return waiting.sort(byUrgency);
 }

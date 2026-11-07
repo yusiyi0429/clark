@@ -56,6 +56,13 @@ export async function releaseStart(q: Query, ownerId: string, id: string, device
     [id, ownerId, deviceId])).rowCount);
 }
 
+/** 停掉还没有电脑接下的那条（本人的；认领过期了的也算没接下）：了结掉。没有在排的为 false。 */
+export async function cancelStart(q: Query, ownerId: string, kind: "card" | "topic", id: string, now: Date): Promise<boolean> {
+  if (!UUID_PATTERN.test(id)) return false;
+  return Boolean((await q(`UPDATE session_starts SET closed_at=$4 WHERE owner_id=$1 AND ${kind === "card" ? "card_id" : "topic_id"}=$2 AND closed_at IS NULL
+    AND (claimed_at IS NULL OR claimed_at < $3::timestamptz - interval '${CLAIM_TTL}')`, [ownerId, id, now, now])).rowCount);
+}
+
 /** 本机报上这张卡或专题的第一条执行：了结它没了结的那条。 */
 export async function closeStartsFor(q: Query, subject: { cardId?: string; topicId?: string }, at: Date): Promise<void> {
   const [column, id] = subject.cardId ? ["card_id", subject.cardId] : ["topic_id", subject.topicId];

@@ -34,7 +34,7 @@ describe("项目", { timeout: 60_000 }, () => {
       await skipBootstrap(f);
       const card = await f.card("挂上之前就有的卡");
       const a = await create(f, { name: "  天枢新首页 " });
-      expect(a).toEqual({ projectId: a.projectId, name: "天枢新首页", archivedAt: null, createdAt: NOW, lastActivityAt: null });
+      expect(a).toEqual({ projectId: a.projectId, name: "天枢新首页", archivedAt: null, createdAt: NOW, lastActivityAt: null, transfer: null });
       // 带 Task 建：要是本人负责的；不是的不建。
       expect((await f.call("POST", "/api/me/projects", { name: "别人的", taskId: "task-theirs" })).statusCode).toBe(403);
       expect((await f.call("POST", "/api/me/projects", { name: "找不到", taskId: "task-nope" })).statusCode).toBe(404);
@@ -262,6 +262,123 @@ describe("项目", { timeout: 60_000 }, () => {
       const feed = (await f.call("GET", `/api/me/projects/${fresh}/feed`)).json().items;
       expect(feed).toEqual([{ kind: "goal_linked", id: "goal:task-open", at: NOW, period: "2026-11", taskId: "task-open", taskName: "对话质量达标" }]);
       expect((await home(f)).month.missions[0].tasks[0].project).toEqual({ projectId: fresh, name: "新项目" });
+    } finally { await f.close(); }
+  });
+
+  it("项目转交（16.7）：发起时云端拼说明、存本机检查重拼「代码在哪」（管线写的段留着）、密钥挡住、发出后伙伴不开子会话、接手换负责人、原负责人只读、接手人先开口", async () => {
+    const f = await boardFixture({}, { boardCloudAgents: false, internalChatToken: "chat-token" });
+    try {
+      await skipBootstrap(f);
+      const third = ((await f.t.app.inject({ method: "POST", url: "/api/auth/login", headers: { origin: f.t.publicOrigin },
+        payload: { loginId: THIRD.loginId, passcode: THIRD.passcode } })).headers["set-cookie"] as string).split(";")[0];
+      const { projectId } = await create(f, { name: "Chat 服务", taskId: "task-open" });
+      const card = await f.card("还没做完的卡");
+      await f.t.sql("INSERT INTO session_starts(id,owner_id,kind,card_id,plan_task_id,origin,requested_at) VALUES($1,$2,'card',$3,'task-open','web',$4)",
+        [randomUUID(), TEST_MEMBER.personId, card, BOARD_NOW]);
+      expect((await f.call("POST", `/api/me/projects/${projectId}/transfers`, { toPersonId: TEST_MEMBER.personId })).statusCode).toBe(400);
+      expect((await f.call("POST", `/api/me/projects/${projectId}/transfers`, { toPersonId: "nobody" })).statusCode).toBe(404);
+      const started = await f.call("POST", `/api/me/projects/${projectId}/transfers`, { toPersonId: THIRD.personId });
+      expect(started.statusCode, started.body).toBe(201);
+      const transfer = started.json();
+      expect(transfer).toMatchObject({ projectId, projectName: "Chat 服务", from: { personId: TEST_MEMBER.personId }, to: { personId: THIRD.personId }, status: "preparing",
+        startedAt: NOW, decidedAt: null, includeHistory: false, running: null, check: null, checkResult: null, clone: null });
+      expect(transfer.note.map((section: { title: string }) => section.title)).toEqual(["到哪了", "没做完的事", "可以问谁"]);
+      expect(transfer.note[0].lines).toEqual(["11 月目标：对话质量达标 · 11/30 验收"]);
+      expect(transfer.note[1].lines).toContain("还没做完的卡");
+      expect((await f.call("POST", `/api/me/projects/${projectId}/transfers`, { toPersonId: THIRD.personId })).json().code).toBe("TRANSFER_OPEN");
+      // 伙伴（/internal，以原负责人的身份）写要读对话的那几段；接手人的身份不行。
+      const internalNote = (owner: string) => f.t.app.inject({ method: "PUT", url: `/internal/me/project-transfers/${transfer.id}/note`,
+        headers: { authorization: "Bearer chat-token", "x-owner-id": owner }, payload: { note: [...transfer.note, { title: "关键决定和原因", lines: ["先上 Chat 再切流量"] }] } });
+      expect((await internalNote(THIRD.personId)).statusCode).toBe(403);
+      expect((await internalNote(TEST_MEMBER.personId)).json().note.map((section: { title: string }) => section.title))
+        .toEqual(["到哪了", "没做完的事", "关键决定和原因", "可以问谁"]);
+
+      // 管线写的段留着；存本机检查时重拼「代码在哪」，给接手人拉仓库的地址和交接分支。
+      const url = `/api/me/project-transfers/${transfer.id}`;
+      await f.call("PATCH", url, { note: [...transfer.note, { title: "坑", lines: ["本地要先起 54329 的库"] }], running: "wait" });
+      const check = { projectId, checkedAt: NOW, folder: { path: "D:/code/chat", label: "chat" }, git: { branch: "main", remotes: [{ name: "origin", url: "https://github.com/x/chat.git" }],
+        uncommitted: ["a.ts"], uncommittedCount: 1, unpushed: [{ branch: "handover/chat", upstream: null, ahead: null }] }, recentFiles: null };
+      const checked = (await f.call("PATCH", url, { checkResult: check, check: "wait" })).json();
+      expect(checked.note.map((section: { title: string }) => section.title)).toEqual(["到哪了", "没做完的事", "代码在哪", "坑", "可以问谁"]);
+      expect(checked.note.find((section: { title: string }) => section.title === "代码在哪").lines[0]).toBe("仓库：https://github.com/x/chat.git");
+      expect(checked).toMatchObject({ running: "wait", check: "wait", clone: { repoUrl: "https://github.com/x/chat.git", branch: "handover/chat" } });
+      // 接手人改不了；像密钥的挡住，标出哪一段第几行。
+      expect((await f.call("PATCH", url, { includeHistory: true }, third)).statusCode).toBe(403);
+      await f.call("PATCH", url, { note: [{ title: "怎么跑起来", lines: ["CHAT_TOKEN 找人豪要", "CHAT_TOKEN=sk-abcdefghijklmnopqrstuv"] }] });
+      const blocked = await f.call("POST", `${url}/send`);
+      expect([blocked.statusCode, blocked.json()]).toEqual([422, { code: "SECRET_IN_NOTE", message: expect.any(String),
+        findings: [{ section: "怎么跑起来", line: 2, sample: "sk-abc…" }] }]);
+      await f.call("PATCH", url, { note: [{ title: "怎么跑起来", lines: ["CHAT_TOKEN 找人豪要"] }] });
+      expect((await f.call("POST", `${url}/send`)).json()).toMatchObject({ status: "sent", decidedAt: NOW });
+      expect((await f.call("PATCH", url, { includeHistory: true })).statusCode).toBe(409);
+
+      // 发出以后：项目行带转交；接手人的等你里一条；伙伴不开子会话。
+      expect((await home(f)).projects[0].transfer).toMatchObject({ id: transfer.id, status: "sent" });
+      const theirHome = (await f.call("GET", "/api/me/work-home", undefined, third)).json();
+      expect(theirHome.waiting.find((item: { kind: string }) => item.kind === "transfer")).toMatchObject({ id: `transfer:${transfer.id}`, open: { kind: "transfer", id: transfer.id },
+        person: { personId: TEST_MEMBER.personId }, projectId, answer: "open" });
+      expect((await f.call("GET", url, undefined, third)).json().status).toBe("sent");
+      const openTopic = (owner: string) => f.t.app.inject({ method: "POST", url: "/internal/me/topics", headers: { authorization: "Bearer chat-token", "x-owner-id": owner },
+        payload: { title: "查一下", projectId } });
+      expect((await openTopic(TEST_MEMBER.personId)).json().code).toBe("PROJECT_PAUSED");
+
+      // 接手：项目换成接手人的，Task 负责人不变；原负责人那边归档、只读；接手人先开口，管线才开子会话。
+      expect((await f.call("POST", `${url}/accept`)).statusCode).toBe(403);
+      expect((await f.call("POST", `${url}/accept`, undefined, third)).json()).toMatchObject({ status: "accepted" });
+      expect((await f.call("POST", `${url}/withdraw`)).statusCode).toBe(409);
+      const after = (await f.call("GET", "/api/me/work-home", undefined, third)).json();
+      // 接手人自己的 Mission 也在第一次读首页时建了项目；交接过来的这个在里面。
+      const received = after.projects.find((project: { projectId: string }) => project.projectId === projectId);
+      expect(received.goals).toEqual([expect.objectContaining({ taskId: "task-open", responsible: { personId: TEST_MEMBER.personId, name: expect.any(String) },
+        criteria: [] })]);
+      const mine = await home(f);
+      expect([mine.projects, mine.archivedCount, mine.other.subSessions]).toEqual([[], 1, []]);
+      expect((await f.call("GET", "/api/me/projects")).json().projects).toEqual([expect.objectContaining({ projectId, archivedAt: NOW,
+        transfer: expect.objectContaining({ status: "accepted" }) })]);
+      expect((await f.call("GET", `/api/me/projects/${projectId}`)).statusCode).toBe(200);
+      expect((await f.call("PATCH", `/api/me/projects/${projectId}`, { name: "改不了" })).statusCode).toBe(404);
+      const scope = encodeURIComponent(`project:${projectId}`);
+      expect((await f.call("GET", `/api/conversations/${scope}/messages`)).statusCode).toBe(200);
+      const say = (cookie: string) => f.t.app.inject({ method: "POST", url: `/api/conversations/${scope}/messages`,
+        headers: { cookie, origin: f.t.publicOrigin, accept: "text/event-stream" }, payload: { message: "接着做" } });
+      expect((await say(f.member)).json().code).toBe("PROJECT_HANDED_OVER");
+      // 动态：两边都有换人的分隔线，接手人那边紧跟交接说明。
+      const feed = async (cookie: string) => (await f.call("GET", `/api/me/projects/${projectId}/feed`, undefined, cookie)).json().items.map((item: { kind: string }) => item.kind);
+      expect(await feed(third)).toEqual(["goal_linked", "handover", "handover_summary"]);
+      expect(await feed(f.member)).toEqual(["goal_linked", "handover"]);
+      expect((await f.call("GET", `${url}/history`, undefined, third)).statusCode).toBe(404);
+      expect((await openTopic(THIRD.personId)).json().code).toBe("PROJECT_PAUSED");
+      expect((await say(third)).statusCode).toBe(200);
+      expect((await openTopic(THIRD.personId)).statusCode).toBe(201);
+      // 原负责人那边还没被电脑接下的开工登记了结掉（不会在他的电脑上接着跑）。
+      expect(await f.t.sql("SELECT closed_at IS NOT NULL AS closed FROM session_starts WHERE card_id=$1", [card])).toEqual([{ closed: true }]);
+    } finally { await f.close(); }
+  });
+
+  it("项目转交：撤回、不接（原负责人那边一行「X 没接」，项目留着）；停掉还在云端排队的子会话", async () => {
+    const f = await boardFixture({}, { boardCloudAgents: false });
+    try {
+      await skipBootstrap(f);
+      const third = ((await f.t.app.inject({ method: "POST", url: "/api/auth/login", headers: { origin: f.t.publicOrigin },
+        payload: { loginId: THIRD.loginId, passcode: THIRD.passcode } })).headers["set-cookie"] as string).split(";")[0];
+      const { projectId } = await create(f, { name: "小项目", taskId: "task-open" });
+      const start = async () => (await f.call("POST", `/api/me/projects/${projectId}/transfers`, { toPersonId: THIRD.personId })).json().id as string;
+      const first = await start();
+      expect((await f.call("POST", `/api/me/project-transfers/${first}/withdraw`)).json().status).toBe("withdrawn");
+      const second = await start();
+      await f.call("POST", `/api/me/project-transfers/${second}/send`);
+      expect((await f.call("POST", `/api/me/project-transfers/${second}/decline`, undefined, third)).json().status).toBe("declined");
+      expect((await home(f)).projects.map((project: { projectId: string; transfer: unknown }) => [project.projectId, project.transfer])).toEqual([[projectId, null]]);
+      const items = (await f.call("GET", `/api/me/projects/${projectId}/feed`)).json().items;
+      expect(items.find((item: { kind: string }) => item.kind === "transfer_declined")).toMatchObject({ transferId: second, by: { personId: THIRD.personId } });
+
+      const card = await f.card("排着的卡");
+      await f.call("PATCH", `/api/me/cards/${card}`, { version: 1, executor: "claude_code" });
+      await f.t.sql("INSERT INTO session_starts(id,owner_id,kind,card_id,plan_task_id,origin,requested_at) VALUES($1,$2,'card',$3,'task-open','web',$4)",
+        [randomUUID(), TEST_MEMBER.personId, card, BOARD_NOW]);
+      expect((await f.call("DELETE", `/api/me/sub-sessions/card/${card}/start`)).statusCode).toBe(204);
+      expect((await f.call("DELETE", `/api/me/sub-sessions/card/${card}/start`)).statusCode).toBe(404);
+      expect((await home(f)).projects[0].subSessions.find((sub: { id: string }) => sub.id === card)).toMatchObject({ autoStart: false });
     } finally { await f.close(); }
   });
 });

@@ -18,7 +18,8 @@ import { shanghaiDate } from "./workdays.js";
 import { settlementsOf } from "./taskContinuity.js";
 import { visibleMissions } from "./visibleMissions.js";
 import { taskBasis } from "./planTaskAccess.js";
-import { CARD_PROJECT, goalsOf, ownProject, PROJECT_SCOPE_PREFIX, projectScope } from "./projects.js";
+import { CARD_PROJECT, goalsOf, ownProject, PROJECT_SCOPE_PREFIX, projectScope, type GoalRow } from "./projects.js";
+import { handedAway, openTransfers, transferView } from "./projectTransfers.js";
 import { syncProjects } from "./projectSync.js";
 import { criteriaMetCounts, type StoredMerge } from "./taskFeed.js";
 
@@ -115,9 +116,14 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
   const projectRows = (await q("SELECT id::text,name,archived_at,created_at FROM projects WHERE owner_id=$1 ORDER BY created_at,id", [ownerId])).rows as
     { id: string; name: string; archived_at: Date | null; created_at: Date }[];
   const active = projectRows.filter((row) => !row.archived_at);
+  // 本人交出去了的项目（16.7）：本人这边算归档、只读；里面本人以前的子会话不进「其他」。
+  const handed = new Set((await handedAway(q, ownerId)).map((row) => row.project_id));
   const activeIds = new Set(active.map((row) => row.id));
-  const projectNames = new Map(projectRows.map((row) => [row.id, row.name]));
   const goals = await goalsOf(q, ownerId);
+  // 项目名：本人的，加本人的 Task 挂着的别人的项目（交出去了的，16.7；「本月」里照样写项目名）。
+  const linkedElsewhere = [...new Set([...goals.values()].flatMap((goal) => goal.project_id && !projectRows.some((row) => row.id === goal.project_id) ? [goal.project_id] : []))];
+  const projectNames = new Map([...projectRows.map((row) => [row.id, row.name] as const), ...(linkedElsewhere.length
+    ? (await q("SELECT id::text,name FROM projects WHERE id=ANY($1::uuid[])", [linkedElsewhere])).rows as { id: string; name: string }[] : []).map((row) => [row.id, row.name] as const)]);
   /** 一件 Task 挂在哪个项目（没挂、取下来了为 null）。 */
   const taskProject = (taskId: string | null) => taskId ? goals.get(taskId)?.project_id ?? null : null;
   const devices = (await workerResources(q, ownerId, now)).devices;
@@ -231,7 +237,7 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
   const planning = new Set([...planRuns.map((run) => run.plan_task_id), ...splits.map((row) => row.plan_task_id)]);
   // 项目对话：接了 Chat 记在 project_pipelines；没接时是天枢自己 scope 为 project:<id> 的对话。
   const pipelines = new Map(active.length ? (deps.chat
-    ? (await q("SELECT project_id::text AS project,conversation_id AS id FROM project_pipelines WHERE project_id=ANY($1::uuid[])", [[...activeIds]])).rows
+    ? (await q("SELECT project_id::text AS project,conversation_id AS id FROM project_pipelines WHERE owner_id=$1 AND project_id=ANY($2::uuid[])", [ownerId, [...activeIds]])).rows
     : (await q(`SELECT DISTINCT ON (scope) substr(scope,${PROJECT_SCOPE_PREFIX.length + 1}) AS project,id::text FROM conversations
         WHERE owner_id=$1 AND scope=ANY($2::text[]) AND deleted_at IS NULL AND archived_at IS NULL ORDER BY scope,created_at,id`,
       [ownerId, active.map((row) => projectScope(row.id))])).rows).map((row) => [row.project as string, row.id as string]) : []);
@@ -258,10 +264,24 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
   const met = await criteriaMetCounts(q, ownerId, goalTasks.map((task) => ({ taskId: task.taskId, count: criteriaOf.get(task.taskId)!.length })));
   const budgets = goalTasks.length ? (await q("SELECT view FROM local_task_budgets WHERE owner_id=$1 AND subject_key=ANY($2::text[])",
     [ownerId, goalTasks.map((task) => `task:${task.taskId}`)])).rows as { view: TLocalTaskBudgetView }[] : [];
+  // 交接过来的项目（16.7）：挂着的 Task 跟着项目走、负责人还是原来的人，不在本人的树上。按挂上时的快照列（标准读不到，记 0 条），
+  // 没了结的，加这个月确认完成了的；目标条上画负责人（responsible）。
+  const othersGoals = active.length ? (await q("SELECT * FROM project_goals WHERE project_id=ANY($1::uuid[]) AND owner_id<>$2 ORDER BY linked_at",
+    [[...activeIds], ownerId])).rows as GoalRow[] : [];
+  const othersSettled = await settlementsOf(q, othersGoals.map((goal) => goal.task_id));
+  const transfers = await openTransfers(q, [...activeIds]);
+  const goalOfOthers = (goal: GoalRow): THomeProjectGoal | null => {
+    const settled = othersSettled.get(goal.task_id);
+    if (settled && !(settled.kind === "completed" && goal.period === period)) return null;
+    return { taskId: goal.task_id, missionId: goal.mission_id, name: goal.task_name, period: goal.period, dueDate: monthEnd(goal.period), criteria: [], criteriaMet: 0,
+      criteriaTotal: 0, completedAt: settled ? new Date(settled.at).toISOString() : null,
+      responsible: { personId: goal.owner_id, name: deps.names.get(goal.owner_id) ?? goal.owner_id } };
+  };
   const homeProjects = active.map((row): THomeProject => {
-    const projectGoals: THomeProjectGoal[] = goalTasks.filter((task) => taskProject(task.taskId) === row.id).map((task) => ({ taskId: task.taskId,
+    const projectGoals: THomeProjectGoal[] = goalTasks.filter((task) => taskProject(task.taskId) === row.id).map((task): THomeProjectGoal => ({ taskId: task.taskId,
       missionId: task.missionId, name: task.name, period: task.period, dueDate: monthEnd(task.period), criteria: criteriaOf.get(task.taskId)!,
-      criteriaMet: met.get(task.taskId) ?? 0, criteriaTotal: criteriaOf.get(task.taskId)!.length, completedAt: task.completedAt }))
+      criteriaMet: met.get(task.taskId) ?? 0, criteriaTotal: criteriaOf.get(task.taskId)!.length, completedAt: task.completedAt, responsible: null }))
+      .concat(othersGoals.filter((goal) => goal.project_id === row.id).flatMap((goal) => goalOfOthers(goal) ?? []))
       .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || a.name.localeCompare(b.name));
     const ids = new Set(projectGoals.map((goal) => goal.taskId));
     const mine = subs.filter((sub) => sub.projectId === row.id).sort(order);
@@ -269,7 +289,8 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
     const count = (...states: TSubSessionState[]) => mine.filter((sub) => states.includes(sub.state)).length;
     const over = budgets.map((entry) => entry.view).filter((budget) => budget.taskId && ids.has(budget.taskId) && budget.state !== "ok")
       .sort((a, b) => (b.ratio ?? 0) - (a.ratio ?? 0))[0];
-    const linked = [...goals.values()].filter((goal) => goal.project_id === row.id).map((goal) => goal.linked_at);
+    const linked = [...goals.values(), ...othersGoals].filter((goal) => goal.project_id === row.id).map((goal) => goal.linked_at);
+    const transfer = transfers.get(row.id);
     return { projectId: row.id, name: row.name, goals: projectGoals,
       budget: over ? { state: over.state as "warning" | "exhausted", percent: Math.round((over.ratio ?? 0) * 100), taskId: over.taskId! } : null,
       lastActivityAt: latest(row.created_at, ...linked, ...mine.map((sub) => sub.updatedAt), ...items.map((item) => item.updatedAt)),
@@ -277,7 +298,8 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
         doneToday: mine.filter((sub) => sub.acceptedAt && shanghaiDate(new Date(sub.acceptedAt)) === today).length,
         needsYou: waiting.filter((item) => item.projectId === row.id).length },
       pipeline: { conversationId: pipelines.get(row.id) ?? null, scope: projectScope(row.id) },
-      planning: projectGoals.some((goal) => planning.has(goal.taskId)), subSessions: mine.map(view), items: items.map(homeItem) };
+      planning: projectGoals.some((goal) => planning.has(goal.taskId)), subSessions: mine.map(view), items: items.map(homeItem),
+      transfer: transfer ? transferView(transfer, deps.names) : null };
   });
   // 16.2：有等你的在前；然后是有目标的、按最早的截止日；最后按最近动静从近到远。
   const rank = (project: THomeProject) => project.summary.needsYou ? 0 : project.goals.length ? 1 : 2;
@@ -291,8 +313,9 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
       return { taskId: task.taskId, name: task.name, completedAt: task.completedAt, project: projectId ? { projectId, name: projectNames.get(projectId)! } : null };
     }) })) };
 
-  return { period, projects: homeProjects, archivedCount: projectRows.length - active.length, month,
-    other: { subSessions: subs.filter((sub) => !onProject(sub.projectId)).sort(order).map(view), items: loose.map(homeItem) }, waiting };
+  return { period, projects: homeProjects, archivedCount: projectRows.length - active.length + handed.size, month,
+    other: { subSessions: subs.filter((sub) => !onProject(sub.projectId) && !(sub.projectId && handed.has(sub.projectId))).sort(order).map(view), items: loose.map(homeItem) },
+    waiting };
 }
 
 /**

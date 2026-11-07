@@ -21,9 +21,9 @@ export async function pipelineConversationIds(q: Query, ownerId: string): Promis
   return new Set(rows.map((row) => row.conversation_id));
 }
 
-/** 这个项目在 Chat 里的那一段；还没开过为 null。 */
-export async function projectPipelineConversation(q: Query, projectId: string): Promise<string | null> {
-  const rows = (await q("SELECT conversation_id FROM project_pipelines WHERE project_id=$1", [projectId])).rows as { conversation_id: string }[];
+/** 这个人这个项目在 Chat 里的那一段（一人一段：交接以后原负责人那段留着只读，接手人另开一段）；还没开过为 null。 */
+export async function projectPipelineConversation(q: Query, projectId: string, ownerId: string): Promise<string | null> {
+  const rows = (await q("SELECT conversation_id FROM project_pipelines WHERE project_id=$1 AND owner_id=$2", [projectId, ownerId])).rows as { conversation_id: string }[];
   return rows[0]?.conversation_id ?? null;
 }
 
@@ -41,15 +41,15 @@ export async function ensureProjectPipeline(deps: { pool: Pool; chat?: ChatServi
     return { conversationId: await ensureMainConversation(deps.pool, owner, scope), created: !existed };
   }
   const q: Query = deps.pool.query.bind(deps.pool);
-  const found = await projectPipelineConversation(q, projectId);
+  const found = await projectPipelineConversation(q, projectId, owner);
   if (found) return { conversationId: found, created: false };
   return deps.chat.createConversation(pipelineViewer(owner), requestId, {
-    existing: () => projectPipelineConversation(q, projectId),
+    existing: () => projectPipelineConversation(q, projectId, owner),
     register: async (id) => {
-      const inserted = (await q("INSERT INTO project_pipelines (project_id, owner_id, conversation_id) VALUES ($1, $2, $3) ON CONFLICT (project_id) DO NOTHING",
+      const inserted = (await q("INSERT INTO project_pipelines (project_id, owner_id, conversation_id) VALUES ($1, $2, $3) ON CONFLICT (project_id, owner_id) DO NOTHING",
         [projectId, owner, id])).rowCount;
       // 没插进去：这个项目已经登记了，读那一条（project_pipelines 不删行）。
-      return inserted ? id : (await projectPipelineConversation(q, projectId)) as string;
+      return inserted ? id : (await projectPipelineConversation(q, projectId, owner)) as string;
     },
   });
 }

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import type { TProject, TProjectDetailResponse, TProjectGoal, TProjectGoalVerdict } from "@warmap/contracts";
+import type { TProject, TProjectDetailResponse, TProjectGoal, TProjectGoalVerdict, TProjectTransfer } from "@warmap/contracts";
 import { UUID_PATTERN, type Query } from "./meetingStore.js";
 import { companyPeriod } from "./monthlyPlans.js";
 import { CardError } from "./taskCards.js";
@@ -24,8 +24,10 @@ type GoalRow = { task_id: string; project_id: string | null; owner_id: string; p
   source: TProjectGoal["source"]; linked_at: Date };
 
 const iso = (time: Date | null | undefined) => time ? new Date(time).toISOString() : null;
-export const projectView = (row: ProjectRow): TProject => ({ projectId: row.id, name: row.name, archivedAt: iso(row.archived_at), createdAt: iso(row.created_at)!,
-  lastActivityAt: iso(row.last_activity_at) });
+/** transfer：正在转交的那一份，或本人交出去了的那一份（这时本人这边算归档，archivedAt 是接手的时间）。 */
+export const projectView = (row: ProjectRow, transfer: TProjectTransfer | null = null): TProject => ({ projectId: row.id, name: row.name,
+  archivedAt: transfer?.status === "accepted" ? transfer.decidedAt : iso(row.archived_at), createdAt: iso(row.created_at)!,
+  lastActivityAt: iso(row.last_activity_at), transfer });
 
 /** 最近一次动静：挂接、项目里的卡和事项、专题（建项目本身不算，没有为 null）。 */
 const LAST_ACTIVITY = `(SELECT max(at) FROM (
@@ -34,11 +36,35 @@ const LAST_ACTIVITY = `(SELECT max(at) FROM (
     UNION ALL SELECT r.updated_at FROM research_topics r WHERE r.owner_id=p.owner_id
       AND COALESCE((SELECT g.project_id FROM project_goals g WHERE g.task_id=r.plan_task_id),r.project_id)=p.id) a)`;
 
-/** GET /api/me/projects：没归档的在前，各自按最近动静（没有就按建的时间）从近到远。 */
-export async function listProjects(q: Query, ownerId: string): Promise<TProject[]> {
-  const rows = (await q(`SELECT p.*,${LAST_ACTIVITY} AS last_activity_at FROM projects p WHERE p.owner_id=$1`, [ownerId])).rows as ProjectRow[];
-  const at = (row: ProjectRow) => (row.last_activity_at ?? row.created_at).getTime();
-  return rows.sort((a, b) => Number(Boolean(a.archived_at)) - Number(Boolean(b.archived_at)) || at(b) - at(a) || a.id.localeCompare(b.id)).map(projectView);
+/**
+ * GET /api/me/projects：本人负责的项目，加本人交出去了的（16.7，算归档、只读）；没归档的在前，各自按最近动静（没有就按建的时间）从近到远。
+ * transfers：本人项目正在转交的、本人交出去了的（transfer.ts 的 openTransfers、handedAway 转好的）。
+ */
+export async function listProjects(q: Query, ownerId: string, transfers: (projectIds: string[]) => Promise<Map<string, TProjectTransfer>>): Promise<TProject[]> {
+  const rows = (await q(`SELECT p.*,${LAST_ACTIVITY} AS last_activity_at FROM projects p WHERE p.owner_id=$1
+    OR EXISTS (SELECT 1 FROM project_transfers t WHERE t.project_id=p.id AND t.from_id=$1 AND t.status='accepted')`, [ownerId])).rows as ProjectRow[];
+  const byProject = await transfers(rows.map((row) => row.id));
+  const views = rows.map((row) => projectView(row, byProject.get(row.id) ?? null));
+  const at = (view: TProject) => Date.parse(view.lastActivityAt ?? view.createdAt);
+  return views.sort((a, b) => Number(Boolean(a.archivedAt)) - Number(Boolean(b.archivedAt)) || at(b) - at(a) || a.projectId.localeCompare(b.projectId));
+}
+
+/**
+ * 能看这个项目的：现在的负责人，和交出去之前负责过的人（16.7，只读）。current 是现在的负责人。
+ * 不是 uuid、没有、和本人无关都 404。改动（改名、挂接、开对话、发消息）只认 ownProject。
+ */
+export async function projectReader(q: Query, personId: string, projectId: string): Promise<{ row: ProjectRow; current: boolean }> {
+  const row = UUID_PATTERN.test(projectId) ? (await q(`SELECT p.*,${LAST_ACTIVITY} AS last_activity_at FROM projects p WHERE p.id=$1 AND (p.owner_id=$2
+    OR EXISTS (SELECT 1 FROM project_transfers t WHERE t.project_id=p.id AND t.from_id=$2 AND t.status='accepted'))`, [projectId, personId])).rows[0] as ProjectRow | undefined
+    : undefined;
+  if (!row) throw new CardError(404, "NOT_FOUND", "找不到这个项目");
+  return { row, current: row.owner_id === personId };
+}
+
+/** 负责过这个项目的人（现在的，加交出去之前的）：项目动态读他们的卡。 */
+export async function projectOwners(q: Query, projectId: string): Promise<string[]> {
+  return ((await q(`SELECT owner_id AS id FROM projects WHERE id=$1 UNION SELECT from_id FROM project_transfers WHERE project_id=$1 AND status='accepted'`,
+    [projectId])).rows as { id: string }[]).map((row) => row.id);
 }
 
 /** 本人的项目；不是 uuid、没有、不是本人的都 404。 */
@@ -55,7 +81,7 @@ export async function createProject(q: Query, ownerId: string, name: string, now
     [randomUUID(), ownerId, name.trim(), originMissionId, now])).rows[0] as ProjectRow;
 }
 
-/** PATCH：改名、归档、恢复。 */
+/** PATCH：改名、归档、恢复（只有现在的负责人）。回的项目不带转交（网页按需另读）。 */
 export async function updateProject(q: Query, ownerId: string, projectId: string, patch: { name?: string; archived?: boolean }, now: Date): Promise<TProject> {
   await ownProject(q, ownerId, projectId);
   await q(`UPDATE projects SET name=COALESCE($3,name),archived_at=CASE WHEN $4::boolean IS NULL THEN archived_at WHEN $4 THEN COALESCE(archived_at,$5) ELSE NULL END,
@@ -108,12 +134,13 @@ async function verdicts(q: Query, taskIds: string[]): Promise<Map<string, TProje
 export const goalView = (row: GoalRow, verdict: TProjectGoalVerdict): TProjectGoal => ({ taskId: row.task_id, taskName: row.task_name, missionId: row.mission_id,
   missionTitle: row.mission_title, period: row.period, verdict, source: row.source, linkedAt: row.linked_at.toISOString() });
 
-/** GET /api/me/projects/:projectId：目标历史，月份从近到远，同一个月按挂上的先后。 */
-export async function projectDetail(q: Query, ownerId: string, projectId: string, now: Date): Promise<TProjectDetailResponse> {
-  const project = await ownProject(q, ownerId, projectId);
-  const rows = (await q("SELECT * FROM project_goals WHERE project_id=$1 ORDER BY period DESC,linked_at,task_id", [projectId])).rows as GoalRow[];
+/** GET /api/me/projects/:projectId：目标历史，月份从近到远，同一个月按挂上的先后。交出去之前负责过的人也能看（只读）。 */
+export async function projectDetail(q: Query, personId: string, projectId: string, now: Date, transfer: (projectId: string) => Promise<TProjectTransfer | null>):
+  Promise<TProjectDetailResponse> {
+  const { row: project } = await projectReader(q, personId, projectId);
+  const rows = (await q("SELECT * FROM project_goals WHERE project_id=$1 ORDER BY period DESC,linked_at,task_id", [project.id])).rows as GoalRow[];
   const verdict = await verdicts(q, rows.map((row) => row.task_id));
-  return { project: projectView(project), period: companyPeriod(now), goals: rows.map((row) => goalView(row, verdict.get(row.task_id)!)) };
+  return { project: projectView(project, await transfer(project.id)), period: companyPeriod(now), goals: rows.map((row) => goalView(row, verdict.get(row.task_id)!)) };
 }
 
 /** 一个项目挂过的 Task（全部月份）。 */

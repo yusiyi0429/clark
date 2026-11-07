@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { ATTACHMENT_MAX_BYTES, attachmentKind, type TSessionAttachment } from "@warmap/contracts";
 import { UUID_PATTERN, type Query } from "./meetingStore.js";
 import { CardError } from "./taskCards.js";
+import { CARD_PROJECT } from "./projects.js";
 
 /**
  * 子会话（卡、专题）的附件（新首页 14.5，契约 attachments.ts）：存在云端，网页给本机程序说那一句时带上 id，本机按 id 取回存进 Task 的工作区。
@@ -58,10 +59,16 @@ export async function storeSessionAttachments(q: Query, storageDir: string, owne
   }
 }
 
-/** 读一份：是这个人的才给（本人的网页、本人配对的电脑）；没有、不是他的、文件不在了为 null。 */
+/**
+ * 读一份：本人的（本人的网页、本人配对的电脑），或附件所在的子会话在一个项目里、本人是这个项目现在或以前的负责人（16.7：附件跟着项目走）。
+ * 没有、看不了、文件不在了为 null。
+ */
 export async function readSessionAttachment(q: Query, storageDir: string, ownerId: string, id: string): Promise<{ attachment: TSessionAttachment; data: Buffer } | null> {
   if (!UUID_PATTERN.test(id)) return null;
-  const row = (await q("SELECT * FROM session_attachments WHERE id=$1 AND owner_id=$2", [id, ownerId])).rows[0] as Row | undefined;
+  const row = (await q(`SELECT a.* FROM session_attachments a WHERE a.id=$1 AND (a.owner_id=$2 OR EXISTS (SELECT 1 FROM projects p WHERE p.id=COALESCE(
+      (SELECT ${CARD_PROJECT("t")} FROM tasks t WHERE t.id=a.card_id),(SELECT ${CARD_PROJECT("r")} FROM research_topics r WHERE r.id=a.topic_id))
+    AND (p.owner_id=$2 OR EXISTS (SELECT 1 FROM project_transfers x WHERE x.project_id=p.id AND x.status='accepted' AND (x.from_id=$2 OR x.to_id=$2)))))`,
+  [id, ownerId])).rows[0] as Row | undefined;
   const data = row ? await readFile(join(storageDir, row.storage_key)).catch(() => null) : null;
   return row && data ? { attachment: view(row), data } : null;
 }

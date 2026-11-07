@@ -55,7 +55,8 @@ import type { ConversationAnchor } from "../conversationAnchor.js";
 import { ChatServiceError, type ChatTarget } from "../chatService.js";
 import { boardTask, CardError, planTaskOpener, type CardPlanTask } from "../taskCards.js";
 import { ensureProjectPipeline, pipelineViewer, projectPipelineConversation } from "../taskPipelines.js";
-import { ownProject, PROJECT_SCOPE_PREFIX, type ProjectRow } from "../projects.js";
+import { CARD_PROJECT, ownProject, PROJECT_SCOPE_PREFIX, projectReader, type ProjectRow } from "../projects.js";
+import { ownerSpoke } from "../projectTransfers.js";
 import { settlementsOf } from "../taskContinuity.js";
 import { VIA_HEADER } from "../homeTurn.js";
 import { currentSegmentOf, segmentDateLabel, startsNewSegment } from "../conversationSegments.js";
@@ -70,11 +71,14 @@ const OBJECT_SCENES: Record<string, string> = {
   "monthly-plan": "月度计划详情", "monthly-review-item": "复盘项详情", "personal-review": "个人复盘", signal: "信号详情", project: "项目",
 };
 
-/** 项目对话（project:<projectId>，新首页第 16 节）的页面对象：项目名，和挂着、没了结的每件 Task 的名字、完成定义、标准和约定。 */
-function projectSnapshot(scope: string, project: ProjectRow, goals: CardPlanTask[]): TReferenceSnapshot {
+/**
+ * 项目对话（project:<projectId>，新首页第 16 节）的页面对象：项目名，和挂着、没了结的每件 Task 的名字、完成定义、标准和约定。
+ * handover（16.7）：项目是交接过来的，管线不读以前的对话，只用这些：交接说明、目标历史、交付物、子会话记录（以前负责人的卡）。
+ */
+function projectSnapshot(scope: string, project: ProjectRow, goals: CardPlanTask[], handover: unknown): TReferenceSnapshot {
   return { cardId: scope, version: 1, kind: "project", title: `项目：${project.name}`, objectRef: { type: "project", id: project.id, version: 1 },
     payload: { project: { name: project.name }, goals: goals.map(({ task, agreement }) => ({ task: { name: task.name, doneDefinition: task.doneDefinition,
-      criteria: task.criteria }, agreement: { criteria: agreement.criteria, exclusions: agreement.exclusions } })) } };
+      criteria: task.criteria }, agreement: { criteria: agreement.criteria, exclusions: agreement.exclusions } })), ...handover ? { handover } : {} } };
 }
 
 /**
@@ -99,13 +103,22 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
   const conversationParams = Type.Object({ scope: ConversationScope }, { additionalProperties: false });
   const openPlanTask = planTaskOpener(q, ctx.planTasks, peopleDirectory, ctx.now);
   const isProject = (scope: TConversationScope) => scope.startsWith(PROJECT_SCOPE_PREFIX);
-  /** 项目对话只给项目的负责人（本人的项目）：不是本人的、找不到都 404（CardError）。 */
-  const pipelineProject = (person: SessionPerson, scope: TConversationScope) => ownProject(q, person.personId, scope.slice(PROJECT_SCOPE_PREFIX.length));
-  /** project scope 先核对是本人的项目；没过时已回了错误，返回 true。别的 scope 不管。 */
-  const pipelineDenied = async (reply: FastifyReply, person: SessionPerson, scope: TConversationScope) => {
+  const projectIdOf = (scope: TConversationScope) => scope.slice(PROJECT_SCOPE_PREFIX.length);
+  /**
+   * 项目对话：发一句、传附件只给项目现在的负责人；读历史还给交出去之前负责过的人（16.7，只读，读的是他自己那段）。
+   * 不是本人的、找不到都 404（CardError）；交出去了的再发一句 403 PROJECT_HANDED_OVER。
+   */
+  const pipelineProject = async (person: SessionPerson, scope: TConversationScope, write: boolean) => {
+    if (!write) return (await projectReader(q, person.personId, projectIdOf(scope))).row;
+    const reader = await projectReader(q, person.personId, projectIdOf(scope));
+    if (!reader.current) throw new CardError(403, "PROJECT_HANDED_OVER", "这个项目已经交给别人了，这里只读");
+    return ownProject(q, person.personId, projectIdOf(scope));
+  };
+  /** project scope 先核对访问（write：发一句、传附件）；没过时已回了错误，返回 true。别的 scope 不管。 */
+  const pipelineDenied = async (reply: FastifyReply, person: SessionPerson, scope: TConversationScope, write = true) => {
     if (!isProject(scope)) return false;
     try {
-      await pipelineProject(person, scope);
+      await pipelineProject(person, scope, write);
       return false;
     } catch (cause) {
       if (!(cause instanceof CardError)) throw cause;
@@ -116,17 +129,28 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
   // 我的 Agent 按「人 × 页面」私有；任务卡 scope 始终复查对象成员及当前拍板权。
   const scopeObjectFor = async (person: SessionPerson, scope: TConversationScope) => {
     if (isProject(scope)) {
-      const project = await pipelineProject(person, scope).catch((cause) => {
+      const project = await pipelineProject(person, scope, false).catch((cause) => {
         if (cause instanceof CardError) return null;
         throw cause;
       });
       if (!project) return { snapshot: null, visible: false };
+      // 交接过来的（16.7）：最近一次交给本人的转交，带上管线能用的材料。
+      const transfer = (await q(`SELECT from_id,note FROM project_transfers WHERE project_id=$1 AND to_id=$2 AND status='accepted' ORDER BY decided_at DESC LIMIT 1`,
+        [project.id, person.personId])).rows[0] as { from_id: string; note: unknown } | undefined;
+      const handover = transfer && project.owner_id === person.personId ? {
+        from: personDisplayNames(peopleDirectory).get(transfer.from_id) ?? transfer.from_id, note: transfer.note,
+        goalHistory: (await q("SELECT period,task_name FROM project_goals WHERE project_id=$1 ORDER BY period DESC,linked_at LIMIT 30", [project.id])).rows,
+        deliverables: (await q(`SELECT v.task_name,v.number,v.delivered_at FROM deliverable_versions v JOIN project_goals g ON g.task_id=v.task_id
+          WHERE g.project_id=$1 ORDER BY v.created_at DESC LIMIT 20`, [project.id])).rows,
+        records: (await q(`SELECT t.title,t.status FROM tasks t WHERE t.owner_id<>$2 AND ${CARD_PROJECT("t")}=$1 ORDER BY t.updated_at DESC LIMIT 30`,
+          [project.id, person.personId])).rows,
+      } : null;
       // 挂着、没了结的 Task（本体读不到、不是本人负责的那件跳过）。
       const rows = (await q("SELECT task_id FROM project_goals WHERE project_id=$1 ORDER BY period DESC,linked_at", [project.id])).rows as { task_id: string }[];
       const settled = await settlementsOf(q, rows.map((row) => row.task_id));
       const goals = (await Promise.all(rows.filter((row) => !settled.has(row.task_id))
         .map((row) => boardTask(openPlanTask, person.personId, row.task_id).catch(() => null)))).filter((goal): goal is CardPlanTask => Boolean(goal));
-      return { visible: true, snapshot: projectSnapshot(scope, project, goals) };
+      return { visible: true, snapshot: projectSnapshot(scope, project, goals, handover) };
     }
     if (person.role !== "ceo" && (scope.startsWith("issue:") || scope.startsWith("meeting:"))) {
       const [objectType, objectId] = scope.split(":", 2) as ["issue" | "meeting", string];
@@ -152,7 +176,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
   const pipelineTarget = async (person: SessionPerson, scope: TConversationScope, requestId: string, ensure: boolean): Promise<ChatTarget | null> => {
     const projectId = scope.slice(PROJECT_SCOPE_PREFIX.length);
     const conversationId = ensure ? (await ensureProjectPipeline({ pool, chat }, person, projectId, requestId)).conversationId
-      : await projectPipelineConversation(q, projectId);
+      : await projectPipelineConversation(q, projectId, person.personId);
     return conversationId ? { conversationId, scope, projectId } : null;
   };
   // 对话分段（CONVERSATION_SEGMENTS=1 才开）：闲置满 12 小时或跨过北京时间凌晨 4 点换一段，模型侧只带这一段；上一段经会话目录里的纪要交接。
@@ -167,7 +191,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
     "/api/conversations/:scope/messages",
     { preHandler: requirePerson, schema: { params: conversationParams } },
     async (req, reply) => {
-      if (await pipelineDenied(reply, req.person!, req.params.scope)) return reply;
+      if (await pipelineDenied(reply, req.person!, req.params.scope, false)) return reply;
       // 项目对话走 Chat：还没开过就是空的，不建。
       if (chat && isProject(req.params.scope)) {
         try {
@@ -197,6 +221,8 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
       const person = req.person!;
       const owner = person.personId;
       if (await pipelineDenied(reply, person, req.params.scope)) return;
+      // 接手人说了第一句：管线可以自己开子会话了（16.7）。
+      if (isProject(req.params.scope)) await ownerSpoke(q, owner, projectIdOf(req.params.scope));
       if (chat && onChat(req.params.scope)) {
         // 和天枢自己的对话同一条规则：成员不能借显式引用把 Card 带进对话。
         if (person.role !== "ceo" && req.body.references?.length) return fail(reply, 404, "REFERENCE_NOT_FOUND", "Card 引用不存在");
