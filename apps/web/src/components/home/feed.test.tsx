@@ -40,10 +40,10 @@ const passedWorker = (handback: Record<string, unknown> = {}): Worker => ({
 });
 
 describe("Task 管线里的验收行（第 4.5 条）", () => {
-  it("过了：一行「greet 验收过了（5/5），已合进 main」，行尾能推翻", () => {
+  it("过了：一句「greet 验收过了（5/5），已合进 main」，行尾能推翻", () => {
     const { html } = render([{ kind: "card_passed", id: "p1", at: "2026-11-07T05:00:00Z", cardId: CARD, title: "greet", met: 5, total: 5,
       merge: { state: "merged", commit: "abc", baseBranch: "main", reason: null, message: null, at: "2026-11-07T05:01:00Z" } }], [passedWorker()]);
-    expect(text(html)).toContain("「greet」验收过了（5/5），已合进 main");
+    expect(text(html)).toContain("greet 验收过了（5/5），已合进 main");
     expect(text(html)).toContain("推翻");
   });
 
@@ -53,12 +53,12 @@ describe("Task 管线里的验收行（第 4.5 条）", () => {
     expect(text(render([item], []).html)).not.toContain("推翻");
   });
 
-  it("过了没合回：这台电脑上有那张卡的会话才问「合进 main（推荐）/ 先不合」，别处那一行写还没合回", () => {
+  it("过了没合回：这台电脑上有那张卡的会话才问「合进 main（推荐）/ 先不合」，别处那一句写无法合回", () => {
     const item: FeedItem = { kind: "card_passed", id: "p1", at: "2026-11-07T05:00:00Z", cardId: CARD, title: "greet", met: 5, total: 5,
       merge: { state: "needs_merge", commit: null, baseBranch: "main", reason: "dirty", message: "主文件夹有没提交的改动", at: "2026-11-07T05:01:00Z" } };
     const elsewhere = render([item], [passedWorker()]);
     expect(elsewhere.blocks).toHaveLength(1);
-    expect(text(elsewhere.html)).toContain("还没合回");
+    expect(text(elsewhere.html)).toContain("无法合回");
     const here = session({ workspace: { kind: "worktree", folder: "C:\\w", path: "C:\\w\\.wt", branch: "tianshu/greet", baseBranch: "main", baseCommit: "a".repeat(40), mergedCommit: null,
       needsMerge: { reason: "not_ready", message: "交回以后卡又改过" } } });
     const onThis = render([item], [{ ...passedWorker(), session: here }], [here]);
@@ -86,5 +86,19 @@ describe("Task 管线里的验收行（第 4.5 条）", () => {
     const html = text(render([{ kind: "rework_opened", id: "r1", at: "2026-11-07T07:00:00Z", cardId: CARD, title: "greet 返工", fromCardId: CARD, reason: "返回值不对" }], []).html);
     expect(html).toContain("推翻了，开了返工「greet 返工」");
     expect(html).toContain("返回值不对");
+  });
+});
+
+describe("子会话的提问由 Task 管线转达（14.3）", () => {
+  const asking = (extra: Partial<TLocalSessionSummary>) => session({ status: "idle", pendingQuestion: { requestId: "q1", askedAt: "2026-11-07T04:09:00Z", questions: [{ question: "用哪个库？", header: "", multiSelect: false, options: [{ label: "zod (Recommended)", description: "" }, { label: "yup", description: "" }] }] }, ...extra });
+  it("这台电脑上的子会话在问：Task 管线里出选项框，框顶上写子会话名", () => {
+    const here = asking({});
+    const { blocks, html } = render([], [{ ...passedWorker(), session: here }], [here]);
+    expect(blocks.map((block) => block.key)).toEqual([`ask:card:${CARD}`]);
+    expect(text(html)).toMatch(/greet 用哪个库？.*zod.*推荐.*yup/);
+  });
+  it("没在问、也不在跑的子会话不占位置", () => {
+    const idle = session({});
+    expect(render([], [{ ...passedWorker(), session: idle }], [idle]).blocks).toHaveLength(0);
   });
 });
