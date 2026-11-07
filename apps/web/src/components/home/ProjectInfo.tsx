@@ -3,7 +3,8 @@
 /**
  * 项目详情（新首页设计 16.3「详情」，替换 Task 详情的入口）。文档类页面（5.4.7）：
  * - 目标历史：每月一行，写月份、Task 名和判定（GET /api/me/projects/:projectId 的 goals：已完成、已停止、已延续；没了结的本月写「进行中」、之前月份写「未了结」）；
- * - 文件夹：这台电脑上的哪个文件夹（连接页加过的那些），能换、能不绑；
+ * - 文件夹：这台电脑上的哪个文件夹（连接页加过的那些），能换、能不绑（本机程序 PUT /v1/projects/:projectId/folder）；
+ * - 转交（16.7）：「转给…」发起一份（POST /api/me/projects/:projectId/transfers），准备中、等接手时能撤回；
  * - 改名、归档（归档的能取消），调 PATCH /api/me/projects/:projectId，没成写「失败 · 重试」；
  * - 当前那件 Task 的预算、完成标准、约定、交付物：沿用原来 Task 详情的样子（TaskBudget、TaskDeliverable）。
  */
@@ -12,7 +13,7 @@ import type { TProjectGoalVerdict } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
 import { readProject } from "@/lib/board/cloud";
 import { FailedLine, failureOf, type Failure } from "@/components/work/DecisionBox";
-import type { Person, Transfer } from "@/lib/home/transfer";
+import type { Person } from "@/lib/home/transfer";
 import { ArrowLeft } from "lucide-react";
 import { Dropdown } from "@heroui/react";
 import { HeroButton } from "@/components/HeroButton";
@@ -27,9 +28,9 @@ import h from "@/styles/home.module.css";
 export type ProjectActions = {
   rename: (id: string, name: string) => Promise<void>;
   archive: (id: string, archived: boolean) => Promise<void>;
-  setFolder: (id: string, folder: string | null) => void;
-  startTransfer: (project: Project, from: Person, to: Person) => void;
-  updateTransfer: (projectId: string, patch: Partial<Transfer>) => void;
+  setFolder: (id: string, folderId: string | null, name?: string) => Promise<void>;
+  transfer: (projectId: string, toPersonId: string) => Promise<void>;
+  withdraw: (transferId: string) => Promise<void>;
 };
 
 /** 人员目录（转给谁）：GET /api/people/directory，去掉自己。 */
@@ -116,8 +117,8 @@ export function ProjectInfo({ project, period, go, actions, doneDefinitionOf, me
               <Dropdown>
                 <Dropdown.Trigger className={h.sendTo} data-testid="project-folder"><b>{project.folder ?? "不绑"}</b></Dropdown.Trigger>
                 <Dropdown.Popover placement="bottom start" offset={8} className={h.pop}>
-                  <Dropdown.Menu aria-label="文件夹" className={h.menuList} onAction={(key) => actions.setFolder(project.id, key === "none" ? null : String(key))}>
-                    {[...local.folders.map((folder) => <Dropdown.Item key={folder.id} id={folder.label} textValue={folder.label} className={h.menuItem}>{folder.label}</Dropdown.Item>),
+                  <Dropdown.Menu aria-label="文件夹" className={h.menuList} onAction={(key) => attempt(() => actions.setFolder(project.id, key === "none" ? null : String(key), project.name))}>
+                    {[...local.folders.map((folder) => <Dropdown.Item key={folder.id} id={folder.id} textValue={folder.label} className={h.menuItem}>{folder.label}</Dropdown.Item>),
                       <Dropdown.Item key="none" id="none" textValue="不绑" className={h.menuItem}>不绑</Dropdown.Item>]}
                   </Dropdown.Menu>
                 </Dropdown.Popover>
@@ -139,17 +140,15 @@ export function ProjectInfo({ project, period, go, actions, doneDefinitionOf, me
               {transfer && transfer.status !== "accepted" ? (
                 <>
                   <span className={h.line}>{transfer.status === "sent" ? `等 ${transfer.to.name} 接手` : `准备交接给 ${transfer.to.name}`}</span>
-                  <HeroButton variant="ghost" size="sm" onPress={() => actions.updateTransfer(project.id, { status: "withdrawn", decidedAt: new Date().toISOString() })} data-testid="transfer-withdraw">撤回</HeroButton>
+                  <HeroButton variant="ghost" size="sm" onPress={() => attempt(() => actions.withdraw(transfer.id))} data-testid="transfer-withdraw">撤回</HeroButton>
                 </>
-              ) : transfer ? <span className={h.line}>已交给 {transfer.to.name}</span> : (
+              ) : transfer ? <span className={h.line}>已交给 {transfer.to.name}</span> : project.archived ? <span className={h.line}>已归档</span> : (
                 <Dropdown>
                   <Dropdown.Trigger className={h.sendTo} data-testid="transfer-to"><b>转给…</b></Dropdown.Trigger>
                   <Dropdown.Popover placement="bottom start" offset={8} className={h.pop}>
                     <Dropdown.Menu aria-label="转给" className={`${h.menuList} ${h.menuScroll}`} onAction={(key) => {
                       const person = people.find((entry) => entry.personId === key);
-                      if (!person) return;
-                      actions.startTransfer(project, me, person);
-                      go(projectHref(project.id));
+                      if (person) attempt(async () => { await actions.transfer(project.id, person.personId); go(projectHref(project.id)); });
                     }}>
                       {people.map((person) => <Dropdown.Item key={person.personId} id={person.personId} textValue={person.name} className={h.menuItem}>{person.name}</Dropdown.Item>)}
                     </Dropdown.Menu>

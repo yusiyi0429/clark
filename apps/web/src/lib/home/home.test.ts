@@ -255,7 +255,7 @@ describe("后台任务", () => {
 });
 
 describe("首页输入框的「自动」（B 的 /route 没上时，规则相同）", () => {
-  const goal = (taskId: string, name: string, criteria: string[]) => ({ taskId, missionId: "m1", name, period: "2026-11", dueDate: "2026-11-30", criteria, criteriaMet: 0, criteriaTotal: criteria.length, completedAt: null });
+  const goal = (taskId: string, name: string, criteria: string[]) => ({ taskId, missionId: "m1", name, period: "2026-11", dueDate: "2026-11-30", criteria, criteriaMet: 0, criteriaTotal: criteria.length, completedAt: null, responsible: null });
   const projects = [
     { projectId: "p1", name: "天枢 V2", goals: [goal("t1", "11/30 上线 V2", ["本机派活跑通", "验收员逐条判"])] },
     { projectId: "p2", name: "Chat 服务", goals: [goal("t2", "11/18 上线 V1", ["约定、对表与参考评审"])] },
@@ -285,10 +285,12 @@ describe("等你按设计 9.6（契约增补二）", () => {
     expect(sorted.map((entry) => entry.id)).toEqual(["quota", "approve", "due-soon", "due-late", "new", "old"]);
   });
 
-  it("新目标：别人请你认可的是只读 Task 详情，月份去月份页，电脑和额度去连接页", () => {
+  it("新目标：别人请你认可的是只读 Task 详情，月份去月份页，电脑和额度去连接页，转交去预览", () => {
     expect(waitingHref(row({ open: { kind: "task_detail", id: "t9" } }))).toBe("/me/work/tasks/t9/info");
     expect(waitingHref(row({ open: { kind: "month", id: "2026-12" } }))).toBe("/me/work/month/2026-12");
     expect(waitingHref(row({ open: { kind: "connections", id: "this_computer" } }))).toBe("/me/work/settings/connections");
+    // 别人把项目交给你（16.7）：只读预览，「接手」「不接」在那里。
+    expect(waitingHref(row({ kind: "transfer", open: { kind: "transfer", id: "x1" } }))).toBe("/me/work/transfers/x1");
   });
 
   it("空月份（「今天」行的「11 月待敲定」）：树上没有本月的 Mission 时是本月；等你里不自己造那一行（以后云端加种类）", () => {

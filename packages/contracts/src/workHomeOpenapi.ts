@@ -4,8 +4,10 @@ import {
   HomeTaskSummary, RouteRequest, RouteResponse, SessionStartView, SubSession, WaitingItem, WaitingTarget, WorkHomeResponse, CardMerge, TaskFeedItem, HomeItem,
   ReleaseSessionStartRequest, NotificationSettings, ClaimedSessionStart,
 } from "./workHome.js";
-import { CreateProjectRequest, Project, ProjectDetailResponse, ProjectFeedItem, ProjectFeedResponse, ProjectGoal, ProjectGoalLinkedItem, ProjectListResponse,
-  ProjectPipelineResponse, UpdateProjectRequest } from "./projects.js";
+import { CreateProjectRequest, Project, ProjectDetailResponse, ProjectFeedItem, ProjectFeedResponse, ProjectGoal, ProjectGoalLinkedItem, ProjectHandoverItem,
+  ProjectHandoverSummaryItem, ProjectListResponse, ProjectPipelineResponse, ProjectTransferDeclinedItem, UpdateProjectRequest } from "./projects.js";
+import { CreateProjectTransferRequest, HandoverSecretFinding, HandoverSecretsResponse, HandoverSection, PersonRef, ProjectTransfer,
+  UpdateProjectTransferRequest } from "./projectTransfers.js";
 import { Budget, TaskBudgetResponse } from "./budget.js";
 import { SessionAttachment, SessionAttachmentUploadResponse } from "./attachments.js";
 
@@ -19,7 +21,8 @@ export const workHomeSchemas: Record<string, JsonSchema> = {
   BackgroundItem, BackgroundResponse, RouteRequest, RouteResponse,
   SessionStartView, ClaimSessionStartsRequest, ClaimSessionStartsResponse, CardMerge, TaskFeedItem, HomeItem, ReleaseSessionStartRequest,
   Project, ProjectListResponse, CreateProjectRequest, UpdateProjectRequest, ProjectGoal, ProjectDetailResponse, ProjectPipelineResponse, ProjectGoalLinkedItem,
-  ProjectFeedItem, ProjectFeedResponse,
+  ProjectFeedItem, ProjectFeedResponse, ProjectHandoverItem, ProjectHandoverSummaryItem, ProjectTransferDeclinedItem,
+  PersonRef, HandoverSection, ProjectTransfer, CreateProjectTransferRequest, UpdateProjectTransferRequest, HandoverSecretFinding, HandoverSecretsResponse,
   NotificationSettings, Budget, TaskBudgetResponse, ClaimedSessionStart, SessionAttachment, SessionAttachmentUploadResponse,
 };
 
@@ -159,6 +162,78 @@ export const workHomePaths: OpenAPIV3.Document["paths"] = {
       summary: "项目对话里按时间插的行：挂上新目标（分隔线）、卡验收过了（带合回结果）、受阻、约定都达到、合回后推翻开了返工卡，从旧到新",
       parameters: path("projectId"),
       responses: { "200": json("项目动态", "ProjectFeedResponse"), ...errors(401, 403, 404) },
+    },
+  },
+  "/api/me/projects/{projectId}/transfers": {
+    post: {
+      operationId: "startProjectTransfer",
+      summary: "转给…（16.7，项目负责人）：发起一份转交（准备交接），云端先拼一份交接说明；给自己 400，人员目录里没有 404，已有没了结的或项目归档了 409",
+      parameters: path("projectId"),
+      requestBody: body("CreateProjectTransferRequest"),
+      responses: { "201": json("准备中的转交", "ProjectTransfer"), ...errors(400, 401, 403, 404, 409) },
+    },
+  },
+  "/api/me/project-transfers/{id}": {
+    get: {
+      operationId: "getProjectTransfer",
+      summary: "一份转交（原负责人和接手人都能看；接手人的只读预览）",
+      parameters: path("id"),
+      responses: { "200": json("转交", "ProjectTransfer"), ...errors(401, 403, 404) },
+    },
+    patch: {
+      operationId: "updateProjectTransfer",
+      summary: "改交接说明、带不带对话、在跑的会话等做完还是停掉、本机检查还是直接转、本机检查结果（原负责人，准备中）；存检查结果时按它重拼「代码在哪」",
+      parameters: path("id"),
+      requestBody: body("UpdateProjectTransferRequest"),
+      responses: { "200": json("改好的转交", "ProjectTransfer"), ...errors(400, 401, 403, 404, 409) },
+    },
+  },
+  "/api/me/project-transfers/{id}/send": {
+    post: {
+      operationId: "sendProjectTransfer",
+      summary: "发出（原负责人，准备中）：交接说明里像密钥的地方挡住（422，标出哪一段第几行）",
+      parameters: path("id"),
+      responses: { "200": json("发出的转交", "ProjectTransfer"), "422": json("交接说明里有像密钥的", "HandoverSecretsResponse"), ...errors(400, 401, 403, 404, 409) },
+    },
+  },
+  "/api/me/project-transfers/{id}/withdraw": {
+    post: {
+      operationId: "withdrawProjectTransfer",
+      summary: "撤回（原负责人，准备中或已发出、还没接手）",
+      parameters: path("id"),
+      responses: { "200": json("撤回的转交", "ProjectTransfer"), ...errors(401, 403, 404, 409) },
+    },
+  },
+  "/api/me/project-transfers/{id}/accept": {
+    post: {
+      operationId: "acceptProjectTransfer",
+      summary: "接手（接手人，已发出）：项目换成本人负责，原负责人那边归档、只读；对话从分隔线开始，第一条是交接说明；管线先不自己开子会话",
+      parameters: path("id"),
+      responses: { "200": json("接手了的转交", "ProjectTransfer"), ...errors(401, 403, 404, 409) },
+    },
+  },
+  "/api/me/project-transfers/{id}/decline": {
+    post: {
+      operationId: "declineProjectTransfer",
+      summary: "不接（接手人，已发出）：项目留在原负责人那边，他的项目对话里一行「{名字}没接」",
+      parameters: path("id"),
+      responses: { "200": json("没接的转交", "ProjectTransfer"), ...errors(401, 403, 404, 409) },
+    },
+  },
+  "/api/me/project-transfers/{id}/history": {
+    get: {
+      operationId: "getProjectTransferHistory",
+      summary: "带上了对话记录时，接手人读原负责人那段项目对话（只读，画在分隔线上面）；没带 404。原负责人读自己那段走 /api/conversations/{scope}/messages",
+      parameters: path("id"),
+      responses: { "200": json("原来的对话", "ConversationHistory"), ...errors(401, 403, 404) },
+    },
+  },
+  "/api/me/sub-sessions/{kind}/{id}/start": {
+    delete: {
+      operationId: "cancelSubSessionStart",
+      summary: "停掉还在云端排队、没有电脑接下的子会话（登记了要开工的那条了结掉，卡和专题留着）；没有在排的 404。电脑上已经在跑的照旧经本机程序停",
+      parameters: [{ name: "kind", in: "path", required: true, schema: { type: "string", enum: ["card", "topic"] } }, ...path("id")],
+      responses: { "204": { description: "停掉了" }, ...errors(401, 403, 404) },
     },
   },
   "/api/me/route": {

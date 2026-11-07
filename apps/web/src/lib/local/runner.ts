@@ -7,6 +7,7 @@ import type {
   TLocalModelProfile, TLocalModelProfileUpsert, TLocalPairingStartResponse, TLocalPairingStatusResponse,
   TLocalPermissionDecisionRequest, TLocalQuestionAnswerRequest, TLocalRunnerErrorCode, TLocalSendMessageRequest, TLocalSendMessageResponse, TLocalSessionDetailResponse,
   TLocalSessionEvent, TLocalSessionSummary, TLocalSettings, TLocalSettingsPatch, TLocalStatusResponse, TLocalBudgetUpdateRequest, TLocalTaskBudgetView, TLocalAttachmentRef,
+  TLocalHandoverCheck, TLocalProjectCloneRequest, TLocalProjectCloneResponse, TLocalProjectFolder, TLocalProjectFolderRequest,
 } from "@warmap/contracts";
 
 export type {
@@ -63,6 +64,13 @@ export interface LocalRunner {
   stopBackground(id: string, itemId: string): Promise<TLocalSessionSummary>;
   /** 改一件 Task 的预算（先存天枢再交给本机）：用完停着等的马上接着做。 */
   putBudget(body: TLocalBudgetUpdateRequest): Promise<TLocalTaskBudgetView>;
+  /** 项目在这台电脑上绑的文件夹（16.6）：列出、绑上或解绑（folderId 为 null）。 */
+  listProjects(): Promise<TLocalProjectFolder[]>;
+  putProjectFolder(projectId: string, body: TLocalProjectFolderRequest): Promise<TLocalProjectFolder>;
+  /** 准备交接时看项目绑的文件夹现在什么样（16.7，只看 git）。 */
+  handoverCheck(projectId: string): Promise<TLocalHandoverCheck>;
+  /** 接手以后「拉到这台电脑」：本机弹框选位置、clone、切交接分支、绑到项目；本人点了取消时 project 为 null。 */
+  cloneProject(projectId: string, body: TLocalProjectCloneRequest): Promise<TLocalProjectCloneResponse>;
   /** 读一个会话的事件流，断了自己重连（带 Last-Event-ID），直到 signal 中止。 */
   watch(id: string, watch: EventWatch): Promise<void>;
 }

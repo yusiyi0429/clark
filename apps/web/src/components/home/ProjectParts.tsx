@@ -3,13 +3,14 @@
 /**
  * 项目页的几块（新首页设计 16.3）：
  * - 页头右边：绑定的文件夹 chip、「详情」；
- * - 页头下的目标条：每件挂着的本月 Task 一行，写名字、截止、「标准 1/3」，点开逐条看；没有目标时不画；
+ * - 页头下的目标条：每件挂着的本月 Task 一行，写名字、截止、「标准 1/3」，点开逐条看；负责人不是本人（交接过来的）时名字前画他的头像；没有目标时不画；
  * - 对话里换月份的分隔线「11 月目标：{Task 名}」。
  * 标准逐条达没达到读 GET /api/plan-tasks/:taskId/check（evidenced 算达到）；读不到就只写「标准 N 条」。
  */
 import { useEffect, useState } from "react";
 import { Check, ChevronRight, Circle, Info } from "lucide-react";
 import { browserApi } from "@/lib/api/client";
+import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import { projectInfoHref, type Project, type ProjectGoal } from "@/lib/home/projects";
 import { ICON } from "./StateIcon";
 import h from "@/styles/home.module.css";
@@ -37,6 +38,7 @@ function GoalLine({ goal, criteria: planned }: { goal: ProjectGoal; criteria: st
     <li className={h.goal}>
       <button type="button" className={h.goalMain} aria-expanded={open} onClick={() => setOpen(!open)} disabled={!criteria.length} data-testid="project-goal">
         <ChevronRight size={14} strokeWidth={1.8} aria-hidden className={h.chevron} data-open={open ? "" : undefined} />
+        {goal.responsible ? <span title={goal.responsible.name} data-testid="goal-responsible"><PersonAvatar personId={goal.responsible.personId} className={h.itemAvatar}>{null}</PersonAvatar></span> : null}
         <span className={h.goalName}>{goal.name}</span>
         <span className={`${h.goalMeta} ${h.num}`}>{goal.due} 验收</span>
         {criteria.length ? <span className={`${h.goalMeta} ${h.num}`}>{checked ? `标准 ${met}/${criteria.length}` : `标准 ${criteria.length} 条`}</span> : null}

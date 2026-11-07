@@ -35,6 +35,8 @@ export const missionHref = (missionId: string) => `/me/work/missions/${encodeURI
 export const HOME_HREF = "/me/work";
 export const projectHref = (id: string) => `/me/work/projects/${encodeURIComponent(id)}`;
 export const projectInfoHref = (id: string) => `${projectHref(id)}/info`;
+/** 一份项目转交（16.7）：接手人从等你点进来的只读预览。 */
+export const transferHref = (id: string) => `/me/work/transfers/${encodeURIComponent(id)}`;
 /** 回退路径（B 的首页接口没上）里每个 Mission 一个同名项目（16.5 上线迁移的规矩），id 是 mission:<missionId>。 */
 export const missionProject = (missionId: string) => `mission:${missionId}`;
 
@@ -60,6 +62,7 @@ export function waitingHref(item: Pick<WaitingItem, "open"> & Partial<Pick<Waiti
     case "task_detail": return infoHref(open.id);
     case "month": return monthHref(open.id);
     case "connections": return pageHref("connections");
+    case "transfer": return transferHref(open.id);
   }
 }
 
@@ -279,13 +282,13 @@ export function deriveWorkHome({ plan, workers, boards, notices, proposals, merg
       goals: own.map((task) => {
         // 本体没写标准时是完成定义那一条（契约 criteriaTotal）。
         const criteria = task.criteria.length ? task.criteria : task.doneDefinition ? [task.doneDefinition] : [];
-        return { taskId: task.taskId, missionId: mission.missionId, name: task.name, period, dueDate: monthEnd(period), criteria, criteriaMet: 0, criteriaTotal: criteria.length, completedAt: completedAt(task) };
+        return { taskId: task.taskId, missionId: mission.missionId, name: task.name, period, dueDate: monthEnd(period), criteria, criteriaMet: 0, criteriaTotal: criteria.length, completedAt: completedAt(task), responsible: null };
       }),
       budget: null,
       lastActivityAt: latest ?? `${today}T00:00:00.000Z`,
       summary: summarize(subSessions, waiting.filter((item) => item.projectId === projectId).length, today),
       pipeline: { conversationId: null, scope: `project:${projectId}` },
-      planning, subSessions, items,
+      planning, subSessions, items, transfer: null,
     };
   });
   return {

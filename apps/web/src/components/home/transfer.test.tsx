@@ -1,77 +1,85 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { LocalContext } from "@/lib/local/LocalRunnerProvider";
+import { createMockRunner } from "@/lib/local/mock";
 import type { Project } from "@/lib/home/projects";
 import { projectLine } from "@/lib/home/projects";
-import { draftNote, handoverRule, secretHits, transferLine, type Transfer } from "@/lib/home/transfer";
-import { HandoverCard, HandoverRule, PullChip, TransferFlow, TransferPreview } from "./Transfer";
+import { handoverRule, transferLine, type Transfer } from "@/lib/home/transfer";
+import { HandoverCard, HandoverRule, HandoverSummary, PullChip, TransferFlow, TransferHistory, TransferPreview } from "./Transfer";
 
 const me = { personId: "sun-mingze", name: "孙铭泽" };
 const chen = { personId: "chen-chenxing", name: "陈晨星" };
 const sub = (id: string, state: string) => ({ id, kind: "card", title: `卡${id}`, state, waiting: null, updatedAt: "a", queueReason: null, holdUntil: null, sessionId: `s${id}` });
 const project = (patch: Partial<Project> = {}): Project => ({
-  id: "p", name: "Chat 服务", folder: null, archived: false, goals: [], subSessions: [], items: [], waiting: 0, lastActivity: null, budget: null, transfer: null,
-  scope: "project:p",
-  current: [{ taskId: "t1", missionId: "m1", missionTitle: "Chat", period: "2026-11", name: "回答的样子", due: "11/21", criteria: [], completedAt: null }], ...patch,
+  id: "p", name: "Chat 服务", folder: null, archived: false, goals: [], subSessions: [], items: [], waiting: 0, lastActivity: null, budget: null, transfer: null, scope: "project:p",
+  current: [{ taskId: "t1", missionId: "m1", missionTitle: "Chat", period: "2026-11", name: "回答的样子", due: "11/30", criteria: [], completedAt: null, responsible: null }], ...patch,
 });
+const NOTE = [{ title: "到哪了", lines: ["11 月目标：回答的样子 · 11/30 验收"] }, { title: "没做完的事", lines: ["卡1", "补上评测集"] }, { title: "可以问谁", lines: ["孙铭泽"] }];
 const transfer = (patch: Partial<Transfer> = {}): Transfer => ({
-  id: "x", projectId: "p", projectName: "Chat 服务", from: me, to: chen, status: "preparing", startedAt: "2026-11-07T10:00:00.000Z", decidedAt: null,
-  includeHistory: false, running: null, check: null, note: null, ...patch,
+  id: "00000000-0000-4000-8000-0000000000aa", projectId: "p", projectName: "Chat 服务", from: me, to: chen, status: "preparing", startedAt: "2026-11-07T10:00:00.000Z", decidedAt: null,
+  includeHistory: false, running: null, check: null, note: null, checkResult: null, clone: null, ...patch,
 });
-const noop = () => undefined;
+const noop = async () => undefined;
+const local = { runner: createMockRunner(), phase: "offline", version: null, status: null, models: [], folders: [], sessions: [], pairing: null, error: null,
+  refresh: vi.fn(), pair: vi.fn(), unpair: vi.fn(), pickFolder: vi.fn(), setIncludePersonal: vi.fn() } as unknown as Parameters<typeof LocalContext.Provider>[0]["value"];
+const render = (node: ReactNode) => renderToStaticMarkup(<LocalContext.Provider value={local}>{node}</LocalContext.Provider>);
 
-describe("项目转交（16.7）", () => {
-  it("交接说明先按项目里有的拼：到哪了、没做完的事、代码在哪、可以问谁；没内容的段不画", () => {
-    const note = draftNote(project({ folder: "Chat_Service", subSessions: [sub("1", "running"), sub("2", "done")] as never }), me);
-    expect(note).toEqual([
-      { title: "到哪了", lines: ["11 月目标：回答的样子 · 11/21 验收"] },
-      { title: "没做完的事", lines: ["卡1"] },
-      { title: "代码在哪", lines: ["Chat_Service"] },
-      { title: "可以问谁", lines: ["孙铭泽"] },
-    ]);
-  });
-
-  it("像密钥的行挡住：sk-、ghp_、AKIA、私钥、xox；变量名不算", () => {
-    const hits = secretHits([{ title: "怎么跑起来", lines: ["OPENAI_API_KEY 找人豪要", "key 是 sk-abcdefghijklmnopqrstu", "AKIAABCDEFGHIJKLMNOP"] }]);
-    expect(hits).toEqual([{ section: "怎么跑起来", line: 2, sample: "sk-abc…" }, { section: "怎么跑起来", line: 3, sample: "AKIAAB…" }]);
-    const card = renderToStaticMarkup(<HandoverCard note={[{ title: "怎么跑起来", lines: ["sk-abcdefghijklmnopqrstu"] }]} to="陈晨星" sent={false} includeHistory={false} onSend={noop} />);
-    expect(card).toContain('data-testid="handover-secret"');
-    expect(card).toMatch(/data-testid="handover-send"[^>]*disabled|disabled[^>]*data-testid="handover-send"/);
-  });
-
-  it("交接说明卡：「带上对话记录」默认不勾，按钮写「交给 {名字}」", () => {
-    const card = renderToStaticMarkup(<HandoverCard note={draftNote(project(), me)} to="陈晨星" sent={false} includeHistory={false} onSend={noop} />);
+describe("项目转交（16.7，接 B 的转交接口）", () => {
+  it("交接说明卡：云端写的几段，准备中每段一个「改」；「带上对话记录」默认不勾，按钮写「交给 {名字}」；发出了就没有按钮、不能改", () => {
+    const card = render(<HandoverCard transfer={transfer({ note: NOTE })} onChanged={noop} />);
+    expect(card).toMatch(/到哪了.*没做完的事.*卡1.*可以问谁/);
+    expect(card.match(/aria-label="改「/g)?.length).toBe(3);
     expect(card).toMatch(/<input type="checkbox"(?![^>]*checked)[^>]*data-testid="handover-history"/);
-    expect(card).toContain("带上对话记录");
     expect(card).toContain("交给 陈晨星");
+    const sent = render(<HandoverCard transfer={transfer({ note: NOTE, status: "sent" })} onChanged={noop} />);
+    expect(sent).not.toContain('data-testid="handover-send"');
+    expect(sent).not.toContain('aria-label="改「');
   });
 
-  it("准备交接：有在跑的会话先问「等做完再转（推荐）/ 停掉」；绑了文件夹的再问检查", () => {
-    const running = renderToStaticMarkup(<TransferFlow project={project({ subSessions: [sub("1", "running")] as never, folder: "Chat_Service" })} transfer={transfer()} onUpdate={noop} onStop={async () => undefined} />);
+  it("准备交接：有在跑的会话先问「等做完再转（推荐）/ 停掉」；绑了文件夹的再问检查；说明还没写好时不出卡", () => {
+    const running = render(<TransferFlow project={project({ subSessions: [sub("1", "running")] as never, folder: "Chat_Service" })} transfer={transfer()} onChanged={noop} onStop={noop} />);
     expect(running).toContain("准备交接给 陈晨星");
     expect(running).toMatch(/有 1 个会话在跑.*等做完再转.*停掉/);
     expect(running).not.toContain("检查文件夹");
-    const check = renderToStaticMarkup(<TransferFlow project={project({ folder: "Chat_Service" })} transfer={transfer()} onUpdate={noop} onStop={async () => undefined} />);
+    const check = render(<TransferFlow project={project({ folder: "Chat_Service" })} transfer={transfer()} onChanged={noop} onStop={noop} />);
     expect(check).toMatch(/检查文件夹「Chat_Service」.*等本机上线.*不检查直接转/);
+    // 等本机检查：本机没就绪时一行「等本机上线」；检查结果到了（云端存下）就往下走到说明卡。
+    expect(render(<TransferFlow project={project({ folder: "Chat_Service" })} transfer={transfer({ check: "wait" })} onChanged={noop} onStop={noop} />)).toContain("检查文件夹 · 等本机上线");
+    const checked = render(<TransferFlow project={project({ folder: "Chat_Service" })} onChanged={noop} onStop={noop}
+      transfer={transfer({ check: "wait", note: NOTE, checkResult: { projectId: "p", checkedAt: "2026-11-07T10:01:00.000Z", folder: null, git: null, recentFiles: null } })} />);
+    expect(checked).toContain('data-testid="handover-card"');
+    expect(render(<TransferFlow project={project()} transfer={transfer()} onChanged={noop} onStop={noop} />)).not.toContain('data-testid="handover-card"');
   });
 
-  it("发出以后：项目行写「等 {名字} 接手」，接走了「已交给 {名字}」；撤回、没接的不写", () => {
+  it("发出以后：项目行写「等 {名字} 接手」，接走了「已交给 {名字}」；对话里「已交给 {名字} · 等接手」", () => {
     expect(transferLine(transfer({ status: "sent" }))).toBe("等 陈晨星 接手");
     expect(projectLine(project({ transfer: transfer({ status: "accepted" }) })).text).toBe("已交给 陈晨星");
     expect(transferLine(null)).toBeNull();
-    const sent = renderToStaticMarkup(<TransferFlow project={project()} transfer={transfer({ status: "sent", note: draftNote(project(), me) })} onUpdate={noop} onStop={async () => undefined} />);
+    const sent = render(<TransferFlow project={project()} transfer={transfer({ status: "sent", note: NOTE })} onChanged={noop} onStop={noop} />);
     expect(sent).toContain("已交给 陈晨星 · 等接手");
     expect(sent).not.toContain('data-testid="handover-send"');
   });
 
-  it("接手人：只读预览，交接说明在最上面，「接手」「不接」；对话从「{日期} {原负责人} → {接手人}」开始", () => {
-    const preview = renderToStaticMarkup(<TransferPreview transfer={transfer({ status: "sent", note: draftNote(project(), me) })} onAccept={noop} onDecline={noop} />);
+  it("接手人：只读预览，交接说明在最上面，「接手」「不接」；已经了结的不给按钮", () => {
+    const preview = render(<TransferPreview transfer={transfer({ status: "sent", note: NOTE })} onAccept={noop} onDecline={noop} />);
     expect(preview).toMatch(/孙铭泽把「Chat 服务」交给你.*交接说明.*到哪了.*接手.*不接/);
-    expect(handoverRule({ decidedAt: new Date(2026, 10, 7, 20).toISOString(), from: me, to: chen })).toBe("11/7 孙铭泽 → 陈晨星");
-    expect(renderToStaticMarkup(<HandoverRule transfer={{ decidedAt: new Date(2026, 10, 7, 20).toISOString(), from: me, to: chen }} />)).toContain('role="separator"');
+    expect(render(<TransferPreview transfer={transfer({ status: "declined", note: NOTE })} onAccept={noop} onDecline={noop} />)).not.toContain('data-testid="transfer-accept"');
+  });
+
+  it("对话从「{日期} {原负责人} → {接手人}」开始；第一条是交接说明，「没做完的事」做成选项；带上了对话记录时原来那段收成一行", () => {
+    const at = new Date(2026, 10, 7, 20).toISOString();
+    expect(handoverRule({ at, from: me, to: chen })).toBe("11/7 孙铭泽 → 陈晨星");
+    expect(render(<HandoverRule item={{ at, from: me, to: chen }} />)).toContain('role="separator"');
+    const summary = render(<HandoverSummary item={{ id: "hs-1", from: me, note: NOTE }} onSay={() => true} />);
+    expect(summary).toMatch(/交接说明 · 孙铭泽.*先做哪件.*卡1.*补上评测集/);
+    const history = render(<TransferHistory from={me} history={{ scope: "project:p", messages: [{ sequence: 1, role: "user", content: "先看评测", referencesSnapshot: [], attachments: [], runId: "r", createdAt: at }] }} />);
+    expect(history).toMatch(/aria-expanded="false".*孙铭泽的对话 1/);
+    expect(history).not.toContain("先看评测");
   });
 
   it("文件夹 chip：「拉到这台电脑」，拉不下来写原因", () => {
-    expect(renderToStaticMarkup(<PullChip state="idle" onPull={noop} />)).toContain("拉到这台电脑");
-    expect(renderToStaticMarkup(<PullChip state="failed" reason="没有仓库权限" onPull={noop} />)).toMatch(/data-tone="danger".*没有仓库权限/);
+    expect(renderToStaticMarkup(<PullChip state="idle" onPull={() => undefined} />)).toContain("拉到这台电脑");
+    expect(renderToStaticMarkup(<PullChip state="failed" reason="没拉下来：没有仓库权限" onPull={() => undefined} />)).toMatch(/data-tone="danger".*没有仓库权限/);
   });
 });

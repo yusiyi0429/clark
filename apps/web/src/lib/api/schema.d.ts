@@ -4999,6 +4999,143 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/projects/{projectId}/transfers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 转给…（16.7，项目负责人）：发起一份转交（准备交接），云端先拼一份交接说明；给自己 400，人员目录里没有 404，已有没了结的或项目归档了 409 */
+        post: operations["startProjectTransfer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/project-transfers/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 一份转交（原负责人和接手人都能看；接手人的只读预览） */
+        get: operations["getProjectTransfer"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 改交接说明、带不带对话、在跑的会话等做完还是停掉、本机检查还是直接转、本机检查结果（原负责人，准备中）；存检查结果时按它重拼「代码在哪」 */
+        patch: operations["updateProjectTransfer"];
+        trace?: never;
+    };
+    "/api/me/project-transfers/{id}/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 发出（原负责人，准备中）：交接说明里像密钥的地方挡住（422，标出哪一段第几行） */
+        post: operations["sendProjectTransfer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/project-transfers/{id}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 撤回（原负责人，准备中或已发出、还没接手） */
+        post: operations["withdrawProjectTransfer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/project-transfers/{id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 接手（接手人，已发出）：项目换成本人负责，原负责人那边归档、只读；对话从分隔线开始，第一条是交接说明；管线先不自己开子会话 */
+        post: operations["acceptProjectTransfer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/project-transfers/{id}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 不接（接手人，已发出）：项目留在原负责人那边，他的项目对话里一行「{名字}没接」 */
+        post: operations["declineProjectTransfer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/project-transfers/{id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 带上了对话记录时，接手人读原负责人那段项目对话（只读，画在分隔线上面）；没带 404。原负责人读自己那段走 /api/conversations/{scope}/messages */
+        get: operations["getProjectTransferHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/sub-sessions/{kind}/{id}/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 停掉还在云端排队、没有电脑接下的子会话（登记了要开工的那条了结掉，卡和专题留着）；没有在排的 404。电脑上已经在跑的照旧经本机程序停 */
+        delete: operations["cancelSubSessionStart"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/route": {
         parameters: {
             query?: never;
@@ -17457,6 +17594,10 @@ export interface components {
             criteriaMet: number;
             criteriaTotal: number;
             completedAt: string | null;
+            responsible: {
+                personId: string;
+                name: string;
+            } | null;
         };
         HomeProject: {
             /** Format: uuid */
@@ -17472,6 +17613,10 @@ export interface components {
                 criteriaMet: number;
                 criteriaTotal: number;
                 completedAt: string | null;
+                responsible: {
+                    personId: string;
+                    name: string;
+                } | null;
             }[];
             budget: {
                 state: "warning" | "exhausted";
@@ -17532,6 +17677,65 @@ export interface components {
                 /** Format: date-time */
                 updatedAt: string;
             }[];
+            transfer: {
+                /** Format: uuid */
+                id: string;
+                /** Format: uuid */
+                projectId: string;
+                projectName: string;
+                from: {
+                    personId: string;
+                    name: string;
+                };
+                to: {
+                    personId: string;
+                    name: string;
+                };
+                status: "preparing" | "sent" | "accepted" | "declined" | "withdrawn";
+                /** Format: date-time */
+                startedAt: string;
+                decidedAt: string | null;
+                includeHistory: boolean;
+                running: ("wait" | "stop") | null;
+                check: ("wait" | "skip") | null;
+                note: {
+                    title: string;
+                    lines: string[];
+                }[] | null;
+                checkResult: {
+                    /** Format: uuid */
+                    projectId: string;
+                    /** Format: date-time */
+                    checkedAt: string;
+                    folder: {
+                        path: string;
+                        label: string;
+                    } | null;
+                    git: {
+                        branch: string | null;
+                        remotes: {
+                            name: string;
+                            url: string;
+                        }[];
+                        uncommitted: string[];
+                        uncommittedCount: number;
+                        unpushed: {
+                            branch: string;
+                            upstream: string | null;
+                            ahead: number | null;
+                        }[];
+                    } | null;
+                    recentFiles: {
+                        path: string;
+                        /** Format: date-time */
+                        modifiedAt: string;
+                    }[] | null;
+                } | null;
+                clone: {
+                    repoUrl: string;
+                    branch: string | null;
+                } | null;
+            } | null;
         };
         HomeMonthTask: {
             taskId: string;
@@ -17559,7 +17763,7 @@ export interface components {
             }[];
         };
         WaitingTarget: {
-            kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections";
+            kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer";
             id: string;
             round?: boolean;
             focus?: {
@@ -17570,12 +17774,12 @@ export interface components {
         };
         WaitingItem: {
             id: string;
-            kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota";
+            kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer";
             title: string;
             source: string | null;
             at: string | null;
             open: {
-                kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections";
+                kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer";
                 id: string;
                 round?: boolean;
                 focus?: {
@@ -17636,6 +17840,10 @@ export interface components {
                     criteriaMet: number;
                     criteriaTotal: number;
                     completedAt: string | null;
+                    responsible: {
+                        personId: string;
+                        name: string;
+                    } | null;
                 }[];
                 budget: {
                     state: "warning" | "exhausted";
@@ -17696,6 +17904,65 @@ export interface components {
                     /** Format: date-time */
                     updatedAt: string;
                 }[];
+                transfer: {
+                    /** Format: uuid */
+                    id: string;
+                    /** Format: uuid */
+                    projectId: string;
+                    projectName: string;
+                    from: {
+                        personId: string;
+                        name: string;
+                    };
+                    to: {
+                        personId: string;
+                        name: string;
+                    };
+                    status: "preparing" | "sent" | "accepted" | "declined" | "withdrawn";
+                    /** Format: date-time */
+                    startedAt: string;
+                    decidedAt: string | null;
+                    includeHistory: boolean;
+                    running: ("wait" | "stop") | null;
+                    check: ("wait" | "skip") | null;
+                    note: {
+                        title: string;
+                        lines: string[];
+                    }[] | null;
+                    checkResult: {
+                        /** Format: uuid */
+                        projectId: string;
+                        /** Format: date-time */
+                        checkedAt: string;
+                        folder: {
+                            path: string;
+                            label: string;
+                        } | null;
+                        git: {
+                            branch: string | null;
+                            remotes: {
+                                name: string;
+                                url: string;
+                            }[];
+                            uncommitted: string[];
+                            uncommittedCount: number;
+                            unpushed: {
+                                branch: string;
+                                upstream: string | null;
+                                ahead: number | null;
+                            }[];
+                        } | null;
+                        recentFiles: {
+                            path: string;
+                            /** Format: date-time */
+                            modifiedAt: string;
+                        }[] | null;
+                    } | null;
+                    clone: {
+                        repoUrl: string;
+                        branch: string | null;
+                    } | null;
+                } | null;
             }[];
             archivedCount: number;
             month: {
@@ -17758,12 +18025,12 @@ export interface components {
             };
             waiting: {
                 id: string;
-                kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota";
+                kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer";
                 title: string;
                 source: string | null;
                 at: string | null;
                 open: {
-                    kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections";
+                    kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer";
                     id: string;
                     round?: boolean;
                     focus?: {
@@ -18029,6 +18296,65 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
             lastActivityAt: string | null;
+            transfer: {
+                /** Format: uuid */
+                id: string;
+                /** Format: uuid */
+                projectId: string;
+                projectName: string;
+                from: {
+                    personId: string;
+                    name: string;
+                };
+                to: {
+                    personId: string;
+                    name: string;
+                };
+                status: "preparing" | "sent" | "accepted" | "declined" | "withdrawn";
+                /** Format: date-time */
+                startedAt: string;
+                decidedAt: string | null;
+                includeHistory: boolean;
+                running: ("wait" | "stop") | null;
+                check: ("wait" | "skip") | null;
+                note: {
+                    title: string;
+                    lines: string[];
+                }[] | null;
+                checkResult: {
+                    /** Format: uuid */
+                    projectId: string;
+                    /** Format: date-time */
+                    checkedAt: string;
+                    folder: {
+                        path: string;
+                        label: string;
+                    } | null;
+                    git: {
+                        branch: string | null;
+                        remotes: {
+                            name: string;
+                            url: string;
+                        }[];
+                        uncommitted: string[];
+                        uncommittedCount: number;
+                        unpushed: {
+                            branch: string;
+                            upstream: string | null;
+                            ahead: number | null;
+                        }[];
+                    } | null;
+                    recentFiles: {
+                        path: string;
+                        /** Format: date-time */
+                        modifiedAt: string;
+                    }[] | null;
+                } | null;
+                clone: {
+                    repoUrl: string;
+                    branch: string | null;
+                } | null;
+            } | null;
         };
         ProjectListResponse: {
             projects: {
@@ -18039,6 +18365,65 @@ export interface components {
                 /** Format: date-time */
                 createdAt: string;
                 lastActivityAt: string | null;
+                transfer: {
+                    /** Format: uuid */
+                    id: string;
+                    /** Format: uuid */
+                    projectId: string;
+                    projectName: string;
+                    from: {
+                        personId: string;
+                        name: string;
+                    };
+                    to: {
+                        personId: string;
+                        name: string;
+                    };
+                    status: "preparing" | "sent" | "accepted" | "declined" | "withdrawn";
+                    /** Format: date-time */
+                    startedAt: string;
+                    decidedAt: string | null;
+                    includeHistory: boolean;
+                    running: ("wait" | "stop") | null;
+                    check: ("wait" | "skip") | null;
+                    note: {
+                        title: string;
+                        lines: string[];
+                    }[] | null;
+                    checkResult: {
+                        /** Format: uuid */
+                        projectId: string;
+                        /** Format: date-time */
+                        checkedAt: string;
+                        folder: {
+                            path: string;
+                            label: string;
+                        } | null;
+                        git: {
+                            branch: string | null;
+                            remotes: {
+                                name: string;
+                                url: string;
+                            }[];
+                            uncommitted: string[];
+                            uncommittedCount: number;
+                            unpushed: {
+                                branch: string;
+                                upstream: string | null;
+                                ahead: number | null;
+                            }[];
+                        } | null;
+                        recentFiles: {
+                            path: string;
+                            /** Format: date-time */
+                            modifiedAt: string;
+                        }[] | null;
+                    } | null;
+                    clone: {
+                        repoUrl: string;
+                        branch: string | null;
+                    } | null;
+                } | null;
             }[];
         };
         CreateProjectRequest: {
@@ -18069,6 +18454,65 @@ export interface components {
                 /** Format: date-time */
                 createdAt: string;
                 lastActivityAt: string | null;
+                transfer: {
+                    /** Format: uuid */
+                    id: string;
+                    /** Format: uuid */
+                    projectId: string;
+                    projectName: string;
+                    from: {
+                        personId: string;
+                        name: string;
+                    };
+                    to: {
+                        personId: string;
+                        name: string;
+                    };
+                    status: "preparing" | "sent" | "accepted" | "declined" | "withdrawn";
+                    /** Format: date-time */
+                    startedAt: string;
+                    decidedAt: string | null;
+                    includeHistory: boolean;
+                    running: ("wait" | "stop") | null;
+                    check: ("wait" | "skip") | null;
+                    note: {
+                        title: string;
+                        lines: string[];
+                    }[] | null;
+                    checkResult: {
+                        /** Format: uuid */
+                        projectId: string;
+                        /** Format: date-time */
+                        checkedAt: string;
+                        folder: {
+                            path: string;
+                            label: string;
+                        } | null;
+                        git: {
+                            branch: string | null;
+                            remotes: {
+                                name: string;
+                                url: string;
+                            }[];
+                            uncommitted: string[];
+                            uncommittedCount: number;
+                            unpushed: {
+                                branch: string;
+                                upstream: string | null;
+                                ahead: number | null;
+                            }[];
+                        } | null;
+                        recentFiles: {
+                            path: string;
+                            /** Format: date-time */
+                            modifiedAt: string;
+                        }[] | null;
+                    } | null;
+                    clone: {
+                        repoUrl: string;
+                        branch: string | null;
+                    } | null;
+                } | null;
             };
             period: string;
             goals: {
@@ -18161,6 +18605,50 @@ export interface components {
             period: string;
             taskId: string;
             taskName: string;
+        } | {
+            /** @constant */
+            kind: "handover";
+            id: string;
+            /** Format: date-time */
+            at: string;
+            /** Format: uuid */
+            transferId: string;
+            from: {
+                personId: string;
+                name: string;
+            };
+            to: {
+                personId: string;
+                name: string;
+            };
+        } | {
+            /** @constant */
+            kind: "handover_summary";
+            id: string;
+            /** Format: date-time */
+            at: string;
+            /** Format: uuid */
+            transferId: string;
+            from: {
+                personId: string;
+                name: string;
+            };
+            note: {
+                title: string;
+                lines: string[];
+            }[];
+        } | {
+            /** @constant */
+            kind: "transfer_declined";
+            id: string;
+            /** Format: date-time */
+            at: string;
+            /** Format: uuid */
+            transferId: string;
+            by: {
+                personId: string;
+                name: string;
+            };
         };
         ProjectFeedResponse: {
             items: (({
@@ -18225,7 +18713,221 @@ export interface components {
                 period: string;
                 taskId: string;
                 taskName: string;
+            } | {
+                /** @constant */
+                kind: "handover";
+                id: string;
+                /** Format: date-time */
+                at: string;
+                /** Format: uuid */
+                transferId: string;
+                from: {
+                    personId: string;
+                    name: string;
+                };
+                to: {
+                    personId: string;
+                    name: string;
+                };
+            } | {
+                /** @constant */
+                kind: "handover_summary";
+                id: string;
+                /** Format: date-time */
+                at: string;
+                /** Format: uuid */
+                transferId: string;
+                from: {
+                    personId: string;
+                    name: string;
+                };
+                note: {
+                    title: string;
+                    lines: string[];
+                }[];
+            } | {
+                /** @constant */
+                kind: "transfer_declined";
+                id: string;
+                /** Format: date-time */
+                at: string;
+                /** Format: uuid */
+                transferId: string;
+                by: {
+                    personId: string;
+                    name: string;
+                };
             })[];
+        };
+        ProjectHandoverItem: {
+            /** @constant */
+            kind: "handover";
+            id: string;
+            /** Format: date-time */
+            at: string;
+            /** Format: uuid */
+            transferId: string;
+            from: {
+                personId: string;
+                name: string;
+            };
+            to: {
+                personId: string;
+                name: string;
+            };
+        };
+        ProjectHandoverSummaryItem: {
+            /** @constant */
+            kind: "handover_summary";
+            id: string;
+            /** Format: date-time */
+            at: string;
+            /** Format: uuid */
+            transferId: string;
+            from: {
+                personId: string;
+                name: string;
+            };
+            note: {
+                title: string;
+                lines: string[];
+            }[];
+        };
+        ProjectTransferDeclinedItem: {
+            /** @constant */
+            kind: "transfer_declined";
+            id: string;
+            /** Format: date-time */
+            at: string;
+            /** Format: uuid */
+            transferId: string;
+            by: {
+                personId: string;
+                name: string;
+            };
+        };
+        PersonRef: {
+            personId: string;
+            name: string;
+        };
+        HandoverSection: {
+            title: string;
+            lines: string[];
+        };
+        ProjectTransfer: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            projectId: string;
+            projectName: string;
+            from: {
+                personId: string;
+                name: string;
+            };
+            to: {
+                personId: string;
+                name: string;
+            };
+            status: "preparing" | "sent" | "accepted" | "declined" | "withdrawn";
+            /** Format: date-time */
+            startedAt: string;
+            decidedAt: string | null;
+            includeHistory: boolean;
+            running: ("wait" | "stop") | null;
+            check: ("wait" | "skip") | null;
+            note: {
+                title: string;
+                lines: string[];
+            }[] | null;
+            checkResult: {
+                /** Format: uuid */
+                projectId: string;
+                /** Format: date-time */
+                checkedAt: string;
+                folder: {
+                    path: string;
+                    label: string;
+                } | null;
+                git: {
+                    branch: string | null;
+                    remotes: {
+                        name: string;
+                        url: string;
+                    }[];
+                    uncommitted: string[];
+                    uncommittedCount: number;
+                    unpushed: {
+                        branch: string;
+                        upstream: string | null;
+                        ahead: number | null;
+                    }[];
+                } | null;
+                recentFiles: {
+                    path: string;
+                    /** Format: date-time */
+                    modifiedAt: string;
+                }[] | null;
+            } | null;
+            clone: {
+                repoUrl: string;
+                branch: string | null;
+            } | null;
+        };
+        CreateProjectTransferRequest: {
+            toPersonId: string;
+        };
+        UpdateProjectTransferRequest: {
+            note?: {
+                title: string;
+                lines: string[];
+            }[];
+            includeHistory?: boolean;
+            running?: ("wait" | "stop") | null;
+            check?: ("wait" | "skip") | null;
+            checkResult?: {
+                /** Format: uuid */
+                projectId: string;
+                /** Format: date-time */
+                checkedAt: string;
+                folder: {
+                    path: string;
+                    label: string;
+                } | null;
+                git: {
+                    branch: string | null;
+                    remotes: {
+                        name: string;
+                        url: string;
+                    }[];
+                    uncommitted: string[];
+                    uncommittedCount: number;
+                    unpushed: {
+                        branch: string;
+                        upstream: string | null;
+                        ahead: number | null;
+                    }[];
+                } | null;
+                recentFiles: {
+                    path: string;
+                    /** Format: date-time */
+                    modifiedAt: string;
+                }[] | null;
+            };
+        };
+        HandoverSecretFinding: {
+            section: string;
+            line: number;
+            sample: string;
+        };
+        HandoverSecretsResponse: {
+            /** @constant */
+            code: "SECRET_IN_NOTE";
+            message: string;
+            findings: {
+                section: string;
+                line: number;
+                sample: string;
+            }[];
         };
         NotificationSettings: {
             feishu: boolean;
@@ -35784,6 +36486,544 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ProjectFeedResponse"];
                 };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    startProjectTransfer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProjectTransferRequest"];
+            };
+        };
+        responses: {
+            /** @description 准备中的转交 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectTransfer"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getProjectTransfer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 转交 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectTransfer"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    updateProjectTransfer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProjectTransferRequest"];
+            };
+        };
+        responses: {
+            /** @description 改好的转交 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectTransfer"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    sendProjectTransfer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 发出的转交 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectTransfer"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description 交接说明里有像密钥的 */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HandoverSecretsResponse"];
+                };
+            };
+        };
+    };
+    withdrawProjectTransfer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 撤回的转交 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectTransfer"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    acceptProjectTransfer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 接手了的转交 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectTransfer"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    declineProjectTransfer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 没接的转交 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectTransfer"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getProjectTransferHistory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 原来的对话 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationHistory"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    cancelSubSessionStart: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: "card" | "topic";
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 停掉了 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description ApiError 统一错误 */
             401: {

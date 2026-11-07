@@ -17,6 +17,7 @@ import type { ConversationData } from "@/conversation/useConversation";
 import { useConversation } from "@/conversation/useConversation";
 import { openProjectPipeline } from "@/lib/board/cloud";
 import { usePipelineConversation } from "@/lib/home/pipeline";
+import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { uploadToConversation } from "@/lib/home/attachments";
 import { useAnswerOptionFill } from "@/conversation/answerOptions";
 import { InputBar } from "./InputBar";
@@ -26,6 +27,7 @@ import type { WorkHomeApi } from "@/lib/home/useWorkHome";
 import { PlanDecision, PlanningLine, StartedRecord } from "./PlanDecision";
 import { feedBlocks, useProjectFeed } from "./TaskFeed";
 import { MonthRule } from "./ProjectParts";
+import { HandoverRule, HandoverSummary, ProjectPull, TransferHistory, useReceived } from "./Transfer";
 import { subHref, subIcon } from "./LeftColumn";
 import { useViewChrome } from "./view";
 import { usePhone } from "./usePhone";
@@ -159,6 +161,8 @@ type PipelineProps = {
   trail: ReactNode;
   bar: ReactNode;
   blocks?: TimedBlock[];
+  /** 接手以后「拉到这台电脑」拉好了（重读这台电脑上绑的文件夹）。 */
+  onPulled?: () => void;
 };
 
 /**
@@ -201,7 +205,7 @@ function MockPipeline({ task, ...props }: PipelineProps & { task: THomePlanTask 
  * 项目对话，网页按时间插进去的几块：挂上一件 Task 的分隔线「{月} 月目标：{Task}」、每件 Task 的规划员在拆（一行）、拆好的派活单（开工的选项框）、
  * 开了哪几个子会话，项目里开出的专题，验收行（过了、受阻、约定都达到、返工，TaskFeed）。
  */
-function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, onSpeaking, onSplit, splitFailed, startFailed, onManualStart, trail, bar, blocks: own }: PipelineProps & { data: ConversationData }) {
+function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, onSpeaking, onSplit, splitFailed, startFailed, onManualStart, trail, bar, blocks: own, onPulled }: PipelineProps & { data: ConversationData }) {
   const chrome = useViewChrome();
   const handheld = usePhone();
   const { work } = api;
@@ -217,6 +221,14 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
   }, [work.workers, project.goals, subs]);
   const taskIds = useMemo(() => project.goals.map((goal) => goal.taskId), [project.goals]);
   const feed = useProjectFeed(project.id, taskIds, api);
+  // 接手过来的（16.7）：分隔线后第一条是交接说明；带上了对话记录时原来那段收在最上面；文件夹 chip 写「拉到这台电脑」。
+  const summary = [...feed].reverse().find((item): item is Extract<ProjectFeedItem, { kind: "handover_summary" }> => item.kind === "handover_summary") ?? null;
+  const received = useReceived(summary?.transferId ?? null);
+  const local = useLocalRunner();
+  const pull = received.clone && !project.folder && local.phase === "ready" && !handheld
+    ? <ProjectPull projectId={project.id} name={project.name} clone={received.clone} onPulled={() => onPulled?.()} /> : null;
+  // 交出去了（原负责人这边）：只读，不能发。
+  const readOnly = project.transfer?.status === "accepted";
   const changed = api.refresh;
   const waiting = api.data.waiting;
   // 专题行排在第一次看到它的时候（契约没有开出时间；updatedAt 会跟着动，用它排这一行会在对话里跳）。
@@ -229,6 +241,13 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
     if (api.live) for (const item of linked) list.push({ key: item.id, at: item.at, node: <MonthRule goal={{ period: item.period, name: item.taskName }} /> });
     else if (project.current[0]) list.push({ key: `month:${project.current[0].taskId}`, at: "0000-01-01T00:00:00.000Z", node: <MonthRule goal={project.current[0]} /> });
     if (own) list.push(...own);
+    // 转交那几行（16.7）：换人的分隔线（两边都有）、接手人那边的交接说明、原负责人那边「X没接」。
+    for (const item of feed) {
+      if (item.kind === "handover") list.push({ key: item.id, at: item.at, node: <HandoverRule item={item} /> });
+      else if (item.kind === "handover_summary") list.push({ key: item.id, at: item.at, node: <HandoverSummary item={item} onSay={(text) => data.send(text, [])} /> });
+      else if (item.kind === "transfer_declined") list.push({ key: item.id, at: item.at, node: <p className={h.line} data-testid="transfer-declined"><StateIcon state="stopped" />{item.by.name}没接</p> });
+    }
+    if (summary && received.history) list.push({ key: `history:${summary.transferId}`, at: "0000-01-01T00:00:00.000Z", node: <TransferHistory history={received.history} from={summary.from} /> });
     for (const task of tasks) {
       const board = work.boards[task.taskId] ?? null;
       const ofTask = mine.filter((worker) => worker.taskId === task.taskId);
@@ -275,10 +294,10 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
       const item = sub.sessionId ? waiting.find((entry) => entry.sessionId === sub.sessionId && (entry.kind === "approval" || entry.kind === "question")) : undefined;
       return item ? [[sub.id, item] as const] : [];
     }));
-    const checks = feed.filter((item): item is FeedItem => item.kind !== "goal_linked");
+    const checks = feed.filter((item): item is FeedItem => item.kind !== "goal_linked" && item.kind !== "handover" && item.kind !== "handover_summary" && item.kind !== "transfer_declined");
     list.push(...feedBlocks({ items: checks, workers: mine, go, onSay: (text) => data.send(text, []), onChanged: () => void changed(), remoteAsks }));
     return list;
-  }, [mine, tasks, work.boards, work.roles, handheld, changed, data, subs, go, feed, onSplit, splitFailed, startFailed, onManualStart, waiting, own, api.live, project]);
+  }, [mine, tasks, work.boards, work.roles, handheld, changed, data, subs, go, feed, onSplit, splitFailed, startFailed, onManualStart, waiting, own, api.live, project, summary, received.history]);
   return (
     <PendingBoxes>
       <div className={h.convo} data-testid="pipeline-view">
@@ -288,6 +307,7 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
               <header className={h.viewHead} data-flush="">
                 {chrome.lead}
                 <h1 className={h.viewTitle} tabIndex={-1}>{project.name}</h1>
+                {pull}
                 {trail}
                 {chrome.trail}
               </header>
@@ -296,7 +316,7 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
           )}
           timeline={(current) => <WorkTimeline data={current} blocks={blocks} />}
           dock={(latest) => <PendingDock latest={latest} />}
-          input={(onHeight) => <ChatInput data={data} placeholder={`与${project.name}讨论…`} onHeight={onHeight} />} />
+          input={readOnly ? undefined : (onHeight) => <ChatInput data={data} placeholder={`与${project.name}讨论…`} onHeight={onHeight} />} />
       </div>
     </PendingBoxes>
   );

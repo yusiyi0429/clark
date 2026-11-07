@@ -463,3 +463,5 @@ button.bgLabel:hover { background: var(--default-soft); }
 /* 手机首屏底部固定的首页输入框（5.7、5.9 第 3 条）：左右留白 16，让出安全区。 */
 .phoneComposer { padding: var(--space-2) var(--space-4) calc(var(--space-2) + env(safe-area-inset-bottom, 0px)); background: var(--surface); }
 .phoneComposer .composerDock { width: 100%; margin: 0; }
+.noteEdit { width: 100%; margin: 0; padding: var(--space-2); border: 1px solid var(--field-border-focus); border-radius: var(--r-control); outline: 0; background: var(--field-bg); color: var(--field-ink); font: inherit; font-size: var(--text-base); line-height: var(--lh-row); resize: vertical; }
+.noteTitle :global(button) { margin-left: var(--space-1); vertical-align: middle; }

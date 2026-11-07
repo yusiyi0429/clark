@@ -26,7 +26,7 @@ import { WorkspaceContext, type WorkspaceApi } from "@/components/shell/Workspac
 import { LocalRunnerProvider, useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { planStartRequest, readLast, startTopic } from "@/lib/local/start";
 import { useAutoReturn } from "@/lib/board/useAutoReturn";
-import { claimStarts, listSplits, registerSplit, releaseStart, removeSplit, routeMessage } from "@/lib/board/cloud";
+import { cancelStart, claimStarts, listSplits, registerSplit, releaseStart, removeSplit, routeMessage } from "@/lib/board/cloud";
 import { gateOf, gateText } from "@/components/board/MonthLanes";
 import { showWorkspaceToast } from "@/lib/toast";
 import { modelForTier } from "@/lib/team/roles";
@@ -45,7 +45,7 @@ import { ForeignTaskInfo, TaskInfo } from "./TaskInfo";
 import { MissionInfo } from "./MissionInfo";
 import { ProjectInfo } from "./ProjectInfo";
 import { GoalBar, ProjectTrail } from "./ProjectParts";
-import { TransferFlow } from "./Transfer";
+import { TransferFlow, TransferView } from "./Transfer";
 import type { TimedBlock } from "@/components/work/WorkTimeline";
 import { useProjects } from "./useProjects";
 import { projectHref, type Project } from "@/lib/home/projects";
@@ -409,11 +409,19 @@ function HomeFrame({ account }: { account: Account }) {
     trail: backgroundButton, parent,
   } : { lead: null, trail: null, parent }), [handheld, go, backgroundButton, parent]);
   useTabTitle(data.waiting.length);
-  /** 项目对话里项目自己的几块：转交（16.7）从「准备交接」那一刻起。 */
-  const projectBlocks = (project: Project): TimedBlock[] => (project.transfer ? [{
+  /** 转交时选了「停掉」：这台电脑上在跑的经本机程序停，云端还排着、没有电脑接下的撤掉登记（别的电脑上在跑的只能在那台电脑上停）。 */
+  const stopForTransfer = async (subs: Project["subSessions"]) => {
+    const here = new Set(local.sessions.map((session) => session.id));
+    for (const sub of subs) {
+      if (sub.sessionId && here.has(sub.sessionId)) await local.runner.kill(sub.sessionId);
+      else if (sub.state === "queued" && !sub.sessionId) await cancelStart(sub.kind, sub.id);
+    }
+    await local.refresh();
+  };
+  /** 项目对话里项目自己的几块：转交（16.7）从「准备交接」那一刻起，到发出、等接手。 */
+  const projectBlocks = (project: Project): TimedBlock[] => (project.transfer && (project.transfer.status === "preparing" || project.transfer.status === "sent") ? [{
     key: `transfer:${project.transfer.id}`, at: project.transfer.startedAt,
-    node: <TransferFlow project={project} transfer={project.transfer} onUpdate={(patch) => projects.actions.updateTransfer(project.id, patch)}
-      onStop={async (ids) => { for (const id of ids) await local.runner.kill(id); await local.refresh(); changed(); }} />,
+    node: <TransferFlow project={project} transfer={project.transfer} onChanged={api.refresh} onStop={stopForTransfer} />,
   }] : []);
   /** 项目对话（16.3）：页头项目名、文件夹 chip、「详情」，下面目标条。接口没上、又没有挂着的 Task 时（假对话要接一件 Task），借总管线说话。 */
   const projectView = (project: Project) => {
@@ -424,7 +432,8 @@ function HomeFrame({ account }: { account: Account }) {
         head={{ title: project.name, trail }} blocks={projectBlocks(project)} />;
     }
     return <PipelineView key={project.id} project={project} tasks={goalTasks} api={api} buddy={buddy} outbox={outbox} consume={consume} go={go} onSplit={(taskId) => void split(taskId)} splitFailed={splitFailed}
-      startFailed={startFailed} onManualStart={(id) => void manualStart(id)} onSpeaking={setSpeaking} trail={trail} bar={<GoalBar project={project} />} blocks={projectBlocks(project)} />;
+      startFailed={startFailed} onManualStart={(id) => void manualStart(id)} onSpeaking={setSpeaking} trail={trail} bar={<GoalBar project={project} />} blocks={projectBlocks(project)}
+      onPulled={() => void projects.actions.reloadFolders()} />;
   };
   const display = (current: View) => {
     switch (current.kind) {
@@ -440,6 +449,7 @@ function HomeFrame({ account }: { account: Account }) {
         return <ProjectInfo key={project.id} project={project} period={data.period} go={go} actions={projects.actions} doneDefinitionOf={(taskId) => planTask(taskId)?.doneDefinition ?? null}
           me={{ personId: account.personId ?? "", name: account.displayName }} />;
       }
+      case "transfer": return <TransferView key={current.id} id={current.id} go={go} onChanged={api.refresh} />;
       case "buddy": return <BuddyView buddy={buddy} outbox={outbox} consume={consume} onSpeaking={setSpeaking} context={buddyContext} onClearContext={() => setBuddyContext(null)} />;
       case "mission": {
         const mission = data.month.missions.find((entry) => entry.missionId === current.id);

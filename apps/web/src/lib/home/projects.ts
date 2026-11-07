@@ -2,11 +2,11 @@
  * 项目（新首页设计第 16 节）：一件一直做下去的事，没有「完成」，不做了就归档；每月的 Task 挂在项目上。
  *
  * 数据是 B 的首页 v2（GET /api/me/work-home 的 projects、month）和项目接口（GET /api/me/projects，契约 projects.ts）；
- * 这里把它们转成左栏、项目页、详情用的样子。绑文件夹是本机程序的事（按设备分别绑，云端不存），转交的接口还没出（16.7），
- * 这两样先记在这个标签页的内存里（ProjectEdits），刷新就没了。网页不存业务数据，所以不写进浏览器存储。
+ * 这里把它们转成左栏、项目页、详情用的样子。转交（16.7）跟着项目回来（transfer）。绑文件夹是本机程序的事（按设备分别绑，云端不存），
+ * 从这台电脑的本机程序读（GET /v1/projects），folders 是项目 id → 文件夹名。
  */
 import type { THomeItem, TProject } from "@warmap/contracts";
-import { transferLine, type Transfer } from "./transfer";
+import { transferLine, type Person, type Transfer } from "./transfer";
 import type { HomeProject, SubSession, WorkHomeData } from "./types";
 
 export { projectHref, projectInfoHref } from "./derive";
@@ -23,6 +23,8 @@ export type ProjectGoal = {
   due: string;
   criteria: string[];
   completedAt: string | null;
+  /** Task 负责人不是本人时是那个人（项目交接过来，Task 跟着项目走），目标条上画他的头像；是本人为 null。 */
+  responsible: Person | null;
 };
 
 export type Project = {
@@ -46,44 +48,36 @@ export type Project = {
   lastActivity: string | null;
   /** 预算用到 80% 以上的那件（契约 HomeProject.budget）；没有为 null。 */
   budget: { percent: number; state: "warning" | "exhausted" } | null;
-  /** 正在转交或已经交出去的那一次（16.7）；撤回了、没接的算没有。 */
+  /** 正在转交的那一份（preparing、sent），或本人交出去了的（accepted，项目在本人这边归档、只读）；没有为 null。 */
   transfer: Transfer | null;
 };
 
-/** 本人在这个标签页里做的、云端还不记的：绑文件夹（本机程序的接口到了换掉）、转交（B 的接口到了换掉）。 */
-export type ProjectEdits = { folders: Record<string, string | null>; transfers: Record<string, Transfer> };
-export const NO_EDITS: ProjectEdits = { folders: {}, transfers: {} };
-
-/** 转交接走了的，原负责人这边进「已归档」（只读，16.7）。 */
-function activeTransfer(id: string, edits: ProjectEdits): Transfer | null {
-  const transfer = edits.transfers[id] ?? null;
-  return transfer && (transfer.status === "preparing" || transfer.status === "sent" || transfer.status === "accepted") ? transfer : null;
-}
+/** 这台电脑上各项目绑的文件夹：项目 id → 文件夹名。 */
+export type Folders = ReadonlyMap<string, string>;
 
 /** 首页 v2 的一个项目（没归档的，已经按 16.2 排好）。 */
-export function fromHome(project: HomeProject, data: Pick<WorkHomeData, "month" | "period">, edits: ProjectEdits): Project {
+export function fromHome(project: HomeProject, data: Pick<WorkHomeData, "month" | "period">, folders: Folders): Project {
   const missionTitle = (missionId: string) => data.month.missions.find((mission) => mission.missionId === missionId)?.title ?? null;
   const goals = project.goals.map((goal): ProjectGoal => ({
     taskId: goal.taskId, missionId: goal.missionId, missionTitle: missionTitle(goal.missionId), period: goal.period, name: goal.name,
-    due: goal.dueDate.slice(5).replace("-", "/"), criteria: goal.criteria, completedAt: goal.completedAt,
+    due: goal.dueDate.slice(5).replace("-", "/"), criteria: goal.criteria, completedAt: goal.completedAt, responsible: goal.responsible,
   }));
-  const transfer = activeTransfer(project.projectId, edits);
   return {
-    id: project.projectId, name: project.name, folder: edits.folders[project.projectId] ?? null, archived: transfer?.status === "accepted",
+    id: project.projectId, name: project.name, folder: folders.get(project.projectId) ?? null, archived: false,
     goals, current: goals.filter((goal) => goal.period === data.period),
     subSessions: project.subSessions, items: project.items, scope: project.pipeline.scope,
     waiting: project.summary.needsYou, lastActivity: project.lastActivityAt,
     budget: project.budget ? { percent: project.budget.percent, state: project.budget.state } : null,
-    transfer,
+    transfer: project.transfer,
   };
 }
 
-/** 归档了的项目（GET /api/me/projects 里 archivedAt 不为 null 的）：首页数据里没有它的目标和会话，详情里的目标历史另读。 */
-export function fromListed(project: TProject, edits: ProjectEdits): Project {
+/** 归档了的项目（GET /api/me/projects 里 archivedAt 不为 null 的，含交出去了的）：首页数据里没有它的目标和会话，详情里的目标历史另读。 */
+export function fromListed(project: TProject, folders: Folders): Project {
   return {
-    id: project.projectId, name: project.name, folder: edits.folders[project.projectId] ?? null, archived: true,
+    id: project.projectId, name: project.name, folder: folders.get(project.projectId) ?? null, archived: true,
     goals: [], current: [], subSessions: [], items: [], scope: `project:${project.projectId}`,
-    waiting: 0, lastActivity: project.lastActivityAt, budget: null, transfer: activeTransfer(project.projectId, edits),
+    waiting: 0, lastActivity: project.lastActivityAt, budget: null, transfer: project.transfer,
   };
 }
 

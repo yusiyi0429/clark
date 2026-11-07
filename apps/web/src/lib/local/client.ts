@@ -133,6 +133,10 @@ export function createHttpRunner(base = localRunnerBase(), token: () => string =
     answerQuestion: async (id, requestId, body) => (await call<{ session: Awaited<ReturnType<LocalRunner["kill"]>> }>("answerQuestion", { id, requestId }, body)).session,
     stopBackground: async (id, itemId) => (await call<{ session: Awaited<ReturnType<LocalRunner["kill"]>> }>("stopBackground", { id, itemId }, {})).session,
     putBudget: (body) => call("putBudget", {}, body),
+    listProjects: async () => (await call<{ projects: Awaited<ReturnType<LocalRunner["listProjects"]>> }>("listProjects")).projects,
+    putProjectFolder: (projectId, body) => call("putProjectFolder", { projectId }, body),
+    handoverCheck: (projectId) => call("handoverCheck", { projectId }, {}),
+    cloneProject: (projectId, body) => call("cloneProject", { projectId }, body),
     watch,
   };
 }

@@ -10,7 +10,7 @@
  */
 import type {
   TLocalBackgroundItem, TLocalCreateSessionRequest, TLocalFolder, TLocalMergeResponse, TLocalModelProfile, TLocalPermissionRequestView, TLocalPlanEntry, TLocalQuestionRequestView,
-  TLocalSessionEvent, TLocalSessionStatus, TLocalSessionSummary, TLocalUsage, TLocalWorkspace,
+  TLocalProjectFolder, TLocalSessionEvent, TLocalSessionStatus, TLocalSessionSummary, TLocalUsage, TLocalWorkspace,
 } from "@warmap/contracts";
 import { LocalRunnerError, type EventWatch, type LocalRunner } from "./runner";
 
@@ -55,6 +55,7 @@ export type MockOptions = { stepMs?: number; paired?: boolean; onPlanned?: (task
 export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: MockOptions = {}): LocalRunner {
   let token = paired ? "mock-token-0000000000000000000000" : "";
   const sessions = new Map<string, MockSession>();
+  const projects = new Map<string, TLocalProjectFolder>();
   const folders: TLocalFolder[] = [{ id: "f1", path: "C:\\work\\tianshu", label: "tianshu", addedAt: new Date().toISOString() }];
   let linked = false;
   let includePersonal = false;
@@ -279,6 +280,27 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
     listFolders: async () => folders,
     pickFolder: async () => { const folder = { id: `f${folders.length + 1}`, path: `C:\\work\\project-${folders.length + 1}`, label: `project-${folders.length + 1}`, addedAt: now() }; folders.push(folder); return folder; },
     removeFolder: async (id) => { const i = folders.findIndex((f) => f.id === id); if (i >= 0) folders.splice(i, 1); },
+    listProjects: async () => [...projects.values()],
+    putProjectFolder: async (projectId, body) => {
+      const folder = body.folderId ? folders.find((entry) => entry.id === body.folderId) : null;
+      if (body.folderId && !folder) throw new LocalRunnerError("not_found", "没有这个文件夹，先选文件夹", 404);
+      const bound = { projectId, name: body.name ?? projects.get(projectId)?.name ?? null, folder: folder ? { id: folder.id, path: folder.path, label: folder.label } : null, updatedAt: now() };
+      projects.set(projectId, bound);
+      return bound;
+    },
+    handoverCheck: async (projectId) => {
+      const folder = projects.get(projectId)?.folder ?? null;
+      return { projectId, checkedAt: now(), folder: folder ? { path: folder.path, label: folder.label } : null,
+        git: folder ? { branch: "main", remotes: [{ name: "origin", url: "https://github.com/example/repo.git" }], uncommitted: [], uncommittedCount: 0, unpushed: [] } : null, recentFiles: null };
+    },
+    cloneProject: async (projectId, body) => {
+      const label = body.name ?? body.repoUrl.replace(/.git$/, "").split(/[/:]/).pop() ?? "repo";
+      const folder = { id: `f${folders.length + 1}`, path: `C:\work\${label}`, label, addedAt: now() };
+      folders.push(folder);
+      const bound = { projectId, name: null, folder: { id: folder.id, path: folder.path, label }, updatedAt: now() };
+      projects.set(projectId, bound);
+      return { project: bound, branch: body.branch ?? null, fellBack: false };
+    },
     listSessions: async () => [...sessions.values()].map(summaryOf).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
     createSession: async (body: TLocalCreateSessionRequest) => create(body),
     createSessionBatch: async (items) => Promise.all(items.map(async (body) => {

@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { THomeItem } from "@warmap/contracts";
 import type { HomeProject, SubSession, WorkHomeData } from "@/lib/home/types";
-import { NO_EDITS, fromHome } from "@/lib/home/projects";
+import { fromHome } from "@/lib/home/projects";
 import { LeftColumn, planOrder } from "./LeftColumn";
 
 const data = { period: "2026-11", projects: [], archivedCount: 0, month: { missions: [] }, waiting: [], other: { subSessions: [], items: [] } } as unknown as WorkHomeData;
-const projectsOf = (used: WorkHomeData) => used.projects.map((project) => fromHome(project, used, NO_EDITS));
+const projectsOf = (used: WorkHomeData) => used.projects.map((project) => fromHome(project, used, new Map()));
 const render = (extra: Partial<Parameters<typeof LeftColumn>[0]>) => {
   const used = extra.data ?? data;
   return renderToStaticMarkup(
@@ -38,7 +38,7 @@ const withTask = (items: THomeItem[], extra: Partial<HomeProject> = {}) => ({
   ...data,
   projects: [{
     projectId: "p1", name: "首页改版", lastActivityAt: "2026-11-07T01:00:00.000Z", budget: null,
-    goals: [{ taskId: "t1", missionId: "m1", name: "左栏", period: "2026-11", dueDate: "2026-11-30", criteria: [], criteriaMet: 0, criteriaTotal: 0, completedAt: null }],
+    goals: [{ taskId: "t1", missionId: "m1", name: "左栏", period: "2026-11", dueDate: "2026-11-30", criteria: [], criteriaMet: 0, criteriaTotal: 0, completedAt: null, responsible: null }], transfer: null,
     summary: { running: 0, waiting: 0, queued: 0, done: 0, doneToday: 0, needsYou: 0 },
     pipeline: { conversationId: null, scope: "project:p1" }, planning: false, subSessions: [], items, ...extra,
   }],

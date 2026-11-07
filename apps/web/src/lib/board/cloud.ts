@@ -8,11 +8,13 @@ import type {
   TTopicBriefResponse, TTopicDetailResponse, TTopicVersionView, TWorkersResponse,
   TBackgroundResponse, TClaimSessionStartsResponse, TRouteResponse, TWorkHomeResponse,
   TProject, TProjectDetailResponse, TProjectFeedResponse, TProjectGoal, TProjectListResponse, TProjectPipelineResponse, TUpdateProjectRequest,
+  THandoverSecretFinding, TProjectTransfer, TUpdateProjectTransferRequest, TConversationHistory,
 } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
 
 export class CloudError extends Error {
-  constructor(readonly status: number, message: string, readonly code?: string) { super(message); }
+  /** body：服务端回的原样（交接说明里有像密钥的，findings 在这里）。 */
+  constructor(readonly status: number, message: string, readonly code?: string, readonly body?: unknown) { super(message); }
 }
 
 type Result<T> = { data?: T; error?: unknown; response: Response };
@@ -32,7 +34,7 @@ async function unwrap<T>(call: Promise<Result<T>>): Promise<T> {
   }
   if (!response.ok || data === undefined) {
     const body = (error ?? {}) as { message?: string; code?: string };
-    throw new CloudError(response.status, body.message ?? "没成功，请重试", body.code);
+    throw new CloudError(response.status, body.message ?? "没成功，请重试", body.code, error);
   }
   return data;
 }
@@ -124,6 +126,29 @@ export const attachGoal = (projectId: string, taskId: string) =>
 /** 项目对话（第一次打开时建）；收发走现有对话接口，scope 是 project:<projectId>。 */
 export const openProjectPipeline = (projectId: string) =>
   maybe<TProjectPipelineResponse>(browserApi.POST("/api/me/projects/{projectId}/pipeline", { params: project(projectId) }) as Promise<Result<TProjectPipelineResponse>>);
+// ── 项目转交（16.7，projectTransfers.ts）──
+const transfer = (transferId: string) => ({ path: { id: transferId } });
+type TransferCall = Promise<Result<TProjectTransfer>>;
+/** 转给…：发起一份（准备交接），云端先写一份交接说明。 */
+export const startTransfer = (projectId: string, toPersonId: string) =>
+  unwrap<TProjectTransfer>(browserApi.POST("/api/me/projects/{projectId}/transfers", { params: project(projectId), body: { toPersonId } }) as TransferCall);
+export const readTransfer = (transferId: string) => maybe<TProjectTransfer>(browserApi.GET("/api/me/project-transfers/{id}", { params: transfer(transferId) }) as TransferCall);
+/** 改交接说明、带不带对话、两个选择、本机检查结果（准备中）。 */
+export const updateTransfer = (transferId: string, body: TUpdateProjectTransferRequest) =>
+  unwrap<TProjectTransfer>(browserApi.PATCH("/api/me/project-transfers/{id}", { params: transfer(transferId), body }) as TransferCall);
+/** 交接说明里像密钥的地方（发出时回 422 SECRET_IN_NOTE）：哪一段第几行、命中那一截。不是这种错为 null。 */
+export const secretFindings = (error: unknown): THandoverSecretFinding[] | null =>
+  error instanceof CloudError && error.code === "SECRET_IN_NOTE" ? (error.body as { findings?: THandoverSecretFinding[] } | undefined)?.findings ?? [] : null;
+export const sendTransfer = (transferId: string) => unwrap<TProjectTransfer>(browserApi.POST("/api/me/project-transfers/{id}/send", { params: transfer(transferId) }) as TransferCall);
+export const withdrawTransfer = (transferId: string) => unwrap<TProjectTransfer>(browserApi.POST("/api/me/project-transfers/{id}/withdraw", { params: transfer(transferId) }) as TransferCall);
+export const acceptTransfer = (transferId: string) => unwrap<TProjectTransfer>(browserApi.POST("/api/me/project-transfers/{id}/accept", { params: transfer(transferId) }) as TransferCall);
+export const declineTransfer = (transferId: string) => unwrap<TProjectTransfer>(browserApi.POST("/api/me/project-transfers/{id}/decline", { params: transfer(transferId) }) as TransferCall);
+/** 带上了对话记录时，接手人读原来那段项目对话；没带回 404（null）。 */
+export const readTransferHistory = (transferId: string) =>
+  maybe<TConversationHistory>(browserApi.GET("/api/me/project-transfers/{id}/history", { params: transfer(transferId) }) as Promise<Result<TConversationHistory>>);
+/** 停掉还在云端排队、没有电脑接下的子会话（转交时选了「停掉」；回 204，没有在排的 404 也算停了）。电脑上已经在跑的经本机程序停。 */
+export const cancelStart = (kind: "card" | "topic", subId: string) => unwrap(browserApi.DELETE("/api/me/sub-sessions/{kind}/{id}/start", { params: { path: { kind, id: subId } } }))
+  .then(() => undefined, (error: unknown) => { if (!(error instanceof CloudError && (error.status === 204 || error.status === 404))) throw error; });
 export const readProjectFeed = (projectId: string) =>
   maybe<TProjectFeedResponse>(browserApi.GET("/api/me/projects/{projectId}/feed", { params: project(projectId) }) as Promise<Result<TProjectFeedResponse>>);
 export const routeMessage = (text: string) => maybe<TRouteResponse>(browserApi.POST("/api/me/route", { body: { text } }) as Promise<Result<TRouteResponse>>);
