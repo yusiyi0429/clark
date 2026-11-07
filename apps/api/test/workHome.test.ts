@@ -175,13 +175,13 @@ describe("新首页", { timeout: 30_000 }, () => {
       // Mission Card 的截止是本人确认关闭的时间。
       expect(byId.get(`mission_card:${mine}`)).toMatchObject({ kind: "mission_card", title: "确认我的任务", source: `${battlefield} · 11 月 Mission Card`,
         open: { kind: "mission_card", id: mine }, answer: "open", dueAt: "2026-11-08T10:00:00.000Z" });
-      // BOARD_NOW（11/06）在 10 月的复盘窗口里，多一件「复盘 10 月」。
-      expect(byId.get("month:review:2026-10")).toMatchObject({ kind: "month", dueAt: "2026-11-07T15:59:59.000Z" });
-      expect(body.waiting).toHaveLength(8);
+      // BOARD_NOW（11/06）在 10 月的复盘窗口里，但本人 10 月没有 Task，没什么要复盘的，不出「复盘 10 月」（monthPage.monthReviewAnswered）。
+      expect(byId.has("month:review:2026-10")).toBe(false);
+      expect(body.waiting).toHaveLength(7);
       // 先是卡住正在跑的活的（批准、回答，新的在前），再是有截止的（早的在前），其余新的在前，没有时间的排后面。
-      expect(body.waiting.slice(0, 5).map((item: { id: string }) => item.id)).toEqual([`approval:verify:${verifier}`, `question:plan:${planner}`,
-        `approval:card:${ids["等批准"]}`, "month:review:2026-10", `mission_card:${mine}`]);
-      const ats = body.waiting.slice(5).map((item: { at: string | null }) => item.at);
+      expect(body.waiting.slice(0, 4).map((item: { id: string }) => item.id)).toEqual([`approval:verify:${verifier}`, `question:plan:${planner}`,
+        `approval:card:${ids["等批准"]}`, `mission_card:${mine}`]);
+      const ats = body.waiting.slice(4).map((item: { at: string | null }) => item.at);
       expect(ats.filter(Boolean)).toEqual([...ats.filter(Boolean)].sort().reverse());
       expect(ats.slice(ats.findIndex((at: string | null) => at === null)).every((at: string | null) => at === null)).toBe(true);
       // 同一件事每次的 id 一样。
@@ -294,6 +294,8 @@ describe("新首页", { timeout: 30_000 }, () => {
       await f.t.sql("UPDATE tasks SET status='done',acceptance=jsonb_build_object('at','2026-10-29T02:00:00.000Z') WHERE id=$1", [ids["交付了·完成"]]);
       // 只开过 Task 管线（没接 Chat 时是天枢自己的对话）：在本人最近几个月的 Mission 里找到。
       await f.t.sql("INSERT INTO conversations (id, owner_id, scope, pi_session_id) VALUES ($1, $2, 'plan-task:oct-talk', $3)", [randomUUID(), TEST_MEMBER.personId, randomUUID()]);
+      // 开管线时找过这件 Task（locatePlanTask），记下了它在哪个 Mission。
+      await f.t.sql("INSERT INTO plan_task_missions(task_id,mission_id,seen_at) VALUES('oct-talk','oct',now())");
       const deliver = (taskId: string, missionId: string, at: string) => f.t.sql(`INSERT INTO deliverable_versions(id,task_id,mission_id,author_id,number,task_name,basis,criteria,delivered_at)
         VALUES($1,$2,$3,$4,1,'x','acceptance','[]',$5)`, [randomUUID(), taskId, missionId, TEST_MEMBER.personId, at]);
       await deliver("oct-delivered", "oct", "2026-10-30T00:00:00.000Z");

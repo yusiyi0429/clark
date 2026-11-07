@@ -15,6 +15,8 @@ import { CardError, cardTaskViews, effectiveOutcome } from "./taskCards.js";
 import { getTaskViews } from "./tasks.js";
 import { ACTIVE, awaitsQuota, heldRuns, workerResources } from "./workers.js";
 import { shanghaiDate } from "./workdays.js";
+import { settlementsOf } from "./taskContinuity.js";
+import { visibleMissions } from "./visibleMissions.js";
 
 /**
  * 新首页（契约 workHome.ts，设计《新首页_伙伴总管线与Task管线》第 2、4、7、10.3 节）：左栏的树（Mission → 本人负责的 Task → 子会话和自己做的事项）、「等你」、右栏的后台任务。
@@ -28,12 +30,6 @@ const SHANGHAI_DAY = (column: string, param: string) =>
 const STATE_ORDER: TSubSessionState[] = ["waiting", "failed", "running", "queued", "done"];
 const latest = (...times: (string | Date | null | undefined)[]) =>
   new Date(Math.max(...times.filter((time): time is string | Date => Boolean(time)).map((time) => new Date(time).getTime()))).toISOString();
-/** YYYY-MM 往前数 n 个月。 */
-const monthsBefore = (period: string, n: number) => {
-  const [year, month] = period.split("-").map(Number);
-  return new Date(Date.UTC(year, month - 1 - n, 1)).toISOString().slice(0, 7);
-};
-
 /** 树上的一件 Task：本体的 Task，带它所在 Mission 的月份和本人确认完成的时间。 */
 export type TreeTask = PlanTask & { period: string; completedAt: string | null };
 type TreeMission = MissionRow & { period: string; owner_id: string };
@@ -41,62 +37,33 @@ const MISSION_SELECT = `SELECT id,code,title,period,owner_id,personal_mission_ca
     world_scope_id,world_object_id,world_domain_id,world_status,world_status_label,world_read_at,world_gaps FROM missions`;
 
 /**
- * 了结（设计 10.3）：了结的 Task 不在左栏（本月的照列、打勾）。现在只认本人确认完成（completedAt）。
- * 复盘定了到此为止、已延续成新月份的 Task：B2 做，数据到了改成调它的辅助函数。
+ * 左栏的 Task（设计 10.3，不按月份硬切）。树和「自动」发给谁、后台任务的 Task 名共用这一份。Mission 取看得见的（visibleMissions.ts，B2）：
+ * - 本人这个月的 Mission（本月没有就退回本人最近一个月；本月已从本体载入过就不退回）下本人负责的 Task（本体没登记负责人的算 Mission 负责人的），了结了也列（打勾）；
+ * - 之前月份里本人动过、没了结的 Task（carried，openTaskIds；谁负责的 Mission 都算），再照本人负责过滤。动过：挂过执行事项或卡、开过专题、出过交付版本、开过 Task 管线。
+ * 了结（确认完成、到此为止、已延续）照 taskContinuity.ts 的 settlementsOf；completedAt 是确认完成的时间。本体读不到（超时、出错）的 Task 不列。
  */
-export const settled = (task: Pick<TreeTask, "completedAt">) => task.completedAt !== null;
-
-/**
- * 本人确认完成的时间（V1 的交付）：这件 Task 最新一版交付物交付了，且交付以后这件 Task 下没开过返工卡；否则不在表里。
- */
-async function completedTimes(q: Query, taskIds: string[]): Promise<Map<string, string>> {
-  if (!taskIds.length) return new Map();
-  const rows = (await q(`SELECT v.task_id,v.delivered_at FROM (SELECT DISTINCT ON (task_id) task_id,delivered_at FROM deliverable_versions
-      WHERE task_id=ANY($1::text[]) ORDER BY task_id,number DESC) v
-    WHERE v.delivered_at IS NOT NULL AND NOT EXISTS (SELECT 1 FROM tasks t WHERE t.plan_task_id=v.task_id AND t.rework_of_card_id IS NOT NULL AND t.created_at>v.delivered_at)`,
-  [taskIds])).rows as { task_id: string; delivered_at: Date }[];
-  return new Map(rows.map((row) => [row.task_id, row.delivered_at.toISOString()]));
-}
-
-/**
- * 左栏的 Task（设计 10.3，不按月份硬切）。树和「自动」发给谁、后台任务的 Task 名共用这一份。
- * - 本月：本人本月的 Mission（不是占位的；不回退到上个月）下本人负责的 Task（本体没登记负责人的算本人的），了结了也列。
- * - 之前月份：本人在天枢里动过的（开过 Task 管线，或挂着子会话）、本人负责的、没了结的。它在哪个 Mission：卡和专题记着 mission_id；
- *   只有管线的，在本人最近 3 个月（本月以外）的 Mission 里找，更早的读不到就不列。本体读不到（超时、出错）的也不列。
- * chat：接了 Chat 服务时管线记在 task_pipelines；没接时是天枢自己 scope 为 plan-task:<id> 的对话。
- */
-export async function treeTasks(q: Query, planTasks: PlanTaskSource, personId: string, now: Date, chat: boolean): Promise<{ period: string; missions: TreeMission[]; tasks: TreeTask[] }> {
+export async function treeTasks(q: Query, planTasks: PlanTaskSource, personId: string, now: Date): Promise<{ period: string; missions: TreeMission[]; tasks: TreeTask[] }> {
   const period = companyPeriod(now);
-  const current = (await q(`${MISSION_SELECT} WHERE owner_id=$1 AND period=$2 AND NOT placeholder ORDER BY code`, [personId, period])).rows as TreeMission[];
-  const thisMonth = current.length
-    ? (await readPlanTasks(planTasks, planTaskMissions(current))).filter((task) => !task.responsibleId || task.responsibleId === personId) : [];
-  const shown = new Set(thisMonth.map((task) => task.taskId));
-
-  // 动过的：挂着子会话（卡、专题），开过 Task 管线。
-  const touched = ((await q(`SELECT plan_task_id AS task_id,mission_id FROM tasks
-      WHERE owner_id=$1 AND plan_task_id IS NOT NULL AND status<>'returned' AND (role_id IS NOT NULL OR executor='claude_code')
-    UNION SELECT plan_task_id,mission_id FROM research_topics WHERE owner_id=$1 AND plan_task_id IS NOT NULL AND status='active'
-    UNION SELECT plan_task_id,NULL FROM task_pipelines WHERE owner_id=$1
-    ${chat ? "" : `UNION SELECT substr(scope,11),NULL FROM conversations WHERE owner_id=$1 AND scope LIKE 'plan-task:%' AND deleted_at IS NULL AND archived_at IS NULL`}`,
-  [personId])).rows as { task_id: string; mission_id: string | null }[]).filter((row) => !shown.has(row.task_id));
-  let earlierMissions: TreeMission[] = [], earlier: PlanTask[] = [];
-  if (touched.length) {
-    const ids = new Set(touched.map((row) => row.task_id));
-    const missionIds = [...new Set(touched.flatMap((row) => row.mission_id ? [row.mission_id] : []))];
-    const pipelineOnly = [...ids].some((id) => !touched.some((row) => row.task_id === id && row.mission_id));
-    earlierMissions = (await q(`${MISSION_SELECT} WHERE NOT placeholder AND period<$2 AND (id=ANY($3::text[]) OR ($4::text IS NOT NULL AND owner_id=$1 AND period>=$4))`,
-      [personId, period, missionIds, pipelineOnly ? monthsBefore(period, 3) : null])).rows as TreeMission[];
-    const owners = new Map(earlierMissions.map((mission) => [mission.id, mission.owner_id]));
-    earlier = earlierMissions.length ? (await readPlanTasks(planTasks, planTaskMissions(earlierMissions))).filter((task) => ids.has(task.taskId)
-      && (task.responsibleId ? task.responsibleId === personId : owners.get(task.missionId) === personId)) : [];
-  }
-  const completed = await completedTimes(q, [...thisMonth, ...earlier].map((task) => task.taskId));
-  const periods = new Map([...current, ...earlierMissions].map((mission) => [mission.id, mission.period]));
-  const withState = (task: PlanTask): TreeTask => ({ ...task, period: periods.get(task.missionId)!, completedAt: completed.get(task.taskId) ?? null });
-  const tasks = [...thisMonth.map(withState), ...earlier.map(withState).filter((task) => !settled(task))];
+  const visible = await visibleMissions(q, now, { personId });
+  const rows = visible.length ? (await q(`${MISSION_SELECT} WHERE id=ANY($1::text[])`, [visible.map((mission) => mission.id)])).rows as TreeMission[] : [];
+  const byId = new Map(rows.map((mission) => [mission.id, mission]));
+  const own = visible.filter((mission) => !mission.carried).flatMap((mission) => byId.get(mission.id) ?? []);
+  const carried = visible.filter((mission) => mission.carried && byId.has(mission.id));
+  const open = new Set(carried.flatMap((mission) => mission.openTaskIds));
+  const mine = (task: PlanTask) => task.responsibleId ? task.responsibleId === personId : byId.get(task.missionId)?.owner_id === personId;
+  const ownTasks = own.length ? (await readPlanTasks(planTasks, planTaskMissions(own))).filter(mine) : [];
+  const shown = new Set(ownTasks.map((task) => task.taskId));
+  const carriedTasks = carried.length ? (await readPlanTasks(planTasks, planTaskMissions(carried.map((mission) => byId.get(mission.id)!))))
+    .filter((task) => open.has(task.taskId) && !shown.has(task.taskId) && mine(task)) : [];
+  const settlements = await settlementsOf(q, [...ownTasks, ...carriedTasks].map((task) => task.taskId));
+  const withState = (task: PlanTask): TreeTask => {
+    const settlement = settlements.get(task.taskId);
+    return { ...task, period: byId.get(task.missionId)!.period, completedAt: settlement?.kind === "completed" ? new Date(settlement.at).toISOString() : null };
+  };
+  const tasks = [...ownTasks.map(withState), ...carriedTasks.filter((task) => !settlements.has(task.taskId)).map(withState)];
   const listed = new Set(tasks.map((task) => task.missionId));
-  // 本月的在前（按 code），之前的按月份从近到远、再按 code；之前月份的 Mission 只在有 Task 时列。
-  const missions = [...current, ...earlierMissions.filter((mission) => listed.has(mission.id))
+  // 本人这个月的在前（按 code），之前的按月份从近到远、再按 code；之前月份的 Mission 只在有 Task 时列。
+  const missions = [...own.sort((a, b) => a.code.localeCompare(b.code)), ...carried.map((mission) => byId.get(mission.id)!).filter((mission) => listed.has(mission.id))
     .sort((a, b) => b.period.localeCompare(a.period) || a.code.localeCompare(b.code))];
   return { period, missions, tasks };
 }
@@ -127,7 +94,7 @@ export type WorkHomeDeps = {
 export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerson): Promise<TWorkHomeResponse> {
   const { q, now } = deps;
   const ownerId = person.personId;
-  const { period, missions, tasks } = await treeTasks(q, deps.planTasks, ownerId, now, deps.chat);
+  const { period, missions, tasks } = await treeTasks(q, deps.planTasks, ownerId, now);
   const taskById = new Map(tasks.map((task) => [task.taskId, task]));
   const devices = (await workerResources(q, ownerId, now)).devices;
   const online = new Set(devices.filter((device) => device.online).map((device) => device.id));
@@ -275,7 +242,7 @@ const parseScope = (scope: string): Scope => scope === "main" || scope === "reso
   : { kind: scope.slice(0, scope.indexOf(":")) as "task" | "card" | "topic", id: scope.slice(scope.indexOf(":") + 1) };
 
 /** GET /api/me/background?scope=…：卡、专题不是本人的 404。 */
-export async function readBackground(deps: { q: Query; now: Date; planTasks: PlanTaskSource; chat: boolean }, ownerId: string, rawScope: string): Promise<TBackgroundResponse> {
+export async function readBackground(deps: { q: Query; now: Date; planTasks: PlanTaskSource }, ownerId: string, rawScope: string): Promise<TBackgroundResponse> {
   const { q, now } = deps;
   const scope = parseScope(rawScope);
   if (scope.kind === "resources") return { items: [], resources: await workerResources(q, ownerId, now) };
@@ -301,7 +268,7 @@ export async function readBackground(deps: { q: Query; now: Date; planTasks: Pla
     { id: string; kind: "plan" | "verify"; state: string; title: string | null; device_id: string; task_id: string | null; plan_task_id: string | null; started_at: Date;
       ended_at: Date | null; card_title: string | null; card_task: string | null; hold_until: string | null; held: boolean; ended_today: boolean; delivered: boolean }[];
   const planTaskIds = runs.some((run) => run.kind === "plan")
-    ? new Map((await treeTasks(q, deps.planTasks, ownerId, now, deps.chat)).tasks.map((task) => [task.taskId, task.name])) : new Map<string, string>();
+    ? new Map((await treeTasks(q, deps.planTasks, ownerId, now)).tasks.map((task) => [task.taskId, task.name])) : new Map<string, string>();
   for (const run of runs) {
     const plan = run.kind === "plan";
     const at = plan ? { taskId: run.plan_task_id, cardId: null, topicId: null } : { taskId: run.card_task, cardId: run.task_id, topicId: null };

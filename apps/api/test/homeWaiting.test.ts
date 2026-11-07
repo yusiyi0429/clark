@@ -127,6 +127,13 @@ describe("首页等你：扩的几种", { timeout: 30_000 }, () => {
           sessionId: null, deviceId: null, deviceName: null, dueAt: null, answer: "open", person: null, month: { step: "continue", period: "2026-10" } },
       ]);
 
+      // 两件都在月份页选了怎么办：复盘答完了，不再出「复盘 10 月」（只补一句话的不算答完）。
+      expect((await f.call("PUT", "/api/me/months/2026-10/tasks/oct-a/decision", { choice: "continue", note: null })).statusCode).toBe(204);
+      expect((await f.call("PUT", "/api/me/months/2026-10/tasks/oct-b/decision", { choice: null, note: "再看看" })).statusCode).toBe(204);
+      expect((await waiting(f, "month")).map((item) => item.id)).toContain("month:review:2026-10");
+      expect((await f.call("PUT", "/api/me/months/2026-10/tasks/oct-b/decision", { choice: "revise", note: null })).statusCode).toBe(204);
+      expect((await waiting(f, "month")).map((item) => item.id)).not.toContain("month:review:2026-10");
+
       // 月中：不在复盘窗口里；交付了一件，还剩一件没了结。
       now = new Date("2026-11-15T02:00:00.000Z");
       await f.t.sql(`INSERT INTO deliverable_versions(id,task_id,mission_id,author_id,number,task_name,basis,criteria,delivered_at)
@@ -205,9 +212,8 @@ describe("首页等你：扩的几种", { timeout: 30_000 }, () => {
         deviceId: laptop.device, deviceName: "我的电脑", dueAt: "2026-11-06T04:30:00.000Z", answer: "open", person: null, month: null });
       expect(items.find((item) => item.id === `quota:${desktop.device}`)).toMatchObject({ title: "Claude 订阅额度用完 · 14:00 恢复", source: "1 件停着",
         deviceName: "另一台", dueAt: "2026-11-06T06:00:00.000Z" });
-      // 额度（截止早的先）、批准，然后是有截止的复盘（11/06 在 10 月的复盘窗口里），其余新的在前。
-      expect(items.map((item) => item.id)).toEqual([`quota:${laptop.device}`, `quota:${desktop.device}`, `approval:card:${asking}`, "month:review:2026-10",
-        `role:${proposal}`]);
+      // 额度（截止早的先）、批准，其余新的在前（本人 10 月没有 Task，不出「复盘 10 月」）。
+      expect(items.map((item) => item.id)).toEqual([`quota:${laptop.device}`, `quota:${desktop.device}`, `approval:card:${asking}`, `role:${proposal}`]);
     } finally { await f.close(); }
   });
 

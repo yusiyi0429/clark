@@ -3,6 +3,7 @@ import { HOLD_STATES } from "./cardProjection.js";
 import { FEISHU_NOTIFY_KIND } from "./feishu/notify.js";
 import type { Query } from "./meetingStore.js";
 import type { MissionRoundPerson } from "./missionRounds.js";
+import { monthReviewAnswered } from "./monthPage.js";
 import { listProposals } from "./roles.js";
 import { openPlanTask, parseNotifyKey } from "./taskAgreements.js";
 import { DeliverableError } from "./taskDeliverables.js";
@@ -50,11 +51,6 @@ export function reviewWindow(now: Date): { period: string; closesAt: string } | 
   const closesAt = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 7, 15, 59, 59));
   return { period: start.toISOString().slice(0, 7), closesAt: closesAt.toISOString() };
 }
-
-/**
- * 这个月的复盘本人在月份页答完了没有（答完了就不出「复盘 N 月」）。月份页的答案是 B2 的数据，还没有：现在一律当没答完，数据到了改成读它。
- */
-const reviewAnswered = async (_q: Query, _ownerId: string, _period: string): Promise<boolean> => false;
 
 /**
  * 排序（设计 9.6）：先是卡住正在跑的活的（批准、回答、额度），再是有截止时间的，其余在后；
@@ -209,7 +205,8 @@ export async function assembleWaiting(input: WaitingInput): Promise<TWaitingItem
   // 月份（设计 10.4、10.7）：复盘窗口里「复盘 N 月」，截止是窗口关闭；之前月份还有没了结、在树上的 Task，每个月一条。
   // 新月份的草稿到了待敲定（finalize）要等 Co-Agent 的草稿，还没有数据，不出。
   const review = reviewWindow(deps.now);
-  if (review && !(await reviewAnswered(q, ownerId, review.period)))
+  // 这个月本人每件没了结的 Task 都选了怎么办（月份页，monthPage.ts）就不出。
+  if (review && !(await monthReviewAnswered(q, deps.planTasks, ownerId, review.period)))
     add({ id: `month:review:${review.period}`, kind: "month", title: `复盘 ${Number(review.period.slice(5))} 月`, source: null, at: null,
       open: { kind: "month", id: review.period }, dueAt: review.closesAt, answer: "open", month: { step: "review", period: review.period } });
   const earlier = new Map<string, number>();

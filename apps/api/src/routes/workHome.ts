@@ -38,10 +38,10 @@ export function registerWorkHomeRoutes(app: AppInstance, ctx: RouteContext): voi
   app.get("/api/me/work-home", { preHandler: requireMember, schema: { response: { 200: WorkHomeResponse } } }, async (req) => workHome(req.person!));
 
   app.get("/api/me/background", { preHandler: requireMember, schema: { querystring: BackgroundQuery, response: { 200: BackgroundResponse } } }, async (req, reply) =>
-    handle(reply, () => readBackground({ q, now: ctx.now(), planTasks: ctx.planTasks, chat: Boolean(ctx.chat) }, req.person!.personId, req.query.scope)));
+    handle(reply, () => readBackground({ q, now: ctx.now(), planTasks: ctx.planTasks }, req.person!.personId, req.query.scope)));
 
   app.post("/api/me/route", { preHandler: requireMember, schema: { body: RouteRequest, response: { 200: RouteResponse } } }, async (req) =>
-    routeMessage(req.body.text, (await treeTasks(q, ctx.planTasks, req.person!.personId, ctx.now(), Boolean(ctx.chat))).tasks));
+    routeMessage(req.body.text, (await treeTasks(q, ctx.planTasks, req.person!.personId, ctx.now())).tasks));
 
   if (!env.internalChatToken) return;
   // 伙伴读的是 DRI 工作台那一份（Mission Card 按本人这一侧看）。
