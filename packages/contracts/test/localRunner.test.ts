@@ -305,7 +305,7 @@ describe("本机程序契约", () => {
     const settings = { includePersonalConfigByDefault: false, allowedOrigins: [], paused: false, maxConcurrent: 3, autoMerge: true };
     const status = {
       deviceId, version: "0.1.0", agents: [], activeSessions: 0, slots: { max: 3, running: 0, queued: 0 },
-      cloud: { linked: false, apiBaseUrl: null, personName: null, outbox: { pending: 0, lastSyncedAt: null, lastError: null } }, settings, quota: [claude, codex, tokenhub, minimax], tools: [{ kind: "claude-code", state: "ready", version: "2.1.318", account: null, checkedAt: at }, { kind: "codex", state: "not_logged_in", version: "0.159.2", account: null, checkedAt: at }, ...tools],
+      cloud: { linked: false, apiBaseUrl: null, personName: null, personId: null, outbox: { pending: 0, lastSyncedAt: null, lastError: null } }, settings, quota: [claude, codex, tokenhub, minimax], tools: [{ kind: "claude-code", state: "ready", version: "2.1.318", account: null, checkedAt: at }, { kind: "codex", state: "not_logged_in", version: "0.159.2", account: null, checkedAt: at }, ...tools],
     };
     expect(Value.Check(LocalStatusResponse, status)).toBe(true);
     expect(Value.Check(LocalStatusResponse, { ...status, tools: [{ ...tools[0], kind: "git" }] })).toBe(false);

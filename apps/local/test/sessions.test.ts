@@ -299,6 +299,12 @@ describe("模型配置与钥匙", () => {
     expect((await api(t.port, token, "PUT", "/v1/cloud", { apiBaseUrl: "https://evil.example", token: cloudToken })).status).toBe(400);
     expect((await api(t.port, token, "PUT", "/v1/cloud", { apiBaseUrl: ORIGIN, token: "bad token\nadd-generic-password" })).status).toBe(400);
     expect((await api(t.port, token, "PUT", "/v1/cloud", { apiBaseUrl: ORIGIN, token: cloudToken, personName: "测试" })).status).toBe(200);
+    // 关联的是谁：没传 personId（老的关联）为 null；传了就存下，状态里给回，网页按它和登录的人比
+    expect((await api(t.port, token, "GET", "/v1/status")).body.cloud).toMatchObject({ linked: true, personName: "测试", personId: null });
+    expect((await api(t.port, token, "PUT", "/v1/cloud", { apiBaseUrl: ORIGIN, token: cloudToken, personName: "测试", personId: "" })).status).toBe(400);
+    expect((await api(t.port, token, "PUT", "/v1/cloud", { apiBaseUrl: ORIGIN, token: cloudToken, personName: "测试", personId: "person-sunm" })).body.personId).toBe("person-sunm");
+    expect((await api(t.port, token, "GET", "/v1/status")).body.cloud).toMatchObject({ personName: "测试", personId: "person-sunm" });
+    expect(JSON.parse(readFileSync(join(t.dataDir, "cloud.json"), "utf8")).personId).toBe("person-sunm");
     expect(JSON.stringify((await api(t.port, token, "GET", "/v1/cloud")).body)).not.toContain(cloudToken);
     const s = await api(t.port, token, "POST", "/v1/sessions", { subject: { kind: "card", cardId: "c-cloud" }, title: "云端 MCP", cwd: work, firstMessage: "hi" });
     expect(s.status).toBe(200);
@@ -325,7 +331,7 @@ describe("模型配置与钥匙", () => {
     // 进程退出后本会话密钥作废。
     await api(t.port, token, "POST", `/v1/sessions/${s.body.id}/kill`, {});
     expect((await raw(t.port, { method: "POST", path: `/internal/sessions/${s.body.id}/cloud-mcp`, headers: { "x-tianshu-session-secret": secret, "content-type": "application/json" }, body })).status).toBe(401);
-    await api(t.port, token, "DELETE", "/v1/cloud");
+    expect((await api(t.port, token, "DELETE", "/v1/cloud")).body).toMatchObject({ linked: false, personName: null, personId: null });
   });
 
   it("改网关地址不带新钥匙时，旧钥匙作废（不会被发到新地址）", async () => {
