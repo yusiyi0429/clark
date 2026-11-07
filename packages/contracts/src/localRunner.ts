@@ -362,7 +362,7 @@ export const LocalProjectFolderRequest = Type.Object({
 /**
  * POST /v1/projects/:projectId/handover-check（新首页设计 16.7「准备交接」）：项目绑的文件夹现在什么样，只看 git，不调模型。网页把结果交给天枢写交接说明。
  * - folder：绑的文件夹（没绑为 null，这时 git、recentFiles 都是 null）。
- * - git（是 git 仓库时）：branch 当前分支（不在分支上为 null）；remotes 远端（url 去掉了里面的账号口令）；uncommitted 没提交的文件（含没加进 git 的，相对仓库根，最多 200 个，
+ * - git（是 git 仓库时）：branch 当前分支（不在分支上为 null）；remotes 远端（url 去掉了口令：https 的账号口令整个去掉，ssh 只留用户名）；uncommitted 没提交的文件（含没加进 git 的，相对仓库根，最多 200 个，
  *   uncommittedCount 是总数）；unpushed 没推完的本地分支：没有上游的 ahead 为 null，有上游的是比上游多几个提交（卡的 tianshu/… 分支也在这里）。
  * - recentFiles（不是 git 仓库时）：最近改过的文件（相对文件夹，跳过 node_modules、.git 这类目录，最多 30 个，新的在前）。
  * 账号口令、文件内容都不在结果里。
@@ -387,9 +387,16 @@ export const LocalHandoverCheck = Type.Object({
  * 本人在选择框点了取消：project 为 null。选的地方不许用（主目录本身等）、那里已经有同名文件夹：400 validation；clone 失败（没有仓库权限、地址不对、断网）：409 conflict，
  * message 是「没拉下来：」加 git 的报错，网页写在 chip 上。可能要几分钟，网页显示用时。
  */
+/**
+ * 能拉的仓库地址（本机 clone 只收这几种；云端 ProjectTransfer.clone 也用它）：https://、ssh://、git@ 开头，不带空白。
+ * 交接检查给的远端已去掉口令（https 的账号口令整个去掉，ssh 只留用户名）；远端是本地路径、file:// 等别的样子时不算能拉。
+ */
+export const LocalRepoUrl = Type.String({ minLength: 8, maxLength: 500, pattern: "^(https://|ssh://|git@)[^\\s]+$" });
+/** 能切的分支名：不以 - 开头，不带空白。 */
+export const LocalBranchName = Type.String({ minLength: 1, maxLength: 250, pattern: "^[^-\\s][^\\s]*$" });
 export const LocalProjectCloneRequest = Type.Object({
-  repoUrl: Type.String({ minLength: 8, maxLength: 500, pattern: "^(https://|ssh://|git@)[^\\s]+$" }),
-  branch: Type.Optional(Type.String({ minLength: 1, maxLength: 250, pattern: "^[^-\\s][^\\s]*$" })),
+  repoUrl: LocalRepoUrl,
+  branch: Type.Optional(LocalBranchName),
   name: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
 }, strict);
 export const LocalProjectCloneResponse = Type.Object({ project: Nullable(LocalProjectFolder), branch: Nullable(Type.String()), fellBack: Type.Boolean() }, strict);
@@ -1156,6 +1163,7 @@ export type TLocalProjectListResponse = Static<typeof LocalProjectListResponse>;
 export type TLocalProjectFolderRequest = Static<typeof LocalProjectFolderRequest>;
 export type TLocalHandoverCheck = Static<typeof LocalHandoverCheck>;
 export type TLocalProjectCloneRequest = Static<typeof LocalProjectCloneRequest>;
+export type TLocalRepoUrl = Static<typeof LocalRepoUrl>;
 export type TLocalProjectCloneResponse = Static<typeof LocalProjectCloneResponse>;
 export type TLocalAttachmentRef = Static<typeof LocalAttachmentRef>;
 export type TLocalSavedAttachment = Static<typeof LocalSavedAttachment>;

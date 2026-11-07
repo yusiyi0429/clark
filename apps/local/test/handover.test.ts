@@ -37,6 +37,9 @@ describe("交接检查（只看 git）", () => {
   it("当前分支、远端（去掉账号口令）、没提交的文件、没推完的本地分支；不是仓库时列最近改过的文件；没绑为空", async () => {
     expect(stripCredentials("https://sean:ghp_x@github.com/a/b.git")).toBe("https://github.com/a/b.git");
     expect(stripCredentials("git@github.com:a/b.git")).toBe("git@github.com:a/b.git");
+    expect(stripCredentials("https://ghp_token@github.com/a/b.git")).toBe("https://github.com/a/b.git");
+    expect(stripCredentials("ssh://git@github.com/a/b.git")).toBe("ssh://git@github.com/a/b.git"); // ssh 的用户名留着
+    expect(stripCredentials("ssh://git:secret@host/a/b.git")).toBe("ssh://git@host/a/b.git");
     expect(repoName("https://github.com/TokenkingOS/Chat_Service.git")).toBe("Chat_Service");
     expect(repoName("git@github.com:TokenkingOS/Chat_Service.git")).toBe("Chat_Service");
 

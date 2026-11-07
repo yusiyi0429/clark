@@ -176,7 +176,9 @@ describe("一句话带附件发给子会话（假 claude）", { timeout: 40_000 
       const only = await h.call("POST", `/v1/sessions/${a.id}/messages`, { attachments: [ref("md", "需求.md", MD)] });
       expect(only.status).toBe(200);
       await until(() => h.events(a.id).filter((e) => e.type === "user_message").length >= 3);
-      expect(h.turns(cwd, a.id).at(-1).turnText).toBe(attachmentNote(h.events(a.id).filter((e) => e.type === "user_message").at(-1).attachments));
+      // 事件先记、假 claude 后收到：等它真收到这一句
+      const note = attachmentNote(h.events(a.id).filter((e) => e.type === "user_message").at(-1).attachments);
+      await until(() => h.turns(cwd, a.id).some((l) => l.turnText === note));
       expect(h.events(a.id).filter((e) => e.type === "user_message").at(-1)).toMatchObject({ text: "", attachments: [{ name: "需求.md" }] });
     } finally {
       await h.t.cleanup();

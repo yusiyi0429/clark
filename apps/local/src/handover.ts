@@ -8,9 +8,12 @@ import { git } from "./git.js";
 const SKIP_DIRS = new Set([".git", "node_modules", ".tianshu-attachments", ".venv", "venv", "__pycache__", "dist", "build", ".next", "target"]);
 const MAX_SCAN = 5_000;
 
-/** 远端地址里的账号口令去掉（https://user:token@host/... → https://host/...）。 */
+/**
+ * 远端地址里的口令去掉：https 的账号口令整个去掉（https://user:token@host/... → https://host/...，令牌常放在用户名的位置）；
+ * ssh 等别的只去掉口令、留下用户名（ssh://git@host/... 不动，少了 git@ 就拉不下来）。
+ */
 export function stripCredentials(url: string): string {
-  return url.replace(/^([a-z][a-z0-9+.-]*:\/\/)[^/@]*@/i, "$1");
+  return url.replace(/^(https?:\/\/)[^/@]*@/i, "$1").replace(/^([a-z][a-z0-9+.-]*:\/\/[^/:@]*):[^/@]*@/i, "$1@");
 }
 
 /**

@@ -1,4 +1,5 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
+import { PersonRef, ProjectTransfer } from "./projectTransfers.js";
 import { TaskFeedItem } from "./workHome.js";
 
 /**
@@ -21,16 +22,21 @@ const Period = Type.String({ pattern: "^\\d{4}-(0[1-9]|1[0-2])$" });
 
 export const ProjectName = Type.String({ minLength: 1, maxLength: 60 });
 
-/** 一个项目。archivedAt 不为 null 是归档了（左栏收进「已归档 N」）；lastActivityAt 是最近一次动静（子会话、事项、挂接），没有为 null。 */
+/**
+ * 一个项目。archivedAt 不为 null 是归档了（左栏收进「已归档 N」）；lastActivityAt 是最近一次动静（子会话、事项、挂接），没有为 null。
+ * transfer（16.7）：正在转交的那一份（preparing、sent），或本人交出去了的那一份（accepted：本人是原负责人，项目在本人这边算归档、只读，
+ * archivedAt 是接手的时间）；都没有为 null。
+ */
 export const Project = Type.Object({
   projectId: Type.String({ format: "uuid" }),
   name: ProjectName,
   archivedAt: Nullable(Instant),
   createdAt: Instant,
   lastActivityAt: Nullable(Instant),
+  transfer: Nullable(ProjectTransfer),
 }, strict);
 
-/** GET /api/me/projects（DRI 工作台）：本人全部项目，没归档的在前，各自按最近动静从近到远。 */
+/** GET /api/me/projects（DRI 工作台）：本人全部项目（含交出去了的，算归档），没归档的在前，各自按最近动静从近到远。 */
 export const ProjectListResponse = Type.Object({ projects: Type.Array(Project) }, strict);
 
 /**
@@ -88,8 +94,12 @@ export const ProjectPipelineResponse = Type.Object({
 }, strict);
 
 /**
- * 项目对话里网页按时间插的一行：TaskFeedItem 那几种（这个项目里的卡：挂着的 Task 下的、和直接挂在项目上的），
- * 加 goal_linked：一件 Task 挂上来了（at 是 linkedAt），网页画居中的分隔线「{period 的月} 月目标：{taskName}」。
+ * 项目对话里网页按时间插的一行：TaskFeedItem 那几种（这个项目里的卡：挂着的 Task 下的、和直接挂在项目上的；交接以后也含以前负责人的卡），
+ * 加 goal_linked：一件 Task 挂上来了（at 是 linkedAt），网页画居中的分隔线「{period 的月} 月目标：{taskName}」；
+ * 加转交那几行（16.7）：
+ * - handover：换人的分隔线「{日期} {from} → {to}」（at 是接手的时间），两边都有；
+ * - handover_summary：接手人那边，紧跟分隔线的第一条消息，管线发的项目总结（就是交接说明，note），后面把「没做完的事」做成选项由网页画；
+ * - transfer_declined：原负责人那边一行「{by}没接」。
  */
 export const ProjectGoalLinkedItem = Type.Object({
   kind: Type.Literal("goal_linked"),
@@ -99,7 +109,13 @@ export const ProjectGoalLinkedItem = Type.Object({
   taskId: Type.String({ minLength: 1 }),
   taskName: Type.String(),
 }, strict);
-export const ProjectFeedItem = Type.Union([TaskFeedItem, ProjectGoalLinkedItem]);
+export const ProjectHandoverItem = Type.Object({ kind: Type.Literal("handover"), id: Type.String({ minLength: 1 }), at: Instant, transferId: Type.String({ format: "uuid" }),
+  from: PersonRef, to: PersonRef }, strict);
+export const ProjectHandoverSummaryItem = Type.Object({ kind: Type.Literal("handover_summary"), id: Type.String({ minLength: 1 }), at: Instant,
+  transferId: Type.String({ format: "uuid" }), from: PersonRef, note: Type.Array(Type.Object({ title: Type.String(), lines: Type.Array(Type.String()) }, strict)) }, strict);
+export const ProjectTransferDeclinedItem = Type.Object({ kind: Type.Literal("transfer_declined"), id: Type.String({ minLength: 1 }), at: Instant,
+  transferId: Type.String({ format: "uuid" }), by: PersonRef }, strict);
+export const ProjectFeedItem = Type.Union([TaskFeedItem, ProjectGoalLinkedItem, ProjectHandoverItem, ProjectHandoverSummaryItem, ProjectTransferDeclinedItem]);
 /** GET /api/me/projects/:projectId/feed：从旧到新。 */
 export const ProjectFeedResponse = Type.Object({ items: Type.Array(ProjectFeedItem) }, strict);
 

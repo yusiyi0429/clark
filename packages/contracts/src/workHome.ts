@@ -1,6 +1,7 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import { Budget } from "./budget.js";
 import { LocalPermissionBrief, LocalQuestionRequestView } from "./localRunner.js";
+import { PersonRef, ProjectTransfer } from "./projectTransfers.js";
 import { RoleRef } from "./roles.js";
 import { WorkerQueueReason, WorkerResources } from "./workers.js";
 
@@ -126,6 +127,8 @@ const Period = Type.String({ pattern: "^\\d{4}-(0[1-9]|1[0-2])$" });
  * dueDate 是验收截止日（YYYY-MM-DD）：本体的 Task 没有截止日，取它所在月份的最后一天。
  * criteriaMet / criteriaTotal：标准几条达到（每条至少一张对它的卡、最近一次有结论的交回算通过）/ 一共几条（本体没写标准时是完成定义那一条，都没有为 0）。
  * criteria 是标准原文（目标条点开逐条看）；completedAt 是本人确认完成的时间。
+ * responsible（16.7）：Task 的负责人不是本人时是那个人（项目交接过来、Task 跟着项目走、负责人还是原来的人，目标条上画他的头像），是本人为 null。
+ *   别人负责的那几件本体读不到标准时 criteria 为空、criteriaTotal 为 0。
  */
 export const HomeProjectGoal = Type.Object({
   taskId: Type.String({ minLength: 1 }),
@@ -137,6 +140,7 @@ export const HomeProjectGoal = Type.Object({
   criteriaMet: Type.Integer({ minimum: 0 }),
   criteriaTotal: Type.Integer({ minimum: 0 }),
   completedAt: Nullable(Instant),
+  responsible: Nullable(PersonRef),
 }, strict);
 
 /**
@@ -147,6 +151,7 @@ export const HomeProjectGoal = Type.Object({
  * - summary、planning、subSessions、items 的规矩同原来的 Task 行：子会话、事项是这个项目里的（挂着的 Task 下的，和直接放在项目里的）。
  * - pipeline.conversationId：项目对话，还没开过为 null（POST /api/me/projects/:projectId/pipeline 建）；scope 永远是 project:<projectId>。
  * - lastActivityAt：最近一次动静（子会话、事项、挂接、建项目），排序和副标题用。
+ * - transfer（16.7）：正在转交的那一份（preparing、sent），副标题在 sent 时优先写「等 {名字} 接手」；没有为 null。
  */
 export const HomeProject = Type.Object({
   projectId: Type.String({ format: "uuid" }),
@@ -160,6 +165,7 @@ export const HomeProject = Type.Object({
   planning: Type.Boolean(),
   subSessions: Type.Array(SubSession),
   items: Type.Array(HomeItem),
+  transfer: Nullable(ProjectTransfer),
 }, strict);
 
 /** 首页「本月」里的一件 Task（16.4）：project 是挂在哪个项目（点了进项目）；没挂上为 null，网页画「挂到…」（选现有项目或新建）。 */
@@ -188,25 +194,28 @@ export const HomeMonthMission = Type.Object({
  * role：岗位修改建议（采纳或不要）；
  * month：月份这个检查点要你做的（month.step：review 复盘、finalize 新月份的草稿到了待敲定、continue 之前月份还有没了结的 Task；open 是月份页）；
  * device：没有在线的电脑而有活在等本机（要开工的、等本机上线的），open 是连接页；这台电脑本机程序的状态（未配对、暂停中等）网页自己看本机程序，不靠这一条；
+ * transfer（16.7）：别人把项目交给你（sent，to 是本人），title「{原负责人}把「{项目}」交给你」，person 是原负责人，open 是那份转交（只读预览，「接手」「不接」）；
  * quota：额度用完或预算到了，有活停着等你定：订阅额度用完时一台电脑一条「Claude 订阅额度用完 · HH:MM 恢复」，source 写停着几件，
  *   open 是连接页，dueAt 是恢复的时间（到点本机自己接着做；要不要换网关模型、开额外额度由你定）。预算（设计 11.4）以后再加。
  */
 export const WaitingKind = Type.Union([
   Type.Literal("approval"), Type.Literal("question"), Type.Literal("verdict"), Type.Literal("meeting"), Type.Literal("mission_card"), Type.Literal("role"),
   Type.Literal("merge"), Type.Literal("plan_start"), Type.Literal("acceptance"), Type.Literal("month"), Type.Literal("device"), Type.Literal("quota"),
+  Type.Literal("transfer"),
 ]);
 
 /**
  * 去哪儿看：card、topic 是子会话（id 是卡或专题的 id），project 是项目对话（id 是项目 id），meeting 是会议（id 是会议 id），
  * mission_card 是个人 Mission Card（id 是任务卡 id，拍板人那一侧没有具体某张卡时是轮次 id，round = true），role 是岗位修改建议（id 是建议 id），
- * task_detail 是 Task 详情（别人的 Task 只读，id 是 Task id），month 是月份页（id 是 YYYY-MM），connections 是连接页（id 固定 "this_computer"）。
+ * task_detail 是 Task 详情（别人的 Task 只读，id 是 Task id），month 是月份页（id 是 YYYY-MM），connections 是连接页（id 固定 "this_computer"），
+ * transfer 是一份项目转交（id 是转交 id，GET /api/me/project-transfers/:id）。
  * focus（设计 14.3）：子会话（卡、专题、规划员、验收员）的提问和批准由项目对话转达，kind = project 时带上是哪个框：sessionId 是那个本机会话，
  * requestId 是那次提问或批准（同 WaitingItem.question / permission 的 requestId；老版本本机程序没报时为 null，定位到那个会话最新的框）。
  * 网页落在项目对话的那个框上，焦点放在推荐的选项上。不在任何项目里的子会话照旧打开子会话（card / topic），不带 focus。
  */
 export const WaitingTarget = Type.Object({
   kind: Type.Union([Type.Literal("card"), Type.Literal("topic"), Type.Literal("project"), Type.Literal("meeting"), Type.Literal("mission_card"), Type.Literal("role"),
-    Type.Literal("task_detail"), Type.Literal("month"), Type.Literal("connections")]),
+    Type.Literal("task_detail"), Type.Literal("month"), Type.Literal("connections"), Type.Literal("transfer")]),
   id: Type.String({ minLength: 1 }),
   round: Type.Optional(Type.Boolean()),
   focus: Type.Optional(Type.Object({ sessionId: Type.String({ format: "uuid" }), requestId: Nullable(Type.String({ minLength: 1 })) }, strict)),
@@ -217,7 +226,7 @@ export const WaitingTarget = Type.Object({
  * inline 在这一行就能答，走云端，手机上也能（开工、岗位建议的采纳 / 不要）；
  * inline_local 在这一行答，但要本机程序办（批准、回答、合回）：只在 deviceId 那台电脑上画按钮，单选题才就地答（题目在本机，网页自己判断），
  *   手机和别的电脑上画「等你 · {deviceName}」，点开是只读摘要；
- * open 点开去答（受阻、会后确认、Mission Card、请你认可、月份、电脑、额度）。
+ * open 点开去答（受阻、会后确认、Mission Card、请你认可、月份、电脑、额度、项目转交）。
  */
 export const WaitingAnswer = Type.Union([Type.Literal("inline"), Type.Literal("inline_local"), Type.Literal("open")]);
 
@@ -227,7 +236,7 @@ export const WaitingAnswer = Type.Union([Type.Literal("inline"), Type.Literal("i
  * taskId：属于哪件 Task，不属于为 null；projectId：属于哪个项目（项目行的「1 件等你」和项目对话里的提醒用），不属于为 null。
  * sessionId、deviceId、deviceName：子会话那几种（approval、question、merge）是哪个本机会话、在哪台电脑上；在这台电脑上的，网页就地批准、回答、合回（本机程序接口），别处的只能打开看。
  * dueAt：有截止时间的（Mission Card 本人确认截止、复盘窗口关闭）写上，网页离截止不到 24 小时换警告档；没有为 null。
- * person：acceptance 是请你认可的那个人（负责人），别的为 null。month：只有 kind = month 有（step、period）。
+ * person：acceptance 是请你认可的那个人（负责人），transfer 是交给你的那个人，别的为 null。month：只有 kind = month 有（step、period）。
  * question、permission（新首页 9.6、5.4.4）：只有真在问、真在等批准才进「等你」，一轮做完停下的不进（卡照常交回进验收，子会话「已停下」）。
  *   question：kind = question 时本机报的原样提问（LocalQuestionRequestView），title 是第一个问题的原话；只有一个问题、单选、最多 3 个选项时就地答，
  *   在那台电脑上用本机程序 POST /v1/sessions/:sessionId/questions/:requestId 回答。
