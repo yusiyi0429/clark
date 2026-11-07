@@ -323,12 +323,39 @@ export const LocalModelProfileUpsert = Type.Object({
   isDefault: Type.Optional(Type.Boolean()),
 }, strict);
 
-/** 本人允许本机程序读写的文件夹。只能经本机弹出的系统选择框添加（POST /v1/folders/pick），网页不能直接写路径。 */
+/** 文件夹挂在哪个项目上（项目 id 是天枢给的，name 是绑定时网页带来的名字，只用来显示）。 */
+export const LocalFolderProject = Type.Object({ projectId: Type.String({ minLength: 1, maxLength: 80 }), name: Nullable(Type.String({ maxLength: 120 })) }, strict);
+/**
+ * 本人允许本机程序读写的文件夹。只能经本机弹出的系统选择框添加（POST /v1/folders/pick），网页不能直接写路径。
+ * projects：这个文件夹在这台电脑上挂着哪几个项目（新首页设计 16.6，连接页的文件夹列表用）；GET /v1/folders 总会带，选文件夹的回执不带。
+ */
 export const LocalFolder = Type.Object({
   id: Id,
   path: Type.String(),
   label: Type.String(),
   addedAt: Instant,
+  projects: Type.Optional(Type.Array(LocalFolderProject, { maxItems: 50 })),
+}, strict);
+/**
+ * 一个项目在这台电脑上对应的文件夹（新首页设计 16.1、16.6：按设备分别绑，存在本机，不报给云端）。folder 为 null 是还没绑或解绑了。
+ * 项目的卡、专题、规划员不指定工作目录时就在这个文件夹里做（卡在 git 仓库里照样开自己的工作树）；没绑时卡在本机程序给这个项目建的专用目录里做，
+ * 专题、规划员照旧用各自的专用目录。
+ */
+export const LocalProjectFolder = Type.Object({
+  projectId: Type.String({ minLength: 1, maxLength: 80 }),
+  name: Nullable(Type.String({ maxLength: 120 })),
+  folder: Nullable(Type.Object({ id: Id, path: Type.String(), label: Type.String() }, strict)),
+  updatedAt: Instant,
+}, strict);
+/** GET /v1/projects：这台电脑上记着的项目和文件夹。 */
+export const LocalProjectListResponse = Type.Object({ projects: Type.Array(LocalProjectFolder) }, strict);
+/**
+ * PUT /v1/projects/:projectId/folder：把项目绑到一个已允许的文件夹（folderId，先经 POST /v1/folders/pick 选好），null 是解绑；name 是项目名（只用来显示，可不带）。
+ * 文件夹不在允许的列表里回 404。删掉一个允许的文件夹（DELETE /v1/folders/:id）时，绑着它的项目一起解绑。
+ */
+export const LocalProjectFolderRequest = Type.Object({
+  folderId: Nullable(Id),
+  name: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
 }, strict);
 export const LocalFolderListResponse = Type.Object({ folders: Type.Array(LocalFolder) }, strict);
 /**
@@ -365,6 +392,11 @@ export const LocalSessionSubject = Type.Object({
   taskId: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
   /** 只有 kind=verify（本机填）：验的是哪一次交回，就是那条 handback 同步条目的 key。 */
   handbackKey: Type.Optional(SyncKey),
+  /**
+   * 所属项目（新首页设计 16，天枢给的 project_id）：网页开工时带；验收员由本机随被验的卡带上。subject 在每条同步条目里都有，状态上报就带着它。
+   * 带了而不指定 cwd 时，本机在这个项目在这台电脑上绑的文件夹里做（见 LocalProjectFolder）。
+   */
+  projectId: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
 }, strict);
 
 export const LocalUsage = Type.Object({
@@ -400,13 +432,16 @@ export const LocalRole = Type.Object({
 }, strict);
 
 /**
- * POST /v1/sessions。kind=plan（规划员）：带 taskId，firstMessage 是云端的拆卡交代，role 是规划员岗位；不给目录时本机给它建一个专用目录。
+ * POST /v1/sessions。kind=plan（规划员）：带 taskId，firstMessage 是云端的拆卡交代，role 是规划员岗位；不给目录时用项目绑的文件夹，再没有本机给它建一个专用目录。
  * kind=verify 不能从网页开（400）：执行方交回以后本机自己起。
  */
 export const LocalCreateSessionRequest = Type.Object({
   subject: LocalSessionSubject,
   title: Type.String({ minLength: 1, maxLength: 120 }),
-  /** 工作目录：必须在允许的文件夹内。topic、plan 可不填，本机程序给它建一个专用目录。卡的文件夹在 git 仓库里时，卡在自己的工作树里做（见 LocalWorkspace）。 */
+  /**
+   * 工作目录：必须在允许的文件夹内。不填时：subject 带 projectId 且项目在这台电脑上绑了文件夹，就用那个文件夹；没绑时卡用本机给项目建的专用目录，
+   * topic、plan 用各自的专用目录；不带项目的卡必须填。卡的文件夹在 git 仓库里时，卡在自己的工作树里做（见 LocalWorkspace）。
+   */
   cwd: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
   agent: Type.Optional(LocalAgentKind),
   /** 不填用默认模型。 */
@@ -1078,6 +1113,10 @@ export type TLocalQuotaSource = Static<typeof LocalQuotaSource>;
 export type TLocalQuotaSync = Static<typeof LocalQuotaSync>;
 export type TLocalToolStatus = Static<typeof LocalToolStatus>;
 export type TLocalHold = Static<typeof LocalHold>;
+export type TLocalFolderProject = Static<typeof LocalFolderProject>;
+export type TLocalProjectFolder = Static<typeof LocalProjectFolder>;
+export type TLocalProjectListResponse = Static<typeof LocalProjectListResponse>;
+export type TLocalProjectFolderRequest = Static<typeof LocalProjectFolderRequest>;
 export type TLocalAttachmentRef = Static<typeof LocalAttachmentRef>;
 export type TLocalSavedAttachment = Static<typeof LocalSavedAttachment>;
 export type TLocalEffort = Static<typeof LocalEffort>;
@@ -1154,4 +1193,6 @@ export const LOCAL_RUNNER_ROUTES = {
   stopBackground: { method: "POST", path: "/v1/sessions/:id/background/:itemId/stop", auth: true },
   listBudgets: { method: "GET", path: "/v1/budgets", auth: true },
   putBudget: { method: "PUT", path: "/v1/budgets", auth: true },
+  listProjects: { method: "GET", path: "/v1/projects", auth: true },
+  putProjectFolder: { method: "PUT", path: "/v1/projects/:projectId/folder", auth: true },
 } as const;
