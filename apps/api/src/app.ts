@@ -635,7 +635,7 @@ export async function buildApp({
     pool,
     bitable: bitable ?? (env.collectionBitable === "live" && env.feishu ? createFeishuBitable() : createMockBitable()),
     feishu: env.feishu,
-    notify: env.feishu ? feishuNotifier(q) : undefined,
+    notify: env.feishu ? (notice, dedupeKey) => feishuNotifier(q)({ ...notice, source: "collection" }, dedupeKey) : undefined,
     isCeo: (personId) => peopleDirectory.searchPeople(undefined).find((person) => person.personId === personId)?.roles.includes("ceo") ?? false,
     names: () => personDisplayNames(peopleDirectory),
     now,

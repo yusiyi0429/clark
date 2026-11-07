@@ -239,7 +239,7 @@ export async function notifyAcceptor(q: Query, access: PlanTaskAccess, check: TT
     throw new DeliverableError(409, "ACCEPTOR_NOT_ON_FEISHU", `${item.acceptor.name}还没关联飞书，推不了`);
   const task = access.task;
   const owner = names.get(access.ownerId) ?? access.ownerId;
-  const notice: FeishuNotice = { personId: request.personId, title: `请看「${task.name}」第 ${item.index} 条`.slice(0, 200),
+  const notice: FeishuNotice = { personId: request.personId, source: "acceptor", title: `请看「${task.name}」第 ${item.index} 条`.slice(0, 200),
     body: `${owner}的 Task「${task.name}」第 ${item.index} 条约定由你来认：${item.text}\n交付物第 ${check.version.number} 版${item.evidence?.locator ? `，证据在 ${item.evidence.locator}` : ""}。`,
     links: [{ label: "打开 Task", path: `/me?planTask=${encodeURIComponent(task.taskId)}` }] };
   const sent = await enqueueJob(q, { kind: FEISHU_NOTIFY_KIND, dedupeKey: notifyKey(task.taskId, item.index, request.personId, shanghaiDate(now)), payload: notice });

@@ -101,7 +101,7 @@ describe("MonthlyPlan Company Day scheduler", () => {
   it("creates at most one plan per Asia/Shanghai period and only catches up the missing period", async () => {
     const agent = fakeAgent();
     let now = new Date("2026-06-15T02:00:00Z"); // 上海 2026-06-15 10:00
-    const t = await createTestApp({}, undefined, { monthlyDraftAgent: agent, monthlyNow: () => now });
+    const t = await createTestApp({ tianshuMonthlyCycle: true }, undefined, { monthlyDraftAgent: agent, monthlyNow: () => now });
     try {
       const first = await t.monthlyPlans!.runScheduled();
       await t.monthlyPlans!.idle();
@@ -133,7 +133,7 @@ describe("MonthlyDraft Agent", () => {
       // 第一次返回越界 candidate：模型不能靠散文或多余字段写入业务字段
       return calls === 1 ? { ...validCandidate(), extra: true } : validCandidate();
     });
-    const t = await createTestApp({}, undefined, { monthlyDraftAgent: agent, monthlyNow: () => new Date("2026-06-15T02:00:00Z") });
+    const t = await createTestApp({ tianshuMonthlyCycle: true }, undefined, { monthlyDraftAgent: agent, monthlyNow: () => new Date("2026-06-15T02:00:00Z") });
     try {
       const planId = await readyPlan(t);
       const cookie = await t.loginCookie();
@@ -171,7 +171,7 @@ describe("MonthlyDraft Agent", () => {
   it("replaces a ready draft, clears its edits and checks, and replays one action only once", async () => {
     let revision = 0;
     const agent = fakeAgent(() => ({ ...validCandidate(), companyOutcome: `草案第 ${++revision} 版` }));
-    const t = await createTestApp({}, undefined, { monthlyDraftAgent: agent });
+    const t = await createTestApp({ tianshuMonthlyCycle: true }, undefined, { monthlyDraftAgent: agent });
     try {
       const planId = await readyPlan(t);
       const cookie = await t.loginCookie();
@@ -201,7 +201,7 @@ describe("MonthlyDraft Agent", () => {
   it("keeps the previous draft and checks when regeneration fails", async () => {
     let revision = 0;
     const agent = fakeAgent(() => ++revision === 1 ? validCandidate() : { ...validCandidate(), extra: true });
-    const t = await createTestApp({}, undefined, { monthlyDraftAgent: agent });
+    const t = await createTestApp({ tianshuMonthlyCycle: true }, undefined, { monthlyDraftAgent: agent });
     try {
       const planId = await readyPlan(t);
       const cookie = await t.loginCookie();
@@ -225,7 +225,7 @@ describe("MonthlyDraft Agent", () => {
   it("feeds confirmed directions, last period review and DRI feedback into the Draft Agent", async () => {
     const agent = fakeAgent();
     let now = new Date("2026-05-15T02:00:00Z");
-    const t = await createTestApp({}, undefined, { monthlyDraftAgent: agent, monthlyNow: () => now });
+    const t = await createTestApp({ tianshuMonthlyCycle: true }, undefined, { monthlyDraftAgent: agent, monthlyNow: () => now });
     try {
       const mayPlanId = await readyPlan(t);
       // 上月 DRI 反馈
@@ -281,7 +281,7 @@ describe("MonthlyDraft Agent", () => {
 
   it("把 Company LTCO 与按 sortOrder 的战场长期目标/Mission 注入 Draft Agent input", async () => {
     const agent = fakeAgent();
-    const t = await createTestApp({}, undefined, { monthlyDraftAgent: agent, monthlyNow: () => new Date("2026-06-15T02:00:00Z") });
+    const t = await createTestApp({ tianshuMonthlyCycle: true }, undefined, { monthlyDraftAgent: agent, monthlyNow: () => new Date("2026-06-15T02:00:00Z") });
     try {
       await t.sql("UPDATE company_strategy_config SET ltco = $1 WHERE id = 'default'", ["用 Agent 重做组织结构，让每块战场都有负责人。"]);
       await t.sql("UPDATE battlefield_config SET code = '02', sort_order = 20, mission_anchors = $1::jsonb WHERE id = 'growth'", [
@@ -321,7 +321,7 @@ describe("MonthlyDraft Agent", () => {
 describe("MonthlyPlan negotiation", () => {
   it("edits company outcome, battlefield outcomes, ordinary todos and checks through a versioned Action", async () => {
     const agent = fakeAgent();
-    const t = await createTestApp({}, undefined, { monthlyDraftAgent: agent, monthlyNow: () => new Date("2026-06-15T02:00:00Z") });
+    const t = await createTestApp({ tianshuMonthlyCycle: true }, undefined, { monthlyDraftAgent: agent, monthlyNow: () => new Date("2026-06-15T02:00:00Z") });
     try {
       const planId = await readyPlan(t);
       const cookie = await t.loginCookie();
@@ -379,7 +379,7 @@ describe("MonthlyPlan negotiation", () => {
 
   it("clears the check of the fields the CEO edits", async () => {
     const agent = fakeAgent();
-    const t = await createTestApp({}, undefined, { monthlyDraftAgent: agent, monthlyNow: () => new Date("2026-06-15T02:00:00Z") });
+    const t = await createTestApp({ tianshuMonthlyCycle: true }, undefined, { monthlyDraftAgent: agent, monthlyNow: () => new Date("2026-06-15T02:00:00Z") });
     try {
       const planId = await readyPlan(t);
       const cookie = await t.loginCookie();
@@ -413,7 +413,7 @@ describe("MonthlyPlan negotiation", () => {
         return { candidate: validCandidate(), runId: "run-gated" };
       },
     };
-    const t = await createTestApp({}, undefined, { monthlyDraftAgent: agent, monthlyNow: () => new Date("2026-06-15T02:00:00Z") });
+    const t = await createTestApp({ tianshuMonthlyCycle: true }, undefined, { monthlyDraftAgent: agent, monthlyNow: () => new Date("2026-06-15T02:00:00Z") });
     try {
       await seedCapability(t);
       const created = await t.monthlyPlans!.runScheduled();
@@ -443,7 +443,7 @@ describe("MonthlyPlan negotiation", () => {
 
   it("rejects unknown todo owners and stale versions, returning the latest Card", async () => {
     const agent = fakeAgent();
-    const t = await createTestApp({}, undefined, { monthlyDraftAgent: agent, monthlyNow: () => new Date("2026-06-15T02:00:00Z") });
+    const t = await createTestApp({ tianshuMonthlyCycle: true }, undefined, { monthlyDraftAgent: agent, monthlyNow: () => new Date("2026-06-15T02:00:00Z") });
     try {
       const planId = await readyPlan(t);
       const cookie = await t.loginCookie();
@@ -478,7 +478,7 @@ describe("MonthlyPlan negotiation", () => {
 
   it("edits and checks the capability PCO, and rejects an unregistered capabilityId", async () => {
     const agent = fakeAgent();
-    const t = await createTestApp({}, undefined, { monthlyDraftAgent: agent, monthlyNow: () => new Date("2026-06-15T02:00:00Z") });
+    const t = await createTestApp({ tianshuMonthlyCycle: true }, undefined, { monthlyDraftAgent: agent, monthlyNow: () => new Date("2026-06-15T02:00:00Z") });
     try {
       const planId = await readyPlan(t);
       const cookie = await t.loginCookie();
@@ -522,7 +522,7 @@ describe("MonthlyPlan negotiation", () => {
 describe("DRI monthly feedback", () => {
   it("appends externalId-deduplicated narrative feedback to the same MonthlyPlan behind the service token", async () => {
     const agent = fakeAgent();
-    const t = await createTestApp({}, undefined, { monthlyDraftAgent: agent, monthlyNow: () => new Date("2026-06-15T02:00:00Z") });
+    const t = await createTestApp({ tianshuMonthlyCycle: true }, undefined, { monthlyDraftAgent: agent, monthlyNow: () => new Date("2026-06-15T02:00:00Z") });
     try {
       const planId = await readyPlan(t);
       const payload = {
@@ -574,7 +574,7 @@ describe("DRI monthly feedback", () => {
 
   it("refuses DRI feedback on a confirmed plan", async () => {
     const agent = fakeAgent();
-    const t = await createTestApp({}, undefined, { monthlyDraftAgent: agent, monthlyNow: () => new Date("2026-06-15T02:00:00Z") });
+    const t = await createTestApp({ tianshuMonthlyCycle: true }, undefined, { monthlyDraftAgent: agent, monthlyNow: () => new Date("2026-06-15T02:00:00Z") });
     try {
       const planId = await readyPlan(t);
       await t.sql("UPDATE monthly_plans SET status = 'confirmed' WHERE id = $1", [planId]);
@@ -595,7 +595,7 @@ describe("DRI monthly feedback", () => {
 
   it("appends todo feedback without changing todo state and rejects unknown period, todo or submitter", async () => {
     const agent = fakeAgent();
-    const t = await createTestApp({}, undefined, { monthlyDraftAgent: agent, monthlyNow: () => new Date("2026-06-15T02:00:00Z") });
+    const t = await createTestApp({ tianshuMonthlyCycle: true }, undefined, { monthlyDraftAgent: agent, monthlyNow: () => new Date("2026-06-15T02:00:00Z") });
     try {
       const planId = await readyPlan(t);
       const cookie = await t.loginCookie();
@@ -708,7 +708,7 @@ describe("startup recovery of an interrupted MonthlyPlan draft", () => {
 describe("MonthlyPlan projections", () => {
   it("reads Card, notification and Conversation scope from the same persisted MonthlyPlan", async () => {
     const agent = fakeAgent();
-    const t = await createTestApp({}, undefined, { monthlyDraftAgent: agent });
+    const t = await createTestApp({ tianshuMonthlyCycle: true }, undefined, { monthlyDraftAgent: agent });
     try {
       const planId = await readyPlan(t);
       const cookie = await t.loginCookie();

@@ -271,7 +271,7 @@ describe("请 X 看", () => {
       const jobs = await f.t.sql("SELECT kind, dedupe_key, payload FROM jobs WHERE kind=$1", [FEISHU_NOTIFY_KIND]);
       expect(jobs).toHaveLength(1);
       expect(jobs[0].dedupe_key).toBe(`${FEISHU_NOTIFY_KIND}:task-check:t-plain:1:${THIRD.personId}:2026-10-22`);
-      expect(jobs[0].payload).toEqual({ personId: THIRD.personId, title: "请看「对话质量达标」第 1 条",
+      expect(jobs[0].payload).toEqual({ personId: THIRD.personId, source: "acceptor", title: "请看「对话质量达标」第 1 条",
         body: "测试乙的 Task「对话质量达标」第 1 条约定由你来认：有题库打分结果\n交付物第 4 版，证据在 评测报告.pdf 第 3 页。",
         links: [{ label: "打开 Task", path: "/me?planTask=t-plain" }] });
       // 队列里那一条由 feishu/notify.ts 发出：这里用打桩的飞书客户端跑一遍，看收件人和跳回 Task 的链接。
