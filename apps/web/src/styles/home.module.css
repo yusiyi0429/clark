@@ -97,8 +97,11 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .sub[data-state="done"] { color: var(--ink-faint); }
 .subName { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .subReason { flex: none; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; }
+/* 本人事项行（9.10）：就是子会话行，状态位换成本人 16 的头像；没照片画成纯 --neutral-wash 圆、不写字（5.4.2「本人行」）。 */
+/* 16px 的人像位（树上本人事项行首、等你行里请你认可的对方）：同一条规则。 */
+.itemAvatar, .waitAvatar { display: inline-grid; flex: none; place-items: center; width: 16px; height: 16px; overflow: hidden; border-radius: 50%; background: var(--neutral-wash); }
 /* 「已完成 N」：和子会话行同一个缩进，ChevronRight + 12/16 400 淡色；悬停字变 --ink-muted。 */
-.foldToggle { display: flex; align-items: center; gap: var(--space-2); width: 100%; height: var(--row-28); padding: 0 var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink-faint); font: inherit; font-size: var(--text-xs); line-height: 16px; text-align: left; cursor: pointer; }
+.foldToggle { display: flex; align-items: center; gap: var(--space-2); width: 100%; height: var(--row-28); padding: 0 var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink-faint); font: inherit; font-size: var(--text-xs); line-height: 16px; font-variant-numeric: tabular-nums; text-align: left; cursor: pointer; }
 .foldToggle:hover { background: var(--default-soft); color: var(--ink-muted); }
 
 /* 本人行：贴底，上沿发丝线；头像 24 + 名字 14/20。菜单开着、在二级页上时是选中底。 */
@@ -154,10 +157,19 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .wait:hover { background: var(--default-soft); }
 .waitMain { display: grid; flex: 1; align-content: center; min-width: 0; min-height: var(--row-48); padding: 6px var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
 .waitTitle { overflow: hidden; font-size: var(--text-base); line-height: var(--lh-row); text-overflow: ellipsis; white-space: nowrap; }
-.waitSource { overflow: hidden; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
+/* 第二行（9.6、9.10）：请你认可的先是对方 16 的头像和名字，再来源，再截止「剩 2 天」；不到 24 小时、已过截止用 --warning。来源放不下省略，截止不省略。 */
+.waitSource { display: flex; align-items: center; gap: var(--space-1); min-width: 0; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; white-space: nowrap; }
+.waitAvatar { margin-right: var(--space-1); }
+.waitFrom { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.waitDue { flex: none; font-variant-numeric: tabular-nums; }
+.waitDue[data-warn] { color: var(--warning); }
 .waitActs { display: flex; flex: none; align-items: center; gap: var(--space-2); padding-right: var(--space-2); }
+.waitActs button { min-height: var(--touch-hit, var(--row-32)); }
+/* 悬停的行底和次按钮、弱按钮悬停、chip、无照片头像的底同是 4%：行悬停时这些换 --default-hover（5.2「颜色怎么用」、5.4.6）。 */
+.wait:hover .waitActs :global(.button--tertiary) { --button-bg: var(--default-hover); }
+.wait:hover .waitActs :global(.button--ghost) { --button-bg-hover: var(--default-hover); --button-bg-pressed: var(--default-hover); }
+.wait:hover .waitAway, .wait:hover .waitAvatar { background: var(--default-hover); }
 .waitDone { color: var(--ink-faint); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); }
-.waitFailed { color: var(--danger); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); }
 .wait[data-done] .waitTitle { color: var(--ink-faint); }
 
 /* 输入框：ComposerPill，和对话列同宽；「发给」是选择器的触发器，样子同弱按钮、字重 400。 */
@@ -232,12 +244,13 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .resModel { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .num { font-variant-numeric: tabular-nums; }
 /* 额度行（5.4.5）：名字 13 墨色、剩多少 13 等宽数字、重置时刻 12 淡；字下 4px 一条 2px 额度条，≤25% 琥珀、≤10% 或用完红；超过 15 分钟没更新整行变淡。整行能点。 */
-.quota { display: grid; align-content: center; gap: 4px; min-height: var(--row-36); margin: 0 calc(-1 * var(--space-2)); padding: 0 var(--space-2); border-radius: var(--r-control); cursor: pointer; }
+.quota { display: grid; align-content: center; gap: 4px; min-height: var(--touch-hit, var(--row-36)); margin: 0 calc(-1 * var(--space-2)); padding: 0 var(--space-2); border-radius: var(--r-control); cursor: pointer; }
 .quota:hover { background: var(--default-soft); }
 .quota[data-focus-visible], .quota:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .quotaLine { display: flex; align-items: baseline; gap: var(--space-2); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); }
-.quotaAmount { color: var(--ink); }
-.quotaTime { color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; }
+.quotaLine .resName { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quotaAmount { flex: none; color: var(--ink); white-space: nowrap; }
+.quotaTime { flex: none; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; white-space: nowrap; }
 .quota[data-stale] .resName, .quota[data-stale] .quotaAmount { color: var(--ink-faint); }
 .quotaBar { display: block; height: 2px; overflow: hidden; border-radius: 1px; background: var(--hairline); }
 .quotaBar i { display: block; height: 100%; background: var(--ink-muted); }
@@ -261,6 +274,7 @@ button.bgLabel:hover { background: var(--default-soft); }
 .bgTitle { flex: 1; min-width: 0; overflow: hidden; color: var(--ink); text-overflow: ellipsis; white-space: nowrap; }
 .bgTime { flex: none; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .bgRow[data-state="failed"] .bgTime { color: var(--danger); }
+.bgHold { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .bgStop { display: inline-flex; flex: none; opacity: 0; transition: opacity var(--dur-snap) var(--ease-swift); }
 .bgRow:hover .bgStop, .bgStop:focus-within, .bgRow[data-handheld] .bgStop { opacity: 1; }
 /* 收起条：44 宽，整条都能点，悬停底；展开键和展开时的收起键同一个高度。 */

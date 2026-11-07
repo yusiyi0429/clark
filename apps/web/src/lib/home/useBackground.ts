@@ -15,13 +15,13 @@ import type { WorkHomeApi } from "./useWorkHome";
 
 const POLL_MS = 5000;
 
-/** scope 为 null（二级页、月份页）时右栏只有资源块，不列后台任务。 */
-export function useBackground(scope: BackgroundScope | null, api: WorkHomeApi): BackgroundItem[] {
+/** scope 为 resources（二级页、月份页）时右栏只有资源块，不列后台任务，也不用去取（云端这时 items 为空）。 */
+export function useBackground(scope: BackgroundScope, api: WorkHomeApi): BackgroundItem[] {
   const local = useLocalRunner();
   const handheld = useHandheld();
   const [cloud, setCloud] = useState<{ scope: string; items: BackgroundItem[] } | null>(null);
   useEffect(() => {
-    if (!api.live || !scope) return;
+    if (!api.live || scope === "resources") return;
     let alive = true;
     const load = () => readBackground(scope).then((data) => { if (alive && data) setCloud({ scope, items: data.items }); }, () => undefined);
     void load();
@@ -46,7 +46,7 @@ export function useBackground(scope: BackgroundScope | null, api: WorkHomeApi): 
     : []), [local.phase, local.sessions, api.deviceId, handheld, today, taskOfCard, taskOfTopic]);
   return useMemo(() => {
     // 云端的只给看：停只能在跑它的那台电脑上经本机程序停，这台电脑上的由下面本机那份（同一个 id）给停止。
-    if (!scope) return [];
+    if (scope === "resources") return [];
     const base = api.live ? (cloud?.scope === scope ? cloud.items : []).map((item) => ({ ...item, stoppable: false })) : workerBackground(workers);
     return inScope(mergeBackground(base, here), scope);
   }, [api.live, cloud, scope, workers, here]);

@@ -25,6 +25,12 @@ describe("右栏额度行（5.4.5）", () => {
     expect(row).toMatchObject({ amount: "用完", resets: "08:00", left: 0, tone: "danger", stale: "20 分钟前" });
   });
 
+  it("云端报的别的设备：名字带设备名，读不到额外额度就不写那一行", () => {
+    const [row] = quotaRows([source({ device: "ThinkPad", extraUsage: null })], now);
+    expect(row!.name).toBe("Claude 订阅 · ThinkPad");
+    expect(row!.details).toEqual(["5 小时 · 剩 17% · 08:00 重置", "本周 · 剩 60% · 11/10 06:00 重置"]);
+  });
+
   it("还没读到窗口的不画；色阶 ≤10% 红、≤25% 琥珀", () => {
     expect(quotaRows([source({ windows: [] })], now)).toEqual([]);
     expect([toneOf(60, false), toneOf(25, false), toneOf(10, false), toneOf(50, true)]).toEqual(["ok", "warning", "danger", "danger"]);

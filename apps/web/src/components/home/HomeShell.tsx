@@ -261,7 +261,7 @@ function HomeFrame({ account }: { account: Account }) {
 
   // ---- 后台任务 ----
   const items = useBackground(scopeOf(view), api);
-  const machine = useMachine();
+  const machine = useMachine(work.resources.quota);
   const running = items.filter((item) => item.state === "running" || item.state === "queued").length;
   const model = local.models.find((entry) => entry.isDefault)?.label ?? local.models[0]?.label ?? null;
   // 规划员、验收员停会话；子 agent、后台命令只停那一项，会话接着做。
@@ -299,9 +299,10 @@ function HomeFrame({ account }: { account: Account }) {
   const backgroundButton = useMemo(() => (
     <button type="button" className={h.icon} aria-label="后台任务" title="后台任务" onClick={() => setSheet(true)} data-testid="phone-background">
       {running ? <span className={h.runningCount}><LoaderCircle {...ICON} />{running}</span> : <ListChecks {...ICON} />}
-      {(machine.alert || machine.quotaAlert) && !handheld ? <i className={h.cornerDot} data-tone={!machine.alert && machine.quotaAlert === "danger" ? "danger" : undefined} aria-hidden /> : null}
+      {/* 这个按钮只在手机上：这台电脑没连上不亮点，额度（云端各设备报的）快用完照样亮（11.2）。 */}
+      {machine.quotaAlert ? <i className={h.cornerDot} data-tone={machine.quotaAlert === "danger" ? "danger" : undefined} aria-hidden /> : null}
     </button>
-  ), [running, machine.alert, machine.quotaAlert, handheld]);
+  ), [running, machine.quotaAlert]);
   // 子会话页头的上一级：它挂在哪件 Task 下（树上找），点了回到那件 Task 的管线。
   const subId = view.kind === "card" || view.kind === "topic" ? view.id : null;
   const owner = subId ? data.missions.flatMap((mission) => mission.tasks).find((task) => task.subSessions.some((sub) => sub.id === subId)) ?? null : null;
@@ -385,7 +386,7 @@ function HomeFrame({ account }: { account: Account }) {
           <aside className={h.left}>{left}</aside>
           <main className={h.display}>{display(view)}</main>
           <aside className={h.right} aria-label="后台任务">
-            {panelOpen ? panel({ onCollapse: () => togglePanel(false) }) : <BackgroundStrip running={running} onExpand={() => togglePanel(true)} />}
+            {panelOpen ? panel({ onCollapse: () => togglePanel(false) }) : <BackgroundStrip running={running} quota={work.resources.quota} onExpand={() => togglePanel(true)} />}
           </aside>
         </div>
       </ViewChrome.Provider>

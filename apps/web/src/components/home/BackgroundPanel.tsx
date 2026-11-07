@@ -3,10 +3,10 @@
 /**
  * 右栏（新首页设计 5.4.5）：资源块 → 发丝线 →「进行中 N」→「已完成 N」，不写标题。跟着展示区走（首页列全部，二级页只留资源块）。
  * - 资源块：「这台电脑 · 就绪」（七种状态：检查中、等浏览器允许、被拦截、离线、未配对、暂停中、就绪；没就绪的前面一个琥珀点，下面一行一个次按钮：
- *   配对、继续或重试）；位置条（用着的 --ink-muted，空的发丝线，不上色）+「2/3」+ 模型。额度行等本机程序给 quota 再加（只显示读得到的）。
+ *   配对、继续或重试）；位置条（用着的 --ink-muted，空的发丝线，不上色）+「2/3」+ 模型。额度行：这台电脑就绪时用本机的，不然用云端各台设备报的（只显示读得到的）。
  * - 后台任务：组头 12/16 600 淡色，「进行中」前面一颗转圈（整栏只有它在转）；「已完成」默认收起，有失败时自动展开、组头后面加「· 失败 1」。
  *   行高 36：种类、名字、用时，停止按钮鼠标移上去或有焦点时才出（手持上一直显示），不能停的不画。行里不放状态图标，失败的行首一个叉、用时换成「失败」，
- *   停了的用时换成「已停止」。后台任务点不进去，行没有悬停底。
+ *   停了的用时换成「已停止」，停着等额度恢复的换成「等额度恢复 · 08:00」。后台任务点不进去，行没有悬停底。
  * - 收起后是 44 宽的细条：展开键；有在跑的是转圈加数字；本机要处理时一个琥珀点。
  */
 import { useEffect, useState } from "react";
@@ -17,7 +17,7 @@ import { Slots } from "@/components/work/Slots";
 import { FailedLine } from "@/components/work/DecisionBox";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import type { LocalPhase } from "@/lib/local/connection";
-import { duration, groupBackground } from "@/lib/home/derive";
+import { duration, groupBackground, queueText } from "@/lib/home/derive";
 import { quotaRows, type QuotaRow } from "@/lib/home/quota";
 import type { BackgroundItem } from "@/lib/home/types";
 import type { Resources } from "@/lib/work/useWork";
@@ -27,8 +27,12 @@ import h from "@/styles/home.module.css";
 const KIND: Record<BackgroundItem["kind"], string> = { plan: "规划", verify: "验收", merge: "合回", subagent: "子 agent", command: "命令" };
 const PHASE: Record<LocalPhase, string> = { checking: "检查中", prompt: "等浏览器允许", blocked: "被拦截", offline: "离线", unpaired: "未配对", ready: "就绪" };
 
-/** 这台电脑现在是什么状态、要不要本人动手（本人行、细条上的琥珀点也用这个）。 */
-export function useMachine() {
+/**
+ * 这台电脑现在是什么状态、要不要本人动手（本人行、细条上的琥珀点也用这个）。
+ * cloudQuota 是各台设备同步给云端的额度：这台电脑没就绪（手机、未配对、离线）或读不到额度时，每台设备一行「Claude 订阅 · 设备名」；
+ * 这台电脑就绪且读得到时只列它自己的。
+ */
+export function useMachine(cloudQuota: Resources["quota"]) {
   const local = useLocalRunner();
   const paused = local.phase === "ready" && !!local.status?.settings.paused;
   const word = paused ? "暂停中" : PHASE[local.phase];
@@ -37,8 +41,12 @@ export function useMachine() {
     : paused ? { label: "继续", run: async () => { await local.runner.patchSettings({ paused: false }); await local.refresh(); } }
     : local.phase === "offline" || local.phase === "blocked" || local.phase === "prompt" ? { label: "重试", run: () => local.refresh() }
     : null;
-  // 额度（D 的 status.quota）：剩 ≤25% 琥珀点、≤10% 或用完红点，和本机要处理的点是同一颗（5.4.5、5.6）。
-  const quota = quotaRows(local.status?.quota ?? [], Date.now());
+  // 额度（D 的 status.quota，读不到用云端的）：剩 ≤25% 琥珀点、≤10% 或用完红点，和本机要处理的点是同一颗（5.4.5、5.6），看列出来的那几行。
+  const now = Date.now();
+  const here = local.phase === "ready" ? quotaRows(local.status?.quota ?? [], now) : [];
+  const quota = here.length ? here : quotaRows(cloudQuota.map((entry) => ({
+    source: entry.source, windows: entry.windows, blockedUntil: entry.blockedUntil, extraUsage: null, updatedAt: entry.updatedAt, device: entry.deviceName,
+  })), now);
   const quotaAlert = quota.some((row) => row.tone === "danger") ? "danger" as const : quota.some((row) => row.tone === "warning") ? "warning" as const : null;
   return { word, alert, action, quota, quotaAlert };
 }
@@ -50,7 +58,7 @@ function QuotaLine({ row }: { row: QuotaRow }) {
     <Popover>
       <Popover.Trigger className={h.quota} data-tone={row.tone} data-stale={row.stale ? "" : undefined} aria-label={`${row.name} ${row.amount}${row.resets ? ` ${row.resets}` : ""}`} data-testid="quota-row">
         <span className={h.quotaLine}>
-          <span className={h.resName}>{row.name}</span>
+          <span className={h.resName} title={row.name}>{row.name}</span>
           <span className={`${h.quotaAmount} ${h.num}`}>{row.amount}</span>
           {time ? <span className={`${h.quotaTime} ${h.num}`}>{time}</span> : null}
         </span>
@@ -77,7 +85,7 @@ export function BackgroundPanel({ items, resources, model, onStop, onCollapse, h
 }) {
   const groups = groupBackground(items);
   const now = useNow(groups.running.some((item) => item.state === "running"));
-  const machine = useMachine();
+  const machine = useMachine(resources.quota);
   const [stopping, setStopping] = useState<string | null>(null);
   const failed = groups.finished.filter((item) => item.state === "failed").length;
   const [open, setOpen] = useState(false);
@@ -97,7 +105,9 @@ export function BackgroundPanel({ items, resources, model, onStop, onCollapse, h
       {item.state === "failed" ? <span className={h.bgFail}><X {...ICON} aria-label="失败" /></span> : null}
       <span className={h.bgKind}>{KIND[item.kind]}</span>
       <span className={h.bgTitle} title={item.title}>{item.title}</span>
-      <span className={h.bgTime}>{item.state === "failed" ? "失败" : item.state === "stopped" ? "已停止" : item.state === "queued" ? "已排队" : duration(item.startedAt, item.finishedAt ?? now)}</span>
+      {/* 停着等额度恢复：放不下就省略，不挤掉停止按钮。 */}
+      {item.state === "queued" && item.holdUntil ? <span className={`${h.bgTime} ${h.bgHold}`}>{queueText("quota", item.holdUntil)}</span>
+        : <span className={h.bgTime}>{item.state === "failed" ? "失败" : item.state === "stopped" ? "已停止" : item.state === "queued" ? "已排队" : duration(item.startedAt, item.finishedAt ?? now)}</span>}
       {stopFailed?.id === item.id && stopping !== item.id ? <FailedLine inline reason={stopFailed.reason} onRetry={() => void stop(item)} />
       : item.stoppable && (item.state === "running" || item.state === "queued") ? (
         <span className={h.bgStop}>
@@ -125,7 +135,7 @@ export function BackgroundPanel({ items, resources, model, onStop, onCollapse, h
           <span className={h.num}>{resources.local.used}/{resources.local.cap}</span>
           {model ? <span className={h.resModel}>{model}</span> : null}
         </div>
-        {machine.quota.map((row) => <QuotaLine key={row.name} row={row} />)}
+        {machine.quota.map((row, index) => <QuotaLine key={`${index}:${row.name}`} row={row} />)}
       </div>
       <div className={h.bgBody}>
         {groups.running.length ? (
@@ -149,13 +159,13 @@ export function BackgroundPanel({ items, resources, model, onStop, onCollapse, h
 }
 
 /** 收起后的细条：展开键；有在跑的是转圈加数字；本机要处理时一个琥珀点。 */
-export function BackgroundStrip({ running, onExpand }: { running: number; onExpand: () => void }) {
-  const machine = useMachine();
+export function BackgroundStrip({ running, quota, onExpand }: { running: number; quota: Resources["quota"]; onExpand: () => void }) {
+  const machine = useMachine(quota);
   return (
     <button type="button" className={h.strip} onClick={onExpand} aria-label={`展开，进行中 ${running}`} title="展开" data-testid="background-strip">
       <PanelRightOpen {...ICON} />
       {running ? <span className={h.runningCount}><LoaderCircle {...ICON} />{running}</span> : null}
-      {machine.alert || machine.quotaAlert ? <i className={h.warnDot} data-tone={!machine.alert && machine.quotaAlert === "danger" ? "danger" : undefined} aria-label={machine.alert ? "这台电脑要处理" : "额度快用完了"} role="img" /> : null}
+      {machine.alert || machine.quotaAlert ? <i className={h.warnDot} data-tone={machine.quotaAlert === "danger" ? "danger" : undefined} aria-label={machine.quotaAlert === "danger" || !machine.alert ? "额度快用完了" : "这台电脑要处理"} role="img" /> : null}
     </button>
   );
 }

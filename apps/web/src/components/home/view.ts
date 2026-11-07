@@ -31,14 +31,14 @@ export function viewOf(pathname: string): View {
   return { kind: "home" };
 }
 
-/** 右栏跟着展示区走：首页和总管线列本人全部（B 的契约 scope=main），Task 管线和详情列这件 Task 的，子会话列它自己的；二级页、月份页只显示资源块。 */
-export function scopeOf(view: View): BackgroundScope | null {
+/** 右栏跟着展示区走：首页和总管线列本人全部（B 的契约 scope=main），Task 管线和详情列这件 Task 的，子会话列它自己的；二级页、月份页只显示资源块（resources）。 */
+export function scopeOf(view: View): BackgroundScope {
   switch (view.kind) {
     case "home": case "buddy": return "main";
     case "task": case "info": return `task:${view.taskId}`;
     case "card": return `card:${view.id}`;
     case "topic": return `topic:${view.id}`;
-    case "page": case "month": return null;
+    case "page": case "month": return "resources";
   }
 }
 

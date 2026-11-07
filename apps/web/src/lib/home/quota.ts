@@ -2,7 +2,8 @@
  * 右栏资源块的额度行（新首页设计 5.4.5「额度」、11.2）：每个来源一行「名字 剩 17% 08:00」，下面一条 2px 额度条；
  * 剩 ≤25% 琥珀、≤10% 或用完红；用完写「用完 · 08:00」；超过 15 分钟没更新整行变淡、写「15 分钟前」。
  * 点开是明细：每个窗口一行「剩多少 · 几点重置」，最后一行「额外额度 · 已开 / 未开」。
- * 数据是本机 GET /v1/status 的 quota（D 的契约 LocalQuotaSource），这里只用到它的这几项。
+ * 数据是本机 GET /v1/status 的 quota（D 的契约 LocalQuotaSource），这里只用到它的这几项；
+ * 这台电脑读不到时用云端 /api/me/workers 的 resources.quota（各台设备报的，没有额外额度），带 device 写成「Claude 订阅 · ThinkPad」。
  */
 export type QuotaWindowLike = {
   kind: "session" | "weekly_all" | "weekly_scoped";
@@ -17,6 +18,8 @@ export type QuotaSourceLike = {
   blockedUntil: string | null;
   extraUsage: boolean | null;
   updatedAt: string | null;
+  /** 云端报的别的设备：名字后面加「 · 设备名」。 */
+  device?: string;
 };
 
 export type QuotaTone = "ok" | "warning" | "danger";
@@ -63,7 +66,7 @@ export function quotaRows(sources: QuotaSourceLike[], now: number): QuotaRow[] {
     });
     if (source.extraUsage !== null) details.push(`额外额度 · ${source.extraUsage ? "已开" : "未开"}`);
     return [{
-      name: NAME[source.source],
+      name: source.device ? `${NAME[source.source]} · ${source.device}` : NAME[source.source],
       amount: blocked ? "用完" : `剩 ${left}%`,
       resets: resetIso ? clock(resetIso, now) : null,
       left,

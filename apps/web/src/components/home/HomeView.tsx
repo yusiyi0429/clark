@@ -10,20 +10,25 @@
 import { useEffect, useRef, useState } from "react";
 import { Dropdown, Header } from "@heroui/react";
 import { Check, ChevronDown } from "lucide-react";
+import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import type { Buddy } from "@/components/buddy/useBuddy";
 import { HeroButton } from "@/components/HeroButton";
+import { FailedLine } from "@/components/work/DecisionBox";
 import { localOptions, oneTap } from "@/components/work/decisions";
 import { useHandheld } from "@/components/ui/useHandheld";
 import { ComposerAction, ComposerPill } from "@/conversation/ComposerPill";
-import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
+import { acceptDrafts } from "@/lib/board/cloud";
+import { useLocalRunner, type LocalRunnerState } from "@/lib/local/LocalRunnerProvider";
 import { decideProposal } from "@/lib/team/roles";
 import { canCommandHere, decide } from "@/lib/work/actions";
 import { mergeCard } from "@/lib/work/merge";
 import { monthLabel, statusParts, taskHref, waitingHref } from "@/lib/home/derive";
+import { relativeDayTime } from "@/lib/companyTime";
 import type { HomeMission, RouteTarget, WaitingItem, WorkHomeData } from "@/lib/home/types";
 import type { WorkHomeApi } from "@/lib/home/useWorkHome";
 import { ICON } from "./StateIcon";
 import h from "@/styles/home.module.css";
+import x from "@/styles/decision-box.module.css";
 
 export type SendTarget = "auto" | RouteTarget;
 
@@ -86,78 +91,130 @@ export function HomeView({ data, api, buddy, today, go, route, onSend }: {
   );
 }
 
-type Action = { label: string; done: string; primary?: boolean; run: () => Promise<unknown> };
+type RunAction = { label: string; done: string; primary?: boolean; run: () => Promise<unknown> };
+/** 行尾的一个按钮：就地办（run），或点了去那件事里（href，开工的「改一改」进 Task 管线）。 */
+type Action = RunAction | { label: string; primary?: boolean; href: string };
+/** away：这里答不了的 inline_local（手机、别的电脑、本机没就绪），行尾画「等你 · {电脑名}」chip。 */
+export type WaitingRowAnswer = { actions: Action[]; away: string | null };
 
 /**
- * 等你的一件能就地答的（5.4.4「就地答」）：本机上的批准、提问、合回只在那台电脑上能答（契约的 deviceId），
- * 答案直接回给那个子会话；手机上、别的电脑上整行点进去看。
+ * 等你一行的行尾（5.4.4「就地答」、9.6，契约 WaitingAnswer）：
+ * - inline_local（批准、回答、合回）要本机办：只在 deviceId 那台电脑上画按钮，答案直接回给那个子会话；单选（最多 3 个短选项）才就地答。
+ *   别处（手机、别的电脑、本机没就绪）画「等你 · {deviceName}」，整行点进去看。
+ * - inline（开工、岗位建议）走云端，手机上也能：开工「开始」= 接受派活单并登记开工（配对的电脑上开着的网页认领后开，同 PlanDecision 开不了本机时），
+ *   「改一改」进 Task 管线；岗位建议「采纳 / 不要」。
+ * - open 的（受阻、会后确认、Mission Card、请你认可、月份、电脑、额度）整行点进去。
  */
+export function waitingAnswer(item: WaitingItem, { api, local, handheld }: { api: Pick<WorkHomeApi, "deviceId" | "work">; local: LocalRunnerState; handheld: boolean }): WaitingRowAnswer {
+  const ready = local.phase === "ready";
+  const actions = waitingActions(item, api, local, ready, handheld);
+  const here = ready && !handheld && (!item.deviceId || item.deviceId === api.deviceId);
+  return { actions, away: !actions.length && item.answer === "inline_local" && !here ? `等你 · ${item.deviceName ?? "那台电脑"}` : null };
+}
+
+function waitingActions(item: WaitingItem, api: Pick<WorkHomeApi, "deviceId" | "work">, local: LocalRunnerState, ready: boolean, handheld: boolean): Action[] {
+  if (item.deviceId && item.deviceId !== api.deviceId) return [];
+  const worker = item.sessionId ? api.work.workers.find((entry) => entry.session?.id === item.sessionId) : undefined;
+  if (worker && (item.kind === "approval" || item.kind === "question") && !canCommandHere(worker, ready, handheld)) return [];
+  if (item.kind === "approval" && worker) return [{ label: "批准", done: "已批准", primary: true, run: () => decide(local.runner, worker, "allow") }];
+  if (item.kind === "question" && worker?.session?.pendingQuestion) {
+    const question = worker.session.pendingQuestion;
+    const session = worker.session;
+    if (!oneTap(question) || question.questions[0]!.options.length > 3) return [];
+    const { options, order } = localOptions(question.questions[0]!.options);
+    return options.slice(0, 2).map((option, index) => ({
+      label: option.label, done: "已回答", primary: index === 0,
+      run: () => local.runner.answerQuestion(session.id, question.requestId, { choices: [[question.questions[0]!.options[order[index]!]!.label]] }),
+    }));
+  }
+  if (item.kind === "role" && item.open.kind === "role") {
+    const id = item.open.id;
+    return [{ label: "采纳", done: "已采纳", primary: true, run: () => decideProposal(id, "accept") }, { label: "不要", done: "已回答", run: () => decideProposal(id, "dismiss") }];
+  }
+  if (item.kind === "merge" && item.sessionId) {
+    const session = local.sessions.find((entry) => entry.id === item.sessionId);
+    if (!session || !ready || handheld) return [];
+    const base = session.workspace?.kind === "worktree" ? session.workspace.baseBranch : "main";
+    return [{ label: `合进 ${base}`, done: "已合回", primary: true, run: async () => { const result = await mergeCard(local.runner, session, item.source ?? ""); if (!result.ok) throw new Error(result.text); } }];
+  }
+  if (item.kind === "plan_start" && item.taskId) {
+    const taskId = item.taskId;
+    const drafts = api.work.boards[taskId]?.drafts ?? [];
+    if (!drafts.length) return [];
+    return [
+      { label: "开始", done: "已开工", primary: true, run: () => acceptDrafts(taskId, drafts.map((draft) => ({ id: draft.id })), true) },
+      { label: "改一改", href: waitingHref(item) },
+    ];
+  }
+  return [];
+}
+
 function useActions(api: WorkHomeApi) {
   const local = useLocalRunner();
   const handheld = useHandheld();
-  const ready = local.phase === "ready";
-  return (item: WaitingItem): Action[] => {
-    if (item.deviceId && api.deviceId && item.deviceId !== api.deviceId) return [];
-    const worker = item.sessionId ? api.work.workers.find((entry) => entry.session?.id === item.sessionId) : undefined;
-    if (worker && (item.kind === "approval" || item.kind === "question") && !canCommandHere(worker, ready, handheld)) return [];
-    if (item.kind === "approval" && worker) return [{ label: "批准", done: "已批准", primary: true, run: () => decide(local.runner, worker, "allow") }];
-    if (item.kind === "question" && worker?.session?.pendingQuestion) {
-      const question = worker.session.pendingQuestion;
-      const session = worker.session;
-      if (!oneTap(question) || question.questions[0]!.options.length > 3) return [];
-      const { options, order } = localOptions(question.questions[0]!.options);
-      return options.slice(0, 2).map((option, index) => ({
-        label: option.label, done: "已回答", primary: index === 0,
-        run: () => local.runner.answerQuestion(session.id, question.requestId, { choices: [[question.questions[0]!.options[order[index]!]!.label]] }),
-      }));
-    }
-    if (item.kind === "role" && item.open.kind === "role") {
-      const id = item.open.id;
-      return [{ label: "采纳", done: "已采纳", primary: true, run: () => decideProposal(id, "accept") }, { label: "不要", done: "已回答", run: () => decideProposal(id, "dismiss") }];
-    }
-    if (item.kind === "merge" && item.sessionId) {
-      const session = local.sessions.find((entry) => entry.id === item.sessionId);
-      if (!session || handheld) return [];
-      const base = session.workspace?.kind === "worktree" ? session.workspace.baseBranch : "main";
-      return [{ label: `合进 ${base}`, done: "已合回", primary: true, run: async () => { const result = await mergeCard(local.runner, session, item.source ?? ""); if (!result.ok) throw new Error(result.text); } }];
-    }
-    return [];
-  };
+  return (item: WaitingItem) => waitingAnswer(item, { api, local, handheld });
 }
 
-/** 等你的一行。答完先在原处写状态词，停 2 秒再刷新（收走）；失败在原处写「失败」加「重试」，不弹 toast。 */
+const HOUR = 3_600_000;
+const DAY = 24 * HOUR;
+/** 截止（5.4.4「时间只写截止」）：「剩 2 天」；不到 24 小时「剩 5 小时」、不到 1 小时「剩 20 分钟」、过了「已过截止」，这三档是警告色。 */
+export function dueText(dueAt: string, now: number): { text: string; warn: boolean } {
+  const left = Date.parse(dueAt) - now;
+  if (left <= 0) return { text: "已过截止", warn: true };
+  if (left >= DAY) return { text: `剩 ${Math.floor(left / DAY)} 天`, warn: false };
+  if (left >= HOUR) return { text: `剩 ${Math.floor(left / HOUR)} 小时`, warn: true };
+  return { text: `剩 ${Math.max(1, Math.floor(left / 60_000))} 分钟`, warn: true };
+}
+
+/**
+ * 等你的一行（5.4.4「等你行」）。第二行依次是对方（请你认可的：头像 16 和名字）、来源、截止；没有截止的不写时间，时间（5.6 相对时间）放在整行能点的那块的 title 里。
+ * 额度那条的 dueAt 是恢复的时刻（原话里已经写了），不当截止写。
+ * 答完先在原处写状态词，停 2 秒再刷新（收走）；失败在原处写「失败」加「重试」，不弹 toast。
+ */
 export function WaitingList({ items, api, go }: { items: WaitingItem[]; api: WorkHomeApi; go: (href: string) => void }) {
-  const actions = useActions(api);
+  const answer = useActions(api);
   const local = useLocalRunner();
-  const [state, setState] = useState<Record<string, { busy?: boolean; done?: string; failed?: Action }>>({});
+  const [state, setState] = useState<Record<string, { busy?: boolean; done?: string; failed?: RunAction; reason?: string }>>({});
   const timers = useRef<number[]>([]);
   useEffect(() => () => timers.current.forEach((timer) => window.clearTimeout(timer)), []);
-  const run = async (item: WaitingItem, action: Action) => {
+  const run = async (item: WaitingItem, action: RunAction) => {
     setState((current) => ({ ...current, [item.id]: { busy: true } }));
     try {
       await action.run();
       setState((current) => ({ ...current, [item.id]: { done: action.done } }));
       timers.current.push(window.setTimeout(() => { void Promise.all([local.refresh(), api.refresh()]); }, 2000));
-    } catch {
-      setState((current) => ({ ...current, [item.id]: { failed: action } }));
+    } catch (error) {
+      setState((current) => ({ ...current, [item.id]: { failed: action, reason: error instanceof Error ? error.message : undefined } }));
     }
   };
+  const now = Date.now();
   return (
     <ul className={h.waiting} data-testid="waiting-list">
       {items.map((item) => {
-        const buttons = actions(item);
+        const { actions, away } = answer(item);
         const row = state[item.id];
+        const due = item.dueAt && item.kind !== "quota" ? dueText(item.dueAt, now) : null;
+        const from = [item.person?.name, item.source].filter(Boolean).join(" · ");
         return (
           <li key={item.id} className={h.wait} data-kind={item.kind} data-done={row?.done ? "" : undefined}>
-            <button type="button" className={h.waitMain} onClick={() => go(waitingHref(item))}>
+            <button type="button" className={h.waitMain} onClick={() => go(waitingHref(item))} title={!due && item.at ? relativeDayTime(item.at, new Date(now)) : undefined}>
               <span className={h.waitTitle}>{item.title}</span>
-              {item.source ? <span className={h.waitSource}>{item.source}</span> : null}
+              {from || due ? (
+                <span className={h.waitSource}>
+                  {item.person ? <PersonAvatar personId={item.person.personId} className={h.waitAvatar}>{null}</PersonAvatar> : null}
+                  {from ? <span className={h.waitFrom}>{from}</span> : null}
+                  {from && due ? <span aria-hidden>·</span> : null}
+                  {due ? <span className={h.waitDue} data-warn={due.warn ? "" : undefined} data-testid="wait-due">{due.text}</span> : null}
+                </span>
+              ) : null}
             </button>
             <span className={h.waitActs}>
               {row?.done ? <span className={h.waitDone}>{row.done}</span>
-                : row?.failed ? <><span className={h.waitFailed}>失败</span><HeroButton variant="ghost" size="sm" onPress={() => void run(item, row.failed!)}>重试</HeroButton></>
-                : buttons.map((action) => (
-                  <HeroButton key={action.label} variant={action.primary ? "tertiary" : "ghost"} size="sm" isDisabled={row?.busy} onPress={() => void run(item, action)}>{action.label}</HeroButton>
+                : row?.failed ? <FailedLine inline reason={row.reason} onRetry={() => void run(item, row.failed!)} />
+                : away ? <span className={`${x.waitChip} ${h.waitAway}`} data-testid="wait-away"><i aria-hidden />{away}</span>
+                : actions.map((action) => (
+                  <HeroButton key={action.label} variant={action.primary ? "tertiary" : "ghost"} size="sm" isDisabled={row?.busy}
+                    onPress={() => { if ("href" in action) go(action.href); else void run(item, action); }}>{action.label}</HeroButton>
                 ))}
             </span>
           </li>

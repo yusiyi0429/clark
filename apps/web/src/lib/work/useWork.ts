@@ -20,6 +20,8 @@ export type Resources = {
   local: { online: boolean; name: string | null; used: number; cap: number };
   models: { key: "subscription" | "codex" | "gateway"; label: string; on: boolean }[];
   todayUsd: number | null;
+  /** 各台设备同步给云端的订阅额度（契约 WorkerResources.quota）：手机和没就绪的电脑上看这个。 */
+  quota: TWorkersResponse["resources"]["quota"];
 };
 
 export function useWork({ planHook }: { planHook: ReturnType<typeof useHomePlan> }) {
@@ -121,6 +123,7 @@ export function useWork({ planHook }: { planHook: ReturnType<typeof useHomePlan>
       { key: "gateway", label: "TokenHub", on: local.models.some((model) => model.source === "gateway") },
     ],
     todayUsd: listed?.resources.cost.today.costUsd ?? null,
+    quota: listed?.resources.quota ?? [],
   };
 
   const refresh = useCallback(async () => { await Promise.all([load(), local.refresh(), loadRoles()]); }, [load, local, loadRoles]);

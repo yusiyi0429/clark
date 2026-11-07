@@ -6,7 +6,8 @@
  *    鼠标移上去右上角出「⋯」，点开「伙伴」二级页。
  * 2. 「今天」行：House +「11 月 7 日 周六」，就是首页（Esc 也回这里）；不在首页时行尾是等你的计数。
  * 3. Mission → Task → 子会话：Mission 组头总是画（之前月份没了结的前面加「10 月 · 」）；Task 行 48 高两行，左边 16 宽的状态位，
- *    右边信息按钮；子会话行 32 高，状态图标对齐 Task 标题；做完的收进「已完成 N」；不归 Task 的进「其他」。
+ *    右边信息按钮；子会话行 32 高，状态图标对齐 Task 标题；本人自己做的事项（9.10）同一枝、同一种行，行首是本人 16 的头像，排在子会话后面；
+ *    做完的收进「已完成 N」；不归 Task 的子会话和待归位的事项进「其他」。
  * 4. 本人行：贴底，头像 24 + 名字，点开个人菜单。
  * 树的键盘：↑↓ 移动，回车打开，→ 展开折叠，← 收起。
  */
@@ -17,7 +18,9 @@ import type { Account } from "@/components/AccountMenu";
 import { BuddyMark } from "@/components/buddy/BuddyMark";
 import type { Buddy } from "@/components/buddy/useBuddy";
 import { BUDDY_HREF, HOME_HREF, cardHref, infoHref, monthLabel, queueText, taskHref, topicHref } from "@/lib/home/derive";
+import type { THomeItem as HomeItem } from "@warmap/contracts";
 import type { HomeTask, SubSession, WorkHomeData } from "@/lib/home/types";
+import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import { PersonRow } from "./PersonMenu";
 import { ICON, StateIcon } from "./StateIcon";
 import { pageHref, type View } from "./view";
@@ -81,13 +84,14 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
         {data.missions.filter((mission) => mission.tasks.length).map((mission) => (
           <section key={mission.missionId} aria-label={mission.title} className={h.group}>
             <p className={h.groupTitle}>{mission.period !== data.period ? <span>{monthLabel(mission.period)} · </span> : null}{mission.title}</p>
-            {mission.tasks.map((task) => <TaskNode key={task.taskId} task={task} view={view} go={go} waiting={pipelineWaiting.has(task.taskId)} />)}
+            {mission.tasks.map((task) => <TaskNode key={task.taskId} task={task} view={view} go={go} waiting={pipelineWaiting.has(task.taskId)} personId={account.personId} />)}
           </section>
         ))}
-        {data.other.subSessions.length ? (
+        {data.other.subSessions.length || data.other.items.length ? (
           <section aria-label="其他" className={h.group}>
             <p className={h.groupTitle}>其他</p>
-            <Subs subs={data.other.subSessions} view={view} go={go} flat />
+            {data.other.subSessions.length ? <Subs subs={data.other.subSessions} view={view} go={go} flat /> : null}
+            {data.other.items.length ? <Items items={data.other.items} personId={account.personId} go={go} /> : null}
           </section>
         ) : null}
       </div>
@@ -114,12 +118,18 @@ function treeKeys(event: KeyboardEvent<HTMLDivElement>, root: HTMLDivElement | n
   }
 }
 
-/** 完成的子会话（验收过、合回了）收进折叠的「已完成 N」（设计第 4.5 条）；本人确认 Task 完成以后全部收进去，Task 行打勾、变淡。 */
-function TaskNode({ task, view, go, waiting }: { task: HomeTask; view: View; go: (href: string) => void; waiting: boolean }) {
+/**
+ * 完成的子会话（验收过、合回了）和做完的本人事项收进折叠的「已完成 N」（设计第 4.5 条、9.10）；本人确认 Task 完成以后全部收进去，Task 行打勾、变淡。
+ * 一枝里先是子会话（等你、进行中的状态图标挨着 Task 行），再是本人的事项（头像领头的一块），最后是「已完成 N」。
+ */
+function TaskNode({ task, view, go, waiting, personId }: { task: HomeTask; view: View; go: (href: string) => void; waiting: boolean; personId?: string | null }) {
   const here = (view.kind === "task" || view.kind === "info") && view.taskId === task.taskId;
   const [open, setOpen] = useState(false);
   const folded = task.subSessions.filter((sub) => task.completedAt || sub.state === "done");
   const live = task.subSessions.filter((sub) => !folded.includes(sub));
+  const doneItems = task.items.filter((item) => task.completedAt || item.status === "done");
+  const items = task.items.filter((item) => !doneItems.includes(item));
+  const foldCount = folded.length + doneItems.length;
   const viewing = folded.some((sub) => (view.kind === "card" || view.kind === "topic") && view.kind === sub.kind && view.id === sub.id);
   const expanded = open || viewing;
   const info = view.kind === "info" && here;
@@ -138,15 +148,17 @@ function TaskNode({ task, view, go, waiting }: { task: HomeTask; view: View; go:
             onPress={() => go(info ? taskHref(task.taskId) : infoHref(task.taskId))} data-testid="task-info"><Info {...ICON} /></HeroButton>
         </span>
       </div>
-      {live.length || folded.length ? (
+      {live.length || items.length || foldCount ? (
         <div className={h.branch}>
           {live.length ? <Subs subs={live} view={view} go={go} /> : null}
-          {folded.length ? (
+          {items.length ? <Items items={items} personId={personId} go={go} /> : null}
+          {foldCount ? (
             <>
               <button type="button" className={h.foldToggle} aria-expanded={expanded} onClick={() => setOpen(!expanded)} data-tree-row="" data-testid="tree-done">
-                <ChevronRight {...ICON} className={h.chevron} data-open={expanded ? "" : undefined} />已完成 {folded.length}
+                <ChevronRight {...ICON} className={h.chevron} data-open={expanded ? "" : undefined} />已完成 {foldCount}
               </button>
-              {expanded ? <Subs subs={folded} view={view} go={go} /> : null}
+              {expanded && folded.length ? <Subs subs={folded} view={view} go={go} /> : null}
+              {expanded && doneItems.length ? <Items items={doneItems} personId={personId} go={go} /> : null}
             </>
           ) : null}
         </div>
@@ -167,6 +179,34 @@ function Subs({ subs, view, go, flat = false }: { subs: SubSession[]; view: View
             <button type="button" className={h.sub} data-state={sub.state} aria-current={current ? "page" : undefined} onClick={() => go(subHref(sub))} data-tree-row="" data-testid="tree-sub">
               <StateIcon state={sub.state} /><span className={h.subName}>{sub.title}</span>
               {reason ? <span className={h.subReason}>{reason}</span> : null}
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** 本人事项的行尾（12 淡色）：交了在等验收写「待验收」，否则写截止日「11/12」（过了期也照样写，不另上色），都没有不写。 */
+function itemMeta(item: Pick<HomeItem, "awaitingAcceptance" | "dueDate">): string | null {
+  if (item.awaitingAcceptance) return "待验收";
+  return item.dueDate ? item.dueDate.slice(5).replace("-", "/") : null;
+}
+
+/**
+ * 本人自己做的执行事项（设计 9.10、5.4.2「子会话行」最后一条）：和子会话行同一种行，状态位换成本人 16 的头像（没照片是纯色圆、不写字），
+ * 做完的变淡。事项不是对话：点开是事项详情（老页面，离开新首页）。
+ */
+function Items({ items, personId, go }: { items: HomeItem[]; personId?: string | null; go: (href: string) => void }) {
+  return (
+    <ul className={h.subs}>
+      {items.map((item) => {
+        const meta = itemMeta(item);
+        return (
+          <li key={item.id}>
+            <button type="button" className={h.sub} data-state={item.status === "done" ? "done" : undefined} onClick={() => go(`/me/tasks/${encodeURIComponent(item.id)}`)} data-tree-row="" data-testid="tree-item">
+              <PersonAvatar personId={personId} className={h.itemAvatar}>{null}</PersonAvatar><span className={h.subName}>{item.title}</span>
+              {meta ? <span className={`${h.subReason} ${h.num}`}>{meta}</span> : null}
             </button>
           </li>
         );
