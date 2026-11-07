@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import type { THandoverNote, THandoverSecretFinding, TLocalHandoverCheck, TProjectTransfer, TUpdateProjectTransferRequest } from "@warmap/contracts";
+import type { HandoverInput, HandoverNoteAgent } from "./handoverNoteAgent.js";
 import { UUID_PATTERN, type Query } from "./meetingStore.js";
-import { CARD_PROJECT, ownProject } from "./projects.js";
+import { CARD_PROJECT, ownProject, projectGoalRows, verdicts } from "./projects.js";
+import { shanghaiDate } from "./workdays.js";
 import { CardError } from "./taskCards.js";
 import { settlementsOf } from "./taskContinuity.js";
 
@@ -11,6 +13,8 @@ import { settlementsOf } from "./taskContinuity.js";
  * 原负责人发起（preparing）→ 发出（sent）→ 接手人接手（accepted）或不接（declined）；没接之前原负责人随时撤回（withdrawn）。
  * 接手：项目换成接手人负责，原负责人以后只读（projects.projectReader 认接手了的转交的 from）；原负责人那边还没被电脑接下的开工登记了结掉；
  * 管线先不自己开子会话（projects.quiet_since），接手人在项目对话里说了第一句就清掉。
+ * 交接说明：发起时和存下本机检查结果时，云端调模型按项目对话、目标历史和判定、交付物、本机检查一次写七段（handoverNoteAgent.ts）；
+ * 模型没配、出错、超时或写出来像密钥，退回按云端的东西拼的四段（到哪了、没做完的事、代码在哪、可以问谁）。
  */
 
 type TransferRow = { id: string; project_id: string; from_id: string; to_id: string; status: TProjectTransfer["status"]; note: THandoverNote | null;
@@ -18,11 +22,16 @@ type TransferRow = { id: string; project_id: string; from_id: string; to_id: str
   started_at: Date; decided_at: Date | null; project_name: string };
 const SELECT = "SELECT t.*,t.project_id::text AS project_id,p.name AS project_name FROM project_transfers t JOIN projects p ON p.id=t.project_id";
 
-/** 接手人「拉到这台电脑」用的仓库：origin（没有就第一个）远端；分支取 handover/ 开头的（交接分支），没有就当前分支。不是 git 为 null。 */
+/** 能拉到别的电脑上的远端：https://、ssh://、git@ 开头的（本地路径、file:// 等不算）。 */
+const PULLABLE = /^(https:\/\/|ssh:\/\/|git@)/;
+/**
+ * 接手人「拉到这台电脑」用的仓库：origin（没有就第一个）远端；分支取 handover/ 开头的（交接分支），没有就当前分支。
+ * 不是 git、远端拉不到别的电脑上为 null。远端地址照本机检查结果（本机已去掉口令）。
+ */
 export function cloneOf(check: TLocalHandoverCheck | null): TProjectTransfer["clone"] {
   const git = check?.git;
   const remote = git ? git.remotes.find((item) => item.name === "origin") ?? git.remotes[0] : undefined;
-  if (!git || !remote) return null;
+  if (!git || !remote || !PULLABLE.test(remote.url)) return null;
   const handover = [...git.unpushed.map((item) => item.branch), ...git.branch ? [git.branch] : []].find((branch) => branch.startsWith("handover/"));
   return { repoUrl: remote.url, branch: handover ?? git.branch };
 }
@@ -62,7 +71,7 @@ const mine = (row: TransferRow, personId: string, side: "from" | "to") => {
   if ((side === "from" ? row.from_id : row.to_id) !== personId) throw new CardError(403, "FORBIDDEN", side === "from" ? "只有原负责人能改" : "只有接手人能操作");
 };
 
-/** 交接说明里云端拼的那几段（其余几段由管线写，重拼时留着）。 */
+/** 模型写不出来时云端拼的那几段（重拼时别的段留着）。 */
 const AUTO_SECTIONS = ["到哪了", "没做完的事", "代码在哪", "可以问谁"];
 const ORDER = ["到哪了", "没做完的事", "关键决定和原因", "怎么跑起来", "代码在哪", "坑", "可以问谁"];
 
@@ -73,24 +82,28 @@ function codeLines(check: TLocalHandoverCheck | null): string[] {
   if (!git) return [`文件夹：${check.folder.label}（不是 git 仓库）`, ...(check.recentFiles ?? []).slice(0, 10).map((file) => `最近改过：${file.path}`)];
   const clone = cloneOf(check);
   return [
-    ...clone ? [`仓库：${clone.repoUrl}`] : [`文件夹：${check.folder.label}（没有远端）`],
+    ...clone ? [`仓库：${clone.repoUrl}`] : [`文件夹：${check.folder.label}（没有能拉到别的电脑上的远端）`],
     ...git.branch ? [`当前分支：${git.branch}`] : [],
     ...git.uncommittedCount ? [`没提交的改动 ${git.uncommittedCount} 个文件：${git.uncommitted.slice(0, 10).join("、")}${git.uncommittedCount > 10 ? " 等" : ""}`] : [],
     ...git.unpushed.map((branch) => `没推完：${branch.branch}${branch.ahead ? `（比 ${branch.upstream} 多 ${branch.ahead} 个提交）` : "（没有上游）"}`),
   ];
 }
 
-/** 按云端的东西拼那几段：挂着没了结的目标、项目里没做完的卡和专题、本机检查、原负责人；和已有的说明合起来（管线写的几段留着）。 */
+/** 项目里原负责人没做完的卡和专题。 */
+const unfinished = async (q: Query, projectId: string, fromId: string) => ((await q(`SELECT title FROM tasks t WHERE t.owner_id=$1 AND ${CARD_PROJECT("t")}=$2
+  AND t.status NOT IN ('done','returned') UNION ALL SELECT title FROM research_topics r WHERE r.owner_id=$1 AND ${CARD_PROJECT("r")}=$2 AND r.status='active'`,
+[fromId, projectId])).rows as { title: string }[]).map((row) => row.title);
+
+/** 按云端的东西拼那几段：挂着没了结的目标、项目里没做完的卡和专题、本机检查、原负责人；和已有的说明合起来（别的段留着）。 */
 async function draftNote(q: Query, row: Pick<TransferRow, "project_id" | "from_id" | "note" | "check_result">, fromName: string): Promise<THandoverNote> {
   const goals = (await q("SELECT task_id,task_name,period FROM project_goals WHERE project_id=$1 ORDER BY period,linked_at", [row.project_id])).rows as
     { task_id: string; task_name: string; period: string }[];
   const settled = await settlementsOf(q, goals.map((goal) => goal.task_id));
-  const open = (await q(`SELECT title FROM tasks t WHERE t.owner_id=$1 AND ${CARD_PROJECT("t")}=$2 AND t.status NOT IN ('done','returned')
-    UNION ALL SELECT title FROM research_topics r WHERE r.owner_id=$1 AND ${CARD_PROJECT("r")}=$2 AND r.status='active'`, [row.from_id, row.project_id])).rows as { title: string }[];
+  const open = await unfinished(q, row.project_id, row.from_id);
   const monthEnd = (period: string) => { const [y, m] = period.split("-").map(Number); return `${m}/${new Date(Date.UTC(y, m, 0)).getUTCDate()}`; };
   const auto: Record<string, string[]> = {
     "到哪了": goals.filter((goal) => !settled.has(goal.task_id)).map((goal) => `${Number(goal.period.slice(5))} 月目标：${goal.task_name} · ${monthEnd(goal.period)} 验收`),
-    "没做完的事": open.map((item) => item.title),
+    "没做完的事": open,
     "代码在哪": codeLines(row.check_result),
     "可以问谁": [fromName],
   };
@@ -112,7 +125,53 @@ export function secretFindings(note: THandoverNote): THandoverSecretFinding[] {
 }
 export class SecretsInNote extends Error { constructor(readonly findings: THandoverSecretFinding[]) { super("交接说明里有像密钥的内容，改掉再发"); } }
 
-export type TransferDeps = { q: Query; pool: Pool; names: Map<string, string>; now: Date };
+/** 写交接说明的模型和读原负责人项目对话的办法（路由给；没给时只拼四段）。 */
+export type HandoverWriter = { agent: HandoverNoteAgent; conversation: (projectId: string, fromId: string) => Promise<HandoverInput["conversation"]>; timeoutMs?: number };
+export type TransferDeps = { q: Query; pool: Pool; names: Map<string, string>; now: Date; handover?: HandoverWriter };
+
+const HANDOVER_TIMEOUT_MS = 90_000;
+/** 对话只给最近的 80 句、每句最多 1500 字。 */
+const CONVERSATION_TURNS = 80, TURN_CHARS = 1500;
+const VERDICT = { open: "进行中", completed: "确认完成", stopped: "到此为止", continued: "已延续" } as const;
+
+/** 交给模型的材料：目标历史和判定、交付物、没做完的、本机检查、项目对话。 */
+async function handoverInput(deps: TransferDeps, row: Pick<TransferRow, "project_id" | "from_id" | "to_id" | "check_result">, project: string): Promise<HandoverInput> {
+  const { q, names, now, handover } = deps;
+  const goals = await projectGoalRows(q, row.project_id);
+  const verdict = await verdicts(q, goals.map((goal) => goal.task_id));
+  const deliverables = (await q(`SELECT task_name,number,delivered_at,statement FROM deliverable_versions WHERE project_id=$1 OR task_id=ANY($2::text[])
+    ORDER BY created_at`, [row.project_id, goals.map((goal) => goal.task_id)])).rows as { task_name: string; number: number; delivered_at: Date | null; statement: string | null }[];
+  const conversation = (await handover!.conversation(row.project_id, row.from_id)).slice(-CONVERSATION_TURNS)
+    .map((turn) => ({ ...turn, text: turn.text.slice(0, TURN_CHARS) }));
+  return { project, today: shanghaiDate(now), from: names.get(row.from_id) ?? row.from_id, to: names.get(row.to_id) ?? row.to_id,
+    goals: goals.map((goal) => ({ period: goal.period, task: goal.task_name, mission: goal.mission_title, verdict: VERDICT[verdict.get(goal.task_id) ?? "open"] })),
+    deliverables: deliverables.map((item) => ({ task: item.task_name, number: item.number, deliveredAt: item.delivered_at?.toISOString() ?? null, statement: item.statement })),
+    unfinished: await unfinished(q, row.project_id, row.from_id), check: row.check_result, conversation };
+}
+
+/** 交模型的说明里有像密钥的：哪一段第几行，让它改成只写名字再交。 */
+const secretProblem = (note: THandoverNote) => {
+  const findings = secretFindings(note);
+  return findings.length ? `这几行像是写了密钥的值，改成只写变量名或去哪要：${findings.map((item) => `「${item.section}」第 ${item.line} 行（${item.sample}）`).join("、")}` : null;
+};
+
+/**
+ * 写交接说明：有模型就让模型按材料一次写七段（整份换掉）；没配模型、出错、超时，退回按云端的东西拼四段（别的段留着）。
+ * 模型交上来的再查一遍密钥样式，还有就当没写出来。
+ */
+async function composeNote(deps: TransferDeps, row: Pick<TransferRow, "project_id" | "from_id" | "to_id" | "note" | "check_result">, project: string): Promise<THandoverNote> {
+  const fromName = deps.names.get(row.from_id) ?? row.from_id;
+  if (deps.handover) {
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), deps.handover.timeoutMs ?? HANDOVER_TIMEOUT_MS);
+    try {
+      const note = ordered((await deps.handover.agent.write(await handoverInput(deps, row, project), row.project_id, secretProblem, abort.signal))
+        .map((section) => ({ title: section.title, lines: section.lines.map((line) => line.trim()).filter(Boolean) })).filter((section) => section.lines.length));
+      if (note.length && !secretFindings(note).length) return note;
+    } catch { /* 退回拼的四段 */ } finally { clearTimeout(timer); }
+  }
+  return draftNote(deps.q, row, fromName);
+}
 
 /** POST /api/me/projects/:projectId/transfers：项目负责人发起，云端先拼一份交接说明。 */
 export async function startTransfer(deps: TransferDeps, fromId: string, projectId: string, toId: string): Promise<TProjectTransfer> {
@@ -122,22 +181,43 @@ export async function startTransfer(deps: TransferDeps, fromId: string, projectI
   if (toId === fromId) throw new CardError(400, "INVALID_INPUT", "不能转给自己");
   if (!names.has(toId)) throw new CardError(404, "PERSON_NOT_FOUND", "人员目录里没有这个人");
   const id = randomUUID();
-  const note = await draftNote(q, { project_id: project.id, from_id: fromId, note: null, check_result: null }, names.get(fromId) ?? fromId);
   try {
-    await q(`INSERT INTO project_transfers(id,project_id,from_id,to_id,status,note,started_at) VALUES($1,$2,$3,$4,'preparing',$5::jsonb,$6)`,
-      [id, project.id, fromId, toId, JSON.stringify(note), now]);
+    await q(`INSERT INTO project_transfers(id,project_id,from_id,to_id,status,started_at) VALUES($1,$2,$3,$4,'preparing',$5)`, [id, project.id, fromId, toId, now]);
   } catch (cause) {
     if ((cause as { code?: string }).code === "23505") throw new CardError(409, "TRANSFER_OPEN", "这个项目已经在转交了");
     throw cause;
   }
+  writeLater(deps, id);
   return transferView(await visible(q, fromId, id), names);
 }
 
-export async function readTransfer(deps: TransferDeps, personId: string, id: string): Promise<TProjectTransfer> {
-  return transferView(await visible(deps.q, personId, id), deps.names);
+/** 正在写的说明：转交 id → 第几次（只认最新那次写的结果）。 */
+const writing = new Map<string, number>();
+let writes = 0;
+/**
+ * 在后台写交接说明（发起、存下本机检查结果以后，note 先为 null，写好填上；previous 是变成 null 之前的说明）。
+ * 写的过程中本人改了说明（note 不再是 null）、发出或撤回了、又重写了一次，这次写的就不要了。
+ */
+function writeLater(deps: TransferDeps, id: string, previous: THandoverNote | null = null): void {
+  const turn = ++writes;
+  writing.set(id, turn);
+  void (async () => {
+    const row = (await deps.q(`${SELECT} WHERE t.id=$1`, [id])).rows[0] as TransferRow;
+    // 模型写不出来时，原来说明里拼的四段以外的段留着。
+    const note = await composeNote(deps, { ...row, note: previous }, row.project_name);
+    if (writing.get(id) === turn)
+      await deps.q("UPDATE project_transfers SET note=$2::jsonb WHERE id=$1 AND status='preparing' AND note IS NULL", [id, JSON.stringify(note)]);
+  })().catch(() => undefined).finally(() => { if (writing.get(id) === turn) writing.delete(id); });
 }
 
-/** PATCH：原负责人在准备中改。存本机检查结果时按它重拼云端那几段（管线写的几段留着）。 */
+/** 读一份：准备中、说明还是空的、又没有在写的（例如写到一半服务重启了），接着写。 */
+export async function readTransfer(deps: TransferDeps, personId: string, id: string): Promise<TProjectTransfer> {
+  const row = await visible(deps.q, personId, id);
+  if (row.status === "preparing" && row.note === null && !writing.has(id)) writeLater(deps, id);
+  return transferView(row, deps.names);
+}
+
+/** PATCH：原负责人在准备中改（本人按段改完，整份交上来）。存本机检查结果时按材料重写一遍：note 先为 null，后台写好填上。 */
 export async function updateTransfer(deps: TransferDeps, personId: string, id: string, patch: TUpdateProjectTransferRequest): Promise<TProjectTransfer> {
   const { q, names } = deps;
   const row = await visible(q, personId, id);
@@ -146,13 +226,14 @@ export async function updateTransfer(deps: TransferDeps, personId: string, id: s
   const next = { ...row, note: patch.note ? ordered(patch.note) : row.note, include_history: patch.includeHistory ?? row.include_history,
     running: patch.running === undefined ? row.running : patch.running, check_choice: patch.check === undefined ? row.check_choice : patch.check,
     check_result: patch.checkResult ?? row.check_result };
-  if (patch.checkResult) next.note = await draftNote(q, next, names.get(row.from_id) ?? row.from_id);
+  if (patch.checkResult) next.note = null;
   await q("UPDATE project_transfers SET note=$2::jsonb,include_history=$3,running=$4,check_choice=$5,check_result=$6::jsonb WHERE id=$1",
-    [id, JSON.stringify(next.note), next.include_history, next.running, next.check_choice, next.check_result ? JSON.stringify(next.check_result) : null]);
+    [id, next.note ? JSON.stringify(next.note) : null, next.include_history, next.running, next.check_choice, next.check_result ? JSON.stringify(next.check_result) : null]);
+  if (patch.checkResult) writeLater(deps, id, patch.note ? ordered(patch.note) : row.note);
   return transferView(await visible(q, personId, id), names);
 }
 
-/** 伙伴（/internal）改交接说明：只在准备中，以原负责人的身份。 */
+/** 伙伴（/internal）改交接说明：只在准备中，以原负责人的身份，同本人改。 */
 export async function writeNote(deps: TransferDeps, personId: string, id: string, note: THandoverNote): Promise<TProjectTransfer> {
   return updateTransfer(deps, personId, id, { note });
 }

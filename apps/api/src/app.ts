@@ -122,6 +122,7 @@ import { createUsageTracker } from "./usage.js";
 import { registerProgressRoutes } from "./routes/progress.js";
 import { createBattlefieldSummaries, type BattlefieldSummaries, type BattlefieldSummaryAgent } from "./battlefieldSummary.js";
 import { createBattlefieldSummaryAgent } from "./battlefieldSummaryAgent.js";
+import { createHandoverNoteAgent, type HandoverNoteAgent } from "./handoverNoteAgent.js";
 import { createTaskPlacementAgent, taskPlacementJobs, type TaskPlacementAgent } from "./taskPlacement.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR, type MeetingRecordingService } from "./meetingRecordings.js";
 import { realVoiceprintDeps, type VoiceprintDeps } from "./voiceprints.js";
@@ -353,6 +354,7 @@ export async function buildApp({
   meetingFollowThroughAgents,
   docChangeAgent,
   battlefieldSummaryAgent,
+  handoverNoteAgent,
   taskPlacementAgent,
   boardAgents,
   companyReader,
@@ -432,6 +434,8 @@ export async function buildApp({
   docChangeAgent?: DocChangeAgent;
   /** 战场进展汇总的 Agent（测试注入假实现）；缺省 PROGRESS_SUMMARY_MODEL，不配时 HEAVY_MODEL、思考 medium。 */
   battlefieldSummaryAgent?: BattlefieldSummaryAgent;
+  /** 项目转交写交接说明的 Agent（测试注入假实现）；缺省和战场进展汇总同一套模型配置。 */
+  handoverNoteAgent?: HandoverNoteAgent;
   /** 会后事项归位的 Agent（测试注入假实现）；缺省 TASK_PLACEMENT_MODEL，不配时 LIGHT_MODEL、不开思考。 */
   taskPlacementAgent?: TaskPlacementAgent;
   /** V2 看板的拆卡、Agent 验收（测试注入假实现）；缺省照参考评审用 REVIEW_*，没配时 HEAVY_MODEL。 */
@@ -890,7 +894,8 @@ export async function buildApp({
   registerSessionStartRoutes(app, ctx);
   registerTaskPipelineRoutes(app, ctx);
   registerProjectRoutes(app, ctx);
-  registerProjectTransferRoutes(app, ctx);
+  registerProjectTransferRoutes(app, ctx, { handoverAgent: handoverNoteAgent ?? createHandoverNoteAgent({ query: q, baseUrl: env.piBaseUrl, apiKey: env.piApiKey,
+    ...agentModel(env.agentModels, "progressSummary", { modelId: env.heavyModel, thinkingLevel: "medium" }) }) });
   // 跨月延续、到此为止和月份页（routes/taskContinuity.ts）。
   registerTaskContinuityRoutes(app, ctx);
   const board = registerTaskCardRoutes(app, ctx, { agents: boardAgents, fetchArticle: deliverableFetcher });

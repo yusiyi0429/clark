@@ -4,6 +4,7 @@ import { ConversationHistory, CreateProjectTransferRequest, HandoverNote, Handov
   type TConversationHistory, type TConversationScope } from "@warmap/contracts";
 import { ChatServiceError } from "../chatService.js";
 import { getConversationHistory } from "../conversations.js";
+import type { HandoverNoteAgent } from "../handoverNoteAgent.js";
 import { personDisplayNames } from "../people.js";
 import { projectScope } from "../projects.js";
 import { acceptTransfer, declineTransfer, readTransfer, SecretsInNote, sendTransfer, startTransfer, updateTransfer, withdrawTransfer, writeNote,
@@ -19,14 +20,26 @@ const projectParams = Type.Object({ projectId: Type.String({ minLength: 1 }) });
  * 项目转交（契约 projectTransfers.ts，设计《新首页》16.7）：发起、改、发出、撤回（原负责人），接手、不接（接手人），预览（两边），
  * 带上了对话记录时接手人读原来那段。DRI 工作台的人才有。伙伴改交接说明走 /internal（INTERNAL_CHAT_TOKEN 加 X-Owner-Id，不进公开 OpenAPI）。
  */
-export function registerProjectTransferRoutes(app: AppInstance, ctx: RouteContext): void {
+export function registerProjectTransferRoutes(app: AppInstance, ctx: RouteContext, options: { handoverAgent: HandoverNoteAgent }): void {
   const { q, pool, env, fail, requirePerson, requireServiceToken } = ctx;
   const requireMember: Guard = async (req, reply) => {
     await requirePerson(req, reply);
     if (reply.sent) return reply;
     if (req.person?.role !== "member") return fail(reply, 403, "FORBIDDEN", "请切换到 DRI 工作台");
   };
-  const deps = (): TransferDeps => ({ q, pool, names: personDisplayNames(ctx.peopleDirectory), now: ctx.now() });
+  /** 原负责人那段项目对话：接了 Chat 读 Chat 里的那条，没接读天枢自己 scope 为 project:<id> 的对话。 */
+  const projectHistory = async (projectId: string, fromId: string, requestId: string): Promise<TConversationHistory> => {
+    const scope = projectScope(projectId) as TConversationScope;
+    if (ctx.chat) {
+      const conversationId = await projectPipelineConversation(q, projectId, fromId);
+      // Chat 的历史和天枢自己的对话同一个形状（chatService.ts 翻好了），scope 是这条项目对话。
+      return conversationId ? await ctx.chat.history(pipelineViewer(fromId), requestId, { conversationId, scope, projectId }) as TConversationHistory : { scope, messages: [] };
+    }
+    return getConversationHistory(q, fromId, scope, ctx.conversationTurnTimeoutMs);
+  };
+  const deps = (requestId = "handover"): TransferDeps => ({ q, pool, names: personDisplayNames(ctx.peopleDirectory), now: ctx.now(),
+    handover: { agent: options.handoverAgent, conversation: async (projectId, fromId) => (await projectHistory(projectId, fromId, requestId)).messages
+      .map((message) => ({ role: message.role, at: message.createdAt, text: message.content })) } });
   const handle = async <T>(reply: FastifyReply, work: () => Promise<T>) => {
     try { return await work(); } catch (cause) {
       if (cause instanceof SecretsInNote) return reply.status(422).send({ code: "SECRET_IN_NOTE", message: cause.message, findings: cause.findings });
@@ -37,13 +50,13 @@ export function registerProjectTransferRoutes(app: AppInstance, ctx: RouteContex
 
   app.post("/api/me/projects/:projectId/transfers", { preHandler: requireMember, schema: { params: projectParams, body: CreateProjectTransferRequest,
     response: { 201: ProjectTransfer } } }, async (req, reply) => handle(reply, async () =>
-    reply.status(201).send(await startTransfer(deps(), req.person!.personId, req.params.projectId, req.body.toPersonId))));
+    reply.status(201).send(await startTransfer(deps(String(req.id)), req.person!.personId, req.params.projectId, req.body.toPersonId))));
 
   app.get("/api/me/project-transfers/:id", { preHandler: requireMember, schema: { params: idParams, response: { 200: ProjectTransfer } } }, async (req, reply) =>
     handle(reply, () => readTransfer(deps(), req.person!.personId, req.params.id)));
 
   app.patch("/api/me/project-transfers/:id", { preHandler: requireMember, schema: { params: idParams, body: UpdateProjectTransferRequest,
-    response: { 200: ProjectTransfer } } }, async (req, reply) => handle(reply, () => updateTransfer(deps(), req.person!.personId, req.params.id, req.body)));
+    response: { 200: ProjectTransfer } } }, async (req, reply) => handle(reply, () => updateTransfer(deps(String(req.id)), req.person!.personId, req.params.id, req.body)));
 
   app.post("/api/me/project-transfers/:id/send", { preHandler: requireMember, schema: { params: idParams,
     response: { 200: ProjectTransfer, 422: HandoverSecretsResponse } } }, async (req, reply) => handle(reply, () => sendTransfer(deps(), req.person!.personId, req.params.id)));
@@ -58,18 +71,11 @@ export function registerProjectTransferRoutes(app: AppInstance, ctx: RouteContex
       const transfer = await readTransfer(deps(), req.person!.personId, req.params.id);
       if (transfer.to.personId !== req.person!.personId || transfer.status !== "accepted" || !transfer.includeHistory)
         throw new CardError(404, "NOT_FOUND", "没有带上对话记录");
-      const scope = projectScope(transfer.projectId) as TConversationScope;
-      if (ctx.chat) {
-        const conversationId = await projectPipelineConversation(q, transfer.projectId, transfer.from.personId);
-        // Chat 的历史和天枢自己的对话同一个形状（chatService.ts 翻好了），scope 是这条项目对话。
-        return conversationId ? await ctx.chat.history(pipelineViewer(transfer.from.personId), String(req.id), { conversationId, scope, projectId: transfer.projectId }) as TConversationHistory
-          : { scope, messages: [] };
-      }
-      return getConversationHistory(q, transfer.from.personId, scope, ctx.conversationTurnTimeoutMs);
+      return projectHistory(transfer.projectId, transfer.from.personId, String(req.id));
     }));
 
   if (!env.internalChatToken) return;
-  // 伙伴写交接说明里要读对话的那几段（关键决定和原因、怎么跑起来、坑），以原负责人的身份，准备中才能改。
+  // 伙伴改交接说明，以原负责人的身份，准备中才能改。
   const owner = (req: { headers: Record<string, unknown> }) => {
     const id = req.headers["x-owner-id"];
     return typeof id === "string" && ctx.peopleDirectory.searchPeople(undefined).some((person) => person.personId === id) ? id : null;

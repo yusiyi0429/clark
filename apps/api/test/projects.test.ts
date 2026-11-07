@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { THomePlanTask } from "@warmap/contracts";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import type { HandoverInput, HandoverNoteAgent } from "../src/handoverNoteAgent.js";
 import { TEST_MEMBER } from "./helpers.js";
 import { BOARD_NOW, BOARD_TASKS, boardFixture, THIRD, type BoardFixture } from "./boardFixture.js";
 
@@ -21,6 +22,12 @@ const home = async (f: BoardFixture) => {
 const skipBootstrap = (f: BoardFixture) => f.t.sql("INSERT INTO project_bootstraps(person_id,done_at,report) VALUES($1,$2,'{}')", [TEST_MEMBER.personId, BOARD_NOW]);
 const goalRow = async (f: BoardFixture, taskId: string) =>
   (await f.t.sql("SELECT project_id::text,source,period FROM project_goals WHERE task_id=$1", [taskId]))[0] as { project_id: string | null; source: string; period: string } | undefined;
+/** 交接说明在后台写：等 note 填上（网页同样隔几秒 GET 一次）。 */
+const written = (f: BoardFixture, id: string) => vi.waitFor(async () => {
+  const transfer = (await f.call("GET", `/api/me/project-transfers/${id}`)).json();
+  expect(transfer.note).not.toBeNull();
+  return transfer;
+}, { timeout: 5000, interval: 50 });
 /** 界面收到的事件（只取 data 行）。 */
 const events = (payload: string) => payload.split("\n\n").flatMap((block) => {
   const line = block.split("\n").find((candidate) => candidate.startsWith("data:"));
@@ -265,7 +272,7 @@ describe("项目", { timeout: 60_000 }, () => {
     } finally { await f.close(); }
   });
 
-  it("项目转交（16.7）：发起时云端拼说明、存本机检查重拼「代码在哪」（管线写的段留着）、密钥挡住、发出后伙伴不开子会话、接手换负责人、原负责人只读、接手人先开口", async () => {
+  it("项目转交（16.7）：模型写不出来时云端拼说明、存本机检查重拼「代码在哪」（别的段留着）、密钥挡住、发出后伙伴不开子会话、接手换负责人、原负责人只读、接手人先开口", async () => {
     const f = await boardFixture({}, { boardCloudAgents: false, internalChatToken: "chat-token" });
     try {
       await skipBootstrap(f);
@@ -279,9 +286,10 @@ describe("项目", { timeout: 60_000 }, () => {
       expect((await f.call("POST", `/api/me/projects/${projectId}/transfers`, { toPersonId: "nobody" })).statusCode).toBe(404);
       const started = await f.call("POST", `/api/me/projects/${projectId}/transfers`, { toPersonId: THIRD.personId });
       expect(started.statusCode, started.body).toBe(201);
-      const transfer = started.json();
-      expect(transfer).toMatchObject({ projectId, projectName: "Chat 服务", from: { personId: TEST_MEMBER.personId }, to: { personId: THIRD.personId }, status: "preparing",
-        startedAt: NOW, decidedAt: null, includeHistory: false, running: null, check: null, checkResult: null, clone: null });
+      expect(started.json()).toMatchObject({ projectId, projectName: "Chat 服务", from: { personId: TEST_MEMBER.personId }, to: { personId: THIRD.personId }, status: "preparing",
+        startedAt: NOW, decidedAt: null, includeHistory: false, running: null, check: null, checkResult: null, clone: null, note: null });
+      // 测试里没有模型：退回按云端的东西拼。
+      const transfer = await written(f, started.json().id);
       expect(transfer.note.map((section: { title: string }) => section.title)).toEqual(["到哪了", "没做完的事", "可以问谁"]);
       expect(transfer.note[0].lines).toEqual(["11 月目标：对话质量达标 · 11/30 验收"]);
       expect(transfer.note[1].lines).toContain("还没做完的卡");
@@ -298,7 +306,8 @@ describe("项目", { timeout: 60_000 }, () => {
       await f.call("PATCH", url, { note: [...transfer.note, { title: "坑", lines: ["本地要先起 54329 的库"] }], running: "wait" });
       const check = { projectId, checkedAt: NOW, folder: { path: "D:/code/chat", label: "chat" }, git: { branch: "main", remotes: [{ name: "origin", url: "https://github.com/x/chat.git" }],
         uncommitted: ["a.ts"], uncommittedCount: 1, unpushed: [{ branch: "handover/chat", upstream: null, ahead: null }] }, recentFiles: null };
-      const checked = (await f.call("PATCH", url, { checkResult: check, check: "wait" })).json();
+      expect((await f.call("PATCH", url, { checkResult: check, check: "wait" })).json().note).toBeNull();
+      const checked = await written(f, transfer.id);
       expect(checked.note.map((section: { title: string }) => section.title)).toEqual(["到哪了", "没做完的事", "代码在哪", "坑", "可以问谁"]);
       expect(checked.note.find((section: { title: string }) => section.title === "代码在哪").lines[0]).toBe("仓库：https://github.com/x/chat.git");
       expect(checked).toMatchObject({ running: "wait", check: "wait", clone: { repoUrl: "https://github.com/x/chat.git", branch: "handover/chat" } });
@@ -355,6 +364,50 @@ describe("项目", { timeout: 60_000 }, () => {
     } finally { await f.close(); }
   });
 
+  it("交接说明由模型写（16.7）：材料带项目对话、目标和判定、没做完的、本机检查；像密钥的让它改掉；写的过程中本人改了不覆盖；远端是本地路径时不给 clone", async () => {
+    const inputs: HandoverInput[] = [];
+    let hold: Promise<void> | null = null;
+    const handoverNoteAgent: HandoverNoteAgent = { modelId: "fake", async write(input, _projectId, validate) {
+      inputs.push(input);
+      if (hold) await hold;
+      expect(validate([{ title: "怎么跑起来", lines: ["CHAT_TOKEN=sk-abcdefghijklmnopqrstuv"] }])).toContain("「怎么跑起来」第 1 行");
+      return [{ title: "可以问谁", lines: ["测试成员：Chat 的部署"] }, { title: "坑", lines: ["  "] }, { title: "到哪了", lines: [" 11 月目标做到一半 "] },
+        { title: "怎么跑起来", lines: ["要配 CHAT_TOKEN，找测试成员要"] }];
+    } };
+    const f = await boardFixture({ handoverNoteAgent }, { boardCloudAgents: false });
+    try {
+      await skipBootstrap(f);
+      const { projectId } = await create(f, { name: "Chat 服务", taskId: "task-open" });
+      await f.card("还没做完的卡");
+      const scope = encodeURIComponent(`project:${projectId}`);
+      expect((await f.t.app.inject({ method: "POST", url: `/api/conversations/${scope}/messages`,
+        headers: { cookie: f.member, origin: f.t.publicOrigin, accept: "text/event-stream" }, payload: { message: "本地要先起 54329 的库" } })).statusCode).toBe(200);
+
+      const id = (await f.call("POST", `/api/me/projects/${projectId}/transfers`, { toPersonId: THIRD.personId })).json().id as string;
+      const transfer = await written(f, id);
+      expect(transfer.note).toEqual([{ title: "到哪了", lines: ["11 月目标做到一半"] }, { title: "怎么跑起来", lines: ["要配 CHAT_TOKEN，找测试成员要"] },
+        { title: "可以问谁", lines: ["测试成员：Chat 的部署"] }]);
+      expect(inputs[0]).toMatchObject({ project: "Chat 服务", today: "2026-11-06", to: expect.any(String), check: null, deliverables: [],
+        goals: [{ period: "2026-11", task: "对话质量达标", mission: "内部版上线", verdict: "进行中" }], unfinished: ["还没做完的卡"] });
+      expect(inputs[0].conversation.find((turn) => turn.role === "user")?.text).toBe("本地要先起 54329 的库");
+
+      // 本机检查：远端是本地路径，接手人拉不到，不给 clone；检查结果进材料。
+      const check = { projectId, checkedAt: NOW, folder: { path: "D:/code/chat", label: "chat" }, git: { branch: "main", remotes: [{ name: "origin", url: "D:/mirror/chat.git" }],
+        uncommitted: [], uncommittedCount: 0, unpushed: [] }, recentFiles: null };
+      const url = `/api/me/project-transfers/${id}`;
+      let release = () => {};
+      hold = new Promise((resolve) => { release = resolve; });
+      expect((await f.call("PATCH", url, { checkResult: check })).json()).toMatchObject({ note: null, clone: null });
+      await vi.waitFor(() => expect(inputs).toHaveLength(2));
+      expect(inputs[1].check).toEqual(check);
+      // 模型还在写，本人先改了：写完的不覆盖本人的。
+      await f.call("PATCH", url, { note: [{ title: "坑", lines: ["本人自己写的"] }] });
+      release();
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      expect((await f.call("GET", url)).json().note).toEqual([{ title: "坑", lines: ["本人自己写的"] }]);
+    } finally { await f.close(); }
+  });
+
   it("项目转交：撤回、不接（原负责人那边一行「X 没接」，项目留着）；停掉还在云端排队的子会话", async () => {
     const f = await boardFixture({}, { boardCloudAgents: false });
     try {
@@ -366,6 +419,7 @@ describe("项目", { timeout: 60_000 }, () => {
       const first = await start();
       expect((await f.call("POST", `/api/me/project-transfers/${first}/withdraw`)).json().status).toBe("withdrawn");
       const second = await start();
+      await written(f, second);
       await f.call("POST", `/api/me/project-transfers/${second}/send`);
       expect((await f.call("POST", `/api/me/project-transfers/${second}/decline`, undefined, third)).json().status).toBe("declined");
       expect((await home(f)).projects.map((project: { projectId: string; transfer: unknown }) => [project.projectId, project.transfer])).toEqual([[projectId, null]]);
