@@ -19705,6 +19705,90 @@
         }
       }
     },
+    "/api/me/notification-settings": {
+      "get": {
+        "operationId": "getNotificationSettings",
+        "summary": "本人的通知开关（「偏好」）：飞书通知，缺省开",
+        "responses": {
+          "200": {
+            "description": "通知开关",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationSettings"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateNotificationSettings",
+        "summary": "改本人的通知开关",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationSettings"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "改好的通知开关",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/work-home": {
       "get": {
         "operationId": "getWorkHome",
@@ -108985,6 +109069,18 @@
           "deviceId": {
             "format": "uuid",
             "type": "string"
+          }
+        }
+      },
+      "NotificationSettings": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "feishu"
+        ],
+        "properties": {
+          "feishu": {
+            "type": "boolean"
           }
         }
       }

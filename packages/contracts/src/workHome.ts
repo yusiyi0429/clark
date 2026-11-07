@@ -217,7 +217,7 @@ export const WaitingItem = Type.Object({
  * missions：有「没了结」的 Task 的 Mission（见文件头），本月的在前，之前月份的按月份从近到远；本月的 Mission 没有 Task 也列。每个下面是本人负责的 Task。
  * 一件 Task 下面的子会话不看月份，全列（done 的网页折叠）。
  * other.subSessions：不归任何 Task 的子会话，加 Task 不在树上（了结了、或不是本人负责）但还没完成的子会话，左栏最下面一组「其他」；
- * other.items：待归位的事项（会议或 Agent 分派给本人、还没挂 Mission 的执行事项，没完成的；10/26 的规矩：只有本人自己建的可以不挂 Mission，那种是独立事项，不在这里）。
+ * other.items：没挂 Mission、没完成没退回的执行事项（设计 9.10），新的在前：待归位的（会议或 Agent 分派给本人的），和本人自己建的独立事项（10/26 的规矩允许不挂 Mission）。
  * waiting：等你。排序（设计 9.6）：先是卡住正在跑的活的（approval、question、quota），再是有截止时间的（dueAt 早的在前），其余按 at 新的在前。
  */
 export const WorkHomeResponse = Type.Object({
@@ -388,3 +388,13 @@ export type TReleaseSessionStartRequest = Static<typeof ReleaseSessionStartReque
 export type TClaimSessionStartsResponse = Static<typeof ClaimSessionStartsResponse>;
 export type TBuddyOpenTopicRequest = Static<typeof BuddyOpenTopicRequest>;
 export type TBuddyOpenTopicResponse = Static<typeof BuddyOpenTopicResponse>;
+
+/**
+ * GET / PUT /api/me/notification-settings（本人，CEO 和 DRI 都有）：「偏好」里的通知开关（设计 13.1、13.2），存在服务端。
+ * feishu：飞书通知，缺省开。开着时天枢只把三类事推到本人和天枢机器人的单聊（「天枢伙伴」那条对话）：
+ * 卡住正在跑的活、而本人 10 分钟内没打开天枢的（验收两次没过、额度用完要定、批准等了 10 分钟）；要本人确认、离截止不到 24 小时的（Mission Card、复盘）；
+ * CEO 要拍板的（原有的规矩）。10 分钟里的几件合成一条，22:00 到 08:00 不推、攒到 08:00；每件带一个打开天枢那一处的链接，不放批准、回答这类操作。
+ * 没关联飞书的人开着也收不到。
+ */
+export const NotificationSettings = Type.Object({ feishu: Type.Boolean() }, strict);
+export type TNotificationSettings = Static<typeof NotificationSettings>;
