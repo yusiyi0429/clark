@@ -57,7 +57,12 @@ export function MissionInfo({ mission, cardId, api, go, onAsk }: {
       </header>
       <div className={h.infoScroll}>
         <div className={h.infoInner}>
-          {detail?.outcome ? <div className={h.infoLead}><p>{detail.outcome}</p></div> : null}
+          {detail?.outcome ? (
+            <section aria-label="目标" className={h.section}>
+              <p className={h.sectionTitle}>目标</p>
+              <div className={h.infoLead}><p>{detail.outcome}</p></div>
+            </section>
+          ) : null}
           {criteria.length ? (
             <section aria-label="验收标准" className={h.section}>
               <p className={h.sectionTitle}>验收标准</p>

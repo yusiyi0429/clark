@@ -1973,7 +1973,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 上传附件到本人在该 scope 的主对话（没有则创建；multipart files，PDF/DOCX/Markdown）；元数据随消息发送时内嵌入库 */
+        /** 上传附件到本人在该 scope 的主对话（multipart files）。总管线、Task 管线接了 Chat 时转给 Chat：类型见 attachments.ts（图片、文档、代码和日志），每个不超过 30 MB，一次合计不超过 100 MB（网页逐个传），一条消息最多 20 个；别的页面和没接 Chat 时照旧 PDF/DOCX/Markdown。元数据随消息发送时内嵌入库 */
         post: operations["uploadConversationAttachments"];
         delete?: never;
         options?: never;
@@ -4783,6 +4783,40 @@ export interface paths {
         put?: never;
         /** 不要这条岗位修改 */
         post: operations["dismissRoleProposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/sub-sessions/{kind}/{id}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 子会话（卡、专题，本人的）的附件存到云端（multipart files，新首页 14.5）：类型见 attachments.ts，每个不超过 30 MB，一次合计不超过 100 MB；回执的 id 随给本机程序的那句话带上（LocalSendMessageRequest.attachments） */
+        post: operations["uploadSubSessionAttachments"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/session-attachments/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 子会话附件的原文件（本人的；气泡里的缩略图、下载） */
+        get: operations["getSessionAttachment"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -17974,6 +18008,40 @@ export interface components {
                     currency: "CNY" | "USD";
                 } | null;
             };
+        };
+        SessionAttachment: {
+            /** Format: uuid */
+            id: string;
+            subject: {
+                kind: "card" | "topic";
+                /** Format: uuid */
+                id: string;
+            };
+            fileName: string;
+            mimeType: string;
+            size: number;
+            sha256: string;
+            kind: "image" | "document" | "code";
+            /** Format: date-time */
+            createdAt: string;
+        };
+        SessionAttachmentUploadResponse: {
+            attachments: {
+                /** Format: uuid */
+                id: string;
+                subject: {
+                    kind: "card" | "topic";
+                    /** Format: uuid */
+                    id: string;
+                };
+                fileName: string;
+                mimeType: string;
+                size: number;
+                sha256: string;
+                kind: "image" | "document" | "code";
+                /** Format: date-time */
+                createdAt: string;
+            }[];
         };
         TaskRef: {
             taskId: string;
@@ -34554,6 +34622,118 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    uploadSubSessionAttachments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: "card" | "topic";
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    files?: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description 存好的附件 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionAttachmentUploadResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getSessionAttachment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 文件原样 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -254,12 +254,17 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
       slots: slots(),
       cloud: { linked, apiBaseUrl: linked ? location.origin : null, personName: null, outbox: { pending: 0, lastSyncedAt: linked ? now() : null, lastError: null } },
       settings: { includePersonalConfigByDefault: includePersonal, allowedOrigins: [typeof location === "undefined" ? "" : location.origin], paused: false, maxConcurrent, autoMerge },
-      // 订阅额度：5 小时窗口用了八成多（右栏额度行出琥珀），本周四成。
-      quota: [{ source: "claude_subscription", plan: "max", blockedUntil: null, extraUsage: false, updatedAt: now(), error: null, windows: [
-        { kind: "session", model: null, usedPercent: 83, state: "warning", resetsAt: new Date(Date.now() + 2 * 3_600_000).toISOString() },
-        { kind: "weekly_all", model: null, usedPercent: 40, state: "ok", resetsAt: new Date(Date.now() + 72 * 3_600_000).toISOString() },
-      ] }],
-      tools: [],
+      // 用量：Claude 订阅 5 小时窗口用了八成多（右栏那一格出琥珀），本周四成；TokenHub 今天花了一点。
+      quota: [
+        { id: "claude", name: "Claude", kind: "subscription", remainingPercent: 17, amounts: [], resetsAt: new Date(Date.now() + 2 * 3_600_000).toISOString(),
+          plan: "max", blockedUntil: null, extraUsage: false, updatedAt: now(), error: null, windows: [
+            { kind: "session", model: null, usedPercent: 83, state: "warning", resetsAt: new Date(Date.now() + 2 * 3_600_000).toISOString() },
+            { kind: "weekly_all", model: null, usedPercent: 40, state: "ok", resetsAt: new Date(Date.now() + 72 * 3_600_000).toISOString() },
+          ] },
+        { id: "tokenhub:mock", name: "TokenHub", kind: "daily_spend", remainingPercent: null, amounts: [{ amount: 12.4, currency: "CNY", estimated: false }],
+          monthAmounts: [{ amount: 186, currency: "CNY", estimated: false }], windows: [], resetsAt: null, blockedUntil: null, plan: null, extraUsage: null, updatedAt: now(), error: null },
+      ],
+      tools: (["claude-code", "codex", "gh", "lark-cli"] as const).map((kind) => ({ kind, state: "ready" as const, version: null, account: null, checkedAt: now() })),
     }),
     login: async () => undefined,
     linkCloud: async (body) => { linked = true; return { linked, apiBaseUrl: body.apiBaseUrl, personName: body.personName ?? null, outbox: { pending: 0, lastSyncedAt: null, lastError: null } }; },
@@ -336,6 +341,8 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
       advance(s);
       return summaryOf(s);
     },
+    putBudget: async (body) => ({ taskId: body.taskId ?? null, sessionId: body.sessionId ?? null, budget: body.budget,
+      spent: { hours: 0, weeklyPercent: null, money: null }, ratio: null, state: "ok", since: null, updatedAt: now() }),
     stopBackground: async (id, itemId) => {
       const s = must(id);
       const item = s.summary.background?.find((entry) => entry.id === itemId);

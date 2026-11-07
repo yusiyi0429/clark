@@ -5,6 +5,7 @@ import {
   NotificationSettings, ClaimedSessionStart,
 } from "./workHome.js";
 import { Budget, TaskBudgetResponse } from "./budget.js";
+import { SessionAttachment, SessionAttachmentUploadResponse } from "./attachments.js";
 
 /**
  * 新首页（伙伴总管线 + Task 管线 + 子会话）的 OpenAPI 路径，手工列出，在 openapi.ts 里展开。
@@ -15,7 +16,7 @@ export const workHomeSchemas: Record<string, JsonSchema> = {
   SubSession, HomeTaskSummary, HomeTask, HomeMission, WaitingTarget, WaitingItem, WorkHomeResponse,
   BackgroundItem, BackgroundResponse, TaskPipelineResponse, RouteRequest, RouteResponse,
   SessionStartView, ClaimSessionStartsRequest, ClaimSessionStartsResponse, CardMerge, TaskFeedItem, TaskFeedResponse, HomeItem, ReleaseSessionStartRequest,
-  NotificationSettings, Budget, TaskBudgetResponse, ClaimedSessionStart,
+  NotificationSettings, Budget, TaskBudgetResponse, ClaimedSessionStart, SessionAttachment, SessionAttachmentUploadResponse,
 };
 
 const error = { description: "ApiError 统一错误", content: { "application/json": { schema: { $ref: "#/components/schemas/ApiError" } } } };
@@ -25,6 +26,23 @@ const body = (schema: string) => ({ required: true, content: { "application/json
 const path = (...names: string[]) => names.map((name) => ({ name, in: "path" as const, required: true, schema: { type: "string" } }));
 
 export const workHomePaths: OpenAPIV3.Document["paths"] = {
+  "/api/me/sub-sessions/{kind}/{id}/attachments": {
+    post: {
+      operationId: "uploadSubSessionAttachments",
+      summary: "子会话（卡、专题，本人的）的附件存到云端（multipart files，新首页 14.5）：类型见 attachments.ts，每个不超过 30 MB，一次合计不超过 100 MB；回执的 id 随给本机程序的那句话带上（LocalSendMessageRequest.attachments）",
+      parameters: [{ name: "kind", in: "path", required: true, schema: { type: "string", enum: ["card", "topic"] } }, ...path("id")],
+      requestBody: { required: true, content: { "multipart/form-data": { schema: { type: "object", properties: { files: { type: "array", items: { type: "string", format: "binary" } } } } } } },
+      responses: { "200": json("存好的附件", "SessionAttachmentUploadResponse"), ...errors(400, 401, 403, 404, 413) },
+    },
+  },
+  "/api/me/session-attachments/{id}": {
+    get: {
+      operationId: "getSessionAttachment",
+      summary: "子会话附件的原文件（本人的；气泡里的缩略图、下载）",
+      parameters: path("id"),
+      responses: { "200": { description: "文件原样" }, ...errors(401, 404) },
+    },
+  },
   "/api/me/budget-default": {
     get: {
       operationId: "getBudgetDefault",

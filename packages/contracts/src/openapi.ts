@@ -1234,7 +1234,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         post: {
           operationId: "uploadConversationAttachments",
           parameters: [{ name: "scope", in: "path", required: true, schema: { type: "string" } }],
-          summary: "上传附件到本人在该 scope 的主对话（没有则创建；multipart files，PDF/DOCX/Markdown）；元数据随消息发送时内嵌入库",
+          summary: "上传附件到本人在该 scope 的主对话（multipart files）。总管线、Task 管线接了 Chat 时转给 Chat：类型见 attachments.ts（图片、文档、代码和日志），每个不超过 30 MB，一次合计不超过 100 MB（网页逐个传），一条消息最多 20 个；别的页面和没接 Chat 时照旧 PDF/DOCX/Markdown。元数据随消息发送时内嵌入库",
           requestBody: {
             content: { "multipart/form-data": { schema: { type: "object", properties: { files: { type: "array", items: { type: "string", format: "binary" } } } } } },
           },

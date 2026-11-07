@@ -19,8 +19,8 @@ const cloud = (deviceName: string, usedPercent: number, n: number): Resources["q
   deviceId: `00000000-0000-4000-8000-0000000000d${n}`, deviceName, source: "claude_subscription", windows: windows(usedPercent), blockedUntil: null, updatedAt: fresh(),
 });
 const resources = (quota: Resources["quota"] = []): Resources => ({ local: { online: false, name: null, used: 0, cap: 3 }, models: [], todayUsd: null, quota });
-const local = (phase: LocalPhase, quota: unknown[] = []) => ({
-  runner: createMockRunner(), phase, version: null, status: phase === "ready" ? { settings: { paused: false }, quota } : null, models: [], folders: [], sessions: [],
+const local = (phase: LocalPhase, quota: unknown[] = [], tools: unknown[] = []) => ({
+  runner: createMockRunner(), phase, version: null, status: phase === "ready" ? { settings: { paused: false }, quota, tools } : null, models: [], folders: [], sessions: [],
   pairing: null, error: null, refresh: vi.fn(), pair: vi.fn(), unpair: vi.fn(), pickFolder: vi.fn(), setIncludePersonal: vi.fn(),
 }) as unknown as Parameters<typeof LocalContext.Provider>[0]["value"];
 const item = (extra: Partial<BackgroundItem>): BackgroundItem => ({
@@ -28,10 +28,13 @@ const item = (extra: Partial<BackgroundItem>): BackgroundItem => ({
   sessionId: "00000000-0000-4000-8000-0000000000a1", itemId: null, deviceId: null, taskId: "t1", cardId: null, topicId: null, holdUntil: null, ...extra,
 });
 const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
-const render = (node: ReactNode, phase: LocalPhase, localQuota: unknown[] = []) =>
-  renderToStaticMarkup(<LocalContext.Provider value={local(phase, localQuota)}>{node}</LocalContext.Provider>);
+const render = (node: ReactNode, phase: LocalPhase, localQuota: unknown[] = [], tools: unknown[] = []) =>
+  renderToStaticMarkup(<LocalContext.Provider value={local(phase, localQuota, tools)}>{node}</LocalContext.Provider>);
+const sub = (remainingPercent: number) => ({ id: "claude", name: "Claude", kind: "subscription", remainingPercent, amounts: [], windows: windows(100 - remainingPercent),
+  resetsAt: null, blockedUntil: null, plan: "max", extraUsage: true, updatedAt: fresh(), error: null });
+const tool = (kind: string, state = "ready") => ({ kind, state, version: null, account: null, checkedAt: fresh() });
 const panel = (items: BackgroundItem[], quota: Resources["quota"] = []) =>
-  <BackgroundPanel items={items} resources={resources(quota)} model={null} onStop={async () => undefined} />;
+  <BackgroundPanel items={items} resources={resources(quota)} onStop={async () => undefined} />;
 
 describe("右栏（5.4.5）", () => {
   it("二级页、月份页只要资源块：scope 是 resources", () => {
@@ -47,31 +50,41 @@ describe("右栏（5.4.5）", () => {
     expect(rows[1]).toContain("已排队");
   });
 
-  it("这台电脑没就绪：额度用云端报的，每台设备一行「Claude 订阅 · 设备名」", () => {
+  it("这台电脑没就绪：用量用云端报的，每台设备一格「Claude · 设备名」", () => {
     const html = render(panel([], [cloud("ThinkPad", 83, 1), cloud("Mac mini", 40, 2)]), "offline");
     const rows = html.split('data-testid="quota-row"').slice(1).map(text);
     expect(rows).toHaveLength(2);
-    expect(rows[0]).toContain("Claude 订阅 · ThinkPad");
-    expect(rows[0]).toContain("剩 17%");
-    expect(rows[1]).toContain("Claude 订阅 · Mac mini");
-    expect(html).toContain('title="Claude 订阅 · ThinkPad"');
+    expect(rows[0]).toContain("Claude · ThinkPad");
+    expect(rows[0]).toContain("17%");
+    expect(rows[1]).toContain("Claude · Mac mini");
+  });
+
+  it("「这台电脑」逐项：就绪时收着；有一项没登录就琥珀点、自动展开、给「重试」；没就绪时工具写「—」；没有模型那一行", () => {
+    const fine = render(panel([], []), "ready", [], [tool("claude-code"), tool("codex"), tool("gh"), tool("lark-cli")]);
+    expect(fine).toMatch(/aria-expanded="false"[^>]*data-testid="machine-row"/);
+    expect(fine).not.toContain('data-testid="machine-checks"');
+    expect(text(fine)).toContain("同时在跑 0/3");
+    const bad = render(panel([], []), "ready", [], [tool("claude-code"), tool("codex", "not_logged_in"), tool("gh"), tool("lark-cli")]);
+    const checks = text(bad.split('data-testid="machine-checks"')[1]!);
+    expect(checks).toMatch(/本机程序 已连接 Claude Code 已登录 Codex 没登录 gh 已登录 飞书命令行 已登录/);
+    expect(bad).toContain("重试");
+    const off = text(render(panel([], []), "offline", [], [tool("gh")]));
+    expect(off).toContain("本机程序 离线");
+    expect(off).not.toContain("同时在跑");
   });
 
   it("这台电脑就绪且读得到额度：只列本机的，别的设备不列；读不到时用云端的", () => {
-    const mine = { source: "claude_subscription", plan: "max", windows: windows(30), blockedUntil: null, extraUsage: true, updatedAt: fresh(), error: null };
-    const ready = text(render(panel([], [cloud("ThinkPad", 83, 1)]), "ready", [mine]));
-    expect(ready).toContain("Claude 订阅");
-    expect(ready).toContain("剩 70%");
+    const ready = text(render(panel([], [cloud("ThinkPad", 83, 1)]), "ready", [sub(70)]));
+    expect(ready).toContain("Claude 70%");
     expect(ready).not.toContain("ThinkPad");
-    expect(text(render(panel([], [cloud("ThinkPad", 83, 1)]), "ready", []))).toContain("Claude 订阅 · ThinkPad");
+    expect(text(render(panel([], [cloud("ThinkPad", 83, 1)]), "ready", []))).toContain("Claude · ThinkPad");
   });
 
   it("收起条的额度点看列出来的那几行：没就绪时云端报的用完是红点", () => {
     const dot = render(<BackgroundStrip running={0} quota={[cloud("ThinkPad", 100, 1)]} onExpand={() => undefined} />, "checking");
     expect(dot).toContain('aria-label="额度快用完了"');
     expect(dot).toContain('data-tone="danger"');
-    const mine = { source: "claude_subscription", plan: null, windows: windows(30), blockedUntil: null, extraUsage: null, updatedAt: fresh(), error: null };
-    expect(render(<BackgroundStrip running={0} quota={[cloud("ThinkPad", 100, 1)]} onExpand={() => undefined} />, "ready", [mine])).not.toContain("额度快用完了");
+    expect(render(<BackgroundStrip running={0} quota={[cloud("ThinkPad", 100, 1)]} onExpand={() => undefined} />, "ready", [sub(70)])).not.toContain("额度快用完了");
   });
 
   it("这台电脑离线（本身要处理）时，云端报的额度用完照样是红点，不被琥珀点盖掉", () => {

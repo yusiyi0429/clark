@@ -2,82 +2,89 @@
 
 /**
  * 右栏（新首页设计 5.4.5）：资源块 → 发丝线 →「进行中 N」→「已完成 N」，不写标题。跟着展示区走（首页列全部，二级页只留资源块）。
- * - 资源块：「这台电脑 · 就绪」（七种状态：检查中、等浏览器允许、被拦截、离线、未配对、暂停中、就绪；没就绪的前面一个琥珀点，下面一行一个次按钮：
- *   配对、继续或重试）；位置条（用着的 --ink-muted，空的发丝线，不上色）+「2/3」+ 模型。额度行：这台电脑就绪时用本机的，不然用云端各台设备报的（只显示读得到的）。
+ * - 资源块（14.4）：「这台电脑 · 就绪」一行能点开，逐项列本机程序、Claude Code、Codex、gh、飞书命令行（照本机报的 tools）；有一项不对就前面一个琥珀点、
+ *   自动展开，下面一个次按钮（配对、继续或重试）。「同时在跑」+ 位置条 +「2/3」（这台电脑就绪时才有）。「用量」两列小格（见 lib/home/quota）：
+ *   这台电脑就绪时用本机的，不然用云端各台设备报的（只显示读得到的）。
  * - 后台任务：组头 12/16 600 淡色，「进行中」前面一颗转圈（整栏只有它在转）；「已完成」默认收起，有失败时自动展开、组头后面加「· 失败 1」。
  *   行高 36：种类、名字、用时，停止按钮鼠标移上去或有焦点时才出（手持上一直显示），不能停的不画。行里不放状态图标，失败的行首一个叉、用时换成「失败」，
  *   停了的用时换成「已停止」，停着等额度恢复的换成「等额度恢复 · 08:00」。后台任务点不进去，行没有悬停底。
  * - 收起后是 44 宽的细条：展开键；有在跑的是转圈加数字；本机要处理时一个琥珀点。
  */
 import { useEffect, useState } from "react";
-import { ChevronRight, LoaderCircle, PanelRightClose, PanelRightOpen, Square, X } from "lucide-react";
-import { Popover } from "@heroui/react";
+import { ChevronDown, ChevronRight, LoaderCircle, PanelRightClose, PanelRightOpen, Square, X } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
 import { Slots } from "@/components/work/Slots";
 import { FailedLine } from "@/components/work/DecisionBox";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import type { LocalPhase } from "@/lib/local/connection";
 import { duration, groupBackground, queueText } from "@/lib/home/derive";
-import { quotaRows, type QuotaRow } from "@/lib/home/quota";
+import { usageCells, type UsageCell } from "@/lib/home/quota";
 import type { BackgroundItem } from "@/lib/home/types";
 import type { Resources } from "@/lib/work/useWork";
+import type { TLocalToolStatus } from "@warmap/contracts";
 import { ICON } from "./StateIcon";
 import h from "@/styles/home.module.css";
 
 const KIND: Record<BackgroundItem["kind"], string> = { plan: "规划", verify: "验收", merge: "合回", subagent: "子 agent", command: "命令" };
 const PHASE: Record<LocalPhase, string> = { checking: "检查中", prompt: "等浏览器允许", blocked: "被拦截", offline: "离线", unpaired: "未配对", ready: "就绪" };
+const TOOL: Record<TLocalToolStatus["kind"], string> = { "claude-code": "Claude Code", codex: "Codex", gh: "gh", "lark-cli": "飞书命令行" };
+const TOOL_STATE: Record<TLocalToolStatus["state"], string> = { ready: "已登录", not_installed: "没装", not_logged_in: "没登录", expired: "登录过期", unknown: "检查中" };
+type Check = { name: string; value: string; bad: boolean };
 
 /**
  * 这台电脑现在是什么状态、要不要本人动手（本人行、细条上的琥珀点也用这个）。
- * cloudQuota 是各台设备同步给云端的额度：这台电脑没就绪（手机、未配对、离线）或读不到额度时，每台设备一行「Claude 订阅 · 设备名」；
+ * checks 是「这台电脑」点开后的逐项：本机程序，再照本机报的 tools 列执行方和命令行工具；没就绪时工具那几项写「—」。
+ * cloudQuota 是各台设备同步给云端的额度：这台电脑没就绪（手机、未配对、离线）或读不到额度时，每台设备一格「Claude · 设备名」；
  * 这台电脑就绪且读得到时只列它自己的。
  */
 export function useMachine(cloudQuota: Resources["quota"]) {
   const local = useLocalRunner();
-  const paused = local.phase === "ready" && !!local.status?.settings.paused;
+  const ready = local.phase === "ready";
+  const paused = ready && !!local.status?.settings.paused;
   const word = paused ? "暂停中" : PHASE[local.phase];
   const alert = paused || local.phase === "prompt" || local.phase === "blocked" || local.phase === "offline" || local.phase === "unpaired";
+  const tools = local.status?.tools ?? [];
+  const checks: Check[] = [
+    { name: "本机程序", value: ready ? (paused ? "暂停中" : "已连接") : PHASE[local.phase], bad: alert },
+    ...tools.map((tool) => ready
+      ? { name: TOOL[tool.kind], value: TOOL_STATE[tool.state], bad: tool.state !== "ready" && tool.state !== "unknown" }
+      : { name: TOOL[tool.kind], value: "—", bad: false }),
+  ];
   const action = local.phase === "unpaired" ? { label: "配对", run: () => local.pair() }
     : paused ? { label: "继续", run: async () => { await local.runner.patchSettings({ paused: false }); await local.refresh(); } }
-    : local.phase === "offline" || local.phase === "blocked" || local.phase === "prompt" ? { label: "重试", run: () => local.refresh() }
+    : alert || checks.some((check) => check.bad) ? { label: "重试", run: () => local.refresh() }
     : null;
-  // 额度（D 的 status.quota，读不到用云端的）：剩 ≤25% 琥珀点、≤10% 或用完红点，和本机要处理的点是同一颗（5.4.5、5.6），看列出来的那几行。
+  // 用量（本机 status.quota，读不到用云端的）：剩 ≤25% 琥珀点、≤10% 或用完红点，和本机要处理的点是同一颗（5.4.5、5.6），看列出来的那几格。
   const now = Date.now();
-  const here = local.phase === "ready" ? quotaRows(local.status?.quota ?? [], now) : [];
-  const quota = here.length ? here : quotaRows(cloudQuota.map((entry) => ({
-    source: entry.source, windows: entry.windows, blockedUntil: entry.blockedUntil, extraUsage: null, updatedAt: entry.updatedAt, device: entry.deviceName,
+  const here = ready ? usageCells(local.status?.quota ?? [], now) : [];
+  const usage = here.length ? here : usageCells(cloudQuota.map((entry) => ({
+    id: `claude:${entry.deviceId}`, name: "Claude", kind: "subscription" as const, remainingPercent: null, amounts: [], windows: entry.windows,
+    blockedUntil: entry.blockedUntil, updatedAt: entry.updatedAt, device: entry.deviceName,
   })), now);
-  const quotaAlert = quota.some((row) => row.tone === "danger") ? "danger" as const : quota.some((row) => row.tone === "warning") ? "warning" as const : null;
-  return { word, alert, action, quota, quotaAlert };
+  const quotaAlert = usage.some((cell) => cell.tone === "danger") ? "danger" as const : usage.some((cell) => cell.tone === "warning") ? "warning" as const : null;
+  return { ready, word, alert, checks, action, usage, quotaAlert };
 }
 
-/** 额度一行：名字、剩多少、几点重置，下面 2px 额度条；整行能点，弹层里是每个窗口的明细。 */
-function QuotaLine({ row }: { row: QuotaRow }) {
-  const time = row.stale ?? (row.resets ? (row.left === 0 ? `· ${row.resets}` : row.resets) : null);
+/** 用量一格：圆环（订阅剩多少）或「¥」、名字、数；明细在 title 里。 */
+function UsageItem({ cell }: { cell: UsageCell }) {
+  const r = 5.5, round = 2 * Math.PI * r;
   return (
-    <Popover>
-      <Popover.Trigger className={h.quota} data-tone={row.tone} data-stale={row.stale ? "" : undefined} aria-label={`${row.name} ${row.amount}${row.resets ? ` ${row.resets}` : ""}`} data-testid="quota-row">
-        <span className={h.quotaLine}>
-          <span className={h.resName} title={row.name}>{row.name}</span>
-          <span className={`${h.quotaAmount} ${h.num}`}>{row.amount}</span>
-          {time ? <span className={`${h.quotaTime} ${h.num}`}>{time}</span> : null}
-        </span>
-        <span className={h.quotaBar} aria-hidden><i style={{ width: `${row.left}%` }} /></span>
-      </Popover.Trigger>
-      <Popover.Content placement="left top" offset={8} className={h.pop}>
-        <Popover.Dialog aria-label={`${row.name}的额度`} className={h.quotaDetails}>
-          {row.details.map((line) => <p key={line} className={`${h.quotaDetail} ${h.num}`}>{line}</p>)}
-        </Popover.Dialog>
-      </Popover.Content>
-    </Popover>
+    <li className={h.usageCell} data-tone={cell.tone} data-stale={cell.stale ? "" : undefined} title={`${cell.name}\n${cell.tip}`} data-testid="quota-row">
+      {cell.percent === null ? <span className={h.usageMoney} aria-hidden>¥</span> : (
+        <svg className={h.usageRing} viewBox="0 0 14 14" aria-hidden>
+          <circle cx="7" cy="7" r={r} fill="none" strokeWidth="2" />
+          <circle cx="7" cy="7" r={r} fill="none" strokeWidth="2" strokeLinecap="round" strokeDasharray={`${(round * cell.percent / 100).toFixed(2)} ${round.toFixed(2)}`} />
+        </svg>
+      )}
+      <span className={h.usageName}>{cell.name}</span>
+      <span className={`${h.usageValue} ${h.num}`}>{cell.value}</span>
+    </li>
   );
 }
 
-export function BackgroundPanel({ items, resources, model, onStop, onCollapse, handheld = false }: {
+export function BackgroundPanel({ items, resources, onStop, onCollapse, handheld = false }: {
   items: BackgroundItem[];
   resources: Resources;
-  /** 默认用的模型（本机的默认档）。 */
-  model: string | null;
   onStop: (item: BackgroundItem) => Promise<void>;
   /** 桌面：收成细条（手机抽屉没有，点外面或 Esc 关）。 */
   onCollapse?: () => void;
@@ -92,6 +99,10 @@ export function BackgroundPanel({ items, resources, model, onStop, onCollapse, h
   const [open, setOpen] = useState<boolean | null>(null);
   const finishedOpen = open ?? failed > 0;
   const [acting, setActing] = useState(false);
+  // 逐项检查：有一项不对时默认展开；本人点过就照本人的来。
+  const [checksOpen, setChecksOpen] = useState<boolean | null>(null);
+  const bad = machine.checks.some((check) => check.bad);
+  const showChecks = checksOpen ?? bad;
   /** 没停下：那一行停止按钮的位置写「失败 · 重试」（原因在 title 里），不弹 toast。 */
   const [stopFailed, setStopFailed] = useState<{ id: string; reason: string } | null>(null);
   const stop = async (item: BackgroundItem) => {
@@ -121,22 +132,38 @@ export function BackgroundPanel({ items, resources, model, onStop, onCollapse, h
     <div className={h.bg} data-testid="background-panel">
       <div className={h.bgHead} data-testid="resources">
         <div className={h.resLine}>
-          {machine.alert ? <i className={h.warnDot} aria-hidden /> : null}
-          <span className={h.resName}>这台电脑</span><span className={h.resWord}> · {machine.word}</span>
-          <span className={h.grow} />
+          <button type="button" className={h.pcRow} aria-expanded={showChecks} onClick={() => setChecksOpen(!showChecks)} data-testid="machine-row">
+            {bad ? <i className={h.warnDot} aria-hidden /> : null}
+            <span className={h.resName}>这台电脑</span><span className={h.resWord}> · {machine.word}</span>
+            <ChevronDown size={14} strokeWidth={1.8} aria-hidden className={h.pcChevron} data-open={showChecks ? "" : undefined} />
+          </button>
           {onCollapse ? <HeroButton variant="ghost" size="sm" isIconOnly title="收起" aria-label="收起" onPress={onCollapse}><PanelRightClose {...ICON} /></HeroButton> : null}
         </div>
-        {machine.action ? (
-          <div className={h.resLine}>
-            <HeroButton variant="tertiary" size="sm" isDisabled={acting} onPress={() => { setActing(true); void machine.action!.run().finally(() => setActing(false)); }}>{machine.action.label}</HeroButton>
+        {showChecks ? (
+          <>
+            <ul className={h.checks} data-testid="machine-checks">
+              {machine.checks.map((check) => <li key={check.name} data-bad={check.bad ? "" : undefined}><span>{check.name}</span><span className={h.checkValue}>{check.value}</span></li>)}
+            </ul>
+            {machine.action ? (
+              <div className={h.checkFix}>
+                <HeroButton variant="tertiary" size="sm" isDisabled={acting} onPress={() => { setActing(true); void machine.action!.run().finally(() => setActing(false)); }}>{machine.action.label}</HeroButton>
+              </div>
+            ) : null}
+          </>
+        ) : null}
+        {machine.ready ? (
+          <div className={h.runLine} title={`同时最多跑 ${resources.local.cap} 张卡`}>
+            同时在跑<span className={h.grow} />
+            <Slots used={resources.local.used} cap={resources.local.cap} />
+            <span className={`${h.runCount} ${h.num}`}>{resources.local.used}/{resources.local.cap}</span>
           </div>
         ) : null}
-        <div className={h.resMeta}>
-          <Slots used={resources.local.used} cap={resources.local.cap} off={!resources.local.online} />
-          <span className={h.num}>{resources.local.used}/{resources.local.cap}</span>
-          {model ? <span className={h.resModel}>{model}</span> : null}
-        </div>
-        {machine.quota.map((row, index) => <QuotaLine key={`${index}:${row.name}`} row={row} />)}
+        {machine.usage.length ? (
+          <>
+            <p className={h.usageHead}>用量</p>
+            <ul className={h.usage}>{machine.usage.map((cell) => <UsageItem key={cell.id} cell={cell} />)}</ul>
+          </>
+        ) : null}
       </div>
       <div className={h.bgBody}>
         {groups.running.length ? (

@@ -4,6 +4,7 @@
  * Task 详情里「预算」那一行（设计 11.3：「Task 详情里一行能改」）：自动 · 设预算 · 无上限。
  * 读 GET /api/me/tasks/:taskId/budget（没单独设过时是本人在「偏好」里的缺省，小字「沿用偏好」），改了 PUT 回去。
  * 自动、无上限点了就存；设预算填时长、本周额度百分比，点「存」才存，一项都没填对时停在输入框上。没存成在原处写「失败 · 重试」。
+ * 存到天枢以后，这台电脑就绪时再交给本机（PUT /v1/budgets）：跑着的、用完停着等的马上按新的来。
  */
 import { useEffect, useRef, useState } from "react";
 import type { TBudget, TBudgetMode } from "@warmap/contracts";
@@ -11,6 +12,7 @@ import { HeroButton } from "@/components/HeroButton";
 import { SegmentedSwitch } from "@/components/SegmentedSwitch";
 import { FailedLine, failureOf, type Failure } from "@/components/work/DecisionBox";
 import { readTaskBudget, saveTaskBudget } from "@/lib/board/cloud";
+import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { MODES, budgetOf, limitsOf, type Limits } from "./PlanDecision";
 import h from "@/styles/home.module.css";
 import x from "@/styles/decision-box.module.css";
@@ -22,6 +24,7 @@ export function TaskBudget({ taskId }: { taskId: string }) {
   const [failed, setFailed] = useState<Failure | null>(null);
   const [busy, setBusy] = useState(false);
   const hoursRef = useRef<HTMLInputElement>(null);
+  const local = useLocalRunner();
   useEffect(() => {
     let alive = true;
     void readTaskBudget(taskId).then((found) => {
@@ -35,7 +38,11 @@ export function TaskBudget({ taskId }: { taskId: string }) {
   const save = async (budget: TBudget) => {
     setBusy(true);
     setFailed(null);
-    try { await saveTaskBudget(taskId, budget); setInherited(false); }
+    try {
+      await saveTaskBudget(taskId, budget);
+      setInherited(false);
+      if (local.phase === "ready") await local.runner.putBudget({ taskId, budget });
+    }
     catch (error) { setFailed(failureOf(error, () => void save(budget))); }
     finally { setBusy(false); }
   };

@@ -13,7 +13,7 @@
  * 树的键盘：↑↓ 移动，回车打开，→ 展开折叠，← 收起。
  */
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { ChevronRight, Ellipsis, House, Info, Target } from "lucide-react";
+import { ChevronDown, ChevronRight, Ellipsis, House, Info, Target } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
 import type { Account } from "@/components/AccountMenu";
 import { BuddyMark } from "@/components/buddy/BuddyMark";
@@ -62,6 +62,9 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
   const showCount = view.kind !== "home";
   const pipelineWaiting = new Set(data.waiting.filter((item) => item.open.kind === "task" && item.taskId).map((item) => item.taskId!));
   const tree = useRef<HTMLDivElement>(null);
+  // 收起的 Mission（行尾的下箭头，鼠标移上去才出；收起时一直显示）。
+  const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
+  const fold = (id: string) => setFolded((now) => { const next = new Set(now); if (!next.delete(id)) next.add(id); return next; });
   // 听写时台上的伙伴跟着声音动（5.4.2、9.2），哪个输入框在听都算。
   const dictation = useDictationSignal();
   return (
@@ -93,11 +96,17 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
         {onRetryPlan ? <p className={h.planFailed} data-testid="plan-read-failed">本体读取失败<HeroButton variant="ghost" size="sm" onPress={onRetryPlan}>重试</HeroButton></p> : null}
         {data.missions.filter((mission) => mission.tasks.length).map((mission) => (
           <section key={mission.missionId} aria-label={mission.title} className={h.group}>
-            <button type="button" className={h.missionRow} aria-current={view.kind === "mission" && view.id === mission.missionId ? "page" : undefined}
-              onClick={() => go(missionHref(mission.missionId))} data-tree-row="" data-testid="tree-mission">
-              <Target size={14} strokeWidth={1.8} aria-hidden /><span className={h.subName}>{mission.period !== data.period ? <span>{monthLabel(mission.period)} · </span> : null}{mission.title}</span>
-            </button>
-            {mission.tasks.map((task) => <TaskNode key={task.taskId} task={task} view={view} go={go} waiting={pipelineWaiting.has(task.taskId)} personId={account.personId} gate={gateFor?.(task.missionId) ?? null} cardAt={cardAt} />)}
+            <div className={h.missionRow} data-current={view.kind === "mission" && view.id === mission.missionId ? "" : undefined}>
+              <button type="button" className={h.missionMain} aria-current={view.kind === "mission" && view.id === mission.missionId ? "page" : undefined}
+                onClick={() => go(missionHref(mission.missionId))} data-tree-row="" data-testid="tree-mission">
+                <Target size={14} strokeWidth={1.8} aria-hidden /><span className={h.subName}>{mission.period !== data.period ? <span>{monthLabel(mission.period)} · </span> : null}{mission.title}</span>
+              </button>
+              <button type="button" className={h.missionFold} aria-expanded={!folded.has(mission.missionId)} title={folded.has(mission.missionId) ? "展开" : "收起"}
+                aria-label={`${folded.has(mission.missionId) ? "展开" : "收起"} ${mission.title}`} onClick={() => fold(mission.missionId)}>
+                <ChevronDown size={14} strokeWidth={1.8} aria-hidden />
+              </button>
+            </div>
+            {folded.has(mission.missionId) ? null : mission.tasks.map((task) => <TaskNode key={task.taskId} task={task} view={view} go={go} waiting={pipelineWaiting.has(task.taskId)} personId={account.personId} gate={gateFor?.(task.missionId) ?? null} cardAt={cardAt} />)}
           </section>
         ))}
         {data.other.subSessions.length || data.other.items.length ? (

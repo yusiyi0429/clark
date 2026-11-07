@@ -6,7 +6,7 @@ import type {
   TLocalCloudLinkRequest, TLocalCloudLinkView, TLocalCreateSessionBatchResponse, TLocalCreateSessionRequest, TLocalFolder, TLocalHealthResponse, TLocalMergeResponse,
   TLocalModelProfile, TLocalModelProfileUpsert, TLocalPairingStartResponse, TLocalPairingStatusResponse,
   TLocalPermissionDecisionRequest, TLocalQuestionAnswerRequest, TLocalRunnerErrorCode, TLocalSendMessageRequest, TLocalSendMessageResponse, TLocalSessionDetailResponse,
-  TLocalSessionEvent, TLocalSessionSummary, TLocalSettings, TLocalSettingsPatch, TLocalStatusResponse,
+  TLocalSessionEvent, TLocalSessionSummary, TLocalSettings, TLocalSettingsPatch, TLocalStatusResponse, TLocalBudgetUpdateRequest, TLocalTaskBudgetView,
 } from "@warmap/contracts";
 
 export type {
@@ -60,6 +60,8 @@ export interface LocalRunner {
   answerQuestion(id: string, requestId: string, body: TLocalQuestionAnswerRequest): Promise<TLocalSessionSummary>;
   /** 停会话里的一个后台任务（子 agent、后台命令），会话本身不停；不在跑、进程已退出、没有这一项是 409。 */
   stopBackground(id: string, itemId: string): Promise<TLocalSessionSummary>;
+  /** 改一件 Task 的预算（先存天枢再交给本机）：用完停着等的马上接着做。 */
+  putBudget(body: TLocalBudgetUpdateRequest): Promise<TLocalTaskBudgetView>;
   /** 读一个会话的事件流，断了自己重连（带 Last-Event-ID），直到 signal 中止。 */
   watch(id: string, watch: EventWatch): Promise<void>;
 }

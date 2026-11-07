@@ -75,11 +75,17 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .groupTitle { display: block; height: var(--row-28); margin: 0; padding: 6px var(--space-2); overflow: hidden; color: var(--ink-faint); font-size: var(--text-xs); font-weight: 600; line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
 .groupTitle span { font-weight: 400; }
 /* Mission 行（14.2）：32 高，target 14 + 名字 12/16 600 淡色；之前月份没了结的前面加「10 月 · 」（400）。点开 Mission 详情。 */
-.missionRow { display: flex; align-items: center; gap: var(--space-2); width: 100%; height: var(--row-32); padding: 0 var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink-faint); font: inherit; font-size: var(--text-xs); font-weight: 600; line-height: 16px; text-align: left; cursor: pointer; }
-.missionRow svg { flex: none; }
-.missionRow span span { font-weight: 400; }
+.missionRow { display: flex; align-items: center; height: var(--row-32); border-radius: var(--r-control); color: var(--ink-faint); }
 .missionRow:hover { background: var(--default-soft); color: var(--ink-muted); }
-.missionRow[aria-current="page"] { background: var(--default-soft-hover); color: var(--ink); }
+.missionRow[data-current] { background: var(--default-soft-hover); color: var(--ink); }
+.missionMain { display: flex; flex: 1; align-items: center; gap: var(--space-2); min-width: 0; height: 100%; padding: 0 var(--space-2); border: 0; border-radius: inherit; background: none; color: inherit; font: inherit; font-size: var(--text-xs); font-weight: 600; line-height: 16px; text-align: left; cursor: pointer; }
+.missionMain svg { flex: none; }
+.missionMain span span { font-weight: 400; }
+/* 收起键：24 见方，鼠标移上去或有焦点时出，收起了一直显示（箭头转向右）。 */
+.missionFold { display: grid; flex: none; place-items: center; width: 24px; height: 24px; margin-right: var(--space-1); border: 0; border-radius: 8px; background: none; color: var(--ink-faint); cursor: pointer; opacity: 0; transition: opacity var(--dur-snap) var(--ease-swift); }
+.missionRow:hover .missionFold, .missionRow:focus-within .missionFold, .missionFold[aria-expanded="false"] { opacity: 1; }
+.missionFold:hover { background: var(--default-soft); }
+.missionFold[aria-expanded="false"] svg { transform: rotate(-90deg); }
 
 .taskNode { display: grid; gap: 2px; }
 .taskRow { position: relative; display: flex; align-items: center; min-height: var(--row-48); border-radius: var(--r-control); }
@@ -114,13 +120,16 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 /* 「子会话 N」（14.2）：和子会话行同一个缩进，ChevronRight + 12/16 400 淡色，收起时后面一排 6px 小方块（一格一个子会话）；悬停字变 --ink-muted。 */
 .foldToggle { display: flex; align-items: center; gap: var(--space-2); width: 100%; height: var(--row-28); padding: 0 var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink-faint); font: inherit; font-size: var(--text-xs); line-height: 16px; font-variant-numeric: tabular-nums; text-align: left; cursor: pointer; }
 .foldToggle:hover { background: var(--default-soft); color: var(--ink-muted); }
-.cells { display: inline-flex; flex-wrap: wrap; gap: 3px; min-width: 0; overflow: hidden; height: 6px; }
-.cells i { width: 6px; height: 6px; border-radius: 1px; background: var(--hairline-strong); }
-.cells i[data-state="running"] { background: var(--ink-muted); }
-.cells i[data-state="waiting"] { background: var(--ink); }
-.cells i[data-state="done"] { background: var(--ink-faint); }
-.cells i[data-state="failed"] { background: var(--danger); }
-.cells i[data-state="stopped"] { background: none; box-shadow: inset 0 0 0 1px var(--ink-faint); }
+/* 小方块：排队是空心发丝线，在跑是 --ink-muted 描边慢慢呼吸，等你实心 --ink，停了实心发丝线，做完淡的实心。 */
+.cells { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px; max-width: 120px; margin-left: auto; }
+.cells i { display: block; width: 6px; height: 6px; border-radius: 1.5px; box-shadow: inset 0 0 0 1px var(--hairline-strong); }
+.cells i[data-state="running"] { box-shadow: inset 0 0 0 1px var(--ink-muted); animation: breath 1.8s ease-in-out infinite; }
+.cells i[data-state="waiting"] { background: var(--ink); box-shadow: none; }
+.cells i[data-state="stopped"] { background: var(--hairline-strong); box-shadow: none; }
+.cells i[data-state="done"] { background: var(--ink-faint); box-shadow: none; opacity: .55; }
+.cells i[data-state="failed"] { background: var(--danger); box-shadow: none; }
+@keyframes breath { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .cells i { animation: none; } }
 
 /* 本人行：贴底，上沿发丝线；头像 24 + 名字 14/20。菜单开着、在二级页上时是选中底。 */
 .me { flex: none; margin: 0 calc(-1 * var(--space-2)); padding: var(--space-1) var(--space-2); box-shadow: inset 0 1px 0 var(--hairline); }
@@ -267,24 +276,37 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .resLine { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-32); font-size: var(--text-base); line-height: var(--lh-row); }
 .resName { color: var(--ink); }
 .resWord { margin-left: calc(-1 * var(--space-2)); color: var(--ink-muted); white-space: pre; }
-.resMeta { display: flex; align-items: center; gap: var(--space-2); color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; }
-.resModel { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 「这台电脑」一行（14.4）：能点开逐项检查，行尾 14 的下箭头。 */
+.pcRow { display: flex; flex: 1; align-items: center; gap: var(--space-2); min-width: 0; min-height: var(--row-36); margin-left: calc(-1 * var(--space-2)); padding: 0 var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.pcRow:hover { background: var(--default-soft); }
+.pcChevron { flex: none; margin-left: auto; color: var(--ink-faint); transition: transform var(--dur-snap) var(--ease-swift); }
+.pcChevron[data-open] { transform: rotate(180deg); }
+/* 逐项：24 一行，12 淡色，右边状态 --ink-muted；不对的那一项状态用 --warning。 */
+.checks { display: grid; margin: 0; padding: 0 var(--space-2) var(--space-1) var(--space-2); list-style: none; }
+.checks li { display: flex; align-items: center; gap: var(--space-2); height: 24px; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; }
+.checkValue { margin-left: auto; color: var(--ink-muted); }
+.checks li[data-bad] .checkValue { color: var(--warning); }
+.checkFix { display: flex; gap: var(--space-2); padding: 0 var(--space-2); }
+/* 「同时在跑」：14，右边位置条加「2/3」（12 淡）。 */
+.runLine { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-32); font-size: var(--text-base); line-height: var(--lh-row); }
+.runCount { color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; }
+/* 「用量」：组头 12/16 600 淡色；两列小格，一格 28 高：14 的圆环或「¥」、名字 12 淡、数 12 --ink-muted（≤25% 琥珀、≤10% 红）。 */
+.usageHead { display: flex; align-items: center; height: var(--row-28); margin: 0; color: var(--ink-faint); font-size: var(--text-xs); font-weight: 600; line-height: 16px; }
+.usage { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px var(--space-1); margin: 0 0 0 calc(-1 * var(--space-1)); padding: 0; list-style: none; }
+.usageCell { display: flex; align-items: center; gap: 6px; min-width: 0; height: var(--row-28); padding: 0 var(--space-1); border-radius: var(--r-control); color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; }
+.usageCell:hover { background: var(--default-soft); }
+.usageName { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.usageValue { flex: none; margin-left: auto; color: var(--ink-muted); }
+.usageCell[data-tone="warning"] .usageValue { color: var(--warning); }
+.usageCell[data-tone="danger"] .usageValue { color: var(--danger); }
+.usageCell[data-stale] .usageValue { color: var(--ink-faint); }
+.usageRing { flex: none; width: 14px; height: 14px; transform: rotate(-90deg); }
+.usageRing circle:first-child { stroke: var(--hairline-strong); }
+.usageRing circle:last-child { stroke: var(--ink-muted); }
+.usageCell[data-tone="warning"] .usageRing circle:last-child { stroke: var(--warning); }
+.usageCell[data-tone="danger"] .usageRing circle:last-child { stroke: var(--danger); }
+.usageMoney { display: grid; flex: none; place-items: center; width: 14px; height: 14px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--hairline-strong); color: var(--ink-muted); font-size: 9px; font-weight: 600; line-height: 1; }
 .num { font-variant-numeric: tabular-nums; }
-/* 额度行（5.4.5）：名字 13 墨色、剩多少 13 等宽数字、重置时刻 12 淡；字下 4px 一条 2px 额度条，≤25% 琥珀、≤10% 或用完红；超过 15 分钟没更新整行变淡。整行能点。 */
-.quota { display: grid; align-content: center; gap: 4px; min-height: var(--touch-hit, var(--row-36)); margin: 0 calc(-1 * var(--space-2)); padding: 0 var(--space-2); border-radius: var(--r-control); cursor: pointer; }
-.quota:hover { background: var(--default-soft); }
-.quota[data-focus-visible], .quota:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
-.quotaLine { display: flex; align-items: baseline; gap: var(--space-2); font-size: var(--text-base); line-height: var(--lh-row); }
-.quotaLine .resName { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.quotaAmount { flex: none; color: var(--ink); white-space: nowrap; }
-.quotaTime { flex: none; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; white-space: nowrap; }
-.quota[data-stale] .resName, .quota[data-stale] .quotaAmount { color: var(--ink-faint); }
-.quotaBar { display: block; height: 2px; overflow: hidden; border-radius: 1px; background: var(--hairline); }
-.quotaBar i { display: block; height: 100%; background: var(--ink-muted); }
-.quota[data-tone="warning"] .quotaBar i { background: var(--warning); }
-.quota[data-tone="danger"] .quotaBar i { background: var(--danger); }
-.quotaDetails { outline: none; }
-.quotaDetail { display: flex; align-items: center; min-height: var(--row-32); margin: 0; padding: 0 var(--space-3); color: var(--ink-muted); font-size: var(--text-base); line-height: var(--lh-row); }
 .warnDot[data-tone="danger"], .cornerDot[data-tone="danger"] { background: var(--danger); }
 .bgBody { min-height: 0; overflow-y: auto; scrollbar-width: thin; padding: var(--space-2) var(--space-2) var(--space-4); }
 .bgGroup + .bgGroup { margin-top: var(--space-2); }
@@ -317,6 +339,7 @@ button.bgLabel:hover { background: var(--default-soft); }
 .app[data-phone] .today { cursor: default; }
 .app[data-phone] .tree { flex: none; overflow: visible; }
 .app[data-phone] .me { margin: 0 calc(-1 * var(--space-4)); padding: var(--space-1) var(--space-4) calc(var(--space-1) + env(safe-area-inset-bottom, 0px)); }
+.app[data-phone] .missionFold { opacity: 1; }
 .app[data-phone] :is(.sub, .meRow, .missionRow) { height: var(--touch-hit, 44px); }
 /* 手机上的热区至少 44（5.2、5.7）：页头的返回、后台任务、信息按钮，「子会话 N」。 */
 .app[data-phone] .icon { min-width: var(--touch-hit, 44px); min-height: var(--touch-hit, 44px); }

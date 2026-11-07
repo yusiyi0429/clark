@@ -349,7 +349,6 @@ function HomeFrame({ account }: { account: Account }) {
   const items = useBackground(scopeOf(view), api);
   const machine = useMachine(work.resources.quota);
   const running = items.filter((item) => item.state === "running" || item.state === "queued").length;
-  const model = local.models.find((entry) => entry.isDefault)?.label ?? local.models[0]?.label ?? null;
   // 规划员、验收员停会话；子 agent、后台命令只停那一项，会话接着做。
   const stop = async (item: BackgroundItem) => {
     if (!item.sessionId) return;
@@ -359,7 +358,7 @@ function HomeFrame({ account }: { account: Account }) {
     changed();
   };
   const panel = (extra: { onCollapse?: () => void; onClose?: () => void }) => (
-    <BackgroundPanel items={items} resources={work.resources} model={model} onStop={stop} handheld={handheld} {...extra} />
+    <BackgroundPanel items={items} resources={work.resources} onStop={stop} handheld={handheld} {...extra} />
   );
 
   const workspace: WorkspaceApi = useMemo(() => ({
