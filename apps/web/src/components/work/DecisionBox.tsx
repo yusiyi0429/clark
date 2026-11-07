@@ -14,6 +14,7 @@
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, LoaderCircle } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
+import { CloudError } from "@/lib/board/cloud";
 import x from "@/styles/decision-box.module.css";
 
 /** noEnter：回车不提交这一项（批准框的「同类以后都批准」），回车提交推荐的那个。 */
@@ -62,7 +63,7 @@ export function DecisionBox({ kind, title, body, options, onPick, other, multi, 
   const [text, setText] = useState("");
   const [sending, setSending] = useState<number | null>(null);
   /** 答案没发出去：框底下一行「失败 · 重试」（重试 = 同一个动作再来一次），title 里是原因。 */
-  const [failed, setFailed] = useState<{ retry: () => void; reason: string } | null>(null);
+  const [failed, setFailed] = useState<Failure | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const optionRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const textRef = useRef<HTMLTextAreaElement>(null);
@@ -93,7 +94,7 @@ export function DecisionBox({ kind, title, body, options, onPick, other, multi, 
     setSending(index);
     setFailed(null);
     try { await action(); }
-    catch (error) { setFailed({ retry: () => void run(index, action), reason: error instanceof Error ? error.message : "" }); }
+    catch (error) { setFailed(failureOf(error, () => void run(index, action))); }
     finally { setSending(null); }
   };
   const choose = (index: number) => {
@@ -206,7 +207,7 @@ export function DecisionBox({ kind, title, body, options, onPick, other, multi, 
           <HeroButton variant="primary" size="sm" isDisabled={disabled || !picks.length} onPress={() => void run(picks[0] ?? 0, () => onPick(picks))}>提交</HeroButton>
         </div>
       ) : null}
-      {failed && sending === null ? <FailedLine reason={failed.reason} onRetry={failed.retry} /> : null}
+      {failed && sending === null ? <FailedLine {...failed} /> : null}
       {footer ? <div className={x.foot}>{footer}</div> : null}
       </>}
     </div>
@@ -214,13 +215,25 @@ export function DecisionBox({ kind, title, body, options, onPick, other, multi, 
 }
 
 /** 动作失败（5.4.1 交互状态表）：原处一行「失败」加「重试」（弱按钮）；原因放在 title 里。 */
-export function FailedLine({ reason, onRetry, inline }: { reason?: string; onRetry: () => void; inline?: boolean }) {
+export function FailedLine({ reason, note, onRetry, inline }: { reason?: string; note?: string | null; onRetry: () => void; inline?: boolean }) {
   return (
     <span className={inline ? x.failInline : x.failLine} data-testid="action-failed">
-      <span className={x.failed} title={reason || undefined}>失败</span>
-      <HeroButton variant="ghost" size="sm" onPress={onRetry}>重试</HeroButton>
+      {note ? <span className={x.failNote}>{note}</span> : <>
+        <span className={x.failed} title={reason || undefined}>失败</span>
+        <HeroButton variant="ghost" size="sm" onPress={onRetry}>重试</HeroButton>
+      </>}
     </span>
   );
+}
+
+/**
+ * 一次没成的动作：原因（title 里）、重试（同一个动作再来一次）。
+ * note：现在重试也没用、要等别的事的，云端的话原样写出来、不给「重试」——推翻时合回结果还没报上来（409 MERGE_PENDING，等电脑上线以后再推翻）。
+ */
+export type Failure = { onRetry: () => void; reason: string; note: string | null };
+export function failureOf(error: unknown, onRetry: () => void): Failure {
+  const reason = error instanceof Error ? error.message : "";
+  return { onRetry, reason, note: error instanceof CloudError && error.code === "MERGE_PENDING" ? reason : null };
 }
 
 /** 头部右侧的状态 chip（5.4.3）：「对外」「工作区外」是警告档。 */

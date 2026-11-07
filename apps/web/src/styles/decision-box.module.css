@@ -51,6 +51,7 @@
 .failLine { display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-3) var(--space-3); }
 .failInline { display: inline-flex; align-items: center; gap: var(--space-1); }
 .failed { color: var(--danger); font-size: var(--text-xs); line-height: 16px; }
+.failNote { color: var(--ink-muted); font-size: var(--text-xs); line-height: 16px; }
 
 /* 答完：收成一行 12/16——勾、问题（淡、400，放不下省略）、「 · 」、答案（--ink-muted 600）。 */
 .resolved { display: flex; align-items: center; gap: var(--space-1); margin: var(--space-2) 0; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; animation: boxIn var(--dur-base) var(--ease-swift); }

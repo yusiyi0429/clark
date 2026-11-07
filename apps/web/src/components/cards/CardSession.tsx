@@ -26,7 +26,7 @@ import { SessionComposer, SessionTranscript, type DecideOptions } from "./Sessio
 import { useCardDetail, type CardDetail } from "./useCardDetail";
 import { MergeAction } from "@/components/work/MergeAction";
 import { QuestionDecision } from "@/components/work/decisions";
-import { FailedLine, PendingBoxes, PendingDock } from "@/components/work/DecisionBox";
+import { FailedLine, PendingBoxes, PendingDock, failureOf, type Failure } from "@/components/work/DecisionBox";
 import { useViewChrome } from "@/components/home/view";
 import { useConversationScroll } from "@/conversation/useConversationScroll";
 import { commitText, placeText, shortPlace } from "@/lib/work/merge";
@@ -288,13 +288,13 @@ function ResultPane({ detail, session, view, canAct, wait, stage, handheld, read
 export function Acceptance({ cardId, handback, canOverrule, deliverable, onChanged }: { cardId: string; handback: TCardHandbackView; canOverrule: boolean; deliverable: string | null; onChanged: () => void }) {
   const [reason, setReason] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState<{ retry: () => void; reason: string } | null>(null);
+  const [failed, setFailed] = useState<Failure | null>(null);
   const verdicts = useMemo(() => handback.result?.criteria ?? [], [handback.result]);
   const run = async (action: () => Promise<unknown>) => {
     setBusy(true);
     setFailed(null);
     try { await action(); setReason(null); onChanged(); }
-    catch (error) { setFailed({ retry: () => void run(action), reason: error instanceof Error ? error.message : "" }); }
+    catch (error) { setFailed(failureOf(error, () => void run(action))); }
     finally { setBusy(false); }
   };
   const head = handback.status === "queued" || handback.status === "running" ? "Agent 验收中"
@@ -324,13 +324,13 @@ export function Acceptance({ cardId, handback, canOverrule, deliverable, onChang
           <input autoFocus value={reason} maxLength={200} placeholder="原因" aria-label="推翻的原因" onChange={(event) => setReason(event.target.value)} />
           <HeroButton variant="primary" size="sm" type="submit" isDisabled={busy || !reason.trim()}>{handback.outcome === "pass" ? "推翻" : "仍然通过"}</HeroButton>
           <HeroButton variant="ghost" size="sm" onPress={() => setReason(null)}>取消</HeroButton>
-          {failed && !busy ? <FailedLine inline reason={failed.reason} onRetry={failed.retry} /> : null}
+          {failed && !busy ? <FailedLine inline {...failed} /> : null}
         </form>
       ) : (
         <div className={s.actions}>
           {canFlip ? <HeroButton variant="secondary" size="sm" onPress={() => setReason("")}>{handback.outcome === "pass" ? "推翻验收" : "仍然通过"}</HeroButton> : null}
           {canOverrule && handback.status === "failed" ? <HeroButton variant="secondary" size="sm" isDisabled={busy} onPress={() => void run(() => retryAcceptance(cardId, handback.id))}>重新验收</HeroButton> : null}
-          {failed && !busy ? <FailedLine inline reason={failed.reason} onRetry={failed.retry} /> : null}
+          {failed && !busy ? <FailedLine inline {...failed} /> : null}
         </div>
       )}
     </div>
