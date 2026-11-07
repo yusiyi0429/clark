@@ -37,8 +37,9 @@ export const HandoverNote = Type.Array(HandoverSection, { maxItems: 12 });
  * - note：交接说明；云端在发起时和存下本机检查结果时按云端的东西拼一份（到哪了、没做完的事、代码在哪、可以问谁），
  *   「关键决定和原因」「怎么跑起来」「坑」由管线读了对话写（伙伴经 /internal 改）；还没有为 null。
  * - checkResult：本机程序的交接检查（D 的 POST /v1/projects/:projectId/handover-check 原样转来）；没检查为 null。
- * - clone：接手人「拉到这台电脑」用的仓库地址和分支（检查结果里 origin（没有就第一个）远端；分支取 handover/ 开头的没推完分支，没有就当前分支）；不是 git、
- *   或远端不是本机 clone 收的地址（LocalRepoUrl：https://、ssh://、git@，本地路径等不算）时为 null。地址是检查里已去掉口令的，云端不会存到凭据。
+ * - clone：接手人「拉到这台电脑」用的仓库地址和分支（检查结果里 origin（没有就第一个）远端；分支取 handover/ 开头的没推完分支，没有就当前分支），
+ *   形状同本机的 POST /v1/projects/:projectId/clone（LocalRepoUrl、LocalBranchName）。不是 git、远端不是 https://、ssh://、git@ 开头（本地路径、file:// 等）为 null。
+ *   远端地址照本机检查结果存（本机已去掉口令：https 去掉整段 user:password，ssh 只去密码、留着用户名），云端不再改。
  */
 export const ProjectTransfer = Type.Object({
   id: Type.String({ format: "uuid" }),
