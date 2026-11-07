@@ -11,7 +11,7 @@ const NOW = new Date("2026-11-07T04:00:00.000Z");
 const MEMBER = TEST_MEMBER.personId;
 const CEO = TEST_CEO.personId;
 
-describe("看得见的 Mission：本月没有就退回这个人最近一个月，加之前月份还有没了结 Task 的", () => {
+describe("看得见的 Mission：本月没有就退回这个人最近一个月，加之前月份还有没了结、动过的 Task 的", () => {
   let t: TestApp;
   afterEach(async () => { await t?.close(); });
   const q = () => t.pool.query.bind(t.pool);
@@ -39,29 +39,61 @@ describe("看得见的 Mission：本月没有就退回这个人最近一个月�
   };
   const ids = (rows: { id: string }[]) => rows.map((row) => row.id).sort();
 
-  it("本月没有的人退回自己最近一个月；本月有的人只看本月；之前月份还挂着没做完的事项的 Mission 也看得见", async () => {
+  it("本月没有的人退回自己最近一个月；本月有的人只看本月；之前月份还有没了结、动过的 Task 的 Mission 也看得见", async () => {
     await seed();
     await item("m-sep-a", "T-sep-a");
-    await item("m-sep-b", "T-sep-b", "done");
+    await item("m-sep-b", "T-sep-b", "returned");
     const all = await visibleMissions(q(), NOW);
-    expect(all.map(({ id, period, carried }) => [id, period, carried])).toEqual([
-      ["m-nov-ceo", "2026-11", false],
-      ["m-oct-a", "2026-10", false], ["m-oct-b", "2026-10", false],
-      ["m-sep-a", "2026-09", true],
+    expect(all.map(({ id, period, carried, openTaskIds }) => [id, period, carried, openTaskIds])).toEqual([
+      ["m-nov-ceo", "2026-11", false, []],
+      ["m-oct-a", "2026-10", false, []], ["m-oct-b", "2026-10", false, []],
+      ["m-sep-a", "2026-09", true, ["T-sep-a"]],
     ]);
-    expect(ids(await visibleMissions(q(), NOW, MEMBER))).toEqual(["m-oct-a", "m-oct-b", "m-sep-a"]);
-    expect(ids(await visibleMissions(q(), NOW, CEO))).toEqual(["m-nov-ceo"]);
+    expect(ids(await visibleMissions(q(), NOW, { ownerId: MEMBER }))).toEqual(["m-oct-a", "m-oct-b", "m-sep-a"]);
+    expect(ids(await visibleMissions(q(), NOW, { ownerId: CEO }))).toEqual(["m-nov-ceo"]);
+  }, 30_000);
 
-    // 事项做完了，那件 Task 不再算没了结。
-    await t.sql("UPDATE tasks SET status='done' WHERE plan_task_id='T-sep-a'");
-    expect(ids(await visibleMissions(q(), NOW, MEMBER))).toEqual(["m-oct-a", "m-oct-b"]);
+  it("了结只有三种：确认完成（之后开了返工又算没了结）、到此为止、已延续；事项做完了不算", async () => {
+    await seed();
+    const card = await item("m-sep-a", "T-sep-a");
+    const shown = async () => ids(await visibleMissions(q(), NOW, { ownerId: MEMBER }));
+    await t.sql("UPDATE tasks SET status='done' WHERE id=$1", [card]);
+    expect(await shown()).toContain("m-sep-a");
+
+    await t.sql("INSERT INTO task_stops(task_id,decided_by,decided_at,note) VALUES('T-sep-a',$1,now(),'不做了')", [MEMBER]);
+    expect(await shown()).not.toContain("m-sep-a");
+    await t.sql("DELETE FROM task_stops");
+
+    await t.sql(`INSERT INTO deliverable_versions(id,task_id,mission_id,author_id,number,task_name,basis,delivered_at)
+      VALUES($1,'T-sep-a','m-sep-a',$2,1,'9 月的事','none','2026-10-01T00:00:00Z')`, [randomUUID(), MEMBER]);
+    expect(await shown()).not.toContain("m-sep-a");
+    const rework = await item("m-sep-a", "T-sep-a");
+    await t.sql("UPDATE tasks SET rework_of_card_id=$2 WHERE id=$1", [rework, card]);
+    expect(await shown()).toContain("m-sep-a");
+
+    await t.sql(`INSERT INTO task_continuations(from_task_id,to_task_id,source,decided_by,decided_at,from_mission_id,from_task_name,to_mission_id,to_task_name)
+      VALUES('T-sep-a','T-nov','owner',$1,now(),'m-sep-a','9 月的事','m-nov-ceo','11 月接着做')`, [MEMBER]);
+    expect(await shown()).not.toContain("m-sep-a");
+  }, 30_000);
+
+  it("只开过 Task 管线的也算动过（按记下的 Task 所在 Mission）；{ personId } 带出本人动过的、别人负责的 Mission", async () => {
+    await seed();
+    await t.sql("INSERT INTO plan_task_missions(task_id,mission_id,seen_at) VALUES('T-oct-ceo','m-oct-ceo',now())");
+    await t.sql("INSERT INTO conversations(id,scope,owner_id,pi_session_id) VALUES($1,'plan-task:T-oct-ceo',$2,$3)", [randomUUID(), CEO, randomUUID()]);
+    expect((await visibleMissions(q(), NOW, { ownerId: CEO })).map(({ id, carried, openTaskIds }) => [id, carried, openTaskIds]))
+      .toEqual([["m-nov-ceo", false, []], ["m-oct-ceo", true, ["T-oct-ceo"]]]);
+    // 本人在别人负责的 Mission 下动过一件：本人的左栏带出那个 Mission，openTaskIds 只算本人动过的。
+    expect(ids(await visibleMissions(q(), NOW, { personId: MEMBER }))).toEqual(["m-oct-a", "m-oct-b"]);
+    await item("m-oct-ceo", "T-oct-member");
+    expect((await visibleMissions(q(), NOW, { personId: MEMBER })).map(({ id, openTaskIds }) => [id, openTaskIds]))
+      .toEqual([["m-oct-ceo", ["T-oct-member"]], ["m-oct-a", []], ["m-oct-b", []]]);
   }, 30_000);
 
   it("本月已经从本体载入过：本月没有的人不退回（斯一 10/24），只剩还有没了结 Task 的", async () => {
     await seed();
     await item("m-oct-b", "T-oct-b");
     await fromWorld("m-nov-ceo", "w-nov");
-    expect((await visibleMissions(q(), NOW, MEMBER)).map(({ id, carried }) => [id, carried])).toEqual([["m-oct-b", true]]);
+    expect((await visibleMissions(q(), NOW, { ownerId: MEMBER })).map(({ id, carried }) => [id, carried])).toEqual([["m-oct-b", true]]);
   }, 30_000);
 
   it("能挂执行事项的 Mission：退回的那个月和还有没了结 Task 的都能挂；之后月份的照旧能挂", async () => {

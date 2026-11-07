@@ -12,6 +12,7 @@ import { saveLocalCardPlan, standardLines } from "./cardPlanner.js";
 import type { HandbackRow } from "./cardProjection.js";
 import type { CardPlanTask } from "./taskCards.js";
 import { closeStartsFor } from "./sessionStarts.js";
+import { latestSuccessor } from "./taskContinuity.js";
 
 /**
  * 本机程序单向上报的接收端（POST /api/local-runner/sync，载荷是本机程序契约 localRunner.ts 的 LocalSyncBatchRequest）。
@@ -87,6 +88,9 @@ export async function applySyncBatch(deps: SyncDeps, personId: string,
 
 async function applyItem(deps: SyncDeps, owner: Owner, item: TLocalSyncItem): Promise<Applied> {
   const seq = seqOf(item.key, owner.deviceId, item.sessionId);
+  // 规划员拆的 Task 延续出去了（taskContinuity.ts，会话已经挂到新 Task 上）：本机还按旧 Task 报，接到它最后延续到的那件。
+  if (item.subject.kind === "plan" && item.subject.taskId)
+    item = { ...item, subject: { ...item.subject, taskId: await latestSuccessor(deps.pool.query.bind(deps.pool), item.subject.taskId) } };
   const at = new Date(item.occurredAt);
   if (Number.isNaN(at.valueOf())) throw new SyncReject("INVALID_TIME", "occurredAt 不是合法时间");
   // 规划员的派活单要读本体里的 Task（不在事务里读）：本人是负责人才收。已经收过的重发不再读。

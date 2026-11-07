@@ -1,0 +1,60 @@
+import { Type } from "@sinclair/typebox";
+import type { FastifyReply } from "fastify";
+import { ContinueTaskRequest, ContinueTaskResponse, MonthAnswer, MonthPageResponse, MonthPeriod, StopTaskRequest, TaskSettlementResponse } from "@warmap/contracts";
+import { decideMonthTask, readMonthPage } from "../monthPage.js";
+import { continueTask, stopTask, unstopTask } from "../taskContinuity.js";
+import { boardTask, CardError, planTaskOpener } from "../taskCards.js";
+import type { AppInstance, Guard, RouteContext } from "./shared.js";
+
+const taskParams = Type.Object({ taskId: Type.String({ minLength: 1 }) });
+const monthParams = Type.Object({ period: MonthPeriod });
+const decisionParams = Type.Object({ period: MonthPeriod, taskId: Type.String({ minLength: 1 }) });
+
+/**
+ * 跨月延续与月份页（契约 taskContinuity.ts）：DRI 工作台的人才有。
+ * 延续、到此为止、撤销只给那件 Task 的负责人（看板同一个口径：看不到 404，能看不是负责人 403）；延续到的新 Task 也要是本人负责的。
+ */
+export function registerTaskContinuityRoutes(app: AppInstance, ctx: RouteContext): void {
+  const { pool, q, fail, requirePerson } = ctx;
+  const open = planTaskOpener(q, ctx.planTasks, ctx.peopleDirectory, ctx.now);
+  const requireMember: Guard = async (req, reply) => {
+    await requirePerson(req, reply);
+    if (reply.sent) return reply;
+    if (req.person?.role !== "member") return fail(reply, 403, "FORBIDDEN", "请切换到 DRI 工作台");
+  };
+  const handle = async <T>(reply: FastifyReply, work: () => Promise<T>) => {
+    try { return await work(); } catch (cause) {
+      if (cause instanceof CardError) return fail(reply, cause.status, cause.code, cause.message);
+      throw cause;
+    }
+  };
+
+  app.post("/api/me/tasks/:taskId/continuation", { preHandler: requireMember, schema: { params: taskParams, body: ContinueTaskRequest,
+    response: { 200: ContinueTaskResponse } } }, async (req, reply) => handle(reply, async () => {
+    const personId = req.person!.personId;
+    const from = await boardTask(open, personId, req.params.taskId);
+    const to = await boardTask(open, personId, req.body.toTaskId);
+    return continueTask(pool, { from, to, source: "owner", decidedBy: personId, now: ctx.now() });
+  }));
+
+  app.post("/api/me/tasks/:taskId/stop", { preHandler: requireMember, schema: { params: taskParams, body: StopTaskRequest,
+    response: { 200: TaskSettlementResponse } } }, async (req, reply) => handle(reply, async () => {
+    const own = await boardTask(open, req.person!.personId, req.params.taskId);
+    return { taskId: own.task.taskId, settlement: await stopTask(q, own.task.taskId, req.person!.personId, req.body.note?.trim() || null, ctx.now()) };
+  }));
+
+  app.delete("/api/me/tasks/:taskId/stop", { preHandler: requireMember, schema: { params: taskParams } }, async (req, reply) => handle(reply, async () => {
+    const own = await boardTask(open, req.person!.personId, req.params.taskId);
+    await unstopTask(q, own.task.taskId);
+    return reply.status(204).send();
+  }));
+
+  app.get("/api/me/months/:period", { preHandler: requireMember, schema: { params: monthParams, response: { 200: MonthPageResponse } } }, async (req) =>
+    readMonthPage(q, ctx.planTasks, req.person!.personId, req.params.period));
+
+  app.put("/api/me/months/:period/tasks/:taskId/decision", { preHandler: requireMember, schema: { params: decisionParams, body: MonthAnswer } },
+    async (req, reply) => handle(reply, async () => {
+      await decideMonthTask(pool, ctx.planTasks, req.person!.personId, req.params.period, req.params.taskId, req.body, ctx.now());
+      return reply.status(204).send();
+    }));
+}

@@ -173,7 +173,7 @@ const AVAILABLE_MISSIONS = `SELECT m.id,m.code,m.title,m.period,COALESCE(rb.name
   WHERE m.owner_id=$1 AND NOT m.placeholder AND (m.period >= $2 OR m.id=ANY($3::text[])) AND (c.id IS NULL OR r.status='confirmed')`;
 type AvailableMission = { id: string; code: string; title: string; period: string; battlefield: string };
 const availableParams = async (q: Query, ownerId: string, now: Date) =>
-  [ownerId, companyPeriod(now), (await visibleMissions(q, now, ownerId)).map((mission) => mission.id)];
+  [ownerId, companyPeriod(now), (await visibleMissions(q, now, { ownerId })).map((mission) => mission.id)];
 export async function missionAvailable(q: Query, ownerId: string, missionId: string, now: Date): Promise<boolean> {
   return !!(await q(`${AVAILABLE_MISSIONS} AND m.id=$4`, [...await availableParams(q, ownerId, now), missionId])).rowCount;
 }

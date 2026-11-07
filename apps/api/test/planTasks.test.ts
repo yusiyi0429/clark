@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createWorldPlanTaskSource, readPlanTasks } from "../src/planTasks.js";
-import { WorldClient } from "../src/worldClient.js";
+import { createWorldPlanTaskSource, readPlanTaskById, readPlanTasks } from "../src/planTasks.js";
+import { WorldClient, WorldError } from "../src/worldClient.js";
 import { instance, stubWorld as stubFetch, worldEnv } from "./worldFixture.js";
 
 /** 本体里的 Task 对象：父引用在 relations，短名是 title，结果和验收标准在 definition 块。 */
@@ -177,6 +177,30 @@ describe("首页 Task 行的本体来源", () => {
       expect(await readPlanTasks(async () => { throw new Error("本体读不到"); }, [{ id: "m", code: "m" }])).toEqual([]);
       expect(logs.mock.calls.map(([line]) => String(line)).filter((line) => line.includes("plan_tasks.read"))).toHaveLength(2);
     } finally { logs.mockRestore(); }
+  });
+
+  it("按 id 读一件 Task（跨月找 Task）：主实例没有就换各 scope 的读身份，带父引用；不是 Task 当没有；按 id 记 60 秒；限时、出错都给 null", async () => {
+    let now = 0;
+    const main = stubWorld({ "<task-tk>": new WorldError(404, "NOT_FOUND", "没有"), "<mission-x>": { business: { object_id: "<mission-x>", object_type: "Mission",
+      title: "一个 Mission", relations: [], blocks: [] } }, "<broken>": new Error("网络断了") });
+    const tk = stubWorld({ "<task-tk>": taskObject("<task-tk>", "十月的 Task", ref("<mission-tk>"), [{ type: "outcome", text: "写进本体" }]) });
+    const source = createWorldPlanTaskSource(main.world, { scopes: new Map([["scope-tk", tk.world]]), clock: () => now });
+    const found = { parents: ["<mission-tk>"], task: { taskId: "<task-tk>", name: "十月的 Task", doneDefinition: "写进本体", criteria: [] } };
+    expect(await readPlanTaskById(source, "<task-tk>")).toEqual(found);
+    now = 59_000;
+    expect(await readPlanTaskById(source, "<task-tk>")).toEqual(found);
+    expect([main.calls.get, tk.calls.get]).toEqual([["<task-tk>"], ["<task-tk>"]]);
+    expect(await readPlanTaskById(source, "<mission-x>")).toBeNull();
+    const logs = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    try {
+      expect(await readPlanTaskById(source, "<broken>")).toBeNull();
+      const started = Date.now();
+      expect(await readPlanTaskById(Object.assign(async () => [], { byId: () => new Promise<never>(() => undefined) }), "<slow>", 50)).toBeNull();
+      expect(Date.now() - started).toBeLessThan(1_000);
+      expect(logs.mock.calls.map(([line]) => String(line)).filter((line) => line.includes("plan_tasks.read_one"))).toHaveLength(2);
+    } finally { logs.mockRestore(); }
+    // 只会按 Mission 列的来源（测试的假来源）：没有这一步。
+    expect(await readPlanTaskById(async () => [], "<task-tk>")).toBeNull();
   });
 
   it("真实客户端：按外部引用找 Mission、按它的域列 Task、跟着翻页，同时最多取 4 个对象", async () => {

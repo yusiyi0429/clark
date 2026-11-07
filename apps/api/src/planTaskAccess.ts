@@ -3,7 +3,7 @@ import { ownMissions, planTaskMissions } from "./homePlan.js";
 import type { Query } from "./meetingStore.js";
 import { companyPeriod } from "./monthlyPlans.js";
 import type { PeopleDirectory } from "./peopleDirectory.js";
-import { readPlanTasks, type PlanTask, type PlanTaskMission, type PlanTaskSource } from "./planTasks.js";
+import { readPlanTaskById, readPlanTasks, type PlanTask, type PlanTaskMission, type PlanTaskSource } from "./planTasks.js";
 import { DeliverableError } from "./taskDeliverables.js";
 
 /**
@@ -49,17 +49,34 @@ async function companyMissions(q: Query, now: Date): Promise<PlanTaskMission[]> 
 }
 
 /**
- * 先在本人的 Mission 里找（和首页同一组，缓存是热的），找不到再在公司当期全部 Mission 里找。
+ * 第三步，不按月份找（设计 10.3）：本体按 id 读一次这件 Task，按它的父引用找本地对应的 Mission（任意月份，同一对象有几行取月份最新的）。
+ * 读不到、超时、父引用对不上本地 Mission 都为 null。
+ */
+async function taskById(q: Query, planTasks: PlanTaskSource, taskId: string): Promise<PlanTask | null> {
+  const found = await readPlanTaskById(planTasks, taskId, LOCATE_BUDGET_MS);
+  if (!found?.parents.length) return null;
+  const mission = (await q(`SELECT id FROM missions WHERE NOT placeholder AND world_object_id=ANY($1::text[]) ORDER BY period DESC, id LIMIT 1`,
+    [found.parents])).rows[0] as { id: string } | undefined;
+  return mission ? { ...found.task, missionId: mission.id } : null;
+}
+
+/**
+ * 先在本人的 Mission 里找（和首页同一组，缓存是热的），找不到再在公司当期全部 Mission 里找，再找不到按 id 读本体（taskById，旧月份的 Task 走这一步）。
  * 都找不到抛 404；找到了不判能不能看，related 交给调用方（认可人还要看约定）。
+ * 找到了顺手记下这件 Task 在哪个 Mission（plan_task_missions，「看得见的 Mission」用）。
  */
 export async function locatePlanTask(q: Query, planTasks: PlanTaskSource, viewer: PlanTaskViewer, now: Date, taskId: string): Promise<PlanTaskAccess> {
   const own = await ownMissions(q, viewer.personId, companyPeriod(now));
   let task = (await readPlanTasks(planTasks, planTaskMissions(own.rows))).find((item) => item.taskId === taskId);
   if (!task) task = (await readPlanTasks(planTasks, await companyMissions(q, now), LOCATE_BUDGET_MS)).find((item) => item.taskId === taskId);
+  if (!task) task = await taskById(q, planTasks, taskId) ?? undefined;
   const notFound = () => new DeliverableError(404, "NOT_FOUND", "找不到这个 Task");
   if (!task) throw notFound();
   const mission = (await q("SELECT owner_id, battlefield_ids FROM missions WHERE id=$1", [task.missionId])).rows[0] as { owner_id: string; battlefield_ids: string[] } | undefined;
   if (!mission) throw notFound();
+  await q(`INSERT INTO plan_task_missions(task_id,mission_id,seen_at) VALUES($1,$2,$3)
+    ON CONFLICT (task_id) DO UPDATE SET mission_id=EXCLUDED.mission_id,seen_at=EXCLUDED.seen_at WHERE plan_task_missions.mission_id<>EXCLUDED.mission_id`,
+  [task.taskId, task.missionId, now]);
   const responsibleId = task.responsibleId ?? null;
   const ownerId = responsibleId ?? mission.owner_id;
   const missionOwner = mission.owner_id === viewer.personId;
