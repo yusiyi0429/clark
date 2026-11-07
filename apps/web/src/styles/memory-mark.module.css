@@ -13,21 +13,21 @@
   padding: 0;
   border: 0;
   border-radius: 5px;
-  background: #1d1d1f0d;
+  background: var(--default-soft);
   line-height: 0;
   vertical-align: 0.28em;
-  color: #7a7f89;
+  color: var(--ink-faint);
   cursor: pointer;
   transition: color 140ms ease, background-color 140ms ease;
 }
 .mark::after { content: ""; position: absolute; inset: -7px -5px; border-radius: 8px; }
-.mark:hover, .mark[aria-expanded="true"] { color: #2f6bb4; background: #2f6bb41a; }
-.mark:focus-visible { outline: 2px solid #3a83f788; outline-offset: 1px; }
+.mark:hover, .mark[aria-expanded="true"] { color: var(--tianshu-blue-secondary); background: var(--accent-soft); }
+.mark:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .pop { padding: 12px 14px 12px; }
-.body { font-size: 13px; line-height: 1.6; color: #25282e; }
+.body { font-size: 13px; line-height: 1.6; color: var(--ink); }
 .head { display: flex; align-items: flex-start; gap: 8px; }
 .title { flex: 1 1 auto; min-width: 0; margin: 0; font-weight: 500; overflow-wrap: anywhere; }
-.text { margin: 4px 0 0; color: #3f4754; white-space: pre-wrap; overflow-wrap: anywhere; }
+.text { margin: 4px 0 0; color: var(--ink-muted); white-space: pre-wrap; overflow-wrap: anywhere; }
 .edit {
   flex: none;
   display: grid;
@@ -39,13 +39,13 @@
   border: 0;
   border-radius: 6px;
   background: none;
-  color: #9599a1;
+  color: var(--ink-faint);
   cursor: pointer;
   transition: color 140ms ease, background-color 140ms ease;
 }
-.edit:hover { color: #2f6bb4; background: #1d1d1f0a; }
-.edit:focus-visible, .ghost:focus-visible, .primary:focus-visible { outline: 2px solid #3a83f788; outline-offset: 2px; }
-.tag { flex: none; margin: 0; padding: 0 6px; border-radius: 5px; background: #1d1d1f0a; font-size: 12px; line-height: 20px; color: #7a7f89; width: fit-content; }
+.edit:hover { color: var(--tianshu-blue-secondary); background: var(--default-soft); }
+.edit:focus-visible, .ghost:focus-visible, .primary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.tag { flex: none; margin: 0; padding: 0 6px; border-radius: 5px; background: var(--default-soft); font-size: 12px; line-height: 20px; color: var(--ink-faint); width: fit-content; }
 /* 输入框沿用全站字段变量（globals.css 的 --field-*）：1px 细边，聚焦只换边色。 */
 .titleInput, .textInput {
   display: block;
@@ -64,14 +64,14 @@
 .titleInput:focus, .textInput:focus { outline: none; border-color: var(--field-border-focus); }
 .actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-top: 8px; }
 .ghost, .primary { height: 28px; padding: 0 12px; border: 0; border-radius: 8px; font: inherit; font-size: 12px; cursor: pointer; transition: background-color 140ms ease, opacity 140ms ease; }
-.ghost { background: none; color: #7a7f89; }
-.ghost:hover { background: #1d1d1f0a; color: #3f4754; }
-.primary { background: #2f6bb4; color: #fff; }
-.primary:hover { background: #285d9e; }
+.ghost { background: none; color: var(--ink-faint); }
+.ghost:hover { background: var(--default-soft); color: var(--ink-muted); }
+.primary { background: var(--accent); color: var(--accent-foreground); }
+.primary:hover { background: var(--accent-hover, var(--accent)); }
 .primary:disabled, .ghost:disabled { opacity: .5; cursor: default; }
-.failed { margin-right: auto; font-size: 12px; color: #c2410c; }
+.failed { margin-right: auto; font-size: 12px; color: var(--counter); }
 .skeleton { display: grid; gap: 7px; padding: 3px 0; }
-.skeleton i { display: block; height: 9px; border-radius: 4px; background: #1d1d1f0f; }
+.skeleton i { display: block; height: 9px; border-radius: 4px; background: var(--wash-hover); }
 .skeleton i:first-child { width: 45%; }
 .skeleton i:last-child { width: 70%; }
 /* 手机：底部升起，字号放大一级，按钮够大。 */
@@ -86,4 +86,4 @@
 .large .ghost, .large .primary { height: 44px; padding: 0 18px; font-size: 15px; }
 .large .tag { font-size: 13px; }
 @media (prefers-reduced-motion: reduce) { .mark, .edit, .titleInput, .textInput { transition: none; } }
-@media (prefers-contrast: more) { .mark, .tag, .ghost { color: #4f5561; } }
+@media (prefers-contrast: more) { .mark, .tag, .ghost { color: var(--ink-muted); } }

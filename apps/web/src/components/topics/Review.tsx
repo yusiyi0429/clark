@@ -6,6 +6,7 @@
  * 这里点的那几个写进这次的补充要求。
  */
 import { useEffect, useState } from "react";
+import { FailedLine } from "@/components/work/DecisionBox";
 import Link from "next/link";
 import Markdown from "react-markdown";
 import type { TTopicVersionSummary } from "@warmap/contracts";
@@ -56,6 +57,9 @@ export function ReviewDialog({ onClose, onStart }: { onClose: () => void; onStar
   const [critics, setCritics] = useState<RoleView[] | null>(null);
   const [picked, setPicked] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  /** 没开起来：「开始」后面写「失败 · 重试」，不弹 toast。 */
+  const [failed, setFailed] = useState<string | null>(null);
+  const begin = (names: string[]) => { setBusy(true); setFailed(null); void onStart(names).catch((error: unknown) => setFailed(error instanceof Error ? error.message : "")).finally(() => setBusy(false)); };
   useEffect(() => {
     let alive = true;
     void listRoles().then((data) => {
@@ -88,7 +92,8 @@ export function ReviewDialog({ onClose, onStart }: { onClose: () => void; onStar
         )}
         <div className={local.actions}>
           <HeroButton variant="ghost" size="sm" onPress={onClose}>取消</HeroButton>
-          <HeroButton variant="primary" size="sm" isDisabled={busy || !names.length} onPress={() => { setBusy(true); void onStart(names).finally(() => setBusy(false)); }}>开始</HeroButton>
+          {failed !== null && !busy ? <FailedLine inline reason={failed} onRetry={() => begin(names)} /> : null}
+          <HeroButton variant="primary" size="sm" isDisabled={busy || !names.length} onPress={() => begin(names)}>开始</HeroButton>
         </div>
       </div>
     </MenuDialog>

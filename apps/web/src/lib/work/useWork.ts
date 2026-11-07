@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { TCardSplitRequestView, TLocalDeviceView, TWorkersResponse } from "@warmap/contracts";
 import type { useHomePlan } from "@/components/member/home/useHomePlan";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
-import { listDevices, listSplits, readBoard, readWorkers } from "@/lib/board/cloud";
+import { listDevices, listSplits, readBoard, readProjectBoard, readWorkers } from "@/lib/board/cloud";
 import { fallbackBoard, type TaskBoard } from "@/lib/board/useTaskBoard";
 import type { CardItem } from "@/lib/board/cards";
 import { listProposals, listRoles, type RoleListResponse, type RoleProposalView } from "@/lib/team/roles";
@@ -20,9 +20,16 @@ export type Resources = {
   local: { online: boolean; name: string | null; used: number; cap: number };
   models: { key: "subscription" | "codex" | "gateway"; label: string; on: boolean }[];
   todayUsd: number | null;
+  /** 各台设备同步给云端的订阅额度（契约 WorkerResources.quota）：手机和没就绪的电脑上看这个。 */
+  quota: TWorkersResponse["resources"]["quota"];
 };
 
-export function useWork({ planHook }: { planHook: ReturnType<typeof useHomePlan> }) {
+/**
+ * extraTaskIds：本月计划以外、也在左栏树上的 Task（之前月份没了结的，B 的 work-home 给的）——它们的看板也读，
+ * 派活单、卡、开工都要用（不然认领到这些 Task 的卡时找不到卡）。
+ * projectIds：项目（16.3）：项目里不挂 Task 的卡和派活单读 GET /api/me/projects/:projectId/board，记在 boards 的 project:<projectId> 下。
+ */
+export function useWork({ planHook, extraTaskIds = [], projectIds = [] }: { planHook: ReturnType<typeof useHomePlan>; extraTaskIds?: string[]; projectIds?: string[] }) {
   const { plan, refresh: refreshPlan } = planHook;
   const local = useLocalRunner();
   const [boards, setBoards] = useState<Record<string, TaskBoard>>({});
@@ -32,35 +39,46 @@ export function useWork({ planHook }: { planHook: ReturnType<typeof useHomePlan>
   const [devices, setDevices] = useState<TLocalDeviceView[]>([]);
   const [splits, setSplits] = useState<TCardSplitRequestView[]>([]);
   const loading = useRef(false);
-  const taskIds = useMemo(() => plan?.tasks.map((task) => task.taskId) ?? [], [plan]);
+  const extraKey = [...new Set(extraTaskIds)].sort().join("|");
+  const projectKey = [...new Set(projectIds)].sort().join("|");
+  const taskIds = useMemo(() => {
+    const own = plan?.tasks.map((task) => task.taskId) ?? [];
+    return [...own, ...(extraKey ? extraKey.split("|") : []).filter((id) => !own.includes(id))];
+  }, [plan, extraKey]);
 
   const load = useCallback(async () => {
     if (!plan || loading.current) return;
     loading.current = true;
     try {
-      const [entries, workers, requests] = await Promise.all([
-        Promise.all(plan.tasks.map(async (task) => {
-          const data = await readBoard(task.taskId).catch(() => undefined);
-          const board: TaskBoard | null = data ? { ...data, fallback: false } : fallbackBoard(plan, task.taskId);
-          return [task.taskId, board] as const;
+      const [entries, projectEntries, workers, requests] = await Promise.all([
+        Promise.all(taskIds.map(async (taskId) => {
+          const data = await readBoard(taskId).catch(() => undefined);
+          const board: TaskBoard | null = data ? { ...data, fallback: false } : fallbackBoard(plan, taskId);
+          return [taskId, board] as const;
+        })),
+        Promise.all((projectKey ? projectKey.split("|") : []).map(async (projectId) => {
+          const data = await readProjectBoard(projectId).catch(() => null);
+          // 没有 Task 的标准和交付物：验收员照卡上的完成标准验。
+          const board: TaskBoard | null = data ? { taskId: "", criteria: [], cards: data.cards, drafts: data.drafts, plan: data.plan, pending: [], nextVersion: 1, fallback: false } : null;
+          return [`project:${projectId}`, board] as const;
         })),
         readWorkers().catch(() => undefined),
         listSplits().catch(() => undefined),
       ]);
-      setBoards(Object.fromEntries(entries.filter((entry): entry is readonly [string, TaskBoard] => !!entry[1])));
+      setBoards(Object.fromEntries([...entries, ...projectEntries].filter((entry): entry is readonly [string, TaskBoard] => !!entry[1])));
       if (workers !== undefined) setListed(workers);
       if (requests !== undefined) setSplits(requests);
     } finally {
       loading.current = false;
     }
-  }, [plan]);
+  }, [plan, taskIds, projectKey]);
   const loadRoles = useCallback(async () => {
     try { setRoles(await listRoles()); setProposals(await listProposals()); } catch { /* 留着上次的 */ }
   }, []);
 
   const planning = Object.values(boards).some((board) => board.plan?.status === "queued" || board.plan?.status === "running");
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { void load(); }, [taskIds.join("|")]);
+  useEffect(() => { void load(); }, [taskIds.join("|"), projectKey]);
   useEffect(() => {
     const timer = window.setInterval(() => { if (document.visibilityState === "visible") void load(); }, planning ? 3000 : 10_000);
     return () => window.clearInterval(timer);
@@ -75,7 +93,7 @@ export function useWork({ planHook }: { planHook: ReturnType<typeof useHomePlan>
   const ready = local.phase === "ready";
   const sessions = useMemo(() => (ready ? local.sessions : []), [ready, local.sessions]);
   const deviceName = devices.find((device) => device.id === local.status?.deviceId)?.name ?? (ready ? "这台电脑" : null);
-  const planKey = sessions.filter((session) => session.subject.kind === "plan" && session.status !== "exited").map((session) => session.id).join("|");
+  const planKey = sessions.filter((session) => session.subject.kind === "plan" && session.status !== "exited" && session.status !== "done").map((session) => session.id).join("|");
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { void load(); }, [planKey]);
 
@@ -121,6 +139,7 @@ export function useWork({ planHook }: { planHook: ReturnType<typeof useHomePlan>
       { key: "gateway", label: "TokenHub", on: local.models.some((model) => model.source === "gateway") },
     ],
     todayUsd: listed?.resources.cost.today.costUsd ?? null,
+    quota: listed?.resources.quota ?? [],
   };
 
   const refresh = useCallback(async () => { await Promise.all([load(), local.refresh(), loadRoles()]); }, [load, local, loadRoles]);

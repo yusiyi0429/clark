@@ -39,4 +39,11 @@ export const LOCAL_RUNNER_ROUTES: Contracts["LOCAL_RUNNER_ROUTES"] = {
   kill: { method: "POST", path: "/v1/sessions/:id/kill", auth: true },
   mergeSession: { method: "POST", path: "/v1/sessions/:id/merge", auth: true },
   answerQuestion: { method: "POST", path: "/v1/sessions/:id/questions/:requestId", auth: true },
+  stopBackground: { method: "POST", path: "/v1/sessions/:id/background/:itemId/stop", auth: true },
+  listBudgets: { method: "GET", path: "/v1/budgets", auth: true },
+  putBudget: { method: "PUT", path: "/v1/budgets", auth: true },
+  listProjects: { method: "GET", path: "/v1/projects", auth: true },
+  putProjectFolder: { method: "PUT", path: "/v1/projects/:projectId/folder", auth: true },
+  handoverCheck: { method: "POST", path: "/v1/projects/:projectId/handover-check", auth: true },
+  cloneProject: { method: "POST", path: "/v1/projects/:projectId/clone", auth: true },
 };

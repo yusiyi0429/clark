@@ -4,7 +4,7 @@
 .link {
   font-size: 13px;
   line-height: inherit;
-  color: #7a7f89;
+  color: var(--ink-faint);
   overflow-wrap: anywhere;
 }
 
@@ -18,19 +18,19 @@
   font-weight: inherit;
   text-align: inherit;
   text-decoration: underline;
-  text-decoration-color: #7a7f8944;
+  text-decoration-color: var(--hairline-strong);
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
   cursor: pointer;
   border-radius: 4px;
   transition: color 140ms ease, text-decoration-color 140ms ease;
 }
-.link:hover { color: #2f6bb4; text-decoration-color: #2f6bb466; }
-.link:focus-visible { outline: 2px solid #3a83f788; outline-offset: 2px; }
-.link[data-cite-open] { color: #2f6bb4; }
+.link:hover { color: var(--tianshu-blue-secondary); text-decoration-color: color-mix(in oklab, var(--tianshu-blue-secondary) 40%, transparent); }
+.link:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.link[data-cite-open] { color: var(--tianshu-blue-secondary); }
 
 @media (prefers-reduced-motion: reduce) { .link { transition: none; } }
-@media (prefers-contrast: more) { .plain, .link { color: #4f5561; } .link { text-decoration-color: currentColor; } }
+@media (prefers-contrast: more) { .plain, .link { color: var(--ink-muted); } .link { text-decoration-color: currentColor; } }
 
 /*
  * 句末的出处标记（10/14）：一个 12px 见方的浅灰圆点，不占行高（行高 0、相对上移），正文读起来不被文件名打断。
@@ -49,7 +49,7 @@
   font-size: 12px;
   line-height: 0;
   vertical-align: 0.42em;
-  color: #7a7f89;
+  color: var(--ink-faint);
   cursor: pointer;
   transition: color 140ms ease;
 }
@@ -66,9 +66,9 @@
   opacity: 0.55;
   transition: opacity 140ms ease;
 }
-.mark:hover, .mark[aria-describedby] { color: #2f6bb4; }
+.mark:hover, .mark[aria-describedby] { color: var(--tianshu-blue-secondary); }
 .mark:hover .dot, .mark[aria-describedby] .dot { opacity: 1; }
-.mark:focus-visible { outline: 2px solid #3a83f788; outline-offset: 1px; }
+.mark:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 
 /* 电脑上悬停浮出的来源：资料名称（13）、所在段落或版本（12）、「打开原文」（12）。 */
 .pop {
@@ -76,15 +76,15 @@
   z-index: 1300;
   box-sizing: border-box;
   padding: 10px 12px;
-  border: 1px solid #1d1d1f24;
+  border: 1px solid var(--hairline-strong);
   border-radius: 10px;
-  background: #fff;
-  box-shadow: 0 8px 24px #0f121729;
-  color: #25282e;
+  background: var(--surface);
+  box-shadow: var(--elev-3);
+  color: var(--ink);
   animation: popIn 120ms ease-out both;
 }
 .popName { margin: 0; font-size: 13px; font-weight: 500; line-height: 1.5; overflow-wrap: anywhere; }
-.popMeta { margin: 2px 0 0; font-size: 12px; line-height: 1.5; color: #7a7f89; }
+.popMeta { margin: 2px 0 0; font-size: 12px; line-height: 1.5; color: var(--ink-faint); }
 .popOpen, .sheetOpen {
   display: inline-flex;
   align-items: center;
@@ -96,16 +96,16 @@
   font-family: inherit;
   font-size: 12px;
   line-height: 1.5;
-  color: #2f6bb4;
+  color: var(--tianshu-blue-secondary);
   cursor: pointer;
 }
 .popOpen:hover { text-decoration: underline; text-underline-offset: 3px; }
-.popOpen:focus-visible, .sheetOpen:focus-visible, .sheetClose:focus-visible { outline: 2px solid #3a83f788; outline-offset: 2px; border-radius: 4px; }
+.popOpen:focus-visible, .sheetOpen:focus-visible, .sheetClose:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
 @keyframes popIn { from { opacity: 0; transform: translateY(2px); } }
 
 /* 手机上点标记：从底部升起同样的内容。 */
 .sheetLayer { position: fixed; inset: 0; z-index: 1300; }
-.sheetVeil { position: absolute; inset: 0; border: 0; padding: 0; background: #0f121733; cursor: default; }
+.sheetVeil { position: absolute; inset: 0; border: 0; padding: 0; background: var(--backdrop); cursor: default; }
 .sheet {
   position: absolute;
   left: 0;
@@ -113,20 +113,20 @@
   bottom: 0;
   padding: 18px 20px max(20px, env(safe-area-inset-bottom));
   border-radius: 18px 18px 0 0;
-  background: #fff;
-  box-shadow: 0 -12px 40px #0f121729;
-  color: #25282e;
+  background: var(--surface);
+  box-shadow: var(--sheet-shadow);
+  color: var(--ink);
   animation: sheetUp 240ms cubic-bezier(.22, .72, .18, 1) both;
 }
-.grabber { position: absolute; top: 6px; left: 50%; width: 36px; height: 4px; margin-left: -18px; border-radius: 2px; background: #1d1d1f24; }
+.grabber { position: absolute; top: 6px; left: 50%; width: 36px; height: 4px; margin-left: -18px; border-radius: 2px; background: var(--hairline-strong); }
 .sheetHead { display: flex; align-items: center; justify-content: space-between; margin: 0 -12px 4px 0; }
-.sheetLabel { font-size: 13px; color: #7a7f89; }
-.sheetClose { display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: 50%; background: transparent; color: #7a7f89; cursor: pointer; }
+.sheetLabel { font-size: 13px; color: var(--ink-faint); }
+.sheetClose { display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: 50%; background: transparent; color: var(--ink-faint); cursor: pointer; }
 .sheetName { margin: 0; font-size: 16px; font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
-.sheetMeta { margin: 4px 0 0; font-size: 13px; line-height: 1.5; color: #7a7f89; }
+.sheetMeta { margin: 4px 0 0; font-size: 13px; line-height: 1.5; color: var(--ink-faint); }
 .sheetOpen { min-height: 44px; margin-top: 8px; font-size: 13px; }
 @keyframes sheetUp { from { transform: translateY(100%); } }
 
 @media (prefers-reduced-motion: reduce) { .mark, .dot { transition: none; } .pop, .sheet { animation: none; } }
 :global([data-reduce-motion='true']) .pop, :global([data-reduce-motion='true']) .sheet { animation: none; }
-@media (prefers-contrast: more) { .mark { color: #4f5561; } .dot { opacity: 1; } .popMeta, .sheetMeta, .sheetLabel { color: #4f5561; } }
+@media (prefers-contrast: more) { .mark { color: var(--ink-muted); } .dot { opacity: 1; } .popMeta, .sheetMeta, .sheetLabel { color: var(--ink-muted); } }

@@ -54,12 +54,12 @@
   background: var(--surface);
   box-shadow: 0 1px 2px #1018280d;
   color: var(--ink);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   cursor: pointer;
 }
 .listButton:hover { background: var(--neutral-wash); }
-.listButton em { display: grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; font-style: normal; }
+.listButton em { display: grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; font-style: normal; }
 .figure { display: grid; justify-items: center; }
 
 /* 对话列表（左上「对话」）：主对话、专题、已归档、新专题。 */
@@ -82,12 +82,12 @@
   cursor: pointer;
 }
 .row:hover, .row[aria-current="page"] { background: var(--neutral-wash); }
-.row b { display: block; overflow: hidden; font-size: 13px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.row small { display: block; color: var(--ink-faint); font-size: 11.5px; }
+.row b { display: block; overflow: hidden; font-size: 14px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.row small { display: block; color: var(--ink-faint); font-size: 12px; }
 .topicDot { position: relative; width: 26px; height: 26px; border-radius: 8px; background: color-mix(in oklab, var(--accent) 12%, var(--surface)); }
 .topicDot::after { content: ""; position: absolute; inset: 9px; border-radius: 3px; background: var(--accent); }
-.groupLabel { margin: 10px 7px 4px; color: var(--ink-faint); font-size: 11.5px; }
-.none { margin: 2px 7px 4px; color: var(--field-placeholder); font-size: 12.5px; }
+.groupLabel { margin: 10px 7px 4px; color: var(--ink-faint); font-size: 12px; }
+.none { margin: 2px 7px 4px; color: var(--field-placeholder); font-size: 12px; }
 .newForm { display: grid; gap: 8px; margin-top: 8px; padding: 8px 7px 2px; border-top: 1px solid var(--hairline); }
 .newForm input, .newForm select {
   width: 100%;
@@ -98,7 +98,7 @@
   background: var(--field-bg);
   color: var(--field-ink);
   font: inherit;
-  font-size: 13px;
+  font-size: 14px;
 }
 .newForm input:focus, .newForm select:focus { border-color: var(--field-border-focus); outline: 0; }
 .newActions { display: flex; justify-content: flex-end; gap: 6px; }

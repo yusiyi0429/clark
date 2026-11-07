@@ -4,7 +4,7 @@
  */
 import type { TLocalCreateSessionRequest, TLocalModelProfile, TLocalSessionSummary } from "./runner";
 import type { LocalRunner } from "./runner";
-import { cardBrief, patchCard, planBrief, topicBrief, CloudError } from "@/lib/board/cloud";
+import { cardBrief, patchCard, planBrief, projectPlanBrief, topicBrief, CloudError, type PlanTarget } from "@/lib/board/cloud";
 import type { CardItem } from "@/lib/board/cards";
 import { cardRole, localRole, modelForTier, setCardRole, type RoleView } from "@/lib/team/roles";
 
@@ -68,9 +68,11 @@ export async function startTopic(runner: LocalRunner, topic: { id: string; title
  * 规划员的开工请求（第 21.3 节）：交代从云端取（GET /api/plan-tasks/:taskId/plan-brief，markdown 原样作为第一句话，规划员岗位原样转给本机），
  * 模型按规划员岗位的档位挑（没配岗位按强档）；不给目录时本机给它建一个专用目录。
  */
-export async function planStartRequest(taskId: string, models: TLocalModelProfile[], cwd: string | undefined): Promise<TLocalCreateSessionRequest> {
-  const brief = await planBrief(taskId);
+export async function planStartRequest(target: PlanTarget, models: TLocalModelProfile[], cwd: string | undefined): Promise<TLocalCreateSessionRequest> {
+  // 没挂 Task 的项目（16.3）：交代从 GET /api/me/projects/:projectId/plan-brief 取，会话 subject 只带项目。
+  const brief = "taskId" in target ? await planBrief(target.taskId) : await projectPlanBrief(target.projectId);
   const model = modelForTier(models, brief.role?.modelTier ?? "strong");
-  return { subject: { kind: "plan", taskId }, title: `拆卡：${brief.task.name}`.slice(0, 120), ...(cwd ? { cwd } : {}), ...(model ? { modelProfileId: model.id } : {}),
+  const subject = "taskId" in target ? { kind: "plan" as const, taskId: target.taskId } : { kind: "plan" as const, projectId: target.projectId };
+  return { subject, title: `拆卡：${brief.task?.name ?? brief.project?.name ?? ""}`.slice(0, 120), ...(cwd ? { cwd } : {}), ...(model ? { modelProfileId: model.id } : {}),
     firstMessage: brief.markdown, ...(brief.role ? { role: localRole(brief.role) } : {}) };
 }

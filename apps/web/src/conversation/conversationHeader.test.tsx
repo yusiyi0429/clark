@@ -38,16 +38,16 @@ describe("一条连续的对话", () => {
 
 describe("备用模型标注", () => {
   const note = { text: "本轮因上游异常改由备用模型完成", detail: "原因：模型服务这次没有响应。处理：换用备用模型 1 次。" };
-  it("回答末尾一行 12px 的淡字，悬停看说明；提问、正在写的回答不显示", () => {
-    const html = renderToStaticMarkup(<ConversationTurn message={{ ...messages[1], recoveryNote: note }} />);
-    expect(html).toContain("本轮因上游异常改由备用模型完成");
-    expect(html).toContain(`title="${note.detail}"`);
-    expect(html.indexOf("长期目标是")).toBeLessThan(html.indexOf("本轮因上游异常"));
-    expect(renderToStaticMarkup(<ConversationTurn message={{ ...messages[1], recoveryNote: note }} streaming />)).not.toContain("conversation-recovery-note");
-    expect(renderToStaticMarkup(<ConversationTurn message={{ ...messages[0], recoveryNote: note }} />)).not.toContain("conversation-recovery-note");
-    expect(renderToStaticMarkup(<ConversationTurn message={messages[1]} />)).not.toContain("conversation-recovery-note");
-    const rule = css("conversation-transcript.module.css").match(/\.recoveryNote\{([^}]*)\}/)?.[1] ?? "";
-    expect(rule).toMatch(/font-size:12px/);
-    expect(rule).toMatch(/color:#a5a5af/);
+  it("新首页设计 5.4.3 删掉了回答末尾那行「悬停看说明」：回答、提问、正在写的回答都不显示", () => {
+    for (const message of [{ ...messages[1], recoveryNote: note }, { ...messages[0], recoveryNote: note }]) {
+      for (const streaming of [false, true]) {
+        const html = renderToStaticMarkup(<ConversationTurn message={message} streaming={streaming} />);
+        expect(html).not.toContain("conversation-recovery-note");
+        expect(html).not.toContain(note.text);
+        expect(html).not.toContain(note.detail);
+      }
+    }
+    expect(renderToStaticMarkup(<ConversationTurn message={{ ...messages[1], recoveryNote: note }} />)).toContain("长期目标是");
+    expect(css("conversation-transcript.module.css")).not.toContain(".recoveryNote");
   });
 });

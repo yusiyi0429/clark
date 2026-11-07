@@ -12,17 +12,17 @@ import { groupWorkers, isWaiting, plannerWorkers, toWorker, type Worker } from "
 import { commitText, mergeBlockedText, mergeCard, shortPlace } from "@/lib/work/merge";
 import { reply } from "@/lib/work/actions";
 import { EMPTY_VIEW, foldEvents } from "@/lib/local/sessionView";
-import { DispatchBlock, countsText, plannerText } from "./DispatchBlock";
-import { WorkerRow, secondLine } from "./WorkerRow";
+import { PlanDecision, PlanningLine, plannerText } from "@/components/home/PlanDecision";
+import { viewOf, scopeOf } from "@/components/home/view";
 import { placeBlocks } from "./WorkTimeline";
-import { taskOfPath } from "./WorkHome";
+import { ApprovalDecision, QuestionDecision, localOptions } from "./decisions";
 
 const ROLE = { id: "00000000-0000-4000-8000-000000000001", name: "开发", kind: "worker" as const };
 const item = (extra: Partial<TWorkerItem>): TWorkerItem => ({
   key: "card:c1", kind: "card", cardId: "c1", topicId: null, title: "同时跑的上限和排队", role: ROLE, workerNo: 1,
   task: { id: "t1", name: "本机程序第一版" }, mission: null, step: { n: 4, total: 7, label: "跑测试" },
   resource: { where: "local", deviceId: null, deviceName: "ThinkPad", modelLabel: "Sonnet" }, startedAt: "2026-11-06T04:00:00Z", elapsedSeconds: 840,
-  finishedAt: null, cost: null, stage: "doing", wait: null, needsYou: false, queueReason: null, queuePosition: null, git: null, waitingFor: [], ...extra,
+  finishedAt: null, cost: null, stage: "doing", wait: null, needsYou: false, queueReason: null, holdUntil: null, queuePosition: null, git: null, waitingFor: [], ...extra,
 });
 const session = (extra: Partial<TLocalSessionSummary>): TLocalSessionSummary => ({
   id: "00000000-0000-4000-8000-0000000000a1", subject: { kind: "card", cardId: "c1" }, title: "x", agent: "claude-code", modelProfileId: "subscription", modelLabel: "订阅 · Sonnet",
@@ -30,8 +30,8 @@ const session = (extra: Partial<TLocalSessionSummary>): TLocalSessionSummary => 
   queuePosition: null, usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null }, ...extra,
 });
 const ctx = (sessions: TLocalSessionSummary[] = []) => ({ sessions, cards: new Map(), deviceName: "这台电脑" });
-const split = (id: string, taskId: string): TCardSplitRequestView => ({ id, taskId, taskName: taskId === "t1" ? "派活单" : "本机程序", missionId: "m1", origin: "web",
-  createdAt: taskId === "t1" ? "2026-11-06T04:00:00Z" : "2026-11-06T04:01:00Z" });
+const split = (id: string, taskId: string): TCardSplitRequestView => ({ id, taskId, taskName: taskId === "t1" ? "派活单" : "本机程序", missionId: "m1", projectId: null, projectName: null,
+  origin: "web", createdAt: taskId === "t1" ? "2026-11-06T04:00:00Z" : "2026-11-06T04:01:00Z" });
 
 describe("worker 和链路", () => {
   it("云端三格照搬；带岗位没开工的是「等开工」；验收中是云端的验收员", () => {
@@ -75,6 +75,18 @@ describe("worker 和链路", () => {
     expect(plannerWorkers({ sessions: [{ ...plan, status: "exited" }], splits: [], listed: [], tasks, deviceName: null })).toEqual([]);
   });
 
+  it("没挂 Task 的项目也能拆（16.3）：本机会话只带 projectId、登记只带项目，都是这个项目的规划员；同一个项目在拆时登记不重复列", () => {
+    const P = "00000000-0000-4000-8000-0000000000f1";
+    const plan = session({ id: "00000000-0000-4000-8000-0000000000a4", subject: { kind: "plan", projectId: P }, status: "running" });
+    const projectSplit = (id: string, projectId: string): TCardSplitRequestView => ({ id, taskId: null, taskName: null, missionId: null, projectId, projectName: "本机程序",
+      origin: "buddy", createdAt: "2026-11-06T04:02:00Z" });
+    const workers = plannerWorkers({ sessions: [plan], splits: [projectSplit("s3", P), projectSplit("s4", "00000000-0000-4000-8000-0000000000f2")], listed: [], tasks: [], deviceName: null });
+    expect(workers.map((worker) => [worker.key, worker.taskId, worker.projectId, worker.state])).toEqual([
+      [`plan:${plan.id}`, null, P, "doing"], ["split:s4", null, "00000000-0000-4000-8000-0000000000f2", "queued"],
+    ]);
+    expect(workers[1]!.title).toBe("本机程序");
+  });
+
   it("云端的规划员、验收员行：这台电脑上有本机会话时以本机为准、不重复列；手机上照云端（验收员在跑是验收中，没起是等开工）", () => {
     const plan = session({ id: "00000000-0000-4000-8000-0000000000a3", subject: { kind: "plan", taskId: "t1" }, status: "queued", queuePosition: 2 });
     const cloudPlan = item({ key: `plan:${plan.id}`, kind: "plan", cardId: null, title: "派活单", role: { id: "00000000-0000-4000-8000-0000000000e1", name: "规划员", kind: "worker" },
@@ -100,74 +112,102 @@ describe("worker 和链路", () => {
     const groups = groupWorkers(workers);
     expect(groups.doing.map((worker) => worker.key)).toEqual(["b", "a"]);
     expect(groups.queued.map((worker) => worker.key)).toEqual(["q2"]);
-    expect(countsText(workers)).toBe("进行中 2 · 已排队 1");
   });
 });
 
-describe("worker 的一行", () => {
+describe("选项框", () => {
   /** 看得见的字。 */
   const text = (markup: string) => markup.replace(/<[^>]+>/g, "");
-  it("第一行岗位 #n、做的事、标记；第二行资源在前、Task 最后", () => {
-    const worker: Worker = { ...toWorker(item({ wait: "approval" }), ctx()), ask: { text: "运行 pnpm test", command: "pnpm --filter @warmap/local test" } };
-    const line = text(renderToStaticMarkup(<>{secondLine(worker, Date.parse("2026-11-06T04:14:00Z"), "本机程序第一版").map((part, i) => <span key={i}>{part}</span>)}</>));
-    expect(line.indexOf("本机")).toBe(0);
-    expect(line).toContain("第 4/7 步");
-    expect(line).toContain("14 分");
-    expect(line.endsWith("本机程序第一版")).toBe(true);
+  const local = { runner: createMockRunner(), phase: "ready", version: null, status: null, models: [], folders: [], sessions: [], pairing: null, error: null,
+    refresh: vi.fn(), pair: vi.fn(), unpair: vi.fn(), pickFolder: vi.fn(), setIncludePersonal: vi.fn() } as unknown as Parameters<typeof LocalContext.Provider>[0]["value"];
+  const permission = (requestId: string, extra: Record<string, unknown> = {}) => ({ requestId, toolName: "Bash", title: "运行 pnpm test", input: { command: "pnpm --filter @warmap/web test" },
+    outsidePaths: [], canAllowForSession: true, ...extra }) as never;
+
+  it("批准：批准（推荐）/ 同类以后都批准（写清范围，回车不会选它）/ 换个做法，带命令；几件一起来时 1/2 和全部批准；工作区外只剩批准、换个做法，路径标出、加 chip；对外的加 chip", () => {
+    const one = text(renderToStaticMarkup(<ApprovalDecision requests={[permission("p1")]} onDecide={vi.fn()} />));
+    expect(one).toContain("pnpm --filter @warmap/web test");
+    expect(one).toContain("批准（推荐）");
+    expect(one.indexOf("同类以后都批准")).toBeGreaterThan(one.indexOf("批准（推荐）"));
+    expect(one).toContain("这个子会话内");
+    expect(one.indexOf("换个做法")).toBeGreaterThan(one.indexOf("同类以后都批准"));
+    expect(one).not.toContain("全部批准");
+    expect(one).not.toContain("对外");
+    const two = text(renderToStaticMarkup(<ApprovalDecision requests={[permission("p1"), permission("p2")]} onDecide={vi.fn()} />));
+    expect(two).toContain("1/2");
+    expect(two).toContain("全部批准");
+    const outside = text(renderToStaticMarkup(<ApprovalDecision requests={[permission("p3", { outsidePaths: ["D:/secrets"] })]} onDecide={vi.fn()} />));
+    expect(outside).toContain("工作区外");
+    expect(outside).toContain("D:/secrets");
+    expect(outside).not.toContain("同类以后都批准");
+    expect(outside).not.toContain("允许这一次");
+    const push = text(renderToStaticMarkup(<ApprovalDecision requests={[permission("p4", { input: { command: "git push origin main" } })]} onDecide={vi.fn()} />));
+    expect(push).toContain("对外");
   });
 
-  it("等你批准：派活单的行带「要运行 …」；手机和别的电脑写「到电脑上处理」", () => {
-    const worker: Worker = { ...toWorker(item({ wait: "approval" }), ctx()), ask: { text: "运行测试", command: "pnpm test" } };
-    const local = { runner: createMockRunner(), phase: "ready", version: null, status: null, models: [], folders: [], sessions: [], pairing: null, error: null,
-      refresh: vi.fn(), pair: vi.fn(), unpair: vi.fn(), pickFolder: vi.fn(), setIncludePersonal: vi.fn() } as unknown as Parameters<typeof LocalContext.Provider>[0]["value"];
-    const html = renderToStaticMarkup(<LocalContext.Provider value={local}><WorkerRow worker={worker} now={0} ask onChanged={vi.fn()} /></LocalContext.Provider>);
-    expect(html).toContain("开发 #1");
-    expect(html).toContain("等你批准");
-    expect(text(html)).toContain("pnpm test");
+  it("手机和别的电脑上只显示要做的事，不给选项，写到电脑上处理", () => {
+    const html = renderToStaticMarkup(<ApprovalDecision requests={[permission("p1")]} blocked="到电脑上处理" onDecide={vi.fn()} />);
     expect(html).toContain("到电脑上处理");
+    expect(html).toContain("pnpm --filter @warmap/web test");
+    expect(html).not.toContain("decision-option");
+  });
+
+  it("提问：Claude Code 标的推荐挪到第一个、去掉括号；最后一项自己说…；数字键标在每个选项上", () => {
+    expect(localOptions([{ label: "留着", description: "" }, { label: "删掉 (Recommended)", description: "只留新的" }])).toEqual({
+      options: [{ label: "删掉", detail: "只留新的", recommended: true }, { label: "留着", detail: null, recommended: false }], order: [1, 0] });
+    const request = { requestId: "q-1", askedAt: "2026-11-07T01:00:00Z", questions: [{ header: "安装说明", question: "旧的安装说明要不要一起删掉？", multiSelect: false,
+      options: [{ label: "留着", description: "放进附录" }, { label: "删掉（推荐）", description: "只留新的" }] }] };
+    const html = renderToStaticMarkup(<LocalContext.Provider value={local}><QuestionDecision request={request} onAnswer={vi.fn()} /></LocalContext.Provider>);
+    const visible = text(html);
+    expect(visible).toContain("旧的安装说明要不要一起删掉？");
+    expect(visible.indexOf("删掉")).toBeLessThan(visible.indexOf("留着"));
+    expect(visible).toContain("推荐");
+    expect(visible.trim().endsWith("自己说…")).toBe(true);
+    expect(html.match(/aria-keyshortcuts="\d"/g)).toEqual(['aria-keyshortcuts="1"', 'aria-keyshortcuts="2"', 'aria-keyshortcuts="3"']);
   });
 });
 
-describe("派活单", () => {
+describe("开工（Task 管线里的选项框）", () => {
   const task: THomePlanTask = { taskId: "t1", missionId: "m1", name: "派活单与 worker 链路", doneDefinition: null, criteria: ["出派活单"], responsibleId: null };
   const draft = (id: string, title: string, extra: Partial<TCardDraftView> = {}): TCardDraftView => ({ id, planId: "00000000-0000-4000-8000-0000000000b1", position: 0, title, brief: "",
     doneDefinition: "做完", criterionIndex: 1, executor: "claude_code", modelTier: "normal", why: null, role: ROLE, suggestPresetKey: null, ...extra });
-  const board = (drafts: TCardDraftView[]): TaskBoard => ({ taskId: "t1", criteria: [], cards: [], drafts, plan: null, pending: [], nextVersion: 1, fallback: false });
   const local = { runner: createMockRunner(), phase: "offline", version: null, status: null, models: [], folders: [], sessions: [], pairing: null, error: null,
     refresh: vi.fn(), pair: vi.fn(), unpair: vi.fn(), pickFolder: vi.fn(), setIncludePersonal: vi.fn() } as unknown as Parameters<typeof LocalContext.Provider>[0]["value"];
 
-  it("拆好了：每行岗位、要干的事、对约定第几条；底下开工、改一改；没有岗位的是我自己", () => {
+  it("拆好了：问「Task 名：这样开工？」，编号的几步，每步的岗位、对约定第几条，几个子会话；就按这个开始（推荐）/ 改一改 / 自己说；没有岗位的是我自己", () => {
     const html = renderToStaticMarkup(<LocalContext.Provider value={local}>
-      <DispatchBlock task={task} board={board([draft("00000000-0000-4000-8000-0000000000d1", "派活单组件"), draft("00000000-0000-4000-8000-0000000000d2", "和晨星对接口", { role: null, executor: "self" })])}
-        workers={[]} roles={[]} now={0} handheld={false} current={null} newest onOpenWorker={vi.fn()} onChanged={vi.fn()} />
+      <PlanDecision target={{ taskId: task.taskId }} name={task.name} drafts={[draft("00000000-0000-4000-8000-0000000000d1", "派活单组件"), draft("00000000-0000-4000-8000-0000000000d2", "和晨星对接口", { role: null, executor: "self" })]}
+        roles={[]} handheld={false} onSay={vi.fn()} onChanged={vi.fn()} />
     </LocalContext.Provider>);
-    expect(html).toContain("派活单");
-    expect(html).toContain("2 件 · 待开工");
+    expect(html).toContain("派活单与 worker 链路：这样开工？");
+    expect(html).toContain("1 个子会话");
     expect(html).toContain("派活单组件");
     expect(html).toContain("约定第 1 条");
     expect(html).toContain("我自己");
-    expect(html).toContain("开工");
+    expect(html).toContain("就按这个开始");
+    expect(html).toContain("推荐");
     expect(html).toContain("改一改");
+    expect(html).toContain("自己说…");
+    expect(html).not.toContain(">开工<");
+    expect(html).toContain('data-testid="plan-mode"');
   });
 
-  it("规划员在拆：派活单页头写「拆卡 · 等开工」，不出 worker 行", () => {
+  it("没挂 Task 的项目的派活单：框顶写项目名；没有预算那一栏（开工用本人的缺省预算）", () => {
+    const html = renderToStaticMarkup(<LocalContext.Provider value={local}>
+      <PlanDecision target={{ projectId: "00000000-0000-4000-8000-0000000000f1" }} name="本机程序" drafts={[draft("00000000-0000-4000-8000-0000000000d3", "接上 clone", { criterionIndex: null })]}
+        roles={[]} handheld={false} onSay={vi.fn()} onChanged={vi.fn()} />
+    </LocalContext.Provider>);
+    expect(html).toContain("本机程序：这样开工？");
+    expect(html).toContain("接上 clone");
+    expect(html).not.toContain('data-testid="plan-mode"');
+    expect(html).not.toContain("约定第");
+  });
+
+  it("规划员在拆：一行「拆卡 · 等开工」；本机在拆写第几步", () => {
     const [planner] = plannerWorkers({ sessions: [], splits: [split("s1", "t1")], listed: [], tasks: [], deviceName: null });
-    const html = renderToStaticMarkup(<LocalContext.Provider value={local}>
-      <DispatchBlock task={task} board={board([])} workers={[planner!]} roles={[]} now={0} handheld={false} current={null} newest onOpenWorker={vi.fn()} onChanged={vi.fn()} />
-    </LocalContext.Provider>);
-    expect(html).toContain('data-testid="dispatch-planning"');
+    const html = renderToStaticMarkup(<LocalContext.Provider value={local}><PlanningLine planner={planner!} /></LocalContext.Provider>);
+    expect(html).toContain('data-testid="planning-line"');
     expect(html).toContain("拆卡 · 等开工");
-    expect(html).not.toContain('data-testid="worker-row"');
-  });
-
-  it("开工以后默认收起，只留等你的行；页头写链路数字", () => {
-    const workers = [toWorker(item({ key: "a" }), ctx()), toWorker(item({ key: "b", wait: "approval", cardId: "c2" }), ctx()), toWorker(item({ key: "c", stage: "todo", queueReason: "slot" }), ctx())];
-    const html = renderToStaticMarkup(<LocalContext.Provider value={local}>
-      <DispatchBlock task={task} board={board([])} workers={workers} roles={[]} now={0} handheld={false} current={null} newest={false} onOpenWorker={vi.fn()} onChanged={vi.fn()} />
-    </LocalContext.Provider>);
-    expect(html).toContain("进行中 2 · 已排队 1");
-    expect(html.match(/data-testid="worker-row"/g)).toHaveLength(1);
-    expect(html).toContain("其余 2 件");
+    expect(plannerText({ ...planner!, state: "doing" }, { step: 2, total: 3 })).toBe("拆卡中 · 第 2/3 步");
   });
 });
 
@@ -182,9 +222,20 @@ describe("对话里插块和锚点", () => {
     expect(placed.get(0)?.map((block) => block.key)).toEqual(["mid"]);
     expect(placed.get(1)?.map((block) => block.key)).toEqual(["late"]);
   });
-  it("锚到 Task 的地址", () => {
-    expect(taskOfPath("/me/work/tasks/demo-task-1")).toBe("demo-task-1");
-    expect(taskOfPath("/me/work")).toBeNull();
+  it("展示区按地址：首页、总管线、Task 管线、Task 详情、子会话；右栏跟着它取范围", () => {
+    expect(viewOf("/me/work")).toEqual({ kind: "home" });
+    expect(viewOf("/me/work/")).toEqual({ kind: "home" });
+    expect(viewOf("/me/work/buddy")).toEqual({ kind: "buddy" });
+    expect(viewOf("/me/work/tasks/demo-task-1")).toEqual({ kind: "task", taskId: "demo-task-1" });
+    expect(viewOf("/me/work/tasks/demo%20task/info")).toEqual({ kind: "info", taskId: "demo task" });
+    expect(viewOf("/me/work/cards/c1")).toEqual({ kind: "card", id: "c1" });
+    expect(viewOf("/me/work/topics/tp1")).toEqual({ kind: "topic", id: "tp1" });
+    // 二级页、月份页（月份是 YYYY-MM，不是的落回首页）；右栏只要资源块。
+    expect(viewOf("/me/work/settings/connections")).toEqual({ kind: "page", page: "connections" });
+    expect(viewOf("/me/work/month/2026-11")).toEqual({ kind: "month", period: "2026-11" });
+    expect(viewOf("/me/work/month/11")).toEqual({ kind: "home" });
+    expect([viewOf("/me/work/settings/connections"), viewOf("/me/work/month/2026-11")].map(scopeOf)).toEqual(["resources", "resources"]);
+    expect([viewOf("/me/work"), viewOf("/me/work/buddy"), viewOf("/me/work/tasks/t1/info"), viewOf("/me/work/cards/c1")].map(scopeOf)).toEqual(["main", "main", "task:t1", "card:c1"]);
   });
 });
 
@@ -192,22 +243,19 @@ describe("卡在哪做和合并（ADR 0038）", () => {
   const worktree = { kind: "worktree" as const, folder: "C:\\work\\tianshu", path: "C:\\data\\worktrees\\c1", branch: "tianshu/c1-board", baseBranch: "main",
     baseCommit: "a".repeat(40), mergedCommit: null };
   it("行里写分支，不是 git 仓库的写文件夹名；同一个文件夹另一张在做时排着写等文件夹空出来", () => {
-    const line = (worker: Worker) => renderToStaticMarkup(<>{secondLine(worker, Date.parse("2026-11-06T04:14:00Z"), null).map((part, i) => <span key={i}>{part}</span>)}</>);
-    expect(line(toWorker(item({}), ctx([session({ workspace: worktree })])))).toContain("tianshu/c1-board");
+    expect(toWorker(item({}), ctx([session({ workspace: worktree })])).workspace).toMatchObject({ branch: "tianshu/c1-board" });
     expect(shortPlace({ kind: "folder", folder: "C:\\work\\notes" })).toBe("notes");
     const folder = { kind: "folder" as const, folder: "C:\\work\\notes" };
     const other = session({ id: "00000000-0000-4000-8000-0000000000a9", subject: { kind: "card", cardId: "c9" }, status: "running", workspace: folder });
     const waiting = toWorker(item({}), ctx([session({ status: "queued", queuePosition: 1, workspace: folder }), other]));
     expect(waiting).toMatchObject({ state: "queued", reason: "folder" });
-    expect(line(waiting)).toContain("notes");
+    expect(shortPlace(waiting.workspace!)).toBe("notes");
   });
 
   it("手机和别的电脑上：分支和提交用云端记的，验收过的写验过的提交", () => {
     const git = { branch: "tianshu/c1-board", baseBranch: "main", baseCommit: "a".repeat(40), commit: "b".repeat(40), verifiedCommit: "b".repeat(40) };
     const worker = toWorker(item({ stage: "done", finishedAt: "2026-11-06T05:00:00Z", git }), ctx());
     expect(worker.git).toEqual(git);
-    const line = renderToStaticMarkup(<>{secondLine({ ...worker, state: "doing" }, Date.parse("2026-11-06T04:14:00Z"), null).map((part, i) => <span key={i}>{part}</span>)}</>);
-    expect(line).toContain("tianshu/c1-board");
     expect(commitText(git)).toBe("交回 bbbbbbb · 验过 bbbbbbb");
     expect(commitText({ ...git, verifiedCommit: null })).toBe("交回 bbbbbbb");
   });
@@ -244,12 +292,12 @@ describe("执行方问本人、卡等前面的卡", () => {
   const local = { runner: createMockRunner(), phase: "ready", version: null, status: null, models: [], folders: [], sessions: [], pairing: null, error: null,
     refresh: vi.fn(), pair: vi.fn(), unpair: vi.fn(), pickFolder: vi.fn(), setIncludePersonal: vi.fn() } as unknown as Parameters<typeof LocalContext.Provider>[0]["value"];
 
-  it("问着的时候是等你回复，行里写问的是什么、选项是按钮；答了就收起", () => {
+  it("问着的时候是等你回复，对话里是选项框写问的是什么、选项能点；答了就收起", () => {
     const worker = toWorker(item({}), ctx([session({ status: "idle", pendingQuestion: request })]));
     expect(worker.mark).toBe("reply");
-    const html = renderToStaticMarkup(<LocalContext.Provider value={local}><WorkerRow worker={worker} now={0} ask onChanged={vi.fn()} /></LocalContext.Provider>);
-    expect(html).toContain('data-testid="question-form"');
-    expect(html).toContain("安装说明");
+    const html = renderToStaticMarkup(<LocalContext.Provider value={local}><QuestionDecision request={worker.session!.pendingQuestion!} onAnswer={vi.fn()} /></LocalContext.Provider>);
+    expect(html).toContain('data-testid="question-decision"');
+    expect(html).toContain("旧的安装说明要不要一起删掉？");
     expect(html).toContain("删掉");
     expect(html).toContain("留着");
     const view = foldEvents([
@@ -271,17 +319,15 @@ describe("执行方问本人、卡等前面的卡", () => {
     const cards = new Map([["c0", { id: "c0", title: "先搭骨架" } as never]]);
     const worker = toWorker(item({ stage: "todo", queueReason: "not_dispatched" }), { sessions: [session({ status: "queued", waitingFor: ["c0"], queuePosition: 1 })], cards, deviceName: null });
     expect(worker).toMatchObject({ state: "queued", reason: "after", waitingFor: ["先搭骨架"], workspace: null });
-    const line = renderToStaticMarkup(<>{secondLine(worker, 0, null).map((part, i) => <span key={i}>{part}</span>)}</>);
-    expect(line).toContain("等「先搭骨架」");
-    expect(line).not.toContain("排第");
     // 手机和别的电脑上照云端行：排队原因 prior_cards，等的卡带标题。
     const remote = toWorker(item({ stage: "todo", queueReason: "prior_cards", waitingFor: [{ cardId: "c0", title: "先搭骨架" }] }), ctx());
     expect(remote).toMatchObject({ state: "queued", reason: "after", waitingFor: ["先搭骨架"] });
   });
 
-  it("假本机程序：批准以后问一个单选问题，答了接着做；答过再答是 409。带 after 的卡等前面的卡合回才开工作树、开始", async () => {
+  it("假本机程序：批准以后问一个单选问题，答了接着做；答过再答是 409。「验收过就合回」关着时验收过了记 needsMerge；带 after 的卡等前面的卡合回才开工作树、开始", async () => {
     vi.useFakeTimers();
     const runner = createMockRunner({ stepMs: 10 });
+    await runner.patchSettings({ autoMerge: false });
     const first = await runner.createSession({ subject: { kind: "card", cardId: "c1" }, title: "Skeleton", cwd: "C:\\work\\tianshu", firstMessage: "交代" });
     const second = await runner.createSession({ subject: { kind: "card", cardId: "c2" }, title: "Rows", cwd: "C:\\work\\tianshu", firstMessage: "交代", after: ["c1"] });
     expect(second).toMatchObject({ status: "queued", waitingFor: ["c1"] });
@@ -296,12 +342,29 @@ describe("执行方问本人、卡等前面的卡", () => {
     await runner.answerQuestion(first.id, asked.pendingQuestion!.requestId, { choices: [["删掉"]] });
     await expect(runner.answerQuestion(first.id, asked.pendingQuestion!.requestId, { choices: [["删掉"]] })).rejects.toMatchObject({ status: 409 });
     await vi.advanceTimersByTimeAsync(200);
+    expect((await runner.getSession(first.id)).session.workspace).toMatchObject({ mergedCommit: null, needsMerge: { reason: "auto_merge_off" } });
     await runner.mergeSession(first.id);
     await runner.mergeSession(first.id);
+    expect((await runner.getSession(first.id)).session.workspace).not.toHaveProperty("needsMerge");
     const started = (await runner.getSession(second.id)).session;
     expect(started.waitingFor).toBeUndefined();
     expect(started.workspace).toMatchObject({ kind: "worktree", branch: "tianshu/c2-rows" });
     expect(started.status).not.toBe("queued");
+    vi.useRealTimers();
+  });
+
+  it("「验收过就合回」开着（默认）：交回、验收员收工以后自己合回，等它的卡接着开工作树", async () => {
+    vi.useFakeTimers();
+    const runner = createMockRunner({ stepMs: 10 });
+    const first = await runner.createSession({ subject: { kind: "card", cardId: "c1" }, title: "Skeleton", cwd: "C:\\work\\tianshu", firstMessage: "交代" });
+    const second = await runner.createSession({ subject: { kind: "card", cardId: "c2" }, title: "Rows", cwd: "C:\\work\\tianshu", firstMessage: "交代", after: ["c1"] });
+    await vi.advanceTimersByTimeAsync(60);
+    await runner.decidePermission(first.id, (await runner.getSession(first.id)).pendingPermissions[0]!.requestId, { decision: "allow" });
+    await vi.advanceTimersByTimeAsync(30);
+    await runner.answerQuestion(first.id, (await runner.getSession(first.id)).session.pendingQuestion!.requestId, { choices: [["删掉"]] });
+    await vi.advanceTimersByTimeAsync(200);
+    expect((await runner.getSession(first.id)).session.workspace).toMatchObject({ mergedCommit: expect.any(String) });
+    expect((await runner.getSession(second.id)).session.workspace).toMatchObject({ kind: "worktree", branch: "tianshu/c2-rows" });
     vi.useRealTimers();
   });
 });
@@ -325,7 +388,7 @@ describe("假本机程序的排队（同真程序的规矩）", () => {
     vi.useRealTimers();
   });
 
-  it("排队先后：验收员、规划员、执行的；执行的交回以后本机自己接一个验收员，规划员拆完退出", async () => {
+  it("排队先后：验收员、规划员、执行的；执行的交回以后本机自己接一个验收员，规划员、验收员交完收工（done）", async () => {
     vi.useFakeTimers();
     const runner = createMockRunner({ stepMs: 10, onPlanned: vi.fn() });
     await runner.patchSettings({ maxConcurrent: 1 });
@@ -343,8 +406,8 @@ describe("假本机程序的排队（同真程序的规矩）", () => {
     expect((await runner.listSessions()).find((s) => s.id === verifier!.id)?.status).toBe("starting");
     await vi.advanceTimersByTimeAsync(200);
     const status = async (id: string) => (await runner.listSessions()).find((s) => s.id === id)?.status;
-    expect(await status(verifier!.id)).toBe("exited");
-    expect(await status(planner!.id)).toBe("exited");
+    expect(await status(verifier!.id)).toBe("done");
+    expect(await status(planner!.id)).toBe("done");
     // 执行的跑到权限请求：批准、回答一句，交回后接上 c2 的验收员。
     await vi.advanceTimersByTimeAsync(100);
     const pending = (await runner.getSession(second!.id)).pendingPermissions[0]!;
@@ -354,6 +417,8 @@ describe("假本机程序的排队（同真程序的规矩）", () => {
     await vi.advanceTimersByTimeAsync(100);
     const chained = (await runner.listSessions()).find((s) => s.subject.kind === "verify" && s.subject.cardId === "c2");
     expect(chained).toBeDefined();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(await status(chained!.id)).toBe("done");
     vi.useRealTimers();
   });
 });

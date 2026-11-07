@@ -10,7 +10,7 @@
 /* 第一行：负责人（头像字 + 名字）· 按什么评。 */
 .facts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin: 0; color: var(--ink-faint); font-size: 12.5px; }
 .owner { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-muted); }
-.ownerAvatar { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: color-mix(in oklab, var(--ink) 7%, #fff); color: var(--ink-muted); font-size: 11px; }
+.ownerAvatar { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: color-mix(in oklab, var(--ink) 7%, var(--surface)); color: var(--ink-muted); font-size: 11px; }
 .owner[data-missing] { color: var(--judgment); }
 
 .section { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding-top: 16px; border-top: 1px solid var(--hairline); }
@@ -38,7 +38,7 @@
 .steps li[data-state="done"] { color: var(--ink-muted); }
 .steps li[data-state="done"] i { border-color: var(--ink-muted); background: var(--ink-muted); }
 .steps li[data-state="now"] { color: var(--ink); font-weight: 500; }
-.steps li[data-state="now"] i { border-color: #2f6fd6; background: #2f6fd6; animation: pulse 1.2s ease-in-out infinite; }
+.steps li[data-state="now"] i { border-color: var(--accent); background: var(--accent); animation: pulse 1.2s ease-in-out infinite; }
 @keyframes pulse { 50% { transform: scale(.6); opacity: .5; } }
 .elapsed { margin: 0; color: var(--ink-faint); font-size: 12px; font-variant-numeric: tabular-nums; }
 .failed { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; color: var(--counter); }
@@ -46,7 +46,7 @@
 /* 验收标准逐条。 */
 .criteria { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
 .criterion { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; gap: 10px; align-items: start; }
-.mark { display: grid; place-items: center; width: 20px; height: 20px; margin-top: 1px; border: 1.5px solid var(--hairline-strong); border-radius: 50%; color: #fff; }
+.mark { display: grid; place-items: center; width: 20px; height: 20px; margin-top: 1px; border: 1.5px solid var(--hairline-strong); border-radius: 50%; color: #fff; } /* 待设计规范 */
 .mark[data-verdict="met"] { border-color: var(--confirmed); background: var(--confirmed); }
 .mark[data-verdict="unmet"] { border-color: var(--counter); background: var(--counter); }
 .mark[data-verdict="partial"] { border-color: var(--judgment); background: linear-gradient(90deg, var(--judgment) 50%, transparent 50%); }
@@ -76,8 +76,8 @@
 .version[aria-selected="true"] { background: color-mix(in oklab, var(--ink) 6%, transparent); color: var(--ink); font-weight: 600; }
 .items { display: flex; flex-wrap: wrap; gap: 6px 8px; margin: 0; padding: 0; list-style: none; }
 .item { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; min-width: 0; height: 32px; padding: 0 10px 0 6px; border-radius: 10px; background: color-mix(in oklab, var(--ink) 3.5%, transparent); }
-.item[data-new] { background: color-mix(in oklab, #2f6fd6 7%, transparent); }
-.tag { flex: none; padding: 1px 6px; border-radius: 6px; background: #fff; color: var(--ink-muted); font-size: 11px; font-weight: 600; line-height: 16px; box-shadow: inset 0 0 0 1px var(--hairline); }
+.item[data-new] { background: var(--accent-soft); }
+.tag { flex: none; padding: 1px 6px; border-radius: 6px; background: var(--surface); color: var(--ink-muted); font-size: 11px; font-weight: 600; line-height: 16px; box-shadow: inset 0 0 0 1px var(--hairline); }
 .itemName { min-width: 0; overflow: hidden; color: var(--ink); text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
 a.itemName:hover { text-decoration: underline; text-decoration-color: var(--hairline-strong); text-underline-offset: 3px; }
 .itemState { flex: none; color: var(--ink-faint); font-size: 12px; }
@@ -101,8 +101,8 @@ a.itemName:hover { text-decoration: underline; text-decoration-color: var(--hair
 /* 传新版本：虚线放置区（唯一的框），拖进来时变蓝。 */
 .composer { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding-top: 16px; border-top: 1px solid var(--hairline); }
 .drop { display: grid; justify-items: center; gap: 10px; padding: 22px 16px; border: 1.5px dashed var(--hairline-strong); border-radius: 16px; transition: border-color var(--dur-base, 200ms) var(--ease-swift, ease), background var(--dur-base, 200ms) var(--ease-swift, ease); }
-.drop[data-dragging] { border-color: #2f6fd6; background: color-mix(in oklab, #2f6fd6 5%, transparent); }
-.dropIcon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 12px; background: color-mix(in oklab, #2f6fd6 9%, #fff); color: #2f6fd6; }
+.drop[data-dragging] { border-color: var(--accent); background: color-mix(in oklab, var(--accent) 5%, transparent); } /* 待设计规范 */
+.dropIcon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 12px; background: var(--accent-soft); color: var(--brand-deep); }
 .dropButtons { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .dropHint { color: var(--ink-faint); font-size: 12px; text-align: center; }
 .remove { display: grid; place-items: center; width: 20px; height: 20px; margin-right: -4px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--ink-faint); cursor: pointer; }
@@ -118,10 +118,10 @@ a.itemName:hover { text-decoration: underline; text-decoration-color: var(--hair
 .hint { color: var(--ink-faint); font-size: 12.5px; }
 
 .plain, .primary, .quiet { display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 32px; padding: 0 14px; border: 0; border-radius: 10px; font: inherit; font-size: 13px; font-weight: 500; white-space: nowrap; cursor: pointer; transition: background var(--dur-base, 200ms) var(--ease-swift, ease), opacity var(--dur-base, 200ms) var(--ease-swift, ease); }
-.plain { background: #fff; box-shadow: inset 0 0 0 1px #dfe3e9; color: var(--ink); }
-.plain:hover:not(:disabled) { background: color-mix(in oklab, var(--ink) 4%, #fff); }
-.primary { background: #2f6fd6; color: #fff; font-weight: 600; }
-.primary:hover:not(:disabled) { background: color-mix(in oklab, #2f6fd6 88%, #000); }
+.plain { background: var(--surface); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--ink) 12%, var(--surface)); color: var(--ink); }
+.plain:hover:not(:disabled) { background: color-mix(in oklab, var(--ink) 4%, var(--surface)); }
+.primary { background: var(--accent); color: var(--accent-foreground); font-weight: 600; }
+.primary:hover:not(:disabled) { background: var(--accent-hover); }
 .quiet { height: 28px; padding: 0 8px; background: none; color: var(--ink-faint); }
 .quiet:hover:not(:disabled) { background: color-mix(in oklab, var(--ink) 4%, transparent); color: var(--ink); }
 .plain:disabled, .primary:disabled, .quiet:disabled { cursor: default; opacity: .45; }
@@ -155,7 +155,7 @@ a.itemName:hover { text-decoration: underline; text-decoration-color: var(--hair
 .agreement small { color: var(--ink-faint); font-size: 11.5px; }
 .criterionBody button.agreement { justify-self: start; max-width: 100%; margin-left: -6px; padding: 1px 6px; border: 0; border-radius: 8px; background: none; font: inherit; font-size: 12.5px; text-align: left; cursor: pointer; }
 button.agreement:hover { background: color-mix(in oklab, var(--ink) 4%, transparent); color: var(--ink); }
-.agreementAdd { justify-self: start; padding: 0; border: 0; background: none; color: #2f6fd6; font: inherit; font-size: 12.5px; cursor: pointer; }
+.agreementAdd { justify-self: start; padding: 0; border: 0; background: none; color: var(--brand-deep); font: inherit; font-size: 12.5px; cursor: pointer; }
 .agreementAdd:hover { text-decoration: underline; text-underline-offset: 3px; }
 .agreementEdit { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px 10px; align-items: center; margin-top: 6px; padding-left: 10px; border-left: 2px solid var(--hairline); }
 .agreementEdit > label, .agreementEdit > span { color: var(--ink-faint); font-size: 12.5px; }

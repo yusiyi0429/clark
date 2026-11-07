@@ -5,7 +5,7 @@
 import type { TLocalPermissionRequestView, TLocalPlanEntry, TLocalQuestionRequestView, TLocalSessionEvent, TLocalSessionStatus, TLocalUsage } from "./runner";
 
 export type SessionEntry =
-  | { kind: "user"; seq: number; at: string; text: string }
+  | { kind: "user"; seq: number; at: string; text: string; attachments?: { name: string; size: number }[] }
   | { kind: "assistant"; seq: number; at: string; text: string }
   | { kind: "step"; seq: number; at: string; toolUseId: string; title: string; done: boolean; isError: boolean }
   | { kind: "permission"; seq: number; at: string; request: TLocalPermissionRequestView; decision: "allow" | "deny" | null }
@@ -38,6 +38,9 @@ export type SessionView = {
   question: TLocalQuestionRequestView | null;
 };
 
+/** 对话里记下的那一行「问：…」；还没答时对话最后是选项框，这一行不重复画（SessionTranscript）。 */
+export const questionNotice = (request: TLocalQuestionRequestView) => `问：${request.questions.map((entry) => entry.question).join(" ")}`;
+
 export const EMPTY_VIEW: SessionView = {
   lastSeq: 0, status: null, startedAt: null, agentVersion: null, plan: [], entries: [], pending: [],
   usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null },
@@ -61,11 +64,14 @@ export function foldEvent(view: SessionView, event: TLocalSessionEvent): Session
       if (event.status === "running") next.interrupted = false;
       if (event.status === "failed") next.entries = [...view.entries, { kind: "notice", ...base, level: "error", text: event.reason ?? "执行方异常退出" }];
       return next;
+    // 后台任务（子 agent、后台命令）不进对话记录：右栏读会话摘要里的 background。
+    case "background":
+      return next;
     case "agent_info":
       next.agentVersion = event.version;
       return next;
     case "user_message":
-      next.entries = [...view.entries, { kind: "user", ...base, text: event.text }];
+      next.entries = [...view.entries, { kind: "user", ...base, text: event.text, ...(event.attachments?.length ? { attachments: event.attachments.map(({ name, size }) => ({ name, size })) } : {}) }];
       next.handedBack = false;
       return next;
     case "assistant_text":
@@ -115,7 +121,7 @@ export function foldEvent(view: SessionView, event: TLocalSessionEvent): Session
       return next;
     case "question":
       next.question = event.request;
-      next.entries = [...view.entries, { kind: "notice", ...base, level: "info", text: `问：${event.request.questions.map((entry) => entry.question).join(" ")}` }];
+      next.entries = [...view.entries, { kind: "notice", ...base, level: "info", text: questionNotice(event.request) }];
       next.lastActivity = { at: event.at, text: event.request.questions[0]!.question };
       return next;
     case "question_resolved":
@@ -127,7 +133,7 @@ export function foldEvent(view: SessionView, event: TLocalSessionEvent): Session
       return next;
     case "verdict": {
       // 本机验收员的结论（验收会话和被验的卡的会话各一条）。
-      const text = `验收${event.passed ? "过了" : event.blocked ? "没过，受阻" : "没过"}：${event.summary}`;
+      const text = `验收${event.passed ? "过了" : event.blocked ? "未通过，受阻" : "未通过"}：${event.summary}`;
       next.entries = [...view.entries, { kind: "notice", ...base, level: event.passed ? "info" : "warn", text }];
       next.lastActivity = { at: event.at, text };
       return next;
@@ -137,9 +143,10 @@ export function foldEvent(view: SessionView, event: TLocalSessionEvent): Session
 
 export const foldEvents = (events: TLocalSessionEvent[], view: SessionView = EMPTY_VIEW) => events.reduce(foldEvent, view);
 
-/** 本机报的标记：有权限请求没答 → 等你批准；本人点了停下（或强停、异常退出）→ 已暂停；一轮停下等人说话 → 等你回复。交回了就不算等。 */
+/** 本机报的标记：有权限请求没答 → 等你批准；本人点了停下（或强停、异常退出）→ 已暂停；一轮停下等人说话 → 等你回复。交回了就不算等；交完收工（done）不等。 */
 export function localWait(view: SessionView): LocalWait | null {
   if (view.pending.length || view.status === "waiting_permission") return "approval";
+  if (view.status === "done") return null;
   if (view.status === "exited" || view.status === "failed") return view.handedBack ? null : "paused";
   if (view.status === "idle") return view.handedBack ? null : view.interrupted ? "paused" : "reply";
   return null;

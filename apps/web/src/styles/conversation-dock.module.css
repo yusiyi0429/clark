@@ -125,11 +125,11 @@
 .layer[data-moving=true]{transition:none}
 .layer[data-issue-context=true]{width:calc(var(--issue-chat-width) - 32px)}
 .layer[data-issue-context=true]{--composer-width:100%}
-.contextLabel{position:absolute;bottom:calc(100% + 8px);max-width:100%;font-size:11px;line-height:18px;color:#77777c;white-space:nowrap;text-overflow:ellipsis;overflow:hidden;pointer-events:none}
+.contextLabel{position:absolute;bottom:calc(100% + 8px);max-width:100%;font-size:11px;line-height:18px;color:var(--ink-faint);white-space:nowrap;text-overflow:ellipsis;overflow:hidden;pointer-events:none}
 .referenceContext{display:flex;align-items:center;gap:8px;width:100%;overflow:visible}
 .referenceContext>span{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis}
-.referenceContext>button{display:flex;align-items:center;gap:3px;flex:none;margin-left:auto;padding:3px 5px;border:0;border-radius:6px;background:transparent;color:#4b6e99;font-size:11px;line-height:18px;pointer-events:auto;transition:background 160ms ease,color 160ms ease}
-.referenceContext>button:hover,.referenceContext>button:focus-visible{background:#007aff0a;color:#006edc}
+.referenceContext>button{display:flex;align-items:center;gap:3px;flex:none;margin-left:auto;padding:3px 5px;border:0;border-radius:6px;background:transparent;color:var(--tianshu-blue-secondary);font-size:11px;line-height:18px;pointer-events:auto;transition:background 160ms ease,color 160ms ease}
+.referenceContext>button:hover,.referenceContext>button:focus-visible{background:var(--accent-soft);color:var(--tianshu-blue-secondary)}
 .layer[data-issue-closing=true],.layer[data-issue-closing=true] .dock{transition-duration:250ms;transition-timing-function:cubic-bezier(.4,0,.2,1)}
 @media(max-width:959px){.layer[data-issue-context=true]{right:16px;width:calc(100% - 32px)}}
 @media(prefers-reduced-motion:reduce){.layer{transition:none}}

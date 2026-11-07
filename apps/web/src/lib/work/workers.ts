@@ -11,16 +11,16 @@ import { localWaitOf, type CardItem } from "@/lib/board/cards";
 
 export type ChainState = "queued" | "doing" | "done";
 /** 等开工：本人确认了还没交给本机；等空位：本机同时跑的满了；等本机上线；等文件夹：不是 git 仓库的文件夹同时只做一张卡；等前面的卡：派活单里排在前面的还没合回。 */
-export type QueueReason = "start" | "slot" | "offline" | "folder" | "after";
+export type QueueReason = "start" | "slot" | "offline" | "folder" | "after" | "quota";
 export type WorkerMark = TWorkerMark;
 
 export const CHAIN_LABEL: Record<ChainState, string> = { queued: "已排队", doing: "进行中", done: "已完成" };
-export const QUEUE_LABEL: Record<QueueReason, string> = { start: "等开工", slot: "等空位", offline: "等本机上线", folder: "等文件夹空出来", after: "等前面的卡" };
+export const QUEUE_LABEL: Record<QueueReason, string> = { start: "等开工", slot: "等空位", offline: "等本机上线", folder: "等文件夹空出来", after: "等前面的卡", quota: "等额度恢复" };
 export const MARK_LABEL: Record<WorkerMark, string> = { approval: "等你批准", reply: "等你回复", paused: "已暂停", reviewing: "验收中", review_failed: "验收没过", blocked: "受阻" };
 /** 「等你」：要本人动手的几种。 */
 export const WAITING: WorkerMark[] = ["approval", "reply", "review_failed", "blocked"];
 export const isWaiting = (mark: WorkerMark | null) => !!mark && WAITING.includes(mark);
-const REASON: Record<NonNullable<TWorkerItem["queueReason"]>, QueueReason> = { not_dispatched: "start", slot: "slot", device_offline: "offline", prior_cards: "after" };
+const REASON: Record<NonNullable<TWorkerItem["queueReason"]>, QueueReason> = { not_dispatched: "start", slot: "slot", device_offline: "offline", prior_cards: "after", quota: "quota" };
 
 export type Worker = {
   key: string;
@@ -36,8 +36,12 @@ export type Worker = {
   taskId: string | null;
   taskName: string | null;
   missionId: string | null;
+  /** 规划员拆的是一个没挂 Task 的项目时（16.3，本机会话或登记带的）：哪个项目。 */
+  projectId?: string | null;
   state: ChainState;
   reason: QueueReason | null;
+  /** 等额度恢复（reason = quota）时恢复的时间：「等额度恢复 · 08:00」；读不到或不在等为 null。 */
+  holdUntil: string | null;
   mark: WorkerMark | null;
   /** 在干什么：当前计划条目。 */
   doing: string | null;
@@ -101,6 +105,7 @@ export function toWorker(entry: TWorkerItem, { sessions, cards, deviceName }: { 
   let reason: QueueReason | null = state === "queued" ? REASON[entry.queueReason ?? "not_dispatched"] : null;
   let mark: WorkerMark | null = state === "doing" ? entry.wait : null;
   let queuePos: number | null = entry.queuePosition;
+  let holdUntil: string | null = reason === "quota" ? entry.holdUntil : null;
   // 等前面的卡：这台电脑上以本机为准（标题从看板的卡和云端行里找），没有本机会话时用云端的。
   const cloudTitle = (id: string) => entry.waitingFor.find((card) => card.cardId === id)?.title;
   const waitingFor = session?.waitingFor?.length ? session.waitingFor.map((id) => cards.get(id)?.title ?? cloudTitle(id) ?? "另一张卡")
@@ -110,13 +115,15 @@ export function toWorker(entry: TWorkerItem, { sessions, cards, deviceName }: { 
     if (session.status === "queued") { state = "queued"; reason = folderBusy(session, sessions) ? "folder" : "slot"; mark = null; queuePos = session.queuePosition; }
     else { state = "doing"; reason = null; mark = localWaitOf(session); }
   }
+  // 停着等额度恢复：这台电脑上以本机报的 hold 为准（停着不占位置，到点本机自己接着做）。
+  if (session?.hold && state !== "done") { state = "queued"; reason = "quota"; mark = null; holdUntil = session.hold.until; }
   if (waitingFor && state !== "done") { state = "queued"; reason = "after"; mark = null; }
   // 验收员在进行中就是验收中（等你批准、等你回复照本机）。
   if (entry.kind === "verify" && state === "doing" && !mark) mark = "reviewing";
   const worker: Worker = {
     key: entry.key, kind: entry.kind, cardId: entry.cardId, topicId: entry.topicId, title: entry.title, role: entry.role, seq: entry.workerNo,
     taskId: entry.task?.id ?? null, taskName: entry.task?.name ?? null, missionId: entry.mission?.id ?? null,
-    state, reason, mark, queuePos,
+    state, reason, holdUntil, mark, queuePos,
     doing: entry.step?.label ?? null,
     step: entry.step ? { n: entry.step.n, total: entry.step.total } : null,
     where: entry.resource?.where ?? (session ? "local" : null),
@@ -150,23 +157,27 @@ export function toWorker(entry: TWorkerItem, { sessions, cards, deviceName }: { 
 export function plannerWorkers({ sessions, splits, listed, tasks, deviceName }: {
   sessions: TLocalSessionSummary[]; splits: TCardSplitRequestView[]; listed: Worker[]; tasks: { taskId: string; name: string; missionId: string | null }[]; deviceName: string | null;
 }): Worker[] {
-  const base = (taskId: string, taskName: string | null, missionId: string | null): Omit<Worker, "key" | "state" | "reason" | "mark" | "queuePos" | "model" | "startedAt" | "session"> => ({
-    kind: "plan", cardId: null, topicId: null, title: taskName ?? "拆卡", role: PLANNER, seq: 1, taskId, taskName, missionId,
+  const base = (taskId: string | null, taskName: string | null, missionId: string | null, projectId: string | null = null): Omit<Worker, "key" | "state" | "reason" | "holdUntil" | "mark" | "queuePos" | "model" | "startedAt" | "session"> => ({
+    kind: "plan", cardId: null, topicId: null, title: taskName ?? "拆卡", role: PLANNER, seq: 1, taskId, taskName, missionId, projectId,
     doing: null, step: null, where: "local", device: deviceName, endedAt: null, costUsd: null, tokens: 0, ask: null, item: null, workspace: null, git: null, waitingFor: null,
   });
   const keys = new Set(listed.map((worker) => worker.key));
   const local = sessions.flatMap((session): Worker[] => {
     const { subject } = session;
-    if (subject.kind !== "plan" || !subject.taskId || !LIVE.has(session.status) || keys.has(`plan:${session.id}`)) return [];
-    const task = tasks.find((entry) => entry.taskId === subject.taskId);
-    const queued = session.status === "queued";
-    return [{ ...base(subject.taskId, task?.name ?? null, task?.missionId ?? null), key: `plan:${session.id}`, state: queued ? "queued" : "doing", reason: queued ? "slot" : null,
+    // 拆一件 Task（taskId），或一个没挂 Task 的项目（只带 projectId，16.3）。
+    if (subject.kind !== "plan" || !(subject.taskId || subject.projectId) || !LIVE.has(session.status) || keys.has(`plan:${session.id}`)) return [];
+    const task = subject.taskId ? tasks.find((entry) => entry.taskId === subject.taskId) : undefined;
+    const held = session.hold ?? null;
+    const queued = session.status === "queued" || !!held;
+    return [{ ...base(subject.taskId ?? null, task?.name ?? null, task?.missionId ?? null, subject.taskId ? null : subject.projectId ?? null), key: `plan:${session.id}`, state: queued ? "queued" : "doing",
+      reason: held ? "quota" : queued ? "slot" : null, holdUntil: held?.until ?? null,
       mark: queued ? null : localWaitOf(session), queuePos: session.queuePosition, model: session.modelLabel, startedAt: session.createdAt, session,
       costUsd: session.usage.costUsd, tokens: session.usage.inputTokens + session.usage.outputTokens }];
   });
-  const busy = new Set([...listed, ...local].filter((worker) => worker.kind === "plan" && worker.state !== "done").map((worker) => worker.taskId));
-  const waiting = splits.filter((request) => !busy.has(request.taskId)).map((request): Worker => ({
-    ...base(request.taskId, request.taskName, request.missionId), key: `split:${request.id}`, state: "queued", reason: "start", mark: null, queuePos: null, model: null,
+  const target = (taskId: string | null, projectId: string | null | undefined) => taskId ?? `project:${projectId}`;
+  const busy = new Set([...listed, ...local].filter((worker) => worker.kind === "plan" && worker.state !== "done").map((worker) => target(worker.taskId, worker.projectId)));
+  const waiting = splits.filter((request) => !busy.has(target(request.taskId, request.projectId))).map((request): Worker => ({
+    ...base(request.taskId, request.taskName ?? request.projectName, request.missionId, request.taskId ? null : request.projectId), key: `split:${request.id}`, state: "queued", reason: "start", holdUntil: null, mark: null, queuePos: null, model: null,
     startedAt: null, session: null, splitId: request.id, requestedAt: request.createdAt,
   }));
   return [...local, ...waiting];

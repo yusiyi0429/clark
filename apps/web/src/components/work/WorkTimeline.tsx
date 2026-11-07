@@ -1,18 +1,20 @@
 "use client";
 
 /**
- * 新首页中间的对话时间线：和 ConversationTimeline 一样画对话（同一套零件，不改它们），另外把网页插入的块
- * （派活单、四种小卡，V2 设计第 20.3 节）按时间插在对话之间：插在它之前最近的一条消息后面，比第一条消息还早的放在最前。
+ * 新首页中间的对话时间线（总管线、Task 管线）：和 ConversationTimeline 一样画对话（同一套零件，不改它们），另外把网页插入的块
+ * （开工的选项框、开了哪几个子会话、验收结果和全部完成）按时间插在对话之间：插在它之前最近的一条消息后面，比第一条消息还早的放在最前。
+ * 伙伴的提问卡画成就地答的选项框（AskDecision），不再是「开始回答」弹窗。
  */
 import { useMemo, type ReactNode } from "react";
 import { ConversationStatusSlot, ConversationThinking, ConversationTurns } from "@/conversation/Transcript";
 import { AnswerOptions } from "@/conversation/AnswerOptionRow";
 import { EntryCards } from "@/conversation/EntryCards";
-import { AskContext } from "@/conversation/AskPanel";
+import { AskContext, askAnswers } from "@/conversation/AskPanel";
 import { parseAnswerOptions } from "@/conversation/answerOptions";
 import { RescopeContext } from "@/conversation/ScopeChip";
 import { withoutSupersededCards } from "@/conversation/ConversationTimeline";
 import type { ConversationData } from "@/conversation/useConversation";
+import { AskDecision } from "./decisions";
 
 export type TimedBlock = { key: string; at: string; node: ReactNode };
 
@@ -36,8 +38,8 @@ export function WorkTimeline({ data, blocks }: { data: ConversationData; blocks:
   const options = !data.streaming && last?.role === "assistant" ? parseAnswerOptions(last.content).options : [];
   const latestCards = useMemo(() => withoutSupersededCards(data.messages), [data.messages]);
   const placed = useMemo(() => placeBlocks(data.messages.map((message) => message.createdAt), blocks), [data.messages, blocks]);
-  const ask = useMemo(() => ({ send: data.send, streaming: data.streaming,
-    answered: new Set(data.messages.flatMap((message) => (message.answers ? [message.answers.askId] : []))) }), [data.send, data.streaming, data.messages]);
+  // 新首页的对话：答过的提问卡原处收成一行（inline），不另画本人那条问答记录。
+  const ask = useMemo(() => ({ send: data.send, streaming: data.streaming, ...askAnswers(data.messages), inline: true }), [data.send, data.streaming, data.messages]);
   const status = data.streaming ? (
     <ConversationStatusSlot>
       {data.thinking ? <ConversationThinking stage={data.stage} startedAt={data.startedAt} onStop={data.stop} route={data.route} progress={data.progress} steps={data.steps} thought={data.thought} readScope={data.readScope} /> : null}
@@ -55,10 +57,13 @@ export function WorkTimeline({ data, blocks }: { data: ConversationData; blocks:
       steps={!data.thinking || data.stage === "answering" ? data.steps : null}
       footer={(index) => (index === lastIndex && options.length ? <AnswerOptions scope={data.scope} options={options} /> : null)}
       after={(index) => {
-        const cards = latestCards[index];
+        const cards = latestCards[index] ?? [];
+        // 伙伴的提问卡在对话里就地答（选项框），别的卡照旧。
+        const asks = cards.filter((card): card is Extract<typeof card, { kind: "questions" }> => card.kind === "questions");
+        const rest = cards.filter((card) => card.kind !== "questions");
         const inserted = blocksAt(index);
-        if (!cards?.length && !inserted.length) return null;
-        return <>{cards?.length ? <EntryCards cards={cards} createdAt={data.messages[index].createdAt} /> : null}{inserted}</>;
+        if (!cards.length && !inserted.length) return null;
+        return <>{rest.length ? <EntryCards cards={rest} createdAt={data.messages[index].createdAt} /> : null}{asks.map((card) => <AskDecision key={card.askId} card={card} />)}{inserted}</>;
       }} />
     </AskContext.Provider>
     </RescopeContext.Provider>

@@ -89,17 +89,17 @@ describe("手机宽度只能看", () => {
     expect(column(html, "todo")).not.toContain(">开始<");
     const request = { requestId: "r", toolName: "Bash", title: "运行 pnpm test", input: {}, outsidePaths: [] as string[], canAllowForSession: true, requestedAt: "2026-11-06T01:00:00Z" };
     const transcript = (canAct: boolean, extra: Partial<typeof request> = {}) =>
-      renderToStaticMarkup(<SessionTranscript entries={[{ kind: "permission", seq: 1, at: request.requestedAt, request: { ...request, ...extra }, decision: null }]} agentName="Claude Code" canAct={canAct} onDecide={vi.fn()} />);
+      renderToStaticMarkup(<SessionTranscript entries={[{ kind: "permission", seq: 1, at: request.requestedAt, request: { ...request, ...extra }, decision: null }]} agentName="Claude Code" canAct={canAct} live onDecide={vi.fn()} />);
     expect(transcript(false)).toContain("运行 pnpm test");
     expect(transcript(false)).not.toContain("批准");
     expect(transcript(true)).toContain("批准");
-    expect(transcript(true)).toContain("这张卡都允许");
-    // 越界：标红写出路径，只能允许这一次。
+    expect(transcript(true)).toContain("同类以后都批准");
+    // 工作区外（5.4.3）：头部「工作区外」chip，路径标红列出，只能批准这一次。
     const outside = transcript(true, { outsidePaths: ["C:\\Users\\me\\.ssh\\id_rsa"], canAllowForSession: false });
-    expect(outside).toContain("data-outside");
-    expect(outside).toContain("越界：C:\\Users\\me\\.ssh\\id_rsa");
-    expect(outside).toContain("允许这一次");
-    expect(outside).not.toContain("这张卡都允许");
+    expect(outside).toContain(">工作区外<");
+    expect(outside).toContain(">C:\\Users\\me\\.ssh\\id_rsa<");
+    expect(outside).toContain(">批准<");
+    expect(outside).not.toContain("同类以后都批准");
   });
 });
 

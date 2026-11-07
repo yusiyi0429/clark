@@ -61,7 +61,7 @@ const yang = { personId: "yang", name: "杨主任" };
 const agreement = (patch: Partial<TTaskAgreementResponse> = {}): TTaskAgreementResponse => ({
   taskId: "t1", taskName: task.name, missionId: "m1", basis: "acceptance", source: "none",
   criteria: criteria.map((text, index) => ({ index: index + 1, text, proof: null, acceptor: null })),
-  exclusions: [], complete: false, basisChanged: false, canEdit: true, updatedBy: null, updatedAt: null, ...patch,
+  exclusions: [], complete: false, basisChanged: false, canEdit: true, updatedBy: null, updatedAt: null, draftFrom: null, ...patch,
 });
 const row = (index: number, status: TTaskCheckCriterion["status"], patch: Partial<TTaskCheckCriterion> = {}): TTaskCheckCriterion => ({
   index, text: criteria[index - 1], status, proof: null, acceptor: null, evidence: null, gap: null, notifiedToday: false, ...patch,

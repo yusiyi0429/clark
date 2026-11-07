@@ -9,19 +9,19 @@
   gap: 2px;
   padding: 3px;
   border-radius: 999px;
-  background: #eef2f8;
+  background: var(--default-soft);
 }
 
 .pose {
   position: relative;
   padding: 4px 14px;
   border-radius: 999px;
-  color: #5d6878;
+  color: var(--ink-muted);
   font-size: 12.5px;
   cursor: pointer;
 }
 
-.pose[data-selected] { background: #fff; color: #1f2a3d; box-shadow: 0 1px 3px rgb(31 53 86 / 12%); }
+.pose[data-selected] { background: var(--surface); color: var(--ink); box-shadow: var(--elev-2); }
 
 /* 按列排：清单前三种（横放胶囊）进左列，后两种（探出半身的形象）进右列。 */
 .options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(3, auto); grid-auto-flow: column; gap: 10px; }
@@ -30,19 +30,19 @@
   position: relative;
   display: grid;
   padding: 8px;
-  border: 1px solid #e3e8ef;
+  border: 1px solid var(--hairline);
   border-radius: 18px;
-  background: #fff;
+  background: var(--surface);
   cursor: pointer;
   transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 
-.option:hover { border-color: #c9d4e4; }
-.option[data-selected] { border-color: #3a6cf0; box-shadow: 0 0 0 1px #3a6cf0, 0 6px 18px -10px rgb(0 40 255 / 35%); }
+.option:hover { border-color: var(--hairline-strong); }
+.option[data-selected] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 
 /* 原生单选框留给键盘和读屏，眼睛看的是整格的选中框。 */
 .poses input, .options input { position: absolute; opacity: 0; pointer-events: none; }
-.option:has(input:focus-visible), .pose:has(input:focus-visible) { outline: 2px solid #3a6cf0; outline-offset: 2px; }
+.option:has(input:focus-visible), .pose:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 /* 台子：参考图那种上浅下更浅的晨雾蓝；上面留出熊猫耳朵、Miles 和 C妹 探出来的那一截。格子窄时胶囊跟着变窄。 */
 .stage {
@@ -50,6 +50,6 @@
   place-items: center;
   height: 96px;
   border-radius: 12px;
-  background: linear-gradient(180deg, #e7efff 0%, #f3f7fd 100%);
+  background: var(--accent-soft);
   --coagent-capsule-width: min(184px, calc(100% - 24px));
 }
