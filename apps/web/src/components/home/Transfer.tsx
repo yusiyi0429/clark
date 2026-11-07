@@ -27,6 +27,8 @@ import { useViewChrome } from "./view";
 import h from "@/styles/home.module.css";
 
 const noop = () => undefined;
+/** 交接说明还在写时隔多久读一次。 */
+const NOTE_POLL_MS = 3000;
 
 /** 还在跑（或排着、等你）的会话：转之前要问等做完还是停掉。 */
 const busy = (project: Project) => project.subSessions.filter((sub) => sub.state === "running" || sub.state === "queued" || sub.state === "waiting");
@@ -69,8 +71,18 @@ export function TransferFlow({ project, transfer, onChanged, onStop }: {
   const askCheck = preparing && !askRunning && !!project.folder && transfer.check === null;
   const waitCheck = preparing && transfer.check === "wait" && !transfer.checkResult;
   const ready = preparing && !askRunning && !waitRunning && !askCheck && !waitCheck;
-  const writing = preparing && (!ready || !transfer.note);
-  const now = useTicking(writing);
+  // 交接说明 null 就是云端在后台写（发起时、存下本机检查结果后各写一遍；写不出来退回拼的四段）：一行「正在写交接说明」加用时，隔几秒读一次这份转交。
+  const writingNote = preparing && !transfer.note;
+  const now = useTicking(preparing && (!ready || writingNote));
+  const changedRef = useRef(onChanged);
+  useEffect(() => { changedRef.current = onChanged; });
+  useEffect(() => {
+    if (!writingNote) return;
+    const timer = window.setInterval(() => {
+      void readTransfer(transfer.id).then((fresh) => { if (fresh && (fresh.note || fresh.status !== "preparing")) void changedRef.current(); }, () => undefined);
+    }, NOTE_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [writingNote, transfer.id]);
   const { failed, attempt } = useAttempt();
   const save = (patch: Parameters<typeof updateTransfer>[1]) => attempt(async () => { await updateTransfer(transfer.id, patch); await onChanged(); });
   // 等本机检查：这台电脑上本机程序就绪了就查一次（只看 git），结果交给云端写「代码在哪」。
@@ -83,9 +95,9 @@ export function TransferFlow({ project, transfer, onChanged, onStop }: {
   return (
     <div className={h.transfer} data-testid="transfer-flow">
       <p className={h.line}>
-        <StateIcon state={writing ? "running" : "done"} />
+        <StateIcon state={preparing && !ready ? "running" : "done"} />
         准备交接给 {transfer.to.name}
-        {writing ? <span className={h.lineMore}> · {duration(transfer.startedAt, now)}</span> : null}
+        {preparing && !ready ? <span className={h.lineMore}> · {duration(transfer.startedAt, now)}</span> : null}
       </p>
       {askRunning ? (
         <DecisionBox kind="question" title={`有 ${running.length} 个会话在跑`} testId="transfer-running"
@@ -105,6 +117,10 @@ export function TransferFlow({ project, transfer, onChanged, onStop }: {
       {waitCheck ? (
         <p className={h.line}><StateIcon state="queued" />检查文件夹 · 等本机上线
           <HeroButton variant="ghost" size="sm" onPress={() => save({ check: "skip" })}>不检查直接转</HeroButton></p>
+      ) : null}
+      {ready && writingNote ? (
+        <p className={h.line} data-testid="note-writing"><StateIcon state="running" />正在写交接说明
+          <span className={h.lineMore}> · {duration(transfer.checkResult?.checkedAt ?? transfer.startedAt, now)}</span></p>
       ) : null}
       {failed ? <FailedLine {...failed} /> : null}
       {transfer.note && (ready || !preparing) ? <HandoverCard transfer={transfer} onChanged={onChanged} /> : null}

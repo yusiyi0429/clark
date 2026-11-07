@@ -493,7 +493,8 @@ export function localBackground({ sessions, deviceId, canStop, today, taskOfCard
     const taskId = subject.taskId ?? (cardId ? taskOfCard(cardId) : topicId ? taskOfTopic(topicId) : null);
     const where = { sessionId: session.id, deviceId, taskId, cardId, topicId };
     const own: BackgroundItem[] = subject.kind === "plan" || subject.kind === "verify" ? [{
-      id: `${subject.kind}:${session.id}`, kind: subject.kind, title: subject.kind === "plan" ? "拆卡" : verifyTitle(session.title),
+      // 规划员的会话名就是「拆卡：{Task 或项目名}」（和云端的一样）。
+      id: `${subject.kind}:${session.id}`, kind: subject.kind, title: subject.kind === "plan" ? session.title || "拆卡" : verifyTitle(session.title),
       state: session.hold ? "queued" : sessionState(session.status), startedAt: session.createdAt, finishedAt: LIVE.has(session.status) ? null : session.updatedAt,
       stoppable: canStop && LIVE.has(session.status), itemId: null, holdUntil: session.hold?.until ?? null, ...where,
     }] : [];

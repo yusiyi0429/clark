@@ -37,7 +37,7 @@ describe("项目转交（16.7，接 B 的转交接口）", () => {
     expect(sent).not.toContain('aria-label="改「');
   });
 
-  it("准备交接：有在跑的会话先问「等做完再转（推荐）/ 停掉」；绑了文件夹的再问检查；说明还没写好时不出卡", () => {
+  it("准备交接：有在跑的会话先问「等做完再转（推荐）/ 停掉」；绑了文件夹的再问检查；说明还在写时是「正在写交接说明」、不出卡", () => {
     const running = render(<TransferFlow project={project({ subSessions: [sub("1", "running")] as never, folder: "Chat_Service" })} transfer={transfer()} onChanged={noop} onStop={noop} />);
     expect(running).toContain("准备交接给 陈晨星");
     expect(running).toMatch(/有 1 个会话在跑.*等做完再转.*停掉/);
@@ -49,7 +49,11 @@ describe("项目转交（16.7，接 B 的转交接口）", () => {
     const checked = render(<TransferFlow project={project({ folder: "Chat_Service" })} onChanged={noop} onStop={noop}
       transfer={transfer({ check: "wait", note: NOTE, checkResult: { projectId: "p", checkedAt: "2026-11-07T10:01:00.000Z", folder: null, git: null, recentFiles: null } })} />);
     expect(checked).toContain('data-testid="handover-card"');
-    expect(render(<TransferFlow project={project()} transfer={transfer()} onChanged={noop} onStop={noop} />)).not.toContain('data-testid="handover-card"');
+    // 交接说明 null 就是云端在后台写：一行「正在写交接说明」加用时，没有卡；问题没答完时不出这一行。
+    const writing = render(<TransferFlow project={project()} transfer={transfer()} onChanged={noop} onStop={noop} />);
+    expect(writing).not.toContain('data-testid="handover-card"');
+    expect(writing).toMatch(/data-testid="note-writing".*正在写交接说明.*·/);
+    expect(running).not.toContain("正在写交接说明");
   });
 
   it("发出以后：项目行写「等 {名字} 接手」，接走了「已交给 {名字}」；对话里「已交给 {名字} · 等接手」", () => {
