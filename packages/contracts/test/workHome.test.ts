@@ -3,7 +3,7 @@ import { FormatRegistry } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import {
   AcceptCardDraftsRequest, BackgroundQuery, BackgroundResponse, ClaimSessionStartsResponse, ConversationScope, CreateProjectRequest, ProjectDetailResponse,
-  ProjectFeedResponse, ProjectPipelineResponse, ProjectTransfer, RouteResponse, UpdateProjectRequest, UpdateProjectTransferRequest, WorkHomeResponse,
+  CardPlanBriefResponse, CardSplitRequestView, ProjectBoardResponse, ProjectFeedResponse, ProjectPipelineResponse, ProjectTransfer, RouteResponse, UpdateProjectRequest, UpdateProjectTransferRequest, WorkHomeResponse,
 } from "../src/index.js";
 import { buildOpenApiDocument } from "../src/openapi.js";
 
@@ -102,6 +102,9 @@ describe("新首页契约", () => {
       clone: { repoUrl: "https://github.com/x/y.git", branch: "main" } };
     expect(Value.Check(ProjectTransfer, transfer)).toBe(true);
     expect(Value.Check(ProjectTransfer, { ...transfer, status: "draft" })).toBe(false);
+    // 本机 clone 不认的地址（本地路径、file://）云端给 null，不给网页一个点了才报错的地址。
+    expect(Value.Check(ProjectTransfer, { ...transfer, clone: { repoUrl: "file:///D:/code/y", branch: null } })).toBe(false);
+    expect(Value.Check(ProjectTransfer, { ...transfer, clone: { repoUrl: "git@github.com:x/y.git", branch: "handover/chat" } })).toBe(true);
     expect(Value.Check(UpdateProjectTransferRequest, { includeHistory: true })).toBe(true);
     expect(Value.Check(UpdateProjectTransferRequest, { checkResult: check, check: "wait" })).toBe(true);
     expect(Value.Check(UpdateProjectTransferRequest, {})).toBe(false);
@@ -114,6 +117,17 @@ describe("新首页契约", () => {
       { kind: "handover_summary", id: `summary:${uuid}`, at, transferId: uuid, from: person("人豪"), note: transfer.note },
       { kind: "transfer_declined", id: `declined:${uuid}`, at, transferId: uuid, by: person("晨星") },
     ] })).toBe(true);
+  });
+
+  it("没挂 Task 的项目也能拆卡（16.3）：登记、交代、项目看板", () => {
+    expect(Value.Check(CardSplitRequestView, { id: uuid, taskId: null, taskName: null, missionId: null, projectId: uuid, projectName: "Chat 服务", origin: "web",
+      createdAt: at })).toBe(true);
+    expect(Value.Check(CardSplitRequestView, { id: uuid, taskId: "T-1", taskName: "上线", missionId: "M1", projectId: null, projectName: null, origin: "buddy",
+      createdAt: at })).toBe(true);
+    expect(Value.Check(CardPlanBriefResponse, { markdown: "# 拆卡：Chat 服务", role: null, task: null, project: { projectId: uuid, name: "Chat 服务" }, criteria: [],
+      exclusions: [], roles: [] })).toBe(true);
+    expect(Value.Check(ProjectBoardResponse, { projectId: uuid, cards: [], drafts: [{ id: uuid, planId: uuid, position: 0, title: "接网关", brief: "做什么",
+      doneDefinition: "能连上；有日志", criterionIndex: null, role: null, suggestPresetKey: null, executor: "claude_code", modelTier: "normal", why: null }], plan: null })).toBe(true);
   });
 
   it("自动分发到项目、认领开工带项目", () => {
@@ -140,7 +154,8 @@ describe("新首页契约", () => {
       "/api/me/projects/{projectId}/pipeline", "/api/me/projects/{projectId}/feed", "/api/me/route", "/api/me/session-starts/claim",
       "/api/me/session-starts/{id}/release", "/api/me/projects/{projectId}/transfers", "/api/me/project-transfers/{id}", "/api/me/project-transfers/{id}/send",
       "/api/me/project-transfers/{id}/withdraw", "/api/me/project-transfers/{id}/accept", "/api/me/project-transfers/{id}/decline",
-      "/api/me/project-transfers/{id}/history", "/api/me/sub-sessions/{kind}/{id}/start"]) expect(paths[key]).toBeDefined();
+      "/api/me/project-transfers/{id}/history", "/api/me/sub-sessions/{kind}/{id}/start", "/api/me/projects/{projectId}/board", "/api/me/projects/{projectId}/card-splits",
+      "/api/me/projects/{projectId}/plan-brief", "/api/me/projects/{projectId}/card-drafts/accept"]) expect(paths[key]).toBeDefined();
     expect(paths["/api/me/tasks/{taskId}/pipeline"]).toBeUndefined();
   });
 });

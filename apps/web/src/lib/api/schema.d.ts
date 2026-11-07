@@ -4999,6 +4999,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/projects/{projectId}/board": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 没挂 Task 的项目拆卡（16.3）：项目里不挂 Task 的卡、还没处理的派活单草稿、最近一次计划 */
+        get: operations["getProjectBoard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/projects/{projectId}/card-splits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 登记拆这个项目（16.3，没挂 Task 也能拆）：只记下来，网页在本人电脑上开规划员；已有一条没开工的回那一条（200） */
+        post: operations["registerProjectCardSplit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/projects/{projectId}/plan-brief": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 拆项目的规划员交代（16.3）：项目名、目标历史、已有的卡；每件派活单自带完成标准 */
+        get: operations["getProjectPlanBrief"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/projects/{projectId}/card-drafts/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 把项目的派活单草稿放进看板（16.3）：卡挂项目、不挂 Task；start=true 时交给 Agent 的卡同时登记要开工 */
+        post: operations["acceptProjectCardDrafts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/projects/{projectId}/transfers": {
         parameters: {
             query?: never;
@@ -17486,9 +17554,11 @@ export interface components {
         CardSplitRequestView: {
             /** Format: uuid */
             id: string;
-            taskId: string;
-            taskName: string;
-            missionId: string;
+            taskId: string | null;
+            taskName: string | null;
+            missionId: string | null;
+            projectId: string | null;
+            projectName: string | null;
             origin: "buddy" | "web";
             /** Format: date-time */
             createdAt: string;
@@ -17497,9 +17567,11 @@ export interface components {
             requests: {
                 /** Format: uuid */
                 id: string;
-                taskId: string;
-                taskName: string;
-                missionId: string;
+                taskId: string | null;
+                taskName: string | null;
+                missionId: string | null;
+                projectId: string | null;
+                projectName: string | null;
                 origin: "buddy" | "web";
                 /** Format: date-time */
                 createdAt: string;
@@ -17531,7 +17603,12 @@ export interface components {
                 taskId: string;
                 name: string;
                 missionId: string;
-            };
+            } | null;
+            project: {
+                /** Format: uuid */
+                projectId: string;
+                name: string;
+            } | null;
             criteria: {
                 index: number;
                 text: string;
@@ -17703,6 +17780,7 @@ export interface components {
                     lines: string[];
                 }[] | null;
                 checkResult: {
+                    /** Format: uuid */
                     projectId: string;
                     /** Format: date-time */
                     checkedAt: string;
@@ -17929,6 +18007,7 @@ export interface components {
                         lines: string[];
                     }[] | null;
                     checkResult: {
+                        /** Format: uuid */
                         projectId: string;
                         /** Format: date-time */
                         checkedAt: string;
@@ -18320,6 +18399,7 @@ export interface components {
                     lines: string[];
                 }[] | null;
                 checkResult: {
+                    /** Format: uuid */
                     projectId: string;
                     /** Format: date-time */
                     checkedAt: string;
@@ -18388,6 +18468,7 @@ export interface components {
                         lines: string[];
                     }[] | null;
                     checkResult: {
+                        /** Format: uuid */
                         projectId: string;
                         /** Format: date-time */
                         checkedAt: string;
@@ -18476,6 +18557,7 @@ export interface components {
                         lines: string[];
                     }[] | null;
                     checkResult: {
+                        /** Format: uuid */
                         projectId: string;
                         /** Format: date-time */
                         checkedAt: string;
@@ -18754,6 +18836,192 @@ export interface components {
                 };
             })[];
         };
+        ProjectBoardResponse: {
+            /** Format: uuid */
+            projectId: string;
+            cards: {
+                id: string;
+                version: number;
+                title: string;
+                status: "not_started" | "in_progress" | "done" | "returned";
+                source: "meeting" | "self" | "plan" | "agent";
+                startDate: string | null;
+                dueDate: string | null;
+                doneDefinition: string | null;
+                mission: {
+                    missionId: string;
+                    title: string;
+                    cardId: string | null;
+                    period: string;
+                    battlefieldName: string;
+                    step: number;
+                    steps: number;
+                } | null;
+                waitingOn: {
+                    taskId: string;
+                    title: string;
+                } | null;
+                owner: {
+                    personId: string;
+                    name: string;
+                };
+                collaborators: {
+                    personId: string;
+                    name: string;
+                }[];
+                latestProgress: {
+                    body: string;
+                    source: "web" | "codex" | "claude" | "github" | "other";
+                    author: {
+                        personId: string;
+                        name: string;
+                    };
+                    createdAt: string;
+                } | null;
+                returnReason: string | null;
+                origin: {
+                    /** @constant */
+                    type: "meeting";
+                    meetingId: string;
+                    meetingTitle: string;
+                    quote: string | null;
+                } | null;
+                awaitingAcceptance: boolean;
+                planTaskId: string | null;
+                blocker: {
+                    reason: string;
+                    waitingOn: {
+                        personId: string;
+                        name: string;
+                    } | null;
+                    since: string;
+                } | null;
+                unplaced?: {
+                    reason: string | null;
+                };
+                createdAt: string;
+                updatedAt: string;
+                card: {
+                    stage: "todo" | "doing" | "review" | "done";
+                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                    role: {
+                        /** Format: uuid */
+                        id: string;
+                        name: string;
+                        kind: "worker" | "reviewer" | "critic";
+                    } | null;
+                    executor: ("claude_code" | "self") | null;
+                    model: {
+                        id: string;
+                        label: string;
+                        kind: "subscription" | "gateway";
+                    } | null;
+                    criterion: {
+                        index: number;
+                        text: string;
+                    } | null;
+                    run: {
+                        /** Format: uuid */
+                        id: string;
+                        /** Format: uuid */
+                        deviceId: string;
+                        deviceName: string;
+                        state: "queued" | "starting" | "running" | "waiting_permission" | "idle" | "exited" | "done" | "failed";
+                        modelLabel: string | null;
+                        plan: {
+                            done: number;
+                            total: number;
+                            step: number;
+                            current: string | null;
+                        };
+                        lastActivity: {
+                            /** Format: date-time */
+                            at: string;
+                            text: string;
+                        } | null;
+                        cost: {
+                            inputTokens: number;
+                            outputTokens: number;
+                            costUsd: number | null;
+                        };
+                        /** Format: date-time */
+                        startedAt: string;
+                        /** Format: date-time */
+                        updatedAt: string;
+                        endedAt: string | null;
+                    } | null;
+                    handback: {
+                        /** Format: uuid */
+                        id: string;
+                        attempt: number;
+                        status: "queued" | "running" | "done" | "failed";
+                        outcome: ("pass" | "fail") | null;
+                        met: number;
+                        total: number;
+                        headline: string | null;
+                        returnText: string | null;
+                        returnedAt: string | null;
+                        overruled: boolean;
+                        /** Format: date-time */
+                        createdAt: string;
+                        finishedAt: string | null;
+                        git: {
+                            branch: string;
+                            baseBranch: string;
+                            baseCommit: string;
+                            commit: string;
+                            verifiedCommit: string | null;
+                        } | null;
+                    } | null;
+                    deliverable: {
+                        state: "pending" | "included";
+                        versionNumber: number;
+                    } | null;
+                    after: string[];
+                };
+            }[];
+            drafts: {
+                /** Format: uuid */
+                id: string;
+                /** Format: uuid */
+                planId: string;
+                position: number;
+                title: string;
+                brief: string;
+                doneDefinition: string;
+                criterionIndex: number | null;
+                role: {
+                    /** Format: uuid */
+                    id: string;
+                    name: string;
+                    kind: "worker" | "reviewer" | "critic";
+                } | null;
+                suggestPresetKey: string | null;
+                executor: "claude_code" | "self";
+                modelTier: "strong" | "normal" | "light";
+                why: string | null;
+            }[];
+            plan: {
+                /** Format: uuid */
+                id: string;
+                status: "queued" | "running" | "done" | "failed";
+                hint: string | null;
+                error: string | null;
+                /** Format: date-time */
+                createdAt: string;
+                startedAt: string | null;
+                finishedAt: string | null;
+                expectedSeconds: number;
+                source: "cloud" | "local";
+                summary: string | null;
+                steps: {
+                    title: string;
+                    detail: string | null;
+                }[];
+                risks: string[];
+                revision: number | null;
+            } | null;
+        };
         ProjectHandoverItem: {
             /** @constant */
             kind: "handover";
@@ -18835,6 +19103,7 @@ export interface components {
                 lines: string[];
             }[] | null;
             checkResult: {
+                /** Format: uuid */
                 projectId: string;
                 /** Format: date-time */
                 checkedAt: string;
@@ -18879,6 +19148,7 @@ export interface components {
             running?: ("wait" | "stop") | null;
             check?: ("wait" | "skip") | null;
             checkResult?: {
+                /** Format: uuid */
                 projectId: string;
                 /** Format: date-time */
                 checkedAt: string;
@@ -36500,6 +36770,242 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getProjectBoard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 项目看板 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectBoardResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    registerProjectCardSplit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已有的登记 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardSplitRequestView"];
+                };
+            };
+            /** @description 新登记 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardSplitRequestView"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getProjectPlanBrief: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 交代 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardPlanBriefResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    acceptProjectCardDrafts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcceptCardDraftsRequest"];
+            };
+        };
+        responses: {
+            /** @description 放进去的卡 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcceptCardDraftsResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

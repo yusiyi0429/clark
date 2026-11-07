@@ -324,7 +324,7 @@ export const LocalModelProfileUpsert = Type.Object({
 }, strict);
 
 /** 文件夹挂在哪个项目上（项目 id 是天枢给的，name 是绑定时网页带来的名字，只用来显示）。 */
-export const LocalFolderProject = Type.Object({ projectId: Type.String({ minLength: 1, maxLength: 80 }), name: Nullable(Type.String({ maxLength: 120 })) }, strict);
+export const LocalFolderProject = Type.Object({ projectId: Uuid, name: Nullable(Type.String({ maxLength: 120 })) }, strict);
 /**
  * 本人允许本机程序读写的文件夹。只能经本机弹出的系统选择框添加（POST /v1/folders/pick），网页不能直接写路径。
  * projects：这个文件夹在这台电脑上挂着哪几个项目（新首页设计 16.6，连接页的文件夹列表用）；GET /v1/folders 总会带，选文件夹的回执不带。
@@ -342,7 +342,7 @@ export const LocalFolder = Type.Object({
  * 专题、规划员照旧用各自的专用目录。
  */
 export const LocalProjectFolder = Type.Object({
-  projectId: Type.String({ minLength: 1, maxLength: 80 }),
+  projectId: Uuid,
   name: Nullable(Type.String({ maxLength: 120 })),
   folder: Nullable(Type.Object({ id: Id, path: Type.String(), label: Type.String() }, strict)),
   updatedAt: Instant,
@@ -362,13 +362,13 @@ export const LocalProjectFolderRequest = Type.Object({
 /**
  * POST /v1/projects/:projectId/handover-check（新首页设计 16.7「准备交接」）：项目绑的文件夹现在什么样，只看 git，不调模型。网页把结果交给天枢写交接说明。
  * - folder：绑的文件夹（没绑为 null，这时 git、recentFiles 都是 null）。
- * - git（是 git 仓库时）：branch 当前分支（不在分支上为 null）；remotes 远端（url 去掉了里面的账号口令）；uncommitted 没提交的文件（含没加进 git 的，相对仓库根，最多 200 个，
+ * - git（是 git 仓库时）：branch 当前分支（不在分支上为 null）；remotes 远端（url 去掉了口令：https 的账号口令整个去掉，ssh 只留用户名）；uncommitted 没提交的文件（含没加进 git 的，相对仓库根，最多 200 个，
  *   uncommittedCount 是总数）；unpushed 没推完的本地分支：没有上游的 ahead 为 null，有上游的是比上游多几个提交（卡的 tianshu/… 分支也在这里）。
  * - recentFiles（不是 git 仓库时）：最近改过的文件（相对文件夹，跳过 node_modules、.git 这类目录，最多 30 个，新的在前）。
  * 账号口令、文件内容都不在结果里。
  */
 export const LocalHandoverCheck = Type.Object({
-  projectId: Type.String({ minLength: 1, maxLength: 80 }),
+  projectId: Uuid,
   checkedAt: Instant,
   folder: Nullable(Type.Object({ path: Type.String(), label: Type.String() }, strict)),
   git: Nullable(Type.Object({
@@ -387,9 +387,16 @@ export const LocalHandoverCheck = Type.Object({
  * 本人在选择框点了取消：project 为 null。选的地方不许用（主目录本身等）、那里已经有同名文件夹：400 validation；clone 失败（没有仓库权限、地址不对、断网）：409 conflict，
  * message 是「没拉下来：」加 git 的报错，网页写在 chip 上。可能要几分钟，网页显示用时。
  */
+/**
+ * 能拉的仓库地址（本机 clone 只收这几种；云端 ProjectTransfer.clone 也用它）：https://、ssh://、git@ 开头，不带空白。
+ * 交接检查给的远端已去掉口令（https 的账号口令整个去掉，ssh 只留用户名）；远端是本地路径、file:// 等别的样子时不算能拉。
+ */
+export const LocalRepoUrl = Type.String({ minLength: 8, maxLength: 500, pattern: "^(https://|ssh://|git@)[^\\s]+$" });
+/** 能切的分支名：不以 - 开头，不带空白。 */
+export const LocalBranchName = Type.String({ minLength: 1, maxLength: 250, pattern: "^[^-\\s][^\\s]*$" });
 export const LocalProjectCloneRequest = Type.Object({
-  repoUrl: Type.String({ minLength: 8, maxLength: 500, pattern: "^(https://|ssh://|git@)[^\\s]+$" }),
-  branch: Type.Optional(Type.String({ minLength: 1, maxLength: 250, pattern: "^[^-\\s][^\\s]*$" })),
+  repoUrl: LocalRepoUrl,
+  branch: Type.Optional(LocalBranchName),
   name: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
 }, strict);
 export const LocalProjectCloneResponse = Type.Object({ project: Nullable(LocalProjectFolder), branch: Nullable(Type.String()), fellBack: Type.Boolean() }, strict);
@@ -429,10 +436,11 @@ export const LocalSessionSubject = Type.Object({
   /** 只有 kind=verify（本机填）：验的是哪一次交回，就是那条 handback 同步条目的 key。 */
   handbackKey: Type.Optional(SyncKey),
   /**
-   * 所属项目（新首页设计 16，天枢给的 project_id）：网页开工时带；验收员由本机随被验的卡带上。subject 在每条同步条目里都有，状态上报就带着它。
+   * 所属项目（新首页设计 16，天枢的项目 id）：网页把认领回执里的 SessionStartView.projectId（不为 null 时）原样放进来；验收员由本机随被验的卡带上。
+   * subject 在每条同步条目里都有，状态上报就带着它（云端从 item.subject.projectId 取）。
    * 带了而不指定 cwd 时，本机在这个项目在这台电脑上绑的文件夹里做（见 LocalProjectFolder）。
    */
-  projectId: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
+  projectId: Type.Optional(Uuid),
 }, strict);
 
 export const LocalUsage = Type.Object({
@@ -1155,6 +1163,7 @@ export type TLocalProjectListResponse = Static<typeof LocalProjectListResponse>;
 export type TLocalProjectFolderRequest = Static<typeof LocalProjectFolderRequest>;
 export type TLocalHandoverCheck = Static<typeof LocalHandoverCheck>;
 export type TLocalProjectCloneRequest = Static<typeof LocalProjectCloneRequest>;
+export type TLocalRepoUrl = Static<typeof LocalRepoUrl>;
 export type TLocalProjectCloneResponse = Static<typeof LocalProjectCloneResponse>;
 export type TLocalAttachmentRef = Static<typeof LocalAttachmentRef>;
 export type TLocalSavedAttachment = Static<typeof LocalSavedAttachment>;

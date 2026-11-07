@@ -1,5 +1,5 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
-import { LocalHandoverCheck } from "./localRunner.js";
+import { LocalBranchName, LocalHandoverCheck, LocalRepoUrl } from "./localRunner.js";
 
 /**
  * 项目转交（设计《新首页》16.7；11/07 用户同意，并改了一处：对话记录默认不带）。项目的带走，个人的留下：
@@ -37,7 +37,9 @@ export const HandoverNote = Type.Array(HandoverSection, { maxItems: 12 });
  * - note：交接说明；云端在发起时和存下本机检查结果时按云端的东西拼一份（到哪了、没做完的事、代码在哪、可以问谁），
  *   「关键决定和原因」「怎么跑起来」「坑」由管线读了对话写（伙伴经 /internal 改）；还没有为 null。
  * - checkResult：本机程序的交接检查（D 的 POST /v1/projects/:projectId/handover-check 原样转来）；没检查为 null。
- * - clone：接手人「拉到这台电脑」用的仓库地址和分支（检查结果里 origin（没有就第一个）远端；分支取 handover/ 开头的没推完分支，没有就当前分支）；不是 git 为 null。
+ * - clone：接手人「拉到这台电脑」用的仓库地址和分支（检查结果里 origin（没有就第一个）远端；分支取 handover/ 开头的没推完分支，没有就当前分支），
+ *   形状同本机的 POST /v1/projects/:projectId/clone（LocalRepoUrl、LocalBranchName）。不是 git、远端不是 https://、ssh://、git@ 开头（本地路径、file:// 等）为 null。
+ *   远端地址照本机检查结果存（本机已去掉口令：https 去掉整段 user:password，ssh 只去密码、留着用户名），云端不再改。
  */
 export const ProjectTransfer = Type.Object({
   id: Type.String({ format: "uuid" }),
@@ -53,7 +55,7 @@ export const ProjectTransfer = Type.Object({
   check: Nullable(Type.Union([Type.Literal("wait"), Type.Literal("skip")])),
   note: Nullable(HandoverNote),
   checkResult: Nullable(LocalHandoverCheck),
-  clone: Nullable(Type.Object({ repoUrl: Type.String(), branch: Nullable(Type.String()) }, strict)),
+  clone: Nullable(Type.Object({ repoUrl: LocalRepoUrl, branch: Nullable(LocalBranchName) }, strict)),
 }, strict);
 
 /** POST /api/me/projects/:projectId/transfers（项目负责人，201）：发起。给自己 400；人员目录里没有 404；已有没了结的 409 TRANSFER_OPEN；归档的 409。 */

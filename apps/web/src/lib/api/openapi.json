@@ -20809,6 +20809,288 @@
         }
       }
     },
+    "/api/me/projects/{projectId}/board": {
+      "get": {
+        "operationId": "getProjectBoard",
+        "summary": "没挂 Task 的项目拆卡（16.3）：项目里不挂 Task 的卡、还没处理的派活单草稿、最近一次计划",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "项目看板",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectBoardResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/projects/{projectId}/card-splits": {
+      "post": {
+        "operationId": "registerProjectCardSplit",
+        "summary": "登记拆这个项目（16.3，没挂 Task 也能拆）：只记下来，网页在本人电脑上开规划员；已有一条没开工的回那一条（200）",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "已有的登记",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardSplitRequestView"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "新登记",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardSplitRequestView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/projects/{projectId}/plan-brief": {
+      "get": {
+        "operationId": "getProjectPlanBrief",
+        "summary": "拆项目的规划员交代（16.3）：项目名、目标历史、已有的卡；每件派活单自带完成标准",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "交代",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CardPlanBriefResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/projects/{projectId}/card-drafts/accept": {
+      "post": {
+        "operationId": "acceptProjectCardDrafts",
+        "summary": "把项目的派活单草稿放进看板（16.3）：卡挂项目、不挂 Task；start=true 时交给 Agent 的卡同时登记要开工",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptCardDraftsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "放进去的卡",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AcceptCardDraftsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/projects/{projectId}/transfers": {
       "post": {
         "operationId": "startProjectTransfer",
@@ -106313,6 +106595,8 @@
           "taskId",
           "taskName",
           "missionId",
+          "projectId",
+          "projectName",
           "origin",
           "createdAt"
         ],
@@ -106322,15 +106606,57 @@
             "type": "string"
           },
           "taskId": {
-            "minLength": 1,
-            "type": "string"
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "taskName": {
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "missionId": {
-            "minLength": 1,
-            "type": "string"
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "projectId": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "projectName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "origin": {
             "anyOf": [
@@ -106367,6 +106693,8 @@
                 "taskId",
                 "taskName",
                 "missionId",
+                "projectId",
+                "projectName",
                 "origin",
                 "createdAt"
               ],
@@ -106376,15 +106704,57 @@
                   "type": "string"
                 },
                 "taskId": {
-                  "minLength": 1,
-                  "type": "string"
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "taskName": {
-                  "type": "string"
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "missionId": {
-                  "minLength": 1,
-                  "type": "string"
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "projectId": {
+                  "anyOf": [
+                    {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "projectName": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "origin": {
                   "anyOf": [
@@ -106489,6 +106859,7 @@
           "markdown",
           "role",
           "task",
+          "project",
           "criteria",
           "exclusions",
           "roles"
@@ -106607,26 +106978,57 @@
             ]
           },
           "task": {
-            "additionalProperties": false,
-            "type": "object",
-            "required": [
-              "taskId",
-              "name",
-              "missionId"
-            ],
-            "properties": {
-              "taskId": {
-                "minLength": 1,
-                "type": "string"
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "taskId",
+                  "name",
+                  "missionId"
+                ],
+                "properties": {
+                  "taskId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "missionId": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                }
               },
-              "name": {
-                "type": "string"
-              },
-              "missionId": {
-                "minLength": 1,
-                "type": "string"
+              {
+                "type": "null"
               }
-            }
+            ]
+          },
+          "project": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "projectId",
+                  "name"
+                ],
+                "properties": {
+                  "projectId": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "criteria": {
             "type": "array",
@@ -107949,8 +108351,7 @@
                         ],
                         "properties": {
                           "projectId": {
-                            "minLength": 1,
-                            "maxLength": 80,
+                            "format": "uuid",
                             "type": "string"
                           },
                           "checkedAt": {
@@ -108131,11 +108532,17 @@
                         ],
                         "properties": {
                           "repoUrl": {
+                            "minLength": 8,
+                            "maxLength": 500,
+                            "pattern": "^(https://|ssh://|git@)[^\\s]+$",
                             "type": "string"
                           },
                           "branch": {
                             "anyOf": [
                               {
+                                "minLength": 1,
+                                "maxLength": 250,
+                                "pattern": "^[^-\\s][^\\s]*$",
                                 "type": "string"
                               },
                               {
@@ -109631,8 +110038,7 @@
                               ],
                               "properties": {
                                 "projectId": {
-                                  "minLength": 1,
-                                  "maxLength": 80,
+                                  "format": "uuid",
                                   "type": "string"
                                 },
                                 "checkedAt": {
@@ -109813,11 +110219,17 @@
                               ],
                               "properties": {
                                 "repoUrl": {
+                                  "minLength": 8,
+                                  "maxLength": 500,
+                                  "pattern": "^(https://|ssh://|git@)[^\\s]+$",
                                   "type": "string"
                                 },
                                 "branch": {
                                   "anyOf": [
                                     {
+                                      "minLength": 1,
+                                      "maxLength": 250,
+                                      "pattern": "^[^-\\s][^\\s]*$",
                                       "type": "string"
                                     },
                                     {
@@ -112510,8 +112922,7 @@
                         ],
                         "properties": {
                           "projectId": {
-                            "minLength": 1,
-                            "maxLength": 80,
+                            "format": "uuid",
                             "type": "string"
                           },
                           "checkedAt": {
@@ -112692,11 +113103,17 @@
                         ],
                         "properties": {
                           "repoUrl": {
+                            "minLength": 8,
+                            "maxLength": 500,
+                            "pattern": "^(https://|ssh://|git@)[^\\s]+$",
                             "type": "string"
                           },
                           "branch": {
                             "anyOf": [
                               {
+                                "minLength": 1,
+                                "maxLength": 250,
+                                "pattern": "^[^-\\s][^\\s]*$",
                                 "type": "string"
                               },
                               {
@@ -112971,8 +113388,7 @@
                               ],
                               "properties": {
                                 "projectId": {
-                                  "minLength": 1,
-                                  "maxLength": 80,
+                                  "format": "uuid",
                                   "type": "string"
                                 },
                                 "checkedAt": {
@@ -113153,11 +113569,17 @@
                               ],
                               "properties": {
                                 "repoUrl": {
+                                  "minLength": 8,
+                                  "maxLength": 500,
+                                  "pattern": "^(https://|ssh://|git@)[^\\s]+$",
                                   "type": "string"
                                 },
                                 "branch": {
                                   "anyOf": [
                                     {
+                                      "minLength": 1,
+                                      "maxLength": 250,
+                                      "pattern": "^[^-\\s][^\\s]*$",
                                       "type": "string"
                                     },
                                     {
@@ -113549,8 +113971,7 @@
                             ],
                             "properties": {
                               "projectId": {
-                                "minLength": 1,
-                                "maxLength": 80,
+                                "format": "uuid",
                                 "type": "string"
                               },
                               "checkedAt": {
@@ -113731,11 +114152,17 @@
                             ],
                             "properties": {
                               "repoUrl": {
+                                "minLength": 8,
+                                "maxLength": 500,
+                                "pattern": "^(https://|ssh://|git@)[^\\s]+$",
                                 "type": "string"
                               },
                               "branch": {
                                 "anyOf": [
                                   {
+                                    "minLength": 1,
+                                    "maxLength": 250,
+                                    "pattern": "^[^-\\s][^\\s]*$",
                                     "type": "string"
                                   },
                                   {
@@ -114905,6 +115332,1399 @@
           }
         }
       },
+      "ProjectBoardResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "projectId",
+          "cards",
+          "drafts",
+          "plan"
+        ],
+        "properties": {
+          "projectId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "cards": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "version",
+                "title",
+                "status",
+                "source",
+                "startDate",
+                "dueDate",
+                "doneDefinition",
+                "mission",
+                "waitingOn",
+                "owner",
+                "collaborators",
+                "latestProgress",
+                "returnReason",
+                "origin",
+                "awaitingAcceptance",
+                "planTaskId",
+                "blocker",
+                "createdAt",
+                "updatedAt",
+                "card"
+              ],
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "version": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "title": {
+                  "minLength": 1,
+                  "maxLength": 120,
+                  "type": "string"
+                },
+                "status": {
+                  "anyOf": [
+                    {
+                      "const": "not_started",
+                      "type": "string"
+                    },
+                    {
+                      "const": "in_progress",
+                      "type": "string"
+                    },
+                    {
+                      "const": "done",
+                      "type": "string"
+                    },
+                    {
+                      "const": "returned",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "source": {
+                  "anyOf": [
+                    {
+                      "const": "meeting",
+                      "type": "string"
+                    },
+                    {
+                      "const": "self",
+                      "type": "string"
+                    },
+                    {
+                      "const": "plan",
+                      "type": "string"
+                    },
+                    {
+                      "const": "agent",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "startDate": {
+                  "anyOf": [
+                    {
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "dueDate": {
+                  "anyOf": [
+                    {
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "doneDefinition": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "maxLength": 500,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "mission": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "missionId",
+                        "title",
+                        "cardId",
+                        "period",
+                        "battlefieldName",
+                        "step",
+                        "steps"
+                      ],
+                      "properties": {
+                        "missionId": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "title": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "cardId": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "period": {
+                          "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                          "type": "string"
+                        },
+                        "battlefieldName": {
+                          "type": "string"
+                        },
+                        "step": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "steps": {
+                          "minimum": 1,
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "waitingOn": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "taskId",
+                        "title"
+                      ],
+                      "properties": {
+                        "taskId": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "title": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "owner": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "personId",
+                    "name"
+                  ],
+                  "properties": {
+                    "personId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "name": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  }
+                },
+                "collaborators": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "personId",
+                      "name"
+                    ],
+                    "properties": {
+                      "personId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "name": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "latestProgress": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "body",
+                        "source",
+                        "author",
+                        "createdAt"
+                      ],
+                      "properties": {
+                        "body": {
+                          "minLength": 1,
+                          "maxLength": 2000,
+                          "type": "string"
+                        },
+                        "source": {
+                          "anyOf": [
+                            {
+                              "const": "web",
+                              "type": "string"
+                            },
+                            {
+                              "const": "codex",
+                              "type": "string"
+                            },
+                            {
+                              "const": "claude",
+                              "type": "string"
+                            },
+                            {
+                              "const": "github",
+                              "type": "string"
+                            },
+                            {
+                              "const": "other",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "author": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "personId",
+                            "name"
+                          ],
+                          "properties": {
+                            "personId": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "name": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "createdAt": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "returnReason": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "origin": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "type",
+                        "meetingId",
+                        "meetingTitle",
+                        "quote"
+                      ],
+                      "properties": {
+                        "type": {
+                          "const": "meeting",
+                          "type": "string"
+                        },
+                        "meetingId": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "meetingTitle": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "quote": {
+                          "anyOf": [
+                            {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "awaitingAcceptance": {
+                  "type": "boolean"
+                },
+                "planTaskId": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "blocker": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "reason",
+                        "waitingOn",
+                        "since"
+                      ],
+                      "properties": {
+                        "reason": {
+                          "minLength": 1,
+                          "maxLength": 200,
+                          "type": "string"
+                        },
+                        "waitingOn": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "personId",
+                                "name"
+                              ],
+                              "properties": {
+                                "personId": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "since": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "unplaced": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "reason"
+                  ],
+                  "properties": {
+                    "reason": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                },
+                "createdAt": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "card": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "stage",
+                    "wait",
+                    "role",
+                    "executor",
+                    "model",
+                    "criterion",
+                    "run",
+                    "handback",
+                    "deliverable",
+                    "after"
+                  ],
+                  "properties": {
+                    "stage": {
+                      "anyOf": [
+                        {
+                          "const": "todo",
+                          "type": "string"
+                        },
+                        {
+                          "const": "doing",
+                          "type": "string"
+                        },
+                        {
+                          "const": "review",
+                          "type": "string"
+                        },
+                        {
+                          "const": "done",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "wait": {
+                      "anyOf": [
+                        {
+                          "anyOf": [
+                            {
+                              "const": "approval",
+                              "type": "string"
+                            },
+                            {
+                              "const": "reply",
+                              "type": "string"
+                            },
+                            {
+                              "const": "paused",
+                              "type": "string"
+                            },
+                            {
+                              "const": "review_failed",
+                              "type": "string"
+                            },
+                            {
+                              "const": "blocked",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "role": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "id",
+                            "name",
+                            "kind"
+                          ],
+                          "properties": {
+                            "id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "name": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "kind": {
+                              "anyOf": [
+                                {
+                                  "const": "worker",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "reviewer",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "critic",
+                                  "type": "string"
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "executor": {
+                      "anyOf": [
+                        {
+                          "anyOf": [
+                            {
+                              "const": "claude_code",
+                              "type": "string"
+                            },
+                            {
+                              "const": "self",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "model": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "id",
+                            "label",
+                            "kind"
+                          ],
+                          "properties": {
+                            "id": {
+                              "minLength": 1,
+                              "maxLength": 80,
+                              "pattern": "^[A-Za-z0-9_-]+$",
+                              "type": "string"
+                            },
+                            "label": {
+                              "minLength": 1,
+                              "maxLength": 40,
+                              "type": "string"
+                            },
+                            "kind": {
+                              "anyOf": [
+                                {
+                                  "const": "subscription",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "gateway",
+                                  "type": "string"
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "criterion": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "index",
+                            "text"
+                          ],
+                          "properties": {
+                            "index": {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "text": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "run": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "id",
+                            "deviceId",
+                            "deviceName",
+                            "state",
+                            "modelLabel",
+                            "plan",
+                            "lastActivity",
+                            "cost",
+                            "startedAt",
+                            "updatedAt",
+                            "endedAt"
+                          ],
+                          "properties": {
+                            "id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "deviceId": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "deviceName": {
+                              "type": "string"
+                            },
+                            "state": {
+                              "anyOf": [
+                                {
+                                  "const": "queued",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "starting",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "running",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "waiting_permission",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "idle",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "exited",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "done",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "failed",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "modelLabel": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "plan": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "done",
+                                "total",
+                                "step",
+                                "current"
+                              ],
+                              "properties": {
+                                "done": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "total": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "step": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "current": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "lastActivity": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "at",
+                                    "text"
+                                  ],
+                                  "properties": {
+                                    "at": {
+                                      "format": "date-time",
+                                      "type": "string"
+                                    },
+                                    "text": {
+                                      "minLength": 1,
+                                      "maxLength": 300,
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "cost": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "inputTokens",
+                                "outputTokens",
+                                "costUsd"
+                              ],
+                              "properties": {
+                                "inputTokens": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "outputTokens": {
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "costUsd": {
+                                  "anyOf": [
+                                    {
+                                      "minimum": 0,
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "startedAt": {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            "updatedAt": {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            "endedAt": {
+                              "anyOf": [
+                                {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "handback": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "id",
+                            "attempt",
+                            "status",
+                            "outcome",
+                            "met",
+                            "total",
+                            "headline",
+                            "returnText",
+                            "returnedAt",
+                            "overruled",
+                            "createdAt",
+                            "finishedAt",
+                            "git"
+                          ],
+                          "properties": {
+                            "id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "attempt": {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "status": {
+                              "anyOf": [
+                                {
+                                  "const": "queued",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "running",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "done",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "failed",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "outcome": {
+                              "anyOf": [
+                                {
+                                  "anyOf": [
+                                    {
+                                      "const": "pass",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "fail",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "met": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "total": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "headline": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "returnText": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "returnedAt": {
+                              "anyOf": [
+                                {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "overruled": {
+                              "type": "boolean"
+                            },
+                            "createdAt": {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            "finishedAt": {
+                              "anyOf": [
+                                {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "git": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "branch",
+                                    "baseBranch",
+                                    "baseCommit",
+                                    "commit",
+                                    "verifiedCommit"
+                                  ],
+                                  "properties": {
+                                    "branch": {
+                                      "type": "string"
+                                    },
+                                    "baseBranch": {
+                                      "type": "string"
+                                    },
+                                    "baseCommit": {
+                                      "type": "string"
+                                    },
+                                    "commit": {
+                                      "type": "string"
+                                    },
+                                    "verifiedCommit": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  }
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "deliverable": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "state",
+                            "versionNumber"
+                          ],
+                          "properties": {
+                            "state": {
+                              "anyOf": [
+                                {
+                                  "const": "pending",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "included",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "versionNumber": {
+                              "minimum": 1,
+                              "type": "integer"
+                            }
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "after": {
+                      "type": "array",
+                      "items": {
+                        "format": "uuid",
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "drafts": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "planId",
+                "position",
+                "title",
+                "brief",
+                "doneDefinition",
+                "criterionIndex",
+                "role",
+                "suggestPresetKey",
+                "executor",
+                "modelTier",
+                "why"
+              ],
+              "properties": {
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "planId": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "position": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "title": {
+                  "minLength": 1,
+                  "maxLength": 120,
+                  "type": "string"
+                },
+                "brief": {
+                  "maxLength": 4000,
+                  "type": "string"
+                },
+                "doneDefinition": {
+                  "minLength": 1,
+                  "maxLength": 500,
+                  "type": "string"
+                },
+                "criterionIndex": {
+                  "anyOf": [
+                    {
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "role": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "name",
+                        "kind"
+                      ],
+                      "properties": {
+                        "id": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "name": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "kind": {
+                          "anyOf": [
+                            {
+                              "const": "worker",
+                              "type": "string"
+                            },
+                            {
+                              "const": "reviewer",
+                              "type": "string"
+                            },
+                            {
+                              "const": "critic",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "suggestPresetKey": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "executor": {
+                  "anyOf": [
+                    {
+                      "const": "claude_code",
+                      "type": "string"
+                    },
+                    {
+                      "const": "self",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "modelTier": {
+                  "anyOf": [
+                    {
+                      "const": "strong",
+                      "type": "string"
+                    },
+                    {
+                      "const": "normal",
+                      "type": "string"
+                    },
+                    {
+                      "const": "light",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "why": {
+                  "anyOf": [
+                    {
+                      "maxLength": 200,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "plan": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "id",
+                  "status",
+                  "hint",
+                  "error",
+                  "createdAt",
+                  "startedAt",
+                  "finishedAt",
+                  "expectedSeconds",
+                  "source",
+                  "summary",
+                  "steps",
+                  "risks",
+                  "revision"
+                ],
+                "properties": {
+                  "id": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "status": {
+                    "anyOf": [
+                      {
+                        "const": "queued",
+                        "type": "string"
+                      },
+                      {
+                        "const": "running",
+                        "type": "string"
+                      },
+                      {
+                        "const": "done",
+                        "type": "string"
+                      },
+                      {
+                        "const": "failed",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "hint": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "error": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "createdAt": {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "startedAt": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "finishedAt": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "expectedSeconds": {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "source": {
+                    "anyOf": [
+                      {
+                        "const": "cloud",
+                        "type": "string"
+                      },
+                      {
+                        "const": "local",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "summary": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "steps": {
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "title",
+                        "detail"
+                      ],
+                      "properties": {
+                        "title": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "detail": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "risks": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "revision": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
       "ProjectHandoverItem": {
         "additionalProperties": false,
         "type": "object",
@@ -115317,8 +117137,7 @@
                 ],
                 "properties": {
                   "projectId": {
-                    "minLength": 1,
-                    "maxLength": 80,
+                    "format": "uuid",
                     "type": "string"
                   },
                   "checkedAt": {
@@ -115499,11 +117318,17 @@
                 ],
                 "properties": {
                   "repoUrl": {
+                    "minLength": 8,
+                    "maxLength": 500,
+                    "pattern": "^(https://|ssh://|git@)[^\\s]+$",
                     "type": "string"
                   },
                   "branch": {
                     "anyOf": [
                       {
+                        "minLength": 1,
+                        "maxLength": 250,
+                        "pattern": "^[^-\\s][^\\s]*$",
                         "type": "string"
                       },
                       {
@@ -115618,8 +117443,7 @@
             ],
             "properties": {
               "projectId": {
-                "minLength": 1,
-                "maxLength": 80,
+                "format": "uuid",
                 "type": "string"
               },
               "checkedAt": {

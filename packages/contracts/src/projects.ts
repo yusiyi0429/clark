@@ -1,5 +1,6 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import { PersonRef, ProjectTransfer } from "./projectTransfers.js";
+import { CardDraftView, CardPlanView, CardTaskView } from "./taskCards.js";
 import { TaskFeedItem } from "./workHome.js";
 
 /**
@@ -119,6 +120,21 @@ export const ProjectFeedItem = Type.Union([TaskFeedItem, ProjectGoalLinkedItem, 
 /** GET /api/me/projects/:projectId/feed：从旧到新。 */
 export const ProjectFeedResponse = Type.Object({ items: Type.Array(ProjectFeedItem) }, strict);
 
+/**
+ * 没挂 Task 的项目拆卡（16.3）：GET /api/me/projects/:projectId/board（项目负责人）是这个项目里不挂 Task 的那几样——卡（项目里本人的、不挂 Task 的，含已完成的）、
+ * 还没处理的派活单草稿、最近一次计划。挂着 Task 的卡和草稿照旧看 /api/plan-tasks/:taskId/cards。
+ * 其余几步：POST /api/me/projects/:projectId/card-splits 登记拆卡（201 新登记、200 已有一条没开工的）；GET /api/me/projects/:projectId/plan-brief 规划员的交代；
+ * POST /api/me/projects/:projectId/card-drafts/accept 放进看板（同 AcceptCardDraftsRequest；不挂 Task，带的 budget 不存，开工用本人的缺省预算）；
+ * 不要的草稿照旧 POST /api/card-drafts/:id/dismiss。计划等你开工（等你 plan_start）、规划中（HomeProject.planning）、后台任务的「拆卡：{项目名}」都照 Task 的规矩算。
+ */
+export const ProjectBoardResponse = Type.Object({
+  projectId: Type.String({ format: "uuid" }),
+  cards: Type.Array(CardTaskView),
+  drafts: Type.Array(CardDraftView),
+  plan: Nullable(CardPlanView),
+}, strict);
+
+export type TProjectBoardResponse = Static<typeof ProjectBoardResponse>;
 export type TProject = Static<typeof Project>;
 export type TProjectListResponse = Static<typeof ProjectListResponse>;
 export type TCreateProjectRequest = Static<typeof CreateProjectRequest>;
