@@ -12,20 +12,20 @@
  * 第一次没过不出：改法自动送回重做，不打扰你。B 的接口没上时由各件 Task 看板上的卡拼（derive.ts 的 deriveFeed，没有返工那一种）。
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { TLocalQuestionAnswerRequest, TTaskFeedItem } from "@warmap/contracts";
+import type { TLocalQuestionAnswerRequest, TProjectGoalChangedItem, TTaskFeedItem } from "@warmap/contracts";
 import { HeroButton } from "@/components/HeroButton";
 import { DecisionBox } from "@/components/work/DecisionBox";
 import { ApprovalDecision, QuestionDecision, awayChip } from "@/components/work/decisions";
 import type { TimedBlock } from "@/components/work/WorkTimeline";
 import { useHandheld } from "@/components/ui/useHandheld";
-import { CloudError, overrule, readProjectFeed, shipPending } from "@/lib/board/cloud";
+import { CloudError, answerGoalChange, overrule, readProjectFeed, shipPending } from "@/lib/board/cloud";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { useSessionEvents } from "@/lib/local/useSessionEvents";
 import { running } from "@/lib/local/sessionView";
 import { canCommandHere } from "@/lib/work/actions";
 import { useMergeIssues } from "@/lib/work/merge";
 import type { Worker } from "@/lib/work/workers";
-import { askAnchor, cardHref, deriveFeed, infoHref } from "@/lib/home/derive";
+import { askAnchor, cardHref, deriveFeed, goalAnchor, infoHref } from "@/lib/home/derive";
 import type { FeedItem, ProjectFeedItem, WaitingItem } from "@/lib/home/types";
 import type { WorkHomeApi } from "@/lib/home/useWorkHome";
 import { BlockedDecision, MergeDecision, answeredOf, markAnswered } from "./TaskDecisions";
@@ -165,6 +165,42 @@ function CriteriaDecision({ item, go, onSay }: { item: Met; go: (href: string) =
       options={[{ label: "交给认可人", recommended: true }, { label: "先不交" }]}
       onPick={([index]) => (index === 0 ? hand() : settle("先不交"))}
       other={{ onSubmit: say }} />
+  );
+}
+
+const ANSWER_LABEL = { stop: "停掉", keep: "留着" } as const;
+
+/**
+ * 月中 Task 改了或取消了（16.4，项目动态 goal_changed）：还有没做完的子会话时问「停掉（推荐）/ 留着」，下面列出那几个；答过的收成一行。
+ * 停掉：先告诉云端（了结还排着的开工），再停这台电脑上在跑的那几个（同转交的「停掉」）；别的电脑上在跑的只能在那台电脑上停。
+ * 从等你那一行跳来（地址带 #goal-<id>）时滚到这里。
+ */
+export function GoalChangeDecision({ projectId, item, onChanged }: { projectId: string; item: TProjectGoalChangedItem; onChanged: () => void }) {
+  const local = useLocalRunner();
+  const ref = useRef<HTMLDivElement>(null);
+  const title = `${item.taskName}：${item.change === "cancelled" ? "Task 取消了" : "Task 改了"}`;
+  useEffect(() => {
+    if (item.answer || window.location.hash !== `#${goalAnchor(item.id)}`) return;
+    ref.current?.scrollIntoView({ block: "center" });
+    ref.current?.querySelector<HTMLElement>("[data-selected]")?.focus({ preventScroll: true });
+  }, [item.answer, item.id]);
+  const answer = async (value: "stop" | "keep") => {
+    await answerGoalChange(projectId, item.id, value);
+    if (value === "stop" && local.phase === "ready") {
+      const ids = new Set(item.sessions.map((session) => session.id));
+      for (const session of local.sessions.filter((entry) => running(entry.status) && ids.has(entry.subject.cardId ?? entry.subject.topicId ?? ""))) await local.runner.kill(session.id);
+      await local.refresh();
+    }
+    onChanged();
+  };
+  return (
+    <div ref={ref} id={goalAnchor(item.id)} data-testid="goal-change">
+      {item.answer ? <DecisionBox kind="question" title={title} options={[]} onPick={() => undefined} resolved={ANSWER_LABEL[item.answer]} />
+        : <DecisionBox kind="question" title={title} testId="goal-change-box"
+          body={<ul className={f.goalSessions}>{item.sessions.map((session) => <li key={session.id}>{session.title}</li>)}</ul>}
+          options={[{ label: "停掉", recommended: true }, { label: "留着" }]}
+          onPick={([index]) => answer(index === 0 ? "stop" : "keep")} />}
+    </div>
   );
 }
 

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { budgetOf } from "@/components/home/PlanDecision";
 import { money, toneOf, usageCells, type UsageSourceLike } from "./quota";
 
 const now = new Date(2026, 10, 7, 6, 0).getTime();
@@ -44,5 +45,17 @@ describe("右栏用量格子（14.4）", () => {
     expect(usageCells([{ ...claude(), kind: "daily_spend", updatedAt: null }], now)).toEqual([]);
     expect([toneOf(60, false), toneOf(25, false), toneOf(10, false), toneOf(50, true)]).toEqual(["ok", "warning", "danger", "danger"]);
     expect(money([])).toBe("¥0");
+  });
+});
+
+describe("可以为空的数字（契约 7fa432ab）：null 是不知道，0 是 0", () => {
+  it("剩余百分比：null 又没有窗口不画，0 画「0%」、红", () => {
+    expect(usageCells([claude({ windows: [], remainingPercent: null })], now)).toEqual([]);
+    expect(usageCells([claude({ windows: [], remainingPercent: 0 })], now)[0]).toMatchObject({ value: "0%", percent: 0, tone: "danger" });
+  });
+  it("预算：清空的那项发 null，填 0 不算（不发 0），一项有效的都没有时发不出去", () => {
+    expect(budgetOf("set", { hours: "", percent: "30", money: "" })).toEqual({ mode: "set", hours: null, weeklyPercent: 30, money: null });
+    expect(budgetOf("set", { hours: "0", percent: "", money: "" })).toBeNull();
+    expect(budgetOf("set", { hours: "0", percent: "20", money: "" })?.hours).toBeNull();
   });
 });

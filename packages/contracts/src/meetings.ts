@@ -2,6 +2,7 @@ import { Type, type Static } from "@sinclair/typebox";
 import { MeetingOutcomeState, StoredTranscript, TranscriptCandidateProjection } from "./transcript.js";
 import { MeetingAttendees, MeetingDecisionView, MeetingMinutesFailure, MeetingMinutesStatus, PickedWorldAnchor } from "./meetingDecisions.js";
 import { RequestPerson } from "./requests.js";
+import { NullableInteger } from "./nullable.js";
 
 export const MeetingStatus = Type.Union([
   Type.Literal("scheduled"),
@@ -157,8 +158,8 @@ export const PreflightStaleMaterial = Type.Object(
     fileName: Type.String({ minLength: 1 }),
     objectType: Type.Union([Type.Literal("meeting"), Type.Literal("issue")]),
     objectId: Type.String({ minLength: 1 }),
-    usedVersion: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
-    currentVersion: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
+    usedVersion: NullableInteger({ minimum: 1 }),
+    currentVersion: NullableInteger({ minimum: 1 }),
     change: Type.Union([Type.Literal("updated"), Type.Literal("added"), Type.Literal("removed")]),
   },
   { additionalProperties: false },

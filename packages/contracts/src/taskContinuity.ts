@@ -1,4 +1,5 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
+import { NullableInteger } from "./nullable.js";
 
 /**
  * 跨月延续与月份页（设计《新首页_伙伴总管线与Task管线_2026-11-07》第 10 节）：月份只是检查点，不按日历一刀切。
@@ -82,7 +83,7 @@ export const MonthTask = Type.Object({
   missionTitle: Type.String(),
   name: Type.String(),
   agreement: Nullable(Type.Object({ met: Type.Integer({ minimum: 0 }), total: Type.Integer({ minimum: 1 }) }, strict)),
-  version: Nullable(Type.Integer({ minimum: 1 })),
+  version: NullableInteger({ minimum: 1 }),
   running: Type.Integer({ minimum: 0 }),
   blocked: Type.Integer({ minimum: 0 }),
   done: Type.Boolean(),

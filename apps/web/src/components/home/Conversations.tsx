@@ -26,7 +26,7 @@ import type { Project } from "@/lib/home/projects";
 import type { FeedItem, ProjectFeedItem, SubSession } from "@/lib/home/types";
 import type { WorkHomeApi } from "@/lib/home/useWorkHome";
 import { PlanDecision, PlanningLine, StartedRecord } from "./PlanDecision";
-import { feedBlocks, useProjectFeed } from "./TaskFeed";
+import { GoalChangeDecision, feedBlocks, useProjectFeed } from "./TaskFeed";
 import { MonthRule } from "./ProjectParts";
 import { HandoverRule, HandoverSummary, ProjectPull, TransferHistory, useReceived } from "./Transfer";
 import { subHref, subIcon } from "./LeftColumn";
@@ -242,6 +242,7 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
     for (const item of feed) {
       if (item.kind === "handover") list.push({ key: item.id, at: item.at, node: <HandoverRule item={item} /> });
       else if (item.kind === "handover_summary") list.push({ key: item.id, at: item.at, node: <HandoverSummary item={item} onSay={(text) => data.send(text, [])} /> });
+      else if (item.kind === "goal_changed") list.push({ key: item.id, at: item.at, node: <GoalChangeDecision projectId={project.id} item={item} onChanged={() => void changed()} /> });
       else if (item.kind === "transfer_declined") list.push({ key: item.id, at: item.at, node: <p className={h.line} data-testid="transfer-declined"><StateIcon state="stopped" />{item.by.name}没接</p> });
     }
     if (summary && received.history) list.push({ key: `history:${summary.transferId}`, at: "0000-01-01T00:00:00.000Z", node: <TransferHistory history={received.history} from={summary.from} /> });
@@ -299,7 +300,8 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
       const item = sub.sessionId ? waiting.find((entry) => entry.sessionId === sub.sessionId && (entry.kind === "approval" || entry.kind === "question")) : undefined;
       return item ? [[sub.id, item] as const] : [];
     }));
-    const checks = feed.filter((item): item is FeedItem => item.kind !== "goal_linked" && item.kind !== "handover" && item.kind !== "handover_summary" && item.kind !== "transfer_declined");
+    const PROJECT_ONLY = new Set<ProjectFeedItem["kind"]>(["goal_linked", "handover", "handover_summary", "transfer_declined", "goal_changed"]);
+    const checks = feed.filter((item): item is FeedItem => !PROJECT_ONLY.has(item.kind));
     list.push(...feedBlocks({ items: checks, workers: mine, go, onSay: (text) => data.send(text, []), onChanged: () => void changed(), remoteAsks }));
     return list;
   }, [mine, tasks, work.boards, work.roles, handheld, changed, data, subs, go, feed, onSplit, splitFailed, startFailed, onManualStart, waiting, own, api.live, project, summary, received.history]);

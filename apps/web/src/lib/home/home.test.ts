@@ -289,6 +289,8 @@ describe("等你按设计 9.6（契约增补二）", () => {
     expect(waitingHref(row({ open: { kind: "task_detail", id: "t9" } }))).toBe("/me/work/tasks/t9/info");
     expect(waitingHref(row({ open: { kind: "month", id: "2026-12" } }))).toBe("/me/work/month/2026-12");
     expect(waitingHref(row({ open: { kind: "connections", id: "this_computer" } }))).toBe("/me/work/settings/connections");
+    // 月中 Task 改了（16.4）：落在项目对话里那个「停掉 / 留着」框上。
+    expect(waitingHref(row({ id: "goal_changed:c1", kind: "goal_changed", open: { kind: "project", id: "p1" } }))).toBe("/me/work/projects/p1#goal-c1");
     // 别人把项目交给你（16.7）：只读预览，「接手」「不接」在那里。
     expect(waitingHref(row({ kind: "transfer", open: { kind: "transfer", id: "x1" } }))).toBe("/me/work/transfers/x1");
   });

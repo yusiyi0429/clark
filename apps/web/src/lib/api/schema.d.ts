@@ -4999,6 +4999,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/projects/{projectId}/goal-changes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 答月中 Task 改了或取消了的选项框（16.4）：停掉或留着和它有关的子会话 */
+        post: operations["answerGoalChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/projects/{projectId}/board": {
         parameters: {
             query?: never;
@@ -17851,7 +17868,7 @@ export interface components {
         };
         WaitingItem: {
             id: string;
-            kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer";
+            kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer" | "goal_changed";
             title: string;
             source: string | null;
             at: string | null;
@@ -18102,7 +18119,7 @@ export interface components {
             };
             waiting: {
                 id: string;
-                kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer";
+                kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer" | "goal_changed";
                 title: string;
                 source: string | null;
                 at: string | null;
@@ -18726,6 +18743,24 @@ export interface components {
                 personId: string;
                 name: string;
             };
+        } | {
+            /** @constant */
+            kind: "goal_changed";
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            at: string;
+            taskId: string;
+            taskName: string;
+            change: "changed" | "cancelled";
+            sessions: {
+                kind: "card" | "topic";
+                /** Format: uuid */
+                id: string;
+                title: string;
+            }[];
+            answer: ("stop" | "keep") | null;
+            answeredAt: string | null;
         };
         ProjectFeedResponse: {
             items: (({
@@ -18834,6 +18869,24 @@ export interface components {
                     personId: string;
                     name: string;
                 };
+            } | {
+                /** @constant */
+                kind: "goal_changed";
+                /** Format: uuid */
+                id: string;
+                /** Format: date-time */
+                at: string;
+                taskId: string;
+                taskName: string;
+                change: "changed" | "cancelled";
+                sessions: {
+                    kind: "card" | "topic";
+                    /** Format: uuid */
+                    id: string;
+                    title: string;
+                }[];
+                answer: ("stop" | "keep") | null;
+                answeredAt: string | null;
             })[];
         };
         ProjectBoardResponse: {
@@ -19021,6 +19074,28 @@ export interface components {
                 risks: string[];
                 revision: number | null;
             } | null;
+        };
+        ProjectGoalChangedItem: {
+            /** @constant */
+            kind: "goal_changed";
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            at: string;
+            taskId: string;
+            taskName: string;
+            change: "changed" | "cancelled";
+            sessions: {
+                kind: "card" | "topic";
+                /** Format: uuid */
+                id: string;
+                title: string;
+            }[];
+            answer: ("stop" | "keep") | null;
+            answeredAt: string | null;
+        };
+        AnswerGoalChangeRequest: {
+            answer: "stop" | "keep";
         };
         ProjectHandoverItem: {
             /** @constant */
@@ -36770,6 +36845,78 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    answerGoalChange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnswerGoalChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description 答完的那一行 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectGoalChangedItem"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

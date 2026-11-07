@@ -15,3 +15,5 @@
 .ask { margin: var(--space-3) 0; }
 .ask > [data-decision], .ask > [data-resolved] { margin-top: var(--space-1); }
 .askFrom { margin: 0; overflow: hidden; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
+/* 月中 Task 改了（16.4）：选项框里列出还没做完的那几个子会话。 */
+.goalSessions { display: grid; gap: 2px; margin: 0; padding-left: var(--space-4); color: var(--ink-muted); font-size: var(--text-base); line-height: var(--lh-row); }

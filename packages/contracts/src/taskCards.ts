@@ -6,6 +6,7 @@ import { LocalOutputView, LocalRunView } from "./localDevices.js";
 import { TaskPerson, TaskView } from "./tasks.js";
 import { CardCriterion, CardExecutor, CardGit, CardHandbackBrief, CardModel, TaskCard } from "./taskCardView.js";
 import { RoleBrief, RoleRef } from "./roles.js";
+import { NullableInteger } from "./nullable.js";
 
 /**
  * 执行看板（V2 设计第 3–8 节）：Task 页右边的四列加交付物、拆卡、卡的详情、Agent 验收和推翻、准备中的交付物和「出下一版」。
@@ -38,7 +39,7 @@ export const CardPlanView = Type.Object({
   summary: Nullable(Type.String()),
   steps: Type.Array(Type.Object({ title: Type.String({ minLength: 1 }), detail: Nullable(Type.String()) }, strict)),
   risks: Type.Array(Type.String()),
-  revision: Nullable(Type.Integer({ minimum: 1 })),
+  revision: NullableInteger({ minimum: 1 }),
 }, strict);
 
 /** 伙伴建议的模型档位，本人开工时再落到具体模型。 */
@@ -56,7 +57,7 @@ export const CardDraftView = Type.Object({
   title: Type.String({ minLength: 1, maxLength: 120 }),
   brief: Type.String({ maxLength: 4000 }),
   doneDefinition: Type.String({ minLength: 1, maxLength: 500 }),
-  criterionIndex: Nullable(Type.Integer({ minimum: 1 })),
+  criterionIndex: NullableInteger({ minimum: 1 }),
   role: Nullable(RoleRef),
   suggestPresetKey: Nullable(Type.String()),
   executor: CardExecutor,
@@ -133,7 +134,7 @@ export const PatchCardRequest = Type.Object({
   roleId: Type.Optional(Nullable(Type.String({ format: "uuid" }))),
   model: Type.Optional(Nullable(CardModel)),
   brief: Type.Optional(Nullable(Type.String({ minLength: 1, maxLength: 4000 }))),
-  criterionIndex: Type.Optional(Nullable(Type.Integer({ minimum: 1 }))),
+  criterionIndex: Type.Optional(NullableInteger({ minimum: 1 })),
 }, strict);
 
 /** Agent 验收里的一条：对照卡的第几条完成标准（从 1 起）、判定、理由、依据、怎么补。 */
@@ -174,7 +175,7 @@ export const CardHandbackView = Type.Object({
     source: Type.Union([Type.Literal("cloud"), Type.Literal("local")]),
     modelLabel: Nullable(Type.String()),
     roleId: Nullable(Type.String({ format: "uuid" })),
-    roleVersion: Nullable(Type.Integer({ minimum: 1 })),
+    roleVersion: NullableInteger({ minimum: 1 }),
   }, strict)),
 }, strict);
 

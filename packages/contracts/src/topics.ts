@@ -2,6 +2,7 @@ import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import { LocalRunBrief, LocalRunView } from "./localDevices.js";
 import { DeliverableInclusion } from "./taskCardView.js";
 import { RoleBrief, RoleRef } from "./roles.js";
+import { NullableInteger } from "./nullable.js";
 
 /**
  * 调研专题（V2 设计第 9 节）：在本机由 Claude Code 跑，先交提纲、本人同意后再写，每改一次存一个新版本。
@@ -94,7 +95,7 @@ export const TopicBriefResponse = Type.Object({
   role: Nullable(RoleBrief),
   critics: Type.Array(RoleBrief, { maxItems: 3 }),
   title: Type.String({ minLength: 1 }),
-  latestVersion: Nullable(Type.Integer({ minimum: 1 })),
+  latestVersion: NullableInteger({ minimum: 1 }),
 }, strict);
 
 export type TTopicStatus = Static<typeof TopicStatus>;

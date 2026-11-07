@@ -431,7 +431,7 @@ export const LocalSessionSubject = Type.Object({
   cardId: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
   /** 天枢里调研专题的 id，kind=topic 时必填。 */
   topicId: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
-  /** 天枢里 Task 的 id，kind=plan 时必填（拆的是这个 Task）。 */
+  /** 天枢里 Task 的 id：kind=plan 时拆的是这个 Task。kind=plan 时 taskId 和 projectId 至少有一个，只带 projectId 是拆没挂 Task 的项目（16.3）。 */
   taskId: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
   /** 只有 kind=verify（本机填）：验的是哪一次交回，就是那条 handback 同步条目的 key。 */
   handbackKey: Type.Optional(SyncKey),
@@ -476,7 +476,7 @@ export const LocalRole = Type.Object({
 }, strict);
 
 /**
- * POST /v1/sessions。kind=plan（规划员）：带 taskId，firstMessage 是云端的拆卡交代，role 是规划员岗位；不给目录时用项目绑的文件夹，再没有本机给它建一个专用目录。
+ * POST /v1/sessions。kind=plan（规划员）：带 taskId，或只带 projectId（没挂 Task 的项目，网页按 plan-brief 回的 project 填），firstMessage 是云端的拆卡交代，role 是规划员岗位；不给目录时用项目绑的文件夹，再没有本机给它建一个专用目录。
  * kind=verify 不能从网页开（400）：执行方交回以后本机自己起。
  */
 export const LocalCreateSessionRequest = Type.Object({
@@ -1064,7 +1064,7 @@ export const LocalSyncItem = Type.Union([
     number: Type.Integer({ minimum: 1 }),
     feishuUrl: Type.String({ pattern: "^https://", maxLength: 2000 }),
   }, strict)),
-  /** 规划员出的计划和派活单草稿（subject.kind = plan，带 taskId）。 */
+  /** 规划员出的计划和派活单草稿（subject.kind = plan，带 taskId 或只带 projectId）。 */
   syncItem("card_plan", LocalCardPlan),
   /** 验收员的结论（subject.kind = verify，带 cardId 和 handbackKey）：云端按 handbackKey 找到那次交回，照原来的规则落结果（过了进准备中，没过拼改法，第二次没过受阻）。 */
   syncItem("verdict", LocalVerdict),

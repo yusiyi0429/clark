@@ -8,7 +8,7 @@ import type {
   TTopicBriefResponse, TTopicDetailResponse, TTopicVersionView, TWorkersResponse,
   TBackgroundResponse, TClaimSessionStartsResponse, TRouteResponse, TWorkHomeResponse,
   TProject, TProjectDetailResponse, TProjectFeedResponse, TProjectGoal, TProjectListResponse, TProjectPipelineResponse, TUpdateProjectRequest,
-  THandoverSecretFinding, TProjectTransfer, TUpdateProjectTransferRequest, TConversationHistory, TProjectBoardResponse,
+  THandoverSecretFinding, TProjectTransfer, TUpdateProjectTransferRequest, TConversationHistory, TProjectBoardResponse, TProjectGoalChangedItem,
 } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
 
@@ -166,6 +166,13 @@ export const readProjectBoard = (projectId: string) =>
 /** 放进看板（不挂 Task：不带预算，开工用本人的缺省预算）。 */
 export const acceptProjectDrafts = (projectId: string, drafts: TAcceptCardDraftsRequest["drafts"], start = false) =>
   unwrap(browserApi.POST("/api/me/projects/{projectId}/card-drafts/accept", { params: project(projectId), body: { drafts, ...(start ? { start } : {}) } })).then((data) => data.cards as TCardTaskView[]);
+/**
+ * 月中 Task 改了或取消了（16.4）：答「停掉 / 留着」。停掉时云端了结还排着的开工登记，这台电脑上在跑的由网页停。
+ * 答过了（别的标签页、别的电脑）回 409 ALREADY_ANSWERED：当成答过，重读动态就好。
+ */
+export const answerGoalChange = (projectId: string, changeId: string, answer: "stop" | "keep") =>
+  unwrap<TProjectGoalChangedItem>(browserApi.POST("/api/me/projects/{projectId}/goal-changes/{id}", { params: { path: { projectId, id: changeId } }, body: { answer } }) as Promise<Result<TProjectGoalChangedItem>>)
+    .then(() => undefined, (error: unknown) => { if (!(error instanceof CloudError && error.code === "ALREADY_ANSWERED")) throw error; });
 export const readProjectFeed = (projectId: string) =>
   maybe<TProjectFeedResponse>(browserApi.GET("/api/me/projects/{projectId}/feed", { params: project(projectId) }) as Promise<Result<TProjectFeedResponse>>);
 export const routeMessage = (text: string) => maybe<TRouteResponse>(browserApi.POST("/api/me/route", { body: { text } }) as Promise<Result<TRouteResponse>>);

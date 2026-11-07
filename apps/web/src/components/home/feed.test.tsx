@@ -10,7 +10,7 @@ import { createMockRunner } from "@/lib/local/mock";
 import type { TLocalSessionSummary } from "@/lib/local/runner";
 import { toWorker, type Worker } from "@/lib/work/workers";
 import type { FeedItem } from "@/lib/home/types";
-import { feedBlocks } from "./TaskFeed";
+import { GoalChangeDecision, feedBlocks } from "./TaskFeed";
 
 const ROLE = { id: "00000000-0000-4000-8000-000000000001", name: "开发", kind: "worker" as const };
 const CARD = "00000000-0000-4000-8000-0000000000c1";
@@ -100,5 +100,25 @@ describe("子会话的提问由 Task 管线转达（14.3）", () => {
   it("没在问、也不在跑的子会话不占位置", () => {
     const idle = session({});
     expect(render([], [{ ...passedWorker(), session: idle }], [idle]).blocks).toHaveLength(0);
+  });
+});
+
+describe("月中 Task 改了或取消了（16.4，goal_changed）", () => {
+  const change = (patch: Record<string, unknown> = {}) => ({ kind: "goal_changed" as const, id: "00000000-0000-4000-8000-0000000000f9", at: "2026-11-15T02:00:00Z", taskId: "t1",
+    taskName: "回答的样子", change: "cancelled" as const, sessions: [{ kind: "card" as const, id: CARD, title: "greet" }, { kind: "topic" as const, id: HANDBACK, title: "查评测集" }],
+    answer: null, answeredAt: null, ...patch });
+  const draw = (item: ReturnType<typeof change>) => text(renderToStaticMarkup(<LocalContext.Provider value={local([])}>
+    <GoalChangeDecision projectId="00000000-0000-4000-8000-0000000000f1" item={item} onChanged={vi.fn()} /></LocalContext.Provider>));
+  it("还没答：「Task 取消了」，停掉（推荐）/ 留着，下面列出还没做完的子会话；锚点给等你那一行用", () => {
+    const html = draw(change());
+    expect(html).toMatch(/回答的样子：Task 取消了.*greet.*查评测集.*停掉.*推荐.*留着/);
+    expect(renderToStaticMarkup(<LocalContext.Provider value={local([])}><GoalChangeDecision projectId="p" item={change({ change: "changed" })} onChanged={vi.fn()} /></LocalContext.Provider>))
+      .toContain('id="goal-00000000-0000-4000-8000-0000000000f9"');
+    expect(draw(change({ change: "changed" }))).toContain("回答的样子：Task 改了");
+  });
+  it("答过的收成一行", () => {
+    const html = draw(change({ answer: "keep", answeredAt: "2026-11-15T03:00:00Z" }));
+    expect(html).toContain("留着");
+    expect(html).not.toContain("推荐");
   });
 });

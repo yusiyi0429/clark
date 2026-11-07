@@ -101,6 +101,7 @@ export const ProjectPipelineResponse = Type.Object({
  * - handover：换人的分隔线「{日期} {from} → {to}」（at 是接手的时间），两边都有；
  * - handover_summary：接手人那边，紧跟分隔线的第一条消息，管线发的项目总结（就是交接说明，note），后面把「没做完的事」做成选项由网页画；
  * - transfer_declined：原负责人那边一行「{by}没接」。
+ * 加 goal_changed（16.4 月中）：见 ProjectGoalChangedItem。
  */
 export const ProjectGoalLinkedItem = Type.Object({
   kind: Type.Literal("goal_linked"),
@@ -116,7 +117,33 @@ export const ProjectHandoverSummaryItem = Type.Object({ kind: Type.Literal("hand
   transferId: Type.String({ format: "uuid" }), from: PersonRef, note: Type.Array(Type.Object({ title: Type.String(), lines: Type.Array(Type.String()) }, strict)) }, strict);
 export const ProjectTransferDeclinedItem = Type.Object({ kind: Type.Literal("transfer_declined"), id: Type.String({ minLength: 1 }), at: Instant,
   transferId: Type.String({ format: "uuid" }), by: PersonRef }, strict);
-export const ProjectFeedItem = Type.Union([TaskFeedItem, ProjectGoalLinkedItem, ProjectHandoverItem, ProjectHandoverSummaryItem, ProjectTransferDeclinedItem]);
+/**
+ * 16.4 月中：本月挂在项目上的 Task 在本体里改了（名字或验收标准变了，change = changed）或取消了（本月的 Task 里没有它了，cancelled），项目不动；
+ * 项目里和它有关、还没做完的子会话（挂这件 Task 的、没完成没退回的卡和还开着的专题）还在时，项目对话里出一个选项框「停掉（推荐）/ 留着」，
+ * 等你里也有一行（goal_changed，点开是项目对话）。没有这样的子会话就不出。同一件 Task 每次改动出一个框。
+ * - at 是发现的时间；taskName 是现在的名字（取消了的是原来的）；sessions 是出框时那几个子会话。
+ * - answer：还没答为 null，stop 停掉，keep 留着；answeredAt 是答的时间。
+ */
+export const ProjectGoalChangedItem = Type.Object({
+  kind: Type.Literal("goal_changed"),
+  id: Type.String({ format: "uuid" }),
+  at: Instant,
+  taskId: Type.String({ minLength: 1 }),
+  taskName: Type.String(),
+  change: Type.Union([Type.Literal("changed"), Type.Literal("cancelled")]),
+  sessions: Type.Array(Type.Object({ kind: Type.Union([Type.Literal("card"), Type.Literal("topic")]), id: Type.String({ format: "uuid" }), title: Type.String() }, strict)),
+  answer: Nullable(Type.Union([Type.Literal("stop"), Type.Literal("keep")])),
+  answeredAt: Nullable(Instant),
+}, strict);
+
+/**
+ * POST /api/me/projects/:projectId/goal-changes/:id（项目负责人）：答选项框，回答完的那一行。答过了 409 ALREADY_ANSWERED。
+ * stop：云端排着、还没有电脑接下的开工登记了结掉；这台电脑上在跑的那几个由网页停掉（同转交的「停掉」）。卡和专题本身不动。keep：只记下。
+ */
+export const AnswerGoalChangeRequest = Type.Object({ answer: Type.Union([Type.Literal("stop"), Type.Literal("keep")]) }, strict);
+
+export const ProjectFeedItem = Type.Union([TaskFeedItem, ProjectGoalLinkedItem, ProjectHandoverItem, ProjectHandoverSummaryItem, ProjectTransferDeclinedItem,
+  ProjectGoalChangedItem]);
 /** GET /api/me/projects/:projectId/feed：从旧到新。 */
 export const ProjectFeedResponse = Type.Object({ items: Type.Array(ProjectFeedItem) }, strict);
 
@@ -135,6 +162,8 @@ export const ProjectBoardResponse = Type.Object({
 }, strict);
 
 export type TProjectBoardResponse = Static<typeof ProjectBoardResponse>;
+export type TProjectGoalChangedItem = Static<typeof ProjectGoalChangedItem>;
+export type TAnswerGoalChangeRequest = Static<typeof AnswerGoalChangeRequest>;
 export type TProject = Static<typeof Project>;
 export type TProjectListResponse = Static<typeof ProjectListResponse>;
 export type TCreateProjectRequest = Static<typeof CreateProjectRequest>;

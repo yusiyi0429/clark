@@ -1,4 +1,5 @@
 import { Type, type Static } from "@sinclair/typebox";
+import { NullableInteger } from "./nullable.js";
 
 /** API health 只报告布尔安全摘要：不返回 secret，也不发起模型/Search 调用（.tech/07 §8）。 */
 export const HealthDependencies = Type.Object(
@@ -42,7 +43,7 @@ export const WorldHealth = Type.Object(
       longTermGoals: Type.Integer({ minimum: 0 }), periodGoals: Type.Integer({ minimum: 0 }),
     }, { additionalProperties: false }), Type.Null()]),
     errorCode: Type.Union([Type.String(), Type.Null()]),
-    httpStatus: Type.Union([Type.Integer(), Type.Null()]),
+    httpStatus: NullableInteger(),
   },
   { additionalProperties: false },
 );

@@ -1,5 +1,6 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import { LocalPlanEntry, LocalSessionStatus } from "./localRunner.js";
+import { NullableInteger, NullableNumber } from "./nullable.js";
 
 /**
  * 本机程序在云端的那一侧（V2 设计第 4、5 节）：配对出来的设备、本机报上来的执行摘要和产出。
@@ -56,7 +57,7 @@ export const LocalRunPlanProgress = Type.Object({
 export const LocalRunCost = Type.Object({
   inputTokens: Type.Integer({ minimum: 0 }),
   outputTokens: Type.Integer({ minimum: 0 }),
-  costUsd: Nullable(Type.Number({ minimum: 0 })),
+  costUsd: NullableNumber({ minimum: 0 }),
 }, strict);
 
 export const LocalRunActivity = Type.Object({ at: Instant, text: Type.String({ minLength: 1, maxLength: 300 }) }, strict);
@@ -101,7 +102,7 @@ export const LocalOutputView = Type.Object({
   title: Type.String({ minLength: 1, maxLength: 200 }),
   fileName: Nullable(Type.String()),
   mimeType: Nullable(Type.String()),
-  sizeBytes: Nullable(Type.Integer({ minimum: 0 })),
+  sizeBytes: NullableInteger({ minimum: 0 }),
   url: Nullable(Type.String()),
   text: Nullable(Type.String({ maxLength: 8000 })),
   createdAt: Instant,

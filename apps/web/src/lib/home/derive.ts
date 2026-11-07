@@ -30,6 +30,8 @@ export const taskHref = (taskId: string) => `/me/work/tasks/${encodeURIComponent
 export const infoHref = (taskId: string) => `/me/work/tasks/${encodeURIComponent(taskId)}/info`;
 /** 项目对话里某个子会话的选项框的锚点（14.3：等你那一行、子会话页「去回答」跳过来落在它上面）。 */
 export const askAnchor = (sessionId: string) => `ask-${sessionId}`;
+/** 项目对话里月中 Task 改了的选项框的锚点（16.4：等你那一行跳过来落在它上面）。 */
+export const goalAnchor = (changeId: string) => `goal-${changeId}`;
 export const BUDDY_HREF = "/me/work/buddy";
 export const missionHref = (missionId: string) => `/me/work/missions/${encodeURIComponent(missionId)}`;
 export const HOME_HREF = "/me/work";
@@ -44,8 +46,10 @@ export const missionProject = (missionId: string) => `mission:${missionId}`;
 export const monthLabel = (period: string) => `${Number(period.slice(5, 7))} 月`;
 
 /** 等你一行点了去哪儿：契约给的是目标（open），网页映射到路由；网页自己拼的通知直接带地址。 */
-export function waitingHref(item: Pick<WaitingItem, "open"> & Partial<Pick<WaitingItem, "kind" | "projectId">>): string {
+export function waitingHref(item: Pick<WaitingItem, "open"> & Partial<Pick<WaitingItem, "kind" | "projectId" | "id">>): string {
   const { open } = item;
+  // 月中 Task 改了（16.4）：落在项目对话里那个「停掉 / 留着」框上（等你的 id 是 goal_changed:<改动 id>）。
+  if (item.kind === "goal_changed" && open.kind === "project" && item.id?.startsWith("goal_changed:")) return `${projectHref(open.id)}#${goalAnchor(item.id.slice("goal_changed:".length))}`;
   // 受阻（验收两次没过）进项目对话：「按这个改 / 仍然通过」的选项框在那里（5.4.4），云端给的目标是那张卡时也一样。
   if (item.kind === "verdict" && item.projectId) return projectHref(item.projectId);
   switch (open.kind) {
