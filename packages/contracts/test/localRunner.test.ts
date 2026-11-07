@@ -7,6 +7,7 @@ import {
   LocalCreateSessionBatchRequest, LocalCreateSessionBatchResponse, LocalSettingsPatch, LocalSessionSummary, LocalHealthResponse,
   LocalVerifyBriefResponse, LOCAL_RUNNER_VERIFY_BRIEF_PATH, LocalMergeResponse, LocalVerdict, LocalQuestionAnswerRequest, LocalPlanCard, LocalBackgroundItem,
   LocalSettings, LocalMergeSync, LocalStatusResponse, LocalQuotaSource, LocalQuotaSync,
+  LocalFolder, LocalProjectFolder, LocalProjectListResponse, LocalProjectFolderRequest, LocalHandoverCheck, LocalProjectCloneRequest, LocalProjectCloneResponse,
   LocalTaskBudgetView, LocalBudgetListResponse, LocalBudgetUpdateRequest, LocalSendMessageRequest as SendMessage, LocalPermissionBrief, LOCAL_RUNNER_ATTACHMENT_PATH,
 } from "../src/index.js";
 
@@ -397,6 +398,42 @@ describe("本机程序契约", () => {
     expect(Value.Check(SendMessage, { attachments: Array.from({ length: 21 }, () => ref) })).toBe(false);
     expect(Value.Check(LocalSessionEvent, { seq: 5, at, sessionId, type: "user_message", text: "", source: "web", attachments: [{ name: "截图.png", path: "D:/w/.tianshu-attachments/1/截图.png", size: 1024 }] })).toBe(true);
     expect(LOCAL_RUNNER_ATTACHMENT_PATH).toBe("/api/local-runner/attachments/:id");
+  });
+
+  it("项目（16.6）：文件夹挂在哪些项目上；项目绑哪个文件夹；开工和同步的 subject 带 projectId", () => {
+    const at = "2026-11-07T07:00:00.000Z";
+    const folder = { id: "f1a2b3c4d5e6", path: "D:/repo", label: "repo", addedAt: at };
+    expect(Value.Check(LocalFolder, folder)).toBe(true); // 选文件夹的回执不带 projects
+    expect(Value.Check(LocalFolder, { ...folder, projects: [{ projectId: "p-1", name: "天枢本机程序" }, { projectId: "p-2", name: null }] })).toBe(true);
+    const bound = { projectId: "p-1", name: "天枢本机程序", folder: { id: folder.id, path: folder.path, label: folder.label }, updatedAt: at };
+    expect(Value.Check(LocalProjectFolder, bound)).toBe(true);
+    expect(Value.Check(LocalProjectFolder, { ...bound, folder: null })).toBe(true);
+    expect(Value.Check(LocalProjectListResponse, { projects: [bound] })).toBe(true);
+    expect(Value.Check(LocalProjectFolderRequest, { folderId: folder.id, name: "天枢本机程序" })).toBe(true);
+    expect(Value.Check(LocalProjectFolderRequest, { folderId: null })).toBe(true);
+    expect(Value.Check(LocalProjectFolderRequest, { path: "D:/repo" })).toBe(false); // 网页不能直接写路径
+    expect(LOCAL_RUNNER_ROUTES.putProjectFolder).toEqual({ method: "PUT", path: "/v1/projects/:projectId/folder", auth: true });
+    const subject = { kind: "card", cardId: "c1", projectId: "p-1" };
+    expect(Value.Check(LocalCreateSessionRequest, { subject, title: "x", firstMessage: "做" })).toBe(true);
+    const item = { key: `${deviceId}:${sessionId}:1`, sessionId, subject, occurredAt: at, type: "status", data: { status: "running", title: "x", agent: "claude-code", modelLabel: "订阅" } };
+    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots: { max: 3, running: 0, queued: 0 }, items: [item] })).toBe(true);
+
+    // 项目转交（16.7）：交接检查只有 git 状态；接手后 clone
+    const check = {
+      projectId: "p-1", checkedAt: at, folder: { path: "D:/repo", label: "repo" },
+      git: { branch: "main", remotes: [{ name: "origin", url: "https://github.com/TokenkingOS/Chat_Service.git" }], uncommitted: ["src/a.ts"], uncommittedCount: 1,
+        unpushed: [{ branch: "main", upstream: "origin/main", ahead: 2 }, { branch: "tianshu/abc", upstream: null, ahead: null }] },
+      recentFiles: null,
+    };
+    expect(Value.Check(LocalHandoverCheck, check)).toBe(true);
+    expect(Value.Check(LocalHandoverCheck, { ...check, git: null, recentFiles: [{ path: "notes.md", modifiedAt: at }] })).toBe(true);
+    expect(Value.Check(LocalHandoverCheck, { ...check, folder: null, git: null })).toBe(true);
+    expect(Value.Check(LocalProjectCloneRequest, { repoUrl: "https://github.com/TokenkingOS/Chat_Service.git", branch: "handover/chat" })).toBe(true);
+    expect(Value.Check(LocalProjectCloneRequest, { repoUrl: "git@github.com:TokenkingOS/Chat_Service.git" })).toBe(true);
+    for (const repoUrl of ["file:///C:/secret", "ext::sh -c touch% /tmp/x", "--upload-pack=x", "C:/repo"]) expect(Value.Check(LocalProjectCloneRequest, { repoUrl })).toBe(false);
+    expect(Value.Check(LocalProjectCloneRequest, { repoUrl: "https://github.com/a/b.git", branch: "--orphan" })).toBe(false);
+    expect(Value.Check(LocalProjectCloneResponse, { project: null, branch: null, fellBack: false })).toBe(true);
+    expect(LOCAL_RUNNER_ROUTES.cloneProject).toEqual({ method: "POST", path: "/v1/projects/:projectId/clone", auth: true });
   });
 
   it("配对口令只在批准后出现；路由表里只有健康和配对不要口令", () => {

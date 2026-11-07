@@ -3,7 +3,7 @@ import { FormatRegistry } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import {
   AcceptCardDraftsRequest, BackgroundQuery, BackgroundResponse, ClaimSessionStartsResponse, ConversationScope, CreateProjectRequest, ProjectDetailResponse,
-  ProjectFeedResponse, ProjectPipelineResponse, RouteResponse, UpdateProjectRequest, WorkHomeResponse,
+  ProjectFeedResponse, ProjectPipelineResponse, ProjectTransfer, RouteResponse, UpdateProjectRequest, UpdateProjectTransferRequest, WorkHomeResponse,
 } from "../src/index.js";
 import { buildOpenApiDocument } from "../src/openapi.js";
 
@@ -24,10 +24,10 @@ const resources = { devices: [], running: 0, cap: null, cost: { today: { inputTo
 describe("新首页契约", () => {
   it("首页 v2：项目（目标、子会话、事项）、本月、其他、等你", () => {
     const goal = { taskId: "T-1", missionId: "M1", name: "11/18 上线 V1", period: "2026-11", dueDate: "2026-11-30", criteria: ["登录能用", "首页能看", "能发消息"],
-      criteriaMet: 1, criteriaTotal: 3, completedAt: null };
+      criteriaMet: 1, criteriaTotal: 3, completedAt: null, responsible: null };
     const project = { projectId: uuid, name: "天枢新首页", goals: [goal], budget: null, lastActivityAt: at,
       summary: { running: 0, waiting: 1, queued: 0, done: 0, doneToday: 0, needsYou: 1 }, pipeline: { conversationId: null, scope: `project:${uuid}` }, planning: false,
-      subSessions: [sub], items: [{ id: uuid, title: "自己写的方案", status: "in_progress", dueDate: "2026-11-12", awaitingAcceptance: false, updatedAt: at }] };
+      subSessions: [sub], items: [{ id: uuid, title: "自己写的方案", status: "in_progress", dueDate: "2026-11-12", awaitingAcceptance: false, updatedAt: at }], transfer: null };
     const home = {
       period: "2026-11",
       projects: [project, { ...project, name: "Chat 服务", goals: [], subSessions: [], items: [], budget: { state: "warning", percent: 82, taskId: "T-2" } }],
@@ -62,7 +62,7 @@ describe("新首页契约", () => {
     expect(Value.Check(CreateProjectRequest, { name: "" })).toBe(false);
     expect(Value.Check(UpdateProjectRequest, { archived: true })).toBe(true);
     expect(Value.Check(UpdateProjectRequest, {})).toBe(false);
-    const project = { projectId: uuid, name: "天枢新首页", archivedAt: null, createdAt: at, lastActivityAt: null };
+    const project = { projectId: uuid, name: "天枢新首页", archivedAt: null, createdAt: at, lastActivityAt: null, transfer: null };
     expect(Value.Check(ProjectDetailResponse, { project, period: "2026-11", goals: [
       { taskId: "T-1", taskName: "11/18 上线 V1", missionId: "M1", missionTitle: "上线", period: "2026-11", verdict: "open", source: "auto", linkedAt: at },
       { taskId: "T-0", taskName: "内部版跑通", missionId: "M0", missionTitle: null, period: "2026-10", verdict: "continued", source: "migration", linkedAt: at },
@@ -93,6 +93,29 @@ describe("新首页契约", () => {
       stoppable: true, sessionId: uuid, itemId: "t1", deviceId: uuid, taskId: "T-1", cardId: uuid, topicId: null, holdUntil: null }] })).toBe(true);
   });
 
+  it("项目转交（16.7）：转交的形状同网页、本机检查结果原样、等你里的 transfer、动态里的换人分隔线和交接说明", () => {
+    const person = (name: string) => ({ personId: `p-${name}`, name });
+    const check = { projectId: uuid, checkedAt: at, folder: { path: "D:/code/tianshu", label: "tianshu" }, git: { branch: "main",
+      remotes: [{ name: "origin", url: "https://github.com/x/y.git" }], uncommitted: ["a.ts"], uncommittedCount: 1, unpushed: [] }, recentFiles: null };
+    const transfer = { id: uuid, projectId: uuid, projectName: "Chat 服务", from: person("人豪"), to: person("晨星"), status: "sent", startedAt: at, decidedAt: at,
+      includeHistory: false, running: "wait", check: "wait", note: [{ title: "到哪了", lines: ["11 月目标：上线 · 11/30 验收"] }], checkResult: check,
+      clone: { repoUrl: "https://github.com/x/y.git", branch: "main" } };
+    expect(Value.Check(ProjectTransfer, transfer)).toBe(true);
+    expect(Value.Check(ProjectTransfer, { ...transfer, status: "draft" })).toBe(false);
+    expect(Value.Check(UpdateProjectTransferRequest, { includeHistory: true })).toBe(true);
+    expect(Value.Check(UpdateProjectTransferRequest, { checkResult: check, check: "wait" })).toBe(true);
+    expect(Value.Check(UpdateProjectTransferRequest, {})).toBe(false);
+    const waiting = { id: `transfer:${uuid}`, kind: "transfer", title: "人豪把「Chat 服务」交给你", source: null, at, open: { kind: "transfer", id: uuid }, taskId: null,
+      projectId: uuid, sessionId: null, deviceId: null, deviceName: null, dueAt: null, answer: "open", person: person("人豪"), month: null, question: null, permission: null };
+    expect(Value.Check(WorkHomeResponse, { period: "2026-11", projects: [], archivedCount: 0, month: { missions: [] }, other: { subSessions: [], items: [] },
+      waiting: [waiting] })).toBe(true);
+    expect(Value.Check(ProjectFeedResponse, { items: [
+      { kind: "handover", id: `handover:${uuid}`, at, transferId: uuid, from: person("人豪"), to: person("晨星") },
+      { kind: "handover_summary", id: `summary:${uuid}`, at, transferId: uuid, from: person("人豪"), note: transfer.note },
+      { kind: "transfer_declined", id: `declined:${uuid}`, at, transferId: uuid, by: person("晨星") },
+    ] })).toBe(true);
+  });
+
   it("自动分发到项目、认领开工带项目", () => {
     expect(Value.Check(RouteResponse, { target: "main" })).toBe(true);
     expect(Value.Check(RouteResponse, { target: { projectId: uuid } })).toBe(true);
@@ -115,7 +138,9 @@ describe("新首页契约", () => {
     const paths = buildOpenApiDocument().paths;
     for (const key of ["/api/me/work-home", "/api/me/background", "/api/me/projects", "/api/me/projects/{projectId}", "/api/me/projects/{projectId}/goals/{taskId}",
       "/api/me/projects/{projectId}/pipeline", "/api/me/projects/{projectId}/feed", "/api/me/route", "/api/me/session-starts/claim",
-      "/api/me/session-starts/{id}/release"]) expect(paths[key]).toBeDefined();
+      "/api/me/session-starts/{id}/release", "/api/me/projects/{projectId}/transfers", "/api/me/project-transfers/{id}", "/api/me/project-transfers/{id}/send",
+      "/api/me/project-transfers/{id}/withdraw", "/api/me/project-transfers/{id}/accept", "/api/me/project-transfers/{id}/decline",
+      "/api/me/project-transfers/{id}/history", "/api/me/sub-sessions/{kind}/{id}/start"]) expect(paths[key]).toBeDefined();
     expect(paths["/api/me/tasks/{taskId}/pipeline"]).toBeUndefined();
   });
 });

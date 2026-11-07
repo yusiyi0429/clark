@@ -20809,6 +20809,651 @@
         }
       }
     },
+    "/api/me/projects/{projectId}/transfers": {
+      "post": {
+        "operationId": "startProjectTransfer",
+        "summary": "转给…（16.7，项目负责人）：发起一份转交（准备交接），云端先拼一份交接说明；给自己 400，人员目录里没有 404，已有没了结的或项目归档了 409",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProjectTransferRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "准备中的转交",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectTransfer"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/project-transfers/{id}": {
+      "get": {
+        "operationId": "getProjectTransfer",
+        "summary": "一份转交（原负责人和接手人都能看；接手人的只读预览）",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "转交",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectTransfer"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateProjectTransfer",
+        "summary": "改交接说明、带不带对话、在跑的会话等做完还是停掉、本机检查还是直接转、本机检查结果（原负责人，准备中）；存检查结果时按它重拼「代码在哪」",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProjectTransferRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "改好的转交",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectTransfer"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/project-transfers/{id}/send": {
+      "post": {
+        "operationId": "sendProjectTransfer",
+        "summary": "发出（原负责人，准备中）：交接说明里像密钥的地方挡住（422，标出哪一段第几行）",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "发出的转交",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectTransfer"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "交接说明里有像密钥的",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HandoverSecretsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/project-transfers/{id}/withdraw": {
+      "post": {
+        "operationId": "withdrawProjectTransfer",
+        "summary": "撤回（原负责人，准备中或已发出、还没接手）",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "撤回的转交",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectTransfer"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/project-transfers/{id}/accept": {
+      "post": {
+        "operationId": "acceptProjectTransfer",
+        "summary": "接手（接手人，已发出）：项目换成本人负责，原负责人那边归档、只读；对话从分隔线开始，第一条是交接说明；管线先不自己开子会话",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "接手了的转交",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectTransfer"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/project-transfers/{id}/decline": {
+      "post": {
+        "operationId": "declineProjectTransfer",
+        "summary": "不接（接手人，已发出）：项目留在原负责人那边，他的项目对话里一行「{名字}没接」",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "没接的转交",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectTransfer"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/project-transfers/{id}/history": {
+      "get": {
+        "operationId": "getProjectTransferHistory",
+        "summary": "带上了对话记录时，接手人读原负责人那段项目对话（只读，画在分隔线上面）；没带 404。原负责人读自己那段走 /api/conversations/{scope}/messages",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "原来的对话",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationHistory"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/sub-sessions/{kind}/{id}/start": {
+      "delete": {
+        "operationId": "cancelSubSessionStart",
+        "summary": "停掉还在云端排队、没有电脑接下的子会话（登记了要开工的那条了结掉，卡和专题留着）；没有在排的 404。电脑上已经在跑的照旧经本机程序停",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "card",
+                "topic"
+              ]
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "停掉了"
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/route": {
       "post": {
         "operationId": "routeMessage",
@@ -106452,7 +107097,8 @@
           "criteria",
           "criteriaMet",
           "criteriaTotal",
-          "completedAt"
+          "completedAt",
+          "responsible"
         ],
         "properties": {
           "taskId": {
@@ -106498,6 +107144,30 @@
                 "type": "null"
               }
             ]
+          },
+          "responsible": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "personId",
+                  "name"
+                ],
+                "properties": {
+                  "personId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -106514,7 +107184,8 @@
           "pipeline",
           "planning",
           "subSessions",
-          "items"
+          "items",
+          "transfer"
         ],
         "properties": {
           "projectId": {
@@ -106538,7 +107209,8 @@
                 "criteria",
                 "criteriaMet",
                 "criteriaTotal",
-                "completedAt"
+                "completedAt",
+                "responsible"
               ],
               "properties": {
                 "taskId": {
@@ -106579,6 +107251,30 @@
                     {
                       "format": "date-time",
                       "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "responsible": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "personId",
+                        "name"
+                      ],
+                      "properties": {
+                        "personId": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      }
                     },
                     {
                       "type": "null"
@@ -107057,6 +107753,409 @@
                 }
               }
             }
+          },
+          "transfer": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "id",
+                  "projectId",
+                  "projectName",
+                  "from",
+                  "to",
+                  "status",
+                  "startedAt",
+                  "decidedAt",
+                  "includeHistory",
+                  "running",
+                  "check",
+                  "note",
+                  "checkResult",
+                  "clone"
+                ],
+                "properties": {
+                  "id": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "projectId": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "projectName": {
+                    "type": "string"
+                  },
+                  "from": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "personId",
+                      "name"
+                    ],
+                    "properties": {
+                      "personId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "to": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "personId",
+                      "name"
+                    ],
+                    "properties": {
+                      "personId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "status": {
+                    "anyOf": [
+                      {
+                        "const": "preparing",
+                        "type": "string"
+                      },
+                      {
+                        "const": "sent",
+                        "type": "string"
+                      },
+                      {
+                        "const": "accepted",
+                        "type": "string"
+                      },
+                      {
+                        "const": "declined",
+                        "type": "string"
+                      },
+                      {
+                        "const": "withdrawn",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "startedAt": {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "decidedAt": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "includeHistory": {
+                    "type": "boolean"
+                  },
+                  "running": {
+                    "anyOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "const": "wait",
+                            "type": "string"
+                          },
+                          {
+                            "const": "stop",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "check": {
+                    "anyOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "const": "wait",
+                            "type": "string"
+                          },
+                          {
+                            "const": "skip",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "note": {
+                    "anyOf": [
+                      {
+                        "maxItems": 12,
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "title",
+                            "lines"
+                          ],
+                          "properties": {
+                            "title": {
+                              "minLength": 1,
+                              "maxLength": 20,
+                              "type": "string"
+                            },
+                            "lines": {
+                              "maxItems": 50,
+                              "type": "array",
+                              "items": {
+                                "maxLength": 1000,
+                                "type": "string"
+                              }
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "checkResult": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "projectId",
+                          "checkedAt",
+                          "folder",
+                          "git",
+                          "recentFiles"
+                        ],
+                        "properties": {
+                          "projectId": {
+                            "minLength": 1,
+                            "maxLength": 80,
+                            "type": "string"
+                          },
+                          "checkedAt": {
+                            "format": "date-time",
+                            "type": "string"
+                          },
+                          "folder": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "path",
+                                  "label"
+                                ],
+                                "properties": {
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "git": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "branch",
+                                  "remotes",
+                                  "uncommitted",
+                                  "uncommittedCount",
+                                  "unpushed"
+                                ],
+                                "properties": {
+                                  "branch": {
+                                    "anyOf": [
+                                      {
+                                        "maxLength": 250,
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "remotes": {
+                                    "maxItems": 10,
+                                    "type": "array",
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "type": "object",
+                                      "required": [
+                                        "name",
+                                        "url"
+                                      ],
+                                      "properties": {
+                                        "name": {
+                                          "maxLength": 100,
+                                          "type": "string"
+                                        },
+                                        "url": {
+                                          "maxLength": 500,
+                                          "type": "string"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "uncommitted": {
+                                    "maxItems": 200,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "uncommittedCount": {
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "unpushed": {
+                                    "maxItems": 50,
+                                    "type": "array",
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "type": "object",
+                                      "required": [
+                                        "branch",
+                                        "upstream",
+                                        "ahead"
+                                      ],
+                                      "properties": {
+                                        "branch": {
+                                          "maxLength": 250,
+                                          "type": "string"
+                                        },
+                                        "upstream": {
+                                          "anyOf": [
+                                            {
+                                              "maxLength": 250,
+                                              "type": "string"
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        },
+                                        "ahead": {
+                                          "anyOf": [
+                                            {
+                                              "minimum": 1,
+                                              "type": "integer"
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "recentFiles": {
+                            "anyOf": [
+                              {
+                                "maxItems": 30,
+                                "type": "array",
+                                "items": {
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "path",
+                                    "modifiedAt"
+                                  ],
+                                  "properties": {
+                                    "path": {
+                                      "type": "string"
+                                    },
+                                    "modifiedAt": {
+                                      "format": "date-time",
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "clone": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "repoUrl",
+                          "branch"
+                        ],
+                        "properties": {
+                          "repoUrl": {
+                            "type": "string"
+                          },
+                          "branch": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -107239,6 +108338,10 @@
               {
                 "const": "connections",
                 "type": "string"
+              },
+              {
+                "const": "transfer",
+                "type": "string"
               }
             ]
           },
@@ -107352,6 +108455,10 @@
               {
                 "const": "quota",
                 "type": "string"
+              },
+              {
+                "const": "transfer",
+                "type": "string"
               }
             ]
           },
@@ -107424,6 +108531,10 @@
                   },
                   {
                     "const": "connections",
+                    "type": "string"
+                  },
+                  {
+                    "const": "transfer",
                     "type": "string"
                   }
                 ]
@@ -107755,7 +108866,8 @@
                 "pipeline",
                 "planning",
                 "subSessions",
-                "items"
+                "items",
+                "transfer"
               ],
               "properties": {
                 "projectId": {
@@ -107779,7 +108891,8 @@
                       "criteria",
                       "criteriaMet",
                       "criteriaTotal",
-                      "completedAt"
+                      "completedAt",
+                      "responsible"
                     ],
                     "properties": {
                       "taskId": {
@@ -107820,6 +108933,30 @@
                           {
                             "format": "date-time",
                             "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "responsible": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "personId",
+                              "name"
+                            ],
+                            "properties": {
+                              "personId": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              }
+                            }
                           },
                           {
                             "type": "null"
@@ -108298,6 +109435,409 @@
                       }
                     }
                   }
+                },
+                "transfer": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "projectId",
+                        "projectName",
+                        "from",
+                        "to",
+                        "status",
+                        "startedAt",
+                        "decidedAt",
+                        "includeHistory",
+                        "running",
+                        "check",
+                        "note",
+                        "checkResult",
+                        "clone"
+                      ],
+                      "properties": {
+                        "id": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "projectId": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "projectName": {
+                          "type": "string"
+                        },
+                        "from": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "personId",
+                            "name"
+                          ],
+                          "properties": {
+                            "personId": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "to": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "personId",
+                            "name"
+                          ],
+                          "properties": {
+                            "personId": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "const": "preparing",
+                              "type": "string"
+                            },
+                            {
+                              "const": "sent",
+                              "type": "string"
+                            },
+                            {
+                              "const": "accepted",
+                              "type": "string"
+                            },
+                            {
+                              "const": "declined",
+                              "type": "string"
+                            },
+                            {
+                              "const": "withdrawn",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "startedAt": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "decidedAt": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "includeHistory": {
+                          "type": "boolean"
+                        },
+                        "running": {
+                          "anyOf": [
+                            {
+                              "anyOf": [
+                                {
+                                  "const": "wait",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "stop",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "check": {
+                          "anyOf": [
+                            {
+                              "anyOf": [
+                                {
+                                  "const": "wait",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "skip",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "note": {
+                          "anyOf": [
+                            {
+                              "maxItems": 12,
+                              "type": "array",
+                              "items": {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "title",
+                                  "lines"
+                                ],
+                                "properties": {
+                                  "title": {
+                                    "minLength": 1,
+                                    "maxLength": 20,
+                                    "type": "string"
+                                  },
+                                  "lines": {
+                                    "maxItems": 50,
+                                    "type": "array",
+                                    "items": {
+                                      "maxLength": 1000,
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "checkResult": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "projectId",
+                                "checkedAt",
+                                "folder",
+                                "git",
+                                "recentFiles"
+                              ],
+                              "properties": {
+                                "projectId": {
+                                  "minLength": 1,
+                                  "maxLength": 80,
+                                  "type": "string"
+                                },
+                                "checkedAt": {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
+                                "folder": {
+                                  "anyOf": [
+                                    {
+                                      "additionalProperties": false,
+                                      "type": "object",
+                                      "required": [
+                                        "path",
+                                        "label"
+                                      ],
+                                      "properties": {
+                                        "path": {
+                                          "type": "string"
+                                        },
+                                        "label": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "git": {
+                                  "anyOf": [
+                                    {
+                                      "additionalProperties": false,
+                                      "type": "object",
+                                      "required": [
+                                        "branch",
+                                        "remotes",
+                                        "uncommitted",
+                                        "uncommittedCount",
+                                        "unpushed"
+                                      ],
+                                      "properties": {
+                                        "branch": {
+                                          "anyOf": [
+                                            {
+                                              "maxLength": 250,
+                                              "type": "string"
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        },
+                                        "remotes": {
+                                          "maxItems": 10,
+                                          "type": "array",
+                                          "items": {
+                                            "additionalProperties": false,
+                                            "type": "object",
+                                            "required": [
+                                              "name",
+                                              "url"
+                                            ],
+                                            "properties": {
+                                              "name": {
+                                                "maxLength": 100,
+                                                "type": "string"
+                                              },
+                                              "url": {
+                                                "maxLength": 500,
+                                                "type": "string"
+                                              }
+                                            }
+                                          }
+                                        },
+                                        "uncommitted": {
+                                          "maxItems": 200,
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "uncommittedCount": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        },
+                                        "unpushed": {
+                                          "maxItems": 50,
+                                          "type": "array",
+                                          "items": {
+                                            "additionalProperties": false,
+                                            "type": "object",
+                                            "required": [
+                                              "branch",
+                                              "upstream",
+                                              "ahead"
+                                            ],
+                                            "properties": {
+                                              "branch": {
+                                                "maxLength": 250,
+                                                "type": "string"
+                                              },
+                                              "upstream": {
+                                                "anyOf": [
+                                                  {
+                                                    "maxLength": 250,
+                                                    "type": "string"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              },
+                                              "ahead": {
+                                                "anyOf": [
+                                                  {
+                                                    "minimum": 1,
+                                                    "type": "integer"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "recentFiles": {
+                                  "anyOf": [
+                                    {
+                                      "maxItems": 30,
+                                      "type": "array",
+                                      "items": {
+                                        "additionalProperties": false,
+                                        "type": "object",
+                                        "required": [
+                                          "path",
+                                          "modifiedAt"
+                                        ],
+                                        "properties": {
+                                          "path": {
+                                            "type": "string"
+                                          },
+                                          "modifiedAt": {
+                                            "format": "date-time",
+                                            "type": "string"
+                                          }
+                                        }
+                                      }
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "clone": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "repoUrl",
+                                "branch"
+                              ],
+                              "properties": {
+                                "repoUrl": {
+                                  "type": "string"
+                                },
+                                "branch": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               }
             }
@@ -108848,6 +110388,10 @@
                     {
                       "const": "quota",
                       "type": "string"
+                    },
+                    {
+                      "const": "transfer",
+                      "type": "string"
                     }
                   ]
                 },
@@ -108920,6 +110464,10 @@
                         },
                         {
                           "const": "connections",
+                          "type": "string"
+                        },
+                        {
+                          "const": "transfer",
                           "type": "string"
                         }
                       ]
@@ -110728,7 +112276,8 @@
           "name",
           "archivedAt",
           "createdAt",
-          "lastActivityAt"
+          "lastActivityAt",
+          "transfer"
         ],
         "properties": {
           "projectId": {
@@ -110765,6 +112314,409 @@
                 "type": "null"
               }
             ]
+          },
+          "transfer": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "id",
+                  "projectId",
+                  "projectName",
+                  "from",
+                  "to",
+                  "status",
+                  "startedAt",
+                  "decidedAt",
+                  "includeHistory",
+                  "running",
+                  "check",
+                  "note",
+                  "checkResult",
+                  "clone"
+                ],
+                "properties": {
+                  "id": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "projectId": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "projectName": {
+                    "type": "string"
+                  },
+                  "from": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "personId",
+                      "name"
+                    ],
+                    "properties": {
+                      "personId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "to": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "personId",
+                      "name"
+                    ],
+                    "properties": {
+                      "personId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "status": {
+                    "anyOf": [
+                      {
+                        "const": "preparing",
+                        "type": "string"
+                      },
+                      {
+                        "const": "sent",
+                        "type": "string"
+                      },
+                      {
+                        "const": "accepted",
+                        "type": "string"
+                      },
+                      {
+                        "const": "declined",
+                        "type": "string"
+                      },
+                      {
+                        "const": "withdrawn",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "startedAt": {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "decidedAt": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "includeHistory": {
+                    "type": "boolean"
+                  },
+                  "running": {
+                    "anyOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "const": "wait",
+                            "type": "string"
+                          },
+                          {
+                            "const": "stop",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "check": {
+                    "anyOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "const": "wait",
+                            "type": "string"
+                          },
+                          {
+                            "const": "skip",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "note": {
+                    "anyOf": [
+                      {
+                        "maxItems": 12,
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "title",
+                            "lines"
+                          ],
+                          "properties": {
+                            "title": {
+                              "minLength": 1,
+                              "maxLength": 20,
+                              "type": "string"
+                            },
+                            "lines": {
+                              "maxItems": 50,
+                              "type": "array",
+                              "items": {
+                                "maxLength": 1000,
+                                "type": "string"
+                              }
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "checkResult": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "projectId",
+                          "checkedAt",
+                          "folder",
+                          "git",
+                          "recentFiles"
+                        ],
+                        "properties": {
+                          "projectId": {
+                            "minLength": 1,
+                            "maxLength": 80,
+                            "type": "string"
+                          },
+                          "checkedAt": {
+                            "format": "date-time",
+                            "type": "string"
+                          },
+                          "folder": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "path",
+                                  "label"
+                                ],
+                                "properties": {
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "label": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "git": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "branch",
+                                  "remotes",
+                                  "uncommitted",
+                                  "uncommittedCount",
+                                  "unpushed"
+                                ],
+                                "properties": {
+                                  "branch": {
+                                    "anyOf": [
+                                      {
+                                        "maxLength": 250,
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "remotes": {
+                                    "maxItems": 10,
+                                    "type": "array",
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "type": "object",
+                                      "required": [
+                                        "name",
+                                        "url"
+                                      ],
+                                      "properties": {
+                                        "name": {
+                                          "maxLength": 100,
+                                          "type": "string"
+                                        },
+                                        "url": {
+                                          "maxLength": 500,
+                                          "type": "string"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "uncommitted": {
+                                    "maxItems": 200,
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "uncommittedCount": {
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "unpushed": {
+                                    "maxItems": 50,
+                                    "type": "array",
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "type": "object",
+                                      "required": [
+                                        "branch",
+                                        "upstream",
+                                        "ahead"
+                                      ],
+                                      "properties": {
+                                        "branch": {
+                                          "maxLength": 250,
+                                          "type": "string"
+                                        },
+                                        "upstream": {
+                                          "anyOf": [
+                                            {
+                                              "maxLength": 250,
+                                              "type": "string"
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        },
+                                        "ahead": {
+                                          "anyOf": [
+                                            {
+                                              "minimum": 1,
+                                              "type": "integer"
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "recentFiles": {
+                            "anyOf": [
+                              {
+                                "maxItems": 30,
+                                "type": "array",
+                                "items": {
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "path",
+                                    "modifiedAt"
+                                  ],
+                                  "properties": {
+                                    "path": {
+                                      "type": "string"
+                                    },
+                                    "modifiedAt": {
+                                      "format": "date-time",
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "clone": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "repoUrl",
+                          "branch"
+                        ],
+                        "properties": {
+                          "repoUrl": {
+                            "type": "string"
+                          },
+                          "branch": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -110785,7 +112737,8 @@
                 "name",
                 "archivedAt",
                 "createdAt",
-                "lastActivityAt"
+                "lastActivityAt",
+                "transfer"
               ],
               "properties": {
                 "projectId": {
@@ -110817,6 +112770,409 @@
                     {
                       "format": "date-time",
                       "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "transfer": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "projectId",
+                        "projectName",
+                        "from",
+                        "to",
+                        "status",
+                        "startedAt",
+                        "decidedAt",
+                        "includeHistory",
+                        "running",
+                        "check",
+                        "note",
+                        "checkResult",
+                        "clone"
+                      ],
+                      "properties": {
+                        "id": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "projectId": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "projectName": {
+                          "type": "string"
+                        },
+                        "from": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "personId",
+                            "name"
+                          ],
+                          "properties": {
+                            "personId": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "to": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "personId",
+                            "name"
+                          ],
+                          "properties": {
+                            "personId": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "const": "preparing",
+                              "type": "string"
+                            },
+                            {
+                              "const": "sent",
+                              "type": "string"
+                            },
+                            {
+                              "const": "accepted",
+                              "type": "string"
+                            },
+                            {
+                              "const": "declined",
+                              "type": "string"
+                            },
+                            {
+                              "const": "withdrawn",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "startedAt": {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        "decidedAt": {
+                          "anyOf": [
+                            {
+                              "format": "date-time",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "includeHistory": {
+                          "type": "boolean"
+                        },
+                        "running": {
+                          "anyOf": [
+                            {
+                              "anyOf": [
+                                {
+                                  "const": "wait",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "stop",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "check": {
+                          "anyOf": [
+                            {
+                              "anyOf": [
+                                {
+                                  "const": "wait",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "skip",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "note": {
+                          "anyOf": [
+                            {
+                              "maxItems": 12,
+                              "type": "array",
+                              "items": {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "title",
+                                  "lines"
+                                ],
+                                "properties": {
+                                  "title": {
+                                    "minLength": 1,
+                                    "maxLength": 20,
+                                    "type": "string"
+                                  },
+                                  "lines": {
+                                    "maxItems": 50,
+                                    "type": "array",
+                                    "items": {
+                                      "maxLength": 1000,
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "checkResult": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "projectId",
+                                "checkedAt",
+                                "folder",
+                                "git",
+                                "recentFiles"
+                              ],
+                              "properties": {
+                                "projectId": {
+                                  "minLength": 1,
+                                  "maxLength": 80,
+                                  "type": "string"
+                                },
+                                "checkedAt": {
+                                  "format": "date-time",
+                                  "type": "string"
+                                },
+                                "folder": {
+                                  "anyOf": [
+                                    {
+                                      "additionalProperties": false,
+                                      "type": "object",
+                                      "required": [
+                                        "path",
+                                        "label"
+                                      ],
+                                      "properties": {
+                                        "path": {
+                                          "type": "string"
+                                        },
+                                        "label": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "git": {
+                                  "anyOf": [
+                                    {
+                                      "additionalProperties": false,
+                                      "type": "object",
+                                      "required": [
+                                        "branch",
+                                        "remotes",
+                                        "uncommitted",
+                                        "uncommittedCount",
+                                        "unpushed"
+                                      ],
+                                      "properties": {
+                                        "branch": {
+                                          "anyOf": [
+                                            {
+                                              "maxLength": 250,
+                                              "type": "string"
+                                            },
+                                            {
+                                              "type": "null"
+                                            }
+                                          ]
+                                        },
+                                        "remotes": {
+                                          "maxItems": 10,
+                                          "type": "array",
+                                          "items": {
+                                            "additionalProperties": false,
+                                            "type": "object",
+                                            "required": [
+                                              "name",
+                                              "url"
+                                            ],
+                                            "properties": {
+                                              "name": {
+                                                "maxLength": 100,
+                                                "type": "string"
+                                              },
+                                              "url": {
+                                                "maxLength": 500,
+                                                "type": "string"
+                                              }
+                                            }
+                                          }
+                                        },
+                                        "uncommitted": {
+                                          "maxItems": 200,
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "uncommittedCount": {
+                                          "minimum": 0,
+                                          "type": "integer"
+                                        },
+                                        "unpushed": {
+                                          "maxItems": 50,
+                                          "type": "array",
+                                          "items": {
+                                            "additionalProperties": false,
+                                            "type": "object",
+                                            "required": [
+                                              "branch",
+                                              "upstream",
+                                              "ahead"
+                                            ],
+                                            "properties": {
+                                              "branch": {
+                                                "maxLength": 250,
+                                                "type": "string"
+                                              },
+                                              "upstream": {
+                                                "anyOf": [
+                                                  {
+                                                    "maxLength": 250,
+                                                    "type": "string"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              },
+                                              "ahead": {
+                                                "anyOf": [
+                                                  {
+                                                    "minimum": 1,
+                                                    "type": "integer"
+                                                  },
+                                                  {
+                                                    "type": "null"
+                                                  }
+                                                ]
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "recentFiles": {
+                                  "anyOf": [
+                                    {
+                                      "maxItems": 30,
+                                      "type": "array",
+                                      "items": {
+                                        "additionalProperties": false,
+                                        "type": "object",
+                                        "required": [
+                                          "path",
+                                          "modifiedAt"
+                                        ],
+                                        "properties": {
+                                          "path": {
+                                            "type": "string"
+                                          },
+                                          "modifiedAt": {
+                                            "format": "date-time",
+                                            "type": "string"
+                                          }
+                                        }
+                                      }
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "clone": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "repoUrl",
+                                "branch"
+                              ],
+                              "properties": {
+                                "repoUrl": {
+                                  "type": "string"
+                                },
+                                "branch": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      }
                     },
                     {
                       "type": "null"
@@ -110959,7 +113315,8 @@
               "name",
               "archivedAt",
               "createdAt",
-              "lastActivityAt"
+              "lastActivityAt",
+              "transfer"
             ],
             "properties": {
               "projectId": {
@@ -110991,6 +113348,409 @@
                   {
                     "format": "date-time",
                     "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "transfer": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "projectId",
+                      "projectName",
+                      "from",
+                      "to",
+                      "status",
+                      "startedAt",
+                      "decidedAt",
+                      "includeHistory",
+                      "running",
+                      "check",
+                      "note",
+                      "checkResult",
+                      "clone"
+                    ],
+                    "properties": {
+                      "id": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "projectId": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "projectName": {
+                        "type": "string"
+                      },
+                      "from": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "personId",
+                          "name"
+                        ],
+                        "properties": {
+                          "personId": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "to": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "personId",
+                          "name"
+                        ],
+                        "properties": {
+                          "personId": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "status": {
+                        "anyOf": [
+                          {
+                            "const": "preparing",
+                            "type": "string"
+                          },
+                          {
+                            "const": "sent",
+                            "type": "string"
+                          },
+                          {
+                            "const": "accepted",
+                            "type": "string"
+                          },
+                          {
+                            "const": "declined",
+                            "type": "string"
+                          },
+                          {
+                            "const": "withdrawn",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "startedAt": {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      "decidedAt": {
+                        "anyOf": [
+                          {
+                            "format": "date-time",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "includeHistory": {
+                        "type": "boolean"
+                      },
+                      "running": {
+                        "anyOf": [
+                          {
+                            "anyOf": [
+                              {
+                                "const": "wait",
+                                "type": "string"
+                              },
+                              {
+                                "const": "stop",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "check": {
+                        "anyOf": [
+                          {
+                            "anyOf": [
+                              {
+                                "const": "wait",
+                                "type": "string"
+                              },
+                              {
+                                "const": "skip",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "note": {
+                        "anyOf": [
+                          {
+                            "maxItems": 12,
+                            "type": "array",
+                            "items": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "title",
+                                "lines"
+                              ],
+                              "properties": {
+                                "title": {
+                                  "minLength": 1,
+                                  "maxLength": 20,
+                                  "type": "string"
+                                },
+                                "lines": {
+                                  "maxItems": 50,
+                                  "type": "array",
+                                  "items": {
+                                    "maxLength": 1000,
+                                    "type": "string"
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "checkResult": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "projectId",
+                              "checkedAt",
+                              "folder",
+                              "git",
+                              "recentFiles"
+                            ],
+                            "properties": {
+                              "projectId": {
+                                "minLength": 1,
+                                "maxLength": 80,
+                                "type": "string"
+                              },
+                              "checkedAt": {
+                                "format": "date-time",
+                                "type": "string"
+                              },
+                              "folder": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "type": "object",
+                                    "required": [
+                                      "path",
+                                      "label"
+                                    ],
+                                    "properties": {
+                                      "path": {
+                                        "type": "string"
+                                      },
+                                      "label": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "git": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "type": "object",
+                                    "required": [
+                                      "branch",
+                                      "remotes",
+                                      "uncommitted",
+                                      "uncommittedCount",
+                                      "unpushed"
+                                    ],
+                                    "properties": {
+                                      "branch": {
+                                        "anyOf": [
+                                          {
+                                            "maxLength": 250,
+                                            "type": "string"
+                                          },
+                                          {
+                                            "type": "null"
+                                          }
+                                        ]
+                                      },
+                                      "remotes": {
+                                        "maxItems": 10,
+                                        "type": "array",
+                                        "items": {
+                                          "additionalProperties": false,
+                                          "type": "object",
+                                          "required": [
+                                            "name",
+                                            "url"
+                                          ],
+                                          "properties": {
+                                            "name": {
+                                              "maxLength": 100,
+                                              "type": "string"
+                                            },
+                                            "url": {
+                                              "maxLength": 500,
+                                              "type": "string"
+                                            }
+                                          }
+                                        }
+                                      },
+                                      "uncommitted": {
+                                        "maxItems": 200,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "uncommittedCount": {
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "unpushed": {
+                                        "maxItems": 50,
+                                        "type": "array",
+                                        "items": {
+                                          "additionalProperties": false,
+                                          "type": "object",
+                                          "required": [
+                                            "branch",
+                                            "upstream",
+                                            "ahead"
+                                          ],
+                                          "properties": {
+                                            "branch": {
+                                              "maxLength": 250,
+                                              "type": "string"
+                                            },
+                                            "upstream": {
+                                              "anyOf": [
+                                                {
+                                                  "maxLength": 250,
+                                                  "type": "string"
+                                                },
+                                                {
+                                                  "type": "null"
+                                                }
+                                              ]
+                                            },
+                                            "ahead": {
+                                              "anyOf": [
+                                                {
+                                                  "minimum": 1,
+                                                  "type": "integer"
+                                                },
+                                                {
+                                                  "type": "null"
+                                                }
+                                              ]
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "recentFiles": {
+                                "anyOf": [
+                                  {
+                                    "maxItems": 30,
+                                    "type": "array",
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "type": "object",
+                                      "required": [
+                                        "path",
+                                        "modifiedAt"
+                                      ],
+                                      "properties": {
+                                        "path": {
+                                          "type": "string"
+                                        },
+                                        "modifiedAt": {
+                                          "format": "date-time",
+                                          "type": "string"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "clone": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "repoUrl",
+                              "branch"
+                            ],
+                            "properties": {
+                              "repoUrl": {
+                                "type": "string"
+                              },
+                              "branch": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
                   },
                   {
                     "type": "null"
@@ -111459,6 +114219,185 @@
                 "type": "string"
               }
             }
+          },
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "kind",
+              "id",
+              "at",
+              "transferId",
+              "from",
+              "to"
+            ],
+            "properties": {
+              "kind": {
+                "const": "handover",
+                "type": "string"
+              },
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "at": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "transferId": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "from": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "personId",
+                  "name"
+                ],
+                "properties": {
+                  "personId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              },
+              "to": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "personId",
+                  "name"
+                ],
+                "properties": {
+                  "personId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "kind",
+              "id",
+              "at",
+              "transferId",
+              "from",
+              "note"
+            ],
+            "properties": {
+              "kind": {
+                "const": "handover_summary",
+                "type": "string"
+              },
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "at": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "transferId": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "from": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "personId",
+                  "name"
+                ],
+                "properties": {
+                  "personId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              },
+              "note": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "title",
+                    "lines"
+                  ],
+                  "properties": {
+                    "title": {
+                      "type": "string"
+                    },
+                    "lines": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "kind",
+              "id",
+              "at",
+              "transferId",
+              "by"
+            ],
+            "properties": {
+              "kind": {
+                "const": "transfer_declined",
+                "type": "string"
+              },
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "at": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "transferId": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "by": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "personId",
+                  "name"
+                ],
+                "properties": {
+                  "personId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
           }
         ]
       },
@@ -111781,8 +114720,1131 @@
                       "type": "string"
                     }
                   }
+                },
+                {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "id",
+                    "at",
+                    "transferId",
+                    "from",
+                    "to"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "handover",
+                      "type": "string"
+                    },
+                    "id": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "at": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "transferId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "from": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "personId",
+                        "name"
+                      ],
+                      "properties": {
+                        "personId": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "to": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "personId",
+                        "name"
+                      ],
+                      "properties": {
+                        "personId": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "id",
+                    "at",
+                    "transferId",
+                    "from",
+                    "note"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "handover_summary",
+                      "type": "string"
+                    },
+                    "id": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "at": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "transferId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "from": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "personId",
+                        "name"
+                      ],
+                      "properties": {
+                        "personId": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "note": {
+                      "type": "array",
+                      "items": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "title",
+                          "lines"
+                        ],
+                        "properties": {
+                          "title": {
+                            "type": "string"
+                          },
+                          "lines": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "id",
+                    "at",
+                    "transferId",
+                    "by"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "transfer_declined",
+                      "type": "string"
+                    },
+                    "id": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "at": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "transferId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "by": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "personId",
+                        "name"
+                      ],
+                      "properties": {
+                        "personId": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
                 }
               ]
+            }
+          }
+        }
+      },
+      "ProjectHandoverItem": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "id",
+          "at",
+          "transferId",
+          "from",
+          "to"
+        ],
+        "properties": {
+          "kind": {
+            "const": "handover",
+            "type": "string"
+          },
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "transferId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "from": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "personId",
+              "name"
+            ],
+            "properties": {
+              "personId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          },
+          "to": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "personId",
+              "name"
+            ],
+            "properties": {
+              "personId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "ProjectHandoverSummaryItem": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "id",
+          "at",
+          "transferId",
+          "from",
+          "note"
+        ],
+        "properties": {
+          "kind": {
+            "const": "handover_summary",
+            "type": "string"
+          },
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "transferId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "from": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "personId",
+              "name"
+            ],
+            "properties": {
+              "personId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          },
+          "note": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "title",
+                "lines"
+              ],
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "lines": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "ProjectTransferDeclinedItem": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "id",
+          "at",
+          "transferId",
+          "by"
+        ],
+        "properties": {
+          "kind": {
+            "const": "transfer_declined",
+            "type": "string"
+          },
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "transferId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "by": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "personId",
+              "name"
+            ],
+            "properties": {
+              "personId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "PersonRef": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "personId",
+          "name"
+        ],
+        "properties": {
+          "personId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "HandoverSection": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "title",
+          "lines"
+        ],
+        "properties": {
+          "title": {
+            "minLength": 1,
+            "maxLength": 20,
+            "type": "string"
+          },
+          "lines": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "maxLength": 1000,
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ProjectTransfer": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "projectId",
+          "projectName",
+          "from",
+          "to",
+          "status",
+          "startedAt",
+          "decidedAt",
+          "includeHistory",
+          "running",
+          "check",
+          "note",
+          "checkResult",
+          "clone"
+        ],
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "projectId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "projectName": {
+            "type": "string"
+          },
+          "from": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "personId",
+              "name"
+            ],
+            "properties": {
+              "personId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          },
+          "to": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "personId",
+              "name"
+            ],
+            "properties": {
+              "personId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "preparing",
+                "type": "string"
+              },
+              {
+                "const": "sent",
+                "type": "string"
+              },
+              {
+                "const": "accepted",
+                "type": "string"
+              },
+              {
+                "const": "declined",
+                "type": "string"
+              },
+              {
+                "const": "withdrawn",
+                "type": "string"
+              }
+            ]
+          },
+          "startedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "decidedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "includeHistory": {
+            "type": "boolean"
+          },
+          "running": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "const": "wait",
+                    "type": "string"
+                  },
+                  {
+                    "const": "stop",
+                    "type": "string"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "check": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "const": "wait",
+                    "type": "string"
+                  },
+                  {
+                    "const": "skip",
+                    "type": "string"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxItems": 12,
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "title",
+                    "lines"
+                  ],
+                  "properties": {
+                    "title": {
+                      "minLength": 1,
+                      "maxLength": 20,
+                      "type": "string"
+                    },
+                    "lines": {
+                      "maxItems": 50,
+                      "type": "array",
+                      "items": {
+                        "maxLength": 1000,
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "checkResult": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "projectId",
+                  "checkedAt",
+                  "folder",
+                  "git",
+                  "recentFiles"
+                ],
+                "properties": {
+                  "projectId": {
+                    "minLength": 1,
+                    "maxLength": 80,
+                    "type": "string"
+                  },
+                  "checkedAt": {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "folder": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "path",
+                          "label"
+                        ],
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "git": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "branch",
+                          "remotes",
+                          "uncommitted",
+                          "uncommittedCount",
+                          "unpushed"
+                        ],
+                        "properties": {
+                          "branch": {
+                            "anyOf": [
+                              {
+                                "maxLength": 250,
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "remotes": {
+                            "maxItems": 10,
+                            "type": "array",
+                            "items": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "name",
+                                "url"
+                              ],
+                              "properties": {
+                                "name": {
+                                  "maxLength": 100,
+                                  "type": "string"
+                                },
+                                "url": {
+                                  "maxLength": 500,
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          },
+                          "uncommitted": {
+                            "maxItems": 200,
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "uncommittedCount": {
+                            "minimum": 0,
+                            "type": "integer"
+                          },
+                          "unpushed": {
+                            "maxItems": 50,
+                            "type": "array",
+                            "items": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "branch",
+                                "upstream",
+                                "ahead"
+                              ],
+                              "properties": {
+                                "branch": {
+                                  "maxLength": 250,
+                                  "type": "string"
+                                },
+                                "upstream": {
+                                  "anyOf": [
+                                    {
+                                      "maxLength": 250,
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "ahead": {
+                                  "anyOf": [
+                                    {
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "recentFiles": {
+                    "anyOf": [
+                      {
+                        "maxItems": 30,
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "path",
+                            "modifiedAt"
+                          ],
+                          "properties": {
+                            "path": {
+                              "type": "string"
+                            },
+                            "modifiedAt": {
+                              "format": "date-time",
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "clone": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "repoUrl",
+                  "branch"
+                ],
+                "properties": {
+                  "repoUrl": {
+                    "type": "string"
+                  },
+                  "branch": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "CreateProjectTransferRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "toPersonId"
+        ],
+        "properties": {
+          "toPersonId": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "UpdateProjectTransferRequest": {
+        "additionalProperties": false,
+        "minProperties": 1,
+        "type": "object",
+        "properties": {
+          "note": {
+            "maxItems": 12,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "title",
+                "lines"
+              ],
+              "properties": {
+                "title": {
+                  "minLength": 1,
+                  "maxLength": 20,
+                  "type": "string"
+                },
+                "lines": {
+                  "maxItems": 50,
+                  "type": "array",
+                  "items": {
+                    "maxLength": 1000,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "includeHistory": {
+            "type": "boolean"
+          },
+          "running": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "const": "wait",
+                    "type": "string"
+                  },
+                  {
+                    "const": "stop",
+                    "type": "string"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "check": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "const": "wait",
+                    "type": "string"
+                  },
+                  {
+                    "const": "skip",
+                    "type": "string"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "checkResult": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "projectId",
+              "checkedAt",
+              "folder",
+              "git",
+              "recentFiles"
+            ],
+            "properties": {
+              "projectId": {
+                "minLength": 1,
+                "maxLength": 80,
+                "type": "string"
+              },
+              "checkedAt": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "folder": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "path",
+                      "label"
+                    ],
+                    "properties": {
+                      "path": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "git": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "branch",
+                      "remotes",
+                      "uncommitted",
+                      "uncommittedCount",
+                      "unpushed"
+                    ],
+                    "properties": {
+                      "branch": {
+                        "anyOf": [
+                          {
+                            "maxLength": 250,
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "remotes": {
+                        "maxItems": 10,
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "name",
+                            "url"
+                          ],
+                          "properties": {
+                            "name": {
+                              "maxLength": 100,
+                              "type": "string"
+                            },
+                            "url": {
+                              "maxLength": 500,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "uncommitted": {
+                        "maxItems": 200,
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "uncommittedCount": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "unpushed": {
+                        "maxItems": 50,
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "branch",
+                            "upstream",
+                            "ahead"
+                          ],
+                          "properties": {
+                            "branch": {
+                              "maxLength": 250,
+                              "type": "string"
+                            },
+                            "upstream": {
+                              "anyOf": [
+                                {
+                                  "maxLength": 250,
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "ahead": {
+                              "anyOf": [
+                                {
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "recentFiles": {
+                "anyOf": [
+                  {
+                    "maxItems": 30,
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "path",
+                        "modifiedAt"
+                      ],
+                      "properties": {
+                        "path": {
+                          "type": "string"
+                        },
+                        "modifiedAt": {
+                          "format": "date-time",
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "HandoverSecretFinding": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "section",
+          "line",
+          "sample"
+        ],
+        "properties": {
+          "section": {
+            "type": "string"
+          },
+          "line": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "sample": {
+            "type": "string"
+          }
+        }
+      },
+      "HandoverSecretsResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "findings"
+        ],
+        "properties": {
+          "code": {
+            "const": "SECRET_IN_NOTE",
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "section",
+                "line",
+                "sample"
+              ],
+              "properties": {
+                "section": {
+                  "type": "string"
+                },
+                "line": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "sample": {
+                  "type": "string"
+                }
+              }
             }
           }
         }
