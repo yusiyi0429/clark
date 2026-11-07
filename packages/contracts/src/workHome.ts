@@ -201,7 +201,7 @@ export const HomeMonthMission = Type.Object({
 export const WaitingKind = Type.Union([
   Type.Literal("approval"), Type.Literal("question"), Type.Literal("verdict"), Type.Literal("meeting"), Type.Literal("mission_card"), Type.Literal("role"),
   Type.Literal("merge"), Type.Literal("plan_start"), Type.Literal("acceptance"), Type.Literal("month"), Type.Literal("device"), Type.Literal("quota"),
-  Type.Literal("transfer"),
+  Type.Literal("transfer"), Type.Literal("goal_changed"),
 ]);
 
 /**

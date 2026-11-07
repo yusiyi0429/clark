@@ -20809,6 +20809,102 @@
         }
       }
     },
+    "/api/me/projects/{projectId}/goal-changes/{id}": {
+      "post": {
+        "operationId": "answerGoalChange",
+        "summary": "答月中 Task 改了或取消了的选项框（16.4）：停掉或留着和它有关的子会话",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnswerGoalChangeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "答完的那一行",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectGoalChangedItem"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/projects/{projectId}/board": {
       "get": {
         "operationId": "getProjectBoard",
@@ -108866,6 +108962,10 @@
               {
                 "const": "transfer",
                 "type": "string"
+              },
+              {
+                "const": "goal_changed",
+                "type": "string"
               }
             ]
           },
@@ -110803,6 +110903,10 @@
                     },
                     {
                       "const": "transfer",
+                      "type": "string"
+                    },
+                    {
+                      "const": "goal_changed",
                       "type": "string"
                     }
                   ]
@@ -114825,6 +114929,117 @@
                 }
               }
             }
+          },
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "kind",
+              "id",
+              "at",
+              "taskId",
+              "taskName",
+              "change",
+              "sessions",
+              "answer",
+              "answeredAt"
+            ],
+            "properties": {
+              "kind": {
+                "const": "goal_changed",
+                "type": "string"
+              },
+              "id": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "at": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "taskId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "taskName": {
+                "type": "string"
+              },
+              "change": {
+                "anyOf": [
+                  {
+                    "const": "changed",
+                    "type": "string"
+                  },
+                  {
+                    "const": "cancelled",
+                    "type": "string"
+                  }
+                ]
+              },
+              "sessions": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "id",
+                    "title"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "const": "card",
+                          "type": "string"
+                        },
+                        {
+                          "const": "topic",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "answer": {
+                "anyOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "const": "stop",
+                        "type": "string"
+                      },
+                      {
+                        "const": "keep",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "answeredAt": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
           }
         ]
       },
@@ -115324,6 +115539,117 @@
                           "type": "string"
                         }
                       }
+                    }
+                  }
+                },
+                {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "id",
+                    "at",
+                    "taskId",
+                    "taskName",
+                    "change",
+                    "sessions",
+                    "answer",
+                    "answeredAt"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "goal_changed",
+                      "type": "string"
+                    },
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "at": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "taskId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "taskName": {
+                      "type": "string"
+                    },
+                    "change": {
+                      "anyOf": [
+                        {
+                          "const": "changed",
+                          "type": "string"
+                        },
+                        {
+                          "const": "cancelled",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "sessions": {
+                      "type": "array",
+                      "items": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "kind",
+                          "id",
+                          "title"
+                        ],
+                        "properties": {
+                          "kind": {
+                            "anyOf": [
+                              {
+                                "const": "card",
+                                "type": "string"
+                              },
+                              {
+                                "const": "topic",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "id": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "answer": {
+                      "anyOf": [
+                        {
+                          "anyOf": [
+                            {
+                              "const": "stop",
+                              "type": "string"
+                            },
+                            {
+                              "const": "keep",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "answeredAt": {
+                      "anyOf": [
+                        {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
                     }
                   }
                 }
@@ -116720,6 +117046,138 @@
               },
               {
                 "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ProjectGoalChangedItem": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "id",
+          "at",
+          "taskId",
+          "taskName",
+          "change",
+          "sessions",
+          "answer",
+          "answeredAt"
+        ],
+        "properties": {
+          "kind": {
+            "const": "goal_changed",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "taskId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "taskName": {
+            "type": "string"
+          },
+          "change": {
+            "anyOf": [
+              {
+                "const": "changed",
+                "type": "string"
+              },
+              {
+                "const": "cancelled",
+                "type": "string"
+              }
+            ]
+          },
+          "sessions": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "kind",
+                "id",
+                "title"
+              ],
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "card",
+                      "type": "string"
+                    },
+                    {
+                      "const": "topic",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "answer": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "const": "stop",
+                    "type": "string"
+                  },
+                  {
+                    "const": "keep",
+                    "type": "string"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "answeredAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "AnswerGoalChangeRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "answer"
+        ],
+        "properties": {
+          "answer": {
+            "anyOf": [
+              {
+                "const": "stop",
+                "type": "string"
+              },
+              {
+                "const": "keep",
+                "type": "string"
               }
             ]
           }
