@@ -390,11 +390,13 @@ describe("本机程序契约", () => {
     expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots: { max: 3, running: 0, queued: 0 }, items: statusItems })).toBe(true);
 
     // 一句话带附件（14.5）：只说附件不说话也行；user_message 事件带存好的附件
-    expect(Value.Check(SendMessage, { attachments: [{ id: "att-1", name: "截图.png" }] })).toBe(true);
+    const ref = { id: "5b0c2f3e-6a1d-4c8e-9f2a-1b3c4d5e6f70", fileName: "截图.png", size: 1024, sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" };
+    expect(Value.Check(SendMessage, { attachments: [ref] })).toBe(true);
+    expect(Value.Check(SendMessage, { attachments: [{ ...ref, sha256: "XYZ" }] })).toBe(false);
     expect(Value.Check(SendMessage, { text: "看看", attachments: [] })).toBe(false);
-    expect(Value.Check(SendMessage, { attachments: Array.from({ length: 21 }, (_, i) => ({ id: `a${i}`, name: `${i}.png` })) })).toBe(false);
+    expect(Value.Check(SendMessage, { attachments: Array.from({ length: 21 }, () => ref) })).toBe(false);
     expect(Value.Check(LocalSessionEvent, { seq: 5, at, sessionId, type: "user_message", text: "", source: "web", attachments: [{ name: "截图.png", path: "D:/w/.tianshu-attachments/1/截图.png", size: 1024 }] })).toBe(true);
-    expect(LOCAL_RUNNER_ATTACHMENT_PATH).toBe("/api/local-runner/attachments");
+    expect(LOCAL_RUNNER_ATTACHMENT_PATH).toBe("/api/local-runner/attachments/:id");
   });
 
   it("配对口令只在批准后出现；路由表里只有健康和配对不要口令", () => {

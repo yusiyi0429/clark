@@ -21,8 +21,11 @@ export const LOCAL_RUNNER_TOKEN_HEADER = "x-tianshu-local-token";
 export const LOCAL_RUNNER_SYNC_PATH = "/api/local-runner/sync";
 /** 云端「验收交代」（相对天枢 api 的根）：GET ?handbackKey=<交回条目的 key>，鉴权同上。本机在交回同步上去以后取它，起验收会话。 */
 export const LOCAL_RUNNER_VERIFY_BRIEF_PATH = "/api/local-runner/verify-brief";
-/** 本机取消息附件的云端接口（GET <apiBaseUrl><这个路径>/<附件 id>，带本机的令牌，回文件原文；B 出接口前是占位，见 LocalAttachmentRef）。 */
-export const LOCAL_RUNNER_ATTACHMENT_PATH = "/api/local-runner/attachments";
+/**
+ * 云端子会话附件（相对天枢 api 的根，新首页 14.5）：GET /api/local-runner/attachments/:id 回文件原样（Content-Type 是它的类型，x-sha256 是摘要），鉴权同上，
+ * 只给附件主人配对的电脑。本机收到带 attachments 的一句话时按 id 取回，存进这件 Task 的工作区，把路径交给 Claude Code。
+ */
+export const LOCAL_RUNNER_ATTACHMENT_PATH = "/api/local-runner/attachments/:id";
 
 const Instant = Type.String({ format: "date-time" });
 const Id = Type.String({ minLength: 1, maxLength: 80, pattern: "^[A-Za-z0-9_-]+$" });
@@ -608,19 +611,25 @@ export const LocalCreateSessionBatchResponse = Type.Object({
  * 这时 text 可不填，填了是本人对这次评审的补充要求。不带 kind 就是普通的一句话，text 必填。
  */
 /**
- * 一句话带的附件（新首页设计 14.5）：天枢里存着的文件，id 是天枢给的，name 是文件名（给人看、存盘用）。
- * 本机按 id 从天枢取回（GET <apiBaseUrl>{LOCAL_RUNNER_ATTACHMENT_PATH}/<id>，带本机的令牌），存进这件的工作区：卡的工作目录（工作树）、专题和规划员的专用目录里的
- * .tianshu-attachments/<这句话的编号>/<文件名>（目录里放一个只写 * 的 .gitignore，不会被提交），再把路径写进给执行方的那句话（图片和 PDF 执行方能直接看）。
+ * 一句话带的附件（新首页 14.5）：云端存着的子会话附件，本机按 id 从 LOCAL_RUNNER_ATTACHMENT_PATH 取回，核对 sha256。
+ * 本机存进这件的工作区：会话的工作目录（卡的工作树、专题和规划员的专用目录）里的 .tianshu-attachments/<这句话的编号>/<文件名>
+ * （目录里放一个只写 * 的 .gitignore，不会被提交），再把路径写进给执行方的那句话（图片和 PDF 执行方能直接看）。
  * 格式：图片 PNG、JPEG、GIF、WebP；文档 PDF、DOCX、XLSX、PPTX、CSV、TXT、MD、JSON、HTML、XML、YAML；代码和日志。每个不超过 30 MB，一句最多 20 个。
- * 格式不支持、太大：400 validation；没连天枢、取不到：409 conflict。都是整句不发，message 写「文件名：原因」，网页照 14.5 写在附件那一行下面。
+ * 格式不支持、太大：400 validation；没连天枢、取不到、sha256 对不上：409 conflict。都是整句不发，会话里记一条 notice（attachment_failed），
+ * message 写「文件名：原因」，网页照 14.5 写在附件那一行下面。
  */
-export const LocalAttachmentRef = Type.Object({ id: Type.String({ minLength: 1, maxLength: 120 }), name: Type.String({ minLength: 1, maxLength: 200 }) }, strict);
+export const LocalAttachmentRef = Type.Object({
+  id: Type.String({ format: "uuid" }),
+  fileName: Type.String({ minLength: 1, maxLength: 255 }),
+  size: Type.Integer({ minimum: 1 }),
+  sha256: Type.String({ pattern: "^[0-9a-f]{64}$" }),
+}, strict);
 /** 存好了的附件：文件名、在本机的路径、大小（字节）。user_message 事件带上，网页画在本人气泡里。 */
-export const LocalSavedAttachment = Type.Object({ name: Type.String({ minLength: 1, maxLength: 200 }), path: Type.String(), size: Type.Integer({ minimum: 0 }) }, strict);
+export const LocalSavedAttachment = Type.Object({ name: Type.String({ minLength: 1, maxLength: 255 }), path: Type.String(), size: Type.Integer({ minimum: 0 }) }, strict);
 export const LocalSendMessageRequest = Type.Object({
   kind: Type.Optional(Type.Union([Type.Literal("say"), Type.Literal("review")])),
-  /** 带了附件时可以不说话。 */
   text: Type.Optional(Type.String({ minLength: 1, maxLength: 20000 })),
+  /** 附件（最多 20 个）：本机取回存进工作区，路径和这句话一起交给执行方；只带附件不说话时 text 可以不填。 */
   attachments: Type.Optional(Type.Array(LocalAttachmentRef, { minItems: 1, maxItems: 20 })),
 }, strict);
 export const LocalSendMessageResponse = Type.Object({
