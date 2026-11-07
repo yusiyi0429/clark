@@ -1,4 +1,5 @@
 import { Type, type Static } from "@sinclair/typebox";
+import { NullableInteger } from "./nullable.js";
 
 /**
  * 会议卡（FR-4、FR-5）：会议 Card 与会议 Event 共用一份冻结 payload（MeetingCardFrozenPayload）。
@@ -50,7 +51,7 @@ const objectChangeFields = {
   id: CardItemId,
   targetRef: NullableString({ minLength: 1, maxLength: 500 }),
   targetTitle: NullableString({ maxLength: 500 }),
-  expectedVersion: Type.Union([Type.Integer({ minimum: 0 }), Type.Null()]),
+  expectedVersion: NullableInteger({ minimum: 0 }),
   before: Type.Union([Type.Object({ text: Type.String() }, { additionalProperties: false }), Type.Null()]),
   after: Type.Object({ text: Type.String({ minLength: 1, maxLength: 20000 }) }, { additionalProperties: false }),
   basisSectionIds: Type.Array(Type.String({ minLength: 1, maxLength: 64 }), { maxItems: 50 }),
@@ -190,7 +191,7 @@ export const MeetingObjectResult = Type.Object(
       Type.Literal("pending"), Type.Literal("updated"), Type.Literal("failed"), Type.Literal("not_allowed"),
       Type.Literal("conflict"), Type.Literal("superseded"), Type.Literal("blocked"),
     ]),
-    actualVersion: Type.Union([Type.Integer({ minimum: 0 }), Type.Null()]),
+    actualVersion: NullableInteger({ minimum: 0 }),
     error: NullableString(),
   },
   { additionalProperties: false },

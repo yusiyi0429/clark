@@ -5,7 +5,10 @@ import {
   LocalCreateSessionRequest, LocalModelProfileUpsert, LocalModelProfile, LocalPermissionDecisionRequest, LocalSessionEvent,
   LocalSyncBatchRequest, LocalPairingStatusResponse, LocalSendMessageRequest, LOCAL_RUNNER_ROUTES,
   LocalCreateSessionBatchRequest, LocalCreateSessionBatchResponse, LocalSettingsPatch, LocalSessionSummary, LocalHealthResponse,
-  LocalVerifyBriefResponse, LOCAL_RUNNER_VERIFY_BRIEF_PATH, LocalMergeResponse, LocalVerdict, LocalQuestionAnswerRequest, LocalPlanCard,
+  LocalVerifyBriefResponse, LOCAL_RUNNER_VERIFY_BRIEF_PATH, LocalMergeResponse, LocalVerdict, LocalQuestionAnswerRequest, LocalPlanCard, LocalBackgroundItem,
+  LocalSettings, LocalMergeSync, LocalStatusResponse, LocalQuotaSource, LocalQuotaSync,
+  LocalFolder, LocalProjectFolder, LocalProjectListResponse, LocalProjectFolderRequest, LocalHandoverCheck, LocalProjectCloneRequest, LocalProjectCloneResponse, ProjectTransfer,
+  LocalTaskBudgetView, LocalBudgetListResponse, LocalBudgetUpdateRequest, LocalSendMessageRequest as SendMessage, LocalPermissionBrief, LOCAL_RUNNER_ATTACHMENT_PATH,
 } from "../src/index.js";
 
 const sessionId = "6b0f3a52-4d0c-4c1e-9a43-1f7d2c9b8e10";
@@ -218,6 +221,224 @@ describe("本机程序契约", () => {
     const status = { status: "queued", title: "总验收", agent: "claude-code", modelLabel: "订阅", queuePosition: 1 };
     expect(Value.Check(LocalSyncBatchRequest, batch({ ...status, waitingFor: ["card-1", "card-2"] }))).toBe(true);
     expect(Value.Check(LocalSyncBatchRequest, batch(status))).toBe(true);
+  });
+
+  it("后台任务：会话摘要列出子 agent 和后台命令，事件和同步条目每次带全部字段，可以停", () => {
+    const at = "2026-11-07T02:00:00.000Z";
+    const agent = { id: "a87b163c2898fa14a", title: "数文件", kind: "subagent", state: "running", startedAt: at, finishedAt: null, stoppable: true };
+    const cmd = { id: "bbvrkzzoy", title: "后台等待 30 秒", kind: "command", state: "stopped", startedAt: at, finishedAt: at, stoppable: false };
+    expect(Value.Check(LocalBackgroundItem, agent)).toBe(true);
+    expect(Value.Check(LocalBackgroundItem, cmd)).toBe(true);
+    expect(Value.Check(LocalBackgroundItem, { ...agent, kind: "plan" })).toBe(false); // 规划员、验收员、合回是云端自己知道的，不在这里
+    expect(Value.Check(LocalBackgroundItem, { ...agent, state: "killed" })).toBe(false);
+    expect(Value.Check(LocalBackgroundItem, { ...agent, finishedAt: undefined })).toBe(false);
+    const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0 };
+    const summary = {
+      id: sessionId, subject: { kind: "card", cardId: "card-1" }, title: "改登录页", agent: "claude-code", modelProfileId: "subscription", modelLabel: "订阅",
+      cwd: "D:/repo", status: "running", includePersonalConfig: false, createdAt: at, updatedAt: at, lastSeq: 9, pendingPermissions: 0, queuePosition: null, usage,
+    };
+    expect(Value.Check(LocalSessionSummary, { ...summary, background: [agent, cmd] })).toBe(true);
+    expect(Value.Check(LocalSessionEvent, { seq: 10, at, sessionId, type: "background", item: cmd })).toBe(true);
+    const batch = { deviceId, runnerVersion: "0.1.0", slots: { max: 3, running: 1, queued: 0 }, items: [{ key: `${deviceId}:${sessionId}:11`, sessionId, subject: summary.subject, occurredAt: at, type: "background", data: agent }] };
+    expect(Value.Check(LocalSyncBatchRequest, batch)).toBe(true);
+    expect(LOCAL_RUNNER_ROUTES.stopBackground).toEqual({ method: "POST", path: "/v1/sessions/:id/background/:itemId/stop", auth: true });
+  });
+
+  it("交完收工是 done；验收过就合回是设置；没合回的卡带 needsMerge；合回结果按交回同步", () => {
+    const at = "2026-11-07T04:30:00.000Z";
+    const sha = "a".repeat(40);
+    const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0 };
+    const plan = {
+      id: sessionId, subject: { kind: "plan", taskId: "task-1" }, title: "拆卡", agent: "claude-code", modelProfileId: "subscription", modelLabel: "订阅",
+      cwd: "D:/plans/task-1", status: "done", includePersonalConfig: false, createdAt: at, updatedAt: at, lastSeq: 9, pendingPermissions: 0, queuePosition: null, usage,
+    };
+    expect(Value.Check(LocalSessionSummary, plan)).toBe(true);
+    expect(Value.Check(LocalSessionEvent, { seq: 10, at, sessionId, type: "status", status: "done", reason: "计划交了" })).toBe(true);
+
+    const settings = { includePersonalConfigByDefault: false, allowedOrigins: [], paused: false, maxConcurrent: 3, autoMerge: true };
+    expect(Value.Check(LocalSettings, settings)).toBe(true);
+    expect(Value.Check(LocalSettings, { ...settings, autoMerge: undefined })).toBe(false);
+    expect(Value.Check(LocalSettingsPatch, { autoMerge: false })).toBe(true);
+
+    const workspace = { kind: "worktree", folder: "D:/repo", path: "D:/data/worktrees/c1", branch: "tianshu/c1-login", baseBranch: "main", baseCommit: sha, mergedCommit: null };
+    const card = { ...plan, subject: { kind: "card", cardId: "card-1" }, status: "idle", workspace };
+    expect(Value.Check(LocalSessionSummary, card)).toBe(true);
+    expect(Value.Check(LocalSessionSummary, { ...card, workspace: { ...workspace, needsMerge: { reason: "dirty", message: "主文件夹有没提交的改动：readme.md" } } })).toBe(true);
+    expect(Value.Check(LocalSessionSummary, { ...card, workspace: { ...workspace, needsMerge: { reason: "busy", message: "x" } } })).toBe(false);
+
+    const key = `${deviceId}:${sessionId}:12`;
+    const merged = { handbackKey: key, merged: true, commit: sha, baseBranch: "main", reason: null, message: null, auto: true };
+    const held = { handbackKey: key, merged: false, commit: null, baseBranch: "main", reason: "auto_merge_off", message: "没开「验收过就合回」，等你合", auto: true };
+    for (const m of [merged, held, { ...held, reason: "not_ready", message: "交回以后卡又改过" }, { ...merged, auto: false }]) expect(Value.Check(LocalMergeSync, m)).toBe(true);
+    expect(Value.Check(LocalMergeSync, { ...held, reason: "busy" })).toBe(false);
+    const batch = { deviceId, runnerVersion: "0.1.0", slots: { max: 3, running: 0, queued: 0 }, items: [{ key: `${deviceId}:${sessionId}:13`, sessionId, subject: card.subject, occurredAt: at, type: "merge", data: merged }] };
+    expect(Value.Check(LocalSyncBatchRequest, batch)).toBe(true);
+  });
+
+  it("额度和命令行工具在本机状态里；额度用完的卡停着等（hold、usage_limit）；花费分订阅和网关、网关带真钱；开工带档位；同步只带百分比、状态、时间", () => {
+    const at = "2026-11-07T07:00:00.000Z";
+    const claude = {
+      id: "claude", name: "Claude", kind: "subscription", remainingPercent: 21, amounts: [], resetsAt: "2026-11-07T00:00:00.229Z",
+      plan: "max", blockedUntil: null, extraUsage: false, updatedAt: at, error: null,
+      windows: [
+        { kind: "weekly_all", model: null, usedPercent: 79, state: "warning", resetsAt: "2026-11-07T00:00:00.229Z" },
+        { kind: "weekly_scoped", model: "Fable", usedPercent: 4, state: "ok", resetsAt: "2026-11-07T00:00:00.229Z" },
+      ],
+    };
+    expect(Value.Check(LocalQuotaSource, claude)).toBe(true);
+    expect(Value.Check(LocalQuotaSource, { ...claude, windows: [{ ...claude.windows[0], usedPercent: 101 }] })).toBe(false);
+    expect(Value.Check(LocalQuotaSource, { ...claude, email: "x@example.com" })).toBe(false); // 账号信息放不进来
+    const codex = { id: "codex", name: "Codex", kind: "subscription", remainingPercent: 79, amounts: [], resetsAt: at, plan: "plus", blockedUntil: null, extraUsage: null, updatedAt: at, error: null, windows: [{ kind: "session", model: null, usedPercent: 0, state: "ok", resetsAt: at }, { kind: "weekly_all", model: null, usedPercent: 21, state: "ok", resetsAt: at }] };
+    expect(Value.Check(LocalQuotaSource, codex)).toBe(true);
+    expect(Value.Check(LocalQuotaSource, { ...codex, kind: "plan" })).toBe(false);
+    // TokenHub 当天花费、别的 API 余额（形状先留着）
+    const tokenhub = { id: "tokenhub:tokenhub.corp.tokenkingos.com", name: "TokenHub", kind: "daily_spend", remainingPercent: null, amounts: [{ amount: 12.4, currency: "CNY", estimated: false }],
+      monthAmounts: [{ amount: 230, currency: "CNY", estimated: false }], windows: [], resetsAt: null, blockedUntil: null, plan: null, extraUsage: null, updatedAt: at, error: null };
+    const minimax = { ...tokenhub, id: "api:minimax", name: "MiniMax", kind: "api_balance", amounts: [{ amount: 88, currency: "CNY", estimated: false }], monthAmounts: undefined };
+    delete (minimax as { monthAmounts?: unknown }).monthAmounts;
+    for (const q of [tokenhub, minimax]) expect(Value.Check(LocalQuotaSource, q)).toBe(true);
+    expect(Value.Check(LocalQuotaSource, { ...tokenhub, account: "sunm" })).toBe(false); // 账户名放不进来
+    const tools = [
+      { kind: "gh", state: "ready", version: "2.88.0", account: "someone", checkedAt: at },
+      { kind: "lark-cli", state: "expired", version: "1.0.93", account: "孙铭泽", checkedAt: at },
+    ];
+    const settings = { includePersonalConfigByDefault: false, allowedOrigins: [], paused: false, maxConcurrent: 3, autoMerge: true };
+    const status = {
+      deviceId, version: "0.1.0", agents: [], activeSessions: 0, slots: { max: 3, running: 0, queued: 0 },
+      cloud: { linked: false, apiBaseUrl: null, personName: null, outbox: { pending: 0, lastSyncedAt: null, lastError: null } }, settings, quota: [claude, codex, tokenhub, minimax], tools: [{ kind: "claude-code", state: "ready", version: "2.1.318", account: null, checkedAt: at }, { kind: "codex", state: "not_logged_in", version: "0.159.2", account: null, checkedAt: at }, ...tools],
+    };
+    expect(Value.Check(LocalStatusResponse, status)).toBe(true);
+    expect(Value.Check(LocalStatusResponse, { ...status, tools: [{ ...tools[0], kind: "git" }] })).toBe(false);
+
+    // 额度用完：一轮以 usage_limit 结束，卡停着等（摘要、状态事件、状态条目都带 hold）
+    const hold = { reason: "usage_limit", until: "2026-11-07T00:00:00.000Z" };
+    const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null };
+    expect(Value.Check(LocalSessionEvent, { seq: 3, at, sessionId, type: "turn_end", isError: true, text: null, durationMs: 1, usage, errorKind: "usage_limit" })).toBe(true);
+    expect(Value.Check(LocalSessionEvent, { seq: 4, at, sessionId, type: "status", status: "idle", hold })).toBe(true);
+    const summary = {
+      id: sessionId, subject: { kind: "card", cardId: "card-1" }, title: "改登录页", agent: "claude-code", modelProfileId: "subscription", modelLabel: "订阅",
+      cwd: "D:/repo", status: "idle", includePersonalConfig: false, createdAt: at, updatedAt: at, lastSeq: 4, pendingPermissions: 0, queuePosition: null, usage, hold,
+    };
+    expect(Value.Check(LocalSessionSummary, summary)).toBe(true);
+    expect(Value.Check(LocalSessionSummary, { ...summary, hold: { reason: "paused", until: null } })).toBe(false);
+    const key = (n: number) => `${deviceId}:${sessionId}:${n}`;
+    const base = { sessionId, subject: summary.subject, occurredAt: at };
+    const sync = { quota: [{ id: "claude", name: "Claude", kind: "subscription", remainingPercent: 21, amounts: [], windows: claude.windows, resetsAt: claude.resetsAt, blockedUntil: null, updatedAt: at },
+      { id: tokenhub.id, name: "TokenHub", kind: "daily_spend", remainingPercent: null, amounts: tokenhub.amounts, monthAmounts: tokenhub.monthAmounts, windows: [], resetsAt: null, blockedUntil: null, updatedAt: at }] };
+    expect(Value.Check(LocalQuotaSync, sync.quota[0])).toBe(true);
+    expect(Value.Check(LocalQuotaSync, { ...sync.quota[0], plan: "max" })).toBe(false); // 计划名不同步
+    const items = [
+      { ...base, key: key(5), type: "status", data: { status: "idle", title: "改登录页", agent: "claude-code", modelLabel: "订阅", hold } },
+      { ...base, key: key(6), type: "cost", data: { modelLabel: "订阅", usage: { ...usage, costUsd: 0.12 }, source: "subscription", model: "claude-opus-5-5", money: null } },
+      { ...base, key: key(7), type: "cost", data: { modelLabel: "DeepSeek", usage, source: "gateway", model: "wangsu/deepseek-v4.1-flash", money: { amount: 0.031, currency: "CNY", estimated: true } } },
+      { ...base, key: key(8), type: "cost", data: { modelLabel: "旧版本机", usage } }, // 旧版本机发的不带来源也收
+    ];
+    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots: { max: 3, running: 0, queued: 0 }, ...sync, items })).toBe(true);
+
+    // 开工带档位（订阅模型按档位选模型和思考强度）
+    expect(Value.Check(LocalCreateSessionRequest, { subject: { kind: "card", cardId: "c1" }, title: "x", firstMessage: "做", modelTier: "light" })).toBe(true);
+    expect(Value.Check(LocalCreateSessionRequest, { subject: { kind: "card", cardId: "c1" }, title: "x", firstMessage: "做", modelTier: "max" })).toBe(false);
+  });
+
+  it("预算：开工带 Task 和预算；本机记账回 GET /v1/budgets，PUT /v1/budgets 改；用完的卡停着等（hold budget），余额不足停着等本人（balance）；卡带跑法；TokenHub 花费进状态和同步", () => {
+    const at = "2026-11-07T07:00:00.000Z";
+    const set = { mode: "set", hours: 2, weeklyPercent: 10, money: { amount: 50, currency: "CNY" } };
+    const auto = { mode: "auto", hours: null, weeklyPercent: null, money: null };
+    const req = { subject: { kind: "card", cardId: "c1" }, title: "x", firstMessage: "做" };
+    expect(Value.Check(LocalCreateSessionRequest, { ...req, taskBudget: { taskId: "T-1", budget: set } })).toBe(true);
+    expect(Value.Check(LocalCreateSessionRequest, { ...req, taskBudget: { taskId: null, budget: auto } })).toBe(true); // 不挂 Task 的专题
+    expect(Value.Check(LocalCreateSessionRequest, { ...req, taskBudget: { taskId: "T-1", budget: { ...set, mode: "max" } } })).toBe(false);
+    const view = {
+      taskId: "T-1", sessionId: null, budget: set, spent: { hours: 1.6, weeklyPercent: 3, money: { amount: 12.5, currency: "CNY", estimated: true } },
+      ratio: 0.8, state: "warning", since: at, updatedAt: at,
+    };
+    expect(Value.Check(LocalTaskBudgetView, view)).toBe(true);
+    expect(Value.Check(LocalTaskBudgetView, { ...view, budget: auto, ratio: null, state: "ok", spent: { hours: 0, weeklyPercent: null, money: null } })).toBe(true);
+    expect(Value.Check(LocalTaskBudgetView, { ...view, state: "over" })).toBe(false);
+    expect(Value.Check(LocalBudgetListResponse, { budgets: [view] })).toBe(true);
+    expect(Value.Check(LocalBudgetUpdateRequest, { taskId: "T-1", budget: { ...set, hours: 3 } })).toBe(true);
+    expect(Value.Check(LocalBudgetUpdateRequest, { sessionId, budget: set })).toBe(true);
+    expect(LOCAL_RUNNER_ROUTES.putBudget).toEqual({ method: "PUT", path: "/v1/budgets", auth: true });
+
+    const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null };
+    const run = { mode: "unlimited", model: "opus", effort: "max", multiAgent: true };
+    const summary = {
+      id: sessionId, subject: { kind: "card", cardId: "card-1" }, title: "改登录页", agent: "claude-code", modelProfileId: "subscription", modelLabel: "订阅",
+      cwd: "D:/repo", status: "idle", includePersonalConfig: false, createdAt: at, updatedAt: at, lastSeq: 4, pendingPermissions: 0, queuePosition: null, usage,
+      hold: { reason: "budget", until: null }, run,
+    };
+    expect(Value.Check(LocalSessionSummary, summary)).toBe(true);
+    expect(Value.Check(LocalSessionSummary, { ...summary, hold: { reason: "balance", until: null }, run: { ...run, mode: "set", effort: null, multiAgent: false } })).toBe(true);
+    expect(Value.Check(LocalSessionSummary, { ...summary, run: { ...run, effort: "ultra" } })).toBe(false);
+    expect(Value.Check(LocalSessionEvent, { seq: 3, at, sessionId, type: "turn_end", isError: true, text: null, durationMs: 1, usage, errorKind: "balance" })).toBe(true);
+
+    const base = { sessionId, subject: summary.subject, occurredAt: at };
+    const items = [
+      { ...base, key: `${deviceId}:${sessionId}:9`, type: "budget", data: view },
+      { ...base, key: `${deviceId}:${sessionId}:10`, type: "status", data: { status: "idle", title: "改登录页", agent: "claude-code", modelLabel: "订阅", hold: summary.hold, run } },
+    ];
+    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots: { max: 3, running: 0, queued: 0 }, items })).toBe(true);
+
+    // 状态条目带在问的提问、在等批准的那一步（B 的 aa6aba9e）
+    const question = { requestId: "ask-1", questions: [{ question: "用哪个方案？", header: "方案", options: [{ label: "A", description: "" }], multiSelect: false }], askedAt: at };
+    const permission = { requestId: "perm-1", toolName: "Bash", title: "运行 pnpm test", outsidePaths: [] };
+    expect(Value.Check(LocalPermissionBrief, permission)).toBe(true);
+    expect(Value.Check(LocalPermissionBrief, { ...permission, input: { command: "pnpm test" } })).toBe(false); // 完整输入不传
+    const statusItems = [
+      { ...base, key: `${deviceId}:${sessionId}:11`, type: "status", data: { status: "idle", title: "改登录页", agent: "claude-code", modelLabel: "订阅", question } },
+      { ...base, key: `${deviceId}:${sessionId}:12`, type: "status", data: { status: "waiting_permission", title: "改登录页", agent: "claude-code", modelLabel: "订阅", permission } },
+    ];
+    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots: { max: 3, running: 0, queued: 0 }, items: statusItems })).toBe(true);
+
+    // 一句话带附件（14.5）：只说附件不说话也行；user_message 事件带存好的附件
+    const ref = { id: "5b0c2f3e-6a1d-4c8e-9f2a-1b3c4d5e6f70", fileName: "截图.png", size: 1024, sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" };
+    expect(Value.Check(SendMessage, { attachments: [ref] })).toBe(true);
+    expect(Value.Check(SendMessage, { attachments: [{ ...ref, sha256: "XYZ" }] })).toBe(false);
+    expect(Value.Check(SendMessage, { text: "看看", attachments: [] })).toBe(false);
+    expect(Value.Check(SendMessage, { attachments: Array.from({ length: 21 }, () => ref) })).toBe(false);
+    expect(Value.Check(LocalSessionEvent, { seq: 5, at, sessionId, type: "user_message", text: "", source: "web", attachments: [{ name: "截图.png", path: "D:/w/.tianshu-attachments/1/截图.png", size: 1024 }] })).toBe(true);
+    expect(LOCAL_RUNNER_ATTACHMENT_PATH).toBe("/api/local-runner/attachments/:id");
+  });
+
+  it("项目（16.6）：文件夹挂在哪些项目上；项目绑哪个文件夹；开工和同步的 subject 带 projectId", () => {
+    const at = "2026-11-07T07:00:00.000Z";
+    const folder = { id: "f1a2b3c4d5e6", path: "D:/repo", label: "repo", addedAt: at };
+    expect(Value.Check(LocalFolder, folder)).toBe(true); // 选文件夹的回执不带 projects
+    expect(Value.Check(LocalFolder, { ...folder, projects: [{ projectId: "11111111-1111-4111-8111-111111111111", name: "天枢本机程序" }, { projectId: "22222222-2222-4222-8222-222222222222", name: null }] })).toBe(true);
+    const bound = { projectId: "11111111-1111-4111-8111-111111111111", name: "天枢本机程序", folder: { id: folder.id, path: folder.path, label: folder.label }, updatedAt: at };
+    expect(Value.Check(LocalProjectFolder, bound)).toBe(true);
+    expect(Value.Check(LocalProjectFolder, { ...bound, folder: null })).toBe(true);
+    expect(Value.Check(LocalProjectListResponse, { projects: [bound] })).toBe(true);
+    expect(Value.Check(LocalProjectFolderRequest, { folderId: folder.id, name: "天枢本机程序" })).toBe(true);
+    expect(Value.Check(LocalProjectFolderRequest, { folderId: null })).toBe(true);
+    expect(Value.Check(LocalProjectFolderRequest, { path: "D:/repo" })).toBe(false); // 网页不能直接写路径
+    expect(LOCAL_RUNNER_ROUTES.putProjectFolder).toEqual({ method: "PUT", path: "/v1/projects/:projectId/folder", auth: true });
+    const subject = { kind: "card", cardId: "c1", projectId: "11111111-1111-4111-8111-111111111111" };
+    expect(Value.Check(LocalCreateSessionRequest, { subject, title: "x", firstMessage: "做" })).toBe(true);
+    const item = { key: `${deviceId}:${sessionId}:1`, sessionId, subject, occurredAt: at, type: "status", data: { status: "running", title: "x", agent: "claude-code", modelLabel: "订阅" } };
+    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots: { max: 3, running: 0, queued: 0 }, items: [item] })).toBe(true);
+
+    // 项目转交（16.7）：交接检查只有 git 状态；接手后 clone
+    const check = {
+      projectId: "11111111-1111-4111-8111-111111111111", checkedAt: at, folder: { path: "D:/repo", label: "repo" },
+      git: { branch: "main", remotes: [{ name: "origin", url: "https://github.com/TokenkingOS/Chat_Service.git" }], uncommitted: ["src/a.ts"], uncommittedCount: 1,
+        unpushed: [{ branch: "main", upstream: "origin/main", ahead: 2 }, { branch: "tianshu/abc", upstream: null, ahead: null }] },
+      recentFiles: null,
+    };
+    expect(Value.Check(LocalHandoverCheck, check)).toBe(true);
+    expect(Value.Check(LocalHandoverCheck, { ...check, git: null, recentFiles: [{ path: "notes.md", modifiedAt: at }] })).toBe(true);
+    expect(Value.Check(LocalHandoverCheck, { ...check, folder: null, git: null })).toBe(true);
+    expect(Value.Check(LocalProjectCloneRequest, { repoUrl: "https://github.com/TokenkingOS/Chat_Service.git", branch: "handover/chat" })).toBe(true);
+    expect(Value.Check(LocalProjectCloneRequest, { repoUrl: "git@github.com:TokenkingOS/Chat_Service.git" })).toBe(true);
+    for (const repoUrl of ["file:///C:/secret", "ext::sh -c touch% /tmp/x", "--upload-pack=x", "C:/repo"]) expect(Value.Check(LocalProjectCloneRequest, { repoUrl })).toBe(false);
+    expect(Value.Check(LocalProjectCloneRequest, { repoUrl: "https://github.com/a/b.git", branch: "--orphan" })).toBe(false);
+    expect(Value.Check(LocalProjectCloneResponse, { project: null, branch: null, fellBack: false })).toBe(true);
+    // 云端的转交存检查结果原样、clone 用同一个地址形状（6460ec84）
+    const transferClone = ProjectTransfer.properties.clone;
+    expect(Value.Check(transferClone, { repoUrl: "https://github.com/TokenkingOS/Chat_Service.git", branch: "handover/chat" })).toBe(true);
+    expect(Value.Check(transferClone, { repoUrl: "C:/Users/x/repo", branch: null })).toBe(false); // 本地路径拉不了：云端要给 null
+    expect(Value.Check(ProjectTransfer.properties.checkResult, check)).toBe(true);
+    expect(LOCAL_RUNNER_ROUTES.cloneProject).toEqual({ method: "POST", path: "/v1/projects/:projectId/clone", auth: true });
   });
 
   it("配对口令只在批准后出现；路由表里只有健康和配对不要口令", () => {

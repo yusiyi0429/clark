@@ -36,13 +36,16 @@ describe("执行看板：卡的投影和看板接口", { timeout: 30_000 }, () =
     const f = await boardFixture();
     try {
       const ids: Record<string, string> = {};
-      for (const name of ["todo", "approval", "reply", "paused", "review", "failedOnce", "failedReturned", "blocked", "crashed", "done", "returned", "otherTask"])
+      for (const name of ["todo", "approval", "reply", "paused", "review", "failedOnce", "failedReturned", "blocked", "crashed", "crashedOnce", "held", "done", "returned", "otherTask"])
         ids[name] = await f.card(name, name === "otherTask" ? { planTaskId: "task-theirs" } : {});
       for (const name of Object.keys(ids).filter((key) => !["todo", "done", "returned", "otherTask"].includes(key))) await status(f, ids[name], "in_progress");
       await status(f, ids.done, "done");
       await status(f, ids.returned, "returned");
       await run(f, ids.approval, "waiting_permission", 1);
       await run(f, ids.reply, "idle", 1);
+      // 执行方在问本人（本机 idle 带 question）才是等你回复；不带的 idle 是一轮做完停下（已暂停，见新首页的测试）。
+      await f.t.sql("UPDATE local_runs SET ask=$2::jsonb WHERE task_id=$1", [ids.reply, JSON.stringify({ kind: "question", request: { requestId: "q-1",
+        questions: [{ question: "先做哪一页？", header: "顺序", options: [], multiSelect: false }], askedAt: "2026-11-06T01:00:00.000Z" } })]);
       await run(f, ids.paused, "exited", 1);
       await handback(f, ids.review, 1, { status: "queued" });
       await handback(f, ids.failedOnce, 1, { outcome: "fail", verdicts: ["met", "partial"] });
@@ -52,13 +55,18 @@ describe("执行看板：卡的投影和看板接口", { timeout: 30_000 }, () =
       await handback(f, ids.blocked, 2, { outcome: "fail", verdicts: ["met", "unmet"], returned: true });
       await run(f, ids.crashed, "failed", 1);
       await run(f, ids.crashed, "failed", 2);
+      // 异常退出一次：已暂停（连续两次才受阻）。停着等额度恢复（本机报了 hold）：不是等你回复。
+      await run(f, ids.crashedOnce, "failed", 1);
+      await run(f, ids.held, "idle", 1);
+      await f.t.sql(`UPDATE local_runs SET hold='{"reason":"usage_limit","until":"2026-11-06T05:00:00.000Z"}'::jsonb WHERE task_id=$1`, [ids.held]);
       const body = (await f.call("GET", "/api/plan-tasks/task-open/cards")).json();
       const card = (name: string) => body.cards.find((item: { id: string }) => item.id === ids[name])?.card;
-      expect(body.cards.map((item: { title: string }) => item.title)).toEqual(["todo", "approval", "reply", "paused", "review", "failedOnce", "failedReturned", "blocked", "crashed", "done"]);
-      expect(Object.fromEntries(["todo", "approval", "reply", "paused", "review", "failedOnce", "failedReturned", "blocked", "crashed", "done"]
-        .map((name) => [name, [card(name).stage, card(name).wait]]))).toEqual({
+      const shown = ["todo", "approval", "reply", "paused", "review", "failedOnce", "failedReturned", "blocked", "crashed", "crashedOnce", "held", "done"];
+      expect(body.cards.map((item: { title: string }) => item.title)).toEqual(shown);
+      expect(Object.fromEntries(shown.map((name) => [name, [card(name).stage, card(name).wait]]))).toEqual({
         todo: ["todo", null], approval: ["doing", "approval"], reply: ["doing", "reply"], paused: ["doing", "paused"], review: ["review", null],
-        failedOnce: ["doing", "review_failed"], failedReturned: ["doing", null], blocked: ["doing", "blocked"], crashed: ["doing", "blocked"], done: ["done", null] });
+        failedOnce: ["doing", "review_failed"], failedReturned: ["doing", null], blocked: ["doing", "blocked"], crashed: ["doing", "blocked"],
+        crashedOnce: ["doing", "paused"], held: ["doing", null], done: ["done", null] });
       expect(card("todo")).toEqual({ stage: "todo", wait: null, role: null, executor: null, model: null, criterion: null, run: null, handback: null, deliverable: null, after: [] });
       expect(card("approval").run).toMatchObject({ deviceId: DEVICE, deviceName: "本机", state: "waiting_permission", plan: { done: 1, total: 2, step: 2, current: "写" },
         lastActivity: { text: "在做" }, cost: { inputTokens: 0, outputTokens: 0, costUsd: null }, endedAt: null });

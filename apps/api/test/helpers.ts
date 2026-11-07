@@ -322,7 +322,7 @@ const defaultConversationRuntime: ConversationRuntime = {
 };
 
 export async function createTestApp(
-  seedOverrides: Partial<Pick<AppEnv, "companyPeopleSeed" | "materialStorageDir" | "conversationAttachmentStorageDir" | "recordingStorageDir" | "extraOrigins" | "companyName" | "missionCardDraftsDir" | "worldApiUrl" | "worldAgentToken" | "worldInstance" | "worldInstanceLocalFile" | "publicOrigin" | "feishu" | "adminPersonIds" | "onboardingDelegationStep" | "internalChatToken" | "chatServiceUrl" | "wechatEnabled" | "chatSessionRotation" | "conversationSegments" | "chatPageContext" | "worldPeriodGoalGates" | "collectionsEnabled" | "docChangeEnabled" | "companyWorldAccessFile" | "boardCloudAgents">> = {},
+  seedOverrides: Partial<Pick<AppEnv, "companyPeopleSeed" | "materialStorageDir" | "conversationAttachmentStorageDir" | "recordingStorageDir" | "extraOrigins" | "companyName" | "missionCardDraftsDir" | "worldApiUrl" | "worldAgentToken" | "worldInstance" | "worldInstanceLocalFile" | "publicOrigin" | "feishu" | "adminPersonIds" | "onboardingDelegationStep" | "internalChatToken" | "chatServiceUrl" | "wechatEnabled" | "chatSessionRotation" | "conversationSegments" | "chatPageContext" | "worldPeriodGoalGates" | "collectionsEnabled" | "docChangeEnabled" | "companyWorldAccessFile" | "boardCloudAgents" | "tianshuMonthlyCycle">> = {},
   conversationRuntime: ConversationRuntime = defaultConversationRuntime,
   runtimeOptions: {
     conversationTurnTimeoutMs?: number;
@@ -391,6 +391,8 @@ export async function createTestApp(
     docChangeAgent?: Parameters<typeof buildApp>[0]["docChangeAgent"];
     /** 战场进展汇总的假 Agent；不注入时用真实装配（打开汇总接口才会调用）。 */
     battlefieldSummaryAgent?: Parameters<typeof buildApp>[0]["battlefieldSummaryAgent"];
+    /** 交接说明的假 Agent；不注入时一调就失败（退回拼的四段）。 */
+    handoverNoteAgent?: Parameters<typeof buildApp>[0]["handoverNoteAgent"];
     /** V2 看板的假拆卡、假 Agent 验收；不注入时用真实装配（只在后台队列里调用）。 */
     boardAgents?: Parameters<typeof buildApp>[0]["boardAgents"];
     /** 本体公司事实的假读取（get_task_context 等）；不注入时按 testEnv 读（没配本体）。 */
@@ -434,6 +436,7 @@ export async function createTestApp(
   const app = await buildApp({ pool, env, conversationRuntime, researchService, monthlyPlanService: monthlyPlans, monthlyReviewService: monthlyReviews, weeklyReviewService: weeklyReviews, recordingService: recordings, now: monthlyNow,
     threadIntroAgent: { async generate(input) { return { message: `${input.inviter}邀请${input.newcomers.join("、")}加入「${input.title}」，请查看对象进展。` }; } },
     taskAcceptanceAgent: { async draft() { throw new Error("测试里没有模型"); } },
+    handoverNoteAgent: { modelId: "test", async write() { throw new Error("测试里没有模型"); } },
     ...appRuntimeOptions });
   const apps = [app];
   return {

@@ -13,6 +13,8 @@ import { createPersonalMemory } from "./personalMemory.js";
 import { createMemoryRecall, memoryRecallModels, type MemoryRecall } from "./personalMemoryRecall.js";
 import { createPersonalDistillation } from "./personalDistillation.js";
 import { createChatService } from "./chatService.js";
+import { pipelineConversationIds } from "./taskPipelines.js";
+import { projectPageFacts } from "./projects.js";
 import { pageFor } from "./pageGuides.js";
 import { createConversationDigests, recordChatSegment } from "./conversationDigests.js";
 import { createConversationRecall } from "./conversationRecall.js";
@@ -110,6 +112,7 @@ import { createCollectionAgent, type CollectionAgent } from "./collectionAgent.j
 import { collectionJobs, type CollectionDeps } from "./collections.js";
 import { createFeishuBitable, createMockBitable, type BitableAdapter } from "./feishu/bitable.js";
 import { feishuNotifier } from "./feishu/notify.js";
+import { createPresence } from "./homePush.js";
 import { registerCollectionRoutes } from "./routes/collections.js";
 import type { JobHandler, RecurringJob } from "./jobs.js";
 import { registerCollectorRoutes } from "./routes/collector.js";
@@ -119,6 +122,7 @@ import { createUsageTracker } from "./usage.js";
 import { registerProgressRoutes } from "./routes/progress.js";
 import { createBattlefieldSummaries, type BattlefieldSummaries, type BattlefieldSummaryAgent } from "./battlefieldSummary.js";
 import { createBattlefieldSummaryAgent } from "./battlefieldSummaryAgent.js";
+import { createHandoverNoteAgent, type HandoverNoteAgent } from "./handoverNoteAgent.js";
 import { createTaskPlacementAgent, taskPlacementJobs, type TaskPlacementAgent } from "./taskPlacement.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR, type MeetingRecordingService } from "./meetingRecordings.js";
 import { realVoiceprintDeps, type VoiceprintDeps } from "./voiceprints.js";
@@ -133,6 +137,12 @@ import { registerLocalRoutes } from "./routes/local.js";
 import { registerRoleRoutes } from "./routes/roles.js";
 import { registerWorkerRoutes } from "./routes/workers.js";
 import { registerTopicRoutes } from "./routes/topics.js";
+import { registerWorkHomeRoutes } from "./routes/workHome.js";
+import { registerSessionStartRoutes } from "./routes/sessionStarts.js";
+import { registerTaskPipelineRoutes } from "./routes/taskPipelines.js";
+import { registerProjectRoutes } from "./routes/projects.js";
+import { registerProjectTransferRoutes } from "./routes/projectTransfers.js";
+import { registerTaskContinuityRoutes } from "./routes/taskContinuity.js";
 import { registerTaskCardRoutes, type BoardAgents } from "./routes/taskCards.js";
 import { planTaskOpener, taskPageFacts } from "./taskCards.js";
 import { registerAgreementRoutes } from "./routes/agreements.js";
@@ -252,6 +262,11 @@ export type AppEnv = {
    * 关着时「拆卡」返回 409、交回不排云端验收、验收重试返回 409。本机程序还没接上规划员的手动测试环境打开它。
    */
   boardCloudAgents?: boolean;
+  /**
+   * 天枢自己那套月度计划和月末复盘（TIANSHU_MONTHLY_CYCLE=1 才开，新首页 13.1）：缺省关，复盘和月初拆解只走 M2。
+   * 关着时不自动起月度计划草案、不自动开月末复盘，MCP 的 list_pending 也不列个人复盘和月度计划；已有的行不动。
+   */
+  tianshuMonthlyCycle?: boolean;
   /** 会后提取等候选 Agent 的模型与思考强度（OUTCOME_MODEL 等，agentModels.ts）；不配时与之前一致。 */
   agentModels?: AgentModelEnv;
   materialStorageDir?: string;
@@ -339,6 +354,7 @@ export async function buildApp({
   meetingFollowThroughAgents,
   docChangeAgent,
   battlefieldSummaryAgent,
+  handoverNoteAgent,
   taskPlacementAgent,
   boardAgents,
   companyReader,
@@ -418,6 +434,8 @@ export async function buildApp({
   docChangeAgent?: DocChangeAgent;
   /** 战场进展汇总的 Agent（测试注入假实现）；缺省 PROGRESS_SUMMARY_MODEL，不配时 HEAVY_MODEL、思考 medium。 */
   battlefieldSummaryAgent?: BattlefieldSummaryAgent;
+  /** 项目转交写交接说明的 Agent（测试注入假实现）；缺省和战场进展汇总同一套模型配置。 */
+  handoverNoteAgent?: HandoverNoteAgent;
   /** 会后事项归位的 Agent（测试注入假实现）；缺省 TASK_PLACEMENT_MODEL，不配时 LIGHT_MODEL、不开思考。 */
   taskPlacementAgent?: TaskPlacementAgent;
   /** V2 看板的拆卡、Agent 验收（测试注入假实现）；缺省照参考评审用 REVIEW_*，没配时 HEAVY_MODEL。 */
@@ -509,8 +527,10 @@ export async function buildApp({
   // 首页走独立 Chat 时只建这一个客户端（首页分段的「人 × 视角」互斥在它里面）；转发的每一句记下进了哪一段，纪要据此去读。
   const chat = env.chatServiceUrl ? createChatService({ baseUrl: env.chatServiceUrl, token: env.internalChatToken, rotation: env.chatSessionRotation === true,
     ...(env.chatPageContext ? { pageGuide: (path: string, viewer: { personId: string }) =>
-      pageFor(path, (taskId) => taskPageFacts(pool.query.bind(pool), openPlanTaskForPage, viewer.personId, taskId)) } : {}),
-    onSegment: (viewer, segment) => recordChatSegment(pool.query.bind(pool), viewer, segment) }) : undefined;
+      pageFor(path, (taskId) => taskPageFacts(pool.query.bind(pool), openPlanTaskForPage, viewer.personId, taskId),
+        (projectId) => projectPageFacts(pool.query.bind(pool), viewer.personId, projectId)) } : {}),
+    onSegment: (viewer, segment) => recordChatSegment(pool.query.bind(pool), viewer, segment),
+    pipelines: (viewer) => pipelineConversationIds(pool.query.bind(pool), viewer.personId) }) : undefined;
   // 会话纪要（后台，CONVERSATION_DIGEST_MODEL / CONVERSATION_DIGEST_THINKING，不配时 LIGHT_MODEL、不开思考）与回看。
   const conversationDigests = createConversationDigests({ pool, chat, baseUrl: env.piBaseUrl, apiKey: env.piApiKey,
     ...agentModel(env.agentModels, "conversationDigest", { modelId: env.lightModel }), streamSimple: conversationDigestStream });
@@ -623,7 +643,7 @@ export async function buildApp({
     pool,
     bitable: bitable ?? (env.collectionBitable === "live" && env.feishu ? createFeishuBitable() : createMockBitable()),
     feishu: env.feishu,
-    notify: env.feishu ? feishuNotifier(q) : undefined,
+    notify: env.feishu ? (notice, dedupeKey) => feishuNotifier(q)({ ...notice, source: "collection" }, dedupeKey) : undefined,
     isCeo: (personId) => peopleDirectory.searchPeople(undefined).find((person) => person.personId === personId)?.roles.includes("ceo") ?? false,
     names: () => personDisplayNames(peopleDirectory),
     now,
@@ -648,7 +668,10 @@ export async function buildApp({
   const requestContext = new WeakMap<FastifyRequest, RequestContext>();
   // 使用周报的「哪天用过」：登录后发问或改动（非 GET 的请求；上手步骤上报本身不算），一人一天记一次。页面打开、轮询不算。
   const usage = createUsageTracker(q, now);
+  // 本人在网页上打开着天枢（浏览器会话的请求，含轮询）：飞书推送据此判断本人在不在天枢里（homePush.ts）。
+  const presence = createPresence(q, now);
   app.addHook("onResponse", async (req, reply) => {
+    if (req.person) presence(req.person.personId);
     if (req.person && reply.statusCode < 400 && req.method !== "GET" && req.method !== "HEAD" && req.routeOptions.url !== "/api/me/usage/onboarding-step") {
       usage.active(req.person.personId);
     }
@@ -867,6 +890,14 @@ export async function buildApp({
   registerRoleRoutes(app, ctx);
   registerWorkerRoutes(app, ctx);
   registerTopicRoutes(app, ctx);
+  registerWorkHomeRoutes(app, ctx);
+  registerSessionStartRoutes(app, ctx);
+  registerTaskPipelineRoutes(app, ctx);
+  registerProjectRoutes(app, ctx);
+  registerProjectTransferRoutes(app, ctx, { handoverAgent: handoverNoteAgent ?? createHandoverNoteAgent({ query: q, baseUrl: env.piBaseUrl, apiKey: env.piApiKey,
+    ...agentModel(env.agentModels, "progressSummary", { modelId: env.heavyModel, thinkingLevel: "medium" }) }) });
+  // 跨月延续、到此为止和月份页（routes/taskContinuity.ts）。
+  registerTaskContinuityRoutes(app, ctx);
   const board = registerTaskCardRoutes(app, ctx, { agents: boardAgents, fetchArticle: deliverableFetcher });
   registerLocalRoutes(app, ctx, board);
 

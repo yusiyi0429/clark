@@ -106,8 +106,10 @@ const missionCardDefinitions: Tool[] = [
   { name: "get_mission_card", description: "读取我可见的任务卡完整原字段、当前版本、本人批注和修改记录。", inputSchema: MissionCardInput as Tool["inputSchema"], annotations: { readOnlyHint: true } },
   { name: "edit_mission_card", description: "本人准备期间，改法已明确就立即修改有权限的任务卡一个字段，保留修改前后记录；先读get_mission_card，必须带刚读取的round作为sourceRound、当前版本和完整原字段，数组用换行连接。不能签发或确认任务卡。", inputSchema: EditMissionCardInput as Tool["inputSchema"] },
 ];
+const LIST_PENDING_TOOL: Tool = { name: "list_pending", description: "列出待我处理的事：CEO 可查议题、会议和任务卡；天枢自己的月末复盘开着时还有个人复盘和月度计划。",
+  inputSchema: EmptyInput as Tool["inputSchema"], annotations: { readOnlyHint: true } };
+/** 天枢自己的月末复盘（monthlyCycle 开着才列）。 */
 const reviewDefinitions: Tool[] = [
-  { name: "list_pending", description: "列出待我处理的个人复盘；CEO 还可查议题、会议、月度计划和任务卡。", inputSchema: EmptyInput as Tool["inputSchema"], annotations: { readOnlyHint: true } },
   { name: "get_my_review", description: "读取本人当前个人复盘、Mission 全文、执行进展和写作要求。", inputSchema: EmptyInput as Tool["inputSchema"], annotations: { readOnlyHint: true } },
   { name: "save_review_draft", description: "按当前版本保存个人复盘草稿；不能提交，请本人到天枢确认后提交。", inputSchema: SaveReviewInput as Tool["inputSchema"] },
 ];
@@ -138,7 +140,9 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
   /** 联网搜索（博查，服务器上的钥匙）；没配时不列 web_search。 */
   search?: WebSearchAdapter & { configured: boolean };
   /** 本体公司事实（get_task_context 按本人授权读）。 */
-  company: CompanyReader }) {
+  company: CompanyReader;
+  /** 天枢自己的月度计划和月末复盘开着（app.ts 的 tianshuMonthlyCycle）；关着时待办不列个人复盘和月度计划，不说复盘的用法。 */
+  monthlyCycle?: boolean }) {
   const auth = () => authenticateMcpToken(deps.q, deps.authorization, deps.pepper, deps.now(), (id) => !!deps.findPerson(id), deps.publicOrigin ? oauthUrls(deps.publicOrigin).resource : undefined);
   /** 推进人写进展、放链接会让未启动的事项变进行中、版本跟着变：把事项此刻的状态和版本一起回给外部工具，接着提交验收直接用。 */
   const itemState = async (itemId: string) =>
@@ -166,7 +170,7 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
       "要拆一个 Task、做它下面的一件事或验收之前，用 get_task_context 读这个 Task 的上下文（约定、Mission 和战场目标、本体里的相关事实和最近进展、上一版交付物和评审）；引用本体事实时照抄它给的 cite。",
     ] : []),
     "任务卡正文是只读边界的例外：get_mission_card 只读本人可见卡；仅本人准备期间、editable=true时，用户已经明确具体改法可用edit_mission_card立即改有权限的任务字段并留痕。必须用刚读取的round填写sourceRound；本人已确认或已开始汇总时，只读正文和历史，先由本人取消确认或由战场 DRI 退回本人重新确认，不能自动绕过。保存备注不授权改文；仅明确修改意图可以写入。重新开放后需重新核对本次改法，不把旧改法直接套进新的本人准备窗口。不确定用户意思时先提问题与选项，最后一个选项为自己输入，澄清后立即改。不能自动向群聊发送私聊记录，不能签发或确认任务卡。遇到旧准备窗口、版本或原字段冲突必须重新读取。",
-    "月末会有个人复盘待起草。用 list_pending 发现，get_my_review 读取本人的承诺、进展和写作要求，再用 save_review_draft 写入四部分草稿；不能替本人提交，请本人回天枢确认。",
+    ...(deps.monthlyCycle ? ["月末会有个人复盘待起草。用 list_pending 发现，get_my_review 读取本人的承诺、进展和写作要求，再用 save_review_draft 写入四部分草稿；不能替本人提交，请本人回天枢确认。"] : []),
     ...(deps.search?.configured ? ["要查外部的最新事实（行业、产品、新闻、数据）用 web_search，结果带链接，引用时写出处；证据够了就停。"] : []),
   ].join("\n");
   const server = new Server({ name: "tianshu", version: "0.1.0" }, { capabilities: { tools: {} }, instructions });
@@ -176,7 +180,7 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
     if (!person) return { tools: [] };
     const roles = access(person);
     return { tools: [...(roles.member ? memberDefinitions : []), ...(roles.ceo ? ceoDefinitions : []),
-      ...(roles.ceo || roles.member ? missionCardDefinitions : []), ...(roles.ceo || roles.member ? [...agreementDefinitions, TASK_CONTEXT_TOOL] : []), ...reviewDefinitions,
+      ...(roles.ceo || roles.member ? missionCardDefinitions : []), ...(roles.ceo || roles.member ? [...agreementDefinitions, TASK_CONTEXT_TOOL] : []), LIST_PENDING_TOOL, ...(deps.monthlyCycle ? reviewDefinitions : []),
       ...(deps.chat && (roles.ceo || roles.member) ? qualityDefinitions : []), ...(deps.search?.configured && (roles.ceo || roles.member) ? [WEB_SEARCH_TOOL] : [])]
       .filter((tool) => !identity?.scopes || identity.scopes.includes("tianshu:write") || !MCP_WRITE_TOOLS.has(tool.name)) };
   });
@@ -239,8 +243,8 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
       switch (tool) {
         case "list_pending": {
           if (!Value.Check(EmptyInput, args)) break;
-          const pending = roles.ceo ? await listPending(ceoContext()) : { items: [] };
-          const review = await getCurrentPersonalReview(deps.q, identity.personId);
+          const pending = roles.ceo ? await listPending(ceoContext(), Boolean(deps.monthlyCycle)) : { items: [] };
+          const review = deps.monthlyCycle ? await getCurrentPersonalReview(deps.q, identity.personId) : null;
           return result({ items: [...pending.items, ...(review && !["submitted", "skipped"].includes(review.status) ? [{
             kind: "personal-review", id: review.id, title: `${Number(review.period.slice(5))} 月个人复盘`, status: review.status,
             version: review.version, href: personalReviewHref(review.id, roles.ceo),

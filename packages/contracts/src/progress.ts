@@ -1,4 +1,5 @@
 import { Type, type Static } from "@sinclair/typebox";
+import { NullableInteger } from "./nullable.js";
 
 /**
  * 全局进展（② 进展，前端交互实现说明第 5 节）。一号位看全部，二号位看同一战场的人（可见范围在仓储层判）。
@@ -153,10 +154,10 @@ export const BattlefieldHelpItem = Type.Object(
     waitingOn: Type.Union([ProgressPerson, Type.Null()]),
     waitingOnMe: Type.Boolean(),
     /** blocked：卡住的自然日数；overdue：已过截止的工作日数；其余为 null。 */
-    days: Type.Union([Type.Integer({ minimum: 0 }), Type.Null()]),
+    days: NullableInteger({ minimum: 0 }),
     dueDate: Type.Union([Day, Type.Null()]),
-    neededDays: Type.Union([Type.Integer({ minimum: 0 }), Type.Null()]),
-    leftDays: Type.Union([Type.Integer({ minimum: 0 }), Type.Null()]),
+    neededDays: NullableInteger({ minimum: 0 }),
+    leftDays: NullableInteger({ minimum: 0 }),
     /** 我是推进人或协作者，点得开详情。 */
     canOpen: Type.Boolean(),
   },

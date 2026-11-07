@@ -4,6 +4,10 @@ import { TEST_MEMBER } from "./helpers.js";
 import { BOARD_NOW, boardFixture } from "./boardFixture.js";
 
 const status = (state: string, title: string) => ["status", { status: state, title, agent: "claude-code", modelLabel: "订阅 · Sonnet" }] as [string, unknown];
+/** 执行方在问本人（本机 idle 带 question）；不带的 idle 是一轮做完停下了（新首页 9.6）。 */
+const QUESTION = { requestId: "q-1", questions: [{ question: "先做哪一页？", header: "顺序", options: [{ label: "登录页", description: "" }, { label: "首页", description: "" }],
+  multiSelect: false }], askedAt: "2026-11-06T01:00:00.000Z" };
+const asking = (title: string) => ["status", { status: "idle", title, agent: "claude-code", modelLabel: "订阅 · Sonnet", question: QUESTION }] as [string, unknown];
 
 describe("worker 列表", { timeout: 30_000 }, () => {
   it("带岗位的卡和专题按进行中、已排队、已完成（今天）列出；等你的排在最前；验收中的是云端的验收员；等空位的排第几；资源取在线设备报的位置数；伙伴读的是同一份", async () => {
@@ -37,10 +41,12 @@ describe("worker 列表", { timeout: 30_000 }, () => {
       const desktop = await f.local("另一台");
       await desktop.send({ kind: "card", cardId: ids["那台电脑关了"] }, [status("running", "那台电脑关了")]);
       await f.t.sql("UPDATE local_devices SET last_sync_at=$2 WHERE id=$1", [desktop.device, new Date(BOARD_NOW.getTime() - 60 * 60_000)]);
+      // 我的电脑先配对（固定时钟下两台的配对时间一样，列表按配对先后排）。
+      await f.t.sql("UPDATE local_devices SET created_at=$2 WHERE id=$1", [laptop.device, new Date(BOARD_NOW.getTime() - 60_000)]);
       const queuedTopic = randomUUID(), runningTopic = randomUUID();
       await f.t.sql(`INSERT INTO research_topics(id,owner_id,title,role_id,plan_task_id,mission_id) VALUES($1,$3,'竞品调研',$4,'task-open','mine'),($2,$3,'行业报告',$4,NULL,NULL)`,
         [queuedTopic, runningTopic, TEST_MEMBER.personId, researcher.id]);
-      await laptop.send({ kind: "topic", topicId: runningTopic }, [status("idle", "行业报告")]);
+      await laptop.send({ kind: "topic", topicId: runningTopic }, [asking("行业报告")]);
 
       const res = await f.call("GET", "/api/me/workers");
       expect(res.statusCode).toBe(200);
@@ -54,7 +60,8 @@ describe("worker 列表", { timeout: 30_000 }, () => {
       expect(item("跑着")).toMatchObject({ key: `card:${ids["跑着"]}`, kind: "card", cardId: ids["跑着"], topicId: null, role: { id: dev.id, name: "开发", kind: "worker" },
         task: { id: "task-open", name: "对话质量达标" }, mission: { id: "mine", title: "内部版上线" }, step: { n: 2, total: 3, label: "写" },
         resource: { where: "local", deviceId: laptop.device, deviceName: "我的电脑", modelLabel: "订阅 · Sonnet" }, startedAt: "2026-11-06T01:00:01.000Z",
-        elapsedSeconds: 3599, cost: { inputTokens: 1000, outputTokens: 200, costUsd: 0.5, costCny: null }, stage: "doing", wait: null, needsYou: false, queueReason: null,
+        // 订阅的用量只算 token，Claude Code 估的 costUsd 不是真钱（设计第 11 节）。
+        elapsedSeconds: 3599, cost: { inputTokens: 1000, outputTokens: 200, costUsd: null, costCny: null }, stage: "doing", wait: null, needsYou: false, queueReason: null,
         queuePosition: null });
       expect(item("等批准")).toMatchObject({ wait: "approval", needsYou: true, stage: "doing" });
       expect(item("验收中")).toMatchObject({ stage: "review", wait: "reviewing", needsYou: false, role: { kind: "reviewer" },
@@ -83,7 +90,8 @@ describe("worker 列表", { timeout: 30_000 }, () => {
           { id: desktop.device, name: "另一台", lastSeenAt: new Date(BOARD_NOW.getTime() - 60 * 60_000).toISOString(), online: false }],
         // 另一台不在线，不算它的位置。
         running: 2, cap: 2,
-        cost: { today: { inputTokens: 1000, outputTokens: 200, costUsd: 0.5, costCny: null }, month: { inputTokens: 1000, outputTokens: 200, costUsd: 0.5, costCny: null } },
+        cost: { today: { inputTokens: 1000, outputTokens: 200, costUsd: null, costCny: null }, month: { inputTokens: 1000, outputTokens: 200, costUsd: null, costCny: null } },
+        quota: [],
       });
 
       const internal = (headers: Record<string, string>) => f.t.app.inject({ method: "GET", url: "/internal/me/workers", headers });
@@ -92,6 +100,36 @@ describe("worker 列表", { timeout: 30_000 }, () => {
       expect(viaChat.json()).toEqual(body);
       expect((await internal({ authorization: "Bearer chat-token", "x-owner-id": "nobody" })).statusCode).toBe(404);
       expect((await internal({ authorization: "Bearer wrong", "x-owner-id": TEST_MEMBER.personId })).statusCode).toBe(401);
+
+      // 答完以后这一轮做完停下（idle 不带提问）：已停下，不算等你。
+      // 另开的这个会话晚一分钟开始，取「最近一次」时才稳定是它（两个会话的开始时间相同时按随机 id 决胜）。
+      const after = await laptop.send({ kind: "topic", topicId: runningTopic }, [status("idle", "行业报告")]);
+      await f.t.sql("UPDATE local_runs SET started_at=started_at+interval '1 minute' WHERE id=$1", [after]);
+      expect((await f.call("GET", "/api/me/workers")).json().running.find((entry: { title: string }) => entry.title === "行业报告")).toMatchObject({ wait: "paused", needsYou: false });
+    } finally { await f.close(); }
+  });
+
+  it("执行异常退出一次的卡算已暂停（不是进行中里没有标记的一行）；停着等额度恢复的卡在看板上不算等你回复", async () => {
+    const f = await boardFixture({}, { boardCloudAgents: false });
+    try {
+      const dev = (await f.call("POST", "/api/me/roles", { name: "开发", family: "dev", kind: "worker" })).json();
+      const ids: Record<string, string> = {};
+      for (const title of ["崩了一次", "等额度"]) {
+        ids[title] = await f.card(title);
+        await f.call("PATCH", `/api/me/cards/${ids[title]}`, { version: 1, roleId: dev.id, executor: "claude_code" });
+      }
+      const laptop = await f.local();
+      await laptop.send({ kind: "card", cardId: ids["崩了一次"] }, [status("running", "崩了一次"), status("failed", "崩了一次")]);
+      await laptop.send({ kind: "card", cardId: ids["等额度"] }, [["status", { status: "idle", title: "等额度", agent: "claude-code", modelLabel: "订阅 · Sonnet",
+        hold: { reason: "usage_limit", until: "2026-11-06T05:00:00.000Z" } }]]);
+      const body = (await f.call("GET", "/api/me/workers")).json();
+      expect(body.running.find((item: { cardId: string }) => item.cardId === ids["崩了一次"])).toMatchObject({ stage: "doing", wait: "paused", needsYou: false, queueReason: null });
+      expect(body.queued.find((item: { cardId: string }) => item.cardId === ids["等额度"])).toMatchObject({ queueReason: "quota", wait: null });
+      const board = (await f.call("GET", "/api/plan-tasks/task-open/cards")).json();
+      const card = (title: string) => board.cards.find((item: { id: string }) => item.id === ids[title]).card;
+      expect([card("崩了一次").stage, card("崩了一次").wait]).toEqual(["doing", "paused"]);
+      expect([card("等额度").stage, card("等额度").wait]).toEqual(["doing", null]);
+      expect((await f.call("GET", `/api/me/tasks/${ids["等额度"]}`)).json().task.card.wait).toBeNull();
     } finally { await f.close(); }
   });
 
@@ -162,7 +200,7 @@ describe("worker 列表", { timeout: 30_000 }, () => {
       expect(byKey(`verify:${checking}`)).toMatchObject({ kind: "verify", cardId: checking, title: "在验的卡", role: { name: "验收员", kind: "reviewer" },
         task: { id: "task-open", name: "对话质量达标" }, mission: { id: "mine", title: "内部版上线" }, stage: "review", wait: null, queueReason: null,
         resource: { where: "local", deviceId: laptop.device, deviceName: "我的电脑", modelLabel: "订阅 · Opus" }, startedAt: "2026-11-06T03:10:00.000Z",
-        cost: { inputTokens: 300, outputTokens: 40, costUsd: 0.1, costCny: null } });
+        cost: { inputTokens: 300, outputTokens: 40, costUsd: null, costCny: null } });
       expect(byKey(`plan:${planning}`)).toMatchObject({ kind: "plan", cardId: null, topicId: null, title: "对话质量达标", role: { name: "规划员" },
         task: { id: "task-open", name: "对话质量达标" }, mission: { id: "mine", title: "内部版上线" }, stage: "doing", step: { n: 2, total: 2, label: "出派活单" },
         resource: { where: "local", deviceName: "我的电脑", modelLabel: "订阅 · Opus" }, queueReason: null });

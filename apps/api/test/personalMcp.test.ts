@@ -32,7 +32,7 @@ describe("个人令牌与执行事项 MCP", () => {
       expect(initialized.json().result.instructions).not.toContain("不用等用户开口");
       expect(initialized.json().result.instructions).not.toContain("◆");
       const tools = await send(2, "tools/list");
-      expect(tools.json().result.tools.map((tool: { name: string }) => tool.name)).toEqual(["list_my_items", "create_item", "get_item", "append_progress", "update_status", "submit_for_acceptance", "add_link", "update_item", "delete_item", "return_item", "accept_item", "get_mission_card", "edit_mission_card", "get_task_agreement", "check_task", "add_deliverable_version", "get_task_context", "list_pending", "get_my_review", "save_review_draft"]);
+      expect(tools.json().result.tools.map((tool: { name: string }) => tool.name)).toEqual(["list_my_items", "create_item", "get_item", "append_progress", "update_status", "submit_for_acceptance", "add_link", "update_item", "delete_item", "return_item", "accept_item", "get_mission_card", "edit_mission_card", "get_task_agreement", "check_task", "add_deliverable_version", "get_task_context", "list_pending"]);
       const invoke = async (id: number, name: string, args: Record<string, unknown>) => (await send(id, "tools/call", { name, arguments: args })).json().result;
       const listed = await invoke(3, "list_my_items", {});
       expect(JSON.parse(listed.content[0].text).items.some((item: { id: string }) => item.id === task.id)).toBe(true);

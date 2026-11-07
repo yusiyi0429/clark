@@ -1,6 +1,6 @@
 import type { THomePlanTask } from "@warmap/contracts";
 import { logEvent } from "./observability.js";
-import { worldErrorCode, type WorldClient, type WorldHead, type WorldObject } from "./worldClient.js";
+import { WorldError, worldErrorCode, type WorldClient, type WorldHead, type WorldObject } from "./worldClient.js";
 import { worldDisplayText } from "./worldReader.js";
 
 /**
@@ -14,8 +14,13 @@ export type PlanTask = THomePlanTask & { agreement?: WorldAgreement };
 
 /** 一个本地 Mission；从本体载入的带本体身份（scope、对象 id、所在域），按它直接找 Task，不靠外部引用。 */
 export type PlanTaskMission = { id: string; code: string; world?: { scopeId: string; objectId: string; domainId: string } | null };
-/** 首页 Task 行的来源：本体里挂在这些 Mission 下的 Task。 */
-export type PlanTaskSource = (missions: PlanTaskMission[]) => Promise<PlanTask[]>;
+/**
+ * 按 id 读一件本体 Task（跨月找 Task 用，planTaskAccess.locatePlanTask 的第三步）：parents 是它父引用指向的本体对象 id（所属 Mission），
+ * task 是 Task 行，missionId 由调用方按 parents 找本地 Mission 补上。本体里没有这件（或不是 Task）为 null。
+ */
+export type PlanTaskById = (taskId: string) => Promise<{ parents: string[]; task: Omit<PlanTask, "missionId"> } | null>;
+/** 首页 Task 行的来源：本体里挂在这些 Mission 下的 Task。byId：按 id 读一件（本体来源有；测试的假来源可以不给，不给就没有第三步）。 */
+export type PlanTaskSource = ((missions: PlanTaskMission[]) => Promise<PlanTask[]>) & { byId?: PlanTaskById };
 
 /** 还没接本体（或实例没开读）时的来源：一个 Task 都没有。 */
 export const emptyPlanTaskSource: PlanTaskSource = async () => [];
@@ -37,6 +42,23 @@ export async function readPlanTasks(planTasks: PlanTaskSource, missions: PlanTas
     clearTimeout(timer);
   }
   return [];
+}
+
+/** 按 id 读一件 Task 时也照 readPlanTasks 限时：超时、出错都当没有，记一条日志。没有 byId 的来源直接给 null。 */
+export async function readPlanTaskById(planTasks: PlanTaskSource, taskId: string, budgetMs = PLAN_TASKS_BUDGET_MS): ReturnType<PlanTaskById> {
+  if (!planTasks.byId) return null;
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<"timeout">((resolve) => { timer = setTimeout(() => resolve("timeout"), budgetMs); });
+  try {
+    const found = await Promise.race([planTasks.byId(taskId), timeout]);
+    if (found !== "timeout") return found;
+    logEvent({ event: "plan_tasks.read_one", status: "failed", objectRef: `world:${taskId}`, errorCode: "PLAN_TASKS_TIMEOUT", durationMs: budgetMs });
+  } catch (cause) {
+    logEvent({ event: "plan_tasks.read_one", status: "failed", objectRef: `world:${taskId}`, errorCode: worldErrorCode(cause) });
+  } finally {
+    clearTimeout(timer);
+  }
+  return null;
 }
 
 type PlanTaskWorld = Pick<WorldClient, "listObjects" | "getObject">;
@@ -134,41 +156,82 @@ async function readTasksIn(world: PlanTaskWorld, personOf: PersonOf, missions: {
   await Promise.all(Array.from({ length: Math.min(READ_CONCURRENCY, candidates.length) }, worker));
   return objects.flatMap((object) => {
     if (!object) return [];
-    const business = object.business as TaskBusiness;
-    const parents = parentIds(business);
-    if (!parents.length) logEvent({ event: "plan_tasks.object", status: "skipped", objectRef: `world:${business.object_id}`, errorCode: "TASK_PARENT_MISSING" });
-    const missionId = parents.map((id) => localMission.get(id)).find(Boolean);
-    if (!missionId) return [];
-    const definition = business.blocks?.find((block) => block.id === "definition");
-    const components = definition?.value?.components?.length ? definition.value.components : definition?.components ?? [];
-    // 负责人和 Mission 载入同一个取法；本体没登记时不带这一项（首页按 null 显示）。
-    const principal = (object as TaskObject).identity?.responsible?.principals?.[0]?.principal_id ?? business.attributes?.responsible;
-    const agreement = worldAgreementOf(definition, components, personOf, business.object_id);
-    return [{ taskId: business.object_id, missionId, name: worldDisplayText(business.title),
-      doneDefinition: texts(components, "outcome")[0] ?? null, criteria: texts(components, "acceptance_criterion"),
-      ...(principal ? { responsibleId: personOf(principal) } : {}), ...(agreement ? { agreement } : {}) }];
+    const missionId = parentsOf(object).map((id) => localMission.get(id)).find(Boolean);
+    return missionId ? [{ ...taskRow(object, personOf), missionId }] : [];
   });
+}
+
+/** Task 对象的父引用（所属 Mission 的对象 id）；一个都没有记一条日志。 */
+function parentsOf(object: WorldObject): string[] {
+  const business = object.business as TaskBusiness;
+  const parents = parentIds(business);
+  if (!parents.length) logEvent({ event: "plan_tasks.object", status: "skipped", objectRef: `world:${business.object_id}`, errorCode: "TASK_PARENT_MISSING" });
+  return parents;
+}
+
+/** 一个 Task 对象换成 Task 行（不含 missionId）。 */
+function taskRow(object: WorldObject, personOf: PersonOf): Omit<PlanTask, "missionId"> {
+  const business = object.business as TaskBusiness;
+  const definition = business.blocks?.find((block) => block.id === "definition");
+  const components = definition?.value?.components?.length ? definition.value.components : definition?.components ?? [];
+  // 负责人和 Mission 载入同一个取法；本体没登记时不带这一项（首页按 null 显示）。
+  const principal = (object as TaskObject).identity?.responsible?.principals?.[0]?.principal_id ?? business.attributes?.responsible;
+  const agreement = worldAgreementOf(definition, components, personOf, business.object_id);
+  return { taskId: business.object_id, name: worldDisplayText(business.title),
+    doneDefinition: texts(components, "outcome")[0] ?? null, criteria: texts(components, "acceptance_criterion"),
+    ...(principal ? { responsibleId: personOf(principal) } : {}), ...(agreement ? { agreement } : {}) };
+}
+
+/**
+ * 按 id 取一件 Task：先主实例，再各 scope 的读身份（Task 在哪个 scope 事先不知道），本体回「没有」或「无权」就换下一个，其余错误照抛。
+ * 取到的不是 Task 当没有。
+ */
+async function readWorldPlanTask(clients: PlanTaskWorld[], personOf: PersonOf, taskId: string): ReturnType<PlanTaskById> {
+  for (const client of clients) {
+    let object: WorldObject;
+    try {
+      object = await client.getObject(taskId);
+    } catch (error) {
+      if (error instanceof WorldError && (error.status === 404 || error.status === 403)) continue;
+      throw error;
+    }
+    return object.business.object_type === "Task" ? { parents: parentsOf(object), task: taskRow(object, personOf) } : null;
+  }
+  return null;
 }
 
 /**
  * 本体来源，带一份按 Mission 组合记的结果：第一次要等（调用方用 readPlanTasks 限时）；之后直接给记下的，
  * 过了 ttlMs 就在后台重读一次（同一组合同时只读一份），读失败沿用旧的。
+ * byId 按 id 读一件，按 Task id 同样记一份、同样过期重读（调用方用 readPlanTaskById 限时）。
  */
 export function createWorldPlanTaskSource(world: PlanTaskWorld, options: { ttlMs?: number; clock?: () => number; scopes?: Map<string, PlanTaskWorld>; personOf?: PersonOf } = {}): PlanTaskSource {
   const ttl = options.ttlMs ?? PLAN_TASKS_TTL_MS;
   const clock = options.clock ?? Date.now;
-  const cache = new Map<string, { value: PlanTask[] | null; at: number; pending: Promise<PlanTask[]> | null }>();
-  return async (missions) => {
-    const key = missions.map(({ id, code, world: source }) => [id, code, source?.scopeId ?? "", source?.objectId ?? ""].join("\u0000")).sort().join("\u0001");
-    let entry = cache.get(key);
-    if (!entry) cache.set(key, entry = { value: null, at: 0, pending: null });
-    const current = entry;
-    const refresh = () => current.pending ??= readWorldPlanTasks(world, missions, options.scopes ?? new Map(), options.personOf ?? (() => null))
-      .then((value) => { current.value = value; current.at = clock(); return value; })
-      .finally(() => { current.pending = null; });
-    if (current.value === null) return refresh();
-    if (clock() - current.at >= ttl) refresh().catch((error) =>
-      logEvent({ event: "plan_tasks.read", status: "failed", errorCode: worldErrorCode(error), reason: "background_refresh" }));
-    return current.value;
+  const personOf = options.personOf ?? (() => null);
+  /** 按 key 记读到的结果：第一次等着读；过期了先给旧的、后台重读（同一 key 同时只读一份），读失败沿用旧的。 */
+  const remembered = <T>(read: (key: string) => Promise<T>, event: string) => {
+    const cache = new Map<string, { value: T | undefined; at: number; pending: Promise<T> | null }>();
+    return async (key: string): Promise<T> => {
+      let entry = cache.get(key);
+      if (!entry) cache.set(key, entry = { value: undefined, at: 0, pending: null });
+      const current = entry;
+      const refresh = () => current.pending ??= read(key)
+        .then((value) => { current.value = value; current.at = clock(); return value; })
+        .finally(() => { current.pending = null; });
+      if (current.value === undefined) return refresh();
+      if (clock() - current.at >= ttl) refresh().catch((error) =>
+        logEvent({ event, status: "failed", errorCode: worldErrorCode(error), reason: "background_refresh" }));
+      return current.value;
+    };
   };
+  const missionSets = new Map<string, PlanTaskMission[]>();
+  const tasksOf = remembered((key) => readWorldPlanTasks(world, missionSets.get(key)!, options.scopes ?? new Map(), personOf), "plan_tasks.read");
+  const clients = [...new Set([world, ...(options.scopes?.values() ?? [])])];
+  const byId = remembered((taskId) => readWorldPlanTask(clients, personOf, taskId), "plan_tasks.read_one");
+  return Object.assign(async (missions: PlanTaskMission[]) => {
+    const key = missions.map(({ id, code, world: source }) => [id, code, source?.scopeId ?? "", source?.objectId ?? ""].join("\u0000")).sort().join("\u0001");
+    missionSets.set(key, missions);
+    return tasksOf(key);
+  }, { byId });
 }

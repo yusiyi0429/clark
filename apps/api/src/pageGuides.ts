@@ -141,8 +141,28 @@ export function taskPageGuide(path: string, facts: TaskPageFacts): PageGuide {
     guide: `本人在这个 Task 的页面，说的事默认指这个 Task。它有 ${facts.criteria} 条验收标准；${cards}`.slice(0, 150) };
 }
 
-/** 转给 Chat 的页面：Task 页按本人读到的 Task 现算，读不到（不是本人 Mission 下的、本体读不到）不带；其余查目录。 */
-export async function pageFor(path: string, readTask: (taskId: string) => Promise<TaskPageFacts | null>): Promise<PageGuide | null> {
+/** 项目页（第 16 节）的项目 id：/me/work/projects/<id>。不是项目页为 null。 */
+export function projectOfPage(path: string): string | null {
+  const match = /^\/me\/work\/projects\/([0-9a-f-]{36})$/.exec(path);
+  return match ? match[1] : null;
+}
+
+/** 本人的这个项目：名字、挂着没了结的 Task 的名字。 */
+export type ProjectPageFacts = { name: string; goals: string[] };
+
+export function projectPageGuide(path: string, facts: ProjectPageFacts): PageGuide {
+  const goals = facts.goals.length ? `现在挂着的目标：${facts.goals.join("、")}。` : "现在没有挂着的目标。";
+  return { path, title: `项目：${facts.name}`.slice(0, 40), guide: `本人在这个项目的对话里，说的事默认指这个项目。${goals}`.slice(0, 150) };
+}
+
+/** 转给 Chat 的页面：Task 页、项目页按本人读到的现算，读不到（不是本人的、本体读不到）不带；其余查目录。 */
+export async function pageFor(path: string, readTask: (taskId: string) => Promise<TaskPageFacts | null>,
+  readProject: (projectId: string) => Promise<ProjectPageFacts | null> = async () => null): Promise<PageGuide | null> {
+  const projectId = projectOfPage(path);
+  if (projectId) {
+    const facts = await readProject(projectId).catch(() => null);
+    return facts ? projectPageGuide(path, facts) : null;
+  }
   const taskId = taskOfPage(path);
   if (!taskId) return pageGuide(path);
   const facts = await readTask(taskId).catch(() => null);

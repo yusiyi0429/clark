@@ -1,4 +1,5 @@
 import { Type, type Static } from '@sinclair/typebox';
+import { NullableNumber } from "./nullable.js";
 
 /**
  * 记忆导入（7a-3、D-06）：从 ChatGPT、Claude（粘贴、上传导出包）和 Claude Code、Codex（本机采集器上报）带进个人记忆。
@@ -56,7 +57,7 @@ export const MemoryImportCandidate = Type.Object({
   category: Type.Union([MemoryImportCategory, Type.Null()]),
   kind: Type.Union([Type.Literal('preference'), Type.Literal('practice'), Type.Null()]),
   dropReason: Type.Union([MemoryImportDropReason, Type.Null()]),
-  confidence: Type.Union([Type.Number(), Type.Null()]),
+  confidence: NullableNumber(),
   group: Type.Union([MemoryImportGroup, Type.Null()]),
   checked: Type.Boolean(),
   /** 密钥、注入：不能勾回。 */

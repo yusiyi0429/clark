@@ -1,8 +1,12 @@
 import { Type, type Static } from "@sinclair/typebox";
 import { WorldAnchor } from "./meetingDecisions.js";
 
+/**
+ * 对话的 scope。project:<projectId> 是新首页的项目对话（本人和这个项目的那条伙伴对话，projects.ts；原来的 Task 管线并进来了），
+ * 和总管线 global 各是各的历史；task:<id> 是执行事项详情页的对话，不是它。
+ */
 export const ConversationScope = Type.String({
-  pattern: "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128})$",
+  pattern: "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|project:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
   description: "global 或稳定对象 scope",
 });
 

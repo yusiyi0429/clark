@@ -1,8 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Type } from "@sinclair/typebox";
-import { CreateLocalDeviceRequest, CreateLocalDeviceResponse, LOCAL_RUNNER_SYNC_PATH, LOCAL_RUNNER_VERIFY_BRIEF_PATH, LocalDeviceListResponse, LocalSyncBatchRequest,
-  LocalSyncBatchResponse, LocalVerifyBriefResponse } from "@warmap/contracts";
+import { ATTACHMENT_MAX_BYTES, ATTACHMENT_MAX_COUNT, CreateLocalDeviceRequest, CreateLocalDeviceResponse, LOCAL_RUNNER_ATTACHMENT_PATH, LOCAL_RUNNER_SYNC_PATH,
+  LOCAL_RUNNER_VERIFY_BRIEF_PATH, LocalDeviceListResponse, LocalSyncBatchRequest, LocalSyncBatchResponse, LocalVerifyBriefResponse, SessionAttachmentUploadResponse,
+  type TSessionAttachment } from "@warmap/contracts";
+import type { FastifyReply } from "fastify";
+import { readSessionAttachment, storeSessionAttachments } from "../sessionAttachments.js";
 import { verifyBrief } from "../cardAcceptance.js";
 import { createLocalDevice, deviceOfToken, listLocalDevices, ownOutput, revokeLocalDevice } from "../localDevices.js";
 import { applySyncBatch } from "../localSync.js";
@@ -13,6 +16,8 @@ import type { AppInstance, RouteContext } from "./shared.js";
 
 /** HTML 产出照材料预览：沙箱里只跑页面自己的脚本，不连网、不提交表单。 */
 const HTML_CSP = "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline' https:; style-src 'unsafe-inline' https:; img-src https: data: blob:; font-src https: data:; media-src https: data: blob:; connect-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'";
+/** 附件一次上传合计最多 100 MB（每个 30 MB，网页逐个传）。 */
+const ATTACHMENT_BODY_LIMIT = 101 * 1024 * 1024;
 /** 一批最多 12 MB（本机程序的上限），留一点余量。 */
 const SYNC_BODY_LIMIT = 13 * 1024 * 1024;
 
@@ -43,14 +48,49 @@ export function registerLocalRoutes(app: AppInstance, ctx: RouteContext, board: 
       .header("x-content-type-options", "nosniff").header("content-security-policy", html ? HTML_CSP : "sandbox").send(data);
   });
 
+  // 子会话的附件（新首页 14.5）：本人存到云端；本人看原文件；本人配对的电脑按 id 取回存进工作区。
+  const sendAttachment = (reply: FastifyReply, found: { attachment: TSessionAttachment; data: Buffer }) =>
+    reply.type(found.attachment.mimeType.startsWith("text/") ? `${found.attachment.mimeType}; charset=utf-8` : found.attachment.mimeType)
+      .header("content-disposition", `${found.attachment.kind === "image" ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(found.attachment.fileName)}`)
+      .header("x-sha256", found.attachment.sha256).header("x-content-type-options", "nosniff").header("content-security-policy", "sandbox").send(found.data);
+  app.post("/api/me/sub-sessions/:kind/:id/attachments", { preHandler: requirePerson, bodyLimit: ATTACHMENT_BODY_LIMIT,
+    schema: { params: Type.Object({ kind: Type.Union([Type.Literal("card"), Type.Literal("topic")]), id: Type.String({ minLength: 1 }) }),
+      response: { 200: SessionAttachmentUploadResponse } } }, async (req, reply) => {
+    try {
+      const files: { filename: string; buffer: Buffer }[] = [];
+      for await (const part of req.files({ limits: { fileSize: ATTACHMENT_MAX_BYTES, files: ATTACHMENT_MAX_COUNT } })) {
+        if (part.type !== "file" || part.fieldname !== "files") return fail(reply, 400, "INVALID_ATTACHMENT", "multipart 只接受 files 文件字段");
+        files.push({ filename: part.filename, buffer: await part.toBuffer() });
+      }
+      if (!files.length) return fail(reply, 400, "INVALID_ATTACHMENT", "缺少附件文件");
+      return { attachments: await storeSessionAttachments(q, ctx.materialStorageDir, req.person!.personId, req.params, files, ctx.now()) };
+    } catch (cause) {
+      if (cause instanceof CardError) return fail(reply, cause.status, cause.code, cause.message);
+      const code = (cause as { code?: string }).code;
+      if (code === "FST_REQ_FILE_TOO_LARGE") return fail(reply, 413, "ATTACHMENT_TOO_LARGE", "超过 30 MB");
+      if (code === "FST_FILES_LIMIT") return fail(reply, 413, "TOO_MANY_ATTACHMENTS", "最多 20 个");
+      throw cause;
+    }
+  });
+  app.get("/api/me/session-attachments/:id", { preHandler: requirePerson, schema: { params: Type.Object({ id: Type.String({ minLength: 1 }) }) } }, async (req, reply) => {
+    const found = await readSessionAttachment(q, ctx.materialStorageDir, req.person!.personId, req.params.id);
+    return found ? sendAttachment(reply, found) : fail(reply, 404, "NOT_FOUND", "找不到这份附件");
+  });
+  app.get(LOCAL_RUNNER_ATTACHMENT_PATH, { schema: { params: Type.Object({ id: Type.String({ minLength: 1 }) }) } }, async (req, reply) => {
+    const identity = await authenticateLocalToken(q, req.headers.authorization, env.sessionSecret, ctx.now(), personExists);
+    if (!identity) return fail(reply, 401, "UNAUTHORIZED", "设备令牌无效，请在天枢插件页重新配对");
+    const found = await readSessionAttachment(q, ctx.materialStorageDir, identity.personId, req.params.id);
+    return found ? sendAttachment(reply, found) : fail(reply, 404, "NOT_FOUND", "找不到这份附件");
+  });
+
   app.post(LOCAL_RUNNER_SYNC_PATH, { bodyLimit: SYNC_BODY_LIMIT, schema: { body: LocalSyncBatchRequest, response: { 200: LocalSyncBatchResponse } } }, async (req, reply) => {
     const identity = await authenticateLocalToken(q, req.headers.authorization, env.sessionSecret, ctx.now(), personExists);
     if (!identity) return fail(reply, 401, "UNAUTHORIZED", "设备令牌无效，请在天枢插件页重新配对");
     const device = await deviceOfToken(q, identity.tokenId);
     if (!device || device.id !== req.body.deviceId) return fail(reply, 403, "DEVICE_MISMATCH", "这把令牌不是这台电脑的");
-    // 每一批（包括闲着时的空批，也就是心跳）都刷新在线时间、版本和位置数。
-    await q("UPDATE local_devices SET last_sync_at=$3,app_version=$4,slots=$5::jsonb WHERE owner_id=$1 AND id=$2",
-      [device.ownerId, device.id, ctx.now(), req.body.runnerVersion.slice(0, 40), JSON.stringify(req.body.slots)]);
+    // 每一批（包括闲着时的空批，也就是心跳）都刷新在线时间、版本和位置数；带了额度的整份换掉这台电脑存的额度，没带的留着上次的。
+    await q("UPDATE local_devices SET last_sync_at=$3,app_version=$4,slots=$5::jsonb,quota=COALESCE($6::jsonb,quota) WHERE owner_id=$1 AND id=$2",
+      [device.ownerId, device.id, ctx.now(), req.body.runnerVersion.slice(0, 40), JSON.stringify(req.body.slots), req.body.quota ? JSON.stringify(req.body.quota) : null]);
     const { response, queued, proposals } = await applySyncBatch({ pool, storageDir: ctx.materialStorageDir, now: ctx.now,
       onError: () => app.log.error("local sync item failed"), planTask: board.planTask }, identity.personId, req.body);
     queued.forEach(board.enqueueAcceptance);

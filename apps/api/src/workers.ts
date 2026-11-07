@@ -1,6 +1,7 @@
-import type { TLocalRunPlanProgress, TLocalSlots, TWorkerCost, TWorkerItem, TWorkerMark, TWorkersResponse } from "@warmap/contracts";
+import type { TLocalQuotaSync, TLocalRunPlanProgress, TLocalSlots, TWorkerCost, TWorkerItem, TWorkerMark, TWorkerResources, TWorkersResponse } from "@warmap/contracts";
 import { ownMissions, planTaskMissions } from "./homePlan.js";
-import { latestRuns, RUN_SELECT, runBrief, type RunRow } from "./localDevices.js";
+import { HOLD_STATES } from "./cardProjection.js";
+import { askingQuestion, latestRuns, RUN_SELECT, runBrief, type RunRow } from "./localDevices.js";
 import { UUID_PATTERN, type Query } from "./meetingStore.js";
 import { companyPeriod } from "./monthlyPlans.js";
 import { readPlanTasks, type PlanTaskSource } from "./planTasks.js";
@@ -15,18 +16,38 @@ import { cardTaskViews } from "./taskCards.js";
  * 卡在验收中时干活的是云端的验收员。设备 10 分钟内上报过算在线；本机的执行还没结束、但设备不在线的，算「等本机上线」；
  * 本机报 queued 的是「等空位」，排第几和本机程序一样：这台电脑上等空位的按开工先后排。资源的 running、cap 取在线设备最近一批报的 slots。
  * 专题没有「完成」：最近一次执行还没结束的算进行中，带岗位还没开过的算等开工。
+ * 本机报了 hold（订阅额度用完，停着等恢复）的会话不论等你回复还是停了，都算「已排队 · 等额度恢复」，不占位置、不算等你；
+ * 那台电脑不在线时算等本机上线，恢复时间过了还没接着做的不再算等额度（awaitsQuota）。
+ * 花费只算网关模型的真钱（本机按价目表估的，按币种分开）；订阅的用量只算 token。
  */
 
 /** 设备多久没上报算不在线。跑着的时候状态、计划、花费都会报；闲着时本机每 5 分钟发一批空的当心跳（本机程序契约 LocalSyncBatchRequest）。 */
 export const ONLINE_WINDOW_MS = 10 * 60_000;
-const ACTIVE = new Set<string>(["queued", "starting", "running", "waiting_permission", "idle"]);
+/** 本机的会话还在（没退出、没失败）。 */
+export const ACTIVE = new Set<string>(["queued", "starting", "running", "waiting_permission", "idle"]);
 const NEEDS_YOU = new Set<TWorkerMark>(["approval", "reply", "review_failed", "blocked"]);
 const ZERO: TWorkerCost = { inputTokens: 0, outputTokens: 0, costUsd: null, costCny: null };
-const COST_SUM = "sum((tokens->>'input')::bigint) AS input,sum((tokens->>'output')::bigint) AS output,sum(cost_usd) AS usd";
+const COST_SUM = `sum((tokens->>'input')::bigint) AS input,sum((tokens->>'output')::bigint) AS output,
+  sum((money->>'USD')::numeric) AS usd,sum((money->>'CNY')::numeric) AS cny`;
 
-type CostRow = { input: string | null; output: string | null; usd: string | null };
+type CostRow = { input: string | null; output: string | null; usd: string | null; cny: string | null };
 const costOf = (row: CostRow | undefined): TWorkerCost => !row ? ZERO
-  : { inputTokens: Number(row.input ?? 0), outputTokens: Number(row.output ?? 0), costUsd: row.usd === null ? null : Number(row.usd), costCny: null };
+  : { inputTokens: Number(row.input ?? 0), outputTokens: Number(row.output ?? 0), costUsd: row.usd === null ? null : Number(row.usd),
+    costCny: row.cny === null ? null : Number(row.cny) };
+/** 这次执行本机报了 hold（停着等额度）：返回恢复时间（读不到为 null）；没报为 undefined。 */
+export const holdOf = (run: Pick<RunRow, "state" | "hold">): string | null | undefined =>
+  run.hold?.reason === "usage_limit" && HOLD_STATES.includes(run.state) ? run.hold.until : undefined;
+/**
+ * 报了 hold 的会话算「等额度恢复」：那台电脑在线，恢复时间没到（读不到算没到），到点本机自己接着做。
+ * 电脑不在线时本机接不着做，算等本机上线；恢复时间过了还没接着做的，不再算等额度。
+ */
+export const awaitsQuota = (until: string | null, deviceId: string, online: Set<string>, now: Date) =>
+  online.has(deviceId) && (!until || Date.parse(until) > now.getTime());
+/** 本人报了 hold 的执行：会话 id → 恢复时间（读不到为 null）。卡的执行摘要不带 hold，按会话 id 查这里。 */
+export async function heldRuns(q: Query, ownerId: string): Promise<Map<string, string | null>> {
+  return new Map(((await q("SELECT id::text,hold->>'until' AS until FROM local_runs WHERE owner_id=$1 AND hold->>'reason'='usage_limit' AND state=ANY($2::text[])",
+    [ownerId, HOLD_STATES])).rows as { id: string; until: string | null }[]).map((row) => [row.id, row.until]));
+}
 /** 本机的会话在等空位（本机程序加了同时跑的上限以后会报 queued）。 */
 const isQueued = (state: string) => state === "queued";
 /** 按开工时间排，等开工（没有开工时间）的排在后面。 */
@@ -38,15 +59,11 @@ type Draft = Omit<TWorkerItem, "workerNo"> & { group: "running" | "queued" | "do
 export async function listWorkers(deps: { q: Query; planTasks: PlanTaskSource; now: Date; names: Map<string, string>; reviewModel: string; cloudAgents: boolean },
   ownerId: string): Promise<TWorkersResponse> {
   const { q, now } = deps;
-  const devices = (await q("SELECT id::text,name,last_sync_at,slots FROM local_devices WHERE owner_id=$1 AND revoked_at IS NULL ORDER BY created_at", [ownerId])).rows as
-    { id: string; name: string; last_sync_at: Date | null; slots: TLocalSlots | null }[];
-  const since = now.getTime() - ONLINE_WINDOW_MS;
-  const onlineDevices = devices.filter((device) => device.last_sync_at && device.last_sync_at.getTime() > since);
-  const online = new Set(onlineDevices.map((device) => device.id));
-  const slots = onlineDevices.flatMap((device) => device.slots ? [device.slots] : []);
-  // 等空位的排第几（在等前面的卡的不占位置，不算）；在等前面的卡的，等的是哪几张（本机报的 waitingFor，标题按本人的卡读）。
+  const resources = await workerResources(q, ownerId, now);
+  const online = new Set(resources.devices.filter((device) => device.online).map((device) => device.id));
+  // 等空位的排第几（在等前面的卡的、停着等额度恢复的不占位置，不算）；在等前面的卡的，等的是哪几张（本机报的 waitingFor，标题按本人的卡读）。
   const positions = new Map(((await q(`SELECT id::text,row_number() OVER (PARTITION BY device_id ORDER BY started_at,id)::int AS position FROM local_runs
-    WHERE owner_id=$1 AND state='queued' AND waiting_for IS NULL`, [ownerId])).rows as { id: string; position: number }[]).map((row) => [row.id, row.position]));
+    WHERE owner_id=$1 AND state='queued' AND waiting_for IS NULL AND hold IS NULL`, [ownerId])).rows as { id: string; position: number }[]).map((row) => [row.id, row.position]));
   const waits = (await q("SELECT id::text,waiting_for FROM local_runs WHERE owner_id=$1 AND state='queued' AND waiting_for IS NOT NULL", [ownerId])).rows as
     { id: string; waiting_for: string[] }[];
   const waitedIds = [...new Set(waits.flatMap((row) => row.waiting_for))];
@@ -54,6 +71,7 @@ export async function listWorkers(deps: { q: Query; planTasks: PlanTaskSource; n
     [ownerId, waitedIds.filter((id) => UUID_PATTERN.test(id))])).rows as { id: string; title: string }[]).map((row) => [row.id, row.title]) : []);
   const waitingOf = (runId: string) => waits.find((row) => row.id === runId)?.waiting_for.map((cardId) => ({ cardId, title: waitedTitles.get(cardId) ?? "" })) ?? [];
   const elapsed = (start: string | null, end: Date = now) => start ? Math.max(0, Math.round((end.getTime() - Date.parse(start)) / 1000)) : null;
+  const held = await heldRuns(q, ownerId);
 
   // 卡：带岗位的、没退回的；完成的只要今天（公司时区）完成的。
   const cardRows = (await q(`SELECT id::text,mission_id,plan_task_id,(acceptance->>'at')::timestamptz AS finished_at FROM tasks
@@ -67,9 +85,9 @@ export async function listWorkers(deps: { q: Query; planTasks: PlanTaskSource; n
   const reviewer = reviewing.length ? await reviewerRole(q, ownerId) : null;
   const verifyRuns = await latestRuns(q, "task_id", reviewing.map((card) => card.id), "verify");
 
-  // 本机的规划员：还没结束的 plan 会话。
-  const planRuns = (await q(`${RUN_SELECT} WHERE r.owner_id=$1 AND r.kind='plan' AND r.state=ANY($2::text[]) ORDER BY r.started_at,r.id`,
-    [ownerId, [...ACTIVE]])).rows as RunRow[];
+  // 本机的规划员：还没结束的 plan 会话，和停着等额度恢复的。
+  const planRuns = (await q(`${RUN_SELECT} WHERE r.owner_id=$1 AND r.kind='plan' AND (r.state=ANY($2::text[]) OR (r.hold IS NOT NULL AND r.state=ANY($3::text[])))
+    ORDER BY r.started_at,r.id`, [ownerId, [...ACTIVE], HOLD_STATES])).rows as RunRow[];
   const planner = planRuns.length ? await plannerRole(q, ownerId) : null;
 
   // 专题：带岗位、没归档的。
@@ -92,18 +110,23 @@ export async function listWorkers(deps: { q: Query; planTasks: PlanTaskSource; n
   const missionOf = (id: string | null) => id ? { id, title: missions.get(id) ?? "" } : null;
   const step = (plan: TLocalRunPlanProgress | null) => plan?.current ? { n: plan.step, total: plan.total, label: plan.current } : null;
   /**
-   * 本机一个会话（专题、规划员、验收员）在列表里的那几样：那台电脑不在线算等本机上线，本机报 queued 算等空位（带排第几）；
-   * 等批准、等回复照会话状态；会话停了（exited、failed）算已暂停。
+   * 本机一个会话（专题、规划员、验收员）在列表里的那几样：停着等额度恢复的算等额度恢复；那台电脑不在线（会话还在或停着等额度）算等本机上线，本机报 queued 算等空位（带排第几）；
+   * 等批准、等回复照会话状态（报了 hold 的不算）；会话停了（exited、failed）算已暂停。
    */
   const session = (run: RunRow) => {
     const brief = runBrief(run);
-    const queueReason = ACTIVE.has(run.state) && !online.has(run.device_id) ? "device_offline" as const : isQueued(run.state) ? "slot" as const : null;
-    const wait: TWorkerMark | null = queueReason ? null : run.state === "waiting_permission" ? "approval" : run.state === "idle" ? "reply" : ACTIVE.has(run.state) ? null : "paused";
+    const hold = holdOf(run);
+    const holdUntil = hold !== undefined && awaitsQuota(hold, run.device_id, online, now) ? hold : undefined;
+    const queueReason = holdUntil !== undefined ? "quota" as const : (ACTIVE.has(run.state) || hold !== undefined) && !online.has(run.device_id) ? "device_offline" as const
+      : isQueued(run.state) ? "slot" as const : null;
+    const wait: TWorkerMark | null = queueReason || hold !== undefined ? null
+      : run.state === "waiting_permission" ? "approval" : run.state === "idle" ? askingQuestion(run) ? "reply" : "paused" : ACTIVE.has(run.state) ? null : "paused";
     return { group: queueReason ? "queued" as const : "running" as const, step: step(brief.plan),
       resource: { where: "local" as const, deviceId: brief.deviceId, deviceName: brief.deviceName, modelLabel: brief.modelLabel },
       startedAt: brief.startedAt, elapsedSeconds: elapsed(brief.startedAt), finishedAt: null,
-      cost: { inputTokens: brief.cost.inputTokens, outputTokens: brief.cost.outputTokens, costUsd: brief.cost.costUsd, costCny: null },
-      wait, needsYou: wait !== null && NEEDS_YOU.has(wait), queueReason, queuePosition: queueReason === "slot" ? positions.get(run.id) ?? null : null };
+      cost: { inputTokens: brief.cost.inputTokens, outputTokens: brief.cost.outputTokens, costUsd: run.money.USD ?? null, costCny: run.money.CNY ?? null },
+      wait, needsYou: wait !== null && NEEDS_YOU.has(wait), queueReason, queuePosition: queueReason === "slot" ? positions.get(run.id) ?? null : null,
+      holdUntil: holdUntil ?? null };
   };
 
   const drafts: Draft[] = [];
@@ -112,15 +135,20 @@ export async function listWorkers(deps: { q: Query; planTasks: PlanTaskSource; n
     const run = card.card.run;
     const role = card.card.role!;
     const base = { key: `card:${card.id}`, kind: "card" as const, cardId: card.id, topicId: null, title: card.title, task: taskOf(row.plan_task_id),
-      mission: missionOf(row.mission_id), cost: cardCosts.get(card.id) ?? null, stage: card.card.stage, git: card.card.handback?.git ?? null, waitingFor: [] };
+      mission: missionOf(row.mission_id), cost: cardCosts.get(card.id) ?? null, stage: card.card.stage, git: card.card.handback?.git ?? null, waitingFor: [],
+      holdUntil: null };
     const local = run ? { where: "local" as const, deviceId: run.deviceId, deviceName: run.deviceName, modelLabel: run.modelLabel } : null;
+    // 这张卡的执行报了 hold（还没开始的订阅卡也会带着它停在排队里）；那台电脑在线、恢复时间没到才算等额度恢复。
+    const hold = run && held.has(run.id) ? held.get(run.id)! : undefined;
+    const holdUntil = run && hold !== undefined && awaitsQuota(hold, run.deviceId, online, now) ? hold : undefined;
     if (card.card.stage === "todo" && run && isQueued(run.state)) {
       // 本机收下了、在等空位或等前面的卡（还没开工，卡在待开始）；那台电脑不在线时算等本机上线。
       const waitingFor = waitingOf(run.id);
-      const queueReason = !online.has(run.deviceId) ? "device_offline" as const : waitingFor.length ? "prior_cards" as const : "slot" as const;
+      const queueReason = holdUntil !== undefined ? "quota" as const : !online.has(run.deviceId) ? "device_offline" as const
+        : waitingFor.length ? "prior_cards" as const : "slot" as const;
       drafts.push({ ...base, group: "queued", role, step: null, resource: local, startedAt: null, elapsedSeconds: null, finishedAt: null,
         wait: null, needsYou: false, queueReason, queuePosition: queueReason === "slot" ? positions.get(run.id) ?? null : null,
-        waitingFor: queueReason === "prior_cards" ? waitingFor : [] });
+        waitingFor: queueReason === "prior_cards" ? waitingFor : [], holdUntil: holdUntil ?? null });
     } else if (card.card.stage === "todo") {
       drafts.push({ ...base, group: "queued", role, step: null, resource: null, startedAt: null, elapsedSeconds: null, finishedAt: null,
         wait: null, needsYou: false, queueReason: "not_dispatched", queuePosition: null });
@@ -147,22 +175,23 @@ export async function listWorkers(deps: { q: Query; planTasks: PlanTaskSource; n
       }
     } else {
       const active = Boolean(run && ACTIVE.has(run.state));
-      const queueReason = run && active && !online.has(run.deviceId) ? "device_offline" as const : run && isQueued(run.state) ? "slot" as const : null;
+      const queueReason = holdUntil !== undefined ? "quota" as const : run && (active || hold !== undefined) && !online.has(run.deviceId) ? "device_offline" as const
+        : run && isQueued(run.state) ? "slot" as const : null;
       const wait = queueReason ? null : card.card.wait;
       drafts.push({ ...base, group: queueReason ? "queued" : "running", role, step: step(run?.plan ?? null), resource: local,
         startedAt: run?.startedAt ?? null, elapsedSeconds: elapsed(run?.startedAt ?? null), finishedAt: null, wait, needsYou: wait !== null && NEEDS_YOU.has(wait), queueReason,
-        queuePosition: run && queueReason === "slot" ? positions.get(run.id) ?? null : null });
+        queuePosition: run && queueReason === "slot" ? positions.get(run.id) ?? null : null, holdUntil: holdUntil ?? null });
     }
   }
   for (const topic of topics) {
     const role = topicRoles.get(topic.role_id);
     const run = topicRuns.get(topic.id);
-    if (!role || (run && !ACTIVE.has(run.state))) continue;
+    if (!role || (run && !ACTIVE.has(run.state) && holdOf(run) === undefined)) continue;
     const base = { key: `topic:${topic.id}`, kind: "topic" as const, cardId: null, topicId: topic.id, title: topic.title, role: roleRef(role),
       task: taskOf(topic.plan_task_id), mission: missionOf(topic.mission_id), cost: topicCosts.get(topic.id) ?? null, finishedAt: null, git: null, waitingFor: [] };
     if (!run) {
       drafts.push({ ...base, group: "queued", step: null, resource: null, startedAt: null, elapsedSeconds: null, stage: "todo", wait: null, needsYou: false,
-        queueReason: "not_dispatched", queuePosition: null });
+        queueReason: "not_dispatched", queuePosition: null, holdUntil: null });
       continue;
     }
     const { cost: _cost, ...rest } = session(run);
@@ -185,19 +214,33 @@ export async function listWorkers(deps: { q: Query; planTasks: PlanTaskSource; n
   const items = (group: Draft["group"]) => drafts.filter((draft) => draft.group === group)
     .map(({ group: _group, ...item }): TWorkerItem => ({ ...item, workerNo: numbered.get(item.key)! }));
 
+  return {
+    running: items("running").sort((a, b) => Number(b.needsYou) - Number(a.needsYou) || byStart(a, b)),
+    queued: items("queued").sort(byStart),
+    done: items("done").sort((a, b) => (b.finishedAt ?? "").localeCompare(a.finishedAt ?? "")),
+    resources,
+  };
+}
+
+/** 资源摘要（worker 列表和首页右栏的第一行）：本人的电脑在不在线，在线的几个位置用了几个，今天和这个月的花费（公司时区），各台电脑报的订阅额度。 */
+export async function workerResources(q: Query, ownerId: string, now: Date): Promise<TWorkerResources> {
+  const devices = (await q("SELECT id::text,name,last_sync_at,slots,quota FROM local_devices WHERE owner_id=$1 AND revoked_at IS NULL ORDER BY created_at", [ownerId])).rows as
+    { id: string; name: string; last_sync_at: Date | null; slots: TLocalSlots | null; quota: TLocalQuotaSync[] | null }[];
+  const since = now.getTime() - ONLINE_WINDOW_MS;
+  const onlineDevices = devices.filter((device) => device.last_sync_at && device.last_sync_at.getTime() > since);
+  const online = new Set(onlineDevices.map((device) => device.id));
+  const slots = onlineDevices.flatMap((device) => device.slots ? [device.slots] : []);
   const today = (await q(`SELECT ${COST_SUM} FROM local_runs WHERE owner_id=$1
     AND (started_at AT TIME ZONE 'Asia/Shanghai')::date=($2::timestamptz AT TIME ZONE 'Asia/Shanghai')::date`, [ownerId, now])).rows[0] as CostRow;
   const month = (await q(`SELECT ${COST_SUM} FROM local_runs WHERE owner_id=$1
     AND date_trunc('month',started_at AT TIME ZONE 'Asia/Shanghai')=date_trunc('month',$2::timestamptz AT TIME ZONE 'Asia/Shanghai')`, [ownerId, now])).rows[0] as CostRow;
   return {
-    running: items("running").sort((a, b) => Number(b.needsYou) - Number(a.needsYou) || byStart(a, b)),
-    queued: items("queued").sort(byStart),
-    done: items("done").sort((a, b) => (b.finishedAt ?? "").localeCompare(a.finishedAt ?? "")),
-    resources: {
-      devices: devices.map((device) => ({ id: device.id, name: device.name, lastSeenAt: device.last_sync_at?.toISOString() ?? null, online: online.has(device.id) })),
-      running: slots.reduce((sum, slot) => sum + slot.running, 0),
-      cap: slots.length ? slots.reduce((sum, slot) => sum + slot.max, 0) : null,
-      cost: { today: costOf(today), month: costOf(month) },
-    },
+    devices: devices.map((device) => ({ id: device.id, name: device.name, lastSeenAt: device.last_sync_at?.toISOString() ?? null, online: online.has(device.id) })),
+    running: slots.reduce((sum, slot) => sum + slot.running, 0),
+    cap: slots.length ? slots.reduce((sum, slot) => sum + slot.max, 0) : null,
+    cost: { today: costOf(today), month: costOf(month) },
+    // 用量：各台电脑最近一批报的（不管在不在线），一项一条，没报过的不列；老版本本机程序报的旧形状（没有 id）不列。
+    quota: devices.flatMap((device) => (device.quota ?? []).filter((quota) => typeof quota.id === "string")
+      .map((quota) => ({ deviceId: device.id, deviceName: device.name, ...quota }))),
   };
 }

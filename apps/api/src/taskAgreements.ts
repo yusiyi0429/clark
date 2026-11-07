@@ -19,7 +19,8 @@ import { shanghaiDate } from "./workdays.js";
  */
 
 type NoteCriterion = { index: number; text: string; proof: string | null; acceptorId: string | null };
-type NoteRow = { task_id: string; basis: string; criteria: NoteCriterion[]; exclusions: string[]; basis_hash: string; updated_by: string; updated_at: Date };
+type NoteRow = { task_id: string; basis: string; criteria: NoteCriterion[]; exclusions: string[]; basis_hash: string; updated_by: string; updated_at: Date;
+  draft_from: string | null };
 type Resolved = { source: TTaskAgreementResponse["source"]; criteria: NoteCriterion[]; exclusions: string[]; complete: boolean; basisChanged: boolean };
 
 /** 标准文字的摘要：按哪套标准、每条原文，任何一处变了摘要就变。 */
@@ -55,7 +56,7 @@ function resolveAgreement(task: PlanTask, basis: TReviewBasis, criteria: string[
     complete: rows.every((row) => !!row.proof), basisChanged: !world && !!note && note.basis_hash !== basisHash(basis, criteria) };
 }
 
-const NOTE_COLUMNS = "task_id,basis,criteria,exclusions,basis_hash,updated_by,updated_at";
+const NOTE_COLUMNS = "task_id,basis,criteria,exclusions,basis_hash,updated_by,updated_at,draft_from";
 
 /** 一个 Task 的约定；canEdit 是负责人或 Mission 负责人，约定来自本体或没有标准时不能改。 */
 export async function readAgreement(q: Query, access: PlanTaskAccess, names: Map<string, string>): Promise<TTaskAgreementResponse> {
@@ -68,7 +69,8 @@ export async function readAgreement(q: Query, access: PlanTaskAccess, names: Map
     criteria: resolved.criteria.map((row) => ({ index: row.index, text: row.text, proof: row.proof, acceptor: person(row.acceptorId) })),
     exclusions: resolved.exclusions, complete: resolved.complete, basisChanged: resolved.basisChanged,
     canEdit: (access.canEdit || access.missionOwner) && resolved.source !== "world" && basis !== "none",
-    updatedBy: note ? person(note.updated_by) : null, updatedAt: note?.updated_at.toISOString() ?? null };
+    updatedBy: note ? person(note.updated_by) : null, updatedAt: note?.updated_at.toISOString() ?? null,
+    draftFrom: resolved.source === "tianshu" ? note?.draft_from ?? null : null };
 }
 
 /** list_my_items 上每个 Task 的两项：几条标准、约定补全了没有。 */
@@ -101,6 +103,7 @@ export function agreementSnapshot(agreement: TTaskAgreementResponse): AgreementS
 
 /**
  * 存 11 月的补充：整份覆盖，按现在的标准逐条记下原文（摘要一起记，之后标准改了就能发现），每存一次留一份修改记录。
+ * 延续来的草稿（draft_from）存一次就成了正式的。
  * 没写到的序号算没写；认可人要在人员目录里。
  */
 export async function saveAgreement(pool: Pool, access: PlanTaskAccess, agreement: TTaskAgreementResponse, body: TPutTaskAgreementRequest,
@@ -124,7 +127,7 @@ export async function saveAgreement(pool: Pool, access: PlanTaskAccess, agreemen
     const { revision } = (await client.query(`INSERT INTO task_agreement_notes(task_id,basis,criteria,exclusions,basis_hash,revision,updated_by,updated_at)
       VALUES($1,$2,$3::jsonb,$4::text[],$5,1,$6,$7)
       ON CONFLICT (task_id) DO UPDATE SET basis=EXCLUDED.basis,criteria=EXCLUDED.criteria,exclusions=EXCLUDED.exclusions,basis_hash=EXCLUDED.basis_hash,
-        revision=task_agreement_notes.revision+1,updated_by=EXCLUDED.updated_by,updated_at=EXCLUDED.updated_at
+        revision=task_agreement_notes.revision+1,updated_by=EXCLUDED.updated_by,updated_at=EXCLUDED.updated_at,draft_from=NULL
       RETURNING revision`, values)).rows[0] as { revision: number };
     await client.query(`INSERT INTO task_agreement_note_revisions(task_id,revision,basis,criteria,exclusions,basis_hash,updated_by,updated_at)
       VALUES($1,$8,$2,$3::jsonb,$4::text[],$5,$6,$7)`, [...values, revision]);
@@ -140,6 +143,15 @@ type ItemRow = { id: string; kind: "file" | "image" | "link"; name: string; url:
 
 /** 「请 X 看」的去重键：同一个 Task、同一条、同一个人、同一天（公司时区）只推一次。 */
 const notifyKey = (taskId: string, index: number, personId: string, day: string) => `${FEISHU_NOTIFY_KIND}:task-check:${taskId}:${index}:${personId}:${day}`;
+/** 拆开「请 X 看」的去重键（首页「请你认可」用）：Task id 里可能有冒号，从右往左拆。不是这种键为 null。 */
+export function parseNotifyKey(key: string): { taskId: string; index: number; personId: string; day: string } | null {
+  const prefix = `${FEISHU_NOTIFY_KIND}:task-check:`;
+  if (!key.startsWith(prefix)) return null;
+  const parts = key.slice(prefix.length).split(":");
+  if (parts.length < 4) return null;
+  const [day, personId, index] = [parts.pop()!, parts.pop()!, Number(parts.pop())];
+  return Number.isInteger(index) ? { taskId: parts.join(":"), index, personId, day } : null;
+}
 const STALE_GAP = "这条标准改过，最新一版没按它评，传一版新的再对表";
 
 function basisNotice(agreementStale: boolean, reviewStale: boolean): TCheckNotice | null {
@@ -230,7 +242,7 @@ export async function notifyAcceptor(q: Query, access: PlanTaskAccess, check: TT
     throw new DeliverableError(409, "ACCEPTOR_NOT_ON_FEISHU", `${item.acceptor.name}还没关联飞书，推不了`);
   const task = access.task;
   const owner = names.get(access.ownerId) ?? access.ownerId;
-  const notice: FeishuNotice = { personId: request.personId, title: `请看「${task.name}」第 ${item.index} 条`.slice(0, 200),
+  const notice: FeishuNotice = { personId: request.personId, source: "acceptor", title: `请看「${task.name}」第 ${item.index} 条`.slice(0, 200),
     body: `${owner}的 Task「${task.name}」第 ${item.index} 条约定由你来认：${item.text}\n交付物第 ${check.version.number} 版${item.evidence?.locator ? `，证据在 ${item.evidence.locator}` : ""}。`,
     links: [{ label: "打开 Task", path: `/me?planTask=${encodeURIComponent(task.taskId)}` }] };
   const sent = await enqueueJob(q, { kind: FEISHU_NOTIFY_KIND, dedupeKey: notifyKey(task.taskId, item.index, request.personId, shanghaiDate(now)), payload: notice });

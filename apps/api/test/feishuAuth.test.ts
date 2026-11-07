@@ -60,7 +60,7 @@ describe("飞书免登路由", () => {
     expect((await t.app.inject({ method: "GET", url: "/api/auth/feishu/config" })).json()).toEqual({ enabled: false });
     expect((await t.app.inject({ method: "GET", url: "/api/auth/feishu/start" })).statusCode).toBe(404);
     const cookie = await t.loginCookie();
-    expect((await t.app.inject({ method: "GET", url: "/api/me/feishu", headers: { cookie } })).json()).toEqual({ enabled: false, connected: false, calendar: false });
+    expect((await t.app.inject({ method: "GET", url: "/api/me/feishu", headers: { cookie } })).json()).toEqual({ enabled: false, connected: false, calendar: false, state: "not_connected" });
   });
 
   it("浏览器：start 写 state cookie 跳授权页；回调校验 state 后按已关联的人建会话，令牌加密落库", async () => {
@@ -167,7 +167,7 @@ describe("已登录的人连接飞书", () => {
     const meetingId = await manualMeeting(t);
     const cookie = await t.loginCookie();
     const status = async () => (await t!.app.inject({ method: "GET", url: "/api/me/feishu", headers: { cookie } })).json();
-    expect(await status()).toEqual({ enabled: true, connected: false, calendar: false });
+    expect(await status()).toEqual({ enabled: true, connected: false, calendar: false, state: "not_connected" });
 
     const start = await t.app.inject({ method: "GET", url: `/api/auth/feishu/start?connect=1&next=${encodeURIComponent(`/meetings/${meetingId}`)}`, headers: { cookie } });
     expect(start.statusCode).toBe(302);
@@ -185,17 +185,25 @@ describe("已登录的人连接飞书", () => {
     expect(await t.sql("SELECT person_id, open_id FROM feishu_identities")).toEqual([{ person_id: TEST_CEO.personId, open_id: "ou_ceo_feishu" }]);
     // 第一次连上：机器人私聊打个招呼。
     expect(fake.sent).toEqual([{ to: "ou_ceo_feishu", text: expect.stringContaining("飞书已经连好了") }]);
-    expect(await status()).toEqual({ enabled: true, connected: true, calendar: false });
+    expect(await status()).toEqual({ enabled: true, connected: true, calendar: false, state: "connected" });
     // 授权里有日历权限才算能在飞书日历约会。
     await t.sql("UPDATE feishu_user_tokens SET scope = scope || ' ' || $1", [FEISHU_CALENDAR_SCOPES.join(" ")]);
-    expect(await status()).toEqual({ enabled: true, connected: true, calendar: true });
+    expect(await status()).toEqual({ enabled: true, connected: true, calendar: true, state: "connected" });
     // 建会的人连上了：这场会回到等妙记，马上排一次轮询。
     expect((await t.sql("SELECT minutes_status, minutes_error FROM meetings WHERE id = $1", [meetingId]))[0]).toEqual({ minutes_status: "waiting", minutes_error: null });
     expect((await t.sql("SELECT count(*)::int AS n FROM jobs WHERE kind = 'meeting.minutes_poll'"))[0].n).toBe(1);
 
     // 授权里没有读妙记的权限：算没连好。
     await t.sql("UPDATE feishu_user_tokens SET scope = 'offline_access'");
-    expect(await status()).toEqual({ enabled: true, connected: false, calendar: false });
+    expect(await status()).toEqual({ enabled: true, connected: false, calendar: false, state: "expired" });
+    // 要重新授权：也是授权过期。
+    await t.sql("UPDATE feishu_user_tokens SET scope = $1, status = 'reauth_required'", [MINUTES_SCOPE]);
+    expect((await status()).state).toBe("expired");
+
+    // 断开：关联和授权都删掉，回到没连过；再断开一次也是 204。
+    for (let i = 0; i < 2; i++) expect((await t.app.inject({ method: "DELETE", url: "/api/me/feishu", headers: { cookie, origin: t.publicOrigin } })).statusCode).toBe(204);
+    expect(await t.sql("SELECT count(*)::int AS n FROM feishu_user_tokens")).toEqual([{ n: 0 }]);
+    expect(await status()).toEqual({ enabled: true, connected: false, calendar: false, state: "not_connected" });
   });
 
   it("飞书账号已经关联了别人、或者发起后口令重置了：拒绝，不存授权", async () => {

@@ -211,6 +211,13 @@ describe("migration", () => {
         "234_local_plan_verify.sql",
         "235_card_handback_git.sql",
         "236_card_after.sql",
+        "237_new_home.sql",
+        "238_task_continuity.sql",
+        "240_feishu_push.sql",
+        "241_budgets.sql",
+        "242_run_ask.sql",
+        "243_session_attachments.sql",
+        "244_local_task_budgets.sql", "245_projects.sql", "246_project_transfers.sql", "247_project_card_splits.sql", "248_goal_changes.sql",
       ]);
 
       // 幂等：重复执行不再变更

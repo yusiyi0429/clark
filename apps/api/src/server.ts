@@ -30,6 +30,7 @@ import { createPersonalReviewDraftAgent } from "./personalReviewAgent.js";
 import { createMonthlyReviewAssessAgent, createMonthlyReviewDraftAgent, createMonthlyReviewSummaryAgent } from "./monthlyReviewAgents.js";
 import { createMonthlyReviewScheduler } from "./monthlyReviewScheduler.js";
 import { createMissionRoundScheduler } from "./missionRoundScheduler.js";
+import { homePushJobs } from "./homePush.js";
 import { createCollectorRawPurgeScheduler } from "./collectorDistill.js";
 import { createWeeklyReviewDraftAgent } from "./weeklyReviewAgent.js";
 import { createWeeklyReviewService } from "./weeklyReviewService.js";
@@ -39,7 +40,8 @@ import { recoverStaleMissionDrafts } from "./missionRounds.js";
 import { recoverInterruptedOutcome } from "./outcome.js";
 import { personDisplayNames } from "./people.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR } from "./meetingRecordings.js";
-import { resolveWorldEnv, resolveWorldTkEnv } from "./worldClient.js";
+import { resolveWorldEnv, resolveWorldTkEnv, WorldClient, worldConfigured } from "./worldClient.js";
+import { missionAutoLoadJobs } from "./missionAutoLoad.js";
 import { createJobWorker, exampleJobHandlers } from "./jobs.js";
 import { usageReportJobs } from "./usage.js";
 import { resolveFeishuEnv } from "./feishu/config.js";
@@ -108,6 +110,8 @@ const env: AppEnv = {
     apiKey: process.env.REVIEW_API_KEY || undefined, thinking: process.env.REVIEW_THINKING || undefined },
   // 云端拆卡和云端 Agent 验收（缺省关，拆卡和验收在本人电脑上做）。
   boardCloudAgents: process.env.BOARD_CLOUD_AGENTS === "1",
+  // 天枢自己的月度计划和月末复盘（缺省关，复盘和月初拆解只走 M2）。
+  tianshuMonthlyCycle: process.env.TIANSHU_MONTHLY_CYCLE === "1",
   buildSha: process.env.BUILD_SHA ?? "dev",
   materialStorageDir: process.env.MEETING_MATERIAL_STORAGE_DIR,
   conversationAttachmentStorageDir: process.env.CONVERSATION_ATTACHMENT_STORAGE_DIR,
@@ -299,14 +303,21 @@ const usageJobs = usageReportJobs(pool.query.bind(pool), peopleDirectory, now);
 const summaryJobs = app.battlefieldSummaries.jobs();
 // 一号位要动手的事主动私信到飞书（复盘与拆解开放、周复盘待确认、红色议题）：配了飞书才发。
 const ceoNoticeJobs = feishuClient ? ceoFeishuNoticeJobs({ pool, people: () => peopleDirectory.searchPeople(undefined), now }) : { handlers: {}, recurring: [] };
+// 新首页「等你」里急的几件推到本人的「天枢伙伴」单聊（设计 13.2）：配了飞书才发。
+const homePush = feishuClient ? homePushJobs({ pool, now, people: () => peopleDirectory.searchPeople(undefined).filter(canUseMemberView).map((person) => person.personId),
+  readHome: (personId) => app.readWorkHome({ personId, role: "member" }) }) : { handlers: {}, recurring: [] };
+// 每天从本体载入本月和下月的 Mission（设计 10.5，代替手动跑 missions:load-world）：TIANSHU_AUTO_LOAD_MISSIONS=1 且本体配了才开，缺省关；只读本体、用主实例。
+const autoLoadMissions = process.env.TIANSHU_AUTO_LOAD_MISSIONS === "1";
+const missionLoadJobs = missionAutoLoadJobs({ enabled: autoLoadMissions, pool, now,
+  world: autoLoadMissions && worldConfigured(env) ? new WorldClient(pool.query.bind(pool), env) : null });
 const jobWorker = createJobWorker({
   pool,
   handlers: {
-    ...exampleJobHandlers, ...feishuTokens?.handlers, ...followThroughJobs.handlers, ...docChangeJobs.handlers, ...app.collectionJobs.handlers, ...usageJobs.handlers, ...summaryJobs.handlers, ...ceoNoticeJobs.handlers, ...app.taskPlacementJobs,
+    ...exampleJobHandlers, ...feishuTokens?.handlers, ...followThroughJobs.handlers, ...docChangeJobs.handlers, ...app.collectionJobs.handlers, ...usageJobs.handlers, ...summaryJobs.handlers, ...ceoNoticeJobs.handlers, ...homePush.handlers, ...app.taskPlacementJobs, ...missionLoadJobs.handlers,
     ...(env.feishu ? feishuEventJobs(pool, mergeFeishuEventHandlers(followThroughJobs.feishuEvents, docChangeJobs.feishuEvents, app.feishuChat?.events ?? {})) : {}),
     ...(feishuClient ? feishuNotifyJobs({ pool, client: feishuClient, publicOrigin: env.publicOrigin }) : {}),
   },
-  recurring: [...(feishuTokens?.recurring ?? []), ...followThroughJobs.recurring, ...app.collectionJobs.recurring, ...usageJobs.recurring, ...summaryJobs.recurring, ...ceoNoticeJobs.recurring],
+  recurring: [...(feishuTokens?.recurring ?? []), ...followThroughJobs.recurring, ...app.collectionJobs.recurring, ...usageJobs.recurring, ...summaryJobs.recurring, ...ceoNoticeJobs.recurring, ...homePush.recurring, ...missionLoadJobs.recurring],
 });
 let feishuEvents: { close: () => void } | undefined;
 app.addHook("onClose", async () => {
@@ -321,8 +332,11 @@ app.addHook("onClose", async () => {
   await collectorRawPurgeScheduler.close();
 });
 scheduler.start();
-monthlyScheduler.start();
-monthlyReviewScheduler.start();
+// 天枢自己的月度计划草案和月末复盘：TIANSHU_MONTHLY_CYCLE=1 才自动起（缺省关，走 M2）。
+if (env.tianshuMonthlyCycle) {
+  monthlyScheduler.start();
+  monthlyReviewScheduler.start();
+}
 missionRoundScheduler.start();
 jobWorker.start();
 collectorRawPurgeScheduler.start();

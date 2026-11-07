@@ -4,6 +4,7 @@ import { AcceptCardDraftsRequest, AcceptCardDraftsResponse, CardBoardResponse, C
   CardSplitRequestView, CardTaskView, CreateCardPlanRequest, AddPendingDeliverableRequest, CreateVersionFromPendingRequest, DeliverableVersion, OverruleCardHandbackRequest,
   PatchCardRequest, PendingDeliverableItem } from "@warmap/contracts";
 import { createArticleFetcher, type ArticleFetcher } from "../articleText.js";
+import { normalizeBudget, writeTaskBudget } from "../budgets.js";
 import { createCardAcceptanceQueue, markHandbackReturned, overruleHandback, retryHandback } from "../cardAcceptance.js";
 import { createCardAcceptanceAgent, type CardAcceptanceAgent } from "../cardAcceptanceAgent.js";
 import { addPendingTopicVersion, createVersionFromPending, removePending } from "../cardDeliverables.js";
@@ -15,6 +16,7 @@ import { createRoleProposalQueue } from "../roleProposals.js";
 import { RoleError } from "../roles.js";
 import { agreementSnapshot } from "../taskAgreements.js";
 import { personDisplayNames } from "../people.js";
+import { ownProject } from "../projects.js";
 import { acceptCardDrafts, boardTask, CardError, cardBrief, createCardPlan, dismissCardDraft, patchCard, planTaskOpener, planTaskOrNull, readBoard,
   readCardDetail, type CardPlanTask } from "../taskCards.js";
 import type { AppInstance, Guard, RouteContext } from "./shared.js";
@@ -93,8 +95,14 @@ export function registerTaskCardRoutes(app: AppInstance, ctx: RouteContext, deps
   }));
 
   app.post("/api/plan-tasks/:taskId/card-drafts/accept", { preHandler: requireMember, schema: { params: taskParams, body: AcceptCardDraftsRequest,
-    response: { 200: AcceptCardDraftsResponse } } }, async (req, reply) => handle(reply, async () =>
-    ({ cards: await acceptCardDrafts(pool, await board(req.person!.personId, req.params.taskId), req.body, names(), ctx.now()) })));
+    response: { 200: AcceptCardDraftsResponse } } }, async (req, reply) => handle(reply, async () => {
+    // 开工框上方选的预算（设计 11.3）：先核对，卡放进看板以后存成这件 Task 的预算。
+    const budget = req.body.budget ? normalizeBudget(req.body.budget) : null;
+    const own = await board(req.person!.personId, req.params.taskId);
+    const cards = await acceptCardDrafts(pool, own, req.body, names(), ctx.now());
+    if (budget) await writeTaskBudget(q, req.person!.personId, req.params.taskId, budget, ctx.now());
+    return { cards };
+  }));
 
   // 登记拆卡（第 21 节）：只记下本人要拆这个 Task，不起作业；网页在本人电脑上开规划员，开了以后去掉登记。
   app.post("/api/plan-tasks/:taskId/card-splits", { preHandler: requireMember, schema: { params: taskParams,
@@ -113,7 +121,8 @@ export function registerTaskCardRoutes(app: AppInstance, ctx: RouteContext, deps
     handle(reply, async () => planBrief(q, await board(req.person!.personId, req.params.taskId))));
 
   app.post("/api/card-drafts/:id/dismiss", { preHandler: requireMember, schema: { params: idParams } }, async (req, reply) => handle(reply, async () => {
-    await dismissCardDraft(q, req.person!.personId, req.params.id, (planTaskId) => board(req.person!.personId, planTaskId));
+    await dismissCardDraft(q, req.person!.personId, req.params.id, (planTaskId) => board(req.person!.personId, planTaskId),
+      (projectId) => ownProject(q, req.person!.personId, projectId));
     return reply.status(204).send();
   }));
 

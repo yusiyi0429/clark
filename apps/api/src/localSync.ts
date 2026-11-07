@@ -8,9 +8,12 @@ import { htmlToText } from "./meetingEvidence.js";
 import { UUID_PATTERN } from "./meetingStore.js";
 import { taskStandards } from "./tasks.js";
 import { settleHandback } from "./cardAcceptance.js";
-import { saveLocalCardPlan, standardLines } from "./cardPlanner.js";
+import { saveLocalCardPlan, standardLines, type PlanTarget } from "./cardPlanner.js";
 import type { HandbackRow } from "./cardProjection.js";
 import type { CardPlanTask } from "./taskCards.js";
+import { ownProject } from "./projects.js";
+import { closeStartsFor } from "./sessionStarts.js";
+import { latestSuccessor } from "./taskContinuity.js";
 
 /**
  * 本机程序单向上报的接收端（POST /api/local-runner/sync，载荷是本机程序契约 localRunner.ts 的 LocalSyncBatchRequest）。
@@ -24,6 +27,7 @@ export class SyncReject extends Error {
 
 type Owner = { personId: string; deviceId: string };
 type RunRow = { id: string; owner_id: string; kind: "card" | "topic" | "plan" | "verify"; task_id: string | null; topic_id: string | null; plan_task_id: string | null;
+  project_id: string | null;
   state_seq: string; plan_seq: string;
   plan: TLocalPlanEntry[]; timeline: TLocalRunActivity[]; last_activity: TLocalRunActivity | null; running_at: Date | null };
 type CardRow = { id: string; owner_id: string; status: string; executor: string | null; done_definition: string | null };
@@ -34,8 +38,10 @@ const ARTIFACT_TYPES: Record<string, string> = {
   ".md": "text/markdown", ".markdown": "text/markdown", ".txt": "text/plain", ".html": "text/html", ".htm": "text/html", ".pdf": "application/pdf",
   ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
 };
-const STATUS_TEXT: Record<TLocalSessionStatus, string> = { queued: "等空位", starting: "开工", running: "在做", waiting_permission: "等你批准", idle: "等你回复", exited: "停下了", failed: "异常退出" };
-const MILESTONE_STATES = new Set<TLocalSessionStatus>(["starting", "exited", "failed"]);
+const STATUS_TEXT: Record<TLocalSessionStatus, string> = { queued: "等空位", starting: "开工", running: "在做", waiting_permission: "等你批准", idle: "在问你", exited: "停下了", failed: "异常退出", done: "做完收工" };
+/** 会话结束了的几种（记结束时间）：停下了、异常退出、规划员和验收员交完收工。 */
+const ENDED_STATES = new Set<TLocalSessionStatus>(["exited", "failed", "done"]);
+const MILESTONE_STATES = new Set<TLocalSessionStatus>(["starting", ...ENDED_STATES]);
 
 /** 幂等键 <deviceId>:<sessionId>:<序号>：前两段要和这一批、这一条对得上，序号是本会话的同步序号。 */
 export function seqOf(key: string, deviceId: string, sessionId: string): number {
@@ -84,11 +90,14 @@ export async function applySyncBatch(deps: SyncDeps, personId: string,
 
 async function applyItem(deps: SyncDeps, owner: Owner, item: TLocalSyncItem): Promise<Applied> {
   const seq = seqOf(item.key, owner.deviceId, item.sessionId);
+  // 规划员拆的 Task 延续出去了（taskContinuity.ts，会话已经挂到新 Task 上）：本机还按旧 Task 报，接到它最后延续到的那件。
+  if (item.subject.kind === "plan" && item.subject.taskId)
+    item = { ...item, subject: { ...item.subject, taskId: await latestSuccessor(deps.pool.query.bind(deps.pool), item.subject.taskId) } };
   const at = new Date(item.occurredAt);
   if (Number.isNaN(at.valueOf())) throw new SyncReject("INVALID_TIME", "occurredAt 不是合法时间");
-  // 规划员的派活单要读本体里的 Task（不在事务里读）：本人是负责人才收。已经收过的重发不再读。
+  // 规划员的派活单要读本体里的 Task（不在事务里读）：本人是负责人才收；拆项目的（16.3）本人是项目负责人才收。已经收过的重发不再读。
   const repeated = item.type === "card_plan" && Boolean((await deps.pool.query("SELECT 1 FROM local_sync_items WHERE key=$1", [item.key])).rowCount);
-  const planned = item.type === "card_plan" && !repeated ? await plannedTask(deps, owner, item) : null;
+  const planned = item.type === "card_plan" && !repeated ? await plannedTarget(deps, owner, item) : null;
   const written: string[] = [];
   const client = await deps.pool.connect();
   try {
@@ -112,24 +121,33 @@ async function applyItem(deps: SyncDeps, owner: Owner, item: TLocalSyncItem): Pr
   } finally { client.release(); }
 }
 
-/** 规划员拆的那个 Task：本人打得开、而且是负责人（看板只给负责人）。 */
-async function plannedTask(deps: SyncDeps, owner: Owner, item: TLocalSyncItem): Promise<CardPlanTask> {
-  const taskId = item.subject.kind === "plan" ? item.subject.taskId : undefined;
-  if (!taskId) throw new SyncReject("INVALID_SUBJECT", "派活单要挂在规划员的会话上（带 taskId）");
+/** 规划员拆的那个 Task（本人打得开、而且是负责人，看板只给负责人），或没挂 Task 的那个项目（本人是项目负责人）。 */
+async function plannedTarget(deps: SyncDeps, owner: Owner, item: TLocalSyncItem): Promise<PlanTarget> {
+  const { kind, taskId, projectId } = item.subject;
+  if (kind !== "plan" || (!taskId && !projectId)) throw new SyncReject("INVALID_SUBJECT", "派活单要挂在规划员的会话上（带 taskId 或 projectId）");
+  if (!taskId) {
+    await ownProject(deps.pool.query.bind(deps.pool), owner.personId, projectId!).catch(() => { throw new SyncReject("NOT_FOUND", "找不到这个项目"); });
+    return { taskId: null, missionId: null, projectId: projectId!, criteria: [] };
+  }
   const own = await deps.planTask(owner.personId, taskId);
   if (!own) throw new SyncReject("NOT_FOUND", "找不到这个 Task");
   if (!own.canEdit) throw new SyncReject("NOT_OWNER", "这个 Task 由负责人推进，派活单只收负责人的");
-  return own;
+  return { taskId, missionId: own.task.missionId, projectId: null, criteria: own.criteria };
 }
 
 /**
  * 会话挂的东西要是本人的：卡（执行事项）和验收员验的那张卡返回卡的几列；专题返回 null；规划员的会话挂的是本体里的 Task，
- * 这里只核对带了 taskId（派活单另外核对负责人）。
+ * 这里只核对带了 taskId（派活单另外核对负责人）；拆项目的（16.3）不带 taskId、带 projectId，项目要是本人的。
  */
 async function lockSubject(client: PoolClient, owner: Owner, item: TLocalSyncItem): Promise<CardRow | null> {
-  const { kind, cardId, topicId, taskId, handbackKey } = item.subject;
+  const { kind, cardId, topicId, taskId, projectId, handbackKey } = item.subject;
   if (kind === "plan") {
-    if (!taskId) throw new SyncReject("INVALID_SUBJECT", "规划员的会话要带 taskId");
+    if (!taskId && !projectId) throw new SyncReject("INVALID_SUBJECT", "规划员的会话要带 taskId 或 projectId");
+    if (!taskId) {
+      const project = (await client.query("SELECT owner_id FROM projects WHERE id=$1", [projectId])).rows[0] as { owner_id: string } | undefined;
+      if (!project) throw new SyncReject("NOT_FOUND", "找不到这个项目");
+      if (project.owner_id !== owner.personId) throw new SyncReject("NOT_OWNER", "这个项目不是你的");
+    }
     return null;
   }
   const onCard = kind === "card" || kind === "verify";
@@ -147,17 +165,23 @@ async function lockSubject(client: PoolClient, owner: Owner, item: TLocalSyncIte
 
 /** 这次执行的摘要行：第一次见到时建，之后锁住改。 */
 async function lockRun(client: PoolClient, owner: Owner, item: TLocalSyncItem, at: Date): Promise<RunRow> {
-  const { kind, cardId, topicId, taskId } = item.subject;
-  const created = await client.query(`INSERT INTO local_runs(id,owner_id,device_id,kind,task_id,topic_id,plan_task_id,started_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$8)
-    ON CONFLICT (id) DO NOTHING`, [item.sessionId, owner.personId, owner.deviceId, kind, kind === "card" || kind === "verify" ? cardId : null,
-    kind === "topic" ? topicId : null, kind === "plan" ? taskId : null, at]);
+  const { kind, cardId, topicId } = item.subject;
+  // 规划员：拆 Task 的记 plan_task_id，拆项目的（16.3，不带 taskId）记 project_id。
+  const taskId = kind === "plan" ? item.subject.taskId ?? null : null;
+  const projectId = kind === "plan" && !taskId ? item.subject.projectId ?? null : null;
+  const created = await client.query(`INSERT INTO local_runs(id,owner_id,device_id,kind,task_id,topic_id,plan_task_id,project_id,started_at,updated_at)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$9) ON CONFLICT (id) DO NOTHING`, [item.sessionId, owner.personId, owner.deviceId, kind,
+    kind === "card" || kind === "verify" ? cardId : null, kind === "topic" ? topicId : null, taskId, projectId, at]);
   const run = (await client.query("SELECT * FROM local_runs WHERE id=$1 FOR UPDATE", [item.sessionId])).rows[0] as RunRow;
   if (run.owner_id !== owner.personId) throw new SyncReject("NOT_OWNER", "这次执行不是你的");
-  const same = kind === "topic" ? run.topic_id === topicId : kind === "plan" ? run.plan_task_id === taskId : run.task_id === cardId;
+  const same = kind === "topic" ? run.topic_id === topicId : kind === "plan" ? run.plan_task_id === taskId && run.project_id === projectId : run.task_id === cardId;
   if (run.kind !== kind || !same) throw new SyncReject("SUBJECT_MISMATCH", "这次执行属于另一张卡、专题或 Task");
   // 开工（本机第一次报这次执行）时记下卡的岗位版本。
   if (created.rowCount && kind === "card")
     await client.query("UPDATE tasks t SET role_version=r.version FROM roles r WHERE t.id=$1 AND r.id=t.role_id", [cardId]);
+  // 这张卡、这个专题登记过要开工（第 4.4 节）：本机开起来了，那条了结，别处不再认领。
+  if (created.rowCount && (kind === "card" || kind === "topic"))
+    await closeStartsFor(client.query.bind(client), kind === "card" ? { cardId } : { topicId }, at);
   return run;
 }
 
@@ -171,17 +195,22 @@ async function note(client: PoolClient, run: RunRow, at: Date, text: string, mil
   await client.query("UPDATE local_runs SET last_activity=$2::jsonb,timeline=$3::jsonb WHERE id=$1", [run.id, JSON.stringify(latest), JSON.stringify(timeline)]);
 }
 
-async function applyType(client: PoolClient, deps: { storageDir: string }, owner: Owner, item: TLocalSyncItem, run: RunRow, card: CardRow | null,
-  seq: number, at: Date, written: string[], planned: CardPlanTask | null): Promise<Applied> {
+async function applyType(client: PoolClient, deps: Pick<SyncDeps, "storageDir" | "now">, owner: Owner, item: TLocalSyncItem, run: RunRow, card: CardRow | null,
+  seq: number, at: Date, written: string[], planned: PlanTarget | null): Promise<Applied> {
   switch (item.type) {
     case "status": {
       if (seq <= Number(run.state_seq)) return {};
-      const { status, title, modelLabel, waitingFor } = item.data;
-      // waitingFor：排着、在等前面的卡（只有 queued 带）；别的状态清掉。
-      await client.query(`UPDATE local_runs SET state=$2,state_seq=$3,title=$4,model_label=$5,ended_at=$6,running_at=COALESCE(running_at,$7),waiting_for=$8 WHERE id=$1`,
-        [run.id, status, seq, title, modelLabel, status === "exited" || status === "failed" ? at : null, status === "running" ? at : null,
-          status === "queued" && waitingFor?.length ? waitingFor : null]);
-      await note(client, run, at, status === "starting" ? `${STATUS_TEXT.starting}（${modelLabel}）` : STATUS_TEXT[status], MILESTONE_STATES.has(status));
+      const { status, title, modelLabel, waitingFor, hold, question, permission } = item.data;
+      // waitingFor：排着、在等前面的卡（只有 queued 带）；别的状态清掉。hold：停着等额度恢复，恢复接着做时报的那条不带，就清掉。
+      // ask：在问本人（idle 带 question）、在等批准的那一步（waiting_permission 带 permission）；别的状态、不带的清掉（新首页 9.6）。
+      const ask = status === "idle" && question ? { kind: "question", request: question }
+        : status === "waiting_permission" && permission ? { kind: "permission", request: permission } : null;
+      await client.query(`UPDATE local_runs SET state=$2,state_seq=$3,title=$4,model_label=$5,ended_at=$6,running_at=COALESCE(running_at,$7),waiting_for=$8,hold=$9::jsonb,
+        ask=$10::jsonb WHERE id=$1`, [run.id, status, seq, title, modelLabel, ENDED_STATES.has(status) ? at : null, status === "running" ? at : null,
+        status === "queued" && waitingFor?.length ? waitingFor : null, hold ? JSON.stringify({ reason: hold.reason, until: hold.until }) : null,
+        ask ? JSON.stringify(ask) : null]);
+      await note(client, run, at, hold ? "额度用完，等恢复" : status === "starting" ? `${STATUS_TEXT.starting}（${modelLabel}）`
+        : status === "idle" && !question ? "这一轮做完了" : STATUS_TEXT[status], MILESTONE_STATES.has(status));
       return {};
     }
     case "plan": {
@@ -247,7 +276,7 @@ async function applyType(client: PoolClient, deps: { storageDir: string }, owner
         throw new SyncReject("INVALID_PLAN", "计划要有一句话总结，每件派活单要有标题和完成标准");
       if (item.data.cards.some((card, index) => (card.after ?? []).some((after) => after > index)))
         throw new SyncReject("INVALID_PLAN", "一件只能等排在它前面的几件（after 写前面的位置，从 1 起）");
-      const saved = await saveLocalCardPlan(client, { ownerId: owner.personId, runId: run.id, own: planned, plan: item.data, at });
+      const saved = await saveLocalCardPlan(client, { ownerId: owner.personId, runId: run.id, target: planned, plan: item.data, at });
       await note(client, run, at, saved ? `出了派活单（第 ${item.data.revision} 次，${item.data.cards.length} 件）` : "旧的派活单晚到了", true);
       return {};
     }
@@ -256,11 +285,45 @@ async function applyType(client: PoolClient, deps: { storageDir: string }, owner
       return applyVerdict(client, owner, run, card, item.subject.handbackKey!, item.data, at);
     }
     case "cost": {
-      const { usage, modelLabel } = item.data;
+      // token 订阅和网关都累计；cost_usd 是 Claude Code 按标价估的，不是花费。网关的真钱（money）按币种累计进 money，不换算；订阅的、旧条目没有 money。
+      const { usage, modelLabel, source, money } = item.data;
+      const paid = source === "gateway" && money ? money : null;
       await client.query(`UPDATE local_runs SET model_label=$2,tokens=jsonb_build_object('input',(tokens->>'input')::bigint+$3,'output',(tokens->>'output')::bigint+$4,
         'cacheRead',(tokens->>'cacheRead')::bigint+$5,'cacheWrite',(tokens->>'cacheWrite')::bigint+$6),
-        cost_usd=CASE WHEN $7::numeric IS NULL THEN cost_usd ELSE COALESCE(cost_usd,0)+$7::numeric END WHERE id=$1`,
-      [run.id, modelLabel, usage.inputTokens, usage.outputTokens, usage.cacheReadTokens, usage.cacheWriteTokens, usage.costUsd]);
+        cost_usd=CASE WHEN $7::numeric IS NULL THEN cost_usd ELSE COALESCE(cost_usd,0)+$7::numeric END,
+        money=CASE WHEN $8::text IS NULL THEN money ELSE money||jsonb_build_object($8::text,COALESCE((money->>$8::text)::numeric,0)+$9::numeric) END WHERE id=$1`,
+      [run.id, modelLabel, usage.inputTokens, usage.outputTokens, usage.cacheReadTokens, usage.cacheWriteTokens, usage.costUsd,
+        paid ? paid.currency.toUpperCase() : null, paid?.amount ?? 0]);
+      return {};
+    }
+    case "budget": {
+      // 这件 Task（不挂 Task 的专题按会话）的预算用了多少：只存最新的一份（updatedAt 新的覆盖旧的），首页的预算提示以后读它。
+      const view = item.data;
+      const key = view.taskId ? `task:${view.taskId}` : `session:${view.sessionId ?? run.id}`;
+      await client.query(`INSERT INTO local_task_budgets(owner_id,subject_key,view,updated_at) VALUES($1,$2,$3::jsonb,$4)
+        ON CONFLICT (owner_id,subject_key) DO UPDATE SET view=EXCLUDED.view,updated_at=EXCLUDED.updated_at WHERE local_task_budgets.updated_at < EXCLUDED.updated_at`,
+      [owner.personId, key, JSON.stringify(view), view.updatedAt]);
+      return {};
+    }
+    case "background": {
+      // 会话里的子 agent、后台命令：按会话 + 本机的 id 覆盖，序号更小的晚到了不改。只给首页右栏显示，不记动静。
+      const { id, kind, title, state, startedAt, finishedAt, stoppable } = item.data;
+      await client.query(`INSERT INTO local_background_items(run_id,item_id,owner_id,kind,title,state,started_at,finished_at,stoppable,seq,updated_at)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (run_id,item_id) DO UPDATE SET kind=EXCLUDED.kind,title=EXCLUDED.title,state=EXCLUDED.state,
+        started_at=EXCLUDED.started_at,finished_at=EXCLUDED.finished_at,stoppable=EXCLUDED.stoppable,seq=EXCLUDED.seq,updated_at=EXCLUDED.updated_at
+        WHERE local_background_items.seq < EXCLUDED.seq`, [run.id, id, owner.personId, kind, title, state, startedAt, finishedAt, stoppable, seq, deps.now()]);
+      return {};
+    }
+    case "merge": {
+      // 卡验收过以后合回到哪了（第 4.5 节）：记在验的那次交回上。同一次交回报了几条时以本机序号最大的为准（同一毫秒里可能报两条，不比时间）。
+      if (!card || run.kind !== "card") throw new SyncReject("INVALID_SUBJECT", "合回结果只收卡的会话");
+      const { handbackKey, merged, commit, baseBranch, reason, message, auto } = item.data;
+      const row = (await client.query("SELECT id FROM card_handbacks WHERE client_id=$1 AND task_id=$2 AND owner_id=$3 FOR UPDATE",
+        [handbackKey, card.id, owner.personId])).rows[0] as { id: string } | undefined;
+      if (!row) throw new SyncReject("HANDBACK_NOT_FOUND", "云端没有这次交回");
+      const saved = await client.query("UPDATE card_handbacks SET merge=$2::jsonb WHERE id=$1 AND (merge IS NULL OR (merge->>'seq')::bigint < $3)",
+        [row.id, JSON.stringify({ merged, commit, baseBranch, reason, message, auto, at: at.toISOString(), seq }), seq]);
+      if (saved.rowCount) await note(client, run, at, merged ? `已合进 ${baseBranch}` : `没能合回：${message ?? reason ?? "原因不明"}`, true);
       return {};
     }
   }

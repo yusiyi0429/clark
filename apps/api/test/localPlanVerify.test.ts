@@ -342,4 +342,70 @@ describe("拆卡和验收在本机（第 21 节）", { timeout: 30_000 }, () => 
       expect((await context(personal, "task-theirs")).isError).toBe(false);
     } finally { await f.close(); }
   });
+
+  it("没挂 Task 的项目也能拆卡（16.3）：登记、交代、本机规划员只带 projectId 报派活单、项目看板、放进看板（卡挂项目不挂 Task）；首页规划中、等你开工、后台任务按项目算", async () => {
+    const f = await localFixture();
+    try {
+      await f.t.sql("INSERT INTO project_bootstraps(person_id,done_at,report) VALUES($1,now(),'{}')", [TEST_MEMBER.personId]);
+      const project = (await f.call("POST", "/api/me/projects", { name: "天枢新首页" })).json().projectId as string;
+      const base = `/api/me/projects/${project}`;
+
+      // 登记：一个项目同时一条没开工的；和拆 Task 的登记互不相干；伙伴也能登记（已有就回那一条）。
+      const web = await f.call("POST", `${base}/card-splits`);
+      expect(web.statusCode).toBe(201);
+      expect(web.json()).toEqual({ id: web.json().id, taskId: null, taskName: null, missionId: null, projectId: project, projectName: "天枢新首页", origin: "web",
+        createdAt: web.json().createdAt });
+      expect([(await f.call("POST", `${base}/card-splits`)).statusCode, (await f.call("POST", "/api/plan-tasks/task-open/card-splits")).statusCode]).toEqual([200, 201]);
+      const buddy = await f.t.app.inject({ method: "POST", url: `/internal/me/projects/${project}/card-splits`,
+        headers: { authorization: "Bearer chat-token", "x-owner-id": TEST_MEMBER.personId } });
+      expect([buddy.statusCode, buddy.json().id]).toEqual([200, web.json().id]);
+      expect((await f.call("POST", `/api/me/projects/${randomUUID()}/card-splits`)).statusCode).toBe(404);
+      // 两条同一时刻登记的（测试里时钟不走），不比先后。
+      expect((await f.call("GET", "/api/me/card-splits")).json().requests.map((item: { projectId: string | null; taskId: string | null }) => [item.projectId, item.taskId]))
+        .toEqual(expect.arrayContaining([[project, null], [null, "task-open"]]));
+      expect((await f.call("GET", "/api/me/work-home")).json().projects.find((item: { projectId: string }) => item.projectId === project).planning).toBe(true);
+
+      // 交代：没有 Task 和约定，写项目名，要求每件自带完成标准。
+      const brief = (await f.call("GET", `${base}/plan-brief`)).json();
+      expect(brief).toMatchObject({ task: null, project: { projectId: project, name: "天枢新首页" }, criteria: [], exclusions: [], role: { name: "规划员" } });
+      for (const text of ["# 拆卡：天枢新首页", "propose_plan", "没有 Task 的验收标准", "这个项目还没挂过 Task。", "对约定第几条一律写 null"]) expect(brief.markdown).toContain(text);
+
+      // 本机规划员只带 projectId：派活单进项目的草稿，条号一律不存。
+      const running = ["status", { status: "running", title: "拆卡", agent: "claude-code", modelLabel: "订阅 · Opus" }] as [string, unknown];
+      const planned = await f.sync({ kind: "plan", projectId: project }, [running, ["card_plan", plan(1, [{ title: "画首页", criterionIndex: 1 }, { title: "接接口", after: [1] }])]]);
+      expect(planned.rejected).toEqual([]);
+      expect(await f.t.sql("SELECT plan_task_id,project_id::text FROM local_runs WHERE id=$1", [planned.session])).toEqual([{ plan_task_id: null, project_id: project }]);
+      let board = (await f.call("GET", `${base}/board`)).json();
+      expect(board).toMatchObject({ projectId: project, cards: [], plan: { status: "done", source: "local", revision: 1 } });
+      expect(board.drafts.map((draft: { title: string; criterionIndex: number | null }) => [draft.title, draft.criterionIndex])).toEqual([["画首页", null], ["接接口", null]]);
+      expect((await f.call("GET", "/api/plan-tasks/task-open/cards")).json().drafts).toEqual([]);
+      const background = (await f.call("GET", `/api/me/background?scope=project:${project}`)).json().items;
+      expect(background.map((item: { title: string; kind: string; state: string }) => [item.title, item.kind, item.state])).toEqual([["拆卡：天枢新首页", "plan", "running"]]);
+      let waiting = (await f.call("GET", "/api/me/work-home")).json().waiting.filter((item: { kind: string }) => item.kind === "plan_start");
+      expect(waiting).toMatchObject([{ title: "天枢新首页：计划等你开工", source: "2 件等你开工", open: { kind: "project", id: project }, projectId: project, taskId: null }]);
+
+      // 别人的项目（当找不到，同项目接口）、什么都不带的规划员会话拒收。
+      const other = await f.t.sql("INSERT INTO projects(id,owner_id,name,created_at,updated_at) VALUES($1,'person-someone','别人的',now(),now()) RETURNING id::text", [randomUUID()]);
+      expect([(await f.sync({ kind: "plan", projectId: other[0].id }, [["card_plan", plan(1, [{}])]])).rejected.map((item) => item.code),
+        (await f.sync({ kind: "plan" }, [["card_plan", plan(1, [{}])]])).rejected.map((item) => item.code)]).toEqual([["NOT_FOUND"], ["INVALID_SUBJECT"]]);
+
+      // 放进看板带 start：卡挂项目、不挂 Task 和 Mission，登记要开工；另一张不要了。
+      const accepted = await f.call("POST", `${base}/card-drafts/accept`, { drafts: [{ id: board.drafts[0].id }], start: true });
+      expect(accepted.statusCode, accepted.body).toBe(200);
+      const card = accepted.json().cards[0].id as string;
+      expect(await f.t.sql("SELECT plan_task_id,mission_id,project_id::text,criterion_index FROM tasks WHERE id=$1", [card]))
+        .toEqual([{ plan_task_id: null, mission_id: null, project_id: project, criterion_index: null }]);
+      expect(await f.t.sql("SELECT plan_task_id FROM session_starts WHERE card_id=$1", [card])).toEqual([{ plan_task_id: null }]);
+      expect((await f.call("POST", `/api/card-drafts/${board.drafts[1].id}/dismiss`)).statusCode).toBe(204);
+      board = (await f.call("GET", `${base}/board`)).json();
+      expect([board.cards.map((item: { id: string }) => item.id), board.drafts]).toEqual([[card], []]);
+      waiting = (await f.call("GET", "/api/me/work-home")).json().waiting.filter((item: { kind: string }) => item.kind === "plan_start");
+      expect(waiting).toEqual([]);
+
+      // 归档的项目不能再登记、放进看板。
+      await f.call("PATCH", base, { archived: true });
+      expect((await f.call("POST", `${base}/card-splits`)).json()).toMatchObject({ code: "PROJECT_ARCHIVED" });
+      expect((await f.call("POST", `${base}/card-drafts/accept`, { drafts: [{ id: randomUUID() }] })).statusCode).toBe(409);
+    } finally { await f.close(); }
+  });
 });

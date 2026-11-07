@@ -17,7 +17,14 @@ export const FeishuCodeLoginRequest = Type.Object(
  * calendar 要求授权有效、带着在飞书日历约会要的权限（约会议时没有就提示会议不会进他的飞书日历）。
  */
 export const FeishuConnectionResponse = Type.Object(
-  { enabled: Type.Boolean(), connected: Type.Boolean(), calendar: Type.Boolean() },
+  {
+    enabled: Type.Boolean(), connected: Type.Boolean(), calendar: Type.Boolean(),
+    /**
+     * 连接页用（新首页 9.4）：not_connected 没连过（或已断开）；connected 已连（授权有效、带着会后拿妙记要的权限，同 connected）；
+     * expired 连过、但授权过期或要重新授权（含缺权限）。没接飞书（enabled=false）时是 not_connected。断开用 DELETE /api/me/feishu。
+     */
+    state: Type.Union([Type.Literal("not_connected"), Type.Literal("connected"), Type.Literal("expired")]),
+  },
   { additionalProperties: false },
 );
 

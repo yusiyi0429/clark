@@ -1,5 +1,5 @@
 import type { TCardGit, TCardHandbackBrief, TCardModel, TCardWait, TCriterionVerdict, TDeliverableInclusion, TLocalGitRef, TLocalHandbackCriterion, TTaskCard, TTaskView } from "@warmap/contracts";
-import { runBrief, type RunRow } from "./localDevices.js";
+import { askingQuestion, runBrief, type RunRow } from "./localDevices.js";
 import type { Query } from "./meetingStore.js";
 import { roleRef, rolesById } from "./roles.js";
 
@@ -21,12 +21,15 @@ export type CardRow = { id: string; status: TTaskView["status"]; executor: TTask
   criterion_index: number | null; criterion_text: string | null; plan_task_id: string | null; done_definition: string | null; mission_id: string | null;
   role_id: string | null; after_card_ids: string[] };
 
+/** 本机报 hold（订阅额度用完，停着等恢复）时会话的几种状态：排着没开始、一轮停在中间（等你说话的状态）、进程退了。 */
+export const HOLD_STATES = ["queued", "idle", "exited"];
+
 /** 推翻过的验收按本人的判断算：通过的推翻算没过，没过的推翻算通过。 */
 export const effectiveOutcome = (row: Pick<HandbackRow, "outcome" | "overruled_at">) =>
   row.outcome && row.overruled_at ? (row.outcome === "pass" ? "fail" : "pass") : row.outcome;
 
 /** 连续几次没过（从最近一次往前数，排队或在验收的不算）。 */
-export function failStreak(handbacks: HandbackRow[]): number {
+export function failStreak(handbacks: Pick<HandbackRow, "status" | "outcome" | "overruled_at">[]): number {
   let streak = 0;
   for (const row of handbacks) {
     if (row.status !== "done" || effectiveOutcome(row) === null) continue;
@@ -55,7 +58,11 @@ function stageAndWait(row: CardRow, handbacks: HandbackRow[], runs: RunRow[]): P
   const failedRuns = runs.length >= 2 && runs.slice(0, 2).every((run) => run.state === "failed");
   if (failStreak(handbacks) >= 2 || failedRuns) return { stage: "doing", wait: "blocked" };
   if (latest && effectiveOutcome(latest) === "fail" && !latest.returned_at) return { stage: "doing", wait: "review_failed" };
-  const waits: Partial<Record<RunRow["state"], TCardWait>> = { waiting_permission: "approval", idle: "reply", exited: "paused" };
+  // 停着等额度恢复的不是等你回复、也不是已暂停（契约的标记里没有额度，给 null）；停下了、异常退出了一次都算已暂停。
+  if (runs[0]?.hold?.reason === "usage_limit" && HOLD_STATES.includes(runs[0].state)) return { stage: "doing", wait: null };
+  // 一轮做完停下、没在问你（idle 不带 question）算已暂停（「已停下」），不是等你回复（新首页 9.6）。
+  if (runs[0]?.state === "idle") return { stage: "doing", wait: askingQuestion(runs[0]) ? "reply" : "paused" };
+  const waits: Partial<Record<RunRow["state"], TCardWait>> = { waiting_permission: "approval", exited: "paused", failed: "paused" };
   return { stage: "doing", wait: runs[0] ? waits[runs[0].state] ?? null : null };
 }
 

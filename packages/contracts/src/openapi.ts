@@ -1,6 +1,8 @@
 import type { JsonSchema, OpenAPIV3 } from "./types/JsonSchemaTypes.js";
 import { taskQualityPaths, taskQualitySchemas } from "./taskQualityOpenapi.js";
 import { boardPaths, boardSchemas } from "./boardOpenapi.js";
+import { workHomePaths, workHomeSchemas } from "./workHomeOpenapi.js";
+import { taskContinuityPaths, taskContinuitySchemas } from "./taskContinuityOpenapi.js";
 import { AcceptIssueDraftRequest, IssueDraftResponse } from "./issueDrafts.js";
 import {
   RequestStep, RequestPerson, RequestRecipientView, RequestQuestionView, RequestClarification, RequestView, RequestResponse,
@@ -359,6 +361,11 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
             "200": { description: "飞书连接状态", content: { "application/json": { schema: { $ref: "#/components/schemas/FeishuConnectionResponse" } } } },
             "401": errorResponse,
           },
+        },
+        delete: {
+          operationId: "disconnectMyFeishu",
+          summary: "断开本人的飞书：删掉飞书账号的关联和授权（天枢里已有的会议、妙记不动）；之后飞书推送、拿妙记都停，要用再连",
+          responses: { "204": { description: "已断开（没连过也是 204）" }, "401": errorResponse, "403": errorResponse },
         },
       },
       "/api/me/wechat": {
@@ -1227,7 +1234,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         post: {
           operationId: "uploadConversationAttachments",
           parameters: [{ name: "scope", in: "path", required: true, schema: { type: "string" } }],
-          summary: "上传附件到本人在该 scope 的主对话（没有则创建；multipart files，PDF/DOCX/Markdown）；元数据随消息发送时内嵌入库",
+          summary: "上传附件到本人在该 scope 的主对话（multipart files）。总管线、Task 管线接了 Chat 时转给 Chat：类型见 attachments.ts（图片、文档、代码和日志），每个不超过 30 MB，一次合计不超过 100 MB（网页逐个传），一条消息最多 20 个；别的页面和没接 Chat 时照旧 PDF/DOCX/Markdown。元数据随消息发送时内嵌入库",
           requestBody: {
             content: { "multipart/form-data": { schema: { type: "object", properties: { files: { type: "array", items: { type: "string", format: "binary" } } } } } },
           },
@@ -3198,6 +3205,8 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         },
       },
       ...boardPaths,
+      ...workHomePaths,
+      ...taskContinuityPaths,
     },
     components: {
       schemas: {
@@ -3562,6 +3571,8 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         ScheduleItem: ScheduleItem as JsonSchema,
         ScheduleListResponse: ScheduleListResponse as JsonSchema,
         ...boardSchemas,
+        ...workHomeSchemas,
+        ...taskContinuitySchemas,
       },
     },
   };

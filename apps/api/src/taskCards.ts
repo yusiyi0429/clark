@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
+import type { TProjectBoardResponse } from "@warmap/contracts";
 import type { TAcceptCardDraftsRequest, TCardBoardResponse, TCardBriefResponse, TCardDetailResponse, TCardHandbackView, TCardPlanView, TCardTaskView, TPatchCardRequest,
   TPendingDeliverableItem, TTaskAgreementResponse, TTaskView } from "@warmap/contracts";
 import { DeliverableError, type OwnTask } from "./taskDeliverables.js";
@@ -14,6 +15,8 @@ import { UUID_PATTERN } from "./meetingStore.js";
 import type { PlanTaskSource } from "./planTasks.js";
 import type { TaskPageFacts } from "./pageGuides.js";
 import { ensurePresetRole, ownRole, roleBrief, roleRef, rolesById, type RoleRow } from "./roles.js";
+import { requestStarts } from "./sessionStarts.js";
+import type { PlanTarget } from "./cardPlanner.js";
 
 /** 没配岗位的卡兜底用的预设（roles/presets/general/executor.md）。 */
 const DEFAULT_WORKER_PRESET = "executor";
@@ -121,6 +124,18 @@ export async function readBoard(q: Query, own: OwnTask, names: Map<string, strin
     drafts: drafts.map(draftView(await rolesById(q, drafts.map((draft) => draft.role_id)))), plan: plan ? planView(plan, await planExpectedSeconds(q)) : null, pending: await pendingItems(q, taskId),
     nextVersion: (await nextVersions(q, [taskId])).get(taskId)!,
   };
+}
+
+/** GET /api/me/projects/:projectId/board（16.3，项目负责人，调用方核对过）：项目里本人的、不挂 Task 的卡，还没处理的项目草稿，最近一次拆项目的计划。 */
+export async function readProjectBoard(q: Query, ownerId: string, projectId: string, names: Map<string, string>): Promise<TProjectBoardResponse> {
+  const ids = (await q(`SELECT id::text FROM tasks WHERE project_id=$1 AND owner_id=$2 AND plan_task_id IS NULL AND status<>'returned' ORDER BY created_at,id`,
+    [projectId, ownerId])).rows.map((row) => row.id as string);
+  const drafts = (await q(`SELECT d.* FROM card_drafts d JOIN card_plans p ON p.id=d.plan_id WHERE d.project_id=$1 AND d.plan_task_id IS NULL AND d.owner_id=$2
+    AND d.status='open' ORDER BY p.created_at,d.position`, [projectId, ownerId])).rows as DraftRow[];
+  const plan = (await q("SELECT * FROM card_plans WHERE project_id=$1 AND plan_task_id IS NULL AND owner_id=$2 ORDER BY created_at DESC LIMIT 1",
+    [projectId, ownerId])).rows[0] as PlanRow | undefined;
+  return { projectId, cards: await cardTaskViews(q, ids, names), drafts: drafts.map(draftView(await rolesById(q, drafts.map((draft) => draft.role_id)))),
+    plan: plan ? planView(plan, await planExpectedSeconds(q)) : null };
 }
 
 export type DraftRow = { id: string; plan_id: string; position: number; title: string; brief: string; done_definition: string; criterion_index: number | null;
@@ -256,32 +271,44 @@ export async function createCardPlan(q: Query, own: OwnTask, hint: string | unde
  * 放进看板（Task 负责人）：草稿变成执行事项，推进人是本人，挂这个 Task 和它的 Mission，来源记「自己建」；草稿 id 当建事项的幂等键。
  * 可以顺手改标题、交代、完成标准、执行方。已经处理过的草稿 409。
  * 交给 Claude Code 的卡都要有岗位（worker 列表按岗位列）：没配时照草稿建议的预设、没建议时照「执行员」预设给本人加上并挂上。
+ * start（新首页第 4.4 节）：交给 Claude Code 的卡同时登记要开工，由本人电脑上开着的网页认领后交给本机程序。
  */
 export async function acceptCardDrafts(pool: Pool, own: OwnTask, input: TAcceptCardDraftsRequest, names: Map<string, string>, now: Date): Promise<TCardTaskView[]> {
-  const ids: string[] = [], plans = new Set<string>();
+  return acceptDrafts(pool, own.viewerId, { taskId: own.task.taskId, missionId: own.task.missionId, projectId: null, criteria: own.criteria }, input, names, now);
+}
+
+/** 把没挂 Task 的项目的派活单草稿放进看板（16.3，项目负责人，调用方核对过）：卡挂项目、不挂 Task 和 Mission，按自己的完成标准验。 */
+export async function acceptProjectCardDrafts(pool: Pool, ownerId: string, projectId: string, input: TAcceptCardDraftsRequest, names: Map<string, string>, now: Date):
+  Promise<TCardTaskView[]> {
+  return acceptDrafts(pool, ownerId, { taskId: null, missionId: null, projectId, criteria: [] }, input, names, now);
+}
+
+async function acceptDrafts(pool: Pool, ownerId: string, target: PlanTarget, input: TAcceptCardDraftsRequest, names: Map<string, string>, now: Date): Promise<TCardTaskView[]> {
+  const ids: string[] = [], plans = new Set<string>(), starts: string[] = [];
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     for (const edit of input.drafts) {
-      const draft = (await client.query("SELECT * FROM card_drafts WHERE id=$1 AND plan_task_id=$2 AND owner_id=$3 FOR UPDATE",
-        [edit.id, own.task.taskId, own.viewerId])).rows[0] as (DraftRow & { status: string }) | undefined;
+      const draft = (await client.query(`SELECT * FROM card_drafts WHERE id=$1 AND ${target.taskId ? "plan_task_id=$2" : "project_id=$2 AND plan_task_id IS NULL"}
+        AND owner_id=$3 FOR UPDATE`, [edit.id, target.taskId ?? target.projectId, ownerId])).rows[0] as (DraftRow & { status: string }) | undefined;
       if (!draft) throw new CardError(404, "NOT_FOUND", "找不到这张草稿");
       if (draft.status !== "open") throw new CardError(409, "DRAFT_DECIDED", "这张草稿已经处理过了");
-      const created = await createInTransaction(client, own.viewerId, names, { clientId: draft.id, title: (edit.title ?? draft.title).trim(), missionId: own.task.missionId,
-        doneDefinition: (edit.doneDefinition ?? draft.done_definition).trim(), planTaskId: own.task.taskId, source: "self" });
+      const created = await createInTransaction(client, ownerId, names, { clientId: draft.id, title: (edit.title ?? draft.title).trim(), missionId: target.missionId,
+        doneDefinition: (edit.doneDefinition ?? draft.done_definition).trim(), ...target.taskId ? { planTaskId: target.taskId } : {}, source: "self" });
       if (!("task" in created)) throw "error" in created ? new CardError(created.error.status as 400, created.error.code, created.error.message)
         : new CardError(409, "DRAFT_DECIDED", "这张草稿已经处理过了");
-      const index = draft.criterion_index && own.criteria[draft.criterion_index - 1] ? draft.criterion_index : null;
-      if (edit.roleId) await ownRole(client.query.bind(client), own.viewerId, edit.roleId);
+      const index = draft.criterion_index && target.criteria[draft.criterion_index - 1] ? draft.criterion_index : null;
+      if (edit.roleId) await ownRole(client.query.bind(client), ownerId, edit.roleId);
       const executor = edit.executor ?? draft.executor;
       let roleId = edit.roleId === undefined ? draft.role_id : edit.roleId;
-      if (!roleId && executor === "claude_code") roleId = (await (draft.suggest_preset_key ? ensurePresetRole(client, own.viewerId, draft.suggest_preset_key, now) : null)
-        ?? await ensurePresetRole(client, own.viewerId, DEFAULT_WORKER_PRESET, now))?.id ?? null;
-      await client.query("UPDATE tasks SET executor=$2,brief=$3,criterion_index=$4,criterion_text=$5,role_id=$6 WHERE id=$1",
-        [created.task.id, executor, (edit.brief ?? draft.brief).trim() || null, index, index ? own.criteria[index - 1] : null, roleId]);
+      if (!roleId && executor === "claude_code") roleId = (await (draft.suggest_preset_key ? ensurePresetRole(client, ownerId, draft.suggest_preset_key, now) : null)
+        ?? await ensurePresetRole(client, ownerId, DEFAULT_WORKER_PRESET, now))?.id ?? null;
+      await client.query("UPDATE tasks SET executor=$2,brief=$3,criterion_index=$4,criterion_text=$5,role_id=$6,project_id=COALESCE($7,project_id) WHERE id=$1",
+        [created.task.id, executor, (edit.brief ?? draft.brief).trim() || null, index, index ? target.criteria[index - 1] : null, roleId, target.projectId]);
       await client.query("UPDATE card_drafts SET status='accepted',task_id=$2,decided_at=now() WHERE id=$1", [draft.id, created.task.id]);
       ids.push(created.task.id);
       plans.add(draft.plan_id);
+      if (executor === "claude_code") starts.push(created.task.id);
     }
     // 先后：草稿要等的那几张草稿放进看板了，换成它们的卡 id（先放后放都对得上；不要了的那张不等）。
     await client.query(`UPDATE tasks t SET after_card_ids=w.ids FROM (
@@ -289,18 +316,21 @@ export async function acceptCardDrafts(pool: Pool, own: OwnTask, input: TAcceptC
       FROM card_drafts d LEFT JOIN card_drafts a ON a.id=ANY(d.after_draft_ids) AND a.status='accepted'
       WHERE d.plan_id=ANY($1::uuid[]) AND d.status='accepted' AND d.task_id IS NOT NULL AND cardinality(d.after_draft_ids)>0 GROUP BY d.task_id) w
       WHERE t.id=w.task_id`, [[...plans]]);
+    if (input.start && starts.length) await requestStarts(client.query.bind(client), { ownerId, origin: "web", now,
+      items: starts.map((cardId) => ({ kind: "card", cardId, planTaskId: target.taskId })) });
     await client.query("COMMIT");
   } catch (cause) { await client.query("ROLLBACK").catch(() => undefined); throw cause; }
   finally { client.release(); }
   return cardTaskViews(pool.query.bind(pool), ids, names);
 }
 
-/** 不要这张草稿：只有这个 Task 的负责人（就是草稿的主人）。 */
-export async function dismissCardDraft(q: Query, personId: string, id: string, ownTask: (planTaskId: string) => Promise<OwnTask>): Promise<void> {
-  const draft = UUID_PATTERN.test(id) ? (await q("SELECT plan_task_id,status FROM card_drafts WHERE id=$1 AND owner_id=$2", [id, personId])).rows[0] as
-    { plan_task_id: string; status: string } | undefined : undefined;
+/** 不要这张草稿：只有这个 Task 的负责人（就是草稿的主人）；项目的草稿（16.3）是项目负责人。 */
+export async function dismissCardDraft(q: Query, personId: string, id: string, ownTask: (planTaskId: string) => Promise<OwnTask>,
+  ownProject: (projectId: string) => Promise<unknown>): Promise<void> {
+  const draft = UUID_PATTERN.test(id) ? (await q("SELECT plan_task_id,project_id::text,status FROM card_drafts WHERE id=$1 AND owner_id=$2", [id, personId])).rows[0] as
+    { plan_task_id: string | null; project_id: string | null; status: string } | undefined : undefined;
   if (!draft) throw new CardError(404, "NOT_FOUND", "找不到这张草稿");
-  await ownTask(draft.plan_task_id);
+  await (draft.plan_task_id ? ownTask(draft.plan_task_id) : ownProject(draft.project_id!));
   if (draft.status !== "open") throw new CardError(409, "DRAFT_DECIDED", "这张草稿已经处理过了");
   await q("UPDATE card_drafts SET status='dismissed',decided_at=now() WHERE id=$1 AND status='open'", [id]);
 }
