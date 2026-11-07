@@ -1,5 +1,5 @@
 import type { Pool } from "pg";
-import type { TCreateLocalDeviceRequest, TCreateLocalDeviceResponse, TLocalDeviceView, TLocalOutputView, TLocalPlanEntry, TLocalRunActivity,
+import type { TCreateLocalDeviceRequest, TCreateLocalDeviceResponse, TLocalDeviceView, TLocalHold, TLocalOutputView, TLocalPlanEntry, TLocalRunActivity,
   TLocalRunBrief, TLocalRunPlanProgress, TLocalRunView, TLocalSessionStatus } from "@warmap/contracts";
 import type { Query } from "./meetingStore.js";
 import { issueLocalToken } from "./personalTokens.js";
@@ -62,6 +62,8 @@ export type RunRow = { id: string; owner_id: string; device_id: string; device_n
   title: string | null; model_label: string | null; state: TLocalSessionStatus; plan: TLocalPlanEntry[]; plan_progress: TLocalRunPlanProgress | null;
   last_activity: TLocalRunActivity | null;
   timeline: TLocalRunActivity[]; tokens: { input: number; output: number; cacheRead: number; cacheWrite: number }; cost_usd: string | null;
+  /** hold：停着等额度恢复（本机状态条目带的）；money：网关模型真花的钱，按币种累计。 */
+  hold: TLocalHold | null; money: Record<string, number>;
   started_at: Date; running_at: Date | null; ended_at: Date | null; updated_at: Date };
 export const RUN_SELECT = `SELECT r.*,d.name AS device_name FROM local_runs r LEFT JOIN local_devices d ON d.owner_id=r.owner_id AND d.id=r.device_id`;
 

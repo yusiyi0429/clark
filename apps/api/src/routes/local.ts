@@ -48,9 +48,9 @@ export function registerLocalRoutes(app: AppInstance, ctx: RouteContext, board: 
     if (!identity) return fail(reply, 401, "UNAUTHORIZED", "设备令牌无效，请在天枢插件页重新配对");
     const device = await deviceOfToken(q, identity.tokenId);
     if (!device || device.id !== req.body.deviceId) return fail(reply, 403, "DEVICE_MISMATCH", "这把令牌不是这台电脑的");
-    // 每一批（包括闲着时的空批，也就是心跳）都刷新在线时间、版本和位置数。
-    await q("UPDATE local_devices SET last_sync_at=$3,app_version=$4,slots=$5::jsonb WHERE owner_id=$1 AND id=$2",
-      [device.ownerId, device.id, ctx.now(), req.body.runnerVersion.slice(0, 40), JSON.stringify(req.body.slots)]);
+    // 每一批（包括闲着时的空批，也就是心跳）都刷新在线时间、版本和位置数；带了额度的整份换掉这台电脑存的额度，没带的留着上次的。
+    await q("UPDATE local_devices SET last_sync_at=$3,app_version=$4,slots=$5::jsonb,quota=COALESCE($6::jsonb,quota) WHERE owner_id=$1 AND id=$2",
+      [device.ownerId, device.id, ctx.now(), req.body.runnerVersion.slice(0, 40), JSON.stringify(req.body.slots), req.body.quota ? JSON.stringify(req.body.quota) : null]);
     const { response, queued, proposals } = await applySyncBatch({ pool, storageDir: ctx.materialStorageDir, now: ctx.now,
       onError: () => app.log.error("local sync item failed"), planTask: board.planTask }, identity.personId, req.body);
     queued.forEach(board.enqueueAcceptance);

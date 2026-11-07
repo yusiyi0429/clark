@@ -140,6 +140,15 @@ type ItemRow = { id: string; kind: "file" | "image" | "link"; name: string; url:
 
 /** 「请 X 看」的去重键：同一个 Task、同一条、同一个人、同一天（公司时区）只推一次。 */
 const notifyKey = (taskId: string, index: number, personId: string, day: string) => `${FEISHU_NOTIFY_KIND}:task-check:${taskId}:${index}:${personId}:${day}`;
+/** 拆开「请 X 看」的去重键（首页「请你认可」用）：Task id 里可能有冒号，从右往左拆。不是这种键为 null。 */
+export function parseNotifyKey(key: string): { taskId: string; index: number; personId: string; day: string } | null {
+  const prefix = `${FEISHU_NOTIFY_KIND}:task-check:`;
+  if (!key.startsWith(prefix)) return null;
+  const parts = key.slice(prefix.length).split(":");
+  if (parts.length < 4) return null;
+  const [day, personId, index] = [parts.pop()!, parts.pop()!, Number(parts.pop())];
+  return Number.isInteger(index) ? { taskId: parts.join(":"), index, personId, day } : null;
+}
 const STALE_GAP = "这条标准改过，最新一版没按它评，传一版新的再对表";
 
 function basisNotice(agreementStale: boolean, reviewStale: boolean): TCheckNotice | null {

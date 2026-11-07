@@ -37,6 +37,8 @@ describe("worker 列表", { timeout: 30_000 }, () => {
       const desktop = await f.local("另一台");
       await desktop.send({ kind: "card", cardId: ids["那台电脑关了"] }, [status("running", "那台电脑关了")]);
       await f.t.sql("UPDATE local_devices SET last_sync_at=$2 WHERE id=$1", [desktop.device, new Date(BOARD_NOW.getTime() - 60 * 60_000)]);
+      // 我的电脑先配对（固定时钟下两台的配对时间一样，列表按配对先后排）。
+      await f.t.sql("UPDATE local_devices SET created_at=$2 WHERE id=$1", [laptop.device, new Date(BOARD_NOW.getTime() - 60_000)]);
       const queuedTopic = randomUUID(), runningTopic = randomUUID();
       await f.t.sql(`INSERT INTO research_topics(id,owner_id,title,role_id,plan_task_id,mission_id) VALUES($1,$3,'竞品调研',$4,'task-open','mine'),($2,$3,'行业报告',$4,NULL,NULL)`,
         [queuedTopic, runningTopic, TEST_MEMBER.personId, researcher.id]);
@@ -54,7 +56,8 @@ describe("worker 列表", { timeout: 30_000 }, () => {
       expect(item("跑着")).toMatchObject({ key: `card:${ids["跑着"]}`, kind: "card", cardId: ids["跑着"], topicId: null, role: { id: dev.id, name: "开发", kind: "worker" },
         task: { id: "task-open", name: "对话质量达标" }, mission: { id: "mine", title: "内部版上线" }, step: { n: 2, total: 3, label: "写" },
         resource: { where: "local", deviceId: laptop.device, deviceName: "我的电脑", modelLabel: "订阅 · Sonnet" }, startedAt: "2026-11-06T01:00:01.000Z",
-        elapsedSeconds: 3599, cost: { inputTokens: 1000, outputTokens: 200, costUsd: 0.5, costCny: null }, stage: "doing", wait: null, needsYou: false, queueReason: null,
+        // 订阅的用量只算 token，Claude Code 估的 costUsd 不是真钱（设计第 11 节）。
+        elapsedSeconds: 3599, cost: { inputTokens: 1000, outputTokens: 200, costUsd: null, costCny: null }, stage: "doing", wait: null, needsYou: false, queueReason: null,
         queuePosition: null });
       expect(item("等批准")).toMatchObject({ wait: "approval", needsYou: true, stage: "doing" });
       expect(item("验收中")).toMatchObject({ stage: "review", wait: "reviewing", needsYou: false, role: { kind: "reviewer" },
@@ -83,7 +86,8 @@ describe("worker 列表", { timeout: 30_000 }, () => {
           { id: desktop.device, name: "另一台", lastSeenAt: new Date(BOARD_NOW.getTime() - 60 * 60_000).toISOString(), online: false }],
         // 另一台不在线，不算它的位置。
         running: 2, cap: 2,
-        cost: { today: { inputTokens: 1000, outputTokens: 200, costUsd: 0.5, costCny: null }, month: { inputTokens: 1000, outputTokens: 200, costUsd: 0.5, costCny: null } },
+        cost: { today: { inputTokens: 1000, outputTokens: 200, costUsd: null, costCny: null }, month: { inputTokens: 1000, outputTokens: 200, costUsd: null, costCny: null } },
+        quota: [],
       });
 
       const internal = (headers: Record<string, string>) => f.t.app.inject({ method: "GET", url: "/internal/me/workers", headers });
@@ -162,7 +166,7 @@ describe("worker 列表", { timeout: 30_000 }, () => {
       expect(byKey(`verify:${checking}`)).toMatchObject({ kind: "verify", cardId: checking, title: "在验的卡", role: { name: "验收员", kind: "reviewer" },
         task: { id: "task-open", name: "对话质量达标" }, mission: { id: "mine", title: "内部版上线" }, stage: "review", wait: null, queueReason: null,
         resource: { where: "local", deviceId: laptop.device, deviceName: "我的电脑", modelLabel: "订阅 · Opus" }, startedAt: "2026-11-06T03:10:00.000Z",
-        cost: { inputTokens: 300, outputTokens: 40, costUsd: 0.1, costCny: null } });
+        cost: { inputTokens: 300, outputTokens: 40, costUsd: null, costCny: null } });
       expect(byKey(`plan:${planning}`)).toMatchObject({ kind: "plan", cardId: null, topicId: null, title: "对话质量达标", role: { name: "规划员" },
         task: { id: "task-open", name: "对话质量达标" }, mission: { id: "mine", title: "内部版上线" }, stage: "doing", step: { n: 2, total: 2, label: "出派活单" },
         resource: { where: "local", deviceName: "我的电脑", modelLabel: "订阅 · Opus" }, queueReason: null });

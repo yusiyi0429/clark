@@ -182,12 +182,13 @@ async function applyType(client: PoolClient, deps: Pick<SyncDeps, "storageDir" |
   switch (item.type) {
     case "status": {
       if (seq <= Number(run.state_seq)) return {};
-      const { status, title, modelLabel, waitingFor } = item.data;
-      // waitingFor：排着、在等前面的卡（只有 queued 带）；别的状态清掉。
-      await client.query(`UPDATE local_runs SET state=$2,state_seq=$3,title=$4,model_label=$5,ended_at=$6,running_at=COALESCE(running_at,$7),waiting_for=$8 WHERE id=$1`,
-        [run.id, status, seq, title, modelLabel, ENDED_STATES.has(status) ? at : null, status === "running" ? at : null,
-          status === "queued" && waitingFor?.length ? waitingFor : null]);
-      await note(client, run, at, status === "starting" ? `${STATUS_TEXT.starting}（${modelLabel}）` : STATUS_TEXT[status], MILESTONE_STATES.has(status));
+      const { status, title, modelLabel, waitingFor, hold } = item.data;
+      // waitingFor：排着、在等前面的卡（只有 queued 带）；别的状态清掉。hold：停着等额度恢复，恢复接着做时报的那条不带，就清掉。
+      await client.query(`UPDATE local_runs SET state=$2,state_seq=$3,title=$4,model_label=$5,ended_at=$6,running_at=COALESCE(running_at,$7),waiting_for=$8,hold=$9::jsonb
+        WHERE id=$1`, [run.id, status, seq, title, modelLabel, ENDED_STATES.has(status) ? at : null, status === "running" ? at : null,
+        status === "queued" && waitingFor?.length ? waitingFor : null, hold ? JSON.stringify({ reason: hold.reason, until: hold.until }) : null]);
+      await note(client, run, at, hold ? "额度用完，等恢复" : status === "starting" ? `${STATUS_TEXT.starting}（${modelLabel}）` : STATUS_TEXT[status],
+        MILESTONE_STATES.has(status));
       return {};
     }
     case "plan": {
@@ -262,11 +263,15 @@ async function applyType(client: PoolClient, deps: Pick<SyncDeps, "storageDir" |
       return applyVerdict(client, owner, run, card, item.subject.handbackKey!, item.data, at);
     }
     case "cost": {
-      const { usage, modelLabel } = item.data;
+      // token 订阅和网关都累计；cost_usd 是 Claude Code 按标价估的，不是花费。网关的真钱（money）按币种累计进 money，不换算；订阅的、旧条目没有 money。
+      const { usage, modelLabel, source, money } = item.data;
+      const paid = source === "gateway" && money ? money : null;
       await client.query(`UPDATE local_runs SET model_label=$2,tokens=jsonb_build_object('input',(tokens->>'input')::bigint+$3,'output',(tokens->>'output')::bigint+$4,
         'cacheRead',(tokens->>'cacheRead')::bigint+$5,'cacheWrite',(tokens->>'cacheWrite')::bigint+$6),
-        cost_usd=CASE WHEN $7::numeric IS NULL THEN cost_usd ELSE COALESCE(cost_usd,0)+$7::numeric END WHERE id=$1`,
-      [run.id, modelLabel, usage.inputTokens, usage.outputTokens, usage.cacheReadTokens, usage.cacheWriteTokens, usage.costUsd]);
+        cost_usd=CASE WHEN $7::numeric IS NULL THEN cost_usd ELSE COALESCE(cost_usd,0)+$7::numeric END,
+        money=CASE WHEN $8::text IS NULL THEN money ELSE money||jsonb_build_object($8::text,COALESCE((money->>$8::text)::numeric,0)+$9::numeric) END WHERE id=$1`,
+      [run.id, modelLabel, usage.inputTokens, usage.outputTokens, usage.cacheReadTokens, usage.cacheWriteTokens, usage.costUsd,
+        paid ? paid.currency.toUpperCase() : null, paid?.amount ?? 0]);
       return {};
     }
     case "background": {
