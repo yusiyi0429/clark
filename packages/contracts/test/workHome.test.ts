@@ -4,7 +4,7 @@ import { Value } from "@sinclair/typebox/value";
 import {
   AcceptCardDraftsRequest, BackgroundQuery, BackgroundResponse, ClaimSessionStartsResponse, ConversationScope, CreateProjectRequest, ProjectDetailResponse,
   CardPlanBriefResponse, CardSplitRequestView, CreateProjectTransferRequest, ProjectBoardResponse, ProjectFeedResponse, ProjectPipelineResponse, ProjectTransfer, RouteResponse, UpdateProjectRequest, UpdateProjectTransferRequest, WorkHomeResponse,
-  BuddyActionParams, ClaimSessionCommandsResponse, PROJECT_ONLY_ACTIONS, SessionCommandDoneRequest, SUB_SESSION_REPORT_PREFIX,
+  AutoRelayDecisionRequest, BuddyActionParams, ClaimSessionCommandsResponse, PROJECT_ONLY_ACTIONS, SessionCommandDoneRequest, SUB_SESSION_REPORT_PREFIX,
 } from "../src/index.js";
 import { buildOpenApiDocument } from "../src/openapi.js";
 
@@ -63,7 +63,7 @@ describe("新首页契约", () => {
     expect(Value.Check(CreateProjectRequest, { name: "" })).toBe(false);
     expect(Value.Check(UpdateProjectRequest, { archived: true })).toBe(true);
     expect(Value.Check(UpdateProjectRequest, {})).toBe(false);
-    const project = { projectId: uuid, name: "天枢新首页", archivedAt: null, createdAt: at, lastActivityAt: null, transfer: null, permissionMode: "auto" };
+    const project = { projectId: uuid, name: "天枢新首页", archivedAt: null, createdAt: at, lastActivityAt: null, transfer: null, permissionMode: "auto", autoRelayLimit: 20 };
     // 新开子会话的默认权限模式：五档之一，项目设置里改。
     expect(Value.Check(UpdateProjectRequest, { permissionMode: "plan" })).toBe(true);
     expect(Value.Check(UpdateProjectRequest, { permissionMode: "yolo" })).toBe(false);
@@ -194,6 +194,13 @@ describe("新首页契约", () => {
     expect([...PROJECT_ONLY_ACTIONS]).toEqual(["sub_session_tell", "sub_session_stop", "sub_session_restart", "sub_session_answer", "sub_session_approve"]);
     const paths = buildOpenApiDocument().paths!;
     expect(paths["/api/me/session-commands/claim"]).toBeDefined();
+    // 18 节第 12 条：自动接力的上限在项目设置里，null 不限；「等你」里 auto_relay 就地继续或停下。
+    expect(Value.Check(UpdateProjectRequest, { autoRelayLimit: 20 })).toBe(true);
+    expect(Value.Check(UpdateProjectRequest, { autoRelayLimit: null })).toBe(true);
+    expect(Value.Check(UpdateProjectRequest, { autoRelayLimit: 0 })).toBe(false);
+    expect(Value.Check(AutoRelayDecisionRequest, { decision: "continue" })).toBe(true);
+    expect(Value.Check(AutoRelayDecisionRequest, { decision: "later" })).toBe(false);
+    expect(paths["/api/me/projects/{projectId}/auto-relay"]).toBeDefined();
     expect(paths["/api/me/session-commands/{id}/done"]).toBeDefined();
   });
 });

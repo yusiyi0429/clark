@@ -20804,6 +20804,87 @@
         }
       }
     },
+    "/api/me/projects/{projectId}/auto-relay": {
+      "post": {
+        "operationId": "decideAutoRelay",
+        "summary": "答「等你」里的自动接力（18 节第 12 条）：continue 清零恢复，stop 收起那一条、等本人说话再恢复；没停着 409",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutoRelayDecisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "记下了"
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/session-commands/claim": {
       "post": {
         "operationId": "claimSessionCommands",
@@ -112159,6 +112240,10 @@
               {
                 "const": "goal_changed",
                 "type": "string"
+              },
+              {
+                "const": "auto_relay",
+                "type": "string"
               }
             ]
           },
@@ -114148,6 +114233,10 @@
                     {
                       "const": "goal_changed",
                       "type": "string"
+                    },
+                    {
+                      "const": "auto_relay",
+                      "type": "string"
                     }
                   ]
                 },
@@ -116076,7 +116165,8 @@
           "createdAt",
           "lastActivityAt",
           "transfer",
-          "permissionMode"
+          "permissionMode",
+          "autoRelayLimit"
         ],
         "properties": {
           "projectId": {
@@ -116553,6 +116643,18 @@
                 "type": "string"
               }
             ]
+          },
+          "autoRelayLimit": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "maximum": 1000,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -116575,7 +116677,8 @@
                 "createdAt",
                 "lastActivityAt",
                 "transfer",
-                "permissionMode"
+                "permissionMode",
+                "autoRelayLimit"
               ],
               "properties": {
                 "projectId": {
@@ -117052,6 +117155,18 @@
                       "type": "string"
                     }
                   ]
+                },
+                "autoRelayLimit": {
+                  "anyOf": [
+                    {
+                      "minimum": 1,
+                      "maximum": 1000,
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               }
             }
@@ -117110,6 +117225,18 @@
               {
                 "const": "bypassPermissions",
                 "type": "string"
+              }
+            ]
+          },
+          "autoRelayLimit": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "maximum": 1000,
+                "type": "integer"
+              },
+              {
+                "type": "null"
               }
             ]
           }
@@ -117215,7 +117342,8 @@
               "createdAt",
               "lastActivityAt",
               "transfer",
-              "permissionMode"
+              "permissionMode",
+              "autoRelayLimit"
             ],
             "properties": {
               "projectId": {
@@ -117690,6 +117818,18 @@
                   {
                     "const": "bypassPermissions",
                     "type": "string"
+                  }
+                ]
+              },
+              "autoRelayLimit": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "maximum": 1000,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
                   }
                 ]
               }
@@ -121907,6 +122047,27 @@
               },
               {
                 "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "AutoRelayDecisionRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "decision"
+        ],
+        "properties": {
+          "decision": {
+            "anyOf": [
+              {
+                "const": "continue",
+                "type": "string"
+              },
+              {
+                "const": "stop",
+                "type": "string"
               }
             ]
           }

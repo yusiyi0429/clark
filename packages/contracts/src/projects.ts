@@ -31,6 +31,13 @@ export const ProjectName = Type.String({ minLength: 1, maxLength: 60 });
  * permissionMode（17.2 第 11 条）：这个项目新开子会话的默认权限模式（项目主管线下面那个选择改的就是它，见 localRunner.ts 的 LocalPermissionMode），缺省 auto；
  * 项目对话、伙伴开的子会话开工时云端把它带给本机（ClaimedSessionStart.permissionMode）。
  */
+/**
+ * 自动接力的上限（18 节第 12 条，空转保护）：这个项目里系统自动触发的项目主管线轮次（子会话停了的报告触发的那一轮），加上主管线代本人给子会话的转话、重开，
+ * 连续这么多次之间本人一句话没说，就停止自动触发，「等你」里出一条 auto_relay 问继续还是停下。null 是不限。新项目缺省 20。
+ * 本人发的话、点的按钮永远不受限；本人在这个项目对话里说任何一句话（含伙伴台转来的）都清零。Task 预算照旧兜底。
+ */
+export const AutoRelayLimit = Type.Integer({ minimum: 1, maximum: 1000 });
+
 export const Project = Type.Object({
   projectId: Type.String({ format: "uuid" }),
   name: ProjectName,
@@ -39,6 +46,7 @@ export const Project = Type.Object({
   lastActivityAt: Nullable(Instant),
   transfer: Nullable(ProjectTransfer),
   permissionMode: LocalPermissionMode,
+  autoRelayLimit: Nullable(AutoRelayLimit),
 }, strict);
 
 /** GET /api/me/projects（DRI 工作台）：本人全部项目（含交出去了的，算归档），没归档的在前，各自按最近动静从近到远。 */
@@ -53,7 +61,16 @@ export const CreateProjectRequest = Type.Object({ name: ProjectName, taskId: Typ
 /** PATCH /api/me/projects/:projectId：改名、归档（archived: true）、恢复（archived: false）。至少带一样。 */
 export const UpdateProjectRequest = Type.Object({ name: Type.Optional(ProjectName), archived: Type.Optional(Type.Boolean()),
   /** 新开子会话的默认权限模式（Project.permissionMode）。 */
-  permissionMode: Type.Optional(LocalPermissionMode) }, { ...strict, minProperties: 1 });
+  permissionMode: Type.Optional(LocalPermissionMode),
+  /** 自动接力的上限（Project.autoRelayLimit，null 不限）。 */
+  autoRelayLimit: Type.Optional(Nullable(AutoRelayLimit)) }, { ...strict, minProperties: 1 });
+
+/**
+ * POST /api/me/projects/:projectId/auto-relay（项目负责人，204）：答「等你」里那条 auto_relay。
+ * continue：计数清零、恢复自动触发；stop：那一条收起，自动触发照旧停着，直到本人在这个项目对话里说一句话（说了就清零、恢复）。
+ * 没停着（没到上限）回 409 NOT_PAUSED。
+ */
+export const AutoRelayDecisionRequest = Type.Object({ decision: Type.Union([Type.Literal("continue"), Type.Literal("stop")]) }, strict);
 
 /**
  * 一件挂着的 Task 的判定（目标历史那一行）：completed 本人确认完成；stopped 定了到此为止；continued 延续成了下个月的一件；open 还没了结。
@@ -231,6 +248,7 @@ export type TProjectPipelineResponse = Static<typeof ProjectPipelineResponse>;
 export type TProjectGoalLinkedItem = Static<typeof ProjectGoalLinkedItem>;
 export type TProjectFeedItem = Static<typeof ProjectFeedItem>;
 export type TProjectFeedResponse = Static<typeof ProjectFeedResponse>;
+export type TAutoRelayDecisionRequest = Static<typeof AutoRelayDecisionRequest>;
 export type TSubSessionFeedRef = Static<typeof SubSessionFeedRef>;
 export type TProjectSubSessionReportItem = Static<typeof ProjectSubSessionReportItem>;
 export type TProjectSubSessionDecisionItem = Static<typeof ProjectSubSessionDecisionItem>;
