@@ -6002,6 +6002,11 @@ export interface components {
                             commit: string;
                             verifiedCommit: string | null;
                         } | null;
+                        sourceWordIssues: {
+                            quote: string;
+                            kind: "missing" | "extra";
+                            reason: string;
+                        }[];
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -10043,6 +10048,11 @@ export interface components {
                         commit: string;
                         verifiedCommit: string | null;
                     } | null;
+                    sourceWordIssues: {
+                        quote: string;
+                        kind: "missing" | "extra";
+                        reason: string;
+                    }[];
                 } | null;
                 deliverable: {
                     state: "pending" | "included";
@@ -10228,6 +10238,11 @@ export interface components {
                                 commit: string;
                                 verifiedCommit: string | null;
                             } | null;
+                            sourceWordIssues: {
+                                quote: string;
+                                kind: "missing" | "extra";
+                                reason: string;
+                            }[];
                         } | null;
                         deliverable: {
                             state: "pending" | "included";
@@ -11561,6 +11576,11 @@ export interface components {
                             commit: string;
                             verifiedCommit: string | null;
                         } | null;
+                        sourceWordIssues: {
+                            quote: string;
+                            kind: "missing" | "extra";
+                            reason: string;
+                        }[];
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -11787,6 +11807,11 @@ export interface components {
                             commit: string;
                             verifiedCommit: string | null;
                         } | null;
+                        sourceWordIssues: {
+                            quote: string;
+                            kind: "missing" | "extra";
+                            reason: string;
+                        }[];
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -11946,6 +11971,11 @@ export interface components {
                                 commit: string;
                                 verifiedCommit: string | null;
                             } | null;
+                            sourceWordIssues: {
+                                quote: string;
+                                kind: "missing" | "extra";
+                                reason: string;
+                            }[];
                         } | null;
                         deliverable: {
                             state: "pending" | "included";
@@ -12105,6 +12135,11 @@ export interface components {
                             commit: string;
                             verifiedCommit: string | null;
                         } | null;
+                        sourceWordIssues: {
+                            quote: string;
+                            kind: "missing" | "extra";
+                            reason: string;
+                        }[];
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -12673,6 +12708,11 @@ export interface components {
                             commit: string;
                             verifiedCommit: string | null;
                         } | null;
+                        sourceWordIssues: {
+                            quote: string;
+                            kind: "missing" | "extra";
+                            reason: string;
+                        }[];
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -12871,6 +12911,11 @@ export interface components {
                                 commit: string;
                                 verifiedCommit: string | null;
                             } | null;
+                            sourceWordIssues: {
+                                quote: string;
+                                kind: "missing" | "extra";
+                                reason: string;
+                            }[];
                         } | null;
                         deliverable: {
                             state: "pending" | "included";
@@ -13019,6 +13064,11 @@ export interface components {
                             commit: string;
                             verifiedCommit: string | null;
                         } | null;
+                        sourceWordIssues: {
+                            quote: string;
+                            kind: "missing" | "extra";
+                            reason: string;
+                        }[];
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -15624,6 +15674,11 @@ export interface components {
                     commit: string;
                     verifiedCommit: string | null;
                 } | null;
+                sourceWordIssues: {
+                    quote: string;
+                    kind: "missing" | "extra";
+                    reason: string;
+                }[];
             } | null;
             deliverable: {
                 state: "pending" | "included";
@@ -15765,6 +15820,11 @@ export interface components {
                         commit: string;
                         verifiedCommit: string | null;
                     } | null;
+                    sourceWordIssues: {
+                        quote: string;
+                        kind: "missing" | "extra";
+                        reason: string;
+                    }[];
                 } | null;
                 deliverable: {
                     state: "pending" | "included";
@@ -15973,6 +16033,11 @@ export interface components {
                             commit: string;
                             verifiedCommit: string | null;
                         } | null;
+                        sourceWordIssues: {
+                            quote: string;
+                            kind: "missing" | "extra";
+                            reason: string;
+                        }[];
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -16202,6 +16267,11 @@ export interface components {
                             commit: string;
                             verifiedCommit: string | null;
                         } | null;
+                        sourceWordIssues: {
+                            quote: string;
+                            kind: "missing" | "extra";
+                            reason: string;
+                        }[];
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -16246,6 +16316,11 @@ export interface components {
                 commit: string;
                 verifiedCommit: string | null;
             } | null;
+            sourceWordIssues: {
+                quote: string;
+                kind: "missing" | "extra";
+                reason: string;
+            }[];
             runId: string | null;
             criteria: string[];
             claims: {
@@ -16419,6 +16494,11 @@ export interface components {
                             commit: string;
                             verifiedCommit: string | null;
                         } | null;
+                        sourceWordIssues: {
+                            quote: string;
+                            kind: "missing" | "extra";
+                            reason: string;
+                        }[];
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -16491,6 +16571,11 @@ export interface components {
                     commit: string;
                     verifiedCommit: string | null;
                 } | null;
+                sourceWordIssues: {
+                    quote: string;
+                    kind: "missing" | "extra";
+                    reason: string;
+                }[];
                 runId: string | null;
                 criteria: string[];
                 claims: {
@@ -18370,6 +18455,11 @@ export interface components {
             /** Format: uuid */
             handbackId: string;
             fix: string | null;
+            sourceWordIssues: {
+                quote: string;
+                kind: "missing" | "extra";
+                reason: string;
+            }[];
         } | {
             /** @constant */
             kind: "criteria_met";
@@ -18693,6 +18783,11 @@ export interface components {
             /** Format: uuid */
             handbackId: string;
             fix: string | null;
+            sourceWordIssues: {
+                quote: string;
+                kind: "missing" | "extra";
+                reason: string;
+            }[];
         } | {
             /** @constant */
             kind: "criteria_met";
@@ -18819,6 +18914,11 @@ export interface components {
                 /** Format: uuid */
                 handbackId: string;
                 fix: string | null;
+                sourceWordIssues: {
+                    quote: string;
+                    kind: "missing" | "extra";
+                    reason: string;
+                }[];
             } | {
                 /** @constant */
                 kind: "criteria_met";
@@ -19049,6 +19149,11 @@ export interface components {
                             commit: string;
                             verifiedCommit: string | null;
                         } | null;
+                        sourceWordIssues: {
+                            quote: string;
+                            kind: "missing" | "extra";
+                            reason: string;
+                        }[];
                     } | null;
                     deliverable: {
                         state: "pending" | "included";

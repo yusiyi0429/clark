@@ -165,6 +165,13 @@ describe("本机程序契约", () => {
     const verdict = { passed: true, summary: "都达到了", criteria: [{ index: 1, verdict: "met", reason: "能登录", evidence: null, fix: null }], beyondScope: [], modelLabel: "haiku", roleId: null, roleVersion: null };
     expect(Value.Check(LocalVerdict, { ...verdict, commit: git.commit })).toBe(true);
     expect(Value.Check(LocalVerdict, verdict)).toBe(true);
+    // 本人原话对不上（16.8）：写明是哪句、漏了还是多做了；没有时不带，带了不能是空数组
+    expect(Value.Check(LocalVerdict, { ...verdict, passed: false, sourceWordIssues: [{ quote: "登录页要有忘记密码", kind: "missing", reason: "没有忘记密码" }] })).toBe(true);
+    expect(Value.Check(LocalVerdict, { ...verdict, sourceWordIssues: [{ quote: "x", kind: "wrong", reason: "x" }] })).toBe(false);
+    expect(Value.Check(LocalVerdict, { ...verdict, sourceWordIssues: [] })).toBe(false);
+    // 云端带上原话（16.8）：验收交代、派活单都收得下（本机严格校验，多一个字段就会拒）
+    expect(Value.Check(LocalVerifyBriefResponse, { markdown: "## 本人原话", criteria: ["能登录"], role: null, failStreak: 0, sourceWords: ["登录页要有忘记密码"] })).toBe(true);
+    expect(Value.Check(LocalPlanCard, { title: "改登录页", brief: "", doneDefinition: "能登录", criterionIndex: null, role: null, modelTier: "normal", why: null, sourceWords: ["登录页要有忘记密码"] })).toBe(true);
 
     expect(LOCAL_RUNNER_ROUTES.mergeSession).toEqual({ method: "POST", path: "/v1/sessions/:id/merge", auth: true });
     expect(Value.Check(LocalMergeResponse, { merged: true, commit: sha, session: { ...summary, workspace: { ...worktree, mergedCommit: sha } } })).toBe(true);
@@ -305,7 +312,7 @@ describe("本机程序契约", () => {
     const settings = { includePersonalConfigByDefault: false, allowedOrigins: [], paused: false, maxConcurrent: 3, autoMerge: true };
     const status = {
       deviceId, version: "0.1.0", agents: [], activeSessions: 0, slots: { max: 3, running: 0, queued: 0 },
-      cloud: { linked: false, apiBaseUrl: null, personName: null, outbox: { pending: 0, lastSyncedAt: null, lastError: null } }, settings, quota: [claude, codex, tokenhub, minimax], tools: [{ kind: "claude-code", state: "ready", version: "2.1.318", account: null, checkedAt: at }, { kind: "codex", state: "not_logged_in", version: "0.159.2", account: null, checkedAt: at }, ...tools],
+      cloud: { linked: false, apiBaseUrl: null, personName: null, personId: null, outbox: { pending: 0, lastSyncedAt: null, lastError: null } }, settings, quota: [claude, codex, tokenhub, minimax], tools: [{ kind: "claude-code", state: "ready", version: "2.1.318", account: null, checkedAt: at }, { kind: "codex", state: "not_logged_in", version: "0.159.2", account: null, checkedAt: at }, ...tools],
     };
     expect(Value.Check(LocalStatusResponse, status)).toBe(true);
     expect(Value.Check(LocalStatusResponse, { ...status, tools: [{ ...tools[0], kind: "git" }] })).toBe(false);

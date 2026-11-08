@@ -146,6 +146,11 @@ export const LocalCloudLinkView = Type.Object({
   linked: Type.Boolean(),
   apiBaseUrl: Nullable(Type.String()),
   personName: Nullable(Type.String()),
+  /**
+   * 关联的是谁（关联时网页传来的天枢人员 id）：网页拿它和登录的人比，对不上就把这台电脑当未配对，不显示别人的本机会话。
+   * 没关联、或者是老的关联（当时没传 personId）时为 null。
+   */
+  personId: Nullable(Type.String()),
   outbox: LocalOutboxStatus,
 }, strict);
 
@@ -278,6 +283,8 @@ export const LocalCloudLinkRequest = Type.Object({
   apiBaseUrl: Type.String({ minLength: 8, maxLength: 200 }),
   token: Type.String({ minLength: 16, maxLength: 400, pattern: SECRET_CHARS }),
   personName: Type.Optional(Type.String({ maxLength: 60 })),
+  /** 关联的是谁：云端 me 里的人员 id，本机存下来，GET /v1/status 和 /v1/cloud 原样给回（见 LocalCloudLinkView）。 */
+  personId: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
 }, strict);
 
 // ───────────────────────── 模型与文件夹 ─────────────────────────
@@ -432,7 +439,7 @@ export const LocalSessionSubject = Type.Object({
   cardId: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
   /** 天枢里调研专题的 id，kind=topic 时必填。 */
   topicId: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
-  /** 天枢里 Task 的 id，kind=plan 时必填（拆的是这个 Task）。 */
+  /** 天枢里 Task 的 id：kind=plan 时拆的是这个 Task。kind=plan 时 taskId 和 projectId 至少有一个，只带 projectId 是拆没挂 Task 的项目（16.3）。 */
   taskId: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
   /** 只有 kind=verify（本机填）：验的是哪一次交回，就是那条 handback 同步条目的 key。 */
   handbackKey: Type.Optional(SyncKey),
@@ -477,7 +484,7 @@ export const LocalRole = Type.Object({
 }, strict);
 
 /**
- * POST /v1/sessions。kind=plan（规划员）：带 taskId，firstMessage 是云端的拆卡交代，role 是规划员岗位；不给目录时用项目绑的文件夹，再没有本机给它建一个专用目录。
+ * POST /v1/sessions。kind=plan（规划员）：带 taskId，或只带 projectId（没挂 Task 的项目，网页按 plan-brief 回的 project 填），firstMessage 是云端的拆卡交代，role 是规划员岗位；不给目录时用项目绑的文件夹，再没有本机给它建一个专用目录。
  * kind=verify 不能从网页开（400）：执行方交回以后本机自己起。
  */
 export const LocalCreateSessionRequest = Type.Object({
@@ -862,7 +869,16 @@ export const LocalVerdictCriterion = Type.Object({
   fix: Nullable(Type.String({ maxLength: 2000 })),
 }, strict);
 /**
- * 验收员的结论（submit_verdict）：每条完成标准判一次，条数和验收交代的 criteria 一样；passed 是每条都 met；beyondScope 是标准以外的建议，不算没达到。
+ * 产出和本人原话对不上的一处（16.8）：quote 是原话里的哪一句（原样，是某段原话或其中一截），kind：missing 漏了原话里明说的，extra 做了原话里没要的；reason 为什么。
+ */
+export const LocalSourceWordIssue = Type.Object({
+  quote: Type.String({ minLength: 1, maxLength: 4000 }),
+  kind: Type.Union([Type.Literal("missing"), Type.Literal("extra")]),
+  reason: Type.String({ minLength: 1, maxLength: 2000 }),
+}, strict);
+/**
+ * 验收员的结论（submit_verdict）：每条完成标准判一次，条数和验收交代的 criteria 一样；passed 是每条都 met、并且没有 sourceWordIssues；beyondScope 是标准以外的建议，不算没达到。
+ * sourceWordIssues：验收交代带了本人原话（LocalVerifyBriefResponse.sourceWords）时，产出和原话明显对不上的地方（见 LocalSourceWordIssue）；有一条就是没过，标准全达到也一样。没有时不带。
  * modelLabel、roleId、roleVersion 记是谁验的（本机用的模型、验收员岗位和版本，用内置规矩时为 null）。
  */
 export const LocalVerdict = Type.Object({
@@ -870,6 +886,7 @@ export const LocalVerdict = Type.Object({
   summary: Type.String({ minLength: 1, maxLength: 2000 }),
   criteria: Type.Array(LocalVerdictCriterion, { minItems: 1, maxItems: 50 }),
   beyondScope: Type.Array(Type.String({ minLength: 1, maxLength: 500 }), { maxItems: 10 }),
+  sourceWordIssues: Type.Optional(Type.Array(LocalSourceWordIssue, { minItems: 1, maxItems: 10 })),
   modelLabel: Type.String(),
   roleId: Nullable(Uuid),
   roleVersion: NullableInteger({ minimum: 1 }),
@@ -885,6 +902,7 @@ export const LocalVerdict = Type.Object({
  * - failStreak 是这张卡在这次交回之前连续没过几次（推翻以后从 0 算）。这次再没过、累计到 2 就是「受阻」。
  * 404：云端没有这次交回（还没收到或拒收了）；409：这次交回已经有结论（已验过或已推翻），不用再验。
  * sourceWords（16.8）：卡上的本人原话；不为空时 markdown 里有一段「本人原话」，验收员逐条对完标准再对一遍原话，明显对不上（做了原话里没要的、漏了原话里明说的）算没过。
+ *   本机核对验收员写的 sourceWordIssues：quote 必须是其中某段或某段里的一截。
  */
 export const LocalVerifyBriefResponse = Type.Object({
   markdown: Type.String({ minLength: 1, maxLength: 20000 }),
@@ -1071,7 +1089,7 @@ export const LocalSyncItem = Type.Union([
     number: Type.Integer({ minimum: 1 }),
     feishuUrl: Type.String({ pattern: "^https://", maxLength: 2000 }),
   }, strict)),
-  /** 规划员出的计划和派活单草稿（subject.kind = plan，带 taskId）。 */
+  /** 规划员出的计划和派活单草稿（subject.kind = plan，带 taskId 或只带 projectId）。 */
   syncItem("card_plan", LocalCardPlan),
   /** 验收员的结论（subject.kind = verify，带 cardId 和 handbackKey）：云端按 handbackKey 找到那次交回，照原来的规则落结果（过了进准备中，没过拼改法，第二次没过受阻）。 */
   syncItem("verdict", LocalVerdict),
@@ -1196,6 +1214,7 @@ export type TLocalRole = Static<typeof LocalRole>;
 export type TLocalModelTier = Static<typeof LocalModelTier>;
 export type TLocalPlanCard = Static<typeof LocalPlanCard>;
 export type TLocalCardPlan = Static<typeof LocalCardPlan>;
+export type TLocalSourceWordIssue = Static<typeof LocalSourceWordIssue>;
 export type TLocalVerdictCriterion = Static<typeof LocalVerdictCriterion>;
 export type TLocalVerdict = Static<typeof LocalVerdict>;
 export type TLocalVerifyBriefResponse = Static<typeof LocalVerifyBriefResponse>;
