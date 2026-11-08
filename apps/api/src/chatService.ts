@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyReply } from "fastify";
-import { AskAnswerRecord, ConversationCard, type TAskAnswerRecord, type TConversationCard, type TConversationMessageRequest, type TPartnerMemoryItem } from "@warmap/contracts";
+import { AskAnswerRecord, ConversationCard, type TAskAnswerRecord, type TBuddyPlan, type TConversationCard, type TConversationMessageRequest, type TPartnerMemoryItem } from "@warmap/contracts";
 import { turnFailureCopy } from "./conversationRecovery.js";
 import { segmentDateLabel, startsNewSegment } from "./conversationSegments.js";
 import type { HomeTurnVia } from "./homeTurn.js";
@@ -46,6 +46,13 @@ type ChatEvent = { type: string; [key: string]: unknown };
  * 写完也留着，直到这个人问下一句；api 一个环境一个进程，放在内存里。frame 为 null 表示这一轮结束了。
  */
 type LiveTurn = { runId?: string; startedAt: number; frames: string[]; listeners: Set<(frame: string | null) => void>; finished: boolean };
+
+/**
+ * 伙伴从伙伴台转给项目对话的话（17.4 message_project）：写进项目对话时带这个开头，项目对话的模型据此知道是伙伴转来的；
+ * 读回历史时去掉开头、标成 via = buddy。转进来的那一轮请求带 FORWARDED_HEADER：项目对话正在回上一轮时不打断它（照旧 409，由转的那边隔几秒再试），也不给回执。
+ */
+export const BUDDY_FORWARD_PREFIX = "【伙伴转来】";
+export const FORWARDED_HEADER = "x-tianshu-forwarded";
 
 /** 没完成的那一轮在历史里的说明行，与天枢自己的对话存档写法一致。 */
 const STOPPED_NOTE = "（已停止，以上是停止前写出的部分。）";
@@ -101,7 +108,7 @@ export function historyMessages(messages: ChatMessage[], runs: ChatRun[]) {
 
 /** 拼几段（从旧到新）：每段之前一行这段开始的日期（第一段不加，kind=trace，界面画成一行淡字）；序号接着排。 */
 export function joinSegments(segments: { messages: ChatMessage[]; runs: ChatRun[]; startedAt?: Date; conversationId?: string }[]) {
-  type Item = { role: "user" | "assistant"; content: string; runId: string; via?: HomeTurnVia; running?: true; attachments?: ReturnType<typeof attachmentInfo>[]; kind?: "trace"; createdAt?: string;
+  type Item = { role: "user" | "assistant"; content: string; runId: string; via?: HomeTurnVia | "buddy"; running?: true; attachments?: ReturnType<typeof attachmentInfo>[]; kind?: "trace"; createdAt?: string;
     cards?: TConversationCard[]; answers?: TAskAnswerRecord };
   const ordered: Item[] = segments.flatMap((segment, index) => [
     ...(index && segment.startedAt ? [{ role: "assistant" as const, content: segmentDateLabel(segment.startedAt), runId: segment.conversationId ?? "",
@@ -114,7 +121,7 @@ export function joinSegments(segments: { messages: ChatMessage[]; runs: ChatRun[
 function segmentMessages(messages: ChatMessage[], runs: ChatRun[]) {
   const status = new Map(runs.map((run) => [run.runId, run.status]));
   const answered = new Set(messages.filter((message) => message.role === "assistant").map((message) => message.runId));
-  const ordered: { role: "user" | "assistant"; content: string; runId: string; via?: HomeTurnVia; running?: true; attachments?: ReturnType<typeof attachmentInfo>[];
+  const ordered: { role: "user" | "assistant"; content: string; runId: string; via?: HomeTurnVia | "buddy"; running?: true; attachments?: ReturnType<typeof attachmentInfo>[];
     cards?: TConversationCard[]; answers?: TAskAnswerRecord }[] = [];
   for (const message of messages) {
     const state = status.get(message.runId);
@@ -127,8 +134,10 @@ function segmentMessages(messages: ChatMessage[], runs: ChatRun[]) {
         ...(cards.length ? { cards } : {}) });
       continue;
     }
-    // 还在回答的那一句标上 running：界面切走、刷新回来据此接上这一轮。
-    ordered.push({ role: "user", content: message.text, runId: message.runId, ...via, ...(state === "running" ? { running: true as const } : {}),
+    // 还在回答的那一句标上 running：界面切走、刷新回来据此接上这一轮。伙伴转来的那句去掉开头、标 buddy。
+    const forwarded = message.text.startsWith(BUDDY_FORWARD_PREFIX);
+    ordered.push({ role: "user", content: forwarded ? message.text.slice(BUDDY_FORWARD_PREFIX.length) : message.text, runId: message.runId,
+      ...(forwarded ? { via: "buddy" as const } : via), ...(state === "running" ? { running: true as const } : {}),
       attachments: (message.attachments ?? []).map(attachmentInfo),
       ...(Value.Check(AskAnswerRecord, message.answers) ? { answers: message.answers } : {}) });
     if (state === "failed" && !answered.has(message.runId)) ordered.push({ role: "assistant", content: EMPTY_NOTE, runId: message.runId, ...via });
@@ -152,6 +161,10 @@ export function createChatService(options: {
   pageGuide?: (path: string, viewer: ChatViewer) => Promise<PageGuide | null>;
   /** 本人的项目对话那几段（project_pipelines，和以前的 task_pipelines）：总管线挑段时排除，不当成首页的段。 */
   pipelines?: (viewer: ChatViewer) => Promise<Set<string>>;
+  /** 伙伴每一轮的计划清单和出的卡（17.4，buddyActions.ts 的 runExtras）：读回历史时接到那一轮的回答上。 */
+  runExtras?: (viewer: ChatViewer, runIds: string[]) => Promise<Map<string, { plan?: TBuddyPlan; cards?: TConversationCard[] }>>;
+  /** 本人在伙伴回答到一半时发来新消息、上一轮要停掉之前（17.4）：收起那一轮的计划清单。失败只记日志。 */
+  onInterrupt?: (viewer: ChatViewer, runId: string) => Promise<void>;
 }) {
   if (!options.token) throw new Error("CHAT_SERVICE_URL 需要同时配置 INTERNAL_CHAT_TOKEN");
   const base = options.baseUrl.replace(/\/+$/, "");
@@ -253,6 +266,52 @@ export function createChatService(options: {
   const liveKey = (viewer: ChatViewer, scope: string) => `${viewer.personId}|${viewer.role}|${scope}`;
   /** 本人点了停止的那几轮：Chat 随后回的「已停止」原样给界面，不当成 Chat 停机。 */
   const stoppedRuns = new Set<string>();
+  /** 正在转的每一轮（Chat 的 runId → 往这一轮的流里写一帧）：伙伴的动作做完时天枢往里插界面效果、卡和计划清单（17.4）。 */
+  const runWriters = new Map<string, (event: ChatEvent) => void>();
+  /** 请 Chat 停下这一轮：先记下是本人停的，Chat 回的「已停止」才原样给界面。 */
+  const stopRun = async (viewer: ChatViewer, requestId: string, runId: string) => {
+    stoppedRuns.add(runId);
+    try {
+      return await json<{ runId: string; status: string }>(viewer, requestId, `/turns/${encodeURIComponent(runId)}/cancel`, { method: "POST" });
+    } catch (error) {
+      stoppedRuns.delete(runId);
+      throw error;
+    }
+  };
+  /** 读回历史时接上伙伴每一轮的计划清单和卡（卡排在 Chat 存的卡后面，最多 4 张）。 */
+  const withExtras = async <M extends { role: string; runId: string; kind?: string; cards?: TConversationCard[] }>(viewer: ChatViewer, messages: M[]) => {
+    const runIds = [...new Set(messages.filter((message) => message.role === "assistant" && !message.kind).map((message) => message.runId))];
+    const extras = options.runExtras && runIds.length ? await options.runExtras(viewer, runIds) : undefined;
+    if (!extras?.size) return messages;
+    return messages.map((message) => {
+      const extra = message.role === "assistant" && !message.kind ? extras.get(message.runId) : undefined;
+      if (!extra) return message;
+      const cards = [...(message.cards ?? []), ...(extra.cards ?? [])].slice(0, 4);
+      return { ...message, ...(cards.length ? { cards } : {}), ...(extra.plan ? { plan: extra.plan } : {}) };
+    });
+  };
+  /** 正在回答的上一轮：网页里问的在 liveTurns 里，否则从这一段的 runs 里找还在跑的。 */
+  const runningTurn = async (viewer: ChatViewer, requestId: string, conversationId: string, scope: string) => {
+    const live = liveTurns.get(liveKey(viewer, scope));
+    return live && !live.finished && live.runId ? live.runId
+      : (await messagesPage(viewer, requestId, conversationId, "0", 1)).runs.find((run) => run.status === "running")?.runId;
+  };
+  /**
+   * 停掉正在回答的上一轮再发这一句：先收起它的清单再请 Chat 停，然后每 0.5 秒再发一次，Chat 收下为止（最多约 15 秒，还是不收就抛「上一轮还没结束」）。
+   */
+  const interrupt = async (viewer: ChatViewer, requestId: string, previous: string, send: () => Promise<Response>, busy: ChatServiceError) => {
+    await options.onInterrupt?.(viewer, previous).catch((error) => logEvent({ event: "chat_service.interrupt_hook_failed", requestId, error: (error as Error)?.message }));
+    await stopRun(viewer, requestId, previous).catch((error) => logEvent({ event: "chat_service.interrupt_failed", requestId, runId: previous, error: (error as Error)?.message }));
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      try {
+        return await send();
+      } catch (error) {
+        if (!(error instanceof ChatServiceError) || error.code !== "TURN_IN_PROGRESS") throw error;
+      }
+    }
+    throw busy;
+  };
   const SSE_HEAD = { "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-cache, no-transform", connection: "keep-alive", "x-accel-buffering": "no" };
 
   return {
@@ -312,7 +371,7 @@ export function createChatService(options: {
     async history(viewer: ChatViewer, requestId: string, target?: ChatTarget) {
       if (target) {
         const { messages, runs } = await allMessages(viewer, requestId, target.conversationId);
-        return { scope: target.scope, messages: historyMessages(messages, runs) };
+        return { scope: target.scope, messages: await withExtras(viewer, historyMessages(messages, runs)) };
       }
       const segments: Parameters<typeof joinSegments>[0] = [];
       let count = 0;
@@ -322,7 +381,7 @@ export function createChatService(options: {
         segments.unshift({ messages, runs, startedAt: new Date(conversation.createdAt), conversationId: conversation.conversationId });
         count += messages.length;
       }
-      return { scope: "global", messages: joinSegments(segments) };
+      return { scope: "global", messages: await withExtras(viewer, joinSegments(segments)) };
     },
 
     /** 附件交给 Chat 解析、存在 Chat 那段对话上；有一份读不出文字就整批不收（和天枢自己的解析一样）。上传和随后那一句同一个判段规则。 */
@@ -347,7 +406,8 @@ export function createChatService(options: {
      * 停止只走 cancel（本人点「停止」）。
      * 带 target（项目对话）：只进那一段，不判段、不记纪要；没带页面路径时按这个项目的页面（/me/work/projects/<id>），Chat 就知道说的是哪个项目。
      */
-    async relay(viewer: ChatViewer, requestId: string, body: TConversationMessageRequest, reply: FastifyReply, via?: HomeTurnVia, target?: ChatTarget): Promise<void> {
+    async relay(viewer: ChatViewer, requestId: string, body: TConversationMessageRequest, reply: FastifyReply, via?: HomeTurnVia, target?: ChatTarget,
+      forwarded = false): Promise<void> {
       const startedAt = Date.now();
       const scope = target?.scope ?? "global";
       // 「继续」进那一轮所在的段；带附件的这句进附件所在的那段（上传时已判过段）；其余按规则判段。
@@ -358,9 +418,10 @@ export function createChatService(options: {
       const id = current.conversation.conversationId;
       const pagePath = body.pagePath ?? (target ? `/me/work/projects/${encodeURIComponent(target.projectId)}` : undefined);
       const page = pagePath && options.pageGuide ? await options.pageGuide(pagePath, viewer) : null;
-      const upstream = await call(viewer, requestId, `/conversations/${id}/turns`, {
+      const clientRequestId = randomUUID();
+      const send = () => call(viewer, requestId, `/conversations/${id}/turns`, {
         method: "POST", headers: { "content-type": "application/json", accept: "text/event-stream" },
-        body: JSON.stringify({ clientRequestId: randomUUID(), message: body.message, attachmentIds: (body.attachments ?? []).map((item) => item.id),
+        body: JSON.stringify({ clientRequestId, message: body.message, attachmentIds: (body.attachments ?? []).map((item) => item.id),
           ...(body.anchorSelection ? { anchorSelection: body.anchorSelection } : {}),
           ...(body.references?.length ? { references: body.references } : {}),
           ...(body.resumeRunId ? { resumeRunId: body.resumeRunId } : {}),
@@ -370,6 +431,18 @@ export function createChatService(options: {
           ...(via ? { channel: via } : {}),
           ...(page ? { page } : {}) }),
       });
+      let upstream: Response | undefined;
+      /** 中途插话（17.4）：伙伴正在回上一轮时本人在网页上又发了一句。飞书、微信、伙伴转来的照旧回「上一轮还没结束」，由它们隔几秒再试。 */
+      let interrupting: { previous: string; busy: ChatServiceError } | undefined;
+      try {
+        upstream = await send();
+      } catch (error) {
+        if (via || forwarded || !(error instanceof ChatServiceError) || error.code !== "TURN_IN_PROGRESS") throw error;
+        // 找不到在跑的那一轮（Chat 那边刚好结束）就照旧回「上一轮还没结束」。
+        const previous = await runningTurn(viewer, requestId, id, scope);
+        if (!previous) throw error;
+        interrupting = { previous, busy: error };
+      }
       reply.hijack();
       reply.raw.writeHead(200, SSE_HEAD);
       // 飞书、微信来的那一轮不进 liveTurns：网页上照旧是「正在回答飞书里的提问」加轮询。
@@ -388,12 +461,20 @@ export function createChatService(options: {
         live.frames.push(frame);
         for (const listener of live.listeners) listener(frame);
       };
+      /** 回执（17.4）：按这条消息的 id（clientRequestId）对上。 */
+      const receipt = (state: "delivered" | "read") => write({ type: "receipt", state, messageId: clientRequestId });
       const translate = (event: ChatEvent): ChatEvent | null => {
         const { conversationId: _conversation, runId: _run, scope: _scope, sequence: _sequence, ...rest } = event;
         switch (event.type) {
           case "turn_started":
             runId = String(event.runId);
             if (live) live.runId = runId;
+            runWriters.set(runId, write);
+            // 回执：天枢收下了、伙伴读到了。Chat 接下这一句就开始这一轮，两个几乎同时到（中途插话的 delivered 开流时已经给了）；飞书、微信、伙伴转来的不给。
+            if (!via && !forwarded) {
+              if (!interrupting) receipt("delivered");
+              receipt("read");
+            }
             deepen = setTimeout(() => { if (!written) write(CHAT_ROUTE.deep); }, CHAT_ROUTE.deepenAfterMs);
             return CHAT_ROUTE.start;
           case "message":
@@ -417,6 +498,19 @@ export function createChatService(options: {
         }
       };
       try {
+        if (interrupting) {
+          // 中途插话：先给第一个勾（这时还没有这一轮，不带 runId），再停上一轮、重发。
+          receipt("delivered");
+          try {
+            upstream = await interrupt(viewer, requestId, interrupting.previous, send, interrupting.busy);
+          } catch (error) {
+            // 给了第一个勾以后还是没开成：在流里给一帧 error（不带 runId）就结束，界面撤掉第一个勾、这条可以重发。
+            const failed = error instanceof ChatServiceError ? error : new ChatServiceError(502, "CHAT_FAILED", "对话服务这次没有接下请求。");
+            outcome = failed.code;
+            write({ type: "error", code: failed.code, message: failed.message });
+          }
+        }
+        if (!upstream) return;
         const reader = upstream.body!.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
@@ -446,6 +540,7 @@ export function createChatService(options: {
         logEvent({ event: "chat_service.turn", requestId, runId, outcome, ...(clientClosed ? { clientClosed: true } : {}),
           conversationId: current.conversation.conversationId, ...(current.started ? { newSegment: true } : {}) });
         if (runId) stoppedRuns.delete(runId);
+        if (runId && runWriters.get(runId) === write) runWriters.delete(runId);
         // 这一轮写完的时刻记成这段最后一次发言（纪要闲置 15 分钟后才写）。项目对话的段不记纪要。
         if (!target) record(viewer, requestId, current.conversation);
         if (!reply.raw.writableEnded) reply.raw.end();
@@ -488,14 +583,14 @@ export function createChatService(options: {
     },
 
     /** 本人点「停止」：请 Chat 停下这一轮（Chat 存下已写出的部分）；先记下是本人停的，Chat 回的「已停止」才原样给界面。 */
-    async cancel(viewer: ChatViewer, requestId: string, runId: string): Promise<{ runId: string; status: string }> {
-      stoppedRuns.add(runId);
-      try {
-        return await json<{ runId: string; status: string }>(viewer, requestId, `/turns/${encodeURIComponent(runId)}/cancel`, { method: "POST" });
-      } catch (error) {
-        stoppedRuns.delete(runId);
-        throw error;
-      }
+    cancel: stopRun,
+
+    /** 往正在转的那一轮的流里插一帧（伙伴动作的界面效果、卡、计划清单）。这一轮已经结束或不在这个进程里为 false。 */
+    inject(runId: string, event: ChatEvent): boolean {
+      const writer = runWriters.get(runId);
+      if (!writer) return false;
+      writer(event);
+      return true;
     },
   };
 }

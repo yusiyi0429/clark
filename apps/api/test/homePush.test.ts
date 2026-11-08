@@ -36,6 +36,19 @@ describe("飞书推送（新首页 13.2）", () => {
     expect((await t.sql("SELECT feishu, web_seen_at IS NOT NULL AS seen FROM person_settings WHERE person_id=$1", [TEST_MEMBER.personId]))).toEqual([{ feishu: false, seen: true }]);
   });
 
+  it("外观存在服务端（17.2）：缺省跟随系统，改了读回来一样；改外观不动通知开关；不认识的值 400；没登录 401", async () => {
+    t = await createTestApp();
+    const cookie = await t.memberCookie();
+    const call = (method: "GET" | "PUT", payload?: object, withCookie = true) => t!.app.inject({ method, url: "/api/me/appearance",
+      headers: { ...(withCookie ? { cookie } : {}), origin: t!.publicOrigin }, ...(payload ? { payload } : {}) });
+    expect((await call("GET")).json()).toEqual({ appearance: "system" });
+    expect((await call("PUT", { appearance: "dark" })).json()).toEqual({ appearance: "dark" });
+    expect((await call("GET")).json()).toEqual({ appearance: "dark" });
+    expect((await t.app.inject({ method: "GET", url: "/api/me/notification-settings", headers: { cookie, origin: t.publicOrigin } })).json()).toEqual({ feishu: true });
+    expect((await call("PUT", { appearance: "blue" })).statusCode).toBe(400);
+    expect((await call("GET", undefined, false)).statusCode).toBe(401);
+  });
+
   it("只推三类里的两类（CEO 拍板在原来那条）：不在天枢时的受阻、额度、批准等了 10 分钟；离截止不到 24 小时的确认。同一件不推第二次，10 分钟里的合成一条", async () => {
     t = await createTestApp();
     await t.sql("INSERT INTO feishu_identities (person_id, open_id) VALUES ($1,'ou_member'),($2,'ou_ceo')", [TEST_MEMBER.personId, TEST_CEO.personId]);

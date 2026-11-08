@@ -155,7 +155,7 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
   // 挂在不在树上的 Task（了结了、不是本人负责）下、已完成的不列。没能自动合回的（最近一次算通过的交回上本机报了 merged = false）还在等你合，
   // 不看月份、不看 Task 在不在树上，一律列。
   const cardRows = (await q(`SELECT id::text,acceptance->>'at' AS accepted_at,project_id::text FROM tasks WHERE owner_id=$1 AND status<>'returned'
-      AND (role_id IS NOT NULL OR executor='claude_code')
+      AND (role_id IS NOT NULL OR executor='claude_code') AND trashed_at IS NULL AND archived_at IS NULL
       AND (status<>'done' OR plan_task_id=ANY($3::text[]) OR (plan_task_id IS NULL
         AND date_trunc('month',(acceptance->>'at')::timestamptz AT TIME ZONE 'Asia/Shanghai')=date_trunc('month',$2::timestamptz AT TIME ZONE 'Asia/Shanghai'))
         OR (SELECT h.merge->>'merged' FROM card_handbacks h WHERE h.task_id=tasks.id AND h.status='done'
@@ -206,7 +206,7 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
   }
 
   // 专题：没归档的都列；最近一次本机执行定状态。专题没有「完成」：会话停了、交完收工、异常退出都算已暂停（等你说一句接着做）。
-  const topics = (await q(`SELECT id::text,title,role_id::text,plan_task_id,project_id::text,updated_at FROM research_topics WHERE owner_id=$1 AND status='active'
+  const topics = (await q(`SELECT id::text,title,role_id::text,plan_task_id,project_id::text,updated_at FROM research_topics WHERE owner_id=$1 AND status='active' AND trashed_at IS NULL
     ORDER BY created_at,id`, [ownerId])).rows as { id: string; title: string; role_id: string | null; plan_task_id: string | null; project_id: string | null; updated_at: Date }[];
   const topicRuns = await latestRuns(q, "topic_id", topics.map((topic) => topic.id), "topic");
   const topicRoles = await rolesById(q, topics.map((topic) => topic.role_id));

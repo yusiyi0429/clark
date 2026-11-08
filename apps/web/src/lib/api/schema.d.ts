@@ -4877,6 +4877,195 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/appearance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人的外观（「偏好」）：跟随系统 / 浅色 / 深色，缺省跟随系统 */
+        get: operations["getAppearance"];
+        /** 改本人的外观（换设备一样） */
+        put: operations["updateAppearance"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/buddy-authority": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 伙伴代本人做事的授权（17.4）：full 完全授权，none 只能读（缺省） */
+        get: operations["getBuddyAuthority"];
+        /** 打开或关掉伙伴的授权（引导里的「同意」、偏好里的开关） */
+        put: operations["updateBuddyAuthority"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/buddy-actions/log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 伙伴代本人做过的写动作（新的在前，最近 100 条），能撤的带 undoable */
+        get: operations["listBuddyActions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/buddy-actions/log/{id}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 撤销伙伴做的一个动作；不能撤、撤过了、对象已经变了 409 NOT_UNDOABLE */
+        post: operations["undoBuddyAction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/buddy-messages/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 伙伴要转达给同事的一句话（对话里的 buddy_message 卡） */
+        get: operations["getBuddyMessage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/buddy-messages/{id}/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 发出：天枢机器人转达给收件人（开头「{本人}请我转达：」）；收不到的列在 failed；不是草稿 409 */
+        post: operations["sendBuddyMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/buddy-messages/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 不发了；不是草稿 409 */
+        post: operations["cancelBuddyMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/trash": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 回收站：删掉的子会话，purgeAt 以后真删 */
+        get: operations["listTrash"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/trash/{kind}/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 从回收站恢复一个子会话（204）；已经真删了 404 */
+        post: operations["restoreTrashItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/session-stops/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 认领这台电脑上要停掉的本机会话（17.4 伙伴的 stop_sub_session） */
+        post: operations["claimSessionStops"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/session-stops/{id}/done": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 报停掉的结果（stopped / not_running）；不是这台电脑认领的 404 */
+        post: operations["finishSessionStop"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/work-home": {
         parameters: {
             query?: never;
@@ -6002,6 +6191,11 @@ export interface components {
                             commit: string;
                             verifiedCommit: string | null;
                         } | null;
+                        sourceWordIssues: {
+                            quote: string;
+                            kind: "missing" | "extra";
+                            reason: string;
+                        }[];
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -6314,6 +6508,11 @@ export interface components {
                 memoryUsed?: string[];
                 cards?: ({
                     /** @constant */
+                    kind: "buddy_message";
+                    /** Format: uuid */
+                    draftId: string;
+                } | {
+                    /** @constant */
                     kind: "review";
                     personalReviewId: string;
                     href: string;
@@ -6397,6 +6596,13 @@ export interface components {
                         title: string;
                     } | null;
                 })[];
+                plan?: {
+                    entries: {
+                        content: string;
+                        status: "pending" | "in_progress" | "completed";
+                    }[];
+                    collapsed: boolean;
+                };
                 readScope?: {
                     label: string;
                     params: {
@@ -6423,7 +6629,7 @@ export interface components {
                     }[];
                 };
                 kind?: "carried" | "trace";
-                via?: "feishu" | "wechat";
+                via?: "feishu" | "wechat" | "buddy";
                 running?: boolean;
                 meta?: {
                     issueId?: string;
@@ -6498,6 +6704,158 @@ export interface components {
             label: string;
             status: "done" | "active" | "pending" | "stopped";
             result?: string;
+        } | {
+            runId: string;
+            /** @description global 或稳定对象 scope */
+            scope: string;
+            sequence: number;
+            /** @constant */
+            type: "plan";
+            plan: {
+                entries: {
+                    content: string;
+                    status: "pending" | "in_progress" | "completed";
+                }[];
+                collapsed: boolean;
+            };
+        } | {
+            runId: string;
+            /** @description global 或稳定对象 scope */
+            scope: string;
+            sequence: number;
+            /** @constant */
+            type: "ui";
+            ui: {
+                /** @constant */
+                kind: "appearance";
+                appearance: "system" | "light" | "dark";
+            } | {
+                /** @constant */
+                kind: "open";
+                target: {
+                    kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer";
+                    id: string;
+                    round?: boolean;
+                    focus?: {
+                        /** Format: uuid */
+                        sessionId: string;
+                        requestId: string | null;
+                    };
+                } | {
+                    kind: "home" | "preferences";
+                };
+            } | {
+                /** @constant */
+                kind: "refresh";
+                what: ("work_home" | "project" | "sub_session" | "settings" | "trash")[];
+                id?: string;
+            };
+        } | {
+            runId: string;
+            /** @description global 或稳定对象 scope */
+            scope: string;
+            sequence: number;
+            /** @constant */
+            type: "card";
+            card: {
+                /** @constant */
+                kind: "buddy_message";
+                /** Format: uuid */
+                draftId: string;
+            } | {
+                /** @constant */
+                kind: "review";
+                personalReviewId: string;
+                href: string;
+            } | {
+                /** @constant */
+                kind: "weekly_review";
+                weeklyReviewId: string;
+                href: string;
+            } | {
+                /** @constant */
+                kind: "todo_pick";
+                question: string;
+                candidates: {
+                    requestId: string;
+                    title: string;
+                    initiatorId?: string;
+                    initiatorName: string;
+                    sentAt: string;
+                    href: string;
+                }[];
+            } | {
+                /** @constant */
+                kind: "todo_ask";
+                requestId: string;
+                question: string;
+                href: string;
+            } | {
+                /** @constant */
+                kind: "todo_answer";
+                requestId: string;
+                href: string;
+                question: string;
+                answer: string;
+                source: "body" | "question";
+                questionId: string | null;
+            } | {
+                /** @constant */
+                kind: "request_draft";
+                requestId: string;
+                href: string;
+            } | {
+                /** @constant */
+                kind: "questions";
+                askId: string;
+                questions: {
+                    id: string;
+                    question: string;
+                    options: {
+                        label: string;
+                        detail?: string;
+                        recommended?: boolean;
+                    }[];
+                }[];
+            } | {
+                /** @constant */
+                kind: "collection_draft";
+                collectionId: string;
+            } | {
+                /** @constant */
+                kind: "meeting_draft";
+                draftId: string;
+                title: string;
+                scheduledAt: string;
+                endsAt: string;
+                host: {
+                    personId: string;
+                    displayName: string;
+                } | null;
+                participants: {
+                    personId: string;
+                    displayName: string;
+                }[];
+                unresolved: {
+                    name: string;
+                    reason: "not_found" | "ambiguous";
+                    host?: boolean;
+                }[];
+                anchor: {
+                    kind: "lto" | "po" | "mission" | "task" | "unit" | "company";
+                    id: string;
+                    title: string;
+                } | null;
+            };
+        } | {
+            runId?: string;
+            /** @description global 或稳定对象 scope */
+            scope: string;
+            sequence: number;
+            /** @constant */
+            type: "receipt";
+            state: "delivered" | "read";
+            messageId: string;
         } | {
             runId: string;
             /** @description global 或稳定对象 scope */
@@ -6592,7 +6950,7 @@ export interface components {
             attempt: number;
             notice: string;
         } | {
-            runId: string;
+            runId?: string;
             /** @description global 或稳定对象 scope */
             scope: string;
             sequence: number;
@@ -10043,6 +10401,11 @@ export interface components {
                         commit: string;
                         verifiedCommit: string | null;
                     } | null;
+                    sourceWordIssues: {
+                        quote: string;
+                        kind: "missing" | "extra";
+                        reason: string;
+                    }[];
                 } | null;
                 deliverable: {
                     state: "pending" | "included";
@@ -10228,6 +10591,11 @@ export interface components {
                                 commit: string;
                                 verifiedCommit: string | null;
                             } | null;
+                            sourceWordIssues: {
+                                quote: string;
+                                kind: "missing" | "extra";
+                                reason: string;
+                            }[];
                         } | null;
                         deliverable: {
                             state: "pending" | "included";
@@ -11561,6 +11929,11 @@ export interface components {
                             commit: string;
                             verifiedCommit: string | null;
                         } | null;
+                        sourceWordIssues: {
+                            quote: string;
+                            kind: "missing" | "extra";
+                            reason: string;
+                        }[];
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -11787,6 +12160,11 @@ export interface components {
                             commit: string;
                             verifiedCommit: string | null;
                         } | null;
+                        sourceWordIssues: {
+                            quote: string;
+                            kind: "missing" | "extra";
+                            reason: string;
+                        }[];
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -11946,6 +12324,11 @@ export interface components {
                                 commit: string;
                                 verifiedCommit: string | null;
                             } | null;
+                            sourceWordIssues: {
+                                quote: string;
+                                kind: "missing" | "extra";
+                                reason: string;
+                            }[];
                         } | null;
                         deliverable: {
                             state: "pending" | "included";
@@ -12105,6 +12488,11 @@ export interface components {
                             commit: string;
                             verifiedCommit: string | null;
                         } | null;
+                        sourceWordIssues: {
+                            quote: string;
+                            kind: "missing" | "extra";
+                            reason: string;
+                        }[];
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -12673,6 +13061,11 @@ export interface components {
                             commit: string;
                             verifiedCommit: string | null;
                         } | null;
+                        sourceWordIssues: {
+                            quote: string;
+                            kind: "missing" | "extra";
+                            reason: string;
+                        }[];
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -12871,6 +13264,11 @@ export interface components {
                                 commit: string;
                                 verifiedCommit: string | null;
                             } | null;
+                            sourceWordIssues: {
+                                quote: string;
+                                kind: "missing" | "extra";
+                                reason: string;
+                            }[];
                         } | null;
                         deliverable: {
                             state: "pending" | "included";
@@ -13019,6 +13417,11 @@ export interface components {
                             commit: string;
                             verifiedCommit: string | null;
                         } | null;
+                        sourceWordIssues: {
+                            quote: string;
+                            kind: "missing" | "extra";
+                            reason: string;
+                        }[];
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -15624,6 +16027,11 @@ export interface components {
                     commit: string;
                     verifiedCommit: string | null;
                 } | null;
+                sourceWordIssues: {
+                    quote: string;
+                    kind: "missing" | "extra";
+                    reason: string;
+                }[];
             } | null;
             deliverable: {
                 state: "pending" | "included";
@@ -15765,6 +16173,11 @@ export interface components {
                         commit: string;
                         verifiedCommit: string | null;
                     } | null;
+                    sourceWordIssues: {
+                        quote: string;
+                        kind: "missing" | "extra";
+                        reason: string;
+                    }[];
                 } | null;
                 deliverable: {
                     state: "pending" | "included";
@@ -15973,6 +16386,11 @@ export interface components {
                             commit: string;
                             verifiedCommit: string | null;
                         } | null;
+                        sourceWordIssues: {
+                            quote: string;
+                            kind: "missing" | "extra";
+                            reason: string;
+                        }[];
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -16202,6 +16620,11 @@ export interface components {
                             commit: string;
                             verifiedCommit: string | null;
                         } | null;
+                        sourceWordIssues: {
+                            quote: string;
+                            kind: "missing" | "extra";
+                            reason: string;
+                        }[];
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -16246,6 +16669,11 @@ export interface components {
                 commit: string;
                 verifiedCommit: string | null;
             } | null;
+            sourceWordIssues: {
+                quote: string;
+                kind: "missing" | "extra";
+                reason: string;
+            }[];
             runId: string | null;
             criteria: string[];
             claims: {
@@ -16419,6 +16847,11 @@ export interface components {
                             commit: string;
                             verifiedCommit: string | null;
                         } | null;
+                        sourceWordIssues: {
+                            quote: string;
+                            kind: "missing" | "extra";
+                            reason: string;
+                        }[];
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -16491,6 +16924,11 @@ export interface components {
                     commit: string;
                     verifiedCommit: string | null;
                 } | null;
+                sourceWordIssues: {
+                    quote: string;
+                    kind: "missing" | "extra";
+                    reason: string;
+                }[];
                 runId: string | null;
                 criteria: string[];
                 claims: {
@@ -18370,6 +18808,11 @@ export interface components {
             /** Format: uuid */
             handbackId: string;
             fix: string | null;
+            sourceWordIssues: {
+                quote: string;
+                kind: "missing" | "extra";
+                reason: string;
+            }[];
         } | {
             /** @constant */
             kind: "criteria_met";
@@ -18693,6 +19136,11 @@ export interface components {
             /** Format: uuid */
             handbackId: string;
             fix: string | null;
+            sourceWordIssues: {
+                quote: string;
+                kind: "missing" | "extra";
+                reason: string;
+            }[];
         } | {
             /** @constant */
             kind: "criteria_met";
@@ -18819,6 +19267,11 @@ export interface components {
                 /** Format: uuid */
                 handbackId: string;
                 fix: string | null;
+                sourceWordIssues: {
+                    quote: string;
+                    kind: "missing" | "extra";
+                    reason: string;
+                }[];
             } | {
                 /** @constant */
                 kind: "criteria_met";
@@ -19049,6 +19502,11 @@ export interface components {
                             commit: string;
                             verifiedCommit: string | null;
                         } | null;
+                        sourceWordIssues: {
+                            quote: string;
+                            kind: "missing" | "extra";
+                            reason: string;
+                        }[];
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -19295,6 +19753,116 @@ export interface components {
         };
         NotificationSettings: {
             feishu: boolean;
+        };
+        AppearanceSettings: {
+            appearance: "system" | "light" | "dark";
+        };
+        SessionStopView: {
+            /** Format: uuid */
+            id: string;
+            kind: "card" | "topic";
+            /** Format: uuid */
+            subSessionId: string;
+            /** Format: uuid */
+            sessionId: string;
+            /** Format: uuid */
+            deviceId: string;
+            /** Format: date-time */
+            requestedAt: string;
+        };
+        ClaimSessionStopsRequest: {
+            /** Format: uuid */
+            deviceId: string;
+        };
+        ClaimSessionStopsResponse: {
+            stops: {
+                /** Format: uuid */
+                id: string;
+                kind: "card" | "topic";
+                /** Format: uuid */
+                subSessionId: string;
+                /** Format: uuid */
+                sessionId: string;
+                /** Format: uuid */
+                deviceId: string;
+                /** Format: date-time */
+                requestedAt: string;
+            }[];
+        };
+        SessionStopDoneRequest: {
+            /** Format: uuid */
+            deviceId: string;
+            result: "stopped" | "not_running";
+        };
+        BuddyAuthority: {
+            authority: "none" | "full";
+            grantedAt: string | null;
+        };
+        UpdateBuddyAuthorityRequest: {
+            authority: "none" | "full";
+        };
+        BuddyAuditEntry: {
+            /** Format: uuid */
+            id: string;
+            action: string;
+            summary: string;
+            /** Format: date-time */
+            at: string;
+            conversationId: string | null;
+            undoable: boolean;
+            undoneAt: string | null;
+        };
+        BuddyAuditListResponse: {
+            entries: {
+                /** Format: uuid */
+                id: string;
+                action: string;
+                summary: string;
+                /** Format: date-time */
+                at: string;
+                conversationId: string | null;
+                undoable: boolean;
+                undoneAt: string | null;
+            }[];
+        };
+        BuddyMessageDraft: {
+            /** Format: uuid */
+            id: string;
+            to: {
+                personId: string;
+                name: string;
+            }[];
+            text: string;
+            status: "draft" | "sent" | "cancelled";
+            /** Format: date-time */
+            createdAt: string;
+            sentAt: string | null;
+            failed: {
+                personId: string;
+                name: string;
+            }[];
+        };
+        TrashItem: {
+            kind: "card" | "topic";
+            /** Format: uuid */
+            id: string;
+            title: string;
+            /** Format: date-time */
+            deletedAt: string;
+            /** Format: date-time */
+            purgeAt: string;
+        };
+        TrashListResponse: {
+            items: {
+                kind: "card" | "topic";
+                /** Format: uuid */
+                id: string;
+                title: string;
+                /** Format: date-time */
+                deletedAt: string;
+                /** Format: date-time */
+                purgeAt: string;
+            }[];
         };
         Budget: {
             mode: "auto" | "set" | "unlimited";
@@ -36338,6 +36906,543 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getAppearance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 外观 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppearanceSettings"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    updateAppearance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppearanceSettings"];
+            };
+        };
+        responses: {
+            /** @description 改好的外观 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppearanceSettings"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getBuddyAuthority: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 授权 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuddyAuthority"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    updateBuddyAuthority: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateBuddyAuthorityRequest"];
+            };
+        };
+        responses: {
+            /** @description 改好的授权 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuddyAuthority"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listBuddyActions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 审计 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuddyAuditListResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    undoBuddyAction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 撤销后的这条 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuddyAuditEntry"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getBuddyMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 这句话 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuddyMessageDraft"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    sendBuddyMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 发出后的这句话 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuddyMessageDraft"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    cancelBuddyMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 取消后的这句话 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuddyMessageDraft"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listTrash: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 回收站 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrashListResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    restoreTrashItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: "card" | "topic";
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 恢复了 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    claimSessionStops: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClaimSessionStopsRequest"];
+            };
+        };
+        responses: {
+            /** @description 要停的 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClaimSessionStopsResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    finishSessionStop: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionStopDoneRequest"];
+            };
+        };
+        responses: {
+            /** @description 记下了 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

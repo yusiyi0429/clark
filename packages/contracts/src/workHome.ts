@@ -1,4 +1,5 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
+import { CardSourceWordIssue } from "./taskCardView.js";
 import { Budget } from "./budget.js";
 import { LocalPermissionBrief, LocalQuestionRequestView } from "./localRunner.js";
 import { PersonRef, ProjectTransfer } from "./projectTransfers.js";
@@ -285,7 +286,8 @@ export const WorkHomeResponse = Type.Object({
 /**
  * 项目对话（原 Task 管线）里网页按时间插的一行（第 4.5 节，从卡和交回现算，不另存事件）。id 稳定，网页按它去重；at 是这件事发生的时间。
  * - card_passed：一张卡验收过了（含本人「仍然通过」），met / total 几条达到，merge 是合回结果（「已合进 main」，或要你合的原因）。
- * - card_blocked：一张卡连续两次没过（受阻），fix 是拼好的改法；网页给选项「按这个改（推荐）/ 我去看看 / 仍然通过」，
+ * - card_blocked：一张卡连续两次没过（受阻），fix 是拼好的改法（含原话对不上的几处）；sourceWordIssues 是那次交回和本人原话对不上的几处（16.8），和没过的标准一起列；
+ *   网页给选项「按这个改（推荐）/ 我去看看 / 仍然通过」，
  *   按这个改 = 照原来的送回（说一句 + /handbacks/:id/returned），仍然通过 = 推翻（/handbacks/:id/overrule）。
  * - criteria_met：taskId 这件 Task 约定里的每一条都有验收通过的卡（met = total）；网页问「约定 n 条都达到了，交给认可人？（推荐）」，
  *   接 V1 的出一版（/deliverable/versions/from-pending）、对表、请 X 看、交付。完成仍只由本人确认。
@@ -296,7 +298,7 @@ export const TaskFeedItem = Type.Union([
   Type.Object({ kind: Type.Literal("card_passed"), ...FeedBase, cardId: Type.String({ format: "uuid" }), title: Type.String(),
     met: Type.Integer({ minimum: 0 }), total: Type.Integer({ minimum: 0 }), merge: Nullable(CardMerge) }, strict),
   Type.Object({ kind: Type.Literal("card_blocked"), ...FeedBase, cardId: Type.String({ format: "uuid" }), title: Type.String(),
-    handbackId: Type.String({ format: "uuid" }), fix: Nullable(Type.String()) }, strict),
+    handbackId: Type.String({ format: "uuid" }), fix: Nullable(Type.String()), sourceWordIssues: Type.Array(CardSourceWordIssue) }, strict),
   Type.Object({ kind: Type.Literal("criteria_met"), ...FeedBase, taskId: Type.String({ minLength: 1 }), met: Type.Integer({ minimum: 1 }),
     total: Type.Integer({ minimum: 1 }) }, strict),
   Type.Object({ kind: Type.Literal("rework_opened"), ...FeedBase, cardId: Type.String({ format: "uuid" }), title: Type.String(),
@@ -402,6 +404,29 @@ export const ClaimedSessionStart = Type.Object({ ...SessionStartView.properties,
 export const ClaimSessionStartsResponse = Type.Object({ starts: Type.Array(ClaimedSessionStart) }, strict);
 
 /**
+ * 「请这台电脑停掉」（17.4：伙伴的 stop_sub_session，在跑的子会话只能在本人电脑上停）：云端记一条，开着的网页在跑这个会话的那台电脑上认领，
+ * 让本机程序停掉（POST /v1/sessions/:sessionId/stop），再报结果。
+ * - POST /api/me/session-stops/claim { deviceId }：认领这台电脑上的（deviceId 是本机会话所在的那台），回 { stops }；两处同时认领只有一处拿到，认领 5 分钟没报结果可以重新认领。
+ * - POST /api/me/session-stops/:id/done { deviceId, result }：stopped 停掉了，not_running 本机上已经没在跑。报过的不再出现。
+ * sessionId 是本机会话的 id（SubSession.sessionId），deviceId 是它所在的电脑。
+ */
+export const SessionStopView = Type.Object({
+  id: Type.String({ format: "uuid" }),
+  kind: Type.Union([Type.Literal("card"), Type.Literal("topic")]),
+  subSessionId: Type.String({ format: "uuid" }),
+  sessionId: Type.String({ format: "uuid" }),
+  deviceId: Type.String({ format: "uuid" }),
+  requestedAt: Instant,
+}, strict);
+export const ClaimSessionStopsRequest = Type.Object({ deviceId: Type.String({ format: "uuid" }) }, strict);
+export const ClaimSessionStopsResponse = Type.Object({ stops: Type.Array(SessionStopView) }, strict);
+export const SessionStopDoneRequest = Type.Object({ deviceId: Type.String({ format: "uuid" }),
+  result: Type.Union([Type.Literal("stopped"), Type.Literal("not_running")]) }, strict);
+export type TSessionStopView = Static<typeof SessionStopView>;
+export type TClaimSessionStopsResponse = Static<typeof ClaimSessionStopsResponse>;
+export type TSessionStopDoneRequest = Static<typeof SessionStopDoneRequest>;
+
+/**
  * 伙伴开探索子会话（工具 open_topic，/internal/me/topics，照 /internal 的 INTERNAL_CHAT_TOKEN 加 X-Owner-Id，不进公开 OpenAPI）：
  * 建一个专题并登记要开工，不用本人同意。projectId 是在哪个项目里（本人的、没归档的）；planTaskId 是归到哪件 Task（本人负责的，带了就在它挂的项目里）。
  * 两样都不带，子会话挂在「其他」。
@@ -453,3 +478,10 @@ export type TBuddyOpenTopicResponse = Static<typeof BuddyOpenTopicResponse>;
  */
 export const NotificationSettings = Type.Object({ feishu: Type.Boolean() }, strict);
 export type TNotificationSettings = Static<typeof NotificationSettings>;
+
+/**
+ * GET / PUT /api/me/appearance（本人，CEO 和 DRI 都有）：「偏好」里的外观（设计 17.2），存在服务端，换设备一样。
+ * system 跟随系统（缺省，没设过就是它）、light 浅色、dark 深色。伙伴代本人改外观的入口按 17.4 定下的做法再加。
+ */
+export const AppearanceSettings = Type.Object({ appearance: Type.Union([Type.Literal("system"), Type.Literal("light"), Type.Literal("dark")]) }, strict);
+export type TAppearanceSettings = Static<typeof AppearanceSettings>;

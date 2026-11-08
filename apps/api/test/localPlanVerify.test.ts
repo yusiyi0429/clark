@@ -353,7 +353,7 @@ describe("拆卡和验收在本机（第 21 节）", { timeout: 30_000 }, () => 
       // 登记：一个项目同时一条没开工的；和拆 Task 的登记互不相干；伙伴也能登记（已有就回那一条）。
       const web = await f.call("POST", `${base}/card-splits`);
       expect(web.statusCode).toBe(201);
-      expect(web.json()).toEqual({ id: web.json().id, taskId: null, taskName: null, missionId: null, projectId: project, projectName: "天枢新首页", origin: "web",
+      expect(web.json()).toEqual({ id: web.json().id, taskId: null, taskName: null, missionId: null, projectId: project, projectName: "天枢新首页", origin: "web", sourceWords: [],
         createdAt: web.json().createdAt });
       expect([(await f.call("POST", `${base}/card-splits`)).statusCode, (await f.call("POST", "/api/plan-tasks/task-open/card-splits")).statusCode]).toEqual([200, 201]);
       const buddy = await f.t.app.inject({ method: "POST", url: `/internal/me/projects/${project}/card-splits`,
@@ -462,6 +462,36 @@ describe("拆卡和验收在本机（第 21 节）", { timeout: 30_000 }, () => 
       const plain = await f.card("自己建的卡");
       expect((await f.call("GET", `/api/me/cards/${plain}`)).json().task.card.sourceWords).toEqual([]);
       expect((await f.call("GET", `/api/me/cards/${plain}/brief`)).json().markdown).not.toContain("本人原话");
+    } finally { await f.close(); }
+  });
+
+  it("验收和本人原话对不上（16.8）：标准全达到也算没过，改法带上是哪句原话；交回摘要和卡详情列出这几处；第二次没过时项目动态的受阻行也列", async () => {
+    const f = await localFixture();
+    try {
+      await f.t.sql("INSERT INTO project_bootstraps(person_id,done_at,report) VALUES($1,now(),'{}')", [TEST_MEMBER.personId]);
+      const project = (await f.call("POST", "/api/me/projects", { name: "对话质量", taskId: "task-open" })).json().projectId as string;
+      const card = await f.card("跑题库打分");
+      await f.t.sql(`UPDATE tasks SET source_words='["录屏这次先不做"]' WHERE id=$1`, [card]);
+      const keyOf = async (id: string) => (await f.t.sql("SELECT client_id FROM card_handbacks WHERE id=$1", [id]))[0].client_id as string;
+      const issue = { quote: "录屏这次先不做", kind: "extra", reason: "交回里多做了一份录屏" };
+      const verdict = { passed: false, summary: "标准都达到，但做了原话里不要的", beyondScope: [], modelLabel: "claude-sonnet-5", roleId: null, roleVersion: null,
+        criteria: [1, 2].map((index) => ({ index, verdict: "met", reason: "对得上", evidence: null, fix: null })), sourceWordIssues: [issue] };
+
+      const first = await f.machine.handBack(card);
+      expect((await f.brief(await keyOf(first))).json().sourceWords).toEqual(["录屏这次先不做"]);
+      expect((await f.sync({ kind: "verify", cardId: card, handbackKey: await keyOf(first) }, [["verdict", verdict]])).rejected).toEqual([]);
+      expect((await f.t.sql("SELECT outcome,return_text FROM card_handbacks WHERE id=$1", [first]))[0]).toEqual({ outcome: "fail",
+        return_text: "验收没过：本人原话「录屏这次先不做」没要的做了，交回里多做了一份录屏。改完再交回。" });
+      const detail = (await f.call("GET", `/api/me/cards/${card}`)).json();
+      expect(detail.task.card.handback).toMatchObject({ outcome: "fail", met: 2, total: 2, sourceWordIssues: [issue] });
+      expect(detail.handbacks[0].sourceWordIssues).toEqual([issue]);
+
+      // 第二次还对不上：受阻，项目动态的受阻行列出这几处。
+      const second = await f.machine.handBack(card);
+      await f.sync({ kind: "verify", cardId: card, handbackKey: await keyOf(second) }, [["verdict", verdict]]);
+      const blocked = (await f.call("GET", `/api/me/projects/${project}/feed`)).json().items.find((item: { kind: string }) => item.kind === "card_blocked");
+      expect(blocked).toMatchObject({ cardId: card, handbackId: second, sourceWordIssues: [issue] });
+      expect(blocked.fix).toContain("本人原话「录屏这次先不做」");
     } finally { await f.close(); }
   });
 });

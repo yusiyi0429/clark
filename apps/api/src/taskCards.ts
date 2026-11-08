@@ -116,7 +116,8 @@ export async function pendingItems(q: Query, planTaskId: string): Promise<TPendi
 /** GET /api/plan-tasks/:taskId/cards */
 export async function readBoard(q: Query, own: OwnTask, names: Map<string, string>): Promise<TCardBoardResponse> {
   const taskId = own.task.taskId, ownerId = own.viewerId;
-  const ids = (await q("SELECT id::text FROM tasks WHERE plan_task_id=$1 AND owner_id=$2 AND status<>'returned' ORDER BY created_at,id", [taskId, ownerId])).rows.map((row) => row.id as string);
+  const ids = (await q("SELECT id::text FROM tasks WHERE plan_task_id=$1 AND owner_id=$2 AND status<>'returned' AND trashed_at IS NULL AND archived_at IS NULL ORDER BY created_at,id",
+    [taskId, ownerId])).rows.map((row) => row.id as string);
   const drafts = (await q(`SELECT d.* FROM card_drafts d JOIN card_plans p ON p.id=d.plan_id WHERE d.plan_task_id=$1 AND d.owner_id=$2 AND d.status='open'
     ORDER BY p.created_at,d.position`, [taskId, ownerId])).rows as DraftRow[];
   const plan = (await q("SELECT * FROM card_plans WHERE plan_task_id=$1 ORDER BY created_at DESC LIMIT 1", [taskId])).rows[0] as PlanRow | undefined;
@@ -129,7 +130,8 @@ export async function readBoard(q: Query, own: OwnTask, names: Map<string, strin
 
 /** GET /api/me/projects/:projectId/board（16.3，项目负责人，调用方核对过）：项目里本人的、不挂 Task 的卡，还没处理的项目草稿，最近一次拆项目的计划。 */
 export async function readProjectBoard(q: Query, ownerId: string, projectId: string, names: Map<string, string>): Promise<TProjectBoardResponse> {
-  const ids = (await q(`SELECT id::text FROM tasks WHERE project_id=$1 AND owner_id=$2 AND plan_task_id IS NULL AND status<>'returned' ORDER BY created_at,id`,
+  const ids = (await q(`SELECT id::text FROM tasks WHERE project_id=$1 AND owner_id=$2 AND plan_task_id IS NULL AND status<>'returned'
+    AND trashed_at IS NULL AND archived_at IS NULL ORDER BY created_at,id`,
     [projectId, ownerId])).rows.map((row) => row.id as string);
   const drafts = (await q(`SELECT d.* FROM card_drafts d JOIN card_plans p ON p.id=d.plan_id WHERE d.project_id=$1 AND d.plan_task_id IS NULL AND d.owner_id=$2
     AND d.status='open' ORDER BY p.created_at,d.position`, [projectId, ownerId])).rows as DraftRow[];

@@ -66,6 +66,8 @@ const env: AppEnv = {
   driServiceToken: requiredEnv("DRI_SERVICE_TOKEN"),
   ontologyServiceToken: process.env.ONTOLOGY_SERVICE_TOKEN,
   internalChatToken: process.env.INTERNAL_CHAT_TOKEN || undefined,
+  internalChatTokensPrevious: (process.env.INTERNAL_CHAT_TOKENS_PREVIOUS ?? "").split(",").map((token) => token.trim()).filter(Boolean),
+  internalCallerAllowlist: (process.env.INTERNAL_CALLER_ALLOWLIST ?? "").split(",").map((entry) => entry.trim()).filter(Boolean),
   // 首页对话改走独立 Chat 服务的开关：设了地址才走（还要 INTERNAL_CHAT_TOKEN），不设照旧走天枢自己的对话。
   chatServiceUrl: process.env.CHAT_SERVICE_URL || undefined,
   // 微信 ClawBot 默认关（10/28 不稳定，生产先不上）；设 WECHAT_ENABLED=1 才开。

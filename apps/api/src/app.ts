@@ -142,6 +142,8 @@ import { registerSessionStartRoutes } from "./routes/sessionStarts.js";
 import { registerTaskPipelineRoutes } from "./routes/taskPipelines.js";
 import { registerProjectRoutes } from "./routes/projects.js";
 import { registerProjectTransferRoutes } from "./routes/projectTransfers.js";
+import { registerBuddyActionRoutes } from "./routes/buddyActions.js";
+import { collapsePlan, runExtras } from "./buddyActions.js";
 import { registerTaskContinuityRoutes } from "./routes/taskContinuity.js";
 import { registerTaskCardRoutes, type BoardAgents } from "./routes/taskCards.js";
 import { planTaskOpener, taskPageFacts } from "./taskCards.js";
@@ -220,6 +222,13 @@ export type AppEnv = {
   ontologyServiceToken?: string;
   /** 独立 Chat 读确认会议的服务凭据（INTERNAL_CHAT_TOKEN）；不配时 /internal/confirmed-meetings 不注册。 */
   internalChatToken?: string;
+  /**
+   * 换 INTERNAL_CHAT_TOKEN 时旧的那几个（INTERNAL_CHAT_TOKENS_PREVIOUS，逗号分隔）：/internal 接口照样认，天枢调 Chat 只用新的。
+   * 换法：先在这里加上旧的、INTERNAL_CHAT_TOKEN 换成新的，Chat 也换成新的以后再把旧的去掉。
+   */
+  internalChatTokensPrevious?: string[];
+  /** 只认这些地址来调 /internal 的 Chat 接口（INTERNAL_CALLER_ALLOWLIST，逗号分隔的 IP 或 CIDR）；不配不限。 */
+  internalCallerAllowlist?: string[];
   /**
    * 独立 Chat 服务的地址（CHAT_SERVICE_URL，如预发的 http://chat:3101）：设了，首页对话（scope=global）的历史、发送、附件改走 Chat，
    * 用 INTERNAL_CHAT_TOKEN 转发本人身份；不设走天枢自己的对话。对象页的对话不受影响。
@@ -530,7 +539,13 @@ export async function buildApp({
       pageFor(path, (taskId) => taskPageFacts(pool.query.bind(pool), openPlanTaskForPage, viewer.personId, taskId),
         (projectId) => projectPageFacts(pool.query.bind(pool), viewer.personId, projectId)) } : {}),
     onSegment: (viewer, segment) => recordChatSegment(pool.query.bind(pool), viewer, segment),
-    pipelines: (viewer) => pipelineConversationIds(pool.query.bind(pool), viewer.personId) }) : undefined;
+    pipelines: (viewer) => pipelineConversationIds(pool.query.bind(pool), viewer.personId),
+    // 伙伴代本人做事（17.4）：读回历史时接上每一轮的计划清单和卡；本人中途发新消息时上一轮的清单收起。
+    runExtras: (viewer, runIds) => runExtras(pool.query.bind(pool), viewer.personId, runIds),
+    onInterrupt: async (_viewer, runId) => {
+      const plan = await collapsePlan(pool.query.bind(pool), runId);
+      if (plan) chat?.inject(runId, { type: "plan", plan });
+    } }) : undefined;
   // 会话纪要（后台，CONVERSATION_DIGEST_MODEL / CONVERSATION_DIGEST_THINKING，不配时 LIGHT_MODEL、不开思考）与回看。
   const conversationDigests = createConversationDigests({ pool, chat, baseUrl: env.piBaseUrl, apiKey: env.piApiKey,
     ...agentModel(env.agentModels, "conversationDigest", { modelId: env.lightModel }), streamSimple: conversationDigestStream });
@@ -711,7 +726,8 @@ export async function buildApp({
   const readSession = createReadSession(env, q, peopleDirectory);
   const requirePerson = createRequirePerson(env, readSession, fail);
   const requireCEO = createRequireCEO(requirePerson, fail);
-  const requireServiceToken = createRequireServiceToken(fail);
+  const requireServiceToken = createRequireServiceToken(fail, env.internalChatToken
+    ? { token: env.internalChatToken, previous: env.internalChatTokensPrevious ?? [], allowlist: env.internalCallerAllowlist ?? [] } : undefined);
   const invalidInput = createInvalidInput(fail);
   const respond = createRespond(fail);
   const respondTranscriptImport = createRespondTranscriptImport(fail);
@@ -894,6 +910,7 @@ export async function buildApp({
   registerSessionStartRoutes(app, ctx);
   registerTaskPipelineRoutes(app, ctx);
   registerProjectRoutes(app, ctx);
+  registerBuddyActionRoutes(app, ctx, { feishu: feishuApi });
   registerProjectTransferRoutes(app, ctx, { handoverAgent: handoverNoteAgent ?? createHandoverNoteAgent({ query: q, baseUrl: env.piBaseUrl, apiKey: env.piApiKey,
     ...agentModel(env.agentModels, "progressSummary", { modelId: env.heavyModel, thinkingLevel: "medium" }) }) });
   // 跨月延续、到此为止和月份页（routes/taskContinuity.ts）。

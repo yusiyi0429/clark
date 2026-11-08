@@ -43,8 +43,8 @@ export async function claimStarts(q: Query, ownerId: string, deviceId: string, n
   if (!(await q("SELECT 1 FROM local_devices WHERE owner_id=$1 AND id=$2 AND revoked_at IS NULL", [ownerId, deviceId])).rowCount) return null;
   const rows = (await q(`WITH claimed AS (UPDATE session_starts s SET claimed_at=$3,claimed_device=$2
     WHERE s.owner_id=$1 AND s.closed_at IS NULL AND (s.claimed_at IS NULL OR s.claimed_at < $3::timestamptz - interval '${CLAIM_TTL}')
-      AND (s.kind='card' AND EXISTS (SELECT 1 FROM tasks t WHERE t.id=s.card_id AND t.status NOT IN ('done','returned'))
-        OR s.kind='topic' AND EXISTS (SELECT 1 FROM research_topics r WHERE r.id=s.topic_id AND r.status='active'))
+      AND (s.kind='card' AND EXISTS (SELECT 1 FROM tasks t WHERE t.id=s.card_id AND t.status NOT IN ('done','returned') AND t.trashed_at IS NULL AND t.archived_at IS NULL)
+        OR s.kind='topic' AND EXISTS (SELECT 1 FROM research_topics r WHERE r.id=s.topic_id AND r.status='active' AND r.trashed_at IS NULL))
     RETURNING s.*) SELECT s.*,${START_PROJECT} FROM claimed s ORDER BY s.requested_at,s.id`, [ownerId, deviceId, now])).rows as StartRow[];
   return rows.map(startView);
 }

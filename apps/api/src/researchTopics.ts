@@ -46,7 +46,7 @@ async function topicViews(q: Query, rows: TopicRow[]): Promise<TResearchTopicVie
 
 /** GET /api/me/topics：新动静的在前。 */
 export async function listTopics(q: Query, ownerId: string, status: "active" | "archived"): Promise<TResearchTopicView[]> {
-  return topicViews(q, (await q("SELECT * FROM research_topics WHERE owner_id=$1 AND status=$2 ORDER BY COALESCE(last_version_at,updated_at) DESC,id",
+  return topicViews(q, (await q("SELECT * FROM research_topics WHERE owner_id=$1 AND status=$2 AND trashed_at IS NULL ORDER BY COALESCE(last_version_at,updated_at) DESC,id",
     [ownerId, status])).rows as TopicRow[]);
 }
 

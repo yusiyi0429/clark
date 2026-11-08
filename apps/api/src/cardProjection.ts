@@ -1,4 +1,4 @@
-import type { TCardGit, TCardHandbackBrief, TCardModel, TCardWait, TCriterionVerdict, TDeliverableInclusion, TLocalGitRef, TLocalHandbackCriterion, TTaskCard, TTaskView } from "@warmap/contracts";
+import type { TCardGit, TCardHandbackBrief, TCardModel, TCardWait, TCriterionVerdict, TDeliverableInclusion, TLocalGitRef, TLocalHandbackCriterion, TTaskCard, TTaskView, TCardSourceWordIssue } from "@warmap/contracts";
 import { askingQuestion, runBrief, type RunRow } from "./localDevices.js";
 import type { Query } from "./meetingStore.js";
 import { roleRef, rolesById } from "./roles.js";
@@ -9,8 +9,9 @@ import { roleRef, rolesById } from "./roles.js";
  */
 
 /** 一次交回在库里的验收结论。 */
+/** sourceWordIssues：和本人原话对不上的几处（16.8，本机验收员报的；云端验收和老的结论没有）。 */
 export type StoredAcceptance = { headline: string | null; criteria: { index: number; verdict: TCriterionVerdict; reason: string; evidence: string | null; fix: string | null }[];
-  beyondScope: string[] };
+  beyondScope: string[]; sourceWordIssues?: TCardSourceWordIssue[] };
 export type HandbackRow = { id: string; task_id: string; run_id: string | null; owner_id: string; attempt: number; criteria: string[]; claims: TLocalHandbackCriterion[];
   summary: string | null; output_ids: string[]; status: TCardHandbackBrief["status"]; started_at: Date | null; finished_at: Date | null; error: string | null;
   result: StoredAcceptance | null; outcome: "pass" | "fail" | null; return_text: string | null; returned_at: Date | null; overruled_at: Date | null;
@@ -46,7 +47,8 @@ export function handbackBrief(row: HandbackRow): TCardHandbackBrief {
   const criteria = row.result?.criteria ?? [];
   return { id: row.id, attempt: row.attempt, status: row.status, outcome: row.outcome, met: criteria.filter((item) => item.verdict === "met").length, total: criteria.length,
     headline: row.result?.headline ?? null, returnText: row.return_text, returnedAt: row.returned_at?.toISOString() ?? null, overruled: row.overruled_at !== null,
-    createdAt: row.created_at.toISOString(), finishedAt: row.finished_at?.toISOString() ?? null, git: cardGit(row) };
+    createdAt: row.created_at.toISOString(), finishedAt: row.finished_at?.toISOString() ?? null, git: cardGit(row),
+    sourceWordIssues: row.result?.sourceWordIssues ?? [] };
 }
 
 /** 列和标记（第 3 节）：handbacks、runs 都是新的在前。 */

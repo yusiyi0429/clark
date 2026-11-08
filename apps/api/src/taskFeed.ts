@@ -53,7 +53,8 @@ function cardItems(cards: FeedCard[], byCard: Map<string, FeedHandback[]>): TTas
     // 受阻（连续两次没过，同卡的投影；完成了的卡不算）：最近那次没过的交回一行，改法是它的 return_text。
     if (card.status !== "done" && failStreak(mine) >= 2) {
       const failed = latestJudged(mine)!;
-      items.push({ kind: "card_blocked", id: `blocked:${failed.id}`, at: judgedAt(failed), cardId: card.id, title: card.title, handbackId: failed.id, fix: failed.return_text });
+      items.push({ kind: "card_blocked", id: `blocked:${failed.id}`, at: judgedAt(failed), cardId: card.id, title: card.title, handbackId: failed.id, fix: failed.return_text,
+        sourceWordIssues: failed.result?.sourceWordIssues ?? [] });
     }
     // 合回后推翻开的返工卡：理由在原卡被推翻的那次（本来通过的）交回上，取最近一次。
     if (card.rework_of_card_id) {
