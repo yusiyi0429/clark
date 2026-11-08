@@ -1,8 +1,10 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { THomeItem } from "@warmap/contracts";
 import type { HomeProject, SubSession, WorkHomeData } from "@/lib/home/types";
-import { fromHome } from "@/lib/home/projects";
+import { fromHome, projectWorking } from "@/lib/home/projects";
 import { LeftColumn, planOrder } from "./LeftColumn";
 
 const data = { period: "2026-11", projects: [], archivedCount: 0, month: { missions: [] }, waiting: [], other: { subSessions: [], items: [] } } as unknown as WorkHomeData;
@@ -97,5 +99,39 @@ describe("伙伴台「亮着」（17.2）：只在伙伴对话里", () => {
     expect(render({})).not.toContain("data-glow");
     expect(render({ view: { kind: "buddy" } })).toContain('data-glow="idle"');
     expect(render({ view: { kind: "buddy" }, speaking: true })).toContain('data-glow="speaking"');
+  });
+});
+
+describe("左栏：项目在后台干活的灰点", () => {
+  const running = (state: string) => ({ id: "c1", kind: "card", title: "卡1", state, waiting: null, updatedAt: "a", queueReason: null, holdUntil: null });
+  const worker = (patch: Partial<Parameters<typeof projectWorking>[1][number]>) => ({ kind: "plan", state: "doing", mark: null, taskId: null, projectId: null, cardId: null, topicId: null, ...patch }) as Parameters<typeof projectWorking>[1][number];
+  const projectOf = (extra: Partial<HomeProject> = {}) => projectsOf(withTask([], extra))[0]!;
+
+  it("有子会话在跑、项目对话在回复、这个项目的规划员或验收员在做，算在干活；都没有就不算", () => {
+    expect(projectWorking(projectOf({ subSessions: [running("running")] as never }), [], false)).toBe(true);
+    for (const state of ["queued", "waiting", "done", "failed"]) expect(projectWorking(projectOf({ subSessions: [running(state)] as never }), [], false)).toBe(false);
+    expect(projectWorking(projectOf(), [], true)).toBe(true);
+    expect(projectWorking(projectOf(), [worker({ taskId: "t1" })], false)).toBe(true);
+    expect(projectWorking(projectOf(), [worker({ projectId: "p1" })], false)).toBe(true);
+    expect(projectWorking(projectOf({ subSessions: [running("done")] as never }), [worker({ kind: "verify", cardId: "c1" })], false)).toBe(true);
+    // 这台电脑上正做着的卡（云端还没同步成 running）也算；等你批准、回答的不算。
+    expect(projectWorking(projectOf(), [worker({ kind: "card", taskId: "t1" })], false)).toBe(true);
+    expect(projectWorking(projectOf(), [worker({ kind: "card", taskId: "t1", mark: "reviewing" })], false)).toBe(true);
+    for (const mark of ["approval", "reply", "paused", "review_failed", "blocked"] as const) expect(projectWorking(projectOf(), [worker({ kind: "card", taskId: "t1", mark })], false)).toBe(false);
+    expect(projectWorking(projectOf(), [worker({ taskId: "t1", state: "done" }), worker({ taskId: "t1", state: "queued" }), worker({ taskId: "t9" })], false)).toBe(false);
+  });
+
+  it("在干活的项目标题这一行最右边一颗点，读屏读「在后台工作」、点本身不读；不在干活的不画", () => {
+    const html = render({ data: withTask([]), working: new Set(["p1"]) });
+    expect(html).toMatch(/首页改版<\/span><span[^>]*data-testid="project-working"><i aria-hidden="true"><\/i><span[^>]*>在后台工作<\/span><\/span><\/span><span[^>]*>11 月 · 左栏/);
+    expect(render({ data: withTask([]) })).not.toContain("project-working");
+    expect(render({ data: withTask([]), working: new Set(["p9"]) })).not.toContain("在后台工作");
+  });
+
+  it("点的节奏：透明度 1 ↔ 0.3、1.4 秒一个来回、缓入缓出一直循环；减少动态效果时不闪", () => {
+    const css = readFileSync(fileURLToPath(new URL("../../styles/home.module.css", import.meta.url)), "utf8");
+    expect(css).toContain(".workingDot i { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-faint); animation: workingBreath 1.4s ease-in-out infinite; }");
+    expect(css).toContain("@keyframes workingBreath { 50% { opacity: .3; } }");
+    expect(css).toContain("@media (prefers-reduced-motion: reduce) { .workingDot i { animation: none; } }");
   });
 });

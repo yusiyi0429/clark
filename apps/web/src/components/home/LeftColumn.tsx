@@ -32,7 +32,7 @@ import h from "@/styles/home.module.css";
 
 export const subHref = (sub: Pick<SubSession, "kind" | "id">) => (sub.kind === "card" ? cardHref(sub.id) : topicHref(sub.id));
 
-export function LeftColumn({ data, view, buddy, speaking, go, phone, account, today, alert, trail, top, month, onRetryPlan, projects, archived, onCreate, cardAt }: {
+export function LeftColumn({ data, view, buddy, speaking, go, phone, account, today, alert, trail, top, month, onRetryPlan, projects, archived, onCreate, cardAt, working }: {
   data: WorkHomeData;
   view: View;
   buddy: Buddy | null;
@@ -60,6 +60,8 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
   onCreate: (name: string) => Promise<string>;
   /** 卡建出来的时间（看板里的）：一个项目下的会话照派活单的先后排（和对话里「开了哪几个子会话」一样）。 */
   cardAt?: ReadonlyMap<string, string>;
+  /** 正在后台干活的项目（projectWorking）：标题右边一颗闪的灰点。 */
+  working?: ReadonlySet<string>;
 }) {
   const name = buddy?.name?.trim() || "伙伴";
   const atHome = view.kind === "home" || view.kind === "month";
@@ -122,7 +124,7 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
               }} />
           ) : null}
           {createFailed ? <FailedLine {...createFailed} /> : null}
-          {projects.map((project) => <ProjectNode key={project.id} project={project} view={view} go={go} personId={account.personId} cardAt={cardAt} />)}
+          {projects.map((project) => <ProjectNode key={project.id} project={project} view={view} go={go} personId={account.personId} cardAt={cardAt} working={!!working?.has(project.id)} />)}
           {archived.length ? (
             <>
               <button type="button" className={h.foldToggle} data-flat="" aria-expanded={archivedOpen} onClick={() => setArchivedOpen(!archivedOpen)} data-tree-row="" data-testid="tree-archived">
@@ -167,7 +169,9 @@ function treeKeys(event: KeyboardEvent<HTMLDivElement>, root: HTMLDivElement | n
  * 项目行（16.2）：48 高两行，第一行项目名 14/600，第二行 12 淡色（预算 80% → 本月目标 · 截止 → 本月没有目标 · 最近活动）；
  * 状态位、蓝点、信息按钮同原来的 Task 行。下面一行「会话 N」加小格子（默认收起，正在看其中一个时自动展开一次），再是本人的事项。
  */
-function ProjectNode({ project, view, go, personId, cardAt }: { project: Project; view: View; go: (href: string) => void; personId?: string | null; cardAt?: ReadonlyMap<string, string> }) {
+function ProjectNode({ project, view, go, personId, cardAt, working = false }: {
+  project: Project; view: View; go: (href: string) => void; personId?: string | null; cardAt?: ReadonlyMap<string, string>; working?: boolean;
+}) {
   // 老地址 /me/work/tasks/<id>（等你那一行、14.3 的定位）画的也是这个项目：那件 Task 挂在这里就算在看它。
   const here = ((view.kind === "project" || view.kind === "projectInfo") && view.id === project.id)
     || ((view.kind === "task" || view.kind === "info") && project.goals.some((goal) => goal.taskId === view.taskId));
@@ -185,8 +189,12 @@ function ProjectNode({ project, view, go, personId, cardAt }: { project: Project
       <div className={h.taskRow} data-current={page ? "" : undefined}>
         <button type="button" className={h.taskMain} onClick={() => go(projectHref(project.id))} aria-current={page ? "page" : undefined} data-tree-row="">
           <span className={h.slotState}>{project.waiting ? <StateIcon state="waiting" /> : null}</span>
-          <span className={h.taskText}>
-            <span className={h.taskName}>{project.name}</span>
+          <span className={`${h.taskText} ${h.projectText}`}>
+            <span className={h.projectTitle}>
+              <span className={h.taskName}>{project.name}</span>
+              {/* 在后台干活：标题这一行最右边一颗闪的灰点（读屏读「在后台工作」，点本身不读）。 */}
+              {working ? <span className={h.workingDot} data-testid="project-working"><i aria-hidden /><span className={h.srOnly}>在后台工作</span></span> : null}
+            </span>
             <span className={h.taskSub} data-warning={line.warning ? "" : undefined}>{line.text}</span>
           </span>
         </button>
