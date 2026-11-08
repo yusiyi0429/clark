@@ -20196,6 +20196,80 @@
         }
       }
     },
+    "/api/me/appearance": {
+      "get": {
+        "operationId": "getAppearance",
+        "summary": "本人的外观（「偏好」）：跟随系统 / 浅色 / 深色，缺省跟随系统",
+        "responses": {
+          "200": {
+            "description": "外观",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppearanceSettings"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateAppearance",
+        "summary": "改本人的外观（换设备一样）",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppearanceSettings"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "改好的外观",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppearanceSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/work-home": {
       "get": {
         "operationId": "getWorkHome",
@@ -118559,6 +118633,31 @@
         "properties": {
           "feishu": {
             "type": "boolean"
+          }
+        }
+      },
+      "AppearanceSettings": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "appearance"
+        ],
+        "properties": {
+          "appearance": {
+            "anyOf": [
+              {
+                "const": "system",
+                "type": "string"
+              },
+              {
+                "const": "light",
+                "type": "string"
+              },
+              {
+                "const": "dark",
+                "type": "string"
+              }
+            ]
           }
         }
       },

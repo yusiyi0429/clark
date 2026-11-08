@@ -2,7 +2,7 @@ import type { JsonSchema, OpenAPIV3 } from "./types/JsonSchemaTypes.js";
 import {
   BackgroundItem, BackgroundResponse, ClaimSessionStartsRequest, ClaimSessionStartsResponse, HomeMonthMission, HomeMonthTask, HomeProject, HomeProjectGoal,
   HomeTaskSummary, RouteRequest, RouteResponse, SessionStartView, SubSession, WaitingItem, WaitingTarget, WorkHomeResponse, CardMerge, TaskFeedItem, HomeItem,
-  ReleaseSessionStartRequest, NotificationSettings, ClaimedSessionStart,
+  ReleaseSessionStartRequest, NotificationSettings, ClaimedSessionStart, AppearanceSettings,
 } from "./workHome.js";
 import { CreateProjectRequest, Project, ProjectDetailResponse, ProjectFeedItem, ProjectFeedResponse, ProjectGoal, ProjectGoalLinkedItem, ProjectHandoverItem,
   ProjectHandoverSummaryItem, ProjectListResponse, ProjectPipelineResponse, ProjectTransferDeclinedItem, UpdateProjectRequest, ProjectBoardResponse, ProjectGoalChangedItem,
@@ -24,7 +24,7 @@ export const workHomeSchemas: Record<string, JsonSchema> = {
   Project, ProjectListResponse, CreateProjectRequest, UpdateProjectRequest, ProjectGoal, ProjectDetailResponse, ProjectPipelineResponse, ProjectGoalLinkedItem,
   ProjectFeedItem, ProjectFeedResponse, ProjectBoardResponse, ProjectGoalChangedItem, AnswerGoalChangeRequest, ProjectHandoverItem, ProjectHandoverSummaryItem, ProjectTransferDeclinedItem,
   PersonRef, HandoverSection, ProjectTransfer, CreateProjectTransferRequest, UpdateProjectTransferRequest, HandoverSecretFinding, HandoverSecretsResponse,
-  NotificationSettings, Budget, TaskBudgetResponse, ClaimedSessionStart, SessionAttachment, SessionAttachmentUploadResponse,
+  NotificationSettings, AppearanceSettings, Budget, TaskBudgetResponse, ClaimedSessionStart, SessionAttachment, SessionAttachmentUploadResponse,
 };
 
 const error = { description: "ApiError 统一错误", content: { "application/json": { schema: { $ref: "#/components/schemas/ApiError" } } } };
@@ -90,6 +90,19 @@ export const workHomePaths: OpenAPIV3.Document["paths"] = {
       summary: "改本人的通知开关",
       requestBody: body("NotificationSettings"),
       responses: { "200": json("改好的通知开关", "NotificationSettings"), ...errors(400, 401, 403) },
+    },
+  },
+  "/api/me/appearance": {
+    get: {
+      operationId: "getAppearance",
+      summary: "本人的外观（「偏好」）：跟随系统 / 浅色 / 深色，缺省跟随系统",
+      responses: { "200": json("外观", "AppearanceSettings"), ...errors(401) },
+    },
+    put: {
+      operationId: "updateAppearance",
+      summary: "改本人的外观（换设备一样）",
+      requestBody: body("AppearanceSettings"),
+      responses: { "200": json("改好的外观", "AppearanceSettings"), ...errors(400, 401) },
     },
   },
   "/api/me/work-home": {

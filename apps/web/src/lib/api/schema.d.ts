@@ -4877,6 +4877,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/appearance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人的外观（「偏好」）：跟随系统 / 浅色 / 深色，缺省跟随系统 */
+        get: operations["getAppearance"];
+        /** 改本人的外观（换设备一样） */
+        put: operations["updateAppearance"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/work-home": {
         parameters: {
             query?: never;
@@ -19400,6 +19418,9 @@ export interface components {
         };
         NotificationSettings: {
             feishu: boolean;
+        };
+        AppearanceSettings: {
+            appearance: "system" | "light" | "dark";
         };
         Budget: {
             mode: "auto" | "set" | "unlimited";
@@ -36443,6 +36464,77 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getAppearance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 外观 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppearanceSettings"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    updateAppearance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppearanceSettings"];
+            };
+        };
+        responses: {
+            /** @description 改好的外观 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppearanceSettings"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

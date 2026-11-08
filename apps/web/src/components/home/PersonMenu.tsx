@@ -3,19 +3,18 @@
 /**
  * 左栏最底下的本人一行和个人菜单（新首页设计 9.4、5.4.2「本人行」、5.4.6「个人菜单」）：
  * - 这一行：头像 24 + 名字；连接要处理时（本机离线、额度用完、飞书授权失效）名字后面一个 6px 琥珀点。整行就是菜单的开关。
- * - 菜单从这一行向上弹出：头像和资料 · 伙伴 · 连接 · 岗位 · 我的记忆 · 偏好 · 更多（原地展开雷达、定时任务、任务数据质量）·
+ * - 菜单从这一行向上弹出：头像和资料 · 伙伴 · 连接 · 岗位 · 我的记忆 · 偏好 · 任务数据质量（开着时）·
  *   切换到 CEO 工作台（双角色）· 管理员（管理员）· 退出登录；最后一行淡色版本号。菜单项不放图标；键盘交给 HeroUI 的菜单。
- * 头像和资料、伙伴、连接、偏好是新首页里的二级页；岗位、我的记忆、雷达、定时任务、任务数据质量、管理员还是老页面，点了离开新首页。
+ * 头像和资料、伙伴、连接、偏好是新首页里的二级页；岗位、我的记忆、任务数据质量、管理员还是老页面，点了离开新首页。
+ * 雷达、定时任务不上（17.2）：不放进菜单（老页面的路由先不动）；「更多」里只剩一项，就不要「更多」这一层。
  */
 import { useState } from "react";
 import { Dropdown } from "@heroui/react";
-import { ChevronRight } from "lucide-react";
 import { avatarInitial, useBuildVersion, type Account } from "@/components/AccountMenu";
 import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import { browserApi } from "@/lib/api/client";
 import { logout } from "@/lib/logout";
 import { readTaskQualityEnabled } from "@/components/task-quality/taskQualityStatus";
-import { ICON } from "./StateIcon";
 import { PAGE_TITLE, pageHref, type PageKey, type View } from "./view";
 import h from "@/styles/home.module.css";
 
@@ -29,12 +28,11 @@ export function PersonRow({ account, view, alert, go }: {
   go: (href: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [more, setMore] = useState(false);
   const [extra, setExtra] = useState<Extra>({ switchView: false, admin: false, taskQuality: false });
   const version = useBuildVersion();
   const onOpenChange = (next: boolean) => {
     setOpen(next);
-    if (!next) { setMore(false); return; }
+    if (!next) return;
     void Promise.all([browserApi.GET("/api/auth/session").catch(() => null), readTaskQualityEnabled().catch(() => false)]).then(([session, taskQuality]) => {
       const authed = session?.response.ok && session.data?.authenticated ? session.data : null;
       setExtra({ switchView: Boolean(authed?.canSwitchView), admin: Boolean(authed && "admin" in authed && authed.admin), taskQuality: Boolean(taskQuality) });
@@ -45,11 +43,10 @@ export function PersonRow({ account, view, alert, go }: {
     if (response.ok) window.location.assign("/");
   };
   const act = (key: string) => {
-    if (key === "more") { setMore((value) => !value); return; }
     if (key === "logout") { void logout(); return; }
     if (key === "switch") { void switchView(); return; }
     if (key in PAGE_TITLE) { go(pageHref(key as PageKey)); return; }
-    const out: Record<string, string> = { roles: "/me/team", memory: "/me/memory", radar: "/me/radar", schedules: "/me/schedules", quality: "/me/task-quality", admin: "/me/admin" };
+    const out: Record<string, string> = { roles: "/me/team", memory: "/me/memory", quality: "/me/task-quality", admin: "/me/admin" };
     if (out[key]) go(out[key]);
   };
   const current = view.kind === "page" ? view.page : null;
@@ -77,14 +74,7 @@ export function PersonRow({ account, view, alert, go }: {
               {item("roles", "岗位")}
               {item("memory", "我的记忆")}
               {item("preferences", "偏好")}
-              <Dropdown.Item id="more" textValue="更多" className={h.menuItem} shouldCloseOnSelect={false} aria-expanded={more}>
-                <span className={h.grow}>更多</span><ChevronRight {...ICON} className={h.chevron} data-open={more ? "" : undefined} />
-              </Dropdown.Item>
-              {more ? <>
-                <Dropdown.Item id="radar" textValue="雷达" className={h.menuItem} data-indent="">雷达</Dropdown.Item>
-                <Dropdown.Item id="schedules" textValue="定时任务" className={h.menuItem} data-indent="">定时任务</Dropdown.Item>
-                {extra.taskQuality ? <Dropdown.Item id="quality" textValue="任务数据质量" className={h.menuItem} data-indent="">任务数据质量</Dropdown.Item> : null}
-              </> : null}
+              {extra.taskQuality ? item("quality", "任务数据质量") : null}
             </Dropdown.Section>
             {extra.switchView || extra.admin ? (
               <Dropdown.Section className={h.menuSection}>

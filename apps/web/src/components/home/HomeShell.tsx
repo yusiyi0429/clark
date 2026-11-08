@@ -6,7 +6,8 @@
  * - 中：展示区——首页、总管线、Task 管线、Task 详情、子会话、二级页、月份页（地址决定，见 view.ts）。
  * - 右：资源和后台任务，跟着展示区走，可以收成细条。
  * 手机：首屏兼首页（伙伴台、今天、等你、树、本人），点进去全屏；后台任务从「今天」行和页头的按钮打开，是底部抽屉。
- * 深色跟系统：外壳带 data-scheme="auto"，深色变量挂在根上（app/scheme-dark.css）。伙伴不飞走，一直在台上（设计 9.2）。
+ * 深色按「偏好 · 外观」（跟随系统 / 浅色 / 深色，17.2）：外壳带 data-scheme="auto"，深色变量挂在根上（app/scheme-dark.css）；
+ * 外观存在服务端，进首页、切回这个标签页时读一次（useAppearance）。伙伴不飞走，一直在台上（设计 9.2）。
  * 切换展示区用 history.pushState（Next 会同步 usePathname），不等服务端；每个地址也都有页面，刷新照样打开。
  *
  * 云端不指挥本机（第 4.4 条）：开子会话、开规划员都由这台电脑上开着的网页去拉起本机程序——
@@ -57,6 +58,7 @@ import { ICON } from "./StateIcon";
 import { useTabTitle } from "./useTabTitle";
 import h from "@/styles/home.module.css";
 import { linkPerson } from "@/lib/local/link";
+import { useAppearance } from "@/lib/appearance";
 
 /** 要开的规划员：拆哪个，登记的 id 和存下的原话（登记回去时用）。 */
 type PlanJob = PlanTarget & { splitId?: string; sourceWords?: string[] };
@@ -87,6 +89,7 @@ function HomeFrame({ account }: { account: Account }) {
   const local = useLocalRunner();
   const { buddy } = useBuddy();
   const api = useWorkHome();
+  useAppearance();
   const { data, work } = api;
   const [panelOpen, setPanelOpen] = useState(true);
   const [sheet, setSheet] = useState(false);
