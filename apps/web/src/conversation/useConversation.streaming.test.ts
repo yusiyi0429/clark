@@ -184,7 +184,7 @@ describe("带引用发送：提问气泡立刻带上引用", () => {
 describe("伙伴对话流里的回执、计划清单、界面效果、卡（17.4）", () => {
   it("计划清单后一条取代前一条；ui 事件发给页面；卡挂在这一轮上；读回的本人那句是已读", async () => {
     const events = [
-      { type: "receipt", state: "delivered" }, { type: "receipt", state: "read" },
+      { type: "receipt", state: "delivered", messageId: "m1" }, { type: "receipt", state: "read", messageId: "m1" },
       { type: "plan", plan: { entries: [{ content: "归档", status: "in_progress" }, { content: "转达", status: "pending" }], collapsed: false } },
       { type: "plan", plan: { entries: [{ content: "归档", status: "completed" }, { content: "转达", status: "in_progress" }], collapsed: false } },
       { type: "ui", ui: { kind: "appearance", appearance: "dark" } },
@@ -206,27 +206,40 @@ describe("伙伴对话流里的回执、计划清单、界面效果、卡（17.4
   });
 });
 
-describe("两个勾的取法（17.4，主会话 11/08）", () => {
-  it("发送接口接下就亮第一个勾，不等 delivered 帧；read 帧到了亮第二个", async () => {
-    const frame = (event: Record<string, unknown>) => new TextEncoder().encode(`data: ${JSON.stringify({ ...event, runId: "r2" })}\n\n`);
+describe("两个勾的取法（17.4，契约 06e5ae77）", () => {
+  const frame = (event: Record<string, unknown>) => new TextEncoder().encode(`data: ${JSON.stringify(event)}
+
+`);
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  it("中途插话：delivered（不带 runId）先亮第一个勾，新一轮开了 read（带 runId）亮第二个，两帧按 messageId 对上", async () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => { release = resolve; });
+    const frames = [frame({ type: "receipt", state: "delivered", messageId: "m2" }), frame({ type: "receipt", state: "read", messageId: "m2", runId: "r2" }),
+      frame({ type: "message", delta: "好", runId: "r2" }), frame({ type: "done", status: "completed", runId: "r2" })];
     let step = 0;
     const read = async () => {
-      step += 1;
-      if (step === 1) return { done: false, value: frame({ type: "message", delta: "在看" }) };
-      if (step === 2) { await gate; return { done: false, value: frame({ type: "receipt", state: "read" }) }; }
-      if (step === 3) return { done: false, value: frame({ type: "done", status: "completed" }) };
-      return { done: true, value: undefined };
+      if (step === 1) await gate;
+      const value = frames[step++];
+      return value ? { done: false, value } : { done: true, value: undefined };
     };
     vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce({ ok: true, status: 200, body: { getReader: () => ({ read }) } })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ messages: [{ sequence: 1, role: "user", content: "停一下" }] }) }));
     const sending = snapshot().send("停一下", []);
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(snapshot().messages.at(-1)).toMatchObject({ role: "user", receipt: "delivered" });
+    await tick();
+    expect(snapshot().messages.at(-1)).toMatchObject({ role: "user", receipt: "delivered", messageId: "m2" });
     release();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(snapshot().messages.find((item) => item.role === "user")).toMatchObject({ receipt: "read" });
     await sending;
+    expect(snapshot().messages[0]).toMatchObject({ role: "user", receipt: "read" });
+  });
+
+  it("delivered 以后没开成（流里一帧 error，不带 runId）：撤掉第一个勾，这句标成 failed（旁边给「重发」）", async () => {
+    const frames = [frame({ type: "receipt", state: "delivered", messageId: "m3" }), frame({ type: "error", code: "CHAT_UNAVAILABLE", message: "对话服务暂时不可用" })];
+    let step = 0;
+    const read = async () => { const value = frames[step++]; return value ? { done: false, value } : { done: true, value: undefined }; };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce({ ok: true, status: 200, body: { getReader: () => ({ read }) } })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ messages: [{ sequence: 1, role: "user", content: "停一下" }] }) }));
+    await snapshot().send("停一下", []);
+    expect(snapshot().messages).toEqual([{ sequence: 1, role: "user", content: "停一下", receipt: "failed", messageId: "m3" }]);
   });
 });

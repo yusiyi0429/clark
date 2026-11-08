@@ -5,6 +5,8 @@ export type ConversationEvent = {
     | "receipt" | "plan" | "ui" | "card";
   /** receipt（17.4，伙伴对话）：本人这条消息 delivered 天枢收下了，read 伙伴读到了。 */
   state?: "delivered" | "read";
+  /** receipt：天枢给本人这条消息的 id，两帧按它对上同一条。 */
+  messageId?: string;
   /** plan（17.4）：伙伴这一轮的计划清单，后一条取代前一条。 */
   plan?: TBuddyPlan;
   /** ui（17.4）：伙伴动作在界面上的效果（切外观、打开某处、刷新哪几块）。 */

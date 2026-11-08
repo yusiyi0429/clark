@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { TBuddyAuditEntry, TBuddyMessageDraft } from "@warmap/contracts";
-import { ConversationTurn } from "@/conversation/Transcript";
+import { ConversationTurn, ResendContext } from "@/conversation/Transcript";
 import { isBuddyScope } from "@/conversation/useConversation";
 import { PlanChecklist } from "@/components/cards/PlanChecklist";
 import { buddyTargetHref } from "@/lib/home/derive";
@@ -30,6 +30,10 @@ describe("伙伴代本人做事（17.4）", () => {
     expect(at("delivered")).toMatch(/data-receipt="delivered"[^>]*aria-label="已送达"/);
     expect(at("read")).toMatch(/data-receipt="read"[^>]*aria-label="已读"/);
     expect(at()).not.toContain("message-receipt");
+    // 收下了却没开成：不画勾，旁边一个「重发」。
+    const failed = renderToStaticMarkup(<ResendContext.Provider value={() => undefined}><ConversationTurn message={{ sequence: 1, role: "user", content: "先停一下", receipt: "failed" }} /></ResendContext.Provider>);
+    expect(failed).not.toContain("message-receipt");
+    expect(failed).toMatch(/data-testid="message-resend".*重发/);
   });
 
   it("项目对话里伙伴转来的本人那句（via=buddy）：气泡上方一行小字「伙伴转来」，别的照本人消息画", () => {

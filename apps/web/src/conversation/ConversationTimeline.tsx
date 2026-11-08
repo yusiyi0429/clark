@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { ConversationStatusSlot, ConversationThinking, ConversationTurns } from "./Transcript";
+import { ConversationStatusSlot, ConversationThinking, ConversationTurns, ResendContext } from "./Transcript";
 import { AnswerOptions } from "./AnswerOptionRow";
 import { EntryCards } from "./EntryCards";
 import { PlanChecklist } from "@/components/cards/PlanChecklist";
@@ -55,10 +55,12 @@ export function ConversationTimeline({ data }: { data: ConversationData }) {
     </ConversationStatusSlot>
   ) : null;
   // 范围标签改范围后按新范围重读：回答进行中不能点。
+  const resend = useMemo(() => (data.resend ? (message: Parameters<typeof data.resend>[0]) => void data.resend(message) : null), [data.resend]);
   const rescope = useMemo(() => ({ rescope: (params: Parameters<typeof data.rescope>[0], label: string) => void data.rescope(params, label), busy: data.streaming }),
     [data.rescope, data.streaming]);
   return (
     <RescopeContext.Provider value={rescope}>
+    <ResendContext.Provider value={resend}>
     <AskContext.Provider value={ask}>
     <ConversationTurns messages={data.messages} partial={data.streaming ? data.partial : ""} status={status}
       thought={data.thought?.seconds != null ? { text: data.thought.text, seconds: data.thought.seconds } : null}
@@ -74,6 +76,7 @@ export function ConversationTimeline({ data }: { data: ConversationData }) {
         </>;
       }} />
     </AskContext.Provider>
+    </ResendContext.Provider>
     </RescopeContext.Provider>
   );
 }

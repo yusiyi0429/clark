@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, memo, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { Fragment, createContext, memo, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import ReactMarkdown from "react-markdown";
 import remend from "remend";
 import { ArrowDown, ArrowRight, Check, Paperclip, Quote } from "lucide-react";
@@ -133,6 +133,14 @@ export function sameTurn(previous: TurnProps, next: TurnProps): boolean {
     && sameList(a.referencesSnapshot, b.referencesSnapshot, (item) => `${item.cardId}@${item.version}`);
 }
 
+/** 「重发」（17.4）：伙伴对话里收下了却没开成的那句，旁边一个小按钮，样式同失败行的「重试」。由对话时间线给出重发的办法。 */
+export const ResendContext = createContext<((message: Message) => void) | null>(null);
+function ResendLine({ message }: { message: Message }) {
+  const resend = useContext(ResendContext);
+  if (!resend) return null;
+  return <span className={s.receipt} data-testid="message-resend"><HeroButton variant="ghost" size="sm" onPress={() => resend(message)}>重发</HeroButton></span>;
+}
+
 /** 首页留痕行（转议题之后）：「已转到议题 X」，点击直达议题页。像聊天里的系统行，居中、浅灰、不占一条回答的版面。 */
 function TraceLine({ message }: { message: Message }) {
   const workspace = useContext(WorkspaceContext);
@@ -234,7 +242,7 @@ function ConversationTurnBody({ message, ms, streaming = false, thought, steps }
         </div>
       )}
       {/* 伙伴对话的回执（17.4）：两个小勾，送达亮第一个，读到亮第二个。 */}
-      {user && message.receipt ? (
+      {user && message.receipt === "failed" ? <ResendLine message={message} /> : user && message.receipt ? (
         <span className={s.receipt} data-receipt={message.receipt} role="img" aria-label={message.receipt === "read" ? "已读" : "已送达"} data-testid="message-receipt">
           <Check size={12} strokeWidth={2.2} aria-hidden /><Check size={12} strokeWidth={2.2} aria-hidden />
         </span>

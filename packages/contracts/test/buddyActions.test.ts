@@ -35,6 +35,11 @@ describe("伙伴代本人做事（17.4）", () => {
     expect(Value.Check(ConversationSseEvent, { ...base, type: "ui", ui: { kind: "appearance", appearance: "dark" } })).toBe(true);
     expect(Value.Check(ConversationSseEvent, { ...base, type: "ui", ui: { kind: "refresh", what: ["work_home", "project"], id: uuid } })).toBe(true);
     expect(Value.Check(BuddyUiEffect, { kind: "refresh", what: [] })).toBe(false);
-    expect(Value.Check(ConversationSseEvent, { ...base, type: "receipt", state: "read" })).toBe(true);
+    expect(Value.Check(ConversationSseEvent, { ...base, type: "receipt", state: "read", messageId: "m1" })).toBe(true);
+    // 中途插话时 delivered 先到，还没有这一轮：不带 runId；messageId 必带。
+    const { runId: _runId, ...noRun } = base;
+    expect(Value.Check(ConversationSseEvent, { ...noRun, type: "receipt", state: "delivered", messageId: "m1" })).toBe(true);
+    expect(Value.Check(ConversationSseEvent, { ...base, type: "receipt", state: "read" })).toBe(false);
+    expect(Value.Check(ConversationSseEvent, { ...noRun, type: "error", code: "TURN_IN_PROGRESS", message: "上一轮停不下来" })).toBe(true);
   });
 });

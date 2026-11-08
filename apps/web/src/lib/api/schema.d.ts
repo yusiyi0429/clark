@@ -6848,13 +6848,14 @@ export interface components {
                 } | null;
             };
         } | {
-            runId: string;
+            runId?: string;
             /** @description global 或稳定对象 scope */
             scope: string;
             sequence: number;
             /** @constant */
             type: "receipt";
             state: "delivered" | "read";
+            messageId: string;
         } | {
             runId: string;
             /** @description global 或稳定对象 scope */
@@ -6949,7 +6950,7 @@ export interface components {
             attempt: number;
             notice: string;
         } | {
-            runId: string;
+            runId?: string;
             /** @description global 或稳定对象 scope */
             scope: string;
             sequence: number;

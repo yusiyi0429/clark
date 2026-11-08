@@ -31406,11 +31406,11 @@
             "additionalProperties": false,
             "type": "object",
             "required": [
-              "runId",
               "scope",
               "sequence",
               "type",
-              "state"
+              "state",
+              "messageId"
             ],
             "properties": {
               "runId": {
@@ -31440,6 +31440,10 @@
                     "type": "string"
                   }
                 ]
+              },
+              "messageId": {
+                "minLength": 1,
+                "type": "string"
               }
             }
           },
@@ -31912,7 +31916,6 @@
             "additionalProperties": false,
             "type": "object",
             "required": [
-              "runId",
               "scope",
               "sequence",
               "type",

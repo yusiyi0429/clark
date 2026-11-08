@@ -42,8 +42,12 @@ export type Message = { sequence: number; role: "user" | "assistant"; content: s
   via?: "feishu" | "wechat" | "buddy";
   /** 只在本人的提问上：这一轮服务端还在回答。 */
   running?: boolean;
-  /** 伙伴对话里本人这一句的回执（17.4）：delivered 天枢收下了，read 伙伴读到了。读回的历史都算 read。 */
-  receipt?: "delivered" | "read";
+  /**
+   * 伙伴对话里本人这一句的回执（17.4）：delivered 天枢收下了，read 伙伴读到了；failed 收下以后这一轮没开成，旁边给「重发」。读回的历史都算 read。
+   */
+  receipt?: "delivered" | "read" | "failed";
+  /** 回执帧里天枢给这一句的 id（本地刚发出的那句，两帧按它对上）。 */
+  messageId?: string;
   /** 伙伴这一轮最后一张计划清单（17.4，只在回答上）。 */
   plan?: TBuddyPlan;
   meta?: { issueId?: string; title?: string; href?: string } };
@@ -669,14 +673,18 @@ ${input}` : input;
 
     let accepted = false;
     /**
-     * 回执落在这一轮发的那句上：这一轮还在这页上（live）时，最后一句本人的话就是它。读到了不再退回送达。
-     * 契约给了消息 id 以后改成按 id 对（主会话 11/08：read 帧按消息 id 对上是哪一条）。
+     * 回执（17.4）：两帧按 messageId 对上同一条；delivered 先到时记下这一轮发的那句（这一轮还在这页上时，最后一句本人的话）是这个 id。
+     * 读到了不再退回送达。
      */
-    const markReceipt = (state: "delivered" | "read") => setMessages((current) => {
-      let index = current.length - 1;
-      while (index >= 0 && current[index].role !== "user") index -= 1;
-      return index < 0 || current[index].receipt === "read" || current[index].receipt === state ? current
-        : current.map((item, at) => (at === index ? { ...item, receipt: state } : item));
+    let receipt: { messageId: string; state: "delivered" | "read" } | null = null;
+    const markReceipt = (state: "delivered" | "read", messageId: string) => setMessages((current) => {
+      let index = current.findIndex((item) => item.role === "user" && item.messageId === messageId);
+      if (index < 0) {
+        index = current.length - 1;
+        while (index >= 0 && current[index].role !== "user") index -= 1;
+      }
+      return index < 0 || current[index].receipt === "read" ? current
+        : current.map((item, at) => (at === index ? { ...item, receipt: state, messageId } : item));
     });
     let reply = "";
     let notice: string | undefined;
@@ -780,8 +788,6 @@ ${input}` : input;
         throw new TurnError(body.code ?? body.error?.code ?? `HTTP_${response.status}`, body.message ?? body.error?.message ?? "");
       }
       accepted = true;
-      // 伙伴对话：发送接口接下了就亮第一个勾（17.4，不等流里的 delivered 帧）；第二个勾等 read 帧。
-      if (isBuddyScope(scope) && !attach && live()) markReceipt("delivered");
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -876,7 +882,10 @@ ${input}` : input;
           // 伙伴登记了拆卡：新首页在这台电脑上开规划员（V2 设计第 21.3 节；事件名同 components/home/HomeShell.tsx 的 SPLIT_EVENT）。
           if (event.type === "tool" && event.phase === "completed" && !event.isError && event.name === "register_card_split")
             window.dispatchEvent(new CustomEvent("card-split-registered", { detail: { scope } }));
-          if (event.type === "receipt" && event.state && live()) markReceipt(event.state);
+          if (event.type === "receipt" && event.state && event.messageId) {
+            receipt = { messageId: event.messageId, state: event.state };
+            if (live()) markReceipt(event.state, event.messageId);
+          }
           if (event.type === "plan" && event.plan && live()) setTurnPlan(event.plan);
           if (event.type === "card" && event.card && live()) { const card = event.card; setTurnCards((current) => [...current, card]); }
           if (event.type === "ui" && event.ui) emitBuddyUi(event.ui);
@@ -926,6 +935,17 @@ ${input}` : input;
       if (!live()) return accepted;
       const code = (cause as TurnError).code;
       let stopped = controller.signal.aborted || code === "ABORTED";
+      // 收下了（delivered）却没开成（流里一帧 error 就结束，17.4）：撤掉第一个勾，这句旁边给「重发」。
+      // 读回的历史里有这句就标在它上面（最后一句同样的话），没有就把它放回去。
+      if (receipt?.state === "delivered" && serverError && !stopped && !attach) {
+        const failed = receipt.messageId;
+        setMessages((current) => {
+          let index = current.length - 1;
+          while (index >= 0 && !(current[index].role === "user" && current[index].content === text)) index -= 1;
+          return index >= 0 ? current.map((item, at) => (at === index ? { ...item, receipt: "failed" as const, messageId: failed } : item))
+            : [...current, { ...turn, sequence: (current.at(-1)?.sequence ?? 0) + 1, receipt: "failed", messageId: failed }];
+        });
+      }
       const written = reply.trim().length > 0;
       // 服务端没接下这句、历史也没读回来：撤掉本地那句，原文由输入框放回（C-04）。
       if (!reloaded && !accepted) setMessages((current) => withoutPendingTurn(current, text));
@@ -993,6 +1013,12 @@ ${input}` : input;
     return send(RESUME_TEXT[recoveryState.mode], [], { resumeRunId: recoveryState.runId });
   }
 
+  /** 「重发」（17.4）：收下了却没开成的那句，撤掉它旁边的按钮，原话再发一次。 */
+  function resend(message: Message): Promise<boolean> {
+    setMessages((current) => current.map((item) => (item === message ? { ...item, receipt: undefined } : item)));
+    return send(message.content, []);
+  }
+
   /** 范围标签改过范围：照原意按新范围重读一遍（这一句作为本人的原话发出，请求带上 scopeOverride）。 */
   function rescope(params: TReadScopeParams, label: string): Promise<boolean> {
     return send(`按「${label}」重新读`, [], { scopeOverride: params });
@@ -1018,6 +1044,7 @@ ${input}` : input;
   const stableSend = useStableCallback(send);
   const stableUpload = useStableCallback(uploadFiles);
   const stableRescope = useStableCallback(rescope);
+  const stableResend = useStableCallback(resend);
   const removeAttachment = useCallback((id: string) => setAttachments((current) => current.filter((item) => item.id !== id)), []);
 
   return {
@@ -1028,6 +1055,8 @@ ${input}` : input;
     streaming: status === "streaming",
     /** 回复中也能再发（伙伴对话，17.4）。 */
     interruptible: isBuddyScope(scope),
+    /** 「重发」收下了却没开成的那句（17.4）。 */
+    resend: stableResend,
     /** 这一轮伙伴的计划清单和出的卡（17.4，回答还在写时；写完读回的历史里在那条回答上）。 */
     plan: turnPlan,
     turnCards,
