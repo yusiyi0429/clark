@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { wordsLines } from "./sourceWords.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Pool, PoolClient } from "pg";
@@ -325,7 +326,8 @@ export async function verifyBrief(q: Query, ownerId: string, handbackKey: string
   if (!row) throw new CardError(404, "NOT_FOUND", "云端没有这次交回");
   if (row.outcome || row.overruled_at) throw new CardError(409, "ALREADY_JUDGED", "这次交回已经有验收结论了");
   if (!row.criteria.length) throw new CardError(409, "NO_CRITERIA", "这张卡没写完成标准，写好以后重新交回");
-  const task = (await q("SELECT id::text,owner_id,title,brief,status,plan_task_id,criterion_index,criterion_text,role_id FROM tasks WHERE id=$1", [row.task_id])).rows[0] as TaskRow;
+  const task = (await q("SELECT id::text,owner_id,title,brief,status,plan_task_id,criterion_index,criterion_text,role_id,source_words FROM tasks WHERE id=$1",
+    [row.task_id])).rows[0] as TaskRow & { source_words: string[] };
   const role = task.role_id ? (await rolesById(q, [task.role_id])).get(task.role_id) ?? null : null;
   const agreement = cardAgreement(task.plan_task_id ? (await planTask(task.plan_task_id))?.agreement ?? null : null, task.criterion_index);
   const outputs = row.output_ids.length ? (await q("SELECT * FROM local_outputs WHERE id=ANY($1::uuid[]) ORDER BY created_at,id", [row.output_ids])).rows as OutputRow[] : [];
@@ -337,6 +339,9 @@ export async function verifyBrief(q: Query, ownerId: string, handbackKey: string
     `# 验收：${task.title}`, "",
     `这是这张卡第 ${row.attempt} 次交回。只读，不改任何文件。按下面的依据逐条判（met 达到、partial 部分、unmet 没达到），用 submit_verdict 交结论。`,
     ...(task.brief?.trim() ? ["", "## 卡的交代", "", task.brief.trim()] : []),
+    // 本人原话（16.8）：逐条对完标准再对一遍；明显对不上算没过。
+    ...(task.source_words.length ? ["", ...wordsLines(task.source_words, "逐条判完完成标准后，再对一遍本人原话：产出做了原话里没要的、或漏了原话里明说的，"
+      + "就算没过，在相关那条的 reason 里写明是哪句。")] : []),
     "", `## 完成标准（共 ${row.criteria.length} 条，逐条判）`, "", ...row.criteria.map((text, index) => `${index + 1}. ${text}`),
     ...(pointed.length || agreement ? ["", "## 约定", "", ...pointed, ...(agreement?.proof ? [`用什么证明：${agreement.proof}`] : []),
       ...(agreement?.exclusions.length ? ["这次不包括（不能当作没达到的理由）：", ...agreement.exclusions.map((text) => `- ${text}`)] : [])] : []),
@@ -353,7 +358,8 @@ export async function verifyBrief(q: Query, ownerId: string, handbackKey: string
         `- 第 ${item.index} 条「${previous.criteria[item.index - 1] ?? ""}」：${item.reason}${item.fix ? `；怎么补：${item.fix}` : ""}`)] : []),
   ];
   const reviewer = await reviewerRole(q, ownerId);
-  return { markdown: lines.join("\n").slice(0, 20_000), criteria: row.criteria, role: reviewer ? roleBrief(reviewer) : null, failStreak: failStreak(history) };
+  return { markdown: lines.join("\n").slice(0, 20_000), criteria: row.criteria, role: reviewer ? roleBrief(reviewer) : null, failStreak: failStreak(history),
+    sourceWords: task.source_words };
 }
 
 /** 网页已经把没过的改法送到本机：记一笔；已经记过的不动。 */

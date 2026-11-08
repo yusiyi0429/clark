@@ -1,9 +1,10 @@
 import type { FastifyReply } from "fastify";
 import { Type } from "@sinclair/typebox";
 import { AcceptCardDraftsRequest, AcceptCardDraftsResponse, AnswerGoalChangeRequest, ProjectGoalChangedItem, CardPlanBriefResponse, CardSplitRequestView, CreateProjectRequest, Project, ProjectBoardResponse,
-  ProjectDetailResponse, ProjectFeedResponse, ProjectGoalResponse, ProjectListResponse, ProjectPipelineResponse, UpdateProjectRequest } from "@warmap/contracts";
+  ProjectDetailResponse, ProjectFeedResponse, ProjectGoalResponse, ProjectListResponse, ProjectPipelineResponse, RegisterCardSplitRequest, UpdateProjectRequest } from "@warmap/contracts";
 import { projectPlanBrief, registerProjectCardSplit } from "../cardSplits.js";
 import { answerGoalChange, goalChangeItems } from "../goalChanges.js";
+import { emptyBodyAsObject, projectHistoryReader, recentOwnerWords, typedWords } from "../sourceWords.js";
 import { ChatServiceError } from "../chatService.js";
 import { personDisplayNames } from "../people.js";
 import { createProject, goalView, linkGoal, listProjects, ownProject, projectDetail, projectGoalRows, projectOwners, projectReader, projectScope, projectView, unlinkGoal,
@@ -119,10 +120,10 @@ export function registerProjectRoutes(app: AppInstance, ctx: RouteContext): void
       return readProjectBoard(q, req.person!.personId, project.id, personDisplayNames(ctx.peopleDirectory));
     }));
 
-  app.post("/api/me/projects/:projectId/card-splits", { preHandler: requireMember, schema: { params: projectParams,
-    response: { 200: CardSplitRequestView, 201: CardSplitRequestView } } }, async (req, reply) => handle(reply, async () => {
+  app.post("/api/me/projects/:projectId/card-splits", { preValidation: emptyBodyAsObject, preHandler: requireMember, schema: { params: projectParams,
+    body: RegisterCardSplitRequest, response: { 200: CardSplitRequestView, 201: CardSplitRequestView } } }, async (req, reply) => handle(reply, async () => {
     const project = await activeProject(req.person!.personId, req.params.projectId);
-    const { request, created } = await registerProjectCardSplit(q, req.person!.personId, project.id, "web", ctx.now());
+    const { request, created } = await registerProjectCardSplit(q, req.person!.personId, project.id, "web", ctx.now(), typedWords(req.body.words));
     return reply.status(created ? 201 : 200).send(request);
   }));
 
@@ -143,7 +144,8 @@ export function registerProjectRoutes(app: AppInstance, ctx: RouteContext): void
     if (typeof id !== "string" || !ctx.peopleDirectory.searchPeople(undefined).some((person) => person.personId === id)) return fail(reply, 404, "OWNER_NOT_FOUND", "提问人不在人员目录");
     return handle(reply, async () => {
       const project = await activeProject(id, req.params.projectId);
-      const { request, created } = await registerProjectCardSplit(q, id, project.id, "buddy", ctx.now());
+      const words = await recentOwnerWords(q, projectHistoryReader(ctx), id, { taskId: null, projectId: project.id }, String(req.id));
+      const { request, created } = await registerProjectCardSplit(q, id, project.id, "buddy", ctx.now(), words);
       return reply.status(created ? 201 : 200).send(request);
     });
   });

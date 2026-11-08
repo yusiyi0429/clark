@@ -2,7 +2,8 @@ import { Type } from "@sinclair/typebox";
 import type { FastifyReply } from "fastify";
 import { AcceptCardDraftsRequest, AcceptCardDraftsResponse, CardBoardResponse, CardBriefResponse, CardDetailResponse, CardPlanBriefResponse, CardPlanView, CardSplitListResponse,
   CardSplitRequestView, CardTaskView, CreateCardPlanRequest, AddPendingDeliverableRequest, CreateVersionFromPendingRequest, DeliverableVersion, OverruleCardHandbackRequest,
-  PatchCardRequest, PendingDeliverableItem } from "@warmap/contracts";
+  PatchCardRequest, PendingDeliverableItem, RegisterCardSplitRequest } from "@warmap/contracts";
+import { emptyBodyAsObject, projectHistoryReader, recentOwnerWords, typedWords } from "../sourceWords.js";
 import { createArticleFetcher, type ArticleFetcher } from "../articleText.js";
 import { normalizeBudget, writeTaskBudget } from "../budgets.js";
 import { createCardAcceptanceQueue, markHandbackReturned, overruleHandback, retryHandback } from "../cardAcceptance.js";
@@ -40,6 +41,7 @@ export type BoardHooks = { enqueueAcceptance: (handbackId: string) => void; enqu
  */
 export function registerTaskCardRoutes(app: AppInstance, ctx: RouteContext, deps: { agents?: Partial<BoardAgents>; fetchArticle?: ArticleFetcher } = {}): BoardHooks {
   const { q, pool, fail, requirePerson, requireServiceToken, env } = ctx;
+  const history = projectHistoryReader(ctx);
   const cloud = Boolean(env.boardCloudAgents);
   const names = () => personDisplayNames(ctx.peopleDirectory);
   const model = { query: q, baseUrl: env.review?.baseUrl ?? env.piBaseUrl, apiKey: env.review?.apiKey ?? env.piApiKey,
@@ -105,9 +107,10 @@ export function registerTaskCardRoutes(app: AppInstance, ctx: RouteContext, deps
   }));
 
   // 登记拆卡（第 21 节）：只记下本人要拆这个 Task，不起作业；网页在本人电脑上开规划员，开了以后去掉登记。
-  app.post("/api/plan-tasks/:taskId/card-splits", { preHandler: requireMember, schema: { params: taskParams,
+  // 带了 words（按钮旁输入框里的话）就存成这次的原话（16.8）。
+  app.post("/api/plan-tasks/:taskId/card-splits", { preValidation: emptyBodyAsObject, preHandler: requireMember, schema: { params: taskParams, body: RegisterCardSplitRequest,
     response: { 200: CardSplitRequestView, 201: CardSplitRequestView } } }, async (req, reply) => handle(reply, async () => {
-    const { request, created } = await registerCardSplit(q, await board(req.person!.personId, req.params.taskId), "web", ctx.now());
+    const { request, created } = await registerCardSplit(q, await board(req.person!.personId, req.params.taskId), "web", ctx.now(), typedWords(req.body.words));
     return reply.status(created ? 201 : 200).send(request);
   }));
 
@@ -179,7 +182,10 @@ export function registerTaskCardRoutes(app: AppInstance, ctx: RouteContext, deps
     const id = req.headers["x-owner-id"];
     if (typeof id !== "string" || !ctx.peopleDirectory.searchPeople(undefined).some((person) => person.personId === id)) return fail(reply, 404, "OWNER_NOT_FOUND", "提问人不在人员目录");
     return handle(reply, async () => {
-      const { request, created } = await registerCardSplit(q, await board(id, req.params.taskId), "buddy", ctx.now());
+      const own = await board(id, req.params.taskId);
+      // 伙伴登记：原话取本人在这件 Task 所在项目对话里最近说的话（16.8；Chat 调过来不带是哪段对话）。
+      const words = await recentOwnerWords(q, history, id, { taskId: own.task.taskId, projectId: null }, String(req.id));
+      const { request, created } = await registerCardSplit(q, own, "buddy", ctx.now(), words);
       return reply.status(created ? 201 : 200).send(request);
     });
   });

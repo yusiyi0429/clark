@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { checkedWords, latestSplitWords } from "./sourceWords.js";
 import type { Pool, PoolClient } from "pg";
 import type { TLocalCardPlan } from "@warmap/contracts";
 import { cardPlanProblem, type CardPlanAgent, type CardPlanInput } from "./cardPlanAgent.js";
@@ -106,7 +107,8 @@ export type CardPlanQueue = ReturnType<typeof createCardPlanQueue>;
  * 本人让它改、再出一次（revision 更大）时换上新的计划，上一次还没处理的草稿收起来，新草稿接在后面；晚到的旧一次不收（返回 false）。
  * 岗位按本人团队里的 id、名字或预设 key 对，对不上再按预设的 key 或名字建议加哪个；对约定第几条超出范围的当没对上。
  */
-/** 派活单挂哪：拆 Task 的带 taskId、missionId 和验收标准；拆项目（16.3）的只带 projectId，criteria 为空（对约定第几条一律不存）。 */
+/** 派活单挂哪：拆 Task 的带 taskId、missionId 和验收标准；拆项目（16.3）的只带 projectId，criteria 为空（对约定第几条一律不存）。
+ * 每件的原话（16.8）按这个 Task 或项目最近一次登记拆卡存下的原话核对（sourceWords.ts 的 checkedWords）。 */
 export type PlanTarget = { taskId: string | null; missionId: string | null; projectId: string | null; criteria: string[] };
 
 export async function saveLocalCardPlan(client: PoolClient, input: { ownerId: string; runId: string; target: PlanTarget; plan: TLocalCardPlan; at: Date }): Promise<boolean> {
@@ -136,15 +138,16 @@ export async function saveLocalCardPlan(client: PoolClient, input: { ownerId: st
     return { roleId: null, preset: roles.find((role) => role.owner_id === null && (role.preset_key === name || role.name === name))?.preset_key ?? null };
   };
   const start = (await client.query("SELECT coalesce(max(position)+1,0)::int AS n FROM card_drafts WHERE plan_id=$1", [planId])).rows[0].n as number;
+  const originals = await latestSplitWords(client.query.bind(client), ownerId, target);
   // 先后（after）是这次派活单里的位置（从 1 起），存成那几张草稿的 id。
   const ids = plan.cards.map(() => randomUUID());
   for (const [position, card] of plan.cards.entries()) {
     const { roleId, preset } = roleOf(card.role);
     const index = card.criterionIndex && target.criteria[card.criterionIndex - 1] ? card.criterionIndex : null;
     await client.query(`INSERT INTO card_drafts(id,plan_id,plan_task_id,owner_id,position,title,brief,done_definition,criterion_index,executor,model_tier,why,role_id,suggest_preset_key,
-      after_draft_ids,project_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'claude_code',$10,$11,$12,$13,$14::uuid[],$15)`, [ids[position], planId, target.taskId, ownerId, start + position, card.title.trim(),
+      after_draft_ids,project_id,source_words) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'claude_code',$10,$11,$12,$13,$14::uuid[],$15,$16::jsonb)`, [ids[position], planId, target.taskId, ownerId, start + position, card.title.trim(),
       card.brief.trim(), standardLines(card.doneDefinition), index, card.modelTier, card.why?.trim() || null, roleId, preset,
-      [...new Set(card.after ?? [])].map((after) => ids[after - 1]), target.taskId ? null : target.projectId]);
+      [...new Set(card.after ?? [])].map((after) => ids[after - 1]), target.taskId ? null : target.projectId, JSON.stringify(checkedWords(originals, card.sourceWords))]);
   }
   return true;
 }

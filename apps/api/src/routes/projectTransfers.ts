@@ -1,16 +1,13 @@
 import type { FastifyReply } from "fastify";
 import { Type } from "@sinclair/typebox";
-import { ConversationHistory, CreateProjectTransferRequest, HandoverNote, HandoverSecretsResponse, ProjectTransfer, UpdateProjectTransferRequest,
-  type TConversationHistory, type TConversationScope } from "@warmap/contracts";
+import { ConversationHistory, CreateProjectTransferRequest, HandoverNote, HandoverSecretsResponse, ProjectTransfer, UpdateProjectTransferRequest } from "@warmap/contracts";
 import { ChatServiceError } from "../chatService.js";
-import { getConversationHistory } from "../conversations.js";
+import { projectHistoryReader } from "../sourceWords.js";
 import type { HandoverNoteAgent } from "../handoverNoteAgent.js";
 import { personDisplayNames } from "../people.js";
-import { projectScope } from "../projects.js";
 import { acceptTransfer, declineTransfer, readTransfer, SecretsInNote, sendTransfer, startTransfer, updateTransfer, withdrawTransfer, writeNote,
   type TransferDeps } from "../projectTransfers.js";
 import { CardError } from "../taskCards.js";
-import { pipelineViewer, projectPipelineConversation } from "../taskPipelines.js";
 import type { AppInstance, Guard, RouteContext } from "./shared.js";
 
 const idParams = Type.Object({ id: Type.String({ minLength: 1 }) });
@@ -27,16 +24,8 @@ export function registerProjectTransferRoutes(app: AppInstance, ctx: RouteContex
     if (reply.sent) return reply;
     if (req.person?.role !== "member") return fail(reply, 403, "FORBIDDEN", "请切换到 DRI 工作台");
   };
-  /** 原负责人那段项目对话：接了 Chat 读 Chat 里的那条，没接读天枢自己 scope 为 project:<id> 的对话。 */
-  const projectHistory = async (projectId: string, fromId: string, requestId: string): Promise<TConversationHistory> => {
-    const scope = projectScope(projectId) as TConversationScope;
-    if (ctx.chat) {
-      const conversationId = await projectPipelineConversation(q, projectId, fromId);
-      // Chat 的历史和天枢自己的对话同一个形状（chatService.ts 翻好了），scope 是这条项目对话。
-      return conversationId ? await ctx.chat.history(pipelineViewer(fromId), requestId, { conversationId, scope, projectId }) as TConversationHistory : { scope, messages: [] };
-    }
-    return getConversationHistory(q, fromId, scope, ctx.conversationTurnTimeoutMs);
-  };
+  /** 原负责人那段项目对话。 */
+  const projectHistory = projectHistoryReader(ctx);
   const deps = (requestId = "handover"): TransferDeps => ({ q, pool, names: personDisplayNames(ctx.peopleDirectory), now: ctx.now(),
     handover: { agent: options.handoverAgent, conversation: async (projectId, fromId) => (await projectHistory(projectId, fromId, requestId)).messages
       .map((message) => ({ role: message.role, at: message.createdAt, text: message.content })) } });

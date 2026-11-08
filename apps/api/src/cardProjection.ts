@@ -19,7 +19,7 @@ export type HandbackRow = { id: string; task_id: string; run_id: string | null; 
   git: TLocalGitRef | null; verified_commit: string | null };
 export type CardRow = { id: string; status: TTaskView["status"]; executor: TTaskCard["executor"]; model: TCardModel | null; brief: string | null;
   criterion_index: number | null; criterion_text: string | null; plan_task_id: string | null; done_definition: string | null; mission_id: string | null;
-  role_id: string | null; after_card_ids: string[] };
+  role_id: string | null; after_card_ids: string[]; source_words: string[] };
 
 /** 本机报 hold（订阅额度用完，停着等恢复）时会话的几种状态：排着没开始、一轮停在中间（等你说话的状态）、进程退了。 */
 export const HOLD_STATES = ["queued", "idle", "exited"];
@@ -66,7 +66,7 @@ function stageAndWait(row: CardRow, handbacks: HandbackRow[], runs: RunRow[]): P
   return { stage: "doing", wait: runs[0] ? waits[runs[0].state] ?? null : null };
 }
 
-export const CARD_COLUMNS = "id::text,status,executor,model,brief,criterion_index,criterion_text,plan_task_id,done_definition,mission_id,role_id::text,after_card_ids::text[]";
+export const CARD_COLUMNS = "id::text,status,executor,model,brief,criterion_index,criterion_text,plan_task_id,done_definition,mission_id,role_id::text,after_card_ids::text[],source_words";
 
 /** 一批执行事项各自的 card。 */
 export async function cardsOf(q: Query, rows: CardRow[]): Promise<Map<string, TTaskCard>> {
@@ -97,7 +97,7 @@ export async function cardsOf(q: Query, rows: CardRow[]): Promise<Map<string, TT
     const role = row.role_id ? roles.get(row.role_id) : undefined;
     return [row.id, { ...stageAndWait(row, own, ownRuns), role: role ? roleRef(role) : null, executor: row.executor, model: row.model,
       criterion: row.criterion_index && row.criterion_text ? { index: row.criterion_index, text: row.criterion_text } : null,
-      run: ownRuns[0] ? runBrief(ownRuns[0]) : null, handback: own[0] ? handbackBrief(own[0]) : null, deliverable, after: row.after_card_ids.filter((id) => agentCards.has(id)) }];
+      run: ownRuns[0] ? runBrief(ownRuns[0]) : null, handback: own[0] ? handbackBrief(own[0]) : null, deliverable, after: row.after_card_ids.filter((id) => agentCards.has(id)), sourceWords: row.source_words }];
   }));
 }
 

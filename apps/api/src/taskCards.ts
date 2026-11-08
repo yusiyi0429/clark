@@ -17,6 +17,7 @@ import type { TaskPageFacts } from "./pageGuides.js";
 import { ensurePresetRole, ownRole, roleBrief, roleRef, rolesById, type RoleRow } from "./roles.js";
 import { requestStarts } from "./sessionStarts.js";
 import type { PlanTarget } from "./cardPlanner.js";
+import { wordsLines } from "./sourceWords.js";
 
 /** 没配岗位的卡兜底用的预设（roles/presets/general/executor.md）。 */
 const DEFAULT_WORKER_PRESET = "executor";
@@ -140,11 +141,12 @@ export async function readProjectBoard(q: Query, ownerId: string, projectId: str
 
 export type DraftRow = { id: string; plan_id: string; position: number; title: string; brief: string; done_definition: string; criterion_index: number | null;
   role_id: string | null; suggest_preset_key: string | null;
-  executor: "claude_code" | "self"; model_tier: "strong" | "normal" | "light"; why: string | null };
+  executor: "claude_code" | "self"; model_tier: "strong" | "normal" | "light"; why: string | null; source_words: string[] };
 const draftView = (roles: Map<string, RoleRow>) => (row: DraftRow) => {
   const role = row.role_id ? roles.get(row.role_id) : undefined;
   return { id: row.id, planId: row.plan_id, position: row.position, title: row.title, brief: row.brief, doneDefinition: row.done_definition,
-    criterionIndex: row.criterion_index, role: role ? roleRef(role) : null, suggestPresetKey: row.suggest_preset_key, executor: row.executor, modelTier: row.model_tier, why: row.why };
+    criterionIndex: row.criterion_index, role: role ? roleRef(role) : null, suggestPresetKey: row.suggest_preset_key, executor: row.executor, modelTier: row.model_tier, why: row.why,
+    sourceWords: row.source_words };
 };
 
 /** 推进人自己的卡（锁住改用 forUpdate）；不是推进人的当找不到。 */
@@ -240,8 +242,10 @@ export async function cardBrief(q: Query, ownerId: string, id: string, planTask:
   const criterion = card.criterion_index && card.criterion_text ? { index: card.criterion_index, text: card.criterion_text, proof: agreement?.proof ?? null } : null;
   const exclusions = agreement?.exclusions ?? [];
   const role = card.role_id ? (await rolesById(q, [card.role_id])).get(card.role_id) : undefined;
+  // 本人原话（16.8）放在最前面，目标和完成标准之前。
   const lines = [
     `# 执行事项：${card.title}`, "",
+    ...wordsLines(card.source_words, "这件事依据的本人原话。做的时候以它为准：不加原话里没要的，不漏原话里明说的。"),
     ...(mission ? [`- Mission：${mission.title}`] : []),
     ...(own ? [`- Task：${own.task.name}`] : []),
     ...(criterion ? [`- 对的是 Task 的第 ${criterion.index} 条标准：${criterion.text}`] : []),
@@ -255,7 +259,7 @@ export async function cardBrief(q: Query, ownerId: string, id: string, planTask:
     ...(role?.acceptance_md.trim() ? ["", `## ${role.name}的验收口径`, "", role.acceptance_md.trim()] : []),
   ];
   return { markdown: lines.join("\n").slice(0, 20_000), role: role ? roleBrief(role) : null, mission: mission ? { missionId: mission.id, title: mission.title } : null,
-    task: own ? { taskId: own.task.taskId, name: own.task.name } : null, criterion, exclusions, reviewGap: gap, lastReturn };
+    task: own ? { taskId: own.task.taskId, name: own.task.name } : null, criterion, exclusions, reviewGap: gap, lastReturn, sourceWords: card.source_words };
 }
 
 /** 拆卡（Task 负责人）：同一个 Task 已有一次在排队或在跑时返回那一次（created=false），不另起。 */
@@ -303,8 +307,10 @@ async function acceptDrafts(pool: Pool, ownerId: string, target: PlanTarget, inp
       let roleId = edit.roleId === undefined ? draft.role_id : edit.roleId;
       if (!roleId && executor === "claude_code") roleId = (await (draft.suggest_preset_key ? ensurePresetRole(client, ownerId, draft.suggest_preset_key, now) : null)
         ?? await ensurePresetRole(client, ownerId, DEFAULT_WORKER_PRESET, now))?.id ?? null;
-      await client.query("UPDATE tasks SET executor=$2,brief=$3,criterion_index=$4,criterion_text=$5,role_id=$6,project_id=COALESCE($7,project_id) WHERE id=$1",
-        [created.task.id, executor, (edit.brief ?? draft.brief).trim() || null, index, index ? target.criteria[index - 1] : null, roleId, target.projectId]);
+      // 本人原话（16.8）跟着草稿进卡。
+      await client.query(`UPDATE tasks SET executor=$2,brief=$3,criterion_index=$4,criterion_text=$5,role_id=$6,project_id=COALESCE($7,project_id),source_words=$8::jsonb
+        WHERE id=$1`, [created.task.id, executor, (edit.brief ?? draft.brief).trim() || null, index, index ? target.criteria[index - 1] : null, roleId, target.projectId,
+        JSON.stringify(draft.source_words)]);
       await client.query("UPDATE card_drafts SET status='accepted',task_id=$2,decided_at=now() WHERE id=$1", [draft.id, created.task.id]);
       ids.push(created.task.id);
       plans.add(draft.plan_id);
