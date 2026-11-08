@@ -20804,6 +20804,92 @@
         }
       }
     },
+    "/api/me/projects/{projectId}/goals/{taskId}/due-date": {
+      "put": {
+        "operationId": "setProjectGoalDueDate",
+        "summary": "给挂在这个项目上的一件 Task 存验收截止日（null 不存了，退回 Mission 的节点）；没挂在这个项目上 404",
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetGoalDueDateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "这条挂接",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectGoal"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/projects/{projectId}/auto-relay": {
       "post": {
         "operationId": "decideAutoRelay",
@@ -110845,6 +110931,7 @@
           "name",
           "period",
           "dueDate",
+          "dueDateSource",
           "criteria",
           "criteriaMet",
           "criteriaTotal",
@@ -110870,6 +110957,18 @@
           "dueDate": {
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
             "type": "string"
+          },
+          "dueDateSource": {
+            "anyOf": [
+              {
+                "const": "set",
+                "type": "string"
+              },
+              {
+                "const": "mission",
+                "type": "string"
+              }
+            ]
           },
           "criteria": {
             "type": "array",
@@ -110957,6 +111056,7 @@
                 "name",
                 "period",
                 "dueDate",
+                "dueDateSource",
                 "criteria",
                 "criteriaMet",
                 "criteriaTotal",
@@ -110982,6 +111082,18 @@
                 "dueDate": {
                   "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
                   "type": "string"
+                },
+                "dueDateSource": {
+                  "anyOf": [
+                    {
+                      "const": "set",
+                      "type": "string"
+                    },
+                    {
+                      "const": "mission",
+                      "type": "string"
+                    }
+                  ]
                 },
                 "criteria": {
                   "type": "array",
@@ -112687,6 +112799,7 @@
                       "name",
                       "period",
                       "dueDate",
+                      "dueDateSource",
                       "criteria",
                       "criteriaMet",
                       "criteriaTotal",
@@ -112712,6 +112825,18 @@
                       "dueDate": {
                         "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
                         "type": "string"
+                      },
+                      "dueDateSource": {
+                        "anyOf": [
+                          {
+                            "const": "set",
+                            "type": "string"
+                          },
+                          {
+                            "const": "mission",
+                            "type": "string"
+                          }
+                        ]
                       },
                       "criteria": {
                         "type": "array",
@@ -117253,7 +117378,8 @@
           "period",
           "verdict",
           "source",
-          "linkedAt"
+          "linkedAt",
+          "dueDate"
         ],
         "properties": {
           "taskId": {
@@ -117320,6 +117446,17 @@
           "linkedAt": {
             "format": "date-time",
             "type": "string"
+          },
+          "dueDate": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -117852,7 +117989,8 @@
                 "period",
                 "verdict",
                 "source",
-                "linkedAt"
+                "linkedAt",
+                "dueDate"
               ],
               "properties": {
                 "taskId": {
@@ -117919,6 +118057,17 @@
                 "linkedAt": {
                   "format": "date-time",
                   "type": "string"
+                },
+                "dueDate": {
+                  "anyOf": [
+                    {
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               }
             }
@@ -122068,6 +122217,26 @@
               {
                 "const": "stop",
                 "type": "string"
+              }
+            ]
+          }
+        }
+      },
+      "SetGoalDueDateRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "dueDate"
+        ],
+        "properties": {
+          "dueDate": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
               }
             ]
           }

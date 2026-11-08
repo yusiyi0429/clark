@@ -62,7 +62,7 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       expect((await f.grant()).json()).toEqual(granted);
       const all = await list();
       expect(all.authority).toEqual(granted);
-      expect(all.actions).toHaveLength(26);
+      expect(all.actions).toHaveLength(27);
       expect(all.actions.find((action: { name: string }) => action.name === "send_message")).toMatchObject({ kind: "write", parameters: { type: "object" } });
 
       expect((await f.act("fly_away", {})).json().code).toBe("UNKNOWN_ACTION");
@@ -440,6 +440,18 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       expect((await f.call("PATCH", `/api/me/projects/${project.projectId}`, { autoRelayLimit: null })).json().autoRelayLimit).toBeNull();
       for (let i = 0; i < 25; i++) expect((await tell(`不限 ${i}`)).statusCode).toBe(200);
       expect(await waiting()).toEqual([]);
+    } finally { await f.close(); }
+  });
+  it("伙伴改 Task 的验收截止日（set_task_due_date），能撤回原来的", async () => {
+    const f = await fixture();
+    try {
+      await f.grant();
+      const project = (await f.call("POST", "/api/me/projects", { name: "天枢", taskId: "task-open" })).json().projectId as string;
+      const done = await f.ok("set_task_due_date", { projectId: project, taskId: "task-open", dueDate: "2026-11-30" });
+      expect(done).toMatchObject({ summary: "把「对话质量达标」的验收截止日定成 2026-11-30", undoable: true });
+      expect((await f.call("GET", `/api/me/projects/${project}`)).json().goals[0].dueDate).toBe("2026-11-30");
+      await f.undo(done.auditId!);
+      expect((await f.call("GET", `/api/me/projects/${project}`)).json().goals[0].dueDate).toBeNull();
     } finally { await f.close(); }
   });
 });

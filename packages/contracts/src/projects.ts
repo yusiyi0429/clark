@@ -81,6 +81,7 @@ export const ProjectGoalVerdict = Type.Union([Type.Literal("open"), Type.Literal
 /**
  * 一条挂接：哪个月的哪件 Task。taskName、missionTitle 是挂上时的快照（本体读不到时历史照样能写）。
  * source：auto 自动挂的（延续、同名同 Mission）、owner 本人挂的、migration 上线迁移挂的。linkedAt 是挂上的时间（项目对话里分隔线的位置）。
+ * dueDate：天枢里给这件目标存的验收截止日（YYYY-MM-DD），没存为 null（首页的截止日见 HomeProjectGoal.dueDate 的先后）。
  */
 export const ProjectGoal = Type.Object({
   taskId: Type.String({ minLength: 1 }),
@@ -91,7 +92,14 @@ export const ProjectGoal = Type.Object({
   verdict: ProjectGoalVerdict,
   source: Type.Union([Type.Literal("auto"), Type.Literal("owner"), Type.Literal("migration")]),
   linkedAt: Instant,
+  dueDate: Nullable(Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" })),
 }, strict);
+
+/**
+ * PUT /api/me/projects/:projectId/goals/:taskId/due-date（项目负责人）：给挂在这个项目上的一件 Task 存验收截止日，null 是不存了（退回本体或 Mission 的节点）。
+ * 回这条挂接（ProjectGoal）。这件 Task 没挂在这个项目上 404；日期不合法 400。伙伴的 set_task_due_date 走同一个接口。
+ */
+export const SetGoalDueDateRequest = Type.Object({ dueDate: Nullable(Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" })) }, strict);
 
 /**
  * GET /api/me/projects/:projectId（项目的「详情」）：goals 是目标历史，月份从近到远（同一个月按挂上的先后）。
@@ -249,6 +257,7 @@ export type TProjectGoalLinkedItem = Static<typeof ProjectGoalLinkedItem>;
 export type TProjectFeedItem = Static<typeof ProjectFeedItem>;
 export type TProjectFeedResponse = Static<typeof ProjectFeedResponse>;
 export type TAutoRelayDecisionRequest = Static<typeof AutoRelayDecisionRequest>;
+export type TSetGoalDueDateRequest = Static<typeof SetGoalDueDateRequest>;
 export type TSubSessionFeedRef = Static<typeof SubSessionFeedRef>;
 export type TProjectSubSessionReportItem = Static<typeof ProjectSubSessionReportItem>;
 export type TProjectSubSessionDecisionItem = Static<typeof ProjectSubSessionDecisionItem>;
