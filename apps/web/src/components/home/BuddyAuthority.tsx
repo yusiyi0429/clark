@@ -12,7 +12,8 @@ import type { TBuddyAuditEntry, TBuddyAuthority, TTrashItem } from "@warmap/cont
 import { HeroButton } from "@/components/HeroButton";
 import { FailedLine, failureOf, type Failure } from "@/components/work/DecisionBox";
 import { readBuddyAuthority, readBuddyLog, readTrash, restoreTrash, saveBuddyAuthority, undoBuddyAction } from "@/lib/buddy/actions";
-import { useBuddyUi } from "@/lib/buddy/uiEvent";
+import { emitBuddyUi, useBuddyUi } from "@/lib/buddy/uiEvent";
+import { browserApi } from "@/lib/api/client";
 import { relativeDayTime } from "@/lib/companyTime";
 import s from "@/styles/v2-local.module.css";
 
@@ -53,7 +54,12 @@ export function BuddyLog() {
   if (!entries.length) return null;
   const undo = (entry: TBuddyAuditEntry) => {
     setProblem(null);
-    void undoBuddyAction(entry.id).then((next) => setEntries((current) => current.map((item) => (item.id === entry.id ? next : item))),
+    void undoBuddyAction(entry.id).then((next) => {
+      setEntries((current) => current.map((item) => (item.id === entry.id ? next : item)));
+      // 撤销以后界面马上跟着变：外观按服务端现在的换，首页和偏好重读（同伙伴做事时插进对话流的效果）。
+      if (entry.action === "set_appearance") void browserApi.GET("/api/me/appearance").then(({ data }) => { if (data) emitBuddyUi({ kind: "appearance", appearance: data.appearance }); });
+      emitBuddyUi({ kind: "refresh", what: ["work_home", "settings", "trash"] });
+    },
       (error: unknown) => setProblem({ id: entry.id, text: error instanceof Error ? error.message : "撤不了" }));
   };
   return <BuddyLogList entries={entries} problem={problem} onUndo={undo} />;
