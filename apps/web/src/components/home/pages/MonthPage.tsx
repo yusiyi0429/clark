@@ -102,7 +102,7 @@ function MonthTaskRow({ task, next, go, decide }: { task: MonthTask; next: strin
         <DecisionBox kind="question" testId="month-decision" title={`${next}怎么办`} options={OPTIONS} autoFocus={false}
           resolved={task.answer ? answerText(task.answer) : undefined}
           onPick={([index], note) => decide(task.taskId, { choice: CHOICES[index ?? 0]!, note: note ?? null })}
-          other={{ onSubmit: (text) => decide(task.taskId, { choice: null, note: text }) }} />
+          other={{ maxLength: 200, onSubmit: (text) => decide(task.taskId, { choice: null, note: text }) }} />
       )}
     </div>
   );
