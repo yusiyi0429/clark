@@ -7,6 +7,7 @@
  * - 自动接力上限（18.12）：连续自动接力多少轮停下来问本人，缺省 20，可以不限（PATCH autoRelayLimit，不限是 null）；
  * - 转交（16.7）：「转给…」发起一份（POST /api/me/projects/:projectId/transfers），准备中、等接手时能撤回；
  * - 改名、归档（归档的能取消），调 PATCH /api/me/projects/:projectId，没成写「失败 · 重试」；
+ * - 当前那件 Task 的验收截止日：日期选择（同其他地方的 DatePicker），本人改了存在天枢里（PUT …/goals/:taskId/due-date），改过的能清掉、退回 Mission 的节点；
  * - 当前那件 Task 的预算、完成标准、约定、交付物：沿用原来 Task 详情的样子（TaskBudget、TaskDeliverable）。
  */
 import { useEffect, useState } from "react";
@@ -18,6 +19,7 @@ import type { Person } from "@/lib/home/transfer";
 import { ArrowLeft } from "lucide-react";
 import { Dropdown } from "@heroui/react";
 import { HeroButton } from "@/components/HeroButton";
+import { DatePicker } from "@/components/ui/DatePicker";
 import { TaskDeliverable } from "@/components/member/home/deliverable/TaskDeliverable";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { mainGoal, projectHref, type Project } from "@/lib/home/projects";
@@ -30,6 +32,7 @@ export type ProjectActions = {
   rename: (id: string, name: string) => Promise<void>;
   archive: (id: string, archived: boolean) => Promise<void>;
   setFolder: (id: string, folderId: string | null, name?: string) => Promise<void>;
+  setDue: (projectId: string, taskId: string, dueDate: string | null) => Promise<void>;
   transfer: (projectId: string, toPersonId: string) => Promise<void>;
   withdraw: (transferId: string) => Promise<void>;
 };
@@ -98,6 +101,7 @@ export function ProjectInfo({ project, period, go, actions, doneDefinitionOf, me
   const [name, setName] = useState(project.name);
   const [failed, setFailed] = useState<Failure | null>(null);
   const [relayFailed, setRelayFailed] = useState<Failure | null>(null);
+  const [dueFailed, setDueFailed] = useState<Failure | null>(null);
   const { history, limit, setLimit } = useDetail(project);
   const goal = mainGoal(project);
   const verdict = (row: HistoryRow) => (row.verdict !== "open" ? VERDICT[row.verdict] : row.period === period ? "进行中" : "未了结");
@@ -203,6 +207,14 @@ export function ProjectInfo({ project, period, go, actions, doneDefinitionOf, me
                   {doneDefinition ? <p>{doneDefinition}</p> : null}
                 </div>
               ) : null}
+              <div className={h.infoRow} data-testid="goal-due">
+                <span className={h.line}>验收截止</span>
+                <DatePicker label="验收截止" size="compact" value={goal.dueDate} clearable={goal.dueSet} onChange={(value) => {
+                  const once = () => { setDueFailed(null); void actions.setDue(project.id, goal.taskId, value || null).catch((error) => setDueFailed(failureOf(error, once))); };
+                  once();
+                }} />
+                {dueFailed ? <FailedLine inline {...dueFailed} /> : null}
+              </div>
               <TaskBudget key={`budget:${goal.taskId}`} taskId={goal.taskId} />
               <TaskDeliverable key={goal.taskId} task={{ taskId: goal.taskId }} checkOnOpen />
             </section>

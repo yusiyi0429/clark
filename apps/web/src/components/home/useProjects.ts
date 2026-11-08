@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { TProject } from "@warmap/contracts";
-import { attachGoal, createProject, listProjects, startTransfer, updateProject, withdrawTransfer } from "@/lib/board/cloud";
+import { attachGoal, createProject, listProjects, setGoalDueDate, startTransfer, updateProject, withdrawTransfer } from "@/lib/board/cloud";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { fromHome, fromListed, type Folders } from "@/lib/home/projects";
 import { noteStartedTransfer, seenSequence } from "@/lib/home/transfer";
@@ -51,6 +51,8 @@ export function useProjects(data: Pick<WorkHomeData, "projects" | "month" | "per
   const rename = useCallback(async (id: string, name: string) => { await updateProject(id, { name }); await refresh(); }, [refresh]);
   const archive = useCallback(async (id: string, value: boolean) => { await updateProject(id, { archived: value }); await refresh(); }, [refresh]);
   const attach = useCallback(async (taskId: string, projectId: string) => { await attachGoal(projectId, taskId); await refresh(); }, [refresh]);
+  /** 改一件目标的验收截止日，null 清掉（退回 Mission 的节点）。 */
+  const setDue = useCallback(async (projectId: string, taskId: string, dueDate: string | null) => { await setGoalDueDate(projectId, taskId, dueDate); await refresh(); }, [refresh]);
   /** 绑到这台电脑上一个允许的文件夹（folderId），null 解绑。 */
   const setFolder = useCallback(async (id: string, folderId: string | null, name?: string) => {
     await runner.putProjectFolder(id, { folderId, ...(name ? { name } : {}) });
@@ -63,8 +65,8 @@ export function useProjects(data: Pick<WorkHomeData, "projects" | "month" | "per
     await refresh();
   }, [refresh]);
   const withdraw = useCallback(async (transferId: string) => { await withdrawTransfer(transferId); await refresh(); }, [refresh]);
-  const actions = useMemo(() => ({ create, rename, archive, attach, setFolder, transfer, withdraw, reloadFolders: loadFolders }),
-    [create, rename, archive, attach, setFolder, transfer, withdraw, loadFolders]);
+  const actions = useMemo(() => ({ create, rename, archive, attach, setDue, setFolder, transfer, withdraw, reloadFolders: loadFolders }),
+    [create, rename, archive, attach, setDue, setFolder, transfer, withdraw, loadFolders]);
   return { all, projects, archived, actions };
 }
 

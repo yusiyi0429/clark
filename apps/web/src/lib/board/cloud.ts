@@ -130,6 +130,9 @@ export const readProject = (projectId: string) => maybe<TProjectDetailResponse>(
 /** 改名、归档（archived: true）、恢复（archived: false）。 */
 export const updateProject = (projectId: string, body: TUpdateProjectRequest) =>
   unwrap<TProject>(browserApi.PATCH("/api/me/projects/{projectId}", { params: project(projectId), body }) as Promise<Result<TProject>>);
+/** 给挂在这个项目上的一件 Task 存验收截止日（YYYY-MM-DD），null 是不存了、退回 Mission 的节点。 */
+export const setGoalDueDate = (projectId: string, taskId: string, dueDate: string | null) =>
+  unwrap<unknown>(browserApi.PUT("/api/me/projects/{projectId}/goals/{taskId}/due-date", { params: { path: { projectId, taskId } }, body: { dueDate } }) as Promise<Result<unknown>>);
 /** 把一件 Task 挂到这个项目（原来挂在别处就移过来）。 */
 export const attachGoal = (projectId: string, taskId: string) =>
   unwrap<TProjectGoal>(browserApi.PUT("/api/me/projects/{projectId}/goals/{taskId}", { params: { path: { projectId, taskId } } }) as Promise<Result<TProjectGoal>>);
