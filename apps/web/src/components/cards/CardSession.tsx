@@ -155,7 +155,7 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
         <div className={s.scroll} ref={scroll.scrollRef}>
           <div ref={scroll.contentRef}>
             {session ? (
-              <SessionTranscript entries={view.entries} agentName={agentName} canAct={canAct} device={device} live={sessionRunning} ended={ended} relay={relay} lead={`交代：${item.title}${item.card?.criterion ? ` · 按「${item.card.criterion.text}」验收` : ""}`}
+              <SessionTranscript entries={view.entries} agentName={agentName} canAct={canAct} onResend={(entry) => void say(entry.text).catch(() => showWorkspaceToast({ text: "没发出去" }))} device={device} live={sessionRunning} ended={ended} relay={relay} lead={`交代：${item.title}${item.card?.criterion ? ` · 按「${item.card.criterion.text}」验收` : ""}`}
                 onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={asking} asking={question} />
             ) : <CloudTimeline run={run} title={item.title} />}
           </div>

@@ -6,6 +6,7 @@
  * 要权限是选项框（批准 / 同类以后都批准 / 换个做法），几件一起等着时合成一个框翻页，放在第一件的位置；
  * 批过的、答过的收成一行（勾 · 问题 · 答案），不另起「问：」「答：」两行；没答就过去了的（被新的取代、作废、子会话停了）收成「已失效」。
  * 交回、产出、提醒各一行。
+ * 本人那句话的回执（17.4，样子同伙伴台）：一个勾已送达、两个勾已读；没读到就没了写「没读到 · 重发」。本机补发的话没有回执。
  * canAct=false（手机、别的电脑、本机没连）时选项框不给选项，头上写「等你 · {电脑名}」。
  */
 import { useState, type ReactNode } from "react";
@@ -20,6 +21,7 @@ import { ApprovalDecision, DENY_MAX, awayChip } from "@/components/work/decision
 import { DecisionBox, FailedLine } from "@/components/work/DecisionBox";
 import { HeroButton } from "@/components/HeroButton";
 import { ICON, StateIcon, type IconState } from "@/components/home/StateIcon";
+import { ReceiptFailed, ReceiptTicks } from "@/conversation/Transcript";
 import h from "@/styles/home.module.css";
 import s from "@/styles/v2-session.module.css";
 
@@ -113,7 +115,9 @@ export function RelayLine({ text, onGo }: { text: string; onGo: () => void }) {
   return <p className={s.relay} data-testid="relay-line"><span>{text}</span><HeroButton variant="tertiary" size="sm" onPress={onGo}>去回答</HeroButton></p>;
 }
 
-export function SessionTranscript({ entries, agentName, canAct, device, onDecide, lead, tail, asking, live, ended = false, relay }: {
+type UserEntry = Extract<SessionEntry, { kind: "user" }>;
+
+export function SessionTranscript({ entries, agentName, canAct, device, onDecide, lead, tail, asking, live, ended = false, relay, onResend }: {
   entries: SessionEntry[];
   agentName: string;
   canAct: boolean;
@@ -132,6 +136,8 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
   ended?: boolean;
   /** 提问、批准由 Task 管线转达（新首页 14.3）：这里不画选项框，只一行原话加「去回答」。 */
   relay?: (() => void) | null;
+  /** 没读到的那句再发一遍（只发原话；这里答不了时不给）。 */
+  onResend?: (entry: UserEntry) => void;
 }) {
   const pending = ended ? [] : entries.flatMap((entry) => (entry.kind === "permission" && !entry.decision ? [entry.request] : []));
   const firstPending = pending[0]?.requestId;
@@ -142,7 +148,7 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
       {lead ? <span className={s.evt}>{lead}</span> : null}
       {groupSteps(entries.filter((_, index) => index !== lastAsk)).map((entry) => {
         switch (entry.kind) {
-          case "user": return (
+          case "user": return [
             <div key={entry.seq} className={s.me}>
               {entry.attachments?.length ? (
                 <ul className={h.bubbleAtts} aria-label="附件">
@@ -152,8 +158,10 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
                 </ul>
               ) : null}
               {entry.text}
-            </div>
-          );
+            </div>,
+            entry.receipt === "failed" ? <ReceiptFailed key={`${entry.seq}:receipt`} className={s.meReceipt} label="没读到" onResend={canAct && entry.text ? () => onResend?.(entry) : undefined} />
+              : entry.receipt ? <ReceiptTicks key={`${entry.seq}:receipt`} className={s.meReceipt} state={entry.receipt} /> : null,
+          ];
           case "assistant": return <div key={entry.seq} className={s.bubble}><small className={s.who}>{agentName}</small><p>{entry.text}</p></div>;
           case "steps": return entry.steps.length === 1 ? <StepRow key={entry.seq} step={entry.steps[0]!} live={live} /> : <StepGroup key={entry.seq} steps={entry.steps} live={live} />;
           case "asked": return <DecisionBox key={entry.seq} kind="question" title={entry.question} options={[]} onPick={noop} resolved={entry.answer ?? undefined} expired={entry.answer === null} />;

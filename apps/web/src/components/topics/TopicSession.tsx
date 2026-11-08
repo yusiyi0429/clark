@@ -16,6 +16,7 @@ import type { TLocalQuestionAnswerRequest, TTopicDetailResponse, TTopicVersionVi
 import { HeroButton } from "@/components/HeroButton";
 import { useHandheld } from "@/components/ui/useHandheld";
 import { StartDialog } from "@/components/local/StartDialog";
+import { showWorkspaceToast } from "@/lib/toast";
 import { RelayLine, SessionComposer, SessionTranscript, sayToSession, sessionEnded, type DecideOptions } from "@/components/cards/SessionTranscript";
 import { stateChip } from "@/components/cards/CardSession";
 import { QuestionDecision, awayChip, questionTitle } from "@/components/work/decisions";
@@ -162,7 +163,7 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
       <div className={s.chat}>
         <div className={s.scroll} ref={scroll.scrollRef}>
           <div ref={scroll.contentRef}>
-            {session ? <SessionTranscript entries={view.entries} agentName="Claude Code" canAct={canAct} device={device} live={running(status)} ended={ended} relay={relay} onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={asking} asking={question} />
+            {session ? <SessionTranscript entries={view.entries} agentName="Claude Code" canAct={canAct} onResend={(entry) => void say(entry.text).catch(() => showWorkspaceToast({ text: "没发出去" }))} device={device} live={running(status)} ended={ended} relay={relay} onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={asking} asking={question} />
               : <div className={s.feed}><span className={s.evt}>{topic.title}</span>
                   {ready && topic.status === "active" && !embedded ? <div className={s.actions}><HeroButton variant="primary" size="sm" onPress={() => setStarting(true)}>开始</HeroButton></div> : null}
                 </div>}

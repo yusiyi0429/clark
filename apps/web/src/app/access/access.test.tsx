@@ -17,6 +17,9 @@ describe("登录页", () => {
     expect(landingPath("member", "/")).toBe("/me?_entry=unlock");
     expect(landingPath("member", "/radar")).toBe("/me?_entry=unlock");
     expect(landingPath("member", "/me/tasks/1")).toBe("/me/tasks/1");
+    // 锁屏、登录过期后回新首页也算进门（19.4 淡入）；新首页里别的页不算。
+    expect(landingPath("member", "/me/work")).toBe("/me/work?_entry=unlock");
+    expect(landingPath("member", "/me/work/settings/preferences")).toBe("/me/work/settings/preferences");
     expect(landingPath("ceo", "/")).toBe("/?_entry=unlock");
     expect(landingPath("ceo", "/me")).toBe("/?_entry=unlock");
     expect(landingPath("ceo", "/radar")).toBe("/radar");

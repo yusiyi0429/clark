@@ -135,10 +135,22 @@ export function sameTurn(previous: TurnProps, next: TurnProps): boolean {
 
 /** 「重发」（17.4）：伙伴对话里收下了却没开成的那句，旁边一个小按钮，样式同失败行的「重试」。由对话时间线给出重发的办法。 */
 export const ResendContext = createContext<((message: Message) => void) | null>(null);
+/** 本人那句话旁的两个小勾（17.4）：送达亮第一个，读到亮第二个。伙伴对话和子会话共用。 */
+export function ReceiptTicks({ state, className }: { state: "delivered" | "read"; className?: string }) {
+  return (
+    <span className={className ? `${s.receipt} ${className}` : s.receipt} data-receipt={state} role="img" aria-label={state === "read" ? "已读" : "已送达"} data-testid="message-receipt">
+      <Check size={12} strokeWidth={2.2} aria-hidden /><Check size={12} strokeWidth={2.2} aria-hidden />
+    </span>
+  );
+}
+/** 收下了却没读到：在勾的位置写「没读到」加「重发」（子会话）；伙伴对话只给「重发」。 */
+export function ReceiptFailed({ label, onResend, className }: { label?: string; onResend?: () => void; className?: string }) {
+  return <span className={className ? `${s.receipt} ${className}` : s.receipt} data-testid="message-resend">{label ? <span className={s.receiptNote}>{label}{onResend ? " ·" : ""}</span> : null}{onResend ? <HeroButton variant="ghost" size="sm" onPress={onResend}>重发</HeroButton> : null}</span>;
+}
 function ResendLine({ message }: { message: Message }) {
   const resend = useContext(ResendContext);
   if (!resend) return null;
-  return <span className={s.receipt} data-testid="message-resend"><HeroButton variant="ghost" size="sm" onPress={() => resend(message)}>重发</HeroButton></span>;
+  return <ReceiptFailed onResend={() => resend(message)} />;
 }
 
 /** 首页留痕行（转议题之后）：「已转到议题 X」，点击直达议题页。像聊天里的系统行，居中、浅灰、不占一条回答的版面。 */
@@ -242,11 +254,7 @@ function ConversationTurnBody({ message, ms, streaming = false, thought, steps }
         </div>
       )}
       {/* 伙伴对话的回执（17.4）：两个小勾，送达亮第一个，读到亮第二个。 */}
-      {user && message.receipt === "failed" ? <ResendLine message={message} /> : user && message.receipt ? (
-        <span className={s.receipt} data-receipt={message.receipt} role="img" aria-label={message.receipt === "read" ? "已读" : "已送达"} data-testid="message-receipt">
-          <Check size={12} strokeWidth={2.2} aria-hidden /><Check size={12} strokeWidth={2.2} aria-hidden />
-        </span>
-      ) : null}
+      {user && message.receipt ? (message.receipt === "failed" ? <ResendLine message={message} /> : <ReceiptTicks state={message.receipt} />) : null}
     </article>
   );
 }

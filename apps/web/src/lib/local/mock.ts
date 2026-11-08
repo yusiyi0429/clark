@@ -311,21 +311,26 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
     sendMessage: async (id, text, kind, attachments) => {
       const s = must(id);
       const was = s.summary.status;
+      // 回执（17.4）：假程序收下即送达，下一步读到。
+      const messageId = crypto.randomUUID();
+      const receipts = () => { emit(s, { type: "receipt", messageId, state: "delivered" }); setTimeout(() => emit(s, { type: "receipt", messageId, state: "read" }), stepMs); };
       if (kind === "review") {
         // 评审会：并行挑刺、合成「分歧和建议」存成一版（假程序只吐事件）。
-        emit(s, { type: "user_message", text: text || "开评审会", source: "web" });
+        emit(s, { type: "user_message", text: text || "开评审会", source: "web", messageId });
+        receipts();
         setTimeout(() => { emit(s, { type: "assistant_text", text: "几位挑刺的看完了，合成好了。" }); emit(s, { type: "version", number: 99, kind: "review", label: "评审", note: null }); }, stepMs * 3);
-        return { delivery: was === "running" ? "next_step" : "new_turn" };
+        return { delivery: was === "running" ? "next_step" : "new_turn", messageId };
       }
-      emit(s, { type: "user_message", text, source: "web" });
+      emit(s, { type: "user_message", text, source: "web", messageId });
+      receipts();
       s.paused = false;
       if (s.summary.pendingQuestion) {
         emit(s, { type: "question_resolved", requestId: s.summary.pendingQuestion.requestId, choices: null, text: null });
         s.summary = { ...s.summary, pendingQuestion: undefined };
       }
-      if (was === "running") { emit(s, { type: "notice", level: "info", code: "interjection_next_step", text: "下一步生效" }); return { delivery: "next_step" }; }
+      if (was === "running") { emit(s, { type: "notice", level: "info", code: "interjection_next_step", text: "下一步生效" }); return { delivery: "next_step", messageId }; }
       advance(s);
-      return { delivery: was === "exited" || was === "done" ? "resumed" : "new_turn" };
+      return { delivery: was === "exited" || was === "done" ? "resumed" : "new_turn", messageId };
     },
     interrupt: async (id) => {
       const s = must(id);
