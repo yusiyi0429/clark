@@ -1,7 +1,7 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import { CardSourceWordIssue } from "./taskCardView.js";
 import { Budget } from "./budget.js";
-import { LocalPermissionBrief, LocalPermissionMode, LocalQuestionRequestView } from "./localRunner.js";
+import { LocalPermissionBrief, LocalPermissionDecisionRequest, LocalPermissionMode, LocalQuestionAnswerRequest, LocalQuestionRequestView } from "./localRunner.js";
 import { PersonRef, ProjectTransfer } from "./projectTransfers.js";
 import { RoleRef } from "./roles.js";
 import { WorkerQueueReason, WorkerResources } from "./workers.js";
@@ -70,6 +70,12 @@ export const CardMerge = Type.Object({
 }, strict);
 
 /**
+ * 子会话的字母（18 节第 10 条）：每个项目里的子会话（卡、专题）按建立的先后编号 A、B……Z、AA、AB……，项目主管线、伙伴、网页、手机用同一套。
+ * 编号建了就不变、不复用（删掉 C，下一个照样是新字母）；一个子会话换了项目，在新项目里另给一个新字母。存在云端，读接口都带。
+ */
+export const SubSessionLetter = Type.String({ pattern: "^[A-Z]{1,3}$" });
+
+/**
  * 一个子会话。id 是卡的 id（执行事项）或专题的 id，kind 说是哪种。
  * queueReason：state = queued 时在等什么（worker 列表同一套：等开工、等空位、等本机上线、等前面的卡），别的为 null。
  * sessionId：最近一次本机执行（本机会话）的 id，没开过为 null；deviceId 是它在哪台电脑上。网页据此在那台电脑上接实时事件。
@@ -77,10 +83,12 @@ export const CardMerge = Type.Object({
  * updatedAt：最近一次动静（本机报的、卡或专题改的），树上同一格按它排。
  * merge：只有卡，最近一次验收通过的交回合回到哪了（见 CardMerge）；专题、还没过的卡为 null。
  * holdUntil：queueReason = quota（订阅额度用完，停着等恢复）时恢复的时间，界面「等额度恢复 · HH:MM」；读不到或不在等为 null。
+ * letter：它在所属项目里的字母（18 节第 10 条，见 SubSessionLetter）；不在项目里（「其他」）为 null。
  */
 export const SubSession = Type.Object({
   id: Type.String({ minLength: 1 }),
   kind: Type.Union([Type.Literal("card"), Type.Literal("topic")]),
+  letter: Nullable(SubSessionLetter),
   title: Type.String(),
   state: SubSessionState,
   waiting: Nullable(SubSessionWaiting),
@@ -257,6 +265,8 @@ export const WaitingItem = Type.Object({
   sessionId: Nullable(Type.String({ format: "uuid" })),
   deviceId: Nullable(Type.String({ format: "uuid" })),
   deviceName: Nullable(Type.String()),
+  /** 这一行是某个子会话的（在问你、等批准、要合回等）且它在项目里时，它的字母（SubSessionLetter）；别的为 null。 */
+  letter: Nullable(SubSessionLetter),
   dueAt: Nullable(Instant),
   answer: WaitingAnswer,
   person: Nullable(Type.Object({ personId: Type.String({ minLength: 1 }), name: Type.String() }, strict)),
@@ -426,6 +436,44 @@ export const SessionStopDoneRequest = Type.Object({ deviceId: Type.String({ form
 export type TSessionStopView = Static<typeof SessionStopView>;
 export type TClaimSessionStopsResponse = Static<typeof ClaimSessionStopsResponse>;
 export type TSessionStopDoneRequest = Static<typeof SessionStopDoneRequest>;
+
+/**
+ * 「请这台电脑对子会话做一件事」（18 节第 10 条：项目主管线按字母给子会话转话、重开、回答问题、批准；停下仍走上面的 SessionStopView）：
+ * 云端不指挥本机，云端记一条，开着的网页在那个会话所在的电脑上认领，照 command 调本机程序，再报结果。认领的规矩同停掉。
+ * - POST /api/me/session-commands/claim { deviceId }：认领这台电脑上的，回 { commands }（按登记先后）；两处同时认领只有一处拿到，认领 5 分钟没报结果可以重新认领。
+ * - POST /api/me/session-commands/:id/done { deviceId, result, message? }：done 做了；not_running 本机上没有这个会话了；expired 要回答、要批准的那一次已经失效
+ *  （答过了、这一轮停了）；failed 本机拒了（message 写本机回的原因）。报过的不再出现。
+ * command：
+ * - message：往会话里说一句（POST /v1/sessions/:sessionId/messages，{ text }）。会话停着（exited、做完一轮）的，本机会续上接着做——「重开」也是这一条。
+ * - answer：回答它在问的那一次（POST /v1/sessions/:sessionId/questions/:requestId，体是 answer）。
+ * - permission：批准或拒绝在等批准的那一步（POST /v1/sessions/:sessionId/permissions/:requestId，体是 decision）。只有本人明说才会登记 allow。
+ * sessionId 是本机会话的 id（SubSession.sessionId），deviceId 是它所在的电脑。
+ */
+export const SessionCommand = Type.Union([
+  Type.Object({ type: Type.Literal("message"), text: Type.String({ minLength: 1, maxLength: 4000 }) }, strict),
+  Type.Object({ type: Type.Literal("answer"), requestId: Type.String({ minLength: 1, maxLength: 120 }), answer: LocalQuestionAnswerRequest }, strict),
+  Type.Object({ type: Type.Literal("permission"), requestId: Type.String({ minLength: 1, maxLength: 120 }), decision: LocalPermissionDecisionRequest }, strict),
+]);
+export const SessionCommandView = Type.Object({
+  id: Type.String({ format: "uuid" }),
+  kind: Type.Union([Type.Literal("card"), Type.Literal("topic")]),
+  subSessionId: Type.String({ format: "uuid" }),
+  sessionId: Type.String({ format: "uuid" }),
+  deviceId: Type.String({ format: "uuid" }),
+  requestedAt: Instant,
+  command: SessionCommand,
+}, strict);
+export const ClaimSessionCommandsRequest = Type.Object({ deviceId: Type.String({ format: "uuid" }) }, strict);
+export const ClaimSessionCommandsResponse = Type.Object({ commands: Type.Array(SessionCommandView) }, strict);
+export const SessionCommandDoneRequest = Type.Object({
+  deviceId: Type.String({ format: "uuid" }),
+  result: Type.Union([Type.Literal("done"), Type.Literal("not_running"), Type.Literal("expired"), Type.Literal("failed")]),
+  message: Type.Optional(Type.String({ maxLength: 500 })),
+}, strict);
+export type TSessionCommand = Static<typeof SessionCommand>;
+export type TSessionCommandView = Static<typeof SessionCommandView>;
+export type TClaimSessionCommandsResponse = Static<typeof ClaimSessionCommandsResponse>;
+export type TSessionCommandDoneRequest = Static<typeof SessionCommandDoneRequest>;
 
 /**
  * 伙伴开探索子会话（工具 open_topic，/internal/me/topics，照 /internal 的 INTERNAL_CHAT_TOKEN 加 X-Owner-Id，不进公开 OpenAPI）：

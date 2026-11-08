@@ -4,6 +4,7 @@ import { Value } from "@sinclair/typebox/value";
 import {
   AcceptCardDraftsRequest, BackgroundQuery, BackgroundResponse, ClaimSessionStartsResponse, ConversationScope, CreateProjectRequest, ProjectDetailResponse,
   CardPlanBriefResponse, CardSplitRequestView, CreateProjectTransferRequest, ProjectBoardResponse, ProjectFeedResponse, ProjectPipelineResponse, ProjectTransfer, RouteResponse, UpdateProjectRequest, UpdateProjectTransferRequest, WorkHomeResponse,
+  BuddyActionParams, ClaimSessionCommandsResponse, PROJECT_ONLY_ACTIONS, SessionCommandDoneRequest, SUB_SESSION_REPORT_PREFIX,
 } from "../src/index.js";
 import { buildOpenApiDocument } from "../src/openapi.js";
 
@@ -15,7 +16,7 @@ beforeAll(() => {
   FormatRegistry.Set("date-time", (v) => !Number.isNaN(Date.parse(v)) && /T/.test(v));
 });
 
-const sub = { id: uuid, kind: "card", title: "修登录页", state: "waiting", waiting: "approval", queueReason: null, role: null, sessionId: uuid, deviceId: uuid,
+const sub = { id: uuid, kind: "card", letter: "B", title: "修登录页", state: "waiting", waiting: "approval", queueReason: null, role: null, sessionId: uuid, deviceId: uuid,
   autoStart: false, updatedAt: at, merge: null, holdUntil: null };
 const resources = { devices: [], running: 0, cap: null, cost: { today: { inputTokens: 0, outputTokens: 0, costUsd: null, costCny: null },
   month: { inputTokens: 0, outputTokens: 0, costUsd: null, costCny: null } }, quota: [{ deviceId: uuid, deviceName: "我的电脑", id: "claude", name: "Claude",
@@ -36,13 +37,13 @@ describe("新首页契约", () => {
         project: { projectId: uuid, name: "天枢新首页" } }, { taskId: "T-3", name: "新的一件", completedAt: null, project: null }] }] },
       other: { subSessions: [{ ...sub, kind: "topic", state: "queued", waiting: null, queueReason: "device_offline", sessionId: null, deviceId: null, autoStart: true }], items: [] },
       waiting: [{ id: `approval:${uuid}`, kind: "approval", title: "要运行命令", source: "天枢新首页", at, open: { kind: "project", id: uuid, focus: { sessionId: uuid, requestId: "p-1" } },
-        taskId: "T-1", projectId: uuid, sessionId: uuid, deviceId: uuid, deviceName: "我的电脑", dueAt: null, answer: "inline_local", person: null, month: null, question: null,
+        taskId: "T-1", projectId: uuid, sessionId: uuid, deviceId: uuid, deviceName: "我的电脑", letter: "B", dueAt: null, answer: "inline_local", person: null, month: null, question: null,
         permission: { requestId: "p-1", toolName: "Bash", title: "要运行命令", outsidePaths: [] } },
       { id: `question:${uuid}`, kind: "question", title: "先做哪一页？", source: null, at, open: { kind: "topic", id: uuid }, taskId: null, projectId: null, sessionId: uuid,
-        deviceId: uuid, deviceName: "我的电脑", dueAt: null, answer: "inline_local", person: null, month: null, permission: null,
+        deviceId: uuid, deviceName: "我的电脑", letter: "B", dueAt: null, answer: "inline_local", person: null, month: null, permission: null,
         question: { requestId: "q-1", askedAt: at, questions: [{ question: "先做哪一页？", header: "顺序", multiSelect: false, options: [{ label: "登录页", description: "" }] }] } },
       { id: "acceptance:T-9:2", kind: "acceptance", title: "请你认可「交付」第 2 条", source: "陈创峰", at, open: { kind: "task_detail", id: "T-9" }, taskId: null, projectId: null,
-        sessionId: null, deviceId: null, deviceName: null, dueAt: null, answer: "open", person: { personId: "p-2", name: "陈创峰" }, month: null, question: null, permission: null }],
+        sessionId: null, deviceId: null, deviceName: null, letter: null, dueAt: null, answer: "open", person: { personId: "p-2", name: "陈创峰" }, month: null, question: null, permission: null }],
     };
     expect(Value.Check(WorkHomeResponse, home)).toBe(true);
     // 子会话只有卡和专题；规划员、验收员是后台任务。
@@ -116,7 +117,7 @@ describe("新首页契约", () => {
     expect(Value.Check(UpdateProjectTransferRequest, { checkResult: check, check: "wait" })).toBe(true);
     expect(Value.Check(UpdateProjectTransferRequest, {})).toBe(false);
     const waiting = { id: `transfer:${uuid}`, kind: "transfer", title: "人豪把「Chat 服务」交给你", source: null, at, open: { kind: "transfer", id: uuid }, taskId: null,
-      projectId: uuid, sessionId: null, deviceId: null, deviceName: null, dueAt: null, answer: "open", person: person("人豪"), month: null, question: null, permission: null };
+      projectId: uuid, sessionId: null, deviceId: null, deviceName: null, letter: null, dueAt: null, answer: "open", person: person("人豪"), month: null, question: null, permission: null };
     expect(Value.Check(WorkHomeResponse, { period: "2026-11", projects: [], archivedCount: 0, month: { missions: [] }, other: { subSessions: [], items: [] },
       waiting: [waiting] })).toBe(true);
     expect(Value.Check(ProjectFeedResponse, { items: [
@@ -165,5 +166,33 @@ describe("新首页契约", () => {
       "/api/me/project-transfers/{id}/history", "/api/me/sub-sessions/{kind}/{id}/start", "/api/me/projects/{projectId}/board", "/api/me/projects/{projectId}/card-splits",
       "/api/me/projects/{projectId}/plan-brief", "/api/me/projects/{projectId}/card-drafts/accept"]) expect(paths[key]).toBeDefined();
     expect(paths["/api/me/tasks/{taskId}/pipeline"]).toBeUndefined();
+  });
+  it("子会话用字母、停了和要介入报进项目对话、项目主管线按字母管子会话（18 节第 10 条）", () => {
+    const sub = { kind: "card", id: uuid, letter: "AB", title: "修登录页" };
+    const question = { requestId: "q-1", questions: [{ question: "用哪个库？", header: "库", options: [{ label: "A", description: "" }], multiSelect: false }], askedAt: at };
+    expect(Value.Check(ProjectFeedResponse, { items: [
+      { kind: "sub_session_report", id: uuid, at, afterSequence: 12, sub, outcome: "round_done", summary: "登录页改完了，测试过了。" },
+      { kind: "sub_session_report", id: uuid, at, afterSequence: null, sub, outcome: "failed", summary: null },
+      { kind: "sub_session_decision", id: uuid, at, afterSequence: 13, sub, sessionId: uuid, deviceId: uuid, question, permission: null, status: "open", closedAt: null },
+    ] })).toBe(true);
+    // 字母只能是大写字母，最多三位。
+    for (const letter of ["a", "", "ABCD", "B1"]) expect(Value.Check(ProjectFeedResponse, { items: [
+      { kind: "sub_session_report", id: uuid, at, afterSequence: null, sub: { ...sub, letter }, outcome: "stopped", summary: null }] })).toBe(false);
+    expect(SUB_SESSION_REPORT_PREFIX).toBe("【子会话回报】");
+    expect(Value.Check(ClaimSessionCommandsResponse, { commands: [
+      { id: uuid, kind: "card", subSessionId: uuid, sessionId: uuid, deviceId: uuid, requestedAt: at, command: { type: "message", text: "先停在测试这步" } },
+      { id: uuid, kind: "topic", subSessionId: uuid, sessionId: uuid, deviceId: uuid, requestedAt: at,
+        command: { type: "answer", requestId: "q-1", answer: { choices: [["A"]] } } },
+      { id: uuid, kind: "card", subSessionId: uuid, sessionId: uuid, deviceId: uuid, requestedAt: at,
+        command: { type: "permission", requestId: "p-1", decision: { decision: "allow" } } },
+    ] })).toBe(true);
+    expect(Value.Check(SessionCommandDoneRequest, { deviceId: uuid, result: "expired" })).toBe(true);
+    expect(Value.Check(BuddyActionParams.sub_session_approve, { letter: "B", decision: "allow", allowForSession: true })).toBe(true);
+    expect(Value.Check(BuddyActionParams.sub_session_answer, { letter: "C", choices: [["第二个"]] })).toBe(true);
+    expect(Value.Check(BuddyActionParams.sub_session_tell, { letter: "b", text: "停一下" })).toBe(false);
+    expect([...PROJECT_ONLY_ACTIONS]).toEqual(["sub_session_tell", "sub_session_stop", "sub_session_restart", "sub_session_answer", "sub_session_approve"]);
+    const paths = buildOpenApiDocument().paths!;
+    expect(paths["/api/me/session-commands/claim"]).toBeDefined();
+    expect(paths["/api/me/session-commands/{id}/done"]).toBeDefined();
   });
 });
