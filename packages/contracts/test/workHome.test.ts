@@ -3,7 +3,7 @@ import { FormatRegistry } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import {
   AcceptCardDraftsRequest, BackgroundQuery, BackgroundResponse, ClaimSessionStartsResponse, ConversationScope, CreateProjectRequest, ProjectDetailResponse,
-  CardPlanBriefResponse, CardSplitRequestView, ProjectBoardResponse, ProjectFeedResponse, ProjectPipelineResponse, ProjectTransfer, RouteResponse, UpdateProjectRequest, UpdateProjectTransferRequest, WorkHomeResponse,
+  CardPlanBriefResponse, CardSplitRequestView, CreateProjectTransferRequest, ProjectBoardResponse, ProjectFeedResponse, ProjectPipelineResponse, ProjectTransfer, RouteResponse, UpdateProjectRequest, UpdateProjectTransferRequest, WorkHomeResponse,
 } from "../src/index.js";
 import { buildOpenApiDocument } from "../src/openapi.js";
 
@@ -99,8 +99,12 @@ describe("新首页契约", () => {
       remotes: [{ name: "origin", url: "https://github.com/x/y.git" }], uncommitted: ["a.ts"], uncommittedCount: 1, unpushed: [] }, recentFiles: null };
     const transfer = { id: uuid, projectId: uuid, projectName: "Chat 服务", from: person("人豪"), to: person("晨星"), status: "sent", startedAt: at, decidedAt: at,
       includeHistory: false, running: "wait", check: "wait", note: [{ title: "到哪了", lines: ["11 月目标：上线 · 11/30 验收"] }], checkResult: check,
-      clone: { repoUrl: "https://github.com/x/y.git", branch: "main" } };
+      clone: { repoUrl: "https://github.com/x/y.git", branch: "main" }, afterSequence: 12 };
     expect(Value.Check(ProjectTransfer, transfer)).toBe(true);
+    // 转交卡排在项目对话哪条消息后面（项目对话的消息不带时间）；对话还没消息时为 null。
+    expect(Value.Check(ProjectTransfer, { ...transfer, afterSequence: null })).toBe(true);
+    expect(Value.Check(CreateProjectTransferRequest, { toPersonId: "p-晨星", afterSequence: 12 })).toBe(true);
+    expect(Value.Check(CreateProjectTransferRequest, { toPersonId: "p-晨星", afterSequence: 0 })).toBe(false);
     expect(Value.Check(ProjectTransfer, { ...transfer, status: "draft" })).toBe(false);
     // 本机 clone 不认的地址（本地路径、file://）云端给 null，不给网页一个点了才报错的地址。
     expect(Value.Check(ProjectTransfer, { ...transfer, clone: { repoUrl: "file:///D:/code/y", branch: null } })).toBe(false);

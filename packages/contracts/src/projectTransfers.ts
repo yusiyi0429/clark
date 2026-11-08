@@ -42,6 +42,8 @@ export const HandoverNote = Type.Array(HandoverSection, { maxItems: 12 });
  * - clone：接手人「拉到这台电脑」用的仓库地址和分支（检查结果里 origin（没有就第一个）远端；分支取 handover/ 开头的没推完分支，没有就当前分支），
  *   形状同本机的 POST /v1/projects/:projectId/clone（LocalRepoUrl、LocalBranchName）。不是 git、远端不是 https://、ssh://、git@ 开头（本地路径、file:// 等）为 null。
  *   远端地址照本机检查结果存（本机已去掉口令：https 去掉整段 user:password，ssh 只去密码、留着用户名），云端不再改。
+ * - afterSequence：发起「准备交接」时这个项目对话最后一条消息的 sequence（ConversationMessage.sequence）。项目对话的消息从 Chat 读回来不带时间，
+ *   网页按它把转交卡插在那条消息后面。发起时网页传上来；没传时云端读这个对话当时最后一条补上；对话还没有消息或读不到为 null。
  */
 export const ProjectTransfer = Type.Object({
   id: Type.String({ format: "uuid" }),
@@ -58,10 +60,17 @@ export const ProjectTransfer = Type.Object({
   note: Nullable(HandoverNote),
   checkResult: Nullable(LocalHandoverCheck),
   clone: Nullable(Type.Object({ repoUrl: LocalRepoUrl, branch: Nullable(LocalBranchName) }, strict)),
+  afterSequence: Nullable(Type.Integer({ minimum: 1 })),
 }, strict);
 
-/** POST /api/me/projects/:projectId/transfers（项目负责人，201）：发起。给自己 400；人员目录里没有 404；已有没了结的 409 TRANSFER_OPEN；归档的 409。 */
-export const CreateProjectTransferRequest = Type.Object({ toPersonId: Type.String({ minLength: 1 }) }, strict);
+/**
+ * POST /api/me/projects/:projectId/transfers（项目负责人，201）：发起。给自己 400；人员目录里没有 404；已有没了结的 409 TRANSFER_OPEN；归档的 409。
+ * afterSequence：网页看到的这个项目对话最后一条消息的 sequence（转交卡排在它后面）；不传时云端自己读。
+ */
+export const CreateProjectTransferRequest = Type.Object({
+  toPersonId: Type.String({ minLength: 1 }),
+  afterSequence: Type.Optional(Type.Integer({ minimum: 1 })),
+}, strict);
 
 /** PATCH /api/me/project-transfers/:id（原负责人，preparing 时）：改说明、带不带对话、两个选择、本机检查结果。至少带一样；不在准备中 409。 */
 export const UpdateProjectTransferRequest = Type.Object({

@@ -18352,6 +18352,7 @@ export interface components {
                     repoUrl: string;
                     branch: string | null;
                 } | null;
+                afterSequence: number | null;
             } | null;
         };
         HomeMonthTask: {
@@ -18579,6 +18580,7 @@ export interface components {
                         repoUrl: string;
                         branch: string | null;
                     } | null;
+                    afterSequence: number | null;
                 } | null;
             }[];
             archivedCount: number;
@@ -18976,6 +18978,7 @@ export interface components {
                     repoUrl: string;
                     branch: string | null;
                 } | null;
+                afterSequence: number | null;
             } | null;
         };
         ProjectListResponse: {
@@ -19045,6 +19048,7 @@ export interface components {
                         repoUrl: string;
                         branch: string | null;
                     } | null;
+                    afterSequence: number | null;
                 } | null;
             }[];
         };
@@ -19134,6 +19138,7 @@ export interface components {
                         repoUrl: string;
                         branch: string | null;
                     } | null;
+                    afterSequence: number | null;
                 } | null;
             };
             period: string;
@@ -19755,9 +19760,11 @@ export interface components {
                 repoUrl: string;
                 branch: string | null;
             } | null;
+            afterSequence: number | null;
         };
         CreateProjectTransferRequest: {
             toPersonId: string;
+            afterSequence?: number;
         };
         UpdateProjectTransferRequest: {
             note?: {

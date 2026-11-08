@@ -110520,7 +110520,8 @@
                   "check",
                   "note",
                   "checkResult",
-                  "clone"
+                  "clone",
+                  "afterSequence"
                 ],
                 "properties": {
                   "id": {
@@ -110892,6 +110893,17 @@
                             ]
                           }
                         }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "afterSequence": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
                       },
                       {
                         "type": "null"
@@ -112207,7 +112219,8 @@
                         "check",
                         "note",
                         "checkResult",
-                        "clone"
+                        "clone",
+                        "afterSequence"
                       ],
                       "properties": {
                         "id": {
@@ -112579,6 +112592,17 @@
                                   ]
                                 }
                               }
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "afterSequence": {
+                          "anyOf": [
+                            {
+                              "minimum": 1,
+                              "type": "integer"
                             },
                             {
                               "type": "null"
@@ -115094,7 +115118,8 @@
                   "check",
                   "note",
                   "checkResult",
-                  "clone"
+                  "clone",
+                  "afterSequence"
                 ],
                 "properties": {
                   "id": {
@@ -115471,6 +115496,17 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "afterSequence": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 }
               },
@@ -115556,7 +115592,8 @@
                         "check",
                         "note",
                         "checkResult",
-                        "clone"
+                        "clone",
+                        "afterSequence"
                       ],
                       "properties": {
                         "id": {
@@ -115933,6 +115970,17 @@
                               "type": "null"
                             }
                           ]
+                        },
+                        "afterSequence": {
+                          "anyOf": [
+                            {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
                         }
                       }
                     },
@@ -116135,7 +116183,8 @@
                       "check",
                       "note",
                       "checkResult",
-                      "clone"
+                      "clone",
+                      "afterSequence"
                     ],
                     "properties": {
                       "id": {
@@ -116507,6 +116556,17 @@
                                 ]
                               }
                             }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "afterSequence": {
+                        "anyOf": [
+                          {
+                            "minimum": 1,
+                            "type": "integer"
                           },
                           {
                             "type": "null"
@@ -119762,7 +119822,8 @@
           "check",
           "note",
           "checkResult",
-          "clone"
+          "clone",
+          "afterSequence"
         ],
         "properties": {
           "id": {
@@ -120139,6 +120200,17 @@
                 "type": "null"
               }
             ]
+          },
+          "afterSequence": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -120152,6 +120224,10 @@
           "toPersonId": {
             "minLength": 1,
             "type": "string"
+          },
+          "afterSequence": {
+            "minimum": 1,
+            "type": "integer"
           }
         }
       },
