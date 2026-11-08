@@ -147,7 +147,7 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
   const dock = <PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} />;
   // 新首页里输入框只在这台电脑上跑着这张卡时出（别处看摘要）；老页面照旧灰着。
   const composer = agent && (session || !embedded)
-    ? <SessionComposer placeholder={`给${item.title}插话…`} disabled={!canAct} onSend={say} dock={dock} subject={{ kind: "card", id: cardId }} />
+    ? <SessionComposer label={`给${item.title}插话`} disabled={!canAct} onSend={say} dock={dock} subject={{ kind: "card", id: cardId }} />
     : <div className={s.composerDock}>{dock}</div>;
   const chat = (
     <PendingBoxes>

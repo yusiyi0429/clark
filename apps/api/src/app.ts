@@ -145,7 +145,7 @@ import { registerTaskPipelineRoutes } from "./routes/taskPipelines.js";
 import { registerProjectRoutes } from "./routes/projects.js";
 import { registerProjectTransferRoutes } from "./routes/projectTransfers.js";
 import { registerBuddyActionRoutes } from "./routes/buddyActions.js";
-import { collapsePlan, runExtras } from "./buddyActions.js";
+import { closeQuestions, collapsePlan, runExtras } from "./buddyActions.js";
 import { registerTaskContinuityRoutes } from "./routes/taskContinuity.js";
 import { registerTaskCardRoutes, type BoardAgents } from "./routes/taskCards.js";
 import { planTaskOpener, taskPageFacts } from "./taskCards.js";
@@ -547,7 +547,9 @@ export async function buildApp({
     onInterrupt: async (_viewer, runId) => {
       const plan = await collapsePlan(pool.query.bind(pool), runId);
       if (plan) chat?.inject(runId, { type: "plan", plan });
-    } }) : undefined;
+    },
+    // 选项框（18 节第 9 条）：本人发出新消息，这个对话里还 open 的收掉，回答的那张标 answered。
+    onMessage: (viewer, scope, answered) => closeQuestions(pool.query.bind(pool), viewer.personId, scope, answered, now()) }) : undefined;
   // 会话纪要（后台，CONVERSATION_DIGEST_MODEL / CONVERSATION_DIGEST_THINKING，不配时 LIGHT_MODEL、不开思考）与回看。
   const conversationDigests = createConversationDigests({ pool, chat, baseUrl: env.piBaseUrl, apiKey: env.piApiKey,
     ...agentModel(env.agentModels, "conversationDigest", { modelId: env.lightModel }), streamSimple: conversationDigestStream });

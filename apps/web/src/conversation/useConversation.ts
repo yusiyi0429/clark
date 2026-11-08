@@ -614,6 +614,8 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
    */
   async function send(message: string, references: SentCardRef[], options: { resumeRunId?: string; scopeOverride?: TReadScopeParams;
     answers?: { input: TAskAnswerInput; record: TAskAnswerRecord }; auto?: boolean; attach?: { runId: string; running: boolean; since?: number };
+    /** 这一句是在回答伙伴的哪个选项框（buddy_question）：原文照发，那张标 answered。 */
+    buddyQuestionId?: string;
     /** 这一句带的附件（新首页的输入框自己传好了给回执）；不给时用输入条里待发的那几份。 */
     attachments?: Attachment[] } = {}): Promise<boolean> {
     const input = message.trim();
@@ -629,7 +631,7 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
       if (cut || cutPlan) setMessages((current) => [...current, { sequence: (current.at(-1)?.sequence ?? 0) + 1, role: "assistant", content: cut,
         ...(cutPlan ? { plan: { ...cutPlan, collapsed: true } } : {}) }]);
     }
-    const text = attach ? "" : messageContext && !options.resumeRunId && !options.answers ? `${messageContext}
+    const text = attach ? "" : messageContext && !options.resumeRunId && !options.answers && !options.buddyQuestionId ? `${messageContext}
 
 ${input}` : input;
     const controller = new AbortController();
@@ -717,6 +719,7 @@ ${input}` : input;
               ...(anchorSelection ? { anchorSelection } : {}),
               ...(options.resumeRunId ? { resumeRunId: options.resumeRunId } : {}),
               ...(options.answers ? { answers: options.answers.input } : {}),
+              ...(options.buddyQuestionId ? { buddyQuestionId: options.buddyQuestionId } : {}),
               ...(options.scopeOverride ? { scopeOverride: options.scopeOverride } : {}),
               // 首页对话在每个二级页面都开着：带上本人此刻在哪个页面，Agent 才知道「这页」指什么。
               ...(scope === "global" ? { pagePath: window.location.pathname } : {}) }),

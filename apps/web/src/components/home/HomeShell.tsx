@@ -49,7 +49,7 @@ import { GoalBar, ProjectTrail } from "./ProjectParts";
 import { TransferFlow, TransferView } from "./Transfer";
 import type { TimedBlock } from "@/components/work/WorkTimeline";
 import { useProjects } from "./useProjects";
-import { projectHref, type Project } from "@/lib/home/projects";
+import { projectHref, projectWorking, type Project } from "@/lib/home/projects";
 import { usePhone } from "./usePhone";
 import { ViewChrome, PAGE_TITLE, monthHref, scopeOf, viewOf, type View } from "./view";
 import { MONTH_PAGE, SECONDARY_PAGES, type SecondaryPageProps } from "./pages";
@@ -507,10 +507,14 @@ function HomeFrame({ account }: { account: Account }) {
   };
   // 连接要处理（本人行的琥珀点，设计 9.4）：这台电脑没就绪，或额度用完（≤10%）。飞书授权失效等 B 的字段到了再加。
   const alert = (!handheld && machine.alert) || machine.quotaAlert === "danger";
+  // 正在后台干活的项目（左栏标题右边闪的灰点）：子会话在跑、规划员或验收员在做，或正开着的这个项目对话在回复。
+  const working = useMemo(() => new Set(projects.projects
+    .filter((project) => projectWorking(project, work.workers, speaking && view.kind === "project" && view.id === project.id))
+    .map((project) => project.id)), [projects.projects, work.workers, speaking, view]);
 
   const left = (
     <LeftColumn data={data} view={view} buddy={buddy} speaking={speaking} go={go} phone={handheld} account={account} month={month} onRetryPlan={api.planFailed ? () => void api.retryPlan() : null}
-      projects={projects.projects} archived={projects.archived} onCreate={(name) => projects.actions.create(name)} cardAt={cardAt}
+      projects={projects.projects} archived={projects.archived} onCreate={(name) => projects.actions.create(name)} cardAt={cardAt} working={working}
       today={todayLabel(work.plan?.today ?? null)} alert={alert} trail={handheld ? backgroundButton : null}
       top={handheld && data.waiting.length ? (
         <section aria-label="等你" className={h.phoneWaiting}>

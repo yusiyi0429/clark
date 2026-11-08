@@ -6,7 +6,7 @@ import { createMockRunner } from "@/lib/local/mock";
 import type { Project } from "@/lib/home/projects";
 import { projectLine } from "@/lib/home/projects";
 import { handoverRule, transferLine, type Transfer } from "@/lib/home/transfer";
-import { HandoverCard, HandoverRule, HandoverSummary, PullChip, TransferFlow, TransferHistory, TransferPreview } from "./Transfer";
+import { CONFIRM_MS, HandoverCard, HandoverRule, HandoverSummary, PullChip, TransferFlow, TransferHistory, TransferPreview, twoStepPress } from "./Transfer";
 
 const me = { personId: "sun-mingze", name: "孙铭泽" };
 const chen = { personId: "chen-chenxing", name: "陈晨星" };
@@ -85,5 +85,38 @@ describe("项目转交（16.7，接 B 的转交接口）", () => {
   it("文件夹 chip：「拉到这台电脑」，拉不下来写原因", () => {
     expect(renderToStaticMarkup(<PullChip state="idle" onPull={() => undefined} />)).toContain("拉到这台电脑");
     expect(renderToStaticMarkup(<PullChip state="failed" reason="没拉下来：没有仓库权限" onPull={() => undefined} />)).toMatch(/data-tone="danger".*没有仓库权限/);
+  });
+
+  it("「交给 {名字}」点两次才发出：点一次只变成「确认转交」，点别处、Esc、失焦或过约 5 秒没再点就变回去", () => {
+    vi.useFakeTimers();
+    try {
+      const act = vi.fn();
+      const armed = vi.fn();
+      const step = twoStepPress(act, armed);
+      step.press();
+      expect(act).not.toHaveBeenCalled();
+      expect(armed).toHaveBeenLastCalledWith(true);
+      step.press();
+      expect(act).toHaveBeenCalledTimes(1);
+      expect(armed).toHaveBeenLastCalledWith(false);
+
+      step.press();
+      step.disarm();
+      expect(armed).toHaveBeenLastCalledWith(false);
+      step.press();
+      expect(act).toHaveBeenCalledTimes(1);
+
+      vi.advanceTimersByTime(CONFIRM_MS);
+      expect(armed).toHaveBeenLastCalledWith(false);
+      step.press();
+      expect(act).toHaveBeenCalledTimes(1);
+      expect(armed).toHaveBeenLastCalledWith(true);
+      expect(CONFIRM_MS).toBe(5000);
+    } finally {
+      vi.useRealTimers();
+    }
+    const card = render(<HandoverCard transfer={transfer({ note: NOTE })} onChanged={noop} />);
+    expect(card).toMatch(/aria-live="polite"[^>]*>.*data-testid="handover-send"[^>]*>交给 陈晨星</);
+    expect(card).not.toContain("确认转交");
   });
 });

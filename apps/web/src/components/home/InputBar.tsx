@@ -22,8 +22,10 @@ import h from "@/styles/home.module.css";
 type Draft = { key: number; file: File; url: string | null };
 const MAX_HEIGHT = 168;
 
-export function InputBar({ placeholder, onSend, busy = false, interruptible = false, onStop, disabled = false, textRequired = false, context, under, dock, draftKey, fill, onText, onHeight }: {
+export function InputBar({ placeholder, label, onSend, busy = false, interruptible = false, onStop, disabled = false, textRequired = false, context, under, dock, draftKey, fill, onText, onHeight }: {
   placeholder: string;
+  /** 读屏念的名字；不给时念占位字（子会话不放占位字，名字从这里给）。 */
+  label?: string;
   /** 发出去：true 收下；false 或报错放回去。 */
   onSend: (text: string, files: File[]) => Promise<boolean>;
   /** 回答进行中：右边是停止，回车不发。 */
@@ -187,7 +189,7 @@ export function InputBar({ placeholder, onSend, busy = false, interruptible = fa
             <DictationMirror field={field} value={text} marks={dictation.marks} polishing={dictation.polishing} fresh={dictation.fresh} />
             <textarea ref={field} rows={1} value={text} disabled={disabled}
               placeholder={dictation.phase === "finishing" ? "正在收尾…" : dictation.active ? (dictation.live ? "正在听…" : "正在录音，结束后转写…") : placeholder}
-              aria-label={placeholder}
+              aria-label={label ?? placeholder}
               onChange={(event) => { if (!dictation.change(event.target.value)) setText(event.target.value); }}
               onPaste={(event) => { const files = [...event.clipboardData.files]; if (!files.length) return; event.preventDefault(); add(files); }}
               onCompositionStart={() => { composing.current = true; dictation.composition(true); }}

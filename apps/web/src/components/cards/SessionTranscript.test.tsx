@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { foldEvents, type SessionEntry } from "@/lib/local/sessionView";
 import type { TLocalSessionEvent } from "@/lib/local/runner";
-import { SessionTranscript } from "./SessionTranscript";
+import { SessionComposer, SessionTranscript } from "./SessionTranscript";
 
 const step = (seq: number, title: string, at: string, done = true): SessionEntry => ({ kind: "step", seq, at, toolUseId: `t${seq}`, title, done, isError: false });
 const render = (entries: SessionEntry[], live = true) =>
@@ -79,5 +79,15 @@ describe("子会话回执（17.4）", () => {
     const away = renderToStaticMarkup(<SessionTranscript entries={view.entries} agentName="Claude Code" canAct={false} onDecide={vi.fn()} live />);
     expect(away.replace(/<[^>]+>/g, "")).toContain("顺手提交没读到");
     expect(away).not.toContain("重发");
+  });
+});
+
+describe("子会话的输入框", () => {
+  it("不放占位字（空着就是一行），读屏名字还是「给{子会话名}插话」", () => {
+    const html = renderToStaticMarkup(<SessionComposer label="给拆左栏插话" disabled={false} onSend={vi.fn()} subject={{ kind: "card", id: "00000000-0000-4000-8000-0000000000c1" }} />);
+    const box = html.match(/<textarea[^>]*>/)?.[0] ?? "";
+    expect(box).toContain('aria-label="给拆左栏插话"');
+    expect(box).toMatch(/placeholder=""/);
+    expect(html).not.toContain("插话…");
   });
 });

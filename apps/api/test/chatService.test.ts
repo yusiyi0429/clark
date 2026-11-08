@@ -1289,4 +1289,82 @@ describe("伙伴代本人做事走 Chat（17.4）", () => {
         { type: "error", code: "CHAT_FAILED", message: "对话服务这次没有接下请求。", scope: "global", sequence: 2 }]);
     });
   }, 30_000);
+  it("选项框（18 节第 9 条 ask_user）：参数照规矩校验；存成这一轮的卡、经流推给网页、读历史读得回；本人发出任何新消息把 open 的标 dismissed，带 buddyQuestionId 的标 answered；项目对话的框只被项目对话里的话收掉", async () => {
+    const deploy = { header: "部署方式", question: "这次发到哪？", options: [
+      { label: "只发预发", detail: "先在预发看一眼，不碰生产", recommended: true }, { label: "预发和生产", detail: "一起发，省一轮" }] };
+    const when = { header: "时间", question: "什么时候发？", options: [{ label: "今天", detail: "现在就发" }, { label: "本周五", detail: "等周五没人用的时候" }], multiSelect: false };
+    const asks: unknown[][] = [];
+    let act: (name: string, args: unknown, extra?: Record<string, unknown>) => Promise<{ statusCode: number; json: () => any }> = async () => { throw new Error("not ready"); };
+    const chat = await fakeChat({
+      conversations: ["chat-conversation"],
+      pages: { "0": { messages: [{ role: "user", text: "部署吧", runId: RUN }, { role: "assistant", text: "先问两件事", runId: RUN }],
+        runs: [{ runId: RUN, status: "completed" }], nextCursor: null } },
+      // 这一轮里伙伴调 ask_user（队列里有的话），然后结束这一轮。
+      turn: (res) => void (async () => {
+        sse(res, [{ type: "turn_started" }, { type: "message", delta: "先问两件事" }], false);
+        const questions = asks.shift();
+        if (questions) expect((await act("ask_user", { questions })).statusCode).toBe(200);
+        res.end(`data: ${JSON.stringify({ conversationId: "chat-conversation", runId: RUN, scope: "global", sequence: 9, type: "done", status: "completed" })}\n\n`);
+      })(),
+    });
+    await withChat(chat, countingRuntime(), async (t) => {
+      const cookie = await t.memberCookie();
+      act = (name, args, extra = { runId: RUN, conversationId: "chat-conversation" }) => t.app.inject({ method: "POST", url: `/internal/me/buddy-actions/${name}`,
+        headers: { authorization: `Bearer ${CHAT_TOKEN}`, "x-owner-id": TEST_MEMBER.personId }, payload: { args, ...extra } });
+      const say = (payload: Record<string, unknown>) => t.app.inject({ method: "POST", url: "/api/conversations/global/messages",
+        headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream" }, payload });
+      const cards = async () => (await t.app.inject({ method: "GET", url: "/api/conversations/global/messages", headers: { cookie } })).json()
+        .messages.find((message: { role: string }) => message.role === "assistant").cards;
+
+      // 没授权也能用（只动界面）；动作清单里有它，说明写清什么时候用。
+      const listed = (await t.app.inject({ method: "GET", url: "/internal/me/buddy-actions",
+        headers: { authorization: `Bearer ${CHAT_TOKEN}`, "x-owner-id": TEST_MEMBER.personId } })).json().actions
+        .find((action: { name: string }) => action.name === "ask_user");
+      expect(listed).toMatchObject({ kind: "ui", description: expect.stringContaining("不要把问题写成一段话") });
+      // 参数校验：推荐的不在第一个、一题只有一个选项、选项没说明、超过 4 题都是 400；这一轮没带 runId 出不来。
+      const bad = [
+        { questions: [{ ...deploy, options: [deploy.options[1], deploy.options[0]] }] },
+        { questions: [{ ...deploy, options: [deploy.options[0]] }] },
+        { questions: [{ ...deploy, options: [{ label: "只发预发" }, deploy.options[1]] }] },
+        { questions: [deploy, when, deploy, when, deploy] },
+      ];
+      for (const args of bad) expect([(await act("ask_user", args)).statusCode, (await act("ask_user", args)).json().code]).toEqual([400, "INVALID_ARGS"]);
+      const noTurn = await act("ask_user", { questions: [deploy] }, {});
+      expect([noTurn.statusCode, noTurn.json().code]).toEqual([409, "NO_TURN"]);
+
+      // 第一轮：伙伴出一个框，经 card 事件推给网页；读历史在那一轮的回答上、open。
+      asks.push([deploy, when]);
+      const first = events((await say({ message: "部署吧" })).body).filter((event) => event.type === "card");
+      expect(first).toEqual([expect.objectContaining({ runId: RUN, scope: "global",
+        card: { kind: "buddy_question", questionId: expect.any(String), questions: [deploy, when], status: "open" } })]);
+      const firstId = (first[0].card as { questionId: string }).questionId;
+      expect(await cards()).toEqual([{ kind: "buddy_question", questionId: firstId, questions: [deploy, when], status: "open" }]);
+
+      // 本人没答、聊了别的：那张 dismissed；伙伴这一轮又出了一个，新的那张 open。
+      asks.push([deploy]);
+      const second = events((await say({ message: "先说说昨天的会" })).body).find((event) => event.type === "card")!;
+      const secondId = (second.card as { questionId: string }).questionId;
+      expect((await cards()).map((card: { questionId: string; status: string }) => [card.questionId, card.status])).toEqual([[firstId, "dismissed"], [secondId, "open"]]);
+
+      // 点选项回答：网页把选择拼成一句话发出、带 buddyQuestionId；那张 answered。Chat 那边只收到原话（不认识的字段 Chat 会整轮拒收）。
+      await say({ message: "部署方式：只发预发（推荐）", buddyQuestionId: secondId });
+      expect((await cards()).map((card: { status: string }) => card.status)).toEqual(["dismissed", "answered"]);
+      expect(JSON.parse(chat.turns().at(-1)!.body)).not.toHaveProperty("buddyQuestionId");
+      // 已经收掉的不能再答成 answered。
+      await say({ message: "还是预发和生产", buddyQuestionId: firstId });
+      expect((await cards()).map((card: { status: string }) => card.status)).toEqual(["dismissed", "answered"]);
+
+      // 项目对话里出的框记在那个项目对话上：伙伴台的话收不掉它，只有项目对话里的话收掉。
+      const projectId = (await t.app.inject({ method: "POST", url: "/api/me/projects", headers: { cookie, origin: t.publicOrigin }, payload: { name: "对话质量" } })).json().projectId as string;
+      const pipeline = (await t.app.inject({ method: "POST", url: `/api/me/projects/${projectId}/pipeline`, headers: { cookie, origin: t.publicOrigin } })).json().conversationId as string;
+      const projectRun = randomUUID();
+      const inProject = (await act("ask_user", { questions: [when] }, { runId: projectRun, conversationId: pipeline })).json().result.questionId as string;
+      const status = async () => (await t.sql("SELECT scope,status FROM buddy_questions WHERE id=$1", [inProject]))[0];
+      await say({ message: "伙伴台这边说一句" });
+      expect(await status()).toEqual({ scope: `project:${projectId}`, status: "open" });
+      await t.app.inject({ method: "POST", url: `/api/conversations/${encodeURIComponent(`project:${projectId}`)}/messages`,
+        headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream" }, payload: { message: "时间：本周五", buddyQuestionId: inProject } });
+      expect(await status()).toEqual({ scope: `project:${projectId}`, status: "answered" });
+    });
+  }, 30_000);
 });

@@ -8,6 +8,7 @@
 import type { THomeItem, TProject } from "@warmap/contracts";
 import { transferLine, type Person, type Transfer } from "./transfer";
 import type { HomeProject, SubSession, WorkHomeData } from "./types";
+import type { Worker } from "@/lib/work/workers";
 
 export { projectHref, projectInfoHref } from "./derive";
 
@@ -87,6 +88,21 @@ export function ago(iso: string, now = Date.now()): string {
   if (minutes < 60) return minutes < 1 ? "刚刚" : `${minutes} 分钟前`;
   const hours = Math.floor(minutes / 60);
   return hours < 24 ? `${hours} 小时前` : `${Math.floor(hours / 24)} 天前`;
+}
+
+type BackgroundWorker = Pick<Worker, "kind" | "state" | "mark" | "taskId" | "projectId" | "cardId" | "topicId">;
+
+/**
+ * 项目在后台干活（左栏标题右边那颗闪的灰点）：项目下有子会话在跑、项目对话正在回复（replying），
+ * 或者这个项目的会话、规划员、验收员在这台电脑上正做着（挂着的 Task 下的，或登记带了这个项目的，或是这个项目的卡和专题）。
+ * 进行中带标记的只有「验收中」（云端验收员在验）算；等你批准、等你回复、暂停、受阻、验收没过都不算在干活。
+ */
+export function projectWorking(project: Project, workers: readonly BackgroundWorker[], replying: boolean): boolean {
+  if (replying || project.subSessions.some((sub) => sub.state === "running")) return true;
+  const taskIds = new Set(project.goals.map((goal) => goal.taskId));
+  const subIds = new Set(project.subSessions.map((sub) => sub.id));
+  return workers.some((worker) => worker.state === "doing" && (!worker.mark || worker.mark === "reviewing")
+    && ((!!worker.taskId && taskIds.has(worker.taskId)) || worker.projectId === project.id || subIds.has(worker.cardId ?? worker.topicId ?? "")));
 }
 
 /**

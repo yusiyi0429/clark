@@ -3,7 +3,7 @@ import type { FastifyInstance } from "fastify";
 import { FormatRegistry } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import {
-  BuddyActionParams, BUDDY_ACTION_NAMES, type BuddyActionName, type TBudget, type TBuddyActionSpec, type TBuddyAuditEntry, type TBuddyAuthority,
+  BuddyActionParams, BUDDY_ACTION_NAMES, type BuddyActionName, type TBudget, type TBuddyActionSpec, type TBuddyAskQuestion, type TBuddyAuditEntry, type TBuddyAuthority,
   type TBuddyMessageDraft, type TBuddyPlan, type TBuddyUiEffect, type TConversationCard, type TSessionStopView, type TTrashItem,
 } from "@warmap/contracts";
 import type { Static } from "@sinclair/typebox";
@@ -35,7 +35,7 @@ if (!FormatRegistry.Has("uuid")) FormatRegistry.Set("uuid", (value) => UUID_PATT
 
 type Kind = TBuddyActionSpec["kind"];
 const KIND: Record<BuddyActionName, Kind> = {
-  read_work_home: "read", read_project: "read", find_people: "read", open_page: "ui", update_plan: "plan",
+  read_work_home: "read", read_project: "read", find_people: "read", open_page: "ui", update_plan: "plan", ask_user: "ui",
   set_appearance: "write", set_feishu_push: "write", start_sub_session: "write", stop_sub_session: "write", archive_sub_session: "write",
   delete_sub_session: "write", create_project: "write", rename_project: "write", archive_project: "write", link_task_to_project: "write",
   transfer_project: "write", split_cards: "write", set_budget: "write", message_project: "write", send_message: "write",
@@ -62,6 +62,11 @@ const DESCRIPTION: Record<BuddyActionName, string> = {
     + "立即返回，不等项目对话回完；项目对话做完、出问题、要本人拿主意时再在总管线里回报本人。",
   send_message: "给同事转达一句话（toPersonIds 是人员目录里的 id）。不会直接发：先出一张卡给本人看，本人点「发出」才由天枢机器人发，开头是「本人名字请我转达：」。",
   update_plan: "计划清单：要做两步以上的事时，先列出步骤（每次交整张清单，status 为 pending / in_progress / completed），做的过程中更新。少于两步不用列。",
+  ask_user: "出一个选项框问本人。开工前要本人拍板、或者有几种做法可选时用它，不要把问题写成一段话让本人自己组织回答。"
+    + "每个问题：header 是两到六个字的短标题（如「部署方式」），question 是题干，给 2–4 个选项，每个选项一个短标签加一行说明（代价、含义）；"
+    + "你推荐的那个放第一个、标 recommended（每题最多一个，没有推荐就都不标）；本人能多选的题标 multiSelect。「自己填」界面会另给，不用写进选项。"
+    + "一次最多 4 个问题，只问真要本人定的；只有一种合理做法、或者只是确认能不能动手时不用它，直接说或直接做。"
+    + "调完这一轮就结束：回答里最多再说一句，不要接着往下做，等本人回答。本人的回答会作为下一条消息发来（点选的会拼成「短标题：选项」）；本人也可能先聊别的、不答，那就照新的话办。",
 };
 
 const BUDDY_DAILY_MESSAGES = 20;
@@ -334,6 +339,16 @@ const handlers: Handlers = {
     const list = to.map((personId) => names.get(personId)!).join("、");
     return { summary: `给${list}的话写好了，等本人在卡上点「发出」`, result: { draftId: id }, undo: null, card: { kind: "buddy_message", draftId: id } };
   },
+  ask_user: async (deps, call, args) => {
+    const misplaced = args.questions.find((question) => question.options.some((option, index) => option.recommended && index > 0));
+    if (misplaced) throw new BuddyError(400, "INVALID_ARGS", `参数不对：「${misplaced.header}」推荐的选项要放在第一个，每题最多推荐一个`);
+    if (!call.runId) throw new BuddyError(409, "NO_TURN", "这一轮没带 runId，选项框出不来，请把问题直接写在回答里");
+    const id = randomUUID();
+    await deps.q(`INSERT INTO buddy_questions(id,owner_id,scope,conversation_id,run_id,questions,status,created_at) VALUES($1,$2,$3,$4,$5,$6::jsonb,'open',$7)`,
+      [id, call.personId, await conversationScope(deps.q, call.personId, call.conversationId), call.conversationId, call.runId, JSON.stringify(args.questions), deps.now()]);
+    return { summary: "选项框出给本人了。这一轮到这里结束，等本人回答（下一条消息）；本人先聊别的就照新的话办。", result: { questionId: id },
+      card: { kind: "buddy_question", questionId: id, questions: args.questions, status: "open" } };
+  },
   update_plan: async (deps, call, args) => {
     if (args.entries.length < 2) return { summary: "少于两步，不出清单" };
     if (!call.runId) return { summary: "清单记下了（这一轮没带 runId，界面上看不到）" };
@@ -443,16 +458,39 @@ export async function collapsePlan(q: Query, runId: string): Promise<TBuddyPlan 
   return row ? { entries: row.entries, collapsed: true } : null;
 }
 
+/** 这一轮在哪个对话里：项目对话是 project:<projectId>，其余是伙伴台（global）。 */
+async function conversationScope(q: Query, ownerId: string, conversationId: string | null): Promise<string> {
+  if (!conversationId) return "global";
+  const row = (await q("SELECT project_id::text FROM project_pipelines WHERE owner_id=$1 AND conversation_id=$2", [ownerId, conversationId])).rows[0] as
+    { project_id: string } | undefined;
+  return row ? `project:${row.project_id}` : "global";
+}
+
+/**
+ * 本人在这个对话（scope）里发出了一条新消息（18 节第 9 条）：带 answered（回答的是哪个选项框）的那张标 answered，这个对话里其余还 open 的标 dismissed。
+ * 在这一句交给 Chat 之前做，这一轮伙伴新出的框不受影响。
+ */
+export async function closeQuestions(q: Query, ownerId: string, scope: string, answered: string | undefined, now: Date): Promise<void> {
+  if (answered) await q("UPDATE buddy_questions SET status='answered',closed_at=$4 WHERE id=$1 AND owner_id=$2 AND scope=$3 AND status='open'",
+    [answered, ownerId, scope, now]);
+  await q("UPDATE buddy_questions SET status='dismissed',closed_at=$3 WHERE owner_id=$1 AND scope=$2 AND status='open'", [ownerId, scope, now]);
+}
+
 /** 读回历史时接到回答上的：每一轮的清单和伙伴出的卡。 */
 export async function runExtras(q: Query, ownerId: string, runIds: string[]): Promise<Map<string, { plan?: TBuddyPlan; cards?: TConversationCard[] }>> {
   const extras = new Map<string, { plan?: TBuddyPlan; cards?: TConversationCard[] }>();
   if (!runIds.length) return extras;
   for (const row of (await q("SELECT run_id,entries,collapsed FROM buddy_plans WHERE owner_id=$1 AND run_id=ANY($2::text[])", [ownerId, runIds])).rows as
     { run_id: string; entries: TBuddyPlan["entries"]; collapsed: boolean }[]) extras.set(row.run_id, { plan: { entries: row.entries, collapsed: row.collapsed } });
-  for (const row of (await q("SELECT id::text,run_id FROM buddy_messages WHERE owner_id=$1 AND run_id=ANY($2::text[]) ORDER BY created_at,id", [ownerId, runIds])).rows as
-    { id: string; run_id: string }[]) {
+  // 转达草稿和选项框按出的先后排。
+  for (const row of (await q(`SELECT id::text,run_id,created_at,NULL::jsonb AS questions,NULL AS status FROM buddy_messages WHERE owner_id=$1 AND run_id=ANY($2::text[])
+      UNION ALL SELECT id::text,run_id,created_at,questions,status FROM buddy_questions WHERE owner_id=$1 AND run_id=ANY($2::text[])
+      ORDER BY created_at,id`, [ownerId, runIds])).rows as
+    { id: string; run_id: string; questions: TBuddyAskQuestion[] | null; status: "open" | "answered" | "dismissed" | null }[]) {
     const entry = extras.get(row.run_id) ?? {};
-    entry.cards = [...(entry.cards ?? []), { kind: "buddy_message", draftId: row.id }];
+    const card: TConversationCard = row.questions ? { kind: "buddy_question", questionId: row.id, questions: row.questions, status: row.status! }
+      : { kind: "buddy_message", draftId: row.id };
+    entry.cards = [...(entry.cards ?? []), card];
     extras.set(row.run_id, entry);
   }
   return extras;
