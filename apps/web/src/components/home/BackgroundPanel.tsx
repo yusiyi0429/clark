@@ -13,7 +13,7 @@
 import { useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, LoaderCircle, PanelRightClose, PanelRightOpen, Square, X } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
-import { Slots } from "@/components/work/Slots";
+import { MANY_SESSIONS, Slots } from "@/components/work/Slots";
 import { FailedLine } from "@/components/work/DecisionBox";
 import { LocalInstall } from "@/components/local/PluginsPage";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
@@ -154,7 +154,7 @@ export function BackgroundPanel({ items, resources, onStop, onCollapse, handheld
         {machine.ready ? (
           <div className={h.runLine} title={`同时最多跑 ${resources.local.cap} 张卡`}>
             在跑的子会话<span className={h.grow} />
-            <Slots used={resources.local.used} cap={resources.local.cap} />
+            {resources.local.cap <= MANY_SESSIONS ? <Slots used={resources.local.used} cap={resources.local.cap} /> : null}
             <span className={`${h.runCount} ${h.num}`}>{resources.local.used}/{resources.local.cap}</span>
           </div>
         ) : null}

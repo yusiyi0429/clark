@@ -1,4 +1,5 @@
 import type { TLocalRole, TLocalRoleTool, TLocalSessionKind, TLocalSourceWordIssue, TLocalVerdictCriterion, TLocalWorkspace } from "@warmap/contracts";
+import { CARD_TITLE_RULE } from "./cardTitle.js";
 
 /**
  * 会话追加的系统提示词（--append-system-prompt-file）、挑刺子 agent 的定义（--agents）、评审会的那句话（ADR 0037）。
@@ -20,6 +21,7 @@ const TOPIC_RULES = `## 规矩
 const PLAN_RULES = `## 规矩
 - 你是规划员：只读，不改文件、不跑命令。拆的是 Task 时，用天枢 MCP 的 get_task_context 读这个 Task 的上下文（约定、Mission、近期的事和决定、上一版交付物和评审）；拆的是没挂 Task 的项目时，交代就是全部上下文。需要时读工作目录里的文件。
 - 把 Task 或项目拆成计划和派活单，用 propose_plan 交：计划几步、先后、风险；派活单每件写交代、完成标准（每行一条、能检查）、对约定第几条、交给哪个岗位（交代里岗位清单的名字）、模型档位。一件就是一个 worker 一次能交回的活。
+- 每件的${CARD_TITLE_RULE}。标题不合规矩时 propose_plan 会退回，照它说的改完整份再交。
 - 交代里有「本人原话」时，每件派活单的 sourceWords 写原话里和这件有关的片段：只能原样摘，不能改写、不能拼接；拿不准就不写（云端会用整条原话）。
 - 一件要用到前面几件的结果（比如合起来跑测试、总验收）时，after 写上它要等的那几件的位置；本机会等那几件合回后再开它。互不相干的件不写 after，好同时做。
 - 交完就停，等本人在网页上看派活单；本人让你改，改完再用 propose_plan 交一次。`;
@@ -76,9 +78,16 @@ function worktreeNote(ws: Extract<TLocalWorkspace, { kind: "worktree" }>): strin
 - 不要切换分支，不要改主文件夹（${ws.folder}）。`;
 }
 
-export function systemPrompt(kind: TLocalSessionKind, role: TLocalRole | null, critics: TLocalRole[], feishu: FeishuSkills, workspace: TLocalWorkspace | null = null): string {
+export function systemPrompt(
+  kind: TLocalSessionKind, role: TLocalRole | null, critics: TLocalRole[], feishu: FeishuSkills, workspace: TLocalWorkspace | null = null,
+  customTools: { server: string; name: string }[] = [],
+): string {
   const parts = ["# 天枢本机会话", INTRO[kind], RULES[kind]];
   if (workspace?.kind === "worktree") parts.push(worktreeNote(workspace));
+  if (customTools.length) {
+    const list = customTools.map((t) => `- ${t.name}：MCP 服务器 ${t.server} 里的工具`).join("\n");
+    parts.push(`## 本人加的工具\n${list}\n查数据的照权限模式用，改数据的每次都要本人批准。`);
+  }
   if (role) {
     parts.push(roleBlock(role, "## 你的岗位："));
     const tools = role.tools.map((t) => `- ${TOOL_TEXT[t]}${t === "feishu" ? FEISHU_NOTE[feishu ?? "none"] : ""}`);

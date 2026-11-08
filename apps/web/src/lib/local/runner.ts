@@ -4,7 +4,7 @@
  */
 import type {
   TLocalCloudLinkRequest, TLocalCloudLinkView, TLocalCreateSessionBatchResponse, TLocalCreateSessionRequest, TLocalFolder, TLocalHealthResponse, TLocalMergeResponse,
-  TLocalModelProfile, TLocalModelProfileUpsert, TLocalPairingStartResponse, TLocalPairingStatusResponse,
+  TLocalModelProfile, TLocalModelProfileUpsert, TLocalTool, TLocalToolUpsert, TLocalPairingStartResponse, TLocalPairingStatusResponse,
   TLocalPermissionDecisionRequest, TLocalQuestionAnswerRequest, TLocalRunnerErrorCode, TLocalSendMessageRequest, TLocalSendMessageResponse, TLocalSessionDetailResponse,
   TLocalSessionEvent, TLocalSessionSummary, TLocalSettings, TLocalSettingsPatch, TLocalStatusResponse, TLocalBudgetUpdateRequest, TLocalTaskBudgetView, TLocalAttachmentRef,
   TLocalHandoverCheck, TLocalProjectCloneRequest, TLocalProjectCloneResponse, TLocalProjectFolder, TLocalProjectFolderRequest, TLocalPermissionMode, TLocalRun, TLocalRunPreviewRequest,
@@ -13,7 +13,7 @@ import type {
 export type {
   TLocalCreateSessionRequest, TLocalFolder, TLocalHealthResponse, TLocalModelProfile, TLocalPermissionRequestView, TLocalPlanEntry, TLocalRole, TLocalSessionEvent,
   TLocalSessionStatus, TLocalSessionSummary, TLocalStatusResponse, TLocalUsage, TLocalWorkspace, TLocalMergeResponse, TLocalQuestion, TLocalQuestionRequestView,
-  TLocalQuestionAnswerRequest, TLocalPermissionMode, TLocalRun,
+  TLocalQuestionAnswerRequest, TLocalPermissionMode, TLocalRun, TLocalTool,
 } from "@warmap/contracts";
 
 /** 本机接口回的错：code 照契约；network 是连不上（没装、没开、浏览器没给访问本机的授权）。 */
@@ -42,6 +42,11 @@ export interface LocalRunner {
   patchSettings(patch: TLocalSettingsPatch): Promise<TLocalSettings>;
   listModels(): Promise<TLocalModelProfile[]>;
   putModel(id: string, body: TLocalModelProfileUpsert): Promise<TLocalModelProfile>;
+  /** 本人加的工具（给执行子会话挂的 HTTP MCP 服务器，存在本机）：列出、加或改（存完本机查一次连没连上）、移除、再查一次。钥匙只写不读。 */
+  listTools(): Promise<TLocalTool[]>;
+  putTool(id: string, body: TLocalToolUpsert): Promise<TLocalTool>;
+  removeTool(id: string): Promise<void>;
+  checkTool(id: string): Promise<TLocalTool>;
   listFolders(): Promise<TLocalFolder[]>;
   pickFolder(): Promise<TLocalFolder | null>;
   removeFolder(id: string): Promise<void>;

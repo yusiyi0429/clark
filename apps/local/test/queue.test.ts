@@ -3,8 +3,12 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { Value } from "@sinclair/typebox/value";
+import { LocalHealthResponse } from "@warmap/contracts";
+import { registerFormats } from "../src/store.js";
 import { api, pair, raw, startTestRunner, tempDir, ORIGIN } from "./helpers.js";
 
+registerFormats();
 const offline = (async () => { throw new Error("offline"); }) as unknown as typeof fetch;
 
 async function until<T>(fn: () => Promise<T | null | undefined | false> | T | null | undefined | false, ms = 8_000): Promise<T> {
@@ -121,6 +125,23 @@ describe("同时跑的上限和队列", { timeout: 30_000 }, () => {
       await h.waitStatus(a.id, "exited");
       await new Promise((r) => setTimeout(r, 200));
       expect(started(h.work)).toEqual([a.id]);
+    } finally {
+      await h.t.cleanup();
+    }
+  });
+
+  it("上限不封顶：设成 12，开 11 件都马上开、一件不排队；健康检查和状态里的上限照报（契约校验通过）", async () => {
+    const h = await setup(12);
+    try {
+      const all = [];
+      for (let i = 1; i <= 11; i++) all.push(await h.open(`N${i}`));
+      expect(all.every((s) => s.status !== "queued")).toBe(true);
+      await until(async () => (await h.slots()).running === 11);
+      expect(await h.slots()).toEqual({ max: 12, running: 11, queued: 0 });
+      const health = (await raw(h.t.port, { path: "/v1/health", headers: { origin: ORIGIN } })).body;
+      expect(Value.Check(LocalHealthResponse, health)).toBe(true);
+      const status = (await h.call("GET", "/v1/status")).body;
+      expect([status.settings.maxConcurrent, status.slots.max]).toEqual([12, 12]);
     } finally {
       await h.t.cleanup();
     }

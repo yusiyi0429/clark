@@ -9,7 +9,7 @@ import {
   LocalSettings, LocalMergeSync, LocalStatusResponse, LocalQuotaSource, LocalQuotaSync,
   LocalFolder, LocalProjectFolder, LocalProjectListResponse, LocalProjectFolderRequest, LocalHandoverCheck, LocalProjectCloneRequest, LocalProjectCloneResponse, ProjectTransfer,
   LocalTaskBudgetView, LocalBudgetListResponse, LocalBudgetUpdateRequest, LocalSendMessageRequest as SendMessage, LocalPermissionBrief, LOCAL_RUNNER_ATTACHMENT_PATH,
-  LocalRunPreviewRequest, LocalPermissionModeRequest, LOCAL_AGENT_PERMISSION_MODES,
+  LocalRunPreviewRequest, LocalPermissionModeRequest, LOCAL_AGENT_PERMISSION_MODES, LocalTool, LocalToolUpsert,
 } from "../src/index.js";
 
 const sessionId = "6b0f3a52-4d0c-4c1e-9a43-1f7d2c9b8e10";
@@ -48,6 +48,19 @@ describe("本机程序契约", () => {
     expect(Value.Check(LocalModelProfileUpsert, { label: "x", source: "gateway", baseUrl: "https://hub.example.com", model: "m", apiKey: "sk\nadd-generic-password" })).toBe(false);
     expect(LocalModelProfile.properties).not.toHaveProperty("apiKey");
     expect(LocalModelProfile.properties).toHaveProperty("hasKey");
+  });
+
+  it("本人加的工具：只收 HTTP 地址、不收命令，钥匙只写不读", () => {
+    expect(Value.Check(LocalToolUpsert, { name: "金蝶", preset: "kingdee", url: "https://kd.example.com/mcp", apiKey: "k-1" })).toBe(true);
+    expect(Value.Check(LocalToolUpsert, { name: "看板", preset: "custom", url: "http://127.0.0.1:9000/mcp", keyHeader: "X-Api-Key" })).toBe(true);
+    expect(Value.Check(LocalToolUpsert, { name: "x", preset: "custom", url: "https://a.example.com", command: "node", args: ["x.js"] })).toBe(false);
+    expect(Value.Check(LocalToolUpsert, { name: "x", preset: "custom", url: "file:///C:/x.exe" })).toBe(false);
+    expect(Value.Check(LocalToolUpsert, { name: "x", preset: "github", url: "https://a.example.com" })).toBe(false);
+    expect(Value.Check(LocalToolUpsert, { name: "x", preset: "custom", url: "https://a.example.com", keyHeader: "Bad: header" })).toBe(false);
+    expect(Value.Check(LocalToolUpsert, { name: "x", preset: "custom", url: "https://a.example.com", apiKey: "k\nadd-generic-password" })).toBe(false);
+    expect(LocalTool.properties).not.toHaveProperty("apiKey");
+    expect(LocalTool.properties).toHaveProperty("hasKey");
+    expect(LOCAL_RUNNER_ROUTES.checkTool).toEqual({ method: "POST", path: "/v1/tools/:id/check", auth: true });
   });
 
   it("权限决定可附理由、可本会话都允许", () => {
@@ -119,7 +132,8 @@ describe("本机程序契约", () => {
     expect(Value.Check(LocalCreateSessionBatchResponse, { results: [{ ok: false, error: { code: "folder_not_allowed", message: "x" } }] })).toBe(true);
     expect(Value.Check(LocalSettingsPatch, { maxConcurrent: 5 })).toBe(true);
     expect(Value.Check(LocalSettingsPatch, { maxConcurrent: 0 })).toBe(false);
-    expect(Value.Check(LocalSettingsPatch, { maxConcurrent: 11 })).toBe(false);
+    expect(Value.Check(LocalSettingsPatch, { maxConcurrent: 11 })).toBe(true); // 不设上限，超过 10 个网页提醒
+    expect(Value.Check(LocalSettingsPatch, { maxConcurrent: 1.5 })).toBe(false);
     expect(LocalSessionSummary.properties).toHaveProperty("queuePosition");
     expect(LocalHealthResponse.properties).toHaveProperty("slots");
     expect(LOCAL_RUNNER_ROUTES.createSessionBatch).toEqual({ method: "POST", path: "/v1/sessions/batch", auth: true });
@@ -436,6 +450,19 @@ describe("本机程序契约", () => {
       { ...base, key: `${deviceId}:${sessionId}:12`, type: "status", data: { status: "waiting_permission", title: "改登录页", agent: "claude-code", modelLabel: "订阅", permission } },
     ];
     expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots: { max: 3, running: 0, queued: 0 }, items: statusItems })).toBe(true);
+    // 批准卡能不能给「这张卡都允许」（18.10）；老版本本机不带也收
+    expect(Value.Check(LocalPermissionBrief, { ...permission, canAllowForSession: true })).toBe(true);
+
+    // 停了的报告（18.10）：怎么停的、一两句摘要、卡在哪、这一轮的产出物
+    const stopped = (data: unknown) => Value.Check(LocalSyncBatchRequest, {
+      deviceId, runnerVersion: "0.1.0", slots: { max: 3, running: 0, queued: 0 }, items: [{ ...base, key: `${deviceId}:${sessionId}:13`, type: "stopped", data }],
+    });
+    const report = { why: "turn_done", summary: "登录页改好了，测试都过了。", blocker: null, outputs: [{ key: `${deviceId}:${sessionId}:7`, title: "改动说明", fileName: "说明.md" }], handbackKey: `${deviceId}:${sessionId}:8` };
+    expect(stopped(report)).toBe(true);
+    expect(stopped({ why: "held", summary: null, blocker: "订阅额度用完了，19:00 恢复后接着做", outputs: [] })).toBe(true);
+    expect(stopped({ ...report, why: "paused" })).toBe(false);
+    expect(stopped({ ...report, summary: "" })).toBe(false); // 没话说是 null，不是空串
+    expect(stopped({ ...report, outputs: [{ key: "x", title: "t", fileName: "f" }] })).toBe(false);
 
     // 一句话带附件（14.5）：只说附件不说话也行；user_message 事件带存好的附件
     const ref = { id: "5b0c2f3e-6a1d-4c8e-9f2a-1b3c4d5e6f70", fileName: "截图.png", size: 1024, sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" };
