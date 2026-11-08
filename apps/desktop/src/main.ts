@@ -1,10 +1,14 @@
-import { app, BrowserWindow, session, shell } from "electron";
+import { app, BrowserWindow, dialog, Menu, nativeImage, session, shell, Tray } from "electron";
+import { join } from "node:path";
 import { allowInWindow, grantPermission, isTianshu, openExternally, type Policy } from "./policy";
+import { RunnerHost, type TrayState } from "./runner";
+import { dotBitmap, TRAY_COLORS, trayView, type TrayIcon } from "./trayView";
+import { takeOverLegacy } from "./legacy";
 
 /**
  * 天枢桌面版的壳（设计稿 17.5 / 17.7）：一个窗口开线上天枢，窗口里只停天枢和飞书登录授权页，别的链接交给系统浏览器。
  * 线上网页拿不到 Node：不开 nodeIntegration、开 contextIsolation 和 sandbox、不挂 preload。本机能力只经 127.0.0.1 那套（Origin、口令、本机确认）。
- * 本机程序、托盘、开机自启、自动更新在后面几天接上。
+ * 本机程序随包装好，由壳在 utilityProcess 里拉起；托盘、开机自启、单实例由壳管；关窗口只是收进托盘。
  */
 
 /** 天枢的来源。开发时可用 TIANSHU_DESKTOP_ORIGIN 指到别的环境（只认 https，和本机程序的 Origin 白名单对得上才连得上本机）。 */
@@ -17,8 +21,32 @@ const ORIGIN = (() => {
 const policy: Policy = { origin: ORIGIN };
 /** 登录状态单独存一份（不和浏览器共用），重启后还在。 */
 const PARTITION = "persist:tianshu";
+/** 开机自启时带的参数：只进托盘，不弹窗口。 */
+const HIDDEN_ARG = "--hidden";
 
 let win: BrowserWindow | null = null;
+let tray: Tray | null = null;
+let quitting = false;
+let trayState: TrayState | null = null;
+let runnerError: string | null = null;
+const runner = new RunnerHost(join(__dirname, "..", "runner", "hosted.cjs"), {
+  tray: (s) => { trayState = s; runnerError = null; refreshTray(); },
+  ready: () => { runnerError = null; refreshTray(); },
+  failed: ({ code, message }) => {
+    runnerError = code === "EADDRINUSE" ? "端口 47610 被别的程序占着" : message;
+    refreshTray();
+  },
+  confirm: async (title, text) => {
+    const opts = { type: "question" as const, title, message: text, buttons: ["是", "否"], defaultId: 1, cancelId: 1, noLink: true };
+    const r = win && win.isVisible() ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts);
+    return r.response === 0;
+  },
+  pickFolder: async () => {
+    const opts = { title: "选一个给天枢用的文件夹", properties: ["openDirectory" as const] };
+    const r = win && win.isVisible() ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+    return r.canceled ? null : r.filePaths[0] ?? null;
+  },
+});
 
 /** 连不上天枢时显示的页（本地的，不带脚本以外的东西）；「重试」回到天枢首页。 */
 function offlinePage(reason: string): string {
@@ -37,9 +65,9 @@ function guard(ses: Electron.Session) {
   ses.setPermissionCheckHandler((_wc, permission, origin) => grantPermission(policy, permission, origin));
 }
 
-function createWindow() {
+function createWindow(show: boolean) {
   win = new BrowserWindow({
-    width: 1280, height: 860, minWidth: 380, title: "天枢", autoHideMenuBar: true,
+    width: 1280, height: 860, minWidth: 380, title: "天枢", autoHideMenuBar: true, show,
     webPreferences: { partition: PARTITION, contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
   const wc = win.webContents;
@@ -61,22 +89,71 @@ function createWindow() {
     // -3 是被下一次跳转取消，不算连不上
     if (isMainFrame && code !== -3 && isTianshu(policy, url)) void wc.loadURL(offlinePage(desc));
   });
+  // 关窗口只是收进托盘；托盘「退出」才真退
+  win.on("close", (e) => {
+    if (quitting) return;
+    e.preventDefault();
+    win?.hide();
+  });
   void wc.loadURL(`${ORIGIN}/`);
+}
+
+function showWindow() {
+  if (!win) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+}
+
+const icons = new Map<TrayIcon, Electron.NativeImage>();
+function icon(name: TrayIcon) {
+  if (!icons.has(name)) icons.set(name, nativeImage.createFromBitmap(dotBitmap(TRAY_COLORS[name]), { width: 32, height: 32, scaleFactor: 2 }));
+  return icons.get(name)!;
+}
+
+function refreshTray() {
+  if (!tray) return;
+  const v = trayView(trayState, runnerError);
+  tray.setImage(icon(v.icon));
+  tray.setToolTip(v.tooltip);
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: "打开天枢", click: showWindow },
+    { label: v.pauseLabel, enabled: v.canPause, click: () => runner.menu(trayState?.paused ? "resume" : "pause") },
+    { type: "separator" },
+    { label: "退出", click: () => void quit() },
+  ]));
+}
+
+async function quit() {
+  if (quitting) return;
+  quitting = true;
+  await runner.stop(); // 本机程序先停掉会话进程再退
+  tray?.destroy();
+  app.exit(0);
 }
 
 // 单实例：再打开一次只是把窗口叫出来
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on("second-instance", () => {
-    if (!win) return;
-    if (win.isMinimized()) win.restore();
-    win.show();
-    win.focus();
-  });
-  app.whenReady().then(() => {
+  app.on("second-instance", showWindow);
+  app.whenReady().then(async () => {
+    // 装好的桌面版才登记开机自启（开发时跑的是 electron.exe，不登记）；开机时只进托盘
+    if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: true, args: [HIDDEN_ARG] });
     guard(session.fromPartition(PARTITION));
-    createWindow();
+    tray = new Tray(icon("off"));
+    tray.on("click", showWindow);
+    refreshTray();
+    createWindow(!process.argv.includes(HIDDEN_ARG));
+    // 先接管脚本装的旧版（停掉它、删它的自启），再拉起随包的本机程序
+    for (const line of await takeOverLegacy().catch(() => [])) console.log(`[桌面版] ${line}`);
+    runner.start();
   });
-  app.on("window-all-closed", () => app.quit());
+  // 窗口收进托盘时不退出；退出只走托盘菜单
+  app.on("window-all-closed", () => {});
+  app.on("before-quit", (e) => {
+    if (quitting) return;
+    e.preventDefault();
+    void quit();
+  });
 }
