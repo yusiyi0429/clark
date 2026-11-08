@@ -135,7 +135,8 @@ describe("月份页（设计 10.4、10.5）", () => {
     expect(tasks).toHaveLength(3);
     expect(text(tasks[0]!)).toContain("新首页改版 约定 2/3 · 交付第 2 版 · 进行中 1");
     expect(text(tasks[0]!)).toContain("12 月怎么办");
-    expect(text(tasks[0]!)).toMatch(/继续做 ?（推荐）.*改一改再做.*到此为止.*自己说…/);
+    expect(text(tasks[0]!)).toMatch(/继续做 ?（推荐）.*改一改再做.*到此为止/);
+    expect(tasks[0]).toContain('placeholder="自己说…"');
     expect(tasks[1]).toContain('aria-label="已完成"');
     expect(tasks[1]).not.toContain('data-testid="month-decision"');
     expect(text(tasks[2]!)).toContain("约定 0/2 · 未交付 · 受阻 1");

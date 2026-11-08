@@ -25,12 +25,12 @@ describe("项目从首页 v2 来（16.2、16.3）", () => {
 
   it("文件夹照这台电脑的本机程序；转交跟着项目回来；交出去了的在归档列表里（只读）；目标的负责人不是本人时带上那个人", () => {
     const transfer = { id: "x", projectId: "p1", projectName: "p1", from: { personId: "a", name: "甲" }, to: { personId: "b", name: "乙" }, status: "sent" as const,
-      startedAt: "2026-11-07T01:00:00.000Z", decidedAt: "2026-11-07T02:00:00.000Z", includeHistory: false, running: null, check: null, note: null, checkResult: null, clone: null };
+      startedAt: "2026-11-07T01:00:00.000Z", decidedAt: "2026-11-07T02:00:00.000Z", includeHistory: false, running: null, check: null, note: null, checkResult: null, clone: null, afterSequence: null };
     const project = fromHome(home("p1", { transfer, goals: [goal("t1", "a", "2026-11", { responsible: { personId: "a", name: "甲" } })] }), data, new Map([["p1", "Tianshu-MVP"]]));
     expect(project).toMatchObject({ folder: "Tianshu-MVP", archived: false, transfer: { status: "sent" } });
     expect(project.goals[0]!.responsible).toEqual({ personId: "a", name: "甲" });
     expect(projectLine(project).text).toBe("等 乙 接手");
-    const listed = fromListed({ projectId: "p9", name: "旧项目", archivedAt: "2026-11-01T00:00:00.000Z", createdAt: "2026-10-01T00:00:00.000Z", lastActivityAt: null,
+    const listed = fromListed({ projectId: "p9", name: "旧项目", archivedAt: "2026-11-01T00:00:00.000Z", createdAt: "2026-10-01T00:00:00.000Z", lastActivityAt: null, permissionMode: "auto",
       transfer: { ...transfer, status: "accepted" } }, new Map());
     expect(listed).toMatchObject({ id: "p9", name: "旧项目", archived: true, goals: [], subSessions: [], scope: "project:p9", transfer: { status: "accepted" } });
     expect(projectLine(listed).text).toBe("已交给 乙");
