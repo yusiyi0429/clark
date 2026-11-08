@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { logout } from "@/lib/logout";
-import { clearLastLogin, readLastLogin, rememberLastLogin, saveLastLogin } from "./lastLogin";
+import { clearLastLogin, readLastLogin, refreshLastLogin, rememberLastLogin, saveLastLogin } from "./lastLogin";
 
 const key = "tianshu.lastLogin";
 const account = { loginId: "linx", displayName: "林晓" };
@@ -57,6 +57,32 @@ describe("记住登录 ID", () => {
     expect(readLastLogin()).toBeNull();
     expect(() => saveLastLogin(account)).not.toThrow();
     expect(() => clearLastLogin()).not.toThrow();
+  });
+
+  it("登录时把他的伙伴（名字、形象）一起记下，不记口令；形象不认得、名字空的伙伴不要", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ authenticated: true, displayName: "林晓", buddy: { name: "小天", form: "miles", personality: "steady" } }) }));
+    await rememberLastLogin("linx");
+    expect(JSON.parse(values.get(key)!)).toEqual({ ...account, buddy: { name: "小天", form: "miles" } });
+    expect(values.get(key)).not.toContain("passcode");
+    expect(readLastLogin()).toEqual({ ...account, buddy: { name: "小天", form: "miles" } });
+    values.set(key, JSON.stringify({ ...account, buddy: { name: "小天", form: "dragon" } }));
+    expect(readLastLogin()).toEqual(account);
+    values.set(key, JSON.stringify({ ...account, buddy: { name: " ", form: "panda" } }));
+    expect(readLastLogin()).toEqual(account);
+  });
+
+  it("保存伙伴后：记住的正是当前登录的人才换上新伙伴；别人登录着、没记住谁时不动", async () => {
+    const session = (loginId: string) => vi.fn().mockResolvedValue({ ok: true, json: async () => ({ authenticated: true, loginId, displayName: "林晓", buddy: { name: "团团", form: "panda" } }) });
+    vi.stubGlobal("fetch", session("linx"));
+    await refreshLastLogin();
+    expect(values.has(key)).toBe(false);
+    saveLastLogin(account);
+    vi.stubGlobal("fetch", session("someone-else"));
+    await refreshLastLogin();
+    expect(readLastLogin()).toEqual(account);
+    vi.stubGlobal("fetch", session("linx"));
+    await refreshLastLogin();
+    expect(readLastLogin()).toEqual({ ...account, buddy: { name: "团团", form: "panda" } });
   });
 
   it("退出登录保留本机记住的账号", async () => {

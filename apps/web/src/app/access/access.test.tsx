@@ -1,22 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { AccessScreen, landingPath, loginFailureCopy } from "./AccessScreen";
-import { formatLockDate, formatLockTime } from "./lockscreenTime";
 import { loginDestination, validNextPath, onboardingDestination } from "@/lib/access-paths";
 
-describe("锁屏时钟（clark lockscreen-time）", () => {
-  const reference = new Date(Date.UTC(2026, 8, 12, 0, 8));
-
-  it("按公司时区格式化时间", () => {
-    expect(formatLockTime(reference)).toBe("08:08");
-  });
-
-  it("日期写成「9月12日 · 星期六」", () => {
-    expect(formatLockDate(reference)).toBe("9月12日 · 星期六");
-  });
-});
-
-describe("锁屏表单", () => {
+describe("登录页", () => {
   it("失败说明：ID 或口令不对；锁定与改口令用服务端原话；限流、来源不符、其他", () => {
     expect(loginFailureCopy(401)).toBe("ID 或口令不对");
     expect(loginFailureCopy(423, "已连续输错 5 次，请 15 分钟后再试")).toBe("已连续输错 5 次，请 15 分钟后再试");
@@ -35,15 +22,15 @@ describe("锁屏表单", () => {
     expect(landingPath("ceo", "/radar")).toBe("/radar");
   });
 
-  it("存储读取前只保留表单占位，不先闪出完整表单；时钟也有占位", () => {
+  it("存储读取前只有天枢标志，不先闪出完整表单；新首页的样子：没有晨光、锁和时钟，深色跟着外观走", () => {
     const html = renderToStaticMarkup(<AccessScreen nextPath="/" />);
     expect(html).not.toContain('id="access-id"');
     expect(html).not.toContain("你的 ID");
     expect(html).not.toContain('aria-label="口令第 1 位"');
-    expect(html).not.toContain('role="radiogroup"');
-    expect(html).toContain("--:--");
-    expect(html).toContain("data-morning-canvas");
-    expect(html).not.toContain("tianshu-flow-lock-v3.webp");
+    expect(html).toContain("data-tianshu-mark");
+    expect(html).not.toContain("data-morning-canvas");
+    expect(html).not.toContain("--:--");
+    expect(html).toContain('data-scheme="auto"');
   });
 
   it("没看过引导时恢复有效深链；老 API 未返回标记时直接进入", () => {

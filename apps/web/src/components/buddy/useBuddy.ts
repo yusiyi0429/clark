@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import type { components } from "@/lib/api/schema";
 import { browserApi } from "@/lib/api/client";
 import { readStoredSkin } from "@/components/coagent/skin";
+import { refreshLastLogin } from "@/app/access/lastLogin";
 
 export type Buddy = components["schemas"]["Buddy"];
 
@@ -55,6 +56,8 @@ export async function saveBuddy(next: Buddy): Promise<Buddy> {
   const { data, error } = await browserApi.PUT("/api/me/buddy", { body: { name: next.name.trim(), form: next.form, ...(next.personality ? { personality: next.personality } : {}) } });
   if (!data) throw new Error(error?.message ?? "未保存，请重试。");
   window.dispatchEvent(new Event(CHANGED));
+  // 登录页认得这台电脑上次的人时请出他的伙伴：选了、改了伙伴，记住的那份跟着换。
+  void refreshLastLogin();
   return data;
 }
 
