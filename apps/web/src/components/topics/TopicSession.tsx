@@ -171,7 +171,7 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
           <div ref={scroll.reserveRef} aria-hidden />
         </div>
         {session || !embedded
-          ? <SessionComposer placeholder={`给${topic.title}插话…`} disabled={!canAct} onSend={say} subject={{ kind: "topic", id: topic.id }} dock={<PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} />} />
+          ? <SessionComposer label={`给${topic.title}插话`} disabled={!canAct} onSend={say} subject={{ kind: "topic", id: topic.id }} dock={<PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} />} />
           : <div className={s.composerDock}><PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} /></div>}
       </div>
     </PendingBoxes>
