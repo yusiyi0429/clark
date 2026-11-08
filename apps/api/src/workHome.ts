@@ -288,16 +288,20 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
     const dates = gateDates.get(missionId) ?? [];
     return dates.find((date) => date >= today) ?? dates.at(-1) ?? monthEnd(period);
   };
+  /** 截止日的先后：本体 Task 自己的（0.3 还没有，跳过）→ 天枢里给这件目标存的 → Mission 今天以后最近的节点。 */
+  const due = (set: string | null, missionId: string, period: string) =>
+    set ? { dueDate: set, dueDateSource: "set" as const } : { dueDate: dueDate(missionId, period), dueDateSource: "mission" as const };
   const goalOfOthers = (goal: GoalRow): THomeProjectGoal | null => {
     const settled = othersSettled.get(goal.task_id);
     if (settled && !(settled.kind === "completed" && goal.period === period)) return null;
-    return { taskId: goal.task_id, missionId: goal.mission_id, name: goal.task_name, period: goal.period, dueDate: dueDate(goal.mission_id, goal.period), criteria: [], criteriaMet: 0,
+    return { taskId: goal.task_id, missionId: goal.mission_id, name: goal.task_name, period: goal.period, ...due(goal.due_date, goal.mission_id, goal.period), criteria: [], criteriaMet: 0,
       criteriaTotal: 0, completedAt: settled ? new Date(settled.at).toISOString() : null,
       responsible: { personId: goal.owner_id, name: deps.names.get(goal.owner_id) ?? goal.owner_id } };
   };
   const homeProjects = active.map((row): THomeProject => {
     const projectGoals: THomeProjectGoal[] = goalTasks.filter((task) => taskProject(task.taskId) === row.id).map((task): THomeProjectGoal => ({ taskId: task.taskId,
-      missionId: task.missionId, name: task.name, period: task.period, dueDate: dueDate(task.missionId, task.period), criteria: criteriaOf.get(task.taskId)!,
+      missionId: task.missionId, name: task.name, period: task.period, ...due(goals.get(task.taskId)?.due_date ?? null, task.missionId, task.period),
+      criteria: criteriaOf.get(task.taskId)!,
       criteriaMet: met.get(task.taskId) ?? 0, criteriaTotal: criteriaOf.get(task.taskId)!.length, completedAt: task.completedAt, responsible: null }))
       .concat(othersGoals.filter((goal) => goal.project_id === row.id).flatMap((goal) => goalOfOthers(goal) ?? []))
       .sort((a, b) => a.dueDate.localeCompare(b.dueDate) || a.name.localeCompare(b.name));

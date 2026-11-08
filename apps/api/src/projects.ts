@@ -21,7 +21,7 @@ export const CARD_PROJECT = (alias: string) =>
 type ProjectRow = { id: string; owner_id: string; name: string; origin_mission_id: string | null; archived_at: Date | null; created_at: Date; updated_at: Date;
   last_activity_at?: Date | null; permission_mode: TProject["permissionMode"]; auto_relay_limit: number | null; auto_relay_paused_at: Date | null };
 type GoalRow = { task_id: string; project_id: string | null; owner_id: string; period: string; mission_id: string; mission_title: string | null; task_name: string;
-  source: TProjectGoal["source"]; linked_at: Date };
+  source: TProjectGoal["source"]; linked_at: Date; due_date: string | null };
 
 const iso = (time: Date | null | undefined) => time ? new Date(time).toISOString() : null;
 /** transfer：正在转交的那一份，或本人交出去了的那一份（这时本人这边算归档，archivedAt 是接手的时间）。 */
@@ -139,7 +139,20 @@ export async function verdicts(q: Query, taskIds: string[]): Promise<Map<string,
 }
 
 export const goalView = (row: GoalRow, verdict: TProjectGoalVerdict): TProjectGoal => ({ taskId: row.task_id, taskName: row.task_name, missionId: row.mission_id,
-  missionTitle: row.mission_title, period: row.period, verdict, source: row.source, linkedAt: row.linked_at.toISOString() });
+  missionTitle: row.mission_title, period: row.period, verdict, source: row.source, linkedAt: row.linked_at.toISOString(), dueDate: row.due_date });
+
+/** 是不是一个真的日期（YYYY-MM-DD，2 月 30 日这类不算）。 */
+const realDate = (date: string) => /^\d{4}-\d{2}-\d{2}$/.test(date) && new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) === date;
+
+/** 给挂在这个项目上的一件 Task 存验收截止日（null 不存了）。项目要是本人的、Task 要挂在这个项目上，否则 404；日期不对 400。 */
+export async function setGoalDueDate(q: Query, ownerId: string, projectId: string, taskId: string, dueDate: string | null): Promise<TProjectGoal> {
+  await ownProject(q, ownerId, projectId);
+  if (dueDate !== null && !realDate(dueDate)) throw new CardError(400, "INVALID_INPUT", "截止日不是一个真的日期");
+  const row = (await q("UPDATE project_goals SET due_date=$4 WHERE project_id=$1 AND owner_id=$2 AND task_id=$3 RETURNING *", [projectId, ownerId, taskId, dueDate])).rows[0] as
+    GoalRow | undefined;
+  if (!row) throw new CardError(404, "NOT_FOUND", "这件 Task 没挂在这个项目上");
+  return goalView(row, (await verdicts(q, [taskId])).get(taskId)!);
+}
 
 /** GET /api/me/projects/:projectId：目标历史，月份从近到远，同一个月按挂上的先后。交出去之前负责过的人也能看（只读）。 */
 export async function projectDetail(q: Query, personId: string, projectId: string, now: Date, transfer: (projectId: string) => Promise<TProjectTransfer | null>):
