@@ -18,6 +18,8 @@ export function tempDir(prefix = "tl-"): string {
 export async function startTestRunner(opts: {
   approvePairing?: boolean; pickFolder?: string | null | (() => string | null); fetchImpl?: typeof fetch; skillsDir?: string; dataDir?: string;
   toolsExec?: ToolExec; holdTiming?: RunnerOptions["holdTiming"]; codexLimits?: RunnerOptions["codexLimits"]; cloneRepo?: RunnerOptions["cloneRepo"];
+  /** 换掉默认的假托盘（测由桌面版托管时用）。 */
+  desktop?: RunnerOptions["desktop"];
 } = {}) {
   // 给 dataDir 时接着用上一次的数据（测重启）
   const dataDir = opts.dataDir ?? tempDir();
@@ -28,7 +30,7 @@ export async function startTestRunner(opts: {
   let menu: (a: MenuAction) => void = () => {};
   Object.assign(desktop, { start: async (fn: (a: MenuAction) => void) => { menu = fn; } });
   const runner: Runner = await startRunner({
-    dataDir, port: 0 as unknown as number, headless: true, desktop, secrets: new FileSecretStore(dataDir),
+    dataDir, port: 0 as unknown as number, headless: true, desktop: opts.desktop ?? desktop, secrets: new FileSecretStore(dataDir),
     claudeBin: { command: process.execPath, prefixArgs: [FAKE_CLAUDE] }, fetchImpl: opts.fetchImpl, allowedOrigins: [ORIGIN],
     // 测试不读本人真装的技能
     skillsDir: opts.skillsDir ?? join(dataDir, "no-skills"),
