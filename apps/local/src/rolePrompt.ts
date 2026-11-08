@@ -20,6 +20,7 @@ const TOPIC_RULES = `## 规矩
 const PLAN_RULES = `## 规矩
 - 你是规划员：只读，不改文件、不跑命令。拆的是 Task 时，用天枢 MCP 的 get_task_context 读这个 Task 的上下文（约定、Mission、近期的事和决定、上一版交付物和评审）；拆的是没挂 Task 的项目时，交代就是全部上下文。需要时读工作目录里的文件。
 - 把 Task 或项目拆成计划和派活单，用 propose_plan 交：计划几步、先后、风险；派活单每件写交代、完成标准（每行一条、能检查）、对约定第几条、交给哪个岗位（交代里岗位清单的名字）、模型档位。一件就是一个 worker 一次能交回的活。
+- 交代里有「本人原话」时，每件派活单的 sourceWords 写原话里和这件有关的片段：只能原样摘，不能改写、不能拼接；拿不准就不写（云端会用整条原话）。
 - 一件要用到前面几件的结果（比如合起来跑测试、总验收）时，after 写上它要等的那几件的位置；本机会等那几件合回后再开它。互不相干的件不写 after，好同时做。
 - 交完就停，等本人在网页上看派活单；本人让你改，改完再用 propose_plan 交一次。`;
 
@@ -28,7 +29,7 @@ const VERIFY_RULES = `## 规矩
 - 依据是交代里的约定、卡的完成标准、卡所属岗位的验收口径和你自己的验收口径；材料是交回里的自评、证据和产出（产出文件在当前工作目录里，可以读）。需要时用天枢 MCP 的 get_task_context 读 Task 的上下文。
 - 每条完成标准判一次：达到（met）、部分（partial）、没达到（unmet），写理由和依据，没达到的写怎么补；标准以外的建议放进 beyondScope，不算没达到。证据不够就判没达到。
 - 对照交代里的改动：完成标准没要求的新增或改动的文件（报告、命令输出、临时文件等），逐个指出来，写进相关那条的理由或 beyondScope。
-- 交代最前面有「本人原话」时：逐条判完完成标准，再对一遍原话。产出明显漏了原话里明说的（missing），或做了原话里没要的（extra），写进 sourceWordIssues：quote 原样抄是哪一句，再写为什么。有一条就是没过，完成标准全达到也一样；拿不准的不写。
+- 交代里有「本人原话」时：逐条判完完成标准，再对一遍原话。产出明显漏了原话里明说的（missing），或做了原话里没要的（extra），写进 sourceWordIssues：quote 原样抄是哪一句，再写为什么。有一条就是没过，完成标准全达到也一样；拿不准的不写。
 - 判完用 submit_verdict 交一次结论，然后停下。`;
 
 const RULES: Record<TLocalSessionKind, string> = { card: CARD_RULES, topic: TOPIC_RULES, plan: PLAN_RULES, verify: VERIFY_RULES };
@@ -105,12 +106,6 @@ export function returnText(criteria: string[], judged: TLocalVerdictCriterion[],
     .map((c) => `第 ${c.index} 条「${criteria[c.index - 1] ?? ""}」，${c.reason}；怎么补：${c.fix ?? "补上能核对的证据"}`);
   const words = issues.map((i) => `本人原话「${i.quote}」${i.kind === "missing" ? "漏了" : "里没要这个"}：${i.reason}`);
   return `验收没过：${[...missed, ...words].join("。")}。改完再交回。`;
-}
-
-/** 本人原话（16.8）：第一句话最前面的一段，原样引用；没有原话为空串。 */
-export function sourceWordsBlock(words: string[]): string {
-  if (!words.length) return "";
-  return `## 本人原话\n\n${words.map((w) => w.split(/\r?\n/).map((l) => `> ${l}`).join("\n")).join("\n\n")}\n\n`;
 }
 
 /** 验收员交代末尾接上的这次交回的改动（卡在工作树里做时）：基线到交回的提交。验收员只读、不能跑命令，改动全靠这里和读文件。 */

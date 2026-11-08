@@ -100,6 +100,10 @@ const PROPOSE_PLAN = {
               type: "array", items: { type: "integer", minimum: 1 },
               description: "要等派活单里哪几件做完（位置，从 1 起，只能写排在前面的）。只在要用到前面几件的结果时才写；互不相干的件不写，好并行做",
             },
+            sourceWords: {
+              type: "array", items: { type: "string" },
+              description: "交代「本人原话」里和这件有关的片段，只能原样摘、不能改写；拿不准就不写",
+            },
           },
           required: ["title", "brief", "doneDefinition", "modelTier"],
         },

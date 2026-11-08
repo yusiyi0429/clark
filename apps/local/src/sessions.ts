@@ -24,7 +24,7 @@ import type { ModelProfiles } from "./models.js";
 import { isInside, type Folders } from "./folders.js";
 import type { Outbox } from "./outbox.js";
 import { SESSION_MCP_NAME, sessionToolNames } from "./sessionMcp.js";
-import { changesBrief, criticAgents, returnText, reviewMessage, sourceWordsBlock, systemPrompt } from "./rolePrompt.js";
+import { changesBrief, criticAgents, returnText, reviewMessage, systemPrompt } from "./rolePrompt.js";
 import { addWorktree, branchName, cardDiff, changedFiles, commitAll, deleteBranch, git, mergeBranch, pruneRepo, removeWorktree, repoHead } from "./git.js";
 import { ensureFeishuPlugin, larkSkills } from "./agents/feishuPlugin.js";
 import type { VerifyBrief } from "./cloud.js";
@@ -124,7 +124,7 @@ interface SessionRecord {
   after: string[];
   /** 验收员：结论过没过（还没交为 null）。 */
   passed: boolean | null;
-  /** 卡：本人原话（16.8，开工请求带来的）；验收员随被验的卡。老记录没有这一项，按空的算。 */
+  /** 验收员：验收交代里的本人原话（16.8），核对结论里的 sourceWordIssues。老记录没有这一项，按空的算。 */
   sourceWords?: string[];
   /** 这个会话里 Claude Code 自己开的后台任务（子 agent、后台命令），按开始的先后。 */
   background: TLocalBackgroundItem[];
@@ -536,7 +536,6 @@ export class SessionManager {
     if (subject.kind === "plan" && !subject.taskId && !subject.projectId) throw new SessionError("validation", "规划员的会话要带 taskId 或 projectId");
     if (subject.kind !== "topic" && req.critics?.length) throw new SessionError("validation", "挑刺岗位只给专题的评审会用");
     if (subject.kind !== "card" && req.after?.length) throw new SessionError("validation", "只有卡能等别的卡");
-    if (subject.kind !== "card" && req.sourceWords?.length) throw new SessionError("validation", "只有卡带本人原话");
     let cwd: string;
     // 不指定目录时：项目在这台电脑上绑的文件夹（新首页设计 16.6）
     const projectDir = !req.cwd && subject.projectId ? this.d.folders.projectFolder(subject.projectId) : null;
@@ -578,16 +577,14 @@ export class SessionManager {
       role: req.role ?? null, modelTier: req.modelTier ?? req.role?.modelTier ?? null, critics: req.critics ?? [], queuedMessage: null, queueOrder: 0,
       parentId: null, briefPending: false, criteria: [], failStreak: 0, submitted: 0, nudged: false,
       workspace: place?.workspace ?? null, commit: null, after: waiting ? after : [], passed: null, background: [], hold: null, holdSince: null,
-      budgetKey, runSince: null, run: null, sourceWords: req.sourceWords ?? [],
+      budgetKey, runSince: null, run: null,
     };
-    // 第一句话：有本人原话时放在最前面（16.8），再接云端的交代
-    const firstMessage = sourceWordsBlock(rec.sourceWords!) + req.firstMessage;
     // 满了（或前面还有人在排、在等前面的卡、文件夹被另一张卡占着、订阅额度用完了、预算用完了、余额不足）就进队，先来先跑；有空位时 pump 接上。
     const busy = this.folderBusy(rec);
     const limited = model.source === "subscription" && this.blocked() !== null;
     const gate = this.gateReason(rec);
     if (waiting || this.ready().length || this.activeCount() >= this.max() || busy || limited || gate) {
-      rec.queuedMessage = firstMessage;
+      rec.queuedMessage = req.firstMessage;
       rec.queueOrder = ++this.queueSeq;
       this.records.set(rec.id, rec);
       if (!waiting && gate) this.markHold(rec, gate);
@@ -613,8 +610,8 @@ export class SessionManager {
     this.save(rec);
     this.emit(rec, { type: "status", status: "starting" });
     this.noteWorkspace(rec, place);
-    this.emit(rec, { type: "user_message", text: firstMessage, source: "initial" });
-    this.runs.get(rec.id)!.send(firstMessage);
+    this.emit(rec, { type: "user_message", text: req.firstMessage, source: "initial" });
+    this.runs.get(rec.id)!.send(req.firstMessage);
     this.setStatus(rec, "running");
     return this.summary(rec);
   }
@@ -1614,7 +1611,7 @@ export class SessionManager {
       createdAt: now, updatedAt: now, status: "queued", usage: zeroUsage(), syncSeq: 0, mcpSecret: "", outputs: [], versionNumber: 0, lastVersion: null,
       role: null, modelTier: null, critics: [], queuedMessage: null, queueOrder: ++this.queueSeq,
       parentId: card.id, briefPending: true, criteria: [], failStreak: 0, submitted: 0, nudged: false, workspace: null, commit, after: [], passed: null,
-      background: [], hold: null, holdSince: null, budgetKey: card.budgetKey, runSince: null, run: null, sourceWords: card.sourceWords ?? [],
+      background: [], hold: null, holdSince: null, budgetKey: card.budgetKey, runSince: null, run: null,
     };
     this.records.set(rec.id, rec);
     this.setStatus(rec, "queued", { reason: "等交回送到天枢，取验收交代" });
@@ -1675,8 +1672,9 @@ export class SessionManager {
       const model = await this.d.models.resolve(this.d.models.forTier(tier));
       if (rec.status !== "queued" || !rec.briefPending) continue;
       // 交代、模型一次填好再标成能开始：中间不能有 await，免得别处的 pump 拿着空的第一句话、执行方的模型先开了它。
-      const markdown = sourceWordsBlock(rec.sourceWords ?? []) + (changes ? `${brief.markdown}\n\n${changes}` : brief.markdown);
-      Object.assign(rec, { briefPending: false, queuedMessage: markdown, criteria: brief.criteria, failStreak: brief.failStreak, role: brief.role, modelTier: tier });
+      const markdown = changes ? `${brief.markdown}\n\n${changes}` : brief.markdown;
+      Object.assign(rec, { briefPending: false, queuedMessage: markdown, criteria: brief.criteria, failStreak: brief.failStreak, role: brief.role, modelTier: tier,
+        sourceWords: (brief.sourceWords ?? []).filter((w) => w.trim()) });
       if (model) Object.assign(rec, { modelProfileId: model.profileId, modelLabel: model.label });
       this.waitNotes.delete(rec.id);
       this.save(rec);
@@ -1718,7 +1716,7 @@ export class SessionManager {
     const issues = (Array.isArray(input.sourceWordIssues) ? input.sourceWordIssues : [])
       .map((i: any) => ({ quote: String(i?.quote ?? "").trim(), kind: i?.kind, reason: String(i?.reason ?? "").trim() })) as TLocalSourceWordIssue[];
     const notQuoted = issues.filter((i) => !i.quote || !words.some((w) => w.includes(i.quote)));
-    if (notQuoted.length) throw new SessionError("validation", words.length ? `「${notQuoted[0]!.quote}」不是本人原话里的话，quote 要原样抄` : "这张卡没有本人原话，不用写 sourceWordIssues");
+    if (notQuoted.length) throw new SessionError("validation", words.length ? `「${notQuoted[0]!.quote}」不是本人原话里的话，quote 要原样抄` : "这次的交代里没有本人原话，不用写 sourceWordIssues");
     const verdict: TLocalVerdict = {
       passed: judged.every((c) => c.verdict === "met") && !issues.length, summary: input.summary.trim(), criteria: judged,
       beyondScope: Array.isArray(input.beyondScope) ? input.beyondScope.map((s) => String(s).trim()).filter(Boolean) : [],
@@ -1762,6 +1760,7 @@ export class SessionManager {
         criterionIndex: Number.isInteger(c?.criterionIndex) && c.criterionIndex >= 1 ? c.criterionIndex : null,
         role: textOrNull(c?.role), modelTier: c?.modelTier, why: textOrNull(c?.why),
         ...(Array.isArray(c?.after) && c.after.length ? { after: [...new Set<number>(c.after)] } : {}),
+        ...(Array.isArray(c?.sourceWords) && c.sourceWords.some((w: unknown) => String(w).trim()) ? { sourceWords: c.sourceWords.map(String).filter((w: string) => w.trim()) } : {}),
       })),
       modelLabel: rec.modelLabel, roleId: rec.role?.id ?? null, roleVersion: rec.role?.version ?? null,
     };

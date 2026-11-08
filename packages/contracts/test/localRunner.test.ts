@@ -169,6 +169,9 @@ describe("本机程序契约", () => {
     expect(Value.Check(LocalVerdict, { ...verdict, passed: false, sourceWordIssues: [{ quote: "登录页要有忘记密码", kind: "missing", reason: "没有忘记密码" }] })).toBe(true);
     expect(Value.Check(LocalVerdict, { ...verdict, sourceWordIssues: [{ quote: "x", kind: "wrong", reason: "x" }] })).toBe(false);
     expect(Value.Check(LocalVerdict, { ...verdict, sourceWordIssues: [] })).toBe(false);
+    // 云端带上原话（16.8）：验收交代、派活单都收得下（本机严格校验，多一个字段就会拒）
+    expect(Value.Check(LocalVerifyBriefResponse, { markdown: "## 本人原话", criteria: ["能登录"], role: null, failStreak: 0, sourceWords: ["登录页要有忘记密码"] })).toBe(true);
+    expect(Value.Check(LocalPlanCard, { title: "改登录页", brief: "", doneDefinition: "能登录", criterionIndex: null, role: null, modelTier: "normal", why: null, sourceWords: ["登录页要有忘记密码"] })).toBe(true);
 
     expect(LOCAL_RUNNER_ROUTES.mergeSession).toEqual({ method: "POST", path: "/v1/sessions/:id/merge", auth: true });
     expect(Value.Check(LocalMergeResponse, { merged: true, commit: sha, session: { ...summary, workspace: { ...worktree, mergedCommit: sha } } })).toBe(true);

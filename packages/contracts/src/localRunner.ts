@@ -504,11 +504,6 @@ export const LocalCreateSessionRequest = Type.Object({
    */
   modelTier: Type.Optional(LocalModelTier),
   firstMessage: Type.String({ minLength: 1, maxLength: 20000 }),
-  /**
-   * 只有卡：本人原话（新首页设计 16.8，卡和派活单上的 sourceWords，网页原样转来）。本机在第一句话的最前面放一段「本人原话」，原样引用，再接 firstMessage；
-   * 验收员的交代前面也放这一段，逐条判完完成标准再对一遍原话。空数组或不带就不加。
-   */
-  sourceWords: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 4000 }), { maxItems: 20 })),
   /** 覆盖「默认干净」：true 时带上本人全局配置（hooks、插件、个人 MCP）。 */
   includePersonalConfig: Type.Optional(Type.Boolean()),
   /** 专题：云端已有的最新一版号（交代里的 latestVersion，没有版本时不填）。本机存新一版时从下一号往下编。 */
@@ -844,6 +839,10 @@ export const LocalPlanCard = Type.Object({
   why: Nullable(Type.String({ maxLength: 200 })),
   /** 要等派活单里哪几件做完（位置，从 1 起，只能是排在它前面的）；不填就是不用等，可以和别的并行。 */
   after: Type.Optional(Type.Array(Type.Integer({ minimum: 1 }), { maxItems: 7 })),
+  /**
+   * 本人原话里和这件有关的片段（16.8）：只能从交代「本人原话」那一段里原样摘，不能改写。云端核对，有一段不是原文就改用整条原话；不填也用整条原话。
+   */
+  sourceWords: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 4000 }), { maxItems: 10 })),
 }, strict);
 /**
  * 规划员出的计划和派活单草稿（propose_plan）。revision 是本会话第几次出（本人说一句让它改，改完再出是新的一次，云端以最新一次为准）；
@@ -879,7 +878,7 @@ export const LocalSourceWordIssue = Type.Object({
 }, strict);
 /**
  * 验收员的结论（submit_verdict）：每条完成标准判一次，条数和验收交代的 criteria 一样；passed 是每条都 met、并且没有 sourceWordIssues；beyondScope 是标准以外的建议，不算没达到。
- * sourceWordIssues：卡带了本人原话时，产出和原话明显对不上的地方（见 LocalSourceWordIssue）；有一条就是没过，标准全达到也一样。没有时不带。
+ * sourceWordIssues：验收交代带了本人原话（LocalVerifyBriefResponse.sourceWords）时，产出和原话明显对不上的地方（见 LocalSourceWordIssue）；有一条就是没过，标准全达到也一样。没有时不带。
  * modelLabel、roleId、roleVersion 记是谁验的（本机用的模型、验收员岗位和版本，用内置规矩时为 null）。
  */
 export const LocalVerdict = Type.Object({
@@ -902,12 +901,15 @@ export const LocalVerdict = Type.Object({
  * - role 是验收员岗位（kind=reviewer，带模型档位，本机按档位挑模型）；没配为 null，本机用内置的验收规矩、普通档。
  * - failStreak 是这张卡在这次交回之前连续没过几次（推翻以后从 0 算）。这次再没过、累计到 2 就是「受阻」。
  * 404：云端没有这次交回（还没收到或拒收了）；409：这次交回已经有结论（已验过或已推翻），不用再验。
+ * sourceWords（16.8）：卡上的本人原话；不为空时 markdown 里有一段「本人原话」，验收员逐条对完标准再对一遍原话，明显对不上（做了原话里没要的、漏了原话里明说的）算没过。
+ *   本机核对验收员写的 sourceWordIssues：quote 必须是其中某段或某段里的一截。
  */
 export const LocalVerifyBriefResponse = Type.Object({
   markdown: Type.String({ minLength: 1, maxLength: 20000 }),
   criteria: Type.Array(Type.String({ minLength: 1 }), { minItems: 1, maxItems: 50 }),
   role: Nullable(LocalRole),
   failStreak: Type.Integer({ minimum: 0 }),
+  sourceWords: Type.Optional(Type.Array(Type.String(), { maxItems: 10 })),
 }, strict);
 
 /** 专题一版的种类：outline 提纲、draft 正文、review 评审会合成的「分歧和建议」。 */
