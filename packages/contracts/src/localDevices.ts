@@ -82,11 +82,25 @@ export const LocalRunBrief = Type.Object({
   endedAt: Nullable(Instant),
 }, strict);
 
-/** 详情里的一次执行：再带完整的计划条目和里程碑（最多 50 条，不含每一步工具调用）。 */
+/**
+ * 本人在网页上对这次执行说的一句（17.4，本机同步条目 user_message、receipt，见 localRunner.ts）：开工那句（云端的交代）不在这里。
+ * attachments 只有文件名；at 是说的时间。receipt 是最新的回执：delivered 执行方收下了（第一个勾）、read 读到了（第二个勾）、
+ * failed 没读到就没了（网页给「重发」）；还没有回执为 null（老版本 Claude Code 没有回执）。
+ */
+export const LocalRunMessage = Type.Object({
+  messageId: Type.String({ format: "uuid" }),
+  text: Type.String(),
+  attachments: Type.Array(Type.String()),
+  at: Instant,
+  receipt: Nullable(Type.Union([Type.Literal("delivered"), Type.Literal("read"), Type.Literal("failed")])),
+}, strict);
+
+/** 详情里的一次执行：再带完整的计划条目、里程碑（最多 50 条，不含每一步工具调用）和本人说的话（按先后，最近 50 句）。 */
 export const LocalRunView = Type.Object({
   ...LocalRunBrief.properties,
   planEntries: Type.Array(LocalPlanEntry, { maxItems: 100 }),
   timeline: Type.Array(LocalRunActivity, { maxItems: 50 }),
+  messages: Type.Array(LocalRunMessage, { maxItems: 50 }),
 }, strict);
 
 /**
@@ -118,4 +132,5 @@ export type TLocalRunCost = Static<typeof LocalRunCost>;
 export type TLocalRunActivity = Static<typeof LocalRunActivity>;
 export type TLocalRunBrief = Static<typeof LocalRunBrief>;
 export type TLocalRunView = Static<typeof LocalRunView>;
+export type TLocalRunMessage = Static<typeof LocalRunMessage>;
 export type TLocalOutputView = Static<typeof LocalOutputView>;

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { TCreateTopicRequest, TDeliverableInclusion, TPatchTopicRequest, TResearchTopicView, TTopicBriefResponse, TTopicDetailResponse, TTopicVersionSummary,
   TTopicVersionView } from "@warmap/contracts";
-import { latestRuns, recentRuns, runBrief, runView } from "./localDevices.js";
+import { latestRuns, recentRuns, runBrief, runViews } from "./localDevices.js";
 import type { Query } from "./meetingStore.js";
 import { UUID_PATTERN } from "./meetingStore.js";
 import { criticRoles, ownRole, roleBrief, roleRef, rolesById } from "./roles.js";
@@ -91,7 +91,7 @@ export async function readTopic(q: Query, ownerId: string, id: string, planTask:
   return { topic: (await topicViews(q, [row]))[0], task: own ? { taskId: own.task.taskId, name: own.task.name } : null,
     versions: versions.map((version) => summary(version, included)),
     current: versions[0] ? { ...summary(versions[0], included), body: versions[0].body } : null,
-    runs: (await recentRuns(q, { topicId: id }, 5)).map(runView) };
+    runs: await runViews(q, await recentRuns(q, { topicId: id }, 5)) };
 }
 
 /** GET /api/me/topics/:id/versions/:number */

@@ -16901,6 +16901,15 @@ export interface components {
                     at: string;
                     text: string;
                 }[];
+                messages: {
+                    /** Format: uuid */
+                    messageId: string;
+                    text: string;
+                    attachments: string[];
+                    /** Format: date-time */
+                    at: string;
+                    receipt: ("delivered" | "read" | "failed") | null;
+                }[];
             }[];
             handbacks: {
                 /** Format: uuid */
@@ -17135,6 +17144,15 @@ export interface components {
                 /** Format: date-time */
                 at: string;
                 text: string;
+            }[];
+            messages: {
+                /** Format: uuid */
+                messageId: string;
+                text: string;
+                attachments: string[];
+                /** Format: date-time */
+                at: string;
+                receipt: ("delivered" | "read" | "failed") | null;
             }[];
         };
         LocalOutputView: {
@@ -17432,6 +17450,15 @@ export interface components {
                     /** Format: date-time */
                     at: string;
                     text: string;
+                }[];
+                messages: {
+                    /** Format: uuid */
+                    messageId: string;
+                    text: string;
+                    attachments: string[];
+                    /** Format: date-time */
+                    at: string;
+                    receipt: ("delivered" | "read" | "failed") | null;
                 }[];
             }[];
         };

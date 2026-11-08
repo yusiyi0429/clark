@@ -9,7 +9,7 @@ import type { PeopleDirectory } from "./peopleDirectory.js";
 import { personDisplayNames } from "./people.js";
 import { openPlanTask } from "./taskAgreements.js";
 import { CARD_COLUMNS, cardGit, cardsOf, effectiveOutcome, handbackBrief, nextVersions, type CardRow, type HandbackRow, type StoredAcceptance } from "./cardProjection.js";
-import { outputView, recentRuns, runView, type OutputRow } from "./localDevices.js";
+import { outputView, recentRuns, runViews, type OutputRow } from "./localDevices.js";
 import type { Query } from "./meetingStore.js";
 import { UUID_PATTERN } from "./meetingStore.js";
 import type { PlanTaskSource } from "./planTasks.js";
@@ -182,7 +182,7 @@ export async function readCardDetail(q: Query, ownerId: string, id: string, name
   const handbacks = (await q("SELECT * FROM card_handbacks WHERE task_id=$1 ORDER BY attempt DESC", [id])).rows as HandbackRow[];
   const outputs = (await q("SELECT * FROM local_outputs WHERE task_id=$1 ORDER BY created_at DESC,id", [id])).rows as OutputRow[];
   const expected = await acceptanceExpectedSeconds(q);
-  return { task, brief: card.brief, standards: taskStandards(card.done_definition), runs: (await recentRuns(q, { taskId: id }, 5)).map(runView),
+  return { task, brief: card.brief, standards: taskStandards(card.done_definition), runs: await runViews(q, await recentRuns(q, { taskId: id }, 5)),
     handbacks: handbacks.map((row) => handbackView(row, names, expected)), outputs: outputs.map(outputView) };
 }
 

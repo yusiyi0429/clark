@@ -100199,7 +100199,8 @@
                 "updatedAt",
                 "endedAt",
                 "planEntries",
-                "timeline"
+                "timeline",
+                "messages"
               ],
               "properties": {
                 "id": {
@@ -100416,6 +100417,63 @@
                         "minLength": 1,
                         "maxLength": 300,
                         "type": "string"
+                      }
+                    }
+                  }
+                },
+                "messages": {
+                  "maxItems": 50,
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "messageId",
+                      "text",
+                      "attachments",
+                      "at",
+                      "receipt"
+                    ],
+                    "properties": {
+                      "messageId": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "text": {
+                        "type": "string"
+                      },
+                      "attachments": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "at": {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      "receipt": {
+                        "anyOf": [
+                          {
+                            "anyOf": [
+                              {
+                                "const": "delivered",
+                                "type": "string"
+                              },
+                              {
+                                "const": "read",
+                                "type": "string"
+                              },
+                              {
+                                "const": "failed",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       }
                     }
                   }
@@ -101791,7 +101849,8 @@
           "updatedAt",
           "endedAt",
           "planEntries",
-          "timeline"
+          "timeline",
+          "messages"
         ],
         "properties": {
           "id": {
@@ -102008,6 +102067,63 @@
                   "minLength": 1,
                   "maxLength": 300,
                   "type": "string"
+                }
+              }
+            }
+          },
+          "messages": {
+            "maxItems": 50,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "messageId",
+                "text",
+                "attachments",
+                "at",
+                "receipt"
+              ],
+              "properties": {
+                "messageId": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "attachments": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "receipt": {
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "const": "delivered",
+                          "type": "string"
+                        },
+                        {
+                          "const": "read",
+                          "type": "string"
+                        },
+                        {
+                          "const": "failed",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               }
             }
@@ -103748,7 +103864,8 @@
                 "updatedAt",
                 "endedAt",
                 "planEntries",
-                "timeline"
+                "timeline",
+                "messages"
               ],
               "properties": {
                 "id": {
@@ -103965,6 +104082,63 @@
                         "minLength": 1,
                         "maxLength": 300,
                         "type": "string"
+                      }
+                    }
+                  }
+                },
+                "messages": {
+                  "maxItems": 50,
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "messageId",
+                      "text",
+                      "attachments",
+                      "at",
+                      "receipt"
+                    ],
+                    "properties": {
+                      "messageId": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "text": {
+                        "type": "string"
+                      },
+                      "attachments": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "at": {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      "receipt": {
+                        "anyOf": [
+                          {
+                            "anyOf": [
+                              {
+                                "const": "delivered",
+                                "type": "string"
+                              },
+                              {
+                                "const": "read",
+                                "type": "string"
+                              },
+                              {
+                                "const": "failed",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
                       }
                     }
                   }
