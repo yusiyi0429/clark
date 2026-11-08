@@ -7,7 +7,7 @@ import {
   LocalCardPlan, LocalVerdict,
   type TLocalAgentKind, type TLocalCardPlan, type TLocalCreateSessionRequest, type TLocalHandbackCriterion, type TLocalPermissionRequestView, type TLocalRole,
   type TLocalSendMessageRequest, type TLocalSendMessageResponse, type TLocalSessionKind, type TLocalSessionStatus, type TLocalSlots, type TLocalSessionSubject,
-  type TLocalSessionSummary, type TLocalSyncItem, type TLocalTopicVersionKind, type TLocalUsage, type TLocalVerdict, type TLocalVerdictCriterion,
+  type TLocalSessionSummary, type TLocalSyncItem, type TLocalTopicVersionKind, type TLocalUsage, type TLocalSourceWordIssue, type TLocalVerdict, type TLocalVerdictCriterion,
   type TLocalWorkspace, type TLocalGitRef, type TLocalMergeResponse, type TLocalQuestionRequestView, type TLocalQuestionAnswerRequest,
   type TLocalBackgroundItem, type TLocalMergeHoldReason, type TLocalMergeSync, type TLocalModelTier, type TLocalHold, type TLocalMoney,
   type TLocalRun, type TLocalTaskBudgetView, type TLocalBudgetUpdateRequest, type TBudgetMode, type TLocalPermissionBrief, type TLocalSavedAttachment,
@@ -124,6 +124,8 @@ interface SessionRecord {
   after: string[];
   /** 验收员：结论过没过（还没交为 null）。 */
   passed: boolean | null;
+  /** 验收员：验收交代里的本人原话（16.8），核对结论里的 sourceWordIssues。老记录没有这一项，按空的算。 */
+  sourceWords?: string[];
   /** 这个会话里 Claude Code 自己开的后台任务（子 agent、后台命令），按开始的先后。 */
   background: TLocalBackgroundItem[];
   /** 停着等订阅额度恢复（新首页设计 11.2）：排着的不开始，做过的到点自动接着做。 */
@@ -299,7 +301,7 @@ export class SessionManager {
   private summary(rec: SessionRecord): TLocalSessionSummary {
     const {
       mcpSecret: _s, syncSeq: _q, outputs: _o, versionNumber: _v, lastVersion: _l, role: _r, critics: _c, queuedMessage: _m, queueOrder: _n,
-      parentId: _p, briefPending: _b, criteria: _cr, failStreak: _f, submitted: _sb, nudged: _nd, workspace, commit: _cm, after: _af, passed: _ps,
+      parentId: _p, briefPending: _b, criteria: _cr, failStreak: _f, submitted: _sb, nudged: _nd, workspace, commit: _cm, after: _af, passed: _ps, sourceWords: _sw,
       background, hold, holdSince: _hs, modelTier: _mt, budgetKey: _bk, runSince: _rs, run, ...rest
     } = rec;
     const question = this.questions.get(rec.id);
@@ -1671,7 +1673,8 @@ export class SessionManager {
       if (rec.status !== "queued" || !rec.briefPending) continue;
       // 交代、模型一次填好再标成能开始：中间不能有 await，免得别处的 pump 拿着空的第一句话、执行方的模型先开了它。
       const markdown = changes ? `${brief.markdown}\n\n${changes}` : brief.markdown;
-      Object.assign(rec, { briefPending: false, queuedMessage: markdown, criteria: brief.criteria, failStreak: brief.failStreak, role: brief.role, modelTier: tier });
+      Object.assign(rec, { briefPending: false, queuedMessage: markdown, criteria: brief.criteria, failStreak: brief.failStreak, role: brief.role, modelTier: tier,
+        sourceWords: (brief.sourceWords ?? []).filter((w) => w.trim()) });
       if (model) Object.assign(rec, { modelProfileId: model.profileId, modelLabel: model.label });
       this.waitNotes.delete(rec.id);
       this.save(rec);
@@ -1692,7 +1695,7 @@ export class SessionManager {
   }
 
   /** 验收员交结论：每条完成标准判一次，经发件箱报给天枢；验收会话和被验的卡的会话里各记一条结论事件（只给网页显示；改法由云端写进那次交回后，网页按交回送回一次）。 */
-  submitVerdict(id: string, input: { summary: string; criteria: unknown[]; beyondScope?: unknown }): string {
+  submitVerdict(id: string, input: { summary: string; criteria: unknown[]; beyondScope?: unknown; sourceWordIssues?: unknown }): string {
     const rec = this.must(id);
     if (rec.subject.kind !== "verify") throw new SessionError("validation", "只有验收员交结论");
     if (rec.submitted) throw new SessionError("conflict", "这次交回已经交过结论了，不能再交");
@@ -1708,9 +1711,16 @@ export class SessionManager {
     if (twice.length) throw new SessionError("validation", `第 ${[...new Set(twice)].join("、")} 条判了不止一次`);
     const missing = Array.from({ length: n }, (_, k) => k + 1).filter((i) => !seen.includes(i));
     if (missing.length) throw new SessionError("validation", `第 ${missing.join("、")} 条还没判（完成标准共 ${n} 条）`);
+    // 原话对不上的地方（16.8）：quote 必须是某段原话或其中一截
+    const words = rec.sourceWords ?? [];
+    const issues = (Array.isArray(input.sourceWordIssues) ? input.sourceWordIssues : [])
+      .map((i: any) => ({ quote: String(i?.quote ?? "").trim(), kind: i?.kind, reason: String(i?.reason ?? "").trim() })) as TLocalSourceWordIssue[];
+    const notQuoted = issues.filter((i) => !i.quote || !words.some((w) => w.includes(i.quote)));
+    if (notQuoted.length) throw new SessionError("validation", words.length ? `「${notQuoted[0]!.quote}」不是本人原话里的话，quote 要原样抄` : "这次的交代里没有本人原话，不用写 sourceWordIssues");
     const verdict: TLocalVerdict = {
-      passed: judged.every((c) => c.verdict === "met"), summary: input.summary.trim(), criteria: judged,
+      passed: judged.every((c) => c.verdict === "met") && !issues.length, summary: input.summary.trim(), criteria: judged,
       beyondScope: Array.isArray(input.beyondScope) ? input.beyondScope.map((s) => String(s).trim()).filter(Boolean) : [],
+      ...(issues.length ? { sourceWordIssues: issues } : {}),
       modelLabel: rec.modelLabel, roleId: rec.role?.id ?? null, roleVersion: rec.role?.version ?? null,
       ...(rec.commit ? { commit: rec.commit } : {}),
     };
@@ -1724,7 +1734,7 @@ export class SessionManager {
     const blocked = failStreak >= reworkRounds(this.modeOf(rec)); // 受阻前返工几轮：自动、设预算 2，无上限 3
     const event = {
       type: "verdict" as const, handbackKey: rec.subject.handbackKey!, passed: verdict.passed, summary: verdict.summary, criteria: judged,
-      beyondScope: verdict.beyondScope, failStreak, blocked, returnText: verdict.passed ? null : returnText(rec.criteria, judged),
+      beyondScope: verdict.beyondScope, failStreak, blocked, returnText: verdict.passed ? null : returnText(rec.criteria, judged, issues),
     };
     this.emit(rec, event);
     const card = rec.parentId ? this.records.get(rec.parentId) : undefined;
@@ -1750,6 +1760,7 @@ export class SessionManager {
         criterionIndex: Number.isInteger(c?.criterionIndex) && c.criterionIndex >= 1 ? c.criterionIndex : null,
         role: textOrNull(c?.role), modelTier: c?.modelTier, why: textOrNull(c?.why),
         ...(Array.isArray(c?.after) && c.after.length ? { after: [...new Set<number>(c.after)] } : {}),
+        ...(Array.isArray(c?.sourceWords) && c.sourceWords.some((w: unknown) => String(w).trim()) ? { sourceWords: c.sourceWords.map(String).filter((w: string) => w.trim()) } : {}),
       })),
       modelLabel: rec.modelLabel, roleId: rec.role?.id ?? null, roleVersion: rec.role?.version ?? null,
     };

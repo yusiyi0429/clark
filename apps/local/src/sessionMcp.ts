@@ -100,6 +100,10 @@ const PROPOSE_PLAN = {
               type: "array", items: { type: "integer", minimum: 1 },
               description: "要等派活单里哪几件做完（位置，从 1 起，只能写排在前面的）。只在要用到前面几件的结果时才写；互不相干的件不写，好并行做",
             },
+            sourceWords: {
+              type: "array", items: { type: "string" },
+              description: "交代「本人原话」里和这件有关的片段，只能原样摘、不能改写；拿不准就不写",
+            },
           },
           required: ["title", "brief", "doneDefinition", "modelTier"],
         },
@@ -110,7 +114,7 @@ const PROPOSE_PLAN = {
 };
 const SUBMIT_VERDICT = {
   name: "submit_verdict",
-  description: "交验收结论（只交一次）：每条完成标准判一次（index 从 1 起，条数照交代），met 达到、partial 部分、unmet 没达到，写理由（reason）、依据（evidence），没达到的写怎么补（fix）；标准以外的建议放 beyondScope；summary 一句结论。",
+  description: "交验收结论（只交一次）：每条完成标准判一次（index 从 1 起，条数照交代），met 达到、partial 部分、unmet 没达到，写理由（reason）、依据（evidence），没达到的写怎么补（fix）；标准以外的建议放 beyondScope；交代里有「本人原话」时再对一遍原话，对不上的写 sourceWordIssues；summary 一句结论。",
   inputSchema: {
     type: "object",
     properties: {
@@ -127,6 +131,15 @@ const SUBMIT_VERDICT = {
         },
       },
       beyondScope: { type: "array", items: { type: "string" } },
+      sourceWordIssues: {
+        type: "array",
+        description: "交代里有「本人原话」时，产出和原话明显对不上的地方：quote 原样抄是哪一句，kind 是 missing（漏了原话里明说的）或 extra（做了原话里没要的），reason 为什么。有一条就是没过；对得上就不写",
+        items: {
+          type: "object",
+          properties: { quote: { type: "string" }, kind: { type: "string", enum: ["missing", "extra"] }, reason: { type: "string" } },
+          required: ["quote", "kind", "reason"],
+        },
+      },
     },
     required: ["summary", "criteria"],
   },
