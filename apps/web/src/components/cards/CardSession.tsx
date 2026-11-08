@@ -26,7 +26,7 @@ import { useAutoReturn } from "@/lib/board/useAutoReturn";
 import { showWorkspaceToast } from "@/lib/toast";
 import { RelayLine, SessionComposer, SessionTranscript, sayToSession, sessionEnded, type DecideOptions } from "./SessionTranscript";
 import { useCardDetail, type CardDetail } from "./useCardDetail";
-import { SourceWords, sourceWordsOf } from "./SourceWords";
+import { SourceWords } from "./SourceWords";
 import { MergeAction } from "@/components/work/MergeAction";
 import { QuestionDecision, awayChip, questionTitle } from "@/components/work/decisions";
 import { askAnchor } from "@/components/home/TaskFeed";
@@ -290,10 +290,10 @@ function ResultPane({ detail, session, view, canAct, wait, stage, handheld, read
         </div>
       ) : null}
 
-      {sourceWordsOf(item.card).length ? (
+      {item.card?.sourceWords.length ? (
         <div className={s.sec}>
           <p className={s.lab}>原话</p>
-          <SourceWords words={sourceWordsOf(item.card)} className={s.words} />
+          <SourceWords words={item.card.sourceWords} className={s.words} />
         </div>
       ) : null}
 

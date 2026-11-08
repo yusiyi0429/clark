@@ -9,7 +9,7 @@ const task: TTaskView = {
   waitingOn: null, awaitingAcceptance: false, planTaskId: null, blocker: null, owner: { personId: "owner", name: "孙铭泽" }, collaborators: [],
   latestProgress: { body: "完成接口核对", source: "codex", author: { personId: "owner", name: "孙铭泽" }, createdAt: "2026-10-05T06:20:00Z" },
   returnReason: null, origin: null, createdAt: "2026-10-01T00:00:00Z", updatedAt: "2026-10-05T06:20:00Z",
-  card: { stage: "todo", wait: null, role: null, executor: null, model: null, criterion: null, run: null, handback: null, deliverable: null, after: [] },
+  card: { stage: "todo", wait: null, role: null, executor: null, model: null, criterion: null, run: null, handback: null, deliverable: null, after: [], sourceWords: [] },
 };
 describe("任务卡执行事项行", () => {
   it("拍板人可读摘要和最新进展，但行不可打开；成员可打开", () => {

@@ -185,8 +185,9 @@ export const workHomePaths: OpenAPIV3.Document["paths"] = {
   "/api/me/projects/{projectId}/card-splits": {
     post: {
       operationId: "registerProjectCardSplit",
-      summary: "登记拆这个项目（16.3，没挂 Task 也能拆）：只记下来，网页在本人电脑上开规划员；已有一条没开工的回那一条（200）",
+      summary: "登记拆这个项目（16.3，没挂 Task 也能拆）：只记下来，网页在本人电脑上开规划员；已有一条没开工的回那一条（200）。可以带本人在输入框里的话（16.8 原话）",
       parameters: path("projectId"),
+      requestBody: { required: false, content: { "application/json": { schema: { $ref: "#/components/schemas/RegisterCardSplitRequest" } } } },
       responses: { "200": json("已有的登记", "CardSplitRequestView"), "201": json("新登记", "CardSplitRequestView"), ...errors(401, 403, 404, 409) },
     },
   },

@@ -69,7 +69,11 @@ export const addTopicVersionToPending = (taskId: string, topicVersionId: string)
 
 // ── 拆卡（第 21 节）：登记了还没开工的拆卡，真正去拆的是本人电脑上的规划员 ──
 export const listSplits = () => maybe<TCardSplitListResponse>(browserApi.GET("/api/me/card-splits") as Promise<Result<TCardSplitListResponse>>).then((data) => data?.requests ?? []);
-export const registerSplit = (taskId: string) => unwrap<TCardSplitRequestView>(browserApi.POST("/api/plan-tasks/{taskId}/card-splits", { params: task(taskId) }) as Promise<Result<TCardSplitRequestView>>);
+/** 原话最多 4000 字（契约 RegisterCardSplitRequest）；没写就不带请求体。 */
+export const WORDS_MAX = 4000;
+export const splitBody = (words?: string) => (words?.trim() ? { words: words.trim().slice(0, WORDS_MAX) } : undefined);
+export const registerSplit = (taskId: string, words?: string) =>
+  unwrap<TCardSplitRequestView>(browserApi.POST("/api/plan-tasks/{taskId}/card-splits", { params: task(taskId), body: splitBody(words) }) as Promise<Result<TCardSplitRequestView>>);
 /** 规划员开起来以后把登记去掉（回 204，没有回包）。 */
 export const removeSplit = (splitId: string) => unwrap(browserApi.DELETE("/api/me/card-splits/{id}", { params: id(splitId) }))
   .then(() => undefined, (error: unknown) => { if (!(error instanceof CloudError && error.status === 204)) throw error; });
@@ -154,10 +158,13 @@ export const cancelStart = (kind: "card" | "topic", subId: string) => unwrap(bro
 export type PlanTarget = { taskId: string } | { projectId: string };
 /** 看板、拆卡失败这些按它记：Task 是 taskId，项目是 project:<projectId>。 */
 export const planKey = (target: PlanTarget) => ("taskId" in target ? target.taskId : `project:${target.projectId}`);
-export const registerProjectSplit = (projectId: string) =>
-  unwrap<TCardSplitRequestView>(browserApi.POST("/api/me/projects/{projectId}/card-splits", { params: project(projectId) }) as Promise<Result<TCardSplitRequestView>>);
-/** 登记拆卡（伙伴或页面上的「拆一下」）：配对的电脑上开着的网页认领后开规划员。 */
-export const registerPlan = (target: PlanTarget) => ("taskId" in target ? registerSplit(target.taskId) : registerProjectSplit(target.projectId));
+export const registerProjectSplit = (projectId: string, words?: string) =>
+  unwrap<TCardSplitRequestView>(browserApi.POST("/api/me/projects/{projectId}/card-splits", { params: project(projectId), body: splitBody(words) }) as Promise<Result<TCardSplitRequestView>>);
+/**
+ * 登记拆卡（伙伴或页面上的「拆一下」）：配对的电脑上开着的网页认领后开规划员。
+ * words（16.8）：本人在输入框里的话，存成这次拆卡的原话；已有一条没开工的登记时换掉那条的原话。
+ */
+export const registerPlan = (target: PlanTarget, words?: string) => ("taskId" in target ? registerSplit(target.taskId, words) : registerProjectSplit(target.projectId, words));
 export const projectPlanBrief = (projectId: string) =>
   unwrap<TCardPlanBriefResponse>(browserApi.GET("/api/me/projects/{projectId}/plan-brief", { params: project(projectId) }) as Promise<Result<TCardPlanBriefResponse>>);
 /** 项目里不挂 Task 的卡、还没处理的草稿、最近一次计划；接口没上为 null。 */

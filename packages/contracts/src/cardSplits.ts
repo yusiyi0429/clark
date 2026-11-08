@@ -15,6 +15,20 @@ const Instant = Type.String({ format: "date-time" });
 const Nullable = <T extends TSchema>(schema: T) => Type.Union([schema, Type.Null()]);
 
 /**
+ * 本人原话（设计《新首页》16.8，11/08 用户定）：派活单、卡带着本人说过的原话，免得规划员改写需求、加了没有的约束。
+ * - 登记拆卡时存下这次拆卡依据的本人消息原文，最多最近 5 条（旧的在前）：网页按钮登记取请求里的 words；伙伴登记取本人在项目对话里最近说的话；什么都没说为空数组。
+ * - 规划员交派活单时每件写 sourceWords（从原话里摘的、和这件有关的片段，只能摘原文）；云端核对：每段去掉首尾空白后必须是某条原话的子串，
+ *   有一段不是就整件不认它摘的，改用整条原话；规划员没摘的也用整条原话。
+ */
+export const SourceWords = Type.Array(Type.String({ minLength: 1, maxLength: 4000 }), { maxItems: 10 });
+
+/**
+ * POST /api/plan-tasks/:taskId/card-splits、POST /api/me/projects/:projectId/card-splits 的请求体（可以不带）：words 是按钮旁输入框里本人的话。
+ * 已有一条没开工的登记时，带了 words 就把那条的原话换成这次的。
+ */
+export const RegisterCardSplitRequest = Type.Object({ words: Type.Optional(Type.String({ maxLength: 4000 })) }, strict);
+
+/**
  * 一条「要拆」的登记：origin=buddy 是伙伴对话里说的（register_card_split），web 是页面上的「拆一下」。
  * 拆一件 Task：taskId、taskName、missionId 有值，projectId 是这件 Task 挂的项目（没挂为 null）；
  * 拆一个没挂 Task 的项目（16.3）：taskId、taskName、missionId 为 null，projectId、projectName 有值。
@@ -27,6 +41,8 @@ export const CardSplitRequestView = Type.Object({
   projectId: Nullable(Type.String({ format: "uuid" })),
   projectName: Nullable(Type.String()),
   origin: Type.Union([Type.Literal("buddy"), Type.Literal("web")]),
+  /** 这次拆卡依据的本人原话（见 SourceWords）。 */
+  sourceWords: SourceWords,
   createdAt: Instant,
 }, strict);
 
@@ -48,6 +64,7 @@ export const PlanBriefRole = Type.Object({
  * 本人的岗位清单和职责摘要、出派活单的要求；role 是规划员岗位（本人加过的，没有时是预设），网页原样交给本机程序；roles 是派活单里能写的岗位。
  * GET /api/me/projects/:projectId/plan-brief（项目负责人，16.3）：没挂 Task 的项目的交代，task 为 null、criteria 和 exclusions 为空，
  * markdown 写项目名、目标历史、项目里已有的卡，要求每件派活单自带能核对的完成标准（对约定第几条一律写 null）。project 是拆的哪个项目（拆 Task 时是它挂的项目，没挂为 null）。
+ * sourceWords（16.8）：这个 Task 或项目最近一次登记拆卡存下的本人原话；markdown 里有一段「本人原话」，要求每件派活单从里面摘相关片段写进 sourceWords，只摘原文不改写。
  */
 export const CardPlanBriefResponse = Type.Object({
   markdown: Type.String({ minLength: 1, maxLength: 20000 }),
@@ -57,9 +74,12 @@ export const CardPlanBriefResponse = Type.Object({
   criteria: Type.Array(Type.Object({ index: Type.Integer({ minimum: 1 }), text: Type.String(), proof: Nullable(Type.String()) }, strict)),
   exclusions: Type.Array(Type.String()),
   roles: Type.Array(PlanBriefRole),
+  sourceWords: SourceWords,
 }, strict);
 
 export type TCardSplitRequestView = Static<typeof CardSplitRequestView>;
 export type TCardSplitListResponse = Static<typeof CardSplitListResponse>;
 export type TPlanBriefRole = Static<typeof PlanBriefRole>;
 export type TCardPlanBriefResponse = Static<typeof CardPlanBriefResponse>;
+export type TSourceWords = Static<typeof SourceWords>;
+export type TRegisterCardSplitRequest = Static<typeof RegisterCardSplitRequest>;

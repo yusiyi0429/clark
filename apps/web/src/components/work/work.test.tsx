@@ -13,6 +13,7 @@ import { commitText, mergeBlockedText, mergeCard, shortPlace } from "@/lib/work/
 import { reply } from "@/lib/work/actions";
 import { EMPTY_VIEW, foldEvents } from "@/lib/local/sessionView";
 import { PlanDecision, PlanningLine, plannerText } from "@/components/home/PlanDecision";
+import { splitBody, WORDS_MAX } from "@/lib/board/cloud";
 import { viewOf, scopeOf } from "@/components/home/view";
 import { placeBlocks } from "./WorkTimeline";
 import { ApprovalDecision, QuestionDecision, localOptions } from "./decisions";
@@ -30,7 +31,7 @@ const session = (extra: Partial<TLocalSessionSummary>): TLocalSessionSummary => 
   queuePosition: null, usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null }, ...extra,
 });
 const ctx = (sessions: TLocalSessionSummary[] = []) => ({ sessions, cards: new Map(), deviceName: "这台电脑" });
-const split = (id: string, taskId: string): TCardSplitRequestView => ({ id, taskId, taskName: taskId === "t1" ? "派活单" : "本机程序", missionId: "m1", projectId: null, projectName: null,
+const split = (id: string, taskId: string): TCardSplitRequestView => ({ id, taskId, taskName: taskId === "t1" ? "派活单" : "本机程序", missionId: "m1", projectId: null, projectName: null, sourceWords: [],
   origin: "web", createdAt: taskId === "t1" ? "2026-11-06T04:00:00Z" : "2026-11-06T04:01:00Z" });
 
 describe("worker 和链路", () => {
@@ -78,7 +79,7 @@ describe("worker 和链路", () => {
   it("没挂 Task 的项目也能拆（16.3）：本机会话只带 projectId、登记只带项目，都是这个项目的规划员；同一个项目在拆时登记不重复列", () => {
     const P = "00000000-0000-4000-8000-0000000000f1";
     const plan = session({ id: "00000000-0000-4000-8000-0000000000a4", subject: { kind: "plan", projectId: P }, status: "running" });
-    const projectSplit = (id: string, projectId: string): TCardSplitRequestView => ({ id, taskId: null, taskName: null, missionId: null, projectId, projectName: "本机程序",
+    const projectSplit = (id: string, projectId: string): TCardSplitRequestView => ({ id, taskId: null, taskName: null, missionId: null, projectId, projectName: "本机程序", sourceWords: [],
       origin: "buddy", createdAt: "2026-11-06T04:02:00Z" });
     const workers = plannerWorkers({ sessions: [plan], splits: [projectSplit("s3", P), projectSplit("s4", "00000000-0000-4000-8000-0000000000f2")], listed: [], tasks: [], deviceName: null });
     expect(workers.map((worker) => [worker.key, worker.taskId, worker.projectId, worker.state])).toEqual([
@@ -169,7 +170,7 @@ describe("选项框", () => {
 describe("开工（Task 管线里的选项框）", () => {
   const task: THomePlanTask = { taskId: "t1", missionId: "m1", name: "派活单与 worker 链路", doneDefinition: null, criteria: ["出派活单"], responsibleId: null };
   const draft = (id: string, title: string, extra: Partial<TCardDraftView> = {}): TCardDraftView => ({ id, planId: "00000000-0000-4000-8000-0000000000b1", position: 0, title, brief: "",
-    doneDefinition: "做完", criterionIndex: 1, executor: "claude_code", modelTier: "normal", why: null, role: ROLE, suggestPresetKey: null, ...extra });
+    doneDefinition: "做完", criterionIndex: 1, executor: "claude_code", modelTier: "normal", why: null, role: ROLE, suggestPresetKey: null, sourceWords: [], ...extra });
   const local = { runner: createMockRunner(), phase: "offline", version: null, status: null, models: [], folders: [], sessions: [], pairing: null, error: null,
     refresh: vi.fn(), pair: vi.fn(), unpair: vi.fn(), pickFolder: vi.fn(), setIncludePersonal: vi.fn() } as unknown as Parameters<typeof LocalContext.Provider>[0]["value"];
 
@@ -202,8 +203,15 @@ describe("开工（Task 管线里的选项框）", () => {
     expect(html).not.toContain("约定第");
   });
 
+  it("网页登记拆卡带上输入框里的话（16.8）：去掉首尾空白、最多 4000 字；没写就不带请求体", () => {
+    expect(splitBody(`  ${"字".repeat(WORDS_MAX + 100)}  `)).toEqual({ words: "字".repeat(WORDS_MAX) });
+    expect(splitBody("先拆登录 ")).toEqual({ words: "先拆登录" });
+    expect(splitBody("   ")).toBeUndefined();
+    expect(splitBody()).toBeUndefined();
+  });
+
   it("派活单每一步带本人原话（16.8）：引用样式放在这一步下面，原文照登；没有原话的那步不画", () => {
-    const words = { sourceWords: ["先把 clone 接上，别动登录"] } as Partial<TCardDraftView>;
+    const words = { sourceWords: ["先把 clone 接上，别动登录"] };
     const html = renderToStaticMarkup(<LocalContext.Provider value={local}>
       <PlanDecision target={{ projectId: "00000000-0000-4000-8000-0000000000f1" }} name="本机程序"
         drafts={[draft("00000000-0000-4000-8000-0000000000d3", "接上 clone", words), draft("00000000-0000-4000-8000-0000000000d4", "补测试")]}
