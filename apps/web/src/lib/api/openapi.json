@@ -30217,6 +30217,10 @@
                     {
                       "const": "wechat",
                       "type": "string"
+                    },
+                    {
+                      "const": "buddy",
+                      "type": "string"
                     }
                   ]
                 },

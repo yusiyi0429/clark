@@ -13,7 +13,7 @@ beforeAll(() => {
 
 describe("伙伴代本人做事（17.4）", () => {
   it("第一批动作的参数：名字齐全；写错的参数不收", () => {
-    expect(BUDDY_ACTION_NAMES).toEqual(expect.arrayContaining(["set_appearance", "open_page", "start_sub_session", "stop_sub_session", "archive_sub_session",
+    expect(BUDDY_ACTION_NAMES).toEqual(expect.arrayContaining(["message_project", "set_appearance", "open_page", "start_sub_session", "stop_sub_session", "archive_sub_session",
       "delete_sub_session", "create_project", "rename_project", "archive_project", "link_task_to_project", "transfer_project", "split_cards", "set_budget",
       "set_feishu_push", "send_message", "update_plan"]));
     expect(Value.Check(BuddyActionParams.set_appearance, { appearance: "dark" })).toBe(true);

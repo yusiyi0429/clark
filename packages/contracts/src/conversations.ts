@@ -295,8 +295,8 @@ export const ConversationMessage = Type.Object(
      * 普通消息没有这个字段。
      */
     kind: Type.Optional(Type.Union([Type.Literal("carried"), Type.Literal("trace")])),
-    /** 这一轮是在飞书私聊机器人或微信 ClawBot 里说的（问与答都标）；网页里不标的就是在天枢里说的。 */
-    via: Type.Optional(Type.Union([Type.Literal("feishu"), Type.Literal("wechat")])),
+    /** 这一轮是在飞书私聊机器人或微信 ClawBot 里说的（问与答都标）；buddy 是伙伴从伙伴台转来的（项目对话里本人那一句，17.4 message_project，只标本人那句）；网页里不标的就是在天枢里说的。 */
+    via: Type.Optional(Type.Union([Type.Literal("feishu"), Type.Literal("wechat"), Type.Literal("buddy")])),
     /** 只在本人的提问上：这一轮服务端还在回答（首页对话走独立 Chat 时）。切走、刷新回来据此接上这一轮。 */
     running: Type.Optional(Type.Boolean()),
     meta: Type.Optional(Type.Object(

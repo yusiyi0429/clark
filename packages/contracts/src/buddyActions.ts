@@ -56,6 +56,10 @@ const SubSessionRef = { kind: Type.Union([Type.Literal("card"), Type.Literal("to
  * - transfer_project（write）：发起转交并直接发出（同 16.7 的发起 + 发出；交接说明照常由云端写，写完才发出）。可撤（撤回转交）。
  * - split_cards（write）：登记拆卡（Task 或没挂 Task 的项目，带本人原话）。可撤（去掉登记）。
  * - set_budget（write）：改一件 Task 的预算或本人的缺省预算（taskId 不带是缺省）。可撤。
+ * - message_project（write）：把本人在伙伴台说的、关于某个项目的话转给这个项目的对话（设计 18 节第 8 条：伙伴台 → 项目对话 → 子会话，一层管一层，
+ *   伙伴不直接和子会话对话；凡是要改子会话手上的活的都走它）。天枢把话写进那个项目的对话（标成伙伴转来的，ConversationMessage.via = buddy），
+ *   触发项目对话这一轮，由它去派活、问子会话；立即回 summary，不等项目对话回完（项目对话正在回上一轮时排在后面，不打断它）。
+ *   项目对话的结果照原来的方式由伙伴在总管线里回报（18 节第 4 条）。不可撤。
  * - send_message（write）：给人员目录里的同事发一句话。先出一张卡（ConversationCard 的 buddy_message）给本人看，本人点「发出」才由天枢机器人转达；
  *   每人每天最多 20 条（回 429 DAILY_LIMIT）。不可撤（发出以后）。
  * - update_plan（plan）：计划清单，见 BuddyPlanParams。
@@ -78,6 +82,7 @@ export const BuddyActionParams = {
   split_cards: Type.Object({ taskId: Type.Optional(Type.String({ minLength: 1 })), projectId: Type.Optional(Uuid),
     words: Type.Optional(Type.String({ maxLength: 4000 })) }, strict),
   set_budget: Type.Object({ taskId: Type.Optional(Type.String({ minLength: 1 })), budget: Budget }, strict),
+  message_project: Type.Object({ projectId: Uuid, text: Type.String({ minLength: 1, maxLength: 4000 }) }, strict),
   send_message: Type.Object({ toPersonIds: Type.Array(Type.String({ minLength: 1 }), { minItems: 1, maxItems: 5 }), text: Type.String({ minLength: 1, maxLength: 2000 }) }, strict),
   update_plan: Type.Object({
     /** 整张清单（每次都交全部，后一次取代前一次）。少于 2 条不出。 */

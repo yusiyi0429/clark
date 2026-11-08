@@ -6629,7 +6629,7 @@ export interface components {
                     }[];
                 };
                 kind?: "carried" | "trace";
-                via?: "feishu" | "wechat";
+                via?: "feishu" | "wechat" | "buddy";
                 running?: boolean;
                 meta?: {
                     issueId?: string;
