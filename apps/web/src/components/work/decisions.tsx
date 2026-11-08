@@ -148,6 +148,68 @@ export function ApprovalDecision({ requests, blocked, onDecide }: {
   );
 }
 
+type BuddyQuestionCard = Extract<TConversationCard, { kind: "buddy_question" }>;
+/** 一题答了什么：点的几个选项（下标），或「自己填」的话（点选项时自己填里打了字，note 一起带上）。 */
+export type BuddyPick = { options: number[]; note?: string } | { text: string };
+
+/** 把选择拼成本人的一句话：「部署方式：只发预发（推荐）；时间：本周五」。多选用「、」连，自己填的照原话。 */
+export function buddyAnswerText(card: { questions: BuddyQuestionCard["questions"] }, picks: (BuddyPick | undefined)[]): string {
+  return card.questions.map((question, index) => {
+    const pick = picks[index];
+    const answer = !pick ? "跳过" : "text" in pick ? pick.text
+      : [...pick.options.map((at) => `${question.options[at]!.label}${question.options[at]!.recommended ? "（推荐）" : ""}`), ...(pick.note ? [pick.note] : [])].join("、");
+    return `${question.header}：${answer}`;
+  }).join("；");
+}
+
+/**
+ * 伙伴的选项框（18 节第 9 条，ask_user 出的 buddy_question）：推荐的在第一个、标「推荐」，最后固定一行「自己填」。
+ * 一题点了就发；几题一题一页，答完翻到下一个没答的，全部答完「提交」才能点。选了拼成一句话作为本人的新消息发出，带上卡 id（send）。
+ * 只画还 open 的；本人可以不选、去聊别的（发了别的话这张就收起，见 WorkTimeline）。
+ */
+export function BuddyQuestionDecision({ card, send, busy }: { card: BuddyQuestionCard; send: (text: string, questionId: string) => Promise<boolean>; busy: boolean }) {
+  const [page, setPage] = useState(0);
+  const [picks, setPicks] = useState<(BuddyPick | undefined)[]>(() => card.questions.map(() => undefined));
+  const [sending, setSending] = useState(false);
+  const [failed, setFailed] = useState<Failure | null>(null);
+  const question = card.questions[page]!;
+  const several = card.questions.length > 1;
+  const deliver = async (next: (BuddyPick | undefined)[]) => {
+    if (!(await send(buddyAnswerText(card, next), card.questionId))) throw new Error("没发出去");
+  };
+  const record = (pick: BuddyPick) => {
+    const next = picks.map((value, index) => (index === page ? pick : value));
+    setPicks(next);
+    if (!several) return deliver(next);
+    const following = next.findIndex((value, index) => index > page && !value);
+    const open = following >= 0 ? following : next.findIndex((value) => !value);
+    if (open >= 0) setPage(open);
+    return undefined;
+  };
+  const submit = async () => {
+    setSending(true);
+    setFailed(null);
+    try { await deliver(picks); }
+    catch (error) { setFailed(failureOf(error, () => void submit())); }
+    finally { setSending(false); }
+  };
+  const current = picks[page];
+  const ticking = several && !!question.multiSelect;
+  return (
+    <DecisionBox kind="question" testId="buddy-question" title={question.question} busy={busy || sending} multi={question.multiSelect}
+      options={question.options.map((option) => ({ label: option.label, detail: option.detail, recommended: option.recommended }))}
+      pager={several ? { index: page, total: card.questions.length, onGo: setPage } : undefined}
+      onPick={(picked, note) => record({ options: picked, ...(note ? { note } : {}) })}
+      onTicks={ticking ? (picked) => setPicks(picks.map((value, index) => (index === page ? (picked.length ? { options: picked } : undefined) : value))) : undefined}
+      initialPicks={ticking && current && "options" in current ? current.options : undefined}
+      other={{ label: "自己填", maxLength: ASK_TEXT_MAX, onSubmit: (text) => record({ text }) }}
+      footer={several ? <>
+        {failed && !sending ? <FailedLine inline {...failed} /> : null}
+        <span className={x.grow} /><HeroButton variant="primary" size="sm" isDisabled={busy || sending || picks.some((value) => !value)} onPress={() => void submit()}>提交</HeroButton>
+      </> : undefined} />
+  );
+}
+
 type QuestionsCard = Extract<TConversationCard, { kind: "questions" }>;
 type Pick = { option: number } | { text: string };
 

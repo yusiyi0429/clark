@@ -15,7 +15,7 @@ import { parseAnswerOptions } from "@/conversation/answerOptions";
 import { RescopeContext } from "@/conversation/ScopeChip";
 import { withoutSupersededCards } from "@/conversation/ConversationTimeline";
 import type { ConversationData } from "@/conversation/useConversation";
-import { AskDecision } from "./decisions";
+import { AskDecision, BuddyQuestionDecision } from "./decisions";
 
 export type TimedBlock = { key: string; at: string; node: ReactNode };
 
@@ -31,6 +31,11 @@ export function placeBlocks(messageTimes: (string | undefined)[], blocks: TimedB
     placed.set(index, [...(placed.get(index) ?? []), block]);
   }
   return placed;
+}
+
+/** 伙伴的选项框还能答：卡是 open，而且挂着它的那条回答之后本人没再发过话。 */
+export function buddyQuestionOpen(card: { status: string }, messages: readonly { role: string }[], index: number): boolean {
+  return card.status === "open" && !messages.slice(index + 1).some((message) => message.role === "user");
 }
 
 export function WorkTimeline({ data, blocks }: { data: ConversationData; blocks: TimedBlock[] }) {
@@ -64,11 +69,15 @@ export function WorkTimeline({ data, blocks }: { data: ConversationData; blocks:
         const cards = latestCards[index] ?? [];
         // 伙伴的提问卡在对话里就地答（选项框），别的卡照旧。
         const asks = cards.filter((card): card is Extract<typeof card, { kind: "questions" }> => card.kind === "questions");
-        const rest = cards.filter((card) => card.kind !== "questions");
+        // 伙伴的选项框（buddy_question）：只画还 open、而且本人之后没再说过话的；答了、发了别的话就收起（云端随后标 answered / dismissed）。
+        const buddyAsks = cards.filter((card): card is Extract<typeof card, { kind: "buddy_question" }> => card.kind === "buddy_question")
+          .filter((card) => buddyQuestionOpen(card, data.messages, index));
+        const rest = cards.filter((card) => card.kind !== "questions" && card.kind !== "buddy_question");
         const inserted = blocksAt(index);
         const plan = data.messages[index].plan;
-        if (!cards.length && !inserted.length && !plan) return null;
-        return <>{plan ? <PlanChecklist entries={plan.entries} collapsed={plan.collapsed} /> : null}{rest.length ? <EntryCards cards={rest} createdAt={data.messages[index].createdAt} /> : null}{asks.map((card) => <AskDecision key={card.askId} card={card} />)}{inserted}</>;
+        if (!rest.length && !asks.length && !buddyAsks.length && !inserted.length && !plan) return null;
+        return <>{plan ? <PlanChecklist entries={plan.entries} collapsed={plan.collapsed} /> : null}{rest.length ? <EntryCards cards={rest} createdAt={data.messages[index].createdAt} /> : null}{asks.map((card) => <AskDecision key={card.askId} card={card} />)}
+          {buddyAsks.map((card) => <BuddyQuestionDecision key={card.questionId} card={card} busy={data.streaming} send={(text, questionId) => data.send(text, [], { buddyQuestionId: questionId })} />)}{inserted}</>;
       }} />
     </AskContext.Provider>
     </RescopeContext.Provider>

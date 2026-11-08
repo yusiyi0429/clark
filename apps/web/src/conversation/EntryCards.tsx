@@ -69,6 +69,8 @@ function EntryCard({ card, createdAt }: { card: TConversationCard; createdAt?: s
     case "collection_draft": return <section className={`${s.card} ${s.bare}`}><CollectionDraftCard collectionId={card.collectionId} /></section>;
     case "meeting_draft": return <MeetingDraftCard card={card} />;
     case "buddy_message": return <BuddyMessageCard draftId={card.draftId} />;
+    // 伙伴的选项框由新首页的对话时间线画（WorkTimeline），这里不画。
+    case "buddy_question": return null;
   }
 }
 
