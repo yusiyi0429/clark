@@ -552,7 +552,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       // Mac/Linux 上自成进程组，强停时整组杀掉。
       detached: process.platform !== "win32",
     });
-    const run = new ClaudeRun(child, launch.sessionId, { cwd: launch.cwd, home: homeDir(), allowedRoots: launch.allowedRoots }, launch.autoAllowRoot, launch.model.source === "subscription", launch.permissionMode);
+    const run = new ClaudeRun(child, launch.sessionId, { cwd: launch.cwd, home: homeDir(), allowedRoots: launch.allowedRoots, toolReads: launch.toolReads }, launch.autoAllowRoot, launch.model.source === "subscription", launch.permissionMode);
     const spawned = await new Promise<Error | null>((resolve) => {
       child.once("spawn", () => resolve(null));
       child.once("error", (e) => resolve(e));

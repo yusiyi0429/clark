@@ -73,7 +73,7 @@ export const LocalModelTier = Type.Union([Type.Literal("strong"), Type.Literal("
  * running 是占着位置的会话（开工中、进行中、等你批准；一轮做完在等你回复的不占）；queued 是等空位的。
  */
 export const LocalSlots = Type.Object({
-  max: Type.Integer({ minimum: 1, maximum: 10 }),
+  max: Type.Integer({ minimum: 1 }),
   running: Type.Integer({ minimum: 0 }),
   queued: Type.Integer({ minimum: 0 }),
 }, strict);
@@ -161,8 +161,8 @@ export const LocalSettings = Type.Object({
   allowedOrigins: Type.Array(Type.String()),
   /** 「暂停全部」后为 true：进行中的会话停下，不接新会话、不续接旧会话；只能在托盘里恢复。 */
   paused: Type.Boolean(),
-  /** 同时最多跑几个（默认 3，插件页可改）。超出的排队，先来先跑；调大时立刻从队里接上。 */
-  maxConcurrent: Type.Integer({ minimum: 1, maximum: 10 }),
+  /** 同时最多跑几个（默认 3，插件页可改，不设上限；超过 10 个时网页提醒电脑和额度可能吃紧）。超出的排队，先来先跑；调大时立刻从队里接上。 */
+  maxConcurrent: Type.Integer({ minimum: 1 }),
   /**
    * 「验收过就合回」（默认 true，插件页可改）：卡的验收过了，主文件夹停在原分支上、没有没提交的改动、合并没有冲突时，本机自动合回（只合不推），
    * 等它的卡接着自己开始。不满足或关了时不合，卡的 workspace.needsMerge 写明原因，等本人合。
@@ -171,7 +171,7 @@ export const LocalSettings = Type.Object({
 }, strict);
 export const LocalSettingsPatch = Type.Object({
   includePersonalConfigByDefault: Type.Optional(Type.Boolean()),
-  maxConcurrent: Type.Optional(Type.Integer({ minimum: 1, maximum: 10 })),
+  maxConcurrent: Type.Optional(Type.Integer({ minimum: 1 })),
   autoMerge: Type.Optional(Type.Boolean()),
   /** 网页只能暂停（true）；传 false 会被拒（409），恢复只能在本机托盘里点。 */
   paused: Type.Optional(Type.Boolean()),
@@ -329,6 +329,53 @@ export const LocalModelProfileUpsert = Type.Object({
   webSearch: Type.Optional(Type.Boolean()),
   apiKey: Type.Optional(Type.String({ maxLength: 400, pattern: SECRET_CHARS })),
   isDefault: Type.Optional(Type.Boolean()),
+}, strict);
+
+// ───────────────────────── 本人加的工具 ─────────────────────────
+
+/**
+ * 本人在连接页给子会话加的工具（设计 9.5 · 11/08 改定、17.2 第 6 条）：一个 MCP 服务器，本机程序开执行会话时写进那个会话的 mcp.json。
+ * - 存在这台电脑上；钥匙只存本机凭据库（Windows DPAPI、Mac 钥匙串），任何接口都不回传，写进 mcp.json 的也只是 ${变量名}。云端这个月不知道。
+ * - 只收 HTTP 地址（https；本机的 127.0.0.1、localhost 可以是 http），不收命令：网页一旦被注入，收命令就等于能在本机起任意程序。
+ * - preset：kingdee 金蝶（哪款产品还没定，先是占位预设，地址由本人填）；custom 其他工具。GitHub 不在这里，它就是「这台电脑」里 gh 那一行。
+ * - 挂给所有执行会话（卡、专题），不受岗位工具名单管；规划员、验收员不挂。Codex 下个月接。
+ * - 放行：预设带一份读工具名单，读的照权限模式放行（「自动」「全部放行」不问，和天枢 MCP 的读工具一样）；写的、认不出的，哪一档都问本人。
+ */
+export const LocalToolPreset = Type.Union([Type.Literal("kingdee"), Type.Literal("custom")]);
+/**
+ * 连没连上（本机发一次 MCP 的 initialize 和 tools/list）：ready 连上了；unauthorized 钥匙不对或过期（401、403）；
+ * unreachable 连不上或回的不是 MCP；unknown 还没查。加、改、点「检查」时查，结果只留本机。
+ */
+export const LocalToolState = Type.Union([Type.Literal("ready"), Type.Literal("unauthorized"), Type.Literal("unreachable"), Type.Literal("unknown")]);
+export const LocalTool = Type.Object({
+  id: Id,
+  name: Type.String({ minLength: 1, maxLength: 40 }),
+  preset: LocalToolPreset,
+  url: Type.String({ maxLength: 300 }),
+  /** 钥匙放在哪个请求头：null 是 Authorization: Bearer <钥匙>，否则原样放进这个头（如 X-Api-Key）。 */
+  keyHeader: Nullable(Type.String({ maxLength: 60 })),
+  hasKey: Type.Boolean(),
+  state: LocalToolState,
+  /** 连上时它有几个工具。 */
+  toolCount: NullableInteger({ minimum: 0 }),
+  /** 没连上的一句原因（给人看）。 */
+  error: Nullable(Type.String({ maxLength: 200 })),
+  checkedAt: Nullable(Instant),
+  addedAt: Instant,
+}, strict);
+/** GET /v1/tools */
+export const LocalToolListResponse = Type.Object({ tools: Type.Array(LocalTool, { maxItems: 20 }) }, strict);
+/**
+ * PUT /v1/tools/:id：加或改一个工具（id 由网页起，字母数字、- 和 _），最多 20 个。不收 command、args 这类字段。
+ * apiKey 只写不读：不传是保留原钥匙，传空串是删掉；地址改了又没给新钥匙时旧钥匙作废（免得改个地址就把钥匙发到别处）。
+ * keyHeader 不传是用 Authorization: Bearer。存完马上查一次连没连上，回的是查完的 LocalTool。
+ */
+export const LocalToolUpsert = Type.Object({
+  name: Type.String({ minLength: 1, maxLength: 40 }),
+  preset: LocalToolPreset,
+  url: Type.String({ minLength: 8, maxLength: 300, pattern: "^https?://" }),
+  keyHeader: Type.Optional(Type.String({ pattern: "^[A-Za-z][A-Za-z0-9-]{0,59}$" })),
+  apiKey: Type.Optional(Type.String({ maxLength: 2000, pattern: SECRET_CHARS })),
 }, strict);
 
 /** 文件夹挂在哪个项目上（项目 id 是天枢给的，name 是绑定时网页带来的名字，只用来显示）。 */
@@ -1108,13 +1155,41 @@ const syncItem = <T extends string, D extends TSchema>(type: T, data: D) => Type
 
 /**
  * 同步给云端的「在等批准的那一步」（status = waiting_permission 时带）：给人看的一行、越界路径，不传工具的完整输入（输入只在本机）。
- * 云端「等你」那一行的标题就是 title（原话）。
+ * 云端「等你」那一行的标题就是 title（原话）；项目对话里的批准卡（新首页设计 18.10）也照它画：
+ * 批准、拒绝都走网页的 POST /v1/sessions/:id/permissions/:requestId（已处理过或已失效回 409）。
  */
 export const LocalPermissionBrief = Type.Object({
   requestId: Type.String({ minLength: 1, maxLength: 120 }),
   toolName: Type.String({ maxLength: 200 }),
   title: Type.String({ maxLength: 500 }),
   outsidePaths: Type.Array(Type.String(), { maxItems: 20 }),
+  /** 能不能「这张卡都允许」（同 LocalPermissionRequestView.canAllowForSession）：为 false 时批准卡只给「允许这一次」。老版本本机报的不带，按 false。 */
+  canAllowForSession: Type.Optional(Type.Boolean()),
+}, strict);
+
+/**
+ * 子会话停了（新首页设计 18.10「报给主管线」）：why 是怎么停的——
+ * turn_done 做完一轮（等本人下一句；卡交回了、规划员交了计划、验收员交了结论也是这个）；interrupted 本人点了停下（含托盘「暂停全部」）；
+ * held 停着等（订阅额度用完、网关余额不足、预算用完，blocker 写等什么）；error 出错停住（执行方报错、没开起来、进程意外退出，blocker 写原因）；killed 强停。
+ * 要人介入（在问本人、在等批准）不报这一条：照旧是 status 条目带 question / permission，云端据此在项目对话里直接出决定卡。
+ */
+export const LocalStopReason = Type.Union([
+  Type.Literal("turn_done"), Type.Literal("interrupted"), Type.Literal("held"), Type.Literal("error"), Type.Literal("killed"),
+]);
+/**
+ * 停了的报告（同步条目 stopped）。都取会话里现成的内容，本机不另调模型：
+ * - summary：做成了什么，取这一轮执行方最后那段话的头一两句（去掉 Markdown 记号，200 字以内）；这一轮一句话也没说为 null。
+ * - blocker：卡在哪，出错、停着等时的原因（一句话，给人看）；做完一轮、本人停下、强停为 null。
+ * - outputs：这一轮交的产出物，key 是它那条 artifact 同步条目的 key（云端据此出「看结果」），title、fileName 同那一条。
+ * - handbackKey：这一轮交回了时，那条 handback 同步条目的 key。
+ * 云端照它在项目对话里出「B · 标题」的报告，再让项目主管线回一小轮。subject 里有 cardId、topicId、taskId 和 projectId。
+ */
+export const LocalStopReport = Type.Object({
+  why: LocalStopReason,
+  summary: Nullable(Type.String({ minLength: 1, maxLength: 400 })),
+  blocker: Nullable(Type.String({ minLength: 1, maxLength: 400 })),
+  outputs: Type.Array(Type.Object({ key: SyncKey, title: Type.String({ maxLength: 200 }), fileName: Type.String({ maxLength: 200 }) }, strict), { maxItems: 20 }),
+  handbackKey: Type.Optional(SyncKey),
 }, strict);
 
 export const LocalSyncItem = Type.Union([
@@ -1219,6 +1294,8 @@ export const LocalSyncItem = Type.Union([
   syncItem("background", LocalBackgroundItem),
   /** 卡合回的结果，见 LocalMergeSync。 */
   syncItem("merge", LocalMergeSync),
+  /** 子会话停了：一两句摘要、卡在哪、这一轮的产出物，见 LocalStopReport。每停一次报一条。 */
+  syncItem("stopped", LocalStopReport),
   /**
    * 预算变了（见 LocalTaskBudgetView）：state 变了（到 80%、到 100%、加了预算回落）和预算被改了时报一条，按报这一条的会话（这件 Task 里刚做完一轮的、或随便一个）。
    * 云端照它画 Task 行的「预算 80%」、Task 管线里的「加 50%」和 100% 时的选项框、「等你」里那一行。同一件 Task 以 updatedAt 最新的一条为准。
@@ -1265,6 +1342,11 @@ export type TLocalModelSource = Static<typeof LocalModelSource>;
 export type TLocalModelProfile = Static<typeof LocalModelProfile>;
 export type TLocalModelListResponse = Static<typeof LocalModelListResponse>;
 export type TLocalModelProfileUpsert = Static<typeof LocalModelProfileUpsert>;
+export type TLocalToolPreset = Static<typeof LocalToolPreset>;
+export type TLocalToolState = Static<typeof LocalToolState>;
+export type TLocalTool = Static<typeof LocalTool>;
+export type TLocalToolListResponse = Static<typeof LocalToolListResponse>;
+export type TLocalToolUpsert = Static<typeof LocalToolUpsert>;
 export type TLocalFolder = Static<typeof LocalFolder>;
 export type TLocalFolderListResponse = Static<typeof LocalFolderListResponse>;
 export type TLocalFolderPickResponse = Static<typeof LocalFolderPickResponse>;
@@ -1315,6 +1397,8 @@ export type TLocalMergeSync = Static<typeof LocalMergeSync>;
 export type TLocalQuestion = Static<typeof LocalQuestion>;
 export type TLocalQuestionRequestView = Static<typeof LocalQuestionRequestView>;
 export type TLocalPermissionBrief = Static<typeof LocalPermissionBrief>;
+export type TLocalStopReason = Static<typeof LocalStopReason>;
+export type TLocalStopReport = Static<typeof LocalStopReport>;
 export type TLocalQuestionAnswerRequest = Static<typeof LocalQuestionAnswerRequest>;
 export type TLocalBackgroundItem = Static<typeof LocalBackgroundItem>;
 export type TLocalBackgroundItemKind = Static<typeof LocalBackgroundItemKind>;
@@ -1362,6 +1446,10 @@ export const LOCAL_RUNNER_ROUTES = {
   listModels: { method: "GET", path: "/v1/models", auth: true },
   putModel: { method: "PUT", path: "/v1/models/:id", auth: true },
   deleteModel: { method: "DELETE", path: "/v1/models/:id", auth: true },
+  listTools: { method: "GET", path: "/v1/tools", auth: true },
+  putTool: { method: "PUT", path: "/v1/tools/:id", auth: true },
+  deleteTool: { method: "DELETE", path: "/v1/tools/:id", auth: true },
+  checkTool: { method: "POST", path: "/v1/tools/:id/check", auth: true },
   listFolders: { method: "GET", path: "/v1/folders", auth: true },
   pickFolder: { method: "POST", path: "/v1/folders/pick", auth: true },
   deleteFolder: { method: "DELETE", path: "/v1/folders/:id", auth: true },

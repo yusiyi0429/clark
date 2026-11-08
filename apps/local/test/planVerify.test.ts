@@ -116,6 +116,8 @@ describe("规划员和验收员", { timeout: 30_000 }, () => {
     const h = await setup(1);
     try {
       h.fake({ verdict: FAILING, plan: PLAN });
+      // 本人加的工具：执行的挂，验收员、规划员不挂
+      expect((await h.call("PUT", "/v1/tools/kd", { name: "金蝶", preset: "kingdee", url: "https://kd.example.com/mcp" })).status).toBe(200);
       const a = await h.open(h.card("A"));
       await h.waitStatus(a.id, "waiting_permission");
       const b = await h.open(h.card("B"));
@@ -150,6 +152,8 @@ describe("规划员和验收员", { timeout: 30_000 }, () => {
       expect(flagList(vv, "--allowedTools")).toEqual(["mcp__tianshu-session__submit_verdict", "mcp__tianshu__get_task_context"]);
       expect(flagList(pv, "--allowedTools")).toEqual(["mcp__tianshu-session__propose_plan", "mcp__tianshu__get_task_context"]);
       expect(flagList(av, "--allowedTools")).toEqual(expect.arrayContaining(["mcp__tianshu-session__hand_back", "mcp__tianshu__get_task_context"]));
+      const toolServers = (argv: string[]) => Object.keys(JSON.parse(readFileSync(flag(argv, "--mcp-config")!, "utf8")).mcpServers).filter((k) => k.startsWith("tool-"));
+      expect([toolServers(av), toolServers(vv), toolServers(pv)]).toEqual([["tool-kd"], [], []]);
       expect([flag(vv, "--model"), flag(av, "--model")]).toEqual(["haiku", "opus"]); // 执行没说档位：按标准档 Opus
       // 验收员的提示词：验收规矩 + 交代里的验收员岗位
       const vPrompt = readFileSync(flag(vv, "--append-system-prompt-file")!, "utf8");
