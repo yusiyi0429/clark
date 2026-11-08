@@ -208,6 +208,23 @@ export function gateLabel(plan: Pick<THomePlanResponse, "gates" | "today"> | nul
   const date = dates.find((value) => value >= (plan?.today ?? "")) ?? dates[dates.length - 1];
   return date ? `${date.slice(5).replace("-", "/")} 验收` : null;
 }
+/**
+ * 一件 Task 的验收截止日（YYYY-MM-DD）：挂在项目上的照那条目标的 dueDate（B 契约 f3525766：天枢里存的，没存退回 Mission 的节点）；
+ * 没挂在项目上的为 null，调用方退回 Mission 下一个验收时间点。
+ */
+export function goalDueDate(projects: readonly { goals: readonly { taskId: string; dueDate: string }[] }[], taskId: string): string | null {
+  for (const project of projects) {
+    const goal = project.goals.find((entry) => entry.taskId === taskId);
+    if (goal) return goal.dueDate;
+  }
+  return null;
+}
+
+/** 「本月」、Mission 详情里 Task 一行的行尾：「11/18 验收」，先看挂着的项目目标，取不到退回 Mission 下一个验收时间点。 */
+export function taskGateLabel(projects: Parameters<typeof goalDueDate>[0], plan: Parameters<typeof gateLabel>[0], task: { taskId: string; missionId: string }): string | null {
+  const due = goalDueDate(projects, task.taskId);
+  return due ? `${due.slice(5).replace("-", "/")} 验收` : gateLabel(plan, task.missionId);
+}
 export function statusLine(task: StatusSource): string {
   const { needsYou, rest } = statusParts(task);
   return [needsYou ? `等你 ${needsYou}` : null, ...rest].filter(Boolean).join(" · ");

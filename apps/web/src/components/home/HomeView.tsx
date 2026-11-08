@@ -21,7 +21,7 @@ import { useLocalRunner, type LocalRunnerState } from "@/lib/local/LocalRunnerPr
 import { decideProposal } from "@/lib/team/roles";
 import { canCommandHere, decide } from "@/lib/work/actions";
 import { mergeCard } from "@/lib/work/merge";
-import { gateLabel, missionHref, taskHref, waitingHref } from "@/lib/home/derive";
+import { missionHref, taskGateLabel, taskHref, waitingHref } from "@/lib/home/derive";
 import { projectHref, type Project } from "@/lib/home/projects";
 import type { ProjectsApi } from "./useProjects";
 import { relativeDayTime } from "@/lib/companyTime";
@@ -71,7 +71,7 @@ export function HomeView({ data, api, buddy, today, go, route, onSend, projects 
                 <div key={mission.missionId} className={h.taskList}>
                   {/* Mission 名点了进只读的 Mission 详情（14.2）。 */}
                   <button type="button" className={h.missionTitle} onClick={() => go(missionHref(mission.missionId))} data-testid="month-mission">{mission.title}</button>
-                  {mission.tasks.map((task) => <MonthRow key={task.taskId} task={task} gate={gateLabel(api.work.plan, mission.missionId)} projects={projects} go={go} />)}
+                  {mission.tasks.map((task) => <MonthRow key={task.taskId} task={task} gate={taskGateLabel(projects.all, api.work.plan, { taskId: task.taskId, missionId: mission.missionId })} projects={projects} go={go} />)}
                 </div>
               ))}
             </section>
@@ -84,7 +84,7 @@ export function HomeView({ data, api, buddy, today, go, route, onSend, projects 
 }
 
 /**
- * 「本月」一行：Task 名（做完了小字「已完成」）、行尾这个 Mission 下一个验收时间点（网页按计划算），再是项目名 chip；
+ * 「本月」一行：Task 名（做完了小字「已完成」）、行尾验收截止（挂着的项目目标的截止日，没挂的退回这个 Mission 下一个验收时间点），再是项目名 chip；
  * 没挂上的「挂到…」：选现有项目（PUT 挂接）或用 Task 名新建一个挂上（POST 带 taskId）；没成在行尾写「失败 · 重试」。
  */
 function MonthRow({ task, gate, projects, go }: { task: HomeMonthMission["tasks"][number]; gate: string | null; projects: ProjectsApi; go: (href: string) => void }) {

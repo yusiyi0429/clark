@@ -10,7 +10,7 @@
 import { useEffect, useState } from "react";
 import { ArrowLeft, Circle } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
-import { gateLabel, monthLabel, projectHref, taskHref, HOME_HREF } from "@/lib/home/derive";
+import { monthLabel, projectHref, taskGateLabel, taskHref, HOME_HREF } from "@/lib/home/derive";
 import type { HomeMonthMission } from "@/lib/home/types";
 import type { WorkHomeApi } from "@/lib/home/useWorkHome";
 import { ICON } from "./StateIcon";
@@ -76,7 +76,7 @@ export function MissionInfo({ mission, cardId, api, go, onAsk }: {
               <p className={h.sectionTitle}>Task</p>
               <div className={h.taskList}>
                 {mission.tasks.map((task) => {
-                  const gate = gateLabel(api.work.plan, mission.missionId);
+                  const gate = taskGateLabel(api.data.projects, api.work.plan, { taskId: task.taskId, missionId: mission.missionId });
                   return (
                     <button key={task.taskId} type="button" className={h.taskLine} onClick={() => go(task.project ? projectHref(task.project.projectId) : taskHref(task.taskId))}>
                       <span className={h.taskText}>
