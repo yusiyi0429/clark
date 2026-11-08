@@ -7,13 +7,13 @@ import type {
   TLocalModelProfile, TLocalModelProfileUpsert, TLocalPairingStartResponse, TLocalPairingStatusResponse,
   TLocalPermissionDecisionRequest, TLocalQuestionAnswerRequest, TLocalRunnerErrorCode, TLocalSendMessageRequest, TLocalSendMessageResponse, TLocalSessionDetailResponse,
   TLocalSessionEvent, TLocalSessionSummary, TLocalSettings, TLocalSettingsPatch, TLocalStatusResponse, TLocalBudgetUpdateRequest, TLocalTaskBudgetView, TLocalAttachmentRef,
-  TLocalHandoverCheck, TLocalProjectCloneRequest, TLocalProjectCloneResponse, TLocalProjectFolder, TLocalProjectFolderRequest,
+  TLocalHandoverCheck, TLocalProjectCloneRequest, TLocalProjectCloneResponse, TLocalProjectFolder, TLocalProjectFolderRequest, TLocalPermissionMode,
 } from "@warmap/contracts";
 
 export type {
   TLocalCreateSessionRequest, TLocalFolder, TLocalHealthResponse, TLocalModelProfile, TLocalPermissionRequestView, TLocalPlanEntry, TLocalRole, TLocalSessionEvent,
   TLocalSessionStatus, TLocalSessionSummary, TLocalStatusResponse, TLocalUsage, TLocalWorkspace, TLocalMergeResponse, TLocalQuestion, TLocalQuestionRequestView,
-  TLocalQuestionAnswerRequest,
+  TLocalQuestionAnswerRequest, TLocalPermissionMode,
 } from "@warmap/contracts";
 
 /** 本机接口回的错：code 照契约；network 是连不上（没装、没开、浏览器没给访问本机的授权）。 */
@@ -54,6 +54,8 @@ export interface LocalRunner {
   /** attachments：云端存好的子会话附件（14.5），本机按 id 取回；只带附件时 text 可以是空的。 */
   sendMessage(id: string, text: string, kind?: TLocalSendMessageRequest["kind"], attachments?: TLocalAttachmentRef[]): Promise<TLocalSendMessageResponse>;
   interrupt(id: string): Promise<TLocalSessionSummary>;
+  /** 换这个子会话的权限模式（跑着也能换，下一步就按新的来）；执行方没有这一档 400、会话已结束 409。 */
+  setPermissionMode(id: string, mode: TLocalPermissionMode): Promise<TLocalSessionSummary>;
   kill(id: string): Promise<TLocalSessionSummary>;
   decidePermission(id: string, requestId: string, body: TLocalPermissionDecisionRequest): Promise<TLocalSessionSummary>;
   /** 把卡的分支合回主文件夹（本人点了才合）；合不了回原因和文件，卡不在工作树、还在跑、交回后又改过、已合过是 409。 */

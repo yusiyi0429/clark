@@ -356,7 +356,19 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
       emit(s, { type: "permission_resolved", requestId, decision: body.decision, allowForSession: Boolean(body.allowForSession), ...(body.message ? { message: body.message } : {}) });
       setStatus(s, "running");
       s.denied = body.decision === "deny";
+      // 先出计划：批了就转成自动接着做（和本机一样报一条 permission_mode）。
+      if (body.decision === "allow" && s.summary.permissionMode === "plan") {
+        s.summary = { ...s.summary, permissionMode: "auto" };
+        emit(s, { type: "permission_mode", mode: "auto", by: "plan_approved" });
+      }
       advance(s);
+      return summaryOf(s);
+    },
+    setPermissionMode: async (id, mode) => {
+      const s = must(id);
+      if (["done", "failed", "exited"].includes(s.summary.status)) throw new LocalRunnerError("conflict", "这个会话已经结束了", 409);
+      s.summary = { ...s.summary, permissionMode: mode };
+      emit(s, { type: "permission_mode", mode, by: "web" });
       return summaryOf(s);
     },
     answerQuestion: async (id, requestId, body) => {
@@ -413,7 +425,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
     const waitingFor = (body.after ?? []).filter((entry) => !merged.has(entry));
     const full = slots().running >= maxConcurrent || busy || waitingFor.length > 0;
     const s: MockSession = {
-      summary: { id, subject: body.subject, title: body.title, agent: "claude-code", modelProfileId: model.id, modelLabel: model.label, cwd: body.cwd ?? "topics", status: full ? "queued" : "starting", includePersonalConfig: Boolean(body.includePersonalConfig), createdAt: now(), updatedAt: now(), lastSeq: 0, pendingPermissions: 0, queuePosition: full ? slots().queued + 1 : null, usage: { ...ZERO }, ...(workspace && !waitingFor.length ? { workspace } : {}), ...(waitingFor.length ? { waitingFor } : {}) },
+      summary: { id, subject: body.subject, title: body.title, agent: "claude-code", modelProfileId: model.id, modelLabel: model.label, cwd: body.cwd ?? "topics", status: full ? "queued" : "starting", permissionMode: body.permissionMode ?? "auto", includePersonalConfig: Boolean(body.includePersonalConfig), createdAt: now(), updatedAt: now(), lastSeq: 0, pendingPermissions: 0, queuePosition: full ? slots().queued + 1 : null, usage: { ...ZERO }, ...(workspace && !waitingFor.length ? { workspace } : {}), ...(waitingFor.length ? { waitingFor } : {}) },
       log: [], listeners: new Set(), script: body.subject.kind === "plan" ? planner : body.subject.kind === "verify" ? verifier : script, cursor: 0, timer: null, pending: null, paused: false, denied: false, mergeTries: 0,
       ...(waitingFor.length ? { waits: { workspace } } : {}),
     };

@@ -16,7 +16,7 @@ const item = (extra: Partial<TWorkerItem>): TWorkerItem => ({
   resource: { where: "local", deviceId: null, deviceName: "ThinkPad", modelLabel: "Sonnet" }, startedAt: "2026-11-07T04:00:00Z", elapsedSeconds: 60,
   finishedAt: null, cost: null, stage: "doing", wait: null, needsYou: false, queueReason: null, holdUntil: null, queuePosition: null, git: null, waitingFor: [], ...extra,
 });
-const session = (extra: Partial<TLocalSessionSummary>): TLocalSessionSummary => ({
+const session = (extra: Partial<TLocalSessionSummary>): TLocalSessionSummary => ({ permissionMode: "auto",
   id: "00000000-0000-4000-8000-0000000000a1", subject: { kind: "plan", taskId: "t1" }, title: "拆卡", agent: "claude-code", modelProfileId: "subscription", modelLabel: "Sonnet",
   cwd: "C:\\w", status: "running", includePersonalConfig: false, createdAt: "2026-11-07T04:00:00Z", updatedAt: "2026-11-07T04:01:00Z", lastSeq: 3, pendingPermissions: 0,
   queuePosition: null, usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null }, ...extra,

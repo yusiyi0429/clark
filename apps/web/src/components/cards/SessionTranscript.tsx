@@ -16,7 +16,8 @@ import type { LocalRunner, TLocalPermissionRequestView, TLocalQuestionRequestVie
 import { duration } from "@/lib/home/derive";
 import { InputBar } from "@/components/home/InputBar";
 import { sizeText, uploadToSubSession } from "@/lib/home/attachments";
-import type { TLocalAttachmentRef, TSessionAttachment } from "@warmap/contracts";
+import type { TLocalAttachmentRef, TLocalPermissionMode, TSessionAttachment } from "@warmap/contracts";
+import { PermissionModeMenu } from "./PermissionMode";
 import { ApprovalDecision, DENY_MAX, awayChip } from "@/components/work/decisions";
 import { DecisionBox, FailedLine } from "@/components/work/DecisionBox";
 import { HeroButton } from "@/components/HeroButton";
@@ -183,15 +184,17 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
 /**
  * 子会话底下的输入框（5.4.3「输入框」、14.5）：和首页、管线一样是 InputBar，不放占位字（空着就是一行），读屏名字「给{子会话名}插话」。发给执行方（进行中在下一个工具步骤生效）。
  * 附件先存到云端（POST /api/me/sub-sessions/:kind/:id/attachments），这句话带着引用交给本机，本机取回存进工作区；只带附件不说话也行。
- * dock：「N 个问题等你 / 回到最新」那一条（PendingDock），放在输入框上方。
+ * dock：「N 个问题等你 / 回到最新」那一条（PendingDock），放在输入框上方。mode：输入框下面左侧的权限模式（useSessionMode；还没开工时不给）。
  */
-export function SessionComposer({ label, disabled, onSend, dock, subject }: {
+export function SessionComposer({ label, disabled, onSend, dock, subject, mode }: {
   label: string; disabled: boolean; onSend: (text: string, attachments: TLocalAttachmentRef[]) => Promise<boolean>; dock?: ReactNode;
   subject: TSessionAttachment["subject"];
+  mode?: { modes: readonly TLocalPermissionMode[]; value: TLocalPermissionMode; set: (mode: TLocalPermissionMode) => void } | null;
 }) {
   return (
     <div className={s.composerDock}>
       <InputBar placeholder="" label={label} disabled={disabled} dock={dock} draftKey={`tianshu-home-draft-v1:${subject.kind}:${subject.id}`}
+        under={mode ? <PermissionModeMenu modes={mode.modes} value={mode.value} disabled={disabled} onChange={mode.set} /> : undefined}
         onSend={async (text, files) => onSend(text, files.length ? await uploadToSubSession(subject, files) : [])} />
     </div>
   );

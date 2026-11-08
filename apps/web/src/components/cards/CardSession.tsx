@@ -25,6 +25,7 @@ import { cardRole } from "@/lib/team/roles";
 import { useAutoReturn } from "@/lib/board/useAutoReturn";
 import { showWorkspaceToast } from "@/lib/toast";
 import { RelayLine, SessionComposer, SessionTranscript, sayToSession, sessionEnded, type DecideOptions } from "./SessionTranscript";
+import { useSessionMode } from "./PermissionMode";
 import { useCardDetail, type CardDetail } from "./useCardDetail";
 import { SourceWordIssues, SourceWords } from "./SourceWords";
 import { MergeAction } from "@/components/work/MergeAction";
@@ -74,6 +75,7 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
   const ready = local.phase === "ready";
   const session = ready ? latestSessionFor(local.sessions, { cardId }) : null;
   const { view } = useSessionEvents(local.runner, session?.id ?? null);
+  const mode = useSessionMode(local.runner, session, view);
   const [tab, setTab] = useState<"result" | "chat">("result");
   const [starting, setStarting] = useState(false);
   useAutoReturn(local.runner, ready, detail ? [detail.task] : [], local.sessions, () => void refresh());
@@ -147,7 +149,7 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
   const dock = <PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} />;
   // 新首页里输入框只在这台电脑上跑着这张卡时出（别处看摘要）；老页面照旧灰着。
   const composer = agent && (session || !embedded)
-    ? <SessionComposer label={`给${item.title}插话`} disabled={!canAct} onSend={say} dock={dock} subject={{ kind: "card", id: cardId }} />
+    ? <SessionComposer label={`给${item.title}插话`} disabled={!canAct} onSend={say} mode={mode} dock={dock} subject={{ kind: "card", id: cardId }} />
     : <div className={s.composerDock}>{dock}</div>;
   const chat = (
     <PendingBoxes>
