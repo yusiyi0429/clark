@@ -373,11 +373,16 @@ export const ConversationSseEvent = Type.Union([
   /** 伙伴这一轮出的卡（17.4：send_message 的 buddy_message）：动作做完时天枢插进这一轮的流，界面接在回答后面；读回历史时在这条回答的 cards 里。 */
   Type.Object({ ...StreamBase, type: Type.Literal("card"), card: ConversationCard }, { additionalProperties: false }),
   /**
-   * 本人这条消息的回执（17.4，伙伴对话：scope 为 global 和 project:<id>）：delivered 天枢收下了（第一个勾），read 伙伴读到了（第二个勾）。
-   * 伙伴正在回上一轮时本人再发：不再回 409 TURN_IN_PROGRESS，天枢先收下（delivered），停掉上一轮（上一轮的流以 done aborted 结束，计划清单收起），
-   * 拿这条开新的一轮；新一轮伙伴开始回的那一刻是 read。没在回复时发的，两个几乎同时到。这两帧都在这条消息自己的响应流里，排在最前面。
+   * 本人这条消息的回执（17.4，伙伴对话：scope 为 global 和 project:<id>，网页发的才有）：delivered 天枢收下了（第一个勾），read 伙伴读到了（第二个勾）。
+   * messageId 是天枢给这条消息的 id，两帧按它对上同一条消息。两帧都在这条消息自己的响应流里，排在最前面。
+   * - 没在回复时发的：伙伴马上开始这一轮，两帧几乎同时到，都带 runId。
+   * - 伙伴正在回上一轮时本人再发（中途插话）：不再回 409 TURN_IN_PROGRESS。天枢先开流、立即写 delivered（这时还没有这一轮，不带 runId），
+   *   再停掉上一轮（上一轮的流以 done aborted 结束，计划清单收起），拿这条开新的一轮；新一轮第一帧到了写 read（带 runId）。
+   *   给了 delivered 以后还是没开成（上一轮停不下来、对话服务拒收或连不上），在这条流里给一帧 error（code 同开流前的拒绝：TURN_IN_PROGRESS、
+   *   RESUME_NOT_FOUND、CHAT_UNAVAILABLE、CHAT_FAILED 等，不带 runId）就结束，界面把第一个勾撤掉、这条消息可以重发。
    */
-  Type.Object({ ...StreamBase, type: Type.Literal("receipt"), state: Type.Union([Type.Literal("delivered"), Type.Literal("read")]) }, { additionalProperties: false }),
+  Type.Object({ runId: Type.Optional(Type.String()), scope: StreamBase.scope, sequence: StreamBase.sequence, type: Type.Literal("receipt"),
+    state: Type.Union([Type.Literal("delivered"), Type.Literal("read")]), messageId: Type.String({ minLength: 1 }) }, { additionalProperties: false }),
   /** 跨对象读取的范围标签（三层取用）：界面显示成可以点开调整的标签；同一轮后一条取代前一条。 */
   Type.Object({ ...StreamBase, type: Type.Literal("scope"), label: ReadScope.properties.label, params: ReadScopeParams, choices: ReadScope.properties.choices }, { additionalProperties: false }),
   /** 本轮档位：快答 / 检索问答 / 深度；检索问答与深度档带一句开场说明（notice），界面先显示它和预计用时。 */
@@ -458,10 +463,12 @@ export const ConversationSseEvent = Type.Union([
    * 这一轮没能完成。message 是给一号位的中文说明（原因 + 已保留什么 + 下一步）；
    * resume：continue = 有已写出的部分，可以从断点续写；retry = 没写出正文，可以用已查到的材料重答；没有 = 不建议直接再试（如凭证失效）。
    * partial：已写出的部分已存进这条对话（读回历史就能看到）。
+   * runId：只有中途插话给了 delivered 以后、新一轮没开成时不带（见 receipt）。
    */
   Type.Object(
     {
       ...StreamBase,
+      runId: Type.Optional(Type.String()),
       type: Type.Literal("error"),
       code: Type.String(),
       message: Type.String(),
