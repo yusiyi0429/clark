@@ -6513,6 +6513,22 @@ export interface components {
                     draftId: string;
                 } | {
                     /** @constant */
+                    kind: "buddy_question";
+                    /** Format: uuid */
+                    questionId: string;
+                    questions: {
+                        header: string;
+                        question: string;
+                        options: {
+                            label: string;
+                            detail: string;
+                            recommended?: boolean;
+                        }[];
+                        multiSelect?: boolean;
+                    }[];
+                    status: "open" | "answered" | "dismissed";
+                } | {
+                    /** @constant */
                     kind: "review";
                     personalReviewId: string;
                     href: string;
@@ -6653,6 +6669,8 @@ export interface components {
                     text?: string;
                 }[];
             };
+            /** Format: uuid */
+            buddyQuestionId?: string;
             references?: {
                 cardId: string;
                 version: number;
@@ -6762,6 +6780,22 @@ export interface components {
                 kind: "buddy_message";
                 /** Format: uuid */
                 draftId: string;
+            } | {
+                /** @constant */
+                kind: "buddy_question";
+                /** Format: uuid */
+                questionId: string;
+                questions: {
+                    header: string;
+                    question: string;
+                    options: {
+                        label: string;
+                        detail: string;
+                        recommended?: boolean;
+                    }[];
+                    multiSelect?: boolean;
+                }[];
+                status: "open" | "answered" | "dismissed";
             } | {
                 /** @constant */
                 kind: "review";
