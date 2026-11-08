@@ -55,6 +55,7 @@ describe("右栏（5.4.5）", () => {
     const html = render(panel([], [cloud("ThinkPad", 83, 1), cloud("Mac mini", 40, 2)]), "offline");
     const rows = html.split('data-testid="quota-row"').slice(1).map(text);
     expect(rows).toHaveLength(2);
+    expect(text(html)).toContain("剩余用量");
     expect(rows[0]).toContain("Claude · ThinkPad");
     expect(rows[0]).toContain("17%");
     expect(rows[1]).toContain("Claude · Mac mini");
@@ -64,14 +65,19 @@ describe("右栏（5.4.5）", () => {
     const fine = render(panel([], []), "ready", [], [tool("claude-code"), tool("codex"), tool("gh"), tool("lark-cli")]);
     expect(fine).toMatch(/aria-expanded="false"[^>]*data-testid="machine-row"/);
     expect(fine).not.toContain('data-testid="machine-checks"');
-    expect(text(fine)).toContain("同时在跑 0/3");
+    expect(text(fine)).toContain("在跑的子会话 0/3");
     const bad = render(panel([], []), "ready", [], [tool("claude-code"), tool("codex", "not_logged_in"), tool("gh"), tool("lark-cli")]);
     const checks = text(bad.split('data-testid="machine-checks"')[1]!);
     expect(checks).toMatch(/本机程序 已连接 Claude Code 已登录 Codex 没登录 gh 已登录 飞书命令行 已登录/);
     expect(bad).toContain("重试");
     const off = text(render(panel([], []), "offline", [], [tool("gh")]));
     expect(off).toContain("本机程序 离线");
-    expect(off).not.toContain("同时在跑");
+    expect(off).not.toContain("在跑的子会话");
+    // 离线：给打开本机程序的路（安装命令和「复制」），还有「重试」。
+    expect(off).toMatch(/irm .*\/install\.ps1 \| iex/);
+    expect(off).toContain("复制");
+    expect(off).toContain("重试");
+    expect(text(render(panel([], []), "prompt"))).not.toContain("install.ps1");
   });
 
   it("这台电脑就绪且读得到额度：只列本机的，别的设备不列；读不到时用云端的", () => {

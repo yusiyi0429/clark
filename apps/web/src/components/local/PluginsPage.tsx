@@ -105,9 +105,9 @@ export function PhaseLine({ handheld }: { handheld: boolean }) {
   if (handheld) return <small className={s.faint}>{local.phase === "ready" ? "已连接" : "在电脑上用"}</small>;
   switch (local.phase) {
     case "checking": return <small className={s.faint}>正在连…</small>;
-    case "prompt": return <div className={s.guide} data-testid="local-prompt"><span className={s.state} data-tone="wait">等浏览器授权</span><BrowserPrompt /></div>;
+    case "prompt": return <div className={s.guide} data-testid="local-prompt"><span className={s.state} data-tone="wait">等浏览器授权</span><BrowserPrompt /><Retry /></div>;
     case "blocked": return <div className={s.guide} data-testid="local-blocked"><span className={s.state} data-tone="warn">浏览器拦住了</span><SiteSettings /></div>;
-    case "offline": return <Install />;
+    case "offline": return <LocalInstall standalone />;
     case "unpaired": return (
       <div className={s.guide} data-testid="local-unpaired">
         {local.pairing?.state === "waiting" ? <span className={s.code}>确认码 <b>{local.pairing.code}</b></span>
@@ -152,16 +152,30 @@ function SiteSettings() {
   );
 }
 
-function Install() {
+/** 「重试」：不等挂着的那次，真的再探一遍（浏览器会问的，再问一次）。 */
+function Retry() {
+  const local = useLocalRunner();
+  const [busy, setBusy] = useState(false);
+  return <HeroButton variant="ghost" size="sm" isDisabled={busy} onPress={() => { setBusy(true); void local.refresh({ fresh: true }).finally(() => setBusy(false)); }}>重试</HeroButton>;
+}
+
+/**
+ * 本机程序没开：给打开它的路——安装命令和「复制」（装好就起来，装过的再跑一遍也是把它打开）。
+ * 桌面版窗口里本机程序是壳自己带的，不给安装命令（壳会把它重新拉起来）。
+ * 右栏也用这一块，只要命令（「离线」和「重试」右栏自己有）；连接页 standalone，带「没连上」和「重试」。
+ */
+export function LocalInstall({ standalone = false }: { standalone?: boolean }) {
   const [copied, setCopied] = useState<string | null>(null);
   const mac = typeof navigator !== "undefined" && /Mac/i.test(navigator.userAgent);
-  const lines = [{ key: mac ? "mac" : "win", label: mac ? "Mac" : "Windows", text: installCommand(mac) }];
+  const desktop = typeof navigator !== "undefined" && navigator.userAgent.includes("TianshuDesktop/");
+  const lines = desktop ? [] : [{ key: mac ? "mac" : "win", label: mac ? "Mac" : "Windows", text: installCommand(mac) }];
   const copy = async (key: string, text: string) => {
     try { await navigator.clipboard.writeText(text); setCopied(key); window.setTimeout(() => setCopied(null), 1600); } catch { /* 手动选中复制 */ }
   };
+  if (!standalone && !lines.length) return null;
   return (
     <div className={s.guide} data-testid="local-offline">
-      <span className={s.state}>没连上</span>
+      {standalone ? <span className={s.state}>没连上</span> : null}
       {lines.map((line) => (
         <div key={line.key} className={s.command}>
           <small>{line.label}</small>
@@ -169,6 +183,7 @@ function Install() {
           <button type="button" className={s.copy} onClick={() => void copy(line.key, line.text)} aria-label="复制">{copied === line.key ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}{copied === line.key ? "已复制" : "复制"}</button>
         </div>
       ))}
+      {standalone ? <Retry /> : null}
     </div>
   );
 }

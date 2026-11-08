@@ -10,7 +10,7 @@ import type { TLocalFolder, TLocalModelProfile, TLocalSessionSummary, TLocalStat
 import { LocalRunnerError, type LocalRunner } from "./runner";
 import { createHttpRunner, writeLocalToken } from "./client";
 import { createMockRunner } from "./mock";
-import { pairedElsewhere, phaseOf, readBrowserPermission, type LocalPhase } from "./connection";
+import { pairedElsewhere, phaseOf, probeRunner, singleFlight, type LocalPhase } from "./connection";
 import { HANDHELD_QUERY } from "@/components/ui/useHandheld";
 import { setMockAgents } from "@/lib/board/cards";
 import { planCards } from "@/lib/board/cloud";
@@ -29,7 +29,8 @@ export type LocalRunnerState = {
   pairing: Pairing | null;
   /** 最近一次动作出的错（配对、选文件夹），给插件页显示。 */
   error: string | null;
-  refresh: () => Promise<void>;
+  /** fresh：本人点「重试」，不等正在挂着的那次，真的再探一遍。 */
+  refresh: (options?: { fresh?: boolean }) => Promise<void>;
   pair: () => Promise<void>;
   unpair: () => Promise<void>;
   pickFolder: () => Promise<TLocalFolder | null>;
@@ -39,7 +40,6 @@ export type LocalRunnerState = {
 /** 测试里直接给一份连接状态。 */
 export const LocalContext = createContext<LocalRunnerState | null>(null);
 
-const PROMPT_WAIT_MS = 1200;
 const RETRY_MS = 4000;
 const MAX_RETRY_MS = 60_000;
 const LIVE_MS = 10_000;
@@ -81,7 +81,6 @@ export function LocalRunnerProvider({ children, runner: given, person: given_per
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const alive = useRef(true);
-  const inFlight = useRef<Promise<void> | null>(null);
 
   const loadPaired = useCallback(async (nextStatus: TLocalStatusResponse) => {
     const [nextModels, nextFolders, nextSessions] = await Promise.all([runner.listModels(), runner.listFolders(), runner.listSessions()]);
@@ -92,37 +91,29 @@ export function LocalRunnerProvider({ children, runner: given, person: given_per
     setSessions(nextSessions);
   }, [runner]);
 
-  const refresh = useCallback(() => {
-    if (inFlight.current) return inFlight.current;
-    inFlight.current = (async () => {
-      let settled = false;
-      const health = runner.health().then((value) => { settled = true; return value; }, (cause: unknown) => { settled = true; throw cause; });
-      // 浏览器在问授权时 fetch 会一直挂着：等一会儿还没回来，就按授权状态先亮「等授权」。
-      const early = window.setTimeout(() => {
-        if (!settled) void readBrowserPermission().then((permission) => { if (!settled && alive.current) setPhase(phaseOf({ health: "waiting", permission })); });
-      }, PROMPT_WAIT_MS);
+  const flight = useRef(singleFlight());
+  const refresh = useCallback((options?: { fresh?: boolean }) => {
+    // 平时有一次在探就等它；本人点「重试」（fresh）时真的再探一遍：浏览器问过被关掉的，会再问一次。只认最新一次的结果。
+    if (options?.fresh) setPhase("checking");
+    return flight.current(async (latest) => {
+      const live = () => alive.current && latest();
+      const offline = (phase: LocalPhase) => { setPhase(phase); setStatus(null); setSessions([]); };
+      const outcome = await probeRunner(() => runner.health(), (phase) => { if (live()) setPhase(phase); });
+      if (!live()) return;
+      if ("phase" in outcome) return offline(outcome.phase);
       try {
-        const result = await health;
-        if (!alive.current) return;
-        setVersion(result.version);
-        let next = phaseOf({ health: "ok", tokenValid: result.tokenValid, permission: "granted" });
+        setVersion(outcome.health.version);
+        let next = phaseOf({ health: "ok", tokenValid: outcome.health.tokenValid, permission: "granted" });
         const nextStatus = next === "ready" ? await runner.status() : null;
         // 这台电脑关联的是别人：和没配对一样，不读它的会话。
         if (nextStatus && pairedElsewhere(nextStatus, personId)) next = "unpaired";
         if (nextStatus && next === "ready") await loadPaired(nextStatus);
         else { setStatus(null); setSessions([]); }
-        setPhase(next);
+        if (live()) setPhase(next);
       } catch {
-        if (!alive.current) return;
-        setPhase(phaseOf({ health: "failed", permission: await readBrowserPermission() }));
-        setStatus(null);
-        setSessions([]);
-      } finally {
-        window.clearTimeout(early);
-        inFlight.current = null;
+        if (live()) offline("offline");
       }
-    })();
-    return inFlight.current;
+    }, options?.fresh);
   }, [runner, loadPaired, personId]);
 
   // 手机和触屏上不连本机（第 13 节：手机只看）：不探，免得一直报连不上。

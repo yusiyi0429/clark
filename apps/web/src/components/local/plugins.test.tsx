@@ -18,6 +18,7 @@ describe("插件页：连本机的几种状态", () => {
     expect(html).toContain('data-testid="local-prompt"');
     expect(text(html)).toContain("等浏览器授权");
     expect(html).toContain("允许");
+    expect(text(html)).toContain("重试");
   });
   it("拒过：指到地址栏左边的站点设置，应用窗口在「⋮ › 应用信息」", () => {
     const html = render(state("blocked"));
@@ -35,6 +36,8 @@ describe("插件页：连本机的几种状态", () => {
     const html = render(state("offline"));
     expect(html).toContain('data-testid="local-offline"');
     expect(text(html)).toContain("复制");
+    expect(text(html)).toContain("重试");
+    expect(text(html)).not.toContain("等浏览器授权");
     expect(installCommand(false)).toMatch(/^irm .*\/install\.ps1 \| iex$/);
     expect(installCommand(true)).toMatch(/^curl -fsSL .*\/install\.sh \| sh$/);
   });

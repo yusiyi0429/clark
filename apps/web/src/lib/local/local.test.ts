@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TLocalSessionEvent } from "@warmap/contracts";
 import { parseSse } from "./client";
-import { needsRelink, pairedElsewhere, phaseOf } from "./connection";
+import { PROMPT_WAIT_MS, needsRelink, pairedElsewhere, phaseOf, probeRunner, singleFlight } from "./connection";
 import { createMockRunner } from "./mock";
 import { EMPTY_VIEW, foldEvent, foldEvents, localWait, planStep } from "./sessionView";
 
@@ -27,7 +27,73 @@ describe("连本机的三种浏览器授权结果", () => {
   it("浏览器放行了还连不上（或浏览器不报授权状态）：没装或没开", () => {
     expect(phaseOf({ health: "failed", permission: "granted" })).toBe("offline");
     expect(phaseOf({ health: "failed", permission: "unknown" })).toBe("offline");
-  });  it("同一台电脑换了账号：本机关联的是别人（按人员 id）就按没配对算；没关联、老关联、或不知道本人是谁时不算别人", () => {
+  });
+  it("授权是 prompt 但很快就失败（浏览器根本没问，本机程序没开）：离线，不是等授权；挂了很久才失败（本人把框关了）还是等授权", () => {
+    expect(phaseOf({ health: "failed", permission: "prompt", elapsedMs: 2060 })).toBe("offline");
+    expect(phaseOf({ health: "failed", permission: "prompt" })).toBe("offline");
+    expect(phaseOf({ health: "failed", permission: "prompt", elapsedMs: PROMPT_WAIT_MS + 1 })).toBe("prompt");
+  });
+});
+
+describe("探一次本机程序", () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+  const never = () => new Promise<never>(() => undefined);
+  const prompt = async () => "prompt" as const;
+
+  it("很快失败（Windows 上连关着的端口约 2 秒）：离线，中途不亮等授权", async () => {
+    const waiting = vi.fn();
+    const result = probeRunner(() => new Promise((_, reject) => setTimeout(() => reject(new TypeError("Failed to fetch")), 2060)), waiting, prompt);
+    await vi.advanceTimersByTimeAsync(2100);
+    await expect(result).resolves.toEqual({ phase: "offline" });
+    await vi.advanceTimersByTimeAsync(PROMPT_WAIT_MS);
+    expect(waiting).not.toHaveBeenCalled();
+  });
+  it("一直挂着：过了 PROMPT_WAIT_MS 亮等授权；本人把框关了（挂很久后失败）还是等授权", async () => {
+    const waiting = vi.fn();
+    let fail!: (cause: Error) => void;
+    const result = probeRunner(() => new Promise((_, reject) => { fail = reject; }), waiting, prompt);
+    await vi.advanceTimersByTimeAsync(PROMPT_WAIT_MS - 100);
+    expect(waiting).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(waiting).toHaveBeenCalledWith("prompt");
+    await vi.advanceTimersByTimeAsync(5000);
+    fail(new TypeError("Failed to fetch"));
+    await expect(result).resolves.toEqual({ phase: "prompt" });
+  });
+  it("授权是 denied：被拦截（挂着时也是）", async () => {
+    const waiting = vi.fn();
+    void probeRunner(never, waiting, async () => "denied");
+    await vi.advanceTimersByTimeAsync(PROMPT_WAIT_MS + 1);
+    expect(waiting).toHaveBeenCalledWith("blocked");
+    await expect(probeRunner(() => Promise.reject(new TypeError("Failed to fetch")), vi.fn(), async () => "denied")).resolves.toEqual({ phase: "blocked" });
+  });
+  it("连上了：交回 health 的结果", async () => {
+    await expect(probeRunner(async () => ({ tokenValid: true }), vi.fn(), prompt)).resolves.toEqual({ health: { tokenValid: true } });
+  });
+  it("重试：有一次挂着时平时再叫是等它，点重试另起一次真的再探，旧那次作废", async () => {
+    const flight = singleFlight();
+    const health = vi.fn(never);
+    const seen: boolean[] = [];
+    let release!: () => void;
+    const run = (latest: () => boolean) => { void health(); return new Promise<void>((done) => { release = () => { seen.push(latest()); done(); }; }); };
+    void flight(run);
+    void flight(run);
+    expect(health).toHaveBeenCalledTimes(1);
+    const firstRelease = release;
+    const second = flight(run, true);
+    expect(health).toHaveBeenCalledTimes(2);
+    firstRelease();
+    release();
+    await second;
+    expect(seen).toEqual([false, true]);
+    void flight(run);
+    expect(health).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("连本机：换账号", () => {
+  it("同一台电脑换了账号：本机关联的是别人（按人员 id）就按没配对算；没关联、老关联、或不知道本人是谁时不算别人", () => {
     const linked = (personId: string | null, isLinked = true) => ({ cloud: { linked: isLinked, personId } });
     expect(pairedElsewhere(linked("sun-mingze"), "browser-dri")).toBe(true);
     expect(pairedElsewhere(linked("sun-mingze"), "sun-mingze")).toBe(false);
