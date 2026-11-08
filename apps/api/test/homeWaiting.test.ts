@@ -8,7 +8,7 @@ import { BOARD_NOW, BOARD_TASKS, boardFixture, THIRD, type BoardFixture } from "
 /** 首页「等你」按设计 9.6 扩的几种：计划等你开工、请你认可、月份、电脑、额度；排序。本机那条路（云端拆卡、验收关着）。 */
 
 type Waiting = { id: string; kind: string; title: string; source: string | null; at: string | null; open: { kind: string; id: string }; taskId: string | null;
-  projectId: string | null; sessionId: string | null; deviceId: string | null; deviceName: string | null; dueAt: string | null; answer: string; person: unknown; month: unknown };
+  projectId: string | null; sessionId: string | null; deviceId: string | null; deviceName: string | null; letter: string | null; dueAt: string | null; answer: string; person: unknown; month: unknown };
 const waiting = async (f: BoardFixture, kind?: string): Promise<Waiting[]> => {
   const res = await f.call("GET", "/api/me/work-home");
   expect(res.statusCode).toBe(200);
@@ -49,7 +49,7 @@ describe("首页等你：扩的几种", { timeout: 30_000 }, () => {
       const items = await waiting(f, "plan_start");
       const project = await projectOf(f, "内部版上线");
       expect(items).toEqual([{ id: `plan_start:${latest}`, kind: "plan_start", title: "对话质量达标：计划等你开工", source: "3 件等你开工",
-        at: "2026-11-06T01:10:00.000Z", open: { kind: "project", id: project }, taskId: "task-open", projectId: project, sessionId: null, deviceId: null, deviceName: null,
+        at: "2026-11-06T01:10:00.000Z", open: { kind: "project", id: project }, taskId: "task-open", projectId: project, sessionId: null, deviceId: null, deviceName: null, letter: null,
         dueAt: null, answer: "inline", person: null, month: null, question: null, permission: null }]);
       const home = (await f.call("GET", "/api/me/work-home")).json();
       expect(home.projects.find((entry: { projectId: string }) => entry.projectId === project).summary.needsYou).toBe(1);
@@ -90,7 +90,7 @@ describe("首页等你：扩的几种", { timeout: 30_000 }, () => {
       let items = await waiting(f, "acceptance");
       expect(items).toEqual([
         { id: "acceptance:world:t:9:2", kind: "acceptance", title: "请你认可「带冒号的」第 2 条", source: null, at: "2026-11-06T01:00:00.000Z",
-          open: { kind: "task_detail", id: "world:t:9" }, taskId: null, projectId: null, sessionId: null, deviceId: null, deviceName: null, dueAt: null, answer: "open",
+          open: { kind: "task_detail", id: "world:t:9" }, taskId: null, projectId: null, sessionId: null, deviceId: null, deviceName: null, letter: null, dueAt: null, answer: "open",
           person: { personId: THIRD.personId, name: "测试丙" }, month: null, question: null, permission: null },
         expect.objectContaining({ id: "acceptance:task-other:1", title: "请你认可「别人 Mission 的」第 1 条", at: "2026-11-05T02:00:00.000Z",
           person: { personId: THIRD.personId, name: "测试丙" } }),
@@ -126,9 +126,9 @@ describe("首页等你：扩的几种", { timeout: 30_000 }, () => {
       let items = await waiting(f, "month");
       expect(items).toEqual([
         { id: "month:review:2026-10", kind: "month", title: "复盘 10 月", source: null, at: null, open: { kind: "month", id: "2026-10" }, taskId: null, projectId: null,
-          sessionId: null, deviceId: null, deviceName: null, dueAt: "2026-11-07T15:59:59.000Z", answer: "open", person: null, month: { step: "review", period: "2026-10" }, question: null, permission: null },
+          sessionId: null, deviceId: null, deviceName: null, letter: null, dueAt: "2026-11-07T15:59:59.000Z", answer: "open", person: null, month: { step: "review", period: "2026-10" }, question: null, permission: null },
         { id: "month:continue:2026-10", kind: "month", title: "10 月还有 2 件没了结", source: null, at: null, open: { kind: "month", id: "2026-10" }, taskId: null, projectId: null,
-          sessionId: null, deviceId: null, deviceName: null, dueAt: null, answer: "open", person: null, month: { step: "continue", period: "2026-10" }, question: null, permission: null },
+          sessionId: null, deviceId: null, deviceName: null, letter: null, dueAt: null, answer: "open", person: null, month: { step: "continue", period: "2026-10" }, question: null, permission: null },
       ]);
 
       // 两件都在月份页选了怎么办：复盘答完了，不再出「复盘 10 月」（只补一句话的不算答完）。
@@ -169,7 +169,7 @@ describe("首页等你：扩的几种", { timeout: 30_000 }, () => {
       expect(await waiting(f, "device")).toEqual([]);
       await roleCard(f, "等开工的卡");
       expect(await waiting(f, "device")).toEqual([{ id: "device:this_computer", kind: "device", title: "还没有配对的电脑", source: "1 件在等", at: null,
-        open: { kind: "connections", id: "this_computer" }, taskId: null, projectId: null, sessionId: null, deviceId: null, deviceName: null, dueAt: null, answer: "open",
+        open: { kind: "connections", id: "this_computer" }, taskId: null, projectId: null, sessionId: null, deviceId: null, deviceName: null, letter: null, dueAt: null, answer: "open",
         person: null, month: null, question: null, permission: null }]);
 
       // 配对了但没上报过（不在线）；拆卡登记也在等本机开规划员。
@@ -213,7 +213,7 @@ describe("首页等你：扩的几种", { timeout: 30_000 }, () => {
       const items = await waiting(f);
       expect(items.find((item) => item.id === `quota:${laptop.device}`)).toEqual({ id: `quota:${laptop.device}`, kind: "quota",
         title: "Claude 订阅额度用完 · 12:30 恢复", source: "3 件停着", at: null, open: { kind: "connections", id: "this_computer" }, taskId: null, projectId: null, sessionId: null,
-        deviceId: laptop.device, deviceName: "我的电脑", dueAt: "2026-11-06T04:30:00.000Z", answer: "open", person: null, month: null, question: null, permission: null });
+        deviceId: laptop.device, deviceName: "我的电脑", letter: null, dueAt: "2026-11-06T04:30:00.000Z", answer: "open", person: null, month: null, question: null, permission: null });
       expect(items.find((item) => item.id === `quota:${desktop.device}`)).toMatchObject({ title: "Claude 订阅额度用完 · 14:00 恢复", source: "1 件停着",
         deviceName: "另一台", dueAt: "2026-11-06T06:00:00.000Z" });
       // 卡在项目里：批准由项目对话转达，点进去落在那个会话的框上（老版本本机程序没报 requestId），来源只写项目名；岗位建议按卡的 Task 归到同一个项目。

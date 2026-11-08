@@ -14,6 +14,8 @@ import type { CardPlanTask } from "./taskCards.js";
 import { ownProject } from "./projects.js";
 import { closeStartsFor } from "./sessionStarts.js";
 import { latestSuccessor } from "./taskContinuity.js";
+import { recordSubSessionStatus } from "./subSessionReports.js";
+import type { RunAsk } from "./localDevices.js";
 
 /**
  * 本机程序单向上报的接收端（POST /api/local-runner/sync，载荷是本机程序契约 localRunner.ts 的 LocalSyncBatchRequest）。
@@ -27,7 +29,7 @@ export class SyncReject extends Error {
 
 type Owner = { personId: string; deviceId: string };
 type RunRow = { id: string; owner_id: string; kind: "card" | "topic" | "plan" | "verify"; task_id: string | null; topic_id: string | null; plan_task_id: string | null;
-  project_id: string | null;
+  project_id: string | null; device_id: string; state: string; ask: RunAsk | null;
   state_seq: string; plan_seq: string;
   plan: TLocalPlanEntry[]; timeline: TLocalRunActivity[]; last_activity: TLocalRunActivity | null; running_at: Date | null };
 type CardRow = { id: string; owner_id: string; status: string; executor: string | null; done_definition: string | null };
@@ -66,26 +68,31 @@ async function extractText(path: string, mime: string, buffer: Buffer): Promise<
  */
 export type SyncDeps = { pool: Pool; storageDir: string; now: () => Date; onError: (cause: unknown) => void;
   planTask: (personId: string, planTaskId: string) => Promise<CardPlanTask | null> };
-/** 一条落下以后要接着做的：queued 是新排队等云端 Agent 验收的交回，proposal 是本机验收员第二次没过时记下的岗位修改。 */
-type Applied = { queued?: string; proposal?: string };
+/**
+ * 一条落下以后要接着做的：queued 是新排队等云端 Agent 验收的交回，proposal 是本机验收员第二次没过时记下的岗位修改；
+ * report、decision 是子会话停了的报告、要介入的决定卡（18 节第 10 条，提交以后补 afterSequence，报告再触发项目主管线一轮）。
+ */
+type Applied = { queued?: string; proposal?: string; report?: string; decision?: string };
 
 /** 一批：逐条处理，回 accepted / rejected；queued、proposals 交给调用方排队。 */
-export async function applySyncBatch(deps: SyncDeps, personId: string,
-  batch: TLocalSyncBatchRequest): Promise<{ response: TLocalSyncBatchResponse; queued: string[]; proposals: string[] }> {
+export async function applySyncBatch(deps: SyncDeps, personId: string, batch: TLocalSyncBatchRequest):
+  Promise<{ response: TLocalSyncBatchResponse; queued: string[]; proposals: string[]; reports: string[]; decisions: string[] }> {
   const response: TLocalSyncBatchResponse = { accepted: [], rejected: [] };
-  const queued: string[] = [], proposals: string[] = [];
+  const queued: string[] = [], proposals: string[] = [], reports: string[] = [], decisions: string[] = [];
   for (const item of batch.items) {
     try {
       const applied = await applyItem(deps, { personId, deviceId: batch.deviceId }, item);
       response.accepted.push(item.key);
       if (applied.queued) queued.push(applied.queued);
       if (applied.proposal) proposals.push(applied.proposal);
+      if (applied.report) reports.push(applied.report);
+      if (applied.decision) decisions.push(applied.decision);
     } catch (cause) {
       if (cause instanceof SyncReject) response.rejected.push({ key: item.key, code: cause.code, message: cause.message });
       else deps.onError(cause);
     }
   }
-  return { response, queued, proposals };
+  return { response, queued, proposals, reports, decisions };
 }
 
 async function applyItem(deps: SyncDeps, owner: Owner, item: TLocalSyncItem): Promise<Applied> {
@@ -211,7 +218,9 @@ async function applyType(client: PoolClient, deps: Pick<SyncDeps, "storageDir" |
         ask ? JSON.stringify(ask) : null, permissionMode ?? null]);
       await note(client, run, at, hold ? "额度用完，等恢复" : status === "starting" ? `${STATUS_TEXT.starting}（${modelLabel}）`
         : status === "idle" && !question ? "这一轮做完了" : STATUS_TEXT[status], MILESTONE_STATES.has(status));
-      return {};
+      // 停了、要介入：报进项目对话（18 节第 10 条）。摘要等本机在 status 上带（还没带时取交回的说明、专题这一版改了什么）。
+      return recordSubSessionStatus(client.query.bind(client), owner.personId, run,
+        { status, question, permission, summary: (item.data as { summary?: string }).summary }, at);
     }
     case "plan": {
       if (seq <= Number(run.plan_seq)) return {};

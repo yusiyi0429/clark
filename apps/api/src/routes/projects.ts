@@ -1,3 +1,4 @@
+import { projectNotices } from "../subSessionReports.js";
 import type { FastifyReply } from "fastify";
 import { Type } from "@sinclair/typebox";
 import { AcceptCardDraftsRequest, AcceptCardDraftsResponse, AnswerGoalChangeRequest, ProjectGoalChangedItem, CardPlanBriefResponse, CardSplitRequestView, CreateProjectRequest, Project, ProjectBoardResponse,
@@ -106,7 +107,9 @@ export function registerProjectRoutes(app: AppInstance, ctx: RouteContext): void
         [goal.task_id, (await boardTask(open, goal.owner_id, goal.task_id).catch(() => null))?.criteria ?? []] as const)));
       const transfers = (await decidedTransfers(q, project.id)).map((row) => transferView(row, personDisplayNames(ctx.peopleDirectory)));
       // 月中 Task 改了或取消了的选项框（16.4）。
-      return readProjectFeed(q, await projectOwners(q, project.id), project.id, goals, criteria, { viewer: personId, transfers }, await goalChangeItems(q, project.id));
+      // 子会话停了、要介入的报告和决定卡（18 节第 10 条）。
+      return readProjectFeed(q, await projectOwners(q, project.id), project.id, goals, criteria, { viewer: personId, transfers },
+        [...await goalChangeItems(q, project.id), ...await projectNotices(q, project.id)]);
     }));
 
   app.post("/api/me/projects/:projectId/goal-changes/:id", { preHandler: requireMember, schema: { params: Type.Object({ projectId: Type.String({ minLength: 1 }),

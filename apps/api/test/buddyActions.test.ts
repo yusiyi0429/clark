@@ -1,6 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import type { FeishuClient } from "../src/feishu/client.js";
 import { BOARD_NOW, boardFixture, THIRD } from "./boardFixture.js";
+import { letterOf, seqOf } from "../src/subSessionLetters.js";
 import { TEST_CEO, TEST_MEMBER } from "./helpers.js";
 
 /**
@@ -58,7 +60,7 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       expect((await f.grant()).json()).toEqual(granted);
       const all = await list();
       expect(all.authority).toEqual(granted);
-      expect(all.actions).toHaveLength(21);
+      expect(all.actions).toHaveLength(26);
       expect(all.actions.find((action: { name: string }) => action.name === "send_message")).toMatchObject({ kind: "write", parameters: { type: "object" } });
 
       expect((await f.act("fly_away", {})).json().code).toBe("UNKNOWN_ACTION");
@@ -233,6 +235,136 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       const workers = await f.t.app.inject({ method: "GET", url: "/internal/me/workers", remoteAddress: "8.8.8.8",
         headers: { authorization: `Bearer ${TOKEN}`, "x-owner-id": TEST_MEMBER.personId } });
       expect(workers.statusCode).toBe(403);
+    } finally { await f.close(); }
+  });
+  it("18 节第 10 条：子会话用字母称呼（按建立先后、不复用）；停了出报告、要介入出决定卡；项目主管线按字母转话、重开、回答、批准，网页认领后交给本机", async () => {
+    expect([1, 2, 26, 27, 28, 52, 53, 702, 703].map(letterOf)).toEqual(["A", "B", "Z", "AA", "AB", "AZ", "BA", "ZZ", "AAA"]);
+    expect(["A", "Z", "AA", "ZZ", "AAA"].map(seqOf)).toEqual([1, 26, 27, 702, 703]);
+    expect([seqOf("a"), seqOf("ABCD"), seqOf("")]).toEqual([null, null, null]);
+    const f = await fixture();
+    try {
+      await f.grant();
+      const project = (await f.call("POST", "/api/me/projects", { name: "本机派活" })).json().projectId as string;
+      const inProject = async (title: string) => {
+        const id = await f.agentCard(title);
+        // 不挂 Task、直接放在项目里（挂着 Task 的算 Task 所在的项目，同首页）。
+        await f.t.sql("UPDATE tasks SET project_id=$2,plan_task_id=NULL WHERE id=$1", [id, project]);
+        return id;
+      };
+      const a = await inProject("规划员岗位初版");
+      const b = await inProject("验收员只读会话");
+      const loose = await f.agentCard("不在项目里的卡");
+      await f.t.sql("UPDATE tasks SET plan_task_id=NULL WHERE id=$1", [loose]);
+      const letters = async () => {
+        const home = (await f.call("GET", "/api/me/work-home")).json() as { projects: { projectId: string; subSessions: { id: string; letter: string | null }[] }[];
+          other: { subSessions: { id: string; letter: string | null }[] } };
+        return Object.fromEntries([...home.projects.flatMap((entry) => entry.subSessions), ...home.other.subSessions].map((sub) => [sub.id, sub.letter]));
+      };
+      expect(await letters()).toMatchObject({ [a]: "A", [b]: "B", [loose]: null });
+      expect((await f.call("GET", `/api/me/cards/${a}`)).json().letter).toBe("A");
+      expect((await f.call("GET", `/api/me/cards/${loose}`)).json().letter).toBeNull();
+      // 删掉 B，新建的是 C，不复用。
+      await f.t.sql("DELETE FROM tasks WHERE id=$1", [b]);
+      const c = await inProject("并行卡独立工作区");
+      expect((await letters())[c]).toBe("C");
+
+      // 项目对话（接了 Chat 时记在 project_pipelines）。动作只在项目对话里用；动作清单带了别的对话就不列这几个。
+      const conversation = randomUUID(), desk = randomUUID();
+      await f.t.sql("INSERT INTO project_pipelines(project_id,owner_id,conversation_id) VALUES($1,$2,$3)", [project, TEST_MEMBER.personId, conversation]);
+      const listed = async (conversationId: string) => ((await f.t.app.inject({ method: "GET", url: `/internal/me/buddy-actions?conversationId=${conversationId}`,
+        headers: { authorization: `Bearer ${TOKEN}`, "x-owner-id": TEST_MEMBER.personId } })).json().actions as { name: string }[]).map((action) => action.name);
+      expect(await listed(desk)).not.toContain("sub_session_tell");
+      expect(await listed(conversation)).toEqual(expect.arrayContaining(["sub_session_tell", "sub_session_stop", "sub_session_restart", "sub_session_answer", "sub_session_approve"]));
+      const act = (name: string, args: unknown, conversationId: string | null = conversation) => f.t.app.inject({ method: "POST", url: `/internal/me/buddy-actions/${name}`,
+        headers: { authorization: `Bearer ${TOKEN}`, "x-owner-id": TEST_MEMBER.personId }, payload: { args, ...(conversationId ? { conversationId } : {}), runId: randomUUID() } });
+      const code = async (name: string, args: unknown, conversationId?: string | null) => (await act(name, args, conversationId)).json().code as string;
+      expect(await code("sub_session_tell", { letter: "A", text: "先别动测试" }, null)).toBe("PROJECT_ONLY");
+      expect(await code("sub_session_tell", { letter: "A", text: "先别动测试" }, desk)).toBe("PROJECT_ONLY");
+      expect(await code("sub_session_tell", { letter: "Z", text: "先别动测试" })).toBe("LETTER_NOT_FOUND");
+      expect(await code("sub_session_tell", { letter: "B", text: "先别动测试" })).toBe("LETTER_NOT_FOUND");
+      expect(await code("sub_session_tell", { letter: "A", text: "先别动测试" })).toBe("NOT_STARTED");
+      // 没开过工的重开 = 登记开工。
+      expect((await act("sub_session_restart", { letter: "C" })).json().summary).toContain("C · 并行卡独立工作区");
+
+      // 本机：A 开工在跑。同一个会话按序号往下报。
+      const machine = await f.local();
+      const session = randomUUID();
+      let seq = 0;
+      const report = async (type: string, data: unknown) => {
+        seq += 1;
+        const res = await f.t.app.inject({ method: "POST", url: "/api/local-runner/sync", headers: { authorization: `Bearer ${machine.token}` }, payload: {
+          deviceId: machine.device, runnerVersion: "0.1.0", slots: { max: 3, running: 1, queued: 0 }, items: [{ key: `${machine.device}:${session}:${seq}`, sessionId: session,
+            subject: { kind: "card", cardId: a }, occurredAt: new Date(Date.UTC(2026, 10, 6, 1, 0, seq)).toISOString(), type, data }] } });
+        expect(res.json().rejected).toEqual([]);
+      };
+      const status = (value: string, extra: object = {}) => report("status", { status: value, title: "规划员岗位初版", agent: "claude-code", modelLabel: "订阅 · Sonnet", ...extra });
+      const feed = async () => ((await f.call("GET", `/api/me/projects/${project}/feed`)).json().items as { kind: string }[])
+        .filter((item) => item.kind.startsWith("sub_session_")) as Record<string, unknown>[];
+      await status("running");
+      expect(await code("sub_session_restart", { letter: "A" })).toBe("ALREADY_RUNNING");
+      expect(await code("sub_session_answer", { letter: "A", choices: [["第二个"]] })).toBe("NOT_ASKING");
+      expect(await code("sub_session_approve", { letter: "A", decision: "allow" })).toBe("NOT_WAITING_PERMISSION");
+      const told = (await act("sub_session_tell", { letter: "A", text: "先别动测试" })).json();
+      expect(told.summary).toContain("A · 规划员岗位初版");
+      const claim = async (device = machine.device) => (await f.call("POST", "/api/me/session-commands/claim", { deviceId: device })).json().commands as
+        { id: string; command: unknown; subSessionId: string; sessionId: string }[];
+      const other = await f.local("另一台");
+      expect(await claim(other.device)).toEqual([]);
+      const first = await claim();
+      expect(first).toEqual([{ id: told.result.commandId, kind: "card", subSessionId: a, sessionId: session, deviceId: machine.device, requestedAt: expect.any(String),
+        command: { type: "message", text: "先别动测试" } }]);
+      expect(await claim()).toEqual([]);
+      expect((await f.call("POST", `/api/me/session-commands/${first[0].id}/done`, { deviceId: other.device, result: "done" })).statusCode).toBe(404);
+      expect((await f.call("POST", `/api/me/session-commands/${first[0].id}/done`, { deviceId: machine.device, result: "done" })).statusCode).toBe(204);
+      expect(await feed()).toEqual([]);
+
+      // 在问本人：直接出决定卡，不出报告；替本人回答登记 answer。
+      const question = { requestId: "q-1", questions: [{ question: "先改哪个？", header: "先后", options: [{ label: "规划员", description: "" }, { label: "验收员", description: "" }],
+        multiSelect: false }], askedAt: "2026-11-06T01:00:00.000Z" };
+      await status("idle", { question });
+      await status("idle", { question });
+      const asked = await feed();
+      expect(asked).toEqual([{ kind: "sub_session_decision", id: expect.any(String), at: expect.any(String), afterSequence: null,
+        sub: { kind: "card", id: a, letter: "A", title: "规划员岗位初版" }, sessionId: session, deviceId: machine.device, question, permission: null, status: "open", closedAt: null }]);
+      expect(await code("sub_session_answer", { letter: "A", choices: [["规划员"], ["验收员"]] })).toBe("INVALID_ARGS");
+      await act("sub_session_answer", { letter: "A", choices: [["验收员"]] });
+      expect((await claim()).map((entry) => entry.command)).toEqual([{ type: "answer", requestId: "q-1", answer: { choices: [["验收员"]] } }]);
+      // 答了接着做：那张关掉。
+      await status("running");
+      expect(await feed()).toEqual([expect.objectContaining({ kind: "sub_session_decision", status: "closed", closedAt: expect.any(String) })]);
+
+      // 等批准：出批准卡；批准登记 permission。
+      const permission = { requestId: "p-1", toolName: "Bash", title: "rm -rf build", outsidePaths: [] };
+      await status("waiting_permission", { permission });
+      expect((await feed()).at(-1)).toMatchObject({ kind: "sub_session_decision", permission, question: null, status: "open" });
+      const approved = (await act("sub_session_approve", { letter: "A", decision: "allow" })).json();
+      expect(approved.summary).toContain("批准了 A · 规划员岗位初版 的「rm -rf build」");
+      expect((await claim()).map((entry) => entry.command)).toEqual([{ type: "permission", requestId: "p-1", decision: { decision: "allow" } }]);
+      await status("running");
+
+      // 做完一轮停下：出报告（还没有本机摘要时取交回的说明，这里没交回为 null）。重开 = 往里说「接着做」。
+      await status("idle");
+      const reports = (await feed()).filter((item) => item.kind === "sub_session_report");
+      expect(reports).toEqual([{ kind: "sub_session_report", id: expect.any(String), at: expect.any(String), afterSequence: null,
+        sub: { kind: "card", id: a, letter: "A", title: "规划员岗位初版" }, outcome: "round_done", summary: null }]);
+      // 同一次停下重报不再出报告。
+      await status("idle");
+      expect((await feed()).filter((item) => item.kind === "sub_session_report")).toHaveLength(1);
+      await act("sub_session_restart", { letter: "A" });
+      expect((await claim()).map((entry) => entry.command)).toEqual([{ type: "message", text: "接着做" }]);
+      await status("running");
+      await status("failed");
+      expect((await feed()).filter((item) => item.kind === "sub_session_report").map((item) => item.outcome)).toEqual(["round_done", "failed"]);
+      // 报告替本人给项目主管线发了一句，它回了一小轮（项目对话里）。
+      const said = async () => (await f.t.sql(`SELECT m.content FROM conversation_messages m JOIN conversations c ON c.id=m.conversation_id
+        WHERE c.scope=$1 AND m.role='user' ORDER BY m.sequence`, [`project:${project}`])).map((row) => row.content as string);
+      for (let i = 0; i < 40 && (await said()).length < 2; i++) await new Promise((resolve) => setTimeout(resolve, 50));
+      expect((await said())[0]).toMatch(/^【子会话回报】A · 规划员岗位初版：做完一轮停下了。\n请用一两句话告诉本人/);
+      // 停下按字母走 stop_sub_session（这时没在跑）。
+      expect(await code("sub_session_stop", { letter: "A" })).toBe("NOT_RUNNING");
+      // 不在项目里的卡停了不报。
+      await machine.send({ kind: "card", cardId: loose }, [running("不在项目里的卡"), ["status", { status: "idle", title: "x", agent: "claude-code", modelLabel: "m" }]]);
+      expect(await f.t.sql("SELECT 1 FROM sub_session_reports WHERE subject_id=$1", [loose])).toEqual([]);
     } finally { await f.close(); }
   });
 });

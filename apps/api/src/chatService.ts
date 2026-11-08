@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyReply } from "fastify";
-import { AskAnswerRecord, ConversationCard, type TAskAnswerRecord, type TBuddyPlan, type TConversationCard, type TConversationMessageRequest, type TConversationModel, type TPartnerMemoryItem } from "@warmap/contracts";
+import { AskAnswerRecord, ConversationCard, SUB_SESSION_REPORT_PREFIX, type TAskAnswerRecord, type TBuddyPlan, type TConversationCard, type TConversationMessageRequest, type TConversationModel, type TPartnerMemoryItem } from "@warmap/contracts";
 import { turnFailureCopy } from "./conversationRecovery.js";
 import { segmentDateLabel, startsNewSegment } from "./conversationSegments.js";
 import type { HomeTurnVia } from "./homeTurn.js";
@@ -108,7 +108,7 @@ export function historyMessages(messages: ChatMessage[], runs: ChatRun[]) {
 
 /** 拼几段（从旧到新）：每段之前一行这段开始的日期（第一段不加，kind=trace，界面画成一行淡字）；序号接着排。 */
 export function joinSegments(segments: { messages: ChatMessage[]; runs: ChatRun[]; startedAt?: Date; conversationId?: string }[]) {
-  type Item = { role: "user" | "assistant"; content: string; runId: string; via?: HomeTurnVia | "buddy"; running?: true; attachments?: ReturnType<typeof attachmentInfo>[]; kind?: "trace"; createdAt?: string;
+  type Item = { role: "user" | "assistant"; content: string; runId: string; via?: HomeTurnVia | "buddy" | "report"; running?: true; attachments?: ReturnType<typeof attachmentInfo>[]; kind?: "trace"; createdAt?: string;
     cards?: TConversationCard[]; answers?: TAskAnswerRecord };
   const ordered: Item[] = segments.flatMap((segment, index) => [
     ...(index && segment.startedAt ? [{ role: "assistant" as const, content: segmentDateLabel(segment.startedAt), runId: segment.conversationId ?? "",
@@ -121,7 +121,7 @@ export function joinSegments(segments: { messages: ChatMessage[]; runs: ChatRun[
 function segmentMessages(messages: ChatMessage[], runs: ChatRun[]) {
   const status = new Map(runs.map((run) => [run.runId, run.status]));
   const answered = new Set(messages.filter((message) => message.role === "assistant").map((message) => message.runId));
-  const ordered: { role: "user" | "assistant"; content: string; runId: string; via?: HomeTurnVia | "buddy"; running?: true; attachments?: ReturnType<typeof attachmentInfo>[];
+  const ordered: { role: "user" | "assistant"; content: string; runId: string; via?: HomeTurnVia | "buddy" | "report"; running?: true; attachments?: ReturnType<typeof attachmentInfo>[];
     cards?: TConversationCard[]; answers?: TAskAnswerRecord }[] = [];
   for (const message of messages) {
     const state = status.get(message.runId);
@@ -134,10 +134,11 @@ function segmentMessages(messages: ChatMessage[], runs: ChatRun[]) {
         ...(cards.length ? { cards } : {}) });
       continue;
     }
-    // 还在回答的那一句标上 running：界面切走、刷新回来据此接上这一轮。伙伴转来的那句去掉开头、标 buddy。
-    const forwarded = message.text.startsWith(BUDDY_FORWARD_PREFIX);
-    ordered.push({ role: "user", content: forwarded ? message.text.slice(BUDDY_FORWARD_PREFIX.length) : message.text, runId: message.runId,
-      ...(forwarded ? { via: "buddy" as const } : via), ...(state === "running" ? { running: true as const } : {}),
+    // 还在回答的那一句标上 running：界面切走、刷新回来据此接上这一轮。伙伴转来的那句去掉开头、标 buddy；子会话报告替本人发的那句去掉开头、标 report。
+    const forwarded = message.text.startsWith(BUDDY_FORWARD_PREFIX) ? { prefix: BUDDY_FORWARD_PREFIX, via: "buddy" as const }
+      : message.text.startsWith(SUB_SESSION_REPORT_PREFIX) ? { prefix: SUB_SESSION_REPORT_PREFIX, via: "report" as const } : null;
+    ordered.push({ role: "user", content: forwarded ? message.text.slice(forwarded.prefix.length) : message.text, runId: message.runId,
+      ...(forwarded ? { via: forwarded.via } : via), ...(state === "running" ? { running: true as const } : {}),
       attachments: (message.attachments ?? []).map(attachmentInfo),
       ...(Value.Check(AskAnswerRecord, message.answers) ? { answers: message.answers } : {}) });
     if (state === "failed" && !answered.has(message.runId)) ordered.push({ role: "assistant", content: EMPTY_NOTE, runId: message.runId, ...via });

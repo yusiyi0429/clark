@@ -92,7 +92,7 @@ export async function assembleWaiting(input: WaitingInput): Promise<TWaitingItem
   const waiting: TWaitingItem[] = [];
   /** 没写的几样取默认：不属于 Task、没有本机会话、没有截止、不是别人请你、不是月份。设备名照 deviceId 取。 */
   const add = (item: Pick<TWaitingItem, "id" | "kind" | "title" | "source" | "at" | "open" | "answer"> & Partial<TWaitingItem>) => waiting.push({ taskId: null,
-    sessionId: null, deviceId: null, dueAt: null, person: null, month: null, question: null, permission: null, ...item,
+    sessionId: null, deviceId: null, letter: null, dueAt: null, person: null, month: null, question: null, permission: null, ...item,
     projectId: item.projectId ?? taskProject(item.taskId ?? null), deviceName: item.deviceId ? deviceNames.get(item.deviceId) ?? null : null });
 
   for (const sub of subs) {
@@ -103,11 +103,11 @@ export async function assembleWaiting(input: WaitingInput): Promise<TWaitingItem
       add({ id: `${sub.waiting}:${sub.kind}:${sub.id}`, kind: sub.waiting, ...askFields(sub.waiting, sub.ask), source: projectName(sub.projectId) ?? sub.title, at: sub.runUpdatedAt,
         open: sub.projectId && sub.sessionId ? { kind: "project", id: sub.projectId, focus: { sessionId: sub.sessionId, requestId: askRequestId(sub.ask) } }
           : { kind: sub.kind, id: sub.id },
-        taskId, projectId: sub.projectId, sessionId: sub.sessionId, deviceId: sub.deviceId, answer: "inline_local" });
+        taskId, projectId: sub.projectId, sessionId: sub.sessionId, deviceId: sub.deviceId, letter: sub.letter, answer: "inline_local" });
     // 验收过了、没能自动合回：在交回那次执行的那台电脑上合。
     if (sub.waiting === "merge" && sub.merge)
       add({ id: `merge:card:${sub.id}`, kind: "merge", title: "没能自动合回", source, at: sub.merge.at, open: { kind: "card", id: sub.id }, taskId, projectId: sub.projectId,
-        sessionId: sub.mergeRun?.sessionId ?? null, deviceId: sub.mergeRun?.deviceId ?? null, answer: "inline_local" });
+        sessionId: sub.mergeRun?.sessionId ?? null, deviceId: sub.mergeRun?.deviceId ?? null, letter: sub.letter, answer: "inline_local" });
   }
   // 受阻只算连续两次验收没过（子会话 waiting = verdict）；执行连续两次异常退出是已暂停，不在这里。
   for (const view of cards) {
@@ -115,7 +115,7 @@ export async function assembleWaiting(input: WaitingInput): Promise<TWaitingItem
     if (!sub) continue;
     const taskId = treeTask(view.planTaskId);
     add({ id: `verdict:card:${view.id}`, kind: "verdict", title: "验收两次没过", source: [view.title, taskName(taskId)].filter(Boolean).join(" · "),
-      at: view.card.handback?.createdAt ?? null, open: { kind: "card", id: view.id }, taskId, projectId: sub.projectId, answer: "open" });
+      at: view.card.handback?.createdAt ?? null, open: { kind: "card", id: view.id }, taskId, projectId: sub.projectId, letter: sub.letter, answer: "open" });
   }
   // 规划员、验收员在等批准、等回复（停着等额度恢复的不算）。
   // 只算真在问（idle 带提问）和在等批准的；一轮做完停下的不算（9.6）。

@@ -9,6 +9,10 @@ import { readSessionAttachment, storeSessionAttachments } from "../sessionAttach
 import { verifyBrief } from "../cardAcceptance.js";
 import { createLocalDevice, deviceOfToken, listLocalDevices, ownOutput, revokeLocalDevice } from "../localDevices.js";
 import { applySyncBatch } from "../localSync.js";
+import { reportToProject, type BuddyDeps } from "../buddyActions.js";
+import { personDisplayNames } from "../people.js";
+import { projectHistoryReader } from "../sourceWords.js";
+import { readReport, reportTurnText, setAfterSequence } from "../subSessionReports.js";
 import { authenticateLocalToken } from "../personalTokens.js";
 import { CardError } from "../taskCards.js";
 import type { BoardHooks } from "./taskCards.js";
@@ -91,12 +95,39 @@ export function registerLocalRoutes(app: AppInstance, ctx: RouteContext, board: 
     // 每一批（包括闲着时的空批，也就是心跳）都刷新在线时间、版本和位置数；带了额度的整份换掉这台电脑存的额度，没带的留着上次的。
     await q("UPDATE local_devices SET last_sync_at=$3,app_version=$4,slots=$5::jsonb,quota=COALESCE($6::jsonb,quota) WHERE owner_id=$1 AND id=$2",
       [device.ownerId, device.id, ctx.now(), req.body.runnerVersion.slice(0, 40), JSON.stringify(req.body.slots), req.body.quota ? JSON.stringify(req.body.quota) : null]);
-    const { response, queued, proposals } = await applySyncBatch({ pool, storageDir: ctx.materialStorageDir, now: ctx.now,
+    const { response, queued, proposals, reports, decisions } = await applySyncBatch({ pool, storageDir: ctx.materialStorageDir, now: ctx.now,
       onError: () => app.log.error("local sync item failed"), planTask: board.planTask }, identity.personId, req.body);
     queued.forEach(board.enqueueAcceptance);
     proposals.forEach(board.enqueueProposal);
+    if (reports.length || decisions.length) void reportNotices(identity.personId, reports, decisions);
     return response;
   });
+
+  /**
+   * 子会话停了、要介入（18 节第 10 条），提交以后在后台做：补上项目对话当时最后一条消息的 sequence（报告、决定卡按它插进对话），
+   * 报告再替本人给项目主管线发一句，让它回一小轮（正在回上一轮时排在后面）。出错只记日志。
+   */
+  const history = projectHistoryReader(ctx);
+  const buddy: BuddyDeps = { app, q, env, now: ctx.now, names: () => personDisplayNames(ctx.peopleDirectory) };
+  const lastSequence = (projectId: string, ownerId: string) =>
+    history(projectId, ownerId, "sub-session-report").then((read) => read.messages.at(-1)?.sequence ?? null).catch(() => null);
+  async function reportNotices(ownerId: string, reports: string[], decisions: string[]) {
+    try {
+      for (const id of decisions) {
+        const projectId = (await q("SELECT project_id::text FROM sub_session_decisions WHERE id=$1", [id])).rows[0]?.project_id as string | undefined;
+        if (projectId) await setAfterSequence(q, "sub_session_decisions", id, await lastSequence(projectId, ownerId));
+      }
+      for (const id of reports) {
+        const report = await readReport(q, id);
+        if (!report) continue;
+        await setAfterSequence(q, "sub_session_reports", id, await lastSequence(report.project_id, ownerId));
+        await reportToProject(buddy, ownerId, report.project_id, reportTurnText(report))
+          .catch((cause) => app.log.warn({ reportId: id, code: (cause as { code?: string }).code }, "sub-session report turn not started"));
+      }
+    } catch (cause) {
+      app.log.error({ err: cause }, "sub-session notices failed");
+    }
+  }
 
   // 验收员的交代（第 21 节）：本机交回以后自己起验收员，先来取这份。
   app.get(LOCAL_RUNNER_VERIFY_BRIEF_PATH, { schema: { querystring: Type.Object({ handbackKey: Type.String({ minLength: 1, maxLength: 200 }) }),

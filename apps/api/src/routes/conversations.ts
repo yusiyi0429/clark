@@ -229,7 +229,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
         // 项目对话：进这个项目那一段（没有就建），飞书、微信只进总管线。
         if (req.params.scope !== "global") {
           return pipelineTarget(person, req.params.scope, String(req.id), true)
-            .then((target) => chat.relay(pipelineViewer(owner), String(req.id), req.body, reply, undefined, target!, req.headers[FORWARDED_HEADER] === "buddy"))
+            .then((target) => chat.relay(pipelineViewer(owner), String(req.id), req.body, reply, undefined, target!, ["buddy", "report"].includes(String(req.headers[FORWARDED_HEADER]))))
             .catch((error) => chatFailed(reply, error));
         }
         const via = req.headers[VIA_HEADER];
