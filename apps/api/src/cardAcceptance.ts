@@ -27,6 +27,9 @@ import { postCoAgentMessage } from "./threads.js";
 export function returnText(criteria: string[], result: StoredAcceptance): string {
   const missed = result.criteria.filter((item) => item.verdict !== "met").sort((a, b) => a.index - b.index)
     .map((item) => `第 ${item.index} 条「${criteria[item.index - 1] ?? ""}」，${item.reason}；怎么补：${item.fix ?? "补上能核对的证据"}`);
+  // 和本人原话对不上的几处（16.8）跟在没过的标准后面。
+  for (const issue of result.sourceWordIssues ?? [])
+    missed.push(`本人原话「${issue.quote}」${issue.kind === "missing" ? "说了要的没做" : "没要的做了"}，${issue.reason}`);
   return `验收没过：${missed.join("。")}。改完再交回。`;
 }
 
@@ -75,7 +78,8 @@ export type Verifier = { source: "cloud" | "local"; modelLabel: string | null; r
 export async function settleHandback(client: PoolClient, row: HandbackRow, result: StoredAcceptance, verifier: Verifier, token: string | null, now: Date):
   Promise<{ saved: boolean; outcome: "pass" | "fail"; proposal: string | null }> {
   const met = result.criteria.filter((item) => item.verdict === "met").length;
-  const outcome = met === result.criteria.length ? "pass" : "fail";
+  // 和本人原话对不上（16.8）有一处就是没过，标准全达到也一样。
+  const outcome = met === result.criteria.length && !result.sourceWordIssues?.length ? "pass" : "fail";
   const locked = (await client.query("SELECT id::text,owner_id,status,plan_task_id FROM tasks WHERE id=$1 FOR UPDATE", [row.task_id])).rows[0] as TaskRow;
   const saved = await client.query(`UPDATE card_handbacks SET status='done',result=$3::jsonb,outcome=$4,return_text=$5,finished_at=$6,error=NULL,
     verifier_source=$7,verifier_model=$8,verifier_role_id=$9,verifier_role_version=$10,verify_run_id=$11,verified_commit=$12
