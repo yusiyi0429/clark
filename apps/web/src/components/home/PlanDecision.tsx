@@ -34,6 +34,7 @@ import { subIcon } from "./LeftColumn";
 import { queueText } from "@/lib/home/derive";
 import h from "@/styles/home.module.css";
 import x from "@/styles/decision-box.module.css";
+import { SourceWords, sourceWordsOf } from "@/components/cards/SourceWords";
 
 const ICON = STATE_ICON;
 
@@ -173,6 +174,7 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
               {editing ? <input value={edits[draft.id]?.title ?? draft.title} maxLength={120} aria-label="这一步" onChange={(event) => edit(draft.id, { title: event.target.value })} />
                 : <span className={h.stepTitle}>{edits[draft.id]?.title ?? draft.title}</span>}
               <span className={h.stepMeta}>{[role?.name ?? "我自己", draft.criterionIndex ? `约定第 ${draft.criterionIndex} 条` : null].filter(Boolean).join(" · ")}</span>
+              <SourceWords words={sourceWordsOf(draft)} className={h.stepWords} />
             </span>
             <span className={h.stepSide}>
               {editing ? <>

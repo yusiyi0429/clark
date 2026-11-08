@@ -202,6 +202,17 @@ describe("开工（Task 管线里的选项框）", () => {
     expect(html).not.toContain("约定第");
   });
 
+  it("派活单每一步带本人原话（16.8）：引用样式放在这一步下面，原文照登；没有原话的那步不画", () => {
+    const words = { sourceWords: ["先把 clone 接上，别动登录"] } as Partial<TCardDraftView>;
+    const html = renderToStaticMarkup(<LocalContext.Provider value={local}>
+      <PlanDecision target={{ projectId: "00000000-0000-4000-8000-0000000000f1" }} name="本机程序"
+        drafts={[draft("00000000-0000-4000-8000-0000000000d3", "接上 clone", words), draft("00000000-0000-4000-8000-0000000000d4", "补测试")]}
+        roles={[]} handheld={false} onSay={vi.fn()} onChanged={vi.fn()} />
+    </LocalContext.Provider>);
+    expect(html.match(/data-testid="source-words"/g)).toHaveLength(1);
+    expect(html).toMatch(/接上 clone.*<blockquote[^>]*data-testid="source-words"><p>先把 clone 接上，别动登录<\/p><\/blockquote>.*补测试/);
+  });
+
   it("规划员在拆：一行「拆卡 · 等开工」；本机在拆写第几步", () => {
     const [planner] = plannerWorkers({ sessions: [], splits: [split("s1", "t1")], listed: [], tasks: [], deviceName: null });
     const html = renderToStaticMarkup(<LocalContext.Provider value={local}><PlanningLine planner={planner!} /></LocalContext.Provider>);
