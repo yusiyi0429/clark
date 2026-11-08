@@ -73,8 +73,10 @@ async function setup(folder: string, max = 3, dataDir?: string, token0?: string,
   const session = async (id: string) => (await call("GET", `/v1/sessions/${id}`)).body;
   const status = async (id: string) => (await session(id)).session.status as string;
   const waitStatus = (id: string, want: string) => until(async () => (await status(id)) === want);
-  const open = async (title: string, cwd = folder, after?: string[]) =>
-    (await call("POST", "/v1/sessions", { subject: { kind: "card", cardId: title }, title, cwd, firstMessage: `做 ${title}`, ...(after ? { after } : {}) })).body;
+  // git 仓库里按「自动」开（工作树里安全的步骤自己放行）；不是 git 仓库的按「每次都问」（这些用例靠写文件时停下等批准）
+  const open = async (title: string, cwd = folder, after?: string[]) => (await call("POST", "/v1/sessions", {
+    subject: { kind: "card", cardId: title }, title, cwd, firstMessage: `做 ${title}`, permissionMode: existsSync(join(folder, ".git")) ? "auto" : "default", ...(after ? { after } : {}),
+  })).body;
   const allow = async (id: string) => {
     const s = await until(async () => { const b = await session(id); return b.pendingPermissions[0] ? b : null; });
     return call("POST", `/v1/sessions/${id}/permissions/${encodeURIComponent(s.pendingPermissions[0].requestId)}`, { decision: "allow" });

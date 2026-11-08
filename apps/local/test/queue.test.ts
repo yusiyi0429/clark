@@ -89,7 +89,9 @@ describe("同时跑的上限和队列", { timeout: 30_000 }, () => {
       // 上报云端：排着时带排第几，前面的走了就重报新位置
       const dItems = statusItems(h.t.dataDir, d.id);
       expect(dItems.filter((x: any) => x.status === "queued").map((x: any) => x.queuePosition)).toEqual([2, 1]);
-      expect(dItems.map((x: any) => x.status)).toEqual(["queued", "queued", "starting", "running", "waiting_permission"]);
+      // 第一轮开头执行方报了实际模型：补报一条 running，带 run.actual
+      expect(dItems.map((x: any) => x.status)).toEqual(["queued", "queued", "starting", "running", "running", "waiting_permission"]);
+      expect(dItems[4].run.actual).toMatchObject({ model: expect.any(String) });
       expect(statusItems(h.t.dataDir, c.id).filter((x: any) => x.status !== "queued").every((x: any) => x.queuePosition === undefined)).toBe(true);
     } finally {
       await h.t.cleanup();

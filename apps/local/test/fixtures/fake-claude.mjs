@@ -33,6 +33,19 @@ function limitHit(limit) {
   turn = null;
 }
 const mode = cfg.mode ?? "normal";
+/** 现在的权限模式：起的时候看 --permission-mode，跑着时 set_permission_mode 改。 */
+let permMode = argv.includes("--permission-mode") ? argv[argv.indexOf("--permission-mode") + 1] : "default";
+/**
+ * system/init 报的模型：真的 Claude Code 报它实际用的那个。这里照 --model 的别名报那一版（opus → claude-opus-5-5），
+ * 网关报 ANTHROPIC_MODEL 原样；配置 initModel 可以硬改（测「请求的和实际的对不上」），每轮现读。
+ */
+function initModel() {
+  const live = readCfg();
+  if (live.initModel) return live.initModel;
+  if (process.env.ANTHROPIC_MODEL) return process.env.ANTHROPIC_MODEL;
+  const m = argv.includes("--model") ? argv[argv.indexOf("--model") + 1] : null;
+  return m && /^(opus|sonnet|haiku)$/.test(m) ? `claude-${m}-5-5` : m ?? "claude-haiku-5-5";
+}
 
 let turn = null; // { permId, timer }
 let turns = 0;
@@ -40,12 +53,12 @@ let turns = 0;
 function startTurn(text) {
   turns += 1;
   if (mode === "auth") {
-    out({ type: "system", subtype: "init", session_id: sid, model: "claude-haiku-5-5", permissionMode: "default", claude_code_version: "2.1.318" });
+    out({ type: "system", subtype: "init", session_id: sid, model: initModel(), permissionMode: "default", claude_code_version: "2.1.318" });
     out({ type: "assistant", error: "authentication_failed", message: { content: [{ type: "text", text: "Not logged in · Please run /login" }] } });
     out({ type: "result", subtype: "success", is_error: true, result: "Not logged in · Please run /login", duration_ms: 5, usage: {} });
     return;
   }
-  out({ type: "system", subtype: "init", session_id: sid, model: "claude-haiku-5-5", permissionMode: "default", claude_code_version: "2.1.318" });
+  out({ type: "system", subtype: "init", session_id: sid, model: initModel(), permissionMode: "default", claude_code_version: "2.1.318" });
   // 额度：每轮现读配置（测试中途改）。usageLimit 在时这一轮碰壁：rate_limit_event rejected → 助手报 rate_limit → 429 的 result（exit 时直接退出）；
   // 这一串照社区复现和 Claude Code 程序里的字符串，没真机复现过
   const live = readCfg();
@@ -83,6 +96,17 @@ function startTurn(text) {
     out({ type: "control_request", request_id: turn.permId, request: { subtype: "can_use_tool", tool_name: "AskUserQuestion", input, tool_use_id: `toolu_ask${turns}` } });
     return;
   }
+  // plan 模式（--permission-mode plan，或跑着时换成 plan）：先出计划、要 ExitPlanMode 的批准，批了才去写文件
+  if (permMode === "plan") {
+    const input = { plan: "1. 写 hello.txt" };
+    out({ type: "assistant", message: { content: [{ type: "tool_use", id: `toolu_plan${turns}`, name: "ExitPlanMode", input }] }, parent_tool_use_id: null });
+    turn = { permId: `plan-${turns}`, plan: true };
+    out({ type: "control_request", request_id: turn.permId, request: { subtype: "can_use_tool", tool_name: "ExitPlanMode", input, tool_use_id: `toolu_plan${turns}` } });
+    return;
+  }
+  askWrite();
+}
+function askWrite() {
   const file = cfg.writePath ?? "hello.txt";
   out({ type: "assistant", message: { content: [{ type: "tool_use", id: `toolu_w${turns}`, name: "Write", input: { file_path: file, content: "你好" } }] }, parent_tool_use_id: null });
   const permId = `perm-${turns}`;
@@ -174,7 +198,7 @@ function agentDone() {
     sys({ subtype: "task_notification", task_id: "agent1", tool_use_id: "toolu_ag", status: "completed", output_file: "", summary: "2" });
     // 子 agent 跑完，Claude Code 自己开一轮
     turns += 1;
-    out({ type: "system", subtype: "init", session_id: sid, model: "claude-haiku-5-5", permissionMode: "default", claude_code_version: "2.1.318" });
+    out({ type: "system", subtype: "init", session_id: sid, model: initModel(), permissionMode: "default", claude_code_version: "2.1.318" });
     out({ type: "assistant", message: { content: [{ type: "text", text: "子 agent 回来了：2 个文件" }] }, parent_tool_use_id: null });
     finish(true, "子 agent 回来了");
   }
@@ -230,6 +254,11 @@ rl.on("line", (line) => {
     sys({ subtype: "task_updated", task_id: id, patch: { status: "killed", end_time: Date.now() } });
     sys({ subtype: "task_notification", task_id: id, status: "stopped", output_file: "", summary: "" });
     out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: {} } });
+  } else if (msg.type === "control_request" && msg.request.subtype === "set_permission_mode") {
+    // 跑着时换权限模式（11/08 实测 2.1.318 收 auto、default、acceptEdits、plan、dontAsk）：记进 trace
+    permMode = msg.request.mode;
+    appendFileSync(TRACE, JSON.stringify({ setPermissionMode: msg.request.mode, sid }) + "\n");
+    out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: { mode: msg.request.mode } } });
   } else if (msg.type === "control_request" && msg.request.subtype === "apply_flag_settings") {
     // 跑着时改设置（多 agent 开关）：记进 trace
     appendFileSync(TRACE, JSON.stringify({ applyFlags: msg.request.settings, sid }) + "\n");
@@ -248,6 +277,12 @@ rl.on("line", (line) => {
     const r = msg.response.response;
     if (!turn || msg.response.request_id !== turn.permId) return;
     appendFileSync(TRACE, JSON.stringify({ permissionResponse: r }) + "\n");
+    if (turn.plan) {
+      // 计划批了：出 plan 接着做（要写文件）；拒了：这一轮停下，等本人说怎么改
+      out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: `toolu_plan${turns}`, content: r.behavior === "allow" ? "User has approved your plan" : r.message, is_error: r.behavior !== "allow" }] }, parent_tool_use_id: null });
+      if (r.behavior === "allow") { permMode = "default"; askWrite(); } else finish(true, "等你说怎么改计划");
+      return;
+    }
     if (turn.ask) {
       const answers = r.updatedInput?.answers ?? null;
       out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: `toolu_ask${turns}`, content: `User has answered your questions: ${JSON.stringify(answers)}` }] }, parent_tool_use_id: null });

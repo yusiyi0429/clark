@@ -4,13 +4,13 @@ import { basename, extname, isAbsolute, join, relative, resolve } from "node:pat
 import type { TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import {
-  LocalCardPlan, LocalVerdict,
+  LocalCardPlan, LocalVerdict, LOCAL_AGENT_PERMISSION_MODES, type TLocalPermissionMode,
   type TLocalAgentKind, type TLocalCardPlan, type TLocalCreateSessionRequest, type TLocalHandbackCriterion, type TLocalPermissionRequestView, type TLocalRole,
   type TLocalSendMessageRequest, type TLocalSendMessageResponse, type TLocalSessionKind, type TLocalSessionStatus, type TLocalSlots, type TLocalSessionSubject,
   type TLocalSessionSummary, type TLocalSyncItem, type TLocalTopicVersionKind, type TLocalUsage, type TLocalSourceWordIssue, type TLocalVerdict, type TLocalVerdictCriterion,
   type TLocalWorkspace, type TLocalGitRef, type TLocalMergeResponse, type TLocalQuestionRequestView, type TLocalQuestionAnswerRequest,
   type TLocalBackgroundItem, type TLocalMergeHoldReason, type TLocalMergeSync, type TLocalModelTier, type TLocalHold, type TLocalMoney,
-  type TLocalRun, type TLocalTaskBudgetView, type TLocalBudgetUpdateRequest, type TBudgetMode, type TLocalPermissionBrief, type TLocalSavedAttachment,
+  type TLocalRun, type TLocalRunPreviewRequest, type TLocalTaskBudgetView, type TLocalBudgetUpdateRequest, type TBudgetMode, type TLocalPermissionBrief, type TLocalSavedAttachment,
 } from "@warmap/contracts";
 import { readJson, writeJsonAtomic, nowIso } from "./store.js";
 import type { EventLog, EventBody } from "./eventLog.js";
@@ -19,7 +19,7 @@ import type { QuotaTracker } from "./quota.js";
 import type { GatewayPricing } from "./pricing.js";
 import { Budgets, MULTI_AGENT_OFF_PERCENT, reworkRounds, runFor } from "./budget.js";
 import { AttachmentError, attachmentNote, saveAttachments, type FetchAttachment } from "./attachments.js";
-import type { ResolvedModel } from "./models.js";
+import { modelDisplayName, sameModel, type ResolvedModel } from "./models.js";
 import type { ModelProfiles } from "./models.js";
 import { isInside, type Folders } from "./folders.js";
 import type { Outbox } from "./outbox.js";
@@ -140,6 +140,8 @@ interface SessionRecord {
   runSince: string | null;
   /** 最近一次拉起时定的跑法（摘要和状态条目带上）。 */
   run: TLocalRun | null;
+  /** 现在的权限模式（契约 LocalPermissionMode）：开工时带来的（没带为 auto），本人中途换、计划批了转 auto。 */
+  permissionMode: TLocalPermissionMode;
 }
 
 /** 不合契约时给执行方看的一句（哪个字段、哪里不对）。 */
@@ -197,6 +199,8 @@ const MAX_ARTIFACT_BYTES = 10 * 1024 * 1024;
 const MAX_VERSION_CHARS = 200_000;
 const zeroUsage = (): TLocalUsage => ({ inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0 });
 const LIVE: TLocalSessionStatus[] = ["starting", "running", "waiting_permission", "idle"];
+/** 这种执行方有没有这一档权限模式（契约 LOCAL_AGENT_PERMISSION_MODES）。 */
+const modeOffered = (agent: TLocalAgentKind, mode: TLocalPermissionMode) => (LOCAL_AGENT_PERMISSION_MODES[agent] as readonly string[]).includes(mode);
 /** 占着位置的状态：一轮做完在等本人回复的（idle）不占，排队的不占。 */
 const OCCUPYING: TLocalSessionStatus[] = ["starting", "running", "waiting_permission"];
 const CANCELLED_WHILE_STARTING = "启动途中已被强停";
@@ -275,6 +279,7 @@ export class SessionManager {
       rec.holdSince ??= null;
       rec.budgetKey ??= null;
       rec.run ??= null;
+      rec.permissionMode ??= "auto";
       rec.runSince = null; // 上次的进程已不在，正跑着的那一段算不准，不算
       this.queueSeq = Math.max(this.queueSeq, rec.queueOrder);
       this.records.set(rec.id, rec);
@@ -476,7 +481,7 @@ export class SessionManager {
     this.sentAsk.set(rec.id, ask.key);
     this.sync(rec, { type: "status", data: {
       status: rec.status, title: rec.title, agent: rec.agent, modelLabel: rec.modelLabel, ...(queuePosition ? { queuePosition } : {}), ...(waitingFor.length ? { waitingFor } : {}),
-      ...(rec.hold ? { hold: rec.hold } : {}), ...(rec.run ? { run: rec.run } : {}), ...ask.data,
+      ...(rec.hold ? { hold: rec.hold } : {}), ...(rec.run ? { run: rec.run } : {}), permissionMode: rec.permissionMode, ...ask.data,
     } });
   }
 
@@ -561,6 +566,8 @@ export class SessionManager {
     if (!model) throw new SessionError("validation", "没有这个模型配置");
     if (model.source === "gateway" && !model.apiKey) throw new SessionError("validation", `「${model.label}」还没填钥匙`);
     const agent = req.agent ?? "claude-code";
+    const permissionMode = req.permissionMode ?? "auto";
+    if (!modeOffered(agent, permissionMode)) throw new SessionError("validation", `${agent} 没有「${permissionMode}」这一档权限模式`);
     if (this.d.paused?.()) throw new SessionError("conflict", "本机程序已暂停，先在托盘里恢复");
     // 要等前面的卡：先排着，等它们都做完再开工作树（从那时基线最新的提交开出来）
     const after = [...new Set(req.after ?? [])].filter((id) => id !== subject.cardId);
@@ -579,7 +586,7 @@ export class SessionManager {
       role: req.role ?? null, modelTier: req.modelTier ?? req.role?.modelTier ?? null, critics: req.critics ?? [], queuedMessage: null, queueOrder: 0,
       parentId: null, briefPending: false, criteria: [], failStreak: 0, submitted: 0, nudged: false,
       workspace: place?.workspace ?? null, commit: null, after: waiting ? after : [], passed: null, background: [], hold: null, holdSince: null,
-      budgetKey, runSince: null, run: null,
+      budgetKey, runSince: null, run: null, permissionMode,
     };
     // 满了（或前面还有人在排、在等前面的卡、文件夹被另一张卡占着、订阅额度用完了、预算用完了、余额不足）就进队，先来先跑；有空位时 pump 接上。
     const busy = this.folderBusy(rec);
@@ -725,7 +732,8 @@ export class SessionManager {
       ...(READ_ONLY_KINDS.includes(rec.subject.kind) ? WRITE_TOOLS : []),
     ];
     const plan = this.runFor(rec, model);
-    rec.run = plan.view;
+    // 续上同一个模型：上次实际报的照留（这次的 init 来之前也显示得出实际的）。
+    rec.run = rec.run?.actual && rec.run.model === plan.view.model ? { ...plan.view, actual: rec.run.actual } : plan.view;
     if (this.records.has(rec.id)) this.save(rec);
     const run = await adapter.start({
       sessionId: rec.id, cwd: rec.cwd, resume, model, run: plan.launch, includePersonalConfig: rec.includePersonalConfig,
@@ -737,8 +745,9 @@ export class SessionManager {
         ...(this.d.folders.isAllowed(folder) ? [rec.workspace?.kind === "worktree" ? rec.workspace.path : rec.cwd] : []),
         ...this.d.folders.list().map((f) => f.path),
       ],
-      // 卡在自己的工作树里：工作树里安全的步骤不问本人（规则在 pathGuard 的 autoAllowed）
+      // 卡在自己的工作树里：「自动」「自动接受改文件」只在工作树里自己放行（规则在 pathGuard 的 modeAllows）
       autoAllowRoot: rec.subject.kind === "card" && rec.workspace?.kind === "worktree" ? rec.workspace.path : null,
+      permissionMode: rec.permissionMode,
     });
     if (this.cancelled.delete(rec.id)) {
       await run.kill();
@@ -773,6 +782,13 @@ export class SessionManager {
         this.inTurn.add(rec.id);
         // Claude Code 自己开了一轮（后台子 agent 跑完来通知时，不经本人）：会话又在跑了
         if (rec.status === "idle" && !this.questions.has(rec.id)) this.setStatus(rec, "running");
+        if (e.model) this.noteActualModel(rec, e.model);
+        break;
+      case "permission_mode":
+        // 本人批了计划：执行方从 plan 转成 auto 了
+        rec.permissionMode = e.mode;
+        this.save(rec);
+        this.syncStatus(rec);
         break;
       case "background":
         this.recordBackground(rec, e.item);
@@ -1025,6 +1041,24 @@ export class SessionManager {
   }
 
   /** 停一个后台任务（会话本身不停）。执行方答应后会来 background 事件（stopped），回执里已经是停了的样子。 */
+  /**
+   * PUT /v1/sessions/:id/permission-mode：本人换权限模式。跑着的告诉执行方（等着批准的按新档重判）；没在跑的（排着、停了）记下，下次拉起按新的。
+   * 结束了的（done、failed）不能换。
+   */
+  async setPermissionMode(id: string, mode: TLocalPermissionMode): Promise<TLocalSessionSummary> {
+    const rec = this.must(id);
+    if (rec.status === "done" || rec.status === "failed") throw new SessionError("conflict", "这个会话已经结束了");
+    if (!modeOffered(rec.agent, mode)) throw new SessionError("validation", `${rec.agent} 没有「${mode}」这一档权限模式`);
+    if (rec.permissionMode === mode) return this.summary(rec);
+    const run = this.runs.get(id);
+    if (run && !(await run.setPermissionMode(mode))) throw new SessionError("conflict", "执行方没换成这一档，稍后再试");
+    rec.permissionMode = mode;
+    this.save(rec);
+    this.emit(rec, { type: "permission_mode", mode, by: "web" });
+    this.syncStatus(rec);
+    return this.summary(rec);
+  }
+
   async stopBackground(id: string, itemId: string): Promise<TLocalSessionSummary> {
     const rec = this.must(id);
     const item = rec.background.find((b) => b.id === itemId);
@@ -1389,17 +1423,46 @@ export class SessionManager {
    * view 是摘要里的 run，launch 是交给 Claude Code 的。
    */
   private runFor(rec: SessionRecord, model: ResolvedModel): { view: TLocalRun; launch: { model: string; effort: TLocalRun["effort"] & string; multiAgent: boolean } } {
-    const mode = this.modeOf(rec);
-    const key = rec.budgetKey;
+    return this.planRun({ mode: this.modeOf(rec), tier: rec.modelTier ?? "normal", verify: rec.subject.kind === "verify", budgetKey: rec.budgetKey }, model);
+  }
+
+  /** runFor 的算法本身（开工前预览也用它）：view 带来源和给人看的模型名，actual 等执行方报了再填。 */
+  private planRun(p: { mode: TBudgetMode; tier: TLocalModelTier; verify: boolean; budgetKey: string | null }, model: ResolvedModel) {
     const launch = runFor({
-      mode, tier: rec.modelTier ?? "normal", verify: rec.subject.kind === "verify",
-      budgetState: key && this.d.budgets ? this.d.budgets.judge(key, this.liveMs(key)) : "ok",
+      mode: p.mode, tier: p.tier, verify: p.verify,
+      budgetState: p.budgetKey && this.d.budgets ? this.d.budgets.judge(p.budgetKey, this.liveMs(p.budgetKey)) : "ok",
       quotaPercent: this.d.quota?.usedPercent() ?? null, quotaWarning: this.d.quota?.warning() ?? false,
     });
+    const used = model.source === "gateway" ? model.model : model.model ?? launch.model;
+    const named = { source: model.source, sourceLabel: model.label, modelName: used ? this.d.models.displayName(used) : null, actual: null };
     const view: TLocalRun = model.source === "gateway"
-      ? { mode, model: model.model, effort: null, multiAgent: false }
-      : { mode, model: model.model ?? launch.model, effort: launch.effort, multiAgent: launch.multiAgent };
+      ? { mode: p.mode, model: model.model, effort: null, multiAgent: false, ...named }
+      : { mode: p.mode, model: used, effort: launch.effort, multiAgent: launch.multiAgent, ...named };
     return { view, launch };
+  }
+
+  /** POST /v1/runs/preview：开工前看这次会怎么跑（「自动」落到哪个来源的哪个模型），算法同真开工。 */
+  async previewRun(req: TLocalRunPreviewRequest): Promise<TLocalRun> {
+    const model = await this.d.models.resolve(req.modelProfileId);
+    if (!model) throw new SessionError("validation", "没有这个模型配置");
+    const budgetKey = req.taskBudget?.taskId ? Budgets.key(req.taskBudget.taskId, "") : null;
+    return this.planRun({ mode: req.taskBudget?.budget.mode ?? "auto", tier: req.modelTier ?? "normal", verify: false, budgetKey }, model).view;
+  }
+
+  /**
+   * 执行方报了实际模型（Claude Code 每轮开头的 system/init）：记进 run.actual，以它为准显示；换了模型才更新、才重报 status。
+   * 和请求的对不上（不是同一个，也不是别名落到的那一版）时记一条 notice（model_mismatch）。订阅的别名落到哪一版记下来，开工前预览写版本号。
+   */
+  private noteActualModel(rec: SessionRecord, actual: string): void {
+    if (!rec.run || rec.run.actual?.model === actual) return;
+    const requested = rec.run.model;
+    rec.run = { ...rec.run, actual: { model: actual, modelName: modelDisplayName(actual), at: nowIso() } };
+    if (requested && rec.run.source === "subscription") this.d.models.noteActual(requested, actual);
+    this.save(rec);
+    if (requested && !sameModel(requested, actual)) {
+      this.emit(rec, { type: "notice", level: "warn", code: "model_mismatch", text: `请求的模型是 ${requested}，实际跑的是 ${actual}` });
+    }
+    this.syncStatus(rec);
   }
 
   /** 新的一轮之前：多 agent 该开该关（「无上限」额度到 95% 关掉，模式改了跟着改）。只管订阅；不用改时为 null（不多等一拍）。 */
@@ -1658,7 +1721,7 @@ export class SessionManager {
       createdAt: now, updatedAt: now, status: "queued", usage: zeroUsage(), syncSeq: 0, mcpSecret: "", outputs: [], versionNumber: 0, lastVersion: null,
       role: null, modelTier: null, critics: [], queuedMessage: null, queueOrder: ++this.queueSeq,
       parentId: card.id, briefPending: true, criteria: [], failStreak: 0, submitted: 0, nudged: false, workspace: null, commit, after: [], passed: null,
-      background: [], hold: null, holdSince: null, budgetKey: card.budgetKey, runSince: null, run: null,
+      background: [], hold: null, holdSince: null, budgetKey: card.budgetKey, runSince: null, run: null, permissionMode: card.permissionMode,
     };
     this.records.set(rec.id, rec);
     this.setStatus(rec, "queued", { reason: "等交回送到天枢，取验收交代" });

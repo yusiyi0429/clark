@@ -35,9 +35,58 @@ const TIER_MATCH: Record<TLocalModelTier, RegExp> = { strong: /opus/i, normal: /
 export const VERIFIED_SEARCH_MODELS = ["wangsu/claude-opus-5-5", "wangsu/deepseek-v4.1-flash"];
 const searchDefault = (source: string, model: string | null) => source !== "gateway" || VERIFIED_SEARCH_MODELS.includes(model ?? "");
 
+/** 去掉「厂商/」前缀和 Claude Code 的 [1m] 后缀，小写：比较和认名字都用它。 */
+const bare = (model: string) => model.slice(model.lastIndexOf("/") + 1).replace(/\[1m\]$/i, "").toLowerCase();
+const ALIAS = /^(opus|sonnet|haiku|fable)$/;
+const FULL = /^claude-(opus|sonnet|haiku|fable)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?$/;
+const cap = (s: string) => s[0]!.toUpperCase() + s.slice(1);
+
+/**
+ * 给人看的模型名（契约 LocalRun.modelName）：claude-opus-5-5 →「Opus 5.5」、claude-sonnet-4-20250514 →「Sonnet 4」；
+ * 别名 opus →「Opus」；别的（网关模型）去掉「厂商/」前缀原样，如 wangsu/qwen3.8-flash → qwen3.8-flash。
+ */
+export function modelDisplayName(model: string): string {
+  const b = bare(model);
+  const full = FULL.exec(b);
+  if (full) return `${cap(full[1]!)} ${full[2]}${full[3] ? `.${full[3]}` : ""}`;
+  const alias = ALIAS.exec(b);
+  if (alias) return cap(alias[1]!);
+  return model.slice(model.lastIndexOf("/") + 1).slice(0, 60);
+}
+
+/** 请求的和执行方实际报的是不是同一个：一样，或者请求的是别名、实际是这个系列的某一版（opus → claude-opus-5-5）。 */
+export function sameModel(requested: string, actual: string): boolean {
+  const r = bare(requested), a = bare(actual);
+  if (r === a) return true;
+  const alias = ALIAS.exec(r);
+  return Boolean(alias && FULL.exec(a)?.[1] === alias[1]);
+}
+
 export class ModelProfiles {
   private readonly file: string;
-  constructor(dataDir: string, private readonly secrets: SecretStore) { this.file = join(dataDir, "models.json"); }
+  /** 别名在这台电脑上实际跑出来是哪一版（opus → claude-opus-5-5）：开工前写「Opus 5.5」用。 */
+  private readonly aliasFile: string;
+  constructor(dataDir: string, private readonly secrets: SecretStore) {
+    this.file = join(dataDir, "models.json");
+    this.aliasFile = join(dataDir, "model-aliases.json");
+  }
+
+  /** 给人看的名字：别名用上一次实际跑出来的那一版，没跑过就是「Opus」这种。 */
+  displayName(model: string): string {
+    const alias = ALIAS.exec(bare(model));
+    const seen = alias ? readJson<Record<string, string>>(this.aliasFile, {})[alias[1]!] : undefined;
+    return modelDisplayName(seen ?? model);
+  }
+
+  /** 执行方报了实际模型：请求的是别名、实际是这个系列的某一版时记下来。 */
+  noteActual(requested: string, actual: string): void {
+    const alias = ALIAS.exec(bare(requested));
+    if (!alias || !sameModel(requested, actual)) return;
+    const map = readJson<Record<string, string>>(this.aliasFile, {});
+    const version = bare(actual);
+    if (map[alias[1]!] === version) return;
+    writeJsonAtomic(this.aliasFile, { ...map, [alias[1]!]: version });
+  }
 
   private stored(): Stored[] {
     const list = readJson<Stored[]>(this.file, []).filter((p) => p.id !== SUBSCRIPTION_ID);
