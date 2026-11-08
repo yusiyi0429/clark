@@ -165,6 +165,10 @@ describe("本机程序契约", () => {
     const verdict = { passed: true, summary: "都达到了", criteria: [{ index: 1, verdict: "met", reason: "能登录", evidence: null, fix: null }], beyondScope: [], modelLabel: "haiku", roleId: null, roleVersion: null };
     expect(Value.Check(LocalVerdict, { ...verdict, commit: git.commit })).toBe(true);
     expect(Value.Check(LocalVerdict, verdict)).toBe(true);
+    // 本人原话对不上（16.8）：写明是哪句、漏了还是多做了；没有时不带，带了不能是空数组
+    expect(Value.Check(LocalVerdict, { ...verdict, passed: false, sourceWordIssues: [{ quote: "登录页要有忘记密码", kind: "missing", reason: "没有忘记密码" }] })).toBe(true);
+    expect(Value.Check(LocalVerdict, { ...verdict, sourceWordIssues: [{ quote: "x", kind: "wrong", reason: "x" }] })).toBe(false);
+    expect(Value.Check(LocalVerdict, { ...verdict, sourceWordIssues: [] })).toBe(false);
 
     expect(LOCAL_RUNNER_ROUTES.mergeSession).toEqual({ method: "POST", path: "/v1/sessions/:id/merge", auth: true });
     expect(Value.Check(LocalMergeResponse, { merged: true, commit: sha, session: { ...summary, workspace: { ...worktree, mergedCommit: sha } } })).toBe(true);

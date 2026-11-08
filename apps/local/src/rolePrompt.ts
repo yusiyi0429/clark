@@ -1,4 +1,4 @@
-import type { TLocalRole, TLocalRoleTool, TLocalSessionKind, TLocalVerdictCriterion, TLocalWorkspace } from "@warmap/contracts";
+import type { TLocalRole, TLocalRoleTool, TLocalSessionKind, TLocalSourceWordIssue, TLocalVerdictCriterion, TLocalWorkspace } from "@warmap/contracts";
 
 /**
  * 会话追加的系统提示词（--append-system-prompt-file）、挑刺子 agent 的定义（--agents）、评审会的那句话（ADR 0037）。
@@ -28,6 +28,7 @@ const VERIFY_RULES = `## 规矩
 - 依据是交代里的约定、卡的完成标准、卡所属岗位的验收口径和你自己的验收口径；材料是交回里的自评、证据和产出（产出文件在当前工作目录里，可以读）。需要时用天枢 MCP 的 get_task_context 读 Task 的上下文。
 - 每条完成标准判一次：达到（met）、部分（partial）、没达到（unmet），写理由和依据，没达到的写怎么补；标准以外的建议放进 beyondScope，不算没达到。证据不够就判没达到。
 - 对照交代里的改动：完成标准没要求的新增或改动的文件（报告、命令输出、临时文件等），逐个指出来，写进相关那条的理由或 beyondScope。
+- 交代最前面有「本人原话」时：逐条判完完成标准，再对一遍原话。产出明显漏了原话里明说的（missing），或做了原话里没要的（extra），写进 sourceWordIssues：quote 原样抄是哪一句，再写为什么。有一条就是没过，完成标准全达到也一样；拿不准的不写。
 - 判完用 submit_verdict 交一次结论，然后停下。`;
 
 const RULES: Record<TLocalSessionKind, string> = { card: CARD_RULES, topic: TOPIC_RULES, plan: PLAN_RULES, verify: VERIFY_RULES };
@@ -98,11 +99,18 @@ export function criticAgents(critics: TLocalRole[], searchTool: string | null): 
   }]));
 }
 
-/** 验收没过时结论事件里的改法：固定格式拼，不调模型（和云端 cardAcceptance.ts 的 returnText 一个格式）。送回执行方走云端那条路。 */
-export function returnText(criteria: string[], judged: TLocalVerdictCriterion[]): string {
+/** 验收没过时结论事件里的改法：固定格式拼，不调模型（和云端 cardAcceptance.ts 的 returnText 一个格式，原话对不上的接在后面）。送回执行方走云端那条路。 */
+export function returnText(criteria: string[], judged: TLocalVerdictCriterion[], issues: TLocalSourceWordIssue[] = []): string {
   const missed = judged.filter((c) => c.verdict !== "met")
     .map((c) => `第 ${c.index} 条「${criteria[c.index - 1] ?? ""}」，${c.reason}；怎么补：${c.fix ?? "补上能核对的证据"}`);
-  return `验收没过：${missed.join("。")}。改完再交回。`;
+  const words = issues.map((i) => `本人原话「${i.quote}」${i.kind === "missing" ? "漏了" : "里没要这个"}：${i.reason}`);
+  return `验收没过：${[...missed, ...words].join("。")}。改完再交回。`;
+}
+
+/** 本人原话（16.8）：第一句话最前面的一段，原样引用；没有原话为空串。 */
+export function sourceWordsBlock(words: string[]): string {
+  if (!words.length) return "";
+  return `## 本人原话\n\n${words.map((w) => w.split(/\r?\n/).map((l) => `> ${l}`).join("\n")).join("\n\n")}\n\n`;
 }
 
 /** 验收员交代末尾接上的这次交回的改动（卡在工作树里做时）：基线到交回的提交。验收员只读、不能跑命令，改动全靠这里和读文件。 */

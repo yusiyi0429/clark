@@ -208,6 +208,59 @@ describe("规划员和验收员", { timeout: 30_000 }, () => {
     }
   });
 
+  it("本人原话（16.8）：卡的第一句话和验收员的交代最前面放原话；标准全过但漏了原话里明说的，判没过、写明是哪句；quote 要是原话；只有卡能带", async () => {
+    const h = await setup(3);
+    try {
+      const WORDS = ["登录页要有忘记密码", "别动注册页\n注册页下周再说"];
+      const BLOCK = "## 本人原话\n\n> 登录页要有忘记密码\n\n> 别动注册页\n> 注册页下周再说\n\n";
+      const missed = { ...PASSING, sourceWordIssues: [{ quote: "登录页要有忘记密码", kind: "missing", reason: "页面上没有忘记密码" }] };
+      h.fake({ verdict: missed });
+      const turns = () => readFileSync(join(h.work, ".fake-claude-turns.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+      const a = await h.open({ ...h.card("A"), sourceWords: WORDS });
+      await h.allow(a.id);
+      await h.waitStatus(a.id, "idle");
+      expect(h.events(a.id).find((e) => e.type === "user_message").text).toBe(`${BLOCK}做 A`);
+      expect(turns().find((l) => l.sid === h.argvOf(a.id)[h.argvOf(a.id).indexOf("--session-id") + 1]).turnText).toBe(`${BLOCK}做 A`);
+
+      await h.handBack(a.id);
+      const v = await until(async () => (await h.verifies())[0]);
+      await h.waitStatus(v.id, "done");
+      expect(h.events(v.id).find((e) => e.type === "user_message").text).toBe(`${BLOCK}# 验收交代`);
+      // 两条标准都 met，漏了原话里明说的：没过，改法里写明是哪句
+      const verdict = h.events(a.id).find((e) => e.type === "verdict");
+      expect(verdict).toMatchObject({ passed: false, failStreak: 1 });
+      expect(verdict.returnText).toBe("验收没过：本人原话「登录页要有忘记密码」漏了：页面上没有忘记密码。改完再交回。");
+      const synced = h.cloud.items.find((i) => i.type === "verdict");
+      expect(synced.data).toMatchObject({ passed: false, sourceWordIssues: missed.sourceWordIssues });
+
+      // quote 不是原话里的话：退回去重交；对得上就不写，照常过
+      h.fake({});
+      const b = await h.open({ ...h.card("B"), sourceWords: WORDS });
+      await h.allow(b.id);
+      await h.waitStatus(b.id, "idle");
+      await h.handBack(b.id);
+      const vb = await until(async () => (await h.verifies()).find((x) => x.subject.cardId === "B"));
+      await until(async () => h.events(vb.id).some((e) => e.type === "user_message"));
+      const bad = await h.mcp(vb.id, "submit_verdict", { ...PASSING, sourceWordIssues: [{ quote: "要有记住我", kind: "missing", reason: "x" }] });
+      expect(bad.isError).toBe(true);
+      expect(bad.content[0]!.text).toContain("不是本人原话里的话");
+      expect((await h.mcp(vb.id, "submit_verdict", PASSING)).content[0]!.text).toBe("结论已交：过了。");
+      // 卡没带原话时不能写 sourceWordIssues
+      const c = await h.open(h.card("C"));
+      await h.allow(c.id);
+      await h.waitStatus(c.id, "idle");
+      expect(h.events(c.id).find((e) => e.type === "user_message").text).toBe("做 C");
+      await h.handBack(c.id);
+      const vc = await until(async () => (await h.verifies()).find((x) => x.subject.cardId === "C"));
+      await until(async () => h.events(vc.id).some((e) => e.type === "user_message"));
+      expect((await h.mcp(vc.id, "submit_verdict", missed)).content[0]!.text).toContain("没有本人原话");
+      // 只有卡能带原话
+      expect((await h.open({ subject: { kind: "topic", topicId: "tp-1" }, title: "x", cwd: h.work, firstMessage: "x", sourceWords: WORDS })).error).toMatchObject({ code: "validation" });
+    } finally {
+      await h.t.cleanup();
+    }
+  });
+
   it("没过：卡的会话里有结论和改法，经「说一句」送回执行会话，改完再交回自动再验；第二次没过停在受阻；过了没有改法", async () => {
     const h = await setup(3);
     try {

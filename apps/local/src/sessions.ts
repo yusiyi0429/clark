@@ -7,7 +7,7 @@ import {
   LocalCardPlan, LocalVerdict,
   type TLocalAgentKind, type TLocalCardPlan, type TLocalCreateSessionRequest, type TLocalHandbackCriterion, type TLocalPermissionRequestView, type TLocalRole,
   type TLocalSendMessageRequest, type TLocalSendMessageResponse, type TLocalSessionKind, type TLocalSessionStatus, type TLocalSlots, type TLocalSessionSubject,
-  type TLocalSessionSummary, type TLocalSyncItem, type TLocalTopicVersionKind, type TLocalUsage, type TLocalVerdict, type TLocalVerdictCriterion,
+  type TLocalSessionSummary, type TLocalSyncItem, type TLocalTopicVersionKind, type TLocalUsage, type TLocalSourceWordIssue, type TLocalVerdict, type TLocalVerdictCriterion,
   type TLocalWorkspace, type TLocalGitRef, type TLocalMergeResponse, type TLocalQuestionRequestView, type TLocalQuestionAnswerRequest,
   type TLocalBackgroundItem, type TLocalMergeHoldReason, type TLocalMergeSync, type TLocalModelTier, type TLocalHold, type TLocalMoney,
   type TLocalRun, type TLocalTaskBudgetView, type TLocalBudgetUpdateRequest, type TBudgetMode, type TLocalPermissionBrief, type TLocalSavedAttachment,
@@ -24,7 +24,7 @@ import type { ModelProfiles } from "./models.js";
 import { isInside, type Folders } from "./folders.js";
 import type { Outbox } from "./outbox.js";
 import { SESSION_MCP_NAME, sessionToolNames } from "./sessionMcp.js";
-import { changesBrief, criticAgents, returnText, reviewMessage, systemPrompt } from "./rolePrompt.js";
+import { changesBrief, criticAgents, returnText, reviewMessage, sourceWordsBlock, systemPrompt } from "./rolePrompt.js";
 import { addWorktree, branchName, cardDiff, changedFiles, commitAll, deleteBranch, git, mergeBranch, pruneRepo, removeWorktree, repoHead } from "./git.js";
 import { ensureFeishuPlugin, larkSkills } from "./agents/feishuPlugin.js";
 import type { VerifyBrief } from "./cloud.js";
@@ -124,6 +124,8 @@ interface SessionRecord {
   after: string[];
   /** 验收员：结论过没过（还没交为 null）。 */
   passed: boolean | null;
+  /** 卡：本人原话（16.8，开工请求带来的）；验收员随被验的卡。老记录没有这一项，按空的算。 */
+  sourceWords?: string[];
   /** 这个会话里 Claude Code 自己开的后台任务（子 agent、后台命令），按开始的先后。 */
   background: TLocalBackgroundItem[];
   /** 停着等订阅额度恢复（新首页设计 11.2）：排着的不开始，做过的到点自动接着做。 */
@@ -299,7 +301,7 @@ export class SessionManager {
   private summary(rec: SessionRecord): TLocalSessionSummary {
     const {
       mcpSecret: _s, syncSeq: _q, outputs: _o, versionNumber: _v, lastVersion: _l, role: _r, critics: _c, queuedMessage: _m, queueOrder: _n,
-      parentId: _p, briefPending: _b, criteria: _cr, failStreak: _f, submitted: _sb, nudged: _nd, workspace, commit: _cm, after: _af, passed: _ps,
+      parentId: _p, briefPending: _b, criteria: _cr, failStreak: _f, submitted: _sb, nudged: _nd, workspace, commit: _cm, after: _af, passed: _ps, sourceWords: _sw,
       background, hold, holdSince: _hs, modelTier: _mt, budgetKey: _bk, runSince: _rs, run, ...rest
     } = rec;
     const question = this.questions.get(rec.id);
@@ -534,6 +536,7 @@ export class SessionManager {
     if (subject.kind === "plan" && !subject.taskId && !subject.projectId) throw new SessionError("validation", "规划员的会话要带 taskId 或 projectId");
     if (subject.kind !== "topic" && req.critics?.length) throw new SessionError("validation", "挑刺岗位只给专题的评审会用");
     if (subject.kind !== "card" && req.after?.length) throw new SessionError("validation", "只有卡能等别的卡");
+    if (subject.kind !== "card" && req.sourceWords?.length) throw new SessionError("validation", "只有卡带本人原话");
     let cwd: string;
     // 不指定目录时：项目在这台电脑上绑的文件夹（新首页设计 16.6）
     const projectDir = !req.cwd && subject.projectId ? this.d.folders.projectFolder(subject.projectId) : null;
@@ -575,14 +578,16 @@ export class SessionManager {
       role: req.role ?? null, modelTier: req.modelTier ?? req.role?.modelTier ?? null, critics: req.critics ?? [], queuedMessage: null, queueOrder: 0,
       parentId: null, briefPending: false, criteria: [], failStreak: 0, submitted: 0, nudged: false,
       workspace: place?.workspace ?? null, commit: null, after: waiting ? after : [], passed: null, background: [], hold: null, holdSince: null,
-      budgetKey, runSince: null, run: null,
+      budgetKey, runSince: null, run: null, sourceWords: req.sourceWords ?? [],
     };
+    // 第一句话：有本人原话时放在最前面（16.8），再接云端的交代
+    const firstMessage = sourceWordsBlock(rec.sourceWords!) + req.firstMessage;
     // 满了（或前面还有人在排、在等前面的卡、文件夹被另一张卡占着、订阅额度用完了、预算用完了、余额不足）就进队，先来先跑；有空位时 pump 接上。
     const busy = this.folderBusy(rec);
     const limited = model.source === "subscription" && this.blocked() !== null;
     const gate = this.gateReason(rec);
     if (waiting || this.ready().length || this.activeCount() >= this.max() || busy || limited || gate) {
-      rec.queuedMessage = req.firstMessage;
+      rec.queuedMessage = firstMessage;
       rec.queueOrder = ++this.queueSeq;
       this.records.set(rec.id, rec);
       if (!waiting && gate) this.markHold(rec, gate);
@@ -608,8 +613,8 @@ export class SessionManager {
     this.save(rec);
     this.emit(rec, { type: "status", status: "starting" });
     this.noteWorkspace(rec, place);
-    this.emit(rec, { type: "user_message", text: req.firstMessage, source: "initial" });
-    this.runs.get(rec.id)!.send(req.firstMessage);
+    this.emit(rec, { type: "user_message", text: firstMessage, source: "initial" });
+    this.runs.get(rec.id)!.send(firstMessage);
     this.setStatus(rec, "running");
     return this.summary(rec);
   }
@@ -1609,7 +1614,7 @@ export class SessionManager {
       createdAt: now, updatedAt: now, status: "queued", usage: zeroUsage(), syncSeq: 0, mcpSecret: "", outputs: [], versionNumber: 0, lastVersion: null,
       role: null, modelTier: null, critics: [], queuedMessage: null, queueOrder: ++this.queueSeq,
       parentId: card.id, briefPending: true, criteria: [], failStreak: 0, submitted: 0, nudged: false, workspace: null, commit, after: [], passed: null,
-      background: [], hold: null, holdSince: null, budgetKey: card.budgetKey, runSince: null, run: null,
+      background: [], hold: null, holdSince: null, budgetKey: card.budgetKey, runSince: null, run: null, sourceWords: card.sourceWords ?? [],
     };
     this.records.set(rec.id, rec);
     this.setStatus(rec, "queued", { reason: "等交回送到天枢，取验收交代" });
@@ -1670,7 +1675,7 @@ export class SessionManager {
       const model = await this.d.models.resolve(this.d.models.forTier(tier));
       if (rec.status !== "queued" || !rec.briefPending) continue;
       // 交代、模型一次填好再标成能开始：中间不能有 await，免得别处的 pump 拿着空的第一句话、执行方的模型先开了它。
-      const markdown = changes ? `${brief.markdown}\n\n${changes}` : brief.markdown;
+      const markdown = sourceWordsBlock(rec.sourceWords ?? []) + (changes ? `${brief.markdown}\n\n${changes}` : brief.markdown);
       Object.assign(rec, { briefPending: false, queuedMessage: markdown, criteria: brief.criteria, failStreak: brief.failStreak, role: brief.role, modelTier: tier });
       if (model) Object.assign(rec, { modelProfileId: model.profileId, modelLabel: model.label });
       this.waitNotes.delete(rec.id);
@@ -1692,7 +1697,7 @@ export class SessionManager {
   }
 
   /** 验收员交结论：每条完成标准判一次，经发件箱报给天枢；验收会话和被验的卡的会话里各记一条结论事件（只给网页显示；改法由云端写进那次交回后，网页按交回送回一次）。 */
-  submitVerdict(id: string, input: { summary: string; criteria: unknown[]; beyondScope?: unknown }): string {
+  submitVerdict(id: string, input: { summary: string; criteria: unknown[]; beyondScope?: unknown; sourceWordIssues?: unknown }): string {
     const rec = this.must(id);
     if (rec.subject.kind !== "verify") throw new SessionError("validation", "只有验收员交结论");
     if (rec.submitted) throw new SessionError("conflict", "这次交回已经交过结论了，不能再交");
@@ -1708,9 +1713,16 @@ export class SessionManager {
     if (twice.length) throw new SessionError("validation", `第 ${[...new Set(twice)].join("、")} 条判了不止一次`);
     const missing = Array.from({ length: n }, (_, k) => k + 1).filter((i) => !seen.includes(i));
     if (missing.length) throw new SessionError("validation", `第 ${missing.join("、")} 条还没判（完成标准共 ${n} 条）`);
+    // 原话对不上的地方（16.8）：quote 必须是某段原话或其中一截
+    const words = rec.sourceWords ?? [];
+    const issues = (Array.isArray(input.sourceWordIssues) ? input.sourceWordIssues : [])
+      .map((i: any) => ({ quote: String(i?.quote ?? "").trim(), kind: i?.kind, reason: String(i?.reason ?? "").trim() })) as TLocalSourceWordIssue[];
+    const notQuoted = issues.filter((i) => !i.quote || !words.some((w) => w.includes(i.quote)));
+    if (notQuoted.length) throw new SessionError("validation", words.length ? `「${notQuoted[0]!.quote}」不是本人原话里的话，quote 要原样抄` : "这张卡没有本人原话，不用写 sourceWordIssues");
     const verdict: TLocalVerdict = {
-      passed: judged.every((c) => c.verdict === "met"), summary: input.summary.trim(), criteria: judged,
+      passed: judged.every((c) => c.verdict === "met") && !issues.length, summary: input.summary.trim(), criteria: judged,
       beyondScope: Array.isArray(input.beyondScope) ? input.beyondScope.map((s) => String(s).trim()).filter(Boolean) : [],
+      ...(issues.length ? { sourceWordIssues: issues } : {}),
       modelLabel: rec.modelLabel, roleId: rec.role?.id ?? null, roleVersion: rec.role?.version ?? null,
       ...(rec.commit ? { commit: rec.commit } : {}),
     };
@@ -1724,7 +1736,7 @@ export class SessionManager {
     const blocked = failStreak >= reworkRounds(this.modeOf(rec)); // 受阻前返工几轮：自动、设预算 2，无上限 3
     const event = {
       type: "verdict" as const, handbackKey: rec.subject.handbackKey!, passed: verdict.passed, summary: verdict.summary, criteria: judged,
-      beyondScope: verdict.beyondScope, failStreak, blocked, returnText: verdict.passed ? null : returnText(rec.criteria, judged),
+      beyondScope: verdict.beyondScope, failStreak, blocked, returnText: verdict.passed ? null : returnText(rec.criteria, judged, issues),
     };
     this.emit(rec, event);
     const card = rec.parentId ? this.records.get(rec.parentId) : undefined;
