@@ -17734,7 +17734,7 @@
     "/api/plan-tasks/{taskId}/card-splits": {
       "post": {
         "operationId": "registerCardSplit",
-        "summary": "登记拆卡（Task 负责人，Task 页「拆一下」）：只记下要拆这个 Task，真正去拆的是本人电脑上的规划员；已有一条没开工的登记时返回那一条",
+        "summary": "登记拆卡（Task 负责人，Task 页「拆一下」）：只记下要拆这个 Task，真正去拆的是本人电脑上的规划员；已有一条没开工的登记时返回那一条。可以带本人在输入框里的话（16.8 原话）",
         "parameters": [
           {
             "name": "taskId",
@@ -17745,6 +17745,16 @@
             }
           }
         ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterCardSplitRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "已有一条没开工的登记",
@@ -20966,7 +20976,7 @@
     "/api/me/projects/{projectId}/card-splits": {
       "post": {
         "operationId": "registerProjectCardSplit",
-        "summary": "登记拆这个项目（16.3，没挂 Task 也能拆）：只记下来，网页在本人电脑上开规划员；已有一条没开工的回那一条（200）",
+        "summary": "登记拆这个项目（16.3，没挂 Task 也能拆）：只记下来，网页在本人电脑上开规划员；已有一条没开工的回那一条（200）。可以带本人在输入框里的话（16.8 原话）",
         "parameters": [
           {
             "name": "projectId",
@@ -20977,6 +20987,16 @@
             }
           }
         ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterCardSplitRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "已有的登记",
@@ -26139,7 +26159,8 @@
                   "run",
                   "handback",
                   "deliverable",
-                  "after"
+                  "after",
+                  "sourceWords"
                 ],
                 "properties": {
                   "stage": {
@@ -26719,6 +26740,13 @@
                     "type": "array",
                     "items": {
                       "format": "uuid",
+                      "type": "string"
+                    }
+                  },
+                  "sourceWords": {
+                    "maxItems": 10,
+                    "type": "array",
+                    "items": {
                       "type": "string"
                     }
                   }
@@ -52699,7 +52727,8 @@
               "run",
               "handback",
               "deliverable",
-              "after"
+              "after",
+              "sourceWords"
             ],
             "properties": {
               "stage": {
@@ -53279,6 +53308,13 @@
                 "type": "array",
                 "items": {
                   "format": "uuid",
+                  "type": "string"
+                }
+              },
+              "sourceWords": {
+                "maxItems": 10,
+                "type": "array",
+                "items": {
                   "type": "string"
                 }
               }
@@ -54015,7 +54051,8 @@
                           "run",
                           "handback",
                           "deliverable",
-                          "after"
+                          "after",
+                          "sourceWords"
                         ],
                         "properties": {
                           "stage": {
@@ -54595,6 +54632,13 @@
                             "type": "array",
                             "items": {
                               "format": "uuid",
+                              "type": "string"
+                            }
+                          },
+                          "sourceWords": {
+                            "maxItems": 10,
+                            "type": "array",
+                            "items": {
                               "type": "string"
                             }
                           }
@@ -62840,7 +62884,8 @@
                   "run",
                   "handback",
                   "deliverable",
-                  "after"
+                  "after",
+                  "sourceWords"
                 ],
                 "properties": {
                   "stage": {
@@ -63420,6 +63465,13 @@
                     "type": "array",
                     "items": {
                       "format": "uuid",
+                      "type": "string"
+                    }
+                  },
+                  "sourceWords": {
+                    "maxItems": 10,
+                    "type": "array",
+                    "items": {
                       "type": "string"
                     }
                   }
@@ -64505,7 +64557,8 @@
                     "run",
                     "handback",
                     "deliverable",
-                    "after"
+                    "after",
+                    "sourceWords"
                   ],
                   "properties": {
                     "stage": {
@@ -65085,6 +65138,13 @@
                       "type": "array",
                       "items": {
                         "format": "uuid",
+                        "type": "string"
+                      }
+                    },
+                    "sourceWords": {
+                      "maxItems": 10,
+                      "type": "array",
+                      "items": {
                         "type": "string"
                       }
                     }
@@ -65682,7 +65742,8 @@
                           "run",
                           "handback",
                           "deliverable",
-                          "after"
+                          "after",
+                          "sourceWords"
                         ],
                         "properties": {
                           "stage": {
@@ -66264,6 +66325,13 @@
                               "format": "uuid",
                               "type": "string"
                             }
+                          },
+                          "sourceWords": {
+                            "maxItems": 10,
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
                           }
                         }
                       }
@@ -66834,7 +66902,8 @@
                     "run",
                     "handback",
                     "deliverable",
-                    "after"
+                    "after",
+                    "sourceWords"
                   ],
                   "properties": {
                     "stage": {
@@ -67414,6 +67483,13 @@
                       "type": "array",
                       "items": {
                         "format": "uuid",
+                        "type": "string"
+                      }
+                    },
+                    "sourceWords": {
+                      "maxItems": 10,
+                      "type": "array",
+                      "items": {
                         "type": "string"
                       }
                     }
@@ -71056,7 +71132,8 @@
                   "run",
                   "handback",
                   "deliverable",
-                  "after"
+                  "after",
+                  "sourceWords"
                 ],
                 "properties": {
                   "stage": {
@@ -71636,6 +71713,13 @@
                     "type": "array",
                     "items": {
                       "format": "uuid",
+                      "type": "string"
+                    }
+                  },
+                  "sourceWords": {
+                    "maxItems": 10,
+                    "type": "array",
+                    "items": {
                       "type": "string"
                     }
                   }
@@ -72472,7 +72556,8 @@
                         "run",
                         "handback",
                         "deliverable",
-                        "after"
+                        "after",
+                        "sourceWords"
                       ],
                       "properties": {
                         "stage": {
@@ -73054,6 +73139,13 @@
                             "format": "uuid",
                             "type": "string"
                           }
+                        },
+                        "sourceWords": {
+                          "maxItems": 10,
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
                         }
                       }
                     }
@@ -73569,7 +73661,8 @@
                     "run",
                     "handback",
                     "deliverable",
-                    "after"
+                    "after",
+                    "sourceWords"
                   ],
                   "properties": {
                     "stage": {
@@ -74149,6 +74242,13 @@
                       "type": "array",
                       "items": {
                         "format": "uuid",
+                        "type": "string"
+                      }
+                    },
+                    "sourceWords": {
+                      "maxItems": 10,
+                      "type": "array",
+                      "items": {
                         "type": "string"
                       }
                     }
@@ -91469,7 +91569,8 @@
           "run",
           "handback",
           "deliverable",
-          "after"
+          "after",
+          "sourceWords"
         ],
         "properties": {
           "stage": {
@@ -92051,6 +92152,13 @@
               "format": "uuid",
               "type": "string"
             }
+          },
+          "sourceWords": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
@@ -92518,7 +92626,8 @@
               "run",
               "handback",
               "deliverable",
-              "after"
+              "after",
+              "sourceWords"
             ],
             "properties": {
               "stage": {
@@ -93100,6 +93209,13 @@
                   "format": "uuid",
                   "type": "string"
                 }
+              },
+              "sourceWords": {
+                "maxItems": 10,
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               }
             }
           }
@@ -93277,7 +93393,8 @@
           "suggestPresetKey",
           "executor",
           "modelTier",
-          "why"
+          "why",
+          "sourceWords"
         ],
         "properties": {
           "id": {
@@ -93403,6 +93520,15 @@
                 "type": "null"
               }
             ]
+          },
+          "sourceWords": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "maxLength": 4000,
+              "type": "string"
+            }
           }
         }
       },
@@ -94025,7 +94151,8 @@
                     "run",
                     "handback",
                     "deliverable",
-                    "after"
+                    "after",
+                    "sourceWords"
                   ],
                   "properties": {
                     "stage": {
@@ -94607,6 +94734,13 @@
                         "format": "uuid",
                         "type": "string"
                       }
+                    },
+                    "sourceWords": {
+                      "maxItems": 10,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   }
                 }
@@ -94630,7 +94764,8 @@
                 "suggestPresetKey",
                 "executor",
                 "modelTier",
-                "why"
+                "why",
+                "sourceWords"
               ],
               "properties": {
                 "id": {
@@ -94756,6 +94891,15 @@
                       "type": "null"
                     }
                   ]
+                },
+                "sourceWords": {
+                  "maxItems": 10,
+                  "type": "array",
+                  "items": {
+                    "minLength": 1,
+                    "maxLength": 4000,
+                    "type": "string"
+                  }
                 }
               }
             }
@@ -95677,7 +95821,8 @@
                     "run",
                     "handback",
                     "deliverable",
-                    "after"
+                    "after",
+                    "sourceWords"
                   ],
                   "properties": {
                     "stage": {
@@ -96257,6 +96402,13 @@
                       "type": "array",
                       "items": {
                         "format": "uuid",
+                        "type": "string"
+                      }
+                    },
+                    "sourceWords": {
+                      "maxItems": 10,
+                      "type": "array",
+                      "items": {
                         "type": "string"
                       }
                     }
@@ -97305,7 +97457,8 @@
                   "run",
                   "handback",
                   "deliverable",
-                  "after"
+                  "after",
+                  "sourceWords"
                 ],
                 "properties": {
                   "stage": {
@@ -97885,6 +98038,13 @@
                     "type": "array",
                     "items": {
                       "format": "uuid",
+                      "type": "string"
+                    }
+                  },
+                  "sourceWords": {
+                    "maxItems": 10,
+                    "type": "array",
+                    "items": {
                       "type": "string"
                     }
                   }
@@ -98759,7 +98919,8 @@
           "criterion",
           "exclusions",
           "reviewGap",
-          "lastReturn"
+          "lastReturn",
+          "sourceWords"
         ],
         "properties": {
           "markdown": {
@@ -98982,6 +99143,15 @@
                 "type": "null"
               }
             ]
+          },
+          "sourceWords": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "maxLength": 4000,
+              "type": "string"
+            }
           }
         }
       },
@@ -106222,6 +106392,7 @@
           "projectId",
           "projectName",
           "origin",
+          "sourceWords",
           "createdAt"
         ],
         "properties": {
@@ -106294,6 +106465,15 @@
               }
             ]
           },
+          "sourceWords": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "maxLength": 4000,
+              "type": "string"
+            }
+          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
@@ -106320,6 +106500,7 @@
                 "projectId",
                 "projectName",
                 "origin",
+                "sourceWords",
                 "createdAt"
               ],
               "properties": {
@@ -106391,6 +106572,15 @@
                       "type": "string"
                     }
                   ]
+                },
+                "sourceWords": {
+                  "maxItems": 10,
+                  "type": "array",
+                  "items": {
+                    "minLength": 1,
+                    "maxLength": 4000,
+                    "type": "string"
+                  }
                 },
                 "createdAt": {
                   "format": "date-time",
@@ -106486,7 +106676,8 @@
           "project",
           "criteria",
           "exclusions",
-          "roles"
+          "roles",
+          "sourceWords"
         ],
         "properties": {
           "markdown": {
@@ -106768,6 +106959,25 @@
                 }
               }
             }
+          },
+          "sourceWords": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "minLength": 1,
+              "maxLength": 4000,
+              "type": "string"
+            }
+          }
+        }
+      },
+      "RegisterCardSplitRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "properties": {
+          "words": {
+            "maxLength": 4000,
+            "type": "string"
           }
         }
       },
@@ -115614,7 +115824,8 @@
                     "run",
                     "handback",
                     "deliverable",
-                    "after"
+                    "after",
+                    "sourceWords"
                   ],
                   "properties": {
                     "stage": {
@@ -116196,6 +116407,13 @@
                         "format": "uuid",
                         "type": "string"
                       }
+                    },
+                    "sourceWords": {
+                      "maxItems": 10,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
                     }
                   }
                 }
@@ -116219,7 +116437,8 @@
                 "suggestPresetKey",
                 "executor",
                 "modelTier",
-                "why"
+                "why",
+                "sourceWords"
               ],
               "properties": {
                 "id": {
@@ -116345,6 +116564,15 @@
                       "type": "null"
                     }
                   ]
+                },
+                "sourceWords": {
+                  "maxItems": 10,
+                  "type": "array",
+                  "items": {
+                    "minLength": 1,
+                    "maxLength": 4000,
+                    "type": "string"
+                  }
                 }
               }
             }

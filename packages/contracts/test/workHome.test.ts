@@ -121,13 +121,13 @@ describe("新首页契约", () => {
 
   it("没挂 Task 的项目也能拆卡（16.3）：登记、交代、项目看板", () => {
     expect(Value.Check(CardSplitRequestView, { id: uuid, taskId: null, taskName: null, missionId: null, projectId: uuid, projectName: "Chat 服务", origin: "web",
-      createdAt: at })).toBe(true);
+      sourceWords: ["把首页改成按项目排"], createdAt: at })).toBe(true);
     expect(Value.Check(CardSplitRequestView, { id: uuid, taskId: "T-1", taskName: "上线", missionId: "M1", projectId: null, projectName: null, origin: "buddy",
-      createdAt: at })).toBe(true);
+      sourceWords: [], createdAt: at })).toBe(true);
     expect(Value.Check(CardPlanBriefResponse, { markdown: "# 拆卡：Chat 服务", role: null, task: null, project: { projectId: uuid, name: "Chat 服务" }, criteria: [],
-      exclusions: [], roles: [] })).toBe(true);
+      exclusions: [], roles: [], sourceWords: ["把首页改成按项目排"] })).toBe(true);
     expect(Value.Check(ProjectBoardResponse, { projectId: uuid, cards: [], drafts: [{ id: uuid, planId: uuid, position: 0, title: "接网关", brief: "做什么",
-      doneDefinition: "能连上；有日志", criterionIndex: null, role: null, suggestPresetKey: null, executor: "claude_code", modelTier: "normal", why: null }], plan: null })).toBe(true);
+      doneDefinition: "能连上；有日志", criterionIndex: null, role: null, suggestPresetKey: null, executor: "claude_code", modelTier: "normal", why: null, sourceWords: ["接上网关"] }], plan: null })).toBe(true);
   });
 
   it("自动分发到项目、认领开工带项目", () => {
