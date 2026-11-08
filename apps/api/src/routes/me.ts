@@ -1,7 +1,7 @@
 import type { FastifyReply } from "fastify";
-import { Budget, Buddy, BuddyOrNull, NotificationSettings, MAX_AVATAR_IMAGE_BYTES, MAX_RAIL_IMAGE_BYTES, PersonAvatarsResponse, PersonalProfileView, RailBackground, SaveAvatarRequest, SaveRailBackgroundRequest, SavedAvatar, UpdatePersonalProfileRequest } from "@warmap/contracts";
+import { AppearanceSettings, Budget, Buddy, BuddyOrNull, NotificationSettings, MAX_AVATAR_IMAGE_BYTES, MAX_RAIL_IMAGE_BYTES, PersonAvatarsResponse, PersonalProfileView, RailBackground, SaveAvatarRequest, SaveRailBackgroundRequest, SavedAvatar, UpdatePersonalProfileRequest } from "@warmap/contracts";
 import { BUDDY_NAME_UNITS, buddyNameUnits, readBuddy, saveBuddy } from "../buddy.js";
-import { readNotificationSettings, writeNotificationSettings } from "../homePush.js";
+import { readAppearance, readNotificationSettings, writeAppearance, writeNotificationSettings } from "../homePush.js";
 import { readBudgetDefault, writeBudgetDefault } from "../budgets.js";
 import { CardError } from "../taskCards.js";
 import { RailBackgroundError, readRailBackground, readRailImage, saveRailBackground } from "../railBackground.js";
@@ -62,6 +62,14 @@ export function registerMeRoutes(app: AppInstance, ctx: RouteContext): void {
   });
   app.put("/api/me/notification-settings", { preHandler: requirePerson, schema: { body: NotificationSettings, response: { 200: NotificationSettings } } }, async (req) =>
     writeNotificationSettings(q, req.person!.personId, req.body));
+
+  // 「偏好」里的外观（新首页 17.2）：本人读写，没设过是跟随系统。
+  app.get("/api/me/appearance", { preHandler: requirePerson, schema: { response: { 200: AppearanceSettings } } }, async (req, reply) => {
+    reply.header("Cache-Control", "no-store");
+    return readAppearance(q, req.person!.personId);
+  });
+  app.put("/api/me/appearance", { preHandler: requirePerson, schema: { body: AppearanceSettings, response: { 200: AppearanceSettings } } }, async (req) =>
+    writeAppearance(q, req.person!.personId, req.body));
 
   // 「偏好」里新 Task 的缺省预算（设计 11.3）：本人读写，没设过是自动；设预算至少一项上限。
   app.get("/api/me/budget-default", { preHandler: requirePerson, schema: { response: { 200: Budget } } }, async (req, reply) => {

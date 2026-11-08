@@ -1,5 +1,5 @@
 import type { Pool } from "pg";
-import type { TNotificationSettings, TWaitingItem, TWaitingTarget, TWorkHomeResponse } from "@warmap/contracts";
+import type { TNotificationSettings, TWaitingItem, TWaitingTarget, TWorkHomeResponse, TAppearanceSettings } from "@warmap/contracts";
 import { inTransaction } from "./collector.js";
 import { FEISHU_NOTIFY_KIND, type FeishuNotice } from "./feishu/notify.js";
 import { enqueueJob, type JobHandler, type RecurringJob } from "./jobs.js";
@@ -35,6 +35,17 @@ export async function readNotificationSettings(q: Query, personId: string): Prom
 
 export async function writeNotificationSettings(q: Query, personId: string, settings: TNotificationSettings): Promise<TNotificationSettings> {
   await q("INSERT INTO person_settings(person_id,feishu) VALUES($1,$2) ON CONFLICT (person_id) DO UPDATE SET feishu=EXCLUDED.feishu", [personId, settings.feishu]);
+  return settings;
+}
+
+/** 本人的外观（设计 17.2）；没设过是跟随系统。 */
+export async function readAppearance(q: Query, personId: string): Promise<TAppearanceSettings> {
+  const row = (await q("SELECT appearance FROM person_settings WHERE person_id=$1", [personId])).rows[0] as { appearance: TAppearanceSettings["appearance"] | null } | undefined;
+  return { appearance: row?.appearance ?? "system" };
+}
+
+export async function writeAppearance(q: Query, personId: string, settings: TAppearanceSettings): Promise<TAppearanceSettings> {
+  await q("INSERT INTO person_settings(person_id,appearance) VALUES($1,$2) ON CONFLICT (person_id) DO UPDATE SET appearance=EXCLUDED.appearance", [personId, settings.appearance]);
   return settings;
 }
 
