@@ -26,6 +26,7 @@ import { useAutoReturn } from "@/lib/board/useAutoReturn";
 import { showWorkspaceToast } from "@/lib/toast";
 import { RelayLine, SessionComposer, SessionTranscript, sayToSession, sessionEnded, type DecideOptions } from "./SessionTranscript";
 import { useSessionMode } from "./PermissionMode";
+import { runLabel } from "@/lib/local/runModel";
 import { useCardDetail, type CardDetail } from "./useCardDetail";
 import { SourceWordIssues, SourceWords } from "./SourceWords";
 import { MergeAction } from "@/components/work/MergeAction";
@@ -179,7 +180,8 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
   if (embedded) {
     const showPane = details ?? !session;
     const chipOf = stateChip(wait, stage, !canAct && device ? awayChip(device) : null);
-    const model = run?.modelLabel ?? item.card?.model?.label ?? null;
+    // 「来源 · 模型」：这台电脑上的会话报的（实际跑的优先），没有时退回云端记的。
+    const model = runLabel(session?.run) ?? run?.modelLabel ?? item.card?.model?.label ?? null;
     const handback = detail.handbacks[0] ?? null;
     const canFlip = !handheld && !!handback && handback.status === "done" && !handback.overruled && handback.outcome === "pass" && !deliverableLabel(item)?.startsWith("已纳入");
     const headAct = (action: () => Promise<unknown>) => { setHeadFailed(null); action().catch((error: unknown) => setHeadFailed(failureOf(error, () => headAct(action)))); };

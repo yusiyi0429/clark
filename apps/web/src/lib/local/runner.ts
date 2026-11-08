@@ -7,13 +7,13 @@ import type {
   TLocalModelProfile, TLocalModelProfileUpsert, TLocalPairingStartResponse, TLocalPairingStatusResponse,
   TLocalPermissionDecisionRequest, TLocalQuestionAnswerRequest, TLocalRunnerErrorCode, TLocalSendMessageRequest, TLocalSendMessageResponse, TLocalSessionDetailResponse,
   TLocalSessionEvent, TLocalSessionSummary, TLocalSettings, TLocalSettingsPatch, TLocalStatusResponse, TLocalBudgetUpdateRequest, TLocalTaskBudgetView, TLocalAttachmentRef,
-  TLocalHandoverCheck, TLocalProjectCloneRequest, TLocalProjectCloneResponse, TLocalProjectFolder, TLocalProjectFolderRequest, TLocalPermissionMode,
+  TLocalHandoverCheck, TLocalProjectCloneRequest, TLocalProjectCloneResponse, TLocalProjectFolder, TLocalProjectFolderRequest, TLocalPermissionMode, TLocalRun, TLocalRunPreviewRequest,
 } from "@warmap/contracts";
 
 export type {
   TLocalCreateSessionRequest, TLocalFolder, TLocalHealthResponse, TLocalModelProfile, TLocalPermissionRequestView, TLocalPlanEntry, TLocalRole, TLocalSessionEvent,
   TLocalSessionStatus, TLocalSessionSummary, TLocalStatusResponse, TLocalUsage, TLocalWorkspace, TLocalMergeResponse, TLocalQuestion, TLocalQuestionRequestView,
-  TLocalQuestionAnswerRequest, TLocalPermissionMode,
+  TLocalQuestionAnswerRequest, TLocalPermissionMode, TLocalRun,
 } from "@warmap/contracts";
 
 /** 本机接口回的错：code 照契约；network 是连不上（没装、没开、浏览器没给访问本机的授权）。 */
@@ -64,6 +64,8 @@ export interface LocalRunner {
   answerQuestion(id: string, requestId: string, body: TLocalQuestionAnswerRequest): Promise<TLocalSessionSummary>;
   /** 停会话里的一个后台任务（子 agent、后台命令），会话本身不停；不在跑、进程已退出、没有这一项是 409。 */
   stopBackground(id: string, itemId: string): Promise<TLocalSessionSummary>;
+  /** 开工前看这次会怎么跑：落到哪个来源的哪个模型（actual 为 null）。 */
+  previewRun(body: TLocalRunPreviewRequest): Promise<TLocalRun>;
   /** 改一件 Task 的预算（先存天枢再交给本机）：用完停着等的马上接着做。 */
   putBudget(body: TLocalBudgetUpdateRequest): Promise<TLocalTaskBudgetView>;
   /** 项目在这台电脑上绑的文件夹（16.6）：列出、绑上或解绑（folderId 为 null）。 */

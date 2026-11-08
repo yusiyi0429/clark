@@ -28,6 +28,7 @@ import { useConversationScroll } from "@/conversation/useConversationScroll";
 import { latestSessionFor, useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { useSessionEvents } from "@/lib/local/useSessionEvents";
 import { useSessionMode } from "@/components/cards/PermissionMode";
+import { runLabel } from "@/lib/local/runModel";
 import { localWait, running } from "@/lib/local/sessionView";
 import { startTopic } from "@/lib/local/start";
 import { WAIT_LABEL, canCommand, waitTone } from "@/lib/board/cards";
@@ -195,7 +196,8 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
     const showDoc = reading || (handheld && !session);
     // 页头的状态 chip（5.4.3）：中性、警告、等你（中性底加圆点）；不在这台电脑上又在等你时写「等你 · {电脑名}」。
     const chipOf = wait ? stateChip(wait, "doing", !canAct && device ? awayChip(device) : null) : { text: topic.status === "archived" ? "已归档" : "进行中", tone: "neutral" as const };
-    const model = topic.run?.modelLabel ?? null;
+    // 「来源 · 模型」：这台电脑上的会话报的（实际跑的优先），没有时退回云端记的。
+    const model = runLabel(session?.run) ?? topic.run?.modelLabel ?? null;
     return (
       <div className={s.page} data-embedded="" data-testid="topic-session">
         <header className={s.embedHead}>

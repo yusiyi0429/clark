@@ -43,6 +43,13 @@ const FOLDER_BUSY = "这个文件夹不是 git 仓库，同时只做一张卡，
 const REPO = "C:\\work\\tianshu";
 const sha = (seed: string) => Array.from({ length: 40 }, (_, i) => "0123456789abcdef"[(seed.charCodeAt(i % seed.length) + i * 7) % 16]).join("");
 
+/** 这次会怎么跑（同本机的 previewRun）：别名（opus、sonnet、haiku）写成「Opus 5.5」这种，网关模型去掉厂商前缀原样写，没定模型是订阅默认的 Opus。 */
+const ALIAS: Record<string, string> = { opus: "Opus 5.5", sonnet: "Sonnet 5.5", haiku: "Haiku 5.5" };
+const runFor = (profile: TLocalModelProfile, mode: "auto" | "set" | "unlimited" = "auto") => ({
+  mode, model: profile.model, effort: null, multiAgent: false, source: profile.source, sourceLabel: profile.label,
+  modelName: profile.model ? ALIAS[profile.model] ?? profile.model.replace(/^.*\//, "") : "Opus 5.5", actual: null,
+});
+
 const MODELS: TLocalModelProfile[] = [
   { id: "subscription", label: "订阅 · 默认", source: "subscription", agent: "claude-code", baseUrl: null, model: null, smallModel: null, webSearch: true, hasKey: false, isDefault: true },
   { id: "sub-haiku", label: "订阅 · Haiku", source: "subscription", agent: "claude-code", baseUrl: null, model: "haiku", smallModel: null, webSearch: true, hasKey: false, isDefault: false },
@@ -133,7 +140,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
   };
 
   const script: Step[] = [
-    (s) => { setStatus(s, "running"); noteWorkspace(s); emit(s, { type: "agent_info", agent: "claude-code", version: "2.1.318", model: s.summary.modelLabel, permissionMode: "manual" }); },
+    (s) => { reportActual(s); setStatus(s, "running"); noteWorkspace(s); emit(s, { type: "agent_info", agent: "claude-code", version: "2.1.318", model: s.summary.modelLabel, permissionMode: "manual" }); },
     (s) => { emit(s, { type: "assistant_text", text: "先读一下交代和相关代码，列个计划。" }); plan(s, 0); },
     (s) => { tool(s, "Read", "读 apps/web/src/app/manifest.ts"); plan(s, 1); background(s, { id: `agent-${++seqId}`, title: "读相关代码", kind: "subagent", state: "running", startedAt: now(), finishedAt: null, stoppable: true }); },
     (s) => {
@@ -181,7 +188,9 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
     const ws = s.summary.workspace;
     if (ws?.kind === "worktree") emit(s, { type: "notice", level: "info", code: "workspace", text: `在工作树里做：分支 ${ws.branch}，从 ${ws.baseBranch} 的最新提交 ${ws.baseCommit.slice(0, 7)} 开始；主文件夹里没提交的改动没带进来` });
   };
-  const started = (s: MockSession, mode: string) => { setStatus(s, "running"); emit(s, { type: "agent_info", agent: "claude-code", version: "2.1.318", model: s.summary.modelLabel, permissionMode: mode }); };
+  // 执行方报上来实际跑的模型（以它为准）。
+  const reportActual = (s: MockSession) => { if (s.summary.run) s.summary = { ...s.summary, run: { ...s.summary.run, actual: { model: s.summary.run.model ?? "opus", modelName: s.summary.run.modelName ?? "Opus 5.5", at: now() } } }; };
+  const started = (s: MockSession, mode: string) => { reportActual(s); setStatus(s, "running"); emit(s, { type: "agent_info", agent: "claude-code", version: "2.1.318", model: s.summary.modelLabel, permissionMode: mode }); };
   const planner: Step[] = [
     (s) => started(s, "manual"),
     (s) => { emit(s, { type: "assistant_text", text: "先读 Task、约定和相关的近期事件。" }); plan(s, 0, PLANNER); },
@@ -380,6 +389,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
       advance(s);
       return summaryOf(s);
     },
+    previewRun: async (body) => runFor(MODELS.find((entry) => entry.id === body.modelProfileId) ?? MODELS.find((entry) => entry.isDefault) ?? MODELS[0]!, body.taskBudget?.budget.mode),
     putBudget: async (body) => ({ taskId: body.taskId ?? null, sessionId: body.sessionId ?? null, budget: body.budget,
       spent: { hours: 0, weeklyPercent: null, money: null }, ratio: null, state: "ok", since: null, updatedAt: now() }),
     stopBackground: async (id, itemId) => {
@@ -425,7 +435,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
     const waitingFor = (body.after ?? []).filter((entry) => !merged.has(entry));
     const full = slots().running >= maxConcurrent || busy || waitingFor.length > 0;
     const s: MockSession = {
-      summary: { id, subject: body.subject, title: body.title, agent: "claude-code", modelProfileId: model.id, modelLabel: model.label, cwd: body.cwd ?? "topics", status: full ? "queued" : "starting", permissionMode: body.permissionMode ?? "auto", includePersonalConfig: Boolean(body.includePersonalConfig), createdAt: now(), updatedAt: now(), lastSeq: 0, pendingPermissions: 0, queuePosition: full ? slots().queued + 1 : null, usage: { ...ZERO }, ...(workspace && !waitingFor.length ? { workspace } : {}), ...(waitingFor.length ? { waitingFor } : {}) },
+      summary: { id, subject: body.subject, title: body.title, agent: "claude-code", modelProfileId: model.id, modelLabel: model.label, cwd: body.cwd ?? "topics", status: full ? "queued" : "starting", permissionMode: body.permissionMode ?? "auto", run: runFor(model), includePersonalConfig: Boolean(body.includePersonalConfig), createdAt: now(), updatedAt: now(), lastSeq: 0, pendingPermissions: 0, queuePosition: full ? slots().queued + 1 : null, usage: { ...ZERO }, ...(workspace && !waitingFor.length ? { workspace } : {}), ...(waitingFor.length ? { waitingFor } : {}) },
       log: [], listeners: new Set(), script: body.subject.kind === "plan" ? planner : body.subject.kind === "verify" ? verifier : script, cursor: 0, timer: null, pending: null, paused: false, denied: false, mergeTries: 0,
       ...(waitingFor.length ? { waits: { workspace } } : {}),
     };

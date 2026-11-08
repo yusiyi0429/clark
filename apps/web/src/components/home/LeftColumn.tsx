@@ -12,7 +12,7 @@
  * 4. 本人行：贴底，头像 24 + 名字，点开个人菜单。
  * 树的键盘：↑↓ 移动，回车打开，→ 展开折叠，← 收起。
  */
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
+import { useContext, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { ChevronRight, Ellipsis, House, Info, Plus } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
 import { FailedLine, failureOf, type Failure } from "@/components/work/DecisionBox";
@@ -27,6 +27,8 @@ import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import { useDictationSignal } from "@/conversation/dictationSignal";
 import { PersonRow } from "./PersonMenu";
 import { useNameTip } from "./NameTip";
+import { LocalContext } from "@/lib/local/LocalRunnerProvider";
+import { runLabel } from "@/lib/local/runModel";
 import { ICON, StateIcon, type IconState } from "./StateIcon";
 import { pageHref, type View } from "./view";
 import h from "@/styles/home.module.css";
@@ -263,7 +265,10 @@ function Subs({ subs, view, go, flat = false }: { subs: SubSession[]; view: View
 function SubRow({ sub, view, go }: { sub: SubSession; view: View; go: (href: string) => void }) {
   const current = (view.kind === "card" || view.kind === "topic") && view.kind === sub.kind && view.id === sub.id;
   const reason = sub.state === "queued" && sub.queueReason ? queueText(sub.queueReason, sub.holdUntil) : null;
-  const name = useNameTip(sub.title);
+  // 悬停全名的提示里带一行「来源 · 模型」（这台电脑上跑着、报了来源的才有；左栏行里不放，太挤）。
+  const local = useContext(LocalContext);
+  const run = sub.sessionId ? local?.sessions.find((entry) => entry.id === sub.sessionId)?.run : null;
+  const name = useNameTip(sub.title, runLabel(run));
   return (
     <li>
       <button type="button" className={h.sub} data-state={sub.state} aria-current={current ? "page" : undefined} onClick={() => go(subHref(sub))} data-tree-row="" data-testid="tree-sub" {...name.rowProps}>

@@ -6,6 +6,7 @@
  */
 import { useEffect, useRef, useState, type FocusEvent, type PointerEvent } from "react";
 import { Tooltip } from "@heroui/react";
+import h from "@/styles/home.module.css";
 
 export const NAME_TIP_MS = 500;
 
@@ -27,8 +28,8 @@ export function nameTip(truncated: () => boolean, setOpen: (open: boolean) => vo
   return { enter, leave };
 }
 
-/** textRef 挂在会截断的那段字上，rowProps 挂在这一行（按钮）上，tip 放在行里（浮层走 portal）。 */
-export function useNameTip(name: string) {
+/** textRef 挂在会截断的那段字上，rowProps 挂在这一行（按钮）上，tip 放在行里（浮层走 portal）。detail：名字下面再一行（子会话的「来源 · 模型」）。 */
+export function useNameTip(name: string, detail?: string | null) {
   const textRef = useRef<HTMLSpanElement>(null);
   const [open, setOpen] = useState(false);
   const [tip] = useState(() => nameTip(() => isTruncated(textRef.current), setOpen));
@@ -43,7 +44,7 @@ export function useNameTip(name: string) {
   // 开关由这里管（isOpen 放在外层，定位跟着它算），浮层挂在那段字上（triggerRef）。
   const node = open ? (
     <Tooltip isOpen onOpenChange={(next) => { if (!next) tip.leave(); }}>
-      <Tooltip.Content triggerRef={textRef} placement="right">{name}</Tooltip.Content>
+      <Tooltip.Content triggerRef={textRef} placement="right">{name}{detail ? <span className={h.tipDetail}>{detail}</span> : null}</Tooltip.Content>
     </Tooltip>
   ) : null;
   return { textRef, rowProps, tip: node };
