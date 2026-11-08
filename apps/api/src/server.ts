@@ -60,7 +60,8 @@ function requiredEnv(name: string): string {
 
 const env: AppEnv = {
   sessionSecret: requiredEnv("SESSION_SECRET"),
-  sessionMaxAgeSeconds: Number(process.env.SESSION_MAX_AGE_SECONDS ?? "2592000"),
+  // 会话多久没用才过期（用着就续期，见 session.ts）：缺省 90 天。
+  sessionMaxAgeSeconds: Number(process.env.SESSION_MAX_AGE_SECONDS ?? "7776000"),
   publicOrigin: requiredEnv("PUBLIC_ORIGIN"),
   extraOrigins: (process.env.EXTRA_ALLOWED_ORIGINS ?? "").split(",").map((origin) => origin.trim()).filter(Boolean),
   driServiceToken: requiredEnv("DRI_SERVICE_TOKEN"),

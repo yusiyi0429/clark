@@ -39,7 +39,7 @@ Compose 只把 `infra/docker-compose.yml` 中 `api.environment` 声明过的变�
 | 分组 | 变量 | 缺省行为 |
 | --- | --- | --- |
 | 基础 | `PORT` | 4000 |
-| | `SESSION_MAX_AGE_SECONDS` | 2592000（30 天） |
+| | `SESSION_MAX_AGE_SECONDS` | 7776000（90 天；多久没用才过期，用着就续期） |
 | | `EXTRA_ALLOWED_ORIGINS` | 除 `PUBLIC_ORIGIN` 外不放行其他来源；仅本地开发填写，逗号分隔 |
 | | `BUILD_SHA` | `dev`，健康接口原样返回 |
 | | `COMPANY_NAME` | 引导里不显示公司名 |

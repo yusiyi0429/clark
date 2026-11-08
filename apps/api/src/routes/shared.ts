@@ -6,7 +6,7 @@ import type { FastifyBaseLogger, FastifyInstance, FastifyReply, FastifyRequest, 
 import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import type { Pool } from "pg";
 import type { TApiError, TCardCollection } from "@warmap/contracts";
-import { SESSION_COOKIE, parseCookies, readSessionToken } from "../session.js";
+import { SESSION_COOKIE, parseCookies, readSessionToken, type SessionClaims } from "../session.js";
 import { canSwitchView, canUseMemberView, currentSessionVersion, roleOf, type SessionRole } from "../memberAccess.js";
 import type { PeopleDirectory } from "../peopleDirectory.js";
 import type { CompanyContext } from "../companyContext.js";
@@ -175,6 +175,10 @@ export function materialMultipartLimitError(
 }
 
 /** 读会话：签名与有效期之外，人要还在 seed 里，凭据版本要与库里一致（口令重置后旧会话立即失效）。 */
+/** 这个请求带着的、核对过的会话（续期用，见 session.ts 的 sessionNeedsRenewal）。 */
+const validSessions = new WeakMap<FastifyRequest, SessionClaims & { exp: number }>();
+export const validSessionOf = (req: FastifyRequest) => validSessions.get(req);
+
 export function createReadSession(env: AppEnv, q: Query, peopleDirectory: PeopleDirectory) {
   return async function readSession(req: FastifyRequest): Promise<SessionPerson | null> {
     const claims = readSessionToken(env.sessionSecret, parseCookies(req.headers.cookie)[SESSION_COOKIE]);
@@ -184,6 +188,7 @@ export function createReadSession(env: AppEnv, q: Query, peopleDirectory: People
     if ((await currentSessionVersion(q, person.personId)) !== claims.v) return null;
     const role = claims.view ?? roleOf(person);
     if (role === "ceo" ? !person.roles.includes("ceo") : !canUseMemberView(person)) return null;
+    validSessions.set(req, claims);
     return { personId: person.personId, role, canSwitchView: canSwitchView(person), sessionVersion: claims.v };
   };
 }
