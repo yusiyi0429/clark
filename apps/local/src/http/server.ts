@@ -5,12 +5,12 @@ import type { TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import {
   LOCAL_RUNNER_PROTOCOL, LOCAL_RUNNER_ROUTES, LOCAL_RUNNER_TOKEN_HEADER,
-  LocalPairingStartRequest, LocalAgentLoginCodeRequest, LocalCloudLinkRequest, LocalSettingsPatch, LocalModelProfileUpsert,
-  LocalCreateSessionRequest, LocalCreateSessionBatchRequest, LocalSendMessageRequest, LocalPermissionDecisionRequest, LocalQuestionAnswerRequest, LocalBudgetUpdateRequest, LocalProjectFolderRequest, LocalProjectCloneRequest, LocalRunPreviewRequest,
+  LocalPairingStartRequest, LocalAgentLoginCodeRequest, LocalCloudLinkRequest, LocalSettingsPatch, LocalModelProfileUpsert, LocalToolUpsert,
+  LocalCreateSessionRequest, LocalCreateSessionBatchRequest, LocalSendMessageRequest, LocalPermissionDecisionRequest, LocalQuestionAnswerRequest, LocalBudgetUpdateRequest, LocalProjectFolderRequest, LocalProjectCloneRequest, LocalRunPreviewRequest, LocalPermissionModeRequest,
   type TLocalRunnerErrorCode, type TLocalStatusResponse, type TLocalHealthResponse,
 } from "@warmap/contracts";
 import { checkHost, checkJson, checkOrigin, corsHeaders, preflightHeaders, type Rejection } from "./security.js";
-import { SessionError, type SessionManager } from "../sessions.js";
+import { READ_ONLY_KINDS, SessionError, type SessionManager } from "../sessions.js";
 import { AgentStartError } from "../agents/types.js";
 import type { TokenStore, Pairings } from "../pairing.js";
 import type { EventLog } from "../eventLog.js";
@@ -25,6 +25,7 @@ import type { CodexQuota } from "../codexQuota.js";
 import { claudeTool } from "../tools.js";
 import { handoverCheck, repoName, stripCredentials, type cloneRepo } from "../handover.js";
 import type { CliTools } from "../tools.js";
+import type { CustomTools } from "../customTools.js";
 import { DEV_PAGE } from "./devPage.js";
 import { handleMcpMessage } from "../sessionMcp.js";
 
@@ -44,6 +45,8 @@ export interface ServerDeps {
   spend: GatewaySpend;
   codexQuota: CodexQuota;
   tools: CliTools;
+  /** 本人在连接页加的工具（/v1/tools），执行会话经本机转发用。 */
+  customTools: CustomTools;
   pickFolder: () => Promise<string | null>;
   /** 接手项目时 clone 仓库（16.7；测试里换成从本地仓库 clone）。 */
   cloneRepo: typeof cloneRepo;
@@ -178,6 +181,14 @@ export function createServer(d: ServerDeps): http.Server {
         throw new HttpError(400, "validation", e instanceof Error ? e.message : String(e));
       }
     },
+    listTools: async () => ({ tools: await d.customTools.list() }),
+    putTool: async (c) => {
+      if (!/^[A-Za-z0-9_-]{1,80}$/.test(c.params.id!)) throw new HttpError(400, "validation", "id 只能用字母数字、- 和 _");
+      const body = validate(LocalToolUpsert, c.body);
+      try { return await d.customTools.upsert(c.params.id!, body); } catch (e) { throw new HttpError(400, "validation", e instanceof Error ? e.message : String(e)); }
+    },
+    deleteTool: async (c) => { if (!(await d.customTools.remove(c.params.id!))) throw new HttpError(404, "not_found", "没有这个工具"); return { ok: true }; },
+    checkTool: async (c) => { const t = await d.customTools.check(c.params.id!); if (!t) throw new HttpError(404, "not_found", "没有这个工具"); return t; },
     deleteModel: async (c) => { if (!(await d.models.remove(c.params.id!))) throw new HttpError(404, "not_found", "没有这个模型配置，或是内置配置"); return { ok: true }; },
     listFolders: () => ({ folders: d.folders.listWithProjects() }),
     pickFolder: async () => {
@@ -213,6 +224,7 @@ export function createServer(d: ServerDeps): http.Server {
     listBudgets: () => ({ budgets: d.sessions.budgets() }),
     putBudget: (c) => d.sessions.setBudget(validate(LocalBudgetUpdateRequest, c.body)),
     previewRun: (c) => d.sessions.previewRun(validate(LocalRunPreviewRequest, c.body ?? {})),
+    setPermissionMode: async (c) => ({ session: await d.sessions.setPermissionMode(c.params.id!, validate(LocalPermissionModeRequest, c.body).mode) }),
     listProjects: () => ({ projects: d.folders.projects() }),
     putProjectFolder: (c) => {
       const b = validate(LocalProjectFolderRequest, c.body);
@@ -311,7 +323,21 @@ export function createServer(d: ServerDeps): http.Server {
     if (!internalGate(req, res, sessionId)) return;
     const target = await d.cloud.target();
     if (!target) return reject(res, { status: 503, code: "cloud_not_linked", message: "还没关联天枢云端" });
-    const headers: Record<string, string> = { authorization: `Bearer ${target.token}` };
+    return proxyMcp(req, res, new URL("/mcp/me", target.apiBaseUrl), { authorization: `Bearer ${target.token}` }, "连不上天枢云端");
+  }
+
+  /** 本人加的工具经本机程序转发（同上）：钥匙只在这里加上，会话和它跑的命令拿不到。规划员、验收员不挂，也不给转。 */
+  async function proxyToolMcp(req: IncomingMessage, res: ServerResponse, sessionId: string, toolId: string) {
+    if (!internalGate(req, res, sessionId)) return;
+    if (READ_ONLY_KINDS.includes(d.sessions.kindOf(sessionId))) return reject(res, { status: 403, code: "unauthorized", message: "规划员、验收员不用本人加的工具" });
+    const up = await d.customTools.upstream(toolId);
+    if (!up) return reject(res, { status: 404, code: "not_found", message: "没有这个工具（可能已经删了）" });
+    return proxyMcp(req, res, up.url, up.headers, "连不上这个工具");
+  }
+
+  /** 请求和响应（含流式响应）原样转发，只换掉鉴权头；不跟跳转（钥匙不跟着去别处）。 */
+  async function proxyMcp(req: IncomingMessage, res: ServerResponse, upstream: string | URL, auth: Record<string, string>, failText: string) {
+    const headers: Record<string, string> = { ...auth };
     for (const h of ["content-type", "accept", "mcp-session-id", "mcp-protocol-version", "last-event-id"]) {
       const v = req.headers[h];
       if (typeof v === "string") headers[h] = v;
@@ -320,7 +346,7 @@ export function createServer(d: ServerDeps): http.Server {
     const abort = new AbortController();
     res.on("close", () => abort.abort());
     try {
-      const up = await d.fetchImpl(new URL("/mcp/me", target.apiBaseUrl), { method: req.method, headers, body, signal: abort.signal });
+      const up = await d.fetchImpl(upstream, { method: req.method, headers, body, signal: abort.signal, redirect: "manual" });
       const out: Record<string, string> = {};
       for (const h of ["content-type", "mcp-session-id", "cache-control"]) { const v = up.headers.get(h); if (v) out[h] = v; }
       res.writeHead(up.status, out);
@@ -328,7 +354,7 @@ export function createServer(d: ServerDeps): http.Server {
       res.end();
     } catch (e) {
       if (res.headersSent) { res.end(); return; }
-      reject(res, { status: 502, code: "internal", message: `连不上天枢云端：${e instanceof Error ? e.message : String(e)}` });
+      reject(res, { status: 502, code: "internal", message: `${failText}：${e instanceof Error ? e.message : String(e)}` });
     }
   }
 
@@ -338,8 +364,11 @@ export function createServer(d: ServerDeps): http.Server {
     const rawUrl = req.url ?? "";
     if (!rawUrl.startsWith("/") || rawUrl.startsWith("//")) return reject(res, { status: 400, code: "validation", message: "请求路径不对" });
     const url = new URL(rawUrl, "http://127.0.0.1");
-    const internal = /^\/internal\/sessions\/([0-9a-f-]{36})\/(mcp|cloud-mcp)$/.exec(url.pathname);
-    if (internal) return internal[2] === "mcp" ? handleSessionMcp(req, res, internal[1]!) : proxyCloudMcp(req, res, internal[1]!);
+    const internal = /^\/internal\/sessions\/([0-9a-f-]{36})\/(mcp|cloud-mcp|tools\/([A-Za-z0-9_-]{1,80})\/mcp)$/.exec(url.pathname);
+    if (internal) {
+      if (internal[3]) return proxyToolMcp(req, res, internal[1]!, internal[3]);
+      return internal[2] === "mcp" ? handleSessionMcp(req, res, internal[1]!) : proxyCloudMcp(req, res, internal[1]!);
+    }
     // 开发测试页：只在 --dev 下提供；页面本身不含任何口令。
     if (d.config.dev && req.method === "GET" && url.pathname === "/dev" && req.headers.origin === undefined) {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });

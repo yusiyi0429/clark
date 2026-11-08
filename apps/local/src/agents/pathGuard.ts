@@ -1,6 +1,7 @@
 import { existsSync, lstatSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { insideAny } from "../folders.js";
+import { TOOL_SERVER_PREFIX } from "../customTools.js";
 
 /**
  * 找出一次工具调用里不在允许的文件夹里的路径，给权限请求标红（ADR 0031）。
@@ -12,7 +13,11 @@ export interface PathScope {
   home: string;
   /** 本会话允许的范围：本人允许的文件夹，加上本会话的工作目录（工作目录所在的文件夹被移除后就不算）。 */
   allowedRoots(): string[];
+  /** 本人在连接页加的工具（mcp__tool-…）里哪些是读的（预设的读工具名单）；不给就是都不算读。 */
+  toolReads?(tool: string): boolean;
 }
+/** 本人加的工具：读的照权限模式放行，写的、认不出的哪一档都问。 */
+const isCustomTool = (tool: string) => tool.startsWith(`mcp__${TOOL_SERVER_PREFIX}`);
 type Inside = (path: string) => boolean;
 
 const WIN = process.platform === "win32";
@@ -219,11 +224,12 @@ function touchesProtected(cmd: string): boolean {
  * - 读写文件：路径都在工作树里；
  * - Bash、PowerShell：认出的路径都在工作树里，而且不装东西、不联网、不推拉代码、不改系统设置、飞书命令行只读（跑仓库自己的脚本 npm test、npm run x、
  *   pnpm test、node --test 行；npx 之类只跑工作树里装好的）；
- * - 天枢 MCP 里读的工具（get_、list_ 开头）。
+ * - 天枢 MCP 里读的工具（get_、list_ 开头），本人加的工具里预设名单认作读的。
  * 碰 .git、.claude 的照样问（只用来排除、筛选的不算）；别的工具（联网搜索、子 agent 等）照样问。scope 的允许范围只放工作树。
  */
 export function autoAllowed(tool: string, input: Record<string, unknown>, scope: PathScope, hint?: unknown): boolean {
   if (tool.startsWith("mcp__tianshu__")) return /^mcp__tianshu__(get|list)_/.test(tool);
+  if (isCustomTool(tool)) return Boolean(scope.toolReads?.(tool));
   const inside = insideAny(scope.allowedRoots());
   if (SHELL_TOOLS.has(tool)) {
     const cmd = input.command;
@@ -233,6 +239,42 @@ export function autoAllowed(tool: string, input: Record<string, unknown>, scope:
   if (!WORKTREE_FILE_TOOLS.has(tool)) return false;
   const paths = (FILE_FIELDS[tool] ?? []).map((f) => input[f]).filter((v): v is string => typeof v === "string");
   return !paths.some((p) => PROTECTED.test(p)) && !collect(tool, input, scope, inside, hint).length;
+}
+
+/** 改文件的工具：「自动接受改文件」自己放行的。 */
+const EDIT_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
+
+/**
+ * 天枢的硬规矩（设计 9.5，契约 LocalPermissionMode）：哪一档都照问本人。scope 的允许范围是本人允许的全部文件夹。
+ * 推拉代码、gh、装东西、联网下载、改系统设置（RISKY_COMMAND），飞书命令行写的，跑没装好的 npx 包，碰 .git、.claude 的，碰允许的文件夹以外的，天枢 MCP 写的工具，
+ * 本人加的工具里不是读的。
+ */
+function mustAsk(tool: string, input: Record<string, unknown>, scope: PathScope, hint?: unknown): boolean {
+  if (tool.startsWith("mcp__tianshu__")) return !/^mcp__tianshu__(get|list)_/.test(tool);
+  if (isCustomTool(tool)) return !scope.toolReads?.(tool);
+  if (SHELL_TOOLS.has(tool)) {
+    const cmd = input.command;
+    if (typeof cmd !== "string") return true;
+    if (RISKY_COMMAND.test(cmd) || larkWrites(cmd) || !binsInstalled(cmd, [scope.cwd, ...scope.allowedRoots()]) || touchesProtected(cmd)) return true;
+  } else if ((FILE_FIELDS[tool] ?? []).some((f) => typeof input[f] === "string" && PROTECTED.test(input[f] as string))) {
+    return true;
+  }
+  return collect(tool, input, scope, insideAny(scope.allowedRoots()), hint).length > 0;
+}
+
+/**
+ * 这一档下这一步能不能不问本人就放行（契约 LocalPermissionMode）。worktree：卡在自己的工作树里做时是工作树的根，
+ * 「自动」「自动接受改文件」只在工作树里自己放行；别的会话为 null，在允许的文件夹里放行，「自动」不在工作树时删、挪文件的命令照样问（没有 git 兜底）。
+ */
+export function modeAllows(
+  mode: "auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions", tool: string, input: Record<string, unknown>, scope: PathScope, hint: unknown, worktree: string | null,
+): boolean {
+  if (mode === "default" || mode === "plan" || mustAsk(tool, input, scope, hint)) return false;
+  if (mode === "bypassPermissions") return true;
+  const area: PathScope = worktree ? { ...scope, allowedRoots: () => [worktree] } : scope;
+  if (mode === "acceptEdits") return EDIT_TOOLS.has(tool) && !collect(tool, input, area, insideAny(area.allowedRoots()), hint).length;
+  if (!autoAllowed(tool, input, area, hint)) return false;
+  return Boolean(worktree) || !(SHELL_TOOLS.has(tool) && WRITES.test(String(input.command ?? "")));
 }
 
 /** Claude Code 放行规则里的路径：//c/x 是绝对路径（Windows 是 C:\x），~/ 是主目录，/x 是项目根下，其余相对工作目录。 */

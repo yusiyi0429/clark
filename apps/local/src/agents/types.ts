@@ -1,4 +1,4 @@
-import type { TLocalAgentKind, TLocalEffort } from "@warmap/contracts";
+import type { TLocalAgentKind, TLocalEffort, TLocalPermissionMode } from "@warmap/contracts";
 import type { EventBody } from "../eventLog.js";
 import type { ResolvedModel } from "../models.js";
 
@@ -30,8 +30,12 @@ export interface AgentLaunch {
   pluginDirs: string[];
   /** 本会话允许的范围（本人允许的文件夹，加上还算数的工作目录），每次权限请求现查，据此标出越界路径。 */
   allowedRoots(): string[];
-  /** 卡在自己的工作树里做时是工作树的根：这里面安全的步骤不问本人就放行（pathGuard 的 autoAllowed）。别的会话为 null。 */
+  /** 卡在自己的工作树里做时是工作树的根：「自动」「自动接受改文件」只在这里面自己放行（pathGuard 的 modeAllows）。别的会话为 null。 */
   autoAllowRoot: string | null;
+  /** 本人在连接页加的工具（mcp__tool-…）里哪些是读的：照权限模式放行；不给就是都要问。 */
+  toolReads?(tool: string): boolean;
+  /** 开工时的权限模式（契约 LocalPermissionMode）：本机按它放行请求；plan 时执行方以自己的 plan 模式起。 */
+  permissionMode: TLocalPermissionMode;
 }
 
 export interface PermissionAnswer {
@@ -59,6 +63,12 @@ export interface AgentRun {
   setMultiAgent(on: boolean): Promise<boolean>;
   /** 停一个后台任务（子 agent、后台命令），会话本身不停。执行方答应了返回 true；之后会来一条 background 事件（stopped）。 */
   stopTask(taskId: string): Promise<boolean>;
+  /**
+   * 换权限模式，下一步起按新的来：进出 plan 时告诉执行方（Claude Code 的 set_permission_mode），别的档只改本机的放行规则。
+   * 正在等批准的请求按新档重判，放行的自己放行并报 permission_resolved。执行方没答应（进程已退出等）返回 false。
+   * 本人批了计划（ExitPlanMode）时执行方自己转成 auto，报一条 permission_mode 事件（by plan_approved）。
+   */
+  setPermissionMode(mode: TLocalPermissionMode): Promise<boolean>;
   /** 强停：只杀本进程树。 */
   kill(): Promise<void>;
   /** 说完了：关掉输入，让执行方自己退出（验收员交完结论用）；一会儿还不退就强停。 */

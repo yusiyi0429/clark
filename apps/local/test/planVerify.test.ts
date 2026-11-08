@@ -3,7 +3,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { api, pair, raw, startTestRunner, tempDir, ORIGIN } from "./helpers.js";
+import { api, gitRepo, pair, raw, startTestRunner, tempDir, ORIGIN } from "./helpers.js";
 import { systemPrompt } from "../src/rolePrompt.js";
 
 async function until<T>(fn: () => Promise<T | null | undefined | false> | T | null | undefined | false, ms = 10_000): Promise<T> {
@@ -105,7 +105,16 @@ async function setup(max: number, opts: { link?: boolean; reuse?: { dataDir: str
   const argvOf = (id: string) => trace().find((l) => l.argv?.includes(id))!.argv as string[];
   const verifies = async () => (await list()).filter((s) => s.subject.kind === "verify").sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const handBack = (id: string) => mcp(id, "hand_back", { summary: "做完了", criteria: [{ index: 1, result: "met", evidence: "hello.txt" }] });
-  return { t, token, work, cloud, call, link, fake, session, list, status, waitStatus, card, open, allow, mcp, events, trace, started, argvOf, verifies, handBack };
+  // 规划员在一个像样的仓库里拆（开拆前的检查不拦，设计 18.11）；假 claude 往上找到 work 里的配置
+  const repo = opts.reuse ? join(work, "repo") : gitRepo(join(work, "repo"));
+  /** 没绑文件夹的规划员：本人说一句（开拆前要问的算交代过了），等这一轮做完。 */
+  const clarify = async (id: string) => {
+    const turns = () => events(id).filter((e) => e.type === "turn_end").length;
+    const before = turns();
+    expect((await call("POST", `/v1/sessions/${id}/messages`, { text: "就在这里拆" })).status).toBe(200);
+    await until(() => turns() > before);
+  };
+  return { t, token, work, repo, clarify, cloud, call, link, fake, session, list, status, waitStatus, card, open, allow, mcp, events, trace, started, argvOf, verifies, handBack };
 }
 const flagList = (argv: string[], name: string) => (argv.includes(name) ? argv[argv.indexOf(name) + 1]!.split(",") : []);
 const flag = (argv: string[], name: string) => (argv.includes(name) ? argv[argv.indexOf(name) + 1] : null);
@@ -116,10 +125,12 @@ describe("规划员和验收员", { timeout: 30_000 }, () => {
     const h = await setup(1);
     try {
       h.fake({ verdict: FAILING, plan: PLAN });
+      // 本人加的工具：执行的挂，验收员、规划员不挂
+      expect((await h.call("PUT", "/v1/tools/kd", { name: "金蝶", preset: "kingdee", url: "https://kd.example.com/mcp" })).status).toBe(200);
       const a = await h.open(h.card("A"));
       await h.waitStatus(a.id, "waiting_permission");
       const b = await h.open(h.card("B"));
-      const p = await h.open({ subject: { kind: "plan", taskId: "T1" }, title: "拆卡：T1", cwd: h.work, firstMessage: "拆卡交代", role: PLANNER });
+      const p = await h.open({ subject: { kind: "plan", taskId: "T1" }, title: "拆卡：T1", cwd: h.repo, firstMessage: "拆卡交代", role: PLANNER });
       // 规划员后来的，但排在执行前面
       expect([(await h.session(p.id)).session.queuePosition, (await h.session(b.id)).session.queuePosition]).toEqual([1, 2]);
 
@@ -150,6 +161,8 @@ describe("规划员和验收员", { timeout: 30_000 }, () => {
       expect(flagList(vv, "--allowedTools")).toEqual(["mcp__tianshu-session__submit_verdict", "mcp__tianshu__get_task_context"]);
       expect(flagList(pv, "--allowedTools")).toEqual(["mcp__tianshu-session__propose_plan", "mcp__tianshu__get_task_context"]);
       expect(flagList(av, "--allowedTools")).toEqual(expect.arrayContaining(["mcp__tianshu-session__hand_back", "mcp__tianshu__get_task_context"]));
+      const toolServers = (argv: string[]) => Object.keys(JSON.parse(readFileSync(flag(argv, "--mcp-config")!, "utf8")).mcpServers).filter((k) => k.startsWith("tool-"));
+      expect([toolServers(av), toolServers(vv), toolServers(pv)]).toEqual([["tool-kd"], [], []]);
       expect([flag(vv, "--model"), flag(av, "--model")]).toEqual(["haiku", "opus"]); // 执行没说档位：按标准档 Opus
       // 验收员的提示词：验收规矩 + 交代里的验收员岗位
       const vPrompt = readFileSync(flag(vv, "--append-system-prompt-file")!, "utf8");
@@ -258,6 +271,7 @@ describe("规划员和验收员", { timeout: 30_000 }, () => {
       // 规划员：派活单带原话片段，原样报上去；不填就不带（云端用整条原话）
       const p = await h.open({ subject: { kind: "plan", taskId: "T-sw" }, title: "拆卡", firstMessage: "拆" });
       await h.waitStatus(p.id, "idle");
+      await h.clarify(p.id);
       const cards = [{ ...PLAN.cards[0], sourceWords: ["登录页要有忘记密码", " "] }, PLAN.cards[1]];
       expect((await h.mcp(p.id, "propose_plan", { ...PLAN, cards })).content[0]!.text).toContain("已交第 1 次计划");
       const plan = await until(() => h.cloud.items.find((i) => i.type === "card_plan" && i.subject.taskId === "T-sw"));
@@ -382,8 +396,20 @@ describe("规划员和验收员", { timeout: 30_000 }, () => {
       const p = await h.open({ subject: { kind: "plan", taskId: "T/2" }, title: "拆卡", firstMessage: "拆" });
       expect(p.cwd).toBe(join(h.t.dataDir, "plans", "T_2"));
       await h.waitStatus(p.id, "idle"); // 专用目录里没有假 claude 的配置：看完就停，没交计划
+      // 没绑文件夹：先不收派活单，要它先问本人（设计 18.11）；本人说了一句以后才收
+      const ask = await h.mcp(p.id, "propose_plan", PLAN);
+      expect([ask.isError, ask.content[0]!.text]).toEqual([true, expect.stringContaining("先不交派活单：这个项目在这台电脑上还没绑文件夹")]);
+      await h.clarify(p.id);
       expect((await h.mcp(p.id, "propose_plan", { summary: "x", cards: [] })).content[0]!.text).toContain("计划不合格");
       expect((await h.mcp(p.id, "propose_plan", { ...PLAN, cards: [{ ...PLAN.cards[0], modelTier: "max" }] })).isError).toBe(true);
+      // 卡标题照 Claude Code 起会话名的规矩：太长、带括号冒号句号的退回重写（说清是第几件），不截断、这一次不算交了
+      const longTitle = { ...PLAN.cards[0], title: "把本机程序的配对流程整个重新做一遍并补上所有测试" };
+      const colonTitle = { ...PLAN.cards[1], title: "网页：派活单" };
+      const rejected = await h.mcp(p.id, "propose_plan", { ...PLAN, cards: [longTitle, colonTitle] });
+      expect(rejected.isError).toBe(true);
+      expect(rejected.content[0]!.text).toContain("第 1 件的标题「把本机程序的配对流程整个重新做一遍并补上所有测试」太长");
+      expect(rejected.content[0]!.text).toContain("第 2 件的标题「网页：派活单」不要带括号、冒号、句号");
+      expect(readFileSync(join(h.t.dataDir, "sessions", p.id, "system.md"), "utf8")).toContain("中文 12 个字以内");
       expect((await h.mcp(p.id, "propose_plan", PLAN)).content[0]!.text).toContain("已交第 1 次计划（2 件）");
       expect((await h.mcp(p.id, "propose_plan", PLAN)).content[0]!.text).toContain("已交第 2 次计划");
       expect((await h.mcp(p.id, "submit_verdict", PASSING)).isError).toBe(true); // 规划员没有交结论的工具
@@ -418,6 +444,7 @@ describe("规划员和验收员", { timeout: 30_000 }, () => {
     try {
       const p = await h.open({ subject: { kind: "plan", taskId: "T9" }, title: "拆卡：T9", firstMessage: "拆卡交代", role: PLANNER });
       await h.waitStatus(p.id, "idle");
+      await h.clarify(p.id);
       const card = (title: string, after?: number[]) => ({ title, brief: "做", doneDefinition: "能检查", modelTier: "light", ...(after ? { after } : {}) });
       const bad = await h.mcp(p.id, "propose_plan", { summary: "拆三件", cards: [card("甲", [2]), card("乙")] });
       expect(bad.isError).toBe(true);
@@ -438,7 +465,7 @@ describe("规划员和验收员", { timeout: 30_000 }, () => {
     const h = await setup(3);
     try {
       h.fake({ plan: PLAN });
-      const p = await h.open({ subject: { kind: "plan", taskId: "T1" }, title: "拆卡：T1", cwd: h.work, firstMessage: "拆卡交代", role: PLANNER });
+      const p = await h.open({ subject: { kind: "plan", taskId: "T1" }, title: "拆卡：T1", cwd: h.repo, firstMessage: "拆卡交代", role: PLANNER });
       await h.waitStatus(p.id, "done");
       const statuses = () => h.events(p.id).filter((e) => e.type === "status");
       expect(statuses().map((e) => e.status)).not.toContain("idle");

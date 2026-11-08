@@ -6,6 +6,7 @@ import { EventLog } from "./eventLog.js";
 import { Pairings, TokenStore } from "./pairing.js";
 import { createSecretStore, type SecretStore } from "./secrets.js";
 import { ModelProfiles } from "./models.js";
+import { CustomTools } from "./customTools.js";
 import { Folders } from "./folders.js";
 import { Outbox } from "./outbox.js";
 import { CloudLink, Settings, fetchAttachment, fetchVerifyBrief } from "./cloud.js";
@@ -68,6 +69,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   const pairings = new Pairings(tokens, ({ code, origin, label }) =>
     desktop.confirm("天枢本机程序 · 配对", `${label}（${origin}）想连接这台电脑上的天枢本机程序。\n\n确认码：${code}\n\n和网页上显示的一致才点「是」。`));
   const models = new ModelProfiles(config.dataDir, secrets);
+  const customTools = new CustomTools(config.dataDir, secrets, opts.fetchImpl ?? fetch);
   const folders = new Folders(config.dataDir);
   const cloud = new CloudLink(config.dataDir, secrets, config.allowedOrigins);
   const settings = new Settings(config.dataDir, config.allowedOrigins);
@@ -109,7 +111,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   let sessionsRef: SessionManager | null = null;
   const updateTray = () => desktop.setState({ paired: tokens.count() > 0, running: sessionsRef?.activeCount() ?? 0, paused: settings.get().paused });
   const sessions = new SessionManager({
-    dataDir: config.dataDir, log, models, folders, outbox, deviceId: config.deviceId, port: () => config.port,
+    dataDir: config.dataDir, log, models, customTools, folders, outbox, deviceId: config.deviceId, port: () => config.port,
     cloudLinked: async () => Boolean(await cloud.target()),
     paused: () => settings.get().paused,
     skillsDir: opts.skillsDir ?? join(homeDir(), ".claude", "skills"),
@@ -130,7 +132,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   // 交回送到天枢以后去取验收交代。
   outbox.onSent = () => void sessions.pullBriefs();
   const server = createServer({
-    config, version: VERSION, tokens, pairings, sessions, log, models, folders, claude, cloud, settings, quota, codexQuota, tools, spend,
+    config, version: VERSION, tokens, pairings, sessions, log, models, folders, claude, cloud, settings, quota, codexQuota, tools, customTools, spend,
     pickFolder: () => desktop.pickFolder(),
     cloneRepo: opts.cloneRepo ?? cloneRepo,
     fetchImpl: cloudFetch,

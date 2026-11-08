@@ -60,7 +60,7 @@ describe("项目的文件夹", { timeout: 40_000 }, () => {
       expect(folders.folders.map((f: any) => [f.id, f.projects])).toEqual([[a.id, [{ projectId: "77777777-7777-4777-8777-777777777771", name: "天枢本机程序" }]], [b.id, [{ projectId: "77777777-7777-4777-8777-777777777773", name: null }]]]);
 
       // 卡不指定目录：在项目绑的仓库里开自己的工作树
-      const card = (await call("POST", "/v1/sessions", { subject: { kind: "card", cardId: "card-p1", projectId: "77777777-7777-4777-8777-777777777771" }, title: "改页面", firstMessage: "做" })).body;
+      const card = (await call("POST", "/v1/sessions", { subject: { kind: "card", cardId: "card-p1", projectId: "77777777-7777-4777-8777-777777777771" }, title: "改页面", firstMessage: "做", permissionMode: "auto" })).body;
       expect(card.subject).toEqual({ kind: "card", cardId: "card-p1", projectId: "77777777-7777-4777-8777-777777777771" });
       expect(card.workspace).toMatchObject({ kind: "worktree", folder: a.path });
       // 专题不指定目录：就在项目的文件夹里

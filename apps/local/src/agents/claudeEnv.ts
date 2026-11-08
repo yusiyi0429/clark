@@ -54,8 +54,12 @@ export function childEnv(base: NodeJS.ProcessEnv, extra: Record<string, string> 
  */
 const GATEWAY_FAIL_FAST = { CLAUDE_CODE_MAX_RETRIES: "2", API_TIMEOUT_MS: "40000" };
 
-export const PERMISSION_ARGS = [
-  "--permission-mode", "manual",
+/**
+ * 权限参数：一律「每次都问」起、请求都交给本机（本机按会话的权限模式放行或转给网页，见 pathGuard 的 modeAllows）；
+ * 只有「先出计划」用 Claude Code 自己的 plan 模式。它的 auto、bypassPermissions 放行的步骤不经本机，天枢的硬规矩管不住，不用。
+ */
+export const permissionArgs = (plan: boolean) => [
+  "--permission-mode", plan ? "plan" : "manual",
   "--permission-prompts", "host",
   // --help 里没有，但必须带：不带时写文件会被直接拒绝，宿主收不到请求（11/05 实测）。
   "--permission-prompt-tool", "stdio",
@@ -68,7 +72,7 @@ export const PERMISSION_ARGS = [
  * 那种组合由 personalSettingsSetKey 拦下，不开工。
  */
 export function buildClaudeArgs(launch: AgentLaunch): { args: string[]; env: Record<string, string> } {
-  const args = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", ...PERMISSION_ARGS];
+  const args = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", ...permissionArgs(launch.permissionMode === "plan")];
   args.push(launch.resume ? "--resume" : "--session-id", launch.sessionId);
   if (!launch.includePersonalConfig) args.push("--setting-sources", "project,local", "--strict-mcp-config");
   if (launch.mcpConfigPath) args.push("--mcp-config", launch.mcpConfigPath);
