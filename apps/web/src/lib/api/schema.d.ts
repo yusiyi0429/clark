@@ -6756,6 +6756,103 @@ export interface components {
             scope: string;
             sequence: number;
             /** @constant */
+            type: "card";
+            card: {
+                /** @constant */
+                kind: "buddy_message";
+                /** Format: uuid */
+                draftId: string;
+            } | {
+                /** @constant */
+                kind: "review";
+                personalReviewId: string;
+                href: string;
+            } | {
+                /** @constant */
+                kind: "weekly_review";
+                weeklyReviewId: string;
+                href: string;
+            } | {
+                /** @constant */
+                kind: "todo_pick";
+                question: string;
+                candidates: {
+                    requestId: string;
+                    title: string;
+                    initiatorId?: string;
+                    initiatorName: string;
+                    sentAt: string;
+                    href: string;
+                }[];
+            } | {
+                /** @constant */
+                kind: "todo_ask";
+                requestId: string;
+                question: string;
+                href: string;
+            } | {
+                /** @constant */
+                kind: "todo_answer";
+                requestId: string;
+                href: string;
+                question: string;
+                answer: string;
+                source: "body" | "question";
+                questionId: string | null;
+            } | {
+                /** @constant */
+                kind: "request_draft";
+                requestId: string;
+                href: string;
+            } | {
+                /** @constant */
+                kind: "questions";
+                askId: string;
+                questions: {
+                    id: string;
+                    question: string;
+                    options: {
+                        label: string;
+                        detail?: string;
+                        recommended?: boolean;
+                    }[];
+                }[];
+            } | {
+                /** @constant */
+                kind: "collection_draft";
+                collectionId: string;
+            } | {
+                /** @constant */
+                kind: "meeting_draft";
+                draftId: string;
+                title: string;
+                scheduledAt: string;
+                endsAt: string;
+                host: {
+                    personId: string;
+                    displayName: string;
+                } | null;
+                participants: {
+                    personId: string;
+                    displayName: string;
+                }[];
+                unresolved: {
+                    name: string;
+                    reason: "not_found" | "ambiguous";
+                    host?: boolean;
+                }[];
+                anchor: {
+                    kind: "lto" | "po" | "mission" | "task" | "unit" | "company";
+                    id: string;
+                    title: string;
+                } | null;
+            };
+        } | {
+            runId: string;
+            /** @description global 或稳定对象 scope */
+            scope: string;
+            sequence: number;
+            /** @constant */
             type: "receipt";
             state: "delivered" | "read";
         } | {

@@ -370,6 +370,8 @@ export const ConversationSseEvent = Type.Union([
   Type.Object({ ...StreamBase, type: Type.Literal("plan"), plan: BuddyPlan }, { additionalProperties: false }),
   /** 伙伴动作在界面上的效果（17.4）：切外观、打开某一处、刷新哪几块（见 buddyActions.ts 的 BuddyUiEffect）。动作做完时天枢插进这一轮。 */
   Type.Object({ ...StreamBase, type: Type.Literal("ui"), ui: BuddyUiEffect }, { additionalProperties: false }),
+  /** 伙伴这一轮出的卡（17.4：send_message 的 buddy_message）：动作做完时天枢插进这一轮的流，界面接在回答后面；读回历史时在这条回答的 cards 里。 */
+  Type.Object({ ...StreamBase, type: Type.Literal("card"), card: ConversationCard }, { additionalProperties: false }),
   /**
    * 本人这条消息的回执（17.4，伙伴对话：scope 为 global 和 project:<id>）：delivered 天枢收下了（第一个勾），read 伙伴读到了（第二个勾）。
    * 伙伴正在回上一轮时本人再发：不再回 409 TURN_IN_PROGRESS，天枢先收下（delivered），停掉上一轮（上一轮的流以 done aborted 结束，计划清单收起），
