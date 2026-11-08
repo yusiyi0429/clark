@@ -19,7 +19,7 @@ import { settlementsOf } from "./taskContinuity.js";
 
 type TransferRow = { id: string; project_id: string; from_id: string; to_id: string; status: TProjectTransfer["status"]; note: THandoverNote | null;
   include_history: boolean; running: "wait" | "stop" | null; check_choice: "wait" | "skip" | null; check_result: TLocalHandoverCheck | null;
-  started_at: Date; decided_at: Date | null; project_name: string };
+  started_at: Date; decided_at: Date | null; project_name: string; after_sequence: number | null };
 const SELECT = "SELECT t.*,t.project_id::text AS project_id,p.name AS project_name FROM project_transfers t JOIN projects p ON p.id=t.project_id";
 
 /** 能拉到别的电脑上的远端：https://、ssh://、git@ 开头的（本地路径、file:// 等不算）。 */
@@ -40,7 +40,8 @@ export const transferView = (row: TransferRow, names: Map<string, string>): TPro
   id: row.id, projectId: row.project_id, projectName: row.project_name,
   from: { personId: row.from_id, name: names.get(row.from_id) ?? row.from_id }, to: { personId: row.to_id, name: names.get(row.to_id) ?? row.to_id },
   status: row.status, startedAt: row.started_at.toISOString(), decidedAt: row.decided_at?.toISOString() ?? null, includeHistory: row.include_history,
-  running: row.running, check: row.check_choice, note: row.note, checkResult: row.check_result, clone: cloneOf(row.check_result) });
+  running: row.running, check: row.check_choice, note: row.note, checkResult: row.check_result, clone: cloneOf(row.check_result),
+  afterSequence: row.after_sequence });
 
 /** 这几个项目各自正在转交的那一份（preparing、sent）。 */
 export async function openTransfers(q: Query, projectIds: string[]): Promise<Map<string, TransferRow>> {
@@ -127,7 +128,9 @@ export class SecretsInNote extends Error { constructor(readonly findings: THando
 
 /** 写交接说明的模型和读原负责人项目对话的办法（路由给；没给时只拼四段）。 */
 export type HandoverWriter = { agent: HandoverNoteAgent; conversation: (projectId: string, fromId: string) => Promise<HandoverInput["conversation"]>; timeoutMs?: number };
-export type TransferDeps = { q: Query; pool: Pool; names: Map<string, string>; now: Date; handover?: HandoverWriter };
+export type TransferDeps = { q: Query; pool: Pool; names: Map<string, string>; now: Date; handover?: HandoverWriter;
+  /** 这个项目对话现在最后一条消息的 sequence（发起时网页没传 afterSequence 才读）；没有消息、读不到为 null。 */
+  lastSequence?: (projectId: string, ownerId: string) => Promise<number | null> };
 
 const HANDOVER_TIMEOUT_MS = 90_000;
 /** 对话只给最近的 80 句、每句最多 1500 字。 */
@@ -173,16 +176,21 @@ async function composeNote(deps: TransferDeps, row: Pick<TransferRow, "project_i
   return draftNote(deps.q, row, fromName);
 }
 
-/** POST /api/me/projects/:projectId/transfers：项目负责人发起，云端先拼一份交接说明。 */
-export async function startTransfer(deps: TransferDeps, fromId: string, projectId: string, toId: string): Promise<TProjectTransfer> {
+/**
+ * POST /api/me/projects/:projectId/transfers：项目负责人发起，云端先拼一份交接说明。
+ * afterSequence：转交卡排在项目对话哪条消息后面（网页传上来的；没传读这个对话现在最后一条，读不到为 null）。
+ */
+export async function startTransfer(deps: TransferDeps, fromId: string, projectId: string, toId: string, afterSequence?: number): Promise<TProjectTransfer> {
   const { q, names, now } = deps;
   const project = await ownProject(q, fromId, projectId);
   if (project.archived_at) throw new CardError(409, "PROJECT_ARCHIVED", "这个项目已经归档了");
   if (toId === fromId) throw new CardError(400, "INVALID_INPUT", "不能转给自己");
   if (!names.has(toId)) throw new CardError(404, "PERSON_NOT_FOUND", "人员目录里没有这个人");
   const id = randomUUID();
+  const after = afterSequence ?? await deps.lastSequence?.(project.id, fromId).catch(() => null) ?? null;
   try {
-    await q(`INSERT INTO project_transfers(id,project_id,from_id,to_id,status,started_at) VALUES($1,$2,$3,$4,'preparing',$5)`, [id, project.id, fromId, toId, now]);
+    await q(`INSERT INTO project_transfers(id,project_id,from_id,to_id,status,started_at,after_sequence) VALUES($1,$2,$3,$4,'preparing',$5,$6)`,
+      [id, project.id, fromId, toId, now, after]);
   } catch (cause) {
     if ((cause as { code?: string }).code === "23505") throw new CardError(409, "TRANSFER_OPEN", "这个项目已经在转交了");
     throw cause;

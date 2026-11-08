@@ -460,8 +460,21 @@ describe("项目", { timeout: 60_000 }, () => {
       const { projectId } = await create(f, { name: "小项目", taskId: "task-open" });
       const start = async () => (await f.call("POST", `/api/me/projects/${projectId}/transfers`, { toPersonId: THIRD.personId })).json().id as string;
       const first = await start();
+      // 转交卡排位（16.7）：项目对话还没有消息、网页也没传，afterSequence 为 null。
+      expect((await f.call("GET", `/api/me/project-transfers/${first}`)).json().afterSequence).toBeNull();
       expect((await f.call("POST", `/api/me/project-transfers/${first}/withdraw`)).json().status).toBe("withdrawn");
+      // 网页传了就照存。
+      const passed = await f.call("POST", `/api/me/projects/${projectId}/transfers`, { toPersonId: THIRD.personId, afterSequence: 7 });
+      expect(passed.json().afterSequence).toBe(7);
+      await f.call("POST", `/api/me/project-transfers/${passed.json().id}/withdraw`);
+      // 没传：云端读这个项目对话现在最后一条。
+      const said = await f.t.app.inject({ method: "POST", url: `/api/conversations/${encodeURIComponent(`project:${projectId}`)}/messages`,
+        headers: { cookie: f.member, origin: f.t.publicOrigin, accept: "text/event-stream" }, payload: { message: "先把打分做完" } });
+      expect(said.statusCode, said.body).toBe(200);
+      const last = (await f.call("GET", `/api/conversations/${encodeURIComponent(`project:${projectId}`)}/messages`)).json().messages.at(-1).sequence as number;
+      expect(last).toBeGreaterThan(0);
       const second = await start();
+      expect((await f.call("GET", `/api/me/project-transfers/${second}`)).json().afterSequence).toBe(last);
       await written(f, second);
       await f.call("POST", `/api/me/project-transfers/${second}/send`);
       expect((await f.call("POST", `/api/me/project-transfers/${second}/decline`, undefined, third)).json().status).toBe("declined");
