@@ -176,7 +176,7 @@ function SectionEditor({ section, onSave, onCancel }: { section: HandoverSection
   );
 }
 
-/** 交接说明卡：逐段能改；卡下面「带上对话记录」（默认不勾）和「交给 {名字}」。发出时云端查出像密钥的（422），标出那几行、挡住。 */
+/** 交接说明卡：逐段能改；卡下面「带上对话记录」（默认不勾）和「交给 {名字}」（点两次才发出）。发出时云端查出像密钥的（422），标出那几行、挡住。 */
 export function HandoverCard({ transfer, onChanged }: { transfer: Transfer; onChanged: () => Promise<unknown> | void }) {
   const note = transfer.note ?? [];
   const sent = transfer.status !== "preparing";
@@ -213,10 +213,63 @@ export function HandoverCard({ transfer, onChanged }: { transfer: Transfer; onCh
             onChange={(event) => { const value = event.target.checked; attempt(async () => { await updateTransfer(transfer.id, { includeHistory: value }); await onChanged(); }); }} />
           带上对话记录
         </label>
-        {sent ? null : <HeroButton variant="primary" size="sm" isDisabled={findings.length > 0 || !!editing || busyWith} onPress={send} data-testid="handover-send">交给 {transfer.to.name}</HeroButton>}
+        {sent ? null : <ConfirmSend name={transfer.to.name} disabled={findings.length > 0 || !!editing || busyWith} onConfirm={send} />}
         {failed ? <FailedLine inline {...failed} /> : null}
       </div>
     </article>
+  );
+}
+
+/** 「交给 {名字}」点了以后等多久没再点就变回去。 */
+export const CONFIRM_MS = 5000;
+
+/**
+ * 点两次才做：第一次只把按钮变成确认态，再点一次才 act；disarm（点了别处、Esc、失焦）或过了 ms 没再点，变回去。
+ * onArmed 报确认态的进出。
+ */
+export function twoStepPress(act: () => void, onArmed: (armed: boolean) => void, ms = CONFIRM_MS) {
+  let armed = false;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const disarm = () => {
+    if (timer) clearTimeout(timer);
+    timer = null;
+    if (!armed) return;
+    armed = false;
+    onArmed(false);
+  };
+  const press = () => {
+    if (armed) { disarm(); act(); return; }
+    armed = true;
+    onArmed(true);
+    timer = setTimeout(disarm, ms);
+  };
+  return { press, disarm };
+}
+
+/** 交接说明卡上的「交给 {名字}」：点一次原地变成「确认转交」，再点一次才发出。确认态的变化读屏会念（外面包一层 polite）。 */
+function ConfirmSend({ name, disabled, onConfirm }: { name: string; disabled: boolean; onConfirm: () => void }) {
+  const [armed, setArmed] = useState(false);
+  const confirmRef = useRef(onConfirm);
+  useEffect(() => { confirmRef.current = onConfirm; });
+  const [step] = useState(() => twoStepPress(() => confirmRef.current(), setArmed));
+  const box = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!armed) return;
+    const away = (event: PointerEvent) => { if (!box.current?.contains(event.target as Node)) step.disarm(); };
+    // 确认态里的 Esc 只把按钮变回去，标成处理过，首页「Esc 回首页」和对话里的 Esc 就不再接。
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") { event.preventDefault(); step.disarm(); } };
+    document.addEventListener("pointerdown", away, true);
+    document.addEventListener("keydown", escape, true);
+    return () => { document.removeEventListener("pointerdown", away, true); document.removeEventListener("keydown", escape, true); };
+  }, [armed, step]);
+  useEffect(() => () => step.disarm(), [step]);
+  useEffect(() => { if (disabled) step.disarm(); }, [disabled, step]);
+  return (
+    <span ref={box} aria-live="polite" onBlur={step.disarm}>
+      <HeroButton variant="primary" size="sm" isDisabled={disabled} onPress={step.press} data-testid="handover-send" data-armed={armed ? "" : undefined}>
+        {armed ? "确认转交" : `交给 ${name}`}
+      </HeroButton>
+    </span>
   );
 }
 
