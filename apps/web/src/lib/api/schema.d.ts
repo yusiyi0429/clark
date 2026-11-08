@@ -6619,6 +6619,10 @@ export interface components {
                     }[];
                     collapsed: boolean;
                 };
+                model?: {
+                    provider: string;
+                    model: string;
+                };
                 readScope?: {
                     label: string;
                     params: {
@@ -6942,6 +6946,15 @@ export interface components {
             reason: "slow" | "retrieval";
             expectSeconds: number;
             notice: string;
+        } | {
+            runId: string;
+            /** @description global 或稳定对象 scope */
+            scope: string;
+            sequence: number;
+            /** @constant */
+            type: "model";
+            provider: string;
+            model: string;
         } | {
             runId: string;
             /** @description global 或稳定对象 scope */
