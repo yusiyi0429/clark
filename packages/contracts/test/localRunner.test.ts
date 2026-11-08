@@ -9,7 +9,7 @@ import {
   LocalSettings, LocalMergeSync, LocalStatusResponse, LocalQuotaSource, LocalQuotaSync,
   LocalFolder, LocalProjectFolder, LocalProjectListResponse, LocalProjectFolderRequest, LocalHandoverCheck, LocalProjectCloneRequest, LocalProjectCloneResponse, ProjectTransfer,
   LocalTaskBudgetView, LocalBudgetListResponse, LocalBudgetUpdateRequest, LocalSendMessageRequest as SendMessage, LocalPermissionBrief, LOCAL_RUNNER_ATTACHMENT_PATH,
-  LocalRunPreviewRequest,
+  LocalRunPreviewRequest, LocalPermissionModeRequest, LOCAL_AGENT_PERMISSION_MODES,
 } from "../src/index.js";
 
 const sessionId = "6b0f3a52-4d0c-4c1e-9a43-1f7d2c9b8e10";
@@ -161,7 +161,7 @@ describe("本机程序契约", () => {
     const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0 };
     const summary = {
       id: sessionId, subject: { kind: "card", cardId: "card-1" }, title: "改登录页", agent: "claude-code", modelProfileId: "subscription", modelLabel: "订阅",
-      cwd: "C:/data/worktrees/card-1", status: "running", includePersonalConfig: false, createdAt: at, updatedAt: at, lastSeq: 3, pendingPermissions: 0, queuePosition: null, usage,
+      cwd: "C:/data/worktrees/card-1", status: "running", includePersonalConfig: false, createdAt: at, updatedAt: at, lastSeq: 3, pendingPermissions: 0, permissionMode: "auto", queuePosition: null, usage,
     };
     const worktree = { kind: "worktree", folder: "D:/repo", path: "C:/data/worktrees/card-1", branch: "tianshu/card1-login", baseBranch: "main", baseCommit: sha, mergedCommit: null };
     expect(Value.Check(LocalSessionSummary, { ...summary, workspace: worktree })).toBe(true);
@@ -202,7 +202,7 @@ describe("本机程序契约", () => {
     const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0 };
     const summary = {
       id: sessionId, subject: { kind: "card", cardId: "card-3" }, title: "总验收", agent: "claude-code", modelProfileId: "subscription", modelLabel: "订阅",
-      cwd: "C:/data/worktrees/card-3", status: "idle", includePersonalConfig: false, createdAt: at, updatedAt: at, lastSeq: 9, pendingPermissions: 0, queuePosition: null, usage,
+      cwd: "C:/data/worktrees/card-3", status: "idle", includePersonalConfig: false, createdAt: at, updatedAt: at, lastSeq: 9, pendingPermissions: 0, permissionMode: "auto", queuePosition: null, usage,
     };
     const request = {
       requestId: "toolu_ask1", askedAt: at,
@@ -235,7 +235,7 @@ describe("本机程序契约", () => {
     const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0 };
     const queued = {
       id: sessionId, subject: start.subject, title: "总验收", agent: "claude-code", modelProfileId: "subscription", modelLabel: "订阅",
-      cwd: "D:/repo", status: "queued", includePersonalConfig: false, createdAt: at, updatedAt: at, lastSeq: 1, pendingPermissions: 0, queuePosition: 1, usage,
+      cwd: "D:/repo", status: "queued", includePersonalConfig: false, createdAt: at, updatedAt: at, lastSeq: 1, pendingPermissions: 0, permissionMode: "auto", queuePosition: 1, usage,
     };
     expect(Value.Check(LocalSessionSummary, { ...queued, waitingFor: ["card-2"] })).toBe(true);
     expect(Value.Check(LocalSessionSummary, { ...queued, waitingFor: [] })).toBe(false); // 不在等就不带
@@ -258,7 +258,7 @@ describe("本机程序契约", () => {
     const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0 };
     const summary = {
       id: sessionId, subject: { kind: "card", cardId: "card-1" }, title: "改登录页", agent: "claude-code", modelProfileId: "subscription", modelLabel: "订阅",
-      cwd: "D:/repo", status: "running", includePersonalConfig: false, createdAt: at, updatedAt: at, lastSeq: 9, pendingPermissions: 0, queuePosition: null, usage,
+      cwd: "D:/repo", status: "running", includePersonalConfig: false, createdAt: at, updatedAt: at, lastSeq: 9, pendingPermissions: 0, permissionMode: "auto", queuePosition: null, usage,
     };
     expect(Value.Check(LocalSessionSummary, { ...summary, background: [agent, cmd] })).toBe(true);
     expect(Value.Check(LocalSessionEvent, { seq: 10, at, sessionId, type: "background", item: cmd })).toBe(true);
@@ -273,7 +273,7 @@ describe("本机程序契约", () => {
     const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: 0 };
     const plan = {
       id: sessionId, subject: { kind: "plan", taskId: "task-1" }, title: "拆卡", agent: "claude-code", modelProfileId: "subscription", modelLabel: "订阅",
-      cwd: "D:/plans/task-1", status: "done", includePersonalConfig: false, createdAt: at, updatedAt: at, lastSeq: 9, pendingPermissions: 0, queuePosition: null, usage,
+      cwd: "D:/plans/task-1", status: "done", includePersonalConfig: false, createdAt: at, updatedAt: at, lastSeq: 9, pendingPermissions: 0, permissionMode: "auto", queuePosition: null, usage,
     };
     expect(Value.Check(LocalSessionSummary, plan)).toBe(true);
     expect(Value.Check(LocalSessionEvent, { seq: 10, at, sessionId, type: "status", status: "done", reason: "计划交了" })).toBe(true);
@@ -340,7 +340,7 @@ describe("本机程序契约", () => {
     expect(Value.Check(LocalSessionEvent, { seq: 4, at, sessionId, type: "status", status: "idle", hold })).toBe(true);
     const summary = {
       id: sessionId, subject: { kind: "card", cardId: "card-1" }, title: "改登录页", agent: "claude-code", modelProfileId: "subscription", modelLabel: "订阅",
-      cwd: "D:/repo", status: "idle", includePersonalConfig: false, createdAt: at, updatedAt: at, lastSeq: 4, pendingPermissions: 0, queuePosition: null, usage, hold,
+      cwd: "D:/repo", status: "idle", includePersonalConfig: false, createdAt: at, updatedAt: at, lastSeq: 4, pendingPermissions: 0, permissionMode: "auto", queuePosition: null, usage, hold,
     };
     expect(Value.Check(LocalSessionSummary, summary)).toBe(true);
     expect(Value.Check(LocalSessionSummary, { ...summary, hold: { reason: "paused", until: null } })).toBe(false);
@@ -387,7 +387,7 @@ describe("本机程序契约", () => {
     const run = { mode: "unlimited", model: "opus", effort: "max", multiAgent: true };
     const summary = {
       id: sessionId, subject: { kind: "card", cardId: "card-1" }, title: "改登录页", agent: "claude-code", modelProfileId: "subscription", modelLabel: "订阅",
-      cwd: "D:/repo", status: "idle", includePersonalConfig: false, createdAt: at, updatedAt: at, lastSeq: 4, pendingPermissions: 0, queuePosition: null, usage,
+      cwd: "D:/repo", status: "idle", includePersonalConfig: false, createdAt: at, updatedAt: at, lastSeq: 4, pendingPermissions: 0, permissionMode: "auto", queuePosition: null, usage,
       hold: { reason: "budget", until: null }, run,
     };
     expect(Value.Check(LocalSessionSummary, summary)).toBe(true);
@@ -403,6 +403,20 @@ describe("本机程序契约", () => {
     expect(Value.Check(LocalRunPreviewRequest, {})).toBe(true);
     expect(Value.Check(LocalRunPreviewRequest, { title: "多余" })).toBe(false);
     expect(LOCAL_RUNNER_ROUTES.previewRun).toEqual({ method: "POST", path: "/v1/runs/preview", auth: true });
+
+    // 权限模式：开工带、摘要里有（必填）、中途换、事件和同步条目带；五档以外的不收；Codex 没有「先出计划」
+    expect(Value.Check(LocalCreateSessionRequest, { ...req, permissionMode: "acceptEdits" })).toBe(true);
+    expect(Value.Check(LocalCreateSessionRequest, { ...req, permissionMode: "dontAsk" })).toBe(false);
+    expect(Value.Check(LocalSessionSummary, { ...summary, permissionMode: "plan" })).toBe(true);
+    const { permissionMode: _pm, ...noMode } = summary as Record<string, unknown>;
+    expect(Value.Check(LocalSessionSummary, noMode)).toBe(false);
+    expect(Value.Check(LocalPermissionModeRequest, { mode: "bypassPermissions" })).toBe(true);
+    expect(Value.Check(LocalPermissionModeRequest, { mode: "manual" })).toBe(false);
+    expect(Value.Check(LocalSessionEvent, { seq: 5, at, sessionId, type: "permission_mode", mode: "auto", by: "plan_approved" })).toBe(true);
+    expect(Value.Check(LocalSessionEvent, { seq: 5, at, sessionId, type: "permission_mode", mode: "auto", by: "cloud" })).toBe(false);
+    expect(LOCAL_RUNNER_ROUTES.setPermissionMode).toEqual({ method: "PUT", path: "/v1/sessions/:id/permission-mode", auth: true });
+    expect(LOCAL_AGENT_PERMISSION_MODES["claude-code"]).toEqual(["auto", "default", "acceptEdits", "plan", "bypassPermissions"]);
+    expect(LOCAL_AGENT_PERMISSION_MODES.codex).not.toContain("plan");
     expect(Value.Check(LocalSessionEvent, { seq: 3, at, sessionId, type: "turn_end", isError: true, text: null, durationMs: 1, usage, errorKind: "balance" })).toBe(true);
 
     const base = { sessionId, subject: summary.subject, occurredAt: at };
