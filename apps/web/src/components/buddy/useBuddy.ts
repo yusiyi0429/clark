@@ -66,12 +66,15 @@ export function useBuddy(): { buddy: Buddy | null; loading: boolean } {
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     let active = true;
+    // 连着改了几次会连着重读：只认最后发的那次，先发的晚回来不把伙伴台换回去。
+    let latest = 0;
     const load = () => {
+      const mine = ++latest;
       void browserApi.GET("/api/me/buddy").then(({ data }) => {
-        if (!active) return;
+        if (!active || mine !== latest) return;
         setBuddy(data ?? null);
         setLoading(false);
-      }).catch(() => { if (active) setLoading(false); });
+      }).catch(() => { if (active && mine === latest) setLoading(false); });
     };
     load();
     window.addEventListener(CHANGED, load);

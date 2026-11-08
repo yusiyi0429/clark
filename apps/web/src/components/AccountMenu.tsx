@@ -298,7 +298,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
           <PasscodeForm loginId={account.loginId} onDone={() => setDialog(null)} />
         </MenuDialog>
       ) : null}
-      {dialog === "coagent" ? <MenuDialog title="伙伴形象" wide onClose={() => setDialog(null)}><BuddySettings onDone={() => setDialog(null)} /></MenuDialog> : null}
+      {dialog === "coagent" ? <MenuDialog title="伙伴形象" wide onClose={() => setDialog(null)}><BuddySettings /></MenuDialog> : null}
       {dialog === "railBackground" ? <MenuDialog title="通知栏背景" wide onClose={() => setDialog(null)}><RailBackgroundSettings personId={account.personId} /></MenuDialog> : null}
       {dialog === "voice" ? <VoiceKeysDialog onClose={() => setDialog(null)} /> : null}
       {dialog === "connection" ? <MenuDialog title="连接到外部工具" wide onClose={() => setDialog(null)}><ConnectionDialog role={account.role} /></MenuDialog> : null}
