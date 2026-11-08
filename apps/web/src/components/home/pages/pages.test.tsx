@@ -204,8 +204,8 @@ describe("偏好页（外观、通知、缺省预算、伙伴、回收站）", (
 });
 
 describe("挂载表", () => {
-  it("四个二级页和月份页都交了", () => {
-    expect(Object.keys(SECONDARY_PAGES).sort()).toEqual(["buddy", "connections", "preferences", "profile"]);
+  it("六个二级页和月份页都交了", () => {
+    expect(Object.keys(SECONDARY_PAGES).sort()).toEqual(["buddy", "connections", "memory", "preferences", "profile", "roles"]);
     expect(MONTH_PAGE).not.toBeNull();
   });
 });

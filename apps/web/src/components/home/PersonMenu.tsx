@@ -52,7 +52,7 @@ export function PersonRow({ account, view, alert, go }: {
     if (key === "logout" || key === "lock") { void logout(); return; }
     if (key === "switch") { void switchView(); return; }
     if (key in PAGE_TITLE) { go(pageHref(key as PageKey)); return; }
-    const out: Record<string, string> = { roles: "/me/team", memory: "/me/memory", quality: "/me/task-quality", admin: "/me/admin" };
+    const out: Record<string, string> = { quality: "/me/task-quality", admin: "/me/admin" };
     if (out[key]) go(out[key]);
   };
   useEffect(() => {

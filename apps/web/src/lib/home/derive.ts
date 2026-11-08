@@ -68,7 +68,7 @@ export function waitingHref(item: Pick<WaitingItem, "open"> & Partial<Pick<Waiti
     case "meeting": return `/me/meetings/${encodeURIComponent(open.id)}`;
     // 具体某张卡去那张卡；拍板人那一侧没有具体的卡（轮次），去原来列着轮次的首页通知栏。
     case "mission_card": return open.round ? "/me" : `/me/mission-cards/${encodeURIComponent(open.id)}`;
-    case "role": return "/me/team";
+    case "role": return pageHref("roles");
     // 别人请你认可的 Task：只读的 Task 详情；月份页；连接页（这台电脑那一组）。
     case "task_detail": return infoHref(open.id);
     case "month": return monthHref(open.id);

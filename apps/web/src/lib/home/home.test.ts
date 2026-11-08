@@ -146,6 +146,8 @@ describe("树上的卡：worker 列表只有今天完成的，看板补上之前
 
   it("受阻（验收两次没过）进项目对话：云端给的目标是那张卡时也一样（选项框在对话里）", () => {
     expect(waitingHref({ kind: "verdict", projectId: "p1", open: { kind: "card", id: "c1" } })).toBe("/me/work/projects/p1");
+    // 岗位修改建议点进去是新首页里的「岗位」二级页，不再跳出新首页。
+    expect(waitingHref({ open: { kind: "role", id: "r1" } })).toBe("/me/work/settings/roles");
     expect(waitingHref({ kind: "approval", projectId: "p1", open: { kind: "card", id: "c1" } })).toBe("/me/work/cards/c1");
   });
 
