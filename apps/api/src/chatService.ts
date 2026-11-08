@@ -165,6 +165,8 @@ export function createChatService(options: {
   runExtras?: (viewer: ChatViewer, runIds: string[]) => Promise<Map<string, { plan?: TBuddyPlan; cards?: TConversationCard[] }>>;
   /** 本人在伙伴回答到一半时发来新消息、上一轮要停掉之前（17.4）：收起那一轮的计划清单。失败只记日志。 */
   onInterrupt?: (viewer: ChatViewer, runId: string) => Promise<void>;
+  /** 本人在这个对话（scope）里发出一条新消息、交给 Chat 之前（18 节第 9 条）：伙伴还 open 的选项框收掉，answered 是这一句回答的那个。失败只记日志。 */
+  onMessage?: (viewer: ChatViewer, scope: string, answered: string | undefined) => Promise<void>;
 }) {
   if (!options.token) throw new Error("CHAT_SERVICE_URL 需要同时配置 INTERNAL_CHAT_TOKEN");
   const base = options.baseUrl.replace(/\/+$/, "");
@@ -410,6 +412,8 @@ export function createChatService(options: {
       forwarded = false): Promise<void> {
       const startedAt = Date.now();
       const scope = target?.scope ?? "global";
+      await options.onMessage?.(viewer, scope, body.buddyQuestionId)
+        .catch((error) => logEvent({ event: "chat_service.message_hook_failed", requestId, error: (error as Error)?.message }));
       // 「继续」进那一轮所在的段；带附件的这句进附件所在的那段（上传时已判过段）；其余按规则判段。
       const resumed = !target && rotation && body.resumeRunId ? await segmentOfRun(viewer, requestId, body.resumeRunId) : null;
       const current = target ? { conversation: { conversationId: target.conversationId, createdAt: "", updatedAt: "" }, started: false }
