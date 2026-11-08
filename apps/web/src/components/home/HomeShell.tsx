@@ -28,12 +28,12 @@ import { LocalRunnerProvider, useLocalRunner } from "@/lib/local/LocalRunnerProv
 import { planStartRequest, readLast, startTopic } from "@/lib/local/start";
 import { useAutoReturn } from "@/lib/board/useAutoReturn";
 import { cancelStart, claimStarts, listSplits, planKey, registerPlan, releaseStart, removeSplit, routeMessage, type PlanTarget } from "@/lib/board/cloud";
-import { gateOf, gateText } from "@/components/board/MonthLanes";
+import { dateGate, gateOf, gateText } from "@/components/board/MonthLanes";
 import { showWorkspaceToast } from "@/lib/toast";
 import { modelForTier } from "@/lib/team/roles";
 import { startBatch, type StartPlan } from "@/lib/work/queue";
 import type { Worker } from "@/lib/work/workers";
-import { HOME_HREF, buddyTargetHref, emptyMonth, monthLabel, routeText, todayLabel } from "@/lib/home/derive";
+import { HOME_HREF, buddyTargetHref, emptyMonth, goalDueDate, monthLabel, routeText, todayLabel } from "@/lib/home/derive";
 import { HeroButton } from "@/components/HeroButton";
 import type { BackgroundItem, RouteTarget } from "@/lib/home/types";
 import { useBackground } from "@/lib/home/useBackground";
@@ -408,6 +408,12 @@ function HomeFrame({ account }: { account: Account }) {
     : empty ? { href: monthHref(empty), label: `${monthLabel(empty)}待敲定` } : null;
 
   // ---- 展示区 ----
+  // Task 详情里的验收时间点：挂着的项目目标的截止日（天枢里存的或 Mission 节点），没挂的退回 Mission 下一个验收时间点。
+  const taskGate = (task: { taskId: string; missionId: string }) => {
+    if (!work.plan) return null;
+    const due = goalDueDate(data.projects, task.taskId);
+    return gateText(due ? dateGate(work.plan, due) : gateOf(work.plan, task.missionId));
+  };
   // 本月计划里的 Task 带完成定义；之前月份没了结、挂在项目上的（B 的 work-home 才有）照项目上的目标拼。
   const planTask = (taskId: string): THomePlanTask | null => {
     const found = tasks.find((task) => task.taskId === taskId);
@@ -487,7 +493,7 @@ function HomeFrame({ account }: { account: Account }) {
         const project = projectOfTask(current.taskId);
         if (project) return projectView(project);
         const task = planTask(current.taskId);
-        if (task) return <TaskInfo task={task} mission={data.month.missions.find((entry) => entry.missionId === task.missionId)?.title ?? null} gate={work.plan ? gateText(gateOf(work.plan, task.missionId)) : null} go={go} />;
+        if (task) return <TaskInfo task={task} mission={data.month.missions.find((entry) => entry.missionId === task.missionId)?.title ?? null} gate={taskGate(task)} go={go} />;
         if (!api.ready) return <Missing loading={!api.planFailed} onRetry={api.planFailed ? () => void api.retryPlan() : undefined} />;
         // 不在本人的计划和项目上（别人的 Task：请你认可、飞书「请 X 看」；之前月份了结了的）：没有对话可看，去只读的详情（9.8、9.10）。
         return <ForeignTaskInfo key={current.taskId} taskId={current.taskId} go={go} redirect />;
@@ -497,7 +503,7 @@ function HomeFrame({ account }: { account: Account }) {
         if (!task && !api.ready) return <Missing loading={!api.planFailed} onRetry={api.planFailed ? () => void api.retryPlan() : undefined} />;
         if (!task) return <ForeignTaskInfo key={current.taskId} taskId={current.taskId} go={go} />;
         const mission = data.month.missions.find((entry) => entry.missionId === task.missionId)?.title ?? null;
-        return <TaskInfo task={task} mission={mission} gate={work.plan ? gateText(gateOf(work.plan, task.missionId)) : null} go={go} />;
+        return <TaskInfo task={task} mission={mission} gate={taskGate(task)} go={go} />;
       }
       case "card": return <CardSession key={current.id} cardId={current.id} embedded />;
       case "topic": return <TopicSession key={current.id} topicId={current.id} embedded />;

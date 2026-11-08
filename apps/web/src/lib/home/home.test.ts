@@ -4,7 +4,7 @@ import type { TLocalSessionSummary } from "@/lib/local/runner";
 import { toWorker, type Worker } from "@/lib/work/workers";
 import type { MemberNotification } from "@/components/member/useMemberHome";
 import {
-  deriveFeed, deriveWorkHome, duration, gateLabel, toSubSession, groupBackground, inScope, localBackground, mergeBackground, emptyMonth, queueText, routeText, sortWaiting, statusLine, waitingHref, workerBackground,
+  deriveFeed, deriveWorkHome, duration, gateLabel, taskGateLabel, toSubSession, groupBackground, inScope, localBackground, mergeBackground, emptyMonth, queueText, routeText, sortWaiting, statusLine, waitingHref, workerBackground,
 } from "./derive";
 import type { BackgroundItem, WaitingItem } from "./types";
 import type { CardItem } from "@/lib/board/cards";
@@ -80,6 +80,10 @@ describe("新首页的数据（B 的 work-home 没上时照契约的形状拼）
     expect(project.goals.map((goal) => [goal.dueDate, goal.criteriaTotal])).toEqual([["2026-11-30", 2], ["2026-11-30", 1]]);
     expect(gateLabel(plan, "m1")).toBe("11/20 验收");
     expect(gateLabel(plan, "m2")).toBeNull();
+    // 「本月」那一行：挂在项目上的照项目目标的截止日（天枢里存的），没挂的退回 Mission 下一个验收时间点。
+    const set = [{ goals: [{ taskId: "t9", dueDate: "2026-11-18" }] }];
+    expect(taskGateLabel(set, plan, { taskId: "t9", missionId: "m1" })).toBe("11/18 验收");
+    expect(taskGateLabel(set, plan, { taskId: "t8", missionId: "m1" })).toBe("11/20 验收");
     expect(project.goals[1]!.completedAt).not.toBeNull();
     expect(data.month.missions[0]!.tasks[1]!.completedAt).not.toBeNull();
     expect(data.other.subSessions).toEqual([expect.objectContaining({ id: "tp1", kind: "topic" })]);

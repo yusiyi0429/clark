@@ -28,6 +28,8 @@ export function gateOf(plan: THomePlanResponse, missionId: string): { date: stri
   const date = dates.find((value) => value >= plan.today) ?? dates[dates.length - 1];
   return date ? { date, left: daysBetween(plan.today, date) } : null;
 }
+/** 某个日期离今天还有几天（Task 自己的验收截止日用，同 gateOf 的写法）。 */
+export const dateGate = (plan: Pick<THomePlanResponse, "today">, date: string) => ({ date, left: daysBetween(plan.today, date) });
 export const gateText = (gate: { date: string; left: number } | null) =>
   gate ? `验收时间点 ${md(gate.date)} · ${gate.left > 0 ? `剩 ${gate.left} 天` : gate.left === 0 ? "就是今天" : `过了 ${-gate.left} 天`}` : null;
 
