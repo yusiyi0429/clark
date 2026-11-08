@@ -1,5 +1,6 @@
 import { Type, type Static } from "@sinclair/typebox";
 import { WorldAnchor } from "./meetingDecisions.js";
+import { BuddyPlan, BuddyUiEffect } from "./buddyActions.js";
 
 /**
  * 对话的 scope。project:<projectId> 是新首页的项目对话（本人和这个项目的那条伙伴对话，projects.ts；原来的 Task 管线并进来了），
@@ -219,6 +220,8 @@ const MeetingDraftPerson = Type.Object({ personId: Type.String({ minLength: 1 })
  * 卡上的状态（是否已发出、草稿进度）由界面按 id 读最新的对象，发出仍走各对象自己的 Action。href 是对象页面的地址。
  */
 export const ConversationCard = Type.Union([
+  /** 伙伴要发给同事的一句话（17.4 send_message）：本人在卡上看一眼、点「发出」才由天枢机器人转达（GET /api/me/buddy-messages/:draftId）。 */
+  Type.Object({ kind: Type.Literal("buddy_message"), draftId: Type.String({ format: "uuid" }) }, { additionalProperties: false }),
   /** 复盘草稿：摘要与「打开修改」。 */
   Type.Object({ kind: Type.Literal("review"), personalReviewId: Type.String({ minLength: 1 }), href: Type.String({ minLength: 1 }) }, { additionalProperties: false }),
   /** 周复盘草稿：摘要与「打开修改」。 */
@@ -281,6 +284,8 @@ export const ConversationMessage = Type.Object(
     memoryUsed: Type.Optional(Type.Array(Type.String())),
     /** 只在助手回答上：这一轮工具生成的卡（排在回答后面）。 */
     cards: Type.Optional(Type.Array(ConversationCard, { maxItems: 4 })),
+    /** 只在助手回答上：这一轮伙伴最后一张计划清单（17.4，见 buddyActions.ts 的 BuddyPlan）；没出清单的没有这个字段。 */
+    plan: Type.Optional(BuddyPlan),
     /** 只在助手回答上：这一轮跨对象读取的范围（最后一次）。 */
     readScope: Type.Optional(ReadScope),
     /** 只在本人的作答消息上：回答 Agent 提问的问答记录。 */
@@ -359,6 +364,18 @@ export const ConversationSseEvent = Type.Union([
     },
     { additionalProperties: false },
   ),
+  /**
+   * 伙伴的计划清单（17.4）：伙伴调 update_plan 时天枢插进这一轮；同一轮后一条取代前一条。collapsed=true 是本人中途发来新消息、这张清单收起。
+   */
+  Type.Object({ ...StreamBase, type: Type.Literal("plan"), plan: BuddyPlan }, { additionalProperties: false }),
+  /** 伙伴动作在界面上的效果（17.4）：切外观、打开某一处、刷新哪几块（见 buddyActions.ts 的 BuddyUiEffect）。动作做完时天枢插进这一轮。 */
+  Type.Object({ ...StreamBase, type: Type.Literal("ui"), ui: BuddyUiEffect }, { additionalProperties: false }),
+  /**
+   * 本人这条消息的回执（17.4，伙伴对话：scope 为 global 和 project:<id>）：delivered 天枢收下了（第一个勾），read 伙伴读到了（第二个勾）。
+   * 伙伴正在回上一轮时本人再发：不再回 409 TURN_IN_PROGRESS，天枢先收下（delivered），停掉上一轮（上一轮的流以 done aborted 结束，计划清单收起），
+   * 拿这条开新的一轮；新一轮伙伴开始回的那一刻是 read。没在回复时发的，两个几乎同时到。这两帧都在这条消息自己的响应流里，排在最前面。
+   */
+  Type.Object({ ...StreamBase, type: Type.Literal("receipt"), state: Type.Union([Type.Literal("delivered"), Type.Literal("read")]) }, { additionalProperties: false }),
   /** 跨对象读取的范围标签（三层取用）：界面显示成可以点开调整的标签；同一轮后一条取代前一条。 */
   Type.Object({ ...StreamBase, type: Type.Literal("scope"), label: ReadScope.properties.label, params: ReadScopeParams, choices: ReadScope.properties.choices }, { additionalProperties: false }),
   /** 本轮档位：快答 / 检索问答 / 深度；检索问答与深度档带一句开场说明（notice），界面先显示它和预计用时。 */
