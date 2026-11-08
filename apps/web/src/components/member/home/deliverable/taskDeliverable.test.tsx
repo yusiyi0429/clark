@@ -92,11 +92,11 @@ describe("Task 交付物面板", () => {
     expect(html).toContain("data-new-item");
   });
 
-  it("参考评审在跑：收成一行「参考评审 · 评审中」，交付等它跑完", () => {
+  it("参考评审在跑：收成一行「参考评审 · 评审中」，交付等它跑完；交付旁边不再另写一句「参考评审中」（新首页设计 5.4.7 删掉 .hint）", () => {
     const html = render(deliverable({ versions: [version({ review: review({ status: "running", phase: { step: 3, total: 4, label: "对照第 2 条" }, criteria: [], score: null, met: 0, total: 0 }) })] }));
     expect(text(html)).toContain("参考评审 · 评审中");
     expect(html).not.toMatch(/data-state="now"/);
-    expect(text(html)).toContain("参考评审中");
+    expect(text(html).replace("参考评审 · 评审中", "")).not.toContain("参考评审中");
     expect(button(html, "交付")).toMatch(/disabled/);
   });
 
@@ -265,6 +265,15 @@ describe("约定与对表", () => {
     expect(text(item(reader, 1))).toContain("要杨主任确认");
   });
 
+  it("延续来的约定（draftFrom）：标题行「延续来的约定」，能改的人旁边「确认」；不是草稿时没有", () => {
+    const draft = render(deliverable({ versions: [version()] }), pact({ agreement: agreement({ draftFrom: "old-task", source: "tianshu" }) }));
+    expect(draft).toContain('data-testid="agreement-draft"');
+    expect(button(draft, "确认")).not.toBeNull();
+    const readOnly = render(deliverable({ versions: [version()] }), pact({ agreement: agreement({ draftFrom: "old-task", canEdit: false }) }));
+    expect(button(readOnly, "确认")).toBeNull();
+    expect(render(deliverable({ versions: [version()] }), pact({ agreement: agreement() }))).not.toContain("延续来的约定");
+  });
+
   it("标准改过：标题行小标「标准改过」，对表的提示里也有那一句", () => {
     const html = render(deliverable({ versions: [version()] }), pact({ agreement: agreement({ basisChanged: true, source: "tianshu" }),
       check: check({ notices: [{ code: "basis_changed", text: "本体里这个 Task 的标准改过，约定是照旧标准写的。" }] }) }));
@@ -335,5 +344,37 @@ describe("格式与校验", () => {
     expect(normalizeLink(" https://example.com/a ")).toBe("https://example.com/a");
     expect(normalizeLink("ftp://example.com")).toBeNull();
     expect(normalizeLink("不是链接")).toBeNull();
+  });
+});
+
+describe("Task 详情的样子（新首页设计 5.4.7）", () => {
+  it("单条标准：达到是勾、未达到是叉、部分达到是行尾的中性 chip；不画实心圆盘", () => {
+    const rows = [
+      { ...review().criteria[0]!, verdict: "met" as const },
+      { ...review().criteria[1]!, verdict: "unmet" as const },
+      { index: 3, text: "第三条", verdict: "partial" as const, reason: "", evidence: null, fix: null, dissent: null },
+    ];
+    const list = renderToStaticMarkup(<CriteriaList title="验收标准" texts={[...criteria, "第三条"]} results={rows} canDissent={false} onDissent={async () => null} />);
+    const lis = list.match(/<li[^>]*>.*?<\/li>/g) ?? [];
+    expect(lis[0]).toContain('aria-label="达到"');
+    expect(lis[1]).toContain('aria-label="未达到"');
+    expect(text(lis[2] ?? "")).toContain("部分达到");
+    expect(lis[2]).not.toContain('aria-label="达到"');
+    expect(list).not.toContain("linear-gradient");
+  });
+
+  it("放置区不写支持哪些格式；读的时候是一颗转圈，不是闪光骨架", () => {
+    expect(text(render(deliverable()))).not.toContain("PDF · Word");
+    state.data = null;
+    const loading = renderToStaticMarkup(<TaskDeliverable task={task} />);
+    expect(loading).toContain('aria-label="加载中"');
+    expect(loading).toContain("lucide-loader-circle");
+  });
+
+  it("按钮都是 HeroButton：交付是主按钮，上传新版本、说说现状是次按钮", () => {
+    const html = render(deliverable({ versions: [version()] }));
+    expect(button(html, "交付")).toMatch(/button--primary/);
+    expect(button(html, "上传新版本")).toMatch(/button--tertiary/);
+    expect(button(html, "说说现状")).toMatch(/button--tertiary/);
   });
 });

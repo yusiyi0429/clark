@@ -11,8 +11,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Button } from "ts-design/primitives";
-import { Check, ChevronDown, Lock, RotateCcw } from "lucide-react";
+import { Check, ChevronDown, LoaderCircle, Lock, RotateCcw } from "lucide-react";
+import { HeroButton } from "@/components/HeroButton";
 import { browserApi } from "@/lib/api/client";
 import { StepList } from "@/components/steps/StepList";
 import { FOLDED_GROUPS, SOURCE_LABEL, shortDate, type ImportCandidate, type MemoryImport, type MemoryImportDetail } from "./memoryModel";
@@ -109,7 +109,7 @@ export function MemoryImportReview({ importId, onConfirmed, onDiscarded, classNa
   };
 
   if (!detail) {
-    return <div className={`${s.review} ${className ?? ""}`} aria-busy={!loadFailed}>{loadFailed ? <p className={s.error} role="alert">没读到</p> : <div className={s.skeleton}><i /><i /><i /></div>}</div>;
+    return <div className={`${s.review} ${className ?? ""}`} aria-busy={!loadFailed}>{loadFailed ? <p className={s.error} role="alert">没读到</p> : <div className={s.loading} role="status" aria-label="加载中"><LoaderCircle size={16} aria-hidden /></div>}</div>;
   }
 
   const toggle = (id: string, on: boolean) => setChecked((current) => {
@@ -130,10 +130,10 @@ export function MemoryImportReview({ importId, onConfirmed, onDiscarded, classNa
 
   return (
     <div className={`${s.review} ${className ?? ""}`} data-import-status={detail.status}>
-      <div data-tone="light" className={s.steps}><StepList steps={detail.steps} /></div>
+      <div data-tone="ink" className={s.steps}><StepList steps={detail.steps} /></div>
       {detail.status === "failed" ? (
         <div className={s.reviewBar}>
-          <Button variant="ghost" className={s.ghost} isDisabled={busy} onPress={() => void retry()}><RotateCcw size={15} aria-hidden />重试</Button>
+          <HeroButton variant="tertiary" size="sm" isDisabled={busy} onPress={() => void retry()}><RotateCcw size={16} aria-hidden />重试</HeroButton>
         </div>
       ) : null}
       {detail.status === "confirmed" ? (
@@ -174,9 +174,9 @@ export function MemoryImportReview({ importId, onConfirmed, onDiscarded, classNa
           <div className={s.reviewBar}>
             {error ? <span className={s.error} role="alert">{error}</span> : null}
             {onDiscarded ? (
-              <Button variant="ghost" className={s.quiet} isDisabled={busy} onPress={() => void discard()}>{discardArmed ? "再按一次丢弃" : "丢弃"}</Button>
+              <HeroButton variant="ghost" size="sm" isDisabled={busy} onPress={() => void discard()}>{discardArmed ? "再按一次丢弃" : "丢弃"}</HeroButton>
             ) : null}
-            <Button variant="ghost" className={s.primary} isDisabled={busy} onPress={() => void confirm()}>确认导入 {importCount}</Button>
+            <HeroButton variant="primary" size="sm" isDisabled={busy} onPress={() => void confirm()}>确认导入 {importCount}</HeroButton>
           </div>
         </>
       ) : null}
@@ -220,7 +220,7 @@ function ConflictRow({ item, choice, onChoose }: { item: ImportCandidate; choice
           <small>{old?.memoryId ? "我的记忆" : "同批"} · {old ? shortDate(old.at) : ""}</small>
         </div>
         <div className={s.side} data-picked={choice === "use_new" ? "" : undefined}>
-          <span className={s.sideTag} data-new="">新</span>
+          <span className={s.sideTag}>新</span>
           <p>{item.text}</p>
           <small>{sourceMeta(item)}</small>
         </div>

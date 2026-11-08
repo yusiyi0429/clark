@@ -8,7 +8,7 @@ import { boardCards, isAgentCard, type CardItem } from "@/lib/board/cards";
 import { cardRole, modelForTier } from "@/lib/team/roles";
 import { KanbanCard } from "@/components/board/KanbanCard";
 import { ReviewDoc, isReview, reviewText, splitSections } from "@/components/topics/Review";
-import { Diff, Proposals, changedFields } from "./TeamPage";
+import { Diff, Proposals, changedFields } from "@/components/home/pages/RolesPage";
 
 const base: Omit<TTaskView, "card"> = {
   id: "c1", version: 1, title: "把看板接上", status: "not_started", source: "self", startDate: null, dueDate: null, doneDefinition: "做完", mission: null, waitingOn: null,
@@ -27,7 +27,7 @@ describe("岗位页", () => {
   };
 
   it("待你确认：每条有采纳、不要，写明哪个岗位、哪一段、为什么、因为哪张卡", () => {
-    const html = renderToStaticMarkup(<Proposals proposals={[proposal]} onDecided={vi.fn()} />);
+    const html = renderToStaticMarkup(<Proposals proposals={[proposal]} go={vi.fn()} onDecided={vi.fn()} />);
     for (const text of ["待你确认", "开发", "做法", "验收被推翻：没有能核对的证据", "接本机", "采纳", "不要", "看改动"]) expect(html).toContain(text);
   });
 

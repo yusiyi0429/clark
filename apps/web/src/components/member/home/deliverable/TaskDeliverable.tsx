@@ -12,19 +12,22 @@
  * 列表写本体当前的标准（标准改过以后也是新的那句），点开参考评审时才换成评审时的原文和逐条判定。
  */
 import { useEffect, useState, type ReactNode } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, LoaderCircle } from "lucide-react";
 import type { THomePlanTask } from "@warmap/contracts";
 import { avatarInitial } from "@/components/AccountMenu";
+import { HeroButton } from "@/components/HeroButton";
 import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import { useTaskDeliverable } from "./useTaskDeliverable";
 import { useTaskAgreement } from "./useTaskAgreement";
-import { AgreementLine, BeyondScope, CheckLine, CheckSummary, Exclusions, agreementBody } from "./Agreement";
+import { AgreementLine, BeyondScope, CheckLine, CheckSummary, DraftAgreement, Exclusions, agreementBody } from "./Agreement";
 import { ReviewHeader } from "./ReviewHeader";
 import { CriteriaList } from "./CriteriaList";
 import { VersionItems } from "./VersionItems";
 import { DeliverableComposer } from "./DeliverableComposer";
 import { VersionNote } from "./VersionNote";
 import d from "@/styles/task-deliverable.module.css";
+
+const ICON = { size: 16, strokeWidth: 1.8 } as const;
 
 type Composer = "files" | "statement" | null;
 
@@ -56,10 +59,10 @@ export function TaskDeliverable({ task, activities, activityCount = 0, newItem, 
   useEffect(() => { if (checkShown) void runCheck(); }, [latestKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const items = activities === undefined ? null : (
-    <div className={d.fold}>
+    <div>
       <div className={d.foldHead}>
         <button type="button" className={d.foldToggle} aria-expanded={itemsOpen} onClick={() => setItemsOpen((open) => !open)}>
-          <ChevronRight size={14} aria-hidden="true" />我的事项 {activityCount}
+          <ChevronRight {...ICON} aria-hidden="true" />我的事项 {activityCount}
         </button>
         {newItem}
       </div>
@@ -68,7 +71,7 @@ export function TaskDeliverable({ task, activities, activityCount = 0, newItem, 
   );
 
   if (!data) {
-    return <div className={d.panel} data-plan-task={task.taskId} aria-busy={!api.error}>{api.error ? <p className={d.error} role="alert">{api.error}</p> : <div className={d.loading} aria-hidden="true" />}{items}</div>;
+    return <div className={d.panel} data-plan-task={task.taskId} aria-busy={!api.error}>{api.error ? <p className={d.error} role="alert">{api.error}</p> : <div className={d.loading} role="status" aria-label="加载中"><LoaderCircle {...ICON} aria-hidden="true" /></div>}{items}</div>;
   }
 
   const latest = data.versions[0] ?? null;
@@ -115,7 +118,7 @@ export function TaskDeliverable({ task, activities, activityCount = 0, newItem, 
 
         {referenceLabel ? (
           <button type="button" className={d.referenceToggle} aria-expanded={referenceOpen} onClick={() => setReferenceOpen((open) => !open)}>
-            <ChevronRight size={14} aria-hidden="true" />参考评审 · {referenceLabel}
+            <ChevronRight {...ICON} aria-hidden="true" />参考评审 · {referenceLabel}
           </button>
         ) : null}
         {referenceOpen && selected && shown ? (
@@ -129,8 +132,9 @@ export function TaskDeliverable({ task, activities, activityCount = 0, newItem, 
           onDissent={async (index, reason) => (selected ? result(await api.dissent(selected.id, index, reason)) : null)}
           tools={<>
             {agreement?.basisChanged ? <span className={d.changed}>标准改过</span> : null}
+            {agreement ? <DraftAgreement agreement={agreement} onConfirm={pact.save} /> : null}
             <span className={d.grow} />
-            <button type="button" className={d.plain} disabled={pact.checking} onClick={() => void runCheck()}>{pact.checking ? "对表中…" : "对表"}</button>
+            <HeroButton variant="tertiary" size="sm" isDisabled={pact.checking} onPress={() => void runCheck()}>{pact.checking ? "对表中…" : "对表"}</HeroButton>
           </>}
           lead={<>
             {pact.checkError ? <p className={d.error} role="alert">{pact.checkError}</p> : null}
@@ -168,13 +172,12 @@ export function TaskDeliverable({ task, activities, activityCount = 0, newItem, 
 
         {data.canEdit && latest && !composing ? (
           <div className={d.actions}>
-            <button type="button" className={d.plain} onClick={() => { setComposer("files"); setPicked(null); }}>上传新版本</button>
-            <button type="button" className={d.plain} onClick={() => { setComposer("statement"); setPicked(null); }}>说说现状</button>
+            <HeroButton variant="tertiary" size="sm" onPress={() => { setComposer("files"); setPicked(null); }}>上传新版本</HeroButton>
+            <HeroButton variant="tertiary" size="sm" onPress={() => { setComposer("statement"); setPicked(null); }}>说说现状</HeroButton>
             <span className={d.grow} />
-            {!latest.deliveredAt ? <>
-              {reviewing ? <span className={d.hint}>参考评审中</span> : null}
-              <button type="button" className={d.primary} disabled={reviewing || delivering} onClick={() => void deliver()}>{delivering ? "正在交付…" : "交付"}</button>
-            </> : null}
+            {!latest.deliveredAt ? (
+              <HeroButton variant="primary" size="sm" isDisabled={reviewing || delivering} onPress={() => void deliver()}>{delivering ? "正在交付…" : "交付"}</HeroButton>
+            ) : null}
           </div>
         ) : null}
       </> : null}

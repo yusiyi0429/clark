@@ -15,7 +15,8 @@ import { readBuddyAuthority, readBuddyLog, readTrash, restoreTrash, saveBuddyAut
 import { emitBuddyUi, useBuddyUi } from "@/lib/buddy/uiEvent";
 import { browserApi } from "@/lib/api/client";
 import { relativeDayTime } from "@/lib/companyTime";
-import s from "@/styles/v2-local.module.css";
+import { Row, Section, SwitchRow } from "./pages/parts";
+import p from "@/styles/home-pages.module.css";
 
 export function BuddyAuthoritySection() {
   const [authority, setAuthority] = useState<TBuddyAuthority["authority"] | null>(null);
@@ -31,17 +32,11 @@ export function BuddyAuthoritySection() {
     void saveBuddyAuthority(next).catch((error: unknown) => { setAuthority(previous); setFailed(failureOf(error, () => toggle(on))); });
   };
   return (
-    <section className={s.section} aria-label="伙伴" data-testid="pref-buddy">
-      <p className={s.lab}>伙伴</p>
-      {authority ? (
-        <label className={s.toggle}>
-          <input type="checkbox" checked={authority === "full"} onChange={(event) => toggle(event.target.checked)} data-testid="buddy-authority" />
-          <span>代我做事</span>
-        </label>
-      ) : null}
-      {failed ? <FailedLine inline {...failed} /> : null}
+    <Section title="伙伴" testId="pref-buddy">
+      {authority ? <ul className={p.rows}><SwitchRow name="代我做事" checked={authority === "full"} onChange={toggle} testId="buddy-authority" /></ul> : null}
+      {failed ? <FailedLine {...failed} /> : null}
       <BuddyLog />
-    </section>
+    </Section>
   );
 }
 
@@ -67,18 +62,16 @@ export function BuddyLog() {
 
 export function BuddyLogList({ entries, problem, onUndo }: { entries: TBuddyAuditEntry[]; problem: { id: string; text: string } | null; onUndo: (entry: TBuddyAuditEntry) => void }) {
   return (
-    <div className={s.block} aria-label="伙伴做过的事" data-testid="buddy-log">
+    <ul className={p.rows} aria-label="伙伴做过的事" data-testid="buddy-log">
       {entries.map((entry) => (
-        <div key={entry.id} className={s.line}>
-          <span>{entry.summary}</span>
-          <small className={s.faint}>{relativeDayTime(entry.at)}</small>
-          <span className={s.grow} />
-          {problem?.id === entry.id ? <span className={s.error}>{problem.text}</span> : null}
-          {entry.undoneAt ? <span className={s.state}>已撤销</span>
-            : entry.undoable ? <HeroButton variant="ghost" size="sm" onPress={() => onUndo(entry)}>撤销</HeroButton> : null}
-        </div>
+        <Row key={entry.id} name={entry.summary} sub={relativeDayTime(entry.at)}
+          action={<>
+            {problem?.id === entry.id ? <span className={p.error}>{problem.text}</span> : null}
+            {entry.undoneAt ? <span className={p.state}>已撤销</span>
+              : entry.undoable ? <HeroButton variant="tertiary" size="sm" onPress={() => onUndo(entry)}>撤销</HeroButton> : null}
+          </>} />
       ))}
-    </div>
+    </ul>
   );
 }
 
@@ -94,19 +87,16 @@ export function TrashSection() {
     void restoreTrash(item).then(() => setItems((current) => current.filter((entry) => entry.id !== item.id)), () => setFailed(item.id));
   };
   return (
-    <section className={s.section} aria-label="回收站" data-testid="pref-trash">
-      <p className={s.lab}>回收站</p>
-      <div className={s.block}>
+    <Section title="回收站" testId="pref-trash">
+      <ul className={p.rows}>
         {items.map((item) => (
-          <div key={`${item.kind}:${item.id}`} className={s.line}>
-            <span>{item.title}</span>
-            <small className={s.faint}>{relativeDayTime(item.deletedAt)}</small>
-            <span className={s.grow} />
-            {failed === item.id ? <span className={s.error}>失败</span> : null}
-            <HeroButton variant="ghost" size="sm" onPress={() => restore(item)}>{failed === item.id ? "重试" : "恢复"}</HeroButton>
-          </div>
+          <Row key={`${item.kind}:${item.id}`} name={item.title} sub={relativeDayTime(item.deletedAt)}
+            action={<>
+              {failed === item.id ? <span className={p.error}>失败</span> : null}
+              <HeroButton variant="tertiary" size="sm" onPress={() => restore(item)}>{failed === item.id ? "重试" : "恢复"}</HeroButton>
+            </>} />
         ))}
-      </div>
-    </section>
+      </ul>
+    </Section>
   );
 }
