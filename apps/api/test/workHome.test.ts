@@ -183,11 +183,11 @@ describe("新首页", { timeout: 30_000 }, () => {
       const projectId = projectOf(body).projectId;
       const byId = new Map(body.waiting.map((item: { id: string }) => [item.id, item]));
       // 本机那几种（批准、回复）在那台电脑上就地答，带设备名；没截止、不是别人请你、不是月份。
-      const local = { answer: "inline_local", deviceName: "我的电脑", dueAt: null, person: null, month: null, question: null, permission: null };
+      const local = { answer: "inline_local", deviceName: "我的电脑", letter: null, dueAt: null, person: null, month: null, question: null, permission: null };
       // 子会话的提问和批准由项目对话转达（14.3）：落在项目对话里那个框上（focus），来源只写项目名。
       expect(byId.get(`approval:card:${ids["等批准"]}`)).toEqual({ id: `approval:card:${ids["等批准"]}`, kind: "approval", title: "等你批准", source: "内部版上线",
         at: "2026-11-06T01:10:00.000Z", open: { kind: "project", id: projectId, focus: { sessionId: approval, requestId: null } }, taskId: "task-open", projectId,
-        sessionId: approval, deviceId: laptop.device, ...local });
+        sessionId: approval, deviceId: laptop.device, ...local, letter: "A" });
       // 在问本人：标题是第一个问题的原话，带原样的提问（就地答）。规划员在它拆的 Task 挂的项目里。
       expect(byId.get(`question:plan:${planner}`)).toEqual({ id: `question:plan:${planner}`, kind: "question", title: "先做哪一页？", source: "内部版上线",
         at: "2026-11-06T01:20:00.000Z", open: { kind: "project", id: projectId, focus: { sessionId: planner, requestId: "q-1" } }, taskId: "task-open", projectId,
@@ -408,7 +408,7 @@ describe("新首页", { timeout: 30_000 }, () => {
       expect(sub("没报合回")).toMatchObject({ state: "done", waiting: null, merge: null });
       expect(body.waiting.find((item: { id: string }) => item.id === `merge:card:${ids["没合回"]}`)).toEqual({ id: `merge:card:${ids["没合回"]}`, kind: "merge",
         title: "没能自动合回", source: "没合回 · 对话质量达标", at: "2026-11-06T01:45:00.000Z", open: { kind: "card", id: ids["没合回"] }, taskId: "task-open",
-        projectId: projectOf(body).projectId, sessionId: runs["没合回"], deviceId: laptop.device, deviceName: "我的电脑", dueAt: null, answer: "inline_local", person: null, month: null, question: null, permission: null });
+        projectId: projectOf(body).projectId, sessionId: runs["没合回"], deviceId: laptop.device, deviceName: "我的电脑", letter: "B", dueAt: null, answer: "inline_local", person: null, month: null, question: null, permission: null });
       expect(body.waiting.filter((item: { kind: string }) => item.kind === "merge")).toHaveLength(1);
       // 今天验收通过的 3 件（等你合的也算验收过了），昨天的不算；等你里归这个项目的 1 条。
       expect(task.summary).toMatchObject({ done: 3, waiting: 1, doneToday: 3, needsYou: 1 });

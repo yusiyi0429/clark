@@ -139,6 +139,14 @@ async function readOnlyTurn() {
   }
   appendFileSync(TRACE, JSON.stringify({ readOnlyTurn: sid, turn: turns, tools, called: result ? name : null, result }) + "\n");
   if (!turn) return; // 途中被停下，这一轮已经结束
+  // 规划员的派活单被退回、要它先问本人（开拆前的检查，设计 18.11）：照 askOnReject 用「问用户」问，收到回答就结束这一轮
+  if (result?.isError && cfg.askOnReject) {
+    const input = { questions: cfg.askOnReject };
+    out({ type: "assistant", message: { content: [{ type: "tool_use", id: `toolu_ask${turns}`, name: "AskUserQuestion", input }] }, parent_tool_use_id: null });
+    turn = { permId: `ask-${turns}`, ask: true };
+    out({ type: "control_request", request_id: turn.permId, request: { subtype: "can_use_tool", tool_name: "AskUserQuestion", input, tool_use_id: `toolu_ask${turns}` } });
+    return;
+  }
   // 交完以后这一轮接下来的请求碰壁（现读配置）
   const after = readCfg().usageLimitAfterSubmit;
   if (result && after) { limitHit(after); return; }

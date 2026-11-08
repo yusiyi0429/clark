@@ -5066,6 +5066,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/projects/{projectId}/auto-relay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 答「等你」里的自动接力（18 节第 12 条）：continue 清零恢复，stop 收起那一条、等本人说话再恢复；没停着 409 */
+        post: operations["decideAutoRelay"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/session-commands/claim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 认领这台电脑上要对本机会话做的事（18 节第 10 条：项目主管线按字母转话、重开、回答问题、批准） */
+        post: operations["claimSessionCommands"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/session-commands/{id}/done": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 报做的结果（done / not_running / expired / failed）；不是这台电脑认领的 404 */
+        post: operations["finishSessionCommand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/work-home": {
         parameters: {
             query?: never;
@@ -6650,7 +6701,7 @@ export interface components {
                     }[];
                 };
                 kind?: "carried" | "trace";
-                via?: "feishu" | "wechat" | "buddy";
+                via?: "feishu" | "wechat" | "buddy" | "report";
                 running?: boolean;
                 meta?: {
                     issueId?: string;
@@ -16923,6 +16974,7 @@ export interface components {
                     sourceWords: string[];
                 };
             };
+            letter: string | null;
             brief: string | null;
             standards: string[];
             runs: {
@@ -17446,6 +17498,7 @@ export interface components {
                     permissionMode: ("auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions") | null;
                 } | null;
             };
+            letter: string | null;
             task: {
                 taskId: string;
                 name: string;
@@ -18202,6 +18255,7 @@ export interface components {
         SubSession: {
             id: string;
             kind: "card" | "topic";
+            letter: string | null;
             title: string;
             state: "queued" | "running" | "waiting" | "done" | "failed";
             waiting: ("approval" | "question" | "verdict" | "merge") | null;
@@ -18293,6 +18347,7 @@ export interface components {
             subSessions: {
                 id: string;
                 kind: "card" | "topic";
+                letter: string | null;
                 title: string;
                 state: "queued" | "running" | "waiting" | "done" | "failed";
                 waiting: ("approval" | "question" | "verdict" | "merge") | null;
@@ -18427,7 +18482,7 @@ export interface components {
         };
         WaitingItem: {
             id: string;
-            kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer" | "goal_changed";
+            kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer" | "goal_changed" | "auto_relay";
             title: string;
             source: string | null;
             at: string | null;
@@ -18446,6 +18501,7 @@ export interface components {
             sessionId: string | null;
             deviceId: string | null;
             deviceName: string | null;
+            letter: string | null;
             dueAt: string | null;
             answer: "inline" | "inline_local" | "open";
             person: {
@@ -18475,6 +18531,7 @@ export interface components {
                 toolName: string;
                 title: string;
                 outsidePaths: string[];
+                canAllowForSession?: boolean;
             } | null;
         };
         WorkHomeResponse: {
@@ -18521,6 +18578,7 @@ export interface components {
                 subSessions: {
                     id: string;
                     kind: "card" | "topic";
+                    letter: string | null;
                     title: string;
                     state: "queued" | "running" | "waiting" | "done" | "failed";
                     waiting: ("approval" | "question" | "verdict" | "merge") | null;
@@ -18640,6 +18698,7 @@ export interface components {
                 subSessions: {
                     id: string;
                     kind: "card" | "topic";
+                    letter: string | null;
                     title: string;
                     state: "queued" | "running" | "waiting" | "done" | "failed";
                     waiting: ("approval" | "question" | "verdict" | "merge") | null;
@@ -18679,7 +18738,7 @@ export interface components {
             };
             waiting: {
                 id: string;
-                kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer" | "goal_changed";
+                kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer" | "goal_changed" | "auto_relay";
                 title: string;
                 source: string | null;
                 at: string | null;
@@ -18698,6 +18757,7 @@ export interface components {
                 sessionId: string | null;
                 deviceId: string | null;
                 deviceName: string | null;
+                letter: string | null;
                 dueAt: string | null;
                 answer: "inline" | "inline_local" | "open";
                 person: {
@@ -18727,6 +18787,7 @@ export interface components {
                     toolName: string;
                     title: string;
                     outsidePaths: string[];
+                    canAllowForSession?: boolean;
                 } | null;
             }[];
         };
@@ -19017,6 +19078,7 @@ export interface components {
                 afterSequence: number | null;
             } | null;
             permissionMode: "auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions";
+            autoRelayLimit: number | null;
         };
         ProjectListResponse: {
             projects: {
@@ -19088,6 +19150,7 @@ export interface components {
                     afterSequence: number | null;
                 } | null;
                 permissionMode: "auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions";
+                autoRelayLimit: number | null;
             }[];
         };
         CreateProjectRequest: {
@@ -19098,6 +19161,7 @@ export interface components {
             name?: string;
             archived?: boolean;
             permissionMode?: "auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions";
+            autoRelayLimit?: number | null;
         };
         ProjectGoal: {
             taskId: string;
@@ -19180,6 +19244,7 @@ export interface components {
                     afterSequence: number | null;
                 } | null;
                 permissionMode: "auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions";
+                autoRelayLimit: number | null;
             };
             period: string;
             goals: {
@@ -19339,6 +19404,71 @@ export interface components {
             }[];
             answer: ("stop" | "keep") | null;
             answeredAt: string | null;
+        } | {
+            /** @constant */
+            kind: "sub_session_report";
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            at: string;
+            afterSequence: number | null;
+            sub: {
+                kind: "card" | "topic";
+                /** Format: uuid */
+                id: string;
+                letter: string;
+                title: string;
+            };
+            why: "turn_done" | "interrupted" | "held" | "error" | "killed";
+            summary: string | null;
+            blocker: string | null;
+            outputs: {
+                outputId: string | null;
+                title: string;
+                fileName: string;
+            }[];
+        } | {
+            /** @constant */
+            kind: "sub_session_decision";
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            at: string;
+            afterSequence: number | null;
+            sub: {
+                kind: "card" | "topic";
+                /** Format: uuid */
+                id: string;
+                letter: string;
+                title: string;
+            };
+            /** Format: uuid */
+            sessionId: string;
+            /** Format: uuid */
+            deviceId: string;
+            question: {
+                requestId: string;
+                questions: {
+                    question: string;
+                    header: string;
+                    options: {
+                        label: string;
+                        description: string;
+                    }[];
+                    multiSelect: boolean;
+                }[];
+                /** Format: date-time */
+                askedAt: string;
+            } | null;
+            permission: {
+                requestId: string;
+                toolName: string;
+                title: string;
+                outsidePaths: string[];
+                canAllowForSession?: boolean;
+            } | null;
+            status: "open" | "closed";
+            closedAt: string | null;
         };
         ProjectFeedResponse: {
             items: (({
@@ -19470,6 +19600,71 @@ export interface components {
                 }[];
                 answer: ("stop" | "keep") | null;
                 answeredAt: string | null;
+            } | {
+                /** @constant */
+                kind: "sub_session_report";
+                /** Format: uuid */
+                id: string;
+                /** Format: date-time */
+                at: string;
+                afterSequence: number | null;
+                sub: {
+                    kind: "card" | "topic";
+                    /** Format: uuid */
+                    id: string;
+                    letter: string;
+                    title: string;
+                };
+                why: "turn_done" | "interrupted" | "held" | "error" | "killed";
+                summary: string | null;
+                blocker: string | null;
+                outputs: {
+                    outputId: string | null;
+                    title: string;
+                    fileName: string;
+                }[];
+            } | {
+                /** @constant */
+                kind: "sub_session_decision";
+                /** Format: uuid */
+                id: string;
+                /** Format: date-time */
+                at: string;
+                afterSequence: number | null;
+                sub: {
+                    kind: "card" | "topic";
+                    /** Format: uuid */
+                    id: string;
+                    letter: string;
+                    title: string;
+                };
+                /** Format: uuid */
+                sessionId: string;
+                /** Format: uuid */
+                deviceId: string;
+                question: {
+                    requestId: string;
+                    questions: {
+                        question: string;
+                        header: string;
+                        options: {
+                            label: string;
+                            description: string;
+                        }[];
+                        multiSelect: boolean;
+                    }[];
+                    /** Format: date-time */
+                    askedAt: string;
+                } | null;
+                permission: {
+                    requestId: string;
+                    toolName: string;
+                    title: string;
+                    outsidePaths: string[];
+                    canAllowForSession?: boolean;
+                } | null;
+                status: "open" | "closed";
+                closedAt: string | null;
             })[];
         };
         ProjectBoardResponse: {
@@ -19688,6 +19883,83 @@ export interface components {
         AnswerGoalChangeRequest: {
             answer: "stop" | "keep";
         };
+        SubSessionFeedRef: {
+            kind: "card" | "topic";
+            /** Format: uuid */
+            id: string;
+            letter: string;
+            title: string;
+        };
+        ProjectSubSessionReportItem: {
+            /** @constant */
+            kind: "sub_session_report";
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            at: string;
+            afterSequence: number | null;
+            sub: {
+                kind: "card" | "topic";
+                /** Format: uuid */
+                id: string;
+                letter: string;
+                title: string;
+            };
+            why: "turn_done" | "interrupted" | "held" | "error" | "killed";
+            summary: string | null;
+            blocker: string | null;
+            outputs: {
+                outputId: string | null;
+                title: string;
+                fileName: string;
+            }[];
+        };
+        ProjectSubSessionDecisionItem: {
+            /** @constant */
+            kind: "sub_session_decision";
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            at: string;
+            afterSequence: number | null;
+            sub: {
+                kind: "card" | "topic";
+                /** Format: uuid */
+                id: string;
+                letter: string;
+                title: string;
+            };
+            /** Format: uuid */
+            sessionId: string;
+            /** Format: uuid */
+            deviceId: string;
+            question: {
+                requestId: string;
+                questions: {
+                    question: string;
+                    header: string;
+                    options: {
+                        label: string;
+                        description: string;
+                    }[];
+                    multiSelect: boolean;
+                }[];
+                /** Format: date-time */
+                askedAt: string;
+            } | null;
+            permission: {
+                requestId: string;
+                toolName: string;
+                title: string;
+                outsidePaths: string[];
+                canAllowForSession?: boolean;
+            } | null;
+            status: "open" | "closed";
+            closedAt: string | null;
+        };
+        AutoRelayDecisionRequest: {
+            decision: "continue" | "stop";
+        };
         ProjectHandoverItem: {
             /** @constant */
             kind: "handover";
@@ -19902,6 +20174,110 @@ export interface components {
             /** Format: uuid */
             deviceId: string;
             result: "stopped" | "not_running";
+        };
+        SessionCommand: {
+            /** @constant */
+            type: "message";
+            text: string;
+        } | {
+            /** @constant */
+            type: "answer";
+            requestId: string;
+            answer: {
+                choices: string[][];
+                text?: string;
+            };
+        } | {
+            /** @constant */
+            type: "permission";
+            requestId: string;
+            decision: {
+                decision: "allow" | "deny";
+                message?: string;
+                allowForSession?: boolean;
+            };
+        };
+        SessionCommandView: {
+            /** Format: uuid */
+            id: string;
+            kind: "card" | "topic";
+            /** Format: uuid */
+            subSessionId: string;
+            /** Format: uuid */
+            sessionId: string;
+            /** Format: uuid */
+            deviceId: string;
+            /** Format: date-time */
+            requestedAt: string;
+            command: {
+                /** @constant */
+                type: "message";
+                text: string;
+            } | {
+                /** @constant */
+                type: "answer";
+                requestId: string;
+                answer: {
+                    choices: string[][];
+                    text?: string;
+                };
+            } | {
+                /** @constant */
+                type: "permission";
+                requestId: string;
+                decision: {
+                    decision: "allow" | "deny";
+                    message?: string;
+                    allowForSession?: boolean;
+                };
+            };
+        };
+        ClaimSessionCommandsRequest: {
+            /** Format: uuid */
+            deviceId: string;
+        };
+        ClaimSessionCommandsResponse: {
+            commands: {
+                /** Format: uuid */
+                id: string;
+                kind: "card" | "topic";
+                /** Format: uuid */
+                subSessionId: string;
+                /** Format: uuid */
+                sessionId: string;
+                /** Format: uuid */
+                deviceId: string;
+                /** Format: date-time */
+                requestedAt: string;
+                command: {
+                    /** @constant */
+                    type: "message";
+                    text: string;
+                } | {
+                    /** @constant */
+                    type: "answer";
+                    requestId: string;
+                    answer: {
+                        choices: string[][];
+                        text?: string;
+                    };
+                } | {
+                    /** @constant */
+                    type: "permission";
+                    requestId: string;
+                    decision: {
+                        decision: "allow" | "deny";
+                        message?: string;
+                        allowForSession?: boolean;
+                    };
+                };
+            }[];
+        };
+        SessionCommandDoneRequest: {
+            /** Format: uuid */
+            deviceId: string;
+            result: "done" | "not_running" | "expired" | "failed";
+            message?: string;
         };
         BuddyAuthority: {
             authority: "none" | "full";
@@ -37523,6 +37899,177 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["SessionStopDoneRequest"];
+            };
+        };
+        responses: {
+            /** @description 记下了 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    decideAutoRelay: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutoRelayDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description 记下了 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    claimSessionCommands: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClaimSessionCommandsRequest"];
+            };
+        };
+        responses: {
+            /** @description 要做的 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClaimSessionCommandsResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    finishSessionCommand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionCommandDoneRequest"];
             };
         };
         responses: {

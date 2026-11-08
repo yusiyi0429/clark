@@ -1,3 +1,4 @@
+import { letterOfSub } from "./subSessionLetters.js";
 import { randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import type { TProjectBoardResponse } from "@warmap/contracts";
@@ -182,7 +183,7 @@ export async function readCardDetail(q: Query, ownerId: string, id: string, name
   const handbacks = (await q("SELECT * FROM card_handbacks WHERE task_id=$1 ORDER BY attempt DESC", [id])).rows as HandbackRow[];
   const outputs = (await q("SELECT * FROM local_outputs WHERE task_id=$1 ORDER BY created_at DESC,id", [id])).rows as OutputRow[];
   const expected = await acceptanceExpectedSeconds(q);
-  return { task, brief: card.brief, standards: taskStandards(card.done_definition), runs: await runViews(q, await recentRuns(q, { taskId: id }, 5)),
+  return { task, letter: (await letterOfSub(q, "card", id))?.letter ?? null, brief: card.brief, standards: taskStandards(card.done_definition), runs: await runViews(q, await recentRuns(q, { taskId: id }, 5)),
     handbacks: handbacks.map((row) => handbackView(row, names, expected)), outputs: outputs.map(outputView) };
 }
 

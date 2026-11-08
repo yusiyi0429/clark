@@ -188,6 +188,8 @@ export const CardHandbackView = Type.Object({
  */
 export const CardDetailResponse = Type.Object({
   task: CardTaskView,
+  /** 卡在所属项目里的字母（18 节第 10 条，同 SubSession.letter，页头写在标题前）；不在项目里为 null。 */
+  letter: Nullable(Type.String({ pattern: "^[A-Z]{1,3}$" })),
   brief: Nullable(Type.String()),
   standards: Type.Array(Type.String()),
   runs: Type.Array(LocalRunView, { maxItems: 5 }),

@@ -1,11 +1,12 @@
 import { Type } from "@sinclair/typebox";
 import {
-  BuddyActionListResponse, BuddyActionRequest, BuddyActionResult, BuddyAuditEntry, BuddyAuditListResponse, BuddyAuthority, BuddyMessageDraft, ClaimSessionStopsRequest,
-  ClaimSessionStopsResponse, SessionStopDoneRequest, TrashListResponse, UpdateBuddyAuthorityRequest,
+  BuddyActionListResponse, BuddyActionRequest, BuddyActionResult, BuddyAuditEntry, BuddyAuditListResponse, BuddyAuthority, BuddyMessageDraft, ClaimSessionCommandsRequest,
+  ClaimSessionCommandsResponse, ClaimSessionStopsRequest, ClaimSessionStopsResponse, SessionCommandDoneRequest, SessionStopDoneRequest, TrashListResponse,
+  UpdateBuddyAuthorityRequest,
 } from "@warmap/contracts";
 import type { FastifyReply } from "fastify";
 import {
-  BuddyError, actionList, cancelMessage, claimStops, finishStop, listAudit, listTrash, readAuthority, readMessage, restoreTrash, runAction, sendMessage, undoAction,
+  BuddyError, actionList, cancelMessage, claimCommands, claimStops, conversationScope, finishCommand, finishStop, listAudit, listTrash, readAuthority, readMessage, restoreTrash, runAction, sendMessage, undoAction,
   writeAuthority, type BuddyDeps,
 } from "../buddyActions.js";
 import type { FeishuClient } from "../feishu/client.js";
@@ -82,16 +83,29 @@ export function registerBuddyActionRoutes(app: AppInstance, ctx: RouteContext, o
     (await finishStop(q, req.person!.personId, req.params.id, req.body.deviceId, req.body.result, ctx.now())) ? reply.status(204).send()
       : fail(reply, 404, "NOT_FOUND", "没有这台电脑认领的这一条"));
 
+  // 18 节第 10 条：项目主管线按字母转话、重开、回答、批准，网页在会话所在的电脑上认领后交给本机。
+  app.post("/api/me/session-commands/claim", { preHandler: requireMember, schema: { body: ClaimSessionCommandsRequest, response: { 200: ClaimSessionCommandsResponse } } },
+    async (req, reply) => {
+      const commands = await claimCommands(q, req.person!.personId, req.body.deviceId, ctx.now());
+      return commands ? { commands } : fail(reply, 404, "DEVICE_NOT_FOUND", "这台电脑没有配对或已经吊销");
+    });
+  app.post("/api/me/session-commands/:id/done", { preHandler: requireMember, schema: { params: idParams, body: SessionCommandDoneRequest } }, async (req, reply) =>
+    (await finishCommand(q, req.person!.personId, req.params.id, req.body.deviceId, req.body.result, req.body.message, ctx.now())) ? reply.status(204).send()
+      : fail(reply, 404, "NOT_FOUND", "没有这台电脑认领的这一条"));
+
   if (!env.internalChatToken) return;
   const owner = (header: unknown) =>
     typeof header === "string" && peopleDirectory.searchPeople(undefined).some((person) => person.personId === header) ? header : null;
-  app.get("/internal/me/buddy-actions", { onRequest: requireServiceToken(env.internalChatToken), schema: { response: { 200: BuddyActionListResponse } } },
-    async (req, reply) => {
-      const id = owner(req.headers["x-owner-id"]);
-      if (!id) return fail(reply, 404, "OWNER_NOT_FOUND", "提问人不在人员目录");
-      const authority = await readAuthority(q, id);
-      return { authority, actions: actionList(authority) };
-    });
+  app.get("/internal/me/buddy-actions", { onRequest: requireServiceToken(env.internalChatToken), schema: {
+    querystring: Type.Object({ conversationId: Type.Optional(Type.String({ minLength: 1 })) }), response: { 200: BuddyActionListResponse } } },
+  async (req, reply) => {
+    const id = owner(req.headers["x-owner-id"]);
+    if (!id) return fail(reply, 404, "OWNER_NOT_FOUND", "提问人不在人员目录");
+    const authority = await readAuthority(q, id);
+    // 带了对话：不是项目对话就不列只给项目对话的那几个（18 节第 10 条）；不带全列，执行时再拦。
+    const inProject = req.query.conversationId ? (await conversationScope(q, id, req.query.conversationId)).startsWith("project:") : undefined;
+    return { authority, actions: actionList(authority, inProject) };
+  });
   app.post("/internal/me/buddy-actions/:name", { onRequest: requireServiceToken(env.internalChatToken), schema: {
     params: Type.Object({ name: Type.String({ minLength: 1 }) }, { additionalProperties: false }), body: BuddyActionRequest, response: { 200: BuddyActionResult } } },
   async (req, reply) => {

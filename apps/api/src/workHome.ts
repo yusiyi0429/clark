@@ -23,6 +23,7 @@ import { CARD_PROJECT, goalsOf, ownProject, PROJECT_SCOPE_PREFIX, projectScope, 
 import { handedAway, openTransfers, transferView } from "./projectTransfers.js";
 import { syncProjects } from "./projectSync.js";
 import { criteriaMetCounts, type StoredMerge } from "./taskFeed.js";
+import { lettersFor } from "./subSessionLetters.js";
 
 /**
  * 新首页（契约 workHome.ts，设计《新首页_伙伴总管线与Task管线》第 2、4、7、10.3 节）：左栏的树（Mission → 本人负责的 Task → 子会话和自己做的事项）、「等你」、右栏的后台任务。
@@ -181,7 +182,7 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
     const { stage, wait, run, role } = view.card;
     const pass = passed.get(view.id);
     const merge = pass?.merge ? cardMerge(pass.merge) : null;
-    const base = { id: view.id, kind: "card" as const, title: view.title, role, sessionId: run?.id ?? null, deviceId: run?.deviceId ?? null,
+    const base = { id: view.id, kind: "card" as const, letter: null as string | null, title: view.title, role, sessionId: run?.id ?? null, deviceId: run?.deviceId ?? null,
       autoStart: autoStart.has(view.id), updatedAt: latest(view.updatedAt, run?.updatedAt), planTaskId: view.planTaskId,
       projectId: taskProject(view.planTaskId) ?? cardProject.get(view.id) ?? null, runUpdatedAt: run?.updatedAt ?? null,
       merge, acceptedAt: stage === "done" ? acceptedAt.get(view.id) ?? null : null, mergeRun: pass ? { sessionId: pass.run_id, deviceId: pass.device_id } : null,
@@ -216,7 +217,7 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
   for (const topic of topics) {
     const run = topicRuns.get(topic.id);
     const role = topic.role_id ? topicRoles.get(topic.role_id) : undefined;
-    const base = { id: topic.id, kind: "topic" as const, title: topic.title, role: role ? roleRef(role) : null, sessionId: run?.id ?? null, deviceId: run?.device_id ?? null,
+    const base = { id: topic.id, kind: "topic" as const, letter: null as string | null, title: topic.title, role: role ? roleRef(role) : null, sessionId: run?.id ?? null, deviceId: run?.device_id ?? null,
       autoStart: autoStart.has(topic.id), updatedAt: latest(topic.updated_at, run?.updated_at), planTaskId: topic.plan_task_id,
       projectId: taskProject(topic.plan_task_id) ?? topic.project_id, runUpdatedAt: run?.updated_at.toISOString() ?? null,
       merge: null, acceptedAt: null, mergeRun: null, ask: run?.ask ?? null };
@@ -226,6 +227,10 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
     const [state, waiting] = queueReason ? ["queued" as const, null] : run.state === "idle" && !askingQuestion(run) ? ["waiting" as const, null] : TOPIC_STATES[run.state];
     subs.push({ ...base, state, waiting, queueReason, holdUntil: holdUntil(queueReason, run.id) });
   }
+
+  // 字母（18 节第 10 条）：在项目里的子会话带它在那个项目里的字母，没编号的当场补上。
+  const letters = await lettersFor(q, subs.flatMap((sub) => sub.projectId ? [{ projectId: sub.projectId, kind: sub.kind, id: sub.id }] : []));
+  for (const sub of subs) sub.letter = sub.projectId ? letters.get(`${sub.kind}:${sub.id}`) ?? null : null;
 
   const order = (a: HomeSub, b: HomeSub) => STATE_ORDER.indexOf(a.state) - STATE_ORDER.indexOf(b.state) || b.updatedAt.localeCompare(a.updatedAt);
   const view = ({ planTaskId: _task, projectId: _project, runUpdatedAt: _at, acceptedAt: _accepted, mergeRun: _run, ask: _ask, ...sub }: HomeSub): TSubSession => sub;

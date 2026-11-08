@@ -1,6 +1,8 @@
+import { decideAutoRelay } from "../autoRelay.js";
+import { projectNotices } from "../subSessionReports.js";
 import type { FastifyReply } from "fastify";
 import { Type } from "@sinclair/typebox";
-import { AcceptCardDraftsRequest, AcceptCardDraftsResponse, AnswerGoalChangeRequest, ProjectGoalChangedItem, CardPlanBriefResponse, CardSplitRequestView, CreateProjectRequest, Project, ProjectBoardResponse,
+import { AcceptCardDraftsRequest, AcceptCardDraftsResponse, AnswerGoalChangeRequest, AutoRelayDecisionRequest, ProjectGoalChangedItem, CardPlanBriefResponse, CardSplitRequestView, CreateProjectRequest, Project, ProjectBoardResponse,
   ProjectDetailResponse, ProjectFeedResponse, ProjectGoalResponse, ProjectListResponse, ProjectPipelineResponse, RegisterCardSplitRequest, UpdateProjectRequest } from "@warmap/contracts";
 import { projectPlanBrief, registerProjectCardSplit } from "../cardSplits.js";
 import { answerGoalChange, goalChangeItems } from "../goalChanges.js";
@@ -106,7 +108,16 @@ export function registerProjectRoutes(app: AppInstance, ctx: RouteContext): void
         [goal.task_id, (await boardTask(open, goal.owner_id, goal.task_id).catch(() => null))?.criteria ?? []] as const)));
       const transfers = (await decidedTransfers(q, project.id)).map((row) => transferView(row, personDisplayNames(ctx.peopleDirectory)));
       // 月中 Task 改了或取消了的选项框（16.4）。
-      return readProjectFeed(q, await projectOwners(q, project.id), project.id, goals, criteria, { viewer: personId, transfers }, await goalChangeItems(q, project.id));
+      // 子会话停了、要介入的报告和决定卡（18 节第 10 条）。
+      return readProjectFeed(q, await projectOwners(q, project.id), project.id, goals, criteria, { viewer: personId, transfers },
+        [...await goalChangeItems(q, project.id), ...await projectNotices(q, project.id)]);
+    }));
+
+  // 自动接力停住了，「等你」里答继续还是停下（18 节第 12 条）。
+  app.post("/api/me/projects/:projectId/auto-relay", { preHandler: requireMember, schema: { params: projectParams, body: AutoRelayDecisionRequest } }, async (req, reply) =>
+    handle(reply, async () => {
+      await decideAutoRelay(q, req.person!.personId, req.params.projectId, req.body.decision);
+      return reply.status(204).send();
     }));
 
   app.post("/api/me/projects/:projectId/goal-changes/:id", { preHandler: requireMember, schema: { params: Type.Object({ projectId: Type.String({ minLength: 1 }),
