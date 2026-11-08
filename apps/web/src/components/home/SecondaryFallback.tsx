@@ -16,7 +16,7 @@ import { Preferences } from "./Preferences";
 export function SecondaryFallback({ page, account }: { page: PageKey; account: Account }) {
   switch (page) {
     case "profile": return <><AvatarEditor personId={account.personId ?? null} initial={avatarInitial(account.displayName)} onDone={() => undefined} /><PersonalProfileForm /></>;
-    case "buddy": return <BuddySettings onDone={() => undefined} />;
+    case "buddy": return <BuddySettings />;
     case "connections": return <><LocalSection person={linkPerson(account)} handheld={false} /><DevicesSection person={linkPerson(account)} /></>;
     case "preferences": return <Preferences />;
   }
