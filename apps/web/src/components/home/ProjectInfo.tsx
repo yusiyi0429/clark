@@ -4,6 +4,7 @@
  * 项目详情（新首页设计 16.3「详情」，替换 Task 详情的入口）。文档类页面（5.4.7）：
  * - 目标历史：每月一行，写月份、Task 名和判定（GET /api/me/projects/:projectId 的 goals：已完成、已停止、已延续；没了结的本月写「进行中」、之前月份写「未了结」）；
  * - 文件夹：这台电脑上的哪个文件夹（连接页加过的那些），能换、能不绑（本机程序 PUT /v1/projects/:projectId/folder）；
+ * - 自动接力上限（18.12）：连续自动接力多少轮停下来问本人，缺省 20，可以不限（PATCH autoRelayLimit，不限是 null）；
  * - 转交（16.7）：「转给…」发起一份（POST /api/me/projects/:projectId/transfers），准备中、等接手时能撤回；
  * - 改名、归档（归档的能取消），调 PATCH /api/me/projects/:projectId，没成写「失败 · 重试」；
  * - 当前那件 Task 的预算、完成标准、约定、交付物：沿用原来 Task 详情的样子（TaskBudget、TaskDeliverable）。
@@ -11,7 +12,7 @@
 import { useEffect, useState } from "react";
 import type { TProjectGoalVerdict } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
-import { readProject } from "@/lib/board/cloud";
+import { readProject, updateProject } from "@/lib/board/cloud";
 import { FailedLine, failureOf, type Failure } from "@/components/work/DecisionBox";
 import type { Person } from "@/lib/home/transfer";
 import { ArrowLeft } from "lucide-react";
@@ -49,19 +50,35 @@ function usePeople(me: string): Person[] {
 type HistoryRow = { taskId: string; period: string; name: string; verdict: TProjectGoalVerdict };
 const VERDICT: Record<Exclude<TProjectGoalVerdict, "open">, string> = { completed: "已完成", stopped: "已停止", continued: "已延续" };
 
-/** 目标历史：项目详情接口的（月份从近到远）；读不到（接口没上）时用首页数据里挂着的，做完了算已完成。 */
-function useHistory(project: Project): HistoryRow[] {
-  const [rows, setRows] = useState<{ id: string; rows: HistoryRow[] } | null>(null);
+/** 自动接力上限的几档（18.12）：缺省 20，null 是不限。 */
+const RELAY_LIMITS = [10, 20, 50, 100, null] as const;
+const DEFAULT_RELAY_LIMIT = 20;
+const relayText = (limit: number | null) => (limit === null ? "不限" : `${limit} 轮`);
+
+/**
+ * 项目详情接口读一次：目标历史（月份从近到远；读不到时用首页数据里挂着的，做完了算已完成）和自动接力上限（读不到时当缺省 20）。
+ * 改上限先改界面，没改成退回去。
+ */
+function useDetail(project: Project) {
+  const [detail, setDetail] = useState<{ id: string; rows: HistoryRow[]; limit: number | null } | null>(null);
   useEffect(() => {
     let alive = true;
-    void readProject(project.id).then((detail) => {
-      if (alive && detail) setRows({ id: project.id, rows: detail.goals.map((goal) => ({ taskId: goal.taskId, period: goal.period, name: goal.taskName, verdict: goal.verdict })) });
+    void readProject(project.id).then((data) => {
+      if (alive && data) setDetail({ id: project.id, limit: data.project.autoRelayLimit,
+        rows: data.goals.map((goal) => ({ taskId: goal.taskId, period: goal.period, name: goal.taskName, verdict: goal.verdict })) });
     }, () => undefined);
     return () => { alive = false; };
   }, [project.id]);
-  if (rows?.id === project.id) return rows.rows;
-  return [...project.goals].sort((a, b) => b.period.localeCompare(a.period))
+  const mine = detail?.id === project.id ? detail : null;
+  const history: HistoryRow[] = mine ? mine.rows : [...project.goals].sort((a, b) => b.period.localeCompare(a.period))
     .map((goal) => ({ taskId: goal.taskId, period: goal.period, name: goal.name, verdict: goal.completedAt ? "completed" : "open" }));
+  const limit = mine ? mine.limit : DEFAULT_RELAY_LIMIT;
+  const setLimit = async (next: number | null) => {
+    setDetail((prev) => (prev?.id === project.id ? { ...prev, limit: next } : prev));
+    try { await updateProject(project.id, { autoRelayLimit: next }); }
+    catch (error) { setDetail((prev) => (prev?.id === project.id ? { ...prev, limit } : prev)); throw error; }
+  };
+  return { history, limit, setLimit };
 }
 
 export function ProjectInfo({ project, period, go, actions, doneDefinitionOf, me }: {
@@ -80,7 +97,8 @@ export function ProjectInfo({ project, period, go, actions, doneDefinitionOf, me
   const local = useLocalRunner();
   const [name, setName] = useState(project.name);
   const [failed, setFailed] = useState<Failure | null>(null);
-  const history = useHistory(project);
+  const [relayFailed, setRelayFailed] = useState<Failure | null>(null);
+  const { history, limit, setLimit } = useDetail(project);
   const goal = mainGoal(project);
   const verdict = (row: HistoryRow) => (row.verdict !== "open" ? VERDICT[row.verdict] : row.period === period ? "进行中" : "未了结");
   const attempt = (run: () => Promise<unknown>) => {
@@ -123,6 +141,25 @@ export function ProjectInfo({ project, period, go, actions, doneDefinitionOf, me
                   </Dropdown.Menu>
                 </Dropdown.Popover>
               </Dropdown>
+            </div>
+          </section>
+          <section aria-label="自动接力上限" className={h.section}>
+            <p className={h.sectionTitle}>自动接力上限</p>
+            <div className={h.infoRow}>
+              <Dropdown>
+                <Dropdown.Trigger className={h.sendTo} data-testid="project-relay-limit"><b>{relayText(limit)}</b></Dropdown.Trigger>
+                <Dropdown.Popover placement="bottom start" offset={8} className={h.pop}>
+                  <Dropdown.Menu aria-label="自动接力上限" className={h.menuList} onAction={(key) => {
+                    const once = () => { setRelayFailed(null); void setLimit(key === "none" ? null : Number(key)).catch((error) => setRelayFailed(failureOf(error, once))); };
+                    once();
+                  }}>
+                    {RELAY_LIMITS.map((entry) => (
+                      <Dropdown.Item key={entry ?? "none"} id={entry === null ? "none" : String(entry)} textValue={relayText(entry)} className={h.menuItem}>{relayText(entry)}</Dropdown.Item>
+                    ))}
+                  </Dropdown.Menu>
+                </Dropdown.Popover>
+              </Dropdown>
+              {relayFailed ? <FailedLine inline {...relayFailed} /> : null}
             </div>
           </section>
           <section aria-label="名字" className={h.section}>
