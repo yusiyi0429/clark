@@ -102,6 +102,8 @@ class ClaudeRun implements AgentRun {
   private readonly eventFns: ((e: EventBody) => void)[] = [];
   private readonly exitFns: ((code: number | null) => void)[] = [];
   private readonly hostRequests = new Map<string, (r: Json) => void>();
+  /** 带编号发出、还没读到的话（等 command_lifecycle 回执）。 */
+  private readonly receipts = new Set<string>();
   /** broad：这一步越界，或「这张卡都允许」要放开的范围越界——这时不给本会话放行。 */
   private readonly permissions = new Map<string, { req: Json; broad: boolean }>();
   /** 在等本人回答的提问（AskUserQuestion）。 */
@@ -175,8 +177,9 @@ class ClaudeRun implements AgentRun {
     });
   }
 
-  send(text: string) {
-    this.write({ type: "user", message: { role: "user", content: text }, parent_tool_use_id: null, session_id: this.sessionId });
+  send(text: string, messageId?: string) {
+    if (messageId) this.receipts.add(messageId);
+    this.write({ type: "user", message: { role: "user", content: text }, parent_tool_use_id: null, session_id: this.sessionId, ...(messageId ? { uuid: messageId } : {}) });
   }
 
   async interrupt() {
@@ -374,6 +377,14 @@ class ClaudeRun implements AgentRun {
           const why = typeof ev.error_status === "number" ? `模型服务出错（HTTP ${ev.error_status}）` : "连不上模型服务（超时或拒绝连接）";
           this.emit({ type: "notice", level: "warn", code: "api_retry", text: `${why}，正在重试（第 ${Number(ev.attempt) || 1}/${Number(ev.max_retries) || "?"} 次）` });
         }
+        return;
+      }
+      case "command_lifecycle": {
+        // 带 uuid 发的话，Claude Code 回 queued（收下了）、started（放进对话，下一次模型请求就带着它）、completed / cancelled（11/08 实测 2.1.318）
+        const id = ev.command_uuid;
+        if (typeof id !== "string" || !this.receipts.has(id)) return;
+        if (ev.state === "queued") this.emit({ type: "receipt", messageId: id, state: "delivered" });
+        if (ev.state === "started") { this.receipts.delete(id); this.emit({ type: "receipt", messageId: id, state: "read" }); }
         return;
       }
       case "rate_limit_event": {

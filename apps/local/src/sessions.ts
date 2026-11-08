@@ -126,6 +126,8 @@ interface SessionRecord {
   passed: boolean | null;
   /** 验收员：验收交代里的本人原话（16.8），核对结论里的 sourceWordIssues。老记录没有这一项，按空的算。 */
   sourceWords?: string[];
+  /** 发给执行方、还没读到的话（17.4 回执）：web 是本人在网页上说的（要同步给云端）。进程没了还没读到的记 failed。老记录没有，按空的算。 */
+  unread?: { id: string; web: boolean }[];
   /** 这个会话里 Claude Code 自己开的后台任务（子 agent、后台命令），按开始的先后。 */
   background: TLocalBackgroundItem[];
   /** 停着等订阅额度恢复（新首页设计 11.2）：排着的不开始，做过的到点自动接着做。 */
@@ -278,6 +280,7 @@ export class SessionManager {
       this.records.set(rec.id, rec);
       // 上次没收尾的后台任务（本机程序没正常退出）：进程已不在，算被停了
       this.stopAllBackground(rec);
+      this.failUnread(rec); // 上次发出去还没读到的话：进程已不在，没读到
       // 本机程序重启时，上次的进程都已不在。排着的照原样排着；刚从队里拉起、还没开始的放回队里（位置不变）。
       if (rec.status === "starting" && rec.queuedMessage !== null) this.setStatus(rec, "queued", { reason: "本机程序重启，照原样排着" });
       else if (LIVE.includes(rec.status)) this.setStatus(rec, "exited", { reason: rec.hold ? HOLD_REASON : "本机程序重启，会话已停；再发一句话会接着做" });
@@ -301,7 +304,7 @@ export class SessionManager {
   private summary(rec: SessionRecord): TLocalSessionSummary {
     const {
       mcpSecret: _s, syncSeq: _q, outputs: _o, versionNumber: _v, lastVersion: _l, role: _r, critics: _c, queuedMessage: _m, queueOrder: _n,
-      parentId: _p, briefPending: _b, criteria: _cr, failStreak: _f, submitted: _sb, nudged: _nd, workspace, commit: _cm, after: _af, passed: _ps, sourceWords: _sw,
+      parentId: _p, briefPending: _b, criteria: _cr, failStreak: _f, submitted: _sb, nudged: _nd, workspace, commit: _cm, after: _af, passed: _ps, sourceWords: _sw, unread: _ur,
       background, hold, holdSince: _hs, modelTier: _mt, budgetKey: _bk, runSince: _rs, run, ...rest
     } = rec;
     const question = this.questions.get(rec.id);
@@ -451,9 +454,8 @@ export class SessionManager {
     }
     const text = rec.queuedMessage ?? "";
     rec.queuedMessage = null;
-    this.emit(rec, { type: "user_message", text, source: "initial" });
     const run = this.runs.get(rec.id)!;
-    run.send(text);
+    this.say(rec, run, text, { source: "initial" });
     this.setStatus(rec, "running");
     this.sendBudgetStop(rec, run); // 拉起途中预算用完了
   }
@@ -610,8 +612,7 @@ export class SessionManager {
     this.save(rec);
     this.emit(rec, { type: "status", status: "starting" });
     this.noteWorkspace(rec, place);
-    this.emit(rec, { type: "user_message", text: req.firstMessage, source: "initial" });
-    this.runs.get(rec.id)!.send(req.firstMessage);
+    this.say(rec, this.runs.get(rec.id)!, req.firstMessage, { source: "initial" });
     this.setStatus(rec, "running");
     return this.summary(rec);
   }
@@ -776,6 +777,13 @@ export class SessionManager {
       case "background":
         this.recordBackground(rec, e.item);
         break;
+      case "receipt": {
+        const entry = rec.unread?.find((u) => u.id === e.messageId);
+        if (!entry) break;
+        if (e.state !== "delivered") { rec.unread = rec.unread!.filter((u) => u !== entry); this.save(rec); }
+        if (entry.web) this.sync(rec, { type: "receipt", data: { messageId: e.messageId, state: e.state } });
+        break;
+      }
       case "question":
         // 执行方问本人：等你回复（不占位置），网页按问题和选项画按钮；后台子 agent 还有权限请求在等时仍是等你批准
         this.questions.set(rec.id, e.request);
@@ -848,6 +856,7 @@ export class SessionManager {
     const question = this.questions.get(rec.id);
     if (question) this.onAgentEvent(rec, { type: "question_resolved", requestId: question.requestId, choices: null, text: null });
     this.stopAllBackground(rec); // 进程没了，还在跑的后台任务也没了
+    this.failUnread(rec); // 发出去还没读到的话没了
     const killed = this.killed.delete(rec.id);
     const finished = this.finished.delete(rec.id) && !killed;
     this.proposed.delete(rec.id);
@@ -890,8 +899,13 @@ export class SessionManager {
     // 在等回答时说的一句就是回答（不选选项）
     const question = this.questions.get(id);
     if (question && req.kind !== "review" && (req.text || note)) {
-      if (saved.length) this.emit(rec, { type: "user_message", text: req.text ?? "", source: "web", attachments: saved, messageId });
       this.answerQuestion(id, question.requestId, { choices: question.questions.map(() => []), text: withNote(req.text ?? "") });
+      if (saved.length) {
+        // 回答直接交给执行方（不经它的排队）：收下即读到
+        this.emit(rec, { type: "user_message", text: req.text ?? "", source: "web", attachments: saved, messageId });
+        this.syncSaid(rec, messageId, req.text ?? "", saved);
+        for (const state of ["delivered", "read"] as const) this.receipt(rec, messageId, state, true);
+      }
       return { delivery: "next_step", messageId };
     }
     const said = req.text ?? "";
@@ -916,11 +930,43 @@ export class SessionManager {
     const flip = delivery !== "next_step" ? this.syncMultiAgent(rec, run) : null;
     if (flip) await flip;
     // 事件里是本人说的原话和附件；给执行方的那句接上附件在哪
-    this.emit(rec, { type: "user_message", text: req.kind === "review" ? text : said, source: "web", ...(saved.length ? { attachments: saved } : {}), messageId });
-    run.send(text);
-    if (delivery === "next_step") this.emit(rec, { type: "notice", level: "info", code: "interjection_next_step", text: "已送达，会在它下一步之前生效" });
+    this.say(rec, run, text, { source: "web", messageId, shown: req.kind === "review" ? text : said, attachments: saved });
+    if (delivery === "next_step") this.emit(rec, { type: "notice", level: "info", code: "interjection_next_step", text: "已送达，它做完这一步（或这一轮）后读到" });
     else this.setStatus(rec, "running");
     return { delivery, messageId };
+  }
+
+  /**
+   * 把一句话交给执行方并记下编号（17.4 回执）：事件里 user_message 带 messageId；执行方收下、读到时它报 receipt（onAgentEvent 记账、同步）。
+   * shown 是事件里显示的原话（插话时不含本机拼的附件路径），没有就用 text。本人在网页上说的（source web）同步给云端。
+   */
+  private say(rec: SessionRecord, run: AgentRun, text: string, o: { source: "initial" | "web"; messageId?: string; shown?: string; attachments?: TLocalSavedAttachment[] }) {
+    const messageId = o.messageId ?? randomUUID();
+    const web = o.source === "web";
+    this.emit(rec, { type: "user_message", text: o.shown ?? text, source: o.source, ...(o.attachments?.length ? { attachments: o.attachments } : {}), messageId });
+    if (web) this.syncSaid(rec, messageId, o.shown ?? text, o.attachments ?? []);
+    rec.unread = [...(rec.unread ?? []), { id: messageId, web }];
+    this.save(rec);
+    run.send(text, messageId);
+  }
+
+  private syncSaid(rec: SessionRecord, messageId: string, text: string, attachments: TLocalSavedAttachment[]) {
+    this.sync(rec, { type: "user_message", data: { messageId, text, ...(attachments.length ? { attachments: attachments.map((a) => a.name) } : {}) } });
+  }
+
+  /** 本机自己出的回执（回答提问收下即读到、进程没了算 failed）：记事件，本人说的同步给云端。 */
+  private receipt(rec: SessionRecord, messageId: string, state: "delivered" | "read" | "failed", web: boolean) {
+    this.emit(rec, { type: "receipt", messageId, state });
+    if (web) this.sync(rec, { type: "receipt", data: { messageId, state } });
+  }
+
+  /** 进程没了（退出、强停、本机程序重启）：还没读到的话都记 failed。 */
+  private failUnread(rec: SessionRecord) {
+    const left = rec.unread ?? [];
+    if (!left.length) return;
+    rec.unread = [];
+    for (const u of left) this.receipt(rec, u.id, "failed", u.web);
+    this.save(rec);
   }
 
   /** 还在排的：停下、强停都是取消，让它出队（不留进程，不能再续）。 */
