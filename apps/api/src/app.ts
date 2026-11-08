@@ -80,7 +80,9 @@ import {
   materialMultipartLimitError,
   type RequestContext,
   type RouteContext,
+  validSessionOf,
 } from "./routes/shared.js";
+import { sessionNeedsRenewal, sessionSetCookie } from "./session.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerMcpOAuthRoutes } from "./routes/mcpOAuth.js";
 import { registerCardRoutes } from "./routes/cards.js";
@@ -681,6 +683,14 @@ export async function buildApp({
   }
   // 每个请求的结构化日志上下文：handler 里补充 action/run 字段，onResponse 统一落一条。
   const requestContext = new WeakMap<FastifyRequest, RequestContext>();
+  // 用着就续期（session.ts 的 sessionNeedsRenewal）：这次请求核对过的会话签出来超过一小时，回应带一张有效期重新算满的新会话。
+  // 这次回应自己发了 Set-Cookie 的（登录、切工作台、退出登录、改口令）不动。
+  app.addHook("onSend", async (req, reply, payload) => {
+    const session = validSessionOf(req);
+    if (session && !reply.hasHeader("set-cookie") && sessionNeedsRenewal(session.exp, env.sessionMaxAgeSeconds))
+      reply.header("set-cookie", sessionSetCookie(env.sessionSecret, env.sessionMaxAgeSeconds, { pid: session.pid, v: session.v, ...(session.view ? { view: session.view } : {}) }));
+    return payload;
+  });
   // 使用周报的「哪天用过」：登录后发问或改动（非 GET 的请求；上手步骤上报本身不算），一人一天记一次。页面打开、轮询不算。
   const usage = createUsageTracker(q, now);
   // 本人在网页上打开着天枢（浏览器会话的请求，含轮询）：飞书推送据此判断本人在不在天枢里（homePush.ts）。

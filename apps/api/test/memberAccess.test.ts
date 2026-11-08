@@ -51,7 +51,9 @@ describe("登录 ID 与初始码", () => {
 describe("会话令牌", () => {
   it("只带 pid 与凭据版本；过期、篡改、旧格式都读不出来", () => {
     const token = createSessionToken("s", 60, { pid: "sun-mingze", v: 3 });
-    expect(readSessionToken("s", token)).toEqual({ pid: "sun-mingze", v: 3 });
+    // 另带到期时间（秒），续期按它算。
+    expect(readSessionToken("s", token)).toEqual({ pid: "sun-mingze", v: 3, exp: expect.any(Number) });
+    expect(readSessionToken("s", token)!.exp - Math.floor(Date.now() / 1000)).toBeLessThanOrEqual(60);
     expect(readSessionToken("s", createSessionToken("s", -1, { pid: "sun-mingze", v: 3 }))).toBeNull();
     expect(readSessionToken("s", `${token.slice(0, -2)}xx`)).toBeNull();
     expect(readSessionToken("other", token)).toBeNull();
