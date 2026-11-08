@@ -427,7 +427,7 @@ function HomeFrame({ account }: { account: Account }) {
   const parent = useMemo(() => (owner ? (
     <button type="button" className={h.crumb} onClick={() => go(projectHref(owner.id))}>{owner.name} / </button>
   ) : null), [owner, go]);
-  // 标题前面的字母方块（18.10），和左栏那一行同一个字母；「其他」里的在那一组里排。
+  // 标题前面的字母方块（18.10），和左栏那一行同一个字母（照云端 SubSession.letter）。
   const siblings = subId ? owner?.subSessions ?? (data.other.subSessions.some((sub) => sub.id === subId) ? data.other.subSessions : null) : null;
   const letterText = siblings && (view.kind === "card" || view.kind === "topic") ? subLetters(siblings, cardAt).get(subKey({ kind: view.kind, id: view.id })) ?? null : null;
   const letter = useMemo(() => (letterText ? <SubLetter letter={letterText} inline /> : null), [letterText]);

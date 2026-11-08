@@ -100,6 +100,9 @@ describe("子会话的字母和状态点（18.10）", () => {
     const at = new Map([["c1", "2026-11-07T01:00:00.001Z"], ["c2", "2026-11-07T01:00:00.002Z"]]);
     const list = [{ id: "c2", kind: "card", updatedAt: "a" }, { id: "c1", kind: "card", updatedAt: "b" }] as unknown as SubSession[];
     expect([...subLetters(list, at)]).toEqual([["card:c1", "A"], ["card:c2", "B"]]);
+    // 云端带了字母就照它的（删过的不复用，可以跳号）；null（「其他」里的）不画。
+    const fromCloud = [{ id: "c1", kind: "card", letter: "A", updatedAt: "a" }, { id: "c3", kind: "card", letter: "C", updatedAt: "b" }, { id: "t1", kind: "topic", letter: null, updatedAt: "c" }] as unknown as SubSession[];
+    expect([...subLetters(fromCloud, at)]).toEqual([["card:c1", "A"], ["card:c3", "C"]]);
   });
 
   it("行首字母方块；行尾在跑灰点、停了蓝点、要介入黄点，排队不出点、照旧写在等什么；读屏按状态读", () => {

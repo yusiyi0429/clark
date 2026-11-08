@@ -269,11 +269,14 @@ export function letterOf(index: number): string {
 }
 
 /**
- * 子会话的字母（18.10）：同一个项目里按建立的先后 A、B、C……。云端的字母字段到了以后改成照它的，只换这一处。
- * 现在先照派活单的先后（卡按建出来的时间，专题没有建立时间、按最近动静排在卡后面）。键是「kind:id」。
+ * 子会话的字母（18.10）：照云端的 SubSession.letter（项目里按建立先后，建了不变、不复用；「其他」里的为 null，不画）。
+ * 云端还没带这个字段（undefined，B 的实现没到）时先照派活单的先后算（卡按建出来的时间，专题按最近动静排在卡后面）。键是「kind:id」。
  */
 export function subLetters(subs: SubSession[], cardAt?: ReadonlyMap<string, string>): Map<string, string> {
-  return new Map(planOrder(subs, cardAt).map((sub, index) => [subKey(sub), letterOf(index)]));
+  return new Map(planOrder(subs, cardAt).flatMap((sub, index): [string, string][] => {
+    const letter = sub.letter === undefined ? letterOf(index) : sub.letter;
+    return letter ? [[subKey(sub), letter]] : [];
+  }));
 }
 export const subKey = (sub: Pick<SubSession, "kind" | "id">) => `${sub.kind}:${sub.id}`;
 
