@@ -3,7 +3,7 @@
 /**
  * 右栏（新首页设计 5.4.5）：资源块 → 发丝线 →「进行中 N」→「已完成 N」，不写标题。跟着展示区走（首页列全部，二级页只留资源块）。
  * - 资源块（14.4）：「这台电脑 · 就绪」一行能点开，逐项列本机程序、Claude Code、Codex、gh、飞书命令行（照本机报的 tools）；有一项不对就前面一个琥珀点、
- *   自动展开，下面一个次按钮（配对、继续或重试；重试真的再探一遍）；离线时上面先给安装命令和「复制」（同连接页）。「同时在跑」+ 位置条 +「2/3」（这台电脑就绪时才有）。「用量」两列小格（见 lib/home/quota）：
+ *   自动展开，下面一个次按钮（配对、继续或重试；重试真的再探一遍）；离线时上面先给安装命令和「复制」（同连接页）。「在跑的子会话」+ 位置条 +「2/3」（这台电脑就绪时才有）。「剩余用量」两列小格（见 lib/home/quota）：
  *   这台电脑就绪时用本机的，不然用云端各台设备报的（只显示读得到的）。
  * - 后台任务：组头 12/16 600 淡色，「进行中」前面一颗转圈（整栏只有它在转）；「已完成」默认收起，有失败时自动展开、组头后面加「· 失败 1」。
  *   行高 36：种类、名字、用时，停止按钮鼠标移上去或有焦点时才出（手持上一直显示），不能停的不画。行里不放状态图标，失败的行首一个叉、用时换成「失败」，
@@ -153,14 +153,14 @@ export function BackgroundPanel({ items, resources, onStop, onCollapse, handheld
         ) : null}
         {machine.ready ? (
           <div className={h.runLine} title={`同时最多跑 ${resources.local.cap} 张卡`}>
-            同时在跑<span className={h.grow} />
+            在跑的子会话<span className={h.grow} />
             <Slots used={resources.local.used} cap={resources.local.cap} />
             <span className={`${h.runCount} ${h.num}`}>{resources.local.used}/{resources.local.cap}</span>
           </div>
         ) : null}
         {machine.usage.length ? (
           <>
-            <p className={h.usageHead}>用量</p>
+            <p className={h.usageHead}>剩余用量</p>
             <ul className={h.usage}>{machine.usage.map((cell) => <UsageItem key={cell.id} cell={cell} />)}</ul>
           </>
         ) : null}
