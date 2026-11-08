@@ -331,6 +331,53 @@ export const LocalModelProfileUpsert = Type.Object({
   isDefault: Type.Optional(Type.Boolean()),
 }, strict);
 
+// ───────────────────────── 本人加的工具 ─────────────────────────
+
+/**
+ * 本人在连接页给子会话加的工具（设计 9.5 · 11/08 改定、17.2 第 6 条）：一个 MCP 服务器，本机程序开执行会话时写进那个会话的 mcp.json。
+ * - 存在这台电脑上；钥匙只存本机凭据库（Windows DPAPI、Mac 钥匙串），任何接口都不回传，写进 mcp.json 的也只是 ${变量名}。云端这个月不知道。
+ * - 只收 HTTP 地址（https；本机的 127.0.0.1、localhost 可以是 http），不收命令：网页一旦被注入，收命令就等于能在本机起任意程序。
+ * - preset：kingdee 金蝶（哪款产品还没定，先是占位预设，地址由本人填）；custom 其他工具。GitHub 不在这里，它就是「这台电脑」里 gh 那一行。
+ * - 挂给所有执行会话（卡、专题），不受岗位工具名单管；规划员、验收员不挂。Codex 下个月接。
+ * - 放行：预设带一份读工具名单，读的照权限模式放行（「自动」「全部放行」不问，和天枢 MCP 的读工具一样）；写的、认不出的，哪一档都问本人。
+ */
+export const LocalToolPreset = Type.Union([Type.Literal("kingdee"), Type.Literal("custom")]);
+/**
+ * 连没连上（本机发一次 MCP 的 initialize 和 tools/list）：ready 连上了；unauthorized 钥匙不对或过期（401、403）；
+ * unreachable 连不上或回的不是 MCP；unknown 还没查。加、改、点「检查」时查，结果只留本机。
+ */
+export const LocalToolState = Type.Union([Type.Literal("ready"), Type.Literal("unauthorized"), Type.Literal("unreachable"), Type.Literal("unknown")]);
+export const LocalTool = Type.Object({
+  id: Id,
+  name: Type.String({ minLength: 1, maxLength: 40 }),
+  preset: LocalToolPreset,
+  url: Type.String({ maxLength: 300 }),
+  /** 钥匙放在哪个请求头：null 是 Authorization: Bearer <钥匙>，否则原样放进这个头（如 X-Api-Key）。 */
+  keyHeader: Nullable(Type.String({ maxLength: 60 })),
+  hasKey: Type.Boolean(),
+  state: LocalToolState,
+  /** 连上时它有几个工具。 */
+  toolCount: NullableInteger({ minimum: 0 }),
+  /** 没连上的一句原因（给人看）。 */
+  error: Nullable(Type.String({ maxLength: 200 })),
+  checkedAt: Nullable(Instant),
+  addedAt: Instant,
+}, strict);
+/** GET /v1/tools */
+export const LocalToolListResponse = Type.Object({ tools: Type.Array(LocalTool, { maxItems: 20 }) }, strict);
+/**
+ * PUT /v1/tools/:id：加或改一个工具（id 由网页起，字母数字、- 和 _），最多 20 个。不收 command、args 这类字段。
+ * apiKey 只写不读：不传是保留原钥匙，传空串是删掉；地址改了又没给新钥匙时旧钥匙作废（免得改个地址就把钥匙发到别处）。
+ * keyHeader 不传是用 Authorization: Bearer。存完马上查一次连没连上，回的是查完的 LocalTool。
+ */
+export const LocalToolUpsert = Type.Object({
+  name: Type.String({ minLength: 1, maxLength: 40 }),
+  preset: LocalToolPreset,
+  url: Type.String({ minLength: 8, maxLength: 300, pattern: "^https?://" }),
+  keyHeader: Type.Optional(Type.String({ pattern: "^[A-Za-z][A-Za-z0-9-]{0,59}$" })),
+  apiKey: Type.Optional(Type.String({ maxLength: 2000, pattern: SECRET_CHARS })),
+}, strict);
+
 /** 文件夹挂在哪个项目上（项目 id 是天枢给的，name 是绑定时网页带来的名字，只用来显示）。 */
 export const LocalFolderProject = Type.Object({ projectId: Uuid, name: Nullable(Type.String({ maxLength: 120 })) }, strict);
 /**
@@ -1265,6 +1312,11 @@ export type TLocalModelSource = Static<typeof LocalModelSource>;
 export type TLocalModelProfile = Static<typeof LocalModelProfile>;
 export type TLocalModelListResponse = Static<typeof LocalModelListResponse>;
 export type TLocalModelProfileUpsert = Static<typeof LocalModelProfileUpsert>;
+export type TLocalToolPreset = Static<typeof LocalToolPreset>;
+export type TLocalToolState = Static<typeof LocalToolState>;
+export type TLocalTool = Static<typeof LocalTool>;
+export type TLocalToolListResponse = Static<typeof LocalToolListResponse>;
+export type TLocalToolUpsert = Static<typeof LocalToolUpsert>;
 export type TLocalFolder = Static<typeof LocalFolder>;
 export type TLocalFolderListResponse = Static<typeof LocalFolderListResponse>;
 export type TLocalFolderPickResponse = Static<typeof LocalFolderPickResponse>;
@@ -1362,6 +1414,10 @@ export const LOCAL_RUNNER_ROUTES = {
   listModels: { method: "GET", path: "/v1/models", auth: true },
   putModel: { method: "PUT", path: "/v1/models/:id", auth: true },
   deleteModel: { method: "DELETE", path: "/v1/models/:id", auth: true },
+  listTools: { method: "GET", path: "/v1/tools", auth: true },
+  putTool: { method: "PUT", path: "/v1/tools/:id", auth: true },
+  deleteTool: { method: "DELETE", path: "/v1/tools/:id", auth: true },
+  checkTool: { method: "POST", path: "/v1/tools/:id/check", auth: true },
   listFolders: { method: "GET", path: "/v1/folders", auth: true },
   pickFolder: { method: "POST", path: "/v1/folders/pick", auth: true },
   deleteFolder: { method: "DELETE", path: "/v1/folders/:id", auth: true },
