@@ -128,7 +128,7 @@ function PassedLine({ item, worker, go, onChanged }: { item: Passed; worker: Wor
       {undoing && handback ? (
         <DecisionBox kind="question" testId="overrule-box" title={`推翻 ${item.title}`}
           options={[{ label: "不推翻" }]} onPick={() => setUndoing(false)}
-          other={{ label: "写原因…", placeholder: "为什么推翻", maxLength: REASON_MAX, onSubmit: async (reason) => {
+          other={{ label: "写原因", maxLength: REASON_MAX, onSubmit: async (reason) => {
             await overrule(item.cardId, handback.id, reason); setUndoing(false); onChanged();
           } }} />
       ) : null}

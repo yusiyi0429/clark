@@ -88,7 +88,7 @@ export function QuestionDecision({ request, blocked, onAnswer, resolved, expired
       onTicks={ticking ? (picked) => setChoices(choices.map((chosen, index) => (index === page ? labelsOf(picked) : chosen))) : undefined}
       initialPicks={ticking ? choices[page]!.map((label) => order.findIndex((at) => question.options[at]!.label === label)).filter((at) => at >= 0) : undefined}
       // 多选时自己说的话和勾中的一起发：这里只记字，不清掉勾。
-      other={{ placeholder: question.header || undefined, maxLength: ANSWER_MAX, onSubmit: (text) => advance(choices.map((chosen, index) => (index === page && !question.multiSelect ? [] : chosen)), notes.map((note, index) => (index === page ? text : note))) }}
+      other={{ maxLength: ANSWER_MAX, onSubmit: (text) => advance(choices.map((chosen, index) => (index === page && !question.multiSelect ? [] : chosen)), notes.map((note, index) => (index === page ? text : note))) }}
       footer={several ? <>
         {failed && !sending ? <FailedLine inline {...failed} /> : null}
         <span className={x.grow} /><HeroButton variant="primary" size="sm" isDisabled={sending || !answered(choices, notes)} onPress={() => void submit()}>提交</HeroButton>

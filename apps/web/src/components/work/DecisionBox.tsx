@@ -3,9 +3,10 @@
 /**
  * 选项框（新首页设计 5.4.3「选项框」）：放在对话里问的那一处，一个组件管三件事——提问、批准、开工。
  * - 框和正文一样宽，--surface 底、1px 发丝边、--r-card 圆角，没有阴影；头部是问题（14/20 600，只写一句），几件一起来时右侧「1/3」和翻页。
- * - 选项行：左边序号（手持上不显示）、选项文字，推荐的那个后面接淡色的「（推荐）」，说明 13/20 一行；最后一行「自己说…」点了在原地展开输入框。
- * - 键盘：1–9 和 ↑↓ 只移高亮，回车才提交高亮的那个；批准框里回车永远不会是「同类以后都批准」（noEnter 的选项回车提交推荐的那个）；
- *   Esc 收起「自己说」，打的字留着；←→ 翻页。键盘和鼠标共用一个高亮，任何时候只亮一行。
+ * - 选项行：左边序号（手持上不显示）、选项文字，推荐的那个后面接淡色的「（推荐）」，说明 13/20 一行；最后一行本身就是「自己说…」输入框，
+ *   回车发出、Shift+回车换行，有字时行尾出发送箭头，字多往下长到约 5 行再滚动。
+ * - 键盘：1–9 和 ↑↓ 只移高亮，移到最后一行时光标进输入框；回车才提交高亮的那个；批准框里回车永远不会是「同类以后都批准」（noEnter 的选项回车提交推荐的那个）；
+ *   输入框里 Esc、或光标在最前面按 ↑，回到上一行，打的字留着；←→ 翻页。键盘和鼠标共用一个高亮，任何时候只亮一行。
  * - 焦点和误触保护：出现时焦点落在推荐的那个上（正在别处打字时不抢）；出现后 220ms 内不接按键和点击；输入法组字时回车不提交。
  * - 提交中：选中的那行出转圈，其余行变淡。答完收成一行：勾 · 问题 · 答案；失效收成「已失效」。
  * - 这里答不了时（手机上、问题在别的电脑上）不画选项，只留问题和状态 chip「等你 · …」。
@@ -22,6 +23,13 @@ export type DecisionOption = { label: string; detail?: ReactNode; recommended?: 
 export type DecisionKind = "question" | "approval" | "plan";
 
 const ICON = { size: 16, strokeWidth: 1.8 } as const;
+
+/** 「自己说」那一行里按的键：回车发出（Shift+回车照常换行）；Esc、或光标在最前面按 ↑，回到上一行选项（打的字留着）。 */
+export function otherKey(event: { key: string; shiftKey: boolean }, box: { selectionStart: number | null; selectionEnd: number | null }): "send" | "up" | null {
+  if (event.key === "Enter") return event.shiftKey ? null : "send";
+  if (event.key === "Escape" || (event.key === "ArrowUp" && box.selectionStart === 0 && box.selectionEnd === 0)) return "up";
+  return null;
+}
 /** 出现后这么久不接按键和点击（--dur-base），免得正在打字的回车误按。 */
 const ARM_MS = 220;
 
@@ -40,8 +48,8 @@ export function DecisionBox({ kind, title, body, options, onPick, onTicks, initi
    */
   onTicks?: (picked: number[]) => void;
   initialPicks?: number[];
-  /** 最后一项：点了就地展开输入。不给就没有这一项。maxLength 和接这句话的接口上限一致，超了发不出去。 */
-  other?: { label?: string; placeholder?: string; maxLength?: number; onSubmit: (text: string) => void | Promise<unknown> };
+  /** 最后一项：这一行本身就是输入框（占位「{label}…」，读屏念 label）。不给就没有这一项。maxLength 和接这句话的接口上限一致，超了发不出去。 */
+  other?: { label?: string; maxLength?: number; onSubmit: (text: string) => void | Promise<unknown> };
   multi?: boolean;
   /** 几件一起来：第几件（从 0 起）、共几件、翻到哪件。 */
   pager?: { index: number; total: number; onGo: (index: number) => void };
@@ -65,7 +73,6 @@ export function DecisionBox({ kind, title, body, options, onPick, onTicks, initi
   const recommended = Math.max(0, options.findIndex((option) => option.recommended));
   const [selected, setSelected] = useState(recommended);
   const [picks, setPicks] = useState<number[]>([]);
-  const [writing, setWriting] = useState(false);
   const [text, setText] = useState("");
   const [sending, setSending] = useState<number | null>(null);
   /** 答案没发出去：框底下一行「失败 · 重试」（重试 = 同一个动作再来一次），title 里是原因。 */
@@ -76,6 +83,8 @@ export function DecisionBox({ kind, title, body, options, onPick, onTicks, initi
   const shownAt = useRef(0);
   const titleId = useId();
   const otherIndex = other ? options.length : -1;
+  /** 最后一行的名字：读屏念它，占位字是它加「…」。 */
+  const otherName = (other?.label ?? "自己说").replace(/…$/, "");
   const total = options.length + (other ? 1 : 0);
   const disabled = !!blocked || !!busy || sending !== null;
   const live = !resolved && !expired && !blocked;
@@ -85,7 +94,7 @@ export function DecisionBox({ kind, title, body, options, onPick, onTicks, initi
 
   // 换页（翻到另一件）时回到推荐的那个、收起输入；勾过的照框外记着的。
   const pageKey = pager ? pager.index : 0;
-  useEffect(() => { setSelected(recommended); setPicks(startPicks.current ?? []); setWriting(false); setText(""); }, [pageKey, recommended]);
+  useEffect(() => { setSelected(recommended); setPicks(startPicks.current ?? []); setText(""); }, [pageKey, recommended]);
   // 出现、翻页时：记下出现的时刻（220ms 内不接按键和点击）；本人没在别处打字时，焦点放到推荐的那个上。
   useEffect(() => {
     if (!live) return;
@@ -107,7 +116,7 @@ export function DecisionBox({ kind, title, body, options, onPick, onTicks, initi
   };
   const choose = (index: number) => {
     if (disabled || arming()) return;
-    if (index === otherIndex) { setSelected(index); setWriting(true); requestAnimationFrame(() => textRef.current?.focus()); return; }
+    if (index === otherIndex) { setSelected(index); textRef.current?.focus(); return; }
     if (multi) {
       setSelected(index);
       const next = picks.includes(index) ? picks.filter((entry) => entry !== index) : [...picks, index];
@@ -118,24 +127,26 @@ export function DecisionBox({ kind, title, body, options, onPick, onTicks, initi
     void run(index, () => onPick([index], note()));
   };
   /** 提问时「自己说」里打了字又去点选项（多选是点「提交」）：打的字一起发出去。 */
-  const note = () => (kind === "question" && writing && text.trim() ? text.trim() : undefined);
-  // 发出去了：收起输入、清掉字（框还留着时，再按回车不会把同一句又发一遍）。
+  const note = () => (kind === "question" && text.trim() ? text.trim() : undefined);
+  // 发出去了：清掉字（框还留着时，再按回车不会把同一句又发一遍）。
   const sendText = () => {
     const value = text.trim();
     if (!value || disabled || !other || arming()) return;
-    void run(otherIndex, async () => { await other.onSubmit(value); setText(""); setWriting(false); });
+    void run(otherIndex, async () => { await other.onSubmit(value); setText(""); });
   };
   const move = (to: number) => {
     const next = (to + total) % total;
     setSelected(next);
-    optionRefs.current[next]?.focus();
+    (next === otherIndex ? textRef.current : optionRefs.current[next])?.focus();
   };
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.nativeEvent.isComposing || event.metaKey || event.ctrlKey || event.altKey || !live) return;
     const target = event.target as HTMLElement;
     if (target === textRef.current) {
-      if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); sendText(); }
-      else if (event.key === "Escape") { event.preventDefault(); setWriting(false); optionRefs.current[otherIndex]?.focus(); }
+      const action = otherKey(event, textRef.current);
+      if (action) event.preventDefault();
+      if (action === "send") sendText();
+      else if (action === "up") move(otherIndex - 1);
       return;
     }
     // 只在框本身和选项上接键；框里的输入框、下拉、翻页、全部批准照它们自己的来。
@@ -200,22 +211,18 @@ export function DecisionBox({ kind, title, body, options, onPick, onTicks, initi
           );
         })}
         {other ? (
-          <>
-            <button ref={(element) => { optionRefs.current[otherIndex] = element; }} type="button" className={x.option} data-other="" role={multi ? "checkbox" : "radio"}
-              aria-checked={writing} data-selected={selected === otherIndex ? "" : undefined} data-sending={sending === otherIndex ? "" : undefined} aria-keyshortcuts={String(otherIndex + 1)} tabIndex={selected === otherIndex ? 0 : -1}
-              disabled={disabled} aria-expanded={writing} onFocus={() => setSelected(otherIndex)} onMouseEnter={() => setSelected(otherIndex)} onClick={() => choose(otherIndex)} data-testid="decision-other">
-              <kbd className={x.key} aria-hidden>{otherIndex + 1}</kbd>
-              <span className={x.label}><span>{other.label ?? "自己说…"}</span></span>
-              <span className={x.trail}>{sending === otherIndex ? <LoaderCircle {...ICON} className={x.spin} aria-hidden /> : null}</span>
-            </button>
-            {writing ? (
-              <div className={x.write}>
-                <textarea ref={textRef} rows={2} maxLength={other.maxLength ?? 4000} value={text} placeholder={other.placeholder} aria-label={other.label ?? "自己说"} disabled={disabled}
-                  onChange={(event) => setText(event.target.value)} />
-                <HeroButton variant="primary" size="sm" isIconOnly aria-label="发送" title="发送" isDisabled={disabled || !text.trim()} onPress={sendText}><ArrowUp {...ICON} aria-hidden /></HeroButton>
-              </div>
-            ) : null}
-          </>
+          // 最后一行本身就是输入框：同样的序号、行高和左边距；点这一行或按它的数字，光标直接进来；有字时行尾才出发送箭头。
+          <div className={x.option} data-other="" data-selected={selected === otherIndex ? "" : undefined} data-sending={sending === otherIndex ? "" : undefined}
+            onMouseEnter={() => setSelected(otherIndex)} onClick={() => textRef.current?.focus()} data-testid="decision-other">
+            <kbd className={x.key} aria-hidden>{otherIndex + 1}</kbd>
+            <textarea ref={textRef} className={x.otherInput} rows={1} maxLength={other.maxLength ?? 4000} value={text} placeholder={`${otherName}…`} aria-label={otherName}
+              aria-keyshortcuts={String(otherIndex + 1)} tabIndex={selected === otherIndex ? 0 : -1} disabled={disabled}
+              onFocus={() => setSelected(otherIndex)} onChange={(event) => setText(event.target.value)} data-testid="decision-other-input" />
+            <span className={x.trail}>
+              {sending === otherIndex ? <LoaderCircle {...ICON} className={x.spin} aria-hidden />
+                : text.trim() ? <button type="button" className={x.otherSend} aria-label="发送" title="发送" disabled={disabled} onClick={(event) => { event.stopPropagation(); sendText(); }}><ArrowUp size={14} strokeWidth={2.2} aria-hidden /></button> : null}
+            </span>
+          </div>
         ) : null}
       </div>
       {multi && !onTicks ? (
