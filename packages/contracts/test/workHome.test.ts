@@ -62,7 +62,10 @@ describe("新首页契约", () => {
     expect(Value.Check(CreateProjectRequest, { name: "" })).toBe(false);
     expect(Value.Check(UpdateProjectRequest, { archived: true })).toBe(true);
     expect(Value.Check(UpdateProjectRequest, {})).toBe(false);
-    const project = { projectId: uuid, name: "天枢新首页", archivedAt: null, createdAt: at, lastActivityAt: null, transfer: null };
+    const project = { projectId: uuid, name: "天枢新首页", archivedAt: null, createdAt: at, lastActivityAt: null, transfer: null, permissionMode: "auto" };
+    // 新开子会话的默认权限模式：五档之一，项目设置里改。
+    expect(Value.Check(UpdateProjectRequest, { permissionMode: "plan" })).toBe(true);
+    expect(Value.Check(UpdateProjectRequest, { permissionMode: "yolo" })).toBe(false);
     expect(Value.Check(ProjectDetailResponse, { project, period: "2026-11", goals: [
       { taskId: "T-1", taskName: "11/18 上线 V1", missionId: "M1", missionTitle: "上线", period: "2026-11", verdict: "open", source: "auto", linkedAt: at },
       { taskId: "T-0", taskName: "内部版跑通", missionId: "M0", missionTitle: null, period: "2026-10", verdict: "continued", source: "migration", linkedAt: at },
@@ -139,7 +142,8 @@ describe("新首页契约", () => {
     expect(Value.Check(RouteResponse, { target: { projectId: uuid } })).toBe(true);
     expect(Value.Check(RouteResponse, { target: { taskId: "T-1" } })).toBe(false);
     const start = { id: uuid, kind: "card", cardId: uuid, topicId: null, taskId: "T-1", projectId: uuid, requestedAt: at };
-    expect(Value.Check(ClaimSessionStartsResponse, { starts: [{ ...start, budget: { mode: "set", hours: 2, weeklyPercent: null, money: { amount: 30, currency: "CNY" } } }] })).toBe(true);
+    expect(Value.Check(ClaimSessionStartsResponse, { starts: [{ ...start, budget: { mode: "set", hours: 2, weeklyPercent: null, money: { amount: 30, currency: "CNY" } },
+      permissionMode: "acceptEdits" }] })).toBe(true);
     // 认领回执每条都带预算。
     expect(Value.Check(ClaimSessionStartsResponse, { starts: [start] })).toBe(false);
     expect(Value.Check(AcceptCardDraftsRequest, { drafts: [{ id: uuid }], start: true })).toBe(true);

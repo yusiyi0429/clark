@@ -26965,7 +26965,8 @@
                           "cost",
                           "startedAt",
                           "updatedAt",
-                          "endedAt"
+                          "endedAt",
+                          "permissionMode"
                         ],
                         "properties": {
                           "id": {
@@ -27124,6 +27125,37 @@
                               {
                                 "format": "date-time",
                                 "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "permissionMode": {
+                            "anyOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "const": "auto",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "default",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "acceptEdits",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "plan",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "bypassPermissions",
+                                    "type": "string"
+                                  }
+                                ]
                               },
                               {
                                 "type": "null"
@@ -54762,7 +54794,8 @@
                       "cost",
                       "startedAt",
                       "updatedAt",
-                      "endedAt"
+                      "endedAt",
+                      "permissionMode"
                     ],
                     "properties": {
                       "id": {
@@ -54921,6 +54954,37 @@
                           {
                             "format": "date-time",
                             "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "permissionMode": {
+                        "anyOf": [
+                          {
+                            "anyOf": [
+                              {
+                                "const": "auto",
+                                "type": "string"
+                              },
+                              {
+                                "const": "default",
+                                "type": "string"
+                              },
+                              {
+                                "const": "acceptEdits",
+                                "type": "string"
+                              },
+                              {
+                                "const": "plan",
+                                "type": "string"
+                              },
+                              {
+                                "const": "bypassPermissions",
+                                "type": "string"
+                              }
+                            ]
                           },
                           {
                             "type": "null"
@@ -56121,7 +56185,8 @@
                                   "cost",
                                   "startedAt",
                                   "updatedAt",
-                                  "endedAt"
+                                  "endedAt",
+                                  "permissionMode"
                                 ],
                                 "properties": {
                                   "id": {
@@ -56280,6 +56345,37 @@
                                       {
                                         "format": "date-time",
                                         "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "permissionMode": {
+                                    "anyOf": [
+                                      {
+                                        "anyOf": [
+                                          {
+                                            "const": "auto",
+                                            "type": "string"
+                                          },
+                                          {
+                                            "const": "default",
+                                            "type": "string"
+                                          },
+                                          {
+                                            "const": "acceptEdits",
+                                            "type": "string"
+                                          },
+                                          {
+                                            "const": "plan",
+                                            "type": "string"
+                                          },
+                                          {
+                                            "const": "bypassPermissions",
+                                            "type": "string"
+                                          }
+                                        ]
                                       },
                                       {
                                         "type": "null"
@@ -64989,7 +65085,8 @@
                           "cost",
                           "startedAt",
                           "updatedAt",
-                          "endedAt"
+                          "endedAt",
+                          "permissionMode"
                         ],
                         "properties": {
                           "id": {
@@ -65148,6 +65245,37 @@
                               {
                                 "format": "date-time",
                                 "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "permissionMode": {
+                            "anyOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "const": "auto",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "default",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "acceptEdits",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "plan",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "bypassPermissions",
+                                    "type": "string"
+                                  }
+                                ]
                               },
                               {
                                 "type": "null"
@@ -66697,7 +66825,8 @@
                             "cost",
                             "startedAt",
                             "updatedAt",
-                            "endedAt"
+                            "endedAt",
+                            "permissionMode"
                           ],
                           "properties": {
                             "id": {
@@ -66856,6 +66985,37 @@
                                 {
                                   "format": "date-time",
                                   "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "permissionMode": {
+                              "anyOf": [
+                                {
+                                  "anyOf": [
+                                    {
+                                      "const": "auto",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "default",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "acceptEdits",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "plan",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "bypassPermissions",
+                                      "type": "string"
+                                    }
+                                  ]
                                 },
                                 {
                                   "type": "null"
@@ -67917,7 +68077,8 @@
                                   "cost",
                                   "startedAt",
                                   "updatedAt",
-                                  "endedAt"
+                                  "endedAt",
+                                  "permissionMode"
                                 ],
                                 "properties": {
                                   "id": {
@@ -68076,6 +68237,37 @@
                                       {
                                         "format": "date-time",
                                         "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  },
+                                  "permissionMode": {
+                                    "anyOf": [
+                                      {
+                                        "anyOf": [
+                                          {
+                                            "const": "auto",
+                                            "type": "string"
+                                          },
+                                          {
+                                            "const": "default",
+                                            "type": "string"
+                                          },
+                                          {
+                                            "const": "acceptEdits",
+                                            "type": "string"
+                                          },
+                                          {
+                                            "const": "plan",
+                                            "type": "string"
+                                          },
+                                          {
+                                            "const": "bypassPermissions",
+                                            "type": "string"
+                                          }
+                                        ]
                                       },
                                       {
                                         "type": "null"
@@ -69112,7 +69304,8 @@
                             "cost",
                             "startedAt",
                             "updatedAt",
-                            "endedAt"
+                            "endedAt",
+                            "permissionMode"
                           ],
                           "properties": {
                             "id": {
@@ -69271,6 +69464,37 @@
                                 {
                                   "format": "date-time",
                                   "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "permissionMode": {
+                              "anyOf": [
+                                {
+                                  "anyOf": [
+                                    {
+                                      "const": "auto",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "default",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "acceptEdits",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "plan",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "bypassPermissions",
+                                      "type": "string"
+                                    }
+                                  ]
                                 },
                                 {
                                   "type": "null"
@@ -73377,7 +73601,8 @@
                           "cost",
                           "startedAt",
                           "updatedAt",
-                          "endedAt"
+                          "endedAt",
+                          "permissionMode"
                         ],
                         "properties": {
                           "id": {
@@ -73536,6 +73761,37 @@
                               {
                                 "format": "date-time",
                                 "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "permissionMode": {
+                            "anyOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "const": "auto",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "default",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "acceptEdits",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "plan",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "bypassPermissions",
+                                    "type": "string"
+                                  }
+                                ]
                               },
                               {
                                 "type": "null"
@@ -74836,7 +75092,8 @@
                                 "cost",
                                 "startedAt",
                                 "updatedAt",
-                                "endedAt"
+                                "endedAt",
+                                "permissionMode"
                               ],
                               "properties": {
                                 "id": {
@@ -74995,6 +75252,37 @@
                                     {
                                       "format": "date-time",
                                       "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "permissionMode": {
+                                  "anyOf": [
+                                    {
+                                      "anyOf": [
+                                        {
+                                          "const": "auto",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "default",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "acceptEdits",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "plan",
+                                          "type": "string"
+                                        },
+                                        {
+                                          "const": "bypassPermissions",
+                                          "type": "string"
+                                        }
+                                      ]
                                     },
                                     {
                                       "type": "null"
@@ -75976,7 +76264,8 @@
                             "cost",
                             "startedAt",
                             "updatedAt",
-                            "endedAt"
+                            "endedAt",
+                            "permissionMode"
                           ],
                           "properties": {
                             "id": {
@@ -76135,6 +76424,37 @@
                                 {
                                   "format": "date-time",
                                   "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "permissionMode": {
+                              "anyOf": [
+                                {
+                                  "anyOf": [
+                                    {
+                                      "const": "auto",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "default",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "acceptEdits",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "plan",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "bypassPermissions",
+                                      "type": "string"
+                                    }
+                                  ]
                                 },
                                 {
                                   "type": "null"
@@ -93919,7 +94239,8 @@
                   "cost",
                   "startedAt",
                   "updatedAt",
-                  "endedAt"
+                  "endedAt",
+                  "permissionMode"
                 ],
                 "properties": {
                   "id": {
@@ -94078,6 +94399,37 @@
                       {
                         "format": "date-time",
                         "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "permissionMode": {
+                    "anyOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "const": "auto",
+                            "type": "string"
+                          },
+                          {
+                            "const": "default",
+                            "type": "string"
+                          },
+                          {
+                            "const": "acceptEdits",
+                            "type": "string"
+                          },
+                          {
+                            "const": "plan",
+                            "type": "string"
+                          },
+                          {
+                            "const": "bypassPermissions",
+                            "type": "string"
+                          }
+                        ]
                       },
                       {
                         "type": "null"
@@ -95011,7 +95363,8 @@
                       "cost",
                       "startedAt",
                       "updatedAt",
-                      "endedAt"
+                      "endedAt",
+                      "permissionMode"
                     ],
                     "properties": {
                       "id": {
@@ -95170,6 +95523,37 @@
                           {
                             "format": "date-time",
                             "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "permissionMode": {
+                        "anyOf": [
+                          {
+                            "anyOf": [
+                              {
+                                "const": "auto",
+                                "type": "string"
+                              },
+                              {
+                                "const": "default",
+                                "type": "string"
+                              },
+                              {
+                                "const": "acceptEdits",
+                                "type": "string"
+                              },
+                              {
+                                "const": "plan",
+                                "type": "string"
+                              },
+                              {
+                                "const": "bypassPermissions",
+                                "type": "string"
+                              }
+                            ]
                           },
                           {
                             "type": "null"
@@ -96571,7 +96955,8 @@
                             "cost",
                             "startedAt",
                             "updatedAt",
-                            "endedAt"
+                            "endedAt",
+                            "permissionMode"
                           ],
                           "properties": {
                             "id": {
@@ -96730,6 +97115,37 @@
                                 {
                                   "format": "date-time",
                                   "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "permissionMode": {
+                              "anyOf": [
+                                {
+                                  "anyOf": [
+                                    {
+                                      "const": "auto",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "default",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "acceptEdits",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "plan",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "bypassPermissions",
+                                      "type": "string"
+                                    }
+                                  ]
                                 },
                                 {
                                   "type": "null"
@@ -98276,7 +98692,8 @@
                             "cost",
                             "startedAt",
                             "updatedAt",
-                            "endedAt"
+                            "endedAt",
+                            "permissionMode"
                           ],
                           "properties": {
                             "id": {
@@ -98435,6 +98852,37 @@
                                 {
                                   "format": "date-time",
                                   "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "permissionMode": {
+                              "anyOf": [
+                                {
+                                  "anyOf": [
+                                    {
+                                      "const": "auto",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "default",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "acceptEdits",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "plan",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "bypassPermissions",
+                                      "type": "string"
+                                    }
+                                  ]
                                 },
                                 {
                                   "type": "null"
@@ -99982,7 +100430,8 @@
                           "cost",
                           "startedAt",
                           "updatedAt",
-                          "endedAt"
+                          "endedAt",
+                          "permissionMode"
                         ],
                         "properties": {
                           "id": {
@@ -100141,6 +100590,37 @@
                               {
                                 "format": "date-time",
                                 "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "permissionMode": {
+                            "anyOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "const": "auto",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "default",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "acceptEdits",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "plan",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "bypassPermissions",
+                                    "type": "string"
+                                  }
+                                ]
                               },
                               {
                                 "type": "null"
@@ -100448,6 +100928,7 @@
                 "startedAt",
                 "updatedAt",
                 "endedAt",
+                "permissionMode",
                 "planEntries",
                 "timeline",
                 "messages"
@@ -100609,6 +101090,37 @@
                     {
                       "format": "date-time",
                       "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "permissionMode": {
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "const": "auto",
+                          "type": "string"
+                        },
+                        {
+                          "const": "default",
+                          "type": "string"
+                        },
+                        {
+                          "const": "acceptEdits",
+                          "type": "string"
+                        },
+                        {
+                          "const": "plan",
+                          "type": "string"
+                        },
+                        {
+                          "const": "bypassPermissions",
+                          "type": "string"
+                        }
+                      ]
                     },
                     {
                       "type": "null"
@@ -101916,7 +102428,8 @@
           "cost",
           "startedAt",
           "updatedAt",
-          "endedAt"
+          "endedAt",
+          "permissionMode"
         ],
         "properties": {
           "id": {
@@ -102080,6 +102593,37 @@
                 "type": "null"
               }
             ]
+          },
+          "permissionMode": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "const": "auto",
+                    "type": "string"
+                  },
+                  {
+                    "const": "default",
+                    "type": "string"
+                  },
+                  {
+                    "const": "acceptEdits",
+                    "type": "string"
+                  },
+                  {
+                    "const": "plan",
+                    "type": "string"
+                  },
+                  {
+                    "const": "bypassPermissions",
+                    "type": "string"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -102098,6 +102642,7 @@
           "startedAt",
           "updatedAt",
           "endedAt",
+          "permissionMode",
           "planEntries",
           "timeline",
           "messages"
@@ -102259,6 +102804,37 @@
               {
                 "format": "date-time",
                 "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "permissionMode": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "const": "auto",
+                    "type": "string"
+                  },
+                  {
+                    "const": "default",
+                    "type": "string"
+                  },
+                  {
+                    "const": "acceptEdits",
+                    "type": "string"
+                  },
+                  {
+                    "const": "plan",
+                    "type": "string"
+                  },
+                  {
+                    "const": "bypassPermissions",
+                    "type": "string"
+                  }
+                ]
               },
               {
                 "type": "null"
@@ -102681,7 +103257,8 @@
                   "cost",
                   "startedAt",
                   "updatedAt",
-                  "endedAt"
+                  "endedAt",
+                  "permissionMode"
                 ],
                 "properties": {
                   "id": {
@@ -102840,6 +103417,37 @@
                       {
                         "format": "date-time",
                         "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "permissionMode": {
+                    "anyOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "const": "auto",
+                            "type": "string"
+                          },
+                          {
+                            "const": "default",
+                            "type": "string"
+                          },
+                          {
+                            "const": "acceptEdits",
+                            "type": "string"
+                          },
+                          {
+                            "const": "plan",
+                            "type": "string"
+                          },
+                          {
+                            "const": "bypassPermissions",
+                            "type": "string"
+                          }
+                        ]
                       },
                       {
                         "type": "null"
@@ -103253,7 +103861,8 @@
                         "cost",
                         "startedAt",
                         "updatedAt",
-                        "endedAt"
+                        "endedAt",
+                        "permissionMode"
                       ],
                       "properties": {
                         "id": {
@@ -103412,6 +104021,37 @@
                             {
                               "format": "date-time",
                               "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "permissionMode": {
+                          "anyOf": [
+                            {
+                              "anyOf": [
+                                {
+                                  "const": "auto",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "default",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "acceptEdits",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "plan",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "bypassPermissions",
+                                  "type": "string"
+                                }
+                              ]
                             },
                             {
                               "type": "null"
@@ -103676,7 +104316,8 @@
                       "cost",
                       "startedAt",
                       "updatedAt",
-                      "endedAt"
+                      "endedAt",
+                      "permissionMode"
                     ],
                     "properties": {
                       "id": {
@@ -103835,6 +104476,37 @@
                           {
                             "format": "date-time",
                             "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "permissionMode": {
+                        "anyOf": [
+                          {
+                            "anyOf": [
+                              {
+                                "const": "auto",
+                                "type": "string"
+                              },
+                              {
+                                "const": "default",
+                                "type": "string"
+                              },
+                              {
+                                "const": "acceptEdits",
+                                "type": "string"
+                              },
+                              {
+                                "const": "plan",
+                                "type": "string"
+                              },
+                              {
+                                "const": "bypassPermissions",
+                                "type": "string"
+                              }
+                            ]
                           },
                           {
                             "type": "null"
@@ -104113,6 +104785,7 @@
                 "startedAt",
                 "updatedAt",
                 "endedAt",
+                "permissionMode",
                 "planEntries",
                 "timeline",
                 "messages"
@@ -104274,6 +104947,37 @@
                     {
                       "format": "date-time",
                       "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "permissionMode": {
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "const": "auto",
+                          "type": "string"
+                        },
+                        {
+                          "const": "default",
+                          "type": "string"
+                        },
+                        {
+                          "const": "acceptEdits",
+                          "type": "string"
+                        },
+                        {
+                          "const": "plan",
+                          "type": "string"
+                        },
+                        {
+                          "const": "bypassPermissions",
+                          "type": "string"
+                        }
+                      ]
                     },
                     {
                       "type": "null"
@@ -114497,7 +115201,8 @@
                 "taskId",
                 "projectId",
                 "requestedAt",
-                "budget"
+                "budget",
+                "permissionMode"
               ],
               "properties": {
                 "id": {
@@ -114641,6 +115346,30 @@
                       ]
                     }
                   }
+                },
+                "permissionMode": {
+                  "anyOf": [
+                    {
+                      "const": "auto",
+                      "type": "string"
+                    },
+                    {
+                      "const": "default",
+                      "type": "string"
+                    },
+                    {
+                      "const": "acceptEdits",
+                      "type": "string"
+                    },
+                    {
+                      "const": "plan",
+                      "type": "string"
+                    },
+                    {
+                      "const": "bypassPermissions",
+                      "type": "string"
+                    }
+                  ]
                 }
               }
             }
@@ -115121,7 +115850,8 @@
           "archivedAt",
           "createdAt",
           "lastActivityAt",
-          "transfer"
+          "transfer",
+          "permissionMode"
         ],
         "properties": {
           "projectId": {
@@ -115574,6 +116304,30 @@
                 "type": "null"
               }
             ]
+          },
+          "permissionMode": {
+            "anyOf": [
+              {
+                "const": "auto",
+                "type": "string"
+              },
+              {
+                "const": "default",
+                "type": "string"
+              },
+              {
+                "const": "acceptEdits",
+                "type": "string"
+              },
+              {
+                "const": "plan",
+                "type": "string"
+              },
+              {
+                "const": "bypassPermissions",
+                "type": "string"
+              }
+            ]
           }
         }
       },
@@ -115595,7 +116349,8 @@
                 "archivedAt",
                 "createdAt",
                 "lastActivityAt",
-                "transfer"
+                "transfer",
+                "permissionMode"
               ],
               "properties": {
                 "projectId": {
@@ -116048,6 +116803,30 @@
                       "type": "null"
                     }
                   ]
+                },
+                "permissionMode": {
+                  "anyOf": [
+                    {
+                      "const": "auto",
+                      "type": "string"
+                    },
+                    {
+                      "const": "default",
+                      "type": "string"
+                    },
+                    {
+                      "const": "acceptEdits",
+                      "type": "string"
+                    },
+                    {
+                      "const": "plan",
+                      "type": "string"
+                    },
+                    {
+                      "const": "bypassPermissions",
+                      "type": "string"
+                    }
+                  ]
                 }
               }
             }
@@ -116084,6 +116863,30 @@
           },
           "archived": {
             "type": "boolean"
+          },
+          "permissionMode": {
+            "anyOf": [
+              {
+                "const": "auto",
+                "type": "string"
+              },
+              {
+                "const": "default",
+                "type": "string"
+              },
+              {
+                "const": "acceptEdits",
+                "type": "string"
+              },
+              {
+                "const": "plan",
+                "type": "string"
+              },
+              {
+                "const": "bypassPermissions",
+                "type": "string"
+              }
+            ]
           }
         }
       },
@@ -116186,7 +116989,8 @@
               "archivedAt",
               "createdAt",
               "lastActivityAt",
-              "transfer"
+              "transfer",
+              "permissionMode"
             ],
             "properties": {
               "projectId": {
@@ -116637,6 +117441,30 @@
                   },
                   {
                     "type": "null"
+                  }
+                ]
+              },
+              "permissionMode": {
+                "anyOf": [
+                  {
+                    "const": "auto",
+                    "type": "string"
+                  },
+                  {
+                    "const": "default",
+                    "type": "string"
+                  },
+                  {
+                    "const": "acceptEdits",
+                    "type": "string"
+                  },
+                  {
+                    "const": "plan",
+                    "type": "string"
+                  },
+                  {
+                    "const": "bypassPermissions",
+                    "type": "string"
                   }
                 ]
               }
@@ -118758,7 +119586,8 @@
                             "cost",
                             "startedAt",
                             "updatedAt",
-                            "endedAt"
+                            "endedAt",
+                            "permissionMode"
                           ],
                           "properties": {
                             "id": {
@@ -118917,6 +119746,37 @@
                                 {
                                   "format": "date-time",
                                   "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "permissionMode": {
+                              "anyOf": [
+                                {
+                                  "anyOf": [
+                                    {
+                                      "const": "auto",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "default",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "acceptEdits",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "plan",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "bypassPermissions",
+                                      "type": "string"
+                                    }
+                                  ]
                                 },
                                 {
                                   "type": "null"
@@ -121326,7 +122186,8 @@
           "taskId",
           "projectId",
           "requestedAt",
-          "budget"
+          "budget",
+          "permissionMode"
         ],
         "properties": {
           "id": {
@@ -121470,6 +122331,30 @@
                 ]
               }
             }
+          },
+          "permissionMode": {
+            "anyOf": [
+              {
+                "const": "auto",
+                "type": "string"
+              },
+              {
+                "const": "default",
+                "type": "string"
+              },
+              {
+                "const": "acceptEdits",
+                "type": "string"
+              },
+              {
+                "const": "plan",
+                "type": "string"
+              },
+              {
+                "const": "bypassPermissions",
+                "type": "string"
+              }
+            ]
           }
         }
       },
