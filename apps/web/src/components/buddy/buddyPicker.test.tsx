@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 const api = vi.hoisted(() => ({ GET: vi.fn(), PUT: vi.fn() }));
 vi.mock("@/lib/api/client", () => ({ browserApi: api }));
 vi.mock("@/components/coagent/PresenceCapsule", () => ({
-  PresenceCapsule: ({ skin, name }: { skin: string; name?: string }) => <span data-capsule={skin} data-name={name} />,
+  PresenceCapsule: ({ skin, name, pose }: { skin: string; name?: string; pose?: string }) => <span data-capsule={skin} data-name={name} data-pose={pose} />,
 }));
 
 import { BuddyPicker } from "./BuddyPicker";
@@ -83,8 +83,12 @@ describe("选择你的伙伴", () => {
     expect(changed).toHaveBeenCalledTimes(1);
   });
 
-  it("「我 › 伙伴」：名字、五种形象、四种性格，没有保存按钮", () => {
+  it("「我 › 伙伴」：名字、五种形象、四种性格，没有保存按钮；形象一律待机姿势，没有「在听 / 在说」", () => {
     const html = renderToStaticMarkup(<BuddySettings />);
+    expect(html).not.toContain("在听");
+    expect(html).not.toContain("在说");
+    expect(html.match(/data-pose="idle"/g)).toHaveLength(5);
+    expect(html).not.toMatch(/data-pose="(listening|speaking)"/);
     expect(html).toContain("名字");
     expect(html.match(/name="coagent-skin"/g)).toHaveLength(5);
     expect(html.match(/name="buddy-personality"/g)).toHaveLength(4);

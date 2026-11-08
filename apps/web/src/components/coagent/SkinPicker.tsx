@@ -1,12 +1,12 @@
 "use client";
 
 /**
- * 选伙伴的样子（引导「选择…的形象」那一页和个人菜单「伙伴形象」共用）：五种形象两列排（左边三颗胶囊、右边 Miles 和 C妹），每格一颗活的胶囊，不写名字和介绍。
- * 上面一个小开关看两种姿势（在听 / 在说），预览的声音是模拟的。
+ * 选伙伴的样子（「我 › 伙伴」）：五种形象两列排（左边三颗胶囊、右边 Miles 和 C妹），每格一颗待机姿势的胶囊，不写名字和介绍。
+ * 和引导里选形象一致，不预览在听 / 在说。
  */
 
 import { useEffect, useState } from "react";
-import { PresenceCapsule, type CapsulePose } from "./PresenceCapsule";
+import { PresenceCapsule } from "./PresenceCapsule";
 import { COAGENT_SKINS, type CoAgentSkin } from "./skin";
 import s from "@/styles/coagent-skin-picker.module.css";
 
@@ -33,28 +33,16 @@ export function CoAgentSkinPicker({ value: skin, name, onChange: setSkin }: {
   name: string;
   onChange: (skin: CoAgentSkin) => void;
 }) {
-  const [pose, setPose] = useState<CapsulePose>("listening");
-  const level = useSimulatedLevel(pose === "listening");
   return (
-    <div className={s.picker}>
-      <div className={s.poses} role="radiogroup" aria-label="预览姿势">
-        {(["listening", "speaking"] as const).map((item) => (
-          <label key={item} className={s.pose} data-selected={pose === item || undefined}>
-            <input type="radio" name="coagent-pose" value={item} checked={pose === item} onChange={() => setPose(item)} />
-            {item === "listening" ? "在听" : "在说"}
-          </label>
-        ))}
-      </div>
-      <div className={s.options} role="radiogroup" aria-label="伙伴形象">
-        {COAGENT_SKINS.map((item) => (
-          <label key={item.id} className={s.option} data-selected={skin === item.id || undefined}>
-            <input type="radio" name="coagent-skin" value={item.id} checked={skin === item.id} aria-label={item.label} onChange={() => setSkin(item.id)} />
-            <span className={s.stage}>
-              <PresenceCapsule skin={item.id} pose={pose} level={level} name={name} />
-            </span>
-          </label>
-        ))}
-      </div>
+    <div className={s.options} role="radiogroup" aria-label="伙伴形象">
+      {COAGENT_SKINS.map((item) => (
+        <label key={item.id} className={s.option} data-selected={skin === item.id || undefined}>
+          <input type="radio" name="coagent-skin" value={item.id} checked={skin === item.id} aria-label={item.label} onChange={() => setSkin(item.id)} />
+          <span className={s.stage}>
+            <PresenceCapsule skin={item.id} pose="idle" level={0} name={name} />
+          </span>
+        </label>
+      ))}
     </div>
   );
 }
