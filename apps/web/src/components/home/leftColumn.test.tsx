@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { THomeItem } from "@warmap/contracts";
 import type { HomeProject, SubSession, WorkHomeData } from "@/lib/home/types";
 import { fromHome, projectWorking } from "@/lib/home/projects";
-import { LeftColumn, planOrder } from "./LeftColumn";
+import { LeftColumn, STAGE_BASE, planOrder, stageScale } from "./LeftColumn";
 
 const data = { period: "2026-11", projects: [], archivedCount: 0, month: { missions: [] }, waiting: [], other: { subSessions: [], items: [] } } as unknown as WorkHomeData;
 const projectsOf = (used: WorkHomeData) => used.projects.map((project) => fromHome(project, used, new Map()));
@@ -133,5 +133,16 @@ describe("左栏：项目在后台干活的灰点", () => {
     expect(css).toContain(".workingDot i { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-faint); animation: workingBreath 1.4s ease-in-out infinite; }");
     expect(css).toContain("@keyframes workingBreath { 50% { opacity: .3; } }");
     expect(css).toContain("@media (prefers-reduced-motion: reduce) { .workingDot i { animation: none; } }");
+  });
+});
+
+describe("伙伴形象跟着台子缩放（17.2 第 15 条）", () => {
+  it("按 1440 时（台子 255）的比例走，不比原来的小；矮屏台子变扁时跟着高度缩", () => {
+    expect(stageScale(242, 242)).toBe(1);
+    expect(stageScale(STAGE_BASE, STAGE_BASE)).toBe(1);
+    expect(stageScale(344, 344)).toBeCloseTo(344 / 255);
+    expect(stageScale(344, 172)).toBeCloseTo((344 / 255) / 2);
+    expect(stageScale(242, 121)).toBeCloseTo(0.5);
+    expect(stageScale(0, 0)).toBe(1);
   });
 });
