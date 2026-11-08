@@ -11,7 +11,7 @@ import { boardFixture } from "./boardFixture.js";
 
 type Subject = Record<string, string>;
 type PlanCard = { title?: string; brief?: string; doneDefinition?: string; criterionIndex?: number | null; role?: string | null; modelTier?: string; why?: string | null;
-  after?: number[] };
+  after?: number[]; sourceWords?: string[] };
 
 const plan = (revision: number, cards: PlanCard[]) => ({ revision, summary: "先打分再录屏", steps: [{ title: "跑题库", detail: null }, { title: "录屏", detail: "约一位新人" }],
   risks: ["题库不全"], modelLabel: "claude-opus-5.5", roleId: null, roleVersion: null,
@@ -406,6 +406,62 @@ describe("拆卡和验收在本机（第 21 节）", { timeout: 30_000 }, () => 
       await f.call("PATCH", base, { archived: true });
       expect((await f.call("POST", `${base}/card-splits`)).json()).toMatchObject({ code: "PROJECT_ARCHIVED" });
       expect((await f.call("POST", `${base}/card-drafts/accept`, { drafts: [{ id: randomUUID() }] })).statusCode).toBe(409);
+    } finally { await f.close(); }
+  });
+
+  it("派活单带上本人原话（16.8）：伙伴登记取项目对话里本人说的话、网页带上来的换掉它；交代里给规划员；改写过的片段丢掉、整件改用整条原话；卡和开工交代带原话", async () => {
+    const f = await localFixture();
+    try {
+      await f.t.sql("INSERT INTO project_bootstraps(person_id,done_at,report) VALUES($1,now(),'{}')", [TEST_MEMBER.personId]);
+      const project = (await f.call("POST", "/api/me/projects", { name: "对话质量", taskId: "task-open" })).json().projectId as string;
+      const scope = encodeURIComponent(`project:${project}`);
+      const say = (message: string) => f.t.app.inject({ method: "POST", url: `/api/conversations/${scope}/messages`,
+        headers: { cookie: f.member, origin: f.t.publicOrigin, accept: "text/event-stream" }, payload: { message } });
+      expect((await say("题库要覆盖新人最常问的 50 个问题")).statusCode).toBe(200);
+      expect((await say("录屏这次先不做")).statusCode).toBe(200);
+
+      // 伙伴登记：取本人在这件 Task 所在项目对话里说的话，旧的在前。
+      const buddy = await f.t.app.inject({ method: "POST", url: "/internal/plan-tasks/task-open/card-splits",
+        headers: { authorization: "Bearer chat-token", "x-owner-id": TEST_MEMBER.personId } });
+      expect(buddy.json().sourceWords).toEqual(["题库要覆盖新人最常问的 50 个问题", "录屏这次先不做"]);
+      // 网页按钮带上输入框里的话：已有一条没开工的，原话换成这次的；不带请求体照旧能登记，原话不动。
+      const words = "先把题库打分跑一遍，录屏这次先不做，题库要覆盖新人最常问的 50 个问题";
+      const web = await f.call("POST", "/api/plan-tasks/task-open/card-splits", { words: `  ${words}  ` });
+      expect([web.statusCode, web.json().id, web.json().sourceWords]).toEqual([200, buddy.json().id, [words]]);
+      expect((await f.t.app.inject({ method: "POST", url: "/api/plan-tasks/task-open/card-splits", headers: { cookie: f.member, origin: f.t.publicOrigin } }))
+        .json().sourceWords).toEqual([words]);
+
+      // 交代：带原话，要求原样摘。
+      const brief = (await f.call("GET", "/api/plan-tasks/task-open/plan-brief")).json();
+      expect(brief.sourceWords).toEqual([words]);
+      for (const text of ["## 本人原话", `> ${words}`, "只能原样摘", "每件带 sourceWords"]) expect(brief.markdown).toContain(text);
+
+      // 规划员交卷：原文片段留着；改写过的那件整件改用整条原话；没摘的也用整条原话。
+      const planned = await f.sync({ kind: "plan", taskId: "task-open" }, [["card_plan", plan(1, [
+        { title: "跑题库打分", sourceWords: ["  先把题库打分跑一遍 ", "题库要覆盖新人最常问的 50 个问题"] },
+        { title: "补录屏", sourceWords: ["先把题库打分跑一遍", "录屏也一起做了"] },
+        { title: "没摘的" },
+      ])]]);
+      expect(planned.rejected).toEqual([]);
+      const board = (await f.call("GET", "/api/plan-tasks/task-open/cards")).json();
+      expect(board.drafts.map((draft: { title: string; sourceWords: string[] }) => [draft.title, draft.sourceWords])).toEqual([
+        ["跑题库打分", ["先把题库打分跑一遍", "题库要覆盖新人最常问的 50 个问题"]],
+        ["补录屏", [words]],
+        ["没摘的", [words]],
+      ]);
+
+      // 放进看板：卡带原话；开工交代最前面是原话。
+      const accepted = await f.call("POST", "/api/plan-tasks/task-open/card-drafts/accept", { drafts: [{ id: board.drafts[0].id }] });
+      const card = accepted.json().cards[0];
+      expect(card.card.sourceWords).toEqual(["先把题库打分跑一遍", "题库要覆盖新人最常问的 50 个问题"]);
+      const cardBrief = (await f.call("GET", `/api/me/cards/${card.id}/brief`)).json();
+      expect(cardBrief.sourceWords).toEqual(card.card.sourceWords);
+      expect(cardBrief.markdown.indexOf("## 本人原话")).toBeGreaterThan(0);
+      expect(cardBrief.markdown.indexOf("## 本人原话")).toBeLessThan(cardBrief.markdown.indexOf("## 完成标准"));
+      // 不是从派活单建的卡：原话为空，交代里没有这一段。
+      const plain = await f.card("自己建的卡");
+      expect((await f.call("GET", `/api/me/cards/${plain}`)).json().task.card.sourceWords).toEqual([]);
+      expect((await f.call("GET", `/api/me/cards/${plain}/brief`)).json().markdown).not.toContain("本人原话");
     } finally { await f.close(); }
   });
 });

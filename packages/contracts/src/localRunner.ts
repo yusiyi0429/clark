@@ -839,6 +839,10 @@ export const LocalPlanCard = Type.Object({
   why: Nullable(Type.String({ maxLength: 200 })),
   /** 要等派活单里哪几件做完（位置，从 1 起，只能是排在它前面的）；不填就是不用等，可以和别的并行。 */
   after: Type.Optional(Type.Array(Type.Integer({ minimum: 1 }), { maxItems: 7 })),
+  /**
+   * 本人原话里和这件有关的片段（16.8）：只能从交代「本人原话」那一段里原样摘，不能改写。云端核对，有一段不是原文就改用整条原话；不填也用整条原话。
+   */
+  sourceWords: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 4000 }), { maxItems: 10 })),
 }, strict);
 /**
  * 规划员出的计划和派活单草稿（propose_plan）。revision 是本会话第几次出（本人说一句让它改，改完再出是新的一次，云端以最新一次为准）；
@@ -887,12 +891,14 @@ export const LocalVerdict = Type.Object({
  * - role 是验收员岗位（kind=reviewer，带模型档位，本机按档位挑模型）；没配为 null，本机用内置的验收规矩、普通档。
  * - failStreak 是这张卡在这次交回之前连续没过几次（推翻以后从 0 算）。这次再没过、累计到 2 就是「受阻」。
  * 404：云端没有这次交回（还没收到或拒收了）；409：这次交回已经有结论（已验过或已推翻），不用再验。
+ * sourceWords（16.8）：卡上的本人原话；不为空时 markdown 里有一段「本人原话」，验收员逐条对完标准再对一遍原话，明显对不上（做了原话里没要的、漏了原话里明说的）算没过。
  */
 export const LocalVerifyBriefResponse = Type.Object({
   markdown: Type.String({ minLength: 1, maxLength: 20000 }),
   criteria: Type.Array(Type.String({ minLength: 1 }), { minItems: 1, maxItems: 50 }),
   role: Nullable(LocalRole),
   failStreak: Type.Integer({ minimum: 0 }),
+  sourceWords: Type.Optional(Type.Array(Type.String(), { maxItems: 10 })),
 }, strict);
 
 /** 专题一版的种类：outline 提纲、draft 正文、review 评审会合成的「分歧和建议」。 */

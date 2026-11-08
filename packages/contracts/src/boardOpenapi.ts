@@ -9,7 +9,7 @@ import { TaskCard } from "./taskCardView.js";
 import { CreateRoleRequest, PatchRoleRequest, RoleBrief, RoleListResponse, RolePresetView, RoleProposalList, RoleProposalView, RoleRef, RoleRevisionList,
   RoleRevisionView, RoleView } from "./roles.js";
 import { WorkerCost, WorkerItem, WorkerResource, WorkerResources, WorkersResponse } from "./workers.js";
-import { CardPlanBriefResponse, CardSplitListResponse, CardSplitRequestView, PlanBriefRole } from "./cardSplits.js";
+import { CardPlanBriefResponse, CardSplitListResponse, CardSplitRequestView, PlanBriefRole, RegisterCardSplitRequest } from "./cardSplits.js";
 import {
   CreateTopicRequest, PatchTopicRequest, ResearchTopicView, TopicBriefResponse, TopicDetailResponse, TopicListResponse, TopicVersionSummary, TopicVersionView,
 } from "./topics.js";
@@ -27,7 +27,7 @@ export const boardSchemas: Record<string, JsonSchema> = {
   ResearchTopicView, TopicVersionSummary, TopicVersionView, TopicListResponse, CreateTopicRequest, PatchTopicRequest, TopicDetailResponse, TopicBriefResponse,
   RoleRef, RoleBrief, RoleView, RolePresetView, RoleListResponse, CreateRoleRequest, PatchRoleRequest, RoleRevisionView, RoleRevisionList, RoleProposalView, RoleProposalList,
   WorkerResource, WorkerCost, WorkerItem, WorkerResources, WorkersResponse,
-  CardSplitRequestView, CardSplitListResponse, PlanBriefRole, CardPlanBriefResponse,
+  CardSplitRequestView, CardSplitListResponse, PlanBriefRole, CardPlanBriefResponse, RegisterCardSplitRequest,
 };
 
 const error = { description: "ApiError 统一错误", content: { "application/json": { schema: { $ref: "#/components/schemas/ApiError" } } } };
@@ -57,8 +57,9 @@ export const boardPaths: OpenAPIV3.Document["paths"] = {
   "/api/plan-tasks/{taskId}/card-splits": {
     post: {
       operationId: "registerCardSplit",
-      summary: "登记拆卡（Task 负责人，Task 页「拆一下」）：只记下要拆这个 Task，真正去拆的是本人电脑上的规划员；已有一条没开工的登记时返回那一条",
+      summary: "登记拆卡（Task 负责人，Task 页「拆一下」）：只记下要拆这个 Task，真正去拆的是本人电脑上的规划员；已有一条没开工的登记时返回那一条。可以带本人在输入框里的话（16.8 原话）",
       parameters: path("taskId"),
+      requestBody: { required: false, content: { "application/json": { schema: { $ref: "#/components/schemas/RegisterCardSplitRequest" } } } },
       responses: { "200": json("已有一条没开工的登记", "CardSplitRequestView"), "201": json("登记好了", "CardSplitRequestView"), ...errors(401, 403, 404) },
     },
   },

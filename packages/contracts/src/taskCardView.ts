@@ -97,6 +97,7 @@ export const DeliverableInclusion = Type.Object({
  * executor 为 null 是没设执行方的老事项（照旧本人做、本人验收）。
  * run 是最近一次本机执行的摘要（卡在别的电脑上跑时，网页据 run.deviceId 标那台电脑、不给操作按钮）。
  * after 是这张卡要等的卡（执行事项 id，派活单上规划员写的先后，只算交给 Agent 做的卡，本人自己做的不等）：开工时原样作为本机程序开工请求的 after，本机等它们合回再开始；不用等为空。
+ * sourceWords 是本人原话（16.8，从派活单带过来；不是从派活单建的卡为空数组）。网页画在完成标准上面，为空不画。
  */
 export const TaskCard = Type.Object({
   stage: CardStage,
@@ -109,6 +110,7 @@ export const TaskCard = Type.Object({
   handback: Nullable(CardHandbackBrief),
   deliverable: Nullable(DeliverableInclusion),
   after: Type.Array(Type.String({ format: "uuid" })),
+  sourceWords: Type.Array(Type.String(), { maxItems: 10 }),
 }, strict);
 
 export type TCardExecutor = Static<typeof CardExecutor>;

@@ -4316,7 +4316,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 登记拆卡（Task 负责人，Task 页「拆一下」）：只记下要拆这个 Task，真正去拆的是本人电脑上的规划员；已有一条没开工的登记时返回那一条 */
+        /** 登记拆卡（Task 负责人，Task 页「拆一下」）：只记下要拆这个 Task，真正去拆的是本人电脑上的规划员；已有一条没开工的登记时返回那一条。可以带本人在输入框里的话（16.8 原话） */
         post: operations["registerCardSplit"];
         delete?: never;
         options?: never;
@@ -5042,7 +5042,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 登记拆这个项目（16.3，没挂 Task 也能拆）：只记下来，网页在本人电脑上开规划员；已有一条没开工的回那一条（200） */
+        /** 登记拆这个项目（16.3，没挂 Task 也能拆）：只记下来，网页在本人电脑上开规划员；已有一条没开工的回那一条（200）。可以带本人在输入框里的话（16.8 原话） */
         post: operations["registerProjectCardSplit"];
         delete?: never;
         options?: never;
@@ -6008,6 +6008,7 @@ export interface components {
                         versionNumber: number;
                     } | null;
                     after: string[];
+                    sourceWords: string[];
                 };
             };
             view?: {
@@ -10048,6 +10049,7 @@ export interface components {
                     versionNumber: number;
                 } | null;
                 after: string[];
+                sourceWords: string[];
             };
         };
         TaskProgressSource: "web" | "codex" | "claude" | "github" | "other";
@@ -10232,6 +10234,7 @@ export interface components {
                             versionNumber: number;
                         } | null;
                         after: string[];
+                        sourceWords: string[];
                     };
                 }[];
             }[];
@@ -11564,6 +11567,7 @@ export interface components {
                         versionNumber: number;
                     } | null;
                     after: string[];
+                    sourceWords: string[];
                 };
             };
             judgment: string | null;
@@ -11789,6 +11793,7 @@ export interface components {
                         versionNumber: number;
                     } | null;
                     after: string[];
+                    sourceWords: string[];
                 };
             }[];
         };
@@ -11947,6 +11952,7 @@ export interface components {
                             versionNumber: number;
                         } | null;
                         after: string[];
+                        sourceWords: string[];
                     };
                 }[];
             }[];
@@ -12105,6 +12111,7 @@ export interface components {
                         versionNumber: number;
                     } | null;
                     after: string[];
+                    sourceWords: string[];
                 };
             }[];
             work: {
@@ -12672,6 +12679,7 @@ export interface components {
                         versionNumber: number;
                     } | null;
                     after: string[];
+                    sourceWords: string[];
                 };
             };
             missionId: string | null;
@@ -12869,6 +12877,7 @@ export interface components {
                             versionNumber: number;
                         } | null;
                         after: string[];
+                        sourceWords: string[];
                     };
                 };
                 missionId: string | null;
@@ -13016,6 +13025,7 @@ export interface components {
                         versionNumber: number;
                     } | null;
                     after: string[];
+                    sourceWords: string[];
                 };
             }[];
         };
@@ -15620,6 +15630,7 @@ export interface components {
                 versionNumber: number;
             } | null;
             after: string[];
+            sourceWords: string[];
         };
         CardTaskView: {
             id: string;
@@ -15760,6 +15771,7 @@ export interface components {
                     versionNumber: number;
                 } | null;
                 after: string[];
+                sourceWords: string[];
             };
         };
         CardPlanView: {
@@ -15802,6 +15814,7 @@ export interface components {
             executor: "claude_code" | "self";
             modelTier: "strong" | "normal" | "light";
             why: string | null;
+            sourceWords: string[];
         };
         PendingDeliverableItem: {
             /** Format: uuid */
@@ -15966,6 +15979,7 @@ export interface components {
                         versionNumber: number;
                     } | null;
                     after: string[];
+                    sourceWords: string[];
                 };
             }[];
             drafts: {
@@ -15988,6 +16002,7 @@ export interface components {
                 executor: "claude_code" | "self";
                 modelTier: "strong" | "normal" | "light";
                 why: string | null;
+                sourceWords: string[];
             }[];
             plan: {
                 /** Format: uuid */
@@ -16193,6 +16208,7 @@ export interface components {
                         versionNumber: number;
                     } | null;
                     after: string[];
+                    sourceWords: string[];
                 };
             }[];
         };
@@ -16409,6 +16425,7 @@ export interface components {
                         versionNumber: number;
                     } | null;
                     after: string[];
+                    sourceWords: string[];
                 };
             };
             brief: string | null;
@@ -16560,6 +16577,7 @@ export interface components {
             exclusions: string[];
             reviewGap: string | null;
             lastReturn: string | null;
+            sourceWords: string[];
         };
         OverruleCardHandbackRequest: {
             reason: string;
@@ -17577,6 +17595,7 @@ export interface components {
             projectId: string | null;
             projectName: string | null;
             origin: "buddy" | "web";
+            sourceWords: string[];
             /** Format: date-time */
             createdAt: string;
         };
@@ -17590,6 +17609,7 @@ export interface components {
                 projectId: string | null;
                 projectName: string | null;
                 origin: "buddy" | "web";
+                sourceWords: string[];
                 /** Format: date-time */
                 createdAt: string;
             }[];
@@ -17640,6 +17660,10 @@ export interface components {
                 dutiesSummary: string;
                 modelTier: "strong" | "normal" | "light";
             }[];
+            sourceWords: string[];
+        };
+        RegisterCardSplitRequest: {
+            words?: string;
         };
         SubSession: {
             id: string;
@@ -19031,6 +19055,7 @@ export interface components {
                         versionNumber: number;
                     } | null;
                     after: string[];
+                    sourceWords: string[];
                 };
             }[];
             drafts: {
@@ -19053,6 +19078,7 @@ export interface components {
                 executor: "claude_code" | "self";
                 modelTier: "strong" | "normal" | "light";
                 why: string | null;
+                sourceWords: string[];
             }[];
             plan: {
                 /** Format: uuid */
@@ -34263,7 +34289,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RegisterCardSplitRequest"];
+            };
+        };
         responses: {
             /** @description 已有一条没开工的登记 */
             200: {
@@ -36984,7 +37014,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RegisterCardSplitRequest"];
+            };
+        };
         responses: {
             /** @description 已有的登记 */
             200: {
