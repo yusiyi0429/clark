@@ -450,6 +450,19 @@ describe("本机程序契约", () => {
       { ...base, key: `${deviceId}:${sessionId}:12`, type: "status", data: { status: "waiting_permission", title: "改登录页", agent: "claude-code", modelLabel: "订阅", permission } },
     ];
     expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots: { max: 3, running: 0, queued: 0 }, items: statusItems })).toBe(true);
+    // 批准卡能不能给「这张卡都允许」（18.10）；老版本本机不带也收
+    expect(Value.Check(LocalPermissionBrief, { ...permission, canAllowForSession: true })).toBe(true);
+
+    // 停了的报告（18.10）：怎么停的、一两句摘要、卡在哪、这一轮的产出物
+    const stopped = (data: unknown) => Value.Check(LocalSyncBatchRequest, {
+      deviceId, runnerVersion: "0.1.0", slots: { max: 3, running: 0, queued: 0 }, items: [{ ...base, key: `${deviceId}:${sessionId}:13`, type: "stopped", data }],
+    });
+    const report = { why: "turn_done", summary: "登录页改好了，测试都过了。", blocker: null, outputs: [{ key: `${deviceId}:${sessionId}:7`, title: "改动说明", fileName: "说明.md" }], handbackKey: `${deviceId}:${sessionId}:8` };
+    expect(stopped(report)).toBe(true);
+    expect(stopped({ why: "held", summary: null, blocker: "订阅额度用完了，19:00 恢复后接着做", outputs: [] })).toBe(true);
+    expect(stopped({ ...report, why: "paused" })).toBe(false);
+    expect(stopped({ ...report, summary: "" })).toBe(false); // 没话说是 null，不是空串
+    expect(stopped({ ...report, outputs: [{ key: "x", title: "t", fileName: "f" }] })).toBe(false);
 
     // 一句话带附件（14.5）：只说附件不说话也行；user_message 事件带存好的附件
     const ref = { id: "5b0c2f3e-6a1d-4c8e-9f2a-1b3c4d5e6f70", fileName: "截图.png", size: 1024, sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" };

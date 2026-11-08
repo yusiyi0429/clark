@@ -1155,13 +1155,41 @@ const syncItem = <T extends string, D extends TSchema>(type: T, data: D) => Type
 
 /**
  * 同步给云端的「在等批准的那一步」（status = waiting_permission 时带）：给人看的一行、越界路径，不传工具的完整输入（输入只在本机）。
- * 云端「等你」那一行的标题就是 title（原话）。
+ * 云端「等你」那一行的标题就是 title（原话）；项目对话里的批准卡（新首页设计 18.10）也照它画：
+ * 批准、拒绝都走网页的 POST /v1/sessions/:id/permissions/:requestId（已处理过或已失效回 409）。
  */
 export const LocalPermissionBrief = Type.Object({
   requestId: Type.String({ minLength: 1, maxLength: 120 }),
   toolName: Type.String({ maxLength: 200 }),
   title: Type.String({ maxLength: 500 }),
   outsidePaths: Type.Array(Type.String(), { maxItems: 20 }),
+  /** 能不能「这张卡都允许」（同 LocalPermissionRequestView.canAllowForSession）：为 false 时批准卡只给「允许这一次」。老版本本机报的不带，按 false。 */
+  canAllowForSession: Type.Optional(Type.Boolean()),
+}, strict);
+
+/**
+ * 子会话停了（新首页设计 18.10「报给主管线」）：why 是怎么停的——
+ * turn_done 做完一轮（等本人下一句；卡交回了、规划员交了计划、验收员交了结论也是这个）；interrupted 本人点了停下（含托盘「暂停全部」）；
+ * held 停着等（订阅额度用完、网关余额不足、预算用完，blocker 写等什么）；error 出错停住（执行方报错、没开起来、进程意外退出，blocker 写原因）；killed 强停。
+ * 要人介入（在问本人、在等批准）不报这一条：照旧是 status 条目带 question / permission，云端据此在项目对话里直接出决定卡。
+ */
+export const LocalStopReason = Type.Union([
+  Type.Literal("turn_done"), Type.Literal("interrupted"), Type.Literal("held"), Type.Literal("error"), Type.Literal("killed"),
+]);
+/**
+ * 停了的报告（同步条目 stopped）。都取会话里现成的内容，本机不另调模型：
+ * - summary：做成了什么，取这一轮执行方最后那段话的头一两句（去掉 Markdown 记号，200 字以内）；这一轮一句话也没说为 null。
+ * - blocker：卡在哪，出错、停着等时的原因（一句话，给人看）；做完一轮、本人停下、强停为 null。
+ * - outputs：这一轮交的产出物，key 是它那条 artifact 同步条目的 key（云端据此出「看结果」），title、fileName 同那一条。
+ * - handbackKey：这一轮交回了时，那条 handback 同步条目的 key。
+ * 云端照它在项目对话里出「B · 标题」的报告，再让项目主管线回一小轮。subject 里有 cardId、topicId、taskId 和 projectId。
+ */
+export const LocalStopReport = Type.Object({
+  why: LocalStopReason,
+  summary: Nullable(Type.String({ minLength: 1, maxLength: 400 })),
+  blocker: Nullable(Type.String({ minLength: 1, maxLength: 400 })),
+  outputs: Type.Array(Type.Object({ key: SyncKey, title: Type.String({ maxLength: 200 }), fileName: Type.String({ maxLength: 200 }) }, strict), { maxItems: 20 }),
+  handbackKey: Type.Optional(SyncKey),
 }, strict);
 
 export const LocalSyncItem = Type.Union([
@@ -1266,6 +1294,8 @@ export const LocalSyncItem = Type.Union([
   syncItem("background", LocalBackgroundItem),
   /** 卡合回的结果，见 LocalMergeSync。 */
   syncItem("merge", LocalMergeSync),
+  /** 子会话停了：一两句摘要、卡在哪、这一轮的产出物，见 LocalStopReport。每停一次报一条。 */
+  syncItem("stopped", LocalStopReport),
   /**
    * 预算变了（见 LocalTaskBudgetView）：state 变了（到 80%、到 100%、加了预算回落）和预算被改了时报一条，按报这一条的会话（这件 Task 里刚做完一轮的、或随便一个）。
    * 云端照它画 Task 行的「预算 80%」、Task 管线里的「加 50%」和 100% 时的选项框、「等你」里那一行。同一件 Task 以 updatedAt 最新的一条为准。
@@ -1367,6 +1397,8 @@ export type TLocalMergeSync = Static<typeof LocalMergeSync>;
 export type TLocalQuestion = Static<typeof LocalQuestion>;
 export type TLocalQuestionRequestView = Static<typeof LocalQuestionRequestView>;
 export type TLocalPermissionBrief = Static<typeof LocalPermissionBrief>;
+export type TLocalStopReason = Static<typeof LocalStopReason>;
+export type TLocalStopReport = Static<typeof LocalStopReport>;
 export type TLocalQuestionAnswerRequest = Static<typeof LocalQuestionAnswerRequest>;
 export type TLocalBackgroundItem = Static<typeof LocalBackgroundItem>;
 export type TLocalBackgroundItemKind = Static<typeof LocalBackgroundItemKind>;
