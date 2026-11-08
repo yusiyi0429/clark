@@ -1,0 +1,40 @@
+# 天枢桌面版安装包（Windows 先行）：NSIS 一键装，按用户装（%LOCALAPPDATA%\Programs\tianshu-desktop），不要管理员；内部版不签名（ADR 0032 的 A）。
+# 自动更新从下载源拉 latest.yml（electron-updater，generic）；发布时把 release/ 里的安装包、.blockmap、latest.yml 传到 publish.url。
+#
+# 打包时项目目录是 scripts/build.mjs 生成的 app/（pnpm run dist 带 --projectDir app），下面的相对路径都相对 app/：
+# app/package.json 的名字是 tianshu-desktop，一键安装按它定安装目录、更新缓存目录（tianshu-desktop-updater）。
+# 11/08 实测：项目目录用 apps/desktop 时，不管 extraMetadata 还是 directories.app，安装目录都按工作区的包名 @warmap/desktop 来。
+appId: com.tokenkingos.tianshu
+productName: 天枢
+executableName: Tianshu
+# 用已装好的 Electron，不再下载（electron-builder 26.18 自带的下载在这里会报错）；没有原生模块，不重编
+electronDist: ../node_modules/electron/dist
+npmRebuild: false
+directories:
+  output: ../release
+  buildResources: ../resources
+files:
+  - dist/**
+  - package.json
+# 本机程序在子进程（utilityProcess）里跑，读不了 asar，解出来放
+asarUnpack:
+  - dist/runner/**
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: ../resources/icon.png
+  artifactName: tianshu-desktop-setup-${version}.${ext}
+nsis:
+  oneClick: true
+  perMachine: false
+  allowElevation: false
+  # 卸载不删本机数据（会话、配对、钥匙在 %LOCALAPPDATA%\Tianshu\local）
+  deleteAppDataOnUninstall: false
+  shortcutName: 天枢
+  installerLanguages: [zh_CN]
+  language: "2052"
+  include: ../resources/installer.nsh
+publish:
+  provider: generic
+  url: https://tk.tokenkingos.com/downloads/desktop
