@@ -54,6 +54,7 @@ import { usePhone } from "./usePhone";
 import { ViewChrome, PAGE_TITLE, monthHref, scopeOf, viewOf, type View } from "./view";
 import { MONTH_PAGE, SECONDARY_PAGES, type SecondaryPageProps } from "./pages";
 import { SecondaryFallback } from "./SecondaryFallback";
+import { useHomeArrival } from "@/components/onboarding/useHomeArrival";
 import { ICON } from "./StateIcon";
 import { useTabTitle } from "./useTabTitle";
 import h from "@/styles/home.module.css";
@@ -92,6 +93,8 @@ function HomeFrame({ account }: { account: Account }) {
   const { buddy } = useBuddy();
   const api = useWorkHome();
   useAppearance();
+  // 进门的那一下（19.4）：从登录页进来（?_entry=unlock）整页淡入；平时直接打开不淡入。
+  const entering = useHomeArrival();
   const { data, work } = api;
   const [panelOpen, setPanelOpen] = useState(true);
   const [sheet, setSheet] = useState(false);
@@ -521,7 +524,7 @@ function HomeFrame({ account }: { account: Account }) {
     return (
       <WorkspaceContext.Provider value={workspace}>
         <ViewChrome.Provider value={chrome}>
-          <div className={h.app} data-phone="" data-view={view.kind} data-scheme="auto" data-testid="work-home">
+          <div className={h.app} data-phone="" data-view={view.kind} data-scheme="auto" data-entering={entering ? "" : undefined} data-testid="work-home">
             {/* 首屏兼首页（5.7）：左栏那几样，底部固定首页的输入框（带「发给」）。 */}
             {view.kind === "home" ? <>
               <aside className={h.left}>{left}</aside>
@@ -543,7 +546,7 @@ function HomeFrame({ account }: { account: Account }) {
   return (
     <WorkspaceContext.Provider value={workspace}>
       <ViewChrome.Provider value={chrome}>
-        <div className={h.app} data-panel={panelOpen ? "open" : "closed"} data-view={view.kind} data-scheme="auto" data-testid="work-home">
+        <div className={h.app} data-panel={panelOpen ? "open" : "closed"} data-view={view.kind} data-scheme="auto" data-entering={entering ? "" : undefined} data-testid="work-home">
           <aside className={h.left}>{left}</aside>
           <main className={h.display}>{display(view)}</main>
           <aside className={h.right} aria-label="后台任务">
