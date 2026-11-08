@@ -44,6 +44,8 @@ const SubSessionRef = { kind: Type.Union([Type.Literal("card"), Type.Literal("to
  * 第一批动作（名字 → 参数）。kind：read 只读（没授权也能用）；ui 只动界面（没授权也能用）；write 写（要完全授权，记审计）；plan 计划清单。
  * - read_work_home：读本人的首页（项目、子会话、等你），回 /api/me/work-home 同样的内容。
  * - read_project：读一个项目的详情和最近的动态（GET /api/me/projects/:id 和 /feed）。
+ * - find_people：按名字在人员目录里找同事（send_message、transfer_project 要的是人员 id，先用它从名字找到 id）。回最多 10 个 { personId, name, self }，
+ *   self 是本人自己（不能转达给自己）。
  * - open_page（ui）：让网页打开某一处，target 同「等你」的 open（WaitingTarget），另加 home（首页）、preferences（偏好）。
  * - set_appearance（write）：切外观，同 PUT /api/me/appearance。可撤（回到原来的）。
  * - set_feishu_push（write）：飞书推送开关，同 PUT /api/me/notification-settings。可撤。
@@ -67,6 +69,7 @@ const SubSessionRef = { kind: Type.Union([Type.Literal("card"), Type.Literal("to
 export const BuddyActionParams = {
   read_work_home: Type.Object({}, strict),
   read_project: Type.Object({ projectId: Uuid }, strict),
+  find_people: Type.Object({ query: Type.String({ minLength: 1, maxLength: 40 }) }, strict),
   open_page: Type.Object({ target: Type.Union([WaitingTarget, Type.Object({ kind: Type.Union([Type.Literal("home"), Type.Literal("preferences")]) }, strict)]) }, strict),
   set_appearance: AppearanceSettings,
   set_feishu_push: Type.Object({ feishu: Type.Boolean() }, strict),
