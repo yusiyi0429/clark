@@ -41,6 +41,23 @@ export const UpdateBuddyAuthorityRequest = Type.Object({ authority: Type.Union([
 const SubSessionRef = { kind: Type.Union([Type.Literal("card"), Type.Literal("topic")]), id: Uuid };
 
 /**
+ * 伙伴的选项框（设计 18 节第 9 条，ask_user 的参数，照 Claude Code 的 AskUserQuestion）：一题一个短标题 header（拼回答用，如「部署方式」）、题干、
+ * 2–4 个选项（短标签 label + 一行说明 detail）；recommended 只能标在第一个选项上、每题最多一个；multiSelect 为 true 可以多选。
+ * 「自己填」不在选项里，网页固定带。
+ */
+export const BuddyAskOption = Type.Object({
+  label: Type.String({ minLength: 1, maxLength: 40 }),
+  detail: Type.String({ minLength: 1, maxLength: 120 }),
+  recommended: Type.Optional(Type.Boolean()),
+}, strict);
+export const BuddyAskQuestion = Type.Object({
+  header: Type.String({ minLength: 1, maxLength: 12 }),
+  question: Type.String({ minLength: 1, maxLength: 300 }),
+  options: Type.Array(BuddyAskOption, { minItems: 2, maxItems: 4 }),
+  multiSelect: Type.Optional(Type.Boolean()),
+}, strict);
+
+/**
  * 第一批动作（名字 → 参数）。kind：read 只读（没授权也能用）；ui 只动界面（没授权也能用）；write 写（要完全授权，记审计）；plan 计划清单。
  * - read_work_home：读本人的首页（项目、子会话、等你），回 /api/me/work-home 同样的内容。
  * - read_project：读一个项目的详情和最近的动态（GET /api/me/projects/:id 和 /feed）。
@@ -65,6 +82,9 @@ const SubSessionRef = { kind: Type.Union([Type.Literal("card"), Type.Literal("to
  * - send_message（write）：给人员目录里的同事发一句话。先出一张卡（ConversationCard 的 buddy_message）给本人看，本人点「发出」才由天枢机器人转达；
  *   每人每天最多 20 条（回 429 DAILY_LIMIT）。不可撤（发出以后）。
  * - update_plan（plan）：计划清单，见 BuddyPlanParams。
+ * - ask_user（ui）：出一个选项框问本人（18 节第 9 条），参数见 BuddyAskQuestion：1–4 题。天枢存成这一轮的一张卡（ConversationCard 的 buddy_question，
+ *   status open），经 card 事件插进这一轮，读历史时也在那一轮的回答上。调完这一轮就该结束，等本人回答。伙伴台和项目对话都能用。
+ *   recommended 不在第一个选项上、或一题标了不止一个，回 400 INVALID_ARGS；这一轮没带 runId（界面上出不来）回 409 NO_TURN。回 { questionId }。
  */
 export const BuddyActionParams = {
   read_work_home: Type.Object({}, strict),
@@ -91,8 +111,10 @@ export const BuddyActionParams = {
     /** 整张清单（每次都交全部，后一次取代前一次）。少于 2 条不出。 */
     entries: Type.Array(LocalPlanEntry, { maxItems: 20 }),
   }, strict),
+  ask_user: Type.Object({ questions: Type.Array(BuddyAskQuestion, { minItems: 1, maxItems: 4 }) }, strict),
 } as const;
 export type BuddyActionName = keyof typeof BuddyActionParams;
+export type TBuddyAskQuestion = Static<typeof BuddyAskQuestion>;
 export const BUDDY_ACTION_NAMES = Object.keys(BuddyActionParams) as BuddyActionName[];
 
 // ───────────────────────── 动作清单和执行（只给 Chat） ─────────────────────────

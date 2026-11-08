@@ -1,6 +1,6 @@
 import { Type, type Static } from "@sinclair/typebox";
 import { WorldAnchor } from "./meetingDecisions.js";
-import { BuddyPlan, BuddyUiEffect } from "./buddyActions.js";
+import { BuddyAskQuestion, BuddyPlan, BuddyUiEffect } from "./buddyActions.js";
 
 /**
  * 对话的 scope。project:<projectId> 是新首页的项目对话（本人和这个项目的那条伙伴对话，projects.ts；原来的 Task 管线并进来了），
@@ -187,6 +187,8 @@ export const ConversationMessageRequest = Type.Object(
     anchorSelection: Type.Optional(AnchorSelection),
     /** 回答 Agent 的提问：带了它，这一句的原文由服务端按提问卡和答案重写。 */
     answers: Type.Optional(AskAnswerInput),
+    /** 这一句是在回答伙伴的哪个选项框（ConversationCard 的 buddy_question）：那张标成 answered，不是 dismissed。原文照发，不改写。 */
+    buddyQuestionId: Type.Optional(Type.String({ format: "uuid" })),
     references: Type.Optional(Type.Array(CardReference, { maxItems: 20 })),
     attachments: Type.Optional(Type.Array(ConversationAttachmentRef, { maxItems: 10 })),
     /** 工单 09：页面左侧正在看的那份材料；必须属于这个 scope 的对象。 */
@@ -222,6 +224,18 @@ const MeetingDraftPerson = Type.Object({ personId: Type.String({ minLength: 1 })
 export const ConversationCard = Type.Union([
   /** 伙伴要发给同事的一句话（17.4 send_message）：本人在卡上看一眼、点「发出」才由天枢机器人转达（GET /api/me/buddy-messages/:draftId）。 */
   Type.Object({ kind: Type.Literal("buddy_message"), draftId: Type.String({ format: "uuid" }) }, { additionalProperties: false }),
+  /**
+   * 伙伴的选项框（18 节第 9 条，伙伴调 ask_user 出的）：跟着出它的那一轮画在对话记录里，不钉在输入框上方。每题给选项（recommended 的在第一个），网页另带「自己填」。
+   * status：open 还在等本人；answered 本人点选项答了；dismissed 本人没答、发了别的话。本人在这个对话（伙伴台或那个项目对话）里发出任何一条新消息，
+   * 云端就把还 open 的那张标成 dismissed（网页发出时也可以先收起，读历史以云端为准）；只有 open 的画成能点的框，answered、dismissed 的不画或只留一行淡字，由网页定。
+   * 作答：网页把选择拼成一句话当作本人的新消息发出（如「部署方式：只发预发（推荐）；时间：本周五」），请求带 buddyQuestionId，那张标成 answered。
+   */
+  Type.Object({
+    kind: Type.Literal("buddy_question"),
+    questionId: Type.String({ format: "uuid" }),
+    questions: Type.Array(BuddyAskQuestion, { minItems: 1, maxItems: 4 }),
+    status: Type.Union([Type.Literal("open"), Type.Literal("answered"), Type.Literal("dismissed")]),
+  }, { additionalProperties: false }),
   /** 复盘草稿：摘要与「打开修改」。 */
   Type.Object({ kind: Type.Literal("review"), personalReviewId: Type.String({ minLength: 1 }), href: Type.String({ minLength: 1 }) }, { additionalProperties: false }),
   /** 周复盘草稿：摘要与「打开修改」。 */
