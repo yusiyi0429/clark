@@ -41,7 +41,7 @@ describe("项目", { timeout: 60_000 }, () => {
       await skipBootstrap(f);
       const card = await f.card("挂上之前就有的卡");
       const a = await create(f, { name: "  天枢新首页 " });
-      expect(a).toEqual({ projectId: a.projectId, name: "天枢新首页", archivedAt: null, createdAt: NOW, lastActivityAt: null, transfer: null });
+      expect(a).toEqual({ projectId: a.projectId, name: "天枢新首页", archivedAt: null, createdAt: NOW, lastActivityAt: null, transfer: null, permissionMode: "auto" });
       // 带 Task 建：要是本人负责的；不是的不建。
       expect((await f.call("POST", "/api/me/projects", { name: "别人的", taskId: "task-theirs" })).statusCode).toBe(403);
       expect((await f.call("POST", "/api/me/projects", { name: "找不到", taskId: "task-nope" })).statusCode).toBe(404);

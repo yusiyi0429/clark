@@ -29,9 +29,10 @@ export function registerSessionStartRoutes(app: AppInstance, ctx: RouteContext):
     async (req, reply) => {
       const ownerId = req.person!.personId;
       const claimed = await claimStarts(q, ownerId, req.body.deviceId, ctx.now());
-      // 每条带这件 Task 此刻的预算（不挂 Task 的专题用本人的缺省），本机按它跑。
+      // 每条带这件 Task 此刻的预算（不挂 Task 的专题用本人的缺省），本机按它跑；带所在项目新开子会话的默认权限模式（不在项目里为 auto）。
       const starts = claimed && await Promise.all(claimed.map(async (start) =>
-        ({ ...start, budget: start.taskId ? (await readTaskBudget(q, ownerId, start.taskId)).budget : await readBudgetDefault(q, ownerId) })));
+        ({ ...start, budget: start.taskId ? (await readTaskBudget(q, ownerId, start.taskId)).budget : await readBudgetDefault(q, ownerId),
+          permissionMode: start.projectId ? ((await q("SELECT permission_mode FROM projects WHERE id=$1", [start.projectId])).rows[0]?.permission_mode ?? "auto") : "auto" })));
       return starts ? { starts } : fail(reply, 404, "DEVICE_NOT_FOUND", "这台电脑没配对，或已经解除配对");
     });
 
