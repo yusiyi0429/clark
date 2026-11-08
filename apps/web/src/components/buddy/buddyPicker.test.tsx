@@ -26,7 +26,7 @@ describe("选择你的伙伴", () => {
     expect(initialBuddyDraft(null)).toEqual({ name: "", form: "classic", personality: "steady" });
     stubWindow("alive");
     expect(initialBuddyDraft(null)).toEqual({ name: "", form: "alive", personality: "steady" });
-    expect(initialBuddyDraft({ name: "团团", form: "panda", personality: "critical" })).toEqual({ name: "团团", form: "panda", personality: "critical" });
+    expect(initialBuddyDraft({ name: "团团", form: "panda", personality: "direct" })).toEqual({ name: "团团", form: "panda", personality: "direct" });
     expect(initialBuddyDraft({ name: "团团", form: "panda" })).toEqual({ name: "团团", form: "panda", personality: "steady" });
   });
 
@@ -49,11 +49,11 @@ describe("选择你的伙伴", () => {
   });
 
   it("上面是名字，中间是五种形象（三颗胶囊、Miles 和 C妹），下面是四种性格，选中的带标记", () => {
-    const html = renderToStaticMarkup(<BuddyPicker value={{ name: "团团", form: "alive", personality: "cheerful" }} onChange={() => undefined} />);
+    const html = renderToStaticMarkup(<BuddyPicker value={{ name: "团团", form: "alive", personality: "warm" }} onChange={() => undefined} />);
     expect(html).toContain("性格");
     expect(html.match(/name="buddy-personality"/g)).toHaveLength(4);
-    expect(html).toMatch(/data-selected="true"[^>]*><input[^>]*value="cheerful"/);
-    for (const label of ["沉稳靠谱", "乐观开朗", "理性冷静", "较真犀利"]) expect(html).toContain(label);
+    expect(html).toMatch(/data-selected="true"[^>]*><input[^>]*value="warm"/);
+    for (const label of ["沉稳靠谱", "直言不讳", "温和体贴", "启发追问"]) expect(html).toContain(label);
     expect(html).toContain("名字");
     expect(html).toMatch(/<input[^>]*value="团团"/);
     expect(html).not.toContain("maxLength");
@@ -74,9 +74,9 @@ describe("选择你的伙伴", () => {
   it("保存时去掉首尾空白，存好后告诉同页的其他读者；存不上就报错", async () => {
     const changed = vi.fn();
     window.addEventListener("buddy-changed", changed);
-    api.PUT.mockResolvedValueOnce({ data: { name: "团团", form: "panda", personality: "calm" }, response: { ok: true } });
-    await expect(saveBuddy({ name: " 团团 ", form: "panda", personality: "calm" })).resolves.toEqual({ name: "团团", form: "panda", personality: "calm" });
-    expect(api.PUT).toHaveBeenCalledWith("/api/me/buddy", { body: { name: "团团", form: "panda", personality: "calm" } });
+    api.PUT.mockResolvedValueOnce({ data: { name: "团团", form: "panda", personality: "coach" }, response: { ok: true } });
+    await expect(saveBuddy({ name: " 团团 ", form: "panda", personality: "coach" })).resolves.toEqual({ name: "团团", form: "panda", personality: "coach" });
+    expect(api.PUT).toHaveBeenCalledWith("/api/me/buddy", { body: { name: "团团", form: "panda", personality: "coach" } });
     expect(changed).toHaveBeenCalledTimes(1);
     api.PUT.mockResolvedValueOnce({ data: undefined, error: { message: "伙伴要有名字" }, response: { ok: false } });
     await expect(saveBuddy({ name: "团团", form: "panda" })).rejects.toThrow("伙伴要有名字");

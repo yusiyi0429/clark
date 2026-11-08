@@ -6452,7 +6452,7 @@ export interface components {
             buddy?: {
                 name: string;
                 form: "classic" | "alive" | "panda" | "miles" | "cmei";
-                personality?: "steady" | "cheerful" | "calm" | "critical";
+                personality?: "steady" | "direct" | "warm" | "coach";
             } | null;
         };
         PeopleDirectoryResponse: {
@@ -11158,10 +11158,10 @@ export interface components {
         Buddy: {
             name: string;
             form: "classic" | "alive" | "panda" | "miles" | "cmei";
-            personality?: "steady" | "cheerful" | "calm" | "critical";
+            personality?: "steady" | "direct" | "warm" | "coach";
         };
         BuddyForm: "classic" | "alive" | "panda" | "miles" | "cmei";
-        BuddyPersonality: "steady" | "cheerful" | "calm" | "critical";
+        BuddyPersonality: "steady" | "direct" | "warm" | "coach";
         RailBackground: {
             choice: "mist" | "dusk" | "pine" | "night" | "sand" | "custom";
             imageVersion: string | null;

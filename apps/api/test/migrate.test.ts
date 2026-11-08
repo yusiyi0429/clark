@@ -24,6 +24,25 @@ describe("migration", () => {
       });
     });
   });
+  it("伙伴性格换成 11/08 的四种：理性冷静并进沉稳靠谱，较真犀利改叫直言不讳，乐观开朗改叫温和体贴", async () => {
+    await createTestDb(async ({ db }) => {
+      const files = (await readdir(MIGRATIONS_DIR)).filter((file) => file.endsWith(".sql") && Number(file.split("_")[0]) < 252).sort();
+      await db.query("CREATE TABLE schema_migrations (id INTEGER PRIMARY KEY, filename TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())");
+      for (const file of files) {
+        await db.query(await readFile(join(MIGRATIONS_DIR, file), "utf8"));
+        await db.query("INSERT INTO schema_migrations(id,filename) VALUES($1,$2)", [Number(file.split("_")[0]), file]);
+      }
+      for (const [person, personality] of [["p-steady", "steady"], ["p-calm", "calm"], ["p-critical", "critical"], ["p-cheerful", "cheerful"]]) {
+        await db.query("INSERT INTO person_buddies(person_id,name,form,personality) VALUES($1,'团团','classic',$2)", [person, personality]);
+      }
+      await migrate(db);
+      const rows = (await db.query("SELECT person_id, personality FROM person_buddies ORDER BY person_id")).rows;
+      expect(rows).toEqual([
+        { person_id: "p-calm", personality: "steady" }, { person_id: "p-cheerful", personality: "warm" },
+        { person_id: "p-critical", personality: "direct" }, { person_id: "p-steady", personality: "steady" },
+      ]);
+    });
+  });
   it("adds task thread membership for existing 026 execution items", async () => {
     await createTestDb(async ({ db }) => {
       const files = (await readdir(MIGRATIONS_DIR)).filter((file) => file.endsWith(".sql") && Number(file.split("_")[0]) <= 35).sort();
@@ -217,7 +236,7 @@ describe("migration", () => {
         "241_budgets.sql",
         "242_run_ask.sql",
         "243_session_attachments.sql",
-        "244_local_task_budgets.sql", "245_projects.sql", "246_project_transfers.sql", "247_project_card_splits.sql", "248_goal_changes.sql", "249_source_words.sql", "250_appearance.sql", "251_buddy_actions.sql",
+        "244_local_task_budgets.sql", "245_projects.sql", "246_project_transfers.sql", "247_project_card_splits.sql", "248_goal_changes.sql", "249_source_words.sql", "250_appearance.sql", "251_buddy_actions.sql", "252_buddy_personality_v2.sql",
       ]);
 
       // 幂等：重复执行不再变更

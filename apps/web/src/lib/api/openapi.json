@@ -29222,15 +29222,15 @@
                         "type": "string"
                       },
                       {
-                        "const": "cheerful",
+                        "const": "direct",
                         "type": "string"
                       },
                       {
-                        "const": "calm",
+                        "const": "warm",
                         "type": "string"
                       },
                       {
-                        "const": "critical",
+                        "const": "coach",
                         "type": "string"
                       }
                     ]
@@ -59791,15 +59791,15 @@
                 "type": "string"
               },
               {
-                "const": "cheerful",
+                "const": "direct",
                 "type": "string"
               },
               {
-                "const": "calm",
+                "const": "warm",
                 "type": "string"
               },
               {
-                "const": "critical",
+                "const": "coach",
                 "type": "string"
               }
             ]
@@ -59837,15 +59837,15 @@
             "type": "string"
           },
           {
-            "const": "cheerful",
+            "const": "direct",
             "type": "string"
           },
           {
-            "const": "calm",
+            "const": "warm",
             "type": "string"
           },
           {
-            "const": "critical",
+            "const": "coach",
             "type": "string"
           }
         ]
