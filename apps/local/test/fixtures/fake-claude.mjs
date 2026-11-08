@@ -180,11 +180,18 @@ function agentDone() {
   }
 }
 
+/** 带 uuid 的话的生命周期（照 Claude Code 2.1.318，11/08 实测）：queued 收下、started 放进对话。 */
+const lifecycle = (id, state) => { if (id) out({ type: "command_lifecycle", command_uuid: id, state, uuid: `l-${Math.random()}`, session_id: sid }); };
+/** holdInterjections：进行中插的话这一轮读不到，等这一轮结束自己成为新的一轮（真机里模型只在出字、中间没有工具时就是这样）。 */
+const held = [];
+
 function finish(ok, text) {
   out({ type: "result", subtype: ok ? "success" : "error_during_execution", is_error: !ok, result: text, duration_ms: 12, total_cost_usd: 0.01 * turns,
     usage: { input_tokens: 3, output_tokens: 5, cache_read_input_tokens: 7, cache_creation_input_tokens: 11, iterations: [] },
     model_usage_since_last_result: cfg.modelUsage ?? { "claude-haiku-5-5": { costUSD: 0.01 } } });
   turn = null;
+  const next = held.shift();
+  if (next) { lifecycle(next.id, "started"); startTurn(next.text); }
 }
 
 const rl = createInterface({ input: process.stdin });
@@ -262,6 +269,9 @@ rl.on("line", (line) => {
       finish(true, "被拒了");
     }
   } else if (msg.type === "user") {
+    lifecycle(msg.uuid, "queued");
+    if (turn && readCfg().holdInterjections) { held.push({ id: msg.uuid, text: msg.message.content }); return; }
+    lifecycle(msg.uuid, "started");
     if (turn) {
       // 进行中插话：下一个工具步骤之前读到。
       appendFileSync(TURNS, JSON.stringify({ interjection: msg.message.content, sid }) + "\n");

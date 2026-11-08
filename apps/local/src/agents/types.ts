@@ -43,8 +43,11 @@ export interface PermissionAnswer {
 /** 一个正在跑的执行方进程。事件都已归一化成契约里的 LocalSessionEvent（未编号）。 */
 export interface AgentRun {
   readonly pid: number | undefined;
-  /** 往进行中的会话追加一条用户消息：进行中时在下一个工具步骤生效，空闲时开新一轮。 */
-  send(text: string): void;
+  /**
+   * 往进行中的会话追加一条用户消息：进行中时在下一个工具步骤生效，空闲时开新一轮。
+   * 带 messageId（本人说的话）时，执行方收下、读到时各来一条 receipt 事件（delivered、read）；本机自己补的话不带、没有回执。
+   */
+  send(text: string, messageId?: string): void;
   /** 停下当前一轮，会话保留。 */
   interrupt(): Promise<void>;
   respondPermission(requestId: string, answer: PermissionAnswer): boolean;
