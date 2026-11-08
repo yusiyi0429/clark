@@ -22,12 +22,14 @@ import h from "@/styles/home.module.css";
 type Draft = { key: number; file: File; url: string | null };
 const MAX_HEIGHT = 168;
 
-export function InputBar({ placeholder, onSend, busy = false, onStop, disabled = false, textRequired = false, context, under, dock, draftKey, fill, onText, onHeight }: {
+export function InputBar({ placeholder, onSend, busy = false, interruptible = false, onStop, disabled = false, textRequired = false, context, under, dock, draftKey, fill, onText, onHeight }: {
   placeholder: string;
   /** 发出去：true 收下；false 或报错放回去。 */
   onSend: (text: string, files: File[]) => Promise<boolean>;
   /** 回答进行中：右边是停止，回车不发。 */
   busy?: boolean;
+  /** 回答进行中也能发（伙伴对话，17.4：发了就停掉上一轮）：框里有字时右边是发送，空着是停止。 */
+  interruptible?: boolean;
   onStop?: () => void;
   disabled?: boolean;
   /** 只带附件不说话能不能发（Chat 要有一句话；子会话可以只带附件）。 */
@@ -110,7 +112,7 @@ export function InputBar({ placeholder, onSend, busy = false, onStop, disabled =
 
   const has = (value: string) => !!value.trim() || (!textRequired && drafts.length > 0);
   async function submit(raw = text) {
-    if (busy || disabled || sending.current) return;
+    if ((busy && !interruptible) || disabled || sending.current) return;
     sending.current = true;
     const value = (dictation.polishing ? await dictation.settle() : raw).trim();
     if (!value && (textRequired || !drafts.length)) { sending.current = false; return; }
@@ -203,11 +205,11 @@ export function InputBar({ placeholder, onSend, busy = false, onStop, disabled =
               }} />
           </span>
           {dictation.active ? (
-            <DictationControls dictation={dictation} onToInput={() => dictation.stop()} onSend={sendDictation} canSend={!busy} />
-          ) : busy && onStop ? (
+            <DictationControls dictation={dictation} onToInput={() => dictation.stop()} onSend={sendDictation} canSend={!busy || interruptible} />
+          ) : busy && onStop && !(interruptible && showSend) ? (
             <button type="button" className={h.barSend} aria-label="停止本次回答" title="停止" onClick={onStop}><Square size={12} strokeWidth={2.4} fill="currentColor" aria-hidden /></button>
           ) : showSend ? (
-            <button type="button" className={h.barSend} aria-label="发送" title="发送" disabled={disabled || busy} onClick={() => void submit()} data-testid="input-send"><ArrowUp size={16} strokeWidth={2.2} aria-hidden /></button>
+            <button type="button" className={h.barSend} aria-label="发送" title="发送" disabled={disabled || (busy && !interruptible)} onClick={() => void submit()} data-testid="input-send"><ArrowUp size={16} strokeWidth={2.2} aria-hidden /></button>
           ) : (
             <button type="button" className={h.barTool} aria-label="说话" title="说话" disabled={disabled} onClick={() => void dictation.start()}><Mic size={16} strokeWidth={1.8} aria-hidden /></button>
           )}

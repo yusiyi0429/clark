@@ -12,7 +12,7 @@
  * 4. 本人行：贴底，头像 24 + 名字，点开个人菜单。
  * 树的键盘：↑↓ 移动，回车打开，→ 展开折叠，← 收起。
  */
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { ChevronRight, Ellipsis, House, Info, Plus } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
 import { FailedLine, failureOf, type Failure } from "@/components/work/DecisionBox";
@@ -70,6 +70,8 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
   const [archivedOpen, setArchivedOpen] = useState(false);
   // 听写时台上的伙伴跟着声音动（5.4.2、9.2），哪个输入框在听都算。
   const dictation = useDictationSignal();
+  // 伙伴台「亮着」（17.2）：只在伙伴对话里；在说或在想（回话流着）> 在听（听写开着）> 空闲。
+  const glow = view.kind !== "buddy" ? undefined : speaking ? "speaking" : dictation ? "listening" : "idle";
   const [createFailed, setCreateFailed] = useState<Failure | null>(null);
   const create = (value: string) => {
     setNaming(false);
@@ -80,7 +82,7 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
   };
   return (
     <nav className={h.leftInner} aria-label="导航">
-      <div className={h.stage} data-current={view.kind === "buddy" ? "" : undefined}>
+      <div className={h.stage} data-current={view.kind === "buddy" ? "" : undefined} data-glow={glow} style={glow === "listening" ? { "--level": dictation?.level ?? 0 } as CSSProperties : undefined}>
         <button type="button" className={h.stageHit} aria-label={name} aria-current={view.kind === "buddy" ? "page" : undefined} onClick={() => go(BUDDY_HREF)} data-testid="buddy-entry">
           <BuddyMark buddy={buddy} place="stage" active={speaking} listening={!!dictation || (view.kind === "buddy" && !speaking)} level={dictation?.level ?? 0} />
         </button>

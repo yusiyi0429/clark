@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * Task 详情里「预算」那一行（设计 11.3：「Task 详情里一行能改」）：自动 · 设预算 · 无上限。
+ * 预算那一行（设计 11.3）：自动 · 设预算 · 无上限。Task 详情里改这件 Task 的（TaskBudget），「偏好」里改本人的缺省（DefaultBudget）。
+ * Task 详情里「预算」那一行（设计 11.3：「Task 详情里一行能改」）：
  * 读 GET /api/me/tasks/:taskId/budget（没单独设过时是本人在「偏好」里的缺省，小字「沿用偏好」），改了 PUT 回去。
  * 自动、无上限点了就存；设预算填时长、本周额度百分比，点「存」才存，一项都没填对时停在输入框上。没存成在原处写「失败 · 重试」。
  * 存到天枢以后，这台电脑就绪时再交给本机（PUT /v1/budgets）：跑着的、用完停着等的马上按新的来。
@@ -11,37 +12,49 @@ import type { TBudget, TBudgetMode } from "@warmap/contracts";
 import { HeroButton } from "@/components/HeroButton";
 import { SegmentedSwitch } from "@/components/SegmentedSwitch";
 import { FailedLine, failureOf, type Failure } from "@/components/work/DecisionBox";
-import { readTaskBudget, saveTaskBudget } from "@/lib/board/cloud";
+import { readBudgetDefault, readTaskBudget, saveBudgetDefault, saveTaskBudget } from "@/lib/board/cloud";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { MODES, budgetOf, limitsOf, type Limits } from "./PlanDecision";
 import h from "@/styles/home.module.css";
 import x from "@/styles/decision-box.module.css";
 
 export function TaskBudget({ taskId }: { taskId: string }) {
+  const local = useLocalRunner();
+  return <BudgetRow key={taskId} read={() => readTaskBudget(taskId)} save={async (budget) => {
+    await saveTaskBudget(taskId, budget);
+    if (local.phase === "ready") await local.runner.putBudget({ taskId, budget });
+  }} />;
+}
+
+/** 「偏好」里本人新 Task 的缺省预算（GET / PUT /api/me/budget-default）。 */
+export function DefaultBudget() {
+  return <BudgetRow read={() => readBudgetDefault().then((budget) => (budget ? { budget, inherited: false } : null))} save={(budget) => saveBudgetDefault(budget).then(() => undefined)} />;
+}
+
+function BudgetRow({ read, save: persist }: { read: () => Promise<{ budget: TBudget; inherited: boolean } | null | undefined>; save: (budget: TBudget) => Promise<void> }) {
   const [mode, setMode] = useState<TBudgetMode | null>(null);
   const [limits, setLimits] = useState<Limits>({ hours: "", percent: "", money: "" });
   const [inherited, setInherited] = useState(false);
   const [failed, setFailed] = useState<Failure | null>(null);
   const [busy, setBusy] = useState(false);
   const hoursRef = useRef<HTMLInputElement>(null);
-  const local = useLocalRunner();
+  const readRef = useRef(read);
   useEffect(() => {
     let alive = true;
-    void readTaskBudget(taskId).then((found) => {
+    void readRef.current().then((found) => {
       if (!alive) return;
       setMode(found?.budget.mode ?? "auto");
       if (found) { setLimits(limitsOf(found.budget)); setInherited(found.inherited); }
     }, () => { if (alive) setMode("auto"); });
     return () => { alive = false; };
-  }, [taskId]);
+  }, []);
   if (!mode) return null;
   const save = async (budget: TBudget) => {
     setBusy(true);
     setFailed(null);
     try {
-      await saveTaskBudget(taskId, budget);
+      await persist(budget);
       setInherited(false);
-      if (local.phase === "ready") await local.runner.putBudget({ taskId, budget });
     }
     catch (error) { setFailed(failureOf(error, () => void save(budget))); }
     finally { setBusy(false); }

@@ -20,7 +20,7 @@ export class CloudError extends Error {
 type Result<T> = { data?: T; error?: unknown; response: Response };
 
 /** 401 去登录；不成功抛 CloudError（带服务端的话）。 */
-async function unwrap<T>(call: Promise<Result<T>>): Promise<T> {
+export async function unwrap<T>(call: Promise<Result<T>>): Promise<T> {
   let result: Result<T>;
   try {
     result = await call;
@@ -61,6 +61,12 @@ export const acceptDrafts = (taskId: string, drafts: TAcceptCardDraftsRequest["d
 export const readTaskBudget = (taskId: string) => maybe(browserApi.GET("/api/me/tasks/{taskId}/budget", { params: task(taskId) }));
 /** 改这件 Task 的预算（Task 详情里「预算」那一行，11.3）。 */
 export const saveTaskBudget = (taskId: string, budget: TBudget) => unwrap(browserApi.PUT("/api/me/tasks/{taskId}/budget", { params: task(taskId), body: budget }));
+/** 本人新 Task 的缺省预算（「偏好」，11.3；没设过是自动）。 */
+export const readBudgetDefault = () => maybe(browserApi.GET("/api/me/budget-default"));
+export const saveBudgetDefault = (budget: TBudget) => unwrap(browserApi.PUT("/api/me/budget-default", { body: budget }));
+/** 本人的通知开关（「偏好」，13.2）：飞书推送，缺省开。 */
+export const readNotificationSettings = () => maybe(browserApi.GET("/api/me/notification-settings"));
+export const saveNotificationSettings = (feishu: boolean) => unwrap(browserApi.PUT("/api/me/notification-settings", { body: { feishu } }));
 export const dismissDraft = (draftId: string) => unwrap(browserApi.POST("/api/card-drafts/{id}/dismiss", { params: id(draftId) }));
 export const shipPending = (taskId: string, statement?: string) =>
   unwrap(browserApi.POST("/api/plan-tasks/{taskId}/deliverable/versions/from-pending", { params: task(taskId), body: statement ? { statement } : {} }));

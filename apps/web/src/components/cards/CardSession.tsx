@@ -26,7 +26,7 @@ import { useAutoReturn } from "@/lib/board/useAutoReturn";
 import { showWorkspaceToast } from "@/lib/toast";
 import { RelayLine, SessionComposer, SessionTranscript, sayToSession, sessionEnded, type DecideOptions } from "./SessionTranscript";
 import { useCardDetail, type CardDetail } from "./useCardDetail";
-import { SourceWords } from "./SourceWords";
+import { SourceWordIssues, SourceWords } from "./SourceWords";
 import { MergeAction } from "@/components/work/MergeAction";
 import { QuestionDecision, awayChip, questionTitle } from "@/components/work/decisions";
 import { askAnchor } from "@/components/home/TaskFeed";
@@ -37,6 +37,7 @@ import { useConversationScroll } from "@/conversation/useConversationScroll";
 import { commitText, placeText, shortPlace } from "@/lib/work/merge";
 import type { TLocalSessionSummary } from "@/lib/local/runner";
 import s from "@/styles/v2-session.module.css";
+import { PlanChecklist } from "./PlanChecklist";
 
 /** 回到新首页，锚着这张卡的 Task（V2 设计第 20.4 节；没打开新首页的人会被带回老首页）。 */
 const workHref = (taskId: string | null) => (taskId ? `/me/work/tasks/${encodeURIComponent(taskId)}` : "/me/work");
@@ -286,7 +287,7 @@ function ResultPane({ detail, session, view, canAct, wait, stage, handheld, read
       {plan.length ? (
         <div className={s.sec}>
           <p className={s.lab}>计划{step ? <span className={s.faint}>第 {step.step}/{step.total} 步</span> : null}</p>
-          <ol className={s.plan}>{plan.map((entry, index) => <li key={index} data-status={entry.status}>{entry.content}</li>)}</ol>
+          <PlanChecklist entries={plan} />
         </div>
       ) : null}
 
@@ -383,6 +384,7 @@ export function Acceptance({ cardId, handback, canOverrule, deliverable, onChang
           ))}
         </ol>
       ) : null}
+      <SourceWordIssues issues={handback.sourceWordIssues} className={s.wordIssues} tagClassName={s.issueTag} />
       {handback.overrule ? <p className={s.faint}>{handback.overrule.by.name} 推翻：{handback.overrule.reason}</p> : null}
       {handback.error ? <p className={s.faint}>{handback.error}</p> : null}
       {reason !== null ? (

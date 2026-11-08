@@ -107,7 +107,7 @@ describe("验收未过：本机连着时自动把改法送过去，只送一次"
   beforeEach(() => { resetAutoReturn(); cloud.markReturned.mockClear(); });
   const failed = (returnedAt: string | null = null) => item("a", { stage: "doing", wait: "review_failed", handback: {
     id: "00000000-0000-4000-8000-0000000000b1", attempt: 1, status: "done", outcome: "fail", met: 1, total: 2, headline: null,
-    returnText: "验收没过：第 2 条……改完再交回。", returnedAt, overruled: false, createdAt: "2026-11-06T01:00:00Z", finishedAt: "2026-11-06T01:02:00Z", git: null,
+    returnText: "验收没过：第 2 条……改完再交回。", returnedAt, overruled: false, createdAt: "2026-11-06T01:00:00Z", finishedAt: "2026-11-06T01:02:00Z", git: null, sourceWordIssues: [],
   } });
   const runner = () => ({ sendMessage: vi.fn(async () => ({ delivery: "resumed" as const })) }) as unknown as LocalRunner & { sendMessage: ReturnType<typeof vi.fn> };
 

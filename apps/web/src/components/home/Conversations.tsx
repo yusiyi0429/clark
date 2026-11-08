@@ -73,7 +73,7 @@ function ChatInput({ data, placeholder, onHeight, context }: {
   const [fill, setFill] = useState<{ text: string; nonce: number } | null>(null);
   useAnswerOptionFill(data.scope, (text) => setFill({ text, nonce: Date.now() }));
   return (
-    <InputBar placeholder={placeholder} busy={data.streaming} onStop={data.stop} textRequired onHeight={onHeight} fill={fill} context={context}
+    <InputBar placeholder={placeholder} busy={data.streaming} interruptible={data.interruptible} onStop={data.stop} textRequired onHeight={onHeight} fill={fill} context={context}
       draftKey={`tianshu-home-draft-v1:${data.scope}`}
       onSend={async (text, files) => {
         const ok = await sendWithFiles(data, context ? `${context.label}\n\n${text}` : text, files);
