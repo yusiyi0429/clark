@@ -484,6 +484,34 @@ export const LocalRole = Type.Object({
 }, strict);
 
 /**
+ * 子会话的权限模式（新首页：子会话输入框下面的模式选择；项目主管线下面那个是这个项目新开子会话的默认，由网页记、开工时带来）。照 Claude Code 的 Mode 菜单：
+ * - auto「自动（推荐）」，新子会话默认：安全的步骤本机自己放行，有风险的问本人。安全的是：在允许的文件夹里读写文件（卡在工作树里时是工作树里），
+ *   不装东西、不联网、不推拉代码、不改系统设置、不删不挪文件（工作树里可以删、挪：有 git 兜底）的命令，飞书命令行只读的，天枢 MCP 里读的工具（get_、list_）。
+ *   别的（联网搜索、抓网页、开子 agent 等）问。
+ * - default「每次都问」：除了 Claude Code 自己就不问的（读文件、看目录这种），每一步都问本人。
+ * - acceptEdits「自动接受改文件」：允许的文件夹里新建、改文件自己放行；命令和别的照样问。
+ * - plan「先出计划」：执行方只读、只出计划（Claude Code 的 plan 模式），出完计划问本人「按这个做」（权限请求，toolName ExitPlanMode）；
+ *   本人批了就转成 auto 接着做（事件 permission_mode，by plan_approved），拒了留在 plan、按本人说的改计划。
+ * - bypassPermissions「全部放行」：除了下面的硬规矩，都自己放行。
+ * 天枢的硬规矩不受模式影响，哪一档都照问本人（设计 9.5）：对外的动作（git 推送和拉取、gh（开 PR 等）、飞书命令行写的（发消息、改文档等））、
+ * 危险命令表里的（装东西、联网下载、ssh、sudo、改注册表和系统设置、跑没装好的 npx 包）、碰 .git 和 .claude 的、碰允许的文件夹以外的路径、
+ * 天枢 MCP 里写的工具。卡和规划员、验收员本来不给的工具（只读的会话不给写文件）照旧不给，跟模式无关。
+ * 实现上 Claude Code 一律以「每次都问」起（只有 plan 用它自己的 plan 模式），每个请求都先到本机、本机按档位放行或转给网页：
+ * Claude Code 自己的 auto、bypassPermissions 放行的步骤不经本机，硬规矩管不住。
+ */
+export const LocalPermissionMode = Type.Union([
+  Type.Literal("auto"), Type.Literal("default"), Type.Literal("acceptEdits"), Type.Literal("plan"), Type.Literal("bypassPermissions"),
+]);
+/**
+ * 每种执行方能选哪几档（没有的不出现在选择里）。Codex（12 月接）走 app-server 的审批（每一步都先问本机），能像 Claude Code 一样由本机按档位放行，
+ * 只是没有「先出计划」；接上时按实测再定。
+ */
+export const LOCAL_AGENT_PERMISSION_MODES = {
+  "claude-code": ["auto", "default", "acceptEdits", "plan", "bypassPermissions"],
+  codex: ["auto", "default", "acceptEdits", "bypassPermissions"],
+} as const satisfies Record<Static<typeof LocalAgentKind>, readonly Static<typeof LocalPermissionMode>[]>;
+
+/**
  * POST /v1/sessions。kind=plan（规划员）：带 taskId，或只带 projectId（没挂 Task 的项目，网页按 plan-brief 回的 project 填），firstMessage 是云端的拆卡交代，role 是规划员岗位；不给目录时用项目绑的文件夹，再没有本机给它建一个专用目录。
  * kind=verify 不能从网页开（400）：执行方交回以后本机自己起。
  */
@@ -523,6 +551,8 @@ export const LocalCreateSessionRequest = Type.Object({
    * 每次开工带的预算覆盖本机记着的那份（以最新的为准）。不带就是「自动」、不记账。
    */
   taskBudget: Type.Optional(Type.Object({ taskId: Nullable(Type.String({ minLength: 1, maxLength: 80 })), budget: Budget }, strict)),
+  /** 权限模式（见 LocalPermissionMode）：网页带项目主管线上设的默认；不带为 auto。执行方没有这一档时 400。验收员随被验的卡。 */
+  permissionMode: Type.Optional(LocalPermissionMode),
 }, strict);
 
 /**
@@ -616,11 +646,48 @@ export const LocalEffort = Type.Union([Type.Literal("low"), Type.Literal("medium
  * model 是传给 Claude Code 的模型（订阅按档位选的 opus、sonnet，网关是配置里的模型名）；effort 是思考强度（网关不传为 null）；
  * multiAgent 是多 agent（ultracode）开没开，只有「无上限」的订阅会话开，额度到 95% 时对新的轮次关掉。每次拉起、续上时定，跑着时只有 multiAgent 会变。
  */
+/**
+ * 执行方自己报的实际模型：Claude Code 每轮开头 system/init 里的 model（Codex 接上以后是 app-server 开线程时回的 model）。
+ * 和 LocalRun.model 不一样时（订阅传的是 opus 这种别名、网关把模型换了）以它为准显示；对不上的那一下本机记一条事件 notice（code model_mismatch，
+ * text 写请求的和实际的），同步给云端的 status 条目随之带新的 actual。modelName 的写法同 LocalRun.modelName；at 是报出这个模型的时间（换了模型才更新，
+ * 每轮报的一样就不重报 status）。续上同一个模型时，上次报的先留着，等这次报了再换。
+ */
+export const LocalActualModel = Type.Object({
+  model: Type.String({ minLength: 1, maxLength: 120 }),
+  modelName: Type.String({ minLength: 1, maxLength: 60 }),
+  at: Instant,
+}, strict);
 export const LocalRun = Type.Object({
   mode: BudgetMode,
   model: Nullable(Type.String({ maxLength: 120 })),
   effort: Nullable(LocalEffort),
   multiAgent: Type.Boolean(),
+  /**
+   * 每个子会话都显示「哪个来源的哪个模型」（选了「自动」也显示落到哪个）：界面写 `${sourceLabel} · ${actual?.modelName ?? modelName}`，
+   * 如「我的 Claude 订阅 · Opus 5.5」「TokenHub · qwen3.8-flash」。下面四项本机总会填；Optional 只为兼容老版本本机报的和已存的会话。
+   * source：本人的订阅还是网关（同模型配置的 source）。
+   */
+  source: Type.Optional(LocalModelSource),
+  /** 来源的名字：模型配置的名字（内置的「我的 Claude 订阅」，或本人给 TokenHub 配置起的名字）。 */
+  sourceLabel: Type.Optional(Type.String({ minLength: 1, maxLength: 40 })),
+  /**
+   * 给人看的模型名：认得出的 Claude 模型写成「Opus 5.5」「Sonnet 5.5」「Haiku 5.5」；订阅传的是 opus、sonnet 这种别名时，
+   * 用这台电脑上一次实际跑出来的版本（见 actual），一次都没跑过就写「Opus」「Sonnet」；别的（网关模型）去掉「厂商/」前缀原样写，如 qwen3.8-flash。
+   */
+  modelName: Type.Optional(Nullable(Type.String({ maxLength: 60 }))),
+  /** 实际跑的（见 LocalActualModel），以它为准；这次拉起后执行方还没报过为 null。 */
+  actual: Type.Optional(Nullable(LocalActualModel)),
+}, strict);
+/**
+ * POST /v1/runs/preview：开工前看这次会怎么跑（开工选项框写「我的 Claude 订阅 · Opus 5.5 · 思考 medium」，「自动」也写落到哪个）。
+ * 体是开工请求（LocalCreateSessionRequest）里定跑法的那几项，原样带；回的 LocalRun 和真开工时一样算（当下的额度、这件 Task 的预算），actual 为 null。
+ * 只是预览：开工时额度或预算变了，以开工那一刻算的为准（会话摘要和 status 条目里的 run）。
+ */
+export const LocalRunPreviewRequest = Type.Object({
+  agent: Type.Optional(LocalAgentKind),
+  modelProfileId: Type.Optional(Id),
+  modelTier: Type.Optional(LocalModelTier),
+  taskBudget: Type.Optional(Type.Object({ taskId: Nullable(Type.String({ minLength: 1, maxLength: 80 })), budget: Budget }, strict)),
 }, strict);
 
 export const LocalSessionSummary = Type.Object({
@@ -653,6 +720,8 @@ export const LocalSessionSummary = Type.Object({
   hold: Type.Optional(LocalHold),
   /** 最近一次拉起时定的跑法（见 LocalRun）；还没拉起过（排着）不带。 */
   run: Type.Optional(LocalRun),
+  /** 现在的权限模式（见 LocalPermissionMode）。本人在子会话底下改（PUT /v1/sessions/:id/permission-mode），计划批了从 plan 转 auto。 */
+  permissionMode: LocalPermissionMode,
 }, strict);
 export const LocalSessionListResponse = Type.Object({ sessions: Type.Array(LocalSessionSummary) }, strict);
 
@@ -763,6 +832,11 @@ export const LocalQuestionAnswerRequest = Type.Object({
 
 /** POST /v1/sessions/:id/interrupt（停下，会话保留）与 /kill（强停，杀本会话进程树）的回执。 */
 export const LocalSessionActionResponse = Type.Object({ session: LocalSessionSummary }, strict);
+/**
+ * PUT /v1/sessions/:id/permission-mode：本人在子会话底下换模式，跑着的时候也能换，下一步就按新的来；回改完的会话。
+ * 换成更宽的档时，正在等批准的请求按新的档重判一遍，新档放行的就自己放行（网页上那条随之消失）。执行方没有这一档时 400；会话已结束 409。
+ */
+export const LocalPermissionModeRequest = Type.Object({ mode: LocalPermissionMode }, strict);
 
 // ───────────────────────── 预算（新首页设计 11.3、11.4） ─────────────────────────
 
@@ -937,6 +1011,8 @@ export const LocalSessionEvent = Type.Union([
   /** hold：停着等额度恢复时带（见 LocalHold）。 */
   ev("status", { status: LocalSessionStatus, exitCode: Type.Optional(NullableInteger()), reason: Type.Optional(Type.String()), hold: Type.Optional(LocalHold) }),
   ev("agent_info", { agent: LocalAgentKind, version: Type.String(), model: Nullable(Type.String()), permissionMode: Nullable(Type.String()) }),
+  /** 权限模式换了（见 LocalPermissionMode）：by web 是本人在网页上换的，plan_approved 是本人批了计划、从 plan 转成 auto。开工时的模式不报这一条。 */
+  ev("permission_mode", { mode: LocalPermissionMode, by: Type.Union([Type.Literal("web"), Type.Literal("plan_approved")]) }),
   /**
    * attachments：这句话带的附件（存好的，见 LocalAttachmentRef）；没有就不带。text 是本人说的原话，不含本机拼给执行方的附件路径。
    * messageId：这句话的编号（本机给的，11/08 起每条都带；之前的事件日志里没有），回执（receipt）按它对上。
@@ -1059,6 +1135,8 @@ export const LocalSyncItem = Type.Union([
     question: Type.Optional(LocalQuestionRequestView),
     /** status = waiting_permission 时带：在等批准的那一步（LocalPermissionBrief）。 */
     permission: Type.Optional(LocalPermissionBrief),
+    /** 现在的权限模式（同本机摘要的 permissionMode，手机上看）；换了模式本机重报一条 status。老版本本机报的不带。 */
+    permissionMode: Type.Optional(LocalPermissionMode),
   }, strict)),
   syncItem("plan", Type.Object({ entries: Type.Array(LocalPlanEntry, { maxItems: 100 }), progress: LocalPlanProgress }, strict)),
   /**
@@ -1224,6 +1302,10 @@ export type TLocalAttachmentRef = Static<typeof LocalAttachmentRef>;
 export type TLocalSavedAttachment = Static<typeof LocalSavedAttachment>;
 export type TLocalEffort = Static<typeof LocalEffort>;
 export type TLocalRun = Static<typeof LocalRun>;
+export type TLocalActualModel = Static<typeof LocalActualModel>;
+export type TLocalRunPreviewRequest = Static<typeof LocalRunPreviewRequest>;
+export type TLocalPermissionMode = Static<typeof LocalPermissionMode>;
+export type TLocalPermissionModeRequest = Static<typeof LocalPermissionModeRequest>;
 export type TLocalTaskBudgetView = Static<typeof LocalTaskBudgetView>;
 export type TLocalBudgetListResponse = Static<typeof LocalBudgetListResponse>;
 export type TLocalBudgetUpdateRequest = Static<typeof LocalBudgetUpdateRequest>;
@@ -1297,6 +1379,8 @@ export const LOCAL_RUNNER_ROUTES = {
   stopBackground: { method: "POST", path: "/v1/sessions/:id/background/:itemId/stop", auth: true },
   listBudgets: { method: "GET", path: "/v1/budgets", auth: true },
   putBudget: { method: "PUT", path: "/v1/budgets", auth: true },
+  previewRun: { method: "POST", path: "/v1/runs/preview", auth: true },
+  setPermissionMode: { method: "PUT", path: "/v1/sessions/:id/permission-mode", auth: true },
   listProjects: { method: "GET", path: "/v1/projects", auth: true },
   putProjectFolder: { method: "PUT", path: "/v1/projects/:projectId/folder", auth: true },
   handoverCheck: { method: "POST", path: "/v1/projects/:projectId/handover-check", auth: true },
