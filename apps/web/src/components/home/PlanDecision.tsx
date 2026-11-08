@@ -9,10 +9,11 @@
  * 样子照设计 5.4.3「开工的特别规矩」：问题「{Task 名}：这样开工？」，编号的几步 14/20，每步下面一行「岗位 · 约定第 N 条」，再一行「N 个子会话」；
  * 岗位、模型、文件夹点了用弹层选（全站唯一那种弹层）。
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Dropdown } from "@heroui/react";
 import { Check, ChevronDown, X } from "lucide-react";
 import type { TBudget, TBudgetMode, TCardDraftView } from "@warmap/contracts";
+import { ProjectModeContext } from "@/components/cards/PermissionMode";
 import { DecisionBox } from "@/components/work/DecisionBox";
 import { ApprovalDecision, QuestionDecision, awayChip } from "@/components/work/decisions";
 import { SegmentedSwitch } from "@/components/SegmentedSwitch";
@@ -81,6 +82,8 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
 }) {
   const local = useLocalRunner();
   const ready = local.phase === "ready" && !handheld;
+  // 所在项目新开子会话的默认档（项目主管线下面那个选择），开工时带给本机。
+  const projectMode = useContext(ProjectModeContext);
   const [editing, setEditing] = useState(false);
   const [edits, setEdits] = useState<Record<string, Edit>>({});
   const [folderId, setFolderId] = useState<string | null>(null);
@@ -173,7 +176,7 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
         const item = cards[index];
         const role = roleOf(draft);
         const model = modelOf(draft);
-        return item && role && model ? [{ item, model, cwd: where?.path ?? "", role: roles.find((entry) => entry.id === role.id) ?? null }] : [];
+        return item && role && model ? [{ item, model, cwd: where?.path ?? "", role: roles.find((entry) => entry.id === role.id) ?? null, ...(projectMode ? { permissionMode: projectMode } : {}) }] : [];
       });
       if (ready && where) {
         writeLast({ folderId: where.id });

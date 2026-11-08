@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ArrowLeft, ListChecks, LoaderCircle } from "lucide-react";
-import type { THomePlanTask } from "@warmap/contracts";
+import type { THomePlanTask, TLocalPermissionMode } from "@warmap/contracts";
 import type { Account } from "@/components/AccountMenu";
 import { useBuddy } from "@/components/buddy/useBuddy";
 import { CardSession } from "@/components/cards/CardSession";
@@ -199,7 +199,7 @@ function HomeFrame({ account }: { account: Account }) {
    * 一批交给本机：开了哪几张卡（卡 id）。没开起来时 onError 接着（拆卡写在管线里「拆卡失败 · 重试」）；
    * 没给 onError 的（自动开工）记进 startFailed，在管线里那一行写「失败 · 手动开始」。
    */
-  const start = useCallback(async (cards: Worker[], planners: PlanJob[], onError?: () => void): Promise<Set<string>> => {
+  const start = useCallback(async (cards: Worker[], planners: PlanJob[], onError?: () => void, modes?: Map<string, TLocalPermissionMode>): Promise<Set<string>> => {
     const opened = new Set<string>();
     const cardIds = cards.flatMap((worker) => (worker.item ? [worker.item.id] : []));
     const cwd = local.folders.find((folder) => folder.id === readLast().folderId)?.path ?? local.folders[0]?.path;
@@ -209,7 +209,7 @@ function HomeFrame({ account }: { account: Account }) {
     const plans: StartPlan[] = cards.flatMap((worker) => {
       const role = roles.find((entry) => entry.id === worker.role.id) ?? null;
       const model = local.models.find((entry) => entry.id === worker.item?.card?.model?.id) ?? modelForTier(local.models, role?.modelTier ?? "normal");
-      return model && worker.item && cwd ? [{ item: worker.item, model, cwd, role }] : [];
+      return model && worker.item && cwd ? [{ item: worker.item, model, cwd, role, permissionMode: modes?.get(worker.item.id) }] : [];
     });
     // 拆卡登记先认领再开（B 的契约）：删成了才算这个标签页的，别的标签页、别的电脑删不成就不开；开不起来（含整批出错）再登记回去。
     const claimed = (await Promise.all(planners.map(async (job) => {
@@ -307,12 +307,14 @@ function HomeFrame({ account }: { account: Account }) {
         if (!worker) soon = true;
         return worker ? [worker] : [];
       });
-      const opened = cards.length ? await start(cards, []) : new Set<string>();
+      // 认领到的带着所在项目新开子会话的默认档（Project.permissionMode），原样给本机。
+      const modes = new Map(claimed.flatMap((entry) => (entry.cardId ? [[entry.cardId, entry.permissionMode] as const] : [])));
+      const opened = cards.length ? await start(cards, [], undefined, modes) : new Set<string>();
       const model = local.models.find((entry) => entry.isDefault) ?? local.models[0];
       for (const entry of claimed) {
         if (entry.kind !== "topic" || !entry.topicId || busy.has(entry.topicId) || !model) continue;
         const title = subs.find((sub) => sub.id === entry.topicId)?.title ?? "";
-        try { await startTopic(local.runner, { id: entry.topicId, title }, model); opened.add(entry.topicId); markStart([entry.topicId], false); }
+        try { await startTopic(local.runner, { id: entry.topicId, title }, model, undefined, entry.permissionMode); opened.add(entry.topicId); markStart([entry.topicId], false); }
         catch { markStart([entry.topicId], true); }
       }
       const done = (id: string | null) => !!id && (opened.has(id) || busy.has(id));

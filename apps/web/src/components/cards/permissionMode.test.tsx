@@ -6,6 +6,16 @@ import type { TLocalSessionEvent } from "@/lib/local/runner";
 import { AGENT_PERMISSION_MODES, PERMISSION_MODE_TEXT } from "@/lib/local/permissionModes";
 import { PermissionModeMenu, modeByKey } from "./PermissionMode";
 import { SessionComposer } from "./SessionTranscript";
+import { startBatch } from "@/lib/work/queue";
+
+// 交代取不到（404）时按标题拼，开工照开；这里只看带给本机的档。
+vi.mock("@/lib/board/cloud", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/board/cloud")>();
+  const missing = async () => { throw new actual.CloudError(404, "没有"); };
+  return { ...actual, cardBrief: missing, topicBrief: missing, patchCard: async () => undefined };
+});
+import { startTopic } from "@/lib/local/start";
+import type { CardItem } from "@/lib/board/cards";
 
 describe("子会话的权限模式（17.2 第 11 条）", () => {
   it("五档的中文名和短副标题；Claude Code 五档都有，Codex 没有「先出计划」", () => {
@@ -51,5 +61,27 @@ describe("子会话的权限模式（17.2 第 11 条）", () => {
     await until(() => foldEvents(seen).permissionMode === "acceptEdits");
     expect(seen.filter((event) => event.type === "permission_mode").map((event) => event.type === "permission_mode" && event.by)).toEqual(["plan_approved", "web"]);
     controller.abort();
+  });
+});
+
+describe("项目主管线下面的默认档（17.2 第 11 条，契约 919cc7f8）", () => {
+  it("手机上点开是底部抽屉：触发写当前档，声明弹出对话框", () => {
+    const html = renderToStaticMarkup(<PermissionModeMenu modes={AGENT_PERMISSION_MODES["claude-code"]} value="plan" sheet onChange={vi.fn()} />);
+    expect(html).toContain('aria-haspopup="dialog"');
+    expect(html).toContain('aria-label="权限模式：先出计划"');
+    expect(html).not.toContain("permission-mode-sheet");
+  });
+
+  it("开工时把项目的默认档带给本机：卡（一批开工）和专题都带，不给的本机按自动", async () => {
+    {
+      const runner = createMockRunner({ stepMs: 1 });
+      const [model] = await runner.listModels();
+      const item = { id: "00000000-0000-4000-8000-0000000000c9", title: "拆左栏", version: 1, doneDefinition: "做完", card: null } as unknown as CardItem;
+      await startBatch(runner, [{ item, model: model!, cwd: "C:\work", role: null, permissionMode: "plan" }]);
+      await startTopic(runner, { id: "00000000-0000-4000-8000-0000000000d9", title: "调研" }, model!, undefined, "acceptEdits");
+      await startTopic(runner, { id: "00000000-0000-4000-8000-0000000000e9", title: "没给" }, model!);
+      const modes = Object.fromEntries((await runner.listSessions()).map((session) => [session.title, session.permissionMode]));
+      expect(modes).toEqual({ 拆左栏: "plan", 调研: "acceptEdits", 没给: "auto" });
+    }
   });
 });
