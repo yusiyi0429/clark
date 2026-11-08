@@ -30,7 +30,7 @@ describe("项目从首页 v2 来（16.2、16.3）", () => {
     expect(project).toMatchObject({ folder: "Tianshu-MVP", archived: false, transfer: { status: "sent" } });
     expect(project.goals[0]!.responsible).toEqual({ personId: "a", name: "甲" });
     expect(projectLine(project).text).toBe("等 乙 接手");
-    const listed = fromListed({ projectId: "p9", name: "旧项目", archivedAt: "2026-11-01T00:00:00.000Z", createdAt: "2026-10-01T00:00:00.000Z", lastActivityAt: null, permissionMode: "auto",
+    const listed = fromListed({ projectId: "p9", name: "旧项目", archivedAt: "2026-11-01T00:00:00.000Z", createdAt: "2026-10-01T00:00:00.000Z", lastActivityAt: null, permissionMode: "auto", autoRelayLimit: 20,
       transfer: { ...transfer, status: "accepted" } }, new Map());
     expect(listed).toMatchObject({ id: "p9", name: "旧项目", archived: true, goals: [], subSessions: [], scope: "project:p9", transfer: { status: "accepted" } });
     expect(projectLine(listed).text).toBe("已交给 乙");

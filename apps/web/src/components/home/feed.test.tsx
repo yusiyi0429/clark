@@ -109,11 +109,17 @@ describe("子会话的提问由 Task 管线转达（14.3）", () => {
 
 describe("子会话停了、要人介入，报给项目主管线（18.10）", () => {
   const sub = { kind: "card" as const, id: CARD, letter: "B", title: "greet" };
-  it("停了：小字「B greet · 做完一轮」，下面本机报的一两句和「看结果」；没报摘要只有「看结果」", () => {
-    const report = { kind: "sub_session_report" as const, id: "r1", at: "2026-11-07T05:00:00Z", afterSequence: 4, sub, outcome: "round_done" as const, summary: "接口写好了，测试过了 12 条" };
+  it("停了：小字「B greet · 做完一轮」，下面做成了什么、卡在哪和「看结果」；产出物收下的能直接打开，没收到的只写标题", () => {
+    const OUT = "00000000-0000-4000-8000-0000000000b1";
+    const report = { kind: "sub_session_report" as const, id: "r1", at: "2026-11-07T05:00:00Z", afterSequence: 4, sub, why: "turn_done" as const, summary: "接口写好了，测试过了 12 条",
+      blocker: null, outputs: [{ outputId: OUT, title: "接口说明", fileName: "api.md" }, { outputId: null, title: "截图", fileName: "shot.png" }] };
     const html = renderToStaticMarkup(<SubSessionReport item={report} go={vi.fn()} />);
     expect(html).toMatch(/data-testid="sub-letter">B<.*greet · 做完一轮.*接口写好了，测试过了 12 条.*看结果/);
-    expect(text(renderToStaticMarkup(<SubSessionReport item={{ ...report, outcome: "failed", summary: null }} go={vi.fn()} />))).toMatch(/greet · 出错停了 看结果/);
+    expect(html).toContain(`href="/api/me/local-outputs/${OUT}"`);
+    expect(text(html)).toContain("接口说明 · 截图");
+    expect(html.match(/<a /g)).toHaveLength(1);
+    expect(text(renderToStaticMarkup(<SubSessionReport item={{ ...report, why: "held", summary: null, blocker: "订阅额度用完了", outputs: [] }} go={vi.fn()} />)))
+      .toMatch(/greet · 停着等 订阅额度用完了 看结果/);
   });
 
   it("要介入：决定卡排在云端记下的位置，标字母；本机那块不再重复出；答过的（closed）不画", () => {

@@ -263,20 +263,34 @@ function SubSessionAsk({ worker, remote: item, letter }: { worker: Worker; remot
   );
 }
 
-const OUTCOME: Record<TProjectSubSessionReportItem["outcome"], string> = { round_done: "做完一轮", stopped: "停下了", failed: "出错停了" };
+const WHY: Record<TProjectSubSessionReportItem["why"], string> = { turn_done: "做完一轮", interrupted: "本人停下", held: "停着等", error: "出错", killed: "强停" };
+const outputHref = (id: string) => `/api/me/local-outputs/${encodeURIComponent(id)}`;
 
 /**
- * 子会话停了的报告（18.10，项目动态 sub_session_report）：小字一行「B 标题 · 做完一轮」，下面是本机报的一两句（做成了什么、卡在哪）和「看结果」。
+ * 子会话停了的报告（18.10，项目动态 sub_session_report）：小字一行「B 标题 · 做完一轮」，下面是做成了什么（summary）、卡在哪（blocker，淡色）和「看结果」。
+ * 这一轮交了产出物的列在下面一行：云端收下的（outputId）点了直接打开，还没收到的只写标题；「看结果」打开第一件收下的，一件都没收到时进那个子会话。
  * 项目主管线接着回的那一小轮是普通回答，画在后面。
  */
 export function SubSessionReport({ item, go }: { item: TProjectSubSessionReportItem; go: (href: string) => void }) {
+  const received = item.outputs.find((output) => output.outputId);
   return (
     <div className={f.ask} data-testid="sub-report">
-      <p className={f.askFrom}><SubLetter letter={item.sub.letter} inline />{item.sub.title} · {OUTCOME[item.outcome]}</p>
+      <p className={f.askFrom}><SubLetter letter={item.sub.letter} inline />{item.sub.title} · {WHY[item.why]}</p>
       <p className={f.sentence}>
         {item.summary ? <span>{item.summary}</span> : null}
-        <HeroButton variant="ghost" size="sm" onPress={() => go(subHref(item.sub))}>看结果</HeroButton>
+        {item.blocker ? <span className={f.more}>{item.blocker}</span> : null}
+        <HeroButton variant="ghost" size="sm" onPress={() => (received ? window.open(outputHref(received.outputId!), "_blank", "noopener") : go(subHref(item.sub)))}>看结果</HeroButton>
       </p>
+      {item.outputs.length ? (
+        <p className={f.more} data-testid="sub-report-outputs">
+          {item.outputs.map((output, index) => (
+            <span key={`${output.outputId ?? output.fileName}:${index}`}>
+              {index ? " · " : null}
+              {output.outputId ? <a href={outputHref(output.outputId)} target="_blank" rel="noopener" className={f.sentenceLink} title={output.fileName}>{output.title}</a> : <span title={output.fileName}>{output.title}</span>}
+            </span>
+          ))}
+        </p>
+      ) : null}
     </div>
   );
 }
