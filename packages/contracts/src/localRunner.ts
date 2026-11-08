@@ -619,7 +619,8 @@ export const LocalEffort = Type.Union([Type.Literal("low"), Type.Literal("medium
 /**
  * 执行方自己报的实际模型：Claude Code 每轮开头 system/init 里的 model（Codex 接上以后是 app-server 开线程时回的 model）。
  * 和 LocalRun.model 不一样时（订阅传的是 opus 这种别名、网关把模型换了）以它为准显示；对不上的那一下本机记一条事件 notice（code model_mismatch，
- * text 写请求的和实际的），同步给云端的 status 条目随之带新的 actual。modelName 的写法同 LocalRun.modelName；at 是最近一次报的时间。
+ * text 写请求的和实际的），同步给云端的 status 条目随之带新的 actual。modelName 的写法同 LocalRun.modelName；at 是报出这个模型的时间（换了模型才更新，
+ * 每轮报的一样就不重报 status）。续上同一个模型时，上次报的先留着，等这次报了再换。
  */
 export const LocalActualModel = Type.Object({
   model: Type.String({ minLength: 1, maxLength: 120 }),

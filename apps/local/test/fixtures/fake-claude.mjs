@@ -33,6 +33,17 @@ function limitHit(limit) {
   turn = null;
 }
 const mode = cfg.mode ?? "normal";
+/**
+ * system/init 报的模型：真的 Claude Code 报它实际用的那个。这里照 --model 的别名报那一版（opus → claude-opus-5-5），
+ * 网关报 ANTHROPIC_MODEL 原样；配置 initModel 可以硬改（测「请求的和实际的对不上」），每轮现读。
+ */
+function initModel() {
+  const live = readCfg();
+  if (live.initModel) return live.initModel;
+  if (process.env.ANTHROPIC_MODEL) return process.env.ANTHROPIC_MODEL;
+  const m = argv.includes("--model") ? argv[argv.indexOf("--model") + 1] : null;
+  return m && /^(opus|sonnet|haiku)$/.test(m) ? `claude-${m}-5-5` : m ?? "claude-haiku-5-5";
+}
 
 let turn = null; // { permId, timer }
 let turns = 0;
@@ -40,12 +51,12 @@ let turns = 0;
 function startTurn(text) {
   turns += 1;
   if (mode === "auth") {
-    out({ type: "system", subtype: "init", session_id: sid, model: "claude-haiku-5-5", permissionMode: "default", claude_code_version: "2.1.318" });
+    out({ type: "system", subtype: "init", session_id: sid, model: initModel(), permissionMode: "default", claude_code_version: "2.1.318" });
     out({ type: "assistant", error: "authentication_failed", message: { content: [{ type: "text", text: "Not logged in · Please run /login" }] } });
     out({ type: "result", subtype: "success", is_error: true, result: "Not logged in · Please run /login", duration_ms: 5, usage: {} });
     return;
   }
-  out({ type: "system", subtype: "init", session_id: sid, model: "claude-haiku-5-5", permissionMode: "default", claude_code_version: "2.1.318" });
+  out({ type: "system", subtype: "init", session_id: sid, model: initModel(), permissionMode: "default", claude_code_version: "2.1.318" });
   // 额度：每轮现读配置（测试中途改）。usageLimit 在时这一轮碰壁：rate_limit_event rejected → 助手报 rate_limit → 429 的 result（exit 时直接退出）；
   // 这一串照社区复现和 Claude Code 程序里的字符串，没真机复现过
   const live = readCfg();
@@ -174,7 +185,7 @@ function agentDone() {
     sys({ subtype: "task_notification", task_id: "agent1", tool_use_id: "toolu_ag", status: "completed", output_file: "", summary: "2" });
     // 子 agent 跑完，Claude Code 自己开一轮
     turns += 1;
-    out({ type: "system", subtype: "init", session_id: sid, model: "claude-haiku-5-5", permissionMode: "default", claude_code_version: "2.1.318" });
+    out({ type: "system", subtype: "init", session_id: sid, model: initModel(), permissionMode: "default", claude_code_version: "2.1.318" });
     out({ type: "assistant", message: { content: [{ type: "text", text: "子 agent 回来了：2 个文件" }] }, parent_tool_use_id: null });
     finish(true, "子 agent 回来了");
   }
