@@ -1,8 +1,8 @@
 /**
  * 伙伴代本人做事（设计 17.4、17.7，契约 buddyActions.ts）网页这边用到的接口：授权、伙伴做过的事和撤销、转达给同事的草稿、回收站、
- * 「请这台电脑停掉」的认领和回报。动作本身由 Chat 调天枢，网页不调。
+ * 「请这台电脑停掉」和「请这台电脑对子会话做一件事」的认领和回报。动作本身由 Chat 调天枢，网页不调。
  */
-import type { TBuddyAuditEntry, TBuddyAuthority, TBuddyMessageDraft, TSessionStopView, TTrashItem } from "@warmap/contracts";
+import type { TBuddyAuditEntry, TBuddyAuthority, TBuddyMessageDraft, TClaimSessionCommandsResponse, TSessionCommandDoneRequest, TSessionStopView, TTrashItem } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
 import { unwrap } from "@/lib/board/cloud";
 
@@ -26,3 +26,8 @@ export const restoreTrash = (item: Pick<TTrashItem, "kind" | "id">) =>
 export const claimSessionStops = (deviceId: string) => call<{ stops: TSessionStopView[] }>(browserApi.POST("/api/me/session-stops/claim", { body: { deviceId } })).then((data) => data.stops);
 export const reportSessionStop = (id: string, deviceId: string, result: "stopped" | "not_running") =>
   call<unknown>(browserApi.POST("/api/me/session-stops/{id}/done", { params: { path: { id } }, body: { deviceId, result } }));
+
+export const claimSessionCommands = (deviceId: string) =>
+  call<TClaimSessionCommandsResponse>(browserApi.POST("/api/me/session-commands/claim", { body: { deviceId } })).then((data) => data.commands);
+export const reportSessionCommand = (id: string, body: TSessionCommandDoneRequest) =>
+  call<unknown>(browserApi.POST("/api/me/session-commands/{id}/done", { params: { path: { id } }, body }));

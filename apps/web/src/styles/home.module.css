@@ -177,7 +177,7 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 /* 项目行：名字和「在后台工作」的灰点同一行，点挂在这一行最右边、和名字垂直居中；名字照常截断，副标题不动。 */
 .projectText { flex: 1; }
 .projectTitle { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
-.projectTitle .taskName { flex: 1; min-width: 0; }
+.projectTitle .taskName { flex: 1; min-width: 0; text-overflow: clip; -webkit-mask-image: var(--fade-end); mask-image: var(--fade-end); }
 .workingDot { display: inline-grid; flex: none; place-items: center; }
 /* 呼吸：透明度 1 ↔ 0.3，一个来回 1.4 秒，缓入缓出；减少动态效果时只是一颗不闪的灰点。 */
 .workingDot i { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-faint); animation: workingBreath 1.4s ease-in-out infinite; }
@@ -197,9 +197,20 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .sub[aria-current="page"] { background: var(--default-soft-hover); color: var(--ink); }
 .sub[data-state="waiting"] { color: var(--ink); }
 .sub[data-state="done"] { color: var(--ink-faint); }
-.subName { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* 子会话上不画蓝点（14.2）：等你是 6px 的 --ink 点，蓝点只在 Task 行。 */
-.sub .state[data-state="waiting"] i { width: 6px; height: 6px; background: var(--ink); }
+/* 左栏标题放不下时右端渐变淡出（18.10，同 Claude Code 侧栏），不用省略号；蒙版只动透明度，深浅色都对。 */
+.tree { --fade-end: linear-gradient(to right, #000 calc(100% - 24px), transparent); }
+.subName { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; -webkit-mask-image: var(--fade-end); mask-image: var(--fade-end); }
+/* 子会话的字母方块（18.10）：16 高的实心小圆角方块，两个字母时变宽。 */
+.letter { display: inline-grid; flex: none; place-items: center; min-width: 16px; height: 16px; padding: 0 3px; border-radius: var(--r-bar); background: var(--hairline-strong); color: var(--ink); font-size: 10px; font-weight: 600; line-height: 1; }
+/* 行尾状态点：在跑灰点闪（节奏同项目标题的呼吸点），停了蓝点，要人介入黄点。 */
+.subDot { display: inline-grid; flex: none; place-items: center; width: 6px; }
+.subDot i { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-faint); }
+.subDot[data-tone="running"] i { animation: workingBreath 1.4s ease-in-out infinite; }
+.subDot[data-tone="stopped"] i { background: var(--accent); }
+.subDot[data-tone="attention"] i { background: var(--warning); }
+@media (prefers-reduced-motion: reduce) { .subDot i { animation: none !important; } }
+/* 页头里跟在文字中间（「项目 / B 标题」）：右边空一格。 */
+.letter[data-inline] { margin-right: 6px; vertical-align: 1px; }
 .subReason { flex: none; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; }
 /* 本人事项行（9.10）：就是子会话行，状态位换成本人 16 的头像；没照片画成纯 --neutral-wash 圆、不写字（5.4.2「本人行」）。 */
 /* 16px 的人像位（树上本人事项行首、等你行里请你认可的对方）：同一条规则。 */

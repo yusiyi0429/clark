@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { THomeItem } from "@warmap/contracts";
 import type { HomeProject, SubSession, WorkHomeData } from "@/lib/home/types";
 import { fromHome, projectWorking } from "@/lib/home/projects";
-import { LeftColumn, STAGE_BASE, planOrder, stageScale } from "./LeftColumn";
+import { LeftColumn, STAGE_BASE, letterOf, planOrder, stageScale, subLetters } from "./LeftColumn";
 
 const data = { period: "2026-11", projects: [], archivedCount: 0, month: { missions: [] }, waiting: [], other: { subSessions: [], items: [] } } as unknown as WorkHomeData;
 const projectsOf = (used: WorkHomeData) => used.projects.map((project) => fromHome(project, used, new Map()));
@@ -91,6 +91,31 @@ describe("会话的先后（照派活单）", () => {
     const at = new Map([["c1", "2026-11-07T01:00:00.001Z"], ["c2", "2026-11-07T01:00:00.002Z"], ["c3", "2026-11-07T01:00:00.003Z"]]);
     const list = [sub("c3", "card", "z"), sub("t1", "topic", "a"), sub("c1", "card", "y"), sub("c2", "card", "x")];
     expect(planOrder(list, at).map((entry) => entry.id)).toEqual(["c1", "c2", "c3", "t1"]);
+  });
+});
+
+describe("子会话的字母和状态点（18.10）", () => {
+  it("字母 A…Z 之后是 AA、AB；按建立先后排", () => {
+    expect([0, 1, 25, 26, 27, 51, 52].map(letterOf)).toEqual(["A", "B", "Z", "AA", "AB", "AZ", "BA"]);
+    const at = new Map([["c1", "2026-11-07T01:00:00.001Z"], ["c2", "2026-11-07T01:00:00.002Z"]]);
+    const list = [{ id: "c2", kind: "card", updatedAt: "a" }, { id: "c1", kind: "card", updatedAt: "b" }] as unknown as SubSession[];
+    expect([...subLetters(list, at)]).toEqual([["card:c1", "A"], ["card:c2", "B"]]);
+    // 云端带了字母就照它的（删过的不复用，可以跳号）；null（「其他」里的）不画。
+    const fromCloud = [{ id: "c1", kind: "card", letter: "A", updatedAt: "a" }, { id: "c3", kind: "card", letter: "C", updatedAt: "b" }, { id: "t1", kind: "topic", letter: null, updatedAt: "c" }] as unknown as SubSession[];
+    expect([...subLetters(fromCloud, at)]).toEqual([["card:c1", "A"], ["card:c3", "C"]]);
+  });
+
+  it("行首字母方块；行尾在跑灰点、停了蓝点、要介入黄点，排队不出点、照旧写在等什么；读屏按状态读", () => {
+    const sub = (id: string, state: string, waiting: unknown = null, queueReason: unknown = null) =>
+      ({ id, kind: "card", title: `卡${id}`, state, waiting, updatedAt: id, queueReason, holdUntil: null, sessionId: null });
+    const html = render({ data: { ...data, other: { subSessions: [sub("1", "running"), sub("2", "waiting"), sub("3", "waiting", "approval"), sub("4", "queued", null, "prior_cards")], items: [] } } as never });
+    const rows = html.split('data-testid="tree-sub"').slice(1);
+    expect(rows.map((row) => /data-testid="sub-letter">([A-Z]+)</.exec(row)?.[1])).toEqual(["A", "B", "C", "D"]);
+    expect(rows[0]).toMatch(/data-tone="running" role="img" aria-label="在跑"/);
+    expect(rows[1]).toMatch(/data-tone="stopped" role="img" aria-label="已停下"/);
+    expect(rows[2]).toMatch(/data-tone="attention" role="img" aria-label="等你批准"/);
+    expect(rows[3]).not.toContain("sub-dot");
+    expect(rows[3]).toContain("等前面的卡");
   });
 });
 

@@ -202,7 +202,7 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
       <div className={s.page} data-embedded="" data-testid="topic-session">
         <header className={s.embedHead}>
           {chrome.lead}
-          <b className={s.embedTitle}>{chrome.parent}{topic.title}</b>
+          <b className={s.embedTitle}>{chrome.parent}{chrome.letter}{topic.title}</b>
           <span className={s.stateChip} data-tone={chipOf.tone}>{chipOf.tone === "wait" ? <i aria-hidden /> : null}{chipOf.text}</span>
           {model ? <span className={s.stateChip} data-tone="neutral">{model}</span> : null}
           <span className={s.exec} />
