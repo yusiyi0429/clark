@@ -73,7 +73,7 @@ export const LocalModelTier = Type.Union([Type.Literal("strong"), Type.Literal("
  * running 是占着位置的会话（开工中、进行中、等你批准；一轮做完在等你回复的不占）；queued 是等空位的。
  */
 export const LocalSlots = Type.Object({
-  max: Type.Integer({ minimum: 1, maximum: 10 }),
+  max: Type.Integer({ minimum: 1 }),
   running: Type.Integer({ minimum: 0 }),
   queued: Type.Integer({ minimum: 0 }),
 }, strict);
@@ -161,8 +161,8 @@ export const LocalSettings = Type.Object({
   allowedOrigins: Type.Array(Type.String()),
   /** 「暂停全部」后为 true：进行中的会话停下，不接新会话、不续接旧会话；只能在托盘里恢复。 */
   paused: Type.Boolean(),
-  /** 同时最多跑几个（默认 3，插件页可改）。超出的排队，先来先跑；调大时立刻从队里接上。 */
-  maxConcurrent: Type.Integer({ minimum: 1, maximum: 10 }),
+  /** 同时最多跑几个（默认 3，插件页可改，不设上限；超过 10 个时网页提醒电脑和额度可能吃紧）。超出的排队，先来先跑；调大时立刻从队里接上。 */
+  maxConcurrent: Type.Integer({ minimum: 1 }),
   /**
    * 「验收过就合回」（默认 true，插件页可改）：卡的验收过了，主文件夹停在原分支上、没有没提交的改动、合并没有冲突时，本机自动合回（只合不推），
    * 等它的卡接着自己开始。不满足或关了时不合，卡的 workspace.needsMerge 写明原因，等本人合。
@@ -171,7 +171,7 @@ export const LocalSettings = Type.Object({
 }, strict);
 export const LocalSettingsPatch = Type.Object({
   includePersonalConfigByDefault: Type.Optional(Type.Boolean()),
-  maxConcurrent: Type.Optional(Type.Integer({ minimum: 1, maximum: 10 })),
+  maxConcurrent: Type.Optional(Type.Integer({ minimum: 1 })),
   autoMerge: Type.Optional(Type.Boolean()),
   /** 网页只能暂停（true）；传 false 会被拒（409），恢复只能在本机托盘里点。 */
   paused: Type.Optional(Type.Boolean()),

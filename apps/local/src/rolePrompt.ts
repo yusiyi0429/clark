@@ -78,9 +78,16 @@ function worktreeNote(ws: Extract<TLocalWorkspace, { kind: "worktree" }>): strin
 - 不要切换分支，不要改主文件夹（${ws.folder}）。`;
 }
 
-export function systemPrompt(kind: TLocalSessionKind, role: TLocalRole | null, critics: TLocalRole[], feishu: FeishuSkills, workspace: TLocalWorkspace | null = null): string {
+export function systemPrompt(
+  kind: TLocalSessionKind, role: TLocalRole | null, critics: TLocalRole[], feishu: FeishuSkills, workspace: TLocalWorkspace | null = null,
+  customTools: { server: string; name: string }[] = [],
+): string {
   const parts = ["# 天枢本机会话", INTRO[kind], RULES[kind]];
   if (workspace?.kind === "worktree") parts.push(worktreeNote(workspace));
+  if (customTools.length) {
+    const list = customTools.map((t) => `- ${t.name}：MCP 服务器 ${t.server} 里的工具`).join("\n");
+    parts.push(`## 本人加的工具\n${list}\n查数据的照权限模式用，改数据的每次都要本人批准。`);
+  }
   if (role) {
     parts.push(roleBlock(role, "## 你的岗位："));
     const tools = role.tools.map((t) => `- ${TOOL_TEXT[t]}${t === "feishu" ? FEISHU_NOTE[feishu ?? "none"] : ""}`);

@@ -132,7 +132,8 @@ describe("本机程序契约", () => {
     expect(Value.Check(LocalCreateSessionBatchResponse, { results: [{ ok: false, error: { code: "folder_not_allowed", message: "x" } }] })).toBe(true);
     expect(Value.Check(LocalSettingsPatch, { maxConcurrent: 5 })).toBe(true);
     expect(Value.Check(LocalSettingsPatch, { maxConcurrent: 0 })).toBe(false);
-    expect(Value.Check(LocalSettingsPatch, { maxConcurrent: 11 })).toBe(false);
+    expect(Value.Check(LocalSettingsPatch, { maxConcurrent: 11 })).toBe(true); // 不设上限，超过 10 个网页提醒
+    expect(Value.Check(LocalSettingsPatch, { maxConcurrent: 1.5 })).toBe(false);
     expect(LocalSessionSummary.properties).toHaveProperty("queuePosition");
     expect(LocalHealthResponse.properties).toHaveProperty("slots");
     expect(LOCAL_RUNNER_ROUTES.createSessionBatch).toEqual({ method: "POST", path: "/v1/sessions/batch", auth: true });
