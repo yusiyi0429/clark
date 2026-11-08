@@ -42,7 +42,7 @@ const KIND: Record<BuddyActionName, Kind> = {
   read_work_home: "read", read_project: "read", find_people: "read", open_page: "ui", update_plan: "plan", ask_user: "ui",
   set_appearance: "write", set_feishu_push: "write", start_sub_session: "write", stop_sub_session: "write", archive_sub_session: "write",
   delete_sub_session: "write", create_project: "write", rename_project: "write", archive_project: "write", link_task_to_project: "write",
-  transfer_project: "write", split_cards: "write", set_budget: "write", message_project: "write", send_message: "write",
+  transfer_project: "write", split_cards: "write", set_budget: "write", set_task_due_date: "write", message_project: "write", send_message: "write",
   sub_session_tell: "write", sub_session_stop: "write", sub_session_restart: "write", sub_session_answer: "write", sub_session_approve: "write",
 };
 const DESCRIPTION: Record<BuddyActionName, string> = {
@@ -66,6 +66,7 @@ const DESCRIPTION: Record<BuddyActionName, string> = {
   split_cards: "登记拆卡：给一件 Task（taskId）或一个没挂 Task 的项目（projectId）拆执行卡，二选一；words 是本人关于怎么拆的原话。"
     + "拆之前先用 ask_user 问清现实：在哪个文件夹、哪个目录开工，本机有没有、要不要新建，是不是从别处（比如 Codex）迁过来的，要不要连 GitHub，拆完做成的样子和本人要的是不是一回事。"
     + "这几件没问清，不拆、不开工，拆了只会更糟。",
+  set_task_due_date: "给挂在项目上的一件 Task 存验收截止日（YYYY-MM-DD；null 不存了，退回 Mission 的节点）。本人说了哪天交、或者 Task 的截止和 Mission 节点对不上时用。",
   set_budget: "改预算：带 taskId 改这件 Task 的，不带改本人新 Task 的缺省预算。",
   message_project: "把本人关于某个项目的话转给这个项目的对话，由项目对话去派活、问子会话（伙伴不直接和子会话对话；凡是要改子会话手上的活的都用它）。"
     + "立即返回，不等项目对话回完；项目对话做完、出问题、要本人拿主意时再在总管线里回报本人。",
@@ -142,7 +143,8 @@ type Undo =
   | { kind: "goal"; projectId: string; taskId: string; previousProjectId: string | null }
   | { kind: "transfer"; transferId: string }
   | { kind: "split"; requestId: string }
-  | { kind: "budget"; taskId: string | null; previous: TBudget | null };
+  | { kind: "budget"; taskId: string | null; previous: TBudget | null }
+  | { kind: "due_date"; projectId: string; taskId: string; previous: string | null };
 
 /** 本人身份的会话（进程内用，几分钟有效，不出这台机器）。 */
 async function sessionCookie(deps: BuddyDeps, personId: string): Promise<string> {
@@ -367,6 +369,14 @@ const handlers: Handlers = {
     const before = await web<TBudget>(deps, call.personId, "GET", "/api/me/budget-default");
     await web(deps, call.personId, "PUT", "/api/me/budget-default", args.budget);
     return { summary: "改了新 Task 的缺省预算", undo: { kind: "budget", taskId: null, previous: before }, ui: [{ kind: "refresh", what: ["settings"] }] };
+  },
+  set_task_due_date: async (deps, call, args) => {
+    const previous = ((await deps.q("SELECT due_date FROM project_goals WHERE owner_id=$1 AND project_id=$2 AND task_id=$3", [call.personId, args.projectId, args.taskId]))
+      .rows[0]?.due_date ?? null) as string | null;
+    const goal = await web<{ taskName: string }>(deps, call.personId, "PUT",
+      `/api/me/projects/${encodeURIComponent(args.projectId)}/goals/${encodeURIComponent(args.taskId)}/due-date`, { dueDate: args.dueDate });
+    return { summary: args.dueDate ? `把「${goal.taskName}」的验收截止日定成 ${args.dueDate}` : `「${goal.taskName}」不再单独存截止日，按 Mission 的节点算`,
+      undo: previous === args.dueDate ? null : { kind: "due_date", projectId: args.projectId, taskId: args.taskId, previous }, ui: [projectRefresh(args.projectId)] };
   },
   message_project: async (deps, call, args) => {
     // 只从伙伴台往项目对话转（18 节第 8 条）。项目对话自己也拿到这张动作清单，它再转一次会把同一句转回自己、一轮接一轮转下去。
@@ -677,6 +687,9 @@ export async function undoAction(deps: BuddyDeps, ownerId: string, id: string): 
       break;
     case "split":
       await web(deps, ownerId, "DELETE", `/api/me/card-splits/${undo.requestId}`);
+      break;
+    case "due_date":
+      await web(deps, ownerId, "PUT", `/api/me/projects/${encodeURIComponent(undo.projectId)}/goals/${encodeURIComponent(undo.taskId)}/due-date`, { dueDate: undo.previous });
       break;
     case "budget":
       if (!undo.taskId) await web(deps, ownerId, "PUT", "/api/me/budget-default", undo.previous);

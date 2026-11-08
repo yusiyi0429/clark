@@ -52,7 +52,7 @@ describe("项目", { timeout: 60_000 }, () => {
       const linked = await f.call("PUT", `/api/me/projects/${a.projectId}/goals/task-open`);
       expect(linked.statusCode).toBe(200);
       expect(linked.json()).toEqual({ taskId: "task-open", taskName: "对话质量达标", missionId: "mine", missionTitle: "内部版上线", period: "2026-11",
-        verdict: "open", source: "owner", linkedAt: NOW });
+        verdict: "open", source: "owner", linkedAt: NOW, dueDate: null });
       expect(await f.t.sql("SELECT project_id::text FROM tasks WHERE id=$1", [card])).toEqual([{ project_id: a.projectId }]);
       expect((await f.call("PUT", `/api/me/projects/${a.projectId}/goals/task-theirs`)).statusCode).toBe(403);
 
@@ -489,6 +489,32 @@ describe("项目", { timeout: 60_000 }, () => {
       expect((await f.call("DELETE", `/api/me/sub-sessions/card/${card}/start`)).statusCode).toBe(204);
       expect((await f.call("DELETE", `/api/me/sub-sessions/card/${card}/start`)).statusCode).toBe(404);
       expect((await home(f)).projects[0].subSessions.find((sub: { id: string }) => sub.id === card)).toMatchObject({ autoStart: false });
+    } finally { await f.close(); }
+  });
+  it("Task 的验收截止日：天枢里存了用存的，没存退回 Mission 今天以后最近的节点；日期不对 400、没挂在这个项目上 404；null 不存了", async () => {
+    const f = await boardFixture({}, { boardCloudAgents: false });
+    try {
+      await skipBootstrap(f);
+      await f.t.sql(`UPDATE missions SET milestones='["11/11 V1 前后端合成一支","11/18 V1 上线","11/30 V2 上线"]'::jsonb WHERE id='mine'`);
+      const a = await create(f, { name: "天枢", taskId: "task-open" });
+      const other = await create(f, { name: "别的" });
+      const goal = async () => (await home(f)).projects.find((project: { projectId: string }) => project.projectId === a.projectId).goals[0] as
+        { dueDate: string; dueDateSource: string };
+      // 今天（11/06）以后最近的节点是 11/11：这就是 8 件都显示 11/11 的原因。
+      expect(await goal()).toMatchObject({ dueDate: "2026-11-11", dueDateSource: "mission" });
+      const set = await f.call("PUT", `/api/me/projects/${a.projectId}/goals/task-open/due-date`, { dueDate: "2026-11-18" });
+      expect([set.statusCode, set.json().dueDate]).toEqual([200, "2026-11-18"]);
+      expect(await goal()).toMatchObject({ dueDate: "2026-11-18", dueDateSource: "set" });
+      expect((await f.call("GET", `/api/me/projects/${a.projectId}`)).json().goals[0].dueDate).toBe("2026-11-18");
+      expect((await f.call("PUT", `/api/me/projects/${a.projectId}/goals/task-open/due-date`, { dueDate: "2026-02-30" })).statusCode).toBe(400);
+      expect((await f.call("PUT", `/api/me/projects/${a.projectId}/goals/task-open/due-date`, { dueDate: "11/18" })).statusCode).toBe(400);
+      expect((await f.call("PUT", `/api/me/projects/${other.projectId}/goals/task-open/due-date`, { dueDate: "2026-11-30" })).statusCode).toBe(404);
+      // 换项目，存的截止日跟着 Task 走。
+      await f.call("PUT", `/api/me/projects/${other.projectId}/goals/task-open`);
+      expect((await f.call("GET", `/api/me/projects/${other.projectId}`)).json().goals[0].dueDate).toBe("2026-11-18");
+      expect((await f.call("PUT", `/api/me/projects/${other.projectId}/goals/task-open/due-date`, { dueDate: null })).json().dueDate).toBeNull();
+      expect((await home(f)).projects.find((project: { projectId: string }) => project.projectId === other.projectId).goals[0])
+        .toMatchObject({ dueDate: "2026-11-11", dueDateSource: "mission" });
     } finally { await f.close(); }
   });
 });

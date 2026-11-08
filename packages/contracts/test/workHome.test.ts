@@ -4,7 +4,7 @@ import { Value } from "@sinclair/typebox/value";
 import {
   AcceptCardDraftsRequest, BackgroundQuery, BackgroundResponse, ClaimSessionStartsResponse, ConversationScope, CreateProjectRequest, ProjectDetailResponse,
   CardPlanBriefResponse, CardSplitRequestView, CreateProjectTransferRequest, ProjectBoardResponse, ProjectFeedResponse, ProjectPipelineResponse, ProjectTransfer, RouteResponse, UpdateProjectRequest, UpdateProjectTransferRequest, WorkHomeResponse,
-  AutoRelayDecisionRequest, BuddyActionParams, ClaimSessionCommandsResponse, PROJECT_ONLY_ACTIONS, SessionCommandDoneRequest, SUB_SESSION_REPORT_PREFIX,
+  AutoRelayDecisionRequest, BuddyActionParams, SetGoalDueDateRequest, ClaimSessionCommandsResponse, PROJECT_ONLY_ACTIONS, SessionCommandDoneRequest, SUB_SESSION_REPORT_PREFIX,
 } from "../src/index.js";
 import { buildOpenApiDocument } from "../src/openapi.js";
 
@@ -24,7 +24,7 @@ const resources = { devices: [], running: 0, cap: null, cost: { today: { inputTo
 
 describe("新首页契约", () => {
   it("首页 v2：项目（目标、子会话、事项）、本月、其他、等你", () => {
-    const goal = { taskId: "T-1", missionId: "M1", name: "11/18 上线 V1", period: "2026-11", dueDate: "2026-11-30", criteria: ["登录能用", "首页能看", "能发消息"],
+    const goal = { taskId: "T-1", missionId: "M1", name: "11/18 上线 V1", period: "2026-11", dueDate: "2026-11-30", dueDateSource: "mission", criteria: ["登录能用", "首页能看", "能发消息"],
       criteriaMet: 1, criteriaTotal: 3, completedAt: null, responsible: null };
     const project = { projectId: uuid, name: "天枢新首页", goals: [goal], budget: null, lastActivityAt: at,
       summary: { running: 0, waiting: 1, queued: 0, done: 0, doneToday: 0, needsYou: 1 }, pipeline: { conversationId: null, scope: `project:${uuid}` }, planning: false,
@@ -68,8 +68,8 @@ describe("新首页契约", () => {
     expect(Value.Check(UpdateProjectRequest, { permissionMode: "plan" })).toBe(true);
     expect(Value.Check(UpdateProjectRequest, { permissionMode: "yolo" })).toBe(false);
     expect(Value.Check(ProjectDetailResponse, { project, period: "2026-11", goals: [
-      { taskId: "T-1", taskName: "11/18 上线 V1", missionId: "M1", missionTitle: "上线", period: "2026-11", verdict: "open", source: "auto", linkedAt: at },
-      { taskId: "T-0", taskName: "内部版跑通", missionId: "M0", missionTitle: null, period: "2026-10", verdict: "continued", source: "migration", linkedAt: at },
+      { taskId: "T-1", taskName: "11/18 上线 V1", missionId: "M1", missionTitle: "上线", period: "2026-11", verdict: "open", source: "auto", linkedAt: at, dueDate: "2026-11-18" },
+      { taskId: "T-0", taskName: "内部版跑通", missionId: "M0", missionTitle: null, period: "2026-10", verdict: "continued", source: "migration", linkedAt: at, dueDate: null },
     ] })).toBe(true);
     expect(Value.Check(ProjectPipelineResponse, { projectId: uuid, conversationId: uuid, scope: `project:${uuid}` })).toBe(true);
     const merged = { state: "merged", commit: "abc1234", baseBranch: "main", reason: null, message: null, at };
@@ -201,6 +201,12 @@ describe("新首页契约", () => {
     expect(Value.Check(AutoRelayDecisionRequest, { decision: "continue" })).toBe(true);
     expect(Value.Check(AutoRelayDecisionRequest, { decision: "later" })).toBe(false);
     expect(paths["/api/me/projects/{projectId}/auto-relay"]).toBeDefined();
+    // Task 截止日：天枢里存的（null 不存了），首页目标带来源。
+    expect(Value.Check(SetGoalDueDateRequest, { dueDate: "2026-11-18" })).toBe(true);
+    expect(Value.Check(SetGoalDueDateRequest, { dueDate: null })).toBe(true);
+    expect(Value.Check(SetGoalDueDateRequest, { dueDate: "11/18" })).toBe(false);
+    expect(Value.Check(BuddyActionParams.set_task_due_date, { projectId: uuid, taskId: "T-1", dueDate: "2026-11-30" })).toBe(true);
+    expect(paths["/api/me/projects/{projectId}/goals/{taskId}/due-date"]).toBeDefined();
     expect(paths["/api/me/session-commands/{id}/done"]).toBeDefined();
   });
 });

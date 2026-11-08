@@ -2,14 +2,14 @@ import { decideAutoRelay } from "../autoRelay.js";
 import { projectNotices } from "../subSessionReports.js";
 import type { FastifyReply } from "fastify";
 import { Type } from "@sinclair/typebox";
-import { AcceptCardDraftsRequest, AcceptCardDraftsResponse, AnswerGoalChangeRequest, AutoRelayDecisionRequest, ProjectGoalChangedItem, CardPlanBriefResponse, CardSplitRequestView, CreateProjectRequest, Project, ProjectBoardResponse,
+import { AcceptCardDraftsRequest, AcceptCardDraftsResponse, AnswerGoalChangeRequest, AutoRelayDecisionRequest, SetGoalDueDateRequest, ProjectGoalChangedItem, CardPlanBriefResponse, CardSplitRequestView, CreateProjectRequest, Project, ProjectBoardResponse,
   ProjectDetailResponse, ProjectFeedResponse, ProjectGoalResponse, ProjectListResponse, ProjectPipelineResponse, RegisterCardSplitRequest, UpdateProjectRequest } from "@warmap/contracts";
 import { projectPlanBrief, registerProjectCardSplit } from "../cardSplits.js";
 import { answerGoalChange, goalChangeItems } from "../goalChanges.js";
 import { emptyBodyAsObject, projectHistoryReader, recentOwnerWords, typedWords } from "../sourceWords.js";
 import { ChatServiceError } from "../chatService.js";
 import { personDisplayNames } from "../people.js";
-import { createProject, goalView, linkGoal, listProjects, ownProject, projectDetail, projectGoalRows, projectOwners, projectReader, projectScope, projectView, unlinkGoal,
+import { createProject, goalView, linkGoal, setGoalDueDate, listProjects, ownProject, projectDetail, projectGoalRows, projectOwners, projectReader, projectScope, projectView, unlinkGoal,
   updateProject } from "../projects.js";
 import { decidedTransfers, handedAway, openTransfers, transferView } from "../projectTransfers.js";
 import { readProjectFeed } from "../taskFeed.js";
@@ -112,6 +112,11 @@ export function registerProjectRoutes(app: AppInstance, ctx: RouteContext): void
       return readProjectFeed(q, await projectOwners(q, project.id), project.id, goals, criteria, { viewer: personId, transfers },
         [...await goalChangeItems(q, project.id), ...await projectNotices(q, project.id)]);
     }));
+
+  // 天枢里给一件目标存的验收截止日（null 不存了）。
+  app.put("/api/me/projects/:projectId/goals/:taskId/due-date", { preHandler: requireMember, schema: { params: goalParams, body: SetGoalDueDateRequest,
+    response: { 200: ProjectGoalResponse } } }, async (req, reply) =>
+    handle(reply, () => setGoalDueDate(q, req.person!.personId, req.params.projectId, req.params.taskId, req.body.dueDate)));
 
   // 自动接力停住了，「等你」里答继续还是停下（18 节第 12 条）。
   app.post("/api/me/projects/:projectId/auto-relay", { preHandler: requireMember, schema: { params: projectParams, body: AutoRelayDecisionRequest } }, async (req, reply) =>
