@@ -112536,6 +112536,9 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "canAllowForSession": {
+                    "type": "boolean"
                   }
                 }
               },
@@ -114522,6 +114525,9 @@
                           "items": {
                             "type": "string"
                           }
+                        },
+                        "canAllowForSession": {
+                          "type": "boolean"
                         }
                       }
                     },
@@ -118484,8 +118490,10 @@
               "at",
               "afterSequence",
               "sub",
-              "outcome",
-              "summary"
+              "why",
+              "summary",
+              "blocker",
+              "outputs"
             ],
             "properties": {
               "kind": {
@@ -118546,18 +118554,26 @@
                   }
                 }
               },
-              "outcome": {
+              "why": {
                 "anyOf": [
                   {
-                    "const": "round_done",
+                    "const": "turn_done",
                     "type": "string"
                   },
                   {
-                    "const": "stopped",
+                    "const": "interrupted",
                     "type": "string"
                   },
                   {
-                    "const": "failed",
+                    "const": "held",
+                    "type": "string"
+                  },
+                  {
+                    "const": "error",
+                    "type": "string"
+                  },
+                  {
+                    "const": "killed",
                     "type": "string"
                   }
                 ]
@@ -118565,13 +118581,56 @@
               "summary": {
                 "anyOf": [
                   {
-                    "maxLength": 600,
+                    "maxLength": 400,
                     "type": "string"
                   },
                   {
                     "type": "null"
                   }
                 ]
+              },
+              "blocker": {
+                "anyOf": [
+                  {
+                    "maxLength": 400,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "outputs": {
+                "maxItems": 20,
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "outputId",
+                    "title",
+                    "fileName"
+                  ],
+                  "properties": {
+                    "outputId": {
+                      "anyOf": [
+                        {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "fileName": {
+                      "type": "string"
+                    }
+                  }
+                }
               }
             }
           },
@@ -118768,6 +118827,9 @@
                         "items": {
                           "type": "string"
                         }
+                      },
+                      "canAllowForSession": {
+                        "type": "boolean"
                       }
                     }
                   },
@@ -119457,8 +119519,10 @@
                     "at",
                     "afterSequence",
                     "sub",
-                    "outcome",
-                    "summary"
+                    "why",
+                    "summary",
+                    "blocker",
+                    "outputs"
                   ],
                   "properties": {
                     "kind": {
@@ -119519,18 +119583,26 @@
                         }
                       }
                     },
-                    "outcome": {
+                    "why": {
                       "anyOf": [
                         {
-                          "const": "round_done",
+                          "const": "turn_done",
                           "type": "string"
                         },
                         {
-                          "const": "stopped",
+                          "const": "interrupted",
                           "type": "string"
                         },
                         {
-                          "const": "failed",
+                          "const": "held",
+                          "type": "string"
+                        },
+                        {
+                          "const": "error",
+                          "type": "string"
+                        },
+                        {
+                          "const": "killed",
                           "type": "string"
                         }
                       ]
@@ -119538,13 +119610,56 @@
                     "summary": {
                       "anyOf": [
                         {
-                          "maxLength": 600,
+                          "maxLength": 400,
                           "type": "string"
                         },
                         {
                           "type": "null"
                         }
                       ]
+                    },
+                    "blocker": {
+                      "anyOf": [
+                        {
+                          "maxLength": 400,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "outputs": {
+                      "maxItems": 20,
+                      "type": "array",
+                      "items": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "outputId",
+                          "title",
+                          "fileName"
+                        ],
+                        "properties": {
+                          "outputId": {
+                            "anyOf": [
+                              {
+                                "format": "uuid",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "fileName": {
+                            "type": "string"
+                          }
+                        }
+                      }
                     }
                   }
                 },
@@ -119741,6 +119856,9 @@
                               "items": {
                                 "type": "string"
                               }
+                            },
+                            "canAllowForSession": {
+                              "type": "boolean"
                             }
                           }
                         },
@@ -121421,8 +121539,10 @@
           "at",
           "afterSequence",
           "sub",
-          "outcome",
-          "summary"
+          "why",
+          "summary",
+          "blocker",
+          "outputs"
         ],
         "properties": {
           "kind": {
@@ -121483,18 +121603,26 @@
               }
             }
           },
-          "outcome": {
+          "why": {
             "anyOf": [
               {
-                "const": "round_done",
+                "const": "turn_done",
                 "type": "string"
               },
               {
-                "const": "stopped",
+                "const": "interrupted",
                 "type": "string"
               },
               {
-                "const": "failed",
+                "const": "held",
+                "type": "string"
+              },
+              {
+                "const": "error",
+                "type": "string"
+              },
+              {
+                "const": "killed",
                 "type": "string"
               }
             ]
@@ -121502,13 +121630,56 @@
           "summary": {
             "anyOf": [
               {
-                "maxLength": 600,
+                "maxLength": 400,
                 "type": "string"
               },
               {
                 "type": "null"
               }
             ]
+          },
+          "blocker": {
+            "anyOf": [
+              {
+                "maxLength": 400,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "outputs": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "outputId",
+                "title",
+                "fileName"
+              ],
+              "properties": {
+                "outputId": {
+                  "anyOf": [
+                    {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "title": {
+                  "type": "string"
+                },
+                "fileName": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       },
@@ -121705,6 +121876,9 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "canAllowForSession": {
+                    "type": "boolean"
                   }
                 }
               },

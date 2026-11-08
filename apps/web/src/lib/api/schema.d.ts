@@ -18514,6 +18514,7 @@ export interface components {
                 toolName: string;
                 title: string;
                 outsidePaths: string[];
+                canAllowForSession?: boolean;
             } | null;
         };
         WorkHomeResponse: {
@@ -18769,6 +18770,7 @@ export interface components {
                     toolName: string;
                     title: string;
                     outsidePaths: string[];
+                    canAllowForSession?: boolean;
                 } | null;
             }[];
         };
@@ -19396,8 +19398,14 @@ export interface components {
                 letter: string;
                 title: string;
             };
-            outcome: "round_done" | "stopped" | "failed";
+            why: "turn_done" | "interrupted" | "held" | "error" | "killed";
             summary: string | null;
+            blocker: string | null;
+            outputs: {
+                outputId: string | null;
+                title: string;
+                fileName: string;
+            }[];
         } | {
             /** @constant */
             kind: "sub_session_decision";
@@ -19436,6 +19444,7 @@ export interface components {
                 toolName: string;
                 title: string;
                 outsidePaths: string[];
+                canAllowForSession?: boolean;
             } | null;
             status: "open" | "closed";
             closedAt: string | null;
@@ -19585,8 +19594,14 @@ export interface components {
                     letter: string;
                     title: string;
                 };
-                outcome: "round_done" | "stopped" | "failed";
+                why: "turn_done" | "interrupted" | "held" | "error" | "killed";
                 summary: string | null;
+                blocker: string | null;
+                outputs: {
+                    outputId: string | null;
+                    title: string;
+                    fileName: string;
+                }[];
             } | {
                 /** @constant */
                 kind: "sub_session_decision";
@@ -19625,6 +19640,7 @@ export interface components {
                     toolName: string;
                     title: string;
                     outsidePaths: string[];
+                    canAllowForSession?: boolean;
                 } | null;
                 status: "open" | "closed";
                 closedAt: string | null;
@@ -19868,8 +19884,14 @@ export interface components {
                 letter: string;
                 title: string;
             };
-            outcome: "round_done" | "stopped" | "failed";
+            why: "turn_done" | "interrupted" | "held" | "error" | "killed";
             summary: string | null;
+            blocker: string | null;
+            outputs: {
+                outputId: string | null;
+                title: string;
+                fileName: string;
+            }[];
         };
         ProjectSubSessionDecisionItem: {
             /** @constant */
@@ -19909,6 +19931,7 @@ export interface components {
                 toolName: string;
                 title: string;
                 outsidePaths: string[];
+                canAllowForSession?: boolean;
             } | null;
             status: "open" | "closed";
             closedAt: string | null;

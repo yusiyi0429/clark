@@ -171,13 +171,14 @@ describe("新首页契约", () => {
     const sub = { kind: "card", id: uuid, letter: "AB", title: "修登录页" };
     const question = { requestId: "q-1", questions: [{ question: "用哪个库？", header: "库", options: [{ label: "A", description: "" }], multiSelect: false }], askedAt: at };
     expect(Value.Check(ProjectFeedResponse, { items: [
-      { kind: "sub_session_report", id: uuid, at, afterSequence: 12, sub, outcome: "round_done", summary: "登录页改完了，测试过了。" },
-      { kind: "sub_session_report", id: uuid, at, afterSequence: null, sub, outcome: "failed", summary: null },
+      { kind: "sub_session_report", id: uuid, at, afterSequence: 12, sub, why: "turn_done", summary: "登录页改完了，测试过了。", blocker: null,
+        outputs: [{ outputId: uuid, title: "改动说明", fileName: "改动说明.md" }, { outputId: null, title: "截图", fileName: "登录页.png" }] },
+      { kind: "sub_session_report", id: uuid, at, afterSequence: null, sub, why: "held", summary: null, blocker: "订阅额度用完，14:00 恢复", outputs: [] },
       { kind: "sub_session_decision", id: uuid, at, afterSequence: 13, sub, sessionId: uuid, deviceId: uuid, question, permission: null, status: "open", closedAt: null },
     ] })).toBe(true);
     // 字母只能是大写字母，最多三位。
     for (const letter of ["a", "", "ABCD", "B1"]) expect(Value.Check(ProjectFeedResponse, { items: [
-      { kind: "sub_session_report", id: uuid, at, afterSequence: null, sub: { ...sub, letter }, outcome: "stopped", summary: null }] })).toBe(false);
+      { kind: "sub_session_report", id: uuid, at, afterSequence: null, sub: { ...sub, letter }, why: "killed", summary: null, blocker: null, outputs: [] }] })).toBe(false);
     expect(SUB_SESSION_REPORT_PREFIX).toBe("【子会话回报】");
     expect(Value.Check(ClaimSessionCommandsResponse, { commands: [
       { id: uuid, kind: "card", subSessionId: uuid, sessionId: uuid, deviceId: uuid, requestedAt: at, command: { type: "message", text: "先停在测试这步" } },
