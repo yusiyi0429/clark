@@ -4,11 +4,12 @@ import { allowInWindow, grantPermission, isTianshu, openExternally, type Policy 
 import { RunnerHost, type TrayState } from "./runner";
 import { dotBitmap, TRAY_COLORS, trayView, type TrayIcon } from "./trayView";
 import { takeOverLegacy } from "./legacy";
+import { Updates } from "./updates";
 
 /**
  * 天枢桌面版的壳（设计稿 17.5 / 17.7）：一个窗口开线上天枢，窗口里只停天枢和飞书登录授权页，别的链接交给系统浏览器。
  * 线上网页拿不到 Node：不开 nodeIntegration、开 contextIsolation 和 sandbox、不挂 preload。本机能力只经 127.0.0.1 那套（Origin、口令、本机确认）。
- * 本机程序随包装好，由壳在 utilityProcess 里拉起；托盘、开机自启、单实例由壳管；关窗口只是收进托盘。
+ * 本机程序随包装好，由壳在 utilityProcess 里拉起；托盘、开机自启、单实例、自动更新由壳管；关窗口只是收进托盘。
  */
 
 /** 天枢的来源。开发时可用 TIANSHU_DESKTOP_ORIGIN 指到别的环境（只认 https，和本机程序的 Origin 白名单对得上才连得上本机）。 */
@@ -23,13 +24,18 @@ const policy: Policy = { origin: ORIGIN };
 const PARTITION = "persist:tianshu";
 /** 开机自启时带的参数：只进托盘，不弹窗口。 */
 const HIDDEN_ARG = "--hidden";
+/** 开机自启在注册表里的名字（HKCU\…\Run；卸载时按它删，见 resources/installer.nsh）。 */
+const LOGIN_ITEM = "TianshuDesktop";
+/** 本机程序：打包在 dist/runner 里；装好的版本从 asar 里解出来的那份跑（子进程读不了 asar）。 */
+const RUNNER = join(__dirname, "runner", "hosted.cjs").replace(/app\.asar([\\/])/, "app.asar.unpacked$1");
 
 let win: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let quitting = false;
 let trayState: TrayState | null = null;
 let runnerError: string | null = null;
-const runner = new RunnerHost(join(__dirname, "..", "runner", "hosted.cjs"), {
+const updates = new Updates(() => refreshTray());
+const runner = new RunnerHost(RUNNER, {
   tray: (s) => { trayState = s; runnerError = null; refreshTray(); },
   ready: () => { runnerError = null; refreshTray(); },
   failed: ({ code, message }) => {
@@ -116,20 +122,28 @@ function refreshTray() {
   const v = trayView(trayState, runnerError);
   tray.setImage(icon(v.icon));
   tray.setToolTip(v.tooltip);
+  // 新版本下好了：没有卡在跑时才能点「重启换新版本」（不打断正在跑的卡）
+  const busy = (trayState?.running ?? 0) > 0;
+  const update: Electron.MenuItemConstructorOptions[] = updates.downloaded
+    ? [{ label: busy ? `新版本 ${updates.downloaded} 已下好，卡跑完再重启` : `重启换新版本 ${updates.downloaded}`, enabled: !busy, click: () => void quit(true) }, { type: "separator" }]
+    : [];
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: "打开天枢", click: showWindow },
     { label: v.pauseLabel, enabled: v.canPause, click: () => runner.menu(trayState?.paused ? "resume" : "pause") },
     { type: "separator" },
+    ...update,
     { label: "退出", click: () => void quit() },
   ]));
 }
 
-async function quit() {
+/** 退出：本机程序先停掉会话进程再退；有下好的新版就顺手静默装上（relaunch：装完再打开，托盘「重启换新版本」走这条）。 */
+async function quit(relaunch = false) {
   if (quitting) return;
   quitting = true;
-  await runner.stop(); // 本机程序先停掉会话进程再退
+  await runner.stop();
   tray?.destroy();
-  app.exit(0);
+  if (updates.downloaded) updates.install(relaunch);
+  else app.exit(0);
 }
 
 // 单实例：再打开一次只是把窗口叫出来
@@ -139,7 +153,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on("second-instance", showWindow);
   app.whenReady().then(async () => {
     // 装好的桌面版才登记开机自启（开发时跑的是 electron.exe，不登记）；开机时只进托盘
-    if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: true, args: [HIDDEN_ARG] });
+    if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: true, args: [HIDDEN_ARG], name: LOGIN_ITEM });
     guard(session.fromPartition(PARTITION));
     tray = new Tray(icon("off"));
     tray.on("click", showWindow);
@@ -148,6 +162,7 @@ if (!app.requestSingleInstanceLock()) {
     // 先接管脚本装的旧版（停掉它、删它的自启），再拉起随包的本机程序
     for (const line of await takeOverLegacy().catch(() => [])) console.log(`[桌面版] ${line}`);
     runner.start();
+    if (app.isPackaged) updates.start(process.env.TIANSHU_DESKTOP_UPDATE_URL);
   });
   // 窗口收进托盘时不退出；退出只走托盘菜单
   app.on("window-all-closed", () => {});

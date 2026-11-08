@@ -126,7 +126,7 @@ describe("会话：开工、事件、批权限、插话、停下、强停、续�
 
   it("空闲时发话开新一轮；进行中插话下一步生效；拒绝可附理由", async () => {
     const r1 = await api(t.port, token, "POST", `/v1/sessions/${id}/messages`, { text: "再写一次" });
-    expect(r1.body).toEqual({ delivery: "new_turn" });
+    expect(r1.body).toEqual({ delivery: "new_turn", messageId: expect.stringMatching(/^[0-9a-f-]{36}$/) });
     let detail: any;
     for (let i = 0; i < 100 && !detail?.pendingPermissions?.length; i++) {
       detail = (await api(t.port, token, "GET", `/v1/sessions/${id}`)).body;
@@ -134,7 +134,7 @@ describe("会话：开工、事件、批权限、插话、停下、强停、续�
     }
     const lastSeq = detail.session.lastSeq;
     const r2 = await api(t.port, token, "POST", `/v1/sessions/${id}/messages`, { text: "别写了" });
-    expect(r2.body).toEqual({ delivery: "next_step" });
+    expect(r2.body).toEqual({ delivery: "next_step", messageId: expect.stringMatching(/^[0-9a-f-]{36}$/) });
     const reqId = detail.pendingPermissions[0].requestId;
     await api(t.port, token, "POST", `/v1/sessions/${id}/permissions/${encodeURIComponent(reqId)}`, { decision: "deny", message: "不要覆盖" });
     const events = await readSse(t.port, token, id, { lastEventId: lastSeq, until: has("status", (e) => e.status === "idle") });
@@ -162,7 +162,7 @@ describe("会话：开工、事件、批权限、插话、停下、强停、续�
     expect((await api(t.port, token, "POST", `/v1/sessions/${id}/kill`, {})).status).toBe(200);
     await readSse(t.port, token, id, { lastEventId: lastSeq, until: has("status", (e) => e.status === "exited") });
     const r = await api(t.port, token, "POST", `/v1/sessions/${id}/messages`, { text: "接着做" });
-    expect(r.body).toEqual({ delivery: "resumed" });
+    expect(r.body).toEqual({ delivery: "resumed", messageId: expect.stringMatching(/^[0-9a-f-]{36}$/) });
     const runs = trace(work);
     const last: string[] = runs.at(-1).argv;
     expect(last[last.indexOf("--resume") + 1]).toBe(id);
