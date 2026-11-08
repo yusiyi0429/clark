@@ -91,3 +91,11 @@ describe("会话的先后（照派活单）", () => {
     expect(planOrder(list, at).map((entry) => entry.id)).toEqual(["c1", "c2", "c3", "t1"]);
   });
 });
+
+describe("伙伴台「亮着」（17.2）：只在伙伴对话里", () => {
+  it("别的页不亮；伙伴对话里空闲是 idle，回话流着是 speaking（在说或在想）", () => {
+    expect(render({})).not.toContain("data-glow");
+    expect(render({ view: { kind: "buddy" } })).toContain('data-glow="idle"');
+    expect(render({ view: { kind: "buddy" }, speaking: true })).toContain('data-glow="speaking"');
+  });
+});

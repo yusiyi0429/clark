@@ -57,6 +57,29 @@
 .stageHit { display: grid; place-items: center; width: 100%; height: 100%; padding: 0; border: 0; border-radius: inherit; background: none; cursor: pointer; }
 .stageMore { position: absolute; top: var(--space-2); right: var(--space-2); opacity: 0; transition: opacity var(--dur-snap) var(--ease-swift); }
 .stage:hover .stageMore, .stageMore:focus-within { opacity: 1; }
+/*
+ * 伙伴台「亮着」（17.2 第 3 条）：只在伙伴对话里，台子里面两层光，不加外发光和阴影。
+ * ::before 一圈 1.5px 流光边（conic-gradient + mask 抠成边框），::after 底部一片淡光（从底边往上约 40%）。
+ * data-glow：idle 空闲（都不动）、listening 在听（底光跟着麦克风音量 --level 0–1）、speaking 在说或在想（环 4 秒转一圈）。
+ * 进伙伴对话淡入 240ms，离开淡出 400ms；浅色靠环显，深色环弱一点、底光亮一点。
+ */
+@property --glow-angle { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
+.stage { isolation: isolate; --g1: color-mix(in oklab, var(--accent) 70%, transparent); --g2: color-mix(in oklab, var(--accent) 30%, transparent); --ring: 0.7; --wash: 0.08; }
+:global(:root[data-color-scheme="dark"]) .stage { --ring: 0.45; --wash: 0.14; }
+.stage::before, .stage::after { content: ""; position: absolute; z-index: -1; pointer-events: none; opacity: 0; transition: opacity 400ms ease; }
+.stage::before {
+  inset: 0; padding: 1.5px; border-radius: inherit;
+  background: conic-gradient(from var(--glow-angle), var(--g1), var(--g2) 25%, transparent 45% 65%, var(--g1));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+}
+.stage::after { inset: auto 0 0; height: 40%; border-radius: 0 0 var(--r-card) var(--r-card); background: radial-gradient(120% 100% at 50% 100%, var(--g1), transparent 70%); }
+.stage[data-glow]::before { opacity: var(--ring); transition-duration: 240ms; }
+.stage[data-glow]::after { opacity: calc(var(--wash) + var(--level, 0) * 0.25); transition-duration: 240ms; }
+.stage[data-glow="listening"]::after { transition: opacity 120ms linear; }
+.stage[data-glow="speaking"]::before { animation: glowSpin 4s linear infinite; }
+@keyframes glowSpin { to { --glow-angle: 360deg; } }
+@media (prefers-reduced-motion: reduce) { .stage::before { animation: none !important; } }
 
 /* 「今天」行：就是首页。行尾是等你的计数（在首页时不显示）。 */
 .today { display: flex; flex: none; align-items: center; gap: var(--space-2); height: var(--row-36); margin-top: var(--space-2); padding: 0 var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink); font: inherit; font-size: var(--text-base); line-height: var(--lh-row); text-align: left; cursor: pointer; }
