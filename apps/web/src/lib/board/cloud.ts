@@ -20,7 +20,7 @@ export class CloudError extends Error {
 type Result<T> = { data?: T; error?: unknown; response: Response };
 
 /** 401 去登录；不成功抛 CloudError（带服务端的话）。 */
-async function unwrap<T>(call: Promise<Result<T>>): Promise<T> {
+export async function unwrap<T>(call: Promise<Result<T>>): Promise<T> {
   let result: Result<T>;
   try {
     result = await call;

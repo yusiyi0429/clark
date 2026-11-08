@@ -37,6 +37,7 @@ import { useConversationScroll } from "@/conversation/useConversationScroll";
 import { commitText, placeText, shortPlace } from "@/lib/work/merge";
 import type { TLocalSessionSummary } from "@/lib/local/runner";
 import s from "@/styles/v2-session.module.css";
+import { PlanChecklist } from "./PlanChecklist";
 
 /** 回到新首页，锚着这张卡的 Task（V2 设计第 20.4 节；没打开新首页的人会被带回老首页）。 */
 const workHref = (taskId: string | null) => (taskId ? `/me/work/tasks/${encodeURIComponent(taskId)}` : "/me/work");
@@ -286,7 +287,7 @@ function ResultPane({ detail, session, view, canAct, wait, stage, handheld, read
       {plan.length ? (
         <div className={s.sec}>
           <p className={s.lab}>计划{step ? <span className={s.faint}>第 {step.step}/{step.total} 步</span> : null}</p>
-          <ol className={s.plan}>{plan.map((entry, index) => <li key={index} data-status={entry.status}>{entry.content}</li>)}</ol>
+          <PlanChecklist entries={plan} />
         </div>
       ) : null}
 

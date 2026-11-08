@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { TAppearanceSettings } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
 import { APPEARANCE_KEY, SCHEME_ATTR } from "./appearanceScript";
+import { useBuddyUi } from "@/lib/buddy/uiEvent";
 
 export type Appearance = TAppearanceSettings["appearance"];
 
@@ -55,6 +56,12 @@ export function useAppearance() {
     document.addEventListener("visibilitychange", onVisible);
     return () => { alive = false; document.removeEventListener("visibilitychange", onVisible); };
   }, []);
+  // 伙伴切了外观（17.4 的 ui 事件）：立刻照它换，不用再读。
+  useBuddyUi((effect) => {
+    if (effect.kind !== "appearance") return;
+    applyStoredAppearance(effect.appearance);
+    setLocal(effect.appearance);
+  });
   const set = useCallback(async (next: Appearance) => {
     const previous = readStoredAppearance();
     applyStoredAppearance(next);

@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * 「偏好」二级页（设计 17.2）：外观（跟随系统 / 浅色 / 深色）、飞书推送、新 Task 的缺省预算。都存在服务端，点了就存。
+ * 「偏好」二级页（设计 17.2、17.4）：外观（跟随系统 / 浅色 / 深色）、飞书推送、新 Task 的缺省预算、伙伴代我做事（和伙伴做过的事）、回收站。
+ * 都存在服务端，点了就存。
  * 版式和控件照「连接」页（v2-local 的分段、开关），不加说明文字；没存成在原处写「失败 · 重试」。
  */
 import { useEffect, useState } from "react";
@@ -10,6 +11,8 @@ import { FailedLine, failureOf, type Failure } from "@/components/work/DecisionB
 import { useAppearance, type Appearance } from "@/lib/appearance";
 import { readNotificationSettings, saveNotificationSettings } from "@/lib/board/cloud";
 import { DefaultBudget } from "./TaskBudget";
+import { BuddyAuthoritySection, TrashSection } from "./BuddyAuthority";
+import { useBuddyUi } from "@/lib/buddy/uiEvent";
 import s from "@/styles/v2-local.module.css";
 
 const APPEARANCES: { id: Appearance; label: string }[] = [{ id: "system", label: "跟随系统" }, { id: "light", label: "浅色" }, { id: "dark", label: "深色" }];
@@ -19,11 +22,14 @@ export function Preferences() {
   const [appearanceFailed, setAppearanceFailed] = useState<Failure | null>(null);
   const [feishu, setFeishu] = useState<boolean | null>(null);
   const [feishuFailed, setFeishuFailed] = useState<Failure | null>(null);
+  // 伙伴改了设置（17.4 的 ui refresh settings）：重读飞书推送。
+  const [settingsTick, setSettingsTick] = useState(0);
+  useBuddyUi((effect) => { if (effect.kind === "refresh" && effect.what.includes("settings")) setSettingsTick((n) => n + 1); });
   useEffect(() => {
     let alive = true;
     void readNotificationSettings().then((found) => { if (alive) setFeishu(found?.feishu ?? true); }, () => { if (alive) setFeishu(true); });
     return () => { alive = false; };
-  }, []);
+  }, [settingsTick]);
   const pick = (next: Appearance) => {
     setAppearanceFailed(null);
     void setAppearance(next).catch((error: unknown) => setAppearanceFailed(failureOf(error, () => pick(next))));
@@ -54,6 +60,8 @@ export function Preferences() {
         <p className={s.lab}>缺省预算</p>
         <DefaultBudget />
       </section>
+      <BuddyAuthoritySection />
+      <TrashSection />
     </>
   );
 }

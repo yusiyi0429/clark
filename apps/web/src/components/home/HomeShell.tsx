@@ -33,7 +33,7 @@ import { showWorkspaceToast } from "@/lib/toast";
 import { modelForTier } from "@/lib/team/roles";
 import { startBatch, type StartPlan } from "@/lib/work/queue";
 import type { Worker } from "@/lib/work/workers";
-import { HOME_HREF, emptyMonth, monthLabel, routeText, todayLabel } from "@/lib/home/derive";
+import { HOME_HREF, buddyTargetHref, emptyMonth, monthLabel, routeText, todayLabel } from "@/lib/home/derive";
 import { HeroButton } from "@/components/HeroButton";
 import type { BackgroundItem, RouteTarget } from "@/lib/home/types";
 import { useBackground } from "@/lib/home/useBackground";
@@ -59,6 +59,8 @@ import { useTabTitle } from "./useTabTitle";
 import h from "@/styles/home.module.css";
 import { linkPerson } from "@/lib/local/link";
 import { useAppearance } from "@/lib/appearance";
+import { useBuddyUi } from "@/lib/buddy/uiEvent";
+import { useSessionStops } from "@/lib/buddy/sessionStops";
 
 /** 要开的规划员：拆哪个，登记的 id 和存下的原话（登记回去时用）。 */
 type PlanJob = PlanTarget & { splitId?: string; sourceWords?: string[] };
@@ -171,6 +173,12 @@ function HomeFrame({ account }: { account: Account }) {
 
   // ---- 开规划员、开卡（一次交给本机）----
   const here = local.phase === "ready" && !handheld;
+  // 伙伴代本人做事（17.4）：界面上的效果——打开某一处、首页那几块重读（外观由 useAppearance 接）；「请这台电脑停掉」由这台电脑认领。
+  useBuddyUi((effect) => {
+    if (effect.kind === "open") go(buddyTargetHref(effect.target));
+    if (effect.kind === "refresh" && effect.what.some((what) => what === "work_home" || what === "project" || what === "sub_session")) void api.refresh();
+  });
+  useSessionStops(local, here);
   const changed = useCallback(() => { void api.refresh(); }, [api]);
   /**
    * 这个标签页里自动开工没开起来的子会话（卡 id、专题 id）：Task 管线里那一行出「失败」加「手动开始」（5.4.3、9.8，手动开始只有这一处），

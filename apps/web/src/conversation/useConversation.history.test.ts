@@ -325,7 +325,8 @@ describe("发送后的重读失败", () => {
     await keepFailing((request) => request.resolve(failed(500)));
     const view = render();
     expect(view).toMatchObject({ status: "failed", error: "上一轮回答还没结束，请等它写完或点「停止」后再发。", historyStatus: "error", recovery: null });
-    expect(view.messages).toEqual([user(1, "早先的问题")]);
+    // 伙伴对话读回的本人那几句都算读到了（17.4 的两个勾）。
+    expect(view.messages).toEqual([{ ...user(1, "早先的问题"), receipt: "read" }]);
   });
 });
 
@@ -358,7 +359,7 @@ describe("首页切走、刷新回来：这一轮在服务端照常写，回来�
     await flush();
     // 不是一句光秃秃的提问：同样的进行中一行，停止可用。
     expect(render()).toMatchObject({ status: "streaming", streaming: true, startedAt, partial: "前半段" });
-    expect(render().messages).toEqual([{ ...asked, running: true }]);
+    expect(render().messages).toEqual([{ ...asked, running: true, receipt: "read" }]);
     turn.release();
     await flush();
     historyRequest().resolve(ok([asked, { sequence: 2, role: "assistant", content: "前半段，后半段", runId: RUN }]));

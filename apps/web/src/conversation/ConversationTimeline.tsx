@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { ConversationStatusSlot, ConversationThinking, ConversationTurns } from "./Transcript";
 import { AnswerOptions } from "./AnswerOptionRow";
 import { EntryCards } from "./EntryCards";
+import { PlanChecklist } from "@/components/cards/PlanChecklist";
 import { AskContext, askAnswers } from "./AskPanel";
 import { parseAnswerOptions } from "./answerOptions";
 import { RescopeContext } from "./ScopeChip";
@@ -48,6 +49,9 @@ export function ConversationTimeline({ data }: { data: ConversationData }) {
   const status = data.streaming ? (
     <ConversationStatusSlot>
       {data.thinking ? <ConversationThinking stage={data.stage} startedAt={data.startedAt} onStop={data.stop} route={data.route} progress={data.progress} steps={data.steps} thought={data.thought} readScope={data.readScope} /> : null}
+      {/* 伙伴这一轮的计划清单和出的卡（17.4）：写完读回历史后挂在那条回答上。 */}
+      {data.plan ? <PlanChecklist entries={data.plan.entries} collapsed={data.plan.collapsed} /> : null}
+      {data.turnCards?.length ? <EntryCards cards={data.turnCards} /> : null}
     </ConversationStatusSlot>
   ) : null;
   // 范围标签改范围后按新范围重读：回答进行中不能点。
@@ -62,7 +66,12 @@ export function ConversationTimeline({ data }: { data: ConversationData }) {
       footer={(index) => (index === lastIndex && options.length ? <AnswerOptions scope={data.scope} options={options} /> : null)}
       after={(index) => {
         const cards = latestCards[index];
-        return cards?.length ? <EntryCards cards={cards} createdAt={data.messages[index].createdAt} /> : null;
+        const plan = data.messages[index].plan;
+        if (!plan && !cards?.length) return null;
+        return <>
+          {plan ? <PlanChecklist entries={plan.entries} collapsed={plan.collapsed} /> : null}
+          {cards?.length ? <EntryCards cards={cards} createdAt={data.messages[index].createdAt} /> : null}
+        </>;
       }} />
     </AskContext.Provider>
     </RescopeContext.Provider>

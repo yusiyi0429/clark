@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { parseSseBlock, splitSse, type ConversationEvent } from "./sse";
 import type { Step, StepStatus } from "@/components/steps/StepList";
-import type { TAskAnswerInput, TAskAnswerRecord, TConversationCard, TReadScope, TReadScopeParams } from "@warmap/contracts";
+import type { TAskAnswerInput, TAskAnswerRecord, TBuddyPlan, TConversationCard, TReadScope, TReadScopeParams } from "@warmap/contracts";
 import type { components } from "@/lib/api/schema";
 import { afterResize, resizing } from "./resizeGate";
 import { useStableCallback } from "./stableCallback";
 import { backoff, HISTORY_RETRY_MS, offline, pause, RECONNECT_MS } from "./reconnect";
+import { emitBuddyUi } from "@/lib/buddy/uiEvent";
 
 /**
  * 对话的数据与调用：一个人在一个页面有一条当前对话（默认一直接着往下聊，用户感觉不到「会话」）。
@@ -37,10 +38,14 @@ export type Message = { sequence: number; role: "user" | "assistant"; content: s
   answers?: TAskAnswerRecord;
   /** carried：转议题时从首页带过来的一段；trace：首页留痕行「已转到议题 X」，meta.href 直达。 */
   kind?: "carried" | "trace";
-  /** 这一句是在飞书私聊天枢机器人或微信 ClawBot 里说的（问与答都标）。 */
-  via?: "feishu" | "wechat";
+  /** 这一句是在飞书私聊天枢机器人或微信 ClawBot 里说的（问与答都标）；buddy 是伙伴从伙伴台转到项目对话里的本人那句（17.4 message_project）。 */
+  via?: "feishu" | "wechat" | "buddy";
   /** 只在本人的提问上：这一轮服务端还在回答。 */
   running?: boolean;
+  /** 伙伴对话里本人这一句的回执（17.4）：delivered 天枢收下了，read 伙伴读到了。读回的历史都算 read。 */
+  receipt?: "delivered" | "read";
+  /** 伙伴这一轮最后一张计划清单（17.4，只在回答上）。 */
+  plan?: TBuddyPlan;
   meta?: { issueId?: string; title?: string; href?: string } };
 export type Attachment = { id: string; fileName: string; mimeType: string };
 export type ConversationStatus = "idle" | "streaming" | "complete" | "failed" | "aborted";
@@ -97,6 +102,9 @@ export function pendingUserMessage(sequence: number, content: string, references
     ...(attachments.length ? { attachments } : {}) };
 }
 
+/** 伙伴对话（总管线、项目对话）：回执、计划清单、回复中再发会停掉上一轮（17.4）。 */
+export const isBuddyScope = (scope: string) => scope === "global" || scope.startsWith("project:");
+
 /** 别处改了这条对话的记录（转议题后首页多了留痕行）：detail.scope 是这条对话，收到就安静地重读历史。 */
 export const CONVERSATION_RELOAD = "conversation-reload";
 
@@ -118,7 +126,7 @@ export function historySignature(list: Message[]): string {
 }
 
 /** 来源标签上的字。 */
-export const VIA_LABEL = { feishu: "飞书", wechat: "微信" } as const;
+export const VIA_LABEL = { feishu: "飞书", wechat: "微信", buddy: "伙伴转来" } as const;
 
 /** 飞书或微信里问了、还没答完：最后一条是从那边来的提问。 */
 export function feishuWaiting(list: Message[]): boolean {
@@ -305,6 +313,8 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
   const pendingTurn = useRef<Message | null>(null);
   /** 每换一次 scope（或卸载）加一：上一个 scope 迟到的发送、上传结果不再改这里的状态。 */
   const generation = useRef(0);
+  const [turnPlan, setTurnPlan] = useState<TBuddyPlan | null>(null);
+  const [turnCards, setTurnCards] = useState<TConversationCard[]>([]);
   /**
    * 流式上屏合帧（B2）：一帧里到的正文、思考摘要、进度只写一次（整棵对话树一帧最多重画一次，不按每段 delta 重画）。
    * 对话层放大 / 收起的过渡里（resizeGate）排着不写，过渡结束一次补齐。
@@ -397,7 +407,9 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
           const body = (await response.json()) as { messages?: unknown };
           if (!Array.isArray(body.messages)) throw new Error("历史格式不对");
           if (!current()) return null;
-          const loaded = withPendingTurn(body.messages as Message[], pendingTurn.current);
+          // 伙伴对话读回的本人那几句都已经读到了（17.4 的两个勾）。
+          const saved = isBuddyScope(scope) ? (body.messages as Message[]).map((item) => (item.role === "user" ? { ...item, receipt: "read" as const } : item)) : body.messages as Message[];
+          const loaded = withPendingTurn(saved, pendingTurn.current);
           setMessages(loaded);
           setHistoryStatus("ready");
           setHistoryError(null);
@@ -602,7 +614,17 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
     attachments?: Attachment[] } = {}): Promise<boolean> {
     const input = message.trim();
     const attach = options.attach;
-    if ((!input && !attach) || status === "streaming") return false;
+    // 伙伴对话回复中本人再发（17.4）：天枢收下、停掉上一轮再开新的一轮；这里把上一轮交出去（不再写这页），已写出的先留在原处。
+    const interrupting = status === "streaming" && !attach && isBuddyScope(scope);
+    if ((!input && !attach) || (status === "streaming" && !interrupting)) return false;
+    if (interrupting) {
+      generation.current += 1;
+      abortRef.current?.abort();
+      const cut = partial;
+      const cutPlan = turnPlan;
+      if (cut || cutPlan) setMessages((current) => [...current, { sequence: (current.at(-1)?.sequence ?? 0) + 1, role: "assistant", content: cut,
+        ...(cutPlan ? { plan: { ...cutPlan, collapsed: true } } : {}) }]);
+    }
     const text = attach ? "" : messageContext && !options.resumeRunId && !options.answers ? `${messageContext}
 
 ${input}` : input;
@@ -626,6 +648,8 @@ ${input}` : input;
     setSteps([]);
     setReadScope(null);
     setThought(null);
+    setTurnPlan(null);
+    setTurnCards([]);
     setStatus("streaming");
     const sentAttachments = options.attachments ?? attachments;
     const attachmentRefs = sentAttachments.map((attachment) => ({ id: attachment.id }));
@@ -840,6 +864,18 @@ ${input}` : input;
           // 伙伴登记了拆卡：新首页在这台电脑上开规划员（V2 设计第 21.3 节；事件名同 components/home/HomeShell.tsx 的 SPLIT_EVENT）。
           if (event.type === "tool" && event.phase === "completed" && !event.isError && event.name === "register_card_split")
             window.dispatchEvent(new CustomEvent("card-split-registered", { detail: { scope } }));
+          if (event.type === "receipt" && event.state && live()) {
+            const state = event.state;
+            // 这一轮还在这页上（live）时，最后一句本人的话就是这次发的那句。
+            setMessages((current) => {
+              let index = current.length - 1;
+              while (index >= 0 && current[index].role !== "user") index -= 1;
+              return index < 0 || current[index].receipt === "read" ? current : current.map((item, at) => (at === index ? { ...item, receipt: state } : item));
+            });
+          }
+          if (event.type === "plan" && event.plan && live()) setTurnPlan(event.plan);
+          if (event.type === "card" && event.card && live()) { const card = event.card; setTurnCards((current) => [...current, card]); }
+          if (event.type === "ui" && event.ui) emitBuddyUi(event.ui);
           if (event.type === "error") {
             serverError = { resume: event.resume };
             throw new TurnError(event.code, event.message ?? "");
@@ -986,6 +1022,11 @@ ${input}` : input;
     messages,
     status,
     streaming: status === "streaming",
+    /** 回复中也能再发（伙伴对话，17.4）。 */
+    interruptible: isBuddyScope(scope),
+    /** 这一轮伙伴的计划清单和出的卡（17.4，回答还在写时；写完读回的历史里在那条回答上）。 */
+    plan: turnPlan,
+    turnCards,
     /** 显示「正在思考 / 查证 / 整理回答」那一行：回答进行中、且正文还没结束。 */
     thinking: status === "streaming" && !bodyDone,
     partial,

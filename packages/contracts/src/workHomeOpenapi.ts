@@ -2,7 +2,8 @@ import type { JsonSchema, OpenAPIV3 } from "./types/JsonSchemaTypes.js";
 import {
   BackgroundItem, BackgroundResponse, ClaimSessionStartsRequest, ClaimSessionStartsResponse, HomeMonthMission, HomeMonthTask, HomeProject, HomeProjectGoal,
   HomeTaskSummary, RouteRequest, RouteResponse, SessionStartView, SubSession, WaitingItem, WaitingTarget, WorkHomeResponse, CardMerge, TaskFeedItem, HomeItem,
-  ReleaseSessionStartRequest, NotificationSettings, ClaimedSessionStart, AppearanceSettings,
+  ReleaseSessionStartRequest, NotificationSettings, ClaimedSessionStart, AppearanceSettings, SessionStopView, ClaimSessionStopsRequest, ClaimSessionStopsResponse,
+  SessionStopDoneRequest,
 } from "./workHome.js";
 import { CreateProjectRequest, Project, ProjectDetailResponse, ProjectFeedItem, ProjectFeedResponse, ProjectGoal, ProjectGoalLinkedItem, ProjectHandoverItem,
   ProjectHandoverSummaryItem, ProjectListResponse, ProjectPipelineResponse, ProjectTransferDeclinedItem, UpdateProjectRequest, ProjectBoardResponse, ProjectGoalChangedItem,
@@ -10,6 +11,7 @@ import { CreateProjectRequest, Project, ProjectDetailResponse, ProjectFeedItem, 
 import { CreateProjectTransferRequest, HandoverSecretFinding, HandoverSecretsResponse, HandoverSection, PersonRef, ProjectTransfer,
   UpdateProjectTransferRequest } from "./projectTransfers.js";
 import { Budget, TaskBudgetResponse } from "./budget.js";
+import { BuddyAuditEntry, BuddyAuditListResponse, BuddyAuthority, BuddyMessageDraft, TrashItem, TrashListResponse, UpdateBuddyAuthorityRequest } from "./buddyActions.js";
 import { SessionAttachment, SessionAttachmentUploadResponse } from "./attachments.js";
 
 /**
@@ -24,7 +26,8 @@ export const workHomeSchemas: Record<string, JsonSchema> = {
   Project, ProjectListResponse, CreateProjectRequest, UpdateProjectRequest, ProjectGoal, ProjectDetailResponse, ProjectPipelineResponse, ProjectGoalLinkedItem,
   ProjectFeedItem, ProjectFeedResponse, ProjectBoardResponse, ProjectGoalChangedItem, AnswerGoalChangeRequest, ProjectHandoverItem, ProjectHandoverSummaryItem, ProjectTransferDeclinedItem,
   PersonRef, HandoverSection, ProjectTransfer, CreateProjectTransferRequest, UpdateProjectTransferRequest, HandoverSecretFinding, HandoverSecretsResponse,
-  NotificationSettings, AppearanceSettings, Budget, TaskBudgetResponse, ClaimedSessionStart, SessionAttachment, SessionAttachmentUploadResponse,
+  NotificationSettings, AppearanceSettings, SessionStopView, ClaimSessionStopsRequest, ClaimSessionStopsResponse, SessionStopDoneRequest,
+  BuddyAuthority, UpdateBuddyAuthorityRequest, BuddyAuditEntry, BuddyAuditListResponse, BuddyMessageDraft, TrashItem, TrashListResponse, Budget, TaskBudgetResponse, ClaimedSessionStart, SessionAttachment, SessionAttachmentUploadResponse,
 };
 
 const error = { description: "ApiError 统一错误", content: { "application/json": { schema: { $ref: "#/components/schemas/ApiError" } } } };
@@ -103,6 +106,90 @@ export const workHomePaths: OpenAPIV3.Document["paths"] = {
       summary: "改本人的外观（换设备一样）",
       requestBody: body("AppearanceSettings"),
       responses: { "200": json("改好的外观", "AppearanceSettings"), ...errors(400, 401) },
+    },
+  },
+  "/api/me/buddy-authority": {
+    get: {
+      operationId: "getBuddyAuthority",
+      summary: "伙伴代本人做事的授权（17.4）：full 完全授权，none 只能读（缺省）",
+      responses: { "200": json("授权", "BuddyAuthority"), ...errors(401) },
+    },
+    put: {
+      operationId: "updateBuddyAuthority",
+      summary: "打开或关掉伙伴的授权（引导里的「同意」、偏好里的开关）",
+      requestBody: body("UpdateBuddyAuthorityRequest"),
+      responses: { "200": json("改好的授权", "BuddyAuthority"), ...errors(400, 401) },
+    },
+  },
+  "/api/me/buddy-actions/log": {
+    get: {
+      operationId: "listBuddyActions",
+      summary: "伙伴代本人做过的写动作（新的在前，最近 100 条），能撤的带 undoable",
+      responses: { "200": json("审计", "BuddyAuditListResponse"), ...errors(401) },
+    },
+  },
+  "/api/me/buddy-actions/log/{id}/undo": {
+    post: {
+      operationId: "undoBuddyAction",
+      summary: "撤销伙伴做的一个动作；不能撤、撤过了、对象已经变了 409 NOT_UNDOABLE",
+      parameters: path("id"),
+      responses: { "200": json("撤销后的这条", "BuddyAuditEntry"), ...errors(401, 404, 409) },
+    },
+  },
+  "/api/me/buddy-messages/{id}": {
+    get: {
+      operationId: "getBuddyMessage",
+      summary: "伙伴要转达给同事的一句话（对话里的 buddy_message 卡）",
+      parameters: path("id"),
+      responses: { "200": json("这句话", "BuddyMessageDraft"), ...errors(401, 404) },
+    },
+  },
+  "/api/me/buddy-messages/{id}/send": {
+    post: {
+      operationId: "sendBuddyMessage",
+      summary: "发出：天枢机器人转达给收件人（开头「{本人}请我转达：」）；收不到的列在 failed；不是草稿 409",
+      parameters: path("id"),
+      responses: { "200": json("发出后的这句话", "BuddyMessageDraft"), ...errors(401, 404, 409, 429) },
+    },
+  },
+  "/api/me/buddy-messages/{id}/cancel": {
+    post: {
+      operationId: "cancelBuddyMessage",
+      summary: "不发了；不是草稿 409",
+      parameters: path("id"),
+      responses: { "200": json("取消后的这句话", "BuddyMessageDraft"), ...errors(401, 404, 409) },
+    },
+  },
+  "/api/me/trash": {
+    get: {
+      operationId: "listTrash",
+      summary: "回收站：删掉的子会话，purgeAt 以后真删",
+      responses: { "200": json("回收站", "TrashListResponse"), ...errors(401) },
+    },
+  },
+  "/api/me/trash/{kind}/{id}/restore": {
+    post: {
+      operationId: "restoreTrashItem",
+      summary: "从回收站恢复一个子会话（204）；已经真删了 404",
+      parameters: [{ name: "kind", in: "path", required: true, schema: { type: "string", enum: ["card", "topic"] } }, ...path("id")],
+      responses: { "204": { description: "恢复了" }, ...errors(401, 404) },
+    },
+  },
+  "/api/me/session-stops/claim": {
+    post: {
+      operationId: "claimSessionStops",
+      summary: "认领这台电脑上要停掉的本机会话（17.4 伙伴的 stop_sub_session）",
+      requestBody: body("ClaimSessionStopsRequest"),
+      responses: { "200": json("要停的", "ClaimSessionStopsResponse"), ...errors(400, 401, 404) },
+    },
+  },
+  "/api/me/session-stops/{id}/done": {
+    post: {
+      operationId: "finishSessionStop",
+      summary: "报停掉的结果（stopped / not_running）；不是这台电脑认领的 404",
+      parameters: path("id"),
+      requestBody: body("SessionStopDoneRequest"),
+      responses: { "204": { description: "记下了" }, ...errors(400, 401, 404) },
     },
   },
   "/api/me/work-home": {

@@ -404,6 +404,29 @@ export const ClaimedSessionStart = Type.Object({ ...SessionStartView.properties,
 export const ClaimSessionStartsResponse = Type.Object({ starts: Type.Array(ClaimedSessionStart) }, strict);
 
 /**
+ * 「请这台电脑停掉」（17.4：伙伴的 stop_sub_session，在跑的子会话只能在本人电脑上停）：云端记一条，开着的网页在跑这个会话的那台电脑上认领，
+ * 让本机程序停掉（POST /v1/sessions/:sessionId/stop），再报结果。
+ * - POST /api/me/session-stops/claim { deviceId }：认领这台电脑上的（deviceId 是本机会话所在的那台），回 { stops }；两处同时认领只有一处拿到，认领 5 分钟没报结果可以重新认领。
+ * - POST /api/me/session-stops/:id/done { deviceId, result }：stopped 停掉了，not_running 本机上已经没在跑。报过的不再出现。
+ * sessionId 是本机会话的 id（SubSession.sessionId），deviceId 是它所在的电脑。
+ */
+export const SessionStopView = Type.Object({
+  id: Type.String({ format: "uuid" }),
+  kind: Type.Union([Type.Literal("card"), Type.Literal("topic")]),
+  subSessionId: Type.String({ format: "uuid" }),
+  sessionId: Type.String({ format: "uuid" }),
+  deviceId: Type.String({ format: "uuid" }),
+  requestedAt: Instant,
+}, strict);
+export const ClaimSessionStopsRequest = Type.Object({ deviceId: Type.String({ format: "uuid" }) }, strict);
+export const ClaimSessionStopsResponse = Type.Object({ stops: Type.Array(SessionStopView) }, strict);
+export const SessionStopDoneRequest = Type.Object({ deviceId: Type.String({ format: "uuid" }),
+  result: Type.Union([Type.Literal("stopped"), Type.Literal("not_running")]) }, strict);
+export type TSessionStopView = Static<typeof SessionStopView>;
+export type TClaimSessionStopsResponse = Static<typeof ClaimSessionStopsResponse>;
+export type TSessionStopDoneRequest = Static<typeof SessionStopDoneRequest>;
+
+/**
  * 伙伴开探索子会话（工具 open_topic，/internal/me/topics，照 /internal 的 INTERNAL_CHAT_TOKEN 加 X-Owner-Id，不进公开 OpenAPI）：
  * 建一个专题并登记要开工，不用本人同意。projectId 是在哪个项目里（本人的、没归档的）；planTaskId 是归到哪件 Task（本人负责的，带了就在它挂的项目里）。
  * 两样都不带，子会话挂在「其他」。

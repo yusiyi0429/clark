@@ -120,6 +120,7 @@
 .issueTag { display: inline-flex; align-items: center; height: 19px; padding: 0 7px; border-radius: 999px; background: var(--neutral-wash); color: var(--ink-muted); font-size: 12px; }
 .plan li[data-status="completed"] { color: var(--ink-faint); text-decoration: line-through; text-decoration-color: var(--hairline-strong); }
 .plan li[data-status="in_progress"] { font-weight: 600; }
+.planFold { justify-self: start; padding: 0; border: 0; background: none; color: var(--ink-faint); font: inherit; font-size: 12px; cursor: pointer; }
 .verdicts { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .verdicts li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 8px; font-size: 12px; }
 .verdicts small { grid-column: 2; color: var(--ink-faint); font-size: 12px; }

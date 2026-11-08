@@ -3,7 +3,7 @@
 import { Fragment, memo, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import ReactMarkdown from "react-markdown";
 import remend from "remend";
-import { ArrowDown, ArrowRight, Paperclip, Quote } from "lucide-react";
+import { ArrowDown, ArrowRight, Check, Paperclip, Quote } from "lucide-react";
 import { WorkspaceContext } from "@/components/shell/WorkspaceContext";
 import type { TReadScope } from "@warmap/contracts";
 import { ScopeChip } from "./ScopeChip";
@@ -128,6 +128,7 @@ export function sameTurn(previous: TurnProps, next: TurnProps): boolean {
     && a.role === b.role && a.content === b.content
     && (a.memoryUsed ?? []).join("|") === (b.memoryUsed ?? []).join("|")
     && a.readScope?.label === b.readScope?.label && a.kind === b.kind && a.via === b.via && a.meta?.href === b.meta?.href && a.answers?.askId === b.answers?.askId
+    && a.receipt === b.receipt
     && sameList(a.attachments, b.attachments, (item) => item.id)
     && sameList(a.referencesSnapshot, b.referencesSnapshot, (item) => `${item.cardId}@${item.version}`);
 }
@@ -232,6 +233,12 @@ function ConversationTurnBody({ message, ms, streaming = false, thought, steps }
           </MemoryUsedProvider>
         </div>
       )}
+      {/* 伙伴对话的回执（17.4）：两个小勾，送达亮第一个，读到亮第二个。 */}
+      {user && message.receipt ? (
+        <span className={s.receipt} data-receipt={message.receipt} role="img" aria-label={message.receipt === "read" ? "已读" : "已送达"} data-testid="message-receipt">
+          <Check size={12} strokeWidth={2.2} aria-hidden /><Check size={12} strokeWidth={2.2} aria-hidden />
+        </span>
+      ) : null}
     </article>
   );
 }

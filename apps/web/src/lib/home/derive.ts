@@ -46,6 +46,13 @@ export const missionProject = (missionId: string) => `mission:${missionId}`;
 export const monthLabel = (period: string) => `${Number(period.slice(5, 7))} 月`;
 
 /** 等你一行点了去哪儿：契约给的是目标（open），网页映射到路由；网页自己拼的通知直接带地址。 */
+/** 伙伴「打开某一处」（17.4 open_page）：同「等你」的 open，另加首页和偏好。 */
+export function buddyTargetHref(target: WaitingItem["open"] | { kind: "home" } | { kind: "preferences" }): string {
+  if (target.kind === "home") return HOME_HREF;
+  if (target.kind === "preferences") return pageHref("preferences");
+  return waitingHref({ open: target });
+}
+
 export function waitingHref(item: Pick<WaitingItem, "open"> & Partial<Pick<WaitingItem, "kind" | "projectId" | "id">>): string {
   const { open } = item;
   // 月中 Task 改了（16.4）：落在项目对话里那个「停掉 / 留着」框上（等你的 id 是 goal_changed:<改动 id>）。

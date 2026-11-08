@@ -38,7 +38,7 @@ describe("真实 SSE 分段进入对话", () => {
     expect(await snapshot().send(input, [])).toBe(true);
     const failed = snapshot();
     expect(failed).toMatchObject({ status: "failed", partial: "", lastReply: null });
-    expect(failed.messages).toEqual([{ sequence: 1, role: "user", content: input }]);
+    expect(failed.messages).toEqual([{ sequence: 1, role: "user", content: input, receipt: "read" }]);
     expect(failed.error).toBe("模型服务没有受理这次请求（内容审核未通过）。问题已保留，可以换个说法后重试。");
     // 换个说法才有用：不给「重新回答」。
     expect(failed.recovery).toBeNull();
@@ -178,5 +178,30 @@ describe("带引用发送：提问气泡立刻带上引用", () => {
     const pending = pendingUserMessage(0, "问一句", [{ cardId: "c", version: 1, kind: "issue", title: "议题甲" }], [{ id: "a", fileName: "纪要.md", mimeType: "text/markdown" }]);
     const merged = withPendingTurn([{ sequence: 4, role: "assistant", content: "上一轮" }], pending);
     expect(merged.at(-1)).toMatchObject({ sequence: 5, content: "问一句", referencesSnapshot: [{ title: "议题甲" }], attachments: [{ fileName: "纪要.md" }] });
+  });
+});
+
+describe("伙伴对话流里的回执、计划清单、界面效果、卡（17.4）", () => {
+  it("计划清单后一条取代前一条；ui 事件发给页面；卡挂在这一轮上；读回的本人那句是已读", async () => {
+    const events = [
+      { type: "receipt", state: "delivered" }, { type: "receipt", state: "read" },
+      { type: "plan", plan: { entries: [{ content: "归档", status: "in_progress" }, { content: "转达", status: "pending" }], collapsed: false } },
+      { type: "plan", plan: { entries: [{ content: "归档", status: "completed" }, { content: "转达", status: "in_progress" }], collapsed: false } },
+      { type: "ui", ui: { kind: "appearance", appearance: "dark" } },
+      { type: "card", card: { kind: "buddy_message", draftId: "00000000-0000-4000-8000-0000000000a1" } },
+      { type: "message", delta: "好的" }, { type: "done", status: "completed" },
+    ].map((event) => `data: ${JSON.stringify({ ...event, runId: "r1" })}\n\n`).join("");
+    let sent = false;
+    const response = { ok: true, status: 200, body: { getReader: () => ({ read: async () => (sent ? { done: true, value: undefined } : (sent = true, { done: false, value: new TextEncoder().encode(events) })) }) } };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(response).mockResolvedValueOnce({
+      ok: true, json: async () => ({ messages: [{ sequence: 1, role: "user", content: "归档再转达" }, { sequence: 2, role: "assistant", content: "好的", runId: "r1" }] }),
+    }));
+    expect(await snapshot().send("归档再转达", [])).toBe(true);
+    const view = snapshot();
+    expect(view.plan?.entries.map((entry) => entry.status)).toEqual(["completed", "in_progress"]);
+    expect(view.turnCards).toEqual([{ kind: "buddy_message", draftId: "00000000-0000-4000-8000-0000000000a1" }]);
+    const ui = (window.dispatchEvent as ReturnType<typeof vi.fn>).mock.calls.map(([event]) => event as CustomEvent).find((event) => event.type === "buddy-ui");
+    expect(ui?.detail).toEqual({ kind: "appearance", appearance: "dark" });
+    expect(view.messages[0]).toMatchObject({ role: "user", receipt: "read" });
   });
 });

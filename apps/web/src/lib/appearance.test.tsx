@@ -38,6 +38,6 @@ describe("外观（17.2）：跟随系统 / 浅色 / 深色", () => {
 
   it("偏好页：外观三段（跟随系统 / 浅色 / 深色）、通知、缺省预算；不加说明文字", () => {
     const html = renderToStaticMarkup(<Preferences />);
-    expect(html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()).toBe("外观 跟随系统 浅色 深色 通知 缺省预算");
+    expect(html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()).toBe("外观 跟随系统 浅色 深色 通知 缺省预算 伙伴");
   });
 });
