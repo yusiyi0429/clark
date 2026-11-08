@@ -23,7 +23,7 @@ export function useCardDetail(cardId: string) {
       if (response.status === 404) { setMissing(true); return; }
       if (task) {
         const standards = (task.task.doneDefinition ?? "").split("\n").map((line) => line.trim()).filter(Boolean);
-        setDetail({ task: task.task, brief: null, standards, runs: [], handbacks: [], outputs: [], fallback: true });
+        setDetail({ task: task.task, letter: null, brief: null, standards, runs: [], handbacks: [], outputs: [], fallback: true });
       }
     } catch { /* 断网时留着上次的 */ }
   }, [cardId]);

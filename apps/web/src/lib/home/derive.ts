@@ -121,7 +121,7 @@ function boardSub(card: CardItem, sessions: TLocalSessionSummary[], merges: Merg
   const merge = mergeOf({ cardId: card.id, at: when, ws: session?.workspace ?? null, git: handback.git }, merges);
   const waiting = merge?.state === "needs_merge";
   return {
-    id: card.id, kind: "card", title: card.title, state: waiting ? "waiting" : "done", waiting: waiting ? "merge" : null, queueReason: null,
+    id: card.id, kind: "card", letter: null, title: card.title, state: waiting ? "waiting" : "done", waiting: waiting ? "merge" : null, queueReason: null,
     role: card.card?.role ?? null, sessionId: session?.id ?? null, deviceId: session ? deviceId : null, autoStart: false, updatedAt: when, merge, holdUntil: null,
   };
 }
@@ -155,7 +155,7 @@ export function toSubSession(worker: Worker, merges: MergeIssue[] = [], deviceId
   // 专题没有「完成」（契约修正 b5c2e100）：会话停下了（本机报 done）、异常退出了都算已暂停，在子会话里说「继续」。
   const topicStopped = worker.kind === "topic" && (worker.state === "done" || worker.session?.status === "done");
   return {
-    id, kind: worker.kind === "topic" ? "topic" : "card", title: worker.title,
+    id, kind: worker.kind === "topic" ? "topic" : "card", letter: null, title: worker.title,
     ...(verifying ? { state: "running" as const, waiting: null } : topicStopped ? { state: "waiting" as const, waiting: null } : subState(worker, merge)),
     queueReason: worker.state === "queued" && worker.reason ? QUEUE[worker.reason] : null,
     holdUntil: worker.state === "queued" && worker.reason === "quota" ? worker.holdUntil : null,
@@ -374,8 +374,8 @@ function orphanMerges(merges: MergeIssue[], subs: SubSession[]): WaitingItem[] {
 
 const NONE = { taskId: null, projectId: null, sessionId: null, deviceId: null } as const;
 
-/** 契约 9.6 加的几项（回退路径）：截止、电脑名、对方、月份先不填；answer 照能不能就地答。 */
-const fields = (answer: TWaitingAnswer) => ({ answer, dueAt: null, deviceName: null, person: null, month: null, question: null, permission: null });
+/** 契约 9.6 加的几项（回退路径）：截止、电脑名、字母、对方、月份先不填；answer 照能不能就地答。 */
+const fields = (answer: TWaitingAnswer) => ({ answer, dueAt: null, deviceName: null, letter: null, person: null, month: null, question: null, permission: null });
 
 function noticeWaiting(notices: NoticeSources | null): WaitingItem[] {
   if (!notices) return [];

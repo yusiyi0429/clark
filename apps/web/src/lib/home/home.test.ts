@@ -278,7 +278,7 @@ describe("首页输入框的「自动」（B 的 /route 没上时，规则相同
 describe("等你按设计 9.6（契约增补二）", () => {
   const row = (extra: Partial<WaitingItem>): WaitingItem => ({
     id: extra.id ?? "x", kind: "meeting", title: "t", source: null, open: { kind: "meeting", id: "m" }, taskId: null, projectId: null, sessionId: null, deviceId: null,
-    at: null, dueAt: null, deviceName: null, person: null, month: null, question: null, permission: null, answer: "open", ...extra,
+    at: null, dueAt: null, deviceName: null, letter: null, person: null, month: null, question: null, permission: null, answer: "open", ...extra,
   });
 
   it("顺序：卡住正在跑的活的（批准、回答、额度）在前，有截止的按截止早的在前，其余按时间新的在前", () => {

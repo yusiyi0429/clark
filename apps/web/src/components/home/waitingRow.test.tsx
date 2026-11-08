@@ -24,7 +24,7 @@ const at = (ms: number) => new Date(NOW + ms).toISOString();
 
 const wait = (extra: Partial<WaitingItem>): WaitingItem => ({
   id: "w1", kind: "verdict", title: "greet 连续两次没过", source: "首页改版 · greet", at: "2026-11-07T03:00:00Z", open: { kind: "project", id: "p1" },
-  taskId: "t1", projectId: "p1", sessionId: null, deviceId: null, deviceName: null, dueAt: null, answer: "open", person: null, month: null, question: null, permission: null, ...extra,
+  taskId: "t1", projectId: "p1", sessionId: null, deviceId: null, deviceName: null, letter: null, dueAt: null, answer: "open", person: null, month: null, question: null, permission: null, ...extra,
 });
 const local = (phase = "ready", sessions: unknown[] = []) => ({ runner: createMockRunner(), phase, version: null, status: null, models: [], folders: [], sessions, pairing: null, error: null,
   refresh: vi.fn(), pair: vi.fn(), unpair: vi.fn(), pickFolder: vi.fn(), setIncludePersonal: vi.fn() }) as unknown as LocalRunnerState;
