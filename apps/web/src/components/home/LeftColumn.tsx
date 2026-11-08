@@ -173,7 +173,7 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
         {data.other.subSessions.length || data.other.items.length ? (
           <section aria-label="其他" className={h.group}>
             <p className={h.groupTitle}>其他</p>
-            {data.other.subSessions.length ? <Subs subs={data.other.subSessions} view={view} go={go} flat /> : null}
+            {data.other.subSessions.length ? <Subs subs={data.other.subSessions} letters={subLetters(data.other.subSessions, cardAt)} view={view} go={go} flat /> : null}
             {data.other.items.length ? <Items items={data.other.items} personId={account.personId} go={go} /> : null}
           </section>
         ) : null}
@@ -214,6 +214,7 @@ function ProjectNode({ project, view, go, personId, cardAt, working = false }: {
   const page = here && (view.kind === "project" || view.kind === "task");
   const [open, setOpen] = useState(false);
   const subs = planOrder(project.subSessions, cardAt);
+  const letters = subLetters(project.subSessions, cardAt);
   const items = [...project.items].sort((a, b) => Number(a.status === "done") - Number(b.status === "done"));
   const viewing = subs.some((sub) => (view.kind === "card" || view.kind === "topic") && view.kind === sub.kind && view.id === sub.id);
   // 正在看其中一个会话时自动展开一次；之后本人收起就收起（不强开着）。
@@ -250,7 +251,7 @@ function ProjectNode({ project, view, go, personId, cardAt, working = false }: {
                 <ChevronRight size={14} strokeWidth={1.8} aria-hidden className={h.chevron} data-open={open ? "" : undefined} />会话 {subs.length}
                 {open ? null : <span className={h.cells} aria-hidden>{subs.map((sub) => <i key={`${sub.kind}:${sub.id}`} data-state={subIcon(sub).state} />)}</span>}
               </button>
-              {open ? <Subs subs={subs} view={view} go={go} /> : null}
+              {open ? <Subs subs={subs} letters={letters} view={view} go={go} /> : null}
             </>
           ) : null}
           {items.length ? <Items items={items} personId={personId} go={go} /> : null}
@@ -258,6 +259,40 @@ function ProjectNode({ project, view, go, personId, cardAt, working = false }: {
       ) : null}
     </div>
   );
+}
+
+/** 0 → A … 25 → Z，26 → AA、AB……（同表格列名）。 */
+export function letterOf(index: number): string {
+  let n = index + 1, out = "";
+  while (n > 0) { n -= 1; out = String.fromCharCode(65 + (n % 26)) + out; n = Math.floor(n / 26); }
+  return out;
+}
+
+/**
+ * 子会话的字母（18.10）：同一个项目里按建立的先后 A、B、C……。云端的字母字段到了以后改成照它的，只换这一处。
+ * 现在先照派活单的先后（卡按建出来的时间，专题没有建立时间、按最近动静排在卡后面）。键是「kind:id」。
+ */
+export function subLetters(subs: SubSession[], cardAt?: ReadonlyMap<string, string>): Map<string, string> {
+  return new Map(planOrder(subs, cardAt).map((sub, index) => [subKey(sub), letterOf(index)]));
+}
+export const subKey = (sub: Pick<SubSession, "kind" | "id">) => `${sub.kind}:${sub.id}`;
+
+/** 字母方块：小的实心圆角方块，左栏子会话行、子会话页头共用。 */
+export const SubLetter = ({ letter, inline = false }: { letter: string; inline?: boolean }) => (
+  <span className={h.letter} data-inline={inline ? "" : undefined} data-testid="sub-letter">{letter}</span>
+);
+
+/**
+ * 子会话行最右边的状态点（18.10）：在跑灰点闪（同项目标题的呼吸点）；停了（一轮做完、被停下、做完了）蓝点；
+ * 要人介入（问题、批准、验收拿主意、合回）黄点；排队不出点（行尾写在等什么）。读屏按状态读。
+ */
+const ASK: Record<NonNullable<SubSession["waiting"]>, string> = { approval: "等你批准", question: "在问你", verdict: "等你拿主意", merge: "等你合回" };
+export function subDot(sub: Pick<SubSession, "state" | "waiting">): { tone: "running" | "stopped" | "attention"; label: string } | null {
+  const state = treeState(sub.state);
+  if (state === "queued") return null;
+  if (state === "running") return { tone: "running", label: "在跑" };
+  if (state === "done") return { tone: "stopped", label: "已完成" };
+  return sub.waiting ? { tone: "attention", label: ASK[sub.waiting] } : { tone: "stopped", label: "已停下" };
 }
 
 /** 派活单的先后：卡按看板里建出来的时间（一次开工建的几张按派活单的顺序建），没读到的和专题排在后面、按最近动静。 */
@@ -287,26 +322,28 @@ export function subIcon(sub: Pick<SubSession, "state" | "waiting">): { state: Ic
 }
 
 /** flat：「其他」组里的，没有上一级，不缩进、不画竖线（状态位在 x=16，名字在 x=40）。 */
-function Subs({ subs, view, go, flat = false }: { subs: SubSession[]; view: View; go: (href: string) => void; flat?: boolean }) {
+function Subs({ subs, letters, view, go, flat = false }: { subs: SubSession[]; letters: ReadonlyMap<string, string>; view: View; go: (href: string) => void; flat?: boolean }) {
   return (
     <ul className={h.subs} data-flat={flat ? "" : undefined}>
-      {subs.map((sub) => <SubRow key={`${sub.kind}:${sub.id}`} sub={sub} view={view} go={go} />)}
+      {subs.map((sub) => <SubRow key={subKey(sub)} sub={sub} letter={letters.get(subKey(sub)) ?? null} view={view} go={go} />)}
     </ul>
   );
 }
 
-function SubRow({ sub, view, go }: { sub: SubSession; view: View; go: (href: string) => void }) {
+function SubRow({ sub, letter, view, go }: { sub: SubSession; letter: string | null; view: View; go: (href: string) => void }) {
   const current = (view.kind === "card" || view.kind === "topic") && view.kind === sub.kind && view.id === sub.id;
   const reason = sub.state === "queued" && sub.queueReason ? queueText(sub.queueReason, sub.holdUntil) : null;
   // 悬停全名的提示里带一行「来源 · 模型」（这台电脑上跑着、报了来源的才有；左栏行里不放，太挤）。
   const local = useContext(LocalContext);
   const run = sub.sessionId ? local?.sessions.find((entry) => entry.id === sub.sessionId)?.run : null;
   const name = useNameTip(sub.title, runLabel(run));
+  const dot = subDot(sub);
   return (
     <li>
       <button type="button" className={h.sub} data-state={sub.state} aria-current={current ? "page" : undefined} onClick={() => go(subHref(sub))} data-tree-row="" data-testid="tree-sub" {...name.rowProps}>
-        <StateIcon {...subIcon(sub)} /><span ref={name.textRef} className={h.subName}>{sub.title}</span>
+        {letter ? <SubLetter letter={letter} /> : null}<span ref={name.textRef} className={h.subName}>{sub.title}</span>
         {reason ? <span className={h.subReason}>{reason}</span> : null}
+        {dot ? <span className={h.subDot} data-tone={dot.tone} role="img" aria-label={dot.label} data-testid="sub-dot"><i aria-hidden /></span> : null}
       </button>
       {name.tip}
     </li>

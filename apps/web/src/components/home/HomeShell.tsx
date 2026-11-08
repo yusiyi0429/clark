@@ -41,7 +41,7 @@ import { useWorkHome } from "@/lib/home/useWorkHome";
 import { BackgroundPanel, BackgroundStrip, useMachine } from "./BackgroundPanel";
 import { BuddyView, PipelineView, type Outbox, type OutboxEntry } from "./Conversations";
 import { HomeComposer, HomeView, WaitingList, type SendTarget } from "./HomeView";
-import { LeftColumn } from "./LeftColumn";
+import { LeftColumn, SubLetter, subKey, subLetters } from "./LeftColumn";
 import { ForeignTaskInfo, TaskInfo } from "./TaskInfo";
 import { MissionInfo } from "./MissionInfo";
 import { ProjectInfo } from "./ProjectInfo";
@@ -427,10 +427,14 @@ function HomeFrame({ account }: { account: Account }) {
   const parent = useMemo(() => (owner ? (
     <button type="button" className={h.crumb} onClick={() => go(projectHref(owner.id))}>{owner.name} / </button>
   ) : null), [owner, go]);
+  // 标题前面的字母方块（18.10），和左栏那一行同一个字母；「其他」里的在那一组里排。
+  const siblings = subId ? owner?.subSessions ?? (data.other.subSessions.some((sub) => sub.id === subId) ? data.other.subSessions : null) : null;
+  const letterText = siblings && (view.kind === "card" || view.kind === "topic") ? subLetters(siblings, cardAt).get(subKey({ kind: view.kind, id: view.id })) ?? null : null;
+  const letter = useMemo(() => (letterText ? <SubLetter letter={letterText} inline /> : null), [letterText]);
   const chrome = useMemo(() => (handheld ? {
     lead: <button type="button" className={h.icon} aria-label="返回" title="返回" onClick={() => go(HOME_HREF)} data-testid="phone-back"><ArrowLeft {...ICON} /></button>,
-    trail: backgroundButton, parent,
-  } : { lead: null, trail: null, parent }), [handheld, go, backgroundButton, parent]);
+    trail: backgroundButton, parent, letter,
+  } : { lead: null, trail: null, parent, letter }), [handheld, go, backgroundButton, parent, letter]);
   useTabTitle(data.waiting.length);
   /** 转交时选了「停掉」：这台电脑上在跑的经本机程序停，云端还排着、没有电脑接下的撤掉登记（别的电脑上在跑的只能在那台电脑上停）。 */
   const stopForTransfer = async (subs: Project["subSessions"]) => {
