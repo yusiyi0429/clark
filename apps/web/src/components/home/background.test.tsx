@@ -66,6 +66,11 @@ describe("右栏（5.4.5）", () => {
     expect(fine).toMatch(/aria-expanded="false"[^>]*data-testid="machine-row"/);
     expect(fine).not.toContain('data-testid="machine-checks"');
     expect(text(fine)).toContain("在跑的子会话 0/3");
+    expect(fine).toContain('aria-label="本机 0/3"');
+    // 上限超过 10（不设上限以后）：格子放不下，只写数字。
+    const many = render(<BackgroundPanel items={[]} resources={{ ...resources(), local: { online: true, name: null, used: 4, cap: 15 } }} onStop={async () => undefined} />, "ready", [], [tool("claude-code")]);
+    expect(text(many)).toContain("在跑的子会话 4/15");
+    expect(many).not.toContain('aria-label="本机 4/15"');
     const bad = render(panel([], []), "ready", [], [tool("claude-code"), tool("codex", "not_logged_in"), tool("gh"), tool("lark-cli")]);
     const checks = text(bad.split('data-testid="machine-checks"')[1]!);
     expect(checks).toMatch(/本机程序 已连接 Claude Code 已登录 Codex 没登录 gh 已登录 飞书命令行 已登录/);

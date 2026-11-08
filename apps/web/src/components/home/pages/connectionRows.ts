@@ -2,7 +2,7 @@
  * 连接页每一行画什么（设计 9.5、5.4.6）：名字 + 小字 + 状态词（已连接 / 未连接 / 已过期 / 用完）+ 一个动作。纯函数，页面照着画、测试照着看。
  * 动作只给种类，页面配上字和做法：pair 配对、retry 重试、resume 继续、link 连接（关联云端、登录执行方）、unpair 断开、reauth 重新授权。
  */
-import type { TLocalAgentStatus, TLocalModelProfile, TLocalStatusResponse } from "@warmap/contracts";
+import type { TLocalAgentStatus, TLocalModelProfile, TLocalStatusResponse, TLocalTool } from "@warmap/contracts";
 import type { Pairing } from "@/lib/local/LocalRunnerProvider";
 import type { LocalPhase } from "@/lib/local/connection";
 import type { ConnState } from "./parts";
@@ -96,3 +96,14 @@ export function mcpRow(tokens: TokenLike[] | null, now: number): RowModel {
   const state: ConnState = used.length ? "connected" : tokens?.length && !active.length ? "expired" : "disconnected";
   return { key: "mcp", name: "让外部 AI 读天枢", sub: used.length ? used.map((token) => token.name).join(" · ") : null, state, action: "link" };
 }
+
+const LOCAL_TOOL_STATE: Record<TLocalTool["state"], ConnState> = { ready: "connected", unauthorized: "unauthorized", unreachable: "unreachable", unknown: "unknown" };
+
+/** 本人加的工具（给子会话挂的 MCP 服务器）：状态词照本机查的结果；小字是连上时有几个工具、没连上的原因，还没查时是地址。 */
+export function localToolRow(tool: TLocalTool): RowModel {
+  const sub = tool.state === "ready" ? (tool.toolCount === null ? null : `${tool.toolCount} 个工具`) : tool.error ?? tool.url;
+  return { key: `local-tool:${tool.id}`, name: tool.name, sub, state: LOCAL_TOOL_STATE[tool.state], action: null };
+}
+
+/** 金蝶：哪款产品、地址和钥匙还没定，没加过时先占一行「未连接」，不给动作。 */
+export const KINGDEE_PLACEHOLDER: RowModel = { key: "local-tool:kingdee", name: "金蝶", sub: null, state: "disconnected", action: null };
