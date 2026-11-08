@@ -116,6 +116,18 @@ describe("子会话停了、要人介入，报给项目主管线（18.10）", ()
     expect(text(renderToStaticMarkup(<SubSessionReport item={{ ...report, outcome: "failed", summary: null }} go={vi.fn()} />))).toMatch(/greet · 出错停了 看结果/);
   });
 
+  it("要介入：决定卡排在云端记下的位置，标字母；本机那块不再重复出；答过的（closed）不画", () => {
+    const here = session({ status: "idle", pendingQuestion: { requestId: "q1", askedAt: "2026-11-07T04:09:00Z", questions: [{ question: "用哪个库？", header: "", multiSelect: false, options: [{ label: "zod", description: "" }] }] } });
+    const decision = { kind: "sub_session_decision" as const, id: "d1", at: "2026-11-07T04:09:30Z", afterSequence: 7, sub, sessionId: here.id, deviceId: "00000000-0000-4000-8000-0000000000d1",
+      question: here.pendingQuestion!, permission: null, status: "open" as const, closedAt: null };
+    const workers = [{ ...passedWorker(), session: here }];
+    const blocks = feedBlocks({ items: [], workers, go: vi.fn(), onSay: vi.fn(), onChanged: vi.fn(), decisions: [decision] });
+    expect(blocks.map((block) => [block.key, block.afterSequence])).toEqual([["d1", 7]]);
+    const html = renderToStaticMarkup(<LocalContext.Provider value={local([here])}>{blocks[0]!.node}</LocalContext.Provider>);
+    expect(html).toMatch(/data-testid="sub-letter">B<.*greet.*用哪个库？/);
+    const closed = feedBlocks({ items: [], workers, go: vi.fn(), onSay: vi.fn(), onChanged: vi.fn(), decisions: [{ ...decision, status: "closed", closedAt: "2026-11-07T04:20:00Z" }] });
+    expect(closed.map((block) => block.key)).toEqual([`ask:card:${CARD}`]);
+  });
 });
 
 describe("月中 Task 改了或取消了（16.4，goal_changed）", () => {

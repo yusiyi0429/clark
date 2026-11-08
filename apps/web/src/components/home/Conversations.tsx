@@ -30,7 +30,7 @@ import { GoalChangeDecision, SubSessionReport, feedBlocks, useProjectFeed } from
 import { MonthRule } from "./ProjectParts";
 import { HandoverRule, HandoverSummary, ProjectPull, TransferHistory, useReceived } from "./Transfer";
 import { noteSeenSequence } from "@/lib/home/transfer";
-import { subHref, subIcon } from "./LeftColumn";
+import { subHref, subIcon, subLetters } from "./LeftColumn";
 import { useViewChrome } from "./view";
 import { usePhone } from "./usePhone";
 import h from "@/styles/home.module.css";
@@ -230,6 +230,8 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
     return work.workers.filter((worker) => (!!worker.taskId && taskIds.has(worker.taskId)) || worker.projectId === project.id || subIds.has(worker.cardId ?? worker.topicId ?? ""));
   }, [work.workers, project.goals, project.id, subs]);
   const taskIds = useMemo(() => project.goals.map((goal) => goal.taskId), [project.goals]);
+  // 子会话的字母（决定卡上标「B · 标题」）：同左栏，云端没带时按看板里卡建出来的先后算。
+  const letters = useMemo(() => subLetters(subs, new Map(Object.values(work.boards).flatMap((board) => board.cards).map((card) => [card.id, card.createdAt]))), [subs, work.boards]);
   const feed = useProjectFeed(project.id, taskIds, api);
   // 接手过来的（16.7）：分隔线后第一条是交接说明；带上了对话记录时原来那段收在最上面；文件夹 chip 写「拉到这台电脑」。
   const summary = [...feed].reverse().find((item): item is Extract<ProjectFeedItem, { kind: "handover_summary" }> => item.kind === "handover_summary") ?? null;
@@ -319,11 +321,12 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
     for (const item of feed) {
       if (item.kind === "sub_session_report") list.push({ key: item.id, at: item.at, afterSequence: item.afterSequence, node: <SubSessionReport item={item} go={go} /> });
     }
+    const decisions = feed.filter((item): item is Extract<ProjectFeedItem, { kind: "sub_session_decision" }> => item.kind === "sub_session_decision");
     const PROJECT_ONLY = new Set<ProjectFeedItem["kind"]>(["goal_linked", "handover", "handover_summary", "transfer_declined", "goal_changed", "sub_session_report", "sub_session_decision"]);
     const checks = feed.filter((item): item is FeedItem => !PROJECT_ONLY.has(item.kind));
-    list.push(...feedBlocks({ items: checks, workers: mine, go, onSay: (text) => data.send(text, []), onChanged: () => void changed(), remoteAsks }));
+    list.push(...feedBlocks({ items: checks, workers: mine, go, onSay: (text) => data.send(text, []), onChanged: () => void changed(), remoteAsks, decisions, letters }));
     return list;
-  }, [mine, tasks, work.boards, work.roles, handheld, changed, data, subs, go, feed, onSplit, splitFailed, startFailed, onManualStart, waiting, own, api.live, project, summary, received.history]);
+  }, [mine, tasks, work.boards, work.roles, handheld, changed, data, subs, go, feed, onSplit, splitFailed, startFailed, onManualStart, waiting, own, api.live, project, summary, received.history, letters]);
   return (
     <ProjectModeContext.Provider value={mode?.value ?? null}>
     <PendingBoxes>
