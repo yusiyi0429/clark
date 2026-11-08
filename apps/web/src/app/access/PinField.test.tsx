@@ -31,6 +31,7 @@ const hooks = vi.hoisted(() => {
 vi.mock("react", async (original) => ({ ...await original<typeof import("react")>(), ...hooks }));
 
 import { AccessScreen } from "./AccessScreen";
+import { BuddyFigure } from "@/components/onboarding/BuddyCarousel";
 import { PinField, type PinFieldHandle } from "./PinField";
 
 type Element = ReactElement<Record<string, unknown>>;
@@ -167,5 +168,40 @@ describe("口令输入与首次设定的事件回归", () => {
     ref.current?.clear();
     await vi.advanceTimersByTimeAsync(20);
     expect(focused).toBe("pin:0");
+  });
+});
+
+describe("认得你就请出伙伴（设计稿 19 节）", () => {
+  const stored = { loginId: "sunm", displayName: "孙铭泽", buddy: { name: "小天", form: "cmei" } };
+  let storage: Map<string, string>;
+  beforeEach(() => {
+    storage = new Map([["tianshu.lastLogin", JSON.stringify(stored)]]);
+    vi.stubGlobal("window", { setTimeout: globalThis.setTimeout, matchMedia: () => ({ matches: false }), location: { replace },
+      localStorage: { getItem: (name: string) => storage.get(name) ?? null, setItem: (name: string, value: string) => { storage.set(name, value); }, removeItem: (name: string) => { storage.delete(name); } } });
+  });
+
+  it("这台电脑登录过：显示他的伙伴和名字、只要口令，不画 ID 框；口令用记住的 ID 提交", async () => {
+    const tree = renderAccess();
+    expect(elements(tree).find((element) => element.type === BuddyFigure)?.props).toMatchObject({ skin: "cmei", name: "小天" });
+    expect(elements(tree).some((element) => element.props.id === "access-id")).toBe(false);
+    expect(elements(tree).some((element) => element.type === "span" && element.props.children === "孙铭泽")).toBe(true);
+    expect(pinProps(tree, "口令").autoFocus).toBe(true);
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 401 }));
+    mountPin("login", pinProps(tree, "口令")).paste("1234");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ loginId: "sunm", passcode: "1234" });
+    const after = renderAccess();
+    expect(elements(after).find((element) => element.props.id === "access-error")?.props.children).toBe("ID 或口令不对");
+    expect(elements(after).find((element) => element.props["data-shake"])?.props["data-shake"]).toBe("a");
+  });
+
+  it("「换个人」清掉这份记忆，换成 ID 加口令", () => {
+    const tree = renderAccess();
+    const change = elements(tree).find((element) => element.type === "button" && element.props.children === "换个人")!;
+    (change.props.onClick as () => void)();
+    expect(storage.has("tianshu.lastLogin")).toBe(false);
+    const after = renderAccess();
+    expect(elements(after).some((element) => element.type === BuddyFigure)).toBe(false);
+    expect(elements(after).some((element) => element.props.id === "access-id")).toBe(true);
   });
 });
