@@ -22,9 +22,10 @@ export function validNextPath(role: Role, candidate?: string): string | null {
 
 export function homePath(role: Role) { return role === "ceo" ? "/" : "/me"; }
 
+/** 回到首页时带上 _entry=unlock，首页据此做进门淡入；/me/work 是成员的新首页（锁屏或登录过期后回来的就是它）。 */
 export function withHomeEntry(path: string): string {
   const url = new URL(path, "https://tianshu.local");
-  if (url.pathname === "/" || url.pathname === "/me") url.searchParams.set("_entry", "unlock");
+  if (url.pathname === "/" || url.pathname === "/me" || url.pathname === "/me/work") url.searchParams.set("_entry", "unlock");
   return `${url.pathname}${url.search}${url.hash}`;
 }
 
