@@ -191,8 +191,10 @@ describe("首页对话走独立 Chat（CHAT_SERVICE_URL）", () => {
       expect(received[2]).toMatchObject({ phase: "started", name: "read_world_object" });
       expect(received.filter((event) => event.type === "tool").some((event) => "label" in event)).toBe(false);
       // 回执（17.4）排在最前：天枢收下了、伙伴读到了；序号接着排。
-      expect(allEvents(response.payload).slice(0, 2)).toEqual([{ type: "receipt", state: "delivered", runId: RUN, scope: "global", sequence: 1 },
-        { type: "receipt", state: "read", runId: RUN, scope: "global", sequence: 2 }]);
+      // 回执按这条消息的 id（转给 Chat 的 clientRequestId）对上。
+      const messageId = JSON.parse(chat.turns()[0].body).clientRequestId as string;
+      expect(allEvents(response.payload).slice(0, 2)).toEqual([{ type: "receipt", state: "delivered", messageId, runId: RUN, scope: "global", sequence: 1 },
+        { type: "receipt", state: "read", messageId, runId: RUN, scope: "global", sequence: 2 }]);
       expect(received.every((event, index) => event.runId === RUN && event.scope === "global" && event.sequence === index + 3)).toBe(true);
       expect(received.some((event) => "conversationId" in event)).toBe(false);
 
@@ -1232,9 +1234,55 @@ describe("伙伴代本人做事走 Chat（17.4）", () => {
       const stopped = events(await second.rest());
       expect(stopped.filter((event) => event.type === "done")).toEqual([expect.objectContaining({ status: "aborted" })]);
       expect(chat.requests.filter((request) => request.url === `/turns/${RUN}/cancel`)).toHaveLength(1);
-      expect(allEvents(thirdText).slice(0, 2).map((event) => event.state)).toEqual(["delivered", "read"]);
+      // 中途插话：第一个勾在停上一轮之前就到（还没有这一轮，不带 runId），第二个勾等新一轮开始；同一条消息 id，重发时也不变。
+      const thirdTurns = chat.turns().slice(-2).map((turn) => JSON.parse(turn.body).clientRequestId as string);
+      expect(new Set(thirdTurns).size).toBe(1);
+      expect(allEvents(thirdText).slice(0, 2)).toEqual([{ type: "receipt", state: "delivered", messageId: thirdTurns[0], scope: "global", sequence: 1 },
+        { type: "receipt", state: "read", messageId: thirdTurns[0], runId: RUN, scope: "global", sequence: 2 }]);
       expect(events(thirdText).at(-1)).toMatchObject({ type: "done", status: "completed" });
       expect((await t.sql("SELECT collapsed FROM buddy_plans WHERE run_id=$1", [RUN]))[0]).toEqual({ collapsed: true });
+    });
+  }, 30_000);
+
+  it("中途插话给了第一个勾以后还是没开成：流里给一帧 error（不带 runId）就结束，码照开流前的拒绝", async () => {
+    let upstream!: ServerResponse;
+    let state: "free" | "busy" | "broken" = "free";
+    const chat = await fakeChat({
+      conversations: [randomUUID()],
+      turn: (res) => {
+        if (state === "free") {
+          state = "busy";
+          upstream = res;
+          sse(res, [{ type: "turn_started" }, { type: "message", delta: "我来" }], false);
+          return;
+        }
+        // 上一轮还在回时 409；停掉以后对话服务出了问题（500）。
+        res.writeHead(state === "busy" ? 409 : 500, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: state === "busy" ? { code: "TURN_RUNNING", message: "本会话已有运行中的轮次" } : { code: "INTERNAL", message: "坏了" } }));
+      },
+      cancel: (res, request) => {
+        upstream.end(`data: ${JSON.stringify({ conversationId: "chat-conversation", runId: RUN, scope: "global", sequence: 9, type: "done", status: "aborted" })}\n\n`);
+        state = "broken";
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ runId: request.url.split("/")[2], status: "aborted" }));
+      },
+    });
+    await withChat(chat, countingRuntime(), async (t) => {
+      const cookie = await t.memberCookie();
+      await t.app.listen({ port: 0, host: "127.0.0.1" });
+      const url = `http://127.0.0.1:${(t.app.server.address() as AddressInfo).port}/api/conversations/global/messages`;
+      const post = (message: string) => fetch(url, { method: "POST", headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream",
+        "content-type": "application/json" }, body: JSON.stringify({ message }) });
+      const first = await post("写长一点");
+      const reader = first.body!.getReader();
+      let text = "";
+      while (!text.includes("我来")) text += new TextDecoder().decode((await reader.read()).value);
+      const second = await post("算了");
+      expect(second.status).toBe(200);
+      const received = allEvents(await second.text());
+      const messageId = JSON.parse(chat.turns()[1].body).clientRequestId as string;
+      expect(received).toEqual([{ type: "receipt", state: "delivered", messageId, scope: "global", sequence: 1 },
+        { type: "error", code: "CHAT_FAILED", message: "对话服务这次没有接下请求。", scope: "global", sequence: 2 }]);
     });
   }, 30_000);
 });

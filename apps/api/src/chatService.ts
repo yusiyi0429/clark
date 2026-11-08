@@ -290,16 +290,16 @@ export function createChatService(options: {
       return { ...message, ...(cards.length ? { cards } : {}), ...(extra.plan ? { plan: extra.plan } : {}) };
     });
   };
-  /**
-   * 停掉正在回答的上一轮再发这一句：上一轮是网页里问的就在 liveTurns 里，否则从这一段的 runs 里找还在跑的；先收起它的清单再请 Chat 停，
-   * 然后每 0.5 秒再发一次，Chat 收下为止（最多约 15 秒，还是不收就照旧回「上一轮还没结束」）。
-   */
-  const interrupt = async (viewer: ChatViewer, requestId: string, conversationId: string, scope: string, send: () => Promise<Response>, busy: ChatServiceError) => {
+  /** 正在回答的上一轮：网页里问的在 liveTurns 里，否则从这一段的 runs 里找还在跑的。 */
+  const runningTurn = async (viewer: ChatViewer, requestId: string, conversationId: string, scope: string) => {
     const live = liveTurns.get(liveKey(viewer, scope));
-    const previous = live && !live.finished && live.runId ? live.runId
+    return live && !live.finished && live.runId ? live.runId
       : (await messagesPage(viewer, requestId, conversationId, "0", 1)).runs.find((run) => run.status === "running")?.runId;
-    // 找不到在跑的那一轮（Chat 那边刚好结束）就照旧回「上一轮还没结束」。
-    if (!previous) throw busy;
+  };
+  /**
+   * 停掉正在回答的上一轮再发这一句：先收起它的清单再请 Chat 停，然后每 0.5 秒再发一次，Chat 收下为止（最多约 15 秒，还是不收就抛「上一轮还没结束」）。
+   */
+  const interrupt = async (viewer: ChatViewer, requestId: string, previous: string, send: () => Promise<Response>, busy: ChatServiceError) => {
     await options.onInterrupt?.(viewer, previous).catch((error) => logEvent({ event: "chat_service.interrupt_hook_failed", requestId, error: (error as Error)?.message }));
     await stopRun(viewer, requestId, previous).catch((error) => logEvent({ event: "chat_service.interrupt_failed", requestId, runId: previous, error: (error as Error)?.message }));
     for (let attempt = 0; attempt < 30; attempt += 1) {
@@ -431,13 +431,17 @@ export function createChatService(options: {
           ...(via ? { channel: via } : {}),
           ...(page ? { page } : {}) }),
       });
-      let upstream: Response;
+      let upstream: Response | undefined;
+      /** 中途插话（17.4）：伙伴正在回上一轮时本人在网页上又发了一句。飞书、微信、伙伴转来的照旧回「上一轮还没结束」，由它们隔几秒再试。 */
+      let interrupting: { previous: string; busy: ChatServiceError } | undefined;
       try {
         upstream = await send();
       } catch (error) {
-        // 伙伴正在回上一轮时本人在网页上又发了一句（17.4）：停掉上一轮（清单收起），拿这句开新的一轮。飞书、微信来的照旧回「上一轮还没结束」，由它们隔几秒再试。
         if (via || forwarded || !(error instanceof ChatServiceError) || error.code !== "TURN_IN_PROGRESS") throw error;
-        upstream = await interrupt(viewer, requestId, id, scope, send, error);
+        // 找不到在跑的那一轮（Chat 那边刚好结束）就照旧回「上一轮还没结束」。
+        const previous = await runningTurn(viewer, requestId, id, scope);
+        if (!previous) throw error;
+        interrupting = { previous, busy: error };
       }
       reply.hijack();
       reply.raw.writeHead(200, SSE_HEAD);
@@ -457,6 +461,8 @@ export function createChatService(options: {
         live.frames.push(frame);
         for (const listener of live.listeners) listener(frame);
       };
+      /** 回执（17.4）：按这条消息的 id（clientRequestId）对上。 */
+      const receipt = (state: "delivered" | "read") => write({ type: "receipt", state, messageId: clientRequestId });
       const translate = (event: ChatEvent): ChatEvent | null => {
         const { conversationId: _conversation, runId: _run, scope: _scope, sequence: _sequence, ...rest } = event;
         switch (event.type) {
@@ -464,10 +470,10 @@ export function createChatService(options: {
             runId = String(event.runId);
             if (live) live.runId = runId;
             runWriters.set(runId, write);
-            // 回执（17.4）：天枢收下了、伙伴读到了。Chat 接下这一句就开始这一轮，两个几乎同时到；飞书、微信来的不给。
+            // 回执：天枢收下了、伙伴读到了。Chat 接下这一句就开始这一轮，两个几乎同时到（中途插话的 delivered 开流时已经给了）；飞书、微信、伙伴转来的不给。
             if (!via && !forwarded) {
-              write({ type: "receipt", state: "delivered" });
-              write({ type: "receipt", state: "read" });
+              if (!interrupting) receipt("delivered");
+              receipt("read");
             }
             deepen = setTimeout(() => { if (!written) write(CHAT_ROUTE.deep); }, CHAT_ROUTE.deepenAfterMs);
             return CHAT_ROUTE.start;
@@ -492,6 +498,19 @@ export function createChatService(options: {
         }
       };
       try {
+        if (interrupting) {
+          // 中途插话：先给第一个勾（这时还没有这一轮，不带 runId），再停上一轮、重发。
+          receipt("delivered");
+          try {
+            upstream = await interrupt(viewer, requestId, interrupting.previous, send, interrupting.busy);
+          } catch (error) {
+            // 给了第一个勾以后还是没开成：在流里给一帧 error（不带 runId）就结束，界面撤掉第一个勾、这条可以重发。
+            const failed = error instanceof ChatServiceError ? error : new ChatServiceError(502, "CHAT_FAILED", "对话服务这次没有接下请求。");
+            outcome = failed.code;
+            write({ type: "error", code: failed.code, message: failed.message });
+          }
+        }
+        if (!upstream) return;
         const reader = upstream.body!.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
