@@ -61,7 +61,7 @@ const SubSessionRef = { kind: Type.Union([Type.Literal("card"), Type.Literal("to
  * - message_project（write）：把本人在伙伴台说的、关于某个项目的话转给这个项目的对话（设计 18 节第 8 条：伙伴台 → 项目对话 → 子会话，一层管一层，
  *   伙伴不直接和子会话对话；凡是要改子会话手上的活的都走它）。天枢把话写进那个项目的对话（标成伙伴转来的，ConversationMessage.via = buddy），
  *   触发项目对话这一轮，由它去派活、问子会话；立即回 summary，不等项目对话回完（项目对话正在回上一轮时排在后面，不打断它）。
- *   项目对话的结果照原来的方式由伙伴在总管线里回报（18 节第 4 条）。不可撤。
+ *   项目对话的结果照原来的方式由伙伴在总管线里回报（18 节第 4 条）。不可撤。从项目对话里调（conversationId 是项目对话）回 409 ALREADY_IN_PROJECT。
  * - send_message（write）：给人员目录里的同事发一句话。先出一张卡（ConversationCard 的 buddy_message）给本人看，本人点「发出」才由天枢机器人转达；
  *   每人每天最多 20 条（回 429 DAILY_LIMIT）。不可撤（发出以后）。
  * - update_plan（plan）：计划清单，见 BuddyPlanParams。
