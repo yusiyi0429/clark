@@ -72,6 +72,11 @@ describe("右栏（5.4.5）", () => {
     const off = text(render(panel([], []), "offline", [], [tool("gh")]));
     expect(off).toContain("本机程序 离线");
     expect(off).not.toContain("同时在跑");
+    // 离线：给打开本机程序的路（安装命令和「复制」），还有「重试」。
+    expect(off).toMatch(/irm .*\/install\.ps1 \| iex/);
+    expect(off).toContain("复制");
+    expect(off).toContain("重试");
+    expect(text(render(panel([], []), "prompt"))).not.toContain("install.ps1");
   });
 
   it("这台电脑就绪且读得到额度：只列本机的，别的设备不列；读不到时用云端的", () => {

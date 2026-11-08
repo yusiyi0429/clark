@@ -3,7 +3,7 @@
 /**
  * 右栏（新首页设计 5.4.5）：资源块 → 发丝线 →「进行中 N」→「已完成 N」，不写标题。跟着展示区走（首页列全部，二级页只留资源块）。
  * - 资源块（14.4）：「这台电脑 · 就绪」一行能点开，逐项列本机程序、Claude Code、Codex、gh、飞书命令行（照本机报的 tools）；有一项不对就前面一个琥珀点、
- *   自动展开，下面一个次按钮（配对、继续或重试）。「同时在跑」+ 位置条 +「2/3」（这台电脑就绪时才有）。「用量」两列小格（见 lib/home/quota）：
+ *   自动展开，下面一个次按钮（配对、继续或重试；重试真的再探一遍）；离线时上面先给安装命令和「复制」（同连接页）。「同时在跑」+ 位置条 +「2/3」（这台电脑就绪时才有）。「用量」两列小格（见 lib/home/quota）：
  *   这台电脑就绪时用本机的，不然用云端各台设备报的（只显示读得到的）。
  * - 后台任务：组头 12/16 600 淡色，「进行中」前面一颗转圈（整栏只有它在转）；「已完成」默认收起，有失败时自动展开、组头后面加「· 失败 1」。
  *   行高 36：种类、名字、用时，停止按钮鼠标移上去或有焦点时才出（手持上一直显示），不能停的不画。行里不放状态图标，失败的行首一个叉、用时换成「失败」，
@@ -15,6 +15,7 @@ import { ChevronDown, ChevronRight, LoaderCircle, PanelRightClose, PanelRightOpe
 import { HeroButton } from "@/components/HeroButton";
 import { Slots } from "@/components/work/Slots";
 import { FailedLine } from "@/components/work/DecisionBox";
+import { LocalInstall } from "@/components/local/PluginsPage";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import type { LocalPhase } from "@/lib/local/connection";
 import { duration, groupBackground, queueText } from "@/lib/home/derive";
@@ -52,7 +53,7 @@ export function useMachine(cloudQuota: Resources["quota"]) {
   ];
   const action = local.phase === "unpaired" ? { label: "配对", run: () => local.pair() }
     : paused ? { label: "继续", run: async () => { await local.runner.patchSettings({ paused: false }); await local.refresh(); } }
-    : alert || checks.some((check) => check.bad) ? { label: "重试", run: () => local.refresh() }
+    : alert || checks.some((check) => check.bad) ? { label: "重试", run: () => local.refresh({ fresh: true }) }
     : null;
   // 用量（本机 status.quota，读不到用云端的）：剩 ≤25% 琥珀点、≤10% 或用完红点，和本机要处理的点是同一颗（5.4.5、5.6），看列出来的那几格。
   const now = Date.now();
@@ -60,7 +61,7 @@ export function useMachine(cloudQuota: Resources["quota"]) {
   // 云端的一项一条（契约 WorkerResources.quota = 本机报的 LocalQuotaSync 加设备）：名字后面加「 · 设备名」。
   const usage = here.length ? here : usageCells(cloudQuota.map((entry) => ({ ...entry, id: `${entry.id}:${entry.deviceId}`, device: entry.deviceName })), now);
   const quotaAlert = usage.some((cell) => cell.tone === "danger") ? "danger" as const : usage.some((cell) => cell.tone === "warning") ? "warning" as const : null;
-  return { ready, word, alert, checks, action, usage, quotaAlert };
+  return { ready, offline: local.phase === "offline", word, alert, checks, action, usage, quotaAlert };
 }
 
 /** 用量一格：圆环（订阅剩多少）或「¥」、名字、数；明细在 title 里。 */
@@ -142,6 +143,7 @@ export function BackgroundPanel({ items, resources, onStop, onCollapse, handheld
             <ul className={h.checks} data-testid="machine-checks">
               {machine.checks.map((check) => <li key={check.name} data-bad={check.bad ? "" : undefined}><span>{check.name}</span><span className={h.checkValue}>{check.value}</span></li>)}
             </ul>
+            {machine.offline && !handheld ? <LocalInstall /> : null}
             {machine.action ? (
               <div className={h.checkFix}>
                 <HeroButton variant="tertiary" size="sm" isDisabled={acting} onPress={() => { setActing(true); void machine.action!.run().finally(() => setActing(false)); }}>{machine.action.label}</HeroButton>
