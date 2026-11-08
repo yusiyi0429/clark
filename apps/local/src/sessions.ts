@@ -10,7 +10,7 @@ import {
   type TLocalSessionSummary, type TLocalSyncItem, type TLocalTopicVersionKind, type TLocalUsage, type TLocalSourceWordIssue, type TLocalVerdict, type TLocalVerdictCriterion,
   type TLocalWorkspace, type TLocalGitRef, type TLocalMergeResponse, type TLocalQuestionRequestView, type TLocalQuestionAnswerRequest,
   type TLocalBackgroundItem, type TLocalMergeHoldReason, type TLocalMergeSync, type TLocalModelTier, type TLocalHold, type TLocalMoney,
-  type TLocalRun, type TLocalRunPreviewRequest, type TLocalTaskBudgetView, type TLocalBudgetUpdateRequest, type TBudgetMode, type TLocalPermissionBrief, type TLocalSavedAttachment,
+  type TLocalRun, type TLocalRunPreviewRequest, type TLocalTaskBudgetView, type TLocalBudgetUpdateRequest, type TBudgetMode, type TLocalPermissionBrief, type TLocalSavedAttachment, type TLocalStopReason, type TLocalStopReport,
 } from "@warmap/contracts";
 import { readJson, writeJsonAtomic, nowIso } from "./store.js";
 import type { EventLog, EventBody } from "./eventLog.js";
@@ -22,6 +22,7 @@ import { AttachmentError, attachmentNote, saveAttachments, type FetchAttachment 
 import { modelDisplayName, sameModel, type ResolvedModel } from "./models.js";
 import type { CustomTools, SessionTools } from "./customTools.js";
 import { cardTitleProblem } from "./cardTitle.js";
+import { firstSentences, TURN_ERROR } from "./stopReport.js";
 import type { ModelProfiles } from "./models.js";
 import { isInside, type Folders } from "./folders.js";
 import type { Outbox } from "./outbox.js";
@@ -219,6 +220,8 @@ export class SessionManager {
   private readonly proposed = new Set<string>();
   /** 正在跑一轮的会话：Claude Code 每轮开头报 system/init，到这一轮的 turn_end 为止。一轮之外来的权限请求是后台子 agent 的。 */
   private readonly inTurn = new Set<string>();
+  /** 这一轮执行方最后说的话、交的产出物、交回（停了的报告用，设计 18.10）：报过就清，只在内存里。 */
+  private readonly turnLog = new Map<string, { text: string | null; outputs: TLocalStopReport["outputs"]; handbackKey?: string }>();
   /** 正在拉起（含续接握手）的会话：同一个会话同时只许有一次启动。 */
   private readonly starting = new Map<string, Promise<AgentRun>>();
   /** 启动途中被强停的会话：启动一完成就杀掉。 */
@@ -400,7 +403,9 @@ export class SessionManager {
         this.syncStatus(rec);
         this.d.onChange?.();
       } catch (e) {
-        this.setStatus(rec, "failed", { reason: `前面的卡都做完了，但没开起来：${e instanceof Error ? e.message : String(e)}` });
+        const reason = `前面的卡都做完了，但没开起来：${e instanceof Error ? e.message : String(e)}`;
+        this.setStatus(rec, "failed", { reason });
+        this.reportStop(rec, "error", { blocker: reason });
       } finally {
         this.opening.delete(rec.id);
       }
@@ -456,8 +461,10 @@ export class SessionManager {
       await p;
     } catch (e) {
       const cancelled = e instanceof SessionError && e.message === CANCELLED_WHILE_STARTING;
-      this.setStatus(rec, cancelled ? "exited" : "failed", { reason: cancelled ? "已强停" : `没开起来：${e instanceof Error ? e.message : String(e)}` });
+      const reason = cancelled ? "已强停" : `没开起来：${e instanceof Error ? e.message : String(e)}`;
+      this.setStatus(rec, cancelled ? "exited" : "failed", { reason });
       if (cancelled) void this.releaseWorktree(rec);
+      else this.reportStop(rec, "error", { blocker: reason });
       return;
     } finally {
       this.starting.delete(rec.id);
@@ -498,8 +505,27 @@ export class SessionManager {
     const question = rec.status === "idle" ? this.questions.get(rec.id) : undefined;
     if (question) return { key: `q:${question.requestId}`, data: { question } };
     const p = rec.status === "waiting_permission" ? [...(this.pending.get(rec.id)?.values() ?? [])][0] : undefined;
-    if (p) return { key: `p:${p.requestId}`, data: { permission: { requestId: p.requestId, toolName: p.toolName.slice(0, 200), title: p.title.slice(0, 500), outsidePaths: p.outsidePaths.slice(0, 20) } } };
+    if (p) return { key: `p:${p.requestId}`, data: { permission: { requestId: p.requestId, toolName: p.toolName.slice(0, 200), title: p.title.slice(0, 500), outsidePaths: p.outsidePaths.slice(0, 20), canAllowForSession: p.canAllowForSession } } };
     return { key: "", data: {} };
+  }
+
+  private turnOf(rec: SessionRecord) {
+    let t = this.turnLog.get(rec.id);
+    if (!t) this.turnLog.set(rec.id, (t = { text: null, outputs: [] }));
+    return t;
+  }
+
+  /**
+   * 子会话停了，报一条 stopped（设计 18.10）：summary 截这一轮执行方最后那段话的头一两句（text 优先，没有用这一轮最后说的），
+   * 带这一轮交的产出物和交回。要人介入（在问、在等批准）不报这条，status 条目带着待决的内容。
+   */
+  private reportStop(rec: SessionRecord, why: TLocalStopReason, opts: { text?: string | null; blocker?: string | null } = {}) {
+    const t = this.turnLog.get(rec.id);
+    this.turnLog.delete(rec.id);
+    const blocker = opts.blocker?.trim() ? opts.blocker.trim().slice(0, 400) : null;
+    this.sync(rec, { type: "stopped", data: {
+      why, summary: firstSentences(opts.text ?? t?.text), blocker, outputs: (t?.outputs ?? []).slice(-20), ...(t?.handbackKey ? { handbackKey: t.handbackKey } : {}),
+    } });
   }
 
   /** 状态没变、在问的或在等批准的那一条变了（又来一条请求、批了一条还剩别的）：照样重报一条状态。 */
@@ -819,6 +845,9 @@ export class SessionManager {
       case "question_resolved":
         this.questions.delete(rec.id);
         break;
+      case "assistant_text":
+        this.turnOf(rec).text = e.text;
+        break;
       case "plan":
         this.sync(rec, { type: "plan", data: { entries: e.entries.slice(0, 100), progress: e.progress } });
         break;
@@ -856,15 +885,25 @@ export class SessionManager {
           break;
         }
         this.inTurn.delete(rec.id);
+        // 停了的报告：停着等的写等什么，出错的写原因（执行方的报错头一两句）；还有请求在等批准、还在问本人的不算停了
+        const why: TLocalStopReason = limited || broke || stopped ? "held" : e.errorKind === "interrupted" ? "interrupted" : e.isError ? "error" : "turn_done";
+        // 执行方把报错也当成一句话说了（如「Not logged in」）：那就只写在卡在哪，不当成做成了什么
+        if (why === "error" && this.turnLog.get(rec.id)?.text === e.text) this.turnOf(rec).text = null;
+        const stop = () => this.reportStop(rec, why, {
+          text: why === "turn_done" ? e.text : null,
+          blocker: why === "held" && rec.hold ? this.holdReason(rec.hold) : why === "error" ? firstSentences(e.text) ?? TURN_ERROR[e.errorKind ?? "other"] ?? TURN_ERROR.other : null,
+        });
         // 交完就收工（done）：验收员交了结论、规划员这一轮交了计划，让 Claude Code 自己退出，不留空闲进程，也不在「等你回复」停一下。
         // 本人想问验收员、要规划员「改一改」，说一句会续上。
         const delivered = rec.subject.kind === "verify" ? rec.submitted > 0 : this.proposed.delete(rec.id);
         if (delivered && run && !pending?.size) {
           this.finished.add(rec.id);
+          stop();
           run.close();
           break;
         }
         this.setStatus(rec, pending?.size ? "waiting_permission" : "idle", rec.hold && (limited || broke || stopped) ? { reason: this.holdReason(rec.hold) } : {});
+        if (!pending?.size && !this.questions.has(rec.id)) stop();
         break;
       }
       default:
@@ -875,6 +914,8 @@ export class SessionManager {
   private onExit(rec: SessionRecord, run: AgentRun, code: number | null) {
     if (this.runs.get(rec.id) !== run) return;
     this.runs.delete(rec.id);
+    // 一轮做到一半没了（强停、意外退出、额度用完直接退）：报一条停了；一轮之外退的（收工、本机关的）在一轮结束时已经报过
+    const midTurn = this.inTurn.delete(rec.id) || Boolean(this.pending.get(rec.id)?.size) || this.questions.has(rec.id);
     for (const id of this.pending.get(rec.id)?.keys() ?? []) {
       this.emit(rec, { type: "permission_resolved", requestId: id, decision: "deny", message: "进程已结束", allowForSession: false });
     }
@@ -898,6 +939,11 @@ export class SessionManager {
     else this.setStatus(rec, killed || code === 0 || limited || rec.hold?.reason === "budget" ? "exited" : "failed", {
       exitCode: code, reason: killed ? "已强停" : rec.hold && !killed ? this.holdReason(rec.hold) : undefined,
     });
+    if (midTurn && !finished) {
+      if (killed) this.reportStop(rec, "killed");
+      else if (rec.hold) this.reportStop(rec, "held", { blocker: this.holdReason(rec.hold) });
+      else this.reportStop(rec, "error", { blocker: `执行方中途退出了${code === null ? "" : `（退出码 ${code}）`}` });
+    }
     this.d.log.evict(rec.id);
     // 验收过了：卡在工作树里做的，试着自动合回
     if (finished && rec.subject.kind === "verify" && rec.passed) void this.autoMerge(rec);
@@ -1328,7 +1374,9 @@ export class SessionManager {
     this.starting.set(rec.id, p);
     p.then((r) => { r.send(say); this.setStatus(rec, "running"); this.sendBudgetStop(rec, r); }, (e: unknown) => {
       const cancelled = e instanceof SessionError && e.message === CANCELLED_WHILE_STARTING;
-      this.setStatus(rec, "exited", { reason: cancelled ? "已强停" : `额度恢复了，但没接上：${e instanceof Error ? e.message : String(e)}；再发一句话会接着做` });
+      const reason = cancelled ? "已强停" : `额度恢复了，但没接上：${e instanceof Error ? e.message : String(e)}；再发一句话会接着做`;
+      this.setStatus(rec, "exited", { reason });
+      if (!cancelled) this.reportStop(rec, "error", { blocker: reason });
     }).finally(() => this.starting.delete(rec.id));
   }
 
@@ -1662,6 +1710,8 @@ export class SessionManager {
     this.emit(rec, { type: "artifact", artifactId, title, fileName, size, sha256 });
     const key = this.sync(rec, { type: "artifact", data: { artifactId, title, fileName, mimeType, size, sha256, contentBase64: content.toString("base64") } });
     const ref = this.remember(rec, "A", key, title, artifactId);
+    const outputs = this.turnOf(rec).outputs;
+    outputs.splice(0, outputs.length, ...outputs.filter((o) => o.fileName !== fileName), { key, title, fileName }); // 同名再交只留最新一版
     return `已交：${title}（${Math.ceil(size / 1024)} KB），编号 ${ref}`;
   }
 
@@ -1716,6 +1766,7 @@ export class SessionManager {
     if (ws?.kind === "worktree" && ws.needsMerge) { delete ws.needsMerge; this.save(rec); } // 又交回了：等这次验收的结果
     this.emit(rec, { type: "handback", summary, criteria, outputKeys, ...(git ? { commit: git.commit } : {}) });
     const key = this.sync(rec, { type: "handback", data: { summary, criteria, outputKeys, ...(git ? { git } : {}) } });
+    this.turnOf(rec).handbackKey = key;
     this.queueVerify(rec, key, git?.commit ?? null);
     return `已交回（用了 ${picked.map((o) => o.ref).join("、") || "0 份产出和证据"}${git ? `，提交 ${git.commit.slice(0, 7)}` : ""}），本机接着起验收员验收`;
   }
