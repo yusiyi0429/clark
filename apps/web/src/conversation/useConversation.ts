@@ -38,8 +38,11 @@ export type Message = { sequence: number; role: "user" | "assistant"; content: s
   answers?: TAskAnswerRecord;
   /** carried：转议题时从首页带过来的一段；trace：首页留痕行「已转到议题 X」，meta.href 直达。 */
   kind?: "carried" | "trace";
-  /** 这一句是在飞书私聊天枢机器人或微信 ClawBot 里说的（问与答都标）；buddy 是伙伴从伙伴台转到项目对话里的本人那句（17.4 message_project）。 */
-  via?: "feishu" | "wechat" | "buddy";
+  /**
+   * 这一句是在飞书私聊天枢机器人或微信 ClawBot 里说的（问与答都标）；buddy 是伙伴从伙伴台转到项目对话里的本人那句（17.4 message_project）；
+   * report 是子会话停了、云端替本人给项目主管线发的那句（18.10）：不画成本人的气泡，报告本身是项目动态里的 sub_session_report。
+   */
+  via?: "feishu" | "wechat" | "buddy" | "report";
   /** 只在本人的提问上：这一轮服务端还在回答。 */
   running?: boolean;
   /**
@@ -140,11 +143,14 @@ export function historySignature(list: Message[]): string {
 /** 来源标签上的字。 */
 export const VIA_LABEL = { feishu: "飞书", wechat: "微信", buddy: "伙伴转来" } as const;
 
-/** 飞书或微信里问了、还没答完：最后一条是从那边来的提问。 */
+/** 飞书或微信里问了、还没答完：最后一条是从那边来的提问（子会话回报那句也是，项目主管线在回它）。 */
 export function feishuWaiting(list: Message[]): boolean {
   const last = list.at(-1);
   return last?.role === "user" && last.via !== undefined;
 }
+
+/** 云端替本人发给项目主管线的子会话回报那句（18.10）：不画气泡。 */
+export const isReportPrompt = (message: Pick<Message, "role" | "via">) => message.role === "user" && message.via === "report";
 
 export function messagesEndpoint(scope: string): string {
   return `/api/conversations/${encodeURIComponent(scope)}/messages`;

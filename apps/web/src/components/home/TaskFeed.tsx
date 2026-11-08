@@ -12,7 +12,7 @@
  * 第一次没过不出：改法自动送回重做，不打扰你。B 的接口没上时由各件 Task 看板上的卡拼（derive.ts 的 deriveFeed，没有返工那一种）。
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { TLocalQuestionAnswerRequest, TProjectGoalChangedItem, TTaskFeedItem } from "@warmap/contracts";
+import type { TLocalQuestionAnswerRequest, TProjectGoalChangedItem, TProjectSubSessionReportItem, TTaskFeedItem } from "@warmap/contracts";
 import { HeroButton } from "@/components/HeroButton";
 import { DecisionBox } from "@/components/work/DecisionBox";
 import { ApprovalDecision, QuestionDecision, awayChip } from "@/components/work/decisions";
@@ -29,6 +29,7 @@ import { askAnchor, cardHref, deriveFeed, goalAnchor, infoHref } from "@/lib/hom
 import type { FeedItem, ProjectFeedItem, WaitingItem } from "@/lib/home/types";
 import type { WorkHomeApi } from "@/lib/home/useWorkHome";
 import { BlockedDecision, MergeDecision, answeredOf, markAnswered } from "./TaskDecisions";
+import { SubLetter, subHref } from "./LeftColumn";
 import f from "@/styles/task-feed.module.css";
 
 const POLL_MS = 5000;
@@ -244,6 +245,24 @@ function SubSessionAsk({ worker, remote: item }: { worker: Worker; remote?: Wait
       {question ? <QuestionDecision key={question.requestId} request={question} blocked={blocked} onAnswer={answer} /> : null}
       {remoteQuestion ? <QuestionDecision key={remoteQuestion.requestId} request={remoteQuestion} blocked={awayChip(worker.device)} onAnswer={async () => undefined} /> : null}
       {remote ? <DecisionBox kind="approval" title={item?.permission?.title ?? worker.ask?.text ?? "等你批准"} options={[]} onPick={() => undefined} blocked={awayChip(worker.device)} /> : null}
+    </div>
+  );
+}
+
+const OUTCOME: Record<TProjectSubSessionReportItem["outcome"], string> = { round_done: "做完一轮", stopped: "停下了", failed: "出错停了" };
+
+/**
+ * 子会话停了的报告（18.10，项目动态 sub_session_report）：小字一行「B 标题 · 做完一轮」，下面是本机报的一两句（做成了什么、卡在哪）和「看结果」。
+ * 项目主管线接着回的那一小轮是普通回答，画在后面。
+ */
+export function SubSessionReport({ item, go }: { item: TProjectSubSessionReportItem; go: (href: string) => void }) {
+  return (
+    <div className={f.ask} data-testid="sub-report">
+      <p className={f.askFrom}><SubLetter letter={item.sub.letter} inline />{item.sub.title} · {OUTCOME[item.outcome]}</p>
+      <p className={f.sentence}>
+        {item.summary ? <span>{item.summary}</span> : null}
+        <HeroButton variant="ghost" size="sm" onPress={() => go(subHref(item.sub))}>看结果</HeroButton>
+      </p>
     </div>
   );
 }

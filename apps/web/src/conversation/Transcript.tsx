@@ -9,7 +9,7 @@ import type { TReadScope } from "@warmap/contracts";
 import { ScopeChip } from "./ScopeChip";
 import { HeroButton } from "@/components/HeroButton";
 import { StepList, StepToggle, type Step } from "@/components/steps/StepList";
-import { VIA_LABEL, feishuWaiting, type Message, type ThinkingStage, type TurnProgress, type TurnThought } from "./useConversation";
+import { VIA_LABEL, feishuWaiting, isReportPrompt, type Message, type ThinkingStage, type TurnProgress, type TurnThought } from "./useConversation";
 import { QuoteChips } from "./QuoteChips";
 import { pageContextBattlefield, readQuotedMessage } from "./quotes";
 import { createArrivalLog, rehypeArrival, type ArrivalLog } from "./arrival";
@@ -243,7 +243,7 @@ function ConversationTurnBody({ message, ms, streaming = false, thought, steps }
         </details>
       ) : null}
       {battlefield ? <div className={s.pageTag}>战场 · {battlefield}</div> : null}
-      {user && message.via ? <div className={s.pageTag} data-testid={`conversation-via-${message.via}`}>{VIA_LABEL[message.via]}</div> : null}
+      {user && message.via && message.via !== "report" ? <div className={s.pageTag} data-testid={`conversation-via-${message.via}`}>{VIA_LABEL[message.via]}</div> : null}
       {quoted.quotes.length ? <QuoteChips quotes={quoted.quotes} sent /> : null}
       {/* 回答 Agent 提问的那一句：画成紧凑的问答记录，不显示原文。 */}
       {user && message.answers ? <AnswerRecord record={message.answers} /> : (
@@ -295,9 +295,11 @@ export function ConversationTurns({ messages, partial = "", footer, after, trail
       {messages.map((message, index) => (
         <Fragment key={`turn-${index}`}>
           {message.kind === "carried" && messages[index - 1]?.kind !== "carried" ? <CarriedDivider message={message} /> : null}
-          <ConversationTurn message={message} ms={message.role === "assistant" ? turnMs(messages, index) : undefined}
-            thought={!partial && thought && index === messages.length - 1 && message.role === "assistant" ? thought : undefined}
-            steps={!partial && steps?.length && index === messages.length - 1 && message.role === "assistant" ? steps : undefined} />
+          {isReportPrompt(message) ? null : (
+            <ConversationTurn message={message} ms={message.role === "assistant" ? turnMs(messages, index) : undefined}
+              thought={!partial && thought && index === messages.length - 1 && message.role === "assistant" ? thought : undefined}
+              steps={!partial && steps?.length && index === messages.length - 1 && message.role === "assistant" ? steps : undefined} />
+          )}
           {footer?.(index) ?? null}
           {after?.(index) ?? null}
         </Fragment>
@@ -306,7 +308,7 @@ export function ConversationTurns({ messages, partial = "", footer, after, trail
       {!partial && !status && feishuWaiting(messages) ? (
         <div className={s.thinking} data-testid="conversation-feishu-waiting">
           <span className={s.pulse} aria-hidden />
-          <span role="status">正在回答{VIA_LABEL[messages.at(-1)!.via!]}里的提问</span>
+          <span role="status">{isReportPrompt(messages.at(-1)!) ? "正在看子会话的回报" : `正在回答${VIA_LABEL[messages.at(-1)!.via as keyof typeof VIA_LABEL]}里的提问`}</span>
         </div>
       ) : null}
       {partial || trailing || status ? (

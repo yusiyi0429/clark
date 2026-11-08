@@ -26,7 +26,7 @@ import type { Project } from "@/lib/home/projects";
 import type { FeedItem, ProjectFeedItem, SubSession } from "@/lib/home/types";
 import type { WorkHomeApi } from "@/lib/home/useWorkHome";
 import { PlanDecision, PlanningLine, StartedRecord } from "./PlanDecision";
-import { GoalChangeDecision, feedBlocks, useProjectFeed } from "./TaskFeed";
+import { GoalChangeDecision, SubSessionReport, feedBlocks, useProjectFeed } from "./TaskFeed";
 import { MonthRule } from "./ProjectParts";
 import { HandoverRule, HandoverSummary, ProjectPull, TransferHistory, useReceived } from "./Transfer";
 import { noteSeenSequence } from "@/lib/home/transfer";
@@ -315,7 +315,11 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
       const item = sub.sessionId ? waiting.find((entry) => entry.sessionId === sub.sessionId && (entry.kind === "approval" || entry.kind === "question")) : undefined;
       return item ? [[sub.id, item] as const] : [];
     }));
-    const PROJECT_ONLY = new Set<ProjectFeedItem["kind"]>(["goal_linked", "handover", "handover_summary", "transfer_declined", "goal_changed"]);
+    // 子会话停了的报告（18.10）：按记下的位置插进对话。
+    for (const item of feed) {
+      if (item.kind === "sub_session_report") list.push({ key: item.id, at: item.at, afterSequence: item.afterSequence, node: <SubSessionReport item={item} go={go} /> });
+    }
+    const PROJECT_ONLY = new Set<ProjectFeedItem["kind"]>(["goal_linked", "handover", "handover_summary", "transfer_declined", "goal_changed", "sub_session_report", "sub_session_decision"]);
     const checks = feed.filter((item): item is FeedItem => !PROJECT_ONLY.has(item.kind));
     list.push(...feedBlocks({ items: checks, workers: mine, go, onSay: (text) => data.send(text, []), onChanged: () => void changed(), remoteAsks }));
     return list;

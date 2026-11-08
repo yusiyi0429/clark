@@ -10,7 +10,7 @@ import { createMockRunner } from "@/lib/local/mock";
 import type { TLocalSessionSummary } from "@/lib/local/runner";
 import { toWorker, type Worker } from "@/lib/work/workers";
 import type { FeedItem } from "@/lib/home/types";
-import { GoalChangeDecision, feedBlocks } from "./TaskFeed";
+import { GoalChangeDecision, SubSessionReport, feedBlocks } from "./TaskFeed";
 
 const ROLE = { id: "00000000-0000-4000-8000-000000000001", name: "开发", kind: "worker" as const };
 const CARD = "00000000-0000-4000-8000-0000000000c1";
@@ -105,6 +105,17 @@ describe("子会话的提问由 Task 管线转达（14.3）", () => {
     const idle = session({});
     expect(render([], [{ ...passedWorker(), session: idle }], [idle]).blocks).toHaveLength(0);
   });
+});
+
+describe("子会话停了、要人介入，报给项目主管线（18.10）", () => {
+  const sub = { kind: "card" as const, id: CARD, letter: "B", title: "greet" };
+  it("停了：小字「B greet · 做完一轮」，下面本机报的一两句和「看结果」；没报摘要只有「看结果」", () => {
+    const report = { kind: "sub_session_report" as const, id: "r1", at: "2026-11-07T05:00:00Z", afterSequence: 4, sub, outcome: "round_done" as const, summary: "接口写好了，测试过了 12 条" };
+    const html = renderToStaticMarkup(<SubSessionReport item={report} go={vi.fn()} />);
+    expect(html).toMatch(/data-testid="sub-letter">B<.*greet · 做完一轮.*接口写好了，测试过了 12 条.*看结果/);
+    expect(text(renderToStaticMarkup(<SubSessionReport item={{ ...report, outcome: "failed", summary: null }} go={vi.fn()} />))).toMatch(/greet · 出错停了 看结果/);
+  });
+
 });
 
 describe("月中 Task 改了或取消了（16.4，goal_changed）", () => {
