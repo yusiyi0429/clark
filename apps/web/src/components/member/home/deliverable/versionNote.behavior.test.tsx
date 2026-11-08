@@ -15,6 +15,7 @@ const hooks = vi.hoisted(() => ({ values: [] as unknown[], index: 0,
 vi.mock("react", async (original) => ({ ...(await original<typeof import("react")>()), useState: hooks.useState, useEffect: () => undefined }));
 vi.mock("@/components/buddy/useBuddy", () => ({ useBuddy: () => ({ buddy: null, loading: false }) }));
 
+import { HeroButton } from "@/components/HeroButton";
 import { VersionNote } from "./VersionNote";
 
 type Node = { type?: unknown; props?: Record<string, unknown> };
@@ -45,8 +46,8 @@ beforeEach(() => { hooks.values = []; });
 
 describe("版本说明「改一改」", () => {
   it("四个框各有看得见的字段名：达成了什么、这一版多做到的、为什么变了、经验", () => {
-    const edit = render().find((node) => node.type === "button" && text(node) === "改一改")!;
-    (edit.props!.onClick as () => void)();
+    const edit = render().find((node) => node.type === HeroButton && text(node) === "改一改")!;
+    (edit.props!.onPress as () => void)();
     const labels = render().filter((node) => node.type === "label");
     expect(labels.map((label) => nodes(label.props!.children).find((node) => node.type === "span") ?? null).map((span) => span && text(span)))
       .toEqual(["达成了什么", "这一版多做到的", "为什么变了", "经验"]);

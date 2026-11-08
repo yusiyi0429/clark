@@ -9,6 +9,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { ChevronRight } from "lucide-react";
 import type { TAgreementCriterion, TAgreementSource, TPutTaskAgreementRequest, TTaskAgreementResponse, TTaskCheckCriterion, TTaskCheckResponse } from "@warmap/contracts";
+import { HeroButton } from "@/components/HeroButton";
 import { listPersonDirectory } from "@/components/meeting/meetingDecisionApi";
 import { Select } from "@/components/ui/Select";
 import d from "@/styles/task-deliverable.module.css";
@@ -30,6 +31,26 @@ export function agreementBody(agreement: TTaskAgreementResponse,
 
 const SOURCE_LABEL: Record<TAgreementSource, string | null> = { world: "本体", tianshu: "11 月补充", none: null };
 
+/**
+ * 延续来的约定（跨月延续把旧 Task 的约定复制成新 Task 的草稿，约定接口的 draftFrom）：一个「延续来的约定」chip，
+ * 能改的人旁边一个「确认」——原样存一次就成了正式的（draftFrom 回到 null）。要改的照常逐条改，存了也算确认。
+ */
+export function DraftAgreement({ agreement, onConfirm }: { agreement: TTaskAgreementResponse; onConfirm: (body: TPutTaskAgreementRequest) => Promise<string | null> }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!agreement.draftFrom) return null;
+  const confirm = async () => {
+    setBusy(true);
+    setError(await onConfirm(agreementBody(agreement, { exclusions: agreement.exclusions })));
+    setBusy(false);
+  };
+  return <>
+    <span className={d.changed} data-testid="agreement-draft">延续来的约定</span>
+    {agreement.canEdit ? <HeroButton variant="ghost" size="sm" isDisabled={busy} onPress={() => void confirm()}>确认</HeroButton> : null}
+    {error ? <span className={d.error} role="alert">{error}</span> : null}
+  </>;
+}
+
 export function AgreementLine({ criterion, source, canEdit, onSave }: {
   criterion: TAgreementCriterion;
   source: TAgreementSource;
@@ -44,7 +65,7 @@ export function AgreementLine({ criterion, source, canEdit, onSave }: {
     if (!error) setEditing(false);
     return error;
   }} />;
-  if (!filled) return canEdit ? <button type="button" className={d.agreementAdd} onClick={() => setEditing(true)}>补约定</button> : null;
+  if (!filled) return canEdit ? <HeroButton variant="ghost" size="sm" className={d.agreementAdd} onPress={() => setEditing(true)}>补约定</HeroButton> : null;
   const body = <>
     {criterion.proof !== null ? <span>证明：{criterion.proof}</span> : null}
     {criterion.acceptor ? <span>认可：{criterion.acceptor.name}</span> : null}
@@ -88,8 +109,8 @@ function AgreementEditor({ criterion, onSave, onCancel }: {
       <Select aria-label={`第 ${criterion.index} 条由谁认可`} size="compact" value={acceptorId} disabled={busy}
         options={[{ value: "", label: "不指定" }, ...choices.map((person) => ({ value: person.personId, label: person.displayName }))]} onChange={setAcceptorId} />
       <div className={d.agreementEditActions}>
-        <button type="submit" className={d.plain} disabled={busy}>保存</button>
-        <button type="button" className={d.quiet} disabled={busy} onClick={onCancel}>取消</button>
+        <HeroButton type="submit" variant="tertiary" size="sm" isDisabled={busy}>保存</HeroButton>
+        <HeroButton variant="ghost" size="sm" isDisabled={busy} onPress={onCancel}>取消</HeroButton>
       </div>
       {error ? <p className={d.error} role="alert">{error}</p> : null}
     </form>
@@ -129,13 +150,13 @@ export function CheckLine({ row, canNotify, asked, feishuOff, onNotify }: {
       <p className={d.check} data-status={row.status}>{checkText(row)}</p>
       {acceptor && canNotify ? (notified
         ? <span className={d.asked}>今天已请</span>
-        : <button type="button" className={d.plain} disabled={busy || feishuOff} title={feishuOff ? "飞书未连接" : undefined} onClick={() => void ask()}>请{acceptor.name}看</button>) : null}
+        : <HeroButton variant="tertiary" size="sm" isDisabled={busy || feishuOff} title={feishuOff ? "飞书未连接" : undefined} onPress={() => void ask()}>请{acceptor.name}看</HeroButton>) : null}
       {error ? <p className={d.error} role="alert">{error}</p> : null}
     </div>
   );
 }
 
-/** 列表上面：提示在前、结论在后；可以交是绿色底，还不能交是灰底。 */
+/** 列表上面：提示在前（--warning）、结论在后（600）；只是字，不加底色（新首页设计 5.4.7：不加卡片底、不整块染色）。 */
 export function CheckSummary({ check }: { check: TTaskCheckResponse }) {
   return (
     <div className={d.checkSummary} data-verdict={check.verdict} role="status">
@@ -164,15 +185,15 @@ export function Exclusions({ items, canEdit, onSave }: { items: string[]; canEdi
     <div className={d.exclusions}>
       <div className={d.subHead}>
         <h4 className={d.label}>这次不包括</h4>
-        {canEdit && draft === null ? <button type="button" className={d.quiet} onClick={() => { setDraft(items.join("\n")); setError(null); }}>{items.length ? "改" : "补"}</button> : null}
+        {canEdit && draft === null ? <HeroButton variant="ghost" size="sm" onPress={() => { setDraft(items.join("\n")); setError(null); }}>{items.length ? "改" : "补"}</HeroButton> : null}
       </div>
       {draft !== null ? (
         <form className={d.exclusionsEdit} onSubmit={(event) => void submit(event)} onKeyDown={(event) => { if (event.key === "Escape") setDraft(null); }}>
           <textarea value={draft} rows={Math.max(3, draft.split("\n").length)} autoFocus disabled={busy} placeholder="每行一条" aria-label="这次不包括"
             onChange={(event) => setDraft(event.target.value)} />
           <div className={d.agreementEditActions}>
-            <button type="submit" className={d.plain} disabled={busy}>保存</button>
-            <button type="button" className={d.quiet} disabled={busy} onClick={() => setDraft(null)}>取消</button>
+            <HeroButton type="submit" variant="tertiary" size="sm" isDisabled={busy}>保存</HeroButton>
+            <HeroButton variant="ghost" size="sm" isDisabled={busy} onPress={() => setDraft(null)}>取消</HeroButton>
           </div>
           {error ? <p className={d.error} role="alert">{error}</p> : null}
         </form>
@@ -188,7 +209,7 @@ export function BeyondScope({ items }: { items: string[] }) {
   return (
     <div className={d.exclusions}>
       <button type="button" className={d.referenceToggle} aria-expanded={open} onClick={() => setOpen((value) => !value)}>
-        <ChevronRight size={14} aria-hidden="true" />下次可以做 {items.length}
+        <ChevronRight size={16} strokeWidth={1.8} aria-hidden="true" />下次可以做 {items.length}
       </button>
       {open ? <ul className={d.plainList}>{items.map((item, index) => <li key={index}>{item}</li>)}</ul> : null}
     </div>

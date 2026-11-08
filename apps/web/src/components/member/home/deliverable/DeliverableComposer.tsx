@@ -2,14 +2,17 @@
 
 /**
  * 传一个新版本：上一版的材料默认沿用（× 去掉），再加文件（点选或拖进来）、贴链接、写一段现状；「评审这一版」交上去就开始评审。
- * 只有这一块用虚线框，表示可以往里放东西。类型和大小先在这里挡一遍，服务端还会再查。
+ * 只有这一块有框（1px 实线，拖进来时铺淡底），表示可以往里放东西；不写支持哪些格式，放错了再说。类型和大小先在这里挡一遍，服务端还会再查。
  * 点「说说现状」光标就进写现状的框：框新出来时靠 autoFocus，已经开着时直接聚焦。
  */
 import { useRef, useState, type DragEvent } from "react";
-import { Plus, X } from "lucide-react";
+import { X } from "lucide-react";
 import type { TDeliverableVersion } from "@warmap/contracts";
+import { HeroButton } from "@/components/HeroButton";
 import { itemTag } from "./deliverableFormat";
 import d from "@/styles/task-deliverable.module.css";
+
+const ICON = { size: 16, strokeWidth: 1.8 } as const;
 
 const ACCEPT = ".pdf,.docx,.md,.html,.htm,.png,.jpg,.jpeg,.webp";
 const DOCUMENT = /\.(pdf|docx|md|html?)$/i;
@@ -104,39 +107,37 @@ export function DeliverableComposer({ previous, startWithStatement, onSubmit, on
           {kept.map((item) => (
             <li key={item.id} className={d.item}>
               <span className={d.tag}>{itemTag(item)}</span><span className={d.itemName}>{item.name}</span>
-              <button type="button" className={d.remove} aria-label={`去掉 ${item.name}`} disabled={busy} onClick={() => setKeep((current) => current.filter((id) => id !== item.id))}><X size={13} aria-hidden="true" /></button>
+              <HeroButton variant="ghost" size="sm" isIconOnly title="去掉" aria-label={`去掉 ${item.name}`} isDisabled={busy} onPress={() => setKeep((current) => current.filter((id) => id !== item.id))}><X {...ICON} aria-hidden="true" /></HeroButton>
             </li>
           ))}
           {files.map((file, index) => (
             <li key={`${file.name}-${index}`} className={d.item} data-new>
               <span className={d.tag}>{fileTag(file.name)}</span>
               <span className={d.itemName}>{file.name}</span>
-              <button type="button" className={d.remove} aria-label={`去掉 ${file.name}`} disabled={busy} onClick={() => setFiles((current) => current.filter((_, at) => at !== index))}><X size={13} aria-hidden="true" /></button>
+              <HeroButton variant="ghost" size="sm" isIconOnly title="去掉" aria-label={`去掉 ${file.name}`} isDisabled={busy} onPress={() => setFiles((current) => current.filter((_, at) => at !== index))}><X {...ICON} aria-hidden="true" /></HeroButton>
             </li>
           ))}
           {links.map((link) => (
             <li key={link} className={d.item} data-new>
               <span className={d.tag}>链接</span><span className={d.itemName}>{link.replace(/^https?:\/\//, "")}</span>
-              <button type="button" className={d.remove} aria-label="去掉这条链接" disabled={busy} onClick={() => setLinks((current) => current.filter((item) => item !== link))}><X size={13} aria-hidden="true" /></button>
+              <HeroButton variant="ghost" size="sm" isIconOnly title="去掉" aria-label="去掉这条链接" isDisabled={busy} onPress={() => setLinks((current) => current.filter((item) => item !== link))}><X {...ICON} aria-hidden="true" /></HeroButton>
             </li>
           ))}
         </ul>
       ) : null}
       <div className={d.drop} data-dragging={dragging || undefined}
         onDragOver={(event) => { event.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={drop}>
-        <span className={d.dropIcon} aria-hidden="true"><Plus size={18} /></span>
         <div className={d.dropButtons}>
-          <button type="button" className={d.plain} disabled={busy} onClick={() => picker.current?.click()}>上传文件</button>
-          <button type="button" className={d.plain} disabled={busy} onClick={() => setLinkOpen(true)}>粘贴链接</button>
-          <button type="button" className={d.plain} disabled={busy} onClick={() => (statementOpen ? statementField.current?.focus() : setStatementOpen(true))}>说说现状</button>
+          <HeroButton variant="tertiary" size="sm" isDisabled={busy} onPress={() => picker.current?.click()}>上传文件</HeroButton>
+          <HeroButton variant="tertiary" size="sm" isDisabled={busy} onPress={() => setLinkOpen(true)}>粘贴链接</HeroButton>
+          <HeroButton variant="tertiary" size="sm" isDisabled={busy} onPress={() => (statementOpen ? statementField.current?.focus() : setStatementOpen(true))}>说说现状</HeroButton>
         </div>
-        <small className={d.dropHint}>PDF · Word · Markdown · HTML · 图片 · 网页链接</small>
         <input ref={picker} type="file" multiple accept={ACCEPT} hidden onChange={(event) => { addFiles([...(event.target.files ?? [])]); event.target.value = ""; }} />
       </div>
       {linkOpen ? (
         <form className={d.linkRow} onSubmit={(event) => { event.preventDefault(); addLink(); }}>
           <input value={linkDraft} autoFocus inputMode="url" placeholder="https://" aria-label="链接" disabled={busy} onChange={(event) => setLinkDraft(event.target.value)} />
-          <button type="submit" className={d.plain} disabled={busy || !linkDraft.trim()}>添加</button>
+          <HeroButton type="submit" variant="tertiary" size="sm" isDisabled={busy || !linkDraft.trim()}>添加</HeroButton>
         </form>
       ) : null}
       {statementOpen ? (
@@ -145,8 +146,8 @@ export function DeliverableComposer({ previous, startWithStatement, onSubmit, on
       ) : null}
       {error ? <p className={d.error} role="alert">{error}</p> : null}
       <div className={d.composerActions}>
-        {onCancel ? <button type="button" className={d.quiet} disabled={busy} onClick={onCancel}>取消</button> : null}
-        <button type="button" className={d.primary} disabled={empty || busy} onClick={() => void submit()}>{busy ? "正在上传…" : "评审这一版"}</button>
+        {onCancel ? <HeroButton variant="ghost" size="sm" isDisabled={busy} onPress={onCancel}>取消</HeroButton> : null}
+        <HeroButton variant="primary" size="sm" isDisabled={empty || busy} onPress={() => void submit()}>{busy ? "正在上传…" : "评审这一版"}</HeroButton>
       </div>
     </div>
   );

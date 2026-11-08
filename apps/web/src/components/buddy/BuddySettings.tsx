@@ -35,7 +35,11 @@ export function liveBuddySaver(save: (next: Buddy) => Promise<Buddy>, on: { save
   };
 }
 
-export function BuddySettings() {
+/**
+ * 「我 › 伙伴」的存法（新首页二级页和旧个人菜单的弹窗共用）：点一个形象、一种性格就存；名字失焦或回车时存，不合法不存。
+ * 没存成：选择退回原来那个，error 写在那一项下面。
+ */
+export function useLiveBuddy() {
   const { buddy, loading } = useBuddy();
   // chosen：点过以后页面上停着的那份；typed：名字框里还没存的字。都为空时跟着读到的伙伴。
   const [chosen, setChosen] = useState<Buddy | null>(null);
@@ -66,10 +70,16 @@ export function BuddySettings() {
     setTyped(null);
     if (name !== value.name) change({ name }, "name");
   };
+  const pick = (patch: Pick<Buddy, "form"> | Pick<Buddy, "personality">) => change(patch, "form" in patch ? "form" : "personality");
+  return { value, name: typed ?? value.name, setName: setTyped, commitName, pick, error, loading };
+}
+
+export function BuddySettings() {
+  const live = useLiveBuddy();
   return (
     <section aria-label="伙伴">
-      <BuddyPicker value={value} name={typed ?? value.name} onName={setTyped} onCommitName={commitName}
-        onPick={(patch) => change(patch, "form" in patch ? "form" : "personality")} error={error} disabled={loading} />
+      <BuddyPicker value={live.value} name={live.name} onName={live.setName} onCommitName={live.commitName}
+        onPick={live.pick} error={live.error} disabled={live.loading} />
     </section>
   );
 }

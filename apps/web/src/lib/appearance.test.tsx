@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { APPEARANCE_KEY, APPEARANCE_SCRIPT, SCHEME_ATTR } from "./appearanceScript";
 import { schemeOf } from "./appearance";
-import { Preferences } from "@/components/home/Preferences";
+import { PreferencesPage } from "@/components/home/pages/PreferencesPage";
 
 /** 照首屏那段脚本跑一遍：本地存的、系统深不深，返回写到 <html> 上的值和系统变了以后的值。 */
 function runScript(stored: string | null, systemDark: boolean) {
@@ -37,7 +37,7 @@ describe("外观（17.2）：跟随系统 / 浅色 / 深色", () => {
   });
 
   it("偏好页：外观三段（跟随系统 / 浅色 / 深色）、通知、缺省预算；不加说明文字", () => {
-    const html = renderToStaticMarkup(<Preferences />);
-    expect(html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()).toBe("外观 跟随系统 浅色 深色 通知 缺省预算 伙伴");
+    const html = renderToStaticMarkup(<PreferencesPage go={() => undefined} />);
+    expect(html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()).toBe("外观 跟随系统 浅色 深色 通知 新 Task 缺省预算 伙伴");
   });
 });

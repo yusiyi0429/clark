@@ -53,7 +53,6 @@ import { projectHref, type Project } from "@/lib/home/projects";
 import { usePhone } from "./usePhone";
 import { ViewChrome, PAGE_TITLE, monthHref, scopeOf, viewOf, type View } from "./view";
 import { MONTH_PAGE, SECONDARY_PAGES, type SecondaryPageProps } from "./pages";
-import { SecondaryFallback } from "./SecondaryFallback";
 import { useHomeArrival } from "@/components/onboarding/useHomeArrival";
 import { ICON } from "./StateIcon";
 import { useTabTitle } from "./useTabTitle";
@@ -495,9 +494,9 @@ function HomeFrame({ account }: { account: Account }) {
       case "card": return <CardSession key={current.id} cardId={current.id} embedded />;
       case "topic": return <TopicSession key={current.id} topicId={current.id} embedded />;
       case "page": {
-        // 二级页：W2 交的组件挂在这里（components/home/pages）；还没交的先用现有的老组件顶着。
-        const Page = SECONDARY_PAGES[current.page] as ComponentType<SecondaryPageProps> | undefined;
-        return <SecondaryFrame key={current.page} title={PAGE_TITLE[current.page]} go={go}>{Page ? <Page go={go} /> : <SecondaryFallback page={current.page} account={account} />}</SecondaryFrame>;
+        // 二级页：组件挂在 components/home/pages。
+        const Page = SECONDARY_PAGES[current.page];
+        return <SecondaryFrame key={current.page} title={PAGE_TITLE[current.page]} go={go}><Page go={go} /></SecondaryFrame>;
       }
       case "month": {
         const Month = MONTH_PAGE;

@@ -3,6 +3,7 @@
 /**
  * 个人菜单 › 设置 › 换头像：选一张图 → 在圆框里拖动、缩放 → 确定，本机裁成 256×256 JPEG 再传；传过的可以删掉，回到单字。
  * 裁剪框自己写：只要固定圆框里的拖动加缩放，用 ts-design 的 Slider，不为此加依赖。
+ * 状态和动作在 useAvatarCrop 里，新首页「头像和资料」页（components/home/pages）也用它，各自画样子。
  */
 
 import { useEffect, useRef, useState, type PointerEvent } from "react";
@@ -13,9 +14,10 @@ import m from "@/styles/account-menu.module.css";
 import e from "@/styles/avatar-editor.module.css";
 
 /** 裁剪框边长（页面上）与导出边长。 */
-const BOX = 240;
+export const AVATAR_BOX = 240;
+const BOX = AVATAR_BOX;
 const OUT = 256;
-const MAX_ZOOM = 3;
+export const AVATAR_MAX_ZOOM = 3;
 
 type Source = { image: HTMLImageElement; url: string };
 type Offset = { x: number; y: number };
@@ -47,11 +49,14 @@ function cropToDataUrl(image: HTMLImageElement, zoom: number, offset: Offset): s
   return canvas.toDataURL("image/jpeg", 0.9);
 }
 
-/** initial：没照片时圆里那个字（个人菜单的 avatarInitial）。 */
-export function AvatarEditor({ personId, initial, onDone }: { personId: string | null; initial: string; onDone: () => void }) {
+/**
+ * 换头像的状态和动作：选图（choose；隐藏的 input 是 chooser，调用方放进页面）、拖动（stage 的指针事件）、缩放、保存、删掉、放弃这张图（reset）。
+ * onDone：存好以后。
+ */
+export function useAvatarCrop(personId: string | null, onDone: () => void) {
   const version = useAvatarVersion(personId);
   const [source, setSource] = useState<Source | null>(null);
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoomValue] = useState(1);
   const [offset, setOffset] = useState<Offset>({ x: 0, y: 0 });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -71,7 +76,7 @@ export function AvatarEditor({ personId, initial, onDone }: { personId: string |
       setError("这张图打不开，换一张 JPEG 或 PNG 试试。");
       return;
     }
-    setZoom(1);
+    setZoomValue(1);
     setOffset({ x: 0, y: 0 });
     setSource({ image, url });
   };
@@ -98,6 +103,10 @@ export function AvatarEditor({ personId, initial, onDone }: { personId: string |
     else setError("没删成，请重试。");
     setBusy(false);
   };
+  const setZoom = (next: number) => {
+    setZoomValue(next);
+    if (source) setOffset((current) => clamp(current, source.image, next));
+  };
   const press = (event: PointerEvent<HTMLDivElement>) => {
     event.currentTarget.setPointerCapture(event.pointerId);
     drag.current = { pointer: event.pointerId, x: event.clientX, y: event.clientY, from: offset };
@@ -108,7 +117,6 @@ export function AvatarEditor({ personId, initial, onDone }: { personId: string |
     setOffset(clamp({ x: start.from.x + event.clientX - start.x, y: start.from.y + event.clientY - start.y }, source.image, zoom));
   };
   const release = () => { drag.current = null; };
-
   const chooser = (
     <input ref={file} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(event) => {
       const picked = event.target.files?.[0];
@@ -116,35 +124,43 @@ export function AvatarEditor({ personId, initial, onDone }: { personId: string |
       if (picked) void pick(picked);
     }} />
   );
+  return {
+    version, source, zoom, setZoom, offset, busy, error, save, remove, chooser,
+    choose: () => file.current?.click(),
+    /** 放弃这张图（新页存好以后也用它回到现在的头像）。 */
+    reset: () => { setSource(null); setError(""); setBusy(false); },
+    size: source ? shown(source.image, zoom) : null,
+    stage: { onPointerDown: press, onPointerMove: move, onPointerUp: release, onPointerCancel: release },
+  };
+}
 
-  if (!source) {
+/** initial：没照片时圆里那个字（个人菜单的 avatarInitial）。 */
+export function AvatarEditor({ personId, initial, onDone }: { personId: string | null; initial: string; onDone: () => void }) {
+  const { version, source, zoom, setZoom, offset, busy, error, save, remove, chooser, choose, size, stage } = useAvatarCrop(personId, onDone);
+
+  if (!source || !size) {
     return (
       <div className={m.form}>
         <PersonAvatar personId={personId} className={e.preview}>{initial}</PersonAvatar>
         {error ? <p role="alert" className={m.error}>{error}</p> : null}
         <div className={`${m.formActions} ${e.actions}`}>
           {version ? <Button variant="ghost" className={m.quietButton} isDisabled={busy} onPress={() => void remove()}>删掉照片</Button> : null}
-          <Button variant="ghost" className={m.primary} isDisabled={busy || !personId} onPress={() => file.current?.click()}>{version ? "换一张" : "选照片"}</Button>
+          <Button variant="ghost" className={m.primary} isDisabled={busy || !personId} onPress={choose}>{version ? "换一张" : "选照片"}</Button>
         </div>
         {chooser}
       </div>
     );
   }
 
-  const size = shown(source.image, zoom);
   return (
     <div className={m.form}>
-      <div className={e.stage} style={{ width: BOX, height: BOX }} onPointerDown={press} onPointerMove={move} onPointerUp={release} onPointerCancel={release}>
+      <div className={e.stage} style={{ width: BOX, height: BOX }} {...stage}>
         <img className={e.image} src={source.url} alt="" draggable={false}
           style={{ width: size.width, height: size.height, transform: `translate(-50%, -50%) translate(${offset.x}px, ${offset.y}px)` }} />
         <span className={e.ring} aria-hidden="true" />
       </div>
-      <Slider className={e.zoom} aria-label="缩放" minValue={1} maxValue={MAX_ZOOM} step={0.01} value={zoom} isDisabled={busy}
-        onChange={(value) => {
-          const next = Array.isArray(value) ? value[0] : value;
-          setZoom(next);
-          setOffset((current) => clamp(current, source.image, next));
-        }}>
+      <Slider className={e.zoom} aria-label="缩放" minValue={1} maxValue={AVATAR_MAX_ZOOM} step={0.01} value={zoom} isDisabled={busy}
+        onChange={(value) => setZoom(Array.isArray(value) ? value[0] : value)}>
         <Slider.Track>
           <Slider.Fill />
           <Slider.Thumb />
@@ -152,7 +168,7 @@ export function AvatarEditor({ personId, initial, onDone }: { personId: string |
       </Slider>
       {error ? <p role="alert" className={m.error}>{error}</p> : null}
       <div className={`${m.formActions} ${e.actions}`}>
-        <Button variant="ghost" className={m.quietButton} isDisabled={busy} onPress={() => file.current?.click()}>重新选</Button>
+        <Button variant="ghost" className={m.quietButton} isDisabled={busy} onPress={choose}>重新选</Button>
         <Button variant="ghost" className={m.primary} isDisabled={busy} onPress={() => void save()}>{busy ? "保存中…" : "确定"}</Button>
       </div>
       {chooser}
