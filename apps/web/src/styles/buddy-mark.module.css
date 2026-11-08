@@ -48,8 +48,9 @@
 /*
  * 伙伴台（新首页左栏顶上的正方形，设计 9.2 / 5.4.2）：形象在台子正中。横放的三种胶囊按页头那份（208×64）画到约 0.7，
  * Miles、C妹 按页头那份放到约 1.6（倍数待原型）。用 zoom 缩放，台子按缩放后的大小居中。在听时整块再变大一圈（只有伙伴可以回弹）。
+ * 整块（连名牌）再乘台子给的 --stage-scale：台子比 1440 时大就跟着放大，矮屏变扁时跟着高度缩（LeftColumn 的 stageScale）。
  */
-.mark[data-place="stage"] { --coagent-capsule-width: 208px; --coagent-capsule-height: 64px; transition: scale 420ms cubic-bezier(.34, 1.56, .64, 1); }
+.mark[data-place="stage"] { --coagent-capsule-width: 208px; --coagent-capsule-height: 64px; zoom: var(--stage-scale, 1); transition: scale 420ms cubic-bezier(.34, 1.56, .64, 1); }
 .mark[data-place="stage"] .scale { zoom: .7; }
 .mark[data-place="stage"]:is([data-skin="miles"], [data-skin="cmei"]) .scale { zoom: 1.6; }
 .mark[data-place="stage"][data-listening] { scale: 1.16; }

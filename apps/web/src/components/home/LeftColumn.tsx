@@ -35,6 +35,37 @@ import h from "@/styles/home.module.css";
 
 export const subHref = (sub: Pick<SubSession, "kind" | "id">) => (sub.kind === "card" ? cardHref(sub.id) : topicHref(sub.id));
 
+/** 1440 宽时伙伴台的边长：形象和台子的比例以它为准。 */
+export const STAGE_BASE = 255;
+
+/**
+ * 伙伴形象跟着台子缩放（17.2 第 15 条）：边长按 1440 时的比例走，不比原来的小；矮屏台子变扁时跟着高度一起缩。
+ */
+export function stageScale(width: number, height: number): number {
+  if (!width || !height) return 1;
+  return Math.max(1, width / STAGE_BASE) * Math.min(1, height / width);
+}
+
+/** 台子的宽高变了就重算形象的倍数，写进 --stage-scale（手机上台子是 160 高的横条，形象不跟着缩，不写）。 */
+function useStageScale(off: boolean) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+  useEffect(() => {
+    const element = ref.current;
+    if (off || !element || typeof ResizeObserver === "undefined") { setScale(1); return; }
+    // 先量一次（首屏就对），之后台子变了再跟。
+    const box = element.getBoundingClientRect();
+    setScale(stageScale(box.width, box.height));
+    const observer = new ResizeObserver(([entry]) => {
+      const box = entry?.contentRect;
+      if (box) setScale(stageScale(box.width, box.height));
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [off]);
+  return { ref, scale };
+}
+
 export function LeftColumn({ data, view, buddy, speaking, go, phone, account, today, alert, trail, top, month, onRetryPlan, projects, archived, onCreate, cardAt, working }: {
   data: WorkHomeData;
   view: View;
@@ -77,6 +108,7 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
   const dictation = useDictationSignal();
   // 伙伴台「亮着」（17.2）：只在伙伴对话里；在说或在想（回话流着）> 在听（听写开着）> 空闲。
   const glow = view.kind !== "buddy" ? undefined : speaking ? "speaking" : dictation ? "listening" : "idle";
+  const stage = useStageScale(phone);
   const [createFailed, setCreateFailed] = useState<Failure | null>(null);
   const create = (value: string) => {
     setNaming(false);
@@ -87,7 +119,8 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
   };
   return (
     <nav className={h.leftInner} aria-label="导航">
-      <div className={h.stage} data-current={view.kind === "buddy" ? "" : undefined} data-glow={glow} style={glow === "listening" ? { "--level": dictation?.level ?? 0 } as CSSProperties : undefined}>
+      <div ref={stage.ref} className={h.stage} data-current={view.kind === "buddy" ? "" : undefined} data-glow={glow}
+        style={{ "--stage-scale": stage.scale, ...(glow === "listening" ? { "--level": dictation?.level ?? 0 } : {}) } as CSSProperties}>
         <button type="button" className={h.stageHit} aria-label={name} aria-current={view.kind === "buddy" ? "page" : undefined} onClick={() => go(BUDDY_HREF)} data-testid="buddy-entry">
           <BuddyMark buddy={buddy} place="stage" active={speaking} listening={!!dictation || (view.kind === "buddy" && !speaking)} level={dictation?.level ?? 0} />
         </button>
