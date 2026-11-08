@@ -133,8 +133,11 @@ const Period = Type.String({ pattern: "^\\d{4}-(0[1-9]|1[0-2])$" });
 /**
  * 项目行上的一件目标：挂着、没了结的 Task（本月的，加之前月份没了结的；本月的了结了照样列，completedAt 不为 null）。
  * 16.2 副标题「{月} 月 · {Task 名} · {截止} 验收」、项目页目标条的「名字、截止、标准 1/3」用它。
- * dueDate 是验收截止日（YYYY-MM-DD）：本体的 Task 没有截止日，取所在 Mission 的验收时间点（同首页「本月」：今天以后最近的那个，都过了取最后一个）；
- *   Mission 没写验收时间点时取它所在月份的最后一天。
+ * dueDate 是验收截止日（YYYY-MM-DD），按这个先后取：
+ *   1. 本体 Task 自己的截止日（本体 0.3 的 Task 还没有这个字段，现在跳过）；
+ *   2. 天枢里给这件目标存的截止日（本人或伙伴改，PUT /api/me/projects/:projectId/goals/:taskId/due-date）；
+ *   3. 都没有，取所在 Mission 的验收时间点（同首页「本月」：今天以后最近的那个，都过了取最后一个）；Mission 没写验收时间点时取它所在月份的最后一天。
+ *   dueDateSource 说是哪一种：set 天枢里存的，mission 退回 Mission 的节点（以后本体有了再加 task）。
  * criteriaMet / criteriaTotal：标准几条达到（每条至少一张对它的卡、最近一次有结论的交回算通过）/ 一共几条（本体没写标准时是完成定义那一条，都没有为 0）。
  * criteria 是标准原文（目标条点开逐条看）；completedAt 是本人确认完成的时间。
  * responsible（16.7）：Task 的负责人不是本人时是那个人（项目交接过来、Task 跟着项目走、负责人还是原来的人，目标条上画他的头像），是本人为 null。
@@ -146,6 +149,7 @@ export const HomeProjectGoal = Type.Object({
   name: Type.String(),
   period: Period,
   dueDate: Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" }),
+  dueDateSource: Type.Union([Type.Literal("set"), Type.Literal("mission")]),
   criteria: Type.Array(Type.String()),
   criteriaMet: Type.Integer({ minimum: 0 }),
   criteriaTotal: Type.Integer({ minimum: 0 }),

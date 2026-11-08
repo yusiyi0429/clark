@@ -5066,6 +5066,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/projects/{projectId}/goals/{taskId}/due-date": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 给挂在这个项目上的一件 Task 存验收截止日（null 不存了，退回 Mission 的节点）；没挂在这个项目上 404 */
+        put: operations["setProjectGoalDueDate"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/projects/{projectId}/auto-relay": {
         parameters: {
             query?: never;
@@ -18296,6 +18313,7 @@ export interface components {
             name: string;
             period: string;
             dueDate: string;
+            dueDateSource: "set" | "mission";
             criteria: string[];
             criteriaMet: number;
             criteriaTotal: number;
@@ -18315,6 +18333,7 @@ export interface components {
                 name: string;
                 period: string;
                 dueDate: string;
+                dueDateSource: "set" | "mission";
                 criteria: string[];
                 criteriaMet: number;
                 criteriaTotal: number;
@@ -18546,6 +18565,7 @@ export interface components {
                     name: string;
                     period: string;
                     dueDate: string;
+                    dueDateSource: "set" | "mission";
                     criteria: string[];
                     criteriaMet: number;
                     criteriaTotal: number;
@@ -19173,6 +19193,7 @@ export interface components {
             source: "auto" | "owner" | "migration";
             /** Format: date-time */
             linkedAt: string;
+            dueDate: string | null;
         };
         ProjectDetailResponse: {
             project: {
@@ -19257,6 +19278,7 @@ export interface components {
                 source: "auto" | "owner" | "migration";
                 /** Format: date-time */
                 linkedAt: string;
+                dueDate: string | null;
             }[];
         };
         ProjectPipelineResponse: {
@@ -19959,6 +19981,9 @@ export interface components {
         };
         AutoRelayDecisionRequest: {
             decision: "continue" | "stop";
+        };
+        SetGoalDueDateRequest: {
+            dueDate: string | null;
         };
         ProjectHandoverItem: {
             /** @constant */
@@ -37920,6 +37945,69 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    setProjectGoalDueDate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetGoalDueDateRequest"];
+            };
+        };
+        responses: {
+            /** @description 这条挂接 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectGoal"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
