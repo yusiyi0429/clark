@@ -2,7 +2,7 @@
  * 把本机会话的事件流折成页面要画的样子：对话记录、计划条目、挂着的权限请求、花费、在等什么。
  * 纯函数，事件按 seq 只增；同一个 seq 来两次（重连补发）只算一次。
  */
-import type { TLocalPermissionRequestView, TLocalPlanEntry, TLocalQuestionRequestView, TLocalSessionEvent, TLocalSessionStatus, TLocalUsage } from "./runner";
+import type { TLocalPermissionMode, TLocalPermissionRequestView, TLocalPlanEntry, TLocalQuestionRequestView, TLocalSessionEvent, TLocalSessionStatus, TLocalUsage } from "./runner";
 
 export type SessionEntry =
   /** messageId、receipt：本人这句话的编号和回执（17.4，本机补发的话没有编号也没有回执）。 */
@@ -37,6 +37,8 @@ export type SessionView = {
   queuedBecause: string | null;
   /** 执行方在问本人、还没答的那次提问。 */
   question: TLocalQuestionRequestView | null;
+  /** 换过的权限模式（事件 permission_mode：本人在网页上换的、计划批了转成自动）；没换过为 null，看会话摘要里的。 */
+  permissionMode: TLocalPermissionMode | null;
 };
 
 /** 对话里记下的那一行「问：…」；还没答时对话最后是选项框，这一行不重复画（SessionTranscript）。 */
@@ -45,7 +47,7 @@ export const questionNotice = (request: TLocalQuestionRequestView) => `问：${r
 export const EMPTY_VIEW: SessionView = {
   lastSeq: 0, status: null, startedAt: null, agentVersion: null, plan: [], entries: [], pending: [],
   usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null },
-  lastActivity: null, interrupted: false, handedBack: false, place: null, queuedBecause: null, question: null,
+  lastActivity: null, interrupted: false, handedBack: false, place: null, queuedBecause: null, question: null, permissionMode: null,
 };
 
 const addUsage = (a: TLocalUsage, b: TLocalUsage): TLocalUsage => ({
@@ -70,6 +72,9 @@ export function foldEvent(view: SessionView, event: TLocalSessionEvent): Session
       return next;
     case "agent_info":
       next.agentVersion = event.version;
+      return next;
+    case "permission_mode":
+      next.permissionMode = event.mode;
       return next;
     case "user_message":
       next.entries = [...view.entries, { kind: "user", ...base, text: event.text, ...(event.attachments?.length ? { attachments: event.attachments.map(({ name, size }) => ({ name, size })) } : {}),

@@ -27,6 +27,8 @@ import { ICON } from "@/components/home/StateIcon";
 import { useConversationScroll } from "@/conversation/useConversationScroll";
 import { latestSessionFor, useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { useSessionEvents } from "@/lib/local/useSessionEvents";
+import { useSessionMode } from "@/components/cards/PermissionMode";
+import { runLabel } from "@/lib/local/runModel";
 import { localWait, running } from "@/lib/local/sessionView";
 import { startTopic } from "@/lib/local/start";
 import { WAIT_LABEL, canCommand, waitTone } from "@/lib/board/cards";
@@ -81,6 +83,7 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
   }, [autoStart, ready, detail, session]);
   const { view } = useSessionEvents(local.runner, session?.id ?? null);
   const canAct = canCommand({ ready, handheld, hasSession: !!session });
+  const mode = useSessionMode(local.runner, session, view);
   // 没成的不弹 toast：发消息交给输入框，批准、回答交给选项框，这页的按钮后面各自写「失败 · 重试」。
   const [failed, setFailed] = useState<{ at: "doc" | "head"; retry: () => void; reason: string } | null>(null);
   const act = (at: "doc" | "head", action: () => Promise<unknown>) => { setFailed(null); action().catch((error: unknown) => setFailed({ at, retry: () => act(at, action), reason: error instanceof Error ? error.message : "" })); };
@@ -171,7 +174,7 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
           <div ref={scroll.reserveRef} aria-hidden />
         </div>
         {session || !embedded
-          ? <SessionComposer label={`给${topic.title}插话`} disabled={!canAct} onSend={say} subject={{ kind: "topic", id: topic.id }} dock={<PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} />} />
+          ? <SessionComposer label={`给${topic.title}插话`} disabled={!canAct} onSend={say} mode={mode} subject={{ kind: "topic", id: topic.id }} dock={<PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} />} />
           : <div className={s.composerDock}><PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} /></div>}
       </div>
     </PendingBoxes>
@@ -193,7 +196,8 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
     const showDoc = reading || (handheld && !session);
     // 页头的状态 chip（5.4.3）：中性、警告、等你（中性底加圆点）；不在这台电脑上又在等你时写「等你 · {电脑名}」。
     const chipOf = wait ? stateChip(wait, "doing", !canAct && device ? awayChip(device) : null) : { text: topic.status === "archived" ? "已归档" : "进行中", tone: "neutral" as const };
-    const model = topic.run?.modelLabel ?? null;
+    // 「来源 · 模型」：这台电脑上的会话报的（实际跑的优先），没有时退回云端记的。
+    const model = runLabel(session?.run) ?? topic.run?.modelLabel ?? null;
     return (
       <div className={s.page} data-embedded="" data-testid="topic-session">
         <header className={s.embedHead}>

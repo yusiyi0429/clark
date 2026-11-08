@@ -16,7 +16,8 @@ describe("伙伴的选项框（18.9 buddy_question）", () => {
   it("推荐的排第一、标「推荐」，最后固定一行「自己填」", () => {
     const html = renderToStaticMarkup(<BuddyQuestionDecision card={card()} busy={false} send={vi.fn()} />);
     expect(html).toContain('data-testid="buddy-question"');
-    expect(text(html)).toMatch(/这次怎么发？.*只发预发.*推荐.*先在预发看一天.*直接上生产.*今晚就发.*自己填/);
+    expect(text(html)).toMatch(/这次怎么发？.*只发预发.*推荐.*先在预发看一天.*直接上生产.*今晚就发/);
+    expect(html).toMatch(/<textarea[^>]*placeholder="自己填…"/);
   });
 
   it("选了拼成本人的一句话：「题头：选的（推荐）」，多选用「、」连，自己填照原话，几题用「；」连", () => {

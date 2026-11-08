@@ -17,6 +17,7 @@ import { splitBody, WORDS_MAX } from "@/lib/board/cloud";
 import { viewOf, scopeOf } from "@/components/home/view";
 import { placeBlocks } from "./WorkTimeline";
 import { ApprovalDecision, QuestionDecision, localOptions } from "./decisions";
+import { DecisionBox, otherKey } from "./DecisionBox";
 
 const ROLE = { id: "00000000-0000-4000-8000-000000000001", name: "开发", kind: "worker" as const };
 const item = (extra: Partial<TWorkerItem>): TWorkerItem => ({
@@ -25,7 +26,7 @@ const item = (extra: Partial<TWorkerItem>): TWorkerItem => ({
   resource: { where: "local", deviceId: null, deviceName: "ThinkPad", modelLabel: "Sonnet" }, startedAt: "2026-11-06T04:00:00Z", elapsedSeconds: 840,
   finishedAt: null, cost: null, stage: "doing", wait: null, needsYou: false, queueReason: null, holdUntil: null, queuePosition: null, git: null, waitingFor: [], ...extra,
 });
-const session = (extra: Partial<TLocalSessionSummary>): TLocalSessionSummary => ({
+const session = (extra: Partial<TLocalSessionSummary>): TLocalSessionSummary => ({ permissionMode: "auto",
   id: "00000000-0000-4000-8000-0000000000a1", subject: { kind: "card", cardId: "c1" }, title: "x", agent: "claude-code", modelProfileId: "subscription", modelLabel: "订阅 · Sonnet",
   cwd: "C:\\w", status: "running", includePersonalConfig: false, createdAt: "2026-11-06T04:00:00Z", updatedAt: "2026-11-06T04:10:00Z", lastSeq: 3, pendingPermissions: 0,
   queuePosition: null, usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null }, ...extra,
@@ -125,12 +126,13 @@ describe("选项框", () => {
     outsidePaths: [], canAllowForSession: true, ...extra }) as never;
 
   it("批准：批准（推荐）/ 同类以后都批准（写清范围，回车不会选它）/ 换个做法，带命令；几件一起来时 1/2 和全部批准；工作区外只剩批准、换个做法，路径标出、加 chip；对外的加 chip", () => {
-    const one = text(renderToStaticMarkup(<ApprovalDecision requests={[permission("p1")]} onDecide={vi.fn()} />));
+    const oneHtml = renderToStaticMarkup(<ApprovalDecision requests={[permission("p1")]} onDecide={vi.fn()} />);
+    const one = text(oneHtml);
     expect(one).toContain("pnpm --filter @warmap/web test");
     expect(one).toContain("批准（推荐）");
     expect(one.indexOf("同类以后都批准")).toBeGreaterThan(one.indexOf("批准（推荐）"));
     expect(one).toContain("这个子会话内");
-    expect(one.indexOf("换个做法")).toBeGreaterThan(one.indexOf("同类以后都批准"));
+    expect(oneHtml.indexOf('placeholder="换个做法…"')).toBeGreaterThan(oneHtml.indexOf("同类以后都批准"));
     expect(one).not.toContain("全部批准");
     expect(one).not.toContain("对外");
     const two = text(renderToStaticMarkup(<ApprovalDecision requests={[permission("p1"), permission("p2")]} onDecide={vi.fn()} />));
@@ -162,8 +164,35 @@ describe("选项框", () => {
     expect(visible).toContain("旧的安装说明要不要一起删掉？");
     expect(visible.indexOf("删掉")).toBeLessThan(visible.indexOf("留着"));
     expect(visible).toContain("推荐");
-    expect(visible.trim().endsWith("自己说…")).toBe(true);
+    expect(html).toMatch(/<textarea[^>]*placeholder="自己说…"/);
     expect(html.match(/aria-keyshortcuts="\d"/g)).toEqual(['aria-keyshortcuts="1"', 'aria-keyshortcuts="2"', 'aria-keyshortcuts="3"']);
+  });
+});
+
+describe("选项框的「自己说」就是最后一行的输入框", () => {
+  const box = () => renderToStaticMarkup(<DecisionBox kind="question" title="用哪个库？" onPick={vi.fn()} other={{ onSubmit: vi.fn() }}
+    options={[{ label: "A", recommended: true }, { label: "B" }, { label: "C" }]} />);
+
+  it("输入框就在第 4 行：同样的序号 4，占位「自己说…」，数字 4 指向它；下面不再有第二个框", () => {
+    const html = box();
+    const row = html.match(/<div[^>]*data-testid="decision-other"[^>]*>([\s\S]*?)<\/div>/)?.[1] ?? "";
+    expect(row).toMatch(/<kbd[^>]*>4<\/kbd><textarea[^>]*>/);
+    expect(row).toMatch(/<textarea[^>]*aria-label="自己说"[^>]*placeholder="自己说…"|<textarea[^>]*placeholder="自己说…"[^>]*aria-label="自己说"/);
+    expect(row).toContain('aria-keyshortcuts="4"');
+    expect(html.match(/<textarea/g)).toHaveLength(1);
+    expect(html).not.toContain("aria-expanded");
+    // 没字时行尾没有发送箭头。
+    expect(row).not.toContain('aria-label="发送"');
+  });
+
+  it("回车发出，Shift+回车换行；Esc 或光标在最前面按 ↑ 回到上一行", () => {
+    const at = (start: number, end = start) => ({ selectionStart: start, selectionEnd: end });
+    expect(otherKey({ key: "Enter", shiftKey: false }, at(3))).toBe("send");
+    expect(otherKey({ key: "Enter", shiftKey: true }, at(3))).toBeNull();
+    expect(otherKey({ key: "Escape", shiftKey: false }, at(3))).toBe("up");
+    expect(otherKey({ key: "ArrowUp", shiftKey: false }, at(0))).toBe("up");
+    expect(otherKey({ key: "ArrowUp", shiftKey: false }, at(5))).toBeNull();
+    expect(otherKey({ key: "4", shiftKey: false }, at(0))).toBeNull();
   });
 });
 

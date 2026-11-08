@@ -21,7 +21,7 @@ const item = (extra: Partial<TWorkerItem>): TWorkerItem => ({
   resource: { where: "local", deviceId: null, deviceName: "ThinkPad", modelLabel: "Sonnet" }, startedAt: "2026-11-07T04:00:00Z", elapsedSeconds: 60,
   finishedAt: null, cost: null, stage: "doing", wait: null, needsYou: false, queueReason: null, holdUntil: null, queuePosition: null, git: null, waitingFor: [], ...extra,
 });
-const session = (extra: Partial<TLocalSessionSummary>): TLocalSessionSummary => ({
+const session = (extra: Partial<TLocalSessionSummary>): TLocalSessionSummary => ({ permissionMode: "auto",
   id: "00000000-0000-4000-8000-0000000000a1", subject: { kind: "card", cardId: CARD }, title: "greet", agent: "claude-code", modelProfileId: "subscription", modelLabel: "Sonnet",
   cwd: "C:\\w", status: "idle", includePersonalConfig: false, createdAt: "2026-11-07T04:00:00Z", updatedAt: "2026-11-07T04:10:00Z", lastSeq: 3, pendingPermissions: 0,
   queuePosition: null, usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null }, ...extra,
@@ -81,8 +81,9 @@ describe("Task 管线里的验收行（第 4.5 条）", () => {
   });
 
   it("约定都达到：问「约定 3 条都达到了，交给认可人？」，交给认可人推荐、先不交、自己说", () => {
-    const html = text(render([{ kind: "criteria_met", id: "c1", at: "2026-11-07T06:00:00Z", taskId: "t1", met: 3, total: 3 }], []).html);
-    expect(html).toMatch(/约定 3 条都达到了，交给认可人？.*交给认可人.*推荐.*先不交.*自己说…/);
+    const raw = render([{ kind: "criteria_met", id: "c1", at: "2026-11-07T06:00:00Z", taskId: "t1", met: 3, total: 3 }], []).html;
+    expect(text(raw)).toMatch(/约定 3 条都达到了，交给认可人？.*交给认可人.*推荐.*先不交/);
+    expect(raw).toContain('placeholder="自己说…"');
   });
 
   it("合回以后被推翻：一行「推翻了，开了返工「greet 返工」」，带理由", () => {

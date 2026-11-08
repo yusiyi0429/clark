@@ -229,6 +229,11 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .menuItem, .menuWho { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-36); padding: 0 var(--space-3); border-radius: var(--r-control); background: none; color: var(--ink); font-size: var(--text-base); line-height: var(--lh-row); cursor: pointer; outline: none; }
 .menuWho { min-height: var(--row-48); padding-block: 6px; }
 .menuItem[data-indent] { padding-left: var(--space-6); }
+/* 权限模式那种两行的项：名字一行、短副标题一行（12 淡色），推荐的名字后面接淡色「（推荐）」。 */
+.menuItem[data-two-line] { padding-block: var(--space-1); }
+.modeText { display: grid; flex: 1; min-width: 0; }
+.modeText small { color: var(--ink-muted); font-size: var(--text-xs); line-height: 16px; }
+.modeRec { color: var(--ink-faint); }
 .menuItem:is([data-hovered], [data-focused]), .menuWho:is([data-hovered], [data-focused]) { background: var(--default-soft); }
 .menuItem[data-current], .menuWho[data-current] { background: var(--default-soft-hover); }
 .menuItem[data-focus-visible], .menuWho[data-focus-visible] { outline: 2px solid var(--focus); outline-offset: -2px; }
@@ -510,3 +515,5 @@ button.bgLabel:hover { background: var(--default-soft); }
 .phoneComposer .composerDock { width: 100%; margin: 0; }
 .noteEdit { width: 100%; margin: 0; padding: var(--space-2); border: 1px solid var(--field-border-focus); border-radius: var(--r-control); outline: 0; background: var(--field-bg); color: var(--field-ink); font: inherit; font-size: var(--text-base); line-height: var(--lh-row); resize: vertical; }
 .noteTitle :global(button) { margin-left: var(--space-1); vertical-align: middle; }
+/* 左栏悬停全名提示里的第二行（子会话的「来源 · 模型」）。 */
+.tipDetail { display: block; font-size: var(--text-xs); opacity: .72; }

@@ -24,6 +24,7 @@ import { planStep } from "@/lib/local/sessionView";
 import { useSessionEvents } from "@/lib/local/useSessionEvents";
 import { readLast, writeLast } from "@/lib/local/start";
 import type { TLocalModelProfile } from "@/lib/local/runner";
+import { runLabel } from "@/lib/local/runModel";
 import { acceptDrafts, acceptProjectDrafts, dismissDraft, readTaskBudget, type PlanTarget } from "@/lib/board/cloud";
 import { TIER_LABEL, draftRole, modelForTier, type CardRole, type RoleView } from "@/lib/team/roles";
 import { SLOT_CAP, startBatch, type StartPlan } from "@/lib/work/queue";
@@ -44,6 +45,8 @@ export function draftWorkerRole(draft: TCardDraftView): CardRole | null {
 }
 
 type Edit = { title?: string; role?: CardRole | null; modelId?: string; dropped?: boolean };
+/** 模型下拉里的「自动」：不单独选，按岗位的档位配（modelForTier）。 */
+const AUTO_MODEL = "auto";
 export const START_LABEL = "就按这个开始";
 
 /** 开工的模式（11.3）：自动（默认）· 设预算 · 无上限。 */
@@ -113,6 +116,35 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
     return local.models.find((model) => model.id === edits[draft.id]?.modelId) ?? modelForTier(local.models, tierOf(draft, role));
   };
   const edit = (id: string, patch: Edit) => setEdits((current) => ({ ...current, [id]: { ...current[id], ...patch } }));
+  // 每一步会落到哪个来源的哪个模型（开工前问本机 previewRun）：按「模型配置 · 档位」记，同样的只问一次。
+  const [previews, setPreviews] = useState<Record<string, string>>({});
+  const asked = useRef(new Set<string>());
+  const previewKey = (model: TLocalModelProfile, tier: string) => `${model.id}:${tier}`;
+  useEffect(() => {
+    if (!ready) return;
+    let alive = true;
+    for (const draft of drafts) {
+      const role = roleOf(draft);
+      const model = modelOf(draft);
+      if (!role || !model) continue;
+      const tier = tierOf(draft, role);
+      const key = previewKey(model, tier);
+      if (asked.current.has(key)) continue;
+      asked.current.add(key);
+      void local.runner.previewRun({ agent: model.agent, modelProfileId: model.id, modelTier: tier }).then((run) => {
+        const label = runLabel(run);
+        if (alive && label) setPreviews((current) => ({ ...current, [key]: label }));
+      }, () => asked.current.delete(key));
+    }
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 草稿、改过的岗位和模型变了才再问
+  }, [ready, local.runner, local.models, drafts, edits, roles]);
+  /** 下拉上写的：「来源 · 模型」；没单独选（自动）时前面加「自动 · 」。本机还没回（或老版本不报）时退回模型配置的名字。 */
+  const modelText = (draft: TCardDraftView, model: TLocalModelProfile | null, role: CardRole) => {
+    if (!model) return "模型";
+    const shown = previews[previewKey(model, tierOf(draft, role))] ?? model.label;
+    return edits[draft.id]?.modelId ? shown : `自动 · ${shown}`;
+  };
 
   const start = async () => {
     if (!kept.length || busy) return;
@@ -182,7 +214,9 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
                   options={[...workerRoles.map((entry) => ({ id: entry.id, label: entry.name })), { id: "self", label: "我自己" }]}
                   onPick={(id) => edit(draft.id, { role: id === "self" ? null : { id, name: workerRoles.find((entry) => entry.id === id)!.name, kind: "worker" }, modelId: undefined })} />
                 <button type="button" className={h.icon} aria-label={`去掉「${draft.title}」`} title="删除" onClick={() => edit(draft.id, { dropped: true })}><X {...ICON} /></button>
-              </> : role ? (local.models.length ? <Pick label={model?.label ?? "模型"} value={model?.id ?? ""} options={local.models.map((entry) => ({ id: entry.id, label: entry.label }))} onPick={(id) => edit(draft.id, { modelId: id })} />
+              </> : role ? (local.models.length ? <Pick label={modelText(draft, model, role)} value={edits[draft.id]?.modelId ?? AUTO_MODEL}
+                  options={[{ id: AUTO_MODEL, label: "自动" }, ...local.models.map((entry) => ({ id: entry.id, label: entry.label }))]}
+                  onPick={(id) => edit(draft.id, { modelId: id === AUTO_MODEL ? undefined : id })} />
                 : <span className={h.chip}>{TIER_LABEL[tierOf(draft, role)]}</span>) : null}
             </span>
           </li>
