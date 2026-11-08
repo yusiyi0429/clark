@@ -205,3 +205,28 @@ describe("伙伴对话流里的回执、计划清单、界面效果、卡（17.4
     expect(view.messages[0]).toMatchObject({ role: "user", receipt: "read" });
   });
 });
+
+describe("两个勾的取法（17.4，主会话 11/08）", () => {
+  it("发送接口接下就亮第一个勾，不等 delivered 帧；read 帧到了亮第二个", async () => {
+    const frame = (event: Record<string, unknown>) => new TextEncoder().encode(`data: ${JSON.stringify({ ...event, runId: "r2" })}\n\n`);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let step = 0;
+    const read = async () => {
+      step += 1;
+      if (step === 1) return { done: false, value: frame({ type: "message", delta: "在看" }) };
+      if (step === 2) { await gate; return { done: false, value: frame({ type: "receipt", state: "read" }) }; }
+      if (step === 3) return { done: false, value: frame({ type: "done", status: "completed" }) };
+      return { done: true, value: undefined };
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce({ ok: true, status: 200, body: { getReader: () => ({ read }) } })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ messages: [{ sequence: 1, role: "user", content: "停一下" }] }) }));
+    const sending = snapshot().send("停一下", []);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(snapshot().messages.at(-1)).toMatchObject({ role: "user", receipt: "delivered" });
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(snapshot().messages.find((item) => item.role === "user")).toMatchObject({ receipt: "read" });
+    await sending;
+  });
+});

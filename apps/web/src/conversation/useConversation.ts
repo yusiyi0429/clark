@@ -668,6 +668,16 @@ ${input}` : input;
     }
 
     let accepted = false;
+    /**
+     * 回执落在这一轮发的那句上：这一轮还在这页上（live）时，最后一句本人的话就是它。读到了不再退回送达。
+     * 契约给了消息 id 以后改成按 id 对（主会话 11/08：read 帧按消息 id 对上是哪一条）。
+     */
+    const markReceipt = (state: "delivered" | "read") => setMessages((current) => {
+      let index = current.length - 1;
+      while (index >= 0 && current[index].role !== "user") index -= 1;
+      return index < 0 || current[index].receipt === "read" || current[index].receipt === state ? current
+        : current.map((item, at) => (at === index ? { ...item, receipt: state } : item));
+    });
     let reply = "";
     let notice: string | undefined;
     /** 这一轮走过恢复时服务端在 done 里给的那行说明（读不回历史时本地补的那条回答也带上）。 */
@@ -770,6 +780,8 @@ ${input}` : input;
         throw new TurnError(body.code ?? body.error?.code ?? `HTTP_${response.status}`, body.message ?? body.error?.message ?? "");
       }
       accepted = true;
+      // 伙伴对话：发送接口接下了就亮第一个勾（17.4，不等流里的 delivered 帧）；第二个勾等 read 帧。
+      if (isBuddyScope(scope) && !attach && live()) markReceipt("delivered");
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -864,15 +876,7 @@ ${input}` : input;
           // 伙伴登记了拆卡：新首页在这台电脑上开规划员（V2 设计第 21.3 节；事件名同 components/home/HomeShell.tsx 的 SPLIT_EVENT）。
           if (event.type === "tool" && event.phase === "completed" && !event.isError && event.name === "register_card_split")
             window.dispatchEvent(new CustomEvent("card-split-registered", { detail: { scope } }));
-          if (event.type === "receipt" && event.state && live()) {
-            const state = event.state;
-            // 这一轮还在这页上（live）时，最后一句本人的话就是这次发的那句。
-            setMessages((current) => {
-              let index = current.length - 1;
-              while (index >= 0 && current[index].role !== "user") index -= 1;
-              return index < 0 || current[index].receipt === "read" ? current : current.map((item, at) => (at === index ? { ...item, receipt: state } : item));
-            });
-          }
+          if (event.type === "receipt" && event.state && live()) markReceipt(event.state);
           if (event.type === "plan" && event.plan && live()) setTurnPlan(event.plan);
           if (event.type === "card" && event.card && live()) { const card = event.card; setTurnCards((current) => [...current, card]); }
           if (event.type === "ui" && event.ui) emitBuddyUi(event.ui);

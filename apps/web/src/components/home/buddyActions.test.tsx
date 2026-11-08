@@ -32,6 +32,11 @@ describe("伙伴代本人做事（17.4）", () => {
     expect(at()).not.toContain("message-receipt");
   });
 
+  it("项目对话里伙伴转来的本人那句（via=buddy）：气泡上方一行小字「伙伴转来」，别的照本人消息画", () => {
+    const html = renderToStaticMarkup(<ConversationTurn message={{ sequence: 1, role: "user", content: "把评测集补上", via: "buddy" }} />);
+    expect(html).toMatch(/data-testid="conversation-via-buddy"[^>]*>伙伴转来<.*把评测集补上/);
+  });
+
   it("计划清单：做完的、在做的照状态画；被打断收起时一行「计划 n/m」", () => {
     const entries = [{ content: "归档 Chat 服务", status: "completed" as const }, { content: "切深色", status: "in_progress" as const }, { content: "转达晨星", status: "pending" as const }];
     expect(renderToStaticMarkup(<PlanChecklist entries={entries} />)).toMatch(/data-status="completed">归档 Chat 服务.*data-status="in_progress">切深色.*data-status="pending">转达晨星/);
