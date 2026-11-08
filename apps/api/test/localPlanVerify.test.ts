@@ -127,7 +127,9 @@ describe("拆卡和验收在本机（第 21 节）", { timeout: 30_000 }, () => 
         expect.objectContaining({ name: "调研员", id: null, presetKey: "researcher" })]));
       expect(body.roles.map((role: { name: string }) => role.name)).not.toContain("规划员");
       expect(body.roles.map((role: { kind: string }) => role.kind)).not.toContain("reviewer");
-      for (const text of ["# 拆卡：对话质量达标", "propose_plan", "get_task_context", "1. 有题库打分结果", "卡：已有的一张", "- 开发（轻档）：写代码", "- 执行员（预设 executor，"])
+      for (const text of ["# 拆卡：对话质量达标", "propose_plan", "get_task_context", "1. 有题库打分结果", "卡：已有的一张", "- 开发（轻档）：写代码", "- 执行员（预设 executor，",
+        // 标题的规矩（短的动宾短语，细节进交代和完成标准）照样交代给本机规划员。
+        "中文 12 个字以内", "不重复项目名"])
         expect(body.markdown).toContain(text);
       expect((await f.call("GET", "/api/plan-tasks/task-theirs/plan-brief")).statusCode).toBe(403);
     } finally { await f.close(); }
@@ -368,7 +370,7 @@ describe("拆卡和验收在本机（第 21 节）", { timeout: 30_000 }, () => 
       // 交代：没有 Task 和约定，写项目名，要求每件自带完成标准。
       const brief = (await f.call("GET", `${base}/plan-brief`)).json();
       expect(brief).toMatchObject({ task: null, project: { projectId: project, name: "天枢新首页" }, criteria: [], exclusions: [], role: { name: "规划员" } });
-      for (const text of ["# 拆卡：天枢新首页", "propose_plan", "没有 Task 的验收标准", "这个项目还没挂过 Task。", "对约定第几条一律写 null"]) expect(brief.markdown).toContain(text);
+      for (const text of ["# 拆卡：天枢新首页", "propose_plan", "没有 Task 的验收标准", "这个项目还没挂过 Task。", "对约定第几条一律写 null", "中文 12 个字以内"]) expect(brief.markdown).toContain(text);
 
       // 本机规划员只带 projectId：派活单进项目的草稿，条号一律不存。
       const running = ["status", { status: "running", title: "拆卡", agent: "claude-code", modelLabel: "订阅 · Opus" }] as [string, unknown];

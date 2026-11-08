@@ -1,6 +1,7 @@
 import { Type, type Static } from "@sinclair/typebox";
 import { runCandidateAgent, type CandidateThinkingLevel } from "./candidateAgentRuntime.js";
 import type { Query } from "./meetingStore.js";
+import { cardTitleProblem, CARD_TITLE_RULE } from "./cardTitle.js";
 import { ADDRESS_STYLE } from "./promptStyle.js";
 
 /**
@@ -21,7 +22,7 @@ export const CARD_PLAN_PROMPT = `# 角色
 - 每张卡是一件能交回、能验收的事，一两天内做得完。按标准拆：一条标准可以拆成几张，几条小标准也可以合成一张。
 - 已有的卡做了的不再拆；标题不能和已有的卡一样，草稿之间也不能一样。
 - criterionIndex：这张卡对的是第几条标准，哪条都对不上的写 null。
-- title：要交付的结果，不超过 30 字，不写「完成……」「推进……」这类空话。
+- title：要交付的结果。${CARD_TITLE_RULE}。不写「完成……」「推进……」这类空话。标题不合规矩会被退回重写。
 - brief：交代，写清要做什么、从哪里入手、产出写成什么（文件名、格式），不超过 600 字。
 - standards：可检查的完成标准，每条一句，1 到 5 条，要能凭产出、链接、截图或改动核对。
 - executor：能在电脑上靠文件、代码、网页完成的给 claude_code；要本人当面沟通、拍板、线下办的给 self。
@@ -61,7 +62,7 @@ export type CardPlanAgent = { plan(input: CardPlanInput, options: { planId: stri
 const normalTitle = (title: string) => title.replace(/\s+/g, "").toLowerCase();
 
 /**
- * 业务校验：编号在标准范围内；完成标准合起来放得进一件执行事项（500 字）；不和已有的卡、也不和彼此重名；
+ * 业务校验：标题照 cardTitle.ts 的规矩（太长、带括号冒号句号的退回重写，不截断）；编号在标准范围内；完成标准合起来放得进一件执行事项（500 字）；不和已有的卡、也不和彼此重名；
  * 岗位只能是给的那几个，建议的预设只能是给的那几个，两样不同时写。
  */
 export function cardPlanProblem(candidate: TCardPlanCandidate, input: Pick<CardPlanInput, "task" | "existing" | "roles" | "presets">): string | null {
@@ -69,6 +70,8 @@ export function cardPlanProblem(candidate: TCardPlanCandidate, input: Pick<CardP
   const seen = new Set(input.existing.map((card) => normalTitle(card.title)));
   for (const [position, card] of candidate.cards.entries()) {
     const n = position + 1;
+    const title = cardTitleProblem(card.title);
+    if (title) return `第 ${n} 张的${title}`;
     if (card.criterionIndex !== null && card.criterionIndex > criteriaCount)
       return criteriaCount ? `第 ${n} 张的 criterionIndex 只能是 1 到 ${criteriaCount} 或 null` : `这个 Task 没有标准，第 ${n} 张的 criterionIndex 写 null`;
     if (card.standards.map((line) => line.trim()).filter(Boolean).join("\n").length > 500) return `第 ${n} 张的完成标准合起来超过 500 字，写短一些`;
