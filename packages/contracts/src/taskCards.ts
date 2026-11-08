@@ -1,4 +1,5 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
+import { SourceWords } from "./cardSplits.js";
 import { Budget } from "./budget.js";
 import { CriterionVerdict } from "./deliverables.js";
 import { LocalHandbackCriterion } from "./localRunner.js";
@@ -63,6 +64,8 @@ export const CardDraftView = Type.Object({
   executor: CardExecutor,
   modelTier: CardModelTier,
   why: Nullable(Type.String({ maxLength: 200 })),
+  /** 本人原话（16.8）：云端核对过的原文片段，或整条原话；登记时什么都没说为空。 */
+  sourceWords: SourceWords,
 }, strict);
 
 /**
@@ -197,6 +200,7 @@ export const CardDetailResponse = Type.Object({
  * Mission、Task、对的那条标准和约定里它「用什么证明」、Task 的「这次不包括」、卡的交代和完成标准、Task 最新一版评审里这条还差什么、上一次验收没过的改法。
  * role 是卡的岗位（职责、做法、验收口径、工具、模型档位、版本），本机开工时按它注入；没配岗位为 null。
  * 工作规矩（怎么交回、产出写在哪）在本机程序的提示词里，这里不重复。
+ * sourceWords（16.8）：卡上的本人原话；不为空时 markdown 最前面（目标和完成标准之前）有一段「本人原话」。
  */
 export const CardBriefResponse = Type.Object({
   markdown: Type.String({ minLength: 1, maxLength: 20000 }),
@@ -207,6 +211,7 @@ export const CardBriefResponse = Type.Object({
   exclusions: Type.Array(Type.String()),
   reviewGap: Nullable(Type.String()),
   lastReturn: Nullable(Type.String()),
+  sourceWords: SourceWords,
 }, strict);
 
 /**
