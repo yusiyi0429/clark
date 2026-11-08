@@ -441,7 +441,7 @@ function HomeFrame({ account }: { account: Account }) {
   };
   /** 项目对话里项目自己的几块：转交（16.7）从「准备交接」那一刻起，到发出、等接手。 */
   const projectBlocks = (project: Project): TimedBlock[] => (project.transfer && (project.transfer.status === "preparing" || project.transfer.status === "sent") ? [{
-    key: `transfer:${project.transfer.id}`, at: project.transfer.startedAt,
+    key: `transfer:${project.transfer.id}`, at: project.transfer.startedAt, afterSequence: project.transfer.afterSequence,
     node: <TransferFlow project={project} transfer={project.transfer} onChanged={api.refresh} onStop={stopForTransfer} />,
   }] : []);
   /** 项目对话（16.3）：页头项目名、文件夹 chip、「详情」，下面目标条。没挂 Task 的项目也在自己的对话里拆卡、开工。 */

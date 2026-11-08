@@ -10,6 +10,7 @@ import type { TProject } from "@warmap/contracts";
 import { attachGoal, createProject, listProjects, startTransfer, updateProject, withdrawTransfer } from "@/lib/board/cloud";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { fromHome, fromListed, type Folders } from "@/lib/home/projects";
+import { noteStartedTransfer, seenSequence } from "@/lib/home/transfer";
 import type { WorkHomeData } from "@/lib/home/types";
 
 export function useProjects(data: Pick<WorkHomeData, "projects" | "month" | "period" | "archivedCount">, refresh: () => Promise<unknown>) {
@@ -56,7 +57,11 @@ export function useProjects(data: Pick<WorkHomeData, "projects" | "month" | "per
     await loadFolders();
   }, [runner, loadFolders]);
   /** 转给某人（16.7）：开一份「准备交接」。 */
-  const transfer = useCallback(async (projectId: string, toPersonId: string) => { await startTransfer(projectId, toPersonId); await refresh(); }, [refresh]);
+  const transfer = useCallback(async (projectId: string, toPersonId: string) => {
+    const started = await startTransfer(projectId, toPersonId, seenSequence(projectId));
+    noteStartedTransfer(started.id);
+    await refresh();
+  }, [refresh]);
   const withdraw = useCallback(async (transferId: string) => { await withdrawTransfer(transferId); await refresh(); }, [refresh]);
   const actions = useMemo(() => ({ create, rename, archive, attach, setFolder, transfer, withdraw, reloadFolders: loadFolders }),
     [create, rename, archive, attach, setFolder, transfer, withdraw, loadFolders]);

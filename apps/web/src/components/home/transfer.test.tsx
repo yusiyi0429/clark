@@ -5,7 +5,7 @@ import { LocalContext } from "@/lib/local/LocalRunnerProvider";
 import { createMockRunner } from "@/lib/local/mock";
 import type { Project } from "@/lib/home/projects";
 import { projectLine } from "@/lib/home/projects";
-import { handoverRule, transferLine, type Transfer } from "@/lib/home/transfer";
+import { handoverRule, justStarted, noteSeenSequence, noteStartedTransfer, SCROLL_NEW_TRANSFER_MS, seenSequence, transferLine, type Transfer } from "@/lib/home/transfer";
 import { CONFIRM_MS, HandoverCard, HandoverRule, HandoverSummary, PullChip, TransferFlow, TransferHistory, TransferPreview, twoStepPress } from "./Transfer";
 
 const me = { personId: "sun-mingze", name: "孙铭泽" };
@@ -18,7 +18,7 @@ const project = (patch: Partial<Project> = {}): Project => ({
 const NOTE = [{ title: "到哪了", lines: ["11 月目标：回答的样子 · 11/30 验收"] }, { title: "没做完的事", lines: ["卡1", "补上评测集"] }, { title: "可以问谁", lines: ["孙铭泽"] }];
 const transfer = (patch: Partial<Transfer> = {}): Transfer => ({
   id: "00000000-0000-4000-8000-0000000000aa", projectId: "p", projectName: "Chat 服务", from: me, to: chen, status: "preparing", startedAt: "2026-11-07T10:00:00.000Z", decidedAt: null,
-  includeHistory: false, running: null, check: null, note: null, checkResult: null, clone: null, ...patch,
+  includeHistory: false, running: null, check: null, note: null, checkResult: null, clone: null, afterSequence: null, ...patch,
 });
 const noop = async () => undefined;
 const local = { runner: createMockRunner(), phase: "offline", version: null, status: null, models: [], folders: [], sessions: [], pairing: null, error: null,
@@ -26,6 +26,20 @@ const local = { runner: createMockRunner(), phase: "offline", version: null, sta
 const render = (node: ReactNode) => renderToStaticMarkup(<LocalContext.Provider value={local}>{node}</LocalContext.Provider>);
 
 describe("项目转交（16.7，接 B 的转交接口）", () => {
+  it("发起时带本人在项目对话里看到的最后一条序号（没打开过对话的不带）；本人刚发起的卡出现时滚到能看见，过一会儿不再滚", () => {
+    expect(seenSequence("p-seen")).toBeUndefined();
+    noteSeenSequence("p-seen", 7);
+    noteSeenSequence("p-seen", undefined);
+    expect(seenSequence("p-seen")).toBe(7);
+    vi.useFakeTimers();
+    try {
+      expect(justStarted("t-new")).toBe(false);
+      noteStartedTransfer("t-new");
+      expect(justStarted("t-new")).toBe(true);
+      vi.advanceTimersByTime(SCROLL_NEW_TRANSFER_MS);
+      expect(justStarted("t-new")).toBe(false);
+    } finally { vi.useRealTimers(); }
+  });
   it("交接说明卡：云端写的几段，准备中每段一个「改」；「带上对话记录」默认不勾，按钮写「交给 {名字}」；发出了就没有按钮、不能改", () => {
     const card = render(<HandoverCard transfer={transfer({ note: NOTE })} onChanged={noop} />);
     expect(card).toMatch(/到哪了.*没做完的事.*卡1.*可以问谁/);

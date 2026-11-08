@@ -29,6 +29,7 @@ import { PlanDecision, PlanningLine, StartedRecord } from "./PlanDecision";
 import { GoalChangeDecision, feedBlocks, useProjectFeed } from "./TaskFeed";
 import { MonthRule } from "./ProjectParts";
 import { HandoverRule, HandoverSummary, ProjectPull, TransferHistory, useReceived } from "./Transfer";
+import { noteSeenSequence } from "@/lib/home/transfer";
 import { subHref, subIcon } from "./LeftColumn";
 import { useViewChrome } from "./view";
 import { usePhone } from "./usePhone";
@@ -209,6 +210,9 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
   useEscStopsReply(data);
   useEffect(() => { onSpeaking(data.streaming); return () => onSpeaking(false); }, [data.streaming, onSpeaking]);
   useOutbox(data, project.id, outbox, consume);
+  // 转交卡排在本人看到的最后一条后面（16.7）：发起「准备交接」时带上这个序号。
+  const lastSequence = data.messages.at(-1)?.sequence;
+  useEffect(() => { noteSeenSequence(project.id, lastSequence); }, [project.id, lastSequence]);
   const subs = project.subSessions;
   // 这个项目里的 worker：挂着的 Task 下的，和项目里的子会话。
   const mine = useMemo(() => {
