@@ -293,7 +293,7 @@ export function deriveWorkHome({ plan, workers, boards, notices, proposals, merg
       goals: own.map((task) => {
         // 本体没写标准时是完成定义那一条（契约 criteriaTotal）。
         const criteria = task.criteria.length ? task.criteria : task.doneDefinition ? [task.doneDefinition] : [];
-        return { taskId: task.taskId, missionId: mission.missionId, name: task.name, period, dueDate: monthEnd(period), criteria, criteriaMet: 0, criteriaTotal: criteria.length, completedAt: completedAt(task), responsible: null };
+        return { taskId: task.taskId, missionId: mission.missionId, name: task.name, period, dueDate: monthEnd(period), dueDateSource: "mission" as const, criteria, criteriaMet: 0, criteriaTotal: criteria.length, completedAt: completedAt(task), responsible: null };
       }),
       budget: null,
       lastActivityAt: latest ?? `${today}T00:00:00.000Z`,

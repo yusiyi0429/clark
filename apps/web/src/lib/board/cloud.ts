@@ -130,6 +130,9 @@ export const readProject = (projectId: string) => maybe<TProjectDetailResponse>(
 /** 改名、归档（archived: true）、恢复（archived: false）。 */
 export const updateProject = (projectId: string, body: TUpdateProjectRequest) =>
   unwrap<TProject>(browserApi.PATCH("/api/me/projects/{projectId}", { params: project(projectId), body }) as Promise<Result<TProject>>);
+/** 给挂在这个项目上的一件 Task 存验收截止日（YYYY-MM-DD），null 是不存了、退回 Mission 的节点。 */
+export const setGoalDueDate = (projectId: string, taskId: string, dueDate: string | null) =>
+  unwrap<unknown>(browserApi.PUT("/api/me/projects/{projectId}/goals/{taskId}/due-date", { params: { path: { projectId, taskId } }, body: { dueDate } }) as Promise<Result<unknown>>);
 /** 把一件 Task 挂到这个项目（原来挂在别处就移过来）。 */
 export const attachGoal = (projectId: string, taskId: string) =>
   unwrap<TProjectGoal>(browserApi.PUT("/api/me/projects/{projectId}/goals/{taskId}", { params: { path: { projectId, taskId } } }) as Promise<Result<TProjectGoal>>);
@@ -183,6 +186,13 @@ export const acceptProjectDrafts = (projectId: string, drafts: TAcceptCardDrafts
  * 月中 Task 改了或取消了（16.4）：答「停掉 / 留着」。停掉时云端了结还排着的开工登记，这台电脑上在跑的由网页停。
  * 答过了（别的标签页、别的电脑）回 409 ALREADY_ANSWERED：当成答过，重读动态就好。
  */
+/**
+ * 答「等你」里的自动接力（18.12，POST /api/me/projects/:projectId/auto-relay，204）：continue 清零恢复，stop 收起那一条、等本人在项目对话里说话再恢复。
+ * 没停着回 409 NOT_PAUSED（别处已经答了）：当成答过。
+ */
+export const decideAutoRelay = (projectId: string, decision: "continue" | "stop") =>
+  unwrap<unknown>(browserApi.POST("/api/me/projects/{projectId}/auto-relay", { params: { path: { projectId } }, body: { decision } }) as Promise<Result<unknown>>)
+    .then(() => undefined, (error: unknown) => { if (!(error instanceof CloudError && error.code === "NOT_PAUSED")) throw error; });
 export const answerGoalChange = (projectId: string, changeId: string, answer: "stop" | "keep") =>
   unwrap<TProjectGoalChangedItem>(browserApi.POST("/api/me/projects/{projectId}/goal-changes/{id}", { params: { path: { projectId, id: changeId } }, body: { answer } }) as Promise<Result<TProjectGoalChangedItem>>)
     .then(() => undefined, (error: unknown) => { if (!(error instanceof CloudError && error.code === "ALREADY_ANSWERED")) throw error; });

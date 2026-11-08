@@ -260,7 +260,7 @@ describe("后台任务", () => {
 });
 
 describe("首页输入框的「自动」（B 的 /route 没上时，规则相同）", () => {
-  const goal = (taskId: string, name: string, criteria: string[]) => ({ taskId, missionId: "m1", name, period: "2026-11", dueDate: "2026-11-30", criteria, criteriaMet: 0, criteriaTotal: criteria.length, completedAt: null, responsible: null });
+  const goal = (taskId: string, name: string, criteria: string[]) => ({ taskId, missionId: "m1", name, period: "2026-11", dueDate: "2026-11-30", dueDateSource: "mission" as const, criteria, criteriaMet: 0, criteriaTotal: criteria.length, completedAt: null, responsible: null });
   const projects = [
     { projectId: "p1", name: "天枢 V2", goals: [goal("t1", "11/30 上线 V2", ["本机派活跑通", "验收员逐条判"])] },
     { projectId: "p2", name: "Chat 服务", goals: [goal("t2", "11/18 上线 V1", ["约定、对表与参考评审"])] },

@@ -5,7 +5,7 @@ import type { HomeProject, WorkHomeData } from "./types";
 
 const SUMMARY = { running: 0, waiting: 0, queued: 0, done: 0, doneToday: 0, needsYou: 0 };
 const goal = (taskId: string, name: string, period = "2026-11", extra: Partial<HomeProject["goals"][number]> = {}): HomeProject["goals"][number] => ({
-  taskId, missionId: "m1", name, period, dueDate: monthEnd(period), criteria: ["a", "b"], criteriaMet: 1, criteriaTotal: 2, completedAt: null, responsible: null, ...extra,
+  taskId, missionId: "m1", name, period, dueDate: monthEnd(period), criteria: ["a", "b"], criteriaMet: 1, criteriaTotal: 2, completedAt: null, responsible: null, ...extra, dueDateSource: extra.dueDateSource ?? "mission",
 });
 const home = (projectId: string, extra: Partial<HomeProject> = {}): HomeProject => ({
   projectId, name: projectId, goals: [], budget: null, lastActivityAt: "2026-11-07T01:00:00.000Z", summary: SUMMARY,
@@ -30,7 +30,7 @@ describe("项目从首页 v2 来（16.2、16.3）", () => {
     expect(project).toMatchObject({ folder: "Tianshu-MVP", archived: false, transfer: { status: "sent" } });
     expect(project.goals[0]!.responsible).toEqual({ personId: "a", name: "甲" });
     expect(projectLine(project).text).toBe("等 乙 接手");
-    const listed = fromListed({ projectId: "p9", name: "旧项目", archivedAt: "2026-11-01T00:00:00.000Z", createdAt: "2026-10-01T00:00:00.000Z", lastActivityAt: null, permissionMode: "auto",
+    const listed = fromListed({ projectId: "p9", name: "旧项目", archivedAt: "2026-11-01T00:00:00.000Z", createdAt: "2026-10-01T00:00:00.000Z", lastActivityAt: null, permissionMode: "auto", autoRelayLimit: 20,
       transfer: { ...transfer, status: "accepted" } }, new Map());
     expect(listed).toMatchObject({ id: "p9", name: "旧项目", archived: true, goals: [], subSessions: [], scope: "project:p9", transfer: { status: "accepted" } });
     expect(projectLine(listed).text).toBe("已交给 乙");
