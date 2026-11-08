@@ -58,6 +58,9 @@ import { useTabTitle } from "./useTabTitle";
 import h from "@/styles/home.module.css";
 import { linkPerson } from "@/lib/local/link";
 
+/** 要开的规划员：拆哪个，登记的 id 和存下的原话（登记回去时用）。 */
+type PlanJob = PlanTarget & { splitId?: string; sourceWords?: string[] };
+
 const PANEL_KEY = "tianshu-home-panel-v1";
 /** 伙伴这一轮调了「登记拆卡」（useConversation 发出）。 */
 const SPLIT_EVENT = "card-split-registered";
@@ -183,7 +186,7 @@ function HomeFrame({ account }: { account: Account }) {
    * 一批交给本机：开了哪几张卡（卡 id）。没开起来时 onError 接着（拆卡写在管线里「拆卡失败 · 重试」）；
    * 没给 onError 的（自动开工）记进 startFailed，在管线里那一行写「失败 · 手动开始」。
    */
-  const start = useCallback(async (cards: Worker[], planners: (PlanTarget & { splitId?: string })[], onError?: () => void): Promise<Set<string>> => {
+  const start = useCallback(async (cards: Worker[], planners: PlanJob[], onError?: () => void): Promise<Set<string>> => {
     const opened = new Set<string>();
     const cardIds = cards.flatMap((worker) => (worker.item ? [worker.item.id] : []));
     const cwd = local.folders.find((folder) => folder.id === readLast().folderId)?.path ?? local.folders[0]?.path;
@@ -200,7 +203,8 @@ function HomeFrame({ account }: { account: Account }) {
       if (!job.splitId) return job;
       try { await removeSplit(job.splitId); return job; } catch { return null; }
     }))).filter((job): job is NonNullable<typeof job> => !!job);
-    const giveBack = (jobs: (PlanTarget & { splitId?: string })[]) => Promise.all(jobs.map((job) => (job.splitId ? registerPlan(job).catch(() => undefined) : undefined)));
+    // 登记回去时带上原来存的原话（16.8），不然新登记的原话是空的。
+    const giveBack = (jobs: PlanJob[]) => Promise.all(jobs.map((job) => (job.splitId ? registerPlan(job, job.sourceWords?.join("\n\n")).catch(() => undefined) : undefined)));
     try {
       const jobs = (await Promise.all(claimed.map(async (job) => {
         try { return { ...job, request: await planStartRequest(job, local.models, cwd) }; } catch { return { ...job, request: null }; }
@@ -250,8 +254,8 @@ function HomeFrame({ account }: { account: Account }) {
       const sessions = await local.runner.listSessions().catch(() => local.sessions);
       const busy = new Set(sessions.flatMap((session) => (session.subject.kind === "card" && session.subject.cardId ? [session.subject.cardId] : [])));
       const cards = waiting.filter((worker) => worker.item && !busy.has(worker.item.id));
-      const planners = waiting.flatMap((worker): (PlanTarget & { splitId: string })[] => (!worker.splitId ? [] : worker.taskId ? [{ taskId: worker.taskId, splitId: worker.splitId }]
-        : worker.projectId ? [{ projectId: worker.projectId, splitId: worker.splitId }] : []));
+      const planners = waiting.flatMap((worker): PlanJob[] => (!worker.splitId ? [] : worker.taskId ? [{ taskId: worker.taskId, splitId: worker.splitId, sourceWords: worker.sourceWords }]
+        : worker.projectId ? [{ projectId: worker.projectId, splitId: worker.splitId, sourceWords: worker.sourceWords }] : []));
       if (cards.length || planners.length) await start(cards, planners);
     };
     void (typeof navigator !== "undefined" && navigator.locks ? navigator.locks.request("tianshu-auto-start", run) : run());
@@ -343,7 +347,8 @@ function HomeFrame({ account }: { account: Account }) {
     onSplitEvent.current = async () => {
       const fresh = (await listSplits().catch(() => [])).filter((request) => !knownSplits.current.has(request.id));
       fresh.forEach((request) => { knownSplits.current.add(request.id); tried.current.add(`split:${request.id}`); });
-      const planners = fresh.flatMap((request): (PlanTarget & { splitId: string })[] => (request.taskId ? [{ taskId: request.taskId, splitId: request.id }] : request.projectId ? [{ projectId: request.projectId, splitId: request.id }] : []));
+      const planners = fresh.flatMap((request): PlanJob[] => (request.taskId ? [{ taskId: request.taskId, splitId: request.id, sourceWords: request.sourceWords }]
+        : request.projectId ? [{ projectId: request.projectId, splitId: request.id, sourceWords: request.sourceWords }] : []));
       if (here && planners.length) await start([], planners);
       else changed();
     };

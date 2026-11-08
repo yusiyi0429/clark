@@ -26,6 +26,7 @@ import { useAutoReturn } from "@/lib/board/useAutoReturn";
 import { showWorkspaceToast } from "@/lib/toast";
 import { RelayLine, SessionComposer, SessionTranscript, sayToSession, sessionEnded, type DecideOptions } from "./SessionTranscript";
 import { useCardDetail, type CardDetail } from "./useCardDetail";
+import { SourceWords } from "./SourceWords";
 import { MergeAction } from "@/components/work/MergeAction";
 import { QuestionDecision, awayChip, questionTitle } from "@/components/work/decisions";
 import { askAnchor } from "@/components/home/TaskFeed";
@@ -286,6 +287,13 @@ function ResultPane({ detail, session, view, canAct, wait, stage, handheld, read
         <div className={s.sec}>
           <p className={s.lab}>计划{step ? <span className={s.faint}>第 {step.step}/{step.total} 步</span> : null}</p>
           <ol className={s.plan}>{plan.map((entry, index) => <li key={index} data-status={entry.status}>{entry.content}</li>)}</ol>
+        </div>
+      ) : null}
+
+      {item.card?.sourceWords.length ? (
+        <div className={s.sec}>
+          <p className={s.lab}>原话</p>
+          <SourceWords words={item.card.sourceWords} className={s.words} />
         </div>
       ) : null}
 

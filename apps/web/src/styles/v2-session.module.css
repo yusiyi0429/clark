@@ -110,6 +110,9 @@
 .choice[aria-checked="true"] { background: color-mix(in oklab, var(--accent) 9%, var(--surface)); box-shadow: inset 0 0 0 1.5px var(--accent); color: var(--brand-deep); font-weight: 600; }
 .choice:disabled { opacity: .5; cursor: default; }
 .plan, .goal { display: grid; gap: 4px; margin: 0; padding-left: 18px; color: var(--ink); font-size: 12px; }
+/* 本人原话（16.8）：引用样式，次级文字。 */
+.words { display: grid; gap: 4px; margin: 0; padding-left: 10px; border-left: 2px solid var(--hairline-strong); color: var(--ink-muted); font-size: 12px; line-height: 1.6; }
+.words p { margin: 0; white-space: pre-wrap; }
 .plan li[data-status="completed"] { color: var(--ink-faint); text-decoration: line-through; text-decoration-color: var(--hairline-strong); }
 .plan li[data-status="in_progress"] { font-weight: 600; }
 .verdicts { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }

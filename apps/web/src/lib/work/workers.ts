@@ -69,6 +69,8 @@ export type Worker = {
   item: CardItem | null;
   /** 登记了还没开的规划员：哪条登记、什么时候登记的。 */
   splitId?: string;
+  /** 拆卡登记存下的本人原话（16.8）：开不起来、要登记回去时带上，免得丢了。 */
+  sourceWords?: string[];
   requestedAt?: string;
 };
 
@@ -178,7 +180,7 @@ export function plannerWorkers({ sessions, splits, listed, tasks, deviceName }: 
   const busy = new Set([...listed, ...local].filter((worker) => worker.kind === "plan" && worker.state !== "done").map((worker) => target(worker.taskId, worker.projectId)));
   const waiting = splits.filter((request) => !busy.has(target(request.taskId, request.projectId))).map((request): Worker => ({
     ...base(request.taskId, request.taskName ?? request.projectName, request.missionId, request.taskId ? null : request.projectId), key: `split:${request.id}`, state: "queued", reason: "start", holdUntil: null, mark: null, queuePos: null, model: null,
-    startedAt: null, session: null, splitId: request.id, requestedAt: request.createdAt,
+    startedAt: null, session: null, splitId: request.id, sourceWords: request.sourceWords, requestedAt: request.createdAt,
   }));
   return [...local, ...waiting];
 }

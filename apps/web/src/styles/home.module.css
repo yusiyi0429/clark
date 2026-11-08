@@ -299,6 +299,9 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .stepMain { display: grid; min-width: 0; }
 .stepTitle { color: var(--ink); font-size: var(--text-base); line-height: var(--lh-row); }
 .stepMeta { color: var(--ink-muted); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); }
+/* 本人原话（16.8）：引用样式，次级文字。 */
+.stepWords { display: grid; gap: var(--space-1); margin: var(--space-1) 0 0; padding-left: var(--space-2); border-left: 2px solid var(--hairline-strong); color: var(--ink-muted); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); }
+.stepWords p { margin: 0; white-space: pre-wrap; }
 .stepSum { margin: 0; color: var(--ink-muted); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); font-variant-numeric: tabular-nums; }
 /* 「改一改」里每步的标题：全局输入框样式，聚焦只换边色。 */
 .stepMain input { width: 100%; height: var(--row-32); padding: 0 var(--space-2); border: 1px solid var(--field-border); border-radius: var(--r-control); background: var(--field-bg); color: var(--field-ink); font: inherit; font-size: var(--field-font); outline: none; }
