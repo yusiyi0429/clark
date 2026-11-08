@@ -384,6 +384,14 @@ describe("规划员和验收员", { timeout: 30_000 }, () => {
       await h.waitStatus(p.id, "idle"); // 专用目录里没有假 claude 的配置：看完就停，没交计划
       expect((await h.mcp(p.id, "propose_plan", { summary: "x", cards: [] })).content[0]!.text).toContain("计划不合格");
       expect((await h.mcp(p.id, "propose_plan", { ...PLAN, cards: [{ ...PLAN.cards[0], modelTier: "max" }] })).isError).toBe(true);
+      // 卡标题照 Claude Code 起会话名的规矩：太长、带括号冒号句号的退回重写（说清是第几件），不截断、这一次不算交了
+      const longTitle = { ...PLAN.cards[0], title: "把本机程序的配对流程整个重新做一遍并补上所有测试" };
+      const colonTitle = { ...PLAN.cards[1], title: "网页：派活单" };
+      const rejected = await h.mcp(p.id, "propose_plan", { ...PLAN, cards: [longTitle, colonTitle] });
+      expect(rejected.isError).toBe(true);
+      expect(rejected.content[0]!.text).toContain("第 1 件的标题「把本机程序的配对流程整个重新做一遍并补上所有测试」太长");
+      expect(rejected.content[0]!.text).toContain("第 2 件的标题「网页：派活单」不要带括号、冒号、句号");
+      expect(readFileSync(join(h.t.dataDir, "sessions", p.id, "system.md"), "utf8")).toContain("中文 12 个字以内");
       expect((await h.mcp(p.id, "propose_plan", PLAN)).content[0]!.text).toContain("已交第 1 次计划（2 件）");
       expect((await h.mcp(p.id, "propose_plan", PLAN)).content[0]!.text).toContain("已交第 2 次计划");
       expect((await h.mcp(p.id, "submit_verdict", PASSING)).isError).toBe(true); // 规划员没有交结论的工具

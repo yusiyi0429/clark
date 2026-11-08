@@ -1,5 +1,6 @@
 import type { TLocalSessionKind } from "@warmap/contracts";
 import type { SessionManager } from "./sessions.js";
+import { CARD_TITLE_RULE } from "./cardTitle.js";
 
 /**
  * 本会话的 MCP（HTTP，挂在本机程序的 /internal/sessions/:id/mcp）：执行方用它把产出物、证据、交回、专题版本报给本机程序，
@@ -89,7 +90,7 @@ const PROPOSE_PLAN = {
         items: {
           type: "object",
           properties: {
-            title: { type: "string", description: "要交付的结果，120 字以内" },
+            title: { type: "string", description: CARD_TITLE_RULE },
             brief: { type: "string", description: "交代：做什么、从哪入手" },
             doneDefinition: { type: "string", description: "完成标准，每行一条，500 字以内" },
             criterionIndex: { type: "integer", minimum: 1, description: "对约定第几条" },

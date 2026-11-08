@@ -20,6 +20,7 @@ import type { GatewayPricing } from "./pricing.js";
 import { Budgets, MULTI_AGENT_OFF_PERCENT, reworkRounds, runFor } from "./budget.js";
 import { AttachmentError, attachmentNote, saveAttachments, type FetchAttachment } from "./attachments.js";
 import { modelDisplayName, sameModel, type ResolvedModel } from "./models.js";
+import { cardTitleProblem } from "./cardTitle.js";
 import type { ModelProfiles } from "./models.js";
 import { isInside, type Folders } from "./folders.js";
 import type { Outbox } from "./outbox.js";
@@ -1876,6 +1877,9 @@ export class SessionManager {
     };
     const problem = schemaProblem(LocalCardPlan, plan);
     if (problem) throw new SessionError("validation", `计划不合格：${problem}`);
+    // 卡标题照 Claude Code 起会话名的规矩（cardTitle.ts）：不合格退回让规划员重写，不硬截断
+    const titles = plan.cards.map((c, i) => { const p = cardTitleProblem(c.title); return p ? `第 ${i + 1} 件的${p}` : null; }).filter(Boolean);
+    if (titles.length) throw new SessionError("validation", `派活单的标题要改，改完整份再交一次：${titles.join("；")}`);
     // 只能等排在前面的件（位置比自己小），免得互相等
     const bad = plan.cards.findIndex((c, i) => c.after?.some((p) => p > i));
     if (bad >= 0) throw new SessionError("validation", `第 ${bad + 1} 件的 after 只能写排在它前面的件（1 到 ${bad}）`);
