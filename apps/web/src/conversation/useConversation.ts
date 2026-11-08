@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { parseSseBlock, splitSse, type ConversationEvent } from "./sse";
 import type { Step, StepStatus } from "@/components/steps/StepList";
-import type { TAskAnswerInput, TAskAnswerRecord, TBuddyPlan, TConversationCard, TReadScope, TReadScopeParams } from "@warmap/contracts";
+import type { TAskAnswerInput, TAskAnswerRecord, TBuddyPlan, TConversationCard, TConversationModel, TReadScope, TReadScopeParams } from "@warmap/contracts";
 import type { components } from "@/lib/api/schema";
 import { afterResize, resizing } from "./resizeGate";
 import { useStableCallback } from "./stableCallback";
@@ -50,6 +50,8 @@ export type Message = { sequence: number; role: "user" | "assistant"; content: s
   messageId?: string;
   /** 伙伴这一轮最后一张计划清单（17.4，只在回答上）。 */
   plan?: TBuddyPlan;
+  /** 这一轮实际用的来源和模型（只在走 Chat 的回答上）。 */
+  model?: TConversationModel;
   meta?: { issueId?: string; title?: string; href?: string } };
 export type Attachment = { id: string; fileName: string; mimeType: string };
 export type ConversationStatus = "idle" | "streaming" | "complete" | "failed" | "aborted";
@@ -124,6 +126,12 @@ export const FEISHU_POLL_MS = 10_000;
 export const FEISHU_WAITING_POLL_MS = 3_000;
 
 /** 读回的历史和眼前的比，有没有变（条数、最后一条的序号、长度、来源）。 */
+/** 历史里最后一条带 model 的回答用的来源和模型；都没有为 null。 */
+export function latestModel(list: readonly Message[]): TConversationModel | null {
+  for (let i = list.length - 1; i >= 0; i -= 1) if (list[i]!.role === "assistant" && list[i]!.model) return list[i]!.model!;
+  return null;
+}
+
 export function historySignature(list: Message[]): string {
   const last = list.at(-1);
   return `${list.length}:${last?.sequence ?? 0}:${last?.content.length ?? 0}:${last?.via ?? ""}`;
@@ -318,6 +326,7 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
   /** 每换一次 scope（或卸载）加一：上一个 scope 迟到的发送、上传结果不再改这里的状态。 */
   const generation = useRef(0);
   const [turnPlan, setTurnPlan] = useState<TBuddyPlan | null>(null);
+  const [turnModel, setTurnModel] = useState<TConversationModel | null>(null);
   const [turnCards, setTurnCards] = useState<TConversationCard[]>([]);
   /**
    * 流式上屏合帧（B2）：一帧里到的正文、思考摘要、进度只写一次（整棵对话树一帧最多重画一次，不按每段 delta 重画）。
@@ -655,6 +664,7 @@ ${input}` : input;
     setReadScope(null);
     setThought(null);
     setTurnPlan(null);
+    setTurnModel(null);
     setTurnCards([]);
     setStatus("streaming");
     const sentAttachments = options.attachments ?? attachments;
@@ -890,6 +900,7 @@ ${input}` : input;
             if (live()) markReceipt(event.state, event.messageId);
           }
           if (event.type === "plan" && event.plan && live()) setTurnPlan(event.plan);
+          if (event.type === "model" && event.provider && event.model && live()) setTurnModel({ provider: event.provider, model: event.model });
           if (event.type === "card" && event.card && live()) { const card = event.card; setTurnCards((current) => [...current, card]); }
           if (event.type === "ui" && event.ui) emitBuddyUi(event.ui);
           if (event.type === "error") {
@@ -1063,6 +1074,8 @@ ${input}` : input;
     /** 这一轮伙伴的计划清单和出的卡（17.4，回答还在写时；写完读回的历史里在那条回答上）。 */
     plan: turnPlan,
     turnCards,
+    /** 最近一轮实际用的来源和模型：这一轮流里报了的，没报的取历史里最后一条带 model 的回答。 */
+    model: turnModel ?? latestModel(messages),
     /** 显示「正在思考 / 查证 / 整理回答」那一行：回答进行中、且正文还没结束。 */
     thinking: status === "streaming" && !bodyDone,
     partial,

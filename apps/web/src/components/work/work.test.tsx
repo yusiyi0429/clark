@@ -261,7 +261,7 @@ describe("开工（Task 管线里的选项框）", () => {
 
 describe("对话里插块和锚点", () => {
   it("块插在它之前最近的一条消息后面，比第一条还早的放最前", () => {
-    const placed = placeBlocks(["2026-11-06T01:00:00Z", "2026-11-06T02:00:00Z"], [
+    const placed = placeBlocks([{ sequence: 1, createdAt: "2026-11-06T01:00:00Z" }, { sequence: 2, createdAt: "2026-11-06T02:00:00Z" }], [
       { key: "early", at: "2026-11-06T00:30:00Z", node: null },
       { key: "mid", at: "2026-11-06T01:30:00Z", node: null },
       { key: "late", at: "2026-11-06T03:00:00Z", node: null },
@@ -269,6 +269,14 @@ describe("对话里插块和锚点", () => {
     expect(placed.get(-1)?.map((block) => block.key)).toEqual(["early"]);
     expect(placed.get(0)?.map((block) => block.key)).toEqual(["mid"]);
     expect(placed.get(1)?.map((block) => block.key)).toEqual(["late"]);
+  });
+  it("按序号排的块（转交卡）：Chat 读回来的消息不带时间，插在序号不超过 afterSequence 的最后一条后面；null 排最后；对话还没读回来时在最前", () => {
+    const chat = [{ sequence: 1 }, { sequence: 2 }, { sequence: 3 }];
+    const transfer = (afterSequence: number | null) => [{ key: "transfer", at: "2020-01-01T00:00:00Z", node: null, afterSequence }];
+    expect(placeBlocks(chat, transfer(2)).get(1)?.map((block) => block.key)).toEqual(["transfer"]);
+    expect(placeBlocks(chat, transfer(3)).get(2)?.map((block) => block.key)).toEqual(["transfer"]);
+    expect(placeBlocks(chat, transfer(null)).get(2)?.map((block) => block.key)).toEqual(["transfer"]);
+    expect(placeBlocks([], transfer(2)).get(-1)?.map((block) => block.key)).toEqual(["transfer"]);
   });
   it("展示区按地址：首页、总管线、Task 管线、Task 详情、子会话；右栏跟着它取范围", () => {
     expect(viewOf("/me/work")).toEqual({ kind: "home" });

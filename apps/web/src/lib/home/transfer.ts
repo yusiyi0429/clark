@@ -17,6 +17,18 @@ export function transferLine(transfer: Pick<Transfer, "status" | "to"> | null): 
   return null;
 }
 
+/**
+ * 转交卡排在项目对话哪条消息后面（afterSequence）：项目对话页记下本人看到的最后一条的 sequence，发起「准备交接」时带上去；没打开过对话的不带，云端自己读。
+ * 刚由本人发起的转交记下发起时刻，卡出现时滚到能看见（只认这台电脑的钟）。
+ */
+const seen = new Map<string, number>();
+const started = new Map<string, number>();
+export const SCROLL_NEW_TRANSFER_MS = 15_000;
+export const noteSeenSequence = (projectId: string, sequence: number | undefined) => { if (sequence) seen.set(projectId, sequence); };
+export const seenSequence = (projectId: string) => seen.get(projectId);
+export const noteStartedTransfer = (transferId: string) => { started.set(transferId, Date.now()); };
+export const justStarted = (transferId: string) => Date.now() - (started.get(transferId) ?? -Infinity) < SCROLL_NEW_TRANSFER_MS;
+
 /** 对话里换人的分隔线（项目动态 handover）：「11/7 孙铭泽 → 陈晨星」。 */
 export const handoverRule = (item: { at: string; from: Person; to: Person }) => {
   const at = new Date(item.at);

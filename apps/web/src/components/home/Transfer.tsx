@@ -20,7 +20,7 @@ import { acceptTransfer, declineTransfer, readTransfer, readTransferHistory, sec
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { HOME_HREF, duration, projectHref } from "@/lib/home/derive";
 import type { Project } from "@/lib/home/projects";
-import { handoverRule, type HandoverSection, type Person, type Transfer } from "@/lib/home/transfer";
+import { handoverRule, justStarted, type HandoverSection, type Person, type Transfer } from "@/lib/home/transfer";
 import { answeredOf, markAnswered } from "./TaskDecisions";
 import { ICON, StateIcon } from "./StateIcon";
 import { useViewChrome } from "./view";
@@ -85,6 +85,9 @@ export function TransferFlow({ project, transfer, onChanged, onStop }: {
   }, [writingNote, transfer.id]);
   const { failed, attempt } = useAttempt();
   const save = (patch: Parameters<typeof updateTransfer>[1]) => attempt(async () => { await updateTransfer(transfer.id, patch); await onChanged(); });
+  // 本人刚发起的：卡出现时滚到能看见（对话读回来以后卡会挪到那条消息后面、重新挂上，再滚一次）。
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (justStarted(transfer.id)) box.current?.scrollIntoView({ block: "nearest" }); }, [transfer.id]);
   // 等本机检查：这台电脑上本机程序就绪了就查一次（只看 git），结果交给云端写「代码在哪」。
   const checked = useRef<string | null>(null);
   useEffect(() => {
@@ -93,7 +96,7 @@ export function TransferFlow({ project, transfer, onChanged, onStop }: {
     attempt(async () => { await updateTransfer(transfer.id, { checkResult: await local.runner.handoverCheck(project.id) }); await onChanged(); });
   });
   return (
-    <div className={h.transfer} data-testid="transfer-flow">
+    <div ref={box} className={h.transfer} data-testid="transfer-flow">
       <p className={h.line}>
         <StateIcon state={preparing && !ready ? "running" : "done"} />
         准备交接给 {transfer.to.name}

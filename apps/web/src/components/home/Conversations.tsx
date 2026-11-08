@@ -29,6 +29,7 @@ import { PlanDecision, PlanningLine, StartedRecord } from "./PlanDecision";
 import { GoalChangeDecision, feedBlocks, useProjectFeed } from "./TaskFeed";
 import { MonthRule } from "./ProjectParts";
 import { HandoverRule, HandoverSummary, ProjectPull, TransferHistory, useReceived } from "./Transfer";
+import { noteSeenSequence } from "@/lib/home/transfer";
 import { subHref, subIcon } from "./LeftColumn";
 import { useViewChrome } from "./view";
 import { usePhone } from "./usePhone";
@@ -36,6 +37,7 @@ import h from "@/styles/home.module.css";
 
 import { StateIcon } from "./StateIcon";
 import { HeroButton } from "@/components/HeroButton";
+import { chatModelLabel } from "@/lib/local/runModel";
 
 /** 首页输入框发来、等着进对话的一句。 */
 /** files：首页输入框带的附件，到了那条对话再传（14.5）。 */
@@ -44,6 +46,12 @@ export type OutboxEntry = { id: number; target: "main" | string; text: string; f
 export type Outbox = OutboxEntry[];
 
 const NO_BLOCKS: TimedBlock[] = [];
+
+/** 页头右边、信息按钮旁边：最近一轮实际用的「来源 · 模型」（走 Chat 的才有）。 */
+export function ModelChip({ data }: { data: Pick<ConversationData, "model"> }) {
+  const label = chatModelLabel(data.model);
+  return label ? <span className={h.statusChip} data-static="" data-testid="chat-model">{label}</span> : null;
+}
 
 /** 对话读好了、没在回答时，把 outbox 里给这条对话的第一句发出去（一次一句，回完再发下一句）。 */
 function useOutbox(data: ConversationData, key: "main" | string, outbox: Outbox, consume: (id: number) => void) {
@@ -124,6 +132,7 @@ export function BuddyView({ buddy, outbox, consume, onSpeaking, context = null, 
             <header className={h.viewHead} data-flush="">
               {chrome.lead}
               <h1 className={h.viewTitle} tabIndex={-1}>{name}</h1>
+              <ModelChip data={data} />
               {chrome.trail}
             </header>
           )}
@@ -209,6 +218,9 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
   useEscStopsReply(data);
   useEffect(() => { onSpeaking(data.streaming); return () => onSpeaking(false); }, [data.streaming, onSpeaking]);
   useOutbox(data, project.id, outbox, consume);
+  // 转交卡排在本人看到的最后一条后面（16.7）：发起「准备交接」时带上这个序号。
+  const lastSequence = data.messages.at(-1)?.sequence;
+  useEffect(() => { noteSeenSequence(project.id, lastSequence); }, [project.id, lastSequence]);
   const subs = project.subSessions;
   // 这个项目里的 worker：挂着的 Task 下的，和项目里的子会话。
   const mine = useMemo(() => {
@@ -315,6 +327,7 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
                 {chrome.lead}
                 <h1 className={h.viewTitle} tabIndex={-1}>{project.name}</h1>
                 {pull}
+                <ModelChip data={data} />
                 {trail}
                 {chrome.trail}
               </header>

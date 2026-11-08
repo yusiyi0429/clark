@@ -3,8 +3,17 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { TCardDraftView, TLocalModelProfile } from "@warmap/contracts";
 import { LocalContext } from "./LocalRunnerProvider";
 import { createMockRunner } from "./mock";
-import { runLabel } from "./runModel";
+import { chatModelLabel, runLabel } from "./runModel";
+import { ModelChip } from "@/components/home/Conversations";
 import { PlanDecision } from "@/components/home/PlanDecision";
+
+describe("项目主管线、伙伴台页头的「来源 · 模型」", () => {
+  it("写法同子会话；没报模型的不出", () => {
+    expect(chatModelLabel({ provider: "tokenhub", model: "qwen3.8-flash" })).toBe("tokenhub · qwen3.8-flash");
+    expect(renderToStaticMarkup(<ModelChip data={{ model: { provider: "tokenhub", model: "qwen3.8-flash" } }} />)).toContain("tokenhub · qwen3.8-flash");
+    expect(renderToStaticMarkup(<ModelChip data={{ model: null }} />)).toBe("");
+  });
+});
 
 describe("子会话显示「来源 · 模型」", () => {
   it("写成「来源 · 模型」，实际跑的优先；只有来源时只写来源；老版本本机不报来源时为 null", () => {

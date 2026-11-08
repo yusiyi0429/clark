@@ -17,17 +17,25 @@ import { withoutSupersededCards } from "@/conversation/ConversationTimeline";
 import type { ConversationData } from "@/conversation/useConversation";
 import { AskDecision, BuddyQuestionDecision } from "./decisions";
 
-export type TimedBlock = { key: string; at: string; node: ReactNode };
+/** afterSequence：按消息序号排的块（转交卡）——插在序号不超过它的最后一条后面，null 排最后；不带这个字段的按时间排。 */
+export type TimedBlock = { key: string; at: string; node: ReactNode; afterSequence?: number | null };
 
-/** 每个块插在哪条消息后面（-1 是最前面）：时间不早于那条消息、早于下一条。没有时间的消息当作现在。 */
-export function placeBlocks(messageTimes: (string | undefined)[], blocks: TimedBlock[]): Map<number, TimedBlock[]> {
+/**
+ * 每个块插在哪条消息后面（-1 是最前面）。按时间排的：时间不早于那条消息、早于下一条，没有时间的消息当作现在。
+ * 按序号排的见 TimedBlock.afterSequence（Chat 读回来的消息不带时间，按时间排不了）。
+ */
+export function placeBlocks(messages: { createdAt?: string; sequence: number }[], blocks: TimedBlock[]): Map<number, TimedBlock[]> {
   const now = Date.now();
-  const times = messageTimes.map((at) => (at ? Date.parse(at) : now));
+  const times = messages.map((message) => (message.createdAt ? Date.parse(message.createdAt) : now));
   const placed = new Map<number, TimedBlock[]>();
   for (const block of [...blocks].sort((a, b) => a.at.localeCompare(b.at))) {
-    const at = Date.parse(block.at);
     let index = -1;
-    for (let i = 0; i < times.length; i += 1) if (times[i]! <= at) index = i;
+    if (block.afterSequence === null) index = messages.length - 1;
+    else if (block.afterSequence !== undefined) messages.forEach((message, i) => { if (message.sequence <= block.afterSequence!) index = i; });
+    else {
+      const at = Date.parse(block.at);
+      for (let i = 0; i < times.length; i += 1) if (times[i]! <= at) index = i;
+    }
     placed.set(index, [...(placed.get(index) ?? []), block]);
   }
   return placed;
@@ -43,7 +51,7 @@ export function WorkTimeline({ data, blocks }: { data: ConversationData; blocks:
   const last = data.messages[lastIndex];
   const options = !data.streaming && last?.role === "assistant" ? parseAnswerOptions(last.content).options : [];
   const latestCards = useMemo(() => withoutSupersededCards(data.messages), [data.messages]);
-  const placed = useMemo(() => placeBlocks(data.messages.map((message) => message.createdAt), blocks), [data.messages, blocks]);
+  const placed = useMemo(() => placeBlocks(data.messages, blocks), [data.messages, blocks]);
   // 新首页的对话：答过的提问卡原处收成一行（inline），不另画本人那条问答记录。
   const ask = useMemo(() => ({ send: data.send, streaming: data.streaming, ...askAnswers(data.messages), inline: true }), [data.send, data.streaming, data.messages]);
   const status = data.streaming ? (

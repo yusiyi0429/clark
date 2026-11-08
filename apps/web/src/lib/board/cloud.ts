@@ -140,8 +140,8 @@ export const openProjectPipeline = (projectId: string) =>
 const transfer = (transferId: string) => ({ path: { id: transferId } });
 type TransferCall = Promise<Result<TProjectTransfer>>;
 /** 转给…：发起一份（准备交接），云端先写一份交接说明。 */
-export const startTransfer = (projectId: string, toPersonId: string) =>
-  unwrap<TProjectTransfer>(browserApi.POST("/api/me/projects/{projectId}/transfers", { params: project(projectId), body: { toPersonId } }) as TransferCall);
+export const startTransfer = (projectId: string, toPersonId: string, afterSequence?: number) =>
+  unwrap<TProjectTransfer>(browserApi.POST("/api/me/projects/{projectId}/transfers", { params: project(projectId), body: { toPersonId, ...(afterSequence ? { afterSequence } : {}) } }) as TransferCall);
 export const readTransfer = (transferId: string) => maybe<TProjectTransfer>(browserApi.GET("/api/me/project-transfers/{id}", { params: transfer(transferId) }) as TransferCall);
 /** 改交接说明、带不带对话、两个选择、本机检查结果（准备中）。 */
 export const updateTransfer = (transferId: string, body: TUpdateProjectTransferRequest) =>

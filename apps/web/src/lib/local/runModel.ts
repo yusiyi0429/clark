@@ -4,6 +4,9 @@
  */
 import type { TLocalRun } from "@warmap/contracts";
 
+/** 走 Chat 的对话（项目主管线、伙伴台）这一轮用的：「来源 · 模型」，写法同子会话。 */
+export const chatModelLabel = (model: { provider: string; model: string } | null | undefined): string | null => (model ? `${model.provider} · ${model.model}` : null);
+
 export function runLabel(run: Pick<TLocalRun, "sourceLabel" | "modelName" | "actual"> | null | undefined): string | null {
   if (!run?.sourceLabel) return null;
   const name = run.actual?.modelName ?? run.modelName;
