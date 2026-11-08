@@ -10,7 +10,7 @@ import {
   type TLocalSessionSummary, type TLocalSyncItem, type TLocalTopicVersionKind, type TLocalUsage, type TLocalSourceWordIssue, type TLocalVerdict, type TLocalVerdictCriterion,
   type TLocalWorkspace, type TLocalGitRef, type TLocalMergeResponse, type TLocalQuestionRequestView, type TLocalQuestionAnswerRequest,
   type TLocalBackgroundItem, type TLocalMergeHoldReason, type TLocalMergeSync, type TLocalModelTier, type TLocalHold, type TLocalMoney,
-  type TLocalRun, type TLocalTaskBudgetView, type TLocalBudgetUpdateRequest, type TBudgetMode, type TLocalPermissionBrief, type TLocalSavedAttachment,
+  type TLocalRun, type TLocalRunPreviewRequest, type TLocalTaskBudgetView, type TLocalBudgetUpdateRequest, type TBudgetMode, type TLocalPermissionBrief, type TLocalSavedAttachment,
 } from "@warmap/contracts";
 import { readJson, writeJsonAtomic, nowIso } from "./store.js";
 import type { EventLog, EventBody } from "./eventLog.js";
@@ -19,7 +19,7 @@ import type { QuotaTracker } from "./quota.js";
 import type { GatewayPricing } from "./pricing.js";
 import { Budgets, MULTI_AGENT_OFF_PERCENT, reworkRounds, runFor } from "./budget.js";
 import { AttachmentError, attachmentNote, saveAttachments, type FetchAttachment } from "./attachments.js";
-import type { ResolvedModel } from "./models.js";
+import { modelDisplayName, sameModel, type ResolvedModel } from "./models.js";
 import type { ModelProfiles } from "./models.js";
 import { isInside, type Folders } from "./folders.js";
 import type { Outbox } from "./outbox.js";
@@ -725,7 +725,8 @@ export class SessionManager {
       ...(READ_ONLY_KINDS.includes(rec.subject.kind) ? WRITE_TOOLS : []),
     ];
     const plan = this.runFor(rec, model);
-    rec.run = plan.view;
+    // 续上同一个模型：上次实际报的照留（这次的 init 来之前也显示得出实际的）。
+    rec.run = rec.run?.actual && rec.run.model === plan.view.model ? { ...plan.view, actual: rec.run.actual } : plan.view;
     if (this.records.has(rec.id)) this.save(rec);
     const run = await adapter.start({
       sessionId: rec.id, cwd: rec.cwd, resume, model, run: plan.launch, includePersonalConfig: rec.includePersonalConfig,
@@ -773,6 +774,7 @@ export class SessionManager {
         this.inTurn.add(rec.id);
         // Claude Code 自己开了一轮（后台子 agent 跑完来通知时，不经本人）：会话又在跑了
         if (rec.status === "idle" && !this.questions.has(rec.id)) this.setStatus(rec, "running");
+        if (e.model) this.noteActualModel(rec, e.model);
         break;
       case "background":
         this.recordBackground(rec, e.item);
@@ -1389,17 +1391,46 @@ export class SessionManager {
    * view 是摘要里的 run，launch 是交给 Claude Code 的。
    */
   private runFor(rec: SessionRecord, model: ResolvedModel): { view: TLocalRun; launch: { model: string; effort: TLocalRun["effort"] & string; multiAgent: boolean } } {
-    const mode = this.modeOf(rec);
-    const key = rec.budgetKey;
+    return this.planRun({ mode: this.modeOf(rec), tier: rec.modelTier ?? "normal", verify: rec.subject.kind === "verify", budgetKey: rec.budgetKey }, model);
+  }
+
+  /** runFor 的算法本身（开工前预览也用它）：view 带来源和给人看的模型名，actual 等执行方报了再填。 */
+  private planRun(p: { mode: TBudgetMode; tier: TLocalModelTier; verify: boolean; budgetKey: string | null }, model: ResolvedModel) {
     const launch = runFor({
-      mode, tier: rec.modelTier ?? "normal", verify: rec.subject.kind === "verify",
-      budgetState: key && this.d.budgets ? this.d.budgets.judge(key, this.liveMs(key)) : "ok",
+      mode: p.mode, tier: p.tier, verify: p.verify,
+      budgetState: p.budgetKey && this.d.budgets ? this.d.budgets.judge(p.budgetKey, this.liveMs(p.budgetKey)) : "ok",
       quotaPercent: this.d.quota?.usedPercent() ?? null, quotaWarning: this.d.quota?.warning() ?? false,
     });
+    const used = model.source === "gateway" ? model.model : model.model ?? launch.model;
+    const named = { source: model.source, sourceLabel: model.label, modelName: used ? this.d.models.displayName(used) : null, actual: null };
     const view: TLocalRun = model.source === "gateway"
-      ? { mode, model: model.model, effort: null, multiAgent: false }
-      : { mode, model: model.model ?? launch.model, effort: launch.effort, multiAgent: launch.multiAgent };
+      ? { mode: p.mode, model: model.model, effort: null, multiAgent: false, ...named }
+      : { mode: p.mode, model: used, effort: launch.effort, multiAgent: launch.multiAgent, ...named };
     return { view, launch };
+  }
+
+  /** POST /v1/runs/preview：开工前看这次会怎么跑（「自动」落到哪个来源的哪个模型），算法同真开工。 */
+  async previewRun(req: TLocalRunPreviewRequest): Promise<TLocalRun> {
+    const model = await this.d.models.resolve(req.modelProfileId);
+    if (!model) throw new SessionError("validation", "没有这个模型配置");
+    const budgetKey = req.taskBudget?.taskId ? Budgets.key(req.taskBudget.taskId, "") : null;
+    return this.planRun({ mode: req.taskBudget?.budget.mode ?? "auto", tier: req.modelTier ?? "normal", verify: false, budgetKey }, model).view;
+  }
+
+  /**
+   * 执行方报了实际模型（Claude Code 每轮开头的 system/init）：记进 run.actual，以它为准显示；换了模型才更新、才重报 status。
+   * 和请求的对不上（不是同一个，也不是别名落到的那一版）时记一条 notice（model_mismatch）。订阅的别名落到哪一版记下来，开工前预览写版本号。
+   */
+  private noteActualModel(rec: SessionRecord, actual: string): void {
+    if (!rec.run || rec.run.actual?.model === actual) return;
+    const requested = rec.run.model;
+    rec.run = { ...rec.run, actual: { model: actual, modelName: modelDisplayName(actual), at: nowIso() } };
+    if (requested && rec.run.source === "subscription") this.d.models.noteActual(requested, actual);
+    this.save(rec);
+    if (requested && !sameModel(requested, actual)) {
+      this.emit(rec, { type: "notice", level: "warn", code: "model_mismatch", text: `请求的模型是 ${requested}，实际跑的是 ${actual}` });
+    }
+    this.syncStatus(rec);
   }
 
   /** 新的一轮之前：多 agent 该开该关（「无上限」额度到 95% 关掉，模式改了跟着改）。只管订阅；不用改时为 null（不多等一拍）。 */

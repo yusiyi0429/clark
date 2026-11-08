@@ -219,7 +219,7 @@ describe("设预算：80% 降档、100% 停下、加了预算接着做（假 cla
       const b = await h.open("B", budget);
       await h.waitStatus(b.id, "idle");
       expect(flag(h.argvOf(b.id)[0], "--effort")).toBe("low");
-      expect((await h.session(b.id)).run).toEqual({ mode: "set", model: "opus", effort: "low", multiAgent: false });
+      expect((await h.session(b.id)).run).toMatchObject({ mode: "set", model: "opus", effort: "low", multiAgent: false });
       conforms(LocalSessionSummary, await h.session(b.id));
       expect((await h.session(a.id)).hold).toBeUndefined();
 
@@ -324,7 +324,7 @@ describe("无上限和自动", { timeout: 60_000 }, () => {
       const argv = h.argvOf(a.id)[0]!;
       expect([flag(argv, "--model"), flag(argv, "--effort")]).toEqual(["opus", "max"]);
       expect(JSON.parse(flag(argv, "--settings")!)).toMatchObject({ ultracode: true });
-      expect((await h.session(a.id)).run).toEqual({ mode: "unlimited", model: "opus", effort: "max", multiAgent: true });
+      expect((await h.session(a.id)).run).toMatchObject({ mode: "unlimited", model: "opus", effort: "max", multiAgent: true });
       // 这一轮报了额度 96%：下一轮之前关掉多 agent
       h.fake({ work: { ms: 50 }, rateInfo: h.weekly(96) });
       await h.call("POST", `/v1/sessions/${a.id}/messages`, { text: "接着做" });
@@ -375,7 +375,7 @@ describe("TokenHub 余额不足和花费", { timeout: 60_000 }, () => {
       expect(held.status).toBe("idle");
       conforms(LocalSessionSummary, held);
       expect(h.events(a.id).find((e) => e.type === "turn_end")).toMatchObject({ isError: true, errorKind: "balance" });
-      expect(held.run).toEqual({ mode: "auto", model: "deepseek-v4", effort: null, multiAgent: false });
+      expect(held.run).toMatchObject({ mode: "auto", model: "deepseek-v4", effort: null, multiAgent: false });
       expect(flag(h.argvOf(a.id)[0], "--effort")).toBeNull();
       const b = await h.open("B", null, { modelProfileId: "gw" });
       expect(b).toMatchObject({ status: "queued", hold: { reason: "balance" } });

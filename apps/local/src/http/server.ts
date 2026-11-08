@@ -6,7 +6,7 @@ import { Value } from "@sinclair/typebox/value";
 import {
   LOCAL_RUNNER_PROTOCOL, LOCAL_RUNNER_ROUTES, LOCAL_RUNNER_TOKEN_HEADER,
   LocalPairingStartRequest, LocalAgentLoginCodeRequest, LocalCloudLinkRequest, LocalSettingsPatch, LocalModelProfileUpsert,
-  LocalCreateSessionRequest, LocalCreateSessionBatchRequest, LocalSendMessageRequest, LocalPermissionDecisionRequest, LocalQuestionAnswerRequest, LocalBudgetUpdateRequest, LocalProjectFolderRequest, LocalProjectCloneRequest,
+  LocalCreateSessionRequest, LocalCreateSessionBatchRequest, LocalSendMessageRequest, LocalPermissionDecisionRequest, LocalQuestionAnswerRequest, LocalBudgetUpdateRequest, LocalProjectFolderRequest, LocalProjectCloneRequest, LocalRunPreviewRequest,
   type TLocalRunnerErrorCode, type TLocalStatusResponse, type TLocalHealthResponse,
 } from "@warmap/contracts";
 import { checkHost, checkJson, checkOrigin, corsHeaders, preflightHeaders, type Rejection } from "./security.js";
@@ -212,6 +212,7 @@ export function createServer(d: ServerDeps): http.Server {
     stopBackground: async (c) => ({ session: await d.sessions.stopBackground(c.params.id!, c.params.itemId!) }),
     listBudgets: () => ({ budgets: d.sessions.budgets() }),
     putBudget: (c) => d.sessions.setBudget(validate(LocalBudgetUpdateRequest, c.body)),
+    previewRun: (c) => d.sessions.previewRun(validate(LocalRunPreviewRequest, c.body ?? {})),
     listProjects: () => ({ projects: d.folders.projects() }),
     putProjectFolder: (c) => {
       const b = validate(LocalProjectFolderRequest, c.body);
