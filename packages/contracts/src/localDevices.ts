@@ -1,5 +1,5 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
-import { LocalPlanEntry, LocalSessionStatus } from "./localRunner.js";
+import { LocalPermissionMode, LocalPlanEntry, LocalSessionStatus } from "./localRunner.js";
 import { NullableInteger, NullableNumber } from "./nullable.js";
 
 /**
@@ -80,6 +80,8 @@ export const LocalRunBrief = Type.Object({
   updatedAt: Instant,
   /** 结束（exited、failed）的时间；还在跑为 null。 */
   endedAt: Nullable(Instant),
+  /** 现在的权限模式（本机同步条目 status 报的，换了重报；17.2 第 11 条）。老版本本机不报为 null。 */
+  permissionMode: Nullable(LocalPermissionMode),
 }, strict);
 
 /**

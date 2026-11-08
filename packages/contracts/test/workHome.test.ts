@@ -3,7 +3,7 @@ import { FormatRegistry } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import {
   AcceptCardDraftsRequest, BackgroundQuery, BackgroundResponse, ClaimSessionStartsResponse, ConversationScope, CreateProjectRequest, ProjectDetailResponse,
-  CardPlanBriefResponse, CardSplitRequestView, ProjectBoardResponse, ProjectFeedResponse, ProjectPipelineResponse, ProjectTransfer, RouteResponse, UpdateProjectRequest, UpdateProjectTransferRequest, WorkHomeResponse,
+  CardPlanBriefResponse, CardSplitRequestView, CreateProjectTransferRequest, ProjectBoardResponse, ProjectFeedResponse, ProjectPipelineResponse, ProjectTransfer, RouteResponse, UpdateProjectRequest, UpdateProjectTransferRequest, WorkHomeResponse,
 } from "../src/index.js";
 import { buildOpenApiDocument } from "../src/openapi.js";
 
@@ -62,7 +62,10 @@ describe("新首页契约", () => {
     expect(Value.Check(CreateProjectRequest, { name: "" })).toBe(false);
     expect(Value.Check(UpdateProjectRequest, { archived: true })).toBe(true);
     expect(Value.Check(UpdateProjectRequest, {})).toBe(false);
-    const project = { projectId: uuid, name: "天枢新首页", archivedAt: null, createdAt: at, lastActivityAt: null, transfer: null };
+    const project = { projectId: uuid, name: "天枢新首页", archivedAt: null, createdAt: at, lastActivityAt: null, transfer: null, permissionMode: "auto" };
+    // 新开子会话的默认权限模式：五档之一，项目设置里改。
+    expect(Value.Check(UpdateProjectRequest, { permissionMode: "plan" })).toBe(true);
+    expect(Value.Check(UpdateProjectRequest, { permissionMode: "yolo" })).toBe(false);
     expect(Value.Check(ProjectDetailResponse, { project, period: "2026-11", goals: [
       { taskId: "T-1", taskName: "11/18 上线 V1", missionId: "M1", missionTitle: "上线", period: "2026-11", verdict: "open", source: "auto", linkedAt: at },
       { taskId: "T-0", taskName: "内部版跑通", missionId: "M0", missionTitle: null, period: "2026-10", verdict: "continued", source: "migration", linkedAt: at },
@@ -99,8 +102,12 @@ describe("新首页契约", () => {
       remotes: [{ name: "origin", url: "https://github.com/x/y.git" }], uncommitted: ["a.ts"], uncommittedCount: 1, unpushed: [] }, recentFiles: null };
     const transfer = { id: uuid, projectId: uuid, projectName: "Chat 服务", from: person("人豪"), to: person("晨星"), status: "sent", startedAt: at, decidedAt: at,
       includeHistory: false, running: "wait", check: "wait", note: [{ title: "到哪了", lines: ["11 月目标：上线 · 11/30 验收"] }], checkResult: check,
-      clone: { repoUrl: "https://github.com/x/y.git", branch: "main" } };
+      clone: { repoUrl: "https://github.com/x/y.git", branch: "main" }, afterSequence: 12 };
     expect(Value.Check(ProjectTransfer, transfer)).toBe(true);
+    // 转交卡排在项目对话哪条消息后面（项目对话的消息不带时间）；对话还没消息时为 null。
+    expect(Value.Check(ProjectTransfer, { ...transfer, afterSequence: null })).toBe(true);
+    expect(Value.Check(CreateProjectTransferRequest, { toPersonId: "p-晨星", afterSequence: 12 })).toBe(true);
+    expect(Value.Check(CreateProjectTransferRequest, { toPersonId: "p-晨星", afterSequence: 0 })).toBe(false);
     expect(Value.Check(ProjectTransfer, { ...transfer, status: "draft" })).toBe(false);
     // 本机 clone 不认的地址（本地路径、file://）云端给 null，不给网页一个点了才报错的地址。
     expect(Value.Check(ProjectTransfer, { ...transfer, clone: { repoUrl: "file:///D:/code/y", branch: null } })).toBe(false);
@@ -135,7 +142,8 @@ describe("新首页契约", () => {
     expect(Value.Check(RouteResponse, { target: { projectId: uuid } })).toBe(true);
     expect(Value.Check(RouteResponse, { target: { taskId: "T-1" } })).toBe(false);
     const start = { id: uuid, kind: "card", cardId: uuid, topicId: null, taskId: "T-1", projectId: uuid, requestedAt: at };
-    expect(Value.Check(ClaimSessionStartsResponse, { starts: [{ ...start, budget: { mode: "set", hours: 2, weeklyPercent: null, money: { amount: 30, currency: "CNY" } } }] })).toBe(true);
+    expect(Value.Check(ClaimSessionStartsResponse, { starts: [{ ...start, budget: { mode: "set", hours: 2, weeklyPercent: null, money: { amount: 30, currency: "CNY" } },
+      permissionMode: "acceptEdits" }] })).toBe(true);
     // 认领回执每条都带预算。
     expect(Value.Check(ClaimSessionStartsResponse, { starts: [start] })).toBe(false);
     expect(Value.Check(AcceptCardDraftsRequest, { drafts: [{ id: uuid }], start: true })).toBe(true);

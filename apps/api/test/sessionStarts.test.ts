@@ -207,4 +207,32 @@ describe("自动开工（第 4.4 节）", { timeout: 30_000 }, () => {
       expect(await f.t.sql("SELECT run_id::text FROM local_background_items WHERE item_id='bash-2'")).toEqual([{ run_id: planner }]);
     } finally { await f.close(); }
   });
+  it("权限模式（17.2 第 11 条）：项目存新开子会话的默认（缺省 auto，PATCH 改，详情读得到）；认领开工带上所在项目的默认，不在项目里为 auto；本机报的当前模式存下，卡详情的 runs 里看得到", async () => {
+    const f = await fixture();
+    try {
+      const created = (await f.call("POST", "/api/me/projects", { name: "对话质量", taskId: "task-open" })).json();
+      expect(created.permissionMode).toBe("auto");
+      expect((await f.call("PATCH", `/api/me/projects/${created.projectId}`, { permissionMode: "yolo" })).statusCode).toBe(400);
+      expect((await f.call("PATCH", `/api/me/projects/${created.projectId}`, { permissionMode: "plan" })).json().permissionMode).toBe("plan");
+      expect((await f.call("GET", `/api/me/projects/${created.projectId}`)).json().project.permissionMode).toBe("plan");
+      expect((await f.call("GET", "/api/me/projects")).json().projects[0].permissionMode).toBe("plan");
+
+      // 挂在这个项目上的 Task 拆出来的卡开工：带项目的默认；伙伴开的不在项目里的专题：auto。
+      await f.sync({ kind: "plan", taskId: "task-open" }, [[1, "card_plan", plan(["跑题库"])]]);
+      const draft = ((await f.call("GET", "/api/plan-tasks/task-open/cards")).json().drafts as { id: string }[])[0].id;
+      const card = ((await f.call("POST", "/api/plan-tasks/task-open/card-drafts/accept", { drafts: [{ id: draft }], start: true })).json().cards as { id: string }[])[0].id;
+      expect((await f.openTopic({ title: "行业报告" })).statusCode).toBeLessThan(300);
+      const starts = (await f.claim(f.machine.device)).json().starts as { cardId: string | null; topicId: string | null; permissionMode: string }[];
+      expect(starts.map((start) => [start.cardId ? "card" : "topic", start.permissionMode]).sort()).toEqual([["card", "plan"], ["topic", "auto"]]);
+
+      // 本机报的当前模式：开工时 plan，批了计划转 auto；老版本本机不带时不改。
+      const runs = async () => (await f.call("GET", `/api/me/cards/${card}`)).json().runs as { permissionMode: string | null }[];
+      const session = await f.sync({ kind: "card", cardId: card }, [[1, "status", { status: "running", title: "跑题库", agent: "claude-code", modelLabel: "订阅 · Sonnet", permissionMode: "plan" }]]);
+      expect((await runs())[0].permissionMode).toBe("plan");
+      await f.sync({ kind: "card", cardId: card }, [[2, "status", { status: "running", title: "跑题库", agent: "claude-code", modelLabel: "订阅 · Sonnet", permissionMode: "auto" }]], session);
+      expect((await runs())[0].permissionMode).toBe("auto");
+      await f.sync({ kind: "card", cardId: card }, [[3, "status", { status: "idle", title: "跑题库", agent: "claude-code", modelLabel: "订阅 · Sonnet" }]], session);
+      expect((await runs())[0].permissionMode).toBe("auto");
+    } finally { await f.close(); }
+  });
 });

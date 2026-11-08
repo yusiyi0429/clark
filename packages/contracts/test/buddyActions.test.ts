@@ -33,6 +33,9 @@ describe("伙伴代本人做事（17.4）", () => {
     expect(Value.Check(BuddyPlan, { entries: [{ content: "归档", status: "completed" }], collapsed: false })).toBe(true);
     expect(Value.Check(ConversationSseEvent, { ...base, type: "plan", plan: { entries: [{ content: "归档", status: "completed" }, { content: "告诉晨星", status: "in_progress" }], collapsed: false } })).toBe(true);
     expect(Value.Check(ConversationSseEvent, { ...base, type: "ui", ui: { kind: "appearance", appearance: "dark" } })).toBe(true);
+    // 这一轮实际用的来源和模型（只这两样）。
+    expect(Value.Check(ConversationSseEvent, { ...base, type: "model", provider: "tokenhub", model: "claude-opus-5-5" })).toBe(true);
+    expect(Value.Check(ConversationSseEvent, { ...base, type: "model", provider: "tokenhub", model: "claude-opus-5-5", apiKey: "x" })).toBe(false);
     expect(Value.Check(ConversationSseEvent, { ...base, type: "ui", ui: { kind: "refresh", what: ["work_home", "project"], id: uuid } })).toBe(true);
     expect(Value.Check(BuddyUiEffect, { kind: "refresh", what: [] })).toBe(false);
     expect(Value.Check(ConversationSseEvent, { ...base, type: "receipt", state: "read", messageId: "m1" })).toBe(true);

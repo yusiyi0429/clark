@@ -283,6 +283,15 @@ export const ConversationCard = Type.Union([
   }, { additionalProperties: false }),
 ]);
 
+/**
+ * 这一轮实际用的模型（项目对话、伙伴台走 Chat 的回答）：provider 是来源（Chat 配的接入方，如 tokenhub），model 是模型名。只记这两样，不记钥匙、地址。
+ * 一轮里调了几次模型时取最后一次。Chat 没报（老版本、天枢自己的对话）的没有。
+ */
+export const ConversationModel = Type.Object(
+  { provider: Type.String({ minLength: 1, maxLength: 60 }), model: Type.String({ minLength: 1, maxLength: 120 }) },
+  { additionalProperties: false },
+);
+
 export const ConversationMessage = Type.Object(
   {
     sequence: Type.Integer({ minimum: 1 }),
@@ -300,6 +309,8 @@ export const ConversationMessage = Type.Object(
     cards: Type.Optional(Type.Array(ConversationCard, { maxItems: 4 })),
     /** 只在助手回答上：这一轮伙伴最后一张计划清单（17.4，见 buddyActions.ts 的 BuddyPlan）；没出清单的没有这个字段。 */
     plan: Type.Optional(BuddyPlan),
+    /** 只在助手回答上：这一轮实际用的来源和模型（见 ConversationModel）；不知道的没有这个字段。 */
+    model: Type.Optional(ConversationModel),
     /** 只在助手回答上：这一轮跨对象读取的范围（最后一次）。 */
     readScope: Type.Optional(ReadScope),
     /** 只在本人的作答消息上：回答 Agent 提问的问答记录。 */
@@ -429,6 +440,9 @@ export const ConversationSseEvent = Type.Union([
     },
     { additionalProperties: false },
   ),
+  /** 这一轮实际用的来源和模型（走 Chat 的对话，Chat 每次调完模型报一次；换了才再给）。网页画在回答下面，读历史时在 ConversationMessage.model。 */
+  Type.Object({ ...StreamBase, type: Type.Literal("model"), provider: ConversationModel.properties.provider, model: ConversationModel.properties.model },
+    { additionalProperties: false }),
   Type.Object(
     {
       ...StreamBase,
@@ -522,4 +536,5 @@ export type TConversationMessage = Static<typeof ConversationMessage>;
 export type TConversationCard = Static<typeof ConversationCard>;
 export type TConversationHistory = Static<typeof ConversationHistory>;
 export type TConversationRecoveryNote = Static<typeof ConversationRecoveryNote>;
+export type TConversationModel = Static<typeof ConversationModel>;
 export type TConversationSseEvent = Static<typeof ConversationSseEvent>;

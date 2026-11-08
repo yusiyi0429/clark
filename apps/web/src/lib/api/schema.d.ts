@@ -6168,6 +6168,7 @@ export interface components {
                         /** Format: date-time */
                         updatedAt: string;
                         endedAt: string | null;
+                        permissionMode: ("auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions") | null;
                     } | null;
                     handback: {
                         /** Format: uuid */
@@ -6619,6 +6620,10 @@ export interface components {
                     }[];
                     collapsed: boolean;
                 };
+                model?: {
+                    provider: string;
+                    model: string;
+                };
                 readScope?: {
                     label: string;
                     params: {
@@ -6942,6 +6947,15 @@ export interface components {
             reason: "slow" | "retrieval";
             expectSeconds: number;
             notice: string;
+        } | {
+            runId: string;
+            /** @description global 或稳定对象 scope */
+            scope: string;
+            sequence: number;
+            /** @constant */
+            type: "model";
+            provider: string;
+            model: string;
         } | {
             runId: string;
             /** @description global 或稳定对象 scope */
@@ -10412,6 +10426,7 @@ export interface components {
                     /** Format: date-time */
                     updatedAt: string;
                     endedAt: string | null;
+                    permissionMode: ("auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions") | null;
                 } | null;
                 handback: {
                     /** Format: uuid */
@@ -10602,6 +10617,7 @@ export interface components {
                             /** Format: date-time */
                             updatedAt: string;
                             endedAt: string | null;
+                            permissionMode: ("auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions") | null;
                         } | null;
                         handback: {
                             /** Format: uuid */
@@ -11940,6 +11956,7 @@ export interface components {
                         /** Format: date-time */
                         updatedAt: string;
                         endedAt: string | null;
+                        permissionMode: ("auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions") | null;
                     } | null;
                     handback: {
                         /** Format: uuid */
@@ -12171,6 +12188,7 @@ export interface components {
                         /** Format: date-time */
                         updatedAt: string;
                         endedAt: string | null;
+                        permissionMode: ("auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions") | null;
                     } | null;
                     handback: {
                         /** Format: uuid */
@@ -12335,6 +12353,7 @@ export interface components {
                             /** Format: date-time */
                             updatedAt: string;
                             endedAt: string | null;
+                            permissionMode: ("auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions") | null;
                         } | null;
                         handback: {
                             /** Format: uuid */
@@ -12499,6 +12518,7 @@ export interface components {
                         /** Format: date-time */
                         updatedAt: string;
                         endedAt: string | null;
+                        permissionMode: ("auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions") | null;
                     } | null;
                     handback: {
                         /** Format: uuid */
@@ -13072,6 +13092,7 @@ export interface components {
                         /** Format: date-time */
                         updatedAt: string;
                         endedAt: string | null;
+                        permissionMode: ("auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions") | null;
                     } | null;
                     handback: {
                         /** Format: uuid */
@@ -13275,6 +13296,7 @@ export interface components {
                             /** Format: date-time */
                             updatedAt: string;
                             endedAt: string | null;
+                            permissionMode: ("auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions") | null;
                         } | null;
                         handback: {
                             /** Format: uuid */
@@ -13428,6 +13450,7 @@ export interface components {
                         /** Format: date-time */
                         updatedAt: string;
                         endedAt: string | null;
+                        permissionMode: ("auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions") | null;
                     } | null;
                     handback: {
                         /** Format: uuid */
@@ -16038,6 +16061,7 @@ export interface components {
                 /** Format: date-time */
                 updatedAt: string;
                 endedAt: string | null;
+                permissionMode: ("auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions") | null;
             } | null;
             handback: {
                 /** Format: uuid */
@@ -16184,6 +16208,7 @@ export interface components {
                     /** Format: date-time */
                     updatedAt: string;
                     endedAt: string | null;
+                    permissionMode: ("auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions") | null;
                 } | null;
                 handback: {
                     /** Format: uuid */
@@ -16397,6 +16422,7 @@ export interface components {
                         /** Format: date-time */
                         updatedAt: string;
                         endedAt: string | null;
+                        permissionMode: ("auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions") | null;
                     } | null;
                     handback: {
                         /** Format: uuid */
@@ -16631,6 +16657,7 @@ export interface components {
                         /** Format: date-time */
                         updatedAt: string;
                         endedAt: string | null;
+                        permissionMode: ("auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions") | null;
                     } | null;
                     handback: {
                         /** Format: uuid */
@@ -16858,6 +16885,7 @@ export interface components {
                         /** Format: date-time */
                         updatedAt: string;
                         endedAt: string | null;
+                        permissionMode: ("auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions") | null;
                     } | null;
                     handback: {
                         /** Format: uuid */
@@ -16926,6 +16954,7 @@ export interface components {
                 /** Format: date-time */
                 updatedAt: string;
                 endedAt: string | null;
+                permissionMode: ("auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions") | null;
                 planEntries: {
                     content: string;
                     status: "pending" | "in_progress" | "completed";
@@ -17140,6 +17169,7 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
             endedAt: string | null;
+            permissionMode: ("auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions") | null;
         };
         LocalRunView: {
             /** Format: uuid */
@@ -17170,6 +17200,7 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
             endedAt: string | null;
+            permissionMode: ("auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions") | null;
             planEntries: {
                 content: string;
                 status: "pending" | "in_progress" | "completed";
@@ -17257,6 +17288,7 @@ export interface components {
                 /** Format: date-time */
                 updatedAt: string;
                 endedAt: string | null;
+                permissionMode: ("auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions") | null;
             } | null;
         };
         TopicVersionSummary: {
@@ -17343,6 +17375,7 @@ export interface components {
                     /** Format: date-time */
                     updatedAt: string;
                     endedAt: string | null;
+                    permissionMode: ("auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions") | null;
                 } | null;
             }[];
         };
@@ -17410,6 +17443,7 @@ export interface components {
                     /** Format: date-time */
                     updatedAt: string;
                     endedAt: string | null;
+                    permissionMode: ("auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions") | null;
                 } | null;
             };
             task: {
@@ -17476,6 +17510,7 @@ export interface components {
                 /** Format: date-time */
                 updatedAt: string;
                 endedAt: string | null;
+                permissionMode: ("auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions") | null;
                 planEntries: {
                     content: string;
                     status: "pending" | "in_progress" | "completed";
@@ -18352,6 +18387,7 @@ export interface components {
                     repoUrl: string;
                     branch: string | null;
                 } | null;
+                afterSequence: number | null;
             } | null;
         };
         HomeMonthTask: {
@@ -18579,6 +18615,7 @@ export interface components {
                         repoUrl: string;
                         branch: string | null;
                     } | null;
+                    afterSequence: number | null;
                 } | null;
             }[];
             archivedCount: number;
@@ -18826,6 +18863,7 @@ export interface components {
                         currency: "CNY" | "USD";
                     } | null;
                 };
+                permissionMode: "auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions";
             }[];
         };
         CardMerge: {
@@ -18976,7 +19014,9 @@ export interface components {
                     repoUrl: string;
                     branch: string | null;
                 } | null;
+                afterSequence: number | null;
             } | null;
+            permissionMode: "auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions";
         };
         ProjectListResponse: {
             projects: {
@@ -19045,7 +19085,9 @@ export interface components {
                         repoUrl: string;
                         branch: string | null;
                     } | null;
+                    afterSequence: number | null;
                 } | null;
+                permissionMode: "auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions";
             }[];
         };
         CreateProjectRequest: {
@@ -19055,6 +19097,7 @@ export interface components {
         UpdateProjectRequest: {
             name?: string;
             archived?: boolean;
+            permissionMode?: "auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions";
         };
         ProjectGoal: {
             taskId: string;
@@ -19134,7 +19177,9 @@ export interface components {
                         repoUrl: string;
                         branch: string | null;
                     } | null;
+                    afterSequence: number | null;
                 } | null;
+                permissionMode: "auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions";
             };
             period: string;
             goals: {
@@ -19540,6 +19585,7 @@ export interface components {
                         /** Format: date-time */
                         updatedAt: string;
                         endedAt: string | null;
+                        permissionMode: ("auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions") | null;
                     } | null;
                     handback: {
                         /** Format: uuid */
@@ -19755,9 +19801,11 @@ export interface components {
                 repoUrl: string;
                 branch: string | null;
             } | null;
+            afterSequence: number | null;
         };
         CreateProjectTransferRequest: {
             toPersonId: string;
+            afterSequence?: number;
         };
         UpdateProjectTransferRequest: {
             note?: {
@@ -19966,6 +20014,7 @@ export interface components {
                     currency: "CNY" | "USD";
                 } | null;
             };
+            permissionMode: "auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions";
         };
         SessionAttachment: {
             /** Format: uuid */

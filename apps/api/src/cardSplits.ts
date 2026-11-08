@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { TCardPlanBriefResponse, TCardSplitRequestView, TPlanBriefRole } from "@warmap/contracts";
+import { CARD_TITLE_RULE } from "./cardTitle.js";
 import { UUID_PATTERN, type Query } from "./meetingStore.js";
 import { projectGoalRows, verdicts, type ProjectRow } from "./projects.js";
 import { isPlannerRole, plannerRole, roleBrief, type RoleRow } from "./roles.js";
@@ -127,7 +128,7 @@ export async function planBrief(q: Query, own: CardPlanTask): Promise<TCardPlanB
     ...(words.length ? ["", ...briefWords(words)] : []),
     "", ...roleLines,
     "", "## 派活单的要求", "",
-    "3 到 8 件，每件能独立交回：标题写要交付的结果；交代写清做什么；完成标准每行一条、能核对；写对约定第几条（对不上写 null）；岗位从上面挑；模型档位 strong / normal / light；一句为什么这么拆。"
+    "3 到 8 件，每件能独立交回：" + CARD_TITLE_RULE + "；交代写清做什么；完成标准每行一条、能核对；写对约定第几条（对不上写 null）；岗位从上面挑；模型档位 strong / normal / light；一句为什么这么拆。"
       + (words.length ? "每件带 sourceWords：从上面「本人原话」里原样摘的相关片段。" : ""),
   ];
   return { markdown: lines.join("\n").slice(0, 20_000), role: planner ? roleBrief(planner) : null,
@@ -163,7 +164,7 @@ export async function projectPlanBrief(q: Query, project: ProjectRow): Promise<T
     ...(words.length ? ["", ...briefWords(words)] : []),
     "", ...roleLines,
     "", "## 派活单的要求", "",
-    "3 到 8 件，每件能独立交回：标题写要交付的结果；交代写清做什么；完成标准每行一条、能核对（没有 Task 的验收标准，验收员只照这几条验）；对约定第几条一律写 null；岗位从上面挑；模型档位 strong / normal / light；一句为什么这么拆。"
+    "3 到 8 件，每件能独立交回：" + CARD_TITLE_RULE + "；交代写清做什么；完成标准每行一条、能核对（没有 Task 的验收标准，验收员只照这几条验）；对约定第几条一律写 null；岗位从上面挑；模型档位 strong / normal / light；一句为什么这么拆。"
       + (words.length ? "每件带 sourceWords：从上面「本人原话」里原样摘的相关片段。" : ""),
   ];
   return { markdown: lines.join("\n").slice(0, 20_000), role: planner ? roleBrief(planner) : null, task: null,

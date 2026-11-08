@@ -28,7 +28,8 @@ export function registerProjectTransferRoutes(app: AppInstance, ctx: RouteContex
   const projectHistory = projectHistoryReader(ctx);
   const deps = (requestId = "handover"): TransferDeps => ({ q, pool, names: personDisplayNames(ctx.peopleDirectory), now: ctx.now(),
     handover: { agent: options.handoverAgent, conversation: async (projectId, fromId) => (await projectHistory(projectId, fromId, requestId)).messages
-      .map((message) => ({ role: message.role, at: message.createdAt, text: message.content })) } });
+      .map((message) => ({ role: message.role, at: message.createdAt, text: message.content })) },
+    lastSequence: async (projectId, fromId) => (await projectHistory(projectId, fromId, requestId)).messages.at(-1)?.sequence ?? null });
   const handle = async <T>(reply: FastifyReply, work: () => Promise<T>) => {
     try { return await work(); } catch (cause) {
       if (cause instanceof SecretsInNote) return reply.status(422).send({ code: "SECRET_IN_NOTE", message: cause.message, findings: cause.findings });
@@ -39,7 +40,8 @@ export function registerProjectTransferRoutes(app: AppInstance, ctx: RouteContex
 
   app.post("/api/me/projects/:projectId/transfers", { preHandler: requireMember, schema: { params: projectParams, body: CreateProjectTransferRequest,
     response: { 201: ProjectTransfer } } }, async (req, reply) => handle(reply, async () =>
-    reply.status(201).send(await startTransfer(deps(String(req.id)), req.person!.personId, req.params.projectId, req.body.toPersonId))));
+    reply.status(201).send(await startTransfer(deps(String(req.id)), req.person!.personId, req.params.projectId, req.body.toPersonId,
+      req.body.afterSequence))));
 
   app.get("/api/me/project-transfers/:id", { preHandler: requireMember, schema: { params: idParams, response: { 200: ProjectTransfer } } }, async (req, reply) =>
     handle(reply, () => readTransfer(deps(), req.person!.personId, req.params.id)));

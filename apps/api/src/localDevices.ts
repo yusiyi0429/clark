@@ -66,7 +66,9 @@ export type RunRow = { id: string; owner_id: string; device_id: string; device_n
   hold: TLocalHold | null; money: Record<string, number>;
   /** 最近一次状态里在问本人（idle 带 question）或在等批准的那一步（waiting_permission 带 permission）；没有为 null（迁移 242）。 */
   ask: RunAsk | null;
-  started_at: Date; running_at: Date | null; ended_at: Date | null; updated_at: Date };
+  started_at: Date; running_at: Date | null; ended_at: Date | null; updated_at: Date;
+  /** 本机同步 status 报的当前权限模式（迁移 257）；老版本本机不报为 null。 */
+  permission_mode: TLocalRunBrief["permissionMode"] };
 export type RunAsk = { kind: "question"; request: TLocalQuestionRequestView } | { kind: "permission"; request: TLocalPermissionBrief };
 /** 真在问本人（不是一轮做完停下）。 */
 export const askingQuestion = (run: Pick<RunRow, "state" | "ask">) => run.state === "idle" && run.ask?.kind === "question";
@@ -79,6 +81,7 @@ export function runBrief(row: RunRow): TLocalRunBrief {
     lastActivity: row.last_activity,
     cost: { inputTokens: row.tokens.input, outputTokens: row.tokens.output, costUsd: row.cost_usd === null ? null : Number(row.cost_usd) },
     startedAt: row.started_at.toISOString(), updatedAt: row.updated_at.toISOString(), endedAt: row.ended_at?.toISOString() ?? null,
+    permissionMode: row.permission_mode,
   };
 }
 export const runView = (row: RunRow, messages: TLocalRunMessage[] = []): TLocalRunView => ({ ...runBrief(row), planEntries: row.plan, timeline: row.timeline, messages });

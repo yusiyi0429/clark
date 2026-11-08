@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import type { CardPlanAgent, CardPlanInput, TCardPlanCandidate } from "../src/cardPlanAgent.js";
-import { cardPlanProblem } from "../src/cardPlanAgent.js";
+import { CARD_PLAN_PROMPT, cardPlanProblem } from "../src/cardPlanAgent.js";
 import { TEST_MEMBER } from "./helpers.js";
 import { boardFixture } from "./boardFixture.js";
 
@@ -91,7 +91,7 @@ describe("拆卡：作业和草稿", { timeout: 30_000 }, () => {
       await f.call("POST", "/api/plan-tasks/task-open/card-plans", {});
       await f.t.app.cardPlans.idle();
       expect((await f.call("GET", "/api/plan-tasks/task-open/cards")).json()).toMatchObject({ plan: { status: "failed", error: "拆卡没做完，可以重试" }, drafts: [] });
-      f.setImpl(async (input) => ({ cards: cards(input.roles[0].id).map((card) => ({ ...card, title: `${card.title}（新）` })) }));
+      f.setImpl(async (input) => ({ cards: cards(input.roles[0].id).map((card) => ({ ...card, title: `${card.title}新版` })) }));
       const queued = randomUUID();
       await f.t.sql("INSERT INTO card_plans(id,plan_task_id,mission_id,owner_id) VALUES($1,'task-open','mine',$2)", [queued, TEST_MEMBER.personId]);
       await f.t.app.cardPlans.recover();
@@ -113,5 +113,20 @@ describe("拆卡：作业和草稿", { timeout: 30_000 }, () => {
     expect(cardPlanProblem({ cards: cards("role-2") }, input)).toBe("第 1 张的 roleId 只能是 roles 里的 id 或 null");
     expect(cardPlanProblem({ cards: [ok[0], ok[1], { ...ok[2], suggestPresetKey: "nope" }] }, input)).toBe("第 3 张的 suggestPresetKey 只能是 presets 里的 key 或 null");
     expect(cardPlanProblem({ cards: [{ ...ok[0], suggestPresetKey: "researcher" }, ok[1], ok[2]] }, input)).toBe("第 1 张已经配了岗位，suggestPresetKey 写 null");
+  });
+
+  it("标题照规矩（短的动宾短语）：太长、带括号冒号句号的退回让模型重写标题，不截断；短标题和英文短标题照收", () => {
+    const input = { task: { name: "x", doneDefinition: null, criteria: [{ index: 1, text: "甲" }, { index: 2, text: "乙" }] }, existing: [],
+      roles: [{ id: "role-1", name: "开发", duties: "" }], presets: [{ key: "researcher", name: "调研员", duties: "" }] };
+    const ok = cards("role-1");
+    const long = "本机程序能按岗位拉起规划员、执行 worker、验收员三种 Claude Code 会话，同时最多 3 个";
+    expect(cardPlanProblem({ cards: [{ ...ok[0], title: long }, ok[1], ok[2]] }, input))
+      .toBe(`第 1 张的标题「${long}」太长，重写成 12 个字以内的动宾短语，细节放进交代和完成标准`);
+    for (const title of ["派活单网页（第一版）", "排期：修改建议", "写复盘。"])
+      expect(cardPlanProblem({ cards: [ok[0], { ...ok[1], title }, ok[2]] }, input)).toBe(`第 2 张的标题「${title}」不要带括号、冒号、句号，重写成一个短的动宾短语`);
+    for (const title of ["本机按岗位拉起会话", "云端汇总本机上报", "两个岗位的初版说明", "Launch sessions by role", "接 Node.js 日志"])
+      expect(cardPlanProblem({ cards: [{ ...ok[0], title }, ok[1], ok[2]] }, input)).toBeNull();
+    // 退回的说明进了作业的提示：模型据此重写（candidateAgentRuntime 把校验的问题回给模型，再交一次）。
+    expect(CARD_PLAN_PROMPT).toContain("中文 12 个字以内");
   });
 });

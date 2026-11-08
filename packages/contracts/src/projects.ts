@@ -1,4 +1,5 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
+import { LocalPermissionMode } from "./localRunner.js";
 import { PersonRef, ProjectTransfer } from "./projectTransfers.js";
 import { CardDraftView, CardPlanView, CardTaskView } from "./taskCards.js";
 import { TaskFeedItem } from "./workHome.js";
@@ -27,6 +28,8 @@ export const ProjectName = Type.String({ minLength: 1, maxLength: 60 });
  * 一个项目。archivedAt 不为 null 是归档了（左栏收进「已归档 N」）；lastActivityAt 是最近一次动静（子会话、事项、挂接），没有为 null。
  * transfer（16.7）：正在转交的那一份（preparing、sent），或本人交出去了的那一份（accepted：本人是原负责人，项目在本人这边算归档、只读，
  * archivedAt 是接手的时间）；都没有为 null。
+ * permissionMode（17.2 第 11 条）：这个项目新开子会话的默认权限模式（项目主管线下面那个选择改的就是它，见 localRunner.ts 的 LocalPermissionMode），缺省 auto；
+ * 项目对话、伙伴开的子会话开工时云端把它带给本机（ClaimedSessionStart.permissionMode）。
  */
 export const Project = Type.Object({
   projectId: Type.String({ format: "uuid" }),
@@ -35,6 +38,7 @@ export const Project = Type.Object({
   createdAt: Instant,
   lastActivityAt: Nullable(Instant),
   transfer: Nullable(ProjectTransfer),
+  permissionMode: LocalPermissionMode,
 }, strict);
 
 /** GET /api/me/projects（DRI 工作台）：本人全部项目（含交出去了的，算归档），没归档的在前，各自按最近动静从近到远。 */
@@ -47,7 +51,9 @@ export const ProjectListResponse = Type.Object({ projects: Type.Array(Project) }
 export const CreateProjectRequest = Type.Object({ name: ProjectName, taskId: Type.Optional(Type.String({ minLength: 1 })) }, strict);
 
 /** PATCH /api/me/projects/:projectId：改名、归档（archived: true）、恢复（archived: false）。至少带一样。 */
-export const UpdateProjectRequest = Type.Object({ name: Type.Optional(ProjectName), archived: Type.Optional(Type.Boolean()) }, { ...strict, minProperties: 1 });
+export const UpdateProjectRequest = Type.Object({ name: Type.Optional(ProjectName), archived: Type.Optional(Type.Boolean()),
+  /** 新开子会话的默认权限模式（Project.permissionMode）。 */
+  permissionMode: Type.Optional(LocalPermissionMode) }, { ...strict, minProperties: 1 });
 
 /**
  * 一件挂着的 Task 的判定（目标历史那一行）：completed 本人确认完成；stopped 定了到此为止；continued 延续成了下个月的一件；open 还没了结。
