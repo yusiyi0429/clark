@@ -1,5 +1,6 @@
 import http from "node:http";
-import { mkdtempSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -109,4 +110,16 @@ export async function waitFor<T>(fn: () => T | undefined | null | false, ms = 5_
     if (Date.now() - t0 > ms) throw new Error("等待超时");
     await new Promise((r) => setTimeout(r, 20));
   }
+}
+
+/** 一个有提交、有远端的 git 仓库（规划员开拆前的检查要看到「是仓库、不是空的」，设计 18.11）。远端只是地址，不连。 */
+export function gitRepo(dir: string): string {
+  mkdirSync(dir, { recursive: true });
+  const g = (...args: string[]) => execFileSync("git", args, { cwd: dir, windowsHide: true, stdio: "pipe" });
+  g("init", "-q", "-b", "main");
+  writeFileSync(join(dir, "readme.md"), "项目\n");
+  g("add", ".");
+  g("-c", "user.name=测试", "-c", "user.email=test@example.com", "commit", "-q", "-m", "init");
+  g("remote", "add", "origin", "https://github.com/example/project.git");
+  return dir;
 }

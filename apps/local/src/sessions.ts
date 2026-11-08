@@ -23,6 +23,7 @@ import { modelDisplayName, sameModel, type ResolvedModel } from "./models.js";
 import type { CustomTools, SessionTools } from "./customTools.js";
 import { cardTitleProblem } from "./cardTitle.js";
 import { firstSentences, TURN_ERROR } from "./stopReport.js";
+import { flagText, planFactsSection, planFolderFacts, type PlanFlag } from "./planCheck.js";
 import type { ModelProfiles } from "./models.js";
 import { isInside, type Folders } from "./folders.js";
 import type { Outbox } from "./outbox.js";
@@ -78,6 +79,9 @@ const FOLDER_BUSY = "这个文件夹不是 git 仓库，同时只做一张卡，
 
 interface SessionRecord {
   id: string;
+  /** 规划员（设计 18.11）：最近一次拉起时开拆前检查发现要先问清楚的几件；planAsked 是本人之后答过问题或说过话，答了才收派活单。 */
+  planFlags?: PlanFlag[];
+  planAsked?: boolean;
   subject: TLocalSessionSubject;
   title: string;
   agent: TLocalAgentKind;
@@ -755,7 +759,15 @@ export class SessionManager {
     // 工作规矩、岗位、挑刺子 agent 写在本机程序的数据目录，经参数交给 Claude Code，不往本人的仓库写文件。
     const dir = join(this.dir, rec.id);
     const systemPromptPath = join(dir, "system.md");
-    writeFileSync(systemPromptPath, systemPrompt(rec.subject.kind, rec.role, rec.critics, feishu, rec.workspace, custom?.names ?? []));
+    let prompt = systemPrompt(rec.subject.kind, rec.role, rec.critics, feishu, rec.workspace, custom?.names ?? []);
+    if (rec.subject.kind === "plan") {
+      // 开拆前看一眼项目的文件夹（只读）：在本机给它的专用目录里做就是没绑
+      const facts = await planFolderFacts(isInside(join(this.d.dataDir, "plans"), rec.cwd) ? null : rec.cwd);
+      rec.planFlags = facts.flags;
+      if (this.records.has(rec.id)) this.save(rec);
+      prompt += `\n${planFactsSection(facts)}\n`;
+    }
+    writeFileSync(systemPromptPath, prompt);
     let agentsPath: string | null = null;
     if (rec.subject.kind === "topic" && rec.critics.length) {
       agentsPath = join(dir, "agents.json");
@@ -955,6 +967,7 @@ export class SessionManager {
     if (rec.queuedMessage !== null && !this.starting.has(id)) throw new SessionError("conflict", "这件还没开始过（排队时取消了或没开起来），要做就重新开工");
     if (req.kind === "review" && (rec.subject.kind !== "topic" || !rec.critics.length)) throw new SessionError("validation", "评审会只给开工时带了挑刺岗位的专题用");
     if (req.kind !== "review" && !req.text && !req.attachments?.length) throw new SessionError("validation", "说一句要有内容");
+    if (rec.subject.kind === "plan" && !rec.planAsked) { rec.planAsked = true; this.save(rec); } // 本人说了话：开拆前要问的算交代过了
     // 附件（新首页设计 14.5）：先取回、存进工作区，有一个不行整句不发
     let saved: TLocalSavedAttachment[] = [];
     if (req.attachments?.length) {
@@ -1149,6 +1162,7 @@ export class SessionManager {
       answers[item.question] = !picked ? text! : allPicked && text && i === q.questions.length - 1 ? `${picked}；${text}` : picked;
     });
     if (!run.respondQuestion(requestId, answers)) throw new SessionError("conflict", "这次提问已经答过或已失效");
+    if (rec.subject.kind === "plan" && !rec.planAsked) { rec.planAsked = true; this.save(rec); } // 规划员问的答了：可以拆了
     this.onAgentEvent(rec, { type: "question_resolved", requestId, choices: req.choices, text });
     this.setStatus(rec, this.pending.get(id)?.size ? "waiting_permission" : "running");
     return this.summary(rec);
@@ -1920,6 +1934,9 @@ export class SessionManager {
   proposePlan(id: string, input: { summary: string; steps?: unknown; risks?: unknown; cards: unknown[] }): string {
     const rec = this.must(id);
     if (rec.subject.kind !== "plan") throw new SessionError("validation", "只有规划员交计划");
+    if (rec.planFlags?.length && !rec.planAsked) {
+      throw new SessionError("validation", `先不交派活单：${flagText(rec.planFlags)}。用「问用户」（AskUserQuestion）问本人在哪个文件夹做、要不要新建、要不要连 GitHub 仓库、是不是从别处迁过来的，每个问题给几个选项、推荐的排第一并标「（推荐）」；本人答了再拆。`);
+    }
     const list = (v: unknown) => (Array.isArray(v) ? v : []);
     const plan: TLocalCardPlan = {
       revision: rec.submitted + 1,

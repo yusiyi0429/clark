@@ -10,7 +10,7 @@ import { CodexQuota, codexQuotaFrom } from "../src/codexQuota.js";
 import { Value } from "@sinclair/typebox/value";
 import { LocalSessionSummary, LocalStatusResponse } from "@warmap/contracts";
 import { registerFormats } from "../src/store.js";
-import { api, pair, startTestRunner, tempDir, FAKE_CLAUDE } from "./helpers.js";
+import { api, gitRepo, pair, startTestRunner, tempDir, FAKE_CLAUDE } from "./helpers.js";
 
 registerFormats();
 /** 本机回给网页的东西都得合契约（摘要是严格的：多一个字段也不行）。 */
@@ -481,7 +481,8 @@ describe("额度用完：不该停、不该乱续的情况（11/07 评审）", {
     const h = await setup();
     try {
       h.fake({ plan: PLAN, usageLimitAfterSubmit: { resetsAt: Math.floor(Date.now() / 1000) + 600 } });
-      const r = await h.call("POST", "/v1/sessions", { subject: { kind: "plan", taskId: "T1" }, title: "拆卡：T1", cwd: h.work, firstMessage: "拆卡交代" });
+      // 规划员在像样的仓库里拆（开拆前的检查不拦）；假 claude 往上找到 work 里的配置
+      const r = await h.call("POST", "/v1/sessions", { subject: { kind: "plan", taskId: "T1" }, title: "拆卡：T1", cwd: gitRepo(join(h.work, "repo")), firstMessage: "拆卡交代" });
       expect(r.status, JSON.stringify(r.body)).toBe(200);
       const done = await h.waitStatus(r.body.id, "done");
       expect(done.hold).toBeUndefined();
