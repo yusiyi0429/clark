@@ -902,6 +902,10 @@ describe("项目对话走 Chat（project:<projectId>，新首页第 16 节）", 
       const pipeline = (await open(f, projectId)).json().conversationId as string;
       expect(chat.turns()[0].url).toBe(`/conversations/${pipeline}/turns`);
       expect(JSON.parse(chat.turns()[0].body).message).toBe("【伙伴转来】录屏先停，先把打分做完");
+      // 项目对话自己也有这张动作清单：从项目对话里再转（转回自己）不做，免得一轮接一轮转下去。
+      const loop = await f.t.app.inject({ method: "POST", url: "/internal/me/buddy-actions/message_project",
+        headers: { authorization: `Bearer ${CHAT_TOKEN}`, "x-owner-id": TEST_MEMBER.personId }, payload: { args: { projectId, text: "再转一次" }, conversationId: pipeline } });
+      expect([loop.statusCode, loop.json().code]).toEqual([409, "ALREADY_IN_PROJECT"]);
 
       // 再转一句：项目对话还在回，不打断（不请 Chat 停），等它回完再发。
       await act({ projectId, text: "再加一条" });

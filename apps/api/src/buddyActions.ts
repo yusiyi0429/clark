@@ -311,6 +311,9 @@ const handlers: Handlers = {
     return { summary: "改了新 Task 的缺省预算", undo: { kind: "budget", taskId: null, previous: before }, ui: [{ kind: "refresh", what: ["settings"] }] };
   },
   message_project: async (deps, call, args) => {
+    // 只从伙伴台往项目对话转（18 节第 8 条）。项目对话自己也拿到这张动作清单，它再转一次会把同一句转回自己、一轮接一轮转下去。
+    if (call.conversationId && (await deps.q("SELECT 1 FROM project_pipelines WHERE owner_id=$1 AND conversation_id=$2", [call.personId, call.conversationId])).rowCount)
+      throw new BuddyError(409, "ALREADY_IN_PROJECT", "这里已经是项目对话，直接在这里安排，不用再转");
     const path = `/api/me/projects/${encodeURIComponent(args.projectId)}`;
     const name = await projectName(deps, call.personId, args.projectId);
     // 项目对话还没开过就开（归档的、别人的照网页接口回错）。
