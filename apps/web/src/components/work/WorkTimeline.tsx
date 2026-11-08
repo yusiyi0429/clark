@@ -9,6 +9,7 @@ import { useMemo, type ReactNode } from "react";
 import { ConversationStatusSlot, ConversationThinking, ConversationTurns } from "@/conversation/Transcript";
 import { AnswerOptions } from "@/conversation/AnswerOptionRow";
 import { EntryCards } from "@/conversation/EntryCards";
+import { PlanChecklist } from "@/components/cards/PlanChecklist";
 import { AskContext, askAnswers } from "@/conversation/AskPanel";
 import { parseAnswerOptions } from "@/conversation/answerOptions";
 import { RescopeContext } from "@/conversation/ScopeChip";
@@ -43,6 +44,9 @@ export function WorkTimeline({ data, blocks }: { data: ConversationData; blocks:
   const status = data.streaming ? (
     <ConversationStatusSlot>
       {data.thinking ? <ConversationThinking stage={data.stage} startedAt={data.startedAt} onStop={data.stop} route={data.route} progress={data.progress} steps={data.steps} thought={data.thought} readScope={data.readScope} /> : null}
+      {/* 伙伴这一轮的计划清单和出的卡（17.4，同 ConversationTimeline）：写完读回历史后挂在那条回答上。 */}
+      {data.plan ? <PlanChecklist entries={data.plan.entries} collapsed={data.plan.collapsed} /> : null}
+      {data.turnCards?.length ? <EntryCards cards={data.turnCards} /> : null}
     </ConversationStatusSlot>
   ) : null;
   const rescope = useMemo(() => ({ rescope: (params: Parameters<typeof data.rescope>[0], label: string) => void data.rescope(params, label), busy: data.streaming }),
@@ -62,8 +66,9 @@ export function WorkTimeline({ data, blocks }: { data: ConversationData; blocks:
         const asks = cards.filter((card): card is Extract<typeof card, { kind: "questions" }> => card.kind === "questions");
         const rest = cards.filter((card) => card.kind !== "questions");
         const inserted = blocksAt(index);
-        if (!cards.length && !inserted.length) return null;
-        return <>{rest.length ? <EntryCards cards={rest} createdAt={data.messages[index].createdAt} /> : null}{asks.map((card) => <AskDecision key={card.askId} card={card} />)}{inserted}</>;
+        const plan = data.messages[index].plan;
+        if (!cards.length && !inserted.length && !plan) return null;
+        return <>{plan ? <PlanChecklist entries={plan.entries} collapsed={plan.collapsed} /> : null}{rest.length ? <EntryCards cards={rest} createdAt={data.messages[index].createdAt} /> : null}{asks.map((card) => <AskDecision key={card.askId} card={card} />)}{inserted}</>;
       }} />
     </AskContext.Provider>
     </RescopeContext.Provider>
