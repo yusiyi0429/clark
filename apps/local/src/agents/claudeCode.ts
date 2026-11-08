@@ -1,10 +1,10 @@
 import { spawn, execFile, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import type { TLocalBackgroundItem, TLocalPermissionRequestView, TLocalQuestion, TLocalUsage } from "@warmap/contracts";
+import type { TLocalBackgroundItem, TLocalPermissionMode, TLocalPermissionRequestView, TLocalQuestion, TLocalUsage } from "@warmap/contracts";
 import type { EventBody } from "../eventLog.js";
 import { AgentStartError, type AgentAdapter, type AgentLaunch, type AgentRun, type PermissionAnswer, type TurnModels } from "./types.js";
 import { buildClaudeArgs, childEnv, describeTool, homeDir, personalSettingsSetKey, versionAtLeast } from "./claudeEnv.js";
-import { autoAllowed, outsidePaths, suggestionsReachOutside, type PathScope } from "./pathGuard.js";
+import { modeAllows, outsidePaths, suggestionsReachOutside, type PathScope } from "./pathGuard.js";
 import { planProgress } from "../plan.js";
 
 /** 低于这个版本不保证兼容：11/05 实测基于 2.1.318；权限模式 default 改名 manual 也在 2.1.3xx。 */
@@ -129,6 +129,8 @@ class ClaudeRun implements AgentRun {
   constructor(
     private readonly child: ChildProcessWithoutNullStreams, private readonly sessionId: string, private readonly scope: PathScope,
     private readonly autoAllowRoot: string | null, private readonly subscription: boolean,
+    /** 现在的权限模式：本机按它放行请求（pathGuard 的 modeAllows）。 */
+    private mode: TLocalPermissionMode,
   ) {
     child.stdout.setEncoding("utf8").on("data", (d: string) => this.onStdout(d));
     let errBuf = "";
@@ -201,6 +203,29 @@ class ClaudeRun implements AgentRun {
       ? { behavior: "allow", updatedInput: req.input ?? {}, ...(session ? { updatedPermissions: session } : {}) }
       : { behavior: "deny", message: a.message?.trim() || "本人在天枢网页上拒绝了这一步" };
     this.write({ type: "control_response", response: { subtype: "success", request_id: requestId, response } });
+    // 本人批了计划：出 plan、转成「自动」接着做（Claude Code 批了 ExitPlanMode 自己也会出 plan，这里再明说一次 default）
+    if (a.allow && req.tool_name === "ExitPlanMode" && this.mode === "plan") {
+      this.mode = "auto";
+      void this.control({ subtype: "set_permission_mode", mode: "default" }, 10_000);
+      this.emit({ type: "permission_mode", mode: "auto", by: "plan_approved" });
+    }
+    return true;
+  }
+
+  async setPermissionMode(mode: TLocalPermissionMode): Promise<boolean> {
+    if (this.exited) return false;
+    if ((mode === "plan") !== (this.mode === "plan")) {
+      const r = await this.control({ subtype: "set_permission_mode", mode: mode === "plan" ? "plan" : "default" }, 10_000);
+      if (r.subtype !== "success") return false;
+    }
+    this.mode = mode;
+    // 换成更宽的档：等着的请求按新档重判，新档放行的自己放行
+    for (const [requestId, p] of this.permissions) {
+      if (!modeAllows(mode, String(p.req.tool_name ?? ""), p.req.input ?? {}, this.scope, p.req.blocked_path, this.autoAllowRoot)) continue;
+      this.permissions.delete(requestId);
+      this.write({ type: "control_response", response: { subtype: "success", request_id: requestId, response: { behavior: "allow", updatedInput: p.req.input ?? {} } } });
+      this.emit({ type: "permission_resolved", requestId, decision: "allow", message: "换了权限模式，按新的模式放行", allowForSession: false });
+    }
     return true;
   }
 
@@ -312,9 +337,8 @@ class ClaudeRun implements AgentRun {
           this.emit({ type: "question", request: { requestId: ev.request_id, questions: questionsOf(req.input ?? {}), askedAt: new Date().toISOString() } });
           return;
         }
-        // 卡在自己的工作树里：工作树里安全的步骤直接放行（规则在 pathGuard 的 autoAllowed）
-        const root = this.autoAllowRoot;
-        if (root && autoAllowed(toolName, req.input ?? {}, { ...this.scope, allowedRoots: () => [root] }, req.blocked_path)) {
+        // 按会话的权限模式放行（规则在 pathGuard 的 modeAllows；硬规矩哪一档都问本人）
+        if (modeAllows(this.mode, toolName, req.input ?? {}, this.scope, req.blocked_path, this.autoAllowRoot)) {
           this.write({ type: "control_response", response: { subtype: "success", request_id: ev.request_id, response: { behavior: "allow", updatedInput: req.input ?? {} } } });
           return;
         }
@@ -528,7 +552,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       // Mac/Linux 上自成进程组，强停时整组杀掉。
       detached: process.platform !== "win32",
     });
-    const run = new ClaudeRun(child, launch.sessionId, { cwd: launch.cwd, home: homeDir(), allowedRoots: launch.allowedRoots }, launch.autoAllowRoot, launch.model.source === "subscription");
+    const run = new ClaudeRun(child, launch.sessionId, { cwd: launch.cwd, home: homeDir(), allowedRoots: launch.allowedRoots }, launch.autoAllowRoot, launch.model.source === "subscription", launch.permissionMode);
     const spawned = await new Promise<Error | null>((resolve) => {
       child.once("spawn", () => resolve(null));
       child.once("error", (e) => resolve(e));

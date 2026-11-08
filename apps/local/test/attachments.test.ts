@@ -126,7 +126,9 @@ async function setup(cfg: Record<string, unknown>, opts: { link?: boolean; git?:
   const session = async (id: string) => (await call("GET", `/v1/sessions/${id}`)).body;
   const waitStatus = (id: string, want: string) => until(async () => (await session(id)).session.status === want);
   const events = (id: string) => readFileSync(join(t.dataDir, "sessions", id, "events.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
-  const open = async () => (await call("POST", "/v1/sessions", { subject: { kind: "card", cardId: "card-att" }, title: "看截图改页面", cwd: repo, firstMessage: "做" })).body;
+  const open = async () => (await call("POST", "/v1/sessions", { subject: { kind: "card", cardId: "card-att" }, title: "看截图改页面", cwd: repo, firstMessage: "做",
+    // git 仓库里按「自动」（工作树里写文件自己放行）；不是 git 的按「每次都问」（用例靠写文件时停下等批准）
+    permissionMode: opts.git === false ? "default" : "auto" })).body;
   const turns = (cwd: string, id: string) => readFileSync(join(cwd, ".fake-claude-turns.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((l) => l.sid === id);
   return { t, repo, cloud, call, session, waitStatus, events, open, turns };
 }

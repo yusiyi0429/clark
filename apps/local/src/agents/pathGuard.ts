@@ -235,6 +235,40 @@ export function autoAllowed(tool: string, input: Record<string, unknown>, scope:
   return !paths.some((p) => PROTECTED.test(p)) && !collect(tool, input, scope, inside, hint).length;
 }
 
+/** 改文件的工具：「自动接受改文件」自己放行的。 */
+const EDIT_TOOLS = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
+
+/**
+ * 天枢的硬规矩（设计 9.5，契约 LocalPermissionMode）：哪一档都照问本人。scope 的允许范围是本人允许的全部文件夹。
+ * 推拉代码、gh、装东西、联网下载、改系统设置（RISKY_COMMAND），飞书命令行写的，跑没装好的 npx 包，碰 .git、.claude 的，碰允许的文件夹以外的，天枢 MCP 写的工具。
+ */
+function mustAsk(tool: string, input: Record<string, unknown>, scope: PathScope, hint?: unknown): boolean {
+  if (tool.startsWith("mcp__tianshu__")) return !/^mcp__tianshu__(get|list)_/.test(tool);
+  if (SHELL_TOOLS.has(tool)) {
+    const cmd = input.command;
+    if (typeof cmd !== "string") return true;
+    if (RISKY_COMMAND.test(cmd) || larkWrites(cmd) || !binsInstalled(cmd, [scope.cwd, ...scope.allowedRoots()]) || touchesProtected(cmd)) return true;
+  } else if ((FILE_FIELDS[tool] ?? []).some((f) => typeof input[f] === "string" && PROTECTED.test(input[f] as string))) {
+    return true;
+  }
+  return collect(tool, input, scope, insideAny(scope.allowedRoots()), hint).length > 0;
+}
+
+/**
+ * 这一档下这一步能不能不问本人就放行（契约 LocalPermissionMode）。worktree：卡在自己的工作树里做时是工作树的根，
+ * 「自动」「自动接受改文件」只在工作树里自己放行；别的会话为 null，在允许的文件夹里放行，「自动」不在工作树时删、挪文件的命令照样问（没有 git 兜底）。
+ */
+export function modeAllows(
+  mode: "auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions", tool: string, input: Record<string, unknown>, scope: PathScope, hint: unknown, worktree: string | null,
+): boolean {
+  if (mode === "default" || mode === "plan" || mustAsk(tool, input, scope, hint)) return false;
+  if (mode === "bypassPermissions") return true;
+  const area: PathScope = worktree ? { ...scope, allowedRoots: () => [worktree] } : scope;
+  if (mode === "acceptEdits") return EDIT_TOOLS.has(tool) && !collect(tool, input, area, insideAny(area.allowedRoots()), hint).length;
+  if (!autoAllowed(tool, input, area, hint)) return false;
+  return Boolean(worktree) || !(SHELL_TOOLS.has(tool) && WRITES.test(String(input.command ?? "")));
+}
+
 /** Claude Code 放行规则里的路径：//c/x 是绝对路径（Windows 是 C:\x），~/ 是主目录，/x 是项目根下，其余相对工作目录。 */
 function rulePath(rule: string, s: PathScope): string {
   if (rule.startsWith("//")) { const p = rule.slice(1); return WIN && /^\/[a-zA-Z](\/|$)/.test(p) ? `${p[1]}:\\${p.slice(3)}` : p; }
