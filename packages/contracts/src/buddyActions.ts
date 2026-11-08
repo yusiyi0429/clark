@@ -1,8 +1,8 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import { Budget } from "./budget.js";
-import { LocalPlanEntry } from "./localRunner.js";
+import { LocalPermissionDecisionRequest, LocalPlanEntry, LocalQuestionAnswerRequest } from "./localRunner.js";
 import { PersonRef } from "./projectTransfers.js";
-import { AppearanceSettings, WaitingTarget } from "./workHome.js";
+import { AppearanceSettings, SubSessionLetter, WaitingTarget } from "./workHome.js";
 
 /**
  * 伙伴能代本人做事（设计《新首页》17.4、17.7，11/08 用户定做法 A）。
@@ -85,6 +85,19 @@ export const BuddyAskQuestion = Type.Object({
  * - ask_user（ui）：出一个选项框问本人（18 节第 9 条），参数见 BuddyAskQuestion：1–4 题。天枢存成这一轮的一张卡（ConversationCard 的 buddy_question，
  *   status open），经 card 事件插进这一轮，读历史时也在那一轮的回答上。调完这一轮就该结束，等本人回答。伙伴台和项目对话都能用。
  *   recommended 不在第一个选项上、或一题标了不止一个，回 400 INVALID_ARGS；这一轮没带 runId（界面上出不来）回 409 NO_TURN。回 { questionId }。
+ *
+ * 项目主管线按字母管子会话（18 节第 10 条，下面五个都是 write，只在项目对话里能用）：letter 是这个项目里子会话的字母（SubSessionLetter，A、B……AA），
+ * 项目从这一轮所在的对话（conversationId 是项目对话）定。不在项目对话里调回 409 PROJECT_ONLY；这个项目里没有这个字母 404 LETTER_NOT_FOUND。
+ * 云端不指挥本机：要动本机会话的都登记一条，由本人电脑上开着的网页认领后交给本机（停下同 stop_sub_session 的 SessionStopView，其余是 SessionCommandView）。
+ * - sub_session_tell：给子会话转一句话（text）。它在跑就在下一步前送到，停着就续上接着做。还没开过工 409 NOT_STARTED（先 sub_session_restart）。
+ * - sub_session_stop：停下它（同 stop_sub_session）。
+ * - sub_session_restart：重开。还没开过工、或开工登记已了结的，登记开工（同 start_sub_session）；本机会话停着的（做完一轮、被停下、出错停住），
+ *   往里说一句 text（不给是「接着做」）续上。在跑 409 ALREADY_RUNNING。
+ * - sub_session_answer：回答它在问的那一次（同本机的 LocalQuestionAnswerRequest：choices 每题选中的选项 label，条数和题数一样；text 另外的话）。
+ *   它没在问 409 NOT_ASKING。
+ * - sub_session_approve：批准（decision = allow）或拒绝（deny，可附 message）它在等批准的那一步；allowForSession 这张卡同类的都允许。
+ *   硬规矩：只有本人在这次对话里明说了（「批准 B」「B 可以」「同意它删」）才 allow，本人没说就不批，转述、猜测都不算。没在等批准 409 NOT_WAITING_PERMISSION。
+ * 回 { letter, kind, id, title }，加登记了什么（commandId、stopId 或 start）。
  */
 export const BuddyActionParams = {
   read_work_home: Type.Object({}, strict),
@@ -112,7 +125,14 @@ export const BuddyActionParams = {
     entries: Type.Array(LocalPlanEntry, { maxItems: 20 }),
   }, strict),
   ask_user: Type.Object({ questions: Type.Array(BuddyAskQuestion, { minItems: 1, maxItems: 4 }) }, strict),
+  sub_session_tell: Type.Object({ letter: SubSessionLetter, text: Type.String({ minLength: 1, maxLength: 4000 }) }, strict),
+  sub_session_stop: Type.Object({ letter: SubSessionLetter }, strict),
+  sub_session_restart: Type.Object({ letter: SubSessionLetter, text: Type.Optional(Type.String({ minLength: 1, maxLength: 4000 })) }, strict),
+  sub_session_answer: Type.Object({ letter: SubSessionLetter, ...LocalQuestionAnswerRequest.properties }, strict),
+  sub_session_approve: Type.Object({ letter: SubSessionLetter, ...LocalPermissionDecisionRequest.properties }, strict),
 } as const;
+/** 只在项目对话里能用的动作（18 节第 10 条）。 */
+export const PROJECT_ONLY_ACTIONS = ["sub_session_tell", "sub_session_stop", "sub_session_restart", "sub_session_answer", "sub_session_approve"] as const;
 export type BuddyActionName = keyof typeof BuddyActionParams;
 export type TBuddyAskQuestion = Static<typeof BuddyAskQuestion>;
 export const BUDDY_ACTION_NAMES = Object.keys(BuddyActionParams) as BuddyActionName[];
@@ -121,6 +141,7 @@ export const BUDDY_ACTION_NAMES = Object.keys(BuddyActionParams) as BuddyActionN
 
 /**
  * GET /internal/me/buddy-actions：本人现在能用的动作。authority 为 none 时只列 read、ui、plan 三类。
+ * 可选查询参数 conversationId：带了而且不是项目对话时，只在项目对话里能用的那几个（PROJECT_ONLY_ACTIONS）不列；不带时全列（执行时再按对话拦）。
  * parameters 是参数的 JSON Schema（直接交给模型当工具的 input_schema）。Chat 把 name 原样当工具名，这样网页收到的 tool 事件里就是动作名。
  */
 export const BuddyActionSpec = Type.Object({

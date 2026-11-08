@@ -1,8 +1,8 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
-import { LocalPermissionMode } from "./localRunner.js";
+import { LocalPermissionBrief, LocalPermissionMode, LocalQuestionRequestView } from "./localRunner.js";
 import { PersonRef, ProjectTransfer } from "./projectTransfers.js";
 import { CardDraftView, CardPlanView, CardTaskView } from "./taskCards.js";
-import { TaskFeedItem } from "./workHome.js";
+import { SubSessionLetter, TaskFeedItem } from "./workHome.js";
 
 /**
  * 项目常驻，每月目标挂在项目上（设计《新首页》第 16 节，11/07 晚用户批准）。
@@ -148,8 +148,54 @@ export const ProjectGoalChangedItem = Type.Object({
  */
 export const AnswerGoalChangeRequest = Type.Object({ answer: Type.Union([Type.Literal("stop"), Type.Literal("keep")]) }, strict);
 
+/**
+ * 18 节第 10 条：子会话停了、要人介入，都报进它所在项目的对话（本人不用进子会话也能处理项目的一切）。两种都按 at 和 afterSequence 插进项目对话：
+ * afterSequence 是记下这一条时项目对话最后一条消息的 sequence（同 ProjectTransfer.afterSequence：Chat 读回的消息不带时间，网页按它插在那条后面），
+ * 对话还没有消息、读不到为 null。sub 是哪个子会话：kind、id、字母、记下时的标题；界面写「B · {标题}」。
+ *
+ * sub_session_report：子会话停了（只报卡和专题；规划员、验收员不报）。一两句写做成了什么、卡在哪（summary，本机报的摘要；本机还没报摘要为 null），附「看结果」。
+ * - outcome：round_done 做完一轮停下（没在问你）；stopped 被停下（本人、伙伴或项目主管线停的，或本机程序退出）；failed 出错停住。
+ * - 记下以后云端以本人身份给项目主管线（模型）发一句（开头是 SUB_SESSION_REPORT_PREFIX 那几个字，读回历史时去掉、标成 ConversationMessage.via = report，
+ *   网页不画成本人的气泡，报告这一行已经画了），让它回一小轮：说一句这意味着什么、下一步。项目主管线正在回上一轮时不打断，排在它后面。
+ *
+ * sub_session_decision：子会话要人介入，直接出它的决定卡，不先等模型想一轮。question 是它在问的那一次（同 WaitingItem.question，网页画选项框），
+ * permission 是在等批准的那一步（同 WaitingItem.permission，网页画批准卡），两样只有一样。答、批由网页在本人电脑上直接交给本机（同「等你」里就地答）；
+ * 手机上看得到、能点进项目对话看。sessionId、deviceId 是那个本机会话和它所在的电脑。
+ * - status：open 还在等；closed 这一次不在等了（答了、批了、拒了，或这一轮停了失效），closedAt 是云端知道的时间。同一次提问、同一步批准只出一张。
+ */
+export const SubSessionFeedRef = Type.Object({
+  kind: Type.Union([Type.Literal("card"), Type.Literal("topic")]),
+  id: Type.String({ format: "uuid" }),
+  letter: SubSessionLetter,
+  title: Type.String(),
+}, strict);
+export const ProjectSubSessionReportItem = Type.Object({
+  kind: Type.Literal("sub_session_report"),
+  id: Type.String({ format: "uuid" }),
+  at: Instant,
+  afterSequence: Nullable(Type.Integer({ minimum: 1 })),
+  sub: SubSessionFeedRef,
+  outcome: Type.Union([Type.Literal("round_done"), Type.Literal("stopped"), Type.Literal("failed")]),
+  summary: Nullable(Type.String({ maxLength: 600 })),
+}, strict);
+export const ProjectSubSessionDecisionItem = Type.Object({
+  kind: Type.Literal("sub_session_decision"),
+  id: Type.String({ format: "uuid" }),
+  at: Instant,
+  afterSequence: Nullable(Type.Integer({ minimum: 1 })),
+  sub: SubSessionFeedRef,
+  sessionId: Type.String({ format: "uuid" }),
+  deviceId: Type.String({ format: "uuid" }),
+  question: Nullable(LocalQuestionRequestView),
+  permission: Nullable(LocalPermissionBrief),
+  status: Type.Union([Type.Literal("open"), Type.Literal("closed")]),
+  closedAt: Nullable(Instant),
+}, strict);
+/** 子会话报告触发项目主管线那一轮时，发给它的那句的开头（读回历史时去掉，标 via = report）。 */
+export const SUB_SESSION_REPORT_PREFIX = "【子会话回报】";
+
 export const ProjectFeedItem = Type.Union([TaskFeedItem, ProjectGoalLinkedItem, ProjectHandoverItem, ProjectHandoverSummaryItem, ProjectTransferDeclinedItem,
-  ProjectGoalChangedItem]);
+  ProjectGoalChangedItem, ProjectSubSessionReportItem, ProjectSubSessionDecisionItem]);
 /** GET /api/me/projects/:projectId/feed：从旧到新。 */
 export const ProjectFeedResponse = Type.Object({ items: Type.Array(ProjectFeedItem) }, strict);
 
@@ -181,3 +227,6 @@ export type TProjectPipelineResponse = Static<typeof ProjectPipelineResponse>;
 export type TProjectGoalLinkedItem = Static<typeof ProjectGoalLinkedItem>;
 export type TProjectFeedItem = Static<typeof ProjectFeedItem>;
 export type TProjectFeedResponse = Static<typeof ProjectFeedResponse>;
+export type TSubSessionFeedRef = Static<typeof SubSessionFeedRef>;
+export type TProjectSubSessionReportItem = Static<typeof ProjectSubSessionReportItem>;
+export type TProjectSubSessionDecisionItem = Static<typeof ProjectSubSessionDecisionItem>;

@@ -20804,6 +20804,125 @@
         }
       }
     },
+    "/api/me/session-commands/claim": {
+      "post": {
+        "operationId": "claimSessionCommands",
+        "summary": "认领这台电脑上要对本机会话做的事（18 节第 10 条：项目主管线按字母转话、重开、回答问题、批准）",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimSessionCommandsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "要做的",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimSessionCommandsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/session-commands/{id}/done": {
+      "post": {
+        "operationId": "finishSessionCommand",
+        "summary": "报做的结果（done / not_running / expired / failed）；不是这台电脑认领的 404",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionCommandDoneRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "记下了"
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/work-home": {
       "get": {
         "operationId": "getWorkHome",
@@ -30365,6 +30484,10 @@
                     },
                     {
                       "const": "buddy",
+                      "type": "string"
+                    },
+                    {
+                      "const": "report",
                       "type": "string"
                     }
                   ]
@@ -99761,6 +99884,7 @@
         "type": "object",
         "required": [
           "task",
+          "letter",
           "brief",
           "standards",
           "runs",
@@ -100893,6 +101017,17 @@
                 }
               }
             }
+          },
+          "letter": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z]{1,3}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "brief": {
             "anyOf": [
@@ -104132,6 +104267,7 @@
         "type": "object",
         "required": [
           "topic",
+          "letter",
           "task",
           "versions",
           "current",
@@ -104521,6 +104657,17 @@
                 ]
               }
             }
+          },
+          "letter": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z]{1,3}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "task": {
             "anyOf": [
@@ -110262,6 +110409,7 @@
         "required": [
           "id",
           "kind",
+          "letter",
           "title",
           "state",
           "waiting",
@@ -110288,6 +110436,17 @@
               {
                 "const": "topic",
                 "type": "string"
+              }
+            ]
+          },
+          "letter": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z]{1,3}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -110911,6 +111070,7 @@
               "required": [
                 "id",
                 "kind",
+                "letter",
                 "title",
                 "state",
                 "waiting",
@@ -110937,6 +111097,17 @@
                     {
                       "const": "topic",
                       "type": "string"
+                    }
+                  ]
+                },
+                "letter": {
+                  "anyOf": [
+                    {
+                      "pattern": "^[A-Z]{1,3}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
                     }
                   ]
                 },
@@ -111918,6 +112089,7 @@
           "sessionId",
           "deviceId",
           "deviceName",
+          "letter",
           "dueAt",
           "answer",
           "person",
@@ -112148,6 +112320,17 @@
           "deviceName": {
             "anyOf": [
               {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "letter": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z]{1,3}$",
                 "type": "string"
               },
               {
@@ -112610,6 +112793,7 @@
                     "required": [
                       "id",
                       "kind",
+                      "letter",
                       "title",
                       "state",
                       "waiting",
@@ -112636,6 +112820,17 @@
                           {
                             "const": "topic",
                             "type": "string"
+                          }
+                        ]
+                      },
+                      "letter": {
+                        "anyOf": [
+                          {
+                            "pattern": "^[A-Z]{1,3}$",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
                           }
                         ]
                       },
@@ -113495,6 +113690,7 @@
                   "required": [
                     "id",
                     "kind",
+                    "letter",
                     "title",
                     "state",
                     "waiting",
@@ -113521,6 +113717,17 @@
                         {
                           "const": "topic",
                           "type": "string"
+                        }
+                      ]
+                    },
+                    "letter": {
+                      "anyOf": [
+                        {
+                          "pattern": "^[A-Z]{1,3}$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
                         }
                       ]
                     },
@@ -113868,6 +114075,7 @@
                 "sessionId",
                 "deviceId",
                 "deviceName",
+                "letter",
                 "dueAt",
                 "answer",
                 "person",
@@ -114098,6 +114306,17 @@
                 "deviceName": {
                   "anyOf": [
                     {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "letter": {
+                  "anyOf": [
+                    {
+                      "pattern": "^[A-Z]{1,3}$",
                       "type": "string"
                     },
                     {
@@ -118255,6 +118474,332 @@
                 ]
               }
             }
+          },
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "kind",
+              "id",
+              "at",
+              "afterSequence",
+              "sub",
+              "outcome",
+              "summary"
+            ],
+            "properties": {
+              "kind": {
+                "const": "sub_session_report",
+                "type": "string"
+              },
+              "id": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "at": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "afterSequence": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "sub": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "kind",
+                  "id",
+                  "letter",
+                  "title"
+                ],
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "const": "card",
+                        "type": "string"
+                      },
+                      {
+                        "const": "topic",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "letter": {
+                    "pattern": "^[A-Z]{1,3}$",
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  }
+                }
+              },
+              "outcome": {
+                "anyOf": [
+                  {
+                    "const": "round_done",
+                    "type": "string"
+                  },
+                  {
+                    "const": "stopped",
+                    "type": "string"
+                  },
+                  {
+                    "const": "failed",
+                    "type": "string"
+                  }
+                ]
+              },
+              "summary": {
+                "anyOf": [
+                  {
+                    "maxLength": 600,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "kind",
+              "id",
+              "at",
+              "afterSequence",
+              "sub",
+              "sessionId",
+              "deviceId",
+              "question",
+              "permission",
+              "status",
+              "closedAt"
+            ],
+            "properties": {
+              "kind": {
+                "const": "sub_session_decision",
+                "type": "string"
+              },
+              "id": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "at": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "afterSequence": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "sub": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "kind",
+                  "id",
+                  "letter",
+                  "title"
+                ],
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "const": "card",
+                        "type": "string"
+                      },
+                      {
+                        "const": "topic",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  "letter": {
+                    "pattern": "^[A-Z]{1,3}$",
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  }
+                }
+              },
+              "sessionId": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "deviceId": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "question": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "requestId",
+                      "questions",
+                      "askedAt"
+                    ],
+                    "properties": {
+                      "requestId": {
+                        "minLength": 1,
+                        "maxLength": 120,
+                        "type": "string"
+                      },
+                      "questions": {
+                        "minItems": 1,
+                        "maxItems": 10,
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "question",
+                            "header",
+                            "options",
+                            "multiSelect"
+                          ],
+                          "properties": {
+                            "question": {
+                              "minLength": 1,
+                              "maxLength": 2000,
+                              "type": "string"
+                            },
+                            "header": {
+                              "maxLength": 100,
+                              "type": "string"
+                            },
+                            "options": {
+                              "maxItems": 10,
+                              "type": "array",
+                              "items": {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "label",
+                                  "description"
+                                ],
+                                "properties": {
+                                  "label": {
+                                    "minLength": 1,
+                                    "maxLength": 200,
+                                    "type": "string"
+                                  },
+                                  "description": {
+                                    "maxLength": 1000,
+                                    "type": "string"
+                                  }
+                                }
+                              }
+                            },
+                            "multiSelect": {
+                              "type": "boolean"
+                            }
+                          }
+                        }
+                      },
+                      "askedAt": {
+                        "format": "date-time",
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "permission": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "requestId",
+                      "toolName",
+                      "title",
+                      "outsidePaths"
+                    ],
+                    "properties": {
+                      "requestId": {
+                        "minLength": 1,
+                        "maxLength": 120,
+                        "type": "string"
+                      },
+                      "toolName": {
+                        "maxLength": 200,
+                        "type": "string"
+                      },
+                      "title": {
+                        "maxLength": 500,
+                        "type": "string"
+                      },
+                      "outsidePaths": {
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "const": "open",
+                    "type": "string"
+                  },
+                  {
+                    "const": "closed",
+                    "type": "string"
+                  }
+                ]
+              },
+              "closedAt": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
           }
         ]
       },
@@ -118891,6 +119436,332 @@
                       ]
                     },
                     "answeredAt": {
+                      "anyOf": [
+                        {
+                          "format": "date-time",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "id",
+                    "at",
+                    "afterSequence",
+                    "sub",
+                    "outcome",
+                    "summary"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "sub_session_report",
+                      "type": "string"
+                    },
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "at": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "afterSequence": {
+                      "anyOf": [
+                        {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "sub": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "kind",
+                        "id",
+                        "letter",
+                        "title"
+                      ],
+                      "properties": {
+                        "kind": {
+                          "anyOf": [
+                            {
+                              "const": "card",
+                              "type": "string"
+                            },
+                            {
+                              "const": "topic",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "id": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "letter": {
+                          "pattern": "^[A-Z]{1,3}$",
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "outcome": {
+                      "anyOf": [
+                        {
+                          "const": "round_done",
+                          "type": "string"
+                        },
+                        {
+                          "const": "stopped",
+                          "type": "string"
+                        },
+                        {
+                          "const": "failed",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "summary": {
+                      "anyOf": [
+                        {
+                          "maxLength": 600,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
+                },
+                {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "id",
+                    "at",
+                    "afterSequence",
+                    "sub",
+                    "sessionId",
+                    "deviceId",
+                    "question",
+                    "permission",
+                    "status",
+                    "closedAt"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "const": "sub_session_decision",
+                      "type": "string"
+                    },
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "at": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "afterSequence": {
+                      "anyOf": [
+                        {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "sub": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "kind",
+                        "id",
+                        "letter",
+                        "title"
+                      ],
+                      "properties": {
+                        "kind": {
+                          "anyOf": [
+                            {
+                              "const": "card",
+                              "type": "string"
+                            },
+                            {
+                              "const": "topic",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "id": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "letter": {
+                          "pattern": "^[A-Z]{1,3}$",
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "sessionId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "deviceId": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "question": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "requestId",
+                            "questions",
+                            "askedAt"
+                          ],
+                          "properties": {
+                            "requestId": {
+                              "minLength": 1,
+                              "maxLength": 120,
+                              "type": "string"
+                            },
+                            "questions": {
+                              "minItems": 1,
+                              "maxItems": 10,
+                              "type": "array",
+                              "items": {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "question",
+                                  "header",
+                                  "options",
+                                  "multiSelect"
+                                ],
+                                "properties": {
+                                  "question": {
+                                    "minLength": 1,
+                                    "maxLength": 2000,
+                                    "type": "string"
+                                  },
+                                  "header": {
+                                    "maxLength": 100,
+                                    "type": "string"
+                                  },
+                                  "options": {
+                                    "maxItems": 10,
+                                    "type": "array",
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "type": "object",
+                                      "required": [
+                                        "label",
+                                        "description"
+                                      ],
+                                      "properties": {
+                                        "label": {
+                                          "minLength": 1,
+                                          "maxLength": 200,
+                                          "type": "string"
+                                        },
+                                        "description": {
+                                          "maxLength": 1000,
+                                          "type": "string"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "multiSelect": {
+                                    "type": "boolean"
+                                  }
+                                }
+                              }
+                            },
+                            "askedAt": {
+                              "format": "date-time",
+                              "type": "string"
+                            }
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "permission": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "requestId",
+                            "toolName",
+                            "title",
+                            "outsidePaths"
+                          ],
+                          "properties": {
+                            "requestId": {
+                              "minLength": 1,
+                              "maxLength": 120,
+                              "type": "string"
+                            },
+                            "toolName": {
+                              "maxLength": 200,
+                              "type": "string"
+                            },
+                            "title": {
+                              "maxLength": 500,
+                              "type": "string"
+                            },
+                            "outsidePaths": {
+                              "maxItems": 20,
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "const": "open",
+                          "type": "string"
+                        },
+                        {
+                          "const": "closed",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "closedAt": {
                       "anyOf": [
                         {
                           "format": "date-time",
@@ -120506,6 +121377,367 @@
           }
         }
       },
+      "SubSessionFeedRef": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "id",
+          "letter",
+          "title"
+        ],
+        "properties": {
+          "kind": {
+            "anyOf": [
+              {
+                "const": "card",
+                "type": "string"
+              },
+              {
+                "const": "topic",
+                "type": "string"
+              }
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "letter": {
+            "pattern": "^[A-Z]{1,3}$",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "ProjectSubSessionReportItem": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "id",
+          "at",
+          "afterSequence",
+          "sub",
+          "outcome",
+          "summary"
+        ],
+        "properties": {
+          "kind": {
+            "const": "sub_session_report",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "afterSequence": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sub": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "kind",
+              "id",
+              "letter",
+              "title"
+            ],
+            "properties": {
+              "kind": {
+                "anyOf": [
+                  {
+                    "const": "card",
+                    "type": "string"
+                  },
+                  {
+                    "const": "topic",
+                    "type": "string"
+                  }
+                ]
+              },
+              "id": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "letter": {
+                "pattern": "^[A-Z]{1,3}$",
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            }
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "const": "round_done",
+                "type": "string"
+              },
+              {
+                "const": "stopped",
+                "type": "string"
+              },
+              {
+                "const": "failed",
+                "type": "string"
+              }
+            ]
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "maxLength": 600,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ProjectSubSessionDecisionItem": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "id",
+          "at",
+          "afterSequence",
+          "sub",
+          "sessionId",
+          "deviceId",
+          "question",
+          "permission",
+          "status",
+          "closedAt"
+        ],
+        "properties": {
+          "kind": {
+            "const": "sub_session_decision",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "afterSequence": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sub": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "kind",
+              "id",
+              "letter",
+              "title"
+            ],
+            "properties": {
+              "kind": {
+                "anyOf": [
+                  {
+                    "const": "card",
+                    "type": "string"
+                  },
+                  {
+                    "const": "topic",
+                    "type": "string"
+                  }
+                ]
+              },
+              "id": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "letter": {
+                "pattern": "^[A-Z]{1,3}$",
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            }
+          },
+          "sessionId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "deviceId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "requestId",
+                  "questions",
+                  "askedAt"
+                ],
+                "properties": {
+                  "requestId": {
+                    "minLength": 1,
+                    "maxLength": 120,
+                    "type": "string"
+                  },
+                  "questions": {
+                    "minItems": 1,
+                    "maxItems": 10,
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "question",
+                        "header",
+                        "options",
+                        "multiSelect"
+                      ],
+                      "properties": {
+                        "question": {
+                          "minLength": 1,
+                          "maxLength": 2000,
+                          "type": "string"
+                        },
+                        "header": {
+                          "maxLength": 100,
+                          "type": "string"
+                        },
+                        "options": {
+                          "maxItems": 10,
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "label",
+                              "description"
+                            ],
+                            "properties": {
+                              "label": {
+                                "minLength": 1,
+                                "maxLength": 200,
+                                "type": "string"
+                              },
+                              "description": {
+                                "maxLength": 1000,
+                                "type": "string"
+                              }
+                            }
+                          }
+                        },
+                        "multiSelect": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  },
+                  "askedAt": {
+                    "format": "date-time",
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "permission": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "requestId",
+                  "toolName",
+                  "title",
+                  "outsidePaths"
+                ],
+                "properties": {
+                  "requestId": {
+                    "minLength": 1,
+                    "maxLength": 120,
+                    "type": "string"
+                  },
+                  "toolName": {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "title": {
+                    "maxLength": 500,
+                    "type": "string"
+                  },
+                  "outsidePaths": {
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "open",
+                "type": "string"
+              },
+              {
+                "const": "closed",
+                "type": "string"
+              }
+            ]
+          },
+          "closedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
       "ProjectHandoverItem": {
         "additionalProperties": false,
         "type": "object",
@@ -121639,6 +122871,520 @@
                 "type": "string"
               }
             ]
+          }
+        }
+      },
+      "SessionCommand": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "type",
+              "text"
+            ],
+            "properties": {
+              "type": {
+                "const": "message",
+                "type": "string"
+              },
+              "text": {
+                "minLength": 1,
+                "maxLength": 4000,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "type",
+              "requestId",
+              "answer"
+            ],
+            "properties": {
+              "type": {
+                "const": "answer",
+                "type": "string"
+              },
+              "requestId": {
+                "minLength": 1,
+                "maxLength": 120,
+                "type": "string"
+              },
+              "answer": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "choices"
+                ],
+                "properties": {
+                  "choices": {
+                    "minItems": 1,
+                    "maxItems": 10,
+                    "type": "array",
+                    "items": {
+                      "maxItems": 10,
+                      "type": "array",
+                      "items": {
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "text": {
+                    "minLength": 1,
+                    "maxLength": 4000,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "type",
+              "requestId",
+              "decision"
+            ],
+            "properties": {
+              "type": {
+                "const": "permission",
+                "type": "string"
+              },
+              "requestId": {
+                "minLength": 1,
+                "maxLength": 120,
+                "type": "string"
+              },
+              "decision": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "decision"
+                ],
+                "properties": {
+                  "decision": {
+                    "anyOf": [
+                      {
+                        "const": "allow",
+                        "type": "string"
+                      },
+                      {
+                        "const": "deny",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "message": {
+                    "maxLength": 500,
+                    "type": "string"
+                  },
+                  "allowForSession": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "SessionCommandView": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "subSessionId",
+          "sessionId",
+          "deviceId",
+          "requestedAt",
+          "command"
+        ],
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "const": "card",
+                "type": "string"
+              },
+              {
+                "const": "topic",
+                "type": "string"
+              }
+            ]
+          },
+          "subSessionId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "sessionId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "deviceId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "requestedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "command": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "type",
+                  "text"
+                ],
+                "properties": {
+                  "type": {
+                    "const": "message",
+                    "type": "string"
+                  },
+                  "text": {
+                    "minLength": 1,
+                    "maxLength": 4000,
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "type",
+                  "requestId",
+                  "answer"
+                ],
+                "properties": {
+                  "type": {
+                    "const": "answer",
+                    "type": "string"
+                  },
+                  "requestId": {
+                    "minLength": 1,
+                    "maxLength": 120,
+                    "type": "string"
+                  },
+                  "answer": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "choices"
+                    ],
+                    "properties": {
+                      "choices": {
+                        "minItems": 1,
+                        "maxItems": 10,
+                        "type": "array",
+                        "items": {
+                          "maxItems": 10,
+                          "type": "array",
+                          "items": {
+                            "minLength": 1,
+                            "maxLength": 200,
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "text": {
+                        "minLength": 1,
+                        "maxLength": 4000,
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              },
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "type",
+                  "requestId",
+                  "decision"
+                ],
+                "properties": {
+                  "type": {
+                    "const": "permission",
+                    "type": "string"
+                  },
+                  "requestId": {
+                    "minLength": 1,
+                    "maxLength": 120,
+                    "type": "string"
+                  },
+                  "decision": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "decision"
+                    ],
+                    "properties": {
+                      "decision": {
+                        "anyOf": [
+                          {
+                            "const": "allow",
+                            "type": "string"
+                          },
+                          {
+                            "const": "deny",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "message": {
+                        "maxLength": 500,
+                        "type": "string"
+                      },
+                      "allowForSession": {
+                        "type": "boolean"
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "ClaimSessionCommandsRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "deviceId"
+        ],
+        "properties": {
+          "deviceId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        }
+      },
+      "ClaimSessionCommandsResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "commands"
+        ],
+        "properties": {
+          "commands": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "kind",
+                "subSessionId",
+                "sessionId",
+                "deviceId",
+                "requestedAt",
+                "command"
+              ],
+              "properties": {
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "card",
+                      "type": "string"
+                    },
+                    {
+                      "const": "topic",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "subSessionId": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "sessionId": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "deviceId": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "requestedAt": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "command": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "type",
+                        "text"
+                      ],
+                      "properties": {
+                        "type": {
+                          "const": "message",
+                          "type": "string"
+                        },
+                        "text": {
+                          "minLength": 1,
+                          "maxLength": 4000,
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "type",
+                        "requestId",
+                        "answer"
+                      ],
+                      "properties": {
+                        "type": {
+                          "const": "answer",
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "minLength": 1,
+                          "maxLength": 120,
+                          "type": "string"
+                        },
+                        "answer": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "choices"
+                          ],
+                          "properties": {
+                            "choices": {
+                              "minItems": 1,
+                              "maxItems": 10,
+                              "type": "array",
+                              "items": {
+                                "maxItems": 10,
+                                "type": "array",
+                                "items": {
+                                  "minLength": 1,
+                                  "maxLength": 200,
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "text": {
+                              "minLength": 1,
+                              "maxLength": 4000,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "type",
+                        "requestId",
+                        "decision"
+                      ],
+                      "properties": {
+                        "type": {
+                          "const": "permission",
+                          "type": "string"
+                        },
+                        "requestId": {
+                          "minLength": 1,
+                          "maxLength": 120,
+                          "type": "string"
+                        },
+                        "decision": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "decision"
+                          ],
+                          "properties": {
+                            "decision": {
+                              "anyOf": [
+                                {
+                                  "const": "allow",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "deny",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "message": {
+                              "maxLength": 500,
+                              "type": "string"
+                            },
+                            "allowForSession": {
+                              "type": "boolean"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "SessionCommandDoneRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "deviceId",
+          "result"
+        ],
+        "properties": {
+          "deviceId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "const": "done",
+                "type": "string"
+              },
+              {
+                "const": "not_running",
+                "type": "string"
+              },
+              {
+                "const": "expired",
+                "type": "string"
+              },
+              {
+                "const": "failed",
+                "type": "string"
+              }
+            ]
+          },
+          "message": {
+            "maxLength": 500,
+            "type": "string"
           }
         }
       },
