@@ -9,6 +9,7 @@ import {
   LocalSettings, LocalMergeSync, LocalStatusResponse, LocalQuotaSource, LocalQuotaSync,
   LocalFolder, LocalProjectFolder, LocalProjectListResponse, LocalProjectFolderRequest, LocalHandoverCheck, LocalProjectCloneRequest, LocalProjectCloneResponse, ProjectTransfer,
   LocalTaskBudgetView, LocalBudgetListResponse, LocalBudgetUpdateRequest, LocalSendMessageRequest as SendMessage, LocalPermissionBrief, LOCAL_RUNNER_ATTACHMENT_PATH,
+  LocalRunPreviewRequest,
 } from "../src/index.js";
 
 const sessionId = "6b0f3a52-4d0c-4c1e-9a43-1f7d2c9b8e10";
@@ -392,6 +393,16 @@ describe("本机程序契约", () => {
     expect(Value.Check(LocalSessionSummary, summary)).toBe(true);
     expect(Value.Check(LocalSessionSummary, { ...summary, hold: { reason: "balance", until: null }, run: { ...run, mode: "set", effort: null, multiAgent: false } })).toBe(true);
     expect(Value.Check(LocalSessionSummary, { ...summary, run: { ...run, effort: "ultra" } })).toBe(false);
+    // 哪个来源的哪个模型：开工前定的，和执行方实际报的（以实际为准）；老版本本机报的没有这几项也收
+    const named = { ...run, source: "subscription", sourceLabel: "我的 Claude 订阅", modelName: "Opus 5.5", actual: { model: "claude-opus-5-5", modelName: "Opus 5.5", at } };
+    expect(Value.Check(LocalSessionSummary, { ...summary, run: named })).toBe(true);
+    expect(Value.Check(LocalSessionSummary, { ...summary, run: { ...named, source: "gateway", sourceLabel: "TokenHub", model: "wangsu/qwen3.8-flash", modelName: "qwen3.8-flash", actual: null } })).toBe(true);
+    expect(Value.Check(LocalSessionSummary, { ...summary, run: { ...named, source: "tokenhub" } })).toBe(false);
+    expect(Value.Check(LocalSessionSummary, { ...summary, run: { ...named, actual: { model: "", modelName: "x", at } } })).toBe(false);
+    expect(Value.Check(LocalRunPreviewRequest, { modelProfileId: "subscription", modelTier: "light", taskBudget: { taskId: "T-1", budget: set } })).toBe(true);
+    expect(Value.Check(LocalRunPreviewRequest, {})).toBe(true);
+    expect(Value.Check(LocalRunPreviewRequest, { title: "多余" })).toBe(false);
+    expect(LOCAL_RUNNER_ROUTES.previewRun).toEqual({ method: "POST", path: "/v1/runs/preview", auth: true });
     expect(Value.Check(LocalSessionEvent, { seq: 3, at, sessionId, type: "turn_end", isError: true, text: null, durationMs: 1, usage, errorKind: "balance" })).toBe(true);
 
     const base = { sessionId, subject: summary.subject, occurredAt: at };

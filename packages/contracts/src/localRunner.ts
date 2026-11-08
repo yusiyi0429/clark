@@ -616,11 +616,47 @@ export const LocalEffort = Type.Union([Type.Literal("low"), Type.Literal("medium
  * model 是传给 Claude Code 的模型（订阅按档位选的 opus、sonnet，网关是配置里的模型名）；effort 是思考强度（网关不传为 null）；
  * multiAgent 是多 agent（ultracode）开没开，只有「无上限」的订阅会话开，额度到 95% 时对新的轮次关掉。每次拉起、续上时定，跑着时只有 multiAgent 会变。
  */
+/**
+ * 执行方自己报的实际模型：Claude Code 每轮开头 system/init 里的 model（Codex 接上以后是 app-server 开线程时回的 model）。
+ * 和 LocalRun.model 不一样时（订阅传的是 opus 这种别名、网关把模型换了）以它为准显示；对不上的那一下本机记一条事件 notice（code model_mismatch，
+ * text 写请求的和实际的），同步给云端的 status 条目随之带新的 actual。modelName 的写法同 LocalRun.modelName；at 是最近一次报的时间。
+ */
+export const LocalActualModel = Type.Object({
+  model: Type.String({ minLength: 1, maxLength: 120 }),
+  modelName: Type.String({ minLength: 1, maxLength: 60 }),
+  at: Instant,
+}, strict);
 export const LocalRun = Type.Object({
   mode: BudgetMode,
   model: Nullable(Type.String({ maxLength: 120 })),
   effort: Nullable(LocalEffort),
   multiAgent: Type.Boolean(),
+  /**
+   * 每个子会话都显示「哪个来源的哪个模型」（选了「自动」也显示落到哪个）：界面写 `${sourceLabel} · ${actual?.modelName ?? modelName}`，
+   * 如「我的 Claude 订阅 · Opus 5.5」「TokenHub · qwen3.8-flash」。下面四项本机总会填；Optional 只为兼容老版本本机报的和已存的会话。
+   * source：本人的订阅还是网关（同模型配置的 source）。
+   */
+  source: Type.Optional(LocalModelSource),
+  /** 来源的名字：模型配置的名字（内置的「我的 Claude 订阅」，或本人给 TokenHub 配置起的名字）。 */
+  sourceLabel: Type.Optional(Type.String({ minLength: 1, maxLength: 40 })),
+  /**
+   * 给人看的模型名：认得出的 Claude 模型写成「Opus 5.5」「Sonnet 5.5」「Haiku 5.5」；订阅传的是 opus、sonnet 这种别名时，
+   * 用这台电脑上一次实际跑出来的版本（见 actual），一次都没跑过就写「Opus」「Sonnet」；别的（网关模型）去掉「厂商/」前缀原样写，如 qwen3.8-flash。
+   */
+  modelName: Type.Optional(Nullable(Type.String({ maxLength: 60 }))),
+  /** 实际跑的（见 LocalActualModel），以它为准；这次拉起后执行方还没报过为 null。 */
+  actual: Type.Optional(Nullable(LocalActualModel)),
+}, strict);
+/**
+ * POST /v1/runs/preview：开工前看这次会怎么跑（开工选项框写「我的 Claude 订阅 · Opus 5.5 · 思考 medium」，「自动」也写落到哪个）。
+ * 体是开工请求（LocalCreateSessionRequest）里定跑法的那几项，原样带；回的 LocalRun 和真开工时一样算（当下的额度、这件 Task 的预算），actual 为 null。
+ * 只是预览：开工时额度或预算变了，以开工那一刻算的为准（会话摘要和 status 条目里的 run）。
+ */
+export const LocalRunPreviewRequest = Type.Object({
+  agent: Type.Optional(LocalAgentKind),
+  modelProfileId: Type.Optional(Id),
+  modelTier: Type.Optional(LocalModelTier),
+  taskBudget: Type.Optional(Type.Object({ taskId: Nullable(Type.String({ minLength: 1, maxLength: 80 })), budget: Budget }, strict)),
 }, strict);
 
 export const LocalSessionSummary = Type.Object({
@@ -1224,6 +1260,8 @@ export type TLocalAttachmentRef = Static<typeof LocalAttachmentRef>;
 export type TLocalSavedAttachment = Static<typeof LocalSavedAttachment>;
 export type TLocalEffort = Static<typeof LocalEffort>;
 export type TLocalRun = Static<typeof LocalRun>;
+export type TLocalActualModel = Static<typeof LocalActualModel>;
+export type TLocalRunPreviewRequest = Static<typeof LocalRunPreviewRequest>;
 export type TLocalTaskBudgetView = Static<typeof LocalTaskBudgetView>;
 export type TLocalBudgetListResponse = Static<typeof LocalBudgetListResponse>;
 export type TLocalBudgetUpdateRequest = Static<typeof LocalBudgetUpdateRequest>;
@@ -1297,6 +1335,7 @@ export const LOCAL_RUNNER_ROUTES = {
   stopBackground: { method: "POST", path: "/v1/sessions/:id/background/:itemId/stop", auth: true },
   listBudgets: { method: "GET", path: "/v1/budgets", auth: true },
   putBudget: { method: "PUT", path: "/v1/budgets", auth: true },
+  previewRun: { method: "POST", path: "/v1/runs/preview", auth: true },
   listProjects: { method: "GET", path: "/v1/projects", auth: true },
   putProjectFolder: { method: "PUT", path: "/v1/projects/:projectId/folder", auth: true },
   handoverCheck: { method: "POST", path: "/v1/projects/:projectId/handover-check", auth: true },
