@@ -9,7 +9,7 @@ import {
   LocalSettings, LocalMergeSync, LocalStatusResponse, LocalQuotaSource, LocalQuotaSync,
   LocalFolder, LocalProjectFolder, LocalProjectListResponse, LocalProjectFolderRequest, LocalHandoverCheck, LocalProjectCloneRequest, LocalProjectCloneResponse, ProjectTransfer,
   LocalTaskBudgetView, LocalBudgetListResponse, LocalBudgetUpdateRequest, LocalSendMessageRequest as SendMessage, LocalPermissionBrief, LOCAL_RUNNER_ATTACHMENT_PATH,
-  LocalRunPreviewRequest, LocalPermissionModeRequest, LOCAL_AGENT_PERMISSION_MODES,
+  LocalRunPreviewRequest, LocalPermissionModeRequest, LOCAL_AGENT_PERMISSION_MODES, LocalTool, LocalToolUpsert,
 } from "../src/index.js";
 
 const sessionId = "6b0f3a52-4d0c-4c1e-9a43-1f7d2c9b8e10";
@@ -48,6 +48,19 @@ describe("本机程序契约", () => {
     expect(Value.Check(LocalModelProfileUpsert, { label: "x", source: "gateway", baseUrl: "https://hub.example.com", model: "m", apiKey: "sk\nadd-generic-password" })).toBe(false);
     expect(LocalModelProfile.properties).not.toHaveProperty("apiKey");
     expect(LocalModelProfile.properties).toHaveProperty("hasKey");
+  });
+
+  it("本人加的工具：只收 HTTP 地址、不收命令，钥匙只写不读", () => {
+    expect(Value.Check(LocalToolUpsert, { name: "金蝶", preset: "kingdee", url: "https://kd.example.com/mcp", apiKey: "k-1" })).toBe(true);
+    expect(Value.Check(LocalToolUpsert, { name: "看板", preset: "custom", url: "http://127.0.0.1:9000/mcp", keyHeader: "X-Api-Key" })).toBe(true);
+    expect(Value.Check(LocalToolUpsert, { name: "x", preset: "custom", url: "https://a.example.com", command: "node", args: ["x.js"] })).toBe(false);
+    expect(Value.Check(LocalToolUpsert, { name: "x", preset: "custom", url: "file:///C:/x.exe" })).toBe(false);
+    expect(Value.Check(LocalToolUpsert, { name: "x", preset: "github", url: "https://a.example.com" })).toBe(false);
+    expect(Value.Check(LocalToolUpsert, { name: "x", preset: "custom", url: "https://a.example.com", keyHeader: "Bad: header" })).toBe(false);
+    expect(Value.Check(LocalToolUpsert, { name: "x", preset: "custom", url: "https://a.example.com", apiKey: "k\nadd-generic-password" })).toBe(false);
+    expect(LocalTool.properties).not.toHaveProperty("apiKey");
+    expect(LocalTool.properties).toHaveProperty("hasKey");
+    expect(LOCAL_RUNNER_ROUTES.checkTool).toEqual({ method: "POST", path: "/v1/tools/:id/check", auth: true });
   });
 
   it("权限决定可附理由、可本会话都允许", () => {
