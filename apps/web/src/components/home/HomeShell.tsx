@@ -61,6 +61,7 @@ import { linkPerson } from "@/lib/local/link";
 import { useAppearance } from "@/lib/appearance";
 import { useBuddyUi } from "@/lib/buddy/uiEvent";
 import { useSessionStops } from "@/lib/buddy/sessionStops";
+import { useSessionCommands } from "@/lib/buddy/sessionCommands";
 
 /** 要开的规划员：拆哪个，登记的 id 和存下的原话（登记回去时用）。 */
 type PlanJob = PlanTarget & { splitId?: string; sourceWords?: string[] };
@@ -181,6 +182,7 @@ function HomeFrame({ account }: { account: Account }) {
     if (effect.kind === "refresh" && effect.what.some((what) => what === "work_home" || what === "project" || what === "sub_session")) void api.refresh();
   });
   useSessionStops(local, here);
+  useSessionCommands(local, here);
   const changed = useCallback(() => { void api.refresh(); }, [api]);
   /**
    * 这个标签页里自动开工没开起来的子会话（卡 id、专题 id）：Task 管线里那一行出「失败」加「手动开始」（5.4.3、9.8，手动开始只有这一处），
