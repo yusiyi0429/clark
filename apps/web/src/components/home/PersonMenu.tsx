@@ -64,8 +64,9 @@ export function PersonRow({ account, view, alert, go }: {
   }, []);
   const current = view.kind === "page" ? view.page : null;
   const subtitle = [account.loginId, account.role === "ceo" ? "CEO" : "成员"].filter(Boolean).join(" · ");
+  // 名字明写成显示的文字：两个字的（伙伴、锁屏…）只靠内容算名字时，无障碍树里读不到。快捷键不进名字。
   const item = (id: string, label: string) => (
-    <Dropdown.Item id={id} textValue={label} className={h.menuItem} data-current={current === id ? "" : undefined}>{label}</Dropdown.Item>
+    <Dropdown.Item id={id} textValue={label} aria-label={label} className={h.menuItem} data-current={current === id ? "" : undefined}>{label}</Dropdown.Item>
   );
   return (
     <div className={h.me}>
