@@ -885,13 +885,14 @@ export class SessionManager {
       }
     }
     const note = saved.length ? attachmentNote(saved) : null;
+    const messageId = randomUUID();
     const withNote = (t: string) => (note ? (t ? `${t}\n\n${note}` : note) : t);
     // 在等回答时说的一句就是回答（不选选项）
     const question = this.questions.get(id);
     if (question && req.kind !== "review" && (req.text || note)) {
-      if (saved.length) this.emit(rec, { type: "user_message", text: req.text ?? "", source: "web", attachments: saved });
+      if (saved.length) this.emit(rec, { type: "user_message", text: req.text ?? "", source: "web", attachments: saved, messageId });
       this.answerQuestion(id, question.requestId, { choices: question.questions.map(() => []), text: withNote(req.text ?? "") });
-      return { delivery: "next_step" };
+      return { delivery: "next_step", messageId };
     }
     const said = req.text ?? "";
     const text = withNote(req.kind === "review" ? reviewMessage(rec.critics, rec.lastVersion, req.text) : said);
@@ -915,11 +916,11 @@ export class SessionManager {
     const flip = delivery !== "next_step" ? this.syncMultiAgent(rec, run) : null;
     if (flip) await flip;
     // 事件里是本人说的原话和附件；给执行方的那句接上附件在哪
-    this.emit(rec, { type: "user_message", text: req.kind === "review" ? text : said, source: "web", ...(saved.length ? { attachments: saved } : {}) });
+    this.emit(rec, { type: "user_message", text: req.kind === "review" ? text : said, source: "web", ...(saved.length ? { attachments: saved } : {}), messageId });
     run.send(text);
     if (delivery === "next_step") this.emit(rec, { type: "notice", level: "info", code: "interjection_next_step", text: "已送达，会在它下一步之前生效" });
     else this.setStatus(rec, "running");
-    return { delivery };
+    return { delivery, messageId };
   }
 
   /** 还在排的：停下、强停都是取消，让它出队（不留进程，不能再续）。 */

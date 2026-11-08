@@ -722,6 +722,8 @@ export const LocalSendMessageRequest = Type.Object({
 export const LocalSendMessageResponse = Type.Object({
   /** next_step：进行中，下一步前送达；new_turn：开了新一轮；resumed：进程已退出，续接后送达。 */
   delivery: Type.Union([Type.Literal("next_step"), Type.Literal("new_turn"), Type.Literal("resumed")]),
+  /** 这句话的编号（本机给的），事件流里 user_message 和 receipt 按它对上。 */
+  messageId: Uuid,
 }, strict);
 
 /** POST /v1/sessions/:id/permissions/:requestId */
@@ -935,8 +937,22 @@ export const LocalSessionEvent = Type.Union([
   /** hold：停着等额度恢复时带（见 LocalHold）。 */
   ev("status", { status: LocalSessionStatus, exitCode: Type.Optional(NullableInteger()), reason: Type.Optional(Type.String()), hold: Type.Optional(LocalHold) }),
   ev("agent_info", { agent: LocalAgentKind, version: Type.String(), model: Nullable(Type.String()), permissionMode: Nullable(Type.String()) }),
-  /** attachments：这句话带的附件（存好的，见 LocalAttachmentRef）；没有就不带。text 是本人说的原话，不含本机拼给执行方的附件路径。 */
-  ev("user_message", { text: Type.String(), source: Type.Union([Type.Literal("initial"), Type.Literal("web")]), attachments: Type.Optional(Type.Array(LocalSavedAttachment, { maxItems: 20 })) }),
+  /**
+   * attachments：这句话带的附件（存好的，见 LocalAttachmentRef）；没有就不带。text 是本人说的原话，不含本机拼给执行方的附件路径。
+   * messageId：这句话的编号（本机给的，11/08 起每条都带；之前的事件日志里没有），回执（receipt）按它对上。
+   */
+  ev("user_message", { text: Type.String(), source: Type.Union([Type.Literal("initial"), Type.Literal("web")]), attachments: Type.Optional(Type.Array(LocalSavedAttachment, { maxItems: 20 })),
+    messageId: Type.Optional(Uuid) }),
+  /**
+   * 这句话的回执（新首页 17.4，形状同伙伴对话的 receipt 帧 { state, messageId }，网页用同一个组件画）：
+   * - delivered：执行方收下了（第一个勾）。Claude Code 回 command_lifecycle queued 的那一刻，比写进它的输入更实。
+   * - read：执行方读到了（第二个勾）。Claude Code 回 command_lifecycle started：这句话放进了对话、下一次模型请求就带着它。
+   *   在跑工具时说的，工具做完马上读到、同一轮里生效；模型只在出字（中间没有工具）时说的，要等这一轮结束、自己成为新的一轮才读到。
+   *   在等本人回答时说的就是回答，收下即读到（delivered、read 同时到）。
+   * - failed：没读到就没了（进程退出、强停、本机程序重启时还没读到的），网页给「重发」。
+   * 一条消息依次是 delivered → read，或 delivered → failed；老版本 Claude Code 没有 command_lifecycle 时没有回执。
+   */
+  ev("receipt", { messageId: Uuid, state: Type.Union([Type.Literal("delivered"), Type.Literal("read"), Type.Literal("failed")]) }),
   ev("assistant_text", { text: Type.String() }),
   ev("tool_call", { toolUseId: Type.String(), name: Type.String(), title: Type.String(), input: Type.Record(Type.String(), Type.Unknown()) }),
   ev("tool_result", { toolUseId: Type.String(), isError: Type.Boolean(), preview: Type.String() }),
@@ -1045,6 +1061,20 @@ export const LocalSyncItem = Type.Union([
     permission: Type.Optional(LocalPermissionBrief),
   }, strict)),
   syncItem("plan", Type.Object({ entries: Type.Array(LocalPlanEntry, { maxItems: 100 }), progress: LocalPlanProgress }, strict)),
+  /**
+   * 本人在网页上对这个会话说的一句（17.4，手机端看子会话的对话和回执用）。只报本人说的（user_message 的 source = web），开工那句（云端的交代）不报。
+   * text 是原话（不含本机拼给执行方的附件路径）；attachments 只报文件名。之后的状态见 receipt 条目，按 messageId 对上。
+   */
+  syncItem("user_message", Type.Object({
+    messageId: Uuid,
+    text: Type.String({ maxLength: 20000 }),
+    attachments: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 255 }), { minItems: 1, maxItems: 20 })),
+  }, strict)),
+  /** 上面那句话的回执（同事件 receipt）：delivered、read、failed 各报一条，云端以最新的为准。 */
+  syncItem("receipt", Type.Object({
+    messageId: Uuid,
+    state: Type.Union([Type.Literal("delivered"), Type.Literal("read"), Type.Literal("failed")]),
+  }, strict)),
   /** 证据：一段说明、日志片段、链接（PR 等）、改动摘要。不传完整工具输出。 */
   syncItem("evidence", Type.Object({
     kind: Type.Union([Type.Literal("note"), Type.Literal("log"), Type.Literal("link"), Type.Literal("diff_summary")]),

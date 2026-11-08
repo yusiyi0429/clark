@@ -63,6 +63,13 @@ describe("本机程序契约", () => {
     // 计划事件一定带「第几步 / 共几步」
     expect(Value.Check(LocalSessionEvent, { ...base, type: "plan", entries: [{ content: "写测试", status: "in_progress" }] })).toBe(false);
     expect(Value.Check(LocalSessionEvent, { ...base, type: "assistant_text", text: "好", raw: {} })).toBe(false);
+    // 子会话消息回执（17.4）：user_message 带编号，receipt 形状同伙伴对话的 { state, messageId }，多一个 failed
+    const messageId = "5f0c2b8e-3d4a-4f6b-9c1d-2e3f4a5b6c7d";
+    expect(Value.Check(LocalSessionEvent, { ...base, type: "user_message", text: "也截一张图", source: "web", messageId })).toBe(true);
+    expect(Value.Check(LocalSessionEvent, { ...base, type: "user_message", text: "老日志没有编号", source: "web" })).toBe(true);
+    for (const state of ["delivered", "read", "failed"]) expect(Value.Check(LocalSessionEvent, { ...base, type: "receipt", messageId, state })).toBe(true);
+    expect(Value.Check(LocalSessionEvent, { ...base, type: "receipt", messageId, state: "sent" })).toBe(false);
+    expect(Value.Check(LocalSessionEvent, { ...base, type: "receipt", state: "read" })).toBe(false);
     expect(Value.Check(LocalSessionEvent, { ...base, seq: 0, type: "assistant_text", text: "好" })).toBe(false);
   });
 
@@ -73,6 +80,14 @@ describe("本机程序契约", () => {
       { ...item, type: "status", data: { status: "running", title: "修登录页", agent: "claude-code", modelLabel: "订阅" } },
       { ...item, type: "cost", data: { modelLabel: "订阅", usage: { inputTokens: 1, outputTokens: 2, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null } } },
     ] })).toBe(true);
+    // 手机端看子会话的对话和回执：本人说的一句（只报文件名）、回执各一条
+    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots, items: [
+      { ...item, type: "user_message", data: { messageId: "5f0c2b8e-3d4a-4f6b-9c1d-2e3f4a5b6c7d", text: "也截一张图", attachments: ["登录页.png"] } },
+      { ...item, type: "receipt", data: { messageId: "5f0c2b8e-3d4a-4f6b-9c1d-2e3f4a5b6c7d", state: "read" } },
+    ] })).toBe(true);
+    expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots, items: [
+      { ...item, type: "receipt", data: { messageId: "5f0c2b8e-3d4a-4f6b-9c1d-2e3f4a5b6c7d", state: "queued" } },
+    ] })).toBe(false);
     // 空的一批是心跳
     expect(Value.Check(LocalSyncBatchRequest, { deviceId, runnerVersion: "0.1.0", slots, items: [] })).toBe(true);
     // 每一批都带本机的位置数
