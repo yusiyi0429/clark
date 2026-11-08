@@ -72,7 +72,7 @@ export function usePipelineConversation(task: PipelineTask | null, handlers: Pip
   return useMemo(() => ({
     scope: `pipeline:${taskId}`, viewingMaterialEditable: false, messages: thread.messages,
     status: thread.streaming ? "streaming" : "complete", streaming: thread.streaming, thinking: thread.streaming, partial: "", stage: "thinking", startedAt: thread.streaming ? Date.now() : 0,
-    route: null, progress: { label: null, checked: 0 }, steps: [], readScope: null, rescope: async () => false, thought: null, error: null, recovery: null, lastReply: null,
+    route: null, progress: { label: null, checked: 0 }, steps: [], readScope: null, model: null, rescope: async () => false, thought: null, error: null, recovery: null, lastReply: null,
     // 看板读到以前（taskId 为空）算还在读：首页发来的那句等对话开了再发，不会先被吃掉。
     historyStatus: taskId ? "ready" : "loading", historyError: null, historyWaiting: null, retryHistory: noop, attachments: [], uploading: false, attachmentError: null,
     uploadFiles: async () => undefined, removeAttachment: noop, send, stop: noop,

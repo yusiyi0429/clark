@@ -2,7 +2,10 @@ import type { TReadScopeParams, TBuddyPlan, TBuddyUiEffect, TConversationCard } 
 
 export type ConversationEvent = {
   type: "message" | "tool" | "step" | "usage" | "compaction" | "warning" | "error" | "done" | "route" | "thinking" | "escalation" | "recovery" | "scope"
-    | "receipt" | "plan" | "ui" | "card";
+    | "receipt" | "plan" | "ui" | "card" | "model";
+  /** model：这一轮实际用的来源（Chat 配的接入方）和模型名（走 Chat 的对话，换了才再给）。 */
+  provider?: string;
+  model?: string;
   /** receipt（17.4，伙伴对话）：本人这条消息 delivered 天枢收下了，read 伙伴读到了。 */
   state?: "delivered" | "read";
   /** receipt：天枢给本人这条消息的 id，两帧按它对上同一条。 */
