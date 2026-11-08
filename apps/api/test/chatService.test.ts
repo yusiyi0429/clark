@@ -919,6 +919,9 @@ describe("项目对话走 Chat（project:<projectId>，新首页第 16 节）", 
       expect((await act({ projectId: randomUUID(), text: "别人的" })).statusCode).toBe(404);
       expect(historyMessages([{ role: "user", text: "【伙伴转来】录屏先停", runId: RUN }, { role: "assistant", text: "好", runId: RUN }],
         [{ runId: RUN, status: "completed" }])[0]).toMatchObject({ role: "user", content: "录屏先停", via: "buddy" });
+      // 子会话报告替本人发的那句（18 节第 10 条）：去掉开头、标 report，网页不画成本人的气泡。
+      expect(historyMessages([{ role: "user", text: "【子会话回报】B · 修登录页：做完一轮停下了。", runId: RUN }, { role: "assistant", text: "好", runId: RUN }],
+        [{ runId: RUN, status: "completed" }])[0]).toMatchObject({ role: "user", content: "B · 修登录页：做完一轮停下了。", via: "report" });
     } finally {
       await f.close();
       await chat.close();

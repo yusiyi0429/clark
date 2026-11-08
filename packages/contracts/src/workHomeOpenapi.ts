@@ -7,7 +7,7 @@ import {
 } from "./workHome.js";
 import { CreateProjectRequest, Project, ProjectDetailResponse, ProjectFeedItem, ProjectFeedResponse, ProjectGoal, ProjectGoalLinkedItem, ProjectHandoverItem,
   ProjectHandoverSummaryItem, ProjectListResponse, ProjectPipelineResponse, ProjectTransferDeclinedItem, UpdateProjectRequest, ProjectBoardResponse, ProjectGoalChangedItem,
-  AnswerGoalChangeRequest, SubSessionFeedRef, ProjectSubSessionReportItem, ProjectSubSessionDecisionItem } from "./projects.js";
+  AnswerGoalChangeRequest, SubSessionFeedRef, ProjectSubSessionReportItem, ProjectSubSessionDecisionItem, AutoRelayDecisionRequest } from "./projects.js";
 import { CreateProjectTransferRequest, HandoverSecretFinding, HandoverSecretsResponse, HandoverSection, PersonRef, ProjectTransfer,
   UpdateProjectTransferRequest } from "./projectTransfers.js";
 import { Budget, TaskBudgetResponse } from "./budget.js";
@@ -24,7 +24,7 @@ export const workHomeSchemas: Record<string, JsonSchema> = {
   BackgroundItem, BackgroundResponse, RouteRequest, RouteResponse,
   SessionStartView, ClaimSessionStartsRequest, ClaimSessionStartsResponse, CardMerge, TaskFeedItem, HomeItem, ReleaseSessionStartRequest,
   Project, ProjectListResponse, CreateProjectRequest, UpdateProjectRequest, ProjectGoal, ProjectDetailResponse, ProjectPipelineResponse, ProjectGoalLinkedItem,
-  ProjectFeedItem, ProjectFeedResponse, ProjectBoardResponse, ProjectGoalChangedItem, AnswerGoalChangeRequest, SubSessionFeedRef, ProjectSubSessionReportItem, ProjectSubSessionDecisionItem, ProjectHandoverItem, ProjectHandoverSummaryItem, ProjectTransferDeclinedItem,
+  ProjectFeedItem, ProjectFeedResponse, ProjectBoardResponse, ProjectGoalChangedItem, AnswerGoalChangeRequest, SubSessionFeedRef, ProjectSubSessionReportItem, ProjectSubSessionDecisionItem, AutoRelayDecisionRequest, ProjectHandoverItem, ProjectHandoverSummaryItem, ProjectTransferDeclinedItem,
   PersonRef, HandoverSection, ProjectTransfer, CreateProjectTransferRequest, UpdateProjectTransferRequest, HandoverSecretFinding, HandoverSecretsResponse,
   NotificationSettings, AppearanceSettings, SessionStopView, ClaimSessionStopsRequest, ClaimSessionStopsResponse, SessionStopDoneRequest,
   SessionCommand, SessionCommandView, ClaimSessionCommandsRequest, ClaimSessionCommandsResponse, SessionCommandDoneRequest,
@@ -191,6 +191,15 @@ export const workHomePaths: OpenAPIV3.Document["paths"] = {
       parameters: path("id"),
       requestBody: body("SessionStopDoneRequest"),
       responses: { "204": { description: "记下了" }, ...errors(400, 401, 404) },
+    },
+  },
+  "/api/me/projects/{projectId}/auto-relay": {
+    post: {
+      operationId: "decideAutoRelay",
+      summary: "答「等你」里的自动接力（18 节第 12 条）：continue 清零恢复，stop 收起那一条、等本人说话再恢复；没停着 409",
+      parameters: path("projectId"),
+      requestBody: body("AutoRelayDecisionRequest"),
+      responses: { "204": { description: "记下了" }, ...errors(400, 401, 403, 404, 409) },
     },
   },
   "/api/me/session-commands/claim": {

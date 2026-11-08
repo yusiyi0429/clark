@@ -1,5 +1,5 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
-import { LocalPermissionBrief, LocalPermissionMode, LocalQuestionRequestView } from "./localRunner.js";
+import { LocalPermissionBrief, LocalPermissionMode, LocalQuestionRequestView, LocalStopReason } from "./localRunner.js";
 import { PersonRef, ProjectTransfer } from "./projectTransfers.js";
 import { CardDraftView, CardPlanView, CardTaskView } from "./taskCards.js";
 import { SubSessionLetter, TaskFeedItem } from "./workHome.js";
@@ -31,6 +31,13 @@ export const ProjectName = Type.String({ minLength: 1, maxLength: 60 });
  * permissionMode（17.2 第 11 条）：这个项目新开子会话的默认权限模式（项目主管线下面那个选择改的就是它，见 localRunner.ts 的 LocalPermissionMode），缺省 auto；
  * 项目对话、伙伴开的子会话开工时云端把它带给本机（ClaimedSessionStart.permissionMode）。
  */
+/**
+ * 自动接力的上限（18 节第 12 条，空转保护）：这个项目里系统自动触发的项目主管线轮次（子会话停了的报告触发的那一轮），加上主管线代本人给子会话的转话、重开，
+ * 连续这么多次之间本人一句话没说，就停止自动触发，「等你」里出一条 auto_relay 问继续还是停下。null 是不限。新项目缺省 20。
+ * 本人发的话、点的按钮永远不受限；本人在这个项目对话里说任何一句话（含伙伴台转来的）都清零。Task 预算照旧兜底。
+ */
+export const AutoRelayLimit = Type.Integer({ minimum: 1, maximum: 1000 });
+
 export const Project = Type.Object({
   projectId: Type.String({ format: "uuid" }),
   name: ProjectName,
@@ -39,6 +46,7 @@ export const Project = Type.Object({
   lastActivityAt: Nullable(Instant),
   transfer: Nullable(ProjectTransfer),
   permissionMode: LocalPermissionMode,
+  autoRelayLimit: Nullable(AutoRelayLimit),
 }, strict);
 
 /** GET /api/me/projects（DRI 工作台）：本人全部项目（含交出去了的，算归档），没归档的在前，各自按最近动静从近到远。 */
@@ -53,7 +61,16 @@ export const CreateProjectRequest = Type.Object({ name: ProjectName, taskId: Typ
 /** PATCH /api/me/projects/:projectId：改名、归档（archived: true）、恢复（archived: false）。至少带一样。 */
 export const UpdateProjectRequest = Type.Object({ name: Type.Optional(ProjectName), archived: Type.Optional(Type.Boolean()),
   /** 新开子会话的默认权限模式（Project.permissionMode）。 */
-  permissionMode: Type.Optional(LocalPermissionMode) }, { ...strict, minProperties: 1 });
+  permissionMode: Type.Optional(LocalPermissionMode),
+  /** 自动接力的上限（Project.autoRelayLimit，null 不限）。 */
+  autoRelayLimit: Type.Optional(Nullable(AutoRelayLimit)) }, { ...strict, minProperties: 1 });
+
+/**
+ * POST /api/me/projects/:projectId/auto-relay（项目负责人，204）：答「等你」里那条 auto_relay。
+ * continue：计数清零、恢复自动触发；stop：那一条收起，自动触发照旧停着，直到本人在这个项目对话里说一句话（说了就清零、恢复）。
+ * 没停着（没到上限）回 409 NOT_PAUSED。
+ */
+export const AutoRelayDecisionRequest = Type.Object({ decision: Type.Union([Type.Literal("continue"), Type.Literal("stop")]) }, strict);
 
 /**
  * 一件挂着的 Task 的判定（目标历史那一行）：completed 本人确认完成；stopped 定了到此为止；continued 延续成了下个月的一件；open 还没了结。
@@ -153,13 +170,15 @@ export const AnswerGoalChangeRequest = Type.Object({ answer: Type.Union([Type.Li
  * afterSequence 是记下这一条时项目对话最后一条消息的 sequence（同 ProjectTransfer.afterSequence：Chat 读回的消息不带时间，网页按它插在那条后面），
  * 对话还没有消息、读不到为 null。sub 是哪个子会话：kind、id、字母、记下时的标题；界面写「B · {标题}」。
  *
- * sub_session_report：子会话停了（只报卡和专题；规划员、验收员不报）。一两句写做成了什么、卡在哪（summary，本机报的摘要；本机还没报摘要为 null），附「看结果」。
- * - outcome：round_done 做完一轮停下（没在问你）；stopped 被停下（本人、伙伴或项目主管线停的，或本机程序退出）；failed 出错停住。
+ * sub_session_report：子会话停了（本机的同步条目 stopped，LocalStopReport；只报卡和专题，规划员、验收员不报）。界面写「B · 标题」，一两句写做成了什么、卡在哪，附「看结果」：
+ * - why 同 LocalStopReason：turn_done 做完一轮；interrupted 本人停下；held 停着等（额度、余额、预算）；error 出错停住；killed 强停。
+ * - summary：做成了什么（本机取这一轮最后那段话的头一两句），这一轮没说话为 null；blocker：卡在哪（出错、停着等时的原因），别的为 null。
+ * - outputs：这一轮交的产出物，outputId 是云端收下的那件产出（GET /api/me/local-outputs/:id 打开，同卡详情的 outputs）；还没收到为 null，只显示标题和文件名。
  * - 记下以后云端以本人身份给项目主管线（模型）发一句（开头是 SUB_SESSION_REPORT_PREFIX 那几个字，读回历史时去掉、标成 ConversationMessage.via = report，
  *   网页不画成本人的气泡，报告这一行已经画了），让它回一小轮：说一句这意味着什么、下一步。项目主管线正在回上一轮时不打断，排在它后面。
  *
  * sub_session_decision：子会话要人介入，直接出它的决定卡，不先等模型想一轮。question 是它在问的那一次（同 WaitingItem.question，网页画选项框），
- * permission 是在等批准的那一步（同 WaitingItem.permission，网页画批准卡），两样只有一样。答、批由网页在本人电脑上直接交给本机（同「等你」里就地答）；
+ * permission 是在等批准的那一步（同 WaitingItem.permission，网页画批准卡；canAllowForSession 为 true 才给「这张卡都允许」），两样只有一样。答、批由网页在本人电脑上直接交给本机（同「等你」里就地答）；
  * 手机上看得到、能点进项目对话看。sessionId、deviceId 是那个本机会话和它所在的电脑。
  * - status：open 还在等；closed 这一次不在等了（答了、批了、拒了，或这一轮停了失效），closedAt 是云端知道的时间。同一次提问、同一步批准只出一张。
  */
@@ -175,8 +194,10 @@ export const ProjectSubSessionReportItem = Type.Object({
   at: Instant,
   afterSequence: Nullable(Type.Integer({ minimum: 1 })),
   sub: SubSessionFeedRef,
-  outcome: Type.Union([Type.Literal("round_done"), Type.Literal("stopped"), Type.Literal("failed")]),
-  summary: Nullable(Type.String({ maxLength: 600 })),
+  why: LocalStopReason,
+  summary: Nullable(Type.String({ maxLength: 400 })),
+  blocker: Nullable(Type.String({ maxLength: 400 })),
+  outputs: Type.Array(Type.Object({ outputId: Nullable(Type.String({ format: "uuid" })), title: Type.String(), fileName: Type.String() }, strict), { maxItems: 20 }),
 }, strict);
 export const ProjectSubSessionDecisionItem = Type.Object({
   kind: Type.Literal("sub_session_decision"),
@@ -227,6 +248,7 @@ export type TProjectPipelineResponse = Static<typeof ProjectPipelineResponse>;
 export type TProjectGoalLinkedItem = Static<typeof ProjectGoalLinkedItem>;
 export type TProjectFeedItem = Static<typeof ProjectFeedItem>;
 export type TProjectFeedResponse = Static<typeof ProjectFeedResponse>;
+export type TAutoRelayDecisionRequest = Static<typeof AutoRelayDecisionRequest>;
 export type TSubSessionFeedRef = Static<typeof SubSessionFeedRef>;
 export type TProjectSubSessionReportItem = Static<typeof ProjectSubSessionReportItem>;
 export type TProjectSubSessionDecisionItem = Static<typeof ProjectSubSessionDecisionItem>;

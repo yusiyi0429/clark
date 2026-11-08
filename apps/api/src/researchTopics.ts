@@ -1,3 +1,4 @@
+import { letterOfSub } from "./subSessionLetters.js";
 import { randomUUID } from "node:crypto";
 import type { TCreateTopicRequest, TDeliverableInclusion, TPatchTopicRequest, TResearchTopicView, TTopicBriefResponse, TTopicDetailResponse, TTopicVersionSummary,
   TTopicVersionView } from "@warmap/contracts";
@@ -88,7 +89,8 @@ export async function readTopic(q: Query, ownerId: string, id: string, planTask:
   const versions = (await q("SELECT * FROM topic_versions WHERE topic_id=$1 ORDER BY number DESC", [id])).rows as VersionRow[];
   const included = await inclusions(q, row, versions.map((version) => version.id));
   const own = row.plan_task_id ? await planTask(row.plan_task_id) : null;
-  return { topic: (await topicViews(q, [row]))[0], task: own ? { taskId: own.task.taskId, name: own.task.name } : null,
+  return { topic: (await topicViews(q, [row]))[0], letter: (await letterOfSub(q, "topic", id))?.letter ?? null,
+    task: own ? { taskId: own.task.taskId, name: own.task.name } : null,
     versions: versions.map((version) => summary(version, included)),
     current: versions[0] ? { ...summary(versions[0], included), body: versions[0].body } : null,
     runs: await runViews(q, await recentRuns(q, { topicId: id }, 5)) };

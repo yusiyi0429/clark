@@ -5066,6 +5066,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/projects/{projectId}/auto-relay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 答「等你」里的自动接力（18 节第 12 条）：continue 清零恢复，stop 收起那一条、等本人说话再恢复；没停着 409 */
+        post: operations["decideAutoRelay"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/session-commands/claim": {
         parameters: {
             query?: never;
@@ -18465,7 +18482,7 @@ export interface components {
         };
         WaitingItem: {
             id: string;
-            kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer" | "goal_changed";
+            kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer" | "goal_changed" | "auto_relay";
             title: string;
             source: string | null;
             at: string | null;
@@ -18514,6 +18531,7 @@ export interface components {
                 toolName: string;
                 title: string;
                 outsidePaths: string[];
+                canAllowForSession?: boolean;
             } | null;
         };
         WorkHomeResponse: {
@@ -18720,7 +18738,7 @@ export interface components {
             };
             waiting: {
                 id: string;
-                kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer" | "goal_changed";
+                kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer" | "goal_changed" | "auto_relay";
                 title: string;
                 source: string | null;
                 at: string | null;
@@ -18769,6 +18787,7 @@ export interface components {
                     toolName: string;
                     title: string;
                     outsidePaths: string[];
+                    canAllowForSession?: boolean;
                 } | null;
             }[];
         };
@@ -19059,6 +19078,7 @@ export interface components {
                 afterSequence: number | null;
             } | null;
             permissionMode: "auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions";
+            autoRelayLimit: number | null;
         };
         ProjectListResponse: {
             projects: {
@@ -19130,6 +19150,7 @@ export interface components {
                     afterSequence: number | null;
                 } | null;
                 permissionMode: "auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions";
+                autoRelayLimit: number | null;
             }[];
         };
         CreateProjectRequest: {
@@ -19140,6 +19161,7 @@ export interface components {
             name?: string;
             archived?: boolean;
             permissionMode?: "auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions";
+            autoRelayLimit?: number | null;
         };
         ProjectGoal: {
             taskId: string;
@@ -19222,6 +19244,7 @@ export interface components {
                     afterSequence: number | null;
                 } | null;
                 permissionMode: "auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions";
+                autoRelayLimit: number | null;
             };
             period: string;
             goals: {
@@ -19396,8 +19419,14 @@ export interface components {
                 letter: string;
                 title: string;
             };
-            outcome: "round_done" | "stopped" | "failed";
+            why: "turn_done" | "interrupted" | "held" | "error" | "killed";
             summary: string | null;
+            blocker: string | null;
+            outputs: {
+                outputId: string | null;
+                title: string;
+                fileName: string;
+            }[];
         } | {
             /** @constant */
             kind: "sub_session_decision";
@@ -19436,6 +19465,7 @@ export interface components {
                 toolName: string;
                 title: string;
                 outsidePaths: string[];
+                canAllowForSession?: boolean;
             } | null;
             status: "open" | "closed";
             closedAt: string | null;
@@ -19585,8 +19615,14 @@ export interface components {
                     letter: string;
                     title: string;
                 };
-                outcome: "round_done" | "stopped" | "failed";
+                why: "turn_done" | "interrupted" | "held" | "error" | "killed";
                 summary: string | null;
+                blocker: string | null;
+                outputs: {
+                    outputId: string | null;
+                    title: string;
+                    fileName: string;
+                }[];
             } | {
                 /** @constant */
                 kind: "sub_session_decision";
@@ -19625,6 +19661,7 @@ export interface components {
                     toolName: string;
                     title: string;
                     outsidePaths: string[];
+                    canAllowForSession?: boolean;
                 } | null;
                 status: "open" | "closed";
                 closedAt: string | null;
@@ -19868,8 +19905,14 @@ export interface components {
                 letter: string;
                 title: string;
             };
-            outcome: "round_done" | "stopped" | "failed";
+            why: "turn_done" | "interrupted" | "held" | "error" | "killed";
             summary: string | null;
+            blocker: string | null;
+            outputs: {
+                outputId: string | null;
+                title: string;
+                fileName: string;
+            }[];
         };
         ProjectSubSessionDecisionItem: {
             /** @constant */
@@ -19909,9 +19952,13 @@ export interface components {
                 toolName: string;
                 title: string;
                 outsidePaths: string[];
+                canAllowForSession?: boolean;
             } | null;
             status: "open" | "closed";
             closedAt: string | null;
+        };
+        AutoRelayDecisionRequest: {
+            decision: "continue" | "stop";
         };
         ProjectHandoverItem: {
             /** @constant */
@@ -37882,6 +37929,75 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    decideAutoRelay: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutoRelayDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description 记下了 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

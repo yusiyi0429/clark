@@ -207,11 +207,13 @@ export const HomeMonthMission = Type.Object({
  * transfer（16.7）：别人把项目交给你（sent，to 是本人），title「{原负责人}把「{项目}」交给你」，person 是原负责人，open 是那份转交（只读预览，「接手」「不接」）；
  * quota：额度用完或预算到了，有活停着等你定：订阅额度用完时一台电脑一条「Claude 订阅额度用完 · HH:MM 恢复」，source 写停着几件，
  *   open 是连接页，dueAt 是恢复的时间（到点本机自己接着做；要不要换网关模型、开额外额度由你定）。预算（设计 11.4）以后再加。
+ * auto_relay（18 节第 12 条）：这个项目的自动接力连续到了上限（Project.autoRelayLimit），停止自动触发了。title「{项目}：自动接力已连续 N 轮，继续吗？」，
+ *   projectId 是那个项目，open 是项目对话，answer = inline：就地「继续」「停下」（POST /api/me/projects/:projectId/auto-relay，手机上也能）。
  */
 export const WaitingKind = Type.Union([
   Type.Literal("approval"), Type.Literal("question"), Type.Literal("verdict"), Type.Literal("meeting"), Type.Literal("mission_card"), Type.Literal("role"),
   Type.Literal("merge"), Type.Literal("plan_start"), Type.Literal("acceptance"), Type.Literal("month"), Type.Literal("device"), Type.Literal("quota"),
-  Type.Literal("transfer"), Type.Literal("goal_changed"),
+  Type.Literal("transfer"), Type.Literal("goal_changed"), Type.Literal("auto_relay"),
 ]);
 
 /**
