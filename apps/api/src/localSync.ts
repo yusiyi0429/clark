@@ -305,6 +305,23 @@ async function applyType(client: PoolClient, deps: Pick<SyncDeps, "storageDir" |
       [owner.personId, key, JSON.stringify(view), view.updatedAt]);
       return {};
     }
+    case "user_message": {
+      // 本人在网页上说的一句（17.4）：存原话和附件的文件名；回执先到了的那一行补上原话。不记动静。
+      const { messageId, text, attachments } = item.data;
+      await client.query(`INSERT INTO local_run_messages(run_id,message_id,owner_id,text,attachments,sent_at) VALUES($1,$2,$3,$4,$5,$6)
+        ON CONFLICT (run_id,message_id) DO UPDATE SET text=EXCLUDED.text,attachments=EXCLUDED.attachments,sent_at=EXCLUDED.sent_at WHERE local_run_messages.text IS NULL`,
+      [run.id, messageId, owner.personId, text, attachments ?? [], at]);
+      return {};
+    }
+    case "receipt": {
+      // 那句话的回执：以本机序号最新的为准（晚到的旧回执不覆盖）；比话先到时先占一行。
+      const { messageId, state } = item.data;
+      await client.query(`INSERT INTO local_run_messages(run_id,message_id,owner_id,receipt,receipt_seq,receipt_at) VALUES($1,$2,$3,$4,$5,$6)
+        ON CONFLICT (run_id,message_id) DO UPDATE SET receipt=EXCLUDED.receipt,receipt_seq=EXCLUDED.receipt_seq,receipt_at=EXCLUDED.receipt_at
+        WHERE local_run_messages.receipt_seq IS NULL OR local_run_messages.receipt_seq < EXCLUDED.receipt_seq`,
+      [run.id, messageId, owner.personId, state, seq, at]);
+      return {};
+    }
     case "background": {
       // 会话里的子 agent、后台命令：按会话 + 本机的 id 覆盖，序号更小的晚到了不改。只给首页右栏显示，不记动静。
       const { id, kind, title, state, startedAt, finishedAt, stoppable } = item.data;

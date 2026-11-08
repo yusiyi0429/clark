@@ -1,6 +1,6 @@
 import type { Pool } from "pg";
 import type { TLocalPermissionBrief, TLocalQuestionRequestView, TCreateLocalDeviceRequest, TCreateLocalDeviceResponse, TLocalDeviceView, TLocalHold, TLocalOutputView, TLocalPlanEntry, TLocalRunActivity,
-  TLocalRunBrief, TLocalRunPlanProgress, TLocalRunView, TLocalSessionStatus } from "@warmap/contracts";
+  TLocalRunBrief, TLocalRunMessage, TLocalRunPlanProgress, TLocalRunView, TLocalSessionStatus } from "@warmap/contracts";
 import type { Query } from "./meetingStore.js";
 import { issueLocalToken } from "./personalTokens.js";
 
@@ -81,7 +81,19 @@ export function runBrief(row: RunRow): TLocalRunBrief {
     startedAt: row.started_at.toISOString(), updatedAt: row.updated_at.toISOString(), endedAt: row.ended_at?.toISOString() ?? null,
   };
 }
-export const runView = (row: RunRow): TLocalRunView => ({ ...runBrief(row), planEntries: row.plan, timeline: row.timeline });
+export const runView = (row: RunRow, messages: TLocalRunMessage[] = []): TLocalRunView => ({ ...runBrief(row), planEntries: row.plan, timeline: row.timeline, messages });
+
+/** 详情里的几次执行：带上每次执行里本人说的话和回执（本机同步的 user_message、receipt；还没收到原话的不列），每次最近 50 句、按先后。 */
+export async function runViews(q: Query, rows: RunRow[]): Promise<TLocalRunView[]> {
+  const found = rows.length ? (await q(`SELECT run_id::text,message_id::text,text,attachments,sent_at,receipt FROM (
+      SELECT m.*,row_number() OVER (PARTITION BY run_id ORDER BY sent_at DESC,message_id) AS n FROM local_run_messages m
+      WHERE run_id=ANY($1::uuid[]) AND text IS NOT NULL) m WHERE n<=50 ORDER BY sent_at,message_id`, [rows.map((row) => row.id)])).rows as
+    { run_id: string; message_id: string; text: string; attachments: string[]; sent_at: Date; receipt: TLocalRunMessage["receipt"] }[] : [];
+  const byRun = new Map<string, TLocalRunMessage[]>();
+  for (const row of found) byRun.set(row.run_id, [...(byRun.get(row.run_id) ?? []),
+    { messageId: row.message_id, text: row.text, attachments: row.attachments, at: row.sent_at.toISOString(), receipt: row.receipt }]);
+  return rows.map((row) => runView(row, byRun.get(row.id)));
+}
 
 /** 某张卡或某个专题最近的几次执行，新的在前。卡只算执行会话（验收员的会话也挂这张卡，不算）。 */
 export async function recentRuns(q: Query, subject: { taskId: string } | { topicId: string }, limit: number): Promise<RunRow[]> {
