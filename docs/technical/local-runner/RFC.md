@@ -243,7 +243,7 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
 
 ## 12. 以后接 Codex
 
-`AgentAdapter.start(launch) → AgentRun{ send, interrupt, respondPermission, kill, onEvent, onExit }` 已按 Codex 也能实现的粒度定；`agents/codex.ts` 现在抛 `not_implemented`。12 月接 `codex app-server`（附录 E）：`turn/steer` 插话、`turn/interrupt` 停下、`requestApproval` 批权限（不能附理由，先 steer 一句再拒）、`thread/resume` 续接；网关只能是 Responses API；花费要按 token 自己算；干净会话要用天枢专用 `CODEX_HOME`（代价是本人在天枢里再登一次 ChatGPT）。Codex 的 `web_search` 也是服务端工具、看供应商（11/06：TokenHub 上 DeepSeek 不搜、Qwen 能搜，和 Claude Code 正好相反），非白名单模型要写 `web_search = "disabled"`，否则上游一拒绝整轮就失败；挂天枢 MCP 时要写 `default_tools_approval_mode = "approve"`，否则 MCP 工具在无人值守时直接失败。
+`AgentAdapter.start(launch) → AgentRun{ send, interrupt, respondPermission, kill, onEvent, onExit }` 已按 Codex 也能实现的粒度定；`agents/codex.ts` 现在抛 `not_implemented`。12 月接 `codex app-server`（附录 E）：`turn/steer` 插话、`turn/interrupt` 停下、`requestApproval` 批权限（不能附理由，先 steer 一句再拒）、`thread/resume` 续接；网关只能是 Responses API；花费要按 token 自己算；干净会话要用天枢专用 `CODEX_HOME`（代价是本人在天枢里再登一次 ChatGPT）。Codex 的 `web_search` 也是服务端工具、看供应商（11/06：TokenHub 上 DeepSeek 不搜、Qwen 能搜，和 Claude Code 正好相反），非白名单模型要写 `web_search = "disabled"`，否则上游一拒绝整轮就失败；挂天枢 MCP 时要写 `default_tools_approval_mode = "approve"`，否则 MCP 工具在无人值守时直接失败。计划（11/08 记下，接适配器时一起做）：`turn/plan/updated {explanation, plan:[{step, status}]}` 照 Claude Code 的 TodoWrite 报成同一种 `plan` 事件——`step` 作 `content`，`pending`/`inProgress`/`completed` 对成 `pending`/`in_progress`/`completed`，`progress` 用 `planProgress` 算；`item/plan/delta` 是逐字流，不单独报。协议形状来自 `app-server generate-ts`，没有真跑样本，接的时候先录一段真实输出做测试。
 
 ## 13. 测试与验证（11/06）
 
