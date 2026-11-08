@@ -455,3 +455,10 @@ export type TBuddyOpenTopicResponse = Static<typeof BuddyOpenTopicResponse>;
  */
 export const NotificationSettings = Type.Object({ feishu: Type.Boolean() }, strict);
 export type TNotificationSettings = Static<typeof NotificationSettings>;
+
+/**
+ * GET / PUT /api/me/appearance（本人，CEO 和 DRI 都有）：「偏好」里的外观（设计 17.2），存在服务端，换设备一样。
+ * system 跟随系统（缺省，没设过就是它）、light 浅色、dark 深色。伙伴代本人改外观的入口按 17.4 定下的做法再加。
+ */
+export const AppearanceSettings = Type.Object({ appearance: Type.Union([Type.Literal("system"), Type.Literal("light"), Type.Literal("dark")]) }, strict);
+export type TAppearanceSettings = Static<typeof AppearanceSettings>;
