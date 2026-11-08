@@ -16,7 +16,7 @@ import { HeroButton } from "@/components/HeroButton";
 import { FailedLine, failureOf, type Failure } from "@/components/work/DecisionBox";
 import { localOptions, oneTap } from "@/components/work/decisions";
 import { InputBar } from "./InputBar";
-import { acceptDrafts, acceptProjectDrafts, planKey, type PlanTarget } from "@/lib/board/cloud";
+import { acceptDrafts, acceptProjectDrafts, decideAutoRelay, planKey, type PlanTarget } from "@/lib/board/cloud";
 import { useLocalRunner, type LocalRunnerState } from "@/lib/local/LocalRunnerProvider";
 import { decideProposal } from "@/lib/team/roles";
 import { canCommandHere, decide } from "@/lib/work/actions";
@@ -122,8 +122,8 @@ export type WaitingRowAnswer = { actions: Action[]; away: string | null };
  * - inline_local（批准、回答、合回）要本机办：只在 deviceId 那台电脑上画按钮，答案直接回给那个子会话；单选、最多 2 个短选项才就地答（3 个的点进去答，不藏第三个）。
  *   批准旁边是「换个做法」（进那个子会话说）。
  *   别处（手机、别的电脑、本机没就绪）画「等你 · {deviceName}」，整行点进去看。
- * - inline（开工、岗位建议）走云端，手机上也能：开工「开始」= 接受派活单并登记开工（配对的电脑上开着的网页认领后开，同 PlanDecision 开不了本机时），
- *   「改一改」进项目对话；岗位建议「采纳 / 不要」。
+ * - inline（开工、岗位建议、自动接力）走云端，手机上也能：开工「开始」= 接受派活单并登记开工（配对的电脑上开着的网页认领后开，同 PlanDecision 开不了本机时），
+ *   「改一改」进项目对话；岗位建议「采纳 / 不要」；自动接力到了上限（18.12）「继续 / 停下」。
  * - open 的（受阻、会后确认、Mission Card、请你认可、月份、电脑、额度）整行点进去。
  */
 export function waitingAnswer(item: WaitingItem, { api, local, handheld }: { api: Pick<WorkHomeApi, "deviceId" | "work">; local: LocalRunnerState; handheld: boolean }): WaitingRowAnswer {
@@ -160,6 +160,10 @@ function waitingActions(item: WaitingItem, api: Pick<WorkHomeApi, "deviceId" | "
   if (item.kind === "role" && item.open.kind === "role") {
     const id = item.open.id;
     return [{ label: "采纳", done: "已采纳", primary: true, run: () => decideProposal(id, "accept") }, { label: "不要", done: "已回答", run: () => decideProposal(id, "dismiss") }];
+  }
+  if (item.kind === "auto_relay" && item.projectId) {
+    const id = item.projectId;
+    return [{ label: "继续", done: "已继续", primary: true, run: () => decideAutoRelay(id, "continue") }, { label: "停下", done: "已停下", run: () => decideAutoRelay(id, "stop") }];
   }
   if (item.kind === "merge" && item.sessionId) {
     const session = local.sessions.find((entry) => entry.id === item.sessionId);

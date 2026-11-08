@@ -183,6 +183,13 @@ export const acceptProjectDrafts = (projectId: string, drafts: TAcceptCardDrafts
  * 月中 Task 改了或取消了（16.4）：答「停掉 / 留着」。停掉时云端了结还排着的开工登记，这台电脑上在跑的由网页停。
  * 答过了（别的标签页、别的电脑）回 409 ALREADY_ANSWERED：当成答过，重读动态就好。
  */
+/**
+ * 答「等你」里的自动接力（18.12，POST /api/me/projects/:projectId/auto-relay，204）：continue 清零恢复，stop 收起那一条、等本人在项目对话里说话再恢复。
+ * 没停着回 409 NOT_PAUSED（别处已经答了）：当成答过。
+ */
+export const decideAutoRelay = (projectId: string, decision: "continue" | "stop") =>
+  unwrap<unknown>(browserApi.POST("/api/me/projects/{projectId}/auto-relay", { params: { path: { projectId } }, body: { decision } }) as Promise<Result<unknown>>)
+    .then(() => undefined, (error: unknown) => { if (!(error instanceof CloudError && error.code === "NOT_PAUSED")) throw error; });
 export const answerGoalChange = (projectId: string, changeId: string, answer: "stop" | "keep") =>
   unwrap<TProjectGoalChangedItem>(browserApi.POST("/api/me/projects/{projectId}/goal-changes/{id}", { params: { path: { projectId, id: changeId } }, body: { answer } }) as Promise<Result<TProjectGoalChangedItem>>)
     .then(() => undefined, (error: unknown) => { if (!(error instanceof CloudError && error.code === "ALREADY_ANSWERED")) throw error; });

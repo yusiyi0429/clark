@@ -118,6 +118,13 @@ describe("就地答（9.6，契约 WaitingAnswer）", () => {
     expect(text(html)).not.toContain(" 批准 ");
   });
 
+  it("自动接力到了上限（18.12）：就地「继续（推荐）/ 停下」，不看是哪台电脑、手机上也能", () => {
+    const relay = approval({ kind: "auto_relay", title: "首页改版：自动接力已连续 20 轮，继续吗？", answer: "inline", sessionId: null, deviceId: null, projectId: "p1" });
+    for (const handheld of [false, true]) {
+      expect(waitingAnswer(relay, { api: api(), local: local("offline"), handheld })).toMatchObject({ actions: [{ label: "继续", done: "已继续", primary: true }, { label: "停下", done: "已停下" }], away: null });
+    }
+  });
+
   it("就在这台电脑上、但不是单选的问题：不画按钮也不画 chip，整行点进去", () => {
     const question = { requestId: "r1", questions: [{ question: "选哪个？", header: "", multiSelect: false, options: ["甲", "乙", "丙", "丁"].map((label) => ({ label, description: "" })) }] };
     const worker = { session: { id: SESSION, pendingQuestion: question } } as unknown as Worker;
