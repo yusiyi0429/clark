@@ -112,7 +112,8 @@ export function InputBar({ placeholder, onSend, busy = false, interruptible = fa
 
   const has = (value: string) => !!value.trim() || (!textRequired && drafts.length > 0);
   async function submit(raw = text) {
-    if ((busy && !interruptible) || disabled || sending.current) return;
+    // 伙伴对话回复中再发（17.4 中途插话）：上一句的 onSend 要等它那一轮写完才回来，这时不拿 sending 拦，不然插话发不出去。
+    if ((busy && !interruptible) || disabled || (sending.current && !(busy && interruptible))) return;
     sending.current = true;
     const value = (dictation.polishing ? await dictation.settle() : raw).trim();
     if (!value && (textRequired || !drafts.length)) { sending.current = false; return; }
