@@ -21,6 +21,7 @@ import { WechatConnectPanel, readWechatConnection, type WechatConnection } from 
 import { installCommand } from "@/components/local/PluginsPage";
 import { useHandheld } from "@/components/ui/useHandheld";
 import { FailedLine } from "@/components/work/DecisionBox";
+import { MANY_SESSIONS } from "@/components/work/Slots";
 import { browserApi } from "@/lib/api/client";
 import { listDevices, revokeDevice } from "@/lib/board/cloud";
 import { feishuConnectHref, readFeishuConnection, type FeishuConnection } from "@/lib/feishuLogin";
@@ -133,7 +134,9 @@ function ThisComputer({ me }: { me: Me | null }) {
               {local.error ? <p className={p.error} role="alert">{local.error}</p> : null}
             </> : null}
           </Row>
-          <Row testId="row-concurrency" name="同时跑" action={<Concurrency value={status.settings.maxConcurrent} onPick={(maxConcurrent) => patch({ maxConcurrent })} />} />
+          <Row testId="row-concurrency" name="同时跑" action={<Concurrency value={status.settings.maxConcurrent} onPick={(maxConcurrent) => patch({ maxConcurrent })} />}>
+            {status.settings.maxConcurrent > MANY_SESSIONS ? <p className={p.warn}>超过 {MANY_SESSIONS} 个，电脑和额度可能吃紧</p> : null}
+          </Row>
           <SwitchRow testId="row-auto-merge" name="验收过就合回" checked={status.settings.autoMerge} onChange={(autoMerge) => patch({ autoMerge })} />
           <SwitchRow testId="row-personal-config" name="带上个人配置" checked={status.settings.includePersonalConfigByDefault}
             onChange={(value) => actions.run("settings", () => local.setIncludePersonal(value))} />
@@ -272,14 +275,15 @@ function ToolForm({ tool, taken, onDone }: { tool: TLocalTool | null; taken: TLo
   );
 }
 
-/** 同时跑几个：中性 chip 触发弹层（1–10），当前那项行尾一个勾。 */
+/** 同时跑几个（不设上限，默认 3）：可选 1–10、12、15、20，眼下的数不在里面时也列上；中性 chip 触发弹层，当前那项行尾一个勾。 */
+const CONCURRENCY = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20];
 function Concurrency({ value, onPick }: { value: number; onPick: (value: number) => void }) {
   return (
     <Dropdown>
       <Dropdown.Trigger className={p.pick} aria-label={`同时跑 ${value} 个`}>{value} 个<ChevronDown {...ICON} /></Dropdown.Trigger>
       <Dropdown.Popover placement="bottom end" offset={8} className={h.pop}>
         <Dropdown.Menu aria-label="同时跑几个" className={h.menuList} onAction={(key) => onPick(Number(key))}>
-          {Array.from({ length: 10 }, (_, index) => index + 1).map((n) => (
+          {[...new Set([...CONCURRENCY, value])].sort((a, b) => a - b).map((n) => (
             <Dropdown.Item key={n} id={String(n)} textValue={`${n} 个`} className={h.menuItem}><span className={h.grow}>{n} 个</span>{n === value ? <Check {...ICON} /> : null}</Dropdown.Item>
           ))}
         </Dropdown.Menu>

@@ -127,6 +127,16 @@ describe("连接页（三组）", () => {
     expect(text(html)).not.toContain("插件");
   });
 
+  it("同时跑不设上限：能选到 10 以上；超过 10 个时这一行下面提醒一句，10 个以内不提醒", () => {
+    const row = (max: number) => {
+      const html = withLocal(<ConnectionsPage go={() => undefined} />, "ready", status({ settings: { ...status().settings, maxConcurrent: max } }));
+      return html.split('data-testid="row-concurrency"')[1]!.split("</li>")[0]!;
+    };
+    expect(row(15)).toContain('aria-label="同时跑 15 个"');
+    expect(text(row(15))).toContain("超过 10 个，电脑和额度可能吃紧");
+    expect(text(row(10))).not.toContain("超过 10 个");
+  });
+
   it("这台电脑离线：本机程序写「离线」，下面是安装命令和复制；不列 Claude Code 等本机才知道的行", () => {
     const html = withLocal(<ConnectionsPage go={() => undefined} />, "offline", null);
     expect(text(html)).toContain("本机程序 离线 未连接 重试");
