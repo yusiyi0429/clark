@@ -4,11 +4,13 @@
  * 左栏最底下的本人一行和个人菜单（新首页设计 9.4、5.4.2「本人行」、5.4.6「个人菜单」）：
  * - 这一行：头像 24 + 名字；连接要处理时（本机离线、额度用完、飞书授权失效）名字后面一个 6px 琥珀点。整行就是菜单的开关。
  * - 菜单从这一行向上弹出：头像和资料 · 伙伴 · 连接 · 岗位 · 我的记忆 · 偏好 · 任务数据质量（开着时）·
- *   切换到 CEO 工作台（双角色）· 管理员（管理员）· 退出登录；最后一行淡色版本号。菜单项不放图标；键盘交给 HeroUI 的菜单。
+ *   切换到 CEO 工作台（双角色）· 管理员（管理员）· 锁屏 · 退出登录；最后一行淡色版本号。菜单项不放图标；键盘交给 HeroUI 的菜单。
+ * 锁屏（设计 19 节第 8 条）：天枢不自动锁，本人点了才锁；和退出登录走同一个接口、回登录页，这台电脑「认得你」的那份（lastLogin）不清。
+ * 快捷键 Ctrl+Shift+L（Mac 上 Cmd+Shift+L），哪里都能按。
  * 头像和资料、伙伴、连接、偏好是新首页里的二级页；岗位、我的记忆、任务数据质量、管理员还是老页面，点了离开新首页。
  * 雷达、定时任务不上（17.2）：不放进菜单（老页面的路由先不动）；「更多」里只剩一项，就不要「更多」这一层。
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Dropdown } from "@heroui/react";
 import { avatarInitial, useBuildVersion, type Account } from "@/components/AccountMenu";
 import { PersonAvatar } from "@/components/avatar/PersonAvatar";
@@ -19,6 +21,10 @@ import { PAGE_TITLE, pageHref, type PageKey, type View } from "./view";
 import h from "@/styles/home.module.css";
 
 type Extra = { switchView: boolean; admin: boolean; taskQuality: boolean };
+
+/** 锁屏的快捷键：Ctrl+Shift+L（Mac 上 Cmd+Shift+L）；打字合成中不算。 */
+export const isLockKey = (event: Pick<KeyboardEvent, "code" | "ctrlKey" | "metaKey" | "shiftKey" | "altKey" | "isComposing">) =>
+  !event.isComposing && event.shiftKey && !event.altKey && (event.ctrlKey !== event.metaKey) && event.code === "KeyL";
 
 export function PersonRow({ account, view, alert, go }: {
   account: Account;
@@ -43,12 +49,19 @@ export function PersonRow({ account, view, alert, go }: {
     if (response.ok) window.location.assign("/");
   };
   const act = (key: string) => {
-    if (key === "logout") { void logout(); return; }
+    if (key === "logout" || key === "lock") { void logout(); return; }
     if (key === "switch") { void switchView(); return; }
     if (key in PAGE_TITLE) { go(pageHref(key as PageKey)); return; }
     const out: Record<string, string> = { roles: "/me/team", memory: "/me/memory", quality: "/me/task-quality", admin: "/me/admin" };
     if (out[key]) go(out[key]);
   };
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (isLockKey(event)) { event.preventDefault(); void logout(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   const current = view.kind === "page" ? view.page : null;
   const subtitle = [account.loginId, account.role === "ceo" ? "CEO" : "成员"].filter(Boolean).join(" · ");
   const item = (id: string, label: string) => (
@@ -83,6 +96,7 @@ export function PersonRow({ account, view, alert, go }: {
               </Dropdown.Section>
             ) : null}
             <Dropdown.Section className={h.menuSection}>
+              {item("lock", "锁屏")}
               {item("logout", "退出登录")}
             </Dropdown.Section>
           </Dropdown.Menu>
