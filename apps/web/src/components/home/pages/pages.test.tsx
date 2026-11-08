@@ -8,7 +8,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: 
 import { LocalContext } from "@/lib/local/LocalRunnerProvider";
 import { createMockRunner } from "@/lib/local/mock";
 import type { LocalPhase } from "@/lib/local/connection";
-import { agentRow, feishuRow, mcpRow, programRow, tokenHubRow, toolRow } from "./connectionRows";
+import { KINGDEE_PLACEHOLDER, agentRow, feishuRow, localToolRow, mcpRow, programRow, tokenHubRow, toolRow } from "./connectionRows";
 import { ConnectionsPage } from "./ConnectionsPage";
 import { MonthView } from "./MonthPage";
 import { PreferencesPage } from "./PreferencesPage";
@@ -73,6 +73,15 @@ describe("连接页每一行（设计 9.5、5.4.6）", () => {
     expect(tokenHubRow([gateway] as never)).toMatchObject({ sub: "DeepSeek", state: "connected" });
   });
 
+  it("本人加的工具：连上写有几个工具，未授权、连不上写原因，还没查写地址；金蝶没加过时占一行未连接、不给动作", () => {
+    const tool = { id: "kb", name: "知识库", preset: "custom" as const, url: "https://mcp.example.com/kb", keyHeader: null, hasKey: true, toolCount: null, error: null, checkedAt: null, addedAt: fresh() };
+    expect(localToolRow({ ...tool, state: "ready", toolCount: 6 })).toMatchObject({ name: "知识库", sub: "6 个工具", state: "connected", action: null });
+    expect(localToolRow({ ...tool, state: "unauthorized", error: "钥匙不对（401）" })).toMatchObject({ sub: "钥匙不对（401）", state: "unauthorized" });
+    expect(localToolRow({ ...tool, state: "unreachable", error: "连不上这个地址" }).state).toBe("unreachable");
+    expect(localToolRow({ ...tool, state: "unknown" })).toMatchObject({ sub: "https://mcp.example.com/kb", state: "unknown" });
+    expect(KINGDEE_PLACEHOLDER).toMatchObject({ name: "金蝶", state: "disconnected", action: null });
+  });
+
   it("我的账号：没接飞书不画飞书；连上给断开，过期给重新授权，没连给连接；让外部 AI 读天枢用过的算连上，只剩过期的是已过期", () => {
     expect(feishuRow({ enabled: false, state: "not_connected" })).toBeNull();
     expect(feishuRow({ enabled: true, state: "connected" })).toMatchObject({ state: "connected", action: "unpair" });
@@ -106,6 +115,9 @@ describe("连接页（三组）", () => {
     expect(text(html)).toContain("GitHub gh · sunm 已连接");
     expect(text(html)).toContain("飞书命令行 lark-cli auth login 未连接");
     expect(text(html)).toContain("C:/code/Tianshu-MVP");
+    // 工具：一行「工具」带「添加」（列表在本机读回来以后画在下面）；在 GitHub 那几行后面、文件夹前面。
+    expect(html).toMatch(/data-testid="row-tool:lark-cli".*data-testid="row-local-tools".*data-testid="row-folders"/s);
+    expect(html.split('data-testid="row-local-tools"')[1]!.split("</li>")[0]).toContain('aria-label="添加工具"');
     expect(html).toContain('aria-label="同时跑 3 个"');
     const row = (id: string) => html.split(`data-testid="row-${id}"`)[1]!.split("</li>")[0]!;
     expect(row("auto-merge")).toMatch(/role="switch"[^>]* checked=""/);

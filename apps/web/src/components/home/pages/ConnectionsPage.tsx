@@ -3,16 +3,18 @@
 /**
  * 连接（个人菜单「连接」，设计 9.5、5.4.6、11.2；「插件」改叫「连接」）：三组，按「在哪」分。每行名字 + 状态词 + 一个动作，不写说明句。
  * - 这台电脑（存在本机）：本机程序（七种状态落到四个状态词，离线时下面是安装命令）、Claude Code（下面是订阅额度和每个窗口的明细）、Codex、TokenHub、
- *   GitHub 和飞书命令行（登没登录、登的是谁）、文件夹（添加、移除）、同时跑、验收过就合回、带上个人配置；再下面是我的几台电脑（断开 = 吊销设备令牌）。
+ *   GitHub 和飞书命令行（登没登录、登的是谁）、工具（本人给子会话加的 MCP 服务器，存在本机）、文件夹（添加、移除）、同时跑、验收过就合回、带上个人配置；
+ *   再下面是我的几台电脑（断开 = 吊销设备令牌）。
  *   逻辑照插件页（components/local/PluginsPage.tsx）：配对好、没关联云端时自己关联一次；断开的正好是这台时当场重新关联。手机上不连本机，只列电脑。
  * - 我的账号（存在云端）：飞书（连接、断开、重新授权）、微信（这套天枢接了才有）、让外部 AI 读天枢（个人 MCP 令牌，展开是现有的连接表单）、本体（我的能力域）。
  * - 公司：公司本体、飞书应用，只看状态（联网搜索没有能读的状态，先不画）。
  * 动作没成：那一行动作的位置写「失败 · 重试」（原因在 title 里），不弹 toast。
  */
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Check, ChevronDown, Copy, X } from "lucide-react";
 import { Dropdown } from "@heroui/react";
-import type { TLocalDeviceView } from "@warmap/contracts";
+import { Popover } from "ts-design/primitives";
+import type { TLocalDeviceView, TLocalTool, TLocalToolUpsert } from "@warmap/contracts";
 import { HeroButton } from "@/components/HeroButton";
 import { ConnectionDialog } from "@/components/ConnectionDialog";
 import { WechatConnectPanel, readWechatConnection, type WechatConnection } from "@/components/WechatConnect";
@@ -26,8 +28,8 @@ import { usageCells } from "@/lib/home/quota";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { linkCloud, type LinkPerson } from "@/lib/local/link";
 import type { SecondaryPageProps } from "./index";
-import { agentRow, feishuRow, isCliTool, mcpRow, programRow, tokenHubRow, toolRow, type RowAction, type RowModel, type TokenLike } from "./connectionRows";
-import { ICON, QuotaBlock, Row, Section, SwitchRow, relative, useMe, type Me } from "./parts";
+import { KINGDEE_PLACEHOLDER, agentRow, feishuRow, isCliTool, localToolRow, mcpRow, programRow, tokenHubRow, toolRow, type RowAction, type RowModel, type TokenLike } from "./connectionRows";
+import { ICON, QuotaBlock, Row, STATE_WORD, Section, SwitchRow, relative, useMe, type Me } from "./parts";
 import h from "@/styles/home.module.css";
 import p from "@/styles/home-pages.module.css";
 
@@ -117,6 +119,7 @@ function ThisComputer({ me }: { me: Me | null }) {
           })}
           {rowOf(tokenHubRow(local.models), gatewayCells.length ? gatewayCells.map((cell) => <QuotaBlock key={cell.id} cell={cell} />) : null)}
           {status.tools.filter(isCliTool).map((tool) => rowOf(toolRow(tool)))}
+          <LocalTools />
           <Row testId="row-folders" name="文件夹" sub={local.folders.length ? `${local.folders.length} 个` : null}
             action={<HeroButton variant="tertiary" size="sm" onPress={() => void local.pickFolder()}>添加</HeroButton>}>
             {local.folders.length || local.error ? <>
@@ -139,6 +142,133 @@ function ThisComputer({ me }: { me: Me | null }) {
       </ul>
       {actions.failed?.key === "settings" || actions.failed?.key.startsWith("folder:") ? <FailedLine reason={actions.failed.reason} onRetry={actions.failed.retry} /> : null}
     </Section>
+  );
+}
+
+/**
+ * 工具（9.5 · 11/08）：本人给子会话加的 MCP 服务器，存在本机，钥匙只写不读。一行「工具」带「添加」，下面每个工具一行：名字、小字、状态词、「编辑」。
+ * 金蝶没加过时先占一行「未连接」。读不到写「失败 · 重试」，不弹 toast。
+ */
+function LocalTools() {
+  const local = useLocalRunner();
+  const [tools, setTools] = useState<TLocalTool[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const load = useCallback(() => {
+    setError(null);
+    void local.runner.listTools().then(setTools).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : ""));
+  }, [local.runner]);
+  useEffect(load, [load]);
+  const rows: { model: RowModel; tool: TLocalTool | null }[] = [
+    ...(tools?.some((tool) => tool.preset === "kingdee") ? [] : [{ model: KINGDEE_PLACEHOLDER, tool: null }]),
+    ...(tools ?? []).map((tool) => ({ model: localToolRow(tool), tool })),
+  ];
+  return (
+    <Row testId="row-local-tools" name="工具" sub={tools?.length ? `${tools.length} 个` : null}
+      action={<ToolForm tool={null} taken={tools ?? []} onDone={load} />}>
+      {tools ? rows.map(({ model, tool }) => (
+        <div key={model.key} className={p.sub} data-testid={model.key}>
+          <b>{model.name}</b>{model.sub ? <span className={p.subText} title={model.sub}>{model.sub}</span> : null}<span className={p.grow} />
+          {model.state ? <span className={p.state} data-state={model.state}>{STATE_WORD[model.state]}</span> : null}
+          {tool ? <ToolForm tool={tool} taken={tools} onDone={load} /> : null}
+        </div>
+      )) : null}
+      {error !== null ? <FailedLine reason={error} onRetry={load} /> : null}
+    </Row>
+  );
+}
+
+const URL_OK = /^https?:\/\/\S{1,292}$/;
+
+/** 新工具的 id：字母数字和 -，不和已有的重。 */
+function toolId(name: string, taken: TLocalTool[]): string {
+  const base = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 24) || "tool";
+  let id = base;
+  for (let n = 2; taken.some((tool) => tool.id === id); n += 1) id = `${base}-${n}`;
+  return id;
+}
+
+/**
+ * 添加、编辑一个工具：站内同一种弹层，三项（名字、地址、钥匙）。存过钥匙的只显示「已设置」，可以换、可以清掉；
+ * 编辑时多一个「移除」（点两下才移除，钥匙一起删）。保存后本机马上查一次，列表里的状态词就是查的结果。
+ */
+function ToolForm({ tool, taken, onDone }: { tool: TLocalTool | null; taken: TLocalTool[]; onDone: () => void }) {
+  const local = useLocalRunner();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [url, setUrl] = useState("");
+  const [key, setKey] = useState("");
+  /** set：存着钥匙、不动；edit：换一把（空着不动）；cleared：清掉。没存过钥匙的直接是 edit。 */
+  const [keyMode, setKeyMode] = useState<"set" | "edit" | "cleared">("edit");
+  const [busy, setBusy] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const keyField = useRef<HTMLInputElement>(null);
+  const openChange = (next: boolean) => {
+    setOpen(next);
+    if (!next) return;
+    setName(tool?.name ?? ""); setUrl(tool?.url ?? ""); setKey("");
+    setKeyMode(tool?.hasKey ? "set" : "edit"); setConfirmRemove(false); setError(null);
+  };
+  const work = async (job: () => Promise<unknown>) => {
+    setBusy(true); setError(null);
+    try { await job(); setOpen(false); onDone(); } catch (reason) { setError(reason instanceof Error ? reason.message : ""); } finally { setBusy(false); }
+  };
+  const valid = name.trim().length > 0 && URL_OK.test(url.trim());
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (!valid || busy) return;
+    const body: TLocalToolUpsert = { name: name.trim(), preset: tool?.preset ?? "custom", url: url.trim() };
+    if (tool?.keyHeader) body.keyHeader = tool.keyHeader;
+    if (keyMode === "cleared") body.apiKey = "";
+    else if (keyMode === "edit" && key.trim()) body.apiKey = key.trim();
+    void work(() => local.runner.putTool(tool?.id ?? toolId(name, taken), body));
+  };
+  const remove = () => {
+    if (!tool) return;
+    if (!confirmRemove) { setConfirmRemove(true); return; }
+    void work(() => local.runner.removeTool(tool.id));
+  };
+  const label = tool ? `编辑 ${tool.name}` : "添加工具";
+  return (
+    <Popover isOpen={open} onOpenChange={openChange}>
+      <HeroButton variant={tool ? "ghost" : "tertiary"} size="sm" aria-label={label}>{tool ? "编辑" : "添加"}</HeroButton>
+      <Popover.Content placement="bottom end" offset={8} className={h.pop}>
+        <Popover.Dialog aria-label={label} className={p.toolForm}>
+          <form onSubmit={submit} className={p.toolFields}>
+            <div className={p.field}>
+              <label htmlFor="tool-name">名字</label>
+              <input id="tool-name" className={p.input} value={name} maxLength={40} autoFocus autoComplete="off" onChange={(event) => setName(event.target.value)} />
+            </div>
+            <div className={p.field}>
+              <label htmlFor="tool-url">地址</label>
+              <input id="tool-url" className={p.input} value={url} maxLength={300} inputMode="url" autoComplete="off" spellCheck={false} placeholder="https://"
+                onChange={(event) => setUrl(event.target.value)} />
+            </div>
+            <div className={p.field}>
+              <label htmlFor="tool-key">钥匙</label>
+              {keyMode === "set" ? (
+                <div className={p.keySet}>
+                  <span className={p.grow}>已设置</span>
+                  <HeroButton variant="ghost" size="sm" onPress={() => { setKeyMode("edit"); window.setTimeout(() => keyField.current?.focus(), 0); }}>换</HeroButton>
+                  <HeroButton variant="ghost" size="sm" onPress={() => setKeyMode("cleared")}>清掉</HeroButton>
+                </div>
+              ) : keyMode === "cleared" ? (
+                <div className={p.keySet}><span className={p.grow} data-faint>已清掉</span></div>
+              ) : (
+                <input id="tool-key" ref={keyField} className={p.input} type="password" value={key} maxLength={2000} autoComplete="off" spellCheck={false}
+                  onChange={(event) => setKey(event.target.value)} />
+              )}
+            </div>
+            {error !== null ? <p className={p.error} role="alert">{error || "没存上"}</p> : null}
+            <div className={p.toolFoot}>
+              {tool ? <HeroButton variant={confirmRemove ? "danger" : "ghost"} size="sm" isDisabled={busy} onPress={remove}>{confirmRemove ? "确认移除" : "移除"}</HeroButton> : null}
+              <span className={p.grow} />
+              <HeroButton variant="primary" size="sm" type="submit" isDisabled={busy || !valid}>{tool ? "保存" : "添加"}</HeroButton>
+            </div>
+          </form>
+        </Popover.Dialog>
+      </Popover.Content>
+    </Popover>
   );
 }
 

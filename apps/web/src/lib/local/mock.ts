@@ -10,7 +10,7 @@
  */
 import type {
   TLocalBackgroundItem, TLocalCreateSessionRequest, TLocalFolder, TLocalMergeResponse, TLocalModelProfile, TLocalPermissionRequestView, TLocalPlanEntry, TLocalQuestionRequestView,
-  TLocalProjectFolder, TLocalSessionEvent, TLocalSessionStatus, TLocalSessionSummary, TLocalUsage, TLocalWorkspace,
+  TLocalProjectFolder, TLocalSessionEvent, TLocalSessionStatus, TLocalSessionSummary, TLocalTool, TLocalToolUpsert, TLocalUsage, TLocalWorkspace,
 } from "@warmap/contracts";
 import { LocalRunnerError, type EventWatch, type LocalRunner } from "./runner";
 
@@ -57,6 +57,27 @@ const MODELS: TLocalModelProfile[] = [
 ];
 
 /** onPlanned：规划员拆完时调（假装本机把 card_plan 同步上去了）。 */
+/** 假的「查一次连没连上」：地址里带 401 是钥匙不对，带 down 是连不上，其余连上、有 6 个工具。 */
+function probeTool(tool: TLocalTool): Pick<TLocalTool, "state" | "toolCount" | "error" | "checkedAt"> {
+  const checkedAt = new Date().toISOString();
+  if (/401/.test(tool.url)) return { state: "unauthorized", toolCount: null, error: "钥匙不对（401）", checkedAt };
+  if (/down/.test(tool.url)) return { state: "unreachable", toolCount: null, error: "连不上这个地址", checkedAt };
+  return { state: "ready", toolCount: 6, error: null, checkedAt };
+}
+
+/** 照契约存一个工具：不收命令；钥匙不传保留、空串删掉；地址改了又没给新钥匙，旧钥匙作废。存完查一次。 */
+function upsertTool(tools: TLocalTool[], id: string, body: TLocalToolUpsert): TLocalTool {
+  if ("command" in body || "args" in body) throw new LocalRunnerError("validation", "只收 HTTP 地址", 400);
+  if (!/^https?:\/\//.test(body.url)) throw new LocalRunnerError("validation", "地址要以 http:// 或 https:// 开头", 400);
+  const old = tools.find((tool) => tool.id === id);
+  if (!old && tools.length >= 20) throw new LocalRunnerError("validation", "最多 20 个工具", 400);
+  const hasKey = body.apiKey !== undefined ? body.apiKey !== "" : Boolean(old?.hasKey && old.url === body.url);
+  const next: TLocalTool = { id, name: body.name, preset: body.preset, url: body.url, keyHeader: body.keyHeader ?? null, hasKey, state: "unknown", toolCount: null, error: null, checkedAt: null, addedAt: old?.addedAt ?? new Date().toISOString() };
+  Object.assign(next, probeTool(next));
+  if (old) Object.assign(old, next); else tools.push(next);
+  return old ?? next;
+}
+
 export type MockOptions = { stepMs?: number; paired?: boolean; onPlanned?: (taskId: string) => void };
 
 export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: MockOptions = {}): LocalRunner {
@@ -64,6 +85,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
   const sessions = new Map<string, MockSession>();
   const projects = new Map<string, TLocalProjectFolder>();
   const folders: TLocalFolder[] = [{ id: "f1", path: "C:\\work\\tianshu", label: "tianshu", addedAt: new Date().toISOString() }];
+  const tools: TLocalTool[] = [{ id: "kb", name: "知识库", preset: "custom", url: "https://mcp.example.com/kb", keyHeader: null, hasKey: true, state: "ready", toolCount: 6, error: null, checkedAt: new Date().toISOString(), addedAt: new Date().toISOString() }];
   let linked = false;
   let includePersonal = false;
   let maxConcurrent = 3;
@@ -286,6 +308,14 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
     },
     listModels: async () => MODELS,
     putModel: async (id, body) => ({ id, label: body.label, source: body.source, agent: "claude-code", baseUrl: body.baseUrl ?? null, model: body.model, smallModel: body.smallModel ?? null, webSearch: body.webSearch ?? false, hasKey: Boolean(body.apiKey), isDefault: Boolean(body.isDefault) }),
+    listTools: async () => tools.map((tool) => ({ ...tool })),
+    putTool: async (id, body) => { const tool = upsertTool(tools, id, body); return { ...tool }; },
+    removeTool: async (id) => { const i = tools.findIndex((tool) => tool.id === id); if (i >= 0) tools.splice(i, 1); },
+    checkTool: async (id) => {
+      const tool = tools.find((entry) => entry.id === id);
+      if (!tool) throw new LocalRunnerError("not_found", "没有这个工具", 404);
+      return { ...Object.assign(tool, probeTool(tool)) };
+    },
     listFolders: async () => folders,
     pickFolder: async () => { const folder = { id: `f${folders.length + 1}`, path: `C:\\work\\project-${folders.length + 1}`, label: `project-${folders.length + 1}`, addedAt: now() }; folders.push(folder); return folder; },
     removeFolder: async (id) => { const i = folders.findIndex((f) => f.id === id); if (i >= 0) folders.splice(i, 1); },

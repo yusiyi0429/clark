@@ -21,9 +21,14 @@ export function Section({ title, aside, children, testId }: { title: string; asi
   );
 }
 
-/** 连接的状态词只有四个（5.6）：已连接 --ink-muted、未连接 --ink-faint、已过期 --warning、用完 --danger。 */
-export type ConnState = "connected" | "disconnected" | "expired" | "exhausted";
-export const STATE_WORD: Record<ConnState, string> = { connected: "已连接", disconnected: "未连接", expired: "已过期", exhausted: "用完" };
+/**
+ * 连接的状态词（5.6）：已连接 --ink-muted、未连接 --ink-faint、已过期 --warning、用完 --danger；
+ * 本人加的工具另有三个（本机查连没连上的结果）：未授权、连不上 --warning，未知 --ink-faint。
+ */
+export type ConnState = "connected" | "disconnected" | "expired" | "exhausted" | "unauthorized" | "unreachable" | "unknown";
+export const STATE_WORD: Record<ConnState, string> = {
+  connected: "已连接", disconnected: "未连接", expired: "已过期", exhausted: "用完", unauthorized: "未授权", unreachable: "连不上", unknown: "未知",
+};
 
 /** 一行：名字（14/20）+ 小字（12/16，可以没有）、状态词、一个动作；高 48。children 是跟在行下面的（额度、文件夹、展开的面板）。 */
 export function Row({ name, tag, sub, state, action, children, testId }: {
