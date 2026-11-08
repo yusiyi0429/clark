@@ -20196,6 +20196,614 @@
         }
       }
     },
+    "/api/me/appearance": {
+      "get": {
+        "operationId": "getAppearance",
+        "summary": "本人的外观（「偏好」）：跟随系统 / 浅色 / 深色，缺省跟随系统",
+        "responses": {
+          "200": {
+            "description": "外观",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppearanceSettings"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateAppearance",
+        "summary": "改本人的外观（换设备一样）",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppearanceSettings"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "改好的外观",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppearanceSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/buddy-authority": {
+      "get": {
+        "operationId": "getBuddyAuthority",
+        "summary": "伙伴代本人做事的授权（17.4）：full 完全授权，none 只能读（缺省）",
+        "responses": {
+          "200": {
+            "description": "授权",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuddyAuthority"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateBuddyAuthority",
+        "summary": "打开或关掉伙伴的授权（引导里的「同意」、偏好里的开关）",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateBuddyAuthorityRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "改好的授权",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuddyAuthority"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/buddy-actions/log": {
+      "get": {
+        "operationId": "listBuddyActions",
+        "summary": "伙伴代本人做过的写动作（新的在前，最近 100 条），能撤的带 undoable",
+        "responses": {
+          "200": {
+            "description": "审计",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuddyAuditListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/buddy-actions/log/{id}/undo": {
+      "post": {
+        "operationId": "undoBuddyAction",
+        "summary": "撤销伙伴做的一个动作；不能撤、撤过了、对象已经变了 409 NOT_UNDOABLE",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "撤销后的这条",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuddyAuditEntry"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/buddy-messages/{id}": {
+      "get": {
+        "operationId": "getBuddyMessage",
+        "summary": "伙伴要转达给同事的一句话（对话里的 buddy_message 卡）",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "这句话",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuddyMessageDraft"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/buddy-messages/{id}/send": {
+      "post": {
+        "operationId": "sendBuddyMessage",
+        "summary": "发出：天枢机器人转达给收件人（开头「{本人}请我转达：」）；收不到的列在 failed；不是草稿 409",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "发出后的这句话",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuddyMessageDraft"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/buddy-messages/{id}/cancel": {
+      "post": {
+        "operationId": "cancelBuddyMessage",
+        "summary": "不发了；不是草稿 409",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "取消后的这句话",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BuddyMessageDraft"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/trash": {
+      "get": {
+        "operationId": "listTrash",
+        "summary": "回收站：删掉的子会话，purgeAt 以后真删",
+        "responses": {
+          "200": {
+            "description": "回收站",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrashListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/trash/{kind}/{id}/restore": {
+      "post": {
+        "operationId": "restoreTrashItem",
+        "summary": "从回收站恢复一个子会话（204）；已经真删了 404",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "card",
+                "topic"
+              ]
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "恢复了"
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/session-stops/claim": {
+      "post": {
+        "operationId": "claimSessionStops",
+        "summary": "认领这台电脑上要停掉的本机会话（17.4 伙伴的 stop_sub_session）",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimSessionStopsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "要停的",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimSessionStopsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/session-stops/{id}/done": {
+      "post": {
+        "operationId": "finishSessionStop",
+        "summary": "报停掉的结果（stopped / not_running）；不是这台电脑认领的 404",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionStopDoneRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "记下了"
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/work-home": {
       "get": {
         "operationId": "getWorkHome",
@@ -26547,7 +27155,8 @@
                           "overruled",
                           "createdAt",
                           "finishedAt",
-                          "git"
+                          "git",
+                          "sourceWordIssues"
                         ],
                         "properties": {
                           "id": {
@@ -26695,6 +27304,40 @@
                                 "type": "null"
                               }
                             ]
+                          },
+                          "sourceWordIssues": {
+                            "type": "array",
+                            "items": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "quote",
+                                "kind",
+                                "reason"
+                              ],
+                              "properties": {
+                                "quote": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "anyOf": [
+                                    {
+                                      "const": "missing",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "extra",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "reason": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              }
+                            }
                           }
                         }
                       },
@@ -28579,15 +29222,15 @@
                         "type": "string"
                       },
                       {
-                        "const": "cheerful",
+                        "const": "direct",
                         "type": "string"
                       },
                       {
-                        "const": "calm",
+                        "const": "warm",
                         "type": "string"
                       },
                       {
-                        "const": "critical",
+                        "const": "coach",
                         "type": "string"
                       }
                     ]
@@ -28870,6 +29513,24 @@
                   "type": "array",
                   "items": {
                     "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "kind",
+                          "draftId"
+                        ],
+                        "properties": {
+                          "kind": {
+                            "const": "buddy_message",
+                            "type": "string"
+                          },
+                          "draftId": {
+                            "format": "uuid",
+                            "type": "string"
+                          }
+                        }
+                      },
                       {
                         "additionalProperties": false,
                         "type": "object",
@@ -29347,6 +30008,51 @@
                     ]
                   }
                 },
+                "plan": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "entries",
+                    "collapsed"
+                  ],
+                  "properties": {
+                    "entries": {
+                      "type": "array",
+                      "items": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "content",
+                          "status"
+                        ],
+                        "properties": {
+                          "content": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "anyOf": [
+                              {
+                                "const": "pending",
+                                "type": "string"
+                              },
+                              {
+                                "const": "in_progress",
+                                "type": "string"
+                              },
+                              {
+                                "const": "completed",
+                                "type": "string"
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    "collapsed": {
+                      "type": "boolean"
+                    }
+                  }
+                },
                 "readScope": {
                   "additionalProperties": false,
                   "type": "object",
@@ -29510,6 +30216,10 @@
                     },
                     {
                       "const": "wechat",
+                      "type": "string"
+                    },
+                    {
+                      "const": "buddy",
                       "type": "string"
                     }
                   ]
@@ -29856,6 +30566,880 @@
               },
               "result": {
                 "type": "string"
+              }
+            }
+          },
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "runId",
+              "scope",
+              "sequence",
+              "type",
+              "plan"
+            ],
+            "properties": {
+              "runId": {
+                "type": "string"
+              },
+              "scope": {
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|project:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
+                "description": "global 或稳定对象 scope",
+                "type": "string"
+              },
+              "sequence": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "type": {
+                "const": "plan",
+                "type": "string"
+              },
+              "plan": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "entries",
+                  "collapsed"
+                ],
+                "properties": {
+                  "entries": {
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "content",
+                        "status"
+                      ],
+                      "properties": {
+                        "content": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "const": "pending",
+                              "type": "string"
+                            },
+                            {
+                              "const": "in_progress",
+                              "type": "string"
+                            },
+                            {
+                              "const": "completed",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "collapsed": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "runId",
+              "scope",
+              "sequence",
+              "type",
+              "ui"
+            ],
+            "properties": {
+              "runId": {
+                "type": "string"
+              },
+              "scope": {
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|project:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
+                "description": "global 或稳定对象 scope",
+                "type": "string"
+              },
+              "sequence": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "type": {
+                "const": "ui",
+                "type": "string"
+              },
+              "ui": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "kind",
+                      "appearance"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "appearance",
+                        "type": "string"
+                      },
+                      "appearance": {
+                        "anyOf": [
+                          {
+                            "const": "system",
+                            "type": "string"
+                          },
+                          {
+                            "const": "light",
+                            "type": "string"
+                          },
+                          {
+                            "const": "dark",
+                            "type": "string"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "kind",
+                      "target"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "open",
+                        "type": "string"
+                      },
+                      "target": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "kind",
+                              "id"
+                            ],
+                            "properties": {
+                              "kind": {
+                                "anyOf": [
+                                  {
+                                    "const": "card",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "topic",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "project",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "meeting",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "mission_card",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "role",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "task_detail",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "month",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "connections",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "transfer",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "round": {
+                                "type": "boolean"
+                              },
+                              "focus": {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "sessionId",
+                                  "requestId"
+                                ],
+                                "properties": {
+                                  "sessionId": {
+                                    "format": "uuid",
+                                    "type": "string"
+                                  },
+                                  "requestId": {
+                                    "anyOf": [
+                                      {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            }
+                          },
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "kind"
+                            ],
+                            "properties": {
+                              "kind": {
+                                "anyOf": [
+                                  {
+                                    "const": "home",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "preferences",
+                                    "type": "string"
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "kind",
+                      "what"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "refresh",
+                        "type": "string"
+                      },
+                      "what": {
+                        "minItems": 1,
+                        "type": "array",
+                        "items": {
+                          "anyOf": [
+                            {
+                              "const": "work_home",
+                              "type": "string"
+                            },
+                            {
+                              "const": "project",
+                              "type": "string"
+                            },
+                            {
+                              "const": "sub_session",
+                              "type": "string"
+                            },
+                            {
+                              "const": "settings",
+                              "type": "string"
+                            },
+                            {
+                              "const": "trash",
+                              "type": "string"
+                            }
+                          ]
+                        }
+                      },
+                      "id": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "runId",
+              "scope",
+              "sequence",
+              "type",
+              "card"
+            ],
+            "properties": {
+              "runId": {
+                "type": "string"
+              },
+              "scope": {
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|project:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
+                "description": "global 或稳定对象 scope",
+                "type": "string"
+              },
+              "sequence": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "type": {
+                "const": "card",
+                "type": "string"
+              },
+              "card": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "kind",
+                      "draftId"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "buddy_message",
+                        "type": "string"
+                      },
+                      "draftId": {
+                        "format": "uuid",
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "kind",
+                      "personalReviewId",
+                      "href"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "review",
+                        "type": "string"
+                      },
+                      "personalReviewId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "href": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "kind",
+                      "weeklyReviewId",
+                      "href"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "weekly_review",
+                        "type": "string"
+                      },
+                      "weeklyReviewId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "href": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "kind",
+                      "question",
+                      "candidates"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "todo_pick",
+                        "type": "string"
+                      },
+                      "question": {
+                        "minLength": 1,
+                        "maxLength": 1000,
+                        "type": "string"
+                      },
+                      "candidates": {
+                        "minItems": 2,
+                        "maxItems": 4,
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "requestId",
+                            "title",
+                            "initiatorName",
+                            "sentAt",
+                            "href"
+                          ],
+                          "properties": {
+                            "requestId": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "title": {
+                              "type": "string"
+                            },
+                            "initiatorId": {
+                              "type": "string"
+                            },
+                            "initiatorName": {
+                              "type": "string"
+                            },
+                            "sentAt": {
+                              "type": "string"
+                            },
+                            "href": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "kind",
+                      "requestId",
+                      "question",
+                      "href"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "todo_ask",
+                        "type": "string"
+                      },
+                      "requestId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "question": {
+                        "minLength": 1,
+                        "maxLength": 1000,
+                        "type": "string"
+                      },
+                      "href": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "kind",
+                      "requestId",
+                      "href",
+                      "question",
+                      "answer",
+                      "source",
+                      "questionId"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "todo_answer",
+                        "type": "string"
+                      },
+                      "requestId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "href": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "question": {
+                        "minLength": 1,
+                        "maxLength": 1000,
+                        "type": "string"
+                      },
+                      "answer": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "source": {
+                        "anyOf": [
+                          {
+                            "const": "body",
+                            "type": "string"
+                          },
+                          {
+                            "const": "question",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "questionId": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "kind",
+                      "requestId",
+                      "href"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "request_draft",
+                        "type": "string"
+                      },
+                      "requestId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "href": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "kind",
+                      "askId",
+                      "questions"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "questions",
+                        "type": "string"
+                      },
+                      "askId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "questions": {
+                        "minItems": 1,
+                        "maxItems": 4,
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "id",
+                            "question",
+                            "options"
+                          ],
+                          "properties": {
+                            "id": {
+                              "minLength": 1,
+                              "maxLength": 8,
+                              "type": "string"
+                            },
+                            "question": {
+                              "minLength": 1,
+                              "maxLength": 200,
+                              "type": "string"
+                            },
+                            "options": {
+                              "minItems": 2,
+                              "maxItems": 4,
+                              "type": "array",
+                              "items": {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "label"
+                                ],
+                                "properties": {
+                                  "label": {
+                                    "minLength": 1,
+                                    "maxLength": 40,
+                                    "type": "string"
+                                  },
+                                  "detail": {
+                                    "maxLength": 120,
+                                    "type": "string"
+                                  },
+                                  "recommended": {
+                                    "type": "boolean"
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "kind",
+                      "collectionId"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "collection_draft",
+                        "type": "string"
+                      },
+                      "collectionId": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "kind",
+                      "draftId",
+                      "title",
+                      "scheduledAt",
+                      "endsAt",
+                      "host",
+                      "participants",
+                      "unresolved",
+                      "anchor"
+                    ],
+                    "properties": {
+                      "kind": {
+                        "const": "meeting_draft",
+                        "type": "string"
+                      },
+                      "draftId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "title": {
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "type": "string"
+                      },
+                      "scheduledAt": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "endsAt": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "host": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "personId",
+                              "displayName"
+                            ],
+                            "properties": {
+                              "personId": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "displayName": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "participants": {
+                        "maxItems": 50,
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "personId",
+                            "displayName"
+                          ],
+                          "properties": {
+                            "personId": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "displayName": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "unresolved": {
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "name",
+                            "reason"
+                          ],
+                          "properties": {
+                            "name": {
+                              "minLength": 1,
+                              "maxLength": 40,
+                              "type": "string"
+                            },
+                            "reason": {
+                              "anyOf": [
+                                {
+                                  "const": "not_found",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "ambiguous",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "host": {
+                              "type": "boolean"
+                            }
+                          }
+                        }
+                      },
+                      "anchor": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "kind",
+                              "id",
+                              "title"
+                            ],
+                            "properties": {
+                              "kind": {
+                                "anyOf": [
+                                  {
+                                    "const": "lto",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "po",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "mission",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "task",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "unit",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "company",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "id": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "title": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "runId",
+              "scope",
+              "sequence",
+              "type",
+              "state"
+            ],
+            "properties": {
+              "runId": {
+                "type": "string"
+              },
+              "scope": {
+                "pattern": "^(global|(issue|signal|meeting|monthly-plan|mission-card|monthly-review-item|personal-review|task):[A-Za-z0-9][A-Za-z0-9_-]{0,127}|mission:.{1,128}|project:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
+                "description": "global 或稳定对象 scope",
+                "type": "string"
+              },
+              "sequence": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "type": {
+                "const": "receipt",
+                "type": "string"
+              },
+              "state": {
+                "anyOf": [
+                  {
+                    "const": "delivered",
+                    "type": "string"
+                  },
+                  {
+                    "const": "read",
+                    "type": "string"
+                  }
+                ]
               }
             }
           },
@@ -53115,7 +54699,8 @@
                       "overruled",
                       "createdAt",
                       "finishedAt",
-                      "git"
+                      "git",
+                      "sourceWordIssues"
                     ],
                     "properties": {
                       "id": {
@@ -53263,6 +54848,40 @@
                             "type": "null"
                           }
                         ]
+                      },
+                      "sourceWordIssues": {
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "quote",
+                            "kind",
+                            "reason"
+                          ],
+                          "properties": {
+                            "quote": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "kind": {
+                              "anyOf": [
+                                {
+                                  "const": "missing",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "extra",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "reason": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          }
+                        }
                       }
                     }
                   },
@@ -54439,7 +56058,8 @@
                                   "overruled",
                                   "createdAt",
                                   "finishedAt",
-                                  "git"
+                                  "git",
+                                  "sourceWordIssues"
                                 ],
                                 "properties": {
                                   "id": {
@@ -54587,6 +56207,40 @@
                                         "type": "null"
                                       }
                                     ]
+                                  },
+                                  "sourceWordIssues": {
+                                    "type": "array",
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "type": "object",
+                                      "required": [
+                                        "quote",
+                                        "kind",
+                                        "reason"
+                                      ],
+                                      "properties": {
+                                        "quote": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "anyOf": [
+                                            {
+                                              "const": "missing",
+                                              "type": "string"
+                                            },
+                                            {
+                                              "const": "extra",
+                                              "type": "string"
+                                            }
+                                          ]
+                                        },
+                                        "reason": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        }
+                                      }
+                                    }
                                   }
                                 }
                               },
@@ -58134,15 +59788,15 @@
                 "type": "string"
               },
               {
-                "const": "cheerful",
+                "const": "direct",
                 "type": "string"
               },
               {
-                "const": "calm",
+                "const": "warm",
                 "type": "string"
               },
               {
-                "const": "critical",
+                "const": "coach",
                 "type": "string"
               }
             ]
@@ -58180,15 +59834,15 @@
             "type": "string"
           },
           {
-            "const": "cheerful",
+            "const": "direct",
             "type": "string"
           },
           {
-            "const": "calm",
+            "const": "warm",
             "type": "string"
           },
           {
-            "const": "critical",
+            "const": "coach",
             "type": "string"
           }
         ]
@@ -63272,7 +64926,8 @@
                           "overruled",
                           "createdAt",
                           "finishedAt",
-                          "git"
+                          "git",
+                          "sourceWordIssues"
                         ],
                         "properties": {
                           "id": {
@@ -63420,6 +65075,40 @@
                                 "type": "null"
                               }
                             ]
+                          },
+                          "sourceWordIssues": {
+                            "type": "array",
+                            "items": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "quote",
+                                "kind",
+                                "reason"
+                              ],
+                              "properties": {
+                                "quote": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "anyOf": [
+                                    {
+                                      "const": "missing",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "extra",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "reason": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              }
+                            }
                           }
                         }
                       },
@@ -64945,7 +66634,8 @@
                             "overruled",
                             "createdAt",
                             "finishedAt",
-                            "git"
+                            "git",
+                            "sourceWordIssues"
                           ],
                           "properties": {
                             "id": {
@@ -65093,6 +66783,40 @@
                                   "type": "null"
                                 }
                               ]
+                            },
+                            "sourceWordIssues": {
+                              "type": "array",
+                              "items": {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "quote",
+                                  "kind",
+                                  "reason"
+                                ],
+                                "properties": {
+                                  "quote": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "anyOf": [
+                                      {
+                                        "const": "missing",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "extra",
+                                        "type": "string"
+                                      }
+                                    ]
+                                  },
+                                  "reason": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                }
+                              }
                             }
                           }
                         },
@@ -66130,7 +67854,8 @@
                                   "overruled",
                                   "createdAt",
                                   "finishedAt",
-                                  "git"
+                                  "git",
+                                  "sourceWordIssues"
                                 ],
                                 "properties": {
                                   "id": {
@@ -66278,6 +68003,40 @@
                                         "type": "null"
                                       }
                                     ]
+                                  },
+                                  "sourceWordIssues": {
+                                    "type": "array",
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "type": "object",
+                                      "required": [
+                                        "quote",
+                                        "kind",
+                                        "reason"
+                                      ],
+                                      "properties": {
+                                        "quote": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "anyOf": [
+                                            {
+                                              "const": "missing",
+                                              "type": "string"
+                                            },
+                                            {
+                                              "const": "extra",
+                                              "type": "string"
+                                            }
+                                          ]
+                                        },
+                                        "reason": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        }
+                                      }
+                                    }
                                   }
                                 }
                               },
@@ -67290,7 +69049,8 @@
                             "overruled",
                             "createdAt",
                             "finishedAt",
-                            "git"
+                            "git",
+                            "sourceWordIssues"
                           ],
                           "properties": {
                             "id": {
@@ -67438,6 +69198,40 @@
                                   "type": "null"
                                 }
                               ]
+                            },
+                            "sourceWordIssues": {
+                              "type": "array",
+                              "items": {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "quote",
+                                  "kind",
+                                  "reason"
+                                ],
+                                "properties": {
+                                  "quote": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "anyOf": [
+                                      {
+                                        "const": "missing",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "extra",
+                                        "type": "string"
+                                      }
+                                    ]
+                                  },
+                                  "reason": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                }
+                              }
                             }
                           }
                         },
@@ -71520,7 +73314,8 @@
                           "overruled",
                           "createdAt",
                           "finishedAt",
-                          "git"
+                          "git",
+                          "sourceWordIssues"
                         ],
                         "properties": {
                           "id": {
@@ -71668,6 +73463,40 @@
                                 "type": "null"
                               }
                             ]
+                          },
+                          "sourceWordIssues": {
+                            "type": "array",
+                            "items": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "quote",
+                                "kind",
+                                "reason"
+                              ],
+                              "properties": {
+                                "quote": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "anyOf": [
+                                    {
+                                      "const": "missing",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "extra",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "reason": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              }
+                            }
                           }
                         }
                       },
@@ -72944,7 +74773,8 @@
                                 "overruled",
                                 "createdAt",
                                 "finishedAt",
-                                "git"
+                                "git",
+                                "sourceWordIssues"
                               ],
                               "properties": {
                                 "id": {
@@ -73092,6 +74922,40 @@
                                       "type": "null"
                                     }
                                   ]
+                                },
+                                "sourceWordIssues": {
+                                  "type": "array",
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "type": "object",
+                                    "required": [
+                                      "quote",
+                                      "kind",
+                                      "reason"
+                                    ],
+                                    "properties": {
+                                      "quote": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "anyOf": [
+                                          {
+                                            "const": "missing",
+                                            "type": "string"
+                                          },
+                                          {
+                                            "const": "extra",
+                                            "type": "string"
+                                          }
+                                        ]
+                                      },
+                                      "reason": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    }
+                                  }
                                 }
                               }
                             },
@@ -74049,7 +75913,8 @@
                             "overruled",
                             "createdAt",
                             "finishedAt",
-                            "git"
+                            "git",
+                            "sourceWordIssues"
                           ],
                           "properties": {
                             "id": {
@@ -74197,6 +76062,40 @@
                                   "type": "null"
                                 }
                               ]
+                            },
+                            "sourceWordIssues": {
+                              "type": "array",
+                              "items": {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "quote",
+                                  "kind",
+                                  "reason"
+                                ],
+                                "properties": {
+                                  "quote": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "anyOf": [
+                                      {
+                                        "const": "missing",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "extra",
+                                        "type": "string"
+                                      }
+                                    ]
+                                  },
+                                  "reason": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                }
+                              }
                             }
                           }
                         },
@@ -91957,7 +93856,8 @@
                   "overruled",
                   "createdAt",
                   "finishedAt",
-                  "git"
+                  "git",
+                  "sourceWordIssues"
                 ],
                 "properties": {
                   "id": {
@@ -92105,6 +94005,40 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "sourceWordIssues": {
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "quote",
+                        "kind",
+                        "reason"
+                      ],
+                      "properties": {
+                        "quote": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "kind": {
+                          "anyOf": [
+                            {
+                              "const": "missing",
+                              "type": "string"
+                            },
+                            {
+                              "const": "extra",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "reason": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    }
                   }
                 }
               },
@@ -93014,7 +94948,8 @@
                       "overruled",
                       "createdAt",
                       "finishedAt",
-                      "git"
+                      "git",
+                      "sourceWordIssues"
                     ],
                     "properties": {
                       "id": {
@@ -93162,6 +95097,40 @@
                             "type": "null"
                           }
                         ]
+                      },
+                      "sourceWordIssues": {
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "quote",
+                            "kind",
+                            "reason"
+                          ],
+                          "properties": {
+                            "quote": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "kind": {
+                              "anyOf": [
+                                {
+                                  "const": "missing",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "extra",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "reason": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          }
+                        }
                       }
                     }
                   },
@@ -94539,7 +96508,8 @@
                             "overruled",
                             "createdAt",
                             "finishedAt",
-                            "git"
+                            "git",
+                            "sourceWordIssues"
                           ],
                           "properties": {
                             "id": {
@@ -94687,6 +96657,40 @@
                                   "type": "null"
                                 }
                               ]
+                            },
+                            "sourceWordIssues": {
+                              "type": "array",
+                              "items": {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "quote",
+                                  "kind",
+                                  "reason"
+                                ],
+                                "properties": {
+                                  "quote": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "anyOf": [
+                                      {
+                                        "const": "missing",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "extra",
+                                        "type": "string"
+                                      }
+                                    ]
+                                  },
+                                  "reason": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                }
+                              }
                             }
                           }
                         },
@@ -96209,7 +98213,8 @@
                             "overruled",
                             "createdAt",
                             "finishedAt",
-                            "git"
+                            "git",
+                            "sourceWordIssues"
                           ],
                           "properties": {
                             "id": {
@@ -96357,6 +98362,40 @@
                                   "type": "null"
                                 }
                               ]
+                            },
+                            "sourceWordIssues": {
+                              "type": "array",
+                              "items": {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "quote",
+                                  "kind",
+                                  "reason"
+                                ],
+                                "properties": {
+                                  "quote": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "anyOf": [
+                                      {
+                                        "const": "missing",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "extra",
+                                        "type": "string"
+                                      }
+                                    ]
+                                  },
+                                  "reason": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                }
+                              }
                             }
                           }
                         },
@@ -96532,6 +98571,7 @@
           "createdAt",
           "finishedAt",
           "git",
+          "sourceWordIssues",
           "runId",
           "criteria",
           "claims",
@@ -96690,6 +98730,40 @@
                 "type": "null"
               }
             ]
+          },
+          "sourceWordIssues": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "quote",
+                "kind",
+                "reason"
+              ],
+              "properties": {
+                "quote": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "missing",
+                      "type": "string"
+                    },
+                    {
+                      "const": "extra",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "reason": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              }
+            }
           },
           "runId": {
             "anyOf": [
@@ -97845,7 +99919,8 @@
                           "overruled",
                           "createdAt",
                           "finishedAt",
-                          "git"
+                          "git",
+                          "sourceWordIssues"
                         ],
                         "properties": {
                           "id": {
@@ -97993,6 +100068,40 @@
                                 "type": "null"
                               }
                             ]
+                          },
+                          "sourceWordIssues": {
+                            "type": "array",
+                            "items": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "quote",
+                                "kind",
+                                "reason"
+                              ],
+                              "properties": {
+                                "quote": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "anyOf": [
+                                    {
+                                      "const": "missing",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "extra",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "reason": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              }
+                            }
                           }
                         }
                       },
@@ -98330,6 +100439,7 @@
                 "createdAt",
                 "finishedAt",
                 "git",
+                "sourceWordIssues",
                 "runId",
                 "criteria",
                 "claims",
@@ -98488,6 +100598,40 @@
                       "type": "null"
                     }
                   ]
+                },
+                "sourceWordIssues": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "quote",
+                      "kind",
+                      "reason"
+                    ],
+                    "properties": {
+                      "quote": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "kind": {
+                        "anyOf": [
+                          {
+                            "const": "missing",
+                            "type": "string"
+                          },
+                          {
+                            "const": "extra",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "reason": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    }
+                  }
                 },
                 "runId": {
                   "anyOf": [
@@ -112296,7 +114440,8 @@
               "cardId",
               "title",
               "handbackId",
-              "fix"
+              "fix",
+              "sourceWordIssues"
             ],
             "properties": {
               "kind": {
@@ -112331,6 +114476,40 @@
                     "type": "null"
                   }
                 ]
+              },
+              "sourceWordIssues": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "quote",
+                    "kind",
+                    "reason"
+                  ],
+                  "properties": {
+                    "quote": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "const": "missing",
+                          "type": "string"
+                        },
+                        {
+                          "const": "extra",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "reason": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  }
+                }
               }
             }
           },
@@ -114281,7 +116460,8 @@
                   "cardId",
                   "title",
                   "handbackId",
-                  "fix"
+                  "fix",
+                  "sourceWordIssues"
                 ],
                 "properties": {
                   "kind": {
@@ -114316,6 +116496,40 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "sourceWordIssues": {
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "quote",
+                        "kind",
+                        "reason"
+                      ],
+                      "properties": {
+                        "quote": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "kind": {
+                          "anyOf": [
+                            {
+                              "const": "missing",
+                              "type": "string"
+                            },
+                            {
+                              "const": "extra",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "reason": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    }
                   }
                 }
               },
@@ -114893,7 +117107,8 @@
                         "cardId",
                         "title",
                         "handbackId",
-                        "fix"
+                        "fix",
+                        "sourceWordIssues"
                       ],
                       "properties": {
                         "kind": {
@@ -114928,6 +117143,40 @@
                               "type": "null"
                             }
                           ]
+                        },
+                        "sourceWordIssues": {
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "quote",
+                              "kind",
+                              "reason"
+                            ],
+                            "properties": {
+                              "quote": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "kind": {
+                                "anyOf": [
+                                  {
+                                    "const": "missing",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "extra",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "reason": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            }
+                          }
                         }
                       }
                     },
@@ -116212,7 +118461,8 @@
                             "overruled",
                             "createdAt",
                             "finishedAt",
-                            "git"
+                            "git",
+                            "sourceWordIssues"
                           ],
                           "properties": {
                             "id": {
@@ -116360,6 +118610,40 @@
                                   "type": "null"
                                 }
                               ]
+                            },
+                            "sourceWordIssues": {
+                              "type": "array",
+                              "items": {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "quote",
+                                  "kind",
+                                  "reason"
+                                ],
+                                "properties": {
+                                  "quote": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "anyOf": [
+                                      {
+                                        "const": "missing",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "extra",
+                                        "type": "string"
+                                      }
+                                    ]
+                                  },
+                                  "reason": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                }
+                              }
                             }
                           }
                         },
@@ -117824,6 +120108,533 @@
         "properties": {
           "feishu": {
             "type": "boolean"
+          }
+        }
+      },
+      "AppearanceSettings": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "appearance"
+        ],
+        "properties": {
+          "appearance": {
+            "anyOf": [
+              {
+                "const": "system",
+                "type": "string"
+              },
+              {
+                "const": "light",
+                "type": "string"
+              },
+              {
+                "const": "dark",
+                "type": "string"
+              }
+            ]
+          }
+        }
+      },
+      "SessionStopView": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "subSessionId",
+          "sessionId",
+          "deviceId",
+          "requestedAt"
+        ],
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "const": "card",
+                "type": "string"
+              },
+              {
+                "const": "topic",
+                "type": "string"
+              }
+            ]
+          },
+          "subSessionId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "sessionId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "deviceId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "requestedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        }
+      },
+      "ClaimSessionStopsRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "deviceId"
+        ],
+        "properties": {
+          "deviceId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        }
+      },
+      "ClaimSessionStopsResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "stops"
+        ],
+        "properties": {
+          "stops": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "kind",
+                "subSessionId",
+                "sessionId",
+                "deviceId",
+                "requestedAt"
+              ],
+              "properties": {
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "card",
+                      "type": "string"
+                    },
+                    {
+                      "const": "topic",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "subSessionId": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "sessionId": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "deviceId": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "requestedAt": {
+                  "format": "date-time",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "SessionStopDoneRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "deviceId",
+          "result"
+        ],
+        "properties": {
+          "deviceId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "const": "stopped",
+                "type": "string"
+              },
+              {
+                "const": "not_running",
+                "type": "string"
+              }
+            ]
+          }
+        }
+      },
+      "BuddyAuthority": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "authority",
+          "grantedAt"
+        ],
+        "properties": {
+          "authority": {
+            "anyOf": [
+              {
+                "const": "none",
+                "type": "string"
+              },
+              {
+                "const": "full",
+                "type": "string"
+              }
+            ]
+          },
+          "grantedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "UpdateBuddyAuthorityRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "authority"
+        ],
+        "properties": {
+          "authority": {
+            "anyOf": [
+              {
+                "const": "none",
+                "type": "string"
+              },
+              {
+                "const": "full",
+                "type": "string"
+              }
+            ]
+          }
+        }
+      },
+      "BuddyAuditEntry": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "action",
+          "summary",
+          "at",
+          "conversationId",
+          "undoable",
+          "undoneAt"
+        ],
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "action": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "conversationId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "undoable": {
+            "type": "boolean"
+          },
+          "undoneAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "BuddyAuditListResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "entries"
+        ],
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "action",
+                "summary",
+                "at",
+                "conversationId",
+                "undoable",
+                "undoneAt"
+              ],
+              "properties": {
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "action": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "summary": {
+                  "type": "string"
+                },
+                "at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "conversationId": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "undoable": {
+                  "type": "boolean"
+                },
+                "undoneAt": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "BuddyMessageDraft": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "to",
+          "text",
+          "status",
+          "createdAt",
+          "sentAt",
+          "failed"
+        ],
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "to": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "personId",
+                "name"
+              ],
+              "properties": {
+                "personId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "text": {
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "const": "draft",
+                "type": "string"
+              },
+              {
+                "const": "sent",
+                "type": "string"
+              },
+              {
+                "const": "cancelled",
+                "type": "string"
+              }
+            ]
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "sentAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failed": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "personId",
+                "name"
+              ],
+              "properties": {
+                "personId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "TrashItem": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "id",
+          "title",
+          "deletedAt",
+          "purgeAt"
+        ],
+        "properties": {
+          "kind": {
+            "anyOf": [
+              {
+                "const": "card",
+                "type": "string"
+              },
+              {
+                "const": "topic",
+                "type": "string"
+              }
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "deletedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "purgeAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        }
+      },
+      "TrashListResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "kind",
+                "id",
+                "title",
+                "deletedAt",
+                "purgeAt"
+              ],
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "card",
+                      "type": "string"
+                    },
+                    {
+                      "const": "topic",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "deletedAt": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "purgeAt": {
+                  "format": "date-time",
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       },

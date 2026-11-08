@@ -46,6 +46,7 @@ import { DelegationPanel } from "./DelegationPanel";
 import { browserApi } from "@/lib/api/client";
 import { BuddyNameInput } from "@/components/buddy/BuddyPicker";
 import { BuddyCarousel, BuddyFigure } from "./BuddyCarousel";
+import { BUDDY_PERSONALITIES } from "@/components/buddy/PersonalityPicker";
 import { PresenceCapsule } from "@/components/coagent/PresenceCapsule";
 import { CoAgentCapsule } from "./CoAgentCapsule";
 
@@ -306,6 +307,11 @@ describe("选择你的伙伴（设计稿 17.1）", () => {
   };
   /** 减少动态效果：「选定」直接翻页，不等那一下动效。 */
   const stubWindow = (extra: object = {}) => vi.stubGlobal("window", Object.assign(new EventTarget(), { matchMedia: () => ({ matches: true }) }, extra));
+  /** 两个 PUT：授权（/api/me/buddy-authority）存上返回 full；伙伴（/api/me/buddy）按传进来的结果。 */
+  const mockPut = (buddy: { data?: unknown; error?: unknown; status?: number } = { data: { name: "团团", form: "panda", personality: "steady" } }) =>
+    vi.spyOn(browserApi, "PUT").mockImplementation((async (path: string) => path === "/api/me/buddy-authority"
+      ? { data: { authority: "full", grantedAt: "2026-11-08T08:00:00.000Z" }, response: new Response(null, { status: 200 }) }
+      : { data: buddy.data, error: buddy.error, response: new Response(null, { status: buddy.status ?? 200 }) }) as never);
   const carousel = (tree: ReactNode) => {
     const match = elements(tree).find((element) => element.type === BuddyCarousel);
     expect(match, "应有左右切换的选择").toBeDefined();
@@ -319,6 +325,11 @@ describe("选择你的伙伴（设计稿 17.1）", () => {
   const progress = (tree: ReactNode) => elements(tree).find((element) => element.type === OnboardingProgress)?.props;
   const figure = (tree: ReactNode) => elements(tree).find((element) => element.type === BuddyFigure && element.props.size === "hero")?.props;
   const press = (tree: ReactNode, label: string) => (button(tree, label).props.onClick as () => void)();
+  /** 授权页点「同意」，等授权存上、翻到起名字。 */
+  const agree = async (data: OnboardingData, options: { nextPath?: string; buddyOnly?: boolean } = {}) => {
+    press(flow(data, options), "同意");
+    await vi.waitFor(() => expect(text(flow(data, options))).toContain("给伙伴起个名字"));
+  };
 
   it("还没有伙伴时四页排在最前面（选形象 → 选性格 → 授权 → 起名字），CEO 和成员都走；已经引导过的只走这四页；有伙伴的不走", () => {
     const buddySteps = ["buddy-form", "buddy-personality", "buddy-consent", "buddy-name"];
@@ -330,8 +341,9 @@ describe("选择你的伙伴（设计稿 17.1）", () => {
     expect(elements(WelcomeFlow({ data: ceo, buddy: { name: "团团", form: "panda" } })).some((element) => element.type === BuddyCarousel)).toBe(false);
   });
 
-  it("步骤点一页一个：只差伙伴的人底下是 4 个点、一页往前走一个（回归：原来四页只算 1 步，只剩一颗拉长的当前点）", () => {
+  it("步骤点一页一个：只差伙伴的人底下是 4 个点、一页往前走一个（回归：原来四页只算 1 步，只剩一颗拉长的当前点）", async () => {
     stubWindow();
+    mockPut();
     const options = { buddyOnly: true };
     expect(progress(flow(ceo, options))).toMatchObject({ current: 1, total: 4 });
     // 只有伙伴四页：深色跟系统。
@@ -340,7 +352,7 @@ describe("选择你的伙伴（设计稿 17.1）", () => {
     expect(progress(flow(ceo, options))).toMatchObject({ current: 2, total: 4 });
     press(flow(ceo, options), "选定");
     expect(progress(flow(ceo, options))).toMatchObject({ current: 3, total: 4 });
-    press(flow(ceo, options), "同意");
+    await agree(ceo, options);
     expect(progress(flow(ceo, options))).toMatchObject({ current: 4, total: 4 });
     const markup = renderToStaticMarkup(OnboardingProgress({ current: 2, total: 4 }));
     expect(markup).toContain("第 2 步，共 4 步");
@@ -391,61 +403,90 @@ describe("选择你的伙伴（设计稿 17.1）", () => {
     }
   });
 
-  it("选性格 → 授权 → 起名字：台上一直是选好的形象（选性格时在说话，起名字时名字跟着变）；名字空着不能完成；存好再往下走", async () => {
+  it("选性格是 11/08 定的四种（沉稳靠谱默认），每种显示「进度落后」那一句，不用表情", () => {
     stubWindow();
-    const put = vi.spyOn(browserApi, "PUT").mockResolvedValue({ data: { name: "团团", form: "panda" }, response: new Response(null, { status: 200 }) } as never);
+    press(flow(ceo), "选定");
+    const tree = flow(ceo);
+    expect(carousel(tree)).toMatchObject({ kind: "card", value: "steady" });
+    expect(carousel(tree).items.map((item) => item.id)).toEqual(["steady", "direct", "warm", "coach"]);
+    expect(BUDDY_PERSONALITIES.map((item) => item.label)).toEqual(["沉稳靠谱", "直言不讳", "温和体贴", "启发追问"]);
+    expect(BUDDY_PERSONALITIES.find((item) => item.id === "steady")!.sample).toBe("全链路这条比计划晚两天。能先交的我拆出来了，周三前补齐，你看行不行。");
+    for (const item of BUDDY_PERSONALITIES) expect(item.sample, item.label).not.toMatch(/\p{Extended_Pictographic}/u);
+  });
+
+  it("选性格 → 授权（同意就把授权存成 full）→ 起名字：台上一直是选好的形象；名字空着不能完成；存好再往下走", async () => {
+    stubWindow();
+    const put = mockPut();
     carousel(flow(ceo)).onChange("miles");
     press(flow(ceo), "选定");
     let tree = flow(ceo);
     expect(text(tree)).toContain("选择性格");
-    expect(carousel(tree)).toMatchObject({ kind: "card", value: "steady" });
-    expect(carousel(tree).items.map((item) => item.id)).toEqual(["steady", "cheerful", "calm", "critical"]);
     expect(figure(tree)).toMatchObject({ skin: "miles", pose: "speaking" });
-    carousel(tree).onChange("calm");
+    carousel(tree).onChange("coach");
     press(flow(ceo), "选定");
     tree = flow(ceo);
     expect(text(tree)).toContain("伙伴可以替你做你能做的事");
-    expect(button(tree, "同意")).toBeDefined();
+    expect(button(tree, "稍后")).toBeDefined();
     expect(put).not.toHaveBeenCalled();
-    press(tree, "同意");
+    await agree(ceo);
+    expect(put).toHaveBeenCalledExactlyOnceWith("/api/me/buddy-authority", { body: { authority: "full" } });
     tree = flow(ceo);
-    expect(text(tree)).toContain("给伙伴起个名字");
     expect(nameInput(tree).value).toBe("");
     expect(button(tree, "完成").props.disabled).toBe(true);
     nameInput(tree).onEnter();
-    expect(put).not.toHaveBeenCalled();
+    expect(put).toHaveBeenCalledTimes(1);
     nameInput(tree).onChange(" 团团 ");
     tree = flow(ceo);
     expect(figure(tree)).toMatchObject({ skin: "miles", name: "团团", pose: "listening" });
     expect(button(tree, "完成").props.disabled).toBe(false);
     press(tree, "完成");
     await vi.waitFor(() => expect(text(flow(ceo))).toContain("你好，测试"));
-    expect(put).toHaveBeenCalledExactlyOnceWith("/api/me/buddy", { body: { name: "团团", form: "miles", personality: "calm" } });
+    expect(put).toHaveBeenLastCalledWith("/api/me/buddy", { body: { name: "团团", form: "miles", personality: "coach" } });
   });
 
-  it("「上一步」一页页退回，选过的都留着", () => {
+  it("授权可以「稍后」：不调接口（保持 none），直接到起名字；存不上就留在授权页并说明", async () => {
     stubWindow();
-    carousel(flow(ceo)).onChange("panda");
+    let put = mockPut();
     press(flow(ceo), "选定");
-    carousel(flow(ceo)).onChange("critical");
+    press(flow(ceo), "选定");
+    press(flow(ceo), "稍后");
+    expect(text(flow(ceo))).toContain("给伙伴起个名字");
+    expect(put).not.toHaveBeenCalled();
+
+    hooks.reset();
+    put.mockRestore();
+    put = vi.spyOn(browserApi, "PUT").mockResolvedValue({ data: undefined, error: { message: "授权没有存上" }, response: new Response(null, { status: 500 }) } as never);
+    press(flow(ceo), "选定");
     press(flow(ceo), "选定");
     press(flow(ceo), "同意");
+    await vi.waitFor(() => expect(text(flow(ceo))).toContain("授权没有存上"));
+    expect(text(flow(ceo))).toContain("伙伴可以替你做你能做的事");
+  });
+
+  it("「上一步」一页页退回，选过的都留着", async () => {
+    stubWindow();
+    mockPut();
+    carousel(flow(ceo)).onChange("panda");
+    press(flow(ceo), "选定");
+    carousel(flow(ceo)).onChange("direct");
+    press(flow(ceo), "选定");
+    await agree(ceo);
     nameInput(flow(ceo)).onChange("团团");
     press(flow(ceo), "上一步");
     expect(text(flow(ceo))).toContain("伙伴可以替你做你能做的事");
     press(flow(ceo), "上一步");
-    expect(carousel(flow(ceo)).value).toBe("critical");
+    expect(carousel(flow(ceo)).value).toBe("direct");
     press(flow(ceo), "上一步");
     expect(carousel(flow(ceo))).toMatchObject({ kind: "figure", value: "panda" });
   });
 
   it("伙伴几页之后的每一页，顶上一直是本人选的那颗（刚选的、以前选好的都算）；选的是默认那颗就还是原来的大胶囊", async () => {
     stubWindow();
-    vi.spyOn(browserApi, "PUT").mockResolvedValue({ data: { name: "团团", form: "panda" }, response: new Response(null, { status: 200 }) } as never);
+    mockPut();
     carousel(flow(member)).onChange("panda");
     press(flow(member), "选定");
     press(flow(member), "选定");
-    press(flow(member), "同意");
+    await agree(member);
     nameInput(flow(member)).onChange("团团");
     press(flow(member), "完成");
     await vi.waitFor(() => expect(text(flow(member))).toContain("你好，测试"));
@@ -488,12 +529,12 @@ describe("选择你的伙伴（设计稿 17.1）", () => {
     expect(hint()).toBe("名字已到最长");
   });
 
-  it("存不上就留在起名字这一页并说明，不往下走", async () => {
+  it("伙伴存不上就留在起名字这一页并说明，不往下走", async () => {
     stubWindow();
-    vi.spyOn(browserApi, "PUT").mockResolvedValue({ data: undefined, error: { message: "伙伴要有名字" }, response: new Response(null, { status: 400 }) } as never);
+    mockPut({ data: undefined, error: { message: "伙伴要有名字" }, status: 400 });
     press(flow(ceo), "选定");
     press(flow(ceo), "选定");
-    press(flow(ceo), "同意");
+    await agree(ceo);
     nameInput(flow(ceo)).onChange("团团");
     press(flow(ceo), "完成");
     await vi.waitFor(() => expect(text(flow(ceo))).toContain("伙伴要有名字"));
@@ -503,13 +544,13 @@ describe("选择你的伙伴（设计稿 17.1）", () => {
   it("已经引导过、只差伙伴的人：存好就回原来要去的页面，不再记一次引导完成", async () => {
     const replace = vi.fn();
     stubWindow({ location: { replace } });
-    vi.spyOn(browserApi, "PUT").mockResolvedValue({ data: { name: "团团", form: "alive" }, response: new Response(null, { status: 200 }) } as never);
+    mockPut({ data: { name: "团团", form: "alive", personality: "steady" } });
     const complete = vi.spyOn(browserApi, "POST").mockResolvedValue({ data: undefined, response: new Response(null, { status: 204 }) } as never);
     const options = { nextPath: "/radar", buddyOnly: true };
     carousel(flow(ceo, options)).onChange("alive");
     press(flow(ceo, options), "选定");
     press(flow(ceo, options), "选定");
-    press(flow(ceo, options), "同意");
+    await agree(ceo, options);
     nameInput(flow(ceo, options)).onChange("团团");
     press(flow(ceo, options), "完成");
     await vi.waitFor(() => expect(replace).toHaveBeenCalledExactlyOnceWith("/radar"));

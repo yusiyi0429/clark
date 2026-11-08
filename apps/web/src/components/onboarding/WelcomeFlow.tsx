@@ -77,8 +77,6 @@ export function WelcomeFlow({ data: initial, nextPath, buddy, buddyOnly = false 
   const [buddyDraft, setBuddyDraft] = useState<Buddy>({ name: "", form: "classic", personality: "steady" });
   const [buddySaving, setBuddySaving] = useState(false);
   const [buddyError, setBuddyError] = useState<string | null>(null);
-  /** 授权页点了「同意」。后端字段由主会话定，先放在网页的本地状态里，之后接上保存。 */
-  const [, setBuddyGranted] = useState(false);
   /** 选形象那一页按下「选定」：两边的影子退开、中间那个应一声，然后才翻页。 */
   const [sealing, setSealing] = useState(false);
   const buddyName = useRef<HTMLInputElement>(null);
@@ -191,11 +189,27 @@ export function WelcomeFlow({ data: initial, nextPath, buddy, buddyOnly = false 
     }
   }
 
+  /** 授权页点「同意」：伙伴代本人做事的授权打开（full），存上再往下走；「稍后」不调接口，保持 none，以后在偏好页里还能开。 */
+  async function grantAuthority() {
+    if (buddySaving) return;
+    setBuddySaving(true);
+    setBuddyError(null);
+    try {
+      const { data: saved, error: failure } = await browserApi.PUT("/api/me/buddy-authority", { body: { authority: "full" } });
+      if (!saved) throw new Error(failure?.message ?? "没有存上，请重试");
+      setBuddySaving(false);
+      move(1);
+    } catch (cause) {
+      setBuddyError(cause instanceof Error ? cause.message : "没有存上，请重试");
+      setBuddySaving(false);
+    }
+  }
+
   async function forward() {
     // 名字页回车也走这里，名字不合格不存。
     if (naming) return saveBuddyStep();
     if (step === "buddy-form") return sealForm();
-    if (step === "buddy-consent") setBuddyGranted(true);
+    if (step === "buddy-consent") return grantAuthority();
     if (choosing) return move(1);
     if (last || error) return finish();
     if (step === "voiceprint" && voice.phase === "recorded") {
@@ -230,7 +244,7 @@ export function WelcomeFlow({ data: initial, nextPath, buddy, buddyOnly = false 
   const disabledHint = step === "voiceprint" && primaryDisabled && !busy
     ? voice.recording ? "录好后再继续，也可以选「稍后」" : voice.tooShort ? "请重新录满 15 秒，或者选「稍后」" : voice.consent ? "录好一段 15–30 秒的朗读，或者选「稍后」" : "先勾选同意并录好，或者选「稍后」"
     : null;
-  const primaryLabel = finishing ? "正在进入…" : naming ? buddySaving ? "正在保存…" : "完成" : step === "buddy-consent" ? "同意" : choosing ? "选定" : step === "hello" ? "开始" : step === "start" ? returnPath ? "继续刚才的页面" : data.next.action : last ? returnPath ? "继续刚才的页面" : "进入工作台" : step === "voiceprint" ? voice.phase === "saving" ? "正在保存…" : voice.phase === "recorded" ? "保存并继续" : voiceReady ? "下一步" : "录好后继续" : "下一步";
+  const primaryLabel = finishing ? "正在进入…" : buddySaving ? "正在保存…" : naming ? "完成" : step === "buddy-consent" ? "同意" : choosing ? "选定" : step === "hello" ? "开始" : step === "start" ? returnPath ? "继续刚才的页面" : data.next.action : last ? returnPath ? "继续刚才的页面" : "进入工作台" : step === "voiceprint" ? voice.phase === "saving" ? "正在保存…" : voice.phase === "recorded" ? "保存并继续" : voiceReady ? "下一步" : "录好后继续" : "下一步";
 
   return <main className={s.page} onKeyDown={onKeyDown} style={{ "--direction": direction } as CSSProperties} data-scheme={scheme}>
     <header className={s.header}>
@@ -267,8 +281,8 @@ export function WelcomeFlow({ data: initial, nextPath, buddy, buddyOnly = false 
             {naming ? <div className={s.buddyName}>
               <BuddyNameInput inputRef={buddyName} className={s.buddyNameInput} label="伙伴的名字" value={buddyDraft.name}
                 onChange={(name) => setBuddyDraft((draft) => ({ ...draft, name }))} onEnter={() => void forward()} />
-              {buddyError ? <p className={s.error} role="alert">{buddyError}</p> : null}
             </div> : null}
+            {choosing && buddyError ? <p className={s.error} role="alert">{buddyError}</p> : null}
             {(step === "tour-notifications" || step === "tour-board") ? <WorkspaceSchematic role={data.role} focus={step === "tour-notifications" ? "notifications" : "board"} /> : null}
             {step === "mission-flow" && data.role === "member" ? <MissionFlow /> : null}
             {step === "radar" ? <RadarSettingsEditor
@@ -323,7 +337,7 @@ export function WelcomeFlow({ data: initial, nextPath, buddy, buddyOnly = false 
           : step === "connect" && !connectDownloaded && !error ? <div key={step} ref={setConnectPrimary} className={s.radarActions} /> : <button key={step} ref={primary} className={f.primary} type="button" onClick={() => void forward()} disabled={primaryDisabled} aria-describedby={disabledHint ? "welcome-action-hint" : undefined}>{error ? "重试" : primaryLabel}{!busy ? <ArrowRight size={18} aria-hidden="true" /> : null}</button>}
         <div className={s.secondary}>
           {index > 0 ? <button className={f.textButton} type="button" onClick={() => move(-1)} disabled={busy}>上一步</button> : null}
-          {step === "voiceprint" || step === "connect" || step === "delegation" ? <button className={f.textButton} type="button" onClick={() => move(1)} disabled={busy}>稍后</button> : null}
+          {step === "buddy-consent" || step === "voiceprint" || step === "connect" || step === "delegation" ? <button className={f.textButton} type="button" onClick={() => move(1)} disabled={busy}>稍后</button> : null}
           {step === "radar" ? <span ref={setRadarLater} className={s.radarSlot} /> : null}
         </div>
       </footer>

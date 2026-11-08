@@ -13,14 +13,14 @@ export const BuddyForm = Type.Union([
 ]);
 
 /**
- * 伙伴的性格（设计稿 .scratch/next-phase/设计_伙伴性格_2026-11-03.md）：沉稳靠谱（默认）、乐观开朗、理性冷静、较真犀利。
- * 只改说话的样子，判断不随性格变。
+ * 伙伴的性格（11/08 调研后定，新首页设计稿 17.3）：沉稳靠谱（默认）、直言不讳、温和体贴、启发追问。
+ * 只改说话的样子，判断不随性格变。11/08 前的四种由迁移 252 换过来：理性冷静并进沉稳靠谱，较真犀利改叫直言不讳，乐观开朗改叫温和体贴。
  */
 export const BuddyPersonality = Type.Union([
   Type.Literal("steady"),
-  Type.Literal("cheerful"),
-  Type.Literal("calm"),
-  Type.Literal("critical"),
+  Type.Literal("direct"),
+  Type.Literal("warm"),
+  Type.Literal("coach"),
 ]);
 
 /**
