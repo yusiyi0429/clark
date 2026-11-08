@@ -67,6 +67,17 @@ export const CardGit = Type.Object({
  * returnText 是没过时发回执行方的那段话（固定格式），returnedAt 是网页已经把它送到本机的时间。
  * overruled：本人推翻过这次验收。
  */
+/**
+ * 产出和本人原话对不上的一处（16.8，本机验收员报的 LocalSourceWordIssue）：quote 原话里的哪一句，kind：missing 漏了原话里明说的、extra 做了原话里没要的；reason 为什么。
+ * 有一处这次交回就算没过，标准全达到也一样。
+ */
+export const CardSourceWordIssue = Type.Object({
+  quote: Type.String({ minLength: 1 }),
+  kind: Type.Union([Type.Literal("missing"), Type.Literal("extra")]),
+  reason: Type.String({ minLength: 1 }),
+}, strict);
+
+/** sourceWordIssues：这次交回和本人原话对不上的几处（见 CardSourceWordIssue），和没过的标准一起列；没有、还没验、老的交回为空数组。 */
 export const CardHandbackBrief = Type.Object({
   id: Type.String({ format: "uuid" }),
   attempt: Type.Integer({ minimum: 1 }),
@@ -81,6 +92,7 @@ export const CardHandbackBrief = Type.Object({
   createdAt: Instant,
   finishedAt: Nullable(Instant),
   git: Nullable(CardGit),
+  sourceWordIssues: Type.Array(CardSourceWordIssue),
 }, strict);
 
 /**
@@ -120,6 +132,7 @@ export type TCardWait = Static<typeof CardWait>;
 export type TCardCriterion = Static<typeof CardCriterion>;
 export type TCardHandbackStatus = Static<typeof CardHandbackStatus>;
 export type TCardHandbackBrief = Static<typeof CardHandbackBrief>;
+export type TCardSourceWordIssue = Static<typeof CardSourceWordIssue>;
 export type TCardGit = Static<typeof CardGit>;
 export type TDeliverableInclusion = Static<typeof DeliverableInclusion>;
 export type TTaskCard = Static<typeof TaskCard>;

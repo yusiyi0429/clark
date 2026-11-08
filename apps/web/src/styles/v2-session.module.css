@@ -113,6 +113,11 @@
 /* 本人原话（16.8）：引用样式，次级文字。 */
 .words { display: grid; gap: 4px; margin: 0; padding-left: 10px; border-left: 2px solid var(--hairline-strong); color: var(--ink-muted); font-size: 12px; line-height: 1.6; }
 .words p { margin: 0; white-space: pre-wrap; }
+/* 原话对不上的几处（16.8）：同「原话」的引用样式，每条一行：原话、标签、为什么。 */
+.wordIssues { display: grid; gap: 4px; margin: 0; padding: 0 0 0 10px; border-left: 2px solid var(--hairline-strong); list-style: none; color: var(--ink-muted); font-size: 12px; line-height: 1.6; }
+.wordIssues li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; }
+.wordIssues small { color: var(--ink-faint); font-size: 12px; }
+.issueTag { display: inline-flex; align-items: center; height: 19px; padding: 0 7px; border-radius: 999px; background: var(--neutral-wash); color: var(--ink-muted); font-size: 12px; }
 .plan li[data-status="completed"] { color: var(--ink-faint); text-decoration: line-through; text-decoration-color: var(--hairline-strong); }
 .plan li[data-status="in_progress"] { font-weight: 600; }
 .verdicts { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }

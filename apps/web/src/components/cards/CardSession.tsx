@@ -26,7 +26,7 @@ import { useAutoReturn } from "@/lib/board/useAutoReturn";
 import { showWorkspaceToast } from "@/lib/toast";
 import { RelayLine, SessionComposer, SessionTranscript, sayToSession, sessionEnded, type DecideOptions } from "./SessionTranscript";
 import { useCardDetail, type CardDetail } from "./useCardDetail";
-import { SourceWords } from "./SourceWords";
+import { SourceWordIssues, SourceWords } from "./SourceWords";
 import { MergeAction } from "@/components/work/MergeAction";
 import { QuestionDecision, awayChip, questionTitle } from "@/components/work/decisions";
 import { askAnchor } from "@/components/home/TaskFeed";
@@ -383,6 +383,7 @@ export function Acceptance({ cardId, handback, canOverrule, deliverable, onChang
           ))}
         </ol>
       ) : null}
+      <SourceWordIssues issues={handback.sourceWordIssues} className={s.wordIssues} tagClassName={s.issueTag} />
       {handback.overrule ? <p className={s.faint}>{handback.overrule.by.name} 推翻：{handback.overrule.reason}</p> : null}
       {handback.error ? <p className={s.faint}>{handback.error}</p> : null}
       {reason !== null ? (

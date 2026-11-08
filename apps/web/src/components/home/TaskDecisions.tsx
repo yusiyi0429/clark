@@ -18,6 +18,8 @@ import { canCommandHere, reply } from "@/lib/work/actions";
 import { mergeCard, useMergeIssues } from "@/lib/work/merge";
 import type { Worker } from "@/lib/work/workers";
 import { cardHref } from "@/lib/home/derive";
+import { SourceWordIssues } from "@/components/cards/SourceWords";
+import h from "@/styles/home.module.css";
 
 
 /** Task 管线里答过的验收行（这台电脑上记着）：同一件不再问，一行写答了什么。 */
@@ -52,7 +54,10 @@ export function BlockedDecision({ item, worker, go, onChanged }: { item: Blocked
   if (answer) return <DecisionBox kind="question" title={`「${item.title}」受阻`} options={[]} onPick={() => undefined} resolved={answer} />;
   return (
     <DecisionBox kind="question" testId="blocked-decision" title={`「${item.title}」受阻`}
-      body={fix ? <span style={{ whiteSpace: "pre-wrap" }}>{fix}</span> : undefined}
+      body={fix || item.sourceWordIssues.length ? <>
+        {fix ? <span style={{ whiteSpace: "pre-wrap" }}>{fix}</span> : null}
+        <SourceWordIssues issues={item.sourceWordIssues} className={h.wordIssues} tagClassName={h.chip} />
+      </> : undefined}
       options={options} onPick={([index]) => pick(options[index!]!.label)} />
   );
 }

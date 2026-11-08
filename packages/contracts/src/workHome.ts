@@ -1,4 +1,5 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
+import { CardSourceWordIssue } from "./taskCardView.js";
 import { Budget } from "./budget.js";
 import { LocalPermissionBrief, LocalQuestionRequestView } from "./localRunner.js";
 import { PersonRef, ProjectTransfer } from "./projectTransfers.js";
@@ -285,7 +286,8 @@ export const WorkHomeResponse = Type.Object({
 /**
  * 项目对话（原 Task 管线）里网页按时间插的一行（第 4.5 节，从卡和交回现算，不另存事件）。id 稳定，网页按它去重；at 是这件事发生的时间。
  * - card_passed：一张卡验收过了（含本人「仍然通过」），met / total 几条达到，merge 是合回结果（「已合进 main」，或要你合的原因）。
- * - card_blocked：一张卡连续两次没过（受阻），fix 是拼好的改法；网页给选项「按这个改（推荐）/ 我去看看 / 仍然通过」，
+ * - card_blocked：一张卡连续两次没过（受阻），fix 是拼好的改法（含原话对不上的几处）；sourceWordIssues 是那次交回和本人原话对不上的几处（16.8），和没过的标准一起列；
+ *   网页给选项「按这个改（推荐）/ 我去看看 / 仍然通过」，
  *   按这个改 = 照原来的送回（说一句 + /handbacks/:id/returned），仍然通过 = 推翻（/handbacks/:id/overrule）。
  * - criteria_met：taskId 这件 Task 约定里的每一条都有验收通过的卡（met = total）；网页问「约定 n 条都达到了，交给认可人？（推荐）」，
  *   接 V1 的出一版（/deliverable/versions/from-pending）、对表、请 X 看、交付。完成仍只由本人确认。
@@ -296,7 +298,7 @@ export const TaskFeedItem = Type.Union([
   Type.Object({ kind: Type.Literal("card_passed"), ...FeedBase, cardId: Type.String({ format: "uuid" }), title: Type.String(),
     met: Type.Integer({ minimum: 0 }), total: Type.Integer({ minimum: 0 }), merge: Nullable(CardMerge) }, strict),
   Type.Object({ kind: Type.Literal("card_blocked"), ...FeedBase, cardId: Type.String({ format: "uuid" }), title: Type.String(),
-    handbackId: Type.String({ format: "uuid" }), fix: Nullable(Type.String()) }, strict),
+    handbackId: Type.String({ format: "uuid" }), fix: Nullable(Type.String()), sourceWordIssues: Type.Array(CardSourceWordIssue) }, strict),
   Type.Object({ kind: Type.Literal("criteria_met"), ...FeedBase, taskId: Type.String({ minLength: 1 }), met: Type.Integer({ minimum: 1 }),
     total: Type.Integer({ minimum: 1 }) }, strict),
   Type.Object({ kind: Type.Literal("rework_opened"), ...FeedBase, cardId: Type.String({ format: "uuid" }), title: Type.String(),

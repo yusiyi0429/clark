@@ -458,7 +458,7 @@ export function deriveFeed({ taskId, cards, workers, criteria, merges, sessions 
     const handback = worker.item?.card?.handback;
     if (worker.kind !== "card" || !worker.cardId || !handback?.finishedAt || handback.returnedAt) continue;
     if (worker.state === "doing" && worker.mark === "blocked") {
-      items.push({ kind: "card_blocked", id: `blocked:${handback.id}`, at: handback.finishedAt, cardId: worker.cardId, title: worker.title, handbackId: handback.id, fix: handback.returnText });
+      items.push({ kind: "card_blocked", id: `blocked:${handback.id}`, at: handback.finishedAt, cardId: worker.cardId, title: worker.title, handbackId: handback.id, fix: handback.returnText, sourceWordIssues: handback.sourceWordIssues });
     }
   }
   if (criteria.length && criteria.every((_, i) => met.has(i + 1))) {

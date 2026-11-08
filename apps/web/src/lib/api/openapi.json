@@ -26547,7 +26547,8 @@
                           "overruled",
                           "createdAt",
                           "finishedAt",
-                          "git"
+                          "git",
+                          "sourceWordIssues"
                         ],
                         "properties": {
                           "id": {
@@ -26695,6 +26696,40 @@
                                 "type": "null"
                               }
                             ]
+                          },
+                          "sourceWordIssues": {
+                            "type": "array",
+                            "items": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "quote",
+                                "kind",
+                                "reason"
+                              ],
+                              "properties": {
+                                "quote": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "anyOf": [
+                                    {
+                                      "const": "missing",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "extra",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "reason": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              }
+                            }
                           }
                         }
                       },
@@ -53115,7 +53150,8 @@
                       "overruled",
                       "createdAt",
                       "finishedAt",
-                      "git"
+                      "git",
+                      "sourceWordIssues"
                     ],
                     "properties": {
                       "id": {
@@ -53263,6 +53299,40 @@
                             "type": "null"
                           }
                         ]
+                      },
+                      "sourceWordIssues": {
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "quote",
+                            "kind",
+                            "reason"
+                          ],
+                          "properties": {
+                            "quote": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "kind": {
+                              "anyOf": [
+                                {
+                                  "const": "missing",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "extra",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "reason": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          }
+                        }
                       }
                     }
                   },
@@ -54439,7 +54509,8 @@
                                   "overruled",
                                   "createdAt",
                                   "finishedAt",
-                                  "git"
+                                  "git",
+                                  "sourceWordIssues"
                                 ],
                                 "properties": {
                                   "id": {
@@ -54587,6 +54658,40 @@
                                         "type": "null"
                                       }
                                     ]
+                                  },
+                                  "sourceWordIssues": {
+                                    "type": "array",
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "type": "object",
+                                      "required": [
+                                        "quote",
+                                        "kind",
+                                        "reason"
+                                      ],
+                                      "properties": {
+                                        "quote": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "anyOf": [
+                                            {
+                                              "const": "missing",
+                                              "type": "string"
+                                            },
+                                            {
+                                              "const": "extra",
+                                              "type": "string"
+                                            }
+                                          ]
+                                        },
+                                        "reason": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        }
+                                      }
+                                    }
                                   }
                                 }
                               },
@@ -63272,7 +63377,8 @@
                           "overruled",
                           "createdAt",
                           "finishedAt",
-                          "git"
+                          "git",
+                          "sourceWordIssues"
                         ],
                         "properties": {
                           "id": {
@@ -63420,6 +63526,40 @@
                                 "type": "null"
                               }
                             ]
+                          },
+                          "sourceWordIssues": {
+                            "type": "array",
+                            "items": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "quote",
+                                "kind",
+                                "reason"
+                              ],
+                              "properties": {
+                                "quote": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "anyOf": [
+                                    {
+                                      "const": "missing",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "extra",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "reason": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              }
+                            }
                           }
                         }
                       },
@@ -64945,7 +65085,8 @@
                             "overruled",
                             "createdAt",
                             "finishedAt",
-                            "git"
+                            "git",
+                            "sourceWordIssues"
                           ],
                           "properties": {
                             "id": {
@@ -65093,6 +65234,40 @@
                                   "type": "null"
                                 }
                               ]
+                            },
+                            "sourceWordIssues": {
+                              "type": "array",
+                              "items": {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "quote",
+                                  "kind",
+                                  "reason"
+                                ],
+                                "properties": {
+                                  "quote": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "anyOf": [
+                                      {
+                                        "const": "missing",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "extra",
+                                        "type": "string"
+                                      }
+                                    ]
+                                  },
+                                  "reason": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                }
+                              }
                             }
                           }
                         },
@@ -66130,7 +66305,8 @@
                                   "overruled",
                                   "createdAt",
                                   "finishedAt",
-                                  "git"
+                                  "git",
+                                  "sourceWordIssues"
                                 ],
                                 "properties": {
                                   "id": {
@@ -66278,6 +66454,40 @@
                                         "type": "null"
                                       }
                                     ]
+                                  },
+                                  "sourceWordIssues": {
+                                    "type": "array",
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "type": "object",
+                                      "required": [
+                                        "quote",
+                                        "kind",
+                                        "reason"
+                                      ],
+                                      "properties": {
+                                        "quote": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "anyOf": [
+                                            {
+                                              "const": "missing",
+                                              "type": "string"
+                                            },
+                                            {
+                                              "const": "extra",
+                                              "type": "string"
+                                            }
+                                          ]
+                                        },
+                                        "reason": {
+                                          "minLength": 1,
+                                          "type": "string"
+                                        }
+                                      }
+                                    }
                                   }
                                 }
                               },
@@ -67290,7 +67500,8 @@
                             "overruled",
                             "createdAt",
                             "finishedAt",
-                            "git"
+                            "git",
+                            "sourceWordIssues"
                           ],
                           "properties": {
                             "id": {
@@ -67438,6 +67649,40 @@
                                   "type": "null"
                                 }
                               ]
+                            },
+                            "sourceWordIssues": {
+                              "type": "array",
+                              "items": {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "quote",
+                                  "kind",
+                                  "reason"
+                                ],
+                                "properties": {
+                                  "quote": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "anyOf": [
+                                      {
+                                        "const": "missing",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "extra",
+                                        "type": "string"
+                                      }
+                                    ]
+                                  },
+                                  "reason": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                }
+                              }
                             }
                           }
                         },
@@ -71520,7 +71765,8 @@
                           "overruled",
                           "createdAt",
                           "finishedAt",
-                          "git"
+                          "git",
+                          "sourceWordIssues"
                         ],
                         "properties": {
                           "id": {
@@ -71668,6 +71914,40 @@
                                 "type": "null"
                               }
                             ]
+                          },
+                          "sourceWordIssues": {
+                            "type": "array",
+                            "items": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "quote",
+                                "kind",
+                                "reason"
+                              ],
+                              "properties": {
+                                "quote": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "anyOf": [
+                                    {
+                                      "const": "missing",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "extra",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "reason": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              }
+                            }
                           }
                         }
                       },
@@ -72944,7 +73224,8 @@
                                 "overruled",
                                 "createdAt",
                                 "finishedAt",
-                                "git"
+                                "git",
+                                "sourceWordIssues"
                               ],
                               "properties": {
                                 "id": {
@@ -73092,6 +73373,40 @@
                                       "type": "null"
                                     }
                                   ]
+                                },
+                                "sourceWordIssues": {
+                                  "type": "array",
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "type": "object",
+                                    "required": [
+                                      "quote",
+                                      "kind",
+                                      "reason"
+                                    ],
+                                    "properties": {
+                                      "quote": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "anyOf": [
+                                          {
+                                            "const": "missing",
+                                            "type": "string"
+                                          },
+                                          {
+                                            "const": "extra",
+                                            "type": "string"
+                                          }
+                                        ]
+                                      },
+                                      "reason": {
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    }
+                                  }
                                 }
                               }
                             },
@@ -74049,7 +74364,8 @@
                             "overruled",
                             "createdAt",
                             "finishedAt",
-                            "git"
+                            "git",
+                            "sourceWordIssues"
                           ],
                           "properties": {
                             "id": {
@@ -74197,6 +74513,40 @@
                                   "type": "null"
                                 }
                               ]
+                            },
+                            "sourceWordIssues": {
+                              "type": "array",
+                              "items": {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "quote",
+                                  "kind",
+                                  "reason"
+                                ],
+                                "properties": {
+                                  "quote": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "anyOf": [
+                                      {
+                                        "const": "missing",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "extra",
+                                        "type": "string"
+                                      }
+                                    ]
+                                  },
+                                  "reason": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                }
+                              }
                             }
                           }
                         },
@@ -91957,7 +92307,8 @@
                   "overruled",
                   "createdAt",
                   "finishedAt",
-                  "git"
+                  "git",
+                  "sourceWordIssues"
                 ],
                 "properties": {
                   "id": {
@@ -92105,6 +92456,40 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "sourceWordIssues": {
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "quote",
+                        "kind",
+                        "reason"
+                      ],
+                      "properties": {
+                        "quote": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "kind": {
+                          "anyOf": [
+                            {
+                              "const": "missing",
+                              "type": "string"
+                            },
+                            {
+                              "const": "extra",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "reason": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    }
                   }
                 }
               },
@@ -93014,7 +93399,8 @@
                       "overruled",
                       "createdAt",
                       "finishedAt",
-                      "git"
+                      "git",
+                      "sourceWordIssues"
                     ],
                     "properties": {
                       "id": {
@@ -93162,6 +93548,40 @@
                             "type": "null"
                           }
                         ]
+                      },
+                      "sourceWordIssues": {
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "quote",
+                            "kind",
+                            "reason"
+                          ],
+                          "properties": {
+                            "quote": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "kind": {
+                              "anyOf": [
+                                {
+                                  "const": "missing",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "extra",
+                                  "type": "string"
+                                }
+                              ]
+                            },
+                            "reason": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          }
+                        }
                       }
                     }
                   },
@@ -94539,7 +94959,8 @@
                             "overruled",
                             "createdAt",
                             "finishedAt",
-                            "git"
+                            "git",
+                            "sourceWordIssues"
                           ],
                           "properties": {
                             "id": {
@@ -94687,6 +95108,40 @@
                                   "type": "null"
                                 }
                               ]
+                            },
+                            "sourceWordIssues": {
+                              "type": "array",
+                              "items": {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "quote",
+                                  "kind",
+                                  "reason"
+                                ],
+                                "properties": {
+                                  "quote": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "anyOf": [
+                                      {
+                                        "const": "missing",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "extra",
+                                        "type": "string"
+                                      }
+                                    ]
+                                  },
+                                  "reason": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                }
+                              }
                             }
                           }
                         },
@@ -96209,7 +96664,8 @@
                             "overruled",
                             "createdAt",
                             "finishedAt",
-                            "git"
+                            "git",
+                            "sourceWordIssues"
                           ],
                           "properties": {
                             "id": {
@@ -96357,6 +96813,40 @@
                                   "type": "null"
                                 }
                               ]
+                            },
+                            "sourceWordIssues": {
+                              "type": "array",
+                              "items": {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "quote",
+                                  "kind",
+                                  "reason"
+                                ],
+                                "properties": {
+                                  "quote": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "anyOf": [
+                                      {
+                                        "const": "missing",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "extra",
+                                        "type": "string"
+                                      }
+                                    ]
+                                  },
+                                  "reason": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                }
+                              }
                             }
                           }
                         },
@@ -96532,6 +97022,7 @@
           "createdAt",
           "finishedAt",
           "git",
+          "sourceWordIssues",
           "runId",
           "criteria",
           "claims",
@@ -96690,6 +97181,40 @@
                 "type": "null"
               }
             ]
+          },
+          "sourceWordIssues": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "quote",
+                "kind",
+                "reason"
+              ],
+              "properties": {
+                "quote": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "missing",
+                      "type": "string"
+                    },
+                    {
+                      "const": "extra",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "reason": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              }
+            }
           },
           "runId": {
             "anyOf": [
@@ -97845,7 +98370,8 @@
                           "overruled",
                           "createdAt",
                           "finishedAt",
-                          "git"
+                          "git",
+                          "sourceWordIssues"
                         ],
                         "properties": {
                           "id": {
@@ -97993,6 +98519,40 @@
                                 "type": "null"
                               }
                             ]
+                          },
+                          "sourceWordIssues": {
+                            "type": "array",
+                            "items": {
+                              "additionalProperties": false,
+                              "type": "object",
+                              "required": [
+                                "quote",
+                                "kind",
+                                "reason"
+                              ],
+                              "properties": {
+                                "quote": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "kind": {
+                                  "anyOf": [
+                                    {
+                                      "const": "missing",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "extra",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                "reason": {
+                                  "minLength": 1,
+                                  "type": "string"
+                                }
+                              }
+                            }
                           }
                         }
                       },
@@ -98330,6 +98890,7 @@
                 "createdAt",
                 "finishedAt",
                 "git",
+                "sourceWordIssues",
                 "runId",
                 "criteria",
                 "claims",
@@ -98488,6 +99049,40 @@
                       "type": "null"
                     }
                   ]
+                },
+                "sourceWordIssues": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "quote",
+                      "kind",
+                      "reason"
+                    ],
+                    "properties": {
+                      "quote": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "kind": {
+                        "anyOf": [
+                          {
+                            "const": "missing",
+                            "type": "string"
+                          },
+                          {
+                            "const": "extra",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "reason": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    }
+                  }
                 },
                 "runId": {
                   "anyOf": [
@@ -112296,7 +112891,8 @@
               "cardId",
               "title",
               "handbackId",
-              "fix"
+              "fix",
+              "sourceWordIssues"
             ],
             "properties": {
               "kind": {
@@ -112331,6 +112927,40 @@
                     "type": "null"
                   }
                 ]
+              },
+              "sourceWordIssues": {
+                "type": "array",
+                "items": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "quote",
+                    "kind",
+                    "reason"
+                  ],
+                  "properties": {
+                    "quote": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "const": "missing",
+                          "type": "string"
+                        },
+                        {
+                          "const": "extra",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "reason": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  }
+                }
               }
             }
           },
@@ -114281,7 +114911,8 @@
                   "cardId",
                   "title",
                   "handbackId",
-                  "fix"
+                  "fix",
+                  "sourceWordIssues"
                 ],
                 "properties": {
                   "kind": {
@@ -114316,6 +114947,40 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "sourceWordIssues": {
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "quote",
+                        "kind",
+                        "reason"
+                      ],
+                      "properties": {
+                        "quote": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "kind": {
+                          "anyOf": [
+                            {
+                              "const": "missing",
+                              "type": "string"
+                            },
+                            {
+                              "const": "extra",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "reason": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      }
+                    }
                   }
                 }
               },
@@ -114893,7 +115558,8 @@
                         "cardId",
                         "title",
                         "handbackId",
-                        "fix"
+                        "fix",
+                        "sourceWordIssues"
                       ],
                       "properties": {
                         "kind": {
@@ -114928,6 +115594,40 @@
                               "type": "null"
                             }
                           ]
+                        },
+                        "sourceWordIssues": {
+                          "type": "array",
+                          "items": {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "quote",
+                              "kind",
+                              "reason"
+                            ],
+                            "properties": {
+                              "quote": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "kind": {
+                                "anyOf": [
+                                  {
+                                    "const": "missing",
+                                    "type": "string"
+                                  },
+                                  {
+                                    "const": "extra",
+                                    "type": "string"
+                                  }
+                                ]
+                              },
+                              "reason": {
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            }
+                          }
                         }
                       }
                     },
@@ -116212,7 +116912,8 @@
                             "overruled",
                             "createdAt",
                             "finishedAt",
-                            "git"
+                            "git",
+                            "sourceWordIssues"
                           ],
                           "properties": {
                             "id": {
@@ -116360,6 +117061,40 @@
                                   "type": "null"
                                 }
                               ]
+                            },
+                            "sourceWordIssues": {
+                              "type": "array",
+                              "items": {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "quote",
+                                  "kind",
+                                  "reason"
+                                ],
+                                "properties": {
+                                  "quote": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "anyOf": [
+                                      {
+                                        "const": "missing",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "extra",
+                                        "type": "string"
+                                      }
+                                    ]
+                                  },
+                                  "reason": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                }
+                              }
                             }
                           }
                         },

@@ -67,11 +67,14 @@ describe("Task 管线里的验收行（第 4.5 条）", () => {
     expect(text(onThis.html)).toContain("交回以后卡又改过");
   });
 
-  it("受阻：「按这个改（推荐）/ 我去看看 / 仍然通过」，改法写在框里；不在这台电脑上没有「按这个改」", () => {
-    const blocked: FeedItem = { kind: "card_blocked", id: "b1", at: "2026-11-07T05:00:00Z", cardId: CARD, title: "greet", handbackId: HANDBACK, fix: "补上 404 的处理" };
+  it("受阻：「按这个改（推荐）/ 我去看看 / 仍然通过」，改法和原话对不上的几处写在框里；不在这台电脑上没有「按这个改」", () => {
+    const blocked: FeedItem = { kind: "card_blocked", id: "b1", at: "2026-11-07T05:00:00Z", cardId: CARD, title: "greet", handbackId: HANDBACK, fix: "补上 404 的处理",
+      sourceWordIssues: [{ quote: "别动登录", kind: "extra", reason: "改了登录页" }, { quote: "要有 404", kind: "missing", reason: "没处理 404" }] };
     const here = session({});
     const onThis = text(render([blocked], [{ ...passedWorker(), session: here }], [here]).html);
     expect(onThis).toMatch(/「greet」受阻.*补上 404 的处理.*按这个改.*推荐.*我去看看.*仍然通过/);
+    // 原话对不上的几处（16.8）：每条一行，原话、「多做了 / 漏了」、为什么。
+    expect(onThis).toMatch(/别动登录 多做了 改了登录页 .*要有 404 漏了 没处理 404/);
     const elsewhere = text(render([blocked], [passedWorker()]).html);
     expect(elsewhere).not.toContain("按这个改");
     expect(elsewhere).toMatch(/我去看看.*仍然通过/);

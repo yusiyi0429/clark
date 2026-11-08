@@ -839,6 +839,10 @@ export const LocalPlanCard = Type.Object({
   why: Nullable(Type.String({ maxLength: 200 })),
   /** 要等派活单里哪几件做完（位置，从 1 起，只能是排在它前面的）；不填就是不用等，可以和别的并行。 */
   after: Type.Optional(Type.Array(Type.Integer({ minimum: 1 }), { maxItems: 7 })),
+  /**
+   * 本人原话里和这件有关的片段（16.8）：只能从交代「本人原话」那一段里原样摘，不能改写。云端核对，有一段不是原文就改用整条原话；不填也用整条原话。
+   */
+  sourceWords: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 4000 }), { maxItems: 10 })),
 }, strict);
 /**
  * 规划员出的计划和派活单草稿（propose_plan）。revision 是本会话第几次出（本人说一句让它改，改完再出是新的一次，云端以最新一次为准）；
@@ -865,7 +869,16 @@ export const LocalVerdictCriterion = Type.Object({
   fix: Nullable(Type.String({ maxLength: 2000 })),
 }, strict);
 /**
- * 验收员的结论（submit_verdict）：每条完成标准判一次，条数和验收交代的 criteria 一样；passed 是每条都 met；beyondScope 是标准以外的建议，不算没达到。
+ * 产出和本人原话对不上的一处（16.8）：quote 是原话里的哪一句（原样，是某段原话或其中一截），kind：missing 漏了原话里明说的，extra 做了原话里没要的；reason 为什么。
+ */
+export const LocalSourceWordIssue = Type.Object({
+  quote: Type.String({ minLength: 1, maxLength: 4000 }),
+  kind: Type.Union([Type.Literal("missing"), Type.Literal("extra")]),
+  reason: Type.String({ minLength: 1, maxLength: 2000 }),
+}, strict);
+/**
+ * 验收员的结论（submit_verdict）：每条完成标准判一次，条数和验收交代的 criteria 一样；passed 是每条都 met、并且没有 sourceWordIssues；beyondScope 是标准以外的建议，不算没达到。
+ * sourceWordIssues：验收交代带了本人原话（LocalVerifyBriefResponse.sourceWords）时，产出和原话明显对不上的地方（见 LocalSourceWordIssue）；有一条就是没过，标准全达到也一样。没有时不带。
  * modelLabel、roleId、roleVersion 记是谁验的（本机用的模型、验收员岗位和版本，用内置规矩时为 null）。
  */
 export const LocalVerdict = Type.Object({
@@ -873,6 +886,7 @@ export const LocalVerdict = Type.Object({
   summary: Type.String({ minLength: 1, maxLength: 2000 }),
   criteria: Type.Array(LocalVerdictCriterion, { minItems: 1, maxItems: 50 }),
   beyondScope: Type.Array(Type.String({ minLength: 1, maxLength: 500 }), { maxItems: 10 }),
+  sourceWordIssues: Type.Optional(Type.Array(LocalSourceWordIssue, { minItems: 1, maxItems: 10 })),
   modelLabel: Type.String(),
   roleId: Nullable(Uuid),
   roleVersion: NullableInteger({ minimum: 1 }),
@@ -887,12 +901,15 @@ export const LocalVerdict = Type.Object({
  * - role 是验收员岗位（kind=reviewer，带模型档位，本机按档位挑模型）；没配为 null，本机用内置的验收规矩、普通档。
  * - failStreak 是这张卡在这次交回之前连续没过几次（推翻以后从 0 算）。这次再没过、累计到 2 就是「受阻」。
  * 404：云端没有这次交回（还没收到或拒收了）；409：这次交回已经有结论（已验过或已推翻），不用再验。
+ * sourceWords（16.8）：卡上的本人原话；不为空时 markdown 里有一段「本人原话」，验收员逐条对完标准再对一遍原话，明显对不上（做了原话里没要的、漏了原话里明说的）算没过。
+ *   本机核对验收员写的 sourceWordIssues：quote 必须是其中某段或某段里的一截。
  */
 export const LocalVerifyBriefResponse = Type.Object({
   markdown: Type.String({ minLength: 1, maxLength: 20000 }),
   criteria: Type.Array(Type.String({ minLength: 1 }), { minItems: 1, maxItems: 50 }),
   role: Nullable(LocalRole),
   failStreak: Type.Integer({ minimum: 0 }),
+  sourceWords: Type.Optional(Type.Array(Type.String(), { maxItems: 10 })),
 }, strict);
 
 /** 专题一版的种类：outline 提纲、draft 正文、review 评审会合成的「分歧和建议」。 */
@@ -1197,6 +1214,7 @@ export type TLocalRole = Static<typeof LocalRole>;
 export type TLocalModelTier = Static<typeof LocalModelTier>;
 export type TLocalPlanCard = Static<typeof LocalPlanCard>;
 export type TLocalCardPlan = Static<typeof LocalCardPlan>;
+export type TLocalSourceWordIssue = Static<typeof LocalSourceWordIssue>;
 export type TLocalVerdictCriterion = Static<typeof LocalVerdictCriterion>;
 export type TLocalVerdict = Static<typeof LocalVerdict>;
 export type TLocalVerifyBriefResponse = Static<typeof LocalVerifyBriefResponse>;

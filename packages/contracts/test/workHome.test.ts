@@ -72,7 +72,7 @@ describe("新首页契约", () => {
     expect(Value.Check(ProjectFeedResponse, { items: [
       { kind: "goal_linked", id: `goal:T-1`, at, period: "2026-11", taskId: "T-1", taskName: "11/18 上线 V1" },
       { kind: "card_passed", id: `passed:${uuid}`, at, cardId: uuid, title: "greet", met: 5, total: 5, merge: merged },
-      { kind: "card_blocked", id: `blocked:${uuid}`, at, cardId: uuid, title: "greet", handbackId: uuid, fix: "第 2 条：补测试" },
+      { kind: "card_blocked", id: `blocked:${uuid}`, at, cardId: uuid, title: "greet", handbackId: uuid, fix: "第 2 条：补测试", sourceWordIssues: [{ quote: "录屏这次先不做", kind: "extra", reason: "做了录屏" }] },
       { kind: "criteria_met", id: "criteria:T-1:3", at, taskId: "T-1", met: 3, total: 3 },
       { kind: "rework_opened", id: `rework:${uuid}`, at, cardId: uuid, title: "返工：greet", fromCardId: uuid, reason: "返回值不对" },
     ] })).toBe(true);
