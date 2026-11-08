@@ -3,11 +3,12 @@
 /**
  * 左栏最底下的本人一行和个人菜单（新首页设计 9.4、5.4.2「本人行」、5.4.6「个人菜单」）：
  * - 这一行：头像 24 + 名字；连接要处理时（本机离线、额度用完、飞书授权失效）名字后面一个 6px 琥珀点。整行就是菜单的开关。
- * - 菜单从这一行向上弹出：头像和资料 · 伙伴 · 连接 · 岗位 · 我的记忆 · 偏好 · 任务数据质量（开着时）·
+ * - 菜单从这一行向上弹出：头像和资料 · 伙伴 · 连接 · 岗位 · 我的记忆 · 偏好 ·
  *   切换到 CEO 工作台（双角色）· 管理员（管理员）· 锁屏 · 退出登录；最后一行淡色版本号。菜单项不放图标；键盘交给 HeroUI 的菜单。
  * 锁屏（设计 19 节第 8 条）：天枢不自动锁，本人点了才锁；和退出登录走同一个接口、回登录页，这台电脑「认得你」的那份（lastLogin）不清。
  * 快捷键 Ctrl+Shift+L（Mac 上 Cmd+Shift+L），哪里都能按。
- * 头像和资料、伙伴、连接、偏好是新首页里的二级页；岗位、我的记忆、任务数据质量、管理员还是老页面，点了离开新首页。
+ * 头像和资料、伙伴、连接、岗位、我的记忆、偏好是新首页里的二级页；管理员还是老页面，点了离开新首页。
+ * 「任务数据质量」不放进新首页的菜单（用户 11/08 定）：老菜单、/me/task-quality 页面和接口都留着，要用随时能放回来。
  * 雷达、定时任务不上（17.2）：不放进菜单（老页面的路由先不动）；「更多」里只剩一项，就不要「更多」这一层。
  */
 import { useEffect, useState } from "react";
@@ -16,11 +17,10 @@ import { avatarInitial, useBuildVersion, type Account } from "@/components/Accou
 import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import { browserApi } from "@/lib/api/client";
 import { logout } from "@/lib/logout";
-import { readTaskQualityEnabled } from "@/components/task-quality/taskQualityStatus";
 import { PAGE_TITLE, pageHref, type PageKey, type View } from "./view";
 import h from "@/styles/home.module.css";
 
-type Extra = { switchView: boolean; admin: boolean; taskQuality: boolean };
+type Extra = { switchView: boolean; admin: boolean };
 
 /** 锁屏的快捷键：Ctrl+Shift+L（Mac 上 Cmd+Shift+L）；打字合成中不算。 */
 export const isLockKey = (event: Pick<KeyboardEvent, "code" | "ctrlKey" | "metaKey" | "shiftKey" | "altKey" | "isComposing">) =>
@@ -34,14 +34,14 @@ export function PersonRow({ account, view, alert, go }: {
   go: (href: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [extra, setExtra] = useState<Extra>({ switchView: false, admin: false, taskQuality: false });
+  const [extra, setExtra] = useState<Extra>({ switchView: false, admin: false });
   const version = useBuildVersion();
   const onOpenChange = (next: boolean) => {
     setOpen(next);
     if (!next) return;
-    void Promise.all([browserApi.GET("/api/auth/session").catch(() => null), readTaskQualityEnabled().catch(() => false)]).then(([session, taskQuality]) => {
+    void browserApi.GET("/api/auth/session").catch(() => null).then((session) => {
       const authed = session?.response.ok && session.data?.authenticated ? session.data : null;
-      setExtra({ switchView: Boolean(authed?.canSwitchView), admin: Boolean(authed && "admin" in authed && authed.admin), taskQuality: Boolean(taskQuality) });
+      setExtra({ switchView: Boolean(authed?.canSwitchView), admin: Boolean(authed && "admin" in authed && authed.admin) });
     });
   };
   const switchView = async () => {
@@ -52,7 +52,7 @@ export function PersonRow({ account, view, alert, go }: {
     if (key === "logout" || key === "lock") { void logout(); return; }
     if (key === "switch") { void switchView(); return; }
     if (key in PAGE_TITLE) { go(pageHref(key as PageKey)); return; }
-    const out: Record<string, string> = { quality: "/me/task-quality", admin: "/me/admin" };
+    const out: Record<string, string> = { admin: "/me/admin" };
     if (out[key]) go(out[key]);
   };
   useEffect(() => {
@@ -88,7 +88,6 @@ export function PersonRow({ account, view, alert, go }: {
               {item("roles", "岗位")}
               {item("memory", "我的记忆")}
               {item("preferences", "偏好")}
-              {extra.taskQuality ? item("quality", "任务数据质量") : null}
             </Dropdown.Section>
             {extra.switchView || extra.admin ? (
               <Dropdown.Section className={h.menuSection}>
