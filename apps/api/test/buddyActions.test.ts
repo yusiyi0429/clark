@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { FeishuClient } from "../src/feishu/client.js";
 import { BOARD_NOW, boardFixture, THIRD } from "./boardFixture.js";
 import { letterOf, seqOf } from "../src/subSessionLetters.js";
+import { actionList } from "../src/buddyActions.js";
+import { buddyPersona } from "../src/buddyPersona.js";
 import { TEST_CEO, TEST_MEMBER } from "./helpers.js";
 
 /**
@@ -366,5 +368,16 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       await machine.send({ kind: "card", cardId: loose }, [running("不在项目里的卡"), ["status", { status: "idle", title: "x", agent: "claude-code", modelLabel: "m" }]]);
       expect(await f.t.sql("SELECT 1 FROM sub_session_reports WHERE subject_id=$1", [loose])).toEqual([]);
     } finally { await f.close(); }
+  });
+  it("18 节第 11 条：建项目、拆卡之前先用选项框问清现实（文件夹、目录、迁移、GitHub、做成什么样），同一个文件夹已有项目先问；人设里也有这条", () => {
+    const description = (name: string) => actionList({ authority: "full", grantedAt: null }).find((action) => action.name === name)!.description;
+    for (const name of ["create_project", "split_cards"]) {
+      for (const word of ["ask_user", "文件夹", "目录", "Codex", "GitHub", "和本人要的是不是一回事"]) expect(description(name)).toContain(word);
+    }
+    expect(description("create_project")).toContain("这个文件夹已经有项目了还要再建，先问本人");
+    expect(description("split_cards")).toContain("不拆、不开工");
+    expect(description("ask_user")).toContain("建项目、拆卡之前一定先用它把现实问清楚");
+    for (const personality of ["steady", "direct", "warm", "coach"] as const)
+      expect(buddyPersona({ name: "团团", personality }, "测试乙")).toContain("# 先从现实出发（哪种性格都一样）");
   });
 });
