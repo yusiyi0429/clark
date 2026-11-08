@@ -3,7 +3,7 @@ import Fastify, { type FastifyError, type FastifyInstance, type FastifyReply, ty
 import { Value } from "@sinclair/typebox/value";
 import { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import type { Pool } from "pg";
-import { RadarSources, type TApiError, type TRadarSources } from "@warmap/contracts";
+import { RadarSources, type TApiError, type TBuddyPlan, type TConversationCard, type TConversationModel, type TRadarSources } from "@warmap/contracts";
 import rateLimit from "@fastify/rate-limit";
 import multipart from "@fastify/multipart";
 import { loadPeopleDirectory, type PeopleDirectoryEnv } from "./peopleDirectory.js";
@@ -146,6 +146,7 @@ import { registerProjectRoutes } from "./routes/projects.js";
 import { registerProjectTransferRoutes } from "./routes/projectTransfers.js";
 import { registerBuddyActionRoutes } from "./routes/buddyActions.js";
 import { closeQuestions, collapsePlan, runExtras } from "./buddyActions.js";
+import { recordTurnModel, turnModels } from "./chatTurnModels.js";
 import { registerTaskContinuityRoutes } from "./routes/taskContinuity.js";
 import { registerTaskCardRoutes, type BoardAgents } from "./routes/taskCards.js";
 import { planTaskOpener, taskPageFacts } from "./taskCards.js";
@@ -543,7 +544,14 @@ export async function buildApp({
     onSegment: (viewer, segment) => recordChatSegment(pool.query.bind(pool), viewer, segment),
     pipelines: (viewer) => pipelineConversationIds(pool.query.bind(pool), viewer.personId),
     // 伙伴代本人做事（17.4）：读回历史时接上每一轮的计划清单和卡；本人中途发新消息时上一轮的清单收起。
-    runExtras: (viewer, runIds) => runExtras(pool.query.bind(pool), viewer.personId, runIds),
+    // 再接上每一轮实际用的来源和模型。
+    runExtras: async (viewer, runIds) => {
+      const [buddy, models] = await Promise.all([runExtras(pool.query.bind(pool), viewer.personId, runIds), turnModels(pool.query.bind(pool), viewer.personId, runIds)]);
+      const extras = new Map<string, { plan?: TBuddyPlan; cards?: TConversationCard[]; model?: TConversationModel }>(buddy);
+      for (const [runId, model] of models) extras.set(runId, { ...extras.get(runId), model });
+      return extras;
+    },
+    onModel: (viewer, runId, used) => recordTurnModel(pool.query.bind(pool), viewer.personId, runId, used, now()),
     onInterrupt: async (_viewer, runId) => {
       const plan = await collapsePlan(pool.query.bind(pool), runId);
       if (plan) chat?.inject(runId, { type: "plan", plan });

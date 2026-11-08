@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyReply } from "fastify";
-import { AskAnswerRecord, ConversationCard, type TAskAnswerRecord, type TBuddyPlan, type TConversationCard, type TConversationMessageRequest, type TPartnerMemoryItem } from "@warmap/contracts";
+import { AskAnswerRecord, ConversationCard, type TAskAnswerRecord, type TBuddyPlan, type TConversationCard, type TConversationMessageRequest, type TConversationModel, type TPartnerMemoryItem } from "@warmap/contracts";
 import { turnFailureCopy } from "./conversationRecovery.js";
 import { segmentDateLabel, startsNewSegment } from "./conversationSegments.js";
 import type { HomeTurnVia } from "./homeTurn.js";
@@ -162,7 +162,9 @@ export function createChatService(options: {
   /** 本人的项目对话那几段（project_pipelines，和以前的 task_pipelines）：总管线挑段时排除，不当成首页的段。 */
   pipelines?: (viewer: ChatViewer) => Promise<Set<string>>;
   /** 伙伴每一轮的计划清单和出的卡（17.4，buddyActions.ts 的 runExtras）：读回历史时接到那一轮的回答上。 */
-  runExtras?: (viewer: ChatViewer, runIds: string[]) => Promise<Map<string, { plan?: TBuddyPlan; cards?: TConversationCard[] }>>;
+  runExtras?: (viewer: ChatViewer, runIds: string[]) => Promise<Map<string, { plan?: TBuddyPlan; cards?: TConversationCard[]; model?: TConversationModel }>>;
+  /** 这一轮实际用的来源和模型（Chat 的 usage 事件报的，一轮里换了才再给）：记下来，读历史时由 runExtras 接回去。失败只记日志。 */
+  onModel?: (viewer: ChatViewer, runId: string, used: TConversationModel) => Promise<void>;
   /** 本人在伙伴回答到一半时发来新消息、上一轮要停掉之前（17.4）：收起那一轮的计划清单。失败只记日志。 */
   onInterrupt?: (viewer: ChatViewer, runId: string) => Promise<void>;
   /** 本人在这个对话（scope）里发出一条新消息、交给 Chat 之前（18 节第 9 条）：伙伴还 open 的选项框收掉，answered 是这一句回答的那个。失败只记日志。 */
@@ -289,7 +291,7 @@ export function createChatService(options: {
       const extra = message.role === "assistant" && !message.kind ? extras.get(message.runId) : undefined;
       if (!extra) return message;
       const cards = [...(message.cards ?? []), ...(extra.cards ?? [])].slice(0, 4);
-      return { ...message, ...(cards.length ? { cards } : {}), ...(extra.plan ? { plan: extra.plan } : {}) };
+      return { ...message, ...(cards.length ? { cards } : {}), ...(extra.plan ? { plan: extra.plan } : {}), ...(extra.model ? { model: extra.model } : {}) };
     });
   };
   /** 正在回答的上一轮：网页里问的在 liveTurns 里，否则从这一段的 runs 里找还在跑的。 */
@@ -457,6 +459,9 @@ export function createChatService(options: {
       let written = false;
       let outcome = "broken";
       let deepen: ReturnType<typeof setTimeout> | undefined;
+      /** 这一轮已经报给界面的模型（换了才再报）；记下来的一次接一次写，最后一次的留下。 */
+      let used: TConversationModel | undefined;
+      let saving = Promise.resolve();
       const frameOf = (event: ChatEvent) => `event: ${event.type}\ndata: ${JSON.stringify({ ...event, runId, scope, sequence: ++sequence })}\n\n`;
       const write = (event: ChatEvent) => {
         const frame = frameOf(event);
@@ -497,6 +502,19 @@ export function createChatService(options: {
           case "error":
             outcome = String(event.code);
             return failure(event);
+          case "usage": {
+            // Chat 报了这次调的来源和模型：换了才给界面一帧 model、记下来（只这两样，截到契约的长度）。
+            const reported = typeof event.provider === "string" && event.provider && typeof event.model === "string" && event.model
+              ? { provider: event.provider.slice(0, 60), model: event.model.slice(0, 120) } : undefined;
+            if (reported && runId && (reported.provider !== used?.provider || reported.model !== used?.model)) {
+              used = reported;
+              write({ type: "model", ...reported });
+              const run = runId;
+              saving = saving.then(() => options.onModel?.(viewer, run, reported))
+                .catch((error) => logEvent({ event: "chat_service.model_hook_failed", requestId, error: (error as Error)?.message }));
+            }
+            return rest;
+          }
           default:
             return rest;
         }

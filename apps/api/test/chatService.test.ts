@@ -1367,4 +1367,34 @@ describe("伙伴代本人做事走 Chat（17.4）", () => {
       expect(await status()).toEqual({ scope: `project:${projectId}`, status: "answered" });
     });
   }, 30_000);
+  it("回话带上这一轮实际用的来源和模型：Chat 的 usage 报了就给界面一帧 model（换了才再给），记下最后一次，读历史时在回答上；没报的没有", async () => {
+    const usage = { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2 };
+    let turns = 0;
+    const chat = await fakeChat({
+      conversations: ["chat-conversation"],
+      pages: { "0": { messages: [{ role: "user", text: "你好", runId: RUN }, { role: "assistant", text: "在", runId: RUN }],
+        runs: [{ runId: RUN, status: "completed" }], nextCursor: null } },
+      turn: (res) => sse(res, ++turns === 1 ? [{ type: "turn_started" },
+        { type: "usage", ...usage, provider: "tokenhub", model: "claude-opus-5-5" },
+        { type: "usage", ...usage, provider: "tokenhub", model: "claude-opus-5-5" },
+        { type: "usage", ...usage, provider: "tokenhub", model: "qwen3.8-flash" },
+        { type: "message", delta: "在" }, { type: "done", status: "completed" }]
+        : [{ type: "turn_started" }, { type: "usage", ...usage }, { type: "message", delta: "在" }, { type: "done", status: "completed" }]),
+    });
+    await withChat(chat, countingRuntime(), async (t) => {
+      const cookie = await t.memberCookie();
+      const say = () => t.app.inject({ method: "POST", url: "/api/conversations/global/messages",
+        headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream" }, payload: { message: "你好" } });
+      const answer = async () => (await t.app.inject({ method: "GET", url: "/api/conversations/global/messages", headers: { cookie } })).json()
+        .messages.find((message: { role: string }) => message.role === "assistant");
+      const first = events((await say()).body).filter((event) => event.type === "model");
+      expect(first.map(({ provider, model }) => ({ provider, model }))).toEqual([
+        { provider: "tokenhub", model: "claude-opus-5-5" }, { provider: "tokenhub", model: "qwen3.8-flash" }]);
+      expect(first.every((event) => event.runId === RUN && Object.keys(event).sort().join() === "model,provider,runId,scope,sequence,type")).toBe(true);
+      await vi.waitFor(async () => expect((await answer()).model).toEqual({ provider: "tokenhub", model: "qwen3.8-flash" }));
+      // Chat 没报模型（老版本）：不给 model 帧，记下的那一轮照旧。
+      expect(events((await say()).body).some((event) => event.type === "model")).toBe(false);
+      expect(await t.sql("SELECT run_id,provider,model FROM chat_turn_models")).toEqual([{ run_id: RUN, provider: "tokenhub", model: "qwen3.8-flash" }]);
+    });
+  }, 30_000);
 });
