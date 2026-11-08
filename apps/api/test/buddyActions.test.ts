@@ -390,4 +390,56 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
     for (const personality of ["steady", "direct", "warm", "coach"] as const)
       expect(buddyPersona({ name: "团团", personality }, "测试乙")).toContain("# 先从现实出发（哪种性格都一样）");
   });
+  it("18 节第 12 条：自动接力连续 20 次本人没说话就停住、「等你」里问继续还是停下；本人在项目对话里说一句清零；设成不限就不停", async () => {
+    const f = await fixture();
+    try {
+      await f.grant();
+      const project = (await f.call("POST", "/api/me/projects", { name: "天枢" })).json() as { projectId: string; autoRelayLimit: number | null };
+      expect(project.autoRelayLimit).toBe(20);
+      const card = await f.agentCard("规划员岗位初版");
+      await f.t.sql("UPDATE tasks SET project_id=$2,plan_task_id=NULL WHERE id=$1", [card, project.projectId]);
+      const conversation = randomUUID();
+      await f.t.sql("INSERT INTO project_pipelines(project_id,owner_id,conversation_id) VALUES($1,$2,$3)", [project.projectId, TEST_MEMBER.personId, conversation]);
+      expect((await f.call("GET", "/api/me/work-home")).json().projects.find((entry: { projectId: string }) => entry.projectId === project.projectId).subSessions[0].letter).toBe("A");
+      const machine = await f.local();
+      await machine.send({ kind: "card", cardId: card }, [running("规划员岗位初版")]);
+      const tell = (text: string) => f.t.app.inject({ method: "POST", url: "/internal/me/buddy-actions/sub_session_tell",
+        headers: { authorization: `Bearer ${TOKEN}`, "x-owner-id": TEST_MEMBER.personId }, payload: { args: { letter: "A", text }, conversationId: conversation, runId: randomUUID() } });
+      const waiting = async () => ((await f.call("GET", "/api/me/work-home")).json().waiting as { id: string; kind: string; title: string; answer: string }[])
+        .filter((item) => item.kind === "auto_relay");
+      const decide = (decision: string) => f.call("POST", `/api/me/projects/${project.projectId}/auto-relay`, { decision });
+
+      // 连转 20 次：第 21 次不做，「等你」里出一条。
+      for (let i = 1; i <= 20; i++) expect((await tell(`第 ${i} 次`)).statusCode).toBe(200);
+      const blocked = await tell("第 21 次");
+      expect([blocked.statusCode, blocked.json().code]).toEqual([409, "AUTO_RELAY_PAUSED"]);
+      expect(await waiting()).toEqual([expect.objectContaining({ id: `auto_relay:${project.projectId}`, title: "天枢：自动接力已连续 20 轮，继续吗？", answer: "inline",
+        open: { kind: "project", id: project.projectId }, projectId: project.projectId })]);
+      expect(await f.t.sql("SELECT 1 FROM session_commands WHERE card_id=$1", [card])).toHaveLength(20);
+      // 停着时子会话停了：报告照样记，不再触发主管线那一轮。
+      await machine.send({ kind: "card", cardId: card }, [["stopped", { why: "turn_done", summary: null, blocker: null, outputs: [] }]]);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(await f.t.sql("SELECT 1 FROM sub_session_reports WHERE subject_id=$1", [card])).toHaveLength(1);
+      expect(await f.t.sql("SELECT 1 FROM conversations WHERE scope=$1", [`project:${project.projectId}`])).toEqual([]);
+
+      // 停下：那一条收起，照旧停着；继续：清零恢复。没停着时答 409。
+      expect((await decide("stop")).statusCode).toBe(204);
+      expect(await waiting()).toEqual([]);
+      expect((await tell("还是不行")).json().code).toBe("AUTO_RELAY_PAUSED");
+      expect((await decide("continue")).statusCode).toBe(204);
+      expect((await tell("继续")).statusCode).toBe(200);
+      expect((await decide("continue")).json().code).toBe("NOT_PAUSED");
+
+      // 本人在项目对话里说一句：清零。再转 19 次也不停（加上清零前那一次之后的计数从 0 起）。
+      for (let i = 0; i < 18; i++) await tell(`再转 ${i}`);
+      expect((await f.call("POST", `/api/conversations/project:${project.projectId}/messages`, { message: "B 先停一下" })).statusCode).toBe(200);
+      for (let i = 0; i < 19; i++) expect((await tell(`清零后 ${i}`)).statusCode).toBe(200);
+      expect(await waiting()).toEqual([]);
+
+      // 设成不限：不停。
+      expect((await f.call("PATCH", `/api/me/projects/${project.projectId}`, { autoRelayLimit: null })).json().autoRelayLimit).toBeNull();
+      for (let i = 0; i < 25; i++) expect((await tell(`不限 ${i}`)).statusCode).toBe(200);
+      expect(await waiting()).toEqual([]);
+    } finally { await f.close(); }
+  });
 });

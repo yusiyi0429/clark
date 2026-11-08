@@ -279,5 +279,12 @@ export async function assembleWaiting(input: WaitingInput): Promise<TWaitingItem
       open: { kind: "transfer", id: row.id }, projectId: row.project_id, person: from, answer: "open" });
   }
 
+  // 自动接力连续到上限停住了（18 节第 12 条）：就地「继续」「停下」。
+  const relays = (await q(`SELECT id::text,name,auto_relay_count,auto_relay_paused_at FROM projects WHERE owner_id=$1 AND archived_at IS NULL AND auto_relay_asked`,
+    [ownerId])).rows as { id: string; name: string; auto_relay_count: number; auto_relay_paused_at: Date }[];
+  for (const row of relays)
+    add({ id: `auto_relay:${row.id}`, kind: "auto_relay", title: `${row.name}：自动接力已连续 ${row.auto_relay_count} 轮，继续吗？`, source: null,
+      at: row.auto_relay_paused_at.toISOString(), open: { kind: "project", id: row.id }, projectId: row.id, answer: "inline" });
+
   return waiting.sort(byUrgency);
 }

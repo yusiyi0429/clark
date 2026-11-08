@@ -17,6 +17,7 @@ import { CLAIM_TTL, cancelStart, requestStarts } from "./sessionStarts.js";
 import { SESSION_COOKIE, createSessionToken } from "./session.js";
 import { ACTIVE } from "./workers.js";
 import { subByLetter } from "./subSessionLetters.js";
+import { autoRelayStep } from "./autoRelay.js";
 import type { RunAsk } from "./localDevices.js";
 
 /**
@@ -205,13 +206,18 @@ async function callProject(deps: BuddyDeps, call: Call): Promise<string> {
   return scope.slice("project:".length);
 }
 /** 这个项目对话里这个字母是哪个子会话（本人的）。 */
-async function lettered(deps: BuddyDeps, call: Call, letter: string): Promise<{ kind: SubKind; id: string; title: string; label: string }> {
+async function lettered(deps: BuddyDeps, call: Call, letter: string): Promise<{ kind: SubKind; id: string; title: string; label: string; projectId: string }> {
   const projectId = await callProject(deps, call);
   const sub = await subByLetter(deps.q, projectId, letter);
   if (!sub) throw new BuddyError(404, "LETTER_NOT_FOUND", `这个项目里没有 ${letter}`);
   const row = await ownSub(deps.q, call.personId, sub.kind, sub.id);
   if (row.trashed_at) throw new BuddyError(404, "LETTER_NOT_FOUND", `${letter} 已经删进回收站了`);
-  return { ...sub, title: row.title, label: `${letter} · ${row.title}` };
+  return { ...sub, title: row.title, label: `${letter} · ${row.title}`, projectId };
+}
+/** 主管线代本人的转话、重开算一步自动接力（18 节第 12 条）；到上限停着时不做。 */
+async function relayStep(deps: BuddyDeps, projectId: string) {
+  if (!(await autoRelayStep(deps.q, projectId, deps.now())))
+    throw new BuddyError(409, "AUTO_RELAY_PAUSED", "这个项目的自动接力已经连续到上限，停着等本人：本人说一句话、或在「等你」里点「继续」以后再接着转");
 }
 /** 登记一条「请这台电脑对子会话做一件事」，由本人电脑上开着的网页认领后交给本机。 */
 async function queueCommand(deps: BuddyDeps, call: Call, sub: { kind: SubKind; id: string }, run: { id: string; device_id: string }, command: TSessionCommand) {
@@ -400,6 +406,7 @@ const handlers: Handlers = {
     const sub = await lettered(deps, call, args.letter);
     const run = await lastRun(deps.q, sub.kind, sub.id);
     if (!run) throw new BuddyError(409, "NOT_STARTED", `${sub.label} 还没开过工，先用 sub_session_restart 开工`);
+    await relayStep(deps, sub.projectId);
     const commandId = await queueCommand(deps, call, sub, run, { type: "message", text: args.text });
     return { summary: `把话转给了 ${sub.label}${LATER}`, result: { letter: args.letter, kind: sub.kind, id: sub.id, title: sub.title, commandId }, ui: [subRefresh(sub.id)] };
   },
@@ -413,12 +420,14 @@ const handlers: Handlers = {
     const run = await lastRun(deps.q, sub.kind, sub.id);
     const result = { letter: args.letter, kind: sub.kind, id: sub.id, title: sub.title };
     if (!run) {
+      await relayStep(deps, sub.projectId);
       const outcome = await handlers.start_sub_session(deps, call, { kind: sub.kind, id: sub.id });
       return { ...outcome, summary: outcome.summary.replace(`「${sub.title}」`, `「${sub.label}」`), result: { ...result, start: true } };
     }
     if (["queued", "starting", "running"].includes(run.state)) throw new BuddyError(409, "ALREADY_RUNNING", `${sub.label} 正在跑，不用重开`);
     if (run.state === "waiting_permission") throw new BuddyError(409, "WAITING_PERMISSION", `${sub.label} 在等批准，先批准或拒绝`);
     if (run.state === "idle" && run.ask?.kind === "question") throw new BuddyError(409, "ASKING", `${sub.label} 在问问题，先回答`);
+    await relayStep(deps, sub.projectId);
     const commandId = await queueCommand(deps, call, sub, run, { type: "message", text: args.text ?? "接着做" });
     return { summary: `让 ${sub.label} 接着做了${LATER}`, result: { ...result, commandId }, ui: [subRefresh(sub.id)] };
   },

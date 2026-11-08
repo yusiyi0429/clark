@@ -1,3 +1,4 @@
+import { autoRelayStep } from "../autoRelay.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Type } from "@sinclair/typebox";
@@ -121,6 +122,8 @@ export function registerLocalRoutes(app: AppInstance, ctx: RouteContext, board: 
         const report = await readReport(q, id);
         if (!report) continue;
         await setAfterSequence(q, "sub_session_reports", id, await lastSequence(report.project_id, ownerId));
+        // 自动接力到上限停着了：报告照样在动态里，不再触发主管线（18 节第 12 条）。
+        if (!(await autoRelayStep(q, report.project_id, ctx.now()))) continue;
         await reportToProject(buddy, ownerId, report.project_id, reportTurnText(report))
           .catch((cause) => app.log.warn({ reportId: id, code: (cause as { code?: string }).code }, "sub-session report turn not started"));
       }

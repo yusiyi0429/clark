@@ -1,3 +1,4 @@
+import { resetAutoRelay } from "../autoRelay.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { Type } from "@sinclair/typebox";
@@ -223,6 +224,8 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
       if (await pipelineDenied(reply, person, req.params.scope)) return;
       // 接手人说了第一句：管线可以自己开子会话了（16.7）。
       if (isProject(req.params.scope)) await ownerSpoke(q, owner, projectIdOf(req.params.scope));
+      // 本人在这个项目对话里说了话（含伙伴台转来的），自动接力清零（18 节第 12 条）；子会话报告替本人发的那句不算。
+      if (isProject(req.params.scope) && req.headers[FORWARDED_HEADER] !== "report") await resetAutoRelay(q, projectIdOf(req.params.scope));
       if (chat && onChat(req.params.scope)) {
         // 和天枢自己的对话同一条规则：成员不能借显式引用把 Card 带进对话。
         if (person.role !== "ceo" && req.body.references?.length) return fail(reply, 404, "REFERENCE_NOT_FOUND", "Card 引用不存在");
