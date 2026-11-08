@@ -20,6 +20,7 @@ import type { GatewayPricing } from "./pricing.js";
 import { Budgets, MULTI_AGENT_OFF_PERCENT, reworkRounds, runFor } from "./budget.js";
 import { AttachmentError, attachmentNote, saveAttachments, type FetchAttachment } from "./attachments.js";
 import { modelDisplayName, sameModel, type ResolvedModel } from "./models.js";
+import type { CustomTools, SessionTools } from "./customTools.js";
 import { cardTitleProblem } from "./cardTitle.js";
 import type { ModelProfiles } from "./models.js";
 import { isInside, type Folders } from "./folders.js";
@@ -39,7 +40,8 @@ const CLOUD_MCP_NAME = "tianshu";
 const CLOUD_MCP_CONTEXT_TOOL = "get_task_context";
 const CLOUD_MCP_SEARCH_TOOL = "web_search";
 /** 规划员、验收员只读：改东西的工具都不给；子 agent 也不给，免得绕过去改。 */
-const READ_ONLY_KINDS: TLocalSessionKind[] = ["plan", "verify"];
+/** 只读的会话种类（规划员、验收员）：不给写文件、跑命令的工具，也不挂本人加的工具。 */
+export const READ_ONLY_KINDS: TLocalSessionKind[] = ["plan", "verify"];
 const WRITE_TOOLS = ["Edit", "MultiEdit", "Write", "NotebookEdit", "Bash", "PowerShell", "Agent", "Task"];
 /** 排队先后：验收员（短，而且卡着交付）→ 规划员 → 执行；同一档先来先跑。 */
 const PRIORITY: Record<TLocalSessionKind, number> = { verify: 0, plan: 1, card: 2, topic: 2 };
@@ -175,6 +177,8 @@ export interface SessionDeps {
   maxConcurrent?: () => number;
   /** 验收过就合回（本机设置 autoMerge，默认开）。 */
   autoMerge?: () => boolean;
+  /** 本人在连接页加的工具：挂给执行会话（卡、专题），不受岗位名单管；规划员、验收员不挂。 */
+  customTools?: CustomTools;
   /** 本人已装的技能目录（找 lark-* 飞书技能，岗位要飞书时挂给会话）。 */
   skillsDir?: string;
   /** 向天枢取一次交回的验收交代（没有就不自动验收）。 */
@@ -672,11 +676,13 @@ export class SessionManager {
    * 本会话的 MCP 配置文件：本会话 MCP（交产出物、证据、交回）；关联了云端时再挂天枢 MCP（/mcp/me，搜索等）。
    * 密钥和令牌不写进文件也不进命令行：文件里写 ${变量名}，Claude Code 启动时从子进程环境变量展开（11/06 实测）。
    */
-  private async writeMcpConfig(rec: SessionRecord, tools: { cloud: boolean; search: boolean }): Promise<{ path: string; env: Record<string, string>; allowedTools: string[] }> {
+  private async writeMcpConfig(rec: SessionRecord, tools: { cloud: boolean; search: boolean }, custom: SessionTools | null): Promise<{ path: string; env: Record<string, string>; allowedTools: string[] }> {
     const env: Record<string, string> = { TIANSHU_SESSION_SECRET: rec.mcpSecret };
     const local = `http://127.0.0.1:${this.d.port()}/internal/sessions/${rec.id}`;
     const secretHeader = { "x-tianshu-session-secret": "${TIANSHU_SESSION_SECRET}" };
     const servers: Record<string, unknown> = {
+      // 本人加的工具（服务器名都是 tool- 开头，不会盖掉下面两个）；不预先放行，读的由本机照权限模式放行
+      ...custom?.servers,
       [SESSION_MCP_NAME]: {
         type: "http",
         url: `${local}/mcp`,
@@ -713,7 +719,9 @@ export class SessionManager {
     const has = (t: TLocalRole["tools"][number]) => !rec.role || rec.role.tools.includes(t);
     const linked = Boolean(await this.d.cloudLinked?.());
     const tools = { cloud: linked && (has("tianshu") || has("web_search")), search: has("web_search") };
-    const mcp = await this.writeMcpConfig(rec, tools);
+    const custom = READ_ONLY_KINDS.includes(rec.subject.kind) || !this.d.customTools ? null
+      : this.d.customTools.forSession(`http://127.0.0.1:${this.d.port()}/internal/sessions/${rec.id}`, { "x-tianshu-session-secret": "${TIANSHU_SESSION_SECRET}" });
+    const mcp = await this.writeMcpConfig(rec, tools, custom);
     // 带个人配置时本人自己的技能照常加载，不另挂插件；干净会话挂一个只在本会话生效的插件。
     const skillsDir = rec.role?.tools.includes("feishu") ? this.d.skillsDir : undefined;
     const plugin = skillsDir && !rec.includePersonalConfig ? ensureFeishuPlugin(this.d.dataDir, skillsDir) : null;
@@ -721,7 +729,7 @@ export class SessionManager {
     // 工作规矩、岗位、挑刺子 agent 写在本机程序的数据目录，经参数交给 Claude Code，不往本人的仓库写文件。
     const dir = join(this.dir, rec.id);
     const systemPromptPath = join(dir, "system.md");
-    writeFileSync(systemPromptPath, systemPrompt(rec.subject.kind, rec.role, rec.critics, feishu, rec.workspace));
+    writeFileSync(systemPromptPath, systemPrompt(rec.subject.kind, rec.role, rec.critics, feishu, rec.workspace, custom?.names ?? []));
     let agentsPath: string | null = null;
     if (rec.subject.kind === "topic" && rec.critics.length) {
       agentsPath = join(dir, "agents.json");
@@ -749,6 +757,7 @@ export class SessionManager {
       // 卡在自己的工作树里：「自动」「自动接受改文件」只在工作树里自己放行（规则在 pathGuard 的 modeAllows）
       autoAllowRoot: rec.subject.kind === "card" && rec.workspace?.kind === "worktree" ? rec.workspace.path : null,
       permissionMode: rec.permissionMode,
+      toolReads: custom?.reads,
     });
     if (this.cancelled.delete(rec.id)) {
       await run.kill();
