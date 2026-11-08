@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { SessionEntry } from "@/lib/local/sessionView";
+import { foldEvents, type SessionEntry } from "@/lib/local/sessionView";
+import type { TLocalSessionEvent } from "@/lib/local/runner";
 import { SessionTranscript } from "./SessionTranscript";
 
 const step = (seq: number, title: string, at: string, done = true): SessionEntry => ({ kind: "step", seq, at, toolUseId: `t${seq}`, title, done, isError: false });
@@ -48,5 +49,35 @@ describe("工具调用行（设计 5.4.3）", () => {
     ]);
     expect(heads(html).map((head) => head.includes("2 步"))).toEqual([true]);
     expect(html).toContain("交出 a.md");
+  });
+});
+
+describe("子会话回执（17.4）", () => {
+  const at = "2026-11-08T02:00:00Z";
+  const ev = (seq: number, body: Record<string, unknown>) => ({ seq, at, ...body }) as unknown as TLocalSessionEvent;
+  const ids = ["00000000-0000-4000-8000-0000000000b1", "00000000-0000-4000-8000-0000000000b2", "00000000-0000-4000-8000-0000000000b3"] as const;
+
+  it("按编号挂到那句话上：一个勾已送达、两个勾已读、failed 写「没读到 · 重发」；本机补发的话没有回执", () => {
+    const view = foldEvents([
+      ev(1, { type: "user_message", text: "先跑测试", source: "web", messageId: ids[0] }),
+      ev(2, { type: "user_message", text: "再改样式", source: "web", messageId: ids[1] }),
+      ev(3, { type: "user_message", text: "额度恢复了，接着做", source: "web" }),
+      ev(4, { type: "user_message", text: "顺手提交", source: "web", messageId: ids[2] }),
+      ev(5, { type: "receipt", messageId: ids[0], state: "delivered" }),
+      ev(6, { type: "receipt", messageId: ids[1], state: "delivered" }),
+      ev(7, { type: "receipt", messageId: ids[1], state: "read" }),
+      ev(8, { type: "receipt", messageId: ids[2], state: "delivered" }),
+      ev(9, { type: "receipt", messageId: ids[2], state: "failed" }),
+    ]);
+    expect(view.entries.map((entry) => entry.kind === "user" ? entry.receipt ?? null : "-")).toEqual(["delivered", "read", null, "failed"]);
+    const html = render(view.entries);
+    expect(html).toMatch(/先跑测试<\/div><span[^>]*data-receipt="delivered"[^>]*aria-label="已送达"/);
+    expect(html).toMatch(/再改样式<\/div><span[^>]*data-receipt="read"[^>]*aria-label="已读"/);
+    expect(html).toMatch(/额度恢复了，接着做<\/div><div/);
+    expect(html.replace(/<[^>]+>/g, "")).toContain("顺手提交没读到 ·重发");
+    // 这里答不了（别的电脑、手机）：只写「没读到」，不给重发。
+    const away = renderToStaticMarkup(<SessionTranscript entries={view.entries} agentName="Claude Code" canAct={false} onDecide={vi.fn()} live />);
+    expect(away.replace(/<[^>]+>/g, "")).toContain("顺手提交没读到");
+    expect(away).not.toContain("重发");
   });
 });

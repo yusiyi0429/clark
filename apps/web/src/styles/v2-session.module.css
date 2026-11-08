@@ -48,6 +48,8 @@
 .step, .steps { font-size: 12px; line-height: 1.5; }
 .step { align-self: stretch; display: flex; align-items: center; gap: var(--space-2); min-width: 0; min-height: var(--row-28); padding: 0 var(--space-2); color: var(--ink-faint); }
 .feed > :is(.step, .steps) + :is(.step, .steps) { margin-top: -6px; }
+/* 本人那句话的回执贴着气泡（17.4）。 */
+.feed > .meReceipt { margin-top: -8px; }
 .step > svg { flex: none; color: var(--ink-faint); }
 .step time, .stepsTook { flex: none; color: var(--field-placeholder); font-variant-numeric: tabular-nums; }
 .stepText, .step > time + span, .stepsSummary { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -181,6 +183,7 @@
  * 步骤和事件 13/20，时间淡色；输入框聚焦只换边色。
  */
 .page[data-embedded] .feed { gap: var(--space-4); }
+.page[data-embedded] .feed > .meReceipt { margin-top: calc(2px - var(--space-4)); }
 .page[data-embedded] .bubble { align-self: stretch; max-width: none; padding: 0; border-radius: 0; background: none; font-size: 16px; line-height: 26px; }
 .page[data-embedded] .who { display: none; }
 .page[data-embedded] .me { max-width: 82%; padding: var(--space-2) var(--space-4); border-radius: var(--field-radius); background: var(--neutral-wash); font-size: 16px; line-height: 26px; }

@@ -5,7 +5,8 @@
 import type { TLocalPermissionRequestView, TLocalPlanEntry, TLocalQuestionRequestView, TLocalSessionEvent, TLocalSessionStatus, TLocalUsage } from "./runner";
 
 export type SessionEntry =
-  | { kind: "user"; seq: number; at: string; text: string; attachments?: { name: string; size: number }[] }
+  /** messageId、receipt：本人这句话的编号和回执（17.4，本机补发的话没有编号也没有回执）。 */
+  | { kind: "user"; seq: number; at: string; text: string; attachments?: { name: string; size: number }[]; messageId?: string; receipt?: "delivered" | "read" | "failed" }
   | { kind: "assistant"; seq: number; at: string; text: string }
   | { kind: "step"; seq: number; at: string; toolUseId: string; title: string; done: boolean; isError: boolean }
   | { kind: "permission"; seq: number; at: string; request: TLocalPermissionRequestView; decision: "allow" | "deny" | null }
@@ -71,8 +72,13 @@ export function foldEvent(view: SessionView, event: TLocalSessionEvent): Session
       next.agentVersion = event.version;
       return next;
     case "user_message":
-      next.entries = [...view.entries, { kind: "user", ...base, text: event.text, ...(event.attachments?.length ? { attachments: event.attachments.map(({ name, size }) => ({ name, size })) } : {}) }];
+      next.entries = [...view.entries, { kind: "user", ...base, text: event.text, ...(event.attachments?.length ? { attachments: event.attachments.map(({ name, size }) => ({ name, size })) } : {}),
+        ...(event.messageId ? { messageId: event.messageId } : {}) }];
       next.handedBack = false;
+      return next;
+    // 回执挂到同编号的那句话上：delivered → read，或 delivered → failed。
+    case "receipt":
+      next.entries = view.entries.map((entry) => entry.kind === "user" && entry.messageId === event.messageId ? { ...entry, receipt: event.state } : entry);
       return next;
     case "assistant_text":
       next.entries = [...view.entries, { kind: "assistant", ...base, text: event.text }];
