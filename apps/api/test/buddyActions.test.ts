@@ -44,7 +44,7 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       expect((await f.call("GET", "/api/me/buddy-authority")).json()).toEqual({ authority: "none", grantedAt: null });
       const list = async () => (await f.t.app.inject({ method: "GET", url: "/internal/me/buddy-actions",
         headers: { authorization: `Bearer ${TOKEN}`, "x-owner-id": TEST_MEMBER.personId } })).json();
-      expect((await list()).actions.map((action: { name: string }) => action.name)).toEqual(["read_work_home", "read_project", "open_page", "update_plan"]);
+      expect((await list()).actions.map((action: { name: string }) => action.name)).toEqual(["read_work_home", "read_project", "find_people", "open_page", "update_plan"]);
       const denied = await f.act("set_appearance", { appearance: "dark" });
       expect([denied.statusCode, denied.json().code]).toEqual([403, "BUDDY_NOT_AUTHORIZED"]);
       expect((await f.call("GET", "/api/me/appearance")).json()).toEqual({ appearance: "system" });
@@ -58,7 +58,7 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       expect((await f.grant()).json()).toEqual(granted);
       const all = await list();
       expect(all.authority).toEqual(granted);
-      expect(all.actions).toHaveLength(19);
+      expect(all.actions).toHaveLength(20);
       expect(all.actions.find((action: { name: string }) => action.name === "send_message")).toMatchObject({ kind: "write", parameters: { type: "object" } });
 
       expect((await f.act("fly_away", {})).json().code).toBe("UNKNOWN_ACTION");
@@ -189,6 +189,10 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
     try {
       await f.grant();
       await f.t.sql("INSERT INTO feishu_identities (person_id, open_id) VALUES ($1, 'ou_third')", [THIRD.personId]);
+      // 先按名字找到人员 id（伙伴只知道名字）；本人自己标 self。
+      expect((await f.ok("find_people", { query: "测试丙" })).result).toEqual({ people: [{ personId: THIRD.personId, name: "测试丙", self: false }] });
+      expect((await f.ok("find_people", { query: "测试乙" })).result).toEqual({ people: [{ personId: TEST_MEMBER.personId, name: "测试乙", self: true }] });
+      expect(await f.ok("find_people", { query: "没有这个人" })).toMatchObject({ summary: "人员目录里没有这个名字", result: { people: [] } });
       expect((await f.act("send_message", { toPersonIds: ["nobody"], text: "在吗" })).json().code).toBe("PERSON_NOT_FOUND");
       expect((await f.act("send_message", { toPersonIds: [TEST_MEMBER.personId], text: "在吗" })).json().code).toBe("PERSON_NOT_FOUND");
       const drafted = await f.ok("send_message", { toPersonIds: [THIRD.personId, TEST_CEO.personId], text: "下午的会改到四点" });

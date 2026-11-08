@@ -35,7 +35,7 @@ if (!FormatRegistry.Has("uuid")) FormatRegistry.Set("uuid", (value) => UUID_PATT
 
 type Kind = TBuddyActionSpec["kind"];
 const KIND: Record<BuddyActionName, Kind> = {
-  read_work_home: "read", read_project: "read", open_page: "ui", update_plan: "plan",
+  read_work_home: "read", read_project: "read", find_people: "read", open_page: "ui", update_plan: "plan",
   set_appearance: "write", set_feishu_push: "write", start_sub_session: "write", stop_sub_session: "write", archive_sub_session: "write",
   delete_sub_session: "write", create_project: "write", rename_project: "write", archive_project: "write", link_task_to_project: "write",
   transfer_project: "write", split_cards: "write", set_budget: "write", message_project: "write", send_message: "write",
@@ -43,6 +43,7 @@ const KIND: Record<BuddyActionName, Kind> = {
 const DESCRIPTION: Record<BuddyActionName, string> = {
   read_work_home: "读本人的首页：项目、每个项目的子会话（卡、专题）和状态、等你、本月的 Mission 和 Task。要找项目 id、子会话 id、Task id 时先读它。",
   read_project: "读一个项目的详情（目标、挂着的 Task）和最近的动态。",
+  find_people: "按名字在人员目录里找同事，拿到人员 id（转达、转交要的是 id）。回最多 10 个：personId、name、self（是不是本人自己）。",
   open_page: "让本人的网页打开某一处：home 首页、preferences 偏好，或某个项目、子会话（同「等你」的 open）。只动界面。",
   set_appearance: "切外观：system 跟随系统、light 浅色、dark 深色。",
   set_feishu_push: "打开或关掉飞书推送（feishu: true 开）。",
@@ -178,6 +179,12 @@ const handlers: Handlers = {
     const path = `/api/me/projects/${encodeURIComponent(args.projectId)}`;
     const project = await web(deps, call.personId, "GET", path);
     return { summary: "读了这个项目", result: { ...(project as object), feed: await web(deps, call.personId, "GET", `${path}/feed`) } };
+  },
+  find_people: async (deps, call, args) => {
+    const query = args.query.trim().toLowerCase();
+    const people = [...deps.names()].filter(([personId, name]) => name.toLowerCase().includes(query) || personId.toLowerCase().includes(query)).slice(0, 10)
+      .map(([personId, name]) => ({ personId, name, self: personId === call.personId }));
+    return { summary: people.length ? `找到 ${people.length} 个` : "人员目录里没有这个名字", result: { people } };
   },
   open_page: async (_deps, _call, args) => ({ summary: "打开了", ui: [{ kind: "open", target: args.target }] }),
   set_appearance: async (deps, call, args) => {
