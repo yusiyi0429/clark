@@ -8,9 +8,11 @@ import { ModelChip } from "@/components/home/Conversations";
 import { PlanDecision } from "@/components/home/PlanDecision";
 
 describe("项目主管线、伙伴台页头的「来源 · 模型」", () => {
-  it("写法同子会话；没报模型的不出", () => {
-    expect(chatModelLabel({ provider: "tokenhub", model: "qwen3.8-flash" })).toBe("tokenhub · qwen3.8-flash");
-    expect(renderToStaticMarkup(<ModelChip data={{ model: { provider: "tokenhub", model: "qwen3.8-flash" } }} />)).toContain("tokenhub · qwen3.8-flash");
+  it("写法同子会话：来源写给人看的名字，模型去掉网关前缀、Claude 写成「Opus 5.5」；查不到的原样；没报模型的不出", () => {
+    expect(chatModelLabel({ provider: "tokenhub", model: "wangsu/claude-opus-5-5" })).toBe("TokenHub · Opus 5.5");
+    expect(chatModelLabel({ provider: "tokenhub", model: "wangsu/qwen3.8-flash" })).toBe("TokenHub · qwen3.8-flash");
+    expect(chatModelLabel({ provider: "openrouter", model: "claude-sonnet-4-20250514" })).toBe("openrouter · Sonnet 4");
+    expect(renderToStaticMarkup(<ModelChip data={{ model: { provider: "tokenhub", model: "wangsu/claude-opus-5-5" } }} />)).toContain("TokenHub · Opus 5.5");
     expect(renderToStaticMarkup(<ModelChip data={{ model: null }} />)).toBe("");
   });
 });
