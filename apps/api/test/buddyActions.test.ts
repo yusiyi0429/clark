@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import type { FeishuClient } from "../src/feishu/client.js";
 import { BOARD_NOW, boardFixture, THIRD } from "./boardFixture.js";
@@ -286,7 +286,7 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       expect(await code("sub_session_tell", { letter: "B", text: "先别动测试" })).toBe("LETTER_NOT_FOUND");
       expect(await code("sub_session_tell", { letter: "A", text: "先别动测试" })).toBe("NOT_STARTED");
       // 没开过工的重开 = 登记开工。
-      expect((await act("sub_session_restart", { letter: "C" })).json().summary).toContain("C · 并行卡独立工作区");
+      expect((await act("sub_session_restart", { letter: "C" })).json().summary).toContain("「C · 并行卡独立工作区」");
 
       // 本机：A 开工在跑。同一个会话按序号往下报。
       const machine = await f.local();
@@ -344,28 +344,38 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       expect((await claim()).map((entry) => entry.command)).toEqual([{ type: "permission", requestId: "p-1", decision: { decision: "allow" } }]);
       await status("running");
 
-      // 做完一轮停下：出报告（还没有本机摘要时取交回的说明，这里没交回为 null）。重开 = 往里说「接着做」。
+      // 停了：本机报 stopped，出报告（status 的 idle 本身不出报告）；产出物按 artifact 条目的 key 对上云端收下的那件。
       await status("idle");
-      const reports = (await feed()).filter((item) => item.kind === "sub_session_report");
-      expect(reports).toEqual([{ kind: "sub_session_report", id: expect.any(String), at: expect.any(String), afterSequence: null,
-        sub: { kind: "card", id: a, letter: "A", title: "规划员岗位初版" }, outcome: "round_done", summary: null }]);
-      // 同一次停下重报不再出报告。
-      await status("idle");
-      expect((await feed()).filter((item) => item.kind === "sub_session_report")).toHaveLength(1);
+      expect((await feed()).filter((item) => item.kind === "sub_session_report")).toEqual([]);
+      const artifact = Buffer.from("# 规划员\n职责……");
+      await report("artifact", { artifactId: "a1", title: "规划员岗位", fileName: "planner.md", mimeType: "text/markdown", size: artifact.length,
+        sha256: createHash("sha256").update(artifact).digest("hex"), contentBase64: artifact.toString("base64") });
+      const artifactKey = `${machine.device}:${session}:${seq}`;
+      await report("stopped", { why: "turn_done", summary: "规划员岗位写好了，放在 planner.md。", blocker: null,
+        outputs: [{ key: artifactKey, title: "规划员岗位", fileName: "planner.md" }, { key: `${machine.device}:${session}:999`, title: "截图", fileName: "a.png" }] });
+      const outputId = (await f.t.sql("SELECT id::text FROM local_outputs WHERE client_id=$1", [artifactKey]))[0].id as string;
+      expect((await feed()).filter((item) => item.kind === "sub_session_report")).toEqual([{ kind: "sub_session_report", id: expect.any(String), at: expect.any(String),
+        afterSequence: null, sub: { kind: "card", id: a, letter: "A", title: "规划员岗位初版" }, why: "turn_done", summary: "规划员岗位写好了，放在 planner.md。", blocker: null,
+        outputs: [{ outputId, title: "规划员岗位", fileName: "planner.md" }, { outputId: null, title: "截图", fileName: "a.png" }] }]);
+      // 重开 = 往里说「接着做」；再停住一次是第二条报告。
       await act("sub_session_restart", { letter: "A" });
       expect((await claim()).map((entry) => entry.command)).toEqual([{ type: "message", text: "接着做" }]);
       await status("running");
-      await status("failed");
-      expect((await feed()).filter((item) => item.kind === "sub_session_report").map((item) => item.outcome)).toEqual(["round_done", "failed"]);
+      await report("stopped", { why: "held", summary: null, blocker: "订阅额度用完，14:00 恢复", outputs: [] });
+      expect((await feed()).filter((item) => item.kind === "sub_session_report").map((item) => [item.why, item.blocker])).toEqual([["turn_done", null],
+        ["held", "订阅额度用完，14:00 恢复"]]);
       // 报告替本人给项目主管线发了一句，它回了一小轮（项目对话里）。
       const said = async () => (await f.t.sql(`SELECT m.content FROM conversation_messages m JOIN conversations c ON c.id=m.conversation_id
         WHERE c.scope=$1 AND m.role='user' ORDER BY m.sequence`, [`project:${project}`])).map((row) => row.content as string);
-      for (let i = 0; i < 40 && (await said()).length < 2; i++) await new Promise((resolve) => setTimeout(resolve, 50));
-      expect((await said())[0]).toMatch(/^【子会话回报】A · 规划员岗位初版：做完一轮停下了。\n请用一两句话告诉本人/);
-      // 停下按字母走 stop_sub_session（这时没在跑）。
-      expect(await code("sub_session_stop", { letter: "A" })).toBe("NOT_RUNNING");
+      for (let i = 0; i < 60 && (await said()).length < 2; i++) await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(await said()).toEqual(["【子会话回报】A · 规划员岗位初版：做完一轮停下了。\n它最后说：规划员岗位写好了，放在 planner.md。\n这一轮交了：规划员岗位、截图\n"
+        + "请用一两句话告诉本人这意味着什么、下一步怎么办；要本人拿主意时讲清选项，只问一个问题。",
+      "【子会话回报】A · 规划员岗位初版：停着等（订阅额度用完，14:00 恢复）。\n请用一两句话告诉本人这意味着什么、下一步怎么办；要本人拿主意时讲清选项，只问一个问题。"]);
+      // 停下按字母走 stop_sub_session：登记「请这台电脑停掉」。
+      expect((await act("sub_session_stop", { letter: "A" })).json().summary).toBe("已请那台电脑停掉「A · 规划员岗位初版」（本人电脑上开着天枢网页时马上停）");
+      expect((await f.call("POST", "/api/me/session-stops/claim", { deviceId: machine.device })).json().stops).toEqual([expect.objectContaining({ subSessionId: a, sessionId: session })]);
       // 不在项目里的卡停了不报。
-      await machine.send({ kind: "card", cardId: loose }, [running("不在项目里的卡"), ["status", { status: "idle", title: "x", agent: "claude-code", modelLabel: "m" }]]);
+      await machine.send({ kind: "card", cardId: loose }, [running("不在项目里的卡"), ["stopped", { why: "turn_done", summary: null, blocker: null, outputs: [] }]]);
       expect(await f.t.sql("SELECT 1 FROM sub_session_reports WHERE subject_id=$1", [loose])).toEqual([]);
     } finally { await f.close(); }
   });

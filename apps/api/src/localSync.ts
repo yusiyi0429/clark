@@ -14,8 +14,7 @@ import type { CardPlanTask } from "./taskCards.js";
 import { ownProject } from "./projects.js";
 import { closeStartsFor } from "./sessionStarts.js";
 import { latestSuccessor } from "./taskContinuity.js";
-import { recordSubSessionStatus } from "./subSessionReports.js";
-import type { RunAsk } from "./localDevices.js";
+import { recordStopReport, recordSubSessionStatus } from "./subSessionReports.js";
 
 /**
  * 本机程序单向上报的接收端（POST /api/local-runner/sync，载荷是本机程序契约 localRunner.ts 的 LocalSyncBatchRequest）。
@@ -29,7 +28,7 @@ export class SyncReject extends Error {
 
 type Owner = { personId: string; deviceId: string };
 type RunRow = { id: string; owner_id: string; kind: "card" | "topic" | "plan" | "verify"; task_id: string | null; topic_id: string | null; plan_task_id: string | null;
-  project_id: string | null; device_id: string; state: string; ask: RunAsk | null;
+  project_id: string | null; device_id: string;
   state_seq: string; plan_seq: string;
   plan: TLocalPlanEntry[]; timeline: TLocalRunActivity[]; last_activity: TLocalRunActivity | null; running_at: Date | null };
 type CardRow = { id: string; owner_id: string; status: string; executor: string | null; done_definition: string | null };
@@ -218,9 +217,8 @@ async function applyType(client: PoolClient, deps: Pick<SyncDeps, "storageDir" |
         ask ? JSON.stringify(ask) : null, permissionMode ?? null]);
       await note(client, run, at, hold ? "额度用完，等恢复" : status === "starting" ? `${STATUS_TEXT.starting}（${modelLabel}）`
         : status === "idle" && !question ? "这一轮做完了" : STATUS_TEXT[status], MILESTONE_STATES.has(status));
-      // 停了、要介入：报进项目对话（18 节第 10 条）。摘要等本机在 status 上带（还没带时取交回的说明、专题这一版改了什么）。
-      return recordSubSessionStatus(client.query.bind(client), owner.personId, run,
-        { status, question, permission, summary: (item.data as { summary?: string }).summary }, at);
+      // 要介入：在项目对话里出决定卡（18 节第 10 条）；停了另有 stopped 条目。
+      return recordSubSessionStatus(client.query.bind(client), owner.personId, run, { status, question, permission }, at);
     }
     case "plan": {
       if (seq <= Number(run.plan_seq)) return {};
@@ -339,6 +337,12 @@ async function applyType(client: PoolClient, deps: Pick<SyncDeps, "storageDir" |
         started_at=EXCLUDED.started_at,finished_at=EXCLUDED.finished_at,stoppable=EXCLUDED.stoppable,seq=EXCLUDED.seq,updated_at=EXCLUDED.updated_at
         WHERE local_background_items.seq < EXCLUDED.seq`, [run.id, id, owner.personId, kind, title, state, startedAt, finishedAt, stoppable, seq, deps.now()]);
       return {};
+    }
+    case "stopped": {
+      // 子会话停了（18 节第 10 条）：卡和专题在项目里的记一条报告，提交以后由路由补位置、触发项目主管线一小轮。规划员、验收员不报。
+      if (run.kind !== "card" && run.kind !== "topic") return {};
+      await note(client, run, at, item.data.blocker ? `停了：${item.data.blocker}` : "停了", false);
+      return recordStopReport(client.query.bind(client), owner.personId, run, item.data, at);
     }
     case "merge": {
       // 卡验收过以后合回到哪了（第 4.5 节）：记在验的那次交回上。同一次交回报了几条时以本机序号最大的为准（同一毫秒里可能报两条，不比时间）。

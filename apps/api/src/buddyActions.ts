@@ -406,7 +406,7 @@ const handlers: Handlers = {
   sub_session_stop: async (deps, call, args) => {
     const sub = await lettered(deps, call, args.letter);
     const outcome = await handlers.stop_sub_session(deps, call, { kind: sub.kind, id: sub.id });
-    return { ...outcome, summary: outcome.summary.replace(`「${sub.title}」`, sub.label), result: { letter: args.letter, kind: sub.kind, id: sub.id, title: sub.title } };
+    return { ...outcome, summary: outcome.summary.replace(`「${sub.title}」`, `「${sub.label}」`), result: { letter: args.letter, kind: sub.kind, id: sub.id, title: sub.title } };
   },
   sub_session_restart: async (deps, call, args) => {
     const sub = await lettered(deps, call, args.letter);
@@ -414,7 +414,7 @@ const handlers: Handlers = {
     const result = { letter: args.letter, kind: sub.kind, id: sub.id, title: sub.title };
     if (!run) {
       const outcome = await handlers.start_sub_session(deps, call, { kind: sub.kind, id: sub.id });
-      return { ...outcome, summary: outcome.summary.replace(`「${sub.title}」`, sub.label), result: { ...result, start: true } };
+      return { ...outcome, summary: outcome.summary.replace(`「${sub.title}」`, `「${sub.label}」`), result: { ...result, start: true } };
     }
     if (["queued", "starting", "running"].includes(run.state)) throw new BuddyError(409, "ALREADY_RUNNING", `${sub.label} 正在跑，不用重开`);
     if (run.state === "waiting_permission") throw new BuddyError(409, "WAITING_PERMISSION", `${sub.label} 在等批准，先批准或拒绝`);
