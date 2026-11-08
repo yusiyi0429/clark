@@ -52,7 +52,7 @@ import { createCompanyMap, defaultFocus, scopeLabel } from "../companyMap.js";
 import { acceptIssueDraft, afterIssueDraftCreated, createIssueSuggest, declineIssueDraft, getIssueDraftView, issueSuggestBlock, issueSuggestContext, withChatIssueCards } from "../issueDrafts.js";
 import { buildSceneAnchor } from "../sceneAnchor.js";
 import type { ConversationAnchor } from "../conversationAnchor.js";
-import { ChatServiceError, type ChatTarget } from "../chatService.js";
+import { ChatServiceError, FORWARDED_HEADER, type ChatTarget } from "../chatService.js";
 import { boardTask, CardError, planTaskOpener, type CardPlanTask } from "../taskCards.js";
 import { ensureProjectPipeline, pipelineViewer, projectPipelineConversation } from "../taskPipelines.js";
 import { CARD_PROJECT, ownProject, PROJECT_SCOPE_PREFIX, projectReader, type ProjectRow } from "../projects.js";
@@ -229,7 +229,7 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
         // 项目对话：进这个项目那一段（没有就建），飞书、微信只进总管线。
         if (req.params.scope !== "global") {
           return pipelineTarget(person, req.params.scope, String(req.id), true)
-            .then((target) => chat.relay(pipelineViewer(owner), String(req.id), req.body, reply, undefined, target!))
+            .then((target) => chat.relay(pipelineViewer(owner), String(req.id), req.body, reply, undefined, target!, req.headers[FORWARDED_HEADER] === "buddy"))
             .catch((error) => chatFailed(reply, error));
         }
         const via = req.headers[VIA_HEADER];

@@ -206,7 +206,9 @@ function writeLater(deps: TransferDeps, id: string, previous: THandoverNote | nu
     // 模型写不出来时，原来说明里拼的四段以外的段留着。
     const note = await composeNote(deps, { ...row, note: previous }, row.project_name);
     if (writing.get(id) === turn)
-      await deps.q("UPDATE project_transfers SET note=$2::jsonb WHERE id=$1 AND status='preparing' AND note IS NULL", [id, JSON.stringify(note)]);
+      await deps.q(`UPDATE project_transfers SET note=$2::jsonb,status=CASE WHEN send_when_ready AND $3 THEN 'sent' ELSE status END,
+        decided_at=CASE WHEN send_when_ready AND $3 THEN $4::timestamptz ELSE decided_at END WHERE id=$1 AND status='preparing' AND note IS NULL`,
+      [id, JSON.stringify(note), !secretFindings(note).length, deps.now]);
   })().catch(() => undefined).finally(() => { if (writing.get(id) === turn) writing.delete(id); });
 }
 

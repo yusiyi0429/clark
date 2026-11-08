@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { TEST_CEO, TEST_MEMBER, createTestApp } from "./helpers.js";
 import type { ConversationRuntime } from "../src/conversations.js";
 import { homeTurn } from "../src/homeTurn.js";
-import { CHAT_ROUTE } from "../src/chatService.js";
+import { CHAT_ROUTE, historyMessages } from "../src/chatService.js";
 import { THIRD, boardFixture } from "./boardFixture.js";
 
 const CHAT_TOKEN = "chat-token-test";
@@ -118,12 +118,16 @@ function countingRuntime(): ConversationRuntime & { calls: number } {
   return runtime;
 }
 
-/** 界面收到的事件（只取 data 行）。 */
-function events(payload: string): Record<string, unknown>[] {
+/** 界面收到的所有事件（只取 data 行）。 */
+function allEvents(payload: string): Record<string, unknown>[] {
   return payload.split("\n\n").flatMap((block) => {
     const line = block.split("\n").find((candidate) => candidate.startsWith("data:"));
     return line ? [JSON.parse(line.slice(5)) as Record<string, unknown>] : [];
   });
+}
+/** 界面收到的事件，去掉每轮最前面的两个回执（17.4，单独测）。 */
+function events(payload: string): Record<string, unknown>[] {
+  return allEvents(payload).filter((event) => event.type !== "receipt");
 }
 
 function multipart(filename: string, content: string): { headers: Record<string, string>; payload: Buffer } {
@@ -186,7 +190,10 @@ describe("首页对话走独立 Chat（CHAT_SERVICE_URL）", () => {
       expect(received[1]).not.toHaveProperty("delta");
       expect(received[2]).toMatchObject({ phase: "started", name: "read_world_object" });
       expect(received.filter((event) => event.type === "tool").some((event) => "label" in event)).toBe(false);
-      expect(received.every((event, index) => event.runId === RUN && event.scope === "global" && event.sequence === index + 1)).toBe(true);
+      // 回执（17.4）排在最前：天枢收下了、伙伴读到了；序号接着排。
+      expect(allEvents(response.payload).slice(0, 2)).toEqual([{ type: "receipt", state: "delivered", runId: RUN, scope: "global", sequence: 1 },
+        { type: "receipt", state: "read", runId: RUN, scope: "global", sequence: 2 }]);
+      expect(received.every((event, index) => event.runId === RUN && event.scope === "global" && event.sequence === index + 3)).toBe(true);
       expect(received.some((event) => "conversationId" in event)).toBe(false);
 
       // 每个请求都带内部凭据和本人身份，浏览器的 Cookie 不转给 Chat。
@@ -861,6 +868,57 @@ describe("项目对话走 Chat（project:<projectId>，新首页第 16 节）", 
   const history = (f: Awaited<ReturnType<typeof boardFixture>>, scope: string) =>
     f.t.app.inject({ method: "GET", url: `/api/conversations/${encodeURIComponent(scope)}/messages`, headers: { cookie: f.member } });
 
+  it("伙伴把话转给项目对话（17.4 message_project）：立即回、不等项目对话回完；那句带「伙伴转来」开头进项目那段；项目对话正在回上一轮时不打断，隔几秒再发；读回历史标 via=buddy", async () => {
+    const upstreams: ServerResponse[] = [];
+    let busy = false;
+    const chat = await fakeChat({ conversations: ["main-segment"], turn: (res) => {
+      if (busy) {
+        res.writeHead(409, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: { code: "TURN_RUNNING", message: "本会话已有运行中的轮次" } }));
+        return;
+      }
+      busy = true;
+      upstreams.push(res);
+      sse(res, [{ type: "turn_started" }, { type: "message", delta: "收到" }], false);
+    } });
+    const f = await pipelineFixture(chat);
+    const finish = () => {
+      upstreams.at(-1)!.end(`data: ${JSON.stringify({ conversationId: "chat-conversation", runId: RUN, scope: "global", sequence: 9, type: "done", status: "completed" })}\n\n`);
+      busy = false;
+    };
+    try {
+      const projectId = await newProject(f);
+      const act = (args: unknown) => f.t.app.inject({ method: "POST", url: "/internal/me/buddy-actions/message_project",
+        headers: { authorization: `Bearer ${CHAT_TOKEN}`, "x-owner-id": TEST_MEMBER.personId }, payload: { args } });
+      expect((await act({ projectId, text: "录屏先停" })).json().code).toBe("BUDDY_NOT_AUTHORIZED");
+      await f.call("PUT", "/api/me/buddy-authority", { authority: "full" });
+
+      // 项目对话还在回（流没结束）时动作已经回了。
+      const forwarded = await act({ projectId, text: "录屏先停，先把打分做完" });
+      expect(forwarded.json()).toMatchObject({ summary: expect.stringContaining("项目「对话质量」"), undoable: false, auditId: expect.any(String) });
+      await vi.waitFor(() => expect(chat.turns()).toHaveLength(1));
+      const pipeline = (await open(f, projectId)).json().conversationId as string;
+      expect(chat.turns()[0].url).toBe(`/conversations/${pipeline}/turns`);
+      expect(JSON.parse(chat.turns()[0].body).message).toBe("【伙伴转来】录屏先停，先把打分做完");
+
+      // 再转一句：项目对话还在回，不打断（不请 Chat 停），等它回完再发。
+      await act({ projectId, text: "再加一条" });
+      await vi.waitFor(() => expect(chat.turns()).toHaveLength(2));
+      expect(chat.requests.some((request) => request.url.endsWith("/cancel"))).toBe(false);
+      finish();
+      await vi.waitFor(() => expect(chat.turns()).toHaveLength(3), { timeout: 10_000 });
+      expect(JSON.parse(chat.turns()[2].body).message).toBe("【伙伴转来】再加一条");
+      finish();
+
+      expect((await act({ projectId: randomUUID(), text: "别人的" })).statusCode).toBe(404);
+      expect(historyMessages([{ role: "user", text: "【伙伴转来】录屏先停", runId: RUN }, { role: "assistant", text: "好", runId: RUN }],
+        [{ runId: RUN, status: "completed" }])[0]).toMatchObject({ role: "user", content: "录屏先停", via: "buddy" });
+    } finally {
+      await f.close();
+      await chat.close();
+    }
+  }, 40_000);
+
   it("第一次打开在 Chat 开一段（201），再打开还是这一段（200）；两个同时打开也只开一段", async () => {
     const chat = await fakeChat({ conversations: ["main-segment"] });
     const f = await pipelineFixture(chat);
@@ -1093,5 +1151,90 @@ describe("项目对话走 Chat（project:<projectId>，新首页第 16 节）", 
       await f.close();
       await chat.close();
     }
+  }, 30_000);
+});
+
+describe("伙伴代本人做事走 Chat（17.4）", () => {
+  it("动作做完往这一轮的流里插界面效果、计划清单、卡，写动作做成了替伙伴打勾；读回历史时接上清单和卡；回答到一半再发一句：停掉上一轮、清单收起，新一轮照常", async () => {
+    const upstreams: ServerResponse[] = [];
+    const frame = (event: Record<string, unknown>) => `data: ${JSON.stringify({ conversationId: "chat-conversation", runId: RUN, scope: "global", sequence: 9, ...event })}\n\n`;
+    let busy = false;
+    const chat = await fakeChat({
+      conversations: [randomUUID()],
+      pages: { "0": { messages: [{ role: "user", text: "换成深色", runId: RUN }, { role: "assistant", text: "换好了", runId: RUN }],
+        runs: [{ runId: RUN, status: "completed" }], nextCursor: null } },
+      turn: (res) => {
+        // 上一轮还没结束时 Chat 回 TURN_RUNNING；停掉以后才收下。
+        if (busy) {
+          res.writeHead(409, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: { code: "TURN_RUNNING", message: "本会话已有运行中的轮次" } }));
+          return;
+        }
+        busy = true;
+        upstreams.push(res);
+        sse(res, [{ type: "turn_started" }, { type: "message", delta: "我来" }], false);
+      },
+      cancel: (res, request) => {
+        upstreams.at(-1)!.end(frame({ type: "done", status: "aborted" }));
+        busy = false;
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ runId: request.url.split("/")[2], status: "aborted" }));
+      },
+    });
+    await withChat(chat, countingRuntime(), async (t) => {
+      const cookie = await t.memberCookie();
+      await t.app.listen({ port: 0, host: "127.0.0.1" });
+      const base = `http://127.0.0.1:${(t.app.server.address() as AddressInfo).port}`;
+      const ask = async (message: string) => {
+        const response = await fetch(`${base}/api/conversations/global/messages`, { method: "POST",
+          headers: { cookie, origin: t.publicOrigin, accept: "text/event-stream", "content-type": "application/json" }, body: JSON.stringify({ message }) });
+        const reader = response.body!.getReader();
+        let text = "";
+        const until = async (needle: string) => { while (!text.includes(needle)) text += new TextDecoder().decode((await reader.read()).value); };
+        const rest = async () => { for (;;) { const { done, value } = await reader.read(); if (done) return text; text += new TextDecoder().decode(value); } };
+        return { until, rest };
+      };
+      const act = (name: string, args: unknown) => t.app.inject({ method: "POST", url: `/internal/me/buddy-actions/${name}`,
+        headers: { authorization: `Bearer ${CHAT_TOKEN}`, "x-owner-id": TEST_MEMBER.personId }, payload: { args, runId: RUN, conversationId: "chat-conversation" } });
+      expect((await t.app.inject({ method: "PUT", url: "/api/me/buddy-authority", headers: { cookie, origin: t.publicOrigin }, payload: { authority: "full" } })).statusCode).toBe(200);
+
+      const first = await ask("换成深色，再跟测试甲说一声");
+      await first.until("我来");
+      const entries = [{ content: "换外观", status: "in_progress" }, { content: "转达测试甲", status: "pending" }];
+      expect((await act("update_plan", { entries })).json()).toMatchObject({ summary: "清单更新了", auditId: null, undoable: false });
+      expect((await act("set_appearance", { appearance: "dark" })).json()).toMatchObject({ undoable: true });
+      const draftedRes = await act("send_message", { toPersonIds: [TEST_CEO.personId], text: "下午的会改到四点" });
+      expect([draftedRes.statusCode, draftedRes.json().code]).toEqual([200, undefined]);
+      const drafted = draftedRes.json();
+      upstreams[0].end(frame({ type: "done", status: "completed" }));
+      busy = false;
+      const received = events(await first.rest());
+      const draftId = drafted.result.draftId as string;
+      expect(received.filter((event) => ["plan", "ui", "card"].includes(event.type as string)).map(({ type, plan, ui, card }) => ({ type, plan, ui, card }))).toEqual([
+        { type: "plan", plan: { entries, collapsed: false }, ui: undefined, card: undefined },
+        { type: "ui", plan: undefined, ui: { kind: "appearance", appearance: "dark" }, card: undefined },
+        // 换外观做成了而伙伴没打勾：天枢替它把进行中的那一步标成完成。
+        { type: "plan", plan: { entries: [{ ...entries[0], status: "completed" }, entries[1]], collapsed: false }, ui: undefined, card: undefined },
+        { type: "card", plan: undefined, ui: undefined, card: { kind: "buddy_message", draftId } },
+      ]);
+      expect(received.every((event) => event.runId === RUN && event.scope === "global")).toBe(true);
+
+      // 读回历史：这一轮的回答带上最后那张清单和转达卡。
+      const history = (await t.app.inject({ method: "GET", url: "/api/conversations/global/messages", headers: { cookie } })).json();
+      expect(history.messages.find((message: { role: string }) => message.role === "assistant")).toMatchObject({
+        plan: { entries: [{ ...entries[0], status: "completed" }, entries[1]], collapsed: false }, cards: [{ kind: "buddy_message", draftId }] });
+
+      // 回答到一半再发一句：上一轮停掉（以「已停止」结束，清单收起），新一句开新的一轮、回执照给。
+      const second = await ask("算了，先别发");
+      await second.until("我来");
+      const third = await ask("就这样");
+      const thirdText = await (async () => { await third.until("我来"); upstreams.at(-1)!.end(frame({ type: "done", status: "completed" })); return third.rest(); })();
+      const stopped = events(await second.rest());
+      expect(stopped.filter((event) => event.type === "done")).toEqual([expect.objectContaining({ status: "aborted" })]);
+      expect(chat.requests.filter((request) => request.url === `/turns/${RUN}/cancel`)).toHaveLength(1);
+      expect(allEvents(thirdText).slice(0, 2).map((event) => event.state)).toEqual(["delivered", "read"]);
+      expect(events(thirdText).at(-1)).toMatchObject({ type: "done", status: "completed" });
+      expect((await t.sql("SELECT collapsed FROM buddy_plans WHERE run_id=$1", [RUN]))[0]).toEqual({ collapsed: true });
+    });
   }, 30_000);
 });

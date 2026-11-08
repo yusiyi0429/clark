@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import { BlockList } from "node:net";
 import { Type, type TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import type { FastifyBaseLogger, FastifyInstance, FastifyReply, FastifyRequest, RawReplyDefaultExpression, RawRequestDefaultExpression, RawServerDefault } from "fastify";
@@ -221,21 +222,50 @@ export function createRequireCEO(requirePerson: Guard, fail: RouteContext["fail"
   };
 }
 
-/** 服务身份边界：独立 bearer token，与 CEO session 不可互换。 */
-export function createRequireServiceToken(fail: RouteContext["fail"]) {
+/**
+ * 服务身份边界：独立 bearer token，与 CEO session 不可互换。
+ * Chat 的凭据（chat.token，INTERNAL_CHAT_TOKEN）另认换下来的旧凭据（previous），配了来源地址（allowlist，IP 或 CIDR）时只认那些地址来的。
+ */
+export function createRequireServiceToken(fail: RouteContext["fail"], chat?: { token: string; previous: string[]; allowlist: string[] }) {
+  const allowed = chat?.allowlist.length ? callerList(chat.allowlist) : null;
+  const same = (token: string, expected: string) => {
+    const a = Buffer.from(token);
+    const b = Buffer.from(expected);
+    return a.length === b.length && timingSafeEqual(a, b);
+  };
   return function requireServiceToken(expected: string) {
+    const isChat = chat !== undefined && expected === chat.token;
+    const accepted = isChat ? [expected, ...chat.previous] : [expected];
     return (req: FastifyRequest, reply: FastifyReply, done: () => void): void => {
       const header = req.headers.authorization ?? "";
       const token = header.startsWith("Bearer ") ? header.slice(7) : "";
-      const a = Buffer.from(token);
-      const b = Buffer.from(expected);
-      if (a.length !== b.length || !timingSafeEqual(a, b)) {
+      if (!accepted.some((candidate) => same(token, candidate))) {
         fail(reply, 401, "UNAUTHORIZED", "无效服务凭据");
+        return;
+      }
+      if (isChat && allowed && !allowed.check(req.ip, req.ip.includes(":") ? "ipv6" : "ipv4")) {
+        fail(reply, 403, "CALLER_NOT_ALLOWED", "调用方地址不在允许范围内");
         return;
       }
       done();
     };
   };
+}
+
+/** INTERNAL_CALLER_ALLOWLIST：IP（1.2.3.4、::1）或 CIDR（172.16.0.0/12）；IPv4 映射成的 IPv6 地址（::ffff:1.2.3.4）也认。 */
+function callerList(entries: string[]): BlockList {
+  const list = new BlockList();
+  for (const entry of entries) {
+    const [address, prefix] = entry.split("/");
+    const type = address.includes(":") ? "ipv6" : "ipv4";
+    if (prefix) list.addSubnet(address, Number(prefix), type);
+    else list.addAddress(address, type);
+    if (type === "ipv4") {
+      if (prefix) list.addSubnet(`::ffff:${address}`, 96 + Number(prefix), "ipv6");
+      else list.addAddress(`::ffff:${address}`, "ipv6");
+    }
+  }
+  return list;
 }
 
 export function createInvalidInput(fail: RouteContext["fail"]) {
