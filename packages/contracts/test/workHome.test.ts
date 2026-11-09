@@ -4,7 +4,7 @@ import { Value } from "@sinclair/typebox/value";
 import {
   AcceptCardDraftsRequest, BackgroundQuery, BackgroundResponse, ClaimSessionStartsResponse, ConversationScope, CreateProjectRequest, ProjectDetailResponse,
   CardPlanBriefResponse, CardSplitRequestView, CreateProjectTransferRequest, ProjectBoardResponse, ProjectFeedResponse, ProjectPipelineResponse, ProjectTransfer, RouteResponse, UpdateProjectRequest, UpdateProjectTransferRequest, WorkHomeResponse,
-  AutoRelayDecisionRequest, BuddyActionParams, SetGoalDueDateRequest, ClaimSessionCommandsResponse, PROJECT_ONLY_ACTIONS, SessionCommandDoneRequest, SUB_SESSION_REPORT_PREFIX,
+  AutoRelayDecisionRequest, BuddyActionParams, MarkWorkSeenRequest, SetGoalDueDateRequest, ClaimSessionCommandsResponse, PROJECT_ONLY_ACTIONS, SessionCommandDoneRequest, SUB_SESSION_REPORT_PREFIX,
 } from "../src/index.js";
 import { buildOpenApiDocument } from "../src/openapi.js";
 
@@ -16,7 +16,7 @@ beforeAll(() => {
   FormatRegistry.Set("date-time", (v) => !Number.isNaN(Date.parse(v)) && /T/.test(v));
 });
 
-const sub = { id: uuid, kind: "card", letter: "B", title: "修登录页", state: "waiting", waiting: "approval", queueReason: null, role: null, sessionId: uuid, deviceId: uuid,
+const sub = { id: uuid, kind: "card", letter: "B", title: "修登录页", state: "waiting", unseen: false, waiting: "approval", queueReason: null, role: null, sessionId: uuid, deviceId: uuid,
   autoStart: false, updatedAt: at, merge: null, holdUntil: null };
 const resources = { devices: [], running: 0, cap: null, cost: { today: { inputTokens: 0, outputTokens: 0, costUsd: null, costCny: null },
   month: { inputTokens: 0, outputTokens: 0, costUsd: null, costCny: null } }, quota: [{ deviceId: uuid, deviceName: "我的电脑", id: "claude", name: "Claude",
@@ -28,7 +28,7 @@ describe("新首页契约", () => {
       criteriaMet: 1, criteriaTotal: 3, completedAt: null, responsible: null };
     const project = { projectId: uuid, name: "天枢新首页", goals: [goal], budget: null, lastActivityAt: at,
       summary: { running: 0, waiting: 1, queued: 0, done: 0, doneToday: 0, needsYou: 1 }, pipeline: { conversationId: null, scope: `project:${uuid}` }, planning: false,
-      subSessions: [sub], items: [{ id: uuid, title: "自己写的方案", status: "in_progress", dueDate: "2026-11-12", awaitingAcceptance: false, updatedAt: at }], transfer: null };
+      subSessions: [sub], items: [{ id: uuid, title: "自己写的方案", status: "in_progress", dueDate: "2026-11-12", awaitingAcceptance: false, updatedAt: at }], transfer: null, unseen: true };
     const home = {
       period: "2026-11",
       projects: [project, { ...project, name: "Chat 服务", goals: [], subSessions: [], items: [], budget: { state: "warning", percent: 82, taskId: "T-2" } }],
@@ -207,6 +207,10 @@ describe("新首页契约", () => {
     expect(Value.Check(SetGoalDueDateRequest, { dueDate: "11/18" })).toBe(false);
     expect(Value.Check(BuddyActionParams.set_task_due_date, { projectId: uuid, taskId: "T-1", dueDate: "2026-11-30" })).toBe(true);
     expect(paths["/api/me/projects/{projectId}/goals/{taskId}/due-date"]).toBeDefined();
+    // 蓝点（17.2 第 25 条）：打开子会话或项目对话记看过。
+    expect(Value.Check(MarkWorkSeenRequest, { kind: "sub", id: uuid })).toBe(true);
+    expect(Value.Check(MarkWorkSeenRequest, { kind: "card", id: uuid })).toBe(false);
+    expect(paths["/api/me/work-seen"]).toBeDefined();
     expect(paths["/api/me/session-commands/{id}/done"]).toBeDefined();
   });
 });

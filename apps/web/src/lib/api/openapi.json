@@ -20971,6 +20971,57 @@
         }
       }
     },
+    "/api/me/work-seen": {
+      "post": {
+        "operationId": "markWorkSeen",
+        "summary": "本人打开了一个子会话或项目对话：记下看过的时间，左栏蓝点（unseen）消失；幂等（17.2 第 25 条）",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarkWorkSeenRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "记下了"
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/session-commands/claim": {
       "post": {
         "operationId": "claimSessionCommands",
@@ -110579,6 +110630,7 @@
           "letter",
           "title",
           "state",
+          "unseen",
           "waiting",
           "queueReason",
           "role",
@@ -110643,6 +110695,9 @@
                 "type": "string"
               }
             ]
+          },
+          "unseen": {
+            "type": "boolean"
           },
           "waiting": {
             "anyOf": [
@@ -111035,7 +111090,8 @@
           "planning",
           "subSessions",
           "items",
-          "transfer"
+          "transfer",
+          "unseen"
         ],
         "properties": {
           "projectId": {
@@ -111266,6 +111322,7 @@
                 "letter",
                 "title",
                 "state",
+                "unseen",
                 "waiting",
                 "queueReason",
                 "role",
@@ -111330,6 +111387,9 @@
                       "type": "string"
                     }
                   ]
+                },
+                "unseen": {
+                  "type": "boolean"
                 },
                 "waiting": {
                   "anyOf": [
@@ -112044,6 +112104,9 @@
                 "type": "null"
               }
             ]
+          },
+          "unseen": {
+            "type": "boolean"
           }
         }
       },
@@ -112778,7 +112841,8 @@
                 "planning",
                 "subSessions",
                 "items",
-                "transfer"
+                "transfer",
+                "unseen"
               ],
               "properties": {
                 "projectId": {
@@ -113009,6 +113073,7 @@
                       "letter",
                       "title",
                       "state",
+                      "unseen",
                       "waiting",
                       "queueReason",
                       "role",
@@ -113073,6 +113138,9 @@
                             "type": "string"
                           }
                         ]
+                      },
+                      "unseen": {
+                        "type": "boolean"
                       },
                       "waiting": {
                         "anyOf": [
@@ -113787,6 +113855,9 @@
                       "type": "null"
                     }
                   ]
+                },
+                "unseen": {
+                  "type": "boolean"
                 }
               }
             }
@@ -113906,6 +113977,7 @@
                     "letter",
                     "title",
                     "state",
+                    "unseen",
                     "waiting",
                     "queueReason",
                     "role",
@@ -113970,6 +114042,9 @@
                           "type": "string"
                         }
                       ]
+                    },
+                    "unseen": {
+                      "type": "boolean"
                     },
                     "waiting": {
                       "anyOf": [
@@ -123888,6 +123963,32 @@
           },
           "message": {
             "maxLength": 500,
+            "type": "string"
+          }
+        }
+      },
+      "MarkWorkSeenRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "id"
+        ],
+        "properties": {
+          "kind": {
+            "anyOf": [
+              {
+                "const": "sub",
+                "type": "string"
+              },
+              {
+                "const": "project",
+                "type": "string"
+              }
+            ]
+          },
+          "id": {
+            "format": "uuid",
             "type": "string"
           }
         }

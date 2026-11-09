@@ -5100,6 +5100,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/work-seen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 本人打开了一个子会话或项目对话：记下看过的时间，左栏蓝点（unseen）消失；幂等（17.2 第 25 条） */
+        post: operations["markWorkSeen"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/session-commands/claim": {
         parameters: {
             query?: never;
@@ -18275,6 +18292,7 @@ export interface components {
             letter: string | null;
             title: string;
             state: "queued" | "running" | "waiting" | "done" | "failed";
+            unseen: boolean;
             waiting: ("approval" | "question" | "verdict" | "merge") | null;
             queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota") | null;
             role: {
@@ -18369,6 +18387,7 @@ export interface components {
                 letter: string | null;
                 title: string;
                 state: "queued" | "running" | "waiting" | "done" | "failed";
+                unseen: boolean;
                 waiting: ("approval" | "question" | "verdict" | "merge") | null;
                 queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota") | null;
                 role: {
@@ -18463,6 +18482,7 @@ export interface components {
                 } | null;
                 afterSequence: number | null;
             } | null;
+            unseen: boolean;
         };
         HomeMonthTask: {
             taskId: string;
@@ -18601,6 +18621,7 @@ export interface components {
                     letter: string | null;
                     title: string;
                     state: "queued" | "running" | "waiting" | "done" | "failed";
+                    unseen: boolean;
                     waiting: ("approval" | "question" | "verdict" | "merge") | null;
                     queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota") | null;
                     role: {
@@ -18695,6 +18716,7 @@ export interface components {
                     } | null;
                     afterSequence: number | null;
                 } | null;
+                unseen: boolean;
             }[];
             archivedCount: number;
             month: {
@@ -18721,6 +18743,7 @@ export interface components {
                     letter: string | null;
                     title: string;
                     state: "queued" | "running" | "waiting" | "done" | "failed";
+                    unseen: boolean;
                     waiting: ("approval" | "question" | "verdict" | "merge") | null;
                     queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota") | null;
                     role: {
@@ -20303,6 +20326,11 @@ export interface components {
             deviceId: string;
             result: "done" | "not_running" | "expired" | "failed";
             message?: string;
+        };
+        MarkWorkSeenRequest: {
+            kind: "sub" | "project";
+            /** Format: uuid */
+            id: string;
         };
         BuddyAuthority: {
             authority: "none" | "full";
@@ -38086,6 +38114,55 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    markWorkSeen: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkWorkSeenRequest"];
+            };
+        };
+        responses: {
+            /** @description 记下了 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
