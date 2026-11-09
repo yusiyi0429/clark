@@ -181,20 +181,28 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .taskName { overflow: hidden; font-size: var(--text-base); font-weight: 600; line-height: var(--lh-row); text-overflow: ellipsis; white-space: nowrap; }
 .taskSub { overflow: hidden; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
 .taskNode[data-done] .taskName { color: var(--ink-faint); }
-/* 项目行：名字和「在后台工作」的灰点同一行，点挂在这一行最右边、和名字垂直居中；名字照常截断，副标题不动。 */
+/* 项目行：名字放不下时右端淡出；行尾的状态点（34 条）和子会话行的点在同一列、一样大。 */
 .projectText { flex: 1; }
-.projectTitle { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
-.projectTitle .taskName { flex: 1; min-width: 0; text-overflow: clip; -webkit-mask-image: var(--fade-end); mask-image: var(--fade-end); }
-.workingDot { display: inline-grid; flex: none; place-items: center; }
+.projectText .taskName { text-overflow: clip; -webkit-mask-image: var(--fade-end); mask-image: var(--fade-end); }
 /* 呼吸：透明度 1 ↔ 0.3，一个来回 1.4 秒，缓入缓出；减少动态效果时只是一颗不闪的灰点。 */
-.workingDot i { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-faint); animation: workingBreath 1.4s ease-in-out infinite; }
 @keyframes workingBreath { 50% { opacity: .3; } }
-@media (prefers-reduced-motion: reduce) { .workingDot i { animation: none; } }
 .srOnly { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-/* 信息按钮：移到这一行或行里有焦点时 140ms 淡入；正在看详情时一直显示、选中底。 */
-.info { display: inline-flex; flex: none; margin-right: var(--space-2); opacity: 0; transition: opacity var(--dur-snap) var(--ease-swift); }
+/* 信息按钮：移到这一行或行里有焦点时 140ms 淡入，盖在行尾的点上；正在看详情时一直显示、选中底。 */
+.info { position: absolute; top: 50%; right: var(--space-1); display: inline-flex; opacity: 0; transform: translateY(-50%); transition: opacity var(--dur-snap) var(--ease-swift); }
 .taskRow:hover .info, .taskRow:focus-within .info, .info[data-on] { opacity: 1; }
 .info[data-on] button { background: var(--default-soft-hover); color: var(--ink); }
+/* 有「…」菜单时信息按钮让到它左边。 */
+.info[data-menu] { right: calc(var(--space-1) + var(--row-28)); }
+/* 行尾「…」（35 条）：移到这一行、行里有焦点、菜单开着时出现，盖在行尾的点上（点藏起来）；没有悬停的设备长按整行打开。 */
+.subItem { position: relative; }
+.rowMore { position: absolute; top: 50%; right: var(--space-1); display: inline-flex; opacity: 0; transform: translateY(-50%); transition: opacity var(--dur-snap) var(--ease-swift); }
+.taskRow:is(:hover, :focus-within) .rowMore, .subItem:is(:hover, :focus-within) .rowMore, .rowMore[data-open] { opacity: 1; }
+.taskRow:is(:hover, :focus-within, :has(> .rowMore[data-open])) .subDot, .subItem:is(:hover, :focus-within, :has(> .rowMore[data-open])) .subDot { visibility: hidden; }
+.rowMoreButton { display: inline-grid; place-items: center; width: var(--row-28); height: var(--row-28); padding: 0; border: 0; border-radius: var(--r-control); background: none; color: var(--ink-muted); cursor: pointer; }
+.rowMoreButton:is(:hover, [data-pressed]), .rowMore[data-open] .rowMoreButton { background: var(--default-soft-hover); color: var(--ink); }
+.rowMoreButton[data-focus-visible] { outline: 2px solid var(--focus); outline-offset: -2px; }
+.menuItem[data-danger] { color: var(--danger); }
+.menuItem[data-failed] { color: var(--ink-muted); }
 
 /* Task 下面一枝：竖线在 x=24（状态位的中线），从 Task 行下沿画到最后一个子行；子行从 x=32 起，图标在 x=40。 */
 .branch { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; margin-left: var(--space-4); padding-left: var(--space-2); box-shadow: inset 1px 0 0 var(--hairline-strong); }
@@ -282,6 +290,9 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 
 @media (hover: none) {
   .stageMore, .info { opacity: 1; }
+  .rowMore { visibility: hidden; pointer-events: none; }
+  .taskRow:is(:hover, :focus-within) .subDot, .subItem:is(:hover, :focus-within) .subDot { visibility: visible; }
+  .info { position: static; flex: none; margin-right: var(--space-2); transform: none; }
 }
 
 /* ---------- 首页（5.4.4）：页头日期 → 等你 → 各 Mission 的 Task → 输入框；区块之间 32，Mission 之间 16 ---------- */

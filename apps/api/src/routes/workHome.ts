@@ -1,6 +1,9 @@
 import { markWorkSeen } from "../workSeen.js";
 import type { FastifyReply } from "fastify";
-import { BackgroundQuery, BackgroundResponse, MarkWorkSeenRequest, RouteRequest, RouteResponse, WorkHomeResponse } from "@warmap/contracts";
+import { Type } from "@sinclair/typebox";
+import { ArchivedSubSessionListResponse, BackgroundQuery, BackgroundResponse, MarkWorkSeenRequest, RouteRequest, RouteResponse, SubSessionKind, UpdateSubSessionRequest,
+  WorkHomeResponse } from "@warmap/contracts";
+import { deleteSubSession, listArchivedSubSessions, updateSubSession } from "../subSessionAdmin.js";
 import { routeMessage } from "../messageRoute.js";
 import { listMissionRoundCards, type MissionRoundPerson } from "../missionRounds.js";
 import { personDisplayNames } from "../people.js";
@@ -44,6 +47,21 @@ export function registerWorkHomeRoutes(app: AppInstance, ctx: RouteContext): voi
     await markWorkSeen(q, req.person!.personId, req.body.kind, req.body.id, ctx.now());
     return reply.status(204).send();
   });
+
+  // 子会话那一行的「…」菜单（17.2 第 35 条）：改名、归档、恢复、删进回收站，和归档列表。
+  const subParams = Type.Object({ kind: SubSessionKind, id: Type.String({ minLength: 1 }) }, { additionalProperties: false });
+  app.get("/api/me/sub-sessions/archived", { preHandler: requireMember, schema: { response: { 200: ArchivedSubSessionListResponse } } }, async (req) =>
+    ({ items: await listArchivedSubSessions(q, req.person!.personId) }));
+  app.patch("/api/me/sub-sessions/:kind/:id", { preHandler: requireMember, schema: { params: subParams, body: UpdateSubSessionRequest } }, async (req, reply) =>
+    handle(reply, async () => {
+      await updateSubSession(q, req.person!.personId, req.params.kind, req.params.id, req.body, ctx.now());
+      return reply.status(204).send();
+    }));
+  app.delete("/api/me/sub-sessions/:kind/:id", { preHandler: requireMember, schema: { params: subParams } }, async (req, reply) =>
+    handle(reply, async () => {
+      await deleteSubSession(q, req.person!.personId, req.params.kind, req.params.id, ctx.now());
+      return reply.status(204).send();
+    }));
 
   app.get("/api/me/background", { preHandler: requireMember, schema: { querystring: BackgroundQuery, response: { 200: BackgroundResponse } } }, async (req, reply) =>
     handle(reply, () => readBackground({ q, now: ctx.now(), planTasks: ctx.planTasks }, req.person!.personId, req.query.scope)));

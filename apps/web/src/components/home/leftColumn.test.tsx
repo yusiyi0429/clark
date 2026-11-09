@@ -166,25 +166,34 @@ describe("左栏：项目在后台干活的灰点", () => {
     expect(projectWorking(projectOf(), [worker({ taskId: "t1", state: "done" }), worker({ taskId: "t1", state: "queued" }), worker({ taskId: "t9" })], false)).toBe(false);
   });
 
-  it("在干活的项目标题这一行最右边一颗点，读屏读「在后台工作」、点本身不读；不在干活的不画", () => {
+  it("在干活的项目行最右边一颗闪的灰点（34 条：和子会话行的点同一个），读屏读「在后台工作」、点本身不读；不在干活的不画", () => {
     const html = render({ data: withTask([]), working: new Set(["p1"]) });
-    expect(html).toMatch(/首页改版<\/span><span[^>]*data-testid="project-working"><i aria-hidden="true"><\/i><span[^>]*>在后台工作<\/span><\/span><\/span><span[^>]*>11 月 · 左栏/);
+    expect(html).toMatch(/11 月 · 左栏[^<]*<\/span><\/span><span class="[^"]*" data-tone="running" data-testid="project-working"><i aria-hidden="true"><\/i><span[^>]*>在后台工作<\/span><\/span><\/button>/);
     expect(render({ data: withTask([]) })).not.toContain("project-working");
     expect(render({ data: withTask([]), working: new Set(["p9"]) })).not.toContain("在后台工作");
   });
 
-  it("项目对话有没看过的新回复（26 条）：标题右边蓝点，同子会话的蓝点；在干活时照旧是灰点；看过的不画", () => {
+  it("项目对话有没看过的新回复（26 条）：行尾蓝点，同子会话的蓝点；在干活时照旧是灰点；看过的不画", () => {
     const unseen = render({ data: withTask([], { unseen: true }) });
-    expect(unseen).toMatch(/首页改版<\/span><span class="[^"]*" data-tone="stopped" role="img" aria-label="有新回复" data-testid="project-unseen">/);
+    expect(unseen).toMatch(/<\/span><\/span><span class="[^"]*" data-tone="stopped" role="img" aria-label="有新回复" data-testid="project-unseen"><i aria-hidden="true"><\/i><\/span><\/button>/);
     expect(render({ data: withTask([], { unseen: true }), working: new Set(["p1"]) })).not.toContain("project-unseen");
     expect(render({ data: withTask([]) })).not.toContain("project-unseen");
   });
 
+  it("等你的项目（34 条）：蓝点从名字左边挪到行最右边，和子会话行的点同一个元素；等你时不再画在干活的灰点和新回复", () => {
+    const waiting = withTask([], { summary: { running: 0, waiting: 1, queued: 0, done: 0, doneToday: 0, needsYou: 1 }, unseen: true } as never);
+    const html = render({ data: waiting, working: new Set(["p1"]) });
+    expect(html).toMatch(/<\/span><\/span><span class="[^"]*" data-tone="stopped" role="img" aria-label="等你" data-testid="project-waiting"><i aria-hidden="true"><\/i><\/span><\/button>/);
+    expect(html).not.toContain("project-working");
+    expect(html).not.toContain("project-unseen");
+    expect(html).not.toMatch(/data-state="waiting"/);
+  });
+
   it("点的节奏：透明度 1 ↔ 0.3、1.4 秒一个来回、缓入缓出一直循环；减少动态效果时不闪", () => {
     const css = readFileSync(fileURLToPath(new URL("../../styles/home.module.css", import.meta.url)), "utf8");
-    expect(css).toContain(".workingDot i { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-faint); animation: workingBreath 1.4s ease-in-out infinite; }");
+    expect(css).toContain('.subDot[data-tone="running"] i { animation: workingBreath 1.4s ease-in-out infinite; }');
     expect(css).toContain("@keyframes workingBreath { 50% { opacity: .3; } }");
-    expect(css).toContain("@media (prefers-reduced-motion: reduce) { .workingDot i { animation: none; } }");
+    expect(css).toContain("@media (prefers-reduced-motion: reduce) { .subDot i { animation: none !important; } }");
   });
 });
 
