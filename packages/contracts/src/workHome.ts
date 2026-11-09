@@ -84,6 +84,8 @@ export const SubSessionLetter = Type.String({ pattern: "^[A-Z]{1,3}$" });
  * merge：只有卡，最近一次验收通过的交回合回到哪了（见 CardMerge）；专题、还没过的卡为 null。
  * holdUntil：queueReason = quota（订阅额度用完，停着等恢复）时恢复的时间，界面「等额度恢复 · HH:MM」；读不到或不在等为 null。
  * letter：它在所属项目里的字母（18 节第 10 条，见 SubSessionLetter）；不在项目里（「其他」）为 null。
+ * unseen（17.2 第 25 条，左栏蓝点）：停下了（一轮做完、被停下、出错停住，卡验收通过算做完），而且停下的时间晚于本人上次打开它（POST /api/me/work-seen）。
+ *   云端算好，网页照着画，不自己比时间。在跑（灰点）、要人介入（黄点）不看它，照旧。
  */
 export const SubSession = Type.Object({
   id: Type.String({ minLength: 1 }),
@@ -91,6 +93,7 @@ export const SubSession = Type.Object({
   letter: Nullable(SubSessionLetter),
   title: Type.String(),
   state: SubSessionState,
+  unseen: Type.Boolean(),
   waiting: Nullable(SubSessionWaiting),
   queueReason: Nullable(WorkerQueueReason),
   role: Nullable(RoleRef),
@@ -180,7 +183,20 @@ export const HomeProject = Type.Object({
   subSessions: Type.Array(SubSession),
   items: Type.Array(HomeItem),
   transfer: Nullable(ProjectTransfer),
+  /** 项目总管线的蓝点（17.2 第 25 条）：项目对话里有新的回复或子会话汇报，而且晚于本人上次打开这个项目对话。云端算好，网页照着画。 */
+  unseen: Type.Boolean(),
 }, strict);
+
+/**
+ * POST /api/me/work-seen（204，幂等）：本人打开了一个子会话（kind = sub，id 是卡或专题的 id）或一个项目对话（kind = project，id 是项目 id），
+ * 记下看过的时间（按人记，手机和电脑一致），对应的 unseen 变成 false。网页打开时调一次；项目对话开着时又来了新回复或汇报，也再调一次。
+ * 不是本人的、没有的照样 204（只记时间，不泄露有没有）。
+ */
+export const MarkWorkSeenRequest = Type.Object({
+  kind: Type.Union([Type.Literal("sub"), Type.Literal("project")]),
+  id: Type.String({ format: "uuid" }),
+}, strict);
+export type TMarkWorkSeenRequest = Static<typeof MarkWorkSeenRequest>;
 
 /** 首页「本月」里的一件 Task（16.4）：project 是挂在哪个项目（点了进项目）；没挂上为 null，网页画「挂到…」（选现有项目或新建）。 */
 export const HomeMonthTask = Type.Object({

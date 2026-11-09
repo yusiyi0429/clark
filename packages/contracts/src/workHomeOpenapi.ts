@@ -4,6 +4,7 @@ import {
   HomeTaskSummary, RouteRequest, RouteResponse, SessionStartView, SubSession, WaitingItem, WaitingTarget, WorkHomeResponse, CardMerge, TaskFeedItem, HomeItem,
   ReleaseSessionStartRequest, NotificationSettings, ClaimedSessionStart, AppearanceSettings, SessionStopView, ClaimSessionStopsRequest, ClaimSessionStopsResponse,
   SessionStopDoneRequest, SessionCommand, SessionCommandView, ClaimSessionCommandsRequest, ClaimSessionCommandsResponse, SessionCommandDoneRequest,
+  MarkWorkSeenRequest,
 } from "./workHome.js";
 import { CreateProjectRequest, Project, ProjectDetailResponse, ProjectFeedItem, ProjectFeedResponse, ProjectGoal, ProjectGoalLinkedItem, ProjectHandoverItem,
   ProjectHandoverSummaryItem, ProjectListResponse, ProjectPipelineResponse, ProjectTransferDeclinedItem, UpdateProjectRequest, ProjectBoardResponse, ProjectGoalChangedItem,
@@ -27,7 +28,7 @@ export const workHomeSchemas: Record<string, JsonSchema> = {
   ProjectFeedItem, ProjectFeedResponse, ProjectBoardResponse, ProjectGoalChangedItem, AnswerGoalChangeRequest, SubSessionFeedRef, ProjectSubSessionReportItem, ProjectSubSessionDecisionItem, AutoRelayDecisionRequest, SetGoalDueDateRequest, ProjectHandoverItem, ProjectHandoverSummaryItem, ProjectTransferDeclinedItem,
   PersonRef, HandoverSection, ProjectTransfer, CreateProjectTransferRequest, UpdateProjectTransferRequest, HandoverSecretFinding, HandoverSecretsResponse,
   NotificationSettings, AppearanceSettings, SessionStopView, ClaimSessionStopsRequest, ClaimSessionStopsResponse, SessionStopDoneRequest,
-  SessionCommand, SessionCommandView, ClaimSessionCommandsRequest, ClaimSessionCommandsResponse, SessionCommandDoneRequest,
+  SessionCommand, SessionCommandView, ClaimSessionCommandsRequest, ClaimSessionCommandsResponse, SessionCommandDoneRequest, MarkWorkSeenRequest,
   BuddyAuthority, UpdateBuddyAuthorityRequest, BuddyAuditEntry, BuddyAuditListResponse, BuddyMessageDraft, TrashItem, TrashListResponse, Budget, TaskBudgetResponse, ClaimedSessionStart, SessionAttachment, SessionAttachmentUploadResponse,
 };
 
@@ -209,6 +210,14 @@ export const workHomePaths: OpenAPIV3.Document["paths"] = {
       parameters: path("projectId"),
       requestBody: body("AutoRelayDecisionRequest"),
       responses: { "204": { description: "记下了" }, ...errors(400, 401, 403, 404, 409) },
+    },
+  },
+  "/api/me/work-seen": {
+    post: {
+      operationId: "markWorkSeen",
+      summary: "本人打开了一个子会话或项目对话：记下看过的时间，左栏蓝点（unseen）消失；幂等（17.2 第 25 条）",
+      requestBody: body("MarkWorkSeenRequest"),
+      responses: { "204": { description: "记下了" }, ...errors(400, 401, 403) },
     },
   },
   "/api/me/session-commands/claim": {

@@ -130,6 +130,9 @@ export const readProject = (projectId: string) => maybe<TProjectDetailResponse>(
 /** 改名、归档（archived: true）、恢复（archived: false）。 */
 export const updateProject = (projectId: string, body: TUpdateProjectRequest) =>
   unwrap<TProject>(browserApi.PATCH("/api/me/projects/{projectId}", { params: project(projectId), body }) as Promise<Result<TProject>>);
+/** 本人打开了一个子会话（sub，卡或专题的 id）或项目对话（project）：记下看过，左栏蓝点消失（26 条，204、幂等）。 */
+export const markWorkSeen = (kind: "sub" | "project", id: string) =>
+  unwrap<unknown>(browserApi.POST("/api/me/work-seen", { body: { kind, id } }) as Promise<Result<unknown>>);
 /** 给挂在这个项目上的一件 Task 存验收截止日（YYYY-MM-DD），null 是不存了、退回 Mission 的节点。 */
 export const setGoalDueDate = (projectId: string, taskId: string, dueDate: string | null) =>
   unwrap<unknown>(browserApi.PUT("/api/me/projects/{projectId}/goals/{taskId}/due-date", { params: { path: { projectId, taskId } }, body: { dueDate } }) as Promise<Result<unknown>>);

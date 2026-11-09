@@ -53,6 +53,8 @@ export type Project = {
   lastActivity: string | null;
   /** 预算用到 80% 以上的那件（契约 HomeProject.budget）；没有为 null。 */
   budget: { percent: number; state: "warning" | "exhausted" } | null;
+  /** 项目对话里有本人还没看过的新回复或汇报（契约 HomeProject.unseen，26 条）：标题右边蓝点。 */
+  unseen: boolean;
   /** 正在转交的那一份（preparing、sent），或本人交出去了的（accepted，项目在本人这边归档、只读）；没有为 null。 */
   transfer: Transfer | null;
 };
@@ -73,7 +75,7 @@ export function fromHome(project: HomeProject, data: Pick<WorkHomeData, "month" 
     subSessions: project.subSessions, items: project.items, scope: project.pipeline.scope,
     waiting: project.summary.needsYou, lastActivity: project.lastActivityAt,
     budget: project.budget ? { percent: project.budget.percent, state: project.budget.state } : null,
-    transfer: project.transfer,
+    transfer: project.transfer, unseen: project.unseen,
   };
 }
 
@@ -82,7 +84,7 @@ export function fromListed(project: TProject, folders: Folders): Project {
   return {
     id: project.projectId, name: project.name, folder: folders.get(project.projectId) ?? null, archived: true,
     goals: [], current: [], subSessions: [], items: [], scope: `project:${project.projectId}`,
-    waiting: 0, lastActivity: project.lastActivityAt, budget: null, transfer: project.transfer,
+    waiting: 0, lastActivity: project.lastActivityAt, budget: null, transfer: project.transfer, unseen: false,
   };
 }
 

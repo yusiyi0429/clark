@@ -5,7 +5,7 @@
  */
 .app {
   /*
-   * 左栏宽（17.2 第 15 条）：固定、不能拖不能关，随窗口宽连续变，250–360。1280 宽、右栏展开时约 258，中栏还剩约 728
+   * 左栏宽（17.2 第 15 条，24 条起能拖）：默认随窗口宽连续变，250–360；本人拖过（240–360）写在根的 style 上，盖过这里。1280 宽、右栏展开时约 258，中栏还剩约 728
    * （扣掉根上 6px 的滚动条槽），放得下 680 的正文列和两边各 24 的留白；1440 约 271、1920 约 310，约 2520 起封顶 360。
    * 手机（≤959）走抽屉，不用它。
    */
@@ -26,7 +26,12 @@
 @keyframes homeEnter { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .app[data-entering] { animation-duration: 150ms; } }
 .app[data-panel="closed"] { grid-template-columns: var(--home-left) minmax(0, 1fr) var(--home-rail); }
-.left { min-width: 0; min-height: 0; background: var(--surface); box-shadow: inset -1px 0 0 var(--hairline); }
+.left { position: relative; min-width: 0; min-height: 0; background: var(--surface); box-shadow: inset -1px 0 0 var(--hairline); }
+/* 左栏右边缘的把手（24 条）：6 宽、骑在边线上；悬停、拖着、键盘聚焦时边缘出一条 2 宽的细线，光标左右拖。拖的时候列宽不过渡、不选字。 */
+.leftHandle { position: absolute; top: 0; right: -3px; bottom: 0; z-index: 5; width: 6px; cursor: col-resize; touch-action: none; outline: none; }
+.leftHandle::after { content: ""; position: absolute; top: 0; bottom: 0; left: 2px; width: 2px; background: transparent; transition: background var(--dur-fast) linear; }
+.leftHandle:hover::after, .leftHandle[data-dragging]::after, .leftHandle:focus-visible::after { background: var(--hairline-strong); }
+.app[data-resizing] { cursor: col-resize; transition: none; user-select: none; }
 /* 展示区和对话都是单列 grid：列宽给 minmax(0, 1fr)，里面的长标题、代码块不能把这一列撑得比展示区宽（不出横向滚动、不压到右栏）。 */
 .display { position: relative; min-width: 0; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); }
 .right { min-width: 0; min-height: 0; background: var(--surface); box-shadow: inset 1px 0 0 var(--hairline); }
@@ -211,6 +216,7 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 @media (prefers-reduced-motion: reduce) { .subDot i { animation: none !important; } }
 /* 页头里跟在文字中间（「项目 / B 标题」）：右边空一格。 */
 .letter[data-inline] { margin-right: 6px; vertical-align: 1px; }
+.subQueue { display: inline-grid; flex: none; place-items: center; color: var(--ink-faint); }
 .subReason { flex: none; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; }
 /* 本人事项行（9.10）：就是子会话行，状态位换成本人 16 的头像；没照片画成纯 --neutral-wash 圆、不写字（5.4.2「本人行」）。 */
 /* 16px 的人像位（树上本人事项行首、等你行里请你认可的对方）：同一条规则。 */
@@ -242,6 +248,8 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .pop { min-width: 240px; padding: var(--space-1); border-radius: var(--r-card); background: var(--surface); color: var(--ink); box-shadow: inset 0 0 0 1px var(--hairline), var(--elev-3); }
 .menuList { display: grid; padding: 0; outline: none; }
 .menuSection { display: grid; }
+/* 菜单行里淡色的后半句（选模型时的来源）。 */
+.menuFaint { color: var(--ink-faint); }
 .menuSection + .menuSection { margin-top: var(--space-1); padding-top: var(--space-1); box-shadow: inset 0 1px 0 var(--hairline); }
 .menuItem, .menuWho { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-36); padding: 0 var(--space-3); border-radius: var(--r-control); background: none; color: var(--ink); font-size: var(--text-base); line-height: var(--lh-row); cursor: pointer; outline: none; }
 .menuWho { min-height: var(--row-48); padding-block: 6px; }

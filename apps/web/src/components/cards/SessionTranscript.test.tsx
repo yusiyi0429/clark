@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { foldEvents, type SessionEntry } from "@/lib/local/sessionView";
 import type { TLocalSessionEvent } from "@/lib/local/runner";
-import { SessionComposer, SessionTranscript } from "./SessionTranscript";
+import { SessionComposer, SessionTranscript, roundStart } from "./SessionTranscript";
 
 const step = (seq: number, title: string, at: string, done = true): SessionEntry => ({ kind: "step", seq, at, toolUseId: `t${seq}`, title, done, isError: false });
 const render = (entries: SessionEntry[], live = true) =>
@@ -89,5 +89,29 @@ describe("子会话的输入框", () => {
     expect(box).toContain('aria-label="给拆左栏插话"');
     expect(box).toMatch(/placeholder=""/);
     expect(html).not.toContain("插话…");
+  });
+});
+
+describe("子会话在跑时界面在动（27 条）", () => {
+  const said = (seq: number, at: string): SessionEntry => ({ kind: "user", seq, at, text: "接着做" });
+  it("两步之间在想：最下面一行转圈「在跑」加这一轮跑了多久；有步骤在转圈、不在跑、在等批准时不出", () => {
+    const thinking = [said(1, "2026-11-07T01:00:00Z"), step(2, "读 a.ts", "2026-11-07T01:00:03Z")];
+    expect(render(thinking)).toMatch(/data-testid="session-working"><span[^>]*aria-label="在跑"/);
+    expect(render([...thinking, step(3, "跑 pnpm test", "2026-11-07T01:00:05Z", false)])).not.toContain("session-working");
+    expect(render(thinking, false)).not.toContain("session-working");
+    const permission: SessionEntry = { kind: "permission", seq: 4, at: "2026-11-07T01:00:06Z", decision: null,
+      request: { requestId: "p1", toolName: "Bash", title: "运行 pnpm test", input: {}, outsidePaths: [], canAllowForSession: true, createdAt: "2026-11-07T01:00:06Z" } as never };
+    expect(render([...thinking, permission])).not.toContain("session-working");
+  });
+
+  it("时长从这一轮开始算：最近一句本人说的；还没说过取第一条", () => {
+    expect(roundStart([said(1, "a"), step(2, "x", "b"), said(3, "c"), step(4, "y", "d")])).toBe("c");
+    expect(roundStart([step(1, "x", "b")])).toBe("b");
+    expect(roundStart([])).toBeNull();
+  });
+
+  it("输入框：在跑时没字是停止方块，同项目对话、伙伴台", () => {
+    const html = renderToStaticMarkup(<SessionComposer label="给 A 插话" disabled={false} onSend={async () => true} subject={{ kind: "card", id: "c1" }} busy onStop={vi.fn()} />);
+    expect(html).toContain('aria-label="停止本次回答"');
   });
 });

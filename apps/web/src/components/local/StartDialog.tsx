@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * 点「开始」：卡先选岗位（默认拆卡时配的），再选模型（默认按岗位的档位，没有岗位时记住上一次）和文件夹，再开工（V2 设计第 11.2、19.6 节）。
- * 专题不选岗位、不用选文件夹（本机给它一个专用目录）。模型分订阅和 TokenHub（网关）两组；文件夹只能经本机弹出的选择框添加。
+ * 点「开始」：卡先选技能（默认拆卡时配的；代码里仍叫 role，22 条只改给人看的字），再选模型（默认按技能的档位，没有时记住上一次）和文件夹，再开工（V2 设计第 11.2、19.6 节）。
+ * 专题不选技能、不用选文件夹（本机给它一个专用目录）。模型按执行方分组（Claude Code、Codex，21 条），每个写「模型 · 来源」；文件夹只能经本机弹出的选择框添加。
  */
 import { useEffect, useState } from "react";
 import { FolderPlus } from "lucide-react";
@@ -10,6 +10,7 @@ import { MenuDialog } from "@/components/AccountMenu";
 import { HeroButton } from "@/components/HeroButton";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { readLast, writeLast } from "@/lib/local/start";
+import { HARNESS_NAME, profileModel, profileSource } from "@/lib/local/runModel";
 import type { TLocalFolder, TLocalModelProfile } from "@/lib/local/runner";
 import { TIER_LABEL, listRoles, modelForTier, type CardRole, type RoleView } from "@/lib/team/roles";
 import s from "@/styles/v2-local.module.css";
@@ -34,10 +35,9 @@ export function StartDialog({ title, needsFolder = true, role: given, onClose, o
   const model = local.models.find((entry) => entry.id === modelId) ?? null;
   const folder = local.folders.find((entry) => entry.id === folderId) ?? null;
   const role = roles.find((entry) => entry.id === roleId) ?? null;
-  const groups = [
-    { label: "订阅", models: local.models.filter((entry) => entry.source === "subscription") },
-    { label: "TokenHub", models: local.models.filter((entry) => entry.source === "gateway") },
-  ].filter((group) => group.models.length);
+  const groups = (Object.keys(HARNESS_NAME) as (keyof typeof HARNESS_NAME)[])
+    .map((agent) => ({ label: HARNESS_NAME[agent], models: local.models.filter((entry) => entry.agent === agent) }))
+    .filter((group) => group.models.length);
 
   const pickRole = (next: RoleView) => {
     setRoleId(next.id);
@@ -77,8 +77,8 @@ export function StartDialog({ title, needsFolder = true, role: given, onClose, o
       <div className={s.start}>
         <p className={s.startTitle}>{title}</p>
         {withRole && roles.length ? (
-          <div className={s.field} role="radiogroup" aria-label="岗位">
-            <span className={s.label}>岗位</span>
+          <div className={s.field} role="radiogroup" aria-label="技能">
+            <span className={s.label}>技能</span>
             <div className={s.chipRow}>
               {roles.map((entry) => (
                 <button key={entry.id} type="button" role="radio" aria-checked={entry.id === roleId} className={s.choice} onClick={() => pickRole(entry)}>{entry.name}</button>
@@ -92,7 +92,7 @@ export function StartDialog({ title, needsFolder = true, role: given, onClose, o
             <div key={group.label} className={s.chipRow}>
               <small>{group.label}</small>
               {group.models.map((entry) => (
-                <button key={entry.id} type="button" role="radio" aria-checked={entry.id === modelId} className={s.choice} onClick={() => setModelId(entry.id)}>{entry.label}</button>
+                <button key={entry.id} type="button" role="radio" aria-checked={entry.id === modelId} className={s.choice} onClick={() => setModelId(entry.id)}>{profileModel(entry)}<span className={s.faint}> · {profileSource(entry)}</span></button>
               ))}
             </div>
           ))}
