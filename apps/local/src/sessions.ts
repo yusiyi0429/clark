@@ -20,6 +20,7 @@ import type { GatewayPricing } from "./pricing.js";
 import { Budgets, MULTI_AGENT_OFF_PERCENT, reworkRounds, runFor } from "./budget.js";
 import { AttachmentError, attachmentNote, saveAttachments, type FetchAttachment } from "./attachments.js";
 import { modelDisplayName, sameModel, type ResolvedModel } from "./models.js";
+import { MAGPIE_PORT, modelOrigin } from "./modelOrigin.js";
 import type { CustomTools, SessionTools } from "./customTools.js";
 import { cardTitleProblem } from "./cardTitle.js";
 import { firstSentences, TURN_ERROR } from "./stopReport.js";
@@ -576,7 +577,7 @@ export class SessionManager {
     if (subject.kind === "card" && !subject.cardId) throw new SessionError("validation", "卡的会话要带 cardId");
     if (subject.kind === "topic" && !subject.topicId) throw new SessionError("validation", "专题的会话要带 topicId");
     if (subject.kind === "plan" && !subject.taskId && !subject.projectId) throw new SessionError("validation", "规划员的会话要带 taskId 或 projectId");
-    if (subject.kind !== "topic" && req.critics?.length) throw new SessionError("validation", "挑刺岗位只给专题的评审会用");
+    if (subject.kind !== "topic" && req.critics?.length) throw new SessionError("validation", "挑刺技能只给专题的评审会用");
     if (subject.kind !== "card" && req.after?.length) throw new SessionError("validation", "只有卡能等别的卡");
     let cwd: string;
     // 不指定目录时：项目在这台电脑上绑的文件夹（新首页设计 16.6）
@@ -965,7 +966,7 @@ export class SessionManager {
     const rec = this.must(id);
     if (rec.status === "queued") throw new SessionError("conflict", "还在等空位，开始后再说");
     if (rec.queuedMessage !== null && !this.starting.has(id)) throw new SessionError("conflict", "这件还没开始过（排队时取消了或没开起来），要做就重新开工");
-    if (req.kind === "review" && (rec.subject.kind !== "topic" || !rec.critics.length)) throw new SessionError("validation", "评审会只给开工时带了挑刺岗位的专题用");
+    if (req.kind === "review" && (rec.subject.kind !== "topic" || !rec.critics.length)) throw new SessionError("validation", "评审会只给开工时带了挑刺技能的专题用");
     if (req.kind !== "review" && !req.text && !req.attachments?.length) throw new SessionError("validation", "说一句要有内容");
     if (rec.subject.kind === "plan" && !rec.planAsked) { rec.planAsked = true; this.save(rec); } // 本人说了话：开拆前要问的算交代过了
     // 附件（新首页设计 14.5）：先取回、存进工作区，有一个不行整句不发
@@ -1495,18 +1496,18 @@ export class SessionManager {
    * view 是摘要里的 run，launch 是交给 Claude Code 的。
    */
   private runFor(rec: SessionRecord, model: ResolvedModel): { view: TLocalRun; launch: { model: string; effort: TLocalRun["effort"] & string; multiAgent: boolean } } {
-    return this.planRun({ mode: this.modeOf(rec), tier: rec.modelTier ?? "normal", verify: rec.subject.kind === "verify", budgetKey: rec.budgetKey }, model);
+    return this.planRun({ mode: this.modeOf(rec), tier: rec.modelTier ?? "normal", verify: rec.subject.kind === "verify", budgetKey: rec.budgetKey, agent: rec.agent }, model);
   }
 
   /** runFor 的算法本身（开工前预览也用它）：view 带来源和给人看的模型名，actual 等执行方报了再填。 */
-  private planRun(p: { mode: TBudgetMode; tier: TLocalModelTier; verify: boolean; budgetKey: string | null }, model: ResolvedModel) {
+  private planRun(p: { mode: TBudgetMode; tier: TLocalModelTier; verify: boolean; budgetKey: string | null; agent: TLocalAgentKind }, model: ResolvedModel) {
     const launch = runFor({
       mode: p.mode, tier: p.tier, verify: p.verify,
       budgetState: p.budgetKey && this.d.budgets ? this.d.budgets.judge(p.budgetKey, this.liveMs(p.budgetKey)) : "ok",
       quotaPercent: this.d.quota?.usedPercent() ?? null, quotaWarning: this.d.quota?.warning() ?? false,
     });
     const used = model.source === "gateway" ? model.model : model.model ?? launch.model;
-    const named = { source: model.source, sourceLabel: model.label, modelName: used ? this.d.models.displayName(used) : null, actual: null };
+    const named = { source: model.source, sourceLabel: model.label, harness: p.agent, origin: model.origin, modelName: used ? this.d.models.displayName(used) : null, actual: null };
     const view: TLocalRun = model.source === "gateway"
       ? { mode: p.mode, model: model.model, effort: null, multiAgent: false, ...named }
       : { mode: p.mode, model: used, effort: launch.effort, multiAgent: launch.multiAgent, ...named };
@@ -1518,7 +1519,7 @@ export class SessionManager {
     const model = await this.d.models.resolve(req.modelProfileId);
     if (!model) throw new SessionError("validation", "没有这个模型配置");
     const budgetKey = req.taskBudget?.taskId ? Budgets.key(req.taskBudget.taskId, "") : null;
-    return this.planRun({ mode: req.taskBudget?.budget.mode ?? "auto", tier: req.modelTier ?? "normal", verify: false, budgetKey }, model).view;
+    return this.planRun({ mode: req.taskBudget?.budget.mode ?? "auto", tier: req.modelTier ?? "normal", verify: false, budgetKey, agent: req.agent ?? "claude-code" }, model).view;
   }
 
   /**
@@ -1529,6 +1530,8 @@ export class SessionManager {
     if (!rec.run || rec.run.actual?.model === actual) return;
     const requested = rec.run.model;
     rec.run = { ...rec.run, actual: { model: actual, modelName: modelDisplayName(actual), at: nowIso() } };
+    // 经 magpie：来源按实际模型名的前缀重认（codex/… 是 Codex 订阅）
+    if (rec.run.origin?.via === "magpie") rec.run.origin = modelOrigin({ source: "gateway", baseUrl: `http://127.0.0.1:${MAGPIE_PORT}`, model: actual });
     if (requested && rec.run.source === "subscription") this.d.models.noteActual(requested, actual);
     this.save(rec);
     if (requested && !sameModel(requested, actual)) {

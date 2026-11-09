@@ -75,6 +75,7 @@ describe("哪个来源的哪个模型", { timeout: 60_000 }, () => {
       expect(before).toEqual({
         mode: "auto", model: "opus", effort: "medium", multiAgent: false,
         source: "subscription", sourceLabel: "我的 Claude 订阅", modelName: "Opus", actual: null,
+        harness: "claude-code", origin: { provider: "claude-subscription", label: "我的 Claude 订阅", via: null },
       });
       expect(await h.preview({ modelTier: "light" })).toMatchObject({ model: "sonnet", effort: "low", modelName: "Sonnet" });
       expect(await h.preview({ taskBudget: { taskId: "T-9", budget: { mode: "unlimited", hours: null, weeklyPercent: null, money: null } } }))
@@ -123,6 +124,7 @@ describe("哪个来源的哪个模型", { timeout: 60_000 }, () => {
       expect(await h.preview({ modelProfileId: "th", modelTier: "strong" })).toEqual({
         mode: "auto", model: "wangsu/qwen3.8-flash", effort: null, multiAgent: false,
         source: "gateway", sourceLabel: "TokenHub", modelName: "qwen3.8-flash", actual: null,
+        harness: "claude-code", origin: { provider: "tokenhub", label: "TokenHub", via: null },
       });
       expect((await h.call("POST", "/v1/runs/preview", { modelProfileId: "nope" })).status).toBe(400);
       expect((await h.call("POST", "/v1/runs/preview", { title: "多余" })).status).toBe(400);

@@ -1,5 +1,6 @@
 import { join } from "node:path";
-import type { TLocalModelProfile, TLocalModelProfileUpsert, TLocalModelTier } from "@warmap/contracts";
+import type { TLocalModelOrigin, TLocalModelProfile, TLocalModelProfileUpsert, TLocalModelTier } from "@warmap/contracts";
+import { isLoopback, isMagpie, modelOrigin } from "./modelOrigin.js";
 import { readJson, writeJsonAtomic } from "./store.js";
 import type { SecretStore } from "./secrets.js";
 
@@ -15,9 +16,14 @@ export interface ResolvedModel {
   smallModel: string | null;
   webSearch: boolean;
   apiKey: string | null;
+  /** 认出的真正来源（经 magpie 的、厂商 API 的），给人看和按来源算用量。 */
+  origin: TLocalModelOrigin;
 }
 
-type Stored = Omit<TLocalModelProfile, "hasKey">;
+/** magpie 不认钥匙：照它的约定传 magpie（本人没填时）。 */
+const MAGPIE_KEY = "magpie";
+
+type Stored = Omit<TLocalModelProfile, "hasKey" | "origin">;
 
 const builtIn: Stored = {
   id: SUBSCRIPTION_ID, label: "我的 Claude 订阅", source: "subscription", agent: "claude-code",
@@ -96,7 +102,9 @@ export class ModelProfiles {
 
   async list(): Promise<TLocalModelProfile[]> {
     const out: TLocalModelProfile[] = [];
-    for (const p of this.stored()) out.push({ ...p, webSearch: p.webSearch ?? searchDefault(p.source, p.model), hasKey: p.source === "gateway" ? Boolean(await this.secrets.get(keyName(p.id))) : false });
+    for (const p of this.stored()) {
+      out.push({ ...p, origin: modelOrigin(p), webSearch: p.webSearch ?? searchDefault(p.source, p.model), hasKey: p.source === "gateway" ? Boolean(await this.secrets.get(keyName(p.id))) : false });
+    }
     return out;
   }
 
@@ -104,6 +112,8 @@ export class ModelProfiles {
     if (id === SUBSCRIPTION_ID) throw new Error("内置的订阅配置不能改");
     const gateway = body.source === "gateway";
     if (gateway && !body.baseUrl) throw new Error("网关模型要填地址");
+    // 钥匙会发到这个地址：别处的要 https，本机地址（magpie 等）可以 http
+    if (gateway && body.baseUrl!.startsWith("http:") && !isLoopback(body.baseUrl!)) throw new Error("只有本机地址可以用 http，别的要 https");
     if (!gateway && (body.baseUrl || body.apiKey)) throw new Error("订阅模型不填地址和钥匙");
     let list = this.stored().slice(1);
     if (body.isDefault) list = list.map((p) => ({ ...p, isDefault: false }));
@@ -154,7 +164,8 @@ export class ModelProfiles {
     return {
       profileId: p.id, label: p.label, source: p.source,
       baseUrl: p.baseUrl, model: p.model, smallModel: p.smallModel, webSearch: p.webSearch ?? searchDefault(p.source, p.model),
-      apiKey: p.source === "gateway" ? await this.secrets.get(keyName(p.id)) : null,
+      apiKey: p.source === "gateway" ? (await this.secrets.get(keyName(p.id))) ?? (isMagpie(p.baseUrl) ? MAGPIE_KEY : null) : null,
+      origin: modelOrigin(p),
     };
   }
 }

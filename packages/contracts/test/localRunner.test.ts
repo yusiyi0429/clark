@@ -50,6 +50,19 @@ describe("本机程序契约", () => {
     expect(LocalModelProfile.properties).toHaveProperty("hasKey");
   });
 
+  it("模型配置看得出执行方和真正的来源：经 magpie 的、厂商 API 的；本机地址可以是 http", () => {
+    expect(Value.Check(LocalModelProfileUpsert, { label: "magpie Codex", source: "gateway", agent: "claude-code", baseUrl: "http://127.0.0.1:3425", model: "codex/gpt-6.1" })).toBe(true);
+    const profile = {
+      id: "magpie-codex", label: "magpie Codex", source: "gateway", agent: "claude-code", baseUrl: "http://127.0.0.1:3425", model: "codex/gpt-6.1",
+      smallModel: null, webSearch: false, hasKey: false, isDefault: false, origin: { provider: "codex", label: "Codex 订阅 · 经 magpie", via: "magpie" },
+    };
+    expect(Value.Check(LocalModelProfile, profile)).toBe(true);
+    expect(Value.Check(LocalModelProfile, { ...profile, origin: { provider: "deepseek", label: "DeepSeek API", via: null } })).toBe(true);
+    expect(Value.Check(LocalModelProfile, { ...profile, origin: { ...profile.origin, via: "openrouter" } })).toBe(false);
+    const { origin: _o, ...old } = profile;
+    expect(Value.Check(LocalModelProfile, old)).toBe(true); // 老版本本机不带
+  });
+
   it("本人加的工具：只收 HTTP 地址、不收命令，钥匙只写不读", () => {
     expect(Value.Check(LocalToolUpsert, { name: "金蝶", preset: "kingdee", url: "https://kd.example.com/mcp", apiKey: "k-1" })).toBe(true);
     expect(Value.Check(LocalToolUpsert, { name: "看板", preset: "custom", url: "http://127.0.0.1:9000/mcp", keyHeader: "X-Api-Key" })).toBe(true);
@@ -412,6 +425,10 @@ describe("本机程序契约", () => {
     expect(Value.Check(LocalSessionSummary, { ...summary, run: named })).toBe(true);
     expect(Value.Check(LocalSessionSummary, { ...summary, run: { ...named, source: "gateway", sourceLabel: "TokenHub", model: "wangsu/qwen3.8-flash", modelName: "qwen3.8-flash", actual: null } })).toBe(true);
     expect(Value.Check(LocalSessionSummary, { ...summary, run: { ...named, source: "tokenhub" } })).toBe(false);
+    // 执行方和真正的来源（经 magpie 的按实际模型名的前缀认）
+    const viaMagpie = { ...named, source: "gateway", sourceLabel: "magpie", model: "codex/gpt-6.1", modelName: "gpt-6.1", harness: "claude-code", origin: { provider: "codex", label: "Codex 订阅 · 经 magpie", via: "magpie" } };
+    expect(Value.Check(LocalSessionSummary, { ...summary, run: viaMagpie })).toBe(true);
+    expect(Value.Check(LocalSessionSummary, { ...summary, run: { ...viaMagpie, harness: "cursor" } })).toBe(false);
     expect(Value.Check(LocalSessionSummary, { ...summary, run: { ...named, actual: { model: "", modelName: "x", at } } })).toBe(false);
     expect(Value.Check(LocalRunPreviewRequest, { modelProfileId: "subscription", modelTier: "light", taskBudget: { taskId: "T-1", budget: set } })).toBe(true);
     expect(Value.Check(LocalRunPreviewRequest, {})).toBe(true);

@@ -291,13 +291,29 @@ export const LocalCloudLinkRequest = Type.Object({
 
 /**
  * subscription：用本人在 Claude Code 里的登录，不设任何模型环境变量（内置一条，id 固定为 "subscription"）。
- * gateway：Anthropic 格式的第三方地址（TokenHub 等），钥匙只存本机（系统凭据库），任何接口都不回传。
+ * gateway：Anthropic 格式的自定义地址，接进 Claude Code：TokenHub、厂商的 Anthropic 兼容地址（DeepSeek、Kimi、GLM、Qwen、火山方舟等），
+ * 或本机的 magpie（127.0.0.1:3425，把 Codex、Copilot、Gemini 等订阅和别家 API 转成 Anthropic 格式）。钥匙只存本机（系统凭据库），任何接口都不回传。
  */
 export const LocalModelSource = Type.Union([Type.Literal("subscription"), Type.Literal("gateway")]);
+/**
+ * 真正的来源（本机按地址和模型名认出来，网页照写，不用自己猜）：
+ * - provider：认出的来源 id。claude-subscription 本人的 Claude 订阅；tokenhub；厂商 API 是 deepseek、kimi、glm、qwen、volcengine、minimax、anthropic 等；
+ *   经 magpie 时按模型名的前缀（codex/…、deepseek/…）认，如 codex、copilot、gemini；都认不出就是地址的主机名（经 magpie 又没有前缀时是 magpie）。
+ * - label：给人看的，如「我的 Claude 订阅」「TokenHub」「DeepSeek API」「Codex 订阅 · 经 magpie」「api.example.com」。
+ * - via：经本机 magpie 转的为 magpie，直连为 null。
+ * 子会话选模型时写「执行方 · 来源 · 模型」，如「Claude Code · Codex 订阅 · 经 magpie · gpt-6.1」。用量照旧按来源（LocalQuotaSource）汇总。
+ */
+export const LocalModelOrigin = Type.Object({
+  provider: Type.String({ minLength: 1, maxLength: 100 }),
+  label: Type.String({ minLength: 1, maxLength: 120 }),
+  via: Nullable(Type.Literal("magpie")),
+}, strict);
 export const LocalModelProfile = Type.Object({
   id: Id,
   label: Type.String({ minLength: 1, maxLength: 40 }),
   source: LocalModelSource,
+  /** 认出的真正来源（见 LocalModelOrigin），按 baseUrl 和 model 现算。老版本本机不带。 */
+  origin: Type.Optional(LocalModelOrigin),
   agent: LocalAgentKind,
   baseUrl: Nullable(Type.String()),
   model: Nullable(Type.String()),
@@ -316,6 +332,7 @@ export const LocalModelListResponse = Type.Object({ profiles: Type.Array(LocalMo
 /**
  * PUT /v1/models/:id。
  * - gateway：baseUrl、model 必填；apiKey 只写不读，不传表示保留原钥匙，传空串表示删除钥匙。
+ *   地址要 https；本机地址（127.0.0.1、localhost）可以是 http。magpie（127.0.0.1:3425）不用填钥匙，本机照它的约定传 magpie；model 写「来源/模型」，如 codex/gpt-6.1。
  * - subscription：用本人登录，只选模型（如 opus、sonnet、haiku），不收 baseUrl 和 apiKey。
  */
 export const LocalModelProfileUpsert = Type.Object({
@@ -717,6 +734,13 @@ export const LocalRun = Type.Object({
   source: Type.Optional(LocalModelSource),
   /** 来源的名字：模型配置的名字（内置的「我的 Claude 订阅」，或本人给 TokenHub 配置起的名字）。 */
   sourceLabel: Type.Optional(Type.String({ minLength: 1, maxLength: 40 })),
+  /** 哪个执行方（harness）跑：Claude Code 或 Codex（同会话的 agent）。老版本本机不带。 */
+  harness: Type.Optional(LocalAgentKind),
+  /**
+   * 认出的真正来源（见 LocalModelOrigin）：开工前按模型配置算；经 magpie 时执行方报了实际模型（actual）就按实际模型名的前缀重认。
+   * 老版本本机不带，网页退回写 sourceLabel。
+   */
+  origin: Type.Optional(LocalModelOrigin),
   /**
    * 给人看的模型名：认得出的 Claude 模型写成「Opus 5.5」「Sonnet 5.5」「Haiku 5.5」；订阅传的是 opus、sonnet 这种别名时，
    * 用这台电脑上一次实际跑出来的版本（见 actual），一次都没跑过就写「Opus」「Sonnet」；别的（网关模型）去掉「厂商/」前缀原样写，如 qwen3.8-flash。
@@ -1342,6 +1366,7 @@ export type TLocalModelSource = Static<typeof LocalModelSource>;
 export type TLocalModelProfile = Static<typeof LocalModelProfile>;
 export type TLocalModelListResponse = Static<typeof LocalModelListResponse>;
 export type TLocalModelProfileUpsert = Static<typeof LocalModelProfileUpsert>;
+export type TLocalModelOrigin = Static<typeof LocalModelOrigin>;
 export type TLocalToolPreset = Static<typeof LocalToolPreset>;
 export type TLocalToolState = Static<typeof LocalToolState>;
 export type TLocalTool = Static<typeof LocalTool>;
