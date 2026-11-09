@@ -84,8 +84,9 @@ describe("连接页每一行（设计 9.5、5.4.6）", () => {
     expect(KINGDEE_PLACEHOLDER).toMatchObject({ name: "金蝶", state: "disconnected", action: null });
   });
 
-  it("我的账号：没接飞书不画飞书；连上给断开，过期给重新授权，没连给连接；让外部 AI 读天枢用过的算连上，只剩过期的是已过期", () => {
-    expect(feishuRow({ enabled: false, state: "not_connected" })).toBeNull();
+  it("我的账号：没配公司飞书应用时飞书照样有，写「未开通」、不给动作（还没读到不画）；连上给断开，过期给重新授权，没连给连接；让外部 AI 读天枢用过的算连上，只剩过期的是已过期", () => {
+    expect(feishuRow(null)).toBeNull();
+    expect(feishuRow({ enabled: false, state: "not_connected" })).toMatchObject({ name: "飞书", state: "not_enabled", action: null });
     expect(feishuRow({ enabled: true, state: "connected" })).toMatchObject({ state: "connected", action: "unpair" });
     expect(feishuRow({ enabled: true, state: "expired" })).toMatchObject({ state: "expired", action: "reauth" });
     expect(feishuRow({ enabled: true, state: "not_connected" })).toMatchObject({ state: "disconnected", action: "link" });
@@ -114,8 +115,12 @@ describe("连接（卡片网格 + 三组）", () => {
     expect(text(claude)).toContain("本周 · Fable：剩 60%");
     expect(text(claude)).toContain("额外额度：未开");
     expect(claude).toContain('data-tone="warning"');
-    // 卡：图标、名字、一行状态、来源；连上的右上角 ✓。
+    // 卡：图标、名字、一行状态、来源；连上的右上角 ✓。本机程序排第一，配好了右上 ✓、点卡是菜单；「这台电脑」组里不再有那一行。
     const card = (id: string) => html.split(`data-testid="card-${id}"`)[1]!.split("</li>")[0]!;
+    expect(html.indexOf('data-testid="card-program"')).toBeLessThan(html.indexOf('data-testid="card-world"'));
+    expect(text(card("program"))).toContain("本机程序 已连接 · v0.9.2 这台电脑");
+    expect(card("program")).toContain('aria-label="已连接"');
+    expect(html).not.toContain('data-testid="row-program"');
     expect(text(card("tool:gh"))).toContain("GitHub 已连接 · gh · sunm 本机");
     expect(card("tool:gh")).toContain('aria-label="已连接"');
     expect(text(card("tool:lark-cli"))).toContain("飞书命令行 未连接 · lark-cli auth login 本机");
@@ -152,9 +157,18 @@ describe("连接（卡片网格 + 三组）", () => {
     expect(html).not.toContain("这台电脑");
   });
 
+  it("本机没配对：本机卡写「未配对」，右上给「配对」", () => {
+    const html = withLocal(<ConnectionsPage go={() => undefined} />, "unpaired", null);
+    const card = html.split('data-testid="card-program"')[1]!.split("</li>")[0]!;
+    expect(text(card)).toContain("本机程序 未连接 · 未配对 这台电脑 配对");
+  });
+
   it("这台电脑离线：本机程序写「离线」，下面是安装命令和复制；不列 Claude Code 等本机才知道的行", () => {
     const html = withLocal(<ConnectionsPage go={() => undefined} />, "offline", null);
-    expect(text(html)).toContain("本机程序 离线 未连接 重试");
+    // 本机程序是网格里第一张卡（11/09），「这台电脑」组里不再有那一行。
+    expect(text(html)).toContain("本机程序 未连接 · 离线 这台电脑 重试");
+    expect(html.indexOf('data-testid="card-program"')).toBeLessThan(html.indexOf('data-testid="card-world"'));
+    expect(html).not.toContain('data-testid="row-program"');
     expect(html).toMatch(/<code>(irm|curl) [^<]*install/);
     expect(html).not.toContain('data-testid="row-agent:claude-code"');
     expect(html).not.toContain('data-testid="row-folders"');

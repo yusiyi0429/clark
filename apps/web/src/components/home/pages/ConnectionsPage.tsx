@@ -1,17 +1,16 @@
 "use client";
 
 /**
- * 连接（个人菜单「连接」，设计 9.5、5.4.6、11.2；「插件」改叫「连接」）：三组，按「在哪」分。每行名字 + 状态词 + 一个动作，不写说明句。
- * - 这台电脑（存在本机）：本机程序（七种状态落到四个状态词，离线时下面是安装命令）、Claude Code（下面是订阅额度和每个窗口的明细）、Codex、TokenHub、
- *   GitHub 和飞书命令行（登没登录、登的是谁）、工具（本人给子会话加的 MCP 服务器，存在本机）、文件夹（添加、移除）、同时跑、验收过就合回、带上个人配置；
- *   再下面是我的几台电脑（断开 = 吊销设备令牌）。
- *   逻辑照插件页（components/local/PluginsPage.tsx）：配对好、没关联云端时自己关联一次；断开的正好是这台时当场重新关联。手机上不连本机，只列电脑。
- * - 我的账号（存在云端）：飞书（连接、断开、重新授权）、微信（这套天枢接了才有）、让外部 AI 读天枢（个人 MCP 令牌，展开是现有的连接表单）、本体（我的能力域）。
- * - 公司：公司本体、飞书应用，只看状态（联网搜索没有能读的状态，先不画）。
+ * 「连接和技能」页的「连接」标签（设计 9.5、5.4.6、11.2、§17.2 第 22、31 条）。不写说明句。
+ * - 我的：最上面是卡片网格——本机程序、飞书、本体、GitHub、飞书命令行、加过的工具（金蝶、其他）；
+ *   下面是几组行：这台电脑（Claude Code 带订阅额度和每个窗口的明细、Codex、TokenHub、文件夹、同时跑、验收过就合回、带上个人配置、我的几台电脑）、
+ *   我的账号（微信、让外部 AI 读天枢）、公司（公司本体、飞书应用，只看状态）。
+ *   本机逻辑照插件页（components/local/PluginsPage.tsx）：配对好、没关联云端时自己关联一次；断开的正好是这台时当场重新关联。手机上不连本机，只列电脑。
+ * - 可添加：还没加的工具预设（金蝶）和「其他工具」。
  * 动作没成：那一行动作的位置写「失败 · 重试」（原因在 title 里），不弹 toast。
  */
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
-import { Boxes, Check, ChevronDown, Copy, Database, GitBranch, MessageSquare, Plug, Terminal, X } from "lucide-react";
+import { Boxes, Check, ChevronDown, Copy, Database, GitBranch, MessageSquare, Monitor, Plug, Terminal, X } from "lucide-react";
 import { Dropdown } from "@heroui/react";
 import { Popover } from "ts-design/primitives";
 import type { TLocalDeviceView, TLocalTool, TLocalToolUpsert } from "@warmap/contracts";
@@ -60,42 +59,19 @@ export function ConnectionsPage({ view = "mine" }: Partial<SecondaryPageProps> &
   const world = useWorldRead();
   const tools = useLocalTools();
   if (view === "add") return <AddConnections tools={tools} />;
-  return <><ConnectionGrid world={world} tools={tools} /><ThisComputer me={me} /><MyAccounts me={me} /><Company world={world.state} /></>;
+  return <><ConnectionGrid me={me} world={world} tools={tools} /><ThisComputer me={me} /><MyAccounts me={me} /><Company world={world.state} /></>;
 }
 
 /* ---------------- 这台电脑 ---------------- */
 
 function ThisComputer({ me }: { me: Me | null }) {
   const local = useLocalRunner();
-  const handheld = useHandheld();
   const actions = useActions();
-  const [linking, setLinking] = useState(false);
-  const [copied, setCopied] = useState(false);
   const status = local.status;
   const ready = local.phase === "ready";
-  const person: LinkPerson | null = me ? { personId: me.personId, name: me.displayName } : null;
   const now = Date.now();
-  // 配对好、还没关联云端的自动关联由 LocalRunnerProvider 一处管；这里只留没关联上、或老关联没记下是谁时的「连接」。
-
-  const mac = typeof navigator !== "undefined" && /Mac/i.test(navigator.userAgent);
-  const program = programRow({ phase: local.phase, status, version: local.version, pairing: local.pairing, error: local.error, linking, install: installCommand(mac) });
-  const programWork: Record<RowAction, (() => Promise<unknown>) | null> = {
-    pair: () => local.pair(),
-    retry: () => local.refresh(),
-    resume: async () => { await local.runner.patchSettings({ paused: false }); await local.refresh(); },
-    link: async () => {
-      if (!status || !person) return;
-      setLinking(true);
-      try { await linkCloud(local.runner, status, person); await local.refresh(); } finally { setLinking(false); }
-    },
-    unpair: () => local.unpair(),
-    reauth: null, login: null,
-  };
   const login = async () => { await local.runner.login(); await local.refresh(); };
   const patch = (body: Parameters<typeof local.runner.patchSettings>[0]) => actions.run("settings", async () => { await local.runner.patchSettings(body); await local.refresh(); });
-  const copy = async (text: string) => {
-    try { await navigator.clipboard.writeText(text); setCopied(true); window.setTimeout(() => setCopied(false), 1600); } catch { /* 手动选中复制 */ }
-  };
 
   // 额度和右栏「用量」同一套数：订阅的挂在 Claude Code、Codex 下面，其余（网关余额、当天花费）挂在 TokenHub 下面。
   const cells = ready ? usageCells(status?.quota ?? [], now) : [];
@@ -106,15 +82,11 @@ function ThisComputer({ me }: { me: Me | null }) {
       action={actions.slot(model.key, model.action ? LABEL[model.action] : null, work ?? null)}>{children}</Row>
   );
 
+  // 本机没就绪时这一组只剩「我的几台电脑」，没有电脑就整组不画（本机程序在上面的卡里）。
+  if (!ready || !status) return <Devices me={me} alone />;
   return (
     <Section title="这台电脑" testId="group-computer">
       <ul className={p.rows}>
-        {handheld ? null : rowOf(program, program.command ? (
-          <div className={p.command}>
-            <code>{program.command}</code>
-            <HeroButton variant="ghost" size="sm" isIconOnly title={copied ? "已复制" : "复制"} aria-label="复制" onPress={() => void copy(program.command!)}>{copied ? <Check {...ICON} /> : <Copy {...ICON} />}</HeroButton>
-          </div>
-        ) : null, program.action ? programWork[program.action] : null)}
         {ready && status ? <>
           {status.agents.map((agent) => {
             const own = cellsOf(agent.kind === "claude-code" ? "claude" : "codex");
@@ -170,10 +142,11 @@ const CLI_ICON: Record<"gh" | "lark-cli", ReactNode> = { gh: <GitBranch {...ICON
 const toolIcon = (tool: Pick<TLocalTool, "preset">) => (tool.preset === "kingdee" ? <Database {...ICON} /> : <Plug {...ICON} />);
 
 /**
- * 我的连接：本体、飞书、GitHub、飞书命令行、加过的工具（金蝶、其他）。卡上那一行写状态；连上了右上角 ✓，要处理的放一个动作（重试、连接、重新授权）。
- * 飞书连上以后点卡是一个菜单（断开）；工具点卡开编辑（名字、地址、钥匙）。
+ * 我的连接：本机程序、飞书、本体排在最前（11/09：找不到连飞书和本机的地方），然后 GitHub、飞书命令行、加过的工具（金蝶、其他）。
+ * 卡上那一行写状态；连上了右上角 ✓，要处理的放一个动作（配对、重试、连接、重新授权）。
+ * 本机、飞书连上以后点卡是一个菜单（断开、重新配对 / 断开）；工具点卡开编辑（名字、地址、钥匙）。
  */
-function ConnectionGrid({ world, tools }: { world: WorldRead; tools: LocalTools }) {
+function ConnectionGrid({ me, world, tools }: { me: Me | null; world: WorldRead; tools: LocalTools }) {
   const local = useLocalRunner();
   const actions = useActions();
   const [feishu, setFeishu] = useState<FeishuConnection | null>(null);
@@ -190,9 +163,7 @@ function ConnectionGrid({ world, tools }: { world: WorldRead; tools: LocalTools 
   return (
     <>
       <CardGrid label="我的连接" testId="connections-mine">
-        <Card testId="card-world" icon={<Boxes {...ICON} />} name="本体" source="公司"
-          line={world.state ? <StateLine state={world.state.ok ? "connected" : "disconnected"} detail={world.state.ok ? ["我的能力域", read ? `${read}读过` : null].filter(Boolean).join(" · ") : "本体读取失败"} /> : null}
-          corner={!world.state ? null : world.state.ok ? <Added label="已连接" /> : <HeroButton variant="ghost" size="sm" onPress={world.reload}>重试</HeroButton>} />
+        <ProgramCard me={me} />
         {feishuModel ? (
           <Card testId="card-feishu" icon={<MessageSquare {...ICON} />} name="飞书" source="我的账号" line={<StateLine state={feishuModel.state} />}
             main={feishuModel.action === "unpair" ? (body) => (
@@ -209,6 +180,9 @@ function ConnectionGrid({ world, tools }: { world: WorldRead; tools: LocalTools 
               : feishuModel.action === "unpair" ? <Added label="已连接" />
               : actions.slot("feishu", feishuModel.action ? LABEL[feishuModel.action] : null, reconnectFeishu)} />
         ) : null}
+        <Card testId="card-world" icon={<Boxes {...ICON} />} name="本体" source="公司"
+          line={world.state ? <StateLine state={world.state.ok ? "connected" : "disconnected"} detail={world.state.ok ? ["我的能力域", read ? `${read}读过` : null].filter(Boolean).join(" · ") : "本体读取失败"} /> : null}
+          corner={!world.state ? null : world.state.ok ? <Added label="已连接" /> : <HeroButton variant="ghost" size="sm" onPress={world.reload}>重试</HeroButton>} />
         {cli.map((tool) => {
           const model = toolRow(tool);
           return (
@@ -220,6 +194,66 @@ function ConnectionGrid({ world, tools }: { world: WorldRead; tools: LocalTools 
       </CardGrid>
       {tools.error !== null ? <FailedLine reason={tools.error} onRetry={tools.reload} /> : null}
     </>
+  );
+}
+
+/**
+ * 本机程序（原来「这台电脑」组里那一行，做法照旧）：七种状态落到状态词加小字；未配对给「配对」，离线、等浏览器允许、被拦截给「重试」，
+ * 暂停给「继续」，没关联云端给「连接」；配好了右上 ✓，点卡是菜单（断开、重新配对）。离线时卡下面是安装命令和「复制」。手机上不连本机，不画。
+ * 配对好、还没关联云端的自动关联由 LocalRunnerProvider 一处管；这里只留没关联上、或老关联没记下是谁时的「连接」。
+ */
+function ProgramCard({ me }: { me: Me | null }) {
+  const local = useLocalRunner();
+  const handheld = useHandheld();
+  const actions = useActions();
+  const [linking, setLinking] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const status = local.status;
+  const person: LinkPerson | null = me ? { personId: me.personId, name: me.displayName } : null;
+  const mac = typeof navigator !== "undefined" && /Mac/i.test(navigator.userAgent);
+  const program = programRow({ phase: local.phase, status, version: local.version, pairing: local.pairing, error: local.error, linking, install: installCommand(mac) });
+  if (handheld) return null;
+  const work: Record<RowAction, (() => Promise<unknown>) | null> = {
+    pair: () => local.pair(),
+    retry: () => local.refresh(),
+    resume: async () => { await local.runner.patchSettings({ paused: false }); await local.refresh(); },
+    link: async () => {
+      if (!status || !person) return;
+      setLinking(true);
+      try { await linkCloud(local.runner, status, person); await local.refresh(); } finally { setLinking(false); }
+    },
+    unpair: () => local.unpair(),
+    reauth: null, login: null,
+  };
+  const repair = async () => { await local.unpair(); await local.pair(); };
+  const copy = async (text: string) => {
+    try { await navigator.clipboard.writeText(text); setCopied(true); window.setTimeout(() => setCopied(false), 1600); } catch { /* 手动选中复制 */ }
+  };
+  const paired = local.phase === "ready";
+  const settled = paired && program.action === "unpair";
+  return (
+    <Card testId="card-program" icon={<Monitor {...ICON} />} name={program.name} source="这台电脑" line={<StateLine state={program.state} detail={program.sub} />}
+      main={paired ? (body) => (
+        <Dropdown>
+          <Dropdown.Trigger className={p.cardMain} aria-label={program.name}>{body}</Dropdown.Trigger>
+          <Dropdown.Popover placement="bottom start" offset={8} className={h.pop}>
+            <Dropdown.Menu aria-label={program.name} className={h.menuList} onAction={(key) => actions.run("program", key === "repair" ? repair : () => local.unpair())}>
+              <Dropdown.Item id="unpair" textValue="断开" className={h.menuItem}>断开</Dropdown.Item>
+              <Dropdown.Item id="repair" textValue="重新配对" className={h.menuItem}>重新配对</Dropdown.Item>
+            </Dropdown.Menu>
+          </Dropdown.Popover>
+        </Dropdown>
+      ) : undefined}
+      corner={actions.failed?.key === "program" ? <FailedLine inline reason={actions.failed.reason} onRetry={actions.failed.retry} />
+        : settled ? <Added label="已连接" />
+        : actions.slot("program", program.action ? LABEL[program.action] : null, program.action ? work[program.action] : null)}>
+      {program.command ? (
+        <div className={p.command}>
+          <code>{program.command}</code>
+          <HeroButton variant="ghost" size="sm" isIconOnly title={copied ? "已复制" : "复制"} aria-label="复制" onPress={() => void copy(program.command!)}>{copied ? <Check {...ICON} /> : <Copy {...ICON} />}</HeroButton>
+        </div>
+      ) : null}
+    </Card>
   );
 }
 
@@ -367,8 +401,9 @@ function Concurrency({ value, onPick }: { value: number; onPick: (value: number)
 /**
  * 我的几台电脑（云端的设备令牌）：名字、「这台」、版本和上次同步；「断开」= 吊销这台的令牌。
  * 断开的正好是这台时当场重新关联（这台电脑拿一把新令牌，被断开的那一行留着写「已断开」）；断开过的不再有按钮。
+ * alone：本机没就绪时自己带「这台电脑」的组标题，没有电脑就什么都不画。
  */
-function Devices({ me }: { me: Me | null }) {
+function Devices({ me, alone }: { me: Me | null; alone?: boolean }) {
   const local = useLocalRunner();
   const actions = useActions();
   const [devices, setDevices] = useState<TLocalDeviceView[] | null>(null);
@@ -388,7 +423,7 @@ function Devices({ me }: { me: Me | null }) {
     setRevoked((gone) => [...gone, device]);
     if (device.id === here && local.status && me) { await linkCloud(local.runner, local.status, { personId: me.personId, name: me.displayName }).catch(() => undefined); await local.refresh(); load(); }
   });
-  return <>{rows.map((device) => {
+  const list = rows.map((device) => {
     const gone = revoked.some((entry) => entry.id === device.id);
     const synced = relative(device.lastSyncAt, now);
     const sub = gone ? "已断开" : [device.appVersion ? `v${device.appVersion}` : null, synced ? `${synced}同步` : null].filter(Boolean).join(" · ") || null;
@@ -396,7 +431,9 @@ function Devices({ me }: { me: Me | null }) {
       <Row key={device.id} testId="row-device" name={device.name} tag={device.id === here ? "这台" : undefined} sub={sub}
         action={gone ? null : actions.slot(`device:${device.id}`, "断开", async () => revoke(device))} />
     );
-  })}</>;
+  });
+  if (!alone) return <>{list}</>;
+  return rows.length ? <Section title="这台电脑" testId="group-computer"><ul className={p.rows}>{list}</ul></Section> : null;
 }
 
 /* ---------------- 我的账号 ---------------- */

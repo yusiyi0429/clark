@@ -20,7 +20,7 @@ label.row:hover { background: var(--default-soft); }
 .rowName > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .rowSub { overflow: hidden; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .state { flex: none; color: var(--ink-muted); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); white-space: nowrap; }
-.state[data-state="disconnected"], .state[data-state="unknown"] { color: var(--ink-faint); }
+.state[data-state="disconnected"], .state[data-state="unknown"], .state[data-state="not_enabled"] { color: var(--ink-faint); }
 .state[data-state="expired"], .state[data-state="unauthorized"], .state[data-state="unreachable"] { color: var(--warning); }
 .state[data-state="exhausted"] { color: var(--danger); }
 .action { display: inline-flex; flex: none; align-items: center; gap: var(--space-1); }
@@ -184,7 +184,7 @@ label.row:hover { background: var(--default-soft); }
 .customizeBar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
 @media (max-width: 959px) { .grid { grid-template-columns: minmax(0, 1fr); } }
-.card { position: relative; display: flex; align-items: flex-start; gap: var(--space-2); min-width: 0; padding: var(--space-3); border-radius: var(--r-card); background: var(--surface); box-shadow: inset 0 0 0 1px var(--hairline); transition: background-color var(--dur-base) var(--ease-swift); }
+.card { position: relative; display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-2); min-width: 0; padding: var(--space-3); border-radius: var(--r-card); background: var(--surface); box-shadow: inset 0 0 0 1px var(--hairline); transition: background-color var(--dur-base) var(--ease-swift); }
 .card[data-openable]:hover { background: var(--default-soft); }
 .cardMain { display: flex; flex: 1; align-items: flex-start; gap: var(--space-3); min-width: 0; margin: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; }
 button.cardMain { cursor: pointer; }
@@ -197,8 +197,9 @@ button.cardMain:focus-visible::after { outline: 2px solid var(--focus); outline-
 .cardLine { display: -webkit-box; overflow: hidden; color: var(--ink-muted); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
 .cardSource { color: var(--ink-faint); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); }
 .cardState { color: var(--ink-muted); }
-.cardState[data-state="disconnected"], .cardState[data-state="unknown"] { color: var(--ink-faint); }
+.cardState[data-state="disconnected"], .cardState[data-state="unknown"], .cardState[data-state="not_enabled"] { color: var(--ink-faint); }
 .cardState[data-state="expired"], .cardState[data-state="unauthorized"], .cardState[data-state="unreachable"] { color: var(--warning); }
 .cardState[data-state="exhausted"] { color: var(--danger); }
+.cardExtra { position: relative; z-index: 1; flex: 1 0 100%; min-width: 0; }
 .cardCorner { position: relative; z-index: 1; display: inline-flex; flex: none; align-items: center; gap: var(--space-1); }
 .added { display: grid; place-items: center; width: 32px; height: 32px; border-radius: var(--r-control); background: var(--confirmed-wash); color: var(--confirmed); }
