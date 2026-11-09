@@ -123,6 +123,22 @@ describe("子会话的字母和状态点（18.10）", () => {
   });
 });
 
+describe("蓝点点了就藏（25 条，组件）", () => {
+  const sub = (updatedAt: string) => ({ id: "c2", kind: "card", title: "卡2", state: "waiting", waiting: null, updatedAt, queueReason: null, holdUntil: null, sessionId: null, unseen: true });
+  const other = (updatedAt: string) => ({ ...data, other: { subSessions: [sub(updatedAt)], items: [] } }) as never;
+  it("刚看过的（同一次停下）不画蓝点；之后来了更新的停下又画；刷新后没有这一页的记录，照云端画", () => {
+    const seen = new Map([["sub:c2", "2026-11-09T03:00:00Z"]]);
+    expect(render({ data: other("2026-11-09T03:00:00Z"), seen })).not.toContain("sub-dot");
+    expect(render({ data: other("2026-11-09T03:05:00Z"), seen })).toMatch(/data-tone="stopped"[^>]*aria-label="已停下"/);
+    expect(render({ data: other("2026-11-09T03:00:00Z") })).toMatch(/data-tone="stopped"[^>]*aria-label="已停下"/);
+  });
+  it("项目行同理：刚看过的不画，看过以后又有新回复的画", () => {
+    const seen = new Map([["project:p1", "2026-11-07T01:00:00.000Z"]]);
+    expect(render({ data: withTask([], { unseen: true }), seen })).not.toContain("project-unseen");
+    expect(render({ data: withTask([], { unseen: true, lastActivityAt: "2026-11-07T02:00:00.000Z" }), seen })).toContain("project-unseen");
+  });
+});
+
 describe("伙伴台「亮着」（17.2）：只在伙伴对话里", () => {
   it("别的页不亮；伙伴对话里空闲是 idle，回话流着是 speaking（在说或在想）", () => {
     expect(render({})).not.toContain("data-glow");

@@ -14,7 +14,7 @@
  * Task 管线里选「就按这个开始」马上开；在手机上开始、或网页没开时排成「等开工」的卡和拆卡登记，下次在电脑上打开就自己开，不用点。
  * 伙伴在这个标签页的回复里「登记拆卡」、本机又连着，就直接开规划员；验收没过的改法由这里自动对执行的会话说一句（useAutoReturn）。
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ArrowLeft, ListChecks, LoaderCircle } from "lucide-react";
 import type { THomePlanTask, TLocalPermissionMode } from "@warmap/contracts";
@@ -47,6 +47,7 @@ import { MissionInfo } from "./MissionInfo";
 import { ProjectInfo } from "./ProjectInfo";
 import { ProjectTrail } from "./ProjectParts";
 import { LeftResize, useLeftWidth } from "./LeftResize";
+import { seenKey, withSeen, type SeenKind, type SeenMarks } from "@/lib/home/seen";
 import { TransferFlow, TransferView } from "./Transfer";
 import type { TimedBlock } from "@/components/work/WorkTimeline";
 import { useProjects } from "./useProjects";
@@ -186,16 +187,24 @@ function HomeFrame({ account }: { account: Account }) {
   useSessionCommands(local, here);
   // 左栏宽度（24 条）：本人拖过的写在根上的 --home-left，没拖过照 CSS 的 clamp。
   const leftWidth = useLeftWidth();
-  // 打开子会话、项目对话时记看过，左栏蓝点消失（26 条）；开着时又来了新的（unseen 又成了 true）再记一次。记过以后重读首页数据收掉蓝点。
-  const seenKind = view.kind === "card" || view.kind === "topic" ? "sub" : view.kind === "project" ? "project" : null;
+  // 蓝点「点了就藏」（25 条）：打开子会话、项目对话的那一刻记成「刚看过」（带那一刻的停下时间），左栏马上不画；work-seen 在后台发，失败不提示。
+  // 左栏点行时在跳页之前记；别处打开的（等你、链接、改地址）在换页后、画出来之前记（layout effect），效果一样。开着时又来了更新的停下，也再记一次。
+  const [seenMarks, setSeenMarks] = useState<SeenMarks>(() => new Map());
+  const marksRef = useRef<SeenMarks>(seenMarks);
+  const markSeen = useCallback((kind: SeenKind, id: string, marker: string | null) => {
+    // 同一个、同一次停下记过了就不再记（点行时记过，换页后那一下就不重复发）。
+    if (marksRef.current.get(seenKey(kind, id)) === (marker ?? "")) return;
+    marksRef.current = withSeen(marksRef.current, kind, id, marker);
+    setSeenMarks(marksRef.current);
+    void markWorkSeen(kind, id).catch(() => undefined);
+  }, []);
+  const seenKind: SeenKind | null = view.kind === "card" || view.kind === "topic" ? "sub" : view.kind === "project" ? "project" : null;
   const seenId = seenKind ? (view as { id: string }).id : null;
-  const seenUnseen = seenKind === "project" ? !!projects.all.find((project) => project.id === seenId)?.unseen
-    : seenKind === "sub" ? !![...projects.all.flatMap((project) => project.subSessions), ...data.other.subSessions].find((sub) => sub.id === seenId)?.unseen : false;
-  useEffect(() => {
-    if (!seenKind || !seenId) return;
-    void markWorkSeen(seenKind, seenId).then(() => { if (seenUnseen) void api.refresh(); }, () => undefined);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 换了打开的对象、或开着时又有新的才记
-  }, [seenKind, seenId, seenUnseen]);
+  const seenMarker = seenKind === "project" ? projects.all.find((project) => project.id === seenId)?.lastActivity ?? null
+    : seenKind === "sub" ? [...projects.all.flatMap((project) => project.subSessions), ...data.other.subSessions].find((sub) => sub.id === seenId)?.updatedAt ?? null : null;
+  useLayoutEffect(() => {
+    if (seenKind && seenId) markSeen(seenKind, seenId, seenMarker);
+  }, [seenKind, seenId, seenMarker, markSeen]);
   const changed = useCallback(() => { void api.refresh(); }, [api]);
   /**
    * 这个标签页里自动开工没开起来的子会话（卡 id、专题 id）：Task 管线里那一行出「失败」加「手动开始」（5.4.3、9.8，手动开始只有这一处），
@@ -540,7 +549,7 @@ function HomeFrame({ account }: { account: Account }) {
 
   const left = (
     <LeftColumn data={data} view={view} buddy={buddy} speaking={speaking} go={go} phone={handheld} account={account} month={month} onRetryPlan={api.planFailed ? () => void api.retryPlan() : null}
-      projects={projects.projects} archived={projects.archived} onCreate={(name) => projects.actions.create(name)} cardAt={cardAt} working={working}
+      projects={projects.projects} archived={projects.archived} onCreate={(name) => projects.actions.create(name)} cardAt={cardAt} working={working} seen={seenMarks} onOpen={markSeen}
       today={todayLabel(work.plan?.today ?? null)} alert={alert} trail={handheld ? backgroundButton : null}
       top={handheld && data.waiting.length ? (
         <section aria-label="等你" className={h.phoneWaiting}>
