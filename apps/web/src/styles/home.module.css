@@ -401,6 +401,8 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .statusChip { display: inline-flex; flex: none; align-items: center; height: 20px; padding: 0 var(--space-2); border: 0; border-radius: var(--r-capsule); background: var(--neutral-wash); color: var(--ink-muted); font: inherit; font-size: var(--text-xs); line-height: 16px; white-space: nowrap; cursor: pointer; }
 .statusChip:hover { background: var(--default-hover); color: var(--ink); }
 .chip svg { flex: none; color: var(--ink-faint); }
+/* 胶囊里的字（模型、岗位、文件夹）：太长出省略号，下拉箭头始终在（.chip 本身是 flex，省略号要写在字这一层）。 */
+.chip > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .slotsLine { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--ink-faint); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
 .line { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-32); margin: var(--space-2) 0; color: var(--ink-faint); font-size: var(--text-base); line-height: var(--lh-row); }
 /* Task 管线里的验收行（结果那句话、推翻）：一行字，点了进那张卡。 */

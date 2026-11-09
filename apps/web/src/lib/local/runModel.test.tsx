@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { TCardDraftView, TLocalModelProfile } from "@warmap/contracts";
 import { LocalContext } from "./LocalRunnerProvider";
 import { createMockRunner } from "./mock";
-import { chatModelLabel, harnessLabel, profileModel, profileSource, runLabel } from "./runModel";
+import { chatModelLabel, harnessLabel, pickLabel, profileModel, profileSource, runLabel } from "./runModel";
 import { ModelText } from "@/components/home/Conversations";
 import { PlanDecision } from "@/components/home/PlanDecision";
 
@@ -38,7 +38,7 @@ describe("子会话显示「来源 · 模型」", () => {
     expect((await runner.listSessions())[0]!.run?.actual?.modelName).toBe("Haiku 5.5");
   });
 
-  it("开工选项框每一步右边：没单独选时写「自动 · 执行方 · 模型」，来源在悬停里；本机还没回预览时照模型配置写", () => {
+  it("开工选项框每一步右边：没单独选时写「自动 · 模型」，订阅读不到模型名写「自动 · Claude 订阅」；执行方和来源在悬停的全称里；本机还没回预览时照模型配置写", () => {
     const models: TLocalModelProfile[] = [{ id: "subscription", label: "我的 Claude 订阅", source: "subscription", agent: "claude-code", baseUrl: null, model: null, smallModel: null, webSearch: true, hasKey: false, isDefault: true }];
     const local = { runner: createMockRunner(), phase: "offline", version: null, status: null, models, folders: [], sessions: [], pairing: null, error: null,
       refresh: vi.fn(), pair: vi.fn(), unpair: vi.fn(), pickFolder: vi.fn(), setIncludePersonal: vi.fn() } as unknown as Parameters<typeof LocalContext.Provider>[0]["value"];
@@ -48,7 +48,20 @@ describe("子会话显示「来源 · 模型」", () => {
     const html = renderToStaticMarkup(<LocalContext.Provider value={local}>
       <PlanDecision target={{ taskId: "t1" }} name="派活单" drafts={[draft]} roles={[]} handheld={false} onSay={vi.fn()} onChanged={vi.fn()} />
     </LocalContext.Provider>);
-    expect(html).toMatch(/<span title="我的 Claude 订阅">自动 · Claude Code · 我的 Claude 订阅<\/span>/);
+    const pick = html.match(/<button[^>]*data-testid="model-pick"[^>]*>[\s\S]*?<\/button>/)?.[0] ?? "";
+    expect(pick).toMatch(/<span title="自动 · Claude Code · 我的 Claude 订阅">自动 · Claude 订阅<\/span><svg/);
+  });
+});
+
+describe("派活单的模型胶囊（用户定 A+B）", () => {
+  it("选了具体模型只写模型；自动写「自动 · 模型」；订阅读不到模型名写「Claude 订阅」「Codex 订阅」；悬停全称是「执行方 · 模型 · 来源」，重复的不写两遍", () => {
+    const opus = { harness: "claude-code" as const, model: "Opus 5.5", source: "我的 Claude 订阅", subscription: true };
+    expect(pickLabel(opus, false)).toEqual({ label: "Opus 5.5", title: "Claude Code · Opus 5.5 · 我的 Claude 订阅" });
+    expect(pickLabel(opus, true)).toEqual({ label: "自动 · Opus 5.5", title: "自动 · Claude Code · Opus 5.5 · 我的 Claude 订阅" });
+    expect(pickLabel({ ...opus, model: null }, true)).toEqual({ label: "自动 · Claude 订阅", title: "自动 · Claude Code · 我的 Claude 订阅" });
+    expect(pickLabel({ harness: "codex", model: null, source: "Codex 订阅 · 经 magpie", subscription: true }, false).label).toBe("Codex 订阅");
+    // 网关读不到模型名时写来源；全称里来源和模型一样时只写一次。
+    expect(pickLabel({ harness: "claude-code", model: null, source: "TokenHub", subscription: false }, false)).toEqual({ label: "TokenHub", title: "Claude Code · TokenHub" });
   });
 });
 
