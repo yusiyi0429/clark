@@ -94,6 +94,24 @@ describe("本机程序契约", () => {
     expect(Value.Check(LocalSessionModelRequest, { model: "haiku" })).toBe(false);
     expect(LocalSessionModelResponse.properties.applied.anyOf.map((x: any) => x.const)).toEqual(["now", "after_turn"]);
     expect(LOCAL_RUNNER_ROUTES.setSessionModel).toEqual({ method: "PUT", path: "/v1/sessions/:id/model", auth: true });
+    // 思考程度（第 36 条）：只换思考程度、回到自动、和模型一起换
+    expect(Value.Check(LocalSessionModelRequest, { effort: "high" })).toBe(true);
+    expect(Value.Check(LocalSessionModelRequest, { effort: null })).toBe(true);
+    expect(Value.Check(LocalSessionModelRequest, { modelProfileId: "sub-haiku", effort: "low" })).toBe(true);
+    expect(Value.Check(LocalSessionModelRequest, { effort: "extreme" })).toBe(false);
+  });
+
+  it("思考程度：模型配置带能选的几档和默认档，开工和预览能带；ultra 只有 Codex 有", () => {
+    const profile = {
+      id: "subscription", label: "我的 Claude 订阅", source: "subscription", agent: "claude-code", baseUrl: null, model: null, smallModel: null,
+      webSearch: true, hasKey: false, isDefault: true, efforts: ["low", "medium", "high", "xhigh", "max"], defaultEffort: null,
+    };
+    expect(Value.Check(LocalModelProfile, profile)).toBe(true);
+    expect(Value.Check(LocalModelProfile, { ...profile, agent: "codex", efforts: ["low", "medium", "high", "xhigh", "max", "ultra"], defaultEffort: "low" })).toBe(true);
+    expect(Value.Check(LocalModelProfile, { ...profile, efforts: [] })).toBe(true); // 网关模型不能选
+    expect(Value.Check(LocalCreateSessionRequest, { subject: { kind: "card", cardId: "c" }, title: "x", firstMessage: "y", effort: "xhigh" })).toBe(true);
+    expect(Value.Check(LocalCreateSessionRequest, { subject: { kind: "card", cardId: "c" }, title: "x", firstMessage: "y", effort: "turbo" })).toBe(false);
+    expect(Value.Check(LocalRunPreviewRequest, { modelProfileId: "subscription", effort: "max" })).toBe(true);
   });
 
   it("权限决定可附理由、可本会话都允许", () => {
@@ -439,7 +457,7 @@ describe("本机程序契约", () => {
     };
     expect(Value.Check(LocalSessionSummary, summary)).toBe(true);
     expect(Value.Check(LocalSessionSummary, { ...summary, hold: { reason: "balance", until: null }, run: { ...run, mode: "set", effort: null, multiAgent: false } })).toBe(true);
-    expect(Value.Check(LocalSessionSummary, { ...summary, run: { ...run, effort: "ultra" } })).toBe(false);
+    expect(Value.Check(LocalSessionSummary, { ...summary, run: { ...run, effort: "turbo" } })).toBe(false);
     // 哪个来源的哪个模型：开工前定的，和执行方实际报的（以实际为准）；老版本本机报的没有这几项也收
     const named = { ...run, source: "subscription", sourceLabel: "我的 Claude 订阅", modelName: "Opus 5.5", actual: { model: "claude-opus-5-5", modelName: "Opus 5.5", at } };
     expect(Value.Check(LocalSessionSummary, { ...summary, run: named })).toBe(true);

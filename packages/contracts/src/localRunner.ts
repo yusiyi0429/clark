@@ -296,6 +296,14 @@ export const LocalCloudLinkRequest = Type.Object({
  */
 export const LocalModelSource = Type.Union([Type.Literal("subscription"), Type.Literal("gateway")]);
 /**
+ * 思考程度（设计 17.2 第 36 条）。各执行方、各模型支持哪几档（11/09 实测，都没调模型）：
+ * - Claude Code 2.1.318：握手（initialize）回的模型列表里，Opus 5.5、Fable 5.1、Sonnet 5.5、Haiku 5.5 都是 low、medium、high、xhigh、max 五档。
+ *   开工用 --effort 传；开着时用控制请求 apply_flag_settings { effortLevel } 当场换（它不校验取值，本机先校验）。网关模型本机不传思考程度。
+ * - Codex 0.159.2：`codex debug models` 的模型目录里每个模型自己列 supported_reasoning_levels 和 default_reasoning_level，
+ *   如 gpt-6.1-sol 是 low…max 加 ultra、默认 low，gpt-5.5 是 low…xhigh、默认 medium；用 -c model_reasoning_effort 传。ultra 只有 Codex 有。
+ */
+export const LocalEffort = Type.Union([Type.Literal("low"), Type.Literal("medium"), Type.Literal("high"), Type.Literal("xhigh"), Type.Literal("max"), Type.Literal("ultra")]);
+/**
  * 真正的来源（本机按地址和模型名认出来，网页照写，不用自己猜）：
  * - provider：认出的来源 id。claude-subscription 本人的 Claude 订阅；tokenhub；厂商 API 是 deepseek、kimi、glm、qwen、volcengine、minimax、anthropic 等；
  *   经 magpie 时按模型名的前缀（codex/…、deepseek/…）认，如 codex、copilot、gemini；都认不出就是地址的主机名（经 magpie 又没有前缀时是 magpie）。
@@ -314,6 +322,13 @@ export const LocalModelProfile = Type.Object({
   source: LocalModelSource,
   /** 认出的真正来源（见 LocalModelOrigin），按 baseUrl 和 model 现算。老版本本机不带。 */
   origin: Type.Optional(LocalModelOrigin),
+  /**
+   * 这个模型能选的思考程度（见 LocalEffort），网页选完模型只列这几档；空的是不能选（网关模型本机不传思考程度）。
+   * Claude Code 的按它握手时报的模型列表（这台电脑上跑过一次以后记下；没跑过按 Claude 模型的五档）。老版本本机不带。
+   */
+  efforts: Type.Optional(Type.Array(LocalEffort, { maxItems: 8 })),
+  /** 不选时用哪档：null 是本机按档位和预算模式定（强 high、标准 medium、轻 low），模型自己的默认档时写那一档。老版本本机不带。 */
+  defaultEffort: Type.Optional(Nullable(LocalEffort)),
   agent: LocalAgentKind,
   baseUrl: Nullable(Type.String()),
   model: Nullable(Type.String()),
@@ -581,10 +596,13 @@ export const LocalRole = Type.Object({
  * - acceptEdits「自动接受改文件」：允许的文件夹里新建、改文件自己放行；命令和别的照样问。
  * - plan「先出计划」：执行方只读、只出计划（Claude Code 的 plan 模式），出完计划问本人「按这个做」（权限请求，toolName ExitPlanMode）；
  *   本人批了就转成 auto 接着做（事件 permission_mode，by plan_approved），拒了留在 plan、按本人说的改计划。
- * - bypassPermissions「全部放行」：除了下面的硬规矩，都自己放行。
- * 天枢的硬规矩不受模式影响，哪一档都照问本人（设计 9.5）：对外的动作（git 推送和拉取、gh（开 PR 等）、飞书命令行写的（发消息、改文档等））、
+ * - bypassPermissions「全部放行」（11/09 用户定，设计 17.2 第 33 条：选了全部放行就是不看，不该来问）：只有三类还问本人——
+ *   推代码或开 PR（git push；gh 的写操作，如 pr create、pr merge、release create、issue create、api 发 POST 等）、
+ *   给别人发消息（飞书命令行发消息、回复、转发、发邮件）、在天枢里替本人写入（天枢 MCP 里写的工具）。
+ *   别的都自己放行：联网下载、装东西、改系统设置、碰 .git 和 .claude、动允许的文件夹以外的文件、跑没装好的 npx 包、本人加的工具里写的操作等。
+ * 其他几档还有天枢的硬规矩，照问本人（设计 9.5）：对外的动作（git 推送和拉取、gh（开 PR 等）、飞书命令行写的（发消息、改文档等））、
  * 危险命令表里的（装东西、联网下载、ssh、sudo、改注册表和系统设置、跑没装好的 npx 包）、碰 .git 和 .claude 的、碰允许的文件夹以外的路径、
- * 天枢 MCP 里写的工具。卡和规划员、验收员本来不给的工具（只读的会话不给写文件）照旧不给，跟模式无关。
+ * 天枢 MCP 里写的工具、本人加的工具里不是读的。卡和规划员、验收员本来不给的工具（只读的会话不给写文件）照旧不给，跟模式无关。
  * 实现上 Claude Code 一律以「每次都问」起（只有 plan 用它自己的 plan 模式），每个请求都先到本机、本机按档位放行或转给网页：
  * Claude Code 自己的 auto、bypassPermissions 放行的步骤不经本机，硬规矩管不住。
  */
@@ -620,6 +638,8 @@ export const LocalCreateSessionRequest = Type.Object({
    * strong 是 Opus、high；normal 是 Opus、medium；light 是 Sonnet、low。不填按岗位的档位，再没有按 normal。
    */
   modelTier: Type.Optional(LocalModelTier),
+  /** 本人选的思考程度（设计 17.2 第 36 条）：要在这个模型配置的 efforts 里，不然 400；不填按档位和预算模式定。 */
+  effort: Type.Optional(LocalEffort),
   firstMessage: Type.String({ minLength: 1, maxLength: 20000 }),
   /** 覆盖「默认干净」：true 时带上本人全局配置（hooks、插件、个人 MCP）。 */
   includePersonalConfig: Type.Optional(Type.Boolean()),
@@ -728,8 +748,6 @@ export const LocalHold = Type.Object({
   until: Nullable(Instant),
 }, strict);
 
-/** Claude Code 的思考强度（--effort）。 */
-export const LocalEffort = Type.Union([Type.Literal("low"), Type.Literal("medium"), Type.Literal("high"), Type.Literal("xhigh"), Type.Literal("max")]);
 /**
  * 这次拉起实际怎么跑（卡行写模型和思考强度，新首页设计 11.3、11.5）：mode 是所属 Task 的预算模式（没带预算为 auto）；
  * model 是传给 Claude Code 的模型（订阅按档位选的 opus、sonnet，网关是配置里的模型名）；effort 是思考强度（网关不传为 null）；
@@ -783,6 +801,7 @@ export const LocalRunPreviewRequest = Type.Object({
   agent: Type.Optional(LocalAgentKind),
   modelProfileId: Type.Optional(Id),
   modelTier: Type.Optional(LocalModelTier),
+  effort: Type.Optional(LocalEffort),
   taskBudget: Type.Optional(Type.Object({ taskId: Nullable(Type.String({ minLength: 1, maxLength: 80 })), budget: Budget }, strict)),
 }, strict);
 
@@ -819,7 +838,9 @@ export const LocalSessionSummary = Type.Object({
   /** 现在的权限模式（见 LocalPermissionMode）。本人在子会话底下改（PUT /v1/sessions/:id/permission-mode），计划批了从 plan 转 auto。 */
   permissionMode: LocalPermissionMode,
   /** 本人换了模型、要等这一轮做完才换的（见 LocalSessionModelResponse 的 after_turn）：换成哪个；换好了或没有就不带。 */
-  pendingModel: Type.Optional(Type.Object({ modelProfileId: Id, modelLabel: Type.String() }, strict)),
+  pendingModel: Type.Optional(Type.Object({ modelProfileId: Id, modelLabel: Type.String(), effort: Type.Optional(Nullable(LocalEffort)) }, strict)),
+  /** 本人选的思考程度（开工时带的或后来换的）；不带是按档位和预算模式定。实际跑的看 run.effort。 */
+  effort: Type.Optional(LocalEffort),
 }, strict);
 export const LocalSessionListResponse = Type.Object({ sessions: Type.Array(LocalSessionSummary) }, strict);
 
@@ -937,7 +958,9 @@ export const LocalSessionActionResponse = Type.Object({ session: LocalSessionSum
 export const LocalPermissionModeRequest = Type.Object({ mode: LocalPermissionMode }, strict);
 
 /**
- * PUT /v1/sessions/:id/model：子会话换模型（天枢伙伴不走这里；设计 17.2 第 32 条）。modelProfileId 是本机的模型配置（GET /v1/models）。
+ * PUT /v1/sessions/:id/model：子会话换模型、换思考程度（天枢伙伴不走这里；设计 17.2 第 32、36 条）。modelProfileId 是本机的模型配置（GET /v1/models），
+ * effort 是思考程度（要在新模型配置的 efforts 里；null 是回到按档位和预算模式定）。两项至少带一项；只带 effort 是同一个模型换思考程度：
+ * Claude Code 在跑时用 apply_flag_settings 当场换（now），Codex 要重开（规则同下面的跨来源）。只换模型不带 effort 时，原来选的思考程度新模型也支持就留着，不支持就回到自动。
  * 两种生效方式，回执的 applied 写明，网页分别显示：
  * - now（已生效）：下一次回答起就用新模型。同一个执行方、同一个来源里换（订阅里 Opus 换 Haiku；同一个网关地址、同一把钥匙下换模型名）时，
  *   本机当场让 Claude Code 换（它的 set_model，11/09 实测 2.1.318 认）；会话没在跑（停了、排着、交完了）时也是 now，下次开起来就用新的。
@@ -947,7 +970,7 @@ export const LocalPermissionModeRequest = Type.Object({ mode: LocalPermissionMod
  * 换好以后摘要和 status 同步条目里的 run（modelName、origin 等）随之更新，事件流记一条 notice（code model_changed）。
  * 没有这个模型配置、配置的执行方和会话的不一样回 400。
  */
-export const LocalSessionModelRequest = Type.Object({ modelProfileId: Id }, strict);
+export const LocalSessionModelRequest = Type.Object({ modelProfileId: Type.Optional(Id), effort: Type.Optional(Nullable(LocalEffort)) }, strict);
 export const LocalSessionModelResponse = Type.Object({
   applied: Type.Union([Type.Literal("now"), Type.Literal("after_turn")]),
   session: LocalSessionSummary,
