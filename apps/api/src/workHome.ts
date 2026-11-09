@@ -24,6 +24,7 @@ import { handedAway, openTransfers, transferView } from "./projectTransfers.js";
 import { syncProjects } from "./projectSync.js";
 import { criteriaMetCounts, type StoredMerge } from "./taskFeed.js";
 import { lettersFor } from "./subSessionLetters.js";
+import { projectNewsAt, seenTimes, unseenSince } from "./workSeen.js";
 
 /**
  * 新首页（契约 workHome.ts，设计《新首页_伙伴总管线与Task管线》第 2、4、7、10.3 节）：左栏的树（Mission → 本人负责的 Task → 子会话和自己做的事项）、「等你」、右栏的后台任务。
@@ -33,6 +34,8 @@ import { lettersFor } from "./subSessionLetters.js";
 
 const SHANGHAI_DAY = (column: string, param: string) =>
   `(${column} AT TIME ZONE 'Asia/Shanghai')::date=(${param}::timestamptz AT TIME ZONE 'Asia/Shanghai')::date`;
+/** 本机会话停下了：一轮做完停下（没在问你）、被停下、出错停住、交完收工。 */
+const stopped = (state: string, ask: RunAsk | null) => ["exited", "failed", "done"].includes(state) || (state === "idle" && ask?.kind !== "question");
 /** 树上同一格里的先后：等你、没过、进行中、已排队、已完成。 */
 const STATE_ORDER: TSubSessionState[] = ["waiting", "failed", "running", "queued", "done"];
 const latest = (...times: (string | Date | null | undefined)[]) =>
@@ -83,7 +86,7 @@ const cardMerge = (stored: StoredMerge): TCardMerge => ({ state: stored.merged ?
   at: new Date(stored.at).toISOString() });
 
 /** 树和等你共用的子会话：外加挂的 Task、最近一次执行的时间、验收通过的时间（卡），以及交回那次执行在哪（等你合回用）。 */
-export type HomeSub = TSubSession & { planTaskId: string | null; projectId: string | null; runUpdatedAt: string | null; acceptedAt: string | null;
+export type HomeSub = TSubSession & { stoppedAt: string | null; planTaskId: string | null; projectId: string | null; runUpdatedAt: string | null; acceptedAt: string | null;
   mergeRun: { sessionId: string | null; deviceId: string | null } | null;
   /** 最近一次执行在问本人的提问、在等批准的那一步（等你那一行用原话、就地答）。 */
   ask: RunAsk | null };
@@ -182,7 +185,7 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
     const { stage, wait, run, role } = view.card;
     const pass = passed.get(view.id);
     const merge = pass?.merge ? cardMerge(pass.merge) : null;
-    const base = { id: view.id, kind: "card" as const, letter: null as string | null, title: view.title, role, sessionId: run?.id ?? null, deviceId: run?.deviceId ?? null,
+    const base = { id: view.id, kind: "card" as const, letter: null as string | null, unseen: false, title: view.title, role, sessionId: run?.id ?? null, deviceId: run?.deviceId ?? null,
       autoStart: autoStart.has(view.id), updatedAt: latest(view.updatedAt, run?.updatedAt), planTaskId: view.planTaskId,
       projectId: taskProject(view.planTaskId) ?? cardProject.get(view.id) ?? null, runUpdatedAt: run?.updatedAt ?? null,
       merge, acceptedAt: stage === "done" ? acceptedAt.get(view.id) ?? null : null, mergeRun: pass ? { sessionId: pass.run_id, deviceId: pass.device_id } : null,
@@ -203,7 +206,8 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
     else if (wait === "approval") [state, waiting] = ["waiting", "approval"];
     else if (wait === "reply") [state, waiting] = ["waiting", "question"];
     else if (wait === "paused") state = "waiting";
-    subs.push({ ...base, state, waiting, queueReason, holdUntil: holdUntil(queueReason, run?.id) });
+    const stoppedAt = stage === "done" ? acceptedAt.get(view.id) ?? null : run && stopped(run.state, asks.get(run.id) ?? null) ? run.updatedAt : null;
+    subs.push({ ...base, state, waiting, queueReason, holdUntil: holdUntil(queueReason, run?.id), stoppedAt });
   }
 
   // 专题：没归档的都列；最近一次本机执行定状态。专题没有「完成」：会话停了、交完收工、异常退出都算已暂停（等你说一句接着做）。
@@ -217,23 +221,27 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
   for (const topic of topics) {
     const run = topicRuns.get(topic.id);
     const role = topic.role_id ? topicRoles.get(topic.role_id) : undefined;
-    const base = { id: topic.id, kind: "topic" as const, letter: null as string | null, title: topic.title, role: role ? roleRef(role) : null, sessionId: run?.id ?? null, deviceId: run?.device_id ?? null,
+    const base = { id: topic.id, kind: "topic" as const, letter: null as string | null, unseen: false, title: topic.title, role: role ? roleRef(role) : null, sessionId: run?.id ?? null, deviceId: run?.device_id ?? null,
       autoStart: autoStart.has(topic.id), updatedAt: latest(topic.updated_at, run?.updated_at), planTaskId: topic.plan_task_id,
       projectId: taskProject(topic.plan_task_id) ?? topic.project_id, runUpdatedAt: run?.updated_at.toISOString() ?? null,
       merge: null, acceptedAt: null, mergeRun: null, ask: run?.ask ?? null };
-    if (!run) { subs.push({ ...base, state: "queued", waiting: null, queueReason: notStarted(topic.id), holdUntil: null }); continue; }
+    if (!run) { subs.push({ ...base, state: "queued", waiting: null, queueReason: notStarted(topic.id), holdUntil: null, stoppedAt: null }); continue; }
     const queueReason = queuedBy({ id: run.id, deviceId: run.device_id, state: run.state });
     // 一轮做完停下、没在问你：已停下（waiting / null），不进等你（9.6）。
     const [state, waiting] = queueReason ? ["queued" as const, null] : run.state === "idle" && !askingQuestion(run) ? ["waiting" as const, null] : TOPIC_STATES[run.state];
-    subs.push({ ...base, state, waiting, queueReason, holdUntil: holdUntil(queueReason, run.id) });
+    subs.push({ ...base, state, waiting, queueReason, holdUntil: holdUntil(queueReason, run.id),
+      stoppedAt: stopped(run.state, run.ask) ? run.updated_at.toISOString() : null });
   }
 
   // 字母（18 节第 10 条）：在项目里的子会话带它在那个项目里的字母，没编号的当场补上。
   const letters = await lettersFor(q, subs.flatMap((sub) => sub.projectId ? [{ projectId: sub.projectId, kind: sub.kind, id: sub.id }] : []));
   for (const sub of subs) sub.letter = sub.projectId ? letters.get(`${sub.kind}:${sub.id}`) ?? null : null;
+  // 蓝点（17.2 第 25 条）：停下的时间晚于本人上次打开它。
+  const seen = await seenTimes(q, ownerId);
+  for (const sub of subs) sub.unseen = unseenSince(sub.stoppedAt, seen.get(`sub:${sub.id}`));
 
   const order = (a: HomeSub, b: HomeSub) => STATE_ORDER.indexOf(a.state) - STATE_ORDER.indexOf(b.state) || b.updatedAt.localeCompare(a.updatedAt);
-  const view = ({ planTaskId: _task, projectId: _project, runUpdatedAt: _at, acceptedAt: _accepted, mergeRun: _run, ask: _ask, ...sub }: HomeSub): TSubSession => sub;
+  const view = ({ planTaskId: _task, projectId: _project, runUpdatedAt: _at, acceptedAt: _accepted, mergeRun: _run, ask: _ask, stoppedAt: _stopped, ...sub }: HomeSub): TSubSession => sub;
   const onProject = (projectId: string | null) => projectId !== null && activeIds.has(projectId);
 
   // 规划员在拆：本机的规划员会话还没结束，或登记了拆卡还没开。
@@ -298,6 +306,8 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
       criteriaTotal: 0, completedAt: settled ? new Date(settled.at).toISOString() : null,
       responsible: { personId: goal.owner_id, name: deps.names.get(goal.owner_id) ?? goal.owner_id } };
   };
+  // 项目总管线的蓝点：项目对话里新的回复或汇报晚于本人上次打开它。
+  const news = await projectNewsAt(q, ownerId, active.map((row) => row.id));
   const homeProjects = active.map((row): THomeProject => {
     const projectGoals: THomeProjectGoal[] = goalTasks.filter((task) => taskProject(task.taskId) === row.id).map((task): THomeProjectGoal => ({ taskId: task.taskId,
       missionId: task.missionId, name: task.name, period: task.period, ...due(goals.get(task.taskId)?.due_date ?? null, task.missionId, task.period),
@@ -321,7 +331,7 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
         needsYou: waiting.filter((item) => item.projectId === row.id).length },
       pipeline: { conversationId: pipelines.get(row.id) ?? null, scope: projectScope(row.id) },
       planning: planningProjects.has(row.id) || projectGoals.some((goal) => planning.has(goal.taskId)), subSessions: mine.map(view), items: items.map(homeItem),
-      transfer: transfer ? transferView(transfer, deps.names) : null };
+      transfer: transfer ? transferView(transfer, deps.names) : null, unseen: unseenSince(news.get(row.id) ?? null, seen.get(`project:${row.id}`)) };
   });
   // 16.2：有等你的在前；然后是有目标的、按最早的截止日；最后按最近动静从近到远。
   const rank = (project: THomeProject) => project.summary.needsYou ? 0 : project.goals.length ? 1 : 2;

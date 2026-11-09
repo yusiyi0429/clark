@@ -454,4 +454,60 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       expect((await f.call("GET", `/api/me/projects/${project}`)).json().goals[0].dueDate).toBeNull();
     } finally { await f.close(); }
   });
+  it("17.2 第 25 条：蓝点只在本人没看过的新情况时出——子会话停下晚于打开、项目对话有新的回复或汇报晚于打开；打开记在云端", async () => {
+    const f = await fixture();
+    try {
+      const project = (await f.call("POST", "/api/me/projects", { name: "天枢" })).json().projectId as string;
+      const card = await f.agentCard("规划员岗位初版");
+      await f.t.sql("UPDATE tasks SET project_id=$2,plan_task_id=NULL WHERE id=$1", [card, project]);
+      const machine = await f.local();
+      const session = randomUUID();
+      let seq = 0;
+      const report = async (type: string, data: unknown) => {
+        seq += 1;
+        const res = await f.t.app.inject({ method: "POST", url: "/api/local-runner/sync", headers: { authorization: `Bearer ${machine.token}` }, payload: {
+          deviceId: machine.device, runnerVersion: "0.1.0", slots: { max: 3, running: 1, queued: 0 }, items: [{ key: `${machine.device}:${session}:${seq}`, sessionId: session,
+            subject: { kind: "card", cardId: card }, occurredAt: new Date(Date.UTC(2026, 10, 6, 1, 0, seq)).toISOString(), type, data }] } });
+        expect(res.json().rejected).toEqual([]);
+      };
+      const status = (value: string, extra: object = {}) => report("status", { status: value, title: "规划员岗位初版", agent: "claude-code", modelLabel: "m", ...extra });
+      const dots = async () => {
+        const entry = (await f.call("GET", "/api/me/work-home")).json().projects.find((row: { projectId: string }) => row.projectId === project);
+        return { project: entry.unseen as boolean, sub: entry.subSessions[0].unseen as boolean };
+      };
+      const seen = (kind: string, id: string) => f.call("POST", "/api/me/work-seen", { kind, id });
+      const later = new Date(BOARD_NOW.getTime() + 3600_000);
+
+      expect(await dots()).toEqual({ project: false, sub: false });
+      await status("running");
+      expect((await dots()).sub).toBe(false);
+      // 一轮做完停下：没打开过，是蓝点；打开了就没了（重复打开照旧 204）。
+      await status("idle");
+      expect((await dots()).sub).toBe(true);
+      expect((await seen("sub", card)).statusCode).toBe(204);
+      expect((await seen("sub", card)).statusCode).toBe(204);
+      expect((await dots()).sub).toBe(false);
+      // 之后又停了一次（晚于打开）：又是蓝点。
+      await f.t.sql("UPDATE local_runs SET updated_at=$2 WHERE id=$1", [session, later]);
+      expect((await dots()).sub).toBe(true);
+      // 在问本人是黄点，不算蓝点。
+      await status("idle", { question: { requestId: "q-1", questions: [{ question: "先改哪个？", header: "先后", options: [{ label: "A", description: "" }], multiSelect: false }],
+        askedAt: "2026-11-06T01:00:00.000Z" } });
+      expect((await dots()).sub).toBe(false);
+
+      // 项目：子会话的汇报来了，没打开过项目对话是蓝点；打开了就没了；Chat 那边回完一轮（晚于打开）又是。
+      // （汇报会触发项目主管线回一轮，它的回答按真实时间记，比测试的时钟晚；这里先停住自动接力，只看汇报本身。）
+      await f.t.sql("UPDATE projects SET auto_relay_paused_at=$2 WHERE id=$1", [project, BOARD_NOW]);
+      await report("stopped", { why: "turn_done", summary: null, blocker: null, outputs: [] });
+      expect((await dots()).project).toBe(true);
+      await seen("project", project);
+      expect((await dots()).project).toBe(false);
+      await f.t.sql("UPDATE projects SET pipeline_reply_at=$2 WHERE id=$1", [project, later]);
+      expect((await dots()).project).toBe(true);
+      // 别人看过不算本人看过；参数不对 400。
+      await f.t.sql("INSERT INTO work_seen(person_id,kind,object_id,seen_at) VALUES($1,'project',$2,$3)", [THIRD.personId, project, later]);
+      expect((await dots()).project).toBe(true);
+      expect((await f.call("POST", "/api/me/work-seen", { kind: "card", id: card })).statusCode).toBe(400);
+    } finally { await f.close(); }
+  });
 });

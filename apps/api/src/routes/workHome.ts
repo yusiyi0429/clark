@@ -1,5 +1,6 @@
+import { markWorkSeen } from "../workSeen.js";
 import type { FastifyReply } from "fastify";
-import { BackgroundQuery, BackgroundResponse, RouteRequest, RouteResponse, WorkHomeResponse } from "@warmap/contracts";
+import { BackgroundQuery, BackgroundResponse, MarkWorkSeenRequest, RouteRequest, RouteResponse, WorkHomeResponse } from "@warmap/contracts";
 import { routeMessage } from "../messageRoute.js";
 import { listMissionRoundCards, type MissionRoundPerson } from "../missionRounds.js";
 import { personDisplayNames } from "../people.js";
@@ -37,6 +38,12 @@ export function registerWorkHomeRoutes(app: AppInstance, ctx: RouteContext): voi
   app.decorate("readWorkHome", workHome);
 
   app.get("/api/me/work-home", { preHandler: requireMember, schema: { response: { 200: WorkHomeResponse } } }, async (req) => workHome(req.person!));
+
+  // 蓝点（17.2 第 25 条）：本人打开了一个子会话或项目对话。
+  app.post("/api/me/work-seen", { preHandler: requireMember, schema: { body: MarkWorkSeenRequest } }, async (req, reply) => {
+    await markWorkSeen(q, req.person!.personId, req.body.kind, req.body.id, ctx.now());
+    return reply.status(204).send();
+  });
 
   app.get("/api/me/background", { preHandler: requireMember, schema: { querystring: BackgroundQuery, response: { 200: BackgroundResponse } } }, async (req, reply) =>
     handle(reply, () => readBackground({ q, now: ctx.now(), planTasks: ctx.planTasks }, req.person!.personId, req.query.scope)));
