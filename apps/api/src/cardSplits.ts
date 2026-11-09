@@ -15,12 +15,13 @@ import type { OwnTask } from "./taskDeliverables.js";
  */
 
 type SplitRow = { id: string; owner_id: string; plan_task_id: string | null; mission_id: string | null; task_name: string | null; origin: "buddy" | "web"; created_at: Date;
-  project: string | null; project_name: string | null; source_words: string[] };
+  project: string | null; project_name: string | null; source_words: string[]; after_sequence: number | null };
 /** 登记连同所属项目：拆项目的是登记上的项目，拆 Task 的是 Task 挂的项目。 */
 const SPLITS = `SELECT s.*,p.id::text AS project,p.name AS project_name FROM card_split_requests s
   LEFT JOIN projects p ON p.id=COALESCE(s.project_id,(SELECT g.project_id FROM project_goals g WHERE g.task_id=s.plan_task_id))`;
 const splitView = (row: SplitRow): TCardSplitRequestView => ({ id: row.id, taskId: row.plan_task_id, taskName: row.task_name, missionId: row.mission_id,
-  projectId: row.project, projectName: row.project_name, origin: row.origin, sourceWords: row.source_words, createdAt: row.created_at.toISOString() });
+  projectId: row.project, projectName: row.project_name, origin: row.origin, sourceWords: row.source_words, createdAt: row.created_at.toISOString(),
+  afterSequence: row.after_sequence });
 const splitById = async (q: Query, id: string) => (await q(`${SPLITS} WHERE s.id=$1`, [id])).rows[0] as SplitRow;
 
 /** 已有一条没开工的登记：这次带了原话（words 不是 undefined）就换成这次的。 */
@@ -31,11 +32,15 @@ const replaceWords = async (q: Query, id: string, words: string[] | undefined) =
 /**
  * 登记拆卡（Task 负责人，调用方核对过）：同一个 Task 已有一条没开工的登记时返回那一条（created=false）。
  * words 是这次依据的本人原话（16.8）；undefined 是没带（新登记存空数组，已有的不动）。
+ * afterSequence：开拆那一下本人看到的项目对话最后一条（17.2 第 29 条）；已有的登记不改。
  */
-export async function registerCardSplit(q: Query, own: OwnTask, origin: "buddy" | "web", now: Date, words?: string[]): Promise<{ request: TCardSplitRequestView; created: boolean }> {
-  const inserted = (await q(`INSERT INTO card_split_requests(id,owner_id,plan_task_id,mission_id,task_name,origin,created_at,source_words) VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb)
+export async function registerCardSplit(q: Query, own: OwnTask, origin: "buddy" | "web", now: Date, words?: string[], afterSequence: number | null = null):
+  Promise<{ request: TCardSplitRequestView; created: boolean }> {
+  const inserted = (await q(`INSERT INTO card_split_requests(id,owner_id,plan_task_id,mission_id,task_name,origin,created_at,source_words,after_sequence)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9)
     ON CONFLICT (owner_id,plan_task_id) WHERE closed_at IS NULL DO NOTHING RETURNING id`,
-  [randomUUID(), own.viewerId, own.task.taskId, own.task.missionId, own.task.name, origin, now, JSON.stringify(words ?? [])])).rows[0] as { id: string } | undefined;
+  [randomUUID(), own.viewerId, own.task.taskId, own.task.missionId, own.task.name, origin, now, JSON.stringify(words ?? []), afterSequence])).rows[0] as
+    { id: string } | undefined;
   const id = inserted?.id ?? (await q("SELECT id FROM card_split_requests WHERE owner_id=$1 AND plan_task_id=$2 AND closed_at IS NULL",
     [own.viewerId, own.task.taskId])).rows[0].id as string;
   if (!inserted) await replaceWords(q, id, words);
@@ -43,11 +48,11 @@ export async function registerCardSplit(q: Query, own: OwnTask, origin: "buddy" 
 }
 
 /** 登记拆一个项目（16.3，项目负责人，调用方核对过）：同一个项目已有一条没开工的项目登记时返回那一条（created=false）。 */
-export async function registerProjectCardSplit(q: Query, ownerId: string, projectId: string, origin: "buddy" | "web", now: Date, words?: string[]):
-  Promise<{ request: TCardSplitRequestView; created: boolean }> {
-  const inserted = (await q(`INSERT INTO card_split_requests(id,owner_id,project_id,origin,created_at,source_words) VALUES($1,$2,$3,$4,$5,$6::jsonb)
+export async function registerProjectCardSplit(q: Query, ownerId: string, projectId: string, origin: "buddy" | "web", now: Date, words?: string[],
+  afterSequence: number | null = null): Promise<{ request: TCardSplitRequestView; created: boolean }> {
+  const inserted = (await q(`INSERT INTO card_split_requests(id,owner_id,project_id,origin,created_at,source_words,after_sequence) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7)
     ON CONFLICT (owner_id,project_id) WHERE closed_at IS NULL AND plan_task_id IS NULL DO NOTHING RETURNING id`,
-  [randomUUID(), ownerId, projectId, origin, now, JSON.stringify(words ?? [])])).rows[0] as { id: string } | undefined;
+  [randomUUID(), ownerId, projectId, origin, now, JSON.stringify(words ?? []), afterSequence])).rows[0] as { id: string } | undefined;
   const id = inserted?.id ?? (await q("SELECT id FROM card_split_requests WHERE owner_id=$1 AND project_id=$2 AND plan_task_id IS NULL AND closed_at IS NULL",
     [ownerId, projectId])).rows[0].id as string;
   if (!inserted) await replaceWords(q, id, words);

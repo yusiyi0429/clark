@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { checkedWords, latestSplitWords } from "./sourceWords.js";
+import { checkedWords, latestSplitSequence, latestSplitWords } from "./sourceWords.js";
 import type { Pool, PoolClient } from "pg";
 import type { TLocalCardPlan } from "@warmap/contracts";
 import { cardPlanProblem, type CardPlanAgent, type CardPlanInput } from "./cardPlanAgent.js";
@@ -124,9 +124,11 @@ export async function saveLocalCardPlan(client: PoolClient, input: { ownerId: st
       [planId, ...values]);
     await client.query("UPDATE card_drafts SET status='dismissed',decided_at=$2 WHERE plan_id=$1 AND status='open'", [planId, at]);
   } else {
-    await client.query(`INSERT INTO card_plans(id,plan_task_id,mission_id,owner_id,status,source,run_id,revision,summary,steps,risks,model_label,role_id,role_version,finished_at,project_id)
-      VALUES($1,$2,$3,$4,'done','local',$5,$6,$7,$8::jsonb,$9::jsonb,$10,$11,$12,$13,$14)`,
-    [planId, target.taskId, target.missionId, ownerId, runId, ...values, target.taskId ? null : target.projectId]);
+    // 开拆那一下的序号照最近一次登记拆卡记的（17.2 第 29 条）。
+    await client.query(`INSERT INTO card_plans(id,plan_task_id,mission_id,owner_id,status,source,run_id,revision,summary,steps,risks,model_label,role_id,role_version,finished_at,project_id,
+      after_sequence) VALUES($1,$2,$3,$4,'done','local',$5,$6,$7,$8::jsonb,$9::jsonb,$10,$11,$12,$13,$14,$15)`,
+    [planId, target.taskId, target.missionId, ownerId, runId, ...values, target.taskId ? null : target.projectId,
+      await latestSplitSequence(client.query.bind(client), ownerId, target)]);
   }
   const roles = (await client.query(`SELECT * FROM roles WHERE kind='worker' AND archived_at IS NULL AND (owner_id=$1 OR owner_id IS NULL) ORDER BY created_at,preset_key`,
     [ownerId])).rows as RoleRow[];

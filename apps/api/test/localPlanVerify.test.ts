@@ -356,6 +356,7 @@ describe("拆卡和验收在本机（第 21 节）", { timeout: 30_000 }, () => 
       const web = await f.call("POST", `${base}/card-splits`);
       expect(web.statusCode).toBe(201);
       expect(web.json()).toEqual({ id: web.json().id, taskId: null, taskName: null, missionId: null, projectId: project, projectName: "天枢新首页", origin: "web", sourceWords: [],
+        afterSequence: null,
         createdAt: web.json().createdAt });
       expect([(await f.call("POST", `${base}/card-splits`)).statusCode, (await f.call("POST", "/api/plan-tasks/task-open/card-splits")).statusCode]).toEqual([200, 201]);
       const buddy = await f.t.app.inject({ method: "POST", url: `/internal/me/projects/${project}/card-splits`,
@@ -494,6 +495,37 @@ describe("拆卡和验收在本机（第 21 节）", { timeout: 30_000 }, () => 
       const blocked = (await f.call("GET", `/api/me/projects/${project}/feed`)).json().items.find((item: { kind: string }) => item.kind === "card_blocked");
       expect(blocked).toMatchObject({ cardId: card, handbackId: second, sourceWordIssues: [issue] });
       expect(blocked.fix).toContain("本人原话「录屏这次先不做」");
+    } finally { await f.close(); }
+  });
+  it("17.2 第 29 条：拆卡那几块按序号插进项目对话——登记时记本人看到的最后一条（没带读对话最新的），派活单照登记的，开工时另记一个", async () => {
+    const f = await localFixture();
+    try {
+      const project = (await f.call("POST", "/api/me/projects", { name: "天枢" })).json().projectId as string;
+      const say = async (message: string) => expect((await f.call("POST", `/api/conversations/project:${project}/messages`, { message })).statusCode).toBe(200);
+      const last = async () => ((await f.call("GET", `/api/conversations/project:${project}/messages`)).json().messages as { sequence: number }[]).at(-1)!.sequence;
+      await say("先把首页拆一下");
+      const seen = await last();
+      expect(seen).toBeGreaterThan(1);
+      // 没带：读项目对话现在最后一条；派活单照登记记的。
+      const registered = (await f.call("POST", `/api/me/projects/${project}/card-splits`, { words: "拆首页" })).json();
+      expect(registered.afterSequence).toBe(seen);
+      expect((await f.call("GET", "/api/me/card-splits")).json().requests[0].afterSequence).toBe(seen);
+      await f.sync({ kind: "plan", projectId: project }, [["card_plan", plan(1, [{ title: "画首页", criterionIndex: null }, { title: "接接口", criterionIndex: null }])]]);
+      const board = async () => (await f.call("GET", `/api/me/projects/${project}/board`)).json() as { drafts: { id: string }[];
+        plan: { afterSequence: number | null; startedAfterSequence: number | null } };
+      expect((await board()).plan).toMatchObject({ afterSequence: seen, startedAfterSequence: null });
+      // 开工：没带读对话最新的；第二次开工不改。
+      await say("就按这个开始");
+      const started = await last();
+      const [first, second] = (await board()).drafts;
+      expect((await f.call("POST", `/api/me/projects/${project}/card-drafts/accept`, { drafts: [{ id: first.id }] })).statusCode).toBe(200);
+      expect((await board()).plan).toMatchObject({ afterSequence: seen, startedAfterSequence: started });
+      expect((await f.call("POST", `/api/me/projects/${project}/card-drafts/accept`, { drafts: [{ id: second.id }], afterSequence: 1 })).statusCode).toBe(200);
+      expect((await board()).plan.startedAfterSequence).toBe(started);
+      // 网页带了：用带的。没挂项目的 Task 没带时读不到，是 null。
+      expect((await f.call("POST", "/api/plan-tasks/task-open/card-splits", { afterSequence: 3 })).json().afterSequence).toBe(3);
+      await f.call("DELETE", `/api/me/card-splits/${(await f.call("GET", "/api/me/card-splits")).json().requests.find((item: { taskId: string | null }) => item.taskId).id}`);
+      expect((await f.call("POST", "/api/plan-tasks/task-open/card-splits", {})).json().afterSequence).toBeNull();
     } finally { await f.close(); }
   });
 });

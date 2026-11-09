@@ -3,7 +3,7 @@ import type { FastifyReply } from "fastify";
 import { AcceptCardDraftsRequest, AcceptCardDraftsResponse, CardBoardResponse, CardBriefResponse, CardDetailResponse, CardPlanBriefResponse, CardPlanView, CardSplitListResponse,
   CardSplitRequestView, CardTaskView, CreateCardPlanRequest, AddPendingDeliverableRequest, CreateVersionFromPendingRequest, DeliverableVersion, OverruleCardHandbackRequest,
   PatchCardRequest, PendingDeliverableItem, RegisterCardSplitRequest } from "@warmap/contracts";
-import { emptyBodyAsObject, projectHistoryReader, recentOwnerWords, typedWords } from "../sourceWords.js";
+import { emptyBodyAsObject, lastSequenceReader, projectHistoryReader, recentOwnerWords, typedWords } from "../sourceWords.js";
 import { createArticleFetcher, type ArticleFetcher } from "../articleText.js";
 import { normalizeBudget, writeTaskBudget } from "../budgets.js";
 import { createCardAcceptanceQueue, markHandbackReturned, overruleHandback, retryHandback } from "../cardAcceptance.js";
@@ -42,6 +42,10 @@ export type BoardHooks = { enqueueAcceptance: (handbackId: string) => void; enqu
 export function registerTaskCardRoutes(app: AppInstance, ctx: RouteContext, deps: { agents?: Partial<BoardAgents>; fetchArticle?: ArticleFetcher } = {}): BoardHooks {
   const { q, pool, fail, requirePerson, requireServiceToken, env } = ctx;
   const history = projectHistoryReader(ctx);
+  // 拆卡那几块按序号插进项目对话（17.2 第 29 条）：网页带了本人看到的最后一条就用它，没带读这件 Task 挂的项目对话现在最后一条。
+  const lastSequence = lastSequenceReader(ctx);
+  const sequenceOf = (given: number | undefined, ownerId: string, taskId: string, requestId: string) =>
+    given !== undefined ? Promise.resolve(given) : lastSequence(ownerId, { taskId, projectId: null }, requestId);
   const cloud = Boolean(env.boardCloudAgents);
   const names = () => personDisplayNames(ctx.peopleDirectory);
   const model = { query: q, baseUrl: env.review?.baseUrl ?? env.piBaseUrl, apiKey: env.review?.apiKey ?? env.piApiKey,
@@ -91,7 +95,7 @@ export function registerTaskCardRoutes(app: AppInstance, ctx: RouteContext, deps
     response: { 200: CardPlanView, 202: CardPlanView } } }, async (req, reply) => handle(reply, async () => {
     const own = await board(req.person!.personId, req.params.taskId);
     if (!cloud) return cloudOff(reply);
-    const { plan, created } = await createCardPlan(q, own, req.body.hint);
+    const { plan, created } = await createCardPlan(q, own, req.body.hint, await sequenceOf(undefined, own.viewerId, own.task.taskId, String(req.id)));
     if (created) void plans.enqueue(plan.id);
     return reply.status(created ? 202 : 200).send(plan);
   }));
@@ -101,7 +105,7 @@ export function registerTaskCardRoutes(app: AppInstance, ctx: RouteContext, deps
     // 开工框上方选的预算（设计 11.3）：先核对，卡放进看板以后存成这件 Task 的预算。
     const budget = req.body.budget ? normalizeBudget(req.body.budget) : null;
     const own = await board(req.person!.personId, req.params.taskId);
-    const cards = await acceptCardDrafts(pool, own, req.body, names(), ctx.now());
+    const cards = await acceptCardDrafts(pool, own, req.body, names(), ctx.now(), await sequenceOf(req.body.afterSequence, own.viewerId, own.task.taskId, String(req.id)));
     if (budget) await writeTaskBudget(q, req.person!.personId, req.params.taskId, budget, ctx.now());
     return { cards };
   }));
@@ -110,7 +114,9 @@ export function registerTaskCardRoutes(app: AppInstance, ctx: RouteContext, deps
   // 带了 words（按钮旁输入框里的话）就存成这次的原话（16.8）。
   app.post("/api/plan-tasks/:taskId/card-splits", { preValidation: emptyBodyAsObject, preHandler: requireMember, schema: { params: taskParams, body: RegisterCardSplitRequest,
     response: { 200: CardSplitRequestView, 201: CardSplitRequestView } } }, async (req, reply) => handle(reply, async () => {
-    const { request, created } = await registerCardSplit(q, await board(req.person!.personId, req.params.taskId), "web", ctx.now(), typedWords(req.body.words));
+    const own = await board(req.person!.personId, req.params.taskId);
+    const { request, created } = await registerCardSplit(q, own, "web", ctx.now(), typedWords(req.body.words),
+      await sequenceOf(req.body.afterSequence, own.viewerId, own.task.taskId, String(req.id)));
     return reply.status(created ? 201 : 200).send(request);
   }));
 
@@ -185,7 +191,7 @@ export function registerTaskCardRoutes(app: AppInstance, ctx: RouteContext, deps
       const own = await board(id, req.params.taskId);
       // 伙伴登记：原话取本人在这件 Task 所在项目对话里最近说的话（16.8；Chat 调过来不带是哪段对话）。
       const words = await recentOwnerWords(q, history, id, { taskId: own.task.taskId, projectId: null }, String(req.id));
-      const { request, created } = await registerCardSplit(q, own, "buddy", ctx.now(), words);
+      const { request, created } = await registerCardSplit(q, own, "buddy", ctx.now(), words, await sequenceOf(undefined, id, own.task.taskId, String(req.id)));
       return reply.status(created ? 201 : 200).send(request);
     });
   });
