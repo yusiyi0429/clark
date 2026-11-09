@@ -71,6 +71,8 @@ export type Worker = {
   splitId?: string;
   /** 拆卡登记存下的本人原话（16.8）：开不起来、要登记回去时带上，免得丢了。 */
   sourceWords?: string[];
+  /** 登记时项目对话最后一条（17.2 第 29 条）：「拆卡 · 等开工」插在它后面；null 放最后。 */
+  afterSequence?: number | null;
   requestedAt?: string;
 };
 
@@ -180,7 +182,7 @@ export function plannerWorkers({ sessions, splits, listed, tasks, deviceName }: 
   const busy = new Set([...listed, ...local].filter((worker) => worker.kind === "plan" && worker.state !== "done").map((worker) => target(worker.taskId, worker.projectId)));
   const waiting = splits.filter((request) => !busy.has(target(request.taskId, request.projectId))).map((request): Worker => ({
     ...base(request.taskId, request.taskName ?? request.projectName, request.missionId, request.taskId ? null : request.projectId), key: `split:${request.id}`, state: "queued", reason: "start", holdUntil: null, mark: null, queuePos: null, model: null,
-    startedAt: null, session: null, splitId: request.id, sourceWords: request.sourceWords, requestedAt: request.createdAt,
+    startedAt: null, session: null, splitId: request.id, sourceWords: request.sourceWords, afterSequence: request.afterSequence, requestedAt: request.createdAt,
   }));
   return [...local, ...waiting];
 }

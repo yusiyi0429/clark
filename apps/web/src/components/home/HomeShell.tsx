@@ -48,6 +48,7 @@ import { ProjectInfo } from "./ProjectInfo";
 import { ProjectTrail } from "./ProjectParts";
 import { LeftResize, useLeftWidth } from "./LeftResize";
 import { seenKey, withSeen, type SeenKind, type SeenMarks } from "@/lib/home/seen";
+import { seenSequence } from "@/lib/home/transfer";
 import { TransferFlow, TransferView } from "./Transfer";
 import type { TimedBlock } from "@/components/work/WorkTimeline";
 import { useProjects } from "./useProjects";
@@ -266,10 +267,11 @@ function HomeFrame({ account }: { account: Account }) {
   }, [local, work.roles, changed, markStart]);
   /** 拆卡登记没成的那件 Task（或没挂 Task 的项目，planKey）：项目对话里出「拆卡失败 · 重试」（不弹 toast）。 */
   const [splitFailed, setSplitFailed] = useState<string | null>(null);
-  const split = useCallback(async (target: PlanTarget) => {
+  // afterSequence（17.2 第 29 条）：项目对话里本人看到的最后一条，登记时带上，拆卡那几块插在它后面。
+  const split = useCallback(async (target: PlanTarget, afterSequence?: number) => {
     setSplitFailed(null);
     if (here) { await start([], [target], () => setSplitFailed(planKey(target))); return; }
-    try { await registerPlan(target); changed(); }
+    try { await registerPlan(target, undefined, afterSequence); changed(); }
     catch { setSplitFailed(planKey(target)); }
   }, [here, start, changed]);
 
@@ -484,7 +486,7 @@ function HomeFrame({ account }: { account: Account }) {
   const projectView = (project: Project) => {
     const goalTasks = project.goals.flatMap((goal) => { const task = planTask(goal.taskId); return task ? [task] : []; });
     const trail = <ProjectTrail project={project} go={go} />;
-    return <PipelineView key={project.id} project={project} tasks={goalTasks} api={api} buddy={buddy} outbox={outbox} consume={consume} go={go} onSplit={(target) => void split(target)} splitFailed={splitFailed}
+    return <PipelineView key={project.id} project={project} tasks={goalTasks} api={api} buddy={buddy} outbox={outbox} consume={consume} go={go} onSplit={(target) => void split(target, seenSequence(project.id))} splitFailed={splitFailed}
       startFailed={startFailed} onManualStart={(id) => void manualStart(id)} onSpeaking={setSpeaking} trail={trail} blocks={projectBlocks(project)}
       onPulled={() => void projects.actions.reloadFolders()} onSetFolder={(folderId) => projects.actions.setFolder(project.id, folderId, project.name)} />;
   };

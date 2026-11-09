@@ -16,6 +16,7 @@ import { PlanDecision, PlanningLine, plannerText } from "@/components/home/PlanD
 import { splitBody, WORDS_MAX } from "@/lib/board/cloud";
 import { viewOf, scopeOf } from "@/components/home/view";
 import { placeBlocks } from "./WorkTimeline";
+import { planAnchors } from "@/components/home/Conversations";
 import { ApprovalDecision, QuestionDecision, localOptions } from "./decisions";
 import { DecisionBox, otherKey } from "./DecisionBox";
 
@@ -32,7 +33,7 @@ const session = (extra: Partial<TLocalSessionSummary>): TLocalSessionSummary => 
   queuePosition: null, usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null }, ...extra,
 });
 const ctx = (sessions: TLocalSessionSummary[] = []) => ({ sessions, cards: new Map(), deviceName: "这台电脑" });
-const split = (id: string, taskId: string): TCardSplitRequestView => ({ id, taskId, taskName: taskId === "t1" ? "派活单" : "本机程序", missionId: "m1", projectId: null, projectName: null, sourceWords: [],
+const split = (id: string, taskId: string): TCardSplitRequestView => ({ id, taskId, taskName: taskId === "t1" ? "派活单" : "本机程序", missionId: "m1", projectId: null, projectName: null, sourceWords: [], afterSequence: null,
   origin: "web", createdAt: taskId === "t1" ? "2026-11-06T04:00:00Z" : "2026-11-06T04:01:00Z" });
 
 describe("worker 和链路", () => {
@@ -80,7 +81,7 @@ describe("worker 和链路", () => {
   it("没挂 Task 的项目也能拆（16.3）：本机会话只带 projectId、登记只带项目，都是这个项目的规划员；同一个项目在拆时登记不重复列", () => {
     const P = "00000000-0000-4000-8000-0000000000f1";
     const plan = session({ id: "00000000-0000-4000-8000-0000000000a4", subject: { kind: "plan", projectId: P }, status: "running" });
-    const projectSplit = (id: string, projectId: string): TCardSplitRequestView => ({ id, taskId: null, taskName: null, missionId: null, projectId, projectName: "本机程序", sourceWords: [],
+    const projectSplit = (id: string, projectId: string): TCardSplitRequestView => ({ id, taskId: null, taskName: null, missionId: null, projectId, projectName: "本机程序", sourceWords: [], afterSequence: null,
       origin: "buddy", createdAt: "2026-11-06T04:02:00Z" });
     const workers = plannerWorkers({ sessions: [plan], splits: [projectSplit("s3", P), projectSplit("s4", "00000000-0000-4000-8000-0000000000f2")], listed: [], tasks: [], deviceName: null });
     expect(workers.map((worker) => [worker.key, worker.taskId, worker.projectId, worker.state])).toEqual([
@@ -298,6 +299,29 @@ describe("对话里插块和锚点", () => {
     ]);
     expect(mixed.get(0)?.map((block) => block.key)).toEqual(["transfer"]);
     expect(mixed.get(2)?.map((block) => block.key)).toEqual(["planning"]);
+  });
+  it("29 条 B：拆卡那几块按序号插——在拆、派活单插在开拆那一下的后面，开了哪几个子会话插在开工那一下的后面；为 null 放最后", () => {
+    const chat = [{ sequence: 1 }, { sequence: 2 }, { sequence: 3 }, { sequence: 4 }];
+    const keysAt = (anchors: ReturnType<typeof planAnchors>) => {
+      const placed = placeBlocks(chat, [
+        { key: "planning", at: "2026-11-09T01:00:00Z", node: null, afterSequence: anchors.planning },
+        { key: "drafts", at: "2026-11-09T01:01:00Z", node: null, afterSequence: anchors.drafts },
+        { key: "started", at: "2026-11-09T01:02:00Z", node: null, afterSequence: anchors.started },
+      ]);
+      return Object.fromEntries([...placed].flatMap(([index, blocks]) => blocks.map((block) => [block.key, index])));
+    };
+    // 登记了还没开：用登记时记的（第 2 条）。
+    expect(keysAt(planAnchors({ afterSequence: 2 }, null))).toMatchObject({ planning: 1, drafts: 3, started: 3 });
+    // 开起来以后：用这次计划记的；拆完开了工：派活单在第 2 条后、开了哪几个在第 3 条后。
+    expect(keysAt(planAnchors(undefined, { status: "running", afterSequence: 2, startedAfterSequence: null })).planning).toBe(1);
+    expect(keysAt(planAnchors(undefined, { status: "done", afterSequence: 2, startedAfterSequence: 3 }))).toMatchObject({ planning: 3, drafts: 1, started: 2 });
+    // 老记录、读不到：都放最后。
+    expect(keysAt(planAnchors({ afterSequence: null }, { status: "done", afterSequence: null, startedAfterSequence: null }))).toEqual({ planning: 3, drafts: 3, started: 3 });
+  });
+  it("29 条 B：项目对话里开拆、开工带上本人看到的最后一条；不带时请求体里没有这个字段", () => {
+    expect(splitBody(undefined, 7)).toEqual({ afterSequence: 7 });
+    expect(splitBody("先拆登录", 7)).toEqual({ words: "先拆登录", afterSequence: 7 });
+    expect(splitBody(undefined, undefined)).toBeUndefined();
   });
   it("展示区按地址：首页、总管线、Task 管线、Task 详情、子会话；右栏跟着它取范围", () => {
     expect(viewOf("/me/work")).toEqual({ kind: "home" });

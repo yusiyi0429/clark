@@ -70,7 +70,7 @@ export const limitsOf = (budget: TBudget): Limits => ({ hours: budget.hours?.toS
 /**
  * target：拆的是一件 Task，还是一个没挂 Task 的项目（16.3）；name 是框顶上的名字。项目的没有预算那一栏：不挂 Task，开工用本人的缺省预算。
  */
-export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onChanged }: {
+export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onChanged, afterSequence }: {
   target: PlanTarget;
   name: string;
   drafts: TCardDraftView[];
@@ -79,6 +79,8 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
   /** 「自己说」：发进 Task 管线。 */
   onSay: (text: string) => Promise<unknown>;
   onChanged: () => void;
+  /** 项目对话里本人看到的最后一条（17.2 第 29 条）：开工时带上，「开了哪几个子会话」插在它后面。 */
+  afterSequence?: number;
 }) {
   const local = useLocalRunner();
   const ready = local.phase === "ready" && !handheld;
@@ -170,8 +172,8 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
         const changed = (role?.id || null) !== (draftRole(draft)?.id ?? null);
         return { id: draft.id, ...(edits[draft.id]?.title?.trim() ? { title: edits[draft.id]!.title!.trim() } : {}), ...(changed ? { roleId: role?.id || null } : {}) };
       });
-      const cards = taskId ? await acceptDrafts(taskId, picked, !(ready && where), touched.current && budget ? budget : undefined)
-        : await acceptProjectDrafts((target as { projectId: string }).projectId, picked, !(ready && where));
+      const cards = taskId ? await acceptDrafts(taskId, picked, !(ready && where), touched.current && budget ? budget : undefined, afterSequence)
+        : await acceptProjectDrafts((target as { projectId: string }).projectId, picked, !(ready && where), afterSequence);
       const plans: StartPlan[] = kept.flatMap((draft, index) => {
         const item = cards[index];
         const role = roleOf(draft);
