@@ -4,7 +4,8 @@ import { projectNotices } from "../subSessionReports.js";
 import type { FastifyReply } from "fastify";
 import { Type } from "@sinclair/typebox";
 import { AcceptCardDraftsRequest, AcceptCardDraftsResponse, AnswerGoalChangeRequest, AutoRelayDecisionRequest, SetGoalDueDateRequest, ProjectGoalChangedItem, CardPlanBriefResponse, CardSplitRequestView, CreateProjectRequest, Project, ProjectBoardResponse,
-  ProjectDetailResponse, ProjectFeedResponse, ProjectGoalResponse, ProjectListResponse, ProjectPipelineResponse, RegisterCardSplitRequest, UpdateProjectRequest } from "@warmap/contracts";
+  ProjectDetailResponse, ProjectFeedResponse, ProjectGoalResponse, ProjectListResponse, ProjectPipelineResponse, RegisterCardSplitRequest, UpdateProjectRequest,
+  ConversationModelListResponse, ProjectPipelineModel, SetProjectPipelineModelRequest } from "@warmap/contracts";
 import { projectPlanBrief, registerProjectCardSplit } from "../cardSplits.js";
 import { answerGoalChange, goalChangeItems } from "../goalChanges.js";
 import { emptyBodyAsObject, lastSequenceReader, projectHistoryReader, recentOwnerWords, typedWords } from "../sourceWords.js";
@@ -15,7 +16,7 @@ import { createProject, goalView, linkGoal, setGoalDueDate, listProjects, ownPro
 import { decidedTransfers, handedAway, openTransfers, transferView } from "../projectTransfers.js";
 import { readProjectFeed } from "../taskFeed.js";
 import { acceptProjectCardDrafts, boardTask, CardError, planTaskOpener, readProjectBoard } from "../taskCards.js";
-import { ensureProjectPipeline } from "../taskPipelines.js";
+import { ensureProjectPipeline, pipelineViewer, projectPipelineConversation } from "../taskPipelines.js";
 import { settlementsOf } from "../taskContinuity.js";
 import type { AppInstance, Guard, RouteContext } from "./shared.js";
 
@@ -103,6 +104,25 @@ export function registerProjectRoutes(app: AppInstance, ctx: RouteContext): void
     const project = await ownProject(q, req.person!.personId, req.params.projectId);
     const { conversationId, created } = await ensureProjectPipeline({ pool, chat: ctx.chat }, req.person!, project.id, String(req.id));
     return reply.status(created ? 201 : 200).send({ projectId: project.id, conversationId, scope: projectScope(project.id) });
+  }));
+
+  // 项目对话按对话选模型和思考程度（17.2 第 36 条）：转发给 Chat，选择存在 Chat 那段对话上；伙伴（总管线）的对话不开放。
+  app.get("/api/me/conversation-models", { preHandler: requireMember, schema: { response: { 200: ConversationModelListResponse } } }, async (req, reply) =>
+    handle(reply, async () => ({ models: ctx.chat ? await ctx.chat.models(pipelineViewer(req.person!.personId), String(req.id)) : [] })));
+  app.get("/api/me/projects/:projectId/pipeline/model", { preHandler: requireMember, schema: { params: projectParams, response: { 200: ProjectPipelineModel } } },
+    async (req, reply) => handle(reply, async () => {
+      const personId = req.person!.personId;
+      const project = await ownProject(q, personId, req.params.projectId);
+      const conversationId = ctx.chat ? await projectPipelineConversation(q, project.id, personId) : null;
+      return { choice: conversationId ? await ctx.chat!.conversationModel(pipelineViewer(personId), String(req.id), conversationId) : null };
+    }));
+  app.put("/api/me/projects/:projectId/pipeline/model", { preHandler: requireMember, schema: { params: projectParams, body: SetProjectPipelineModelRequest,
+    response: { 200: ProjectPipelineModel } } }, async (req, reply) => handle(reply, async () => {
+    const personId = req.person!.personId;
+    const project = await ownProject(q, personId, req.params.projectId);
+    if (!ctx.chat) throw new CardError(409, "CHAT_NOT_CONNECTED", "没接对话服务，项目对话用的是天枢自己的模型，不能另选");
+    const { conversationId } = await ensureProjectPipeline({ pool, chat: ctx.chat }, req.person!, project.id, String(req.id));
+    return { choice: await ctx.chat.setConversationModel(pipelineViewer(personId), String(req.id), conversationId, req.body.choice) };
   }));
 
   // 项目动态：每件挂过的 Task 的标准从本体读（读不到的那件不出「约定都达到」），卡的验收行照 Task 管线原来的算法；
