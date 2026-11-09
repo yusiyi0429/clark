@@ -172,6 +172,8 @@ type PipelineProps = {
   onPulled?: () => void;
   /** 输入框下面左边换文件夹（同项目详情，绑这台电脑上加过的一个，null 不绑）。 */
   onSetFolder?: (folderId: string | null) => Promise<void>;
+  /** 这个项目在这台电脑上绑的文件夹（17.2 第 32 条）：派活单开工就在它里面开。 */
+  bound?: { id: string; path: string; label: string } | null;
 };
 
 /**
@@ -226,7 +228,7 @@ function MockPipeline({ task, ...props }: PipelineProps & { task: THomePlanTask 
  * 项目对话，网页按时间插进去的几块：挂上一件 Task 的分隔线「{月} 月目标：{Task}」、每件 Task 的规划员在拆（一行）、拆好的派活单（开工的选项框）、
  * 开了哪几个子会话，项目里开出的专题，验收行（过了、受阻、约定都达到、返工，TaskFeed）。
  */
-function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, onSpeaking, onSplit, splitFailed, startFailed, onManualStart, trail, blocks: own, onPulled, onSetFolder }: PipelineProps & { data: ConversationData }) {
+function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, onSpeaking, onSplit, splitFailed, startFailed, onManualStart, trail, blocks: own, onPulled, onSetFolder, bound = null }: PipelineProps & { data: ConversationData }) {
   const chrome = useViewChrome();
   const handheld = usePhone();
   const { work } = api;
@@ -256,8 +258,9 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
   // 交出去了（原负责人这边）：只读，不能发（输入框画成空的；不给 input 时 ChatColumn 会退回它自己的输入框）。
   const readOnly = project.transfer?.status === "accepted";
   // 输入框下面左边：这个项目绑的文件夹（照 Claude Code），这台电脑上能换；手机上、本机没连上只写名字。
-  const folder = !handheld && local.phase === "ready" && onSetFolder
-    ? <FolderMenu value={project.folder} folders={local.folders} onPick={(id) => void onSetFolder(id).catch(() => showWorkspaceToast({ text: "没改成" }))} />
+  const pickFolder = onSetFolder ? (id: string | null) => onSetFolder(id).catch(() => showWorkspaceToast({ text: "没改成" })) : undefined;
+  const folder = !handheld && local.phase === "ready" && pickFolder
+    ? <FolderMenu value={project.folder} folders={local.folders} onPick={(id) => void pickFolder(id)} />
     : project.folder ? <FootText>{project.folder}</FootText> : null;
   // 输入框下面左侧：这个项目以后新开子会话的默认权限模式（17.2 第 11 条）。
   const mode = useProjectMode(project.id);
@@ -307,6 +310,7 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
         // 拆好的时候（规划员拆完同步上来那一刻）；没有记录时当作现在，放在最后。
         list.push({ key: `plan:${board.drafts[0]!.id}`, at: board.plan?.finishedAt ?? board.plan?.createdAt ?? new Date().toISOString(), afterSequence: anchors.drafts, node: (
           <PlanDecision target={target} name={name} drafts={board.drafts} roles={work.roles?.roles ?? []} handheld={handheld} onChanged={() => void changed()} afterSequence={lastSequence}
+            folder={bound} onSetFolder={pickFolder}
             onSay={(text) => data.send(text, [])} />
         ) });
       }

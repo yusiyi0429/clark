@@ -49,6 +49,8 @@ import { ProjectTrail } from "./ProjectParts";
 import { LeftResize, useLeftWidth } from "./LeftResize";
 import { seenKey, withSeen, type SeenKind, type SeenMarks } from "@/lib/home/seen";
 import { seenSequence } from "@/lib/home/transfer";
+import { projectIdOf, startFolder } from "@/lib/home/startFolder";
+import { FolderAsk } from "./FolderAsk";
 import { TransferFlow, TransferView } from "./Transfer";
 import type { TimedBlock } from "@/components/work/WorkTimeline";
 import { useProjects } from "./useProjects";
@@ -224,18 +226,32 @@ function HomeFrame({ account }: { account: Account }) {
    * 一批交给本机：开了哪几张卡（卡 id）。没开起来时 onError 接着（拆卡写在管线里「拆卡失败 · 重试」）；
    * 没给 onError 的（自动开工）记进 startFailed，在管线里那一行写「失败 · 手动开始」。
    */
+  /** 项目没在这台电脑上绑文件夹、卡没开（17.2 第 32 条）：这几个项目的对话里出「在哪个文件夹开工？」，选完绑上再开。 */
+  const [needFolder, setNeedFolder] = useState<ReadonlySet<string>>(() => new Set());
   const start = useCallback(async (cards: Worker[], planners: PlanJob[], onError?: () => void, modes?: Map<string, TLocalPermissionMode>): Promise<Set<string>> => {
     const opened = new Set<string>();
-    const cardIds = cards.flatMap((worker) => (worker.item ? [worker.item.id] : []));
-    const cwd = local.folders.find((folder) => folder.id === readLast().folderId)?.path ?? local.folders[0]?.path;
-    if (!cwd && cards.length) { if (onError) onError(); else markStart(cardIds, true); if (!planners.length) return opened; cards = []; }
-    const tryIds = cards.flatMap((worker) => (worker.item ? [worker.item.id] : []));
+    // 在所属项目绑的文件夹里开（17.2 第 32 条）；项目没绑的卡不开、去问；不属于项目的才用上次用过的。
+    const fallback = local.folders.find((folder) => folder.id === readLast().folderId)?.path ?? local.folders[0]?.path ?? null;
+    const asks = new Set<string>();
+    const placed = cards.flatMap((worker) => {
+      const projectId = projectIdOf(worker, projects.all);
+      const where = startFolder(projectId, projects.bound, fallback);
+      if (where.ask && projectId) { asks.add(projectId); return []; }
+      return [{ worker, cwd: where.cwd }];
+    });
+    if (asks.size) setNeedFolder((current) => ([...asks].every((id) => current.has(id)) ? current : new Set([...current, ...asks])));
+    const homeless = placed.flatMap(({ worker, cwd }) => (!cwd && worker.item ? [worker.item.id] : []));
+    if (homeless.length) { if (onError) onError(); else markStart(homeless, true); }
+    const tryIds = placed.flatMap(({ worker, cwd }) => (cwd && worker.item ? [worker.item.id] : []));
     const roles = work.roles?.roles ?? [];
-    const plans: StartPlan[] = cards.flatMap((worker) => {
+    const plans: StartPlan[] = placed.flatMap(({ worker, cwd }) => {
       const role = roles.find((entry) => entry.id === worker.role.id) ?? null;
       const model = local.models.find((entry) => entry.id === worker.item?.card?.model?.id) ?? modelForTier(local.models, role?.modelTier ?? "normal");
       return model && worker.item && cwd ? [{ item: worker.item, model, cwd, role, permissionMode: modes?.get(worker.item.id) }] : [];
     });
+    // 规划员：项目绑了就在那个文件夹里拆，没绑不给目录（本机给它专用目录，规划员会先问清在哪做）。
+    const planCwd = (job: PlanJob) => startFolder(projectIdOf({ projectId: "projectId" in job ? job.projectId : null, taskId: "taskId" in job ? job.taskId : null }, projects.all),
+      projects.bound, fallback).cwd ?? undefined;
     // 拆卡登记先认领再开（B 的契约）：删成了才算这个标签页的，别的标签页、别的电脑删不成就不开；开不起来（含整批出错）再登记回去。
     const claimed = (await Promise.all(planners.map(async (job) => {
       if (!job.splitId) return job;
@@ -245,7 +261,7 @@ function HomeFrame({ account }: { account: Account }) {
     const giveBack = (jobs: PlanJob[]) => Promise.all(jobs.map((job) => (job.splitId ? registerPlan(job, job.sourceWords?.join("\n\n")).catch(() => undefined) : undefined)));
     try {
       const jobs = (await Promise.all(claimed.map(async (job) => {
-        try { return { ...job, request: await planStartRequest(job, local.models, cwd) }; } catch { return { ...job, request: null }; }
+        try { return { ...job, request: await planStartRequest(job, local.models, planCwd(job)) }; } catch { return { ...job, request: null }; }
       })));
       const ready = jobs.filter((job): job is typeof job & { request: NonNullable<typeof job.request> } => !!job.request);
       const result = await startBatch(local.runner, plans, ready.map((job) => job.request));
@@ -264,7 +280,7 @@ function HomeFrame({ account }: { account: Account }) {
       changed();
     }
     return opened;
-  }, [local, work.roles, changed, markStart]);
+  }, [local, work.roles, changed, markStart, projects.all, projects.bound]);
   /** 拆卡登记没成的那件 Task（或没挂 Task 的项目，planKey）：项目对话里出「拆卡失败 · 重试」（不弹 toast）。 */
   const [splitFailed, setSplitFailed] = useState<string | null>(null);
   // afterSequence（17.2 第 29 条）：项目对话里本人看到的最后一条，登记时带上，拆卡那几块插在它后面。
@@ -359,7 +375,8 @@ function HomeFrame({ account }: { account: Account }) {
     return () => window.clearTimeout(retry);
   }, [here, api.live, api.deviceId, canOpen, autoStartKey, claimTick, markStart]);
   // 换了文件夹或模型（比如没开成以后去连接页加了文件夹）：没开成的再自动试一次。
-  const setupKey = `${local.folders.map((folder) => folder.id).join(",")}|${local.models.map((entry) => entry.id).join(",")}`;
+  // 项目绑了文件夹（「在哪个文件夹开工？」选完）也算：等文件夹的卡马上再认领。
+  const setupKey = `${local.folders.map((folder) => folder.id).join(",")}|${local.models.map((entry) => entry.id).join(",")}|${[...projects.bound].map(([projectId, folder]) => `${projectId}:${folder.id}`).join(",")}`;
   const lastSetup = useRef(setupKey);
   useEffect(() => {
     if (lastSetup.current === setupKey) return;
@@ -478,17 +495,25 @@ function HomeFrame({ account }: { account: Account }) {
     await local.refresh();
   };
   /** 项目对话里项目自己的几块：转交（16.7）从「准备交接」那一刻起，到发出、等接手。 */
-  const projectBlocks = (project: Project): TimedBlock[] => (project.transfer && (project.transfer.status === "preparing" || project.transfer.status === "sent") ? [{
-    key: `transfer:${project.transfer.id}`, at: project.transfer.startedAt, afterSequence: project.transfer.afterSequence,
-    node: <TransferFlow project={project} transfer={project.transfer} onChanged={api.refresh} onStop={stopForTransfer} />,
-  }] : []);
+  const projectBlocks = (project: Project): TimedBlock[] => [
+    ...(project.transfer && (project.transfer.status === "preparing" || project.transfer.status === "sent") ? [{
+      key: `transfer:${project.transfer.id}`, at: project.transfer.startedAt, afterSequence: project.transfer.afterSequence,
+      node: <TransferFlow project={project} transfer={project.transfer} onChanged={api.refresh} onStop={stopForTransfer} />,
+    }] : []),
+    // 卡等着项目绑文件夹（17.2 第 32 条）：放在最后，选完绑上就收起，卡接着开。
+    ...(here && needFolder.has(project.id) && !projects.bound.has(project.id) ? [{
+      key: `folder-ask:${project.id}`, at: new Date().toISOString(), afterSequence: null,
+      node: <FolderAsk folders={local.folders} onBind={(folder) => projects.actions.setFolder(project.id, folder.id, project.name)} onPickOther={() => local.pickFolder()} />,
+    }] : []),
+  ];
   /** 项目对话（16.3）：页头只有项目名和「详情」（文件夹在输入框下面）。没挂 Task 的项目也在自己的对话里拆卡、开工。 */
   const projectView = (project: Project) => {
     const goalTasks = project.goals.flatMap((goal) => { const task = planTask(goal.taskId); return task ? [task] : []; });
     const trail = <ProjectTrail project={project} go={go} />;
     return <PipelineView key={project.id} project={project} tasks={goalTasks} api={api} buddy={buddy} outbox={outbox} consume={consume} go={go} onSplit={(target) => void split(target, seenSequence(project.id))} splitFailed={splitFailed}
       startFailed={startFailed} onManualStart={(id) => void manualStart(id)} onSpeaking={setSpeaking} trail={trail} blocks={projectBlocks(project)}
-      onPulled={() => void projects.actions.reloadFolders()} onSetFolder={(folderId) => projects.actions.setFolder(project.id, folderId, project.name)} />;
+      onPulled={() => void projects.actions.reloadFolders()} onSetFolder={(folderId) => projects.actions.setFolder(project.id, folderId, project.name)}
+      bound={projects.bound.get(project.id) ?? null} />;
   };
   const display = (current: View) => {
     switch (current.kind) {
