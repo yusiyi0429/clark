@@ -19,7 +19,7 @@ export function ensureFeishuPlugin(dataDir: string, skillsDir: string): string |
   try {
     mkdirSync(join(dir, ".claude-plugin"), { recursive: true });
     mkdirSync(linkDir, { recursive: true });
-    writeFileSync(join(dir, ".claude-plugin", "plugin.json"), JSON.stringify({ name: "tianshu-feishu", version: "1.0.0", description: "本人已装的飞书技能（天枢本机程序按岗位挂载）" }));
+    writeFileSync(join(dir, ".claude-plugin", "plugin.json"), JSON.stringify({ name: "tianshu-feishu", version: "1.0.0", description: "本人已装的飞书技能（天枢本机程序按技能挂载）" }));
   } catch { return null; }
   // 本人删掉的技能，链接也删。unlink 只删链接本身、不进指向的目录（Bun 下 rmSync 删目录链接报 EFAULT）；不是链接的删不掉就留着。
   for (const n of readdirSync(linkDir)) {

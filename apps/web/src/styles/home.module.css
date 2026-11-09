@@ -306,7 +306,7 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .composerDock { width: min(680px, calc(100% - 2 * var(--space-6))); margin: 0 auto var(--space-4); }
 /* 输入框（14.5）：四处一样。空着是一行高的长条（48）：左「+」、中间字（16/24）、右麦克风或发送；附件和「关于」在框里、字的上方；「发给」在框下面。 */
 .inputDock { display: grid; gap: var(--space-2); }
-.bar { display: flex; flex-direction: column; gap: var(--space-1); padding: 7px; border: 1px solid var(--field-border); border-radius: 20px; background: var(--field-bg); color: var(--field-ink); box-shadow: var(--elev-2); transition: border-color var(--dur-fast) linear, background var(--dur-fast) linear; }
+.bar { display: flex; flex-direction: column; gap: var(--space-1); padding: 7px; border: 1px solid var(--field-border); border-radius: var(--r-inset); background: var(--field-bg); color: var(--field-ink); box-shadow: var(--elev-2); transition: border-color var(--dur-fast) linear, background var(--dur-fast) linear; }
 .bar:focus-within, .bar[data-drag] { border-color: var(--field-border-focus); }
 .bar[data-drag] { background: var(--neutral-wash); }
 .barRow { display: flex; align-items: flex-end; gap: var(--space-1); }
@@ -334,7 +334,11 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .att:hover .attRemove, .att:focus-within .attRemove { opacity: 1; }
 .barError { display: flex; align-items: center; min-height: 24px; margin: 0; padding: 0 4px; color: var(--danger); font-size: var(--text-xs); line-height: 16px; }
 .barFailed { padding: 0 4px; }
-.barUnder { display: flex; align-items: center; gap: var(--space-2); padding: 0 4px; }
+/* 框下面一行（照 Claude Code 桌面版）：固定 28 高，左边上下文、右边模型和权限档；四处一样，空着也占位。 */
+.barFoot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); height: 28px; padding: 0 var(--space-1); }
+.barFootSide { display: flex; align-items: center; gap: var(--space-1); min-width: 0; }
+.footText { display: inline-flex; align-items: center; gap: var(--space-1); min-width: 0; padding: 0 var(--space-2); overflow: hidden; color: var(--ink-muted); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); text-overflow: ellipsis; white-space: nowrap; }
+.footText svg { flex: none; color: var(--ink-faint); }
 /* 本人气泡里的附件（14.5）：靠右，图片 96。 */
 .bubbleAtts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); margin: 0 0 6px; padding: 0; list-style: none; }
 .sendTo { display: inline-flex; align-items: center; gap: var(--space-1); max-width: 320px; height: var(--row-32); padding: 0 var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink); font: inherit; font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); cursor: pointer; }

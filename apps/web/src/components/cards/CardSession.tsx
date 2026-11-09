@@ -149,8 +149,11 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
     : <QuestionDecision key={question.requestId} request={question} blocked={canAct ? null : awayChip(device)} expired={ended} onAnswer={answer} />;
   const dock = <PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} />;
   // 新首页里输入框只在这台电脑上跑着这张卡时出（别处看摘要）；老页面照旧灰着。
+  // 「来源 · 模型」：这台电脑上的会话报的（实际跑的优先），没有时退回云端记的。写在输入框下面一行的右边，文件夹在左边。
+  const model = runLabel(session?.run) ?? run?.modelLabel ?? item.card?.model?.label ?? null;
+  const place = session?.workspace ? { name: shortPlace(session.workspace), title: placeText(session.workspace) } : null;
   const composer = agent && (session || !embedded)
-    ? <SessionComposer label={`给${item.title}插话`} disabled={!canAct} onSend={say} mode={mode} dock={dock} subject={{ kind: "card", id: cardId }} />
+    ? <SessionComposer label={`给${item.title}插话`} disabled={!canAct} onSend={say} mode={mode} dock={dock} subject={{ kind: "card", id: cardId }} place={place} model={model ? { label: model } : null} />
     : <div className={s.composerDock}>{dock}</div>;
   const chat = (
     <PendingBoxes>
@@ -176,12 +179,10 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
     setStarting(false);
     await local.refresh();
   }} /> : null;
-  // 新首页的展示区（5.4.3「页头」）：上一级 / 名字，右边状态 chip、模型 chip、「停止」或「推翻」（弱按钮）、信息图标；下面是对话，点信息图标换成结果。
+  // 新首页的展示区（5.4.3「页头」）：上一级 / 名字，右边状态 chip、「停止」或「推翻」（弱按钮）、信息图标；下面是对话，点信息图标换成结果。模型和文件夹在输入框下面一行。
   if (embedded) {
     const showPane = details ?? !session;
     const chipOf = stateChip(wait, stage, !canAct && device ? awayChip(device) : null);
-    // 「来源 · 模型」：这台电脑上的会话报的（实际跑的优先），没有时退回云端记的。
-    const model = runLabel(session?.run) ?? run?.modelLabel ?? item.card?.model?.label ?? null;
     const handback = detail.handbacks[0] ?? null;
     const canFlip = !handheld && !!handback && handback.status === "done" && !handback.overruled && handback.outcome === "pass" && !deliverableLabel(item)?.startsWith("已纳入");
     const headAct = (action: () => Promise<unknown>) => { setHeadFailed(null); action().catch((error: unknown) => setHeadFailed(failureOf(error, () => headAct(action)))); };
@@ -193,8 +194,7 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
           {chrome.lead}
           <b className={s.embedTitle}>{chrome.parent}{chrome.letter}{item.title}</b>
           <span className={s.stateChip} data-tone={chipOf.tone}>{chipOf.tone === "wait" ? <i aria-hidden /> : null}{chipOf.text}</span>
-          {model ? <span className={s.stateChip} data-tone="neutral">{model}</span> : null}
-          <span className={s.exec}>{session?.workspace ? <span title={placeText(session.workspace)}>{shortPlace(session.workspace)}</span> : null}</span>
+          <span className={s.exec} />
           {headFailed ? <FailedLine inline {...headFailed} /> : stop}
           <HeroButton variant="ghost" size="sm" isIconOnly aria-label="结果" title="结果" data-pressed={showPane || undefined} onPress={() => setDetails(!showPane)} data-testid="session-details"><Info {...ICON} aria-hidden /></HeroButton>
           {chrome.trail}

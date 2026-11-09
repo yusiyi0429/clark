@@ -28,12 +28,13 @@ describe("输入框附件（14.5）", () => {
 });
 
 describe("输入框（14.5）", () => {
-  it("空着时一行：左「+」、右麦克风，没有发送；「关于」胶囊在框里；「发给」在框下面", () => {
+  it("空着时一行：左「+」、右麦克风，没有发送；「关于」胶囊在框里；框下面一行左边上下文、右边模型，没给也占这一行", () => {
     const html = renderToStaticMarkup(<InputBar placeholder="说点什么…" onSend={async () => true}
-      context={{ label: "关于：会议回流", onClear: () => undefined }} under={<span>发给</span>} />);
+      context={{ label: "关于：会议回流", onClear: () => undefined }} footer={{ left: <span>发给</span>, right: <span>TokenHub · Opus 5.5</span> }} />);
     expect(html).toMatch(/aria-label="添加文件或图片".*<textarea[^>]*placeholder="说点什么…".*aria-label="说话"/);
     expect(html).not.toContain('data-testid="input-send"');
-    expect(html).toMatch(/data-testid="input-bar".*关于：会议回流.*<\/div><div[^>]*>.*发给/);
+    expect(html).toMatch(/data-testid="input-bar".*关于：会议回流.*data-testid="input-footer"><span[^>]*><span>发给<\/span><\/span><span[^>]*><span>TokenHub · Opus 5.5/);
+    expect(renderToStaticMarkup(<InputBar placeholder="" onSend={async () => true} />)).toContain('data-testid="input-footer"');
   });
 
   it("回答进行中：右边是停止", () => {

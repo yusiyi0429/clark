@@ -4,7 +4,7 @@ import { cardTitleProblem } from "../src/cardTitle.js";
 
 describe("卡标题", () => {
   it("短的动宾短语合格；中文按 2、英文按 1 算宽度，32 以内", () => {
-    for (const ok of ["本机按岗位拉起会话", "派活单网页", "Add pairing retry button", "改登录页", "接 TokenHub 计费"]) expect(cardTitleProblem(ok), ok).toBeNull();
+    for (const ok of ["本机按技能拉起会话", "派活单网页", "Add pairing retry button", "改登录页", "接 TokenHub 计费"]) expect(cardTitleProblem(ok), ok).toBeNull();
     expect(cardTitleProblem("一二三四五六七八九十一二三四五六")).toBeNull(); // 16 个字正好 32
   });
   it("太长、带括号冒号句号的退回重写，说清怎么改", () => {

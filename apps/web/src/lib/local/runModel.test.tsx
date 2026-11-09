@@ -4,7 +4,7 @@ import type { TCardDraftView, TLocalModelProfile } from "@warmap/contracts";
 import { LocalContext } from "./LocalRunnerProvider";
 import { createMockRunner } from "./mock";
 import { chatModelLabel, runLabel } from "./runModel";
-import { ModelChip } from "@/components/home/Conversations";
+import { ModelText } from "@/components/home/Conversations";
 import { PlanDecision } from "@/components/home/PlanDecision";
 
 describe("项目主管线、伙伴台页头的「来源 · 模型」", () => {
@@ -12,8 +12,8 @@ describe("项目主管线、伙伴台页头的「来源 · 模型」", () => {
     expect(chatModelLabel({ provider: "tokenhub", model: "wangsu/claude-opus-5-5" })).toBe("TokenHub · Opus 5.5");
     expect(chatModelLabel({ provider: "tokenhub", model: "wangsu/qwen3.8-flash" })).toBe("TokenHub · qwen3.8-flash");
     expect(chatModelLabel({ provider: "openrouter", model: "claude-sonnet-4-20250514" })).toBe("openrouter · Sonnet 4");
-    expect(renderToStaticMarkup(<ModelChip data={{ model: { provider: "tokenhub", model: "wangsu/claude-opus-5-5" } }} />)).toContain("TokenHub · Opus 5.5");
-    expect(renderToStaticMarkup(<ModelChip data={{ model: null }} />)).toBe("");
+    expect(renderToStaticMarkup(<ModelText data={{ model: { provider: "tokenhub", model: "wangsu/claude-opus-5-5" } }} />)).toContain("TokenHub · Opus 5.5");
+    expect(renderToStaticMarkup(<ModelText data={{ model: null }} />)).toBe("");
   });
 });
 

@@ -47,7 +47,7 @@ describe("岗位", () => {
     const promptFile = after(argv, "--append-system-prompt-file")!;
     expect(realpathSync(promptFile)).toBe(realpathSync(join(t.dataDir, "sessions", s.body.id, "system.md")));
     const prompt = readFileSync(promptFile, "utf8");
-    for (const text of ["## 你的岗位：开发", "开发的职责：把事做对", "开发的做法：先列计划", "开发的验收口径：有证据", "hand_back", "GitHub：用 gh 命令行"]) expect(prompt).toContain(text);
+    for (const text of ["## 你的技能：开发", "开发的职责：把事做对", "开发的做法：先列计划", "开发的验收口径：有证据", "hand_back", "GitHub：用 gh 命令行"]) expect(prompt).toContain(text);
     expect(argv).not.toContain("--agents");
     expect(argv).not.toContain("--plugin-dir");
     expect(after(argv, "--disallowedTools")!.split(",")).toEqual(expect.arrayContaining(["WebSearch", "mcp__tianshu__web_search"]));
@@ -71,7 +71,7 @@ describe("岗位", () => {
     const argv: string[] = trace(work).at(-1).argv;
     const prompt = readFileSync(after(argv, "--append-system-prompt-file")!, "utf8");
     expect(prompt).toContain("hand_back");
-    expect(prompt).not.toContain("你的岗位");
+    expect(prompt).not.toContain("你的技能");
     expect(argv).not.toContain("--disallowedTools"); // 订阅模型、没有岗位：自带搜索也给
     await kill(s.body.id);
   });

@@ -45,7 +45,7 @@ import { LeftColumn, SubLetter, subKey, subLetters } from "./LeftColumn";
 import { ForeignTaskInfo, TaskInfo } from "./TaskInfo";
 import { MissionInfo } from "./MissionInfo";
 import { ProjectInfo } from "./ProjectInfo";
-import { GoalBar, ProjectTrail } from "./ProjectParts";
+import { ProjectTrail } from "./ProjectParts";
 import { TransferFlow, TransferView } from "./Transfer";
 import type { TimedBlock } from "@/components/work/WorkTimeline";
 import { useProjects } from "./useProjects";
@@ -458,13 +458,13 @@ function HomeFrame({ account }: { account: Account }) {
     key: `transfer:${project.transfer.id}`, at: project.transfer.startedAt, afterSequence: project.transfer.afterSequence,
     node: <TransferFlow project={project} transfer={project.transfer} onChanged={api.refresh} onStop={stopForTransfer} />,
   }] : []);
-  /** 项目对话（16.3）：页头项目名、文件夹 chip、「详情」，下面目标条。没挂 Task 的项目也在自己的对话里拆卡、开工。 */
+  /** 项目对话（16.3）：页头只有项目名和「详情」（文件夹在输入框下面）。没挂 Task 的项目也在自己的对话里拆卡、开工。 */
   const projectView = (project: Project) => {
     const goalTasks = project.goals.flatMap((goal) => { const task = planTask(goal.taskId); return task ? [task] : []; });
     const trail = <ProjectTrail project={project} go={go} />;
     return <PipelineView key={project.id} project={project} tasks={goalTasks} api={api} buddy={buddy} outbox={outbox} consume={consume} go={go} onSplit={(target) => void split(target)} splitFailed={splitFailed}
-      startFailed={startFailed} onManualStart={(id) => void manualStart(id)} onSpeaking={setSpeaking} trail={trail} bar={<GoalBar project={project} />} blocks={projectBlocks(project)}
-      onPulled={() => void projects.actions.reloadFolders()} />;
+      startFailed={startFailed} onManualStart={(id) => void manualStart(id)} onSpeaking={setSpeaking} trail={trail} blocks={projectBlocks(project)}
+      onPulled={() => void projects.actions.reloadFolders()} onSetFolder={(folderId) => projects.actions.setFolder(project.id, folderId, project.name)} />;
   };
   const display = (current: View) => {
     switch (current.kind) {
