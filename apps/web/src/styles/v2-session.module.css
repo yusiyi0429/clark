@@ -53,7 +53,6 @@
 .step > svg { flex: none; color: var(--ink-faint); }
 .step time, .stepsTook { flex: none; color: var(--field-placeholder); font-variant-numeric: tabular-nums; }
 .stepText, .step > time + span, .stepsSummary { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.stepsCount { flex: none; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .steps { align-self: stretch; display: grid; min-width: 0; }
 .stepsHead { display: flex; align-items: center; gap: var(--space-2); min-width: 0; height: var(--touch-hit, var(--row-28)); padding: 0 var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink-faint); font: inherit; text-align: left; cursor: pointer; transition: background-color var(--dur-fast) linear; }
 .stepsHead > svg { color: var(--ink-faint); }

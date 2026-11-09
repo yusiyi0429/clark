@@ -2,9 +2,9 @@
 
 /**
  * 子会话的对话（本机实时，原型 v8.4 cardChat）。本人说的靠右；执行方说的是浅灰气泡，带名字；
- * 工具调用行（设计 5.4.3）：连续的步骤折成一行（ChevronRight · N 步 · 最后一步 · 用时；正在跑时箭头换成转圈），点开一步一行；只有一步就直接是那一行；
- * 要权限是选项框（批准 / 同类以后都批准 / 换个做法），几件一起等着时合成一个框翻页，放在第一件的位置；
- * 批过的、答过的收成一行（勾 · 问题 · 答案），不另起「问：」「答：」两行；没答就过去了的（被新的取代、作废、子会话停了）收成「已失效」。
+ * 过程（28 条，照 Claude Code）：两句对话之间的步骤、批过的权限合成一行，收着写总结（运行 N 条命令 · 读 N 个文件 · … · 用时），正在跑时是转圈加当前那一步，点开一步一行、不写时间；
+ * 要权限是选项框（批准 / 同类以后都批准 / 换个做法），几件一起等着时合成一个框翻页，放在第一件的位置，批完就消失：批准的不留行，换了做法的在那一步行尾写「换个做法」；
+ * 答过的问题收成一行（勾 · 问题 · 答案），不另起「问：」「答：」两行，AskUserQuestion 那一步不画；没答就过去了的（被新的取代、作废、子会话停了）收成「已失效」。
  * 交回、产出、提醒各一行。
  * 本人那句话的回执（17.4，样子同伙伴台）：一个勾已送达、两个勾已读；没读到就没了写「没读到 · 重发」。本机补发的话没有回执。
  * canAct=false（手机、别的电脑、本机没连）时选项框不给选项，头上写「等你 · {电脑名}」。
@@ -32,18 +32,61 @@ const hhmm = (iso: string) => new Date(iso).toLocaleTimeString("zh-CN", { hour: 
 export type DecideOptions = { forSession?: boolean; message?: string };
 
 type Step = Extract<SessionEntry, { kind: "step" }>;
+type Permission = Extract<SessionEntry, { kind: "permission" }>;
 /** 一次提问折成一项：答了是答案，没答就过去了是 expired。 */
 type Asked = { kind: "asked"; seq: number; question: string; answer: string | null };
-type Item = Exclude<SessionEntry, Step> | { kind: "steps"; seq: number; steps: Step[] } | Asked;
+/** 过程里的一行：一步；denied = 本人让它换了做法（批准时选的「换个做法」）。 */
+type ProcessRow = { step: Step; denied: boolean };
+/** 一段过程（28 条）：两句对话之间的步骤、批过的权限并成一段，start/end 是这一段第一条和最后一条记录的时间。 */
+type Process = { kind: "process"; seq: number; start: string; end: string; rows: ProcessRow[] };
+type Item = Exclude<SessionEntry, Step> | Process | Asked;
+
+/** 执行方问本人那一步：不画，留问答那一行。 */
+const ASK_TOOL = "AskUserQuestion";
+/** 收起时按类型数（标题是本机 describeTool 写的「运行 …」「读文件 …」等）。 */
+const STEP_KINDS: { prefixes: string[]; text: (count: number) => string }[] = [
+  { prefixes: ["运行 "], text: (count) => `运行 ${count} 条命令` },
+  { prefixes: ["读文件 ", "读 "], text: (count) => `读 ${count} 个文件` },
+  { prefixes: ["改文件 ", "写文件 ", "改 ", "写 "], text: (count) => `改 ${count} 个文件` },
+  { prefixes: ["搜索 ", "找文件 ", "联网搜索 "], text: (count) => `搜索 ${count} 次` },
+];
+
+/** 一段过程的总结：「运行 5 条命令 · 读 3 个文件 · 改 2 个文件 · 搜索 2 次」，别的工具写「其他 N 步」。 */
+export function processSummary(titles: string[]): string {
+  const counts = STEP_KINDS.map(() => 0);
+  let other = 0;
+  for (const title of titles) {
+    const at = STEP_KINDS.findIndex((kind) => kind.prefixes.some((prefix) => title.startsWith(prefix)));
+    if (at < 0) other += 1; else counts[at]! += 1;
+  }
+  return [...STEP_KINDS.flatMap((kind, at) => (counts[at] ? [kind.text(counts[at]!)] : [])), ...(other ? [`其他 ${other} 步`] : [])].join(" · ");
+}
+
+/** 换了做法的批准挂到同名的那一步上（离它最近、还没挂过的）；没有那一步就自己算一行。 */
+function processRows(steps: Step[], denied: Permission[]): ProcessRow[] {
+  const rows = steps.map((step) => ({ step, denied: false }));
+  for (const permission of denied) {
+    const match = rows.filter((row) => !row.denied && row.step.title === permission.request.title)
+      .sort((a, b) => Math.abs(a.step.seq - permission.seq) - Math.abs(b.step.seq - permission.seq))[0];
+    if (match) match.denied = true;
+    else rows.push({ step: { kind: "step", seq: permission.seq, at: permission.at, toolUseId: permission.request.requestId, title: permission.request.title, done: true, isError: false }, denied: true });
+  }
+  return rows.sort((a, b) => a.step.seq - b.step.seq);
+}
 
 /** sessionView 记的「问：…」「答：…」两行（questionNotice 和 question_resolved 写的）。 */
 const ASK_PREFIX = "问：";
 const ANSWER_PREFIX = "答：";
 const noticeText = (entry: SessionEntry) => (entry.kind === "notice" ? entry.text : null);
 
-/** 连续的工具步骤并成一组；产出（artifact）是交付物，不并，单独一行。「问：」和它后面的「答：」并成一项。 */
-function groupSteps(entries: SessionEntry[]): Item[] {
+/**
+ * 两句对话之间的过程并成一段（28 条）：对话是本人说的、执行方说的、交回、交出产出、问答、提醒；过程是步骤和批过的权限（批准、换个做法）。
+ * 还没批的、失效的权限照旧单独一项（选项框、「已失效」）。AskUserQuestion 那一步不要。「问：」和它后面的「答：」并成一项。
+ */
+function groupEntries(entries: SessionEntry[]): Item[] {
   const items: Item[] = [];
+  const denied = new Map<Process, Permission[]>();
+  const steps = new Map<Process, Step[]>();
   const used = new Set<number>();
   entries.forEach((entry, index) => {
     if (used.has(index)) return;
@@ -59,11 +102,22 @@ function groupSteps(entries: SessionEntry[]): Item[] {
       items.push({ kind: "asked", seq: entry.seq, question: text.slice(ASK_PREFIX.length).trim(), answer });
       return;
     }
-    const last = items[items.length - 1];
-    if (entry.kind === "step" && last?.kind === "steps") last.steps.push(entry);
-    else items.push(entry.kind === "step" ? { kind: "steps", seq: entry.seq, steps: [entry] } : entry);
+    if (entry.kind === "step" && entry.title === ASK_TOOL) return;
+    if (entry.kind !== "step" && !(entry.kind === "permission" && entry.decision)) { items.push(entry); return; }
+    let last = items[items.length - 1];
+    if (last?.kind !== "process") {
+      last = { kind: "process", seq: entry.seq, start: entry.at, end: entry.at, rows: [] };
+      items.push(last);
+      steps.set(last, []);
+      denied.set(last, []);
+    }
+    last.end = entry.at;
+    if (entry.kind === "step") steps.get(last)!.push(entry);
+    else if (entry.decision === "deny") denied.get(last)!.push(entry);
   });
-  return items;
+  for (const [process, list] of steps) process.rows = processRows(list, denied.get(process)!);
+  // 只有批过的权限、那一步还没来的一段先不画。
+  return items.filter((item) => item.kind !== "process" || item.rows.length > 0);
 }
 
 /** 没做完的那一步：会话还在跑就是进行中，不在跑了就是停在那儿了。 */
@@ -79,7 +133,7 @@ export function roundStart(entries: SessionEntry[]): string | null {
 
 /**
  * 「在跑」那一行（27 条，照 Claude Code 底部那行）：模型在两步之间想的时候界面也在动——转圈加这一轮跑了多久（每秒走一下）。
- * 只在会话在跑、没有正在执行的步骤、也没在等你批准或回答时出；有步骤在转圈时不重复出。不写解释句。
+ * 只在会话在跑、最后不是一段过程、也没在等你批准或回答时出；最后那段过程在转圈时不重复出。不写解释句。
  */
 function WorkingRow({ since }: { since: string | null }) {
   const [now, setNow] = useState(() => Date.now());
@@ -95,25 +149,36 @@ function WorkingRow({ since }: { since: string | null }) {
   );
 }
 
-function StepRow({ step, live }: { step: Step; live: boolean }) {
-  return <div className={s.step}><StateIcon state={stepState(step, live)} /><span className={s.stepText}>{step.title}</span><time>{hhmm(step.at)}</time></div>;
+/** 点开后的一步一行：不写时间；换了做法的行尾一个淡色「换个做法」。 */
+function StepRow({ row, live }: { row: ProcessRow; live: boolean }) {
+  return (
+    <div className={s.step}>
+      <StateIcon state={row.denied ? "stopped" : stepState(row.step, live)} />
+      <span className={s.stepText}>{row.step.title}</span>
+      {row.denied ? <span className={s.stepsTook}>换个做法</span> : null}
+    </div>
+  );
 }
 
-function StepGroup({ steps, live }: { steps: Step[]; live: boolean }) {
+/**
+ * 一段过程一行（28 条，照 Claude Code）：收着时写总结和这一段的用时，点开一步一行。
+ * running（会话在跑、这一段在最后）：转圈加当前那一步的标题；做完了收成总结。
+ */
+function ProcessGroup({ process, live, running }: { process: Process; live: boolean; running: boolean }) {
   const [open, setOpen] = useState(false);
-  const first = steps[0]!;
-  const last = steps[steps.length - 1]!;
-  const took = Date.parse(last.at) - Date.parse(first.at) >= 1000 ? duration(first.at, last.at) : null;
+  const summary = processSummary(process.rows.map((row) => row.step.title));
+  const current = [...process.rows].reverse().find((row) => !row.denied && !row.step.done) ?? process.rows[process.rows.length - 1]!;
+  const took = !running && Date.parse(process.end) - Date.parse(process.start) >= 1000 ? duration(process.start, process.end) : null;
+  const said = running ? current.step.title : [summary, took].filter(Boolean).join(" · ");
   return (
     <div className={s.steps} data-open={open ? "" : undefined}>
-      <button type="button" className={s.stepsHead} aria-expanded={open} onClick={() => setOpen(!open)}>
-        {live && !last.done ? <StateIcon state="running" /> : <ChevronRight {...ICON} className={h.chevron} data-open={open ? "" : undefined} />}
-        <span className={s.stepsCount}>{steps.length} 步</span>
-        <span className={s.stepsSummary}>{last.title}</span>
+      <button type="button" className={s.stepsHead} aria-expanded={open} aria-label={`${said}，${open ? "收起" : "展开"}`} onClick={() => setOpen(!open)}>
+        {running ? <StateIcon state="running" /> : <ChevronRight {...ICON} className={h.chevron} data-open={open ? "" : undefined} />}
+        <span className={s.stepsSummary}>{running ? current.step.title : summary}</span>
         {took ? <span className={s.stepsTook}>{took}</span> : null}
       </button>
       <div className={s.stepsBody} inert={!open}>
-        <div>{steps.map((step) => <StepRow key={step.seq} step={step} live={live} />)}</div>
+        <div>{process.rows.map((row) => <StepRow key={row.step.seq} row={row} live={live} />)}</div>
       </div>
     </div>
   );
@@ -171,11 +236,14 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
   const firstPending = pending[0]?.requestId;
   const askingText = asking ? questionNotice(asking) : null;
   const lastAsk = askingText ? entries.map((entry) => entry.kind === "notice" && entry.text === askingText).lastIndexOf(true) : -1;
-  const working = live && !pending.length && !asking && !entries.some((entry) => entry.kind === "step" && !entry.done);
+  const items = groupEntries(entries.filter((_, index) => index !== lastAsk));
+  // 在跑、没在等你：最后一段过程就是正在做的（转圈加当前那一步）；最后不是过程（刚说完、在想）时出「在跑」那一行。
+  const busy = live && !pending.length && !asking;
+  const tailProcess = items[items.length - 1]?.kind === "process";
   return (
     <div className={s.feed}>
       {lead ? <span className={s.evt}>{lead}</span> : null}
-      {groupSteps(entries.filter((_, index) => index !== lastAsk)).map((entry) => {
+      {items.map((entry, index) => {
         switch (entry.kind) {
           case "user": return [
             <div key={entry.seq} className={s.me}>
@@ -192,10 +260,9 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
               : entry.receipt ? <ReceiptTicks key={`${entry.seq}:receipt`} className={s.meReceipt} state={entry.receipt} /> : null,
           ];
           case "assistant": return <div key={entry.seq} className={s.bubble}><small className={s.who}>{agentName}</small><p>{entry.text}</p></div>;
-          case "steps": return entry.steps.length === 1 ? <StepRow key={entry.seq} step={entry.steps[0]!} live={live} /> : <StepGroup key={entry.seq} steps={entry.steps} live={live} />;
+          case "process": return <ProcessGroup key={entry.seq} process={entry} live={live} running={busy && index === items.length - 1} />;
           case "asked": return <DecisionBox key={entry.seq} kind="question" title={entry.question} options={[]} onPick={noop} resolved={entry.answer ?? undefined} expired={entry.answer === null} />;
           case "permission":
-            if (entry.decision) return <DecisionBox key={entry.seq} kind="approval" title={entry.request.title} options={[]} onPick={noop} resolved={entry.decision === "allow" ? "已批准" : "换个做法"} />;
             if (ended) return <DecisionBox key={entry.seq} kind="approval" title={entry.request.title} options={[]} onPick={noop} expired />;
             if (entry.request.requestId !== firstPending) return null;
             return relay ? <RelayLine key={entry.seq} text={entry.request.title} onGo={relay} /> : <ApprovalDecision key={entry.seq} requests={pending} blocked={canAct ? null : awayChip(device)} onDecide={onDecide} />;
@@ -204,7 +271,7 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
           case "notice": return <span key={entry.seq} className={s.evt} data-level={entry.level}>{entry.text}</span>;
         }
       })}
-      {working ? <WorkingRow since={roundStart(entries)} /> : null}
+      {busy && !tailProcess ? <WorkingRow since={roundStart(entries)} /> : null}
       {tail}
     </div>
   );
