@@ -2,7 +2,7 @@
 
 /**
  * 新首页中间的对话时间线（总管线、Task 管线）：和 ConversationTimeline 一样画对话（同一套零件，不改它们），另外把网页插入的块
- * （开工的选项框、开了哪几个子会话、验收结果和全部完成）按时间插在对话之间：插在它之前最近的一条消息后面，比第一条消息还早的放在最前。
+ * （开工的选项框、开了哪几个子会话、验收结果和全部完成）按时间插在对话之间：插在它之前最近的一条消息后面，比第一条消息还早的放在最前；有消息不带时间时放最后。
  * 伙伴的提问卡画成就地答的选项框（AskDecision），不再是「开始回答」弹窗。
  */
 import { useMemo, type ReactNode } from "react";
@@ -21,16 +21,17 @@ import { AskDecision, BuddyQuestionDecision } from "./decisions";
 export type TimedBlock = { key: string; at: string; node: ReactNode; afterSequence?: number | null };
 
 /**
- * 每个块插在哪条消息后面（-1 是最前面）。按时间排的：时间不早于那条消息、早于下一条，没有时间的消息当作现在。
- * 按序号排的见 TimedBlock.afterSequence（Chat 读回来的消息不带时间，按时间排不了）。
+ * 每个块插在哪条消息后面（-1 是最前面）。按时间排的：时间不早于那条消息、早于下一条；
+ * 对话里有消息不带时间（Chat 读回来的历史）就排不了，全放到最后一条后面，块和块之间仍按时间先后（29 条 C）。
+ * 按序号排的见 TimedBlock.afterSequence。
  */
 export function placeBlocks(messages: { createdAt?: string; sequence: number }[], blocks: TimedBlock[]): Map<number, TimedBlock[]> {
-  const now = Date.now();
-  const times = messages.map((message) => (message.createdAt ? Date.parse(message.createdAt) : now));
+  const untimed = messages.some((message) => !message.createdAt);
+  const times = messages.map((message) => Date.parse(message.createdAt ?? ""));
   const placed = new Map<number, TimedBlock[]>();
   for (const block of [...blocks].sort((a, b) => a.at.localeCompare(b.at))) {
     let index = -1;
-    if (block.afterSequence === null) index = messages.length - 1;
+    if (block.afterSequence === null || (block.afterSequence === undefined && untimed)) index = messages.length - 1;
     else if (block.afterSequence !== undefined) messages.forEach((message, i) => { if (message.sequence <= block.afterSequence!) index = i; });
     else {
       const at = Date.parse(block.at);
