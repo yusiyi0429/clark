@@ -12,7 +12,7 @@
  * 4. 本人行：贴底，头像 24 + 名字，点开个人菜单。
  * 树的键盘：↑↓ 移动，回车打开，→ 展开折叠，← 收起。
  */
-import { useContext, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { ChevronRight, Ellipsis, House, Info, Plus, Timer } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
 import { FailedLine, failureOf, type Failure } from "@/components/work/DecisionBox";
@@ -31,6 +31,10 @@ import { LocalContext } from "@/lib/local/LocalRunnerProvider";
 import { runLabel } from "@/lib/local/runModel";
 import { ICON, StateIcon, type IconState } from "./StateIcon";
 import { pageHref, type View } from "./view";
+import { showUnseen, type SeenKind, type SeenMarks } from "@/lib/home/seen";
+
+/** 左栏里的「刚看过」（25 条）：画蓝点前查，点行时在跳页之前记。 */
+const SeenContext = createContext<{ seen?: SeenMarks; onOpen?: (kind: SeenKind, id: string, marker: string | null) => void }>({});
 import h from "@/styles/home.module.css";
 
 export const subHref = (sub: Pick<SubSession, "kind" | "id">) => (sub.kind === "card" ? cardHref(sub.id) : topicHref(sub.id));
@@ -66,7 +70,7 @@ function useStageScale(off: boolean) {
   return { ref, scale };
 }
 
-export function LeftColumn({ data, view, buddy, speaking, go, phone, account, today, alert, trail, top, month, onRetryPlan, projects, archived, onCreate, cardAt, working }: {
+export function LeftColumn({ data, view, buddy, speaking, go, phone, account, today, alert, trail, top, month, onRetryPlan, projects, archived, onCreate, cardAt, working, seen, onOpen }: {
   data: WorkHomeData;
   view: View;
   buddy: Buddy | null;
@@ -94,6 +98,9 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
   onCreate: (name: string) => Promise<string>;
   /** 卡建出来的时间（看板里的）：一个项目下的会话照派活单的先后排（和对话里「开了哪几个子会话」一样）。 */
   cardAt?: ReadonlyMap<string, string>;
+  /** 蓝点「点了就藏」（25 条）：这一页里刚看过的（见 lib/home/seen），和点行时在跳页之前记一下。 */
+  seen?: SeenMarks;
+  onOpen?: (kind: SeenKind, id: string, marker: string | null) => void;
   /** 正在后台干活的项目（projectWorking）：标题右边一颗闪的灰点。 */
   working?: ReadonlySet<string>;
 }) {
@@ -118,6 +125,7 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
     run();
   };
   return (
+    <SeenContext.Provider value={{ seen, onOpen }}>
     <nav className={h.leftInner} aria-label="导航">
       <div ref={stage.ref} className={h.stage} data-current={view.kind === "buddy" ? "" : undefined} data-glow={glow}
         style={{ "--stage-scale": stage.scale, ...(glow === "listening" ? { "--level": dictation?.level ?? 0 } : {}) } as CSSProperties}>
@@ -180,6 +188,7 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
       </div>
       <PersonRow account={account} view={view} alert={alert} go={go} />
     </nav>
+    </SeenContext.Provider>
   );
 }
 
@@ -220,20 +229,21 @@ function ProjectNode({ project, view, go, personId, cardAt, working = false }: {
   // 正在看其中一个会话时自动展开一次；之后本人收起就收起（不强开着）。
   useEffect(() => { if (viewing) setOpen(true); }, [viewing]);
   const info = view.kind === "projectInfo" && here;
+  const opened = useContext(SeenContext);
   const line = projectLine(project);
   // 名字被截断时悬停、键盘聚焦出完整名字。
   const nameTip = useNameTip(project.name);
   return (
     <div className={h.taskNode} data-testid="tree-project" data-done={project.archived ? "" : undefined}>
       <div className={h.taskRow} data-current={page ? "" : undefined}>
-        <button type="button" className={h.taskMain} onClick={() => go(projectHref(project.id))} aria-current={page ? "page" : undefined} data-tree-row="" {...nameTip.rowProps}>
+        <button type="button" className={h.taskMain} onClick={() => { opened.onOpen?.("project", project.id, project.lastActivity); go(projectHref(project.id)); }} aria-current={page ? "page" : undefined} data-tree-row="" {...nameTip.rowProps}>
           <span className={h.slotState}>{project.waiting ? <StateIcon state="waiting" /> : null}</span>
           <span className={`${h.taskText} ${h.projectText}`}>
             <span className={h.projectTitle}>
               <span ref={nameTip.textRef} className={h.taskName}>{project.name}</span>
               {/* 在后台干活：标题这一行最右边一颗闪的灰点（读屏读「在后台工作」，点本身不读）。 */}
               {working ? <span className={h.workingDot} data-testid="project-working"><i aria-hidden /><span className={h.srOnly}>在后台工作</span></span>
-                : project.unseen ? <span className={h.subDot} data-tone="stopped" role="img" aria-label="有新回复" data-testid="project-unseen"><i aria-hidden /></span> : null}
+                : showUnseen(project.unseen, opened.seen, "project", project.id, project.lastActivity) ? <span className={h.subDot} data-tone="stopped" role="img" aria-label="有新回复" data-testid="project-unseen"><i aria-hidden /></span> : null}
             </span>
             <span className={h.taskSub} data-warning={line.warning ? "" : undefined}>{line.text}</span>
           </span>
@@ -343,10 +353,11 @@ function SubRow({ sub, letter, view, go }: { sub: SubSession; letter: string | n
   const local = useContext(LocalContext);
   const run = sub.sessionId ? local?.sessions.find((entry) => entry.id === sub.sessionId)?.run : null;
   const name = useNameTip(sub.title, runLabel(run));
-  const dot = subDot(sub);
+  const opened = useContext(SeenContext);
+  const dot = subDot({ ...sub, unseen: showUnseen(sub.unseen, opened.seen, "sub", sub.id, sub.updatedAt) });
   return (
     <li>
-      <button type="button" className={h.sub} data-state={sub.state} aria-current={current ? "page" : undefined} onClick={() => go(subHref(sub))} data-tree-row="" data-testid="tree-sub" {...name.rowProps}>
+      <button type="button" className={h.sub} data-state={sub.state} aria-current={current ? "page" : undefined} onClick={() => { opened.onOpen?.("sub", sub.id, sub.updatedAt); go(subHref(sub)); }} data-tree-row="" data-testid="tree-sub" {...name.rowProps}>
         {letter ? <SubLetter letter={letter} /> : null}<span ref={name.textRef} className={h.subName}>{sub.title}</span>
         {reason ? <QueueIcon text={reason} /> : null}
         {dot ? <span className={h.subDot} data-tone={dot.tone} role="img" aria-label={dot.label} data-testid="sub-dot"><i aria-hidden /></span> : null}
