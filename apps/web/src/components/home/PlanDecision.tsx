@@ -12,7 +12,7 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Dropdown, Header } from "@heroui/react";
 import { Check, ChevronDown, X } from "lucide-react";
-import type { TBudget, TBudgetMode, TCardDraftView, TLocalAgentKind } from "@warmap/contracts";
+import type { TBudget, TBudgetMode, TCardDraftView, TLocalAgentKind, TLocalEffort } from "@warmap/contracts";
 import { ProjectModeContext } from "@/components/cards/PermissionMode";
 import { DecisionBox } from "@/components/work/DecisionBox";
 import { ApprovalDecision, QuestionDecision, awayChip } from "@/components/work/decisions";
@@ -24,7 +24,7 @@ import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { planStep } from "@/lib/local/sessionView";
 import { useSessionEvents } from "@/lib/local/useSessionEvents";
 import type { TLocalModelProfile } from "@/lib/local/runner";
-import { HARNESS_NAME, pickLabel, profileModel, profileSource } from "@/lib/local/runModel";
+import { HARNESS_NAME, effortText, pickLabel, profileModel, profileSource } from "@/lib/local/runModel";
 import { acceptDrafts, acceptProjectDrafts, dismissDraft, readTaskBudget, type PlanTarget } from "@/lib/board/cloud";
 import { TIER_LABEL, draftRole, modelForTier, type CardRole, type RoleView } from "@/lib/team/roles";
 import { SLOT_CAP, startBatch, type StartPlan } from "@/lib/work/queue";
@@ -46,7 +46,7 @@ export function draftWorkerRole(draft: TCardDraftView): CardRole | null {
   return draftRole(draft) ?? (draft.executor === "self" ? null : { id: "", name: "Claude Code", kind: "worker" });
 }
 
-type Edit = { title?: string; role?: CardRole | null; modelId?: string; dropped?: boolean };
+type Edit = { title?: string; role?: CardRole | null; modelId?: string; effort?: TLocalEffort; dropped?: boolean };
 /** 模型下拉里的「自动」：不单独选，按岗位的档位配（modelForTier）。 */
 const AUTO_MODEL = "auto";
 export const START_LABEL = "就按这个开始";
@@ -127,11 +127,16 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
     if (!role) return null;
     return local.models.find((model) => model.id === edits[draft.id]?.modelId) ?? modelForTier(local.models, tierOf(draft, role));
   };
+  /** 这一步选的思考程度（36 条）：要在它的模型支持的几档里，不然算自动（null）。 */
+  const effortOf = (draft: TCardDraftView, model: TLocalModelProfile | null): TLocalEffort | null => {
+    const picked = edits[draft.id]?.effort;
+    return picked && model?.efforts?.includes(picked) ? picked : null;
+  };
   const edit = (id: string, patch: Edit) => setEdits((current) => ({ ...current, [id]: { ...current[id], ...patch } }));
   // 每一步会落到哪个来源的哪个模型（开工前问本机 previewRun）：按「模型配置 · 档位」记，同样的只问一次。
   const [previews, setPreviews] = useState<Record<string, { model: string | null; source: string | null; harness: TLocalAgentKind }>>({});
   const asked = useRef(new Set<string>());
-  const previewKey = (model: TLocalModelProfile, tier: string) => `${model.id}:${tier}`;
+  const previewKey = (model: TLocalModelProfile, tier: string, effort: TLocalEffort | null) => `${model.id}:${tier}:${effort ?? ""}`;
   useEffect(() => {
     if (!ready) return;
     let alive = true;
@@ -140,10 +145,11 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
       const model = modelOf(draft);
       if (!role || !model) continue;
       const tier = tierOf(draft, role);
-      const key = previewKey(model, tier);
+      const effort = effortOf(draft, model);
+      const key = previewKey(model, tier, effort);
       if (asked.current.has(key)) continue;
       asked.current.add(key);
-      void local.runner.previewRun({ agent: model.agent, modelProfileId: model.id, modelTier: tier }).then((run) => {
+      void local.runner.previewRun({ agent: model.agent, modelProfileId: model.id, modelTier: tier, ...(effort ? { effort } : {}) }).then((run) => {
         const name = run.actual?.modelName ?? run.modelName ?? null;
         if (alive) setPreviews((current) => ({ ...current, [key]: { model: name, source: run.origin?.label ?? run.sourceLabel ?? null, harness: run.harness ?? model.agent } }));
       }, () => asked.current.delete(key));
@@ -156,7 +162,7 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
    * 本机开工前算出来的（previewRun）优先；还没回（或老版本不报）时照模型配置写。
    */
   const modelText = (draft: TCardDraftView, model: TLocalModelProfile, role: CardRole, auto: boolean) => {
-    const preview = previews[previewKey(model, tierOf(draft, role))];
+    const preview = previews[previewKey(model, tierOf(draft, role), effortOf(draft, model))];
     return pickLabel({ harness: preview?.harness ?? model.agent, model: preview?.model ?? (model.model ? profileModel(model) : null),
       source: preview?.source ?? profileSource(model), subscription: model.source === "subscription" }, auto);
   };
@@ -186,7 +192,7 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
         const item = cards[index];
         const role = roleOf(draft);
         const model = modelOf(draft);
-        return item && role && model ? [{ item, model, cwd: where?.path ?? "", role: roles.find((entry) => entry.id === role.id) ?? null, ...(projectMode ? { permissionMode: projectMode } : {}) }] : [];
+        return item && role && model ? [{ item, model, cwd: where?.path ?? "", role: roles.find((entry) => entry.id === role.id) ?? null, ...(projectMode ? { permissionMode: projectMode } : {}), effort: effortOf(draft, model) }] : [];
       });
       if (ready && where) {
         await startBatch(local.runner, plans);
@@ -229,8 +235,16 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
               </> : role ? (local.models.length && model ? <ModelPick models={local.models} value={edits[draft.id]?.modelId ?? AUTO_MODEL}
                   shown={modelText(draft, model, role, !edits[draft.id]?.modelId)}
                   auto={(() => { const fallback = modelForTier(local.models, tierOf(draft, role)); return fallback ? modelText(draft, fallback, role, false).label : null; })()}
-                  onPick={(id) => edit(draft.id, { modelId: id === AUTO_MODEL ? undefined : id })} />
+                  onPick={(id) => {
+                    // 换了模型：原来选的思考程度新模型不支持就回到自动。
+                    const next = id === AUTO_MODEL ? modelForTier(local.models, tierOf(draft, role)) : local.models.find((entry) => entry.id === id);
+                    const kept = edits[draft.id]?.effort;
+                    edit(draft.id, { modelId: id === AUTO_MODEL ? undefined : id, effort: kept && next?.efforts?.includes(kept) ? kept : undefined });
+                  }} />
                 : <span className={h.chip}>{TIER_LABEL[tierOf(draft, role)]}</span>) : null}
+              {role && model?.efforts?.length && !editing ? <Pick label={effortText(effortOf(draft, model))} value={effortOf(draft, model) ?? ""}
+                options={[{ id: "", label: effortText(null) }, ...model.efforts.map((entry) => ({ id: entry, label: effortText(entry) }))]}
+                onPick={(id) => edit(draft.id, { effort: id === "none" ? undefined : id as TLocalEffort })} /> : null}
             </span>
           </li>
         );

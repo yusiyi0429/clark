@@ -17,7 +17,7 @@ import { duration } from "@/lib/home/derive";
 import { InputBar } from "@/components/home/InputBar";
 import { FolderText, FootText, SessionModelMenu } from "@/components/home/InputFooter";
 import { sizeText, uploadToSubSession } from "@/lib/home/attachments";
-import type { TLocalAttachmentRef, TLocalPermissionMode, TSessionAttachment } from "@warmap/contracts";
+import type { TLocalAttachmentRef, TLocalEffort, TLocalPermissionMode, TLocalSessionModelRequest, TSessionAttachment } from "@warmap/contracts";
 import { PermissionModeMenu } from "./PermissionMode";
 import { ApprovalDecision, DENY_MAX, awayChip } from "@/components/work/decisions";
 import { DecisionBox, FailedLine } from "@/components/work/DecisionBox";
@@ -291,13 +291,21 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
  * dock：「N 个问题等你 / 回到最新」那一条（PendingDock），放在输入框上方。
  * 输入框下面一行（同首页、项目对话）：左边在哪个文件夹里跑（place，悬停出完整路径），右边模型（model，悬停出 title）和权限档（mode，useSessionMode；还没开工时不给）。
  */
-/** 子会话能换的模型（32 条）：同一个执行方的；选了交给本机（PUT /v1/sessions/:id/model），换好或记下「这一轮做完后换」后重读摘要，没成 onFail。 */
+/**
+ * 子会话能换的模型和思考程度（32、36 条）：同一个执行方的模型；思考程度只列现在这个模型支持的几档。
+ * 选了交给本机（PUT /v1/sessions/:id/model），换好或记下「这一轮做完后换」后重读摘要，没成 onFail。
+ */
 export function sessionModels(runner: LocalRunner, models: readonly TLocalModelProfile[], session: TLocalSessionSummary | null | undefined, refresh: () => unknown, onFail: () => void) {
   if (!session) return null;
+  const change = (body: TLocalSessionModelRequest) => void runner.setSessionModel(session.id, body).then(() => refresh(), onFail);
+  const value = session.pendingModel?.modelProfileId ?? session.modelProfileId;
   return {
     list: models.filter((model) => model.agent === session.agent),
-    value: session.pendingModel?.modelProfileId ?? session.modelProfileId,
-    onPick: (id: string) => void runner.setSessionModel(session.id, { modelProfileId: id }).then(() => refresh(), onFail),
+    value,
+    onPick: (id: string) => change({ modelProfileId: id }),
+    efforts: models.find((model) => model.id === value)?.efforts ?? [],
+    effort: (session.pendingModel ? session.pendingModel.effort : session.effort) ?? null,
+    onEffort: (effort: TLocalEffort | null) => change({ effort }),
   };
 }
 
@@ -314,7 +322,7 @@ export function SessionComposer({ label, disabled, onSend, dock, subject, mode, 
   place?: { name: string; title: string } | null;
   model?: { label: string; title?: string } | null;
   /** 能换的模型（32 条，这台电脑上跑着的子会话才给）：右边的模型成下拉，选了 onPick。 */
-  models?: { list: readonly TLocalModelProfile[]; value: string | null; onPick: (id: string) => void } | null;
+  models?: ReturnType<typeof sessionModels>;
   /** 会话在跑（27 条）：右边没字时是停止方块（onStop，本机 interrupt），有字时照样能发（插话），同项目对话、伙伴台。 */
   busy?: boolean;
   onStop?: () => void;
@@ -324,7 +332,7 @@ export function SessionComposer({ label, disabled, onSend, dock, subject, mode, 
       <InputBar placeholder="" label={label} disabled={disabled} dock={dock} busy={busy} interruptible onStop={onStop} draftKey={`tianshu-home-draft-v1:${subject.kind}:${subject.id}`}
         footer={{
           left: place ? <FolderText name={place.name} title={place.title} /> : null,
-          right: <>{model && models && !disabled ? <SessionModelMenu label={model.label} title={model.title} models={models.list} value={models.value} onPick={models.onPick} />
+          right: <>{model && models && !disabled ? <SessionModelMenu label={model.label} title={model.title} models={models.list} value={models.value} onPick={models.onPick} efforts={models.efforts} effort={models.effort} onEffort={models.onEffort} />
             : model ? <FootText title={model.title} testId="session-model">{model.label}</FootText> : null}{mode ? <PermissionModeMenu modes={mode.modes} value={mode.value} disabled={disabled} onChange={mode.set} /> : null}</>,
         }}
         onSend={async (text, files) => onSend(text, files.length ? await uploadToSubSession(subject, files) : [])} />

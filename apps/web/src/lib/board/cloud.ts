@@ -9,6 +9,7 @@ import type {
   TBackgroundResponse, TClaimSessionStartsResponse, TRouteResponse, TWorkHomeResponse,
   TProject, TProjectDetailResponse, TProjectFeedResponse, TProjectGoal, TProjectListResponse, TProjectPipelineResponse, TUpdateProjectRequest,
   TArchivedSubSessionListResponse, TSubSessionKind, TUpdateSubSessionRequest,
+  TConversationModelChoice, TConversationModelListResponse, TProjectPipelineModel,
   THandoverSecretFinding, TProjectTransfer, TUpdateProjectTransferRequest, TConversationHistory, TProjectBoardResponse, TProjectGoalChangedItem,
 } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
@@ -156,6 +157,15 @@ export const deleteSubSession = (kind: TSubSessionKind, id: string) =>
 /** 归档了的子会话（新归档的在前），带原来的项目和字母。 */
 export const listArchivedSubSessions = () =>
   unwrap<TArchivedSubSessionListResponse>(browserApi.GET("/api/me/sub-sessions/archived") as Promise<Result<TArchivedSubSessionListResponse>>);
+/** 项目对话能选的模型和各自的思考程度（36 条）；默认的排第一，没接 Chat 为空（不出选择）。 */
+export const listConversationModels = () =>
+  unwrap<TConversationModelListResponse>(browserApi.GET("/api/me/conversation-models") as Promise<Result<TConversationModelListResponse>>);
+/** 这个项目对话选的模型和思考程度，没选为 null（照 Chat 的默认）。 */
+export const readPipelineModel = (projectId: string) =>
+  unwrap<TProjectPipelineModel>(browserApi.GET("/api/me/projects/{projectId}/pipeline/model", { params: project(projectId) }) as Promise<Result<TProjectPipelineModel>>);
+/** 改项目对话的模型和思考程度，null 回到默认；不在列表里 400 INVALID_MODEL_CHOICE，没接 Chat 409 CHAT_NOT_CONNECTED。 */
+export const setPipelineModel = (projectId: string, choice: TConversationModelChoice | null) =>
+  unwrap<TProjectPipelineModel>(browserApi.PUT("/api/me/projects/{projectId}/pipeline/model", { params: project(projectId), body: { choice } }) as Promise<Result<TProjectPipelineModel>>);
 /** 本人打开了一个子会话（sub，卡或专题的 id）或项目对话（project）：记下看过，左栏蓝点消失（26 条，204、幂等）。 */
 export const markWorkSeen = (kind: "sub" | "project", id: string) =>
   unwrap<unknown>(browserApi.POST("/api/me/work-seen", { body: { kind, id } }) as Promise<Result<unknown>>);

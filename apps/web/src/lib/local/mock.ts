@@ -9,7 +9,7 @@
  * 状态只在内存里：同一个页面会话内跨页面保留，刷新就没了。
  */
 import type {
-  TLocalBackgroundItem, TLocalCreateSessionRequest, TLocalFolder, TLocalMergeResponse, TLocalModelProfile, TLocalPermissionRequestView, TLocalPlanEntry, TLocalQuestionRequestView,
+  TLocalBackgroundItem, TLocalCreateSessionRequest, TLocalEffort, TLocalFolder, TLocalMergeResponse, TLocalModelProfile, TLocalPermissionRequestView, TLocalPlanEntry, TLocalQuestionRequestView,
   TLocalProjectFolder, TLocalSessionEvent, TLocalSessionStatus, TLocalSessionSummary, TLocalTool, TLocalToolUpsert, TLocalUsage, TLocalWorkspace,
 } from "@warmap/contracts";
 import { LocalRunnerError, type EventWatch, type LocalRunner } from "./runner";
@@ -45,15 +45,19 @@ const sha = (seed: string) => Array.from({ length: 40 }, (_, i) => "0123456789ab
 
 /** 这次会怎么跑（同本机的 previewRun）：别名（opus、sonnet、haiku）写成「Opus 5.5」这种，网关模型去掉厂商前缀原样写，没定模型是订阅默认的 Opus。 */
 const ALIAS: Record<string, string> = { opus: "Opus 5.5", sonnet: "Sonnet 5.5", haiku: "Haiku 5.5" };
-const runFor = (profile: TLocalModelProfile, mode: "auto" | "set" | "unlimited" = "auto") => ({
-  mode, model: profile.model, effort: null, multiAgent: false, source: profile.source, sourceLabel: profile.label,
+const runFor = (profile: TLocalModelProfile, mode: "auto" | "set" | "unlimited" = "auto", effort: TLocalEffort | null = null) => ({
+  mode, model: profile.model, effort, multiAgent: false, source: profile.source, sourceLabel: profile.label,
   modelName: profile.model ? ALIAS[profile.model] ?? profile.model.replace(/^.*\//, "") : "Opus 5.5", actual: null,
 });
 
+/** Claude Code 握手报的五档（D 契约 c97b38c5）。 */
+const CLAUDE_EFFORTS: TLocalEffort[] = ["low", "medium", "high", "xhigh", "max"];
+
 const MODELS: TLocalModelProfile[] = [
-  { id: "subscription", label: "订阅 · 默认", source: "subscription", agent: "claude-code", baseUrl: null, model: null, smallModel: null, webSearch: true, hasKey: false, isDefault: true },
-  { id: "sub-haiku", label: "订阅 · Haiku", source: "subscription", agent: "claude-code", baseUrl: null, model: "haiku", smallModel: null, webSearch: true, hasKey: false, isDefault: false },
-  { id: "tokenhub-deepseek", label: "TokenHub · DeepSeek", source: "gateway", agent: "claude-code", baseUrl: "https://tokenhub.example/anthropic", model: "deepseek-v4.1-flash", smallModel: null, webSearch: true, hasKey: true, isDefault: false },
+  { id: "subscription", label: "订阅 · 默认", source: "subscription", agent: "claude-code", baseUrl: null, model: null, smallModel: null, webSearch: true, hasKey: false, isDefault: true, efforts: [...CLAUDE_EFFORTS], defaultEffort: null },
+  { id: "sub-haiku", label: "订阅 · Haiku", source: "subscription", agent: "claude-code", baseUrl: null, model: "haiku", smallModel: null, webSearch: true, hasKey: false, isDefault: false, efforts: [...CLAUDE_EFFORTS], defaultEffort: null },
+  // 网关模型本机不传思考程度（36 条）。
+  { id: "tokenhub-deepseek", label: "TokenHub · DeepSeek", source: "gateway", agent: "claude-code", baseUrl: "https://tokenhub.example/anthropic", model: "deepseek-v4.1-flash", smallModel: null, webSearch: true, hasKey: true, isDefault: false, efforts: [], defaultEffort: null },
 ];
 
 /** onPlanned：规划员拆完时调（假装本机把 card_plan 同步上去了）。 */
@@ -421,18 +425,22 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
       return summaryOf(s);
     },
     // 换模型（17.2 第 32 条）：同一个来源、或会话没在跑时当场换（now）；跨来源又正在跑，等这一轮做完（after_turn，摘要带 pendingModel，假程序隔几步换上）。
+    // 只带 effort 是同一个模型换思考程度（Claude Code 当场换）；只换模型时原来的思考程度新模型也支持就留着，不然回到自动（36 条）。
     setSessionModel: async (id, body) => {
       const s = must(id);
-      const model = MODELS.find((entry) => entry.id === body.modelProfileId);
-      if (!model || model.agent !== s.summary.agent) throw new LocalRunnerError("validation", "没有这个模型", 400);
-      const apply = () => {
-        const { pendingModel: _done, ...rest } = s.summary;
-        s.summary = { ...rest, modelProfileId: model.id, modelLabel: model.label, run: runFor(model) };
-        emit(s, { type: "notice", level: "info", code: "model_changed", text: `换成 ${runFor(model).modelName}` });
-      };
       const current = MODELS.find((entry) => entry.id === s.summary.modelProfileId);
+      const model = body.modelProfileId === undefined ? current : MODELS.find((entry) => entry.id === body.modelProfileId);
+      if (!model || model.agent !== s.summary.agent) throw new LocalRunnerError("validation", "没有这个模型", 400);
+      const wanted = body.effort === undefined ? s.summary.effort ?? null : body.effort;
+      if (body.effort && !model.efforts?.includes(body.effort)) throw new LocalRunnerError("validation", "这个模型没有这一档", 400);
+      const effort = wanted && model.efforts?.includes(wanted) ? wanted : null;
+      const apply = () => {
+        const { pendingModel: _done, effort: _old, ...rest } = s.summary;
+        s.summary = { ...rest, modelProfileId: model.id, modelLabel: model.label, run: runFor(model, "auto", effort), ...(effort ? { effort } : {}) };
+        if (model !== current) emit(s, { type: "notice", level: "info", code: "model_changed", text: `换成 ${runFor(model).modelName}` });
+      };
       if (OCCUPYING.has(s.summary.status) && current?.source !== model.source) {
-        s.summary = { ...s.summary, pendingModel: { modelProfileId: model.id, modelLabel: runFor(model).modelName } };
+        s.summary = { ...s.summary, pendingModel: { modelProfileId: model.id, modelLabel: runFor(model).modelName, effort } };
         setTimeout(apply, stepMs * 4);
         return { applied: "after_turn", session: summaryOf(s) };
       }
@@ -455,7 +463,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
       advance(s);
       return summaryOf(s);
     },
-    previewRun: async (body) => runFor(MODELS.find((entry) => entry.id === body.modelProfileId) ?? MODELS.find((entry) => entry.isDefault) ?? MODELS[0]!, body.taskBudget?.budget.mode),
+    previewRun: async (body) => runFor(MODELS.find((entry) => entry.id === body.modelProfileId) ?? MODELS.find((entry) => entry.isDefault) ?? MODELS[0]!, body.taskBudget?.budget.mode, body.effort ?? null),
     putBudget: async (body) => ({ taskId: body.taskId ?? null, sessionId: body.sessionId ?? null, budget: body.budget,
       spent: { hours: 0, weeklyPercent: null, money: null }, ratio: null, state: "ok", since: null, updatedAt: now() }),
     stopBackground: async (id, itemId) => {
@@ -501,7 +509,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
     const waitingFor = (body.after ?? []).filter((entry) => !merged.has(entry));
     const full = slots().running >= maxConcurrent || busy || waitingFor.length > 0;
     const s: MockSession = {
-      summary: { id, subject: body.subject, title: body.title, agent: "claude-code", modelProfileId: model.id, modelLabel: model.label, cwd: body.cwd ?? "topics", status: full ? "queued" : "starting", permissionMode: body.permissionMode ?? "auto", run: runFor(model), includePersonalConfig: Boolean(body.includePersonalConfig), createdAt: now(), updatedAt: now(), lastSeq: 0, pendingPermissions: 0, queuePosition: full ? slots().queued + 1 : null, usage: { ...ZERO }, ...(workspace && !waitingFor.length ? { workspace } : {}), ...(waitingFor.length ? { waitingFor } : {}) },
+      summary: { id, subject: body.subject, title: body.title, agent: "claude-code", modelProfileId: model.id, modelLabel: model.label, cwd: body.cwd ?? "topics", status: full ? "queued" : "starting", permissionMode: body.permissionMode ?? "auto", run: runFor(model, "auto", body.effort ?? null), ...(body.effort ? { effort: body.effort } : {}), includePersonalConfig: Boolean(body.includePersonalConfig), createdAt: now(), updatedAt: now(), lastSeq: 0, pendingPermissions: 0, queuePosition: full ? slots().queued + 1 : null, usage: { ...ZERO }, ...(workspace && !waitingFor.length ? { workspace } : {}), ...(waitingFor.length ? { waitingFor } : {}) },
       log: [], listeners: new Set(), script: body.subject.kind === "plan" ? planner : body.subject.kind === "verify" ? verifier : script, cursor: 0, timer: null, pending: null, paused: false, denied: false, mergeTries: 0,
       ...(waitingFor.length ? { waits: { workspace } } : {}),
     };

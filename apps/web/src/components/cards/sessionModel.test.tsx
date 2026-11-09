@@ -3,8 +3,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createMockRunner } from "@/lib/local/mock";
 import { foldEvents, type SessionEntry } from "@/lib/local/sessionView";
 import type { TLocalSessionEvent } from "@/lib/local/runner";
-import { PENDING_MODEL_TITLE, harnessLabel, withPendingModel } from "@/lib/local/runModel";
-import { SessionComposer, SessionTranscript } from "./SessionTranscript";
+import { PENDING_MODEL_TITLE, effortText, harnessLabel, sessionModelText, withPendingModel } from "@/lib/local/runModel";
+import { SessionComposer, SessionTranscript, sessionModels } from "./SessionTranscript";
 
 const until = async (check: () => boolean) => { for (let i = 0; i < 300 && !check(); i++) await new Promise((resolve) => setTimeout(resolve, 2)); };
 const subject = { kind: "card" as const, id: "00000000-0000-4000-8000-0000000000c1" };
@@ -12,7 +12,7 @@ const subject = { kind: "card" as const, id: "00000000-0000-4000-8000-0000000000
 describe("子会话换模型（32 条，D 契约 5e52c73f）", () => {
   it("now：同来源或没在跑时当场换，摘要和下面那一行马上是新模型；换模型那一句进过程行，不单独一行", async () => {
     const runner = createMockRunner({ stepMs: 1 });
-    const session = await runner.createSession({ subject: { kind: "card", cardId: "c1" }, title: "卡", cwd: "C:\work\tianshu", firstMessage: "交代" });
+    const session = await runner.createSession({ subject: { kind: "card", cardId: "c1" }, title: "卡", cwd: "C:\\work\\tianshu", firstMessage: "交代" });
     const seen: TLocalSessionEvent[] = [];
     const controller = new AbortController();
     void runner.watch(session.id, { after: 0, onEvent: (event) => seen.push(event), signal: controller.signal });
@@ -39,7 +39,7 @@ describe("子会话换模型（32 条，D 契约 5e52c73f）", () => {
 
   it("after_turn：跑着时换来源要等这一轮做完，下面那一行写「当前 → 新」、悬停「这一轮做完后换」；换上后回到只写新模型", async () => {
     const runner = createMockRunner({ stepMs: 5 });
-    const session = await runner.createSession({ subject: { kind: "card", cardId: "c1" }, title: "卡", cwd: "C:\work\tianshu", firstMessage: "交代" });
+    const session = await runner.createSession({ subject: { kind: "card", cardId: "c1" }, title: "卡", cwd: "C:\\work\\tianshu", firstMessage: "交代" });
     const changed = await runner.setSessionModel(session.id, { modelProfileId: "tokenhub-deepseek" });
     expect(changed.applied).toBe("after_turn");
     expect(changed.session.modelProfileId).toBe("subscription");
@@ -48,7 +48,7 @@ describe("子会话换模型（32 条，D 契约 5e52c73f）", () => {
     expect(pending.label).toMatch(/^Claude Code · .+ → deepseek-v4\.1-flash$/);
     expect(pending.title).toBe(PENDING_MODEL_TITLE);
     const html = renderToStaticMarkup(<SessionComposer label="插话" disabled={false} onSend={vi.fn()} subject={subject} model={{ label: pending.label, title: pending.title ?? undefined }}
-      models={{ list: [], value: "tokenhub-deepseek", onPick: vi.fn() }} />);
+      models={{ list: [], value: "tokenhub-deepseek", onPick: vi.fn(), efforts: [], effort: null, onEffort: vi.fn() }} />);
     expect(html).toContain(`title="${PENDING_MODEL_TITLE}"`);
     expect(html).toContain('data-testid="session-model"');
     let after = changed.session;
@@ -57,5 +57,35 @@ describe("子会话换模型（32 条，D 契约 5e52c73f）", () => {
     expect(withPendingModel(harnessLabel(after.run, after.agent), after.pendingModel)?.label).toBe("Claude Code · deepseek-v4.1-flash");
     // 没换成本机 400：没有这个模型。
     await expect(runner.setSessionModel(session.id, { modelProfileId: "nope" })).rejects.toMatchObject({ status: 400 });
+  });
+});
+
+describe("思考程度（36 条，D 契约 c97b38c5）", () => {
+  it("给人看的字：低 / 中 / 高 / 超高 / 最高 / 极限，项目对话的 off 是「不思考」，没选是「自动」", () => {
+    expect((["low", "medium", "high", "xhigh", "max", "ultra", "off"] as const).map((effort) => effortText(effort))).toEqual(["低", "中", "高", "超高", "最高", "极限", "不思考"]);
+    expect(effortText(null)).toBe("自动");
+  });
+
+  it("子会话下面一行写「Opus 5.5 · 高」、全称在悬停里；开工带的思考程度进摘要；开着只换思考程度当场换，换成网关模型（不能选）回到自动、不写后半", async () => {
+    const runner = createMockRunner({ stepMs: 5 });
+    const models = await runner.listModels();
+    const effortsOf = (id: string) => models.find((model) => model.id === id)?.efforts;
+    const session = await runner.createSession({ subject: { kind: "card", cardId: "c1" }, title: "卡", cwd: "C:\\work\\tianshu", firstMessage: "交代", effort: "high" });
+    expect(session.effort).toBe("high");
+    expect(sessionModelText(session, effortsOf(session.modelProfileId))).toEqual({ label: "Opus 5.5 · 高", title: "Claude Code · Opus 5.5 · 订阅 · 默认 · 思考程度 高" });
+    const changed = await runner.setSessionModel(session.id, { effort: "max" });
+    expect(changed.applied).toBe("now");
+    expect(changed.session.effort).toBe("max");
+    expect(sessionModelText(changed.session, effortsOf(changed.session.modelProfileId))?.label).toBe("Opus 5.5 · 最高");
+    expect((await runner.setSessionModel(session.id, { effort: null })).session.effort).toBeUndefined();
+    await expect(runner.setSessionModel(session.id, { modelProfileId: "tokenhub-deepseek", effort: "high" })).rejects.toMatchObject({ status: 400 });
+    // 换模型不带思考程度：新模型也支持就留着。
+    await runner.setSessionModel(session.id, { effort: "low" });
+    expect((await runner.setSessionModel(session.id, { modelProfileId: "sub-haiku" })).session.effort).toBe("low");
+    // 下拉里「思考程度」一组只列这个模型的几档，「自动」在前（开着菜单才画，这里看给它的数据）。
+    const picks = sessionModels(runner, models, (await runner.listSessions())[0]!, vi.fn(), vi.fn())!;
+    expect(picks.efforts).toEqual(["low", "medium", "high", "xhigh", "max"]);
+    expect(picks.effort).toBe("low");
+    expect(sessionModelText({ run: { ...session.run!, modelName: "deepseek-v4.1-flash" }, agent: "claude-code" }, effortsOf("tokenhub-deepseek"))?.label).toBe("deepseek-v4.1-flash");
   });
 });

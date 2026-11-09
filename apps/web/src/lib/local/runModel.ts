@@ -2,7 +2,11 @@
  * 子会话用的是哪个来源的哪个模型（契约 LocalRun）：写成「来源 · 模型」，如「我的 Claude 订阅 · Opus 5.5」「TokenHub · qwen3.8-flash」。
  * 实际跑起来的（actual，执行方报的）优先；和请求的不一样时照实际的写，不另加说明。老版本本机不报来源时为 null，由调用方退回原来的写法。
  */
-import type { TLocalAgentKind, TLocalModelProfile, TLocalRun } from "@warmap/contracts";
+import type { TLocalAgentKind, TLocalEffort, TLocalModelProfile, TLocalRun, TLocalSessionSummary, TModelEffort } from "@warmap/contracts";
+
+/** 思考程度给人看的字（36 条）：低 / 中 / 高 / 超高 / 最高，Codex 多一档「极限」，项目对话多一档「不思考」；没选（null）写「自动」。 */
+export const EFFORT_LABEL: Record<TLocalEffort | TModelEffort, string> = { off: "不思考", low: "低", medium: "中", high: "高", xhigh: "超高", max: "最高", ultra: "极限" };
+export const effortText = (effort: TLocalEffort | TModelEffort | null | undefined) => (effort ? EFFORT_LABEL[effort] : "自动");
 
 /** Chat 报的接入方 → 给人看的来源名（同子会话 sourceLabel 的叫法）；查不到原样写。 */
 const PROVIDER_NAMES: Record<string, string> = { tokenhub: "TokenHub" };
@@ -56,6 +60,20 @@ export const PENDING_MODEL_TITLE = "这一轮做完后换";
 export function withPendingModel(model: { label: string; title: string | null } | null, pending: { modelLabel: string } | null | undefined): { label: string; title: string | null } | null {
   if (!model || !pending) return model;
   return { label: `${model.label} → ${pending.modelLabel}`, title: PENDING_MODEL_TITLE };
+}
+
+/**
+ * 子会话输入框下面的模型（36 条）：「Opus 5.5 · 高」，模型能选思考程度时才写后半（没选是「自动」）；执行方、来源、思考程度的全称在悬停里。
+ * 换了模型要等这一轮做完时是「当前 → 新」（同 withPendingModel）。没有模型名时为 null，调用方退回原来的写法。
+ */
+export function sessionModelText(session: Pick<TLocalSessionSummary, "run" | "agent" | "effort" | "pendingModel">, efforts: readonly TLocalEffort[] | undefined): { label: string; title: string | null } | null {
+  const run = session.run;
+  const name = run?.actual?.modelName ?? run?.modelName ?? null;
+  if (!name) return null;
+  const effort = efforts?.length ? effortText(session.effort) : null;
+  const source = run?.origin?.label ?? run?.sourceLabel ?? null;
+  const title = [HARNESS_NAME[run?.harness ?? session.agent], name, source, effort ? `思考程度 ${effort}` : null].filter(Boolean).join(" · ");
+  return withPendingModel({ label: effort ? `${name} · ${effort}` : name, title }, session.pendingModel);
 }
 
 /** 订阅类读不到具体模型名时写的（派活单选模型那一处）。 */

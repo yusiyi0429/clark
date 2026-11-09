@@ -10,7 +10,8 @@ import { MenuDialog } from "@/components/AccountMenu";
 import { HeroButton } from "@/components/HeroButton";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { readLast, writeLast } from "@/lib/local/start";
-import { HARNESS_NAME, profileModel, profileSource } from "@/lib/local/runModel";
+import { HARNESS_NAME, effortText, profileModel, profileSource } from "@/lib/local/runModel";
+import type { TLocalEffort } from "@warmap/contracts";
 import type { TLocalFolder, TLocalModelProfile } from "@/lib/local/runner";
 import { TIER_LABEL, listRoles, modelForTier, type CardRole, type RoleView } from "@/lib/team/roles";
 import s from "@/styles/v2-local.module.css";
@@ -21,7 +22,7 @@ export function StartDialog({ title, needsFolder = true, role: given, onClose, o
   /** 卡：拆卡时配的岗位（没配为 null）；不传表示不选岗位（专题）。 */
   role?: CardRole | null;
   onClose: () => void;
-  onStart: (model: TLocalModelProfile, folder: TLocalFolder | null, role: RoleView | null) => Promise<void>;
+  onStart: (model: TLocalModelProfile, folder: TLocalFolder | null, role: RoleView | null, effort: TLocalEffort | null) => Promise<void>;
 }) {
   const local = useLocalRunner();
   const last = readLast();
@@ -30,11 +31,15 @@ export function StartDialog({ title, needsFolder = true, role: given, onClose, o
   const [roleId, setRoleId] = useState<string | null>(given?.id ?? null);
   const [modelId, setModelId] = useState(() => local.models.find((model) => model.id === last.modelId)?.id ?? local.models.find((model) => model.isDefault)?.id ?? local.models[0]?.id ?? "");
   const [folderId, setFolderId] = useState(() => local.folders.find((folder) => folder.id === last.folderId)?.id ?? local.folders[0]?.id ?? "");
+  // 思考程度（36 条）：先选模型，再在这个模型支持的几档里选，「自动」在前；换了模型不支持的回到自动。
+  const [effortPick, setEffort] = useState<TLocalEffort | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const model = local.models.find((entry) => entry.id === modelId) ?? null;
   const folder = local.folders.find((entry) => entry.id === folderId) ?? null;
   const role = roles.find((entry) => entry.id === roleId) ?? null;
+  const efforts = model?.efforts ?? [];
+  const effort = effortPick && efforts.includes(effortPick) ? effortPick : null;
   const groups = (Object.keys(HARNESS_NAME) as (keyof typeof HARNESS_NAME)[])
     .map((agent) => ({ label: HARNESS_NAME[agent], models: local.models.filter((entry) => entry.agent === agent) }))
     .filter((group) => group.models.length);
@@ -65,7 +70,7 @@ export function StartDialog({ title, needsFolder = true, role: given, onClose, o
     setError(null);
     writeLast({ modelId: model.id, ...(folder ? { folderId: folder.id } : {}) });
     try {
-      await onStart(model, folder, role);
+      await onStart(model, folder, role, effort);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "没开起来，请重试");
       setBusy(false);
@@ -97,6 +102,16 @@ export function StartDialog({ title, needsFolder = true, role: given, onClose, o
             </div>
           ))}
         </div>
+        {efforts.length ? (
+          <div className={s.field} role="radiogroup" aria-label="思考程度">
+            <span className={s.label}>思考程度</span>
+            <div className={s.chipRow}>
+              {[null, ...efforts].map((entry) => (
+                <button key={entry ?? "auto"} type="button" role="radio" aria-checked={entry === effort} className={s.choice} onClick={() => setEffort(entry)}>{effortText(entry)}</button>
+              ))}
+            </div>
+          </div>
+        ) : null}
         {needsFolder ? (
           <div className={s.field}>
             <span className={s.label}>文件夹</span>
