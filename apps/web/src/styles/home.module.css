@@ -216,6 +216,7 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 @media (prefers-reduced-motion: reduce) { .subDot i { animation: none !important; } }
 /* 页头里跟在文字中间（「项目 / B 标题」）：右边空一格。 */
 .letter[data-inline] { margin-right: 6px; vertical-align: 1px; }
+.subQueue { display: inline-grid; flex: none; place-items: center; color: var(--ink-faint); }
 .subReason { flex: none; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; }
 /* 本人事项行（9.10）：就是子会话行，状态位换成本人 16 的头像；没照片画成纯 --neutral-wash 圆、不写字（5.4.2「本人行」）。 */
 /* 16px 的人像位（树上本人事项行首、等你行里请你认可的对方）：同一条规则。 */

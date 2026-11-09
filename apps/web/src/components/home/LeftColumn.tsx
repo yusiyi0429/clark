@@ -13,7 +13,7 @@
  * 树的键盘：↑↓ 移动，回车打开，→ 展开折叠，← 收起。
  */
 import { useContext, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
-import { ChevronRight, Ellipsis, House, Info, Plus } from "lucide-react";
+import { ChevronRight, Ellipsis, House, Info, Plus, Timer } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
 import { FailedLine, failureOf, type Failure } from "@/components/work/DecisionBox";
 import type { Account } from "@/components/AccountMenu";
@@ -26,7 +26,7 @@ import type { SubSession, WorkHomeData } from "@/lib/home/types";
 import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import { useDictationSignal } from "@/conversation/dictationSignal";
 import { PersonRow } from "./PersonMenu";
-import { useNameTip } from "./NameTip";
+import { useHoverTip, useNameTip } from "./NameTip";
 import { LocalContext } from "@/lib/local/LocalRunnerProvider";
 import { runLabel } from "@/lib/local/runModel";
 import { ICON, StateIcon, type IconState } from "./StateIcon";
@@ -345,11 +345,22 @@ function SubRow({ sub, letter, view, go }: { sub: SubSession; letter: string | n
     <li>
       <button type="button" className={h.sub} data-state={sub.state} aria-current={current ? "page" : undefined} onClick={() => go(subHref(sub))} data-tree-row="" data-testid="tree-sub" {...name.rowProps}>
         {letter ? <SubLetter letter={letter} /> : null}<span ref={name.textRef} className={h.subName}>{sub.title}</span>
-        {reason ? <span className={h.subReason}>{reason}</span> : null}
+        {reason ? <QueueIcon text={reason} /> : null}
         {dot ? <span className={h.subDot} data-tone={dot.tone} role="img" aria-label={dot.label} data-testid="sub-dot"><i aria-hidden /></span> : null}
       </button>
       {name.tip}
     </li>
+  );
+}
+
+/** 排队的子会话行尾（25 条）：不写字，一个计时器图标；悬停出统一的提示写在等什么，读屏读同一句。 */
+function QueueIcon({ text }: { text: string }) {
+  const tip = useHoverTip(text);
+  return (
+    <>
+      <span ref={tip.ref} className={h.subQueue} role="img" aria-label={text} data-testid="sub-queue" {...tip.props}><Timer {...ICON} aria-hidden /></span>
+      {tip.tip}
+    </>
   );
 }
 

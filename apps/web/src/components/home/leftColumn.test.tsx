@@ -105,7 +105,7 @@ describe("子会话的字母和状态点（18.10）", () => {
     expect([...subLetters(fromCloud, at)]).toEqual([["card:c1", "A"], ["card:c3", "C"]]);
   });
 
-  it("行首字母方块；行尾在跑灰点、停了蓝点、要介入黄点，排队不出点、照旧写在等什么；读屏按状态读", () => {
+  it("行首字母方块；行尾在跑灰点、停了蓝点、要介入黄点，排队不出点、行尾是计时器图标；读屏按状态读", () => {
     const sub = (id: string, state: string, waiting: unknown = null, queueReason: unknown = null) =>
       ({ id, kind: "card", title: `卡${id}`, state, waiting, updatedAt: id, queueReason, holdUntil: null, sessionId: null });
     const html = render({ data: { ...data, other: { subSessions: [sub("1", "running"), sub("2", "waiting"), sub("3", "waiting", "approval"), sub("4", "queued", null, "prior_cards")], items: [] } } as never });
@@ -115,7 +115,9 @@ describe("子会话的字母和状态点（18.10）", () => {
     expect(rows[1]).toMatch(/data-tone="stopped" role="img" aria-label="已停下"/);
     expect(rows[2]).toMatch(/data-tone="attention" role="img" aria-label="等你批准"/);
     expect(rows[3]).not.toContain("sub-dot");
-    expect(rows[3]).toContain("等前面的卡");
+    // 排队：行尾不写字，计时器图标，读屏和悬停提示写在等什么（25 条）。
+    expect(rows[3]).toMatch(/role="img" aria-label="等前面的卡" data-testid="sub-queue"/);
+    expect(rows[3].replace(/<[^>]+>/g, "")).not.toContain("等前面的卡");
   });
 });
 
