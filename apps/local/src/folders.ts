@@ -1,4 +1,4 @@
-import { mkdirSync, realpathSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, join, parse, relative, isAbsolute, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 import type { TLocalFolder, TLocalProjectFolder } from "@warmap/contracts";
@@ -39,7 +39,20 @@ export function insideAny(roots: string[]): (p: string) => boolean {
   return (p) => { const n = norm(p); return rs.some((r) => under(r, n)); };
 }
 
-/** 本人允许本机程序读写的文件夹，只能经本机系统选择框添加。调研专题另有本机程序自己的专用目录。 */
+/** Windows 的保留名（带扩展名的也算，如 CON.txt）。 */
+const RESERVED = /^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])(\.|$)/i;
+
+/** 新建文件夹的名字（一层）有什么不对；没问题为 null。message 可直接给人看。 */
+export function folderNameProblem(name: string): string | null {
+  if (!name.trim()) return "名字不能是空的";
+  if (/[\\/:*?"<>|\u0000-\u001f]/.test(name)) return "名字里不能有 / \\ : * ? \" < > | 这些字符";
+  if (name === "." || name === "..") return "名字不能是 . 或 ..";
+  if (/[. ]$/.test(name)) return "名字不能以点或空格结尾";
+  if (RESERVED.test(name)) return `「${name}」是 Windows 保留的名字，换一个`;
+  return null;
+}
+
+/** 本人允许本机程序读写的文件夹：经本机系统选择框添加，或经「新建文件夹」新建的空文件夹。调研专题另有本机程序自己的专用目录。 */
 export class Folders {
   private readonly file: string;
   private readonly projectsFile: string;
@@ -77,6 +90,26 @@ export class Folders {
     const folder: TLocalFolder = { id: randomBytes(6).toString("hex"), path: resolve(path), label: basename(resolve(path)) || path, addedAt: nowIso() };
     writeJsonAtomic(this.file, [...this.list(), folder]);
     return folder;
+  }
+
+  /**
+   * 新建一个空文件夹并加进允许的列表（「新建文件夹…」）：parent 不给时是桌面（没有桌面时是主目录）；只能建在主目录下或已允许的文件夹下。
+   * 不合规矩抛 FolderError（validation 或 conflict，message 可直接给人看）。
+   */
+  create(name: string, parent?: string): TLocalFolder {
+    const why = folderNameProblem(name);
+    if (why) throw new FolderError("validation", why);
+    const desktop = join(this.home, "Desktop");
+    const base = resolve(parent ?? (existsSync(desktop) ? desktop : this.home));
+    if (parent !== undefined && !isAbsolute(parent)) throw new FolderError("validation", "父目录要写完整路径");
+    if (!existsSync(base) || !statSync(base).isDirectory()) throw new FolderError("validation", "父目录不存在");
+    if (!isInside(this.home, base) && !this.contains(base)) throw new FolderError("validation", "只能建在你的主目录下，或已经允许的文件夹下");
+    const target = join(base, name);
+    const reject = this.rejectReason(target);
+    if (reject) throw new FolderError("validation", reject);
+    if (readdirSync(base).some((n) => n.toLowerCase() === name.toLowerCase())) throw new FolderError("conflict", `「${name}」已经有了，换个名字`);
+    mkdirSync(target);
+    return this.add(target);
   }
 
   remove(id: string): boolean {
@@ -137,4 +170,8 @@ export class Folders {
   isAllowed(cwd: string): boolean {
     return this.contains(cwd) || ["topics", "plans", "projects", "worktrees"].some((g) => isInside(join(this.dataDir, g), cwd));
   }
+}
+
+export class FolderError extends Error {
+  constructor(readonly code: "validation" | "conflict", message: string) { super(message); }
 }

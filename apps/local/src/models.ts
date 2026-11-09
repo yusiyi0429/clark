@@ -146,6 +146,11 @@ export class ModelProfiles {
     return true;
   }
 
+  /** 这个配置给哪个执行方用（没有这个配置为 null）。 */
+  agentOf(id: string): "claude-code" | "codex" | null {
+    return this.stored().find((p) => p.id === id)?.agent ?? null;
+  }
+
   /** 这个配置是订阅还是网关（没有这个配置为 null）：额度用完时只停订阅的卡。 */
   sourceOf(id: string): "subscription" | "gateway" | null {
     return this.stored().find((p) => p.id === id)?.source ?? null;
