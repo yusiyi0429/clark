@@ -5,7 +5,7 @@ import type { TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import {
   LOCAL_RUNNER_PROTOCOL, LOCAL_RUNNER_ROUTES, LOCAL_RUNNER_TOKEN_HEADER,
-  LocalPairingStartRequest, LocalAgentLoginCodeRequest, LocalCloudLinkRequest, LocalSettingsPatch, LocalModelProfileUpsert, LocalToolUpsert,
+  LocalPairingStartRequest, LocalAgentLoginCodeRequest, LocalCloudLinkRequest, LocalSettingsPatch, LocalModelProfileUpsert, LocalToolUpsert, LocalFolderPickRequest, LocalFolderCreateRequest, LocalSessionModelRequest,
   LocalCreateSessionRequest, LocalCreateSessionBatchRequest, LocalSendMessageRequest, LocalPermissionDecisionRequest, LocalQuestionAnswerRequest, LocalBudgetUpdateRequest, LocalProjectFolderRequest, LocalProjectCloneRequest, LocalRunPreviewRequest, LocalPermissionModeRequest,
   type TLocalRunnerErrorCode, type TLocalStatusResponse, type TLocalHealthResponse,
 } from "@warmap/contracts";
@@ -15,7 +15,7 @@ import { AgentStartError } from "../agents/types.js";
 import type { TokenStore, Pairings } from "../pairing.js";
 import type { EventLog } from "../eventLog.js";
 import type { ModelProfiles } from "../models.js";
-import type { Folders } from "../folders.js";
+import { FolderError, type Folders } from "../folders.js";
 import type { ClaudeSetup } from "../agents/claudeSetup.js";
 import type { CloudLink, Settings } from "../cloud.js";
 import type { RunnerConfig } from "../config.js";
@@ -191,12 +191,26 @@ export function createServer(d: ServerDeps): http.Server {
     checkTool: async (c) => { const t = await d.customTools.check(c.params.id!); if (!t) throw new HttpError(404, "not_found", "没有这个工具"); return t; },
     deleteModel: async (c) => { if (!(await d.models.remove(c.params.id!))) throw new HttpError(404, "not_found", "没有这个模型配置，或是内置配置"); return { ok: true }; },
     listFolders: () => ({ folders: d.folders.listWithProjects() }),
-    pickFolder: async () => {
+    pickFolder: async (c) => {
+      const b = validate(LocalFolderPickRequest, c.body ?? {});
       const p = await d.pickFolder();
       if (!p) return { folder: null };
       const why = d.folders.rejectReason(p);
       if (why) throw new HttpError(400, "validation", why);
-      return { folder: d.folders.add(p) };
+      const folder = d.folders.add(p);
+      // 带了项目：选中后一步绑上（同 PUT /v1/projects/:projectId/folder）
+      const project = b.projectId ? d.folders.bindProject(b.projectId, folder.id, b.projectName) ?? undefined : undefined;
+      return { folder, ...(project ? { project } : {}) };
+    },
+    createFolder: (c) => {
+      const b = validate(LocalFolderCreateRequest, c.body);
+      let folder;
+      try { folder = d.folders.create(b.name, b.parent); } catch (e) {
+        if (e instanceof FolderError) throw new HttpError(e.code === "conflict" ? 409 : 400, e.code, e.message);
+        throw e;
+      }
+      const project = b.projectId ? d.folders.bindProject(b.projectId, folder.id, b.projectName) ?? undefined : undefined;
+      return { folder, ...(project ? { project } : {}) };
     },
     deleteFolder: (c) => { if (!d.folders.remove(c.params.id!)) throw new HttpError(404, "not_found", "没有这个文件夹"); return { ok: true }; },
     listSessions: () => ({ sessions: d.sessions.list() }),
@@ -223,6 +237,7 @@ export function createServer(d: ServerDeps): http.Server {
     stopBackground: async (c) => ({ session: await d.sessions.stopBackground(c.params.id!, c.params.itemId!) }),
     listBudgets: () => ({ budgets: d.sessions.budgets() }),
     putBudget: (c) => d.sessions.setBudget(validate(LocalBudgetUpdateRequest, c.body)),
+    setSessionModel: async (c) => d.sessions.setModel(c.params.id!, validate(LocalSessionModelRequest, c.body).modelProfileId),
     previewRun: (c) => d.sessions.previewRun(validate(LocalRunPreviewRequest, c.body ?? {})),
     setPermissionMode: async (c) => ({ session: await d.sessions.setPermissionMode(c.params.id!, validate(LocalPermissionModeRequest, c.body).mode) }),
     listProjects: () => ({ projects: d.folders.projects() }),

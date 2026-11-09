@@ -296,6 +296,14 @@ export const LocalCloudLinkRequest = Type.Object({
  */
 export const LocalModelSource = Type.Union([Type.Literal("subscription"), Type.Literal("gateway")]);
 /**
+ * 思考程度（设计 17.2 第 36 条）。各执行方、各模型支持哪几档（11/09 实测，都没调模型）：
+ * - Claude Code 2.1.318：握手（initialize）回的模型列表里，Opus 5.5、Fable 5.1、Sonnet 5.5、Haiku 5.5 都是 low、medium、high、xhigh、max 五档。
+ *   开工用 --effort 传；开着时用控制请求 apply_flag_settings { effortLevel } 当场换（它不校验取值，本机先校验）。网关模型本机不传思考程度。
+ * - Codex 0.159.2：`codex debug models` 的模型目录里每个模型自己列 supported_reasoning_levels 和 default_reasoning_level，
+ *   如 gpt-6.1-sol 是 low…max 加 ultra、默认 low，gpt-5.5 是 low…xhigh、默认 medium；用 -c model_reasoning_effort 传。ultra 只有 Codex 有。
+ */
+export const LocalEffort = Type.Union([Type.Literal("low"), Type.Literal("medium"), Type.Literal("high"), Type.Literal("xhigh"), Type.Literal("max"), Type.Literal("ultra")]);
+/**
  * 真正的来源（本机按地址和模型名认出来，网页照写，不用自己猜）：
  * - provider：认出的来源 id。claude-subscription 本人的 Claude 订阅；tokenhub；厂商 API 是 deepseek、kimi、glm、qwen、volcengine、minimax、anthropic 等；
  *   经 magpie 时按模型名的前缀（codex/…、deepseek/…）认，如 codex、copilot、gemini；都认不出就是地址的主机名（经 magpie 又没有前缀时是 magpie）。
@@ -314,6 +322,13 @@ export const LocalModelProfile = Type.Object({
   source: LocalModelSource,
   /** 认出的真正来源（见 LocalModelOrigin），按 baseUrl 和 model 现算。老版本本机不带。 */
   origin: Type.Optional(LocalModelOrigin),
+  /**
+   * 这个模型能选的思考程度（见 LocalEffort），网页选完模型只列这几档；空的是不能选（网关模型本机不传思考程度）。
+   * Claude Code 的按它握手时报的模型列表（这台电脑上跑过一次以后记下；没跑过按 Claude 模型的五档）。老版本本机不带。
+   */
+  efforts: Type.Optional(Type.Array(LocalEffort, { maxItems: 8 })),
+  /** 不选时用哪档：null 是本机按档位和预算模式定（强 high、标准 medium、轻 low），模型自己的默认档时写那一档。老版本本机不带。 */
+  defaultEffort: Type.Optional(Nullable(LocalEffort)),
   agent: LocalAgentKind,
   baseUrl: Nullable(Type.String()),
   model: Nullable(Type.String()),
@@ -474,10 +489,35 @@ export const LocalProjectCloneRequest = Type.Object({
 export const LocalProjectCloneResponse = Type.Object({ project: Nullable(LocalProjectFolder), branch: Nullable(Type.String()), fellBack: Type.Boolean() }, strict);
 export const LocalFolderListResponse = Type.Object({ folders: Type.Array(LocalFolder) }, strict);
 /**
- * POST /v1/folders/pick：本人在本机选择框里点了取消时 folder 为 null。
- * 选了主目录或它的上级、Claude 配置目录、本机程序数据目录（或它们的上级）时回 400 validation，message 可直接给人看。
+ * POST /v1/folders/pick 的体（「选择其他文件夹…」，设计 17.2 第 32 条）：可以空着（{}）；带 projectId 时选中后一步绑到这个项目（同 PUT /v1/projects/:projectId/folder），
+ * projectName 是项目名（只用来显示）。
  */
-export const LocalFolderPickResponse = Type.Object({ folder: Nullable(LocalFolder) }, strict);
+export const LocalFolderPickRequest = Type.Object({
+  projectId: Type.Optional(Uuid),
+  projectName: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
+}, strict);
+/**
+ * POST /v1/folders/pick：本机弹系统的选文件夹窗口，本人选中后加进允许的文件夹；本人点了取消时 folder 为 null。
+ * 选了主目录或它的上级、Claude 配置目录、本机程序数据目录（或它们的上级）时回 400 validation，message 可直接给人看。
+ * 请求带了 projectId 且选中了：project 是绑好以后的样子；没带或取消了不带。
+ */
+export const LocalFolderPickResponse = Type.Object({ folder: Nullable(LocalFolder), project: Type.Optional(LocalProjectFolder) }, strict);
+/**
+ * POST /v1/folders/create（「新建文件夹…」，设计 17.2 第 32 条）：在 parent 下新建一个空文件夹 name，加进允许的文件夹；带 projectId 时一步绑到这个项目。
+ * - name：一层的名字，不能带 / \ : * ? " < > | 和控制字符，不能是 . 或 ..，不能以点或空格结尾，不能是 Windows 的保留名（CON、PRN、AUX、NUL、COM1–9、LPT1–9，带扩展名的也算）；
+ *   parent 下已经有同名的（不分大小写）回 409 conflict。
+ * - parent：绝对路径，可不传，默认是本人的桌面（没有桌面时是主目录）。只能在本人主目录下、或在已允许的文件夹下；
+ *   新建出来的不能落进 Claude 配置目录、本机程序数据目录（同选文件夹的规矩），不满足回 400 validation，message 可直接给人看。
+ * 不经系统窗口：新建的是空文件夹，不会因此放开本人已有的文件。
+ */
+export const LocalFolderCreateRequest = Type.Object({
+  name: Type.String({ minLength: 1, maxLength: 100 }),
+  parent: Type.Optional(Type.String({ minLength: 1, maxLength: 1000 })),
+  projectId: Type.Optional(Uuid),
+  projectName: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
+}, strict);
+/** 新建好的文件夹（已在允许的列表里）；带了 projectId 时 project 是绑好以后的样子。 */
+export const LocalFolderCreateResponse = Type.Object({ folder: LocalFolder, project: Type.Optional(LocalProjectFolder) }, strict);
 
 // ───────────────────────── 会话 ─────────────────────────
 
@@ -556,10 +596,13 @@ export const LocalRole = Type.Object({
  * - acceptEdits「自动接受改文件」：允许的文件夹里新建、改文件自己放行；命令和别的照样问。
  * - plan「先出计划」：执行方只读、只出计划（Claude Code 的 plan 模式），出完计划问本人「按这个做」（权限请求，toolName ExitPlanMode）；
  *   本人批了就转成 auto 接着做（事件 permission_mode，by plan_approved），拒了留在 plan、按本人说的改计划。
- * - bypassPermissions「全部放行」：除了下面的硬规矩，都自己放行。
- * 天枢的硬规矩不受模式影响，哪一档都照问本人（设计 9.5）：对外的动作（git 推送和拉取、gh（开 PR 等）、飞书命令行写的（发消息、改文档等））、
+ * - bypassPermissions「全部放行」（11/09 用户定，设计 17.2 第 33 条：选了全部放行就是不看，不该来问）：只有三类还问本人——
+ *   推代码或开 PR（git push；gh 的写操作，如 pr create、pr merge、release create、issue create、api 发 POST 等）、
+ *   给别人发消息（飞书命令行发消息、回复、转发、发邮件）、在天枢里替本人写入（天枢 MCP 里写的工具）。
+ *   别的都自己放行：联网下载、装东西、改系统设置、碰 .git 和 .claude、动允许的文件夹以外的文件、跑没装好的 npx 包、本人加的工具里写的操作等。
+ * 其他几档还有天枢的硬规矩，照问本人（设计 9.5）：对外的动作（git 推送和拉取、gh（开 PR 等）、飞书命令行写的（发消息、改文档等））、
  * 危险命令表里的（装东西、联网下载、ssh、sudo、改注册表和系统设置、跑没装好的 npx 包）、碰 .git 和 .claude 的、碰允许的文件夹以外的路径、
- * 天枢 MCP 里写的工具。卡和规划员、验收员本来不给的工具（只读的会话不给写文件）照旧不给，跟模式无关。
+ * 天枢 MCP 里写的工具、本人加的工具里不是读的。卡和规划员、验收员本来不给的工具（只读的会话不给写文件）照旧不给，跟模式无关。
  * 实现上 Claude Code 一律以「每次都问」起（只有 plan 用它自己的 plan 模式），每个请求都先到本机、本机按档位放行或转给网页：
  * Claude Code 自己的 auto、bypassPermissions 放行的步骤不经本机，硬规矩管不住。
  */
@@ -595,6 +638,8 @@ export const LocalCreateSessionRequest = Type.Object({
    * strong 是 Opus、high；normal 是 Opus、medium；light 是 Sonnet、low。不填按岗位的档位，再没有按 normal。
    */
   modelTier: Type.Optional(LocalModelTier),
+  /** 本人选的思考程度（设计 17.2 第 36 条）：要在这个模型配置的 efforts 里，不然 400；不填按档位和预算模式定。 */
+  effort: Type.Optional(LocalEffort),
   firstMessage: Type.String({ minLength: 1, maxLength: 20000 }),
   /** 覆盖「默认干净」：true 时带上本人全局配置（hooks、插件、个人 MCP）。 */
   includePersonalConfig: Type.Optional(Type.Boolean()),
@@ -703,8 +748,6 @@ export const LocalHold = Type.Object({
   until: Nullable(Instant),
 }, strict);
 
-/** Claude Code 的思考强度（--effort）。 */
-export const LocalEffort = Type.Union([Type.Literal("low"), Type.Literal("medium"), Type.Literal("high"), Type.Literal("xhigh"), Type.Literal("max")]);
 /**
  * 这次拉起实际怎么跑（卡行写模型和思考强度，新首页设计 11.3、11.5）：mode 是所属 Task 的预算模式（没带预算为 auto）；
  * model 是传给 Claude Code 的模型（订阅按档位选的 opus、sonnet，网关是配置里的模型名）；effort 是思考强度（网关不传为 null）；
@@ -758,6 +801,7 @@ export const LocalRunPreviewRequest = Type.Object({
   agent: Type.Optional(LocalAgentKind),
   modelProfileId: Type.Optional(Id),
   modelTier: Type.Optional(LocalModelTier),
+  effort: Type.Optional(LocalEffort),
   taskBudget: Type.Optional(Type.Object({ taskId: Nullable(Type.String({ minLength: 1, maxLength: 80 })), budget: Budget }, strict)),
 }, strict);
 
@@ -793,6 +837,10 @@ export const LocalSessionSummary = Type.Object({
   run: Type.Optional(LocalRun),
   /** 现在的权限模式（见 LocalPermissionMode）。本人在子会话底下改（PUT /v1/sessions/:id/permission-mode），计划批了从 plan 转 auto。 */
   permissionMode: LocalPermissionMode,
+  /** 本人换了模型、要等这一轮做完才换的（见 LocalSessionModelResponse 的 after_turn）：换成哪个；换好了或没有就不带。 */
+  pendingModel: Type.Optional(Type.Object({ modelProfileId: Id, modelLabel: Type.String(), effort: Type.Optional(Nullable(LocalEffort)) }, strict)),
+  /** 本人选的思考程度（开工时带的或后来换的）；不带是按档位和预算模式定。实际跑的看 run.effort。 */
+  effort: Type.Optional(LocalEffort),
 }, strict);
 export const LocalSessionListResponse = Type.Object({ sessions: Type.Array(LocalSessionSummary) }, strict);
 
@@ -908,6 +956,25 @@ export const LocalSessionActionResponse = Type.Object({ session: LocalSessionSum
  * 换成更宽的档时，正在等批准的请求按新的档重判一遍，新档放行的就自己放行（网页上那条随之消失）。执行方没有这一档时 400；会话已结束 409。
  */
 export const LocalPermissionModeRequest = Type.Object({ mode: LocalPermissionMode }, strict);
+
+/**
+ * PUT /v1/sessions/:id/model：子会话换模型、换思考程度（天枢伙伴不走这里；设计 17.2 第 32、36 条）。modelProfileId 是本机的模型配置（GET /v1/models），
+ * effort 是思考程度（要在新模型配置的 efforts 里；null 是回到按档位和预算模式定）。两项至少带一项；只带 effort 是同一个模型换思考程度：
+ * Claude Code 在跑时用 apply_flag_settings 当场换（now），Codex 要重开（规则同下面的跨来源）。只换模型不带 effort 时，原来选的思考程度新模型也支持就留着，不支持就回到自动。
+ * 两种生效方式，回执的 applied 写明，网页分别显示：
+ * - now（已生效）：下一次回答起就用新模型。同一个执行方、同一个来源里换（订阅里 Opus 换 Haiku；同一个网关地址、同一把钥匙下换模型名）时，
+ *   本机当场让 Claude Code 换（它的 set_model，11/09 实测 2.1.318 认）；会话没在跑（停了、排着、交完了）时也是 now，下次开起来就用新的。
+ * - after_turn（这一轮做完后生效）：跨来源（订阅换 TokenHub、换别的网关、换钥匙）要换环境变量，或者是 Codex 的会话，只能重开执行方。
+ *   正在跑的先记下（摘要的 pendingModel），这一轮做完、没有在跑的后台任务时，本机用 --resume 接着原来的对话、换上新模型重开，对话和进度不丢；
+ *   会话空着（等你回复）时当场就重开，回 now。
+ * 换好以后摘要和 status 同步条目里的 run（modelName、origin 等）随之更新，事件流记一条 notice（code model_changed）。
+ * 没有这个模型配置、配置的执行方和会话的不一样回 400。
+ */
+export const LocalSessionModelRequest = Type.Object({ modelProfileId: Type.Optional(Id), effort: Type.Optional(Nullable(LocalEffort)) }, strict);
+export const LocalSessionModelResponse = Type.Object({
+  applied: Type.Union([Type.Literal("now"), Type.Literal("after_turn")]),
+  session: LocalSessionSummary,
+}, strict);
 
 // ───────────────────────── 预算（新首页设计 11.3、11.4） ─────────────────────────
 
@@ -1375,6 +1442,11 @@ export type TLocalToolUpsert = Static<typeof LocalToolUpsert>;
 export type TLocalFolder = Static<typeof LocalFolder>;
 export type TLocalFolderListResponse = Static<typeof LocalFolderListResponse>;
 export type TLocalFolderPickResponse = Static<typeof LocalFolderPickResponse>;
+export type TLocalFolderPickRequest = Static<typeof LocalFolderPickRequest>;
+export type TLocalFolderCreateRequest = Static<typeof LocalFolderCreateRequest>;
+export type TLocalFolderCreateResponse = Static<typeof LocalFolderCreateResponse>;
+export type TLocalSessionModelRequest = Static<typeof LocalSessionModelRequest>;
+export type TLocalSessionModelResponse = Static<typeof LocalSessionModelResponse>;
 export type TLocalSessionStatus = Static<typeof LocalSessionStatus>;
 export type TLocalSessionSubject = Static<typeof LocalSessionSubject>;
 export type TLocalUsage = Static<typeof LocalUsage>;
@@ -1477,6 +1549,7 @@ export const LOCAL_RUNNER_ROUTES = {
   checkTool: { method: "POST", path: "/v1/tools/:id/check", auth: true },
   listFolders: { method: "GET", path: "/v1/folders", auth: true },
   pickFolder: { method: "POST", path: "/v1/folders/pick", auth: true },
+  createFolder: { method: "POST", path: "/v1/folders/create", auth: true },
   deleteFolder: { method: "DELETE", path: "/v1/folders/:id", auth: true },
   listSessions: { method: "GET", path: "/v1/sessions", auth: true },
   createSession: { method: "POST", path: "/v1/sessions", auth: true },
@@ -1494,6 +1567,7 @@ export const LOCAL_RUNNER_ROUTES = {
   putBudget: { method: "PUT", path: "/v1/budgets", auth: true },
   previewRun: { method: "POST", path: "/v1/runs/preview", auth: true },
   setPermissionMode: { method: "PUT", path: "/v1/sessions/:id/permission-mode", auth: true },
+  setSessionModel: { method: "PUT", path: "/v1/sessions/:id/model", auth: true },
   listProjects: { method: "GET", path: "/v1/projects", auth: true },
   putProjectFolder: { method: "PUT", path: "/v1/projects/:projectId/folder", auth: true },
   handoverCheck: { method: "POST", path: "/v1/projects/:projectId/handover-check", auth: true },

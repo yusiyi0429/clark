@@ -83,6 +83,8 @@ interface SessionRecord {
   /** 规划员（设计 18.11）：最近一次拉起时开拆前检查发现要先问清楚的几件；planAsked 是本人之后答过问题或说过话，答了才收派活单。 */
   planFlags?: PlanFlag[];
   planAsked?: boolean;
+  /** 本人换了模型、要等这一轮做完才换的（跨来源要重开执行方）：换成哪个。换好就去掉（摘要里原样是 pendingModel）。 */
+  pendingModel?: { modelProfileId: string; modelLabel: string };
   subject: TLocalSessionSubject;
   title: string;
   agent: TLocalAgentKind;
@@ -917,6 +919,7 @@ export class SessionManager {
         }
         this.setStatus(rec, pending?.size ? "waiting_permission" : "idle", rec.hold && (limited || broke || stopped) ? { reason: this.holdReason(rec.hold) } : {});
         if (!pending?.size && !this.questions.has(rec.id)) stop();
+        if (rec.pendingModel) this.swapModel(rec); // 这一轮做完了：换上本人要的模型
         break;
       }
       default:
@@ -958,6 +961,9 @@ export class SessionManager {
       else this.reportStop(rec, "error", { blocker: `执行方中途退出了${code === null ? "" : `（退出码 ${code}）`}` });
     }
     this.d.log.evict(rec.id);
+    // 本人要换的模型还没换上就退了（交完收工、强停等）：直接换，下次开起来用新的
+    const want = rec.pendingModel?.modelProfileId;
+    if (want) void this.d.models.resolve(want).then((m) => { if (m?.profileId === want && rec.pendingModel?.modelProfileId === want) this.applyModel(rec, m); });
     // 验收过了：卡在工作树里做的，试着自动合回
     if (finished && rec.subject.kind === "verify" && rec.passed) void this.autoMerge(rec);
   }
@@ -1115,6 +1121,75 @@ export class SessionManager {
    * PUT /v1/sessions/:id/permission-mode：本人换权限模式。跑着的告诉执行方（等着批准的按新档重判）；没在跑的（排着、停了）记下，下次拉起按新的。
    * 结束了的（done、failed）不能换。
    */
+  /**
+   * 子会话换模型（契约 LocalSessionModelRequest）：同一个执行方、同一个来源里当场换（set_model）；跨来源要换环境变量，
+   * 在两轮之间就用 --resume 重开，正在跑就记下、这一轮做完再重开（after_turn）；进程不在就直接换，下次开起来用新的。
+   */
+  async setModel(id: string, profileId: string): Promise<{ applied: "now" | "after_turn"; session: TLocalSessionSummary }> {
+    const rec = this.must(id);
+    const next = await this.d.models.resolve(profileId);
+    if (!next || next.profileId !== profileId) throw new SessionError("validation", "没有这个模型配置");
+    const agent = this.d.models.agentOf(profileId);
+    if (agent !== rec.agent) throw new SessionError("validation", `这个模型配置是给 ${agent} 用的，这个会话是 ${rec.agent}`);
+    if (next.source === "gateway" && !next.apiKey) throw new SessionError("validation", `「${next.label}」还没填钥匙`);
+    const run = this.runs.get(id);
+    if (!run || this.starting.has(id)) {
+      this.applyModel(rec, next);
+      return { applied: "now", session: this.summary(rec) };
+    }
+    const cur = await this.d.models.resolve(rec.modelProfileId);
+    const sameEnv = cur && rec.agent === "claude-code" && cur.source === next.source && cur.baseUrl === next.baseUrl && cur.apiKey === next.apiKey && cur.webSearch === next.webSearch;
+    if (sameEnv) {
+      const plan = this.runFor(rec, next);
+      if (await run.setModel(next.source === "gateway" ? next.model! : next.model ?? plan.launch.model)) {
+        this.applyModel(rec, next, plan.view);
+        return { applied: "now", session: this.summary(rec) };
+      }
+    }
+    rec.pendingModel = { modelProfileId: next.profileId, modelLabel: next.label };
+    this.save(rec);
+    if (this.swapModel(rec)) return { applied: "now", session: this.summary(rec) };
+    this.emit(rec, { type: "notice", level: "info", code: "model_pending", text: `这一轮做完后换成「${next.label}」` });
+    this.syncStatus(rec);
+    return { applied: "after_turn", session: this.summary(rec) };
+  }
+
+  /** 换上新模型：记进会话、跑法跟着换（实际模型等执行方再报），事件流记一条、报给云端。 */
+  private applyModel(rec: SessionRecord, model: ResolvedModel, view?: TLocalRun) {
+    rec.modelProfileId = model.profileId;
+    rec.modelLabel = model.label;
+    delete rec.pendingModel;
+    rec.run = view ?? this.runFor(rec, model).view;
+    this.save(rec);
+    this.emit(rec, { type: "notice", level: "info", code: "model_changed", text: `换成了「${model.label}」${rec.run.modelName ? ` · ${rec.run.modelName}` : ""}` });
+    this.syncStatus(rec);
+  }
+
+  /**
+   * 跨来源换模型：在两轮之间（没在一轮里、没有在等批准或回答、没有在跑的后台任务）才重开——停掉旧进程，用 --resume 接着原来的对话、换上新模型拉起。
+   * 重开期间说的话等它起来再送（starting）。重开了返回 true；还不到时候返回 false，等这一轮做完再试。
+   */
+  private swapModel(rec: SessionRecord): boolean {
+    const old = this.runs.get(rec.id);
+    if (!rec.pendingModel || !old || this.inTurn.has(rec.id) || this.pending.get(rec.id)?.size || this.questions.has(rec.id) || this.starting.has(rec.id)) return false;
+    if (rec.background.some((b) => b.state === "running")) return false;
+    const target = rec.pendingModel.modelProfileId;
+    this.runs.delete(rec.id); // 旧进程退出时 onExit 认不出它，不改状态、不报停了
+    const p = (async () => {
+      await old.kill();
+      const model = await this.d.models.resolve(target);
+      if (!model || model.profileId !== target) throw new Error("要换的模型配置已被删除");
+      this.applyModel(rec, model);
+      return this.startRun(rec, true);
+    })();
+    this.starting.set(rec.id, p);
+    p.catch((e: unknown) => {
+      delete rec.pendingModel;
+      this.setStatus(rec, "exited", { reason: `换模型后没接上：${e instanceof Error ? e.message : String(e)}；再发一句话会接着做` });
+    }).finally(() => this.starting.delete(rec.id));
+    return true;
+  }
+
   async setPermissionMode(id: string, mode: TLocalPermissionMode): Promise<TLocalSessionSummary> {
     const rec = this.must(id);
     if (rec.status === "done" || rec.status === "failed") throw new SessionError("conflict", "这个会话已经结束了");

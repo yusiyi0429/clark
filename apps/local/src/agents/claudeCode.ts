@@ -238,6 +238,11 @@ class ClaudeRun implements AgentRun {
     return r.subtype === "success";
   }
 
+  async setModel(model: string): Promise<boolean> {
+    const r = await this.control({ subtype: "set_model", model }, 10_000);
+    return r.subtype === "success";
+  }
+
   async stopTask(taskId: string): Promise<boolean> {
     const r = await this.control({ subtype: "stop_task", task_id: taskId }, 10_000);
     return r.subtype === "success";
