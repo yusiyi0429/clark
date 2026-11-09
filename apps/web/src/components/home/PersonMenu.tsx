@@ -3,11 +3,11 @@
 /**
  * 左栏最底下的本人一行和个人菜单（新首页设计 9.4、5.4.2「本人行」、5.4.6「个人菜单」）：
  * - 这一行：头像 24 + 名字；连接要处理时（本机离线、额度用完、飞书授权失效）名字后面一个 6px 琥珀点。整行就是菜单的开关。
- * - 菜单从这一行向上弹出：头像和资料 · 伙伴 · 连接 · 岗位 · 我的记忆 · 偏好 ·
+ * - 菜单从这一行向上弹出：头像和资料 · 伙伴 · 连接和技能 · 我的记忆 · 偏好 ·
  *   切换到 CEO 工作台（双角色）· 管理员（管理员）· 锁屏 · 退出登录；最后一行淡色版本号。菜单项不放图标；键盘交给 HeroUI 的菜单。
  * 锁屏（设计 19 节第 8 条）：天枢不自动锁，本人点了才锁；和退出登录走同一个接口、回登录页，这台电脑「认得你」的那份（lastLogin）不清。
  * 快捷键 Ctrl+Shift+L（Mac 上 Cmd+Shift+L），哪里都能按。
- * 头像和资料、伙伴、连接、岗位、我的记忆、偏好是新首页里的二级页；管理员还是老页面，点了离开新首页。
+ * 头像和资料、伙伴、连接和技能、我的记忆、偏好是新首页里的二级页（连接和技能一项，老的 roles 页键也开它）；管理员还是老页面，点了离开新首页。
  * 「任务数据质量」不放进新首页的菜单（用户 11/08 定）：老菜单、/me/task-quality 页面和接口都留着，要用随时能放回来。
  * 雷达、定时任务不上（17.2）：不放进菜单（老页面的路由先不动）；「更多」里只剩一项，就不要「更多」这一层。
  */
@@ -62,7 +62,7 @@ export function PersonRow({ account, view, alert, go }: {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
-  const current = view.kind === "page" ? view.page : null;
+  const current = view.kind === "page" ? (view.page === "roles" ? "connections" : view.page) : null;
   const subtitle = [account.loginId, account.role === "ceo" ? "CEO" : "成员"].filter(Boolean).join(" · ");
   // 名字明写成显示的文字：两个字的（伙伴、锁屏…）只靠内容算名字时，无障碍树里读不到。快捷键不进名字。
   const item = (id: string, label: string) => (
@@ -84,8 +84,7 @@ export function PersonRow({ account, view, alert, go }: {
                 <span className={h.menuWhoText}><b>{account.displayName}</b>{subtitle ? <small>{subtitle}</small> : null}</span>
               </Dropdown.Item>
               {item("buddy", "伙伴")}
-              {item("connections", "连接")}
-              {item("roles", "岗位")}
+              {item("connections", "连接和技能")}
               {item("memory", "我的记忆")}
               {item("preferences", "偏好")}
             </Dropdown.Section>

@@ -415,7 +415,7 @@ function noticeWaiting(notices: NoticeSources | null): WaitingItem[] {
 function proposalWaiting(proposals: RoleProposalView[]): WaitingItem[] {
   return proposals.map((proposal) => ({
     id: `proposal:${proposal.id}`, kind: "role", title: `${proposal.role.name}的${FIELD_LABEL[proposal.field]}改一句`,
-    source: "岗位修改建议", open: { kind: "role", id: proposal.id }, at: proposal.createdAt, ...NONE, ...fields("inline"),
+    source: "技能修改建议", open: { kind: "role", id: proposal.id }, at: proposal.createdAt, ...NONE, ...fields("inline"),
   }));
 }
 

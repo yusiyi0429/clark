@@ -2,7 +2,7 @@
 
 /**
  * 新骨架（V2 设计第 11.1、19.6 节，原型 v8.4）：左边一条图标栏（对话、本月、岗位、插件，最下面是头像菜单），右边一次放一页。
- * 959 及以下没有图标栏，底部三个标签：伙伴、本月、我（岗位从「我」进）。分界和现在的手持、工作台一致。
+ * 959 及以下没有图标栏，底部三个标签：伙伴、本月、我（技能从「我」进）。分界和现在的手持、工作台一致。
  * 老首页 /me 不动，新骨架的页面都在这里面；本机程序的连接整个骨架共用一份。
  */
 import { useEffect, useState, type ReactNode } from "react";
@@ -27,7 +27,7 @@ export function sectionOf(pathname: string): V2Section {
 const RAIL: { section: V2Section; href: string; label: string; icon: typeof MessageCircle }[] = [
   { section: "chat", href: "/me/chat", label: "对话", icon: MessageCircle },
   { section: "month", href: "/me/month", label: "本月", icon: PanelsTopLeft },
-  { section: "team", href: "/me/team", label: "岗位", icon: UsersRound },
+  { section: "team", href: "/me/team", label: "技能", icon: UsersRound },
   { section: "plugins", href: "/me/plugins", label: "连接", icon: Shapes },
 ];
 const TABS: { section: V2Section; href: string; label: string; icon: typeof MessageCircle }[] = [

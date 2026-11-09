@@ -14,6 +14,7 @@
 .row { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-48); padding: 6px var(--space-2); border-radius: var(--r-control); }
 label.row { cursor: pointer; }
 label.row:hover { background: var(--default-soft); }
+.switchRow { width: 100%; }
 .rowText { display: grid; flex: 1; min-width: 0; }
 .rowName { display: flex; align-items: center; gap: var(--space-2); min-width: 0; overflow: hidden; color: var(--ink); font-size: var(--text-base); line-height: var(--lh-row); white-space: nowrap; }
 .rowName > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -34,9 +35,6 @@ label.row:hover { background: var(--default-soft); }
 /* 这台电脑那一行的「这台」：中性 chip（5.4.3）。 */
 .chip { display: inline-flex; flex: none; align-items: center; height: 20px; padding: 0 var(--space-2); border-radius: var(--r-capsule); background: var(--neutral-wash); color: var(--ink-muted); font-size: var(--text-xs); line-height: 16px; }
 
-/* 开关（沿用插件页的 .toggle：原生勾选框，选中用强调色——选择控件的选中态）。 */
-.switch { flex: none; width: 16px; height: 16px; margin: 0 var(--space-2); accent-color: var(--accent); cursor: pointer; }
-.switch:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 /* 弹层的触发器（同时跑几个）：中性 chip，悬停加深一档（和 Task 管线「改一改」里的岗位、模型同一个样子）。 */
 .pick { display: inline-flex; align-items: center; gap: var(--space-1); height: var(--row-28); padding: 0 var(--space-2); border: 0; border-radius: var(--r-capsule); background: var(--neutral-wash); color: var(--ink); font: inherit; font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); font-variant-numeric: tabular-nums; cursor: pointer; }
@@ -181,3 +179,26 @@ label.row:hover { background: var(--default-soft); }
 .keySet { display: flex; align-items: center; gap: var(--space-1); min-height: var(--touch-hit, 40px); padding-left: var(--space-3); border-radius: var(--r-control); background: var(--neutral-wash); color: var(--ink); font-size: var(--text-base); line-height: var(--lh-row); }
 .keySet [data-faint] { color: var(--ink-faint); }
 .toolFoot { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-2) 0; }
+
+/* ---------- 连接和技能：卡片网格（照 Claude 设置的 Customize）——两列，959 及以下一列；卡和首页的卡同一套（--surface 底、细边） ---------- */
+.customizeBar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+@media (max-width: 959px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.card { position: relative; display: flex; align-items: flex-start; gap: var(--space-2); min-width: 0; padding: var(--space-3); border-radius: var(--r-card); background: var(--surface); box-shadow: inset 0 0 0 1px var(--hairline); transition: background-color var(--dur-base) var(--ease-swift); }
+.card[data-openable]:hover { background: var(--default-soft); }
+.cardMain { display: flex; flex: 1; align-items: flex-start; gap: var(--space-3); min-width: 0; margin: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; }
+button.cardMain { cursor: pointer; }
+button.cardMain::after { content: ""; position: absolute; inset: 0; border-radius: var(--r-card); }
+button.cardMain:focus-visible { outline: none; }
+button.cardMain:focus-visible::after { outline: 2px solid var(--focus); outline-offset: -2px; }
+.cardIcon { display: grid; flex: none; place-items: center; width: 40px; height: 40px; border-radius: var(--r-inset); background: var(--neutral-wash); color: var(--ink-muted); }
+.cardText { display: grid; gap: 2px; min-width: 0; }
+.cardName { overflow: hidden; color: var(--ink); font-size: var(--text-base); font-weight: 600; line-height: var(--lh-row); text-overflow: ellipsis; white-space: nowrap; }
+.cardLine { display: -webkit-box; overflow: hidden; color: var(--ink-muted); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
+.cardSource { color: var(--ink-faint); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); }
+.cardState { color: var(--ink-muted); }
+.cardState[data-state="disconnected"], .cardState[data-state="unknown"] { color: var(--ink-faint); }
+.cardState[data-state="expired"], .cardState[data-state="unauthorized"], .cardState[data-state="unreachable"] { color: var(--warning); }
+.cardState[data-state="exhausted"] { color: var(--danger); }
+.cardCorner { position: relative; z-index: 1; display: inline-flex; flex: none; align-items: center; gap: var(--space-1); }
+.added { display: grid; place-items: center; width: 32px; height: 32px; border-radius: var(--r-control); background: var(--confirmed-wash); color: var(--confirmed); }
