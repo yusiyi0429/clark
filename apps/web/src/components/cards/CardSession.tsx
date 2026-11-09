@@ -24,9 +24,9 @@ import { overrule, retryAcceptance } from "@/lib/board/cloud";
 import { cardRole } from "@/lib/team/roles";
 import { useAutoReturn } from "@/lib/board/useAutoReturn";
 import { showWorkspaceToast } from "@/lib/toast";
-import { RelayLine, SessionComposer, SessionTranscript, sayToSession, sessionEnded, type DecideOptions } from "./SessionTranscript";
+import { RelayLine, SessionComposer, SessionTranscript, sayToSession, sessionModels, useModelChangedRefresh, sessionEnded, type DecideOptions } from "./SessionTranscript";
 import { useSessionMode } from "./PermissionMode";
-import { harnessLabel, runLabel } from "@/lib/local/runModel";
+import { harnessLabel, runLabel, withPendingModel } from "@/lib/local/runModel";
 import { useCardDetail, type CardDetail } from "./useCardDetail";
 import { SourceWordIssues, SourceWords } from "./SourceWords";
 import { MergeAction } from "@/components/work/MergeAction";
@@ -75,6 +75,7 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
   const ready = local.phase === "ready";
   const session = ready ? latestSessionFor(local.sessions, { cardId }) : null;
   const { view } = useSessionEvents(local.runner, session?.id ?? null);
+  useModelChangedRefresh(view.entries, local.refresh);
   const mode = useSessionMode(local.runner, session, view);
   const [tab, setTab] = useState<"result" | "chat">("result");
   const [starting, setStarting] = useState(false);
@@ -149,10 +150,11 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
   const dock = <PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} />;
   // 新首页里输入框只在这台电脑上跑着这张卡时出（别处看摘要）；老页面照旧灰着。
   // 输入框下面一行的右边写「执行方 · 模型」（21 条），来源在悬停里：这台电脑上的会话报的（实际跑的优先），没有时退回「来源 · 模型」、再退回云端记的。文件夹在左边。
-  const model = harnessLabel(session?.run, session?.agent) ?? ((label) => (label ? { label, title: null } : null))(runLabel(session?.run) ?? run?.modelLabel ?? item.card?.model?.label ?? null);
+  const model = withPendingModel(harnessLabel(session?.run, session?.agent) ?? ((label) => (label ? { label, title: null } : null))(runLabel(session?.run) ?? run?.modelLabel ?? item.card?.model?.label ?? null), session?.pendingModel);
   const place = session?.workspace ? { name: shortPlace(session.workspace), title: placeText(session.workspace) } : null;
   const composer = agent && (session || !embedded)
     ? <SessionComposer label={`给${item.title}插话`} disabled={!canAct} onSend={say} mode={mode} dock={dock} subject={{ kind: "card", id: cardId }} place={place} model={model ? { label: model.label, title: model.title ?? undefined } : null}
+      models={sessionModels(local.runner, local.models, session, local.refresh, () => showWorkspaceToast({ text: "没换成" }))}
       busy={sessionRunning} onStop={() => void control("interrupt").catch(() => showWorkspaceToast({ text: "没停下" }))} />
     : <div className={s.composerDock}>{dock}</div>;
   const chat = (

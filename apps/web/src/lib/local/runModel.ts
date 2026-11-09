@@ -49,6 +49,15 @@ export function harnessLabel(run: Pick<TLocalRun, "harness" | "origin" | "source
   return { label: `${HARNESS_NAME[harness]} · ${name}`, title: run?.origin?.label ?? run?.sourceLabel ?? null };
 }
 
+/** 换了模型、等这一轮做完才换（32 条，摘要的 pendingModel）时悬停写的。 */
+export const PENDING_MODEL_TITLE = "这一轮做完后换";
+
+/** 子会话输入框下面的模型：换了模型要等这一轮做完时写「当前模型 → 新模型」，悬停「这一轮做完后换」；换上了摘要不再带 pendingModel，回到只写新模型。 */
+export function withPendingModel(model: { label: string; title: string | null } | null, pending: { modelLabel: string } | null | undefined): { label: string; title: string | null } | null {
+  if (!model || !pending) return model;
+  return { label: `${model.label} → ${pending.modelLabel}`, title: PENDING_MODEL_TITLE };
+}
+
 /** 订阅类读不到具体模型名时写的（派活单选模型那一处）。 */
 const SUBSCRIPTION_NAME: Record<TLocalAgentKind, string> = { "claude-code": "Claude 订阅", codex: "Codex 订阅" };
 

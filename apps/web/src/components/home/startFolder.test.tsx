@@ -6,6 +6,7 @@ import { LocalContext } from "@/lib/local/LocalRunnerProvider";
 import { createMockRunner } from "@/lib/local/mock";
 import type { TLocalFolder } from "@/lib/local/runner";
 import { FolderAsk, PICK_OTHER, folderChoice } from "./FolderAsk";
+import { createFolderError } from "./InputFooter";
 import { PlanDecision } from "./PlanDecision";
 
 const brand = { id: "3e6eb3984cec", path: "C:\\Users\\10021\\Desktop\\tk-branding", label: "tk-branding" };
@@ -52,5 +53,21 @@ describe("开工用项目绑的文件夹（17.2 第 32 条）", () => {
     expect(html).toMatch(/data-testid="footer-folder"[^>]*>[\s\S]*?<b>tk-branding<\/b>/);
     expect(html).not.toContain("选文件夹");
     expect(render(null)).toMatch(/aria-label="文件夹：不绑"/);
+  });
+
+  it("文件夹菜单「选择其他文件夹…」「新建文件夹…」：本机选好或建好后一步绑到项目上；重名 409 就地写「已有同名文件夹」，名字不行照本机说的", async () => {
+    const runner = createMockRunner();
+    const picked = await runner.pickFolder({ projectId: "p-brand", projectName: "品牌建设" });
+    expect(picked.project).toMatchObject({ projectId: "p-brand", folder: { id: picked.folder!.id } });
+    const made = await runner.createFolder({ name: "测试新版天枢", projectId: "p-test", projectName: "测试" });
+    expect(made.folder.path).toBe(["C:", "Users", "me", "Desktop", "测试新版天枢"].join("\\"));
+    expect(made.project).toMatchObject({ projectId: "p-test", folder: { id: made.folder.id, label: "测试新版天枢" } });
+    expect((await runner.listProjects()).map((entry) => [entry.projectId, entry.folder?.label])).toEqual([["p-brand", picked.folder!.label], ["p-test", "测试新版天枢"]]);
+    const dup = await runner.createFolder({ name: "测试新版天枢", projectId: "p-test" }).catch((error: unknown) => error);
+    expect(dup).toMatchObject({ code: "conflict", status: 409 });
+    expect(createFolderError(dup)).toBe("已有同名文件夹");
+    const bad = await runner.createFolder({ name: "a/b" }).catch((error: unknown) => error);
+    expect(createFolderError(bad)).toMatch(/不能有/);
+    expect(createFolderError(new Error("断了"))).toBe("没建成");
   });
 });

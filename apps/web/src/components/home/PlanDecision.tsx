@@ -71,7 +71,7 @@ export const limitsOf = (budget: TBudget): Limits => ({ hours: budget.hours?.toS
 /**
  * target：拆的是一件 Task，还是一个没挂 Task 的项目（16.3）；name 是框顶上的名字。项目的没有预算那一栏：不挂 Task，开工用本人的缺省预算。
  */
-export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onChanged, afterSequence, folder = null, onSetFolder }: {
+export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onChanged, afterSequence, folder = null, onSetFolder, onPickFolder, onCreateFolder }: {
   target: PlanTarget;
   name: string;
   drafts: TCardDraftView[];
@@ -88,6 +88,9 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
    */
   folder?: { id: string; path: string; label: string } | null;
   onSetFolder?: (folderId: string | null) => Promise<unknown>;
+  /** 同输入框下面那个文件夹菜单的「选择其他文件夹…」「新建文件夹…」。 */
+  onPickFolder?: () => Promise<unknown>;
+  onCreateFolder?: (name: string) => Promise<unknown>;
 }) {
   const local = useLocalRunner();
   const ready = local.phase === "ready" && !handheld;
@@ -247,7 +250,7 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
     </>
   );
   const footer = ready ? <>
-    {onSetFolder ? <FolderMenu value={folder?.label ?? null} folders={local.folders} onPick={(id) => void onSetFolder(id)} /> : null}
+    {onSetFolder ? <FolderMenu value={folder?.label ?? null} currentId={folder?.id ?? null} folders={local.folders} onPick={(id) => void onSetFolder(id)} onPickOther={onPickFolder} onCreate={onCreateFolder} /> : null}
     <span className={h.grow} />
     <span className={h.slotsLine}>本机 <Slots used={used} cap={SLOT_CAP} /> {used}/{SLOT_CAP}</span>
   </> : null;

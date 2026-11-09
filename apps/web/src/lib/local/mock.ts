@@ -84,6 +84,11 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
   let token = paired ? "mock-token-0000000000000000000000" : "";
   const sessions = new Map<string, MockSession>();
   const projects = new Map<string, TLocalProjectFolder>();
+  const bind = (projectId: string, folder: TLocalFolder | null, name?: string): TLocalProjectFolder => {
+    const bound = { projectId, name: name ?? projects.get(projectId)?.name ?? null, folder: folder ? { id: folder.id, path: folder.path, label: folder.label } : null, updatedAt: now() };
+    projects.set(projectId, bound);
+    return bound;
+  };
   const folders: TLocalFolder[] = [{ id: "f1", path: "C:\\work\\tianshu", label: "tianshu", addedAt: new Date().toISOString() }];
   const tools: TLocalTool[] = [{ id: "kb", name: "知识库", preset: "custom", url: "https://mcp.example.com/kb", keyHeader: null, hasKey: true, state: "ready", toolCount: 6, error: null, checkedAt: new Date().toISOString(), addedAt: new Date().toISOString() }];
   let linked = false;
@@ -317,15 +322,27 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
       return { ...Object.assign(tool, probeTool(tool)) };
     },
     listFolders: async () => folders,
-    pickFolder: async () => { const folder = { id: `f${folders.length + 1}`, path: `C:\\work\\project-${folders.length + 1}`, label: `project-${folders.length + 1}`, addedAt: now() }; folders.push(folder); return folder; },
+    // 选文件夹（17.2 第 32 条）：假程序不弹窗，直接加一个；带项目时一步绑上。
+    pickFolder: async (body = {}) => {
+      const folder = { id: `f${folders.length + 1}`, path: `C:\\work\\project-${folders.length + 1}`, label: `project-${folders.length + 1}`, addedAt: now() };
+      folders.push(folder);
+      return { folder, ...(body.projectId ? { project: bind(body.projectId, folder, body.projectName) } : {}) };
+    },
+    // 新建文件夹：照本机的规矩查名字，重名（不分大小写）409，建在桌面，带项目时一步绑上。
+    createFolder: async (body) => {
+      const name = body.name.trim();
+      if (!name || /[\\/:*?"<>|]/.test(name) || /[. ]$/.test(name)) throw new LocalRunnerError("validation", "名字里不能有 \\ / : * ? \" < > |，也不能以点或空格结尾", 400);
+      if (folders.some((entry) => entry.label.toLowerCase() === name.toLowerCase())) throw new LocalRunnerError("conflict", "桌面上已经有同名的文件夹", 409);
+      const folder = { id: `f${folders.length + 1}`, path: `C:\\Users\\me\\Desktop\\${name}`, label: name, addedAt: now() };
+      folders.push(folder);
+      return { folder, ...(body.projectId ? { project: bind(body.projectId, folder, body.projectName) } : {}) };
+    },
     removeFolder: async (id) => { const i = folders.findIndex((f) => f.id === id); if (i >= 0) folders.splice(i, 1); },
     listProjects: async () => [...projects.values()],
     putProjectFolder: async (projectId, body) => {
       const folder = body.folderId ? folders.find((entry) => entry.id === body.folderId) : null;
       if (body.folderId && !folder) throw new LocalRunnerError("not_found", "没有这个文件夹，先选文件夹", 404);
-      const bound = { projectId, name: body.name ?? projects.get(projectId)?.name ?? null, folder: folder ? { id: folder.id, path: folder.path, label: folder.label } : null, updatedAt: now() };
-      projects.set(projectId, bound);
-      return bound;
+      return bind(projectId, folder ?? null, body.name);
     },
     handoverCheck: async (projectId) => {
       const folder = projects.get(projectId)?.folder ?? null;
@@ -402,6 +419,25 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
       }
       advance(s);
       return summaryOf(s);
+    },
+    // 换模型（17.2 第 32 条）：同一个来源、或会话没在跑时当场换（now）；跨来源又正在跑，等这一轮做完（after_turn，摘要带 pendingModel，假程序隔几步换上）。
+    setSessionModel: async (id, body) => {
+      const s = must(id);
+      const model = MODELS.find((entry) => entry.id === body.modelProfileId);
+      if (!model || model.agent !== s.summary.agent) throw new LocalRunnerError("validation", "没有这个模型", 400);
+      const apply = () => {
+        const { pendingModel: _done, ...rest } = s.summary;
+        s.summary = { ...rest, modelProfileId: model.id, modelLabel: model.label, run: runFor(model) };
+        emit(s, { type: "notice", level: "info", code: "model_changed", text: `换成 ${runFor(model).modelName}` });
+      };
+      const current = MODELS.find((entry) => entry.id === s.summary.modelProfileId);
+      if (OCCUPYING.has(s.summary.status) && current?.source !== model.source) {
+        s.summary = { ...s.summary, pendingModel: { modelProfileId: model.id, modelLabel: runFor(model).modelName } };
+        setTimeout(apply, stepMs * 4);
+        return { applied: "after_turn", session: summaryOf(s) };
+      }
+      apply();
+      return { applied: "now", session: summaryOf(s) };
     },
     setPermissionMode: async (id, mode) => {
       const s = must(id);

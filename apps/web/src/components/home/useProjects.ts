@@ -60,6 +60,15 @@ export function useProjects(data: Pick<WorkHomeData, "projects" | "month" | "per
     await runner.putProjectFolder(id, { folderId, ...(name ? { name } : {}) });
     await loadFolders();
   }, [runner, loadFolders]);
+  /** 本机弹框选别的文件夹、一步绑到项目上（32 条）。 */
+  const pickFolder = useCallback(async (id: string, name: string) => {
+    if (await local.pickFolder({ projectId: id, projectName: name })) await loadFolders();
+  }, [local, loadFolders]);
+  /** 在桌面新建文件夹、一步绑到项目上；没成照本机的错抛出，菜单里就地写。 */
+  const createFolder = useCallback(async (id: string, name: string, folderName: string) => {
+    await local.createFolder({ name: folderName, projectId: id, projectName: name });
+    await loadFolders();
+  }, [local, loadFolders]);
   /** 转给某人（16.7）：开一份「准备交接」。 */
   const transfer = useCallback(async (projectId: string, toPersonId: string) => {
     const started = await startTransfer(projectId, toPersonId, seenSequence(projectId));
@@ -67,8 +76,8 @@ export function useProjects(data: Pick<WorkHomeData, "projects" | "month" | "per
     await refresh();
   }, [refresh]);
   const withdraw = useCallback(async (transferId: string) => { await withdrawTransfer(transferId); await refresh(); }, [refresh]);
-  const actions = useMemo(() => ({ create, rename, archive, attach, setDue, setFolder, transfer, withdraw, reloadFolders: loadFolders }),
-    [create, rename, archive, attach, setDue, setFolder, transfer, withdraw, loadFolders]);
+  const actions = useMemo(() => ({ create, rename, archive, attach, setDue, setFolder, pickFolder, createFolder, transfer, withdraw, reloadFolders: loadFolders }),
+    [create, rename, archive, attach, setDue, setFolder, pickFolder, createFolder, transfer, withdraw, loadFolders]);
   return { all, projects, archived, bound, actions };
 }
 

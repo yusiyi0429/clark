@@ -5117,6 +5117,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/sub-sessions/{kind}/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 删掉一个子会话：先进回收站，30 天内能恢复，之后彻底删掉撤不回；在跑 409 SUB_SESSION_RUNNING */
+        delete: operations["deleteSubSession"];
+        options?: never;
+        head?: never;
+        /** 子会话「…」菜单（17.2 第 35 条）：改名、归档（archived: true）、恢复（archived: false）；在跑时归档 409 SUB_SESSION_RUNNING；专题名超 60 字 400 */
+        patch: operations["updateSubSession"];
+        trace?: never;
+    };
+    "/api/me/sub-sessions/archived": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 归档了的子会话（新归档的在前），带原来的项目和字母 */
+        get: operations["listArchivedSubSessions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/session-commands/claim": {
         parameters: {
             query?: never;
@@ -5214,7 +5249,8 @@ export interface paths {
         get: operations["getProject"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** 删掉项目（17.2 第 35 条，撤不回）：项目、项目对话、挂接、字母和汇报删掉，子会话进回收站，自己做的事项留到「其他」；只有负责人能删；有在跑的 409 PROJECT_BUSY，正在转交 409 PROJECT_TRANSFERRING */
+        delete: operations["deleteProject"];
         options?: never;
         head?: never;
         /** 改名、归档（archived: true）、恢复（archived: false） */
@@ -5250,6 +5286,41 @@ export interface paths {
         put?: never;
         /** 这个项目的对话：第一次打开时建，以后都返回同一条；收发消息走 /api/conversations/{scope}，scope 是 project:<projectId> */
         post: operations["openProjectPipeline"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/projects/{projectId}/pipeline/model": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 这个项目对话选的模型和思考程度（17.2 第 36 条）；没选为 null（照 Chat 的默认） */
+        get: operations["getProjectPipelineModel"];
+        /** 给这个项目对话选模型和思考程度，null 回到默认；不在列表里或思考程度不支持 400 INVALID_MODEL_CHOICE；没接 Chat 409 CHAT_NOT_CONNECTED */
+        put: operations["setProjectPipelineModel"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/conversation-models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 项目对话能选的模型和各自支持的思考程度（17.2 第 36 条）；默认的排第一；没接 Chat 为空 */
+        get: operations["listConversationModels"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -20341,6 +20412,73 @@ export interface components {
             kind: "sub" | "project";
             /** Format: uuid */
             id: string;
+        };
+        SubSessionKind: "card" | "topic";
+        UpdateSubSessionRequest: {
+            title?: string;
+            archived?: boolean;
+        };
+        ArchivedSubSession: {
+            kind: "card" | "topic";
+            /** Format: uuid */
+            id: string;
+            title: string;
+            letter: string | null;
+            projectId: string | null;
+            projectName: string | null;
+            /** Format: date-time */
+            archivedAt: string;
+        };
+        ArchivedSubSessionListResponse: {
+            items: {
+                kind: "card" | "topic";
+                /** Format: uuid */
+                id: string;
+                title: string;
+                letter: string | null;
+                projectId: string | null;
+                projectName: string | null;
+                /** Format: date-time */
+                archivedAt: string;
+            }[];
+        };
+        ModelEffort: "off" | "low" | "medium" | "high" | "xhigh" | "max";
+        ConversationModelOption: {
+            source: string;
+            modelId: string;
+            label: string;
+            efforts: ("off" | "low" | "medium" | "high" | "xhigh" | "max")[];
+            defaultEffort: "off" | "low" | "medium" | "high" | "xhigh" | "max";
+            isDefault: boolean;
+        };
+        ConversationModelListResponse: {
+            models: {
+                source: string;
+                modelId: string;
+                label: string;
+                efforts: ("off" | "low" | "medium" | "high" | "xhigh" | "max")[];
+                defaultEffort: "off" | "low" | "medium" | "high" | "xhigh" | "max";
+                isDefault: boolean;
+            }[];
+        };
+        ConversationModelChoice: {
+            source: string;
+            modelId: string;
+            effort: "off" | "low" | "medium" | "high" | "xhigh" | "max";
+        };
+        ProjectPipelineModel: {
+            choice: {
+                source: string;
+                modelId: string;
+                effort: "off" | "low" | "medium" | "high" | "xhigh" | "max";
+            } | null;
+        };
+        SetProjectPipelineModelRequest: {
+            choice: {
+                source: string;
+                modelId: string;
+                effort: "off" | "low" | "medium" | "high" | "xhigh" | "max";
+            } | null;
         };
         BuddyAuthority: {
             authority: "none" | "full";
@@ -38182,6 +38320,171 @@ export interface operations {
             };
         };
     };
+    deleteSubSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: "card" | "topic";
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 进回收站了 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    updateSubSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: "card" | "topic";
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSubSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description 改好了 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listArchivedSubSessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 归档了的子会话 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArchivedSubSessionListResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     claimSessionCommands: {
         parameters: {
             query?: never;
@@ -38527,6 +38830,62 @@ export interface operations {
             };
         };
     };
+    deleteProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 删掉了 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     updateProject: {
         parameters: {
             query?: never;
@@ -38745,6 +39104,218 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getProjectPipelineModel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 现在选的 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectPipelineModel"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    setProjectPipelineModel: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetProjectPipelineModelRequest"];
+            };
+        };
+        responses: {
+            /** @description 改好的 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectPipelineModel"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listConversationModels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 能选的模型 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationModelListResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
