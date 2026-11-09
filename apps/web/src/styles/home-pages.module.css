@@ -4,11 +4,11 @@
  */
 
 /* ---------- 区块和行 ---------- */
-.section { display: grid; gap: var(--space-2); min-width: 0; }
+.section { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); min-width: 0; }
 .sectionTitle { display: flex; align-items: center; gap: var(--space-2); margin: 0; padding: 0 var(--space-2); color: var(--ink-faint); font-size: var(--doc-type-meta); font-weight: 600; line-height: var(--doc-lh-meta); }
 .sectionHead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .sectionHead .sectionTitle { flex: 1; }
-.rows { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.rows { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; margin: 0; padding: 0; list-style: none; }
 
 /* 一行（连接页、偏好、资料）：名字 14/20 + 小字 12/16，右边状态词 13，最右一个动作。高 48，上下内边距 6。 */
 .row { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-48); padding: 6px var(--space-2); border-radius: var(--r-control); }
@@ -25,10 +25,10 @@ label.row:hover { background: var(--default-soft); }
 .state[data-state="exhausted"] { color: var(--danger); }
 .action { display: inline-flex; flex: none; align-items: center; gap: var(--space-1); }
 .action :global(.button) { min-height: var(--touch-hit, var(--row-32)); }
-/* 行下面跟着的东西（额度、文件夹、命令、展开的面板）：和名字对齐。 */
-.under { display: grid; gap: var(--space-1); margin: 0 0 var(--space-2); padding: 0 var(--space-2); }
+/* 行下面跟着的东西（额度、文件夹、命令、展开的面板）：和名字对齐。单列 grid 都写 minmax(0, 1fr)，长路径不把行撑出页面（clip-audit 第 6 条）。 */
+.under { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-1); margin: 0 0 var(--space-2); padding: 0 var(--space-2); }
 .sub { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-32); color: var(--ink-muted); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); }
-.sub > b { flex: none; color: var(--ink); font-weight: 400; }
+.sub > b { flex: 0 1 auto; max-width: 50%; overflow: hidden; color: var(--ink); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
 .subText { min-width: 0; overflow: hidden; color: var(--ink-faint); text-overflow: ellipsis; white-space: nowrap; }
 .path { min-width: 0; overflow: hidden; color: var(--ink-faint); font-family: var(--font-mono); font-size: var(--doc-type-meta); text-overflow: ellipsis; white-space: nowrap; }
 .grow { flex: 1; min-width: 0; }
@@ -47,7 +47,7 @@ label.row:hover { background: var(--default-soft); }
 .command code { flex: 1; min-width: 0; overflow-x: auto; color: var(--ink); font-family: var(--font-mono); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); white-space: nowrap; scrollbar-width: thin; }
 
 /* 额度（订阅那几行下面，和右栏的额度行一样）：名字、剩多少、几点重置，下面 2px 额度条；明细每个窗口一行。 */
-.quota { display: grid; gap: 4px; padding: var(--space-1) 0; }
+.quota { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; padding: var(--space-1) 0; }
 .quotaLine { display: flex; align-items: baseline; gap: var(--space-2); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); }
 .quotaName { min-width: 0; overflow: hidden; color: var(--ink); text-overflow: ellipsis; white-space: nowrap; }
 .quotaAmount { flex: none; color: var(--ink); font-variant-numeric: tabular-nums; }
