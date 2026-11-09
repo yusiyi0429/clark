@@ -191,7 +191,7 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
       <div className={s.page} data-embedded="" data-testid="card-session">
         <header className={s.embedHead}>
           {chrome.lead}
-          <b className={s.embedTitle}>{chrome.parent}{chrome.letter}{item.title}</b>
+          <b className={s.embedTitle}>{chrome.parent}{chrome.letter}<span className={s.embedName}>{item.title}</span></b>
           <span className={s.stateChip} data-tone={chipOf.tone}>{chipOf.tone === "wait" ? <i aria-hidden /> : null}{chipOf.text}</span>
           <span className={s.exec} />
           {stop}

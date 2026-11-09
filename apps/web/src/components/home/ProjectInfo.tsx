@@ -124,7 +124,7 @@ export function ProjectInfo({ project, period, go, actions, doneDefinitionOf, me
     <div className={h.infoView} data-type-scale="doc" data-testid="project-info-view">
       <header className={h.viewHead}>
         {chrome.lead ?? <button type="button" className={h.icon} aria-label="返回" title="返回" onClick={() => go(projectHref(project.id))}><ArrowLeft {...ICON} /></button>}
-        <h1 className={h.viewTitle} tabIndex={-1}><button type="button" className={h.crumb} onClick={() => go(projectHref(project.id))}>{project.name} / </button>详情</h1>
+        <h1 className={h.viewTitle} tabIndex={-1}><button type="button" className={h.crumb} onClick={() => go(projectHref(project.id))}>{project.name} / </button><span className={h.ellipsis}>详情</span></h1>
         {chrome.trail}
       </header>
       <div className={h.infoScroll}>

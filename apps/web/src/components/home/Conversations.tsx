@@ -369,7 +369,7 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
           )}
           timeline={(current) => <WorkTimeline data={current} blocks={blocks} />}
           dock={(latest) => <PendingDock latest={latest} />}
-          input={readOnly ? () => null : (onHeight) => <ChatInput data={data} placeholder={`与${project.name}讨论…`} onHeight={onHeight} footer={{
+          input={readOnly ? () => null : (onHeight) => <ChatInput data={data} placeholder={handheld ? "说点什么…" : `与${project.name}讨论…`} onHeight={onHeight} footer={{
             left: folder,
             right: <><ModelText data={data} />{mode ? <PermissionModeMenu modes={mode.modes} value={mode.value} sheet={handheld} onChange={mode.set} /> : null}</>,
           }} />} />
