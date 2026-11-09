@@ -17,7 +17,7 @@ describe("岗位：预设同步", { timeout: 30_000 }, () => {
   it("预设文件按 frontmatter 加三段正文读；格式不对说清哪里不对；仓库里的预设都读得出来", async () => {
     expect(parsePreset(preset("调研员"), "strategy_content", "researcher")).toEqual({ key: "researcher", family: "strategy_content", name: "调研员", kind: "worker",
       tools: ["tianshu", "web_search"], modelTier: "strong", dutiesMd: "查资料", practiceMd: "先交提纲", acceptanceMd: "有出处" });
-    expect(() => parsePreset(preset("调研员"), "finance", "x")).toThrow("岗位包只能是");
+    expect(() => parsePreset(preset("调研员"), "finance", "x")).toThrow("分组只能是");
     expect(() => parsePreset(preset("调研员").replace("kind: worker", "kind: boss"), "general", "x")).toThrow("kind 只能是");
     expect(() => parsePreset(preset("调研员").replace("## 做法", "## 方法"), "general", "x")).toThrow("正文要有「## 做法」一段");
     expect(() => parsePreset("没有 frontmatter", "general", "x")).toThrow("frontmatter");
@@ -101,7 +101,7 @@ describe("岗位：本人的团队", { timeout: 30_000 }, () => {
       expect((await f.call("PATCH", `/api/me/cards/${card}`, { version: 1, roleId: role.id })).json().card.role).toEqual({ id: role.id, name: "开发", kind: "worker" });
       const before = (await f.call("GET", `/api/me/cards/${card}/brief`)).json();
       expect(before.role).toMatchObject({ id: role.id, name: "开发", practiceMd: "先写测试", acceptanceMd: "测试都过", version: 1 });
-      expect(before.markdown).toContain("- 岗位：开发");
+      expect(before.markdown).toContain("- 技能：开发");
       expect(before.markdown).toContain("## 开发的验收口径\n\n测试都过");
       await f.call("PATCH", `/api/me/roles/${role.id}`, { version: 1, acceptanceMd: "测试都过，覆盖到改动的分支" });
       const next = (await f.call("GET", `/api/me/cards/${card}/brief`)).json();

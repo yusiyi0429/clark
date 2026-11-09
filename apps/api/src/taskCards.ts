@@ -253,7 +253,7 @@ export async function cardBrief(q: Query, ownerId: string, id: string, planTask:
     ...(own ? [`- Task：${own.task.name}`] : []),
     ...(criterion ? [`- 对的是 Task 的第 ${criterion.index} 条标准：${criterion.text}`] : []),
     ...(criterion?.proof ? [`- 这条用什么证明：${criterion.proof}`] : []),
-    ...(role ? [`- 岗位：${role.name}`] : []),
+    ...(role ? [`- 技能：${role.name}`] : []),
     "", "## 交代", "", card.brief ?? "（没写交代，按标题和完成标准做）",
     "", "## 完成标准（交回时逐条写证据）", "", ...(standards.length ? standards.map((text, index) => `${index + 1}. ${text}`) : ["（还没写完成标准）"]),
     ...(exclusions.length ? ["", "## 这次不包括", "", ...exclusions.map((text) => `- ${text}`)] : []),
