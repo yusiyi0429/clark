@@ -20,6 +20,7 @@ import type { GatewayPricing } from "./pricing.js";
 import { Budgets, MULTI_AGENT_OFF_PERCENT, reworkRounds, runFor } from "./budget.js";
 import { AttachmentError, attachmentNote, saveAttachments, type FetchAttachment } from "./attachments.js";
 import { modelDisplayName, sameModel, type ResolvedModel } from "./models.js";
+import { MAGPIE_PORT, modelOrigin } from "./modelOrigin.js";
 import type { CustomTools, SessionTools } from "./customTools.js";
 import { cardTitleProblem } from "./cardTitle.js";
 import { firstSentences, TURN_ERROR } from "./stopReport.js";
@@ -1495,18 +1496,18 @@ export class SessionManager {
    * view 是摘要里的 run，launch 是交给 Claude Code 的。
    */
   private runFor(rec: SessionRecord, model: ResolvedModel): { view: TLocalRun; launch: { model: string; effort: TLocalRun["effort"] & string; multiAgent: boolean } } {
-    return this.planRun({ mode: this.modeOf(rec), tier: rec.modelTier ?? "normal", verify: rec.subject.kind === "verify", budgetKey: rec.budgetKey }, model);
+    return this.planRun({ mode: this.modeOf(rec), tier: rec.modelTier ?? "normal", verify: rec.subject.kind === "verify", budgetKey: rec.budgetKey, agent: rec.agent }, model);
   }
 
   /** runFor 的算法本身（开工前预览也用它）：view 带来源和给人看的模型名，actual 等执行方报了再填。 */
-  private planRun(p: { mode: TBudgetMode; tier: TLocalModelTier; verify: boolean; budgetKey: string | null }, model: ResolvedModel) {
+  private planRun(p: { mode: TBudgetMode; tier: TLocalModelTier; verify: boolean; budgetKey: string | null; agent: TLocalAgentKind }, model: ResolvedModel) {
     const launch = runFor({
       mode: p.mode, tier: p.tier, verify: p.verify,
       budgetState: p.budgetKey && this.d.budgets ? this.d.budgets.judge(p.budgetKey, this.liveMs(p.budgetKey)) : "ok",
       quotaPercent: this.d.quota?.usedPercent() ?? null, quotaWarning: this.d.quota?.warning() ?? false,
     });
     const used = model.source === "gateway" ? model.model : model.model ?? launch.model;
-    const named = { source: model.source, sourceLabel: model.label, modelName: used ? this.d.models.displayName(used) : null, actual: null };
+    const named = { source: model.source, sourceLabel: model.label, harness: p.agent, origin: model.origin, modelName: used ? this.d.models.displayName(used) : null, actual: null };
     const view: TLocalRun = model.source === "gateway"
       ? { mode: p.mode, model: model.model, effort: null, multiAgent: false, ...named }
       : { mode: p.mode, model: used, effort: launch.effort, multiAgent: launch.multiAgent, ...named };
@@ -1518,7 +1519,7 @@ export class SessionManager {
     const model = await this.d.models.resolve(req.modelProfileId);
     if (!model) throw new SessionError("validation", "没有这个模型配置");
     const budgetKey = req.taskBudget?.taskId ? Budgets.key(req.taskBudget.taskId, "") : null;
-    return this.planRun({ mode: req.taskBudget?.budget.mode ?? "auto", tier: req.modelTier ?? "normal", verify: false, budgetKey }, model).view;
+    return this.planRun({ mode: req.taskBudget?.budget.mode ?? "auto", tier: req.modelTier ?? "normal", verify: false, budgetKey, agent: req.agent ?? "claude-code" }, model).view;
   }
 
   /**
@@ -1529,6 +1530,8 @@ export class SessionManager {
     if (!rec.run || rec.run.actual?.model === actual) return;
     const requested = rec.run.model;
     rec.run = { ...rec.run, actual: { model: actual, modelName: modelDisplayName(actual), at: nowIso() } };
+    // 经 magpie：来源按实际模型名的前缀重认（codex/… 是 Codex 订阅）
+    if (rec.run.origin?.via === "magpie") rec.run.origin = modelOrigin({ source: "gateway", baseUrl: `http://127.0.0.1:${MAGPIE_PORT}`, model: actual });
     if (requested && rec.run.source === "subscription") this.d.models.noteActual(requested, actual);
     this.save(rec);
     if (requested && !sameModel(requested, actual)) {

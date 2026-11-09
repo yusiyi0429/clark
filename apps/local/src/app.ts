@@ -7,6 +7,7 @@ import { Pairings, TokenStore } from "./pairing.js";
 import { createSecretStore, type SecretStore } from "./secrets.js";
 import { ModelProfiles } from "./models.js";
 import { CustomTools } from "./customTools.js";
+import { readsTokenHubSpend } from "./modelOrigin.js";
 import { Folders } from "./folders.js";
 import { Outbox } from "./outbox.js";
 import { CloudLink, Settings, fetchAttachment, fetchVerifyBrief } from "./cloud.js";
@@ -101,7 +102,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   const spend = new GatewaySpend(async () => {
     const out: { baseUrl: string; apiKey: string }[] = [];
     for (const p of await models.list()) {
-      if (p.source !== "gateway" || !p.hasKey) continue;
+      if (p.source !== "gateway" || !p.hasKey || (p.origin && !readsTokenHubSpend(p.origin))) continue; // 经 magpie 的、认得出的厂商不读 TokenHub 的统计
       const m = await models.resolve(p.id);
       if (m?.baseUrl && m.apiKey) out.push({ baseUrl: m.baseUrl, apiKey: m.apiKey });
     }
