@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyReply } from "fastify";
+import { ConversationModelListResponse, ProjectPipelineModel, type TConversationModelChoice, type TConversationModelOption } from "@warmap/contracts";
 import { AskAnswerRecord, ConversationCard, SUB_SESSION_REPORT_PREFIX, type TAskAnswerRecord, type TBuddyPlan, type TConversationCard, type TConversationMessageRequest, type TConversationModel, type TPartnerMemoryItem } from "@warmap/contracts";
 import { turnFailureCopy } from "./conversationRecovery.js";
 import { segmentDateLabel, startsNewSegment } from "./conversationSegments.js";
@@ -329,6 +330,32 @@ export function createChatService(options: {
       const { memories } = await json<{ memories: TPartnerMemoryItem[] }>(viewer, requestId, "/memories");
       return memories.map((item) => ({ id: item.id, category: item.category, text: item.text, project: item.project ?? null,
         tentative: item.tentative === true, updatedAt: item.updatedAt }));
+    },
+    /**
+     * 按对话选模型（17.2 第 36 条）：能选的模型、一段对话选的、改选（null 回到默认）。Chat 还没有这几条接口（404）时当没有可选的、没选。
+     * 回来的数据对不上契约当 Chat 版本不对。
+     */
+    async models(viewer: ChatViewer, requestId: string): Promise<TConversationModelOption[]> {
+      const value: unknown = await json(viewer, requestId, "/models").catch((error) => {
+        if (error instanceof ChatServiceError && error.status === 404) return { models: [] };
+        throw error;
+      });
+      if (!Value.Check(ConversationModelListResponse, value)) throw new ChatServiceError(502, "CHAT_CONTRACT_MISMATCH", "对话服务的模型列表版本不匹配，请检查部署版本。");
+      return value.models;
+    },
+    async conversationModel(viewer: ChatViewer, requestId: string, conversationId: string): Promise<TConversationModelChoice | null> {
+      const value: unknown = await json(viewer, requestId, `/conversations/${encodeURIComponent(conversationId)}/model`).catch((error) => {
+        if (error instanceof ChatServiceError && error.status === 404) return { choice: null };
+        throw error;
+      });
+      if (!Value.Check(ProjectPipelineModel, value)) throw new ChatServiceError(502, "CHAT_CONTRACT_MISMATCH", "对话服务的模型选择版本不匹配，请检查部署版本。");
+      return value.choice;
+    },
+    async setConversationModel(viewer: ChatViewer, requestId: string, conversationId: string, choice: TConversationModelChoice | null): Promise<TConversationModelChoice | null> {
+      const value: unknown = await json(viewer, requestId, `/conversations/${encodeURIComponent(conversationId)}/model`,
+        { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ choice }) });
+      if (!Value.Check(ProjectPipelineModel, value)) throw new ChatServiceError(502, "CHAT_CONTRACT_MISMATCH", "对话服务的模型选择版本不匹配，请检查部署版本。");
+      return value.choice;
     },
     async quality<S extends TSchema>(viewer: ChatViewer, requestId: string, path: string, schema: S, body?: unknown, signal?: AbortSignal): Promise<Static<S>> {
       const value: unknown = await json(viewer, requestId, `/task-quality${path}`, {

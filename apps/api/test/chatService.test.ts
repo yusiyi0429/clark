@@ -47,7 +47,10 @@ async function fakeChat(options: {
   cancel?: (res: ServerResponse, request: ChatRequest) => void;
   /** POST /conversations 开段之前先等它（模拟 Chat 卡住、或开段期间别的进程先登记了）。 */
   beforeCreate?: () => Promise<void>;
+  /** 按对话选模型（17.2 第 36 条）：GET /models 回它，GET/PUT /conversations/:id/model 读改；没给时这几条 404（老 Chat）。 */
+  models?: { source: string; modelId: string; label: string; efforts: string[]; defaultEffort: string; isDefault: boolean }[];
 } = {}) {
+  const choices = new Map<string, unknown>();
   const requests: ChatRequest[] = [];
   const now = () => new Date().toISOString();
   const listed: FakeConversation[] = (options.conversations ?? []).map((item) => (typeof item === "string" ? { conversationId: item, createdAt: now(), updatedAt: now() } : item));
@@ -82,6 +85,16 @@ async function fakeChat(options: {
       return send(200, (options.segments?.[history[1]] ?? options.pages)?.[history[2]] ?? { messages: [], runs: [], nextCursor: null });
     }
     if (request.method === "POST" && request.url.endsWith("/attachments")) return send(200, options.upload?.(request));
+    const modelPath = /^\/conversations\/([^/]+)\/model$/.exec(request.url);
+    if (options.models && request.method === "GET" && request.url === "/models") return send(200, { models: options.models });
+    if (options.models && modelPath && request.method === "GET") return send(200, { choice: choices.get(modelPath[1]) ?? null });
+    if (options.models && modelPath && request.method === "PUT") {
+      const { choice } = JSON.parse(request.body) as { choice: { source: string; modelId: string; effort: string } | null };
+      if (choice && !options.models.some((model) => model.source === choice.source && model.modelId === choice.modelId && model.efforts.includes(choice.effort)))
+        return send(400, { error: { code: "INVALID_MODEL_CHOICE", message: "没有这个模型，或它不支持这档思考程度" } });
+      choices.set(modelPath[1], choice);
+      return send(200, { choice });
+    }
     if (request.method === "POST" && /^\/turns\/[^/]+\/cancel$/.test(request.url) && options.cancel) return options.cancel(res, request);
     if (request.method === "POST" && request.url.endsWith("/turns")) {
       // 和 Chat 的 TurnCommand 一样不收多余字段：字段名对不上时整轮 400。
@@ -925,6 +938,48 @@ describe("项目对话走 Chat（project:<projectId>，新首页第 16 节）", 
     } finally {
       await f.close();
       await chat.close();
+    }
+  }, 40_000);
+
+  it("17.2 第 36 条：项目对话选模型和思考程度转给 Chat——列表照 Chat 的；没选为 null；改选存在项目那段上（还没建先建），不合法照 Chat 的 400；别人的项目 404；老 Chat 没这几条接口时列表为空", async () => {
+    const models = [{ source: "TokenHub · wangsu", modelId: "wangsu/claude", label: "claude", efforts: ["low", "medium", "high"], defaultEffort: "medium", isDefault: true },
+      { source: "TokenHub · aliyun", modelId: "aliyun/qwen", label: "千问", efforts: ["off", "high"], defaultEffort: "off", isDefault: false }];
+    const chat = await fakeChat({ conversations: ["main-segment"], models });
+    const f = await pipelineFixture(chat);
+    try {
+      const projectId = await newProject(f);
+      expect((await f.call("GET", "/api/me/conversation-models")).json()).toEqual({ models });
+      const path = `/api/me/projects/${projectId}/pipeline/model`;
+      // 项目对话还没建：读是 null，不开段。
+      expect((await f.call("GET", path)).json()).toEqual({ choice: null });
+      expect(createdSegments(chat)).toHaveLength(0);
+      const qwen = { source: "TokenHub · aliyun", modelId: "aliyun/qwen", effort: "high" };
+      expect((await f.call("PUT", path, { choice: qwen })).json()).toEqual({ choice: qwen });
+      const pipeline = (await open(f, projectId)).json().conversationId as string;
+      expect(createdSegments(chat)).toHaveLength(1);
+      expect(chat.requests.filter((request) => request.method === "PUT").map((request) => [request.url, request.headers["x-viewer-role"]]))
+        .toEqual([[`/conversations/${pipeline}/model`, "member"]]);
+      expect((await f.call("GET", path)).json()).toEqual({ choice: qwen });
+      const invalid = await f.call("PUT", path, { choice: { ...qwen, effort: "medium" } });
+      expect([invalid.statusCode, invalid.json().code]).toEqual([400, "INVALID_MODEL_CHOICE"]);
+      expect((await f.call("PUT", path, { choice: null })).json()).toEqual({ choice: null });
+      expect((await f.call("GET", path)).json()).toEqual({ choice: null });
+      expect((await f.call("GET", `/api/me/projects/${randomUUID()}/pipeline/model`)).statusCode).toBe(404);
+      expect((await f.call("PUT", `/api/me/projects/${randomUUID()}/pipeline/model`, { choice: null })).statusCode).toBe(404);
+    } finally {
+      await f.close();
+      await chat.close();
+    }
+    const old = await fakeChat({ conversations: ["main-segment"] });
+    const g = await pipelineFixture(old);
+    try {
+      const projectId = await newProject(g);
+      expect((await g.call("GET", "/api/me/conversation-models")).json()).toEqual({ models: [] });
+      await open(g, projectId);
+      expect((await g.call("GET", `/api/me/projects/${projectId}/pipeline/model`)).json()).toEqual({ choice: null });
+    } finally {
+      await g.close();
+      await old.close();
     }
   }, 40_000);
 
