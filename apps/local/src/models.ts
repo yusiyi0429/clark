@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { TLocalModelOrigin, TLocalModelProfile, TLocalModelProfileUpsert, TLocalModelTier } from "@warmap/contracts";
+import type { TLocalEffort, TLocalModelOrigin, TLocalModelProfile, TLocalModelProfileUpsert, TLocalModelTier } from "@warmap/contracts";
 import { isLoopback, isMagpie, modelOrigin } from "./modelOrigin.js";
 import { readJson, writeJsonAtomic } from "./store.js";
 import type { SecretStore } from "./secrets.js";
@@ -20,10 +20,17 @@ export interface ResolvedModel {
   origin: TLocalModelOrigin;
 }
 
+/**
+ * 能选的思考程度（契约 LocalEffort）：Claude Code 的订阅模型都是这五档（11/09 实测 2.1.318 握手报的 Opus 5.5、Fable 5.1、Sonnet 5.5、Haiku 5.5）；
+ * 网关模型本机不传思考程度，不给选；Codex 12 月接上以后按它的模型目录（codex debug models）给。
+ */
+const CLAUDE_EFFORTS: TLocalEffort[] = ["low", "medium", "high", "xhigh", "max"];
+const effortsOf = (p: { agent: string; source: string }): TLocalEffort[] => (p.agent === "claude-code" && p.source === "subscription" ? [...CLAUDE_EFFORTS] : []);
+
 /** magpie 不认钥匙：照它的约定传 magpie（本人没填时）。 */
 const MAGPIE_KEY = "magpie";
 
-type Stored = Omit<TLocalModelProfile, "hasKey" | "origin">;
+type Stored = Omit<TLocalModelProfile, "hasKey" | "origin" | "efforts" | "defaultEffort">;
 
 const builtIn: Stored = {
   id: SUBSCRIPTION_ID, label: "我的 Claude 订阅", source: "subscription", agent: "claude-code",
@@ -103,7 +110,7 @@ export class ModelProfiles {
   async list(): Promise<TLocalModelProfile[]> {
     const out: TLocalModelProfile[] = [];
     for (const p of this.stored()) {
-      out.push({ ...p, origin: modelOrigin(p), webSearch: p.webSearch ?? searchDefault(p.source, p.model), hasKey: p.source === "gateway" ? Boolean(await this.secrets.get(keyName(p.id))) : false });
+      out.push({ ...p, origin: modelOrigin(p), efforts: effortsOf(p), defaultEffort: null, webSearch: p.webSearch ?? searchDefault(p.source, p.model), hasKey: p.source === "gateway" ? Boolean(await this.secrets.get(keyName(p.id))) : false });
     }
     return out;
   }
@@ -144,6 +151,12 @@ export class ModelProfiles {
     writeJsonAtomic(this.file, list.filter((p) => p.id !== id));
     await this.secrets.delete(keyName(id));
     return true;
+  }
+
+  /** 这个配置能选的思考程度（没有这个配置为空）。 */
+  efforts(id: string): TLocalEffort[] {
+    const p = this.stored().find((x) => x.id === id);
+    return p ? effortsOf(p) : [];
   }
 
   /** 这个配置给哪个执行方用（没有这个配置为 null）。 */

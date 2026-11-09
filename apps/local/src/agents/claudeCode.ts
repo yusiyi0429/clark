@@ -1,6 +1,6 @@
 import { spawn, execFile, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import type { TLocalBackgroundItem, TLocalPermissionMode, TLocalPermissionRequestView, TLocalQuestion, TLocalUsage } from "@warmap/contracts";
+import type { TLocalBackgroundItem, TLocalEffort, TLocalPermissionMode, TLocalPermissionRequestView, TLocalQuestion, TLocalUsage } from "@warmap/contracts";
 import type { EventBody } from "../eventLog.js";
 import { AgentStartError, type AgentAdapter, type AgentLaunch, type AgentRun, type PermissionAnswer, type TurnModels } from "./types.js";
 import { buildClaudeArgs, childEnv, describeTool, homeDir, personalSettingsSetKey, versionAtLeast } from "./claudeEnv.js";
@@ -235,6 +235,11 @@ class ClaudeRun implements AgentRun {
 
   async setMultiAgent(on: boolean): Promise<boolean> {
     const r = await this.control({ subtype: "apply_flag_settings", settings: { ultracode: on } }, 10_000);
+    return r.subtype === "success";
+  }
+
+  async setEffort(effort: TLocalEffort): Promise<boolean> {
+    const r = await this.control({ subtype: "apply_flag_settings", settings: { effortLevel: effort } }, 10_000);
     return r.subtype === "success";
   }
 

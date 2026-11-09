@@ -118,6 +118,50 @@ describe("子会话换模型", { timeout: 40_000 }, () => {
     await call("POST", `/v1/sessions/${id}/kill`, {});
   });
 
+  it("思考程度：订阅能选五档、网关不能选；开工带了就照它传，不能选的回 400", async () => {
+    const profiles = (await call("GET", "/v1/models")).body.profiles;
+    expect(Object.fromEntries(profiles.map((p: any) => [p.id, [p.efforts, p.defaultEffort]]))).toEqual({
+      subscription: [["low", "medium", "high", "xhigh", "max"], null], "sub-haiku": [["low", "medium", "high", "xhigh", "max"], null], th: [[], null],
+    });
+    mkdirSync(join(work, "E"), { recursive: true });
+    const bad = await call("POST", "/v1/sessions", { subject: { kind: "card", cardId: "E" }, title: "E", cwd: join(work, "E"), firstMessage: "做 E", modelProfileId: "th", effort: "high" });
+    expect([bad.status, bad.body.error.message]).toEqual([400, "「TokenHub」不能选「high」这档思考程度"]);
+    expect((await call("POST", "/v1/runs/preview", { effort: "xhigh" })).body).toMatchObject({ effort: "xhigh" });
+    const r = await call("POST", "/v1/sessions", { subject: { kind: "card", cardId: "E" }, title: "E", cwd: join(work, "E"), firstMessage: "做 E", effort: "xhigh" });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body).toMatchObject({ effort: "xhigh", run: { effort: "xhigh" } });
+    await until(() => launches(r.body.id).length === 1);
+    const argv = launches(r.body.id)[0].argv as string[];
+    expect(argv[argv.indexOf("--effort") + 1]).toBe("xhigh");
+    await call("POST", `/v1/sessions/${r.body.id}/kill`, {});
+  });
+
+  it("开着换思考程度：Claude Code 当场换（apply_flag_settings），不重开；null 回到自动；换模型时选的那档新模型支持就留着", async () => {
+    const id = await open("F");
+    await waitingPermission(id);
+    const up =await call("PUT", `/v1/sessions/${id}/model`, { effort: "max" });
+    expect(up.body).toMatchObject({ applied: "now", session: { modelProfileId: "subscription", effort: "max", run: { effort: "max" } } });
+    expect(trace().filter((l) => l.applyFlags?.effortLevel).map((l) => l.applyFlags.effortLevel)).toContain("max");
+    expect(launches(id)).toHaveLength(1);
+    // 回到自动：标准档是 medium
+    const auto = await call("PUT", `/v1/sessions/${id}/model`, { effort: null });
+    expect(auto.body.session.effort).toBeUndefined();
+    expect(auto.body.session.run.effort).toBe("medium");
+    // 选了 high 再换成订阅 Haiku：high 留着，只换模型
+    await call("PUT", `/v1/sessions/${id}/model`, { effort: "high" });
+    const haiku = await call("PUT", `/v1/sessions/${id}/model`, { modelProfileId: "sub-haiku" });
+    expect(haiku.body).toMatchObject({ applied: "now", session: { modelProfileId: "sub-haiku", effort: "high", run: { model: "haiku", effort: "high" } } });
+    // 网关不能选思考程度；什么都不带回 400
+    expect((await call("PUT", `/v1/sessions/${id}/model`, { modelProfileId: "th", effort: "low" })).status).toBe(400);
+    expect((await call("PUT", `/v1/sessions/${id}/model`, {})).status).toBe(400);
+    // 换到网关：选的那档它不支持，回到自动（网关不传思考程度）
+    const th = await call("PUT", `/v1/sessions/${id}/model`, { modelProfileId: "th" });
+    expect(th.body).toMatchObject({ applied: "after_turn", session: { pendingModel: { modelProfileId: "th", effort: null } } });
+    await call("POST", `/v1/sessions/${id}/kill`, {});
+    await until(async () => (await session(id)).session.modelProfileId === "th");
+    expect((await session(id)).session.effort).toBeUndefined();
+  });
+
   it("进程不在（强停了）：直接换，下次开起来用新的；没有这个配置回 400", async () => {
     const id = await open("D");
     await waitingPermission(id);

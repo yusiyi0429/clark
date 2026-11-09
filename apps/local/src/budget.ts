@@ -13,7 +13,7 @@ export const TIER_RUN: Record<TLocalModelTier, { model: string; effort: TLocalEf
   normal: { model: "opus", effort: "medium" },
   light: { model: "sonnet", effort: "low" },
 };
-const LOWER: Record<TLocalEffort, TLocalEffort> = { max: "xhigh", xhigh: "high", high: "medium", medium: "low", low: "low" };
+const LOWER: Record<TLocalEffort, TLocalEffort> = { ultra: "max", max: "xhigh", xhigh: "high", high: "medium", medium: "low", low: "low" };
 /** 额度到这个百分比，「无上限」对新的轮次关掉多 agent，好在 100% 时干净停下（11.3）。 */
 export const MULTI_AGENT_OFF_PERCENT = 95;
 
