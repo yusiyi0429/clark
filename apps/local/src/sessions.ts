@@ -577,7 +577,7 @@ export class SessionManager {
     if (subject.kind === "card" && !subject.cardId) throw new SessionError("validation", "卡的会话要带 cardId");
     if (subject.kind === "topic" && !subject.topicId) throw new SessionError("validation", "专题的会话要带 topicId");
     if (subject.kind === "plan" && !subject.taskId && !subject.projectId) throw new SessionError("validation", "规划员的会话要带 taskId 或 projectId");
-    if (subject.kind !== "topic" && req.critics?.length) throw new SessionError("validation", "挑刺岗位只给专题的评审会用");
+    if (subject.kind !== "topic" && req.critics?.length) throw new SessionError("validation", "挑刺技能只给专题的评审会用");
     if (subject.kind !== "card" && req.after?.length) throw new SessionError("validation", "只有卡能等别的卡");
     let cwd: string;
     // 不指定目录时：项目在这台电脑上绑的文件夹（新首页设计 16.6）
@@ -966,7 +966,7 @@ export class SessionManager {
     const rec = this.must(id);
     if (rec.status === "queued") throw new SessionError("conflict", "还在等空位，开始后再说");
     if (rec.queuedMessage !== null && !this.starting.has(id)) throw new SessionError("conflict", "这件还没开始过（排队时取消了或没开起来），要做就重新开工");
-    if (req.kind === "review" && (rec.subject.kind !== "topic" || !rec.critics.length)) throw new SessionError("validation", "评审会只给开工时带了挑刺岗位的专题用");
+    if (req.kind === "review" && (rec.subject.kind !== "topic" || !rec.critics.length)) throw new SessionError("validation", "评审会只给开工时带了挑刺技能的专题用");
     if (req.kind !== "review" && !req.text && !req.attachments?.length) throw new SessionError("validation", "说一句要有内容");
     if (rec.subject.kind === "plan" && !rec.planAsked) { rec.planAsked = true; this.save(rec); } // 本人说了话：开拆前要问的算交代过了
     // 附件（新首页设计 14.5）：先取回、存进工作区，有一个不行整句不发

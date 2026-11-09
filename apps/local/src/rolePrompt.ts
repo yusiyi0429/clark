@@ -24,7 +24,7 @@ const PLAN_RULES = `## 规矩
   或者和这件事对不上（比如是写代码的活，却绑了一个空文件夹、没有远端），就先不出派活单：用「问用户」（AskUserQuestion）问本人，
   在哪个文件夹做、要不要新建、要不要连 GitHub 仓库、是不是从别处（比如 Codex）迁过来的、做出来是不是本人要的那样。每个问题给几个选项，推荐的排第一并标「（推荐）」。
   本人答了再拆；不要怕问。只看，不改文件夹。
-- 把 Task 或项目拆成计划和派活单，用 propose_plan 交：计划几步、先后、风险；派活单每件写交代、完成标准（每行一条、能检查）、对约定第几条、交给哪个岗位（交代里岗位清单的名字）、模型档位。一件就是一个 worker 一次能交回的活。
+- 把 Task 或项目拆成计划和派活单，用 propose_plan 交：计划几步、先后、风险；派活单每件写交代、完成标准（每行一条、能检查）、对约定第几条、交给哪个技能（交代里技能清单的名字）、模型档位。一件就是一个 worker 一次能交回的活。
 - 每件的${CARD_TITLE_RULE}。标题不合规矩时 propose_plan 会退回，照它说的改完整份再交。
 - 交代里有「本人原话」时，每件派活单的 sourceWords 写原话里和这件有关的片段：只能原样摘，不能改写、不能拼接；拿不准就不写（云端会用整条原话）。
 - 一件要用到前面几件的结果（比如合起来跑测试、总验收）时，after 写上它要等的那几件的位置；本机会等那几件合回后再开它。互不相干的件不写 after，好同时做。
@@ -32,7 +32,7 @@ const PLAN_RULES = `## 规矩
 
 const VERIFY_RULES = `## 规矩
 - 你是验收员：只读，不改文件、不跑命令，也不替执行方补做。
-- 依据是交代里的约定、卡的完成标准、卡所属岗位的验收口径和你自己的验收口径；材料是交回里的自评、证据和产出（产出文件在当前工作目录里，可以读）。需要时用天枢 MCP 的 get_task_context 读 Task 的上下文。
+- 依据是交代里的约定、卡的完成标准、卡所属技能的验收口径和你自己的验收口径；材料是交回里的自评、证据和产出（产出文件在当前工作目录里，可以读）。需要时用天枢 MCP 的 get_task_context 读 Task 的上下文。
 - 每条完成标准判一次：达到（met）、部分（partial）、没达到（unmet），写理由和依据，没达到的写怎么补；标准以外的建议放进 beyondScope，不算没达到。证据不够就判没达到。
 - 对照交代里的改动：完成标准没要求的新增或改动的文件（报告、命令输出、临时文件等），逐个指出来，写进相关那条的理由或 beyondScope。
 - 交代里有「本人原话」时：逐条判完完成标准，再对一遍原话。产出明显漏了原话里明说的（missing），或做了原话里没要的（extra），写进 sourceWordIssues：quote 原样抄是哪一句，再写为什么。有一条就是没过，完成标准全达到也一样；拿不准的不写。
@@ -93,7 +93,7 @@ export function systemPrompt(
     parts.push(`## 本人加的工具\n${list}\n查数据的照权限模式用，改数据的每次都要本人批准。`);
   }
   if (role) {
-    parts.push(roleBlock(role, "## 你的岗位："));
+    parts.push(roleBlock(role, "## 你的技能："));
     const tools = role.tools.map((t) => `- ${TOOL_TEXT[t]}${t === "feishu" ? FEISHU_NOTE[feishu ?? "none"] : ""}`);
     parts.push(`### 能用的工具\n${tools.length ? tools.join("\n") : "- 只用 Claude Code 自带的读写和命令"}`);
   }
@@ -107,8 +107,8 @@ export function systemPrompt(
 /** --agents 的定义：每个挑刺岗位一个只读的子 agent。 */
 export function criticAgents(critics: TLocalRole[], searchTool: string | null): Record<string, { description: string; prompt: string; tools: string[] }> {
   return Object.fromEntries(critics.map((c, i) => [criticAgentName(i), {
-    description: `挑刺岗位「${c.name}」：按这个岗位的口径给专题的某一版挑刺，只提意见、不改稿`,
-    prompt: `${roleBlock(c, "# 你是挑刺岗位：")}\n\n## 怎么做\n读主会话指定的那一版，按你的职责和口径逐条列问题、理由和建议，最后一句给总体判断。只提意见，不改任何文件。\n`,
+    description: `挑刺技能「${c.name}」：按这个技能的口径给专题的某一版挑刺，只提意见、不改稿`,
+    prompt: `${roleBlock(c, "# 你用的挑刺技能：")}\n\n## 怎么做\n读主会话指定的那一版，按你的职责和口径逐条列问题、理由和建议，最后一句给总体判断。只提意见，不改任何文件。\n`,
     tools: ["Read", "Grep", "Glob", ...(searchTool && c.tools.includes("web_search") ? [searchTool] : [])],
   }]));
 }

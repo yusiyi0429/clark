@@ -167,7 +167,7 @@ describe("规划员和验收员", { timeout: 30_000 }, () => {
       // 验收员的提示词：验收规矩 + 交代里的验收员岗位
       const vPrompt = readFileSync(flag(vv, "--append-system-prompt-file")!, "utf8");
       expect(vPrompt).toContain("你是验收员：只读");
-      expect(vPrompt).toContain("## 你的岗位：验收员");
+      expect(vPrompt).toContain("## 你的技能：验收员");
       expect(readFileSync(flag(pv, "--append-system-prompt-file")!, "utf8")).toContain("你是规划员：只读");
       // 只读的两个从没来要过写文件的权限，第一句话是交代
       for (const id of [v.id, p.id]) expect(h.events(id).some((e) => e.type === "permission_request")).toBe(false);
