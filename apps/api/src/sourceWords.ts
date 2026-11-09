@@ -19,6 +19,34 @@ export const SOURCE_TURNS = 5;
 /** 拆卡的对象：一件 Task，或一个没挂 Task 的项目。 */
 export type SplitTarget = { taskId: string | null; projectId: string | null };
 
+/**
+ * 拆卡那几块按序号插进项目对话（17.2 第 29 条）：网页没带时，读这个项目（拆 Task 的是它挂的项目）的对话现在最后一条消息的 sequence。
+ * 不在项目里、对话还没有消息、读不到为 null。
+ */
+export function lastSequenceReader(deps: { q: Query; chat?: ChatService; conversationTurnTimeoutMs: number }) {
+  const history = projectHistoryReader(deps);
+  return async (ownerId: string, target: SplitTarget, requestId: string): Promise<number | null> => {
+    const projectId = target.projectId ?? ((await deps.q("SELECT project_id::text FROM project_goals WHERE task_id=$1 AND owner_id=$2", [target.taskId, ownerId])).rows[0]
+      ?.project_id as string | null | undefined) ?? null;
+    if (!projectId) return null;
+    return (await history(projectId, ownerId, requestId).catch(() => null))?.messages.at(-1)?.sequence ?? null;
+  };
+}
+
+/**
+ * 本机规划员的派活单第一次报上来、云端建派活单这一下的序号（17.2 第 29 条）：最近一次登记被认领了（网页先删登记再开规划员）、
+ * 还没给别的派活单用过，这次就是照它开的，用它记的，并记下给了这份派活单（planId）；不然是这台电脑连着本机时直接开的（不经过登记），
+ * 用这一下项目对话的最后一条（current）。
+ */
+export async function localPlanSequence(q: Query, ownerId: string, target: SplitTarget, planId: string, current: number | null): Promise<number | null> {
+  const row = (await q(`SELECT id,after_sequence,closed_at IS NOT NULL AND plan_id IS NULL AS claimed FROM card_split_requests
+    WHERE owner_id=$1 AND ${target.taskId ? "plan_task_id=$2" : "project_id=$2 AND plan_task_id IS NULL"} ORDER BY created_at DESC,id DESC LIMIT 1`,
+  [ownerId, target.taskId ?? target.projectId])).rows[0] as { id: string; after_sequence: number | null; claimed: boolean } | undefined;
+  if (!row?.claimed) return current;
+  await q("UPDATE card_split_requests SET plan_id=$2 WHERE id=$1", [row.id, planId]);
+  return row.after_sequence;
+}
+
 /** 网页按钮带上来的那段话：去掉首尾空白，空的当没说。 */
 export const typedWords = (words: string | undefined): string[] | undefined => words === undefined ? undefined : words.trim() ? [words.trim()] : [];
 

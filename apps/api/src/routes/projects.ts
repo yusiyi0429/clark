@@ -6,7 +6,7 @@ import { AcceptCardDraftsRequest, AcceptCardDraftsResponse, AnswerGoalChangeRequ
   ProjectDetailResponse, ProjectFeedResponse, ProjectGoalResponse, ProjectListResponse, ProjectPipelineResponse, RegisterCardSplitRequest, UpdateProjectRequest } from "@warmap/contracts";
 import { projectPlanBrief, registerProjectCardSplit } from "../cardSplits.js";
 import { answerGoalChange, goalChangeItems } from "../goalChanges.js";
-import { emptyBodyAsObject, projectHistoryReader, recentOwnerWords, typedWords } from "../sourceWords.js";
+import { emptyBodyAsObject, lastSequenceReader, projectHistoryReader, recentOwnerWords, typedWords } from "../sourceWords.js";
 import { ChatServiceError } from "../chatService.js";
 import { personDisplayNames } from "../people.js";
 import { createProject, goalView, linkGoal, setGoalDueDate, listProjects, ownProject, projectDetail, projectGoalRows, projectOwners, projectReader, projectScope, projectView, unlinkGoal,
@@ -139,7 +139,8 @@ export function registerProjectRoutes(app: AppInstance, ctx: RouteContext): void
   app.post("/api/me/projects/:projectId/card-splits", { preValidation: emptyBodyAsObject, preHandler: requireMember, schema: { params: projectParams,
     body: RegisterCardSplitRequest, response: { 200: CardSplitRequestView, 201: CardSplitRequestView } } }, async (req, reply) => handle(reply, async () => {
     const project = await activeProject(req.person!.personId, req.params.projectId);
-    const { request, created } = await registerProjectCardSplit(q, req.person!.personId, project.id, "web", ctx.now(), typedWords(req.body.words));
+    const { request, created } = await registerProjectCardSplit(q, req.person!.personId, project.id, "web", ctx.now(), typedWords(req.body.words),
+      req.body.afterSequence ?? await lastSequenceReader(ctx)(req.person!.personId, { taskId: null, projectId: project.id }, String(req.id)));
     return reply.status(created ? 201 : 200).send(request);
   }));
 
@@ -150,7 +151,9 @@ export function registerProjectRoutes(app: AppInstance, ctx: RouteContext): void
   app.post("/api/me/projects/:projectId/card-drafts/accept", { preHandler: requireMember, schema: { params: projectParams, body: AcceptCardDraftsRequest,
     response: { 200: AcceptCardDraftsResponse } } }, async (req, reply) => handle(reply, async () => {
     const project = await activeProject(req.person!.personId, req.params.projectId);
-    return { cards: await acceptProjectCardDrafts(pool, req.person!.personId, project.id, req.body, personDisplayNames(ctx.peopleDirectory), ctx.now()) };
+    // 开工那一下的序号（17.2 第 29 条）：网页带了用它，没带读这个项目对话现在最后一条。
+    const after = req.body.afterSequence ?? await lastSequenceReader(ctx)(req.person!.personId, { taskId: null, projectId: project.id }, String(req.id));
+    return { cards: await acceptProjectCardDrafts(pool, req.person!.personId, project.id, req.body, personDisplayNames(ctx.peopleDirectory), ctx.now(), after) };
   }));
 
   // 伙伴在项目对话里登记拆这个项目（register_card_split 带 projectId）：照 /internal/plan-tasks/:taskId/card-splits，INTERNAL_CHAT_TOKEN 加 X-Owner-Id；没配时不注册。
@@ -161,7 +164,8 @@ export function registerProjectRoutes(app: AppInstance, ctx: RouteContext): void
     return handle(reply, async () => {
       const project = await activeProject(id, req.params.projectId);
       const words = await recentOwnerWords(q, projectHistoryReader(ctx), id, { taskId: null, projectId: project.id }, String(req.id));
-      const { request, created } = await registerProjectCardSplit(q, id, project.id, "buddy", ctx.now(), words);
+      const { request, created } = await registerProjectCardSplit(q, id, project.id, "buddy", ctx.now(), words,
+        await lastSequenceReader(ctx)(id, { taskId: null, projectId: project.id }, String(req.id)));
       return reply.status(created ? 201 : 200).send(request);
     });
   });

@@ -89,10 +89,10 @@ export async function taskPageFacts(q: Query, open: OpenPlanTask, personId: stri
 }
 
 type PlanRow = { id: string; status: TCardPlanView["status"]; hint: string | null; error: string | null; created_at: Date; started_at: Date | null; finished_at: Date | null;
-  source: "cloud" | "local"; summary: string | null; steps: TCardPlanView["steps"]; risks: string[]; revision: number | null };
+  source: "cloud" | "local"; summary: string | null; steps: TCardPlanView["steps"]; risks: string[]; revision: number | null ; after_sequence: number | null; started_after_sequence: number | null };
 export const planView = (row: PlanRow, expectedSeconds: number): TCardPlanView => ({ id: row.id, status: row.status, hint: row.hint, error: row.status === "failed" ? row.error : null,
   createdAt: row.created_at.toISOString(), startedAt: row.started_at?.toISOString() ?? null, finishedAt: row.finished_at?.toISOString() ?? null, expectedSeconds,
-  source: row.source, summary: row.summary, steps: row.steps, risks: row.risks, revision: row.revision });
+  source: row.source, summary: row.summary, steps: row.steps, risks: row.risks, revision: row.revision , afterSequence: row.after_sequence, startedAfterSequence: row.started_after_sequence });
 
 /** 拆卡预计用时：最近 20 次拆完的中位数，30 秒到 10 分钟之间；还没有拆完过的按 1 分钟。 */
 export async function planExpectedSeconds(q: Query): Promise<number> {
@@ -266,10 +266,10 @@ export async function cardBrief(q: Query, ownerId: string, id: string, planTask:
 }
 
 /** 拆卡（Task 负责人）：同一个 Task 已有一次在排队或在跑时返回那一次（created=false），不另起。 */
-export async function createCardPlan(q: Query, own: OwnTask, hint: string | undefined): Promise<{ plan: TCardPlanView; created: boolean }> {
-  const inserted = (await q(`INSERT INTO card_plans(id,plan_task_id,mission_id,owner_id,hint) VALUES($1,$2,$3,$4,$5)
+export async function createCardPlan(q: Query, own: OwnTask, hint: string | undefined, afterSequence: number | null = null): Promise<{ plan: TCardPlanView; created: boolean }> {
+  const inserted = (await q(`INSERT INTO card_plans(id,plan_task_id,mission_id,owner_id,hint,after_sequence) VALUES($1,$2,$3,$4,$5,$6)
     ON CONFLICT (plan_task_id) WHERE status IN ('queued','running') DO NOTHING RETURNING *`,
-  [randomUUID(), own.task.taskId, own.task.missionId, own.viewerId, hint?.trim() || null])).rows[0] as PlanRow | undefined;
+  [randomUUID(), own.task.taskId, own.task.missionId, own.viewerId, hint?.trim() || null, afterSequence])).rows[0] as PlanRow | undefined;
   const row = inserted ?? (await q("SELECT * FROM card_plans WHERE plan_task_id=$1 AND status IN ('queued','running')", [own.task.taskId])).rows[0] as PlanRow;
   return { plan: planView(row, await planExpectedSeconds(q)), created: Boolean(inserted) };
 }
@@ -280,17 +280,20 @@ export async function createCardPlan(q: Query, own: OwnTask, hint: string | unde
  * 交给 Claude Code 的卡都要有岗位（worker 列表按岗位列）：没配时照草稿建议的预设、没建议时照「执行员」预设给本人加上并挂上。
  * start（新首页第 4.4 节）：交给 Claude Code 的卡同时登记要开工，由本人电脑上开着的网页认领后交给本机程序。
  */
-export async function acceptCardDrafts(pool: Pool, own: OwnTask, input: TAcceptCardDraftsRequest, names: Map<string, string>, now: Date): Promise<TCardTaskView[]> {
-  return acceptDrafts(pool, own.viewerId, { taskId: own.task.taskId, missionId: own.task.missionId, projectId: null, criteria: own.criteria }, input, names, now);
+export async function acceptCardDrafts(pool: Pool, own: OwnTask, input: TAcceptCardDraftsRequest, names: Map<string, string>, now: Date,
+  afterSequence: number | null = null): Promise<TCardTaskView[]> {
+  return acceptDrafts(pool, own.viewerId, { taskId: own.task.taskId, missionId: own.task.missionId, projectId: null, criteria: own.criteria }, input, names, now, afterSequence);
 }
 
 /** 把没挂 Task 的项目的派活单草稿放进看板（16.3，项目负责人，调用方核对过）：卡挂项目、不挂 Task 和 Mission，按自己的完成标准验。 */
-export async function acceptProjectCardDrafts(pool: Pool, ownerId: string, projectId: string, input: TAcceptCardDraftsRequest, names: Map<string, string>, now: Date):
-  Promise<TCardTaskView[]> {
-  return acceptDrafts(pool, ownerId, { taskId: null, missionId: null, projectId, criteria: [] }, input, names, now);
+export async function acceptProjectCardDrafts(pool: Pool, ownerId: string, projectId: string, input: TAcceptCardDraftsRequest, names: Map<string, string>, now: Date,
+  afterSequence: number | null = null): Promise<TCardTaskView[]> {
+  return acceptDrafts(pool, ownerId, { taskId: null, missionId: null, projectId, criteria: [] }, input, names, now, afterSequence);
 }
 
-async function acceptDrafts(pool: Pool, ownerId: string, target: PlanTarget, input: TAcceptCardDraftsRequest, names: Map<string, string>, now: Date): Promise<TCardTaskView[]> {
+/** afterSequence：开工那一下本人看到的项目对话最后一条（17.2 第 29 条），记成这几份派活单的 startedAfterSequence（第一次开工记了就不改）。 */
+async function acceptDrafts(pool: Pool, ownerId: string, target: PlanTarget, input: TAcceptCardDraftsRequest, names: Map<string, string>, now: Date,
+  afterSequence: number | null): Promise<TCardTaskView[]> {
   const ids: string[] = [], plans = new Set<string>(), starts: string[] = [];
   const client = await pool.connect();
   try {
@@ -327,6 +330,8 @@ async function acceptDrafts(pool: Pool, ownerId: string, target: PlanTarget, inp
       WHERE t.id=w.task_id`, [[...plans]]);
     if (input.start && starts.length) await requestStarts(client.query.bind(client), { ownerId, origin: "web", now,
       items: starts.map((cardId) => ({ kind: "card", cardId, planTaskId: target.taskId })) });
+    if (afterSequence !== null && plans.size)
+      await client.query("UPDATE card_plans SET started_after_sequence=$2 WHERE id=ANY($1::uuid[]) AND started_after_sequence IS NULL", [[...plans], afterSequence]);
     await client.query("COMMIT");
   } catch (cause) { await client.query("ROLLBACK").catch(() => undefined); throw cause; }
   finally { client.release(); }
