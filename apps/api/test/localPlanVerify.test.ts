@@ -506,26 +506,87 @@ describe("拆卡和验收在本机（第 21 节）", { timeout: 30_000 }, () => 
       await say("先把首页拆一下");
       const seen = await last();
       expect(seen).toBeGreaterThan(1);
-      // 没带：读项目对话现在最后一条；派活单照登记记的。
+      // 没带：读项目对话现在最后一条。
       const registered = (await f.call("POST", `/api/me/projects/${project}/card-splits`, { words: "拆首页" })).json();
       expect(registered.afterSequence).toBe(seen);
       expect((await f.call("GET", "/api/me/card-splits")).json().requests[0].afterSequence).toBe(seen);
+      // 网页认领了登记、规划员没开起来，登记回去（不带序号）：照登记的规则读对话现在最后一条。
+      expect((await f.call("DELETE", `/api/me/card-splits/${registered.id}`)).statusCode).toBe(204);
+      await say("顺便看看手机版");
+      const given = await last();
+      expect(given).toBeGreaterThan(seen);
+      const back = (await f.call("POST", `/api/me/projects/${project}/card-splits`, { words: "拆首页" })).json();
+      expect(back.afterSequence).toBe(given);
+      // 再认领、开起来：派活单照登记记的，不是派活单报上来时对话的最后一条。
+      expect((await f.call("DELETE", `/api/me/card-splits/${back.id}`)).statusCode).toBe(204);
+      await say("拆的时候我先去开会");
       await f.sync({ kind: "plan", projectId: project }, [["card_plan", plan(1, [{ title: "画首页", criterionIndex: null }, { title: "接接口", criterionIndex: null }])]]);
+      const seenPlan = given;
       const board = async () => (await f.call("GET", `/api/me/projects/${project}/board`)).json() as { drafts: { id: string }[];
         plan: { afterSequence: number | null; startedAfterSequence: number | null } };
-      expect((await board()).plan).toMatchObject({ afterSequence: seen, startedAfterSequence: null });
+      expect((await board()).plan).toMatchObject({ afterSequence: seenPlan, startedAfterSequence: null });
       // 开工：没带读对话最新的；第二次开工不改。
       await say("就按这个开始");
       const started = await last();
       const [first, second] = (await board()).drafts;
       expect((await f.call("POST", `/api/me/projects/${project}/card-drafts/accept`, { drafts: [{ id: first.id }] })).statusCode).toBe(200);
-      expect((await board()).plan).toMatchObject({ afterSequence: seen, startedAfterSequence: started });
+      expect((await board()).plan).toMatchObject({ afterSequence: seenPlan, startedAfterSequence: started });
       expect((await f.call("POST", `/api/me/projects/${project}/card-drafts/accept`, { drafts: [{ id: second.id }], afterSequence: 1 })).statusCode).toBe(200);
       expect((await board()).plan.startedAfterSequence).toBe(started);
       // 网页带了：用带的。没挂项目的 Task 没带时读不到，是 null。
       expect((await f.call("POST", "/api/plan-tasks/task-open/card-splits", { afterSequence: 3 })).json().afterSequence).toBe(3);
       await f.call("DELETE", `/api/me/card-splits/${(await f.call("GET", "/api/me/card-splits")).json().requests.find((item: { taskId: string | null }) => item.taskId).id}`);
       expect((await f.call("POST", "/api/plan-tasks/task-open/card-splits", {})).json().afterSequence).toBeNull();
+    } finally { await f.close(); }
+  });
+  it("17.2 第 29 条：这台电脑连着本机时网页直接开规划员（不经过登记），派活单记云端建它那一下项目对话的最后一条；用过的登记不再算", async () => {
+    const f = await localFixture();
+    try {
+      const project = (await f.call("POST", "/api/me/projects", { name: "天枢" })).json().projectId as string;
+      const say = async (message: string) => expect((await f.call("POST", `/api/conversations/project:${project}/messages`, { message })).statusCode).toBe(200);
+      const last = async () => ((await f.call("GET", `/api/conversations/project:${project}/messages`)).json().messages as { sequence: number }[]).at(-1)!.sequence;
+      const planOf = async () => (await f.call("GET", `/api/me/projects/${project}/board`)).json().plan as { afterSequence: number | null };
+      const report = (session?: string, revision = 1) => f.sync({ kind: "plan", projectId: project }, [["card_plan", plan(revision, [{ title: "画首页", criterionIndex: null }])]], session);
+      // 从没登记过：建派活单那一下的最后一条。
+      await say("拆一下首页");
+      const direct = await last();
+      const first = await report();
+      expect((await planOf()).afterSequence).toBe(direct);
+      // 同一个会话再出一次：不改。
+      await say("第二件拆细一点");
+      await report(first.session, 2);
+      expect((await planOf()).afterSequence).toBe(direct);
+      // 照登记开的一次用掉了那条登记；之后再直接开，不再拿那条登记的，用现在的最后一条。
+      const registered = (await f.call("POST", `/api/me/projects/${project}/card-splits`, {})).json();
+      expect((await f.call("DELETE", `/api/me/card-splits/${registered.id}`)).statusCode).toBe(204);
+      await report();
+      expect((await planOf()).afterSequence).toBe(registered.afterSequence);
+      await say("再拆一遍");
+      const again = await last();
+      expect(again).toBeGreaterThan(registered.afterSequence);
+      await report();
+      expect((await planOf()).afterSequence).toBe(again);
+    } finally { await f.close(); }
+  });
+  it("17.2 第 29 条：首页「等你」点「开始」（Task 的开工接口，不带序号）：startedAfterSequence 读这件 Task 挂的项目对话现在的最后一条", async () => {
+    const f = await localFixture();
+    try {
+      const project = (await f.call("POST", "/api/me/projects", { name: "天枢" })).json().projectId as string;
+      expect((await f.call("PUT", `/api/me/projects/${project}/goals/task-open`)).statusCode).toBe(200);
+      const say = async (message: string) => expect((await f.call("POST", `/api/conversations/project:${project}/messages`, { message })).statusCode).toBe(200);
+      const last = async () => ((await f.call("GET", `/api/conversations/project:${project}/messages`)).json().messages as { sequence: number }[]).at(-1)!.sequence;
+      await say("拆一下对话质量");
+      const split = await last();
+      await f.sync({ kind: "plan", taskId: "task-open" }, [["card_plan", plan(1, [{ title: "跑题库" }])]]);
+      const board = async () => (await f.call("GET", "/api/plan-tasks/task-open/cards")).json() as { drafts: { id: string }[];
+        plan: { afterSequence: number | null; startedAfterSequence: number | null } };
+      expect((await board()).plan).toMatchObject({ afterSequence: split, startedAfterSequence: null });
+      await say("可以开始了");
+      const started = await last();
+      expect(started).toBeGreaterThan(split);
+      const accepted = await f.call("POST", "/api/plan-tasks/task-open/card-drafts/accept", { drafts: (await board()).drafts.map(({ id }) => ({ id })), start: true });
+      expect(accepted.statusCode).toBe(200);
+      expect((await board()).plan).toMatchObject({ afterSequence: split, startedAfterSequence: started });
     } finally { await f.close(); }
   });
 });

@@ -33,11 +33,18 @@ export function lastSequenceReader(deps: { q: Query; chat?: ChatService; convers
   };
 }
 
-/** 这个 Task 或项目最近一次登记拆卡记下的序号（派活单的 afterSequence 照它）；没有为 null。 */
-export async function latestSplitSequence(q: Query, ownerId: string, target: SplitTarget): Promise<number | null> {
-  const row = (await q(`SELECT after_sequence FROM card_split_requests WHERE owner_id=$1 AND ${target.taskId ? "plan_task_id=$2" : "project_id=$2 AND plan_task_id IS NULL"}
-    ORDER BY created_at DESC,id DESC LIMIT 1`, [ownerId, target.taskId ?? target.projectId])).rows[0] as { after_sequence: number | null } | undefined;
-  return row?.after_sequence ?? null;
+/**
+ * 本机规划员的派活单第一次报上来、云端建派活单这一下的序号（17.2 第 29 条）：最近一次登记被认领了（网页先删登记再开规划员）、
+ * 还没给别的派活单用过，这次就是照它开的，用它记的，并记下给了这份派活单（planId）；不然是这台电脑连着本机时直接开的（不经过登记），
+ * 用这一下项目对话的最后一条（current）。
+ */
+export async function localPlanSequence(q: Query, ownerId: string, target: SplitTarget, planId: string, current: number | null): Promise<number | null> {
+  const row = (await q(`SELECT id,after_sequence,closed_at IS NOT NULL AND plan_id IS NULL AS claimed FROM card_split_requests
+    WHERE owner_id=$1 AND ${target.taskId ? "plan_task_id=$2" : "project_id=$2 AND plan_task_id IS NULL"} ORDER BY created_at DESC,id DESC LIMIT 1`,
+  [ownerId, target.taskId ?? target.projectId])).rows[0] as { id: string; after_sequence: number | null; claimed: boolean } | undefined;
+  if (!row?.claimed) return current;
+  await q("UPDATE card_split_requests SET plan_id=$2 WHERE id=$1", [row.id, planId]);
+  return row.after_sequence;
 }
 
 /** 网页按钮带上来的那段话：去掉首尾空白，空的当没说。 */

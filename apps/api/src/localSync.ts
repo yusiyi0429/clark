@@ -66,7 +66,9 @@ async function extractText(path: string, mime: string, buffer: Buffer): Promise<
  * 接收端的依赖。planTask：按本人打开一个 Task 和它的约定（规划员报的派活单要挂 Task 负责人的 Mission，读不到或不是负责人拒收）。
  */
 export type SyncDeps = { pool: Pool; storageDir: string; now: () => Date; onError: (cause: unknown) => void;
-  planTask: (personId: string, planTaskId: string) => Promise<CardPlanTask | null> };
+  planTask: (personId: string, planTaskId: string) => Promise<CardPlanTask | null>;
+  /** 这件 Task 挂的项目（或这个项目）的对话现在最后一条消息的 sequence（17.2 第 29 条，派活单按它插进对话）；不给或读不到为 null。 */
+  lastSequence?: (personId: string, target: { taskId: string | null; projectId: string | null }) => Promise<number | null> };
 /**
  * 一条落下以后要接着做的：queued 是新排队等云端 Agent 验收的交回，proposal 是本机验收员第二次没过时记下的岗位修改；
  * report、decision 是子会话停了的报告、要介入的决定卡（18 节第 10 条，提交以后补 afterSequence，报告再触发项目主管线一轮）。
@@ -104,6 +106,8 @@ async function applyItem(deps: SyncDeps, owner: Owner, item: TLocalSyncItem): Pr
   // 规划员的派活单要读本体里的 Task（不在事务里读）：本人是负责人才收；拆项目的（16.3）本人是项目负责人才收。已经收过的重发不再读。
   const repeated = item.type === "card_plan" && Boolean((await deps.pool.query("SELECT 1 FROM local_sync_items WHERE key=$1", [item.key])).rowCount);
   const planned = item.type === "card_plan" && !repeated ? await plannedTarget(deps, owner, item) : null;
+  // 项目对话现在的最后一条（读 Chat，不在事务里读）：这台电脑连着本机时网页直接开规划员、不经过登记，第一次建派活单时插在这后面。
+  const currentSequence = planned && deps.lastSequence ? await deps.lastSequence(owner.personId, planned).catch(() => null) : null;
   const written: string[] = [];
   const client = await deps.pool.connect();
   try {
@@ -113,7 +117,7 @@ async function applyItem(deps: SyncDeps, owner: Owner, item: TLocalSyncItem): Pr
     if (!fresh.rowCount) { await client.query("COMMIT"); return {}; }
     const card = await lockSubject(client, owner, item);
     const run = await lockRun(client, owner, item, at);
-    const applied = await applyType(client, deps, owner, item, run, card, seq, at, written, planned);
+    const applied = await applyType(client, deps, owner, item, run, card, seq, at, written, planned, currentSequence);
     await client.query("UPDATE local_runs SET last_seq=GREATEST(last_seq,$2),updated_at=$3 WHERE id=$1", [run.id, seq, deps.now()]);
     // 本机开工了，卡变进行中；本机报「等空位」（queued）还没开工，卡留在待开始。验收员的会话不动卡。
     if (item.subject.kind === "card" && card?.status === "not_started" && !(item.type === "status" && item.data.status === "queued"))
@@ -202,7 +206,7 @@ async function note(client: PoolClient, run: RunRow, at: Date, text: string, mil
 }
 
 async function applyType(client: PoolClient, deps: Pick<SyncDeps, "storageDir" | "now">, owner: Owner, item: TLocalSyncItem, run: RunRow, card: CardRow | null,
-  seq: number, at: Date, written: string[], planned: PlanTarget | null): Promise<Applied> {
+  seq: number, at: Date, written: string[], planned: PlanTarget | null, currentSequence: number | null): Promise<Applied> {
   switch (item.type) {
     case "status": {
       if (seq <= Number(run.state_seq)) return {};
@@ -283,7 +287,7 @@ async function applyType(client: PoolClient, deps: Pick<SyncDeps, "storageDir" |
         throw new SyncReject("INVALID_PLAN", "计划要有一句话总结，每件派活单要有标题和完成标准");
       if (item.data.cards.some((card, index) => (card.after ?? []).some((after) => after > index)))
         throw new SyncReject("INVALID_PLAN", "一件只能等排在它前面的几件（after 写前面的位置，从 1 起）");
-      const saved = await saveLocalCardPlan(client, { ownerId: owner.personId, runId: run.id, target: planned, plan: item.data, at });
+      const saved = await saveLocalCardPlan(client, { ownerId: owner.personId, runId: run.id, target: planned, plan: item.data, at, currentSequence });
       await note(client, run, at, saved ? `出了派活单（第 ${item.data.revision} 次，${item.data.cards.length} 件）` : "旧的派活单晚到了", true);
       return {};
     }
