@@ -54,9 +54,13 @@ const task = (taskId: string) => ({ path: { taskId } });
 // ── 看板 ──
 export const readBoard = (taskId: string) => maybe<TCardBoardResponse>(browserApi.GET("/api/plan-tasks/{taskId}/cards", { params: task(taskId) }));
 export const planCards = (taskId: string, hint?: string) => unwrap<TCardPlanView>(browserApi.POST("/api/plan-tasks/{taskId}/card-plans", { params: task(taskId), body: hint ? { hint } : {} }) as Promise<Result<TCardPlanView>>);
-/** start：新首页第 4.4 节，交给 Agent 的卡同时登记要开工（配对的电脑上的网页认领后开）。budget：开工框上方选的预算（11.3），带了就存成这件 Task 的预算。 */
-export const acceptDrafts = (taskId: string, drafts: TAcceptCardDraftsRequest["drafts"], start = false, budget?: TAcceptCardDraftsRequest["budget"]) =>
-  unwrap(browserApi.POST("/api/plan-tasks/{taskId}/card-drafts/accept", { params: task(taskId), body: { drafts, ...(start ? { start } : {}), ...(budget ? { budget } : {}) } })).then((data) => data.cards as TCardTaskView[]);
+/**
+ * start：新首页第 4.4 节，交给 Agent 的卡同时登记要开工（配对的电脑上的网页认领后开）。budget：开工框上方选的预算（11.3），带了就存成这件 Task 的预算。
+ * afterSequence（17.2 第 29 条）：项目对话里本人看到的最后一条，「开了哪几个子会话」插在它后面；不带时云端自己读。
+ */
+export const acceptDrafts = (taskId: string, drafts: TAcceptCardDraftsRequest["drafts"], start = false, budget?: TAcceptCardDraftsRequest["budget"], afterSequence?: number) =>
+  unwrap(browserApi.POST("/api/plan-tasks/{taskId}/card-drafts/accept", { params: task(taskId), body: { drafts, ...(start ? { start } : {}), ...(budget ? { budget } : {}), ...(afterSequence ? { afterSequence } : {}) } }))
+    .then((data) => data.cards as TCardTaskView[]);
 /** 这件 Task 现在的预算（11.3；没单独设过时是本人的缺省，inherited）：开工框的模式分段从它开始。 */
 export const readTaskBudget = (taskId: string) => maybe(browserApi.GET("/api/me/tasks/{taskId}/budget", { params: task(taskId) }));
 /** 改这件 Task 的预算（Task 详情里「预算」那一行，11.3）。 */
@@ -75,11 +79,17 @@ export const addTopicVersionToPending = (taskId: string, topicVersionId: string)
 
 // ── 拆卡（第 21 节）：登记了还没开工的拆卡，真正去拆的是本人电脑上的规划员 ──
 export const listSplits = () => maybe<TCardSplitListResponse>(browserApi.GET("/api/me/card-splits") as Promise<Result<TCardSplitListResponse>>).then((data) => data?.requests ?? []);
-/** 原话最多 4000 字（契约 RegisterCardSplitRequest）；没写就不带请求体。 */
+/**
+ * 原话最多 4000 字（契约 RegisterCardSplitRequest）；afterSequence（17.2 第 29 条）：项目对话里本人看到的最后一条，拆卡那几块插在它后面。
+ * 都没有就不带请求体（云端自己读对话最后一条）。
+ */
 export const WORDS_MAX = 4000;
-export const splitBody = (words?: string) => (words?.trim() ? { words: words.trim().slice(0, WORDS_MAX) } : undefined);
-export const registerSplit = (taskId: string, words?: string) =>
-  unwrap<TCardSplitRequestView>(browserApi.POST("/api/plan-tasks/{taskId}/card-splits", { params: task(taskId), body: splitBody(words) }) as Promise<Result<TCardSplitRequestView>>);
+export const splitBody = (words?: string, afterSequence?: number) => {
+  const body = { ...(words?.trim() ? { words: words.trim().slice(0, WORDS_MAX) } : {}), ...(afterSequence ? { afterSequence } : {}) };
+  return Object.keys(body).length ? body : undefined;
+};
+export const registerSplit = (taskId: string, words?: string, afterSequence?: number) =>
+  unwrap<TCardSplitRequestView>(browserApi.POST("/api/plan-tasks/{taskId}/card-splits", { params: task(taskId), body: splitBody(words, afterSequence) }) as Promise<Result<TCardSplitRequestView>>);
 /** 规划员开起来以后把登记去掉（回 204，没有回包）。 */
 export const removeSplit = (splitId: string) => unwrap(browserApi.DELETE("/api/me/card-splits/{id}", { params: id(splitId) }))
   .then(() => undefined, (error: unknown) => { if (!(error instanceof CloudError && error.status === 204)) throw error; });
@@ -170,21 +180,23 @@ export const cancelStart = (kind: "card" | "topic", subId: string) => unwrap(bro
 export type PlanTarget = { taskId: string } | { projectId: string };
 /** 看板、拆卡失败这些按它记：Task 是 taskId，项目是 project:<projectId>。 */
 export const planKey = (target: PlanTarget) => ("taskId" in target ? target.taskId : `project:${target.projectId}`);
-export const registerProjectSplit = (projectId: string, words?: string) =>
-  unwrap<TCardSplitRequestView>(browserApi.POST("/api/me/projects/{projectId}/card-splits", { params: project(projectId), body: splitBody(words) }) as Promise<Result<TCardSplitRequestView>>);
+export const registerProjectSplit = (projectId: string, words?: string, afterSequence?: number) =>
+  unwrap<TCardSplitRequestView>(browserApi.POST("/api/me/projects/{projectId}/card-splits", { params: project(projectId), body: splitBody(words, afterSequence) }) as Promise<Result<TCardSplitRequestView>>);
 /**
  * 登记拆卡（伙伴或页面上的「拆一下」）：配对的电脑上开着的网页认领后开规划员。
  * words（16.8）：本人在输入框里的话，存成这次拆卡的原话；已有一条没开工的登记时换掉那条的原话。
  */
-export const registerPlan = (target: PlanTarget, words?: string) => ("taskId" in target ? registerSplit(target.taskId, words) : registerProjectSplit(target.projectId, words));
+export const registerPlan = (target: PlanTarget, words?: string, afterSequence?: number) =>
+  ("taskId" in target ? registerSplit(target.taskId, words, afterSequence) : registerProjectSplit(target.projectId, words, afterSequence));
 export const projectPlanBrief = (projectId: string) =>
   unwrap<TCardPlanBriefResponse>(browserApi.GET("/api/me/projects/{projectId}/plan-brief", { params: project(projectId) }) as Promise<Result<TCardPlanBriefResponse>>);
 /** 项目里不挂 Task 的卡、还没处理的草稿、最近一次计划；接口没上为 null。 */
 export const readProjectBoard = (projectId: string) =>
   maybe<TProjectBoardResponse>(browserApi.GET("/api/me/projects/{projectId}/board", { params: project(projectId) }) as Promise<Result<TProjectBoardResponse>>);
 /** 放进看板（不挂 Task：不带预算，开工用本人的缺省预算）。 */
-export const acceptProjectDrafts = (projectId: string, drafts: TAcceptCardDraftsRequest["drafts"], start = false) =>
-  unwrap(browserApi.POST("/api/me/projects/{projectId}/card-drafts/accept", { params: project(projectId), body: { drafts, ...(start ? { start } : {}) } })).then((data) => data.cards as TCardTaskView[]);
+export const acceptProjectDrafts = (projectId: string, drafts: TAcceptCardDraftsRequest["drafts"], start = false, afterSequence?: number) =>
+  unwrap(browserApi.POST("/api/me/projects/{projectId}/card-drafts/accept", { params: project(projectId), body: { drafts, ...(start ? { start } : {}), ...(afterSequence ? { afterSequence } : {}) } }))
+    .then((data) => data.cards as TCardTaskView[]);
 /**
  * 月中 Task 改了或取消了（16.4）：答「停掉 / 留着」。停掉时云端了结还排着的开工登记，这台电脑上在跑的由网页停。
  * 答过了（别的标签页、别的电脑）回 409 ALREADY_ANSWERED：当成答过，重读动态就好。

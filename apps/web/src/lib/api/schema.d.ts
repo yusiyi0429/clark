@@ -16350,6 +16350,8 @@ export interface components {
             }[];
             risks: string[];
             revision: number | null;
+            afterSequence: number | null;
+            startedAfterSequence: number | null;
         };
         CardDraftView: {
             /** Format: uuid */
@@ -16586,6 +16588,8 @@ export interface components {
                 }[];
                 risks: string[];
                 revision: number | null;
+                afterSequence: number | null;
+                startedAfterSequence: number | null;
             } | null;
             pending: {
                 /** Format: uuid */
@@ -16630,6 +16634,7 @@ export interface components {
                     currency: "CNY" | "USD";
                 } | null;
             };
+            afterSequence?: number;
         };
         AcceptCardDraftsResponse: {
             cards: {
@@ -18219,6 +18224,7 @@ export interface components {
             sourceWords: string[];
             /** Format: date-time */
             createdAt: string;
+            afterSequence: number | null;
         };
         CardSplitListResponse: {
             requests: {
@@ -18233,6 +18239,7 @@ export interface components {
                 sourceWords: string[];
                 /** Format: date-time */
                 createdAt: string;
+                afterSequence: number | null;
             }[];
         };
         PlanBriefRole: {
@@ -18285,6 +18292,7 @@ export interface components {
         };
         RegisterCardSplitRequest: {
             words?: string;
+            afterSequence?: number;
         };
         SubSession: {
             id: string;
@@ -19904,6 +19912,8 @@ export interface components {
                 }[];
                 risks: string[];
                 revision: number | null;
+                afterSequence: number | null;
+                startedAfterSequence: number | null;
             } | null;
         };
         ProjectGoalChangedItem: {

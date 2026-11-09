@@ -41,6 +41,13 @@ export const CardPlanView = Type.Object({
   steps: Type.Array(Type.Object({ title: Type.String({ minLength: 1 }), detail: Nullable(Type.String()) }, strict)),
   risks: Type.Array(Type.String()),
   revision: NullableInteger({ minimum: 1 }),
+  /**
+   * 项目对话里按序号插（17.2 第 29 条，项目对话的消息从 Chat 读回来不带时间，网页按它把这一块插在那条消息后面（同 ProjectTransfer.afterSequence））：
+   * afterSequence 是开拆（登记拆卡）那一下本人看到的最后一条，派活单、拆卡失败插在它后面；
+   * startedAfterSequence 是开工（派活单放进看板、第一张卡建出来）那一下的，「开了哪几个子会话」插在它后面。还没开工、读不到、老记录为 null，网页走兜底。
+   */
+  afterSequence: NullableInteger({ minimum: 1 }),
+  startedAfterSequence: NullableInteger({ minimum: 1 }),
 }, strict);
 
 /** 伙伴建议的模型档位，本人开工时再落到具体模型。 */
@@ -124,6 +131,8 @@ export const AcceptCardDraftsRequest = Type.Object({
   start: Type.Optional(Type.Boolean()),
   /** 开工框上方选的预算（设计 11.3）：带了就存成这件 Task 的预算（同 PUT /api/me/tasks/:taskId/budget）；不带不动。 */
   budget: Type.Optional(Budget),
+  /** 本人在项目对话里看到的最后一条消息的 sequence（17.2 第 29 条），存成派活单的 startedAfterSequence；不带时云端读那条对话现在最后一条。 */
+  afterSequence: Type.Optional(Type.Integer({ minimum: 1 })),
 }, strict);
 export const AcceptCardDraftsResponse = Type.Object({ cards: Type.Array(CardTaskView) }, strict);
 

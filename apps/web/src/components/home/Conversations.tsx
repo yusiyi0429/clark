@@ -8,7 +8,7 @@
  * 首页输入框发来的话（outbox）进了对应的对话就发出去。
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { THomePlanTask } from "@warmap/contracts";
+import type { TCardPlanView, THomePlanTask } from "@warmap/contracts";
 import type { Buddy } from "@/components/buddy/useBuddy";
 import { ChatColumn } from "@/components/rail/ChatPane";
 import { PendingBoxes, PendingDock } from "@/components/work/DecisionBox";
@@ -178,6 +178,18 @@ type PipelineProps = {
  * 项目对话（16.3）：B 的接口在（live）时是真的对话；接口确定没上（404）时是这个标签页里接本月那件 Task 的假对话（lib/home/pipeline）。
  * 还不知道（首页接口第一次还没回、或一直出错）时先空着等：不开假对话（写进去的话会丢，「拆成几步」还会真的开规划员）。
  */
+/**
+ * 拆卡那几块插在哪条消息后面（17.2 第 29 条，项目对话的消息不带时间，按序号插；null 放最后）：
+ * 规划员在拆——登记了还没开的用登记时记的，开起来以后用这次（排着、在拆的）计划记的；派活单是开拆那一下的；开了哪几个子会话是开工那一下的。
+ */
+export function planAnchors(planner: Pick<Worker, "afterSequence"> | undefined, plan: Pick<TCardPlanView, "status" | "afterSequence" | "startedAfterSequence"> | null) {
+  return {
+    planning: planner?.afterSequence ?? (plan && (plan.status === "queued" || plan.status === "running") ? plan.afterSequence : null),
+    drafts: plan?.afterSequence ?? null,
+    started: plan?.startedAfterSequence ?? null,
+  };
+}
+
 export function PipelineView(props: PipelineProps) {
   if (!props.api.known) return <div className={h.convo} aria-busy />;
   return props.api.live ? <LivePipeline {...props} /> : props.tasks[0] ? <MockPipeline {...props} task={props.tasks[0]} /> : <div className={h.convo} aria-busy />;
@@ -270,6 +282,7 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
     }
     if (summary && received.history) list.push({ key: `history:${summary.transferId}`, at: "0000-01-01T00:00:00.000Z", node: <TransferHistory history={received.history} from={summary.from} /> });
     // 拆卡的几块，每件挂着的 Task 一组，项目本身（不挂 Task 的卡和派活单，16.3）一组：规划员在拆、拆卡失败、派活单、开了哪几个子会话。
+    // 按序号插（17.2 第 29 条，项目对话的消息不带时间）：前三块在开拆那一下的序号后面，开了哪几个子会话在开工那一下的后面；为 null 放最后。
     const projectBoard = work.boards[planKey({ projectId: project.id })] ?? null;
     const projectCards = new Set((projectBoard?.cards ?? []).map((card) => card.id));
     const groups: { target: PlanTarget; name: string; of: (worker: Worker) => boolean }[] = [
@@ -281,18 +294,19 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
       const board = work.boards[key] ?? null;
       const ofTarget = mine.filter(of);
       const planner = ofTarget.find((worker) => worker.kind === "plan" && worker.state !== "done");
-      if (planner) list.push({ key: `planning:${planner.key}`, at: planner.startedAt ?? planner.requestedAt ?? new Date().toISOString(), node: <PlanningLine planner={planner} /> });
+      const anchors = planAnchors(planner, board?.plan ?? null);
+      if (planner) list.push({ key: `planning:${planner.key}`, at: planner.startedAt ?? planner.requestedAt ?? new Date().toISOString(), afterSequence: anchors.planning, node: <PlanningLine planner={planner} /> });
       // 拆卡没做完（出了错才给兜底）：一行「拆卡失败」加「重试」（弱按钮）。
       else if ((board?.plan?.status === "failed" && !board.drafts.length) || splitFailed === key) {
         const plan = board?.plan?.status === "failed" ? board.plan : null;
-        list.push({ key: `plan-failed:${plan?.id ?? key}`, at: plan ? plan.finishedAt ?? plan.createdAt : new Date().toISOString(), node: (
+        list.push({ key: `plan-failed:${plan?.id ?? key}`, at: plan ? plan.finishedAt ?? plan.createdAt : new Date().toISOString(), afterSequence: plan?.afterSequence ?? null, node: (
           <p className={h.line} data-testid="plan-failed"><StateIcon state="failed" />拆卡失败<HeroButton variant="ghost" size="sm" onPress={() => onSplit(target)}>重试</HeroButton></p>
         ) });
       }
       if (board?.drafts.length) {
         // 拆好的时候（规划员拆完同步上来那一刻）；没有记录时当作现在，放在最后。
-        list.push({ key: `plan:${board.drafts[0]!.id}`, at: board.plan?.finishedAt ?? board.plan?.createdAt ?? new Date().toISOString(), node: (
-          <PlanDecision target={target} name={name} drafts={board.drafts} roles={work.roles?.roles ?? []} handheld={handheld} onChanged={() => void changed()}
+        list.push({ key: `plan:${board.drafts[0]!.id}`, at: board.plan?.finishedAt ?? board.plan?.createdAt ?? new Date().toISOString(), afterSequence: anchors.drafts, node: (
+          <PlanDecision target={target} name={name} drafts={board.drafts} roles={work.roles?.roles ?? []} handheld={handheld} onChanged={() => void changed()} afterSequence={lastSequence}
             onSay={(text) => data.send(text, [])} />
         ) });
       }
@@ -302,7 +316,7 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
       const ids = new Set([...(board?.cards ?? []).map((card) => card.id), ...cards.map((worker) => worker.cardId)]);
       const cardSubs = subs.filter((sub) => sub.kind === "card" && ids.has(sub.id));
       if (first && cardSubs.length) {
-        list.push({ key: `started:${key}`, at: first, node: <StartedRecord task={name} subs={[...cardSubs].sort(byTitle(cards))} onOpen={(sub: SubSession) => go(subHref(sub))} /> });
+        list.push({ key: `started:${key}`, at: first, afterSequence: anchors.started, node: <StartedRecord task={name} subs={[...cardSubs].sort(byTitle(cards))} onOpen={(sub: SubSession) => go(subHref(sub))} /> });
       }
     }
     // 对话或伙伴开的探索子会话（专题）：开出时一行（5.4.3 事件行），按开出的时间排；点了进那个子会话。
@@ -332,7 +346,7 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
     const checks = feed.filter((item): item is FeedItem => !PROJECT_ONLY.has(item.kind));
     list.push(...feedBlocks({ items: checks, workers: mine, go, onSay: (text) => data.send(text, []), onChanged: () => void changed(), remoteAsks, decisions, letters }));
     return list;
-  }, [mine, tasks, work.boards, work.roles, handheld, changed, data, subs, go, feed, onSplit, splitFailed, startFailed, onManualStart, waiting, own, api.live, project, summary, received.history, letters]);
+  }, [mine, tasks, work.boards, work.roles, handheld, changed, data, subs, go, feed, onSplit, splitFailed, startFailed, onManualStart, waiting, own, api.live, project, summary, received.history, letters, lastSequence]);
   return (
     <ProjectModeContext.Provider value={mode?.value ?? null}>
     <PendingBoxes>
