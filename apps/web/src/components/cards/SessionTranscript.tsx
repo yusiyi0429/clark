@@ -9,7 +9,7 @@
  * 本人那句话的回执（17.4，样子同伙伴台）：一个勾已送达、两个勾已读；没读到就没了写「没读到 · 重发」。本机补发的话没有回执。
  * canAct=false（手机、别的电脑、本机没连）时选项框不给选项，头上写「等你 · {电脑名}」。
  */
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import { questionNotice, type SessionEntry } from "@/lib/local/sessionView";
 import type { LocalRunner, TLocalPermissionRequestView, TLocalQuestionRequestView, TLocalSessionStatus } from "@/lib/local/runner";
@@ -68,6 +68,32 @@ function groupSteps(entries: SessionEntry[]): Item[] {
 
 /** 没做完的那一步：会话还在跑就是进行中，不在跑了就是停在那儿了。 */
 const stepState = (step: Step, live: boolean): IconState => step.isError ? "failed" : step.done ? "done" : live ? "running" : "stopped";
+
+/**
+ * 这一轮从什么时候算起（27 条「在跑」那一行的时长）：最近一句本人说的（含交代）；一句都还没有时取第一条记录的时间；什么都没有为 null（只转圈不写时长）。
+ */
+export function roundStart(entries: SessionEntry[]): string | null {
+  for (let index = entries.length - 1; index >= 0; index -= 1) if (entries[index]!.kind === "user") return entries[index]!.at;
+  return entries[0]?.at ?? null;
+}
+
+/**
+ * 「在跑」那一行（27 条，照 Claude Code 底部那行）：模型在两步之间想的时候界面也在动——转圈加这一轮跑了多久（每秒走一下）。
+ * 只在会话在跑、没有正在执行的步骤、也没在等你批准或回答时出；有步骤在转圈时不重复出。不写解释句。
+ */
+function WorkingRow({ since }: { since: string | null }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return (
+    <div className={s.step} data-testid="session-working">
+      <StateIcon state="running" label="在跑" />
+      {since ? <span className={`${s.stepText} ${h.num}`}>{duration(since, now)}</span> : null}
+    </div>
+  );
+}
 
 function StepRow({ step, live }: { step: Step; live: boolean }) {
   return <div className={s.step}><StateIcon state={stepState(step, live)} /><span className={s.stepText}>{step.title}</span><time>{hhmm(step.at)}</time></div>;
@@ -145,6 +171,7 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
   const firstPending = pending[0]?.requestId;
   const askingText = asking ? questionNotice(asking) : null;
   const lastAsk = askingText ? entries.map((entry) => entry.kind === "notice" && entry.text === askingText).lastIndexOf(true) : -1;
+  const working = live && !pending.length && !asking && !entries.some((entry) => entry.kind === "step" && !entry.done);
   return (
     <div className={s.feed}>
       {lead ? <span className={s.evt}>{lead}</span> : null}
@@ -177,6 +204,7 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
           case "notice": return <span key={entry.seq} className={s.evt} data-level={entry.level}>{entry.text}</span>;
         }
       })}
+      {working ? <WorkingRow since={roundStart(entries)} /> : null}
       {tail}
     </div>
   );
@@ -188,16 +216,19 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
  * dock：「N 个问题等你 / 回到最新」那一条（PendingDock），放在输入框上方。
  * 输入框下面一行（同首页、项目对话）：左边在哪个文件夹里跑（place，悬停出完整路径），右边模型（model，悬停出 title）和权限档（mode，useSessionMode；还没开工时不给）。
  */
-export function SessionComposer({ label, disabled, onSend, dock, subject, mode, place, model }: {
+export function SessionComposer({ label, disabled, onSend, dock, subject, mode, place, model, busy = false, onStop }: {
   label: string; disabled: boolean; onSend: (text: string, attachments: TLocalAttachmentRef[]) => Promise<boolean>; dock?: ReactNode;
   subject: TSessionAttachment["subject"];
   mode?: { modes: readonly TLocalPermissionMode[]; value: TLocalPermissionMode; set: (mode: TLocalPermissionMode) => void } | null;
   place?: { name: string; title: string } | null;
   model?: { label: string; title?: string } | null;
+  /** 会话在跑（27 条）：右边没字时是停止方块（onStop，本机 interrupt），有字时照样能发（插话），同项目对话、伙伴台。 */
+  busy?: boolean;
+  onStop?: () => void;
 }) {
   return (
     <div className={s.composerDock}>
-      <InputBar placeholder="" label={label} disabled={disabled} dock={dock} draftKey={`tianshu-home-draft-v1:${subject.kind}:${subject.id}`}
+      <InputBar placeholder="" label={label} disabled={disabled} dock={dock} busy={busy} interruptible onStop={onStop} draftKey={`tianshu-home-draft-v1:${subject.kind}:${subject.id}`}
         footer={{
           left: place ? <FolderText name={place.name} title={place.title} /> : null,
           right: <>{model ? <FootText title={model.title} testId="session-model">{model.label}</FootText> : null}{mode ? <PermissionModeMenu modes={mode.modes} value={mode.value} disabled={disabled} onChange={mode.set} /> : null}</>,

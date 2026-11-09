@@ -67,7 +67,6 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
   const [details, setDetails] = useState<boolean | null>(null);
   /** 页头点了「推翻」：打开结果、推翻的原因框直接展开。 */
   const [flipping, setFlipping] = useState(false);
-  const [headFailed, setHeadFailed] = useState<Failure | null>(null);
   const { detail, missing, refresh } = useCardDetail(cardId);
   const local = useLocalRunner();
   const handheld = useHandheld();
@@ -153,7 +152,8 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
   const model = harnessLabel(session?.run, session?.agent) ?? ((label) => (label ? { label, title: null } : null))(runLabel(session?.run) ?? run?.modelLabel ?? item.card?.model?.label ?? null);
   const place = session?.workspace ? { name: shortPlace(session.workspace), title: placeText(session.workspace) } : null;
   const composer = agent && (session || !embedded)
-    ? <SessionComposer label={`给${item.title}插话`} disabled={!canAct} onSend={say} mode={mode} dock={dock} subject={{ kind: "card", id: cardId }} place={place} model={model ? { label: model.label, title: model.title ?? undefined } : null} />
+    ? <SessionComposer label={`给${item.title}插话`} disabled={!canAct} onSend={say} mode={mode} dock={dock} subject={{ kind: "card", id: cardId }} place={place} model={model ? { label: model.label, title: model.title ?? undefined } : null}
+      busy={sessionRunning} onStop={() => void control("interrupt").catch(() => showWorkspaceToast({ text: "没停下" }))} />
     : <div className={s.composerDock}>{dock}</div>;
   const chat = (
     <PendingBoxes>
@@ -185,9 +185,8 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
     const chipOf = stateChip(wait, stage, !canAct && device ? awayChip(device) : null);
     const handback = detail.handbacks[0] ?? null;
     const canFlip = !handheld && !!handback && handback.status === "done" && !handback.overruled && handback.outcome === "pass" && !deliverableLabel(item)?.startsWith("已纳入");
-    const headAct = (action: () => Promise<unknown>) => { setHeadFailed(null); action().catch((error: unknown) => setHeadFailed(failureOf(error, () => headAct(action)))); };
-    const stop = canAct && session && !ended ? <HeroButton variant="ghost" size="sm" onPress={() => headAct(() => control(sessionRunning ? "interrupt" : "kill"))}>停止</HeroButton>
-      : canFlip ? <HeroButton variant="ghost" size="sm" onPress={() => { setDetails(true); setFlipping(true); }}>推翻</HeroButton> : null;
+    // 停止在输入框右边（27 条，在跑时没字是停止方块）；页头只留「推翻」。
+    const stop = canFlip ? <HeroButton variant="ghost" size="sm" onPress={() => { setDetails(true); setFlipping(true); }}>推翻</HeroButton> : null;
     return (
       <div className={s.page} data-embedded="" data-testid="card-session">
         <header className={s.embedHead}>
@@ -195,7 +194,7 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
           <b className={s.embedTitle}>{chrome.parent}{chrome.letter}{item.title}</b>
           <span className={s.stateChip} data-tone={chipOf.tone}>{chipOf.tone === "wait" ? <i aria-hidden /> : null}{chipOf.text}</span>
           <span className={s.exec} />
-          {headFailed ? <FailedLine inline {...headFailed} /> : stop}
+          {stop}
           <HeroButton variant="ghost" size="sm" isIconOnly aria-label="结果" title="结果" data-pressed={showPane || undefined} onPress={() => setDetails(!showPane)} data-testid="session-details"><Info {...ICON} aria-hidden /></HeroButton>
           {chrome.trail}
         </header>
