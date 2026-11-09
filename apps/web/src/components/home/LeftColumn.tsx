@@ -29,7 +29,7 @@ import { PersonRow } from "./PersonMenu";
 import { useHoverTip, useNameTip } from "./NameTip";
 import { LocalContext } from "@/lib/local/LocalRunnerProvider";
 import { runLabel } from "@/lib/local/runModel";
-import { ICON, StateIcon, type IconState } from "./StateIcon";
+import { ICON, type IconState } from "./StateIcon";
 import { pageHref, type View } from "./view";
 import { showUnseen, type SeenKind, type SeenMarks } from "@/lib/home/seen";
 
@@ -237,16 +237,15 @@ function ProjectNode({ project, view, go, personId, cardAt, working = false }: {
     <div className={h.taskNode} data-testid="tree-project" data-done={project.archived ? "" : undefined}>
       <div className={h.taskRow} data-current={page ? "" : undefined}>
         <button type="button" className={h.taskMain} onClick={() => { opened.onOpen?.("project", project.id, project.lastActivity); go(projectHref(project.id)); }} aria-current={page ? "page" : undefined} data-tree-row="" {...nameTip.rowProps}>
-          <span className={h.slotState}>{project.waiting ? <StateIcon state="waiting" /> : null}</span>
+          <span className={h.slotState} />
           <span className={`${h.taskText} ${h.projectText}`}>
-            <span className={h.projectTitle}>
-              <span ref={nameTip.textRef} className={h.taskName}>{project.name}</span>
-              {/* 在后台干活：标题这一行最右边一颗闪的灰点（读屏读「在后台工作」，点本身不读）。 */}
-              {working ? <span className={h.workingDot} data-testid="project-working"><i aria-hidden /><span className={h.srOnly}>在后台工作</span></span>
-                : showUnseen(project.unseen, opened.seen, "project", project.id, project.lastActivity) ? <span className={h.subDot} data-tone="stopped" role="img" aria-label="有新回复" data-testid="project-unseen"><i aria-hidden /></span> : null}
-            </span>
+            <span ref={nameTip.textRef} className={h.taskName}>{project.name}</span>
             <span className={h.taskSub} data-warning={line.warning ? "" : undefined}>{line.text}</span>
           </span>
+          {/* 行尾一颗点（34 条，和子会话行同一个位置、同样大小）：等你蓝点 → 在后台干活闪的灰点（读屏读「在后台工作」）→ 没看过的新回复蓝点。 */}
+          {project.waiting ? <span className={h.subDot} data-tone="stopped" role="img" aria-label="等你" data-testid="project-waiting"><i aria-hidden /></span>
+            : working ? <span className={h.subDot} data-tone="running" data-testid="project-working"><i aria-hidden /><span className={h.srOnly}>在后台工作</span></span>
+            : showUnseen(project.unseen, opened.seen, "project", project.id, project.lastActivity) ? <span className={h.subDot} data-tone="stopped" role="img" aria-label="有新回复" data-testid="project-unseen"><i aria-hidden /></span> : null}
         </button>
         {nameTip.tip}
         <span className={h.info} data-on={info ? "" : undefined}>
