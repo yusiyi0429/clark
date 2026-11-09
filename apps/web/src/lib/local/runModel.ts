@@ -49,6 +49,20 @@ export function harnessLabel(run: Pick<TLocalRun, "harness" | "origin" | "source
   return { label: `${HARNESS_NAME[harness]} · ${name}`, title: run?.origin?.label ?? run?.sourceLabel ?? null };
 }
 
+/** 订阅类读不到具体模型名时写的（派活单选模型那一处）。 */
+const SUBSCRIPTION_NAME: Record<TLocalAgentKind, string> = { "claude-code": "Claude 订阅", codex: "Codex 订阅" };
+
+/**
+ * 派活单每一步右边的模型胶囊（17.2 第 21 条之后，用户定 A+B）：只写模型，如「Opus 5.5」；自动时「自动 · Opus 5.5」；
+ * 订阅类读不到具体模型名时写「Claude 订阅」。执行方和来源放到悬停的全称里，如「自动 · Claude Code · Opus 5.5 · 我的 Claude 订阅」。
+ */
+export function pickLabel(pick: { harness: TLocalAgentKind; model: string | null; source: string | null; subscription: boolean }, auto: boolean): { label: string; title: string } {
+  const name = pick.model ?? (pick.subscription ? SUBSCRIPTION_NAME[pick.harness] : pick.source ?? HARNESS_NAME[pick.harness]);
+  const prefix = auto ? "自动 · " : "";
+  const full = [HARNESS_NAME[pick.harness], pick.model, pick.source].filter((part, index, all): part is string => !!part && all.indexOf(part) === index);
+  return { label: `${prefix}${name}`, title: `${prefix}${full.join(" · ")}` };
+}
+
 export function runLabel(run: Pick<TLocalRun, "sourceLabel" | "modelName" | "actual"> | null | undefined): string | null {
   if (!run?.sourceLabel) return null;
   const name = run.actual?.modelName ?? run.modelName;

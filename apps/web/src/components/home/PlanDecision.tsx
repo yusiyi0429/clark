@@ -12,7 +12,7 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Dropdown, Header } from "@heroui/react";
 import { Check, ChevronDown, X } from "lucide-react";
-import type { TBudget, TBudgetMode, TCardDraftView } from "@warmap/contracts";
+import type { TBudget, TBudgetMode, TCardDraftView, TLocalAgentKind } from "@warmap/contracts";
 import { ProjectModeContext } from "@/components/cards/PermissionMode";
 import { DecisionBox } from "@/components/work/DecisionBox";
 import { ApprovalDecision, QuestionDecision, awayChip } from "@/components/work/decisions";
@@ -25,7 +25,7 @@ import { planStep } from "@/lib/local/sessionView";
 import { useSessionEvents } from "@/lib/local/useSessionEvents";
 import { readLast, writeLast } from "@/lib/local/start";
 import type { TLocalModelProfile } from "@/lib/local/runner";
-import { HARNESS_NAME, harnessLabel, profileModel, profileSource } from "@/lib/local/runModel";
+import { HARNESS_NAME, pickLabel, profileModel, profileSource } from "@/lib/local/runModel";
 import { acceptDrafts, acceptProjectDrafts, dismissDraft, readTaskBudget, type PlanTarget } from "@/lib/board/cloud";
 import { TIER_LABEL, draftRole, modelForTier, type CardRole, type RoleView } from "@/lib/team/roles";
 import { SLOT_CAP, startBatch, type StartPlan } from "@/lib/work/queue";
@@ -122,7 +122,7 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
   };
   const edit = (id: string, patch: Edit) => setEdits((current) => ({ ...current, [id]: { ...current[id], ...patch } }));
   // 每一步会落到哪个来源的哪个模型（开工前问本机 previewRun）：按「模型配置 · 档位」记，同样的只问一次。
-  const [previews, setPreviews] = useState<Record<string, { label: string; title: string | null }>>({});
+  const [previews, setPreviews] = useState<Record<string, { model: string | null; source: string | null; harness: TLocalAgentKind }>>({});
   const asked = useRef(new Set<string>());
   const previewKey = (model: TLocalModelProfile, tier: string) => `${model.id}:${tier}`;
   useEffect(() => {
@@ -137,19 +137,22 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
       if (asked.current.has(key)) continue;
       asked.current.add(key);
       void local.runner.previewRun({ agent: model.agent, modelProfileId: model.id, modelTier: tier }).then((run) => {
-        const label = harnessLabel(run, model.agent);
-        if (alive && label) setPreviews((current) => ({ ...current, [key]: label }));
+        const name = run.actual?.modelName ?? run.modelName ?? null;
+        if (alive) setPreviews((current) => ({ ...current, [key]: { model: name, source: run.origin?.label ?? run.sourceLabel ?? null, harness: run.harness ?? model.agent } }));
       }, () => asked.current.delete(key));
     }
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 草稿、改过的岗位和模型变了才再问
   }, [ready, local.runner, local.models, drafts, edits, roles]);
   /**
-   * 下拉上写的（21 条）：「执行方 · 模型」，如「Claude Code · Opus 5.5」，来源在悬停里；没单独选（自动）时前面加「自动 · 」。
+   * 胶囊上写的（用户定 A+B）：只写模型，自动时「自动 · 模型」，订阅读不到模型名写「Claude 订阅」；执行方和来源在悬停的全称里（见 pickLabel）。
    * 本机开工前算出来的（previewRun）优先；还没回（或老版本不报）时照模型配置写。
    */
-  const modelText = (draft: TCardDraftView, model: TLocalModelProfile, role: CardRole) =>
-    previews[previewKey(model, tierOf(draft, role))] ?? { label: `${HARNESS_NAME[model.agent]} · ${profileModel(model)}`, title: profileSource(model) };
+  const modelText = (draft: TCardDraftView, model: TLocalModelProfile, role: CardRole, auto: boolean) => {
+    const preview = previews[previewKey(model, tierOf(draft, role))];
+    return pickLabel({ harness: preview?.harness ?? model.agent, model: preview?.model ?? (model.model ? profileModel(model) : null),
+      source: preview?.source ?? profileSource(model), subscription: model.source === "subscription" }, auto);
+  };
 
   const start = async () => {
     if (!kept.length || busy) return;
@@ -220,7 +223,8 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
                   onPick={(id) => edit(draft.id, { role: id === "self" ? null : { id, name: workerRoles.find((entry) => entry.id === id)!.name, kind: "worker" }, modelId: undefined })} />
                 <button type="button" className={h.icon} aria-label={`去掉「${draft.title}」`} title="删除" onClick={() => edit(draft.id, { dropped: true })}><X {...ICON} /></button>
               </> : role ? (local.models.length && model ? <ModelPick models={local.models} value={edits[draft.id]?.modelId ?? AUTO_MODEL}
-                  shown={modelText(draft, model, role)} auto={(() => { const fallback = modelForTier(local.models, tierOf(draft, role)); return fallback ? modelText(draft, fallback, role).label : null; })()}
+                  shown={modelText(draft, model, role, !edits[draft.id]?.modelId)}
+                  auto={(() => { const fallback = modelForTier(local.models, tierOf(draft, role)); return fallback ? modelText(draft, fallback, role, false).label : null; })()}
                   onPick={(id) => edit(draft.id, { modelId: id === AUTO_MODEL ? undefined : id })} />
                 : <span className={h.chip}>{TIER_LABEL[tierOf(draft, role)]}</span>) : null}
             </span>
@@ -259,17 +263,16 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
 
 /**
  * 选模型（21 条）：「自动」在最上面、写明落到哪一个；下面按执行方分组（Claude Code、Codex），每行写模型名，后面淡色写来源，如「Opus 5.5 · 我的 Claude 订阅」「GPT-6.1 · Codex 订阅 · 经 magpie」。
- * 选中后下拉上写「执行方 · 模型」，来源在悬停里（同子会话输入框下面那一行）。
+ * 胶囊上只写模型（自动时「自动 · 模型」），太长出省略号、下拉箭头始终在；悬停是全称（执行方 · 模型 · 来源）。
  */
 function ModelPick({ models, value, shown, auto, onPick }: {
-  models: TLocalModelProfile[]; value: string; shown: { label: string; title: string | null }; auto: string | null; onPick: (id: string) => void;
+  models: TLocalModelProfile[]; value: string; shown: { label: string; title: string }; auto: string | null; onPick: (id: string) => void;
 }) {
-  const label = value === AUTO_MODEL ? `自动 · ${shown.label}` : shown.label;
   const mark = (id: string) => (id === value ? <Check {...ICON} /> : null);
   const groups = (Object.keys(HARNESS_NAME) as (keyof typeof HARNESS_NAME)[]).map((agent) => ({ agent, list: models.filter((model) => model.agent === agent) })).filter((group) => group.list.length);
   return (
     <Dropdown>
-      <Dropdown.Trigger className={h.chip} aria-label={`模型：${label}`} data-testid="model-pick"><span title={shown.title ?? undefined}>{label}</span><ChevronDown {...ICON} /></Dropdown.Trigger>
+      <Dropdown.Trigger className={h.chip} aria-label={`模型：${shown.title}`} data-testid="model-pick"><span title={shown.title}>{shown.label}</span><ChevronDown {...ICON} /></Dropdown.Trigger>
       <Dropdown.Popover placement="bottom end" offset={8} className={h.pop}>
         <Dropdown.Menu aria-label="模型" className={h.menuList} onAction={(key) => onPick(String(key))}>
           <Dropdown.Section className={h.menuSection}>
@@ -297,7 +300,7 @@ function ModelPick({ models, value, shown, auto, onPick }: {
 function Pick({ label, options, value, onPick, up }: { label: string; options: { id: string; label: string }[]; value: string; onPick: (id: string) => void; up?: boolean }) {
   return (
     <Dropdown>
-      <Dropdown.Trigger className={h.chip}>{label}<ChevronDown {...ICON} /></Dropdown.Trigger>
+      <Dropdown.Trigger className={h.chip}><span title={label}>{label}</span><ChevronDown {...ICON} /></Dropdown.Trigger>
       <Dropdown.Popover placement={up ? "top start" : "bottom end"} offset={8} className={h.pop}>
         <Dropdown.Menu aria-label={label} className={h.menuList} onAction={(key) => onPick(String(key))}>
           {options.map((option) => (
