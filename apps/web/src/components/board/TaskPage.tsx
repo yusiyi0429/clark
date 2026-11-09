@@ -51,9 +51,9 @@ export function TaskPage({ taskId }: { taskId: string }) {
   useAutoReturn(local.runner, ready, board?.cards ?? [], sessions, () => void refresh());
 
   const canStart = (card: BoardCard) => canStartCard({ ready, handheld, item: card.item });
-  const start = async (item: CardItem, model: Parameters<typeof startCard>[2], cwd: string, role: Parameters<typeof startCard>[4]) => {
+  const start = async (item: CardItem, model: Parameters<typeof startCard>[2], cwd: string, role: Parameters<typeof startCard>[4], effort: Parameters<typeof startCard>[5]) => {
     const begun = performance.now();
-    const session = await startCard(local.runner, item, model, cwd, role);
+    const session = await startCard(local.runner, item, model, cwd, role, effort);
     setStarting(null);
     await local.refresh();
     showWorkspaceToast({ text: `开始了 · ${model.label}` });
@@ -120,7 +120,7 @@ export function TaskPage({ taskId }: { taskId: string }) {
           </div>
         ) : <div className={s.loading} aria-busy />}
       </div>
-      {starting ? <StartDialog title={starting.title} role={cardRole(starting)} onClose={() => setStarting(null)} onStart={(model, folder, role) => start(starting, model, folder?.path ?? "", role)} /> : null}
+      {starting ? <StartDialog title={starting.title} role={cardRole(starting)} onClose={() => setStarting(null)} onStart={(model, folder, role, effort) => start(starting, model, folder?.path ?? "", role, effort)} /> : null}
     </div>
   );
 }

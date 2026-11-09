@@ -28,7 +28,7 @@ import { useConversationScroll } from "@/conversation/useConversationScroll";
 import { latestSessionFor, useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { useSessionEvents } from "@/lib/local/useSessionEvents";
 import { useSessionMode } from "@/components/cards/PermissionMode";
-import { harnessLabel, runLabel, withPendingModel } from "@/lib/local/runModel";
+import { runLabel, sessionModelText } from "@/lib/local/runModel";
 import { placeText, shortPlace } from "@/lib/work/merge";
 import { localWait, running } from "@/lib/local/sessionView";
 import { startTopic } from "@/lib/local/start";
@@ -164,7 +164,7 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
 
   const state = wait ? <span className={s.tag} data-tone={waitTone(wait)}>{WAIT_LABEL[wait]}</span> : <span className={s.tag} data-tone={topic.status === "archived" ? undefined : "ver"}>{topic.status === "archived" ? "已归档" : "进行中"}</span>;
   // 输入框下面一行的右边写「执行方 · 模型」（21 条），来源在悬停里；没有时退回「来源 · 模型」、再退回云端记的。文件夹在左边。
-  const model = withPendingModel(harnessLabel(session?.run, session?.agent) ?? ((label) => (label ? { label, title: null } : null))(runLabel(session?.run) ?? topic.run?.modelLabel ?? null), session?.pendingModel);
+  const model = (session ? sessionModelText(session, local.models.find((entry) => entry.id === session.modelProfileId)?.efforts) : null) ?? ((label) => (label ? { label, title: null } : null))(runLabel(session?.run) ?? topic.run?.modelLabel ?? null);
   const place = session?.workspace ? { name: shortPlace(session.workspace), title: placeText(session.workspace) } : null;
   const chat = (
     <PendingBoxes>
@@ -192,8 +192,8 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
       await local.runner.sendMessage(session.id, reviewText(critics), "review");
       setReviewing(false);
     }} /> : null}
-    {starting ? <StartDialog title={topic.title} needsFolder={false} onClose={() => setStarting(false)} onStart={async (model) => {
-      await startTopic(local.runner, topic, model);
+    {starting ? <StartDialog title={topic.title} needsFolder={false} onClose={() => setStarting(false)} onStart={async (model, _folder, _role, effort) => {
+      await startTopic(local.runner, topic, model, undefined, undefined, effort);
       setStarting(false);
       await local.refresh();
     }} /> : null}

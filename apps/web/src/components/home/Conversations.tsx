@@ -41,6 +41,7 @@ import { chatModelLabel } from "@/lib/local/runModel";
 import { PermissionModeMenu, ProjectModeContext, useProjectMode } from "@/components/cards/PermissionMode";
 import { showWorkspaceToast } from "@/lib/toast";
 import { FolderMenu, FootText } from "./InputFooter";
+import { PipelineModelMenu } from "./PipelineModel";
 
 /** 首页输入框发来、等着进对话的一句。 */
 /** files：首页输入框带的附件，到了那条对话再传（14.5）。 */
@@ -375,7 +376,7 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
           dock={(latest) => <PendingDock latest={latest} />}
           input={readOnly ? () => null : (onHeight) => <ChatInput data={data} placeholder={handheld ? "说点什么…" : `与${project.name}讨论…`} onHeight={onHeight} footer={{
             left: folder,
-            right: <><ModelText data={data} />{mode ? <PermissionModeMenu modes={mode.modes} value={mode.value} sheet={handheld} onChange={mode.set} /> : null}</>,
+            right: <><PipelineModelMenu projectId={project.id} fallback={<ModelText data={data} />} />{mode ? <PermissionModeMenu modes={mode.modes} value={mode.value} sheet={handheld} onChange={mode.set} /> : null}</>,
           }} />} />
       </div>
     </PendingBoxes>
