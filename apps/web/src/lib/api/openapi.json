@@ -96184,7 +96184,9 @@
           "summary",
           "steps",
           "risks",
-          "revision"
+          "revision",
+          "afterSequence",
+          "startedAfterSequence"
         ],
         "properties": {
           "id": {
@@ -96317,6 +96319,20 @@
             }
           },
           "revision": {
+            "minimum": 1,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "afterSequence": {
+            "minimum": 1,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "startedAfterSequence": {
             "minimum": 1,
             "type": [
               "integer",
@@ -97936,7 +97952,9 @@
                   "summary",
                   "steps",
                   "risks",
-                  "revision"
+                  "revision",
+                  "afterSequence",
+                  "startedAfterSequence"
                 ],
                 "properties": {
                   "id": {
@@ -98069,6 +98087,20 @@
                     }
                   },
                   "revision": {
+                    "minimum": 1,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "afterSequence": {
+                    "minimum": 1,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "startedAfterSequence": {
                     "minimum": 1,
                     "type": [
                       "integer",
@@ -98359,6 +98391,10 @@
                 ]
               }
             }
+          },
+          "afterSequence": {
+            "minimum": 1,
+            "type": "integer"
           }
         }
       },
@@ -110033,7 +110069,8 @@
           "projectName",
           "origin",
           "sourceWords",
-          "createdAt"
+          "createdAt",
+          "afterSequence"
         ],
         "properties": {
           "id": {
@@ -110117,6 +110154,17 @@
           "createdAt": {
             "format": "date-time",
             "type": "string"
+          },
+          "afterSequence": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -110141,7 +110189,8 @@
                 "projectName",
                 "origin",
                 "sourceWords",
-                "createdAt"
+                "createdAt",
+                "afterSequence"
               ],
               "properties": {
                 "id": {
@@ -110225,6 +110274,17 @@
                 "createdAt": {
                   "format": "date-time",
                   "type": "string"
+                },
+                "afterSequence": {
+                  "anyOf": [
+                    {
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               }
             }
@@ -110618,6 +110678,10 @@
           "words": {
             "maxLength": 4000,
             "type": "string"
+          },
+          "afterSequence": {
+            "minimum": 1,
+            "type": "integer"
           }
         }
       },
@@ -121579,7 +121643,9 @@
                   "summary",
                   "steps",
                   "risks",
-                  "revision"
+                  "revision",
+                  "afterSequence",
+                  "startedAfterSequence"
                 ],
                 "properties": {
                   "id": {
@@ -121712,6 +121778,20 @@
                     }
                   },
                   "revision": {
+                    "minimum": 1,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "afterSequence": {
+                    "minimum": 1,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "startedAfterSequence": {
                     "minimum": 1,
                     "type": [
                       "integer",
