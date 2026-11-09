@@ -10,6 +10,7 @@ import {
   LocalFolder, LocalProjectFolder, LocalProjectListResponse, LocalProjectFolderRequest, LocalHandoverCheck, LocalProjectCloneRequest, LocalProjectCloneResponse, ProjectTransfer,
   LocalTaskBudgetView, LocalBudgetListResponse, LocalBudgetUpdateRequest, LocalSendMessageRequest as SendMessage, LocalPermissionBrief, LOCAL_RUNNER_ATTACHMENT_PATH,
   LocalRunPreviewRequest, LocalPermissionModeRequest, LOCAL_AGENT_PERMISSION_MODES, LocalTool, LocalToolUpsert,
+  LocalFolderPickRequest, LocalFolderPickResponse, LocalFolderCreateRequest, LocalSessionModelRequest, LocalSessionModelResponse,
 } from "../src/index.js";
 
 const sessionId = "6b0f3a52-4d0c-4c1e-9a43-1f7d2c9b8e10";
@@ -74,6 +75,25 @@ describe("本机程序契约", () => {
     expect(LocalTool.properties).not.toHaveProperty("apiKey");
     expect(LocalTool.properties).toHaveProperty("hasKey");
     expect(LOCAL_RUNNER_ROUTES.checkTool).toEqual({ method: "POST", path: "/v1/tools/:id/check", auth: true });
+  });
+
+  it("换文件夹：选文件夹可一步绑到项目；新建文件夹传名字，父目录和项目可选", () => {
+    const projectId = "6b0f3a52-4d0c-4c1e-9a43-1f7d2c9b8e10";
+    expect(Value.Check(LocalFolderPickRequest, {})).toBe(true);
+    expect(Value.Check(LocalFolderPickRequest, { projectId, projectName: "天枢" })).toBe(true);
+    expect(Value.Check(LocalFolderPickRequest, { path: "C:/x" })).toBe(false); // 网页不能直接写路径
+    expect(Value.Check(LocalFolderPickResponse, { folder: null })).toBe(true);
+    expect(Value.Check(LocalFolderCreateRequest, { name: "天枢新项目" })).toBe(true);
+    expect(Value.Check(LocalFolderCreateRequest, { name: "x", parent: "C:/Users/me/Desktop", projectId })).toBe(true);
+    expect(Value.Check(LocalFolderCreateRequest, { name: "" })).toBe(false);
+    expect(LOCAL_RUNNER_ROUTES.createFolder).toEqual({ method: "POST", path: "/v1/folders/create", auth: true });
+  });
+
+  it("子会话换模型：回执写明当场生效还是这一轮做完后生效", () => {
+    expect(Value.Check(LocalSessionModelRequest, { modelProfileId: "sub-haiku" })).toBe(true);
+    expect(Value.Check(LocalSessionModelRequest, { model: "haiku" })).toBe(false);
+    expect(LocalSessionModelResponse.properties.applied.anyOf.map((x: any) => x.const)).toEqual(["now", "after_turn"]);
+    expect(LOCAL_RUNNER_ROUTES.setSessionModel).toEqual({ method: "PUT", path: "/v1/sessions/:id/model", auth: true });
   });
 
   it("权限决定可附理由、可本会话都允许", () => {
@@ -441,6 +461,7 @@ describe("本机程序契约", () => {
     expect(Value.Check(LocalSessionSummary, { ...summary, permissionMode: "plan" })).toBe(true);
     const { permissionMode: _pm, ...noMode } = summary as Record<string, unknown>;
     expect(Value.Check(LocalSessionSummary, noMode)).toBe(false);
+    expect(Value.Check(LocalSessionSummary, { ...summary, pendingModel: { modelProfileId: "th", modelLabel: "TokenHub" } })).toBe(true);
     expect(Value.Check(LocalPermissionModeRequest, { mode: "bypassPermissions" })).toBe(true);
     expect(Value.Check(LocalPermissionModeRequest, { mode: "manual" })).toBe(false);
     expect(Value.Check(LocalSessionEvent, { seq: 5, at, sessionId, type: "permission_mode", mode: "auto", by: "plan_approved" })).toBe(true);

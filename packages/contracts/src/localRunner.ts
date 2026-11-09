@@ -474,10 +474,35 @@ export const LocalProjectCloneRequest = Type.Object({
 export const LocalProjectCloneResponse = Type.Object({ project: Nullable(LocalProjectFolder), branch: Nullable(Type.String()), fellBack: Type.Boolean() }, strict);
 export const LocalFolderListResponse = Type.Object({ folders: Type.Array(LocalFolder) }, strict);
 /**
- * POST /v1/folders/pick：本人在本机选择框里点了取消时 folder 为 null。
- * 选了主目录或它的上级、Claude 配置目录、本机程序数据目录（或它们的上级）时回 400 validation，message 可直接给人看。
+ * POST /v1/folders/pick 的体（「选择其他文件夹…」，设计 17.2 第 32 条）：可以空着（{}）；带 projectId 时选中后一步绑到这个项目（同 PUT /v1/projects/:projectId/folder），
+ * projectName 是项目名（只用来显示）。
  */
-export const LocalFolderPickResponse = Type.Object({ folder: Nullable(LocalFolder) }, strict);
+export const LocalFolderPickRequest = Type.Object({
+  projectId: Type.Optional(Uuid),
+  projectName: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
+}, strict);
+/**
+ * POST /v1/folders/pick：本机弹系统的选文件夹窗口，本人选中后加进允许的文件夹；本人点了取消时 folder 为 null。
+ * 选了主目录或它的上级、Claude 配置目录、本机程序数据目录（或它们的上级）时回 400 validation，message 可直接给人看。
+ * 请求带了 projectId 且选中了：project 是绑好以后的样子；没带或取消了不带。
+ */
+export const LocalFolderPickResponse = Type.Object({ folder: Nullable(LocalFolder), project: Type.Optional(LocalProjectFolder) }, strict);
+/**
+ * POST /v1/folders/create（「新建文件夹…」，设计 17.2 第 32 条）：在 parent 下新建一个空文件夹 name，加进允许的文件夹；带 projectId 时一步绑到这个项目。
+ * - name：一层的名字，不能带 / \ : * ? " < > | 和控制字符，不能是 . 或 ..，不能以点或空格结尾，不能是 Windows 的保留名（CON、PRN、AUX、NUL、COM1–9、LPT1–9，带扩展名的也算）；
+ *   parent 下已经有同名的（不分大小写）回 409 conflict。
+ * - parent：绝对路径，可不传，默认是本人的桌面（没有桌面时是主目录）。只能在本人主目录下、或在已允许的文件夹下；
+ *   新建出来的不能落进 Claude 配置目录、本机程序数据目录（同选文件夹的规矩），不满足回 400 validation，message 可直接给人看。
+ * 不经系统窗口：新建的是空文件夹，不会因此放开本人已有的文件。
+ */
+export const LocalFolderCreateRequest = Type.Object({
+  name: Type.String({ minLength: 1, maxLength: 100 }),
+  parent: Type.Optional(Type.String({ minLength: 1, maxLength: 1000 })),
+  projectId: Type.Optional(Uuid),
+  projectName: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
+}, strict);
+/** 新建好的文件夹（已在允许的列表里）；带了 projectId 时 project 是绑好以后的样子。 */
+export const LocalFolderCreateResponse = Type.Object({ folder: LocalFolder, project: Type.Optional(LocalProjectFolder) }, strict);
 
 // ───────────────────────── 会话 ─────────────────────────
 
@@ -793,6 +818,8 @@ export const LocalSessionSummary = Type.Object({
   run: Type.Optional(LocalRun),
   /** 现在的权限模式（见 LocalPermissionMode）。本人在子会话底下改（PUT /v1/sessions/:id/permission-mode），计划批了从 plan 转 auto。 */
   permissionMode: LocalPermissionMode,
+  /** 本人换了模型、要等这一轮做完才换的（见 LocalSessionModelResponse 的 after_turn）：换成哪个；换好了或没有就不带。 */
+  pendingModel: Type.Optional(Type.Object({ modelProfileId: Id, modelLabel: Type.String() }, strict)),
 }, strict);
 export const LocalSessionListResponse = Type.Object({ sessions: Type.Array(LocalSessionSummary) }, strict);
 
@@ -908,6 +935,23 @@ export const LocalSessionActionResponse = Type.Object({ session: LocalSessionSum
  * 换成更宽的档时，正在等批准的请求按新的档重判一遍，新档放行的就自己放行（网页上那条随之消失）。执行方没有这一档时 400；会话已结束 409。
  */
 export const LocalPermissionModeRequest = Type.Object({ mode: LocalPermissionMode }, strict);
+
+/**
+ * PUT /v1/sessions/:id/model：子会话换模型（天枢伙伴不走这里；设计 17.2 第 32 条）。modelProfileId 是本机的模型配置（GET /v1/models）。
+ * 两种生效方式，回执的 applied 写明，网页分别显示：
+ * - now（已生效）：下一次回答起就用新模型。同一个执行方、同一个来源里换（订阅里 Opus 换 Haiku；同一个网关地址、同一把钥匙下换模型名）时，
+ *   本机当场让 Claude Code 换（它的 set_model，11/09 实测 2.1.318 认）；会话没在跑（停了、排着、交完了）时也是 now，下次开起来就用新的。
+ * - after_turn（这一轮做完后生效）：跨来源（订阅换 TokenHub、换别的网关、换钥匙）要换环境变量，或者是 Codex 的会话，只能重开执行方。
+ *   正在跑的先记下（摘要的 pendingModel），这一轮做完、没有在跑的后台任务时，本机用 --resume 接着原来的对话、换上新模型重开，对话和进度不丢；
+ *   会话空着（等你回复）时当场就重开，回 now。
+ * 换好以后摘要和 status 同步条目里的 run（modelName、origin 等）随之更新，事件流记一条 notice（code model_changed）。
+ * 没有这个模型配置、配置的执行方和会话的不一样回 400。
+ */
+export const LocalSessionModelRequest = Type.Object({ modelProfileId: Id }, strict);
+export const LocalSessionModelResponse = Type.Object({
+  applied: Type.Union([Type.Literal("now"), Type.Literal("after_turn")]),
+  session: LocalSessionSummary,
+}, strict);
 
 // ───────────────────────── 预算（新首页设计 11.3、11.4） ─────────────────────────
 
@@ -1375,6 +1419,11 @@ export type TLocalToolUpsert = Static<typeof LocalToolUpsert>;
 export type TLocalFolder = Static<typeof LocalFolder>;
 export type TLocalFolderListResponse = Static<typeof LocalFolderListResponse>;
 export type TLocalFolderPickResponse = Static<typeof LocalFolderPickResponse>;
+export type TLocalFolderPickRequest = Static<typeof LocalFolderPickRequest>;
+export type TLocalFolderCreateRequest = Static<typeof LocalFolderCreateRequest>;
+export type TLocalFolderCreateResponse = Static<typeof LocalFolderCreateResponse>;
+export type TLocalSessionModelRequest = Static<typeof LocalSessionModelRequest>;
+export type TLocalSessionModelResponse = Static<typeof LocalSessionModelResponse>;
 export type TLocalSessionStatus = Static<typeof LocalSessionStatus>;
 export type TLocalSessionSubject = Static<typeof LocalSessionSubject>;
 export type TLocalUsage = Static<typeof LocalUsage>;
@@ -1477,6 +1526,7 @@ export const LOCAL_RUNNER_ROUTES = {
   checkTool: { method: "POST", path: "/v1/tools/:id/check", auth: true },
   listFolders: { method: "GET", path: "/v1/folders", auth: true },
   pickFolder: { method: "POST", path: "/v1/folders/pick", auth: true },
+  createFolder: { method: "POST", path: "/v1/folders/create", auth: true },
   deleteFolder: { method: "DELETE", path: "/v1/folders/:id", auth: true },
   listSessions: { method: "GET", path: "/v1/sessions", auth: true },
   createSession: { method: "POST", path: "/v1/sessions", auth: true },
@@ -1494,6 +1544,7 @@ export const LOCAL_RUNNER_ROUTES = {
   putBudget: { method: "PUT", path: "/v1/budgets", auth: true },
   previewRun: { method: "POST", path: "/v1/runs/preview", auth: true },
   setPermissionMode: { method: "PUT", path: "/v1/sessions/:id/permission-mode", auth: true },
+  setSessionModel: { method: "PUT", path: "/v1/sessions/:id/model", auth: true },
   listProjects: { method: "GET", path: "/v1/projects", auth: true },
   putProjectFolder: { method: "PUT", path: "/v1/projects/:projectId/folder", auth: true },
   handoverCheck: { method: "POST", path: "/v1/projects/:projectId/handover-check", auth: true },
