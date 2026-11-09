@@ -36,7 +36,7 @@ const split = (id: string, taskId: string): TCardSplitRequestView => ({ id, task
   origin: "web", createdAt: taskId === "t1" ? "2026-11-06T04:00:00Z" : "2026-11-06T04:01:00Z" });
 
 describe("worker 和链路", () => {
-  it("云端三格照搬；带岗位没开工的是「等开工」；验收中是云端的验收员", () => {
+  it("云端三格照搬；带技能没开工的是「等开工」；验收中是云端的验收员", () => {
     expect(toWorker(item({ stage: "todo", queueReason: "not_dispatched", startedAt: null, step: null }), ctx())).toMatchObject({ state: "queued", reason: "start", mark: null });
     expect(toWorker(item({ stage: "todo", queueReason: "device_offline" }), ctx())).toMatchObject({ state: "queued", reason: "offline" });
     expect(toWorker(item({ stage: "todo", queueReason: "slot", queuePosition: 3 }), ctx())).toMatchObject({ state: "queued", reason: "slot", queuePos: 3 });
@@ -203,7 +203,7 @@ describe("开工（Task 管线里的选项框）", () => {
   const local = { runner: createMockRunner(), phase: "offline", version: null, status: null, models: [], folders: [], sessions: [], pairing: null, error: null,
     refresh: vi.fn(), pair: vi.fn(), unpair: vi.fn(), pickFolder: vi.fn(), setIncludePersonal: vi.fn() } as unknown as Parameters<typeof LocalContext.Provider>[0]["value"];
 
-  it("拆好了：问「Task 名：这样开工？」，编号的几步，每步的岗位、对约定第几条，几个子会话；就按这个开始（推荐）/ 改一改 / 自己说；没有岗位的是我自己", () => {
+  it("拆好了：问「Task 名：这样开工？」，编号的几步，每步的技能、对约定第几条，几个子会话；就按这个开始（推荐）/ 改一改 / 自己说；没有技能的是我自己", () => {
     const html = renderToStaticMarkup(<LocalContext.Provider value={local}>
       <PlanDecision target={{ taskId: task.taskId }} name={task.name} drafts={[draft("00000000-0000-4000-8000-0000000000d1", "派活单组件"), draft("00000000-0000-4000-8000-0000000000d2", "和晨星对接口", { role: null, executor: "self" })]}
         roles={[]} handheld={false} onSay={vi.fn()} onChanged={vi.fn()} />

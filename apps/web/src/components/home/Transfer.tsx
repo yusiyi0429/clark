@@ -23,6 +23,7 @@ import type { Project } from "@/lib/home/projects";
 import { handoverRule, justStarted, type HandoverSection, type Person, type Transfer } from "@/lib/home/transfer";
 import { answeredOf, markAnswered } from "./TaskDecisions";
 import { ICON, StateIcon } from "./StateIcon";
+import { Switch } from "@/components/ui/Switch";
 import { useViewChrome } from "./view";
 import h from "@/styles/home.module.css";
 
@@ -211,11 +212,10 @@ export function HandoverCard({ transfer, onChanged }: { transfer: Transfer; onCh
         </p>
       ) : null}
       <div className={h.noteFoot}>
-        <label className={h.check}>
-          <input type="checkbox" checked={transfer.includeHistory} disabled={sent} data-testid="handover-history"
-            onChange={(event) => { const value = event.target.checked; attempt(async () => { await updateTransfer(transfer.id, { includeHistory: value }); await onChanged(); }); }} />
+        <Switch className={h.check} checked={transfer.includeHistory} disabled={sent} testId="handover-history"
+          onChange={(value) => attempt(async () => { await updateTransfer(transfer.id, { includeHistory: value }); await onChanged(); })}>
           带上对话记录
-        </label>
+        </Switch>
         {sent ? null : <ConfirmSend name={transfer.to.name} disabled={findings.length > 0 || !!editing || busyWith} onConfirm={send} />}
         {failed ? <FailedLine inline {...failed} /> : null}
       </div>

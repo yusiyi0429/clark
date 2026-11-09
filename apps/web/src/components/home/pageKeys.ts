@@ -4,7 +4,7 @@
  */
 export const PAGE_KEYS = ["profile", "buddy", "connections", "roles", "memory", "preferences"] as const;
 export type PageKey = (typeof PAGE_KEYS)[number];
-export const PAGE_TITLE: Record<PageKey, string> = { profile: "头像和资料", buddy: "伙伴", connections: "连接", roles: "岗位", memory: "我的记忆", preferences: "偏好" };
+export const PAGE_TITLE: Record<PageKey, string> = { profile: "头像和资料", buddy: "伙伴", connections: "连接和技能", roles: "连接和技能", memory: "我的记忆", preferences: "偏好" };
 export const pageHref = (page: PageKey) => `/me/work/settings/${page}`;
 export const monthHref = (period: string) => `/me/work/month/${period}`;
 export const isPage = (value: string | undefined): value is PageKey => !!value && (PAGE_KEYS as readonly string[]).includes(value);

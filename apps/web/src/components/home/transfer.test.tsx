@@ -44,7 +44,8 @@ describe("项目转交（16.7，接 B 的转交接口）", () => {
     const card = render(<HandoverCard transfer={transfer({ note: NOTE })} onChanged={noop} />);
     expect(card).toMatch(/到哪了.*没做完的事.*卡1.*可以问谁/);
     expect(card.match(/aria-label="改「/g)?.length).toBe(3);
-    expect(card).toMatch(/<input type="checkbox"(?![^>]*checked)[^>]*data-testid="handover-history"/);
+    // 「带上对话记录」是开关（左右拨动），默认关。
+    expect(card).toMatch(/<button type="button" role="switch" aria-checked="false"[^>]*data-testid="handover-history"/);
     expect(card).toContain("交给 陈晨星");
     const sent = render(<HandoverCard transfer={transfer({ note: NOTE, status: "sent" })} onChanged={noop} />);
     expect(sent).not.toContain('data-testid="handover-send"');

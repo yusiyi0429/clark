@@ -77,12 +77,12 @@ export function ReviewDialog({ onClose, onStart }: { onClose: () => void; onStar
       <div className={local.start}>
         {critics && !critics.length ? (
           <div className={local.field}>
-            <span className={local.faint}>还没有挑刺的岗位</span>
-            <Link href="/me/team" className={s.link}>去岗位页添加</Link>
+            <span className={local.faint}>还没有挑刺的技能</span>
+            <Link href="/me/team" className={s.link}>去技能页添加</Link>
           </div>
         ) : (
-          <div className={local.field} role="group" aria-label="挑刺的岗位">
-            <span className={local.label}>挑刺的岗位 · 最多 3 个</span>
+          <div className={local.field} role="group" aria-label="挑刺的技能">
+            <span className={local.label}>挑刺的技能 · 最多 3 个</span>
             <div className={local.chipRow}>
               {(critics ?? []).map((role) => (
                 <button key={role.id} type="button" role="checkbox" aria-checked={picked.includes(role.id)} className={local.choice} onClick={() => toggle(role.id)}>{role.name}</button>

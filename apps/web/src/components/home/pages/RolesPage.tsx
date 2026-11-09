@@ -1,16 +1,17 @@
 "use client";
 
 /**
- * 岗位（个人菜单「岗位」，V2 设计 19.6；新首页二级页，文档类版式 5.4.7）。老页面 /me/team 能做的这里都能做：
- * - 待你确认：别人的卡提的岗位修改。哪个岗位、改哪一段、哪张卡、为什么；「看改动」展开改前改后；「采纳」写回（版本 +1）、「不要」丢掉。
- * - 我的岗位：一行一个（名字 + 家族 · 种类），点进去是详情；「从岗位包添加」在原处展开预设（按家族分组，加过的写「已添加」）。
+ * 技能（「连接和技能」页的「技能」标签，设计 §17.2 第 22 条：「岗位」改叫「技能」，去掉「岗位包」）。代码里的 roles、family 不动，只改给人看的字。
+ * - 我的：最上面是「待你确认」（别人的卡提的技能修改：哪个技能、改哪一段、哪张卡、为什么；「看改动」展开改前改后；「采纳」写回、「不要」丢掉），
+ *   下面是我的技能卡（图标、名字、职责第一句、来源「预设 / 自己写的」、右上角 ✓），点卡进详情。
+ * - 可添加：全部预设，按通用、研发、战略和内容分组；加过的 ✓，没加的 +，点 + 就地添加。
  * - 详情：名称、职责 / 做法 / 验收口径（Markdown，点一下改，「预览」回去）、工具（多选）、模型档位（三段）、修改记录（点开看原因和每项改前改后）。
  *   有改动才出「取消 / 保存」；保存只带改了的字段和版本号，别人先改过（409）就重读。
  * 成功不弹 toast，看得到的变化就是反馈；没成在原处写「失败 · 重试」。不写说明句。
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Markdown from "react-markdown";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, ClipboardCheck, Hammer, MessageSquareWarning } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
 import { SegmentedSwitch } from "@/components/SegmentedSwitch";
 import { FailedLine, failureOf, type Failure } from "@/components/work/DecisionBox";
@@ -19,21 +20,30 @@ import { REMARK_PLUGINS } from "@/lib/markdown";
 import {
   CHANGE_LABEL, FAMILY_LABEL, FIELDS, FIELD_LABEL, KIND_LABEL, TIERS, TIER_LABEL, TOOLS, TOOL_LABEL,
   addPreset, decideProposal, listProposals, listRevisions, listRoles, patchRole,
-  type ModelTier, type PatchRoleRequest, type RoleFamily, type RoleListResponse, type RoleProposalView, type RoleRevisionView, type RoleView,
+  type ModelTier, type PatchRoleRequest, type RoleFamily, type RoleKind, type RoleListResponse, type RoleProposalView, type RoleRevisionView, type RoleView,
 } from "@/lib/team/roles";
 import type { SecondaryPageProps } from "./index";
-import { ICON, Loading, Row, Section, relative } from "./parts";
+import { AddButton, Added, Card, CardGrid, ICON, Loading, Row, Section, relative } from "./parts";
 import p from "@/styles/home-pages.module.css";
 
 const roleLine = (role: Pick<RoleView, "family" | "kind">) => `${FAMILY_LABEL[role.family]} · ${KIND_LABEL[role.kind]}`;
 const cardHref = (id: string) => `/me/work/cards/${encodeURIComponent(id)}`;
 const TIER_SEGMENTS = TIERS.map((tier) => ({ id: tier, label: TIER_LABEL[tier] }));
+const KIND_ICON: Record<RoleKind, ReactNode> = { worker: <Hammer {...ICON} />, reviewer: <ClipboardCheck {...ICON} />, critic: <MessageSquareWarning {...ICON} /> };
 
-export function RolesPage({ go }: SecondaryPageProps) {
+/** 卡上那一行：职责的第一句（跳过标题行，去掉 Markdown 记号）。 */
+export function dutyLine(md: string): string {
+  const line = md.split("\n").filter((text) => !/^\s*#/.test(text)).map((text) => text.replace(/^\s*(?:>|[-*+]|\d+[.、)])\s*/, "").replace(/[*_`~]|\[([^\]]*)\]\([^)]*\)/g, "$1").trim()).find(Boolean) ?? "";
+  const end = line.search(/[。！？!?；;]|\.(?:\s|$)/);
+  return end >= 0 ? line.slice(0, end + 1) : line;
+}
+
+export type SkillsView = "mine" | "add";
+
+export function RolesPage({ go, view = "mine", selected = null, onSelect }: SecondaryPageProps & { view?: SkillsView; selected?: string | null; onSelect: (id: string | null) => void }) {
   const [data, setData] = useState<RoleListResponse | null>(null);
   const [proposals, setProposals] = useState<RoleProposalView[]>([]);
   const [loadFailed, setLoadFailed] = useState<Failure | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
   const load = useCallback(async () => {
     setLoadFailed(null);
     try {
@@ -52,20 +62,27 @@ export function RolesPage({ go }: SecondaryPageProps) {
   if (!data) return <Loading />;
   if (role) {
     const saved = (next: RoleView) => setData((current) => current && { ...current, roles: current.roles.map((entry) => (entry.id === next.id ? next : entry)) });
-    return <RoleDetail key={`${role.id}-${role.version}`} role={role} onBack={() => setSelected(null)} onSaved={saved} onConflict={() => void load()} />;
+    return <RoleDetail key={`${role.id}-${role.version}`} role={role} onBack={() => onSelect(null)} onSaved={saved} onConflict={() => void load()} />;
   }
+  if (view === "add") return <Presets presets={data.presets} onAdded={() => void load()} />;
   return (
     <>
       {proposals.length ? <Proposals proposals={proposals} go={go} onDecided={() => void load()} /> : null}
-      <MyRoles roles={roles} presets={data.presets} onOpen={setSelected} onAdded={(next) => { setSelected(next.id); void load(); }} />
+      {roles.length ? (
+        <CardGrid label="我的技能" testId="roles-list">
+          {roles.map((entry) => (
+            <Card key={entry.id} testId="role-card" icon={KIND_ICON[entry.kind]} name={entry.name} line={dutyLine(entry.dutiesMd) || null}
+              source={entry.presetKey ? "预设" : "自己写的"} corner={<Added />} label={entry.name} onOpen={() => onSelect(entry.id)} />
+          ))}
+        </CardGrid>
+      ) : <p className={p.empty}>还没有技能</p>}
     </>
   );
 }
 
-/* ---------------- 我的岗位 + 从岗位包添加 ---------------- */
+/* ---------------- 可添加：全部预设，按家族分组 ---------------- */
 
-function MyRoles({ roles, presets, onOpen, onAdded }: { roles: RoleView[]; presets: RoleListResponse["presets"]; onOpen: (id: string) => void; onAdded: (role: RoleView) => void }) {
-  const [adding, setAdding] = useState(false);
+function Presets({ presets, onAdded }: { presets: RoleListResponse["presets"]; onAdded: () => void }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [failed, setFailed] = useState<{ key: string; failure: Failure } | null>(null);
   const families = (Object.keys(FAMILY_LABEL) as RoleFamily[])
@@ -74,42 +91,24 @@ function MyRoles({ roles, presets, onOpen, onAdded }: { roles: RoleView[]; prese
   const add = async (key: string) => {
     setBusy(key);
     setFailed(null);
-    try { onAdded(await addPreset(key)); setAdding(false); }
+    try { await addPreset(key); onAdded(); }
     catch (error) { setFailed({ key, failure: failureOf(error, () => void add(key)) }); }
     finally { setBusy(null); }
   };
-  const toggle = <HeroButton variant="tertiary" size="sm" aria-expanded={adding} onPress={() => setAdding(!adding)}>{adding ? "收起" : "从岗位包添加"}</HeroButton>;
   return (
     <>
-      <Section title="我的岗位" aside={toggle} testId="roles-list">
-        {roles.length ? (
-          <ul className={p.rows}>
-            {roles.map((entry) => (
-              <li key={entry.id}>
-                <button type="button" className={`${p.row} ${p.rowButton}`} onClick={() => onOpen(entry.id)} data-testid="role-row">
-                  <span className={p.rowText}>
-                    <span className={p.rowName}><span>{entry.name}</span></span>
-                    <span className={p.rowSub}>{roleLine(entry)}</span>
-                  </span>
-                  <ChevronRight {...ICON} className={p.rowChevron} aria-hidden />
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : <p className={p.empty}>还没有岗位</p>}
-      </Section>
-      {adding ? families.map((group) => (
+      {families.map((group) => (
         <Section key={group.family} title={FAMILY_LABEL[group.family]} testId={`presets-${group.family}`}>
-          <ul className={p.rows}>
+          <CardGrid label={FAMILY_LABEL[group.family]}>
             {group.presets.map((preset) => (
-              <Row key={preset.presetKey} name={preset.name} tag={KIND_LABEL[preset.kind]}
-                action={preset.added ? <span className={p.state}>已添加</span>
+              <Card key={preset.presetKey} testId="preset-card" icon={KIND_ICON[preset.kind]} name={preset.name} line={dutyLine(preset.dutiesMd) || null} source="预设"
+                corner={preset.added ? <Added />
                   : failed?.key === preset.presetKey ? <FailedLine inline {...failed.failure} />
-                  : <HeroButton variant="secondary" size="sm" isDisabled={busy !== null} onPress={() => void add(preset.presetKey)}>添加</HeroButton>} />
+                  : <AddButton label={`添加 ${preset.name}`} disabled={busy !== null} onPress={() => void add(preset.presetKey)} />} />
             ))}
-          </ul>
+          </CardGrid>
         </Section>
-      )) : null}
+      ))}
     </>
   );
 }
@@ -163,7 +162,7 @@ export function Diff({ before, after }: { before: string; after: string }) {
   return <div className={p.diff}>{side("改前", before, left, inAfter, "del")}{side("改后", after, right, inBefore, "add")}</div>;
 }
 
-/* ---------------- 一个岗位的详情 ---------------- */
+/* ---------------- 一个技能的详情 ---------------- */
 
 type Draft = Pick<RoleView, "name" | "dutiesMd" | "practiceMd" | "acceptanceMd" | "tools" | "modelTier">;
 const draftOf = (role: RoleView): Draft => ({ name: role.name, dutiesMd: role.dutiesMd, practiceMd: role.practiceMd, acceptanceMd: role.acceptanceMd, tools: role.tools, modelTier: role.modelTier });
@@ -206,10 +205,10 @@ function RoleDetail({ role, onBack, onSaved, onConflict }: { role: RoleView; onB
 
   return (
     <div className={p.stack} data-testid="role-detail">
-      <div className={p.back}><HeroButton variant="ghost" size="sm" onPress={onBack}><ChevronLeft {...ICON} aria-hidden />全部岗位</HeroButton></div>
+      <div className={p.back}><HeroButton variant="ghost" size="sm" onPress={onBack}><ChevronLeft {...ICON} aria-hidden />全部技能</HeroButton></div>
       <Section title="名称">
         <div className={p.field}>
-          <input className={p.input} value={draft.name} maxLength={20} aria-label="岗位名称" onChange={(event) => set("name", event.target.value)} />
+          <input className={p.input} value={draft.name} maxLength={20} aria-label="技能名称" onChange={(event) => set("name", event.target.value)} />
           <span className={p.rowSub}>{roleLine(role)} · 第 {role.version} 版</span>
         </div>
       </Section>

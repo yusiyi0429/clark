@@ -18,7 +18,7 @@ const base: Omit<TTaskView, "card"> = {
 const facet: TTaskCard = { stage: "todo", wait: null, executor: "claude_code", role: null, model: null, criterion: null, run: null, handback: null, deliverable: null, after: [], sourceWords: [] };
 const RID = "00000000-0000-4000-8000-000000000001";
 
-describe("岗位页", () => {
+describe("技能页", () => {
   const proposal: TRoleProposalView = {
     id: "00000000-0000-4000-8000-000000000002", role: { id: RID, name: "开发", kind: "worker" }, baseVersion: 3, sourceKind: "overrule",
     handbackId: "00000000-0000-4000-8000-000000000003", card: { id: "c9", title: "接本机" }, field: "practiceMd",
@@ -26,7 +26,7 @@ describe("岗位页", () => {
     status: "open", createdAt: "2026-11-06T01:00:00Z", decidedAt: null,
   };
 
-  it("待你确认：每条有采纳、不要，写明哪个岗位、哪一段、为什么、因为哪张卡", () => {
+  it("待你确认：每条有采纳、不要，写明哪个技能、哪一段、为什么、因为哪张卡", () => {
     const html = renderToStaticMarkup(<Proposals proposals={[proposal]} go={vi.fn()} onDecided={vi.fn()} />);
     for (const text of ["待你确认", "开发", "做法", "验收被推翻：没有能核对的证据", "接本机", "采纳", "不要", "看改动"]) expect(html).toContain(text);
   });
@@ -47,10 +47,10 @@ describe("岗位页", () => {
   });
 });
 
-describe("卡上写岗位名", () => {
+describe("卡上写技能名", () => {
   /** 看得见的字（去掉图标的读屏标签）。 */
   const text = (markup: string) => markup.replace(/aria-label="[^"]*"/g, "");
-  it("配了岗位的卡写岗位名，不写执行方；没配岗位不写", () => {
+  it("配了技能的卡写技能名，不写执行方；没配技能不写", () => {
     const withRole: CardItem = { ...base, card: { ...facet, role: { id: RID, name: "调研员", kind: "worker" } } };
     const html = text(renderToStaticMarkup(<KanbanCard card={boardCards([withRole])[0]!} canStart={false} elsewhere={null} onStart={vi.fn()} now={0} />));
     expect(cardRole(withRole)).toEqual({ id: RID, name: "调研员", kind: "worker" });
@@ -62,7 +62,7 @@ describe("卡上写岗位名", () => {
     expect(text(renderToStaticMarkup(<KanbanCard card={boardCards([self])[0]!} canStart={false} elsewhere={null} onStart={vi.fn()} now={0} />))).not.toContain("我自己");
   });
 
-  it("开始时的模型默认按岗位档位：强 Opus、中 Sonnet、轻 Haiku，认不出用默认", () => {
+  it("开始时的模型默认按技能档位：强 Opus、中 Sonnet、轻 Haiku，认不出用默认", () => {
     const models = [
       { id: "subscription", model: null, label: "订阅", isDefault: true },
       { id: "o", model: "opus", label: "Opus", isDefault: false },
@@ -88,7 +88,7 @@ describe("专题的评审会", () => {
     expect(html).toContain('data-kind="advice"');
     expect(html).toContain("样本太少");
   });
-  it("评审会写明这次请的挑刺岗位", () => {
+  it("评审会写明这次请的挑刺技能", () => {
     expect(reviewText(["反方", "读者视角"])).toContain("「反方」、「读者视角」");
   });
 });

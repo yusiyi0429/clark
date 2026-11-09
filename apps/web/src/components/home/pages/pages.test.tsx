@@ -13,6 +13,8 @@ import { ConnectionsPage } from "./ConnectionsPage";
 import { MonthView } from "./MonthPage";
 import { PreferencesPage } from "./PreferencesPage";
 import { MONTH_PAGE, SECONDARY_PAGES } from "./index";
+import { dutyLine } from "./RolesPage";
+import { PAGE_TITLE } from "../pageKeys";
 import { httpMonthSource, monthFixture, monthSummary, nextPeriod, type MonthPageData } from "./useMonthPage";
 
 const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -100,10 +102,10 @@ const local = (phase: LocalPhase, value: TLocalStatusResponse | null) => ({
 const withLocal = (node: ReactNode, phase: LocalPhase, value: TLocalStatusResponse | null) =>
   renderToStaticMarkup(<LocalContext.Provider value={local(phase, value)}>{node}</LocalContext.Provider>);
 
-describe("连接页（三组）", () => {
-  it("这台电脑就绪：本机程序、Claude Code 下面是额度和每个窗口的明细，GitHub、飞书命令行、文件夹、同时跑、两个开关；再是我的账号、公司两组", () => {
+describe("连接（卡片网格 + 三组）", () => {
+  it("这台电脑就绪：上面是连接的卡（本体、GitHub、飞书命令行）；下面这台电脑（本机程序、Claude Code 带额度、文件夹、同时跑、两个开关）、我的账号、公司", () => {
     const html = withLocal(<ConnectionsPage go={() => undefined} />, "ready", status());
-    expect(text(html)).toMatch(/这台电脑.*我的账号.*公司/);
+    expect(text(html)).toMatch(/本体.*GitHub.*飞书命令行.*这台电脑.*我的账号.*公司/);
     const claude = html.split('data-testid="row-agent:claude-code"')[1]!.split("data-testid=\"row-")[0]!;
     expect(text(claude)).toContain("Claude Code 2.1.318 · max 已连接");
     // 额度和右栏「用量」同一套数（usageCells）。
@@ -112,17 +114,20 @@ describe("连接页（三组）", () => {
     expect(text(claude)).toContain("本周 · Fable：剩 60%");
     expect(text(claude)).toContain("额外额度：未开");
     expect(claude).toContain('data-tone="warning"');
-    expect(text(html)).toContain("GitHub gh · sunm 已连接");
-    expect(text(html)).toContain("飞书命令行 lark-cli auth login 未连接");
+    // 卡：图标、名字、一行状态、来源；连上的右上角 ✓。
+    const card = (id: string) => html.split(`data-testid="card-${id}"`)[1]!.split("</li>")[0]!;
+    expect(text(card("tool:gh"))).toContain("GitHub 已连接 · gh · sunm 本机");
+    expect(card("tool:gh")).toContain('aria-label="已连接"');
+    expect(text(card("tool:lark-cli"))).toContain("飞书命令行 未连接 · lark-cli auth login 本机");
+    expect(card("tool:lark-cli")).not.toContain('aria-label="已连接"');
+    expect(html).not.toContain('data-testid="row-tool:gh"');
     expect(text(html)).toContain("C:/code/Tianshu-MVP");
-    // 工具：一行「工具」带「添加」（列表在本机读回来以后画在下面）；在 GitHub 那几行后面、文件夹前面。
-    expect(html).toMatch(/data-testid="row-tool:lark-cli".*data-testid="row-local-tools".*data-testid="row-folders"/s);
-    expect(html.split('data-testid="row-local-tools"')[1]!.split("</li>")[0]).toContain('aria-label="添加工具"');
     expect(html).toContain('aria-label="同时跑 3 个"');
     const row = (id: string) => html.split(`data-testid="row-${id}"`)[1]!.split("</li>")[0]!;
-    expect(row("auto-merge")).toMatch(/role="switch"[^>]* checked=""/);
-    expect(row("personal-config")).toContain(`role="switch"`);
-    expect(row("personal-config")).not.toContain(` checked=""`);
+    // 开关是左右拨动的那种（整行一个 role="switch" 按钮），不是勾选框。
+    expect(row("auto-merge")).toMatch(/<button type="button" role="switch" aria-checked="true"/);
+    expect(row("personal-config")).toMatch(/<button type="button" role="switch" aria-checked="false"/);
+    expect(html).not.toContain('type="checkbox"');
     // 状态词只有那四个；不写「插件」。
     expect(text(html)).not.toContain("插件");
   });
@@ -135,6 +140,16 @@ describe("连接页（三组）", () => {
     expect(row(15)).toContain('aria-label="同时跑 15 个"');
     expect(text(row(15))).toContain("超过 10 个，电脑和额度可能吃紧");
     expect(text(row(10))).not.toContain("超过 10 个");
+  });
+
+  it("可添加：金蝶（还没定，写未连接、不给动作）和「其他工具」（+）；本机没就绪时 + 不能点", () => {
+    const html = withLocal(<ConnectionsPage go={() => undefined} view="add" />, "offline", null);
+    const card = (id: string) => html.split(`data-testid="${id}"`)[1]!.split("</li>")[0]!;
+    expect(text(card("local-tool:kingdee"))).toContain("金蝶 未连接 预设 · 本机");
+    expect(card("local-tool:kingdee")).not.toContain("<button");
+    expect(text(card("card-add-tool"))).toContain("其他工具 本机");
+    expect(card("card-add-tool")).toMatch(/aria-label="添加工具"[^>]*disabled=""|disabled=""[^>]*aria-label="添加工具"/);
+    expect(html).not.toContain("这台电脑");
   });
 
   it("这台电脑离线：本机程序写「离线」，下面是安装命令和复制；不列 Claude Code 等本机才知道的行", () => {
@@ -230,6 +245,25 @@ describe("偏好页（外观、通知、缺省预算、伙伴、回收站）", (
 describe("挂载表", () => {
   it("六个二级页和月份页都交了", () => {
     expect(Object.keys(SECONDARY_PAGES).sort()).toEqual(["buddy", "connections", "memory", "preferences", "profile", "roles"]);
+    // 连接和技能：两个老页键开同一页，分别落在「连接」「技能」标签。
+    expect(PAGE_TITLE.connections).toBe("连接和技能");
+    expect(PAGE_TITLE.roles).toBe("连接和技能");
+    const tabOf = (page: "connections" | "roles") => {
+      const Page = SECONDARY_PAGES[page];
+      const html = withLocal(<Page go={() => undefined} />, "offline", null);
+      return text(html.split('data-testid="customize-bar"')[1]!.split("</div>")[0]!.match(/aria-checked="true"[^>]*>([^<]+)</)?.[1] ?? "");
+    };
+    expect(tabOf("connections")).toContain("连接");
+    expect(tabOf("roles")).toContain("技能");
     expect(MONTH_PAGE).not.toBeNull();
+  });
+});
+
+describe("技能卡上那一行", () => {
+  it("取职责的第一句，去掉 Markdown 记号", () => {
+    expect(dutyLine("## 职责\n- 按交代改代码、补测试。交回前跑全量测试")).toBe("按交代改代码、补测试。");
+    expect(dutyLine("- **按交代**改代码、补测试。交回前跑全量测试")).toBe("按交代改代码、补测试。");
+    expect(dutyLine("Review the diff. Then report")).toBe("Review the diff.");
+    expect(dutyLine("")).toBe("");
   });
 });

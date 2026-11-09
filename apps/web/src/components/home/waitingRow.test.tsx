@@ -147,7 +147,7 @@ describe("就地答（9.6，契约 WaitingAnswer）", () => {
     expect(waitingAnswer(item, { api: api(), local: local(), handheld: false }).actions).toEqual([]);
   });
 
-  it("岗位建议照旧「采纳 / 不要」；open 的整行点进去，没有按钮和 chip", () => {
+  it("技能建议照旧「采纳 / 不要」；open 的整行点进去，没有按钮和 chip", () => {
     const role = wait({ id: "proposal:r1", kind: "role", title: "开发的说明改一句", answer: "inline", open: { kind: "role", id: "r1" } });
     expect(waitingAnswer(role, { api: api(), local: local(), handheld: true }).actions.map((action) => action.label)).toEqual(["采纳", "不要"]);
     for (const kind of ["verdict", "acceptance", "month", "device", "quota", "meeting", "mission_card"] as const) {
