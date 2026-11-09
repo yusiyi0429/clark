@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { foldEvents, type SessionEntry } from "@/lib/local/sessionView";
 import type { TLocalSessionEvent } from "@/lib/local/runner";
-import { SessionComposer, SessionTranscript, roundStart } from "./SessionTranscript";
+import { SessionComposer, SessionTranscript, processSummary, roundStart } from "./SessionTranscript";
 
 const step = (seq: number, title: string, at: string, done = true): SessionEntry => ({ kind: "step", seq, at, toolUseId: `t${seq}`, title, done, isError: false });
 const render = (entries: SessionEntry[], live = true) =>
@@ -10,45 +10,81 @@ const render = (entries: SessionEntry[], live = true) =>
 /** 组头：带 aria-expanded 的按钮。 */
 const heads = (html: string) => [...html.matchAll(/<button[^>]*aria-expanded="[^"]*"[^>]*>([\s\S]*?)<\/button>/g)].map((match) => match[1]!);
 
-describe("工具调用行（设计 5.4.3）", () => {
-  it("连续 3 步折成一行：「3 步」加最后一步，收着", () => {
+const permit = (seq: number, title: string, at: string, decision: "allow" | "deny" | null): SessionEntry => ({ kind: "permission", seq, at, decision,
+  request: { requestId: `p${seq}`, toolName: "Bash", title, input: {}, outsidePaths: [], canAllowForSession: true, requestedAt: at } });
+/** 去掉标签的纯文字。 */
+const text = (html: string) => html.replace(/<[^>]+>/g, "|").replace(/\|+/g, "|");
+
+describe("过程收起（28 条，照 Claude Code）", () => {
+  it("被批准行隔开的步骤合成一段：两句对话之间只一行；批过的不出单独行、不写「已批准」", () => {
     const html = render([
-      step(1, "读 SessionTranscript.tsx", "2026-11-07T01:00:00Z"),
-      step(2, "改 v2-session.module.css", "2026-11-07T01:00:20Z"),
-      step(3, "跑 vitest", "2026-11-07T01:01:12Z"),
-    ]);
-    const found = heads(html);
-    expect(found).toHaveLength(1);
-    expect(found[0]).toContain("3 步");
-    expect(found[0]).toContain("跑 vitest");
-    expect(found[0]).toContain("1 分");
+      { kind: "user", seq: 1, at: "2026-11-09T01:00:00Z", text: "先跑测试" },
+      step(2, "读文件 web/a.ts", "2026-11-09T01:00:01Z"),
+      permit(3, "运行 pnpm test", "2026-11-09T01:00:02Z", "allow"),
+      step(4, "运行 pnpm test", "2026-11-09T01:00:03Z"),
+      permit(5, "搜索 roundStart", "2026-11-09T01:00:04Z", "allow"),
+      step(6, "搜索 roundStart", "2026-11-09T01:00:05Z"),
+      { kind: "assistant", seq: 7, at: "2026-11-09T01:00:06Z", text: "测完了" },
+      step(8, "改文件 web/a.ts", "2026-11-09T01:00:07Z"),
+    ], false);
+    expect(heads(html)).toHaveLength(2);
+    expect(html).not.toContain("已批准");
+    expect(html).not.toContain("data-resolved");
+    // 收着：只有总结，点开才一步一行；步骤不写时间。
+    expect(html).toContain('aria-label="运行 1 条命令 · 读 1 个文件 · 搜索 1 次 · 4 秒，展开"');
     expect(html).toContain('aria-expanded="false"');
+    expect(text(html)).toContain("|读文件 web/a.ts|运行 pnpm test|搜索 roundStart|");
+    expect(html).not.toMatch(/<time>/);
   });
 
-  it("只有一步不画组头", () => {
-    const html = render([step(1, "读 SessionTranscript.tsx", "2026-11-07T01:00:00Z")]);
-    expect(heads(html)).toHaveLength(0);
-    expect(html).not.toContain("1 步");
-    expect(html).toContain("读 SessionTranscript.tsx");
+  it("总结按类型数：运行 5 条命令 · 读 3 个文件 · 改 2 个文件 · 搜索 2 次，后面跟这一段的用时；别的写「其他 N 步」", () => {
+    const titles = ["运行 a", "运行 b", "运行 c", "运行 d", "运行 e", "读文件 x", "读文件 y", "读 z", "改文件 x", "写文件 n", "搜索 foo", "找文件 *.ts"];
+    const html = render(titles.map((title, index) => step(index + 1, title, `2026-11-09T01:0${index < 6 ? 0 : 1}:${String(index * 5).padStart(2, "0")}Z`)), false);
+    expect(heads(html)[0]).toMatch(/运行 5 条命令 · 读 3 个文件 · 改 2 个文件 · 搜索 2 次<\/span><span[^>]*>1 分 55 秒/);
+    expect(processSummary(["派子任务 看代码", "运行 x", "更新计划"])).toBe("运行 1 条命令 · 其他 2 步");
   });
 
-  it("最后一步还在跑：组头转圈；会话不在跑了就是箭头", () => {
-    const entries = [step(1, "读 a.ts", "2026-11-07T01:00:00Z"), step(2, "跑 pnpm test", "2026-11-07T01:00:05Z", false)];
-    expect(heads(render(entries))[0]).toContain('aria-label="进行中"');
-    expect(heads(render(entries, false))[0]).not.toContain('aria-label="进行中"');
+  it("在跑时这一行是转圈加当前那一步；做完了（或不在跑）收成总结", () => {
+    const entries = [step(1, "读文件 a.ts", "2026-11-09T01:00:00Z"), step(2, "运行 pnpm test", "2026-11-09T01:00:05Z", false), step(3, "读文件 b.ts", "2026-11-09T01:00:06Z")];
+    const live = heads(render(entries))[0]!;
+    expect(live).toContain('aria-label="进行中"');
+    expect(text(live)).toContain("|运行 pnpm test|");
+    expect(render(entries)).toContain('aria-label="运行 pnpm test，展开"');
+    // 在跑时最后那段在转圈，最下面不再出「在跑」那一行。
+    expect(render(entries)).not.toContain("session-working");
+    const done = heads(render(entries, false))[0]!;
+    expect(done).not.toContain('aria-label="进行中"');
+    expect(text(done)).toContain("|运行 1 条命令 · 读 2 个文件|6 秒|");
+    // 后面已经有对话了，前面那段不再转圈。
+    expect(heads(render([...entries, { kind: "assistant", seq: 4, at: "2026-11-09T01:00:07Z", text: "好了" }]))[0]).not.toContain('aria-label="进行中"');
   });
 
-  it("中间隔着别的话就分成两组，产出单独一行", () => {
+  it("换了做法的：不单独成行，点开后那一步行尾一个淡色「换个做法」；没有那一步也算一行；还没批的照旧是选项框", () => {
+    const denied = render([
+      step(1, "读文件 a.ts", "2026-11-09T01:00:00Z"),
+      step(2, "运行 rm -rf dist", "2026-11-09T01:00:01Z", false),
+      permit(3, "运行 rm -rf dist", "2026-11-09T01:00:02Z", "deny"),
+      permit(4, "运行 git push", "2026-11-09T01:00:03Z", "deny"),
+    ], false);
+    expect(heads(denied)).toHaveLength(1);
+    expect(text(denied)).toContain("|读文件 a.ts|运行 rm -rf dist|换个做法|运行 git push|换个做法|");
+    expect(denied.match(/换个做法/g)).toHaveLength(2);
+    const pending = render([step(1, "读文件 a.ts", "2026-11-09T01:00:00Z"), permit(2, "运行 pnpm test", "2026-11-09T01:00:01Z", null)]);
+    expect(pending).toContain("同类以后都批准");
+    expect(heads(pending)).toHaveLength(1);
+  });
+
+  it("AskUserQuestion 这一步不画，留问答那一行；产出、交回照旧单独一行", () => {
     const html = render([
-      step(1, "读 a.ts", "2026-11-07T01:00:00Z"),
-      step(2, "读 b.ts", "2026-11-07T01:00:01Z"),
-      { kind: "assistant", seq: 3, at: "2026-11-07T01:00:02Z", text: "看完了" },
-      step(4, "改 a.ts", "2026-11-07T01:00:03Z"),
-      { kind: "artifact", seq: 5, at: "2026-11-07T01:00:04Z", title: "a", fileName: "a.md" },
-      step(6, "跑 vitest", "2026-11-07T01:00:05Z"),
-    ]);
-    expect(heads(html).map((head) => head.includes("2 步"))).toEqual([true]);
-    expect(html).toContain("交出 a.md");
+      step(1, "读文件 a.ts", "2026-11-09T01:00:00Z"),
+      step(2, "AskUserQuestion", "2026-11-09T01:00:01Z"),
+      { kind: "notice", seq: 3, at: "2026-11-09T01:00:02Z", level: "info", text: "问：要不要删旧说明？" },
+      { kind: "notice", seq: 4, at: "2026-11-09T01:00:03Z", level: "info", text: "答：删掉" },
+      step(5, "写文件 交回说明.md", "2026-11-09T01:00:04Z"),
+      { kind: "artifact", seq: 6, at: "2026-11-09T01:00:05Z", title: "交回说明", fileName: "交回说明.md" },
+    ], false);
+    expect(html).not.toContain("AskUserQuestion");
+    expect(text(html)).toMatch(/读 1 个文件\|.*要不要删旧说明？.*删掉.*改 1 个文件\|.*交出 交回说明\.md/);
   });
 });
 
@@ -94,14 +130,12 @@ describe("子会话的输入框", () => {
 
 describe("子会话在跑时界面在动（27 条）", () => {
   const said = (seq: number, at: string): SessionEntry => ({ kind: "user", seq, at, text: "接着做" });
-  it("两步之间在想：最下面一行转圈「在跑」加这一轮跑了多久；有步骤在转圈、不在跑、在等批准时不出", () => {
-    const thinking = [said(1, "2026-11-07T01:00:00Z"), step(2, "读 a.ts", "2026-11-07T01:00:03Z")];
+  it("刚说完、在想：最下面一行转圈「在跑」加这一轮跑了多久；最后是一段过程（它自己转圈）、不在跑、在等批准时不出", () => {
+    const thinking = [step(1, "读 a.ts", "2026-11-07T01:00:00Z"), said(2, "2026-11-07T01:00:03Z")];
     expect(render(thinking)).toMatch(/data-testid="session-working"><span[^>]*aria-label="在跑"/);
     expect(render([...thinking, step(3, "跑 pnpm test", "2026-11-07T01:00:05Z", false)])).not.toContain("session-working");
     expect(render(thinking, false)).not.toContain("session-working");
-    const permission: SessionEntry = { kind: "permission", seq: 4, at: "2026-11-07T01:00:06Z", decision: null,
-      request: { requestId: "p1", toolName: "Bash", title: "运行 pnpm test", input: {}, outsidePaths: [], canAllowForSession: true, createdAt: "2026-11-07T01:00:06Z" } as never };
-    expect(render([...thinking, permission])).not.toContain("session-working");
+    expect(render([...thinking, permit(4, "运行 pnpm test", "2026-11-07T01:00:06Z", null)])).not.toContain("session-working");
   });
 
   it("时长从这一轮开始算：最近一句本人说的；还没说过取第一条", () => {
