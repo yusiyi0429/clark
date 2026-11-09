@@ -290,7 +290,7 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 
 @media (hover: none) {
   .stageMore, .info { opacity: 1; }
-  .rowMore { pointer-events: none; }
+  .rowMore { visibility: hidden; pointer-events: none; }
   .taskRow:is(:hover, :focus-within) .subDot, .subItem:is(:hover, :focus-within) .subDot { visibility: visible; }
   .info { position: static; flex: none; margin-right: var(--space-2); transform: none; }
 }

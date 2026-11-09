@@ -141,16 +141,18 @@ export const readProject = (projectId: string) => maybe<TProjectDetailResponse>(
 /** 改名、归档（archived: true）、恢复（archived: false）。 */
 export const updateProject = (projectId: string, body: TUpdateProjectRequest) =>
   unwrap<TProject>(browserApi.PATCH("/api/me/projects/{projectId}", { params: project(projectId), body }) as Promise<Result<TProject>>);
+/** 回 204、没有回包的：unwrap 把它当成没成（status 204），这里算成了。 */
+const noContent = (call: Promise<unknown>) => call.then(() => undefined, (error: unknown) => { if (!(error instanceof CloudError && error.status === 204)) throw error; });
 /** 删掉项目（35 条，撤不回，204）：有在跑的 409 PROJECT_BUSY（message 写是哪几个），正在转交 409 PROJECT_TRANSFERRING。本机解绑由调用方做。 */
 export const deleteProject = (projectId: string) =>
-  unwrap<unknown>(browserApi.DELETE("/api/me/projects/{projectId}", { params: project(projectId) }) as Promise<Result<unknown>>);
+  noContent(unwrap<unknown>(browserApi.DELETE("/api/me/projects/{projectId}", { params: project(projectId) }) as Promise<Result<unknown>>));
 const subSession = (kind: TSubSessionKind, id: string) => ({ path: { kind, id } });
 /** 子会话改名、归档（archived: true）、恢复（false）（35 条，204）；在跑时归档 409 SUB_SESSION_RUNNING。 */
 export const updateSubSession = (kind: TSubSessionKind, id: string, body: TUpdateSubSessionRequest) =>
-  unwrap<unknown>(browserApi.PATCH("/api/me/sub-sessions/{kind}/{id}", { params: subSession(kind, id), body }) as Promise<Result<unknown>>);
+  noContent(unwrap<unknown>(browserApi.PATCH("/api/me/sub-sessions/{kind}/{id}", { params: subSession(kind, id), body }) as Promise<Result<unknown>>));
 /** 删掉子会话：进回收站，30 天内能恢复；在跑 409 SUB_SESSION_RUNNING。 */
 export const deleteSubSession = (kind: TSubSessionKind, id: string) =>
-  unwrap<unknown>(browserApi.DELETE("/api/me/sub-sessions/{kind}/{id}", { params: subSession(kind, id) }) as Promise<Result<unknown>>);
+  noContent(unwrap<unknown>(browserApi.DELETE("/api/me/sub-sessions/{kind}/{id}", { params: subSession(kind, id) }) as Promise<Result<unknown>>));
 /** 归档了的子会话（新归档的在前），带原来的项目和字母。 */
 export const listArchivedSubSessions = () =>
   unwrap<TArchivedSubSessionListResponse>(browserApi.GET("/api/me/sub-sessions/archived") as Promise<Result<TArchivedSubSessionListResponse>>);

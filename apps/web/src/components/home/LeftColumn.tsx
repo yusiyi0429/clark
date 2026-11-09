@@ -27,7 +27,7 @@ import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import { useDictationSignal } from "@/conversation/dictationSignal";
 import { PersonRow } from "./PersonMenu";
 import { useHoverTip, useNameTip } from "./NameTip";
-import { LocalContext } from "@/lib/local/LocalRunnerProvider";
+import { LocalContext, latestSessionFor } from "@/lib/local/LocalRunnerProvider";
 import { runLabel } from "@/lib/local/runModel";
 import { running } from "@/lib/local/sessionView";
 import { ICON, type IconState } from "./StateIcon";
@@ -58,9 +58,19 @@ export const deleteSubFail = (error: unknown) => conflictText(error, { SUB_SESSI
 
 /** 改名：就地一个输入框，回车、移开存，Esc 不改；空的或没变不存。 */
 function RenameInput({ value, maxLength, onDone }: { value: string; maxLength: number; onDone: (name: string | null) => void }) {
+  const ref = useRef<HTMLInputElement>(null);
+  // 从「…」菜单进来时焦点还关在菜单里（autoFocus 落不进来），菜单关掉时焦点掉回页面：那一下接住。
+  useEffect(() => {
+    const input = ref.current;
+    if (!input || document.activeElement === input) return;
+    if (document.activeElement === document.body) { input.focus(); return; }
+    const settle = (event: FocusEvent) => { if (event.relatedTarget) return; document.removeEventListener("focusout", settle); input.focus(); };
+    document.addEventListener("focusout", settle);
+    return () => document.removeEventListener("focusout", settle);
+  }, []);
   const done = (next: string) => { const trimmed = next.trim(); onDone(trimmed && trimmed !== value ? trimmed : null); };
   return (
-    <input className={h.projectName} autoFocus defaultValue={value} aria-label="新名字" maxLength={maxLength} data-testid="row-rename" onFocus={(event) => event.currentTarget.select()}
+    <input ref={ref} className={h.projectName} autoFocus defaultValue={value} aria-label="新名字" maxLength={maxLength} data-testid="row-rename" onFocus={(event) => event.currentTarget.select()}
       onBlur={(event) => done(event.currentTarget.value)}
       onKeyDown={(event) => {
         if (event.nativeEvent.isComposing) return;
@@ -422,8 +432,8 @@ function SubRow({ sub, letter, view, go }: { sub: SubSession; letter: string | n
   const [menu, setMenu] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const press = useLongPress(() => setMenu(true));
-  // 停止只在这台电脑上跑着时有（本机直接停）。
-  const session = sub.sessionId ? local?.sessions.find((entry) => entry.id === sub.sessionId) : null;
+  // 停止只在这台电脑上跑着时有（本机直接停）；会话照子会话页的认法（这张卡、这个专题最近的那个）。
+  const session = local ? latestSessionFor(local.sessions, sub.kind === "card" ? { cardId: sub.id } : { topicId: sub.id }) : null;
   const stoppable = !!session && running(session.status);
   // 行尾「…」（35 条）：重命名、标为已读、停止（在跑时）、归档、删除（进回收站）。
   const menuItems: RowMenuItem[] = actions ? [
