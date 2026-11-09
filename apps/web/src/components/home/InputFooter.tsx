@@ -11,7 +11,7 @@ import h from "@/styles/home.module.css";
 
 /** 只看不能点的一段字（模型），悬停出完整说法。 */
 export const FootText = ({ children, title, testId }: { children: ReactNode; title?: string; testId?: string }) => (
-  <span className={h.footText} title={title} data-testid={testId}>{children}</span>
+  <span className={h.footText} title={title} data-testid={testId}><span className={h.ellipsis}>{children}</span></span>
 );
 
 /** 项目绑的文件夹：点开换成这台电脑上加过的别的文件夹，或不绑（同项目详情）。 */
@@ -33,5 +33,5 @@ export function FolderMenu({ value, folders, onPick }: { value: string | null; f
 
 /** 子会话在哪个文件夹里跑（只看：开着的会话换不了地方），悬停出完整路径。 */
 export const FolderText = ({ name, title }: { name: string; title: string }) => (
-  <span className={h.footText} title={title} data-testid="footer-folder"><Folder {...ICON} />{name}</span>
+  <span className={h.footText} title={title} data-testid="footer-folder"><Folder {...ICON} /><span className={h.ellipsis}>{name}</span></span>
 );

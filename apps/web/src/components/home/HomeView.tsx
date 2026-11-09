@@ -70,7 +70,7 @@ export function HomeView({ data, api, buddy, today, go, route, onSend, projects 
               {missions.map((mission) => (
                 <div key={mission.missionId} className={h.taskList}>
                   {/* Mission 名点了进只读的 Mission 详情（14.2）。 */}
-                  <button type="button" className={h.missionTitle} onClick={() => go(missionHref(mission.missionId))} data-testid="month-mission">{mission.title}</button>
+                  <button type="button" className={h.missionTitle} onClick={() => go(missionHref(mission.missionId))} data-testid="month-mission" title={mission.title}><span className={h.ellipsis}>{mission.title}</span></button>
                   {mission.tasks.map((task) => <MonthRow key={task.taskId} task={task} gate={taskGateLabel(projects.all, api.work.plan, { taskId: task.taskId, missionId: mission.missionId })} projects={projects} go={go} />)}
                 </div>
               ))}
@@ -104,7 +104,7 @@ function MonthRow({ task, gate, projects, go }: { task: HomeMonthMission["tasks"
         {gate ? <span className={h.taskGate}>{gate}</span> : null}
       </button>
       {failed ? <FailedLine inline {...failed} />
-        : project ? <button type="button" className={h.statusChip} onClick={() => go(projectHref(project.projectId))} data-testid="task-project">{project.name}</button>
+        : project ? <button type="button" className={h.statusChip} onClick={() => go(projectHref(project.projectId))} data-testid="task-project" title={project.name}><span className={h.ellipsis}>{project.name}</span></button>
         : <AttachMenu taskName={task.name} projects={projects.projects} onPick={(projectId) => attempt(() => projects.actions.attach(task.taskId, projectId))}
           onCreate={() => attempt(() => projects.actions.create(task.name, task.taskId))} />}
     </div>
