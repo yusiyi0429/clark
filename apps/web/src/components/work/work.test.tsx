@@ -278,6 +278,27 @@ describe("对话里插块和锚点", () => {
     expect(placeBlocks(chat, transfer(null)).get(2)?.map((block) => block.key)).toEqual(["transfer"]);
     expect(placeBlocks([], transfer(2)).get(-1)?.map((block) => block.key)).toEqual(["transfer"]);
   });
+  it("29 条 C：对话里有消息不带时间（Chat 读回来的历史），按时间排的块全放在最后一条后面，块之间仍按时间先后，不再落到最前面", () => {
+    const blocks = [
+      { key: "approve", at: "2026-11-09T02:00:00Z", node: null },
+      { key: "planning", at: "2026-11-09T01:00:00Z", node: null },
+    ];
+    expect(placeBlocks([{ sequence: 1 }, { sequence: 2 }], blocks).get(1)?.map((block) => block.key)).toEqual(["planning", "approve"]);
+    expect(placeBlocks([{ sequence: 1 }, { sequence: 2 }], blocks).has(-1)).toBe(false);
+    // 只有一条没带时间（比如刚发出去的）也一样。
+    expect(placeBlocks([{ sequence: 1, createdAt: "2026-11-09T00:00:00Z" }, { sequence: 2 }], blocks).get(1)?.map((block) => block.key)).toEqual(["planning", "approve"]);
+  });
+  it("29 条 C：全部带时间照旧按时间插；有序号的块不受没时间的消息影响", () => {
+    const timed = placeBlocks([{ sequence: 1, createdAt: "2026-11-09T01:00:00Z" }, { sequence: 2, createdAt: "2026-11-09T03:00:00Z" }],
+      [{ key: "mid", at: "2026-11-09T02:00:00Z", node: null }]);
+    expect(timed.get(0)?.map((block) => block.key)).toEqual(["mid"]);
+    const mixed = placeBlocks([{ sequence: 1 }, { sequence: 2 }, { sequence: 3 }], [
+      { key: "transfer", at: "2020-01-01T00:00:00Z", node: null, afterSequence: 1 },
+      { key: "planning", at: "2026-11-09T01:00:00Z", node: null },
+    ]);
+    expect(mixed.get(0)?.map((block) => block.key)).toEqual(["transfer"]);
+    expect(mixed.get(2)?.map((block) => block.key)).toEqual(["planning"]);
+  });
   it("展示区按地址：首页、总管线、Task 管线、Task 详情、子会话；右栏跟着它取范围", () => {
     expect(viewOf("/me/work")).toEqual({ kind: "home" });
     expect(viewOf("/me/work/")).toEqual({ kind: "home" });
