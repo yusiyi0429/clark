@@ -2,7 +2,8 @@
 
 /**
  * 项目详情（新首页设计 16.3「详情」，替换 Task 详情的入口）。文档类页面（5.4.7）：
- * - 目标历史：每月一行，写月份、Task 名和判定（GET /api/me/projects/:projectId 的 goals：已完成、已停止、已延续；没了结的本月写「进行中」、之前月份写「未了结」）；
+ * - 本月目标（20 条）：本月挂着的 Task 一件一行，写截止和标准进度，点开逐条看（同原来项目对话页头的目标条）；
+ * - 往月目标：只放本月以前的月份，按月分组、近的在上，每行写结果（GET /api/me/projects/:projectId 的 goals：完成 / 延续到 X 月 / 到此为止 / 没完成）；没有往月整块不画；
  * - 文件夹：这台电脑上的哪个文件夹（连接页加过的那些），能换、能不绑（本机程序 PUT /v1/projects/:projectId/folder）；
  * - 自动接力上限（18.12）：连续自动接力多少轮停下来问本人，缺省 20，可以不限（PATCH autoRelayLimit，不限是 null）；
  * - 转交（16.7）：「转给…」发起一份（POST /api/me/projects/:projectId/transfers），准备中、等接手时能撤回；
@@ -25,6 +26,7 @@ import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { mainGoal, projectHref, type Project } from "@/lib/home/projects";
 import { useViewChrome } from "./view";
 import { TaskBudget } from "./TaskBudget";
+import { GoalBar } from "./ProjectParts";
 import { ICON } from "./StateIcon";
 import h from "@/styles/home.module.css";
 
@@ -51,7 +53,14 @@ function usePeople(me: string): Person[] {
 }
 
 type HistoryRow = { taskId: string; period: string; name: string; verdict: TProjectGoalVerdict };
-const VERDICT: Record<Exclude<TProjectGoalVerdict, "open">, string> = { completed: "已完成", stopped: "已停止", continued: "已延续" };
+/** 下一个月（YYYY-MM）：延续的那件挂到了下个月。 */
+const nextPeriod = (period: string) => {
+  const [year, month] = period.split("-").map(Number) as [number, number];
+  return month === 12 ? `${year + 1}-01` : `${year}-${String(month + 1).padStart(2, "0")}`;
+};
+/** 往月目标一行的结果。 */
+export const pastVerdict = (row: Pick<HistoryRow, "period" | "verdict">) => (row.verdict === "completed" ? "完成"
+  : row.verdict === "continued" ? `延续到 ${Number(nextPeriod(row.period).slice(5))} 月` : row.verdict === "stopped" ? "到此为止" : "没完成");
 
 /** 自动接力上限的几档（18.12）：缺省 20，null 是不限。 */
 const RELAY_LIMITS = [10, 20, 50, 100, null] as const;
@@ -104,7 +113,8 @@ export function ProjectInfo({ project, period, go, actions, doneDefinitionOf, me
   const [dueFailed, setDueFailed] = useState<Failure | null>(null);
   const { history, limit, setLimit } = useDetail(project);
   const goal = mainGoal(project);
-  const verdict = (row: HistoryRow) => (row.verdict !== "open" ? VERDICT[row.verdict] : row.period === period ? "进行中" : "未了结");
+  // 往月：本月以前的，近的月在上；同一个月只在第一行写月份。
+  const past = history.filter((row) => row.period < period).sort((a, b) => b.period.localeCompare(a.period));
   const attempt = (run: () => Promise<unknown>) => {
     const once = () => { setFailed(null); void run().catch((error) => setFailed(failureOf(error, once))); };
     once();
@@ -119,20 +129,26 @@ export function ProjectInfo({ project, period, go, actions, doneDefinitionOf, me
       </header>
       <div className={h.infoScroll}>
         <div className={h.infoInner}>
-          <section aria-label="目标历史" className={h.section}>
-            <p className={h.sectionTitle}>目标历史</p>
-            {history.length ? (
-              <ul className={h.history}>
-                {history.map((entry) => (
-                  <li key={entry.taskId}>
-                    <span className={h.num}>{Number(entry.period.slice(5))} 月</span>
+          {project.current.length ? (
+            <section aria-label="本月目标" className={h.section}>
+              <p className={h.sectionTitle}>本月目标</p>
+              <GoalBar project={project} />
+            </section>
+          ) : null}
+          {past.length ? (
+            <section aria-label="往月目标" className={h.section}>
+              <p className={h.sectionTitle}>往月目标</p>
+              <ul className={h.history} data-testid="past-goals">
+                {past.map((entry, index) => (
+                  <li key={`${entry.period}:${entry.taskId}`}>
+                    <span className={h.num}>{past[index - 1]?.period === entry.period ? null : `${Number(entry.period.slice(5))} 月`}</span>
                     <span className={h.historyName}>{entry.name}</span>
-                    <span className={h.statusChip} data-static="">{verdict(entry)}</span>
+                    <span className={h.statusChip} data-static="">{pastVerdict(entry)}</span>
                   </li>
                 ))}
               </ul>
-            ) : <p className={h.line}>还没有挂过目标</p>}
-          </section>
+            </section>
+          ) : null}
           <section aria-label="文件夹" className={h.section}>
             <p className={h.sectionTitle}>文件夹</p>
             <div className={h.infoRow}>

@@ -3,7 +3,7 @@
 /**
  * 项目页的几块（新首页设计 16.3）：
  * - 页头右边：「详情」（文件夹在输入框下面一行的左边）；
- * - 页头下的目标条：每件挂着的本月 Task 一行，写名字、截止、「标准 1/3」，点开逐条看；负责人不是本人（交接过来的）时名字前画他的头像；没有目标时不画；
+ * - 目标条（项目信息页上方的「本月目标」，20 条）：每件挂着的本月 Task 一行，写名字、截止、「标准 1/3」，点开逐条看；负责人不是本人（交接过来的）时名字前画他的头像；没有目标时不画；
  * - 对话里换月份的分隔线「11 月目标：{Task 名}」。
  * 标准逐条达没达到读 GET /api/plan-tasks/:taskId/check（evidenced 算达到）；读不到就只写「标准 N 条」。
  */
@@ -54,7 +54,7 @@ function GoalLine({ goal, criteria: planned }: { goal: ProjectGoal; criteria: st
   );
 }
 
-/** 页头下的目标条：本月挂着的 Task 一件一行（标准原文是首页数据里的）。 */
+/** 目标条（项目信息页的「本月目标」）：本月挂着的 Task 一件一行（标准原文是首页数据里的）。 */
 export function GoalBar({ project }: { project: Project }) {
   if (!project.current.length) return null;
   return (
