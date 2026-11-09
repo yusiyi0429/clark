@@ -78,10 +78,14 @@ export function toolRow(tool: Tool): RowModel {
   }
 }
 
-/** 飞书（云端授权）：连上是已连接、给「断开」；授权过期或缺权限是已过期、给「重新授权」；没连是未连接、给「连接」。这套天枢没接飞书时不画这一行。 */
+/**
+ * 飞书（云端授权）：连上是已连接、给「断开」；授权过期或缺权限是已过期、给「重新授权」；没连是未连接、给「连接」。
+ * 这套天枢没配公司飞书应用时照样画，写「未开通」、不给动作（11/09：找不到连飞书的地方）。还没读到（null）不画。
+ */
 export function feishuRow(feishu: { enabled: boolean; state: "not_connected" | "connected" | "expired" } | null): RowModel | null {
-  if (!feishu?.enabled) return null;
+  if (!feishu) return null;
   const base = { key: "feishu", name: "飞书", sub: null };
+  if (!feishu.enabled) return { ...base, state: "not_enabled", action: null };
   if (feishu.state === "connected") return { ...base, state: "connected", action: "unpair" };
   if (feishu.state === "expired") return { ...base, state: "expired", action: "reauth" };
   return { ...base, state: "disconnected", action: "link" };

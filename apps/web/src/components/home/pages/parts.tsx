@@ -25,11 +25,11 @@ export function Section({ title, aside, children, testId }: { title: string; asi
 
 /**
  * 连接的状态词（5.6）：已连接 --ink-muted、未连接 --ink-faint、已过期 --warning、用完 --danger；
- * 本人加的工具另有三个（本机查连没连上的结果）：未授权、连不上 --warning，未知 --ink-faint。
+ * 本人加的工具另有三个（本机查连没连上的结果）：未授权、连不上 --warning，未知 --ink-faint；这套天枢没配公司飞书应用时个人飞书是「未开通」--ink-faint。
  */
-export type ConnState = "connected" | "disconnected" | "expired" | "exhausted" | "unauthorized" | "unreachable" | "unknown";
+export type ConnState = "connected" | "disconnected" | "expired" | "exhausted" | "unauthorized" | "unreachable" | "unknown" | "not_enabled";
 export const STATE_WORD: Record<ConnState, string> = {
-  connected: "已连接", disconnected: "未连接", expired: "已过期", exhausted: "用完", unauthorized: "未授权", unreachable: "连不上", unknown: "未知",
+  connected: "已连接", disconnected: "未连接", expired: "已过期", exhausted: "用完", unauthorized: "未授权", unreachable: "连不上", unknown: "未知", not_enabled: "未开通",
 };
 
 /** 一行：名字（14/20）+ 小字（12/16，可以没有）、状态词、一个动作；高 48。children 是跟在行下面的（额度、文件夹、展开的面板）。 */
@@ -88,7 +88,7 @@ export function CardGrid({ label, children, testId }: { label: string; children:
  * 一张卡：图标、名字、一行内容、来源一行；右上角是 ✓（已加）或一个动作（+、重试、连接）。
  * onOpen 有的整卡可点（技能进详情、工具开编辑）；main 给了就用它当可点的那块（比如飞书点开是菜单）。
  */
-export function Card({ icon, name, line, source, corner, onOpen, openRef, main, label, testId }: {
+export function Card({ icon, name, line, source, corner, onOpen, openRef, main, label, testId, children }: {
   icon: ReactNode;
   name: ReactNode;
   line?: ReactNode;
@@ -99,6 +99,8 @@ export function Card({ icon, name, line, source, corner, onOpen, openRef, main, 
   main?: (body: ReactNode) => ReactNode;
   label?: string;
   testId?: string;
+  /** 卡下面整宽的一块（本机离线时的安装命令）。 */
+  children?: ReactNode;
 }) {
   const body = (
     <>
@@ -114,6 +116,7 @@ export function Card({ icon, name, line, source, corner, onOpen, openRef, main, 
     <li className={p.card} data-testid={testId} data-openable={onOpen || main ? "" : undefined}>
       {main ? main(body) : onOpen ? <button type="button" ref={openRef} className={p.cardMain} aria-label={label} onClick={onOpen}>{body}</button> : <div className={p.cardMain}>{body}</div>}
       {corner ? <span className={p.cardCorner}>{corner}</span> : null}
+      {children ? <div className={p.cardExtra}>{children}</div> : null}
     </li>
   );
 }
