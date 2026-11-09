@@ -4,7 +4,7 @@ import { Value } from "@sinclair/typebox/value";
 import {
   AcceptCardDraftsRequest, BackgroundQuery, BackgroundResponse, ClaimSessionStartsResponse, ConversationScope, CreateProjectRequest, ProjectDetailResponse,
   CardPlanBriefResponse, CardSplitRequestView, CreateProjectTransferRequest, ProjectBoardResponse, ProjectFeedResponse, ProjectPipelineResponse, ProjectTransfer, RouteResponse, UpdateProjectRequest, UpdateProjectTransferRequest, WorkHomeResponse,
-  AutoRelayDecisionRequest, BuddyActionParams, MarkWorkSeenRequest, SetGoalDueDateRequest, ClaimSessionCommandsResponse, PROJECT_ONLY_ACTIONS, SessionCommandDoneRequest, SUB_SESSION_REPORT_PREFIX,
+  AutoRelayDecisionRequest, BuddyActionParams, MarkWorkSeenRequest, RegisterCardSplitRequest, SetGoalDueDateRequest, ClaimSessionCommandsResponse, PROJECT_ONLY_ACTIONS, SessionCommandDoneRequest, SUB_SESSION_REPORT_PREFIX,
 } from "../src/index.js";
 import { buildOpenApiDocument } from "../src/openapi.js";
 
@@ -129,13 +129,20 @@ describe("新首页契约", () => {
 
   it("没挂 Task 的项目也能拆卡（16.3）：登记、交代、项目看板", () => {
     expect(Value.Check(CardSplitRequestView, { id: uuid, taskId: null, taskName: null, missionId: null, projectId: uuid, projectName: "Chat 服务", origin: "web",
-      sourceWords: ["把首页改成按项目排"], createdAt: at })).toBe(true);
+      sourceWords: ["把首页改成按项目排"], createdAt: at, afterSequence: 12 })).toBe(true);
     expect(Value.Check(CardSplitRequestView, { id: uuid, taskId: "T-1", taskName: "上线", missionId: "M1", projectId: null, projectName: null, origin: "buddy",
-      sourceWords: [], createdAt: at })).toBe(true);
+      sourceWords: [], createdAt: at, afterSequence: null })).toBe(true);
     expect(Value.Check(CardPlanBriefResponse, { markdown: "# 拆卡：Chat 服务", role: null, task: null, project: { projectId: uuid, name: "Chat 服务" }, criteria: [],
       exclusions: [], roles: [], sourceWords: ["把首页改成按项目排"] })).toBe(true);
     expect(Value.Check(ProjectBoardResponse, { projectId: uuid, cards: [], drafts: [{ id: uuid, planId: uuid, position: 0, title: "接网关", brief: "做什么",
       doneDefinition: "能连上；有日志", criterionIndex: null, role: null, suggestPresetKey: null, executor: "claude_code", modelTier: "normal", why: null, sourceWords: ["接上网关"] }], plan: null })).toBe(true);
+    // 17.2 第 29 条：派活单和「开了哪几个子会话」按序号插进项目对话；登记、放进看板时网页带上本人看到的最后一条。
+    expect(Value.Check(ProjectBoardResponse, { projectId: uuid, cards: [], drafts: [], plan: { id: uuid, status: "done", hint: null, error: null, createdAt: at,
+      startedAt: null, finishedAt: at, expectedSeconds: 60, source: "local", summary: "拆成三件", steps: [], risks: [], revision: 1, afterSequence: 12,
+      startedAfterSequence: null } })).toBe(true);
+    expect(Value.Check(RegisterCardSplitRequest, { words: "先拆登录", afterSequence: 12 })).toBe(true);
+    expect(Value.Check(RegisterCardSplitRequest, { afterSequence: 0 })).toBe(false);
+    expect(Value.Check(AcceptCardDraftsRequest, { drafts: [{ id: uuid }], start: true, afterSequence: 15 })).toBe(true);
   });
 
   it("自动分发到项目、认领开工带项目", () => {

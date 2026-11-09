@@ -26,7 +26,12 @@ export const SourceWords = Type.Array(Type.String({ minLength: 1, maxLength: 400
  * POST /api/plan-tasks/:taskId/card-splits、POST /api/me/projects/:projectId/card-splits 的请求体（可以不带）：words 是按钮旁输入框里本人的话。
  * 已有一条没开工的登记时，带了 words 就把那条的原话换成这次的。
  */
-export const RegisterCardSplitRequest = Type.Object({ words: Type.Optional(Type.String({ maxLength: 4000 })) }, strict);
+/**
+ * afterSequence（17.2 第 29 条）：本人在项目对话里看到的最后一条消息的 sequence（ConversationMessage.sequence），「拆卡中」「拆卡失败」「派活单」
+ * 插在它后面。项目对话页带上来；不带时（首页、手机、伙伴登记的）云端读这件 Task 挂的项目（或这个项目）的对话现在最后一条，读不到为 null。
+ */
+export const RegisterCardSplitRequest = Type.Object({ words: Type.Optional(Type.String({ maxLength: 4000 })),
+  afterSequence: Type.Optional(Type.Integer({ minimum: 1 })) }, strict);
 
 /**
  * 一条「要拆」的登记：origin=buddy 是伙伴对话里说的（register_card_split），web 是页面上的「拆一下」。
@@ -44,6 +49,8 @@ export const CardSplitRequestView = Type.Object({
   /** 这次拆卡依据的本人原话（见 SourceWords）。 */
   sourceWords: SourceWords,
   createdAt: Instant,
+  /** 登记时项目对话最后一条消息的 sequence（见 RegisterCardSplitRequest.afterSequence），「拆卡中」插在它后面；对话还没有消息、读不到、老记录为 null。 */
+  afterSequence: Nullable(Type.Integer({ minimum: 1 })),
 }, strict);
 
 /** GET /api/me/card-splits：本人还没开工的登记，先登记的在前。 */
