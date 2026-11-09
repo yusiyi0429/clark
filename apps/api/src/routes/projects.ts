@@ -1,4 +1,5 @@
 import { decideAutoRelay } from "../autoRelay.js";
+import { deleteProject } from "../subSessionAdmin.js";
 import { projectNotices } from "../subSessionReports.js";
 import type { FastifyReply } from "fastify";
 import { Type } from "@sinclair/typebox";
@@ -76,6 +77,13 @@ export function registerProjectRoutes(app: AppInstance, ctx: RouteContext): void
 
   app.patch("/api/me/projects/:projectId", { preHandler: requireMember, schema: { params: projectParams, body: UpdateProjectRequest, response: { 200: Project } } },
     async (req, reply) => handle(reply, () => updateProject(q, req.person!.personId, req.params.projectId, req.body, ctx.now())));
+
+  // 删掉项目（17.2 第 35 条，撤不回）：子会话进回收站，其余见 subSessionAdmin.ts 的 deleteProject。
+  app.delete("/api/me/projects/:projectId", { preHandler: requireMember, schema: { params: projectParams } }, async (req, reply) =>
+    handle(reply, async () => {
+      await deleteProject(pool, req.person!.personId, req.params.projectId, ctx.now());
+      return reply.status(204).send();
+    }));
 
   app.put("/api/me/projects/:projectId/goals/:taskId", { preHandler: requireMember, schema: { params: goalParams, response: { 200: ProjectGoalResponse } } },
     async (req, reply) => handle(reply, async () => {
