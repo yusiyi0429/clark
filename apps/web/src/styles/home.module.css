@@ -232,6 +232,16 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .cells i[data-state="stopped"] { background: var(--hairline-strong); box-shadow: none; }
 .cells i[data-state="done"] { background: var(--ink-faint); box-shadow: none; opacity: .55; }
 .cells i[data-state="failed"] { background: var(--danger); box-shadow: none; }
+
+/*
+ * 左栏的字和内容区统一（17.2 第 30 条，照 Claude Code；手机抽屉里同一套）：每一行的主字（日期行、项目名、子会话和事项、「会话 N」「已归档 N」、本人那一行）
+ * 同正文 16/400，选中的靠底色不加粗；第二行小字（本月目标、等谁接手、时间）和组名 13 淡墨。行高按 16 的字排，字母方块、状态点、图标、计数跟着垂直居中。
+ */
+.leftInner { --left-main: var(--text-md); --left-main-lh: 24px; --left-sub: 13px; --left-sub-lh: 18px; }
+.leftInner :is(.today, .planFailed, .taskName, .sub, .foldToggle, .projectName, .meRow) { font-size: var(--left-main); font-weight: 400; line-height: var(--left-main-lh); }
+.leftInner :is(.groupHead, .groupTitle, .taskSub, .subReason) { font-size: var(--left-sub); font-weight: 400; line-height: var(--left-sub-lh); }
+.leftInner :is(.sub, .foldToggle) { height: var(--row-36); }
+.leftInner .groupTitle { padding: 5px var(--space-2); }
 @keyframes breath { 50% { opacity: .45; } }
 @media (prefers-reduced-motion: reduce) { .cells i { animation: none; } }
 
