@@ -12,7 +12,7 @@ import { createLocalDevice, deviceOfToken, listLocalDevices, ownOutput, revokeLo
 import { applySyncBatch } from "../localSync.js";
 import { reportToProject, type BuddyDeps } from "../buddyActions.js";
 import { personDisplayNames } from "../people.js";
-import { projectHistoryReader } from "../sourceWords.js";
+import { lastSequenceReader, projectHistoryReader } from "../sourceWords.js";
 import { readReport, reportTurnText, setAfterSequence } from "../subSessionReports.js";
 import { authenticateLocalToken } from "../personalTokens.js";
 import { CardError } from "../taskCards.js";
@@ -88,6 +88,7 @@ export function registerLocalRoutes(app: AppInstance, ctx: RouteContext, board: 
     return found ? sendAttachment(reply, found) : fail(reply, 404, "NOT_FOUND", "找不到这份附件");
   });
 
+  const planSequence = lastSequenceReader(ctx);
   app.post(LOCAL_RUNNER_SYNC_PATH, { bodyLimit: SYNC_BODY_LIMIT, schema: { body: LocalSyncBatchRequest, response: { 200: LocalSyncBatchResponse } } }, async (req, reply) => {
     const identity = await authenticateLocalToken(q, req.headers.authorization, env.sessionSecret, ctx.now(), personExists);
     if (!identity) return fail(reply, 401, "UNAUTHORIZED", "设备令牌无效，请在天枢插件页重新配对");
@@ -97,7 +98,8 @@ export function registerLocalRoutes(app: AppInstance, ctx: RouteContext, board: 
     await q("UPDATE local_devices SET last_sync_at=$3,app_version=$4,slots=$5::jsonb,quota=COALESCE($6::jsonb,quota) WHERE owner_id=$1 AND id=$2",
       [device.ownerId, device.id, ctx.now(), req.body.runnerVersion.slice(0, 40), JSON.stringify(req.body.slots), req.body.quota ? JSON.stringify(req.body.quota) : null]);
     const { response, queued, proposals, reports, decisions } = await applySyncBatch({ pool, storageDir: ctx.materialStorageDir, now: ctx.now,
-      onError: () => app.log.error("local sync item failed"), planTask: board.planTask }, identity.personId, req.body);
+      onError: () => app.log.error("local sync item failed"), planTask: board.planTask,
+      lastSequence: (personId, target) => planSequence(personId, target, String(req.id)) }, identity.personId, req.body);
     queued.forEach(board.enqueueAcceptance);
     proposals.forEach(board.enqueueProposal);
     if (reports.length || decisions.length) void reportNotices(identity.personId, reports, decisions);

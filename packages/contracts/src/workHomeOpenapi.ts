@@ -4,11 +4,12 @@ import {
   HomeTaskSummary, RouteRequest, RouteResponse, SessionStartView, SubSession, WaitingItem, WaitingTarget, WorkHomeResponse, CardMerge, TaskFeedItem, HomeItem,
   ReleaseSessionStartRequest, NotificationSettings, ClaimedSessionStart, AppearanceSettings, SessionStopView, ClaimSessionStopsRequest, ClaimSessionStopsResponse,
   SessionStopDoneRequest, SessionCommand, SessionCommandView, ClaimSessionCommandsRequest, ClaimSessionCommandsResponse, SessionCommandDoneRequest,
-  MarkWorkSeenRequest,
+  MarkWorkSeenRequest, SubSessionKind, UpdateSubSessionRequest, ArchivedSubSession, ArchivedSubSessionListResponse,
 } from "./workHome.js";
 import { CreateProjectRequest, Project, ProjectDetailResponse, ProjectFeedItem, ProjectFeedResponse, ProjectGoal, ProjectGoalLinkedItem, ProjectHandoverItem,
   ProjectHandoverSummaryItem, ProjectListResponse, ProjectPipelineResponse, ProjectTransferDeclinedItem, UpdateProjectRequest, ProjectBoardResponse, ProjectGoalChangedItem,
-  AnswerGoalChangeRequest, SubSessionFeedRef, ProjectSubSessionReportItem, ProjectSubSessionDecisionItem, AutoRelayDecisionRequest, SetGoalDueDateRequest } from "./projects.js";
+  AnswerGoalChangeRequest, SubSessionFeedRef, ProjectSubSessionReportItem, ProjectSubSessionDecisionItem, AutoRelayDecisionRequest, SetGoalDueDateRequest,
+  ModelEffort, ConversationModelOption, ConversationModelListResponse, ConversationModelChoice, ProjectPipelineModel, SetProjectPipelineModelRequest } from "./projects.js";
 import { CreateProjectTransferRequest, HandoverSecretFinding, HandoverSecretsResponse, HandoverSection, PersonRef, ProjectTransfer,
   UpdateProjectTransferRequest } from "./projectTransfers.js";
 import { Budget, TaskBudgetResponse } from "./budget.js";
@@ -29,6 +30,8 @@ export const workHomeSchemas: Record<string, JsonSchema> = {
   PersonRef, HandoverSection, ProjectTransfer, CreateProjectTransferRequest, UpdateProjectTransferRequest, HandoverSecretFinding, HandoverSecretsResponse,
   NotificationSettings, AppearanceSettings, SessionStopView, ClaimSessionStopsRequest, ClaimSessionStopsResponse, SessionStopDoneRequest,
   SessionCommand, SessionCommandView, ClaimSessionCommandsRequest, ClaimSessionCommandsResponse, SessionCommandDoneRequest, MarkWorkSeenRequest,
+  SubSessionKind, UpdateSubSessionRequest, ArchivedSubSession, ArchivedSubSessionListResponse,
+  ModelEffort, ConversationModelOption, ConversationModelListResponse, ConversationModelChoice, ProjectPipelineModel, SetProjectPipelineModelRequest,
   BuddyAuthority, UpdateBuddyAuthorityRequest, BuddyAuditEntry, BuddyAuditListResponse, BuddyMessageDraft, TrashItem, TrashListResponse, Budget, TaskBudgetResponse, ClaimedSessionStart, SessionAttachment, SessionAttachmentUploadResponse,
 };
 
@@ -220,6 +223,28 @@ export const workHomePaths: OpenAPIV3.Document["paths"] = {
       responses: { "204": { description: "记下了" }, ...errors(400, 401, 403) },
     },
   },
+  "/api/me/sub-sessions/{kind}/{id}": {
+    patch: {
+      operationId: "updateSubSession",
+      summary: "子会话「…」菜单（17.2 第 35 条）：改名、归档（archived: true）、恢复（archived: false）；在跑时归档 409 SUB_SESSION_RUNNING；专题名超 60 字 400",
+      parameters: [{ name: "kind", in: "path", required: true, schema: { type: "string", enum: ["card", "topic"] } }, ...path("id")],
+      requestBody: body("UpdateSubSessionRequest"),
+      responses: { "204": { description: "改好了" }, ...errors(400, 401, 403, 404, 409) },
+    },
+    delete: {
+      operationId: "deleteSubSession",
+      summary: "删掉一个子会话：先进回收站，30 天内能恢复，之后彻底删掉撤不回；在跑 409 SUB_SESSION_RUNNING",
+      parameters: [{ name: "kind", in: "path", required: true, schema: { type: "string", enum: ["card", "topic"] } }, ...path("id")],
+      responses: { "204": { description: "进回收站了" }, ...errors(401, 403, 404, 409) },
+    },
+  },
+  "/api/me/sub-sessions/archived": {
+    get: {
+      operationId: "listArchivedSubSessions",
+      summary: "归档了的子会话（新归档的在前），带原来的项目和字母",
+      responses: { "200": json("归档了的子会话", "ArchivedSubSessionListResponse"), ...errors(401, 403) },
+    },
+  },
   "/api/me/session-commands/claim": {
     post: {
       operationId: "claimSessionCommands",
@@ -279,6 +304,12 @@ export const workHomePaths: OpenAPIV3.Document["paths"] = {
       requestBody: body("UpdateProjectRequest"),
       responses: { "200": json("改好的项目", "Project"), ...errors(400, 401, 403, 404) },
     },
+    delete: {
+      operationId: "deleteProject",
+      summary: "删掉项目（17.2 第 35 条，撤不回）：项目、项目对话、挂接、字母和汇报删掉，子会话进回收站，自己做的事项留到「其他」；只有负责人能删；有在跑的 409 PROJECT_BUSY，正在转交 409 PROJECT_TRANSFERRING",
+      parameters: path("projectId"),
+      responses: { "204": { description: "删掉了" }, ...errors(401, 403, 404, 409) },
+    },
   },
   "/api/me/projects/{projectId}/goals/{taskId}": {
     put: {
@@ -300,6 +331,28 @@ export const workHomePaths: OpenAPIV3.Document["paths"] = {
       summary: "这个项目的对话：第一次打开时建，以后都返回同一条；收发消息走 /api/conversations/{scope}，scope 是 project:<projectId>",
       parameters: path("projectId"),
       responses: { "200": json("已有的项目对话", "ProjectPipelineResponse"), "201": json("新建的项目对话", "ProjectPipelineResponse"), ...errors(401, 403, 404, 502, 503) },
+    },
+  },
+  "/api/me/projects/{projectId}/pipeline/model": {
+    get: {
+      operationId: "getProjectPipelineModel",
+      summary: "这个项目对话选的模型和思考程度（17.2 第 36 条）；没选为 null（照 Chat 的默认）",
+      parameters: path("projectId"),
+      responses: { "200": json("现在选的", "ProjectPipelineModel"), ...errors(401, 403, 404, 502, 503) },
+    },
+    put: {
+      operationId: "setProjectPipelineModel",
+      summary: "给这个项目对话选模型和思考程度，null 回到默认；不在列表里或思考程度不支持 400 INVALID_MODEL_CHOICE；没接 Chat 409 CHAT_NOT_CONNECTED",
+      parameters: path("projectId"),
+      requestBody: body("SetProjectPipelineModelRequest"),
+      responses: { "200": json("改好的", "ProjectPipelineModel"), ...errors(400, 401, 403, 404, 409, 502, 503) },
+    },
+  },
+  "/api/me/conversation-models": {
+    get: {
+      operationId: "listConversationModels",
+      summary: "项目对话能选的模型和各自支持的思考程度（17.2 第 36 条）；默认的排第一；没接 Chat 为空",
+      responses: { "200": json("能选的模型", "ConversationModelListResponse"), ...errors(401, 403, 502, 503) },
     },
   },
   "/api/me/projects/{projectId}/feed": {

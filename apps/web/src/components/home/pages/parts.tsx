@@ -4,8 +4,10 @@
  * 二级页共用的几样（设计 5.4.6、5.4.7）：区块（标题 13/20 600 淡色 + 一列行）、一行（名字 + 小字、状态词、一个动作）、连接的四个状态词、
  * 本人是谁（session）、订阅的额度块（和右栏的额度行同一套数：quotaRows）。
  */
-import { useEffect, useState, type ReactNode } from "react";
-import { LoaderCircle } from "lucide-react";
+import { useEffect, useState, type ReactNode, type Ref } from "react";
+import { Check, LoaderCircle, Plus } from "lucide-react";
+import { HeroButton } from "@/components/HeroButton";
+import { Switch } from "@/components/ui/Switch";
 import { browserApi } from "@/lib/api/client";
 import type { UsageCell } from "@/lib/home/quota";
 import p from "@/styles/home-pages.module.css";
@@ -23,11 +25,11 @@ export function Section({ title, aside, children, testId }: { title: string; asi
 
 /**
  * 连接的状态词（5.6）：已连接 --ink-muted、未连接 --ink-faint、已过期 --warning、用完 --danger；
- * 本人加的工具另有三个（本机查连没连上的结果）：未授权、连不上 --warning，未知 --ink-faint。
+ * 本人加的工具另有三个（本机查连没连上的结果）：未授权、连不上 --warning，未知 --ink-faint；这套天枢没配公司飞书应用时个人飞书是「未开通」--ink-faint。
  */
-export type ConnState = "connected" | "disconnected" | "expired" | "exhausted" | "unauthorized" | "unreachable" | "unknown";
+export type ConnState = "connected" | "disconnected" | "expired" | "exhausted" | "unauthorized" | "unreachable" | "unknown" | "not_enabled";
 export const STATE_WORD: Record<ConnState, string> = {
-  connected: "已连接", disconnected: "未连接", expired: "已过期", exhausted: "用完", unauthorized: "未授权", unreachable: "连不上", unknown: "未知",
+  connected: "已连接", disconnected: "未连接", expired: "已过期", exhausted: "用完", unauthorized: "未授权", unreachable: "连不上", unknown: "未知", not_enabled: "未开通",
 };
 
 /** 一行：名字（14/20）+ 小字（12/16，可以没有）、状态词、一个动作；高 48。children 是跟在行下面的（额度、文件夹、展开的面板）。 */
@@ -56,7 +58,7 @@ export function Row({ name, tag, sub, state, action, children, testId }: {
   );
 }
 
-/** 开关行（带上个人配置、验收过就合回、飞书通知）：整行是一个 label，最右是开关（原生勾选框，role=switch）。 */
+/** 开关行（带上个人配置、验收过就合回、飞书推送）：整行是一个开关按钮（components/ui/Switch），名字在左、开关在右。 */
 export function SwitchRow({ name, sub, checked, disabled, onChange, testId }: {
   name: string;
   sub?: ReactNode;
@@ -67,15 +69,71 @@ export function SwitchRow({ name, sub, checked, disabled, onChange, testId }: {
 }) {
   return (
     <li data-testid={testId}>
-      <label className={p.row}>
+      <Switch className={`${p.row} ${p.switchRow}`} checked={checked} disabled={disabled} onChange={onChange}>
         <span className={p.rowText}>
           <span className={p.rowName}><span>{name}</span></span>
           {sub ? <span className={p.rowSub}>{sub}</span> : null}
         </span>
-        <input type="checkbox" role="switch" className={p.switch} checked={checked} disabled={disabled} aria-checked={checked} onChange={(event) => onChange(event.target.checked)} />
-      </label>
+      </Switch>
     </li>
   );
+}
+
+/** 卡片网格（「连接和技能」，照 Claude 设置的 Customize）：两列，959 及以下一列。 */
+export function CardGrid({ label, children, testId }: { label: string; children: ReactNode; testId?: string }) {
+  return <ul className={p.grid} aria-label={label} data-testid={testId}>{children}</ul>;
+}
+
+/**
+ * 一张卡：图标、名字、一行内容、来源一行；右上角是 ✓（已加）或一个动作（+、重试、连接）。
+ * onOpen 有的整卡可点（技能进详情、工具开编辑）；main 给了就用它当可点的那块（比如飞书点开是菜单）。
+ */
+export function Card({ icon, name, line, source, corner, onOpen, openRef, main, label, testId, children }: {
+  icon: ReactNode;
+  name: ReactNode;
+  line?: ReactNode;
+  source?: ReactNode;
+  corner?: ReactNode;
+  onOpen?: () => void;
+  openRef?: Ref<HTMLButtonElement>;
+  main?: (body: ReactNode) => ReactNode;
+  label?: string;
+  testId?: string;
+  /** 卡下面整宽的一块（本机离线时的安装命令）。 */
+  children?: ReactNode;
+}) {
+  const body = (
+    <>
+      <span className={p.cardIcon} aria-hidden>{icon}</span>
+      <span className={p.cardText}>
+        <span className={p.cardName}>{name}</span>
+        {line ? <span className={p.cardLine}>{line}</span> : null}
+        {source ? <span className={p.cardSource}>{source}</span> : null}
+      </span>
+    </>
+  );
+  return (
+    <li className={p.card} data-testid={testId} data-openable={onOpen || main ? "" : undefined}>
+      {main ? main(body) : onOpen ? <button type="button" ref={openRef} className={p.cardMain} aria-label={label} onClick={onOpen}>{body}</button> : <div className={p.cardMain}>{body}</div>}
+      {corner ? <span className={p.cardCorner}>{corner}</span> : null}
+      {children ? <div className={p.cardExtra}>{children}</div> : null}
+    </li>
+  );
+}
+
+/** 卡右上角的 ✓：已加（连接是已连接）。 */
+export function Added({ label = "已添加" }: { label?: string }) {
+  return <span className={p.added} role="img" aria-label={label} title={label}><Check {...ICON} /></span>;
+}
+
+/** 卡右上角的 +：点了就地添加。 */
+export function AddButton({ label, disabled, onPress }: { label: string; disabled?: boolean; onPress: () => void }) {
+  return <HeroButton variant="secondary" size="sm" isIconOnly aria-label={label} title="添加" isDisabled={disabled} onPress={onPress}><Plus {...ICON} /></HeroButton>;
+}
+
+/** 卡上那一行写状态时：状态词（带颜色）+ 一段内容。 */
+export function StateLine({ state, detail }: { state: ConnState | null; detail?: string | null }) {
+  return <>{state ? <span className={p.cardState} data-state={state}>{STATE_WORD[state]}</span> : null}{state && detail ? " · " : null}{detail}</>;
 }
 
 /** 加载：一颗转圈（--ink-faint），不写字、不画骨架（5.2「交互状态」）。 */

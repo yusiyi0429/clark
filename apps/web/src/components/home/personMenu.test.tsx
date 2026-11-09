@@ -23,11 +23,13 @@ vi.mock("@/components/avatar/PersonAvatar", () => ({ PersonAvatar: ({ children }
 import { PersonRow } from "./PersonMenu";
 
 describe("个人菜单", () => {
-  it("岗位、我的记忆在里面；「任务数据质量」不在新首页的菜单里（用户 11/08 定）", () => {
+  it("技能、我的记忆在里面；「任务数据质量」不在新首页的菜单里（用户 11/08 定）", () => {
     const html = renderToStaticMarkup(<PersonRow account={{ displayName: "孙铭泽", loginId: "sunm", role: "member", personId: "sun-mingze" } as never}
       view={{ kind: "home" }} alert={false} go={() => undefined} />);
     const items = [...html.matchAll(/data-item="([^"]+)"/g)].map((match) => match[1]);
-    expect(items).toEqual(["profile", "buddy", "connections", "roles", "memory", "preferences", "switch", "admin", "lock", "logout"]);
+    // 连接、技能合成一项「连接和技能」（11/09 用户定）。
+    expect(items).toEqual(["profile", "buddy", "connections", "memory", "preferences", "switch", "admin", "lock", "logout"]);
+    expect(html).toContain('data-item="connections">连接和技能<');
     expect(html).not.toContain("任务数据质量");
   });
 });

@@ -198,6 +198,38 @@ export const MarkWorkSeenRequest = Type.Object({
 }, strict);
 export type TMarkWorkSeenRequest = Static<typeof MarkWorkSeenRequest>;
 
+/**
+ * 子会话那一行的「…」菜单（17.2 第 35 条）：重命名、标为已读、停止、归档、删除。
+ * - 标为已读：POST /api/me/work-seen（kind = sub）；停止：照旧由网页直接调本机，云端没有新接口。
+ * - 重命名、归档、恢复：PATCH /api/me/sub-sessions/:kind/:id（UpdateSubSessionRequest，204）。kind 是 card（卡）或 topic（专题），id 是卡或专题的 id。
+ *   title：卡最长 120 字，专题最长 60 字（超了 400 TITLE_TOO_LONG），去掉首尾空白后不能为空。只改天枢里的名字，本机会话、字母都不变。
+ *   archived = true 归档：从左栏和首页收起，在 GET /api/me/sub-sessions/archived 里能找到；还在跑（含排队、停着等回话）409 SUB_SESSION_RUNNING，先停；
+ *   登记了还没开的开工一并撤掉。archived = false 恢复，回到原来的项目（项目删了的在「其他」里）。在跑时也能改名。
+ * - 删除：DELETE /api/me/sub-sessions/:kind/:id（204）。和伙伴删的一样先进回收站（GET /api/me/trash），30 天内能从回收站恢复；
+ *   过了 30 天彻底删掉，撤不回（会话记录、交回、验收都没了；本机那边的工作树和文件不动）。还在跑 409 SUB_SESSION_RUNNING，先停。
+ * 不是本人的、没有的、已经在回收站里的 404。
+ */
+export const SubSessionKind = Type.Union([Type.Literal("card"), Type.Literal("topic")]);
+export const UpdateSubSessionRequest = Type.Object({
+  title: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
+  archived: Type.Optional(Type.Boolean()),
+}, { ...strict, minProperties: 1 });
+/** GET /api/me/sub-sessions/archived：本人归档了的子会话，新归档的在前。letter 是在原项目里的字母，projectId、projectName 是原来的项目（不在项目里、项目删了为 null）。 */
+export const ArchivedSubSession = Type.Object({
+  kind: SubSessionKind,
+  id: Type.String({ format: "uuid" }),
+  title: Type.String(),
+  letter: Nullable(SubSessionLetter),
+  projectId: Nullable(Type.String({ format: "uuid" })),
+  projectName: Nullable(Type.String()),
+  archivedAt: Instant,
+}, strict);
+export const ArchivedSubSessionListResponse = Type.Object({ items: Type.Array(ArchivedSubSession) }, strict);
+export type TSubSessionKind = Static<typeof SubSessionKind>;
+export type TUpdateSubSessionRequest = Static<typeof UpdateSubSessionRequest>;
+export type TArchivedSubSession = Static<typeof ArchivedSubSession>;
+export type TArchivedSubSessionListResponse = Static<typeof ArchivedSubSessionListResponse>;
+
 /** 首页「本月」里的一件 Task（16.4）：project 是挂在哪个项目（点了进项目）；没挂上为 null，网页画「挂到…」（选现有项目或新建）。 */
 export const HomeMonthTask = Type.Object({
   taskId: Type.String({ minLength: 1 }),

@@ -11,6 +11,7 @@ import { Check, ChevronRight, Copy, FolderPlus, UsersRound, X } from "lucide-rea
 import type { TLocalDeviceView } from "@warmap/contracts";
 import { AccountMenu, type Account } from "@/components/AccountMenu";
 import { HeroButton } from "@/components/HeroButton";
+import { Switch } from "@/components/ui/Switch";
 import { useHandheld } from "@/components/ui/useHandheld";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { linkCloud, linkPerson, type LinkPerson } from "@/lib/local/link";
@@ -33,7 +34,7 @@ export function PluginsPage({ account }: { account: Account }) {
     <div className={s.page} data-testid="plugins-page">
       <div className={s.wrap}>
         {handheld ? <div className={s.meHead}><h1>我</h1><AccountMenu account={account} /></div> : <h1 className={s.pageTitle}>连接</h1>}
-        {handheld ? <Link href="/me/team" className={s.row}><UsersRound size={16} aria-hidden /><b>岗位</b><span className={s.grow} /><ChevronRight size={16} aria-hidden /></Link> : null}
+        {handheld ? <Link href="/me/team" className={s.row}><UsersRound size={16} aria-hidden /><b>技能</b><span className={s.grow} /><ChevronRight size={16} aria-hidden /></Link> : null}
         <LocalSection person={linkPerson(account)} handheld={handheld} />
         <DevicesSection person={linkPerson(account)} />
       </div>
@@ -73,17 +74,15 @@ export function LocalSection({ person, handheld }: { person: LinkPerson; handhel
       </div>
       {ready && !handheld ? <ModelsAndFolders /> : null}
       {ready && !handheld ? (
-        <label className={s.toggle}>
-          <input type="checkbox" checked={status?.settings.includePersonalConfigByDefault ?? false} onChange={(event) => void local.setIncludePersonal(event.target.checked)} />
+        <Switch className={s.toggle} checked={status?.settings.includePersonalConfigByDefault ?? false} onChange={(value) => void local.setIncludePersonal(value)}>
           <span>带上个人配置</span>
-        </label>
+        </Switch>
       ) : null}
       {ready && !handheld && status ? (
-        <label className={s.toggle}>
-          <input type="checkbox" checked={status.settings.autoMerge}
-            onChange={(event) => void local.runner.patchSettings({ autoMerge: event.target.checked }).then(() => local.refresh()).catch(() => showWorkspaceToast({ text: "没改成，请重试" }))} />
+        <Switch className={s.toggle} checked={status.settings.autoMerge}
+          onChange={(value) => void local.runner.patchSettings({ autoMerge: value }).then(() => local.refresh()).catch(() => showWorkspaceToast({ text: "没改成，请重试" }))}>
           <span>验收过就合回</span>
-        </label>
+        </Switch>
       ) : null}
       {ready && !handheld && status ? (
         <label className={s.toggle}>

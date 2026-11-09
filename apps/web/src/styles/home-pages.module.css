@@ -4,39 +4,37 @@
  */
 
 /* ---------- 区块和行 ---------- */
-.section { display: grid; gap: var(--space-2); min-width: 0; }
+.section { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); min-width: 0; }
 .sectionTitle { display: flex; align-items: center; gap: var(--space-2); margin: 0; padding: 0 var(--space-2); color: var(--ink-faint); font-size: var(--doc-type-meta); font-weight: 600; line-height: var(--doc-lh-meta); }
 .sectionHead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .sectionHead .sectionTitle { flex: 1; }
-.rows { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.rows { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; margin: 0; padding: 0; list-style: none; }
 
 /* 一行（连接页、偏好、资料）：名字 14/20 + 小字 12/16，右边状态词 13，最右一个动作。高 48，上下内边距 6。 */
 .row { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-48); padding: 6px var(--space-2); border-radius: var(--r-control); }
 label.row { cursor: pointer; }
 label.row:hover { background: var(--default-soft); }
+.switchRow { width: 100%; }
 .rowText { display: grid; flex: 1; min-width: 0; }
 .rowName { display: flex; align-items: center; gap: var(--space-2); min-width: 0; overflow: hidden; color: var(--ink); font-size: var(--text-base); line-height: var(--lh-row); white-space: nowrap; }
 .rowName > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .rowSub { overflow: hidden; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .state { flex: none; color: var(--ink-muted); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); white-space: nowrap; }
-.state[data-state="disconnected"], .state[data-state="unknown"] { color: var(--ink-faint); }
+.state[data-state="disconnected"], .state[data-state="unknown"], .state[data-state="not_enabled"] { color: var(--ink-faint); }
 .state[data-state="expired"], .state[data-state="unauthorized"], .state[data-state="unreachable"] { color: var(--warning); }
 .state[data-state="exhausted"] { color: var(--danger); }
 .action { display: inline-flex; flex: none; align-items: center; gap: var(--space-1); }
 .action :global(.button) { min-height: var(--touch-hit, var(--row-32)); }
-/* 行下面跟着的东西（额度、文件夹、命令、展开的面板）：和名字对齐。 */
-.under { display: grid; gap: var(--space-1); margin: 0 0 var(--space-2); padding: 0 var(--space-2); }
+/* 行下面跟着的东西（额度、文件夹、命令、展开的面板）：和名字对齐。单列 grid 都写 minmax(0, 1fr)，长路径不把行撑出页面（clip-audit 第 6 条）。 */
+.under { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-1); margin: 0 0 var(--space-2); padding: 0 var(--space-2); }
 .sub { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-32); color: var(--ink-muted); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); }
-.sub > b { flex: none; color: var(--ink); font-weight: 400; }
+.sub > b { flex: 0 1 auto; max-width: 50%; overflow: hidden; color: var(--ink); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
 .subText { min-width: 0; overflow: hidden; color: var(--ink-faint); text-overflow: ellipsis; white-space: nowrap; }
 .path { min-width: 0; overflow: hidden; color: var(--ink-faint); font-family: var(--font-mono); font-size: var(--doc-type-meta); text-overflow: ellipsis; white-space: nowrap; }
 .grow { flex: 1; min-width: 0; }
 /* 这台电脑那一行的「这台」：中性 chip（5.4.3）。 */
 .chip { display: inline-flex; flex: none; align-items: center; height: 20px; padding: 0 var(--space-2); border-radius: var(--r-capsule); background: var(--neutral-wash); color: var(--ink-muted); font-size: var(--text-xs); line-height: 16px; }
 
-/* 开关（沿用插件页的 .toggle：原生勾选框，选中用强调色——选择控件的选中态）。 */
-.switch { flex: none; width: 16px; height: 16px; margin: 0 var(--space-2); accent-color: var(--accent); cursor: pointer; }
-.switch:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 /* 弹层的触发器（同时跑几个）：中性 chip，悬停加深一档（和 Task 管线「改一改」里的岗位、模型同一个样子）。 */
 .pick { display: inline-flex; align-items: center; gap: var(--space-1); height: var(--row-28); padding: 0 var(--space-2); border: 0; border-radius: var(--r-capsule); background: var(--neutral-wash); color: var(--ink); font: inherit; font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); font-variant-numeric: tabular-nums; cursor: pointer; }
@@ -49,7 +47,7 @@ label.row:hover { background: var(--default-soft); }
 .command code { flex: 1; min-width: 0; overflow-x: auto; color: var(--ink); font-family: var(--font-mono); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); white-space: nowrap; scrollbar-width: thin; }
 
 /* 额度（订阅那几行下面，和右栏的额度行一样）：名字、剩多少、几点重置，下面 2px 额度条；明细每个窗口一行。 */
-.quota { display: grid; gap: 4px; padding: var(--space-1) 0; }
+.quota { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; padding: var(--space-1) 0; }
 .quotaLine { display: flex; align-items: baseline; gap: var(--space-2); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); }
 .quotaName { min-width: 0; overflow: hidden; color: var(--ink); text-overflow: ellipsis; white-space: nowrap; }
 .quotaAmount { flex: none; color: var(--ink); font-variant-numeric: tabular-nums; }
@@ -181,3 +179,27 @@ label.row:hover { background: var(--default-soft); }
 .keySet { display: flex; align-items: center; gap: var(--space-1); min-height: var(--touch-hit, 40px); padding-left: var(--space-3); border-radius: var(--r-control); background: var(--neutral-wash); color: var(--ink); font-size: var(--text-base); line-height: var(--lh-row); }
 .keySet [data-faint] { color: var(--ink-faint); }
 .toolFoot { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-2) 0; }
+
+/* ---------- 连接和技能：卡片网格（照 Claude 设置的 Customize）——两列，959 及以下一列；卡和首页的卡同一套（--surface 底、细边） ---------- */
+.customizeBar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+@media (max-width: 959px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.card { position: relative; display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--space-2); min-width: 0; padding: var(--space-3); border-radius: var(--r-card); background: var(--surface); box-shadow: inset 0 0 0 1px var(--hairline); transition: background-color var(--dur-base) var(--ease-swift); }
+.card[data-openable]:hover { background: var(--default-soft); }
+.cardMain { display: flex; flex: 1; align-items: flex-start; gap: var(--space-3); min-width: 0; margin: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; }
+button.cardMain { cursor: pointer; }
+button.cardMain::after { content: ""; position: absolute; inset: 0; border-radius: var(--r-card); }
+button.cardMain:focus-visible { outline: none; }
+button.cardMain:focus-visible::after { outline: 2px solid var(--focus); outline-offset: -2px; }
+.cardIcon { display: grid; flex: none; place-items: center; width: 40px; height: 40px; border-radius: var(--r-inset); background: var(--neutral-wash); color: var(--ink-muted); }
+.cardText { display: grid; gap: 2px; min-width: 0; }
+.cardName { overflow: hidden; color: var(--ink); font-size: var(--text-base); font-weight: 600; line-height: var(--lh-row); text-overflow: ellipsis; white-space: nowrap; }
+.cardLine { display: -webkit-box; overflow: hidden; color: var(--ink-muted); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
+.cardSource { color: var(--ink-faint); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); }
+.cardState { color: var(--ink-muted); }
+.cardState[data-state="disconnected"], .cardState[data-state="unknown"], .cardState[data-state="not_enabled"] { color: var(--ink-faint); }
+.cardState[data-state="expired"], .cardState[data-state="unauthorized"], .cardState[data-state="unreachable"] { color: var(--warning); }
+.cardState[data-state="exhausted"] { color: var(--danger); }
+.cardExtra { position: relative; z-index: 1; flex: 1 0 100%; min-width: 0; }
+.cardCorner { position: relative; z-index: 1; display: inline-flex; flex: none; align-items: center; gap: var(--space-1); }
+.added { display: grid; place-items: center; width: 32px; height: 32px; border-radius: var(--r-control); background: var(--confirmed-wash); color: var(--confirmed); }
