@@ -165,9 +165,8 @@ type PipelineProps = {
   onManualStart?: (subId: string) => void;
   /** 伙伴在这条对话里说话（伙伴台换成「在说」）。 */
   onSpeaking: (speaking: boolean) => void;
-  /** 页头右边（项目的 chip 和「详情」）、页头下的目标条、项目自己的几块（转交，16.7）。 */
+  /** 页头右边（「详情」）、项目自己的几块（转交，16.7）。页头只留项目名和信息按钮，本月的 Task 在信息页和首页「本月」里看（19 条）。 */
   trail: ReactNode;
-  bar: ReactNode;
   blocks?: TimedBlock[];
   /** 接手以后「拉到这台电脑」拉好了（重读这台电脑上绑的文件夹）。 */
   onPulled?: () => void;
@@ -215,7 +214,7 @@ function MockPipeline({ task, ...props }: PipelineProps & { task: THomePlanTask 
  * 项目对话，网页按时间插进去的几块：挂上一件 Task 的分隔线「{月} 月目标：{Task}」、每件 Task 的规划员在拆（一行）、拆好的派活单（开工的选项框）、
  * 开了哪几个子会话，项目里开出的专题，验收行（过了、受阻、约定都达到、返工，TaskFeed）。
  */
-function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, onSpeaking, onSplit, splitFailed, startFailed, onManualStart, trail, bar, blocks: own, onPulled, onSetFolder }: PipelineProps & { data: ConversationData }) {
+function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, onSpeaking, onSplit, splitFailed, startFailed, onManualStart, trail, blocks: own, onPulled, onSetFolder }: PipelineProps & { data: ConversationData }) {
   const chrome = useViewChrome();
   const handheld = usePhone();
   const { work } = api;
@@ -348,7 +347,6 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
                 {trail}
                 {chrome.trail}
               </header>
-              {bar}
             </>
           )}
           timeline={(current) => <WorkTimeline data={current} blocks={blocks} />}
