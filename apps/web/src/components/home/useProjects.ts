@@ -6,8 +6,8 @@
  * 绑文件夹在这台电脑的本机程序上（D 的 GET/PUT /v1/projects）：没连上本机程序时都算没绑。交出去了的项目，这台电脑上的绑定解掉（只解绑，不动文件）。
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { TProject } from "@warmap/contracts";
-import { attachGoal, createProject, listProjects, setGoalDueDate, startTransfer, updateProject, withdrawTransfer } from "@/lib/board/cloud";
+import type { TArchivedSubSession, TProject, TSubSessionKind } from "@warmap/contracts";
+import { attachGoal, createProject, deleteProject, deleteSubSession, listArchivedSubSessions, listProjects, setGoalDueDate, startTransfer, updateProject, updateSubSession, withdrawTransfer } from "@/lib/board/cloud";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { fromHome, fromListed, type BoundFolders, type Folders } from "@/lib/home/projects";
 import { noteStartedTransfer, seenSequence } from "@/lib/home/transfer";
@@ -40,6 +40,11 @@ export function useProjects(data: Pick<WorkHomeData, "projects" | "month" | "per
     void Promise.all(handedOff.split(",").map((projectId) => runner.putProjectFolder(projectId, { folderId: null }).catch(() => undefined))).then(loadFolders);
   }, [ready, handedOff, runner, loadFolders]);
 
+  // 归档了的子会话（35 条）：左栏「已归档」里列出来、能恢复；进页面读一次，本人归档、恢复、删了再读。
+  const [archivedSubs, setArchivedSubs] = useState<TArchivedSubSession[]>([]);
+  const loadArchivedSubs = useCallback(() => listArchivedSubSessions().then((answer) => setArchivedSubs(answer.items), () => undefined), []);
+  useEffect(() => { void loadArchivedSubs(); }, [loadArchivedSubs]);
+
   const projects = useMemo(() => data.projects.map((project) => fromHome(project, data, folders)), [data, folders]);
   const archived = useMemo(() => listed.map((project) => fromListed(project, folders)), [listed, folders]);
   const all = useMemo(() => [...projects, ...archived], [projects, archived]);
@@ -60,6 +65,19 @@ export function useProjects(data: Pick<WorkHomeData, "projects" | "month" | "per
     await runner.putProjectFolder(id, { folderId, ...(name ? { name } : {}) });
     await loadFolders();
   }, [runner, loadFolders]);
+  /** 删掉项目（35 条，撤不回）：云端删成了，这台电脑上的绑定解掉（文件夹和文件不动）。 */
+  const remove = useCallback(async (id: string) => {
+    await deleteProject(id);
+    if (ready) await runner.putProjectFolder(id, { folderId: null }).catch(() => undefined);
+    await Promise.all([refresh(), loadFolders(), loadArchivedSubs()]);
+  }, [ready, runner, refresh, loadFolders, loadArchivedSubs]);
+  /** 子会话改名、归档 / 恢复、删（进回收站）。 */
+  const renameSub = useCallback(async (kind: TSubSessionKind, id: string, title: string) => { await updateSubSession(kind, id, { title }); await refresh(); }, [refresh]);
+  const archiveSub = useCallback(async (kind: TSubSessionKind, id: string, archived: boolean) => {
+    await updateSubSession(kind, id, { archived });
+    await Promise.all([refresh(), loadArchivedSubs()]);
+  }, [refresh, loadArchivedSubs]);
+  const removeSub = useCallback(async (kind: TSubSessionKind, id: string) => { await deleteSubSession(kind, id); await Promise.all([refresh(), loadArchivedSubs()]); }, [refresh, loadArchivedSubs]);
   /** 本机弹框选别的文件夹、一步绑到项目上（32 条）。 */
   const pickFolder = useCallback(async (id: string, name: string) => {
     if (await local.pickFolder({ projectId: id, projectName: name })) await loadFolders();
@@ -76,9 +94,9 @@ export function useProjects(data: Pick<WorkHomeData, "projects" | "month" | "per
     await refresh();
   }, [refresh]);
   const withdraw = useCallback(async (transferId: string) => { await withdrawTransfer(transferId); await refresh(); }, [refresh]);
-  const actions = useMemo(() => ({ create, rename, archive, attach, setDue, setFolder, pickFolder, createFolder, transfer, withdraw, reloadFolders: loadFolders }),
-    [create, rename, archive, attach, setDue, setFolder, pickFolder, createFolder, transfer, withdraw, loadFolders]);
-  return { all, projects, archived, bound, actions };
+  const actions = useMemo(() => ({ create, rename, archive, remove, attach, setDue, setFolder, pickFolder, createFolder, transfer, withdraw, renameSub, archiveSub, removeSub, reloadFolders: loadFolders }),
+    [create, rename, archive, remove, attach, setDue, setFolder, pickFolder, createFolder, transfer, withdraw, renameSub, archiveSub, removeSub, loadFolders]);
+  return { all, projects, archived, archivedSubs, bound, actions };
 }
 
 export type ProjectsApi = ReturnType<typeof useProjects>;

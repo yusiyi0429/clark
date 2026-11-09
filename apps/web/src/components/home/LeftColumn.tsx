@@ -29,12 +29,46 @@ import { PersonRow } from "./PersonMenu";
 import { useHoverTip, useNameTip } from "./NameTip";
 import { LocalContext } from "@/lib/local/LocalRunnerProvider";
 import { runLabel } from "@/lib/local/runModel";
+import { running } from "@/lib/local/sessionView";
 import { ICON, type IconState } from "./StateIcon";
 import { pageHref, type View } from "./view";
 import { showUnseen, type SeenKind, type SeenMarks } from "@/lib/home/seen";
+import type { TArchivedSubSession, TSubSessionKind } from "@warmap/contracts";
+import { showWorkspaceToast } from "@/lib/toast";
+import { RowMenu, conflictText, useLongPress, type RowMenuItem } from "./RowMenu";
 
 /** 左栏里的「刚看过」（25 条）：画蓝点前查，点行时在跳页之前记。 */
 const SeenContext = createContext<{ seen?: SeenMarks; onOpen?: (kind: SeenKind, id: string, marker: string | null) => void }>({});
+
+/** 行尾「…」菜单要做的事（35 条）：调云端的在 useProjects 里；不给就不画菜单。 */
+export type RowActions = {
+  renameProject: (id: string, name: string) => Promise<unknown>;
+  archiveProject: (id: string, archived: boolean) => Promise<unknown>;
+  deleteProject: (id: string) => Promise<unknown>;
+  renameSub: (kind: TSubSessionKind, id: string, title: string) => Promise<unknown>;
+  archiveSub: (kind: TSubSessionKind, id: string, archived: boolean) => Promise<unknown>;
+  deleteSub: (kind: TSubSessionKind, id: string) => Promise<unknown>;
+};
+const ActionsContext = createContext<RowActions | null>(null);
+
+/** 菜单里没成时就地写的话（B 契约 c3366f28 的 409）。 */
+export const deleteProjectFail = (error: unknown) => conflictText(error, { PROJECT_BUSY: null, PROJECT_TRANSFERRING: "正在转交" }, "没删成");
+export const archiveSubFail = (error: unknown) => conflictText(error, { SUB_SESSION_RUNNING: "先停下再归档" }, "没归档成");
+export const deleteSubFail = (error: unknown) => conflictText(error, { SUB_SESSION_RUNNING: "先停下再删" }, "没删成");
+
+/** 改名：就地一个输入框，回车、移开存，Esc 不改；空的或没变不存。 */
+function RenameInput({ value, maxLength, onDone }: { value: string; maxLength: number; onDone: (name: string | null) => void }) {
+  const done = (next: string) => { const trimmed = next.trim(); onDone(trimmed && trimmed !== value ? trimmed : null); };
+  return (
+    <input className={h.projectName} autoFocus defaultValue={value} aria-label="新名字" maxLength={maxLength} data-testid="row-rename" onFocus={(event) => event.currentTarget.select()}
+      onBlur={(event) => done(event.currentTarget.value)}
+      onKeyDown={(event) => {
+        if (event.nativeEvent.isComposing) return;
+        if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); }
+        if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onDone(null); }
+      }} />
+  );
+}
 import h from "@/styles/home.module.css";
 
 export const subHref = (sub: Pick<SubSession, "kind" | "id">) => (sub.kind === "card" ? cardHref(sub.id) : topicHref(sub.id));
@@ -70,7 +104,7 @@ function useStageScale(off: boolean) {
   return { ref, scale };
 }
 
-export function LeftColumn({ data, view, buddy, speaking, go, phone, account, today, alert, trail, top, month, onRetryPlan, projects, archived, onCreate, cardAt, working, seen, onOpen }: {
+export function LeftColumn({ data, view, buddy, speaking, go, phone, account, today, alert, trail, top, month, onRetryPlan, projects, archived, archivedSubs = [], actions = null, onCreate, cardAt, working, seen, onOpen }: {
   data: WorkHomeData;
   view: View;
   buddy: Buddy | null;
@@ -94,6 +128,10 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
   /** 项目（已排好序，16.2）和已归档的。 */
   projects: Project[];
   archived: Project[];
+  /** 归档了的子会话（35 条）：列在「已归档」里，带原来的项目和字母，能恢复。 */
+  archivedSubs?: TArchivedSubSession[];
+  /** 行尾「…」菜单（35 条）；不给就不画。 */
+  actions?: RowActions | null;
   /** 新建一个项目（POST /api/me/projects），回它的 id（建好直接进项目页）；没建成在组头下写「失败 · 重试」。 */
   onCreate: (name: string) => Promise<string>;
   /** 卡建出来的时间（看板里的）：一个项目下的会话照派活单的先后排（和对话里「开了哪几个子会话」一样）。 */
@@ -126,6 +164,7 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
   };
   return (
     <SeenContext.Provider value={{ seen, onOpen }}>
+    <ActionsContext.Provider value={actions}>
     <nav className={h.leftInner} aria-label="导航">
       <div ref={stage.ref} className={h.stage} data-current={view.kind === "buddy" ? "" : undefined} data-glow={glow}
         style={{ "--stage-scale": stage.scale, ...(glow === "listening" ? { "--level": dictation?.level ?? 0 } : {}) } as CSSProperties}>
@@ -169,12 +208,15 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
           ) : null}
           {createFailed ? <FailedLine {...createFailed} /> : null}
           {projects.map((project) => <ProjectNode key={project.id} project={project} view={view} go={go} personId={account.personId} cardAt={cardAt} working={!!working?.has(project.id)} />)}
-          {archived.length ? (
+          {archived.length || archivedSubs.length ? (
             <>
               <button type="button" className={h.foldToggle} data-flat="" aria-expanded={archivedOpen} onClick={() => setArchivedOpen(!archivedOpen)} data-tree-row="" data-testid="tree-archived">
-                <ChevronRight size={14} strokeWidth={1.8} aria-hidden className={h.chevron} data-open={archivedOpen ? "" : undefined} />已归档 {archived.length}
+                <ChevronRight size={14} strokeWidth={1.8} aria-hidden className={h.chevron} data-open={archivedOpen ? "" : undefined} />已归档 {archived.length + archivedSubs.length}
               </button>
               {archivedOpen ? archived.map((project) => <ProjectNode key={project.id} project={project} view={view} go={go} personId={account.personId} cardAt={cardAt} />) : null}
+              {archivedOpen && archivedSubs.length ? (
+                <ul className={h.subs} data-flat="">{archivedSubs.map((sub) => <ArchivedSubRow key={`${sub.kind}:${sub.id}`} sub={sub} go={go} />)}</ul>
+              ) : null}
             </>
           ) : null}
         </section>
@@ -188,6 +230,7 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
       </div>
       <PersonRow account={account} view={view} alert={alert} go={go} />
     </nav>
+    </ActionsContext.Provider>
     </SeenContext.Provider>
   );
 }
@@ -233,9 +276,27 @@ function ProjectNode({ project, view, go, personId, cardAt, working = false }: {
   const line = projectLine(project);
   // 名字被截断时悬停、键盘聚焦出完整名字。
   const nameTip = useNameTip(project.name);
+  const actions = useContext(ActionsContext);
+  const [menu, setMenu] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const press = useLongPress(() => setMenu(true));
+  const unseen = showUnseen(project.unseen, opened.seen, "project", project.id, project.lastActivity);
+  // 行尾「…」（35 条）：重命名、标为已读、转交给…（进项目详情里那一处）、归档 / 恢复、删除（撤不回，删成了回首页）。
+  const menuItems: RowMenuItem[] = actions ? [
+    { id: "rename", label: "重命名", run: () => setRenaming(true) },
+    { id: "read", label: "标为已读", disabled: !unseen, run: () => opened.onOpen?.("project", project.id, project.lastActivity) },
+    ...(project.archived ? [] : [{ id: "transfer", label: "转交给…", run: () => go(projectInfoHref(project.id)) }]),
+    { id: "archive", label: project.archived ? "恢复" : "归档", run: () => actions.archiveProject(project.id, !project.archived), failText: () => "没改成" },
+    { id: "delete", label: "删除", danger: true, run: async () => { await actions.deleteProject(project.id); go(HOME_HREF); }, failText: deleteProjectFail },
+  ] : [];
+  const rename = (name: string | null) => {
+    setRenaming(false);
+    if (name && actions) void actions.renameProject(project.id, name).catch(() => showWorkspaceToast({ text: "没改成" }));
+  };
   return (
     <div className={h.taskNode} data-testid="tree-project" data-done={project.archived ? "" : undefined}>
-      <div className={h.taskRow} data-current={page ? "" : undefined}>
+      {renaming ? <RenameInput value={project.name} maxLength={60} onDone={rename} /> : (
+      <div className={h.taskRow} data-current={page ? "" : undefined} {...press}>
         <button type="button" className={h.taskMain} onClick={() => { opened.onOpen?.("project", project.id, project.lastActivity); go(projectHref(project.id)); }} aria-current={page ? "page" : undefined} data-tree-row="" {...nameTip.rowProps}>
           <span className={h.slotState} />
           <span className={`${h.taskText} ${h.projectText}`}>
@@ -245,14 +306,16 @@ function ProjectNode({ project, view, go, personId, cardAt, working = false }: {
           {/* 行尾一颗点（34 条，和子会话行同一个位置、同样大小）：等你蓝点 → 在后台干活闪的灰点（读屏读「在后台工作」）→ 没看过的新回复蓝点。 */}
           {project.waiting ? <span className={h.subDot} data-tone="stopped" role="img" aria-label="等你" data-testid="project-waiting"><i aria-hidden /></span>
             : working ? <span className={h.subDot} data-tone="running" data-testid="project-working"><i aria-hidden /><span className={h.srOnly}>在后台工作</span></span>
-            : showUnseen(project.unseen, opened.seen, "project", project.id, project.lastActivity) ? <span className={h.subDot} data-tone="stopped" role="img" aria-label="有新回复" data-testid="project-unseen"><i aria-hidden /></span> : null}
+            : unseen ? <span className={h.subDot} data-tone="stopped" role="img" aria-label="有新回复" data-testid="project-unseen"><i aria-hidden /></span> : null}
         </button>
         {nameTip.tip}
-        <span className={h.info} data-on={info ? "" : undefined}>
+        <span className={h.info} data-on={info ? "" : undefined} data-menu={actions ? "" : undefined}>
           <HeroButton variant="ghost" size="sm" isIconOnly title="详情" aria-label={`${project.name} 详情`} aria-pressed={info}
             onPress={() => go(info ? projectHref(project.id) : projectInfoHref(project.id))} data-testid="project-info"><Info {...ICON} /></HeroButton>
         </span>
+        {actions ? <RowMenu label={project.name} items={menuItems} open={menu} onOpenChange={setMenu} /> : null}
       </div>
+      )}
       {subs.length || items.length ? (
         <div className={h.branch}>
           {subs.length ? (
@@ -353,15 +416,53 @@ function SubRow({ sub, letter, view, go }: { sub: SubSession; letter: string | n
   const run = sub.sessionId ? local?.sessions.find((entry) => entry.id === sub.sessionId)?.run : null;
   const name = useNameTip(sub.title, runLabel(run));
   const opened = useContext(SeenContext);
-  const dot = subDot({ ...sub, unseen: showUnseen(sub.unseen, opened.seen, "sub", sub.id, sub.updatedAt) });
+  const unseen = showUnseen(sub.unseen, opened.seen, "sub", sub.id, sub.updatedAt);
+  const dot = subDot({ ...sub, unseen });
+  const actions = useContext(ActionsContext);
+  const [menu, setMenu] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const press = useLongPress(() => setMenu(true));
+  // 停止只在这台电脑上跑着时有（本机直接停）。
+  const session = sub.sessionId ? local?.sessions.find((entry) => entry.id === sub.sessionId) : null;
+  const stoppable = !!session && running(session.status);
+  // 行尾「…」（35 条）：重命名、标为已读、停止（在跑时）、归档、删除（进回收站）。
+  const menuItems: RowMenuItem[] = actions ? [
+    { id: "rename", label: "重命名", run: () => setRenaming(true) },
+    { id: "read", label: "标为已读", disabled: !unseen, run: () => opened.onOpen?.("sub", sub.id, sub.updatedAt) },
+    ...(stoppable && local ? [{ id: "stop", label: "停止", run: async () => { await local.runner.kill(session!.id); await local.refresh(); }, failText: () => "没停下" }] : []),
+    { id: "archive", label: "归档", run: () => actions.archiveSub(sub.kind, sub.id, true), failText: archiveSubFail },
+    { id: "delete", label: "删除", danger: true, run: () => actions.deleteSub(sub.kind, sub.id), failText: deleteSubFail },
+  ] : [];
+  const rename = (title: string | null) => {
+    setRenaming(false);
+    if (title && actions) void actions.renameSub(sub.kind, sub.id, title).catch(() => showWorkspaceToast({ text: "没改成" }));
+  };
+  if (renaming) return <li><RenameInput value={sub.title} maxLength={sub.kind === "topic" ? 60 : 120} onDone={rename} /></li>;
   return (
-    <li>
+    <li className={h.subItem} {...press}>
       <button type="button" className={h.sub} data-state={sub.state} aria-current={current ? "page" : undefined} onClick={() => { opened.onOpen?.("sub", sub.id, sub.updatedAt); go(subHref(sub)); }} data-tree-row="" data-testid="tree-sub" {...name.rowProps}>
         {letter ? <SubLetter letter={letter} /> : null}<span ref={name.textRef} className={h.subName}>{sub.title}</span>
         {reason ? <QueueIcon text={reason} /> : null}
         {dot ? <span className={h.subDot} data-tone={dot.tone} role="img" aria-label={dot.label} data-testid="sub-dot"><i aria-hidden /></span> : null}
       </button>
       {name.tip}
+      {actions ? <RowMenu label={sub.title} items={menuItems} open={menu} onOpenChange={setMenu} /> : null}
+    </li>
+  );
+}
+
+/** 「已归档」里的一个子会话（35 条）：字母、名字、淡色写原来的项目；点了打开，「…」里恢复回原来的项目。 */
+function ArchivedSubRow({ sub, go }: { sub: TArchivedSubSession; go: (href: string) => void }) {
+  const actions = useContext(ActionsContext);
+  const [menu, setMenu] = useState(false);
+  const press = useLongPress(() => setMenu(true));
+  return (
+    <li className={h.subItem} {...press} data-testid="tree-archived-sub">
+      <button type="button" className={h.sub} data-state="done" onClick={() => go(subHref(sub))} data-tree-row="">
+        {sub.letter ? <SubLetter letter={sub.letter} /> : null}<span className={h.subName}>{sub.title}{sub.projectName ? <span className={h.menuFaint}> · {sub.projectName}</span> : null}</span>
+      </button>
+      {actions ? <RowMenu label={sub.title} open={menu} onOpenChange={setMenu}
+        items={[{ id: "restore", label: "恢复", run: () => actions.archiveSub(sub.kind, sub.id, false), failText: () => "没恢复成" }]} /> : null}
     </li>
   );
 }

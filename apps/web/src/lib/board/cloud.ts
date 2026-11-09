@@ -8,6 +8,7 @@ import type {
   TTopicBriefResponse, TTopicDetailResponse, TTopicVersionView, TWorkersResponse,
   TBackgroundResponse, TClaimSessionStartsResponse, TRouteResponse, TWorkHomeResponse,
   TProject, TProjectDetailResponse, TProjectFeedResponse, TProjectGoal, TProjectListResponse, TProjectPipelineResponse, TUpdateProjectRequest,
+  TArchivedSubSessionListResponse, TSubSessionKind, TUpdateSubSessionRequest,
   THandoverSecretFinding, TProjectTransfer, TUpdateProjectTransferRequest, TConversationHistory, TProjectBoardResponse, TProjectGoalChangedItem,
 } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
@@ -140,6 +141,19 @@ export const readProject = (projectId: string) => maybe<TProjectDetailResponse>(
 /** 改名、归档（archived: true）、恢复（archived: false）。 */
 export const updateProject = (projectId: string, body: TUpdateProjectRequest) =>
   unwrap<TProject>(browserApi.PATCH("/api/me/projects/{projectId}", { params: project(projectId), body }) as Promise<Result<TProject>>);
+/** 删掉项目（35 条，撤不回，204）：有在跑的 409 PROJECT_BUSY（message 写是哪几个），正在转交 409 PROJECT_TRANSFERRING。本机解绑由调用方做。 */
+export const deleteProject = (projectId: string) =>
+  unwrap<unknown>(browserApi.DELETE("/api/me/projects/{projectId}", { params: project(projectId) }) as Promise<Result<unknown>>);
+const subSession = (kind: TSubSessionKind, id: string) => ({ path: { kind, id } });
+/** 子会话改名、归档（archived: true）、恢复（false）（35 条，204）；在跑时归档 409 SUB_SESSION_RUNNING。 */
+export const updateSubSession = (kind: TSubSessionKind, id: string, body: TUpdateSubSessionRequest) =>
+  unwrap<unknown>(browserApi.PATCH("/api/me/sub-sessions/{kind}/{id}", { params: subSession(kind, id), body }) as Promise<Result<unknown>>);
+/** 删掉子会话：进回收站，30 天内能恢复；在跑 409 SUB_SESSION_RUNNING。 */
+export const deleteSubSession = (kind: TSubSessionKind, id: string) =>
+  unwrap<unknown>(browserApi.DELETE("/api/me/sub-sessions/{kind}/{id}", { params: subSession(kind, id) }) as Promise<Result<unknown>>);
+/** 归档了的子会话（新归档的在前），带原来的项目和字母。 */
+export const listArchivedSubSessions = () =>
+  unwrap<TArchivedSubSessionListResponse>(browserApi.GET("/api/me/sub-sessions/archived") as Promise<Result<TArchivedSubSessionListResponse>>);
 /** 本人打开了一个子会话（sub，卡或专题的 id）或项目对话（project）：记下看过，左栏蓝点消失（26 条，204、幂等）。 */
 export const markWorkSeen = (kind: "sub" | "project", id: string) =>
   unwrap<unknown>(browserApi.POST("/api/me/work-seen", { body: { kind, id } }) as Promise<Result<unknown>>);
