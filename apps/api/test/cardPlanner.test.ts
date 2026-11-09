@@ -112,7 +112,7 @@ describe("拆卡：作业和草稿", { timeout: 30_000 }, () => {
     expect(cardPlanProblem({ cards: [ok[0], { ...ok[1], standards: Array(5).fill("长".repeat(110)) }, ok[2]] }, input)).toBe("第 2 张的完成标准合起来超过 500 字，写短一些");
     expect(cardPlanProblem({ cards: cards("role-2") }, input)).toBe("第 1 张的 roleId 只能是 roles 里的 id 或 null");
     expect(cardPlanProblem({ cards: [ok[0], ok[1], { ...ok[2], suggestPresetKey: "nope" }] }, input)).toBe("第 3 张的 suggestPresetKey 只能是 presets 里的 key 或 null");
-    expect(cardPlanProblem({ cards: [{ ...ok[0], suggestPresetKey: "researcher" }, ok[1], ok[2]] }, input)).toBe("第 1 张已经配了岗位，suggestPresetKey 写 null");
+    expect(cardPlanProblem({ cards: [{ ...ok[0], suggestPresetKey: "researcher" }, ok[1], ok[2]] }, input)).toBe("第 1 张已经配了技能，suggestPresetKey 写 null");
   });
 
   it("标题照规矩（短的动宾短语）：太长、带括号冒号句号的退回让模型重写标题，不截断；短标题和英文短标题照收", () => {

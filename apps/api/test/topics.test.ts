@@ -66,7 +66,7 @@ describe("调研专题", { timeout: 30_000 }, () => {
       expect(brief).toMatchObject({ title: "竞品调研", latestVersion: null, role: { id: role.id, name: role.name, kind: "worker", version: 1 } });
       expect(brief.critics.map((item: { id: string }) => item.id).sort()).toEqual([opponent.id, reader.id].sort());
       expect(brief.critics.find((item: { id: string }) => item.id === reader.id)).toMatchObject({ name: "读者视角", kind: "critic", acceptanceMd: "外行看得懂" });
-      for (const text of ["# 调研专题：竞品调研", "Mission：内部版上线", "Task：对话质量达标", `岗位：${role.name}`, "1. 有题库打分结果", "2. 有新人上手录屏"])
+      for (const text of ["# 调研专题：竞品调研", "Mission：内部版上线", "Task：对话质量达标", `技能：${role.name}`, "1. 有题库打分结果", "2. 有新人上手录屏"])
         expect(brief.markdown).toContain(text);
       expect((await f.call("GET", `/api/me/topics/${topic.id}/brief?critics=${reader.id}`)).json().critics.map((item: { id: string }) => item.id)).toEqual([reader.id]);
       expect((await f.call("GET", `/api/me/topics/${topic.id}/brief?critics=${role.id}`)).json()).toMatchObject({ code: "INVALID_CRITICS" });

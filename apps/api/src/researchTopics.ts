@@ -120,7 +120,7 @@ export async function topicBrief(q: Query, ownerId: string, id: string, picked: 
     `# 调研专题：${row.title}`, "",
     ...(mission ? [`- Mission：${mission.title}`] : []),
     ...(own ? [`- Task：${own.task.name}`] : []),
-    ...(role ? [`- 岗位：${role.name}`] : []),
+    ...(role ? [`- 技能：${role.name}`] : []),
     ...(latest ? [`- 已经存到第 ${latest} 版，接着这一版改`] : []),
     ...(own?.criteria.length ? ["", "## 这个 Task 的标准", "", ...own.criteria.map((text, index) => `${index + 1}. ${text}`)] : []),
   ];

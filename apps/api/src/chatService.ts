@@ -170,6 +170,8 @@ export function createChatService(options: {
   onInterrupt?: (viewer: ChatViewer, runId: string) => Promise<void>;
   /** 本人在这个对话（scope）里发出一条新消息、交给 Chat 之前（18 节第 9 条）：伙伴还 open 的选项框收掉，answered 是这一句回答的那个。失败只记日志。 */
   onMessage?: (viewer: ChatViewer, scope: string, answered: string | undefined) => Promise<void>;
+  /** 项目对话（target）这一轮写出了回答、结束了（17.2 第 25 条，项目的蓝点）。失败只记日志。 */
+  onProjectReply?: (viewer: ChatViewer, scope: string) => Promise<void>;
 }) {
   if (!options.token) throw new Error("CHAT_SERVICE_URL 需要同时配置 INTERNAL_CHAT_TOKEN");
   const base = options.baseUrl.replace(/\/+$/, "");
@@ -564,8 +566,10 @@ export function createChatService(options: {
           conversationId: current.conversation.conversationId, ...(current.started ? { newSegment: true } : {}) });
         if (runId) stoppedRuns.delete(runId);
         if (runId && runWriters.get(runId) === write) runWriters.delete(runId);
-        // 这一轮写完的时刻记成这段最后一次发言（纪要闲置 15 分钟后才写）。项目对话的段不记纪要。
+        // 这一轮写完的时刻记成这段最后一次发言（纪要闲置 15 分钟后才写）。项目对话的段不记纪要，记它回完了（蓝点）。
         if (!target) record(viewer, requestId, current.conversation);
+        else if (written) void options.onProjectReply?.(viewer, scope)
+          .catch((error) => logEvent({ event: "chat_service.reply_hook_failed", requestId, error: (error as Error)?.message }));
         if (!reply.raw.writableEnded) reply.raw.end();
         if (live) {
           // 接上来看的界面要一个结尾：和 Chat 的连接断了、没收到 done / error 时补一条「没有完成」（本人这条连接照旧不补，界面会自己接着写）。

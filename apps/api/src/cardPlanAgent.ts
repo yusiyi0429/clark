@@ -11,11 +11,11 @@ import { ADDRESS_STYLE } from "./promptStyle.js";
 
 export const CARD_PLAN_PROMPT = `# 角色
 
-你是本人的伙伴。本人要把一个 Task 拆成几张卡（执行事项），每张卡按岗位派给一个执行方：claude_code 是在本人电脑上由 Claude Code 按岗位去干，交回后由 Agent 按完成标准验收；self 是本人自己做。你出 3 到 8 张草稿卡，本人挑着放进看板。
+你是本人的伙伴。本人要把一个 Task 拆成几张卡（执行事项），每张卡按技能派给一个执行方：claude_code 是在本人电脑上由 Claude Code 按技能去干，交回后由 Agent 按完成标准验收；self 是本人自己做。你出 3 到 8 张草稿卡，本人挑着放进看板。
 
 # 输入
 
-一个 JSON：task 是 Task 的名字、完成定义和标准（criteria，编号从 1 起）；mission 是所属 Mission 的名字和验收时间点（milestones）；existing 是这个 Task 下已有的卡（标题、对第几条、状态）；roles 是本人团队里干活的岗位（id、名称、职责）；presets 是本人还没加的预设岗位（key、名称、职责）；hint 是本人说的想怎么拆，有时没有。
+一个 JSON：task 是 Task 的名字、完成定义和标准（criteria，编号从 1 起）；mission 是所属 Mission 的名字和验收时间点（milestones）；existing 是这个 Task 下已有的卡（标题、对第几条、状态）；roles 是本人加过的干活技能（id、名称、职责）；presets 是本人还没加的预设技能（key、名称、职责）；hint 是本人说的想怎么拆，有时没有。
 
 # 怎么拆
 
@@ -26,8 +26,8 @@ export const CARD_PLAN_PROMPT = `# 角色
 - brief：交代，写清要做什么、从哪里入手、产出写成什么（文件名、格式），不超过 600 字。
 - standards：可检查的完成标准，每条一句，1 到 5 条，要能凭产出、链接、截图或改动核对。
 - executor：能在电脑上靠文件、代码、网页完成的给 claude_code；要本人当面沟通、拍板、线下办的给 self。
-- roleId：claude_code 的卡从 roles 里挑职责最对得上的岗位，写它的 id；self 的卡写 null。
-- suggestPresetKey：roles 里没有对得上的岗位、presets 里有时，写那个预设的 key，roleId 写 null；都没有就写 null。
+- roleId：claude_code 的卡从 roles 里挑职责最对得上的技能，写它的 id；self 的卡写 null。
+- suggestPresetKey：roles 里没有对得上的技能、presets 里有时，写那个预设的 key，roleId 写 null；都没有就写 null。
 - why：一句话说为什么这么拆，不超过 40 字。
 - 有 hint 时照 hint 拆。
 
@@ -81,7 +81,7 @@ export function cardPlanProblem(candidate: TCardPlanCandidate, input: Pick<CardP
     if (card.roleId !== null && !input.roles.some((role) => role.id === card.roleId)) return `第 ${n} 张的 roleId 只能是 roles 里的 id 或 null`;
     if (card.suggestPresetKey !== null && !input.presets.some((preset) => preset.key === card.suggestPresetKey))
       return `第 ${n} 张的 suggestPresetKey 只能是 presets 里的 key 或 null`;
-    if (card.roleId !== null && card.suggestPresetKey !== null) return `第 ${n} 张已经配了岗位，suggestPresetKey 写 null`;
+    if (card.roleId !== null && card.suggestPresetKey !== null) return `第 ${n} 张已经配了技能，suggestPresetKey 写 null`;
   }
   return null;
 }

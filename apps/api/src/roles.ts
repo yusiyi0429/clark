@@ -32,7 +32,7 @@ export type PresetFile = { key: string; family: TRoleFamily; name: string; kind:
 /** 读一个预设文件；格式不对时抛错，说清哪里不对。 */
 export function parsePreset(text: string, family: string, key: string): PresetFile {
   const where = `${family}/${key}.md`;
-  if (!FAMILIES.has(family as TRoleFamily)) throw new Error(`${where}：岗位包只能是 ${[...FAMILIES].join("、")}`);
+  if (!FAMILIES.has(family as TRoleFamily)) throw new Error(`${where}：分组只能是 ${[...FAMILIES].join("、")}`);
   if (!/^[a-z0-9][a-z0-9_-]{0,79}$/.test(key)) throw new Error(`${where}：文件名只能用小写字母、数字、- 和 _`);
   const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/.exec(text.replace(/^﻿/, ""));
   if (!match) throw new Error(`${where}：开头要有 --- 包起来的 frontmatter`);
@@ -133,7 +133,7 @@ export async function listRoles(q: Query, ownerId: string, names: Map<string, st
 /** 本人没归档的岗位；不是本人的、归档了的当找不到。 */
 export async function ownRole(q: Query, ownerId: string, id: string): Promise<RoleRow> {
   const row = UUID_PATTERN.test(id) ? (await q("SELECT * FROM roles WHERE id=$1 AND owner_id=$2 AND archived_at IS NULL", [id, ownerId])).rows[0] as RoleRow | undefined : undefined;
-  if (!row) throw new RoleError(404, "ROLE_NOT_FOUND", "找不到这个岗位");
+  if (!row) throw new RoleError(404, "ROLE_NOT_FOUND", "找不到这个技能");
   return row;
 }
 
@@ -142,11 +142,11 @@ export async function createRole(pool: Pool, ownerId: string, input: TCreateRole
   const id = randomUUID();
   if ("presetKey" in input) {
     const preset = (await pool.query("SELECT * FROM roles WHERE owner_id IS NULL AND preset_key=$1 AND archived_at IS NULL", [input.presetKey])).rows[0] as RoleRow | undefined;
-    if (!preset) throw new RoleError(404, "PRESET_NOT_FOUND", "没有这个预设岗位");
+    if (!preset) throw new RoleError(404, "PRESET_NOT_FOUND", "没有这个预设技能");
     const inserted = await pool.query(`INSERT INTO roles(id,owner_id,preset_key,preset_version,name,family,kind,duties_md,practice_md,acceptance_md,tools,model_tier,created_at,updated_at,updated_by)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$13,$2) ON CONFLICT (owner_id,preset_key) WHERE owner_id IS NOT NULL AND preset_key IS NOT NULL AND archived_at IS NULL DO NOTHING`,
     [id, ownerId, preset.preset_key, preset.version, preset.name, preset.family, preset.kind, preset.duties_md, preset.practice_md, preset.acceptance_md, preset.tools, preset.model_tier, now]);
-    if (!inserted.rowCount) throw new RoleError(409, "PRESET_ADDED", "这个岗位已经加过了");
+    if (!inserted.rowCount) throw new RoleError(409, "PRESET_ADDED", "这个技能已经加过了");
   } else {
     await pool.query(`INSERT INTO roles(id,owner_id,name,family,kind,duties_md,practice_md,acceptance_md,tools,model_tier,created_at,updated_at,updated_by)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$11,$2)`, [id, ownerId, input.name.trim(), input.family, input.kind, input.dutiesMd ?? "", input.practiceMd ?? "",
@@ -182,8 +182,8 @@ export async function patchRole(pool: Pool, ownerId: string, id: string, input: 
     await client.query("BEGIN");
     const row = UUID_PATTERN.test(id) ? (await client.query("SELECT * FROM roles WHERE id=$1 AND owner_id=$2 AND archived_at IS NULL FOR UPDATE",
       [id, ownerId])).rows[0] as RoleRow | undefined : undefined;
-    if (!row) throw new RoleError(404, "ROLE_NOT_FOUND", "找不到这个岗位");
-    if (row.version !== version) throw new RoleError(409, "ROLE_VERSION_CONFLICT", "岗位已经被改过，请基于最新内容再改");
+    if (!row) throw new RoleError(404, "ROLE_NOT_FOUND", "找不到这个技能");
+    if (row.version !== version) throw new RoleError(409, "ROLE_VERSION_CONFLICT", "技能已经被改过，请基于最新内容再改");
     await reviseRole(client, row, { ...fields, ...(fields.name ? { name: fields.name.trim() } : {}) }, ownerId,
       { reason: reason?.trim() || null, source: "manual", proposalId: null }, now);
     await client.query("COMMIT");
@@ -201,7 +201,7 @@ export async function archiveRole(q: Query, ownerId: string, id: string, now: Da
 /** GET /api/me/roles/:id/revisions：本人的岗位（归档了的也能看）的修改记录，新的在前。 */
 export async function listRevisions(q: Query, ownerId: string, id: string, names: Map<string, string>): Promise<TRoleRevisionView[]> {
   const owned = UUID_PATTERN.test(id) && (await q("SELECT 1 FROM roles WHERE id=$1 AND owner_id=$2", [id, ownerId])).rowCount;
-  if (!owned) throw new RoleError(404, "ROLE_NOT_FOUND", "找不到这个岗位");
+  if (!owned) throw new RoleError(404, "ROLE_NOT_FOUND", "找不到这个技能");
   const rows = (await q("SELECT * FROM role_revisions WHERE role_id=$1 ORDER BY version DESC", [id])).rows as { id: string; version: number;
     changes: TRoleRevisionView["changes"]; reason: string | null; source: "manual" | "proposal"; proposal_id: string | null; created_by: string; created_at: Date }[];
   return rows.map((row) => ({ id: row.id, version: row.version, changes: row.changes, reason: row.reason, source: row.source, proposalId: row.proposal_id,
@@ -247,7 +247,7 @@ export async function criticRoles(q: Query, ownerId: string, picked?: string[]):
   const rows = (await q("SELECT * FROM roles WHERE owner_id=$1 AND kind='critic' AND archived_at IS NULL ORDER BY created_at,id", [ownerId])).rows as RoleRow[];
   if (!picked) return rows.slice(0, 3);
   const chosen = picked.map((id) => rows.find((row) => row.id === id));
-  if (chosen.some((row) => !row) || picked.length > 3) throw new RoleError(400, "INVALID_CRITICS", "评审会最多点 3 个本人的挑刺岗位");
+  if (chosen.some((row) => !row) || picked.length > 3) throw new RoleError(400, "INVALID_CRITICS", "评审会最多点 3 个本人的挑刺技能");
   return chosen as RoleRow[];
 }
 
@@ -268,8 +268,8 @@ export async function listProposals(q: Query, ownerId: string, status: "open" | 
 
 async function lockedProposal(client: PoolClient, ownerId: string, id: string): Promise<ProposalRow> {
   const row = UUID_PATTERN.test(id) ? (await client.query("SELECT * FROM role_proposals WHERE id=$1 AND owner_id=$2 FOR UPDATE", [id, ownerId])).rows[0] as ProposalRow | undefined : undefined;
-  if (!row || row.status === "drafting" || row.status === "failed") throw new RoleError(404, "PROPOSAL_NOT_FOUND", "找不到这条岗位修改");
-  if (row.status !== "open") throw new RoleError(409, "PROPOSAL_DECIDED", "这条岗位修改已经处理过了");
+  if (!row || row.status === "drafting" || row.status === "failed") throw new RoleError(404, "PROPOSAL_NOT_FOUND", "找不到这条技能修改");
+  if (row.status !== "open") throw new RoleError(409, "PROPOSAL_DECIDED", "这条技能修改已经处理过了");
   return row;
 }
 
@@ -281,8 +281,8 @@ export async function acceptProposal(pool: Pool, ownerId: string, id: string, na
     await client.query("BEGIN");
     const proposal = await lockedProposal(client, ownerId, id);
     const role = (await client.query("SELECT * FROM roles WHERE id=$1 AND owner_id=$2 FOR UPDATE", [proposal.role_id, ownerId])).rows[0] as RoleRow | undefined;
-    if (!role || role.archived_at) throw new RoleError(409, "ROLE_ARCHIVED", "这个岗位已经归档了");
-    if (role.version !== proposal.base_version) throw new RoleError(409, "ROLE_CHANGED", "岗位在这之后改过了，这条修改对不上了");
+    if (!role || role.archived_at) throw new RoleError(409, "ROLE_ARCHIVED", "这个技能已经归档了");
+    if (role.version !== proposal.base_version) throw new RoleError(409, "ROLE_CHANGED", "技能在这之后改过了，这条修改对不上了");
     await reviseRole(client, role, { [FIELD_OF[proposal.field!]]: proposal.proposed_text }, ownerId,
       { reason: proposal.why, source: "proposal", proposalId: proposal.id }, now);
     await client.query("UPDATE role_proposals SET status='accepted',decided_at=$2 WHERE id=$1", [id, now]);
