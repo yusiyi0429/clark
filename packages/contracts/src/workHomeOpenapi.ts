@@ -8,7 +8,8 @@ import {
 } from "./workHome.js";
 import { CreateProjectRequest, Project, ProjectDetailResponse, ProjectFeedItem, ProjectFeedResponse, ProjectGoal, ProjectGoalLinkedItem, ProjectHandoverItem,
   ProjectHandoverSummaryItem, ProjectListResponse, ProjectPipelineResponse, ProjectTransferDeclinedItem, UpdateProjectRequest, ProjectBoardResponse, ProjectGoalChangedItem,
-  AnswerGoalChangeRequest, SubSessionFeedRef, ProjectSubSessionReportItem, ProjectSubSessionDecisionItem, AutoRelayDecisionRequest, SetGoalDueDateRequest } from "./projects.js";
+  AnswerGoalChangeRequest, SubSessionFeedRef, ProjectSubSessionReportItem, ProjectSubSessionDecisionItem, AutoRelayDecisionRequest, SetGoalDueDateRequest,
+  ModelEffort, ConversationModelOption, ConversationModelListResponse, ConversationModelChoice, ProjectPipelineModel, SetProjectPipelineModelRequest } from "./projects.js";
 import { CreateProjectTransferRequest, HandoverSecretFinding, HandoverSecretsResponse, HandoverSection, PersonRef, ProjectTransfer,
   UpdateProjectTransferRequest } from "./projectTransfers.js";
 import { Budget, TaskBudgetResponse } from "./budget.js";
@@ -30,6 +31,7 @@ export const workHomeSchemas: Record<string, JsonSchema> = {
   NotificationSettings, AppearanceSettings, SessionStopView, ClaimSessionStopsRequest, ClaimSessionStopsResponse, SessionStopDoneRequest,
   SessionCommand, SessionCommandView, ClaimSessionCommandsRequest, ClaimSessionCommandsResponse, SessionCommandDoneRequest, MarkWorkSeenRequest,
   SubSessionKind, UpdateSubSessionRequest, ArchivedSubSession, ArchivedSubSessionListResponse,
+  ModelEffort, ConversationModelOption, ConversationModelListResponse, ConversationModelChoice, ProjectPipelineModel, SetProjectPipelineModelRequest,
   BuddyAuthority, UpdateBuddyAuthorityRequest, BuddyAuditEntry, BuddyAuditListResponse, BuddyMessageDraft, TrashItem, TrashListResponse, Budget, TaskBudgetResponse, ClaimedSessionStart, SessionAttachment, SessionAttachmentUploadResponse,
 };
 
@@ -329,6 +331,28 @@ export const workHomePaths: OpenAPIV3.Document["paths"] = {
       summary: "这个项目的对话：第一次打开时建，以后都返回同一条；收发消息走 /api/conversations/{scope}，scope 是 project:<projectId>",
       parameters: path("projectId"),
       responses: { "200": json("已有的项目对话", "ProjectPipelineResponse"), "201": json("新建的项目对话", "ProjectPipelineResponse"), ...errors(401, 403, 404, 502, 503) },
+    },
+  },
+  "/api/me/projects/{projectId}/pipeline/model": {
+    get: {
+      operationId: "getProjectPipelineModel",
+      summary: "这个项目对话选的模型和思考程度（17.2 第 36 条）；没选为 null（照 Chat 的默认）",
+      parameters: path("projectId"),
+      responses: { "200": json("现在选的", "ProjectPipelineModel"), ...errors(401, 403, 404, 502, 503) },
+    },
+    put: {
+      operationId: "setProjectPipelineModel",
+      summary: "给这个项目对话选模型和思考程度，null 回到默认；不在列表里或思考程度不支持 400 INVALID_MODEL_CHOICE；没接 Chat 409 CHAT_NOT_CONNECTED",
+      parameters: path("projectId"),
+      requestBody: body("SetProjectPipelineModelRequest"),
+      responses: { "200": json("改好的", "ProjectPipelineModel"), ...errors(400, 401, 403, 404, 409, 502, 503) },
+    },
+  },
+  "/api/me/conversation-models": {
+    get: {
+      operationId: "listConversationModels",
+      summary: "项目对话能选的模型和各自支持的思考程度（17.2 第 36 条）；默认的排第一；没接 Chat 为空",
+      responses: { "200": json("能选的模型", "ConversationModelListResponse"), ...errors(401, 403, 502, 503) },
     },
   },
   "/api/me/projects/{projectId}/feed": {

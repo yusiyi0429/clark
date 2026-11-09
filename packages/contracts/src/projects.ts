@@ -140,6 +140,37 @@ export const ProjectPipelineResponse = Type.Object({
 }, strict);
 
 /**
+ * 项目对话按对话选模型和思考程度（17.2 第 36 条）。只有项目对话能选；伙伴（总管线）的对话不开放。选择存在 Chat 服务的那条对话上，
+ * 天枢只转发；不选（choice = null）完全照 Chat 现在配的默认模型和思考程度。
+ *
+ * - 思考程度 ModelEffort：off 不思考、low、medium、high、xhigh、max（从少到多），每个模型支持哪几档见 ConversationModelOption.efforts。
+ * - GET /api/me/conversation-models：能选的模型。source 是来源（如「TokenHub · 网宿」，原样显示），modelId 是模型 id，label 是给人看的名字；
+ *   efforts 是它支持的几档，defaultEffort 是不改时用哪档；isDefault 为 true 的那个就是「默认」（只有一个，排第一）。
+ *   没接 Chat 服务时 models 为空，网页不出选择。
+ * - GET /api/me/projects/:projectId/pipeline/model：这个项目对话现在选的（没选为 null）。PUT 同一路径（SetProjectPipelineModelRequest）改：
+ *   choice 的 source + modelId 要是列表里的一项，effort 要在它的 efforts 里，不然 400 INVALID_MODEL_CHOICE；choice = null 回到默认。
+ *   项目对话还没建时 PUT 会先建。下一轮起生效，正在回的那一轮不变。只有项目负责人能读改（别人 404）；没接 Chat 服务时 PUT 回 409 CHAT_NOT_CONNECTED。
+ */
+export const ModelEffort = Type.Union([Type.Literal("off"), Type.Literal("low"), Type.Literal("medium"), Type.Literal("high"), Type.Literal("xhigh"),
+  Type.Literal("max")]);
+export const ConversationModelOption = Type.Object({
+  source: Type.String({ minLength: 1 }),
+  modelId: Type.String({ minLength: 1 }),
+  label: Type.String({ minLength: 1 }),
+  efforts: Type.Array(ModelEffort, { minItems: 1 }),
+  defaultEffort: ModelEffort,
+  isDefault: Type.Boolean(),
+}, strict);
+export const ConversationModelListResponse = Type.Object({ models: Type.Array(ConversationModelOption) }, strict);
+export const ConversationModelChoice = Type.Object({
+  source: Type.String({ minLength: 1 }),
+  modelId: Type.String({ minLength: 1 }),
+  effort: ModelEffort,
+}, strict);
+export const ProjectPipelineModel = Type.Object({ choice: Nullable(ConversationModelChoice) }, strict);
+export const SetProjectPipelineModelRequest = Type.Object({ choice: Nullable(ConversationModelChoice) }, strict);
+
+/**
  * 项目对话里网页按时间插的一行：TaskFeedItem 那几种（这个项目里的卡：挂着的 Task 下的、和直接挂在项目上的；交接以后也含以前负责人的卡），
  * 加 goal_linked：一件 Task 挂上来了（at 是 linkedAt），网页画居中的分隔线「{period 的月} 月目标：{taskName}」；
  * 加转交那几行（16.7）：
@@ -267,6 +298,12 @@ export type TProjectGoalVerdict = Static<typeof ProjectGoalVerdict>;
 export type TProjectGoal = Static<typeof ProjectGoal>;
 export type TProjectDetailResponse = Static<typeof ProjectDetailResponse>;
 export type TProjectPipelineResponse = Static<typeof ProjectPipelineResponse>;
+export type TModelEffort = Static<typeof ModelEffort>;
+export type TConversationModelOption = Static<typeof ConversationModelOption>;
+export type TConversationModelListResponse = Static<typeof ConversationModelListResponse>;
+export type TConversationModelChoice = Static<typeof ConversationModelChoice>;
+export type TProjectPipelineModel = Static<typeof ProjectPipelineModel>;
+export type TSetProjectPipelineModelRequest = Static<typeof SetProjectPipelineModelRequest>;
 export type TProjectGoalLinkedItem = Static<typeof ProjectGoalLinkedItem>;
 export type TProjectFeedItem = Static<typeof ProjectFeedItem>;
 export type TProjectFeedResponse = Static<typeof ProjectFeedResponse>;
