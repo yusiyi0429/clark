@@ -121,9 +121,9 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .projectName::placeholder { color: var(--field-placeholder); }
 .taskSub[data-warning] { color: var(--warning); }
 /* 项目页页头下的目标条（16.3）：一块 --neutral-wash 底，每件本月 Task 一行（名字 14、截止和「标准 1/3」12 淡），点开逐条看。 */
-.goalBar { display: grid; gap: 2px; margin: 0 0 var(--space-2); padding: var(--space-1); border-radius: var(--r-inset); background: var(--neutral-wash); list-style: none; }
-.goal { display: grid; gap: var(--space-1); }
-.goalMain { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-32); padding: 0 var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink); font: inherit; font-size: var(--text-base); line-height: var(--lh-row); text-align: left; cursor: pointer; }
+.goalBar { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; margin: 0 0 var(--space-2); padding: var(--space-1); border-radius: var(--r-inset); background: var(--neutral-wash); list-style: none; }
+.goal { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
+.goalMain { display: flex; align-items: center; gap: var(--space-2); min-width: 0; min-height: var(--row-32); padding: 0 var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink); font: inherit; font-size: var(--text-base); line-height: var(--lh-row); text-align: left; cursor: pointer; }
 .goalMain:hover:not(:disabled) { background: var(--default-soft); }
 .goalMain:disabled { cursor: default; }
 .goalMain:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
@@ -325,7 +325,7 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 /* 输入框：ComposerPill，和对话列同宽；「发给」是选择器的触发器，样子同弱按钮、字重 400。 */
 .composerDock { width: min(680px, calc(100% - 2 * var(--space-6))); margin: 0 auto var(--space-4); }
 /* 输入框（14.5）：四处一样。空着是一行高的长条（48）：左「+」、中间字（16/24）、右麦克风或发送；附件和「关于」在框里、字的上方；「发给」在框下面。 */
-.inputDock { display: grid; gap: var(--space-2); }
+.inputDock { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
 .bar { display: flex; flex-direction: column; gap: var(--space-1); padding: 7px; border: 1px solid var(--field-border); border-radius: var(--r-inset); background: var(--field-bg); color: var(--field-ink); box-shadow: var(--elev-2); transition: border-color var(--dur-fast) linear, background var(--dur-fast) linear; }
 .bar:focus-within, .bar[data-drag] { border-color: var(--field-border-focus); }
 .bar[data-drag] { background: var(--neutral-wash); }
@@ -355,7 +355,7 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .barError { display: flex; align-items: center; min-height: 24px; margin: 0; padding: 0 4px; color: var(--danger); font-size: var(--text-xs); line-height: 16px; }
 .barFailed { padding: 0 4px; }
 /* 框下面一行（照 Claude Code 桌面版）：固定 28 高，左边上下文、右边模型和权限档；四处一样，空着也占位。 */
-.barFoot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); height: 28px; padding: 0 var(--space-1); }
+.barFoot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-width: 0; height: 28px; padding: 0 var(--space-1); }
 .barFootSide { display: flex; align-items: center; gap: var(--space-1); min-width: 0; }
 .footText { display: inline-flex; align-items: center; gap: var(--space-1); min-width: 0; padding: 0 var(--space-2); overflow: hidden; color: var(--ink-muted); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); white-space: nowrap; }
 .footText svg { flex: none; color: var(--ink-faint); }
@@ -420,8 +420,8 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .resolvedQ { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .resolvedA { flex: none; color: var(--ink-muted); font-weight: 600; }
 .resolvedA::before { content: "· "; color: var(--ink-faint); font-weight: 400; }
-.eventList { display: grid; gap: 2px; margin: 0 0 0 7px; padding: 0 0 0 var(--space-2); list-style: none; box-shadow: inset 1px 0 0 var(--hairline-strong); }
-.event { display: flex; align-items: center; gap: var(--space-2); max-width: 100%; height: var(--row-32); padding: 0 var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink); font: inherit; font-size: var(--text-base); line-height: var(--lh-row); text-align: left; cursor: pointer; }
+.eventList { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; margin: 0 0 0 7px; padding: 0 0 0 var(--space-2); list-style: none; box-shadow: inset 1px 0 0 var(--hairline-strong); }
+.event { display: flex; align-items: center; gap: var(--space-2); min-width: 0; max-width: 100%; height: var(--row-32); padding: 0 var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink); font: inherit; font-size: var(--text-base); line-height: var(--lh-row); text-align: left; cursor: pointer; }
 .event:hover { background: var(--default-soft); }
 .event:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .eventName { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
