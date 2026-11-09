@@ -464,7 +464,7 @@ function HomeFrame({ account }: { account: Account }) {
     const trail = <ProjectTrail project={project} go={go} />;
     return <PipelineView key={project.id} project={project} tasks={goalTasks} api={api} buddy={buddy} outbox={outbox} consume={consume} go={go} onSplit={(target) => void split(target)} splitFailed={splitFailed}
       startFailed={startFailed} onManualStart={(id) => void manualStart(id)} onSpeaking={setSpeaking} trail={trail} bar={<GoalBar project={project} />} blocks={projectBlocks(project)}
-      onPulled={() => void projects.actions.reloadFolders()} />;
+      onPulled={() => void projects.actions.reloadFolders()} onSetFolder={(folderId) => projects.actions.setFolder(project.id, folderId, project.name)} />;
   };
   const display = (current: View) => {
     switch (current.kind) {

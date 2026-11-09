@@ -7,7 +7,7 @@
  * - 附件三种加法：「+」、粘贴、拖进来；显示在框里、字的上方（图片 56 的缩略图，文件是类型 + 名字 + 大小），鼠标移上去右上角出 ✕。
  *   加不上的在附件下面一行红字写原因（「文件名：格式不支持」「超过 30 MB」「最多 20 个」）。
  * - 「关于：…」胶囊在框里左上角（从 Mission 详情点「问伙伴」带进来的），✕ 去掉。
- * - 「发给」（只在首页）在框下面，由调用方给 under。
+ * - 框下面一行（footer，照 Claude Code）：左边上下文、右边模型和权限档，由调用方给；四处都画这一行，空着也占高，输入框离底一样。
  * 发送：按下的一刻字和附件一起清掉，交给 onSend（它负责传附件、发出去）；没发出去（false 或报错）放回去，框里写「失败 · 重试」。
  */
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
@@ -22,7 +22,7 @@ import h from "@/styles/home.module.css";
 type Draft = { key: number; file: File; url: string | null };
 const MAX_HEIGHT = 168;
 
-export function InputBar({ placeholder, label, onSend, busy = false, interruptible = false, onStop, disabled = false, textRequired = false, context, under, dock, draftKey, fill, onText, onHeight }: {
+export function InputBar({ placeholder, label, onSend, busy = false, interruptible = false, onStop, disabled = false, textRequired = false, context, footer, dock, draftKey, fill, onText, onHeight }: {
   placeholder: string;
   /** 读屏念的名字；不给时念占位字（子会话不放占位字，名字从这里给）。 */
   label?: string;
@@ -37,7 +37,8 @@ export function InputBar({ placeholder, label, onSend, busy = false, interruptib
   /** 只带附件不说话能不能发（Chat 要有一句话；子会话可以只带附件）。 */
   textRequired?: boolean;
   context?: { label: string; onClear: () => void } | null;
-  under?: ReactNode;
+  /** 框下面那一行：left 上下文（发给、文件夹），right 模型和权限档。 */
+  footer?: { left?: ReactNode; right?: ReactNode };
   /** 框上面那一条（「N 个问题等你 / 回到最新」）。 */
   dock?: ReactNode;
   /** 草稿按这个键存在本机浏览器里（切走再回来不丢）；不给不存。 */
@@ -218,7 +219,10 @@ export function InputBar({ placeholder, label, onSend, busy = false, interruptib
           )}
         </div>
       </div>
-      {under ? <div className={h.barUnder}>{under}</div> : null}
+      <div className={h.barFoot} data-testid="input-footer">
+        <span className={h.barFootSide}>{footer?.left}</span>
+        <span className={h.barFootSide}>{footer?.right}</span>
+      </div>
     </div>
   );
 }

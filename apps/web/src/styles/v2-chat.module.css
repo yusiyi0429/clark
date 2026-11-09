@@ -26,12 +26,15 @@
 }
 .inner { display: flow-root; }
 
+/* 输入框那一块是实心底（同子会话）：从框上沿到窗口底边整条盖住，对话不从框下面透出来；框离底 16 加安全区。 */
 .composer [data-composer] {
   position: absolute;
   z-index: 3;
-  left: var(--gutter);
-  right: var(--gutter);
-  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 0 var(--gutter) calc(16px + env(safe-area-inset-bottom, 0px));
+  background: var(--surface);
   width: auto;
   height: auto;
   transform: none;

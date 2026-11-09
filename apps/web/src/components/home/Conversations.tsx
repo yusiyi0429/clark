@@ -39,6 +39,8 @@ import { StateIcon } from "./StateIcon";
 import { HeroButton } from "@/components/HeroButton";
 import { chatModelLabel } from "@/lib/local/runModel";
 import { PermissionModeMenu, ProjectModeContext, useProjectMode } from "@/components/cards/PermissionMode";
+import { showWorkspaceToast } from "@/lib/toast";
+import { FolderMenu, FootText } from "./InputFooter";
 
 /** 首页输入框发来、等着进对话的一句。 */
 /** files：首页输入框带的附件，到了那条对话再传（14.5）。 */
@@ -48,10 +50,10 @@ export type Outbox = OutboxEntry[];
 
 const NO_BLOCKS: TimedBlock[] = [];
 
-/** 页头右边、信息按钮旁边：最近一轮实际用的「来源 · 模型」（走 Chat 的才有）。 */
-export function ModelChip({ data }: { data: Pick<ConversationData, "model"> }) {
+/** 输入框下面一行的右边：最近一轮实际用的「来源 · 模型」（走 Chat 的才有；由 Chat 的配置定，不能点）。 */
+export function ModelText({ data }: { data: Pick<ConversationData, "model"> }) {
   const label = chatModelLabel(data.model);
-  return label ? <span className={h.statusChip} data-static="" data-testid="chat-model">{label}</span> : null;
+  return label ? <FootText testId="chat-model">{label}</FootText> : null;
 }
 
 /** 对话读好了、没在回答时，把 outbox 里给这条对话的第一句发出去（一次一句，回完再发下一句）。 */
@@ -76,13 +78,13 @@ async function sendWithFiles(data: ConversationData, text: string, files: File[]
  * 总管线、Task 管线底下的输入框（14.5）：InputBar，回答进行中右边是停止；回答末尾的选项填进框里；草稿按对话存。
  * context：「关于：{Mission}」胶囊，发出的这一句前面带上它，发完就去掉。
  */
-function ChatInput({ data, placeholder, onHeight, context, under }: {
-  data: ConversationData; placeholder: string; onHeight: (height: number) => void; context?: { label: string; onClear: () => void } | null; under?: ReactNode;
+function ChatInput({ data, placeholder, onHeight, context, footer }: {
+  data: ConversationData; placeholder: string; onHeight: (height: number) => void; context?: { label: string; onClear: () => void } | null; footer?: { left?: ReactNode; right?: ReactNode };
 }) {
   const [fill, setFill] = useState<{ text: string; nonce: number } | null>(null);
   useAnswerOptionFill(data.scope, (text) => setFill({ text, nonce: Date.now() }));
   return (
-    <InputBar placeholder={placeholder} busy={data.streaming} interruptible={data.interruptible} onStop={data.stop} textRequired onHeight={onHeight} fill={fill} context={context} under={under}
+    <InputBar placeholder={placeholder} busy={data.streaming} interruptible={data.interruptible} onStop={data.stop} textRequired onHeight={onHeight} fill={fill} context={context} footer={footer}
       draftKey={`tianshu-home-draft-v1:${data.scope}`}
       onSend={async (text, files) => {
         const ok = await sendWithFiles(data, context ? `${context.label}\n\n${text}` : text, files);
@@ -133,13 +135,12 @@ export function BuddyView({ buddy, outbox, consume, onSpeaking, context = null, 
             <header className={h.viewHead} data-flush="">
               {chrome.lead}
               <h1 className={h.viewTitle} tabIndex={-1}>{name}</h1>
-              <ModelChip data={data} />
               {chrome.trail}
             </header>
           )}
           timeline={(current) => <WorkTimeline data={current} blocks={NO_BLOCKS} />}
           dock={(latest) => <PendingDock latest={latest} />}
-          input={(onHeight) => <ChatInput data={data} placeholder={`与${name}讨论…`} onHeight={onHeight}
+          input={(onHeight) => <ChatInput data={data} placeholder={`与${name}讨论…`} onHeight={onHeight} footer={{ right: <ModelText data={data} /> }}
             context={context ? { label: context, onClear: () => onClearContext?.() } : null} />} />
       </div>
     </PendingBoxes>
@@ -170,6 +171,8 @@ type PipelineProps = {
   blocks?: TimedBlock[];
   /** 接手以后「拉到这台电脑」拉好了（重读这台电脑上绑的文件夹）。 */
   onPulled?: () => void;
+  /** 输入框下面左边换文件夹（同项目详情，绑这台电脑上加过的一个，null 不绑）。 */
+  onSetFolder?: (folderId: string | null) => Promise<void>;
 };
 
 /**
@@ -212,7 +215,7 @@ function MockPipeline({ task, ...props }: PipelineProps & { task: THomePlanTask 
  * 项目对话，网页按时间插进去的几块：挂上一件 Task 的分隔线「{月} 月目标：{Task}」、每件 Task 的规划员在拆（一行）、拆好的派活单（开工的选项框）、
  * 开了哪几个子会话，项目里开出的专题，验收行（过了、受阻、约定都达到、返工，TaskFeed）。
  */
-function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, onSpeaking, onSplit, splitFailed, startFailed, onManualStart, trail, bar, blocks: own, onPulled }: PipelineProps & { data: ConversationData }) {
+function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, onSpeaking, onSplit, splitFailed, startFailed, onManualStart, trail, bar, blocks: own, onPulled, onSetFolder }: PipelineProps & { data: ConversationData }) {
   const chrome = useViewChrome();
   const handheld = usePhone();
   const { work } = api;
@@ -241,6 +244,10 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
     ? <ProjectPull projectId={project.id} name={project.name} clone={received.clone} onPulled={() => onPulled?.()} /> : null;
   // 交出去了（原负责人这边）：只读，不能发（输入框画成空的；不给 input 时 ChatColumn 会退回它自己的输入框）。
   const readOnly = project.transfer?.status === "accepted";
+  // 输入框下面左边：这个项目绑的文件夹（照 Claude Code），这台电脑上能换；手机上、本机没连上只写名字。
+  const folder = !handheld && local.phase === "ready" && onSetFolder
+    ? <FolderMenu value={project.folder} folders={local.folders} onPick={(id) => void onSetFolder(id).catch(() => showWorkspaceToast({ text: "没改成" }))} />
+    : project.folder ? <FootText>{project.folder}</FootText> : null;
   // 输入框下面左侧：这个项目以后新开子会话的默认权限模式（17.2 第 11 条）。
   const mode = useProjectMode(project.id);
   const changed = api.refresh;
@@ -338,7 +345,6 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
                 {chrome.lead}
                 <h1 className={h.viewTitle} tabIndex={-1}>{project.name}</h1>
                 {pull}
-                <ModelChip data={data} />
                 {trail}
                 {chrome.trail}
               </header>
@@ -347,8 +353,10 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
           )}
           timeline={(current) => <WorkTimeline data={current} blocks={blocks} />}
           dock={(latest) => <PendingDock latest={latest} />}
-          input={readOnly ? () => null : (onHeight) => <ChatInput data={data} placeholder={`与${project.name}讨论…`} onHeight={onHeight}
-            under={mode ? <PermissionModeMenu modes={mode.modes} value={mode.value} sheet={handheld} onChange={mode.set} /> : undefined} />} />
+          input={readOnly ? () => null : (onHeight) => <ChatInput data={data} placeholder={`与${project.name}讨论…`} onHeight={onHeight} footer={{
+            left: folder,
+            right: <><ModelText data={data} />{mode ? <PermissionModeMenu modes={mode.modes} value={mode.value} sheet={handheld} onChange={mode.set} /> : null}</>,
+          }} />} />
       </div>
     </PendingBoxes>
     </ProjectModeContext.Provider>
