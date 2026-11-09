@@ -14,7 +14,7 @@
  * Task 管线里选「就按这个开始」马上开；在手机上开始、或网页没开时排成「等开工」的卡和拆卡登记，下次在电脑上打开就自己开，不用点。
  * 伙伴在这个标签页的回复里「登记拆卡」、本机又连着，就直接开规划员；验收没过的改法由这里自动对执行的会话说一句（useAutoReturn）。
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ArrowLeft, ListChecks, LoaderCircle } from "lucide-react";
 import type { THomePlanTask, TLocalPermissionMode } from "@warmap/contracts";
@@ -46,6 +46,7 @@ import { ForeignTaskInfo, TaskInfo } from "./TaskInfo";
 import { MissionInfo } from "./MissionInfo";
 import { ProjectInfo } from "./ProjectInfo";
 import { ProjectTrail } from "./ProjectParts";
+import { LeftResize, useLeftWidth } from "./LeftResize";
 import { TransferFlow, TransferView } from "./Transfer";
 import type { TimedBlock } from "@/components/work/WorkTimeline";
 import { useProjects } from "./useProjects";
@@ -183,6 +184,8 @@ function HomeFrame({ account }: { account: Account }) {
   });
   useSessionStops(local, here);
   useSessionCommands(local, here);
+  // 左栏宽度（24 条）：本人拖过的写在根上的 --home-left，没拖过照 CSS 的 clamp。
+  const leftWidth = useLeftWidth();
   const changed = useCallback(() => { void api.refresh(); }, [api]);
   /**
    * 这个标签页里自动开工没开起来的子会话（卡 id、专题 id）：Task 管线里那一行出「失败」加「手动开始」（5.4.3、9.8，手动开始只有这一处），
@@ -563,8 +566,9 @@ function HomeFrame({ account }: { account: Account }) {
   return (
     <WorkspaceContext.Provider value={workspace}>
       <ViewChrome.Provider value={chrome}>
-        <div className={h.app} data-panel={panelOpen ? "open" : "closed"} data-view={view.kind} data-scheme="auto" data-entering={entering ? "" : undefined} data-testid="work-home">
-          <aside className={h.left}>{left}</aside>
+        <div className={h.app} data-panel={panelOpen ? "open" : "closed"} data-view={view.kind} data-scheme="auto" data-entering={entering ? "" : undefined} data-testid="work-home"
+          data-resizing={leftWidth.dragging ? "" : undefined} style={leftWidth.width ? ({ "--home-left": `${leftWidth.width}px` } as CSSProperties) : undefined}>
+          <aside className={h.left}>{left}<LeftResize control={leftWidth} /></aside>
           <main className={h.display}>{display(view)}</main>
           <aside className={h.right} aria-label="后台任务">
             {panelOpen ? panel({ onCollapse: () => togglePanel(false) }) : <BackgroundStrip running={running} quota={work.resources.quota} onExpand={() => togglePanel(true)} />}
