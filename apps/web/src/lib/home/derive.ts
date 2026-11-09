@@ -121,7 +121,7 @@ function boardSub(card: CardItem, sessions: TLocalSessionSummary[], merges: Merg
   const merge = mergeOf({ cardId: card.id, at: when, ws: session?.workspace ?? null, git: handback.git }, merges);
   const waiting = merge?.state === "needs_merge";
   return {
-    id: card.id, kind: "card", letter: null, title: card.title, state: waiting ? "waiting" : "done", waiting: waiting ? "merge" : null, queueReason: null,
+    id: card.id, kind: "card", letter: null, unseen: false, title: card.title, state: waiting ? "waiting" : "done", waiting: waiting ? "merge" : null, queueReason: null,
     role: card.card?.role ?? null, sessionId: session?.id ?? null, deviceId: session ? deviceId : null, autoStart: false, updatedAt: when, merge, holdUntil: null,
   };
 }
@@ -155,7 +155,7 @@ export function toSubSession(worker: Worker, merges: MergeIssue[] = [], deviceId
   // 专题没有「完成」（契约修正 b5c2e100）：会话停下了（本机报 done）、异常退出了都算已暂停，在子会话里说「继续」。
   const topicStopped = worker.kind === "topic" && (worker.state === "done" || worker.session?.status === "done");
   return {
-    id, kind: worker.kind === "topic" ? "topic" : "card", letter: null, title: worker.title,
+    id, kind: worker.kind === "topic" ? "topic" : "card", letter: null, unseen: false, title: worker.title,
     ...(verifying ? { state: "running" as const, waiting: null } : topicStopped ? { state: "waiting" as const, waiting: null } : subState(worker, merge)),
     queueReason: worker.state === "queued" && worker.reason ? QUEUE[worker.reason] : null,
     holdUntil: worker.state === "queued" && worker.reason === "quota" ? worker.holdUntil : null,
@@ -306,7 +306,7 @@ export function deriveWorkHome({ plan, workers, boards, notices, proposals, merg
       || boards[task.taskId]?.plan?.status === "queued" || boards[task.taskId]?.plan?.status === "running");
     const latest = [...subSessions.map((sub) => sub.updatedAt), ...items.map((item) => item.updatedAt)].sort().at(-1);
     return {
-      projectId, name: mission.title,
+      projectId, name: mission.title, unseen: false,
       goals: own.map((task) => {
         // 本体没写标准时是完成定义那一条（契约 criteriaTotal）。
         const criteria = task.criteria.length ? task.criteria : task.doneDefinition ? [task.doneDefinition] : [];

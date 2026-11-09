@@ -9,7 +9,7 @@ const goal = (taskId: string, name: string, period = "2026-11", extra: Partial<H
 });
 const home = (projectId: string, extra: Partial<HomeProject> = {}): HomeProject => ({
   projectId, name: projectId, goals: [], budget: null, lastActivityAt: "2026-11-07T01:00:00.000Z", summary: SUMMARY,
-  pipeline: { conversationId: null, scope: `project:${projectId}` }, planning: false, subSessions: [], items: [], transfer: null, ...extra,
+  pipeline: { conversationId: null, scope: `project:${projectId}` }, planning: false, unseen: false, subSessions: [], items: [], transfer: null, ...extra,
 });
 const data = { period: "2026-11", month: { missions: [{ missionId: "m1", title: "新首页", period: "2026-11", tasks: [] }] } } as unknown as Pick<WorkHomeData, "month" | "period">;
 
@@ -40,7 +40,7 @@ describe("项目从首页 v2 来（16.2、16.3）", () => {
 describe("项目行（16.2）", () => {
   const project = (patch: Partial<Project>): Project => ({
     id: "p", name: "p", folder: null, archived: false, goals: [], current: [], subSessions: [], items: [], scope: "project:p",
-    waiting: 0, lastActivity: null, budget: null, transfer: null, ...patch,
+    waiting: 0, lastActivity: null, budget: null, transfer: null, unseen: false, ...patch,
   });
   const current = fromHome(home("p", { goals: [goal("t1", "对所有 DRI 开放")] }), data, new Map()).goals;
 

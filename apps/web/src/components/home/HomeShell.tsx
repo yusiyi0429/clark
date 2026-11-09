@@ -27,7 +27,7 @@ import { WorkspaceContext, type WorkspaceApi } from "@/components/shell/Workspac
 import { LocalRunnerProvider, useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { planStartRequest, readLast, startTopic } from "@/lib/local/start";
 import { useAutoReturn } from "@/lib/board/useAutoReturn";
-import { cancelStart, claimStarts, listSplits, planKey, registerPlan, releaseStart, removeSplit, routeMessage, type PlanTarget } from "@/lib/board/cloud";
+import { cancelStart, claimStarts, listSplits, markWorkSeen, planKey, registerPlan, releaseStart, removeSplit, routeMessage, type PlanTarget } from "@/lib/board/cloud";
 import { dateGate, gateOf, gateText } from "@/components/board/MonthLanes";
 import { showWorkspaceToast } from "@/lib/toast";
 import { modelForTier } from "@/lib/team/roles";
@@ -186,6 +186,16 @@ function HomeFrame({ account }: { account: Account }) {
   useSessionCommands(local, here);
   // 左栏宽度（24 条）：本人拖过的写在根上的 --home-left，没拖过照 CSS 的 clamp。
   const leftWidth = useLeftWidth();
+  // 打开子会话、项目对话时记看过，左栏蓝点消失（26 条）；开着时又来了新的（unseen 又成了 true）再记一次。记过以后重读首页数据收掉蓝点。
+  const seenKind = view.kind === "card" || view.kind === "topic" ? "sub" : view.kind === "project" ? "project" : null;
+  const seenId = seenKind ? (view as { id: string }).id : null;
+  const seenUnseen = seenKind === "project" ? !!projects.all.find((project) => project.id === seenId)?.unseen
+    : seenKind === "sub" ? !![...projects.all.flatMap((project) => project.subSessions), ...data.other.subSessions].find((sub) => sub.id === seenId)?.unseen : false;
+  useEffect(() => {
+    if (!seenKind || !seenId) return;
+    void markWorkSeen(seenKind, seenId).then(() => { if (seenUnseen) void api.refresh(); }, () => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 换了打开的对象、或开着时又有新的才记
+  }, [seenKind, seenId, seenUnseen]);
   const changed = useCallback(() => { void api.refresh(); }, [api]);
   /**
    * 这个标签页里自动开工没开起来的子会话（卡 id、专题 id）：Task 管线里那一行出「失败」加「手动开始」（5.4.3、9.8，手动开始只有这一处），

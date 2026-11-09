@@ -232,7 +232,8 @@ function ProjectNode({ project, view, go, personId, cardAt, working = false }: {
             <span className={h.projectTitle}>
               <span ref={nameTip.textRef} className={h.taskName}>{project.name}</span>
               {/* 在后台干活：标题这一行最右边一颗闪的灰点（读屏读「在后台工作」，点本身不读）。 */}
-              {working ? <span className={h.workingDot} data-testid="project-working"><i aria-hidden /><span className={h.srOnly}>在后台工作</span></span> : null}
+              {working ? <span className={h.workingDot} data-testid="project-working"><i aria-hidden /><span className={h.srOnly}>在后台工作</span></span>
+                : project.unseen ? <span className={h.subDot} data-tone="stopped" role="img" aria-label="有新回复" data-testid="project-unseen"><i aria-hidden /></span> : null}
             </span>
             <span className={h.taskSub} data-warning={line.warning ? "" : undefined}>{line.text}</span>
           </span>
@@ -286,16 +287,18 @@ export const SubLetter = ({ letter, inline = false }: { letter: string; inline?:
 );
 
 /**
- * 子会话行最右边的状态点（18.10）：在跑灰点闪（同项目标题的呼吸点）；停了（一轮做完、被停下、做完了）蓝点；
+ * 子会话行最右边的状态点（18.10）：在跑灰点闪（同项目标题的呼吸点）；停了（一轮做完、被停下、做完了）、本人还没看过的蓝点（26 条，看过就不画）；
  * 要人介入（问题、批准、验收拿主意、合回）黄点；排队不出点（行尾写在等什么）。读屏按状态读。
  */
 const ASK: Record<NonNullable<SubSession["waiting"]>, string> = { approval: "等你批准", question: "在问你", verdict: "等你拿主意", merge: "等你合回" };
-export function subDot(sub: Pick<SubSession, "state" | "waiting">): { tone: "running" | "stopped" | "attention"; label: string } | null {
+export function subDot(sub: Pick<SubSession, "state" | "waiting" | "unseen">): { tone: "running" | "stopped" | "attention"; label: string } | null {
   const state = treeState(sub.state);
   if (state === "queued") return null;
   if (state === "running") return { tone: "running", label: "在跑" };
-  if (state === "done") return { tone: "stopped", label: "已完成" };
-  return sub.waiting ? { tone: "attention", label: ASK[sub.waiting] } : { tone: "stopped", label: "已停下" };
+  if (state === "waiting" && sub.waiting) return { tone: "attention", label: ASK[sub.waiting] };
+  // 蓝点只是提醒（26 条）：停了、本人还没看过才画，打开过就消失（云端算 unseen）。
+  if (!sub.unseen) return null;
+  return state === "done" ? { tone: "stopped", label: "已完成" } : { tone: "stopped", label: "已停下" };
 }
 
 /** 派活单的先后：卡按看板里建出来的时间（一次开工建的几张按派活单的顺序建），没读到的和专题排在后面、按最近动静。 */
