@@ -7,7 +7,7 @@ import { PhaseLine, installCommand } from "./PluginsPage";
 
 const state = (phase: LocalPhase, extra: Partial<LocalRunnerState> = {}): LocalRunnerState => ({
   runner: createMockRunner(), phase, version: phase === "ready" ? "0.1.0" : null, status: null, models: [], folders: [], sessions: [], pairing: null, error: null,
-  refresh: vi.fn(), pair: vi.fn(), unpair: vi.fn(), pickFolder: vi.fn(), setIncludePersonal: vi.fn(), ...extra,
+  refresh: vi.fn(), pair: vi.fn(), unpair: vi.fn(), pickFolder: vi.fn(), createFolder: vi.fn(), setIncludePersonal: vi.fn(), ...extra,
 });
 const render = (value: LocalRunnerState, handheld = false) => renderToStaticMarkup(<LocalContext.Provider value={value}><PhaseLine handheld={handheld} /></LocalContext.Provider>);
 const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();

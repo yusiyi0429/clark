@@ -7,6 +7,7 @@ import type {
   TLocalModelProfile, TLocalModelProfileUpsert, TLocalTool, TLocalToolUpsert, TLocalPairingStartResponse, TLocalPairingStatusResponse,
   TLocalPermissionDecisionRequest, TLocalQuestionAnswerRequest, TLocalRunnerErrorCode, TLocalSendMessageRequest, TLocalSendMessageResponse, TLocalSessionDetailResponse,
   TLocalSessionEvent, TLocalSessionSummary, TLocalSettings, TLocalSettingsPatch, TLocalStatusResponse, TLocalBudgetUpdateRequest, TLocalTaskBudgetView, TLocalAttachmentRef,
+  TLocalFolderCreateRequest, TLocalFolderCreateResponse, TLocalFolderPickRequest, TLocalFolderPickResponse, TLocalSessionModelRequest, TLocalSessionModelResponse,
   TLocalHandoverCheck, TLocalProjectCloneRequest, TLocalProjectCloneResponse, TLocalProjectFolder, TLocalProjectFolderRequest, TLocalPermissionMode, TLocalRun, TLocalRunPreviewRequest,
 } from "@warmap/contracts";
 
@@ -48,7 +49,10 @@ export interface LocalRunner {
   removeTool(id: string): Promise<void>;
   checkTool(id: string): Promise<TLocalTool>;
   listFolders(): Promise<TLocalFolder[]>;
-  pickFolder(): Promise<TLocalFolder | null>;
+  /** 本机弹系统窗口选文件夹（取消时 folder 为 null）；带 projectId 时选中后一步绑到这个项目，回执带 project（17.2 第 32 条）。 */
+  pickFolder(body?: TLocalFolderPickRequest): Promise<TLocalFolderPickResponse>;
+  /** 新建一个空文件夹（默认在桌面）并加进允许的；带 projectId 时一步绑上。重名 409，名字不合法 400（message 可直接给人看）。 */
+  createFolder(body: TLocalFolderCreateRequest): Promise<TLocalFolderCreateResponse>;
   removeFolder(id: string): Promise<void>;
   listSessions(): Promise<TLocalSessionSummary[]>;
   createSession(body: TLocalCreateSessionRequest): Promise<TLocalSessionSummary>;
@@ -61,6 +65,8 @@ export interface LocalRunner {
   interrupt(id: string): Promise<TLocalSessionSummary>;
   /** 换这个子会话的权限模式（跑着也能换，下一步就按新的来）；执行方没有这一档 400、会话已结束 409。 */
   setPermissionMode(id: string, mode: TLocalPermissionMode): Promise<TLocalSessionSummary>;
+  /** 子会话换模型（17.2 第 32 条）：applied=now 当场换，after_turn 这一轮做完再换（摘要带 pendingModel）。 */
+  setSessionModel(id: string, body: TLocalSessionModelRequest): Promise<TLocalSessionModelResponse>;
   kill(id: string): Promise<TLocalSessionSummary>;
   decidePermission(id: string, requestId: string, body: TLocalPermissionDecisionRequest): Promise<TLocalSessionSummary>;
   /** 把卡的分支合回主文件夹（本人点了才合）；合不了回原因和文件，卡不在工作树、还在跑、交回后又改过、已合过是 409。 */

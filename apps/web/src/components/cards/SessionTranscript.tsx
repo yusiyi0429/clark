@@ -12,10 +12,10 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import { questionNotice, type SessionEntry } from "@/lib/local/sessionView";
-import type { LocalRunner, TLocalPermissionRequestView, TLocalQuestionRequestView, TLocalSessionStatus } from "@/lib/local/runner";
+import type { LocalRunner, TLocalModelProfile, TLocalSessionSummary, TLocalPermissionRequestView, TLocalQuestionRequestView, TLocalSessionStatus } from "@/lib/local/runner";
 import { duration } from "@/lib/home/derive";
 import { InputBar } from "@/components/home/InputBar";
-import { FolderText, FootText } from "@/components/home/InputFooter";
+import { FolderText, FootText, SessionModelMenu } from "@/components/home/InputFooter";
 import { sizeText, uploadToSubSession } from "@/lib/home/attachments";
 import type { TLocalAttachmentRef, TLocalPermissionMode, TSessionAttachment } from "@warmap/contracts";
 import { PermissionModeMenu } from "./PermissionMode";
@@ -35,8 +35,10 @@ type Step = Extract<SessionEntry, { kind: "step" }>;
 type Permission = Extract<SessionEntry, { kind: "permission" }>;
 /** 一次提问折成一项：答了是答案，没答就过去了是 expired。 */
 type Asked = { kind: "asked"; seq: number; question: string; answer: string | null };
-/** 过程里的一行：一步；denied = 本人让它换了做法（批准时选的「换个做法」）。 */
-type ProcessRow = { step: Step; denied: boolean };
+/** 过程里的一行：一步；denied = 本人让它换了做法（批准时选的「换个做法」）；note = 过程里的一句提示（换了模型），不算步数。 */
+type ProcessRow = { step: Step; denied: boolean; note?: boolean };
+/** 归进过程的提示（32 条：换模型那一句进过程行，不单独一行）。 */
+const PROCESS_NOTICES = new Set(["model_changed"]);
 /** 一段过程（28 条）：两句对话之间的步骤、批过的权限并成一段，start/end 是这一段第一条和最后一条记录的时间。 */
 type Process = { kind: "process"; seq: number; start: string; end: string; rows: ProcessRow[] };
 type Item = Exclude<SessionEntry, Step> | Process | Asked;
@@ -63,14 +65,15 @@ export function processSummary(titles: string[]): string {
 }
 
 /** 换了做法的批准挂到同名的那一步上（离它最近、还没挂过的）；没有那一步就自己算一行。 */
-function processRows(steps: Step[], denied: Permission[]): ProcessRow[] {
-  const rows = steps.map((step) => ({ step, denied: false }));
+function processRows(steps: Step[], denied: Permission[], notes: Step[]): ProcessRow[] {
+  const rows: ProcessRow[] = steps.map((step) => ({ step, denied: false }));
   for (const permission of denied) {
     const match = rows.filter((row) => !row.denied && row.step.title === permission.request.title)
       .sort((a, b) => Math.abs(a.step.seq - permission.seq) - Math.abs(b.step.seq - permission.seq))[0];
     if (match) match.denied = true;
     else rows.push({ step: { kind: "step", seq: permission.seq, at: permission.at, toolUseId: permission.request.requestId, title: permission.request.title, done: true, isError: false }, denied: true });
   }
+  for (const step of notes) rows.push({ step, denied: false, note: true });
   return rows.sort((a, b) => a.step.seq - b.step.seq);
 }
 
@@ -87,6 +90,7 @@ function groupEntries(entries: SessionEntry[]): Item[] {
   const items: Item[] = [];
   const denied = new Map<Process, Permission[]>();
   const steps = new Map<Process, Step[]>();
+  const notes = new Map<Process, Step[]>();
   const used = new Set<number>();
   entries.forEach((entry, index) => {
     if (used.has(index)) return;
@@ -103,19 +107,22 @@ function groupEntries(entries: SessionEntry[]): Item[] {
       return;
     }
     if (entry.kind === "step" && entry.title === ASK_TOOL) return;
-    if (entry.kind !== "step" && !(entry.kind === "permission" && entry.decision)) { items.push(entry); return; }
+    const note = entry.kind === "notice" && entry.code !== undefined && PROCESS_NOTICES.has(entry.code);
+    if (entry.kind !== "step" && !note && !(entry.kind === "permission" && entry.decision)) { items.push(entry); return; }
     let last = items[items.length - 1];
     if (last?.kind !== "process") {
       last = { kind: "process", seq: entry.seq, start: entry.at, end: entry.at, rows: [] };
       items.push(last);
       steps.set(last, []);
       denied.set(last, []);
+      notes.set(last, []);
     }
     last.end = entry.at;
     if (entry.kind === "step") steps.get(last)!.push(entry);
-    else if (entry.decision === "deny") denied.get(last)!.push(entry);
+    else if (entry.kind === "notice") notes.get(last)!.push({ kind: "step", seq: entry.seq, at: entry.at, toolUseId: `note-${entry.seq}`, title: entry.text, done: true, isError: false });
+    else if (entry.kind === "permission" && entry.decision === "deny") denied.get(last)!.push(entry);
   });
-  for (const [process, list] of steps) process.rows = processRows(list, denied.get(process)!);
+  for (const [process, list] of steps) process.rows = processRows(list, denied.get(process)!, notes.get(process)!);
   // 只有批过的权限、那一步还没来的一段先不画。
   return items.filter((item) => item.kind !== "process" || item.rows.length > 0);
 }
@@ -166,7 +173,8 @@ function StepRow({ row, live }: { row: ProcessRow; live: boolean }) {
  */
 function ProcessGroup({ process, live, running }: { process: Process; live: boolean; running: boolean }) {
   const [open, setOpen] = useState(false);
-  const summary = processSummary(process.rows.map((row) => row.step.title));
+  const counted = process.rows.filter((row) => !row.note);
+  const summary = counted.length ? processSummary(counted.map((row) => row.step.title)) : process.rows.map((row) => row.step.title).join(" · ");
   const current = [...process.rows].reverse().find((row) => !row.denied && !row.step.done) ?? process.rows[process.rows.length - 1]!;
   const took = !running && Date.parse(process.end) - Date.parse(process.start) >= 1000 ? duration(process.start, process.end) : null;
   const said = running ? current.step.title : [summary, took].filter(Boolean).join(" · ");
@@ -283,12 +291,30 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
  * dock：「N 个问题等你 / 回到最新」那一条（PendingDock），放在输入框上方。
  * 输入框下面一行（同首页、项目对话）：左边在哪个文件夹里跑（place，悬停出完整路径），右边模型（model，悬停出 title）和权限档（mode，useSessionMode；还没开工时不给）。
  */
-export function SessionComposer({ label, disabled, onSend, dock, subject, mode, place, model, busy = false, onStop }: {
+/** 子会话能换的模型（32 条）：同一个执行方的；选了交给本机（PUT /v1/sessions/:id/model），换好或记下「这一轮做完后换」后重读摘要，没成 onFail。 */
+export function sessionModels(runner: LocalRunner, models: readonly TLocalModelProfile[], session: TLocalSessionSummary | null | undefined, refresh: () => unknown, onFail: () => void) {
+  if (!session) return null;
+  return {
+    list: models.filter((model) => model.agent === session.agent),
+    value: session.pendingModel?.modelProfileId ?? session.modelProfileId,
+    onPick: (id: string) => void runner.setSessionModel(session.id, { modelProfileId: id }).then(() => refresh(), onFail),
+  };
+}
+
+/** 本机报了换好模型（notice model_changed）就马上重读摘要：下面那一行从「当前 → 新」回到新模型，不等 10 秒一次的刷新。 */
+export function useModelChangedRefresh(entries: SessionEntry[], refresh: () => unknown) {
+  const changed = [...entries].reverse().find((entry) => entry.kind === "notice" && entry.code === "model_changed")?.seq ?? null;
+  useEffect(() => { if (changed !== null) void refresh(); }, [changed, refresh]);
+}
+
+export function SessionComposer({ label, disabled, onSend, dock, subject, mode, place, model, models, busy = false, onStop }: {
   label: string; disabled: boolean; onSend: (text: string, attachments: TLocalAttachmentRef[]) => Promise<boolean>; dock?: ReactNode;
   subject: TSessionAttachment["subject"];
   mode?: { modes: readonly TLocalPermissionMode[]; value: TLocalPermissionMode; set: (mode: TLocalPermissionMode) => void } | null;
   place?: { name: string; title: string } | null;
   model?: { label: string; title?: string } | null;
+  /** 能换的模型（32 条，这台电脑上跑着的子会话才给）：右边的模型成下拉，选了 onPick。 */
+  models?: { list: readonly TLocalModelProfile[]; value: string | null; onPick: (id: string) => void } | null;
   /** 会话在跑（27 条）：右边没字时是停止方块（onStop，本机 interrupt），有字时照样能发（插话），同项目对话、伙伴台。 */
   busy?: boolean;
   onStop?: () => void;
@@ -298,7 +324,8 @@ export function SessionComposer({ label, disabled, onSend, dock, subject, mode, 
       <InputBar placeholder="" label={label} disabled={disabled} dock={dock} busy={busy} interruptible onStop={onStop} draftKey={`tianshu-home-draft-v1:${subject.kind}:${subject.id}`}
         footer={{
           left: place ? <FolderText name={place.name} title={place.title} /> : null,
-          right: <>{model ? <FootText title={model.title} testId="session-model">{model.label}</FootText> : null}{mode ? <PermissionModeMenu modes={mode.modes} value={mode.value} disabled={disabled} onChange={mode.set} /> : null}</>,
+          right: <>{model && models && !disabled ? <SessionModelMenu label={model.label} title={model.title} models={models.list} value={models.value} onPick={models.onPick} />
+            : model ? <FootText title={model.title} testId="session-model">{model.label}</FootText> : null}{mode ? <PermissionModeMenu modes={mode.modes} value={mode.value} disabled={disabled} onChange={mode.set} /> : null}</>,
         }}
         onSend={async (text, files) => onSend(text, files.length ? await uploadToSubSession(subject, files) : [])} />
     </div>

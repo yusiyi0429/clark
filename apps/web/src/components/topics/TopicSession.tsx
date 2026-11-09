@@ -17,7 +17,7 @@ import { HeroButton } from "@/components/HeroButton";
 import { useHandheld } from "@/components/ui/useHandheld";
 import { StartDialog } from "@/components/local/StartDialog";
 import { showWorkspaceToast } from "@/lib/toast";
-import { RelayLine, SessionComposer, SessionTranscript, sayToSession, sessionEnded, type DecideOptions } from "@/components/cards/SessionTranscript";
+import { RelayLine, SessionComposer, SessionTranscript, sayToSession, sessionModels, useModelChangedRefresh, sessionEnded, type DecideOptions } from "@/components/cards/SessionTranscript";
 import { stateChip } from "@/components/cards/CardSession";
 import { QuestionDecision, awayChip, questionTitle } from "@/components/work/decisions";
 import { askAnchor } from "@/components/home/TaskFeed";
@@ -28,7 +28,7 @@ import { useConversationScroll } from "@/conversation/useConversationScroll";
 import { latestSessionFor, useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { useSessionEvents } from "@/lib/local/useSessionEvents";
 import { useSessionMode } from "@/components/cards/PermissionMode";
-import { harnessLabel, runLabel } from "@/lib/local/runModel";
+import { harnessLabel, runLabel, withPendingModel } from "@/lib/local/runModel";
 import { placeText, shortPlace } from "@/lib/work/merge";
 import { localWait, running } from "@/lib/local/sessionView";
 import { startTopic } from "@/lib/local/start";
@@ -83,6 +83,7 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
     window.history.replaceState(null, "", window.location.pathname);
   }, [autoStart, ready, detail, session]);
   const { view } = useSessionEvents(local.runner, session?.id ?? null);
+  useModelChangedRefresh(view.entries, local.refresh);
   const canAct = canCommand({ ready, handheld, hasSession: !!session });
   const mode = useSessionMode(local.runner, session, view);
   // 没成的不弹 toast：发消息交给输入框，批准、回答交给选项框，这页的按钮后面各自写「失败 · 重试」。
@@ -163,7 +164,7 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
 
   const state = wait ? <span className={s.tag} data-tone={waitTone(wait)}>{WAIT_LABEL[wait]}</span> : <span className={s.tag} data-tone={topic.status === "archived" ? undefined : "ver"}>{topic.status === "archived" ? "已归档" : "进行中"}</span>;
   // 输入框下面一行的右边写「执行方 · 模型」（21 条），来源在悬停里；没有时退回「来源 · 模型」、再退回云端记的。文件夹在左边。
-  const model = harnessLabel(session?.run, session?.agent) ?? ((label) => (label ? { label, title: null } : null))(runLabel(session?.run) ?? topic.run?.modelLabel ?? null);
+  const model = withPendingModel(harnessLabel(session?.run, session?.agent) ?? ((label) => (label ? { label, title: null } : null))(runLabel(session?.run) ?? topic.run?.modelLabel ?? null), session?.pendingModel);
   const place = session?.workspace ? { name: shortPlace(session.workspace), title: placeText(session.workspace) } : null;
   const chat = (
     <PendingBoxes>
@@ -179,6 +180,7 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
         </div>
         {session || !embedded
           ? <SessionComposer label={`给${topic.title}插话`} disabled={!canAct} onSend={say} mode={mode} subject={{ kind: "topic", id: topic.id }} place={place} model={model ? { label: model.label, title: model.title ?? undefined } : null}
+            models={sessionModels(local.runner, local.models, session, local.refresh, () => showWorkspaceToast({ text: "没换成" }))}
             busy={running(status)} onStop={() => void local.runner.interrupt(session!.id).then(() => local.refresh()).catch(() => showWorkspaceToast({ text: "没停下" }))} dock={<PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} />} />
           : <div className={s.composerDock}><PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} /></div>}
       </div>

@@ -12,7 +12,7 @@ export type SessionEntry =
   | { kind: "permission"; seq: number; at: string; request: TLocalPermissionRequestView; decision: "allow" | "deny" | null }
   | { kind: "artifact"; seq: number; at: string; title: string; fileName: string }
   | { kind: "handback"; seq: number; at: string; summary: string; met: number; total: number }
-  | { kind: "notice"; seq: number; at: string; level: "info" | "warn" | "error"; text: string };
+  | { kind: "notice"; seq: number; at: string; level: "info" | "warn" | "error"; text: string; code?: string };
 
 /** 卡身上的标记里由本机报的三种（第 3 节）。 */
 export type LocalWait = "approval" | "reply" | "paused";
@@ -124,7 +124,7 @@ export function foldEvent(view: SessionView, event: TLocalSessionEvent): Session
     case "notice":
       if (event.code === "interjection_next_step") return next;
       if (event.code === "workspace") next.place = event.text;
-      next.entries = [...view.entries, { kind: "notice", ...base, level: event.level, text: event.text }];
+      next.entries = [...view.entries, { kind: "notice", ...base, level: event.level, text: event.text, ...(event.code ? { code: event.code } : {}) }];
       return next;
     case "version":
       next.entries = [...view.entries, { kind: "notice", ...base, level: "info", text: `存了${event.label ?? `第 ${event.number} 版`}` }];

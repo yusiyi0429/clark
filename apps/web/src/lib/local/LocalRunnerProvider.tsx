@@ -7,6 +7,7 @@
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { TLocalFolder, TLocalModelProfile, TLocalSessionSummary, TLocalStatusResponse } from "./runner";
+import type { TLocalFolderCreateRequest, TLocalFolderPickRequest } from "@warmap/contracts";
 import { LocalRunnerError, type LocalRunner } from "./runner";
 import { createHttpRunner, writeLocalToken } from "./client";
 import { createMockRunner } from "./mock";
@@ -33,7 +34,10 @@ export type LocalRunnerState = {
   refresh: (options?: { fresh?: boolean }) => Promise<void>;
   pair: () => Promise<void>;
   unpair: () => Promise<void>;
-  pickFolder: () => Promise<TLocalFolder | null>;
+  /** 本机弹选择框选一个文件夹；带项目时本机一步绑上（32 条）。取消、没成回 null。 */
+  pickFolder: (bind?: TLocalFolderPickRequest) => Promise<TLocalFolder | null>;
+  /** 在桌面新建一个文件夹，带项目时一步绑上；没成照本机的错抛出（重名 409、名字不行 400）。 */
+  createFolder: (body: TLocalFolderCreateRequest) => Promise<TLocalFolder>;
   setIncludePersonal: (value: boolean) => Promise<void>;
 };
 
@@ -89,6 +93,12 @@ export function LocalRunnerProvider({ children, runner: given, person: given_per
     setModels(nextModels);
     setFolders(nextFolders);
     setSessions(nextSessions);
+  }, [runner]);
+
+  const createFolder = useCallback(async (body: TLocalFolderCreateRequest) => {
+    const { folder } = await runner.createFolder(body);
+    setFolders(await runner.listFolders());
+    return folder;
   }, [runner]);
 
   const flight = useRef(singleFlight());
@@ -186,10 +196,10 @@ export function LocalRunnerProvider({ children, runner: given, person: given_per
     await refresh();
   }, [runner, refresh]);
 
-  const pickFolder = useCallback(async () => {
+  const pickFolder = useCallback(async (bind?: TLocalFolderPickRequest) => {
     setError(null);
     try {
-      const folder = await runner.pickFolder();
+      const { folder } = await runner.pickFolder(bind);
       setFolders(await runner.listFolders());
       return folder;
     } catch (cause) {
@@ -203,8 +213,8 @@ export function LocalRunnerProvider({ children, runner: given, person: given_per
     await refresh();
   }, [runner, refresh]);
 
-  const value = useMemo<LocalRunnerState>(() => ({ runner, phase, version, status, models, folders, sessions, pairing, error, refresh, pair, unpair, pickFolder, setIncludePersonal }),
-    [runner, phase, version, status, models, folders, sessions, pairing, error, refresh, pair, unpair, pickFolder, setIncludePersonal]);
+  const value = useMemo<LocalRunnerState>(() => ({ runner, phase, version, status, models, folders, sessions, pairing, error, refresh, pair, unpair, pickFolder, createFolder, setIncludePersonal }),
+    [runner, phase, version, status, models, folders, sessions, pairing, error, refresh, pair, unpair, pickFolder, createFolder, setIncludePersonal]);
   return <LocalContext.Provider value={value}>{children}</LocalContext.Provider>;
 }
 

@@ -514,6 +514,7 @@ function HomeFrame({ account }: { account: Account }) {
     return <PipelineView key={project.id} project={project} tasks={goalTasks} api={api} buddy={buddy} outbox={outbox} consume={consume} go={go} onSplit={(target) => void split(target, seenSequence(project.id))} splitFailed={splitFailed}
       startFailed={startFailed} onManualStart={(id) => void manualStart(id)} onSpeaking={setSpeaking} trail={trail} blocks={projectBlocks(project)}
       onPulled={() => void projects.actions.reloadFolders()} onSetFolder={(folderId) => projects.actions.setFolder(project.id, folderId, project.name)}
+      onPickFolder={() => projects.actions.pickFolder(project.id, project.name)} onCreateFolder={(name) => projects.actions.createFolder(project.id, project.name, name)}
       bound={projects.bound.get(project.id) ?? null} />;
   };
   const display = (current: View) => {
