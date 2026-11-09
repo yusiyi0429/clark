@@ -482,7 +482,8 @@ function HomeFrame({ account }: { account: Account }) {
   const letter = useMemo(() => (letterText ? <SubLetter letter={letterText} inline /> : null), [letterText]);
   const chrome = useMemo(() => (handheld ? {
     lead: <button type="button" className={h.icon} aria-label="返回" title="返回" onClick={() => go(HOME_HREF)} data-testid="phone-back"><ArrowLeft {...ICON} /></button>,
-    trail: backgroundButton, parent, letter,
+    // 手机上页头不写上一级（左边已经有返回），只留字母和子会话标题（排查清单第 3 条）。
+    trail: backgroundButton, parent: null, letter,
   } : { lead: null, trail: null, parent, letter }), [handheld, go, backgroundButton, parent, letter]);
   useTabTitle(data.waiting.length);
   /** 转交时选了「停掉」：这台电脑上在跑的经本机程序停，云端还排着、没有电脑接下的撤掉登记（别的电脑上在跑的只能在那台电脑上停）。 */

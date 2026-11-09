@@ -80,7 +80,9 @@
 .page[data-embedded] { grid-template-rows: auto minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); min-width: 0; background: transparent; }
 /* 页头（5.4.3）：高 --row-48，4 的倍数；标题 14/20 600；右边状态 chip、模型 chip、「停止」「推翻」（弱按钮）、信息图标（HeroButton ghost）。 */
 .embedHead { display: flex; align-items: center; gap: var(--space-2); min-width: 0; min-height: var(--row-48); padding: 0 var(--space-4) 0 var(--space-6); }
-.embedTitle { flex: 1; min-width: 0; overflow: hidden; color: var(--ink); font-size: 14px; font-weight: 600; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; }
+/* 「项目名 / [字母] 标题」一行（排查清单第 3 条）：上一级和标题各自出省略号，见 home.module.css 的 .crumb。 */
+.embedTitle { display: flex; flex: 1; align-items: center; min-width: 0; overflow: hidden; color: var(--ink); font-size: 14px; font-weight: 600; line-height: 20px; white-space: nowrap; }
+.embedName { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .embedHead .exec { flex: none; }
 .embedHead [data-pressed] { background: var(--default-soft-hover); }
 /* 状态 chip（5.4.3「状态 chip」）：高 20、胶囊、左右 8、12/16 400；中性、警告、等你（中性底，字前 8px 强调色圆点，字 --ink）。没有成功色。 */
