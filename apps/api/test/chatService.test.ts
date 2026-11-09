@@ -19,7 +19,7 @@ const validPage = (page: unknown) => {
   return [[path, 200], [title, 40], [guide, 150]].every(([value, max]) => typeof value === "string" && value.length > 0 && value.length <= (max as number));
 };
 
-type ChatRequest = { method: string; url: string; headers: IncomingHttpHeaders; body: string };
+type ChatRequest = { method: string; url: string; headers: IncomingHttpHeaders; body: string; raw?: Buffer };
 type Page = { messages: unknown[]; runs: unknown[]; nextCursor: string | null };
 
 /** Chat 的一轮 SSE：先一行心跳，事件带 Chat 自己的 conversationId / runId / scope / sequence。 */
@@ -65,7 +65,8 @@ async function fakeChat(options: {
   const server = createServer(async (req, res) => {
     const chunks: Buffer[] = [];
     for await (const chunk of req) chunks.push(chunk as Buffer);
-    const request = { method: req.method ?? "", url: req.url ?? "", headers: req.headers, body: Buffer.concat(chunks).toString("utf8") };
+    const raw = Buffer.concat(chunks);
+    const request = { method: req.method ?? "", url: req.url ?? "", headers: req.headers, body: raw.toString("utf8"), raw };
     requests.push(request);
     const send = (status: number, body: unknown) => {
       res.writeHead(status, { "content-type": "application/json" });
@@ -429,7 +430,10 @@ describe("首页对话走独立 Chat（CHAT_SERVICE_URL）", () => {
     const attachmentId = randomUUID();
     const results = [
       { attachments: [{ attachmentId, fileName: "brief.md", mime: "text/markdown", size: 15, status: "ready", extractedChars: 5, reason: null }] },
-      { attachments: [{ attachmentId: randomUUID(), fileName: "scan.md", mime: "text/markdown", size: 3, status: "failed", extractedChars: 0, reason: "empty" }] },
+      { attachments: [{ attachmentId: randomUUID(), fileName: "scan.md", mime: "text/markdown", size: 3, status: "failed", extractedChars: 0, reason: null }] },
+      { attachments: [{ attachmentId: randomUUID(), fileName: "截图.jpg", mime: "image/jpeg", size: 8, status: "ready", extractedChars: 0, reason: null }] },
+      { attachments: [{ attachmentId: randomUUID(), fileName: "大图.png", mime: "image/png", size: 8, status: "failed", extractedChars: 0,
+        reason: "图片超过 5 MB（模型能看的单张上限），请压缩后再发" }] },
     ];
     const chat = await fakeChat({ upload: () => results.shift() });
     await withChat(chat, countingRuntime(), async (t) => {
@@ -454,7 +458,19 @@ describe("首页对话走独立 Chat（CHAT_SERVICE_URL）", () => {
       expect(JSON.parse(chat.turns()[0].body).attachmentIds).toEqual([attachmentId]);
 
       const unreadable = await upload(multipart("scan.md", "   "));
-      expect([unreadable.statusCode, unreadable.json().code]).toEqual([400, "ATTACHMENT_UNREADABLE"]);
+      expect([unreadable.statusCode, unreadable.json().code, unreadable.json().message]).toEqual([400, "ATTACHMENT_UNREADABLE", "scan.md 没能读出文字，请换一份再传。"]);
+
+      // 图片（17.2 第 37 条）：原样转给 Chat（字节和类型不变），Chat 认了就是 ready；Chat 写了不收的原因照它说。
+      const jpg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
+      const image = (name: string, type: string) => ({ headers: { "content-type": "multipart/form-data; boundary=img" }, payload: Buffer.concat([
+        Buffer.from(`--img\r\nContent-Disposition: form-data; name="files"; filename="${name}"\r\nContent-Type: ${type}\r\n\r\n`), jpg, Buffer.from("\r\n--img--\r\n")]) });
+      const photo = await upload(image("截图.jpg", "image/jpeg"));
+      expect(photo.json().attachments[0]).toMatchObject({ fileName: "截图.jpg", mimeType: "image/jpeg" });
+      const sent = chat.requests.filter((request) => request.url.endsWith("/attachments")).at(-1)!;
+      expect(sent.body).toContain("Content-Type: image/jpeg");
+      expect(sent.raw!.includes(jpg)).toBe(true);
+      const big = await upload(image("大图.png", "image/png"));
+      expect([big.statusCode, big.json().message]).toEqual([400, "大图.png：图片超过 5 MB（模型能看的单张上限），请压缩后再发"]);
     });
   });
 

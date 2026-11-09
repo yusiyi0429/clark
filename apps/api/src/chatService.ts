@@ -35,7 +35,7 @@ export class ChatServiceError extends Error {
   }
 }
 
-type ChatAttachment = { attachmentId: string; fileName: string; mime: string; size: number; status?: string };
+type ChatAttachment = { attachmentId: string; fileName: string; mime: string; size: number; status?: string; reason?: string | null };
 type ChatMessage = { position?: string; role: "user" | "assistant"; text: string; runId: string; attachments?: ChatAttachment[]; turnAt?: string; channel?: HomeTurnVia | null;
   /** 伙伴的选项框（ask_user）：助手消息带提问卡，本人的作答消息带问答记录（契约 workHome.ts 顶部）。 */
   cards?: unknown; answers?: unknown };
@@ -430,7 +430,9 @@ export function createChatService(options: {
       for (const file of files) form.append("files", new Blob([new Uint8Array(file.buffer)], { type: file.mimetype }), file.filename);
       const result = await json<{ attachments: ChatAttachment[] }>(viewer, requestId, `/conversations/${id}/attachments`, { method: "POST", body: form });
       const unreadable = result.attachments.find((file) => file.status === "failed");
-      if (unreadable) throw new ChatServiceError(400, "ATTACHMENT_UNREADABLE", `${unreadable.fileName} 没能读出文字，请换一份再传。`);
+      // Chat 写了原因的照它说（比如图片超过 5 MB、扩展名和内容对不上，17.2 第 37 条），没写的照旧。
+      if (unreadable) throw new ChatServiceError(400, "ATTACHMENT_UNREADABLE",
+        unreadable.reason ? `${unreadable.fileName}：${unreadable.reason}` : `${unreadable.fileName} 没能读出文字，请换一份再传。`);
       return { attachments: result.attachments.map(attachmentInfo) };
     },
 
