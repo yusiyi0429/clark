@@ -61,6 +61,8 @@ export type Project = {
 
 /** 这台电脑上各项目绑的文件夹：项目 id → 文件夹名。 */
 export type Folders = ReadonlyMap<string, string>;
+/** 同上，带文件夹 id 和路径（开工用）。 */
+export type BoundFolders = ReadonlyMap<string, { id: string; path: string; label: string }>;
 
 /** 首页 v2 的一个项目（没归档的，已经按 16.2 排好）。 */
 export function fromHome(project: HomeProject, data: Pick<WorkHomeData, "month" | "period">, folders: Folders): Project {

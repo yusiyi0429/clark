@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { TProject } from "@warmap/contracts";
 import { attachGoal, createProject, listProjects, setGoalDueDate, startTransfer, updateProject, withdrawTransfer } from "@/lib/board/cloud";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
-import { fromHome, fromListed, type Folders } from "@/lib/home/projects";
+import { fromHome, fromListed, type BoundFolders, type Folders } from "@/lib/home/projects";
 import { noteStartedTransfer, seenSequence } from "@/lib/home/transfer";
 import type { WorkHomeData } from "@/lib/home/types";
 
@@ -17,7 +17,9 @@ export function useProjects(data: Pick<WorkHomeData, "projects" | "month" | "per
   const local = useLocalRunner();
   const ready = local.phase === "ready";
   const [listed, setListed] = useState<TProject[]>([]);
-  const [folders, setFolders] = useState<Folders>(new Map());
+  /** 这台电脑上各项目绑的文件夹（项目 id → 文件夹）：开工、开规划员都在它里面做（17.2 第 32 条）。 */
+  const [bound, setBound] = useState<BoundFolders>(new Map());
+  const folders: Folders = useMemo(() => new Map([...bound].map(([projectId, folder]) => [projectId, folder.label])), [bound]);
   // 归档了几个变了（本人归档、恢复、交出去了，或别处改的）就重读一次列表；一个都没有时不读。
   useEffect(() => {
     if (!data.archivedCount) { setListed([]); return; }
@@ -27,10 +29,10 @@ export function useProjects(data: Pick<WorkHomeData, "projects" | "month" | "per
   }, [data.archivedCount]);
   const { runner } = local;
   const loadFolders = useCallback(async () => {
-    const bound = await runner.listProjects().catch(() => []);
-    setFolders(new Map(bound.flatMap((entry) => (entry.folder ? [[entry.projectId, entry.folder.label] as const] : []))));
+    const listed = await runner.listProjects().catch(() => []);
+    setBound(new Map(listed.flatMap((entry) => (entry.folder ? [[entry.projectId, entry.folder] as const] : []))));
   }, [runner]);
-  useEffect(() => { if (ready) void loadFolders(); else setFolders(new Map()); }, [ready, loadFolders]);
+  useEffect(() => { if (ready) void loadFolders(); else setBound(new Map()); }, [ready, loadFolders]);
   // 交出去了（accepted）的项目还绑着这台电脑上的文件夹：解绑（16.7，原负责人那边只读）。
   const handedOff = listed.filter((project) => project.transfer?.status === "accepted" && folders.has(project.projectId)).map((project) => project.projectId).join(",");
   useEffect(() => {
@@ -67,7 +69,7 @@ export function useProjects(data: Pick<WorkHomeData, "projects" | "month" | "per
   const withdraw = useCallback(async (transferId: string) => { await withdrawTransfer(transferId); await refresh(); }, [refresh]);
   const actions = useMemo(() => ({ create, rename, archive, attach, setDue, setFolder, transfer, withdraw, reloadFolders: loadFolders }),
     [create, rename, archive, attach, setDue, setFolder, transfer, withdraw, loadFolders]);
-  return { all, projects, archived, actions };
+  return { all, projects, archived, bound, actions };
 }
 
 export type ProjectsApi = ReturnType<typeof useProjects>;

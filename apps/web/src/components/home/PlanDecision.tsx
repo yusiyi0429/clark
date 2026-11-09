@@ -23,7 +23,6 @@ import { Slots } from "@/components/work/Slots";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { planStep } from "@/lib/local/sessionView";
 import { useSessionEvents } from "@/lib/local/useSessionEvents";
-import { readLast, writeLast } from "@/lib/local/start";
 import type { TLocalModelProfile } from "@/lib/local/runner";
 import { HARNESS_NAME, pickLabel, profileModel, profileSource } from "@/lib/local/runModel";
 import { acceptDrafts, acceptProjectDrafts, dismissDraft, readTaskBudget, type PlanTarget } from "@/lib/board/cloud";
@@ -37,6 +36,8 @@ import { queueText } from "@/lib/home/derive";
 import h from "@/styles/home.module.css";
 import x from "@/styles/decision-box.module.css";
 import { SourceWords } from "@/components/cards/SourceWords";
+import { FolderMenu } from "./InputFooter";
+import { FolderAsk } from "./FolderAsk";
 
 const ICON = STATE_ICON;
 
@@ -70,7 +71,7 @@ export const limitsOf = (budget: TBudget): Limits => ({ hours: budget.hours?.toS
 /**
  * target：拆的是一件 Task，还是一个没挂 Task 的项目（16.3）；name 是框顶上的名字。项目的没有预算那一栏：不挂 Task，开工用本人的缺省预算。
  */
-export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onChanged, afterSequence }: {
+export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onChanged, afterSequence, folder = null, onSetFolder }: {
   target: PlanTarget;
   name: string;
   drafts: TCardDraftView[];
@@ -81,6 +82,12 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
   onChanged: () => void;
   /** 项目对话里本人看到的最后一条（17.2 第 29 条）：开工时带上，「开了哪几个子会话」插在它后面。 */
   afterSequence?: number;
+  /**
+   * 所属项目在这台电脑上绑的文件夹（17.2 第 32 条）：卡就在它里面开。下面那一行改文件夹就是改项目的（onSetFolder，同输入框下面那个），没有「这一次用别的」。
+   * 这台电脑能开但项目没绑：先在下面问在哪个文件夹开工（FolderAsk），选完绑到项目上再开。
+   */
+  folder?: { id: string; path: string; label: string } | null;
+  onSetFolder?: (folderId: string | null) => Promise<unknown>;
 }) {
   const local = useLocalRunner();
   const ready = local.phase === "ready" && !handheld;
@@ -88,7 +95,6 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
   const projectMode = useContext(ProjectModeContext);
   const [editing, setEditing] = useState(false);
   const [edits, setEdits] = useState<Record<string, Edit>>({});
-  const [folderId, setFolderId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // 模式从这件 Task 现在的预算开始（没设过是本人的缺省，读不到就是「自动」）；本人动过才随开工存回去。
   const [mode, setMode] = useState<TBudgetMode>("auto");
@@ -108,9 +114,7 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
   }, [taskId]);
   const pickMode = (next: TBudgetMode) => { touched.current = true; setMode(next); if (next === "set") requestAnimationFrame(() => hoursRef.current?.focus()); };
   const setLimit = (key: keyof Limits, value: string) => { touched.current = true; setLimits((current) => ({ ...current, [key]: value })); };
-  useEffect(() => { setFolderId((current) => current ?? local.folders.find((folder) => folder.id === readLast().folderId)?.id ?? local.folders[0]?.id ?? null); }, [local.folders]);
   const workerRoles = useMemo(() => roles.filter((role) => role.kind === "worker"), [roles]);
-  const folder = local.folders.find((entry) => entry.id === folderId) ?? null;
   const kept = drafts.filter((draft) => !edits[draft.id]?.dropped);
   const used = liveSessions(local.sessions).length;
   const roleOf = (draft: TCardDraftView) => { const edit = edits[draft.id]; return edit && "role" in edit ? edit.role ?? null : draftWorkerRole(draft); };
@@ -154,17 +158,15 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
       source: preview?.source ?? profileSource(model), subscription: model.source === "subscription" }, auto);
   };
 
-  const start = async () => {
+  // 项目没绑文件夹时点了开始：先问在哪个文件夹开工。
+  const [asking, setAsking] = useState(false);
+  const start = async (chosen?: { id: string; path: string; label: string }) => {
     if (!kept.length || busy) return;
     // 设预算却一项都没填对：停在填的地方。
     const budget = taskId ? budgetOf(mode, limits) : null;
     if (taskId && !budget) { hoursRef.current?.focus(); return; }
-    let where = folder;
-    if (ready && !where) {
-      where = await local.pickFolder();
-      if (!where) return;
-      setFolderId(where.id);
-    }
+    const where = chosen ?? folder;
+    if (ready && !where) { setAsking(true); return; }
     setBusy(true);
     try {
       for (const draft of drafts.filter((entry) => edits[entry.id]?.dropped)) await dismissDraft(draft.id).catch(() => undefined);
@@ -184,7 +186,6 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
         return item && role && model ? [{ item, model, cwd: where?.path ?? "", role: roles.find((entry) => entry.id === role.id) ?? null, ...(projectMode ? { permissionMode: projectMode } : {}) }] : [];
       });
       if (ready && where) {
-        writeLast({ folderId: where.id });
         await startBatch(local.runner, plans);
         await local.refresh();
       }
@@ -246,18 +247,23 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
     </>
   );
   const footer = ready ? <>
-    {folder ? <Pick label={folder.label} value={folder.id} options={local.folders.map((entry) => ({ id: entry.id, label: entry.label }))} onPick={setFolderId} up />
-      : <button type="button" className={h.chip} onClick={() => void local.pickFolder().then((picked) => { if (picked) setFolderId(picked.id); })}>选文件夹</button>}
+    {onSetFolder ? <FolderMenu value={folder?.label ?? null} folders={local.folders} onPick={(id) => void onSetFolder(id)} /> : null}
     <span className={h.grow} />
     <span className={h.slotsLine}>本机 <Slots used={used} cap={SLOT_CAP} /> {used}/{SLOT_CAP}</span>
   </> : null;
 
   return (
-    <DecisionBox kind="plan" testId="plan-decision" title={`${name}：这样开工？`} body={steps} busy={busy} footer={footer}
-      options={editing ? [{ label: START_LABEL, recommended: true }, { label: "改好了" }] : [{ label: START_LABEL, recommended: true }, { label: "改一改" }]}
-      onPick={([picked]) => (picked === 0 ? start() : setEditing(!editing))}
-      // 管线正在回话时发不出去（send 回 false）：算失败，框里原处写「失败 · 重试」，打的字留着。
-      other={{ onSubmit: async (text) => { if ((await onSay(text)) === false) throw new Error("没发出去"); } }} />
+    <>
+      <DecisionBox kind="plan" testId="plan-decision" title={`${name}：这样开工？`} body={steps} busy={busy} footer={footer}
+        options={editing ? [{ label: START_LABEL, recommended: true }, { label: "改好了" }] : [{ label: START_LABEL, recommended: true }, { label: "改一改" }]}
+        onPick={([picked]) => (picked === 0 ? start() : setEditing(!editing))}
+        // 管线正在回话时发不出去（send 回 false）：算失败，框里原处写「失败 · 重试」，打的字留着。
+        other={{ onSubmit: async (text) => { if ((await onSay(text)) === false) throw new Error("没发出去"); } }} />
+      {asking && ready && !folder ? (
+        <FolderAsk folders={local.folders} onPickOther={() => local.pickFolder()}
+          onBind={async (picked) => { await onSetFolder?.(picked.id); setAsking(false); await start(picked); }} />
+      ) : null}
+    </>
   );
 }
 
@@ -297,11 +303,11 @@ function ModelPick({ models, value, shown, auto, onPick }: {
 }
 
 /** 一个小下拉：点开是弹层（全站唯一那种），当前那项行尾打勾。 */
-function Pick({ label, options, value, onPick, up }: { label: string; options: { id: string; label: string }[]; value: string; onPick: (id: string) => void; up?: boolean }) {
+function Pick({ label, options, value, onPick }: { label: string; options: { id: string; label: string }[]; value: string; onPick: (id: string) => void }) {
   return (
     <Dropdown>
       <Dropdown.Trigger className={h.chip}><span title={label}>{label}</span><ChevronDown {...ICON} /></Dropdown.Trigger>
-      <Dropdown.Popover placement={up ? "top start" : "bottom end"} offset={8} className={h.pop}>
+      <Dropdown.Popover placement="bottom end" offset={8} className={h.pop}>
         <Dropdown.Menu aria-label={label} className={h.menuList} onAction={(key) => onPick(String(key))}>
           {options.map((option) => (
             <Dropdown.Item key={option.id || "none"} id={option.id || "none"} textValue={option.label} className={h.menuItem}>
