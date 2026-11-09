@@ -2,7 +2,7 @@
  * 子会话用的是哪个来源的哪个模型（契约 LocalRun）：写成「来源 · 模型」，如「我的 Claude 订阅 · Opus 5.5」「TokenHub · qwen3.8-flash」。
  * 实际跑起来的（actual，执行方报的）优先；和请求的不一样时照实际的写，不另加说明。老版本本机不报来源时为 null，由调用方退回原来的写法。
  */
-import type { TLocalRun } from "@warmap/contracts";
+import type { TLocalAgentKind, TLocalModelProfile, TLocalRun } from "@warmap/contracts";
 
 /** Chat 报的接入方 → 给人看的来源名（同子会话 sourceLabel 的叫法）；查不到原样写。 */
 const PROVIDER_NAMES: Record<string, string> = { tokenhub: "TokenHub" };
@@ -28,6 +28,26 @@ export function modelDisplayName(model: string): string {
 /** 走 Chat 的对话（项目主管线、伙伴台）这一轮用的：「来源 · 模型」，写法同子会话，如 tokenhub + wangsu/claude-opus-5-5 →「TokenHub · Opus 5.5」。 */
 export const chatModelLabel = (model: { provider: string; model: string } | null | undefined): string | null =>
   (model ? `${PROVIDER_NAMES[model.provider.toLowerCase()] ?? model.provider} · ${modelDisplayName(model.model)}` : null);
+
+/** 执行方（harness）给人看的名字（21 条：选模型时要看得出哪个模型配的哪个执行方）。 */
+export const HARNESS_NAME: Record<TLocalAgentKind, string> = { "claude-code": "Claude Code", codex: "Codex" };
+
+/** 一个模型配置的模型名：照本机的写法（claude-opus-5-5 →「Opus 5.5」，网关模型去掉「来源/」前缀）；没写模型的（订阅默认）用配置名。 */
+export const profileModel = (profile: Pick<TLocalModelProfile, "model" | "label">) => (profile.model ? modelDisplayName(profile.model) : profile.label);
+/** 一个模型配置的来源：本机认出的（D 契约 12541f55 的 origin.label，如「Codex 订阅 · 经 magpie」）；老版本本机不带时，订阅写「我的 Claude 订阅」，别的写配置名。 */
+export const profileSource = (profile: Pick<TLocalModelProfile, "origin" | "source" | "label">) =>
+  profile.origin?.label ?? (profile.source === "subscription" ? "我的 Claude 订阅" : profile.label);
+
+/**
+ * 子会话选中的、实际在跑的：「执行方 · 模型」，如「Claude Code · Opus 5.5」，来源（title）放在悬停里。
+ * 执行方照本机报的 harness，老版本不带时用会话的 agent；来源照 origin.label，老版本退回 sourceLabel。都没有时为 null，调用方退回原来的写法。
+ */
+export function harnessLabel(run: Pick<TLocalRun, "harness" | "origin" | "sourceLabel" | "modelName" | "actual"> | null | undefined, agent?: TLocalAgentKind | null): { label: string; title: string | null } | null {
+  const harness = run?.harness ?? agent ?? null;
+  const name = run?.actual?.modelName ?? run?.modelName ?? null;
+  if (!harness || !name) return null;
+  return { label: `${HARNESS_NAME[harness]} · ${name}`, title: run?.origin?.label ?? run?.sourceLabel ?? null };
+}
 
 export function runLabel(run: Pick<TLocalRun, "sourceLabel" | "modelName" | "actual"> | null | undefined): string | null {
   if (!run?.sourceLabel) return null;

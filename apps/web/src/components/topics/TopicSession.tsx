@@ -28,7 +28,7 @@ import { useConversationScroll } from "@/conversation/useConversationScroll";
 import { latestSessionFor, useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { useSessionEvents } from "@/lib/local/useSessionEvents";
 import { useSessionMode } from "@/components/cards/PermissionMode";
-import { runLabel } from "@/lib/local/runModel";
+import { harnessLabel, runLabel } from "@/lib/local/runModel";
 import { placeText, shortPlace } from "@/lib/work/merge";
 import { localWait, running } from "@/lib/local/sessionView";
 import { startTopic } from "@/lib/local/start";
@@ -162,8 +162,8 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
   );
 
   const state = wait ? <span className={s.tag} data-tone={waitTone(wait)}>{WAIT_LABEL[wait]}</span> : <span className={s.tag} data-tone={topic.status === "archived" ? undefined : "ver"}>{topic.status === "archived" ? "已归档" : "进行中"}</span>;
-  // 「来源 · 模型」：这台电脑上的会话报的（实际跑的优先），没有时退回云端记的。写在输入框下面一行的右边，文件夹在左边。
-  const model = runLabel(session?.run) ?? topic.run?.modelLabel ?? null;
+  // 输入框下面一行的右边写「执行方 · 模型」（21 条），来源在悬停里；没有时退回「来源 · 模型」、再退回云端记的。文件夹在左边。
+  const model = harnessLabel(session?.run, session?.agent) ?? ((label) => (label ? { label, title: null } : null))(runLabel(session?.run) ?? topic.run?.modelLabel ?? null);
   const place = session?.workspace ? { name: shortPlace(session.workspace), title: placeText(session.workspace) } : null;
   const chat = (
     <PendingBoxes>
@@ -178,7 +178,7 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
           <div ref={scroll.reserveRef} aria-hidden />
         </div>
         {session || !embedded
-          ? <SessionComposer label={`给${topic.title}插话`} disabled={!canAct} onSend={say} mode={mode} subject={{ kind: "topic", id: topic.id }} place={place} model={model ? { label: model } : null} dock={<PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} />} />
+          ? <SessionComposer label={`给${topic.title}插话`} disabled={!canAct} onSend={say} mode={mode} subject={{ kind: "topic", id: topic.id }} place={place} model={model ? { label: model.label, title: model.title ?? undefined } : null} dock={<PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} />} />
           : <div className={s.composerDock}><PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} /></div>}
       </div>
     </PendingBoxes>

@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { TCardDraftView, TLocalModelProfile } from "@warmap/contracts";
 import { LocalContext } from "./LocalRunnerProvider";
 import { createMockRunner } from "./mock";
-import { chatModelLabel, runLabel } from "./runModel";
+import { chatModelLabel, harnessLabel, profileModel, profileSource, runLabel } from "./runModel";
 import { ModelText } from "@/components/home/Conversations";
 import { PlanDecision } from "@/components/home/PlanDecision";
 
@@ -38,7 +38,7 @@ describe("子会话显示「来源 · 模型」", () => {
     expect((await runner.listSessions())[0]!.run?.actual?.modelName).toBe("Haiku 5.5");
   });
 
-  it("开工选项框每一步右边：没单独选时写「自动 · …」；本机还没回预览时先写模型配置的名字", () => {
+  it("开工选项框每一步右边：没单独选时写「自动 · 执行方 · 模型」，来源在悬停里；本机还没回预览时照模型配置写", () => {
     const models: TLocalModelProfile[] = [{ id: "subscription", label: "我的 Claude 订阅", source: "subscription", agent: "claude-code", baseUrl: null, model: null, smallModel: null, webSearch: true, hasKey: false, isDefault: true }];
     const local = { runner: createMockRunner(), phase: "offline", version: null, status: null, models, folders: [], sessions: [], pairing: null, error: null,
       refresh: vi.fn(), pair: vi.fn(), unpair: vi.fn(), pickFolder: vi.fn(), setIncludePersonal: vi.fn() } as unknown as Parameters<typeof LocalContext.Provider>[0]["value"];
@@ -48,6 +48,26 @@ describe("子会话显示「来源 · 模型」", () => {
     const html = renderToStaticMarkup(<LocalContext.Provider value={local}>
       <PlanDecision target={{ taskId: "t1" }} name="派活单" drafts={[draft]} roles={[]} handheld={false} onSay={vi.fn()} onChanged={vi.fn()} />
     </LocalContext.Provider>);
-    expect(html).toContain("自动 · 我的 Claude 订阅");
+    expect(html).toMatch(/<span title="我的 Claude 订阅">自动 · Claude Code · 我的 Claude 订阅<\/span>/);
+  });
+});
+
+describe("选模型时看得出执行方（21 条）", () => {
+  const profile = (patch: Partial<TLocalModelProfile>): TLocalModelProfile => ({ id: "p", label: "我的 Claude 订阅", source: "subscription", agent: "claude-code", baseUrl: null,
+    model: "claude-opus-5-5", smallModel: null, webSearch: true, hasKey: false, isDefault: false, ...patch });
+  it("菜单一行写「模型 · 来源」：来源照本机认出的 origin，老版本订阅写「我的 Claude 订阅」、别的写配置名", () => {
+    expect([profileModel(profile({})), profileSource(profile({}))]).toEqual(["Opus 5.5", "我的 Claude 订阅"]);
+    const magpie = profile({ label: "Codex", source: "gateway", agent: "codex", model: "codex/gpt-6.1", origin: { provider: "codex", label: "Codex 订阅 · 经 magpie", via: "magpie" } });
+    expect([profileModel(magpie), profileSource(magpie)]).toEqual(["gpt-6.1", "Codex 订阅 · 经 magpie"]);
+    expect(profileSource(profile({ label: "DeepSeek", source: "gateway" }))).toBe("DeepSeek");
+    expect(profileModel(profile({ model: null, label: "订阅默认" }))).toBe("订阅默认");
+  });
+  it("选中后写「执行方 · 模型」，来源在悬停：执行方照本机报的 harness，老版本用会话的 agent；来源照 origin，老版本退回 sourceLabel", () => {
+    expect(harnessLabel({ harness: "codex", origin: { provider: "codex", label: "Codex 订阅 · 经 magpie", via: "magpie" }, sourceLabel: "Codex", modelName: "gpt-6.1" }))
+      .toEqual({ label: "Codex · gpt-6.1", title: "Codex 订阅 · 经 magpie" });
+    expect(harnessLabel({ sourceLabel: "我的 Claude 订阅", modelName: "Opus", actual: { model: "claude-opus-5-5", modelName: "Opus 5.5", at: "2026-11-09T01:00:00Z" } }, "claude-code"))
+      .toEqual({ label: "Claude Code · Opus 5.5", title: "我的 Claude 订阅" });
+    expect(harnessLabel({ modelName: "Opus" })).toBeNull();
+    expect(harnessLabel(null, "claude-code")).toBeNull();
   });
 });
