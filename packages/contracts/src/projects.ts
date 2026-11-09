@@ -66,6 +66,20 @@ export const UpdateProjectRequest = Type.Object({ name: Type.Optional(ProjectNam
   autoRelayLimit: Type.Optional(Nullable(AutoRelayLimit)) }, { ...strict, minProperties: 1 });
 
 /**
+ * 项目那一行的「…」菜单（17.2 第 35 条）：重命名、归档用 PATCH /api/me/projects/:projectId（UpdateProjectRequest）；标为已读 POST /api/me/work-seen（kind = project）；
+ * 转交给… 走 POST /api/me/projects/:projectId/transfers；删除用 DELETE /api/me/projects/:projectId（204），只有项目负责人能删（别人 404）。
+ *
+ * 删除撤不回（没有回收站；想留着请用归档）：
+ * - 删掉：项目本身、项目对话（天枢这边的历史和「项目 → Chat 对话」的对应，从天枢再也打不开）、挂接关系（本体里的 Task 不动，回到「本月」里没挂的状态）、
+ *   子会话字母、汇报、决定卡、目标变化、拆卡登记和派活单草稿、转交记录、蓝点记录。
+ * - 项目里的子会话（卡、专题）进回收站（同 DELETE /api/me/sub-sessions），30 天内能恢复，恢复后在「其他」里；之后彻底删掉。
+ * - 留下：自己做的执行事项（不是子会话）留着，回到「其他」；交付物的版本留着，只是不再挂项目。
+ * - 本机：天枢云端不碰本机。网页删成功后自己调本机 PUT /v1/projects/:projectId/folder（folderId = null）解绑，文件夹和里面的文件不动。
+ * 不能删的时候（409，不删任何东西）：有子会话或规划员还在跑（含排队、停着等回话）回 PROJECT_BUSY，message 写是哪几个（字母 · 标题），先停掉再删；
+ * 正在转交（还没接手或拒绝）回 PROJECT_TRANSFERRING，先撤回转交。
+ */
+
+/**
  * POST /api/me/projects/:projectId/auto-relay（项目负责人，204）：答「等你」里那条 auto_relay。
  * continue：计数清零、恢复自动触发；stop：那一条收起，自动触发照旧停着，直到本人在这个项目对话里说一句话（说了就清零、恢复）。
  * 没停着（没到上限）回 409 NOT_PAUSED。
