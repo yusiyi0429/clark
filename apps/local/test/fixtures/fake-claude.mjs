@@ -39,8 +39,12 @@ let permMode = argv.includes("--permission-mode") ? argv[argv.indexOf("--permiss
  * system/init 报的模型：真的 Claude Code 报它实际用的那个。这里照 --model 的别名报那一版（opus → claude-opus-5-5），
  * 网关报 ANTHROPIC_MODEL 原样；配置 initModel 可以硬改（测「请求的和实际的对不上」），每轮现读。
  */
+/** 跑着时 set_model 换上的（11/09 实测 2.1.318：别名回成完整的名字，之后每轮开头报它）。 */
+let setModelTo = null;
+const FULL_MODEL = { opus: "claude-opus-5-5", sonnet: "claude-sonnet-5-5", haiku: "claude-haiku-5-5" };
 function initModel() {
   const live = readCfg();
+  if (setModelTo) return setModelTo;
   if (live.initModel) return live.initModel;
   if (process.env.ANTHROPIC_MODEL) return process.env.ANTHROPIC_MODEL;
   const m = argv.includes("--model") ? argv[argv.indexOf("--model") + 1] : null;
@@ -262,6 +266,10 @@ rl.on("line", (line) => {
     sys({ subtype: "task_updated", task_id: id, patch: { status: "killed", end_time: Date.now() } });
     sys({ subtype: "task_notification", task_id: id, status: "stopped", output_file: "", summary: "" });
     out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: {} } });
+  } else if (msg.type === "control_request" && msg.request.subtype === "set_model") {
+    setModelTo = FULL_MODEL[msg.request.model] ?? msg.request.model;
+    appendFileSync(TRACE, JSON.stringify({ setModel: msg.request.model, pid: process.pid }) + "\n");
+    out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: { model: setModelTo } } });
   } else if (msg.type === "control_request" && msg.request.subtype === "set_permission_mode") {
     // 跑着时换权限模式（11/08 实测 2.1.318 收 auto、default、acceptEdits、plan、dontAsk）：记进 trace
     permMode = msg.request.mode;

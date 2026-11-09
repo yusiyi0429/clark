@@ -11,6 +11,7 @@ import {
   type TLocalWorkspace, type TLocalGitRef, type TLocalMergeResponse, type TLocalQuestionRequestView, type TLocalQuestionAnswerRequest,
   type TLocalBackgroundItem, type TLocalMergeHoldReason, type TLocalMergeSync, type TLocalModelTier, type TLocalHold, type TLocalMoney,
   type TLocalRun, type TLocalRunPreviewRequest, type TLocalTaskBudgetView, type TLocalBudgetUpdateRequest, type TBudgetMode, type TLocalPermissionBrief, type TLocalSavedAttachment, type TLocalStopReason, type TLocalStopReport,
+  type TLocalEffort, type TLocalSessionModelRequest,
 } from "@warmap/contracts";
 import { readJson, writeJsonAtomic, nowIso } from "./store.js";
 import type { EventLog, EventBody } from "./eventLog.js";
@@ -83,6 +84,10 @@ interface SessionRecord {
   /** 规划员（设计 18.11）：最近一次拉起时开拆前检查发现要先问清楚的几件；planAsked 是本人之后答过问题或说过话，答了才收派活单。 */
   planFlags?: PlanFlag[];
   planAsked?: boolean;
+  /** 本人换了模型、要等这一轮做完才换的（跨来源要重开执行方）：换成哪个、思考程度。换好就去掉（摘要里原样是 pendingModel）。 */
+  pendingModel?: { modelProfileId: string; modelLabel: string; effort?: TLocalEffort | null };
+  /** 本人选的思考程度（开工带的或后来换的）；不带是按档位和预算模式定（摘要里原样是 effort）。 */
+  effort?: TLocalEffort;
   subject: TLocalSessionSubject;
   title: string;
   agent: TLocalAgentKind;
@@ -604,6 +609,7 @@ export class SessionManager {
     const agent = req.agent ?? "claude-code";
     const permissionMode = req.permissionMode ?? "auto";
     if (!modeOffered(agent, permissionMode)) throw new SessionError("validation", `${agent} 没有「${permissionMode}」这一档权限模式`);
+    if (req.effort && !this.d.models.efforts(model.profileId).includes(req.effort)) throw new SessionError("validation", `「${model.label}」不能选「${req.effort}」这档思考程度`);
     if (this.d.paused?.()) throw new SessionError("conflict", "本机程序已暂停，先在托盘里恢复");
     // 要等前面的卡：先排着，等它们都做完再开工作树（从那时基线最新的提交开出来）
     const after = [...new Set(req.after ?? [])].filter((id) => id !== subject.cardId);
@@ -622,7 +628,7 @@ export class SessionManager {
       role: req.role ?? null, modelTier: req.modelTier ?? req.role?.modelTier ?? null, critics: req.critics ?? [], queuedMessage: null, queueOrder: 0,
       parentId: null, briefPending: false, criteria: [], failStreak: 0, submitted: 0, nudged: false,
       workspace: place?.workspace ?? null, commit: null, after: waiting ? after : [], passed: null, background: [], hold: null, holdSince: null,
-      budgetKey, runSince: null, run: null, permissionMode,
+      budgetKey, runSince: null, run: null, permissionMode, ...(req.effort ? { effort: req.effort } : {}),
     };
     // 满了（或前面还有人在排、在等前面的卡、文件夹被另一张卡占着、订阅额度用完了、预算用完了、余额不足）就进队，先来先跑；有空位时 pump 接上。
     const busy = this.folderBusy(rec);
@@ -917,6 +923,7 @@ export class SessionManager {
         }
         this.setStatus(rec, pending?.size ? "waiting_permission" : "idle", rec.hold && (limited || broke || stopped) ? { reason: this.holdReason(rec.hold) } : {});
         if (!pending?.size && !this.questions.has(rec.id)) stop();
+        if (rec.pendingModel) this.swapModel(rec); // 这一轮做完了：换上本人要的模型
         break;
       }
       default:
@@ -958,6 +965,9 @@ export class SessionManager {
       else this.reportStop(rec, "error", { blocker: `执行方中途退出了${code === null ? "" : `（退出码 ${code}）`}` });
     }
     this.d.log.evict(rec.id);
+    // 本人要换的模型还没换上就退了（交完收工、强停等）：直接换，下次开起来用新的
+    const want = rec.pendingModel?.modelProfileId;
+    if (want) void this.d.models.resolve(want).then((m) => { if (m?.profileId === want && rec.pendingModel?.modelProfileId === want) this.applyModel(rec, m, rec.pendingModel.effort ?? undefined); });
     // 验收过了：卡在工作树里做的，试着自动合回
     if (finished && rec.subject.kind === "verify" && rec.passed) void this.autoMerge(rec);
   }
@@ -1115,6 +1125,88 @@ export class SessionManager {
    * PUT /v1/sessions/:id/permission-mode：本人换权限模式。跑着的告诉执行方（等着批准的按新档重判）；没在跑的（排着、停了）记下，下次拉起按新的。
    * 结束了的（done、failed）不能换。
    */
+  /**
+   * 子会话换模型（契约 LocalSessionModelRequest）：同一个执行方、同一个来源里当场换（set_model）；跨来源要换环境变量，
+   * 在两轮之间就用 --resume 重开，正在跑就记下、这一轮做完再重开（after_turn）；进程不在就直接换，下次开起来用新的。
+   */
+  async setModel(id: string, req: TLocalSessionModelRequest): Promise<{ applied: "now" | "after_turn"; session: TLocalSessionSummary }> {
+    const rec = this.must(id);
+    if (req.modelProfileId === undefined && req.effort === undefined) throw new SessionError("validation", "要带模型或思考程度");
+    const profileId = req.modelProfileId ?? rec.modelProfileId;
+    const next = await this.d.models.resolve(profileId);
+    if (!next || next.profileId !== profileId) throw new SessionError("validation", "没有这个模型配置");
+    const agent = this.d.models.agentOf(profileId);
+    if (agent !== rec.agent) throw new SessionError("validation", `这个模型配置是给 ${agent} 用的，这个会话是 ${rec.agent}`);
+    if (next.source === "gateway" && !next.apiKey) throw new SessionError("validation", `「${next.label}」还没填钥匙`);
+    // 思考程度：带了就用（null 是回到自动）；只换模型时，原来选的新模型也支持就留着，不支持就回到自动
+    const efforts = this.d.models.efforts(profileId);
+    const effort = req.effort !== undefined ? req.effort ?? undefined : rec.effort && efforts.includes(rec.effort) ? rec.effort : undefined;
+    if (effort && !efforts.includes(effort)) throw new SessionError("validation", `「${next.label}」不能选「${effort}」这档思考程度`);
+    const run = this.runs.get(id);
+    if (!run || this.starting.has(id)) {
+      this.applyModel(rec, next, effort);
+      return { applied: "now", session: this.summary(rec) };
+    }
+    const cur = await this.d.models.resolve(rec.modelProfileId);
+    const sameEnv = cur && rec.agent === "claude-code" && cur.source === next.source && cur.baseUrl === next.baseUrl && cur.apiKey === next.apiKey && cur.webSearch === next.webSearch;
+    if (sameEnv) {
+      const plan = this.runFor(rec, next, effort ?? null);
+      const modelOk = profileId === rec.modelProfileId || await run.setModel(next.source === "gateway" ? next.model! : next.model ?? plan.launch.model);
+      // 订阅才传思考程度：要的和现在跑的不一样就当场换
+      const effortOk = !modelOk || next.source !== "subscription" || plan.view.effort === rec.run?.effort || await run.setEffort(plan.launch.effort);
+      if (modelOk && effortOk) {
+        this.applyModel(rec, next, effort, plan.view);
+        return { applied: "now", session: this.summary(rec) };
+      }
+    }
+    rec.pendingModel = { modelProfileId: next.profileId, modelLabel: next.label, effort: effort ?? null };
+    this.save(rec);
+    if (this.swapModel(rec)) return { applied: "now", session: this.summary(rec) };
+    this.emit(rec, { type: "notice", level: "info", code: "model_pending", text: `这一轮做完后换成「${next.label}」${effort ? ` · 思考 ${effort}` : ""}` });
+    this.syncStatus(rec);
+    return { applied: "after_turn", session: this.summary(rec) };
+  }
+
+  /** 换上新模型、思考程度：记进会话、跑法跟着换（实际模型等执行方再报），事件流记一条、报给云端。effort 不带是回到自动。 */
+  private applyModel(rec: SessionRecord, model: ResolvedModel, effort: TLocalEffort | undefined, view?: TLocalRun) {
+    rec.modelProfileId = model.profileId;
+    rec.modelLabel = model.label;
+    delete rec.pendingModel;
+    if (effort) rec.effort = effort;
+    else delete rec.effort;
+    rec.run = view ?? this.runFor(rec, model).view;
+    this.save(rec);
+    const said = [rec.run.modelName, rec.run.effort ? `思考 ${rec.run.effort}` : null].filter(Boolean).join(" · ");
+    this.emit(rec, { type: "notice", level: "info", code: "model_changed", text: `换成了「${model.label}」${said ? ` · ${said}` : ""}` });
+    this.syncStatus(rec);
+  }
+
+  /**
+   * 跨来源换模型：在两轮之间（没在一轮里、没有在等批准或回答、没有在跑的后台任务）才重开——停掉旧进程，用 --resume 接着原来的对话、换上新模型拉起。
+   * 重开期间说的话等它起来再送（starting）。重开了返回 true；还不到时候返回 false，等这一轮做完再试。
+   */
+  private swapModel(rec: SessionRecord): boolean {
+    const old = this.runs.get(rec.id);
+    if (!rec.pendingModel || !old || this.inTurn.has(rec.id) || this.pending.get(rec.id)?.size || this.questions.has(rec.id) || this.starting.has(rec.id)) return false;
+    if (rec.background.some((b) => b.state === "running")) return false;
+    const target = rec.pendingModel.modelProfileId;
+    const effort = rec.pendingModel.effort ?? undefined;
+    this.runs.delete(rec.id); // 旧进程退出时 onExit 认不出它，不改状态、不报停了
+    const p = (async () => {
+      await old.kill();
+      const model = await this.d.models.resolve(target);
+      if (!model || model.profileId !== target) throw new Error("要换的模型配置已被删除");
+      this.applyModel(rec, model, effort);
+      return this.startRun(rec, true);
+    })();
+    this.starting.set(rec.id, p);
+    p.catch((e: unknown) => {
+      delete rec.pendingModel;
+      this.setStatus(rec, "exited", { reason: `换模型后没接上：${e instanceof Error ? e.message : String(e)}；再发一句话会接着做` });
+    }).finally(() => this.starting.delete(rec.id));
+    return true;
+  }
+
   async setPermissionMode(id: string, mode: TLocalPermissionMode): Promise<TLocalSessionSummary> {
     const rec = this.must(id);
     if (rec.status === "done" || rec.status === "failed") throw new SessionError("conflict", "这个会话已经结束了");
@@ -1495,17 +1587,21 @@ export class SessionManager {
    * 一次拉起怎么跑：订阅按档位和预算模式（budget.ts 的 runFor）；配置里写了模型名的用配置的；网关用配置的模型名、不传思考强度、不开多 agent。
    * view 是摘要里的 run，launch 是交给 Claude Code 的。
    */
-  private runFor(rec: SessionRecord, model: ResolvedModel): { view: TLocalRun; launch: { model: string; effort: TLocalRun["effort"] & string; multiAgent: boolean } } {
-    return this.planRun({ mode: this.modeOf(rec), tier: rec.modelTier ?? "normal", verify: rec.subject.kind === "verify", budgetKey: rec.budgetKey, agent: rec.agent }, model);
+  private runFor(rec: SessionRecord, model: ResolvedModel, effort?: TLocalEffort | null): { view: TLocalRun; launch: { model: string; effort: TLocalRun["effort"] & string; multiAgent: boolean } } {
+    // effort 不传用会话选的那档，null 是按档位和预算模式定
+    const chosen = effort === undefined ? rec.effort : effort ?? undefined;
+    return this.planRun({ mode: this.modeOf(rec), tier: rec.modelTier ?? "normal", verify: rec.subject.kind === "verify", budgetKey: rec.budgetKey, agent: rec.agent, effort: chosen }, model);
   }
 
   /** runFor 的算法本身（开工前预览也用它）：view 带来源和给人看的模型名，actual 等执行方报了再填。 */
-  private planRun(p: { mode: TBudgetMode; tier: TLocalModelTier; verify: boolean; budgetKey: string | null; agent: TLocalAgentKind }, model: ResolvedModel) {
-    const launch = runFor({
+  private planRun(p: { mode: TBudgetMode; tier: TLocalModelTier; verify: boolean; budgetKey: string | null; agent: TLocalAgentKind; effort?: TLocalEffort }, model: ResolvedModel) {
+    const auto = runFor({
       mode: p.mode, tier: p.tier, verify: p.verify,
       budgetState: p.budgetKey && this.d.budgets ? this.d.budgets.judge(p.budgetKey, this.liveMs(p.budgetKey)) : "ok",
       quotaPercent: this.d.quota?.usedPercent() ?? null, quotaWarning: this.d.quota?.warning() ?? false,
     });
+    // 本人选了思考程度就用它（设计 17.2 第 36 条），不选按档位和预算模式定
+    const launch = p.effort ? { ...auto, effort: p.effort } : auto;
     const used = model.source === "gateway" ? model.model : model.model ?? launch.model;
     const named = { source: model.source, sourceLabel: model.label, harness: p.agent, origin: model.origin, modelName: used ? this.d.models.displayName(used) : null, actual: null };
     const view: TLocalRun = model.source === "gateway"
@@ -1519,7 +1615,8 @@ export class SessionManager {
     const model = await this.d.models.resolve(req.modelProfileId);
     if (!model) throw new SessionError("validation", "没有这个模型配置");
     const budgetKey = req.taskBudget?.taskId ? Budgets.key(req.taskBudget.taskId, "") : null;
-    return this.planRun({ mode: req.taskBudget?.budget.mode ?? "auto", tier: req.modelTier ?? "normal", verify: false, budgetKey, agent: req.agent ?? "claude-code" }, model).view;
+    if (req.effort && !this.d.models.efforts(model.profileId).includes(req.effort)) throw new SessionError("validation", `「${model.label}」不能选「${req.effort}」这档思考程度`);
+    return this.planRun({ mode: req.taskBudget?.budget.mode ?? "auto", tier: req.modelTier ?? "normal", verify: false, budgetKey, agent: req.agent ?? "claude-code", effort: req.effort }, model).view;
   }
 
   /**

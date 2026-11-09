@@ -157,13 +157,15 @@ describe("本人加的工具：读的照权限模式放行，写的哪一档都�
     expect(presetReads("custom", "query_voucher")).toBe(false);
   });
 
-  it("读的：自动、全部放行不问，每次都问、先出计划、自动接受改文件照问；写的和认不出的：哪一档都问", () => {
+  it("读的：自动、全部放行不问，每次都问、先出计划、自动接受改文件照问；写的和认不出的：除了全部放行都问", () => {
     expect([allows("auto", "mcp__tool-kd__query_voucher"), allows("bypassPermissions", "mcp__tool-kd__query_voucher")]).toEqual([true, true]);
     for (const mode of ["default", "plan", "acceptEdits"] as const) expect(allows(mode, "mcp__tool-kd__query_voucher")).toBe(false);
-    for (const mode of ["auto", "bypassPermissions", "acceptEdits", "default"] as const) {
+    for (const mode of ["auto", "acceptEdits", "default"] as const) {
       expect(allows(mode, "mcp__tool-kd__save_voucher")).toBe(false);
       expect(allows(mode, "mcp__tool-other__query_voucher")).toBe(false);
     }
+    // 全部放行只问三类（设计 17.2 第 33 条）：本人加的工具写的也放
+    expect([allows("bypassPermissions", "mcp__tool-kd__save_voucher"), allows("bypassPermissions", "mcp__tool-other__query_voucher")]).toEqual([true, true]);
   });
 });
 

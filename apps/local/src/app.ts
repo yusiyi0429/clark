@@ -29,6 +29,8 @@ import { createDesktop, openUrl, type Desktop, type MenuAction } from "./desktop
 
 export interface RunnerOptions {
   dataDir?: string;
+  /** 测试用：当成本人主目录的地方（新建文件夹默认建在它的 Desktop 下），不碰真的主目录。 */
+  home?: string;
   port?: number;
   dev?: boolean;
   headless?: boolean;
@@ -71,7 +73,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
     desktop.confirm("天枢本机程序 · 配对", `${label}（${origin}）想连接这台电脑上的天枢本机程序。\n\n确认码：${code}\n\n和网页上显示的一致才点「是」。`));
   const models = new ModelProfiles(config.dataDir, secrets);
   const customTools = new CustomTools(config.dataDir, secrets, opts.fetchImpl ?? fetch);
-  const folders = new Folders(config.dataDir);
+  const folders = new Folders(config.dataDir, opts.home);
   const cloud = new CloudLink(config.dataDir, secrets, config.allowedOrigins);
   const settings = new Settings(config.dataDir, config.allowedOrigins);
   const outbox = new Outbox(config.dataDir, () => cloud.target(), { deviceId: config.deviceId, runnerVersion: VERSION }, opts.fetchImpl);

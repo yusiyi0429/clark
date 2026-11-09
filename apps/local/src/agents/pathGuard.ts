@@ -262,15 +262,64 @@ function mustAsk(tool: string, input: Record<string, unknown>, scope: PathScope,
   return collect(tool, input, scope, insideAny(scope.allowedRoots()), hint).length > 0;
 }
 
+/** gh 只读的：看、列、查状态、搜（gh api 只发 GET、不带字段）。别的（pr create、pr merge、release create、issue comment、api 发 POST…）都算写。 */
+const GH_READ_VERB = new Set(["view", "list", "ls", "status", "diff", "checks", "search", "watch", "download", "browse"]);
+function ghWrites(cmd: string): boolean {
+  for (const m of cmd.matchAll(/(?:^|[\s;&|(])gh\s+([^;&|\n]*)/g)) {
+    const words = m[1]!.trim().split(/\s+/).filter(Boolean);
+    const head = words.filter((w) => !w.startsWith("-"));
+    const [a, b] = head.map((w) => w.toLowerCase());
+    if (!a || a === "help" || a === "version" || a === "status" || a === "search" || a === "browse") continue;
+    if (a === "auth" && (b === "status" || b === "token")) continue;
+    if (a === "api") {
+      const method = /(?:^|\s)(?:-X|--method)[=\s]+(\w+)/i.exec(m[1]!)?.[1]?.toUpperCase();
+      if ((!method || method === "GET") && !/(?:^|\s)(-f|-F|--field|--raw-field|--input)(?:[=\s]|$)/.test(m[1]!)) continue;
+      return true;
+    }
+    if (b && GH_READ_VERB.has(b)) continue;
+    return true;
+  }
+  return false;
+}
+
+/** 飞书命令行里给别人发消息的：快捷命令名里有发、回复、转发、加急；按资源调 im、mail 的写方法；直接调消息、邮件的接口。认不清（套在 $( ) 里）的算。 */
+const LARK_MESSAGE_PART = new Set(["send", "reply", "forward", "urgent"]);
+function larkMessages(cmd: string): boolean {
+  if (/lark/i.test(cmd) && /\$\(|`|<\(/.test(cmd)) return true;
+  for (const m of cmd.matchAll(/\blark-cli\b([^;&|\n]*)/gi)) {
+    const words = m[1]!.trim().split(/\s+/).filter(Boolean);
+    const head: string[] = [];
+    for (const w of words) { if (w.startsWith("-")) break; head.push(w.toLowerCase()); }
+    const shortcut = head.find((w) => w.startsWith("+"));
+    if (shortcut && shortcut.slice(1).split("-").some((p) => LARK_MESSAGE_PART.has(p))) return true;
+    if ((head[0] === "im" || head[0] === "mail") && !shortcut && head.length >= 3 && !larkRead(words)) return true;
+    if (head[0] === "api" && /\/(im|mail)\//i.test(m[1]!) && !/^get$/i.test(head[1] ?? "")) return true;
+  }
+  return false;
+}
+
 /**
- * 这一档下这一步能不能不问本人就放行（契约 LocalPermissionMode）。worktree：卡在自己的工作树里做时是工作树的根，
+ * 「全部放行」也照问的三类（设计 17.2 第 33 条）：推代码或开 PR（git push、gh 写的）、给别人发消息（飞书发消息、回复、转发、发邮件）、
+ * 在天枢里替本人写入（天枢 MCP 写的工具）。别的（联网、装东西、碰 .git、允许范围以外的路径、本人加的工具写的等）都放行。
+ */
+function bypassAsks(tool: string, input: Record<string, unknown>): boolean {
+  if (tool.startsWith("mcp__tianshu__")) return !/^mcp__tianshu__(get|list)_/.test(tool);
+  if (!SHELL_TOOLS.has(tool)) return false;
+  const cmd = input.command;
+  if (typeof cmd !== "string") return true;
+  if (/(git|gh)/i.test(cmd) && /\$\(|`|<\(/.test(cmd)) return true; // 套在 $( )、反引号里认不清
+  return /\bgit\b[^;&|\n]*\bpush\b/i.test(cmd) || ghWrites(cmd) || larkMessages(cmd);
+}
+
+/**
+ * 这一档下这一步能不能不问本人就放行（契约 LocalPermissionMode）。「全部放行」只问 bypassAsks 那三类；别的档还有硬规矩（mustAsk）。worktree：卡在自己的工作树里做时是工作树的根，
  * 「自动」「自动接受改文件」只在工作树里自己放行；别的会话为 null，在允许的文件夹里放行，「自动」不在工作树时删、挪文件的命令照样问（没有 git 兜底）。
  */
 export function modeAllows(
   mode: "auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions", tool: string, input: Record<string, unknown>, scope: PathScope, hint: unknown, worktree: string | null,
 ): boolean {
+  if (mode === "bypassPermissions") return !bypassAsks(tool, input);
   if (mode === "default" || mode === "plan" || mustAsk(tool, input, scope, hint)) return false;
-  if (mode === "bypassPermissions") return true;
   const area: PathScope = worktree ? { ...scope, allowedRoots: () => [worktree] } : scope;
   if (mode === "acceptEdits") return EDIT_TOOLS.has(tool) && !collect(tool, input, area, insideAny(area.allowedRoots()), hint).length;
   if (!autoAllowed(tool, input, area, hint)) return false;

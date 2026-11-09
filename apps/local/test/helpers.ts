@@ -21,6 +21,8 @@ export async function startTestRunner(opts: {
   toolsExec?: ToolExec; holdTiming?: RunnerOptions["holdTiming"]; codexLimits?: RunnerOptions["codexLimits"]; cloneRepo?: RunnerOptions["cloneRepo"];
   /** 换掉默认的假托盘（测由桌面版托管时用）。 */
   desktop?: RunnerOptions["desktop"];
+  /** 当成本人主目录的地方（测新建文件夹，不碰真的桌面）。 */
+  home?: string;
 } = {}) {
   // 给 dataDir 时接着用上一次的数据（测重启）
   const dataDir = opts.dataDir ?? tempDir();
@@ -38,7 +40,7 @@ export async function startTestRunner(opts: {
     // 测试不查本人电脑上真装的 gh、lark-cli
     toolsExec: opts.toolsExec ?? (async () => null), holdTiming: opts.holdTiming,
     // 测试不起本人电脑上真装的 Codex：默认当没装
-    codexLimits: opts.codexLimits ?? (async () => null), cloneRepo: opts.cloneRepo,
+    codexLimits: opts.codexLimits ?? (async () => null), cloneRepo: opts.cloneRepo, home: opts.home,
   });
   const port = (runner.server.address() as { port: number }).port;
   runner.config.port = port; // 监听随机端口时，Host 检查要按实际端口
