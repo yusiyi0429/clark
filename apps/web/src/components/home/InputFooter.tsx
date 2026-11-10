@@ -99,9 +99,11 @@ const EFFORT_KEY = "effort:";
  * 模型能选思考程度时下面再一组「思考程度」：自动在前，只列这个模型支持的几档，选了 onEffort（null 是回到自动）。
  * 名字写 label（「Opus 5.5 · 高」；换了要等这一轮做完时是「当前 → 新」），悬停 title。
  */
-export function SessionModelMenu({ label, title, models, value, onPick, efforts = [], effort = null, onEffort }: {
+export function SessionModelMenu({ label, title, models, value, onPick, efforts = [], effort = null, onEffort, disabled = [] }: {
   label: string; title?: string; models: readonly TLocalModelProfile[]; value: string | null; onPick: (id: string) => void;
   efforts?: readonly TLocalEffort[]; effort?: TLocalEffort | null; onEffort?: (effort: TLocalEffort | null) => void;
+  /** 灰着不能选的模型（另一个执行方的，见 CROSS_AGENT_SWITCH）。 */
+  disabled?: readonly string[];
 }) {
   const choose = (key: string) => {
     if (!key.startsWith(EFFORT_KEY)) { if (key !== value) onPick(key); return; }
@@ -116,7 +118,7 @@ export function SessionModelMenu({ label, title, models, value, onPick, efforts 
         <b title={title}>{label}</b><ChevronDown {...ICON} />
       </Dropdown.Trigger>
       <Dropdown.Popover placement="top end" offset={8} className={h.pop}>
-        <Dropdown.Menu aria-label="模型" className={h.menuList} onAction={(key) => choose(String(key))}>
+        <Dropdown.Menu aria-label="模型" className={h.menuList} disabledKeys={disabled} onAction={(key) => choose(String(key))}>
           {groups.map((group) => (
             <Dropdown.Section key={group.agent} className={h.menuSection}>
               <Header className={h.menuHeader}>{HARNESS_NAME[group.agent]}</Header>

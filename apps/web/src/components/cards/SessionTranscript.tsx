@@ -295,12 +295,17 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
  * 子会话能换的模型和思考程度（32、36 条）：同一个执行方的模型；思考程度只列现在这个模型支持的几档。
  * 选了交给本机（PUT /v1/sessions/:id/model），换好或记下「这一轮做完后换」后重读摘要，没成 onFail。
  */
+/** 开着的子会话能不能换到另一个执行方（D 补契约后打开）。 */
+export const CROSS_AGENT_SWITCH = false;
+
 export function sessionModels(runner: LocalRunner, models: readonly TLocalModelProfile[], session: TLocalSessionSummary | null | undefined, refresh: () => unknown, onFail: () => void) {
   if (!session) return null;
   const change = (body: TLocalSessionModelRequest) => void runner.setSessionModel(session.id, body).then(() => refresh(), onFail);
   const value = session.pendingModel?.modelProfileId ?? session.modelProfileId;
   return {
-    list: models.filter((model) => model.agent === session.agent),
+    list: models,
+    // 开着的子会话换执行方（Claude Code ↔ Codex）等 D 补契约：现在两组都列，另一个执行方的灰着。
+    disabled: models.filter((model) => !CROSS_AGENT_SWITCH && model.agent !== session.agent).map((model) => model.id),
     value,
     onPick: (id: string) => change({ modelProfileId: id }),
     efforts: models.find((model) => model.id === value)?.efforts ?? [],
@@ -332,7 +337,7 @@ export function SessionComposer({ label, disabled, onSend, dock, subject, mode, 
       <InputBar placeholder="" label={label} disabled={disabled} dock={dock} busy={busy} interruptible onStop={onStop} draftKey={`tianshu-home-draft-v1:${subject.kind}:${subject.id}`}
         footer={{
           left: place ? <FolderText name={place.name} title={place.title} /> : null,
-          right: <>{model && models && !disabled ? <SessionModelMenu label={model.label} title={model.title} models={models.list} value={models.value} onPick={models.onPick} efforts={models.efforts} effort={models.effort} onEffort={models.onEffort} />
+          right: <>{model && models && !disabled ? <SessionModelMenu label={model.label} title={model.title} models={models.list} value={models.value} onPick={models.onPick} efforts={models.efforts} effort={models.effort} onEffort={models.onEffort} disabled={models.disabled} />
             : model ? <FootText title={model.title} testId="session-model">{model.label}</FootText> : null}{mode ? <PermissionModeMenu modes={mode.modes} value={mode.value} disabled={disabled} onChange={mode.set} /> : null}</>,
         }}
         onSend={async (text, files) => onSend(text, files.length ? await uploadToSubSession(subject, files) : [])} />

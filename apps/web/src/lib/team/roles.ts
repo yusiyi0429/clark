@@ -73,7 +73,11 @@ export async function setCardRole(cardId: string, version: number, role: CardRol
 
 /** 岗位档位落到具体模型：强 → Opus，中 → Sonnet，轻 → Haiku 一类；认不出时用默认模型。 */
 const TIER_MATCH: Record<ModelTier, RegExp> = { strong: /opus/i, normal: /sonnet/i, light: /haiku|flash|mini|lite/i };
-export function modelForTier<T extends { model: string | null; label: string; isDefault: boolean }>(models: T[], tier: ModelTier): T | null {
+/**
+ * 按档位配模型（「自动」）：只在 Claude Code 的模型里挑（设计 17.2 第 38 条：Codex 要本人自己选；规划员只能用 Claude Code）。
+ */
+export function modelForTier<T extends { model: string | null; label: string; isDefault: boolean; agent?: string }>(all: T[], tier: ModelTier): T | null {
+  const models = all.filter((entry) => (entry.agent ?? "claude-code") === "claude-code");
   return models.find((entry) => TIER_MATCH[tier].test(`${entry.model ?? ""} ${entry.label}`)) ?? models.find((entry) => entry.isDefault) ?? models[0] ?? null;
 }
 

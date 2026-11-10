@@ -37,7 +37,7 @@ export const chatModelLabel = (model: { provider: string; model: string } | null
 export const HARNESS_NAME: Record<TLocalAgentKind, string> = { "claude-code": "Claude Code", codex: "Codex" };
 
 /** 一个模型配置的模型名：照本机的写法（claude-opus-5-5 →「Opus 5.5」，网关模型去掉「来源/」前缀）；没写模型的（订阅默认）用配置名。 */
-export const profileModel = (profile: Pick<TLocalModelProfile, "model" | "label">) => (profile.model ? modelDisplayName(profile.model) : profile.label);
+export const profileModel = (profile: Pick<TLocalModelProfile, "model" | "label" | "catalog">) => (profile.catalog || !profile.model ? profile.label : modelDisplayName(profile.model));
 /** 一个模型配置的来源：本机认出的（D 契约 12541f55 的 origin.label，如「Codex 订阅 · 经 magpie」）；老版本本机不带时，订阅写「我的 Claude 订阅」，别的写配置名。 */
 export const profileSource = (profile: Pick<TLocalModelProfile, "origin" | "source" | "label">) =>
   profile.origin?.label ?? (profile.source === "subscription" ? "我的 Claude 订阅" : profile.label);

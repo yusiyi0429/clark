@@ -3,7 +3,7 @@
  * 接口和类型照 packages/contracts/src/localRunner.ts，两边不各写一份。
  */
 import type {
-  TLocalCloudLinkRequest, TLocalCloudLinkView, TLocalCreateSessionBatchResponse, TLocalCreateSessionRequest, TLocalFolder, TLocalHealthResponse, TLocalMergeResponse,
+  TLocalAgentKind, TLocalCloudLinkRequest, TLocalCloudLinkView, TLocalCreateSessionBatchResponse, TLocalCreateSessionRequest, TLocalFolder, TLocalHealthResponse, TLocalMergeResponse,
   TLocalModelProfile, TLocalModelProfileUpsert, TLocalTool, TLocalToolUpsert, TLocalPairingStartResponse, TLocalPairingStatusResponse,
   TLocalPermissionDecisionRequest, TLocalQuestionAnswerRequest, TLocalRunnerErrorCode, TLocalSendMessageRequest, TLocalSendMessageResponse, TLocalSessionDetailResponse,
   TLocalSessionEvent, TLocalSessionSummary, TLocalSettings, TLocalSettingsPatch, TLocalStatusResponse, TLocalBudgetUpdateRequest, TLocalTaskBudgetView, TLocalAttachmentRef,
@@ -38,7 +38,8 @@ export interface LocalRunner {
   pairingStatus(pairingId: string): Promise<TLocalPairingStatusResponse>;
   unpair(): Promise<void>;
   status(): Promise<TLocalStatusResponse>;
-  login(): Promise<void>;
+  /** 登录执行方（不填是 Claude Code）：本机替本人开浏览器（D 契约 b28c1f12，Codex 也走这里，没有贴码）。 */
+  login(agent?: TLocalAgentKind): Promise<void>;
   linkCloud(body: TLocalCloudLinkRequest): Promise<TLocalCloudLinkView>;
   patchSettings(patch: TLocalSettingsPatch): Promise<TLocalSettings>;
   listModels(): Promise<TLocalModelProfile[]>;

@@ -48,7 +48,7 @@ describe("子会话换模型（32 条，D 契约 5e52c73f）", () => {
     expect(pending.label).toMatch(/^Claude Code · .+ → deepseek-v4\.1-flash$/);
     expect(pending.title).toBe(PENDING_MODEL_TITLE);
     const html = renderToStaticMarkup(<SessionComposer label="插话" disabled={false} onSend={vi.fn()} subject={subject} model={{ label: pending.label, title: pending.title ?? undefined }}
-      models={{ list: [], value: "tokenhub-deepseek", onPick: vi.fn(), efforts: [], effort: null, onEffort: vi.fn() }} />);
+      models={{ list: [], value: "tokenhub-deepseek", onPick: vi.fn(), efforts: [], effort: null, onEffort: vi.fn(), disabled: [] }} />);
     expect(html).toContain(`title="${PENDING_MODEL_TITLE}"`);
     expect(html).toContain('data-testid="session-model"');
     let after = changed.session;

@@ -13,7 +13,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNod
 import { Boxes, Check, ChevronDown, Copy, Database, GitBranch, MessageSquare, Monitor, Plug, Terminal, X } from "lucide-react";
 import { Dropdown } from "@heroui/react";
 import { Popover } from "ts-design/primitives";
-import type { TLocalDeviceView, TLocalTool, TLocalToolUpsert } from "@warmap/contracts";
+import type { TLocalAgentKind, TLocalDeviceView, TLocalTool, TLocalToolUpsert } from "@warmap/contracts";
 import { HeroButton } from "@/components/HeroButton";
 import { ConnectionDialog } from "@/components/ConnectionDialog";
 import { WechatConnectPanel, readWechatConnection, type WechatConnection } from "@/components/WechatConnect";
@@ -70,7 +70,7 @@ function ThisComputer({ me }: { me: Me | null }) {
   const status = local.status;
   const ready = local.phase === "ready";
   const now = Date.now();
-  const login = async () => { await local.runner.login(); await local.refresh(); };
+  const login = (agent: TLocalAgentKind) => async () => { await local.runner.login(agent); await local.refresh(); };
   const patch = (body: Parameters<typeof local.runner.patchSettings>[0]) => actions.run("settings", async () => { await local.runner.patchSettings(body); await local.refresh(); });
 
   // 额度和右栏「用量」同一套数：订阅的挂在 Claude Code、Codex 下面，其余（网关余额、当天花费）挂在 TokenHub 下面。
@@ -90,7 +90,7 @@ function ThisComputer({ me }: { me: Me | null }) {
         {ready && status ? <>
           {status.agents.map((agent) => {
             const own = cellsOf(agent.kind === "claude-code" ? "claude" : "codex");
-            return rowOf(agentRow(agent, now, own.some((cell) => cell.value === "用完")), own.length ? own.map((cell) => <QuotaBlock key={cell.id} cell={cell} />) : null, login);
+            return rowOf(agentRow(agent, now, own.some((cell) => cell.value === "用完")), own.length ? own.map((cell) => <QuotaBlock key={cell.id} cell={cell} />) : null, login(agent.kind));
           })}
           {rowOf(tokenHubRow(local.models), gatewayCells.length ? gatewayCells.map((cell) => <QuotaBlock key={cell.id} cell={cell} />) : null)}
           <Row testId="row-folders" name="文件夹" sub={local.folders.length ? `${local.folders.length} 个` : null}

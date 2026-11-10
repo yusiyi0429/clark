@@ -3,6 +3,7 @@
  * 模型和文件夹本人选（记住上一次）。卡的模型同时记到云端的卡上（只存名字）。云端接口还没有时，卡的交代用标题和完成标准拼一段。
  */
 import type { TLocalEffort, TLocalPermissionMode } from "@warmap/contracts";
+import { AGENT_PERMISSION_MODES } from "./permissionModes";
 import type { TLocalCreateSessionRequest, TLocalModelProfile, TLocalSessionSummary } from "./runner";
 import type { LocalRunner } from "./runner";
 import { cardBrief, patchCard, planBrief, projectPlanBrief, topicBrief, CloudError, type PlanTarget } from "@/lib/board/cloud";
@@ -29,6 +30,9 @@ export function fallbackCardBrief(item: CardItem): string {
  * 一张卡的开工请求：换了岗位先记到卡上（交代按卡上的岗位出），再取交代；模型记到卡上（记不上不耽误开工）。
  * 单开和一批开工（派活单）都用它。
  */
+/** 项目的默认权限档这个执行方没有（Codex 没有「先出计划」）时不带，本机按它的默认开（设计 17.2 第 38 条）。 */
+const modeFor = (model: TLocalModelProfile, mode?: TLocalPermissionMode) => (mode && (AGENT_PERMISSION_MODES[model.agent] as readonly TLocalPermissionMode[]).includes(mode) ? { permissionMode: mode } : {});
+
 export async function cardStartRequest(item: CardItem, model: TLocalModelProfile, cwd: string, role: RoleView | null = null, permissionMode?: TLocalPermissionMode, effort?: TLocalEffort | null): Promise<TLocalCreateSessionRequest> {
   let version = item.version;
   if (role && role.id !== cardRole(item)?.id) version = await setCardRole(item.id, version, role);
@@ -45,7 +49,7 @@ export async function cardStartRequest(item: CardItem, model: TLocalModelProfile
   // 要等的前面的卡（派活单上规划员写的先后）：本机等它们在这台电脑上合回再开始。
   const after = item.card?.after ?? [];
   return { subject: { kind: "card", cardId: item.id }, title: item.title.slice(0, 120), cwd, modelProfileId: model.id, firstMessage, ...(brief?.role ? { role: localRole(brief.role) } : {}),
-    ...(after.length ? { after } : {}), ...(permissionMode ? { permissionMode } : {}), ...(effort ? { effort } : {}) };
+    ...(after.length ? { after } : {}), ...modeFor(model, permissionMode), ...(effort ? { effort } : {}) };
 }
 
 export async function startCard(runner: LocalRunner, item: CardItem, model: TLocalModelProfile, cwd: string, role: RoleView | null = null, effort?: TLocalEffort | null): Promise<TLocalSessionSummary> {
@@ -55,7 +59,7 @@ export async function startCard(runner: LocalRunner, item: CardItem, model: TLoc
 /** 专题：交代带岗位和评审会用的挑刺岗位（critics 是本人点的那几个，不点用团队里的前三个），本机从最新一版往下编号。 */
 export async function startTopic(runner: LocalRunner, topic: { id: string; title: string }, model: TLocalModelProfile, critics?: string[], permissionMode?: TLocalPermissionMode, effort?: TLocalEffort | null): Promise<TLocalSessionSummary> {
   let request: TLocalCreateSessionRequest = { subject: { kind: "topic", topicId: topic.id }, title: topic.title.slice(0, 120), modelProfileId: model.id, firstMessage: `# 调研专题：${topic.title}`,
-    ...(permissionMode ? { permissionMode } : {}), ...(effort ? { effort } : {}) };
+    ...modeFor(model, permissionMode), ...(effort ? { effort } : {}) };
   try {
     const brief = await topicBrief(topic.id, critics);
     request = { ...request, firstMessage: brief.markdown, ...(brief.latestVersion ? { versionBase: brief.latestVersion } : {}),
