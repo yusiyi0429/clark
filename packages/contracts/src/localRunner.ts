@@ -201,7 +201,8 @@ export const LocalUsageKind = Type.Union([Type.Literal("subscription"), Type.Lit
  * 一个用量来源（右栏「用量」的一格，新首页设计 14.4）。来源不限几家，按这个形状往下排：
  * - Claude 订阅（id claude）：本机向 Claude Code 读（get_usage，不发提示、不花 token），跑着的卡实时报的 rate_limit_event 也算进来；
  * - Codex 订阅（id codex，装了 Codex 才有）：codex app-server 的 account/rateLimits/read（11/07 实测 0.159.2 约 5 秒，不花 token），按窗口长度认 5 小时和本周，
- *   Codex 不报警戒线，只看到没到 100%；只显示，不挡卡；
+ *   Codex 不报警戒线，只看到没到 100%。Codex 子会话跑着时每次模型回复后它报的 account/rateLimits/updated 也算进来；
+ *   用完了（它报 usageLimitExceeded，或读到 100%）Codex 的卡停下等额度（LocalHold usage_limit），Claude Code 的卡不受影响；
  * - TokenHub（id tokenhub:<网关主机>，kind daily_spend）：TokenHub 自己的统计（GET <网关主机>/api/tokavi/v1/log/usage，用本机存的那把钥匙，只能查这把钥匙所在的账户，
  *   每人一个计费账户，就是本人的），amounts 是今天（本机 0 点起）、monthAmounts 是本月（1 日 0 点起）花了多少，按币种各一笔，estimated false，不换算；半小时一格；
  * - 别的 API（MiniMax、DeepSeek 等，id api:<名字>，kind api_balance）：amounts 是余额。形状先留着，本机还没读。
@@ -269,7 +270,12 @@ export const LocalStatusResponse = Type.Object({
   tools: Type.Array(LocalToolStatus, { maxItems: 8 }),
 }, strict);
 
-/** POST /v1/agents/claude-code/login 的贴码兜底：浏览器显示一串代码而没有跳回时，本人贴进网页。 */
+/**
+ * POST /v1/agents/claude-code/login 的贴码兜底：浏览器显示一串代码而没有跳回时，本人贴进网页。
+ * Codex 也走 POST /v1/agents/codex/login（设计 17.2 第 38 条）：本机经 codex app-server 的 account/login/start 拿到 ChatGPT 的登录地址，
+ * 替本人打开浏览器（setup.loginUrl 同 Claude），本人点完 Codex 自己收回调（本机 1455 端口），本机收到 account/login/completed 后 phase 转 succeeded。
+ * Codex 没有贴码，login/code 对 Codex 回 400；DELETE /v1/agents/codex/setup 取消登录。Codex 没装时 install 回 501（请本人装 Codex，本机不代装）。
+ */
 export const LocalAgentLoginCodeRequest = Type.Object({ code: Type.String({ minLength: 4, maxLength: 2000 }) }, strict);
 
 // ───────────────────────── 云端关联 ─────────────────────────
@@ -299,8 +305,9 @@ export const LocalModelSource = Type.Union([Type.Literal("subscription"), Type.L
  * 思考程度（设计 17.2 第 36 条）。各执行方、各模型支持哪几档（11/09 实测，都没调模型）：
  * - Claude Code 2.1.318：握手（initialize）回的模型列表里，Opus 5.5、Fable 5.1、Sonnet 5.5、Haiku 5.5 都是 low、medium、high、xhigh、max 五档。
  *   开工用 --effort 传；开着时用控制请求 apply_flag_settings { effortLevel } 当场换（它不校验取值，本机先校验）。网关模型本机不传思考程度。
- * - Codex 0.159.2：`codex debug models` 的模型目录里每个模型自己列 supported_reasoning_levels 和 default_reasoning_level，
- *   如 gpt-6.1-sol 是 low…max 加 ultra、默认 low，gpt-5.5 是 low…xhigh、默认 medium；用 -c model_reasoning_effort 传。ultra 只有 Codex 有。
+ * - Codex 0.159.2：app-server 的 model/list（同 `codex debug models` 的模型目录，登录后按账号给）里每个模型自己列 supportedReasoningEfforts 和
+ *   defaultReasoningEffort，如 gpt-6.1-sol 是 low…max 加 ultra、默认 low，gpt-5.5 是 low…xhigh、默认 medium（11/10 实测）。ultra 只有 Codex 有。
+ *   开一轮（turn/start）时带 effort，从这一轮起生效；Codex 报的这里没有的档（如 none、minimal）不列。
  */
 export const LocalEffort = Type.Union([Type.Literal("low"), Type.Literal("medium"), Type.Literal("high"), Type.Literal("xhigh"), Type.Literal("max"), Type.Literal("ultra")]);
 /**
@@ -324,11 +331,21 @@ export const LocalModelProfile = Type.Object({
   origin: Type.Optional(LocalModelOrigin),
   /**
    * 这个模型能选的思考程度（见 LocalEffort），网页选完模型只列这几档；空的是不能选（网关模型本机不传思考程度）。
-   * Claude Code 的按它握手时报的模型列表（这台电脑上跑过一次以后记下；没跑过按 Claude 模型的五档）。老版本本机不带。
+   * Claude Code 的订阅是 Claude 模型的五档；Codex 的按它模型目录里这个模型的几档。老版本本机不带。
    */
   efforts: Type.Optional(Type.Array(LocalEffort, { maxItems: 8 })),
-  /** 不选时用哪档：null 是本机按档位和预算模式定（强 high、标准 medium、轻 low），模型自己的默认档时写那一档。老版本本机不带。 */
+  /**
+   * 不选时用哪档：null 是本机按档位和预算模式定（强 high、标准 medium、轻 low），模型自己的默认档时写那一档（Codex 写它模型目录里的默认档）。
+   * 老版本本机不带。
+   */
   defaultEffort: Type.Optional(Nullable(LocalEffort)),
+  /**
+   * 从执行方自己的模型目录现列的（设计 17.2 第 38 条）：Codex 订阅能用的每个模型一条，按 codex app-server 的 model/list（不列 hidden 的），
+   * 本人的 Codex 登录着才有。id 是 codex- 加模型名（不是字母、数字、_、- 的字换成 _），如 codex-gpt-6_1-sol；label 是 Codex 给的显示名，如 GPT-6.1-Sol；
+   * source subscription、agent codex、model 是模型名、origin「Codex 订阅」；不能改、不能删（PUT、DELETE 回 400），也不能设成默认。
+   * 5 分钟读一次，读不到时用上次读到的。网页把它们和 Claude Code 的分开成「Codex」一组。本人配的为 false；老版本本机不带。
+   */
+  catalog: Type.Optional(Type.Boolean()),
   agent: LocalAgentKind,
   baseUrl: Nullable(Type.String()),
   model: Nullable(Type.String()),
@@ -349,6 +366,8 @@ export const LocalModelListResponse = Type.Object({ profiles: Type.Array(LocalMo
  * - gateway：baseUrl、model 必填；apiKey 只写不读，不传表示保留原钥匙，传空串表示删除钥匙。
  *   地址要 https；本机地址（127.0.0.1、localhost）可以是 http。magpie（127.0.0.1:3425）不用填钥匙，本机照它的约定传 magpie；model 写「来源/模型」，如 codex/gpt-6.1。
  * - subscription：用本人登录，只选模型（如 opus、sonnet、haiku），不收 baseUrl 和 apiKey。
+ * 只收 Claude Code 的（agent 不填或 claude-code）：Codex 的模型从它自己的模型目录来（见 LocalModelProfile.catalog），这次不接 Codex 走网关；
+ * id 以 codex- 开头的留给模型目录，回 400。
  */
 export const LocalModelProfileUpsert = Type.Object({
   label: Type.String({ minLength: 1, maxLength: 40 }),
@@ -604,14 +623,20 @@ export const LocalRole = Type.Object({
  * 危险命令表里的（装东西、联网下载、ssh、sudo、改注册表和系统设置、跑没装好的 npx 包）、碰 .git 和 .claude 的、碰允许的文件夹以外的路径、
  * 天枢 MCP 里写的工具、本人加的工具里不是读的。卡和规划员、验收员本来不给的工具（只读的会话不给写文件）照旧不给，跟模式无关。
  * 实现上 Claude Code 一律以「每次都问」起（只有 plan 用它自己的 plan 模式），每个请求都先到本机、本机按档位放行或转给网页：
- * Claude Code 自己的 auto、bypassPermissions 放行的步骤不经本机，硬规矩管不住。
+ * Claude Code 自己的 auto、bypassPermissions 放行的步骤不经本机，硬规矩管不住。Codex 同理，见 LOCAL_AGENT_PERMISSION_MODES。
  */
 export const LocalPermissionMode = Type.Union([
   Type.Literal("auto"), Type.Literal("default"), Type.Literal("acceptEdits"), Type.Literal("plan"), Type.Literal("bypassPermissions"),
 ]);
 /**
- * 每种执行方能选哪几档（没有的不出现在选择里）。Codex（12 月接）走 app-server 的审批（每一步都先问本机），能像 Claude Code 一样由本机按档位放行，
- * 只是没有「先出计划」；接上时按实测再定。
+ * 每种执行方能选哪几档（没有的不出现在选择里）。Codex 没有「先出计划」。
+ * Codex（设计 17.2 第 38 条）一律以 approvalPolicy untrusted、sandbox read-only 起，每一步都先到本机，本机按档位放行或转给网页，规则和 Claude Code 同一套。
+ * 11/10 用 codex-cli 0.159.2 加本机假网关实测（没调模型）：
+ * - 命令：Windows 上每条都包进 PowerShell，连目录里的读（Get-Content）都来问（item/commandExecution/requestApproval），本人允许后照常执行；
+ * - 改文件（apply_patch）：每次都来问（item/fileChange/requestApproval）；
+ * - MCP 工具：声明只读（readOnlyHint）的直接跑、不问，别的来问（mcpServer/elicitation/request，_meta.codex_approval_kind 为 mcp_tool_call）。
+ *   所以天枢 MCP 里读的工具、本人加的工具里自己声明只读的，Codex 不经本机；写的照问。
+ * 批准不能附理由：本人拒绝时带的话，本机先作为插话送进去再拒。
  */
 export const LOCAL_AGENT_PERMISSION_MODES = {
   "claude-code": ["auto", "default", "acceptEdits", "plan", "bypassPermissions"],
@@ -630,6 +655,11 @@ export const LocalCreateSessionRequest = Type.Object({
    * topic、plan 用各自的专用目录；不带项目的卡必须填。卡的文件夹在 git 仓库里时，卡在自己的工作树里做（见 LocalWorkspace）。
    */
   cwd: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
+  /**
+   * 执行方，不填按模型配置的（再没有是 Claude Code）。和模型配置的执行方不一样回 400。
+   * 规划员（kind=plan）只能用 Claude Code（400）：开工前要用选项框问本人（18.11），Codex 0.159.2 的提问工具只在它自己的计划模式里给。
+   * Codex 会话里没有选项框，模型要问就直接写在回复里，会话转成等你回复。
+   */
   agent: Type.Optional(LocalAgentKind),
   /** 不填用默认模型。 */
   modelProfileId: Type.Optional(Id),
@@ -960,11 +990,13 @@ export const LocalPermissionModeRequest = Type.Object({ mode: LocalPermissionMod
 /**
  * PUT /v1/sessions/:id/model：子会话换模型、换思考程度（天枢伙伴不走这里；设计 17.2 第 32、36 条）。modelProfileId 是本机的模型配置（GET /v1/models），
  * effort 是思考程度（要在新模型配置的 efforts 里；null 是回到按档位和预算模式定）。两项至少带一项；只带 effort 是同一个模型换思考程度：
- * Claude Code 在跑时用 apply_flag_settings 当场换（now），Codex 要重开（规则同下面的跨来源）。只换模型不带 effort 时，原来选的思考程度新模型也支持就留着，不支持就回到自动。
+ * Claude Code 在跑时用 apply_flag_settings 当场换（now）。只换模型不带 effort 时，原来选的思考程度新模型也支持就留着，不支持就回到自动。
+ * Codex 的会话（设计 17.2 第 38 条）：模型和思考程度都是开一轮（turn/start）时带，不用重开进程——没在跑时 now；正在跑一轮时 after_turn，
+ * 这一轮做完、下一轮开始时换上（摘要的 pendingModel 到那时去掉）。下面两条讲的是 Claude Code。
  * 两种生效方式，回执的 applied 写明，网页分别显示：
  * - now（已生效）：下一次回答起就用新模型。同一个执行方、同一个来源里换（订阅里 Opus 换 Haiku；同一个网关地址、同一把钥匙下换模型名）时，
  *   本机当场让 Claude Code 换（它的 set_model，11/09 实测 2.1.318 认）；会话没在跑（停了、排着、交完了）时也是 now，下次开起来就用新的。
- * - after_turn（这一轮做完后生效）：跨来源（订阅换 TokenHub、换别的网关、换钥匙）要换环境变量，或者是 Codex 的会话，只能重开执行方。
+ * - after_turn（这一轮做完后生效）：跨来源（订阅换 TokenHub、换别的网关、换钥匙）要换环境变量，只能重开执行方。
  *   正在跑的先记下（摘要的 pendingModel），这一轮做完、没有在跑的后台任务时，本机用 --resume 接着原来的对话、换上新模型重开，对话和进度不丢；
  *   会话空着（等你回复）时当场就重开，回 now。
  * 换好以后摘要和 status 同步条目里的 run（modelName、origin 等）随之更新，事件流记一条 notice（code model_changed）。

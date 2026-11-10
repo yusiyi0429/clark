@@ -109,6 +109,11 @@ describe("本机程序契约", () => {
     expect(Value.Check(LocalModelProfile, profile)).toBe(true);
     expect(Value.Check(LocalModelProfile, { ...profile, agent: "codex", efforts: ["low", "medium", "high", "xhigh", "max", "ultra"], defaultEffort: "low" })).toBe(true);
     expect(Value.Check(LocalModelProfile, { ...profile, efforts: [] })).toBe(true); // 网关模型不能选
+    // Codex 模型目录里的一条：id 是 codex- 加模型名（点换成 _），只读
+    const codex = { ...profile, id: "codex-gpt-6_1-sol", label: "GPT-6.1-Sol", agent: "codex", model: "gpt-6.1-sol", isDefault: false, catalog: true,
+      origin: { provider: "codex", label: "Codex 订阅", via: null }, efforts: ["low", "medium", "high", "xhigh", "max", "ultra"], defaultEffort: "low" };
+    expect(Value.Check(LocalModelProfile, codex)).toBe(true);
+    expect(Value.Check(LocalModelProfile, { ...codex, id: "codex:gpt-6.1-sol" })).toBe(false);
     expect(Value.Check(LocalCreateSessionRequest, { subject: { kind: "card", cardId: "c" }, title: "x", firstMessage: "y", effort: "xhigh" })).toBe(true);
     expect(Value.Check(LocalCreateSessionRequest, { subject: { kind: "card", cardId: "c" }, title: "x", firstMessage: "y", effort: "turbo" })).toBe(false);
     expect(Value.Check(LocalRunPreviewRequest, { modelProfileId: "subscription", effort: "max" })).toBe(true);
