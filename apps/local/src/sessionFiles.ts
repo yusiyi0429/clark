@@ -6,7 +6,7 @@ import { git } from "./git.js";
 
 /**
  * 在右边预览文件（设计 17.2 第 41 条，契约 LocalSessionFileReadResponse、LocalSessionFilesResponse）：读一个文件、列本会话写过改过的文件。
- * 都只看会话根（卡的工作树根，或工作目录）里面的；只读。
+ * 都只看会话根（卡的工作树根，或工作目录）和项目另外绑的文件夹（extras，第 46 条）里面的；只读。会话根里的 path 相对会话根，另外的文件夹里的是绝对路径。
  */
 const MAX_TEXT_BYTES = 1024 * 1024;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -55,20 +55,21 @@ function within(root: string, p: string): boolean {
 }
 
 /**
- * 读一个文件。path 是绝对路径，或相对路径：先按工作目录找（执行方说的相对路径是相对它的），没有再按会话根找。
- * 先按字面判在不在会话根里，再按解析掉链接的真实路径判一遍（指到外面的链接也算在外面）。
+ * 读一个文件。path 是绝对路径，或相对路径：先按工作目录找（执行方说的相对路径是相对它的），没有再按会话根找；不去另外的文件夹里猜同名的。
+ * 先按字面判在不在会话根、另外的文件夹里，再按解析掉链接的真实路径判一遍（指到外面的链接也算在外面）。
  */
-export function readSessionFile(root: string, cwd: string, path: string): TLocalSessionFileReadResponse {
+export function readSessionFile(root: string, cwd: string, path: string, extras: string[] = []): TLocalSessionFileReadResponse {
   if (path.includes("\0")) throw new SessionFileError("validation", "路径不对");
   const given = sep === "/" ? path.replace(/\\/g, "/") : path; // 反斜杠在 Mac、Linux 上也当分隔符（回答里的路径可能是在 Windows 上写的）
-  const inside = [...new Set([resolve(cwd, given), resolve(root, given)])].filter((p) => within(root, p));
+  const roots = [root, ...extras];
+  const inside = [...new Set([resolve(cwd, given), resolve(root, given)])].filter((p) => roots.some((r) => within(r, p)));
   if (!inside.length) throw new SessionFileError("folder_not_allowed", "只能读本会话的文件夹或工作树里的文件");
   const abs = inside.find((p) => existsSync(p) && statSync(p).isFile());
   if (!abs) throw new SessionFileError("not_found", "文件不存在");
-  if (!isInside(root, abs)) throw new SessionFileError("folder_not_allowed", "只能读本会话的文件夹或工作树里的文件");
+  if (!roots.some((r) => isInside(r, abs))) throw new SessionFileError("folder_not_allowed", "只能读本会话的文件夹或工作树里的文件");
   const st = statSync(abs);
   const ext = extname(abs).toLowerCase();
-  const meta = { path: posix(relative(root, abs)), absolutePath: abs, name: basename(abs), size: st.size, modifiedAt: st.mtime.toISOString() };
+  const meta = { path: within(root, abs) ? posix(relative(root, abs)) : posix(abs), absolutePath: abs, name: basename(abs), size: st.size, modifiedAt: st.mtime.toISOString() };
   if (IMAGE_MIME[ext]) {
     const fits = st.size <= MAX_IMAGE_BYTES;
     return { ...meta, kind: "image", mimeType: IMAGE_MIME[ext], encoding: "base64", content: fits ? head(abs, MAX_IMAGE_BYTES).toString("base64") : null, truncated: !fits };
@@ -119,14 +120,18 @@ async function gitFiles(cwd: string, base: string): Promise<string[]> {
 /**
  * 本会话写过、改过的文件。只列会话根里面的；按路径排，最多 500 个。base 是卡开工时的提交（在工作树里做的才有）：
  * 工作树是这张卡自己的，工具调用和 git 两路取并集；在本人文件夹里直接做的只认工具调用（11/10 用户：宁可漏掉用命令改的，也不把本人自己没提交的改动算成这个会话改的）。
+ * 项目另外绑的文件夹（extras）是本人自己的文件夹，同样只认工具调用，path 给绝对路径。
  */
-export async function listSessionFiles(root: string, cwd: string, base: string | null, events: TLocalSessionEvent[]): Promise<TLocalSessionFilesResponse> {
-  const found = new Map<string, { abs: string; sources: Set<"tool" | "git"> }>();
+export async function listSessionFiles(root: string, cwd: string, base: string | null, events: TLocalSessionEvent[], extras: string[] = []): Promise<TLocalSessionFilesResponse> {
+  const found = new Map<string, { abs: string; path: string; sources: Set<"tool" | "git"> }>();
   const add = (abs: string, source: "tool" | "git") => {
     const rel = relative(root, abs);
-    if (!rel || rel.startsWith("..") || isAbsolute(rel)) return; // 会话根外面的不列
-    const key = process.platform === "win32" ? rel.toLowerCase() : rel;
-    const entry = found.get(key) ?? { abs: join(root, rel), sources: new Set() };
+    const inRoot = Boolean(rel) && !rel.startsWith("..") && !isAbsolute(rel);
+    // 会话根外面的：只列工具动过的、在项目另外绑的文件夹里的
+    if (!inRoot && !(source === "tool" && extras.some((x) => abs !== resolve(x) && within(x, abs) && isInside(x, abs)))) return;
+    const path = inRoot ? posix(rel) : posix(abs);
+    const key = process.platform === "win32" ? path.toLowerCase() : path;
+    const entry = found.get(key) ?? { abs: inRoot ? join(root, rel) : abs, path, sources: new Set() };
     entry.sources.add(source);
     found.set(key, entry);
   };
@@ -134,7 +139,7 @@ export async function listSessionFiles(root: string, cwd: string, base: string |
   for (const p of base && existsSync(cwd) ? await gitFiles(cwd, base) : []) add(p, "git");
   const all = [...found.values()].map((f): TLocalChangedFile => {
     const st = existsSync(f.abs) ? statSync(f.abs) : null;
-    return { path: posix(relative(root, f.abs)), absolutePath: f.abs, sources: (["tool", "git"] as const).filter((s) => f.sources.has(s)), exists: Boolean(st?.isFile()), size: st?.isFile() ? st.size : null };
+    return { path: f.path, absolutePath: f.abs, sources: (["tool", "git"] as const).filter((s) => f.sources.has(s)), exists: Boolean(st?.isFile()), size: st?.isFile() ? st.size : null };
   }).sort((a, b) => a.path.localeCompare(b.path));
   return { root, files: all.slice(0, MAX_FILES), truncated: all.length > MAX_FILES };
 }
