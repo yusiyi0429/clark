@@ -26,17 +26,24 @@ const MODELS = [
   { value: "opus", resolvedModel: "claude-opus-5-5", displayName: "Opus 5.5", description: "For complex work and everyday tasks", supportsEffort: true, supportedEffortLevels: FIVE },
   { value: "claude-fable-5-2", resolvedModel: "claude-fable-5-2", displayName: "Fable 5.2", description: "For your toughest challenges", supportsEffort: true, supportedEffortLevels: FIVE },
   { value: "claude-haiku-4-5-20251001", resolvedModel: "claude-haiku-4-5-20251001", displayName: "Haiku 4.5", description: "Fastest for quick answers", supportsThinkingOff: true },
+  { value: "fable", resolvedModel: "claude-fable-5-1", displayName: "Fable 5.1", description: "Most capable", supportsEffort: true, supportedEffortLevels: FIVE },
   { value: "claude-opus-4-6", resolvedModel: "claude-opus-4-6", displayName: "Opus 4.6", description: "Best for everyday, complex tasks", supportsEffort: true, supportedEffortLevels: ["low", "medium", "high", "max", "turbo"] },
+  { value: "team-router", resolvedModel: "team-router", displayName: "Team Router", description: "认不出系列和版本的", supportsEffort: true, supportedEffortLevels: ["low", "medium", "high", "max", "turbo"] },
 ];
 
 describe("握手回的模型列表 → 目录", () => {
-  it("不列 default，思考程度只留契约里有的档、不支持选的为空，同名的只留一条；id 是 cc- 加名字", () => {
+  it("每个系列只留最新的一个（旧版本不列），认不出系列和版本的照列；不列 default；思考程度只留契约里有的档、不支持选的为空；id 是 cc- 加名字", () => {
     expect(claudeCatalogFrom([...MODELS, MODELS[1], { displayName: "没有名字" }])).toEqual([
-      { model: "opus", label: "Opus 5.5", efforts: FIVE },
-      { model: "claude-fable-5-2", label: "Fable 5.2", efforts: FIVE },
+      { model: "opus", label: "Opus 5.5", efforts: FIVE }, // Opus 4.6 是旧的，不列
+      { model: "claude-fable-5-2", label: "Fable 5.2", efforts: FIVE }, // 别名 fable 现在落在 5.1，比它旧，不列
       { model: "claude-haiku-4-5-20251001", label: "Haiku 4.5", efforts: [] },
-      { model: "claude-opus-4-6", label: "Opus 4.6", efforts: ["low", "medium", "high", "max"] },
+      { model: "team-router", label: "Team Router", efforts: ["low", "medium", "high", "max"] },
     ]);
+    // 11/10 真机回的 14 个筛下来是这四个
+    const real = [["default", "claude-fable-5-2"], ["opus", "claude-opus-5-5"], ["claude-fable-5-2", "claude-fable-5-2"], ["sonnet", "claude-sonnet-5-5"], ["haiku", "claude-haiku-5-5"],
+      ["fable", "claude-fable-5-1"], ["claude-haiku-4-5-20251001", "claude-haiku-4-5-20251001"], ["claude-sonnet-5", "claude-sonnet-5"], ["claude-opus-5", "claude-opus-5"],
+      ["claude-fable-5", "claude-fable-5"], ["claude-opus-4-8", "claude-opus-4-8"], ["claude-opus-4-7", "claude-opus-4-7"], ["claude-opus-4-6", "claude-opus-4-6"], ["claude-sonnet-4-6", "claude-sonnet-4-6"]];
+    expect(claudeCatalogFrom(real.map(([value, resolvedModel]) => ({ value, resolvedModel, displayName: value }))).map((m) => m.model)).toEqual(["opus", "claude-fable-5-2", "sonnet", "haiku"]);
     expect(claudeCatalogFrom(undefined)).toEqual([]);
     expect(claudeProfileId("claude-fable-5.2")).toBe("cc-claude-fable-5_2");
   });
@@ -92,7 +99,7 @@ describe("Claude 订阅的模型目录", { timeout: 40_000 }, () => {
     expect(Value.Check(LocalModelListResponse, { profiles })).toBe(true);
     expect(profiles.map((p: any) => [p.id, p.modelName, p.catalog, p.efforts.length])).toEqual([
       ["subscription", "自动", false, 5], ["cc-opus", "Opus 5.5", true, 5], ["cc-claude-fable-5-2", "Fable 5.2", true, 5],
-      ["cc-claude-haiku-4-5-20251001", "Haiku 4.5", true, 0], ["cc-claude-opus-4-6", "Opus 4.6", true, 4],
+      ["cc-claude-haiku-4-5-20251001", "Haiku 4.5", true, 0], ["cc-team-router", "Team Router", true, 4],
     ]);
     expect(profiles[0]).toMatchObject({ label: "Claude 订阅", isDefault: true, model: null, origin: { provider: "claude-subscription", label: "Claude 订阅", via: null } });
     expect(profiles[2]).toMatchObject({

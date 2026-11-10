@@ -99,8 +99,8 @@ function toolFiles(events: TLocalSessionEvent[], cwd: string): string[] {
   return done;
 }
 
-/** git 看得到的：没提交的改动（含新文件，一个个列），卡在工作树里做时加上开工以来已经提交的。不是仓库为空。返回绝对路径。 */
-async function gitFiles(cwd: string, base: string | null): Promise<string[]> {
+/** 卡的工作树里 git 看得到的：开工（base）以来已经提交的，加上没提交的改动（含新文件，一个个列）。返回绝对路径。 */
+async function gitFiles(cwd: string, base: string): Promise<string[]> {
   const top = await git(cwd, ["rev-parse", "--show-toplevel"]).then((s) => s.trim(), () => null);
   if (!top) return [];
   // -z：路径原样、用 NUL 隔开（带空格、引号的名字不转义）；改名、复制的那一条后面跟着原来的路径，跳过
@@ -112,13 +112,13 @@ async function gitFiles(cwd: string, base: string | null): Promise<string[]> {
     dirty.push(f.slice(3));
     if (/[RC]/.test(f.slice(0, 2))) i += 1;
   }
-  const committed = base ? await git(cwd, ["diff", "--name-only", "-z", base, "HEAD"]).then((o) => o.split("\0").filter(Boolean), () => []) : [];
+  const committed = await git(cwd, ["diff", "--name-only", "-z", base, "HEAD"]).then((o) => o.split("\0").filter(Boolean), () => []);
   return [...committed, ...dirty].map((p) => resolve(top, p));
 }
 
 /**
- * 本会话写过、改过的文件：工具调用和 git 两路取并集（各自的盲区见契约）。只列会话根里面的；按路径排，最多 500 个。
- * base 是卡开工时的提交（在工作树里做的才有）。
+ * 本会话写过、改过的文件。只列会话根里面的；按路径排，最多 500 个。base 是卡开工时的提交（在工作树里做的才有）：
+ * 工作树是这张卡自己的，工具调用和 git 两路取并集；在本人文件夹里直接做的只认工具调用（11/10 用户：宁可漏掉用命令改的，也不把本人自己没提交的改动算成这个会话改的）。
  */
 export async function listSessionFiles(root: string, cwd: string, base: string | null, events: TLocalSessionEvent[]): Promise<TLocalSessionFilesResponse> {
   const found = new Map<string, { abs: string; sources: Set<"tool" | "git"> }>();
@@ -131,7 +131,7 @@ export async function listSessionFiles(root: string, cwd: string, base: string |
     found.set(key, entry);
   };
   for (const p of toolFiles(events, cwd)) add(p, "tool");
-  for (const p of existsSync(cwd) ? await gitFiles(cwd, base) : []) add(p, "git");
+  for (const p of base && existsSync(cwd) ? await gitFiles(cwd, base) : []) add(p, "git");
   const all = [...found.values()].map((f): TLocalChangedFile => {
     const st = existsSync(f.abs) ? statSync(f.abs) : null;
     return { path: posix(relative(root, f.abs)), absolutePath: f.abs, sources: (["tool", "git"] as const).filter((s) => f.sources.has(s)), exists: Boolean(st?.isFile()), size: st?.isFile() ? st.size : null };
