@@ -468,6 +468,7 @@ export const LocalFolder = Type.Object({
  *   （不开工作树，直接读写本人的那个文件夹；卡在里面改的东西不在卡的分支上，合回时不带）。没绑是空列表。
  * - folder：就是 folders 的第一个（没绑为 null），留给只认一个文件夹的老网页。
  * - 回的东西里没有 folders 的，是老的本机程序：只能绑一个，网页照一个的上限来，也不要发 folderIds（老的本机程序不认，回 400）。
+ *   项目在这台电脑上还没有记录（GET /v1/projects 里没有它）时看不出来：先用 folderId 绑第一个，回执里有 folders 再用 folderIds 交整份。
  */
 export const LOCAL_PROJECT_FOLDER_LIMIT = 5;
 export const LocalProjectFolderRef = Type.Object({ id: Id, path: Type.String(), label: Type.String() }, strict);

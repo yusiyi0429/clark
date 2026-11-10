@@ -71,6 +71,11 @@ describe("每一档本机自己放行什么", () => {
     expect(ok("auto", "Bash", { command: `echo x > ${sh(join(docs, "a.md"))}` })).toBe(false);
     expect(ok("auto", "Bash", { command: `cp ${sh(join(tree, "a.txt"))} ${sh(join(docs, "a.txt"))}` })).toBe(false);
     expect(ok("acceptEdits", "Bash", { command: `cat ${sh(join(docs, "a.md"))}` })).toBe(false);
+    // WRITES 认不出、但一样会冲掉那里没提交的改动的：git、就地改文件的，也问
+    for (const command of [`git -C ${sh(docs)} reset --hard`, `git -C ${sh(docs)} clean -fdx`, `cd ${sh(docs)} && git checkout -- .`, `sed -i s/a/b/ ${sh(join(docs, "a.md"))}`, `perl -pi -e s/a/b/ ${sh(join(docs, "a.md"))}`]) {
+      expect(ok("auto", "Bash", { command }), command).toBe(false);
+    }
+    expect(ok("auto", "Bash", { command: "git status && git add -A" })).toBe(true); // 工作树里的 git 照旧不问
     // 工作树里照旧可以删；碰其余目录里的 .git 照样问；每次都问那一档照样问
     expect(ok("auto", "Bash", { command: `rm ${sh(join(tree, "a.txt"))}` })).toBe(true);
     expect(ok("auto", "Write", { file_path: join(docs, ".git", "config"), content: "x" })).toBe(false);

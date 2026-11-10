@@ -851,12 +851,17 @@ export class SessionManager {
   /** 工作目录里 git 看得到的改动文件：卡在工作树里做时算上开工以来已经提交的；不是仓库就是空的。 */
   /**
    * 项目另外绑的文件夹（设计 17.2 第 46 条）：项目绑着的文件夹里，除了本会话自己那个（工作目录所在的，卡在工作树里做时是开工作树的那个），都是。
-   * 每次现查：本人加了、减了，放行的范围和读文件马上跟着变；和本会话自己的文件夹互相套着的不算（免得绕过工作树去改主文件夹），磁盘上已经不在的也不算。
-   * 验收员跟着它验的那张卡算（它在卡的工作树里看，自己的文件夹就是卡的）。
+   * 每次现查：本人加了、减了，本机放行的范围和右边预览读文件马上跟着变（执行方自己知道的目录要到下一次起进程才变）。
+   * 和本会话自己的文件夹互相套着的不算，磁盘上已经不在的也不算。卡在工作树里做时，自己的文件夹按整个仓库算：工作树里有仓库的全部，
+   * 同一个仓库里别的子文件夹要是也算，卡就能绕过工作树去改主文件夹，改的东西还会挡住合回。
+   * 验收员跟着它验的那张卡算（它在卡的工作树里看）。
    */
   private extraDirs(rec: SessionRecord): string[] {
     if (!rec.subject.projectId) return [];
-    const own = (rec.parentId ? this.records.get(rec.parentId)?.workspace?.folder : null) ?? rec.workspace?.folder ?? rec.cwd;
+    const card = (rec.parentId ? this.records.get(rec.parentId) : undefined) ?? rec;
+    const ws = card.workspace;
+    // 工作树的根对着仓库的根：会话在工作树的子文件夹里时，从本人选的文件夹往上退同样几层
+    const own = ws?.kind === "worktree" ? resolve(ws.folder, relative(card.cwd, ws.path)) : ws?.folder ?? rec.cwd;
     return this.d.folders.projectFolders(rec.subject.projectId).filter((p) => !isInside(p, own) && !isInside(own, p) && existsSync(p));
   }
 
