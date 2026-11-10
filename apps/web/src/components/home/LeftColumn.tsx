@@ -26,7 +26,7 @@ import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import { useDictationSignal } from "@/conversation/dictationSignal";
 import { PersonRow } from "./PersonMenu";
 import { NewProjectDialog } from "./NewProjectDialog";
-import { useNameTip } from "./NameTip";
+import { isTruncated, useNameTip } from "./NameTip";
 import { LocalContext, latestSessionFor } from "@/lib/local/LocalRunnerProvider";
 import { runLabel } from "@/lib/local/runModel";
 import { running } from "@/lib/local/sessionView";
@@ -236,27 +236,55 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
   );
 }
 
-/** 树的键盘：在树里的可聚焦行之间 ↑↓；→ / ← 展开、收起「会话 N」「已归档 N」（焦点在那一行时）。回车由按钮自己打开。 */
+/**
+ * 树的键盘：在树里的可聚焦行之间 ↑↓；→ / ← 展开、收起「已归档 N」、项目的子会话（焦点在项目名、收起时那一行或项目名后面的箭头上，49 条）。
+ * 回车由按钮自己打开。
+ */
 function treeKeys(event: KeyboardEvent<HTMLDivElement>, root: HTMLDivElement | null) {
   if (!root) return;
+  const active = document.activeElement instanceof HTMLElement && root.contains(document.activeElement) ? document.activeElement : null;
+  if (!active) return;
   const rows = [...root.querySelectorAll<HTMLElement>("[data-tree-row]")];
-  const index = rows.indexOf(document.activeElement as HTMLElement);
-  if (index < 0) return;
+  const index = rows.indexOf(active);
   if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    if (index < 0) return;
     event.preventDefault();
     rows[Math.max(0, Math.min(rows.length - 1, index + (event.key === "ArrowDown" ? 1 : -1)))]?.focus();
     return;
   }
-  const row = rows[index]!;
-  if (row.hasAttribute("aria-expanded") && (event.key === "ArrowRight" || event.key === "ArrowLeft")) {
-    const open = row.getAttribute("aria-expanded") === "true";
-    if ((event.key === "ArrowRight") !== open) { event.preventDefault(); row.click(); }
+  if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+  // 收起时那一行：→ 等于点它（展开，焦点交回项目名）。
+  if (active.hasAttribute("data-fold-summary")) {
+    if (event.key === "ArrowRight") { event.preventDefault(); active.click(); }
+    return;
   }
+  const toggle = active.hasAttribute("aria-expanded") ? active
+    : active.hasAttribute("data-fold-row") ? active.closest("[data-project-node]")?.querySelector<HTMLElement>("[data-fold]") ?? null : null;
+  if (!toggle) return;
+  const open = toggle.getAttribute("aria-expanded") === "true";
+  if ((event.key === "ArrowRight") === open) return;
+  event.preventDefault();
+  toggle.click();
 }
 
 /**
- * 项目行（16.2）：48 高两行，第一行项目名 14/600，第二行 12 淡色（预算 80% → 本月目标 · 截止 → 本月没有目标 · 最近活动）；
- * 状态位、蓝点、信息按钮同原来的 Task 行。下面一行「会话 N」加小格子（默认收起，正在看其中一个时自动展开一次），再是本人的事项。
+ * 收起时那一行的数（49 条）：受阻 = 等你拿主意（连续两次验收没过；契约的 failed 是第一次没过，照 5.4.2 仍算进行中，不计）；
+ * 未读 = 和子会话行尾蓝点同一个判断。
+ */
+export function subsSummary(subs: SubSession[], seen?: SeenMarks): { total: number; blocked: number; unread: number } {
+  let blocked = 0, unread = 0;
+  for (const sub of subs) {
+    if (sub.state === "waiting" && sub.waiting === "verdict") blocked += 1;
+    if (subDot({ ...sub, unseen: showUnseen(sub.unseen, seen, "sub", sub.id, sub.updatedAt) })?.tone === "stopped") unread += 1;
+  }
+  return { total: subs.length, blocked, unread };
+}
+
+/**
+ * 项目行（16.2、47 条）：名字一行（转交中、预算 80% 时多一行小字）；行尾一颗点、信息按钮、「…」。
+ * 有子会话时名字后面紧跟一个箭头（49 条，照 Claude Code 侧栏）：点箭头只开合子会话，点名字照旧进项目。
+ * 收起时（默认）下面一行「N 个子会话 · N 个受阻 · N 个未读」，点了展开；展开时这一行不画，子会话直接接在项目行下面。
+ * 正在看其中一个子会话时自动展开一次。本人事项照旧列在后面，不归这个开关管。
  */
 function ProjectNode({ project, view, go, personId, cardAt, working = false }: {
   project: Project; view: View; go: (href: string) => void; personId?: string | null; cardAt?: ReadonlyMap<string, string>; working?: boolean;
@@ -280,6 +308,19 @@ function ProjectNode({ project, view, go, personId, cardAt, working = false }: {
   const actions = useContext(ActionsContext);
   const [menu, setMenu] = useState(false);
   const [renaming, setRenaming] = useState(false);
+  // 名字按字宽排（箭头紧跟在后面），放不下时才在右端淡出：淡出只在真被截断时加，不然最后几个字会被淡掉。
+  const [cut, setCut] = useState(false);
+  useEffect(() => {
+    const text = nameTip.textRef.current;
+    if (!text || typeof ResizeObserver === "undefined") return;
+    const check = () => setCut(isTruncated(text));
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(text);
+    return () => observer.disconnect();
+  }, [nameTip.textRef, project.name, renaming]);
+  const main = useRef<HTMLButtonElement>(null);
+  const summary = subs.length && !open ? subsSummary(subs, opened.seen) : null;
   const press = useLongPress(() => setMenu(true));
   const unseen = showUnseen(project.unseen, opened.seen, "project", project.id, project.lastActivity);
   // 行尾「…」（35 条）：重命名、标为已读、转交给…（进项目详情里那一处）、归档 / 恢复、删除（撤不回，删成了回首页）。
@@ -295,19 +336,25 @@ function ProjectNode({ project, view, go, personId, cardAt, working = false }: {
     if (name && actions) void actions.renameProject(project.id, name).catch(() => showWorkspaceToast({ text: "没改成" }));
   };
   return (
-    <div className={h.taskNode} data-testid="tree-project" data-done={project.archived ? "" : undefined}>
+    <div className={h.taskNode} data-testid="tree-project" data-project-node="" data-done={project.archived ? "" : undefined}>
       {renaming ? <RenameInput value={project.name} maxLength={60} onDone={rename} /> : (
-      <div className={h.taskRow} data-current={page ? "" : undefined} {...press}>
-        <button type="button" className={h.taskMain} onClick={() => { opened.onOpen?.("project", project.id, project.lastActivity); go(projectHref(project.id)); }} aria-current={page ? "page" : undefined} data-tree-row="" {...nameTip.rowProps}>
+      <div className={h.taskRow} data-current={page ? "" : undefined} data-two={line ? "" : undefined} data-project-row={actions ? "menu" : ""} {...press}>
+        {/* 名字按钮按字宽排，点的范围用 ::after 铺满整行（箭头、信息按钮、「…」盖在上面各管各的）。 */}
+        <button ref={main} type="button" className={`${h.taskMain} ${h.projectMain}`} onClick={() => { opened.onOpen?.("project", project.id, project.lastActivity); go(projectHref(project.id)); }} aria-current={page ? "page" : undefined} data-tree-row="" data-fold-row={subs.length ? "" : undefined} {...nameTip.rowProps}>
           <span className={`${h.taskText} ${h.projectText}`}>
-            <span ref={nameTip.textRef} className={h.taskName}>{project.name}</span>
+            <span ref={nameTip.textRef} className={h.taskName} data-cut={cut ? "" : undefined}>{project.name}</span>
             {line ? <span className={h.taskSub} data-warning={line.warning ? "" : undefined}>{line.text}</span> : null}
           </span>
-          {/* 行尾一颗点（34、47 条，和子会话行同一个位置、同样大小）：等你黄点 → 在后台干活闪的灰点（读屏读「在后台工作」）→ 没看过的新回复蓝点。 */}
-          {project.waiting ? <span className={h.subDot} data-tone="attention" role="img" aria-label="等你" data-testid="project-waiting"><i aria-hidden /></span>
-            : working ? <span className={h.subDot} data-tone="running" data-testid="project-working"><i aria-hidden /><span className={h.srOnly}>在后台工作</span></span>
-            : unseen ? <span className={h.subDot} data-tone="stopped" role="img" aria-label="有新回复" data-testid="project-unseen"><i aria-hidden /></span> : null}
         </button>
+        {subs.length ? (
+          <button type="button" className={h.projectFold} aria-expanded={open} aria-label={`${project.name} 的子会话`} onClick={() => setOpen(!open)} data-fold="" data-testid="tree-subs-toggle">
+            <ChevronRight size={14} strokeWidth={1.8} aria-hidden className={h.chevron} data-open={open ? "" : undefined} />
+          </button>
+        ) : null}
+        {/* 行尾一颗点（34、47 条，和子会话行同一个位置、同样大小）：等你黄点 → 在后台干活闪的灰点（读屏读「在后台工作」）→ 没看过的新回复蓝点。 */}
+        {project.waiting ? <span className={`${h.subDot} ${h.projectDot}`} data-tone="attention" role="img" aria-label="等你" data-testid="project-waiting"><i aria-hidden /></span>
+          : working ? <span className={`${h.subDot} ${h.projectDot}`} data-tone="running" data-testid="project-working"><i aria-hidden /><span className={h.srOnly}>在后台工作</span></span>
+          : unseen ? <span className={`${h.subDot} ${h.projectDot}`} data-tone="stopped" role="img" aria-label="有新回复" data-testid="project-unseen"><i aria-hidden /></span> : null}
         {nameTip.tip}
         <span className={h.info} data-on={info ? "" : undefined} data-menu={actions ? "" : undefined}>
           <HeroButton variant="ghost" size="sm" isIconOnly title="详情" aria-label={`${project.name} 详情`} aria-pressed={info}
@@ -318,13 +365,16 @@ function ProjectNode({ project, view, go, personId, cardAt, working = false }: {
       )}
       {subs.length || items.length ? (
         <div className={h.branch}>
-          {subs.length ? (
-            <>
-              <button type="button" className={h.foldToggle} aria-expanded={open} onClick={() => setOpen(!open)} data-tree-row="" data-testid="tree-subs">
-                <ChevronRight size={14} strokeWidth={1.8} aria-hidden className={h.chevron} data-open={open ? "" : undefined} />会话 {subs.length}
-              </button>
-              {open ? <Subs subs={subs} letters={letters} view={view} go={go} /> : null}
-            </>
+          {open ? <Subs subs={subs} letters={letters} view={view} go={go} /> : null}
+          {summary ? (
+            // 点了展开，焦点交回项目名（这一行展开后就没了）。
+            <button type="button" className={h.subsSummary} onClick={() => { setOpen(true); main.current?.focus({ preventScroll: true }); }} data-tree-row="" data-fold-summary="" data-testid="tree-subs">
+              <span className={h.subsSummaryText}>
+                {summary.total} 个子会话
+                {summary.blocked ? <> · <span data-tone="warning">{summary.blocked} 个受阻</span></> : null}
+                {summary.unread ? <> · <span data-tone="accent">{summary.unread} 个未读</span></> : null}
+              </span>
+            </button>
           ) : null}
           {items.length ? <Items items={items} personId={personId} go={go} /> : null}
         </div>
