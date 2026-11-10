@@ -5,7 +5,7 @@ import type { TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import {
   LOCAL_RUNNER_PROTOCOL, LOCAL_RUNNER_ROUTES, LOCAL_RUNNER_TOKEN_HEADER,
-  LocalPairingStartRequest, LocalAgentLoginCodeRequest, LocalCloudLinkRequest, LocalSettingsPatch, LocalModelProfileUpsert, LocalToolUpsert, LocalFolderPickRequest, LocalFolderCreateRequest, LocalSessionModelRequest,
+  LocalSessionFileReadRequest, LocalPairingStartRequest, LocalAgentLoginCodeRequest, LocalCloudLinkRequest, LocalSettingsPatch, LocalModelProfileUpsert, LocalToolUpsert, LocalFolderPickRequest, LocalFolderCreateRequest, LocalSessionModelRequest,
   LocalCreateSessionRequest, LocalCreateSessionBatchRequest, LocalSendMessageRequest, LocalPermissionDecisionRequest, LocalQuestionAnswerRequest, LocalBudgetUpdateRequest, LocalProjectFolderRequest, LocalProjectCloneRequest, LocalRunPreviewRequest, LocalPermissionModeRequest,
   type TLocalRunnerErrorCode, type TLocalStatusResponse, type TLocalHealthResponse,
 } from "@warmap/contracts";
@@ -22,6 +22,10 @@ import type { RunnerConfig } from "../config.js";
 import type { QuotaTracker } from "../quota.js";
 import type { GatewaySpend } from "../spend.js";
 import type { CodexQuota } from "../codexQuota.js";
+import type { CodexCatalog } from "../codexCatalog.js";
+import { isClaudeProfileId, type ClaudeCatalog } from "../claudeCatalog.js";
+import { isCodexProfileId } from "../codexCatalog.js";
+import { codexTool, type CodexSetup } from "../agents/codexSetup.js";
 import { claudeTool } from "../tools.js";
 import { handoverCheck, repoName, stripCredentials, type cloneRepo } from "../handover.js";
 import type { CliTools } from "../tools.js";
@@ -44,6 +48,11 @@ export interface ServerDeps {
   quota: QuotaTracker;
   spend: GatewaySpend;
   codexQuota: CodexQuota;
+  /** 本人的 Codex：装没装、登录（设计 17.2 第 38 条）。 */
+  codex: CodexSetup;
+  /** Codex 订阅能用的模型（GET /v1/models 里 Codex 那一组）。 */
+  codexCatalog: CodexCatalog;
+  claudeCatalog: ClaudeCatalog;
   tools: CliTools;
   /** 本人在连接页加的工具（/v1/tools），执行会话经本机转发用。 */
   customTools: CustomTools;
@@ -133,26 +142,44 @@ export function createServer(d: ServerDeps): http.Server {
     },
     unpair: (c) => { d.tokens.revoke(c.token!); return { ok: true }; },
     status: async (): Promise<TLocalStatusResponse> => {
-      const claude = await d.claude.status();
+      const [claude, codex] = await Promise.all([d.claude.status(), d.codex.status()]);
       // 额度读缓存；超过 5 分钟没读过就在后台读一次（不发提示、不花 token），下一次轮询就有了
       if (claude.installed && claude.loggedIn) void d.quota.refresh();
       void d.spend.refresh(); // TokenHub 今天、本月花了多少：同样 5 分钟读一次
       void d.codexQuota.refresh(); // Codex 订阅的额度（没装就不列）
       return {
-        deviceId: d.config.deviceId, version: d.version, agents: [claude],
+        deviceId: d.config.deviceId, version: d.version, agents: [claude, codex],
         activeSessions: d.sessions.activeCount(), slots: d.sessions.slots(), cloud: d.cloud.view(), settings: d.settings.get(),
-        quota: [...d.quota.view(), ...d.codexQuota.view(), ...d.spend.view()], tools: [claudeTool(claude), ...d.tools.view()],
+        quota: [...d.quota.view(), ...d.codexQuota.view(), ...d.spend.view()], tools: [claudeTool(claude), codexTool(codex), ...d.tools.view()],
       };
     },
-    installAgent: (c) => { agentMustBeClaude(c); if (!d.claude.install()) throw new HttpError(409, "conflict", "正在安装或登录中"); return { ok: true }; },
-    loginAgent: async (c) => { agentMustBeClaude(c); if (!(await d.claude.login())) throw new HttpError(409, "conflict", "没装 Claude Code，或正在安装、登录中"); return { ok: true }; },
+    installAgent: (c) => {
+      if (c.params.agent === "codex") throw new HttpError(501, "not_implemented", "本机不代装 Codex，请本人先装好 Codex");
+      agentMustBeClaude(c);
+      if (!d.claude.install()) throw new HttpError(409, "conflict", "正在安装或登录中");
+      return { ok: true };
+    },
+    loginAgent: async (c) => {
+      if (c.params.agent === "codex") {
+        if (!(await d.codex.login().catch(() => false))) throw new HttpError(409, "conflict", "没装 Codex，或正在登录中");
+        return { ok: true };
+      }
+      agentMustBeClaude(c);
+      if (!(await d.claude.login())) throw new HttpError(409, "conflict", "没装 Claude Code，或正在安装、登录中");
+      return { ok: true };
+    },
     loginAgentCode: (c) => {
+      if (c.params.agent === "codex") throw new HttpError(400, "validation", "Codex 登录不用贴码");
       agentMustBeClaude(c);
       const b = validate(LocalAgentLoginCodeRequest, c.body);
       if (!d.claude.submitCode(b.code)) throw new HttpError(409, "conflict", "现在没有在等登录代码");
       return { ok: true };
     },
-    cancelAgentSetup: (c) => { agentMustBeClaude(c); d.claude.cancel(); return { ok: true }; },
+    cancelAgentSetup: (c) => {
+      if (c.params.agent === "codex") d.codex.cancel();
+      else { agentMustBeClaude(c); d.claude.cancel(); }
+      return { ok: true };
+    },
     getCloud: () => d.cloud.view(),
     linkCloud: async (c) => {
       const b = validate(LocalCloudLinkRequest, c.body);
@@ -173,7 +200,11 @@ export function createServer(d: ServerDeps): http.Server {
       d.onSettingsChange?.();
       return s;
     },
-    listModels: async () => ({ profiles: await d.models.list() }),
+    listModels: async () => {
+      void d.codexCatalog.refresh(); // Codex 订阅能用的模型：5 分钟读一次，读到了下一次就有
+      void d.claudeCatalog.refresh(); // Claude 订阅能用的模型：同上
+      return { profiles: await d.models.list() };
+    },
     putModel: async (c) => {
       if (!/^[A-Za-z0-9_-]{1,80}$/.test(c.params.id!)) throw new HttpError(400, "validation", "id 只能用字母数字、- 和 _");
       try { return await d.models.upsert(c.params.id!, validate(LocalModelProfileUpsert, c.body)); } catch (e) {
@@ -189,7 +220,12 @@ export function createServer(d: ServerDeps): http.Server {
     },
     deleteTool: async (c) => { if (!(await d.customTools.remove(c.params.id!))) throw new HttpError(404, "not_found", "没有这个工具"); return { ok: true }; },
     checkTool: async (c) => { const t = await d.customTools.check(c.params.id!); if (!t) throw new HttpError(404, "not_found", "没有这个工具"); return t; },
-    deleteModel: async (c) => { if (!(await d.models.remove(c.params.id!))) throw new HttpError(404, "not_found", "没有这个模型配置，或是内置配置"); return { ok: true }; },
+    deleteModel: async (c) => {
+      if (isCodexProfileId(c.params.id!)) throw new HttpError(400, "validation", "Codex 的模型从它自己的模型目录来，不能删");
+      if (isClaudeProfileId(c.params.id!)) throw new HttpError(400, "validation", "Claude 订阅的模型从它自己的模型目录来，不能删");
+      if (!(await d.models.remove(c.params.id!))) throw new HttpError(404, "not_found", "没有这个模型配置，或是内置配置");
+      return { ok: true };
+    },
     listFolders: () => ({ folders: d.folders.listWithProjects() }),
     pickFolder: async (c) => {
       const b = validate(LocalFolderPickRequest, c.body ?? {});
@@ -252,6 +288,9 @@ export function createServer(d: ServerDeps): http.Server {
       const p = d.folders.projects().find((x) => x.projectId === projectIdOf(c));
       return handoverCheck(projectIdOf(c), p?.folder ? { path: p.folder.path, label: p.folder.label } : null);
     },
+    // 在右边预览文件（17.2 第 41 条）：列本会话写过改过的文件、读一个文件，都只看会话自己的文件夹或工作树
+    listSessionFiles: (c) => d.sessions.listFiles(c.params.id!),
+    readSessionFile: (c) => d.sessions.readFile(c.params.id!, validate(LocalSessionFileReadRequest, c.body).path),
     // 接手以后「拉到这台电脑」（16.7）：本人选放在哪，clone、切到交接分支、加进允许的文件夹、绑到项目
     cloneProject: async (c) => {
       const b = validate(LocalProjectCloneRequest, c.body);
@@ -279,7 +318,6 @@ export function createServer(d: ServerDeps): http.Server {
   }
 
   function agentMustBeClaude(c: Ctx) {
-    if (c.params.agent === "codex") throw new HttpError(501, "not_implemented", "Codex 12 月接入");
     if (c.params.agent !== "claude-code") throw new HttpError(404, "not_found", "没有这个执行方");
   }
 

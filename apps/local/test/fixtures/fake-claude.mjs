@@ -11,7 +11,13 @@ const sid = argv.includes("--session-id") ? argv[argv.indexOf("--session-id") + 
 let home = process.cwd();
 while (!existsSync(join(home, ".fake-claude.json")) && dirname(home) !== home) home = dirname(home);
 if (!existsSync(join(home, ".fake-claude.json"))) home = process.cwd();
-const readCfg = () => existsSync(join(home, ".fake-claude.json")) ? JSON.parse(readFileSync(join(home, ".fake-claude.json"), "utf8")) : {};
+// 测试中途会改写这份配置：正好读到写了一半的（空的、不完整的）就用上一次读到的
+let lastCfg = {};
+const readCfg = () => {
+  if (!existsSync(join(home, ".fake-claude.json"))) return {};
+  try { lastCfg = JSON.parse(readFileSync(join(home, ".fake-claude.json"), "utf8")); } catch { /* 写了一半 */ }
+  return lastCfg;
+};
 const cfg = readCfg();
 const TRACE = join(home, ".fake-claude-trace.jsonl");
 /** 每一轮收到的话另记一份（不混进 trace：别的测试拿 trace 的最后一行当最近一次拉起）。 */
@@ -21,6 +27,8 @@ appendFileSync(TRACE, JSON.stringify({ pid: process.pid, argv, envKeys: Object.k
 let msgSeq = 0;
 const out = (o) => {
   if (o.type === "assistant" && o.message && !o.error && !o.message.id) o.message = { id: `msg_${process.pid}_${++msgSeq}`, model: "claude-haiku-5-5", ...o.message };
+  // 配置 messageUsage：每条助手消息带这次请求的用量（真机每条都带；本机拿它估这一轮中间上下文用了多少）
+  if (o.type === "assistant" && o.message && !o.error && readCfg().messageUsage) o.message.usage = readCfg().messageUsage;
   process.stdout.write(JSON.stringify(o) + "\n");
 };
 /** 碰壁：rate_limit_event rejected → 助手补一条 rate_limit / usage_limit_reached → 429 的 result（照社区复现和程序里的字符串）。plain429：只有 rate_limit 的别的 429。 */
@@ -87,6 +95,8 @@ function startTurn(text) {
     out({ type: "result", subtype: "success", is_error: true, result: "API Error: Connection refused (ECONNREFUSED)", api_error_status: null, duration_ms: 3200, usage: {} });
     return;
   }
+  // 配置 compact：这一轮开头先压缩一次上下文（照 Claude Code 的 compact_boundary）
+  if (live.compact) out({ type: "system", subtype: "compact_boundary", session_id: sid, compact_metadata: { trigger: "auto", pre_tokens: 190000 } });
   out({ type: "assistant", message: { content: [{ type: "text", text: `收到：${text}` }] }, parent_tool_use_id: null });
   out({ type: "assistant", message: { content: [{ type: "tool_use", id: `toolu_todo${turns}`, name: "TodoWrite", input: { todos: [{ content: "写文件", status: "in_progress" }] } }] }, parent_tool_use_id: null });
   if (readOnly) { void readOnlyTurn(); return; }
@@ -244,8 +254,10 @@ rl.on("line", (line) => {
     return;
   }
   if (msg.type === "control_request" && msg.request.subtype === "initialize") {
-    if (cfg.initDelayMs) { setTimeout(() => out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: { claude_code_version: cfg.version ?? "2.1.318", pid: process.pid } } }), cfg.initDelayMs); return; }
-    out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: { claude_code_version: cfg.version ?? "2.1.318", pid: process.pid } } });
+    // 握手的回执：版本；配置里有 models 时带上模型列表（真机 2.1.318 每次都带，11/10 实测）
+    const init = { type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: { claude_code_version: cfg.version ?? "2.1.318", pid: process.pid, ...(cfg.models ? { models: cfg.models } : {}) } } };
+    if (cfg.initDelayMs) { setTimeout(() => out(init), cfg.initDelayMs); return; }
+    out(init);
   } else if (msg.type === "control_request" && msg.request.subtype === "get_usage") {
     // 读额度（11/07 实测 2.1.318 的形状，只留本机用到的字段）
     appendFileSync(TRACE, JSON.stringify({ getUsage: msg.request }) + "\n");
@@ -255,6 +267,12 @@ rl.on("line", (line) => {
       { kind: "weekly_scoped", group: "weekly", percent: 81, severity: "warning", resets_at: "2026-11-12T00:00:00Z", scope: { model: { display_name: "Opus" } }, is_active: true },
     ], extra_usage: { is_enabled: false } }, account: { email: "someone@example.com", organization: "Org" } };
     out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: usage } });
+  } else if (msg.type === "control_request" && msg.request.subtype === "get_context_usage") {
+    // 上下文用了多少（11/10 实测 2.1.318 的形状，只留本机用到的字段）：配置 context 可改（false 是老版本、不认这个请求），默认每轮涨一点
+    const c = readCfg().context;
+    if (c === false) { out({ type: "control_response", response: { subtype: "error", request_id: msg.request_id, error: "Unsupported control request subtype: get_context_usage" } }); return; }
+    const usage = c ?? { totalTokens: 18000 + 1000 * turns, maxTokens: 200000 };
+    out({ type: "control_response", response: { subtype: "success", request_id: msg.request_id, response: { ...usage, percentage: Math.round((usage.totalTokens / usage.maxTokens) * 100), model: initModel() } } });
   } else if (msg.type === "control_request" && msg.request.subtype === "stop_task") {
     const id = msg.request.task_id;
     appendFileSync(TRACE, JSON.stringify({ stopTask: id }) + "\n");
@@ -331,6 +349,9 @@ rl.on("line", (line) => {
         clearTimeout(turn.timer);
         turn.timer = setTimeout(() => { out({ type: "assistant", message: { content: [{ type: "text", text: "停下了，没做完的：收尾" }] }, parent_tool_use_id: null }); finish(true, "停下了"); }, 30);
       }
+    } else if (readCfg().turnDelayMs) {
+      // 收下了、过一会儿才开始这一轮（真机上收下一句话到报 system/init 之间有一小段）
+      setTimeout(() => startTurn(msg.message.content), readCfg().turnDelayMs);
     } else {
       startTurn(msg.message.content);
     }

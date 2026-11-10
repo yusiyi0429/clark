@@ -7,6 +7,7 @@ import { CliTools, claudeTool, type ToolExec } from "../src/tools.js";
 import { costOf, evalExpr, GatewayPricing, inInterval, pricesUrl } from "../src/pricing.js";
 import { readUsage } from "../src/agents/claudeCode.js";
 import { CodexQuota, codexQuotaFrom } from "../src/codexQuota.js";
+import { codexTool } from "../src/agents/codexSetup.js";
 import { Value } from "@sinclair/typebox/value";
 import { LocalSessionSummary, LocalStatusResponse } from "@warmap/contracts";
 import { registerFormats } from "../src/store.js";
@@ -183,48 +184,44 @@ describe("命令行工具登没登录", () => {
   };
   const check = async (table: Parameters<typeof exec>[0], now = Date.parse("2026-11-07T00:00:00Z")) => {
     const t = new CliTools(exec(table), () => now);
-    expect(t.view().map((x) => x.state)).toEqual(["unknown", "unknown", "unknown"]);
+    expect(t.view().map((x) => x.state)).toEqual(["unknown", "unknown"]);
     await t.refresh();
     return t.view().map(({ checkedAt, ...rest }) => { expect(checkedAt).toBeTruthy(); return rest; });
   };
 
-  it("Codex、gh、lark-cli：没装、没登录、登着（是谁）、过期；Claude Code 照它自己报的", async () => {
+  it("gh、lark-cli：没装、没登录、登着（是谁）、过期；Claude Code、Codex 照它们自己报的", async () => {
     expect(claudeTool({ installed: false, loggedIn: false, version: null, loginExpiresAt: null }).state).toBe("not_installed");
     expect(claudeTool({ installed: true, loggedIn: false, version: "2.1.318", loginExpiresAt: null }).state).toBe("not_logged_in");
     expect(claudeTool({ installed: true, loggedIn: true, version: "2.1.318", loginExpiresAt: "2026-11-01T00:00:00Z" }, Date.parse("2026-11-07T00:00:00Z")).state).toBe("expired");
     expect(claudeTool({ installed: true, loggedIn: true, version: "2.1.318", loginExpiresAt: null })).toMatchObject({ kind: "claude-code", state: "ready", version: "2.1.318", account: null });
-    const codexV = { stdout: "codex-cli 0.159.2\n" };
-    expect(await check({ "codex --version": null, "gh --version": null, "lark-cli --version": null })).toEqual([
-      { kind: "codex", state: "not_installed", version: null, account: null },
+    const codex = { kind: "codex" as const, installed: true, version: "0.159.2", path: null, loggedIn: false, authMethod: null, subscriptionType: null, loginExpiresAt: null, minimumVersion: "0.159.0", compatible: true, setup: { phase: "idle" as const, startedAt: null, loginUrl: null, error: null } };
+    expect(codexTool({ ...codex, installed: false, version: null }).state).toBe("not_installed");
+    expect(codexTool(codex).state).toBe("not_logged_in");
+    expect(codexTool({ ...codex, loggedIn: true })).toMatchObject({ kind: "codex", state: "ready", version: "0.159.2", account: null });
+    expect(await check({ "gh --version": null, "lark-cli --version": null })).toEqual([
       { kind: "gh", state: "not_installed", version: null, account: null },
       { kind: "lark-cli", state: "not_installed", version: null, account: null },
     ]);
     const ghV = { stdout: "gh version 2.88.1 (2026-10-01)\n" };
     const larkV = { stdout: "lark-cli version 1.0.93\n" };
     expect(await check({
-      "codex --version": codexV, "codex login status": { stdout: "Logged in using ChatGPT\n" },
       "gh --version": ghV, "gh auth status --json hosts": { stdout: JSON.stringify({ hosts: { "github.com": [{ state: "success", active: true, login: "sean" }, { state: "success", active: false, login: "other" }] } }) },
       "lark-cli --version": larkV, "lark-cli auth status": { stdout: JSON.stringify({ identities: { user: { status: "valid", available: true, userName: "孙明泽", refreshExpiresAt: "2026-12-01T00:00:00Z" }, bot: { available: true } } }) },
     })).toEqual([
-      { kind: "codex", state: "ready", version: "0.159.2", account: null },
       { kind: "gh", state: "ready", version: "2.88.1", account: "sean" },
       { kind: "lark-cli", state: "ready", version: "1.0.93", account: "孙明泽" },
     ]);
     expect(await check({
-      "codex --version": codexV, "codex login status": { code: 1, stdout: "Not logged in\n" },
       "gh --version": ghV, "gh auth status --json hosts": { code: 1, stdout: JSON.stringify({ hosts: { "github.com": [{ state: "error", active: true, login: "sean" }] } }) },
       "lark-cli --version": larkV, "lark-cli auth status": { stdout: JSON.stringify({ identities: { user: { status: "valid", available: true, userName: "孙明泽", refreshExpiresAt: "2026-11-01T00:00:00Z" } } }) },
     })).toEqual([
-      { kind: "codex", state: "not_logged_in", version: "0.159.2", account: null },
       { kind: "gh", state: "expired", version: "2.88.1", account: "sean" },
       { kind: "lark-cli", state: "expired", version: "1.0.93", account: "孙明泽" },
     ]);
     expect(await check({
-      "codex --version": null,
       "gh --version": ghV, "gh auth status --json hosts": { code: 1, stdout: JSON.stringify({ hosts: {} }) },
       "lark-cli --version": larkV, "lark-cli auth status": { stdout: JSON.stringify({ identities: { bot: { available: true } } }) }, // 只有机器人身份
     })).toEqual([
-      { kind: "codex", state: "not_installed", version: null, account: null },
       { kind: "gh", state: "not_logged_in", version: "2.88.1", account: null },
       { kind: "lark-cli", state: "not_logged_in", version: "1.0.93", account: null },
     ]);

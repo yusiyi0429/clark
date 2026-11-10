@@ -11,6 +11,7 @@ import {
   LocalTaskBudgetView, LocalBudgetListResponse, LocalBudgetUpdateRequest, LocalSendMessageRequest as SendMessage, LocalPermissionBrief, LOCAL_RUNNER_ATTACHMENT_PATH,
   LocalRunPreviewRequest, LocalPermissionModeRequest, LOCAL_AGENT_PERMISSION_MODES, LocalTool, LocalToolUpsert,
   LocalFolderPickRequest, LocalFolderPickResponse, LocalFolderCreateRequest, LocalSessionModelRequest, LocalSessionModelResponse,
+  LocalContextUsage, LocalSessionFileReadRequest, LocalSessionFileReadResponse, LocalSessionFilesResponse,
 } from "../src/index.js";
 
 const sessionId = "6b0f3a52-4d0c-4c1e-9a43-1f7d2c9b8e10";
@@ -109,6 +110,11 @@ describe("本机程序契约", () => {
     expect(Value.Check(LocalModelProfile, profile)).toBe(true);
     expect(Value.Check(LocalModelProfile, { ...profile, agent: "codex", efforts: ["low", "medium", "high", "xhigh", "max", "ultra"], defaultEffort: "low" })).toBe(true);
     expect(Value.Check(LocalModelProfile, { ...profile, efforts: [] })).toBe(true); // 网关模型不能选
+    // Codex 模型目录里的一条：id 是 codex- 加模型名（点换成 _），只读
+    const codex = { ...profile, id: "codex-gpt-6_1-sol", label: "GPT-6.1-Sol", agent: "codex", model: "gpt-6.1-sol", isDefault: false, catalog: true,
+      origin: { provider: "codex", label: "Codex 订阅", via: null }, efforts: ["low", "medium", "high", "xhigh", "max", "ultra"], defaultEffort: "low" };
+    expect(Value.Check(LocalModelProfile, codex)).toBe(true);
+    expect(Value.Check(LocalModelProfile, { ...codex, id: "codex:gpt-6.1-sol" })).toBe(false);
     expect(Value.Check(LocalCreateSessionRequest, { subject: { kind: "card", cardId: "c" }, title: "x", firstMessage: "y", effort: "xhigh" })).toBe(true);
     expect(Value.Check(LocalCreateSessionRequest, { subject: { kind: "card", cardId: "c" }, title: "x", firstMessage: "y", effort: "turbo" })).toBe(false);
     expect(Value.Check(LocalRunPreviewRequest, { modelProfileId: "subscription", effort: "max" })).toBe(true);
@@ -483,6 +489,7 @@ describe("本机程序契约", () => {
     expect(Value.Check(LocalPermissionModeRequest, { mode: "bypassPermissions" })).toBe(true);
     expect(Value.Check(LocalPermissionModeRequest, { mode: "manual" })).toBe(false);
     expect(Value.Check(LocalSessionEvent, { seq: 5, at, sessionId, type: "permission_mode", mode: "auto", by: "plan_approved" })).toBe(true);
+    expect(Value.Check(LocalSessionEvent, { seq: 5, at, sessionId, type: "permission_mode", mode: "default", by: "harness_changed" })).toBe(true); // 「先出计划」换到 Codex
     expect(Value.Check(LocalSessionEvent, { seq: 5, at, sessionId, type: "permission_mode", mode: "auto", by: "cloud" })).toBe(false);
     expect(LOCAL_RUNNER_ROUTES.setPermissionMode).toEqual({ method: "PUT", path: "/v1/sessions/:id/permission-mode", auth: true });
     expect(LOCAL_AGENT_PERMISSION_MODES["claude-code"]).toEqual(["auto", "default", "acceptEdits", "plan", "bypassPermissions"]);
@@ -575,5 +582,51 @@ describe("本机程序契约", () => {
     expect(Value.Check(LocalPairingStatusResponse, { status: "pending" })).toBe(true);
     const open = Object.values(LOCAL_RUNNER_ROUTES).filter((r) => !r.auth).map((r) => r.path);
     expect(open).toEqual(["/v1/health", "/v1/pairings", "/v1/pairings/:pairingId"]);
+  });
+
+  it("Claude 订阅的模型目录（第 40 条）：每个模型一条只读的配置，带给人看的模型名；内置那条叫「自动」", () => {
+    const base = { source: "subscription", agent: "claude-code", baseUrl: null, smallModel: null, webSearch: true, hasKey: false, defaultEffort: null,
+      origin: { provider: "claude-subscription", label: "Claude 订阅", via: null } };
+    expect(Value.Check(LocalModelProfile, { ...base, id: "subscription", label: "Claude 订阅", model: null, modelName: "自动", isDefault: true, catalog: false,
+      efforts: ["low", "medium", "high", "xhigh", "max"] })).toBe(true);
+    expect(Value.Check(LocalModelProfile, { ...base, id: "cc-claude-fable-5-2", label: "Fable 5.2", model: "claude-fable-5-2", modelName: "Fable 5.2", isDefault: false, catalog: true,
+      efforts: ["low", "medium", "high", "xhigh", "max"] })).toBe(true);
+    // 不支持选思考程度的模型：efforts 为空
+    expect(Value.Check(LocalModelProfile, { ...base, id: "cc-claude-haiku-4-5-20251001", label: "Haiku 4.5", model: "claude-haiku-4-5-20251001", modelName: "Haiku 4.5", isDefault: false, catalog: true,
+      efforts: [] })).toBe(true);
+    expect(Value.Check(LocalModelProfile, { ...base, id: "cc-opus", label: "Opus 5.5", model: "opus", modelName: "", isDefault: false, catalog: true, efforts: [] })).toBe(false);
+  });
+
+  it("读文件给预览（第 41 条）：读一个文件回类型和内容，列本会话改过的文件写明是从哪知道的", () => {
+    expect(LOCAL_RUNNER_ROUTES.readSessionFile).toEqual({ method: "POST", path: "/v1/sessions/:id/files/read", auth: true });
+    expect(LOCAL_RUNNER_ROUTES.listSessionFiles).toEqual({ method: "GET", path: "/v1/sessions/:id/files", auth: true });
+    expect(Value.Check(LocalSessionFileReadRequest, { path: "docs/方案.md" })).toBe(true);
+    expect(Value.Check(LocalSessionFileReadRequest, { path: "" })).toBe(false);
+    const file = { path: "docs/方案.md", absolutePath: "C:/work/repo/docs/方案.md", name: "方案.md", size: 1200, modifiedAt: "2026-11-10T04:00:00.000Z" };
+    expect(Value.Check(LocalSessionFileReadResponse, { ...file, kind: "markdown", mimeType: "text/markdown", encoding: "utf8", content: "# 方案", truncated: false })).toBe(true);
+    expect(Value.Check(LocalSessionFileReadResponse, { ...file, name: "图.png", kind: "image", mimeType: "image/png", encoding: "base64", content: "iVBORw0KGgo=", truncated: false })).toBe(true);
+    // 别的类型、太大的图片：只有名字和大小
+    expect(Value.Check(LocalSessionFileReadResponse, { ...file, name: "a.pdf", kind: "other", mimeType: "application/pdf", encoding: "base64", content: null, truncated: false })).toBe(true);
+    expect(Value.Check(LocalSessionFileReadResponse, { ...file, kind: "html", mimeType: "text/html", encoding: "utf8", content: "<p>", truncated: false })).toBe(false); // HTML 当 text 看
+    const changed = { path: "src/a.ts", absolutePath: "C:/work/repo/src/a.ts", exists: true, size: 300 };
+    expect(Value.Check(LocalSessionFilesResponse, { root: "C:/work/repo", truncated: false, files: [
+      { ...changed, sources: ["tool", "git"] }, { ...changed, path: "old.ts", sources: ["git"], exists: false, size: null },
+    ] })).toBe(true);
+    expect(Value.Check(LocalSessionFilesResponse, { root: "C:/work/repo", truncated: false, files: [{ ...changed, sources: [] }] })).toBe(false);
+    // 产出事件带它在会话根里的相对路径，预览时拿去读（老版本本机不带）
+    const artifact = { seq: 3, at: "2026-11-10T04:00:00.000Z", sessionId, type: "artifact", artifactId: "a1b2c3", title: "方案", fileName: "方案.md", size: 1200, sha256: "x" };
+    expect(Value.Check(LocalSessionEvent, { ...artifact, path: "docs/方案.md" })).toBe(true);
+    expect(Value.Check(LocalSessionEvent, artifact)).toBe(true);
+  });
+
+  it("上下文用了多少（第 42 条）：摘要和事件带现在的 token 数和模型上限；压缩了记一条提示", () => {
+    const at = "2026-11-10T04:00:00.000Z";
+    expect(Value.Check(LocalContextUsage, { usedTokens: 166_000, maxTokens: 200_000, at })).toBe(true);
+    expect(Value.Check(LocalContextUsage, { usedTokens: 18_920, maxTokens: null, at })).toBe(true); // 上限读不到
+    expect(Value.Check(LocalContextUsage, { usedTokens: -1, maxTokens: 200_000, at })).toBe(false);
+    expect(LocalSessionSummary.properties).toHaveProperty("context");
+    expect(Value.Check(LocalSessionEvent, { seq: 9, at, sessionId, type: "context_usage", usedTokens: 166_000, maxTokens: 200_000 })).toBe(true);
+    expect(Value.Check(LocalSessionEvent, { seq: 9, at, sessionId, type: "context_usage", usedTokens: 166_000 })).toBe(false);
+    expect(Value.Check(LocalSessionEvent, { seq: 10, at, sessionId, type: "notice", level: "info", code: "context_compacted", text: "压缩了上下文" })).toBe(true);
   });
 });

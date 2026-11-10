@@ -25,7 +25,7 @@ const gw = (baseUrl: string, model: string) => modelOrigin({ source: "gateway", 
 
 describe("认来源", () => {
   it("订阅；经 magpie 的按模型名前缀认；没有前缀、认不出的前缀照写", () => {
-    expect(modelOrigin({ source: "subscription", baseUrl: null, model: null })).toEqual({ provider: "claude-subscription", label: "我的 Claude 订阅", via: null });
+    expect(modelOrigin({ source: "subscription", baseUrl: null, model: null })).toEqual({ provider: "claude-subscription", label: "Claude 订阅", via: null });
     expect(gw(MAGPIE, "codex/gpt-6.1")).toEqual({ provider: "codex", label: "Codex 订阅 · 经 magpie", via: "magpie" });
     expect(gw("http://localhost:3425/", "deepseek/deepseek-v4-pro")).toEqual({ provider: "deepseek", label: "DeepSeek API · 经 magpie", via: "magpie" });
     expect(gw(MAGPIE, "Copilot/claude-sonnet-5-5")).toEqual({ provider: "copilot", label: "Copilot 订阅 · 经 magpie", via: "magpie" });
@@ -75,7 +75,7 @@ describe("模型配置和子会话带上执行方和来源", { timeout: 30_000 }
     await call("PUT", "/v1/models/ds", { label: "我的 DeepSeek", source: "gateway", baseUrl: "https://api.deepseek.com/anthropic", model: "deepseek-v4-pro", apiKey: "sk-test-0123456789" });
     const list = (await call("GET", "/v1/models")).body.profiles;
     for (const p of list) expect(Value.Check(LocalModelProfile, p)).toBe(true);
-    expect(Object.fromEntries(list.map((p: any) => [p.id, p.origin.label]))).toEqual({ subscription: "我的 Claude 订阅", magpie: "Codex 订阅 · 经 magpie", ds: "DeepSeek API" });
+    expect(Object.fromEntries(list.map((p: any) => [p.id, p.origin.label]))).toEqual({ subscription: "Claude 订阅", magpie: "Codex 订阅 · 经 magpie", ds: "DeepSeek API" });
   });
 
   it("经 magpie 开一个子会话：执行方是 Claude Code，来源 Codex 订阅；钥匙照 magpie 的约定传；实际模型名照样解析，前缀变了来源跟着变", async () => {
@@ -95,8 +95,8 @@ describe("模型配置和子会话带上执行方和来源", { timeout: 30_000 }
     await call("POST", `/v1/sessions/${s.id}/kill`, {});
   });
 
-  it("订阅的子会话照旧：我的 Claude 订阅", async () => {
+  it("订阅的子会话照旧：Claude 订阅", async () => {
     const preview = await call("POST", "/v1/runs/preview", {});
-    expect(preview.body).toMatchObject({ source: "subscription", harness: "claude-code", origin: { provider: "claude-subscription", label: "我的 Claude 订阅", via: null } });
+    expect(preview.body).toMatchObject({ source: "subscription", harness: "claude-code", origin: { provider: "claude-subscription", label: "Claude 订阅", via: null } });
   });
 });

@@ -1,3 +1,4 @@
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Server } from "node:http";
 import { loadConfig, VERSION, type RunnerConfig } from "./config.js";
@@ -15,8 +16,12 @@ import { MAX_ATTACHMENT_BYTES } from "./attachments.js";
 import { cloneRepo } from "./handover.js";
 import { SessionManager, type SessionDeps } from "./sessions.js";
 import { ClaudeSetup } from "./agents/claudeSetup.js";
-import { ClaudeCodeAdapter, readUsage, type ClaudeBin } from "./agents/claudeCode.js";
+import { ClaudeCodeAdapter, readModels, readUsage, type ClaudeBin } from "./agents/claudeCode.js";
+import { ClaudeCatalog } from "./claudeCatalog.js";
 import { CodexAdapter } from "./agents/codex.js";
+import { findCodexBin, type CodexBin } from "./agents/codexRpc.js";
+import { CodexSetup } from "./agents/codexSetup.js";
+import { CodexCatalog } from "./codexCatalog.js";
 import { homeDir } from "./agents/claudeEnv.js";
 import { createServer } from "./http/server.js";
 import { QuotaTracker } from "./quota.js";
@@ -24,7 +29,7 @@ import { CliTools, type ToolExec } from "./tools.js";
 import { GatewayPricing } from "./pricing.js";
 import { GatewaySpend } from "./spend.js";
 import { Budgets } from "./budget.js";
-import { CodexQuota, readCodexLimits } from "./codexQuota.js";
+import { CodexQuota } from "./codexQuota.js";
 import { createDesktop, openUrl, type Desktop, type MenuAction } from "./desktop/index.js";
 
 export interface RunnerOptions {
@@ -50,6 +55,12 @@ export interface RunnerOptions {
   cloneRepo?: typeof cloneRepo;
   /** 读本人 Codex 订阅的额度（测试里换成假的；没装回 null）。 */
   codexLimits?: () => Promise<Record<string, unknown> | null>;
+  /** 测试用：Codex 可执行文件（假的 app-server）；null 当没装。不给就找本机装的。 */
+  codexBin?: CodexBin | null;
+  /** Codex 的配置目录（登录也在里面）：默认是数据目录下天枢专用的 codex；null 用本人的 ~/.codex。 */
+  codexHome?: string | null;
+  /** 测试用：替本人打开浏览器（登录 Codex 时），不去开真的。 */
+  openUrl?: (url: string) => void;
   onQuit?: () => void;
 }
 
@@ -71,7 +82,18 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   const tokens = new TokenStore(config.dataDir);
   const pairings = new Pairings(tokens, ({ code, origin, label }) =>
     desktop.confirm("天枢本机程序 · 配对", `${label}（${origin}）想连接这台电脑上的天枢本机程序。\n\n确认码：${code}\n\n和网页上显示的一致才点「是」。`));
-  const models = new ModelProfiles(config.dataDir, secrets);
+  // 本人的 Codex（设计 17.2 第 38 条）：用天枢专用的配置目录，登录、额度、模型目录、会话都在里面
+  const codexHome = opts.codexHome !== undefined ? opts.codexHome : join(config.dataDir, "codex");
+  if (codexHome) mkdirSync(codexHome, { recursive: true });
+  const codexBin = opts.codexBin !== undefined ? async () => opts.codexBin ?? null : async () => findCodexBin();
+  const codex = new CodexSetup(codexBin, codexHome, opts.openUrl ?? openUrl);
+  const codexCatalog = new CodexCatalog(config.dataDir, () => codex.readModels());
+  // 本人 Claude 订阅能用的模型（设计 17.2 第 40 条）：向 Claude Code 读（握手里就有，不发提示、不花 token）
+  const claudeCatalog = new ClaudeCatalog(config.dataDir, async () => {
+    const bin = await claudeBin();
+    return bin ? readModels(bin, config.dataDir) : null;
+  });
+  const models = new ModelProfiles(config.dataDir, secrets, codexCatalog, claudeCatalog);
   const customTools = new CustomTools(config.dataDir, secrets, opts.fetchImpl ?? fetch);
   const folders = new Folders(config.dataDir, opts.home);
   const cloud = new CloudLink(config.dataDir, secrets, config.allowedOrigins);
@@ -95,8 +117,8 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
     if (!bin) throw new Error("这台电脑上没找到 Claude Code");
     return readUsage(bin, config.dataDir);
   });
-  // Codex 订阅的额度：装了 Codex 才有，只显示、同步，不挡卡
-  const codexQuota = new CodexQuota(opts.codexLimits ?? (() => readCodexLimits()));
+  // Codex 订阅的额度：装了 Codex 才有；用完了 Codex 的卡停下等
+  const codexQuota = new CodexQuota(opts.codexLimits ?? (() => codex.readLimits()));
   outbox.quota = () => [...quota.syncView(), ...codexQuota.syncView(), ...spend.syncView()];
   const tools = new CliTools(opts.toolsExec);
   const pricing = new GatewayPricing(baseFetch);
@@ -120,22 +142,25 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
     skillsDir: opts.skillsDir ?? join(homeDir(), ".claude", "skills"),
     maxConcurrent: () => settings.get().maxConcurrent,
     autoMerge: () => settings.get().autoMerge,
-    quota, pricing, budgets, holdTiming: opts.holdTiming,
+    quota, codexQuota, pricing, budgets, holdTiming: opts.holdTiming,
     verifyBrief: async (handbackKey) => fetchVerifyBrief(await cloud.target(), handbackKey, cloudFetch),
     fetchAttachment: async (id) => fetchAttachment(await cloud.target(), id, cloudFetch, MAX_ATTACHMENT_BYTES),
     adapters: {
       "claude-code": new ClaudeCodeAdapter(claudeBin),
-      codex: new CodexAdapter(),
+      codex: new CodexAdapter(codexBin, { home: codexHome, dataDir: config.dataDir }),
     },
     onChange: updateTray,
   });
   sessionsRef = sessions;
   quota.onChange = () => sessions.onQuotaChange();
+  codexQuota.onChange = () => sessions.onQuotaChange();
+  // 登上 Codex 了：马上读它能用的模型和额度
+  codex.onLogin = () => { void codexCatalog.refresh(true); void codexQuota.refresh(true); };
   outbox.slots = () => sessions.slots();
   // 交回送到天枢以后去取验收交代。
   outbox.onSent = () => void sessions.pullBriefs();
   const server = createServer({
-    config, version: VERSION, tokens, pairings, sessions, log, models, folders, claude, cloud, settings, quota, codexQuota, tools, customTools, spend,
+    config, version: VERSION, tokens, pairings, sessions, log, models, folders, claude, cloud, settings, quota, codexQuota, codex, codexCatalog, claudeCatalog, tools, customTools, spend,
     pickFolder: () => desktop.pickFolder(),
     cloneRepo: opts.cloneRepo ?? cloneRepo,
     fetchImpl: cloudFetch,
@@ -166,6 +191,8 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   // 上次没开始的排队会话，有空位就接上（要等本机程序开始监听，本会话 MCP 才连得上）。
   sessions.pump();
   void sessions.pullBriefs();
+  void codexCatalog.refresh();
+  void claudeCatalog.refresh();
   void sessions.pruneWorktrees();
   void sessions.releaseWaiting();
   tools.start();

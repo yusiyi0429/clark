@@ -201,7 +201,8 @@ export const LocalUsageKind = Type.Union([Type.Literal("subscription"), Type.Lit
  * 一个用量来源（右栏「用量」的一格，新首页设计 14.4）。来源不限几家，按这个形状往下排：
  * - Claude 订阅（id claude）：本机向 Claude Code 读（get_usage，不发提示、不花 token），跑着的卡实时报的 rate_limit_event 也算进来；
  * - Codex 订阅（id codex，装了 Codex 才有）：codex app-server 的 account/rateLimits/read（11/07 实测 0.159.2 约 5 秒，不花 token），按窗口长度认 5 小时和本周，
- *   Codex 不报警戒线，只看到没到 100%；只显示，不挡卡；
+ *   Codex 不报警戒线，只看到没到 100%。Codex 子会话跑着时每次模型回复后它报的 account/rateLimits/updated 也算进来；
+ *   用完了（它报 usageLimitExceeded，或读到 100%）Codex 的卡停下等额度（LocalHold usage_limit），Claude Code 的卡不受影响；
  * - TokenHub（id tokenhub:<网关主机>，kind daily_spend）：TokenHub 自己的统计（GET <网关主机>/api/tokavi/v1/log/usage，用本机存的那把钥匙，只能查这把钥匙所在的账户，
  *   每人一个计费账户，就是本人的），amounts 是今天（本机 0 点起）、monthAmounts 是本月（1 日 0 点起）花了多少，按币种各一笔，estimated false，不换算；半小时一格；
  * - 别的 API（MiniMax、DeepSeek 等，id api:<名字>，kind api_balance）：amounts 是余额。形状先留着，本机还没读。
@@ -269,7 +270,12 @@ export const LocalStatusResponse = Type.Object({
   tools: Type.Array(LocalToolStatus, { maxItems: 8 }),
 }, strict);
 
-/** POST /v1/agents/claude-code/login 的贴码兜底：浏览器显示一串代码而没有跳回时，本人贴进网页。 */
+/**
+ * POST /v1/agents/claude-code/login 的贴码兜底：浏览器显示一串代码而没有跳回时，本人贴进网页。
+ * Codex 也走 POST /v1/agents/codex/login（设计 17.2 第 38 条）：本机经 codex app-server 的 account/login/start 拿到 ChatGPT 的登录地址，
+ * 替本人打开浏览器（setup.loginUrl 同 Claude），本人点完 Codex 自己收回调（本机 1455 端口），本机收到 account/login/completed 后 phase 转 succeeded。
+ * Codex 没有贴码，login/code 对 Codex 回 400；DELETE /v1/agents/codex/setup 取消登录。Codex 没装时 install 回 501（请本人装 Codex，本机不代装）。
+ */
 export const LocalAgentLoginCodeRequest = Type.Object({ code: Type.String({ minLength: 4, maxLength: 2000 }) }, strict);
 
 // ───────────────────────── 云端关联 ─────────────────────────
@@ -299,15 +305,17 @@ export const LocalModelSource = Type.Union([Type.Literal("subscription"), Type.L
  * 思考程度（设计 17.2 第 36 条）。各执行方、各模型支持哪几档（11/09 实测，都没调模型）：
  * - Claude Code 2.1.318：握手（initialize）回的模型列表里，Opus 5.5、Fable 5.1、Sonnet 5.5、Haiku 5.5 都是 low、medium、high、xhigh、max 五档。
  *   开工用 --effort 传；开着时用控制请求 apply_flag_settings { effortLevel } 当场换（它不校验取值，本机先校验）。网关模型本机不传思考程度。
- * - Codex 0.159.2：`codex debug models` 的模型目录里每个模型自己列 supported_reasoning_levels 和 default_reasoning_level，
- *   如 gpt-6.1-sol 是 low…max 加 ultra、默认 low，gpt-5.5 是 low…xhigh、默认 medium；用 -c model_reasoning_effort 传。ultra 只有 Codex 有。
+ * - Codex 0.159.2：app-server 的 model/list（同 `codex debug models` 的模型目录，登录后按账号给）里每个模型自己列 supportedReasoningEfforts 和
+ *   defaultReasoningEffort，如 gpt-6.1-sol 是 low…max 加 ultra、默认 low，gpt-5.5 是 low…xhigh、默认 medium（11/10 实测）。ultra 只有 Codex 有。
+ *   开一轮（turn/start）时带 effort，从这一轮起生效；Codex 报的这里没有的档（如 none、minimal）不列。
  */
 export const LocalEffort = Type.Union([Type.Literal("low"), Type.Literal("medium"), Type.Literal("high"), Type.Literal("xhigh"), Type.Literal("max"), Type.Literal("ultra")]);
 /**
  * 真正的来源（本机按地址和模型名认出来，网页照写，不用自己猜）：
  * - provider：认出的来源 id。claude-subscription 本人的 Claude 订阅；tokenhub；厂商 API 是 deepseek、kimi、glm、qwen、volcengine、minimax、anthropic 等；
  *   经 magpie 时按模型名的前缀（codex/…、deepseek/…）认，如 codex、copilot、gemini；都认不出就是地址的主机名（经 magpie 又没有前缀时是 magpie）。
- * - label：给人看的，如「我的 Claude 订阅」「TokenHub」「DeepSeek API」「Codex 订阅 · 经 magpie」「api.example.com」。
+ * - label：给人看的来源名，从简：「Claude 订阅」「Codex 订阅」「TokenHub」「DeepSeek API」「Codex 订阅 · 经 magpie」「api.example.com」（11/10 起不带「我的」）。
+ *   选模型的「来源」那一行写它；同一个 provider 的几条模型配置是同一个来源，「模型」那一行在它们里面选（见 LocalModelProfile.modelName）。
  * - via：经本机 magpie 转的为 magpie，直连为 null。
  * 子会话选模型时写「执行方 · 来源 · 模型」，如「Claude Code · Codex 订阅 · 经 magpie · gpt-6.1」。用量照旧按来源（LocalQuotaSource）汇总。
  */
@@ -324,11 +332,34 @@ export const LocalModelProfile = Type.Object({
   origin: Type.Optional(LocalModelOrigin),
   /**
    * 这个模型能选的思考程度（见 LocalEffort），网页选完模型只列这几档；空的是不能选（网关模型本机不传思考程度）。
-   * Claude Code 的按它握手时报的模型列表（这台电脑上跑过一次以后记下；没跑过按 Claude 模型的五档）。老版本本机不带。
+   * Claude Code 的订阅是 Claude 模型的五档；Codex 的按它模型目录里这个模型的几档。老版本本机不带。
    */
   efforts: Type.Optional(Type.Array(LocalEffort, { maxItems: 8 })),
-  /** 不选时用哪档：null 是本机按档位和预算模式定（强 high、标准 medium、轻 low），模型自己的默认档时写那一档。老版本本机不带。 */
+  /**
+   * 不选时用哪档：null 是本机按档位和预算模式定（强 high、标准 medium、轻 low），模型自己的默认档时写那一档（Codex 写它模型目录里的默认档）。
+   * 老版本本机不带。
+   */
   defaultEffort: Type.Optional(Nullable(LocalEffort)),
+  /**
+   * 从执行方自己的模型目录现列的，不能改、不能删（PUT、DELETE 回 400），也不能设成默认；5 分钟读一次，读不到时用上次读到的。本人配的为 false；老版本本机不带。
+   * - Codex 订阅（设计 17.2 第 38 条）：能用的每个模型一条，按 codex app-server 的 model/list（不列 hidden 的），本人的 Codex 登录着才有。
+   *   id 是 codex- 加模型名（不是字母、数字、_、- 的字换成 _），如 codex-gpt-6_1-sol；label 是 Codex 给的显示名，如 GPT-6.1-Sol；
+   *   source subscription、agent codex、model 是模型名、origin「Codex 订阅」。
+   * - Claude 订阅（设计 17.2 第 40 条）：Claude Code 握手（initialize）回的模型列表里每个模型一条（11/10 实测 2.1.318 回 14 个：default、opus、sonnet、haiku、fable
+   *   这几个别名，加 claude-fable-5-2、claude-opus-4-6 这样指定版本的；不发提示、不调模型就读得到）。「default」那一项不列（内置的 subscription 那条就是不指定模型）。
+   *   id 是 cc- 加 Claude Code 给的名字（同样换字），如 cc-opus、cc-claude-fable-5-2；label 和 modelName 是它给的显示名，如「Opus 5.5」「Fable 5.2」；
+   *   source subscription、agent claude-code、model 是那个名字（拉起时原样传 --model）、origin「Claude 订阅」；efforts 是它报的这个模型支持的几档
+   *   （不支持选思考程度的为空，如 Haiku 4.5），defaultEffort 为 null。Claude Code 没装、读不到时没有这几条，内置的 subscription 那条照旧在。
+   */
+  catalog: Type.Optional(Type.Boolean()),
+  /**
+   * 给人看的模型名（设计 17.2 第 40 条，选模型「模型」那一行写它，来源那一行写 origin.label，同一个东西不写两遍）：
+   * - 内置的 subscription（不指定模型，本机按档位和预算模式挑 Opus、Sonnet、Haiku）是「自动」，它是「Claude 订阅」这个来源的默认；
+   * - 模型目录里的是执行方给的显示名（「Opus 5.5」「GPT-6.1-Sol」）；
+   * - 本人配的按 model 写（同 LocalRun.modelName 的写法：认得出的 Claude 模型写成「Haiku 5.5」，网关模型去掉「厂商/」前缀，如 qwen3.8-flash）。
+   * 老版本本机不带，网页退回写 label。
+   */
+  modelName: Type.Optional(Type.String({ minLength: 1, maxLength: 60 })),
   agent: LocalAgentKind,
   baseUrl: Nullable(Type.String()),
   model: Nullable(Type.String()),
@@ -349,6 +380,8 @@ export const LocalModelListResponse = Type.Object({ profiles: Type.Array(LocalMo
  * - gateway：baseUrl、model 必填；apiKey 只写不读，不传表示保留原钥匙，传空串表示删除钥匙。
  *   地址要 https；本机地址（127.0.0.1、localhost）可以是 http。magpie（127.0.0.1:3425）不用填钥匙，本机照它的约定传 magpie；model 写「来源/模型」，如 codex/gpt-6.1。
  * - subscription：用本人登录，只选模型（如 opus、sonnet、haiku），不收 baseUrl 和 apiKey。
+ * 只收 Claude Code 的（agent 不填或 claude-code）：Codex 的模型从它自己的模型目录来（见 LocalModelProfile.catalog），这次不接 Codex 走网关；
+ * id 以 codex-、cc- 开头的留给模型目录，回 400。
  */
 export const LocalModelProfileUpsert = Type.Object({
   label: Type.String({ minLength: 1, maxLength: 40 }),
@@ -604,14 +637,20 @@ export const LocalRole = Type.Object({
  * 危险命令表里的（装东西、联网下载、ssh、sudo、改注册表和系统设置、跑没装好的 npx 包）、碰 .git 和 .claude 的、碰允许的文件夹以外的路径、
  * 天枢 MCP 里写的工具、本人加的工具里不是读的。卡和规划员、验收员本来不给的工具（只读的会话不给写文件）照旧不给，跟模式无关。
  * 实现上 Claude Code 一律以「每次都问」起（只有 plan 用它自己的 plan 模式），每个请求都先到本机、本机按档位放行或转给网页：
- * Claude Code 自己的 auto、bypassPermissions 放行的步骤不经本机，硬规矩管不住。
+ * Claude Code 自己的 auto、bypassPermissions 放行的步骤不经本机，硬规矩管不住。Codex 同理，见 LOCAL_AGENT_PERMISSION_MODES。
  */
 export const LocalPermissionMode = Type.Union([
   Type.Literal("auto"), Type.Literal("default"), Type.Literal("acceptEdits"), Type.Literal("plan"), Type.Literal("bypassPermissions"),
 ]);
 /**
- * 每种执行方能选哪几档（没有的不出现在选择里）。Codex（12 月接）走 app-server 的审批（每一步都先问本机），能像 Claude Code 一样由本机按档位放行，
- * 只是没有「先出计划」；接上时按实测再定。
+ * 每种执行方能选哪几档（没有的不出现在选择里）。Codex 没有「先出计划」。
+ * Codex（设计 17.2 第 38 条）一律以 approvalPolicy untrusted、sandbox read-only 起，每一步都先到本机，本机按档位放行或转给网页，规则和 Claude Code 同一套。
+ * 11/10 用 codex-cli 0.159.2 加本机假网关实测（没调模型）：
+ * - 命令：Windows 上每条都包进 PowerShell，连目录里的读（Get-Content）都来问（item/commandExecution/requestApproval），本人允许后照常执行；
+ * - 改文件（apply_patch）：每次都来问（item/fileChange/requestApproval）；
+ * - MCP 工具：声明只读（readOnlyHint）的直接跑、不问，别的来问（mcpServer/elicitation/request，_meta.codex_approval_kind 为 mcp_tool_call）。
+ *   所以天枢 MCP 里读的工具、本人加的工具里自己声明只读的，Codex 不经本机；写的照问。
+ * 批准不能附理由：本人拒绝时带的话，本机先作为插话送进去再拒。
  */
 export const LOCAL_AGENT_PERMISSION_MODES = {
   "claude-code": ["auto", "default", "acceptEdits", "plan", "bypassPermissions"],
@@ -630,6 +669,11 @@ export const LocalCreateSessionRequest = Type.Object({
    * topic、plan 用各自的专用目录；不带项目的卡必须填。卡的文件夹在 git 仓库里时，卡在自己的工作树里做（见 LocalWorkspace）。
    */
   cwd: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
+  /**
+   * 执行方，不填按模型配置的（再没有是 Claude Code）。和模型配置的执行方不一样回 400。
+   * 规划员（kind=plan）只能用 Claude Code（400）：开工前要用选项框问本人（18.11），Codex 0.159.2 的提问工具只在它自己的计划模式里给。
+   * Codex 会话里没有选项框，模型要问就直接写在回复里，会话转成等你回复。
+   */
   agent: Type.Optional(LocalAgentKind),
   /** 不填用默认模型。 */
   modelProfileId: Type.Optional(Id),
@@ -764,6 +808,19 @@ export const LocalActualModel = Type.Object({
   modelName: Type.String({ minLength: 1, maxLength: 60 }),
   at: Instant,
 }, strict);
+/**
+ * 上下文用了多少（设计 17.2 第 42 条，输入框下面的小圆环）：usedTokens 现在上下文里的 token 数，maxTokens 这个模型的上限（读不到为 null，圆环不画）。
+ * 网页写「16.6 万 / 20 万」，百分比自己算（usedTokens ÷ maxTokens），到 80% 变色。分布（消息、工具、记忆各占多少）不给。
+ * - Claude Code：每轮做完用控制请求 get_context_usage 读一次（11/10 实测 2.1.318：回 totalTokens、maxTokens，约 1 秒、不调模型；Opus 5.5、Fable 5.2 的上限是 100 万）；
+ *   这一轮中间按每次模型回复的用量估（输入加缓存加输出），上限用上一次读到的。
+ * - Codex：每次模型回复后它报的 thread/tokenUsage/updated 里最近一次请求的 totalTokens 和 modelContextWindow。
+ * at 是算出这个数的时间。会话还没跑过一轮、执行方没报过时没有这一项。换了执行方、换了模型以后，等新的那家报了才更新。
+ */
+export const LocalContextUsage = Type.Object({
+  usedTokens: Type.Integer({ minimum: 0 }),
+  maxTokens: NullableInteger({ minimum: 1 }),
+  at: Instant,
+}, strict);
 export const LocalRun = Type.Object({
   mode: BudgetMode,
   model: Nullable(Type.String({ maxLength: 120 })),
@@ -771,11 +828,14 @@ export const LocalRun = Type.Object({
   multiAgent: Type.Boolean(),
   /**
    * 每个子会话都显示「哪个来源的哪个模型」（选了「自动」也显示落到哪个）：界面写 `${sourceLabel} · ${actual?.modelName ?? modelName}`，
-   * 如「我的 Claude 订阅 · Opus 5.5」「TokenHub · qwen3.8-flash」。下面四项本机总会填；Optional 只为兼容老版本本机报的和已存的会话。
+   * 如「Claude 订阅 · Opus 5.5」「TokenHub · qwen3.8-flash」。下面四项本机总会填；Optional 只为兼容老版本本机报的和已存的会话。
    * source：本人的订阅还是网关（同模型配置的 source）。
    */
   source: Type.Optional(LocalModelSource),
-  /** 来源的名字：模型配置的名字（内置的「我的 Claude 订阅」，或本人给 TokenHub 配置起的名字）。 */
+  /**
+   * 来源的名字：本人配的写模型配置的名字（如本人给 TokenHub 配置起的名字）；内置的那条是「Claude 订阅」；
+   * 模型目录里的（cc-、codex- 开头的，配置的名字就是模型名）写认出的来源，「Claude 订阅」「Codex 订阅」（11/10 起，免得写成「Opus 5.5 · Opus 5.5」）。
+   */
   sourceLabel: Type.Optional(Type.String({ minLength: 1, maxLength: 40 })),
   /** 哪个执行方（harness）跑：Claude Code 或 Codex（同会话的 agent）。老版本本机不带。 */
   harness: Type.Optional(LocalAgentKind),
@@ -793,7 +853,7 @@ export const LocalRun = Type.Object({
   actual: Type.Optional(Nullable(LocalActualModel)),
 }, strict);
 /**
- * POST /v1/runs/preview：开工前看这次会怎么跑（开工选项框写「我的 Claude 订阅 · Opus 5.5 · 思考 medium」，「自动」也写落到哪个）。
+ * POST /v1/runs/preview：开工前看这次会怎么跑（开工选项框写「Claude 订阅 · Opus 5.5 · 思考 medium」，「自动」也写落到哪个）。
  * 体是开工请求（LocalCreateSessionRequest）里定跑法的那几项，原样带；回的 LocalRun 和真开工时一样算（当下的额度、这件 Task 的预算），actual 为 null。
  * 只是预览：开工时额度或预算变了，以开工那一刻算的为准（会话摘要和 status 条目里的 run）。
  */
@@ -841,6 +901,8 @@ export const LocalSessionSummary = Type.Object({
   pendingModel: Type.Optional(Type.Object({ modelProfileId: Id, modelLabel: Type.String(), effort: Type.Optional(Nullable(LocalEffort)) }, strict)),
   /** 本人选的思考程度（开工时带的或后来换的）；不带是按档位和预算模式定。实际跑的看 run.effort。 */
   effort: Type.Optional(LocalEffort),
+  /** 上下文用了多少（见 LocalContextUsage）：最近一次算出来的；还没有就不带。事件流里随 context_usage 更新。 */
+  context: Type.Optional(LocalContextUsage),
 }, strict);
 export const LocalSessionListResponse = Type.Object({ sessions: Type.Array(LocalSessionSummary) }, strict);
 
@@ -865,6 +927,56 @@ export const LocalPermissionRequestView = Type.Object({
 export const LocalSessionDetailResponse = Type.Object({
   session: LocalSessionSummary,
   pendingPermissions: Type.Array(LocalPermissionRequestView),
+}, strict);
+
+/**
+ * 在右边预览文件（设计 17.2 第 41 条）。两条都只看本会话自己的地方（下称「会话根」）：卡在工作树里做时是工作树的根，别的会话是工作目录；
+ * 交出的产出本来就在里面。本机按解析掉链接以后的真实路径判，在会话根外面的（.. 穿越、指到外面的链接、别的盘）一律 403 folder_not_allowed。
+ * 会话结束了（退出、交完、合回前）也能读；工作树合回后清掉了，文件就不在了（404，列表里 exists 为 false）。只读，不改任何东西。
+ *
+ * POST /v1/sessions/:id/files/read：读一个文件。path 是绝对路径，或相对路径（正反斜杠都行）：相对路径先按执行方的工作目录找（它在回答里写的相对路径是相对工作目录的），
+ * 没有再按会话根找——两者只在卡的工作树里、本人选的又是仓库的子文件夹时不一样。回答里的路径、列表里的 path / absolutePath、产出事件（artifact）的 path 都可以直接拿来问。
+ * - kind：markdown（.md、.markdown）；text 纯文本和代码（按扩展名认，认不出的看内容里有没有 NUL 字节；HTML、SVG 也算 text，网页当文本看、不执行）；
+ *   image（png、jpg、jpeg、gif、webp、bmp、ico）；other 别的（PDF、Word、压缩包、二进制），只给名字和大小，网页给「打开」。
+ * - content：markdown、text 是 UTF-8 文字，最多 1 MB，超了只给前 1 MB、truncated 为 true；image 是 base64（encoding 写明），最多 5 MB，超了不给内容（content 为 null、truncated true）；
+ *   other 的 content 为 null。mimeType 给 image 拼 data: 地址用，别的类型按扩展名给一个尽量准的。
+ * - path 是相对会话根的路径（正斜杠），absolutePath 是这台电脑上的绝对路径，size 是文件的字节数，modifiedAt 是最后改的时间。
+ * 错误：404 not_found（没有这个会话、文件不存在、是个文件夹）；403 folder_not_allowed（在会话根外面）；400 validation。
+ */
+export const LocalFileKind = Type.Union([Type.Literal("markdown"), Type.Literal("text"), Type.Literal("image"), Type.Literal("other")]);
+export const LocalSessionFileReadRequest = Type.Object({ path: Type.String({ minLength: 1, maxLength: 2000 }) }, strict);
+export const LocalSessionFileReadResponse = Type.Object({
+  path: Type.String(),
+  absolutePath: Type.String(),
+  name: Type.String(),
+  size: Type.Integer({ minimum: 0 }),
+  modifiedAt: Instant,
+  kind: LocalFileKind,
+  mimeType: Type.String({ minLength: 1, maxLength: 120 }),
+  encoding: Type.Union([Type.Literal("utf8"), Type.Literal("base64")]),
+  content: Nullable(Type.String()),
+  truncated: Type.Boolean(),
+}, strict);
+/**
+ * GET /v1/sessions/:id/files：本会话写过、改过的文件（右栏「改动的文件 N」；回答里提到的路径对得上这里的才能点）。两路取并集，各有各的盲区，sources 写明是哪一路知道的：
+ * - tool：事件记录里执行方用写文件、改文件的工具动过的（Claude Code 的 Write、Edit、MultiEdit、NotebookEdit，Codex 的改文件）。不是 git 仓库也有；
+ *   用命令改的（脚本生成、sed、格式化工具）看不到，子 agent 里写的也看不到（它内部的步骤不进事件记录）；被拒绝、没改成的不算。
+ * - git：卡在工作树里做的最全——开工以来分支上已经提交的，加上没提交的（含新文件，.gitignore 里的不算）；
+ *   在本人文件夹里直接做的（专题、不是工作树的卡），文件夹是 git 仓库时只有没提交的改动，而且分不清是不是这个会话改的（本人自己没提交的改动也在里面）；不是仓库就没有这一路。
+ * path 是相对会话根的路径（正斜杠），absolutePath 是绝对路径（回答里两种写法都可能出现，网页拿它们去对）；exists 是现在还在不在（删掉的、挪走的为 false，不能点）；
+ * size 是现在的字节数（不在了为 null）。按路径排，最多 500 个，多了 truncated 为 true。root 是会话根。删掉的文件只有 git 那一路知道。
+ */
+export const LocalChangedFile = Type.Object({
+  path: Type.String(),
+  absolutePath: Type.String(),
+  sources: Type.Array(Type.Union([Type.Literal("tool"), Type.Literal("git")]), { minItems: 1, maxItems: 2 }),
+  exists: Type.Boolean(),
+  size: NullableInteger({ minimum: 0 }),
+}, strict);
+export const LocalSessionFilesResponse = Type.Object({
+  root: Type.String(),
+  files: Type.Array(LocalChangedFile, { maxItems: 500 }),
+  truncated: Type.Boolean(),
 }, strict);
 
 /**
@@ -960,15 +1072,29 @@ export const LocalPermissionModeRequest = Type.Object({ mode: LocalPermissionMod
 /**
  * PUT /v1/sessions/:id/model：子会话换模型、换思考程度（天枢伙伴不走这里；设计 17.2 第 32、36 条）。modelProfileId 是本机的模型配置（GET /v1/models），
  * effort 是思考程度（要在新模型配置的 efforts 里；null 是回到按档位和预算模式定）。两项至少带一项；只带 effort 是同一个模型换思考程度：
- * Claude Code 在跑时用 apply_flag_settings 当场换（now），Codex 要重开（规则同下面的跨来源）。只换模型不带 effort 时，原来选的思考程度新模型也支持就留着，不支持就回到自动。
+ * Claude Code 在跑时用 apply_flag_settings 当场换（now）。只换模型不带 effort 时，原来选的思考程度新模型也支持就留着，不支持就回到自动。
+ * Codex 的会话（设计 17.2 第 38 条）：模型和思考程度都是开一轮（turn/start）时带，不用重开进程——没在跑时 now；正在跑一轮时 after_turn，
+ * 这一轮做完、下一轮开始时换上（摘要的 pendingModel 到那时去掉）。下面两条讲的是 Claude Code。
  * 两种生效方式，回执的 applied 写明，网页分别显示：
  * - now（已生效）：下一次回答起就用新模型。同一个执行方、同一个来源里换（订阅里 Opus 换 Haiku；同一个网关地址、同一把钥匙下换模型名）时，
  *   本机当场让 Claude Code 换（它的 set_model，11/09 实测 2.1.318 认）；会话没在跑（停了、排着、交完了）时也是 now，下次开起来就用新的。
- * - after_turn（这一轮做完后生效）：跨来源（订阅换 TokenHub、换别的网关、换钥匙）要换环境变量，或者是 Codex 的会话，只能重开执行方。
+ * - after_turn（这一轮做完后生效）：跨来源（订阅换 TokenHub、换别的网关、换钥匙）要换环境变量，只能重开执行方。
  *   正在跑的先记下（摘要的 pendingModel），这一轮做完、没有在跑的后台任务时，本机用 --resume 接着原来的对话、换上新模型重开，对话和进度不丢；
  *   会话空着（等你回复）时当场就重开，回 now。
  * 换好以后摘要和 status 同步条目里的 run（modelName、origin 等）随之更新，事件流记一条 notice（code model_changed）。
- * 没有这个模型配置、配置的执行方和会话的不一样回 400。
+ * 没有这个模型配置回 400。
+ *
+ * 换执行方（设计 17.2 第 38 条下面，11/10 用户：Claude Code ↔ Codex 双向换，接着原来的事做）：modelProfileId 是另一家的模型配置就是换执行方。
+ * - 生效时机同跨来源：空着、停了、排着时 now；正在跑一轮、有批准或提问在等、有后台任务在跑时 after_turn，这一轮做完再换。
+ * - 会话还是同一个（id、事件流、产出、工作目录都不变）：摘要的 agent 和 run.harness 换成新的，事件流记一条 notice（code harness_changed，
+ *   text 如「换成 Codex · GPT-6.1-Sol」），同步给云端的 status 条目随之带新的 run。
+ * - 接上下文：两家各留着自己的对话（Claude Code 的会话、Codex 的线程），换回来时续上自己的；换过去的那家只补它没看到的那几轮——
+ *   最近 8 轮原样带上（本人说的、它回的、工具调用写成一行字，如「运行 git status → ok」），更早的不压缩，给它本会话 MCP 的
+ *   read_earlier_turns 工具自己翻（本机从事件记录里读，分页）；再附上工作目录里 git 看得到的改动文件。不再调一次模型去写摘要（额度用完时也能换）。
+ * - 两边规矩一致：工作规矩、技能、天枢 MCP、本人加的工具两边都挂；仓库里只有 CLAUDE.md 时它的内容一并给 Codex，只有 AGENTS.md 时给 Claude Code
+ *   （本机不往仓库里写文件）；技能要飞书时两边都有本人的飞书技能。
+ * - 新执行方没有现在这一档权限模式时（「先出计划」换到 Codex）改成「每次都问」，事件流记 permission_mode（by harness_changed）。
+ * - 规划员、验收员只能用 Claude Code，换到 Codex 回 400。
  */
 export const LocalSessionModelRequest = Type.Object({ modelProfileId: Type.Optional(Id), effort: Type.Optional(Nullable(LocalEffort)) }, strict);
 export const LocalSessionModelResponse = Type.Object({
@@ -1149,8 +1275,11 @@ export const LocalSessionEvent = Type.Union([
   /** hold：停着等额度恢复时带（见 LocalHold）。 */
   ev("status", { status: LocalSessionStatus, exitCode: Type.Optional(NullableInteger()), reason: Type.Optional(Type.String()), hold: Type.Optional(LocalHold) }),
   ev("agent_info", { agent: LocalAgentKind, version: Type.String(), model: Nullable(Type.String()), permissionMode: Nullable(Type.String()) }),
-  /** 权限模式换了（见 LocalPermissionMode）：by web 是本人在网页上换的，plan_approved 是本人批了计划、从 plan 转成 auto。开工时的模式不报这一条。 */
-  ev("permission_mode", { mode: LocalPermissionMode, by: Type.Union([Type.Literal("web"), Type.Literal("plan_approved")]) }),
+  /**
+   * 权限模式换了（见 LocalPermissionMode）：by web 是本人在网页上换的，plan_approved 是本人批了计划、从 plan 转成 auto，
+   * harness_changed 是换了执行方、新的那家没有原来那一档（「先出计划」换到 Codex 改成「每次都问」）。开工时的模式不报这一条。
+   */
+  ev("permission_mode", { mode: LocalPermissionMode, by: Type.Union([Type.Literal("web"), Type.Literal("plan_approved"), Type.Literal("harness_changed")]) }),
   /**
    * attachments：这句话带的附件（存好的，见 LocalAttachmentRef）；没有就不带。text 是本人说的原话，不含本机拼给执行方的附件路径。
    * messageId：这句话的编号（本机给的，11/08 起每条都带；之前的事件日志里没有），回执（receipt）按它对上。
@@ -1190,7 +1319,8 @@ export const LocalSessionEvent = Type.Union([
      */
     errorKind: Type.Optional(Type.Union([Type.Literal("auth"), Type.Literal("api"), Type.Literal("usage_limit"), Type.Literal("balance"), Type.Literal("interrupted"), Type.Literal("other")])),
   }),
-  ev("artifact", { artifactId: Id, title: Type.String(), fileName: Type.String(), size: Type.Integer({ minimum: 0 }), sha256: Type.String() }),
+  /** path：这份产出在会话根里的相对路径（正斜杠，11/10 起带；fileName 只是文件名），在右边预览时拿它去读（POST /v1/sessions/:id/files/read）。 */
+  ev("artifact", { artifactId: Id, title: Type.String(), fileName: Type.String(), size: Type.Integer({ minimum: 0 }), sha256: Type.String(), path: Type.Optional(Type.String()) }),
   /** commit：卡在工作树里做时，交回那一刻分支上的提交（本机先把没提交的改动提交了）。 */
   ev("handback", { summary: Type.String(), criteria: Type.Array(LocalHandbackCriterion), outputKeys: Type.Array(SyncKey), commit: Type.Optional(Sha) }),
   /** 专题存了新的一版（已排进上报队列）。 */
@@ -1205,8 +1335,15 @@ export const LocalSessionEvent = Type.Union([
     failStreak: Type.Integer({ minimum: 0 }), blocked: Type.Boolean(), returnText: Nullable(Type.String()),
   }),
   /**
+   * 上下文用了多少变了（见 LocalContextUsage，摘要的 context 同步更新）：每轮做完报一次；这一轮中间每次模型回复后算一次，
+   * 百分比（取整）变了才报，免得事件太密；上限读不到时只在每轮做完报。压缩以后跟着报一条新的。
+   */
+  ev("context_usage", { usedTokens: Type.Integer({ minimum: 0 }), maxTokens: NullableInteger({ minimum: 1 }) }),
+  /**
    * interjection_next_step：插话已送出，下一步生效；auth_required：执行方登录失效；agent_stderr：执行方报错输出；verify_waiting：验收在等交代（连不上天枢等）；
-   * workspace：卡开工时在哪做（工作树的分支、从哪个提交开始、主文件夹里没提交的改动没带进来）；merged：卡的分支已合回主文件夹。
+   * workspace：卡开工时在哪做（工作树的分支、从哪个提交开始、主文件夹里没提交的改动没带进来）；merged：卡的分支已合回主文件夹；
+   * context_compacted：执行方压缩了上下文（Claude Code 的 compact_boundary、Codex 的 contextCompaction；自动压的和本人让它压的都报），
+   * text 是「压缩了上下文」，网页在对话里记这一行（设计 17.2 第 42 条）。
    */
   ev("notice", { level: Type.Union([Type.Literal("info"), Type.Literal("warn"), Type.Literal("error")]), code: Type.String(), text: Type.String() }),
 ]);
@@ -1446,6 +1583,12 @@ export type TLocalFolderPickRequest = Static<typeof LocalFolderPickRequest>;
 export type TLocalFolderCreateRequest = Static<typeof LocalFolderCreateRequest>;
 export type TLocalFolderCreateResponse = Static<typeof LocalFolderCreateResponse>;
 export type TLocalSessionModelRequest = Static<typeof LocalSessionModelRequest>;
+export type TLocalContextUsage = Static<typeof LocalContextUsage>;
+export type TLocalFileKind = Static<typeof LocalFileKind>;
+export type TLocalSessionFileReadRequest = Static<typeof LocalSessionFileReadRequest>;
+export type TLocalSessionFileReadResponse = Static<typeof LocalSessionFileReadResponse>;
+export type TLocalChangedFile = Static<typeof LocalChangedFile>;
+export type TLocalSessionFilesResponse = Static<typeof LocalSessionFilesResponse>;
 export type TLocalSessionModelResponse = Static<typeof LocalSessionModelResponse>;
 export type TLocalSessionStatus = Static<typeof LocalSessionStatus>;
 export type TLocalSessionSubject = Static<typeof LocalSessionSubject>;
@@ -1568,6 +1711,8 @@ export const LOCAL_RUNNER_ROUTES = {
   previewRun: { method: "POST", path: "/v1/runs/preview", auth: true },
   setPermissionMode: { method: "PUT", path: "/v1/sessions/:id/permission-mode", auth: true },
   setSessionModel: { method: "PUT", path: "/v1/sessions/:id/model", auth: true },
+  listSessionFiles: { method: "GET", path: "/v1/sessions/:id/files", auth: true },
+  readSessionFile: { method: "POST", path: "/v1/sessions/:id/files/read", auth: true },
   listProjects: { method: "GET", path: "/v1/projects", auth: true },
   putProjectFolder: { method: "PUT", path: "/v1/projects/:projectId/folder", auth: true },
   handoverCheck: { method: "POST", path: "/v1/projects/:projectId/handover-check", auth: true },

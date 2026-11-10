@@ -6,7 +6,8 @@ import { CARD_TITLE_RULE } from "./cardTitle.js";
  * 本会话的 MCP（HTTP，挂在本机程序的 /internal/sessions/:id/mcp）：执行方用它把产出物、证据、交回、专题版本报给本机程序，
  * 本机程序再排进发件箱单向报给云端。用 HTTP 而不是 stdio：不用为每个会话再起一个本机程序进程。
  * 本机程序把地址和本会话密钥写进 --mcp-config 文件（不进命令行）；这些工具预先放行，不弹权限请求。
- * 各种会话看到自己那几个：卡交回（hand_back），专题存版本（save_version、set_feishu_url），规划员交计划（propose_plan），验收员交结论（submit_verdict）。
+ * 各种会话看到自己那几个：卡交回（hand_back），专题存版本（save_version、set_feishu_url），规划员交计划（propose_plan），验收员交结论（submit_verdict）；
+ * 卡和专题还有翻更早轮次的 read_earlier_turns（换执行方接着做时用，契约 LocalSessionModelRequest）。
  */
 const ADD_ARTIFACT = {
   name: "add_artifact",
@@ -146,11 +147,24 @@ const SUBMIT_VERDICT = {
   },
 };
 
+/** 规划员、验收员换不了执行方，不给。 */
+const READ_EARLIER_TURNS = {
+  name: "read_earlier_turns",
+  description: "翻这个会话更早的轮次：本人说的、执行方回的原样，工具调用一行一个。换过执行方（Claude Code、Codex）接着做时，交代里只带了最近几轮，更早的用它看。从最近的往前翻：before 不填从最新一轮起；填上次返回里最早那一轮的号，接着往前。",
+  inputSchema: {
+    type: "object",
+    properties: {
+      before: { type: "integer", minimum: 1, description: "只看第几轮之前的（不含这一轮）" },
+      limit: { type: "integer", minimum: 1, maximum: 20, description: "一次看几轮，默认 8" },
+    },
+  },
+};
+
 export const SESSION_MCP_NAME = "tianshu-session";
 
 const TOOLS: Record<TLocalSessionKind, { name: string }[]> = {
-  card: [ADD_ARTIFACT, ADD_EVIDENCE, HAND_BACK],
-  topic: [ADD_ARTIFACT, ADD_EVIDENCE, SAVE_VERSION, SET_FEISHU_URL],
+  card: [ADD_ARTIFACT, ADD_EVIDENCE, HAND_BACK, READ_EARLIER_TURNS],
+  topic: [ADD_ARTIFACT, ADD_EVIDENCE, SAVE_VERSION, SET_FEISHU_URL, READ_EARLIER_TURNS],
   plan: [PROPOSE_PLAN],
   verify: [SUBMIT_VERDICT],
 };
@@ -187,6 +201,10 @@ function callTool(sessions: SessionManager, id: string, kind: TLocalSessionKind,
   if (name === "set_feishu_url" && Number.isInteger(input?.number) && typeof input?.url === "string") return sessions.setFeishuUrl(id, input);
   if (name === "propose_plan" && typeof input?.summary === "string" && Array.isArray(input?.cards)) return sessions.proposePlan(id, input);
   if (name === "submit_verdict" && typeof input?.summary === "string" && Array.isArray(input?.criteria)) return sessions.submitVerdict(id, input);
+  if (name === "read_earlier_turns") {
+    const int = (v: unknown) => (Number.isInteger(v) && (v as number) >= 1 ? (v as number) : undefined);
+    return sessions.readEarlierTurns(id, { before: int(input?.before), limit: int(input?.limit) });
+  }
   throw new Error("工具名或参数不对");
 }
 

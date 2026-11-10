@@ -2,7 +2,7 @@ import type { TLocalModelOrigin } from "@warmap/contracts";
 
 /**
  * 模型配置真正的来源（契约 LocalModelOrigin）：按地址和模型名认，不联网。
- * - 订阅：本人的 Claude 订阅。
+ * - 订阅：本人的 Claude 订阅；Codex 的是本人的 Codex 订阅。
  * - 本机 magpie（127.0.0.1:3425，github.com/yetone/magpie）：模型名写「来源/模型」，按前缀认（codex/… 是 Codex 订阅）。
  * - 别的地址按域名对上预设名单（TokenHub、DeepSeek、Kimi、GLM、Qwen、火山方舟等），对不上写主机名。
  */
@@ -50,8 +50,9 @@ const MAGPIE_PREFIX: Record<string, { provider: string; label: string }> = {
   openrouter: { provider: "openrouter", label: "OpenRouter" },
 };
 
-export function modelOrigin(p: { source: "subscription" | "gateway"; baseUrl: string | null; model: string | null }): TLocalModelOrigin {
-  if (p.source === "subscription") return { provider: "claude-subscription", label: "我的 Claude 订阅", via: null };
+export function modelOrigin(p: { source: "subscription" | "gateway"; baseUrl: string | null; model: string | null; agent?: string }): TLocalModelOrigin {
+  if (p.source === "subscription" && p.agent === "codex") return { provider: "codex", label: "Codex 订阅", via: null };
+  if (p.source === "subscription") return { provider: "claude-subscription", label: "Claude 订阅", via: null };
   const url = urlOf(p.baseUrl);
   if (isMagpie(p.baseUrl)) {
     const slash = (p.model ?? "").indexOf("/");
