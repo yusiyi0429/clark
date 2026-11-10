@@ -182,7 +182,7 @@ describe("会话：开工、事件、批权限、插话、停下、强停、续�
       body: JSON.stringify({ jsonrpc: "2.0", id: ++n, method, params }),
     })).body;
     expect((await rpc("initialize", { protocolVersion: "2025-06-18" })).result.serverInfo.name).toBe("tianshu-local");
-    expect((await rpc("tools/list")).result.tools.map((x: any) => x.name)).toEqual(["add_artifact", "add_evidence", "hand_back"]);
+    expect((await rpc("tools/list")).result.tools.map((x: any) => x.name)).toEqual(["add_artifact", "add_evidence", "hand_back", "read_earlier_turns"]);
     const call = async (name: string, args: unknown) => (await rpc("tools/call", { name, arguments: args })).result as { isError: boolean; content: { text: string }[] };
     expect((await call("add_artifact", { path: "方案.md", title: "方案" })).content[0]!.text).toContain("编号 A1");
     expect((await call("add_artifact", { path: "../../etc/passwd" })).isError).toBe(true);
@@ -221,7 +221,7 @@ describe("会话：开工、事件、批权限、插话、停下、强停、续�
       body: JSON.stringify({ jsonrpc: "2.0", id: ++n, method, params }),
     })).body;
     const call = async (name: string, args: unknown) => (await rpc("tools/call", { name, arguments: args })).result as { isError: boolean; content: { text: string }[] };
-    expect((await rpc("tools/list")).result.tools.map((x: any) => x.name)).toEqual(["add_artifact", "add_evidence", "save_version", "set_feishu_url"]);
+    expect((await rpc("tools/list")).result.tools.map((x: any) => x.name)).toEqual(["add_artifact", "add_evidence", "save_version", "set_feishu_url", "read_earlier_turns"]);
     writeFileSync(join(s.body.cwd, "提纲.md"), "# 提纲\n1. 背景");
     expect((await call("save_version", { path: "提纲.md", kind: "outline", note: "第一次出提纲" })).content[0]!.text).toBe("已存第 3 版");
     expect((await call("save_version", { path: "../x.md", kind: "draft" })).isError).toBe(true);

@@ -7,6 +7,7 @@ import { planProgress } from "../plan.js";
 import { readJson, writeJsonAtomic } from "../store.js";
 import { describeTool, homeDir, versionAtLeast } from "./claudeEnv.js";
 import { codexEnv, CodexRpcError, openCodex, type CodexBin, type CodexRpc } from "./codexRpc.js";
+import { linkLarkSkills } from "./feishuPlugin.js";
 import { modeAllows, outsidePaths, type PathScope } from "./pathGuard.js";
 import { AgentStartError, type AgentAdapter, type AgentLaunch, type AgentRun, type PermissionAnswer, type TurnModels } from "./types.js";
 
@@ -427,6 +428,8 @@ export class CodexAdapter implements AgentAdapter {
       // 角色的工具名单里没有联网搜索时关掉 Codex 自带的
       ...(launch.disallowedTools.includes("WebSearch") ? ["-c", 'web_search="disabled"'] : []),
     ];
+    // 技能要飞书：本人已装的飞书技能链接进天枢专用的配置目录（本人自己的 ~/.codex 不动）
+    if (launch.feishuSkillsDir && this.opts.home) linkLarkSkills(join(this.opts.home, "skills"), launch.feishuSkillsDir);
     const env = codexEnv(this.opts.baseEnv ?? process.env, this.opts.home, launch.mcpEnv);
     let opened: Awaited<ReturnType<typeof openCodex>>;
     try {

@@ -61,7 +61,7 @@ describe("岗位", () => {
     const s = await api(t.port, token, "POST", "/v1/sessions", { subject: { kind: "topic", topicId: "t-early" }, title: "x", cwd: dir, firstMessage: "hi" });
     expect(s.status).toBe(200);
     const checked = readFileSync(join(dir, ".fake-claude-trace.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((l) => l.mcpOnInit).at(-1);
-    expect(checked.mcpOnInit).toEqual({ status: 200, tools: ["add_artifact", "add_evidence", "save_version", "set_feishu_url"] });
+    expect(checked.mcpOnInit).toEqual({ status: 200, tools: ["add_artifact", "add_evidence", "save_version", "set_feishu_url", "read_earlier_turns"] });
     writeFileSync(join(dir, ".fake-claude.json"), "{}");
     await kill(s.body.id);
   });

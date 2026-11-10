@@ -28,6 +28,8 @@ export interface AgentLaunch {
   agentsPath: string | null;
   /** 只在本会话生效的插件目录（--plugin-dir），如飞书技能。 */
   pluginDirs: string[];
+  /** 技能要飞书时本人已装技能的目录：Codex 把里面的 lark-* 链接进天枢专用的配置目录（Claude Code 走 pluginDirs，不看这一项）。 */
+  feishuSkillsDir?: string | null;
   /** 本会话允许的范围（本人允许的文件夹，加上还算数的工作目录），每次权限请求现查，据此标出越界路径。 */
   allowedRoots(): string[];
   /** 卡在自己的工作树里做时是工作树的根：「自动」「自动接受改文件」只在这里面自己放行（pathGuard 的 modeAllows）。别的会话为 null。 */

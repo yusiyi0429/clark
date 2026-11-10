@@ -331,6 +331,9 @@ rl.on("line", (line) => {
         clearTimeout(turn.timer);
         turn.timer = setTimeout(() => { out({ type: "assistant", message: { content: [{ type: "text", text: "停下了，没做完的：收尾" }] }, parent_tool_use_id: null }); finish(true, "停下了"); }, 30);
       }
+    } else if (readCfg().turnDelayMs) {
+      // 收下了、过一会儿才开始这一轮（真机上收下一句话到报 system/init 之间有一小段）
+      setTimeout(() => startTurn(msg.message.content), readCfg().turnDelayMs);
     } else {
       startTurn(msg.message.content);
     }
