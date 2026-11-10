@@ -532,7 +532,7 @@ function HomeFrame({ account }: { account: Account }) {
       case "projectInfo": {
         const project = projects.all.find((entry) => entry.id === current.id);
         if (!project) return <Missing loading={!api.ready} onRetry={api.planFailed ? () => void api.retryPlan() : undefined} />;
-        return <ProjectInfo key={project.id} project={project} period={data.period} go={go} actions={projects.actions} doneDefinitionOf={(taskId) => planTask(taskId)?.doneDefinition ?? null}
+        return <ProjectInfo key={project.id} project={project} period={data.period} go={go} actions={projects.actions} folders={projects.boundAll.get(project.id) ?? []} folderLimit={projects.folderLimit} doneDefinitionOf={(taskId) => planTask(taskId)?.doneDefinition ?? null}
           me={{ personId: account.personId ?? "", name: account.displayName }} />;
       }
       case "transfer": return <TransferView key={current.id} id={current.id} go={go} onChanged={api.refresh} />;
@@ -582,7 +582,13 @@ function HomeFrame({ account }: { account: Account }) {
 
   const left = (
     <LeftColumn data={data} view={view} buddy={buddy} speaking={speaking} go={go} phone={handheld} account={account} month={month} onRetryPlan={api.planFailed ? () => void api.retryPlan() : null}
-      projects={projects.projects} archived={projects.archived} archivedSubs={projects.archivedSubs} actions={rowActions} onCreate={(name) => projects.actions.create(name)} cardAt={cardAt} working={working} seen={seenMarks} onOpen={markSeen}
+      projects={projects.projects} archived={projects.archived} archivedSubs={projects.archivedSubs} actions={rowActions} folderLimit={projects.folderLimit}
+      onCreate={async (name, folderIds) => {
+        const id = await projects.actions.create(name);
+        // 项目建好了、文件夹没绑上：照样进项目页，提示一句，文件夹在详情里再加。
+        if (folderIds.length) await projects.actions.setFolders(id, folderIds, name).catch(() => showWorkspaceToast({ text: "文件夹没绑上" }));
+        return id;
+      }} cardAt={cardAt} working={working} seen={seenMarks} onOpen={markSeen}
       today={todayLabel(work.plan?.today ?? null)} alert={alert} trail={handheld ? backgroundButton : null}
       top={handheld && data.waiting.length ? (
         <section aria-label="等你" className={h.phoneWaiting}>

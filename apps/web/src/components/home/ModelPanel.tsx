@@ -4,7 +4,7 @@
  * 选模型的面板（设计 17.2 第 40 条，照 Claude Code）：入口是输入框下面的胶囊，点开三行——来源、模型、思考，左边行名、右边现在的值和「›」。
  * 点一行，同一个弹层翻到第二页：顶上一行「‹ 行名」回去，下面是能选的，选中的打勾；选完回到三行，弹层不关。点别处、Esc 关；第二页按 Esc 先回第一页。
  * 只列得出一项的那一行没有「›」、点不了。手持上从底部升起（同权限档那个抽屉）。子会话、开工对话框、项目对话三处共用；每一行的值和选项由调用方算（lib/local/modelPanel）。
- * busy：选了以后要等一会儿才换好的（子会话换执行方，本机要等新的那家起来）——那一行转圈、先写选的那个，换好之前三行都点不了。
+ * busy：选了以后要等一会儿才换好的（子会话换执行方，本机要等新的那家起来）——那一行转圈、先写选的那个，换好之前三行都点不了，另外两行的「›」也收起来。
  */
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Dropdown } from "@heroui/react";
@@ -37,7 +37,7 @@ const RowText = ({ row, busy }: { row: PanelRow; busy?: Props["busy"] }) => {
   const value = waiting ? row.options.find((option) => option.id === waiting.id)?.label ?? row.value : row.value;
   return (
     <><span className={h.grow}>{row.name}</span><span className={h.panelValue}>{value}</span>
-      <span className={h.panelMark}>{waiting ? <StateIcon state="running" label="正在换" /> : rowOpens(row) ? <ChevronRight {...ICON} className={h.chevron} aria-hidden /> : null}</span></>
+      <span className={h.panelMark}>{waiting ? <StateIcon state="running" label="正在换" /> : !busy && rowOpens(row) ? <ChevronRight {...ICON} className={h.chevron} aria-hidden /> : null}</span></>
   );
 };
 const BackText = ({ row }: { row: PanelRow }) => <span className={h.panelBack}><ChevronLeft {...ICON} className={h.chevron} aria-hidden />{row.name}</span>;
