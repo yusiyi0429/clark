@@ -461,11 +461,14 @@ export class CodexAdapter implements AgentAdapter {
     if (!model) throw new AgentStartError("validation", "Codex 的模型配置没有模型名");
     // 技能要飞书：本人已装的飞书技能链接进天枢专用的配置目录（本人自己的 ~/.codex 不动）；链接变了，本人技能重列一次
     if (launch.feishuSkillsDir && this.opts.home && linkLarkSkills(join(this.opts.home, "skills"), launch.feishuSkillsDir)) this.userSkills = null;
+    const extraDirs = launch.extraDirs();
     const args = [
       ...mcpArgs(launch.mcpConfigPath),
       ...(await this.personalSkillsOff(bin, launch)),
       // 角色的工具名单里没有联网搜索时关掉 Codex 自带的
       ...(launch.disallowedTools.includes("WebSearch") ? ["-c", 'web_search="disabled"'] : []),
+      // 项目另外绑的文件夹：沙箱里也算可写的目录。Windows 上 Codex 实际以只读起（11/10 实测 0.159.2），写和命令本来就每一步先到本机，这一项带了不起作用也不报错
+      ...(extraDirs.length ? ["-c", `sandbox_workspace_write.writable_roots=[${extraDirs.map(toml).join(",")}]`] : []),
     ];
     const env = codexEnv(this.opts.baseEnv ?? process.env, this.opts.home, launch.mcpEnv);
     let opened: Awaited<ReturnType<typeof openCodex>>;
@@ -496,7 +499,7 @@ export class CodexAdapter implements AgentAdapter {
       return fail("agent_incompatible", `Codex 没开出会话：${e instanceof Error ? e.message : String(e)}`);
     }
     this.threads.set(launch.sessionId, threadId);
-    const scope: PathScope = { cwd: launch.cwd, home: homeDir(), allowedRoots: launch.allowedRoots, toolReads: launch.toolReads };
+    const scope: PathScope = { cwd: launch.cwd, home: homeDir(), allowedRoots: launch.allowedRoots, toolReads: launch.toolReads, extraDirs: launch.extraDirs };
     return new CodexRun(rpc, threadId, version, scope, launch.autoAllowRoot, launch.permissionMode, model, launch.run.effort ?? null, new Set(launch.allowedTools));
   }
 }

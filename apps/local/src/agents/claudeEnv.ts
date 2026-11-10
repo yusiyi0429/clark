@@ -84,6 +84,8 @@ export function buildClaudeArgs(launch: AgentLaunch): { args: string[]; env: Rec
   if (launch.systemPromptPath) args.push("--append-system-prompt-file", launch.systemPromptPath);
   if (launch.agentsPath) args.push("--agents", launch.agentsPath);
   for (const dir of launch.pluginDirs) args.push("--plugin-dir", dir);
+  // 项目另外绑的文件夹：读它们不用再来问；改文件照旧每一步先到本机（权限是「每次都问」起的）
+  for (const dir of launch.extraDirs()) args.push("--add-dir", dir);
 
   // MCP 配置文件里用 ${变量名} 引用的密钥和令牌，经子进程环境变量交给 Claude Code。
   const env: Record<string, string> = { DISABLE_AUTOUPDATER: "1", ...launch.mcpEnv };

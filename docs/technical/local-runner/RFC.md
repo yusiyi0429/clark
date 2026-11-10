@@ -158,7 +158,7 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
 - TokenHub 花了多少（11/07 下午，每人一个计费账户）：配了网关模型、存了钥匙时，`quota` 里多一项 TokenHub（kind `daily_spend`）：用本机存的钥匙调 `GET <网关主机>/api/tokavi/v1/log/usage?time_start=<本月 1 日 0 点>&page_size=500`（只能查这把钥匙所在的账户，半小时一格，翻页读完），按 `pay_currency` 加 `wallet_charge`，今天的从本机今天 0 点起；这是 TokenHub 自己的数（`estimated: false`），右栏「TokenHub 今天 ¥x」用它。同一把钥匙配在几个模型上只读一次，同一个账户的几把钥匙只列一项；接口 404（不是 TokenHub）的网关不列。网页问状态时 5 分钟读一次（TokenHub 半小时一格，不用每轮都读）。账户名只用来去重，不出本机。
 - 这台电脑逐项（新首页设计 14.4）：`tools` 依次是 Claude Code（照它自己报的登录，每次问状态现查；登录到期算过期）、Codex（`codex login status`，退出码 0 且写着 Logged in 算登着）、gh、飞书命令行，网页一行一行列，有一项不是 ready 就提醒。命令行工具：本机程序启动时和每 10 分钟查一次 Codex、gh（`gh auth status --json hosts` 里 github.com 的当前账号）和飞书命令行（`lark-cli auth status` 的用户身份；刷新令牌过期算过期，只有机器人身份不算登着），放在 `GET /v1/status` 的 `tools[{ kind, state: ready|not_installed|not_logged_in|expired|unknown, version, account, checkedAt }]`，不同步给云端。
 **项目的文件夹（11/07 晚，新首页设计 16.6）**：
-- 一个项目在这台电脑上对应一个文件夹，存在本机（`projects.json`），不报给云端。文件夹照旧只能经本机选择框加进允许列表（`POST /v1/folders/pick`），再 `PUT /v1/projects/:projectId/folder { folderId | null, name? }` 绑上或解绑；`GET /v1/projects` 列出这台电脑上记着的项目和文件夹；`GET /v1/folders` 每个文件夹带 `projects[{ projectId, name }]`（连接页看挂在哪）。名字只用来显示。文件夹从允许列表删掉后，绑着它的项目读出来就是没绑。
+- 一个项目在这台电脑上对应文件夹（11/10 起可以绑多个，见下面一段），存在本机（`projects.json`），不报给云端。文件夹照旧只能经本机选择框加进允许列表（`POST /v1/folders/pick`），再 `PUT /v1/projects/:projectId/folder { folderId | null, name? }` 绑上或解绑；`GET /v1/projects` 列出这台电脑上记着的项目和文件夹；`GET /v1/folders` 每个文件夹带 `projects[{ projectId, name }]`（连接页看挂在哪）。名字只用来显示。文件夹从允许列表删掉后，绑着它的项目读出来就是没绑。
 - 开工的 `subject` 可带 `projectId`（天枢的 project_id）。不指定 `cwd` 时：项目绑了文件夹就在那里做（卡在 git 仓库里照样开自己的工作树；专题、规划员直接在那个文件夹）；没绑时卡在本机程序数据目录的 `projects/<项目 id>/` 里做（不是 git 仓库，同一时间一张卡，前后几张卡看得到彼此留下的东西），专题、规划员照旧用各自的专用目录；不带项目又不指定目录的卡照旧 400。指定了 `cwd` 的照旧用 `cwd`。
 - 上报：`subject` 在每条同步条目里都有，所以状态、花费、交回等都带 `projectId`；本机起的验收员跟着被验的卡带上。
 - 项目转交（11/07 晚，16.7）本机三件：
@@ -166,6 +166,20 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
   - 接手以后「拉到这台电脑」`POST /v1/projects/:projectId/clone { repoUrl, branch?, name? }`：先弹系统选择框让本人选放在哪，在里面 `git clone -- <地址> <名字>`（只收 https://、ssh://、git@ 开头的地址，不经 shell，`GIT_TERMINAL_PROMPT=0` 不弹输入口令，用本人电脑上已有的 git 登录），再 `git switch <交接分支>`（远端没有就留在默认分支，`fellBack: true`），加进允许的文件夹、绑到项目。取消回 `project: null`；那里已有同名文件夹、选的地方不许用回 400；拉不下来回 409「没拉下来：」加 git 的报错（地址里的口令去掉）。同步等 clone 做完才回（最多 15 分钟），网页显示用时。
   - 原负责人那边：网页 `PUT /v1/projects/:projectId/folder { folderId: null }` 解绑，不动文件，文件夹也还在允许的列表里；本机不另开接口。
 - 测试：`test/projects.test.ts`。
+
+**一个项目绑多个文件夹（11/10，新首页设计 17.2 第 46 条）**：
+- 含义：`LocalProjectFolder.folders` 有顺序，最多 5 个。第一个是工作目录（会话从这里开始，卡的工作树开在这里），其余的是这个项目的会话另外能读写的目录。`folder` 留着，等于第一个。
+- 绑定：还是 `PUT /v1/projects/:projectId/folder`，`folderIds`（整份列表，一次换掉，空的是全部解绑）和 `folderId`（老写法：换掉第一个、其余不动，null 全部解绑）给一个。选文件夹、新建文件夹、拉仓库时带项目的，也是换掉第一个。有一个不在允许的列表里回 404，一个都不改。`projects.json` 记 `folderIds`，同时照旧写 `folderId`（等于第一个，换回老的本机程序时还认得工作目录）；只有 `folderId` 的老记录照读。
+- 删掉一个允许的文件夹：它从项目的列表里拿掉（读的时候只认还在允许列表里的），拿掉的是第一个时剩下的第一个成了工作目录。
+- 一个会话的「其余目录」每次现算（`SessionManager.extraDirs`）：项目绑着的文件夹里，除了本会话自己那个（工作目录所在的；卡在工作树里做时是开工作树的那个；验收员跟着它验的卡算）。和自己那个互相套着的不算（不然卡能绕过工作树去改主文件夹），磁盘上不在了的不算。挂在项目上的卡、专题、规划员、验收员都按这条来；没挂项目的会话没有其余目录。
+- 交给执行方（起进程时定，项目的文件夹改了要到下一次起进程才变）：
+  - Claude Code：`--add-dir <目录>`，一个目录一个。我们以「每次都问」起它，所以读这些目录不再来问，改文件照旧每一步先到本机。
+  - Codex：`-c sandbox_workspace_write.writable_roots=[…]`。Windows 上 Codex 实际以只读起（11/10 实测 0.159.2：`thread/start` 带 `workspace-write`，回的 `sandbox` 是 `readOnly`，带不带这一项都一样），写文件、跑命令本来就每一步先到本机，这一项不起作用也不报错；Mac、Linux 上的效果没验证过。
+  - 两家的工作规矩里都加一段「项目另外的文件夹」，列出路径（Codex 只读起的时候不会自己告诉模型有这些目录）。
+- 放行（`pathGuard` 的 `modeAllows`，`PathScope.extraDirs` 每次现查，本人加了减了马上跟着变）：不在工作树里做的会话本来就在允许的文件夹里放行，没变。卡在工作树里做时，「自动」「自动接受改文件」原来只在工作树里放行；现在其余目录照「不在工作树里」的规矩放行：改文件的工具、读的命令不问，用命令写、删、挪的照样问（那里没有 git 兜底）。别的允许的文件夹（不是这个项目另外绑的）照旧问。
+- 读文件、改动的文件：其余目录里的也认。读文件要给绝对路径（相对路径只按工作目录、会话根找）；改动的文件在其余目录里只认工具调用那一路，不看 git。这些文件的 `path` 是绝对路径（正斜杠）。
+- 没做的：其余目录不开工作树（卡在里面改的东西不在卡的分支上，合回时不带，丢弃卡时不撤）；交接检查只看第一个文件夹。
+- 测试：`test/projectFolders.test.ts`、`test/permissionMode.test.ts`（都用假 claude、假 codex）。真的两家各跑一轮没做过。
 
 **一句话带附件（11/07 下午，新首页设计 14.5）**：
 - `POST /v1/sessions/:id/messages` 可带 `attachments[{ id, fileName, size, sha256 }]`（最多 20 个，带了可以不说话；B 的 334f1ade）：天枢里存着的子会话附件。本机按 id 从天枢取回（`GET <apiBaseUrl>/api/local-runner/attachments/:id`，设备令牌，只给附件主人配对的电脑），核对 sha256，存进这件的工作区：会话的工作目录（卡的工作树、专题和规划员的专用目录）里的 `.tianshu-attachments/<毫秒时间>/<文件名>`，目录里放一个只写 `*` 的 `.gitignore`，卡交回提交时不带上，也不改仓库自己的 `.gitignore`。文件名去掉路径和 Windows 不许的字符，同一句里重名的加「(2)」。

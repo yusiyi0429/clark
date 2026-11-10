@@ -82,12 +82,21 @@ function worktreeNote(ws: Extract<TLocalWorkspace, { kind: "worktree" }>): strin
 - 不要切换分支，不要改主文件夹（${ws.folder}）。`;
 }
 
+/** 项目另外绑的文件夹（设计 17.2 第 46 条）：两家执行方都靠这几句知道有它们。 */
+function extraDirsNote(dirs: string[], worktree: boolean): string {
+  return `## 项目另外的文件夹
+这个项目除了工作目录，还绑着下面这些文件夹，用到时写绝对路径：
+${dirs.map((d) => `- ${d}`).join("\n")}
+它们是本人自己的文件夹，没有单独的工作树。${worktree ? "在里面改的东西不在这张卡的分支上，交回时写明改了哪些文件。" : ""}`;
+}
+
 export function systemPrompt(
   kind: TLocalSessionKind, role: TLocalRole | null, critics: TLocalRole[], feishu: FeishuSkills, workspace: TLocalWorkspace | null = null,
-  customTools: { server: string; name: string }[] = [],
+  customTools: { server: string; name: string }[] = [], extraDirs: string[] = [],
 ): string {
   const parts = ["# 天枢本机会话", INTRO[kind], RULES[kind]];
   if (workspace?.kind === "worktree") parts.push(worktreeNote(workspace));
+  if (extraDirs.length) parts.push(extraDirsNote(extraDirs, workspace?.kind === "worktree"));
   if (customTools.length) {
     const list = customTools.map((t) => `- ${t.name}：MCP 服务器 ${t.server} 里的工具`).join("\n");
     parts.push(`## 本人加的工具\n${list}\n查数据的照权限模式用，改数据的每次都要本人批准。`);

@@ -279,7 +279,9 @@ export function createServer(d: ServerDeps): http.Server {
     listProjects: () => ({ projects: d.folders.projects() }),
     putProjectFolder: (c) => {
       const b = validate(LocalProjectFolderRequest, c.body);
-      const r = d.folders.bindProject(projectIdOf(c), b.folderId, b.name);
+      if ((b.folderId === undefined) === (b.folderIds === undefined)) throw new HttpError(400, "validation", "folderId、folderIds 给一个");
+      // folderIds 是整份列表；folderId 是老写法，只换工作目录（第一个）
+      const r = b.folderIds ? d.folders.setProjectFolders(projectIdOf(c), b.folderIds, b.name) : d.folders.bindProject(projectIdOf(c), b.folderId!, b.name);
       if (!r) throw new HttpError(404, "not_found", "没有这个文件夹，先选文件夹");
       return r;
     },

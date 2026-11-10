@@ -790,7 +790,7 @@ export class SessionManager {
     // 工作规矩、岗位、挑刺子 agent 写在本机程序的数据目录，经参数交给 Claude Code，不往本人的仓库写文件。
     const dir = join(this.dir, rec.id);
     const systemPromptPath = join(dir, "system.md");
-    let prompt = systemPrompt(rec.subject.kind, rec.role, rec.critics, feishu, rec.workspace, custom?.names ?? []);
+    let prompt = systemPrompt(rec.subject.kind, rec.role, rec.critics, feishu, rec.workspace, custom?.names ?? [], this.extraDirs(rec));
     if (rec.subject.kind === "plan") {
       // 开拆前看一眼项目的文件夹（只读）：在本机给它的专用目录里做就是没绑
       const facts = await planFolderFacts(isInside(join(this.d.dataDir, "plans"), rec.cwd) ? null : rec.cwd);
@@ -832,6 +832,7 @@ export class SessionManager {
       ],
       // 卡在自己的工作树里：「自动」「自动接受改文件」只在工作树里自己放行（规则在 pathGuard 的 modeAllows）
       autoAllowRoot: rec.subject.kind === "card" && rec.workspace?.kind === "worktree" ? rec.workspace.path : null,
+      extraDirs: () => this.extraDirs(rec),
       permissionMode: rec.permissionMode,
       toolReads: custom?.reads,
     });
@@ -848,6 +849,17 @@ export class SessionManager {
   }
 
   /** 工作目录里 git 看得到的改动文件：卡在工作树里做时算上开工以来已经提交的；不是仓库就是空的。 */
+  /**
+   * 项目另外绑的文件夹（设计 17.2 第 46 条）：项目绑着的文件夹里，除了本会话自己那个（工作目录所在的，卡在工作树里做时是开工作树的那个），都是。
+   * 每次现查：本人加了、减了，放行的范围和读文件马上跟着变；和本会话自己的文件夹互相套着的不算（免得绕过工作树去改主文件夹），磁盘上已经不在的也不算。
+   * 验收员跟着它验的那张卡算（它在卡的工作树里看，自己的文件夹就是卡的）。
+   */
+  private extraDirs(rec: SessionRecord): string[] {
+    if (!rec.subject.projectId) return [];
+    const own = (rec.parentId ? this.records.get(rec.parentId)?.workspace?.folder : null) ?? rec.workspace?.folder ?? rec.cwd;
+    return this.d.folders.projectFolders(rec.subject.projectId).filter((p) => !isInside(p, own) && !isInside(own, p) && existsSync(p));
+  }
+
   private async changedSince(rec: SessionRecord): Promise<string[]> {
     const ws = rec.workspace;
     const committed = ws?.kind === "worktree" ? await git(ws.path, ["diff", "--name-only", ws.baseCommit, "HEAD"]).then((o) => o.split("\n").filter(Boolean), () => []) : [];
@@ -2020,8 +2032,8 @@ export class SessionManager {
   }
 
   /**
-   * 在右边预览文件（设计 17.2 第 41 条）：只看会话根（卡的工作树根，或工作目录）里面的，而且这个文件夹本人还允许着。
-   * 会话结束了也能读；只读。
+   * 在右边预览文件（设计 17.2 第 41 条）：只看会话根（卡的工作树根，或工作目录）里面的，而且这个文件夹本人还允许着；
+   * 项目另外绑的文件夹里的也认（第 46 条）。会话结束了也能读；只读。
    */
   private fileRoot(id: string): { rec: SessionRecord; root: string } {
     const rec = this.must(id);
@@ -2031,7 +2043,7 @@ export class SessionManager {
 
   readFile(id: string, path: string): TLocalSessionFileReadResponse {
     const { rec, root } = this.fileRoot(id);
-    try { return readSessionFile(root, rec.cwd, path); } catch (e) {
+    try { return readSessionFile(root, rec.cwd, path, this.extraDirs(rec)); } catch (e) {
       if (e instanceof SessionFileError) throw new SessionError(e.code, e.message);
       throw e;
     }
@@ -2040,7 +2052,7 @@ export class SessionManager {
   /** 本会话写过、改过的文件：事件记录里的写文件、改文件，加 git 看得到的（卡在工作树里做时算上开工以来已经提交的）。 */
   listFiles(id: string): Promise<TLocalSessionFilesResponse> {
     const { rec, root } = this.fileRoot(id);
-    return listSessionFiles(root, rec.cwd, rec.workspace?.kind === "worktree" ? rec.workspace.baseCommit : null, this.d.log.after(id, 0));
+    return listSessionFiles(root, rec.cwd, rec.workspace?.kind === "worktree" ? rec.workspace.baseCommit : null, this.d.log.after(id, 0), this.extraDirs(rec));
   }
 
   /** 本会话 MCP 的 read_earlier_turns：从事件记录里翻更早的轮次（换过执行方接着做时，交代里只带最近几轮）。 */

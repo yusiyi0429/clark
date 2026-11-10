@@ -15,6 +15,8 @@ export interface PathScope {
   allowedRoots(): string[];
   /** 本人在连接页加的工具（mcp__tool-…）里哪些是读的（预设的读工具名单）；不给就是都不算读。 */
   toolReads?(tool: string): boolean;
+  /** 项目另外绑的文件夹（设计 17.2 第 46 条），每次现查：卡在工作树里做时，这些地方照「不在工作树里」的规矩放行（modeAllows）。 */
+  extraDirs?(): string[];
 }
 /** 本人加的工具：读的照权限模式放行，写的、认不出的哪一档都问。 */
 const isCustomTool = (tool: string) => tool.startsWith(`mcp__${TOOL_SERVER_PREFIX}`);
@@ -314,16 +316,20 @@ function bypassAsks(tool: string, input: Record<string, unknown>): boolean {
 /**
  * 这一档下这一步能不能不问本人就放行（契约 LocalPermissionMode）。「全部放行」只问 bypassAsks 那三类；别的档还有硬规矩（mustAsk）。worktree：卡在自己的工作树里做时是工作树的根，
  * 「自动」「自动接受改文件」只在工作树里自己放行；别的会话为 null，在允许的文件夹里放行，「自动」不在工作树时删、挪文件的命令照样问（没有 git 兜底）。
+ * 卡在工作树里、项目另外还绑着文件夹（scope.extraDirs）：那些文件夹是本人真的文件夹，照「不在工作树里」的规矩放行。
  */
 export function modeAllows(
   mode: "auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions", tool: string, input: Record<string, unknown>, scope: PathScope, hint: unknown, worktree: string | null,
 ): boolean {
   if (mode === "bypassPermissions") return !bypassAsks(tool, input);
   if (mode === "default" || mode === "plan" || mustAsk(tool, input, scope, hint)) return false;
-  const area: PathScope = worktree ? { ...scope, allowedRoots: () => [worktree] } : scope;
-  if (mode === "acceptEdits") return EDIT_TOOLS.has(tool) && !collect(tool, input, area, insideAny(area.allowedRoots()), hint).length;
-  if (!autoAllowed(tool, input, area, hint)) return false;
-  return Boolean(worktree) || !(SHELL_TOOLS.has(tool) && WRITES.test(String(input.command ?? "")));
+  const pass = (area: PathScope, ownTree: boolean) => mode === "acceptEdits"
+    ? EDIT_TOOLS.has(tool) && !collect(tool, input, area, insideAny(area.allowedRoots()), hint).length
+    : autoAllowed(tool, input, area, hint) && (ownTree || !(SHELL_TOOLS.has(tool) && WRITES.test(String(input.command ?? ""))));
+  if (!worktree) return pass(scope, false);
+  if (pass({ ...scope, allowedRoots: () => [worktree] }, true)) return true;
+  const extras = scope.extraDirs?.() ?? [];
+  return extras.length > 0 && pass({ ...scope, allowedRoots: () => [worktree, ...extras] }, false);
 }
 
 /** Claude Code 放行规则里的路径：//c/x 是绝对路径（Windows 是 C:\x），~/ 是主目录，/x 是项目根下，其余相对工作目录。 */
