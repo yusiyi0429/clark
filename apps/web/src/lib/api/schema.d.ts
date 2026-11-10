@@ -6958,7 +6958,7 @@ export interface components {
                 /** @constant */
                 kind: "open";
                 target: {
-                    kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer";
+                    kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer" | "nexus_confirmation";
                     id: string;
                     round?: boolean;
                     focus?: {
@@ -18662,7 +18662,7 @@ export interface components {
             }[];
         };
         WaitingTarget: {
-            kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer";
+            kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer" | "nexus_confirmation";
             id: string;
             round?: boolean;
             focus?: {
@@ -18673,12 +18673,12 @@ export interface components {
         };
         WaitingItem: {
             id: string;
-            kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer" | "goal_changed" | "auto_relay";
+            kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer" | "goal_changed" | "auto_relay" | "nexus_confirmation";
             title: string;
             source: string | null;
             at: string | null;
             open: {
-                kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer";
+                kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer" | "nexus_confirmation";
                 id: string;
                 round?: boolean;
                 focus?: {
@@ -18724,6 +18724,12 @@ export interface components {
                 outsidePaths: string[];
                 canAllowForSession?: boolean;
             } | null;
+            confirmation?: {
+                /** Format: uuid */
+                id: string;
+                value: string | null;
+                quote: string | null;
+            };
         };
         WorkHomeResponse: {
             period: string;
@@ -18933,12 +18939,12 @@ export interface components {
             };
             waiting: {
                 id: string;
-                kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer" | "goal_changed" | "auto_relay";
+                kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer" | "goal_changed" | "auto_relay" | "nexus_confirmation";
                 title: string;
                 source: string | null;
                 at: string | null;
                 open: {
-                    kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer";
+                    kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer" | "nexus_confirmation";
                     id: string;
                     round?: boolean;
                     focus?: {
@@ -18984,6 +18990,12 @@ export interface components {
                     outsidePaths: string[];
                     canAllowForSession?: boolean;
                 } | null;
+                confirmation?: {
+                    /** Format: uuid */
+                    id: string;
+                    value: string | null;
+                    quote: string | null;
+                };
             }[];
         };
         BackgroundItem: {

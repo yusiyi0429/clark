@@ -31941,6 +31941,10 @@
                                   {
                                     "const": "transfer",
                                     "type": "string"
+                                  },
+                                  {
+                                    "const": "nexus_confirmation",
+                                    "type": "string"
                                   }
                                 ]
                               },
@@ -113208,6 +113212,10 @@
               {
                 "const": "transfer",
                 "type": "string"
+              },
+              {
+                "const": "nexus_confirmation",
+                "type": "string"
               }
             ]
           },
@@ -113334,6 +113342,10 @@
               {
                 "const": "auto_relay",
                 "type": "string"
+              },
+              {
+                "const": "nexus_confirmation",
+                "type": "string"
               }
             ]
           },
@@ -113410,6 +113422,10 @@
                   },
                   {
                     "const": "transfer",
+                    "type": "string"
+                  },
+                  {
+                    "const": "nexus_confirmation",
                     "type": "string"
                   }
                 ]
@@ -113721,6 +113737,41 @@
                 "type": "null"
               }
             ]
+          },
+          "confirmation": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "id",
+              "value",
+              "quote"
+            ],
+            "properties": {
+              "id": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "value": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "quote": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
           }
         }
       },
@@ -115352,6 +115403,10 @@
                     {
                       "const": "auto_relay",
                       "type": "string"
+                    },
+                    {
+                      "const": "nexus_confirmation",
+                      "type": "string"
                     }
                   ]
                 },
@@ -115428,6 +115483,10 @@
                         },
                         {
                           "const": "transfer",
+                          "type": "string"
+                        },
+                        {
+                          "const": "nexus_confirmation",
                           "type": "string"
                         }
                       ]
@@ -115739,6 +115798,41 @@
                       "type": "null"
                     }
                   ]
+                },
+                "confirmation": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "value",
+                    "quote"
+                  ],
+                  "properties": {
+                    "id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "value": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "quote": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  }
                 }
               }
             }

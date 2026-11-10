@@ -261,25 +261,30 @@ export const HomeMonthMission = Type.Object({
  *   open 是连接页，dueAt 是恢复的时间（到点本机自己接着做；要不要换网关模型、开额外额度由你定）。预算（设计 11.4）以后再加。
  * auto_relay（18 节第 12 条）：这个项目的自动接力连续到了上限（Project.autoRelayLimit），停止自动触发了。title「{项目}：自动接力已连续 N 轮，继续吗？」，
  *   projectId 是那个项目，open 是项目对话，answer = inline：就地「继续」「停下」（POST /api/me/projects/:projectId/auto-relay，手机上也能）。
+ * nexus_confirmation（会后确认，契约 nexusDri.ts）：Nexus 推来的会上待定事项，本人是这件事预先指定的负责人、没过期、没被新版本作废、还没处理。
+ *   title 是要本人确认的问题，source 固定「会后确认」，at 是 Nexus 发出的时间，dueAt 是截止（过了就作废、从「等你」里消失，不催）；
+ *   confirmation 带待确认的内容和会上原话。answer = inline：就地「确认」「拒绝」，有内容的可以「修改」（从原内容改起，只改内容），
+ *   都是 POST /api/me/nexus-confirmations/{confirmation.id}/decision（手机上也能）。没有单独的页面，open 只是指回这一条。不属于 Task、项目。
  */
 export const WaitingKind = Type.Union([
   Type.Literal("approval"), Type.Literal("question"), Type.Literal("verdict"), Type.Literal("meeting"), Type.Literal("mission_card"), Type.Literal("role"),
   Type.Literal("merge"), Type.Literal("plan_start"), Type.Literal("acceptance"), Type.Literal("month"), Type.Literal("device"), Type.Literal("quota"),
-  Type.Literal("transfer"), Type.Literal("goal_changed"), Type.Literal("auto_relay"),
+  Type.Literal("transfer"), Type.Literal("goal_changed"), Type.Literal("auto_relay"), Type.Literal("nexus_confirmation"),
 ]);
 
 /**
  * 去哪儿看：card、topic 是子会话（id 是卡或专题的 id），project 是项目对话（id 是项目 id），meeting 是会议（id 是会议 id），
  * mission_card 是个人 Mission Card（id 是任务卡 id，拍板人那一侧没有具体某张卡时是轮次 id，round = true），role 是岗位修改建议（id 是建议 id），
  * task_detail 是 Task 详情（别人的 Task 只读，id 是 Task id），month 是月份页（id 是 YYYY-MM），connections 是连接页（id 固定 "this_computer"），
- * transfer 是一份项目转交（id 是转交 id，GET /api/me/project-transfers/:id）。
+ * transfer 是一份项目转交（id 是转交 id，GET /api/me/project-transfers/:id），
+ * nexus_confirmation 是一条会后待定事项（id 同 WaitingItem.confirmation.id）：没有自己的页面，就在首页「等你」那一行处理，链接落在首页。
  * focus（设计 14.3）：子会话（卡、专题、规划员、验收员）的提问和批准由项目对话转达，kind = project 时带上是哪个框：sessionId 是那个本机会话，
  * requestId 是那次提问或批准（同 WaitingItem.question / permission 的 requestId；老版本本机程序没报时为 null，定位到那个会话最新的框）。
  * 网页落在项目对话的那个框上，焦点放在推荐的选项上。不在任何项目里的子会话照旧打开子会话（card / topic），不带 focus。
  */
 export const WaitingTarget = Type.Object({
   kind: Type.Union([Type.Literal("card"), Type.Literal("topic"), Type.Literal("project"), Type.Literal("meeting"), Type.Literal("mission_card"), Type.Literal("role"),
-    Type.Literal("task_detail"), Type.Literal("month"), Type.Literal("connections"), Type.Literal("transfer")]),
+    Type.Literal("task_detail"), Type.Literal("month"), Type.Literal("connections"), Type.Literal("transfer"), Type.Literal("nexus_confirmation")]),
   id: Type.String({ minLength: 1 }),
   round: Type.Optional(Type.Boolean()),
   focus: Type.Optional(Type.Object({ sessionId: Type.String({ format: "uuid" }), requestId: Nullable(Type.String({ minLength: 1 })) }, strict)),
@@ -287,7 +292,7 @@ export const WaitingTarget = Type.Object({
 
 /**
  * 能不能就地答（设计 9.6、5.7「等你在手机上」）：
- * inline 在这一行就能答，走云端，手机上也能（开工、岗位建议的采纳 / 不要）；
+ * inline 在这一行就能答，走云端，手机上也能（开工、岗位建议的采纳 / 不要、会后待定事项的确认 / 拒绝 / 修改）；
  * inline_local 在这一行答，但要本机程序办（批准、回答、合回）：只在 deviceId 那台电脑上画按钮，单选题才就地答（题目在本机，网页自己判断），
  *   手机和别的电脑上画「等你 · {deviceName}」，点开是只读摘要；
  * open 点开去答（受阻、会后确认、Mission Card、请你认可、月份、电脑、额度、项目转交）。
@@ -306,6 +311,8 @@ export const WaitingAnswer = Type.Union([Type.Literal("inline"), Type.Literal("i
  *   在那台电脑上用本机程序 POST /v1/sessions/:sessionId/questions/:requestId 回答。
  *   permission：kind = approval 时在等批准的那一步（LocalPermissionBrief），title 是它给人看的那一行（「运行 pnpm test」），就地「批准」，
  *   有越界路径（outsidePaths）时只能点进去「允许这一次」。老版本的本机程序不报这两样时为 null，标题退回「等你回复」「等你批准」。别的种类都为 null。
+ * confirmation：只有 kind = nexus_confirmation 带（别的种类没有这一项）。id 是这条待定事项（决定接口路径里的 id）；value 是待本人确认的内容，
+ *   为 null 的没有可改的内容、只能确认或拒绝；quote 是会上原话，和 value 一样时不带（null）。
  */
 export const WaitingItem = Type.Object({
   id: Type.String({ minLength: 1 }),
@@ -327,6 +334,7 @@ export const WaitingItem = Type.Object({
   month: Nullable(Type.Object({ step: Type.Union([Type.Literal("review"), Type.Literal("finalize"), Type.Literal("continue")]), period: Period }, strict)),
   question: Nullable(LocalQuestionRequestView),
   permission: Nullable(LocalPermissionBrief),
+  confirmation: Type.Optional(Type.Object({ id: Type.String({ format: "uuid" }), value: Nullable(Type.String()), quote: Nullable(Type.String()) }, strict)),
 }, strict);
 
 /**
