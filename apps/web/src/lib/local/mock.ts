@@ -47,7 +47,8 @@ const sha = (seed: string) => Array.from({ length: 40 }, (_, i) => "0123456789ab
 const ALIAS: Record<string, string> = { opus: "Opus 5.5", sonnet: "Sonnet 5.5", haiku: "Haiku 5.5" };
 const runFor = (profile: TLocalModelProfile, mode: "auto" | "set" | "unlimited" = "auto", effort: TLocalEffort | null = null) => ({
   mode, model: profile.model, effort, multiAgent: false, source: profile.source, sourceLabel: profile.label,
-  modelName: profile.model ? ALIAS[profile.model] ?? profile.model.replace(/^.*\//, "") : "Opus 5.5", actual: null,
+  modelName: profile.catalog ? profile.label : profile.model ? ALIAS[profile.model] ?? profile.model.replace(/^.*\//, "") : "Opus 5.5", actual: null,
+  harness: profile.agent, ...(profile.origin ? { origin: profile.origin } : {}),
 });
 
 /** Claude Code 握手报的五档（D 契约 c97b38c5）。 */
@@ -58,6 +59,17 @@ const MODELS: TLocalModelProfile[] = [
   { id: "sub-haiku", label: "订阅 · Haiku", source: "subscription", agent: "claude-code", baseUrl: null, model: "haiku", smallModel: null, webSearch: true, hasKey: false, isDefault: false, efforts: [...CLAUDE_EFFORTS], defaultEffort: null },
   // 网关模型本机不传思考程度（36 条）。
   { id: "tokenhub-deepseek", label: "TokenHub · DeepSeek", source: "gateway", agent: "claude-code", baseUrl: "https://tokenhub.example/anthropic", model: "deepseek-v4.1-flash", smallModel: null, webSearch: true, hasKey: true, isDefault: false, efforts: [], defaultEffort: null },
+];
+
+/**
+ * Codex 订阅的模型目录（设计 17.2 第 38 条，D 契约 b28c1f12）：登录着才有，只读（catalog）；每个模型自己的几档，gpt-6.1-sol 多一档 ultra。
+ */
+const CODEX_ORIGIN = { provider: "openai", label: "Codex 订阅", via: null };
+const CODEX_MODELS: TLocalModelProfile[] = [
+  { id: "codex-gpt-6_1-sol", label: "GPT-6.1-Sol", source: "subscription", agent: "codex", baseUrl: null, model: "gpt-6.1-sol", smallModel: null, webSearch: true, hasKey: false, isDefault: false,
+    efforts: [...CLAUDE_EFFORTS, "ultra"], defaultEffort: "low", catalog: true, origin: CODEX_ORIGIN },
+  { id: "codex-gpt-5_5", label: "GPT-5.5", source: "subscription", agent: "codex", baseUrl: null, model: "gpt-5.5", smallModel: null, webSearch: true, hasKey: false, isDefault: false,
+    efforts: ["low", "medium", "high", "xhigh"], defaultEffort: "medium", catalog: true, origin: CODEX_ORIGIN },
 ];
 
 /** onPlanned：规划员拆完时调（假装本机把 card_plan 同步上去了）。 */
@@ -82,10 +94,14 @@ function upsertTool(tools: TLocalTool[], id: string, body: TLocalToolUpsert): TL
   return old ?? next;
 }
 
-export type MockOptions = { stepMs?: number; paired?: boolean; onPlanned?: (taskId: string) => void };
+/** codex：Codex 登没登录（默认没登录，连接页点「连接」走一遍登录）。 */
+export type MockOptions = { stepMs?: number; paired?: boolean; onPlanned?: (taskId: string) => void; codex?: "logged_in" | "logged_out" };
 
-export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: MockOptions = {}): LocalRunner {
+export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex = "logged_out" }: MockOptions = {}): LocalRunner {
   let token = paired ? "mock-token-0000000000000000000000" : "";
+  let codexIn = codex === "logged_in";
+  let codexSetup: { phase: "idle" | "waiting_browser"; startedAt: string | null } = { phase: "idle", startedAt: null };
+  const models = () => [...MODELS, ...(codexIn ? CODEX_MODELS : [])];
   const sessions = new Map<string, MockSession>();
   const projects = new Map<string, TLocalProjectFolder>();
   const bind = (projectId: string, folder: TLocalFolder | null, name?: string): TLocalProjectFolder => {
@@ -170,6 +186,8 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
     emit(s, { type: "turn_end", isError: false, text, durationMs: stepMs * 4, usage, ...(errorKind ? { errorKind } : {}) });
   };
 
+  /** 真的执行方回答是 Markdown（17.2 第 41 条按 Markdown 排），假的也带一点：粗体、列表、行内代码、表格。 */
+  const ANSWER_TEXT = ["好，按你说的改，**两处**：", "", "- 删掉旧的安装说明", "- `README.md` 里的链接换到新说明", "", "| 文件 | 改动 |", "| --- | --- |", "| README.md | 换链接 |", "| docs/install-old.md | 删掉 |"].join("\n");
   const script: Step[] = [
     (s) => { reportActual(s); setStatus(s, "running"); noteWorkspace(s); emit(s, { type: "agent_info", agent: "claude-code", version: "2.1.318", model: s.summary.modelLabel, permissionMode: "manual" }); },
     (s) => { emit(s, { type: "assistant_text", text: "先读一下交代和相关代码，列个计划。" }); plan(s, 0); },
@@ -198,7 +216,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
       setStatus(s, "idle");
       return "wait";
     },
-    (s) => { setStatus(s, "running"); emit(s, { type: "assistant_text", text: "好，按你说的改。" }); plan(s, 2); },
+    (s) => { setStatus(s, "running"); emit(s, { type: "assistant_text", text: ANSWER_TEXT }); plan(s, 2); },
     (s) => { tool(s, "Write", "写 交回说明.md"); emit(s, { type: "artifact", artifactId: `a${++seqId}`, title: "交回说明", fileName: "交回说明.md", size: 2048, sha256: "0".repeat(64) }); },
     (s) => {
       plan(s, 3);
@@ -290,7 +308,9 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
     unpair: async () => { token = ""; },
     status: async () => ({
       deviceId: "00000000-0000-4000-8000-000000000001", version: "0.1.0-mock",
-      agents: [{ kind: "claude-code", installed: true, version: "2.1.318", path: null, loggedIn: true, authMethod: "claude.ai", subscriptionType: "max", loginExpiresAt: null, minimumVersion: "2.1.300", compatible: true, setup: { phase: "idle", startedAt: null, loginUrl: null, error: null } }],
+      agents: [{ kind: "claude-code", installed: true, version: "2.1.318", path: null, loggedIn: true, authMethod: "claude.ai", subscriptionType: "max", loginExpiresAt: null, minimumVersion: "2.1.300", compatible: true, setup: { phase: "idle", startedAt: null, loginUrl: null, error: null } },
+        { kind: "codex", installed: true, version: "0.159.2", path: null, loggedIn: codexIn, authMethod: codexIn ? "chatgpt" : null, subscriptionType: codexIn ? "pro" : null, loginExpiresAt: null, minimumVersion: "0.159.0", compatible: true,
+          setup: { ...codexSetup, loginUrl: codexSetup.phase === "waiting_browser" ? "https://auth.openai.com/oauth/authorize?mock" : null, error: null } }],
       activeSessions: slots().running,
       slots: slots(),
       cloud: { linked, apiBaseUrl: linked ? location.origin : null, personName: null, personId: null, outbox: { pending: 0, lastSyncedAt: linked ? now() : null, lastError: null } },
@@ -302,12 +322,19 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
             { kind: "session", model: null, usedPercent: 83, state: "warning", resetsAt: new Date(Date.now() + 2 * 3_600_000).toISOString() },
             { kind: "weekly_all", model: null, usedPercent: 40, state: "ok", resetsAt: new Date(Date.now() + 72 * 3_600_000).toISOString() },
           ] },
+        ...(codexIn ? [{ id: "codex", name: "Codex", kind: "subscription" as const, remainingPercent: 64, amounts: [], resetsAt: new Date(Date.now() + 3 * 3_600_000).toISOString(),
+          plan: "pro", blockedUntil: null, extraUsage: null, updatedAt: now(), error: null, windows: [{ kind: "session" as const, model: null, usedPercent: 36, state: "ok" as const, resetsAt: new Date(Date.now() + 3 * 3_600_000).toISOString() }] }] : []),
         { id: "tokenhub:mock", name: "TokenHub", kind: "daily_spend", remainingPercent: null, amounts: [{ amount: 12.4, currency: "CNY", estimated: false }],
           monthAmounts: [{ amount: 186, currency: "CNY", estimated: false }], windows: [], resetsAt: null, blockedUntil: null, plan: null, extraUsage: null, updatedAt: now(), error: null },
       ],
       tools: (["claude-code", "codex", "gh", "lark-cli"] as const).map((kind) => ({ kind, state: "ready" as const, version: null, account: null, checkedAt: now() })),
     }),
-    login: async () => undefined,
+    // Codex 登录（D 契约 b28c1f12）：本机替本人开浏览器，等一会儿算登好了；Claude Code 照旧什么都不做。
+    login: async (agent = "claude-code") => {
+      if (agent !== "codex" || codexIn) return;
+      codexSetup = { phase: "waiting_browser", startedAt: now() };
+      setTimeout(() => { codexIn = true; codexSetup = { phase: "idle", startedAt: null }; }, stepMs * 2);
+    },
     linkCloud: async (body) => { linked = true; return { linked, apiBaseUrl: body.apiBaseUrl, personName: body.personName ?? null, personId: body.personId ?? null, outbox: { pending: 0, lastSyncedAt: null, lastError: null } }; },
     patchSettings: async (patch) => {
       if (patch.includePersonalConfigByDefault !== undefined) includePersonal = patch.includePersonalConfigByDefault;
@@ -315,7 +342,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
       if (patch.autoMerge !== undefined) autoMerge = patch.autoMerge;
       return { includePersonalConfigByDefault: includePersonal, allowedOrigins: [], paused: Boolean(patch.paused), maxConcurrent, autoMerge };
     },
-    listModels: async () => MODELS,
+    listModels: async () => models(),
     putModel: async (id, body) => ({ id, label: body.label, source: body.source, agent: "claude-code", baseUrl: body.baseUrl ?? null, model: body.model, smallModel: body.smallModel ?? null, webSearch: body.webSearch ?? false, hasKey: Boolean(body.apiKey), isDefault: Boolean(body.isDefault) }),
     listTools: async () => tools.map((tool) => ({ ...tool })),
     putTool: async (id, body) => { const tool = upsertTool(tools, id, body); return { ...tool }; },
@@ -428,8 +455,8 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
     // 只带 effort 是同一个模型换思考程度（Claude Code 当场换）；只换模型时原来的思考程度新模型也支持就留着，不然回到自动（36 条）。
     setSessionModel: async (id, body) => {
       const s = must(id);
-      const current = MODELS.find((entry) => entry.id === s.summary.modelProfileId);
-      const model = body.modelProfileId === undefined ? current : MODELS.find((entry) => entry.id === body.modelProfileId);
+      const current = models().find((entry) => entry.id === s.summary.modelProfileId);
+      const model = body.modelProfileId === undefined ? current : models().find((entry) => entry.id === body.modelProfileId);
       if (!model || model.agent !== s.summary.agent) throw new LocalRunnerError("validation", "没有这个模型", 400);
       const wanted = body.effort === undefined ? s.summary.effort ?? null : body.effort;
       if (body.effort && !model.efforts?.includes(body.effort)) throw new LocalRunnerError("validation", "这个模型没有这一档", 400);
@@ -439,7 +466,9 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
         s.summary = { ...rest, modelProfileId: model.id, modelLabel: model.label, run: runFor(model, "auto", effort), ...(effort ? { effort } : {}) };
         if (model !== current) emit(s, { type: "notice", level: "info", code: "model_changed", text: `换成 ${runFor(model).modelName}` });
       };
-      if (OCCUPYING.has(s.summary.status) && current?.source !== model.source) {
+      // Codex：模型和思考程度都是开一轮时带，在跑这一轮时等它做完（after_turn）；Claude Code 跨来源才要等。
+      const later = s.summary.agent === "codex" ? model !== current || effort !== (s.summary.effort ?? null) : current?.source !== model.source;
+      if (OCCUPYING.has(s.summary.status) && later) {
         s.summary = { ...s.summary, pendingModel: { modelProfileId: model.id, modelLabel: runFor(model).modelName, effort } };
         setTimeout(apply, stepMs * 4);
         return { applied: "after_turn", session: summaryOf(s) };
@@ -463,7 +492,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
       advance(s);
       return summaryOf(s);
     },
-    previewRun: async (body) => runFor(MODELS.find((entry) => entry.id === body.modelProfileId) ?? MODELS.find((entry) => entry.isDefault) ?? MODELS[0]!, body.taskBudget?.budget.mode, body.effort ?? null),
+    previewRun: async (body) => runFor(models().find((entry) => entry.id === body.modelProfileId) ?? MODELS.find((entry) => entry.isDefault) ?? MODELS[0]!, body.taskBudget?.budget.mode, body.effort ?? null),
     putBudget: async (body) => ({ taskId: body.taskId ?? null, sessionId: body.sessionId ?? null, budget: body.budget,
       spent: { hours: 0, weeklyPercent: null, money: null }, ratio: null, state: "ok", since: null, updatedAt: now() }),
     stopBackground: async (id, itemId) => {
@@ -495,7 +524,9 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
 
   async function create(body: TLocalCreateSessionRequest): Promise<TLocalSessionSummary> {
     if (!token) throw new LocalRunnerError("unauthorized", "没配对", 401);
-    const model = MODELS.find((m) => m.id === body.modelProfileId) ?? MODELS[0]!;
+    const model = models().find((m) => m.id === body.modelProfileId) ?? MODELS[0]!;
+    // 规划员只能用 Claude Code（D 契约 b28c1f12）。
+    if (model.agent === "codex" && body.subject.kind === "plan") throw new LocalRunnerError("validation", "规划员只能用 Claude Code", 400);
     const id = crypto.randomUUID();
     const cardId = body.subject.kind === "card" ? body.subject.cardId : undefined;
     const slug = body.title.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase().slice(0, 30);
@@ -509,7 +540,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned }: Moc
     const waitingFor = (body.after ?? []).filter((entry) => !merged.has(entry));
     const full = slots().running >= maxConcurrent || busy || waitingFor.length > 0;
     const s: MockSession = {
-      summary: { id, subject: body.subject, title: body.title, agent: "claude-code", modelProfileId: model.id, modelLabel: model.label, cwd: body.cwd ?? "topics", status: full ? "queued" : "starting", permissionMode: body.permissionMode ?? "auto", run: runFor(model, "auto", body.effort ?? null), ...(body.effort ? { effort: body.effort } : {}), includePersonalConfig: Boolean(body.includePersonalConfig), createdAt: now(), updatedAt: now(), lastSeq: 0, pendingPermissions: 0, queuePosition: full ? slots().queued + 1 : null, usage: { ...ZERO }, ...(workspace && !waitingFor.length ? { workspace } : {}), ...(waitingFor.length ? { waitingFor } : {}) },
+      summary: { id, subject: body.subject, title: body.title, agent: model.agent, modelProfileId: model.id, modelLabel: model.label, cwd: body.cwd ?? "topics", status: full ? "queued" : "starting", permissionMode: body.permissionMode ?? "auto", run: runFor(model, "auto", body.effort ?? null), ...(body.effort ? { effort: body.effort } : {}), includePersonalConfig: Boolean(body.includePersonalConfig), createdAt: now(), updatedAt: now(), lastSeq: 0, pendingPermissions: 0, queuePosition: full ? slots().queued + 1 : null, usage: { ...ZERO }, ...(workspace && !waitingFor.length ? { workspace } : {}), ...(waitingFor.length ? { waitingFor } : {}) },
       log: [], listeners: new Set(), script: body.subject.kind === "plan" ? planner : body.subject.kind === "verify" ? verifier : script, cursor: 0, timer: null, pending: null, paused: false, denied: false, mergeTries: 0,
       ...(waitingFor.length ? { waits: { workspace } } : {}),
     };

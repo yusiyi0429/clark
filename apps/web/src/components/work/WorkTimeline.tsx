@@ -6,7 +6,7 @@
  * 伙伴的提问卡画成就地答的选项框（AskDecision），不再是「开始回答」弹窗。
  */
 import { useMemo, type ReactNode } from "react";
-import { ConversationStatusSlot, ConversationThinking, ConversationTurns } from "@/conversation/Transcript";
+import { ConversationStatusSlot, ConversationThinking, ConversationTurns, LocalTurnRow } from "@/conversation/Transcript";
 import { AnswerOptions } from "@/conversation/AnswerOptionRow";
 import { EntryCards } from "@/conversation/EntryCards";
 import { PlanChecklist } from "@/components/cards/PlanChecklist";
@@ -71,6 +71,7 @@ export function WorkTimeline({ data, blocks }: { data: ConversationData; blocks:
     <AskContext.Provider value={ask}>
     {blocksAt(-1)}
     <ConversationTurns messages={data.messages} partial={data.streaming ? data.partial : ""} status={status}
+      trailing={!data.streaming && data.localTurn ? <LocalTurnRow turn={data.localTurn} /> : undefined}
       thought={data.thought?.seconds != null ? { text: data.thought.text, seconds: data.thought.seconds } : null}
       steps={!data.thinking || data.stage === "answering" ? data.steps : null}
       footer={(index) => (index === lastIndex && options.length ? <AnswerOptions scope={data.scope} options={options} /> : null)}

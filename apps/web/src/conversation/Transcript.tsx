@@ -5,7 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remend from "remend";
 import { ArrowDown, ArrowRight, Check, Paperclip, Quote } from "lucide-react";
 import { WorkspaceContext } from "@/components/shell/WorkspaceContext";
-import type { TReadScope } from "@warmap/contracts";
+import type { TConversationLocalTurn, TReadScope } from "@warmap/contracts";
 import { ScopeChip } from "./ScopeChip";
 import { HeroButton } from "@/components/HeroButton";
 import { StepList, StepToggle, type Step } from "@/components/steps/StepList";
@@ -129,6 +129,7 @@ export function sameTurn(previous: TurnProps, next: TurnProps): boolean {
     && (a.memoryUsed ?? []).join("|") === (b.memoryUsed ?? []).join("|")
     && a.readScope?.label === b.readScope?.label && a.kind === b.kind && a.via === b.via && a.meta?.href === b.meta?.href && a.answers?.askId === b.answers?.askId
     && a.receipt === b.receipt
+    && a.ranOn === b.ranOn && a.model?.model === b.model?.model
     && sameList(a.attachments, b.attachments, (item) => item.id)
     && sameList(a.referencesSnapshot, b.referencesSnapshot, (item) => `${item.cardId}@${item.version}`);
 }
@@ -169,6 +170,33 @@ function TraceLine({ message }: { message: Message }) {
 }
 
 /** 一条消息（clark `ConversationTurn`）：不显示角色名，读屏读「你 / 天枢」。 */
+/**
+ * 项目对话里一轮回答在哪跑（17.2 第 38 条，B 契约 7d6a62b3）：「本机 · Opus 5.5」「云端 · claude-opus-5-5」；本该本机没跑成（fallback）的也写「云端」。
+ * 不是项目对话（没有 ranOn）的为 null。
+ */
+export function turnSource(message: Pick<Message, "ranOn" | "model">): string | null {
+  if (!message.ranOn) return null;
+  const where = message.ranOn === "local" ? "本机" : "云端";
+  return message.model?.model ? `${where} · ${message.model.model}` : where;
+}
+
+/**
+ * 项目对话正在本人电脑上跑、还没写进历史的那一轮（localTurn）：别的页面、手机上先画本人那一句和「正在回答」，写进来后换成那一轮。
+ * 第一版这里停不了。
+ */
+export function LocalTurnRow({ turn }: { turn: TConversationLocalTurn }) {
+  return (
+    <>
+      <ConversationTurn message={{ sequence: -2, role: "user", content: turn.message, createdAt: turn.startedAt }} />
+      <div className={s.thinking} data-testid="conversation-local-turn">
+        <span className={s.pulse} aria-hidden />
+        <span role="status">正在回答</span>
+        <span className={s.time}>{turn.source}</span>
+      </div>
+    </>
+  );
+}
+
 export const ConversationTurn = memo(function ConversationTurn({ message, ms, streaming = false, thought, steps }: TurnProps) {
   if (message.kind === "trace") return <TraceLine message={message} />;
   return <ConversationTurnBody message={message} ms={ms} streaming={streaming} thought={thought} steps={steps} />;
@@ -180,6 +208,8 @@ function ConversationTurnBody({ message, ms, streaming = false, thought, steps }
   const [stepsOpen, setStepsOpen] = useState(false);
   const stepsId = useId();
   const scope = !user && message.readScope ? <ScopeChip scope={message.readScope} /> : null;
+  const source = user ? null : turnSource(message);
+  const sourceTag = source ? <span className={s.source} data-testid="turn-source">{source}</span> : null;
   const thoughtToggle = thought || steps?.length || scope ? (
     <>
       {scope}
@@ -204,11 +234,12 @@ function ConversationTurnBody({ message, ms, streaming = false, thought, steps }
       {!user && ms !== undefined ? (
         <div className={s.meta}>
           <span className={s.time}>用时 {seconds(ms)}</span>
+          {sourceTag}
           {thoughtToggle}
         </div>
-      ) : !user && thoughtToggle ? (
+      ) : !user && (thoughtToggle || sourceTag) ? (
         // 正文已经开始：思考收成「已思考 N 秒」放在这一行，结束后「用时」写在它前面。
-        <div className={s.meta}>{thoughtToggle}</div>
+        <div className={s.meta}>{sourceTag}{thoughtToggle}</div>
       ) : !user && streaming ? (
         // 先占住「用时」那一行：结束后写上用时，正文不被往下推。
         <div className={s.meta} aria-hidden data-meta-placeholder="true" style={{ visibility: "hidden" }}>

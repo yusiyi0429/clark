@@ -48,7 +48,7 @@ describe("子会话换模型（32 条，D 契约 5e52c73f）", () => {
     expect(pending.label).toMatch(/^Claude Code · .+ → deepseek-v4\.1-flash$/);
     expect(pending.title).toBe(PENDING_MODEL_TITLE);
     const html = renderToStaticMarkup(<SessionComposer label="插话" disabled={false} onSend={vi.fn()} subject={subject} model={{ label: pending.label, title: pending.title ?? undefined }}
-      models={{ list: [], value: "tokenhub-deepseek", onPick: vi.fn(), efforts: [], effort: null, onEffort: vi.fn() }} />);
+      models={sessionModels(runner, await runner.listModels(), changed.session, vi.fn(), vi.fn())} />);
     expect(html).toContain(`title="${PENDING_MODEL_TITLE}"`);
     expect(html).toContain('data-testid="session-model"');
     let after = changed.session;
@@ -72,7 +72,7 @@ describe("思考程度（36 条，D 契约 c97b38c5）", () => {
     const effortsOf = (id: string) => models.find((model) => model.id === id)?.efforts;
     const session = await runner.createSession({ subject: { kind: "card", cardId: "c1" }, title: "卡", cwd: "C:\\work\\tianshu", firstMessage: "交代", effort: "high" });
     expect(session.effort).toBe("high");
-    expect(sessionModelText(session, effortsOf(session.modelProfileId))).toEqual({ label: "Opus 5.5 · 高", title: "Claude Code · Opus 5.5 · 订阅 · 默认 · 思考程度 高" });
+    expect(sessionModelText(session, effortsOf(session.modelProfileId))).toEqual({ label: "Opus 5.5 · 高", title: "Claude Code · Opus 5.5 · 订阅 · 默认 · 思考 高" });
     const changed = await runner.setSessionModel(session.id, { effort: "max" });
     expect(changed.applied).toBe("now");
     expect(changed.session.effort).toBe("max");
@@ -82,10 +82,12 @@ describe("思考程度（36 条，D 契约 c97b38c5）", () => {
     // 换模型不带思考程度：新模型也支持就留着。
     await runner.setSessionModel(session.id, { effort: "low" });
     expect((await runner.setSessionModel(session.id, { modelProfileId: "sub-haiku" })).session.effort).toBe("low");
-    // 下拉里「思考程度」一组只列这个模型的几档，「自动」在前（开着菜单才画，这里看给它的数据）。
-    const picks = sessionModels(runner, models, (await runner.listSessions())[0]!, vi.fn(), vi.fn())!;
-    expect(picks.efforts).toEqual(["low", "medium", "high", "xhigh", "max"]);
-    expect(picks.effort).toBe("low");
+    // 面板「思考」那一行只列这个模型的几档，「自动」在前（开着才画，这里看给它的数据）；思考是自动时下面一行只写模型名。
+    const now = (await runner.listSessions())[0]!;
+    const picks = sessionModels(runner, models, now, vi.fn(), vi.fn())!;
+    expect(picks.rows.map((row) => [row.name, row.value])).toEqual([["来源", "Claude 订阅"], ["模型", "Haiku"], ["思考", "低"]]);
+    expect(picks.rows[2]!.options.map((option) => option.label)).toEqual(["自动", "低", "中", "高", "超高", "最高"]);
+    expect(sessionModelText({ ...now, effort: undefined }, effortsOf(now.modelProfileId))?.label).not.toContain("自动");
     expect(sessionModelText({ run: { ...session.run!, modelName: "deepseek-v4.1-flash" }, agent: "claude-code" }, effortsOf("tokenhub-deepseek"))?.label).toBe("deepseek-v4.1-flash");
   });
 });

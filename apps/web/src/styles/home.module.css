@@ -283,6 +283,12 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .menuItem[data-current], .menuWho[data-current] { background: var(--default-soft-hover); }
 .menuItem[data-focus-visible], .menuWho[data-focus-visible] { outline: 2px solid var(--focus); outline-offset: -2px; }
 .menuItem .chevron { color: var(--ink-faint); }
+/* 选模型的三行面板（17.2 第 40 条）：行尾现在的值；第二页顶上「‹ 行名」；置灰的项照基础组件的禁用样子；点不开的行照常色、只是不能点。 */
+.panelValue { min-width: 0; overflow: hidden; color: var(--ink-muted); text-overflow: ellipsis; white-space: nowrap; }
+.panelBody { outline: none; }
+.panelMark { display: inline-flex; flex: none; width: 16px; }
+.panelBack { display: inline-flex; flex: 1; align-items: center; gap: var(--space-1); color: var(--ink-muted); }
+.menuItem[data-static] { opacity: 1; cursor: default; }
 .menuWhoText { display: grid; min-width: 0; }
 .menuWhoText b { overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .menuWhoText small { color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; }

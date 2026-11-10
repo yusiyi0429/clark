@@ -112,7 +112,7 @@ export function createHttpRunner(base = localRunnerBase(), token: () => string =
     pairingStatus: (pairingId) => call("pairingStatus", { pairingId }),
     unpair: async () => { await call("unpair"); },
     status: () => call("status"),
-    login: async () => { await call("loginAgent", { agent: "claude-code" }, {}); },
+    login: async (agent = "claude-code") => { await call("loginAgent", { agent }, {}); },
     linkCloud: (body) => call("linkCloud", {}, body),
     patchSettings: (patch) => call("patchSettings", {}, patch),
     listModels: async () => (await call<{ profiles: Awaited<ReturnType<LocalRunner["listModels"]>> }>("listModels")).profiles,

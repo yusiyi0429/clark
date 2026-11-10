@@ -18,10 +18,10 @@ describe("项目主管线、伙伴台页头的「来源 · 模型」", () => {
 });
 
 describe("子会话显示「来源 · 模型」", () => {
-  it("写成「来源 · 模型」，实际跑的优先；只有来源时只写来源；老版本本机不报来源时为 null", () => {
-    expect(runLabel({ sourceLabel: "我的 Claude 订阅", modelName: "Opus", actual: null })).toBe("我的 Claude 订阅 · Opus");
+  it("写成「来源 · 模型」，实际跑的优先；只有来源时只写来源；来源不写「我的」（40 条）；老版本本机不报来源时为 null", () => {
+    expect(runLabel({ sourceLabel: "我的 Claude 订阅", modelName: "Opus", actual: null })).toBe("Claude 订阅 · Opus");
     expect(runLabel({ sourceLabel: "我的 Claude 订阅", modelName: "Opus", actual: { model: "claude-sonnet-5-5", modelName: "Sonnet 5.5", at: "2026-11-08T12:00:00Z" } }))
-      .toBe("我的 Claude 订阅 · Sonnet 5.5");
+      .toBe("Claude 订阅 · Sonnet 5.5");
     expect(runLabel({ sourceLabel: "TokenHub", modelName: null })).toBe("TokenHub");
     expect(runLabel({ modelName: "Opus 5.5" })).toBeNull();
     expect(runLabel(null)).toBeNull();
@@ -49,16 +49,16 @@ describe("子会话显示「来源 · 模型」", () => {
       <PlanDecision target={{ taskId: "t1" }} name="派活单" drafts={[draft]} roles={[]} handheld={false} onSay={vi.fn()} onChanged={vi.fn()} />
     </LocalContext.Provider>);
     const pick = html.match(/<button[^>]*data-testid="model-pick"[^>]*>[\s\S]*?<\/button>/)?.[0] ?? "";
-    expect(pick).toMatch(/<span title="自动 · Claude Code · 我的 Claude 订阅">自动 · Claude 订阅<\/span><svg/);
+    expect(pick).toMatch(/<span title="自动 · Claude Code · Claude 订阅">自动 · Claude 订阅<\/span><svg/);
   });
 });
 
 describe("派活单的模型胶囊（用户定 A+B）", () => {
   it("选了具体模型只写模型；自动写「自动 · 模型」；订阅读不到模型名写「Claude 订阅」「Codex 订阅」；悬停全称是「执行方 · 模型 · 来源」，重复的不写两遍", () => {
     const opus = { harness: "claude-code" as const, model: "Opus 5.5", source: "我的 Claude 订阅", subscription: true };
-    expect(pickLabel(opus, false)).toEqual({ label: "Opus 5.5", title: "Claude Code · Opus 5.5 · 我的 Claude 订阅" });
-    expect(pickLabel(opus, true)).toEqual({ label: "自动 · Opus 5.5", title: "自动 · Claude Code · Opus 5.5 · 我的 Claude 订阅" });
-    expect(pickLabel({ ...opus, model: null }, true)).toEqual({ label: "自动 · Claude 订阅", title: "自动 · Claude Code · 我的 Claude 订阅" });
+    expect(pickLabel(opus, false)).toEqual({ label: "Opus 5.5", title: "Claude Code · Opus 5.5 · Claude 订阅" });
+    expect(pickLabel(opus, true)).toEqual({ label: "自动 · Opus 5.5", title: "自动 · Claude Code · Opus 5.5 · Claude 订阅" });
+    expect(pickLabel({ ...opus, model: null }, true)).toEqual({ label: "自动 · Claude 订阅", title: "自动 · Claude Code · Claude 订阅" });
     expect(pickLabel({ harness: "codex", model: null, source: "Codex 订阅 · 经 magpie", subscription: true }, false).label).toBe("Codex 订阅");
     // 网关读不到模型名时写来源；全称里来源和模型一样时只写一次。
     expect(pickLabel({ harness: "claude-code", model: null, source: "TokenHub", subscription: false }, false)).toEqual({ label: "TokenHub", title: "Claude Code · TokenHub" });
@@ -68,18 +68,22 @@ describe("派活单的模型胶囊（用户定 A+B）", () => {
 describe("选模型时看得出执行方（21 条）", () => {
   const profile = (patch: Partial<TLocalModelProfile>): TLocalModelProfile => ({ id: "p", label: "我的 Claude 订阅", source: "subscription", agent: "claude-code", baseUrl: null,
     model: "claude-opus-5-5", smallModel: null, webSearch: true, hasKey: false, isDefault: false, ...patch });
-  it("菜单一行写「模型 · 来源」：来源照本机认出的 origin，老版本订阅写「我的 Claude 订阅」、别的写配置名", () => {
-    expect([profileModel(profile({})), profileSource(profile({}))]).toEqual(["Opus 5.5", "我的 Claude 订阅"]);
+  it("菜单一行写「模型 · 来源」：订阅写「Claude 订阅」「Codex 订阅」，不写「我的」（40 条）；网关照本机认出的 origin，老版本取配置名「·」前面那一段；订阅没写模型的模型名写「默认」", () => {
+    expect([profileModel(profile({})), profileSource(profile({}))]).toEqual(["Opus 5.5", "Claude 订阅"]);
+    expect(profileSource(profile({ agent: "codex", label: "GPT-6.1-Sol", origin: { provider: "openai", label: "Codex 订阅", via: null } }))).toBe("Codex 订阅");
+    expect(profileSource(profile({ label: "TokenHub · DeepSeek", source: "gateway" }))).toBe("TokenHub");
+    expect(profileSource(profile({ label: "x", source: "gateway", origin: { provider: "tokenhub", label: "我的 TokenHub", via: null } }))).toBe("TokenHub");
     const magpie = profile({ label: "Codex", source: "gateway", agent: "codex", model: "codex/gpt-6.1", origin: { provider: "codex", label: "Codex 订阅 · 经 magpie", via: "magpie" } });
     expect([profileModel(magpie), profileSource(magpie)]).toEqual(["gpt-6.1", "Codex 订阅 · 经 magpie"]);
     expect(profileSource(profile({ label: "DeepSeek", source: "gateway" }))).toBe("DeepSeek");
-    expect(profileModel(profile({ model: null, label: "订阅默认" }))).toBe("订阅默认");
+    expect(profileModel(profile({ model: null, label: "订阅默认" }))).toBe("默认");
+    expect(profileModel(profile({ model: null, label: "网关默认", source: "gateway" }))).toBe("网关默认");
   });
   it("选中后写「执行方 · 模型」，来源在悬停：执行方照本机报的 harness，老版本用会话的 agent；来源照 origin，老版本退回 sourceLabel", () => {
     expect(harnessLabel({ harness: "codex", origin: { provider: "codex", label: "Codex 订阅 · 经 magpie", via: "magpie" }, sourceLabel: "Codex", modelName: "gpt-6.1" }))
       .toEqual({ label: "Codex · gpt-6.1", title: "Codex 订阅 · 经 magpie" });
     expect(harnessLabel({ sourceLabel: "我的 Claude 订阅", modelName: "Opus", actual: { model: "claude-opus-5-5", modelName: "Opus 5.5", at: "2026-11-09T01:00:00Z" } }, "claude-code"))
-      .toEqual({ label: "Claude Code · Opus 5.5", title: "我的 Claude 订阅" });
+      .toEqual({ label: "Claude Code · Opus 5.5", title: "Claude 订阅" });
     expect(harnessLabel({ modelName: "Opus" })).toBeNull();
     expect(harnessLabel(null, "claude-code")).toBeNull();
   });

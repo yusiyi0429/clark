@@ -7,7 +7,7 @@
  * 手机上分「结果」「对话」两个标签。
  */
 import type { TLocalAttachmentRef } from "@warmap/contracts";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, ChevronLeft, Info, X } from "lucide-react";
@@ -26,6 +26,7 @@ import { useAutoReturn } from "@/lib/board/useAutoReturn";
 import { showWorkspaceToast } from "@/lib/toast";
 import { RelayLine, SessionComposer, SessionTranscript, sayToSession, sessionModels, useModelChangedRefresh, sessionEnded, type DecideOptions } from "./SessionTranscript";
 import { useSessionMode } from "./PermissionMode";
+import { FilePreview, cloudOutputFile, type PreviewFile } from "./FilePreview";
 import { runLabel, sessionModelText } from "@/lib/local/runModel";
 import { useCardDetail, type CardDetail } from "./useCardDetail";
 import { SourceWordIssues, SourceWords } from "./SourceWords";
@@ -65,6 +66,9 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
   const router = useRouter();
   /** 看结果还是对话；没选过时，子会话不在这台电脑上（手机、别的电脑、还没开）先看摘要（5.4.3）。 */
   const [details, setDetails] = useState<boolean | null>(null);
+  // 右边看文件（41 条）：交出的产出点了在这一页右边看，不新开页；手持上整屏。
+  const [preview, setPreview] = useState<PreviewFile | null>(null);
+  const closePreview = useCallback(() => setPreview(null), []);
   /** 页头点了「推翻」：打开结果、推翻的原因框直接展开。 */
   const [flipping, setFlipping] = useState(false);
   const { detail, missing, refresh } = useCardDetail(cardId);
@@ -138,7 +142,7 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
   const pane = (
     <aside className={s.pane} aria-label="结果">
       <ResultPane detail={detail} session={session} view={session ? view : null} canAct={canAct} wait={wait} stage={stage} handheld={handheld} ready={ready} embedded={embedded}
-        flipping={flipping} onFlipDone={() => setFlipping(false)}
+        flipping={flipping} onFlipDone={() => setFlipping(false)} onPreview={setPreview} previewing={preview?.key ?? null}
         onStart={embedded ? undefined : () => setStarting(true)} onControl={control} onResume={() => say("继续")} onChanged={() => void refresh()} />
     </aside>
   );
@@ -154,7 +158,7 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
   const place = session?.workspace ? { name: shortPlace(session.workspace), title: placeText(session.workspace) } : null;
   const composer = agent && (session || !embedded)
     ? <SessionComposer label={`给${item.title}插话`} disabled={!canAct} onSend={say} mode={mode} dock={dock} subject={{ kind: "card", id: cardId }} place={place} model={model ? { label: model.label, title: model.title ?? undefined } : null}
-      models={sessionModels(local.runner, local.models, session, local.refresh, () => showWorkspaceToast({ text: "没换成" }))}
+      models={sessionModels(local.runner, local.models, session, local.refresh, () => showWorkspaceToast({ text: "没换成" }), local.status)}
       busy={sessionRunning} onStop={() => void control("interrupt").catch(() => showWorkspaceToast({ text: "没停下" }))} />
     : <div className={s.composerDock}>{dock}</div>;
   const chat = (
@@ -164,6 +168,7 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
           <div ref={scroll.contentRef}>
             {session ? (
               <SessionTranscript entries={view.entries} agentName={agentName} canAct={canAct} onResend={(entry) => void say(entry.text).catch(() => showWorkspaceToast({ text: "没发出去" }))} device={device} live={sessionRunning} ended={ended} relay={relay} lead={`交代：${item.title}${item.card?.criterion ? ` · 按「${item.card.criterion.text}」验收` : ""}`}
+                onArtifact={(fileName) => { const output = detail.outputs.find((entry) => entry.kind === "artifact" && entry.fileName === fileName); return output ? () => setPreview(cloudOutputFile(output)) : null; }}
                 onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={asking} asking={question} />
             ) : <CloudTimeline run={run} title={item.title} />}
           </div>
@@ -200,7 +205,10 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
           <HeroButton variant="ghost" size="sm" isIconOnly aria-label="结果" title="结果" data-pressed={showPane || undefined} onPress={() => setDetails(!showPane)} data-testid="session-details"><Info {...ICON} aria-hidden /></HeroButton>
           {chrome.trail}
         </header>
-        <div className={s.body} data-solo="">{showPane ? <div className={s.paneScroll}>{pane}</div> : chat}</div>
+        <div className={s.body} data-solo={preview && !handheld ? undefined : ""}>
+          {showPane ? <div className={s.paneScroll}>{pane}</div> : chat}
+          {preview ? <FilePreview file={preview} onClose={closePreview} /> : null}
+        </div>
         {starter}
       </div>
     );
@@ -230,7 +238,8 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
       ) : null}
       <div className={s.body} data-tab={handheld ? tab : undefined}>
         {chat}
-        {pane}
+        {preview && !handheld ? null : pane}
+        {preview ? <FilePreview file={preview} onClose={closePreview} /> : null}
       </div>
       {starter}
     </div>
@@ -249,12 +258,14 @@ function CloudTimeline({ run, title }: { run: TLocalRunView | null; title: strin
   );
 }
 
-function ResultPane({ detail, session, view, canAct, wait, stage, handheld, ready, embedded, flipping, onFlipDone, onStart, onControl, onResume, onChanged }: {
+function ResultPane({ detail, session, view, canAct, wait, stage, handheld, ready, embedded, flipping, onFlipDone, onPreview, previewing, onStart, onControl, onResume, onChanged }: {
   detail: CardDetail; session: TLocalSessionSummary | null; view: SessionView | null; canAct: boolean; wait: string | null; stage: string; handheld: boolean; ready: boolean;
   /** 新首页里：停止、推翻在页头（5.4.3），这里只留「继续」；不写订阅按标价折算的花费（11.2）。 */
   embedded: boolean;
   /** 页头点了「推翻」：推翻的原因框直接展开。 */
   flipping: boolean; onFlipDone: () => void;
+  /** 交出的产出点了在右边看（41 条）；previewing 是正在看的那一份。 */
+  onPreview: (file: PreviewFile) => void; previewing: string | null;
   /** 新首页里没有常驻的「开始」（设计 9.8）：自动开工失败时由 Task 管线那一行出「手动开始」。 */
   onStart?: () => void; onControl: (action: "interrupt" | "kill") => Promise<unknown>; onResume: () => Promise<unknown>; onChanged: () => void;
 }) {
@@ -316,14 +327,24 @@ function ResultPane({ detail, session, view, canAct, wait, stage, handheld, read
       {detail.outputs.length ? (
         <div className={s.sec}>
           <p className={s.lab}>产出</p>
-          {detail.outputs.map((output) => (
-            <div key={output.id} className={s.output}>
-              <span className={s.outTag}>{output.kind === "artifact" ? (output.fileName?.split(".").pop() ?? "文件").toUpperCase() : "证据"}</span>
-              <span className={s.outTitle}>{output.title}</span>
-              {output.kind === "artifact" ? <a href={`/api/me/local-outputs/${encodeURIComponent(output.id)}`} target="_blank" rel="noopener" className={s.link}>打开</a>
-                : output.url ? <a href={output.url} target="_blank" rel="noopener noreferrer" className={s.link}>打开</a> : null}
-            </div>
-          ))}
+          {detail.outputs.map((output) => {
+            const tag = <span className={s.outTag}>{output.kind === "artifact" ? (output.fileName?.split(".").pop() ?? "文件").toUpperCase() : "证据"}</span>;
+            // 交出的文件：整行点了在右边看；证据照旧（有链接的新开一页）。
+            if (output.kind === "artifact") {
+              const file = cloudOutputFile(output);
+              return (
+                <button key={output.id} type="button" className={s.output} data-current={previewing === file.key ? "" : undefined} onClick={() => onPreview(file)} data-testid="output-open">
+                  {tag}<span className={s.outTitle}>{output.title}</span>
+                </button>
+              );
+            }
+            return (
+              <div key={output.id} className={s.output}>
+                {tag}<span className={s.outTitle}>{output.title}</span>
+                {output.url ? <a href={output.url} target="_blank" rel="noopener noreferrer" className={s.link}>打开</a> : null}
+              </div>
+            );
+          })}
         </div>
       ) : null}
 
