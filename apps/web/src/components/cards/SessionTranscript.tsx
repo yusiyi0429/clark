@@ -295,7 +295,7 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
                   ))}
                 </ul>
               ) : null}
-              {entry.text}
+              {entry.initial ? <AgentText text={entry.text} onFile={onFile} /> : entry.text}
             </div>,
             entry.receipt === "failed" ? <ReceiptFailed key={`${entry.seq}:receipt`} className={s.meReceipt} label="没读到" onResend={canAct && entry.text ? () => onResend?.(entry) : undefined} />
               : entry.receipt ? <ReceiptTicks key={`${entry.seq}:receipt`} className={s.meReceipt} state={entry.receipt} /> : null,

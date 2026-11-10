@@ -40,6 +40,8 @@
 .bubble p, .permission p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 /* 执行方的回答按 Markdown 排（17.2 第 41 条）：字号行距跟着这条回答，标题不放大；表格、代码小一档（不小于最小那档字），放不下自己横向滚。 */
 .md { --md-small: max(.875em, var(--text-sm)); min-width: 0; overflow-wrap: anywhere; }
+/* 交代气泡里的 Markdown：气泡本身保留换行（pre-wrap），这里交给 Markdown 自己分段。 */
+.me .md { white-space: normal; }
 .md strong { font-weight: 600; }
 .md > :first-child { margin-top: 0; }
 .md > :last-child { margin-bottom: 0; }
@@ -113,7 +115,8 @@
 .stateChip { display: inline-flex; flex: none; align-items: center; gap: var(--space-1); height: 20px; padding: 0 var(--space-2); border-radius: var(--r-capsule); background: var(--neutral-wash); color: var(--ink-muted); font-size: var(--text-xs); font-weight: 400; line-height: 16px; white-space: nowrap; }
 .stateChip[data-tone="warn"] { background: var(--warning-soft); color: var(--warning); }
 .stateChip[data-tone="wait"] { color: var(--ink); }
-.stateChip i { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+/* 「等你」的点和左栏同一种（47 条）：6px 黄。 */
+.stateChip i { width: 6px; height: 6px; border-radius: 50%; background: var(--warning); }
 /* 四条对话一样宽：正文 680，两边至少 24。 */
 .page[data-embedded] .chat { --gl: max(var(--space-6), calc((100% - 680px) / 2)); }
 .paneScroll { min-height: 0; overflow-y: auto; }

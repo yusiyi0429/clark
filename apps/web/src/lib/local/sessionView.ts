@@ -6,7 +6,9 @@ import type { TLocalPermissionMode, TLocalPermissionRequestView, TLocalPlanEntry
 
 export type SessionEntry =
   /** messageId、receipt：本人这句话的编号和回执（17.4，本机补发的话没有编号也没有回执）。 */
-  | { kind: "user"; seq: number; at: string; text: string; attachments?: { name: string; size: number }[]; messageId?: string; receipt?: "delivered" | "read" | "failed" }
+  | { kind: "user"; seq: number; at: string; text: string; attachments?: { name: string; size: number }[]; messageId?: string; receipt?: "delivered" | "read" | "failed";
+      /** 开工那句（派活时交给会话的交代，user_message 的 source = initial）：按 Markdown 画。 */
+      initial?: true }
   | { kind: "assistant"; seq: number; at: string; text: string }
   | { kind: "step"; seq: number; at: string; toolUseId: string; title: string; done: boolean; isError: boolean }
   | { kind: "permission"; seq: number; at: string; request: TLocalPermissionRequestView; decision: "allow" | "deny" | null }
@@ -95,7 +97,7 @@ export function foldEvent(view: SessionView, event: TLocalSessionEvent): Session
       return next;
     case "user_message":
       next.entries = [...view.entries, { kind: "user", ...base, text: event.text, ...(event.attachments?.length ? { attachments: event.attachments.map(({ name, size }) => ({ name, size })) } : {}),
-        ...(event.messageId ? { messageId: event.messageId } : {}) }];
+        ...(event.messageId ? { messageId: event.messageId } : {}), ...(event.source === "initial" ? { initial: true as const } : {}) }];
       next.handedBack = false;
       return next;
     // 回执挂到同编号的那句话上：delivered → read，或 delivered → failed。

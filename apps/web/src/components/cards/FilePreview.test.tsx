@@ -34,6 +34,21 @@ describe("子会话的回答按 Markdown 显示（41 条）", () => {
     expect(html).not.toContain("<strong>");
   });
 
+  it("开工那句交代（source = initial）照回答的 Markdown 画：看不到 ##，标题、列表成形；本人后来插的话还是原样", async () => {
+    const { foldEvents } = await import("@/lib/local/sessionView");
+    const view = foldEvents([
+      { seq: 1, at, type: "user_message", text: "## 交代\n\n- 做完\n- **验收**", source: "initial" },
+      { seq: 2, at, type: "user_message", text: "**别加粗**", source: "web", messageId: "m1" },
+    ] as never);
+    expect(view.entries.map((entry) => entry.kind === "user" && !!entry.initial)).toEqual([true, false]);
+    const html = transcript(view.entries);
+    expect(html).not.toContain("## 交代");
+    expect(html).toContain("<h2>交代</h2>");
+    expect(html).toContain("<li>做完</li>");
+    expect(html).toContain("<strong>验收</strong>");
+    expect(html).toContain("**别加粗**");
+  });
+
   it("「交出 文件名」：对得上交出的产出时文件名能点，对不上照旧是字", () => {
     const entries: SessionEntry[] = [{ kind: "artifact", seq: 1, at, title: "交回说明", fileName: "交回说明.md" }];
     expect(transcript(entries, () => vi.fn())).toMatch(/交出 <button[^>]*data-testid="artifact-open"[^>]*>交回说明\.md<\/button>/);
