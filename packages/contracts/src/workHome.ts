@@ -356,6 +356,12 @@ export const WorkHomeResponse = Type.Object({
 }, strict);
 
 /**
+ * GET /api/me/work-home/waiting-count：本人有几件「等你」的事（同 work-home 的 waiting 的条数），哪种视角都能读。
+ * 给管理模式（CEO 视角）用：CEO 视角读不了 work-home（403），个人菜单里「工作模式」那一项后面带这个数（设计稿 17.2 第 45 条）。
+ */
+export const WorkWaitingCountResponse = Type.Object({ count: Type.Integer({ minimum: 0 }) }, strict);
+
+/**
  * 项目对话（原 Task 管线）里网页按时间插的一行（第 4.5 节，从卡和交回现算，不另存事件）。id 稳定，网页按它去重；at 是这件事发生的时间。
  * - card_passed：一张卡验收过了（含本人「仍然通过」），met / total 几条达到，merge 是合回结果（「已合进 main」，或要你合的原因）。
  * - card_blocked：一张卡连续两次没过（受阻），fix 是拼好的改法（含原话对不上的几处）；sourceWordIssues 是那次交回和本人原话对不上的几处（16.8），和没过的标准一起列；
@@ -566,6 +572,7 @@ export type THomeItem = Static<typeof HomeItem>;
 export type TWaitingTarget = Static<typeof WaitingTarget>;
 export type TWaitingItem = Static<typeof WaitingItem>;
 export type TWorkHomeResponse = Static<typeof WorkHomeResponse>;
+export type TWorkWaitingCountResponse = Static<typeof WorkWaitingCountResponse>;
 export type TBackgroundKind = Static<typeof BackgroundKind>;
 export type TBackgroundState = Static<typeof BackgroundState>;
 export type TBackgroundItem = Static<typeof BackgroundItem>;

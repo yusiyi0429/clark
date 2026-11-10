@@ -35,7 +35,11 @@ export const SessionResponse = Type.Object(
     loginId: Type.Optional(Type.String()),
     /** 可选以兼容分批部署；当前 API 对已登录的人总会返回。 */
     onboarded: Type.Optional(Type.Boolean()),
-    /** 同时是 CEO 和 DRI 的人可以在两种工作台之间切换；role 是当前视角。 */
+    /**
+     * CEO 角色的人都能在两种模式之间切换（设计稿 17.2 第 45 条）：管理模式是 CEO 视角（role = ceo，现在的 CEO 界面），
+     * 工作模式是成员视角（role = member，新首页，以本人的身份用）；不要求同时是负责人。登录后默认管理模式，切过去以后这次登录留在那个模式。
+     * 只有负责人身份的人为 false，没有这组切换。role 是当前视角。
+     */
     canSwitchView: Type.Optional(Type.Boolean()),
     /** 管理员（TIANSHU_ADMIN_PERSON_IDS）才有，为 true：个人菜单里多一项「管理员」。 */
     admin: Type.Optional(Type.Boolean()),

@@ -51,6 +51,8 @@ export type MeetingCardDeps = {
   people?: () => TPersonResult[];
   /** 记录正文能不能写进本体（等斯一答复，MEETING_WORLD_RECORD_TEXT）：能时，没有决策的会生成后直接冻结写入。 */
   recordText?: boolean;
+  /** 会议写本体整个关掉了（MEETING_WORLD_WRITES_OFF）：视图带 worldWritesOff，网页收起「不写进本体」开关。 */
+  writesOff?: boolean;
 };
 export type Viewer = { personId: string; isCeo: boolean };
 type CardError = { status: number; code: string; message: string; fieldErrors?: Record<string, string>; view?: TMeetingCardView };
@@ -338,7 +340,7 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
     return {
       draft: row?.draft ?? null, draftVersion: row?.draft_version ?? 0, draftStatus: row?.draft_status ?? "created", actionItems: row?.action_items ?? [],
       decisions: row?.decisions ?? null, hostId: meeting.lead_dri_id, viewerId: viewer.personId, writeToWorld: row?.write_to_world ?? true,
-      ...confirmedView(current), targetOptions, canEdit, draftChange: draftChangeOf(row?.draft ?? null, row?.action_items ?? [], current),
+      ...(deps.writesOff ? { worldWritesOff: true } : {}), ...confirmedView(current), targetOptions, canEdit, draftChange: draftChangeOf(row?.draft ?? null, row?.action_items ?? [], current),
       unmappedSpeakers: canEdit ? await openSpeakers(meetingId) : [],
     };
   }

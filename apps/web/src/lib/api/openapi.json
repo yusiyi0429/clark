@@ -21498,6 +21498,34 @@
         }
       }
     },
+    "/api/me/work-home/waiting-count": {
+      "get": {
+        "operationId": "getWorkWaitingCount",
+        "summary": "本人有几件「等你」的事（同 work-home 的 waiting 的条数）；管理模式（CEO 视角）和工作模式都能读，给个人菜单里「工作模式」后面的数字用",
+        "responses": {
+          "200": {
+            "description": "等你的条数",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkWaitingCountResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/background": {
       "get": {
         "operationId": "getBackground",
@@ -28990,6 +29018,9 @@
                 "type": "string"
               },
               "writeToWorld": {
+                "type": "boolean"
+              },
+              "worldWritesOff": {
                 "type": "boolean"
               },
               "confirmed": {
@@ -87301,6 +87332,9 @@
           "writeToWorld": {
             "type": "boolean"
           },
+          "worldWritesOff": {
+            "type": "boolean"
+          },
           "confirmed": {
             "anyOf": [
               {
@@ -89419,6 +89453,9 @@
                     "type": "string"
                   },
                   "writeToWorld": {
+                    "type": "boolean"
+                  },
+                  "worldWritesOff": {
                     "type": "boolean"
                   },
                   "confirmed": {
@@ -115836,6 +115873,19 @@
                 }
               }
             }
+          }
+        }
+      },
+      "WorkWaitingCountResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "count"
+        ],
+        "properties": {
+          "count": {
+            "minimum": 0,
+            "type": "integer"
           }
         }
       },

@@ -370,6 +370,37 @@ describe("整卡确认与会议事件", () => {
     }
   });
 
+  it("只关会议写本体（MEETING_WORLD_WRITES_OFF）：照常确认，选了写入也按不写入记，不排写入任务、不发写请求，没有可重试的；读挂点照旧，视图带 worldWritesOff", async () => {
+    const world = ontology();
+    const { t, host, meetingId, run } = await setup(cardAgent(), { meetingWorldWritesOff: true });
+    try {
+      const before = await getCard(t, host, meetingId);
+      expect(before.worldWritesOff).toBe(true);
+      // 读还开着：挂点对象里能改的组件照样读得到。
+      expect(before.targetOptions.map((option) => option.targetRef)).toContain("obj-po-1#target/acc-1");
+
+      const draftVersion = await ready(t, host, meetingId);
+      const confirmed = await confirm(t, host, meetingId, { draftVersion, writeToWorld: true });
+      expect(confirmed.statusCode).toBe(200);
+      const view = confirmed.json() as TMeetingCardView;
+      expect(view.confirmed).toMatchObject({ kind: "first", confirmation: { revision: 1, confirmedBy: HOST } });
+      expect(view.sync).toMatchObject({ writeToWorld: false, event: { status: "skipped", eventId: null } });
+      expect(view.sync!.objects.every((object) => object.status !== "pending")).toBe(true);
+      await run();
+      // 同一草稿再点一次写入：还是不写入，不变成「写入中」。
+      expect((await confirm(t, host, meetingId, { draftVersion, writeToWorld: true })).json().sync).toMatchObject({ writeToWorld: false, event: { status: "skipped" } });
+      await run();
+
+      expect(await t.sql("SELECT count(*)::int AS n FROM jobs WHERE kind = 'meeting.world_sync'")).toEqual([{ n: 0 }]);
+      expect(world.calls.filter((call) => call.url.pathname.startsWith("/v1/actions"))).toEqual([]);
+      const retried = await retry(t, host, meetingId);
+      expect([retried.statusCode, retried.json().code]).toEqual([409, "NOTHING_TO_RETRY"]);
+      expect((await t.sql("SELECT status FROM meetings WHERE id = $1", [meetingId]))[0].status).toBe("reviewed");
+    } finally {
+      await t.close();
+    }
+  });
+
   it("写过再选不写入：不出新版本、不追加，原事件保留", async () => {
     const world = ontology();
     const { t, host, meetingId, run } = await setup();

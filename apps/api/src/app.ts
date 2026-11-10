@@ -301,6 +301,8 @@ export type AppEnv = {
   feishuWebOrigin?: string;
   /** 会议记录正文（摘要、正文段落）能不能随会议事件写进本体（MEETING_WORLD_RECORD_TEXT=1，等斯一答复）：缺省不能，只写已确认的决策和行动项，没有决策的会不写。 */
   meetingRecordText?: boolean;
+  /** 只关会议写本体（MEETING_WORLD_WRITES_OFF=1，会后链切到 Nexus 以后）：会议卡照常生成、照常逐条确认，不再写会议事件和对象修改；缺省不关。别的本体写入不受影响。 */
+  meetingWorldWritesOff?: boolean;
   /** ③ 信息收集的飞书多维表格：live 以发起人身份调开放接口（要先在飞书后台开通 base 权限，见 feishu/bitable.ts）；缺省 mock，不调飞书（FEISHU_BITABLE_MODE）。 */
   collectionBitable?: "live" | "mock";
   /** ③ 信息收集（COLLECTIONS_ENABLED=1 才开，D-56）：关着时不接收集路由、不跑每分钟的收集任务、对话里没有「发起信息收集」，定时任务里不列收集项。 */

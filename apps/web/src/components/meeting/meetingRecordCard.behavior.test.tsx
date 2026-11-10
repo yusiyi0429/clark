@@ -313,6 +313,18 @@ describe("会议卡：整卡编辑、确认、修改、同步状态", () => {
     expect(button(off, "确认这份记录")!.props!.disabled).toBe(false);
   });
 
+  it("会议写本体关着（worldWritesOff）：不出「不写进本体」开关，没挂对象也能确认，确认按不写入发", async () => {
+    const initial = view({ draft: draft({ relatedObjectRefs: [] }), worldWritesOff: true });
+    const tree = render(initial);
+    expect(tree.some((node) => node.props?.role === "switch")).toBe(false);
+    expect(hasText(tree, "不写进本体")).toBe(false);
+    expect(hasText(tree, "未挂对象")).toBe(false);
+    expect(button(tree, "确认这份记录")!.props!.disabled).toBe(false);
+    click(button(tree, "确认这份记录"));
+    await vi.waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+    expect((api.post.mock.calls[0][1] as { body: unknown }).body).toMatchObject({ writeToWorld: false });
+  });
+
   it("确认出错只显示标签：本体读不了是「本体暂不可用」，时间不对把时间标红", async () => {
     const initial = view();
     api.post.mockResolvedValueOnce({ error: { code: "WORLD_UNAVAILABLE", message: "World read failed: ETIMEDOUT" }, response: { ok: false, status: 503 } });

@@ -322,7 +322,7 @@ const defaultConversationRuntime: ConversationRuntime = {
 };
 
 export async function createTestApp(
-  seedOverrides: Partial<Pick<AppEnv, "companyPeopleSeed" | "materialStorageDir" | "conversationAttachmentStorageDir" | "recordingStorageDir" | "extraOrigins" | "companyName" | "missionCardDraftsDir" | "worldApiUrl" | "worldAgentToken" | "worldInstance" | "worldInstanceLocalFile" | "publicOrigin" | "feishu" | "adminPersonIds" | "onboardingDelegationStep" | "internalChatToken" | "chatServiceUrl" | "wechatEnabled" | "chatSessionRotation" | "conversationSegments" | "chatPageContext" | "worldPeriodGoalGates" | "collectionsEnabled" | "docChangeEnabled" | "companyWorldAccessFile" | "boardCloudAgents" | "tianshuMonthlyCycle" | "internalChatTokensPrevious" | "internalCallerAllowlist" | "nexusDri">> = {},
+  seedOverrides: Partial<Pick<AppEnv, "companyPeopleSeed" | "materialStorageDir" | "conversationAttachmentStorageDir" | "recordingStorageDir" | "extraOrigins" | "companyName" | "missionCardDraftsDir" | "worldApiUrl" | "worldAgentToken" | "worldInstance" | "worldInstanceLocalFile" | "publicOrigin" | "feishu" | "adminPersonIds" | "onboardingDelegationStep" | "internalChatToken" | "chatServiceUrl" | "wechatEnabled" | "chatSessionRotation" | "conversationSegments" | "chatPageContext" | "worldPeriodGoalGates" | "collectionsEnabled" | "docChangeEnabled" | "companyWorldAccessFile" | "boardCloudAgents" | "tianshuMonthlyCycle" | "internalChatTokensPrevious" | "internalCallerAllowlist" | "nexusDri" | "meetingWorldWritesOff">> = {},
   conversationRuntime: ConversationRuntime = defaultConversationRuntime,
   runtimeOptions: {
     conversationTurnTimeoutMs?: number;
