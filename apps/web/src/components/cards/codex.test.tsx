@@ -33,7 +33,7 @@ describe("子会话能用 Codex（17.2 第 38 条，D 契约 b28c1f12）", () =>
     await expect(runner.createSession({ subject: { kind: "plan", taskId: "t1" }, title: "拆卡", modelProfileId: "codex-gpt-6_1-sol", firstMessage: "拆" })).rejects.toMatchObject({ status: 400 });
   });
 
-  it("Codex 子会话换模型、思考程度：在跑这一轮时 after_turn，没在跑 now；子会话下面的菜单两组都列，另一个执行方的先灰着", async () => {
+  it("Codex 子会话换模型、思考程度：在跑这一轮时 after_turn，没在跑 now；子会话下面的面板两个来源都列，另一个执行方的先灰着", async () => {
     const runner = createMockRunner({ stepMs: 5, codex: "logged_in" });
     const session = await runner.createSession({ subject: { kind: "card", cardId: "c1" }, title: "卡", cwd: "C:\work\tianshu", modelProfileId: "codex-gpt-6_1-sol", firstMessage: "交代", effort: "ultra" });
     expect(session).toMatchObject({ agent: "codex", effort: "ultra" });
@@ -42,9 +42,10 @@ describe("子会话能用 Codex（17.2 第 38 条，D 契约 b28c1f12）", () =>
     expect(changed.session.pendingModel?.effort).toBe("high");
     const models = await runner.listModels();
     const menu = sessionModels(runner, models, changed.session, () => undefined, () => undefined)!;
-    expect(new Set(menu.list.map((model) => model.agent))).toEqual(new Set(["claude-code", "codex"]));
+    const [source, model, effort] = menu.rows;
+    expect(source!.options.map((option) => [option.label, !!option.disabled])).toEqual([["Claude 订阅", true], ["TokenHub", true], ["Codex 订阅", false]]);
     expect(CROSS_AGENT_SWITCH).toBe(false);
-    expect(menu.disabled).toEqual(models.filter((model) => model.agent === "claude-code").map((model) => model.id));
-    expect(menu.efforts).toContain("ultra");
+    expect([source!.value, model!.value, effort!.value]).toEqual(["Codex 订阅", "GPT-6.1-Sol", "高"]);
+    expect(effort!.options.map((option) => option.label)).toContain("极限");
   });
 });

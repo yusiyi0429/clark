@@ -158,7 +158,7 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
   const place = session?.workspace ? { name: shortPlace(session.workspace), title: placeText(session.workspace) } : null;
   const composer = agent && (session || !embedded)
     ? <SessionComposer label={`给${item.title}插话`} disabled={!canAct} onSend={say} mode={mode} dock={dock} subject={{ kind: "card", id: cardId }} place={place} model={model ? { label: model.label, title: model.title ?? undefined } : null}
-      models={sessionModels(local.runner, local.models, session, local.refresh, () => showWorkspaceToast({ text: "没换成" }))}
+      models={sessionModels(local.runner, local.models, session, local.refresh, () => showWorkspaceToast({ text: "没换成" }), local.status)}
       busy={sessionRunning} onStop={() => void control("interrupt").catch(() => showWorkspaceToast({ text: "没停下" }))} />
     : <div className={s.composerDock}>{dock}</div>;
   const chat = (

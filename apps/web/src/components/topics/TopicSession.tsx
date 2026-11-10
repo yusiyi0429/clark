@@ -180,7 +180,7 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
         </div>
         {session || !embedded
           ? <SessionComposer label={`给${topic.title}插话`} disabled={!canAct} onSend={say} mode={mode} subject={{ kind: "topic", id: topic.id }} place={place} model={model ? { label: model.label, title: model.title ?? undefined } : null}
-            models={sessionModels(local.runner, local.models, session, local.refresh, () => showWorkspaceToast({ text: "没换成" }))}
+            models={sessionModels(local.runner, local.models, session, local.refresh, () => showWorkspaceToast({ text: "没换成" }), local.status)}
             busy={running(status)} onStop={() => void local.runner.interrupt(session!.id).then(() => local.refresh()).catch(() => showWorkspaceToast({ text: "没停下" }))} dock={<PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} />} />
           : <div className={s.composerDock}><PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} /></div>}
       </div>

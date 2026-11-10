@@ -29,7 +29,7 @@ import h from "@/styles/home.module.css";
 const KIND: Record<BackgroundItem["kind"], string> = { plan: "规划", verify: "验收", merge: "合回", subagent: "子 agent", command: "命令" };
 const PHASE: Record<LocalPhase, string> = { checking: "检查中", prompt: "等浏览器允许", blocked: "被拦截", offline: "离线", unpaired: "未配对", ready: "就绪" };
 const TOOL: Record<TLocalToolStatus["kind"], string> = { "claude-code": "Claude Code", codex: "Codex", gh: "gh", "lark-cli": "飞书命令行" };
-const TOOL_STATE: Record<TLocalToolStatus["state"], string> = { ready: "已登录", not_installed: "没装", not_logged_in: "没登录", expired: "登录过期", unknown: "检查中" };
+export const TOOL_STATE: Record<TLocalToolStatus["state"], string> = { ready: "已登录", not_installed: "没装", not_logged_in: "没登录", expired: "登录过期", unknown: "检查中" };
 type Check = { name: string; value: string; bad: boolean };
 
 /**

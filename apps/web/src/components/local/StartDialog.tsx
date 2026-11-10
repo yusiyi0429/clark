@@ -2,7 +2,7 @@
 
 /**
  * 点「开始」：卡先选技能（默认拆卡时配的；代码里仍叫 role，22 条只改给人看的字），再选模型（默认按技能的档位，没有时记住上一次）和文件夹，再开工（V2 设计第 11.2、19.6 节）。
- * 专题不选技能、不用选文件夹（本机给它一个专用目录）。模型按执行方分组（Claude Code、Codex，21 条），每个写「模型 · 来源」；文件夹只能经本机弹出的选择框添加。
+ * 专题不选技能、不用选文件夹（本机给它一个专用目录）。模型是一个胶囊，点开三行——来源、模型、思考（40 条，同子会话输入框下面那个）；文件夹只能经本机弹出的选择框添加。
  */
 import { useEffect, useState } from "react";
 import { FolderPlus } from "lucide-react";
@@ -10,7 +10,9 @@ import { MenuDialog } from "@/components/AccountMenu";
 import { HeroButton } from "@/components/HeroButton";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { readLast, writeLast } from "@/lib/local/start";
-import { HARNESS_NAME, effortText, profileModel, profileSource } from "@/lib/local/runModel";
+import { localPanelRows, panelLabel, pickLocal, type PanelRowKey } from "@/lib/local/modelPanel";
+import { usageCells } from "@/lib/home/quota";
+import { ModelPanel } from "@/components/home/ModelPanel";
 import type { TLocalEffort } from "@warmap/contracts";
 import type { TLocalFolder, TLocalModelProfile } from "@/lib/local/runner";
 import { TIER_LABEL, listRoles, modelForTier, type CardRole, type RoleView } from "@/lib/team/roles";
@@ -31,7 +33,7 @@ export function StartDialog({ title, needsFolder = true, role: given, onClose, o
   const [roleId, setRoleId] = useState<string | null>(given?.id ?? null);
   const [modelId, setModelId] = useState(() => local.models.find((model) => model.id === last.modelId)?.id ?? local.models.find((model) => model.isDefault)?.id ?? local.models[0]?.id ?? "");
   const [folderId, setFolderId] = useState(() => local.folders.find((folder) => folder.id === last.folderId)?.id ?? local.folders[0]?.id ?? "");
-  // 思考程度（36 条）：先选模型，再在这个模型支持的几档里选，「自动」在前；换了模型不支持的回到自动。
+  // 思考（36 条）：在这个模型支持的几档里选，「自动」在前；换了模型不支持的回到自动。
   const [effortPick, setEffort] = useState<TLocalEffort | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,9 +42,14 @@ export function StartDialog({ title, needsFolder = true, role: given, onClose, o
   const role = roles.find((entry) => entry.id === roleId) ?? null;
   const efforts = model?.efforts ?? [];
   const effort = effortPick && efforts.includes(effortPick) ? effortPick : null;
-  const groups = (Object.keys(HARNESS_NAME) as (keyof typeof HARNESS_NAME)[])
-    .map((agent) => ({ label: HARNESS_NAME[agent], models: local.models.filter((entry) => entry.agent === agent) }))
-    .filter((group) => group.models.length);
+  const now = Date.now();
+  const rows = localPanelRows({ models: local.models, modelId, effort, cells: usageCells(local.status?.quota ?? [], now), agents: local.status?.agents ?? [], now });
+  const pickModel = (row: PanelRowKey, id: string) => {
+    const next = pickLocal(local.models, { modelId, effort }, row, id);
+    if (!next) return;
+    setModelId(next.modelId);
+    setEffort(next.effort);
+  };
 
   const pickRole = (next: RoleView) => {
     setRoleId(next.id);
@@ -91,25 +98,10 @@ export function StartDialog({ title, needsFolder = true, role: given, onClose, o
             </div>
           </div>
         ) : null}
-        <div className={s.field} role="radiogroup" aria-label="模型">
-          <span className={s.label}>模型{role ? <small className={s.faint}> · 档位：{TIER_LABEL[role.modelTier]}</small> : null}</span>
-          {groups.map((group) => (
-            <div key={group.label} className={s.chipRow}>
-              <small>{group.label}</small>
-              {group.models.map((entry) => (
-                <button key={entry.id} type="button" role="radio" aria-checked={entry.id === modelId} className={s.choice} onClick={() => setModelId(entry.id)}>{profileModel(entry)}<span className={s.faint}> · {profileSource(entry)}</span></button>
-              ))}
-            </div>
-          ))}
-        </div>
-        {efforts.length ? (
-          <div className={s.field} role="radiogroup" aria-label="思考程度">
-            <span className={s.label}>思考程度</span>
-            <div className={s.chipRow}>
-              {[null, ...efforts].map((entry) => (
-                <button key={entry ?? "auto"} type="button" role="radio" aria-checked={entry === effort} className={s.choice} onClick={() => setEffort(entry)}>{effortText(entry)}</button>
-              ))}
-            </div>
+        {model ? (
+          <div className={s.field}>
+            <span className={s.label}>模型{role ? <small className={s.faint}> · 档位：{TIER_LABEL[role.modelTier]}</small> : null}</span>
+            <div className={s.chipRow}><ModelPanel label={panelLabel(model, effort)} rows={rows} onPick={pickModel} placement="bottom start" testId="start-model" /></div>
           </div>
         ) : null}
         {needsFolder ? (

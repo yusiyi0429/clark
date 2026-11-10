@@ -376,7 +376,7 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
           dock={(latest) => <PendingDock latest={latest} />}
           input={readOnly ? () => null : (onHeight) => <ChatInput data={data} placeholder={handheld ? "说点什么…" : `与${project.name}讨论…`} onHeight={onHeight} footer={{
             left: folder,
-            right: <><PipelineModelMenu projectId={project.id} fallback={<ModelText data={data} />} />{mode ? <PermissionModeMenu modes={mode.modes} value={mode.value} sheet={handheld} onChange={mode.set} /> : null}</>,
+            right: <><PipelineModelMenu projectId={project.id} fallback={<ModelText data={data} />} sheet={handheld} />{mode ? <PermissionModeMenu modes={mode.modes} value={mode.value} sheet={handheld} onChange={mode.set} /> : null}</>,
           }} />} />
       </div>
     </PendingBoxes>
