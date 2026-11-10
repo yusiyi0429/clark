@@ -1,6 +1,6 @@
 import type { Pool } from "pg";
 import type { TBackgroundItem, TBackgroundResponse, TBackgroundState, TCard, TCardMerge, TCardTaskView, THomeItem, THomeProject, THomeProjectGoal,
-  TLocalTaskBudgetView, TMyMeetingCard, TMyMeetingConfirm, TSubSession, TSubSessionState, TWorkerQueueReason, TWorkHomeResponse } from "@warmap/contracts";
+  TLocalTaskBudgetView, TMyMeetingCard, TMyMeetingConfirm, TNexusConfirmationItem, TSubSession, TSubSessionState, TWorkerQueueReason, TWorkHomeResponse } from "@warmap/contracts";
 import { assembleWaiting, HELD } from "./homeWaiting.js";
 import { planTaskMissions, type MissionRow } from "./homePlan.js";
 import { failStreak, type HandbackRow } from "./cardProjection.js";
@@ -98,6 +98,8 @@ export type WorkHomeDeps = {
   chat: boolean;
   /** 会议记录等我确认的（通知栏同一份，meetingCard.ts 的 pendingFor）。 */
   meetings: (personId: string) => Promise<MeetingPending>;
+  /** Nexus 推来、等我确认的会后待定事项（nexusDri.ts 的 listFor）。 */
+  nexusConfirmations: (personId: string) => Promise<TNexusConfirmationItem[]>;
   /** 我看得到的 Mission Card 轮次（missionRounds.ts 的 listMissionRoundCards）。 */
   missionRounds: (person: MissionRoundPerson) => Promise<TCard[]>;
 };

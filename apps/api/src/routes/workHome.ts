@@ -34,6 +34,7 @@ export function registerWorkHomeRoutes(app: AppInstance, ctx: RouteContext): voi
     const now = ctx.now();
     return readWorkHome({ q, pool, planTasks: ctx.planTasks, now, names: personDisplayNames(peopleDirectory), chat: Boolean(ctx.chat),
       meetings: (personId) => app.meetingFollowThrough.cards.pendingFor(personId),
+      nexusConfirmations: (personId) => app.nexusDri.listFor(personId),
       missionRounds: (viewer) => listMissionRoundCards(q, peopleDirectory.searchPeople(undefined), env.sessionSecret, viewer, undefined, now) }, person);
   };
 

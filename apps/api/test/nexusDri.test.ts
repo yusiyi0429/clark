@@ -304,6 +304,38 @@ describe("Nexus → DRI 确认：本人确认、修改、拒绝和回调", () =>
     expect(JSON.parse(nexus.received[0].body.toString("utf8"))).toMatchObject({ confirmationRef, confirmedBy: "unknown-world-person" });
   }, 30_000);
 
+  it("新首页「等你」：负责人的待定事项一条一行，带内容和截止；处理完、被新版本换掉、过期的不再出现；CEO 视角读不到这一份", async () => {
+    const { t, clock, push, member, list, decide } = await setup();
+    const waiting = async () => ((await t.app.inject({ method: "GET", url: "/api/me/work-home", headers: { cookie: member } })).json().waiting as
+      { id: string; kind: string; title: string; confirmation?: { id: string; value: string | null; quote: string | null } }[]).filter((item) => item.kind === "nexus_confirmation");
+    expect(await waiting()).toEqual([]);
+
+    // 样例里原话和内容一样：quote 不带。另一条原话不一样、没有可改的内容。
+    await push(SAMPLE);
+    const { value: _value, ...withoutValue } = SAMPLE.content;
+    await push(requestWith({ requestId: "dri:second", callbackCorrelation: "dri:second", itemId: "second", question: "第二个问题", content: withoutValue,
+      source: { ...SAMPLE.source, quote: "会上另一句原话" }, expiresAt: SAMPLE.expiresAt + 60_000 }));
+    const [first, second] = await list();
+    expect(await waiting()).toEqual([
+      { id: `nexus_confirmation:${first.id}`, kind: "nexus_confirmation", title: SAMPLE.question, source: "会后确认", at: new Date(SAMPLE.createdAt).toISOString(),
+        dueAt: new Date(SAMPLE.expiresAt).toISOString(), open: { kind: "nexus_confirmation", id: first.id }, answer: "inline",
+        confirmation: { id: first.id, value: SAMPLE.content.value, quote: null },
+        taskId: null, projectId: null, sessionId: null, deviceId: null, deviceName: null, letter: null, person: null, month: null, question: null, permission: null },
+      expect.objectContaining({ id: `nexus_confirmation:${second.id}`, title: "第二个问题", confirmation: { id: second.id, value: null, quote: "会上另一句原话" } }),
+    ]);
+    const ceo = await t.app.inject({ method: "GET", url: "/api/me/work-home", headers: { cookie: await t.loginCookie() } });
+    expect(ceo.statusCode).toBe(403);
+
+    // 处理完的消失；来了新版本，旧的换成新的。
+    expect((await decide(first.id, { decision: "confirmed" })).statusCode).toBe(200);
+    expect((await waiting()).map((item) => item.title)).toEqual(["第二个问题"]);
+    await push(requestWith({ requestId: "dri:second", callbackCorrelation: "dri:second", itemId: "second", revision: 2, question: "第二个问题（改过）" }));
+    expect((await waiting()).map((item) => item.title)).toEqual(["第二个问题（改过）"]);
+    // 过期的消失。
+    clock.at = SAMPLE.expiresAt;
+    expect(await waiting()).toEqual([]);
+  }, 30_000);
+
   it("没配服务凭据时 Nexus 调的接口不注册，本人这一侧列表为空", async () => {
     const t = await createTestApp();
     open = { t };

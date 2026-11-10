@@ -16,7 +16,7 @@ import type { RunAsk } from "./localDevices.js";
 
 /**
  * 首页的「等你」（契约 WaitingItem，设计 9.6）：要本人拿主意、不拿就有事卡住的，才进来。
- * 子会话、规划员、验收员在等批准或回复，受阻的卡，没能自动合回的卡，计划等你开工，会议要确认的，Mission Card 要做的，请你认可，岗位修改建议，
+ * 子会话、规划员、验收员在等批准或回复，受阻的卡，没能自动合回的卡，计划等你开工，会议要确认的，Nexus 推来的会后待定事项，Mission Card 要做的，请你认可，岗位修改建议，
  * 月份（复盘、之前月份还有没了结的），电脑不在线而有活在等本机，订阅额度用完有活停着。
  */
 
@@ -30,7 +30,7 @@ const BLOCKING = new Set<TWaitingItem["kind"]>(["approval", "question", "quota"]
 
 export type WaitingInput = {
   q: Query; person: MissionRoundPerson;
-  deps: Pick<WorkHomeDeps, "meetings" | "missionRounds" | "planTasks" | "now" | "names">;
+  deps: Pick<WorkHomeDeps, "meetings" | "nexusConfirmations" | "missionRounds" | "planTasks" | "now" | "names">;
   /** 现在是哪个月（公司时区）。 */
   period: string;
   /** 树和「其他」里的子会话，卡的投影，树上的 Task（带月份）。 */
@@ -195,6 +195,11 @@ export async function assembleWaiting(input: WaitingInput): Promise<TWaitingItem
   for (const [meetingId, entry] of meetings) add({ id: `meeting:${meetingId}`, kind: "meeting", title: entry.title,
     source: [entry.confirms ? `${entry.confirms} 条待你确认` : null, entry.failed ? "会议记录没生成" : null].filter(Boolean).join(" · "),
     at: entry.endedAt, open: { kind: "meeting", id: meetingId }, answer: "open" });
+  // 会后待定事项（Nexus 推来的，nexusDri.ts）：本人是负责人、没过期、没作废、还没处理的，一条一行，就地确认、拒绝或修改。截止是这一条作废的时间。
+  for (const item of await deps.nexusConfirmations(ownerId))
+    add({ id: `nexus_confirmation:${item.id}`, kind: "nexus_confirmation", title: item.question, source: "会后确认", at: item.createdAt, dueAt: item.expiresAt,
+      open: { kind: "nexus_confirmation", id: item.id }, answer: "inline",
+      confirmation: { id: item.id, value: item.value, quote: item.quote && item.quote !== item.value ? item.quote : null } });
   // Mission Card：本人确认我的任务（轮次在本人确认阶段、我那张还没确认），拍板人那一侧的待办。截止是本人确认关闭的时间。
   for (const card of await deps.missionRounds(person)) {
     const round = card.payload as TMissionRoundSummary;
