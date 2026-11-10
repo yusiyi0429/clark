@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { FormatRegistry } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import {
-  LocalCreateSessionRequest, LocalModelProfileUpsert, LocalModelProfile, LocalPermissionDecisionRequest, LocalSessionEvent,
+  LocalCreateSessionRequest, LocalModelProfileUpsert, LocalTokenHubConnectRequest, LocalRunnerError, LOCAL_TOKENHUB_PROFILE_PREFIX, LocalModelProfile, LocalPermissionDecisionRequest, LocalSessionEvent,
   LocalSyncBatchRequest, LocalPairingStatusResponse, LocalSendMessageRequest, LOCAL_RUNNER_ROUTES,
   LocalCreateSessionBatchRequest, LocalCreateSessionBatchResponse, LocalSettingsPatch, LocalSessionSummary, LocalHealthResponse,
   LocalVerifyBriefResponse, LOCAL_RUNNER_VERIFY_BRIEF_PATH, LocalMergeResponse, LocalVerdict, LocalQuestionAnswerRequest, LocalPlanCard, LocalBackgroundItem,
@@ -638,5 +638,16 @@ describe("本机程序契约", () => {
     expect(Value.Check(LocalSessionEvent, { seq: 9, at, sessionId, type: "context_usage", usedTokens: 166_000, maxTokens: 200_000 })).toBe(true);
     expect(Value.Check(LocalSessionEvent, { seq: 9, at, sessionId, type: "context_usage", usedTokens: 166_000 })).toBe(false);
     expect(Value.Check(LocalSessionEvent, { seq: 10, at, sessionId, type: "notice", level: "info", code: "context_compacted", text: "压缩了上下文" })).toBe(true);
+  });
+});
+
+describe("连接页连 TokenHub（17.2 第 51 条）", () => {
+  it("POST /v1/tokenhub 只收一把 Key（可见字符、不空）；两个错误码；建的模型配置 id 以 th- 开头", () => {
+    expect(LOCAL_RUNNER_ROUTES.connectTokenHub).toEqual({ method: "POST", path: "/v1/tokenhub", auth: true });
+    expect(LOCAL_RUNNER_ROUTES.disconnectTokenHub).toEqual({ method: "DELETE", path: "/v1/tokenhub", auth: true });
+    expect(Value.Check(LocalTokenHubConnectRequest, { apiKey: "sk-abc123" })).toBe(true);
+    for (const bad of [{}, { apiKey: "" }, { apiKey: "a b" }, { apiKey: "k", baseUrl: "https://x" }]) expect(Value.Check(LocalTokenHubConnectRequest, bad)).toBe(false);
+    for (const code of ["tokenhub_key_rejected", "tokenhub_unreachable"]) expect(Value.Check(LocalRunnerError, { error: { code, message: "x" } })).toBe(true);
+    expect(LOCAL_TOKENHUB_PROFILE_PREFIX).toBe("th-");
   });
 });

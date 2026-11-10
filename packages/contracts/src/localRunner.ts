@@ -47,6 +47,8 @@ export const LocalRunnerErrorCode = Type.Union([
   Type.Literal("validation"), Type.Literal("not_found"), Type.Literal("conflict"), Type.Literal("folder_not_allowed"),
   Type.Literal("agent_not_installed"), Type.Literal("agent_not_logged_in"), Type.Literal("agent_incompatible"),
   Type.Literal("not_implemented"), Type.Literal("cloud_not_linked"), Type.Literal("internal"),
+  /** 连 TokenHub（POST /v1/tokenhub）：TokenHub 不认这把 Key（422）；连不上 TokenHub、它回的认不出（502）。 */
+  Type.Literal("tokenhub_key_rejected"), Type.Literal("tokenhub_unreachable"),
 ]);
 export const LocalRunnerError = Type.Object({
   error: Type.Object({ code: LocalRunnerErrorCode, message: Type.String() }, strict),
@@ -377,6 +379,24 @@ export const LocalModelProfile = Type.Object({
   isDefault: Type.Boolean(),
 }, strict);
 export const LocalModelListResponse = Type.Object({ profiles: Type.Array(LocalModelProfile) }, strict);
+
+/** 连接页连 TokenHub 时建的模型配置的 id 前缀（设计 17.2 第 51 条）。 */
+export const LOCAL_TOKENHUB_PROFILE_PREFIX = "th-";
+/**
+ * POST /v1/tokenhub：连接页连 TokenHub（设计 17.2 第 51 条）。网页把 Key 直接交给本机，不经过云端；Key 只写不读，不进日志。
+ * 本机先拿这把 Key 调 TokenHub 列这把 Key 能用的模型（`GET <TokenHub>/api/openai/v1/models`，Bearer）：
+ * - 不认（401、403）回 422 tokenhub_key_rejected；连不上、超时、别的错、回的认不出回 502 tokenhub_unreachable。都不改本机的东西。
+ * - 认了：Key 存进本机钥匙（一份，这些模型配置共用），列出来的每个模型建一条网关模型配置：id 是 th- 加模型名（不是字母、数字、_、- 的换成 _），
+ *   label 是给人看的模型名，baseUrl 是本机认的 TokenHub 的 Anthropic 入口（默认 https://tokenhub.corp.tokenkingos.com/api/anthropic），
+ *   model 是 TokenHub 的模型名（如 wangsu/claude-opus-5-5）。列表是空的时建一份默认的。上一次连接建的、这次没列的删掉；默认模型不改。
+ *   回现在全部的模型配置（同 GET /v1/models）。
+ * 这些模型配置的 baseUrl 和钥匙只能经这里换（PUT /v1/models/:id 改它们的地址或钥匙回 400），名字、默认、联网搜索照常能改；单条能删。
+ * 以后天枢给每人开 TokenHub 户头时，可以照样把 Key 交到这里自动连上。
+ */
+export const LocalTokenHubConnectRequest = Type.Object({
+  apiKey: Type.String({ minLength: 1, maxLength: 400, pattern: SECRET_CHARS }),
+}, strict);
+/** DELETE /v1/tokenhub：断开，删本机存的 Key 和 th- 开头的模型配置（本人在模型配置里自己配的 TokenHub 不动）；用着它们的会话同删了模型配置一样：再说话时回「这个会话用的模型配置已被删除」，换个模型接着做。回 { ok: true }。 */
 /**
  * PUT /v1/models/:id。
  * - gateway：baseUrl、model 必填；apiKey 只写不读，不传表示保留原钥匙，传空串表示删除钥匙。
@@ -1592,6 +1612,7 @@ export type TLocalCloudLinkRequest = Static<typeof LocalCloudLinkRequest>;
 export type TLocalModelSource = Static<typeof LocalModelSource>;
 export type TLocalModelProfile = Static<typeof LocalModelProfile>;
 export type TLocalModelListResponse = Static<typeof LocalModelListResponse>;
+export type TLocalTokenHubConnectRequest = Static<typeof LocalTokenHubConnectRequest>;
 export type TLocalModelProfileUpsert = Static<typeof LocalModelProfileUpsert>;
 export type TLocalModelOrigin = Static<typeof LocalModelOrigin>;
 export type TLocalToolPreset = Static<typeof LocalToolPreset>;
@@ -1709,6 +1730,8 @@ export const LOCAL_RUNNER_ROUTES = {
   listModels: { method: "GET", path: "/v1/models", auth: true },
   putModel: { method: "PUT", path: "/v1/models/:id", auth: true },
   deleteModel: { method: "DELETE", path: "/v1/models/:id", auth: true },
+  connectTokenHub: { method: "POST", path: "/v1/tokenhub", auth: true },
+  disconnectTokenHub: { method: "DELETE", path: "/v1/tokenhub", auth: true },
   listTools: { method: "GET", path: "/v1/tools", auth: true },
   putTool: { method: "PUT", path: "/v1/tools/:id", auth: true },
   deleteTool: { method: "DELETE", path: "/v1/tools/:id", auth: true },
