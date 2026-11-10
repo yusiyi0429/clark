@@ -322,6 +322,8 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .modeRec { color: var(--ink-faint); }
 .menuItem:is([data-hovered], [data-focused]), .menuWho:is([data-hovered], [data-focused]) { background: var(--default-soft); }
 .menuItem[data-current], .menuWho[data-current] { background: var(--default-soft-hover); }
+/* 第二层开着时（50 条），第一层里那一行保持选中底色。 */
+.menuItem[data-open] { background: var(--default-soft-hover); }
 .menuItem[data-focus-visible], .menuWho[data-focus-visible] { outline: 2px solid var(--focus); outline-offset: -2px; }
 .menuItem .chevron { color: var(--ink-faint); }
 /* 选模型的三行面板（17.2 第 40 条）：行尾现在的值；第二页顶上「‹ 行名」；置灰的项照基础组件的禁用样子；点不开的行照常色、只是不能点。 */

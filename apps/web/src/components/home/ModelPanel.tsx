@@ -1,19 +1,21 @@
 "use client";
 
 /**
- * 选模型的面板（设计 17.2 第 40 条，照 Claude Code）：入口是输入框下面的胶囊，点开三行——来源、模型、思考，左边行名、右边现在的值和「›」。
- * 点一行，同一个弹层翻到第二页：顶上一行「‹ 行名」回去，下面是能选的，选中的打勾；选完回到三行，弹层不关。点别处、Esc 关；第二页按 Esc 先回第一页。
- * 只列得出一项的那一行没有「›」、点不了。手持上从底部升起（同权限档那个抽屉）。子会话、开工对话框、项目对话三处共用；每一行的值和选项由调用方算（lib/local/modelPanel）。
+ * 选模型的面板（设计 17.2 第 40、50 条，照 Claude Code）：入口是输入框下面的胶囊，点开三行——来源、模型、思考，左边行名、右边现在的值和「›」。
+ * 桌面（50 条）：点一行或悬停一下，在第一层右边贴着弹出第二层（HeroUI 的子菜单，react-aria 算位置：顶边对齐这一行，放不下往上挪、右边放不下翻到左边）；
+ * 第一层一直在，开着的那一行保持选中底色。第二层是能选的，选中的打勾；选了第二层收起、第一层不关。点别处、Esc 全关；第二层开着时 Esc、← 只收第二层，→、回车打开。
+ * 手持上从底部升起（同权限档那个抽屉），地方不够，仍是同一个抽屉里翻到第二页（顶上「‹ 行名」回去）。
+ * 只列得出一项的那一行没有「›」、不弹。子会话、开工对话框、项目对话三处共用；每一行的值和选项由调用方算（lib/local/modelPanel）。
  * busy：选了以后要等一会儿才换好的（子会话换执行方，本机要等新的那家起来）——那一行转圈、先写选的那个，换好之前三行都点不了，另外两行的「›」也收起来。
  */
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useContext, useEffect, useRef, useState, type RefObject } from "react";
 import { Dropdown } from "@heroui/react";
+import { RootMenuTriggerStateContext } from "react-aria-components";
 import { Check, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { rowOpens, type PanelOption, type PanelRow, type PanelRowKey } from "@/lib/local/modelPanel";
 import { ICON, StateIcon } from "./StateIcon";
 import h from "@/styles/home.module.css";
 
-const BACK = "back";
 type Props = {
   /** 胶囊上写的（「Opus 5.5 · 高」），悬停 title。 */
   label: string;
@@ -47,70 +49,56 @@ const OptionText = ({ option, selected }: { option: PanelOption; selected: boole
 const optionName = (option: PanelOption) => (option.note ? `${option.label} ${option.note}` : option.label);
 
 function PanelDropdown({ label, title, rows, onPick, busy = null, placement = "top end", testId = "model-panel" }: Omit<Props, "sheet">) {
-  const [open, setOpen] = useState(false);
-  const [page, setPage] = useState<PanelRowKey | null>(null);
   const body = useRef<HTMLDivElement>(null);
-  // 翻页后焦点落在哪一项：进第二页是选中的那个，回第一页是刚才那一行。
-  const focus = useRef<string | null>(null);
-  const row = rows.find((entry) => entry.key === page) ?? null;
-  // 翻页时这一页的项会卸掉：先把焦点收到弹层里，不让它掉到页面上（不然这时按 Esc 就不归弹层管了）。
-  const go = (next: PanelRowKey | null, key: string) => { focus.current = key; body.current?.focus(); setPage(next); };
-  useEffect(() => {
-    const key = focus.current;
-    focus.current = null;
-    if (!key) return;
-    // 菜单的项晚一两拍才画出来：等到那一项在了再把焦点放上去（最多等十来拍）。
-    let tries = 0;
-    let timer = 0;
-    const place = () => {
-      const item = [...(body.current?.querySelectorAll<HTMLElement>("[data-panel-key]") ?? [])].find((entry) => entry.dataset.panelKey === key);
-      if (item) item.focus(); else if (++tries < 12) timer = window.setTimeout(place, 16);
-    };
-    timer = window.setTimeout(place);
-    return () => window.clearTimeout(timer);
-  }, [page]);
-  const act = (key: string) => {
-    if (busy) return;
-    if (!row) { const next = rows.find((entry) => entry.key === key); if (next && rowOpens(next)) go(next.key, next.selected); return; }
-    if (key !== BACK && key !== row.selected) onPick(row.key, key);
-    go(null, row.key);
-  };
-  // 第二页按 Esc 先回第一页（抢在弹层自己关之前接住）。
-  const onKey = (event: ReactKeyboardEvent) => {
-    if (event.key !== "Escape" || !row) return;
-    event.preventDefault();
-    event.stopPropagation();
-    go(null, row.key);
-  };
-  const disabled = row ? row.options.filter((option) => option.disabled).map((option) => option.id) : rows.filter((entry) => busy || !rowOpens(entry)).map((entry) => entry.key);
+  // 点不开的（只有一项）和换着的时候三行都不弹第二层、也点不了。
+  const disabled = rows.filter((entry) => busy || !rowOpens(entry)).map((entry) => entry.key);
   return (
-    <Dropdown isOpen={open} onOpenChange={(next) => { setOpen(next); if (!next) setPage(null); }}>
+    <Dropdown>
       <Dropdown.Trigger className={h.sendTo} aria-label={`模型：${title ?? label}`} data-testid={testId}><b title={title ?? undefined}>{label}</b><ChevronDown {...ICON} /></Dropdown.Trigger>
       <Dropdown.Popover placement={placement} offset={8} className={h.pop}>
-        <div ref={body} tabIndex={-1} className={h.panelBody} onKeyDownCapture={onKey} data-testid="model-panel-body" data-page={page ?? "rows"}>
-          <Dropdown.Menu key={page ?? "rows"} aria-label={row ? row.name : "模型"} className={h.menuList} disabledKeys={disabled} onAction={(key) => act(String(key))}>
-            {row ? (
-              <>
-                <Dropdown.Section className={h.menuSection}>
-                  <Dropdown.Item id={BACK} textValue={row.name} className={h.menuItem} shouldCloseOnSelect={false} data-panel-key={BACK} data-testid="model-panel-back"><BackText row={row} /></Dropdown.Item>
-                </Dropdown.Section>
-                <Dropdown.Section className={h.menuSection}>
-                  {row.options.map((option) => (
-                    <Dropdown.Item key={option.id} id={option.id} textValue={optionName(option)} className={h.menuItem} shouldCloseOnSelect={false} data-panel-key={option.id} data-testid="model-panel-option">
-                      <OptionText option={option} selected={option.id === row.selected} />
-                    </Dropdown.Item>
-                  ))}
-                </Dropdown.Section>
-              </>
-            ) : rows.map((entry) => (
-              <Dropdown.Item key={entry.key} id={entry.key} textValue={`${entry.name} ${entry.value}`} className={h.menuItem} shouldCloseOnSelect={false} data-panel-key={entry.key} data-static={busy || !rowOpens(entry) ? "" : undefined} data-busy={busy?.row === entry.key ? "" : undefined} data-testid="model-panel-row">
-                <RowText row={entry} busy={busy} />
-              </Dropdown.Item>
-            ))}
+        <div ref={body} className={h.panelBody} data-testid="model-panel-body">
+          <Dropdown.Menu aria-label="模型" className={h.menuList} disabledKeys={disabled}>
+            {rows.map((entry) => {
+              const item = (
+                <Dropdown.Item key={entry.key} id={entry.key} textValue={`${entry.name} ${entry.value}`} className={h.menuItem} shouldCloseOnSelect={false} data-panel-key={entry.key} data-static={busy || !rowOpens(entry) ? "" : undefined} data-busy={busy?.row === entry.key ? "" : undefined} data-testid="model-panel-row">
+                  <RowText row={entry} busy={busy} />
+                </Dropdown.Item>
+              );
+              return busy || !rowOpens(entry) ? item : (
+                <Dropdown.SubmenuTrigger key={entry.key}>
+                  {item}
+                  {/* 第二层：贴在这一行右边，顶边对齐（放不下 react-aria 自己往上挪、往左翻）。 */}
+                  <Dropdown.Popover placement="end top" className={h.pop} data-testid="model-panel-sub">
+                    <Options row={entry} onPick={onPick} body={body} />
+                  </Dropdown.Popover>
+                </Dropdown.SubmenuTrigger>
+              );
+            })}
           </Dropdown.Menu>
         </div>
       </Dropdown.Popover>
     </Dropdown>
+  );
+}
+
+/** 第二层的项：选了只收第二层（第一层不关），焦点回到那一行；选中的那项行尾打勾。 */
+function Options({ row, onPick, body }: { row: PanelRow; onPick: Props["onPick"]; body: RefObject<HTMLDivElement | null> }) {
+  const root = useContext(RootMenuTriggerStateContext);
+  const pick = (id: string) => {
+    if (id !== row.selected) onPick(row.key, id);
+    // 开着的第二层在第 0 级；它的键是 react-aria 给子菜单自己起的（不是这一行的 id），照栈里那个收。
+    const open = root?.expandedKeysStack[0];
+    if (open !== undefined) root?.closeSubmenu(open, 0);
+    body.current?.querySelector<HTMLElement>(`[data-panel-key="${row.key}"]`)?.focus();
+  };
+  return (
+    <Dropdown.Menu aria-label={row.name} className={h.menuList} disabledKeys={row.options.filter((option) => option.disabled).map((option) => option.id)} onAction={(key) => pick(String(key))}>
+      {row.options.map((option) => (
+        <Dropdown.Item key={option.id} id={option.id} textValue={optionName(option)} className={h.menuItem} shouldCloseOnSelect={false} data-panel-key={option.id} data-testid="model-panel-option">
+          <OptionText option={option} selected={option.id === row.selected} />
+        </Dropdown.Item>
+      ))}
+    </Dropdown.Menu>
   );
 }
 
