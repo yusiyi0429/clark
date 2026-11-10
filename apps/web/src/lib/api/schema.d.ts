@@ -5237,6 +5237,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/work-home/waiting-count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 本人有几件「等你」的事（同 work-home 的 waiting 的条数）；管理模式（CEO 视角）和工作模式都能读，给个人菜单里「工作模式」后面的数字用 */
+        get: operations["getWorkWaitingCount"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/background": {
         parameters: {
             query?: never;
@@ -19000,6 +19017,9 @@ export interface components {
                     quote: string | null;
                 };
             }[];
+        };
+        WorkWaitingCountResponse: {
+            count: number;
         };
         BackgroundItem: {
             id: string;
@@ -38804,6 +38824,35 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getWorkWaitingCount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 等你的条数 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkWaitingCountResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
