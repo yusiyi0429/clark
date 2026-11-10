@@ -488,6 +488,7 @@ describe("本机程序契约", () => {
     expect(Value.Check(LocalPermissionModeRequest, { mode: "bypassPermissions" })).toBe(true);
     expect(Value.Check(LocalPermissionModeRequest, { mode: "manual" })).toBe(false);
     expect(Value.Check(LocalSessionEvent, { seq: 5, at, sessionId, type: "permission_mode", mode: "auto", by: "plan_approved" })).toBe(true);
+    expect(Value.Check(LocalSessionEvent, { seq: 5, at, sessionId, type: "permission_mode", mode: "default", by: "harness_changed" })).toBe(true); // 「先出计划」换到 Codex
     expect(Value.Check(LocalSessionEvent, { seq: 5, at, sessionId, type: "permission_mode", mode: "auto", by: "cloud" })).toBe(false);
     expect(LOCAL_RUNNER_ROUTES.setPermissionMode).toEqual({ method: "PUT", path: "/v1/sessions/:id/permission-mode", auth: true });
     expect(LOCAL_AGENT_PERMISSION_MODES["claude-code"]).toEqual(["auto", "default", "acceptEdits", "plan", "bypassPermissions"]);

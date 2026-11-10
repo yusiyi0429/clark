@@ -1000,7 +1000,19 @@ export const LocalPermissionModeRequest = Type.Object({ mode: LocalPermissionMod
  *   正在跑的先记下（摘要的 pendingModel），这一轮做完、没有在跑的后台任务时，本机用 --resume 接着原来的对话、换上新模型重开，对话和进度不丢；
  *   会话空着（等你回复）时当场就重开，回 now。
  * 换好以后摘要和 status 同步条目里的 run（modelName、origin 等）随之更新，事件流记一条 notice（code model_changed）。
- * 没有这个模型配置、配置的执行方和会话的不一样回 400。
+ * 没有这个模型配置回 400。
+ *
+ * 换执行方（设计 17.2 第 38 条下面，11/10 用户：Claude Code ↔ Codex 双向换，接着原来的事做）：modelProfileId 是另一家的模型配置就是换执行方。
+ * - 生效时机同跨来源：空着、停了、排着时 now；正在跑一轮、有批准或提问在等、有后台任务在跑时 after_turn，这一轮做完再换。
+ * - 会话还是同一个（id、事件流、产出、工作目录都不变）：摘要的 agent 和 run.harness 换成新的，事件流记一条 notice（code harness_changed，
+ *   text 如「换成 Codex · GPT-6.1-Sol」），同步给云端的 status 条目随之带新的 run。
+ * - 接上下文：两家各留着自己的对话（Claude Code 的会话、Codex 的线程），换回来时续上自己的；换过去的那家只补它没看到的那几轮——
+ *   最近 8 轮原样带上（本人说的、它回的、工具调用写成一行字，如「运行 git status → ok」），更早的不压缩，给它本会话 MCP 的
+ *   read_earlier_turns 工具自己翻（本机从事件记录里读，分页）；再附上工作目录里 git 看得到的改动文件。不再调一次模型去写摘要（额度用完时也能换）。
+ * - 两边规矩一致：工作规矩、技能、天枢 MCP、本人加的工具两边都挂；仓库里只有 CLAUDE.md 时它的内容一并给 Codex，只有 AGENTS.md 时给 Claude Code
+ *   （本机不往仓库里写文件）；技能要飞书时两边都有本人的飞书技能。
+ * - 新执行方没有现在这一档权限模式时（「先出计划」换到 Codex）改成「每次都问」，事件流记 permission_mode（by harness_changed）。
+ * - 规划员、验收员只能用 Claude Code，换到 Codex 回 400。
  */
 export const LocalSessionModelRequest = Type.Object({ modelProfileId: Type.Optional(Id), effort: Type.Optional(Nullable(LocalEffort)) }, strict);
 export const LocalSessionModelResponse = Type.Object({
@@ -1181,8 +1193,11 @@ export const LocalSessionEvent = Type.Union([
   /** hold：停着等额度恢复时带（见 LocalHold）。 */
   ev("status", { status: LocalSessionStatus, exitCode: Type.Optional(NullableInteger()), reason: Type.Optional(Type.String()), hold: Type.Optional(LocalHold) }),
   ev("agent_info", { agent: LocalAgentKind, version: Type.String(), model: Nullable(Type.String()), permissionMode: Nullable(Type.String()) }),
-  /** 权限模式换了（见 LocalPermissionMode）：by web 是本人在网页上换的，plan_approved 是本人批了计划、从 plan 转成 auto。开工时的模式不报这一条。 */
-  ev("permission_mode", { mode: LocalPermissionMode, by: Type.Union([Type.Literal("web"), Type.Literal("plan_approved")]) }),
+  /**
+   * 权限模式换了（见 LocalPermissionMode）：by web 是本人在网页上换的，plan_approved 是本人批了计划、从 plan 转成 auto，
+   * harness_changed 是换了执行方、新的那家没有原来那一档（「先出计划」换到 Codex 改成「每次都问」）。开工时的模式不报这一条。
+   */
+  ev("permission_mode", { mode: LocalPermissionMode, by: Type.Union([Type.Literal("web"), Type.Literal("plan_approved"), Type.Literal("harness_changed")]) }),
   /**
    * attachments：这句话带的附件（存好的，见 LocalAttachmentRef）；没有就不带。text 是本人说的原话，不含本机拼给执行方的附件路径。
    * messageId：这句话的编号（本机给的，11/08 起每条都带；之前的事件日志里没有），回执（receipt）按它对上。
