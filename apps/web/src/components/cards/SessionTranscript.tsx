@@ -17,7 +17,7 @@ import type { LocalRunner, TLocalModelProfile, TLocalSessionSummary, TLocalPermi
 import { duration } from "@/lib/home/derive";
 import { REMARK_PLUGINS } from "@/lib/markdown";
 import { InputBar } from "@/components/home/InputBar";
-import { FolderText, FootText } from "@/components/home/InputFooter";
+import { ContextRing, FolderText, FootText } from "@/components/home/InputFooter";
 import { ModelPanel } from "@/components/home/ModelPanel";
 import { AUTO_EFFORT, localPanelRows, pickLocal, type PanelRowKey } from "@/lib/local/modelPanel";
 import { usageCells } from "@/lib/home/quota";
@@ -383,7 +383,7 @@ export function useModelChangedRefresh(entries: SessionEntry[], refresh: () => u
   useEffect(() => { if (changed !== null) void refresh(); }, [changed, refresh]);
 }
 
-export function SessionComposer({ label, disabled, onSend, dock, subject, mode, place, model, models, busy = false, onStop }: {
+export function SessionComposer({ label, disabled, onSend, dock, subject, mode, place, model, models, context, busy = false, onStop }: {
   label: string; disabled: boolean; onSend: (text: string, attachments: TLocalAttachmentRef[]) => Promise<boolean>; dock?: ReactNode;
   subject: TSessionAttachment["subject"];
   mode?: { modes: readonly TLocalPermissionMode[]; value: TLocalPermissionMode; set: (mode: TLocalPermissionMode) => void } | null;
@@ -391,6 +391,8 @@ export function SessionComposer({ label, disabled, onSend, dock, subject, mode, 
   model?: { label: string; title?: string } | null;
   /** 能换的模型（32、40 条，这台电脑上跑着的子会话才给）：右边的模型成胶囊，点开三行面板，选了 onPick。 */
   models?: ReturnType<typeof useSessionModels>;
+  /** 上下文用了多少（42 条，contextUsage 算的）：模型胶囊旁边一个小圆环加百分比；还没有就不画。 */
+  context?: { percent: number; warn: boolean; tip: string } | null;
   /** 会话在跑（27 条）：右边没字时是停止方块（onStop，本机 interrupt），有字时照样能发（插话），同项目对话、伙伴台。 */
   busy?: boolean;
   onStop?: () => void;
@@ -400,7 +402,7 @@ export function SessionComposer({ label, disabled, onSend, dock, subject, mode, 
       <InputBar placeholder="" label={label} disabled={disabled} dock={dock} busy={busy} interruptible onStop={onStop} draftKey={`tianshu-home-draft-v1:${subject.kind}:${subject.id}`}
         footer={{
           left: place ? <FolderText name={place.name} title={place.title} /> : null,
-          right: <>{model && models?.rows.length && !disabled ? <ModelPanel label={model.label} title={model.title} rows={models.rows} onPick={models.onPick} busy={models.busy} testId="session-model" />
+          right: <>{context ? <ContextRing {...context} /> : null}{model && models?.rows.length && !disabled ? <ModelPanel label={model.label} title={model.title} rows={models.rows} onPick={models.onPick} busy={models.busy} testId="session-model" />
             : model ? <FootText title={model.title} testId="session-model">{model.label}</FootText> : null}{mode ? <PermissionModeMenu modes={mode.modes} value={mode.value} disabled={disabled} onChange={mode.set} /> : null}</>,
         }}
         onSend={async (text, files) => onSend(text, files.length ? await uploadToSubSession(subject, files) : [])} />

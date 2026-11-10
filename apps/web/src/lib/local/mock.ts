@@ -199,7 +199,16 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
   const finishBackground = (s: MockSession, state: "done" | "stopped") => {
     for (const item of s.summary.background ?? []) if (item.state === "running") background(s, { ...item, state, finishedAt: now(), stoppable: false });
   };
+  /** 上下文用了多少（17.2 第 42 条）：摘要和事件流一起更新。 */
+  const CONTEXT_MAX = 200_000;
+  const reportContext = (s: MockSession, usedTokens: number) => {
+    s.summary = { ...s.summary, context: { usedTokens, maxTokens: CONTEXT_MAX, at: now() } };
+    emit(s, { type: "context_usage", usedTokens, maxTokens: CONTEXT_MAX });
+  };
   const turnEnd = (s: MockSession, text: string | null, errorKind?: "interrupted") => {
+    // 每轮做完涨一截；快满了执行方自己压缩一次。
+    const grown = (s.summary.context?.usedTokens ?? 96_000) + 70_000;
+    if (grown > CONTEXT_MAX * 0.95) { emit(s, { type: "notice", level: "info", code: "context_compacted", text: "压缩了上下文" }); reportContext(s, 42_000); } else reportContext(s, grown);
     const usage = { ...ZERO, inputTokens: 1200, outputTokens: 320, costUsd: 0.004 };
     s.summary = { ...s.summary, usage: { ...s.summary.usage, inputTokens: s.summary.usage.inputTokens + 1200, outputTokens: s.summary.usage.outputTokens + 320, costUsd: (s.summary.usage.costUsd ?? 0) + 0.004 } };
     emit(s, { type: "turn_end", isError: false, text, durationMs: stepMs * 4, usage, ...(errorKind ? { errorKind } : {}) });

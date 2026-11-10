@@ -30,7 +30,7 @@ import { useSessionEvents } from "@/lib/local/useSessionEvents";
 import { useSessionMode } from "@/components/cards/PermissionMode";
 import { HARNESS_NAME, runLabel, sessionModelText } from "@/lib/local/runModel";
 import { placeText, shortPlace } from "@/lib/work/merge";
-import { localWait, running } from "@/lib/local/sessionView";
+import { contextUsage, localWait, running } from "@/lib/local/sessionView";
 import { startTopic } from "@/lib/local/start";
 import { WAIT_LABEL, canCommand, waitTone } from "@/lib/board/cards";
 import { addTopicVersionToPending, patchTopic, readTopic, readTopicVersion } from "@/lib/board/cloud";
@@ -180,7 +180,7 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
           <div ref={scroll.reserveRef} aria-hidden />
         </div>
         {session || !embedded
-          ? <SessionComposer label={`给${topic.title}插话`} disabled={!canAct} onSend={say} mode={mode} subject={{ kind: "topic", id: topic.id }} place={place} model={model ? { label: model.label, title: model.title ?? undefined } : null}
+          ? <SessionComposer label={`给${topic.title}插话`} disabled={!canAct} onSend={say} mode={mode} context={contextUsage(view.context ?? session?.context)} subject={{ kind: "topic", id: topic.id }} place={place} model={model ? { label: model.label, title: model.title ?? undefined } : null}
             models={models}
             busy={running(status)} onStop={() => void local.runner.interrupt(session!.id).then(() => local.refresh()).catch(() => showWorkspaceToast({ text: "没停下" }))} dock={<PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} />} />
           : <div className={s.composerDock}><PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} /></div>}

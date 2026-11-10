@@ -43,6 +43,18 @@ export type SessionView = {
   context: { usedTokens: number; maxTokens: number | null; at: string } | null;
 };
 
+/** 「16.6 万」：token 数按万写，留一位小数。 */
+const wan = (tokens: number) => `${Number((tokens / 10_000).toFixed(1))} 万`;
+/**
+ * 上下文用了多少（17.2 第 42 条，输入框下面的小圆环）：百分比取整，到 80% 是警告色，悬停写「16.6 万 / 20 万」。
+ * 还没报过、读不到这个模型的上限（maxTokens 为 null）时为 null，不画。
+ */
+export function contextUsage(context: { usedTokens: number; maxTokens: number | null } | null | undefined): { percent: number; warn: boolean; tip: string } | null {
+  if (!context?.maxTokens) return null;
+  const percent = Math.min(100, Math.round((context.usedTokens / context.maxTokens) * 100));
+  return { percent, warn: percent >= 80, tip: `${wan(context.usedTokens)} / ${wan(context.maxTokens)}` };
+}
+
 /** 对话里记下的那一行「问：…」；还没答时对话最后是选项框，这一行不重复画（SessionTranscript）。 */
 export const questionNotice = (request: TLocalQuestionRequestView) => `问：${request.questions.map((entry) => entry.question).join(" ")}`;
 
