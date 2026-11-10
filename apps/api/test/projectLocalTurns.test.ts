@@ -130,6 +130,10 @@ describe("项目对话在本人电脑上跑（17.2 第 38 条）", () => {
       const renamed = await s.tool(issued.token, "rename_project", { projectId: s.projectId, name: "对话质量 2" });
       expect(renamed.isError).toBe(false);
       expect(renamed.value).toMatchObject({ undoable: true });
+      // 工具结果带回界面要跟着变的（网页据此重读项目），和天枢自动打过勾的清单。
+      expect(renamed.value.ui).toEqual([{ kind: "refresh", what: ["work_home", "project"], id: s.projectId }]);
+      expect(renamed.value.plan.entries.map((entry: { status: string }) => entry.status)).toEqual(["completed", "completed"]);
+      expect(plan.value.ui).toBeUndefined();
       expect((await s.tool(issued.token, "open_page", { target: { kind: "home" } })).isError).toBe(true);
       expect((await s.runner(`/api/local-runner/project-turns/${turn.turnId}/heartbeat`)).statusCode).toBe(204);
 

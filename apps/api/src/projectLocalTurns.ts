@@ -4,7 +4,7 @@ import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { Value } from "@sinclair/typebox/value";
 import {
   PROJECT_CONVERSATION_RULES, PROJECT_MCP_ACTIONS, READ_EARLIER_CONVERSATION_TOOL, ReadEarlierConversationParams, SUB_SESSION_REPORT_PREFIX,
-  type TBuddyPlan, type TConversationCard, type TConversationLocalTurn, type TConversationModel, type TLocalProjectExecutor, type TLocalProjectKeyResponse,
+  type TBuddyPlan, type TBuddyUiEffect, type TConversationCard, type TConversationLocalTurn, type TConversationModel, type TLocalProjectExecutor, type TLocalProjectKeyResponse,
   type TLocalProjectTurnFinishRequest, type TLocalProjectTurnFinishResponse, type TLocalProjectTurnStartRequest, type TLocalProjectTurnStartResponse,
   type TProjectDetailResponse, type TProjectMcpToolResult, type TProjectTurnRecord, type TReadEarlierConversationResult, type TSubSession, type TWorkHomeResponse,
 } from "@warmap/contracts";
@@ -303,7 +303,7 @@ export async function projectToolDefinitions(q: Query, personId: string): Promis
 }
 export const isProjectTool = (name: string) => PROJECT_ACTIONS.has(name) || name === READ_EARLIER_CONVERSATION_TOOL;
 
-/** 执行一个项目工具：伙伴动作照云端项目对话执行（这一轮是这个项目正占着的本机那一轮），带回这一下出的卡和清单。 */
+/** 执行一个项目工具：伙伴动作照云端项目对话执行（这一轮是这个项目正占着的本机那一轮），带回这一下出的卡、清单和界面要跟着变的。 */
 export async function callProjectTool(deps: LocalTurnDeps, who: { personId: string; projectId: string }, tool: string, args: unknown, requestId: string):
   Promise<{ value: TProjectMcpToolResult | TReadEarlierConversationResult | { code: string; message: string }; isError: boolean }> {
   try {
@@ -323,13 +323,15 @@ export async function callProjectTool(deps: LocalTurnDeps, who: { personId: stri
       ?.id ?? null) as string | null;
     let card: TConversationCard | undefined;
     let plan: TBuddyPlan | undefined;
+    const ui: TBuddyUiEffect[] = [];
     const stream: BuddyDeps["stream"] = (_runId, event) => {
       if (event.type === "card") card = event.card as TConversationCard;
       if (event.type === "plan") plan = event.plan as TBuddyPlan;
+      if (event.type === "ui") ui.push(event.ui as TBuddyUiEffect);
       return true;
     };
     const outcome = await runAction({ ...deps.buddy, stream }, { personId: who.personId, conversationId, runId }, tool, args);
-    return { value: { ...outcome, ...(card ? { card } : {}), ...(plan ? { plan } : {}) }, isError: false };
+    return { value: { ...outcome, ...(card ? { card } : {}), ...(plan ? { plan } : {}), ...(ui.length ? { ui } : {}) }, isError: false };
   } catch (cause) {
     if (cause instanceof BuddyError || cause instanceof LocalTurnError || cause instanceof ChatServiceError) return { value: { code: cause.code, message: cause.message }, isError: true };
     throw cause;
