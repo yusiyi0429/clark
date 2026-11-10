@@ -338,6 +338,16 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .wait:hover .waitAway, .wait:hover .waitAvatar { background: var(--default-hover); }
 .waitDone { color: var(--ink-faint); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); }
 .wait[data-done] .waitTitle { color: var(--ink-faint); }
+/* 会后确认展开（17.2 第 43 条）：这一行下面多一块——会上原话、输入框、提交和取消；展开着问题写全、不截断。 */
+.wait[data-editing] { flex-wrap: wrap; }
+.waitActs:empty { display: none; }
+.wait[data-editing] .waitTitle { white-space: normal; overflow-wrap: anywhere; }
+/* 手机上三个按钮和字挤不下一行：会后确认这一种，按钮换到字下面一排。 */
+.app[data-phone] .wait[data-kind="nexus_confirmation"] { flex-wrap: wrap; }
+.app[data-phone] .wait[data-kind="nexus_confirmation"] .waitMain { flex-basis: 100%; }
+.app[data-phone] .wait[data-kind="nexus_confirmation"] .waitActs { padding: 0 var(--space-2) var(--space-1); }
+.waitEdit { display: grid; flex: 0 0 100%; gap: var(--space-2); min-width: 0; padding: 0 var(--space-2) var(--space-2); }
+.waitQuote { margin: 0; padding-left: var(--space-3); box-shadow: inset 2px 0 0 var(--hairline-strong); color: var(--ink-muted); font-size: var(--text-base); line-height: var(--lh-row); white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* 输入框：ComposerPill，和对话列同宽；「发给」是选择器的触发器，样子同弱按钮、字重 400。 */
 .composerDock { width: min(680px, calc(100% - 2 * var(--space-6))); margin: 0 auto var(--space-4); }

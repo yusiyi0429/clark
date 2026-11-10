@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }), usePathname: () => "/me/work" }));
-vi.mock("@/lib/board/cloud", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/board/cloud")>()), acceptDrafts: vi.fn(async () => []) }));
+vi.mock("@/lib/board/cloud", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/board/cloud")>()), acceptDrafts: vi.fn(async () => []), decideNexusConfirmation: vi.fn(async () => undefined) }));
 
-import { acceptDrafts } from "@/lib/board/cloud";
+import { acceptDrafts, decideNexusConfirmation } from "@/lib/board/cloud";
 import { relativeDayTime } from "@/lib/companyTime";
 import { waitingHref } from "@/lib/home/derive";
 import type { WaitingItem } from "@/lib/home/types";
@@ -12,7 +12,7 @@ import type { WorkHomeApi } from "@/lib/home/useWorkHome";
 import { LocalContext, type LocalRunnerState } from "@/lib/local/LocalRunnerProvider";
 import { createMockRunner } from "@/lib/local/mock";
 import type { Worker } from "@/lib/work/workers";
-import { WaitingList, dueText, waitingAnswer } from "./HomeView";
+import { WaitingList, confirmationLine, dueText, waitingAnswer } from "./HomeView";
 
 const HERE = "00000000-0000-4000-8000-00000000d001";
 const THERE = "00000000-0000-4000-8000-00000000d002";
@@ -153,5 +153,45 @@ describe("就地答（9.6，契约 WaitingAnswer）", () => {
     for (const kind of ["verdict", "acceptance", "month", "device", "quota", "meeting", "mission_card"] as const) {
       expect(waitingAnswer(wait({ kind }), { api: api(), local: local(), handheld: false })).toEqual({ actions: [], away: null });
     }
+  });
+});
+
+describe("会后确认（17.2 第 43 条，B 契约 f2f4253f）", () => {
+  const CONFIRMATION = "00000000-0000-4000-8000-0000000000c9";
+  const nexus = (confirmation: NonNullable<WaitingItem["confirmation"]>, extra: Partial<WaitingItem> = {}) => wait({ id: `nexus:${CONFIRMATION}`, kind: "nexus_confirmation",
+    title: "灯塔试点的验收时间点要不要顺延到 11/20？", source: "会后确认", open: { kind: "nexus_confirmation", id: CONFIRMATION }, taskId: null, projectId: null,
+    dueAt: "2026-11-12T10:00:00Z", answer: "inline", confirmation, ...extra });
+  const full = nexus({ id: CONFIRMATION, value: "验收时间点顺延到 11/20，\n由王明负责通知客户", quote: "那就往后放一周吧，王明去跟客户说一下" });
+
+  it("第二行写「会后确认 · 待确认的内容 · 截止 11/12 18:00」：内容压成一行，截止写时刻、不到 24 小时是警告色", () => {
+    expect(confirmationLine(full, NOW)).toEqual({ from: "会后确认 · 验收时间点顺延到 11/20， 由王明负责通知客户", due: { text: "截止 11/12 18:00", warn: false } });
+    expect(confirmationLine(nexus({ id: CONFIRMATION, value: null, quote: null }, { dueAt: at(5 * HOUR) }), NOW)).toMatchObject({ from: "会后确认", due: { warn: true } });
+    expect(confirmationLine(wait({ dueAt: at(HOUR) }), NOW)).toBeNull();
+    const html = render([full]);
+    expect(text(html)).toMatch(/灯塔试点的验收时间点要不要顺延到 11\/20？ 会后确认 · 验收时间点顺延到 11\/20， 由王明负责通知客户 · 截止 11\/12 18:00/);
+    expect(html).toContain('data-kind="nexus_confirmation"');
+    expect(html).not.toContain("剩 ");
+  });
+
+  it("行尾三个都露着：「确认」是次按钮，「修改」「拒绝」是弱按钮；没有内容可改的不出「修改」；不看是哪台电脑，手机上也能", async () => {
+    for (const handheld of [false, true]) {
+      expect(waitingAnswer(full, { api: api(), local: local("offline"), handheld })).toMatchObject({
+        actions: [{ label: "确认", done: "已确认", primary: true }, { label: "修改", edit: true }, { label: "拒绝", done: "已拒绝" }], away: null });
+    }
+    expect(waitingAnswer(nexus({ id: CONFIRMATION, value: null, quote: "先这么定" }), { api: api(), local: local("offline"), handheld: false }).actions.map((action) => action.label)).toEqual(["确认", "拒绝"]);
+    const html = render([full], { phase: "offline" });
+    expect([...html.matchAll(/<button[^>]*class="[^"]*button--(tertiary|ghost)[^"]*"[^>]*>(?:<[^>]+>)*([^<]+)/g)].map((match) => [match[2], match[1]]))
+      .toEqual([["确认", "tertiary"], ["修改", "ghost"], ["拒绝", "ghost"]]);
+    // 没点开时不画输入框和原话；这一行能点开（aria-expanded）。
+    expect(html).not.toContain("confirm-edit");
+    expect(html).toContain('aria-expanded="false"');
+    expect(render([nexus({ id: CONFIRMATION, value: null, quote: null })])).not.toContain("aria-expanded");
+  });
+
+  it("确认、拒绝调同一个决定接口，带这条待定事项的 id", async () => {
+    const [confirm, , reject] = waitingAnswer(full, { api: api(), local: local(), handheld: false }).actions;
+    await (confirm as { run: () => Promise<unknown> }).run();
+    await (reject as { run: () => Promise<unknown> }).run();
+    expect(vi.mocked(decideNexusConfirmation).mock.calls).toEqual([[CONFIRMATION, "confirmed"], [CONFIRMATION, "rejected"]]);
   });
 });
