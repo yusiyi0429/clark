@@ -56,7 +56,7 @@ export function agentRow(agent: TLocalAgentStatus, now: number, exhausted = fals
 }
 
 /**
- * TokenHub（17.2 第 51 条）：本机有连接时建的模型配置（th- 开头）就是已连接，小字写模型名（多于 3 个写前 3 个和「等 N 个」），动作「断开」；
+ * TokenHub（17.2 第 51 条）：本机有连接时建的模型配置（th- 开头）就是已连接（本机存着 TokenHub 的 Key 时一定有，反过来也一样），小字写模型名（多于 3 个写前 3 个和「等 N 个」），动作「断开」；
  * 没有是未连接，动作「连接」（弹窗填 Key，Key 只交给本机）。本人在模型配置里自己配的网关不算。
  */
 export function tokenHubRow(models: TLocalModelProfile[]): RowModel {

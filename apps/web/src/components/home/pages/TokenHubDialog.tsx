@@ -14,11 +14,12 @@ import { ICON } from "../StateIcon";
 import h from "@/styles/home.module.css";
 import p from "@/styles/home-pages.module.css";
 
-/** 没连上的原因：本机验 Key 的两种照写，别的照本机程序回的。 */
+/** 没连上的原因：本机验 Key 的三种照写，别的照本机程序回的。 */
 export function tokenHubFailure(error: unknown): string {
   if (error instanceof LocalRunnerError) {
     if (error.code === "tokenhub_key_rejected") return "Key 不对";
     if (error.code === "tokenhub_unreachable") return "连不上 TokenHub";
+    if (error.code === "tokenhub_no_models") return "这个 Key 没有能用的模型";
     if (error.code === "network") return "连不上本机程序";
   }
   return (error instanceof Error && error.message) || "没连上";

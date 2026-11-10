@@ -222,7 +222,7 @@ export function createServer(d: ServerDeps): http.Server {
     connectTokenHub: async (c) => {
       const { apiKey } = validate(LocalTokenHubConnectRequest, c.body);
       try { await d.tokenHub.connect(apiKey); } catch (e) {
-        if (e instanceof TokenHubError) throw new HttpError(e.code === "tokenhub_key_rejected" ? 422 : 502, e.code, e.message);
+        if (e instanceof TokenHubError) throw new HttpError(e.code === "tokenhub_unreachable" ? 502 : 422, e.code, e.message);
         throw e;
       }
       void d.spend.refresh(true); // 右栏、这一行下面的 TokenHub 花费马上重读（断开时同样，免得未连接下面还挂着花费）

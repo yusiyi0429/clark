@@ -394,11 +394,12 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
       return { includePersonalConfigByDefault: includePersonal, allowedOrigins: [], paused: Boolean(patch.paused), maxConcurrent, autoMerge };
     },
     listModels: async () => models(),
-    // 连 TokenHub：Key 里带 bad 当成 Key 不对，带 offline 当成连不上，别的连上两个模型
+    // 连 TokenHub：Key 里带 bad 当成 Key 不对，带 offline 当成连不上，带 empty 当成没有能用的模型，别的连上两个模型
     connectTokenHub: async (apiKey) => {
       await new Promise((resolve) => setTimeout(resolve, stepMs));
       if (apiKey.includes("bad")) throw new LocalRunnerError("tokenhub_key_rejected", "Key 不对", 422);
       if (apiKey.includes("offline")) throw new LocalRunnerError("tokenhub_unreachable", "连不上 TokenHub", 502);
+      if (apiKey.includes("empty")) throw new LocalRunnerError("tokenhub_no_models", "这个 Key 没有能用的模型", 422);
       tokenHub = TOKENHUB_MODELS;
       return models();
     },

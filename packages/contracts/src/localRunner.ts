@@ -47,8 +47,8 @@ export const LocalRunnerErrorCode = Type.Union([
   Type.Literal("validation"), Type.Literal("not_found"), Type.Literal("conflict"), Type.Literal("folder_not_allowed"),
   Type.Literal("agent_not_installed"), Type.Literal("agent_not_logged_in"), Type.Literal("agent_incompatible"),
   Type.Literal("not_implemented"), Type.Literal("cloud_not_linked"), Type.Literal("internal"),
-  /** 连 TokenHub（POST /v1/tokenhub）：TokenHub 不认这把 Key（422）；连不上 TokenHub、它回的认不出（502）。 */
-  Type.Literal("tokenhub_key_rejected"), Type.Literal("tokenhub_unreachable"),
+  /** 连 TokenHub（POST /v1/tokenhub）：TokenHub 不认这把 Key（422）；连不上 TokenHub、它回的认不出（502）；这把 Key 的账户没有能用的模型（422）。 */
+  Type.Literal("tokenhub_key_rejected"), Type.Literal("tokenhub_unreachable"), Type.Literal("tokenhub_no_models"),
 ]);
 export const LocalRunnerError = Type.Object({
   error: Type.Object({ code: LocalRunnerErrorCode, message: Type.String() }, strict),
@@ -386,10 +386,12 @@ export const LOCAL_TOKENHUB_PROFILE_PREFIX = "th-";
  * POST /v1/tokenhub：连接页连 TokenHub（设计 17.2 第 51 条）。网页把 Key 直接交给本机，不经过云端；Key 只写不读，不进日志。
  * 本机先拿这把 Key 调 TokenHub 列这把 Key 能用的模型（`GET <TokenHub>/api/openai/v1/models`，Bearer）：
  * - 不认（401、403）回 422 tokenhub_key_rejected；连不上、超时、别的错、回的认不出回 502 tokenhub_unreachable。都不改本机的东西。
- * - 认了：Key 存进本机钥匙（一份，这些模型配置共用），列出来的每个模型建一条网关模型配置：id 是 th- 加模型名（不是字母、数字、_、- 的换成 _），
+ * - 只建实测能给 Claude Code 用的（现在是 wangsu/claude-opus-5-5、wangsu/claude-sonnet-5-5、wangsu/deepseek-v4.1-flash）里这把 Key 的账户列得出来的，
+ *   选模型时不出现点了就失败的；一个都没有回 422 tokenhub_no_models，也不改本机的东西。所以本机存着这把 Key，就一定有 th- 的模型配置，反过来也一样。
+ * - 认了：Key 存进本机钥匙（一份，这些模型配置共用），每个模型建一条网关模型配置：id 是 th- 加模型名（不是字母、数字、_、- 的换成 _），
  *   label 是给人看的模型名，baseUrl 是本机认的 TokenHub 的 Anthropic 入口（默认 https://tokenhub.corp.tokenkingos.com/api/anthropic），
- *   model 是 TokenHub 的模型名（如 wangsu/claude-opus-5-5）。列表是空的时建一份默认的。上一次连接建的、这次没列的删掉；默认模型不改。
- *   回现在全部的模型配置（同 GET /v1/models）。
+ *   model 是 TokenHub 的模型名。上一次连接建的、这次没有的删掉。默认模型不改，只有一个例外：这台电脑的 Claude 订阅用不了（Claude Code 没装或没登录）、
+ *   默认还是内置那条时，把 Opus 5.5 那条（没有就第一条）设成默认，免得默认档一跑就失败。回现在全部的模型配置（同 GET /v1/models）。
  * 这些模型配置的 baseUrl 和钥匙只能经这里换（PUT /v1/models/:id 改它们的地址或钥匙回 400），名字、默认、联网搜索照常能改；单条能删。
  * 以后天枢给每人开 TokenHub 户头时，可以照样把 Key 交到这里自动连上。
  */

@@ -74,21 +74,31 @@ describe("连接页连 TokenHub", () => {
     expect(state.calls.length).toBe(before);
   });
 
-  it("连上：照 TokenHub 列的每个模型建一条网关配置，Key 只存一份、哪儿都不回、默认模型不变", async () => {
-    state.hub = { status: 200, models: ["wangsu/claude-opus-5-5", "wangsu/deepseek-v4.1-flash", "aliyun/qwen3.8-flash"] };
+  it("这把 Key 的账户列不出实测能用的模型：回 422 tokenhub_no_models「这个 Key 没有能用的模型」，什么都不存", async () => {
+    for (const models of [[], ["aliyun/qwen3.8-flash", "aws/claude-opus-5-5"]]) {
+      state.hub = { status: 200, models };
+      const r = await call("POST", "/v1/tokenhub", { apiKey: KEY });
+      expect(r.status).toBe(422);
+      expect(r.body.error).toEqual({ code: "tokenhub_no_models", message: "这个 Key 没有能用的模型" });
+    }
+    expect(await tokenHubProfiles()).toEqual([]);
+    expect(secrets().tokenhub).toBeUndefined();
+  });
+
+  it("连上：只建实测能用的、这把 Key 的账户也列得出来的（两边取交集），Key 只存一份、哪儿都不回；订阅能用时默认模型不变", async () => {
+    state.hub = { status: 200, models: ["aliyun/qwen3.8-flash", "wangsu/deepseek-v4.1-flash", "wangsu/claude-opus-5-5"] };
     const r = await call("POST", "/v1/tokenhub", { apiKey: KEY });
     expect(r.status, JSON.stringify(r.body)).toBe(200);
     const th = r.body.profiles.filter((p: any) => p.id.startsWith("th-"));
     expect(th.map((p: any) => [p.id, p.label, p.model])).toEqual([
       ["th-wangsu_claude-opus-5-5", "Opus 5.5", "wangsu/claude-opus-5-5"],
       ["th-wangsu_deepseek-v4_1-flash", "deepseek-v4.1-flash", "wangsu/deepseek-v4.1-flash"],
-      ["th-aliyun_qwen3_8-flash", "qwen3.8-flash", "aliyun/qwen3.8-flash"],
     ]);
     for (const p of th) {
       expect(p).toMatchObject({ source: "gateway", agent: "claude-code", baseUrl: "https://tokenhub.corp.tokenkingos.com/api/anthropic", hasKey: true, isDefault: false, catalog: false, origin: { provider: "tokenhub", label: "TokenHub", via: null } });
     }
-    // 实测能搜的两个开着自带搜索，别的关着（同手动配网关）
-    expect(th.map((p: any) => p.webSearch)).toEqual([true, true, false]);
+    // 这两个都是实测能搜的，开着自带搜索
+    expect(th.map((p: any) => p.webSearch)).toEqual([true, true]);
     expect(r.body.profiles.find((p: any) => p.isDefault).id).toBe("subscription");
     expect(Object.keys(secrets())).toEqual(["tokenhub"]);
     expect(JSON.stringify(r.body)).not.toContain(KEY);
@@ -119,22 +129,20 @@ describe("连接页连 TokenHub", () => {
     expect(secrets().tokenhub).toBe(KEY);
   });
 
-  it("单删一条：别的几条还用着这把 Key", async () => {
-    expect((await call("DELETE", "/v1/models/th-aliyun_qwen3_8-flash")).status).toBe(200);
+  it("单删一条：别的还用着这把 Key", async () => {
+    expect((await call("DELETE", "/v1/models/th-wangsu_deepseek-v4_1-flash")).status).toBe(200);
     const th = await tokenHubProfiles();
-    expect(th.map((p: any) => p.id)).toEqual(["th-wangsu_claude-opus-5-5", "th-wangsu_deepseek-v4_1-flash"]);
-    expect(th.every((p: any) => p.hasKey)).toBe(true);
+    expect(th.map((p: any) => p.id)).toEqual(["th-wangsu_claude-opus-5-5"]);
+    expect(th[0].hasKey).toBe(true);
+    expect(secrets().tokenhub).toBe(KEY);
   });
 
-  it("再连一次：这次没列的删掉，留下的保住本人改过的名字和默认；列表是空的时建默认的三个", async () => {
+  it("再连一次：这次没有的删掉，留下的保住本人改过的名字和默认", async () => {
     state.hub = { status: 200, models: ["wangsu/claude-opus-5-5", "wangsu/claude-sonnet-5-5"] };
     expect((await call("POST", "/v1/tokenhub", { apiKey: KEY })).status).toBe(200);
     expect((await tokenHubProfiles()).map((p: any) => [p.id, p.label, p.isDefault])).toEqual([
       ["th-wangsu_claude-opus-5-5", "主力", true], ["th-wangsu_claude-sonnet-5-5", "Sonnet 5.5", false],
     ]);
-    state.hub = { status: 200, models: [] };
-    expect((await call("POST", "/v1/tokenhub", { apiKey: KEY })).status).toBe(200);
-    expect((await tokenHubProfiles()).map((p: any) => p.model)).toEqual(["wangsu/claude-opus-5-5", "wangsu/claude-sonnet-5-5", "wangsu/deepseek-v4.1-flash"]);
   });
 
   it("断开：删 Key 和 th- 开头的配置；本人自己配的网关不动；默认回到 Claude 订阅", async () => {
@@ -174,5 +182,29 @@ describe("TokenHub 的地址可以在本机配置里换（config.json 的 tokenH
       await t.cleanup();
       hub.close();
     }
+  });
+});
+
+describe("这台电脑的 Claude 订阅用不了（Claude Code 没装或没登录）时连上 TokenHub", () => {
+  const hub = (models: string[]) => fakeHub({ hub: { status: 200, models }, calls: [] });
+  const connect = async (models: string[], before?: (port: number, tok: string) => Promise<unknown>) => {
+    const t = await startTestRunner({ fetchImpl: hub(models), subscriptionUsable: false });
+    try {
+      const tok = await pair(t.port);
+      await before?.(t.port, tok);
+      const r = await api(t.port, tok, "POST", "/v1/tokenhub", { apiKey: KEY });
+      expect(r.status, JSON.stringify(r.body)).toBe(200);
+      return r.body.profiles.filter((p: any) => p.isDefault).map((p: any) => p.id);
+    } finally { await t.cleanup(); }
+  };
+
+  it("默认还是内置的 Claude 订阅：把 TokenHub 的 Opus 5.5 设成默认；账户里没有 Opus 就用第一个", async () => {
+    expect(await connect(["wangsu/deepseek-v4.1-flash", "wangsu/claude-opus-5-5"])).toEqual(["th-wangsu_claude-opus-5-5"]);
+    expect(await connect(["wangsu/deepseek-v4.1-flash", "wangsu/claude-sonnet-5-5"])).toEqual(["th-wangsu_claude-sonnet-5-5"]);
+  });
+
+  it("本人另设过默认（自己配的网关）：不动", async () => {
+    const own = (port: number, tok: string) => api(port, tok, "PUT", "/v1/models/my-gw", { label: "我配的", source: "gateway", baseUrl: "https://api.deepseek.com/anthropic", model: "deepseek-chat", apiKey: "own-key-123456", isDefault: true });
+    expect(await connect(["wangsu/claude-opus-5-5"], own)).toEqual(["my-gw"]);
   });
 });

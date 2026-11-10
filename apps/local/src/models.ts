@@ -200,9 +200,9 @@ export class ModelProfiles {
 
   /**
    * 连上 TokenHub（契约 POST /v1/tokenhub）：钥匙存一份，每个模型一条 th- 开头的网关配置。上次建的、这次也有的留着本人改过的名字、默认和联网搜索；
-   * 这次没有的删掉。先存钥匙，存不上就什么都不改。
+   * 这次没有的删掉。先存钥匙，存不上就什么都不改。makeDefault：默认还是内置那条（本人没另设）时，把这个模型的那条设成默认。
    */
-  async setTokenHub(baseUrl: string, apiKey: string, models: string[]): Promise<void> {
+  async setTokenHub(baseUrl: string, apiKey: string, models: string[], makeDefault: string | null = null): Promise<void> {
     await this.secrets.set(TOKENHUB_KEY, apiKey);
     const list = this.stored().slice(1);
     const before = new Map(list.filter((p) => isTokenHubProfileId(p.id)).map((p) => [p.id, p]));
@@ -218,7 +218,9 @@ export class ModelProfiles {
       labels.add(label);
       added.push({ ...(prev ?? { label, agent: "claude-code", smallModel: null, webSearch: searchDefault("gateway", model), isDefault: false }), id, source: "gateway", baseUrl: baseUrl.replace(/\/+$/, ""), model });
     }
-    writeJsonAtomic(this.file, [...list.filter((p) => !isTokenHubProfileId(p.id)), ...added]);
+    const next = [...list.filter((p) => !isTokenHubProfileId(p.id)), ...added];
+    const target = makeDefault && !next.some((p) => p.isDefault) ? tokenHubProfileId(makeDefault) : null;
+    writeJsonAtomic(this.file, next.map((p) => (p.id === target ? { ...p, isDefault: true } : p)));
   }
 
   /** 断开 TokenHub（契约 DELETE /v1/tokenhub）：删 th- 开头的配置和那把钥匙。 */

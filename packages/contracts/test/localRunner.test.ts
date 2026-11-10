@@ -642,12 +642,12 @@ describe("本机程序契约", () => {
 });
 
 describe("连接页连 TokenHub（17.2 第 51 条）", () => {
-  it("POST /v1/tokenhub 只收一把 Key（可见字符、不空）；两个错误码；建的模型配置 id 以 th- 开头", () => {
+  it("POST /v1/tokenhub 只收一把 Key（可见字符、不空）；三个错误码；建的模型配置 id 以 th- 开头", () => {
     expect(LOCAL_RUNNER_ROUTES.connectTokenHub).toEqual({ method: "POST", path: "/v1/tokenhub", auth: true });
     expect(LOCAL_RUNNER_ROUTES.disconnectTokenHub).toEqual({ method: "DELETE", path: "/v1/tokenhub", auth: true });
     expect(Value.Check(LocalTokenHubConnectRequest, { apiKey: "sk-abc123" })).toBe(true);
     for (const bad of [{}, { apiKey: "" }, { apiKey: "a b" }, { apiKey: "k", baseUrl: "https://x" }]) expect(Value.Check(LocalTokenHubConnectRequest, bad)).toBe(false);
-    for (const code of ["tokenhub_key_rejected", "tokenhub_unreachable"]) expect(Value.Check(LocalRunnerError, { error: { code, message: "x" } })).toBe(true);
+    for (const code of ["tokenhub_key_rejected", "tokenhub_unreachable", "tokenhub_no_models"]) expect(Value.Check(LocalRunnerError, { error: { code, message: "x" } })).toBe(true);
     expect(LOCAL_TOKENHUB_PROFILE_PREFIX).toBe("th-");
   });
 });

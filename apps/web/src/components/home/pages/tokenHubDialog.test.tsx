@@ -24,9 +24,10 @@ describe("连 TokenHub 的小弹窗（17.2 第 51 条）", () => {
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*data-testid="tokenhub-connect"|data-testid="tokenhub-connect"[^>]*disabled=""/);
   });
 
-  it("没连上的原因：Key 不对、连不上 TokenHub 照写，连不上本机程序另写，别的照本机回的", () => {
+  it("没连上的原因：Key 不对、连不上 TokenHub、没有能用的模型照写，连不上本机程序另写，别的照本机回的", () => {
     expect(tokenHubFailure(new LocalRunnerError("tokenhub_key_rejected", "x", 422))).toBe("Key 不对");
     expect(tokenHubFailure(new LocalRunnerError("tokenhub_unreachable", "x", 502))).toBe("连不上 TokenHub");
+    expect(tokenHubFailure(new LocalRunnerError("tokenhub_no_models", "x", 422))).toBe("这个 Key 没有能用的模型");
     expect(tokenHubFailure(new LocalRunnerError("network", "Failed to fetch"))).toBe("连不上本机程序");
     expect(tokenHubFailure(new LocalRunnerError("not_found", "没有这个接口", 404))).toBe("没有这个接口");
   });
