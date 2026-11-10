@@ -345,8 +345,10 @@ export const LocalModelProfile = Type.Object({
    * - Codex 订阅（设计 17.2 第 38 条）：能用的每个模型一条，按 codex app-server 的 model/list（不列 hidden 的），本人的 Codex 登录着才有。
    *   id 是 codex- 加模型名（不是字母、数字、_、- 的字换成 _），如 codex-gpt-6_1-sol；label 是 Codex 给的显示名，如 GPT-6.1-Sol；
    *   source subscription、agent codex、model 是模型名、origin「Codex 订阅」。
-   * - Claude 订阅（设计 17.2 第 40 条）：Claude Code 握手（initialize）回的模型列表里每个模型一条（11/10 实测 2.1.318 回 14 个：default、opus、sonnet、haiku、fable
-   *   这几个别名，加 claude-fable-5-2、claude-opus-4-6 这样指定版本的；不发提示、不调模型就读得到）。「default」那一项不列（内置的 subscription 那条就是不指定模型）。
+   * - Claude 订阅（设计 17.2 第 40 条）：从 Claude Code 握手（initialize）回的模型列表里来（11/10 实测 2.1.318 回 14 个：default、opus、sonnet、haiku、fable
+   *   这几个别名，加 claude-fable-5-2、claude-opus-4-6 这样指定版本的；不发提示、不调模型就读得到）。本机筛过再给，网页拿到的就是要列的：
+   *   每个系列只留最新的一个（按它实际是哪一版认，现在是 Opus 5.5、Fable 5.2、Sonnet 5.5、Haiku 5.5 四个，同 Claude Code 自己菜单的主列表），旧版本不列；
+   *   系列和版本认不出来的照列；「default」那一项不列（内置的 subscription 那条就是不指定模型，排在最前面）。
    *   id 是 cc- 加 Claude Code 给的名字（同样换字），如 cc-opus、cc-claude-fable-5-2；label 和 modelName 是它给的显示名，如「Opus 5.5」「Fable 5.2」；
    *   source subscription、agent claude-code、model 是那个名字（拉起时原样传 --model）、origin「Claude 订阅」；efforts 是它报的这个模型支持的几档
    *   （不支持选思考程度的为空，如 Haiku 4.5），defaultEffort 为 null。Claude Code 没装、读不到时没有这几条，内置的 subscription 那条照旧在。
@@ -958,11 +960,11 @@ export const LocalSessionFileReadResponse = Type.Object({
   truncated: Type.Boolean(),
 }, strict);
 /**
- * GET /v1/sessions/:id/files：本会话写过、改过的文件（右栏「改动的文件 N」；回答里提到的路径对得上这里的才能点）。两路取并集，各有各的盲区，sources 写明是哪一路知道的：
+ * GET /v1/sessions/:id/files：本会话写过、改过的文件（右栏「改动的文件 N」；回答里提到的路径对得上这里的才能点）。sources 写明是哪一路知道的。
+ * 卡在工作树里做的两路取并集；在本人文件夹里直接做的只有 tool 这一路——宁可漏掉用命令改的，也不把本人自己没提交的改动算成这个会话改的：
  * - tool：事件记录里执行方用写文件、改文件的工具动过的（Claude Code 的 Write、Edit、MultiEdit、NotebookEdit，Codex 的改文件）。不是 git 仓库也有；
  *   用命令改的（脚本生成、sed、格式化工具）看不到，子 agent 里写的也看不到（它内部的步骤不进事件记录）；被拒绝、没改成的不算。
- * - git：卡在工作树里做的最全——开工以来分支上已经提交的，加上没提交的（含新文件，.gitignore 里的不算）；
- *   在本人文件夹里直接做的（专题、不是工作树的卡），文件夹是 git 仓库时只有没提交的改动，而且分不清是不是这个会话改的（本人自己没提交的改动也在里面）；不是仓库就没有这一路。
+ * - git：只有卡在工作树里做的有这一路（工作树是这张卡自己的）——开工以来分支上已经提交的，加上没提交的（含新文件，.gitignore 里的不算）。
  * path 是相对会话根的路径（正斜杠），absolutePath 是绝对路径（回答里两种写法都可能出现，网页拿它们去对）；exists 是现在还在不在（删掉的、挪走的为 false，不能点）；
  * size 是现在的字节数（不在了为 null）。按路径排，最多 500 个，多了 truncated 为 true。root 是会话根。删掉的文件只有 git 那一路知道。
  */
