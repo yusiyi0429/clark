@@ -1,6 +1,6 @@
 {
   "name": "@warmap/local",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "天枢本机程序：只监听 127.0.0.1，替本人在本机拉起 Claude Code，结果单向报给天枢",
