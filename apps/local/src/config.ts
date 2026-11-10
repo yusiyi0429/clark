@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { LOCAL_RUNNER_DEFAULT_PORT } from "@warmap/contracts";
 import { readJson, writeJsonAtomic } from "./store.js";
+import { DEFAULT_TOKENHUB_URL } from "./tokenHub.js";
 
 export const VERSION = "0.2.0";
 export const DEFAULT_ORIGINS = ["https://tk.tokenkingos.com"];
@@ -11,7 +12,7 @@ export const DEFAULT_TIANSHU_URL = "https://tk.tokenkingos.com";
 /**
  * 本机配置文件 <dataDir>/config.json，本人或运维手改，网页改不了：
  * - allowedOrigins：允许直连的网页来源（整个替换默认值）；extraOrigins：在默认值上追加（本地开发来源放这里）；
- * - port、claudePath（Claude Code 不在默认位置时指定）、tianshuUrl（托盘「打开天枢」去哪）。
+ * - port、claudePath（Claude Code 不在默认位置时指定）、tianshuUrl（托盘「打开天枢」去哪）、tokenHubUrl（连接页连 TokenHub 用的 Anthropic 入口）。
  */
 export interface FileConfig {
   port?: number;
@@ -19,6 +20,7 @@ export interface FileConfig {
   extraOrigins?: string[];
   claudePath?: string;
   tianshuUrl?: string;
+  tokenHubUrl?: string;
 }
 
 export interface RunnerConfig {
@@ -27,6 +29,7 @@ export interface RunnerConfig {
   dataDir: string;
   claudePath: string | null;
   tianshuUrl: string;
+  tokenHubUrl: string;
   dev: boolean;
   deviceId: string;
 }
@@ -54,6 +57,7 @@ export function loadConfig(opts: { dataDir?: string; dev?: boolean; port?: numbe
     dataDir,
     claudePath: file.claudePath ?? null,
     tianshuUrl: file.tianshuUrl ?? DEFAULT_TIANSHU_URL,
+    tokenHubUrl: file.tokenHubUrl ?? DEFAULT_TOKENHUB_URL,
     dev: Boolean(opts.dev),
     deviceId,
   };

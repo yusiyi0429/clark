@@ -5,7 +5,7 @@ import type { TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import {
   LOCAL_RUNNER_PROTOCOL, LOCAL_RUNNER_ROUTES, LOCAL_RUNNER_TOKEN_HEADER,
-  LocalSessionFileReadRequest, LocalPairingStartRequest, LocalAgentLoginCodeRequest, LocalCloudLinkRequest, LocalSettingsPatch, LocalModelProfileUpsert, LocalToolUpsert, LocalFolderPickRequest, LocalFolderCreateRequest, LocalSessionModelRequest,
+  LocalSessionFileReadRequest, LocalPairingStartRequest, LocalAgentLoginCodeRequest, LocalCloudLinkRequest, LocalSettingsPatch, LocalModelProfileUpsert, LocalTokenHubConnectRequest, LocalToolUpsert, LocalFolderPickRequest, LocalFolderCreateRequest, LocalSessionModelRequest,
   LocalCreateSessionRequest, LocalCreateSessionBatchRequest, LocalSendMessageRequest, LocalPermissionDecisionRequest, LocalQuestionAnswerRequest, LocalBudgetUpdateRequest, LocalProjectFolderRequest, LocalProjectCloneRequest, LocalRunPreviewRequest, LocalPermissionModeRequest,
   type TLocalRunnerErrorCode, type TLocalStatusResponse, type TLocalHealthResponse,
 } from "@warmap/contracts";
@@ -30,6 +30,7 @@ import { claudeTool } from "../tools.js";
 import { handoverCheck, repoName, stripCredentials, type cloneRepo } from "../handover.js";
 import type { CliTools } from "../tools.js";
 import type { CustomTools } from "../customTools.js";
+import { TokenHubError, type TokenHub } from "../tokenHub.js";
 import { DEV_PAGE } from "./devPage.js";
 import { handleMcpMessage } from "../sessionMcp.js";
 
@@ -56,6 +57,8 @@ export interface ServerDeps {
   tools: CliTools;
   /** 本人在连接页加的工具（/v1/tools），执行会话经本机转发用。 */
   customTools: CustomTools;
+  /** 连接页连 TokenHub（/v1/tokenhub）。 */
+  tokenHub: TokenHub;
   pickFolder: () => Promise<string | null>;
   /** 接手项目时 clone 仓库（16.7；测试里换成从本地仓库 clone）。 */
   cloneRepo: typeof cloneRepo;
@@ -216,6 +219,16 @@ export function createServer(d: ServerDeps): http.Server {
         throw new HttpError(400, "validation", e instanceof Error ? e.message : String(e));
       }
     },
+    connectTokenHub: async (c) => {
+      const { apiKey } = validate(LocalTokenHubConnectRequest, c.body);
+      try { await d.tokenHub.connect(apiKey); } catch (e) {
+        if (e instanceof TokenHubError) throw new HttpError(e.code === "tokenhub_unreachable" ? 502 : 422, e.code, e.message);
+        throw e;
+      }
+      void d.spend.refresh(true); // 右栏、这一行下面的 TokenHub 花费马上重读（断开时同样，免得未连接下面还挂着花费）
+      return { profiles: await d.models.list() };
+    },
+    disconnectTokenHub: async () => { await d.tokenHub.disconnect(); void d.spend.refresh(true); return { ok: true }; },
     listTools: async () => ({ tools: await d.customTools.list() }),
     putTool: async (c) => {
       if (!/^[A-Za-z0-9_-]{1,80}$/.test(c.params.id!)) throw new HttpError(400, "validation", "id 只能用字母数字、- 和 _");

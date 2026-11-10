@@ -28,6 +28,7 @@ import { QuotaTracker } from "./quota.js";
 import { CliTools, type ToolExec } from "./tools.js";
 import { GatewayPricing } from "./pricing.js";
 import { GatewaySpend } from "./spend.js";
+import { TokenHub } from "./tokenHub.js";
 import { Budgets } from "./budget.js";
 import { CodexQuota } from "./codexQuota.js";
 import { createDesktop, openUrl, type Desktop, type MenuAction } from "./desktop/index.js";
@@ -53,6 +54,8 @@ export interface RunnerOptions {
   holdTiming?: SessionDeps["holdTiming"];
   /** 接手项目时 clone 仓库（测试里换成从本地仓库 clone）。 */
   cloneRepo?: typeof cloneRepo;
+  /** 测试用：这台电脑的 Claude 订阅能不能用（连 TokenHub 时决定要不要把它设成默认）；不给就看 Claude Code 装没装、登没登录。 */
+  subscriptionUsable?: () => Promise<boolean>;
   /** 读本人 Codex 订阅的额度（测试里换成假的；没装回 null）。 */
   codexLimits?: () => Promise<Record<string, unknown> | null>;
   /** 测试用：Codex 可执行文件（假的 app-server）；null 当没装。不给就找本机装的。 */
@@ -132,6 +135,10 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
     }
     return out;
   }, baseFetch);
+  const tokenHub = new TokenHub(models, config.tokenHubUrl, baseFetch, opts.subscriptionUsable ?? (async () => {
+    const s = await claude.status();
+    return s.installed && s.loggedIn;
+  }));
   const budgets = new Budgets(config.dataDir);
   let sessionsRef: SessionManager | null = null;
   const updateTray = () => desktop.setState({ paired: tokens.count() > 0, running: sessionsRef?.activeCount() ?? 0, paused: settings.get().paused });
@@ -160,7 +167,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   // 交回送到天枢以后去取验收交代。
   outbox.onSent = () => void sessions.pullBriefs();
   const server = createServer({
-    config, version: VERSION, tokens, pairings, sessions, log, models, folders, claude, cloud, settings, quota, codexQuota, codex, codexCatalog, claudeCatalog, tools, customTools, spend,
+    config, version: VERSION, tokens, pairings, sessions, log, models, folders, claude, cloud, settings, quota, codexQuota, codex, codexCatalog, claudeCatalog, tools, customTools, spend, tokenHub,
     pickFolder: () => desktop.pickFolder(),
     cloneRepo: opts.cloneRepo ?? cloneRepo,
     fetchImpl: cloudFetch,

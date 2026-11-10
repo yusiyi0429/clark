@@ -2,7 +2,7 @@
  * 真本机程序的客户端：直连 http://127.0.0.1:<端口>，口令放在 x-tianshu-local-token 头里。
  * 事件流不能用 EventSource（带不了口令头），用 fetch 读 SSE，断了带 Last-Event-ID 重连（RFC 第 4 节）。
  */
-import type { TLocalCreateSessionBatchResponse, TLocalSessionEvent } from "@warmap/contracts";
+import type { TLocalCreateSessionBatchResponse, TLocalModelProfile, TLocalSessionEvent } from "@warmap/contracts";
 import { LOCAL_RUNNER_DEFAULT_PORT, LOCAL_RUNNER_ROUTES, LOCAL_RUNNER_TOKEN_HEADER } from "./routes";
 import { LocalRunnerError, type EventWatch, type LocalRunner } from "./runner";
 
@@ -117,6 +117,8 @@ export function createHttpRunner(base = localRunnerBase(), token: () => string =
     patchSettings: (patch) => call("patchSettings", {}, patch),
     listModels: async () => (await call<{ profiles: Awaited<ReturnType<LocalRunner["listModels"]>> }>("listModels")).profiles,
     putModel: (id, body) => call("putModel", { id }, body),
+    connectTokenHub: async (apiKey) => (await call<{ profiles: TLocalModelProfile[] }>("connectTokenHub", {}, { apiKey })).profiles,
+    disconnectTokenHub: async () => { await call("disconnectTokenHub"); },
     listTools: async () => (await call<{ tools: Awaited<ReturnType<LocalRunner["listTools"]>> }>("listTools")).tools,
     putTool: (id, body) => call("putTool", { id }, body),
     removeTool: async (id) => { await call("deleteTool", { id }); },

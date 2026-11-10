@@ -28,6 +28,8 @@ export async function startTestRunner(opts: {
   fakeCodex?: boolean;
   /** 登录 Codex 时「打开浏览器」：记下地址，不开真的。 */
   openUrl?: (url: string) => void;
+  /** 这台电脑的 Claude 订阅能不能用（连 TokenHub 时看）；默认能用，不去问本人电脑上真装的 Claude Code。 */
+  subscriptionUsable?: boolean;
 } = {}) {
   // 给 dataDir 时接着用上一次的数据（测重启）
   const dataDir = opts.dataDir ?? tempDir();
@@ -48,6 +50,7 @@ export async function startTestRunner(opts: {
     codexLimits: opts.codexLimits ?? (opts.fakeCodex ? undefined : async () => null), cloneRepo: opts.cloneRepo, home: opts.home,
     codexBin: opts.fakeCodex ? { command: process.execPath, prefixArgs: [FAKE_CODEX] } : null,
     openUrl: opts.openUrl ?? (() => {}),
+    subscriptionUsable: async () => opts.subscriptionUsable ?? true,
   });
   const port = (runner.server.address() as { port: number }).port;
   runner.config.port = port; // 监听随机端口时，Host 检查要按实际端口

@@ -5,6 +5,7 @@ import { codexProfileId, isCodexProfileId, type CodexModel } from "./codexCatalo
 import { isLoopback, isMagpie, modelOrigin } from "./modelOrigin.js";
 import { readJson, writeJsonAtomic } from "./store.js";
 import type { SecretStore } from "./secrets.js";
+import { isTokenHubProfileId, tokenHubProfileId } from "./tokenHub.js";
 
 export const SUBSCRIPTION_ID = "subscription";
 
@@ -55,7 +56,9 @@ const builtIn: Stored = {
   baseUrl: null, model: null, smallModel: null, webSearch: true, isDefault: true,
 };
 
-const keyName = (id: string) => `model:${id}`;
+/** 连接页连 TokenHub 建的那些（th- 开头）共用一把钥匙。 */
+const TOKENHUB_KEY = "tokenhub";
+const keyName = (id: string) => (isTokenHubProfileId(id) ? TOKENHUB_KEY : `model:${id}`);
 /** 档位怎么认模型：和网页（apps/web 的 modelForTier）同一套。 */
 const TIER_MATCH: Record<TLocalModelTier, RegExp> = { strong: /opus/i, normal: /sonnet/i, light: /haiku|flash|mini|lite/i };
 
@@ -152,6 +155,12 @@ export class ModelProfiles {
     if (isCodexProfileId(id)) throw new Error("Codex 的模型从它自己的模型目录来，不能改");
     if (isClaudeProfileId(id)) throw new Error("Claude 订阅的模型从它自己的模型目录来，不能改（cc- 开头的 id 留给它）");
     if (body.agent === "codex") throw new Error("Codex 的模型从它自己的模型目录来，不用配");
+    if (isTokenHubProfileId(id)) {
+      // 连接页连 TokenHub 建的：名字、默认、联网搜索能改；地址和钥匙只经连接页换（钥匙几条共用）
+      const own = this.stored().find((p) => p.id === id);
+      if (!own) throw new Error("th- 开头的 id 留给连接页连 TokenHub");
+      if (body.source !== "gateway" || (body.baseUrl ?? null) !== own.baseUrl || body.model !== own.model || body.apiKey !== undefined) throw new Error("TokenHub 的地址、模型和钥匙在连接页换");
+    }
     const gateway = body.source === "gateway";
     if (gateway && !body.baseUrl) throw new Error("网关模型要填地址");
     // 钥匙会发到这个地址：别处的要 https，本机地址（magpie 等）可以 http
@@ -183,9 +192,41 @@ export class ModelProfiles {
     if (id === SUBSCRIPTION_ID) return false;
     const list = this.stored().slice(1);
     if (!list.some((p) => p.id === id)) return false;
-    writeJsonAtomic(this.file, list.filter((p) => p.id !== id));
-    await this.secrets.delete(keyName(id));
+    const rest = list.filter((p) => p.id !== id);
+    writeJsonAtomic(this.file, rest);
+    if (!isTokenHubProfileId(id) || !rest.some((p) => isTokenHubProfileId(p.id))) await this.secrets.delete(keyName(id));
     return true;
+  }
+
+  /**
+   * 连上 TokenHub（契约 POST /v1/tokenhub）：钥匙存一份，每个模型一条 th- 开头的网关配置。上次建的、这次也有的留着本人改过的名字、默认和联网搜索；
+   * 这次没有的删掉。先存钥匙，存不上就什么都不改。makeDefault：默认还是内置那条（本人没另设）时，把这个模型的那条设成默认。
+   */
+  async setTokenHub(baseUrl: string, apiKey: string, models: string[], makeDefault: string | null = null): Promise<void> {
+    await this.secrets.set(TOKENHUB_KEY, apiKey);
+    const list = this.stored().slice(1);
+    const before = new Map(list.filter((p) => isTokenHubProfileId(p.id)).map((p) => [p.id, p]));
+    const labels = new Set<string>();
+    const added: Stored[] = [];
+    for (const model of models) {
+      const id = tokenHubProfileId(model);
+      if (added.some((p) => p.id === id)) continue;
+      const prev = before.get(id);
+      // 名字用给人看的模型名；两个模型叫得一样时（不同厂商的同一个模型）用 TokenHub 的模型名
+      const shown = modelDisplayName(model).slice(0, 40);
+      const label = prev?.label ?? (labels.has(shown) ? model.slice(0, 40) : shown);
+      labels.add(label);
+      added.push({ ...(prev ?? { label, agent: "claude-code", smallModel: null, webSearch: searchDefault("gateway", model), isDefault: false }), id, source: "gateway", baseUrl: baseUrl.replace(/\/+$/, ""), model });
+    }
+    const next = [...list.filter((p) => !isTokenHubProfileId(p.id)), ...added];
+    const target = makeDefault && !next.some((p) => p.isDefault) ? tokenHubProfileId(makeDefault) : null;
+    writeJsonAtomic(this.file, next.map((p) => (p.id === target ? { ...p, isDefault: true } : p)));
+  }
+
+  /** 断开 TokenHub（契约 DELETE /v1/tokenhub）：删 th- 开头的配置和那把钥匙。 */
+  async removeTokenHub(): Promise<void> {
+    writeJsonAtomic(this.file, this.stored().slice(1).filter((p) => !isTokenHubProfileId(p.id)));
+    await this.secrets.delete(TOKENHUB_KEY);
   }
 
   /**

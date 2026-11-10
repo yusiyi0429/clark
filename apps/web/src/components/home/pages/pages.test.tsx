@@ -65,14 +65,20 @@ describe("连接页每一行（设计 9.5、5.4.6）", () => {
     expect(agentRow(agent({ kind: "codex", subscriptionType: null }), NOW).name).toBe("Codex");
   });
 
-  it("GitHub、飞书命令行写登的是谁；没登录时小字是登录命令；TokenHub 看本机有没有网关模型", () => {
+  it("GitHub、飞书命令行写登的是谁；没登录时小字是登录命令", () => {
     expect(toolRow({ kind: "gh", state: "ready", version: null, account: "sunm", checkedAt: null })).toMatchObject({ name: "GitHub", sub: "gh · sunm", state: "connected" });
     expect(toolRow({ kind: "lark-cli", state: "not_logged_in", version: null, account: null, checkedAt: null })).toMatchObject({ name: "飞书命令行", state: "disconnected", command: "lark-cli auth login" });
     expect(toolRow({ kind: "gh", state: "expired", version: null, account: null, checkedAt: null }).state).toBe("expired");
     expect(toolRow({ kind: "gh", state: "unknown", version: null, account: null, checkedAt: null })).toMatchObject({ sub: "检查中", state: null });
-    expect(tokenHubRow([]).state).toBe("disconnected");
-    const gateway = { id: "m1", label: "DeepSeek", source: "gateway" as const, agent: "claude-code" as const, baseUrl: null, model: null, smallModel: null, webSearch: true, isDefault: false, tier: null };
-    expect(tokenHubRow([gateway] as never)).toMatchObject({ sub: "DeepSeek", state: "connected" });
+  });
+
+  it("TokenHub（17.2 第 51 条）：没有连接时建的模型（th- 开头）是未连接、给「连接」；有就是已连接、小字写模型名、给「断开」；本人自己配的网关不算", () => {
+    const gateway = (id: string, name: string) => ({ id, label: name, modelName: name, source: "gateway" as const, agent: "claude-code" as const, baseUrl: null, model: null, smallModel: null, webSearch: true, isDefault: false, hasKey: true });
+    expect(tokenHubRow([])).toEqual({ key: "tokenhub", name: "TokenHub", sub: null, state: "disconnected", action: "link" });
+    expect(tokenHubRow([gateway("my-gw", "DeepSeek")])).toMatchObject({ sub: null, state: "disconnected", action: "link" });
+    expect(tokenHubRow([gateway("my-gw", "DeepSeek"), gateway("th-a", "Opus 5.5"), gateway("th-b", "deepseek-v4.1-flash")]))
+      .toMatchObject({ sub: "Opus 5.5 · deepseek-v4.1-flash", state: "connected", action: "unpair" });
+    expect(tokenHubRow(["A", "B", "C", "D", "E"].map((n) => gateway(`th-${n}`, n))).sub).toBe("A · B · C 等 5 个");
   });
 
   it("本人加的工具：连上写有几个工具，未授权、连不上写原因，还没查写地址；金蝶没加过时占一行未连接、不给动作", () => {
