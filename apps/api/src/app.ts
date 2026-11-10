@@ -36,7 +36,7 @@ import { resumePreflights, type PreflightAgent } from "./meetingPreflight.js";
 import { createPreflightAgent, createPreflightThoughtTranslator, preflightThinkingLevel } from "./preflightAgent.js";
 import { agentModel, type AgentModelEnv } from "./agentModels.js";
 import type { PostMeetingAgent } from "./outcome.js";
-import { WorldClient, worldConfigured, type WorldEnv } from "./worldClient.js";
+import { loadWorldInstance, WorldClient, worldConfigured, type WorldEnv } from "./worldClient.js";
 import { companyPeriod } from "./monthlyPlans.js";
 import { WORLD_READ_TIMEOUT_MS, createWorldReader, mergeWorldGoalsIntoContext, ontologyToolResult, type OntologyQuery } from "./worldReader.js";
 import { createPostMeetingAgent } from "./postMeetingAgent.js";
@@ -61,6 +61,8 @@ import type { FeishuCalendarApi } from "./feishu/calendar.js";
 import type { FeishuMinutesApi } from "./feishu/minutes.js";
 import { registerMeetingFollowThroughRoutes } from "./routes/meetingFollowThrough.js";
 import { registerInternalMeetingRoutes } from "./routes/internalMeetings.js";
+import { createNexusDri, type NexusDri, type NexusDriEnv } from "./nexusDri.js";
+import { registerNexusDriRoutes } from "./routes/nexusDri.js";
 import { createDocChangeAgent, type DocChangeAgent } from "./docChangeAgent.js";
 import { createDocChangeService, type DocChangeService } from "./docChanges.js";
 import { registerDocChangeRoutes } from "./routes/docChanges.js";
@@ -255,6 +257,8 @@ export type AppEnv = {
   collectionsEnabled?: boolean;
   /** ⑧ 文档变更推送（DOC_CHANGE_ENABLED=1 才开，D-56）：关着时群里贴文档链接不触发；已有的变更照常能看、能处理。 */
   docChangeEnabled?: boolean;
+  /** Nexus → DRI 确认的接收端（resolveNexusDriEnv）；不设 NEXUS_DRI_SERVICE_TOKEN 时为空，Nexus 调的接口不注册。 */
+  nexusDri?: NexusDriEnv;
 } & PeopleDirectoryEnv & WorldEnv & CompanyContextEnv;
 
 declare module "fastify" {
@@ -269,6 +273,8 @@ declare module "fastify" {
     battlefieldSummaries: BattlefieldSummaries;
     /** 会后分派的归位（task.place）；server.ts 注册给 jobs worker。 */
     taskPlacementJobs: Record<string, JobHandler>;
+    /** Nexus → DRI 确认；server.ts 启动时调 resume()，把 jobs 注册给 jobs worker。 */
+    nexusDri: NexusDri;
     feishuChat: FeishuChat | undefined;
     /** 微信 ClawBot；server.ts 启动后调 start() 开始收消息和推送。没接飞书（借用它的令牌密钥）时为空。 */
     wechat: WechatService | undefined;
@@ -798,6 +804,11 @@ export async function buildApp({
   registerProgressRoutes(app, ctx, battlefieldSummaries);
   registerMeetingFollowThroughRoutes(app, ctx, followThrough);
   registerInternalMeetingRoutes(app, ctx);
+  // Nexus → DRI 确认：负责人按本体实例配置的 people（天枢人员 → 本体人员）找；没开接收端时不读这份配置。
+  const nexusDri = createNexusDri({ pool, now, env: env.nexusDri,
+    people: env.nexusDri ? loadWorldInstance(env.worldInstance, env.worldInstanceLocalFile).people : {} });
+  app.decorate("nexusDri", nexusDri);
+  registerNexusDriRoutes(app, ctx, nexusDri);
   // 文档变更：找候选用快模型；按作者身份读飞书文档元数据（不读正文）；后台任务与群消息事件由 server.ts 按 app.docChanges.jobs() 注册。
   const isCeo = (personId: string) => peopleDirectory.searchPeople(undefined).find((person) => person.personId === personId)?.roles.includes("ceo") ?? false;
   const docChanges = createDocChangeService({

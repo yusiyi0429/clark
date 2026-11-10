@@ -22,7 +22,8 @@ import { Type, type Static } from "@sinclair/typebox";
  * - GET /api/me/nexus-confirmations：等我确认的（我是负责人、没过期、没作废、还没处理）。
  * - POST /api/me/nexus-confirmations/{id}/decision：确认 / 修改 / 拒绝。只有负责人本人能点，别人 403 NOT_CONFIRMER；
  *   过了 expiresAt 409 EXPIRED；被新 revision 作废 409 SUPERSEDED；已处理过 409 ALREADY_DECIDED；
- *   修改只能改 value、保留本人原文：没带 value 400 VALUE_REQUIRED，和原来一样 400 VALUE_UNCHANGED，这一条没有可改的 value 400 NOT_AMENDABLE。
+ *   修改只能改 value、保留本人原文：没带 value 400 VALUE_REQUIRED，和原来一样 400 VALUE_UNCHANGED，这一条没有可改的 value 400 NOT_AMENDABLE，
+ *   改后回调正文超过 NEXUS_DRI_MAX_BODY_BYTES 字节 400 VALUE_TOO_LONG。
  *
  * 负责人：第一版取 proposedConfirmers 的第一位（本体人员 ID），按天枢的「人员 → 本体人员」对应找到天枢里的人；对不上记成找不到人，没有人能确认。
  * 到期：过了 expiresAt 作废，不回 pending、不催人。

@@ -194,6 +194,7 @@ describe("migration", () => {
         "216_meeting_card_decisions.sql",
         "217_conversation_digests.sql",
         "218_issue_drafts_chat_origin.sql",
+        "270_nexus_dri.sql",
       ]);
 
       // 幂等：重复执行不再变更
