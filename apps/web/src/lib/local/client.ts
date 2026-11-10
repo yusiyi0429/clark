@@ -134,6 +134,8 @@ export function createHttpRunner(base = localRunnerBase(), token: () => string =
     interrupt: async (id) => (await call<{ session: Awaited<ReturnType<LocalRunner["interrupt"]>> }>("interrupt", { id }, {})).session,
     setPermissionMode: async (id, mode) => (await call<{ session: Awaited<ReturnType<LocalRunner["setPermissionMode"]>> }>("setPermissionMode", { id }, { mode })).session,
     setSessionModel: (id, body) => call("setSessionModel", { id }, body),
+    listSessionFiles: (id) => call("listSessionFiles", { id }),
+    readSessionFile: (id, body) => call("readSessionFile", { id }, body),
     kill: async (id) => (await call<{ session: Awaited<ReturnType<LocalRunner["kill"]>> }>("kill", { id }, {})).session,
     decidePermission: async (id, requestId, body) => (await call<{ session: Awaited<ReturnType<LocalRunner["kill"]>> }>("decidePermission", { id, requestId }, body)).session,
     mergeSession: async (id) => call<Awaited<ReturnType<LocalRunner["mergeSession"]>>>("mergeSession", { id }, {}),

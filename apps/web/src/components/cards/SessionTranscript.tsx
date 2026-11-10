@@ -9,7 +9,7 @@
  * 本人那句话的回执（17.4，样子同伙伴台）：一个勾已送达、两个勾已读；没读到就没了写「没读到 · 重发」。本机补发的话没有回执。
  * canAct=false（手机、别的电脑、本机没连）时选项框不给选项，头上写「等你 · {电脑名}」。
  */
-import { memo, useEffect, useState, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
 import Markdown, { type Components } from "react-markdown";
 import { ChevronRight } from "lucide-react";
 import { questionNotice, type SessionEntry } from "@/lib/local/sessionView";
@@ -133,14 +133,29 @@ function groupEntries(entries: SessionEntry[]): Item[] {
 }
 
 /** 回答里的链接新开一页。 */
-const MARKDOWN_PARTS: Components = { a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer">{children}</a> };
+/** 回答里提到的一处（行内代码、链接的地址）能不能点开看：对得上本会话改过的文件或交出的产出才给，回 null 就照原样画。 */
+export type OpenFile = (mention: string) => (() => void) | null;
+const decoded = (href: string) => { try { return decodeURIComponent(href); } catch { return href; } };
+const markdownParts = (onFile?: OpenFile): Components => ({
+  a: ({ href, children }) => {
+    const open = href ? onFile?.(decoded(href)) ?? null : null;
+    return open ? <button type="button" className={s.fileLink} onClick={open} data-testid="file-open">{children}</button> : <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
+  },
+  code: ({ className, children }) => {
+    // 只认行内的一小段（代码块带 language- 类或有换行）。
+    const text = typeof children === "string" && !className && !children.includes("\n") ? children : null;
+    const open = text ? onFile?.(text) ?? null : null;
+    return open ? <code><button type="button" className={s.fileLink} onClick={open} data-testid="file-open">{text}</button></code> : <code className={className}>{children}</code>;
+  },
+});
 
 /**
  * 执行方说的话按 Markdown 排（41 条）：标题、列表、表格、加粗、代码、链接；字号行距跟着这条回答，不比正文大。
  * 流式时一条回答会重画很多次，文字没变就不重排。
  */
-export const AgentText = memo(function AgentText({ text }: { text: string }) {
-  return <div className={s.md}><Markdown remarkPlugins={REMARK_PLUGINS} components={MARKDOWN_PARTS}>{text}</Markdown></div>;
+export const AgentText = memo(function AgentText({ text, onFile }: { text: string; onFile?: OpenFile }) {
+  const parts = useMemo(() => markdownParts(onFile), [onFile]);
+  return <div className={s.md}><Markdown remarkPlugins={REMARK_PLUGINS} components={parts}>{text}</Markdown></div>;
 });
 
 /** 没做完的那一步：会话还在跑就是进行中，不在跑了就是停在那儿了。 */
@@ -234,7 +249,7 @@ export function RelayLine({ text, onGo }: { text: string; onGo: () => void }) {
 
 type UserEntry = Extract<SessionEntry, { kind: "user" }>;
 
-export function SessionTranscript({ entries, agentName, canAct, device, onDecide, lead, tail, asking, live, ended = false, relay, onResend, onArtifact }: {
+export function SessionTranscript({ entries, agentName, canAct, device, onDecide, lead, tail, asking, live, ended = false, relay, onResend, onFile }: {
   entries: SessionEntry[];
   agentName: string;
   canAct: boolean;
@@ -256,7 +271,7 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
   /** 没读到的那句再发一遍（只发原话；这里答不了时不给）。 */
   onResend?: (entry: UserEntry) => void;
   /** 「交出 文件名」那一行能不能点开看（41 条）：对得上交出的产出时回打开的办法，对不上回 null（不能点，不猜）。 */
-  onArtifact?: (fileName: string) => (() => void) | null;
+  onFile?: OpenFile;
 }) {
   const pending = ended ? [] : entries.flatMap((entry) => (entry.kind === "permission" && !entry.decision ? [entry.request] : []));
   const firstPending = pending[0]?.requestId;
@@ -285,7 +300,7 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
             entry.receipt === "failed" ? <ReceiptFailed key={`${entry.seq}:receipt`} className={s.meReceipt} label="没读到" onResend={canAct && entry.text ? () => onResend?.(entry) : undefined} />
               : entry.receipt ? <ReceiptTicks key={`${entry.seq}:receipt`} className={s.meReceipt} state={entry.receipt} /> : null,
           ];
-          case "assistant": return <div key={entry.seq} className={s.bubble}><small className={s.who}>{agentName}</small><AgentText text={entry.text} /></div>;
+          case "assistant": return <div key={entry.seq} className={s.bubble}><small className={s.who}>{agentName}</small><AgentText text={entry.text} onFile={onFile} /></div>;
           case "process": return <ProcessGroup key={entry.seq} process={entry} live={live} running={busy && index === items.length - 1} />;
           case "asked": return <DecisionBox key={entry.seq} kind="question" title={entry.question} options={[]} onPick={noop} resolved={entry.answer ?? undefined} expired={entry.answer === null} />;
           case "permission":
@@ -293,7 +308,7 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
             if (entry.request.requestId !== firstPending) return null;
             return relay ? <RelayLine key={entry.seq} text={entry.request.title} onGo={relay} /> : <ApprovalDecision key={entry.seq} requests={pending} blocked={canAct ? null : awayChip(device)} onDecide={onDecide} />;
           case "artifact": {
-            const open = onArtifact?.(entry.fileName) ?? null;
+            const open = onFile?.(entry.fileName) ?? null;
             return <div key={entry.seq} className={s.step}><StateIcon state="done" />
               <span className={s.stepText}>交出 {open ? <button type="button" className={s.fileLink} onClick={open} data-testid="artifact-open">{entry.fileName}</button> : entry.fileName}</span><time>{hhmm(entry.at)}</time></div>;
           }

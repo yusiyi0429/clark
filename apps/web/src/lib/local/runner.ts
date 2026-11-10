@@ -8,6 +8,7 @@ import type {
   TLocalPermissionDecisionRequest, TLocalQuestionAnswerRequest, TLocalRunnerErrorCode, TLocalSendMessageRequest, TLocalSendMessageResponse, TLocalSessionDetailResponse,
   TLocalSessionEvent, TLocalSessionSummary, TLocalSettings, TLocalSettingsPatch, TLocalStatusResponse, TLocalBudgetUpdateRequest, TLocalTaskBudgetView, TLocalAttachmentRef,
   TLocalFolderCreateRequest, TLocalFolderCreateResponse, TLocalFolderPickRequest, TLocalFolderPickResponse, TLocalSessionModelRequest, TLocalSessionModelResponse,
+  TLocalSessionFileReadRequest, TLocalSessionFileReadResponse, TLocalSessionFilesResponse,
   TLocalHandoverCheck, TLocalProjectCloneRequest, TLocalProjectCloneResponse, TLocalProjectFolder, TLocalProjectFolderRequest, TLocalPermissionMode, TLocalRun, TLocalRunPreviewRequest,
 } from "@warmap/contracts";
 
@@ -68,6 +69,10 @@ export interface LocalRunner {
   setPermissionMode(id: string, mode: TLocalPermissionMode): Promise<TLocalSessionSummary>;
   /** 子会话换模型（17.2 第 32 条）：applied=now 当场换，after_turn 这一轮做完再换（摘要带 pendingModel）。 */
   setSessionModel(id: string, body: TLocalSessionModelRequest): Promise<TLocalSessionModelResponse>;
+  /** 本会话写过、改过的文件（17.2 第 41 条）；老版本没有这条路由（404）、还没实现（501）时调用方当没有。 */
+  listSessionFiles(id: string): Promise<TLocalSessionFilesResponse>;
+  /** 读本会话文件夹或工作树里的一个文件，在右边预览；在外面的 403，没有的 404。 */
+  readSessionFile(id: string, body: TLocalSessionFileReadRequest): Promise<TLocalSessionFileReadResponse>;
   kill(id: string): Promise<TLocalSessionSummary>;
   decidePermission(id: string, requestId: string, body: TLocalPermissionDecisionRequest): Promise<TLocalSessionSummary>;
   /** 把卡的分支合回主文件夹（本人点了才合）；合不了回原因和文件，卡不在工作树、还在跑、交回后又改过、已合过是 409。 */
