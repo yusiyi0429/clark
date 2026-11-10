@@ -6780,6 +6780,8 @@ export interface components {
                     provider: string;
                     model: string;
                 };
+                ranOn?: "cloud" | "local";
+                fallback?: "local_unavailable" | "local_quota";
                 readScope?: {
                     label: string;
                     params: {
@@ -6814,6 +6816,15 @@ export interface components {
                     href?: string;
                 };
             }[];
+            localTurn?: {
+                /** Format: uuid */
+                turnId: string;
+                message: string;
+                /** Format: date-time */
+                startedAt: string;
+                deviceName: string;
+                source: string;
+            };
         };
         ConversationMessageRequest: {
             message: string;
@@ -6850,6 +6861,7 @@ export interface components {
                 to?: string;
             };
             pagePath?: string;
+            fallback?: "local_unavailable" | "local_quota";
         };
         ConversationSseEvent: {
             runId: string;
