@@ -55,6 +55,7 @@ export * from "./collections.js";
 export * from "./homePlan.js";
 export * from "./feishuMinuteInbox.js";
 export * from "./worldSources.js";
+export * from "./nexusDri.js";
 export * from "./vendor/chat-task-quality.js";
 export { TaskQualityStatus, type TTaskQualityStatus } from "./taskQualityOpenapi.js";
 export * from "./localDevices.js";

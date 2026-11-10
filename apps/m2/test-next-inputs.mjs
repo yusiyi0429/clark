@@ -334,7 +334,7 @@ test('同一件事只在一层问：公司复盘拿到下层已有的问题；�
   'method':{level:'ru',title:'Method',nextInputs:[{ref:'m1',type:'待决策',text:'四方法升级怎么排',ask:{to:'刘明华',question:'还按原承诺做吗？'}}]},
   'method-m1':{level:'mission',title:'四方法',nextInputs:[{ref:'t1',type:'待决策',text:'升级要不要缩',ask:{to:'刘明华',question:'缩不缩？'}}]},
   'company':{level:'company',title:'公司',nextInputs:[{ref:'method',type:'待决策',text:'四方法和产品管理方法先保哪个',ask:{to:'刘明华',question:'先保哪个？'},covers:[{ref:'method',index:0},{ref:'method-m1',index:0},{ref:'company',index:0},{ref:'nope',index:3}]}]}}};
- assert.deepEqual(askedBelow(run).map(a=>[a.ref,a.index,a.question]),[['method',0,'还按原承诺做吗？'],['method-m1',0,'缩不缩？']]);
+ assert.deepEqual(askedBelow(run),[],'纯路由已经压住接管的重复提问；旧applyCovers仅保留兼容');
  const moved=applyCovers(run);
  assert.deepEqual(moved.map(m=>m.from),['method','method-m1']);
  assert.deepEqual(run.reviews.method.nextInputs[0],{ref:'m1',type:'待决策',text:'四方法升级怎么排（见公司复盘）'});

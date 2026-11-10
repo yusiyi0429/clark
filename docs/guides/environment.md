@@ -49,6 +49,9 @@ Compose 只把 `infra/docker-compose.yml` 中 `api.environment` 声明过的变�
 | | `MISSION_CARD_KNOWN_MISSIONS_FILE` | 起草时参考的已知本月任务；文件缺失照常起草 |
 | 服务令牌 | `ONTOLOGY_SERVICE_TOKEN` | 本体拉每周进展的只读令牌；不填时对应接口返回 503 |
 | | `INTERNAL_CHAT_TOKEN` | 独立 Chat 读确认会议（`/internal/confirmed-meetings`）的服务凭据；不填时接口一律 404 |
+| | `NEXUS_DRI_SERVICE_TOKEN`、`NEXUS_DRI_TENANT_ID` | Nexus → DRI 确认的接收端（`/api/integrations/nexus/dri/*`）：Nexus 调天枢用的服务凭据，和天枢这边的租户（请求的 `recipientTenant` 要等于它）。都填才开，不填时接口一律 404 |
+| | `NEXUS_DRI_AGENT_ID` | 请求里 `agentId` 要等于它；不填是 `tianshu-dri`（本地回放合成样例时换成样例里的值） |
+| | `NEXUS_DRI_CALLBACK_URL`、`NEXUS_DRI_CALLBACK_SECRET` | 本人确认后回调 Nexus 的地址和 HMAC 共享密钥（至少 32 字节）；不填就不发，确认记录留在待发，填上重启后补发 |
 | | `CHAT_SERVICE_URL` | 首页对话改走独立 Chat 服务的地址（预发 `http://chat:3101`），用 `INTERNAL_CHAT_TOKEN` 转发本人身份；不填时走天枢自己的对话，对象页对话不受影响 |
 | 对话分段 | `CHAT_SESSION_ROTATION` | 设为 `1` 才开首页分段：首页的 Chat 对话闲置满 12 小时或跨过北京时间凌晨 4 点新开一段，界面拼最近 7 天的几段；同时在 `/internal/home-cards` 末尾多给 Chat 一张「以前的对话」卡（上一段纪要 + 近 14 天目录，见 `docs/guides/chat-conversation-recall.md`） |
 | | `CONVERSATION_SEGMENTS` | 设为 `1` 才开天枢页面的对话分段：同一条规则换段，模型侧只带这一段，上一段经会话目录里的纪要交接，另给两个回看工具。缺省关，照旧闲置 12 小时只带摘要重开。两个分段开关都关时不跑会话纪要的后台任务 |

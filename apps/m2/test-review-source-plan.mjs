@@ -8,6 +8,12 @@ const data=()=>{
  return {input,sources,reviews:Object.fromEntries(Object.keys(sources).map(ref=>[ref,{ref,verdict:'部分达成'}])),programFacts:{perReview:{},verdictFacts:[],askLoad:[]},tasks:['JSON组1','JSON组2','JSON组3'],system:'完整规则JSON',maxTargetRefs:1};
 };
 const ok=p=>({issues:[],checkedRefs:p.scope.targetRefs,checkedEdges:p.scope.edges,sourceRequests:[]});
+test('source-key contract v2 exposes exactly the actual top-level source enum while legacy payloads stay unchanged',()=>{
+ const legacy=data(),before=buildReviewCheckPlan(legacy);assert.ok(before.packets.every(p=>p.payloads.every(v=>!Object.hasOwn(v,'allowedSourceRefs'))));
+ const newer=data();newer.input.engineeringContracts={checkerSources:2};newer.sources.a.tasks=[{ref:'00000000-0000-4000-8000-000000000001',componentRef:'nested@2#execution_plan/t01'}];
+ const plan=buildReviewCheckPlan(newer);for(const packet of plan.packets)for(const payload of packet.payloads){assert.deepEqual(payload.allowedSourceRefs,payload.scope.sourceRefs);assert.deepEqual([...payload.allowedSourceRefs].sort(),Object.keys(payload.sources).sort());assert.equal(payload.allowedSourceRefs.includes(newer.sources.a.tasks[0].ref),false);}
+ const oldAgain=buildReviewCheckPlan(legacy);assert.deepEqual(oldAgain,before);
+});
 test('text sharing is lossless and never merges distinct evidence identities or namespaces',()=>{
  const a=data(),packet=packSourceText(a.sources);assert.deepEqual(restoreSourceText(packet),a.sources);assert.ok(Object.keys(packet.texts).length);assert.equal(packet.sources.a.evidence[0].namespace,'a');assert.equal(packet.sources.b.evidence[0].namespace,'b');packet.texts[Object.keys(packet.texts)[0]]+='伪造';assert.throws(()=>restoreSourceText(packet));
 });

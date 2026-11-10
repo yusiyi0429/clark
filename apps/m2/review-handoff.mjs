@@ -35,6 +35,7 @@ export function handoffGenerated(s){
 // The entry page's review line: which review is in, from what data, how far confirmation has got (2026-10-22).
 export function reviewSummary(state){
  const r=state.reviewRound;if(!r)return null;
+ const used=[...new Set([...Object.values(r.modelProvenance?.initial||{}).map(x=>x.requestedAlias),...(r.modelProvenance?.quality||[]).map(x=>x.selectedAlias)].filter(Boolean))];
  const cards=Object.values(state.cards).filter(isReviewCard);
- return {label:r.label,skill:r.skill,period:r.period,cutoff:r.cutoff,loadedAt:r.loadedAt,readAt:r.readAt||null,generatedAt:r.generatedAt||null,startedAt:r.startedAt||null,durationMs:r.durationMs??null,total:cards.length,confirmed:cards.filter(c=>c.confirmedVersion===currentVersion(c).number).length,problems:(r.problems||[]).length,failed:(r.problems||[]).filter(p=>p.kind==='failed').length,failedList:(r.problems||[]).filter(p=>p.kind==='failed').map(p=>({ref:p.ref,title:p.title||null,reason:p.reason})),degraded:(r.problems||[]).filter(p=>p.kind==='degraded').length,skipped:(r.skipped||[]).length};
+ return {label:r.label,model:used.join('、')||r.model||r.modelProvenance?.requestedPrimary||null,skill:r.skill,period:r.period,cutoff:r.cutoff,loadedAt:r.loadedAt,readAt:r.readAt||null,generatedAt:r.generatedAt||null,startedAt:r.startedAt||null,durationMs:r.durationMs??null,total:cards.length,confirmed:cards.filter(c=>c.confirmedVersion===currentVersion(c).number).length,problems:(r.problems||[]).length,failed:(r.problems||[]).filter(p=>p.kind==='failed').length,failedList:(r.problems||[]).filter(p=>p.kind==='failed').map(p=>({ref:p.ref,title:p.title||null,reason:p.reason})),degraded:(r.problems||[]).filter(p=>p.kind==='degraded').length,skipped:(r.skipped||[]).length};
 }

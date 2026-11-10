@@ -1,0 +1,226 @@
+{
+  "contract": "nexus-dri-confirmation/0.1",
+  "syntheticOnly": true,
+  "urls": {
+    "driIntake": null,
+    "nexusCallback": null,
+    "receiptLookup": null
+  },
+  "signingDemonstration": {
+    "secret": "SYNTHETIC_ONLY_NOT_A_PRODUCTION_SECRET_20261109",
+    "timestampMs": 1794225600000,
+    "realClockValidation": false
+  },
+  "request": {
+    "contract": "nexus-dri-confirmation/0.1",
+    "requestId": "dri:70bffb1936b66595e45465440a30a0621481d1a61d4e6b204335f85750394060",
+    "itemId": "synthetic-confirmation-item",
+    "revision": 1,
+    "meetingId": "1234567890123456",
+    "scopeId": "d9d42568-cac1-4a23-bdb4-012345678901",
+    "recipientTenant": "synthetic-tenant",
+    "agentId": "synthetic-dri-agent",
+    "minutesRef": "synthetic-minutes:revision-1",
+    "question": "请本人确认接口联调范围；正式上线时间仍单独待定。",
+    "content": {
+      "classification": "fact",
+      "targetRef": "d9d42568-cac1-4a23-bdb4-012345678905@2",
+      "fieldKey": "record/progress",
+      "value": "本例只确认接口联调范围，正式上线时间仍待确认。"
+    },
+    "proposedConfirmers": [
+      "synthetic-human"
+    ],
+    "disclosureRef": "synthetic-grant:single-item",
+    "source": {
+      "id": "synthetic-meeting-source",
+      "version": "synthetic-v1",
+      "hash": "d2172c251736414093f906b297975370b3313f65fee9e42808bf1418240e9495",
+      "turnId": "synthetic-turn-1",
+      "reference": "synthetic-source:turn-1",
+      "quote": "本例只确认接口联调范围，正式上线时间仍待确认。"
+    },
+    "createdAt": 1794225600000,
+    "expiresAt": 1794229200000,
+    "callbackCorrelation": "dri:70bffb1936b66595e45465440a30a0621481d1a61d4e6b204335f85750394060",
+    "fingerprint": "ab2ef5bd356ecc8e6e81ca9d68821c00e71f6e4be8cebcd378b9af00b6a2159e"
+  },
+  "deliveryReceipt": {
+    "accepted": true,
+    "receiptId": "synthetic-delivery-receipt",
+    "tenantId": "synthetic-tenant",
+    "requestId": "dri:70bffb1936b66595e45465440a30a0621481d1a61d4e6b204335f85750394060",
+    "itemId": "synthetic-confirmation-item",
+    "revision": 1,
+    "fingerprint": "ab2ef5bd356ecc8e6e81ca9d68821c00e71f6e4be8cebcd378b9af00b6a2159e"
+  },
+  "callbacks": {
+    "confirmed": {
+      "body": {
+        "callbackId": "synthetic-callback-confirmed",
+        "requestId": "dri:70bffb1936b66595e45465440a30a0621481d1a61d4e6b204335f85750394060",
+        "itemId": "synthetic-confirmation-item",
+        "revision": 1,
+        "fingerprint": "ab2ef5bd356ecc8e6e81ca9d68821c00e71f6e4be8cebcd378b9af00b6a2159e",
+        "decision": "confirmed",
+        "confirmedBy": "synthetic-human",
+        "confirmedAt": "2026-11-09T12:00:00.000Z",
+        "confirmationRef": "synthetic-human-proof:confirmed"
+      },
+      "rawBody": "{\"callbackId\":\"synthetic-callback-confirmed\",\"requestId\":\"dri:70bffb1936b66595e45465440a30a0621481d1a61d4e6b204335f85750394060\",\"itemId\":\"synthetic-confirmation-item\",\"revision\":1,\"fingerprint\":\"ab2ef5bd356ecc8e6e81ca9d68821c00e71f6e4be8cebcd378b9af00b6a2159e\",\"decision\":\"confirmed\",\"confirmedBy\":\"synthetic-human\",\"confirmedAt\":\"2026-11-09T12:00:00.000Z\",\"confirmationRef\":\"synthetic-human-proof:confirmed\"}",
+      "headers": {
+        "content-type": "application/json",
+        "x-dri-timestamp": "1794225600000",
+        "x-dri-signature": "sha256=3b73b7dd067b662562d5bf1f8d938124f519f7e19707a4860dd1722e4ea61d1b"
+      },
+      "expectedReceipt": {
+        "ok": true,
+        "requestId": "dri:70bffb1936b66595e45465440a30a0621481d1a61d4e6b204335f85750394060",
+        "itemId": "synthetic-confirmation-item",
+        "revision": 1,
+        "fingerprint": "ab2ef5bd356ecc8e6e81ca9d68821c00e71f6e4be8cebcd378b9af00b6a2159e",
+        "status": "confirmed_pending_write",
+        "delivery": "accepted",
+        "persisted": true,
+        "worldWritten": false
+      }
+    },
+    "amended": {
+      "body": {
+        "callbackId": "synthetic-callback-amended",
+        "requestId": "dri:70bffb1936b66595e45465440a30a0621481d1a61d4e6b204335f85750394060",
+        "itemId": "synthetic-confirmation-item",
+        "revision": 1,
+        "fingerprint": "ab2ef5bd356ecc8e6e81ca9d68821c00e71f6e4be8cebcd378b9af00b6a2159e",
+        "decision": "amended",
+        "confirmedBy": "synthetic-human",
+        "confirmedAt": "2026-11-09T12:00:00.000Z",
+        "confirmationRef": "synthetic-human-proof:amended",
+        "content": {
+          "classification": "fact",
+          "targetRef": "d9d42568-cac1-4a23-bdb4-012345678905@2",
+          "fieldKey": "record/progress",
+          "value": "本人修订：只承诺周五接口联调，正式上线另行确认。"
+        }
+      },
+      "rawBody": "{\"callbackId\":\"synthetic-callback-amended\",\"requestId\":\"dri:70bffb1936b66595e45465440a30a0621481d1a61d4e6b204335f85750394060\",\"itemId\":\"synthetic-confirmation-item\",\"revision\":1,\"fingerprint\":\"ab2ef5bd356ecc8e6e81ca9d68821c00e71f6e4be8cebcd378b9af00b6a2159e\",\"decision\":\"amended\",\"confirmedBy\":\"synthetic-human\",\"confirmedAt\":\"2026-11-09T12:00:00.000Z\",\"confirmationRef\":\"synthetic-human-proof:amended\",\"content\":{\"classification\":\"fact\",\"targetRef\":\"d9d42568-cac1-4a23-bdb4-012345678905@2\",\"fieldKey\":\"record/progress\",\"value\":\"本人修订：只承诺周五接口联调，正式上线另行确认。\"}}",
+      "headers": {
+        "content-type": "application/json",
+        "x-dri-timestamp": "1794225600000",
+        "x-dri-signature": "sha256=522bc0bc9dd26b5655293953970b38a48abe1e320d7de69310067441daa962fa"
+      },
+      "expectedReceipt": {
+        "ok": true,
+        "requestId": "dri:70bffb1936b66595e45465440a30a0621481d1a61d4e6b204335f85750394060",
+        "itemId": "synthetic-confirmation-item",
+        "revision": 1,
+        "fingerprint": "ab2ef5bd356ecc8e6e81ca9d68821c00e71f6e4be8cebcd378b9af00b6a2159e",
+        "status": "confirmed_pending_write",
+        "delivery": "accepted",
+        "persisted": true,
+        "worldWritten": false
+      }
+    },
+    "rejected": {
+      "body": {
+        "callbackId": "synthetic-callback-rejected",
+        "requestId": "dri:70bffb1936b66595e45465440a30a0621481d1a61d4e6b204335f85750394060",
+        "itemId": "synthetic-confirmation-item",
+        "revision": 1,
+        "fingerprint": "ab2ef5bd356ecc8e6e81ca9d68821c00e71f6e4be8cebcd378b9af00b6a2159e",
+        "decision": "rejected",
+        "confirmedBy": "synthetic-human",
+        "confirmedAt": "2026-11-09T12:00:00.000Z",
+        "confirmationRef": "synthetic-human-proof:rejected"
+      },
+      "rawBody": "{\"callbackId\":\"synthetic-callback-rejected\",\"requestId\":\"dri:70bffb1936b66595e45465440a30a0621481d1a61d4e6b204335f85750394060\",\"itemId\":\"synthetic-confirmation-item\",\"revision\":1,\"fingerprint\":\"ab2ef5bd356ecc8e6e81ca9d68821c00e71f6e4be8cebcd378b9af00b6a2159e\",\"decision\":\"rejected\",\"confirmedBy\":\"synthetic-human\",\"confirmedAt\":\"2026-11-09T12:00:00.000Z\",\"confirmationRef\":\"synthetic-human-proof:rejected\"}",
+      "headers": {
+        "content-type": "application/json",
+        "x-dri-timestamp": "1794225600000",
+        "x-dri-signature": "sha256=42de3129e3b8b9b38d56ebdba3317dd2c2294e4542cb44d92f97c4ff98a604c0"
+      },
+      "expectedReceipt": {
+        "ok": true,
+        "requestId": "dri:70bffb1936b66595e45465440a30a0621481d1a61d4e6b204335f85750394060",
+        "itemId": "synthetic-confirmation-item",
+        "revision": 1,
+        "fingerprint": "ab2ef5bd356ecc8e6e81ca9d68821c00e71f6e4be8cebcd378b9af00b6a2159e",
+        "status": "rejected",
+        "delivery": "accepted",
+        "persisted": true,
+        "worldWritten": false
+      }
+    },
+    "pending": {
+      "body": {
+        "callbackId": "synthetic-callback-pending",
+        "requestId": "dri:70bffb1936b66595e45465440a30a0621481d1a61d4e6b204335f85750394060",
+        "itemId": "synthetic-confirmation-item",
+        "revision": 1,
+        "fingerprint": "ab2ef5bd356ecc8e6e81ca9d68821c00e71f6e4be8cebcd378b9af00b6a2159e",
+        "decision": "pending"
+      },
+      "rawBody": "{\"callbackId\":\"synthetic-callback-pending\",\"requestId\":\"dri:70bffb1936b66595e45465440a30a0621481d1a61d4e6b204335f85750394060\",\"itemId\":\"synthetic-confirmation-item\",\"revision\":1,\"fingerprint\":\"ab2ef5bd356ecc8e6e81ca9d68821c00e71f6e4be8cebcd378b9af00b6a2159e\",\"decision\":\"pending\"}",
+      "headers": {
+        "content-type": "application/json",
+        "x-dri-timestamp": "1794225600000",
+        "x-dri-signature": "sha256=64b66dd22420968666f35a191b9a2e1b04707e71c6f7e2b95c8d7b7f92457bf4"
+      },
+      "expectedReceipt": {
+        "ok": true,
+        "requestId": "dri:70bffb1936b66595e45465440a30a0621481d1a61d4e6b204335f85750394060",
+        "itemId": "synthetic-confirmation-item",
+        "revision": 1,
+        "fingerprint": "ab2ef5bd356ecc8e6e81ca9d68821c00e71f6e4be8cebcd378b9af00b6a2159e",
+        "status": "awaiting_confirmation",
+        "delivery": "accepted",
+        "persisted": true,
+        "worldWritten": false
+      }
+    }
+  },
+  "results": [
+    {
+      "decision": "confirmed",
+      "status": "confirmed_pending_write",
+      "persisted": true,
+      "worldWritten": false,
+      "duplicate": true,
+      "fakeTransportCalls": 1,
+      "writeStatus": "write_disabled"
+    },
+    {
+      "decision": "amended",
+      "status": "confirmed_pending_write",
+      "persisted": true,
+      "worldWritten": false,
+      "duplicate": true,
+      "fakeTransportCalls": 1,
+      "writeStatus": "write_disabled"
+    },
+    {
+      "decision": "rejected",
+      "status": "rejected",
+      "persisted": true,
+      "worldWritten": false,
+      "duplicate": true,
+      "fakeTransportCalls": 1,
+      "writeStatus": "write_disabled"
+    },
+    {
+      "decision": "pending",
+      "status": "awaiting_confirmation",
+      "persisted": true,
+      "worldWritten": false,
+      "duplicate": true,
+      "fakeTransportCalls": 1,
+      "writeStatus": "write_disabled"
+    }
+  ],
+  "boundaries": {
+    "realNetworkCalls": 0,
+    "realWorldWrites": 0,
+    "realHumanConfirmation": false,
+    "liveWorkerConnected": false
+  }
+}

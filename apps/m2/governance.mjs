@@ -1,3 +1,4 @@
+import {activeReviewAsk,routedQuestion,currentReviewQuestionRows} from './review-question-routing.mjs';
 import {syncConfirmedMissionStatus,confirmedMissionSourceProblem,quotedReviewFields} from './confirmed-review-status.mjs';
 import {patchPaths,pathsOverlap,rebasePatch} from './proposal-units.mjs';
 // Actors are resolved server-side from the approved roster. Internal trial has no authentication.
@@ -48,7 +49,7 @@ export const nextInputProblem=(list,{max=5,roster=[],allowEmpty=false,maxAsks=In
  list.some(x=>!x||typeof x.text!=='string'||!x.text.trim()||x.text.length>300)?'每条下期输入要有正文':
  list.some(x=>!NEXT_TYPES.includes(x.type))?`下期输入类型只能是${NEXT_TYPES.join('、')}`:
  list.some(x=>x.ask!=null&&(typeof x.ask!=='object'||!String(x.ask.to||'').trim()||!String(x.ask.question||'').trim()||String(x.ask.question).length>300))?'要问人的下期输入要写问谁、问什么':
- list.filter(x=>x.ask).length>maxAsks?`点名提问最多 ${maxAsks} 个，现在有 ${list.filter(x=>x.ask).length} 个`:
+ list.filter(x=>activeReviewAsk(x)).length>maxAsks?`点名提问最多 ${maxAsks} 个，现在有 ${list.filter(x=>activeReviewAsk(x)).length} 个`:
  roster.length&&list.some(x=>x.ask&&!roster.includes(String(x.ask.to).trim()))?`下期输入里问的“${list.find(x=>x.ask&&!roster.includes(String(x.ask.to).trim())).ask.to}”不在公司名单里`:null;
 export const factProblem=list=>!Array.isArray(list)||list.length>40||list.some(x=>!x||typeof x.item!=='string'||!x.item.trim()||!FACT_STATUS.includes(x.status)||typeof (x.evidence??'')!=='string'||typeof (x.gap??'')!=='string'||String(x.evidence||'').length>2000||String(x.gap||'').length>1000);
 // 分析洞察 (陈溪南 2026-10-26): written by each participant under a review, never handshaken. Until 管理 reveals them,
@@ -139,7 +140,7 @@ export function confirmationSummary(state,card){const v=currentVersion(card),slo
 const mentionList=names=>[...new Set(names.filter(Boolean))].map(n=>'@'+n).join('、');
 export function mayChangeOwner(actor,card){return !!actor&&(card.level==='po'?actor.ceo===true:(actor.unitDri||[]).includes(unitOf(card)));}
 // Someone a review's 下期输入 asks by name may open that one card to answer, even outside their units (2026-10-27 drill: 于斯一 asked on Agents got 403).
-export function canRead(actor,card){return !!actor&&(actor.ceo===true||(actor.visibleUnits||[]).includes(unitOf(card))||isReview(card)&&!!actor.name&&(card.versions?.at(-1)?.content?.nextInputs||[]).some(n=>n?.ask?.to===actor.name));}
+export function canRead(actor,card,state){return !!actor&&(actor.ceo===true||(actor.visibleUnits||[]).includes(unitOf(card))||isReview(card)&&!!actor.name&&(state?currentReviewQuestionRows(state,card):card.versions?.at(-1)?.content?.nextInputs||[]).some(n=>activeReviewAsk(n)?.to===actor.name));}
 // 个人复盘 is confirmed by its owner alone (陈溪南 2026-10-27); the unit DRI still reads, comments, files cards and answers questions.
 export function confirmationSlots(card){if(isReview(card))return card.level==='company'?['ceo']:card.level==='po'?['ceo','unitDri']:['missionDri'];return card.level==='po'?['ceo','unitDri']:card.level==='mission'?['unitDri','missionDri']:[];}
 export function currentVersion(card){return card.versions.at(-1);}
@@ -159,7 +160,7 @@ export function applyAction(previous,actor,action){
  if(['acceptProposal','rejectProposal'].includes(action.type)){
   const proposal=previous.proposals?.find(p=>p.id===action.proposalId&&p.cardId===action.cardId);
   const target=proposal&&previous.cards[proposal.cardId];
-  if(!actor?.id||actor.kind==='coagent'||!target||!canRead(actor,target))fail(403,'请由当前成果负责人处理修订建议');
+  if(!actor?.id||actor.kind==='coagent'||!target||!canRead(actor,target,previous))fail(403,'请由当前成果负责人处理修订建议');
   // 判定变化 is decided by the other signer: whoever holds a confirmation slot on the review and did not ask for it
   // (陈溪南 2026-10-22). Only when no one else signs (the company review) does the asker decide.
   if(proposal?.verdictChange&&action.type==='acceptProposal'){const holders=verdictDeciders(previous,target,proposal);if(!holders.includes(nameOf(actor.id)))fail(403,`判定改动要由${holders.join('、')||'对方签字人'}确认`);}
@@ -201,7 +202,7 @@ export function applyAction(previous,actor,action){
  if(!card&&String(action.cardId||'').startsWith('rv:person:')&&action.type==='message'){const who=String(action.cardId).slice(10);
   if(who!==actor.name)fail(403,'个人复盘的对话只有本人能发');
   card=Object.values(state.cards).find(c=>isReview(c)&&c.level==='mission'&&roomOf(c)===personRoomOf(who));if(!card)fail(404,'没有你的个人复盘');action={...action,general:true};}
- if(!card||!canRead(actor,card)&&actor.kind!=='coagent')fail(403,'不在当前领域可见范围内');
+ if(!card||!canRead(actor,card,state)&&actor.kind!=='coagent')fail(403,'不在当前领域可见范围内');
  const v=currentVersion(card),now=new Date().toISOString();
  freezeLegacyInsights(state,card);
  if(action.type==='revise'){
@@ -366,7 +367,7 @@ export function applyAction(previous,actor,action){
   if(!target)fail(400,'批注关联的版本不存在');
   // Only the owner talks on a 个人复盘; someone a 下期输入 question names may still answer it there.
   const room=roomOf(card),member=roomMember(room);
-  if(member&&member!==actor.id&&!(action.type==='comment'&&action.answers&&Number.isInteger(action.answers.index)&&currentVersion(card).content.nextInputs?.[action.answers.index]?.ask?.to===actor.name))fail(403,'个人复盘的讨论只在本人的个人复盘里；有意见请在单元复盘里说');
+  if(member&&member!==actor.id&&!(action.type==='comment'&&action.answers&&Number.isInteger(action.answers.index)&&activeReviewAsk(currentReviewQuestionRows(state,card)[action.answers.index])?.to===actor.name))fail(403,'个人复盘的讨论只在本人的个人复盘里；有意见请在单元复盘里说');
   const entry={id:`event-${state.sequence+1}`,createdSequence:state.sequence+1,author:actor.id,scope:room,cardId:card.id,version:target.number,text:action.text.trim(),block:typeof action.block==='string'?action.block.slice(0,80):'card',createdAt:now,channel:'group'};
   // A comment can sit on one item of a list field (陈溪南 2026-10-23); it keeps which item and that item's text,
   // so whoever reads it (Nexus first) sees exactly what was pointed at.
@@ -382,7 +383,7 @@ export function applyAction(previous,actor,action){
    entry.replyPreview={author:source.author,text:source.text.slice(0,120)};
   }
   // Sent from a card page (走查第 2 条): the open card is what the line is about, so Nexus counts it as the basis.
-  else if(action.type==='message'&&typeof (action.viewing||action.context?.selection)?.id==='string'){const open=state.cards[(action.viewing||action.context.selection).id];if(open&&unitOf(open)===unitOf(card)&&canRead(actor,open))entry.context={scope:unitOf(card),selection:{id:open.id,version:currentVersion(open).number}};}
+  else if(action.type==='message'&&typeof (action.viewing||action.context?.selection)?.id==='string'){const open=state.cards[(action.viewing||action.context.selection).id];if(open&&unitOf(open)===unitOf(card)&&canRead(actor,open,state))entry.context={scope:unitOf(card),selection:{id:open.id,version:currentVersion(open).number}};}
   // Answering a question Nexus just asked (without pressing 回复) still counts as talking to Nexus, so it replies
   // promptly instead of waiting out its cooldown (陈溪南 2026-10-19).
   if(!entry.replyTo&&action.type==='message'&&answersNexus(state,entry.scope,actor.id,now))entry.answersNexus=true;
@@ -391,7 +392,7 @@ export function applyAction(previous,actor,action){
   // Answering a review's 追问 is a comment on its 原因 row that names which question it answers.
   // 三段式 cards ask on 下期输入 rows ({ask:{to,question}}); older cards on 原因 rows.
   if(action.type==='comment'&&isReview(card)&&action.answers&&Number.isInteger(action.answers.index)){const c=currentVersion(card).content,i=action.answers.index,asNext=Array.isArray(c.facts),ask=String((asNext?c.nextInputs?.[i]?.ask?.question:c.causes?.[i]?.ask)||'');
-   if(ask)entry.answers={index:i,ask:ask.slice(0,300),...(asNext?{block:'nextInputs',to:String(c.nextInputs[i].ask.to||'')}:{})};}
+   if(asNext&&routedQuestion(currentReviewQuestionRows(state,card)[i]))fail(409,'此问题已由上级复盘统一提问，请在对应条目回答');if(ask)entry.answers={index:i,ask:ask.slice(0,300),...(asNext?{block:'nextInputs',to:String(c.nextInputs[i].ask.to||'')}:{})};}
   if(action.type==='message'&&!entry.context&&!entry.general&&action.block&&editable.has(action.block))entry.context={scope:entry.scope,selection:{id:card.id,version:v.number},block:action.block};
   state[action.type==='comment'?'comments':'messages'].push(entry);
   const proposal=confirmationProposal(state,entry);

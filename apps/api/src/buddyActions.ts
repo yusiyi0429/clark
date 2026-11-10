@@ -167,6 +167,9 @@ async function web<T = unknown>(deps: BuddyDeps, personId: string, method: "GET"
   return parsed as T;
 }
 
+/** 以本人身份调网页的接口（项目对话在本机跑时取项目情况用，projectLocalTurns.ts）。 */
+export const callAsPerson = web;
+
 type SubRow = { title: string; plan_task_id: string | null; status: string; trashed_at: Date | null; archived_at: Date | null };
 /** 本人的一个子会话（带岗位或交给 Claude Code 的卡、专题）；不是本人的、没有的 404。 */
 async function ownSub(q: Query, ownerId: string, kind: SubKind, id: string): Promise<SubRow> {

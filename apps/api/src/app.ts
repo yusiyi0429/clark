@@ -12,7 +12,7 @@ import type { CompanyReader } from "./company.js";
 import { createPersonalMemory } from "./personalMemory.js";
 import { createMemoryRecall, memoryRecallModels, type MemoryRecall } from "./personalMemoryRecall.js";
 import { createPersonalDistillation } from "./personalDistillation.js";
-import { createChatService } from "./chatService.js";
+import { createChatService, type ChatRunExtras } from "./chatService.js";
 import { pipelineConversationIds } from "./taskPipelines.js";
 import { projectPageFacts } from "./projects.js";
 import { pageFor } from "./pageGuides.js";
@@ -39,7 +39,7 @@ import { resumePreflights, type PreflightAgent } from "./meetingPreflight.js";
 import { createPreflightAgent, createPreflightThoughtTranslator, preflightThinkingLevel } from "./preflightAgent.js";
 import { agentModel, type AgentModelEnv } from "./agentModels.js";
 import type { PostMeetingAgent } from "./outcome.js";
-import { WorldClient, worldConfigured, type WorldEnv } from "./worldClient.js";
+import { loadWorldInstance, WorldClient, worldConfigured, type WorldEnv } from "./worldClient.js";
 import { companyPeriod } from "./monthlyPlans.js";
 import { WORLD_READ_TIMEOUT_MS, createWorldReader, mergeWorldGoalsIntoContext, ontologyToolResult, type OntologyQuery } from "./worldReader.js";
 import { createPostMeetingAgent } from "./postMeetingAgent.js";
@@ -64,6 +64,8 @@ import type { FeishuCalendarApi } from "./feishu/calendar.js";
 import type { FeishuMinutesApi } from "./feishu/minutes.js";
 import { registerMeetingFollowThroughRoutes } from "./routes/meetingFollowThrough.js";
 import { registerInternalMeetingRoutes } from "./routes/internalMeetings.js";
+import { createNexusDri, type NexusDri, type NexusDriEnv } from "./nexusDri.js";
+import { registerNexusDriRoutes } from "./routes/nexusDri.js";
 import { createDocChangeAgent, type DocChangeAgent } from "./docChangeAgent.js";
 import { createDocChangeService, type DocChangeService } from "./docChanges.js";
 import { registerDocChangeRoutes } from "./routes/docChanges.js";
@@ -136,6 +138,7 @@ import { createTaskAcceptanceAgent, type TaskAcceptanceAgent } from "./taskAccep
 import { createWorldPlanTaskSource, emptyPlanTaskSource, type PlanTaskSource } from "./planTasks.js";
 import { registerDeliverableRoutes } from "./routes/deliverables.js";
 import { registerLocalRoutes } from "./routes/local.js";
+import { registerProjectLocalTurnRoutes } from "./routes/projectLocalTurns.js";
 import { registerRoleRoutes } from "./routes/roles.js";
 import { registerWorkerRoutes } from "./routes/workers.js";
 import { registerTopicRoutes } from "./routes/topics.js";
@@ -147,7 +150,8 @@ import { registerProjectTransferRoutes } from "./routes/projectTransfers.js";
 import { registerBuddyActionRoutes } from "./routes/buddyActions.js";
 import { closeQuestions, collapsePlan, runExtras } from "./buddyActions.js";
 import { recordProjectReply } from "./workSeen.js";
-import { recordTurnModel, turnModels } from "./chatTurnModels.js";
+import { recordTurnFallback, recordTurnModel, turnModels } from "./chatTurnModels.js";
+import { localTurnExtras } from "./projectLocalTurns.js";
 import { registerTaskContinuityRoutes } from "./routes/taskContinuity.js";
 import { registerTaskCardRoutes, type BoardAgents } from "./routes/taskCards.js";
 import { planTaskOpener, taskPageFacts } from "./taskCards.js";
@@ -303,6 +307,8 @@ export type AppEnv = {
   collectionsEnabled?: boolean;
   /** ⑧ 文档变更推送（DOC_CHANGE_ENABLED=1 才开，D-56）：关着时群里贴文档链接不触发；已有的变更照常能看、能处理。 */
   docChangeEnabled?: boolean;
+  /** Nexus → DRI 确认的接收端（resolveNexusDriEnv）；不设 NEXUS_DRI_SERVICE_TOKEN 时为空，Nexus 调的接口不注册。 */
+  nexusDri?: NexusDriEnv;
 } & PeopleDirectoryEnv & WorldEnv & CompanyContextEnv;
 
 declare module "fastify" {
@@ -319,6 +325,8 @@ declare module "fastify" {
     deliverables: DeliverableQueue;
     /** 会后分派的归位（task.place）；server.ts 注册给 jobs worker。 */
     taskPlacementJobs: Record<string, JobHandler>;
+    /** Nexus → DRI 确认；server.ts 启动时调 resume()，把 jobs 注册给 jobs worker。 */
+    nexusDri: NexusDri;
     feishuChat: FeishuChat | undefined;
     /** 微信 ClawBot；server.ts 启动后调 start() 开始收消息和推送。没接飞书（借用它的令牌密钥）时为空。 */
     wechat: WechatService | undefined;
@@ -547,12 +555,16 @@ export async function buildApp({
     // 伙伴代本人做事（17.4）：读回历史时接上每一轮的计划清单和卡；本人中途发新消息时上一轮的清单收起。
     // 再接上每一轮实际用的来源和模型。
     runExtras: async (viewer, runIds) => {
-      const [buddy, models] = await Promise.all([runExtras(pool.query.bind(pool), viewer.personId, runIds), turnModels(pool.query.bind(pool), viewer.personId, runIds)]);
-      const extras = new Map<string, { plan?: TBuddyPlan; cards?: TConversationCard[]; model?: TConversationModel }>(buddy);
-      for (const [runId, model] of models) extras.set(runId, { ...extras.get(runId), model });
+      const [buddy, models, local] = await Promise.all([runExtras(pool.query.bind(pool), viewer.personId, runIds), turnModels(pool.query.bind(pool), viewer.personId, runIds),
+        localTurnExtras(pool.query.bind(pool), viewer.personId, runIds)]);
+      const extras = new Map<string, ChatRunExtras>(buddy);
+      for (const [runId, model] of models) extras.set(runId, { ...extras.get(runId), ...model });
+      // 项目对话在本人电脑上跑的那几轮（17.2 第 38 条）：在哪跑、执行方和模型。
+      for (const [runId, ran] of local) extras.set(runId, { ...extras.get(runId), ...ran });
       return extras;
     },
     onModel: (viewer, runId, used) => recordTurnModel(pool.query.bind(pool), viewer.personId, runId, used, now()),
+    onFallback: (viewer, runId, reason) => recordTurnFallback(pool.query.bind(pool), viewer.personId, runId, reason, now()),
     onInterrupt: async (_viewer, runId) => {
       const plan = await collapsePlan(pool.query.bind(pool), runId);
       if (plan) chat?.inject(runId, { type: "plan", plan });
@@ -902,6 +914,11 @@ export async function buildApp({
   registerProgressRoutes(app, ctx, battlefieldSummaries);
   registerMeetingFollowThroughRoutes(app, ctx, followThrough);
   registerInternalMeetingRoutes(app, ctx);
+  // Nexus → DRI 确认：负责人按本体实例配置的 people（天枢人员 → 本体人员）找；没开接收端时不读这份配置。
+  const nexusDri = createNexusDri({ pool, now, env: env.nexusDri,
+    people: env.nexusDri ? loadWorldInstance(env.worldInstance, env.worldInstanceLocalFile).people : {} });
+  app.decorate("nexusDri", nexusDri);
+  registerNexusDriRoutes(app, ctx, nexusDri);
   // 文档变更：找候选用快模型；按作者身份读飞书文档元数据（不读正文）；后台任务与群消息事件由 server.ts 按 app.docChanges.jobs() 注册。
   const isCeo = (personId: string) => peopleDirectory.searchPeople(undefined).find((person) => person.personId === personId)?.roles.includes("ceo") ?? false;
   const docChanges = createDocChangeService({
@@ -941,6 +958,7 @@ export async function buildApp({
   registerTaskContinuityRoutes(app, ctx);
   const board = registerTaskCardRoutes(app, ctx, { agents: boardAgents, fetchArticle: deliverableFetcher });
   registerLocalRoutes(app, ctx, board);
+  registerProjectLocalTurnRoutes(app, ctx);
 
   return app;
 }

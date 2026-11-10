@@ -74,6 +74,8 @@ export function waitingHref(item: Pick<WaitingItem, "open"> & Partial<Pick<Waiti
     case "month": return monthHref(open.id);
     case "connections": return pageHref("connections");
     case "transfer": return transferHref(open.id);
+    // 会后待定事项没有自己的页面：就在首页「等你」那一行处理。
+    case "nexus_confirmation": return HOME_HREF;
   }
 }
 

@@ -3,8 +3,12 @@ import type { Pool, PoolClient } from "pg";
 import type { TCreatePersonalTokenRequest, TPersonalTokenClient, TPersonalTokenView } from "@warmap/contracts";
 import type { Query } from "./meetingStore.js";
 
-/** local：本机程序的设备令牌（localDevices.ts），不占 5 把的名额、不在设置页列，也不能当个人令牌用。 */
-type StoredClient = TPersonalTokenClient | "local";
+/**
+ * local：本机程序的设备令牌（localDevices.ts）；local_project：本机项目会话的项目钥匙（projectLocalTurns.ts，17.2 第 38 条）。
+ * 这两种不占 5 把的名额、不在设置页列，也不能当个人令牌用。
+ */
+type StoredClient = TPersonalTokenClient | "local" | "local_project";
+const MACHINE = "('local','local_project')";
 type Row = { id: string; person_id: string; name: string; client: StoredClient; secret_hash: string;
   created_at: Date; expires_at: Date | null; last_used_at: Date | null; revoked_at: Date | null; last_progress_at?: Date | null; auth_type?: "personal" | "oauth" };
 const view = (row: Row): TPersonalTokenView => ({ id: row.id, name: row.name, client: row.client as TPersonalTokenClient,
@@ -15,7 +19,7 @@ const TOKEN = /^tsm_([0-9a-f]{32})_([A-Za-z0-9_-]{43})$/;
 
 export async function listPersonalTokens(q: Query, personId: string): Promise<TPersonalTokenView[]> {
   const rows = (await q(`SELECT t.*, (SELECT max(p.created_at) FROM task_progress p WHERE p.token_id=t.id) AS last_progress_at
-    FROM personal_tokens t WHERE t.person_id=$1 AND t.revoked_at IS NULL AND t.client<>'local' ORDER BY t.created_at DESC,t.id DESC`, [personId])).rows as Row[];
+    FROM personal_tokens t WHERE t.person_id=$1 AND t.revoked_at IS NULL AND t.client NOT IN ${MACHINE} ORDER BY t.created_at DESC,t.id DESC`, [personId])).rows as Row[];
   return rows.map(view);
 }
 
@@ -24,7 +28,7 @@ export async function createPersonalToken(pool: Pool, personId: string, input: T
   try {
     await client.query("BEGIN");
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`personal-tokens:${personId}`]);
-    const count = Number((await client.query("SELECT count(*) AS n FROM personal_tokens WHERE person_id=$1 AND revoked_at IS NULL AND client<>'local' AND (expires_at IS NULL OR expires_at>$2)", [personId, now])).rows[0].n);
+    const count = Number((await client.query(`SELECT count(*) AS n FROM personal_tokens WHERE person_id=$1 AND revoked_at IS NULL AND client NOT IN ${MACHINE} AND (expires_at IS NULL OR expires_at>$2)`, [personId, now])).rows[0].n);
     if (count >= 5) { await client.query("ROLLBACK"); return null; }
     const id = randomUUID(), random = randomBytes(32).toString("base64url");
     const expiresAt = input.expiresInDays === null ? null : new Date(now.getTime() + input.expiresInDays * 86_400_000);
@@ -39,14 +43,18 @@ export async function createPersonalToken(pool: Pool, personId: string, input: T
 /** 设置页只能吊销外部工具的令牌；本机设备的令牌在插件页随设备一起吊销。 */
 export async function revokePersonalToken(q: Query, personId: string, id: string): Promise<boolean> {
   if (!/^[0-9a-f-]{36}$/i.test(id)) return false;
-  return Boolean((await q("UPDATE personal_tokens SET revoked_at=now() WHERE id=$1 AND person_id=$2 AND revoked_at IS NULL AND client<>'local'", [id, personId])).rowCount);
+  return Boolean((await q(`UPDATE personal_tokens SET revoked_at=now() WHERE id=$1 AND person_id=$2 AND revoked_at IS NULL AND client NOT IN ${MACHINE}`, [id, personId])).rowCount);
 }
 
-/** 本机设备令牌：在调用方的事务里建（同一台电脑再配对时调用方先吊销旧的），不过期、不占 5 把的名额。 */
-export async function issueLocalToken(client: PoolClient, personId: string, name: string, pepper: string, now: Date): Promise<{ id: string; token: string }> {
+/**
+ * 本机设备令牌：在调用方的事务里建（同一台电脑再配对时调用方先吊销旧的），不过期、不占 5 把的名额。
+ * project：本机项目会话的项目钥匙（client = local_project，expiresAt 到期）。
+ */
+export async function issueLocalToken(client: PoolClient, personId: string, name: string, pepper: string, now: Date,
+  project?: { expiresAt: Date }): Promise<{ id: string; token: string }> {
   const id = randomUUID(), random = randomBytes(32).toString("base64url");
-  await client.query(`INSERT INTO personal_tokens(id,person_id,name,client,secret_hash,created_at,expires_at) VALUES($1,$2,$3,'local',$4,$5,NULL)`,
-    [id, personId, name.trim().slice(0, 40) || "本机", hash(random, pepper).toString("hex"), now]);
+  await client.query(`INSERT INTO personal_tokens(id,person_id,name,client,secret_hash,created_at,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7)`,
+    [id, personId, name.trim().slice(0, 40) || "本机", project ? "local_project" : "local", hash(random, pepper).toString("hex"), now, project?.expiresAt ?? null]);
   return { id, token: `tsm_${id.replaceAll("-", "")}_${random}` };
 }
 
@@ -54,7 +62,7 @@ export async function issueLocalToken(client: PoolClient, personId: string, name
 export async function authenticatePersonalToken(q: Query, authorization: string | undefined, pepper: string, now: Date,
   personExists: (personId: string) => boolean): Promise<{ tokenId: string; personId: string; client: TPersonalTokenClient } | null> {
   const identity = await verifyToken(q, authorization, pepper, now, personExists);
-  return identity && identity.client !== "local" ? { ...identity, client: identity.client } : null;
+  return identity && identity.client !== "local" && identity.client !== "local_project" ? { ...identity, client: identity.client } : null;
 }
 
 /** 本机程序的设备令牌（client=local）：只给 /api/local-runner/* 用。 */
@@ -62,6 +70,21 @@ export async function authenticateLocalToken(q: Query, authorization: string | u
   personExists: (personId: string) => boolean): Promise<{ tokenId: string; personId: string } | null> {
   const identity = await verifyToken(q, authorization, pepper, now, personExists);
   return identity?.client === "local" ? { tokenId: identity.tokenId, personId: identity.personId } : null;
+}
+
+/**
+ * 本机项目会话的项目钥匙（client=local_project，projectLocalTurns.ts）：只给天枢 MCP 用。
+ * 本人还是项目负责人、项目没归档没删、发钥匙的那台电脑没吊销才算数。
+ */
+export async function authenticateProjectKeyToken(q: Query, authorization: string | undefined, pepper: string, now: Date,
+  personExists: (personId: string) => boolean): Promise<{ tokenId: string; personId: string; projectId: string; deviceId: string } | null> {
+  const identity = await verifyToken(q, authorization, pepper, now, personExists);
+  if (identity?.client !== "local_project") return null;
+  const key = (await q(`SELECT k.project_id::text,k.device_id::text FROM local_project_keys k JOIN projects p ON p.id=k.project_id
+    JOIN local_devices d ON d.owner_id=k.owner_id AND d.id=k.device_id
+    WHERE k.token_id=$1 AND k.owner_id=$2 AND p.owner_id=$2 AND p.archived_at IS NULL AND d.revoked_at IS NULL`, [identity.tokenId, identity.personId])).rows[0] as
+    { project_id: string; device_id: string } | undefined;
+  return key ? { tokenId: identity.tokenId, personId: identity.personId, projectId: key.project_id, deviceId: key.device_id } : null;
 }
 
 async function verifyToken(q: Query, authorization: string | undefined, pepper: string, now: Date,

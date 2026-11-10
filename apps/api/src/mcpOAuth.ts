@@ -4,7 +4,7 @@ import { OAuthClientMetadataSchema, type OAuthClientInformationFull } from "@mod
 import { redirectUriMatches } from "@modelcontextprotocol/sdk/server/auth/handlers/authorize.js";
 import type { TPersonalTokenClient } from "@warmap/contracts";
 import type { Query } from "./meetingStore.js";
-import { authenticateLocalToken, authenticatePersonalToken } from "./personalTokens.js";
+import { authenticateLocalToken, authenticatePersonalToken, authenticateProjectKeyToken } from "./personalTokens.js";
 import type { SessionPerson } from "./routes/shared.js";
 
 export const MCP_SCOPES = ["tianshu:read", "tianshu:write"];
@@ -201,13 +201,18 @@ export async function revokeOAuthToken(q: Query, clientId: string, token: string
     [clientId, digest(token, pepper), ["access", "refresh"], now]);
 }
 /** 采集器令牌只能调 /api/collector，不能连 MCP。 */
-export type McpIdentity = { tokenId: string; personId: string; client: Exclude<TPersonalTokenClient, "collector"> | "local"; scopes?: string[] };
+/** project：本机项目会话的项目钥匙（17.2 第 38 条），只读之外多项目动作（projectLocalTurns.ts），对这个项目、这台电脑有效。 */
+export type McpIdentity = { tokenId: string; personId: string; client: Exclude<TPersonalTokenClient, "collector"> | "local"; scopes?: string[];
+  project?: { projectId: string; deviceId: string } };
 export async function authenticateMcpToken(q: Query, authorization: string | undefined, pepper: string, now: Date,
   personExists: (id: string) => boolean, resource?: string): Promise<McpIdentity | null> {
   const token = /^Bearer (tso_[A-Za-z0-9_-]{43})$/.exec(authorization ?? "")?.[1];
   if (!token) {
     const identity = await authenticatePersonalToken(q, authorization, pepper, now, personExists);
     if (identity) return identity.client !== "collector" ? { tokenId: identity.tokenId, personId: identity.personId, client: identity.client } : null;
+    // 本机项目会话的项目钥匙：通用工具照设备令牌只读，另有项目动作。
+    const key = await authenticateProjectKeyToken(q, authorization, pepper, now, personExists);
+    if (key) return { tokenId: key.tokenId, personId: key.personId, client: "local", scopes: ["tianshu:read"], project: { projectId: key.projectId, deviceId: key.deviceId } };
     // 本机程序的设备令牌（V2）：只读，本机会话要写的一律走本机程序的同步。
     const local = await authenticateLocalToken(q, authorization, pepper, now, personExists);
     return local ? { tokenId: local.tokenId, personId: local.personId, client: "local", scopes: ["tianshu:read"] } : null;
