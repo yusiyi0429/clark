@@ -331,33 +331,55 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
 /**
  * 子会话能换的来源、模型和思考（32、36、40 条）：三行面板的每一行和选了以后做什么。来源右边的数和状态词照本机状态（status，同右栏）。
  * 选了交给本机（PUT /v1/sessions/:id/model；换来源、换模型时思考档留不留由本机算），换好或记下「这一轮做完后换」后重读摘要，没成 onFail。
+ * 换到另一家的来源就是换执行方（Claude Code ↔ Codex，D 契约 5a217add）：会话还是这一个，摘要的 agent、权限档跟着变；规划员、验收员只能用 Claude Code。
  */
-/** 开着的子会话能不能换到另一个执行方（D 补契约后打开）。 */
-export const CROSS_AGENT_SWITCH = false;
-
 export function sessionModels(runner: LocalRunner, models: readonly TLocalModelProfile[], session: TLocalSessionSummary | null | undefined, refresh: () => unknown, onFail: () => void,
   status?: Pick<TLocalStatusResponse, "quota" | "agents"> | null) {
   if (!session) return null;
-  const change = (body: TLocalSessionModelRequest) => void runner.setSessionModel(session.id, body).then(() => refresh(), onFail);
+  const change = (body: TLocalSessionModelRequest): Promise<void> => runner.setSessionModel(session.id, body).then(async () => { await refresh(); }, onFail);
   const modelId = session.pendingModel?.modelProfileId ?? session.modelProfileId;
   const effort = (session.pendingModel ? session.pendingModel.effort : session.effort) ?? null;
   const now = Date.now();
-  // 规划员、验收员只用 Claude Code；别的子会话换执行方（Claude Code ↔ Codex）等 D 补契约，现在另一个执行方的来源灰着。
+  // 规划员、验收员只用 Claude Code（换到 Codex 本机回 400），Codex 的来源灰着。
   const fixed = session.subject.kind === "plan" || session.subject.kind === "verify";
   return {
-    rows: localPanelRows({ models, modelId, effort, cells: usageCells(status?.quota ?? [], now), agents: status?.agents ?? [], now,
-      agentsAllowed: fixed ? ["claude-code"] : CROSS_AGENT_SWITCH ? undefined : [session.agent] }),
-    onPick: (row: PanelRowKey, id: string) => {
-      if (row === "effort") { change({ effort: id === AUTO_EFFORT ? null : id as TLocalEffort }); return; }
+    rows: localPanelRows({ models, modelId, effort, cells: usageCells(status?.quota ?? [], now), agents: status?.agents ?? [], now, agentsAllowed: fixed ? ["claude-code"] : undefined }),
+    /** 选了一项：交给本机，回的是「换好了」；没有要换的为 null。 */
+    pick: (row: PanelRowKey, id: string): Promise<void> | null => {
+      if (row === "effort") return change({ effort: id === AUTO_EFFORT ? null : id as TLocalEffort });
       const next = pickLocal(models, { modelId, effort }, row, id);
-      if (next && next.modelId !== modelId) change({ modelProfileId: next.modelId });
+      return next && next.modelId !== modelId ? change({ modelProfileId: next.modelId }) : null;
     },
   };
 }
 
-/** 本机报了换好模型（notice model_changed）就马上重读摘要：下面那一行从「当前 → 新」回到新模型，不等 10 秒一次的刷新。 */
+/**
+ * 子会话输入框下面那个面板用的：sessionModels 加上「正在换」——换执行方时本机要等新的那家起来才回（几秒），
+ * 这期间那一行转圈、先写选的那个，三行都点不了，不会重复点。
+ */
+export function useSessionModels(runner: LocalRunner, models: readonly TLocalModelProfile[], session: TLocalSessionSummary | null | undefined, refresh: () => unknown, onFail: () => void,
+  status?: Pick<TLocalStatusResponse, "quota" | "agents"> | null) {
+  const [busy, setBusy] = useState<{ row: PanelRowKey; id: string } | null>(null);
+  const base = sessionModels(runner, models, session, refresh, onFail, status);
+  if (!base) return null;
+  return {
+    rows: base.rows, busy,
+    onPick: (row: PanelRowKey, id: string) => {
+      if (busy) return;
+      const run = base.pick(row, id);
+      if (!run) return;
+      setBusy({ row, id });
+      void run.finally(() => setBusy(null));
+    },
+  };
+}
+
+/**
+ * 本机报了换好模型（notice model_changed）、换好执行方（harness_changed）就马上重读摘要：下面那一行从「当前 → 新」回到新模型，
+ * 执行方的名字、能选的权限档跟着换，不等 10 秒一次的刷新。
+ */
 export function useModelChangedRefresh(entries: SessionEntry[], refresh: () => unknown) {
-  const changed = [...entries].reverse().find((entry) => entry.kind === "notice" && entry.code === "model_changed")?.seq ?? null;
+  const changed = [...entries].reverse().find((entry) => entry.kind === "notice" && (entry.code === "model_changed" || entry.code === "harness_changed"))?.seq ?? null;
   useEffect(() => { if (changed !== null) void refresh(); }, [changed, refresh]);
 }
 
@@ -368,7 +390,7 @@ export function SessionComposer({ label, disabled, onSend, dock, subject, mode, 
   place?: { name: string; title: string } | null;
   model?: { label: string; title?: string } | null;
   /** 能换的模型（32、40 条，这台电脑上跑着的子会话才给）：右边的模型成胶囊，点开三行面板，选了 onPick。 */
-  models?: ReturnType<typeof sessionModels>;
+  models?: ReturnType<typeof useSessionModels>;
   /** 会话在跑（27 条）：右边没字时是停止方块（onStop，本机 interrupt），有字时照样能发（插话），同项目对话、伙伴台。 */
   busy?: boolean;
   onStop?: () => void;
@@ -378,7 +400,7 @@ export function SessionComposer({ label, disabled, onSend, dock, subject, mode, 
       <InputBar placeholder="" label={label} disabled={disabled} dock={dock} busy={busy} interruptible onStop={onStop} draftKey={`tianshu-home-draft-v1:${subject.kind}:${subject.id}`}
         footer={{
           left: place ? <FolderText name={place.name} title={place.title} /> : null,
-          right: <>{model && models?.rows.length && !disabled ? <ModelPanel label={model.label} title={model.title} rows={models.rows} onPick={models.onPick} testId="session-model" />
+          right: <>{model && models?.rows.length && !disabled ? <ModelPanel label={model.label} title={model.title} rows={models.rows} onPick={models.onPick} busy={models.busy} testId="session-model" />
             : model ? <FootText title={model.title} testId="session-model">{model.label}</FootText> : null}{mode ? <PermissionModeMenu modes={mode.modes} value={mode.value} disabled={disabled} onChange={mode.set} /> : null}</>,
         }}
         onSend={async (text, files) => onSend(text, files.length ? await uploadToSubSession(subject, files) : [])} />

@@ -68,7 +68,7 @@ describe("派活单的模型胶囊（用户定 A+B）", () => {
 describe("选模型时看得出执行方（21 条）", () => {
   const profile = (patch: Partial<TLocalModelProfile>): TLocalModelProfile => ({ id: "p", label: "我的 Claude 订阅", source: "subscription", agent: "claude-code", baseUrl: null,
     model: "claude-opus-5-5", smallModel: null, webSearch: true, hasKey: false, isDefault: false, ...patch });
-  it("菜单一行写「模型 · 来源」：订阅写「Claude 订阅」「Codex 订阅」，不写「我的」（40 条）；网关照本机认出的 origin，老版本取配置名「·」前面那一段；订阅没写模型的模型名写「默认」", () => {
+  it("菜单一行写「模型 · 来源」：订阅写「Claude 订阅」「Codex 订阅」，不写「我的」（40 条）；网关照本机认出的 origin，老版本取配置名「·」前面那一段；模型名照本机给的 modelName，老版本订阅没写模型的写「自动」", () => {
     expect([profileModel(profile({})), profileSource(profile({}))]).toEqual(["Opus 5.5", "Claude 订阅"]);
     expect(profileSource(profile({ agent: "codex", label: "GPT-6.1-Sol", origin: { provider: "openai", label: "Codex 订阅", via: null } }))).toBe("Codex 订阅");
     expect(profileSource(profile({ label: "TokenHub · DeepSeek", source: "gateway" }))).toBe("TokenHub");
@@ -76,7 +76,9 @@ describe("选模型时看得出执行方（21 条）", () => {
     const magpie = profile({ label: "Codex", source: "gateway", agent: "codex", model: "codex/gpt-6.1", origin: { provider: "codex", label: "Codex 订阅 · 经 magpie", via: "magpie" } });
     expect([profileModel(magpie), profileSource(magpie)]).toEqual(["gpt-6.1", "Codex 订阅 · 经 magpie"]);
     expect(profileSource(profile({ label: "DeepSeek", source: "gateway" }))).toBe("DeepSeek");
-    expect(profileModel(profile({ model: null, label: "订阅默认" }))).toBe("默认");
+    expect(profileModel(profile({ model: null, label: "订阅默认" }))).toBe("自动");
+    expect(profileModel(profile({ model: "opus", label: "Opus 5.5", catalog: true, modelName: "Opus 5.5" }))).toBe("Opus 5.5");
+    expect(profileModel(profile({ model: "claude-haiku-5-5", modelName: "Haiku 5.5（本机给的）" }))).toBe("Haiku 5.5（本机给的）");
     expect(profileModel(profile({ model: null, label: "网关默认", source: "gateway" }))).toBe("网关默认");
   });
   it("选中后写「执行方 · 模型」，来源在悬停：执行方照本机报的 harness，老版本用会话的 agent；来源照 origin，老版本退回 sourceLabel", () => {

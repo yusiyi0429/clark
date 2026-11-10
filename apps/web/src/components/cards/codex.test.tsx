@@ -4,7 +4,9 @@ import { modelForTier } from "@/lib/team/roles";
 import { effortText, profileModel, profileSource } from "@/lib/local/runModel";
 import { AGENT_PERMISSION_MODES } from "@/lib/local/permissionModes";
 import { agentRow } from "@/components/home/pages/connectionRows";
-import { CROSS_AGENT_SWITCH, sessionModels } from "./SessionTranscript";
+import { foldEvents } from "@/lib/local/sessionView";
+import type { TLocalSessionEvent } from "@/lib/local/runner";
+import { sessionModels } from "./SessionTranscript";
 
 const until = async (check: () => Promise<boolean>) => { for (let i = 0; i < 300 && !(await check()); i++) await new Promise((resolve) => setTimeout(resolve, 2)); };
 
@@ -29,11 +31,13 @@ describe("子会话能用 Codex（17.2 第 38 条，D 契约 b28c1f12）", () =>
     const runner = createMockRunner({ stepMs: 2, codex: "logged_in" });
     const models = await runner.listModels();
     expect(modelForTier(models, "light")?.agent).toBe("claude-code");
+    // 不看 Claude 订阅的模型目录：没配强档的模型时落到内置那条，由本机挑。
+    expect(modelForTier(models, "strong")?.id).toBe("subscription");
     expect(modelForTier(models.filter((model) => model.agent === "codex"), "strong")).toBeNull();
     await expect(runner.createSession({ subject: { kind: "plan", taskId: "t1" }, title: "拆卡", modelProfileId: "codex-gpt-6_1-sol", firstMessage: "拆" })).rejects.toMatchObject({ status: 400 });
   });
 
-  it("Codex 子会话换模型、思考程度：在跑这一轮时 after_turn，没在跑 now；子会话下面的面板两个来源都列，另一个执行方的先灰着", async () => {
+  it("Codex 子会话换模型、思考程度：在跑这一轮时 after_turn，没在跑 now；子会话下面的面板几个来源都列、都能选", async () => {
     const runner = createMockRunner({ stepMs: 5, codex: "logged_in" });
     const session = await runner.createSession({ subject: { kind: "card", cardId: "c1" }, title: "卡", cwd: "C:\work\tianshu", modelProfileId: "codex-gpt-6_1-sol", firstMessage: "交代", effort: "ultra" });
     expect(session).toMatchObject({ agent: "codex", effort: "ultra" });
@@ -43,9 +47,53 @@ describe("子会话能用 Codex（17.2 第 38 条，D 契约 b28c1f12）", () =>
     const models = await runner.listModels();
     const menu = sessionModels(runner, models, changed.session, () => undefined, () => undefined)!;
     const [source, model, effort] = menu.rows;
-    expect(source!.options.map((option) => [option.label, !!option.disabled])).toEqual([["Claude 订阅", true], ["TokenHub", true], ["Codex 订阅", false]]);
-    expect(CROSS_AGENT_SWITCH).toBe(false);
+    expect(source!.options.map((option) => [option.label, !!option.disabled])).toEqual([["Claude 订阅", false], ["TokenHub", false], ["Codex 订阅", false]]);
     expect([source!.value, model!.value, effort!.value]).toEqual(["Codex 订阅", "GPT-6.1-Sol", "高"]);
     expect(effort!.options.map((option) => option.label)).toContain("极限");
+  });
+
+  it("开着的子会话换到另一家的来源就是换执行方（D 契约 5a217add）：空着时等新的那家起来再回，摘要的执行方跟着变，「先出计划」换到 Codex 变「每次都问」，事件流记一行", async () => {
+    const runner = createMockRunner({ stepMs: 2, codex: "logged_in" });
+    const models = await runner.listModels();
+    const session = await runner.createSession({ subject: { kind: "card", cardId: "c1" }, title: "卡", cwd: "C:/work/tianshu", firstMessage: "交代", permissionMode: "plan" });
+    expect(session).toMatchObject({ agent: "claude-code", permissionMode: "plan" });
+    const seen: TLocalSessionEvent[] = [];
+    const controller = new AbortController();
+    void runner.watch(session.id, { after: 0, onEvent: (event) => seen.push(event), signal: controller.signal });
+    // 在跑着：这一轮做完再换。
+    const later = await runner.setSessionModel(session.id, { modelProfileId: "codex-gpt-5_5" });
+    expect(later.applied).toBe("after_turn");
+    expect(later.session).toMatchObject({ agent: "claude-code", pendingModel: { modelProfileId: "codex-gpt-5_5" } });
+    await until(async () => (await runner.listSessions())[0]!.agent === "codex");
+    // 停下来（空着）：当场换回 Claude Code，回执里的会话已经是换好的。
+    await runner.interrupt(session.id);
+    const back = await runner.setSessionModel(session.id, { modelProfileId: "sub-haiku" });
+    expect(back.applied).toBe("now");
+    expect(back.session).toMatchObject({ agent: "claude-code", modelProfileId: "sub-haiku", run: { harness: "claude-code" } });
+    expect(back.session.pendingModel).toBeUndefined();
+    await until(async () => seen.filter((event) => event.type === "notice" && event.code === "harness_changed").length === 2);
+    controller.abort();
+    const view = foldEvents(seen);
+    expect(view.entries.filter((entry) => entry.kind === "notice" && entry.code === "harness_changed").map((entry) => entry.kind === "notice" && entry.text)).toEqual(["换成 Codex · GPT-5.5", "换成 Claude Code · Haiku 5.5"]);
+    // 「先出计划」换到 Codex 没有这一档：改成「每次都问」，权限档那颗跟着事件变。
+    expect(seen.find((event) => event.type === "permission_mode")).toMatchObject({ mode: "default", by: "harness_changed" });
+    expect(view.permissionMode).toBe("default");
+    // 面板里三个来源都能选；现在是 Claude 订阅。
+    const rows = sessionModels(runner, models, back.session, () => undefined, () => undefined)!.rows;
+    expect(rows[0]!.options.map((option) => [option.label, !!option.disabled])).toEqual([["Claude 订阅", false], ["TokenHub", false], ["Codex 订阅", false]]);
+    expect(rows.map((row) => row.value)).toEqual(["Claude 订阅", "Haiku 5.5", "自动"]);
+  });
+
+  it("规划员、验收员不能换到 Codex：面板里 Codex 的来源灰着，本机回 400", async () => {
+    const runner = createMockRunner({ stepMs: 2, codex: "logged_in" });
+    const models = await runner.listModels();
+    const planner = await runner.createSession({ subject: { kind: "plan", taskId: "t1" }, title: "拆卡", firstMessage: "拆" });
+    const rows = sessionModels(runner, models, planner, () => undefined, () => undefined)!.rows;
+    expect(rows[0]!.options.map((option) => [option.label, !!option.disabled])).toEqual([["Claude 订阅", false], ["TokenHub", false], ["Codex 订阅", true]]);
+    await expect(runner.setSessionModel(planner.id, { modelProfileId: "codex-gpt-5_5" })).rejects.toMatchObject({ status: 400 });
+    // 选了一项回的是「换好了」；没有要换的（还是现在这个）为 null。
+    const picks = sessionModels(runner, models, planner, () => undefined, () => undefined)!;
+    expect(picks.pick("model", planner.modelProfileId!)).toBeNull();
+    await expect(picks.pick("model", "sub-haiku")).resolves.toBeUndefined();
   });
 });

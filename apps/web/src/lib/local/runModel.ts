@@ -39,11 +39,12 @@ const plainSource = (text: string) => text.replace(/^我的\s*/, "");
 export const HARNESS_NAME: Record<TLocalAgentKind, string> = { "claude-code": "Claude Code", codex: "Codex" };
 
 /**
- * 一个模型配置的模型名：照本机的写法（claude-opus-5-5 →「Opus 5.5」，网关模型去掉「来源/」前缀）；模型目录里现列的用它给的显示名；
- * 订阅没写模型的写「默认」（配置名就是来源名，再写一遍就重复了，40 条）；别的没写模型的用配置名。
+ * 一个模型配置的模型名（40 条，D 契约 584eb5e9）：本机给了 modelName 就写它（内置的订阅那条是「自动」，模型目录里的是执行方给的显示名）。
+ * 老版本本机不带时自己拼：模型目录里的用配置名；照 model 写（claude-opus-5-5 →「Opus 5.5」，网关模型去掉「来源/」前缀）；
+ * 订阅没写模型的写「自动」（配置名就是来源名，再写一遍就重复了）；别的没写模型的用配置名。
  */
-export const profileModel = (profile: Pick<TLocalModelProfile, "model" | "label" | "catalog"> & { source?: TLocalModelProfile["source"] }) =>
-  (profile.catalog ? profile.label : profile.model ? modelDisplayName(profile.model) : profile.source === "subscription" ? "默认" : profile.label);
+export const profileModel = (profile: Pick<TLocalModelProfile, "model" | "label" | "catalog"> & { source?: TLocalModelProfile["source"]; modelName?: string }) =>
+  profile.modelName ?? (profile.catalog ? profile.label : profile.model ? modelDisplayName(profile.model) : profile.source === "subscription" ? "自动" : profile.label);
 /** 来源的叫法（40 条）：「Claude 订阅」「Codex 订阅」，不写「我的」；网关的照本机认出的（origin.label，如「TokenHub」），老版本本机不带时取配置名「·」前面那一段。 */
 export function profileSourceName(profile: Pick<TLocalModelProfile, "source" | "agent" | "label"> & { origin?: TLocalModelProfile["origin"] }): string {
   if (profile.source === "subscription") return profile.agent === "codex" ? "Codex 订阅" : "Claude 订阅";
