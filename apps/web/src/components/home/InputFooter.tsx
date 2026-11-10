@@ -9,6 +9,7 @@ import { Check, ChevronDown, Folder } from "lucide-react";
 import { FailedLine } from "@/components/work/DecisionBox";
 import { LocalRunnerError } from "@/lib/local/runner";
 import { PICK_OTHER } from "./FolderAsk";
+import { useHoverTip } from "./NameTip";
 import { ICON } from "./StateIcon";
 import h from "@/styles/home.module.css";
 
@@ -89,21 +90,31 @@ export function FolderMenu({ value, currentId, folders, onPick, onPickOther, onC
   );
 }
 
-/** 子会话的上下文用了多少（17.2 第 42 条）：小圆环加百分比，样式同右栏用量那颗；到 80% 是警告色，悬停写「16.6 万 / 20 万」。 */
+/** 子会话的上下文用了多少（17.2 第 42 条）：小圆环加百分比，样式同右栏用量那颗；到 80% 是警告色，悬停写「16.6 万 / 20 万」（站内统一的提示，不用原生 title）。 */
 export function ContextRing({ percent, warn, tip }: { percent: number; warn: boolean; tip: string }) {
   const r = 5.5, round = 2 * Math.PI * r;
+  const hover = useHoverTip(tip, "top");
   return (
-    <span className={h.footText} data-tone={warn ? "warning" : undefined} title={tip} role="img" aria-label={`上下文 ${percent}%，${tip}`} data-testid="context-usage">
+    <>
+    <span ref={hover.ref} className={h.footText} data-tone={warn ? "warning" : undefined} role="img" aria-label={`上下文 ${percent}%，${tip}`} data-testid="context-usage" {...hover.props}>
       <svg className={h.usageRing} viewBox="0 0 14 14" aria-hidden>
         <circle cx="7" cy="7" r={r} fill="none" strokeWidth="2" />
         <circle cx="7" cy="7" r={r} fill="none" strokeWidth="2" strokeLinecap="round" strokeDasharray={`${((round * percent) / 100).toFixed(2)} ${round.toFixed(2)}`} />
       </svg>
       <span className={h.num}>{percent}%</span>
     </span>
+    {hover.tip}
+    </>
   );
 }
 
-/** 子会话在哪个文件夹里跑（只看：开着的会话换不了地方），悬停出完整路径。 */
-export const FolderText = ({ name, title }: { name: string; title: string }) => (
-  <span className={h.footText} title={title} data-testid="footer-folder"><Folder {...ICON} /><span className={h.ellipsis}>{name}</span></span>
-);
+/** 子会话在哪个文件夹里跑（只看：开着的会话换不了地方），悬停出完整路径（站内统一的提示）。 */
+export function FolderText({ name, title }: { name: string; title: string }) {
+  const hover = useHoverTip(title, "top");
+  return (
+    <>
+      <span ref={hover.ref} className={h.footText} data-testid="footer-folder" {...hover.props}><Folder {...ICON} /><span className={h.ellipsis}>{name}</span></span>
+      {hover.tip}
+    </>
+  );
+}
