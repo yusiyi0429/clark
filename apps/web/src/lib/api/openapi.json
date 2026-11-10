@@ -28992,6 +28992,9 @@
               "writeToWorld": {
                 "type": "boolean"
               },
+              "worldWritesOff": {
+                "type": "boolean"
+              },
               "confirmed": {
                 "anyOf": [
                   {
@@ -87301,6 +87304,9 @@
           "writeToWorld": {
             "type": "boolean"
           },
+          "worldWritesOff": {
+            "type": "boolean"
+          },
           "confirmed": {
             "anyOf": [
               {
@@ -89419,6 +89425,9 @@
                     "type": "string"
                   },
                   "writeToWorld": {
+                    "type": "boolean"
+                  },
+                  "worldWritesOff": {
                     "type": "boolean"
                   },
                   "confirmed": {

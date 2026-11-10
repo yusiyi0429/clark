@@ -232,6 +232,11 @@ export const MeetingCardView = Type.Object(
     viewerId: Type.String({ minLength: 1 }),
     /** 冻结时写不写进本体（主持人或创建人在冻结前定；冻结后看 sync.writeToWorld）。 */
     writeToWorld: Type.Boolean(),
+    /**
+     * 会议写本体整个关掉了（MEETING_WORLD_WRITES_OFF=1，会后链切到 Nexus 以后）时为 true，没关时不带。
+     * 关着时会议卡照常生成、照常逐条确认，只是不写本体：确认、冻结一律按「不写入」记，网页把「不写进本体」开关收起来。
+     */
+    worldWritesOff: Type.Optional(Type.Boolean()),
     confirmed: Type.Union([
       Type.Object(
         // actionItems：这次确认时的行动项快照（10/30 之前推成执行事项的带 taskId）。

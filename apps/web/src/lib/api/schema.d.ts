@@ -6472,6 +6472,7 @@ export interface components {
                 hostId: string;
                 viewerId: string;
                 writeToWorld: boolean;
+                worldWritesOff?: boolean;
                 confirmed: {
                     payload: {
                         schemaVersion: "meeting-card.v1" | "meeting-card.v2";
@@ -15149,6 +15150,7 @@ export interface components {
             hostId: string;
             viewerId: string;
             writeToWorld: boolean;
+            worldWritesOff?: boolean;
             confirmed: {
                 payload: {
                     schemaVersion: "meeting-card.v1" | "meeting-card.v2";
@@ -15428,6 +15430,7 @@ export interface components {
                 hostId: string;
                 viewerId: string;
                 writeToWorld: boolean;
+                worldWritesOff?: boolean;
                 confirmed: {
                     payload: {
                         schemaVersion: "meeting-card.v1" | "meeting-card.v2";
