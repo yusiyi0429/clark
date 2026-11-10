@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { parseSseBlock, splitSse, type ConversationEvent } from "./sse";
 import type { Step, StepStatus } from "@/components/steps/StepList";
-import type { TAskAnswerInput, TAskAnswerRecord, TBuddyPlan, TConversationCard, TConversationModel, TReadScope, TReadScopeParams } from "@warmap/contracts";
+import type { TAskAnswerInput, TAskAnswerRecord, TBuddyPlan, TConversationCard, TConversationLocalTurn, TConversationModel, TLocalFallbackReason, TReadScope, TReadScopeParams } from "@warmap/contracts";
 import type { components } from "@/lib/api/schema";
 import { afterResize, resizing } from "./resizeGate";
 import { useStableCallback } from "./stableCallback";
@@ -55,6 +55,9 @@ export type Message = { sequence: number; role: "user" | "assistant"; content: s
   plan?: TBuddyPlan;
   /** 这一轮实际用的来源和模型（只在走 Chat 的回答上）。 */
   model?: TConversationModel;
+  /** 只在项目对话的回答上（17.2 第 38 条，B 契约 7d6a62b3）：这一轮在哪跑；fallback 是本该在本机、没跑成改在云端。 */
+  ranOn?: "cloud" | "local";
+  fallback?: TLocalFallbackReason;
   meta?: { issueId?: string; title?: string; href?: string } };
 export type Attachment = { id: string; fileName: string; mimeType: string };
 export type ConversationStatus = "idle" | "streaming" | "complete" | "failed" | "aborted";
@@ -126,6 +129,8 @@ export const CONVERSATION_TURN_SETTLED = "conversation-turn-settled";
 
 /** 飞书私聊机器人、微信 ClawBot 说的话记在首页对话里：开着时多久看一眼有没有新的；那边刚问、还没答完时看得勤一些。 */
 export const FEISHU_POLL_MS = 10_000;
+/** 项目对话有一轮正在本人电脑上跑（localTurn）时，别的页面、手机隔多久重读一次历史，等它写进来。 */
+export const LOCAL_TURN_POLL_MS = 4_000;
 export const FEISHU_WAITING_POLL_MS = 3_000;
 
 /** 读回的历史和眼前的比，有没有变（条数、最后一条的序号、长度、来源）。 */
@@ -314,6 +319,8 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
   const [uploading, setUploading] = useState(false);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [historyStatus, setHistoryStatus] = useState<HistoryStatus>("loading");
+  /** 项目对话正在本人电脑上跑、还没写进历史的那一轮（读历史时单独给）。 */
+  const [localTurn, setLocalTurn] = useState<TConversationLocalTurn | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
   /** 载入对话记录时连不上、正在自己重试：从什么时候开始等、是不是在等网络恢复。 */
   const [historyWaiting, setHistoryWaiting] = useState<{ since: number; offline: boolean } | null>(null);
@@ -423,9 +430,10 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
             failedStatus = response.status;
             throw new Error(`历史读取失败：${response.status}`);
           }
-          const body = (await response.json()) as { messages?: unknown };
+          const body = (await response.json()) as { messages?: unknown; localTurn?: TConversationLocalTurn };
           if (!Array.isArray(body.messages)) throw new Error("历史格式不对");
           if (!current()) return null;
+          setLocalTurn(body.localTurn ?? null);
           // 伙伴对话读回的本人那几句都已经读到了（17.4 的两个勾）。
           const saved = isBuddyScope(scope) ? (body.messages as Message[]).map((item) => (item.role === "user" ? { ...item, receipt: "read" as const } : item)) : body.messages as Message[];
           const loaded = withPendingTurn(saved, pendingTurn.current);
@@ -537,6 +545,16 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
     }, waitingOnFeishu ? FEISHU_WAITING_POLL_MS : FEISHU_POLL_MS);
     return () => clearInterval(timer);
   }, [scope, status, historyStatus, historyUrl, loadHistory, shownSignature, waitingOnFeishu]);
+
+  // 本机正跑着一轮（别的页面、手机上看到的）：隔一会儿重读历史，等那一轮写进来。
+  useEffect(() => {
+    if (!localTurn || status === "streaming" || typeof window === "undefined") return;
+    const timer = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      if (!historyRun.current) void loadHistory("quiet");
+    }, LOCAL_TURN_POLL_MS);
+    return () => clearInterval(timer);
+  }, [localTurn, status, loadHistory]);
 
   /** 只重读历史：输入草稿、待发附件、已显示的消息和正在流式的回答都不动。 */
   const retryHistory = useCallback(() => {
@@ -1098,6 +1116,8 @@ ${input}` : input;
     recovery: recoveryState && status !== "streaming" ? { mode: recoveryState.mode, label: RESUME_TEXT[recoveryState.mode], run: () => void resume() } : null,
     lastReply,
     historyStatus,
+    /** 项目对话正在本人电脑上跑的那一轮（见 TConversationLocalTurn）；没有为 null。 */
+    localTurn,
     historyError,
     historyWaiting,
     retryHistory,
