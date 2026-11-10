@@ -8,6 +8,7 @@ import { readJson, writeJsonAtomic } from "../store.js";
 import { describeTool, homeDir, versionAtLeast } from "./claudeEnv.js";
 import { codexEnv, CodexRpcError, openCodex, type CodexBin, type CodexRpc } from "./codexRpc.js";
 import { linkLarkSkills } from "./feishuPlugin.js";
+import { CONTEXT_COMPACTED, ContextReporter } from "./contextUsage.js";
 import { modeAllows, outsidePaths, type PathScope } from "./pathGuard.js";
 import { AgentStartError, type AgentAdapter, type AgentLaunch, type AgentRun, type PermissionAnswer, type TurnModels } from "./types.js";
 
@@ -81,6 +82,9 @@ export class CodexRun implements AgentRun {
   private usage: Json | null = null;
   private requests = 0;
   private retried = false;
+  /** 上下文用了多少（设计 17.2 第 42 条）：最近一次模型回复后 Codex 报的（最近一次请求的 token 数、模型上限）。 */
+  private readonly context = new ContextReporter((e) => this.emit(e));
+  private contextNow: { used: number; max: number | null } | null = null;
   private markReported: () => void = () => {};
   private readonly exitReported = new Promise<void>((r) => { this.markReported = r; });
   lastTurn: TurnModels | null = null;
@@ -303,6 +307,8 @@ export class CodexRun implements AgentRun {
           this.emit({ type: "tool_result", toolUseId: id, isError: Boolean(item.error) || item.status === "failed", preview: clip(text, PREVIEW_CHARS) });
         } else if (item.type === "webSearch") {
           this.emit({ type: "tool_result", toolUseId: id, isError: false, preview: "" });
+        } else if (item.type === "contextCompaction") {
+          this.emit(CONTEXT_COMPACTED);
         }
         return;
       }
@@ -321,10 +327,16 @@ export class CodexRun implements AgentRun {
         this.emit({ type: "plan", entries, progress: planProgress(entries) });
         return;
       }
-      case "thread/tokenUsage/updated":
+      case "thread/tokenUsage/updated": {
         this.usage = p.tokenUsage?.total ?? this.usage;
         this.requests += 1;
+        const window = Number(p.tokenUsage?.modelContextWindow);
+        if (p.tokenUsage?.last) {
+          this.contextNow = { used: Math.round(n(p.tokenUsage.last.totalTokens)), max: window > 0 ? Math.round(window) : null };
+          this.context.report(this.contextNow.used, this.contextNow.max);
+        }
         return;
+      }
       case "account/rateLimits/updated":
         if (p.rateLimits && typeof p.rateLimits === "object") for (const fn of this.rateFns) fn(p.rateLimits);
         return;
@@ -348,6 +360,7 @@ export class CodexRun implements AgentRun {
         const retried = this.retried;
         this.retried = false;
         if (kind === "auth") this.emit({ type: "notice", level: "error", code: "auth_required", text: "Codex 还没登录或登录已失效，请在天枢里登录 Codex。" });
+        if (this.contextNow) this.context.report(this.contextNow.used, this.contextNow.max, true);
         this.emit({
           type: "turn_end", isError,
           text: isError && turn.error?.message ? String(turn.error.message) : this.lastText,

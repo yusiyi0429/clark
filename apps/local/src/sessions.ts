@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { basename, extname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import {
@@ -11,7 +11,7 @@ import {
   type TLocalWorkspace, type TLocalGitRef, type TLocalMergeResponse, type TLocalQuestionRequestView, type TLocalQuestionAnswerRequest,
   type TLocalBackgroundItem, type TLocalMergeHoldReason, type TLocalMergeSync, type TLocalModelTier, type TLocalHold, type TLocalMoney,
   type TLocalRun, type TLocalRunPreviewRequest, type TLocalTaskBudgetView, type TLocalBudgetUpdateRequest, type TBudgetMode, type TLocalPermissionBrief, type TLocalSavedAttachment, type TLocalStopReason, type TLocalStopReport,
-  type TLocalEffort, type TLocalSessionModelRequest,
+  type TLocalEffort, type TLocalSessionModelRequest, type TLocalSessionFileReadResponse, type TLocalSessionFilesResponse, type TLocalContextUsage,
 } from "@warmap/contracts";
 import { readJson, writeJsonAtomic, nowIso } from "./store.js";
 import type { EventLog, EventBody } from "./eventLog.js";
@@ -22,6 +22,8 @@ import type { GatewayPricing } from "./pricing.js";
 import { Budgets, MULTI_AGENT_OFF_PERCENT, reworkRounds, runFor } from "./budget.js";
 import { AttachmentError, attachmentNote, saveAttachments, type FetchAttachment } from "./attachments.js";
 import { modelDisplayName, sameModel, type ResolvedModel } from "./models.js";
+import { isClaudeProfileId } from "./claudeCatalog.js";
+import { isCodexProfileId } from "./codexCatalog.js";
 import { MAGPIE_PORT, modelOrigin } from "./modelOrigin.js";
 import type { CustomTools, SessionTools } from "./customTools.js";
 import { cardTitleProblem } from "./cardTitle.js";
@@ -35,6 +37,7 @@ import { changesBrief, criticAgents, returnText, reviewMessage, systemPrompt } f
 import { addWorktree, branchName, cardDiff, changedFiles, commitAll, deleteBranch, git, mergeBranch, pruneRepo, removeWorktree, repoHead } from "./git.js";
 import { ensureFeishuPlugin, larkSkills } from "./agents/feishuPlugin.js";
 import { AGENT_NAME, earlierTurns, handoffText, otherRules } from "./handoff.js";
+import { listSessionFiles, readSessionFile, SessionFileError } from "./sessionFiles.js";
 import type { VerifyBrief } from "./cloud.js";
 
 /** 云端天枢 MCP 在会话里的名字：和本人在 Claude Code 里配的天枢 MCP 同名，工具名一致。 */
@@ -165,6 +168,8 @@ interface SessionRecord {
   seen?: Partial<Record<TLocalAgentKind, number>>;
   /** 换了执行方、还没把它没看到的那几轮交代给现在这一家（接在给它的下一句话前面，见 deliver）。 */
   handoff?: boolean;
+  /** 上下文用了多少（契约 LocalContextUsage）：执行方最近一次报的，摘要原样带；还没报过没有。 */
+  context?: TLocalContextUsage;
 }
 
 /** 不合契约时给执行方看的一句（哪个字段、哪里不对）。 */
@@ -879,6 +884,10 @@ export class SessionManager {
       case "background":
         this.recordBackground(rec, e.item);
         break;
+      case "context_usage":
+        rec.context = { usedTokens: e.usedTokens, maxTokens: e.maxTokens, at: nowIso() };
+        this.save(rec);
+        break;
       case "receipt": {
         const entry = rec.unread?.find((u) => u.id === e.messageId);
         if (!entry) break;
@@ -1249,6 +1258,7 @@ export class SessionManager {
       if (own && !rec.handoff) rec.seen = { ...rec.seen, [from]: this.d.log.lastSeq(rec.id) };
       rec.handoff = true;
       rec.agent = agent;
+      delete rec.context; // 上下文用了多少是原来那家的，新的那家报了再有
     }
     rec.modelProfileId = model.profileId;
     rec.modelLabel = model.label;
@@ -1710,10 +1720,13 @@ export class SessionManager {
     const def = p.effort ?? (p.agent === "codex" ? this.d.models.defaultEffort(model.profileId) : null);
     const launch = { ...auto, ...(def ? { effort: def } : {}), ...(p.agent === "codex" ? { multiAgent: false } : {}) };
     const used = model.source === "gateway" ? model.model : model.model ?? launch.model;
-    const named = { source: model.source, sourceLabel: model.label, harness: p.agent, origin: model.origin, modelName: used ? this.d.models.displayName(used) : null, actual: null };
+    // 来源的名字：本人配的写配置的名字；模型目录里的一条，配置的名字就是模型名，来源写认出的那个（「Claude 订阅」「Codex 订阅」）
+    const catalog = isClaudeProfileId(model.profileId) || isCodexProfileId(model.profileId);
+    const named = { source: model.source, sourceLabel: catalog ? model.origin.label.slice(0, 40) : model.label, harness: p.agent, origin: model.origin, modelName: used ? this.d.models.displayName(used) : null, actual: null };
+    // 目录里不支持选思考程度的模型（如 Haiku 4.5）不写思考档
     const view: TLocalRun = model.source === "gateway"
       ? { mode: p.mode, model: model.model, effort: null, multiAgent: false, ...named }
-      : { mode: p.mode, model: used, effort: launch.effort, multiAgent: launch.multiAgent, ...named };
+      : { mode: p.mode, model: used, effort: this.d.models.efforts(model.profileId).length ? launch.effort : null, multiAgent: launch.multiAgent, ...named };
     return { view, launch };
   }
 
@@ -1928,7 +1941,9 @@ export class SessionManager {
     // 同名再交是同一个产出物的新一版。
     const artifactId = createHash("sha256").update(`${rec.id}:${fileName}`).digest("hex").slice(0, 24);
     const title = (input.title?.trim() || fileName).slice(0, 200);
-    this.emit(rec, { type: "artifact", artifactId, title, fileName, size, sha256 });
+    // path：在会话根里的相对路径（在右边预览时拿它去读）
+    const root = rec.workspace?.kind === "worktree" ? rec.workspace.path : rec.cwd;
+    this.emit(rec, { type: "artifact", artifactId, title, fileName, size, sha256, path: relative(root, file).split(sep).join("/") });
     const key = this.sync(rec, { type: "artifact", data: { artifactId, title, fileName, mimeType, size, sha256, contentBase64: content.toString("base64") } });
     const ref = this.remember(rec, "A", key, title, artifactId);
     const outputs = this.turnOf(rec).outputs;
@@ -1990,6 +2005,30 @@ export class SessionManager {
     this.turnOf(rec).handbackKey = key;
     this.queueVerify(rec, key, git?.commit ?? null);
     return `已交回（用了 ${picked.map((o) => o.ref).join("、") || "0 份产出和证据"}${git ? `，提交 ${git.commit.slice(0, 7)}` : ""}），本机接着起验收员验收`;
+  }
+
+  /**
+   * 在右边预览文件（设计 17.2 第 41 条）：只看会话根（卡的工作树根，或工作目录）里面的，而且这个文件夹本人还允许着。
+   * 会话结束了也能读；只读。
+   */
+  private fileRoot(id: string): { rec: SessionRecord; root: string } {
+    const rec = this.must(id);
+    if (!this.d.folders.isAllowed(rec.workspace?.folder ?? rec.cwd)) throw new SessionError("folder_not_allowed", "这个会话的目录已不在允许的文件夹里");
+    return { rec, root: rec.workspace?.kind === "worktree" ? rec.workspace.path : rec.cwd };
+  }
+
+  readFile(id: string, path: string): TLocalSessionFileReadResponse {
+    const { rec, root } = this.fileRoot(id);
+    try { return readSessionFile(root, rec.cwd, path); } catch (e) {
+      if (e instanceof SessionFileError) throw new SessionError(e.code, e.message);
+      throw e;
+    }
+  }
+
+  /** 本会话写过、改过的文件：事件记录里的写文件、改文件，加 git 看得到的（卡在工作树里做时算上开工以来已经提交的）。 */
+  listFiles(id: string): Promise<TLocalSessionFilesResponse> {
+    const { rec, root } = this.fileRoot(id);
+    return listSessionFiles(root, rec.cwd, rec.workspace?.kind === "worktree" ? rec.workspace.baseCommit : null, this.d.log.after(id, 0));
   }
 
   /** 本会话 MCP 的 read_earlier_turns：从事件记录里翻更早的轮次（换过执行方接着做时，交代里只带最近几轮）。 */

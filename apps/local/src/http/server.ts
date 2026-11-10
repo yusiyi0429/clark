@@ -5,7 +5,7 @@ import type { TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import {
   LOCAL_RUNNER_PROTOCOL, LOCAL_RUNNER_ROUTES, LOCAL_RUNNER_TOKEN_HEADER,
-  LocalPairingStartRequest, LocalAgentLoginCodeRequest, LocalCloudLinkRequest, LocalSettingsPatch, LocalModelProfileUpsert, LocalToolUpsert, LocalFolderPickRequest, LocalFolderCreateRequest, LocalSessionModelRequest,
+  LocalSessionFileReadRequest, LocalPairingStartRequest, LocalAgentLoginCodeRequest, LocalCloudLinkRequest, LocalSettingsPatch, LocalModelProfileUpsert, LocalToolUpsert, LocalFolderPickRequest, LocalFolderCreateRequest, LocalSessionModelRequest,
   LocalCreateSessionRequest, LocalCreateSessionBatchRequest, LocalSendMessageRequest, LocalPermissionDecisionRequest, LocalQuestionAnswerRequest, LocalBudgetUpdateRequest, LocalProjectFolderRequest, LocalProjectCloneRequest, LocalRunPreviewRequest, LocalPermissionModeRequest,
   type TLocalRunnerErrorCode, type TLocalStatusResponse, type TLocalHealthResponse,
 } from "@warmap/contracts";
@@ -23,6 +23,7 @@ import type { QuotaTracker } from "../quota.js";
 import type { GatewaySpend } from "../spend.js";
 import type { CodexQuota } from "../codexQuota.js";
 import type { CodexCatalog } from "../codexCatalog.js";
+import { isClaudeProfileId, type ClaudeCatalog } from "../claudeCatalog.js";
 import { isCodexProfileId } from "../codexCatalog.js";
 import { codexTool, type CodexSetup } from "../agents/codexSetup.js";
 import { claudeTool } from "../tools.js";
@@ -51,6 +52,7 @@ export interface ServerDeps {
   codex: CodexSetup;
   /** Codex 订阅能用的模型（GET /v1/models 里 Codex 那一组）。 */
   codexCatalog: CodexCatalog;
+  claudeCatalog: ClaudeCatalog;
   tools: CliTools;
   /** 本人在连接页加的工具（/v1/tools），执行会话经本机转发用。 */
   customTools: CustomTools;
@@ -200,6 +202,7 @@ export function createServer(d: ServerDeps): http.Server {
     },
     listModels: async () => {
       void d.codexCatalog.refresh(); // Codex 订阅能用的模型：5 分钟读一次，读到了下一次就有
+      void d.claudeCatalog.refresh(); // Claude 订阅能用的模型：同上
       return { profiles: await d.models.list() };
     },
     putModel: async (c) => {
@@ -219,6 +222,7 @@ export function createServer(d: ServerDeps): http.Server {
     checkTool: async (c) => { const t = await d.customTools.check(c.params.id!); if (!t) throw new HttpError(404, "not_found", "没有这个工具"); return t; },
     deleteModel: async (c) => {
       if (isCodexProfileId(c.params.id!)) throw new HttpError(400, "validation", "Codex 的模型从它自己的模型目录来，不能删");
+      if (isClaudeProfileId(c.params.id!)) throw new HttpError(400, "validation", "Claude 订阅的模型从它自己的模型目录来，不能删");
       if (!(await d.models.remove(c.params.id!))) throw new HttpError(404, "not_found", "没有这个模型配置，或是内置配置");
       return { ok: true };
     },
@@ -284,10 +288,10 @@ export function createServer(d: ServerDeps): http.Server {
       const p = d.folders.projects().find((x) => x.projectId === projectIdOf(c));
       return handoverCheck(projectIdOf(c), p?.folder ? { path: p.folder.path, label: p.folder.label } : null);
     },
+    // 在右边预览文件（17.2 第 41 条）：列本会话写过改过的文件、读一个文件，都只看会话自己的文件夹或工作树
+    listSessionFiles: (c) => d.sessions.listFiles(c.params.id!),
+    readSessionFile: (c) => d.sessions.readFile(c.params.id!, validate(LocalSessionFileReadRequest, c.body).path),
     // 接手以后「拉到这台电脑」（16.7）：本人选放在哪，clone、切到交接分支、加进允许的文件夹、绑到项目
-    // 契约先行（设计 17.2 第 41 条）：读文件、列改过的文件，实现跟着来
-    listSessionFiles: () => { throw new HttpError(501, "not_implemented", "这一版本机程序还不能列改动的文件"); },
-    readSessionFile: () => { throw new HttpError(501, "not_implemented", "这一版本机程序还不能读文件"); },
     cloneProject: async (c) => {
       const b = validate(LocalProjectCloneRequest, c.body);
       const parent = await d.pickFolder();

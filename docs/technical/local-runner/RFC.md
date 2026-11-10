@@ -188,6 +188,8 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
 - 余额不足（网关回 402，第 5 节）：这一件停着等本人（`hold.reason = balance`），不重试、不自己接着做；用同一个网关模型配置排着的、新开的也先停着等；本人对其中一件说一句（多半是充值了）就放开这个配置，排着的回到队里（还不足就再停）。「换订阅继续」本机不换正在做的会话的模型（网关做的会话换成订阅续上不保证能接上），网页可以停掉它、用订阅重新开这张卡（工作树还在，接着用）。
 - 额度到 90% 问一次（11.4）：本机不另做，云端和网页照同步上去的额度百分比问；付费兜底（TokenHub、额外额度）本机从不自己换，都要本人在网页上选。
 - 测试：`test/budget.test.ts`（记账：时长、本周额度重置后累加、币种；三种模式的跑法表和返工轮数；TokenHub 花费的今天、本月、翻页、不是 TokenHub、钥匙不对、同一账户；用假 claude 跑：80% 降档和「加 50%」回落、100% 跑着的做完这一步停下和排着的不开始、加了预算接着做、只算真在跑的时长、不理就打断、停之前加了预算说不用停、无上限的参数和 95% 关多 agent、不挂 Task 的专题、余额不足停着等和放开、状态里的花费），`test/planVerify.test.ts` 无上限的验收员和返工轮数，`test/outbox.test.ts` 同步带花费。
+- 上下文用了多少（11/10，设计 17.2 第 42 条）：摘要的 `context { usedTokens, maxTokens }`，事件 `context_usage`（百分比变了才报）。Claude Code 每轮做完发控制请求 `get_context_usage`（实测 2.1.318 回 `totalTokens`、`maxTokens`，约 1 秒、不调模型；老版本不认就不报），这一轮中间按每条助手消息的 `usage`（输入加缓存加输出）估；Codex 用 `thread/tokenUsage/updated` 里 `last.totalTokens` 和 `modelContextWindow`。压缩记 `notice context_compacted`（Claude Code 的 `compact_boundary`、Codex 的 `contextCompaction`）。
+- 在右边预览文件（11/10，设计 17.2 第 41 条，`sessionFiles.ts`）：`POST /v1/sessions/:id/files/read` 读一个文件，`GET /v1/sessions/:id/files` 列本会话写过改过的。都只看会话根（卡的工作树根，或工作目录）里面的：先按字面判（别的盘、别的主机上的共享路径不去碰），再按解析掉链接的真实路径判；相对路径先按工作目录找、再按会话根找；文本最多 1 MB、图片 5 MB。列表是事件记录里的写文件、改文件和 git（工作树：开工以来已提交的加没提交的；本人文件夹：只有没提交的）取并集。
 - 测试：`test/quota.test.ts`（额度解析、事件、缓存，向假 Claude Code 读额度，命令行工具四种状态，价目表三种策略和缓存，碰壁停着等再往进程里说一句、排着的跟着停、碰壁退出再续接、本人说一句或停下就不再等，花费的来源和真钱，档位，状态接口），`test/outbox.test.ts` 同步带额度，`test/guard.test.ts` 飞书命令行。
 
 ## 7. 会话里的 MCP
@@ -230,6 +232,7 @@ env：白名单 + DISABLE_AUTOUPDATER=1 + TIANSHU_SESSION_SECRET（本会话 MCP
 ## 9. 模型
 
 - 内置 `subscription`：用本人 Claude Code 的登录，不设任何模型环境变量，模型和思考强度按会话的档位传（第 6 节）。也可以加「订阅 + 指定模型」的配置（如 haiku、sonnet、opus）。
+- Claude 订阅的模型目录（11/10，设计 17.2 第 40 条，`claudeCatalog.ts`）：Claude Code 握手（`initialize`）的回执里有 `models`（实测 2.1.318 回 14 个：`default`、`opus` 这样的别名，加 `claude-fable-5-2`、`claude-opus-4-6` 这样指定版本的；每个带 `displayName`、`supportedEffortLevels`）。本机起一个不发提示的 Claude Code 读（同读额度），5 分钟一次，存 `claude-models.json`；每个模型一条只读配置（id `cc-…`，`model` 原样传 `--model`），`default` 不列。模型配置多 `modelName`（选模型「模型」那一行写它，内置那条是「自动」）；来源的叫法从简，「Claude 订阅」不带「我的」。
 - `gateway`：Anthropic 格式地址 + 模型名 + 钥匙（TokenHub 等）；小模型（WebFetch 摘要用）不填就同主模型。几张卡同时跑、各用各的模型（11/05 实测）。
 - WebFetch 走网关能用（要 `skipWebFetchPreflight`）；WebSearch 能不能用看网关背后的模型：DeepSeek v4.1 flash、Opus 能真搜，Qwen 3.8 flash 不搜还编结果（附录 D）。所以模型配置有 `webSearch` 开关：订阅默认开，网关默认关（拉起时加 `--disallowedTools WebSearch`），实测能搜的再打开。调研专题要联网时，用开了搜索的模型，或用天枢提供的搜索工具。
 
