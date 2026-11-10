@@ -411,7 +411,14 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
       folders.push(folder);
       return { folder, ...(body.projectId ? { project: bind(body.projectId, folder, body.projectName) } : {}) };
     },
-    removeFolder: async (id) => { const i = folders.findIndex((f) => f.id === id); if (i >= 0) folders.splice(i, 1); },
+    // 删掉一个允许的文件夹：它从绑着它的项目里一起拿掉（拿掉的是第一个时，剩下的第一个成了工作目录）。
+    removeFolder: async (id) => {
+      const i = folders.findIndex((f) => f.id === id);
+      if (i >= 0) folders.splice(i, 1);
+      for (const [projectId, entry] of projects) {
+        if (entry.folders?.some((ref) => ref.id === id)) bindAll(projectId, entry.folders.flatMap((ref) => folders.filter((known) => known.id === ref.id)), entry.name ?? undefined);
+      }
+    },
     listProjects: async () => [...projects.values()],
     putProjectFolder: async (projectId, body) => {
       if (body.folderIds) {

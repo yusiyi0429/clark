@@ -153,6 +153,12 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .folderLabel { flex: none; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .folderPath { flex: 1; min-width: 0; overflow: hidden; color: var(--ink-faint); font-size: var(--text-xs); text-overflow: ellipsis; white-space: nowrap; }
 .folderList li > .menuFaint { flex: none; font-size: var(--text-xs); }
+/* 「设为工作目录」：和第一行的「工作目录」同一个位置，移上去、键盘走到才显出来；触屏没有悬停，一直显着。 */
+.folderFirst { flex: none; padding: 0 var(--space-1); border: 0; border-radius: var(--r-control); background: none; color: var(--ink-faint); font: inherit; font-size: var(--text-xs); line-height: var(--row-28); opacity: 0; cursor: pointer; transition: opacity var(--dur-fast) linear; }
+.folderList li:hover .folderFirst, .folderFirst:focus-visible { opacity: 1; }
+.folderFirst:hover { color: var(--ink); }
+.folderFirst:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+@media (pointer: coarse) { .folderFirst { opacity: 1; } }
 .infoRow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: 0 var(--space-2); }
 .infoRow .projectName { flex: 1; min-width: 160px; }
 /* 首页「本月」（16.4）：Mission 名能点（进只读详情），每件 Task 后面一个项目 chip 或「挂到…」。 */

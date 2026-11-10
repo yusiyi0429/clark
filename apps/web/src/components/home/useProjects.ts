@@ -11,7 +11,7 @@ import type { TArchivedSubSession, TProject, TSubSessionKind } from "@warmap/con
 import { LOCAL_PROJECT_FOLDER_LIMIT } from "@/lib/local/routes";
 import { attachGoal, createProject, deleteProject, deleteSubSession, listArchivedSubSessions, listProjects, setGoalDueDate, startTransfer, updateProject, updateSubSession, withdrawTransfer } from "@/lib/board/cloud";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
-import { LocalRunnerError } from "@/lib/local/runner";
+import { bindProjectFolders } from "@/lib/local/projectFolders";
 import { fromHome, fromListed, type BoundFolderLists, type BoundFolders, type Folders } from "@/lib/home/projects";
 import { noteStartedTransfer, seenSequence } from "@/lib/home/transfer";
 import type { WorkHomeData } from "@/lib/home/types";
@@ -23,7 +23,7 @@ export function useProjects(data: Pick<WorkHomeData, "projects" | "month" | "per
   /** 这台电脑上各项目绑的文件夹（项目 id → 有顺序的列表）；bound 是各自的第一个：开工、开规划员都在它里面做（17.2 第 32 条）。 */
   const [boundAll, setBoundAll] = useState<BoundFolderLists>(new Map());
   const bound: BoundFolders = useMemo(() => new Map([...boundAll].flatMap(([projectId, list]) => (list[0] ? [[projectId, list[0]] as const] : []))), [boundAll]);
-  /** 本机程序认不认多个文件夹：读到过项目才知道，不知道时当认（PUT 回 400 再退回一个）。 */
+  /** 本机程序认不认多个文件夹：读到过项目、或绑过一次才知道（见 bindProjectFolders）；还不知道时上限先照多个的来。 */
   const [multi, setMulti] = useState<boolean | null>(null);
   const folderLimit = multi === false ? 1 : LOCAL_PROJECT_FOLDER_LIMIT;
   const folders: Folders = useMemo(() => new Map([...bound].map(([projectId, folder]) => [projectId, folder.label])), [bound]);
@@ -40,7 +40,9 @@ export function useProjects(data: Pick<WorkHomeData, "projects" | "month" | "per
     setBoundAll(new Map(listed.map((entry) => [entry.projectId, entry.folders ?? (entry.folder ? [entry.folder] : [])])));
     if (listed.length) setMulti(listed.some((entry) => entry.folders !== undefined));
   }, [runner]);
-  useEffect(() => { if (ready) void loadFolders(); else setBoundAll(new Map()); }, [ready, loadFolders]);
+  // 允许的文件夹变了也重读（在连接页删掉一个，它从各项目的列表里一起拿掉，拿掉的是第一个时剩下的第一个成了工作目录）。
+  const allowed = local.folders.map((folder) => folder.id).join(",");
+  useEffect(() => { if (ready) void loadFolders(); else setBoundAll(new Map()); }, [ready, loadFolders, allowed]);
   // 交出去了（accepted）的项目还绑着这台电脑上的文件夹：解绑（16.7，原负责人那边只读）。
   const handedOff = listed.filter((project) => project.transfer?.status === "accepted" && folders.has(project.projectId)).map((project) => project.projectId).join(",");
   useEffect(() => {
@@ -73,12 +75,9 @@ export function useProjects(data: Pick<WorkHomeData, "projects" | "month" | "per
     await runner.putProjectFolder(id, { folderId, ...(name ? { name } : {}) });
     await loadFolders();
   }, [runner, loadFolders]);
-  /** 定这个项目绑哪几个文件夹（整份有顺序的列表，空的是全部解绑）。老的本机程序不认 folderIds（回 400）：退回只绑第一个。 */
+  /** 定这个项目绑哪几个文件夹（整份有顺序的列表，第一个是工作目录，空的是全部解绑）；老的本机程序只绑第一个。 */
   const setFolders = useCallback(async (id: string, folderIds: string[], name?: string) => {
-    const extra = name ? { name } : {};
-    const one = () => runner.putProjectFolder(id, { folderId: folderIds[0] ?? null, ...extra });
-    if (multi === false) await one();
-    else await runner.putProjectFolder(id, { folderIds, ...extra }).catch((error) => { if (error instanceof LocalRunnerError && error.status === 400) return one(); throw error; });
+    setMulti(await bindProjectFolders(runner, multi, id, folderIds, name));
     await loadFolders();
   }, [runner, multi, loadFolders]);
   /** 删掉项目（35 条，撤不回）：云端删成了，这台电脑上的绑定解掉（文件夹和文件不动）。 */

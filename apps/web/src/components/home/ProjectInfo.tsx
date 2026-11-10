@@ -25,7 +25,7 @@ import { DatePicker } from "@/components/ui/DatePicker";
 import { TaskDeliverable } from "@/components/member/home/deliverable/TaskDeliverable";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { mainGoal, projectHref, type FolderRef, type Project } from "@/lib/home/projects";
-import { AddFolder, FolderList } from "./NewProjectDialog";
+import { AddFolder, FolderList, firstOf } from "./NewProjectDialog";
 import { useViewChrome } from "./view";
 import { TaskBudget } from "./TaskBudget";
 import { GoalBar } from "./ProjectParts";
@@ -158,7 +158,7 @@ export function ProjectInfo({ project, period, go, actions, folders = [], folder
           {local.phase === "ready" ? (
             <section aria-label="文件夹" className={h.section} data-testid="project-folders">
               <p className={h.sectionTitle}>文件夹</p>
-              <FolderList folders={folders} onRemove={(id) => putFolders(folders.filter((folder) => folder.id !== id))} />
+              <FolderList folders={folders} onRemove={(id) => putFolders(folders.filter((folder) => folder.id !== id))} onFirst={(id) => putFolders(firstOf(folders, id))} />
               {folders.length < folderLimit ? (
                 <div className={h.infoRow}><AddFolder onPicked={(folder) => { if (!folders.some((entry) => entry.id === folder.id)) putFolders([...folders, folder]); }} /></div>
               ) : null}

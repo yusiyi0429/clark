@@ -5,7 +5,8 @@
  * - 弹窗：项目名（必填，进来就聚焦，回车等于点「创建」）；文件夹（选填，这台电脑连着本机程序时才有这一块）；「取消」「创建」。
  *   没建成在弹窗里写「失败 · 重试」，弹窗不关。
  * - 文件夹列表（弹窗里和项目详情里是同一个）：每个一行——名字、淡色路径、行尾移除。有顺序，第一个是工作目录
- *   （子会话从这里开始、工作树也开在这里），有两个以上时第一行后面写淡色的「工作目录」。
+ *   （子会话从这里开始、工作树也开在这里），有两个以上时第一行后面写淡色的「工作目录」；别的行在同一个位置是「设为工作目录」
+ *   （挪到第一个），鼠标移上去或键盘走到时才显出来。
  * - 「添加文件夹」由本机弹系统的选择框（POST /v1/folders/pick）；到上限（本机契约 LOCAL_PROJECT_FOLDER_LIMIT，老的本机程序是 1）就不出。
  */
 import { useState } from "react";
@@ -18,7 +19,7 @@ import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { ICON } from "./StateIcon";
 import h from "@/styles/home.module.css";
 
-export function FolderList({ folders, onRemove }: { folders: readonly FolderRef[]; onRemove: (id: string) => void }) {
+export function FolderList({ folders, onRemove, onFirst }: { folders: readonly FolderRef[]; onRemove: (id: string) => void; onFirst: (id: string) => void }) {
   if (!folders.length) return null;
   return (
     <ul className={h.folderList} data-testid="folder-list">
@@ -26,13 +27,17 @@ export function FolderList({ folders, onRemove }: { folders: readonly FolderRef[
         <li key={folder.id}>
           <span className={h.folderLabel}>{folder.label}</span>
           <span className={h.folderPath} title={folder.path}>{folder.path}</span>
-          {index === 0 && folders.length > 1 ? <span className={h.menuFaint}>工作目录</span> : null}
+          {folders.length < 2 ? null : index === 0 ? <span className={h.menuFaint}>工作目录</span>
+            : <button type="button" className={h.folderFirst} onClick={() => onFirst(folder.id)}>设为工作目录</button>}
           <button type="button" className={h.icon} aria-label={`移除 ${folder.label}`} title="移除" onClick={() => onRemove(folder.id)}><X {...ICON} /></button>
         </li>
       ))}
     </ul>
   );
 }
+
+/** 把一个文件夹挪到第一个（设为工作目录），其余的顺序不动。 */
+export const firstOf = <T extends { id: string }>(list: readonly T[], id: string): T[] => [...list.filter((entry) => entry.id === id), ...list.filter((entry) => entry.id !== id)];
 
 /** 「添加文件夹」：本机弹系统的选择框，选了回这个文件夹（取消、没选上为 null）。 */
 export function AddFolder({ onPicked }: { onPicked: (folder: FolderRef) => void }) {
@@ -84,7 +89,8 @@ export function NewProjectDialog({ withFolders, limit, onCreate, onClose }: {
             {withFolders ? (
               <section aria-label="文件夹" className={h.dialogBlock}>
                 <p className={h.sectionTitle}>文件夹</p>
-                <FolderList folders={folders} onRemove={(id) => setFolders((list) => list.filter((folder) => folder.id !== id))} />
+                <FolderList folders={folders} onRemove={(id) => setFolders((list) => list.filter((folder) => folder.id !== id))}
+                  onFirst={(id) => setFolders((list) => firstOf(list, id))} />
                 {folders.length < limit ? (
                   <div className={h.infoRow}><AddFolder onPicked={(folder) => setFolders((list) => (list.some((entry) => entry.id === folder.id) ? list : [...list, folder]))} /></div>
                 ) : null}
