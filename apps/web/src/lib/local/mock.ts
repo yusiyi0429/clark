@@ -186,6 +186,8 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
     emit(s, { type: "turn_end", isError: false, text, durationMs: stepMs * 4, usage, ...(errorKind ? { errorKind } : {}) });
   };
 
+  /** 真的执行方回答是 Markdown（17.2 第 41 条按 Markdown 排），假的也带一点：粗体、列表、行内代码、表格。 */
+  const ANSWER_TEXT = ["好，按你说的改，**两处**：", "", "- 删掉旧的安装说明", "- `README.md` 里的链接换到新说明", "", "| 文件 | 改动 |", "| --- | --- |", "| README.md | 换链接 |", "| docs/install-old.md | 删掉 |"].join("\n");
   const script: Step[] = [
     (s) => { reportActual(s); setStatus(s, "running"); noteWorkspace(s); emit(s, { type: "agent_info", agent: "claude-code", version: "2.1.318", model: s.summary.modelLabel, permissionMode: "manual" }); },
     (s) => { emit(s, { type: "assistant_text", text: "先读一下交代和相关代码，列个计划。" }); plan(s, 0); },
@@ -214,7 +216,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
       setStatus(s, "idle");
       return "wait";
     },
-    (s) => { setStatus(s, "running"); emit(s, { type: "assistant_text", text: "好，按你说的改。" }); plan(s, 2); },
+    (s) => { setStatus(s, "running"); emit(s, { type: "assistant_text", text: ANSWER_TEXT }); plan(s, 2); },
     (s) => { tool(s, "Write", "写 交回说明.md"); emit(s, { type: "artifact", artifactId: `a${++seqId}`, title: "交回说明", fileName: "交回说明.md", size: 2048, sha256: "0".repeat(64) }); },
     (s) => {
       plan(s, 3);
