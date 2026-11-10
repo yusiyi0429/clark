@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { THomeItem } from "@warmap/contracts";
 import type { HomeProject, SubSession, WorkHomeData } from "@/lib/home/types";
 import { fromHome, projectWorking } from "@/lib/home/projects";
-import { LeftColumn, STAGE_BASE, letterOf, planOrder, stageScale, subLetters } from "./LeftColumn";
+import { LeftColumn, STAGE_BASE, letterOf, planOrder, stageScale, subLetters, subsSummary } from "./LeftColumn";
 
 const data = { period: "2026-11", projects: [], archivedCount: 0, month: { missions: [] }, waiting: [], other: { subSessions: [], items: [] } } as unknown as WorkHomeData;
 const projectsOf = (used: WorkHomeData) => used.projects.map((project) => fromHome(project, used, new Map()));
@@ -73,13 +73,30 @@ describe("左栏：项目（16.2）", () => {
     expect(html).not.toContain("已完成");
   });
 
-  it("会话默认收成一行「会话 N」，不列出来、不画点；后面不再有一排小方块（47 条：圆点只有一种）", () => {
-    const sub = (id: string, state: string, waiting: unknown = null) => ({ id, kind: "card", title: `卡${id}`, state, waiting, updatedAt: "a", queueReason: null, holdUntil: null });
-    const html = render({ data: withTask([], { subSessions: [sub("1", "running"), sub("2", "waiting", "question"), sub("3", "done")] as never }) });
-    expect(html).toMatch(/aria-expanded="false"[^>]*data-testid="tree-subs".*会话 3/);
-    expect(html).not.toMatch(/<i data-state=/);
-    expect(html).toMatch(/会话 3<\/button>/);
+  it("有子会话：项目名后面紧跟箭头（aria-expanded 在箭头上），默认收起；下面一行「N 个子会话 · N 个受阻 · N 个未读」，不列出来（49 条）", () => {
+    const sub = (id: string, state: string, waiting: unknown = null, unseen = false) => ({ id, kind: "card", title: `卡${id}`, state, waiting, updatedAt: "a", queueReason: null, holdUntil: null, unseen });
+    const html = render({ data: withTask([], { subSessions: [sub("1", "running"), sub("2", "waiting", "verdict"), sub("3", "done", null, true), sub("4", "waiting", null, true), sub("5", "failed")] as never }) });
+    expect(html).toMatch(/首页改版<\/span><\/span><\/button><button[^>]*aria-expanded="false" aria-label="首页改版 的子会话"[^>]*data-fold=""/);
+    expect(html.replace(/<!-- -->/g, "")).toMatch(/data-testid="tree-subs"><span class="[^"]*">5 个子会话 · <span data-tone="warning">1 个受阻<\/span> · <span data-tone="accent">2 个未读<\/span><\/span><\/button>/);
+    expect(html).not.toMatch(/data-testid="tree-subs"[^>]*aria-expanded/);
     expect(html).not.toContain("卡1");
+  });
+
+  it("为 0 的那段不写；没有子会话的项目不画箭头、不画那一行", () => {
+    const sub = (id: string) => ({ id, kind: "card", title: `卡${id}`, state: "running", waiting: null, updatedAt: "a", queueReason: null, holdUntil: null, unseen: false });
+    const html = render({ data: withTask([], { subSessions: [sub("1"), sub("2")] as never }) }).replace(/<!-- -->/g, "");
+    expect(html).toMatch(/data-testid="tree-subs"><span class="[^"]*">2 个子会话<\/span><\/button>/);
+    const none = render({ data: withTask([]) });
+    expect(none).not.toContain("tree-subs");
+    expect(none).not.toContain("tree-subs-toggle");
+    expect(none).not.toContain("data-fold");
+  });
+
+  it("受阻 = 等你拿主意（连续两次没过）；failed（第一次没过）不算；未读同蓝点（刚看过的不算、在跑和等你的不算）", () => {
+    const sub = (id: string, state: string, waiting: unknown = null, unseen = false) => ({ id, kind: "card", state, waiting, updatedAt: "2026-11-09T03:00:00Z", unseen }) as unknown as SubSession;
+    const list = [sub("1", "failed"), sub("2", "waiting", "verdict", true), sub("3", "waiting", "question", true), sub("4", "done", null, true), sub("5", "waiting", null, true), sub("6", "running", null, true)];
+    expect(subsSummary(list)).toEqual({ total: 6, blocked: 1, unread: 2 });
+    expect(subsSummary(list, new Map([["sub:4", "2026-11-09T03:00:00Z"]]))).toEqual({ total: 6, blocked: 1, unread: 1 });
   });
 
   it("有已归档的：一行「已归档 N」，默认收起", () => {
@@ -179,14 +196,14 @@ describe("左栏：项目在后台干活的灰点", () => {
 
   it("在干活的项目行最右边一颗闪的灰点（34 条：和子会话行的点同一个），读屏读「在后台工作」、点本身不读；不在干活的不画", () => {
     const html = render({ data: withTask([]), working: new Set(["p1"]) });
-    expect(html).toMatch(/首页改版<\/span><\/span><span class="[^"]*" data-tone="running" data-testid="project-working"><i aria-hidden="true"><\/i><span[^>]*>在后台工作<\/span><\/span><\/button>/);
+    expect(html).toMatch(/首页改版<\/span><\/span><\/button><span class="[^"]*" data-tone="running" data-testid="project-working"><i aria-hidden="true"><\/i><span[^>]*>在后台工作<\/span><\/span>/);
     expect(render({ data: withTask([]) })).not.toContain("project-working");
     expect(render({ data: withTask([]), working: new Set(["p9"]) })).not.toContain("在后台工作");
   });
 
   it("项目对话有没看过的新回复（26 条）：行尾蓝点，同子会话的蓝点；在干活时照旧是灰点；看过的不画", () => {
     const unseen = render({ data: withTask([], { unseen: true }) });
-    expect(unseen).toMatch(/<\/span><\/span><span class="[^"]*" data-tone="stopped" role="img" aria-label="有新回复" data-testid="project-unseen"><i aria-hidden="true"><\/i><\/span><\/button>/);
+    expect(unseen).toMatch(/<\/span><\/span><\/button><span class="[^"]*" data-tone="stopped" role="img" aria-label="有新回复" data-testid="project-unseen"><i aria-hidden="true"><\/i><\/span>/);
     expect(render({ data: withTask([], { unseen: true }), working: new Set(["p1"]) })).not.toContain("project-unseen");
     expect(render({ data: withTask([]) })).not.toContain("project-unseen");
   });
@@ -194,7 +211,7 @@ describe("左栏：项目在后台干活的灰点", () => {
   it("等你的项目（34、47 条）：行最右边一颗黄点，和子会话行「要介入」的点同一个元素同一种颜色；等你时不再画在干活的灰点和新回复", () => {
     const waiting = withTask([], { summary: { running: 0, waiting: 1, queued: 0, done: 0, doneToday: 0, needsYou: 1 }, unseen: true } as never);
     const html = render({ data: waiting, working: new Set(["p1"]) });
-    expect(html).toMatch(/<\/span><\/span><span class="[^"]*" data-tone="attention" role="img" aria-label="等你" data-testid="project-waiting"><i aria-hidden="true"><\/i><\/span><\/button>/);
+    expect(html).toMatch(/<\/span><\/span><\/button><span class="[^"]*" data-tone="attention" role="img" aria-label="等你" data-testid="project-waiting"><i aria-hidden="true"><\/i><\/span>/);
     expect(html).not.toContain("project-working");
     expect(html).not.toContain("project-unseen");
     expect(html).not.toMatch(/data-state="waiting"/);

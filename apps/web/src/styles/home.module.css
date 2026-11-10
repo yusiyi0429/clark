@@ -200,7 +200,27 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .taskNode[data-done] .taskName { color: var(--ink-faint); }
 /* 项目行：名字放不下时右端淡出；行尾的状态点（34 条）和子会话行的点在同一列、一样大。 */
 .projectText { flex: 1; }
-.projectText .taskName { text-overflow: clip; -webkit-mask-image: var(--fade-end); mask-image: var(--fade-end); }
+.projectText .taskName { text-overflow: clip; }
+.projectText .taskName[data-cut] { -webkit-mask-image: var(--fade-end); mask-image: var(--fade-end); }
+/*
+ * 项目名后面紧跟折叠箭头（49 条，照 Claude Code 侧栏）：名字按钮按字宽排，点的范围用 ::after 铺满整行；
+ * 箭头、信息按钮、「…」是定位的、排在后面，盖在它上面。行尾的点挪到按钮外面，靠右、不接点击。
+ */
+.projectMain { flex: 0 1 auto; }
+.projectMain::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
+.taskMain.projectMain:focus-visible { outline: none; }
+.projectMain:focus-visible::after { outline: 2px solid var(--focus); outline-offset: -2px; }
+.projectFold { position: relative; display: inline-grid; flex: none; place-items: center; width: 20px; height: var(--left-main-lh, 24px); margin: 0 var(--space-2) 0 calc(-1 * var(--space-1)); padding: 0; border: 0; border-radius: var(--r-bar); background: none; color: var(--ink-faint); cursor: pointer; }
+.projectFold:hover { background: var(--default-soft-hover); color: var(--ink-muted); }
+.projectFold:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.taskRow[data-two] .projectFold { align-self: flex-start; margin-top: 6px; }
+.app[data-phone] .projectFold::after { content: ""; position: absolute; inset: -10px -8px; }
+.projectDot { margin-left: auto; margin-right: var(--space-2); pointer-events: none; }
+/* 悬停时信息按钮、「…」浮在行尾：名字长时一直给它们留出位置（不是悬停时才收，免得箭头在指针底下挪走），箭头不被盖住。 */
+@media (hover: hover) {
+  .taskRow[data-project-row]:has(> .projectFold) .projectMain { max-width: calc(100% - 20px - var(--space-1) - var(--row-32)); }
+  .taskRow[data-project-row="menu"]:has(> .projectFold) .projectMain { max-width: calc(100% - 20px - var(--space-1) - var(--row-32) - var(--row-28)); }
+}
 /* 呼吸：透明度 1 ↔ 0.3，一个来回 1.4 秒，缓入缓出；减少动态效果时只是一颗不闪的灰点。 */
 @keyframes workingBreath { 50% { opacity: .3; } }
 .srOnly { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -250,6 +270,19 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 /* 「子会话 N」（14.2）：和子会话行同一个缩进，ChevronRight + 12/16 400 淡色，收起时后面一排 6px 小方块（一格一个子会话）；悬停字变 --ink-muted。 */
 .foldToggle { display: flex; align-items: center; gap: var(--space-2); width: 100%; height: var(--row-28); padding: 0 var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink-faint); font: inherit; font-size: var(--text-xs); line-height: 16px; font-variant-numeric: tabular-nums; text-align: left; cursor: pointer; }
 .foldToggle:hover { background: var(--default-soft); color: var(--ink-muted); }
+/*
+ * 收起时项目下面那一行（49 条）：和子会话行同一个缩进，第二行小字（--left-sub 13、淡墨）；受阻 --warning、未读 --accent（同行尾黄点、蓝点）。
+ * 放不下省略号截断、不折行。它是这一枝最后一行时，竖线到它这里拐个弯（「└」）。
+ */
+.subsSummary { position: relative; display: flex; align-items: center; width: 100%; height: var(--row-28); padding: 0 var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink-faint); font: inherit; font-size: var(--left-sub, 13px); font-weight: 400; line-height: var(--left-sub-lh, 18px); font-variant-numeric: tabular-nums; text-align: left; cursor: pointer; }
+.subsSummary:hover { background: var(--default-soft); }
+.subsSummary:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.subsSummaryText { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.subsSummary [data-tone="warning"] { color: var(--warning); }
+.subsSummary [data-tone="accent"] { color: var(--accent); }
+.branch:has(> .subsSummary:last-child) { box-shadow: none; }
+.subsSummary:last-child::before { content: ""; position: absolute; top: -2px; left: calc(-1 * var(--space-2)); width: 6px; height: calc(50% + 2px); border-bottom: 1px solid var(--hairline-strong); border-left: 1px solid var(--hairline-strong); border-bottom-left-radius: 4px; pointer-events: none; }
+.app[data-phone] .subsSummary { min-height: var(--touch-hit, 44px); }
 /* 小方块：排队是空心发丝线，在跑是 --ink-muted 描边慢慢呼吸，等你实心 --ink，停了实心发丝线，做完淡的实心。 */
 
 /*
@@ -289,6 +322,8 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .modeRec { color: var(--ink-faint); }
 .menuItem:is([data-hovered], [data-focused]), .menuWho:is([data-hovered], [data-focused]) { background: var(--default-soft); }
 .menuItem[data-current], .menuWho[data-current] { background: var(--default-soft-hover); }
+/* 第二层开着时（50 条），第一层里那一行保持选中底色。 */
+.menuItem[data-open] { background: var(--default-soft-hover); }
 .menuItem[data-focus-visible], .menuWho[data-focus-visible] { outline: 2px solid var(--focus); outline-offset: -2px; }
 .menuItem .chevron { color: var(--ink-faint); }
 /* 选模型的三行面板（17.2 第 40 条）：行尾现在的值；第二页顶上「‹ 行名」；置灰的项照基础组件的禁用样子；点不开的行照常色、只是不能点。 */
@@ -306,7 +341,8 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
   .stageMore, .info { opacity: 1; }
   .rowMore { visibility: hidden; pointer-events: none; }
   .taskRow:is(:hover, :focus-within) .subDot, .subItem:is(:hover, :focus-within) .subDot { visibility: visible; }
-  .info { position: static; flex: none; margin-right: var(--space-2); transform: none; }
+  /* 在行里排（不悬停也一直在），要定位着才盖得住项目名铺满整行的点击范围（49 条）。 */
+  .info, .info[data-menu] { position: relative; top: auto; right: auto; flex: none; margin-right: var(--space-2); transform: none; }
 }
 
 /* ---------- 首页（5.4.4）：页头日期 → 等你 → 各 Mission 的 Task → 输入框；区块之间 32，Mission 之间 16 ---------- */
