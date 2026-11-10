@@ -462,27 +462,43 @@ export const LocalFolder = Type.Object({
  * 一个项目在这台电脑上对应的文件夹（新首页设计 16.1、16.6：按设备分别绑，存在本机，不报给云端）。folder 为 null 是还没绑或解绑了。
  * 项目的卡、专题、规划员不指定工作目录时就在这个文件夹里做（卡在 git 仓库里照样开自己的工作树）；没绑时卡在本机程序给这个项目建的专用目录里做，
  * 专题、规划员照旧用各自的专用目录。
+ *
+ * 一个项目可以绑多个文件夹（设计 17.2 第 46 条，11/10 起）：
+ * - folders：有顺序的列表，最多 LOCAL_PROJECT_FOLDER_LIMIT 个。第一个是工作目录（会话从这里开始，卡的工作树也开在这里）；其余的是这个项目的会话另外能读写的目录
+ *   （不开工作树，直接读写本人的那个文件夹；卡在里面改的东西不在卡的分支上，合回时不带）。没绑是空列表。
+ * - folder：就是 folders 的第一个（没绑为 null），留给只认一个文件夹的老网页。
+ * - 回的东西里没有 folders 的，是老的本机程序：只能绑一个，网页照一个的上限来，也不要发 folderIds（老的本机程序不认，回 400）。
  */
+export const LOCAL_PROJECT_FOLDER_LIMIT = 5;
+export const LocalProjectFolderRef = Type.Object({ id: Id, path: Type.String(), label: Type.String() }, strict);
 export const LocalProjectFolder = Type.Object({
   projectId: Uuid,
   name: Nullable(Type.String({ maxLength: 120 })),
-  folder: Nullable(Type.Object({ id: Id, path: Type.String(), label: Type.String() }, strict)),
+  folder: Nullable(LocalProjectFolderRef),
+  folders: Type.Optional(Type.Array(LocalProjectFolderRef, { maxItems: LOCAL_PROJECT_FOLDER_LIMIT })),
   updatedAt: Instant,
 }, strict);
 /** GET /v1/projects：这台电脑上记着的项目和文件夹。 */
 export const LocalProjectListResponse = Type.Object({ projects: Type.Array(LocalProjectFolder) }, strict);
 /**
- * PUT /v1/projects/:projectId/folder：把项目绑到一个已允许的文件夹（folderId，先经 POST /v1/folders/pick 选好），null 是解绑；name 是项目名（只用来显示，可不带）。
- * 项目交出去以后（16.7），原负责人那边的网页传 null 解绑：只解绑，不动文件夹里的文件，文件夹也还在允许的列表里。
- * 文件夹不在允许的列表里回 404。删掉一个允许的文件夹（DELETE /v1/folders/:id）时，绑着它的项目一起解绑。
+ * PUT /v1/projects/:projectId/folder：定这个项目在这台电脑上绑哪些文件夹（都要是已允许的，先经 POST /v1/folders/pick 选好）；name 是项目名（只用来显示，可不带）。
+ * folderId、folderIds 给一个，都给或都不给回 400 validation：
+ * - folderIds（11/10 起）：整份有顺序的列表，一次换掉——加一个、减一个、换工作目录（把它挪到第一个）都是交整份。空列表是全部解绑。不能有重复的。
+ * - folderId（老网页只会这个，照旧能用）：换掉第一个（工作目录），其余的不动；它本来就在其余的里面时挪到第一个。null 是全部解绑。
+ * 项目交出去以后（16.7），原负责人那边的网页传 folderId: null 解绑：只解绑，不动文件夹里的文件，文件夹也还在允许的列表里。
+ * 有一个文件夹不在允许的列表里就回 404，一个都不改。删掉一个允许的文件夹（DELETE /v1/folders/:id）时，它从绑着它的项目里一起拿掉；
+ * 拿掉的是第一个时，剩下的第一个成了工作目录，一个都不剩就是没绑。
+ * 改了以后：本机放行的范围马上跟着变；开着的会话里执行方自己知道的目录，到它下一次起进程才变。
  */
 export const LocalProjectFolderRequest = Type.Object({
-  folderId: Nullable(Id),
+  folderId: Type.Optional(Nullable(Id)),
+  folderIds: Type.Optional(Type.Array(Id, { maxItems: LOCAL_PROJECT_FOLDER_LIMIT, uniqueItems: true })),
   name: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
 }, strict);
 
 /**
  * POST /v1/projects/:projectId/handover-check（新首页设计 16.7「准备交接」）：项目绑的文件夹现在什么样，只看 git，不调模型。网页把结果交给天枢写交接说明。
+ * 绑了多个文件夹的只看第一个（工作目录），其余的不查。
  * - folder：绑的文件夹（没绑为 null，这时 git、recentFiles 都是 null）。
  * - git（是 git 仓库时）：branch 当前分支（不在分支上为 null）；remotes 远端（url 去掉了口令：https 的账号口令整个去掉，ssh 只留用户名）；uncommitted 没提交的文件（含没加进 git 的，相对仓库根，最多 200 个，
  *   uncommittedCount 是总数）；unpushed 没推完的本地分支：没有上游的 ahead 为 null，有上游的是比上游多几个提交（卡的 tianshu/… 分支也在这里）。
@@ -504,7 +520,8 @@ export const LocalHandoverCheck = Type.Object({
 }, strict);
 /**
  * POST /v1/projects/:projectId/clone（16.7「接手」以后文件夹 chip 的「拉到这台电脑」）：本机先弹系统选择框让本人选放在哪（父文件夹），
- * 在里面 git clone 仓库（文件夹名是 name，不给就用仓库名），切到 branch（交接分支；远端没有就留在默认分支，fellBack 为 true），加进允许的文件夹并绑到项目上。
+ * 在里面 git clone 仓库（文件夹名是 name，不给就用仓库名），切到 branch（交接分支；远端没有就留在默认分支，fellBack 为 true），加进允许的文件夹并绑到项目上
+ * （放在第一个，项目原有的其余文件夹不动）。
  * repoUrl 只收 https://、ssh://、git@ 开头的。用本人电脑上的 git 和它已有的登录，不弹输入口令（拿不到权限直接失败）。
  * 本人在选择框点了取消：project 为 null。选的地方不许用（主目录本身等）、那里已经有同名文件夹：400 validation；clone 失败（没有仓库权限、地址不对、断网）：409 conflict，
  * message 是「没拉下来：」加 git 的报错，网页写在 chip 上。可能要几分钟，网页显示用时。
@@ -524,8 +541,8 @@ export const LocalProjectCloneRequest = Type.Object({
 export const LocalProjectCloneResponse = Type.Object({ project: Nullable(LocalProjectFolder), branch: Nullable(Type.String()), fellBack: Type.Boolean() }, strict);
 export const LocalFolderListResponse = Type.Object({ folders: Type.Array(LocalFolder) }, strict);
 /**
- * POST /v1/folders/pick 的体（「选择其他文件夹…」，设计 17.2 第 32 条）：可以空着（{}）；带 projectId 时选中后一步绑到这个项目（同 PUT /v1/projects/:projectId/folder），
- * projectName 是项目名（只用来显示）。
+ * POST /v1/folders/pick 的体（「选择其他文件夹…」，设计 17.2 第 32 条）：可以空着（{}）；带 projectId 时选中后一步绑到这个项目（同 PUT /v1/projects/:projectId/folder
+ * 的 folderId：换掉第一个，其余的不动），projectName 是项目名（只用来显示）。给项目再加一个文件夹时不带 projectId：选好以后用 folderIds 交整份列表。
  */
 export const LocalFolderPickRequest = Type.Object({
   projectId: Type.Optional(Uuid),
@@ -538,7 +555,7 @@ export const LocalFolderPickRequest = Type.Object({
  */
 export const LocalFolderPickResponse = Type.Object({ folder: Nullable(LocalFolder), project: Type.Optional(LocalProjectFolder) }, strict);
 /**
- * POST /v1/folders/create（「新建文件夹…」，设计 17.2 第 32 条）：在 parent 下新建一个空文件夹 name，加进允许的文件夹；带 projectId 时一步绑到这个项目。
+ * POST /v1/folders/create（「新建文件夹…」，设计 17.2 第 32 条）：在 parent 下新建一个空文件夹 name，加进允许的文件夹；带 projectId 时一步绑到这个项目（同选文件夹：换掉第一个）。
  * - name：一层的名字，不能带 / \ : * ? " < > | 和控制字符，不能是 . 或 ..，不能以点或空格结尾，不能是 Windows 的保留名（CON、PRN、AUX、NUL、COM1–9、LPT1–9，带扩展名的也算）；
  *   parent 下已经有同名的（不分大小写）回 409 conflict。
  * - parent：绝对路径，可不传，默认是本人的桌面（没有桌面时是主目录）。只能在本人主目录下、或在已允许的文件夹下；
@@ -943,7 +960,9 @@ export const LocalSessionDetailResponse = Type.Object({
  * - content：markdown、text 是 UTF-8 文字，最多 1 MB，超了只给前 1 MB、truncated 为 true；image 是 base64（encoding 写明），最多 5 MB，超了不给内容（content 为 null、truncated true）；
  *   other 的 content 为 null。mimeType 给 image 拼 data: 地址用，别的类型按扩展名给一个尽量准的。
  * - path 是相对会话根的路径（正斜杠），absolutePath 是这台电脑上的绝对路径，size 是文件的字节数，modifiedAt 是最后改的时间。
- * 错误：404 not_found（没有这个会话、文件不存在、是个文件夹）；403 folder_not_allowed（在会话根外面）；400 validation。
+ * 项目另外绑的文件夹（LocalProjectFolder.folders 里第一个以后的，17.2 第 46 条）里的文件也能读：要给绝对路径（相对路径只按工作目录、会话根找，不去那些文件夹里猜同名的）；
+ * 这些文件的 path 就是绝对路径（正斜杠），拿它原样再问也行。认的是问的这一刻项目绑着、本人也还允许着的文件夹。
+ * 错误：404 not_found（没有这个会话、文件不存在、是个文件夹）；403 folder_not_allowed（在会话根和项目另外绑的文件夹外面）；400 validation。
  */
 export const LocalFileKind = Type.Union([Type.Literal("markdown"), Type.Literal("text"), Type.Literal("image"), Type.Literal("other")]);
 export const LocalSessionFileReadRequest = Type.Object({ path: Type.String({ minLength: 1, maxLength: 2000 }) }, strict);
@@ -967,6 +986,7 @@ export const LocalSessionFileReadResponse = Type.Object({
  * - git：只有卡在工作树里做的有这一路（工作树是这张卡自己的）——开工以来分支上已经提交的，加上没提交的（含新文件，.gitignore 里的不算）。
  * path 是相对会话根的路径（正斜杠），absolutePath 是绝对路径（回答里两种写法都可能出现，网页拿它们去对）；exists 是现在还在不在（删掉的、挪走的为 false，不能点）；
  * size 是现在的字节数（不在了为 null）。按路径排，最多 500 个，多了 truncated 为 true。root 是会话根。删掉的文件只有 git 那一路知道。
+ * 项目另外绑的文件夹里的也列（17.2 第 46 条）：只有 tool 这一路（那里是本人的文件夹，不开工作树），path 是绝对路径（正斜杠）。
  */
 export const LocalChangedFile = Type.Object({
   path: Type.String(),

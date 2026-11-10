@@ -279,6 +279,7 @@ export function createServer(d: ServerDeps): http.Server {
     listProjects: () => ({ projects: d.folders.projects() }),
     putProjectFolder: (c) => {
       const b = validate(LocalProjectFolderRequest, c.body);
+      if (b.folderId === undefined) throw new HttpError(400, "validation", "这一版本机程序还不认 folderIds");
       const r = d.folders.bindProject(projectIdOf(c), b.folderId, b.name);
       if (!r) throw new HttpError(404, "not_found", "没有这个文件夹，先选文件夹");
       return r;
