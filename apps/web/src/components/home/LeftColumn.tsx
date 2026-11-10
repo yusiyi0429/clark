@@ -13,12 +13,12 @@
  * 树的键盘：↑↓ 移动，回车打开，→ 展开折叠，← 收起。
  */
 import { createContext, useContext, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
-import { ChevronRight, Ellipsis, House, Info, Plus, Timer } from "lucide-react";
+import { ChevronRight, Ellipsis, House, Info, Plus } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
 import type { Account } from "@/components/AccountMenu";
 import { BuddyMark } from "@/components/buddy/BuddyMark";
 import type { Buddy } from "@/components/buddy/useBuddy";
-import { BUDDY_HREF, HOME_HREF, cardHref, queueText, topicHref } from "@/lib/home/derive";
+import { BUDDY_HREF, HOME_HREF, cardHref, topicHref } from "@/lib/home/derive";
 import { projectHref, projectInfoHref, projectLine, type Project } from "@/lib/home/projects";
 import type { THomeItem as HomeItem } from "@warmap/contracts";
 import type { SubSession, WorkHomeData } from "@/lib/home/types";
@@ -26,7 +26,7 @@ import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import { useDictationSignal } from "@/conversation/dictationSignal";
 import { PersonRow } from "./PersonMenu";
 import { NewProjectDialog } from "./NewProjectDialog";
-import { useHoverTip, useNameTip } from "./NameTip";
+import { useNameTip } from "./NameTip";
 import { LocalContext, latestSessionFor } from "@/lib/local/LocalRunnerProvider";
 import { runLabel } from "@/lib/local/runModel";
 import { running } from "@/lib/local/sessionView";
@@ -301,7 +301,7 @@ function ProjectNode({ project, view, go, personId, cardAt, working = false }: {
         <button type="button" className={h.taskMain} onClick={() => { opened.onOpen?.("project", project.id, project.lastActivity); go(projectHref(project.id)); }} aria-current={page ? "page" : undefined} data-tree-row="" {...nameTip.rowProps}>
           <span className={`${h.taskText} ${h.projectText}`}>
             <span ref={nameTip.textRef} className={h.taskName}>{project.name}</span>
-            <span className={h.taskSub} data-warning={line.warning ? "" : undefined}>{line.text}</span>
+            {line ? <span className={h.taskSub} data-warning={line.warning ? "" : undefined}>{line.text}</span> : null}
           </span>
           {/* 行尾一颗点（34、47 条，和子会话行同一个位置、同样大小）：等你黄点 → 在后台干活闪的灰点（读屏读「在后台工作」）→ 没看过的新回复蓝点。 */}
           {project.waiting ? <span className={h.subDot} data-tone="attention" role="img" aria-label="等你" data-testid="project-waiting"><i aria-hidden /></span>
@@ -409,7 +409,6 @@ function Subs({ subs, letters, view, go, flat = false }: { subs: SubSession[]; l
 
 function SubRow({ sub, letter, view, go }: { sub: SubSession; letter: string | null; view: View; go: (href: string) => void }) {
   const current = (view.kind === "card" || view.kind === "topic") && view.kind === sub.kind && view.id === sub.id;
-  const reason = sub.state === "queued" && sub.queueReason ? queueText(sub.queueReason, sub.holdUntil) : null;
   // 悬停全名的提示里带一行「来源 · 模型」（这台电脑上跑着、报了来源的才有；左栏行里不放，太挤）。
   const local = useContext(LocalContext);
   const run = sub.sessionId ? local?.sessions.find((entry) => entry.id === sub.sessionId)?.run : null;
@@ -441,7 +440,6 @@ function SubRow({ sub, letter, view, go }: { sub: SubSession; letter: string | n
     <li className={h.subItem} {...press}>
       <button type="button" className={h.sub} data-state={sub.state} aria-current={current ? "page" : undefined} onClick={() => { opened.onOpen?.("sub", sub.id, sub.updatedAt); go(subHref(sub)); }} data-tree-row="" data-testid="tree-sub" {...name.rowProps}>
         {letter ? <SubLetter letter={letter} /> : null}<span ref={name.textRef} className={h.subName}>{sub.title}</span>
-        {reason ? <QueueIcon text={reason} /> : null}
         {dot ? <span className={h.subDot} data-tone={dot.tone} role="img" aria-label={dot.label} data-testid="sub-dot"><i aria-hidden /></span> : null}
       </button>
       {name.tip}
@@ -463,17 +461,6 @@ function ArchivedSubRow({ sub, go }: { sub: TArchivedSubSession; go: (href: stri
       {actions ? <RowMenu label={sub.title} open={menu} onOpenChange={setMenu}
         items={[{ id: "restore", label: "恢复", run: () => actions.archiveSub(sub.kind, sub.id, false), failText: () => "没恢复成" }]} /> : null}
     </li>
-  );
-}
-
-/** 排队的子会话行尾（25 条）：不写字，一个计时器图标；悬停出统一的提示写在等什么，读屏读同一句。 */
-function QueueIcon({ text }: { text: string }) {
-  const tip = useHoverTip(text);
-  return (
-    <>
-      <span ref={tip.ref} className={h.subQueue} role="img" aria-label={text} data-testid="sub-queue" {...tip.props}><Timer {...ICON} aria-hidden /></span>
-      {tip.tip}
-    </>
   );
 }
 

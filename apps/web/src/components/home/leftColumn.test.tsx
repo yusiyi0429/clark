@@ -47,11 +47,20 @@ const withTask = (items: THomeItem[], extra: Partial<HomeProject> = {}) => ({
 }) as unknown as WorkHomeData;
 
 describe("左栏：项目（16.2）", () => {
-  it("「项目」组头右边一个「+」；项目行两行：名字，第二行「11 月 · Task · 截止 验收」；信息按钮进项目详情", () => {
+  it("「项目」组头右边一个「+」；项目行只有名字一行，本月目标不写在左栏（47 条）；信息按钮进项目详情", () => {
     const html = render({ data: withTask([]) });
     expect(html).toMatch(/项目<\/span><button[^>]*aria-label="新建项目"/);
-    expect(html).toMatch(/data-testid="tree-project".*首页改版.*11 月 · 左栏 · 11\/30 验收/);
+    expect(html).toContain("首页改版");
+    expect(html).not.toContain("11/30 验收");
+    expect(html).not.toMatch(/class="[^"]*taskSub/);
     expect(html).toContain('aria-label="首页改版 详情"');
+  });
+
+  it("例外两种还出第二行（47 条）：转交中「等 X 接手」、预算 80%（琥珀）", () => {
+    const transfer = { id: "x", projectId: "p1", projectName: "p1", from: { personId: "a", name: "甲" }, to: { personId: "b", name: "乙" }, status: "sent",
+      startedAt: "2026-11-07T01:00:00.000Z", decidedAt: null, includeHistory: false, running: null, check: null, note: null, checkResult: null, clone: null, afterSequence: null };
+    expect(render({ data: withTask([], { transfer } as never) })).toMatch(/<span class="[^"]*taskSub[^"]*">等 乙 接手<\/span>/);
+    expect(render({ data: withTask([], { budget: { percent: 80, state: "warning" } } as never) })).toMatch(/<span class="[^"]*taskSub[^"]*" data-warning="">预算 80%<\/span>/);
   });
 
   it("没有 Mission 分组：不再画 Mission 行", () => {
@@ -106,7 +115,7 @@ describe("子会话的字母和状态点（18.10）", () => {
     expect([...subLetters(fromCloud, at)]).toEqual([["card:c1", "A"], ["card:c3", "C"]]);
   });
 
-  it("行首字母方块；行尾在跑灰点、停了蓝点、要介入黄点，排队不出点、行尾是计时器图标；读屏按状态读", () => {
+  it("行首字母方块；行尾在跑灰点、停了蓝点、要介入黄点，排队的行尾什么都不画（47 条）；读屏按状态读", () => {
     const sub = (id: string, state: string, waiting: unknown = null, queueReason: unknown = null, unseen = false) =>
       ({ id, kind: "card", title: `卡${id}`, state, waiting, updatedAt: id, queueReason, holdUntil: null, sessionId: null, unseen });
     const html = render({ data: { ...data, other: { subSessions: [sub("1", "running"), sub("2", "waiting", null, null, true), sub("3", "waiting", "approval"), sub("4", "queued", null, "prior_cards"), sub("5", "waiting")], items: [] } } as never });
@@ -118,9 +127,10 @@ describe("子会话的字母和状态点（18.10）", () => {
     expect(rows[3]).not.toContain("sub-dot");
     // 蓝点只是提醒（26 条）：停了、看过的不画。
     expect(rows[4]).not.toContain("sub-dot");
-    // 排队：行尾不写字，计时器图标，读屏和悬停提示写在等什么（25 条）。
-    expect(rows[3]).toMatch(/role="img" aria-label="等前面的卡" data-testid="sub-queue"/);
-    expect(rows[3].replace(/<[^>]+>/g, "")).not.toContain("等前面的卡");
+    // 排队：行尾不写字、不画图标（47 条，计时器图标去掉）。
+    expect(rows[3]).not.toContain("sub-queue");
+    expect(rows[3]).not.toContain("等前面的卡");
+    expect(rows[3]).not.toContain("<svg");
   });
 });
 
@@ -169,7 +179,7 @@ describe("左栏：项目在后台干活的灰点", () => {
 
   it("在干活的项目行最右边一颗闪的灰点（34 条：和子会话行的点同一个），读屏读「在后台工作」、点本身不读；不在干活的不画", () => {
     const html = render({ data: withTask([]), working: new Set(["p1"]) });
-    expect(html).toMatch(/11 月 · 左栏[^<]*<\/span><\/span><span class="[^"]*" data-tone="running" data-testid="project-working"><i aria-hidden="true"><\/i><span[^>]*>在后台工作<\/span><\/span><\/button>/);
+    expect(html).toMatch(/首页改版<\/span><\/span><span class="[^"]*" data-tone="running" data-testid="project-working"><i aria-hidden="true"><\/i><span[^>]*>在后台工作<\/span><\/span><\/button>/);
     expect(render({ data: withTask([]) })).not.toContain("project-working");
     expect(render({ data: withTask([]), working: new Set(["p9"]) })).not.toContain("在后台工作");
   });

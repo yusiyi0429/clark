@@ -29,11 +29,11 @@ describe("项目从首页 v2 来（16.2、16.3）", () => {
     const project = fromHome(home("p1", { transfer, goals: [goal("t1", "a", "2026-11", { responsible: { personId: "a", name: "甲" } })] }), data, new Map([["p1", "Tianshu-MVP"]]));
     expect(project).toMatchObject({ folder: "Tianshu-MVP", archived: false, transfer: { status: "sent" } });
     expect(project.goals[0]!.responsible).toEqual({ personId: "a", name: "甲" });
-    expect(projectLine(project).text).toBe("等 乙 接手");
+    expect(projectLine(project)?.text).toBe("等 乙 接手");
     const listed = fromListed({ projectId: "p9", name: "旧项目", archivedAt: "2026-11-01T00:00:00.000Z", createdAt: "2026-10-01T00:00:00.000Z", lastActivityAt: null, permissionMode: "auto", autoRelayLimit: 20,
       transfer: { ...transfer, status: "accepted" } }, new Map());
     expect(listed).toMatchObject({ id: "p9", name: "旧项目", archived: true, goals: [], subSessions: [], scope: "project:p9", transfer: { status: "accepted" } });
-    expect(projectLine(listed).text).toBe("已交给 乙");
+    expect(projectLine(listed)?.text).toBe("已交给 乙");
   });
 });
 
@@ -44,12 +44,12 @@ describe("项目行（16.2）", () => {
   });
   const current = fromHome(home("p", { goals: [goal("t1", "对所有 DRI 开放")] }), data, new Map()).goals;
 
-  it("第二行按顺序取：预算 80%（琥珀）→ 目标 · 截止 → 本月没有目标 · 最近活动", () => {
+  it("第二行只在两种时出（47 条）：转交中、预算 80%（琥珀）；本月目标、本月没有目标都不写，只有名字一行", () => {
     const now = Date.parse("2026-11-07T10:00:00.000Z");
-    expect(projectLine(project({ budget: { percent: 80, state: "warning" }, goals: current }), now)).toEqual({ text: "预算 80%", warning: true });
-    expect(projectLine(project({ goals: current }), now)).toEqual({ text: "11 月 · 对所有 DRI 开放 · 11/30 验收", warning: false });
-    expect(projectLine(project({ lastActivity: "2026-11-07T08:00:00.000Z" }), now).text).toBe("本月没有目标 · 2 小时前");
-    expect(projectLine(project({}), now).text).toBe("本月没有目标");
+    expect(projectLine(project({ budget: { percent: 80, state: "warning" }, goals: current }))).toEqual({ text: "预算 80%", warning: true });
+    expect(projectLine(project({ goals: current }))).toBeNull();
+    expect(projectLine(project({ lastActivity: "2026-11-07T08:00:00.000Z" }))).toBeNull();
+    expect(projectLine(project({}))).toBeNull();
     expect([ago("2026-11-07T09:59:30.000Z", now), ago("2026-11-04T10:00:00.000Z", now)]).toEqual(["刚刚", "3 天前"]);
   });
 
