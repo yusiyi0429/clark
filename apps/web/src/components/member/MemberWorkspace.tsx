@@ -62,7 +62,7 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
           />
           <div className={n.noticeList}>
             {/* M2 接管复盘和拆解时，天枢自己的周期卡（个人复盘、月度复盘）不出，同 CEO 通知栏；任务卡签发只看 M2。 */}
-            <MeetingCardNoticeList meetings={records.meetings} confirms={records.confirms} deferred={records.deferred} minutes={records.minutes} meetingBase="/me/meetings" onNavigate={api.navigate} onChanged={records.reload} />
+            <MeetingCardNoticeList meetings={records.meetings} confirms={records.confirms} minutes={records.minutes} meetingBase="/me/meetings" onNavigate={api.navigate} onChanged={records.reload} />
             <MemberMeetingSchedule meetings={home.meetings} feishuEvents={feishuEvents} onNavigate={api.navigate} />
             {api.m2Available ? null : <PersonalReviewBoard onNavigate={api.navigate} />}
             <RequestNotices base="/me/requests" currentHref={currentHref} onNavigate={api.navigate} header={false} onCounts={setRequests} />
@@ -82,7 +82,7 @@ export function MemberWorkspace({ displayName, loginId, viewerId = null, childre
               api.navigate(`${item.href}?channel=group`, from);
             }, buttons: [] })))} onSettled={() => undefined} />
             <MemberRadarNotices signals={radarSignals} currentHref={currentHref} onNavigate={api.navigate} onRead={home.readRadarNotice} />
-            {(plan.plan?.unplaced.length ?? 0) + requests.items + records.meetings.length + records.confirms.length + records.deferred.length + records.minutes.length + home.rounds.length + home.meetings.length + feishuEvents.length + home.unreadThreads.length + home.unreadMissionGroups.length + quietNoticeCount(home.notifications) + radarSignals.length === 0 ? <p className={m.quiet}>暂时没有新通知</p> : null}
+            {(plan.plan?.unplaced.length ?? 0) + requests.items + records.meetings.length + records.confirms.length + records.minutes.length + home.rounds.length + home.meetings.length + feishuEvents.length + home.unreadThreads.length + home.unreadMissionGroups.length + quietNoticeCount(home.notifications) + radarSignals.length === 0 ? <p className={m.quiet}>暂时没有新通知</p> : null}
           </div>
           <div className={n.railFoot}>
             <AccountMenu account={account} onNavigate={api.navigate} />

@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import type { TFeishuMinuteInboxItem, TMyMeetingCard, TMyMeetingConfirm, TNexusConfirmationItem } from "@warmap/contracts";
-import { confirmNotices, deferredNotices, MeetingCardNoticeList, meetingCardNotices, minuteNotices, type ConfirmActs, type DeferredDecide, type MinuteActs } from "./MeetingCardNotices";
+import type { TFeishuMinuteInboxItem, TMyMeetingCard, TMyMeetingConfirm } from "@warmap/contracts";
+import { confirmNotices, MeetingCardNoticeList, meetingCardNotices, minuteNotices, type ConfirmActs, type MinuteActs } from "./MeetingCardNotices";
 
 const meeting = (overrides: Partial<TMyMeetingCard> = {}): TMyMeetingCard => ({
   meetingId: "m1", title: "接口切换会", endedAt: "2026-10-20T06:00:00.000Z", status: "failed", ...overrides,
@@ -62,33 +62,6 @@ describe("会后确认：只出要确认的决策和行动项，一次一条", (
     expect(one).not.toContain("共 1 条");
     // 记录正文不进通知栏：没有「会议记录待确认」。
     expect(html).not.toContain("待确认");
-  });
-
-  it("Nexus 推来的待定事项：标签「待定事项」、正文是问题、小字带内容和截止；确认、拒绝一点就办，修改从原内容改起", async () => {
-    const pending: TNexusConfirmationItem = { id: "r1", meetingId: "7001", question: "请本人确认接口联调范围", value: "只确认接口联调范围，上线时间另定",
-      quote: "上线时间我们再看", createdAt: "2026-11-10T02:00:00.000Z", expiresAt: "2026-11-12T10:00:00.000Z" };
-    const decide = vi.fn<DeferredDecide>(async () => ({ ok: true }));
-    const [notice] = deferredNotices([pending], decide);
-    expect(notice).toMatchObject({ id: "nexus:r1", label: "待定事项", title: "请本人确认接口联调范围",
-      detail: "只确认接口联调范围，上线时间另定 · 会上原话：上线时间我们再看 · 截止 11/12 18:00" });
-    expect(notice.buttons.map((button) => button.label)).toEqual(["确认", "拒绝"]);
-    expect(await notice.buttons[0].run()).toEqual({ ok: true, settled: "已确认" });
-    expect(decide).toHaveBeenLastCalledWith(pending, "confirmed");
-    expect(await notice.buttons[1].run()).toEqual({ ok: true, settled: "已拒绝" });
-    expect(decide).toHaveBeenLastCalledWith(pending, "rejected");
-    expect(notice.reason).toMatchObject({ label: "修改", initial: "只确认接口联调范围，上线时间另定" });
-    expect(await notice.reason!.run("只确认周五联调")).toEqual({ ok: true, settled: "已修改" });
-    expect(decide).toHaveBeenLastCalledWith(pending, "amended", "只确认周五联调");
-
-    // 原话和内容一样时不重复写；没有内容的不能修改。
-    const [same, bare] = deferredNotices([{ ...pending, quote: pending.value }, { ...pending, id: "r2", value: null, quote: null }], decide);
-    expect(same.detail).toBe("只确认接口联调范围，上线时间另定 · 截止 11/12 18:00");
-    expect(bare.detail).toBe("截止 11/12 18:00");
-    expect(bare.reason).toBeUndefined();
-
-    // 和决策、行动项排在同一组里翻。
-    const html = renderToStaticMarkup(<MeetingCardNoticeList meetings={[]} confirms={[confirm()]} deferred={[pending]} meetingBase="/me/meetings" onNavigate={() => undefined} />);
-    expect(html).toContain("第 1 条 / 共 2 条");
   });
 
   it("写入失败的会议记录：卡上重试，点了去会议页", async () => {
