@@ -285,6 +285,9 @@ export function createServer(d: ServerDeps): http.Server {
       return handoverCheck(projectIdOf(c), p?.folder ? { path: p.folder.path, label: p.folder.label } : null);
     },
     // 接手以后「拉到这台电脑」（16.7）：本人选放在哪，clone、切到交接分支、加进允许的文件夹、绑到项目
+    // 契约先行（设计 17.2 第 41 条）：读文件、列改过的文件，实现跟着来
+    listSessionFiles: () => { throw new HttpError(501, "not_implemented", "这一版本机程序还不能列改动的文件"); },
+    readSessionFile: () => { throw new HttpError(501, "not_implemented", "这一版本机程序还不能读文件"); },
     cloneProject: async (c) => {
       const b = validate(LocalProjectCloneRequest, c.body);
       const parent = await d.pickFolder();

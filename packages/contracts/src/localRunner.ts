@@ -314,7 +314,8 @@ export const LocalEffort = Type.Union([Type.Literal("low"), Type.Literal("medium
  * 真正的来源（本机按地址和模型名认出来，网页照写，不用自己猜）：
  * - provider：认出的来源 id。claude-subscription 本人的 Claude 订阅；tokenhub；厂商 API 是 deepseek、kimi、glm、qwen、volcengine、minimax、anthropic 等；
  *   经 magpie 时按模型名的前缀（codex/…、deepseek/…）认，如 codex、copilot、gemini；都认不出就是地址的主机名（经 magpie 又没有前缀时是 magpie）。
- * - label：给人看的，如「我的 Claude 订阅」「TokenHub」「DeepSeek API」「Codex 订阅 · 经 magpie」「api.example.com」。
+ * - label：给人看的来源名，从简：「Claude 订阅」「Codex 订阅」「TokenHub」「DeepSeek API」「Codex 订阅 · 经 magpie」「api.example.com」（11/10 起不带「我的」）。
+ *   选模型的「来源」那一行写它；同一个 provider 的几条模型配置是同一个来源，「模型」那一行在它们里面选（见 LocalModelProfile.modelName）。
  * - via：经本机 magpie 转的为 magpie，直连为 null。
  * 子会话选模型时写「执行方 · 来源 · 模型」，如「Claude Code · Codex 订阅 · 经 magpie · gpt-6.1」。用量照旧按来源（LocalQuotaSource）汇总。
  */
@@ -340,12 +341,25 @@ export const LocalModelProfile = Type.Object({
    */
   defaultEffort: Type.Optional(Nullable(LocalEffort)),
   /**
-   * 从执行方自己的模型目录现列的（设计 17.2 第 38 条）：Codex 订阅能用的每个模型一条，按 codex app-server 的 model/list（不列 hidden 的），
-   * 本人的 Codex 登录着才有。id 是 codex- 加模型名（不是字母、数字、_、- 的字换成 _），如 codex-gpt-6_1-sol；label 是 Codex 给的显示名，如 GPT-6.1-Sol；
-   * source subscription、agent codex、model 是模型名、origin「Codex 订阅」；不能改、不能删（PUT、DELETE 回 400），也不能设成默认。
-   * 5 分钟读一次，读不到时用上次读到的。网页把它们和 Claude Code 的分开成「Codex」一组。本人配的为 false；老版本本机不带。
+   * 从执行方自己的模型目录现列的，不能改、不能删（PUT、DELETE 回 400），也不能设成默认；5 分钟读一次，读不到时用上次读到的。本人配的为 false；老版本本机不带。
+   * - Codex 订阅（设计 17.2 第 38 条）：能用的每个模型一条，按 codex app-server 的 model/list（不列 hidden 的），本人的 Codex 登录着才有。
+   *   id 是 codex- 加模型名（不是字母、数字、_、- 的字换成 _），如 codex-gpt-6_1-sol；label 是 Codex 给的显示名，如 GPT-6.1-Sol；
+   *   source subscription、agent codex、model 是模型名、origin「Codex 订阅」。
+   * - Claude 订阅（设计 17.2 第 40 条）：Claude Code 握手（initialize）回的模型列表里每个模型一条（11/10 实测 2.1.318 回 14 个：default、opus、sonnet、haiku、fable
+   *   这几个别名，加 claude-fable-5-2、claude-opus-4-6 这样指定版本的；不发提示、不调模型就读得到）。「default」那一项不列（内置的 subscription 那条就是不指定模型）。
+   *   id 是 cc- 加 Claude Code 给的名字（同样换字），如 cc-opus、cc-claude-fable-5-2；label 和 modelName 是它给的显示名，如「Opus 5.5」「Fable 5.2」；
+   *   source subscription、agent claude-code、model 是那个名字（拉起时原样传 --model）、origin「Claude 订阅」；efforts 是它报的这个模型支持的几档
+   *   （不支持选思考程度的为空，如 Haiku 4.5），defaultEffort 为 null。Claude Code 没装、读不到时没有这几条，内置的 subscription 那条照旧在。
    */
   catalog: Type.Optional(Type.Boolean()),
+  /**
+   * 给人看的模型名（设计 17.2 第 40 条，选模型「模型」那一行写它，来源那一行写 origin.label，同一个东西不写两遍）：
+   * - 内置的 subscription（不指定模型，本机按档位和预算模式挑 Opus、Sonnet、Haiku）是「自动」，它是「Claude 订阅」这个来源的默认；
+   * - 模型目录里的是执行方给的显示名（「Opus 5.5」「GPT-6.1-Sol」）；
+   * - 本人配的按 model 写（同 LocalRun.modelName 的写法：认得出的 Claude 模型写成「Haiku 5.5」，网关模型去掉「厂商/」前缀，如 qwen3.8-flash）。
+   * 老版本本机不带，网页退回写 label。
+   */
+  modelName: Type.Optional(Type.String({ minLength: 1, maxLength: 60 })),
   agent: LocalAgentKind,
   baseUrl: Nullable(Type.String()),
   model: Nullable(Type.String()),
@@ -367,7 +381,7 @@ export const LocalModelListResponse = Type.Object({ profiles: Type.Array(LocalMo
  *   地址要 https；本机地址（127.0.0.1、localhost）可以是 http。magpie（127.0.0.1:3425）不用填钥匙，本机照它的约定传 magpie；model 写「来源/模型」，如 codex/gpt-6.1。
  * - subscription：用本人登录，只选模型（如 opus、sonnet、haiku），不收 baseUrl 和 apiKey。
  * 只收 Claude Code 的（agent 不填或 claude-code）：Codex 的模型从它自己的模型目录来（见 LocalModelProfile.catalog），这次不接 Codex 走网关；
- * id 以 codex- 开头的留给模型目录，回 400。
+ * id 以 codex-、cc- 开头的留给模型目录，回 400。
  */
 export const LocalModelProfileUpsert = Type.Object({
   label: Type.String({ minLength: 1, maxLength: 40 }),
@@ -794,6 +808,19 @@ export const LocalActualModel = Type.Object({
   modelName: Type.String({ minLength: 1, maxLength: 60 }),
   at: Instant,
 }, strict);
+/**
+ * 上下文用了多少（设计 17.2 第 42 条，输入框下面的小圆环）：usedTokens 现在上下文里的 token 数，maxTokens 这个模型的上限（读不到为 null，圆环不画）。
+ * 网页写「16.6 万 / 20 万」，百分比自己算（usedTokens ÷ maxTokens），到 80% 变色。分布（消息、工具、记忆各占多少）不给。
+ * - Claude Code：每轮做完用控制请求 get_context_usage 读一次（11/10 实测 2.1.318：回 totalTokens、maxTokens，约 1 秒、不调模型；Opus 5.5、Fable 5.2 的上限是 100 万）；
+ *   这一轮中间按每次模型回复的用量估（输入加缓存加输出），上限用上一次读到的。
+ * - Codex：每次模型回复后它报的 thread/tokenUsage/updated 里最近一次请求的 totalTokens 和 modelContextWindow。
+ * at 是算出这个数的时间。会话还没跑过一轮、执行方没报过时没有这一项。换了执行方、换了模型以后，等新的那家报了才更新。
+ */
+export const LocalContextUsage = Type.Object({
+  usedTokens: Type.Integer({ minimum: 0 }),
+  maxTokens: NullableInteger({ minimum: 1 }),
+  at: Instant,
+}, strict);
 export const LocalRun = Type.Object({
   mode: BudgetMode,
   model: Nullable(Type.String({ maxLength: 120 })),
@@ -871,6 +898,8 @@ export const LocalSessionSummary = Type.Object({
   pendingModel: Type.Optional(Type.Object({ modelProfileId: Id, modelLabel: Type.String(), effort: Type.Optional(Nullable(LocalEffort)) }, strict)),
   /** 本人选的思考程度（开工时带的或后来换的）；不带是按档位和预算模式定。实际跑的看 run.effort。 */
   effort: Type.Optional(LocalEffort),
+  /** 上下文用了多少（见 LocalContextUsage）：最近一次算出来的；还没有就不带。事件流里随 context_usage 更新。 */
+  context: Type.Optional(LocalContextUsage),
 }, strict);
 export const LocalSessionListResponse = Type.Object({ sessions: Type.Array(LocalSessionSummary) }, strict);
 
@@ -895,6 +924,55 @@ export const LocalPermissionRequestView = Type.Object({
 export const LocalSessionDetailResponse = Type.Object({
   session: LocalSessionSummary,
   pendingPermissions: Type.Array(LocalPermissionRequestView),
+}, strict);
+
+/**
+ * 在右边预览文件（设计 17.2 第 41 条）。两条都只看本会话自己的地方（下称「会话根」）：卡在工作树里做时是工作树的根，别的会话是工作目录；
+ * 交出的产出本来就在里面。本机按解析掉链接以后的真实路径判，在会话根外面的（.. 穿越、指到外面的链接、别的盘）一律 403 folder_not_allowed。
+ * 会话结束了（退出、交完、合回前）也能读；工作树合回后清掉了，文件就不在了（404，列表里 exists 为 false）。只读，不改任何东西。
+ *
+ * POST /v1/sessions/:id/files/read：读一个文件。path 是绝对路径，或相对会话根的路径（正反斜杠都行）；回答里的路径、列表里的 path / absolutePath、产出的文件名都可以直接拿来问。
+ * - kind：markdown（.md、.markdown）；text 纯文本和代码（按扩展名认，认不出的看内容里有没有 NUL 字节；HTML、SVG 也算 text，网页当文本看、不执行）；
+ *   image（png、jpg、jpeg、gif、webp、bmp、ico）；other 别的（PDF、Word、压缩包、二进制），只给名字和大小，网页给「打开」。
+ * - content：markdown、text 是 UTF-8 文字，最多 1 MB，超了只给前 1 MB、truncated 为 true；image 是 base64（encoding 写明），最多 5 MB，超了不给内容（content 为 null、truncated true）；
+ *   other 的 content 为 null。mimeType 给 image 拼 data: 地址用，别的类型按扩展名给一个尽量准的。
+ * - path 是相对会话根的路径（正斜杠），absolutePath 是这台电脑上的绝对路径，size 是文件的字节数，modifiedAt 是最后改的时间。
+ * 错误：404 not_found（没有这个会话、文件不存在、是个文件夹）；403 folder_not_allowed（在会话根外面）；400 validation。
+ */
+export const LocalFileKind = Type.Union([Type.Literal("markdown"), Type.Literal("text"), Type.Literal("image"), Type.Literal("other")]);
+export const LocalSessionFileReadRequest = Type.Object({ path: Type.String({ minLength: 1, maxLength: 2000 }) }, strict);
+export const LocalSessionFileReadResponse = Type.Object({
+  path: Type.String(),
+  absolutePath: Type.String(),
+  name: Type.String(),
+  size: Type.Integer({ minimum: 0 }),
+  modifiedAt: Instant,
+  kind: LocalFileKind,
+  mimeType: Type.String({ minLength: 1, maxLength: 120 }),
+  encoding: Type.Union([Type.Literal("utf8"), Type.Literal("base64")]),
+  content: Nullable(Type.String()),
+  truncated: Type.Boolean(),
+}, strict);
+/**
+ * GET /v1/sessions/:id/files：本会话写过、改过的文件（右栏「改动的文件 N」；回答里提到的路径对得上这里的才能点）。两路取并集，各有各的盲区，sources 写明是哪一路知道的：
+ * - tool：事件记录里执行方用写文件、改文件的工具动过的（Claude Code 的 Write、Edit、MultiEdit、NotebookEdit，Codex 的改文件）。不是 git 仓库也有；
+ *   用命令改的（脚本生成、sed、格式化工具）看不到；被拒绝、没改成的不算。
+ * - git：卡在工作树里做的最全——开工以来分支上已经提交的，加上没提交的（含新文件，.gitignore 里的不算）；
+ *   在本人文件夹里直接做的（专题、不是工作树的卡），文件夹是 git 仓库时只有没提交的改动，而且分不清是不是这个会话改的（本人自己没提交的改动也在里面）；不是仓库就没有这一路。
+ * path 是相对会话根的路径（正斜杠），absolutePath 是绝对路径（回答里两种写法都可能出现，网页拿它们去对）；exists 是现在还在不在（删掉的、挪走的为 false，不能点）；
+ * size 是现在的字节数（不在了为 null）。按路径排，最多 500 个，多了 truncated 为 true。root 是会话根。删掉的文件只有 git 那一路知道。
+ */
+export const LocalChangedFile = Type.Object({
+  path: Type.String(),
+  absolutePath: Type.String(),
+  sources: Type.Array(Type.Union([Type.Literal("tool"), Type.Literal("git")]), { minItems: 1, maxItems: 2 }),
+  exists: Type.Boolean(),
+  size: NullableInteger({ minimum: 0 }),
+}, strict);
+export const LocalSessionFilesResponse = Type.Object({
+  root: Type.String(),
+  files: Type.Array(LocalChangedFile, { maxItems: 500 }),
+  truncated: Type.Boolean(),
 }, strict);
 
 /**
@@ -1252,8 +1330,15 @@ export const LocalSessionEvent = Type.Union([
     failStreak: Type.Integer({ minimum: 0 }), blocked: Type.Boolean(), returnText: Nullable(Type.String()),
   }),
   /**
+   * 上下文用了多少变了（见 LocalContextUsage，摘要的 context 同步更新）：每轮做完报一次；这一轮中间每次模型回复后算一次，
+   * 百分比（取整）变了才报，免得事件太密；上限读不到时只在每轮做完报。压缩以后跟着报一条新的。
+   */
+  ev("context_usage", { usedTokens: Type.Integer({ minimum: 0 }), maxTokens: NullableInteger({ minimum: 1 }) }),
+  /**
    * interjection_next_step：插话已送出，下一步生效；auth_required：执行方登录失效；agent_stderr：执行方报错输出；verify_waiting：验收在等交代（连不上天枢等）；
-   * workspace：卡开工时在哪做（工作树的分支、从哪个提交开始、主文件夹里没提交的改动没带进来）；merged：卡的分支已合回主文件夹。
+   * workspace：卡开工时在哪做（工作树的分支、从哪个提交开始、主文件夹里没提交的改动没带进来）；merged：卡的分支已合回主文件夹；
+   * context_compacted：执行方压缩了上下文（Claude Code 的 compact_boundary、Codex 的 contextCompaction；自动压的和本人让它压的都报），
+   * text 是「压缩了上下文」，网页在对话里记这一行（设计 17.2 第 42 条）。
    */
   ev("notice", { level: Type.Union([Type.Literal("info"), Type.Literal("warn"), Type.Literal("error")]), code: Type.String(), text: Type.String() }),
 ]);
@@ -1493,6 +1578,12 @@ export type TLocalFolderPickRequest = Static<typeof LocalFolderPickRequest>;
 export type TLocalFolderCreateRequest = Static<typeof LocalFolderCreateRequest>;
 export type TLocalFolderCreateResponse = Static<typeof LocalFolderCreateResponse>;
 export type TLocalSessionModelRequest = Static<typeof LocalSessionModelRequest>;
+export type TLocalContextUsage = Static<typeof LocalContextUsage>;
+export type TLocalFileKind = Static<typeof LocalFileKind>;
+export type TLocalSessionFileReadRequest = Static<typeof LocalSessionFileReadRequest>;
+export type TLocalSessionFileReadResponse = Static<typeof LocalSessionFileReadResponse>;
+export type TLocalChangedFile = Static<typeof LocalChangedFile>;
+export type TLocalSessionFilesResponse = Static<typeof LocalSessionFilesResponse>;
 export type TLocalSessionModelResponse = Static<typeof LocalSessionModelResponse>;
 export type TLocalSessionStatus = Static<typeof LocalSessionStatus>;
 export type TLocalSessionSubject = Static<typeof LocalSessionSubject>;
@@ -1615,6 +1706,8 @@ export const LOCAL_RUNNER_ROUTES = {
   previewRun: { method: "POST", path: "/v1/runs/preview", auth: true },
   setPermissionMode: { method: "PUT", path: "/v1/sessions/:id/permission-mode", auth: true },
   setSessionModel: { method: "PUT", path: "/v1/sessions/:id/model", auth: true },
+  listSessionFiles: { method: "GET", path: "/v1/sessions/:id/files", auth: true },
+  readSessionFile: { method: "POST", path: "/v1/sessions/:id/files/read", auth: true },
   listProjects: { method: "GET", path: "/v1/projects", auth: true },
   putProjectFolder: { method: "PUT", path: "/v1/projects/:projectId/folder", auth: true },
   handoverCheck: { method: "POST", path: "/v1/projects/:projectId/handover-check", auth: true },
