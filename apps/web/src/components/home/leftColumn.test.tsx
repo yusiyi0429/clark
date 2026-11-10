@@ -64,11 +64,12 @@ describe("左栏：项目（16.2）", () => {
     expect(html).not.toContain("已完成");
   });
 
-  it("会话默认收成一行「会话 N」加一格一个的小方块，不列出来、不画蓝点", () => {
+  it("会话默认收成一行「会话 N」，不列出来、不画点；后面不再有一排小方块（47 条：圆点只有一种）", () => {
     const sub = (id: string, state: string, waiting: unknown = null) => ({ id, kind: "card", title: `卡${id}`, state, waiting, updatedAt: "a", queueReason: null, holdUntil: null });
     const html = render({ data: withTask([], { subSessions: [sub("1", "running"), sub("2", "waiting", "question"), sub("3", "done")] as never }) });
     expect(html).toMatch(/aria-expanded="false"[^>]*data-testid="tree-subs".*会话 3/);
-    expect(html.match(/<i data-state=/g)?.length).toBe(3);
+    expect(html).not.toMatch(/<i data-state=/);
+    expect(html).toMatch(/会话 3<\/button>/);
     expect(html).not.toContain("卡1");
   });
 
@@ -180,13 +181,28 @@ describe("左栏：项目在后台干活的灰点", () => {
     expect(render({ data: withTask([]) })).not.toContain("project-unseen");
   });
 
-  it("等你的项目（34 条）：蓝点从名字左边挪到行最右边，和子会话行的点同一个元素；等你时不再画在干活的灰点和新回复", () => {
+  it("等你的项目（34、47 条）：行最右边一颗黄点，和子会话行「要介入」的点同一个元素同一种颜色；等你时不再画在干活的灰点和新回复", () => {
     const waiting = withTask([], { summary: { running: 0, waiting: 1, queued: 0, done: 0, doneToday: 0, needsYou: 1 }, unseen: true } as never);
     const html = render({ data: waiting, working: new Set(["p1"]) });
-    expect(html).toMatch(/<\/span><\/span><span class="[^"]*" data-tone="stopped" role="img" aria-label="等你" data-testid="project-waiting"><i aria-hidden="true"><\/i><\/span><\/button>/);
+    expect(html).toMatch(/<\/span><\/span><span class="[^"]*" data-tone="attention" role="img" aria-label="等你" data-testid="project-waiting"><i aria-hidden="true"><\/i><\/span><\/button>/);
     expect(html).not.toContain("project-working");
     expect(html).not.toContain("project-unseen");
     expect(html).not.toMatch(/data-state="waiting"/);
+  });
+
+  it("项目名和「项目」组头对齐（47 条）：名字前没有空的状态位，第一样就是名字", () => {
+    const html = render({ data: withTask([]) });
+    expect(html).toMatch(/data-tree-row=""[^>]*><span class="[^"]*taskText[^"]*projectText/);
+  });
+
+  it("圆点只有一种（47 条）：6px 实心圆，黄 = 要介入、蓝 = 停了没看过、灰呼吸 = 在跑；「今天」行和状态图标里「等你」的点也是 6px 黄", () => {
+    const css = readFileSync(fileURLToPath(new URL("../../styles/home.module.css", import.meta.url)), "utf8");
+    expect(css).toContain(".subDot i { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-faint); }");
+    expect(css).toContain('.subDot[data-tone="stopped"] i { background: var(--accent); }');
+    expect(css).toContain('.subDot[data-tone="attention"] i { background: var(--warning); }');
+    expect(css).toContain(".count i { width: 6px; height: 6px; border-radius: 50%; background: var(--warning); }");
+    expect(css).toContain('.state[data-state="waiting"] i { width: 6px; height: 6px; border-radius: 50%; background: var(--warning); }');
+    expect(css).not.toMatch(/\.cells\b/);
   });
 
   it("点的节奏：透明度 1 ↔ 0.3、1.4 秒一个来回、缓入缓出一直循环；减少动态效果时不闪", () => {

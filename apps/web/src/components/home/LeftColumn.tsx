@@ -299,13 +299,12 @@ function ProjectNode({ project, view, go, personId, cardAt, working = false }: {
       {renaming ? <RenameInput value={project.name} maxLength={60} onDone={rename} /> : (
       <div className={h.taskRow} data-current={page ? "" : undefined} {...press}>
         <button type="button" className={h.taskMain} onClick={() => { opened.onOpen?.("project", project.id, project.lastActivity); go(projectHref(project.id)); }} aria-current={page ? "page" : undefined} data-tree-row="" {...nameTip.rowProps}>
-          <span className={h.slotState} />
           <span className={`${h.taskText} ${h.projectText}`}>
             <span ref={nameTip.textRef} className={h.taskName}>{project.name}</span>
             <span className={h.taskSub} data-warning={line.warning ? "" : undefined}>{line.text}</span>
           </span>
-          {/* 行尾一颗点（34 条，和子会话行同一个位置、同样大小）：等你蓝点 → 在后台干活闪的灰点（读屏读「在后台工作」）→ 没看过的新回复蓝点。 */}
-          {project.waiting ? <span className={h.subDot} data-tone="stopped" role="img" aria-label="等你" data-testid="project-waiting"><i aria-hidden /></span>
+          {/* 行尾一颗点（34、47 条，和子会话行同一个位置、同样大小）：等你黄点 → 在后台干活闪的灰点（读屏读「在后台工作」）→ 没看过的新回复蓝点。 */}
+          {project.waiting ? <span className={h.subDot} data-tone="attention" role="img" aria-label="等你" data-testid="project-waiting"><i aria-hidden /></span>
             : working ? <span className={h.subDot} data-tone="running" data-testid="project-working"><i aria-hidden /><span className={h.srOnly}>在后台工作</span></span>
             : unseen ? <span className={h.subDot} data-tone="stopped" role="img" aria-label="有新回复" data-testid="project-unseen"><i aria-hidden /></span> : null}
         </button>
@@ -323,7 +322,6 @@ function ProjectNode({ project, view, go, personId, cardAt, working = false }: {
             <>
               <button type="button" className={h.foldToggle} aria-expanded={open} onClick={() => setOpen(!open)} data-tree-row="" data-testid="tree-subs">
                 <ChevronRight size={14} strokeWidth={1.8} aria-hidden className={h.chevron} data-open={open ? "" : undefined} />会话 {subs.length}
-                {open ? null : <span className={h.cells} aria-hidden>{subs.map((sub) => <i key={`${sub.kind}:${sub.id}`} data-state={subIcon(sub).state} />)}</span>}
               </button>
               {open ? <Subs subs={subs} letters={letters} view={view} go={go} /> : null}
             </>
