@@ -138,8 +138,11 @@ async function main() {
   let clockAnchor = Date.now();
   const appNow = () => new Date(now.getTime() + Date.now() - clockAnchor);
   applicationNow = appNow;
+  // Nexus → DRI 确认：设了 NEXUS_DRI_* 环境变量才开（回放见 .scratch/nexus-dri/本地回放步骤.md）；孙铭泽等人的本体人员 ID 用仓库里实例配置的那一份。
+  const { resolveNexusDriEnv } = await import("../../apps/api/src/nexusDri.js");
+  const nexusDri = resolveNexusDriEnv();
   // 云端拆卡和云端验收（BOARD_CLOUD_AGENTS）缺省关；本机程序接上规划员、验收员之前，手动测试环境（模拟本机走的是云端拆卡）先开着。
-  app = await createTestApp({ companyPeopleSeed: peopleFile, companyName: "天枢（手动测试）", missionCardDraftsDir: join(root, "seed/placeholders"), boardCloudAgents: true }, {
+  app = await createTestApp({ companyPeopleSeed: peopleFile, companyName: "天枢（手动测试）", missionCardDraftsDir: join(root, "seed/placeholders"), boardCloudAgents: true, ...(nexusDri ? { nexusDri } : {}) }, {
     async run(input) {
       const answer = "这是隔离验收中的私人只读回复。公开意见请在事项群组发表；这段私聊不会进入集中 Review。";
       input.emit({ type: "message", delta: answer });
@@ -363,6 +366,11 @@ async function main() {
   const commandPool = new Pool({ connectionString: testDatabaseUrl.replace(/\/postgres$/, `/${database}`), max: 2 });
   closeCommandPool = () => commandPool.end();
   closeTimer = setInterval(() => { void closeDueRounds(commandPool, appNow).catch(() => report({ closeFailed: true })); }, 60_000);
+  // 时间机器不跑后台任务：配了 Nexus 回调时每 3 秒把待发的确认记录发一次。
+  if (nexusDri?.callbackUrl) setInterval(() => {
+    void app!.sql("SELECT id::text FROM nexus_dri_confirmations WHERE callback_status = 'pending'")
+      .then((rows) => Promise.all(rows.map((row) => app!.app.nexusDri.deliver((row as { id: string }).id)))).catch(() => undefined);
+  }, 3_000).unref();
   const stopped = new Promise<void>((done) => { settled = done; });
   const stop = () => { void close().catch(() => { process.exitCode = 1; }).finally(() => settled?.()); };
   process.once("SIGINT", stop); process.once("SIGTERM", stop);

@@ -12,6 +12,7 @@ import {
 import { MeetingCardConfirmRequest, MeetingCardDraftRequest, MeetingCardOwnerRequest, MeetingCardReviewRequest, MeetingCardReviewResponse, MeetingCardSpeakerRequest, MeetingCardView, MeetingCardWorldChoiceRequest } from "./meetingCard.js";
 import { MeetingDecisionView, MeetingMinutesFetchResponse, MeetingMinutesLinkRequest, MeetingWorldAnchorOptionsResponse, MeetingWorldAnchorsRequest, MeetingWorldResponse, MyMeetingCardsResponse } from "./meetingDecisions.js";
 import { AttachFeishuMinuteRequest, FeishuMinuteInboxResponse, FeishuMinuteMeetingResponse, OrganizeFeishuMinuteRequest } from "./feishuMinuteInbox.js";
+import { NexusConfirmationDecisionRequest, NexusConfirmationDecisionResponse, NexusConfirmationItem, NexusConfirmationListResponse } from "./nexusDri.js";
 import { ImpactCardView, ImpactCardResponse, ImpactAskRequest, ImpactAskResponse, ImpactIrrelevantRequest } from "./impact.js";
 import { UsageResponse, OnboardingStepUsageRequest } from "./usage.js";
 import { PersonalProfileView, UpdatePersonalProfileRequest } from "./personalProfile.js";
@@ -935,6 +936,21 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         get: {
           operationId: "listMyMeetingCards", summary: "通知栏的会后确认：等我确认的决策和行动项（一条一条），和我主持或创建的会里写入失败的会议记录（一场会一条）",
           responses: { "200": { description: "待处理的会议记录", content: { "application/json": { schema: { $ref: "#/components/schemas/MyMeetingCardsResponse" } } } }, "401": errorResponse },
+        },
+      },
+      "/api/me/nexus-confirmations": {
+        get: {
+          operationId: "listMyNexusConfirmations", summary: "Nexus 推来、等我确认的会上待定事项：我是事项预先指定的负责人、没过期、没被新版本作废、还没处理",
+          responses: { "200": { description: "等我确认的", content: { "application/json": { schema: { $ref: "#/components/schemas/NexusConfirmationListResponse" } } } }, "401": errorResponse },
+        },
+      },
+      "/api/me/nexus-confirmations/{id}/decision": {
+        post: {
+          operationId: "decideNexusConfirmation",
+          summary: "确认 / 修改 / 拒绝一条 Nexus 待确认项：只有负责人本人能点（别人 403 NOT_CONFIRMER）；过期 409 EXPIRED，被新版本作废 409 SUPERSEDED，已处理过 409 ALREADY_DECIDED；修改只改 value（400 VALUE_REQUIRED / VALUE_UNCHANGED / NOT_AMENDABLE）",
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+          requestBody: jsonBody({ $ref: "#/components/schemas/NexusConfirmationDecisionRequest" }),
+          responses: { "200": { description: "确认记录的 id", content: { "application/json": { schema: { $ref: "#/components/schemas/NexusConfirmationDecisionResponse" } } } }, "400": errorResponse, "401": errorResponse, "403": errorResponse, "404": errorResponse, "409": errorResponse },
         },
       },
       "/api/me/feishu-minutes": {
@@ -3531,6 +3547,10 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         ExecuteRequestActionRequest: ExecuteRequestActionRequest as JsonSchema,
         MeetingDecisionView: MeetingDecisionView as JsonSchema,
         MyMeetingCardsResponse: MyMeetingCardsResponse as JsonSchema,
+        NexusConfirmationItem: NexusConfirmationItem as JsonSchema,
+        NexusConfirmationListResponse: NexusConfirmationListResponse as JsonSchema,
+        NexusConfirmationDecisionRequest: NexusConfirmationDecisionRequest as JsonSchema,
+        NexusConfirmationDecisionResponse: NexusConfirmationDecisionResponse as JsonSchema,
         FeishuMinuteInboxResponse: FeishuMinuteInboxResponse as JsonSchema,
         OrganizeFeishuMinuteRequest: OrganizeFeishuMinuteRequest as JsonSchema,
         AttachFeishuMinuteRequest: AttachFeishuMinuteRequest as JsonSchema,

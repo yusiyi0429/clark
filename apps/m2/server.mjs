@@ -15,7 +15,7 @@ import {runRoundPool} from './round-pool.mjs';
 import {redactMessages} from './redact.mjs';
 import {disagrees} from './stance.mjs';
 import {openCollaborationStore,archivesPath} from './collaboration-store.mjs';
-import {memberActor,sharedProjection} from './shared-projection.mjs';
+import {memberActor,sharedProjection,reviewJobProjection} from './shared-projection.mjs';
 import {randomUUID,createHash} from 'node:crypto';
 import {generateRound,validateRound} from './round-runner.mjs';
 import {loadPublishedRound08,loadPublishedRound09,loadOntologyCandidate,loadBootstrap,skillLocation,reviewSkillLocation,seedRoot} from './deployment-data.mjs';
@@ -131,6 +131,7 @@ const reviewJobs=createReviewJobs({store,gateway:reviewGateway,skillRoot:reviewS
  companyDirection:async period=>{try{const m=await loadOntologyManifest();return m.selections.filter(x=>x.unit==='company'&&(x.kind==='intent'||x.kind==='history'&&x.historyPeriod===period)).map(x=>x.text).join('\n\n');}catch{return '';}},
  installReviewRound,archivesPath});
 await reviewJobs.recover();
+const reviewJobFor=(state,actor)=>reviewJobProjection(state,actor,reviewJobs.view(),mayRunRounds(actor));
 // Nexus's synthesis under each review once insights are revealed; a failure is kept on the card, not hidden (2026-10-26).
 // 公开洞察: by the admin in 管理, or by itself at the review's due time (陈溪南 2026-10-27). Returns who had not written one.
 async function revealInsights(actor,{auto=false}={}){
@@ -266,17 +267,20 @@ export const server=createServer(async(req,res)=>{
     const bundle=privateAgentContext(snap,actor,{scope:q.get('scope')||undefined,...(q.get('card')?{selection:{id:q.get('card')}}:{}),canvasView:q.get('view')||undefined},snap.round?.input?.sources||[]);
     const stage=snap.reviewRound&&!snap.planHandoff?.generatedAt?'review':'plan';
     return json(res,200,{...bundle,stage,review:snap.reviewRound?{period:snap.reviewRound.period,dueAt:snap.reviewRound.dueAt||null,loadedAt:snap.reviewRound.loadedAt}:null,plan:snap.round?{period:snap.round.input?.period||null}:null,
-     notifications:notificationsFor(snap,actor.id,{reads:await readMarks.of(actor.id),jobs:{review:reviewJobs.view()}})});}
+     notifications:notificationsFor(snap,actor.id,{reads:await readMarks.of(actor.id),jobs:{review:reviewJobFor(snap,actor)}})});}
    catch(e){return json(res,e.status||400,{error:String(e.message||e)});}}
-  if(route.pathname==='/api/notifications'&&req.method==='GET'){const member=route.searchParams.get('member');try{const items=notificationsFor(store.snapshot(),member,{reads:await readMarks.of(member),jobs:{review:reviewJobs.view()}});const body=JSON.stringify({items,at:new Date().toISOString()}),etag='"'+createHash('sha256').update(JSON.stringify(items)).digest('hex').slice(0,20)+'"';if(req.headers['if-none-match']===etag){res.writeHead(304,{ETag:etag,'Cache-Control':'private, no-cache'});return res.end();}res.writeHead(200,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'private, no-cache',ETag:etag,'X-Content-Type-Options':'nosniff'});return res.end(body);}catch(e){return json(res,200,{items:[],error:'通知暂时取不到'});}}
+  if(route.pathname==='/api/notifications'&&req.method==='GET'){const member=route.searchParams.get('member');try{const state=store.snapshot(),actor=memberActor(member,state);const items=notificationsFor(state,member,{reads:await readMarks.of(member),jobs:{review:reviewJobFor(state,actor)}});const body=JSON.stringify({items,at:new Date().toISOString()}),etag='"'+createHash('sha256').update(JSON.stringify(items)).digest('hex').slice(0,20)+'"';if(req.headers['if-none-match']===etag){res.writeHead(304,{ETag:etag,'Cache-Control':'private, no-cache'});return res.end();}res.writeHead(200,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'private, no-cache',ETag:etag,'X-Content-Type-Options':'nosniff'});return res.end(body);}catch(e){return json(res,200,{items:[],error:'通知暂时取不到'});}}
   if(route.pathname==='/api/notifications/read'&&req.method==='POST'){const b=await body(req);if(!handoffProfiles[b.memberId])return json(res,400,{error:'请选择名单中的试用成员'});const ids=Array.isArray(b.ids)?b.ids.slice(0,20):[b.id];await readMarks.mark(b.memberId,ids.filter(Boolean));return json(res,200,{ok:true});}
   // 公开洞察 (陈溪南 2026-10-26): 管理 opens every review's insights at once; Nexus then writes its synthesis under each.
   if(route.pathname==='/api/reviews/reveal-insights'&&req.method==='POST'){const b=await body(req),actor=actorFor(b.memberId);if(!(actor?.ceo===true||roundOperators.includes(actor?.id)))return json(res,403,{error:'只有管理员能公开洞察'});
    const missing=await revealInsights(actor);return json(res,200,{revealedAt:store.snapshot().insightsRevealed.at,missing});}
   if(route.pathname==='/api/reviews/cancel'&&req.method==='POST'){const b=await body(req);return json(res,200,{job:await reviewJobs.cancel(actorFor(b.memberId))});}
-  if(route.pathname==='/api/reviews'&&req.method==='GET')return json(res,200,{job:reviewJobs.view()});
-  if(route.pathname==='/api/reviews'&&req.method==='POST'){const b=await body(req);try{return json(res,200,{job:await reviewJobs.start(actorFor(b.memberId),{regenerate:b.regenerate===true,resume:b.resume===true,period:b.period,cutoff:b.cutoff})});}catch(e){return json(res,e.status||500,{error:e.message,...(e.code?{code:e.code,total:e.total,confirmed:e.confirmed}:{})});}}
-  if(route.pathname==='/api/reviews'&&req.method==='GET')return json(res,200,{job:reviewJobs.view()});
+  if(route.pathname==='/api/reviews/recheck'&&req.method==='POST')return json(res,202,await reviewJobs.recheck(actorFor(req.m2Session.memberId)));
+  if(route.pathname==='/api/reviews/candidate'){
+   if(req.method!=='GET')return json(res,405,{error:'草稿只支持只读查看'});
+   return json(res,200,await reviewJobs.candidate(actorFor(req.m2Session.memberId)));
+  }
+  if(route.pathname==='/api/reviews'&&req.method==='GET'){const state=store.snapshot(),actor=memberActor(req.m2Session.memberId,state);return json(res,200,{job:reviewJobFor(state,actor)});}
   if(route.pathname==='/api/reviews'&&req.method==='POST'){const b=await body(req);try{return json(res,200,{job:await reviewJobs.start(actorFor(b.memberId),{regenerate:b.regenerate===true,resume:b.resume===true,period:b.period,cutoff:b.cutoff})});}catch(e){return json(res,e.status||500,{error:e.message,...(e.code?{code:e.code,total:e.total,confirmed:e.confirmed}:{})});}}
   if(route.pathname==='/api/collaboration'&&req.method==='GET'){const state=store.snapshot(),member=route.searchParams.get('member');return revalidated(req,res,cachedRead(state,'collaboration:'+member,()=>sharedProjection(state,memberActor(member,state))));}
   if(req.url==='/api/rounds/import-published'&&req.method==='POST'){
@@ -359,7 +363,7 @@ export const server=createServer(async(req,res)=>{
    const b=await body(req),actor=actorFor(b.memberId);
    if('roundId'in b&&b.roundId!==(store.snapshot().round?.id||null))return json(res,409,{error:'轮次已切换，请重新核对当前内容'});
    if(b.action?.type==='setListening'){
-    const scope=b.action.scope;if(!store.snapshot().cards[scope]||!canRead(actor,store.snapshot().cards[scope]))return json(res,403,{error:'请选择可见领域'});
+    const scope=b.action.scope;if(!store.snapshot().cards[scope]||!canRead(actor,store.snapshot().cards[scope],store.snapshot()))return json(res,403,{error:'请选择可见领域'});
     if(!actor.ceo&&!(actor.unitDri||[]).includes(scope))return json(res,403,{error:'只有领域 DRI 可以暂停或恢复 Nexus'});
     const paused=await store.transact(state=>{state.pausedUnits=(state.pausedUnits||[]).filter(x=>x!==scope);if(!b.action.enabled)state.pausedUnits.push(scope);state.sequence++;return state;});
     if(b.action.enabled)await scheduleNexus(scope,actor.id);
@@ -387,7 +391,7 @@ export const server=createServer(async(req,res)=>{
    if(!proposal)return json(res,404,{error:'找不到可见修订卡'});
    try{return json(res,200,await summarizeProposal(proposal,view.drafts[proposal.cardId],{actorId:actor.id,roundId:state.round?.id,reviewLoadedAt:state.reviewRound?.loadedAt,scope:proposal.scope}));}catch{return json(res,502,{error:'修改摘要未生成，请重试'});}
   }
-  if(req.url==='/api/data'){const state=store.snapshot(),actor=memberActor(req.m2Session.memberId,state);const metadata=await roundMetadata(state.round,input);metadata.readerViews=visibleReaderViews(metadata.readerViews,state,actor);if(!actor.ceo)delete metadata.roundAudit;return revalidated(req,res,etagged(JSON.stringify({session:req.m2Session,canRunRounds:mayRunRounds(actor),canDebugReviews:mayDebugReviews(req.m2Session.memberId),review:reviewSummary(state),units:liveUnitsFrom(state).filter(u=>canRead(actor,state.cards[u.id])),round:state.round?.number||6,roundId:state.round?.id||null,skill:state.round?.input?.skill?.version||'旧轮未记录实际技能快照',availableSkill:loadedSkill.version,modelReady:ready,modelStatus:gateway.status,tracing:tracer.state(),chatModelStatus:chatGateway===gateway?null:chatGateway.status,auditStatus:state.round?.audit?.status||null,auditIssueCount:state.round?.audit?.issues?.length||0,auditGapCount:state.round?.audit?.gaps?.length||0,sourceTime:state.round?.input.retrievedAt||input.retrievedAt,...metadata})));}
+  if(req.url==='/api/data'){const state=store.snapshot(),actor=memberActor(req.m2Session.memberId,state);const metadata=await roundMetadata(state.round,input);metadata.readerViews=visibleReaderViews(metadata.readerViews,state,actor);if(!actor.ceo)delete metadata.roundAudit;return revalidated(req,res,etagged(JSON.stringify({session:req.m2Session,canRunRounds:mayRunRounds(actor),canDebugReviews:mayDebugReviews(req.m2Session.memberId),review:reviewSummary(state),units:liveUnitsFrom(state).filter(u=>canRead(actor,state.cards[u.id],state)),round:state.round?.number||6,roundId:state.round?.id||null,skill:state.round?.input?.skill?.version||'旧轮未记录实际技能快照',availableSkill:loadedSkill.version,modelReady:ready,modelStatus:gateway.status,reviewModelStatus:reviewGateway.status,tracing:tracer.state(),chatModelStatus:chatGateway===gateway?null:chatGateway.status,auditStatus:state.round?.audit?.status||null,auditIssueCount:state.round?.audit?.issues?.length||0,auditGapCount:state.round?.audit?.gaps?.length||0,sourceTime:state.round?.input.retrievedAt||input.retrievedAt,...metadata})));}
   if(['/api/agent','/api/nexus'].includes(req.url)&&req.method==='POST'){
    const b=await body(req), n=liveNodes().find(n=>n.id===b.context?.selection?.id),roundAtStart=store.snapshot().round?.id;
    if(!ready)return json(res,503,{error:'模型服务尚未配置。需在服务器配置 DECODING_API_BASE、DECODING_MODEL、DECODING_API_KEY；密钥不进入浏览器。'});
@@ -397,7 +401,7 @@ export const server=createServer(async(req,res)=>{
    const scope=liveUnits().find(u=>u.id===b.context?.scope)||(b.context?.scope==='company'&&store.snapshot().cards['rv:company']?{id:'company',level:'company'}:undefined)||(roomMember(b.context?.scope)&&handoffProfiles[roomMember(b.context.scope)]?{id:b.context.scope,level:'person'}:undefined);
    const shared=req.url==='/api/nexus';
    const actor=actorFor(b.memberId);refusalTo={shared,scope:scope?.id,memberId:actor.id,called:b.trigger!=='automatic'};
-   if(n&&!canRead(actor,store.snapshot().cards[n.id])||scope&&(scope.level==='person'?!canReadRoom(actor,scope.id):!canRead(actor,store.snapshot().cards[scope.id]||store.snapshot().cards['rv:'+scope.id])))return json(res,403,{error:'不在当前成员的领域范围内'});
+   if(n&&!canRead(actor,store.snapshot().cards[n.id],store.snapshot())||scope&&(scope.level==='person'?!canReadRoom(actor,scope.id):!canRead(actor,store.snapshot().cards[scope.id]||store.snapshot().cards['rv:'+scope.id],store.snapshot())))return json(res,403,{error:'不在当前成员的领域范围内'});
    if(shared&&!scope)return json(res,400,{error:'请先进入战场或 Domain，Nexus 只分析该领域的公开讨论。'});
    // One trace per Nexus pass or Agent question: listen, act, repairs and answers are its model calls (2026-10-27).
    return await tracer.withRun(shared?'nexus':'private-agent','chain',{scope:scope?.id,card_id:n?.id,member:actor.id,trigger:b.trigger==='automatic'?'automatic':'explicit',round_id:roundAtStart,skill_version:loadedSkill.version},async()=>{
@@ -572,4 +576,4 @@ const result=await chatGateway.complete([{role:'system',content:(legacy?nexusSys
 server.on('close',()=>{nexusClosing=true;for(const timer of nexusTimers.values())clearTimeout(timer);store.close();});
 server.on('listening',()=>{for(const [scope,n] of Object.entries(store.snapshot().nexus||{}))if(n.pendingSourceIds?.length&&n.pendingMemberId)scheduleNexus(scope,n.pendingMemberId);});
 for(const signal of ['SIGINT','SIGTERM'])if(process.env.NODE_ENV!=='test')process.once(signal,async()=>{nexusClosing=true;for(const timer of nexusTimers.values())clearTimeout(timer);await new Promise(r=>server.close(r));await store.close();await Promise.race([tracer.flush(),new Promise(r=>setTimeout(r,2000))]);process.exit(0);});
-if(process.env.NODE_ENV!=='test')server.listen(Number(process.env.PORT||4333),process.env.M2_BIND_HOST||'127.0.0.1',()=>console.log(`Decoding MVP http://${lanHost||'127.0.0.1'}:4333`));
+if(process.env.NODE_ENV!=='test')server.listen(Number(process.env.PORT||4333),process.env.M2_BIND_HOST||'127.0.0.1',()=>{console.log(`Decoding MVP http://${lanHost||'127.0.0.1'}:4333`);console.log(`M2 review primary=${reviewGateway.status.model} fallback=${reviewGateway.status.reviewFallbackModels?.join(',')||'none'}`);});

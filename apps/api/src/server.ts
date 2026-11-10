@@ -43,6 +43,7 @@ import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR } from "./
 import { resolveWorldEnv, resolveWorldTkEnv, WorldClient, worldConfigured } from "./worldClient.js";
 import { missionAutoLoadJobs } from "./missionAutoLoad.js";
 import { createJobWorker, exampleJobHandlers } from "./jobs.js";
+import { resolveNexusDriEnv } from "./nexusDri.js";
 import { usageReportJobs } from "./usage.js";
 import { resolveFeishuEnv } from "./feishu/config.js";
 import { parseAdminPersonIds } from "./admin.js";
@@ -136,6 +137,8 @@ const env: AppEnv = {
   // 信息收集、文档变更推送（D-56）：值为 1 才开，缺省关。
   collectionsEnabled: process.env.COLLECTIONS_ENABLED === "1",
   docChangeEnabled: process.env.DOC_CHANGE_ENABLED === "1",
+  // Nexus → DRI 确认的接收端：NEXUS_DRI_SERVICE_TOKEN、NEXUS_DRI_TENANT_ID（都设才开）；回调 NEXUS_DRI_CALLBACK_URL、NEXUS_DRI_CALLBACK_SECRET（没设就不发，记成待发）。
+  nexusDri: resolveNexusDriEnv(),
 };
 
 const port = Number(process.env.PORT ?? "4000");
@@ -313,10 +316,12 @@ const homePush = feishuClient ? homePushJobs({ pool, now, people: () => peopleDi
 const autoLoadMissions = process.env.TIANSHU_AUTO_LOAD_MISSIONS === "1";
 const missionLoadJobs = missionAutoLoadJobs({ enabled: autoLoadMissions, pool, now,
   world: autoLoadMissions && worldConfigured(env) ? new WorldClient(pool.query.bind(pool), env) : null });
+// Nexus → DRI 确认：人员对应补上后把之前找不到人的补认；配了回调就把待发的确认记录排进去。
+await app.nexusDri.resume();
 const jobWorker = createJobWorker({
   pool,
   handlers: {
-    ...exampleJobHandlers, ...feishuTokens?.handlers, ...followThroughJobs.handlers, ...docChangeJobs.handlers, ...app.collectionJobs.handlers, ...usageJobs.handlers, ...summaryJobs.handlers, ...ceoNoticeJobs.handlers, ...homePush.handlers, ...app.taskPlacementJobs, ...missionLoadJobs.handlers,
+    ...exampleJobHandlers, ...feishuTokens?.handlers, ...followThroughJobs.handlers, ...docChangeJobs.handlers, ...app.collectionJobs.handlers, ...usageJobs.handlers, ...summaryJobs.handlers, ...ceoNoticeJobs.handlers, ...homePush.handlers, ...app.taskPlacementJobs, ...missionLoadJobs.handlers, ...app.nexusDri.jobs,
     ...(env.feishu ? feishuEventJobs(pool, mergeFeishuEventHandlers(followThroughJobs.feishuEvents, docChangeJobs.feishuEvents, app.feishuChat?.events ?? {})) : {}),
     ...(feishuClient ? feishuNotifyJobs({ pool, client: feishuClient, publicOrigin: env.publicOrigin }) : {}),
   },

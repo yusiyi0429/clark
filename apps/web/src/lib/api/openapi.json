@@ -5284,6 +5284,123 @@
         }
       }
     },
+    "/api/me/nexus-confirmations": {
+      "get": {
+        "operationId": "listMyNexusConfirmations",
+        "summary": "Nexus 推来、等我确认的会上待定事项：我是事项预先指定的负责人、没过期、没被新版本作废、还没处理",
+        "responses": {
+          "200": {
+            "description": "等我确认的",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NexusConfirmationListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/nexus-confirmations/{id}/decision": {
+      "post": {
+        "operationId": "decideNexusConfirmation",
+        "summary": "确认 / 修改 / 拒绝一条 Nexus 待确认项：只有负责人本人能点（别人 403 NOT_CONFIRMER）；过期 409 EXPIRED，被新版本作废 409 SUPERSEDED，已处理过 409 ALREADY_DECIDED；修改只改 value（400 VALUE_REQUIRED / VALUE_UNCHANGED / NOT_AMENDABLE）",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NexusConfirmationDecisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "确认记录的 id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NexusConfirmationDecisionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/feishu-minutes": {
       "get": {
         "operationId": "listMyFeishuMinutes",
@@ -85960,6 +86077,171 @@
                 }
               }
             }
+          }
+        }
+      },
+      "NexusConfirmationItem": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "meetingId",
+          "question",
+          "value",
+          "quote",
+          "createdAt",
+          "expiresAt"
+        ],
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "meetingId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "question": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAt": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "expiresAt": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      },
+      "NexusConfirmationListResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "meetingId",
+                "question",
+                "value",
+                "quote",
+                "createdAt",
+                "expiresAt"
+              ],
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "meetingId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "question": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "value": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "quote": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "createdAt": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "expiresAt": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "NexusConfirmationDecisionRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "decision"
+        ],
+        "properties": {
+          "decision": {
+            "anyOf": [
+              {
+                "const": "confirmed",
+                "type": "string"
+              },
+              {
+                "const": "amended",
+                "type": "string"
+              },
+              {
+                "const": "rejected",
+                "type": "string"
+              }
+            ]
+          },
+          "value": {
+            "minLength": 1,
+            "maxLength": 20000,
+            "type": "string"
+          }
+        }
+      },
+      "NexusConfirmationDecisionResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "confirmationRef"
+        ],
+        "properties": {
+          "confirmationRef": {
+            "minLength": 1,
+            "type": "string"
           }
         }
       },

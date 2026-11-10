@@ -40,9 +40,10 @@ test('missing review objects are contract failures and failed raw never becomes 
  const state=run();let calls=0;
  await assert.rejects(initialReviewCall({...args(state),gateway:{complete:async()=>{calls++;return {answer:'{"model":"Claude"}'};}},validate:value=>{if(!value.review)throw outputContractError();return value;}}),e=>e.code==='MODEL_OUTPUT_CONTRACT');
  assert.equal(calls,3);assert.equal(state.raw.eo,undefined);
- const answer=await initialReviewCall({...args(state),gateway:{complete:async()=>({answer:'{"review":{}}'})}});assert.ok(answer.review);assert.equal(state.initialAttempts.length,4);
- await initialReviewCall({...args(state),gateway:{complete:async()=>{throw Error('must reuse successful same-input cache');}}});
- await assert.rejects(initialReviewCall({...args(state),user:{different:true},gateway:{complete:async()=>{throw Error('must not call');}}}),e=>e.code==='REVIEW_CACHE_MISMATCH');
+ const failed=structuredClone(state.initialAttempts);await assert.rejects(initialReviewCall({...args(state),gateway:{complete:async()=>{calls++;return {answer:'{"review":{}}'};}}}),e=>e.code==='REVIEW_MODEL_ATTEMPT_LIMIT');assert.equal(calls,3);assert.deepEqual(state.initialAttempts,failed);
+ const fresh=run(),answer=await initialReviewCall({...args(fresh),gateway:{complete:async()=>({answer:'{"review":{}}'})}});assert.ok(answer.review);
+ await initialReviewCall({...args(fresh),gateway:{complete:async()=>{throw Error('must reuse successful same-input cache');}}});
+ await assert.rejects(initialReviewCall({...args(fresh),user:{different:true},gateway:{complete:async()=>{throw Error('must not call');}}}),e=>e.code==='REVIEW_CACHE_MISMATCH');
 });
 test('new product initial refusals keep the complete source and never use the legacy background-removal retry',async()=>{
  const basis={mode:'latest-source-candidate',snapshotHash:'frozen'},meta={basisMode:basis.mode,snapshotHash:basis.snapshotHash};
