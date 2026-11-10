@@ -6,7 +6,7 @@ import type { EventBody } from "../eventLog.js";
 import { planProgress } from "../plan.js";
 import { readJson, writeJsonAtomic } from "../store.js";
 import { describeTool, homeDir, versionAtLeast } from "./claudeEnv.js";
-import { codexEnv, CodexRpcError, openCodex, type CodexBin, type CodexRpc } from "./codexRpc.js";
+import { codexEnv, CodexRpcError, openCodex, withCodex, type CodexBin, type CodexRpc } from "./codexRpc.js";
 import { linkLarkSkills } from "./feishuPlugin.js";
 import { CONTEXT_COMPACTED, ContextReporter } from "./contextUsage.js";
 import { modeAllows, outsidePaths, type PathScope } from "./pathGuard.js";
@@ -410,6 +410,9 @@ export function mcpArgs(path: string | null): string[] {
   return args;
 }
 
+/** 本人自己的技能列一次要另起一个 app-server：5 分钟内不重列。 */
+const USER_SKILLS_TTL_MS = 5 * 60_000;
+
 export interface CodexAdapterOptions {
   /** Codex 的配置目录：天枢专用的（登录也在里面），null 是本人的 ~/.codex。 */
   home: string | null;
@@ -426,9 +429,29 @@ export interface CodexAdapterOptions {
 export class CodexAdapter implements AgentAdapter {
   readonly kind = "codex" as const;
   private readonly threads: ThreadMap;
+  private userSkills: { at: number; list: { name: string; path: string }[] } | null = null;
 
   constructor(private readonly resolveBin: () => Promise<CodexBin | null>, private readonly opts: CodexAdapterOptions) {
     this.threads = new ThreadMap(join(opts.dataDir, "codex-threads.json"));
+  }
+
+  /**
+   * 干净会话（没开「带上个人配置」）不带本人自己的技能，同 Claude Code 那边：用天枢专用的配置目录就是要本人的技能、插件、记忆不带进来，
+   * 但 Codex 还会读本人主目录下的 ~/.agents/skills（11/10 实测 0.159.2，和配置目录在哪无关）。所以起会话时把它列出来的本人技能（scope 是 user 的）一个个关掉：
+   * 命令行的 -c skills.config=[{path, enabled=false}]，只对这一个进程生效（实测）；技能要飞书的留着 lark-*。列不出来（老版本没有 skills/list）就不关。
+   */
+  private async personalSkillsOff(bin: CodexBin, launch: AgentLaunch): Promise<string[]> {
+    if (launch.includePersonalConfig) return [];
+    if (!this.userSkills || Date.now() - this.userSkills.at > USER_SKILLS_TTL_MS) {
+      const env = codexEnv(this.opts.baseEnv ?? process.env, this.opts.home);
+      const listed = await withCodex(bin, env, (rpc) => rpc.request<Json>("skills/list", { cwds: [launch.cwd], forceReload: true }, 20_000)).catch(() => null);
+      if (listed) {
+        const skills = (Array.isArray(listed.data) ? listed.data : []).flatMap((e: Json) => (Array.isArray(e?.skills) ? e.skills : []));
+        this.userSkills = { at: Date.now(), list: skills.filter((s: Json) => s?.scope === "user" && typeof s.path === "string" && typeof s.name === "string").map((s: Json) => ({ name: s.name, path: s.path })) };
+      }
+    }
+    const off = (this.userSkills?.list ?? []).filter((s) => !(launch.feishuSkillsDir && s.name.startsWith("lark-")));
+    return off.length ? ["-c", `skills.config=[${off.map((s) => `{path=${toml(s.path)},enabled=false}`).join(",")}]`] : [];
   }
 
   async start(launch: AgentLaunch): Promise<AgentRun> {
@@ -436,13 +459,14 @@ export class CodexAdapter implements AgentAdapter {
     if (!bin) throw new AgentStartError("agent_not_installed", "这台电脑上没找到 Codex");
     const model = launch.model.model;
     if (!model) throw new AgentStartError("validation", "Codex 的模型配置没有模型名");
+    // 技能要飞书：本人已装的飞书技能链接进天枢专用的配置目录（本人自己的 ~/.codex 不动）；链接变了，本人技能重列一次
+    if (launch.feishuSkillsDir && this.opts.home && linkLarkSkills(join(this.opts.home, "skills"), launch.feishuSkillsDir)) this.userSkills = null;
     const args = [
       ...mcpArgs(launch.mcpConfigPath),
+      ...(await this.personalSkillsOff(bin, launch)),
       // 角色的工具名单里没有联网搜索时关掉 Codex 自带的
       ...(launch.disallowedTools.includes("WebSearch") ? ["-c", 'web_search="disabled"'] : []),
     ];
-    // 技能要飞书：本人已装的飞书技能链接进天枢专用的配置目录（本人自己的 ~/.codex 不动）
-    if (launch.feishuSkillsDir && this.opts.home) linkLarkSkills(join(this.opts.home, "skills"), launch.feishuSkillsDir);
     const env = codexEnv(this.opts.baseEnv ?? process.env, this.opts.home, launch.mcpEnv);
     let opened: Awaited<ReturnType<typeof openCodex>>;
     try {

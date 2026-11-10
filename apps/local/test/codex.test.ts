@@ -221,4 +221,44 @@ describe("Codex 子会话", { timeout: 60_000 }, () => {
     expect(quota.windows.find((w: any) => w.kind === "session")).toMatchObject({ usedPercent: 100, state: "blocked" });
     await call("POST", `/v1/sessions/${id}/kill`, {});
   });
+
+  it("干净会话不带本人自己的技能：Codex 列出来的本人技能逐个关掉（只对这一个进程），技能要飞书的留着 lark-*；开了「带上个人配置」的照留", async () => {
+    // 另起一个本机程序：它的 Codex 配置目录里，假 codex 的 skills/list 回两个本人的技能、一个它自带的
+    const dataDir = tempDir("tl-codex-skills-");
+    const dir = tempDir("tl-codex-skills-work-");
+    mkdirSync(join(dataDir, "codex"), { recursive: true });
+    writeFileSync(join(dataDir, "codex", "auth.json"), "{}");
+    writeFileSync(join(dataDir, "codex", "fake-skills.json"), JSON.stringify([
+      { name: "lark-doc", path: "C:/Users/me/.agents/skills/lark-doc/SKILL.md", scope: "user", enabled: true },
+      { name: "my-notes", path: "C:/Users/me/.agents/skills/my notes/SKILL.md", scope: "user", enabled: true },
+      { name: "imagegen", path: join(dataDir, "codex", "skills", ".system", "imagegen", "SKILL.md"), scope: "system", enabled: true },
+    ]));
+    const offline = (async () => { throw new Error("offline"); }) as unknown as typeof fetch;
+    const other = await startTestRunner({ dataDir, pickFolder: dir, fetchImpl: offline, fakeCodex: true });
+    try {
+      const tk = await pair(other.port);
+      const req = (method: string, path: string, body?: unknown) => api(other.port, tk, method, path, body);
+      await req("POST", "/v1/folders/pick", {});
+      await until(async () => (await req("GET", "/v1/models")).body.profiles.some((p: any) => p.id === SOL));
+      const lines = () => readFileSync(join(dataDir, "codex", "trace.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+      const skillsArg = async (name: string, extra: Record<string, unknown>) => {
+        mkdirSync(join(dir, name), { recursive: true });
+        const r = await req("POST", "/v1/sessions", { subject: { kind: "card", cardId: name }, title: name, cwd: join(dir, name), firstMessage: "hi", modelProfileId: SOL, ...extra });
+        expect(r.status, JSON.stringify(r.body)).toBe(200);
+        await until(async () => (await req("GET", `/v1/sessions/${r.body.id}`)).body.session.status === "idle");
+        const argv = lines().filter((l) => l.argv && l.cwd === join(dir, name)).at(-1).argv as string[];
+        await req("POST", `/v1/sessions/${r.body.id}/kill`, {});
+        return argv.find((a) => a.startsWith("skills.config=")) ?? null;
+      };
+      const off = (path: string) => `{path=${JSON.stringify(path)},enabled=false}`;
+      expect(await skillsArg("S1", {})).toBe(`skills.config=[${off("C:/Users/me/.agents/skills/lark-doc/SKILL.md")},${off("C:/Users/me/.agents/skills/my notes/SKILL.md")}]`);
+      const role = { id: "6b0f3a52-4d0c-4c1e-9a43-1f7d2c9b8e12", name: "助理", kind: "worker", modelTier: "normal", version: 1, tools: ["feishu"], dutiesMd: "管飞书文档", practiceMd: "先看再改", acceptanceMd: "有链接" };
+      expect(await skillsArg("S2", { role })).toBe(`skills.config=[${off("C:/Users/me/.agents/skills/my notes/SKILL.md")}]`);
+      expect(await skillsArg("S3", { includePersonalConfig: true })).toBeNull();
+      // 本人的技能 5 分钟内只列一次（另起一个 app-server 列的），不是每开一个会话都列
+      expect(lines().filter((l) => l.method === "skills/list")).toHaveLength(1);
+    } finally {
+      await other.cleanup();
+    }
+  });
 });

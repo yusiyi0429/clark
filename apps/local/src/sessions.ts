@@ -68,6 +68,8 @@ const HOLD_RESUME_AFTER_MS = 60_000;
 const HOLD_POLL_MS = 5 * 60_000;
 /** 额度恢复后发给执行方的一句（不是本人说的，网页上显示成一条提示）。 */
 const HOLD_CONTINUE = "额度恢复了，接着把刚才没做完的做完。";
+/** 停着等额度（或网关余额）时本人换了来源：换完本机替本人说的这一句（11/10 用户：换就是为了让它接着做）。 */
+const SWITCH_CONTINUE = "换了来源，接着把刚才没做完的做完。";
 const HOLD_REASON = "订阅额度用完了，恢复后自动接着做";
 /** 预算用完（新首页设计 11.4）：跑着的收到这一句，这一轮做完或过 3 分钟就停下。 */
 const BUDGET_STOP = "这件 Task 的预算用完了：把手上这一步做完就停下，列出还没做完的，不要再开新的步骤。";
@@ -1008,7 +1010,7 @@ export class SessionManager {
     this.d.log.evict(rec.id);
     // 本人要换的模型还没换上就退了（交完收工、强停等）：直接换，下次开起来用新的
     const want = rec.pendingModel?.modelProfileId;
-    if (want) void this.d.models.resolve(want).then((m) => { if (m?.profileId === want && rec.pendingModel?.modelProfileId === want) this.applyModel(rec, m, rec.pendingModel.effort ?? undefined); });
+    if (want) void this.d.models.resolve(want).then((m) => { if (m?.profileId === want && rec.pendingModel?.modelProfileId === want && this.applyModel(rec, m, rec.pendingModel.effort ?? undefined)) this.carryOn(rec); });
     // 验收过了：卡在工作树里做的，试着自动合回
     if (finished && rec.subject.kind === "verify" && rec.passed) void this.autoMerge(rec);
   }
@@ -1220,7 +1222,7 @@ export class SessionManager {
     // 换执行方时进程在的还是原来那家：不能只改记录，停掉它再拉起新的那家
     if (cross && run) return swapLater();
     if (!run || this.starting.has(id)) {
-      this.applyModel(rec, next, effort);
+      if (this.applyModel(rec, next, effort)) this.carryOn(rec);
       return { applied: "now", session: this.summary(rec) };
     }
     if (rec.agent === "codex") {
@@ -1248,8 +1250,11 @@ export class SessionManager {
     return swapLater();
   }
 
-  /** 换上新模型、思考程度：记进会话、跑法跟着换（实际模型等执行方再报），事件流记一条、报给云端。effort 不带是回到自动。 */
-  private applyModel(rec: SessionRecord, model: ResolvedModel, effort: TLocalEffort | undefined, view?: TLocalRun) {
+  /**
+   * 换上新模型、思考程度：记进会话、跑法跟着换（实际模型等执行方再报），事件流记一条、报给云端。effort 不带是回到自动。
+   * 返回 true：这个会话原来停着等那个来源（订阅额度、网关余额），新的来源没用完——调用方等新的那家起来后调 carryOn 接着做。
+   */
+  private applyModel(rec: SessionRecord, model: ResolvedModel, effort: TLocalEffort | undefined, view?: TLocalRun): boolean {
     const from = rec.agent;
     const agent = this.d.models.agentOf(model.profileId) ?? from;
     if (agent !== from) {
@@ -1274,15 +1279,20 @@ export class SessionManager {
     if (agent === from) this.emit(rec, { type: "notice", level: "info", code: "model_changed", text: `换成了「${model.label}」${said ? ` · ${said}` : ""}` });
     else this.emit(rec, { type: "notice", level: "info", code: "harness_changed", text: `换成 ${AGENT_NAME[agent]} · ${model.label}${rec.run.effort ? ` · 思考 ${rec.run.effort}` : ""}` });
     if (modeGone) this.emit(rec, { type: "permission_mode", mode: "default", by: "harness_changed" });
-    // 停着等的是原来那家订阅的额度：新的那家没用完就不等了（排着的回到队里），也用完了就照它的恢复时间等
-    if (agent !== from && rec.hold?.reason === "usage_limit") {
-      if (this.subscription(rec) && this.blocked(rec) !== null) this.markHold(rec);
-      else this.clearHold(rec);
-      this.noteHold(rec);
-      this.pump();
-      return;
-    }
     this.syncStatus(rec);
+    // 停着等的是原来那个来源（订阅额度、网关余额）：新的来源也用完了就照它的等；没用完就接着做（见 carryOn）。等预算的不归这里：预算是这件 Task 的，换来源不会变多
+    if (rec.hold?.reason !== "usage_limit" && rec.hold?.reason !== "balance") return false;
+    const out = this.subscription(rec) ? (this.blocked(rec) !== null ? "usage_limit" as const : null) : this.balanceBlocked.has(rec.modelProfileId) ? "balance" as const : null;
+    if (!out) return true;
+    this.markHold(rec, out);
+    this.noteHold(rec);
+    return false;
+  }
+
+  /** 停着等额度时换了来源、新的没用完：接着做（排着的回到队里；做过的往新的那家说一句，前面带着交代）。 */
+  private carryOn(rec: SessionRecord) {
+    this.resumeHeld(rec, true);
+    this.pump();
   }
 
   /**
@@ -1309,8 +1319,10 @@ export class SessionManager {
       await old.kill();
       const model = await this.d.models.resolve(target);
       if (!model || model.profileId !== target) throw new Error("要换的模型配置已被删除");
-      this.applyModel(rec, model, effort);
-      return this.startRun(rec, true);
+      const carry = this.applyModel(rec, model, effort);
+      const run = await this.startRun(rec, true);
+      if (carry) this.carryOn(rec);
+      return run;
     })();
     this.starting.set(rec.id, p);
     p.catch((e: unknown) => {
@@ -1577,15 +1589,15 @@ export class SessionManager {
   }
 
   /** 接着做：排着的回到队里；一轮做完停着的往开着的进程里说一句；进程不在了就续接（--resume）再说。 */
-  private resumeHeld(rec: SessionRecord) {
+  private resumeHeld(rec: SessionRecord, switched = false) {
     const budget = rec.hold?.reason === "budget";
     // 额度恢复了但预算用完了、预算加了但额度用完了：换成另一种等
     const other = budget ? (this.subscription(rec) && this.blocked(rec) !== null ? "usage_limit" : null) : this.budgetExhausted(rec) ? "budget" : null;
     if (other) { this.markHold(rec, other); this.noteHold(rec); return; }
     this.clearHold(rec);
     if (rec.status === "queued") { this.noteHold(rec); return; }
-    this.emit(rec, { type: "notice", level: "info", code: budget ? "budget_resumed" : "usage_resumed", text: budget ? "预算加了，接着做" : "额度恢复了，接着做" });
-    const say = budget ? BUDGET_CONTINUE : HOLD_CONTINUE;
+    this.emit(rec, { type: "notice", level: "info", code: budget ? "budget_resumed" : "usage_resumed", text: budget ? "预算加了，接着做" : switched ? "换了来源，接着做" : "额度恢复了，接着做" });
+    const say = budget ? BUDGET_CONTINUE : switched ? SWITCH_CONTINUE : HOLD_CONTINUE;
     const run = this.runs.get(rec.id);
     if (run) {
       this.setStatus(rec, "running");

@@ -9,7 +9,7 @@
 //   compact           先压缩一次上下文（contextCompaction），再回一句
 //   ctx <n>           这一次请求用了 n 个 token（上下文用了多少），再回一句
 //   别的              回一句 echo: <话>
-import { appendFileSync, existsSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const home = process.env.CODEX_HOME ?? ".";
@@ -144,6 +144,8 @@ process.stdin.setEncoding("utf8").on("data", (d) => {
           { id: "secret", model: "secret", displayName: "Hidden", hidden: true, isDefault: false, supportedReasoningEfforts: [], defaultReasoningEffort: "low" },
         ], nextCursor: null });
         break;
+      // 本人的技能：读 CODEX_HOME/fake-skills.json（[{ name, path, scope }]），没有就是空的
+      case "skills/list": reply({ data: [{ cwd: (p.cwds ?? [])[0] ?? "", skills: existsSync(join(home, "fake-skills.json")) ? JSON.parse(readFileSync(join(home, "fake-skills.json"), "utf8")) : [], errors: [] }] }); break;
       case "thread/start": thread = `t-${Date.now()}`; reply({ thread: { id: thread }, model: p.model, modelProvider: "openai" }); break;
       case "thread/resume": thread = p.threadId; reply({ thread: { id: thread }, model: p.model, modelProvider: "openai" }); break;
       case "turn/start": {
