@@ -163,6 +163,9 @@ describe("Nexus → DRI 确认：本人确认、修改、拒绝和回调", () =>
       decision: "confirmed", confirmedBy: "synthetic-human", confirmedAt, question: SAMPLE.question, content: SAMPLE.content,
     });
 
+    // 内容里键的顺序照 Nexus 发来的原样。
+    expect(Object.keys((await record(confirmationRef)).content)).toEqual(Object.keys(SAMPLE.content));
+
     // 确认时排了发送任务；跑一次。
     expect(await t.sql("SELECT payload FROM jobs WHERE kind = $1", [NEXUS_DRI_CALLBACK_KIND])).toEqual([{ payload: { confirmationRef } }]);
     await t.app.nexusDri.jobs[NEXUS_DRI_CALLBACK_KIND]({ confirmationRef }, { id: "1", kind: NEXUS_DRI_CALLBACK_KIND, dedupe_key: "k", attempts: 1, payload: {} });

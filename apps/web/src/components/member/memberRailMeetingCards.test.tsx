@@ -7,8 +7,8 @@ vi.mock("@/components/meeting/MeetingCardNotices", async (original) => ({
   useMeetingRecords: () => records,
 }));
 
-let records: { meetings: unknown[]; confirms: unknown[]; minutes: unknown[]; reload: () => void } = {
-  meetings: [], confirms: [{ meetingId: "m1", title: "接口切换会", kind: "decision", id: "dec-1", text: "接口统一改成 v2", dueDate: null }], minutes: [], reload: () => undefined,
+let records: { meetings: unknown[]; confirms: unknown[]; deferred: unknown[]; minutes: unknown[]; reload: () => void } = {
+  meetings: [], confirms: [{ meetingId: "m1", title: "接口切换会", kind: "decision", id: "dec-1", text: "接口统一改成 v2", dueDate: null }], deferred: [], minutes: [], reload: () => undefined,
 };
 
 import { MemberWorkspace } from "./MemberWorkspace";
@@ -26,6 +26,7 @@ describe("成员通知栏：会议记录", () => {
     records = {
       meetings: [],
       confirms: [],
+      deferred: [],
       minutes: [{ minuteToken: "obcn1", title: "产品周会", startsAt: "2026-10-23T06:00:00.000Z", endsAt: "2026-10-23T07:10:00.000Z", attendees: [], otherAttendees: 0, suggestion: null }],
       reload: () => undefined,
     };

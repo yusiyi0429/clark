@@ -2,7 +2,7 @@
 -- 编号从 270 起：新首页分支已经用到 265，这条链要能不带新首页单独上线。只新增表，不改已有表。
 
 -- 一行是一个 requestId 的一个 revision；id 就是接收回执的 receiptId。
--- body 是收到的请求（解析后原样存，本人确认时看到的内容从这里取）。
+-- body 是收到的请求（json 类型：键的顺序照原样留着，本人确认时看到的内容从这里取）。
 -- confirmer_world_id 是 proposedConfirmers 的第一位（本体人员 ID）；confirmer_person_id 是对到的天枢人员，NULL 表示找不到人、没有人能确认。
 -- superseded_at：同一个 requestId 来了更大的 revision 时记下，旧的不能再确认。到期只看 expires_at，不另记状态。
 CREATE TABLE nexus_dri_requests (
@@ -12,7 +12,7 @@ CREATE TABLE nexus_dri_requests (
   item_id text NOT NULL,
   meeting_id text NOT NULL,
   fingerprint text NOT NULL,
-  body jsonb NOT NULL,
+  body json NOT NULL,
   confirmer_world_id text,
   confirmer_person_id text,
   expires_at timestamptz NOT NULL,
@@ -32,7 +32,7 @@ CREATE TABLE nexus_dri_confirmations (
   confirmed_by_person_id text NOT NULL,
   confirmed_by_world_id text NOT NULL,
   confirmed_at timestamptz NOT NULL,
-  amended_content jsonb,
+  amended_content json,
   amended_fingerprint text,
   callback_id text NOT NULL UNIQUE,
   callback_body text NOT NULL,

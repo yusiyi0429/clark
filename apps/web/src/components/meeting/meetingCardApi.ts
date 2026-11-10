@@ -1,4 +1,4 @@
-import type { TMeetingActionItem, TMeetingCardConfirmRequest, TMeetingCardDraft, TMeetingCardOwnerRequest, TMeetingCardReviewRequest, TMeetingCardView } from "@warmap/contracts";
+import type { TMeetingActionItem, TMeetingCardConfirmRequest, TMeetingCardDraft, TMeetingCardOwnerRequest, TMeetingCardReviewRequest, TMeetingCardView, TNexusConfirmationDecisionRequest } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
 
 /**
@@ -55,6 +55,17 @@ export const reviewMeetingCardItem = (meetingId: string, body: TMeetingCardRevie
 /** 主持人把一条没有责任人的决策交给一位参会人确认。 */
 export const assignMeetingDecisionOwner = (meetingId: string, body: TMeetingCardOwnerRequest) =>
   itemResult(browserApi.POST("/api/meetings/{id}/card/owners", { params: { path: { id: meetingId } }, body }));
+
+/** Nexus 推来的会上待定事项：负责人本人确认 / 修改 / 拒绝；修改带改后的内容。 */
+export async function decideNexusConfirmation(id: string, body: TNexusConfirmationDecisionRequest): Promise<{ ok: true } | { ok: false; status: number; code: string }> {
+  try {
+    const { data, error, response } = await browserApi.POST("/api/me/nexus-confirmations/{id}/decision", { params: { path: { id } }, body });
+    if (response.status === 401) window.location.assign("/access");
+    return response.ok && data ? { ok: true } : { ok: false, status: response.status, code: (error as { code?: string } | undefined)?.code ?? "" };
+  } catch {
+    return { ok: false, status: 0, code: "NETWORK" };
+  }
+}
 
 /** 冻结前改「不写进本体」。 */
 export const setMeetingCardWorldChoice = (meetingId: string, writeToWorld: boolean) =>

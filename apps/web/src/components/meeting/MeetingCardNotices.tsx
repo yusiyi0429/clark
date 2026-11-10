@@ -4,19 +4,20 @@
  * 通知栏的会后两组（10/28 起记录正文不用确认，不进通知栏）：
  * - 「会后确认」：等我确认的决策和行动项（GET /api/me/meeting-cards 的 confirms），一次只出一条、左右翻；卡上当场确认或写原因说不对，不进二级页。
  *   我主持的会里没有责任人的决策，点了去会议页交给一位参会人。
+ *   Nexus 推来、我是负责人的会上待定事项（GET /api/me/nexus-confirmations）也排在这一组：卡上确认、拒绝，或从原内容改起。
  *   成员和 CEO 用同一个组件、同一个接口，按人给。
  * - 「会议记录」：飞书里直接开的会待整理（GET /api/me/feishu-minutes，卡上整理、记到天枢里约好的会、忽略），
  *   和我主持或创建的会里写入本体失败的（卡上重试）。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { TFeishuMinuteInboxItem, TMyMeetingCard, TMyMeetingConfirm } from "@warmap/contracts";
+import type { TFeishuMinuteInboxItem, TMyMeetingCard, TMyMeetingConfirm, TNexusConfirmationItem, TNexusDriDecision } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
-import { daySpan } from "@/lib/companyTime";
+import { daySpan, monthDayTime } from "@/lib/companyTime";
 import { ActionNoticeCard, type ActionNotice } from "@/components/ActionNoticeCard";
 import type { NoticeOutcome } from "@/components/NoticeActions";
 import { dateLabel } from "@/components/ui/pickerFormat";
 import { MeetingBookingSheet } from "./MeetingBookingSheet";
-import { retryMeetingCardSync, reviewMeetingCardItem } from "./meetingCardApi";
+import { decideNexusConfirmation, retryMeetingCardSync, reviewMeetingCardItem } from "./meetingCardApi";
 import { attachFeishuMinute, ignoreFeishuMinute } from "./meetingDecisionApi";
 
 type Navigate = (href: string, origin?: Element | null) => void;
@@ -77,6 +78,28 @@ export function confirmNotices(confirms: TMyMeetingConfirm[], act: ConfirmActs):
 }
 const REVIEW_ERROR: Record<string, string> = { ALREADY_REVIEWED: "已经处理过了", CARD_FROZEN: "这场会的决策已经定版", REASON_REQUIRED: "要写一句原因" };
 
+export type DeferredDecide = (item: TNexusConfirmationItem, decision: TNexusDriDecision, value?: string) => Promise<NoticeOutcome>;
+/**
+ * Nexus 推来的会上待定事项：正文是要我确认的问题，小字是待确认的内容、会上原话（和内容不一样时）和截止时间。
+ * 确认、拒绝一点就办；有内容的可以从原内容改起。
+ */
+export function deferredNotices(items: TNexusConfirmationItem[], decide: DeferredDecide): ActionNotice[] {
+  return items.map((item) => ({
+    id: `nexus:${item.id}`,
+    label: "待定事项",
+    title: item.question,
+    detail: [item.value, item.quote && item.quote !== item.value ? `会上原话：${item.quote}` : null, `截止 ${monthDayTime(item.expiresAt)}`].filter(Boolean).join(" · "),
+    tone: "amber",
+    buttons: [
+      { label: "确认", emphasis: true, run: async () => receipt(await decide(item, "confirmed"), "已确认") },
+      { label: "拒绝", run: async () => receipt(await decide(item, "rejected"), "已拒绝") },
+    ],
+    ...(item.value === null ? {} : { reason: { label: "修改", fieldLabel: "改后的内容", placeholder: "", submitLabel: "提交", initial: item.value,
+      run: async (value: string) => receipt(await decide(item, "amended", value), "已修改") } }),
+  }));
+}
+const DECIDE_ERROR: Record<string, string> = { NOT_CONFIRMER: "只有负责人本人能确认", EXPIRED: "已经过期", SUPERSEDED: "这一条已经更新", ALREADY_DECIDED: "已经处理过了", VALUE_TOO_LONG: "内容太长" };
+
 export type MinuteActs = {
   organize(minute: TFeishuMinuteInboxItem): Promise<NoticeOutcome>;
   attach(minute: TFeishuMinuteInboxItem): Promise<NoticeOutcome>;
@@ -105,10 +128,13 @@ const minuteError = (code: string): NoticeOutcome => ({ ok: false, error: MINUTE
 
 /** 没传时用同一个空列表：「办完的先不显示」按列表是不是同一份来判断有没有取回新数据。 */
 const NO_CONFIRMS: TMyMeetingConfirm[] = [];
+const NO_DEFERRED: TNexusConfirmationItem[] = [];
 
-export function MeetingCardNoticeList({ meetings, confirms = NO_CONFIRMS, minutes = [], meetingBase, onNavigate, onChanged }: {
+export function MeetingCardNoticeList({ meetings, confirms = NO_CONFIRMS, deferred = NO_DEFERRED, minutes = [], meetingBase, onNavigate, onChanged }: {
   meetings: TMyMeetingCard[];
   confirms?: TMyMeetingConfirm[];
+  /** Nexus 推来、等我确认的会上待定事项。 */
+  deferred?: TNexusConfirmationItem[];
   minutes?: TFeishuMinuteInboxItem[];
   meetingBase: string;
   onNavigate: Navigate;
@@ -117,8 +143,8 @@ export function MeetingCardNoticeList({ meetings, confirms = NO_CONFIRMS, minute
   /** 正在整理的那一份：表单整理成了或关掉时，兑现卡上那颗按钮。 */
   const [organizing, setOrganizing] = useState<{ minute: TFeishuMinuteInboxItem; settle(outcome: NoticeOutcome): void }>();
   /** 办完、回执也淡出了的：下一次取回新数据之前先不显示，免得按钮又闪出来；新数据到了就不再拦。 */
-  const [settled, setSettled] = useState<{ ids: string[]; minutes: TFeishuMinuteInboxItem[]; confirms: TMyMeetingConfirm[] }>({ ids: [], minutes, confirms });
-  const hidden = settled.minutes === minutes && settled.confirms === confirms ? settled.ids : [];
+  const [settled, setSettled] = useState<{ ids: string[]; minutes: TFeishuMinuteInboxItem[]; confirms: TMyMeetingConfirm[]; deferred: TNexusConfirmationItem[] }>({ ids: [], minutes, confirms, deferred });
+  const hidden = settled.minutes === minutes && settled.confirms === confirms && settled.deferred === deferred ? settled.ids : [];
   /** 记到成功的：回执淡出后才通知别处（meeting-changed），免得立刻重取把回执冲掉。 */
   const attached = useRef(new Set<string>());
   const finish = (outcome: NoticeOutcome) => {
@@ -139,10 +165,14 @@ export function MeetingCardNoticeList({ meetings, confirms = NO_CONFIRMS, minute
     },
   };
   const onSettled = useCallback((noticeId: string) => {
-    setSettled((current) => ({ ids: [...(current.minutes === minutes && current.confirms === confirms ? current.ids : []), noticeId], minutes, confirms }));
+    setSettled((current) => ({ ids: [...(current.minutes === minutes && current.confirms === confirms && current.deferred === deferred ? current.ids : []), noticeId], minutes, confirms, deferred }));
     if (attached.current.delete(noticeId)) window.dispatchEvent(new Event("meeting-changed"));
     onChanged?.();
-  }, [minutes, confirms, onChanged]);
+  }, [minutes, confirms, deferred, onChanged]);
+  const decide: DeferredDecide = async (item, decision, value) => {
+    const result = await decideNexusConfirmation(item.id, { decision, ...(value === undefined ? {} : { value }) });
+    return result.ok ? { ok: true } : { ok: false, error: result.status === 0 ? "网络不通，再试一次" : DECIDE_ERROR[result.code] ?? "没有办成" };
+  };
   const review: ConfirmActs["review"] = async (item, verdict, reason) => {
     const result = await reviewMeetingCardItem(item.meetingId, { kind: item.kind, id: item.id, verdict, ...(reason ? { reason } : {}) });
     if (!result.ok) return { ok: false, error: result.status === 0 ? "网络不通，再试一次" : REVIEW_ERROR[result.code] ?? "没有办成" };
@@ -155,7 +185,7 @@ export function MeetingCardNoticeList({ meetings, confirms = NO_CONFIRMS, minute
     return result.ok ? { ok: true, settled: "已重新写入" } : { ok: false, error: result.status === 0 ? "网络不通，再试一次" : "没有办成" };
   };
   const open: ConfirmActs["open"] = (item, from) => onNavigate(`${meetingBase}/${item.meetingId}`, from);
-  const pending = confirmNotices(confirms, { review, open }).filter((notice) => !hidden.includes(notice.id));
+  const pending = [...confirmNotices(confirms, { review, open }), ...deferredNotices(deferred, decide)].filter((notice) => !hidden.includes(notice.id));
   const notices = [...minuteNotices(minutes, act), ...meetingCardNotices(meetings, meetingBase, onNavigate, retry)].filter((notice) => !hidden.includes(notice.id));
   return (
     <>
@@ -174,12 +204,14 @@ export function MeetingCardNoticeList({ meetings, confirms = NO_CONFIRMS, minute
 }
 
 /** 等我确认的条目、写入失败的会议记录和待整理的妙记：打开时一起取，每 30 秒（页面可见时）、回到窗口、会议记录状态变了（meeting-changed）再取；哪个没取到就留着上一次的。 */
-export function useMeetingRecords(): { meetings: TMyMeetingCard[]; confirms: TMyMeetingConfirm[]; minutes: TFeishuMinuteInboxItem[]; reload(): void } {
+export function useMeetingRecords(): { meetings: TMyMeetingCard[]; confirms: TMyMeetingConfirm[]; deferred: TNexusConfirmationItem[]; minutes: TFeishuMinuteInboxItem[]; reload(): void } {
   const [cards, setCards] = useState<{ meetings: TMyMeetingCard[]; confirms: TMyMeetingConfirm[] }>({ meetings: [], confirms: [] });
+  const [deferred, setDeferred] = useState<TNexusConfirmationItem[]>(NO_DEFERRED);
   const [minutes, setMinutes] = useState<TFeishuMinuteInboxItem[]>([]);
   const load = useCallback(async () => {
     await Promise.all([
       browserApi.GET("/api/me/meeting-cards").then(({ data }) => { if (data) setCards(data); }, () => undefined),
+      browserApi.GET("/api/me/nexus-confirmations").then(({ data }) => { if (data) setDeferred(data.items); }, () => undefined),
       browserApi.GET("/api/me/feishu-minutes").then(({ data }) => { if (data) setMinutes(data.minutes); }, () => undefined),
     ]);
   }, []);
@@ -196,10 +228,10 @@ export function useMeetingRecords(): { meetings: TMyMeetingCard[]; confirms: TMy
       window.removeEventListener("meeting-changed", refresh);
     };
   }, [load]);
-  return { ...cards, minutes, reload };
+  return { ...cards, deferred, minutes, reload };
 }
 
 export function MeetingCardNotices({ meetingBase, onNavigate }: { meetingBase: string; onNavigate: Navigate }) {
   const records = useMeetingRecords();
-  return <MeetingCardNoticeList meetings={records.meetings} confirms={records.confirms} minutes={records.minutes} meetingBase={meetingBase} onNavigate={onNavigate} onChanged={records.reload} />;
+  return <MeetingCardNoticeList meetings={records.meetings} confirms={records.confirms} deferred={records.deferred} minutes={records.minutes} meetingBase={meetingBase} onNavigate={onNavigate} onChanged={records.reload} />;
 }

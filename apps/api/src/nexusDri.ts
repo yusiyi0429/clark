@@ -124,7 +124,7 @@ export function createNexusDri({ pool, now, env, people }: NexusDriDeps) {
       const id = randomUUID();
       await cq(
         `INSERT INTO nexus_dri_requests (id, request_id, revision, item_id, meeting_id, fingerprint, body, confirmer_world_id, confirmer_person_id, expires_at, received_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11)`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7::json, $8, $9, $10, $11)`,
         [id, request.requestId, request.revision, request.itemId, request.meetingId, request.fingerprint, JSON.stringify(request), confirmerWorldId, confirmerPersonId, new Date(request.expiresAt), at],
       );
       await cq("UPDATE nexus_dri_requests SET superseded_at = $3 WHERE request_id = $1 AND revision < $2 AND superseded_at IS NULL", [request.requestId, request.revision, at]);
@@ -182,7 +182,7 @@ export function createNexusDri({ pool, now, env, people }: NexusDriDeps) {
       if (Buffer.byteLength(callbackBody) > NEXUS_DRI_MAX_BODY_BYTES) return fail(400, "VALUE_TOO_LONG", "改后的内容太长");
       await cq(
         `INSERT INTO nexus_dri_confirmations (id, request_row_id, decision, confirmed_by_person_id, confirmed_by_world_id, confirmed_at, amended_content, amended_fingerprint, callback_id, callback_body)
-         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10)`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7::json, $8, $9, $10)`,
         [confirmationRef, id, input.decision, personId, row.confirmer_world_id, at, amended ? JSON.stringify(amended.content) : null, amended?.fingerprint ?? null, callback.callbackId, callbackBody],
       );
       if (canCallBack) await enqueueJob(cq, { kind: NEXUS_DRI_CALLBACK_KIND, dedupeKey: `${NEXUS_DRI_CALLBACK_KIND}:${confirmationRef}`, payload: { confirmationRef } });
