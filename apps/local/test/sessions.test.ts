@@ -372,7 +372,7 @@ describe("模型配置与钥匙", () => {
 });
 
 describe("执行方异常", () => {
-  it("版本太旧拒绝开工；登录失效报 auth_required；Codex 还没接", async () => {
+  it("版本太旧拒绝开工；登录失效报 auth_required；执行方和模型配置对不上不开", async () => {
     const work = tempDir("tl-work-");
     const t = await startTestRunner({ pickFolder: work });
     try {
@@ -390,7 +390,7 @@ describe("执行方异常", () => {
       expect(events.find((e) => e.type === "turn_end")).toMatchObject({ isError: true, errorKind: "auth" });
 
       const codex = await api(t.port, token, "POST", "/v1/sessions", { subject: { kind: "topic", topicId: "t" }, title: "x", agent: "codex", firstMessage: "hi" });
-      expect(codex.status).toBe(501);
+      expect(codex.status).toBe(400); // 默认的模型配置是 Claude Code 的
     } finally {
       await t.cleanup();
     }

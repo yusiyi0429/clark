@@ -11,6 +11,7 @@ import { HeadlessDesktop, type MenuAction } from "../src/desktop/index.js";
 
 export const ORIGIN = "https://tk.tokenkingos.com";
 export const FAKE_CLAUDE = fileURLToPath(new URL("./fixtures/fake-claude.mjs", import.meta.url));
+export const FAKE_CODEX = fileURLToPath(new URL("./fixtures/fake-codex.mjs", import.meta.url));
 
 export function tempDir(prefix = "tl-"): string {
   return mkdtempSync(join(tmpdir(), prefix));
@@ -23,6 +24,10 @@ export async function startTestRunner(opts: {
   desktop?: RunnerOptions["desktop"];
   /** 当成本人主目录的地方（测新建文件夹，不碰真的桌面）。 */
   home?: string;
+  /** 用假的 Codex（fake-codex.mjs）；不给就当没装，不起本人电脑上真装的。 */
+  fakeCodex?: boolean;
+  /** 登录 Codex 时「打开浏览器」：记下地址，不开真的。 */
+  openUrl?: (url: string) => void;
 } = {}) {
   // 给 dataDir 时接着用上一次的数据（测重启）
   const dataDir = opts.dataDir ?? tempDir();
@@ -40,7 +45,9 @@ export async function startTestRunner(opts: {
     // 测试不查本人电脑上真装的 gh、lark-cli
     toolsExec: opts.toolsExec ?? (async () => null), holdTiming: opts.holdTiming,
     // 测试不起本人电脑上真装的 Codex：默认当没装
-    codexLimits: opts.codexLimits ?? (async () => null), cloneRepo: opts.cloneRepo, home: opts.home,
+    codexLimits: opts.codexLimits ?? (opts.fakeCodex ? undefined : async () => null), cloneRepo: opts.cloneRepo, home: opts.home,
+    codexBin: opts.fakeCodex ? { command: process.execPath, prefixArgs: [FAKE_CODEX] } : null,
+    openUrl: opts.openUrl ?? (() => {}),
   });
   const port = (runner.server.address() as { port: number }).port;
   runner.config.port = port; // 监听随机端口时，Host 检查要按实际端口
