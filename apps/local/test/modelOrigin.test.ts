@@ -95,6 +95,67 @@ describe("模型配置和子会话带上执行方和来源", { timeout: 30_000 }
     await call("POST", `/v1/sessions/${s.id}/kill`, {});
   });
 
+  it("会话记录里存的是旧名字（如「我的 Claude 订阅」）：本机程序启动时照现在的配置改过来，摘要和报给云端的都是新名字；以前的提示行、最近更新时间不动", async () => {
+    const offline = (async () => { throw new Error("offline"); }) as unknown as typeof fetch;
+    const folder = tempDir("tl-origin-old-");
+    writeFileSync(join(folder, ".fake-claude.json"), "{}");
+    const first = await startTestRunner({ pickFolder: folder, fetchImpl: offline });
+    const { dataDir } = first;
+    const tok = await pair(first.port);
+    await api(first.port, tok, "POST", "/v1/folders/pick", {});
+    const s = (await api(first.port, tok, "POST", "/v1/sessions", { subject: { kind: "card", cardId: "old" }, title: "old", cwd: folder, firstMessage: "做", permissionMode: "auto" })).body;
+    await until(async () => (await api(first.port, tok, "GET", `/v1/sessions/${s.id}`)).body.session.status === "idle");
+    await api(first.port, tok, "POST", `/v1/sessions/${s.id}/kill`, {}); // 已经停了的老会话：重启时状态不会再变
+    await first.runner.close();
+    // 照 11/10 以前的样子改回去：配置的名字、来源名、认出的来源都带「我的」
+    const file = join(dataDir, "sessions", s.id, "session.json");
+    const rec = JSON.parse(readFileSync(file, "utf8"));
+    const OLD = "我的 Claude 订阅";
+    const updatedAt = "2026-11-08T03:00:00.000Z";
+    writeFileSync(file, JSON.stringify({ ...rec, updatedAt, modelLabel: OLD, run: { ...rec.run, sourceLabel: OLD, origin: { ...rec.run.origin, label: OLD } } }));
+    const eventsFile = join(dataDir, "sessions", s.id, "events.jsonl");
+    const before = readFileSync(eventsFile, "utf8");
+    const statuses = () => JSON.parse(readFileSync(join(dataDir, "outbox.json"), "utf8")).entries.map((e: any) => e.item).filter((i: any) => i.sessionId === s.id && i.type === "status").map((i: any) => i.data);
+    const sent = statuses().length;
+
+    const again = await startTestRunner({ pickFolder: folder, fetchImpl: offline, dataDir });
+    try {
+      const now = (await api(again.port, tok, "GET", `/v1/sessions/${s.id}`)).body.session;
+      expect(now.modelLabel).toBe("Claude 订阅");
+      expect(now.run).toMatchObject({ sourceLabel: "Claude 订阅", origin: { provider: "claude-subscription", label: "Claude 订阅", via: null }, model: rec.run.model, actual: rec.run.actual });
+      expect(Value.Check(LocalRun, now.run)).toBe(true);
+      expect(JSON.stringify(now)).not.toContain("我的");
+      expect(now.updatedAt).toBe(updatedAt); // 只是改名字，不算会话有更新
+      expect(JSON.parse(readFileSync(file, "utf8"))).toMatchObject({ modelLabel: "Claude 订阅", updatedAt });
+      // 报给云端：多了带新名字的状态
+      const later = statuses().slice(sent);
+      expect(later.length).toBeGreaterThan(0);
+      expect(later.at(-1)).toMatchObject({ modelLabel: "Claude 订阅", run: { sourceLabel: "Claude 订阅", origin: { label: "Claude 订阅" } } });
+      // 事件记录原样
+      expect(readFileSync(eventsFile, "utf8")).toBe(before);
+      // 再启动一次：名字已经对了，不重报
+      const count = statuses().length;
+      await again.runner.close();
+      const third = await startTestRunner({ pickFolder: folder, fetchImpl: offline, dataDir });
+      try { expect(statuses().length).toBe(count); } finally { await third.runner.close(); }
+    } finally {
+      await again.cleanup().catch(() => {});
+    }
+  });
+
+  it("本人给模型配置改了名：用着它的会话名字跟着改；经 magpie 的来源照旧按实际跑的模型认", async () => {
+    const before = (await call("GET", "/v1/sessions")).body.sessions.find((x: any) => x.modelProfileId === "magpie");
+    expect(before).toMatchObject({ modelLabel: "magpie", run: { sourceLabel: "magpie", origin: { label: "DeepSeek API · 经 magpie" } } });
+    const put = await call("PUT", "/v1/models/magpie", { label: "本机转发", source: "gateway", baseUrl: MAGPIE, model: "codex/gpt-6.1" });
+    expect(put.status, JSON.stringify(put.body)).toBe(200);
+    const after = (await call("GET", `/v1/sessions/${before.id}`)).body.session;
+    expect(after).toMatchObject({ modelLabel: "本机转发", updatedAt: before.updatedAt, run: { sourceLabel: "本机转发", origin: { provider: "deepseek", label: "DeepSeek API · 经 magpie", via: "magpie" } } });
+    // 别的会话不受影响
+    const others = (await call("GET", "/v1/sessions")).body.sessions.filter((x: any) => x.modelProfileId !== "magpie");
+    expect(others.every((x: any) => x.modelLabel !== "本机转发")).toBe(true);
+    await call("PUT", "/v1/models/magpie", { label: "magpie", source: "gateway", baseUrl: MAGPIE, model: "codex/gpt-6.1" });
+  });
+
   it("订阅的子会话照旧：Claude 订阅", async () => {
     const preview = await call("POST", "/v1/runs/preview", {});
     expect(preview.body).toMatchObject({ source: "subscription", harness: "claude-code", origin: { provider: "claude-subscription", label: "Claude 订阅", via: null } });

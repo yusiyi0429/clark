@@ -329,6 +329,7 @@ export class SessionManager {
       else if (LIVE.includes(rec.status)) this.setStatus(rec, "exited", { reason: rec.hold ? HOLD_REASON : "本机程序重启，会话已停；再发一句话会接着做" });
     }
     this.holdQueue = false;
+    this.relabelAll(); // 记录里存的来源名、模型配置的名字可能是旧叫法（如「我的 Claude 订阅」）：照现在的配置改过来
     this.scheduleHoldCheck(); // 上次停着等额度的，照原来的恢复时间接着等
     if (d.budgets) {
       // 时长到没到预算：只在有会话真在跑时才有变化
@@ -1749,9 +1750,8 @@ export class SessionManager {
     const def = p.effort ?? (p.agent === "codex" ? this.d.models.defaultEffort(model.profileId) : null);
     const launch = { ...auto, ...(def ? { effort: def } : {}), ...(p.agent === "codex" ? { multiAgent: false } : {}) };
     const used = model.source === "gateway" ? model.model : model.model ?? launch.model;
-    // 来源的名字：本人配的写配置的名字；模型目录里的一条，配置的名字就是模型名，来源写认出的那个（「Claude 订阅」「Codex 订阅」）
-    const catalog = isClaudeProfileId(model.profileId) || isCodexProfileId(model.profileId);
-    const named = { source: model.source, sourceLabel: catalog ? model.origin.label.slice(0, 40) : model.label, harness: p.agent, origin: model.origin, modelName: used ? this.d.models.displayName(used) : null, actual: null };
+    // 来源的名字见 ModelProfiles.naming
+    const named = { source: model.source, sourceLabel: this.d.models.naming(model.profileId)?.sourceLabel ?? model.label, harness: p.agent, origin: model.origin, modelName: used ? this.d.models.displayName(used) : null, actual: null };
     // 目录里不支持选思考程度的模型（如 Haiku 4.5）不写思考档
     const view: TLocalRun = model.source === "gateway"
       ? { mode: p.mode, model: model.model, effort: null, multiAgent: false, ...named }
@@ -1766,6 +1766,31 @@ export class SessionManager {
     const budgetKey = req.taskBudget?.taskId ? Budgets.key(req.taskBudget.taskId, "") : null;
     if (req.effort && !this.d.models.efforts(model.profileId).includes(req.effort)) throw new SessionError("validation", `「${model.label}」不能选「${req.effort}」这档思考程度`);
     return this.planRun({ mode: req.taskBudget?.budget.mode ?? "auto", tier: req.modelTier ?? "normal", verify: false, budgetKey, agent: req.agent ?? this.d.models.agentOf(model.profileId) ?? "claude-code", effort: req.effort }, model).view;
+  }
+
+  /**
+   * 会话记录里存着开工、换模型时的名字（modelLabel、run 的 sourceLabel 和 origin）。配置改了名、内置那条换了叫法（11/10 去掉「我的」）以后，
+   * 摘要和报给云端的要跟着是现在的名字：本机程序启动时、本人改了模型配置后各对一遍，变了的存下来、重报一次状态。
+   * 配置已经删了的留着原来的；事件记录里以前的提示行不改。只是改名字，会话的「最近更新时间」不动（不然启动一次，老会话都排到前面去了）。
+   */
+  relabelAll(): void {
+    for (const rec of this.records.values()) {
+      const now = this.d.models.naming(rec.modelProfileId);
+      const pending = rec.pendingModel ? this.d.models.naming(rec.pendingModel.modelProfileId)?.label : undefined;
+      // 经 magpie 的来源是按实际跑的模型认的（noteActualModel），照样按它重认
+      const origin = now && (now.origin.via === "magpie" && rec.run?.actual ? modelOrigin({ source: "gateway", baseUrl: `http://127.0.0.1:${MAGPIE_PORT}`, model: rec.run.actual.model }) : now.origin);
+      const stale = Boolean(now && (rec.modelLabel !== now.label || (rec.run && (rec.run.sourceLabel !== now.sourceLabel || JSON.stringify(rec.run.origin) !== JSON.stringify(origin)))));
+      if (!stale && (pending === undefined || pending === rec.pendingModel!.modelLabel)) continue;
+      if (now) {
+        rec.modelLabel = now.label;
+        if (rec.run) rec.run = { ...rec.run, sourceLabel: now.sourceLabel, origin: origin! };
+      }
+      if (pending !== undefined) rec.pendingModel = { ...rec.pendingModel!, modelLabel: pending };
+      const updatedAt = rec.updatedAt;
+      if (stale) this.syncStatus(rec);
+      rec.updatedAt = updatedAt;
+      writeJsonAtomic(join(this.dir, rec.id, "session.json"), rec);
+    }
   }
 
   /**

@@ -207,7 +207,11 @@ export function createServer(d: ServerDeps): http.Server {
     },
     putModel: async (c) => {
       if (!/^[A-Za-z0-9_-]{1,80}$/.test(c.params.id!)) throw new HttpError(400, "validation", "id 只能用字母数字、- 和 _");
-      try { return await d.models.upsert(c.params.id!, validate(LocalModelProfileUpsert, c.body)); } catch (e) {
+      try {
+        const saved = await d.models.upsert(c.params.id!, validate(LocalModelProfileUpsert, c.body));
+        d.sessions.relabelAll(); // 用着这条配置的会话，名字跟着改
+        return saved;
+      } catch (e) {
         if (e instanceof HttpError) throw e;
         throw new HttpError(400, "validation", e instanceof Error ? e.message : String(e));
       }

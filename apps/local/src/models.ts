@@ -188,6 +188,17 @@ export class ModelProfiles {
     return true;
   }
 
+  /**
+   * 这个配置现在叫什么（没有这个配置为 null）：label 配置的名字；sourceLabel 来源的名字——本人配的写配置的名字，
+   * 模型目录里的一条配置的名字就是模型名，来源写认出的那个（「Claude 订阅」「Codex 订阅」）；origin 认出的来源。
+   */
+  naming(id: string): { label: string; sourceLabel: string; origin: TLocalModelOrigin } | null {
+    const p = this.all().find((x) => x.id === id);
+    if (!p) return null;
+    const origin = modelOrigin(p);
+    return { label: p.label, sourceLabel: p.catalog ? origin.label.slice(0, 40) : p.label, origin };
+  }
+
   /** 这个配置能选的思考程度（没有这个配置为空）。 */
   efforts(id: string): TLocalEffort[] {
     const p = this.all().find((x) => x.id === id);
