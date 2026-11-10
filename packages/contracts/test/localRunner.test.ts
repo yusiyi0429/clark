@@ -613,6 +613,10 @@ describe("本机程序契约", () => {
       { ...changed, sources: ["tool", "git"] }, { ...changed, path: "old.ts", sources: ["git"], exists: false, size: null },
     ] })).toBe(true);
     expect(Value.Check(LocalSessionFilesResponse, { root: "C:/work/repo", truncated: false, files: [{ ...changed, sources: [] }] })).toBe(false);
+    // 产出事件带它在会话根里的相对路径，预览时拿去读（老版本本机不带）
+    const artifact = { seq: 3, at: "2026-11-10T04:00:00.000Z", sessionId, type: "artifact", artifactId: "a1b2c3", title: "方案", fileName: "方案.md", size: 1200, sha256: "x" };
+    expect(Value.Check(LocalSessionEvent, { ...artifact, path: "docs/方案.md" })).toBe(true);
+    expect(Value.Check(LocalSessionEvent, artifact)).toBe(true);
   });
 
   it("上下文用了多少（第 42 条）：摘要和事件带现在的 token 数和模型上限；压缩了记一条提示", () => {

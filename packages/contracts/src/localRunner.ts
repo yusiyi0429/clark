@@ -828,11 +828,14 @@ export const LocalRun = Type.Object({
   multiAgent: Type.Boolean(),
   /**
    * 每个子会话都显示「哪个来源的哪个模型」（选了「自动」也显示落到哪个）：界面写 `${sourceLabel} · ${actual?.modelName ?? modelName}`，
-   * 如「我的 Claude 订阅 · Opus 5.5」「TokenHub · qwen3.8-flash」。下面四项本机总会填；Optional 只为兼容老版本本机报的和已存的会话。
+   * 如「Claude 订阅 · Opus 5.5」「TokenHub · qwen3.8-flash」。下面四项本机总会填；Optional 只为兼容老版本本机报的和已存的会话。
    * source：本人的订阅还是网关（同模型配置的 source）。
    */
   source: Type.Optional(LocalModelSource),
-  /** 来源的名字：模型配置的名字（内置的「我的 Claude 订阅」，或本人给 TokenHub 配置起的名字）。 */
+  /**
+   * 来源的名字：本人配的写模型配置的名字（如本人给 TokenHub 配置起的名字）；内置的那条是「Claude 订阅」；
+   * 模型目录里的（cc-、codex- 开头的，配置的名字就是模型名）写认出的来源，「Claude 订阅」「Codex 订阅」（11/10 起，免得写成「Opus 5.5 · Opus 5.5」）。
+   */
   sourceLabel: Type.Optional(Type.String({ minLength: 1, maxLength: 40 })),
   /** 哪个执行方（harness）跑：Claude Code 或 Codex（同会话的 agent）。老版本本机不带。 */
   harness: Type.Optional(LocalAgentKind),
@@ -850,7 +853,7 @@ export const LocalRun = Type.Object({
   actual: Type.Optional(Nullable(LocalActualModel)),
 }, strict);
 /**
- * POST /v1/runs/preview：开工前看这次会怎么跑（开工选项框写「我的 Claude 订阅 · Opus 5.5 · 思考 medium」，「自动」也写落到哪个）。
+ * POST /v1/runs/preview：开工前看这次会怎么跑（开工选项框写「Claude 订阅 · Opus 5.5 · 思考 medium」，「自动」也写落到哪个）。
  * 体是开工请求（LocalCreateSessionRequest）里定跑法的那几项，原样带；回的 LocalRun 和真开工时一样算（当下的额度、这件 Task 的预算），actual 为 null。
  * 只是预览：开工时额度或预算变了，以开工那一刻算的为准（会话摘要和 status 条目里的 run）。
  */
@@ -931,7 +934,8 @@ export const LocalSessionDetailResponse = Type.Object({
  * 交出的产出本来就在里面。本机按解析掉链接以后的真实路径判，在会话根外面的（.. 穿越、指到外面的链接、别的盘）一律 403 folder_not_allowed。
  * 会话结束了（退出、交完、合回前）也能读；工作树合回后清掉了，文件就不在了（404，列表里 exists 为 false）。只读，不改任何东西。
  *
- * POST /v1/sessions/:id/files/read：读一个文件。path 是绝对路径，或相对会话根的路径（正反斜杠都行）；回答里的路径、列表里的 path / absolutePath、产出的文件名都可以直接拿来问。
+ * POST /v1/sessions/:id/files/read：读一个文件。path 是绝对路径，或相对路径（正反斜杠都行）：相对路径先按执行方的工作目录找（它在回答里写的相对路径是相对工作目录的），
+ * 没有再按会话根找——两者只在卡的工作树里、本人选的又是仓库的子文件夹时不一样。回答里的路径、列表里的 path / absolutePath、产出事件（artifact）的 path 都可以直接拿来问。
  * - kind：markdown（.md、.markdown）；text 纯文本和代码（按扩展名认，认不出的看内容里有没有 NUL 字节；HTML、SVG 也算 text，网页当文本看、不执行）；
  *   image（png、jpg、jpeg、gif、webp、bmp、ico）；other 别的（PDF、Word、压缩包、二进制），只给名字和大小，网页给「打开」。
  * - content：markdown、text 是 UTF-8 文字，最多 1 MB，超了只给前 1 MB、truncated 为 true；image 是 base64（encoding 写明），最多 5 MB，超了不给内容（content 为 null、truncated true）；
@@ -956,7 +960,7 @@ export const LocalSessionFileReadResponse = Type.Object({
 /**
  * GET /v1/sessions/:id/files：本会话写过、改过的文件（右栏「改动的文件 N」；回答里提到的路径对得上这里的才能点）。两路取并集，各有各的盲区，sources 写明是哪一路知道的：
  * - tool：事件记录里执行方用写文件、改文件的工具动过的（Claude Code 的 Write、Edit、MultiEdit、NotebookEdit，Codex 的改文件）。不是 git 仓库也有；
- *   用命令改的（脚本生成、sed、格式化工具）看不到；被拒绝、没改成的不算。
+ *   用命令改的（脚本生成、sed、格式化工具）看不到，子 agent 里写的也看不到（它内部的步骤不进事件记录）；被拒绝、没改成的不算。
  * - git：卡在工作树里做的最全——开工以来分支上已经提交的，加上没提交的（含新文件，.gitignore 里的不算）；
  *   在本人文件夹里直接做的（专题、不是工作树的卡），文件夹是 git 仓库时只有没提交的改动，而且分不清是不是这个会话改的（本人自己没提交的改动也在里面）；不是仓库就没有这一路。
  * path 是相对会话根的路径（正斜杠），absolutePath 是绝对路径（回答里两种写法都可能出现，网页拿它们去对）；exists 是现在还在不在（删掉的、挪走的为 false，不能点）；
@@ -1315,7 +1319,8 @@ export const LocalSessionEvent = Type.Union([
      */
     errorKind: Type.Optional(Type.Union([Type.Literal("auth"), Type.Literal("api"), Type.Literal("usage_limit"), Type.Literal("balance"), Type.Literal("interrupted"), Type.Literal("other")])),
   }),
-  ev("artifact", { artifactId: Id, title: Type.String(), fileName: Type.String(), size: Type.Integer({ minimum: 0 }), sha256: Type.String() }),
+  /** path：这份产出在会话根里的相对路径（正斜杠，11/10 起带；fileName 只是文件名），在右边预览时拿它去读（POST /v1/sessions/:id/files/read）。 */
+  ev("artifact", { artifactId: Id, title: Type.String(), fileName: Type.String(), size: Type.Integer({ minimum: 0 }), sha256: Type.String(), path: Type.Optional(Type.String()) }),
   /** commit：卡在工作树里做时，交回那一刻分支上的提交（本机先把没提交的改动提交了）。 */
   ev("handback", { summary: Type.String(), criteria: Type.Array(LocalHandbackCriterion), outputKeys: Type.Array(SyncKey), commit: Type.Optional(Sha) }),
   /** 专题存了新的一版（已排进上报队列）。 */
