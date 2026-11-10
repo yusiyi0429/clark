@@ -1,5 +1,5 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
-import { BUDDY_ACTION_NAMES, BuddyActionResult, BuddyPlan, type BuddyActionName } from "./buddyActions.js";
+import { BUDDY_ACTION_NAMES, BuddyActionResult, BuddyPlan, BuddyUiEffect, type BuddyActionName } from "./buddyActions.js";
 import { ConversationCard, LocalFallbackReason } from "./conversations.js";
 import { LocalAgentKind } from "./localRunner.js";
 import { ModelEffort, ProjectDetailResponse } from "./projects.js";
@@ -79,12 +79,15 @@ export const PROJECT_MCP_TOOLS = [...PROJECT_MCP_ACTIONS, READ_EARLIER_CONVERSAT
 
 /**
  * 项目动作的工具结果（MCP 的 text 内容是它的 JSON）：同 Chat 拿到的 BuddyActionResult，多带这一下要画的东西：
- * card 是出的卡（ask_user 的选项框、send_message 的转达卡），plan 是 update_plan 交的整张清单。出错时 isError = true，内容是 { code, message }（同云端的错误码和中文）。
+ * card 是出的卡（ask_user 的选项框、send_message 的转达卡），plan 是 update_plan 交的整张清单（写动作做成后天枢自动打勾的那一版也在这里），
+ * ui 是做完这个动作界面上要跟着变的（同云端对话流的 ui 事件，按先后；没有就不带）：本机原样转给网页，网页据此重读那几块。
+ * 这三样只在这个项目有一轮本机的在跑时才有（都按那一轮记）。出错时 isError = true，内容是 { code, message }（同云端的错误码和中文）。
  */
 export const ProjectMcpToolResult = Type.Object({
   ...BuddyActionResult.properties,
   card: Type.Optional(ConversationCard),
   plan: Type.Optional(BuddyPlan),
+  ui: Type.Optional(Type.Array(BuddyUiEffect)),
 }, strict);
 
 /** 一轮对话（开始时带的最近几轮、read_earlier_conversation 读到的都是这个）。 */
