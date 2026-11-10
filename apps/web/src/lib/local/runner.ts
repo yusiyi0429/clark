@@ -45,6 +45,10 @@ export interface LocalRunner {
   patchSettings(patch: TLocalSettingsPatch): Promise<TLocalSettings>;
   listModels(): Promise<TLocalModelProfile[]>;
   putModel(id: string, body: TLocalModelProfileUpsert): Promise<TLocalModelProfile>;
+  /** 连 TokenHub（17.2 第 51 条）：Key 直接交给本机，本机验过再存；回现在全部的模型配置。Key 不对 tokenhub_key_rejected，连不上 tokenhub_unreachable。 */
+  connectTokenHub(apiKey: string): Promise<TLocalModelProfile[]>;
+  /** 断开 TokenHub：本机删 Key 和连接时建的模型配置。 */
+  disconnectTokenHub(): Promise<void>;
   /** 本人加的工具（给执行子会话挂的 HTTP MCP 服务器，存在本机）：列出、加或改（存完本机查一次连没连上）、移除、再查一次。钥匙只写不读。 */
   listTools(): Promise<TLocalTool[]>;
   putTool(id: string, body: TLocalToolUpsert): Promise<TLocalTool>;

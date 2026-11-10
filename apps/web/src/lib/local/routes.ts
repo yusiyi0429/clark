@@ -6,6 +6,8 @@ type Contracts = typeof import("@warmap/contracts");
 
 export const LOCAL_RUNNER_DEFAULT_PORT: Contracts["LOCAL_RUNNER_DEFAULT_PORT"] = 47610;
 export const LOCAL_RUNNER_TOKEN_HEADER: Contracts["LOCAL_RUNNER_TOKEN_HEADER"] = "x-tianshu-local-token";
+/** 连接页连 TokenHub 时本机建的模型配置，id 都以它开头。 */
+export const LOCAL_TOKENHUB_PROFILE_PREFIX: Contracts["LOCAL_TOKENHUB_PROFILE_PREFIX"] = "th-";
 /** 一个项目在一台电脑上最多绑几个文件夹（17.2 第 46 条）。 */
 export const LOCAL_PROJECT_FOLDER_LIMIT: Contracts["LOCAL_PROJECT_FOLDER_LIMIT"] = 5;
 
@@ -27,6 +29,8 @@ export const LOCAL_RUNNER_ROUTES: Contracts["LOCAL_RUNNER_ROUTES"] = {
   listModels: { method: "GET", path: "/v1/models", auth: true },
   putModel: { method: "PUT", path: "/v1/models/:id", auth: true },
   deleteModel: { method: "DELETE", path: "/v1/models/:id", auth: true },
+  connectTokenHub: { method: "POST", path: "/v1/tokenhub", auth: true },
+  disconnectTokenHub: { method: "DELETE", path: "/v1/tokenhub", auth: true },
   listTools: { method: "GET", path: "/v1/tools", auth: true },
   putTool: { method: "PUT", path: "/v1/tools/:id", auth: true },
   deleteTool: { method: "DELETE", path: "/v1/tools/:id", auth: true },

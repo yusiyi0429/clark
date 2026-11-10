@@ -5,6 +5,7 @@
 import type { TLocalAgentStatus, TLocalModelProfile, TLocalStatusResponse, TLocalTool } from "@warmap/contracts";
 import type { Pairing } from "@/lib/local/LocalRunnerProvider";
 import type { LocalPhase } from "@/lib/local/connection";
+import { LOCAL_TOKENHUB_PROFILE_PREFIX } from "@/lib/local/routes";
 import type { ConnState } from "./parts";
 
 export type RowAction = "pair" | "retry" | "resume" | "link" | "unpair" | "reauth" | "login";
@@ -54,10 +55,16 @@ export function agentRow(agent: TLocalAgentStatus, now: number, exhausted = fals
   return { key, name, sub, state: exhausted ? "exhausted" : "connected", action: null };
 }
 
-/** TokenHub：本机有网关的模型档就算连上，小字写模型名。钥匙只在本机，网页不加（共用账户的花费不写，13.1 第 6 条）。 */
+/**
+ * TokenHub（17.2 第 51 条）：本机有连接时建的模型配置（th- 开头）就是已连接，小字写模型名（多于 3 个写前 3 个和「等 N 个」），动作「断开」；
+ * 没有是未连接，动作「连接」（弹窗填 Key，Key 只交给本机）。本人在模型配置里自己配的网关不算。
+ */
 export function tokenHubRow(models: TLocalModelProfile[]): RowModel {
-  const gateway = models.filter((model) => model.source !== "subscription");
-  return { key: "tokenhub", name: "TokenHub", sub: gateway.length ? gateway.map((model) => model.label).join(" · ") : null, state: gateway.length ? "connected" : "disconnected", action: null };
+  const names = models.filter((model) => model.id.startsWith(LOCAL_TOKENHUB_PROFILE_PREFIX)).map((model) => model.modelName ?? model.label);
+  const base = { key: "tokenhub", name: "TokenHub" };
+  if (!names.length) return { ...base, sub: null, state: "disconnected", action: "link" };
+  const sub = names.length > 3 ? `${names.slice(0, 3).join(" · ")} 等 ${names.length} 个` : names.join(" · ");
+  return { ...base, sub, state: "connected", action: "unpair" };
 }
 
 const TOOL: Record<Tool["kind"], { name: string; login: string }> = {

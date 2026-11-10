@@ -28,6 +28,7 @@ import { usageCells } from "@/lib/home/quota";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { linkCloud, type LinkPerson } from "@/lib/local/link";
 import type { SecondaryPageProps } from "./index";
+import { TokenHubDialog } from "./TokenHubDialog";
 import { KINGDEE_PLACEHOLDER, agentRow, feishuRow, isCliTool, localToolRow, mcpRow, programRow, tokenHubRow, toolRow, type RowAction, type RowModel, type TokenLike } from "./connectionRows";
 import { AddButton, Added, Card, CardGrid, ICON, QuotaBlock, Row, Section, StateLine, SwitchRow, relative, useMe, type Me } from "./parts";
 import h from "@/styles/home.module.css";
@@ -72,6 +73,8 @@ function ThisComputer({ me }: { me: Me | null }) {
   const now = Date.now();
   const login = (agent: TLocalAgentKind) => async () => { await local.runner.login(agent); await local.refresh(); };
   const patch = (body: Parameters<typeof local.runner.patchSettings>[0]) => actions.run("settings", async () => { await local.runner.patchSettings(body); await local.refresh(); });
+  const [tokenHubOpen, setTokenHubOpen] = useState(false);
+  const tokenHub = tokenHubRow(local.models);
 
   // 额度和右栏「用量」同一套数：订阅的挂在 Claude Code、Codex 下面，其余（网关余额、当天花费）挂在 TokenHub 下面。
   const cells = ready ? usageCells(status?.quota ?? [], now) : [];
@@ -92,7 +95,8 @@ function ThisComputer({ me }: { me: Me | null }) {
             const own = cellsOf(agent.kind === "claude-code" ? "claude" : "codex");
             return rowOf(agentRow(agent, now, own.some((cell) => cell.value === "用完")), own.length ? own.map((cell) => <QuotaBlock key={cell.id} cell={cell} />) : null, login(agent.kind));
           })}
-          {rowOf(tokenHubRow(local.models), gatewayCells.length ? gatewayCells.map((cell) => <QuotaBlock key={cell.id} cell={cell} />) : null)}
+          {rowOf(tokenHub, gatewayCells.length ? gatewayCells.map((cell) => <QuotaBlock key={cell.id} cell={cell} />) : null,
+            tokenHub.action === "link" ? async () => setTokenHubOpen(true) : async () => { await local.runner.disconnectTokenHub(); await local.refresh(); })}
           <Row testId="row-folders" name="文件夹" sub={local.folders.length ? `${local.folders.length} 个` : null}
             action={<HeroButton variant="tertiary" size="sm" onPress={() => void local.pickFolder()}>添加</HeroButton>}>
             {local.folders.length || local.error ? <>
@@ -116,6 +120,7 @@ function ThisComputer({ me }: { me: Me | null }) {
         <Devices me={me} />
       </ul>
       {actions.failed?.key === "settings" || actions.failed?.key.startsWith("folder:") ? <FailedLine reason={actions.failed.reason} onRetry={actions.failed.retry} /> : null}
+      {tokenHubOpen ? <TokenHubDialog onClose={() => setTokenHubOpen(false)} onConnect={async (apiKey) => { await local.runner.connectTokenHub(apiKey); await local.refresh(); }} /> : null}
     </Section>
   );
 }

@@ -65,6 +65,13 @@ const MODELS: TLocalModelProfile[] = [
     origin: { provider: "tokenhub", label: "TokenHub", via: null }, modelName: "deepseek-v4.1-flash" },
 ];
 
+/** 连接页连上 TokenHub 后本机建的（th- 开头）。 */
+const tokenHubModel = (model: string, name: string): TLocalModelProfile => ({
+  id: `th-${model.replace(/[^A-Za-z0-9_-]/g, "_")}`, label: name, source: "gateway", agent: "claude-code", baseUrl: "https://tokenhub.example/api/anthropic", model, smallModel: null,
+  webSearch: true, hasKey: true, isDefault: false, efforts: [], defaultEffort: null, catalog: false, origin: { provider: "tokenhub", label: "TokenHub", via: null }, modelName: name,
+});
+const TOKENHUB_MODELS = [tokenHubModel("wangsu/claude-opus-5-5", "Opus 5.5"), tokenHubModel("wangsu/deepseek-v4.1-flash", "deepseek-v4.1-flash")];
+
 /**
  * Claude 订阅的模型目录（设计 17.2 第 40 条，D 契约 584eb5e9）：Claude Code 握手回的模型每个一条，只读（catalog），id 是 cc- 开头；
  * 不能选思考的 efforts 为空（Haiku 4.5）。排在本人配的后面（真的本机程序里「自动」在最上面，目录已经筛过）。
@@ -120,7 +127,8 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
   let token = paired ? "mock-token-0000000000000000000000" : "";
   let codexIn = codex === "logged_in";
   let codexSetup: { phase: "idle" | "waiting_browser"; startedAt: string | null } = { phase: "idle", startedAt: null };
-  const models = () => [...MODELS, ...CLAUDE_MODELS, ...(codexIn ? CODEX_MODELS : [])];
+  let tokenHub: TLocalModelProfile[] = [];
+  const models = () => [...MODELS, ...tokenHub, ...CLAUDE_MODELS, ...(codexIn ? CODEX_MODELS : [])];
   const sessions = new Map<string, MockSession>();
   const projects = new Map<string, TLocalProjectFolder>();
   const bindAll = (projectId: string, list: TLocalFolder[], name?: string): TLocalProjectFolder => {
@@ -386,6 +394,15 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
       return { includePersonalConfigByDefault: includePersonal, allowedOrigins: [], paused: Boolean(patch.paused), maxConcurrent, autoMerge };
     },
     listModels: async () => models(),
+    // 连 TokenHub：Key 里带 bad 当成 Key 不对，带 offline 当成连不上，别的连上两个模型
+    connectTokenHub: async (apiKey) => {
+      await new Promise((resolve) => setTimeout(resolve, stepMs));
+      if (apiKey.includes("bad")) throw new LocalRunnerError("tokenhub_key_rejected", "Key 不对", 422);
+      if (apiKey.includes("offline")) throw new LocalRunnerError("tokenhub_unreachable", "连不上 TokenHub", 502);
+      tokenHub = TOKENHUB_MODELS;
+      return models();
+    },
+    disconnectTokenHub: async () => { tokenHub = []; },
     putModel: async (id, body) => ({ id, label: body.label, source: body.source, agent: "claude-code", baseUrl: body.baseUrl ?? null, model: body.model, smallModel: body.smallModel ?? null, webSearch: body.webSearch ?? false, hasKey: Boolean(body.apiKey), isDefault: Boolean(body.isDefault) }),
     listTools: async () => tools.map((tool) => ({ ...tool })),
     putTool: async (id, body) => { const tool = upsertTool(tools, id, body); return { ...tool }; },
