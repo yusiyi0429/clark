@@ -189,7 +189,7 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .foldToggle[data-flat] { padding-left: var(--space-2); }
 
 .taskNode { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
-.taskRow { position: relative; display: flex; align-items: center; min-height: var(--row-48); border-radius: var(--r-control); }
+.taskRow { position: relative; display: flex; align-items: center; min-height: var(--row-36); border-radius: var(--r-control); }
 .taskRow:hover { background: var(--default-soft); }
 .taskRow[data-current] { background: var(--default-soft-hover); }
 .taskMain { display: flex; flex: 1; align-items: center; gap: var(--space-2); min-width: 0; padding: 6px var(--space-2); border: 0; border-radius: inherit; background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
@@ -243,7 +243,6 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 @media (prefers-reduced-motion: reduce) { .subDot i { animation: none !important; } }
 /* 页头里跟在文字中间（「项目 / B 标题」）：右边空一格。 */
 .letter[data-inline] { margin-right: 6px; vertical-align: 1px; }
-.subQueue { display: inline-grid; flex: none; place-items: center; color: var(--ink-faint); }
 .subReason { flex: none; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; }
 /* 本人事项行（9.10）：就是子会话行，状态位换成本人 16 的头像；没照片画成纯 --neutral-wash 圆、不写字（5.4.2「本人行」）。 */
 /* 16px 的人像位（树上本人事项行首、等你行里请你认可的对方）：同一条规则。 */
@@ -550,6 +549,7 @@ button.bgLabel:hover { background: var(--default-soft); }
 .app[data-phone] .tree { flex: none; overflow: visible; }
 .app[data-phone] .me { margin: 0 calc(-1 * var(--space-4)); padding: var(--space-1) var(--space-4) calc(var(--space-1) + env(safe-area-inset-bottom, 0px)); }
 .app[data-phone] :is(.sub, .meRow) { height: var(--touch-hit, 44px); }
+.app[data-phone] .taskRow { min-height: var(--touch-hit, 44px); }
 /* 手机上的热区至少 44（5.2、5.7）：页头的返回、后台任务、信息按钮，「子会话 N」。 */
 .app[data-phone] .icon { min-width: var(--touch-hit, 44px); min-height: var(--touch-hit, 44px); }
 .app[data-phone] .foldToggle { min-height: var(--touch-hit, 44px); }

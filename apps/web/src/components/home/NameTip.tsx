@@ -51,7 +51,7 @@ export function useNameTip(name: string, detail?: string | null) {
 }
 
 /**
- * 一直出的悬停提示（同上面的样子和 500ms）：图标上写它是什么意思，如排队的子会话行尾的计时器「等前面的卡」（25 条）。
+ * 一直出的悬停提示（同上面的样子和 500ms）：写它是什么意思，如子会话输入框下面的上下文圆环「16.6 万 / 20 万」（42 条）。
  * ref 挂在图标上，props 也挂在图标上；读屏另给图标 aria-label，同一句话。placement：左栏里出在右边，输入框下面那排出在上面。
  */
 export function useHoverTip(text: string, placement: "right" | "top" = "right") {

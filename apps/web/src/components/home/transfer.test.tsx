@@ -73,7 +73,7 @@ describe("项目转交（16.7，接 B 的转交接口）", () => {
 
   it("发出以后：项目行写「等 {名字} 接手」，接走了「已交给 {名字}」；对话里「已交给 {名字} · 等接手」", () => {
     expect(transferLine(transfer({ status: "sent" }))).toBe("等 陈晨星 接手");
-    expect(projectLine(project({ transfer: transfer({ status: "accepted" }) })).text).toBe("已交给 陈晨星");
+    expect(projectLine(project({ transfer: transfer({ status: "accepted" }) }))?.text).toBe("已交给 陈晨星");
     expect(transferLine(null)).toBeNull();
     const sent = render(<TransferFlow project={project()} transfer={transfer({ status: "sent", note: NOTE })} onChanged={noop} onStop={noop} />);
     expect(sent).toContain("已交给 陈晨星 · 等接手");

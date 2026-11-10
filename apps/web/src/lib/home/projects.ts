@@ -117,15 +117,14 @@ export function projectWorking(project: Project, workers: readonly BackgroundWor
 }
 
 /**
- * 项目行的第二行（16.2），按顺序取第一个有的：转交中「等 {名字} 接手」/ 交出去了「已交给 {名字}」（16.7）→「预算 80%」（warning）→「{月} 月 · {Task 名} · {截止} 验收」→「本月没有目标 · {最近活动}」。
+ * 项目行的第二行（16.2；17.2 第 47 条起只在这两种时出，其余只有名字一行）：转交中「等 {名字} 接手」/ 交出去了「已交给 {名字}」（16.7）→「预算 80%」（warning）。
+ * 本月目标、「本月没有目标」不在左栏写（项目详情里有）。
  */
-export function projectLine(project: Project, now = Date.now()): { text: string; warning: boolean } {
+export function projectLine(project: Project): { text: string; warning: boolean } | null {
   const handover = transferLine(project.transfer);
   if (handover) return { text: handover, warning: false };
   if (project.budget) return { text: `预算 ${project.budget.percent}%`, warning: true };
-  const goal = project.goals[0];
-  if (goal) return { text: [`${Number(goal.period.slice(5))} 月`, goal.name, `${goal.due} 验收`].join(" · "), warning: false };
-  return { text: project.lastActivity ? `本月没有目标 · ${ago(project.lastActivity, now)}` : "本月没有目标", warning: false };
+  return null;
 }
 
 /** 详情里「当前目标」那一块写哪件：本月截止最早的那件，本月没有就之前月份没了结的。 */
