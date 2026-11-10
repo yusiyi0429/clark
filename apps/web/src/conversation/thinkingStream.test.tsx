@@ -12,7 +12,7 @@ describe("思考过程的显示", () => {
       route={{ tier: "deep", expectSeconds: 90 }} thought={{ text: TEXT, seconds: null }} />);
     expect(html).toContain('data-testid="conversation-thinking-stream"');
     expect(html).toContain("再看融资金额与上市门槛。");
-    expect(html).toContain("正在深入思考");
+    expect(html).toContain("深入分析");
     expect(html.indexOf("conversation-thinking-stream")).toBeLessThan(html.indexOf('data-testid="conversation-thinking"'));
   });
 

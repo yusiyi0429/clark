@@ -1,8 +1,12 @@
+import { resetAutoRelay } from "../autoRelay.js";
 import { createHash, randomUUID } from "node:crypto";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { Type } from "@sinclair/typebox";
 import {
   AcceptIssueDraftRequest,
+  ATTACHMENT_MAX_BYTES,
+  ATTACHMENT_MAX_COUNT,
+  attachmentKind,
   ConversationMessageRequest,
   ConversationScope,
   ConversationTurnParams,
@@ -49,7 +53,13 @@ import { createCompanyMap, defaultFocus, scopeLabel } from "../companyMap.js";
 import { acceptIssueDraft, afterIssueDraftCreated, createIssueSuggest, declineIssueDraft, getIssueDraftView, issueSuggestBlock, issueSuggestContext, withChatIssueCards } from "../issueDrafts.js";
 import { buildSceneAnchor } from "../sceneAnchor.js";
 import type { ConversationAnchor } from "../conversationAnchor.js";
-import { ChatServiceError } from "../chatService.js";
+import { ChatServiceError, FORWARDED_HEADER, type ChatTarget } from "../chatService.js";
+import { boardTask, CardError, planTaskOpener, type CardPlanTask } from "../taskCards.js";
+import { ensureProjectPipeline, pipelineViewer, projectPipelineConversation } from "../taskPipelines.js";
+import { historyLocalTurn, localTurnBusy } from "../projectLocalTurns.js";
+import { CARD_PROJECT, ownProject, PROJECT_SCOPE_PREFIX, projectReader, type ProjectRow } from "../projects.js";
+import { ownerSpoke } from "../projectTransfers.js";
+import { settlementsOf } from "../taskContinuity.js";
 import { VIA_HEADER } from "../homeTurn.js";
 import { currentSegmentOf, segmentDateLabel, startsNewSegment } from "../conversationSegments.js";
 import type { PastConversations } from "../conversationRecall.js";
@@ -60,8 +70,18 @@ import { idParams, type AppInstance, type RouteContext, type SessionPerson } fro
 /** 场景锚点里对象页的叫法（按 scope 前缀）。 */
 const OBJECT_SCENES: Record<string, string> = {
   task: "执行事项详情", meeting: "会议详情", issue: "议题详情", mission: "Mission 详情", "mission-card": "任务卡详情",
-  "monthly-plan": "月度计划详情", "monthly-review-item": "复盘项详情", "personal-review": "个人复盘", signal: "信号详情",
+  "monthly-plan": "月度计划详情", "monthly-review-item": "复盘项详情", "personal-review": "个人复盘", signal: "信号详情", project: "项目",
 };
+
+/**
+ * 项目对话（project:<projectId>，新首页第 16 节）的页面对象：项目名，和挂着、没了结的每件 Task 的名字、完成定义、标准和约定。
+ * handover（16.7）：项目是交接过来的，管线不读以前的对话，只用这些：交接说明、目标历史、交付物、子会话记录（以前负责人的卡）。
+ */
+function projectSnapshot(scope: string, project: ProjectRow, goals: CardPlanTask[], handover: unknown): TReferenceSnapshot {
+  return { cardId: scope, version: 1, kind: "project", title: `项目：${project.name}`, objectRef: { type: "project", id: project.id, version: 1 },
+    payload: { project: { name: project.name }, goals: goals.map(({ task, agreement }) => ({ task: { name: task.name, doneDefinition: task.doneDefinition,
+      criteria: task.criteria }, agreement: { criteria: agreement.criteria, exclusions: agreement.exclusions } })), ...handover ? { handover } : {} } };
+}
 
 /**
  * 正在写的对话轮次（runId → 本人与这一轮的 abort）：停机时由 settleActiveTurns 收尾，本人点「停止」时按 runId 停下。
@@ -83,8 +103,57 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
   const { pool, q, env, fail, requirePerson, requireCEO, requestContext, runtime, peopleDirectory, conversationAttachmentStorageDir, conversationTurnTimeoutMs, conversationStallTimeoutMs, conversationHeartbeatMs, conversationCompaction, research } = ctx;
 
   const conversationParams = Type.Object({ scope: ConversationScope }, { additionalProperties: false });
+  const openPlanTask = planTaskOpener(q, ctx.planTasks, peopleDirectory, ctx.now);
+  const isProject = (scope: TConversationScope) => scope.startsWith(PROJECT_SCOPE_PREFIX);
+  const projectIdOf = (scope: TConversationScope) => scope.slice(PROJECT_SCOPE_PREFIX.length);
+  /**
+   * 项目对话：发一句、传附件只给项目现在的负责人；读历史还给交出去之前负责过的人（16.7，只读，读的是他自己那段）。
+   * 不是本人的、找不到都 404（CardError）；交出去了的再发一句 403 PROJECT_HANDED_OVER。
+   */
+  const pipelineProject = async (person: SessionPerson, scope: TConversationScope, write: boolean) => {
+    if (!write) return (await projectReader(q, person.personId, projectIdOf(scope))).row;
+    const reader = await projectReader(q, person.personId, projectIdOf(scope));
+    if (!reader.current) throw new CardError(403, "PROJECT_HANDED_OVER", "这个项目已经交给别人了，这里只读");
+    return ownProject(q, person.personId, projectIdOf(scope));
+  };
+  /** project scope 先核对访问（write：发一句、传附件）；没过时已回了错误，返回 true。别的 scope 不管。 */
+  const pipelineDenied = async (reply: FastifyReply, person: SessionPerson, scope: TConversationScope, write = true) => {
+    if (!isProject(scope)) return false;
+    try {
+      await pipelineProject(person, scope, write);
+      return false;
+    } catch (cause) {
+      if (!(cause instanceof CardError)) throw cause;
+      fail(reply, cause.status, cause.code, cause.message);
+      return true;
+    }
+  };
   // 我的 Agent 按「人 × 页面」私有；任务卡 scope 始终复查对象成员及当前拍板权。
   const scopeObjectFor = async (person: SessionPerson, scope: TConversationScope) => {
+    if (isProject(scope)) {
+      const project = await pipelineProject(person, scope, false).catch((cause) => {
+        if (cause instanceof CardError) return null;
+        throw cause;
+      });
+      if (!project) return { snapshot: null, visible: false };
+      // 交接过来的（16.7）：最近一次交给本人的转交，带上管线能用的材料。
+      const transfer = (await q(`SELECT from_id,note FROM project_transfers WHERE project_id=$1 AND to_id=$2 AND status='accepted' ORDER BY decided_at DESC LIMIT 1`,
+        [project.id, person.personId])).rows[0] as { from_id: string; note: unknown } | undefined;
+      const handover = transfer && project.owner_id === person.personId ? {
+        from: personDisplayNames(peopleDirectory).get(transfer.from_id) ?? transfer.from_id, note: transfer.note,
+        goalHistory: (await q("SELECT period,task_name FROM project_goals WHERE project_id=$1 ORDER BY period DESC,linked_at LIMIT 30", [project.id])).rows,
+        deliverables: (await q(`SELECT v.task_name,v.number,v.delivered_at FROM deliverable_versions v JOIN project_goals g ON g.task_id=v.task_id
+          WHERE g.project_id=$1 ORDER BY v.created_at DESC LIMIT 20`, [project.id])).rows,
+        records: (await q(`SELECT t.title,t.status FROM tasks t WHERE t.owner_id<>$2 AND ${CARD_PROJECT("t")}=$1 ORDER BY t.updated_at DESC LIMIT 30`,
+          [project.id, person.personId])).rows,
+      } : null;
+      // 挂着、没了结的 Task（本体读不到、不是本人负责的那件跳过）。
+      const rows = (await q("SELECT task_id FROM project_goals WHERE project_id=$1 ORDER BY period DESC,linked_at", [project.id])).rows as { task_id: string }[];
+      const settled = await settlementsOf(q, rows.map((row) => row.task_id));
+      const goals = (await Promise.all(rows.filter((row) => !settled.has(row.task_id))
+        .map((row) => boardTask(openPlanTask, person.personId, row.task_id).catch(() => null)))).filter((goal): goal is CardPlanTask => Boolean(goal));
+      return { visible: true, snapshot: projectSnapshot(scope, project, goals, handover) };
+    }
     if (person.role !== "ceo" && (scope.startsWith("issue:") || scope.startsWith("meeting:"))) {
       const [objectType, objectId] = scope.split(":", 2) as ["issue" | "meeting", string];
       if (!await isActiveMember(q, { objectType, objectId }, person.personId)) return { snapshot: null, visible: false };
@@ -102,8 +171,16 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
   };
   const conversationScopeVisible = async (person: SessionPerson, scope: TConversationScope) =>
     (await scopeObjectFor(person, scope)).visible;
-  // 首页对话改走独立 Chat（CHAT_SERVICE_URL，chatService.ts）：只管 global，对象页的对话照旧。
+  // 首页对话改走独立 Chat（CHAT_SERVICE_URL，chatService.ts）：只管 global 和项目对话（project），对象页的对话照旧。
   const chat = ctx.chat;
+  const onChat = (scope: TConversationScope) => scope === "global" || isProject(scope);
+  /** 项目对话在 Chat 里的那一段：发一句、传附件时没有就建（ensure），读历史时只查不建。 */
+  const pipelineTarget = async (person: SessionPerson, scope: TConversationScope, requestId: string, ensure: boolean): Promise<ChatTarget | null> => {
+    const projectId = scope.slice(PROJECT_SCOPE_PREFIX.length);
+    const conversationId = ensure ? (await ensureProjectPipeline({ pool, chat }, person, projectId, requestId)).conversationId
+      : await projectPipelineConversation(q, projectId, person.personId);
+    return conversationId ? { conversationId, scope, projectId } : null;
+  };
   // 对话分段（CONVERSATION_SEGMENTS=1 才开）：闲置满 12 小时或跨过北京时间凌晨 4 点换一段，模型侧只带这一段；上一段经会话目录里的纪要交接。
   // 关着时（缺省）照旧：闲置 12 小时模型侧只带摘要重开（CONVERSATION_IDLE_RESTART_MS）。
   const segmentsOn = env.conversationSegments === true;
@@ -116,6 +193,19 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
     "/api/conversations/:scope/messages",
     { preHandler: requirePerson, schema: { params: conversationParams } },
     async (req, reply) => {
+      if (await pipelineDenied(reply, req.person!, req.params.scope, false)) return reply;
+      // 项目对话走 Chat：还没开过就是空的，不建。
+      if (chat && isProject(req.params.scope)) {
+        try {
+          const target = await pipelineTarget(req.person!, req.params.scope, String(req.id), false);
+          const history = target ? await chat.history(pipelineViewer(req.person!.personId), String(req.id), target) : { scope: req.params.scope, messages: [] };
+          // 本人电脑上正在跑的那一轮（17.2 第 38 条）：还没写进对话，单独给。
+          const localTurn = await historyLocalTurn(q, projectIdOf(req.params.scope), ctx.now());
+          return localTurn ? { ...history, localTurn } : history;
+        } catch (error) {
+          return chatFailed(reply, error);
+        }
+      }
       // 一号位的首页历史里补上 Chat 那几轮的转议题建议卡（issueDrafts.ts withChatIssueCards）。
       if (chat && req.params.scope === "global") {
         return chat.history(req.person!, String(req.id))
@@ -135,9 +225,23 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
   ): Promise<void> => {
       const person = req.person!;
       const owner = person.personId;
-      if (chat && req.params.scope === "global") {
+      if (await pipelineDenied(reply, person, req.params.scope)) return;
+      // 接手人说了第一句：管线可以自己开子会话了（16.7）。
+      if (isProject(req.params.scope)) await ownerSpoke(q, owner, projectIdOf(req.params.scope));
+      // 本人在这个项目对话里说了话（含伙伴台转来的），自动接力清零（18 节第 12 条）；子会话报告替本人发的那句不算。
+      if (isProject(req.params.scope) && req.headers[FORWARDED_HEADER] !== "report") await resetAutoRelay(q, projectIdOf(req.params.scope));
+      if (chat && onChat(req.params.scope)) {
         // 和天枢自己的对话同一条规则：成员不能借显式引用把 Card 带进对话。
         if (person.role !== "ceo" && req.body.references?.length) return fail(reply, 404, "REFERENCE_NOT_FOUND", "Card 引用不存在");
+        // 项目对话：进这个项目那一段（没有就建），飞书、微信只进总管线。
+        if (req.params.scope !== "global") {
+          // 一段对话同一时间只跑一轮：本人电脑上正在跑（17.2 第 38 条）就不发，伙伴转来、子会话回报照旧隔几秒再试。
+          if (await localTurnBusy(q, projectIdOf(req.params.scope), ctx.now()))
+            return fail(reply, 409, "TURN_IN_PROGRESS", "这个项目对话正在本人电脑上回答上一句，等它答完再发。");
+          return pipelineTarget(person, req.params.scope, String(req.id), true)
+            .then((target) => chat.relay(pipelineViewer(owner), String(req.id), req.body, reply, undefined, target!, ["buddy", "report"].includes(String(req.headers[FORWARDED_HEADER]))))
+            .catch((error) => chatFailed(reply, error));
+        }
         const via = req.headers[VIA_HEADER];
         return chat.relay(person, String(req.id), req.body, reply, via === "feishu" || via === "wechat" ? via : undefined)
           .catch((error) => chatFailed(reply, error));
@@ -760,16 +864,18 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
   app.get("/api/conversations/:scope/turns/:runId/stream", { preHandler: requirePerson, schema: { params: ConversationTurnParams } },
     async (req, reply) => {
       if (chat && req.params.scope === "global" && chat.follow(req.person!, req.params.runId, reply)) return;
+      if (chat && isProject(req.params.scope) && chat.follow(pipelineViewer(req.person!.personId), req.params.runId, reply, req.params.scope)) return;
       return reply.code(204).send();
     });
   app.post("/api/conversations/:scope/turns/:runId/stop", { preHandler: requirePerson, schema: { params: ConversationTurnParams } },
     async (req, reply) => {
-      if (!chat || req.params.scope !== "global") {
+      if (!chat || !onChat(req.params.scope)) {
         const turn = activeTurns.get(req.params.runId);
         if (turn?.ownerId === req.person!.personId) turn.abort.abort(Object.assign(new Error("Conversation stopped by user"), { code: "USER_STOPPED" }));
         return reply.code(204).send();
       }
-      return chat.cancel(req.person!, String(req.id), req.params.runId).catch((error) => chatFailed(reply, error));
+      const viewer = req.params.scope === "global" ? req.person! : pipelineViewer(req.person!.personId);
+      return chat.cancel(viewer, String(req.id), req.params.runId).catch((error) => chatFailed(reply, error));
     });
 
   // 一号位深聊转议题（issueDrafts.ts）：建议卡读取、开议题 / 接到议题、不用。只有 CEO。
@@ -798,20 +904,29 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
   });
 
   // 附件挂到这个人在这个页面的主对话（没有就建）；复用 Meeting 材料的受限解析器（PDF/DOCX/Markdown、同一大小/数量/超时限制），API 卷独立。
+  // 总管线、项目对话接了 Chat 时（新首页 14.5）：类型照 attachments.ts（图片、文档、代码和日志），每个 30 MB、一次最多 20 个，原样转给 Chat。
   app.post(
     "/api/conversations/:scope/attachments",
     { preHandler: requirePerson, schema: { params: conversationParams }, bodyLimit: 101 * 1024 * 1024 },
     async (req, reply) => {
       let parsed: Awaited<ReturnType<typeof parseMaterialBatch>> | undefined;
       try {
+        if (await pipelineDenied(reply, req.person!, req.params.scope)) return reply;
         if (!await conversationScopeVisible(req.person!, req.params.scope)) return fail(reply, 404, "CONVERSATION_SCOPE_NOT_FOUND", "Conversation scope 不存在");
         const files: { filename: string; mimetype: string; buffer: Buffer }[] = [];
-        for await (const part of req.files({ limits: { fileSize: MAX_MATERIAL_FILE_BYTES, files: MAX_MATERIAL_FILES } })) {
+        const toChat = Boolean(chat) && (req.params.scope === "global" || isProject(req.params.scope));
+        const limits = toChat ? { fileSize: ATTACHMENT_MAX_BYTES, files: ATTACHMENT_MAX_COUNT } : { fileSize: MAX_MATERIAL_FILE_BYTES, files: MAX_MATERIAL_FILES };
+        for await (const part of req.files({ limits })) {
           if (part.type !== "file" || part.fieldname !== "files") return fail(reply, 400, "INVALID_ATTACHMENT", "multipart 只接受 files 文件字段");
+          if (toChat && !attachmentKind(part.filename)) return fail(reply, 400, "UNSUPPORTED_ATTACHMENT", `${part.filename}：格式不支持`);
           files.push({ filename: part.filename, mimetype: part.mimetype, buffer: await part.toBuffer() });
         }
         if (!files.length) return fail(reply, 400, "INVALID_ATTACHMENT", "缺少附件文件");
         if (chat && req.params.scope === "global") return await chat.upload(req.person!, String(req.id), files);
+        if (chat && isProject(req.params.scope)) {
+          const target = await pipelineTarget(req.person!, req.params.scope, String(req.id), true);
+          return await chat.upload(pipelineViewer(req.person!.personId), String(req.id), files, target!);
+        }
         parsed = await parseMaterialBatch(files);
         const conversationId = await ensureMainConversation(pool, req.person!.personId, req.params.scope);
         const stored = await storeConversationAttachments(conversationAttachmentStorageDir, conversationId, parsed.materials);

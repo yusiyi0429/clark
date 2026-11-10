@@ -57,7 +57,7 @@ function fakeAgent(candidate: TMonthlyDraftCandidate = validCandidate()): FakeAg
 }
 
 function appWith(candidate?: TMonthlyDraftCandidate) {
-  return createTestApp({}, undefined, { monthlyDraftAgent: fakeAgent(candidate), monthlyNow: () => new Date("2026-06-15T02:00:00Z") });
+  return createTestApp({ tianshuMonthlyCycle: true }, undefined, { monthlyDraftAgent: fakeAgent(candidate), monthlyNow: () => new Date("2026-06-15T02:00:00Z") });
 }
 
 async function card(t: TestApp, cookie: string, planId: string): Promise<Record<string, any>> {

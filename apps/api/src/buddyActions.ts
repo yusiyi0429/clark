@@ -1,0 +1,811 @@
+import { randomUUID } from "node:crypto";
+import type { FastifyInstance } from "fastify";
+import { FormatRegistry } from "@sinclair/typebox";
+import { Value } from "@sinclair/typebox/value";
+import {
+  BuddyActionParams, BUDDY_ACTION_NAMES, PROJECT_ONLY_ACTIONS, type BuddyActionName, type TBudget, type TBuddyActionSpec, type TBuddyAskQuestion, type TBuddyAuditEntry, type TBuddyAuthority,
+  type TBuddyMessageDraft, type TBuddyPlan, type TBuddyUiEffect, type TConversationCard, type TSessionCommand, type TSessionCommandView,
+  type TSessionStopView, type TTrashItem,
+} from "@warmap/contracts";
+import type { Static } from "@sinclair/typebox";
+import { BUDDY_FORWARD_PREFIX, FORWARDED_HEADER } from "./chatService.js";
+import { sseEvents } from "./homeTurn.js";
+import { currentSessionVersion } from "./memberAccess.js";
+import { logEvent } from "./observability.js";
+import { UUID_PATTERN, type Query } from "./meetingStore.js";
+import { CLAIM_TTL, cancelStart, requestStarts } from "./sessionStarts.js";
+import { SESSION_COOKIE, createSessionToken } from "./session.js";
+import { ACTIVE } from "./workers.js";
+import { subByLetter } from "./subSessionLetters.js";
+import { autoRelayStep } from "./autoRelay.js";
+import type { RunAsk } from "./localDevices.js";
+
+/**
+ * 伙伴代本人做事（新首页 17.4，契约 buddyActions.ts）。Chat 每轮读动作清单（actionList），模型调哪个就按名字执行（runAction）。
+ * - 能照网页接口做的，以本人身份在进程内调那个接口（同 homeTurn.ts 的做法：本人当前凭据版本签一个几分钟的会话，Origin 是正式地址），
+ *   权限检查、校验、错误全照网页那一份；网页没有的（开工、停掉、归档卡、删进回收站、转达、计划清单）在这里照同样的归属检查做。
+ * - 写动作要本人完全授权，每个记一条审计（buddy_actions），能撤的存下撤销要用的东西。
+ * - 界面效果、卡、计划清单经 stream 插进这一轮的对话事件流（chatService.inject）。
+ */
+
+export class BuddyError extends Error {
+  constructor(readonly status: number, readonly code: string, message: string) {
+    super(message);
+  }
+}
+
+// 参数里的 uuid：TypeBox 的 Value.Check 要先登记格式（Fastify 那边用的是 Ajv 自己的）。
+if (!FormatRegistry.Has("uuid")) FormatRegistry.Set("uuid", (value) => UUID_PATTERN.test(value));
+
+type Kind = TBuddyActionSpec["kind"];
+const KIND: Record<BuddyActionName, Kind> = {
+  read_work_home: "read", read_project: "read", find_people: "read", open_page: "ui", update_plan: "plan", ask_user: "ui",
+  set_appearance: "write", set_feishu_push: "write", start_sub_session: "write", stop_sub_session: "write", archive_sub_session: "write",
+  delete_sub_session: "write", create_project: "write", rename_project: "write", archive_project: "write", link_task_to_project: "write",
+  transfer_project: "write", split_cards: "write", set_budget: "write", set_task_due_date: "write", message_project: "write", send_message: "write",
+  sub_session_tell: "write", sub_session_stop: "write", sub_session_restart: "write", sub_session_answer: "write", sub_session_approve: "write",
+};
+const DESCRIPTION: Record<BuddyActionName, string> = {
+  read_work_home: "读本人的首页：项目、每个项目的子会话（卡、专题）和状态、等你、本月的 Mission 和 Task。要找项目 id、子会话 id、Task id 时先读它。",
+  read_project: "读一个项目的详情（目标、挂着的 Task）和最近的动态。",
+  find_people: "按名字在人员目录里找同事，拿到人员 id（转达、转交要的是 id）。回最多 10 个：personId、name、self（是不是本人自己）。",
+  open_page: "让本人的网页打开某一处：home 首页、preferences 偏好，或某个项目、子会话（同「等你」的 open）。只动界面。",
+  set_appearance: "切外观：system 跟随系统、light 浅色、dark 深色。",
+  set_feishu_push: "打开或关掉飞书推送（feishu: true 开）。",
+  start_sub_session: "让一个卡或专题开工：登记要开工，本人电脑上开着的网页接下后交给本机。已经在跑的不用再开。",
+  stop_sub_session: "停掉一个子会话：还没被电脑接下的撤掉开工登记；在跑的请它所在的那台电脑停掉。停掉不能撤。",
+  archive_sub_session: "归档一个子会话（卡或专题），从首页收起。在跑的要先停掉。",
+  delete_sub_session: "删掉一个子会话：先进回收站，30 天内能恢复。在跑的要先停掉。",
+  create_project: "新建一个项目，可以顺带挂上一件本人负责的 Task（taskId）。一个工作文件夹加一条长期的线是一个项目，功能是挂在项目下的每月 Task，不另立项目。"
+    + "建之前先用 ask_user 问清现实：本机有没有现成的文件夹、要不要新建；是不是从别处（比如 Codex）迁过来的；在哪个目录开工；要不要连 GitHub 仓库；"
+    + "做下去会做成什么样、和本人要的是不是一回事。这个文件夹已经有项目了还要再建，先问本人。问不清就不建。",
+  rename_project: "给项目改名。",
+  archive_project: "归档一个项目。",
+  link_task_to_project: "把本人负责的一件 Task 挂到某个项目上（原来挂在别的项目上就移过来）。",
+  transfer_project: "把项目转交给同事：发起转交，交接说明由云端写好后直接发出。toPersonId 是同事的人员 id。",
+  split_cards: "登记拆卡：给一件 Task（taskId）或一个没挂 Task 的项目（projectId）拆执行卡，二选一；words 是本人关于怎么拆的原话。"
+    + "拆之前先用 ask_user 问清现实：在哪个文件夹、哪个目录开工，本机有没有、要不要新建，是不是从别处（比如 Codex）迁过来的，要不要连 GitHub，拆完做成的样子和本人要的是不是一回事。"
+    + "这几件没问清，不拆、不开工，拆了只会更糟。",
+  set_task_due_date: "给挂在项目上的一件 Task 存验收截止日（YYYY-MM-DD；null 不存了，退回 Mission 的节点）。本人说了哪天交、或者 Task 的截止和 Mission 节点对不上时用。",
+  set_budget: "改预算：带 taskId 改这件 Task 的，不带改本人新 Task 的缺省预算。",
+  message_project: "把本人关于某个项目的话转给这个项目的对话，由项目对话去派活、问子会话（伙伴不直接和子会话对话；凡是要改子会话手上的活的都用它）。"
+    + "立即返回，不等项目对话回完；项目对话做完、出问题、要本人拿主意时再在总管线里回报本人。",
+  send_message: "给同事转达一句话（toPersonIds 是人员目录里的 id）。不会直接发：先出一张卡给本人看，本人点「发出」才由天枢机器人发，开头是「本人名字请我转达：」。",
+  update_plan: "计划清单：要做两步以上的事时，先列出步骤（每次交整张清单，status 为 pending / in_progress / completed），做的过程中更新。少于两步不用列。",
+  ask_user: "出一个选项框问本人。开工前要本人拍板、或者有几种做法可选时用它，不要把问题写成一段话让本人自己组织回答。"
+    + "建项目、拆卡之前一定先用它把现实问清楚（文件夹、目录、是否迁移、GitHub、做成什么样）；该问就问，不怕得罪本人。"
+    + "每个问题：header 是两到六个字的短标题（如「部署方式」），question 是题干，给 2–4 个选项，每个选项一个短标签加一行说明（代价、含义）；"
+    + "你推荐的那个放第一个、标 recommended（每题最多一个，没有推荐就都不标）；本人能多选的题标 multiSelect。「自己填」界面会另给，不用写进选项。"
+    + "一次最多 4 个问题，只问真要本人定的；只有一种合理做法、或者只是确认能不能动手时不用它，直接说或直接做。"
+    + "调完这一轮就结束：回答里最多再说一句，不要接着往下做，等本人回答。本人的回答会作为下一条消息发来（点选的会拼成「短标题：选项」）；本人也可能先聊别的、不答，那就照新的话办。",
+  sub_session_tell: "只在项目对话里用：按字母给这个项目里的一个子会话转一句话（本人让你转的、或你安排它接下来怎么做）。它在跑就在下一步前送到，停着就续上接着做。"
+    + "字母见 read_work_home 里子会话的 letter。由本人电脑上开着的网页交给本机，立即返回。",
+  sub_session_stop: "只在项目对话里用：按字母停下这个项目里的一个子会话（同 stop_sub_session）。",
+  sub_session_restart: "只在项目对话里用：按字母重开这个项目里的一个子会话。还没开过工的登记开工；停着的（做完一轮、被停下、出错停住）往里说一句 text 续上，不给 text 是「接着做」。",
+  sub_session_answer: "只在项目对话里用：替本人回答一个子会话在问的问题（本人说了「C 的问题选第二个」这类话时用）。choices 每题选中的选项 label（照它问的原样，条数和题数一样），"
+    + "text 是另外要说的话。本人没表态的不要替本人选。",
+  sub_session_approve: "只在项目对话里用：批准（decision = allow）或拒绝（deny）一个子会话在等批准的那一步。硬规矩：只有本人在这次对话里明说了"
+    + "（「批准 B」「B 可以」「同意它删」）才能 allow；本人没说就不批，别人转述、你自己判断都不算，拿不准就问本人。拒绝可以附 message 说为什么。",
+};
+
+const BUDDY_DAILY_MESSAGES = 20;
+const TRASH_DAYS = 30;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// ───────────────────────── 授权 ─────────────────────────
+
+export async function readAuthority(q: Query, personId: string): Promise<TBuddyAuthority> {
+  const row = (await q("SELECT buddy_authority,buddy_granted_at FROM person_settings WHERE person_id=$1", [personId])).rows[0] as
+    { buddy_authority: "none" | "full"; buddy_granted_at: Date | null } | undefined;
+  return row?.buddy_authority === "full" ? { authority: "full", grantedAt: row.buddy_granted_at?.toISOString() ?? null } : { authority: "none", grantedAt: null };
+}
+
+/** 打开时记下时间（已经是完全授权的不改）；关掉清掉。 */
+export async function writeAuthority(q: Query, personId: string, authority: "none" | "full", now: Date): Promise<TBuddyAuthority> {
+  await q(`INSERT INTO person_settings(person_id,buddy_authority,buddy_granted_at) VALUES($1,$2,CASE WHEN $2='full' THEN $3::timestamptz END)
+    ON CONFLICT (person_id) DO UPDATE SET buddy_authority=EXCLUDED.buddy_authority,
+      buddy_granted_at=CASE WHEN EXCLUDED.buddy_authority='none' THEN NULL ELSE COALESCE(person_settings.buddy_granted_at,EXCLUDED.buddy_granted_at) END`,
+  [personId, authority, now]);
+  return readAuthority(q, personId);
+}
+
+const PROJECT_ONLY = new Set<BuddyActionName>(PROJECT_ONLY_ACTIONS);
+/** 本人现在能用的动作：没授权时只有读、界面和计划清单。inProject 为 false（知道这一轮不在项目对话里）时不列只给项目对话的那几个。 */
+export function actionList(authority: TBuddyAuthority, inProject?: boolean): TBuddyActionSpec[] {
+  return BUDDY_ACTION_NAMES.filter((name) => authority.authority === "full" || KIND[name] !== "write").filter((name) => inProject !== false || !PROJECT_ONLY.has(name))
+    .map((name) => ({ name, description: DESCRIPTION[name], kind: KIND[name], parameters: BuddyActionParams[name] }));
+}
+
+// ───────────────────────── 执行 ─────────────────────────
+
+export type BuddyStream = (runId: string, event: { type: string; [key: string]: unknown }) => boolean;
+export type BuddyDeps = {
+  app: FastifyInstance;
+  q: Query;
+  env: { sessionSecret: string; publicOrigin: string };
+  now: () => Date;
+  /** 人员目录：id → 名字。 */
+  names: () => Map<string, string>;
+  /** 往这一轮的对话事件流里插一帧（接了 Chat 才有）。 */
+  stream?: BuddyStream;
+};
+type Call = { personId: string; conversationId: string | null; runId: string | null };
+type Outcome = { summary: string; result?: unknown; undo?: Undo | null; ui?: TBuddyUiEffect[]; card?: TConversationCard };
+type SubKind = "card" | "topic";
+type Undo =
+  | { kind: "appearance"; previous: string; set: string }
+  | { kind: "feishu"; previous: boolean; set: boolean }
+  | { kind: "start"; sub: SubKind; id: string }
+  | { kind: "unarchive_sub"; sub: SubKind; id: string }
+  | { kind: "restore"; sub: SubKind; id: string }
+  | { kind: "project_archived"; projectId: string; archived: boolean }
+  | { kind: "project_name"; projectId: string; previous: string; set: string }
+  | { kind: "goal"; projectId: string; taskId: string; previousProjectId: string | null }
+  | { kind: "transfer"; transferId: string }
+  | { kind: "split"; requestId: string }
+  | { kind: "budget"; taskId: string | null; previous: TBudget | null }
+  | { kind: "due_date"; projectId: string; taskId: string; previous: string | null };
+
+/** 本人身份的会话（进程内用，几分钟有效，不出这台机器）。 */
+async function sessionCookie(deps: BuddyDeps, personId: string): Promise<string> {
+  const version = await currentSessionVersion(deps.q, personId);
+  if (version === null) throw new BuddyError(403, "BUDDY_NOT_AUTHORIZED", "本人的账号现在用不了天枢");
+  return `${SESSION_COOKIE}=${createSessionToken(deps.env.sessionSecret, 5 * 60, { pid: personId, v: version, view: "member" })}`;
+}
+
+/** 以本人身份调网页的接口（进程内，不出这台机器）：出错照网页的码和中文抛出。 */
+async function web<T = unknown>(deps: BuddyDeps, personId: string, method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE", url: string, body?: unknown): Promise<T> {
+  const cookie = await sessionCookie(deps, personId);
+  const response = await deps.app.inject({ method, url, headers: { cookie, origin: deps.env.publicOrigin,
+    ...(body === undefined ? {} : { "content-type": "application/json" }) }, ...(body === undefined ? {} : { payload: JSON.stringify(body) }) });
+  const parsed = (() => { try { return response.body ? JSON.parse(response.body) as unknown : null; } catch { return null; } })();
+  if (response.statusCode >= 400) {
+    const error = parsed as { code?: string; message?: string } | null;
+    if (response.statusCode === 401) throw new BuddyError(403, "BUDDY_NOT_AUTHORIZED", "本人现在用不了 DRI 工作台");
+    throw new BuddyError(response.statusCode, error?.code ?? "FAILED", error?.message ?? "没做成");
+  }
+  return parsed as T;
+}
+
+/** 以本人身份调网页的接口（项目对话在本机跑时取项目情况用，projectLocalTurns.ts）。 */
+export const callAsPerson = web;
+
+type SubRow = { title: string; plan_task_id: string | null; status: string; trashed_at: Date | null; archived_at: Date | null };
+/** 本人的一个子会话（带岗位或交给 Claude Code 的卡、专题）；不是本人的、没有的 404。 */
+async function ownSub(q: Query, ownerId: string, kind: SubKind, id: string): Promise<SubRow> {
+  const row = !UUID_PATTERN.test(id) ? undefined : kind === "card"
+    ? (await q(`SELECT title,plan_task_id,status,trashed_at,archived_at FROM tasks WHERE id=$1 AND owner_id=$2
+        AND (role_id IS NOT NULL OR executor='claude_code')`, [id, ownerId])).rows[0]
+    : (await q("SELECT title,plan_task_id,status,trashed_at,NULL::timestamptz AS archived_at FROM research_topics WHERE id=$1 AND owner_id=$2", [id, ownerId])).rows[0];
+  if (!row) throw new BuddyError(404, "NOT_FOUND", "没有这个子会话");
+  return row as SubRow;
+}
+const column = (kind: SubKind) => (kind === "card" ? "card_id" : "topic_id");
+/** 最近一次本机执行，还在跑（含排队、停着等回话）的。 */
+async function activeRun(q: Query, kind: SubKind, id: string): Promise<{ id: string; device_id: string } | null> {
+  const row = (await q(`SELECT id::text,device_id::text,state FROM local_runs WHERE ${kind === "card" ? "task_id" : "topic_id"}=$1 ORDER BY started_at DESC,id LIMIT 1`,
+    [id])).rows[0] as { id: string; device_id: string; state: string } | undefined;
+  return row && ACTIVE.has(row.state) ? row : null;
+}
+async function closeStarts(q: Query, kind: SubKind, id: string, now: Date) {
+  await q(`UPDATE session_starts SET closed_at=$2 WHERE ${column(kind)}=$1 AND closed_at IS NULL`, [id, now]);
+}
+async function notRunning(q: Query, kind: SubKind, id: string, title: string) {
+  if (await activeRun(q, kind, id)) throw new BuddyError(409, "SUB_SESSION_RUNNING", `「${title}」还在跑，先停掉`);
+}
+const subTable = (kind: SubKind) => (kind === "card" ? "tasks" : "research_topics");
+const subRefresh = (id: string, extra: ("trash" | "project")[] = []): TBuddyUiEffect => ({ kind: "refresh", what: ["work_home", "sub_session", ...extra], id });
+const projectRefresh = (projectId: string): TBuddyUiEffect => ({ kind: "refresh", what: ["work_home", "project"], id: projectId });
+const projectName = async (deps: BuddyDeps, personId: string, projectId: string) =>
+  (await web<{ project: { name: string } }>(deps, personId, "GET", `/api/me/projects/${encodeURIComponent(projectId)}`)).project.name;
+
+/** 最近一次本机执行（不论还在不在跑）；没开过为 null。 */
+async function lastRun(q: Query, kind: SubKind, id: string): Promise<{ id: string; device_id: string; state: string; ask: RunAsk | null } | null> {
+  return ((await q(`SELECT id::text,device_id::text,state,ask FROM local_runs WHERE ${kind === "card" ? "task_id" : "topic_id"}=$1 ORDER BY started_at DESC,id LIMIT 1`,
+    [id])).rows[0] ?? null) as { id: string; device_id: string; state: string; ask: RunAsk | null } | null;
+}
+/** 这一轮所在的项目对话是哪个项目；不在项目对话里 409。 */
+async function callProject(deps: BuddyDeps, call: Call): Promise<string> {
+  const scope = await conversationScope(deps.q, call.personId, call.conversationId);
+  if (!scope.startsWith("project:")) throw new BuddyError(409, "PROJECT_ONLY", "这个动作只在项目对话里用；在伙伴台请用 message_project 把话转给项目对话");
+  return scope.slice("project:".length);
+}
+/** 这个项目对话里这个字母是哪个子会话（本人的）。 */
+async function lettered(deps: BuddyDeps, call: Call, letter: string): Promise<{ kind: SubKind; id: string; title: string; label: string; projectId: string }> {
+  const projectId = await callProject(deps, call);
+  const sub = await subByLetter(deps.q, projectId, letter);
+  if (!sub) throw new BuddyError(404, "LETTER_NOT_FOUND", `这个项目里没有 ${letter}`);
+  const row = await ownSub(deps.q, call.personId, sub.kind, sub.id);
+  if (row.trashed_at) throw new BuddyError(404, "LETTER_NOT_FOUND", `${letter} 已经删进回收站了`);
+  return { ...sub, title: row.title, label: `${letter} · ${row.title}`, projectId };
+}
+/** 主管线代本人的转话、重开算一步自动接力（18 节第 12 条）；到上限停着时不做。 */
+async function relayStep(deps: BuddyDeps, projectId: string) {
+  if (!(await autoRelayStep(deps.q, projectId, deps.now())))
+    throw new BuddyError(409, "AUTO_RELAY_PAUSED", "这个项目的自动接力已经连续到上限，停着等本人：本人说一句话、或在「等你」里点「继续」以后再接着转");
+}
+/** 登记一条「请这台电脑对子会话做一件事」，由本人电脑上开着的网页认领后交给本机。 */
+async function queueCommand(deps: BuddyDeps, call: Call, sub: { kind: SubKind; id: string }, run: { id: string; device_id: string }, command: TSessionCommand) {
+  const id = randomUUID();
+  await deps.q(`INSERT INTO session_commands(id,owner_id,kind,card_id,topic_id,run_id,device_id,command,requested_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9)`,
+    [id, call.personId, sub.kind, sub.kind === "card" ? sub.id : null, sub.kind === "topic" ? sub.id : null, run.id, run.device_id, JSON.stringify(command), deps.now()]);
+  return id;
+}
+const LATER = "（本人电脑上开着天枢网页时马上交给它）";
+
+type Args<N extends BuddyActionName> = Static<(typeof BuddyActionParams)[N]>;
+type Handlers = { [N in BuddyActionName]: (deps: BuddyDeps, call: Call, args: Args<N>) => Promise<Outcome> };
+
+const handlers: Handlers = {
+  read_work_home: async (deps, call) => ({ summary: "读了首页", result: await web(deps, call.personId, "GET", "/api/me/work-home") }),
+  read_project: async (deps, call, args) => {
+    const path = `/api/me/projects/${encodeURIComponent(args.projectId)}`;
+    const project = await web(deps, call.personId, "GET", path);
+    return { summary: "读了这个项目", result: { ...(project as object), feed: await web(deps, call.personId, "GET", `${path}/feed`) } };
+  },
+  find_people: async (deps, call, args) => {
+    const query = args.query.trim().toLowerCase();
+    const people = [...deps.names()].filter(([personId, name]) => name.toLowerCase().includes(query) || personId.toLowerCase().includes(query)).slice(0, 10)
+      .map(([personId, name]) => ({ personId, name, self: personId === call.personId }));
+    return { summary: people.length ? `找到 ${people.length} 个` : "人员目录里没有这个名字", result: { people } };
+  },
+  open_page: async (_deps, _call, args) => ({ summary: "打开了", ui: [{ kind: "open", target: args.target }] }),
+  set_appearance: async (deps, call, args) => {
+    const previous = (await web<{ appearance: string }>(deps, call.personId, "GET", "/api/me/appearance")).appearance;
+    await web(deps, call.personId, "PUT", "/api/me/appearance", args);
+    const label = { system: "跟随系统", light: "浅色", dark: "深色" }[args.appearance];
+    return { summary: `外观换成了${label}`, undo: previous === args.appearance ? null : { kind: "appearance", previous, set: args.appearance },
+      ui: [{ kind: "appearance", appearance: args.appearance }] };
+  },
+  set_feishu_push: async (deps, call, args) => {
+    const previous = (await web<{ feishu: boolean }>(deps, call.personId, "GET", "/api/me/notification-settings")).feishu;
+    await web(deps, call.personId, "PUT", "/api/me/notification-settings", { feishu: args.feishu });
+    return { summary: args.feishu ? "飞书推送打开了" : "飞书推送关掉了", undo: previous === args.feishu ? null : { kind: "feishu", previous, set: args.feishu },
+      ui: [{ kind: "refresh", what: ["settings"] }] };
+  },
+  start_sub_session: async (deps, call, args) => {
+    const { q } = deps;
+    const sub = await ownSub(q, call.personId, args.kind, args.id);
+    if (sub.trashed_at || sub.archived_at || (args.kind === "card" ? ["done", "returned"].includes(sub.status) : sub.status !== "active"))
+      throw new BuddyError(409, "NOT_STARTABLE", `「${sub.title}」已经完成、归档或删掉了，不能开工`);
+    if (await activeRun(q, args.kind, args.id)) throw new BuddyError(409, "ALREADY_RUNNING", `「${sub.title}」已经在跑了`);
+    const open = (await q(`SELECT 1 FROM session_starts WHERE ${column(args.kind)}=$1 AND closed_at IS NULL`, [args.id])).rowCount;
+    if (open) return { summary: `「${sub.title}」已经登记过开工了，等电脑接下`, undo: null };
+    await requestStarts(q, { ownerId: call.personId, origin: "buddy", now: deps.now(), items: [args.kind === "card"
+      ? { kind: "card", cardId: args.id, planTaskId: sub.plan_task_id } : { kind: "topic", topicId: args.id, planTaskId: sub.plan_task_id }] });
+    return { summary: `让「${sub.title}」开工了，本人电脑上开着的网页接下后就开始`, undo: { kind: "start", sub: args.kind, id: args.id }, ui: [subRefresh(args.id)] };
+  },
+  stop_sub_session: async (deps, call, args) => {
+    const { q } = deps;
+    const now = deps.now();
+    const sub = await ownSub(q, call.personId, args.kind, args.id);
+    if (await cancelStart(q, call.personId, args.kind, args.id, now)) return { summary: `撤掉了「${sub.title}」的开工登记`, ui: [subRefresh(args.id)] };
+    const run = await activeRun(q, args.kind, args.id);
+    if (!run) throw new BuddyError(409, "NOT_RUNNING", `「${sub.title}」没在跑`);
+    await q(`INSERT INTO session_stops(id,owner_id,kind,${column(args.kind)},run_id,device_id,requested_at) VALUES($1,$2,$3,$4,$5,$6,$7)
+      ON CONFLICT DO NOTHING`, [randomUUID(), call.personId, args.kind, args.id, run.id, run.device_id, now]);
+    return { summary: `已请那台电脑停掉「${sub.title}」（本人电脑上开着天枢网页时马上停）`, ui: [subRefresh(args.id)] };
+  },
+  archive_sub_session: async (deps, call, args) => {
+    const { q } = deps;
+    const sub = await ownSub(q, call.personId, args.kind, args.id);
+    if (sub.trashed_at) throw new BuddyError(404, "NOT_FOUND", "没有这个子会话");
+    await notRunning(q, args.kind, args.id, sub.title);
+    if (args.kind === "topic") {
+      if (sub.status !== "active") return { summary: `「${sub.title}」已经归档了`, undo: null };
+      await web(deps, call.personId, "PATCH", `/api/me/topics/${args.id}`, { status: "archived" });
+    } else {
+      if (sub.archived_at) return { summary: `「${sub.title}」已经归档了`, undo: null };
+      await q("UPDATE tasks SET archived_at=$2 WHERE id=$1", [args.id, deps.now()]);
+    }
+    await closeStarts(q, args.kind, args.id, deps.now());
+    return { summary: `把「${sub.title}」归档了`, undo: { kind: "unarchive_sub", sub: args.kind, id: args.id }, ui: [subRefresh(args.id)] };
+  },
+  delete_sub_session: async (deps, call, args) => {
+    const { q } = deps;
+    const sub = await ownSub(q, call.personId, args.kind, args.id);
+    if (sub.trashed_at) return { summary: `「${sub.title}」已经在回收站里了`, undo: null };
+    await notRunning(q, args.kind, args.id, sub.title);
+    await q(`UPDATE ${subTable(args.kind)} SET trashed_at=$2 WHERE id=$1`, [args.id, deps.now()]);
+    await closeStarts(q, args.kind, args.id, deps.now());
+    return { summary: `把「${sub.title}」删进了回收站，${TRASH_DAYS} 天内能恢复`, undo: { kind: "restore", sub: args.kind, id: args.id }, ui: [subRefresh(args.id, ["trash"])] };
+  },
+  create_project: async (deps, call, args) => {
+    const project = await web<{ projectId: string; name: string }>(deps, call.personId, "POST", "/api/me/projects", args);
+    return { summary: `新建了项目「${project.name}」`, result: { projectId: project.projectId },
+      undo: { kind: "project_archived", projectId: project.projectId, archived: false }, ui: [projectRefresh(project.projectId)] };
+  },
+  rename_project: async (deps, call, args) => {
+    const previous = await projectName(deps, call.personId, args.projectId);
+    await web(deps, call.personId, "PATCH", `/api/me/projects/${encodeURIComponent(args.projectId)}`, { name: args.name });
+    return { summary: `把项目「${previous}」改名为「${args.name}」`,
+      undo: previous === args.name ? null : { kind: "project_name", projectId: args.projectId, previous, set: args.name }, ui: [projectRefresh(args.projectId)] };
+  },
+  archive_project: async (deps, call, args) => {
+    const name = await projectName(deps, call.personId, args.projectId);
+    await web(deps, call.personId, "PATCH", `/api/me/projects/${encodeURIComponent(args.projectId)}`, { archived: true });
+    return { summary: `把项目「${name}」归档了`, undo: { kind: "project_archived", projectId: args.projectId, archived: true }, ui: [projectRefresh(args.projectId)] };
+  },
+  link_task_to_project: async (deps, call, args) => {
+    const previousProjectId = ((await deps.q("SELECT project_id::text FROM project_goals WHERE owner_id=$1 AND task_id=$2", [call.personId, args.taskId])).rows[0]
+      ?.project_id ?? null) as string | null;
+    const goal = await web<{ taskName: string }>(deps, call.personId, "PUT", `/api/me/projects/${encodeURIComponent(args.projectId)}/goals/${encodeURIComponent(args.taskId)}`);
+    const name = await projectName(deps, call.personId, args.projectId);
+    return { summary: `把 Task「${goal.taskName}」挂到了项目「${name}」`, result: goal,
+      undo: previousProjectId === args.projectId ? null : { kind: "goal", projectId: args.projectId, taskId: args.taskId, previousProjectId },
+      ui: [projectRefresh(args.projectId)] };
+  },
+  transfer_project: async (deps, call, args) => {
+    const path = `/api/me/projects/${encodeURIComponent(args.projectId)}/transfers`;
+    const transfer = await web<{ id: string }>(deps, call.personId, "POST", path, { toPersonId: args.toPersonId });
+    // 先标上「写好就发」，再看说明是不是已经写好了：两边谁晚谁发，不会漏。
+    await deps.q("UPDATE project_transfers SET send_when_ready=true WHERE id=$1", [transfer.id]);
+    const sent = await sendIfReady(deps, call.personId, transfer.id);
+    const name = await projectName(deps, call.personId, args.projectId);
+    const to = deps.names().get(args.toPersonId) ?? args.toPersonId;
+    return { summary: sent === "sent" ? `已把项目「${name}」转交给${to}，等对方接手`
+      : sent === "secrets" ? `发起了把项目「${name}」转交给${to}，交接说明里有疑似凭据，本人在转交页改完再发`
+        : `发起了把项目「${name}」转交给${to}，交接说明写好就发出`,
+    result: { transferId: transfer.id }, undo: { kind: "transfer", transferId: transfer.id }, ui: [projectRefresh(args.projectId)] };
+  },
+  split_cards: async (deps, call, args) => {
+    if (Boolean(args.taskId) === Boolean(args.projectId)) throw new BuddyError(400, "INVALID_ARGS", "taskId 和 projectId 要带且只带一个");
+    const body = args.words?.trim() ? { words: args.words } : {};
+    // 登记之前就有一条没开的：那条不是这次登记的，不给撤。
+    const before = new Set(((await deps.q("SELECT id::text FROM card_split_requests WHERE owner_id=$1 AND closed_at IS NULL", [call.personId])).rows as
+      { id: string }[]).map((row) => row.id));
+    const request = await web<{ id: string }>(deps, call.personId, "POST", args.taskId
+      ? `/api/plan-tasks/${encodeURIComponent(args.taskId)}/card-splits` : `/api/me/projects/${encodeURIComponent(args.projectId!)}/card-splits`, body);
+    const created = !before.has(request.id);
+    return { summary: "登记了拆卡，本人电脑上开着的网页接下后就开始拆", result: { requestId: request.id },
+      undo: created ? { kind: "split", requestId: request.id } : null,
+      ui: [args.projectId ? projectRefresh(args.projectId) : { kind: "refresh", what: ["work_home"] }] };
+  },
+  set_budget: async (deps, call, args) => {
+    if (args.taskId) {
+      const path = `/api/me/tasks/${encodeURIComponent(args.taskId)}/budget`;
+      const before = await web<{ budget: TBudget; inherited: boolean }>(deps, call.personId, "GET", path);
+      await web(deps, call.personId, "PUT", path, args.budget);
+      return { summary: "改了这件 Task 的预算", undo: { kind: "budget", taskId: args.taskId, previous: before.inherited ? null : before.budget },
+        ui: [{ kind: "refresh", what: ["work_home"] }] };
+    }
+    const before = await web<TBudget>(deps, call.personId, "GET", "/api/me/budget-default");
+    await web(deps, call.personId, "PUT", "/api/me/budget-default", args.budget);
+    return { summary: "改了新 Task 的缺省预算", undo: { kind: "budget", taskId: null, previous: before }, ui: [{ kind: "refresh", what: ["settings"] }] };
+  },
+  set_task_due_date: async (deps, call, args) => {
+    const previous = ((await deps.q("SELECT due_date FROM project_goals WHERE owner_id=$1 AND project_id=$2 AND task_id=$3", [call.personId, args.projectId, args.taskId]))
+      .rows[0]?.due_date ?? null) as string | null;
+    const goal = await web<{ taskName: string }>(deps, call.personId, "PUT",
+      `/api/me/projects/${encodeURIComponent(args.projectId)}/goals/${encodeURIComponent(args.taskId)}/due-date`, { dueDate: args.dueDate });
+    return { summary: args.dueDate ? `把「${goal.taskName}」的验收截止日定成 ${args.dueDate}` : `「${goal.taskName}」不再单独存截止日，按 Mission 的节点算`,
+      undo: previous === args.dueDate ? null : { kind: "due_date", projectId: args.projectId, taskId: args.taskId, previous }, ui: [projectRefresh(args.projectId)] };
+  },
+  message_project: async (deps, call, args) => {
+    // 只从伙伴台往项目对话转（18 节第 8 条）。项目对话自己也拿到这张动作清单，它再转一次会把同一句转回自己、一轮接一轮转下去。
+    if (call.conversationId && (await deps.q("SELECT 1 FROM project_pipelines WHERE owner_id=$1 AND conversation_id=$2", [call.personId, call.conversationId])).rowCount)
+      throw new BuddyError(409, "ALREADY_IN_PROJECT", "这里已经是项目对话，直接在这里安排，不用再转");
+    const path = `/api/me/projects/${encodeURIComponent(args.projectId)}`;
+    const name = await projectName(deps, call.personId, args.projectId);
+    // 项目对话还没开过就开（归档的、别人的照网页接口回错）。
+    await web(deps, call.personId, "POST", `${path}/pipeline`);
+    forwardToProject(deps, call.personId, args.projectId, `${BUDDY_FORWARD_PREFIX}${args.text}`, "buddy");
+    return { summary: `已把话转给项目「${name}」的对话，由它去安排；有结果、出问题或要本人拿主意时再回报`, undo: null, ui: [projectRefresh(args.projectId)] };
+  },
+  send_message: async (deps, call, args) => {
+    const names = deps.names();
+    const to = [...new Set(args.toPersonIds)];
+    const unknown = to.filter((id) => !names.has(id) || id === call.personId);
+    if (unknown.length) throw new BuddyError(404, "PERSON_NOT_FOUND", `人员目录里没有：${unknown.join("、")}（也不能转达给自己）`);
+    if ((await sentToday(deps.q, call.personId, deps.now())) >= BUDDY_DAILY_MESSAGES)
+      throw new BuddyError(429, "DAILY_LIMIT", `今天已经转达了 ${BUDDY_DAILY_MESSAGES} 条，明天再发`);
+    const id = randomUUID();
+    await deps.q(`INSERT INTO buddy_messages(id,owner_id,to_ids,text,status,conversation_id,run_id,created_at) VALUES($1,$2,$3,$4,'draft',$5,$6,$7)`,
+      [id, call.personId, to, args.text, call.conversationId, call.runId, deps.now()]);
+    const list = to.map((personId) => names.get(personId)!).join("、");
+    return { summary: `给${list}的话写好了，等本人在卡上点「发出」`, result: { draftId: id }, undo: null, card: { kind: "buddy_message", draftId: id } };
+  },
+  ask_user: async (deps, call, args) => {
+    const misplaced = args.questions.find((question) => question.options.some((option, index) => option.recommended && index > 0));
+    if (misplaced) throw new BuddyError(400, "INVALID_ARGS", `参数不对：「${misplaced.header}」推荐的选项要放在第一个，每题最多推荐一个`);
+    if (!call.runId) throw new BuddyError(409, "NO_TURN", "这一轮没带 runId，选项框出不来，请把问题直接写在回答里");
+    const id = randomUUID();
+    await deps.q(`INSERT INTO buddy_questions(id,owner_id,scope,conversation_id,run_id,questions,status,created_at) VALUES($1,$2,$3,$4,$5,$6::jsonb,'open',$7)`,
+      [id, call.personId, await conversationScope(deps.q, call.personId, call.conversationId), call.conversationId, call.runId, JSON.stringify(args.questions), deps.now()]);
+    return { summary: "选项框出给本人了。这一轮到这里结束，等本人回答（下一条消息）；本人先聊别的就照新的话办。", result: { questionId: id },
+      card: { kind: "buddy_question", questionId: id, questions: args.questions, status: "open" } };
+  },
+  sub_session_tell: async (deps, call, args) => {
+    const sub = await lettered(deps, call, args.letter);
+    const run = await lastRun(deps.q, sub.kind, sub.id);
+    if (!run) throw new BuddyError(409, "NOT_STARTED", `${sub.label} 还没开过工，先用 sub_session_restart 开工`);
+    await relayStep(deps, sub.projectId);
+    const commandId = await queueCommand(deps, call, sub, run, { type: "message", text: args.text });
+    return { summary: `把话转给了 ${sub.label}${LATER}`, result: { letter: args.letter, kind: sub.kind, id: sub.id, title: sub.title, commandId }, ui: [subRefresh(sub.id)] };
+  },
+  sub_session_stop: async (deps, call, args) => {
+    const sub = await lettered(deps, call, args.letter);
+    const outcome = await handlers.stop_sub_session(deps, call, { kind: sub.kind, id: sub.id });
+    return { ...outcome, summary: outcome.summary.replace(`「${sub.title}」`, `「${sub.label}」`), result: { letter: args.letter, kind: sub.kind, id: sub.id, title: sub.title } };
+  },
+  sub_session_restart: async (deps, call, args) => {
+    const sub = await lettered(deps, call, args.letter);
+    const run = await lastRun(deps.q, sub.kind, sub.id);
+    const result = { letter: args.letter, kind: sub.kind, id: sub.id, title: sub.title };
+    if (!run) {
+      await relayStep(deps, sub.projectId);
+      const outcome = await handlers.start_sub_session(deps, call, { kind: sub.kind, id: sub.id });
+      return { ...outcome, summary: outcome.summary.replace(`「${sub.title}」`, `「${sub.label}」`), result: { ...result, start: true } };
+    }
+    if (["queued", "starting", "running"].includes(run.state)) throw new BuddyError(409, "ALREADY_RUNNING", `${sub.label} 正在跑，不用重开`);
+    if (run.state === "waiting_permission") throw new BuddyError(409, "WAITING_PERMISSION", `${sub.label} 在等批准，先批准或拒绝`);
+    if (run.state === "idle" && run.ask?.kind === "question") throw new BuddyError(409, "ASKING", `${sub.label} 在问问题，先回答`);
+    await relayStep(deps, sub.projectId);
+    const commandId = await queueCommand(deps, call, sub, run, { type: "message", text: args.text ?? "接着做" });
+    return { summary: `让 ${sub.label} 接着做了${LATER}`, result: { ...result, commandId }, ui: [subRefresh(sub.id)] };
+  },
+  sub_session_answer: async (deps, call, args) => {
+    const sub = await lettered(deps, call, args.letter);
+    const run = await lastRun(deps.q, sub.kind, sub.id);
+    if (!run || run.state !== "idle" || run.ask?.kind !== "question") throw new BuddyError(409, "NOT_ASKING", `${sub.label} 现在没在问问题`);
+    const asked = run.ask.request.questions.length;
+    if (args.choices.length !== asked) throw new BuddyError(400, "INVALID_ARGS", `参数不对：${sub.label} 问了 ${asked} 题，choices 要 ${asked} 条`);
+    const commandId = await queueCommand(deps, call, sub, run, { type: "answer", requestId: run.ask.request.requestId,
+      answer: { choices: args.choices, ...(args.text ? { text: args.text } : {}) } });
+    return { summary: `替本人回答了 ${sub.label} 的问题${LATER}`, result: { letter: args.letter, kind: sub.kind, id: sub.id, title: sub.title, commandId }, ui: [subRefresh(sub.id)] };
+  },
+  sub_session_approve: async (deps, call, args) => {
+    const sub = await lettered(deps, call, args.letter);
+    const run = await lastRun(deps.q, sub.kind, sub.id);
+    if (!run || run.state !== "waiting_permission" || run.ask?.kind !== "permission") throw new BuddyError(409, "NOT_WAITING_PERMISSION", `${sub.label} 现在没在等批准`);
+    const { decision, message, allowForSession } = args;
+    const commandId = await queueCommand(deps, call, sub, run, { type: "permission", requestId: run.ask.request.requestId,
+      decision: { decision, ...(message ? { message } : {}), ...(allowForSession !== undefined ? { allowForSession } : {}) } });
+    return { summary: `${decision === "allow" ? "批准" : "拒绝"}了 ${sub.label} 的「${run.ask.request.title}」${LATER}`,
+      result: { letter: args.letter, kind: sub.kind, id: sub.id, title: sub.title, commandId }, ui: [subRefresh(sub.id)] };
+  },
+  update_plan: async (deps, call, args) => {
+    if (args.entries.length < 2) return { summary: "少于两步，不出清单" };
+    if (!call.runId) return { summary: "清单记下了（这一轮没带 runId，界面上看不到）" };
+    await deps.q(`INSERT INTO buddy_plans(run_id,owner_id,entries,collapsed,updated_at) VALUES($1,$2,$3::jsonb,false,$4)
+      ON CONFLICT (run_id) DO UPDATE SET entries=EXCLUDED.entries,collapsed=false,updated_at=EXCLUDED.updated_at`,
+    [call.runId, call.personId, JSON.stringify(args.entries), deps.now()]);
+    deps.stream?.(call.runId, { type: "plan", plan: { entries: args.entries, collapsed: false } });
+    return { summary: "清单更新了" };
+  },
+};
+
+const FORWARD_RETRY_MS = 5_000;
+const FORWARD_GIVE_UP_MS = 10 * 60_000;
+/**
+ * 在后台以本人身份往项目对话里说这一句（message 已带开头：伙伴转来的「【伙伴转来】」，子会话报告的「【子会话回报】」），走网页同一个对话接口；
+ * 读完这一轮的流（结果留在项目对话里）。项目对话正在回上一轮时不打断它，隔 5 秒再试，最多等 10 分钟（同 homeTurn.ts）。失败只记日志。
+ */
+function forwardToProject(deps: BuddyDeps, personId: string, projectId: string, message: string, via: "buddy" | "report"): void {
+  void (async () => {
+    const startedAt = Date.now();
+    for (;;) {
+      const response = await deps.app.inject({ method: "POST", url: `/api/conversations/${encodeURIComponent(`project:${projectId}`)}/messages`, payloadAsStream: true,
+        headers: { cookie: await sessionCookie(deps, personId), origin: deps.env.publicOrigin, accept: "text/event-stream", "content-type": "application/json",
+          [FORWARDED_HEADER]: via }, payload: JSON.stringify({ message }) });
+      const stream = response.stream();
+      if (response.statusCode === 200) {
+        for await (const _event of sseEvents(stream)) { /* 读到这一轮结束 */ }
+        return;
+      }
+      let body = "";
+      for await (const chunk of stream) body += chunk.toString();
+      const code = (() => { try { return (JSON.parse(body) as { code?: string }).code; } catch { return undefined; } })();
+      if (code !== "TURN_IN_PROGRESS" || Date.now() - startedAt >= FORWARD_GIVE_UP_MS) {
+        logEvent({ event: "buddy.forward_failed", projectId, httpStatus: response.statusCode, errorCode: code });
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, FORWARD_RETRY_MS));
+    }
+  })().catch((error) => logEvent({ event: "buddy.forward_failed", projectId, error: (error as Error)?.message }));
+}
+
+/**
+ * 子会话停了的报告（18 节第 10 条）：替本人给项目主管线发 text（reportTurnText，开头 SUB_SESSION_REPORT_PREFIX），让它回一小轮。
+ * 项目对话还没开过就开；项目归档了、不是本人的照网页接口抛错，调用方记日志。
+ */
+export async function reportToProject(deps: BuddyDeps, personId: string, projectId: string, text: string): Promise<void> {
+  await web(deps, personId, "POST", `/api/me/projects/${encodeURIComponent(projectId)}/pipeline`);
+  forwardToProject(deps, personId, projectId, text, "report");
+}
+
+/** 转交的说明写好了、还在准备中、没有疑似凭据：发出。说明还没写好时等后台写好再发（projectTransfers.ts 的 writeLater）。 */
+async function sendIfReady(deps: BuddyDeps, personId: string, transferId: string): Promise<"sent" | "waiting" | "secrets"> {
+  const row = (await deps.q("SELECT status,note FROM project_transfers WHERE id=$1", [transferId])).rows[0] as { status: string; note: unknown } | undefined;
+  if (row?.status === "sent") return "sent";
+  if (!row || row.status !== "preparing" || row.note === null) return "waiting";
+  try {
+    await web(deps, personId, "POST", `/api/me/project-transfers/${transferId}/send`);
+    return "sent";
+  } catch (cause) {
+    if (cause instanceof BuddyError && cause.code === "SECRET_IN_NOTE") return "secrets";
+    // 后台刚好先发出了。
+    if (cause instanceof BuddyError && cause.status === 409) return "sent";
+    throw cause;
+  }
+}
+
+/** 今天（公司时区）发出去的转达条数。 */
+async function sentToday(q: Query, ownerId: string, now: Date): Promise<number> {
+  return Number((await q(`SELECT count(*) AS n FROM buddy_messages WHERE owner_id=$1 AND status='sent'
+    AND date_trunc('day',sent_at AT TIME ZONE 'Asia/Shanghai')=date_trunc('day',$2::timestamptz AT TIME ZONE 'Asia/Shanghai')`, [ownerId, now])).rows[0].n);
+}
+
+type BuddyActionOutcome = { summary: string; result: unknown; auditId: string | null; undoable: boolean };
+
+/** 按名字执行一个动作。没有这个动作 404，参数不对 400，写动作没授权 403；其余错误是对应接口的。 */
+export async function runAction(deps: BuddyDeps, call: Call, name: string, args: unknown): Promise<BuddyActionOutcome> {
+  if (!(BUDDY_ACTION_NAMES as string[]).includes(name)) throw new BuddyError(404, "UNKNOWN_ACTION", `没有 ${name} 这个动作`);
+  const action = name as BuddyActionName;
+  const schema = BuddyActionParams[action];
+  const input = args ?? {};
+  if (!Value.Check(schema, input)) {
+    const first = Value.Errors(schema, input).First();
+    throw new BuddyError(400, "INVALID_ARGS", `参数不对：${first ? `${first.path || "/"} ${first.message}` : "格式不符"}`);
+  }
+  const kind = KIND[action];
+  if (kind === "write" && (await readAuthority(deps.q, call.personId)).authority !== "full")
+    throw new BuddyError(403, "BUDDY_NOT_AUTHORIZED", "本人还没同意让伙伴代为操作，这件事请本人自己做，或先在偏好里打开");
+  const outcome = await (handlers[action] as (deps: BuddyDeps, call: Call, args: unknown) => Promise<Outcome>)(deps, call, input);
+  let auditId: string | null = null;
+  if (kind === "write") {
+    auditId = randomUUID();
+    await deps.q(`INSERT INTO buddy_actions(id,owner_id,action,args,summary,undo,conversation_id,run_id,at) VALUES($1,$2,$3,$4::jsonb,$5,$6::jsonb,$7,$8,$9)`,
+      [auditId, call.personId, action, JSON.stringify(input), outcome.summary, outcome.undo ? JSON.stringify(outcome.undo) : null, call.conversationId, call.runId, deps.now()]);
+  }
+  if (call.runId && deps.stream) {
+    for (const ui of outcome.ui ?? []) deps.stream(call.runId, { type: "ui", ui });
+    if (outcome.card) deps.stream(call.runId, { type: "card", card: outcome.card });
+    if (kind === "write") await tickPlan(deps, call.runId);
+  }
+  return { summary: outcome.summary, result: outcome.result ?? null, auditId, undoable: Boolean(outcome.undo) };
+}
+
+/** 兜底：写动作做成了而伙伴没打勾，把清单上第一条进行中的标成完成。 */
+async function tickPlan(deps: BuddyDeps, runId: string) {
+  const row = (await deps.q("SELECT entries FROM buddy_plans WHERE run_id=$1", [runId])).rows[0] as { entries: TBuddyPlan["entries"] } | undefined;
+  const index = row?.entries.findIndex((entry) => entry.status === "in_progress") ?? -1;
+  if (!row || index < 0) return;
+  const entries = row.entries.map((entry, at) => (at === index ? { ...entry, status: "completed" as const } : entry));
+  await deps.q("UPDATE buddy_plans SET entries=$2::jsonb,updated_at=$3 WHERE run_id=$1", [runId, JSON.stringify(entries), deps.now()]);
+  deps.stream?.(runId, { type: "plan", plan: { entries, collapsed: false } });
+}
+
+/** 本人在伙伴回答到一半时发来新消息：那一轮的清单收起。返回收起后的清单（没有清单为 null）。 */
+export async function collapsePlan(q: Query, runId: string): Promise<TBuddyPlan | null> {
+  const row = (await q("UPDATE buddy_plans SET collapsed=true WHERE run_id=$1 RETURNING entries", [runId])).rows[0] as { entries: TBuddyPlan["entries"] } | undefined;
+  return row ? { entries: row.entries, collapsed: true } : null;
+}
+
+/** 这一轮在哪个对话里：项目对话是 project:<projectId>，其余是伙伴台（global）。 */
+export async function conversationScope(q: Query, ownerId: string, conversationId: string | null): Promise<string> {
+  if (!conversationId) return "global";
+  const row = (await q("SELECT project_id::text FROM project_pipelines WHERE owner_id=$1 AND conversation_id=$2", [ownerId, conversationId])).rows[0] as
+    { project_id: string } | undefined;
+  return row ? `project:${row.project_id}` : "global";
+}
+
+/**
+ * 本人在这个对话（scope）里发出了一条新消息（18 节第 9 条）：带 answered（回答的是哪个选项框）的那张标 answered，这个对话里其余还 open 的标 dismissed。
+ * 在这一句交给 Chat 之前做，这一轮伙伴新出的框不受影响。
+ */
+export async function closeQuestions(q: Query, ownerId: string, scope: string, answered: string | undefined, now: Date): Promise<void> {
+  if (answered) await q("UPDATE buddy_questions SET status='answered',closed_at=$4 WHERE id=$1 AND owner_id=$2 AND scope=$3 AND status='open'",
+    [answered, ownerId, scope, now]);
+  await q("UPDATE buddy_questions SET status='dismissed',closed_at=$3 WHERE owner_id=$1 AND scope=$2 AND status='open'", [ownerId, scope, now]);
+}
+
+/** 读回历史时接到回答上的：每一轮的清单和伙伴出的卡。 */
+export async function runExtras(q: Query, ownerId: string, runIds: string[]): Promise<Map<string, { plan?: TBuddyPlan; cards?: TConversationCard[] }>> {
+  const extras = new Map<string, { plan?: TBuddyPlan; cards?: TConversationCard[] }>();
+  if (!runIds.length) return extras;
+  for (const row of (await q("SELECT run_id,entries,collapsed FROM buddy_plans WHERE owner_id=$1 AND run_id=ANY($2::text[])", [ownerId, runIds])).rows as
+    { run_id: string; entries: TBuddyPlan["entries"]; collapsed: boolean }[]) extras.set(row.run_id, { plan: { entries: row.entries, collapsed: row.collapsed } });
+  // 转达草稿和选项框按出的先后排。
+  for (const row of (await q(`SELECT id::text,run_id,created_at,NULL::jsonb AS questions,NULL AS status FROM buddy_messages WHERE owner_id=$1 AND run_id=ANY($2::text[])
+      UNION ALL SELECT id::text,run_id,created_at,questions,status FROM buddy_questions WHERE owner_id=$1 AND run_id=ANY($2::text[])
+      ORDER BY created_at,id`, [ownerId, runIds])).rows as
+    { id: string; run_id: string; questions: TBuddyAskQuestion[] | null; status: "open" | "answered" | "dismissed" | null }[]) {
+    const entry = extras.get(row.run_id) ?? {};
+    const card: TConversationCard = row.questions ? { kind: "buddy_question", questionId: row.id, questions: row.questions, status: row.status! }
+      : { kind: "buddy_message", draftId: row.id };
+    entry.cards = [...(entry.cards ?? []), card];
+    extras.set(row.run_id, entry);
+  }
+  return extras;
+}
+
+// ───────────────────────── 审计和撤销 ─────────────────────────
+
+type AuditRow = { id: string; action: string; summary: string; at: Date; conversation_id: string | null; undo: Undo | null; undone_at: Date | null };
+const auditView = (row: AuditRow): TBuddyAuditEntry => ({ id: row.id, action: row.action, summary: row.summary, at: row.at.toISOString(),
+  conversationId: row.conversation_id, undoable: row.undo !== null && row.undone_at === null, undoneAt: row.undone_at?.toISOString() ?? null });
+
+export async function listAudit(q: Query, ownerId: string): Promise<TBuddyAuditEntry[]> {
+  return ((await q("SELECT id::text,action,summary,at,conversation_id,undo,undone_at FROM buddy_actions WHERE owner_id=$1 ORDER BY at DESC,seq DESC LIMIT 100",
+    [ownerId])).rows as AuditRow[]).map(auditView);
+}
+
+const changed = (message: string) => new BuddyError(409, "NOT_UNDOABLE", message);
+
+/** 撤销一条：本人在网页上点的，照本人的身份做。 */
+export async function undoAction(deps: BuddyDeps, ownerId: string, id: string): Promise<TBuddyAuditEntry> {
+  const { q } = deps;
+  const row = UUID_PATTERN.test(id) ? (await q("SELECT id::text,action,summary,at,conversation_id,undo,undone_at FROM buddy_actions WHERE id=$1 AND owner_id=$2",
+    [id, ownerId])).rows[0] as AuditRow | undefined : undefined;
+  if (!row) throw new BuddyError(404, "NOT_FOUND", "没有这条记录");
+  if (!row.undo) throw changed("这一条不能撤销");
+  if (row.undone_at) throw changed("这一条已经撤销过了");
+  const undo = row.undo;
+  const now = deps.now();
+  switch (undo.kind) {
+    case "appearance": {
+      const current = (await web<{ appearance: string }>(deps, ownerId, "GET", "/api/me/appearance")).appearance;
+      if (current !== undo.set) throw changed("外观后来又换过了，照现在的样子撤不了");
+      await web(deps, ownerId, "PUT", "/api/me/appearance", { appearance: undo.previous });
+      break;
+    }
+    case "feishu": {
+      const current = (await web<{ feishu: boolean }>(deps, ownerId, "GET", "/api/me/notification-settings")).feishu;
+      if (current !== undo.set) throw changed("飞书推送后来又改过了，照现在的样子撤不了");
+      await web(deps, ownerId, "PUT", "/api/me/notification-settings", { feishu: undo.previous });
+      break;
+    }
+    case "start":
+      if (!(await cancelStart(q, ownerId, undo.sub, undo.id, now))) throw changed("已经被电脑接下开始做了，撤不了；要停就让伙伴停掉");
+      break;
+    case "unarchive_sub":
+      if (undo.sub === "topic") {
+        const topic = await ownSub(q, ownerId, "topic", undo.id);
+        if (topic.trashed_at || topic.status !== "archived") throw changed("这个专题已经不在归档里了");
+        await web(deps, ownerId, "PATCH", `/api/me/topics/${undo.id}`, { status: "active" });
+      } else if (!(await q("UPDATE tasks SET archived_at=NULL WHERE id=$1 AND owner_id=$2 AND archived_at IS NOT NULL AND trashed_at IS NULL", [undo.id, ownerId])).rowCount)
+        throw changed("这张卡已经不在归档里了");
+      break;
+    case "restore":
+      if (!(await restoreTrash(q, ownerId, undo.sub, undo.id, now))) throw changed("回收站里已经没有它了");
+      break;
+    case "project_archived":
+      await web(deps, ownerId, "PATCH", `/api/me/projects/${encodeURIComponent(undo.projectId)}`, { archived: !undo.archived });
+      break;
+    case "project_name": {
+      if ((await projectName(deps, ownerId, undo.projectId)) !== undo.set) throw changed("项目后来又改过名，照现在的样子撤不了");
+      await web(deps, ownerId, "PATCH", `/api/me/projects/${encodeURIComponent(undo.projectId)}`, { name: undo.previous });
+      break;
+    }
+    case "goal": {
+      const now = ((await q("SELECT project_id::text FROM project_goals WHERE owner_id=$1 AND task_id=$2", [ownerId, undo.taskId])).rows[0]?.project_id ?? null) as string | null;
+      if (now !== undo.projectId) throw changed("这件 Task 后来又挪过，照现在的样子撤不了");
+      if (undo.previousProjectId) await web(deps, ownerId, "PUT", `/api/me/projects/${encodeURIComponent(undo.previousProjectId)}/goals/${encodeURIComponent(undo.taskId)}`);
+      else await web(deps, ownerId, "DELETE", `/api/me/projects/${encodeURIComponent(undo.projectId)}/goals/${encodeURIComponent(undo.taskId)}`);
+      break;
+    }
+    case "transfer":
+      await web(deps, ownerId, "POST", `/api/me/project-transfers/${undo.transferId}/withdraw`);
+      break;
+    case "split":
+      await web(deps, ownerId, "DELETE", `/api/me/card-splits/${undo.requestId}`);
+      break;
+    case "due_date":
+      await web(deps, ownerId, "PUT", `/api/me/projects/${encodeURIComponent(undo.projectId)}/goals/${encodeURIComponent(undo.taskId)}/due-date`, { dueDate: undo.previous });
+      break;
+    case "budget":
+      if (!undo.taskId) await web(deps, ownerId, "PUT", "/api/me/budget-default", undo.previous);
+      else if (undo.previous) await web(deps, ownerId, "PUT", `/api/me/tasks/${encodeURIComponent(undo.taskId)}/budget`, undo.previous);
+      else await q("DELETE FROM task_budgets WHERE owner_id=$1 AND plan_task_id=$2", [ownerId, undo.taskId]);
+      break;
+  }
+  const done = (await q("UPDATE buddy_actions SET undone_at=$2 WHERE id=$1 RETURNING id::text,action,summary,at,conversation_id,undo,undone_at", [id, now])).rows[0] as AuditRow;
+  return auditView(done);
+}
+
+// ───────────────────────── 转达 ─────────────────────────
+
+type MessageRow = { id: string; to_ids: string[]; text: string; status: TBuddyMessageDraft["status"]; failed_ids: string[]; created_at: Date; sent_at: Date | null };
+const messageView = (row: MessageRow, names: Map<string, string>): TBuddyMessageDraft => {
+  const ref = (personId: string) => ({ personId, name: names.get(personId) ?? personId });
+  return { id: row.id, to: row.to_ids.map(ref), text: row.text, status: row.status, createdAt: row.created_at.toISOString(),
+    sentAt: row.sent_at?.toISOString() ?? null, failed: row.failed_ids.map(ref) };
+};
+async function ownMessage(q: Query, ownerId: string, id: string): Promise<MessageRow> {
+  const row = UUID_PATTERN.test(id) ? (await q("SELECT id::text,to_ids,text,status,failed_ids,created_at,sent_at FROM buddy_messages WHERE id=$1 AND owner_id=$2",
+    [id, ownerId])).rows[0] as MessageRow | undefined : undefined;
+  if (!row) throw new BuddyError(404, "NOT_FOUND", "没有这句话");
+  return row;
+}
+export async function readMessage(q: Query, ownerId: string, id: string, names: Map<string, string>) {
+  return messageView(await ownMessage(q, ownerId, id), names);
+}
+export async function cancelMessage(q: Query, ownerId: string, id: string, names: Map<string, string>) {
+  await ownMessage(q, ownerId, id);
+  const row = (await q("UPDATE buddy_messages SET status='cancelled' WHERE id=$1 AND status='draft' RETURNING id::text,to_ids,text,status,failed_ids,created_at,sent_at",
+    [id])).rows[0] as MessageRow | undefined;
+  if (!row) throw new BuddyError(409, "NOT_DRAFT", "这句话已经发出或不发了");
+  return messageView(row, names);
+}
+/**
+ * 发出：先把草稿改成已发（两处同时点只有一处发），再由天枢机器人逐个发；收不到的（没关联飞书、发送失败）记在 failed。
+ * deliver 回 false 是这个人收不到。
+ */
+export async function sendMessage(q: Query, ownerId: string, id: string, names: Map<string, string>, now: Date,
+  deliver: (personId: string, text: string) => Promise<boolean>): Promise<TBuddyMessageDraft> {
+  const draft = await ownMessage(q, ownerId, id);
+  if (draft.status !== "draft") throw new BuddyError(409, "NOT_DRAFT", "这句话已经发出或不发了");
+  if ((await sentToday(q, ownerId, now)) >= BUDDY_DAILY_MESSAGES) throw new BuddyError(429, "DAILY_LIMIT", `今天已经转达了 ${BUDDY_DAILY_MESSAGES} 条，明天再发`);
+  if (!(await q("UPDATE buddy_messages SET status='sent',sent_at=$2 WHERE id=$1 AND status='draft'", [id, now])).rowCount)
+    throw new BuddyError(409, "NOT_DRAFT", "这句话已经发出或不发了");
+  const text = `${names.get(ownerId) ?? ownerId}请我转达：${draft.text}`;
+  const failed: string[] = [];
+  for (const personId of draft.to_ids) if (!(await deliver(personId, text).catch(() => false))) failed.push(personId);
+  await q("UPDATE buddy_messages SET failed_ids=$2 WHERE id=$1", [id, failed]);
+  return messageView({ ...draft, status: "sent", sent_at: now, failed_ids: failed }, names);
+}
+
+// ───────────────────────── 回收站 ─────────────────────────
+
+/** 进回收站满 30 天的真删（读回收站、恢复时顺手做）。 */
+async function purgeTrash(q: Query, ownerId: string, now: Date) {
+  const before = new Date(now.getTime() - TRASH_DAYS * DAY_MS);
+  await q("DELETE FROM tasks WHERE owner_id=$1 AND trashed_at < $2", [ownerId, before]);
+  await q("DELETE FROM research_topics WHERE owner_id=$1 AND trashed_at < $2", [ownerId, before]);
+}
+export async function listTrash(q: Query, ownerId: string, now: Date): Promise<TTrashItem[]> {
+  await purgeTrash(q, ownerId, now);
+  const rows = (await q(`SELECT 'card' AS kind,id::text,title,trashed_at FROM tasks WHERE owner_id=$1 AND trashed_at IS NOT NULL
+    UNION ALL SELECT 'topic',id::text,title,trashed_at FROM research_topics WHERE owner_id=$1 AND trashed_at IS NOT NULL ORDER BY trashed_at DESC,id`, [ownerId])).rows as
+    { kind: SubKind; id: string; title: string; trashed_at: Date }[];
+  return rows.map((row) => ({ kind: row.kind, id: row.id, title: row.title, deletedAt: row.trashed_at.toISOString(),
+    purgeAt: new Date(row.trashed_at.getTime() + TRASH_DAYS * DAY_MS).toISOString() }));
+}
+export async function restoreTrash(q: Query, ownerId: string, kind: SubKind, id: string, now: Date): Promise<boolean> {
+  if (!UUID_PATTERN.test(id)) return false;
+  await purgeTrash(q, ownerId, now);
+  return Boolean((await q(`UPDATE ${subTable(kind)} SET trashed_at=NULL WHERE id=$1 AND owner_id=$2 AND trashed_at IS NOT NULL`, [id, ownerId])).rowCount);
+}
+
+// ───────────────────────── 请这台电脑停掉 ─────────────────────────
+
+type StopRow = { id: string; kind: SubKind; card_id: string | null; topic_id: string | null; run_id: string; device_id: string; requested_at: Date };
+const stopView = (row: StopRow): TSessionStopView => ({ id: row.id, kind: row.kind, subSessionId: (row.card_id ?? row.topic_id)!, sessionId: row.run_id,
+  deviceId: row.device_id, requestedAt: row.requested_at.toISOString() });
+
+/** 认领这台电脑上要停的（同开工的认领：两处同时认领只有一处拿到，认领 5 分钟没报结果可以重新认领）。设备不是本人的为 null。 */
+export async function claimStops(q: Query, ownerId: string, deviceId: string, now: Date): Promise<TSessionStopView[] | null> {
+  if (!UUID_PATTERN.test(deviceId) || !(await q("SELECT 1 FROM local_devices WHERE owner_id=$1 AND id=$2 AND revoked_at IS NULL", [ownerId, deviceId])).rowCount) return null;
+  const rows = (await q(`UPDATE session_stops SET claimed_at=$3 WHERE owner_id=$1 AND device_id=$2 AND done_at IS NULL
+    AND (claimed_at IS NULL OR claimed_at < $3::timestamptz - interval '${CLAIM_TTL}')
+    RETURNING id::text,kind,card_id::text,topic_id::text,run_id::text,device_id::text,requested_at`, [ownerId, deviceId, now])).rows as StopRow[];
+  return rows.sort((a, b) => a.requested_at.getTime() - b.requested_at.getTime() || a.id.localeCompare(b.id)).map(stopView);
+}
+
+// ───────────────────────── 请这台电脑对子会话做一件事（18 节第 10 条） ─────────────────────────
+
+type CommandRow = { id: string; kind: SubKind; card_id: string | null; topic_id: string | null; run_id: string; device_id: string; requested_at: Date; command: TSessionCommand };
+/** 认领这台电脑上要做的（同停掉的认领）。设备不是本人的为 null。 */
+export async function claimCommands(q: Query, ownerId: string, deviceId: string, now: Date): Promise<TSessionCommandView[] | null> {
+  if (!UUID_PATTERN.test(deviceId) || !(await q("SELECT 1 FROM local_devices WHERE owner_id=$1 AND id=$2 AND revoked_at IS NULL", [ownerId, deviceId])).rowCount) return null;
+  const rows = (await q(`UPDATE session_commands SET claimed_at=$3 WHERE owner_id=$1 AND device_id=$2 AND done_at IS NULL
+    AND (claimed_at IS NULL OR claimed_at < $3::timestamptz - interval '${CLAIM_TTL}')
+    RETURNING id::text,kind,card_id::text,topic_id::text,run_id::text,device_id::text,requested_at,command`, [ownerId, deviceId, now])).rows as CommandRow[];
+  return rows.sort((a, b) => a.requested_at.getTime() - b.requested_at.getTime() || a.id.localeCompare(b.id)).map((row) => ({ id: row.id, kind: row.kind,
+    subSessionId: (row.card_id ?? row.topic_id)!, sessionId: row.run_id, deviceId: row.device_id, requestedAt: row.requested_at.toISOString(), command: row.command }));
+}
+/** 报做的结果：本人的、这台电脑的、还没报过的；否则 false。 */
+export async function finishCommand(q: Query, ownerId: string, id: string, deviceId: string, result: "done" | "not_running" | "expired" | "failed",
+  message: string | undefined, now: Date): Promise<boolean> {
+  if (!UUID_PATTERN.test(id)) return false;
+  return Boolean((await q("UPDATE session_commands SET done_at=$4,result=$5,message=$6 WHERE id=$1 AND owner_id=$2 AND device_id=$3 AND done_at IS NULL",
+    [id, ownerId, deviceId, now, result, message ?? null])).rowCount);
+}
+
+/** 报结果：本人的、这台电脑的、还没报过的；否则 false。 */
+export async function finishStop(q: Query, ownerId: string, id: string, deviceId: string, result: "stopped" | "not_running", now: Date): Promise<boolean> {
+  if (!UUID_PATTERN.test(id)) return false;
+  return Boolean((await q("UPDATE session_stops SET done_at=$4,result=$5 WHERE id=$1 AND owner_id=$2 AND device_id=$3 AND done_at IS NULL",
+    [id, ownerId, deviceId, now, result])).rowCount);
+}

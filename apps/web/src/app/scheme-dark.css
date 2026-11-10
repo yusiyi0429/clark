@@ -1,0 +1,41 @@
+/* ---------------------------------------------------------------------------
+   深色（新首页设计 5.2「深色」、17.2 外观）：<html data-color-scheme> 由根布局里渲染前的脚本按「偏好 · 外观」
+   （跟随系统 / 浅色 / 深色）写好（lib/appearanceScript.ts），这里只认它，不再看 prefers-color-scheme。
+   只在页面里有 [data-scheme="auto"] 的外壳时（新首页 /me/work）在根上换底层变量：
+   --hairline、--neutral-wash、--default-soft* 这些由底层变量混出来的会自己按深色重算，
+   HeroUI 挂在 body 下的浮层也一起变深；老页面没有这个属性，不受影响。
+   取值都来自 ts-design 的 [data-ts-theme="dark"] 和 HeroUI 自带的深色主题。
+--------------------------------------------------------------------------- */
+:root[data-theme="tianshu"][data-color-scheme="dark"]:has([data-scheme="auto"]) {
+  color-scheme: dark;
+  --paper: oklch(12% 0.0015 217.71);
+  --morning-start: oklch(12% 0.0015 217.71);
+  --surface: oklch(21.03% 0.003 217.71);
+  --field-bg: oklch(21.03% 0.003 217.71);
+  --ink: oklch(99.11% 0.0015 217.71);
+  --field-ink: oklch(99.11% 0.0015 217.71);
+  /* 深色只有两级字色：层级靠字号和字重分。 */
+  --ink-muted: oklch(70.5% 0.003 217.71);
+  --ink-faint: oklch(70.5% 0.003 217.71);
+  --field-placeholder: oklch(70.5% 0.003 217.71);
+  --field-border-focus: oklch(70.5% 0.003 217.71);
+  --rule: oklch(28% 0.0015 217.71);
+  --field-border: oklch(28% 0.0015 217.71);
+  --field-border-hover: var(--hairline-strong);
+  --confirmed: #6ad8bd;
+  --judgment: #f5c36b;
+  --counter: #ff91a9;
+  --judgment-wash: #3e3019;
+  --counter-wash: #462332;
+  --confirmed-wash: #163b36;
+  --accent-soft: color-mix(in oklab, var(--accent) 12%, transparent);
+  --tianshu-blue-secondary: #80adff;
+  --field-caret: #80adff;
+  --brand-deep: #3a83f7;
+  --sh-1: transparent;
+  --sh-2: transparent;
+  --sh-3: transparent;
+  --sheet-shadow: none;
+  --overlay-shadow: 0 0 1px 0 rgba(255, 255, 255, 0.3) inset;
+  --backdrop: rgba(0, 0, 0, 0.6);
+}

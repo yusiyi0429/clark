@@ -73,12 +73,14 @@ export function feishuConnectHref(next: string): string {
   return `/api/auth/feishu/start?${new URLSearchParams({ connect: "1", next })}`;
 }
 
-/** 本人的飞书连好了没有（calendar：能在飞书日历约会）；读不到时按没接飞书算，不出「连接飞书」。 */
-export async function readFeishuConnection(): Promise<{ enabled: boolean; connected: boolean; calendar: boolean }> {
+/** 本人的飞书连好了没有（calendar：能在飞书日历约会；state：连接页的状态）；读不到时按没接飞书算，不出「连接飞书」。 */
+export type FeishuConnection = { enabled: boolean; connected: boolean; calendar: boolean; state: "not_connected" | "connected" | "expired" };
+const NO_FEISHU: FeishuConnection = { enabled: false, connected: false, calendar: false, state: "not_connected" };
+export async function readFeishuConnection(): Promise<FeishuConnection> {
   try {
     const { data } = await browserApi.GET("/api/me/feishu");
-    return data ?? { enabled: false, connected: false, calendar: false };
+    return data ?? NO_FEISHU;
   } catch {
-    return { enabled: false, connected: false, calendar: false };
+    return NO_FEISHU;
   }
 }

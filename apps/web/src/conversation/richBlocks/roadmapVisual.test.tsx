@@ -174,13 +174,13 @@ describe("roadmap：画法", () => {
   });
 
   it("推断用虚线描边、无底，不加新颜色；「现在」是现有的蓝；泳道名在横向滚动时贴住左边", () => {
-    expect(css).toMatch(/\.rmItem\[data-status=inferred\] \.rmMark\{border:1px dashed #8e959e;background:transparent\}/);
-    expect(css).toMatch(/\.rmItem\[data-status=confirmed\] \.rmMark\{border:1px solid #3b6fc9;background:#3b6fc9\}/);
-    expect(css).toMatch(/\.rmNowLine\{[^}]*background:#3b6fc9/);
+    expect(css).toMatch(/\.rmItem\[data-status=inferred\] \.rmMark\{border:1px dashed var\(--ink-faint\);background:transparent\}/);
+    expect(css).toMatch(/\.rmItem\[data-status=confirmed\] \.rmMark\{border:1px solid var\(--tianshu-blue-secondary\);background:var\(--tianshu-blue-secondary\)\}/);
+    expect(css).toMatch(/\.rmNowLine\{[^}]*background:var\(--tianshu-blue-secondary\)/);
     expect(css).toMatch(/\.rmLaneLabel\{position:sticky;left:0/);
     const section = css.slice(css.indexOf("/* ── 路线图"), css.indexOf("/* ── 图示"));
-    const colors = new Set(section.match(/#[0-9a-f]{6}/gi)!.map((color) => color.toLowerCase()));
-    for (const color of colors) expect(["#3b6fc9", "#2f5fae", "#7a7f89", "#1d1d1f", "#eef0f3", "#25282e", "#fbfbfc", "#b4b9c1", "#8e959e", "#666d76"], color).toContain(color);
+    // 不加新颜色：路线图一段里不写色值，只用现有变量（深色下跟着换）。
+    expect(section).not.toMatch(/#[0-9a-f]{3,8}\b|rgba?\(/i);
   });
 
   it("横向滚动时：提示行「左右滑动查看完整时间轴」", () => {

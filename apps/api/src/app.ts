@@ -3,16 +3,19 @@ import Fastify, { type FastifyError, type FastifyInstance, type FastifyReply, ty
 import { Value } from "@sinclair/typebox/value";
 import { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import type { Pool } from "pg";
-import { RadarSources, type TApiError, type TRadarSources } from "@warmap/contracts";
+import { RadarSources, type TApiError, type TBuddyPlan, type TConversationCard, type TConversationModel, type TRadarSources } from "@warmap/contracts";
 import rateLimit from "@fastify/rate-limit";
 import multipart from "@fastify/multipart";
 import { loadPeopleDirectory, type PeopleDirectoryEnv } from "./peopleDirectory.js";
 import { createCompanyContext, type CompanyContextEnv } from "./companyContext.js";
+import type { CompanyReader } from "./company.js";
 import { createPersonalMemory } from "./personalMemory.js";
 import { createMemoryRecall, memoryRecallModels, type MemoryRecall } from "./personalMemoryRecall.js";
 import { createPersonalDistillation } from "./personalDistillation.js";
-import { createChatService } from "./chatService.js";
-import { pageGuide } from "./pageGuides.js";
+import { createChatService, type ChatRunExtras } from "./chatService.js";
+import { pipelineConversationIds } from "./taskPipelines.js";
+import { projectPageFacts } from "./projects.js";
+import { pageFor } from "./pageGuides.js";
 import { createConversationDigests, recordChatSegment } from "./conversationDigests.js";
 import { createConversationRecall } from "./conversationRecall.js";
 import { registerPersonalMemoryRoutes } from "./routes/personalMemory.js";
@@ -77,7 +80,9 @@ import {
   materialMultipartLimitError,
   type RequestContext,
   type RouteContext,
+  validSessionOf,
 } from "./routes/shared.js";
+import { sessionNeedsRenewal, sessionSetCookie } from "./session.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerMcpOAuthRoutes } from "./routes/mcpOAuth.js";
 import { registerCardRoutes } from "./routes/cards.js";
@@ -109,6 +114,7 @@ import { createCollectionAgent, type CollectionAgent } from "./collectionAgent.j
 import { collectionJobs, type CollectionDeps } from "./collections.js";
 import { createFeishuBitable, createMockBitable, type BitableAdapter } from "./feishu/bitable.js";
 import { feishuNotifier } from "./feishu/notify.js";
+import { createPresence } from "./homePush.js";
 import { registerCollectionRoutes } from "./routes/collections.js";
 import type { JobHandler, RecurringJob } from "./jobs.js";
 import { registerCollectorRoutes } from "./routes/collector.js";
@@ -118,6 +124,7 @@ import { createUsageTracker } from "./usage.js";
 import { registerProgressRoutes } from "./routes/progress.js";
 import { createBattlefieldSummaries, type BattlefieldSummaries, type BattlefieldSummaryAgent } from "./battlefieldSummary.js";
 import { createBattlefieldSummaryAgent } from "./battlefieldSummaryAgent.js";
+import { createHandoverNoteAgent, type HandoverNoteAgent } from "./handoverNoteAgent.js";
 import { createTaskPlacementAgent, taskPlacementJobs, type TaskPlacementAgent } from "./taskPlacement.js";
 import { createMeetingRecordingService, DEFAULT_RECORDING_STORAGE_DIR, type MeetingRecordingService } from "./meetingRecordings.js";
 import { realVoiceprintDeps, type VoiceprintDeps } from "./voiceprints.js";
@@ -128,6 +135,25 @@ import { createThreadIntroAgent, type ThreadIntroAgent } from "./threadIntro.js"
 import { createTaskAcceptanceAgent, type TaskAcceptanceAgent } from "./taskAcceptanceDraft.js";
 import { createWorldPlanTaskSource, emptyPlanTaskSource, type PlanTaskSource } from "./planTasks.js";
 import { registerDeliverableRoutes } from "./routes/deliverables.js";
+import { registerLocalRoutes } from "./routes/local.js";
+import { registerProjectLocalTurnRoutes } from "./routes/projectLocalTurns.js";
+import { registerRoleRoutes } from "./routes/roles.js";
+import { registerWorkerRoutes } from "./routes/workers.js";
+import { registerTopicRoutes } from "./routes/topics.js";
+import { registerWorkHomeRoutes } from "./routes/workHome.js";
+import { registerSessionStartRoutes } from "./routes/sessionStarts.js";
+import { registerTaskPipelineRoutes } from "./routes/taskPipelines.js";
+import { registerProjectRoutes } from "./routes/projects.js";
+import { registerProjectTransferRoutes } from "./routes/projectTransfers.js";
+import { registerBuddyActionRoutes } from "./routes/buddyActions.js";
+import { closeQuestions, collapsePlan, runExtras } from "./buddyActions.js";
+import { recordProjectReply } from "./workSeen.js";
+import { recordTurnFallback, recordTurnModel, turnModels } from "./chatTurnModels.js";
+import { localTurnExtras } from "./projectLocalTurns.js";
+import { registerTaskContinuityRoutes } from "./routes/taskContinuity.js";
+import { registerTaskCardRoutes, type BoardAgents } from "./routes/taskCards.js";
+import { planTaskOpener, taskPageFacts } from "./taskCards.js";
+import { registerAgreementRoutes } from "./routes/agreements.js";
 import type { DeliverableAgents, DeliverableQueue } from "./deliverableReview.js";
 import type { ArticleFetcher } from "./articleText.js";
 import { personDisplayNames } from "./people.js";
@@ -203,6 +229,13 @@ export type AppEnv = {
   /** 独立 Chat 读确认会议的服务凭据（INTERNAL_CHAT_TOKEN）；不配时 /internal/confirmed-meetings 不注册。 */
   internalChatToken?: string;
   /**
+   * 换 INTERNAL_CHAT_TOKEN 时旧的那几个（INTERNAL_CHAT_TOKENS_PREVIOUS，逗号分隔）：/internal 接口照样认，天枢调 Chat 只用新的。
+   * 换法：先在这里加上旧的、INTERNAL_CHAT_TOKEN 换成新的，Chat 也换成新的以后再把旧的去掉。
+   */
+  internalChatTokensPrevious?: string[];
+  /** 只认这些地址来调 /internal 的 Chat 接口（INTERNAL_CALLER_ALLOWLIST，逗号分隔的 IP 或 CIDR）；不配不限。 */
+  internalCallerAllowlist?: string[];
+  /**
    * 独立 Chat 服务的地址（CHAT_SERVICE_URL，如预发的 http://chat:3101）：设了，首页对话（scope=global）的历史、发送、附件改走 Chat，
    * 用 INTERNAL_CHAT_TOKEN 转发本人身份；不设走天枢自己的对话。对象页的对话不受影响。
    */
@@ -239,6 +272,16 @@ export type AppEnv = {
   preflightThinking?: string;
   /** 交付物评审与版本说明的模型（REVIEW_MODEL / REVIEW_BASE_URL / REVIEW_API_KEY / REVIEW_THINKING，指向 TokenHub）；不配时用 PI_BASE_URL、PI_API_KEY、HEAVY_MODEL，思考 medium。 */
   review?: { model?: string; baseUrl?: string; apiKey?: string; thinking?: string };
+  /**
+   * 云端拆卡和云端 Agent 验收（BOARD_CLOUD_AGENTS=1 才开，V2 第 21 节）：缺省关，拆卡和验收在本人电脑上由规划员、验收员做；
+   * 关着时「拆卡」返回 409、交回不排云端验收、验收重试返回 409。本机程序还没接上规划员的手动测试环境打开它。
+   */
+  boardCloudAgents?: boolean;
+  /**
+   * 天枢自己那套月度计划和月末复盘（TIANSHU_MONTHLY_CYCLE=1 才开，新首页 13.1）：缺省关，复盘和月初拆解只走 M2。
+   * 关着时不自动起月度计划草案、不自动开月末复盘，MCP 的 list_pending 也不列个人复盘和月度计划；已有的行不动。
+   */
+  tianshuMonthlyCycle?: boolean;
   /** 会后提取等候选 Agent 的模型与思考强度（OUTCOME_MODEL 等，agentModels.ts）；不配时与之前一致。 */
   agentModels?: AgentModelEnv;
   materialStorageDir?: string;
@@ -326,7 +369,10 @@ export async function buildApp({
   meetingFollowThroughAgents,
   docChangeAgent,
   battlefieldSummaryAgent,
+  handoverNoteAgent,
   taskPlacementAgent,
+  boardAgents,
+  companyReader,
   conversationTurnTimeoutMs = CONVERSATION_TURN_TIMEOUT_MS,
   conversationStallTimeoutMs = CONVERSATION_STALL_TIMEOUT_MS,
   conversationHeartbeatMs = CONVERSATION_HEARTBEAT_MS,
@@ -403,8 +449,14 @@ export async function buildApp({
   docChangeAgent?: DocChangeAgent;
   /** 战场进展汇总的 Agent（测试注入假实现）；缺省 PROGRESS_SUMMARY_MODEL，不配时 HEAVY_MODEL、思考 medium。 */
   battlefieldSummaryAgent?: BattlefieldSummaryAgent;
+  /** 项目转交写交接说明的 Agent（测试注入假实现）；缺省和战场进展汇总同一套模型配置。 */
+  handoverNoteAgent?: HandoverNoteAgent;
   /** 会后事项归位的 Agent（测试注入假实现）；缺省 TASK_PLACEMENT_MODEL，不配时 LIGHT_MODEL、不开思考。 */
   taskPlacementAgent?: TaskPlacementAgent;
+  /** V2 看板的拆卡、Agent 验收（测试注入假实现）；缺省照参考评审用 REVIEW_*，没配时 HEAVY_MODEL。 */
+  boardAgents?: Partial<BoardAgents>;
+  /** 本体公司事实的读取（测试注入假实现）；缺省按 env 读本体（company.ts）。 */
+  companyReader?: CompanyReader;
   conversationTurnTimeoutMs?: number;
   conversationStallTimeoutMs?: number;
   conversationHeartbeatMs?: number;
@@ -422,7 +474,7 @@ export async function buildApp({
   // seed 缺失/不合规 → 启动即失败，不虚构人员或空目录（Ticket 16 装载真实 seed）
   const peopleDirectory = loadPeopleDirectory(env);
   // 本体只读公司事实（company.ts）：对话按本人授权读；后台服务按 COMPANY_SYSTEM_PERSON_ID 的授权读。读不到时如实说没读到，不用本地资料兜底。
-  const company = createCompanyContext(env);
+  const company = createCompanyContext(env, companyReader);
   // 分诊与思考翻译用的快模型（TRIAGE_MODEL，不配时 LIGHT_MODEL）；TRIAGE_MODEL 出错时退回 LIGHT_MODEL 再试一次。
   const fastModels = { modelId: env.triageModel || env.lightModel, fallbackModelId: env.lightModel };
   // 真实预审 Agent 在后台跑：建会、加入会议、重试预审的接口写完就返回（巡检 P1-5/6）；注入的测试替身保持同步，除非自己声明 background。
@@ -458,6 +510,10 @@ export async function buildApp({
   // 本体（tkos.world）只读集成：未配置时 reader 不发请求；读失败一律回退本地，不影响启动和页面。
   // 读取时间用真实时钟（演示场次的业务时钟是资料截至时间，不能用来标「读自本体」的时刻）。
   const world = createWorldReader({ q: pool.query.bind(pool), env });
+  // 首页 Task 行：本体配了、实例也开了读（和其他读本体的地方同一个开关），或配了 TK 只读实例，才从本体读（只读），否则没有 Task。
+  const planTaskSource = planTasks ?? worldPlanTaskSource(pool.query.bind(pool), env, world.enabled);
+  // Task 页带进对话时按看的人打开这个 Task（谁能看照约定 V1 的规则）。
+  const openPlanTaskForPage = planTaskOpener(pool.query.bind(pool), planTaskSource, peopleDirectory, now);
   // 第二个只读实例（TK scope，写死只读）：默认关闭；开了也只做健康探测和快照缓存，还没接进战场卡与 read_ontology。
   const worldTk = env.worldTk ? createWorldReader({ q: pool.query.bind(pool), env: env.worldTk }) : undefined;
   const baseGlobalContext = () => globalConversationContext(pool.query.bind(pool), now(), personDisplayNames(peopleDirectory));
@@ -485,8 +541,33 @@ export async function buildApp({
     modelId: env.lightModel, streamSimple: personalDistillationStream });
   // 首页走独立 Chat 时只建这一个客户端（首页分段的「人 × 视角」互斥在它里面）；转发的每一句记下进了哪一段，纪要据此去读。
   const chat = env.chatServiceUrl ? createChatService({ baseUrl: env.chatServiceUrl, token: env.internalChatToken, rotation: env.chatSessionRotation === true,
-    ...(env.chatPageContext ? { pageGuide } : {}),
-    onSegment: (viewer, segment) => recordChatSegment(pool.query.bind(pool), viewer, segment) }) : undefined;
+    ...(env.chatPageContext ? { pageGuide: (path: string, viewer: { personId: string }) =>
+      pageFor(path, (taskId) => taskPageFacts(pool.query.bind(pool), openPlanTaskForPage, viewer.personId, taskId),
+        (projectId) => projectPageFacts(pool.query.bind(pool), viewer.personId, projectId)) } : {}),
+    onSegment: (viewer, segment) => recordChatSegment(pool.query.bind(pool), viewer, segment),
+    pipelines: (viewer) => pipelineConversationIds(pool.query.bind(pool), viewer.personId),
+    // 伙伴代本人做事（17.4）：读回历史时接上每一轮的计划清单和卡；本人中途发新消息时上一轮的清单收起。
+    // 再接上每一轮实际用的来源和模型。
+    runExtras: async (viewer, runIds) => {
+      const [buddy, models, local] = await Promise.all([runExtras(pool.query.bind(pool), viewer.personId, runIds), turnModels(pool.query.bind(pool), viewer.personId, runIds),
+        localTurnExtras(pool.query.bind(pool), viewer.personId, runIds)]);
+      const extras = new Map<string, ChatRunExtras>(buddy);
+      for (const [runId, model] of models) extras.set(runId, { ...extras.get(runId), ...model });
+      // 项目对话在本人电脑上跑的那几轮（17.2 第 38 条）：在哪跑、执行方和模型。
+      for (const [runId, ran] of local) extras.set(runId, { ...extras.get(runId), ...ran });
+      return extras;
+    },
+    onModel: (viewer, runId, used) => recordTurnModel(pool.query.bind(pool), viewer.personId, runId, used, now()),
+    onFallback: (viewer, runId, reason) => recordTurnFallback(pool.query.bind(pool), viewer.personId, runId, reason, now()),
+    onInterrupt: async (_viewer, runId) => {
+      const plan = await collapsePlan(pool.query.bind(pool), runId);
+      if (plan) chat?.inject(runId, { type: "plan", plan });
+    },
+    // 选项框（18 节第 9 条）：本人发出新消息，这个对话里还 open 的收掉，回答的那张标 answered。
+    onMessage: (viewer, scope, answered) => closeQuestions(pool.query.bind(pool), viewer.personId, scope, answered, now()),
+    onProjectReply: async (_viewer, scope) => {
+      if (scope.startsWith("project:")) await recordProjectReply(pool.query.bind(pool), scope.slice("project:".length), now());
+    } }) : undefined;
   // 会话纪要（后台，CONVERSATION_DIGEST_MODEL / CONVERSATION_DIGEST_THINKING，不配时 LIGHT_MODEL、不开思考）与回看。
   const conversationDigests = createConversationDigests({ pool, chat, baseUrl: env.piBaseUrl, apiKey: env.piApiKey,
     ...agentModel(env.agentModels, "conversationDigest", { modelId: env.lightModel }), streamSimple: conversationDigestStream });
@@ -599,7 +680,7 @@ export async function buildApp({
     pool,
     bitable: bitable ?? (env.collectionBitable === "live" && env.feishu ? createFeishuBitable() : createMockBitable()),
     feishu: env.feishu,
-    notify: env.feishu ? feishuNotifier(q) : undefined,
+    notify: env.feishu ? (notice, dedupeKey) => feishuNotifier(q)({ ...notice, source: "collection" }, dedupeKey) : undefined,
     isCeo: (personId) => peopleDirectory.searchPeople(undefined).find((person) => person.personId === personId)?.roles.includes("ceo") ?? false,
     names: () => personDisplayNames(peopleDirectory),
     now,
@@ -622,9 +703,20 @@ export async function buildApp({
   }
   // 每个请求的结构化日志上下文：handler 里补充 action/run 字段，onResponse 统一落一条。
   const requestContext = new WeakMap<FastifyRequest, RequestContext>();
+  // 用着就续期（session.ts 的 sessionNeedsRenewal）：这次请求核对过的会话签出来超过一小时，回应带一张有效期重新算满的新会话。
+  // 这次回应自己发了 Set-Cookie 的（登录、切工作台、退出登录、改口令）不动。
+  app.addHook("onSend", async (req, reply, payload) => {
+    const session = validSessionOf(req);
+    if (session && !reply.hasHeader("set-cookie") && sessionNeedsRenewal(session.exp, env.sessionMaxAgeSeconds))
+      reply.header("set-cookie", sessionSetCookie(env.sessionSecret, env.sessionMaxAgeSeconds, { pid: session.pid, v: session.v, ...(session.view ? { view: session.view } : {}) }));
+    return payload;
+  });
   // 使用周报的「哪天用过」：登录后发问或改动（非 GET 的请求；上手步骤上报本身不算），一人一天记一次。页面打开、轮询不算。
   const usage = createUsageTracker(q, now);
+  // 本人在网页上打开着天枢（浏览器会话的请求，含轮询）：飞书推送据此判断本人在不在天枢里（homePush.ts）。
+  const presence = createPresence(q, now);
   app.addHook("onResponse", async (req, reply) => {
+    if (req.person) presence(req.person.personId);
     if (req.person && reply.statusCode < 400 && req.method !== "GET" && req.method !== "HEAD" && req.routeOptions.url !== "/api/me/usage/onboarding-step") {
       usage.active(req.person.personId);
     }
@@ -664,7 +756,8 @@ export async function buildApp({
   const readSession = createReadSession(env, q, peopleDirectory);
   const requirePerson = createRequirePerson(env, readSession, fail);
   const requireCEO = createRequireCEO(requirePerson, fail);
-  const requireServiceToken = createRequireServiceToken(fail);
+  const requireServiceToken = createRequireServiceToken(fail, env.internalChatToken
+    ? { token: env.internalChatToken, previous: env.internalChatTokensPrevious ?? [], allowlist: env.internalCallerAllowlist ?? [] } : undefined);
   const invalidInput = createInvalidInput(fail);
   const respond = createRespond(fail);
   const respondTranscriptImport = createRespondTranscriptImport(fail);
@@ -743,8 +836,7 @@ export async function buildApp({
     threadIntroAgent: threadIntroAgent ?? createThreadIntroAgent(pool, env),
     missionCardDraftAgent: missionCardDraftAgent ?? createMissionCardDraftAgent({ query: q, baseUrl: env.piBaseUrl, apiKey: env.piApiKey, modelId: env.heavyModel }),
     taskAcceptanceAgent: taskAcceptanceAgent ?? createTaskAcceptanceAgent(pool, env),
-    // 首页 Task 行：本体配了、实例也开了读（和其他读本体的地方同一个开关），或配了 TK 只读实例，才从本体读（只读），否则没有 Task。
-    planTasks: planTasks ?? worldPlanTaskSource(q, env, world.enabled),
+    planTasks: planTaskSource,
     materialStorageDir,
     conversationAttachmentStorageDir,
     conversationTurnTimeoutMs,
@@ -781,7 +873,8 @@ export async function buildApp({
   registerActionRoutes(app, ctx);
   registerDriRoutes(app, ctx);
   registerOntologyRoutes(app, ctx);
-  registerSystemRoutes(app, ctx);
+  // /mcp/me 的 web_search 用同一个博查实例（server.ts 装配；测试里是假的，没带 configured 的当作配好了）。
+  registerSystemRoutes(app, ctx, webSearch ? { search: { configured: (webSearch as { configured?: boolean }).configured !== false, search: (input, signal) => webSearch.search(input, signal) } } : {});
   registerThreadRoutes(app, ctx);
   registerRecordingRoutes(app, ctx);
   registerMeRoutes(app, ctx);
@@ -790,6 +883,7 @@ export async function buildApp({
   registerSeenMarkRoutes(app, ctx);
   registerMissionCardRoutes(app, ctx, missionCardAnnotationAgent, missionCardReviewAgent);
   registerDeliverableRoutes(app, ctx, { agents: deliverableAgents, fetchArticle: deliverableFetcher });
+  registerAgreementRoutes(app, ctx);
   registerMyRadarRoutes(app, ctx);
   registerMonthlyReviewRoutes(app, ctx);
   registerRequestRoutes(app, ctx, deliveryAgent);
@@ -838,6 +932,22 @@ export async function buildApp({
     registerWechatRoutes(app, ctx, wechat);
     app.addHook("onClose", async () => { await wechat.close(); });
   }
+  // V2 执行看板（routes/taskCards.ts）；本机程序在云端的那一侧（routes/local.ts）：配对、设备令牌、单向上报的接收端。
+  registerRoleRoutes(app, ctx);
+  registerWorkerRoutes(app, ctx);
+  registerTopicRoutes(app, ctx);
+  registerWorkHomeRoutes(app, ctx);
+  registerSessionStartRoutes(app, ctx);
+  registerTaskPipelineRoutes(app, ctx);
+  registerProjectRoutes(app, ctx);
+  registerBuddyActionRoutes(app, ctx, { feishu: feishuApi });
+  registerProjectTransferRoutes(app, ctx, { handoverAgent: handoverNoteAgent ?? createHandoverNoteAgent({ query: q, baseUrl: env.piBaseUrl, apiKey: env.piApiKey,
+    ...agentModel(env.agentModels, "progressSummary", { modelId: env.heavyModel, thinkingLevel: "medium" }) }) });
+  // 跨月延续、到此为止和月份页（routes/taskContinuity.ts）。
+  registerTaskContinuityRoutes(app, ctx);
+  const board = registerTaskCardRoutes(app, ctx, { agents: boardAgents, fetchArticle: deliverableFetcher });
+  registerLocalRoutes(app, ctx, board);
+  registerProjectLocalTurnRoutes(app, ctx);
 
   return app;
 }

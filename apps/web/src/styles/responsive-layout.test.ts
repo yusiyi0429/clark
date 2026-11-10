@@ -163,13 +163,13 @@ describe("responsive workspace CSS", () => {
     expect(source).toContain(".scroll{padding:24px 32px 30px;overflow-y:auto;overscroll-behavior:contain;min-height:0;");
   });
 
-  it("uses the shared morning surface and blue focus on the lock screen, retaining coarse-pointer notification controls", () => {
+  it("登录页用新首页的实心底和统一焦点（设计稿 19 节），手机上一列靠上；通知栏粗指针下的按钮尺寸照旧", () => {
     const access = css("./access.module.css");
-    expect(access).toContain("background: var(--morning-start)");
-    expect(access).toContain("outline: 2px solid var(--onboarding-blue)");
-    expect(access).toContain("prefers-reduced-transparency");
-    expect(access).not.toContain("contourDraw");
-    expect(access).toContain(".passwordField {");
+    expect(access).toContain("background: var(--surface)");
+    expect(access).toContain("box-shadow: 0 0 0 3px var(--accent-soft)");
+    expect(access).not.toContain("--morning-start");
+    expect(access).not.toContain("backdrop-filter");
+    expect(access).toMatch(/@media \(max-width: 759px\) \{\s*\.shell \{ justify-content: flex-start;/);
     expect(css("./notifications.module.css")).toContain("@media(pointer:coarse){.railLock button{width:42px;height:42px;margin:0}}");
   });
 

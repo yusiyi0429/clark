@@ -11,7 +11,7 @@ import { shanghaiDate } from "./workdays.js";
  * - 复盘与拆解开放：月末倒数第 3 天到次月 7 日，每个时段发一次，去 M2；
  * - 周复盘写好了等确认：周五到周一，本人那份是 draft 时发一次；
  * - 需要尽快判断的议题（红色、待判断）：两天内新出现的，每条发一次。
- * 每 15 分钟看一次，只在上海时间 9–21 点发；同一件事按 dedupeKey 只发一次，没关联飞书的人直接跳过（notify.ts）。
+ * 每 15 分钟看一次，只在上海时间 9–21 点发；同一件事按 dedupeKey 只发一次，没关联飞书的人直接跳过（notify.ts），「偏好」里关了飞书通知的不发。
  */
 export const CEO_FEISHU_NOTICES_KIND = "feishu.ceo_notices";
 const EVERY_MS = 15 * 60_000;
@@ -43,7 +43,9 @@ export function ceoFeishuNoticeJobs({ pool, people, now }: { pool: Pool; people:
     if (hour < QUIET_BEFORE || hour >= QUIET_FROM) return;
     const day = shanghaiDate(at);
     const weekday = new Date(`${day}T00:00:00Z`).getUTCDay();
-    const ceos = people().filter((person) => person.roles.includes("ceo")).map((person) => person.personId);
+    // 「偏好」里关了飞书通知的不发（新首页 13.2）。
+    const muted = new Set(((await q("SELECT person_id FROM person_settings WHERE NOT feishu")).rows as { person_id: string }[]).map((row) => row.person_id));
+    const ceos = people().filter((person) => person.roles.includes("ceo") && !muted.has(person.personId)).map((person) => person.personId);
     if (!ceos.length) return;
     const issues = (await q(
       `SELECT id::text, title FROM issues WHERE status = 'pending' AND urgency->>'level' = 'red' AND created_at > $1::timestamptz - interval '2 days' ORDER BY created_at`,

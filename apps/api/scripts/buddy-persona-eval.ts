@@ -4,9 +4,9 @@
  * - 读 PI_BASE_URL / PI_API_KEY / LIGHT_MODEL（作答）/ HEAVY_MODEL（评分），**不打印任何密钥值**。
  * - 同一组用例（设计稿第 5 节的场景，加「以后靠你了」和打招呼）四种性格各答一遍：系统提示 = 成员对话角色提示 + 伙伴人设，
  *   用例的事实放在每轮 JSON 的 anchor 里，和对话里首页快照的位置一样。
- * - 评分模型对每个用例的四个回答一起看：抽出各自的判断（达到几条、差哪条、有没有落后），四份必须一致（底线第 2 条）；
- *   每个回答按《质量标准 V2》打 0–100 分，75 分及格，有否决项（编造、把待定当决定、把计划当完成）直接不及格；坏消息有没有说（底线第 1 条）。
- * - 本地另查两条硬规矩：理性冷静、较真犀利不用表情；简短用例里沉稳靠谱 ≤ 60 字、理性冷静 ≤ 40 字（设计稿 40 字、20 字左右，留余量）。
+ * - 评分模型对每个用例的四个回答一起看：抽出各自的判断（达到几条、差哪条、有没有落后），四份必须一致（底线第 1 条）；
+ *   每个回答按《质量标准 V2》打 0–100 分，75 分及格，有否决项（编造、把待定当决定、把计划当完成）直接不及格；坏消息有没有说（底线第 4 条）。
+ * - 本地另查两条硬规矩：四种都不用表情（底线第 2 条）；简短用例里沉稳靠谱 ≤ 60 字（人设 40 字，留余量）。
  * - 逐条结果写 stdout，全部写到 --out（缺省写到系统临时目录）。任何一条不过，退出码 1。
  */
 import { writeFileSync } from "node:fs";
@@ -18,7 +18,7 @@ import { driSystemPrompt } from "../src/piConversationRuntime.js";
 
 const OWNER = "孙铭泽";
 const BUDDY = "小天";
-const PERSONALITIES: TBuddyPersonality[] = ["steady", "cheerful", "calm", "critical"];
+const PERSONALITIES: TBuddyPersonality[] = ["steady", "direct", "warm", "coach"];
 
 /**
  * 设计稿第 5 节的那件事：交付物 v2 的参考评审出了结果，2 条里达到 1 条，差「真实会议走完全链路」（缺一次真会的读回记录）。
@@ -35,7 +35,7 @@ const TASK = {
   nextMeeting: "下周一有周会，可以录一次",
 };
 
-/** mustMention：这一轮必须说到的坏消息（底线第 1 条）；托付、打招呼不必提。 */
+/** mustMention：这一轮必须说到的坏消息（底线第 4 条）；托付、打招呼不必提。 */
 type Case = { id: string; kind: string; message: string; short: boolean; anchor: unknown; mustMention: string[] };
 const MISSING = "还差「真实会议走完全链路」这一条（缺读回记录）";
 const CASES: Case[] = [
@@ -64,7 +64,7 @@ async function respond(model: string, instructions: string, input: string): Prom
   return (data.output_text ?? (data.output ?? []).flatMap((item) => item.content ?? []).filter((part) => part.type === "output_text").map((part) => part.text ?? "").join("")).trim();
 }
 
-const JUDGE_PROMPT = `你给一个工作伙伴 Agent 的回答打分。同一个用例有四个回答，分别出自四种说话性格（沉稳靠谱、乐观开朗、理性冷静、较真犀利）；性格只该改变说法，不该改变判断。
+const JUDGE_PROMPT = `你给一个工作伙伴 Agent 的回答打分。同一个用例有四个回答，分别出自四种说话性格（沉稳靠谱、直言不讳、温和体贴、启发追问）；性格只该改变说法，不该改变判断。
 
 输入是 JSON：facts 是真实情况，message 是本人这句话，mustMention 是这一轮必须说到的坏消息，answers 是四个回答（键是性格）。参考评审是 Agent 给的参考意见；验收由人做、还没发生，回答说「参考评审没过」「还差一条」不算提前下验收结论，说「验收已经不通过」才算。
 
@@ -108,9 +108,8 @@ async function main() {
       if (verdict.veto) problems.push(`${label}：否决（${verdict.veto}）`);
       if (verdict.score < 75) problems.push(`${label}：${verdict.score} 分`);
       if (!verdict.badNews) problems.push(`${label}：没说坏消息`);
-      if ((personality === "calm" || personality === "critical") && EMOJI.test(answer)) problems.push(`${label}：用了表情`);
+      if (EMOJI.test(answer)) problems.push(`${label}：用了表情`);
       if (item.short && personality === "steady" && chars(answer) > 60) problems.push(`${label}：${chars(answer)} 字，太长`);
-      if (item.short && personality === "calm" && chars(answer) > 40) problems.push(`${label}：${chars(answer)} 字，太长`);
     }
     failures += problems.length ? 1 : 0;
     console.log(`\n${item.id} ${item.kind}「${item.message}」 ${problems.length ? "不过" : "过"}`);

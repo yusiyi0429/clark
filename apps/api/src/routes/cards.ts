@@ -27,7 +27,8 @@ export async function readHomeCards(ctx: RouteContext, person: MissionRoundPerso
     listMeetingRows(q),
     // 首页只读当前公司周期的 Mission：战场卡 Mission 数、能力面板数量与入口都从这份 collection 派生，不保存汇总；历史周期留在 /api/cards/missions
     listMissionCards(q, env.sessionSecret, personDisplayNames(peopleDirectory), period, person),
-    getMonthlyPlanNotice(q, env.sessionSecret, at),
+    // 天枢自己的月度计划关着（TIANSHU_MONTHLY_CYCLE，缺省关，月初拆解走 M2）时不出「月度计划待签发」。
+    env.tianshuMonthlyCycle ? getMonthlyPlanNotice(q, env.sessionSecret, at) : null,
     listMissionRoundCards(q, people, env.sessionSecret, person, undefined, at),
   ]);
   // 会前通知看 scheduled；会后的会议记录待确认走 /api/me/meeting-cards（不再单列给 CEO 确认的战略项）
@@ -108,7 +109,7 @@ export function registerCardRoutes(app: AppInstance, ctx: RouteContext): void {
   app.get("/api/cards/notifications", { preHandler: requireCEO }, async (req): Promise<TCardCollection> => {
     const at = now();
     const rows = (await listMeetingRows(q)).filter((row) => hasMeetingNotice(row, req.person!.personId, at));
-    const monthlyNotice = await getMonthlyPlanNotice(q, env.sessionSecret, at);
+    const monthlyNotice = env.tianshuMonthlyCycle ? await getMonthlyPlanNotice(q, env.sessionSecret, at) : null;
     return { cards: [...(monthlyNotice ? [monthlyNotice] : []), ...rows.map((row) => projectMeetingCard(row, env.sessionSecret, at))] };
   });
 

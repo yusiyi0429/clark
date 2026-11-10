@@ -1,24 +1,46 @@
 :global(html):has(.page) { scrollbar-gutter: auto; }
-:global(html):has(.page), :global(body):has(.page) { background-color: var(--morning-start); }
-.page { position: relative; isolation: isolate; min-height: 100svh; color: var(--onboarding-ink); font-family: var(--font-sans); padding: 0 24px; }
+:global(html):has(.page), :global(body):has(.page) { background-color: var(--surface); }
+/*
+ * 新首页的样子（设计稿 17.1、第 5 节）：实心底、不用毛玻璃和晨光；蓝色只给主按钮和选中；字号只用 12/14/16，字重 400/600；
+ * 深色跟系统（外壳带 data-scheme="auto"，变量在根上换，app/scheme-dark.css）。旧版的晨雾变量在这里换成新首页的变量。
+ */
+.page {
+  --morning-start: var(--surface);
+  --onboarding-blue: var(--accent);
+  --onboarding-pressed: var(--accent-hover);
+  --onboarding-glass: var(--surface);
+  --onboarding-blur: 0px;
+  --onboarding-sat: 100%;
+  --onboarding-edge: var(--hairline);
+  --onboarding-highlight: 0 0 0 0 transparent;
+  --onboarding-shadow: 0 0 0 0 transparent;
+  --onboarding-card-radius: var(--r-card);
+  --onboarding-error: var(--danger);
+  position: relative; isolation: isolate; min-height: 100svh; color: var(--ink); background: var(--surface); font-family: var(--font-sans); padding: 0 24px;
+}
+/* 主按钮：实心强调色、14/600；手机上撑满、高 44。 */
+.page :is(.footer > button, .radarActions > button) { min-height: 40px; padding: 0 24px; font-size: 14px; font-weight: 600; line-height: var(--lh-row); color: var(--accent-foreground); }
+.page .footer > button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+/* 选伙伴几页：顶上的伙伴（选形象那页由左右切换的台子代替）。 */
+.buddyStage { display: grid; place-items: center; flex-shrink: 0; height: 120px; animation: enter 320ms var(--ease-brand) both; }
 .header { position: absolute; inset: 24px 40px auto; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .brand { display: flex; align-items: center; gap: 10px; }
 .brand svg { width: 24px; height: 24px; }
-.brand span { font: 18px var(--font-wordmark), var(--font-sans); }
+.brand span { font: 16px var(--font-wordmark), var(--font-sans); }
 .flow { width: min(560px, 100%); min-height: 100svh; margin: auto; display: flex; flex-direction: column; align-items: stretch; padding-top: max(96px, 12vh); padding-bottom: 32px; }
 .stage { position: relative; margin-top: 40px; }
 .content { width: 100%; }
 .intro { text-align: center; }
-.intro h1 { margin: 0; font-size: 32px; font-weight: 600; line-height: 1.4; letter-spacing: -.025em; text-wrap: balance; outline: none; overflow-wrap: anywhere; }
+.intro h1 { margin: 0; font-size: 16px; font-weight: 600; line-height: 24px; letter-spacing: -.025em; text-wrap: balance; outline: none; overflow-wrap: anywhere; }
 .intro h1:focus-visible { outline: none; }
-.subtitle { margin: 12px 0 0; font-size: 20px; color: var(--onboarding-muted); }
-.description { margin: 20px auto 0; max-width: 470px; font-size: 17px; line-height: 1.7; color: var(--onboarding-muted); text-wrap: pretty; }
+.subtitle { margin: 8px 0 0; font-size: 16px; color: var(--onboarding-muted); }
+.description { margin: 16px auto 0; max-width: 470px; font-size: 14px; line-height: 1.7; color: var(--onboarding-muted); text-wrap: pretty; }
 .mobileTourCopy { display: none; }
 .details { margin-top: 28px; }
 .details:empty { margin-top: 0; }
 /* 给伙伴起名字：一页只有一个大的名字框，字居中。边和聚焦走 globals.css 的统一输入框样式。 */
-.buddyName { display: flex; justify-content: center; }
-.buddyNameInput { box-sizing: border-box; width: min(420px, 100%); height: 60px; padding: 0 20px; border-radius: 16px; font-size: 20px; text-align: center; }
+.buddyName { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.buddyNameInput { box-sizing: border-box; width: min(360px, 100%); height: 44px; padding: 0 var(--space-4); border-radius: var(--field-radius); font-size: 16px; text-align: center; }
 /* 连接外部工具这一步：设置里同一张表单，放在一块玻璃卡里。 */
 .connectPanel { width: min(560px, 100%); margin-inline: auto; padding: 20px 22px; text-align: left; }
 .content[data-step="hello"] { padding-top: 24px; }
@@ -35,16 +57,16 @@
 .clampTwo { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
 .clampTwo { -webkit-line-clamp: 2; }
 .battlefields { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-.battlefields li { display: grid; grid-template-columns: 24px 1fr auto; align-items: baseline; gap: 8px; font-size: 15px; line-height: 1.6; }
-.battlefields strong { font-weight: 500; overflow-wrap: anywhere; }
+.battlefields li { display: grid; grid-template-columns: 24px 1fr auto; align-items: baseline; gap: 8px; font-size: 14px; line-height: 1.6; }
+.battlefields strong { font-weight: 600; overflow-wrap: anywhere; }
 .battlefields li > span:last-child { font-size: 14px; color: var(--onboarding-muted); max-width: 160px; overflow-wrap: anywhere; }
 .code { font-size: 12px; color: var(--onboarding-faint); font-variant-numeric: tabular-nums; }
 .people { display: flex; align-items: center; gap: 16px; }
 .avatars { display: flex; padding-left: 4px; }
-.avatars span { display: grid; place-items: center; width: 32px; height: 32px; margin-left: -4px; border: 2px solid #fff; border-radius: 50%; background: #edf2f9; color: var(--onboarding-muted); font-size: 12px; }
-.footnote { margin: 16px 0 0; text-align: center; font-size: 13px; color: var(--onboarding-faint); line-height: 1.7; }
-.workMissions h2 { font-size: 13px; font-weight: 500; color: var(--onboarding-faint); }
-.consent { display: flex; align-items: flex-start; gap: 12px; font-size: 13px; line-height: 1.7; color: var(--onboarding-muted); cursor: pointer; padding: 4px 0; min-height: 44px; }
+.avatars span { display: grid; place-items: center; width: 32px; height: 32px; margin-left: -4px; border: 2px solid var(--surface); border-radius: 50%; background: var(--neutral-wash); color: var(--onboarding-muted); font-size: 12px; }
+.footnote { margin: 16px 0 0; text-align: center; font-size: 12px; color: var(--onboarding-faint); line-height: 1.7; }
+.workMissions h2 { font-size: 12px; font-weight: 600; color: var(--onboarding-faint); }
+.consent { display: flex; align-items: flex-start; gap: 12px; font-size: 14px; line-height: 1.7; color: var(--onboarding-muted); cursor: pointer; padding: 4px 0; min-height: 44px; }
 .consent input { width: 18px; height: 18px; margin-top: 3px; flex: none; accent-color: var(--onboarding-blue); }
 .consent input:focus-visible { outline: 2px solid var(--onboarding-blue); outline-offset: 4px; }
 .script { margin: 16px 0 0; padding: 20px 24px; font-size: 16px; line-height: 1.85; color: var(--onboarding-ink); }
@@ -61,9 +83,9 @@
 .timer span { color: var(--onboarding-ink); }
 .recordHint { margin: 4px 0 0; font-size: 12px; line-height: 1.6; color: var(--onboarding-faint); }
 .enrolled { padding: 28px; text-align: center; }
-.successIcon { width: 48px; height: 48px; margin: 0 auto 16px; display: grid; place-items: center; background: #edf4ff; color: var(--onboarding-blue); border-radius: 50%; }
-.enrolled p { margin: 0; font-size: 17px; }
-.enrolled .updated { color: var(--onboarding-faint); font-size: 13px; margin-top: 8px; }
+.successIcon { width: 48px; height: 48px; margin: 0 auto 16px; display: grid; place-items: center; background: var(--neutral-wash); color: var(--ink); border-radius: 50%; }
+.enrolled p { margin: 0; font-size: 16px; }
+.enrolled .updated { color: var(--onboarding-faint); font-size: 12px; margin-top: 8px; }
 .enrolled button { margin-top: 12px; }
 .summary { text-align: center; margin: 32px 0 0; font-size: 14px; line-height: 1.8; color: var(--onboarding-muted); }
 .summary span { display: block; margin-top: 4px; color: var(--onboarding-faint); font-size: 12px; }
@@ -128,7 +150,7 @@
   .flow:is([data-step="voiceprint"], [data-step="company"], [data-step="work"], [data-step="radar"]) .stage { margin-top: calc(24px - var(--stage-fade)); }
   .flow[data-step="voiceprint"] .description { margin-top: 8px; }
   .flow[data-step="voiceprint"] .details { margin-top: 16px; }
-  .flow[data-step="voiceprint"] .script { margin-top: 16px; padding-block: 16px; font-size: 15px; line-height: 1.7; }
+  .flow[data-step="voiceprint"] .script { margin-top: 16px; padding-block: 16px; font-size: 14px; line-height: 1.7; }
   .flow[data-step="voiceprint"] .recordControl { margin-top: 16px; }
   .flow:is([data-step="voiceprint"], [data-step="company"], [data-step="work"], [data-step="radar"]) .footer { margin-top: 16px; gap: 8px; }
   .flow[data-step="radar"] .description { margin-top: 8px; }
@@ -141,12 +163,12 @@
   .brand { gap: 8px; }
   .brand svg { width: 21px; height: 21px; }
   .brand span { font-size: 16px; }
-  .header button { padding-inline: 8px; font-size: 13px; }
+  .header button { padding-inline: 8px; font-size: 14px; }
   .flow { padding-top: max(96px, 12svh); min-height: 100svh; padding-bottom: calc(224px + env(safe-area-inset-bottom)); }
   .stage { margin-top: 32px; }
-  .intro h1 { font-size: 25px; }
-  .subtitle { font-size: 18px; }
-  .description { font-size: 16px; line-height: 1.7; }
+  .intro h1 { font-size: 16px; }
+  .subtitle { font-size: 16px; }
+  .description { font-size: 14px; line-height: 1.7; }
   .content[data-step^="tour-"] .description { margin-top: 10px; font-size: 14px; line-height: 1.55; }
   .content[data-step^="tour-"] .details { margin-top: 14px; }
   .content[data-step="mission-flow"] .description { margin-top: 10px; font-size: 14px; line-height: 1.55; }
@@ -156,7 +178,7 @@
   .details { margin-top: 24px; }
   .snapshot { padding: 20px; }
   .battlefields li > span:last-child { max-width: 90px; }
-  .script { padding: 16px 20px; font-size: 15px; line-height: 1.8; }
+  .script { padding: 16px 20px; font-size: 14px; line-height: 1.8; }
   .recordControl { margin-top: 20px; }
   .footer { position: fixed; z-index: 5; bottom: 0; left: 16px; right: 16px; margin: 0; padding: 12px 0 max(12px, env(safe-area-inset-bottom)); gap: 8px; isolation: isolate; }
   .footer::before { content: ""; position: absolute; z-index: -1; inset: -24px -16px 0; background: linear-gradient(180deg, transparent, var(--morning-start) 28%); pointer-events: none; }

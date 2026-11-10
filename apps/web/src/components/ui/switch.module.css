@@ -1,0 +1,13 @@
+/* 开关：整行一个按钮，右边是轨道与圆钮（同引导 foundation.module.css 那段，缩到 40×24）。开是实心主色，关是淡墨；禁用变淡。
+   按钮的重置放在 :where 里（优先级 0），所在页给的行样式（行距、字号、宽度）照样生效。 */
+:where(.row) { display: flex; align-items: center; gap: var(--space-2); margin: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.row:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-control); }
+.row:disabled { cursor: default; opacity: .5; }
+
+.track { position: relative; display: inline-flex; flex: none; width: 40px; height: 24px; margin-left: auto; border-radius: var(--r-capsule); background: color-mix(in srgb, var(--ink) 16%, transparent); transition: background var(--dur-base) var(--ease-swift); }
+.track > span { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgb(23 23 27 / 18%), 0 0 0 .5px rgb(23 23 27 / 6%); transition: transform var(--dur-base) var(--ease-swift); }
+.track[data-on] { background: var(--accent); }
+.track[data-on] > span { transform: translateX(16px); }
+
+@media (prefers-reduced-motion: reduce) { .track, .track > span { transition: none; } }
+@media (forced-colors: active) { .track { border: 1px solid CanvasText; } .track[data-on] { background: Highlight; } }

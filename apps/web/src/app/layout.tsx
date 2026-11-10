@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { ReduceMotionSync } from "@/components/ReduceMotionSync";
+import { APPEARANCE_SCRIPT } from "@/lib/appearanceScript";
 import "./globals.css";
 
 /** 字标「天枢」两字的抖音美好体子集（800 字节）；正文只用系统字栈（clark 同）。 */
@@ -30,7 +31,9 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1, inte
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="zh-CN" data-theme="tianshu" className={`h-full ${douyin.variable}`}>
+    // data-color-scheme 由下面的脚本在渲染前写上（外观，17.2），服务端渲染时没有：不算水合不一致。
+    <html lang="zh-CN" data-theme="tianshu" className={`h-full ${douyin.variable}`} suppressHydrationWarning>
+      <head><script dangerouslySetInnerHTML={{ __html: APPEARANCE_SCRIPT }} /></head>
       <body className="min-h-full bg-paper">
         <ReduceMotionSync />
         {children}

@@ -1,0 +1,107 @@
+/*
+ * 选伙伴的左右切换（BuddyCarousel）：一次一个放大居中，两边是影子；颜色、圆角、时长只用现有变量（设计稿第 5 节）。
+ * 只有伙伴可以回弹（5.5）：「选定」那一下中间那个回弹一次，两边的影子退开。
+ */
+
+.carousel {
+  --gap: 300px;
+  --track: 240px;
+  position: relative;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 32px;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+}
+.carousel[data-kind="card"] { --gap: 360px; --track: 200px; }
+
+.track {
+  position: relative;
+  height: var(--track);
+  overflow: hidden;
+  touch-action: pan-y;
+  user-select: none;
+  /* 两边的影子淡进边缘里。 */
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
+}
+
+.slide {
+  --o: 0;
+  --s: 1;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  transform: translate(-50%, -50%) translateX(calc(var(--o) * var(--gap))) scale(var(--s));
+  transition: transform 420ms var(--ease-brand), opacity var(--dur-slow) var(--ease-swift);
+  cursor: pointer;
+}
+.slide[data-offset="0"] { cursor: default; z-index: 1; }
+.slide[data-offset="-1"] { --o: -1; --s: .56; opacity: .32; }
+.slide[data-offset="1"] { --o: 1; --s: .56; opacity: .32; }
+.slide[data-offset="-2"] { --o: -1.8; --s: .4; opacity: 0; pointer-events: none; }
+.slide[data-offset="2"] { --o: 1.8; --s: .4; opacity: 0; pointer-events: none; }
+.carousel[data-kind="card"] .slide[data-offset="-1"], .carousel[data-kind="card"] .slide[data-offset="1"] { --s: .86; opacity: .4; }
+.slide:not([data-offset="0"]):hover { opacity: .5; }
+.slide:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; border-radius: var(--r-card); }
+
+.seal { display: grid; place-items: center; }
+.carousel[data-sealing] .slide:not([data-offset="0"]) { opacity: 0; transition-duration: var(--dur-base); }
+.carousel[data-sealing] .slide[data-offset="0"] .seal { animation: seal 560ms cubic-bezier(.34, 1.4, .64, 1) both; }
+.carousel[data-sealing] .arrow { opacity: 0; pointer-events: none; }
+@keyframes seal { 0% { transform: none; } 38% { transform: scale(1.1); } 100% { transform: none; } }
+
+.arrow {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: var(--r-control);
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+  transition: background-color var(--dur-fast) linear, color var(--dur-fast) linear, opacity var(--dur-base) var(--ease-swift);
+}
+.arrow:hover { background: var(--default-soft); color: var(--ink-muted); }
+.arrow:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* 台上的伙伴：胶囊按原样放大（transform，不改它自己的尺寸变量），探出半身的形象本身小，放得更大。 */
+.figure { display: grid; place-items: center; transform: scale(var(--figure-scale)); --figure-scale: 1.7; }
+.figure[data-tall] { --figure-scale: 2.4; }
+.figure[data-size="hero"] { --figure-scale: 1.25; }
+.figure[data-size="hero"][data-tall] { --figure-scale: 1.7; }
+
+/* 性格：一张话卡。名字 14/600，示例 16/26（设计稿 5.2 只用 12/14/16）。 */
+.card {
+  box-sizing: border-box;
+  display: grid;
+  gap: var(--space-2);
+  width: 320px;
+  padding: var(--space-4);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  text-align: left;
+}
+.cardLabel { color: var(--ink); font-size: 14px; font-weight: 600; line-height: var(--lh-row); }
+.cardSample { color: var(--ink); font-size: 16px; line-height: 26px; }
+
+@media (max-width: 759px) {
+  .carousel { --gap: 200px; --track: 200px; grid-template-columns: minmax(0, 1fr); }
+  .carousel[data-kind="card"] { --gap: 270px; --track: 220px; }
+  .arrow { display: none; }
+  .track { -webkit-mask-image: none; mask-image: none; margin-inline: -16px; }
+  .figure { --figure-scale: 1.3; }
+  .figure[data-tall] { --figure-scale: 1.9; }
+  .figure[data-size="hero"] { --figure-scale: 1.1; }
+  .figure[data-size="hero"][data-tall] { --figure-scale: 1.4; }
+  .card { width: 280px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slide, .arrow { transition: none; }
+  .carousel[data-sealing] .slide[data-offset="0"] .seal { animation: none; }
+}

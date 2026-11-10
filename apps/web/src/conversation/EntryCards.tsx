@@ -23,6 +23,7 @@ import { useWorkspace } from "@/components/shell/WorkspaceContext";
 import { DraftRequest } from "@/components/requests/RequestScreen";
 import { CollectionDraftCard } from "@/components/collections/CollectionDraft";
 import { MeetingDraftCard } from "@/components/meeting/MeetingDraftCard";
+import { BuddyMessageCard } from "@/components/home/BuddyMessageCard";
 import { prepareQuestion, readRequest, requestError, runRequestAction } from "@/components/requests/requestApi";
 import { browserApi } from "@/lib/api/client";
 import { relativeDayTime } from "@/lib/companyTime";
@@ -67,6 +68,9 @@ function EntryCard({ card, createdAt }: { card: TConversationCard; createdAt?: s
     case "questions": return <AskCard card={card} />;
     case "collection_draft": return <section className={`${s.card} ${s.bare}`}><CollectionDraftCard collectionId={card.collectionId} /></section>;
     case "meeting_draft": return <MeetingDraftCard card={card} />;
+    case "buddy_message": return <BuddyMessageCard draftId={card.draftId} />;
+    // 伙伴的选项框由新首页的对话时间线画（WorkTimeline），这里不画。
+    case "buddy_question": return null;
   }
 }
 

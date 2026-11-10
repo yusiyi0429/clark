@@ -1,7 +1,8 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
+import { LocalPermissionBrief, LocalPermissionMode, LocalQuestionRequestView, LocalStopReason } from "./localRunner.js";
 import { PersonRef, ProjectTransfer } from "./projectTransfers.js";
 import { CardDraftView, CardPlanView, CardTaskView } from "./taskCards.js";
-import { TaskFeedItem } from "./workHome.js";
+import { SubSessionLetter, TaskFeedItem } from "./workHome.js";
 
 /**
  * 项目常驻，每月目标挂在项目上（设计《新首页》第 16 节，11/07 晚用户批准）。
@@ -27,7 +28,16 @@ export const ProjectName = Type.String({ minLength: 1, maxLength: 60 });
  * 一个项目。archivedAt 不为 null 是归档了（左栏收进「已归档 N」）；lastActivityAt 是最近一次动静（子会话、事项、挂接），没有为 null。
  * transfer（16.7）：正在转交的那一份（preparing、sent），或本人交出去了的那一份（accepted：本人是原负责人，项目在本人这边算归档、只读，
  * archivedAt 是接手的时间）；都没有为 null。
+ * permissionMode（17.2 第 11 条）：这个项目新开子会话的默认权限模式（项目主管线下面那个选择改的就是它，见 localRunner.ts 的 LocalPermissionMode），缺省 auto；
+ * 项目对话、伙伴开的子会话开工时云端把它带给本机（ClaimedSessionStart.permissionMode）。
  */
+/**
+ * 自动接力的上限（18 节第 12 条，空转保护）：这个项目里系统自动触发的项目主管线轮次（子会话停了的报告触发的那一轮），加上主管线代本人给子会话的转话、重开，
+ * 连续这么多次之间本人一句话没说，就停止自动触发，「等你」里出一条 auto_relay 问继续还是停下。null 是不限。新项目缺省 20。
+ * 本人发的话、点的按钮永远不受限；本人在这个项目对话里说任何一句话（含伙伴台转来的）都清零。Task 预算照旧兜底。
+ */
+export const AutoRelayLimit = Type.Integer({ minimum: 1, maximum: 1000 });
+
 export const Project = Type.Object({
   projectId: Type.String({ format: "uuid" }),
   name: ProjectName,
@@ -35,6 +45,8 @@ export const Project = Type.Object({
   createdAt: Instant,
   lastActivityAt: Nullable(Instant),
   transfer: Nullable(ProjectTransfer),
+  permissionMode: LocalPermissionMode,
+  autoRelayLimit: Nullable(AutoRelayLimit),
 }, strict);
 
 /** GET /api/me/projects（DRI 工作台）：本人全部项目（含交出去了的，算归档），没归档的在前，各自按最近动静从近到远。 */
@@ -47,7 +59,33 @@ export const ProjectListResponse = Type.Object({ projects: Type.Array(Project) }
 export const CreateProjectRequest = Type.Object({ name: ProjectName, taskId: Type.Optional(Type.String({ minLength: 1 })) }, strict);
 
 /** PATCH /api/me/projects/:projectId：改名、归档（archived: true）、恢复（archived: false）。至少带一样。 */
-export const UpdateProjectRequest = Type.Object({ name: Type.Optional(ProjectName), archived: Type.Optional(Type.Boolean()) }, { ...strict, minProperties: 1 });
+export const UpdateProjectRequest = Type.Object({ name: Type.Optional(ProjectName), archived: Type.Optional(Type.Boolean()),
+  /** 新开子会话的默认权限模式（Project.permissionMode）。 */
+  permissionMode: Type.Optional(LocalPermissionMode),
+  /** 自动接力的上限（Project.autoRelayLimit，null 不限）。 */
+  autoRelayLimit: Type.Optional(Nullable(AutoRelayLimit)) }, { ...strict, minProperties: 1 });
+
+/**
+ * 项目那一行的「…」菜单（17.2 第 35 条）：重命名、归档用 PATCH /api/me/projects/:projectId（UpdateProjectRequest）；标为已读 POST /api/me/work-seen（kind = project）；
+ * 转交给… 走 POST /api/me/projects/:projectId/transfers；删除用 DELETE /api/me/projects/:projectId（204），只有项目负责人能删（别人 404）。
+ *
+ * 删除撤不回（没有回收站；想留着请用归档）：
+ * - 删掉：项目本身、项目对话（天枢这边的历史和「项目 → Chat 对话」的对应，从天枢再也打不开）、挂接关系（本体里的 Task 不动，回到「本月」里没挂的状态）、
+ *   子会话字母、汇报、决定卡、目标变化、拆卡登记和派活单草稿、转交记录、蓝点记录。
+ * - 直接放在项目里的子会话（卡、专题）进回收站（同 DELETE /api/me/sub-sessions），30 天内能恢复，恢复后在「其他」里；之后彻底删掉。
+ *   挂着的 Task 下面的卡、专题是那件 Task 的，跟着 Task 留下（Task 回到没挂的状态，它们照 Task 显示），不进回收站。
+ * - 留下：自己做的执行事项（不是子会话）留着，回到「其他」；交付物的版本留着，只是不再挂项目。
+ * - 本机：天枢云端不碰本机。网页删成功后自己调本机 PUT /v1/projects/:projectId/folder（folderId = null）解绑，文件夹和里面的文件不动。
+ * 不能删的时候（409，不删任何东西）：要进回收站的子会话或这个项目的规划员还在跑（含排队、停着等回话）回 PROJECT_BUSY，message 写是哪几个（字母 · 标题），先停掉再删；
+ * 正在转交（还没接手或拒绝）回 PROJECT_TRANSFERRING，先撤回转交。
+ */
+
+/**
+ * POST /api/me/projects/:projectId/auto-relay（项目负责人，204）：答「等你」里那条 auto_relay。
+ * continue：计数清零、恢复自动触发；stop：那一条收起，自动触发照旧停着，直到本人在这个项目对话里说一句话（说了就清零、恢复）。
+ * 没停着（没到上限）回 409 NOT_PAUSED。
+ */
+export const AutoRelayDecisionRequest = Type.Object({ decision: Type.Union([Type.Literal("continue"), Type.Literal("stop")]) }, strict);
 
 /**
  * 一件挂着的 Task 的判定（目标历史那一行）：completed 本人确认完成；stopped 定了到此为止；continued 延续成了下个月的一件；open 还没了结。
@@ -58,6 +96,7 @@ export const ProjectGoalVerdict = Type.Union([Type.Literal("open"), Type.Literal
 /**
  * 一条挂接：哪个月的哪件 Task。taskName、missionTitle 是挂上时的快照（本体读不到时历史照样能写）。
  * source：auto 自动挂的（延续、同名同 Mission）、owner 本人挂的、migration 上线迁移挂的。linkedAt 是挂上的时间（项目对话里分隔线的位置）。
+ * dueDate：天枢里给这件目标存的验收截止日（YYYY-MM-DD），没存为 null（首页的截止日见 HomeProjectGoal.dueDate 的先后）。
  */
 export const ProjectGoal = Type.Object({
   taskId: Type.String({ minLength: 1 }),
@@ -68,7 +107,14 @@ export const ProjectGoal = Type.Object({
   verdict: ProjectGoalVerdict,
   source: Type.Union([Type.Literal("auto"), Type.Literal("owner"), Type.Literal("migration")]),
   linkedAt: Instant,
+  dueDate: Nullable(Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" })),
 }, strict);
+
+/**
+ * PUT /api/me/projects/:projectId/goals/:taskId/due-date（项目负责人）：给挂在这个项目上的一件 Task 存验收截止日，null 是不存了（退回本体或 Mission 的节点）。
+ * 回这条挂接（ProjectGoal）。这件 Task 没挂在这个项目上 404；日期不合法 400。伙伴的 set_task_due_date 走同一个接口。
+ */
+export const SetGoalDueDateRequest = Type.Object({ dueDate: Nullable(Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" })) }, strict);
 
 /**
  * GET /api/me/projects/:projectId（项目的「详情」）：goals 是目标历史，月份从近到远（同一个月按挂上的先后）。
@@ -93,6 +139,37 @@ export const ProjectPipelineResponse = Type.Object({
   conversationId: Type.String({ minLength: 1 }),
   scope: Type.String({ minLength: 1 }),
 }, strict);
+
+/**
+ * 项目对话按对话选模型和思考程度（17.2 第 36 条）。只有项目对话能选；伙伴（总管线）的对话不开放。选择存在 Chat 服务的那条对话上，
+ * 天枢只转发；不选（choice = null）完全照 Chat 现在配的默认模型和思考程度。
+ *
+ * - 思考程度 ModelEffort：off 不思考、low、medium、high、xhigh、max（从少到多），每个模型支持哪几档见 ConversationModelOption.efforts。
+ * - GET /api/me/conversation-models：能选的模型。source 是来源（如「TokenHub · 网宿」，原样显示），modelId 是模型 id，label 是给人看的名字；
+ *   efforts 是它支持的几档，defaultEffort 是不改时用哪档；isDefault 为 true 的那个就是「默认」（只有一个，排第一）。
+ *   没接 Chat 服务时 models 为空，网页不出选择。
+ * - GET /api/me/projects/:projectId/pipeline/model：这个项目对话现在选的（没选为 null）。PUT 同一路径（SetProjectPipelineModelRequest）改：
+ *   choice 的 source + modelId 要是列表里的一项，effort 要在它的 efforts 里，不然 400 INVALID_MODEL_CHOICE；choice = null 回到默认。
+ *   项目对话还没建时 PUT 会先建。下一轮起生效，正在回的那一轮不变。只有项目负责人能读改（别人 404）；没接 Chat 服务时 PUT 回 409 CHAT_NOT_CONNECTED。
+ */
+export const ModelEffort = Type.Union([Type.Literal("off"), Type.Literal("low"), Type.Literal("medium"), Type.Literal("high"), Type.Literal("xhigh"),
+  Type.Literal("max")]);
+export const ConversationModelOption = Type.Object({
+  source: Type.String({ minLength: 1 }),
+  modelId: Type.String({ minLength: 1 }),
+  label: Type.String({ minLength: 1 }),
+  efforts: Type.Array(ModelEffort, { minItems: 1 }),
+  defaultEffort: ModelEffort,
+  isDefault: Type.Boolean(),
+}, strict);
+export const ConversationModelListResponse = Type.Object({ models: Type.Array(ConversationModelOption) }, strict);
+export const ConversationModelChoice = Type.Object({
+  source: Type.String({ minLength: 1 }),
+  modelId: Type.String({ minLength: 1 }),
+  effort: ModelEffort,
+}, strict);
+export const ProjectPipelineModel = Type.Object({ choice: Nullable(ConversationModelChoice) }, strict);
+export const SetProjectPipelineModelRequest = Type.Object({ choice: Nullable(ConversationModelChoice) }, strict);
 
 /**
  * 项目对话里网页按时间插的一行：TaskFeedItem 那几种（这个项目里的卡：挂着的 Task 下的、和直接挂在项目上的；交接以后也含以前负责人的卡），
@@ -142,8 +219,58 @@ export const ProjectGoalChangedItem = Type.Object({
  */
 export const AnswerGoalChangeRequest = Type.Object({ answer: Type.Union([Type.Literal("stop"), Type.Literal("keep")]) }, strict);
 
+/**
+ * 18 节第 10 条：子会话停了、要人介入，都报进它所在项目的对话（本人不用进子会话也能处理项目的一切）。两种都按 at 和 afterSequence 插进项目对话：
+ * afterSequence 是记下这一条时项目对话最后一条消息的 sequence（同 ProjectTransfer.afterSequence：Chat 读回的消息不带时间，网页按它插在那条后面），
+ * 对话还没有消息、读不到为 null。sub 是哪个子会话：kind、id、字母、记下时的标题；界面写「B · {标题}」。
+ *
+ * sub_session_report：子会话停了（本机的同步条目 stopped，LocalStopReport；只报卡和专题，规划员、验收员不报）。界面写「B · 标题」，一两句写做成了什么、卡在哪，附「看结果」：
+ * - why 同 LocalStopReason：turn_done 做完一轮；interrupted 本人停下；held 停着等（额度、余额、预算）；error 出错停住；killed 强停。
+ * - summary：做成了什么（本机取这一轮最后那段话的头一两句），这一轮没说话为 null；blocker：卡在哪（出错、停着等时的原因），别的为 null。
+ * - outputs：这一轮交的产出物，outputId 是云端收下的那件产出（GET /api/me/local-outputs/:id 打开，同卡详情的 outputs）；还没收到为 null，只显示标题和文件名。
+ * - 记下以后云端以本人身份给项目主管线（模型）发一句（开头是 SUB_SESSION_REPORT_PREFIX 那几个字，读回历史时去掉、标成 ConversationMessage.via = report，
+ *   网页不画成本人的气泡，报告这一行已经画了），让它回一小轮：说一句这意味着什么、下一步。项目主管线正在回上一轮时不打断，排在它后面。
+ *
+ * sub_session_decision：子会话要人介入，直接出它的决定卡，不先等模型想一轮。question 是它在问的那一次（同 WaitingItem.question，网页画选项框），
+ * permission 是在等批准的那一步（同 WaitingItem.permission，网页画批准卡；canAllowForSession 为 true 才给「这张卡都允许」），两样只有一样。答、批由网页在本人电脑上直接交给本机（同「等你」里就地答）；
+ * 手机上看得到、能点进项目对话看。sessionId、deviceId 是那个本机会话和它所在的电脑。
+ * - status：open 还在等；closed 这一次不在等了（答了、批了、拒了，或这一轮停了失效），closedAt 是云端知道的时间。同一次提问、同一步批准只出一张。
+ */
+export const SubSessionFeedRef = Type.Object({
+  kind: Type.Union([Type.Literal("card"), Type.Literal("topic")]),
+  id: Type.String({ format: "uuid" }),
+  letter: SubSessionLetter,
+  title: Type.String(),
+}, strict);
+export const ProjectSubSessionReportItem = Type.Object({
+  kind: Type.Literal("sub_session_report"),
+  id: Type.String({ format: "uuid" }),
+  at: Instant,
+  afterSequence: Nullable(Type.Integer({ minimum: 1 })),
+  sub: SubSessionFeedRef,
+  why: LocalStopReason,
+  summary: Nullable(Type.String({ maxLength: 400 })),
+  blocker: Nullable(Type.String({ maxLength: 400 })),
+  outputs: Type.Array(Type.Object({ outputId: Nullable(Type.String({ format: "uuid" })), title: Type.String(), fileName: Type.String() }, strict), { maxItems: 20 }),
+}, strict);
+export const ProjectSubSessionDecisionItem = Type.Object({
+  kind: Type.Literal("sub_session_decision"),
+  id: Type.String({ format: "uuid" }),
+  at: Instant,
+  afterSequence: Nullable(Type.Integer({ minimum: 1 })),
+  sub: SubSessionFeedRef,
+  sessionId: Type.String({ format: "uuid" }),
+  deviceId: Type.String({ format: "uuid" }),
+  question: Nullable(LocalQuestionRequestView),
+  permission: Nullable(LocalPermissionBrief),
+  status: Type.Union([Type.Literal("open"), Type.Literal("closed")]),
+  closedAt: Nullable(Instant),
+}, strict);
+/** 子会话报告触发项目主管线那一轮时，发给它的那句的开头（读回历史时去掉，标 via = report）。 */
+export const SUB_SESSION_REPORT_PREFIX = "【子会话回报】";
+
 export const ProjectFeedItem = Type.Union([TaskFeedItem, ProjectGoalLinkedItem, ProjectHandoverItem, ProjectHandoverSummaryItem, ProjectTransferDeclinedItem,
-  ProjectGoalChangedItem]);
+  ProjectGoalChangedItem, ProjectSubSessionReportItem, ProjectSubSessionDecisionItem]);
 /** GET /api/me/projects/:projectId/feed：从旧到新。 */
 export const ProjectFeedResponse = Type.Object({ items: Type.Array(ProjectFeedItem) }, strict);
 
@@ -172,6 +299,17 @@ export type TProjectGoalVerdict = Static<typeof ProjectGoalVerdict>;
 export type TProjectGoal = Static<typeof ProjectGoal>;
 export type TProjectDetailResponse = Static<typeof ProjectDetailResponse>;
 export type TProjectPipelineResponse = Static<typeof ProjectPipelineResponse>;
+export type TModelEffort = Static<typeof ModelEffort>;
+export type TConversationModelOption = Static<typeof ConversationModelOption>;
+export type TConversationModelListResponse = Static<typeof ConversationModelListResponse>;
+export type TConversationModelChoice = Static<typeof ConversationModelChoice>;
+export type TProjectPipelineModel = Static<typeof ProjectPipelineModel>;
+export type TSetProjectPipelineModelRequest = Static<typeof SetProjectPipelineModelRequest>;
 export type TProjectGoalLinkedItem = Static<typeof ProjectGoalLinkedItem>;
 export type TProjectFeedItem = Static<typeof ProjectFeedItem>;
 export type TProjectFeedResponse = Static<typeof ProjectFeedResponse>;
+export type TAutoRelayDecisionRequest = Static<typeof AutoRelayDecisionRequest>;
+export type TSetGoalDueDateRequest = Static<typeof SetGoalDueDateRequest>;
+export type TSubSessionFeedRef = Static<typeof SubSessionFeedRef>;
+export type TProjectSubSessionReportItem = Static<typeof ProjectSubSessionReportItem>;
+export type TProjectSubSessionDecisionItem = Static<typeof ProjectSubSessionDecisionItem>;

@@ -2,8 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { TianshuMark } from "@/components/TianshuMark";
-import { LockscreenClock } from "./LockscreenVisual";
-import { MorningCanvas } from "@/components/onboarding/MorningCanvas";
+import { BuddyFigure } from "@/components/onboarding/BuddyCarousel";
 import { loginDestination } from "@/lib/access-paths";
 export { landingPath } from "@/lib/access-paths";
 import { PinField, type PinFieldHandle } from "./PinField";
@@ -37,9 +36,10 @@ async function post(url: string, body: Record<string, string> = {}): Promise<Res
 }
 
 /**
- * 锁屏与引导共用晨光画布，解锁只让输入与时钟离场。
- * 天枢是「你的 ID + 4 位口令」：口令输满即提交；初始码登录后原地换成「设置你的 4 位口令」，输两遍。
- * 验证通过后以 replace 进入（不留锁屏历史）。
+ * 登录页（新首页设计稿 19 节）：和新首页同一套样子，一列居中。上面是小号的天枢标志；
+ * 这台电脑登录过就请出他的伙伴和名字、只输口令，旁边一个「换个人」；不认得时是「你的 ID」加 4 个口令格。口令输满即提交。
+ * 初始码登录后原地换成「设置你的 4 位口令」，输两遍。出错在口令格下一行写原因，口令格轻抖一下。
+ * 通过后这一列淡出（约 240ms），以 replace 进入（不留登录页历史）。深色跟着外观走（外壳带 data-scheme="auto"）。
  */
 export function AccessScreen({ nextPath, demoName = null }: { nextPath?: string; demoName?: string | null }) {
   const [stage, setStage] = useState<Stage>({ kind: "login" });
@@ -48,6 +48,8 @@ export function AccessScreen({ nextPath, demoName = null }: { nextPath?: string;
   const [submitting, setSubmitting] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
   const [error, setError] = useState("");
+  /** 每出一次错加一，奇偶换一组同样的抖动，连着错也会再抖。 */
+  const [shakes, setShakes] = useState(0);
   const idInput = useRef<HTMLInputElement>(null);
   const pin = useRef<PinFieldHandle>(null);
   const newPin = useRef<PinFieldHandle>(null);
@@ -66,13 +68,18 @@ export function AccessScreen({ nextPath, demoName = null }: { nextPath?: string;
       const result = await feishuAutoLogin();
       if (!result) return;
       if (!result.ok) {
-        setError(result.message);
+        fail(result.message);
         return;
       }
       await enter(result.role ?? "member", result.onboarded);
     });
-    // 只在打开锁屏时尝试一次
+    // 只在打开登录页时尝试一次
   }, []);
+
+  function fail(message: string) {
+    setError(message);
+    setShakes(shakes + 1);
+  }
 
   async function run(task: () => Promise<void>) {
     if (inFlight.current) return;
@@ -82,7 +89,7 @@ export function AccessScreen({ nextPath, demoName = null }: { nextPath?: string;
     try {
       await task();
     } catch {
-      setError("网络连接失败");
+      fail("网络连接失败");
       (stage.kind === "login" ? pin : confirmPin).current?.clear();
     } finally {
       inFlight.current = false;
@@ -100,14 +107,14 @@ export function AccessScreen({ nextPath, demoName = null }: { nextPath?: string;
     run(async () => {
       const id = (lastLogin?.loginId ?? loginId).trim();
       if (!id) {
-        setError("先输入你的 ID");
+        fail("先输入你的 ID");
         pin.current?.clear(false);
         idInput.current?.focus();
         return;
       }
       const result = await post("/api/auth/login", { loginId: id, passcode });
       if (!result.ok) {
-        setError(result.message);
+        fail(result.message);
         pin.current?.clear();
         return;
       }
@@ -129,13 +136,13 @@ export function AccessScreen({ nextPath, demoName = null }: { nextPath?: string;
       if (stage.kind !== "set") return;
       const newPasscode = newPin.current?.value() ?? "";
       if (newPasscode.length !== 4 || code !== newPasscode) {
-        setError("两次输入的口令不一致");
+        fail("两次输入的口令不一致");
         confirmPin.current?.clear();
         return;
       }
       const result = await post("/api/auth/passcode", { loginId: stage.loginId, passcode: stage.passcode, newPasscode: code });
       if (!result.ok) {
-        setError(result.message);
+        fail(result.message);
         confirmPin.current?.clear();
         newPin.current?.clear();
         return;
@@ -144,12 +151,12 @@ export function AccessScreen({ nextPath, demoName = null }: { nextPath?: string;
       await enter(result.role ?? "member", result.onboarded);
     });
 
-  // 演示入口：免口令进入演示账号，之后的去向与正常登录一样；不记成「上次登录」，锁屏不留演示账号。
+  // 演示入口：免口令进入演示账号，之后的去向与正常登录一样；不记成「上次登录」，登录页不留演示账号。
   const enterDemo = () =>
     run(async () => {
       const result = await post("/api/auth/demo");
       if (!result.ok) {
-        setError(result.message);
+        fail(result.message);
         return;
       }
       await enter(result.role ?? "member", result.onboarded);
@@ -162,104 +169,81 @@ export function AccessScreen({ nextPath, demoName = null }: { nextPath?: string;
     setError("");
   }
 
+  const errorProps = { invalid: Boolean(error), describedBy: error ? "access-error" : undefined };
+  const shake = shakes ? (shakes % 2 ? "a" : "b") : undefined;
+
   return (
-    <main className={a.shell} data-unlocking={unlocking}>
-      <MorningCanvas />
-
-      <div className={a.brand} aria-label="天枢">
-        <TianshuMark className={a.brandMark} />
-        <span className={a.brandName}>天枢</span>
-      </div>
-
-      <section className={a.lockscreen} aria-labelledby="access-title">
+    <main className={a.shell} data-unlocking={unlocking} data-scheme="auto">
+      <section className={a.column} aria-labelledby="access-title" aria-busy={submitting}>
         <h1 id="access-title" className={a.srOnly}>
           进入天枢
         </h1>
+        <TianshuMark className={a.mark} />
 
-        <LockscreenClock />
-
-        <form className={a.accessForm} data-error={Boolean(error)} onSubmit={(event) => event.preventDefault()} aria-busy={submitting}>
+        <form className={a.form} onSubmit={(event) => event.preventDefault()}>
           {stage.kind === "login" && lastLogin === undefined ? null : stage.kind === "login" ? (
             <>
               {lastLogin ? (
-                <div className={a.returningAccount}>
-                  <h2 className={a.welcome}>欢迎回来，{lastLogin.displayName}</h2>
-                  <p className={a.accountLine}>
-                    <span className={a.accountId}>{lastLogin.loginId}</span>
-                    <button type="button" className={a.switchAccount} disabled={busy} onClick={switchAccount}>切换账号</button>
+                <div className={a.returning}>
+                  {lastLogin.buddy ? (
+                    <div className={a.buddy}>
+                      <BuddyFigure size="hero" skin={lastLogin.buddy.form} name={lastLogin.buddy.name} pose="idle" level={0} />
+                    </div>
+                  ) : null}
+                  <p className={a.person}>
+                    <span className={a.personName}>{lastLogin.displayName}</span>
+                    <button type="button" className={a.switchAccount} disabled={busy} onClick={switchAccount}>换个人</button>
                   </p>
                 </div>
               ) : (
-                <div className={`${a.codeGroup} ${a.narrowGroup}`}>
-                  <label className={a.codeLabel} htmlFor="access-id">
-                    你的 ID
-                  </label>
-                  <div className={a.passwordField}>
-                    <input
-                      ref={idInput}
-                      id="access-id"
-                      className={a.passwordInput}
-                      type="text"
-                      value={loginId}
-                      autoComplete="username"
-                      autoCapitalize="none"
-                      autoCorrect="off"
-                      spellCheck={false}
-                      autoFocus
-                      disabled={busy}
-                      onChange={(event) => {
-                        setLoginId(event.target.value);
-                        if (error) setError("");
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key !== "Enter") return;
-                        event.preventDefault();
-                        const code = pin.current?.value() ?? "";
-                        if (code.length === 4) void login(code);
-                        else pin.current?.focus();
-                      }}
-                    />
-                  </div>
-                </div>
-              )}
-              <div className={`${a.codeGroup} ${a.narrowGroup}`}>
-                <p className={a.codeLabel}>4 位口令</p>
-                <PinField
-                  key="login"
-                  ref={pin}
-                  label="口令"
-                  autoComplete="current-password"
-                  autoFocus={Boolean(lastLogin)}
+                <input
+                  ref={idInput}
+                  id="access-id"
+                  className={a.idInput}
+                  type="text"
+                  value={loginId}
+                  placeholder="你的 ID"
+                  aria-label="你的 ID"
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  autoFocus
                   disabled={busy}
-                  invalid={Boolean(error)}
-                  describedBy={error ? "access-error" : undefined}
-                  onComplete={(code) => void login(code)}
+                  onChange={(event) => {
+                    setLoginId(event.target.value);
+                    if (error) setError("");
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter") return;
+                    event.preventDefault();
+                    const code = pin.current?.value() ?? "";
+                    if (code.length === 4) void login(code);
+                    else pin.current?.focus();
+                  }}
                 />
+              )}
+              <div className={a.pin} data-shake={shake}>
+                <PinField key="login" ref={pin} label="口令" autoComplete="current-password" autoFocus={Boolean(lastLogin)} disabled={busy}
+                  {...errorProps} onComplete={(code) => void login(code)} />
               </div>
             </>
           ) : (
             <>
-              <p className={a.setHint}>第一次登录，设置你自己的 4 位口令</p>
-              <div className={`${a.codeGroup} ${a.narrowGroup}`}>
-                <p className={a.codeLabel}>新口令</p>
+              <h2 className={a.setTitle}>设置你的 4 位口令</h2>
+              <div className={a.group}>
+                <p className={a.label}>新口令</p>
                 <PinField key="new" ref={newPin} label="新口令" autoComplete="new-password" autoFocus disabled={busy} onComplete={choose} />
               </div>
-              <div className={`${a.codeGroup} ${a.narrowGroup}`}>
-                <p className={a.codeLabel}>再输一遍</p>
-                <PinField
-                  ref={confirmPin}
-                  label="确认口令"
-                  autoComplete="new-password"
-                  disabled={busy}
-                  invalid={Boolean(error)}
-                  describedBy={error ? "access-error" : undefined}
-                  onComplete={(code) => void confirm(code)}
-                />
+              <div className={a.group}>
+                <p className={a.label}>再输一遍</p>
+                <div className={a.pin} data-shake={shake}>
+                  <PinField ref={confirmPin} label="确认口令" autoComplete="new-password" disabled={busy} {...errorProps} onComplete={(code) => void confirm(code)} />
+                </div>
               </div>
             </>
           )}
           <div className={a.errorSlot} aria-live="polite">
-            {submitting ? <p className={a.verifying}>正在确认</p> : null}
             {error ? (
               <p id="access-error" role="alert">
                 {error}
@@ -269,16 +253,11 @@ export function AccessScreen({ nextPath, demoName = null }: { nextPath?: string;
         </form>
       </section>
 
-      <footer className={a.panelFooter}>
-        <span>天枢 · TKOS</span>
-      </footer>
-
       {demoName ? (
         <button type="button" className={a.demoEntry} disabled={busy} onClick={() => void enterDemo()} aria-label={`天枢系统：演示入口，直接进入${demoName}的工作台`}>
           天枢系统
         </button>
       ) : null}
-
     </main>
   );
 }

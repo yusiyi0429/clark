@@ -23,14 +23,15 @@ describe("深度档的开场说明与进度", () => {
       route={{ tier: "deep", expectSeconds: 90 }} progress={{ label: "检索公开来源「无问芯穹 递表」", checked: 3 }} />);
     expect(html).toContain("正在查资料");
     expect(html).toContain("检索公开来源「无问芯穹 递表」 · 已查 3 项");
-    expect(html).toContain("预计 1–2 分钟");
+    // 现场行写法（新首页设计 5.4.3）：用时 / 预计。
+    expect(html).toContain("1 秒 / 约 1–2 分钟");
     expect(html).toContain('data-tier="deep"');
   });
 
   it("其他档不显示预计用时；没有进度时与原来一样", () => {
     const html = renderToStaticMarkup(<ConversationThinking stage="researching" startedAt={Date.now()} onStop={noop} route={{ tier: "grounded", expectSeconds: 30 }} />);
     expect(html).toContain("正在查资料");
-    expect(html).not.toContain("预计");
+    expect(html).not.toContain("约");
     expect(html).not.toContain("conversation-progress");
   });
 
@@ -50,10 +51,15 @@ describe("深度档的开场说明与进度", () => {
 });
 
 describe("分段进度行：理解问题、思考要点、中途升级、正文开始后淡化", () => {
-  it("刚发出时是「正在理解问题」", () => {
-    const html = renderToStaticMarkup(<ConversationThinking stage="understanding" startedAt={Date.now()} onStop={noop} />);
-    expect(html).toContain("正在理解问题");
-    expect(html).not.toContain("conversation-progress");
+  it("拿到具体阶段以前（刚发出、模型在想）只有呼吸点，不写「正在理解问题」「正在思考」这类笼统的词（新首页设计 5.4.3）", () => {
+    for (const stage of ["understanding", "thinking"] as const) {
+      const html = renderToStaticMarkup(<ConversationThinking stage={stage} startedAt={Date.now()} onStop={noop} />);
+      expect(html).toContain('data-testid="conversation-thinking"');
+      expect(html).not.toMatch(/正在理解问题|正在思考|思考中|处理中/);
+      expect(html).toContain('<span role="status"></span>');
+      expect(html).not.toContain("conversation-progress");
+      expect(html).toContain("停止");
+    }
   });
 
   it("思考时有中文要点就显示要点，没有就沿用最近读到的内容", () => {
@@ -62,16 +68,19 @@ describe("分段进度行：理解问题、思考要点、中途升级、正文�
     expect(progressDetail("researching", { label: "检索公开来源「硅基流动」", checked: 1, thought: "不该显示" })).toBe("检索公开来源「硅基流动」 · 已查 1 项");
   });
 
-  it("非深度档中途升级：上方一行提示、进度行改为深入口径；正文开始后不再显示提示", () => {
+  it("非深度档中途升级：不另起一行解释，现场行写「深入分析」和整轮预计（升级时的用时 + 还需的秒数）；正文开始后不再写预计", () => {
     const escalation = { notice: "这个问题需要更深入的分析，预计还需约 40 秒。", expectSeconds: 40 };
     const html = renderToStaticMarkup(<ConversationThinking stage="thinking" startedAt={Date.now() - 21_000} onStop={noop}
       route={{ tier: "grounded", expectSeconds: 30 }} progress={{ label: null, checked: 2, escalation }} />);
-    expect(html).toContain("这个问题需要更深入的分析，预计还需约 40 秒。");
-    expect(html).toContain("正在深入思考");
-    expect(html.indexOf("conversation-escalation")).toBeLessThan(html.indexOf("conversation-thinking"));
+    expect(html).not.toContain("这个问题需要更深入的分析");
+    expect(html).not.toContain("conversation-escalation");
+    expect(html).toContain('<span role="status">深入分析</span>');
+    // 21 秒时升级、还需约 40 秒：整轮约 61 秒，向上取到 70 秒，过了 1 分钟写成分钟。
+    expect(html).toContain("· 21 秒 / 约 1 分钟");
     const answering = renderToStaticMarkup(<ConversationThinking stage="answering" startedAt={Date.now()} onStop={noop}
       route={{ tier: "grounded", expectSeconds: 30 }} progress={{ label: null, checked: 2, escalation }} />);
-    expect(answering).not.toContain("conversation-escalation");
+    expect(answering).not.toContain("深入分析");
+    expect(answering).not.toContain("约");
     expect(answering).toContain('data-stage="answering"');
     expect(answering).not.toContain("已查");
   });

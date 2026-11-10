@@ -23,7 +23,7 @@
   border: 0;
   border-radius: 999px;
   background: transparent;
-  color: #5b6677;
+  color: var(--ink-muted);
   font: inherit;
   font-size: 14px;
   font-weight: 500;
@@ -34,16 +34,16 @@
   transition: background-color 160ms ease, color 160ms ease;
 }
 
-.segment:hover { color: #1f2a3d; background: rgb(31 53 86 / 5%); }
+.segment:hover { color: var(--ink); background: var(--default-soft); }
 
 .segment[aria-checked='true'],
 .segment[aria-checked='true']:hover {
-  background: #e4eefc;
-  color: #1c4f94;
+  background: var(--accent-soft);
+  color: var(--accent-soft-foreground);
   cursor: default;
 }
 
-.segment:focus-visible { outline: 2px solid #3a83f7; outline-offset: 2px; }
+.segment:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
 .segment svg { flex: none; }
 

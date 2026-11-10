@@ -1,9 +1,12 @@
 /**
  * 页面目录：首页对话在每个二级页面都开着，本人在哪个页面问，转给 Chat 的这一轮就带上这页的名字和说明
  * （CHAT_PAGE_CONTEXT=1 才带，见 chatService）。说明写给 Agent 用来指导本人：这页做什么、主要怎么操作、结果去哪。
- * 按页面路径匹配；首页不带（首页的内容 Chat 自己读首页卡），不挂对话的页面（雷达列表、我的雷达、成员信号详情、成员战场详情、配置页）不收。
+ * 按页面路径匹配；首页（/me、新首页 /me/work）不带（首页的内容 Chat 自己读首页卡），不挂对话的页面（雷达列表、我的雷达、成员信号详情、成员战场详情、配置页）不收。
+ * Task 页不在目录里，按本人读到的这个 Task 现算（V2 设计第 10 节兜底：新 Chat 还不认 Task 锚点时，从 Task 页发的每一句带上这个 Task）。
  * Chat 的 page 字段：title ≤ 40 字、guide ≤ 150 字（10/29 人豪定），超了整轮会被拒，测试里卡住。
  */
+import type { TCardStage } from "@warmap/contracts";
+
 export type PageGuide = { path: string; title: string; guide: string };
 
 const GUIDES: { patterns: RegExp[]; title: string; guide: string }[] = [
@@ -120,6 +123,50 @@ const GUIDES: { patterns: RegExp[]; title: string; guide: string }[] = [
 export function pageGuide(path: string): PageGuide | null {
   const entry = GUIDES.find((item) => item.patterns.some((pattern) => pattern.test(path)));
   return entry ? { path, title: entry.title, guide: entry.guide } : null;
+}
+
+/** Task 页的 Task id：本月页点进去是 /me/month/tasks/<id>，新首页的对话锚到一个 Task 时是 /me/work/tasks/<id>。不是 Task 页为 null。 */
+export function taskOfPage(path: string): string | null {
+  const match = /^\/me\/(?:month|work)\/tasks\/([^/]+)$/.exec(path);
+  if (!match) return null;
+  try { return decodeURIComponent(match[1]); } catch { return null; }
+}
+
+/** 本人读到的这个 Task：名字、几条标准；cards 是看板上各列几张卡，看板只给 Task 负责人，不是负责人为 null。 */
+export type TaskPageFacts = { name: string; criteria: number; cards: Record<TCardStage, number> | null };
+
+export function taskPageGuide(path: string, facts: TaskPageFacts): PageGuide {
+  const cards = facts.cards ? `看板上待开始 ${facts.cards.todo} 张、进行中 ${facts.cards.doing} 张、验收中 ${facts.cards.review} 张、已完成 ${facts.cards.done} 张。` : "";
+  return { path, title: `Task：${facts.name}`.slice(0, 40),
+    guide: `本人在这个 Task 的页面，说的事默认指这个 Task。它有 ${facts.criteria} 条验收标准；${cards}`.slice(0, 150) };
+}
+
+/** 项目页（第 16 节）的项目 id：/me/work/projects/<id>。不是项目页为 null。 */
+export function projectOfPage(path: string): string | null {
+  const match = /^\/me\/work\/projects\/([0-9a-f-]{36})$/.exec(path);
+  return match ? match[1] : null;
+}
+
+/** 本人的这个项目：名字、挂着没了结的 Task 的名字。 */
+export type ProjectPageFacts = { name: string; goals: string[] };
+
+export function projectPageGuide(path: string, facts: ProjectPageFacts): PageGuide {
+  const goals = facts.goals.length ? `现在挂着的目标：${facts.goals.join("、")}。` : "现在没有挂着的目标。";
+  return { path, title: `项目：${facts.name}`.slice(0, 40), guide: `本人在这个项目的对话里，说的事默认指这个项目。${goals}`.slice(0, 150) };
+}
+
+/** 转给 Chat 的页面：Task 页、项目页按本人读到的现算，读不到（不是本人的、本体读不到）不带；其余查目录。 */
+export async function pageFor(path: string, readTask: (taskId: string) => Promise<TaskPageFacts | null>,
+  readProject: (projectId: string) => Promise<ProjectPageFacts | null> = async () => null): Promise<PageGuide | null> {
+  const projectId = projectOfPage(path);
+  if (projectId) {
+    const facts = await readProject(projectId).catch(() => null);
+    return facts ? projectPageGuide(path, facts) : null;
+  }
+  const taskId = taskOfPage(path);
+  if (!taskId) return pageGuide(path);
+  const facts = await readTask(taskId).catch(() => null);
+  return facts ? taskPageGuide(path, facts) : null;
 }
 
 /** 测试用：整份目录（核对长度上限）。 */

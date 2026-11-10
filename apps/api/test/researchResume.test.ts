@@ -26,7 +26,8 @@ async function waitFor(check: () => Promise<boolean>, tries = 200): Promise<void
   for (let i = 0; i < tries; i += 1) { if (await check()) return; await new Promise((resolve) => setTimeout(resolve, 20)); }
 }
 
-describe("场次启动后补跑议题预研", () => {
+// 每个用例都从空库跑全部迁移再起几次应用，迁移越加越多，单独跑也要 4–6 秒。
+describe("场次启动后补跑议题预研", { timeout: 30_000 }, () => {
   it("只补还没有预研的议题，最多 3 个同时跑；已有预研、模型真跑失败的不动", async () => {
     await createTestDb(async ({ db, pool }) => {
       await migrate(db);

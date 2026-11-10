@@ -7,24 +7,55 @@
 .mark { display: block; flex: none; pointer-events: none; }
 .scale { display: block; transform-origin: 0 0; }
 
-/* 页头正中：和两颗圆键同高的一条里居中。 */
-.mark[data-place="sheet"] { --coagent-capsule-width: 208px; --coagent-capsule-height: 64px; width: 104px; height: 32px; }
+/* 页头正中：和两颗圆键同高的一条里居中。在听本人说话时整块再变大一圈（带一点回弹），停下缩回。 */
+.mark[data-place="sheet"] { --coagent-capsule-width: 208px; --coagent-capsule-height: 64px; width: 104px; height: 32px; transition: scale 420ms cubic-bezier(.34, 1.56, .64, 1); }
 .mark[data-place="sheet"] .scale { transform: scale(.5); }
-.mark[data-place="sheet"][data-skin="miles"] { width: 56px; height: 53px; }
-.mark[data-place="sheet"][data-skin="miles"] .scale { transform: translateX(-50%) scale(.8); transform-origin: 50% 0; margin-left: 50%; width: max-content; }
-
-/* 入口胶囊里，替掉原来的聊天图标。 */
-.mark[data-place="entry"] { --coagent-capsule-width: 68px; --coagent-capsule-height: 44px; width: 34px; height: 22px; }
-.mark[data-place="entry"] .scale { transform: scale(.5); }
+.mark[data-place="sheet"][data-listening] { scale: 1.16; }
 
 /*
- * Miles：只露出胶囊上沿以上的半身（整块 66 高，写名字的小胶囊在下面 22，上沿在 44 处），缩到 0.8 后露出约 35，
+ * Miles、C妹：按 1 倍画，胶囊大一号（整块 72 高，宽跟着名字 64–124），名字和对话正文一样大；
+ * 页头那条从上沿往下排（app-shell .sheetBuddy），变大时往下长，不顶出对话层。
+ */
+.mark[data-place="sheet"]:is([data-skin="miles"], [data-skin="cmei"]) { width: auto; height: 72px; transform-origin: 50% 0; }
+.mark[data-place="sheet"]:is([data-skin="miles"], [data-skin="cmei"]) .scale { transform: none; }
+
+/*
+ * 入口：默认、生命感、熊猫这三种胶囊就是主按钮本身，按原尺寸（48 高，眼睛、耳朵都是照 48 画的）铺满主按钮原来的形状，
+ * 不缩、不挤（11/03 用户定：缩成小图标时熊猫被挤得像苍蝇）。
+ */
+.mark[data-place="entry"] { --coagent-capsule-width: 100%; --coagent-capsule-height: 48px; width: 100%; height: 48px; }
+
+/*
+ * Miles、C妹：只露出胶囊上沿以上的半身（整块 66 高，写名字的小胶囊在下面 22，上沿在 43.5 处），放到 1.1 后露出约 48，
  * 贴着入口胶囊的上沿居中站着，看起来是从入口胶囊里探出来；名字已经写在入口胶囊上。
  */
-.mark[data-place="entry"][data-skin="miles"] {
-  position: absolute; left: 50%; bottom: calc(100% - 1px); width: 56px; height: 35px; overflow: hidden;
+.mark[data-place="entry"]:is([data-skin="miles"], [data-skin="cmei"]) {
+  position: absolute; left: 50%; bottom: calc(100% - 1px); width: 64px; height: 48px; overflow: hidden;
   transform: translateX(-50%);
 }
-.mark[data-place="entry"][data-skin="miles"] .scale { transform: translateX(-50%) scale(.8); transform-origin: 50% 0; margin-left: 50%; width: max-content; }
-/* 探出来的半身也算入口：点它和点胶囊一样打开对话。 */
-.mark[data-place="entry"][data-skin="miles"] { pointer-events: auto; cursor: pointer; }
+.mark[data-place="entry"]:is([data-skin="miles"], [data-skin="cmei"]) .scale { transform: translateX(-50%) scale(1.1); transform-origin: 50% 0; margin-left: 50%; width: max-content; }
+/* C妹 头顶的呆毛比框高出约 7（放到 1.1 后约 8）：这块往上多留 9，画跟着往下挪 9，上沿还贴着入口胶囊。 */
+.mark[data-place="entry"][data-skin="cmei"] { height: 57px; }
+.mark[data-place="entry"][data-skin="cmei"] .scale { transform: translate(-50%, 9px) scale(1.1); }
+/* 探出来的半身不接点击（沿用 .mark 的 pointer-events: none）：它盖在页面右下的按钮上，点下去要落到那些按钮；打开对话只认下面的胶囊。 */
+
+/* 署名：伙伴写的段落左边（交付物的版本说明）。横放胶囊按页头的比例画、缩到四分之一（40×16）；Miles、C妹 缩一半（约 35–48 宽）。 */
+.mark[data-place="note"] { --coagent-capsule-width: 160px; --coagent-capsule-height: 64px; width: 40px; height: 16px; }
+.mark[data-place="note"] .scale { transform: scale(.25); }
+.mark[data-place="note"]:is([data-skin="miles"], [data-skin="cmei"]) { width: 48px; height: 33px; }
+.mark[data-place="note"]:is([data-skin="miles"], [data-skin="cmei"]) .scale { transform: scale(.5); width: max-content; }
+
+/*
+ * 伙伴台（新首页左栏顶上的正方形，设计 9.2 / 5.4.2）：形象在台子正中。横放的三种胶囊按页头那份（208×64）画到约 0.7，
+ * Miles、C妹 按页头那份放到约 1.6（倍数待原型）。用 zoom 缩放，台子按缩放后的大小居中。在听时整块再变大一圈（只有伙伴可以回弹）。
+ * 整块（连名牌）再乘台子给的 --stage-scale：台子比 1440 时大就跟着放大，矮屏变扁时跟着高度缩（LeftColumn 的 stageScale）。
+ */
+.mark[data-place="stage"] { --coagent-capsule-width: 208px; --coagent-capsule-height: 64px; zoom: var(--stage-scale, 1); transition: scale 420ms cubic-bezier(.34, 1.56, .64, 1); }
+.mark[data-place="stage"] .scale { zoom: .7; }
+.mark[data-place="stage"]:is([data-skin="miles"], [data-skin="cmei"]) .scale { zoom: 1.6; }
+.mark[data-place="stage"][data-listening] { scale: 1.16; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mark[data-place="sheet"], .mark[data-place="stage"] { transition: none; }
+  .mark[data-place="stage"][data-listening] { scale: none; }
+}

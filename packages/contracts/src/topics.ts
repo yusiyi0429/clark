@@ -79,6 +79,8 @@ export const PatchTopicRequest = Type.Object({
  */
 export const TopicDetailResponse = Type.Object({
   topic: ResearchTopicView,
+  /** 专题在所属项目里的字母（18 节第 10 条，同 SubSession.letter，页头写在标题前）；不在项目里为 null。 */
+  letter: Nullable(Type.String({ pattern: "^[A-Z]{1,3}$" })),
   task: Nullable(Type.Object({ taskId: Type.String({ minLength: 1 }), name: Type.String() }, strict)),
   versions: Type.Array(TopicVersionSummary),
   current: Nullable(TopicVersionView),

@@ -1,8 +1,9 @@
 "use client";
 
 /**
- * 选伙伴的性格（设计稿 .scratch/next-phase/设计_伙伴性格_2026-11-03.md 第 1、4 节）：四格两列，每格是性格的名字，
- * 加一句它在同一个场景里会说的话（交付物 v2 评完了，2 条里达到 1 条），不写说明。引导第三页和设置 › 伙伴形象共用。
+ * 选伙伴的性格：每种是名字，加一句它在「进度落后」这个场景里会说的话，不写说明。引导里左右切换着选（onboarding/BuddyCarousel），
+ * 设置 › 伙伴形象里是四格。四种和示例是 11/08 调研后定的（新首页设计稿 17.3），要换只改下面这张表；
+ * 每种三个场景的示例和说话规矩在 apps/api/src/buddyPersona.ts，这里的 sample 和那边的 behind 是同一句。
  */
 
 import type { components } from "@/lib/api/schema";
@@ -11,10 +12,10 @@ import s from "@/styles/buddy-personality.module.css";
 export type BuddyPersonality = components["schemas"]["BuddyPersonality"];
 
 export const BUDDY_PERSONALITIES: { id: BuddyPersonality; label: string; sample: string }[] = [
-  { id: "steady", label: "沉稳靠谱", sample: "v2 评完了，还差「全链路」一条。周一录一次会就能补上。" },
-  { id: "cheerful", label: "乐观开朗", sample: "飞书那条过了，挺不容易 👏 就差全链路一条，周一录个会就齐！" },
-  { id: "calm", label: "理性冷静", sample: "v2：1/2。缺全链路读回记录，建议周一补录。" },
-  { id: "critical", label: "较真犀利", sample: "还差最关键的一条：没有真实会议的读回，链路通不通说不清。" },
+  { id: "steady", label: "沉稳靠谱", sample: "全链路这条比计划晚两天。能先交的我拆出来了，周三前补齐，你看行不行。" },
+  { id: "direct", label: "直言不讳", sample: "照现在的速度周五交不了。卡在没有真会议的读回，这条不解决，别的做完也不算数。" },
+  { id: "warm", label: "温和体贴", sample: "这周会多、事也杂，晚两天不奇怪。剩下的我排好了，周一录完会就能追回来。" },
+  { id: "coach", label: "启发追问", sample: "晚了两天。主要卡在排期，还是读回本身难做？说清楚了，再看哪块能挪。" },
 ];
 
 export function PersonalityPicker({ value, onChange, disabled = false }: { value: BuddyPersonality; onChange: (next: BuddyPersonality) => void; disabled?: boolean }) {

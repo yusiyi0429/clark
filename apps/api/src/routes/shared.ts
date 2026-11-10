@@ -1,11 +1,12 @@
 import { timingSafeEqual } from "node:crypto";
+import { BlockList } from "node:net";
 import { Type, type TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import type { FastifyBaseLogger, FastifyInstance, FastifyReply, FastifyRequest, RawReplyDefaultExpression, RawRequestDefaultExpression, RawServerDefault } from "fastify";
 import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import type { Pool } from "pg";
 import type { TApiError, TCardCollection } from "@warmap/contracts";
-import { SESSION_COOKIE, parseCookies, readSessionToken } from "../session.js";
+import { SESSION_COOKIE, parseCookies, readSessionToken, type SessionClaims } from "../session.js";
 import { canSwitchView, canUseMemberView, currentSessionVersion, roleOf, type SessionRole } from "../memberAccess.js";
 import type { PeopleDirectory } from "../peopleDirectory.js";
 import type { CompanyContext } from "../companyContext.js";
@@ -174,6 +175,10 @@ export function materialMultipartLimitError(
 }
 
 /** 读会话：签名与有效期之外，人要还在 seed 里，凭据版本要与库里一致（口令重置后旧会话立即失效）。 */
+/** 这个请求带着的、核对过的会话（续期用，见 session.ts 的 sessionNeedsRenewal）。 */
+const validSessions = new WeakMap<FastifyRequest, SessionClaims & { exp: number }>();
+export const validSessionOf = (req: FastifyRequest) => validSessions.get(req);
+
 export function createReadSession(env: AppEnv, q: Query, peopleDirectory: PeopleDirectory) {
   return async function readSession(req: FastifyRequest): Promise<SessionPerson | null> {
     const claims = readSessionToken(env.sessionSecret, parseCookies(req.headers.cookie)[SESSION_COOKIE]);
@@ -183,6 +188,7 @@ export function createReadSession(env: AppEnv, q: Query, peopleDirectory: People
     if ((await currentSessionVersion(q, person.personId)) !== claims.v) return null;
     const role = claims.view ?? roleOf(person);
     if (role === "ceo" ? !person.roles.includes("ceo") : !canUseMemberView(person)) return null;
+    validSessions.set(req, claims);
     return { personId: person.personId, role, canSwitchView: canSwitchView(person), sessionVersion: claims.v };
   };
 }
@@ -221,21 +227,50 @@ export function createRequireCEO(requirePerson: Guard, fail: RouteContext["fail"
   };
 }
 
-/** 服务身份边界：独立 bearer token，与 CEO session 不可互换。 */
-export function createRequireServiceToken(fail: RouteContext["fail"]) {
+/**
+ * 服务身份边界：独立 bearer token，与 CEO session 不可互换。
+ * Chat 的凭据（chat.token，INTERNAL_CHAT_TOKEN）另认换下来的旧凭据（previous），配了来源地址（allowlist，IP 或 CIDR）时只认那些地址来的。
+ */
+export function createRequireServiceToken(fail: RouteContext["fail"], chat?: { token: string; previous: string[]; allowlist: string[] }) {
+  const allowed = chat?.allowlist.length ? callerList(chat.allowlist) : null;
+  const same = (token: string, expected: string) => {
+    const a = Buffer.from(token);
+    const b = Buffer.from(expected);
+    return a.length === b.length && timingSafeEqual(a, b);
+  };
   return function requireServiceToken(expected: string) {
+    const isChat = chat !== undefined && expected === chat.token;
+    const accepted = isChat ? [expected, ...chat.previous] : [expected];
     return (req: FastifyRequest, reply: FastifyReply, done: () => void): void => {
       const header = req.headers.authorization ?? "";
       const token = header.startsWith("Bearer ") ? header.slice(7) : "";
-      const a = Buffer.from(token);
-      const b = Buffer.from(expected);
-      if (a.length !== b.length || !timingSafeEqual(a, b)) {
+      if (!accepted.some((candidate) => same(token, candidate))) {
         fail(reply, 401, "UNAUTHORIZED", "无效服务凭据");
+        return;
+      }
+      if (isChat && allowed && !allowed.check(req.ip, req.ip.includes(":") ? "ipv6" : "ipv4")) {
+        fail(reply, 403, "CALLER_NOT_ALLOWED", "调用方地址不在允许范围内");
         return;
       }
       done();
     };
   };
+}
+
+/** INTERNAL_CALLER_ALLOWLIST：IP（1.2.3.4、::1）或 CIDR（172.16.0.0/12）；IPv4 映射成的 IPv6 地址（::ffff:1.2.3.4）也认。 */
+function callerList(entries: string[]): BlockList {
+  const list = new BlockList();
+  for (const entry of entries) {
+    const [address, prefix] = entry.split("/");
+    const type = address.includes(":") ? "ipv6" : "ipv4";
+    if (prefix) list.addSubnet(address, Number(prefix), type);
+    else list.addAddress(address, type);
+    if (type === "ipv4") {
+      if (prefix) list.addSubnet(`::ffff:${address}`, 96 + Number(prefix), "ipv6");
+      else list.addAddress(`::ffff:${address}`, "ipv6");
+    }
+  }
+  return list;
 }
 
 export function createInvalidInput(fail: RouteContext["fail"]) {

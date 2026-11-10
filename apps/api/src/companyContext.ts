@@ -13,8 +13,8 @@ export async function readCompanyContext(context: CompanyContext, query?: string
   return context.company.read(context.companyViewer, { query }, signal);
 }
 
-/** 交给模型的公司事实：只有标题与正文，加读取状态；不是 ready 时 message 说明没读到的原因。 */
+/** 交给模型的公司事实：对象 ref（id@version）、类型、标题与正文，加读取状态；不是 ready 时 message 说明没读到的原因。 */
 export function companyProse(view: CompanyView) {
-  return { status: view.status, entries: view.entries.map(({ title, text }) => ({ title, text })), ...(view.message ? { message: view.message } : {}),
+  return { status: view.status, entries: view.entries.map(({ ref, type, title, text }) => ({ ref, type, title, text })), ...(view.message ? { message: view.message } : {}),
     ...(view.nextCursor ? { more: true } : {}) };
 }

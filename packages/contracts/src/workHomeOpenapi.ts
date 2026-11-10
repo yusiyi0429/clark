@@ -2,14 +2,18 @@ import type { JsonSchema, OpenAPIV3 } from "./types/JsonSchemaTypes.js";
 import {
   BackgroundItem, BackgroundResponse, ClaimSessionStartsRequest, ClaimSessionStartsResponse, HomeMonthMission, HomeMonthTask, HomeProject, HomeProjectGoal,
   HomeTaskSummary, RouteRequest, RouteResponse, SessionStartView, SubSession, WaitingItem, WaitingTarget, WorkHomeResponse, CardMerge, TaskFeedItem, HomeItem,
-  ReleaseSessionStartRequest, NotificationSettings, ClaimedSessionStart,
+  ReleaseSessionStartRequest, NotificationSettings, ClaimedSessionStart, AppearanceSettings, SessionStopView, ClaimSessionStopsRequest, ClaimSessionStopsResponse,
+  SessionStopDoneRequest, SessionCommand, SessionCommandView, ClaimSessionCommandsRequest, ClaimSessionCommandsResponse, SessionCommandDoneRequest,
+  MarkWorkSeenRequest, SubSessionKind, UpdateSubSessionRequest, ArchivedSubSession, ArchivedSubSessionListResponse,
 } from "./workHome.js";
 import { CreateProjectRequest, Project, ProjectDetailResponse, ProjectFeedItem, ProjectFeedResponse, ProjectGoal, ProjectGoalLinkedItem, ProjectHandoverItem,
   ProjectHandoverSummaryItem, ProjectListResponse, ProjectPipelineResponse, ProjectTransferDeclinedItem, UpdateProjectRequest, ProjectBoardResponse, ProjectGoalChangedItem,
-  AnswerGoalChangeRequest } from "./projects.js";
+  AnswerGoalChangeRequest, SubSessionFeedRef, ProjectSubSessionReportItem, ProjectSubSessionDecisionItem, AutoRelayDecisionRequest, SetGoalDueDateRequest,
+  ModelEffort, ConversationModelOption, ConversationModelListResponse, ConversationModelChoice, ProjectPipelineModel, SetProjectPipelineModelRequest } from "./projects.js";
 import { CreateProjectTransferRequest, HandoverSecretFinding, HandoverSecretsResponse, HandoverSection, PersonRef, ProjectTransfer,
   UpdateProjectTransferRequest } from "./projectTransfers.js";
 import { Budget, TaskBudgetResponse } from "./budget.js";
+import { BuddyAuditEntry, BuddyAuditListResponse, BuddyAuthority, BuddyMessageDraft, TrashItem, TrashListResponse, UpdateBuddyAuthorityRequest } from "./buddyActions.js";
 import { SessionAttachment, SessionAttachmentUploadResponse } from "./attachments.js";
 
 /**
@@ -22,9 +26,13 @@ export const workHomeSchemas: Record<string, JsonSchema> = {
   BackgroundItem, BackgroundResponse, RouteRequest, RouteResponse,
   SessionStartView, ClaimSessionStartsRequest, ClaimSessionStartsResponse, CardMerge, TaskFeedItem, HomeItem, ReleaseSessionStartRequest,
   Project, ProjectListResponse, CreateProjectRequest, UpdateProjectRequest, ProjectGoal, ProjectDetailResponse, ProjectPipelineResponse, ProjectGoalLinkedItem,
-  ProjectFeedItem, ProjectFeedResponse, ProjectBoardResponse, ProjectGoalChangedItem, AnswerGoalChangeRequest, ProjectHandoverItem, ProjectHandoverSummaryItem, ProjectTransferDeclinedItem,
+  ProjectFeedItem, ProjectFeedResponse, ProjectBoardResponse, ProjectGoalChangedItem, AnswerGoalChangeRequest, SubSessionFeedRef, ProjectSubSessionReportItem, ProjectSubSessionDecisionItem, AutoRelayDecisionRequest, SetGoalDueDateRequest, ProjectHandoverItem, ProjectHandoverSummaryItem, ProjectTransferDeclinedItem,
   PersonRef, HandoverSection, ProjectTransfer, CreateProjectTransferRequest, UpdateProjectTransferRequest, HandoverSecretFinding, HandoverSecretsResponse,
-  NotificationSettings, Budget, TaskBudgetResponse, ClaimedSessionStart, SessionAttachment, SessionAttachmentUploadResponse,
+  NotificationSettings, AppearanceSettings, SessionStopView, ClaimSessionStopsRequest, ClaimSessionStopsResponse, SessionStopDoneRequest,
+  SessionCommand, SessionCommandView, ClaimSessionCommandsRequest, ClaimSessionCommandsResponse, SessionCommandDoneRequest, MarkWorkSeenRequest,
+  SubSessionKind, UpdateSubSessionRequest, ArchivedSubSession, ArchivedSubSessionListResponse,
+  ModelEffort, ConversationModelOption, ConversationModelListResponse, ConversationModelChoice, ProjectPipelineModel, SetProjectPipelineModelRequest,
+  BuddyAuthority, UpdateBuddyAuthorityRequest, BuddyAuditEntry, BuddyAuditListResponse, BuddyMessageDraft, TrashItem, TrashListResponse, Budget, TaskBudgetResponse, ClaimedSessionStart, SessionAttachment, SessionAttachmentUploadResponse,
 };
 
 const error = { description: "ApiError 统一错误", content: { "application/json": { schema: { $ref: "#/components/schemas/ApiError" } } } };
@@ -92,6 +100,168 @@ export const workHomePaths: OpenAPIV3.Document["paths"] = {
       responses: { "200": json("改好的通知开关", "NotificationSettings"), ...errors(400, 401, 403) },
     },
   },
+  "/api/me/appearance": {
+    get: {
+      operationId: "getAppearance",
+      summary: "本人的外观（「偏好」）：跟随系统 / 浅色 / 深色，缺省跟随系统",
+      responses: { "200": json("外观", "AppearanceSettings"), ...errors(401) },
+    },
+    put: {
+      operationId: "updateAppearance",
+      summary: "改本人的外观（换设备一样）",
+      requestBody: body("AppearanceSettings"),
+      responses: { "200": json("改好的外观", "AppearanceSettings"), ...errors(400, 401) },
+    },
+  },
+  "/api/me/buddy-authority": {
+    get: {
+      operationId: "getBuddyAuthority",
+      summary: "伙伴代本人做事的授权（17.4）：full 完全授权，none 只能读（缺省）",
+      responses: { "200": json("授权", "BuddyAuthority"), ...errors(401) },
+    },
+    put: {
+      operationId: "updateBuddyAuthority",
+      summary: "打开或关掉伙伴的授权（引导里的「同意」、偏好里的开关）",
+      requestBody: body("UpdateBuddyAuthorityRequest"),
+      responses: { "200": json("改好的授权", "BuddyAuthority"), ...errors(400, 401) },
+    },
+  },
+  "/api/me/buddy-actions/log": {
+    get: {
+      operationId: "listBuddyActions",
+      summary: "伙伴代本人做过的写动作（新的在前，最近 100 条），能撤的带 undoable",
+      responses: { "200": json("审计", "BuddyAuditListResponse"), ...errors(401) },
+    },
+  },
+  "/api/me/buddy-actions/log/{id}/undo": {
+    post: {
+      operationId: "undoBuddyAction",
+      summary: "撤销伙伴做的一个动作；不能撤、撤过了、对象已经变了 409 NOT_UNDOABLE",
+      parameters: path("id"),
+      responses: { "200": json("撤销后的这条", "BuddyAuditEntry"), ...errors(401, 404, 409) },
+    },
+  },
+  "/api/me/buddy-messages/{id}": {
+    get: {
+      operationId: "getBuddyMessage",
+      summary: "伙伴要转达给同事的一句话（对话里的 buddy_message 卡）",
+      parameters: path("id"),
+      responses: { "200": json("这句话", "BuddyMessageDraft"), ...errors(401, 404) },
+    },
+  },
+  "/api/me/buddy-messages/{id}/send": {
+    post: {
+      operationId: "sendBuddyMessage",
+      summary: "发出：天枢机器人转达给收件人（开头「{本人}请我转达：」）；收不到的列在 failed；不是草稿 409",
+      parameters: path("id"),
+      responses: { "200": json("发出后的这句话", "BuddyMessageDraft"), ...errors(401, 404, 409, 429) },
+    },
+  },
+  "/api/me/buddy-messages/{id}/cancel": {
+    post: {
+      operationId: "cancelBuddyMessage",
+      summary: "不发了；不是草稿 409",
+      parameters: path("id"),
+      responses: { "200": json("取消后的这句话", "BuddyMessageDraft"), ...errors(401, 404, 409) },
+    },
+  },
+  "/api/me/trash": {
+    get: {
+      operationId: "listTrash",
+      summary: "回收站：删掉的子会话，purgeAt 以后真删",
+      responses: { "200": json("回收站", "TrashListResponse"), ...errors(401) },
+    },
+  },
+  "/api/me/trash/{kind}/{id}/restore": {
+    post: {
+      operationId: "restoreTrashItem",
+      summary: "从回收站恢复一个子会话（204）；已经真删了 404",
+      parameters: [{ name: "kind", in: "path", required: true, schema: { type: "string", enum: ["card", "topic"] } }, ...path("id")],
+      responses: { "204": { description: "恢复了" }, ...errors(401, 404) },
+    },
+  },
+  "/api/me/session-stops/claim": {
+    post: {
+      operationId: "claimSessionStops",
+      summary: "认领这台电脑上要停掉的本机会话（17.4 伙伴的 stop_sub_session）",
+      requestBody: body("ClaimSessionStopsRequest"),
+      responses: { "200": json("要停的", "ClaimSessionStopsResponse"), ...errors(400, 401, 404) },
+    },
+  },
+  "/api/me/session-stops/{id}/done": {
+    post: {
+      operationId: "finishSessionStop",
+      summary: "报停掉的结果（stopped / not_running）；不是这台电脑认领的 404",
+      parameters: path("id"),
+      requestBody: body("SessionStopDoneRequest"),
+      responses: { "204": { description: "记下了" }, ...errors(400, 401, 404) },
+    },
+  },
+  "/api/me/projects/{projectId}/goals/{taskId}/due-date": {
+    put: {
+      operationId: "setProjectGoalDueDate",
+      summary: "给挂在这个项目上的一件 Task 存验收截止日（null 不存了，退回 Mission 的节点）；没挂在这个项目上 404",
+      parameters: path("projectId", "taskId"),
+      requestBody: body("SetGoalDueDateRequest"),
+      responses: { "200": json("这条挂接", "ProjectGoal"), ...errors(400, 401, 403, 404) },
+    },
+  },
+  "/api/me/projects/{projectId}/auto-relay": {
+    post: {
+      operationId: "decideAutoRelay",
+      summary: "答「等你」里的自动接力（18 节第 12 条）：continue 清零恢复，stop 收起那一条、等本人说话再恢复；没停着 409",
+      parameters: path("projectId"),
+      requestBody: body("AutoRelayDecisionRequest"),
+      responses: { "204": { description: "记下了" }, ...errors(400, 401, 403, 404, 409) },
+    },
+  },
+  "/api/me/work-seen": {
+    post: {
+      operationId: "markWorkSeen",
+      summary: "本人打开了一个子会话或项目对话：记下看过的时间，左栏蓝点（unseen）消失；幂等（17.2 第 25 条）",
+      requestBody: body("MarkWorkSeenRequest"),
+      responses: { "204": { description: "记下了" }, ...errors(400, 401, 403) },
+    },
+  },
+  "/api/me/sub-sessions/{kind}/{id}": {
+    patch: {
+      operationId: "updateSubSession",
+      summary: "子会话「…」菜单（17.2 第 35 条）：改名、归档（archived: true）、恢复（archived: false）；在跑时归档 409 SUB_SESSION_RUNNING；专题名超 60 字 400",
+      parameters: [{ name: "kind", in: "path", required: true, schema: { type: "string", enum: ["card", "topic"] } }, ...path("id")],
+      requestBody: body("UpdateSubSessionRequest"),
+      responses: { "204": { description: "改好了" }, ...errors(400, 401, 403, 404, 409) },
+    },
+    delete: {
+      operationId: "deleteSubSession",
+      summary: "删掉一个子会话：先进回收站，30 天内能恢复，之后彻底删掉撤不回；在跑 409 SUB_SESSION_RUNNING",
+      parameters: [{ name: "kind", in: "path", required: true, schema: { type: "string", enum: ["card", "topic"] } }, ...path("id")],
+      responses: { "204": { description: "进回收站了" }, ...errors(401, 403, 404, 409) },
+    },
+  },
+  "/api/me/sub-sessions/archived": {
+    get: {
+      operationId: "listArchivedSubSessions",
+      summary: "归档了的子会话（新归档的在前），带原来的项目和字母",
+      responses: { "200": json("归档了的子会话", "ArchivedSubSessionListResponse"), ...errors(401, 403) },
+    },
+  },
+  "/api/me/session-commands/claim": {
+    post: {
+      operationId: "claimSessionCommands",
+      summary: "认领这台电脑上要对本机会话做的事（18 节第 10 条：项目主管线按字母转话、重开、回答问题、批准）",
+      requestBody: body("ClaimSessionCommandsRequest"),
+      responses: { "200": json("要做的", "ClaimSessionCommandsResponse"), ...errors(400, 401, 404) },
+    },
+  },
+  "/api/me/session-commands/{id}/done": {
+    post: {
+      operationId: "finishSessionCommand",
+      summary: "报做的结果（done / not_running / expired / failed）；不是这台电脑认领的 404",
+      parameters: path("id"),
+      requestBody: body("SessionCommandDoneRequest"),
+      responses: { "204": { description: "记下了" }, ...errors(400, 401, 404) },
+    },
+  },
   "/api/me/work-home": {
     get: {
       operationId: "getWorkHome",
@@ -134,6 +304,12 @@ export const workHomePaths: OpenAPIV3.Document["paths"] = {
       requestBody: body("UpdateProjectRequest"),
       responses: { "200": json("改好的项目", "Project"), ...errors(400, 401, 403, 404) },
     },
+    delete: {
+      operationId: "deleteProject",
+      summary: "删掉项目（17.2 第 35 条，撤不回）：项目、项目对话、挂接、字母和汇报删掉，子会话进回收站，自己做的事项留到「其他」；只有负责人能删；有在跑的 409 PROJECT_BUSY，正在转交 409 PROJECT_TRANSFERRING",
+      parameters: path("projectId"),
+      responses: { "204": { description: "删掉了" }, ...errors(401, 403, 404, 409) },
+    },
   },
   "/api/me/projects/{projectId}/goals/{taskId}": {
     put: {
@@ -155,6 +331,28 @@ export const workHomePaths: OpenAPIV3.Document["paths"] = {
       summary: "这个项目的对话：第一次打开时建，以后都返回同一条；收发消息走 /api/conversations/{scope}，scope 是 project:<projectId>",
       parameters: path("projectId"),
       responses: { "200": json("已有的项目对话", "ProjectPipelineResponse"), "201": json("新建的项目对话", "ProjectPipelineResponse"), ...errors(401, 403, 404, 502, 503) },
+    },
+  },
+  "/api/me/projects/{projectId}/pipeline/model": {
+    get: {
+      operationId: "getProjectPipelineModel",
+      summary: "这个项目对话选的模型和思考程度（17.2 第 36 条）；没选为 null（照 Chat 的默认）",
+      parameters: path("projectId"),
+      responses: { "200": json("现在选的", "ProjectPipelineModel"), ...errors(401, 403, 404, 502, 503) },
+    },
+    put: {
+      operationId: "setProjectPipelineModel",
+      summary: "给这个项目对话选模型和思考程度，null 回到默认；不在列表里或思考程度不支持 400 INVALID_MODEL_CHOICE；没接 Chat 409 CHAT_NOT_CONNECTED",
+      parameters: path("projectId"),
+      requestBody: body("SetProjectPipelineModelRequest"),
+      responses: { "200": json("改好的", "ProjectPipelineModel"), ...errors(400, 401, 403, 404, 409, 502, 503) },
+    },
+  },
+  "/api/me/conversation-models": {
+    get: {
+      operationId: "listConversationModels",
+      summary: "项目对话能选的模型和各自支持的思考程度（17.2 第 36 条）；默认的排第一；没接 Chat 为空",
+      responses: { "200": json("能选的模型", "ConversationModelListResponse"), ...errors(401, 403, 502, 503) },
     },
   },
   "/api/me/projects/{projectId}/feed": {

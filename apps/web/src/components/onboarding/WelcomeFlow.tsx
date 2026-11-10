@@ -10,13 +10,13 @@ import { landingPath, onboardingDestination, onboardingReturnPath } from "@/lib/
 import { RadarSettingsEditor } from "@/components/radar/RadarSettingsEditor";
 import { ConnectAgentForm } from "@/components/ConnectAgentForm";
 import { BuddyNameInput } from "@/components/buddy/BuddyPicker";
-import { PersonalityPicker } from "@/components/buddy/PersonalityPicker";
+import { BUDDY_PERSONALITIES } from "@/components/buddy/PersonalityPicker";
 import { buddyNameValid, saveBuddy, type Buddy } from "@/components/buddy/useBuddy";
 import { PresenceCapsule } from "@/components/coagent/PresenceCapsule";
-import { CoAgentSkinPicker, useSimulatedLevel } from "@/components/coagent/SkinPicker";
-import { readStoredSkin } from "@/components/coagent/skin";
+import { useSimulatedLevel } from "@/components/coagent/SkinPicker";
+import { COAGENT_SKINS, readStoredSkin } from "@/components/coagent/skin";
+import { BuddyCarousel, BuddyFigure, PersonalityCard } from "./BuddyCarousel";
 import { DelegationPanel } from "./DelegationPanel";
-import { MorningCanvas } from "./MorningCanvas";
 import { CoAgentCapsule } from "./CoAgentCapsule";
 import { OnboardingProgress } from "./OnboardingProgress";
 import { WorkspaceSchematic } from "./WorkspaceSchematic";
@@ -26,10 +26,12 @@ import f from "./foundation.module.css";
 import s from "./welcome.module.css";
 
 export type OnboardingData = components["schemas"]["OnboardingResponse"];
-/** 选伙伴这一步的三页，按先后排。 */
-const BUDDY_PAGES = ["name", "form", "personality"] as const;
-type BuddyPage = (typeof BUDDY_PAGES)[number];
-type Step = "buddy" | "hello" | "tour-notifications" | "tour-board" | "mission-flow" | "radar" | "voiceprint" | "connect" | "delegation" | "start";
+/**
+ * 选伙伴的四页，按先后排（设计稿 17.1）：选形象 → 选性格 → 授权 → 起名字。起名字放在最后，那时台上已经是选好的形象。
+ * 每一页都是引导里的一步，底下的步骤点一页一个。
+ */
+const BUDDY_STEPS = ["buddy-form", "buddy-personality", "buddy-consent", "buddy-name"] as const;
+type Step = (typeof BUDDY_STEPS)[number] | "hello" | "tour-notifications" | "tour-board" | "mission-flow" | "radar" | "voiceprint" | "connect" | "delegation" | "start";
 
 /**
  * CEO 只看工作台三页（你好 → 通知栏 → 公司全局和对话），最后一页直接进工作台；雷达、外部工具都在个人菜单里。
@@ -38,8 +40,8 @@ type Step = "buddy" | "hello" | "tour-notifications" | "tour-board" | "mission-f
  * 还没有伙伴的人，最前面先「选择你的伙伴」（spec 5.5）；已经引导过、只差伙伴的人只走这一步。
  */
 export function onboardingSteps(data: OnboardingData, buddyStep: "none" | "first" | "only" = "none"): Step[] {
-  if (buddyStep === "only") return ["buddy"];
-  const first: Step[] = buddyStep === "first" ? ["buddy"] : [];
+  if (buddyStep === "only") return [...BUDDY_STEPS];
+  const first: Step[] = buddyStep === "first" ? [...BUDDY_STEPS] : [];
   if (data.role === "ceo") return [...first, "hello", "tour-notifications", "tour-board"];
   return [...first, "hello", "tour-notifications", "tour-board", "mission-flow", "radar", ...(data.voiceprint.configured ? ["voiceprint" as const] : []), "connect",
     ...(data.delegationStep ? ["delegation" as const] : []), "start"];
@@ -71,15 +73,16 @@ export function WelcomeFlow({ data: initial, nextPath, buddy, buddyOnly = false 
   /** 雷达这一步由编辑器负责前进：它的主按钮与「稍后」放进下面的底栏，位置和其他步骤一样。 */
   const [radarPrimary, setRadarPrimary] = useState<HTMLDivElement | null>(null);
   const [radarLater, setRadarLater] = useState<HTMLSpanElement | null>(null);
-  /** 选伙伴这一步的草稿：名字空着等本人起；样子在浏览器里再换成这台电脑原来选过的那颗；性格默认沉稳靠谱。 */
+  /** 选伙伴的草稿：名字空着等本人起；样子在浏览器里再换成这台电脑原来选过的那颗；性格默认沉稳靠谱。 */
   const [buddyDraft, setBuddyDraft] = useState<Buddy>({ name: "", form: "classic", personality: "steady" });
   const [buddySaving, setBuddySaving] = useState(false);
   const [buddyError, setBuddyError] = useState<string | null>(null);
-  /** 选伙伴分三页：先单独一页起名字，再选形象，最后选性格；三页算同一步，进度点只占一个。 */
-  const [buddyPage, setBuddyPage] = useState<BuddyPage>("name");
+  /** 选形象那一页按下「选定」：两边的影子退开、中间那个应一声，然后才翻页。 */
+  const [sealing, setSealing] = useState(false);
   const buddyName = useRef<HTMLInputElement>(null);
   const steps = onboardingSteps(data, buddyStep);
   const step = steps[index];
+  const choosing = step.startsWith("buddy-");
   const last = index === steps.length - 1;
   const voice = useVoiceprintEnrollment({ initialStatus: data.voiceprint });
   const current = useRef(0);
@@ -90,21 +93,25 @@ export function WelcomeFlow({ data: initial, nextPath, buddy, buddyOnly = false 
   const outgoingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const primary = useRef<HTMLButtonElement>(null);
   const recordResult = useRef<HTMLDivElement>(null);
-  const naming = step === "buddy" && buddyPage === "name";
-  /** 选形象那一页，顶上换成选中的那颗（默认那颗还是原来的大胶囊）；选性格那一页顶上就是选好的那颗，摆成在说话，下面的示例像是它说的。 */
-  const heroSkin = step === "buddy" && ((buddyPage === "form" && buddyDraft.form !== "classic") || buddyPage === "personality") ? buddyDraft.form : null;
-  const heroLevel = useSimulatedLevel(heroSkin !== null);
+  const naming = step === "buddy-name";
+  /** 本人的伙伴：这次刚选的（选伙伴几页存好了才往下走），或者以前就选好的；不知道时（undefined）是默认胶囊。 */
+  const own = buddy === null ? buddyDraft : buddy;
+  /** 伙伴那几页之后的每一页，顶上一直是本人的伙伴（选的是默认那颗就还是原来的大胶囊）。 */
+  const heroSkin = choosing ? null : own && own.form !== "classic" ? own.form : null;
+  /** 选伙伴几页里台上那个伙伴的模拟声音；选性格那页它在说话，下面的话像是它说的。 */
+  const buddyLevel = useSimulatedLevel(choosing);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" });
     content.current?.parentElement?.scrollTo({ top: 0, behavior: "instant" });
     // 起名字那一页直接落在名字框上，其余页落在标题上。
     (naming ? buddyName.current : title.current)?.focus({ preventScroll: true });
-  }, [index, naming, buddyPage]);
-  // 使用周报的上手漏斗：打开哪一步报一次，报不上不影响上手。
+  }, [index, naming]);
+  // 使用周报的上手漏斗：打开哪一步报一次，报不上不影响上手。选伙伴的四页在漏斗里仍算「buddy」一步。
+  const usageStep = choosing ? "buddy" : step as Exclude<Step, (typeof BUDDY_STEPS)[number]>;
   useEffect(() => {
-    void browserApi.POST("/api/me/usage/onboarding-step", { body: { step } }).catch(() => undefined);
-  }, [step]);
+    void browserApi.POST("/api/me/usage/onboarding-step", { body: { step: usageStep } }).catch(() => undefined);
+  }, [usageStep]);
   useEffect(() => {
     if (step !== "voiceprint" || voice.phase !== "recorded" || !window.matchMedia("(max-width: 759px)").matches) return;
     // 手机读完长稿后，把时长和重录入口带回视野，避免被固定操作区遮住。
@@ -134,23 +141,20 @@ export function WelcomeFlow({ data: initial, nextPath, buddy, buddyOnly = false 
     if (next === current.current || completing.current || voice.phase === "saving") return;
     voice.cancel();
     slideOut(delta, !(steps[next].startsWith("tour-") && steps[current.current].startsWith("tour-")));
-    // 从后面退回选伙伴，落在它的最后一页（选形象）。
-    if (delta < 0 && steps[next] === "buddy") setBuddyPage("form");
     current.current = next;
     setDirection(delta);
     setIndex(next);
     setAcknowledge((value) => value + 1);
     setError(null);
+    setBuddyError(null);
   }
 
-  /** 选伙伴的两页之间翻：和换一步一样滑动，胶囊也应一声。 */
-  function turnBuddyPage(page: BuddyPage) {
-    const delta = BUDDY_PAGES.indexOf(page) > BUDDY_PAGES.indexOf(buddyPage) ? 1 : -1;
-    slideOut(delta);
-    setDirection(delta);
-    setBuddyPage(page);
-    setAcknowledge((value) => value + 1);
-    setBuddyError(null);
+  /** 选定形象：先播完那一下再翻页；减少动态效果时直接翻页。 */
+  function sealForm() {
+    if (sealing) return;
+    if (typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return move(1);
+    setSealing(true);
+    setTimeout(() => { setSealing(false); move(1); }, 560);
   }
 
   async function finish() {
@@ -185,14 +189,28 @@ export function WelcomeFlow({ data: initial, nextPath, buddy, buddyOnly = false 
     }
   }
 
-  async function forward() {
-    if (step === "buddy") {
-      if (buddyPage === "personality") return saveBuddyStep();
-      if (buddyPage === "form") return turnBuddyPage("personality");
-      // 名字页回车也走这里，名字不合格不翻页。
-      if (buddyNameValid(buddyDraft.name)) turnBuddyPage("form");
-      return;
+  /** 授权页点「同意」：伙伴代本人做事的授权打开（full），存上再往下走；「稍后」不调接口，保持 none，以后在偏好页里还能开。 */
+  async function grantAuthority() {
+    if (buddySaving) return;
+    setBuddySaving(true);
+    setBuddyError(null);
+    try {
+      const { data: saved, error: failure } = await browserApi.PUT("/api/me/buddy-authority", { body: { authority: "full" } });
+      if (!saved) throw new Error(failure?.message ?? "没有存上，请重试");
+      setBuddySaving(false);
+      move(1);
+    } catch (cause) {
+      setBuddyError(cause instanceof Error ? cause.message : "没有存上，请重试");
+      setBuddySaving(false);
     }
+  }
+
+  async function forward() {
+    // 名字页回车也走这里，名字不合格不存。
+    if (naming) return saveBuddyStep();
+    if (step === "buddy-form") return sealForm();
+    if (step === "buddy-consent") return grantAuthority();
+    if (choosing) return move(1);
     if (last || error) return finish();
     if (step === "voiceprint" && voice.phase === "recorded") {
       const saved = await voice.save();
@@ -211,30 +229,36 @@ export function WelcomeFlow({ data: initial, nextPath, buddy, buddyOnly = false 
       : step === "connect" && !connectDownloaded ? connectPrimary?.querySelector<HTMLButtonElement>("button") : primary.current)?.click();
   }
 
-  const heading = step === "buddy" ? naming ? "给你的伙伴起个名字" : `选择${buddyDraft.name.trim()}的${buddyPage === "form" ? "形象" : "性格"}` : step === "delegation" ? "授权天枢替你记进本体" : step === "hello" ? `你好，${data.displayName}` : step === "tour-notifications" ? "左边是通知栏" : step === "tour-board" ? data.role === "ceo" ? "右边是公司全局" : "右边是你的工作" : step === "mission-flow" ? "每个月的 Mission，这样定下来" : step === "radar" ? "你想关注哪些变化？" : step === "voiceprint" ? "让我在会上认出你的声音" : step === "connect" ? "连上你自己的 AI 工具" : "可以开始了";
+  const heading = step === "buddy-form" ? "选择你的伙伴" : step === "buddy-personality" ? "选择性格" : step === "buddy-consent" ? "伙伴可以替你做你能做的事" : naming ? "给伙伴起个名字" : step === "delegation" ? "授权天枢替你记进本体" : step === "hello" ? `你好，${data.displayName}` : step === "tour-notifications" ? "左边是通知栏" : step === "tour-board" ? data.role === "ceo" ? "右边是公司全局" : "右边是你的工作" : step === "mission-flow" ? "每个月的 Mission，这样定下来" : step === "radar" ? "你想关注哪些变化？" : step === "voiceprint" ? "让我在会上认出你的声音" : step === "connect" ? "连上你自己的 AI 工具" : "可以开始了";
   // 手机首页是一条滚动：最上面是通知，往下 CEO 是公司全局、成员是自己的工作。
   const noticeCopy = data.role === "ceo" ? "会后要你确认的会议卡、月末的复盘与拆解，到时候会出现在这里。" : "任务卡的讨论、分给你的事和别人的回复，按轻重排在这里。";
   const phoneHeading = step === "tour-notifications" ? "最上面是通知" : step === "tour-board" ? data.role === "ceo" ? "往下是公司全局" : "往下是你的工作" : null;
-  const busy = finishing || voice.phase === "saving" || buddySaving;
+  /**
+   * 深色跟系统（设计稿 5.2）只在整段引导都是伙伴四页时开；后面那些旧步骤（导览示意图等）还是写死的浅色，
+   * 第一次引导就整段先用浅色，不半深半浅。
+   */
+  const scheme = steps.every((item) => item.startsWith("buddy-")) ? "auto" : "light";
+  const busy = finishing || voice.phase === "saving" || buddySaving || sealing;
   const voiceReady = voice.status?.enrolled && !rerecord && voice.phase === "idle";
-  const primaryDisabled = busy || (step === "buddy" && !buddyNameValid(buddyDraft.name)) || (!error && ((step === "voiceprint" && !voiceReady && (voice.phase !== "recorded" || voice.tooShort))));
+  const primaryDisabled = busy || (naming && !buddyNameValid(buddyDraft.name)) || (!error && ((step === "voiceprint" && !voiceReady && (voice.phase !== "recorded" || voice.tooShort))));
   const disabledHint = step === "voiceprint" && primaryDisabled && !busy
     ? voice.recording ? "录好后再继续，也可以选「稍后」" : voice.tooShort ? "请重新录满 15 秒，或者选「稍后」" : voice.consent ? "录好一段 15–30 秒的朗读，或者选「稍后」" : "先勾选同意并录好，或者选「稍后」"
     : null;
-  const primaryLabel = finishing ? "正在进入…" : step === "buddy" ? buddySaving ? "正在保存…" : "继续" : step === "hello" ? "开始" : step === "start" ? returnPath ? "继续刚才的页面" : data.next.action : last ? returnPath ? "继续刚才的页面" : "进入工作台" : step === "voiceprint" ? voice.phase === "saving" ? "正在保存…" : voice.phase === "recorded" ? "保存并继续" : voiceReady ? "下一步" : "录好后继续" : "下一步";
+  const primaryLabel = finishing ? "正在进入…" : buddySaving ? "正在保存…" : naming ? "完成" : step === "buddy-consent" ? "同意" : choosing ? "选定" : step === "hello" ? "开始" : step === "start" ? returnPath ? "继续刚才的页面" : data.next.action : last ? returnPath ? "继续刚才的页面" : "进入工作台" : step === "voiceprint" ? voice.phase === "saving" ? "正在保存…" : voice.phase === "recorded" ? "保存并继续" : voiceReady ? "下一步" : "录好后继续" : "下一步";
 
-  return <main className={s.page} onKeyDown={onKeyDown} style={{ "--direction": direction } as CSSProperties}>
-    <MorningCanvas progress={index} />
+  return <main className={s.page} onKeyDown={onKeyDown} style={{ "--direction": direction } as CSSProperties} data-scheme={scheme}>
     <header className={s.header}>
       <div className={s.brand} aria-label="天枢"><TianshuMark /><span>天枢</span></div>
-      {!last && step !== "buddy" ? <button type="button" className={f.textButton} onClick={() => void finish()} disabled={busy}>先进入工作台</button> : null}
+      {!last && !choosing ? <button type="button" className={f.textButton} onClick={() => void finish()} disabled={busy}>先进入工作台</button> : null}
     </header>
     <div className={s.flow} data-step={step} data-role={data.role}>
-      {heroSkin ? <div key={heroSkin} className={f.buddyHero} aria-hidden="true">
-        <PresenceCapsule skin={heroSkin} pose={buddyPage === "personality" ? "speaking" : "listening"} level={heroLevel} name={buddyDraft.name} />
+      {choosing ? step === "buddy-form" ? null : <div className={s.buddyStage}>
+        <BuddyFigure size="hero" skin={buddyDraft.form} name={buddyDraft.name.trim()} pose={step === "buddy-personality" ? "speaking" : naming ? "listening" : "idle"} level={buddyLevel} />
+      </div> : heroSkin ? <div key={heroSkin} className={f.buddyHero} aria-hidden="true">
+        <PresenceCapsule skin={heroSkin} name={own?.name} pose={voice.recording ? "listening" : "idle"} level={voice.recording ? voice.level : 0} />
       </div> : <CoAgentCapsule acknowledge={acknowledge} state={voice.recording ? "listening" : "idle"} level={voice.level} />}
       <div className={s.stage}>
-        <div className={s.content} key={step === "buddy" ? `buddy-${buddyPage}` : step.startsWith("tour-") ? "tour" : step} ref={content} data-step={step}>
+        <div className={s.content} key={step.startsWith("tour-") ? "tour" : step} ref={content} data-step={step}>
           <div className={s.intro}>
             <h1 ref={title} tabIndex={-1}>{phoneHeading ? <><span className={s.desktopTourCopy}>{heading}</span><span className={s.mobileTourCopy}>{phoneHeading}</span></> : heading}</h1>
             {step === "hello" ? <><p className={s.subtitle}>欢迎使用天枢。</p><p className={s.description}>{data.role === "ceo" ? "先花一分钟看看工作台。" : <>先花一分钟看看工作台，再看看每个月的 Mission 怎么定下来。<br />{data.voiceprint.configured ? "雷达、声纹和外部工具" : "雷达和外部工具"}，可以现在设，也可以以后再说。</>}</p></> : null}
@@ -246,17 +270,19 @@ export function WelcomeFlow({ data: initial, nextPath, buddy, buddyOnly = false 
             {step === "start" && !returnPath ? <p className={s.description}>{data.next.text}</p> : null}
           </div>
           <div className={s.details}>
+            {step === "buddy-form" ? <BuddyCarousel kind="figure" label="伙伴形象" items={COAGENT_SKINS} value={buddyDraft.form} sealing={sealing}
+              onChange={(form) => setBuddyDraft((draft) => ({ ...draft, form }))}>
+              {(form, active) => <BuddyFigure size="stage" skin={form} name="" pose={active ? sealing ? "speaking" : "listening" : "idle"} level={active ? buddyLevel : 0} />}
+            </BuddyCarousel> : null}
+            {step === "buddy-personality" ? <BuddyCarousel kind="card" label="伙伴的性格" items={BUDDY_PERSONALITIES} value={buddyDraft.personality ?? "steady"}
+              onChange={(personality) => setBuddyDraft((draft) => ({ ...draft, personality }))}>
+              {(id) => <PersonalityCard id={id} />}
+            </BuddyCarousel> : null}
             {naming ? <div className={s.buddyName}>
               <BuddyNameInput inputRef={buddyName} className={s.buddyNameInput} label="伙伴的名字" value={buddyDraft.name}
                 onChange={(name) => setBuddyDraft((draft) => ({ ...draft, name }))} onEnter={() => void forward()} />
             </div> : null}
-            {step === "buddy" && buddyPage === "form" ? <div className={`${f.glass} ${s.connectPanel}`}>
-              <CoAgentSkinPicker value={buddyDraft.form} name={buddyDraft.name} onChange={(form) => setBuddyDraft((draft) => ({ ...draft, form }))} />
-            </div> : null}
-            {step === "buddy" && buddyPage === "personality" ? <div className={`${f.glass} ${s.connectPanel}`}>
-              <PersonalityPicker value={buddyDraft.personality ?? "steady"} disabled={buddySaving} onChange={(personality) => setBuddyDraft((draft) => ({ ...draft, personality }))} />
-              {buddyError ? <p className={s.error} role="alert">{buddyError}</p> : null}
-            </div> : null}
+            {choosing && buddyError ? <p className={s.error} role="alert">{buddyError}</p> : null}
             {(step === "tour-notifications" || step === "tour-board") ? <WorkspaceSchematic role={data.role} focus={step === "tour-notifications" ? "notifications" : "board"} /> : null}
             {step === "mission-flow" && data.role === "member" ? <MissionFlow /> : null}
             {step === "radar" ? <RadarSettingsEditor
@@ -310,8 +336,8 @@ export function WelcomeFlow({ data: initial, nextPath, buddy, buddyOnly = false 
         {step === "radar" && !error ? <div key={step} ref={setRadarPrimary} className={s.radarActions} />
           : step === "connect" && !connectDownloaded && !error ? <div key={step} ref={setConnectPrimary} className={s.radarActions} /> : <button key={step} ref={primary} className={f.primary} type="button" onClick={() => void forward()} disabled={primaryDisabled} aria-describedby={disabledHint ? "welcome-action-hint" : undefined}>{error ? "重试" : primaryLabel}{!busy ? <ArrowRight size={18} aria-hidden="true" /> : null}</button>}
         <div className={s.secondary}>
-          {index > 0 || (step === "buddy" && !naming) ? <button className={f.textButton} type="button" onClick={() => step === "buddy" && !naming ? turnBuddyPage(buddyPage === "personality" ? "form" : "name") : move(-1)} disabled={busy}>上一步</button> : null}
-          {step === "voiceprint" || step === "connect" || step === "delegation" ? <button className={f.textButton} type="button" onClick={() => move(1)} disabled={busy}>稍后</button> : null}
+          {index > 0 ? <button className={f.textButton} type="button" onClick={() => move(-1)} disabled={busy}>上一步</button> : null}
+          {step === "buddy-consent" || step === "voiceprint" || step === "connect" || step === "delegation" ? <button className={f.textButton} type="button" onClick={() => move(1)} disabled={busy}>稍后</button> : null}
           {step === "radar" ? <span ref={setRadarLater} className={s.radarSlot} /> : null}
         </div>
       </footer>

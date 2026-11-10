@@ -1,6 +1,7 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
+import { CardSourceWordIssue } from "./taskCardView.js";
 import { Budget } from "./budget.js";
-import { LocalPermissionBrief, LocalQuestionRequestView } from "./localRunner.js";
+import { LocalPermissionBrief, LocalPermissionDecisionRequest, LocalPermissionMode, LocalQuestionAnswerRequest, LocalQuestionRequestView } from "./localRunner.js";
 import { PersonRef, ProjectTransfer } from "./projectTransfers.js";
 import { RoleRef } from "./roles.js";
 import { WorkerQueueReason, WorkerResources } from "./workers.js";
@@ -69,6 +70,12 @@ export const CardMerge = Type.Object({
 }, strict);
 
 /**
+ * 子会话的字母（18 节第 10 条）：每个项目里的子会话（卡、专题）按建立的先后编号 A、B……Z、AA、AB……，项目主管线、伙伴、网页、手机用同一套。
+ * 编号建了就不变、不复用（删掉 C，下一个照样是新字母）；一个子会话换了项目，在新项目里另给一个新字母。存在云端，读接口都带。
+ */
+export const SubSessionLetter = Type.String({ pattern: "^[A-Z]{1,3}$" });
+
+/**
  * 一个子会话。id 是卡的 id（执行事项）或专题的 id，kind 说是哪种。
  * queueReason：state = queued 时在等什么（worker 列表同一套：等开工、等空位、等本机上线、等前面的卡），别的为 null。
  * sessionId：最近一次本机执行（本机会话）的 id，没开过为 null；deviceId 是它在哪台电脑上。网页据此在那台电脑上接实时事件。
@@ -76,12 +83,17 @@ export const CardMerge = Type.Object({
  * updatedAt：最近一次动静（本机报的、卡或专题改的），树上同一格按它排。
  * merge：只有卡，最近一次验收通过的交回合回到哪了（见 CardMerge）；专题、还没过的卡为 null。
  * holdUntil：queueReason = quota（订阅额度用完，停着等恢复）时恢复的时间，界面「等额度恢复 · HH:MM」；读不到或不在等为 null。
+ * letter：它在所属项目里的字母（18 节第 10 条，见 SubSessionLetter）；不在项目里（「其他」）为 null。
+ * unseen（17.2 第 25 条，左栏蓝点）：停下了（一轮做完、被停下、出错停住，卡验收通过算做完），而且停下的时间晚于本人上次打开它（POST /api/me/work-seen）。
+ *   云端算好，网页照着画，不自己比时间。在跑（灰点）、要人介入（黄点）不看它，照旧。
  */
 export const SubSession = Type.Object({
   id: Type.String({ minLength: 1 }),
   kind: Type.Union([Type.Literal("card"), Type.Literal("topic")]),
+  letter: Nullable(SubSessionLetter),
   title: Type.String(),
   state: SubSessionState,
+  unseen: Type.Boolean(),
   waiting: Nullable(SubSessionWaiting),
   queueReason: Nullable(WorkerQueueReason),
   role: Nullable(RoleRef),
@@ -124,8 +136,11 @@ const Period = Type.String({ pattern: "^\\d{4}-(0[1-9]|1[0-2])$" });
 /**
  * 项目行上的一件目标：挂着、没了结的 Task（本月的，加之前月份没了结的；本月的了结了照样列，completedAt 不为 null）。
  * 16.2 副标题「{月} 月 · {Task 名} · {截止} 验收」、项目页目标条的「名字、截止、标准 1/3」用它。
- * dueDate 是验收截止日（YYYY-MM-DD）：本体的 Task 没有截止日，取所在 Mission 的验收时间点（同首页「本月」：今天以后最近的那个，都过了取最后一个）；
- *   Mission 没写验收时间点时取它所在月份的最后一天。
+ * dueDate 是验收截止日（YYYY-MM-DD），按这个先后取：
+ *   1. 本体 Task 自己的截止日（本体 0.3 的 Task 还没有这个字段，现在跳过）；
+ *   2. 天枢里给这件目标存的截止日（本人或伙伴改，PUT /api/me/projects/:projectId/goals/:taskId/due-date）；
+ *   3. 都没有，取所在 Mission 的验收时间点（同首页「本月」：今天以后最近的那个，都过了取最后一个）；Mission 没写验收时间点时取它所在月份的最后一天。
+ *   dueDateSource 说是哪一种：set 天枢里存的，mission 退回 Mission 的节点（以后本体有了再加 task）。
  * criteriaMet / criteriaTotal：标准几条达到（每条至少一张对它的卡、最近一次有结论的交回算通过）/ 一共几条（本体没写标准时是完成定义那一条，都没有为 0）。
  * criteria 是标准原文（目标条点开逐条看）；completedAt 是本人确认完成的时间。
  * responsible（16.7）：Task 的负责人不是本人时是那个人（项目交接过来、Task 跟着项目走、负责人还是原来的人，目标条上画他的头像），是本人为 null。
@@ -137,6 +152,7 @@ export const HomeProjectGoal = Type.Object({
   name: Type.String(),
   period: Period,
   dueDate: Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" }),
+  dueDateSource: Type.Union([Type.Literal("set"), Type.Literal("mission")]),
   criteria: Type.Array(Type.String()),
   criteriaMet: Type.Integer({ minimum: 0 }),
   criteriaTotal: Type.Integer({ minimum: 0 }),
@@ -167,7 +183,52 @@ export const HomeProject = Type.Object({
   subSessions: Type.Array(SubSession),
   items: Type.Array(HomeItem),
   transfer: Nullable(ProjectTransfer),
+  /** 项目总管线的蓝点（17.2 第 25 条）：项目对话里有新的回复或子会话汇报，而且晚于本人上次打开这个项目对话。云端算好，网页照着画。 */
+  unseen: Type.Boolean(),
 }, strict);
+
+/**
+ * POST /api/me/work-seen（204，幂等）：本人打开了一个子会话（kind = sub，id 是卡或专题的 id）或一个项目对话（kind = project，id 是项目 id），
+ * 记下看过的时间（按人记，手机和电脑一致），对应的 unseen 变成 false。网页打开时调一次；项目对话开着时又来了新回复或汇报，也再调一次。
+ * 不是本人的、没有的照样 204（只记时间，不泄露有没有）。
+ */
+export const MarkWorkSeenRequest = Type.Object({
+  kind: Type.Union([Type.Literal("sub"), Type.Literal("project")]),
+  id: Type.String({ format: "uuid" }),
+}, strict);
+export type TMarkWorkSeenRequest = Static<typeof MarkWorkSeenRequest>;
+
+/**
+ * 子会话那一行的「…」菜单（17.2 第 35 条）：重命名、标为已读、停止、归档、删除。
+ * - 标为已读：POST /api/me/work-seen（kind = sub）；停止：照旧由网页直接调本机，云端没有新接口。
+ * - 重命名、归档、恢复：PATCH /api/me/sub-sessions/:kind/:id（UpdateSubSessionRequest，204）。kind 是 card（卡）或 topic（专题），id 是卡或专题的 id。
+ *   title：卡最长 120 字，专题最长 60 字（超了 400 TITLE_TOO_LONG），去掉首尾空白后不能为空。只改天枢里的名字，本机会话、字母都不变。
+ *   archived = true 归档：从左栏和首页收起，在 GET /api/me/sub-sessions/archived 里能找到；还在跑（含排队、停着等回话）409 SUB_SESSION_RUNNING，先停；
+ *   登记了还没开的开工一并撤掉。archived = false 恢复，回到原来的项目（项目删了的在「其他」里）。在跑时也能改名。
+ * - 删除：DELETE /api/me/sub-sessions/:kind/:id（204）。和伙伴删的一样先进回收站（GET /api/me/trash），30 天内能从回收站恢复；
+ *   过了 30 天彻底删掉，撤不回（会话记录、交回、验收都没了；本机那边的工作树和文件不动）。还在跑 409 SUB_SESSION_RUNNING，先停。
+ * 不是本人的、没有的、已经在回收站里的 404。
+ */
+export const SubSessionKind = Type.Union([Type.Literal("card"), Type.Literal("topic")]);
+export const UpdateSubSessionRequest = Type.Object({
+  title: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
+  archived: Type.Optional(Type.Boolean()),
+}, { ...strict, minProperties: 1 });
+/** GET /api/me/sub-sessions/archived：本人归档了的子会话，新归档的在前。letter 是在原项目里的字母，projectId、projectName 是原来的项目（不在项目里、项目删了为 null）。 */
+export const ArchivedSubSession = Type.Object({
+  kind: SubSessionKind,
+  id: Type.String({ format: "uuid" }),
+  title: Type.String(),
+  letter: Nullable(SubSessionLetter),
+  projectId: Nullable(Type.String({ format: "uuid" })),
+  projectName: Nullable(Type.String()),
+  archivedAt: Instant,
+}, strict);
+export const ArchivedSubSessionListResponse = Type.Object({ items: Type.Array(ArchivedSubSession) }, strict);
+export type TSubSessionKind = Static<typeof SubSessionKind>;
+export type TUpdateSubSessionRequest = Static<typeof UpdateSubSessionRequest>;
+export type TArchivedSubSession = Static<typeof ArchivedSubSession>;
+export type TArchivedSubSessionListResponse = Static<typeof ArchivedSubSessionListResponse>;
 
 /** 首页「本月」里的一件 Task（16.4）：project 是挂在哪个项目（点了进项目）；没挂上为 null，网页画「挂到…」（选现有项目或新建）。 */
 export const HomeMonthTask = Type.Object({
@@ -198,11 +259,13 @@ export const HomeMonthMission = Type.Object({
  * transfer（16.7）：别人把项目交给你（sent，to 是本人），title「{原负责人}把「{项目}」交给你」，person 是原负责人，open 是那份转交（只读预览，「接手」「不接」）；
  * quota：额度用完或预算到了，有活停着等你定：订阅额度用完时一台电脑一条「Claude 订阅额度用完 · HH:MM 恢复」，source 写停着几件，
  *   open 是连接页，dueAt 是恢复的时间（到点本机自己接着做；要不要换网关模型、开额外额度由你定）。预算（设计 11.4）以后再加。
+ * auto_relay（18 节第 12 条）：这个项目的自动接力连续到了上限（Project.autoRelayLimit），停止自动触发了。title「{项目}：自动接力已连续 N 轮，继续吗？」，
+ *   projectId 是那个项目，open 是项目对话，answer = inline：就地「继续」「停下」（POST /api/me/projects/:projectId/auto-relay，手机上也能）。
  */
 export const WaitingKind = Type.Union([
   Type.Literal("approval"), Type.Literal("question"), Type.Literal("verdict"), Type.Literal("meeting"), Type.Literal("mission_card"), Type.Literal("role"),
   Type.Literal("merge"), Type.Literal("plan_start"), Type.Literal("acceptance"), Type.Literal("month"), Type.Literal("device"), Type.Literal("quota"),
-  Type.Literal("transfer"), Type.Literal("goal_changed"),
+  Type.Literal("transfer"), Type.Literal("goal_changed"), Type.Literal("auto_relay"),
 ]);
 
 /**
@@ -256,6 +319,8 @@ export const WaitingItem = Type.Object({
   sessionId: Nullable(Type.String({ format: "uuid" })),
   deviceId: Nullable(Type.String({ format: "uuid" })),
   deviceName: Nullable(Type.String()),
+  /** 这一行是某个子会话的（在问你、等批准、要合回等）且它在项目里时，它的字母（SubSessionLetter）；别的为 null。 */
+  letter: Nullable(SubSessionLetter),
   dueAt: Nullable(Instant),
   answer: WaitingAnswer,
   person: Nullable(Type.Object({ personId: Type.String({ minLength: 1 }), name: Type.String() }, strict)),
@@ -285,7 +350,8 @@ export const WorkHomeResponse = Type.Object({
 /**
  * 项目对话（原 Task 管线）里网页按时间插的一行（第 4.5 节，从卡和交回现算，不另存事件）。id 稳定，网页按它去重；at 是这件事发生的时间。
  * - card_passed：一张卡验收过了（含本人「仍然通过」），met / total 几条达到，merge 是合回结果（「已合进 main」，或要你合的原因）。
- * - card_blocked：一张卡连续两次没过（受阻），fix 是拼好的改法；网页给选项「按这个改（推荐）/ 我去看看 / 仍然通过」，
+ * - card_blocked：一张卡连续两次没过（受阻），fix 是拼好的改法（含原话对不上的几处）；sourceWordIssues 是那次交回和本人原话对不上的几处（16.8），和没过的标准一起列；
+ *   网页给选项「按这个改（推荐）/ 我去看看 / 仍然通过」，
  *   按这个改 = 照原来的送回（说一句 + /handbacks/:id/returned），仍然通过 = 推翻（/handbacks/:id/overrule）。
  * - criteria_met：taskId 这件 Task 约定里的每一条都有验收通过的卡（met = total）；网页问「约定 n 条都达到了，交给认可人？（推荐）」，
  *   接 V1 的出一版（/deliverable/versions/from-pending）、对表、请 X 看、交付。完成仍只由本人确认。
@@ -296,7 +362,7 @@ export const TaskFeedItem = Type.Union([
   Type.Object({ kind: Type.Literal("card_passed"), ...FeedBase, cardId: Type.String({ format: "uuid" }), title: Type.String(),
     met: Type.Integer({ minimum: 0 }), total: Type.Integer({ minimum: 0 }), merge: Nullable(CardMerge) }, strict),
   Type.Object({ kind: Type.Literal("card_blocked"), ...FeedBase, cardId: Type.String({ format: "uuid" }), title: Type.String(),
-    handbackId: Type.String({ format: "uuid" }), fix: Nullable(Type.String()) }, strict),
+    handbackId: Type.String({ format: "uuid" }), fix: Nullable(Type.String()), sourceWordIssues: Type.Array(CardSourceWordIssue) }, strict),
   Type.Object({ kind: Type.Literal("criteria_met"), ...FeedBase, taskId: Type.String({ minLength: 1 }), met: Type.Integer({ minimum: 1 }),
     total: Type.Integer({ minimum: 1 }) }, strict),
   Type.Object({ kind: Type.Literal("rework_opened"), ...FeedBase, cardId: Type.String({ format: "uuid" }), title: Type.String(),
@@ -397,9 +463,71 @@ export const ReleaseSessionStartRequest = Type.Object({ deviceId: Type.String({ 
  * 认领到的一条，带这件 Task 此刻的预算（设计 11.3、11.4，契约 budget.ts）：Task 单独设过的，没设过是本人的缺省；不挂 Task 的专题是本人的缺省。
  * 本机按它跑这张卡（模型、思考强度、多 agent、到 80%/100% 怎么办）；每开一张卡认领一次，所以中途改了预算，下一张卡就拿到新的。
  * 一张卡跑着时预算改了怎么办由本机程序定。
+ * permissionMode（17.2 第 11 条）：所在项目新开子会话的默认权限模式（Project.permissionMode），不在项目里为 auto；网页开工时原样带给本机（LocalCreateSessionRequest.permissionMode）。
  */
-export const ClaimedSessionStart = Type.Object({ ...SessionStartView.properties, budget: Budget }, strict);
+export const ClaimedSessionStart = Type.Object({ ...SessionStartView.properties, budget: Budget, permissionMode: LocalPermissionMode }, strict);
 export const ClaimSessionStartsResponse = Type.Object({ starts: Type.Array(ClaimedSessionStart) }, strict);
+
+/**
+ * 「请这台电脑停掉」（17.4：伙伴的 stop_sub_session，在跑的子会话只能在本人电脑上停）：云端记一条，开着的网页在跑这个会话的那台电脑上认领，
+ * 让本机程序停掉（POST /v1/sessions/:sessionId/stop），再报结果。
+ * - POST /api/me/session-stops/claim { deviceId }：认领这台电脑上的（deviceId 是本机会话所在的那台），回 { stops }；两处同时认领只有一处拿到，认领 5 分钟没报结果可以重新认领。
+ * - POST /api/me/session-stops/:id/done { deviceId, result }：stopped 停掉了，not_running 本机上已经没在跑。报过的不再出现。
+ * sessionId 是本机会话的 id（SubSession.sessionId），deviceId 是它所在的电脑。
+ */
+export const SessionStopView = Type.Object({
+  id: Type.String({ format: "uuid" }),
+  kind: Type.Union([Type.Literal("card"), Type.Literal("topic")]),
+  subSessionId: Type.String({ format: "uuid" }),
+  sessionId: Type.String({ format: "uuid" }),
+  deviceId: Type.String({ format: "uuid" }),
+  requestedAt: Instant,
+}, strict);
+export const ClaimSessionStopsRequest = Type.Object({ deviceId: Type.String({ format: "uuid" }) }, strict);
+export const ClaimSessionStopsResponse = Type.Object({ stops: Type.Array(SessionStopView) }, strict);
+export const SessionStopDoneRequest = Type.Object({ deviceId: Type.String({ format: "uuid" }),
+  result: Type.Union([Type.Literal("stopped"), Type.Literal("not_running")]) }, strict);
+export type TSessionStopView = Static<typeof SessionStopView>;
+export type TClaimSessionStopsResponse = Static<typeof ClaimSessionStopsResponse>;
+export type TSessionStopDoneRequest = Static<typeof SessionStopDoneRequest>;
+
+/**
+ * 「请这台电脑对子会话做一件事」（18 节第 10 条：项目主管线按字母给子会话转话、重开、回答问题、批准；停下仍走上面的 SessionStopView）：
+ * 云端不指挥本机，云端记一条，开着的网页在那个会话所在的电脑上认领，照 command 调本机程序，再报结果。认领的规矩同停掉。
+ * - POST /api/me/session-commands/claim { deviceId }：认领这台电脑上的，回 { commands }（按登记先后）；两处同时认领只有一处拿到，认领 5 分钟没报结果可以重新认领。
+ * - POST /api/me/session-commands/:id/done { deviceId, result, message? }：done 做了；not_running 本机上没有这个会话了；expired 要回答、要批准的那一次已经失效
+ *  （答过了、这一轮停了）；failed 本机拒了（message 写本机回的原因）。报过的不再出现。
+ * command：
+ * - message：往会话里说一句（POST /v1/sessions/:sessionId/messages，{ text }）。会话停着（exited、做完一轮）的，本机会续上接着做——「重开」也是这一条。
+ * - answer：回答它在问的那一次（POST /v1/sessions/:sessionId/questions/:requestId，体是 answer）。
+ * - permission：批准或拒绝在等批准的那一步（POST /v1/sessions/:sessionId/permissions/:requestId，体是 decision）。只有本人明说才会登记 allow。
+ * sessionId 是本机会话的 id（SubSession.sessionId），deviceId 是它所在的电脑。
+ */
+export const SessionCommand = Type.Union([
+  Type.Object({ type: Type.Literal("message"), text: Type.String({ minLength: 1, maxLength: 4000 }) }, strict),
+  Type.Object({ type: Type.Literal("answer"), requestId: Type.String({ minLength: 1, maxLength: 120 }), answer: LocalQuestionAnswerRequest }, strict),
+  Type.Object({ type: Type.Literal("permission"), requestId: Type.String({ minLength: 1, maxLength: 120 }), decision: LocalPermissionDecisionRequest }, strict),
+]);
+export const SessionCommandView = Type.Object({
+  id: Type.String({ format: "uuid" }),
+  kind: Type.Union([Type.Literal("card"), Type.Literal("topic")]),
+  subSessionId: Type.String({ format: "uuid" }),
+  sessionId: Type.String({ format: "uuid" }),
+  deviceId: Type.String({ format: "uuid" }),
+  requestedAt: Instant,
+  command: SessionCommand,
+}, strict);
+export const ClaimSessionCommandsRequest = Type.Object({ deviceId: Type.String({ format: "uuid" }) }, strict);
+export const ClaimSessionCommandsResponse = Type.Object({ commands: Type.Array(SessionCommandView) }, strict);
+export const SessionCommandDoneRequest = Type.Object({
+  deviceId: Type.String({ format: "uuid" }),
+  result: Type.Union([Type.Literal("done"), Type.Literal("not_running"), Type.Literal("expired"), Type.Literal("failed")]),
+  message: Type.Optional(Type.String({ maxLength: 500 })),
+}, strict);
+export type TSessionCommand = Static<typeof SessionCommand>;
+export type TSessionCommandView = Static<typeof SessionCommandView>;
+export type TClaimSessionCommandsResponse = Static<typeof ClaimSessionCommandsResponse>;
+export type TSessionCommandDoneRequest = Static<typeof SessionCommandDoneRequest>;
 
 /**
  * 伙伴开探索子会话（工具 open_topic，/internal/me/topics，照 /internal 的 INTERNAL_CHAT_TOKEN 加 X-Owner-Id，不进公开 OpenAPI）：
@@ -453,3 +581,10 @@ export type TBuddyOpenTopicResponse = Static<typeof BuddyOpenTopicResponse>;
  */
 export const NotificationSettings = Type.Object({ feishu: Type.Boolean() }, strict);
 export type TNotificationSettings = Static<typeof NotificationSettings>;
+
+/**
+ * GET / PUT /api/me/appearance（本人，CEO 和 DRI 都有）：「偏好」里的外观（设计 17.2），存在服务端，换设备一样。
+ * system 跟随系统（缺省，没设过就是它）、light 浅色、dark 深色。伙伴代本人改外观的入口按 17.4 定下的做法再加。
+ */
+export const AppearanceSettings = Type.Object({ appearance: Type.Union([Type.Literal("system"), Type.Literal("light"), Type.Literal("dark")]) }, strict);
+export type TAppearanceSettings = Static<typeof AppearanceSettings>;

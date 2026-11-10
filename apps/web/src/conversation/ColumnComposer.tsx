@@ -44,6 +44,7 @@ export function ColumnComposer({
   onRestoreQuotes,
   draftOwnerId,
   allowAttachments = true,
+  buddyName,
 }: {
   data: ConversationData;
   label: string;
@@ -66,6 +67,8 @@ export function ColumnComposer({
   onRestoreQuotes?: (quotes: TextQuote[]) => void;
   draftOwnerId?: string;
   allowAttachments?: boolean;
+  /** 本人伙伴的名字：提示文字写「与<名字>讨论…」，还没读到或没起名时写天枢。 */
+  buddyName?: string;
 }) {
   const draftKey = `tianshu-conversation-draft-v1:${draftOwnerId ? `${draftOwnerId}:` : ""}${data.scope}`;
   const [input, setInput] = useState("");
@@ -270,7 +273,7 @@ export function ColumnComposer({
               event.preventDefault();
               event.currentTarget.form?.requestSubmit();
             }}
-            placeholder={dictation.phase === "finishing" ? "正在收尾…" : dictation.active ? (dictation.live ? "正在听…" : "正在录音，结束后转写…") : data.viewingMaterialEditable ? "让 Agent 改这份材料…" : "与天枢讨论…"}
+            placeholder={dictation.phase === "finishing" ? "正在收尾…" : dictation.active ? (dictation.live ? "正在听…" : "正在录音，结束后转写…") : data.viewingMaterialEditable ? "让 Agent 改这份材料…" : `与${buddyName ?? "天枢"}讨论…`}
             aria-label={`${label}对话输入`}
           />
           </>

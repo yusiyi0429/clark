@@ -285,7 +285,7 @@ export function NotificationRail({
   const feishuEvents = useFeishuEvents();
   const groups = railGroups(cards, now, viewerId, feishuEvents).filter((group) => !(m2Available && group.kind === "decisions"));
   const rail = useRef<HTMLElement>(null);
-  const railBackground = useRailBackground();
+  const railBackground = useRailBackground(viewerId);
   const positions = useRef(new Map<string, number>());
   const layoutKey = groups.map((group) => `${group.kind}:${group.items.length}`).join("|");
 

@@ -113,12 +113,12 @@ describe("address and opening rule reaches every prompt", () => {
       ["material-annotation", MATERIAL_ANNOTATION_PROMPT], ["mission-card-annotation", MISSION_CARD_ANNOTATION_PROMPT], ["mission-card-review", MISSION_CARD_REVIEW_PROMPT],
       ["mission-card-draft", MISSION_CARD_DRAFT_PROMPT], ["mission-card-draft-review", MISSION_CARD_DRAFT_REVIEW_PROMPT],
       ["task-acceptance", TASK_ACCEPTANCE_PROMPT], ["thread-intro", THREAD_INTRO_PROMPT],
-      ["deliverable-review", DELIVERABLE_REVIEW_PROMPT], ["deliverable-note", deliverableNotePrompt("steady")], ["deliverable-note-critical", deliverableNotePrompt("critical")],
+      ["deliverable-review", DELIVERABLE_REVIEW_PROMPT], ["deliverable-note", deliverableNotePrompt("steady")], ["deliverable-note-direct", deliverableNotePrompt("direct")],
       ["ceo-conversation", SYSTEM_PROMPT],
       ["dri-conversation", driSystemPrompt("测试乙")], ["dri-mission-card", `${driSystemPrompt("测试乙", true)}\n\n${MISSION_CARD_EDITING_PROMPT}`],
     ];
     for (const [name, prompt] of prompts) expect(prompt, name).toContain(ADDRESS_STYLE);
-    const personalities = ["steady", "cheerful", "calm", "critical"] as const;
+    const personalities = ["steady", "direct", "warm", "coach"] as const;
     for (const prompt of [DELIVERABLE_REVIEW_PROMPT, ...personalities.map(deliverableNotePrompt), ...personalities.map((personality) => buddyPersona({ name: "团团", personality }, "测试乙"))]) {
       expect(findForbiddenPhrase(prompt)).toBeNull();
     }

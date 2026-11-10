@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { parseSseBlock, splitSse, type ConversationEvent } from "./sse";
 import type { Step, StepStatus } from "@/components/steps/StepList";
-import type { TAskAnswerInput, TAskAnswerRecord, TConversationCard, TReadScope, TReadScopeParams } from "@warmap/contracts";
+import type { TAskAnswerInput, TAskAnswerRecord, TBuddyPlan, TConversationCard, TConversationModel, TReadScope, TReadScopeParams } from "@warmap/contracts";
 import type { components } from "@/lib/api/schema";
 import { afterResize, resizing } from "./resizeGate";
 import { useStableCallback } from "./stableCallback";
 import { backoff, HISTORY_RETRY_MS, offline, pause, RECONNECT_MS } from "./reconnect";
+import { emitBuddyUi } from "@/lib/buddy/uiEvent";
 
 /**
  * 对话的数据与调用：一个人在一个页面有一条当前对话（默认一直接着往下聊，用户感觉不到「会话」）。
@@ -37,10 +38,23 @@ export type Message = { sequence: number; role: "user" | "assistant"; content: s
   answers?: TAskAnswerRecord;
   /** carried：转议题时从首页带过来的一段；trace：首页留痕行「已转到议题 X」，meta.href 直达。 */
   kind?: "carried" | "trace";
-  /** 这一句是在飞书私聊天枢机器人或微信 ClawBot 里说的（问与答都标）。 */
-  via?: "feishu" | "wechat";
+  /**
+   * 这一句是在飞书私聊天枢机器人或微信 ClawBot 里说的（问与答都标）；buddy 是伙伴从伙伴台转到项目对话里的本人那句（17.4 message_project）；
+   * report 是子会话停了、云端替本人给项目主管线发的那句（18.10）：不画成本人的气泡，报告本身是项目动态里的 sub_session_report。
+   */
+  via?: "feishu" | "wechat" | "buddy" | "report";
   /** 只在本人的提问上：这一轮服务端还在回答。 */
   running?: boolean;
+  /**
+   * 伙伴对话里本人这一句的回执（17.4）：delivered 天枢收下了，read 伙伴读到了；failed 收下以后这一轮没开成，旁边给「重发」。读回的历史都算 read。
+   */
+  receipt?: "delivered" | "read" | "failed";
+  /** 回执帧里天枢给这一句的 id（本地刚发出的那句，两帧按它对上）。 */
+  messageId?: string;
+  /** 伙伴这一轮最后一张计划清单（17.4，只在回答上）。 */
+  plan?: TBuddyPlan;
+  /** 这一轮实际用的来源和模型（只在走 Chat 的回答上）。 */
+  model?: TConversationModel;
   meta?: { issueId?: string; title?: string; href?: string } };
 export type Attachment = { id: string; fileName: string; mimeType: string };
 export type ConversationStatus = "idle" | "streaming" | "complete" | "failed" | "aborted";
@@ -97,6 +111,9 @@ export function pendingUserMessage(sequence: number, content: string, references
     ...(attachments.length ? { attachments } : {}) };
 }
 
+/** 伙伴对话（总管线、项目对话）：回执、计划清单、回复中再发会停掉上一轮（17.4）。 */
+export const isBuddyScope = (scope: string) => scope === "global" || scope.startsWith("project:");
+
 /** 别处改了这条对话的记录（转议题后首页多了留痕行）：detail.scope 是这条对话，收到就安静地重读历史。 */
 export const CONVERSATION_RELOAD = "conversation-reload";
 
@@ -112,19 +129,28 @@ export const FEISHU_POLL_MS = 10_000;
 export const FEISHU_WAITING_POLL_MS = 3_000;
 
 /** 读回的历史和眼前的比，有没有变（条数、最后一条的序号、长度、来源）。 */
+/** 历史里最后一条带 model 的回答用的来源和模型；都没有为 null。 */
+export function latestModel(list: readonly Message[]): TConversationModel | null {
+  for (let i = list.length - 1; i >= 0; i -= 1) if (list[i]!.role === "assistant" && list[i]!.model) return list[i]!.model!;
+  return null;
+}
+
 export function historySignature(list: Message[]): string {
   const last = list.at(-1);
   return `${list.length}:${last?.sequence ?? 0}:${last?.content.length ?? 0}:${last?.via ?? ""}`;
 }
 
 /** 来源标签上的字。 */
-export const VIA_LABEL = { feishu: "飞书", wechat: "微信" } as const;
+export const VIA_LABEL = { feishu: "飞书", wechat: "微信", buddy: "伙伴转来" } as const;
 
-/** 飞书或微信里问了、还没答完：最后一条是从那边来的提问。 */
+/** 飞书或微信里问了、还没答完：最后一条是从那边来的提问（子会话回报那句也是，项目主管线在回它）。 */
 export function feishuWaiting(list: Message[]): boolean {
   const last = list.at(-1);
   return last?.role === "user" && last.via !== undefined;
 }
+
+/** 云端替本人发给项目主管线的子会话回报那句（18.10）：不画气泡。 */
+export const isReportPrompt = (message: Pick<Message, "role" | "via">) => message.role === "user" && message.via === "report";
 
 export function messagesEndpoint(scope: string): string {
   return `/api/conversations/${encodeURIComponent(scope)}/messages`;
@@ -305,6 +331,9 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
   const pendingTurn = useRef<Message | null>(null);
   /** 每换一次 scope（或卸载）加一：上一个 scope 迟到的发送、上传结果不再改这里的状态。 */
   const generation = useRef(0);
+  const [turnPlan, setTurnPlan] = useState<TBuddyPlan | null>(null);
+  const [turnModel, setTurnModel] = useState<TConversationModel | null>(null);
+  const [turnCards, setTurnCards] = useState<TConversationCard[]>([]);
   /**
    * 流式上屏合帧（B2）：一帧里到的正文、思考摘要、进度只写一次（整棵对话树一帧最多重画一次，不按每段 delta 重画）。
    * 对话层放大 / 收起的过渡里（resizeGate）排着不写，过渡结束一次补齐。
@@ -397,7 +426,9 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
           const body = (await response.json()) as { messages?: unknown };
           if (!Array.isArray(body.messages)) throw new Error("历史格式不对");
           if (!current()) return null;
-          const loaded = withPendingTurn(body.messages as Message[], pendingTurn.current);
+          // 伙伴对话读回的本人那几句都已经读到了（17.4 的两个勾）。
+          const saved = isBuddyScope(scope) ? (body.messages as Message[]).map((item) => (item.role === "user" ? { ...item, receipt: "read" as const } : item)) : body.messages as Message[];
+          const loaded = withPendingTurn(saved, pendingTurn.current);
           setMessages(loaded);
           setHistoryStatus("ready");
           setHistoryError(null);
@@ -597,11 +628,25 @@ export function useConversation(scope: string, viewingMaterial: { id: string; ed
    * （用时从 since 算），否则返回 false 交还调用方。
    */
   async function send(message: string, references: SentCardRef[], options: { resumeRunId?: string; scopeOverride?: TReadScopeParams;
-    answers?: { input: TAskAnswerInput; record: TAskAnswerRecord }; auto?: boolean; attach?: { runId: string; running: boolean; since?: number } } = {}): Promise<boolean> {
+    answers?: { input: TAskAnswerInput; record: TAskAnswerRecord }; auto?: boolean; attach?: { runId: string; running: boolean; since?: number };
+    /** 这一句是在回答伙伴的哪个选项框（buddy_question）：原文照发，那张标 answered。 */
+    buddyQuestionId?: string;
+    /** 这一句带的附件（新首页的输入框自己传好了给回执）；不给时用输入条里待发的那几份。 */
+    attachments?: Attachment[] } = {}): Promise<boolean> {
     const input = message.trim();
     const attach = options.attach;
-    if ((!input && !attach) || status === "streaming") return false;
-    const text = attach ? "" : messageContext && !options.resumeRunId && !options.answers ? `${messageContext}
+    // 伙伴对话回复中本人再发（17.4）：天枢收下、停掉上一轮再开新的一轮；这里把上一轮交出去（不再写这页），已写出的先留在原处。
+    const interrupting = status === "streaming" && !attach && isBuddyScope(scope);
+    if ((!input && !attach) || (status === "streaming" && !interrupting)) return false;
+    if (interrupting) {
+      generation.current += 1;
+      abortRef.current?.abort();
+      const cut = partial;
+      const cutPlan = turnPlan;
+      if (cut || cutPlan) setMessages((current) => [...current, { sequence: (current.at(-1)?.sequence ?? 0) + 1, role: "assistant", content: cut,
+        ...(cutPlan ? { plan: { ...cutPlan, collapsed: true } } : {}) }]);
+    }
+    const text = attach ? "" : messageContext && !options.resumeRunId && !options.answers && !options.buddyQuestionId ? `${messageContext}
 
 ${input}` : input;
     const controller = new AbortController();
@@ -624,10 +669,14 @@ ${input}` : input;
     setSteps([]);
     setReadScope(null);
     setThought(null);
+    setTurnPlan(null);
+    setTurnModel(null);
+    setTurnCards([]);
     setStatus("streaming");
-    const attachmentRefs = attachments.map((attachment) => ({ id: attachment.id }));
+    const sentAttachments = options.attachments ?? attachments;
+    const attachmentRefs = sentAttachments.map((attachment) => ({ id: attachment.id }));
     // 乐观渲染：引用的卡片、附的材料随这句一起立刻画出来，不等回答结束读回历史。
-    const turn = { ...pendingUserMessage(0, text, references, attachments), ...(options.answers ? { answers: options.answers.record } : {}) };
+    const turn = { ...pendingUserMessage(0, text, references, sentAttachments), ...(options.answers ? { answers: options.answers.record } : {}) };
     /** 发出前已有的最后一条：没连上之后读回历史，若这句已经排在它后面，就是其实送到了，不再重发。 */
     const lastSequence = messages.reduce((max, item) => Math.max(max, item.sequence), 0);
     if (attach) {
@@ -641,6 +690,20 @@ ${input}` : input;
     }
 
     let accepted = false;
+    /**
+     * 回执（17.4）：两帧按 messageId 对上同一条；delivered 先到时记下这一轮发的那句（这一轮还在这页上时，最后一句本人的话）是这个 id。
+     * 读到了不再退回送达。
+     */
+    let receipt: { messageId: string; state: "delivered" | "read" } | null = null;
+    const markReceipt = (state: "delivered" | "read", messageId: string) => setMessages((current) => {
+      let index = current.findIndex((item) => item.role === "user" && item.messageId === messageId);
+      if (index < 0) {
+        index = current.length - 1;
+        while (index >= 0 && current[index].role !== "user") index -= 1;
+      }
+      return index < 0 || current[index].receipt === "read" ? current
+        : current.map((item, at) => (at === index ? { ...item, receipt: state, messageId } : item));
+    });
     let reply = "";
     let notice: string | undefined;
     /** 这一轮走过恢复时服务端在 done 里给的那行说明（读不回历史时本地补的那条回答也带上）。 */
@@ -672,6 +735,7 @@ ${input}` : input;
               ...(anchorSelection ? { anchorSelection } : {}),
               ...(options.resumeRunId ? { resumeRunId: options.resumeRunId } : {}),
               ...(options.answers ? { answers: options.answers.input } : {}),
+              ...(options.buddyQuestionId ? { buddyQuestionId: options.buddyQuestionId } : {}),
               ...(options.scopeOverride ? { scopeOverride: options.scopeOverride } : {}),
               // 首页对话在每个二级页面都开着：带上本人此刻在哪个页面，Agent 才知道「这页」指什么。
               ...(scope === "global" ? { pagePath: window.location.pathname } : {}) }),
@@ -834,6 +898,17 @@ ${input}` : input;
           if (event.type === "tool" && event.phase === "completed" && !event.isError
             && (event.name === "edit_mission_card" || event.name === "edit_my_mission_card" || event.name === "ask_mission_card_question"))
             window.dispatchEvent(new CustomEvent("mission-card-changed", { detail: { scope } }));
+          // 伙伴登记了拆卡：新首页在这台电脑上开规划员（V2 设计第 21.3 节；事件名同 components/home/HomeShell.tsx 的 SPLIT_EVENT）。
+          if (event.type === "tool" && event.phase === "completed" && !event.isError && event.name === "register_card_split")
+            window.dispatchEvent(new CustomEvent("card-split-registered", { detail: { scope } }));
+          if (event.type === "receipt" && event.state && event.messageId) {
+            receipt = { messageId: event.messageId, state: event.state };
+            if (live()) markReceipt(event.state, event.messageId);
+          }
+          if (event.type === "plan" && event.plan && live()) setTurnPlan(event.plan);
+          if (event.type === "model" && event.provider && event.model && live()) setTurnModel({ provider: event.provider, model: event.model });
+          if (event.type === "card" && event.card && live()) { const card = event.card; setTurnCards((current) => [...current, card]); }
+          if (event.type === "ui" && event.ui) emitBuddyUi(event.ui);
           if (event.type === "error") {
             serverError = { resume: event.resume };
             throw new TurnError(event.code, event.message ?? "");
@@ -880,6 +955,17 @@ ${input}` : input;
       if (!live()) return accepted;
       const code = (cause as TurnError).code;
       let stopped = controller.signal.aborted || code === "ABORTED";
+      // 收下了（delivered）却没开成（流里一帧 error 就结束，17.4）：撤掉第一个勾，这句旁边给「重发」。
+      // 读回的历史里有这句就标在它上面（最后一句同样的话），没有就把它放回去。
+      if (receipt?.state === "delivered" && serverError && !stopped && !attach) {
+        const failed = receipt.messageId;
+        setMessages((current) => {
+          let index = current.length - 1;
+          while (index >= 0 && !(current[index].role === "user" && current[index].content === text)) index -= 1;
+          return index >= 0 ? current.map((item, at) => (at === index ? { ...item, receipt: "failed" as const, messageId: failed } : item))
+            : [...current, { ...turn, sequence: (current.at(-1)?.sequence ?? 0) + 1, receipt: "failed", messageId: failed }];
+        });
+      }
       const written = reply.trim().length > 0;
       // 服务端没接下这句、历史也没读回来：撤掉本地那句，原文由输入框放回（C-04）。
       if (!reloaded && !accepted) setMessages((current) => withoutPendingTurn(current, text));
@@ -947,6 +1033,12 @@ ${input}` : input;
     return send(RESUME_TEXT[recoveryState.mode], [], { resumeRunId: recoveryState.runId });
   }
 
+  /** 「重发」（17.4）：收下了却没开成的那句，撤掉它旁边的按钮，原话再发一次。 */
+  function resend(message: Message): Promise<boolean> {
+    setMessages((current) => current.map((item) => (item === message ? { ...item, receipt: undefined } : item)));
+    return send(message.content, []);
+  }
+
   /** 范围标签改过范围：照原意按新范围重读一遍（这一句作为本人的原话发出，请求带上 scopeOverride）。 */
   function rescope(params: TReadScopeParams, label: string): Promise<boolean> {
     return send(`按「${label}」重新读`, [], { scopeOverride: params });
@@ -972,6 +1064,7 @@ ${input}` : input;
   const stableSend = useStableCallback(send);
   const stableUpload = useStableCallback(uploadFiles);
   const stableRescope = useStableCallback(rescope);
+  const stableResend = useStableCallback(resend);
   const removeAttachment = useCallback((id: string) => setAttachments((current) => current.filter((item) => item.id !== id)), []);
 
   return {
@@ -980,6 +1073,15 @@ ${input}` : input;
     messages,
     status,
     streaming: status === "streaming",
+    /** 回复中也能再发（伙伴对话，17.4）。 */
+    interruptible: isBuddyScope(scope),
+    /** 「重发」收下了却没开成的那句（17.4）。 */
+    resend: stableResend,
+    /** 这一轮伙伴的计划清单和出的卡（17.4，回答还在写时；写完读回的历史里在那条回答上）。 */
+    plan: turnPlan,
+    turnCards,
+    /** 最近一轮实际用的来源和模型：这一轮流里报了的，没报的取历史里最后一条带 model 的回答。 */
+    model: turnModel ?? latestModel(messages),
     /** 显示「正在思考 / 查证 / 整理回答」那一行：回答进行中、且正文还没结束。 */
     thinking: status === "streaming" && !bodyDone,
     partial,

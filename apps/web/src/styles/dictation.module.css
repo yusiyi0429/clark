@@ -1,14 +1,14 @@
 /*
  * 听写控件（conversation/DictationControls.tsx）：文字为主、指示为辅。
- *   录音指示：8px 红点（#e5484d）1.2 秒呼吸一次（减少动效时常亮）+ 计时 0:12（12px 等宽灰字）
+ *   录音指示：8px 红点（--counter）1.2 秒呼吸一次（减少动效时常亮）+ 计时 0:12（12px 等宽灰字）
  *   声波：18 根、2px 宽、间距 2（共约 70px），高 2–10px，灰色、透明度 0.45；不说话时是一条细线
  *   钮：✕ ■ ↑ 都是圆的，大小跟所在输入条的钮一样：--dictation-size（二级页 36，首页 44）
  * 放在二级页输入条里时读 --tone-*（跟着频道换色）；放在首页输入条里时读那边给的 --dictation-*。
  */
 
 .controls {
-  --ink: var(--dictation-muted, var(--tone-muted, #7b8290));
-  --soft: var(--dictation-soft, var(--tone-mic, #f1f4f8));
+  --ink: var(--dictation-muted, var(--tone-muted, var(--ink-faint)));
+  --soft: var(--dictation-soft, var(--tone-mic, var(--wash-hover)));
   --strong: var(--dictation-strong, var(--tone-send, #3a83f7));
   --size: var(--dictation-size, 36px);
   display: flex;
@@ -34,7 +34,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #e5484d;
+  background: var(--counter);
   animation: breathe 1200ms ease-in-out infinite;
 }
 
@@ -54,7 +54,7 @@
   width: 70px;
   height: 12px;
   overflow: hidden;
-  color: #8a909a;
+  color: var(--ink-faint);
   opacity: 0.45;
 }
 
@@ -104,7 +104,7 @@
   min-width: 0;
   margin: 0;
   padding: 2px 8px;
-  color: var(--dictation-error, #b4412f);
+  color: var(--dictation-error, var(--counter));
   font-size: 12px;
   line-height: 18px;
 }
@@ -130,7 +130,7 @@
 
 .marked {
   text-decoration-line: underline;
-  text-decoration-color: var(--dictation-underline, #9aa1ad);
+  text-decoration-color: var(--dictation-underline, var(--ink-faint));
   text-decoration-thickness: 1.5px;
   text-decoration-skip-ink: none;
   text-underline-offset: 4px;
@@ -151,7 +151,7 @@
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes veil { from { background-color: color-mix(in srgb, var(--dictation-veil, transparent) 82%, transparent); } to { background-color: transparent; } }
 @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
-@keyframes polishing { 0%, 100% { text-decoration-color: var(--dictation-underline, #9aa1ad); } 50% { text-decoration-color: color-mix(in srgb, var(--dictation-underline, #9aa1ad) 35%, transparent); } }
+@keyframes polishing { 0%, 100% { text-decoration-color: var(--dictation-underline, var(--ink-faint)); } 50% { text-decoration-color: color-mix(in srgb, var(--dictation-underline, var(--ink-faint)) 35%, transparent); } }
 
 @media (prefers-reduced-motion: reduce) {
   .wave i { transition: none; }

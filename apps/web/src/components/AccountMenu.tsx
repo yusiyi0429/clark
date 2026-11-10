@@ -298,8 +298,8 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
           <PasscodeForm loginId={account.loginId} onDone={() => setDialog(null)} />
         </MenuDialog>
       ) : null}
-      {dialog === "coagent" ? <MenuDialog title="伙伴形象" wide onClose={() => setDialog(null)}><BuddySettings onDone={() => setDialog(null)} /></MenuDialog> : null}
-      {dialog === "railBackground" ? <MenuDialog title="通知栏背景" wide onClose={() => setDialog(null)}><RailBackgroundSettings /></MenuDialog> : null}
+      {dialog === "coagent" ? <MenuDialog title="伙伴形象" wide onClose={() => setDialog(null)}><BuddySettings /></MenuDialog> : null}
+      {dialog === "railBackground" ? <MenuDialog title="通知栏背景" wide onClose={() => setDialog(null)}><RailBackgroundSettings personId={account.personId} /></MenuDialog> : null}
       {dialog === "voice" ? <VoiceKeysDialog onClose={() => setDialog(null)} /> : null}
       {dialog === "connection" ? <MenuDialog title="连接到外部工具" wide onClose={() => setDialog(null)}><ConnectionDialog role={account.role} /></MenuDialog> : null}
       {dialog === "wechat" ? <MenuDialog title="连接微信" onClose={() => setDialog(null)}><WechatConnectPanel onChange={setWechat} /></MenuDialog> : null}
@@ -344,8 +344,8 @@ export function MenuDialog({ title, wide = false, onClose, children }: { title: 
 
 const FOUR_DIGITS = /^\d{4}$/;
 
-/** 版本信息藏在「修改口令」底部（用户 2026-09-30 指定）：Web 与 API 各自的构建版本，一样时只写一个。 */
-function BuildVersion() {
+/** Web 与 API 各自的构建版本，一样时只写一个（「修改口令」底部、新首页个人菜单最后一行）。 */
+export function useBuildVersion(): string {
   const [text, setText] = useState("");
   useEffect(() => {
     let active = true;
@@ -355,6 +355,12 @@ function BuildVersion() {
     });
     return () => { active = false; };
   }, []);
+  return text;
+}
+
+/** 版本信息藏在「修改口令」底部（用户 2026-09-30 指定）。 */
+function BuildVersion() {
+  const text = useBuildVersion();
   return text ? <p className={m.version}>{text}</p> : null;
 }
 

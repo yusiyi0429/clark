@@ -83,7 +83,8 @@ describe("右列底下的两行输入条", () => {
     expect(narrow).toContain("天枢");
   });
 
-  it("提示文字是「与天枢讨论…」，空着时右端是停用的发送钮，旁边是附件和小麦克风", () => {
+  it("提示文字跟伙伴的名字：「与<名字>讨论…」，伙伴还没读到时是「与天枢讨论…」；空着时右端是停用的发送钮，旁边是附件和小麦克风", () => {
+    expect(composer({ buddyName: "Christopher" })).toContain('placeholder="与Christopher讨论…"');
     const html = composer();
     expect(html).toContain('placeholder="与天枢讨论…"');
     const send = html.match(/<button[^>]*data-state="send"[^>]*>/)?.[0] ?? "";

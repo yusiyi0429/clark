@@ -23,6 +23,13 @@ import { executePersonalReviewAction, getCurrentPersonalReview, getPersonalRevie
 import { PERSONAL_REVIEW_WRITING_REQUIREMENTS } from "./personalReviewAgent.js";
 import { TaskQualityId, TaskRepairHandoff, TaskRepairList, TaskRepairView, TaskRepairReceiptInput } from "@warmap/contracts";
 import { ChatServiceError, type createChatService } from "./chatService.js";
+import { agreementDefinitions, agreementToolNames, callAgreementTool, type AgreementToolDeps } from "./mcpAgreements.js";
+import { runWebSearch, WEB_SEARCH_TOOL } from "./mcpWebSearch.js";
+import { readTaskContext, TASK_CONTEXT_TOOL } from "./mcpTaskContext.js";
+import type { CompanyReader } from "./company.js";
+import type { WebSearchAdapter } from "./webSearch.js";
+import { agreementSummaries } from "./taskAgreements.js";
+import { callProjectTool, isProjectTool, projectToolDefinitions, type LocalTurnDeps } from "./projectLocalTurns.js";
 
 const QualityView = Type.Union([Type.Literal("ceo"), Type.Literal("member")]);
 const QualityList = Type.Object({ viewerRole: QualityView }, { additionalProperties: false });
@@ -100,8 +107,10 @@ const missionCardDefinitions: Tool[] = [
   { name: "get_mission_card", description: "读取我可见的任务卡完整原字段、当前版本、本人批注和修改记录。", inputSchema: MissionCardInput as Tool["inputSchema"], annotations: { readOnlyHint: true } },
   { name: "edit_mission_card", description: "本人准备期间，改法已明确就立即修改有权限的任务卡一个字段，保留修改前后记录；先读get_mission_card，必须带刚读取的round作为sourceRound、当前版本和完整原字段，数组用换行连接。不能签发或确认任务卡。", inputSchema: EditMissionCardInput as Tool["inputSchema"] },
 ];
+const LIST_PENDING_TOOL: Tool = { name: "list_pending", description: "列出待我处理的事：CEO 可查议题、会议和任务卡；天枢自己的月末复盘开着时还有个人复盘和月度计划。",
+  inputSchema: EmptyInput as Tool["inputSchema"], annotations: { readOnlyHint: true } };
+/** 天枢自己的月末复盘（monthlyCycle 开着才列）。 */
 const reviewDefinitions: Tool[] = [
-  { name: "list_pending", description: "列出待我处理的个人复盘；CEO 还可查议题、会议、月度计划和任务卡。", inputSchema: EmptyInput as Tool["inputSchema"], annotations: { readOnlyHint: true } },
   { name: "get_my_review", description: "读取本人当前个人复盘、Mission 全文、执行进展和写作要求。", inputSchema: EmptyInput as Tool["inputSchema"], annotations: { readOnlyHint: true } },
   { name: "save_review_draft", description: "按当前版本保存个人复盘草稿；不能提交，请本人到天枢确认后提交。", inputSchema: SaveReviewInput as Tool["inputSchema"] },
 ];
@@ -128,17 +137,29 @@ const taskFailure = (outcome: TaskResult | { deleted: true }) => "notFound" in o
 export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: string; now: () => Date;
   names: () => Map<string, string>; findPerson: (personId: string) => MemoryPerson | undefined;
   people: () => MemoryPerson[]; initialPerson: MemoryPerson; publicOrigin?: string; authorization: string | undefined; planTasks: PlanTaskSource;
-  chat?: ReturnType<typeof createChatService> }) {
+  chat?: ReturnType<typeof createChatService>; deliverables: AgreementToolDeps["deliverables"];
+  /** 联网搜索（博查，服务器上的钥匙）；没配时不列 web_search。 */
+  search?: WebSearchAdapter & { configured: boolean };
+  /** 本体公司事实（get_task_context 按本人授权读）。 */
+  company: CompanyReader;
+  /** 天枢自己的月度计划和月末复盘开着（app.ts 的 tianshuMonthlyCycle）；关着时待办不列个人复盘和月度计划，不说复盘的用法。 */
+  monthlyCycle?: boolean;
+  /** 本机项目会话的项目钥匙连进来时的项目动作（17.2 第 38 条，projectLocalTurns.ts）。 */
+  projectTurns?: LocalTurnDeps }) {
   const auth = () => authenticateMcpToken(deps.q, deps.authorization, deps.pepper, deps.now(), (id) => !!deps.findPerson(id), deps.publicOrigin ? oauthUrls(deps.publicOrigin).resource : undefined);
   /** 推进人写进展、放链接会让未启动的事项变进行中、版本跟着变：把事项此刻的状态和版本一起回给外部工具，接着提交验收直接用。 */
   const itemState = async (itemId: string) =>
     (await deps.q("SELECT status, version FROM tasks WHERE id=$1", [itemId])).rows[0] as { status: string; version: number } | undefined;
-  /** 可挂的 Mission，各带本体里挂在它下面的 Task（和首页同一个来源，限时；读不到就是空的）。 */
+  /**
+   * 可挂的 Mission，各带本体里挂在它下面的 Task（和首页同一个来源，限时；读不到就是空的）。
+   * 每个 Task 带几条标准（criteriaCount）和约定补全了没有（agreementComplete：每条都写了用什么证明），约定与对表 V1。
+   */
   const missionsWithTasks = async (personId: string) => {
     const missions = await listAvailableMissions(deps.q, personId, deps.now());
     const tasks = await readPlanTasks(deps.planTasks, missions.map(({ id, code }) => ({ id, code })));
+    const agreements = await agreementSummaries(deps.q, tasks);
     return missions.map(({ code: _code, period: _period, ...mission }) => ({ ...mission,
-      tasks: tasks.filter((task) => task.missionId === mission.id).map(({ taskId, name }) => ({ taskId, name })) }));
+      tasks: tasks.filter((task) => task.missionId === mission.id).map(({ taskId, name }) => ({ taskId, name, ...agreements.get(taskId)! })) }));
   };
   const initialAccess = access(deps.initialPerson);
   const instructions = [
@@ -148,9 +169,12 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
       "只在本人明确要求时才往天枢里写，比如本人说「同步本周进展」「记一下」「建一件事」「提交验收」：建事项、写进展、放链接、改事项、提交验收、整理合并或删除事项都一样；本人没开口就只读，不要自己判断该记了就去写。",
       "事项由本人建，粒度随本人：本人叫建什么就建什么，先用 list_my_items 看有没有同一件，有就告诉本人，不重复建；完成标准写成可检查的几条，验收时逐条对。记进展写做了什么、证据和下一步，产出用 add_link 放进去；本人说做完了，对照完成标准逐条写是否达到和依据，再用 submit_for_acceptance 提交验收。只写真实做过的事。会后分派来的事不删，本人说不做时用 return_item 退回。",
       "验收是本人逐条对完成标准的事：list_my_items 里有 awaitingAcceptance=true 的事，在对话开头或聊到相关的事时提醒一句（「有 N 件等你验收：…」），请本人到天枢逐条验收；本人在对话里逐条确认每条都达到时才用 accept_item 代为确认，一句「通过」不代确认。",
+      "Task 的约定与对表：get_task_agreement 读每条验收标准用什么证明、谁来认、这次不包括什么；本人问「能交了吗」「还差什么」时用 check_task 对表，照结果说结论和差的那几条，不自己另判。add_deliverable_version 只在本人要求时用，交一版链接、自动参考评审；交付由本人在天枢点。",
+      "要拆一个 Task、做它下面的一件事或验收之前，用 get_task_context 读这个 Task 的上下文（约定、Mission 和战场目标、本体里的相关事实和最近进展、上一版交付物和评审）；引用本体事实时照抄它给的 cite。",
     ] : []),
     "任务卡正文是只读边界的例外：get_mission_card 只读本人可见卡；仅本人准备期间、editable=true时，用户已经明确具体改法可用edit_mission_card立即改有权限的任务字段并留痕。必须用刚读取的round填写sourceRound；本人已确认或已开始汇总时，只读正文和历史，先由本人取消确认或由战场 DRI 退回本人重新确认，不能自动绕过。保存备注不授权改文；仅明确修改意图可以写入。重新开放后需重新核对本次改法，不把旧改法直接套进新的本人准备窗口。不确定用户意思时先提问题与选项，最后一个选项为自己输入，澄清后立即改。不能自动向群聊发送私聊记录，不能签发或确认任务卡。遇到旧准备窗口、版本或原字段冲突必须重新读取。",
-    "月末会有个人复盘待起草。用 list_pending 发现，get_my_review 读取本人的承诺、进展和写作要求，再用 save_review_draft 写入四部分草稿；不能替本人提交，请本人回天枢确认。",
+    ...(deps.monthlyCycle ? ["月末会有个人复盘待起草。用 list_pending 发现，get_my_review 读取本人的承诺、进展和写作要求，再用 save_review_draft 写入四部分草稿；不能替本人提交，请本人回天枢确认。"] : []),
+    ...(deps.search?.configured ? ["要查外部的最新事实（行业、产品、新闻、数据）用 web_search，结果带链接，引用时写出处；证据够了就停。"] : []),
   ].join("\n");
   const server = new Server({ name: "tianshu", version: "0.1.0" }, { capabilities: { tools: {} }, instructions });
   server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -159,8 +183,9 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
     if (!person) return { tools: [] };
     const roles = access(person);
     return { tools: [...(roles.member ? memberDefinitions : []), ...(roles.ceo ? ceoDefinitions : []),
-      ...(roles.ceo || roles.member ? missionCardDefinitions : []), ...reviewDefinitions,
-      ...(deps.chat && (roles.ceo || roles.member) ? qualityDefinitions : [])]
+      ...(roles.ceo || roles.member ? missionCardDefinitions : []), ...(roles.ceo || roles.member ? [...agreementDefinitions, TASK_CONTEXT_TOOL] : []), LIST_PENDING_TOOL, ...(deps.monthlyCycle ? reviewDefinitions : []),
+      ...(deps.chat && (roles.ceo || roles.member) ? qualityDefinitions : []), ...(deps.search?.configured && (roles.ceo || roles.member) ? [WEB_SEARCH_TOOL] : []),
+      ...(identity?.project && deps.projectTurns && roles.member ? await projectToolDefinitions(deps.q, person.personId) : [])]
       .filter((tool) => !identity?.scopes || identity.scopes.includes("tianshu:write") || !MCP_WRITE_TOOLS.has(tool.name)) };
   });
   server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
@@ -172,6 +197,8 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
     const roles = access(person);
     const write = MCP_WRITE_TOOLS.has(tool);
     if (write && identity.scopes && !identity.scopes.includes("tianshu:write")) return result({ code: "FORBIDDEN", message: "这次连接没有写入权限，请重新授权" }, true);
+    // 写进展、提交验收时记是哪种工具写的；本机程序的设备令牌（local）只读，到不了写工具。
+    const writer = identity.client === "local" ? null : identity.client;
     let itemId: string | undefined;
     let code: string | undefined;
     try {
@@ -182,6 +209,13 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
       }
       if (missionCardDefinitions.some((definition) => definition.name === tool) && !roles.member && !roles.ceo) {
         code = "FORBIDDEN"; return result({ code, message: "这个工具只对成员或 CEO 开放" }, true);
+      }
+      // 项目钥匙的项目动作（17.2 第 38 条）：照本人的伙伴授权执行（写的要完全授权、记审计），调用次数照上面每把钥匙每分钟的上限算。
+      if (identity.project && deps.projectTurns && isProjectTool(tool)) {
+        if (!roles.member) { code = "FORBIDDEN"; return result({ code, message: "这个工具只对成员开放" }, true); }
+        const outcome = await callProjectTool(deps.projectTurns, { personId: person.personId, projectId: identity.project.projectId }, tool, args, randomUUID());
+        if (outcome.isError) code = (outcome.value as { code: string }).code;
+        return result(outcome.value, outcome.isError);
       }
       const names = deps.names();
       if (qualityDefinitions.some(definition => definition.name === tool)) {
@@ -194,13 +228,34 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
         if (call.name === "get_task_repair_handoff") return result(await deps.chat.quality(viewer, randomUUID(), `/proposals/${call.arguments.proposalId}/handoff`, TaskRepairHandoff, undefined, extra.signal));
         return result(await deps.chat.quality(viewer, randomUUID(), `/proposals/${call.arguments.proposalId}/receipts`, TaskRepairView, call.arguments.receipt, extra.signal));
       }
+      // 约定与对表（mcpAgreements.ts）：成员和 CEO 都列，谁能看、谁能交在里面按人和 Task 的关系判；参数不合法落到最后的 INVALID_INPUT。
+      if (agreementToolNames.has(tool)) {
+        if (!roles.member && !roles.ceo) { code = "FORBIDDEN"; return result({ code, message: "这个工具只对成员或 CEO 开放" }, true); }
+        const outcome = await callAgreementTool({ pool: deps.pool, q: deps.q, now: deps.now, planTasks: deps.planTasks, names, publicOrigin: deps.publicOrigin,
+          deliverables: deps.deliverables }, { personId: person.personId, isCeo: roles.ceo }, tool, args);
+        if (outcome) { code = outcome.error; return result(outcome.value, !!outcome.error); }
+      }
+      // Task 上下文（mcpTaskContext.ts）：成员和 CEO 都能用，本机程序的设备令牌也能用（只读）；谁能看照约定判，本体按本人授权读。
+      if (tool === TASK_CONTEXT_TOOL.name) {
+        if (!roles.member && !roles.ceo) { code = "FORBIDDEN"; return result({ code, message: "这个工具只对成员或 CEO 开放" }, true); }
+        const outcome = await readTaskContext({ q: deps.q, now: deps.now, planTasks: deps.planTasks, names, company: deps.company },
+          { personId: person.personId, isCeo: roles.ceo }, args, extra.signal);
+        if (outcome) { code = outcome.error; return result(outcome.value, !!outcome.error); }
+      }
+      // 联网搜索（mcpWebSearch.ts）：成员和 CEO 都能用，本机程序的设备令牌也能用；每人每分钟、每天有上限，每真搜一次记一行。
+      if (tool === WEB_SEARCH_TOOL.name) {
+        if (!deps.search || (!roles.member && !roles.ceo)) { code = "FORBIDDEN"; return result({ code, message: "这个工具只对成员或 CEO 开放" }, true); }
+        const outcome = await runWebSearch({ q: deps.q, search: deps.search, now: deps.now() }, { personId: person.personId, client: identity.client }, args, extra.signal);
+        if (!outcome.ok) { code = outcome.code; return result({ code: outcome.code, message: outcome.message }, true); }
+        return result(outcome.value);
+      }
       const ceoContext = () => ({ q: deps.q, secret: deps.pepper, now: deps.now(), names,
         people: deps.people(), personId: identity.personId });
       switch (tool) {
         case "list_pending": {
           if (!Value.Check(EmptyInput, args)) break;
-          const pending = roles.ceo ? await listPending(ceoContext()) : { items: [] };
-          const review = await getCurrentPersonalReview(deps.q, identity.personId);
+          const pending = roles.ceo ? await listPending(ceoContext(), Boolean(deps.monthlyCycle)) : { items: [] };
+          const review = deps.monthlyCycle ? await getCurrentPersonalReview(deps.q, identity.personId) : null;
           return result({ items: [...pending.items, ...(review && !["submitted", "skipped"].includes(review.status) ? [{
             kind: "personal-review", id: review.id, title: `${Number(review.period.slice(5))} 月个人复盘`, status: review.status,
             version: review.version, href: personalReviewHref(review.id, roles.ceo),
@@ -300,7 +355,7 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
           if (!Value.Check(AppendInput, args)) break;
           if (!(args.body as string).trim()) { code = "INVALID_INPUT"; return result({ code, message: "请填写进展正文" }, true); }
           itemId = args.itemId as string;
-          const saved = await appendTaskProgress(deps.pool, itemId, identity.personId, identity.client,
+          const saved = await appendTaskProgress(deps.pool, itemId, identity.personId, writer!,
             { body: args.body as string, links: args.links as { url: string; title?: string }[] | undefined,
               clientEventId: args.clientEventId as string | undefined ?? randomUUID() }, names, identity.tokenId);
           if ("error" in saved) { code = saved.error.code; return result(saved.error, true); }
@@ -310,7 +365,7 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
           if (!Value.Check(StatusInput, args)) break;
           itemId = args.itemId as string;
           if (args.status === "done") {
-            const submitted = await submitMyTaskForAcceptance(deps.pool, identity.personId, itemId, { version: args.version as number }, identity.client, names, deps.now());
+            const submitted = await submitMyTaskForAcceptance(deps.pool, identity.personId, itemId, { version: args.version as number }, writer!, names, deps.now());
             if ("notFound" in submitted) { code = "TASK_NOT_FOUND"; return result({ code, message: "找不到这件执行事项" }, true); }
             if ("conflict" in submitted) { code = "VERSION_CONFLICT"; return result({ code, message: "版本已变化，请读取最新状态后重试", currentVersion: submitted.conflict.version, currentStatus: submitted.conflict.status }, true); }
             if ("error" in submitted) { code = submitted.error.code; return result(submitted.error, true); }
@@ -327,7 +382,7 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
           if (!Value.Check(SubmitInput, args)) break;
           const input = args as typeof SubmitInput.static;
           itemId = input.itemId;
-          const submitted = await submitMyTaskForAcceptance(deps.pool, identity.personId, itemId, input, identity.client, names, deps.now());
+          const submitted = await submitMyTaskForAcceptance(deps.pool, identity.personId, itemId, input, writer!, names, deps.now());
           if ("notFound" in submitted) {
             const readable = await canReadTask(deps.q, itemId, identity.personId);
             code = readable ? "FORBIDDEN" : "TASK_NOT_FOUND";
@@ -377,7 +432,7 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
             verdict: input.verdict ?? submission?.verdict ?? null,
             standards: input.standards?.map((check) => ({ ...check, evidence: check.evidence ?? null, materialId: check.materialId ?? null })) ?? submission?.standards ?? [],
             deliverableMaterialIds: input.deliverables ?? submission?.deliverableMaterialIds ?? [] },
-          names, deps.now(), { client: identity.client, userConfirmation: input.userConfirmation });
+          names, deps.now(), { client: writer!, userConfirmation: input.userConfirmation });
           const failed = taskFailure(accepted);
           if (failed || !("task" in accepted)) { code = failed?.code ?? "INTERNAL"; return result(failed, true); }
           return result({ status: accepted.task.status, version: accepted.task.version });

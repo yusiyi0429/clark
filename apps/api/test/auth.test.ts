@@ -4,7 +4,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setMemberAccess } from "../src/memberAccess.js";
-import { readSessionToken } from "../src/session.js";
+import { createSessionToken, readSessionToken } from "../src/session.js";
 import type { Query } from "../src/meetingStore.js";
 import { TEST_CEO, TEST_MEMBER, createTestApp, type TestApp } from "./helpers.js";
 
@@ -83,6 +83,40 @@ describe("登录 ID + 4 位口令", () => {
       await setMemberAccess(queryOf(t), { personId: TEST_MEMBER.personId, loginId: TEST_MEMBER.loginId, passcode: "9173", mustChange: true });
       const session = await t.app.inject({ method: "GET", url: "/api/auth/session", headers: { cookie: member } });
       expect(session.json()).toEqual({ authenticated: false });
+    } finally {
+      await t.close();
+    }
+  });
+
+  it("用着就续期（设计 19 节第 8 条）：会话签出来超过一小时，回应换一张有效期重新算满的；刚签的不重签；退出登录不被续回来；凭据版本变了的不续", async () => {
+    const t = await createTestApp();
+    const secret = "test-session-secret";
+    const maxAge = 60 * 60 * 8;
+    try {
+      const fresh = await t.memberCookie();
+      expect((await t.app.inject({ method: "GET", url: "/api/auth/session", headers: { cookie: fresh } })).headers["set-cookie"]).toBeUndefined();
+
+      // 两小时前签的：还剩 maxAge - 2 小时。用一次就换一张满的，人、凭据版本、视角都不变。
+      const claims = readSessionToken(secret, fresh.split("=")[1])!;
+      const old = `warmap_session=${createSessionToken(secret, maxAge - 2 * 60 * 60, { pid: claims.pid, v: claims.v, ...(claims.view ? { view: claims.view } : {}) })}`;
+      const used = await t.app.inject({ method: "GET", url: "/api/me/appearance", headers: { cookie: old } });
+      expect(used.statusCode).toBe(200);
+      const setCookie = String(used.headers["set-cookie"]);
+      expect(setCookie).toContain(`Max-Age=${maxAge}`);
+      const renewed = readSessionToken(secret, cookieOf(setCookie).split("=")[1])!;
+      expect(renewed).toMatchObject({ pid: claims.pid, v: claims.v, view: claims.view });
+      expect(renewed.exp - Math.floor(Date.now() / 1000)).toBeGreaterThan(maxAge - 60);
+      expect((await t.app.inject({ method: "GET", url: "/api/auth/session", headers: { cookie: cookieOf(setCookie) } })).json()).toMatchObject({ authenticated: true });
+
+      // 退出登录只清会话，不会被续回来。
+      const out = await t.app.inject({ method: "POST", url: "/api/auth/logout", headers: { cookie: old, origin: t.publicOrigin } });
+      expect(String(out.headers["set-cookie"])).toContain("Max-Age=0");
+
+      // 管理员重置（凭据版本加一）：旧会话失效，也不续。
+      await setMemberAccess(queryOf(t), { personId: TEST_MEMBER.personId, loginId: TEST_MEMBER.loginId, passcode: "9173", mustChange: true });
+      const dead = await t.app.inject({ method: "GET", url: "/api/auth/session", headers: { cookie: old } });
+      expect(dead.json()).toEqual({ authenticated: false });
+      expect(dead.headers["set-cookie"]).toBeUndefined();
     } finally {
       await t.close();
     }

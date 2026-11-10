@@ -138,7 +138,8 @@ async function main() {
   let clockAnchor = Date.now();
   const appNow = () => new Date(now.getTime() + Date.now() - clockAnchor);
   applicationNow = appNow;
-  app = await createTestApp({ companyPeopleSeed: peopleFile, companyName: "天枢（手动测试）", missionCardDraftsDir: join(root, "seed/placeholders") }, {
+  // 云端拆卡和云端验收（BOARD_CLOUD_AGENTS）缺省关；本机程序接上规划员、验收员之前，手动测试环境（模拟本机走的是云端拆卡）先开着。
+  app = await createTestApp({ companyPeopleSeed: peopleFile, companyName: "天枢（手动测试）", missionCardDraftsDir: join(root, "seed/placeholders"), boardCloudAgents: true }, {
     async run(input) {
       const answer = "这是隔离验收中的私人只读回复。公开意见请在事项群组发表；这段私聊不会进入集中 Review。";
       input.emit({ type: "message", delta: answer });
@@ -146,6 +147,27 @@ async function main() {
     },
   }, {
     monthlyNow: appNow,
+    // 本体 Task：时间机器不连本体，每个 Mission 给两件，负责人是 Mission 负责人（新首页的项目、本月、挂到…要有 Task 才走得通）。
+    planTasks: async (missions) => {
+      const pool = [
+        ["约定与对表", "每条标准写清用什么证明、谁来认", ["约定写清每条标准用什么证明、谁来认", "对表能说出还差哪几条"]],
+        ["本机派活跑通", "派活单开工、验收员逐条判", ["派活单一次开工，同时最多 3 个", "验收员逐条判，没过送回重做", "合回主分支"]],
+        ["伙伴接入", "伙伴 API、本体上下文与会议回流", ["伙伴 API 接上，首句两秒内", "答案带本体出处"]],
+        ["交接清单", "跨人员交接能被非当事人核对", ["交接清单覆盖三个场景", "一次非当事人回看"]],
+      ] as const;
+      // 按全部 Mission 的 id 排序编号，同一个 Mission 不管从哪组读都拿到同两件。
+      const rows = await app!.sql("SELECT id,owner_id,row_number() OVER (ORDER BY id)::int AS n FROM missions WHERE id=ANY($1::text[])", [missions.map((mission) => mission.id)]) as { id: string; owner_id: string; n: number }[];
+      return rows.flatMap((row) => [0, 1].map((k) => {
+        const [name, done, criteria] = pool[(row.n * 2 + k) % pool.length];
+        return { taskId: `${row.id}-t${k + 1}`, missionId: row.id, name, doneDefinition: done, criteria: [...criteria], responsibleId: row.owner_id };
+      }));
+    },
+    // 拆卡：时间机器没有模型，规划员给三张卡（两张给 Claude Code、一张本人做）。
+    boardAgents: { plan: { async plan(input) {
+      const role = input.roles[0]?.id ?? null;
+      const card = (title: string, criterionIndex: number, executor: "claude_code" | "self") => ({ title, brief: `${title}。`, standards: [`${title}能跑通`], criterionIndex, executor, roleId: executor === "self" ? null : role, suggestPresetKey: null, why: "按标准拆" });
+      return { cards: [card("派活单一次开工的接口", 1, "claude_code"), card("验收员没过时送回重做", 2, "claude_code"), card("和晨星对一下合回的时机", 3, "self")] };
+    } } },
     // 材料批注：时间机器没有模型，演示规则——批注写「改成 X」就把选中的文字换成 X，写「删掉 / 删除」就删掉，其他说看不懂。
     materialAnnotationAgent: { async generate(input) {
       await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -257,11 +279,8 @@ async function main() {
           { battlefieldId: "product", outcome: "完成 CEO 与 DRI 双视角走查，按人核对四张任务卡与五条讨论意见。" }])]);
     }
     if (stage === "issued") {
-      const { value, headers } = await projectAs("browserceo", `/api/cards/monthly-plans/${planId}`);
-      const sign = value.cards[0].actions.find((action: { actionType: string }) => action.actionType === "monthly-plan.sign");
-      if (!sign) throw new Error("Fixture plan cannot be signed");
-      const result = await app!.app.inject({ method: "POST", url: "/api/actions/execute", headers, payload: { actionId: sign.actionId, input: {} } });
-      if (result.statusCode !== 200) throw new Error(`Fixture plan signing failed: ${result.statusCode}`);
+      // 不走签发动作：签发会立刻给三个战场自动起草任务卡，和下面王路遥的预置轮次、README 里的手动 draft 冲突。
+      await app!.sql("UPDATE monthly_plans SET status='confirmed', confirmed_at=$2, version=version+1 WHERE id=$1", [planId, appNow()]);
       luyaoTasks = (await seedWangLuyao(app!,planId,appNow(),"8742",TEST_CEO.personId)).tasks;
     }
     metadata = { ...metadata, planStage: stage, planSigned: stage === "issued" };
@@ -290,6 +309,43 @@ async function main() {
   // TM_PLAN_STAGE=negotiating：停在未签发，好在界面上亲手签发（签发后系统自动起草，见 ADR-0026）。
   const initialStage = process.env.TM_PLAN_STAGE === "negotiating" ? "negotiating" : "issued";
   await setPlanStage(initialStage);
+  await seedProjects();
+  /**
+   * 新首页的项目（都走接口）：读一次首页，按 Mission 建项目、挂上本人的 Task；孙铭泽取下一件（「本月」里等挂到…）；
+   * 王路遥把一个项目交给孙铭泽、孙铭泽接手（孙铭泽的目标条上那几件负责人是王路遥）。王路遥只在目标签发后才有（TM_PLAN_STAGE=negotiating 时跳过）。
+   */
+  async function seedProjects() {
+    async function as(loginId: string) {
+      const login = await app!.app.inject({ method: "POST", url: "/api/auth/login", headers: { origin: testEnv.publicOrigin }, payload: { loginId, passcode: "8742" } });
+      if (login.statusCode !== 200) throw new Error(`Synthetic login failed: ${login.statusCode}`);
+      let headers = { cookie: String(login.headers["set-cookie"]).split(";")[0], origin: testEnv.publicOrigin };
+      // CEO 兼 DRI（王路遥）登录后在 CEO 工作台，项目接口要先切到 DRI 工作台。
+      if ((login.json() as { role?: string }).role === "ceo") {
+        const view = await app!.app.inject({ method: "POST", url: "/api/auth/view", headers, payload: { view: "member" } });
+        if (view.statusCode !== 200) throw new Error(`Synthetic view switch failed: ${view.statusCode}`);
+        headers = { ...headers, cookie: String(view.headers["set-cookie"]).split(";")[0] };
+      }
+      return async (method: "GET" | "POST" | "PATCH" | "DELETE", url: string, payload?: unknown) => {
+        const response = await app!.app.inject({ method, url, headers, payload: payload as never });
+        if (response.statusCode >= 300) throw new Error(`Fixture ${method} ${url} failed: ${response.statusCode} ${response.body.slice(0, 250)}`);
+        return response.body ? response.json() : null;
+      };
+    }
+    type Home = { projects: { projectId: string; name: string; goals: { taskId: string }[] }[] };
+    const member = await as("browsermember");
+    const own = (await member("GET", "/api/me/work-home") as Home).projects.filter((project) => project.goals.length >= 2);
+    if (own[0]) await member("DELETE", `/api/me/projects/${own[0].projectId}/goals/${own[0].goals[1].taskId}`);
+    if (!luyaoTasks) return;
+    const luyao = await as(LUYAO.loginId);
+    const given = (await luyao("GET", "/api/me/work-home") as Home).projects.find((project) => project.goals.length);
+    if (!given) return;
+    const transfer = await luyao("POST", `/api/me/projects/${given.projectId}/transfers`, { toPersonId: "sun-mingze" }) as { id: string };
+    await luyao("PATCH", `/api/me/project-transfers/${transfer.id}`, { note: [
+      { title: "到哪了", lines: ["约定写完了，对表还差两条"] }, { title: "没做完的事", lines: ["对表能说出还差哪几条", "补一次非当事人回看"] }, { title: "可以问谁", lines: ["王路遥"] },
+    ] });
+    await luyao("POST", `/api/me/project-transfers/${transfer.id}/send`);
+    await member("POST", `/api/me/project-transfers/${transfer.id}/accept`);
+  }
   async function roundAction(actionType: string, input: Record<string, unknown> = {}) {
     const { value, headers } = await projectAs("browserceo", "/api/cards/home");
     const round = value.cards.find((card: { kind: string; objectRef?: { type?: string }; payload?: { battlefieldId?: string } }) => card.kind === "mission-round" && card.objectRef?.type === (actionType === "draft" ? "mission-round-slot" : "mission-round") && card.payload?.battlefieldId === "growth");

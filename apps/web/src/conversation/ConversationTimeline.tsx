@@ -1,10 +1,11 @@
 "use client";
 
 import { useMemo } from "react";
-import { ConversationStatusSlot, ConversationThinking, ConversationTurns } from "./Transcript";
+import { ConversationStatusSlot, ConversationThinking, ConversationTurns, ResendContext } from "./Transcript";
 import { AnswerOptions } from "./AnswerOptionRow";
 import { EntryCards } from "./EntryCards";
-import { AskContext } from "./AskPanel";
+import { PlanChecklist } from "@/components/cards/PlanChecklist";
+import { AskContext, askAnswers } from "./AskPanel";
 import { parseAnswerOptions } from "./answerOptions";
 import { RescopeContext } from "./ScopeChip";
 import type { ConversationData, Message } from "./useConversation";
@@ -43,19 +44,23 @@ export function ConversationTimeline({ data }: { data: ConversationData }) {
   const options = !data.streaming && last?.role === "assistant" ? parseAnswerOptions(last.content).options : [];
   const latestCards = useMemo(() => withoutSupersededCards(data.messages), [data.messages]);
   // 提问卡：哪几组已经回答过（本人的作答消息带着问答记录，刚发出、还没读回的那句也算）。
-  const ask = useMemo(() => ({ send: data.send, streaming: data.streaming,
-    answered: new Set(data.messages.flatMap((message) => (message.answers ? [message.answers.askId] : []))) }), [data.send, data.streaming, data.messages]);
+  const ask = useMemo(() => ({ send: data.send, streaming: data.streaming, ...askAnswers(data.messages) }), [data.send, data.streaming, data.messages]);
   // 状态区：回答进行中一直占着位置。
   const status = data.streaming ? (
     <ConversationStatusSlot>
       {data.thinking ? <ConversationThinking stage={data.stage} startedAt={data.startedAt} onStop={data.stop} route={data.route} progress={data.progress} steps={data.steps} thought={data.thought} readScope={data.readScope} /> : null}
+      {/* 伙伴这一轮的计划清单和出的卡（17.4）：写完读回历史后挂在那条回答上。 */}
+      {data.plan ? <PlanChecklist entries={data.plan.entries} collapsed={data.plan.collapsed} /> : null}
+      {data.turnCards?.length ? <EntryCards cards={data.turnCards} /> : null}
     </ConversationStatusSlot>
   ) : null;
   // 范围标签改范围后按新范围重读：回答进行中不能点。
+  const resend = useMemo(() => (data.resend ? (message: Parameters<typeof data.resend>[0]) => void data.resend(message) : null), [data.resend]);
   const rescope = useMemo(() => ({ rescope: (params: Parameters<typeof data.rescope>[0], label: string) => void data.rescope(params, label), busy: data.streaming }),
     [data.rescope, data.streaming]);
   return (
     <RescopeContext.Provider value={rescope}>
+    <ResendContext.Provider value={resend}>
     <AskContext.Provider value={ask}>
     <ConversationTurns messages={data.messages} partial={data.streaming ? data.partial : ""} status={status}
       thought={data.thought?.seconds != null ? { text: data.thought.text, seconds: data.thought.seconds } : null}
@@ -63,9 +68,15 @@ export function ConversationTimeline({ data }: { data: ConversationData }) {
       footer={(index) => (index === lastIndex && options.length ? <AnswerOptions scope={data.scope} options={options} /> : null)}
       after={(index) => {
         const cards = latestCards[index];
-        return cards?.length ? <EntryCards cards={cards} createdAt={data.messages[index].createdAt} /> : null;
+        const plan = data.messages[index].plan;
+        if (!plan && !cards?.length) return null;
+        return <>
+          {plan ? <PlanChecklist entries={plan.entries} collapsed={plan.collapsed} /> : null}
+          {cards?.length ? <EntryCards cards={cards} createdAt={data.messages[index].createdAt} /> : null}
+        </>;
       }} />
     </AskContext.Provider>
+    </ResendContext.Provider>
     </RescopeContext.Provider>
   );
 }

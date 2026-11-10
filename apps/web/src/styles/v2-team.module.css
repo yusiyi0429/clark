@@ -1,0 +1,9 @@
+/*
+ * 老地址 /me/team 的外壳（components/team/TeamPage）：里面是新首页的二级页 RolesPage，这里只管页面底、正文列和标题。
+ * 和新首页二级页同一套：实心底、正文列 600、区块之间 24。
+ */
+.page { height: 100%; overflow-y: auto; background: var(--surface); }
+.wrap { display: grid; gap: var(--space-6); max-width: var(--doc-measure); margin: 0 auto; padding: var(--space-6) var(--space-6) var(--space-8); }
+.top { display: flex; align-items: center; gap: var(--space-3); }
+.top h1 { margin: 0; color: var(--ink); font-size: var(--text-lg, 16px); font-weight: 600; line-height: 24px; }
+@media (max-width: 759px) { .wrap { padding-inline: var(--space-4); } }

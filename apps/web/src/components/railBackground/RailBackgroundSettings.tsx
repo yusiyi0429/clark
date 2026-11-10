@@ -15,8 +15,8 @@ const PRESETS: { choice: Exclude<RailBackgroundChoice, "custom">; label: string 
   { choice: "sand", label: "暖沙" },
 ];
 
-export function RailBackgroundSettings() {
-  const current = useRailBackground();
+export function RailBackgroundSettings({ personId }: { personId: string | null | undefined }) {
+  const current = useRailBackground(personId);
   const [busy, setBusy] = useState<RailBackgroundChoice | "upload" | null>(null);
   const [error, setError] = useState("");
   const file = useRef<HTMLInputElement>(null);

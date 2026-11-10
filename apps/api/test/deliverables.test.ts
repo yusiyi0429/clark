@@ -38,11 +38,12 @@ async function fixture() {
   const reviews: { input: ReviewAgentInput; images: { mimeType: string; data: string }[] }[] = [];
   const notes: unknown[] = [];
   const links: string[] = [];
+  let now = NOW;
   let reviewImpl: DeliverableReviewAgent["review"] = async (input, { onProgress }) => { onProgress?.(input.criteria.length, true); return judge(input); };
   const review: DeliverableReviewAgent = { review: (input, options) => { reviews.push({ input, images: options.images }); return reviewImpl(input, options); } };
   const note: DeliverableNoteAgent = { async write(input) { notes.push(input); return { achieved: "v1 达成了：方案定稿", gain: "两条都有材料", why: null, lesson: "先拿题库打分" }; } };
   const t = await createTestApp({ companyPeopleSeed: PEOPLE_SEED, materialStorageDir: storage }, undefined, {
-    monthlyNow: () => NOW,
+    monthlyNow: () => now,
     planTasks: async (missions) => TASKS.filter((task) => missions.some((mission) => mission.id === task.missionId)),
     deliverableAgents: { review, note },
     deliverableFetcher: async (url) => { links.push(url); return url.includes("broken") ? null : { text: `网页正文：有题库打分结果，来自 ${url}`, images: [] }; },
@@ -78,6 +79,7 @@ async function fixture() {
     return (login.headers["set-cookie"] as string).split(";")[0];
   };
   return { t, call, upload, read, status, third, reviews, notes, links, setReview: (impl: typeof reviewImpl) => { reviewImpl = impl; },
+    setNow: (value: Date) => { now = value; },
     close: async () => { await t.close(); await rm(storage, { recursive: true, force: true }); } };
 }
 type Fixture = Awaited<ReturnType<typeof fixture>>;
@@ -255,6 +257,20 @@ describe("Task 交付物", () => {
       expect(after).toMatchObject({ status: "done", ready: true, score: 100, headline: "1 条都达到了" });
       expect(after.criteria[0]).toMatchObject({ verdict: "met", dissent: null });
       expect(after.criteria[1]).toMatchObject({ verdict: "met", dissent: { reason: "录屏见附件第 2 页", upheld: true } });
+    } finally { await f.close(); }
+  });
+
+  it("不同意以后重评：用时从点「我不同意」那一刻算，不接着第一次评审（PR #80 走查）", async () => {
+    const f = await fixture();
+    try {
+      const version = (await f.upload("task-open", { files: [["方案.md", "有题库打分结果"]] })).json();
+      const first = (await f.read("task-open")).versions[0].review;
+      expect(first).toMatchObject({ status: "done", startedAt: NOW.toISOString(), finishedAt: NOW.toISOString() });
+      const later = new Date(NOW.getTime() + 2 * 60 * 60_000);
+      f.setNow(later);
+      const started = await f.call("POST", `/api/plan-tasks/task-open/deliverable/versions/${version.id}/criteria/2/dissent`, { reason: "录屏见附件第 2 页" });
+      expect(started.json().review).toMatchObject({ status: "running", startedAt: later.toISOString(), finishedAt: null });
+      expect((await f.read("task-open")).versions[0].review).toMatchObject({ status: "done", startedAt: later.toISOString(), finishedAt: later.toISOString() });
     } finally { await f.close(); }
   });
 
