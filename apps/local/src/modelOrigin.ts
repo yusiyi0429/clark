@@ -52,7 +52,7 @@ const MAGPIE_PREFIX: Record<string, { provider: string; label: string }> = {
 
 export function modelOrigin(p: { source: "subscription" | "gateway"; baseUrl: string | null; model: string | null; agent?: string }): TLocalModelOrigin {
   if (p.source === "subscription" && p.agent === "codex") return { provider: "codex", label: "Codex 订阅", via: null };
-  if (p.source === "subscription") return { provider: "claude-subscription", label: "我的 Claude 订阅", via: null };
+  if (p.source === "subscription") return { provider: "claude-subscription", label: "Claude 订阅", via: null };
   const url = urlOf(p.baseUrl);
   if (isMagpie(p.baseUrl)) {
     const slash = (p.model ?? "").indexOf("/");

@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import type { TLocalEffort, TLocalModelOrigin, TLocalModelProfile, TLocalModelProfileUpsert, TLocalModelTier } from "@warmap/contracts";
+import { claudeProfileId, isClaudeProfileId, type ClaudeModel } from "./claudeCatalog.js";
 import { codexProfileId, isCodexProfileId, type CodexModel } from "./codexCatalog.js";
 import { isLoopback, isMagpie, modelOrigin } from "./modelOrigin.js";
 import { readJson, writeJsonAtomic } from "./store.js";
@@ -31,8 +32,8 @@ const effortsOf = (p: Entry): TLocalEffort[] => p.efforts ?? (p.agent === "claud
 /** magpie 不认钥匙：照它的约定传 magpie（本人没填时）。 */
 const MAGPIE_KEY = "magpie";
 
-type Stored = Omit<TLocalModelProfile, "hasKey" | "origin" | "efforts" | "defaultEffort" | "catalog">;
-/** 本人配的，或 Codex 模型目录里现列的（带能选的几档和默认档）。 */
+type Stored = Omit<TLocalModelProfile, "hasKey" | "origin" | "efforts" | "defaultEffort" | "catalog" | "modelName">;
+/** 本人配的，或执行方模型目录里现列的（带能选的几档和默认档）。 */
 type Entry = Stored & { efforts?: TLocalEffort[]; defaultEffort?: TLocalEffort | null; catalog?: true };
 
 /** Codex 模型目录里的一个模型 → 模型配置（只读）。 */
@@ -41,8 +42,16 @@ const fromCatalog = (m: CodexModel): Entry => ({
   webSearch: true, isDefault: false, efforts: m.efforts, defaultEffort: m.defaultEffort, catalog: true,
 });
 
+/** Claude 订阅模型目录里的一个模型 → 模型配置（只读）：model 原样传给 --model。 */
+const fromClaudeCatalog = (m: ClaudeModel): Entry => ({
+  id: claudeProfileId(m.model), label: m.label, source: "subscription", agent: "claude-code", baseUrl: null, model: m.model, smallModel: null,
+  webSearch: true, isDefault: false, efforts: m.efforts, defaultEffort: null, catalog: true,
+});
+
+/** 内置的那条不指定模型（本机按档位和预算模式挑）：选模型时「模型」那一行叫「自动」。 */
+const AUTO_MODEL_NAME = "自动";
 const builtIn: Stored = {
-  id: SUBSCRIPTION_ID, label: "我的 Claude 订阅", source: "subscription", agent: "claude-code",
+  id: SUBSCRIPTION_ID, label: "Claude 订阅", source: "subscription", agent: "claude-code",
   baseUrl: null, model: null, smallModel: null, webSearch: true, isDefault: true,
 };
 
@@ -88,7 +97,10 @@ export class ModelProfiles {
   private readonly file: string;
   /** 别名在这台电脑上实际跑出来是哪一版（opus → claude-opus-5-5）：开工前写「Opus 5.5」用。 */
   private readonly aliasFile: string;
-  constructor(dataDir: string, private readonly secrets: SecretStore, private readonly codex: { list(): CodexModel[] } | null = null) {
+  constructor(
+    dataDir: string, private readonly secrets: SecretStore, private readonly codex: { list(): CodexModel[] } | null = null,
+    private readonly claude: { list(): ClaudeModel[] } | null = null,
+  ) {
     this.file = join(dataDir, "models.json");
     this.aliasFile = join(dataDir, "model-aliases.json");
   }
@@ -116,15 +128,21 @@ export class ModelProfiles {
     return [{ ...builtIn, isDefault: !hasDefault }, ...list];
   }
 
-  /** 本人配的，加上 Codex 模型目录里现列的。 */
+  /** 本人配的，加上 Claude 订阅、Codex 订阅模型目录里现列的。 */
   private all(): Entry[] {
-    return [...this.stored(), ...(this.codex?.list() ?? []).map(fromCatalog)];
+    return [...this.stored(), ...(this.claude?.list() ?? []).map(fromClaudeCatalog), ...(this.codex?.list() ?? []).map(fromCatalog)];
+  }
+
+  /** 给人看的模型名（契约 LocalModelProfile.modelName）。 */
+  private modelNameOf(p: Entry): string {
+    if (p.catalog) return p.label;
+    return p.model ? this.displayName(p.model) : p.id === SUBSCRIPTION_ID ? AUTO_MODEL_NAME : p.label;
   }
 
   async list(): Promise<TLocalModelProfile[]> {
     const out: TLocalModelProfile[] = [];
     for (const p of this.all()) {
-      out.push({ ...p, origin: modelOrigin(p), efforts: effortsOf(p), defaultEffort: p.defaultEffort ?? null, catalog: Boolean(p.catalog), webSearch: p.webSearch ?? searchDefault(p.source, p.model), hasKey: p.source === "gateway" ? Boolean(await this.secrets.get(keyName(p.id))) : false });
+      out.push({ ...p, origin: modelOrigin(p), modelName: this.modelNameOf(p), efforts: effortsOf(p), defaultEffort: p.defaultEffort ?? null, catalog: Boolean(p.catalog), webSearch: p.webSearch ?? searchDefault(p.source, p.model), hasKey: p.source === "gateway" ? Boolean(await this.secrets.get(keyName(p.id))) : false });
     }
     return out;
   }
@@ -132,6 +150,7 @@ export class ModelProfiles {
   async upsert(id: string, body: TLocalModelProfileUpsert): Promise<TLocalModelProfile> {
     if (id === SUBSCRIPTION_ID) throw new Error("内置的订阅配置不能改");
     if (isCodexProfileId(id)) throw new Error("Codex 的模型从它自己的模型目录来，不能改");
+    if (isClaudeProfileId(id)) throw new Error("Claude 订阅的模型从它自己的模型目录来，不能改（cc- 开头的 id 留给它）");
     if (body.agent === "codex") throw new Error("Codex 的模型从它自己的模型目录来，不用配");
     const gateway = body.source === "gateway";
     if (gateway && !body.baseUrl) throw new Error("网关模型要填地址");

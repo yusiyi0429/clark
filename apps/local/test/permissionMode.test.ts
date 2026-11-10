@@ -54,6 +54,40 @@ describe("每一档本机自己放行什么", () => {
     expect(allows("acceptEdits", "Write", { file_path: join(tree, "b.txt"), content: "x" }, tree)).toBe(true);
     expect(allows("acceptEdits", "Write", write, tree)).toBe(false);
   });
+  it("卡在工作树里、项目另外还绑着文件夹（17.2 第 46 条）：那里照「不在工作树里」的规矩——改文件的工具、读的命令放行，写删挪的命令问；别的允许的文件夹照样问", () => {
+    const tree = join(folder, "tree");
+    const docs = join(folder, "docs");
+    const other = join(folder, "other"); // 本人允许着，但不是这个项目另外绑的
+    for (const d of [tree, docs, other]) mkdirSync(d, { recursive: true });
+    const withDocs: PathScope = { ...scope, extraDirs: () => [docs] };
+    const ok = (mode: Parameters<typeof modeAllows>[0], tool: string, input: Record<string, unknown>, s: PathScope = withDocs) => modeAllows(mode, tool, input, s, undefined, tree);
+    const inDocs = { file_path: join(docs, "a.md"), content: "x" };
+    expect(ok("auto", "Write", inDocs)).toBe(true);
+    expect(ok("acceptEdits", "Edit", { file_path: join(docs, "a.md"), old_string: "x", new_string: "y" })).toBe(true);
+    expect(ok("auto", "Read", { file_path: join(docs, "a.md") })).toBe(true);
+    expect(ok("auto", "Bash", { command: `cat ${sh(join(docs, "a.md"))}` })).toBe(true);
+    // 那里没有工作树兜底：用命令写、删、挪的问；从工作树往那里拷也问
+    expect(ok("auto", "Bash", { command: `rm ${sh(join(docs, "a.md"))}` })).toBe(false);
+    expect(ok("auto", "Bash", { command: `echo x > ${sh(join(docs, "a.md"))}` })).toBe(false);
+    expect(ok("auto", "Bash", { command: `cp ${sh(join(tree, "a.txt"))} ${sh(join(docs, "a.txt"))}` })).toBe(false);
+    expect(ok("acceptEdits", "Bash", { command: `cat ${sh(join(docs, "a.md"))}` })).toBe(false);
+    // WRITES 认不出、但一样会冲掉那里没提交的改动的：git、就地改文件的，也问
+    for (const command of [`git -C ${sh(docs)} reset --hard`, `git -C ${sh(docs)} clean -fdx`, `cd ${sh(docs)} && git checkout -- .`, `sed -i s/a/b/ ${sh(join(docs, "a.md"))}`, `perl -pi -e s/a/b/ ${sh(join(docs, "a.md"))}`]) {
+      expect(ok("auto", "Bash", { command }), command).toBe(false);
+    }
+    expect(ok("auto", "Bash", { command: "git status && git add -A" })).toBe(true); // 工作树里的 git 照旧不问
+    // 工作树里照旧可以删；碰其余目录里的 .git 照样问；每次都问那一档照样问
+    expect(ok("auto", "Bash", { command: `rm ${sh(join(tree, "a.txt"))}` })).toBe(true);
+    expect(ok("auto", "Write", { file_path: join(docs, ".git", "config"), content: "x" })).toBe(false);
+    expect(ok("default", "Write", inDocs)).toBe(false);
+    // 不是这个项目另外绑的：主文件夹、别的允许的文件夹、允许范围以外，都照旧问
+    expect(ok("auto", "Write", write)).toBe(false);
+    expect(ok("auto", "Write", { file_path: join(other, "a.md"), content: "x" })).toBe(false);
+    expect(ok("auto", "Write", { file_path: join(outside, "a.md"), content: "x" })).toBe(false);
+    // 项目没另外绑文件夹（或者减掉了）：和原来一样
+    expect(ok("auto", "Write", inDocs, scope)).toBe(false);
+    expect(ok("auto", "Write", inDocs, { ...scope, extraDirs: () => [] })).toBe(false);
+  });
   it("自动接受改文件：只放改文件的，命令照样问", () => {
     expect(allows("acceptEdits", "Edit", { file_path: join(folder, "a.txt"), old_string: "x", new_string: "y" })).toBe(true);
     expect(allows("acceptEdits", "Bash", { command: "ls" })).toBe(false);

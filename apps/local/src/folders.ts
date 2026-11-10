@@ -3,8 +3,12 @@ import { basename, dirname, join, parse, relative, isAbsolute, resolve } from "n
 import { randomBytes } from "node:crypto";
 import type { TLocalFolder, TLocalProjectFolder } from "@warmap/contracts";
 
-/** 一个项目在这台电脑上绑的文件夹（projects.json）。 */
-interface ProjectBinding { folderId: string | null; name: string | null; updatedAt: string }
+/**
+ * 一个项目在这台电脑上绑的文件夹（projects.json）。folderIds 有顺序，第一个是工作目录（设计 17.2 第 46 条）；
+ * 11/10 以前只记一个 folderId，照读。folderId 接着写（等于第一个）：换回老的本机程序时它还认得工作目录。
+ */
+interface ProjectBinding { folderId: string | null; folderIds?: string[]; name: string | null; updatedAt: string }
+const boundIds = (b: ProjectBinding | undefined): string[] => b?.folderIds ?? (b?.folderId ? [b.folderId] : []);
 import { readJson, writeJsonAtomic, nowIso } from "./store.js";
 import { homeDir } from "./agents/claudeEnv.js";
 
@@ -115,7 +119,7 @@ export class Folders {
   remove(id: string): boolean {
     const list = this.list();
     if (!list.some((f) => f.id === id)) return false;
-    writeJsonAtomic(this.file, list.filter((f) => f.id !== id)); // 绑着它的项目读出来就是没绑（只认还在允许列表里的文件夹）
+    writeJsonAtomic(this.file, list.filter((f) => f.id !== id)); // 绑着它的项目读出来就没有它了（只认还在允许列表里的文件夹）
     return true;
   }
 
@@ -125,34 +129,51 @@ export class Folders {
     return readJson<Record<string, ProjectBinding>>(this.projectsFile, {});
   }
 
+  /** 绑着、而且还在允许的列表里的（删掉的文件夹不算，后面的往前顶）。 */
+  private bound(b: ProjectBinding | undefined, list = this.list()): TLocalFolder[] {
+    return boundIds(b).flatMap((id) => list.find((f) => f.id === id) ?? []);
+  }
+
   private projectView(projectId: string, b: ProjectBinding): TLocalProjectFolder {
-    const f = b.folderId ? this.list().find((x) => x.id === b.folderId) : undefined;
-    return { projectId, name: b.name, folder: f ? { id: f.id, path: f.path, label: f.label } : null, updatedAt: b.updatedAt };
+    const folders = this.bound(b).map((f) => ({ id: f.id, path: f.path, label: f.label }));
+    return { projectId, name: b.name, folder: folders[0] ?? null, folders, updatedAt: b.updatedAt };
   }
 
   projects(): TLocalProjectFolder[] {
     return Object.entries(this.bindings()).map(([id, b]) => this.projectView(id, b));
   }
 
-  /** 绑到一个允许的文件夹（null 是解绑）。文件夹不在允许的列表里回 null。 */
-  bindProject(projectId: string, folderId: string | null, name?: string): TLocalProjectFolder | null {
-    if (folderId && !this.list().some((f) => f.id === folderId)) return null;
+  /** 整份换掉项目绑的文件夹（有顺序，第一个是工作目录；空的是全部解绑）。有一个不在允许的列表里回 null，一个都不改。 */
+  setProjectFolders(projectId: string, folderIds: string[], name?: string): TLocalProjectFolder | null {
+    const list = this.list();
+    if (folderIds.some((id) => !list.some((f) => f.id === id))) return null;
     const bindings = this.bindings();
-    bindings[projectId] = { folderId, name: name ?? bindings[projectId]?.name ?? null, updatedAt: nowIso() };
+    bindings[projectId] = { folderId: folderIds[0] ?? null, folderIds, name: name ?? bindings[projectId]?.name ?? null, updatedAt: nowIso() };
     writeJsonAtomic(this.projectsFile, bindings);
     return this.projectView(projectId, bindings[projectId]!);
   }
 
-  /** 项目在这台电脑上绑的文件夹的路径（没绑、或文件夹已不在允许的列表里为 null）。 */
+  /** 只定工作目录（老网页的写法，选文件夹、新建文件夹、拉仓库带项目时也是）：换掉第一个，其余的不动；null 是全部解绑。不在允许的列表里回 null。 */
+  bindProject(projectId: string, folderId: string | null, name?: string): TLocalProjectFolder | null {
+    if (!folderId) return this.setProjectFolders(projectId, [], name);
+    const rest = this.bound(this.bindings()[projectId]).slice(1).map((f) => f.id).filter((id) => id !== folderId);
+    return this.setProjectFolders(projectId, [folderId, ...rest], name);
+  }
+
+  /** 项目在这台电脑上绑的文件夹的路径，按顺序（第一个是工作目录）；已不在允许的列表里的不算。 */
+  projectFolders(projectId: string): string[] {
+    return this.bound(this.bindings()[projectId]).map((f) => f.path);
+  }
+
+  /** 项目的工作目录（没绑为 null）。 */
   projectFolder(projectId: string): string | null {
-    const id = this.bindings()[projectId]?.folderId;
-    return (id && this.list().find((f) => f.id === id)?.path) || null;
+    return this.projectFolders(projectId)[0] ?? null;
   }
 
   /** 连接页的文件夹列表：每个文件夹挂着哪几个项目。 */
   listWithProjects(): TLocalFolder[] {
     const bindings = Object.entries(this.bindings());
-    return this.list().map((f) => ({ ...f, projects: bindings.filter(([, b]) => b.folderId === f.id).map(([projectId, b]) => ({ projectId, name: b.name })) }));
+    return this.list().map((f) => ({ ...f, projects: bindings.filter(([, b]) => boundIds(b).includes(f.id)).map(([projectId, b]) => ({ projectId, name: b.name })) }));
   }
 
   /** 专题、规划员没给目录时用的专用目录；没绑文件夹的项目，卡在 projects/<项目 id> 里做（都在本机程序的数据目录里）。 */

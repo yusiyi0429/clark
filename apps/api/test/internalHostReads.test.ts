@@ -102,8 +102,8 @@ describe("给独立 Chat 的宿主只读接口", () => {
           const missing = await get(t, url, CEO, role);
           expect([missing.statusCode, missing.json().code]).toEqual([400, "VIEW_REQUIRED"]);
         }
-        // CEO 本人没有 DRI / 参与人角色，用不了成员视角；主持人不是 CEO。
-        expect((await get(t, url, CEO, "member")).json().code).toBe("VIEW_NOT_ALLOWED");
+        // CEO 角色的人能切到工作模式（17.2 第 45 条），成员视角对他放行，哪怕没有 DRI / 参与人角色；主持人不是 CEO，用不了 CEO 视角。
+        expect((await get(t, url, CEO, "member")).json().code).not.toBe("VIEW_NOT_ALLOWED");
         const denied = await get(t, url, HOST, "ceo");
         expect([denied.statusCode, denied.json().code]).toEqual([403, "VIEW_NOT_ALLOWED"]);
       }

@@ -74,8 +74,8 @@ describe("哪个来源的哪个模型", { timeout: 60_000 }, () => {
       conforms(LocalRun, before);
       expect(before).toEqual({
         mode: "auto", model: "opus", effort: "medium", multiAgent: false,
-        source: "subscription", sourceLabel: "我的 Claude 订阅", modelName: "Opus", actual: null,
-        harness: "claude-code", origin: { provider: "claude-subscription", label: "我的 Claude 订阅", via: null },
+        source: "subscription", sourceLabel: "Claude 订阅", modelName: "Opus", actual: null,
+        harness: "claude-code", origin: { provider: "claude-subscription", label: "Claude 订阅", via: null },
       });
       expect(await h.preview({ modelTier: "light" })).toMatchObject({ model: "sonnet", effort: "low", modelName: "Sonnet" });
       expect(await h.preview({ taskBudget: { taskId: "T-9", budget: { mode: "unlimited", hours: null, weeklyPercent: null, money: null } } }))
@@ -84,10 +84,10 @@ describe("哪个来源的哪个模型", { timeout: 60_000 }, () => {
       const a = await h.open("A");
       const s = await until(async () => { const x = await h.session(a.id); return x.run?.actual && x; });
       conforms(LocalSessionSummary, s);
-      expect(s.run).toMatchObject({ source: "subscription", sourceLabel: "我的 Claude 订阅", model: "opus", modelName: "Opus" });
+      expect(s.run).toMatchObject({ source: "subscription", sourceLabel: "Claude 订阅", model: "opus", modelName: "Opus" });
       expect(s.run.actual).toMatchObject({ model: "claude-opus-5-5", modelName: "Opus 5.5" });
       // 同步给云端的 status 也带着（手机看得到）
-      expect(h.statusSynced(a.id).some((d: any) => d.run?.actual?.modelName === "Opus 5.5" && d.run.sourceLabel === "我的 Claude 订阅")).toBe(true);
+      expect(h.statusSynced(a.id).some((d: any) => d.run?.actual?.modelName === "Opus 5.5" && d.run.sourceLabel === "Claude 订阅")).toBe(true);
       // 别名落到的是同系列的一版：不算对不上
       expect(h.events(a.id).some((e) => e.type === "notice" && e.code === "model_mismatch")).toBe(false);
       // 之后开工前就写得出版本号

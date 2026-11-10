@@ -6,6 +6,7 @@ import { AgentStartError, type AgentAdapter, type AgentLaunch, type AgentRun, ty
 import { buildClaudeArgs, childEnv, describeTool, homeDir, personalSettingsSetKey, versionAtLeast } from "./claudeEnv.js";
 import { modeAllows, outsidePaths, suggestionsReachOutside, type PathScope } from "./pathGuard.js";
 import { planProgress } from "../plan.js";
+import { CONTEXT_COMPACTED, ContextReporter } from "./contextUsage.js";
 
 /** 低于这个版本不保证兼容：11/05 实测基于 2.1.318；权限模式 default 改名 manual 也在 2.1.3xx。 */
 export const MIN_CLAUDE_VERSION = "2.1.300";
@@ -125,6 +126,11 @@ class ClaudeRun implements AgentRun {
   private limitHit = false;
   /** 这一轮网关说余额不足（billing_error）。 */
   private balanceHit = false;
+  /** 上下文用了多少（设计 17.2 第 42 条）：上限是上一次 get_context_usage 读到的，这一轮中间拿它估百分比。 */
+  private readonly context = new ContextReporter((e) => this.emit(e));
+  private contextMax: number | null = null;
+  /** 这个进程（或换了模型以后）还没读过上限：第一次模型回复后先读一次，不然第一轮中间估不出百分比。 */
+  private contextAsked = false;
 
   constructor(
     private readonly child: ChildProcessWithoutNullStreams, private readonly sessionId: string, private readonly scope: PathScope,
@@ -245,7 +251,24 @@ class ClaudeRun implements AgentRun {
 
   async setModel(model: string): Promise<boolean> {
     const r = await this.control({ subtype: "set_model", model }, 10_000);
-    return r.subtype === "success";
+    if (r.subtype !== "success") return false;
+    // 新模型的上下文上限可能不一样：等下一次模型回复后重读
+    this.contextMax = null;
+    this.contextAsked = false;
+    return true;
+  }
+
+  /**
+   * 读一次上下文用了多少（控制请求 get_context_usage，11/10 实测 2.1.318：回 totalTokens、maxTokens，约 1 秒、不调模型）：每轮做完读。
+   * 老版本不认这个请求就不报。
+   */
+  private async refreshContext(): Promise<void> {
+    if (this.exited) return;
+    const r = await this.control({ subtype: "get_context_usage" }, 10_000);
+    const c = r.response;
+    if (r.subtype !== "success" || typeof c?.totalTokens !== "number") return;
+    this.contextMax = typeof c.maxTokens === "number" && c.maxTokens > 0 ? Math.round(c.maxTokens) : null;
+    this.context.report(Math.max(0, Math.round(c.totalTokens)), this.contextMax, true);
   }
 
   async stopTask(taskId: string): Promise<boolean> {
@@ -399,6 +422,10 @@ class ClaudeRun implements AgentRun {
           const state = TASK_STATE[String(ev.status)];
           if (state) this.taskChanged(ev.task_id, { state });
         }
+        if (ev.subtype === "compact_boundary") {
+          // 压缩了上下文（自动压的、本人让它压的都报）：记一行；新的用量随下一次模型回复、这一轮做完时报
+          this.emit(CONTEXT_COMPACTED);
+        }
         if (ev.subtype === "init") {
           this.emit({ type: "agent_info", agent: "claude-code", version: String(ev.claude_code_version ?? ""), model: ev.model ?? null, permissionMode: ev.permissionMode ?? null });
         } else if (ev.subtype === "api_retry" && ev.error === "authentication_failed") {
@@ -444,6 +471,16 @@ class ClaudeRun implements AgentRun {
         if (ev.error === "authentication_failed") this.authFailure("Claude 还没登录或登录已失效，请在天枢里登录 Claude。");
         else if (!ev.error) this.apiRetried = false; // 重试后模型又答上来了：这一轮之后再出错不算模型服务的错
         if (ev.parent_tool_use_id) return; // 子代理内部的步骤不逐条上屏
+        // 这一次模型回复后上下文大约用了多少：这次请求的输入（含缓存）加输出
+        const used = ev.message?.usage;
+        if (!this.contextAsked && !ev.error) {
+          this.contextAsked = true;
+          void this.refreshContext();
+        }
+        if (used && !ev.error) {
+          const n = (v: unknown) => Math.max(0, Number(v) || 0);
+          this.context.report(n(used.input_tokens) + n(used.cache_read_input_tokens) + n(used.cache_creation_input_tokens) + n(used.output_tokens), this.contextMax);
+        }
         for (const c of ev.message?.content ?? []) {
           if (c.type === "text" && c.text?.trim()) this.emit({ type: "assistant_text", text: c.text });
           if (c.type === "tool_use") {
@@ -495,6 +532,7 @@ class ClaudeRun implements AgentRun {
           // 拒连、超时没有 HTTP 状态码，但这一轮重试过就算模型服务的错。
           ...(isError ? { errorKind: interrupted ? "interrupted" : auth ? "auth" : limited ? "usage_limit" : balance ? "balance" : ev.api_error_status || apiRetried ? "api" : "other" } : {}),
         } as EventBody);
+        void this.refreshContext();
         return;
       }
       default:
@@ -504,10 +542,9 @@ class ClaudeRun implements AgentRun {
 }
 
 /**
- * 读本人订阅的额度：起一个不发提示的 Claude Code（不存会话、不读本人的全局设置），只发 initialize 和 get_usage，读完就关。
- * 11/07 实测不花 token、get_usage 约 0.7 秒回。get_usage 是 Claude Code 自己标的实验接口，形状可能变。读不到抛错。
+ * 起一个不发提示的 Claude Code（不存会话、不读本人的全局设置），握手（initialize）过了交给 fn，做完就关。不花 token。握手没过抛错。
  */
-export async function readUsage(bin: ClaudeBin, cwd: string, baseEnv: NodeJS.ProcessEnv = process.env, timeoutMs = 30_000): Promise<Json> {
+async function probe<T>(bin: ClaudeBin, cwd: string, baseEnv: NodeJS.ProcessEnv, timeoutMs: number, fn: (init: Json, control: (id: string, request: Json) => Promise<Json>) => Promise<T>): Promise<T> {
   const args = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--setting-sources", "project,local", "--strict-mcp-config", "--no-session-persistence"];
   const child = spawn(bin.command, [...bin.prefixArgs, ...args], { cwd, env: childEnv(baseEnv, { DISABLE_AUTOUPDATER: "1" }), stdio: ["pipe", "pipe", "pipe"], windowsHide: true, shell: false });
   const waiters = new Map<string, (r: Json) => void>();
@@ -532,13 +569,30 @@ export async function readUsage(bin: ClaudeBin, cwd: string, baseEnv: NodeJS.Pro
   try {
     const init = await control("u1", { subtype: "initialize" });
     if (init.subtype !== "success") throw new Error(String(init.error ?? "Claude Code 没有响应握手"));
-    const usage = await control("u2", { subtype: "get_usage", skip_behaviors: true });
-    if (usage.subtype !== "success" || !usage.response) throw new Error(String(usage.error ?? "没读到额度"));
-    return usage.response;
+    return await fn(init, control);
   } finally {
     child.stdin.end();
     setTimeout(() => { try { child.kill(); } catch { /* 已退出 */ } }, 5_000).unref();
   }
+}
+
+/**
+ * 读本人订阅的额度：握手后发 get_usage。11/07 实测不花 token、约 0.7 秒回。get_usage 是 Claude Code 自己标的实验接口，形状可能变。读不到抛错。
+ */
+export function readUsage(bin: ClaudeBin, cwd: string, baseEnv: NodeJS.ProcessEnv = process.env, timeoutMs = 30_000): Promise<Json> {
+  return probe(bin, cwd, baseEnv, timeoutMs, async (_init, control) => {
+    const usage = await control("u2", { subtype: "get_usage", skip_behaviors: true });
+    if (usage.subtype !== "success" || !usage.response) throw new Error(String(usage.error ?? "没读到额度"));
+    return usage.response as Json;
+  });
+}
+
+/**
+ * 读本人 Claude 订阅能用的模型（设计 17.2 第 40 条）：握手的回执里就有（models，11/10 实测 2.1.318 回 14 个，每个带显示名和支持的思考档）。
+ * 老版本没有这一项时回空的。
+ */
+export function readModels(bin: ClaudeBin, cwd: string, baseEnv: NodeJS.ProcessEnv = process.env, timeoutMs = 30_000): Promise<unknown[]> {
+  return probe(bin, cwd, baseEnv, timeoutMs, async (init) => (Array.isArray(init.response?.models) ? init.response.models as unknown[] : []));
 }
 
 export class ClaudeCodeAdapter implements AgentAdapter {
@@ -562,7 +616,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       // Mac/Linux 上自成进程组，强停时整组杀掉。
       detached: process.platform !== "win32",
     });
-    const run = new ClaudeRun(child, launch.sessionId, { cwd: launch.cwd, home: homeDir(), allowedRoots: launch.allowedRoots, toolReads: launch.toolReads }, launch.autoAllowRoot, launch.model.source === "subscription", launch.permissionMode);
+    const run = new ClaudeRun(child, launch.sessionId, { cwd: launch.cwd, home: homeDir(), allowedRoots: launch.allowedRoots, toolReads: launch.toolReads, extraDirs: launch.extraDirs }, launch.autoAllowRoot, launch.model.source === "subscription", launch.permissionMode);
     const spawned = await new Promise<Error | null>((resolve) => {
       child.once("spawn", () => resolve(null));
       child.once("error", (e) => resolve(e));

@@ -11,7 +11,7 @@ import type { Viewer } from "../meetingCard.js";
 import { listConfirmedMeetings, PayloadHashMismatchError, readConfirmedMeeting } from "../meetingCardRead.js";
 import { DraftMeetingParams, draftMeeting, draftTimeLabel, type DraftMeetingArgs } from "../meetingDraft.js";
 import { meetingHasEnded } from "../meetingStore.js";
-import { canUseMemberView, roleOf, type SessionRole } from "../memberAccess.js";
+import { canEnterMemberView, roleOf, type SessionRole } from "../memberAccess.js";
 import { MISSION_PLAN_TIMEOUT_MS, readMissionPlans, type MissionPlanWorld, type MissionPlanWorldOff } from "../missionPlanRead.js";
 import { companyPeriod } from "../monthlyPlans.js";
 import { isRealPerson, personDisplayNames } from "../people.js";
@@ -72,7 +72,7 @@ export function registerInternalMeetingRoutes(app: AppInstance, ctx: RouteContex
       fail(reply, 404, ownerMissing.code, ownerMissing.message);
       return null;
     }
-    if (role === "ceo" ? roleOf(person) !== "ceo" : !canUseMemberView(person)) {
+    if (role === "ceo" ? roleOf(person) !== "ceo" : !canEnterMemberView(person)) {
       fail(reply, 403, "VIEW_NOT_ALLOWED", "本人用不了这个视角");
       return null;
     }

@@ -34,6 +34,11 @@ export interface AgentLaunch {
   allowedRoots(): string[];
   /** 卡在自己的工作树里做时是工作树的根：「自动」「自动接受改文件」只在这里面自己放行（pathGuard 的 modeAllows）。别的会话为 null。 */
   autoAllowRoot: string | null;
+  /**
+   * 项目另外绑的文件夹（设计 17.2 第 46 条：会话另外能读写的目录，不含工作目录所在的那个），每次现查。
+   * 起进程时交给执行方（Claude Code 的 --add-dir，Codex 的可写目录）；权限请求来时按它放行（pathGuard 的 modeAllows）。
+   */
+  extraDirs(): string[];
   /** 本人在连接页加的工具（mcp__tool-…）里哪些是读的：照权限模式放行；不给就是都要问。 */
   toolReads?(tool: string): boolean;
   /** 开工时的权限模式（契约 LocalPermissionMode）：本机按它放行请求；plan 时执行方以自己的 plan 模式起。 */

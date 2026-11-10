@@ -16,7 +16,8 @@ import { MAX_ATTACHMENT_BYTES } from "./attachments.js";
 import { cloneRepo } from "./handover.js";
 import { SessionManager, type SessionDeps } from "./sessions.js";
 import { ClaudeSetup } from "./agents/claudeSetup.js";
-import { ClaudeCodeAdapter, readUsage, type ClaudeBin } from "./agents/claudeCode.js";
+import { ClaudeCodeAdapter, readModels, readUsage, type ClaudeBin } from "./agents/claudeCode.js";
+import { ClaudeCatalog } from "./claudeCatalog.js";
 import { CodexAdapter } from "./agents/codex.js";
 import { findCodexBin, type CodexBin } from "./agents/codexRpc.js";
 import { CodexSetup } from "./agents/codexSetup.js";
@@ -87,7 +88,12 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   const codexBin = opts.codexBin !== undefined ? async () => opts.codexBin ?? null : async () => findCodexBin();
   const codex = new CodexSetup(codexBin, codexHome, opts.openUrl ?? openUrl);
   const codexCatalog = new CodexCatalog(config.dataDir, () => codex.readModels());
-  const models = new ModelProfiles(config.dataDir, secrets, codexCatalog);
+  // 本人 Claude 订阅能用的模型（设计 17.2 第 40 条）：向 Claude Code 读（握手里就有，不发提示、不花 token）
+  const claudeCatalog = new ClaudeCatalog(config.dataDir, async () => {
+    const bin = await claudeBin();
+    return bin ? readModels(bin, config.dataDir) : null;
+  });
+  const models = new ModelProfiles(config.dataDir, secrets, codexCatalog, claudeCatalog);
   const customTools = new CustomTools(config.dataDir, secrets, opts.fetchImpl ?? fetch);
   const folders = new Folders(config.dataDir, opts.home);
   const cloud = new CloudLink(config.dataDir, secrets, config.allowedOrigins);
@@ -154,7 +160,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   // 交回送到天枢以后去取验收交代。
   outbox.onSent = () => void sessions.pullBriefs();
   const server = createServer({
-    config, version: VERSION, tokens, pairings, sessions, log, models, folders, claude, cloud, settings, quota, codexQuota, codex, codexCatalog, tools, customTools, spend,
+    config, version: VERSION, tokens, pairings, sessions, log, models, folders, claude, cloud, settings, quota, codexQuota, codex, codexCatalog, claudeCatalog, tools, customTools, spend,
     pickFolder: () => desktop.pickFolder(),
     cloneRepo: opts.cloneRepo ?? cloneRepo,
     fetchImpl: cloudFetch,
@@ -186,6 +192,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   sessions.pump();
   void sessions.pullBriefs();
   void codexCatalog.refresh();
+  void claudeCatalog.refresh();
   void sessions.pruneWorktrees();
   void sessions.releaseWaiting();
   tools.start();

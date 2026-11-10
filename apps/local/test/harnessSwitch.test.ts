@@ -555,9 +555,15 @@ describe("子会话 Claude Code ↔ Codex 双向换", { timeout: 60_000 }, () =>
   });
 
   // 放在最后：这一条会把 Claude 的额度记成用完，之后再开的 Claude 会话都排着等
-  it("停着等 Claude 额度时换成 Codex：不再等原来那家的额度，说一句就接着做，Codex 知道上一轮是额度用完停的", async () => {
+  it("停着等 Claude 额度时换成 Codex：不再等原来那家的额度，换完本机替本人说一句、自动接着做（进程在不在都一样），Codex 知道上一轮是额度用完停的", async () => {
     const id = await open("F", "做 F");
+    const gone = await open("F2", "做 F2");
     await idle(id);
+    await idle(gone);
+    // F2 碰壁就退出（进程不在了），F 碰壁后进程还在
+    fake({ usageLimit: { resetsAt: Math.floor(Date.now() / 1000) + 3600, exit: true } });
+    await say(gone, "接着做 F2");
+    await until(async () => { const s = (await session(gone)).session; return s.status === "exited" && s.hold; });
     fake({ usageLimit: { resetsAt: Math.floor(Date.now() / 1000) + 3600 } });
     await say(id, "接着做 F");
     const held = await until(async () => { const s = (await session(id)).session; return s.hold ? s : null; });
@@ -566,12 +572,23 @@ describe("子会话 Claude Code ↔ Codex 双向换", { timeout: 60_000 }, () =>
     const r = await setModel(id, SOL);
     expect(r.session.agent).toBe("codex");
     expect(r.session.hold).toBeUndefined();
-    expect(events(id).filter((e) => e.type === "status").at(-1).hold).toBeUndefined();
-    await say(id, "接着");
+    expect(events(id).filter((e) => e.type === "status" && e.hold).at(-1).seq).toBeLessThan(events(id).filter((e) => e.type === "notice" && e.code === "harness_changed").at(-1).seq);
+    // 不用本人再说话：换完本机替本人说一句，前面带着交代
     await until(() => codexTurns(join(work, "F")).length === 1);
-    expect(codexTurns(join(work, "F"))[0]).toContain("本人：接着做 F\nClaude Code：You've hit your limit · resets 3pm\n（这一轮没做完：额度用完了）");
+    const got = codexTurns(join(work, "F"))[0]!;
+    expect(got).toContain("本人：接着做 F\nClaude Code：You've hit your limit · resets 3pm\n（这一轮没做完：额度用完了）");
+    expect(got.endsWith("［以上是之前的经过。下面是现在要你做的］\n\n换了来源，接着把刚才没做完的做完。")).toBe(true);
+    expect(events(id).filter((e) => e.type === "notice" && e.code === "usage_resumed").map((e) => e.text)).toEqual(["换了来源，接着做"]);
+    expect(events(id).filter((e) => e.type === "user_message").map((e) => e.text)).toEqual(["做 F", "接着做 F"]); // 本机替本人说的不记成本人的话
     await idle(id);
     await kill(id);
+    // 进程不在的那个：换完先拉起 Codex，再说那一句
+    expect((await setModel(gone, SOL)).applied).toBe("now");
+    await until(() => codexTurns(join(work, "F2")).length === 1);
+    expect(codexTurns(join(work, "F2"))[0]!.endsWith("换了来源，接着把刚才没做完的做完。")).toBe(true);
+    const s2 = await idle(gone);
+    expect([s2.agent, s2.hold]).toEqual(["codex", undefined]);
+    await kill(gone);
   });
 
   it("Claude 额度用完、排着等的新卡换成 Codex：不再等，直接用 Codex 开始", async () => {
@@ -587,10 +604,23 @@ describe("子会话 Claude Code ↔ Codex 双向换", { timeout: 60_000 }, () =>
     expect(claudeLaunches(id)).toHaveLength(0);
     await kill(id);
   });
+
+  it("换到的那家额度也用完了：不接着做，照它的恢复时间接着等", async () => {
+    const cx = await open("X", "limit", { modelProfileId: SOL }); // Codex 也碰壁：Codex 那枚记成用完
+    await until(async () => (await session(cx)).session.hold);
+    const id = await open("Q2", "做 Q2"); // Claude 的额度还记着用完：排着等
+    expect((await session(id)).session).toMatchObject({ status: "queued", hold: { reason: "usage_limit" } });
+    const r = await setModel(id, SOL);
+    expect(r.session).toMatchObject({ agent: "codex", status: "queued", hold: { reason: "usage_limit" } });
+    await new Promise((res) => setTimeout(res, 300));
+    expect(codexTrace().some((l) => l.argv && l.cwd === join(work, "Q2"))).toBe(false);
+    await kill(id);
+    await kill(cx);
+  });
 });
 
 describe("停着等预算时换了执行方", { timeout: 60_000 }, () => {
-  it("加了预算自动接着做：本机替本人说的那一句前面也带上交代", async () => {
+  it("等预算的换了来源不会自己接着做（预算是这件 Task 的，换来源不会变多）；加了预算才接着做，本机替本人说的那一句前面也带上交代", async () => {
     const work = tempDir("tl-hs-bud-");
     const dataDir = tempDir("tl-hs-bud-data-");
     mkdirSync(join(dataDir, "codex"), { recursive: true });
@@ -612,6 +642,8 @@ describe("停着等预算时换了执行方", { timeout: 60_000 }, () => {
       await until(async () => { const s = (await call("GET", `/v1/sessions/${id}`)).body.session; return s.hold?.reason === "budget" && s.status === "idle"; });
       const swapped = await call("PUT", `/v1/sessions/${id}/model`, { modelProfileId: SOL });
       expect(swapped.body).toMatchObject({ applied: "now", session: { agent: "codex", status: "idle", hold: { reason: "budget" } } });
+      await new Promise((res) => setTimeout(res, 400));
+      expect(existsSync(join(dataDir, "codex", "trace.jsonl")) && readFileSync(join(dataDir, "codex", "trace.jsonl"), "utf8").includes('"turn/start"')).toBe(false);
       await call("PUT", "/v1/budgets", { taskId: "T-1", budget: budget(1) });
       const trace = () => readFileSync(join(dataDir, "codex", "trace.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
       const turn = await until(() => trace().find((l) => l.method === "turn/start"));

@@ -7,7 +7,7 @@ import {
   LocalCreateSessionBatchRequest, LocalCreateSessionBatchResponse, LocalSettingsPatch, LocalSessionSummary, LocalHealthResponse,
   LocalVerifyBriefResponse, LOCAL_RUNNER_VERIFY_BRIEF_PATH, LocalMergeResponse, LocalVerdict, LocalQuestionAnswerRequest, LocalPlanCard, LocalBackgroundItem,
   LocalSettings, LocalMergeSync, LocalStatusResponse, LocalQuotaSource, LocalQuotaSync,
-  LocalFolder, LocalProjectFolder, LocalProjectListResponse, LocalProjectFolderRequest, LocalHandoverCheck, LocalProjectCloneRequest, LocalProjectCloneResponse, ProjectTransfer,
+  LocalFolder, LocalProjectFolder, LocalProjectListResponse, LocalProjectFolderRequest, LOCAL_PROJECT_FOLDER_LIMIT, LocalHandoverCheck, LocalProjectCloneRequest, LocalProjectCloneResponse, ProjectTransfer,
   LocalTaskBudgetView, LocalBudgetListResponse, LocalBudgetUpdateRequest, LocalSendMessageRequest as SendMessage, LocalPermissionBrief, LOCAL_RUNNER_ATTACHMENT_PATH,
   LocalRunPreviewRequest, LocalPermissionModeRequest, LOCAL_AGENT_PERMISSION_MODES, LocalTool, LocalToolUpsert,
   LocalFolderPickRequest, LocalFolderPickResponse, LocalFolderCreateRequest, LocalSessionModelRequest, LocalSessionModelResponse,
@@ -549,6 +549,16 @@ describe("本机程序契约", () => {
     expect(Value.Check(LocalProjectFolderRequest, { folderId: folder.id, name: "天枢本机程序" })).toBe(true);
     expect(Value.Check(LocalProjectFolderRequest, { folderId: null })).toBe(true);
     expect(Value.Check(LocalProjectFolderRequest, { path: "D:/repo" })).toBe(false); // 网页不能直接写路径
+    // 一个项目绑多个文件夹（17.2 第 46 条）：folders 有顺序，第一个是工作目录；老的本机程序回的没有 folders，老网页只发 folderId，都照旧合法
+    const docs = { id: "a1b2c3d4e5f6", path: "D:/docs", label: "docs" };
+    expect(Value.Check(LocalProjectFolder, { ...bound, folders: [bound.folder, docs] })).toBe(true);
+    expect(Value.Check(LocalProjectFolder, { ...bound, folder: null, folders: [] })).toBe(true);
+    expect(Value.Check(LocalProjectFolder, { ...bound, folders: Array.from({ length: LOCAL_PROJECT_FOLDER_LIMIT + 1 }, (_, i) => ({ ...docs, id: `a1b2c3d4e5f${i}` })) })).toBe(false);
+    expect(Value.Check(LocalProjectFolderRequest, { folderIds: [folder.id, docs.id], name: "天枢本机程序" })).toBe(true);
+    expect(Value.Check(LocalProjectFolderRequest, { folderIds: [] })).toBe(true); // 全部解绑
+    expect(Value.Check(LocalProjectFolderRequest, { folderIds: [folder.id, folder.id] })).toBe(false); // 不能重复
+    expect(Value.Check(LocalProjectFolderRequest, { folderIds: Array.from({ length: LOCAL_PROJECT_FOLDER_LIMIT + 1 }, (_, i) => `a1b2c3d4e5f${i}`) })).toBe(false);
+    expect(Value.Check(LocalProjectFolderRequest, { folderIds: ["D:/repo"] })).toBe(false);
     expect(LOCAL_RUNNER_ROUTES.putProjectFolder).toEqual({ method: "PUT", path: "/v1/projects/:projectId/folder", auth: true });
     const subject = { kind: "card", cardId: "c1", projectId: "11111111-1111-4111-8111-111111111111" };
     expect(Value.Check(LocalCreateSessionRequest, { subject, title: "x", firstMessage: "做" })).toBe(true);
@@ -613,6 +623,10 @@ describe("本机程序契约", () => {
       { ...changed, sources: ["tool", "git"] }, { ...changed, path: "old.ts", sources: ["git"], exists: false, size: null },
     ] })).toBe(true);
     expect(Value.Check(LocalSessionFilesResponse, { root: "C:/work/repo", truncated: false, files: [{ ...changed, sources: [] }] })).toBe(false);
+    // 产出事件带它在会话根里的相对路径，预览时拿去读（老版本本机不带）
+    const artifact = { seq: 3, at: "2026-11-10T04:00:00.000Z", sessionId, type: "artifact", artifactId: "a1b2c3", title: "方案", fileName: "方案.md", size: 1200, sha256: "x" };
+    expect(Value.Check(LocalSessionEvent, { ...artifact, path: "docs/方案.md" })).toBe(true);
+    expect(Value.Check(LocalSessionEvent, artifact)).toBe(true);
   });
 
   it("上下文用了多少（第 42 条）：摘要和事件带现在的 token 数和模型上限；压缩了记一条提示", () => {

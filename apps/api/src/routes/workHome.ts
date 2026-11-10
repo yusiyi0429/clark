@@ -2,7 +2,7 @@ import { markWorkSeen } from "../workSeen.js";
 import type { FastifyReply } from "fastify";
 import { Type } from "@sinclair/typebox";
 import { ArchivedSubSessionListResponse, BackgroundQuery, BackgroundResponse, MarkWorkSeenRequest, RouteRequest, RouteResponse, SubSessionKind, UpdateSubSessionRequest,
-  WorkHomeResponse } from "@warmap/contracts";
+  WorkHomeResponse, WorkWaitingCountResponse } from "@warmap/contracts";
 import { deleteSubSession, listArchivedSubSessions, updateSubSession } from "../subSessionAdmin.js";
 import { routeMessage } from "../messageRoute.js";
 import { listMissionRoundCards, type MissionRoundPerson } from "../missionRounds.js";
@@ -34,6 +34,7 @@ export function registerWorkHomeRoutes(app: AppInstance, ctx: RouteContext): voi
     const now = ctx.now();
     return readWorkHome({ q, pool, planTasks: ctx.planTasks, now, names: personDisplayNames(peopleDirectory), chat: Boolean(ctx.chat),
       meetings: (personId) => app.meetingFollowThrough.cards.pendingFor(personId),
+      nexusConfirmations: (personId) => app.nexusDri.listFor(personId),
       missionRounds: (viewer) => listMissionRoundCards(q, peopleDirectory.searchPeople(undefined), env.sessionSecret, viewer, undefined, now) }, person);
   };
 
@@ -41,6 +42,10 @@ export function registerWorkHomeRoutes(app: AppInstance, ctx: RouteContext): voi
   app.decorate("readWorkHome", workHome);
 
   app.get("/api/me/work-home", { preHandler: requireMember, schema: { response: { 200: WorkHomeResponse } } }, async (req) => workHome(req.person!));
+
+  // 本人有几件等你的事：管理模式（CEO 视角）也能读，菜单里「工作模式」后面的数字用（17.2 第 45 条）。按成员视角算，就是工作模式里看到的那一份。
+  app.get("/api/me/work-home/waiting-count", { preHandler: requirePerson, schema: { response: { 200: WorkWaitingCountResponse } } },
+    async (req) => ({ count: (await workHome({ personId: req.person!.personId, role: "member" })).waiting.length }));
 
   // 蓝点（17.2 第 25 条）：本人打开了一个子会话或项目对话。
   app.post("/api/me/work-seen", { preHandler: requireMember, schema: { body: MarkWorkSeenRequest } }, async (req, reply) => {

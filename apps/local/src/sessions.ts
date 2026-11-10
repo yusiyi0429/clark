@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { basename, extname, isAbsolute, join, relative, resolve } from "node:path";
+import { basename, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import {
@@ -11,7 +11,7 @@ import {
   type TLocalWorkspace, type TLocalGitRef, type TLocalMergeResponse, type TLocalQuestionRequestView, type TLocalQuestionAnswerRequest,
   type TLocalBackgroundItem, type TLocalMergeHoldReason, type TLocalMergeSync, type TLocalModelTier, type TLocalHold, type TLocalMoney,
   type TLocalRun, type TLocalRunPreviewRequest, type TLocalTaskBudgetView, type TLocalBudgetUpdateRequest, type TBudgetMode, type TLocalPermissionBrief, type TLocalSavedAttachment, type TLocalStopReason, type TLocalStopReport,
-  type TLocalEffort, type TLocalSessionModelRequest,
+  type TLocalEffort, type TLocalSessionModelRequest, type TLocalSessionFileReadResponse, type TLocalSessionFilesResponse, type TLocalContextUsage,
 } from "@warmap/contracts";
 import { readJson, writeJsonAtomic, nowIso } from "./store.js";
 import type { EventLog, EventBody } from "./eventLog.js";
@@ -22,6 +22,8 @@ import type { GatewayPricing } from "./pricing.js";
 import { Budgets, MULTI_AGENT_OFF_PERCENT, reworkRounds, runFor } from "./budget.js";
 import { AttachmentError, attachmentNote, saveAttachments, type FetchAttachment } from "./attachments.js";
 import { modelDisplayName, sameModel, type ResolvedModel } from "./models.js";
+import { isClaudeProfileId } from "./claudeCatalog.js";
+import { isCodexProfileId } from "./codexCatalog.js";
 import { MAGPIE_PORT, modelOrigin } from "./modelOrigin.js";
 import type { CustomTools, SessionTools } from "./customTools.js";
 import { cardTitleProblem } from "./cardTitle.js";
@@ -35,6 +37,7 @@ import { changesBrief, criticAgents, returnText, reviewMessage, systemPrompt } f
 import { addWorktree, branchName, cardDiff, changedFiles, commitAll, deleteBranch, git, mergeBranch, pruneRepo, removeWorktree, repoHead } from "./git.js";
 import { ensureFeishuPlugin, larkSkills } from "./agents/feishuPlugin.js";
 import { AGENT_NAME, earlierTurns, handoffText, otherRules } from "./handoff.js";
+import { listSessionFiles, readSessionFile, SessionFileError } from "./sessionFiles.js";
 import type { VerifyBrief } from "./cloud.js";
 
 /** 云端天枢 MCP 在会话里的名字：和本人在 Claude Code 里配的天枢 MCP 同名，工具名一致。 */
@@ -65,6 +68,8 @@ const HOLD_RESUME_AFTER_MS = 60_000;
 const HOLD_POLL_MS = 5 * 60_000;
 /** 额度恢复后发给执行方的一句（不是本人说的，网页上显示成一条提示）。 */
 const HOLD_CONTINUE = "额度恢复了，接着把刚才没做完的做完。";
+/** 停着等额度（或网关余额）时本人换了来源：换完本机替本人说的这一句（11/10 用户：换就是为了让它接着做）。 */
+const SWITCH_CONTINUE = "换了来源，接着把刚才没做完的做完。";
 const HOLD_REASON = "订阅额度用完了，恢复后自动接着做";
 /** 预算用完（新首页设计 11.4）：跑着的收到这一句，这一轮做完或过 3 分钟就停下。 */
 const BUDGET_STOP = "这件 Task 的预算用完了：把手上这一步做完就停下，列出还没做完的，不要再开新的步骤。";
@@ -165,6 +170,8 @@ interface SessionRecord {
   seen?: Partial<Record<TLocalAgentKind, number>>;
   /** 换了执行方、还没把它没看到的那几轮交代给现在这一家（接在给它的下一句话前面，见 deliver）。 */
   handoff?: boolean;
+  /** 上下文用了多少（契约 LocalContextUsage）：执行方最近一次报的，摘要原样带；还没报过没有。 */
+  context?: TLocalContextUsage;
 }
 
 /** 不合契约时给执行方看的一句（哪个字段、哪里不对）。 */
@@ -783,7 +790,7 @@ export class SessionManager {
     // 工作规矩、岗位、挑刺子 agent 写在本机程序的数据目录，经参数交给 Claude Code，不往本人的仓库写文件。
     const dir = join(this.dir, rec.id);
     const systemPromptPath = join(dir, "system.md");
-    let prompt = systemPrompt(rec.subject.kind, rec.role, rec.critics, feishu, rec.workspace, custom?.names ?? []);
+    let prompt = systemPrompt(rec.subject.kind, rec.role, rec.critics, feishu, rec.workspace, custom?.names ?? [], this.extraDirs(rec));
     if (rec.subject.kind === "plan") {
       // 开拆前看一眼项目的文件夹（只读）：在本机给它的专用目录里做就是没绑
       const facts = await planFolderFacts(isInside(join(this.d.dataDir, "plans"), rec.cwd) ? null : rec.cwd);
@@ -825,6 +832,7 @@ export class SessionManager {
       ],
       // 卡在自己的工作树里：「自动」「自动接受改文件」只在工作树里自己放行（规则在 pathGuard 的 modeAllows）
       autoAllowRoot: rec.subject.kind === "card" && rec.workspace?.kind === "worktree" ? rec.workspace.path : null,
+      extraDirs: () => this.extraDirs(rec),
       permissionMode: rec.permissionMode,
       toolReads: custom?.reads,
     });
@@ -841,6 +849,22 @@ export class SessionManager {
   }
 
   /** 工作目录里 git 看得到的改动文件：卡在工作树里做时算上开工以来已经提交的；不是仓库就是空的。 */
+  /**
+   * 项目另外绑的文件夹（设计 17.2 第 46 条）：项目绑着的文件夹里，除了本会话自己那个（工作目录所在的，卡在工作树里做时是开工作树的那个），都是。
+   * 每次现查：本人加了、减了，本机放行的范围和右边预览读文件马上跟着变（执行方自己知道的目录要到下一次起进程才变）。
+   * 和本会话自己的文件夹互相套着的不算，磁盘上已经不在的也不算。卡在工作树里做时，自己的文件夹按整个仓库算：工作树里有仓库的全部，
+   * 同一个仓库里别的子文件夹要是也算，卡就能绕过工作树去改主文件夹，改的东西还会挡住合回。
+   * 验收员跟着它验的那张卡算（它在卡的工作树里看）。
+   */
+  private extraDirs(rec: SessionRecord): string[] {
+    if (!rec.subject.projectId) return [];
+    const card = (rec.parentId ? this.records.get(rec.parentId) : undefined) ?? rec;
+    const ws = card.workspace;
+    // 工作树的根对着仓库的根：会话在工作树的子文件夹里时，从本人选的文件夹往上退同样几层
+    const own = ws?.kind === "worktree" ? resolve(ws.folder, relative(card.cwd, ws.path)) : ws?.folder ?? rec.cwd;
+    return this.d.folders.projectFolders(rec.subject.projectId).filter((p) => !isInside(p, own) && !isInside(own, p) && existsSync(p));
+  }
+
   private async changedSince(rec: SessionRecord): Promise<string[]> {
     const ws = rec.workspace;
     const committed = ws?.kind === "worktree" ? await git(ws.path, ["diff", "--name-only", ws.baseCommit, "HEAD"]).then((o) => o.split("\n").filter(Boolean), () => []) : [];
@@ -878,6 +902,10 @@ export class SessionManager {
         break;
       case "background":
         this.recordBackground(rec, e.item);
+        break;
+      case "context_usage":
+        rec.context = { usedTokens: e.usedTokens, maxTokens: e.maxTokens, at: nowIso() };
+        this.save(rec);
         break;
       case "receipt": {
         const entry = rec.unread?.find((u) => u.id === e.messageId);
@@ -999,7 +1027,7 @@ export class SessionManager {
     this.d.log.evict(rec.id);
     // 本人要换的模型还没换上就退了（交完收工、强停等）：直接换，下次开起来用新的
     const want = rec.pendingModel?.modelProfileId;
-    if (want) void this.d.models.resolve(want).then((m) => { if (m?.profileId === want && rec.pendingModel?.modelProfileId === want) this.applyModel(rec, m, rec.pendingModel.effort ?? undefined); });
+    if (want) void this.d.models.resolve(want).then((m) => { if (m?.profileId === want && rec.pendingModel?.modelProfileId === want && this.applyModel(rec, m, rec.pendingModel.effort ?? undefined)) this.carryOn(rec); });
     // 验收过了：卡在工作树里做的，试着自动合回
     if (finished && rec.subject.kind === "verify" && rec.passed) void this.autoMerge(rec);
   }
@@ -1211,7 +1239,7 @@ export class SessionManager {
     // 换执行方时进程在的还是原来那家：不能只改记录，停掉它再拉起新的那家
     if (cross && run) return swapLater();
     if (!run || this.starting.has(id)) {
-      this.applyModel(rec, next, effort);
+      if (this.applyModel(rec, next, effort)) this.carryOn(rec);
       return { applied: "now", session: this.summary(rec) };
     }
     if (rec.agent === "codex") {
@@ -1239,8 +1267,11 @@ export class SessionManager {
     return swapLater();
   }
 
-  /** 换上新模型、思考程度：记进会话、跑法跟着换（实际模型等执行方再报），事件流记一条、报给云端。effort 不带是回到自动。 */
-  private applyModel(rec: SessionRecord, model: ResolvedModel, effort: TLocalEffort | undefined, view?: TLocalRun) {
+  /**
+   * 换上新模型、思考程度：记进会话、跑法跟着换（实际模型等执行方再报），事件流记一条、报给云端。effort 不带是回到自动。
+   * 返回 true：这个会话原来停着等那个来源（订阅额度、网关余额），新的来源没用完——调用方等新的那家起来后调 carryOn 接着做。
+   */
+  private applyModel(rec: SessionRecord, model: ResolvedModel, effort: TLocalEffort | undefined, view?: TLocalRun): boolean {
     const from = rec.agent;
     const agent = this.d.models.agentOf(model.profileId) ?? from;
     if (agent !== from) {
@@ -1249,6 +1280,7 @@ export class SessionManager {
       if (own && !rec.handoff) rec.seen = { ...rec.seen, [from]: this.d.log.lastSeq(rec.id) };
       rec.handoff = true;
       rec.agent = agent;
+      delete rec.context; // 上下文用了多少是原来那家的，新的那家报了再有
     }
     rec.modelProfileId = model.profileId;
     rec.modelLabel = model.label;
@@ -1264,15 +1296,20 @@ export class SessionManager {
     if (agent === from) this.emit(rec, { type: "notice", level: "info", code: "model_changed", text: `换成了「${model.label}」${said ? ` · ${said}` : ""}` });
     else this.emit(rec, { type: "notice", level: "info", code: "harness_changed", text: `换成 ${AGENT_NAME[agent]} · ${model.label}${rec.run.effort ? ` · 思考 ${rec.run.effort}` : ""}` });
     if (modeGone) this.emit(rec, { type: "permission_mode", mode: "default", by: "harness_changed" });
-    // 停着等的是原来那家订阅的额度：新的那家没用完就不等了（排着的回到队里），也用完了就照它的恢复时间等
-    if (agent !== from && rec.hold?.reason === "usage_limit") {
-      if (this.subscription(rec) && this.blocked(rec) !== null) this.markHold(rec);
-      else this.clearHold(rec);
-      this.noteHold(rec);
-      this.pump();
-      return;
-    }
     this.syncStatus(rec);
+    // 停着等的是原来那个来源（订阅额度、网关余额）：新的来源也用完了就照它的等；没用完就接着做（见 carryOn）。等预算的不归这里：预算是这件 Task 的，换来源不会变多
+    if (rec.hold?.reason !== "usage_limit" && rec.hold?.reason !== "balance") return false;
+    const out = this.subscription(rec) ? (this.blocked(rec) !== null ? "usage_limit" as const : null) : this.balanceBlocked.has(rec.modelProfileId) ? "balance" as const : null;
+    if (!out) return true;
+    this.markHold(rec, out);
+    this.noteHold(rec);
+    return false;
+  }
+
+  /** 停着等额度时换了来源、新的没用完：接着做（排着的回到队里；做过的往新的那家说一句，前面带着交代）。 */
+  private carryOn(rec: SessionRecord) {
+    this.resumeHeld(rec, true);
+    this.pump();
   }
 
   /**
@@ -1299,8 +1336,10 @@ export class SessionManager {
       await old.kill();
       const model = await this.d.models.resolve(target);
       if (!model || model.profileId !== target) throw new Error("要换的模型配置已被删除");
-      this.applyModel(rec, model, effort);
-      return this.startRun(rec, true);
+      const carry = this.applyModel(rec, model, effort);
+      const run = await this.startRun(rec, true);
+      if (carry) this.carryOn(rec);
+      return run;
     })();
     this.starting.set(rec.id, p);
     p.catch((e: unknown) => {
@@ -1567,15 +1606,15 @@ export class SessionManager {
   }
 
   /** 接着做：排着的回到队里；一轮做完停着的往开着的进程里说一句；进程不在了就续接（--resume）再说。 */
-  private resumeHeld(rec: SessionRecord) {
+  private resumeHeld(rec: SessionRecord, switched = false) {
     const budget = rec.hold?.reason === "budget";
     // 额度恢复了但预算用完了、预算加了但额度用完了：换成另一种等
     const other = budget ? (this.subscription(rec) && this.blocked(rec) !== null ? "usage_limit" : null) : this.budgetExhausted(rec) ? "budget" : null;
     if (other) { this.markHold(rec, other); this.noteHold(rec); return; }
     this.clearHold(rec);
     if (rec.status === "queued") { this.noteHold(rec); return; }
-    this.emit(rec, { type: "notice", level: "info", code: budget ? "budget_resumed" : "usage_resumed", text: budget ? "预算加了，接着做" : "额度恢复了，接着做" });
-    const say = budget ? BUDGET_CONTINUE : HOLD_CONTINUE;
+    this.emit(rec, { type: "notice", level: "info", code: budget ? "budget_resumed" : "usage_resumed", text: budget ? "预算加了，接着做" : switched ? "换了来源，接着做" : "额度恢复了，接着做" });
+    const say = budget ? BUDGET_CONTINUE : switched ? SWITCH_CONTINUE : HOLD_CONTINUE;
     const run = this.runs.get(rec.id);
     if (run) {
       this.setStatus(rec, "running");
@@ -1710,10 +1749,13 @@ export class SessionManager {
     const def = p.effort ?? (p.agent === "codex" ? this.d.models.defaultEffort(model.profileId) : null);
     const launch = { ...auto, ...(def ? { effort: def } : {}), ...(p.agent === "codex" ? { multiAgent: false } : {}) };
     const used = model.source === "gateway" ? model.model : model.model ?? launch.model;
-    const named = { source: model.source, sourceLabel: model.label, harness: p.agent, origin: model.origin, modelName: used ? this.d.models.displayName(used) : null, actual: null };
+    // 来源的名字：本人配的写配置的名字；模型目录里的一条，配置的名字就是模型名，来源写认出的那个（「Claude 订阅」「Codex 订阅」）
+    const catalog = isClaudeProfileId(model.profileId) || isCodexProfileId(model.profileId);
+    const named = { source: model.source, sourceLabel: catalog ? model.origin.label.slice(0, 40) : model.label, harness: p.agent, origin: model.origin, modelName: used ? this.d.models.displayName(used) : null, actual: null };
+    // 目录里不支持选思考程度的模型（如 Haiku 4.5）不写思考档
     const view: TLocalRun = model.source === "gateway"
       ? { mode: p.mode, model: model.model, effort: null, multiAgent: false, ...named }
-      : { mode: p.mode, model: used, effort: launch.effort, multiAgent: launch.multiAgent, ...named };
+      : { mode: p.mode, model: used, effort: this.d.models.efforts(model.profileId).length ? launch.effort : null, multiAgent: launch.multiAgent, ...named };
     return { view, launch };
   }
 
@@ -1928,7 +1970,9 @@ export class SessionManager {
     // 同名再交是同一个产出物的新一版。
     const artifactId = createHash("sha256").update(`${rec.id}:${fileName}`).digest("hex").slice(0, 24);
     const title = (input.title?.trim() || fileName).slice(0, 200);
-    this.emit(rec, { type: "artifact", artifactId, title, fileName, size, sha256 });
+    // path：在会话根里的相对路径（在右边预览时拿它去读）
+    const root = rec.workspace?.kind === "worktree" ? rec.workspace.path : rec.cwd;
+    this.emit(rec, { type: "artifact", artifactId, title, fileName, size, sha256, path: relative(root, file).split(sep).join("/") });
     const key = this.sync(rec, { type: "artifact", data: { artifactId, title, fileName, mimeType, size, sha256, contentBase64: content.toString("base64") } });
     const ref = this.remember(rec, "A", key, title, artifactId);
     const outputs = this.turnOf(rec).outputs;
@@ -1990,6 +2034,30 @@ export class SessionManager {
     this.turnOf(rec).handbackKey = key;
     this.queueVerify(rec, key, git?.commit ?? null);
     return `已交回（用了 ${picked.map((o) => o.ref).join("、") || "0 份产出和证据"}${git ? `，提交 ${git.commit.slice(0, 7)}` : ""}），本机接着起验收员验收`;
+  }
+
+  /**
+   * 在右边预览文件（设计 17.2 第 41 条）：只看会话根（卡的工作树根，或工作目录）里面的，而且这个文件夹本人还允许着；
+   * 项目另外绑的文件夹里的也认（第 46 条）。会话结束了也能读；只读。
+   */
+  private fileRoot(id: string): { rec: SessionRecord; root: string } {
+    const rec = this.must(id);
+    if (!this.d.folders.isAllowed(rec.workspace?.folder ?? rec.cwd)) throw new SessionError("folder_not_allowed", "这个会话的目录已不在允许的文件夹里");
+    return { rec, root: rec.workspace?.kind === "worktree" ? rec.workspace.path : rec.cwd };
+  }
+
+  readFile(id: string, path: string): TLocalSessionFileReadResponse {
+    const { rec, root } = this.fileRoot(id);
+    try { return readSessionFile(root, rec.cwd, path, this.extraDirs(rec)); } catch (e) {
+      if (e instanceof SessionFileError) throw new SessionError(e.code, e.message);
+      throw e;
+    }
+  }
+
+  /** 本会话写过、改过的文件：事件记录里的写文件、改文件，加 git 看得到的（卡在工作树里做时算上开工以来已经提交的）。 */
+  listFiles(id: string): Promise<TLocalSessionFilesResponse> {
+    const { rec, root } = this.fileRoot(id);
+    return listSessionFiles(root, rec.cwd, rec.workspace?.kind === "worktree" ? rec.workspace.baseCommit : null, this.d.log.after(id, 0), this.extraDirs(rec));
   }
 
   /** 本会话 MCP 的 read_earlier_turns：从事件记录里翻更早的轮次（换过执行方接着做时，交代里只带最近几轮）。 */

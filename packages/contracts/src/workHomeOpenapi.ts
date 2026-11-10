@@ -1,7 +1,7 @@
 import type { JsonSchema, OpenAPIV3 } from "./types/JsonSchemaTypes.js";
 import {
   BackgroundItem, BackgroundResponse, ClaimSessionStartsRequest, ClaimSessionStartsResponse, HomeMonthMission, HomeMonthTask, HomeProject, HomeProjectGoal,
-  HomeTaskSummary, RouteRequest, RouteResponse, SessionStartView, SubSession, WaitingItem, WaitingTarget, WorkHomeResponse, CardMerge, TaskFeedItem, HomeItem,
+  HomeTaskSummary, RouteRequest, RouteResponse, SessionStartView, SubSession, WaitingItem, WaitingTarget, WorkHomeResponse, WorkWaitingCountResponse, CardMerge, TaskFeedItem, HomeItem,
   ReleaseSessionStartRequest, NotificationSettings, ClaimedSessionStart, AppearanceSettings, SessionStopView, ClaimSessionStopsRequest, ClaimSessionStopsResponse,
   SessionStopDoneRequest, SessionCommand, SessionCommandView, ClaimSessionCommandsRequest, ClaimSessionCommandsResponse, SessionCommandDoneRequest,
   MarkWorkSeenRequest, SubSessionKind, UpdateSubSessionRequest, ArchivedSubSession, ArchivedSubSessionListResponse,
@@ -22,7 +22,7 @@ import { SessionAttachment, SessionAttachmentUploadResponse } from "./attachment
  */
 
 export const workHomeSchemas: Record<string, JsonSchema> = {
-  SubSession, HomeTaskSummary, HomeProjectGoal, HomeProject, HomeMonthTask, HomeMonthMission, WaitingTarget, WaitingItem, WorkHomeResponse,
+  SubSession, HomeTaskSummary, HomeProjectGoal, HomeProject, HomeMonthTask, HomeMonthMission, WaitingTarget, WaitingItem, WorkHomeResponse, WorkWaitingCountResponse,
   BackgroundItem, BackgroundResponse, RouteRequest, RouteResponse,
   SessionStartView, ClaimSessionStartsRequest, ClaimSessionStartsResponse, CardMerge, TaskFeedItem, HomeItem, ReleaseSessionStartRequest,
   Project, ProjectListResponse, CreateProjectRequest, UpdateProjectRequest, ProjectGoal, ProjectDetailResponse, ProjectPipelineResponse, ProjectGoalLinkedItem,
@@ -267,6 +267,13 @@ export const workHomePaths: OpenAPIV3.Document["paths"] = {
       operationId: "getWorkHome",
       summary: "新首页 v2（DRI 工作台，第 16 节）：没归档的项目（挂着的目标、子会话、事项）、「本月」按 Mission 列这个月的 Task 和挂在哪个项目、「其他」和跨来源的「等你」",
       responses: { "200": json("首页", "WorkHomeResponse"), ...errors(401, 403) },
+    },
+  },
+  "/api/me/work-home/waiting-count": {
+    get: {
+      operationId: "getWorkWaitingCount",
+      summary: "本人有几件「等你」的事（同 work-home 的 waiting 的条数）；管理模式（CEO 视角）和工作模式都能读，给个人菜单里「工作模式」后面的数字用",
+      responses: { "200": json("等你的条数", "WorkWaitingCountResponse"), ...errors(401) },
     },
   },
   "/api/me/background": {

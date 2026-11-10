@@ -6,8 +6,10 @@
 //   mcp <服务器> <工具> [ro]  调 MCP 工具；不是 ro 的来要批准（mcpServer/elicitation/request）
 //   limit             额度用完（usageLimitExceeded），报额度 100%
 //   slow              一直跑，等停下或插话（插话后回一句 heard: …）
+//   compact           先压缩一次上下文（contextCompaction），再回一句
+//   ctx <n>           这一次请求用了 n 个 token（上下文用了多少），再回一句
 //   别的              回一句 echo: <话>
-import { appendFileSync, existsSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const home = process.env.CODEX_HOME ?? ".";
@@ -33,9 +35,10 @@ async function runTurn(t, text, input, clientId) {
   note("item/started", { item: item("userMessage", { clientId: clientId ?? null, content: input }) });
   const words = text.trim().split(/\s+/);
   const msg = async (s) => { const m = item("agentMessage", { text: "" }); note("item/started", { item: m }); note("item/agentMessage/delta", { itemId: m.id, delta: s }); note("item/completed", { item: { ...m, text: s } }); };
-  const usage = () => {
+  // last 是最近一次请求的用量（本机拿它当上下文用了多少）：默认同累计的，ctx <n> 时是 n
+  const usage = (lastTokens) => {
     total = { ...total, totalTokens: total.totalTokens + 15, inputTokens: total.inputTokens + 10, cachedInputTokens: total.cachedInputTokens + 4, outputTokens: total.outputTokens + 5 };
-    note("thread/tokenUsage/updated", { threadId: thread, turnId: t.id, tokenUsage: { total, last: total, modelContextWindow: 200000 } });
+    note("thread/tokenUsage/updated", { threadId: thread, turnId: t.id, tokenUsage: { total, last: lastTokens ? { ...total, totalTokens: lastTokens } : total, modelContextWindow: 200000 } });
     note("account/rateLimits/updated", { rateLimits: { limitId: "codex", primary: { usedPercent: 12, windowDurationMins: 300, resetsAt: soon(1) }, secondary: { usedPercent: 30, windowDurationMins: 10080, resetsAt: soon(24) }, planType: "plus" } });
   };
   const finish = (status = "completed", error = null) => {
@@ -101,7 +104,12 @@ async function runTurn(t, text, input, clientId) {
     usage();
     return finish();
   }
-  usage();
+  if (words[0] === "compact") {
+    const c = item("contextCompaction", {});
+    note("item/started", { item: c, threadId: thread, turnId: t.id });
+    note("item/completed", { item: c, threadId: thread, turnId: t.id });
+  }
+  usage(words[0] === "ctx" ? Number(words[1]) : undefined);
   await msg(`echo: ${text}`);
   finish();
 }
@@ -136,6 +144,8 @@ process.stdin.setEncoding("utf8").on("data", (d) => {
           { id: "secret", model: "secret", displayName: "Hidden", hidden: true, isDefault: false, supportedReasoningEfforts: [], defaultReasoningEffort: "low" },
         ], nextCursor: null });
         break;
+      // 本人的技能：读 CODEX_HOME/fake-skills.json（[{ name, path, scope }]），没有就是空的
+      case "skills/list": reply({ data: [{ cwd: (p.cwds ?? [])[0] ?? "", skills: existsSync(join(home, "fake-skills.json")) ? JSON.parse(readFileSync(join(home, "fake-skills.json"), "utf8")) : [], errors: [] }] }); break;
       case "thread/start": thread = `t-${Date.now()}`; reply({ thread: { id: thread }, model: p.model, modelProvider: "openai" }); break;
       case "thread/resume": thread = p.threadId; reply({ thread: { id: thread }, model: p.model, modelProvider: "openai" }); break;
       case "turn/start": {

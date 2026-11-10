@@ -67,8 +67,9 @@ describe("登录 ID + 4 位口令", () => {
       expect(denied.json()).toMatchObject({ code: "FORBIDDEN" });
       const ceo = await t.loginCookie();
       expect((await t.app.inject({ method: "GET", url: "/api/cards/home", headers: { cookie: ceo } })).statusCode).toBe(200);
-      for (const [cookie, view] of [[ceo, "member"], [member, "ceo"]])
-        expect((await t.app.inject({ method: "POST", url: "/api/auth/view", headers: { cookie, origin: t.publicOrigin }, payload: { view } })).statusCode).toBe(403);
+      // 只有负责人身份的人不能切；CEO 角色的人都能切到工作模式（17.2 第 45 条，见 ceoWorkMode.test.ts）。
+      for (const [cookie, view, status] of [[ceo, "member", 200], [member, "ceo", 403]] as const)
+        expect((await t.app.inject({ method: "POST", url: "/api/auth/view", headers: { cookie, origin: t.publicOrigin }, payload: { view } })).statusCode).toBe(status);
       const session = await t.app.inject({ method: "GET", url: "/api/auth/session", headers: { cookie: ceo } });
       expect(session.json()).toMatchObject({ authenticated: true, personId: TEST_CEO.personId, role: "ceo" });
     } finally {

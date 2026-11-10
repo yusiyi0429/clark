@@ -201,6 +201,28 @@ describe("会议决策逐条确认", { timeout: 30_000 }, () => {
     }
   });
 
+  it("只关会议写本体（MEETING_WORLD_WRITES_OFF）：照常逐条确认、照常冻结，冻结后只留天枢，不写会议事件", async () => {
+    const world = ontology();
+    const s = await setup(TWO_DECISIONS, { meetingWorldWritesOff: true }, V2);
+    try {
+      expect(await confirmsOf(s, s.owner)).toEqual(["decision:dec-1", "action:act-1"]);
+      expect((await review(s, s.owner, { kind: "decision", id: "dec-1", verdict: "confirm" })).statusCode).toBe(200);
+      await assign(s, s.host, { id: "dec-2", ownerPersonId: OWNER });
+      expect((await review(s, s.owner, { kind: "decision", id: "dec-2", verdict: "confirm" })).statusCode).toBe(200);
+      await s.run();
+
+      const view = await getCard(s.t, s.host, s.meetingId);
+      expect(view.worldWritesOff).toBe(true);
+      expect(view.confirmed).toMatchObject({ confirmation: { revision: 1 }, payload: { decisions: [{ id: "dec-1", confirmedBy: OWNER }, { id: "dec-2", confirmedBy: OWNER }] } });
+      expect(view.sync).toMatchObject({ writeToWorld: false, event: { status: "skipped" } });
+      expect(world.events()).toEqual([]);
+      expect(world.revisions()).toEqual([]);
+      expect(await s.t.sql("SELECT count(*)::int AS n FROM jobs WHERE kind = 'meeting.world_sync'")).toEqual([{ n: 0 }]);
+    } finally {
+      await s.t.close();
+    }
+  });
+
   it("记录正文开关打开（MEETING_WORLD_RECORD_TEXT=1）：没有决策的会生成后直接冻结写入，事件带正文", async () => {
     const world = ontology();
     const s = await setup(cardAgent([], []), { meetingRecordText: true }, V2);
