@@ -123,10 +123,16 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
   const models = () => [...MODELS, ...CLAUDE_MODELS, ...(codexIn ? CODEX_MODELS : [])];
   const sessions = new Map<string, MockSession>();
   const projects = new Map<string, TLocalProjectFolder>();
-  const bind = (projectId: string, folder: TLocalFolder | null, name?: string): TLocalProjectFolder => {
-    const bound = { projectId, name: name ?? projects.get(projectId)?.name ?? null, folder: folder ? { id: folder.id, path: folder.path, label: folder.label } : null, updatedAt: now() };
+  const bindAll = (projectId: string, list: TLocalFolder[], name?: string): TLocalProjectFolder => {
+    const refs = list.map((folder) => ({ id: folder.id, path: folder.path, label: folder.label }));
+    const bound = { projectId, name: name ?? projects.get(projectId)?.name ?? null, folder: refs[0] ?? null, folders: refs, updatedAt: now() };
     projects.set(projectId, bound);
     return bound;
+  };
+  /** 只给一个（folderId 那条路）：换掉第一个，其余的不动；它本来在其余的里面时挪到第一个；null 全部解绑。 */
+  const bind = (projectId: string, folder: TLocalFolder | null, name?: string): TLocalProjectFolder => {
+    const rest = (projects.get(projectId)?.folders ?? []).slice(1).filter((entry) => entry.id !== folder?.id).flatMap((entry) => folders.filter((known) => known.id === entry.id));
+    return bindAll(projectId, folder ? [folder, ...rest] : [], name);
   };
   const folders: TLocalFolder[] = [{ id: "f1", path: "C:\\work\\tianshu", label: "tianshu", addedAt: new Date().toISOString() }];
   const tools: TLocalTool[] = [{ id: "kb", name: "知识库", preset: "custom", url: "https://mcp.example.com/kb", keyHeader: null, hasKey: true, state: "ready", toolCount: 6, error: null, checkedAt: new Date().toISOString(), addedAt: new Date().toISOString() }];
@@ -408,6 +414,11 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
     removeFolder: async (id) => { const i = folders.findIndex((f) => f.id === id); if (i >= 0) folders.splice(i, 1); },
     listProjects: async () => [...projects.values()],
     putProjectFolder: async (projectId, body) => {
+      if (body.folderIds) {
+        const list = body.folderIds.map((id) => folders.find((entry) => entry.id === id));
+        if (list.some((entry) => !entry)) throw new LocalRunnerError("not_found", "没有这个文件夹，先选文件夹", 404);
+        return bindAll(projectId, list as TLocalFolder[], body.name);
+      }
       const folder = body.folderId ? folders.find((entry) => entry.id === body.folderId) : null;
       if (body.folderId && !folder) throw new LocalRunnerError("not_found", "没有这个文件夹，先选文件夹", 404);
       return bind(projectId, folder ?? null, body.name);

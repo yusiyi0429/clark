@@ -6,6 +6,8 @@ type Contracts = typeof import("@warmap/contracts");
 
 export const LOCAL_RUNNER_DEFAULT_PORT: Contracts["LOCAL_RUNNER_DEFAULT_PORT"] = 47610;
 export const LOCAL_RUNNER_TOKEN_HEADER: Contracts["LOCAL_RUNNER_TOKEN_HEADER"] = "x-tianshu-local-token";
+/** 一个项目在一台电脑上最多绑几个文件夹（17.2 第 46 条）。 */
+export const LOCAL_PROJECT_FOLDER_LIMIT: Contracts["LOCAL_PROJECT_FOLDER_LIMIT"] = 5;
 
 export const LOCAL_RUNNER_ROUTES: Contracts["LOCAL_RUNNER_ROUTES"] = {
   health: { method: "GET", path: "/v1/health", auth: false },

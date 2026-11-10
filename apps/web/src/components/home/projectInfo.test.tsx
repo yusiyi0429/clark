@@ -8,7 +8,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: 
 const local = { phase: "ready", folders: [], sessions: [] } as unknown as Parameters<typeof LocalContext.Provider>[0]["value"];
 
 const project = { id: "p1", name: "首页改版", archived: false, folder: null, transfer: null, goals: [], current: [], subSessions: [], items: [] } as unknown as Project;
-const actions = { rename: vi.fn(), archive: vi.fn(), setFolder: vi.fn(), setDue: vi.fn(), transfer: vi.fn(), withdraw: vi.fn() };
+const actions = { rename: vi.fn(), archive: vi.fn(), setFolders: vi.fn(), setDue: vi.fn(), transfer: vi.fn(), withdraw: vi.fn() };
 
 describe("项目详情：自动接力上限（18.12）", () => {
   it("有一行「自动接力上限」，没读到项目详情时写缺省的 20 轮", () => {

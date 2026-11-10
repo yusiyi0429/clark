@@ -15,7 +15,6 @@
 import { createContext, useContext, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { ChevronRight, Ellipsis, House, Info, Plus, Timer } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
-import { FailedLine, failureOf, type Failure } from "@/components/work/DecisionBox";
 import type { Account } from "@/components/AccountMenu";
 import { BuddyMark } from "@/components/buddy/BuddyMark";
 import type { Buddy } from "@/components/buddy/useBuddy";
@@ -26,6 +25,7 @@ import type { SubSession, WorkHomeData } from "@/lib/home/types";
 import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import { useDictationSignal } from "@/conversation/dictationSignal";
 import { PersonRow } from "./PersonMenu";
+import { NewProjectDialog } from "./NewProjectDialog";
 import { useHoverTip, useNameTip } from "./NameTip";
 import { LocalContext, latestSessionFor } from "@/lib/local/LocalRunnerProvider";
 import { runLabel } from "@/lib/local/runModel";
@@ -34,6 +34,7 @@ import { ICON, type IconState } from "./StateIcon";
 import { pageHref, type View } from "./view";
 import { showUnseen, type SeenKind, type SeenMarks } from "@/lib/home/seen";
 import type { TArchivedSubSession, TSubSessionKind } from "@warmap/contracts";
+import { LOCAL_PROJECT_FOLDER_LIMIT } from "@/lib/local/routes";
 import { showWorkspaceToast } from "@/lib/toast";
 import { RowMenu, conflictText, useLongPress, type RowMenuItem } from "./RowMenu";
 
@@ -114,7 +115,7 @@ function useStageScale(off: boolean) {
   return { ref, scale };
 }
 
-export function LeftColumn({ data, view, buddy, speaking, go, phone, account, today, alert, trail, top, month, onRetryPlan, projects, archived, archivedSubs = [], actions = null, onCreate, cardAt, working, seen, onOpen }: {
+export function LeftColumn({ data, view, buddy, speaking, go, phone, account, today, alert, trail, top, month, onRetryPlan, projects, archived, archivedSubs = [], actions = null, onCreate, folderLimit = LOCAL_PROJECT_FOLDER_LIMIT, cardAt, working, seen, onOpen }: {
   data: WorkHomeData;
   view: View;
   buddy: Buddy | null;
@@ -142,8 +143,10 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
   archivedSubs?: TArchivedSubSession[];
   /** 行尾「…」菜单（35 条）；不给就不画。 */
   actions?: RowActions | null;
-  /** 新建一个项目（POST /api/me/projects），回它的 id（建好直接进项目页）；没建成在组头下写「失败 · 重试」。 */
-  onCreate: (name: string) => Promise<string>;
+  /** 新建一个项目（POST /api/me/projects，选了文件夹的建好后绑上），回它的 id（建好直接进项目页）；没建成在弹窗里写「失败 · 重试」。 */
+  onCreate: (name: string, folderIds: string[]) => Promise<string>;
+  /** 一个项目最多绑几个文件夹（老的本机程序是 1）。 */
+  folderLimit?: number;
   /** 卡建出来的时间（看板里的）：一个项目下的会话照派活单的先后排（和对话里「开了哪几个子会话」一样）。 */
   cardAt?: ReadonlyMap<string, string>;
   /** 蓝点「点了就藏」（25 条）：这一页里刚看过的（见 lib/home/seen），和点行时在跳页之前记一下。 */
@@ -164,14 +167,8 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
   // 伙伴台「亮着」（17.2）：只在伙伴对话里；在说或在想（回话流着）> 在听（听写开着）> 空闲。
   const glow = view.kind !== "buddy" ? undefined : speaking ? "speaking" : dictation ? "listening" : "idle";
   const stage = useStageScale(phone);
-  const [createFailed, setCreateFailed] = useState<Failure | null>(null);
-  const create = (value: string) => {
-    setNaming(false);
-    const trimmed = value.trim();
-    if (!trimmed) return;
-    const run = () => { setCreateFailed(null); void onCreate(trimmed).then((id) => go(projectHref(id)), (error) => setCreateFailed(failureOf(error, run))); };
-    run();
-  };
+  // 新建项目的弹窗里有没有文件夹那一块：这台电脑连着本机程序才有（手机、没装的没有）。
+  const localReady = useContext(LocalContext)?.phase === "ready";
   return (
     <SeenContext.Provider value={{ seen, onOpen }}>
     <ActionsContext.Provider value={actions}>
@@ -208,15 +205,9 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
             <button type="button" className={h.groupAdd} title="新建项目" aria-label="新建项目" onClick={() => setNaming(true)} data-testid="project-add"><Plus size={14} strokeWidth={1.8} aria-hidden /></button>
           </div>
           {naming ? (
-            <input className={h.projectName} autoFocus aria-label="项目名" placeholder="项目名" maxLength={60} data-testid="project-name"
-              onBlur={(event) => create(event.currentTarget.value)}
-              onKeyDown={(event) => {
-                if (event.nativeEvent.isComposing) return;
-                if (event.key === "Enter") { event.preventDefault(); create(event.currentTarget.value); }
-                if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setNaming(false); }
-              }} />
+            <NewProjectDialog withFolders={!phone && localReady} limit={folderLimit} onClose={() => setNaming(false)}
+              onCreate={(name, folderIds) => onCreate(name, folderIds).then((id) => go(projectHref(id)))} />
           ) : null}
-          {createFailed ? <FailedLine {...createFailed} /> : null}
           {projects.map((project) => <ProjectNode key={project.id} project={project} view={view} go={go} personId={account.personId} cardAt={cardAt} working={!!working?.has(project.id)} />)}
           {archived.length || archivedSubs.length ? (
             <>

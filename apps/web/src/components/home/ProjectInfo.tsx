@@ -4,7 +4,8 @@
  * 项目详情（新首页设计 16.3「详情」，替换 Task 详情的入口）。文档类页面（5.4.7）：
  * - 本月目标（20 条）：本月挂着的 Task 一件一行，写截止和标准进度，点开逐条看（同原来项目对话页头的目标条）；
  * - 往月目标：只放本月以前的月份，按月分组、近的在上，每行写结果（GET /api/me/projects/:projectId 的 goals：完成 / 延续到 X 月 / 到此为止 / 没完成）；没有往月整块不画；
- * - 文件夹：这台电脑上的哪个文件夹（连接页加过的那些），能换、能不绑（本机程序 PUT /v1/projects/:projectId/folder）；
+ * - 文件夹（17.2 第 46 条）：这台电脑上绑的几个文件夹，一个一行，能添加、能移除，第一个是工作目录（本机程序 PUT /v1/projects/:projectId/folder）；
+ *   没连上本机程序时不出这一节；
  * - 自动接力上限（18.12）：连续自动接力多少轮停下来问本人，缺省 20，可以不限（PATCH autoRelayLimit，不限是 null）；
  * - 转交（16.7）：「转给…」发起一份（POST /api/me/projects/:projectId/transfers），准备中、等接手时能撤回；
  * - 改名、归档（归档的能取消），调 PATCH /api/me/projects/:projectId，没成写「失败 · 重试」；
@@ -23,7 +24,8 @@ import { HeroButton } from "@/components/HeroButton";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { TaskDeliverable } from "@/components/member/home/deliverable/TaskDeliverable";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
-import { mainGoal, projectHref, type Project } from "@/lib/home/projects";
+import { mainGoal, projectHref, type FolderRef, type Project } from "@/lib/home/projects";
+import { AddFolder, FolderList } from "./NewProjectDialog";
 import { useViewChrome } from "./view";
 import { TaskBudget } from "./TaskBudget";
 import { GoalBar } from "./ProjectParts";
@@ -33,7 +35,7 @@ import h from "@/styles/home.module.css";
 export type ProjectActions = {
   rename: (id: string, name: string) => Promise<void>;
   archive: (id: string, archived: boolean) => Promise<void>;
-  setFolder: (id: string, folderId: string | null, name?: string) => Promise<void>;
+  setFolders: (id: string, folderIds: string[], name?: string) => Promise<void>;
   setDue: (projectId: string, taskId: string, dueDate: string | null) => Promise<void>;
   transfer: (projectId: string, toPersonId: string) => Promise<void>;
   withdraw: (transferId: string) => Promise<void>;
@@ -93,8 +95,11 @@ function useDetail(project: Project) {
   return { history, limit, setLimit };
 }
 
-export function ProjectInfo({ project, period, go, actions, doneDefinitionOf, me }: {
+export function ProjectInfo({ project, period, go, actions, folders = [], folderLimit = 1, doneDefinitionOf, me }: {
   project: Project;
+  /** 这台电脑上绑的文件夹（有顺序，第一个是工作目录）和最多能绑几个。 */
+  folders?: readonly FolderRef[];
+  folderLimit?: number;
   /** 这个月（YYYY-MM）。 */
   period: string;
   go: (href: string) => void;
@@ -120,6 +125,7 @@ export function ProjectInfo({ project, period, go, actions, doneDefinitionOf, me
     once();
   };
   const doneDefinition = goal ? doneDefinitionOf(goal.taskId) : null;
+  const putFolders = (next: readonly FolderRef[]) => attempt(() => actions.setFolders(project.id, next.map((folder) => folder.id), project.name));
   return (
     <div className={h.infoView} data-type-scale="doc" data-testid="project-info-view">
       <header className={h.viewHead}>
@@ -149,20 +155,15 @@ export function ProjectInfo({ project, period, go, actions, doneDefinitionOf, me
               </ul>
             </section>
           ) : null}
-          <section aria-label="文件夹" className={h.section}>
-            <p className={h.sectionTitle}>文件夹</p>
-            <div className={h.infoRow}>
-              <Dropdown>
-                <Dropdown.Trigger className={h.sendTo} data-testid="project-folder"><b>{project.folder ?? "不绑"}</b></Dropdown.Trigger>
-                <Dropdown.Popover placement="bottom start" offset={8} className={h.pop}>
-                  <Dropdown.Menu aria-label="文件夹" className={h.menuList} onAction={(key) => attempt(() => actions.setFolder(project.id, key === "none" ? null : String(key), project.name))}>
-                    {[...local.folders.map((folder) => <Dropdown.Item key={folder.id} id={folder.id} textValue={folder.label} className={h.menuItem}>{folder.label}</Dropdown.Item>),
-                      <Dropdown.Item key="none" id="none" textValue="不绑" className={h.menuItem}>不绑</Dropdown.Item>]}
-                  </Dropdown.Menu>
-                </Dropdown.Popover>
-              </Dropdown>
-            </div>
-          </section>
+          {local.phase === "ready" ? (
+            <section aria-label="文件夹" className={h.section} data-testid="project-folders">
+              <p className={h.sectionTitle}>文件夹</p>
+              <FolderList folders={folders} onRemove={(id) => putFolders(folders.filter((folder) => folder.id !== id))} />
+              {folders.length < folderLimit ? (
+                <div className={h.infoRow}><AddFolder onPicked={(folder) => { if (!folders.some((entry) => entry.id === folder.id)) putFolders([...folders, folder]); }} /></div>
+              ) : null}
+            </section>
+          ) : null}
           <section aria-label="自动接力上限" className={h.section}>
             <p className={h.sectionTitle}>自动接力上限</p>
             <div className={h.infoRow}>

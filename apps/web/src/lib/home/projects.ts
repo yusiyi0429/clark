@@ -61,8 +61,11 @@ export type Project = {
 
 /** 这台电脑上各项目绑的文件夹：项目 id → 文件夹名。 */
 export type Folders = ReadonlyMap<string, string>;
-/** 同上，带文件夹 id 和路径（开工用）。 */
-export type BoundFolders = ReadonlyMap<string, { id: string; path: string; label: string }>;
+export type FolderRef = { id: string; path: string; label: string };
+/** 同上，带文件夹 id 和路径（开工用）：绑了多个的是第一个（工作目录）。 */
+export type BoundFolders = ReadonlyMap<string, FolderRef>;
+/** 各项目绑的整份文件夹列表（17.2 第 46 条）：有顺序，第一个是工作目录。 */
+export type BoundFolderLists = ReadonlyMap<string, readonly FolderRef[]>;
 
 /** 首页 v2 的一个项目（没归档的，已经按 16.2 排好）。 */
 export function fromHome(project: HomeProject, data: Pick<WorkHomeData, "month" | "period">, folders: Folders): Project {

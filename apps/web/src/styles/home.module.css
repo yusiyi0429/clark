@@ -142,6 +142,17 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .historyName { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .statusChip[data-static] { cursor: default; }
 .statusChip[data-static]:hover { background: var(--neutral-wash); color: var(--ink-muted); }
+/* 新建项目的小弹窗和文件夹列表（17.2 第 46 条）：弹窗用浮层同一套材质；列表一个一行——名字、淡色路径、行尾移除。 */
+.dialogBackdrop { background: var(--backdrop); }
+.dialog { display: grid; gap: var(--space-4); width: min(400px, calc(100vw - 32px)); max-width: none; margin: auto; padding: var(--space-4); border-radius: var(--r-card); background: var(--surface); color: var(--ink); font-family: var(--font-sans); font-size: var(--text-base); line-height: var(--lh-row); box-shadow: inset 0 0 0 1px var(--hairline), var(--elev-3); }
+.dialogTitle { margin: 0; font-size: var(--text-base); font-weight: 600; line-height: var(--lh-row); }
+.dialogBlock { display: grid; margin: 0 calc(var(--space-2) * -1); }
+.dialogActions { display: flex; justify-content: flex-end; gap: var(--space-2); }
+.folderList { display: grid; margin: 0; padding: 0; list-style: none; }
+.folderList li { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-36); padding: 0 0 0 var(--space-2); }
+.folderLabel { flex: none; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.folderPath { flex: 1; min-width: 0; overflow: hidden; color: var(--ink-faint); font-size: var(--text-xs); text-overflow: ellipsis; white-space: nowrap; }
+.folderList li > .menuFaint { flex: none; font-size: var(--text-xs); }
 .infoRow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: 0 var(--space-2); }
 .infoRow .projectName { flex: 1; min-width: 160px; }
 /* 首页「本月」（16.4）：Mission 名能点（进只读详情），每件 Task 后面一个项目 chip 或「挂到…」。 */
