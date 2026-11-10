@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { ReduceMotionSync } from "@/components/ReduceMotionSync";
+import { ThemeColorSync } from "@/components/ThemeColorSync";
 import { APPEARANCE_SCRIPT } from "@/lib/appearanceScript";
 import "./globals.css";
 
@@ -25,9 +26,10 @@ export const metadata: Metadata = {
 /**
  * 弹出软键盘时让整页（外壳是 100dvh）一起缩到键盘上方：底部的输入条、对话记录层跟着上来，不被键盘盖住。
  * Android / 鸿蒙的 Chromium 内核浏览器默认只缩视觉视口，固定在底部的输入条会被推到键盘后面；iOS Safari 忽略这一项。
- * viewportFit cover：页面铺到刘海和底部横条下面，各处用 safe-area-inset 自己留白；themeColor 是手机浏览器顶栏的颜色。
+ * viewportFit cover：页面铺到刘海和底部横条下面，各处用 safe-area-inset 自己留白。
+ * 顶栏、窗口标题栏的颜色（theme-color）不在这里写死：跟着外观变，由首屏脚本和 ThemeColorSync 写。
  */
-export const viewport: Viewport = { width: "device-width", initialScale: 1, interactiveWidget: "resizes-content", viewportFit: "cover", themeColor: "#1b2543" };
+export const viewport: Viewport = { width: "device-width", initialScale: 1, interactiveWidget: "resizes-content", viewportFit: "cover" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -36,6 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head><script dangerouslySetInnerHTML={{ __html: APPEARANCE_SCRIPT }} /></head>
       <body className="min-h-full bg-paper">
         <ReduceMotionSync />
+        <ThemeColorSync />
         {children}
       </body>
     </html>
