@@ -12,7 +12,7 @@ import type { CompanyReader } from "./company.js";
 import { createPersonalMemory } from "./personalMemory.js";
 import { createMemoryRecall, memoryRecallModels, type MemoryRecall } from "./personalMemoryRecall.js";
 import { createPersonalDistillation } from "./personalDistillation.js";
-import { createChatService } from "./chatService.js";
+import { createChatService, type ChatRunExtras } from "./chatService.js";
 import { pipelineConversationIds } from "./taskPipelines.js";
 import { projectPageFacts } from "./projects.js";
 import { pageFor } from "./pageGuides.js";
@@ -136,6 +136,7 @@ import { createTaskAcceptanceAgent, type TaskAcceptanceAgent } from "./taskAccep
 import { createWorldPlanTaskSource, emptyPlanTaskSource, type PlanTaskSource } from "./planTasks.js";
 import { registerDeliverableRoutes } from "./routes/deliverables.js";
 import { registerLocalRoutes } from "./routes/local.js";
+import { registerProjectLocalTurnRoutes } from "./routes/projectLocalTurns.js";
 import { registerRoleRoutes } from "./routes/roles.js";
 import { registerWorkerRoutes } from "./routes/workers.js";
 import { registerTopicRoutes } from "./routes/topics.js";
@@ -147,7 +148,8 @@ import { registerProjectTransferRoutes } from "./routes/projectTransfers.js";
 import { registerBuddyActionRoutes } from "./routes/buddyActions.js";
 import { closeQuestions, collapsePlan, runExtras } from "./buddyActions.js";
 import { recordProjectReply } from "./workSeen.js";
-import { recordTurnModel, turnModels } from "./chatTurnModels.js";
+import { recordTurnFallback, recordTurnModel, turnModels } from "./chatTurnModels.js";
+import { localTurnExtras } from "./projectLocalTurns.js";
 import { registerTaskContinuityRoutes } from "./routes/taskContinuity.js";
 import { registerTaskCardRoutes, type BoardAgents } from "./routes/taskCards.js";
 import { planTaskOpener, taskPageFacts } from "./taskCards.js";
@@ -547,12 +549,16 @@ export async function buildApp({
     // 伙伴代本人做事（17.4）：读回历史时接上每一轮的计划清单和卡；本人中途发新消息时上一轮的清单收起。
     // 再接上每一轮实际用的来源和模型。
     runExtras: async (viewer, runIds) => {
-      const [buddy, models] = await Promise.all([runExtras(pool.query.bind(pool), viewer.personId, runIds), turnModels(pool.query.bind(pool), viewer.personId, runIds)]);
-      const extras = new Map<string, { plan?: TBuddyPlan; cards?: TConversationCard[]; model?: TConversationModel }>(buddy);
-      for (const [runId, model] of models) extras.set(runId, { ...extras.get(runId), model });
+      const [buddy, models, local] = await Promise.all([runExtras(pool.query.bind(pool), viewer.personId, runIds), turnModels(pool.query.bind(pool), viewer.personId, runIds),
+        localTurnExtras(pool.query.bind(pool), viewer.personId, runIds)]);
+      const extras = new Map<string, ChatRunExtras>(buddy);
+      for (const [runId, model] of models) extras.set(runId, { ...extras.get(runId), ...model });
+      // 项目对话在本人电脑上跑的那几轮（17.2 第 38 条）：在哪跑、执行方和模型。
+      for (const [runId, ran] of local) extras.set(runId, { ...extras.get(runId), ...ran });
       return extras;
     },
     onModel: (viewer, runId, used) => recordTurnModel(pool.query.bind(pool), viewer.personId, runId, used, now()),
+    onFallback: (viewer, runId, reason) => recordTurnFallback(pool.query.bind(pool), viewer.personId, runId, reason, now()),
     onInterrupt: async (_viewer, runId) => {
       const plan = await collapsePlan(pool.query.bind(pool), runId);
       if (plan) chat?.inject(runId, { type: "plan", plan });
@@ -941,6 +947,7 @@ export async function buildApp({
   registerTaskContinuityRoutes(app, ctx);
   const board = registerTaskCardRoutes(app, ctx, { agents: boardAgents, fetchArticle: deliverableFetcher });
   registerLocalRoutes(app, ctx, board);
+  registerProjectLocalTurnRoutes(app, ctx);
 
   return app;
 }
