@@ -28,8 +28,16 @@ describe("个人菜单", () => {
       view={{ kind: "home" }} alert={false} go={() => undefined} />);
     const items = [...html.matchAll(/data-item="([^"]+)"/g)].map((match) => match[1]);
     // 连接、技能合成一项「连接和技能」（11/09 用户定）。
-    expect(items).toEqual(["profile", "buddy", "connections", "memory", "preferences", "switch", "admin", "lock", "logout"]);
+    expect(items).toEqual(["profile", "buddy", "connections", "memory", "preferences", "mode-manage", "mode-work", "admin", "lock", "logout"]);
     expect(html).toContain('data-item="connections">连接和技能<');
     expect(html).not.toContain("任务数据质量");
+  });
+
+  it("CEO 的两种模式（17.2 第 45 条）：一组两项「管理模式」「工作模式」，新首页里打勾的是工作模式；不写「切换到…」", () => {
+    const html = renderToStaticMarkup(<PersonRow account={{ displayName: "王路遥", loginId: "wangluyao", role: "member", personId: "wang-luyao" } as never}
+      view={{ kind: "home" }} alert={false} go={() => undefined} />);
+    expect(html).toMatch(/data-item="mode-manage"><span[^>]*>管理模式<\/span><\/div>/);
+    expect(html).toMatch(/data-item="mode-work"><span[^>]*>工作模式<\/span><svg/);
+    expect(html).not.toContain("切换到");
   });
 });

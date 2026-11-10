@@ -125,6 +125,9 @@
 /* 「设置 ›」：箭头靠右；二级开着时这一行保持按下的浅底。 */
 .item.item > svg.more { margin-left: auto; color: #8a95a6; }
 .item.item[data-settings][aria-expanded='true'] { background: rgb(255 255 255 / 58%); }
+/* 管理模式 / 工作模式：现在这个前面打勾，另一个留同样宽的空位；「工作模式」后面的数靠右。 */
+.item.item > .blank { flex: none; width: 16px; }
+.item.item > .count { margin-left: auto; color: #4f5a6b; font-size: 12.5px; font-variant-numeric: tabular-nums; }
 .rule { margin: 4px 8px; border: 0; border-top: 1px solid rgb(31 53 86 / 10%); }
 
 /* 不支持或不想要透明效果时：退回实色，字照样读得清。 */

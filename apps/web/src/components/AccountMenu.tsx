@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button, Modal, Popover } from "ts-design/primitives";
 import { TianshuPortalTheme } from "ts-design";
-import { Activity, ArrowLeftRight, ArrowRight, AudioLines, Brain, CalendarClock, ChevronRight, CircleUserRound, Image as ImageIcon, KeyRound, Link2, LogOut, Laptop, MessageCircle, Mic, PlugZap, Radar, RotateCcw, Settings, Settings2, Smile, X } from "lucide-react";
+import { Activity, ArrowRight, AudioLines, Brain, CalendarClock, Check, ChevronRight, CircleUserRound, Image as ImageIcon, KeyRound, Link2, LogOut, Laptop, MessageCircle, Mic, PlugZap, Radar, RotateCcw, Settings, Settings2, Smile, X } from "lucide-react";
 import { browserApi } from "@/lib/api/client";
 import { feishuConnectHref, readFeishuConnection } from "@/lib/feishuLogin";
 import { logout } from "@/lib/logout";
@@ -53,6 +53,9 @@ export function accountSubtitle(account: Account, demo: boolean): string {
 
 type Dialog = "voiceprint" | "avatar" | "radar" | "connection" | "collector" | "coagent" | "railBackground" | "passcode" | "voice" | "profile" | "wechat" | null;
 
+/** CEO 的两种模式（17.2 第 45 条）：管理模式是 CEO 视角（现在的 CEO 界面），工作模式是成员视角（新首页）。 */
+const MODES = [{ view: "ceo", label: "管理模式" }, { view: "member", label: "工作模式" }] as const;
+
 export function AccountMenu({ account, compact = false, onNavigate }: { account: Account; compact?: boolean; onNavigate?: (href: string) => void }) {
   const [open, setOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -61,6 +64,8 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
   const [leaving, setLeaving] = useState(false);
   const [leaveArmed, setLeaveArmed] = useState(false);
   const [canSwitchView, setCanSwitchView] = useState(false);
+  // 管理模式里「工作模式」后面的数：本人有几件「等你」的事（17.2 第 45 条），开菜单时取一次。
+  const [waiting, setWaiting] = useState(0);
   const [admin, setAdmin] = useState(false);
   const [voiceConfigured, setVoiceConfigured] = useState(false);
   const [feishu, setFeishu] = useState<{ enabled: boolean; connected: boolean } | null>(null);
@@ -96,9 +101,9 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
     void readFeishuConnection().then(setFeishu);
     void readWechatConnection().then(setWechat);
     void readTaskQualityEnabled().then(setTaskQuality);
+    if (account.role === "ceo") void browserApi.GET("/api/me/work-home/waiting-count").then(({ response, data }) => setWaiting(response.ok && data ? data.count : 0), () => undefined);
   };
-  const switchView = async () => {
-    const view = account.role === "ceo" ? "member" : "ceo";
+  const switchView = async (view: "ceo" | "member") => {
     setBusy(true);
     setError(null);
     try {
@@ -106,7 +111,7 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
       if (!response.ok) throw new Error("switch failed");
       window.location.assign(view === "ceo" ? "/" : "/me");
     } catch {
-      setError("切换工作台失败，请重试。");
+      setError("切换失败，请重试。");
       setBusy(false);
     }
   };
@@ -243,10 +248,17 @@ export function AccountMenu({ account, compact = false, onNavigate }: { account:
                   组织配置
                 </Button>
               ) : null}
-              {canSwitchView ? <Button variant="ghost" className={m.item} isDisabled={busy} onPress={() => void switchView()}>
-                <ArrowLeftRight size={16} aria-hidden="true" />
-                {account.role === "ceo" ? "切换到负责人工作台" : "切换到 CEO 工作台"}
-              </Button> : null}
+              {canSwitchView ? <>
+                <hr className={m.rule} />
+                {MODES.map(({ view, label }) => (
+                  <Button key={view} variant="ghost" className={m.item} isDisabled={busy} aria-current={account.role === view ? "true" : undefined}
+                    onPress={() => { if (account.role !== view) void switchView(view); }}>
+                    {account.role === view ? <Check size={16} aria-hidden="true" /> : <span className={m.blank} aria-hidden="true" />}
+                    {label}
+                    {view === "member" && account.role === "ceo" && waiting > 0 ? <span className={m.count} aria-label={`${waiting} 件等你`}>{waiting}</span> : null}
+                  </Button>
+                ))}
+              </> : null}
               {error ? <p className={m.error} role="alert">{error}</p> : null}
               <hr className={m.rule} />
               <Button
