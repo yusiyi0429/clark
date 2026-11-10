@@ -31038,6 +31038,30 @@
                     }
                   }
                 },
+                "ranOn": {
+                  "anyOf": [
+                    {
+                      "const": "cloud",
+                      "type": "string"
+                    },
+                    {
+                      "const": "local",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "fallback": {
+                  "anyOf": [
+                    {
+                      "const": "local_unavailable",
+                      "type": "string"
+                    },
+                    {
+                      "const": "local_quota",
+                      "type": "string"
+                    }
+                  ]
+                },
                 "readScope": {
                   "additionalProperties": false,
                   "type": "object",
@@ -31233,6 +31257,36 @@
                 }
               }
             }
+          },
+          "localTurn": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "turnId",
+              "message",
+              "startedAt",
+              "deviceName",
+              "source"
+            ],
+            "properties": {
+              "turnId": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "startedAt": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "deviceName": {
+                "type": "string"
+              },
+              "source": {
+                "type": "string"
+              }
+            }
           }
         }
       },
@@ -31407,6 +31461,18 @@
             "maxLength": 200,
             "pattern": "^/",
             "type": "string"
+          },
+          "fallback": {
+            "anyOf": [
+              {
+                "const": "local_unavailable",
+                "type": "string"
+              },
+              {
+                "const": "local_quota",
+                "type": "string"
+              }
+            ]
           }
         }
       },
