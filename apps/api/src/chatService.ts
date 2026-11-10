@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyReply } from "fastify";
-import { ConversationModelListResponse, ProjectPipelineModel, type TConversationModelChoice, type TConversationModelOption } from "@warmap/contracts";
+import { ChatRecordedTurnResponse, ConversationModelListResponse, ProjectPipelineModel, type TChatRecordedTurnRequest, type TChatRecordedTurnResponse, type TConversationModelChoice, type TConversationModelOption, type TLocalFallbackReason } from "@warmap/contracts";
 import { AskAnswerRecord, ConversationCard, SUB_SESSION_REPORT_PREFIX, type TAskAnswerRecord, type TBuddyPlan, type TConversationCard, type TConversationMessageRequest, type TConversationModel, type TPartnerMemoryItem } from "@warmap/contracts";
 import { turnFailureCopy } from "./conversationRecovery.js";
 import { segmentDateLabel, startsNewSegment } from "./conversationSegments.js";
@@ -39,7 +39,9 @@ type ChatAttachment = { attachmentId: string; fileName: string; mime: string; si
 type ChatMessage = { position?: string; role: "user" | "assistant"; text: string; runId: string; attachments?: ChatAttachment[]; turnAt?: string; channel?: HomeTurnVia | null;
   /** 伙伴的选项框（ask_user）：助手消息带提问卡，本人的作答消息带问答记录（契约 workHome.ts 顶部）。 */
   cards?: unknown; answers?: unknown };
-type ChatRun = { runId: string; status: string };
+type ChatRun = { runId: string; status: string; turnAt?: string };
+/** 读回历史时接到每一轮回答上的（runExtras）：计划清单、卡、来源和模型；项目对话还有在哪跑、是不是本机没跑成改在云端（17.2 第 38 条）。 */
+export type ChatRunExtras = { plan?: TBuddyPlan; cards?: TConversationCard[]; model?: TConversationModel; ranOn?: "cloud" | "local"; fallback?: TLocalFallbackReason };
 type ChatMessagePage = { messages: ChatMessage[]; nextCursor: string | null; runs: ChatRun[] };
 type ChatEvent = { type: string; [key: string]: unknown };
 /**
@@ -164,9 +166,11 @@ export function createChatService(options: {
   /** 本人的项目对话那几段（project_pipelines，和以前的 task_pipelines）：总管线挑段时排除，不当成首页的段。 */
   pipelines?: (viewer: ChatViewer) => Promise<Set<string>>;
   /** 伙伴每一轮的计划清单和出的卡（17.4，buddyActions.ts 的 runExtras）：读回历史时接到那一轮的回答上。 */
-  runExtras?: (viewer: ChatViewer, runIds: string[]) => Promise<Map<string, { plan?: TBuddyPlan; cards?: TConversationCard[]; model?: TConversationModel }>>;
+  runExtras?: (viewer: ChatViewer, runIds: string[]) => Promise<Map<string, ChatRunExtras>>;
   /** 这一轮实际用的来源和模型（Chat 的 usage 事件报的，一轮里换了才再给）：记下来，读历史时由 runExtras 接回去。失败只记日志。 */
   onModel?: (viewer: ChatViewer, runId: string, used: TConversationModel) => Promise<void>;
+  /** 项目对话这一轮本该在本机跑、没跑成改发云端（请求带 fallback，17.2 第 38 条）：Chat 开始这一轮时记下。失败只记日志。 */
+  onFallback?: (viewer: ChatViewer, runId: string, reason: TLocalFallbackReason) => Promise<void>;
   /** 本人在伙伴回答到一半时发来新消息、上一轮要停掉之前（17.4）：收起那一轮的计划清单。失败只记日志。 */
   onInterrupt?: (viewer: ChatViewer, runId: string) => Promise<void>;
   /** 本人在这个对话（scope）里发出一条新消息、交给 Chat 之前（18 节第 9 条）：伙伴还 open 的选项框收掉，answered 是这一句回答的那个。失败只记日志。 */
@@ -286,16 +290,20 @@ export function createChatService(options: {
       throw error;
     }
   };
-  /** 读回历史时接上伙伴每一轮的计划清单和卡（卡排在 Chat 存的卡后面，最多 4 张）。 */
-  const withExtras = async <M extends { role: string; runId: string; kind?: string; cards?: TConversationCard[] }>(viewer: ChatViewer, messages: M[]) => {
+  /**
+   * 读回历史时接上伙伴每一轮的计划清单和卡（卡排在 Chat 存的卡后面，最多 4 张）。
+   * project（项目对话）：每条回答标上在哪跑（不是本机跑的就是云端），本机没跑成改在云端的标 fallback。
+   */
+  const withExtras = async <M extends { role: string; runId: string; kind?: string; cards?: TConversationCard[] }>(viewer: ChatViewer, messages: M[], project = false) => {
     const runIds = [...new Set(messages.filter((message) => message.role === "assistant" && !message.kind).map((message) => message.runId))];
     const extras = options.runExtras && runIds.length ? await options.runExtras(viewer, runIds) : undefined;
-    if (!extras?.size) return messages;
+    if (!extras?.size && !project) return messages;
     return messages.map((message) => {
-      const extra = message.role === "assistant" && !message.kind ? extras.get(message.runId) : undefined;
-      if (!extra) return message;
+      if (message.role !== "assistant" || message.kind) return message;
+      const extra = extras?.get(message.runId) ?? {};
       const cards = [...(message.cards ?? []), ...(extra.cards ?? [])].slice(0, 4);
-      return { ...message, ...(cards.length ? { cards } : {}), ...(extra.plan ? { plan: extra.plan } : {}), ...(extra.model ? { model: extra.model } : {}) };
+      return { ...message, ...(cards.length ? { cards } : {}), ...(extra.plan ? { plan: extra.plan } : {}), ...(extra.model ? { model: extra.model } : {}),
+        ...(project ? { ranOn: extra.ranOn ?? "cloud" } : {}), ...(project && extra.fallback ? { fallback: extra.fallback } : {}) };
     });
   };
   /** 正在回答的上一轮：网页里问的在 liveTurns 里，否则从这一段的 runs 里找还在跑的。 */
@@ -405,7 +413,7 @@ export function createChatService(options: {
     async history(viewer: ChatViewer, requestId: string, target?: ChatTarget) {
       if (target) {
         const { messages, runs } = await allMessages(viewer, requestId, target.conversationId);
-        return { scope: target.scope, messages: await withExtras(viewer, historyMessages(messages, runs)) };
+        return { scope: target.scope, messages: await withExtras(viewer, historyMessages(messages, runs), true) };
       }
       const segments: Parameters<typeof joinSegments>[0] = [];
       let count = 0;
@@ -416,6 +424,17 @@ export function createChatService(options: {
         count += messages.length;
       }
       return { scope: "global", messages: await withExtras(viewer, joinSegments(segments)) };
+    },
+
+    /**
+     * 补记一轮（17.2 第 38 条）：项目对话在本人电脑上跑完的一轮写进 Chat 那一段（Chat 的 POST /conversations/:id/recorded-turns，契约 ChatRecordedTurnRequest）。
+     * Chat 那段对话正在回答时抛 TURN_IN_PROGRESS，调用方隔几秒再写。
+     */
+    async recordTurn(viewer: ChatViewer, requestId: string, conversationId: string, body: TChatRecordedTurnRequest): Promise<TChatRecordedTurnResponse> {
+      const value: unknown = await json(viewer, requestId, `/conversations/${encodeURIComponent(conversationId)}/recorded-turns`,
+        { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      if (!Value.Check(ChatRecordedTurnResponse, value)) throw new ChatServiceError(502, "CHAT_CONTRACT_MISMATCH", "对话服务的补记接口版本不匹配，请检查部署版本。");
+      return value;
     },
 
     /** 附件交给 Chat 解析、存在 Chat 那段对话上；有一份读不出文字就整批不收（和天枢自己的解析一样）。上传和随后那一句同一个判段规则。 */
@@ -509,6 +528,11 @@ export function createChatService(options: {
         switch (event.type) {
           case "turn_started":
             runId = String(event.runId);
+            if (body.fallback) {
+              const run = runId;
+              void options.onFallback?.(viewer, run, body.fallback)
+                .catch((error) => logEvent({ event: "chat_service.fallback_hook_failed", requestId, error: (error as Error)?.message }));
+            }
             if (live) live.runId = runId;
             runWriters.set(runId, write);
             // 回执：天枢收下了、伙伴读到了。Chat 接下这一句就开始这一轮，两个几乎同时到（中途插话的 delivered 开流时已经给了）；飞书、微信、伙伴转来的不给。

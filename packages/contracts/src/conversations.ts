@@ -180,6 +180,11 @@ export const AnchorSelection = Type.Object(
   { additionalProperties: false },
 );
 
+/**
+ * 项目对话这一轮为什么在云端跑（17.2 第 38 条，见 projectLocalTurns.ts）：本该在本机跑，local_unavailable 本机起不来，local_quota 本机那家订阅额度用完。
+ */
+export const LocalFallbackReason = Type.Union([Type.Literal("local_unavailable"), Type.Literal("local_quota")]);
+
 export const ConversationMessageRequest = Type.Object(
   {
     message: Type.String({ minLength: 1, maxLength: 20_000 }),
@@ -202,6 +207,8 @@ export const ConversationMessageRequest = Type.Object(
     scopeOverride: Type.Optional(ReadScopeParams),
     /** 本人此刻所在页面的路径（如 /me/task-quality）：首页对话据此告诉 Agent 这是哪个页面、能做什么。 */
     pagePath: Type.Optional(Type.String({ minLength: 1, maxLength: 200, pattern: "^/" })),
+    /** 只在项目对话：这一句本该在本机跑、本机没跑成，改发云端（见 LocalFallbackReason）。读回历史时这一轮的回答带同样的 fallback。 */
+    fallback: Type.Optional(LocalFallbackReason),
   },
   { additionalProperties: false },
 );
@@ -309,8 +316,18 @@ export const ConversationMessage = Type.Object(
     cards: Type.Optional(Type.Array(ConversationCard, { maxItems: 4 })),
     /** 只在助手回答上：这一轮伙伴最后一张计划清单（17.4，见 buddyActions.ts 的 BuddyPlan）；没出清单的没有这个字段。 */
     plan: Type.Optional(BuddyPlan),
-    /** 只在助手回答上：这一轮实际用的来源和模型（见 ConversationModel）；不知道的没有这个字段。 */
+    /**
+     * 只在助手回答上：这一轮实际用的来源和模型（见 ConversationModel）；不知道的没有这个字段。
+     * 项目对话在本机跑的那一轮（ranOn = local）：provider 是执行方（「Claude Code」「Codex」），model 是给人看的模型名（「Opus 5.5」）。
+     */
     model: Type.Optional(ConversationModel),
+    /**
+     * 只在项目对话的助手回答上（17.2 第 38 条）：这一轮在哪跑，cloud 云端、local 本人电脑上。项目对话以外没有这个字段。
+     * 网页底部胶囊、轮次旁的来源按它和 model 写：「本机 · Opus 5.5」「云端 · claude-opus-5-5」。
+     */
+    ranOn: Type.Optional(Type.Union([Type.Literal("cloud"), Type.Literal("local")])),
+    /** 只在项目对话的助手回答上：这一轮本该在本机、没跑成改在云端（同 ConversationMessageRequest.fallback）。网页在旁边写一行这一轮用的是云端。 */
+    fallback: Type.Optional(LocalFallbackReason),
     /** 只在助手回答上：这一轮跨对象读取的范围（最后一次）。 */
     readScope: Type.Optional(ReadScope),
     /** 只在本人的作答消息上：回答 Agent 提问的问答记录。 */
@@ -336,10 +353,28 @@ export const ConversationMessage = Type.Object(
   { additionalProperties: false },
 );
 
+/**
+ * 项目对话正在本人电脑上跑的那一轮（17.2 第 38 条）：还没写进对话历史，读历史时单独给。手机、别的页面据此画「正在回答」和本人那一句；
+ * 本机这台电脑上的网页直接从本机读实时内容。turnId 是这一轮的 id（结束后历史里那一轮的 runId 就是它）。
+ */
+export const ConversationLocalTurn = Type.Object(
+  {
+    turnId: Type.String({ format: "uuid" }),
+    message: Type.String(),
+    startedAt: Type.String({ format: "date-time" }),
+    deviceName: Type.String(),
+    /** 在哪跑、用的什么：「本机 · Claude Code · Opus 5.5」。 */
+    source: Type.String(),
+  },
+  { additionalProperties: false },
+);
+
 export const ConversationHistory = Type.Object(
   {
     scope: ConversationScope,
     messages: Type.Array(ConversationMessage),
+    /** 只在项目对话：本机正占着的那一轮（见 ConversationLocalTurn）；没有不带。 */
+    localTurn: Type.Optional(ConversationLocalTurn),
   },
   { additionalProperties: false },
 );
@@ -541,4 +576,6 @@ export type TConversationCard = Static<typeof ConversationCard>;
 export type TConversationHistory = Static<typeof ConversationHistory>;
 export type TConversationRecoveryNote = Static<typeof ConversationRecoveryNote>;
 export type TConversationModel = Static<typeof ConversationModel>;
+export type TLocalFallbackReason = Static<typeof LocalFallbackReason>;
+export type TConversationLocalTurn = Static<typeof ConversationLocalTurn>;
 export type TConversationSseEvent = Static<typeof ConversationSseEvent>;

@@ -3,6 +3,15 @@ import {createHash} from 'node:crypto';
 const clone=x=>structuredClone(x),bytes=x=>Buffer.byteLength(JSON.stringify(x));
 const digest=x=>createHash('sha256').update(JSON.stringify(x)).digest('hex');
 
+// Frozen only for new inputs. Older inputs must keep their original layout and hashes.
+export function fullContextCheckContract(refs,{version=1}={}){
+ if(!refs.length||new Set(refs).size!==refs.length||refs.some(ref=>typeof ref!=='string'||!ref))throw Error('完整检查需要唯一冻结对象');
+ if(![1,2].includes(version))throw Error('不支持的完整检查布局版本');
+ const groups=Array.from({length:version===2?1:Math.min(2,refs.length)},()=>[]);
+ [...refs].sort().forEach((ref,index)=>groups[index%groups.length].push(ref));
+ return {version,sourceMode:'all-frozen',checkGroups:3,maxConcurrency:groups.length*3,layout:groups.map(units=>({kind:'object',units}))};
+}
+
 export function packSourceText(sources){
  const rows=new Map();
  function visit(value,path=[]){
@@ -53,6 +62,12 @@ const scopeRules='本包检查 scope.targetRefs 及 scope.edges，问题只能�
 export function buildReviewCheckPlan({input,sources,reviews,programFacts,tasks,system,maxBodyBytes=512*1024,maxTargetRefs=3,wireOptions={},extraRelations=[],fixedLayout=null}){
  if(tasks?.length!==3||tasks.some(t=>typeof t!=='string'||!t)||!Number.isInteger(maxTargetRefs)||maxTargetRefs<1||!Number.isInteger(maxBodyBytes)||maxBodyBytes<1)throw Error('必须保留三组检查任务及有效预算');
  const items=input.stages.flat(),byId=new Map(items.map(c=>[c.id,c])),current=Array.isArray(reviews)?Object.fromEntries(reviews.map(r=>[r.ref,r])):reviews;
+ const fullContext=input.engineeringContracts?.fullContextCheck;
+ if(fullContext!==undefined){
+  if(digest(fullContext)!==digest(fullContextCheckContract(items.map(c=>c.id),{version:fullContext?.version})))throw Error('完整检查布局、来源模式或并发合同已变化');
+  if(extraRelations.length||fixedLayout&&digest(fixedLayout)!==digest(fullContext.layout))throw Error('完整检查只能使用冻结布局，禁止额外分包');
+  fixedLayout=fullContext.layout;
+ }
  for(const id of Object.keys(sources))if(!byId.has(id))throw Error('来源没有对应冻结对象：'+id);
  for(const c of items)if(!Object.hasOwn(sources,c.id)||!Object.hasOwn(current,c.id))throw Error('对象缺少完整来源或候选：'+c.id);
  const parent=new Map(),edges=[];
@@ -60,12 +75,13 @@ export function buildReviewCheckPlan({input,sources,reviews,programFacts,tasks,s
  const make=(kind,units)=>{
   const own=kind==='object'?units:units.flatMap(e=>[e.parentRef,e.childRef]),targets=[...new Set(own)];
   const context=new Set(targets);for(const id of targets){if(parent.has(id))context.add(parent.get(id));for(const child of byId.get(id).children||[])context.add(child);}
-  const sourceRefs=[...new Set([...targets,...targets.map(id=>parent.get(id)).filter(Boolean)])];
+  const sourceRefs=fullContext?items.map(c=>c.id):[...new Set([...targets,...targets.map(id=>parent.get(id)).filter(Boolean)])];
   const original=Object.fromEntries(sourceRefs.map(id=>[id,sources[id]])),packed=packSourceText(original);
   const related=kind==='relation'?units:edges.filter(e=>targets.includes(e.childRef)&&sourceRefs.includes(e.parentRef));
   const scope={kind,targetRefs:targets,sourceRefs,allowedIssueRefs:[...new Set([...targets,...related.flatMap(e=>[e.parentRef,e.childRef])])],reviewRefs:Object.keys(current),edges:related};
-  const perReview=programFacts?.perReview||{},facts={...programFacts,perReview:Object.fromEntries([...context].filter(id=>Object.hasOwn(perReview,id)).map(id=>[id,perReview[id]]))};
-  const payloads=tasks.map(task=>({task:task+'\n'+scopeRules,reviews:Object.values(current),programFacts:facts,sources:packed.sources,sourceTexts:packed.texts,sourceBindings:packed.bindings,scope,sourceHash:digest(original),candidateHash:digest(current)}));
+  const perReview=programFacts?.perReview||{},facts=fullContext?programFacts:{...programFacts,perReview:Object.fromEntries([...context].filter(id=>Object.hasOwn(perReview,id)).map(id=>[id,perReview[id]]))};
+  const fullContextRules=fullContext?'\n本轮 sourceMode=all-frozen：本包已提供全部冻结对象原文、全部当前候选和全部程序测量。只完整审查 scope.targetRefs 的正文，并审查 scope.edges；非 target 的 allowedIssueRefs 只可为这些声明关系的问题作锚，不重复完整审查其正文。不在 targetRefs 不等于没有发生，也不等于没有来源。sourceRefs/allowedSourceRefs 是实际完整来源键，不是目标清单。保持原三组检查标准与逐项覆盖要求。':'';
+  const payloads=tasks.map(task=>({task:task+'\n'+scopeRules+fullContextRules,reviews:Object.values(current),programFacts:facts,sources:packed.sources,sourceTexts:packed.texts,sourceBindings:packed.bindings,scope,...(input.engineeringContracts?.checkerSources>=2?{allowedSourceRefs:[...sourceRefs]}:{}),sourceHash:digest(original),candidateHash:digest(current)}));
   const bodies=payloads.map(payload=>reviewModelBudgetBytes(system,payload,wireOptions));
   return {kind,scope,originalHash:packed.originalHash,payloads,maxBodyBytes:Math.max(...bodies),sourceBytes:bytes(original),packedSourceBytes:bytes(packed),sourceEvidenceCount:sourceRefs.reduce((n,id)=>n+(sources[id].evidence?.length||0),0)};
  };
@@ -88,7 +104,7 @@ export function buildReviewCheckPlan({input,sources,reviews,programFacts,tasks,s
  for(const relation of extraRelations){if(relation.length!==2||relation.some(ref=>!byId.has(ref)))throw Error('跨单元关联必须明确两个冻结对象');append('relation',[{parentRef:relation[0],childRef:relation[1]}]);}
  }
  const layout=packets.map(p=>({kind:p.kind,units:p.kind==='object'?p.scope.targetRefs:p.scope.edges}));
- const plan={schemaVersion:1,offlineOnly:true,inputHash:digest(input),sourceHash:digest(sources),candidateHash:digest(current),systemHash:digest(system),tasksHash:digest(tasks),factsHash:digest(programFacts),maxBodyBytes,maxTargetRefs,maxConcurrency:3,wireOptions,layout,sourceRefs:items.map(c=>c.id),edges,packets,requestCount:packets.length*tasks.length};
+ const plan={schemaVersion:1,offlineOnly:true,inputHash:digest(input),sourceHash:digest(sources),candidateHash:digest(current),systemHash:digest(system),tasksHash:digest(tasks),factsHash:digest(programFacts),maxBodyBytes,maxTargetRefs,maxConcurrency:fullContext?.maxConcurrency??3,...(fullContext?{fullContextCheck:clone(fullContext)}:{}),wireOptions,layout,sourceRefs:items.map(c=>c.id),edges,packets,requestCount:packets.length*tasks.length};
  plan.stamp=digest(plan);return plan;
 }
 

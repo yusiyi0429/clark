@@ -58,19 +58,19 @@ test('model call cache is keyed by current candidate and pass; all attempts reta
  await qualityModelCall({...args,validate});await qualityModelCall({...args,validate});assert.equal(calls.length,1);
  await qualityModelCall({...args,pass:1,payload:{...payload,candidateHash:'after'},validate});assert.equal(calls.length,2);assert.equal(calls[1].sources.m.evidence[0].text,'真实会议验证仍待实会');assert.equal(Object.keys(quality.requests).length,2);
 });
-test('failed checkers are not zero issues; malformed raw is retained and a resume can fetch a valid answer',async()=>{
+test('failed checkers are not zero issues; malformed raw is retained and resume cannot reset three used attempts',async()=>{
  const quality={requests:{},sourceHash:'s',skillHash:'h'},run={raw:{}},args={quality,run,pass:0,stage:'check',payload:{sources},system:'rules',save:async()=>{},validate:x=>{if(!Array.isArray(x.issues))throw Error('no issues');return x;}};
  let calls=0,bad=true;const gateway={complete:async()=>{calls++;return {answer:bad?'{}':'{"issues":[]}'};}};
  await assert.rejects(qualityModelCall({...args,gateway}),/no issues/);assert.equal(calls,3);assert.equal(Object.values(quality.requests)[0].attempts[0].raw,'{}');assert.equal(Object.keys(run.raw).length,0);
- bad=false;await qualityModelCall({...args,gateway});assert.equal(calls,4);assert.equal(Object.values(quality.requests)[0].attempts.length,4);
+ const failed=structuredClone(quality.requests);bad=false;await assert.rejects(qualityModelCall({...args,gateway}),e=>e.code==='REVIEW_MODEL_ATTEMPT_LIMIT');assert.equal(calls,3);assert.deepEqual(quality.requests,failed);assert.equal(Object.keys(run.raw).length,0);
 });
 test('cancellation interrupts a call without adding transport retries',async()=>{
  const controller=new AbortController();let calls=0;
  const gateway={complete:async(_messages,{signal})=>{calls++;controller.abort(Error('cancelled'));signal.throwIfAborted();}};
  await assert.rejects(qualityModelCall({gateway,quality:{requests:{}},run:{raw:{}},pass:0,stage:'check',payload:{},system:'rules',save:async()=>{},signal:controller.signal}),/cancelled/);assert.equal(calls,1);
 });
-test('product skill exposes an exact two-round contract',async()=>{
- const actual=await loadReviewSkill(new URL('./review-skill/',import.meta.url));assert.equal(actual.version,'2.1.13');assert.equal(actual.maxRevisionRounds,2);assert.equal(actual.groups.length,3);
+test('product skill exposes an exact one-batch contract',async()=>{
+ const actual=await loadReviewSkill(new URL('./review-skill/',import.meta.url));assert.equal(actual.version,'2.1.16');assert.equal(actual.maxRevisionRounds,1);assert.equal(actual.groups.length,3);
 });
 test('product runner checks after both repairs, preserves complete E43/E49 sources and never restores initial cached drafts on resume',async()=>{
  const basis={mode:'latest-source-candidate',snapshotHash:'snapshot'},meta={basisMode:basis.mode,snapshotHash:basis.snapshotHash};
@@ -125,4 +125,127 @@ test('quality answer caches remain separate for the two explicit test models',as
  const quality={requests:{},sourceHash:'frozen',skillHash:'skill'},run={raw:{}},args={quality,run,pass:0,stage:'check',payload:{sources},system:'rules',save:async()=>{}};let calls=0;
  for(const model of ['aliyun/deepseek-v4.1-flash','wangsu/claude-sonnet-5-5'])await qualityModelCall({...args,gateway:{status:{model},complete:async()=>{calls++;return {answer:'{"issues":[]}'};}}});
  assert.equal(calls,2);assert.equal(Object.keys(quality.requests).length,2);
+});
+
+test('a changed Mission verdict repairs only stale RU and company references in the same batch',async()=>{
+ const related={stages:[[{id:'m',parent:'u'},{id:'peer',parent:'u'}],[{id:'u',parent:'company',children:['m','peer']}],[{id:'company',children:['u']}]]};
+ const old='未达成',updated='达成';
+ const run={raw:{},reviews:{
+  m:{verdict:old},peer:{verdict:old,facts:[{evidence:'[m:E43]'}]},
+  u:{verdict:old,facts:[{ref:'m',status:old},{ref:'peer',status:old}]},
+  company:{verdict:old,facts:[{ref:'u',status:old}]},
+ }};
+ const sequence=[],requests=[];
+ await runReviewQuality({run,input:related,skill,sources,phased:true,
+  check:async(reviews,index,q)=>{
+   const pass=q.passes[index];sequence.push(pass.phase);
+   pass.coverage={candidateHash:qualityHash(reviews)};pass.coverageHash=qualityHash(pass.coverage);
+   if(pass.phase==='initial')return [issue()];
+   assert.equal(reviews.u.facts[0].status,updated);
+   assert.equal(reviews.company.facts[0].status,updated);
+   return [];
+  },
+  revise:async(card,action)=>{
+   requests.push(card.id);
+   if(card.id!=='m')assert.equal(action.issues[0].dependencyChange.newVerdict,updated);
+   const oldReview=action.before[card.id];
+   return {...oldReview,verdict:updated,...(oldReview.facts?{facts:oldReview.facts.map(row=>({...row,status:action.before[row.ref].verdict}))}:{})};
+  },
+ });
+ assert.deepEqual(requests,['m','u','company']);
+ assert.deepEqual(sequence,['initial','impact','final']);
+ assert.deepEqual(run.quality.counts,{m:1,u:1,company:1});
+ assert.equal(run.reviews.peer.verdict,old);
+ assert.equal(run.quality.passes.filter(pass=>pass.actions?.length).length,1);
+ assert.equal(run.quality.passes.at(-1).coverage.candidateHash,qualityHash(run.reviews));
+ assert.equal(run.quality.status,'passed');
+});
+
+test('scoped check and its source request share three model attempts across cache reuse and resume',async()=>{
+ const quality={requests:{},sourceHash:'source',skillHash:'skill'},run={raw:{}};
+ const calls=[];
+ const gateway={status:{model:'wangsu/gpt-6.1-sol'},complete:async messages=>{
+  const {sourceRound}=JSON.parse(messages[1].content);calls.push(sourceRound);
+  if(sourceRound==='last'||calls.length===1)throw Object.assign(Error('offline'),{providerStatus:503});
+  return {answer:'{"sourceRequests":["m"]}'};
+ }};
+ const args={gateway,system:'JSON',quality,run,pass:1,stage:'check',save:async()=>{}};
+ const payload={phase:'final',candidateHash:'candidate',sourceRound:'first'};
+ const first={...args,ref:'final',payload},last={...args,ref:'final-source',payload:{...payload,sourceRound:'last'}};
+ await qualityModelCall(first);
+ await assert.rejects(qualityModelCall(last),{code:'REVIEW_MODEL_ATTEMPT_LIMIT'});
+ const resumed=structuredClone({quality,run});
+ await qualityModelCall({...first,...resumed});
+ await assert.rejects(qualityModelCall({...last,...resumed}),{code:'REVIEW_MODEL_ATTEMPT_LIMIT'});
+ assert.deepEqual(calls,['first','first','last']);
+ assert.deepEqual(Object.values(resumed.quality.requests).map(r=>r.attempts.map(a=>a.attempt)),[[1,2],[3]]);
+});
+
+test('GPT repair time carries across source requests and a restored journal, without affecting other cards',async()=>{
+ let clock=0;
+ const calls=[],quality={requests:{},sourceHash:'source',skillHash:'skill'};
+ const run={raw:{},outputPolicy:{gptRepairTimeBudget:{attemptMs:150000,totalMs:330000}}};
+ const gateway={status:{model:'wangsu/gpt-6.1-sol'},complete:async(_messages,{timeoutMs,signal,onTransportTiming})=>{
+  assert.ok(signal instanceof AbortSignal);
+  calls.push(timeoutMs);
+  onTransportTiming({headersMs:12,firstByteMs:18});
+  clock+=calls.length===1?97000:timeoutMs;
+  if(calls.length===2)throw new DOMException('timeout','TimeoutError');
+  return {answer:'{"review":{}}'};
+ }};
+ const args={gateway,system:'JSON',quality,run,pass:0,ref:'m',payload:{unit:{id:'m'},revision:1,candidateHash:'candidate'},now:()=>clock,save:async()=>{}};
+ await qualityModelCall({...args,stage:'revise'});
+ const restored=structuredClone({run,quality});
+ await qualityModelCall({...args,...restored,stage:'revise-source',payload:{...args.payload,sourceScope:{sourceRefs:['m','source']}}});
+ await qualityModelCall({...args,...restored,stage:'revise',ref:'peer',payload:{...args.payload,unit:{id:'peer'}}});
+ assert.deepEqual(calls,[150000,150000,83000,150000]);
+ assert.deepEqual(Object.values(restored.quality.requests)[1].attempts.map(a=>a.timeBudget),[
+  {reservedMs:150000,elapsedMs:150000},{reservedMs:83000,elapsedMs:83000},
+ ]);
+ assert.deepEqual(Object.values(restored.quality.requests)[1].attempts[1].transportTiming,{headersMs:12,firstByteMs:18});
+});
+
+test('exhausted repair time stops before another call, and frozen old repairs keep their original timeout',async()=>{
+ let clock=0;
+ const calls=[],quality={requests:{},sourceHash:'source',skillHash:'skill'};
+ const gateway={status:{model:'wangsu/gpt-6.1-sol'},complete:async(_messages,{timeoutMs})=>{
+  calls.push(timeoutMs);clock+=165000;
+  throw Object.assign(Error('offline'),{providerStatus:503});
+ }};
+ const args={gateway,system:'JSON',quality,run:{raw:{},outputPolicy:{gptRepairTimeBudget:{attemptMs:150000,totalMs:330000}}},pass:0,stage:'revise',ref:'m',payload:{unit:{id:'m'},revision:1,candidateHash:'candidate'},now:()=>clock,save:async()=>{}};
+ await assert.rejects(qualityModelCall(args),{code:'REVIEW_REPAIR_TIME_BUDGET'});
+ await assert.rejects(qualityModelCall({...args,...structuredClone({quality,run:args.run})}),{code:'REVIEW_REPAIR_TIME_BUDGET'});
+ assert.deepEqual(calls,[150000,150000]);
+ let oldTimeout;
+ await qualityModelCall({...args,quality:{...quality,requests:{}},run:{raw:{}},gateway:{...gateway,complete:async(_messages,{timeoutMs})=>{oldTimeout=timeoutMs;return {answer:'{}'};}}});
+ assert.equal(oldTimeout,900000);
+});
+
+test('cancelled GPT repair persists elapsed time and does not retry',async()=>{
+ const controller=new AbortController(),quality={requests:{},sourceHash:'source',skillHash:'skill'};
+ const run={raw:{},outputPolicy:{gptRepairTimeBudget:{attemptMs:150000,totalMs:330000}}};
+ let clock=0,calls=0;
+ const gateway={status:{model:'wangsu/gpt-6.1-sol'},complete:async(_messages,{signal})=>{
+  calls++;clock=44000;controller.abort(new DOMException('stopped','AbortError'));signal.throwIfAborted();
+ }};
+ await assert.rejects(qualityModelCall({gateway,system:'JSON',quality,run,pass:0,stage:'revise',ref:'m',payload:{unit:{id:'m'},revision:1,candidateHash:'candidate'},signal:controller.signal,now:()=>clock,save:async()=>{}}),{name:'AbortError'});
+ assert.equal(calls,1);
+ assert.deepEqual(Object.values(quality.requests)[0].attempts[0].timeBudget,{reservedMs:150000,elapsedMs:44000});
+});
+
+test('scoped check contract retry sends validation feedback without changing candidate, source or raw answers',async()=>{
+ const quality={requests:{},sourceHash:'source',skillHash:'skill'},run={raw:{}},messages=[];
+ const gateway={status:{model:'wangsu/gpt-6.1-sol'},complete:async turns=>{
+  messages.push(turns);return {answer:messages.length===1?'{"bad":true}':'{"ok":true}'};
+ }};
+ const payload={phase:'impact',candidateHash:'candidate',checkBasis:2,sourceRound:'first',sources:{finance:{evidence:[{id:'E1',text:'原文'}]}}};
+ await qualityModelCall({gateway,system:'JSON',quality,run,pass:1,stage:'check',ref:'impact',payload,save:async()=>{},validate:value=>{
+  if(value.bad)throw Error('来源地址未提供');return value;
+ }});
+ assert.equal(messages[0][1].content,messages[1][1].content);
+ assert.match(messages[1][0].content,/上一次响应未通过结构校验：来源地址未提供/);
+ const [first,second]=Object.values(quality.requests)[0].attempts;
+ assert.equal(first.raw,'{"bad":true}');
+ assert.equal(second.validationFeedback,'来源地址未提供');
+ assert.equal(second.raw,'{"ok":true}');
 });

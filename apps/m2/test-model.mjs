@@ -48,3 +48,26 @@ test('GPT（wangsu/gpt-6.1-sol）：不流式、用 max_completion_tokens、思�
  const unknown=await createModelGateway({env:{DECODING_API_KEY:'test',DECODING_MODEL:'some/unverified-model'},transport:async()=>{throw Error('不应发出')}});
  await assert.rejects(()=>unknown.complete([{role:'user',content:'x'}],{thinking:true}),/未核实拆解思考参数/);
 });
+
+test('GPT transport reports headers and first body byte, and closes the socket on timeout',async()=>{
+ const {createServer}=await import('node:http');
+ const {once}=await import('node:events');
+ const {patientTransport}=await import('./model.mjs');
+ let disconnected;
+ const closed=new Promise(resolve=>{disconnected=resolve;});
+ const server=createServer((_req,res)=>{
+  res.on('close',disconnected);
+  res.writeHead(200,{'content-type':'application/json'});
+  res.write('{"choices":');
+ });
+ server.listen(0,'127.0.0.1');await once(server,'listening');
+ try{
+  const timing=[];
+  await assert.rejects(patientTransport(`http://127.0.0.1:${server.address().port}/v1/`,{method:'POST',signal:AbortSignal.timeout(250),onTransportTiming:value=>timing.push(value)}),{name:'TimeoutError'});
+  await closed;
+  assert.equal(timing.length,2);
+  assert.equal(timing[0].firstByteMs,null);
+  assert.ok(timing[1].firstByteMs>=timing[1].headersMs);
+  assert.deepEqual(Object.keys(timing[1]),['headersMs','firstByteMs']);
+ }finally{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
+});

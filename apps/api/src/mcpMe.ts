@@ -29,6 +29,7 @@ import { readTaskContext, TASK_CONTEXT_TOOL } from "./mcpTaskContext.js";
 import type { CompanyReader } from "./company.js";
 import type { WebSearchAdapter } from "./webSearch.js";
 import { agreementSummaries } from "./taskAgreements.js";
+import { callProjectTool, isProjectTool, projectToolDefinitions, type LocalTurnDeps } from "./projectLocalTurns.js";
 
 const QualityView = Type.Union([Type.Literal("ceo"), Type.Literal("member")]);
 const QualityList = Type.Object({ viewerRole: QualityView }, { additionalProperties: false });
@@ -142,7 +143,9 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
   /** 本体公司事实（get_task_context 按本人授权读）。 */
   company: CompanyReader;
   /** 天枢自己的月度计划和月末复盘开着（app.ts 的 tianshuMonthlyCycle）；关着时待办不列个人复盘和月度计划，不说复盘的用法。 */
-  monthlyCycle?: boolean }) {
+  monthlyCycle?: boolean;
+  /** 本机项目会话的项目钥匙连进来时的项目动作（17.2 第 38 条，projectLocalTurns.ts）。 */
+  projectTurns?: LocalTurnDeps }) {
   const auth = () => authenticateMcpToken(deps.q, deps.authorization, deps.pepper, deps.now(), (id) => !!deps.findPerson(id), deps.publicOrigin ? oauthUrls(deps.publicOrigin).resource : undefined);
   /** 推进人写进展、放链接会让未启动的事项变进行中、版本跟着变：把事项此刻的状态和版本一起回给外部工具，接着提交验收直接用。 */
   const itemState = async (itemId: string) =>
@@ -181,7 +184,8 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
     const roles = access(person);
     return { tools: [...(roles.member ? memberDefinitions : []), ...(roles.ceo ? ceoDefinitions : []),
       ...(roles.ceo || roles.member ? missionCardDefinitions : []), ...(roles.ceo || roles.member ? [...agreementDefinitions, TASK_CONTEXT_TOOL] : []), LIST_PENDING_TOOL, ...(deps.monthlyCycle ? reviewDefinitions : []),
-      ...(deps.chat && (roles.ceo || roles.member) ? qualityDefinitions : []), ...(deps.search?.configured && (roles.ceo || roles.member) ? [WEB_SEARCH_TOOL] : [])]
+      ...(deps.chat && (roles.ceo || roles.member) ? qualityDefinitions : []), ...(deps.search?.configured && (roles.ceo || roles.member) ? [WEB_SEARCH_TOOL] : []),
+      ...(identity?.project && deps.projectTurns && roles.member ? await projectToolDefinitions(deps.q, person.personId) : [])]
       .filter((tool) => !identity?.scopes || identity.scopes.includes("tianshu:write") || !MCP_WRITE_TOOLS.has(tool.name)) };
   });
   server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
@@ -205,6 +209,13 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
       }
       if (missionCardDefinitions.some((definition) => definition.name === tool) && !roles.member && !roles.ceo) {
         code = "FORBIDDEN"; return result({ code, message: "这个工具只对成员或 CEO 开放" }, true);
+      }
+      // 项目钥匙的项目动作（17.2 第 38 条）：照本人的伙伴授权执行（写的要完全授权、记审计），调用次数照上面每把钥匙每分钟的上限算。
+      if (identity.project && deps.projectTurns && isProjectTool(tool)) {
+        if (!roles.member) { code = "FORBIDDEN"; return result({ code, message: "这个工具只对成员开放" }, true); }
+        const outcome = await callProjectTool(deps.projectTurns, { personId: person.personId, projectId: identity.project.projectId }, tool, args, randomUUID());
+        if (outcome.isError) code = (outcome.value as { code: string }).code;
+        return result(outcome.value, outcome.isError);
       }
       const names = deps.names();
       if (qualityDefinitions.some(definition => definition.name === tool)) {

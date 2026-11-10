@@ -349,7 +349,10 @@ describe("Conversation HTTP/SSE public seam", () => {
     const runtime: ConversationRuntime = {
       async run(input): Promise<never> {
         input.emit({ type: "message", delta: "partial" });
-        await new Promise<void>((resolve) => input.signal.addEventListener("abort", () => resolve(), { once: true }));
+        // The deadline starts before the runtime, and can fire during request setup.
+        if (!input.signal.aborted) {
+          await new Promise<void>((resolve) => input.signal.addEventListener("abort", () => resolve(), { once: true }));
+        }
         throw input.signal.reason;
       },
     };
@@ -434,7 +437,10 @@ describe("Conversation HTTP/SSE public seam", () => {
     const runtime: ConversationRuntime = {
       async run(input): Promise<never> {
         input.emit({ type: "route", tier: "deep", source: "rule", expectSeconds: 90, timeoutMs: 30, notice: "这个问题涉及集团层面的战略判断，需要更深入地查证和推演。" });
-        await new Promise<void>((resolve) => input.signal.addEventListener("abort", () => resolve(), { once: true }));
+        // The deadline starts before the runtime, and can fire during request setup.
+        if (!input.signal.aborted) {
+          await new Promise<void>((resolve) => input.signal.addEventListener("abort", () => resolve(), { once: true }));
+        }
         throw input.signal.reason;
       },
     };

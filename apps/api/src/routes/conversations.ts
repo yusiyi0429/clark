@@ -56,6 +56,7 @@ import type { ConversationAnchor } from "../conversationAnchor.js";
 import { ChatServiceError, FORWARDED_HEADER, type ChatTarget } from "../chatService.js";
 import { boardTask, CardError, planTaskOpener, type CardPlanTask } from "../taskCards.js";
 import { ensureProjectPipeline, pipelineViewer, projectPipelineConversation } from "../taskPipelines.js";
+import { historyLocalTurn, localTurnBusy } from "../projectLocalTurns.js";
 import { CARD_PROJECT, ownProject, PROJECT_SCOPE_PREFIX, projectReader, type ProjectRow } from "../projects.js";
 import { ownerSpoke } from "../projectTransfers.js";
 import { settlementsOf } from "../taskContinuity.js";
@@ -197,7 +198,10 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
       if (chat && isProject(req.params.scope)) {
         try {
           const target = await pipelineTarget(req.person!, req.params.scope, String(req.id), false);
-          return target ? await chat.history(pipelineViewer(req.person!.personId), String(req.id), target) : { scope: req.params.scope, messages: [] };
+          const history = target ? await chat.history(pipelineViewer(req.person!.personId), String(req.id), target) : { scope: req.params.scope, messages: [] };
+          // 本人电脑上正在跑的那一轮（17.2 第 38 条）：还没写进对话，单独给。
+          const localTurn = await historyLocalTurn(q, projectIdOf(req.params.scope), ctx.now());
+          return localTurn ? { ...history, localTurn } : history;
         } catch (error) {
           return chatFailed(reply, error);
         }
@@ -231,6 +235,9 @@ export function registerConversationRoutes(app: AppInstance, ctx: RouteContext, 
         if (person.role !== "ceo" && req.body.references?.length) return fail(reply, 404, "REFERENCE_NOT_FOUND", "Card 引用不存在");
         // 项目对话：进这个项目那一段（没有就建），飞书、微信只进总管线。
         if (req.params.scope !== "global") {
+          // 一段对话同一时间只跑一轮：本人电脑上正在跑（17.2 第 38 条）就不发，伙伴转来、子会话回报照旧隔几秒再试。
+          if (await localTurnBusy(q, projectIdOf(req.params.scope), ctx.now()))
+            return fail(reply, 409, "TURN_IN_PROGRESS", "这个项目对话正在本人电脑上回答上一句，等它答完再发。");
           return pipelineTarget(person, req.params.scope, String(req.id), true)
             .then((target) => chat.relay(pipelineViewer(owner), String(req.id), req.body, reply, undefined, target!, ["buddy", "report"].includes(String(req.headers[FORWARDED_HEADER]))))
             .catch((error) => chatFailed(reply, error));

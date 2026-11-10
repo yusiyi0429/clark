@@ -1436,6 +1436,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/nexus-confirmations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Nexus 推来、等我确认的会上待定事项：我是事项预先指定的负责人、没过期、没被新版本作废、还没处理 */
+        get: operations["listMyNexusConfirmations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/nexus-confirmations/{id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 确认 / 修改 / 拒绝一条 Nexus 待确认项：只有负责人本人能点（别人 403 NOT_CONFIRMER）；过期 409 EXPIRED，被新版本作废 409 SUPERSEDED，已处理过 409 ALREADY_DECIDED；修改只改 value（400 VALUE_REQUIRED / VALUE_UNCHANGED / NOT_AMENDABLE） */
+        post: operations["decideNexusConfirmation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/me/feishu-minutes": {
         parameters: {
             query?: never;
@@ -6780,6 +6814,8 @@ export interface components {
                     provider: string;
                     model: string;
                 };
+                ranOn?: "cloud" | "local";
+                fallback?: "local_unavailable" | "local_quota";
                 readScope?: {
                     label: string;
                     params: {
@@ -6814,6 +6850,15 @@ export interface components {
                     href?: string;
                 };
             }[];
+            localTurn?: {
+                /** Format: uuid */
+                turnId: string;
+                message: string;
+                /** Format: date-time */
+                startedAt: string;
+                deviceName: string;
+                source: string;
+            };
         };
         ConversationMessageRequest: {
             message: string;
@@ -6850,6 +6895,7 @@ export interface components {
                 to?: string;
             };
             pagePath?: string;
+            fallback?: "local_unavailable" | "local_quota";
         };
         ConversationSseEvent: {
             runId: string;
@@ -6912,7 +6958,7 @@ export interface components {
                 /** @constant */
                 kind: "open";
                 target: {
-                    kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer";
+                    kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer" | "nexus_confirmation";
                     id: string;
                     round?: boolean;
                     focus?: {
@@ -14941,6 +14987,33 @@ export interface components {
                 needsOwner: boolean;
             }[];
         };
+        NexusConfirmationItem: {
+            id: string;
+            meetingId: string;
+            question: string;
+            value: string | null;
+            quote: string | null;
+            createdAt: string;
+            expiresAt: string;
+        };
+        NexusConfirmationListResponse: {
+            items: {
+                id: string;
+                meetingId: string;
+                question: string;
+                value: string | null;
+                quote: string | null;
+                createdAt: string;
+                expiresAt: string;
+            }[];
+        };
+        NexusConfirmationDecisionRequest: {
+            decision: "confirmed" | "amended" | "rejected";
+            value?: string;
+        };
+        NexusConfirmationDecisionResponse: {
+            confirmationRef: string;
+        };
         FeishuMinuteInboxResponse: {
             minutes: {
                 minuteToken: string;
@@ -18589,7 +18662,7 @@ export interface components {
             }[];
         };
         WaitingTarget: {
-            kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer";
+            kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer" | "nexus_confirmation";
             id: string;
             round?: boolean;
             focus?: {
@@ -18600,12 +18673,12 @@ export interface components {
         };
         WaitingItem: {
             id: string;
-            kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer" | "goal_changed" | "auto_relay";
+            kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer" | "goal_changed" | "auto_relay" | "nexus_confirmation";
             title: string;
             source: string | null;
             at: string | null;
             open: {
-                kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer";
+                kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer" | "nexus_confirmation";
                 id: string;
                 round?: boolean;
                 focus?: {
@@ -18651,6 +18724,12 @@ export interface components {
                 outsidePaths: string[];
                 canAllowForSession?: boolean;
             } | null;
+            confirmation?: {
+                /** Format: uuid */
+                id: string;
+                value: string | null;
+                quote: string | null;
+            };
         };
         WorkHomeResponse: {
             period: string;
@@ -18860,12 +18939,12 @@ export interface components {
             };
             waiting: {
                 id: string;
-                kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer" | "goal_changed" | "auto_relay";
+                kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer" | "goal_changed" | "auto_relay" | "nexus_confirmation";
                 title: string;
                 source: string | null;
                 at: string | null;
                 open: {
-                    kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer";
+                    kind: "card" | "topic" | "project" | "meeting" | "mission_card" | "role" | "task_detail" | "month" | "connections" | "transfer" | "nexus_confirmation";
                     id: string;
                     round?: boolean;
                     focus?: {
@@ -18911,6 +18990,12 @@ export interface components {
                     outsidePaths: string[];
                     canAllowForSession?: boolean;
                 } | null;
+                confirmation?: {
+                    /** Format: uuid */
+                    id: string;
+                    value: string | null;
+                    quote: string | null;
+                };
             }[];
         };
         BackgroundItem: {
@@ -25330,6 +25415,106 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listMyNexusConfirmations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 等我确认的 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NexusConfirmationListResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    decideNexusConfirmation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NexusConfirmationDecisionRequest"];
+            };
+        };
+        responses: {
+            /** @description 确认记录的 id */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NexusConfirmationDecisionResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
