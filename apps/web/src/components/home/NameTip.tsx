@@ -52,9 +52,9 @@ export function useNameTip(name: string, detail?: string | null) {
 
 /**
  * 一直出的悬停提示（同上面的样子和 500ms）：图标上写它是什么意思，如排队的子会话行尾的计时器「等前面的卡」（25 条）。
- * ref 挂在图标上，props 也挂在图标上；读屏另给图标 aria-label，同一句话。
+ * ref 挂在图标上，props 也挂在图标上；读屏另给图标 aria-label，同一句话。placement：左栏里出在右边，输入框下面那排出在上面。
  */
-export function useHoverTip(text: string) {
+export function useHoverTip(text: string, placement: "right" | "top" = "right") {
   const ref = useRef<HTMLSpanElement>(null);
   const [open, setOpen] = useState(false);
   const [tip] = useState(() => nameTip(() => true, setOpen));
@@ -66,7 +66,7 @@ export function useHoverTip(text: string) {
   };
   const node = open ? (
     <Tooltip isOpen onOpenChange={(next) => { if (!next) tip.leave(); }}>
-      <Tooltip.Content triggerRef={ref} placement="right">{text}</Tooltip.Content>
+      <Tooltip.Content triggerRef={ref} placement={placement}>{text}</Tooltip.Content>
     </Tooltip>
   ) : null;
   return { ref, props, tip: node };

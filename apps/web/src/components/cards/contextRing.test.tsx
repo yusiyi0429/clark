@@ -22,7 +22,9 @@ describe("子会话显示上下文用了多少（17.2 第 42 条，D 契约 584e
 
   it("输入框下面、模型胶囊前面一个小圆环加数字；没有就不画", () => {
     const html = renderToStaticMarkup(<SessionComposer label="插话" disabled={false} onSend={vi.fn()} subject={subject} model={{ label: "Opus 5.5" }} context={contextUsage({ usedTokens: 166_000, maxTokens: 200_000 })} />);
-    expect(html).toMatch(/<span[^>]*data-tone="warning"[^>]*title="16\.6 万 \/ 20 万"[^>]*data-testid="context-usage"[^>]*><svg[\s\S]*?<\/svg><span[^>]*>83%<\/span><\/span>/);
+    expect(html).toMatch(/<span[^>]*data-tone="warning"[^>]*data-testid="context-usage"[^>]*><svg[\s\S]*?<\/svg><span[^>]*>83%<\/span><\/span>/);
+    // 悬停提示用站内统一的那种（useHoverTip），不用原生 title。
+    expect(html).not.toMatch(/data-testid="context-usage"[^>]*title=|title="[^"]*"[^>]*data-testid="context-usage"/);
     expect(html).toContain('aria-label="上下文 83%，16.6 万 / 20 万"');
     expect(html.indexOf("context-usage")).toBeLessThan(html.indexOf("session-model"));
     const calm = renderToStaticMarkup(<SessionComposer label="插话" disabled={false} onSend={vi.fn()} subject={subject} model={{ label: "Opus 5.5" }} context={contextUsage({ usedTokens: 42_000, maxTokens: 200_000 })} />);
