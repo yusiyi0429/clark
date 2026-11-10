@@ -72,19 +72,24 @@ describe("上下文用了多少", { timeout: 60_000 }, () => {
   afterAll(() => t.cleanup());
 
   it("Claude Code：每轮做完读一次（token 数和模型上限），记进摘要和事件流；这一轮中间按模型回复的用量估，百分比变了才报", async () => {
-    const id = await open("A", "做 A");
-    expect((await session(id)).session.context).toBeUndefined(); // 还没跑完一轮：没有
-    const s = await context(id, 19_000); // 假 claude：第一轮做完 18000 + 1000
+    // 「每次都问」：第一轮停在等批准，这一轮一定还没做完
+    const id = await open("A", "做 A", { permissionMode: "default" });
+    expect((await session(id)).session.context).toBeUndefined(); // 模型还没回过：没有
+    const first = await until(async () => (await session(id)).pendingPermissions[0] ?? null);
+    // 这个进程第一次模型回复后就读一次（知道了上限，第一轮中间也估得出）：还等着批准，数已经有了
+    const s = await context(id, 19_000); // 假 claude：第一轮 18000 + 1000
     expect(Value.Check(LocalSessionSummary, s)).toBe(true);
     expect(s.context).toMatchObject({ usedTokens: 19_000, maxTokens: 200_000 });
+    expect(events(id).some((e) => e.type === "turn_end")).toBe(false);
+    // 批了、做完再读一次：数没变不重报
+    await call("POST", `/v1/sessions/${id}/permissions/${encodeURIComponent(first.requestId)}`, { decision: "allow" });
+    await until(async () => (await session(id)).session.status === "idle");
+    await new Promise((r) => setTimeout(r, 300));
     const ev = events(id);
     expect(ev.every((e) => Value.Check(LocalSessionEvent, e))).toBe(true);
-    // 这个进程第一次模型回复后就读一次（知道了上限，第一轮中间也估得出），做完再读、数没变不重报
-    expect(ev.findIndex((e) => e.type === "context_usage")).toBeLessThan(ev.findIndex((e) => e.type === "turn_end"));
     expect(usages(id)).toEqual([[19_000, 200_000]]);
     // 第二轮：每条模型回复带用量（输入 10 万、缓存 2 万、输出 1 千），停在等批准时已经报了 61%
     fake({ messageUsage: { input_tokens: 100_000, cache_read_input_tokens: 20_000, cache_creation_input_tokens: 0, output_tokens: 1_000 } });
-    await call("PUT", `/v1/sessions/${id}/permission-mode`, { mode: "default" });
     await say(id, "再来");
     const p = await until(async () => (await session(id)).pendingPermissions[0] ?? null);
     expect((await session(id)).session.context).toMatchObject({ usedTokens: 121_000, maxTokens: 200_000 });
