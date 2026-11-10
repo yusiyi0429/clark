@@ -7,7 +7,7 @@ import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import type { Pool } from "pg";
 import type { TApiError, TCardCollection } from "@warmap/contracts";
 import { SESSION_COOKIE, parseCookies, readSessionToken, type SessionClaims } from "../session.js";
-import { canSwitchView, canUseMemberView, currentSessionVersion, roleOf, type SessionRole } from "../memberAccess.js";
+import { canEnterMemberView, canSwitchView, currentSessionVersion, roleOf, type SessionRole } from "../memberAccess.js";
 import type { PeopleDirectory } from "../peopleDirectory.js";
 import type { CompanyContext } from "../companyContext.js";
 import type { ConversationRuntime } from "../conversations.js";
@@ -187,7 +187,8 @@ export function createReadSession(env: AppEnv, q: Query, peopleDirectory: People
     if (!person) return null;
     if ((await currentSessionVersion(q, person.personId)) !== claims.v) return null;
     const role = claims.view ?? roleOf(person);
-    if (role === "ceo" ? !person.roles.includes("ceo") : !canUseMemberView(person)) return null;
+    // 成员视角：成员，或者 CEO 切到了工作模式（不要求是负责人）。
+    if (role === "ceo" ? !person.roles.includes("ceo") : !canEnterMemberView(person)) return null;
     validSessions.set(req, claims);
     return { personId: person.personId, role, canSwitchView: canSwitchView(person), sessionVersion: claims.v };
   };

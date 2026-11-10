@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { migrate } from "../src/migrate.js";
 import {
   LOCK_AFTER_FAILURES,
+  canEnterMemberView,
   canSwitchView,
   canUseMemberView,
   changePasscode,
@@ -25,12 +26,14 @@ const findPerson = (id: string) => people.find((p) => p.personId === id);
 const at = (iso: string) => new Date(iso);
 
 describe("登录 ID 与初始码", () => {
-  it("仅 CEO 兼 DRI 或 participant 能切换；被邀请资格看成员身份", () => {
-    for (const roles of [["ceo"], ["dri"], ["ceo", "dri"], ["ceo", "participant"]]) {
+  it("每个 CEO 角色的人都能切换（不要求是负责人），只有负责人身份的不能；能进成员视角的是成员或 CEO；被邀请资格只看成员身份", () => {
+    for (const roles of [["ceo"], ["dri"], ["ceo", "dri"], ["ceo", "participant"], ["participant"]]) {
       const person = { personId: "p", displayName: "测试", roles };
-      expect(canSwitchView(person)).toBe(roles.includes("ceo") && roles.some((role) => role === "dri" || role === "participant"));
+      expect(canSwitchView(person)).toBe(roles.includes("ceo"));
+      expect(canEnterMemberView(person)).toBe(true);
       expect(canUseMemberView(person)).toBe(roles.some((role) => role === "dri" || role === "participant"));
     }
+    expect(canEnterMemberView({ personId: "p", displayName: "测试", roles: [] })).toBe(false);
   });
   it("姓全拼 + 名首字母；不是「姓-名」格式时交给管理员指定", () => {
     expect(loginIdFor("sun-mingze")).toBe("sunm");
