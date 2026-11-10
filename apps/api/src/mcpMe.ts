@@ -7,7 +7,7 @@ import { Value } from "@sinclair/typebox/value";
 import type { Pool } from "pg";
 import type { Query } from "./meetingStore.js";
 import { authenticateMcpToken, MCP_WRITE_TOOLS, oauthUrls } from "./mcpOAuth.js";
-import { canUseMemberView } from "./memberAccess.js";
+import { canEnterMemberView, canUseMemberView } from "./memberAccess.js";
 import type { DirectoryPerson as MemoryPerson } from "./peopleDirectory.js";
 import { companyProgress, getIssue, getMeeting, listPending } from "./mcpCeoReads.js";
 import { readMissionCardForAgent } from "./mcpMissionCards.js";
@@ -116,7 +116,8 @@ const reviewDefinitions: Tool[] = [
 ];
 const memberNames = new Set(memberDefinitions.map((tool) => tool.name));
 const ceoNames = new Set(ceoDefinitions.map((tool) => tool.name));
-const access = (person: MemoryPerson) => ({ member: canUseMemberView(person), ceo: person.roles.includes("ceo") });
+/** member：成员才有的工具（执行事项）；ceo：CEO 才有的；work：能进成员视角（成员，或切到工作模式的 CEO）——项目会话的项目动作看它。 */
+const access = (person: MemoryPerson) => ({ member: canUseMemberView(person), ceo: person.roles.includes("ceo"), work: canEnterMemberView(person) });
 type Bucket = { minute: number; total: number; writes: number };
 const buckets = new Map<string, Bucket>();
 function limited(tokenId: string, write: boolean, now: Date): boolean {
@@ -185,7 +186,7 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
     return { tools: [...(roles.member ? memberDefinitions : []), ...(roles.ceo ? ceoDefinitions : []),
       ...(roles.ceo || roles.member ? missionCardDefinitions : []), ...(roles.ceo || roles.member ? [...agreementDefinitions, TASK_CONTEXT_TOOL] : []), LIST_PENDING_TOOL, ...(deps.monthlyCycle ? reviewDefinitions : []),
       ...(deps.chat && (roles.ceo || roles.member) ? qualityDefinitions : []), ...(deps.search?.configured && (roles.ceo || roles.member) ? [WEB_SEARCH_TOOL] : []),
-      ...(identity?.project && deps.projectTurns && roles.member ? await projectToolDefinitions(deps.q, person.personId) : [])]
+      ...(identity?.project && deps.projectTurns && roles.work ? await projectToolDefinitions(deps.q, person.personId) : [])]
       .filter((tool) => !identity?.scopes || identity.scopes.includes("tianshu:write") || !MCP_WRITE_TOOLS.has(tool.name)) };
   });
   server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
@@ -212,7 +213,7 @@ export async function createMeMcpSession(deps: { pool: Pool; q: Query; pepper: s
       }
       // 项目钥匙的项目动作（17.2 第 38 条）：照本人的伙伴授权执行（写的要完全授权、记审计），调用次数照上面每把钥匙每分钟的上限算。
       if (identity.project && deps.projectTurns && isProjectTool(tool)) {
-        if (!roles.member) { code = "FORBIDDEN"; return result({ code, message: "这个工具只对成员开放" }, true); }
+        if (!roles.work) { code = "FORBIDDEN"; return result({ code, message: "这个工具只对成员开放" }, true); }
         const outcome = await callProjectTool(deps.projectTurns, { personId: person.personId, projectId: identity.project.projectId }, tool, args, randomUUID());
         if (outcome.isError) code = (outcome.value as { code: string }).code;
         return result(outcome.value, outcome.isError);

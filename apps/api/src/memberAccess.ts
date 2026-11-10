@@ -29,10 +29,13 @@ export function randomInitialPasscode(): string {
 }
 
 export const roleOf = (person: MemoryPerson): SessionRole => (person.roles.includes("ceo") ? "ceo" : "member");
-export const canSwitchView = (person: MemoryPerson): boolean =>
-  person.roles.includes("ceo") && (person.roles.includes("dri") || person.roles.includes("participant"));
+/** 能在管理模式（CEO 视角）和工作模式（成员视角）之间切换：每个 CEO 角色的人，不要求同时是负责人（设计稿 17.2 第 45 条）。 */
+export const canSwitchView = (person: MemoryPerson): boolean => person.roles.includes("ceo");
+/** 是负责人或参与人（「成员」这个身份）：拉人进执行事项群、周复盘名单、飞书推送名单看它。能不能进成员视角看 canEnterMemberView。 */
 export const canUseMemberView = (person: MemoryPerson): boolean =>
   person.roles.includes("dri") || person.roles.includes("participant");
+/** 能进成员视角（新首页）：成员，或者 CEO 切到工作模式（以本人的身份用，不要求是负责人）。 */
+export const canEnterMemberView = (person: MemoryPerson): boolean => canUseMemberView(person) || person.roles.includes("ceo");
 
 export type AccessRow = {
   person_id: string;

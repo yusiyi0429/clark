@@ -780,7 +780,9 @@ describe("给 Chat 的回看接口（/internal/conversation-*）", () => {
 
       expect((await t.app.inject({ url: "/internal/conversation-catalog", headers: headers("ceo", TEST_CEO.personId, "wrong") })).statusCode).toBe(401);
       expect((await t.app.inject({ url: "/internal/conversation-catalog", headers: { authorization: `Bearer ${CHAT_TOKEN}`, "x-owner-id": TEST_CEO.personId } })).json().code).toBe("VIEW_REQUIRED");
-      expect((await t.app.inject({ url: "/internal/conversation-catalog", headers: headers("member") })).statusCode).toBe(403);
+      // 用不了的视角 403：成员用不了 CEO 视角。CEO 能切到工作模式（17.2 第 45 条），成员视角对他放行。
+      expect((await t.app.inject({ url: "/internal/conversation-catalog", headers: headers("ceo", TEST_MEMBER.personId) })).statusCode).toBe(403);
+      expect((await t.app.inject({ url: "/internal/conversation-catalog", headers: headers("member") })).statusCode).toBe(200);
       expect((await t.app.inject({ url: "/internal/conversation-recall/search?from=yesterday", headers: headers() })).statusCode).toBe(400);
     } finally {
       await t.close();
