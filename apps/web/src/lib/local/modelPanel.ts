@@ -1,6 +1,7 @@
 /**
  * 选模型的三行（设计 17.2 第 40 条）：来源、模型、思考。这里只算每一行现在的值和能选的项，界面在 components/home/ModelPanel。
- * 来源按本机的模型配置归组：「Claude 订阅」「Codex 订阅」，网关的照本机认出的名字（如「TokenHub」）；不写「我的」。
+ * 来源按本机认出的归组（origin.provider，经不经 magpie 分开算）：「Claude 订阅」「Codex 订阅」，网关的照本机认出的名字（如「TokenHub」）；不写「我的」。
+ * 模型那一行在这个来源的几条配置里选，写本机给的 modelName（内置的订阅那条是「自动」，排最上面）；模型目录里不能选思考的（efforts 为空）思考那一行点不开。
  * 联动：换来源，模型落到那个来源的默认；换模型，原来的思考档它支持就留着，不支持回到自动（同 36 条，本机也这样算）。
  */
 import type { TLocalAgentKind, TLocalAgentStatus, TLocalEffort, TLocalModelProfile } from "@warmap/contracts";
@@ -17,12 +18,16 @@ export const AUTO_EFFORT = "auto";
 /** 这一行点不点得开：只列得出一项的不给「›」、不能点。 */
 export const rowOpens = (row: Pick<PanelRow, "options">) => row.options.length > 1;
 
-const SUBSCRIPTION_SOURCE: Record<TLocalAgentKind, string> = { "claude-code": "claude", codex: "codex" };
-const SOURCE_AGENT: Record<string, TLocalAgentKind> = { claude: "claude-code", codex: "codex" };
+/** 两家订阅：来源的 id（同本机 origin.provider 的写法），和右栏用量那一格的 id。 */
+const SUBSCRIPTION: Record<TLocalAgentKind, { source: string; quota: string }> = {
+  "claude-code": { source: "claude-subscription", quota: "claude" },
+  codex: { source: "codex", quota: "codex" },
+};
 
-/** 一个模型配置属于哪个来源：订阅按执行方（claude、codex，也是右栏用量那一格的 id），网关按名字。 */
+/** 一个模型配置属于哪个来源：订阅按执行方；网关按本机认出的 provider（经 magpie 的另算一个），老版本本机不带 origin 时按名字。 */
 export function sourceIdOf(profile: Pick<TLocalModelProfile, "source" | "agent" | "origin" | "label">): string {
-  return profile.source === "subscription" ? SUBSCRIPTION_SOURCE[profile.agent] : `gateway:${profileSourceName(profile)}`;
+  if (profile.source === "subscription") return SUBSCRIPTION[profile.agent].source;
+  return profile.origin ? `${profile.origin.provider}${profile.origin.via ? `:${profile.origin.via}` : ""}` : `gateway:${profileSourceName(profile)}`;
 }
 
 /** 这个来源的默认模型：标了默认的那个，没有就第一个。 */
@@ -53,7 +58,7 @@ export type LocalPanelInput = {
   cells?: readonly UsageCell[];
   agents?: readonly TLocalAgentStatus[];
   now?: number;
-  /** 只许这几个执行方的来源（开着的子会话在双向换合进来之前只许自己的；规划员、验收员只许 Claude Code）；别的置灰。不给都能选。 */
+  /** 只许这几个执行方的来源（规划员、验收员只许 Claude Code）；别的置灰。不给都能选。 */
   agentsAllowed?: readonly TLocalAgentKind[];
 };
 
@@ -65,17 +70,19 @@ export function localPanelRows({ models, modelId, effort, cells = [], agents = [
   const current = models.find((model) => model.id === modelId) ?? null;
   if (!current) return [];
   const sourceId = sourceIdOf(current);
-  const seen = new Map<string, { label: string; agent: TLocalAgentKind }>();
-  for (const model of models) if (!seen.has(sourceIdOf(model))) seen.set(sourceIdOf(model), { label: profileSourceName(model), agent: model.agent });
+  const seen = new Map<string, { label: string; agent: TLocalAgentKind; subscription: boolean }>();
+  for (const model of models) {
+    const id = sourceIdOf(model);
+    if (!seen.has(id)) seen.set(id, { label: profileSourceName(model), agent: model.agent, subscription: model.source === "subscription" });
+  }
   for (const agent of agents) {
-    const id = SUBSCRIPTION_SOURCE[agent.kind];
-    if (!seen.has(id) && agentBlock(agent, now)) seen.set(id, { label: profileSourceName({ source: "subscription", agent: agent.kind, label: "" }), agent: agent.kind });
+    const id = SUBSCRIPTION[agent.kind].source;
+    if (!seen.has(id) && agentBlock(agent, now)) seen.set(id, { label: profileSourceName({ source: "subscription", agent: agent.kind, label: "" }), agent: agent.kind, subscription: true });
   }
   const sources: PanelOption[] = [...seen].map(([id, source]) => {
-    const subscription = id in SOURCE_AGENT;
-    const blocked = subscription ? agentBlock(agents.find((agent) => agent.kind === SOURCE_AGENT[id]), now) : null;
+    const blocked = source.subscription ? agentBlock(agents.find((agent) => agent.kind === source.agent), now) : null;
     const locked = !!agentsAllowed && !agentsAllowed.includes(source.agent);
-    const cell = cells.find((entry) => (subscription ? entry.id === id : entry.name === source.label));
+    const cell = cells.find((entry) => (source.subscription ? entry.id === SUBSCRIPTION[source.agent].quota : entry.name === source.label));
     return { id, label: source.label, note: blocked ?? cell?.value ?? null, disabled: (!!blocked || locked) && id !== sourceId };
   });
   const own = models.filter((model) => sourceIdOf(model) === sourceId);
@@ -96,8 +103,8 @@ export function pickLocal(models: readonly TLocalModelProfile[], current: { mode
   return model ? { modelId: model.id, effort: keptEffort(model, current.effort) } : null;
 }
 
-/** 胶囊上写的：「模型名 · 思考档」；思考是自动时只写模型名。订阅没写模型的（默认那个）读不到模型名，写来源名（同派活单的写法）。 */
-export function panelLabel(model: Pick<TLocalModelProfile, "model" | "label" | "catalog" | "source" | "agent" | "efforts">, effort: TLocalEffort | null): string {
+/** 胶囊上写的：「模型名 · 思考档」；思考是自动时只写模型名。订阅没写模型的（内置那条，模型由本机按档位挑）写来源名（同派活单的写法）。 */
+export function panelLabel(model: Pick<TLocalModelProfile, "model" | "label" | "catalog" | "source" | "agent" | "efforts" | "modelName">, effort: TLocalEffort | null): string {
   const name = !model.catalog && !model.model && model.source === "subscription" ? profileSourceName(model) : profileModel(model);
   const level = keptEffort(model, effort);
   return level ? `${name} · ${effortText(level)}` : name;

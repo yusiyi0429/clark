@@ -75,9 +75,10 @@ export async function setCardRole(cardId: string, version: number, role: CardRol
 const TIER_MATCH: Record<ModelTier, RegExp> = { strong: /opus/i, normal: /sonnet/i, light: /haiku|flash|mini|lite/i };
 /**
  * 按档位配模型（「自动」）：只在 Claude Code 的模型里挑（设计 17.2 第 38 条：Codex 要本人自己选；规划员只能用 Claude Code）。
+ * 只看本人配的和内置那条，不看 Claude 订阅的模型目录（40 条）：没配对应档位的模型时落到内置的「自动」，由本机按档位和预算模式挑，同以前。
  */
-export function modelForTier<T extends { model: string | null; label: string; isDefault: boolean; agent?: string }>(all: T[], tier: ModelTier): T | null {
-  const models = all.filter((entry) => (entry.agent ?? "claude-code") === "claude-code");
+export function modelForTier<T extends { model: string | null; label: string; isDefault: boolean; agent?: string; catalog?: boolean }>(all: T[], tier: ModelTier): T | null {
+  const models = all.filter((entry) => (entry.agent ?? "claude-code") === "claude-code" && !entry.catalog);
   return models.find((entry) => TIER_MATCH[tier].test(`${entry.model ?? ""} ${entry.label}`)) ?? models.find((entry) => entry.isDefault) ?? models[0] ?? null;
 }
 

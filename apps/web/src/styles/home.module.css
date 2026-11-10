@@ -503,6 +503,9 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .usageRing circle:last-child { stroke: var(--ink-muted); }
 .usageCell[data-tone="warning"] .usageRing circle:last-child { stroke: var(--warning); }
 .usageCell[data-tone="danger"] .usageRing circle:last-child { stroke: var(--danger); }
+/* 输入框下面的上下文圆环（17.2 第 42 条）：同一颗圆环，到 80% 字和环都是警告色。 */
+.footText[data-tone="warning"] { color: var(--warning); }
+.footText[data-tone="warning"] .usageRing circle:last-child { stroke: var(--warning); }
 .usageMoney { display: grid; flex: none; place-items: center; width: 14px; height: 14px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--hairline-strong); color: var(--ink-muted); font-size: 9px; font-weight: 600; line-height: 1; }
 .num { font-variant-numeric: tabular-nums; }
 .warnDot[data-tone="danger"], .cornerDot[data-tone="danger"] { background: var(--danger); }

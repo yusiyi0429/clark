@@ -54,22 +54,41 @@ const runFor = (profile: TLocalModelProfile, mode: "auto" | "set" | "unlimited" 
 /** Claude Code 握手报的五档（D 契约 c97b38c5）。 */
 const CLAUDE_EFFORTS: TLocalEffort[] = ["low", "medium", "high", "xhigh", "max"];
 
+const CLAUDE_ORIGIN = { provider: "claude-subscription", label: "Claude 订阅", via: null };
 const MODELS: TLocalModelProfile[] = [
-  { id: "subscription", label: "订阅 · 默认", source: "subscription", agent: "claude-code", baseUrl: null, model: null, smallModel: null, webSearch: true, hasKey: false, isDefault: true, efforts: [...CLAUDE_EFFORTS], defaultEffort: null },
-  { id: "sub-haiku", label: "订阅 · Haiku", source: "subscription", agent: "claude-code", baseUrl: null, model: "haiku", smallModel: null, webSearch: true, hasKey: false, isDefault: false, efforts: [...CLAUDE_EFFORTS], defaultEffort: null },
+  { id: "subscription", label: "订阅 · 默认", source: "subscription", agent: "claude-code", baseUrl: null, model: null, smallModel: null, webSearch: true, hasKey: false, isDefault: true, efforts: [...CLAUDE_EFFORTS], defaultEffort: null,
+    origin: CLAUDE_ORIGIN, modelName: "自动" },
+  { id: "sub-haiku", label: "订阅 · Haiku", source: "subscription", agent: "claude-code", baseUrl: null, model: "haiku", smallModel: null, webSearch: true, hasKey: false, isDefault: false, efforts: [...CLAUDE_EFFORTS], defaultEffort: null,
+    origin: CLAUDE_ORIGIN, modelName: "Haiku 5.5" },
   // 网关模型本机不传思考程度（36 条）。
-  { id: "tokenhub-deepseek", label: "TokenHub · DeepSeek", source: "gateway", agent: "claude-code", baseUrl: "https://tokenhub.example/anthropic", model: "deepseek-v4.1-flash", smallModel: null, webSearch: true, hasKey: true, isDefault: false, efforts: [], defaultEffort: null },
+  { id: "tokenhub-deepseek", label: "TokenHub · DeepSeek", source: "gateway", agent: "claude-code", baseUrl: "https://tokenhub.example/anthropic", model: "deepseek-v4.1-flash", smallModel: null, webSearch: true, hasKey: true, isDefault: false, efforts: [], defaultEffort: null,
+    origin: { provider: "tokenhub", label: "TokenHub", via: null }, modelName: "deepseek-v4.1-flash" },
+];
+
+/**
+ * Claude 订阅的模型目录（设计 17.2 第 40 条，D 契约 584eb5e9）：Claude Code 握手回的模型每个一条，只读（catalog），id 是 cc- 开头；
+ * 不能选思考的 efforts 为空（Haiku 4.5）。排在本人配的后面（真的本机程序里「自动」在最上面，目录已经筛过）。
+ */
+const claudeModel = (id: string, model: string, name: string, efforts: TLocalEffort[]): TLocalModelProfile => ({
+  id, label: name, source: "subscription", agent: "claude-code", baseUrl: null, model, smallModel: null, webSearch: true, hasKey: false, isDefault: false,
+  efforts, defaultEffort: null, catalog: true, origin: CLAUDE_ORIGIN, modelName: name,
+});
+const CLAUDE_MODELS: TLocalModelProfile[] = [
+  claudeModel("cc-opus", "opus", "Opus 5.5", [...CLAUDE_EFFORTS]),
+  claudeModel("cc-sonnet", "sonnet", "Sonnet 5.5", [...CLAUDE_EFFORTS]),
+  claudeModel("cc-claude-fable-5-2", "claude-fable-5-2", "Fable 5.2", [...CLAUDE_EFFORTS]),
+  claudeModel("cc-claude-haiku-4-5", "claude-haiku-4-5", "Haiku 4.5", []),
 ];
 
 /**
  * Codex 订阅的模型目录（设计 17.2 第 38 条，D 契约 b28c1f12）：登录着才有，只读（catalog）；每个模型自己的几档，gpt-6.1-sol 多一档 ultra。
  */
-const CODEX_ORIGIN = { provider: "openai", label: "Codex 订阅", via: null };
+const CODEX_ORIGIN = { provider: "codex", label: "Codex 订阅", via: null };
 const CODEX_MODELS: TLocalModelProfile[] = [
   { id: "codex-gpt-6_1-sol", label: "GPT-6.1-Sol", source: "subscription", agent: "codex", baseUrl: null, model: "gpt-6.1-sol", smallModel: null, webSearch: true, hasKey: false, isDefault: false,
-    efforts: [...CLAUDE_EFFORTS, "ultra"], defaultEffort: "low", catalog: true, origin: CODEX_ORIGIN },
+    efforts: [...CLAUDE_EFFORTS, "ultra"], defaultEffort: "low", catalog: true, origin: CODEX_ORIGIN, modelName: "GPT-6.1-Sol" },
   { id: "codex-gpt-5_5", label: "GPT-5.5", source: "subscription", agent: "codex", baseUrl: null, model: "gpt-5.5", smallModel: null, webSearch: true, hasKey: false, isDefault: false,
-    efforts: ["low", "medium", "high", "xhigh"], defaultEffort: "medium", catalog: true, origin: CODEX_ORIGIN },
+    efforts: ["low", "medium", "high", "xhigh"], defaultEffort: "medium", catalog: true, origin: CODEX_ORIGIN, modelName: "GPT-5.5" },
 ];
 
 /** onPlanned：规划员拆完时调（假装本机把 card_plan 同步上去了）。 */
@@ -101,7 +120,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
   let token = paired ? "mock-token-0000000000000000000000" : "";
   let codexIn = codex === "logged_in";
   let codexSetup: { phase: "idle" | "waiting_browser"; startedAt: string | null } = { phase: "idle", startedAt: null };
-  const models = () => [...MODELS, ...(codexIn ? CODEX_MODELS : [])];
+  const models = () => [...MODELS, ...CLAUDE_MODELS, ...(codexIn ? CODEX_MODELS : [])];
   const sessions = new Map<string, MockSession>();
   const projects = new Map<string, TLocalProjectFolder>();
   const bind = (projectId: string, folder: TLocalFolder | null, name?: string): TLocalProjectFolder => {
@@ -180,7 +199,16 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
   const finishBackground = (s: MockSession, state: "done" | "stopped") => {
     for (const item of s.summary.background ?? []) if (item.state === "running") background(s, { ...item, state, finishedAt: now(), stoppable: false });
   };
+  /** 上下文用了多少（17.2 第 42 条）：摘要和事件流一起更新。 */
+  const CONTEXT_MAX = 200_000;
+  const reportContext = (s: MockSession, usedTokens: number) => {
+    s.summary = { ...s.summary, context: { usedTokens, maxTokens: CONTEXT_MAX, at: now() } };
+    emit(s, { type: "context_usage", usedTokens, maxTokens: CONTEXT_MAX });
+  };
   const turnEnd = (s: MockSession, text: string | null, errorKind?: "interrupted") => {
+    // 每轮做完涨一截；快满了执行方自己压缩一次。
+    const grown = (s.summary.context?.usedTokens ?? 96_000) + 70_000;
+    if (grown > CONTEXT_MAX * 0.95) { emit(s, { type: "notice", level: "info", code: "context_compacted", text: "压缩了上下文" }); reportContext(s, 42_000); } else reportContext(s, grown);
     const usage = { ...ZERO, inputTokens: 1200, outputTokens: 320, costUsd: 0.004 };
     s.summary = { ...s.summary, usage: { ...s.summary.usage, inputTokens: s.summary.usage.inputTokens + 1200, outputTokens: s.summary.usage.outputTokens + 320, costUsd: (s.summary.usage.costUsd ?? 0) + 0.004 } };
     emit(s, { type: "turn_end", isError: false, text, durationMs: stepMs * 4, usage, ...(errorKind ? { errorKind } : {}) });
@@ -466,22 +494,32 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
       const s = must(id);
       const current = models().find((entry) => entry.id === s.summary.modelProfileId);
       const model = body.modelProfileId === undefined ? current : models().find((entry) => entry.id === body.modelProfileId);
-      if (!model || model.agent !== s.summary.agent) throw new LocalRunnerError("validation", "没有这个模型", 400);
+      if (!model) throw new LocalRunnerError("validation", "没有这个模型", 400);
+      // 换执行方（D 契约 5a217add）：modelProfileId 是另一家的就是换；规划员、验收员只能用 Claude Code。
+      const crossing = model.agent !== s.summary.agent;
+      if (crossing && model.agent === "codex" && (s.summary.subject.kind === "plan" || s.summary.subject.kind === "verify")) throw new LocalRunnerError("validation", "规划员、验收员只能用 Claude Code", 400);
       const wanted = body.effort === undefined ? s.summary.effort ?? null : body.effort;
       if (body.effort && !model.efforts?.includes(body.effort)) throw new LocalRunnerError("validation", "这个模型没有这一档", 400);
       const effort = wanted && model.efforts?.includes(wanted) ? wanted : null;
       const apply = () => {
         const { pendingModel: _done, effort: _old, ...rest } = s.summary;
-        s.summary = { ...rest, modelProfileId: model.id, modelLabel: model.label, run: runFor(model, "auto", effort), ...(effort ? { effort } : {}) };
-        if (model !== current) emit(s, { type: "notice", level: "info", code: "model_changed", text: `换成 ${runFor(model).modelName}` });
+        const was = s.summary.agent;
+        s.summary = { ...rest, agent: model.agent, modelProfileId: model.id, modelLabel: model.label, run: runFor(model, "auto", effort), ...(effort ? { effort } : {}) };
+        if (model.agent !== was) {
+          emit(s, { type: "notice", level: "info", code: "harness_changed", text: `换成 ${model.agent === "codex" ? "Codex" : "Claude Code"} · ${runFor(model).modelName}${effort ? ` · 思考 ${effort}` : ""}` });
+          // 新的那家没有现在这一档（「先出计划」换到 Codex）：改成「每次都问」。
+          if (s.summary.permissionMode === "plan" && model.agent === "codex") { s.summary = { ...s.summary, permissionMode: "default" }; emit(s, { type: "permission_mode", mode: "default", by: "harness_changed" }); }
+        } else if (model !== current) emit(s, { type: "notice", level: "info", code: "model_changed", text: `换成 ${runFor(model).modelName}` });
       };
       // Codex：模型和思考程度都是开一轮时带，在跑这一轮时等它做完（after_turn）；Claude Code 跨来源才要等。
-      const later = s.summary.agent === "codex" ? model !== current || effort !== (s.summary.effort ?? null) : current?.source !== model.source;
+      const later = crossing || (s.summary.agent === "codex" ? model !== current || effort !== (s.summary.effort ?? null) : current?.source !== model.source);
       if (OCCUPYING.has(s.summary.status) && later) {
         s.summary = { ...s.summary, pendingModel: { modelProfileId: model.id, modelLabel: runFor(model).modelName, effort } };
         setTimeout(apply, stepMs * 4);
         return { applied: "after_turn", session: summaryOf(s) };
       }
+      // 换执行方要等新的那家起来才回（真的要几秒）。
+      if (crossing) await new Promise((resolve) => setTimeout(resolve, stepMs * 3));
       apply();
       return { applied: "now", session: summaryOf(s) };
     },

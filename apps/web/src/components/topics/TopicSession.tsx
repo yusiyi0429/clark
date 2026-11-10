@@ -17,7 +17,7 @@ import { HeroButton } from "@/components/HeroButton";
 import { useHandheld } from "@/components/ui/useHandheld";
 import { StartDialog } from "@/components/local/StartDialog";
 import { showWorkspaceToast } from "@/lib/toast";
-import { RelayLine, SessionComposer, SessionTranscript, sayToSession, sessionModels, useModelChangedRefresh, sessionEnded, type DecideOptions } from "@/components/cards/SessionTranscript";
+import { RelayLine, SessionComposer, SessionTranscript, sayToSession, useSessionModels, useModelChangedRefresh, sessionEnded, type DecideOptions } from "@/components/cards/SessionTranscript";
 import { stateChip } from "@/components/cards/CardSession";
 import { QuestionDecision, awayChip, questionTitle } from "@/components/work/decisions";
 import { askAnchor } from "@/components/home/TaskFeed";
@@ -28,9 +28,9 @@ import { useConversationScroll } from "@/conversation/useConversationScroll";
 import { latestSessionFor, useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { useSessionEvents } from "@/lib/local/useSessionEvents";
 import { useSessionMode } from "@/components/cards/PermissionMode";
-import { runLabel, sessionModelText } from "@/lib/local/runModel";
+import { HARNESS_NAME, runLabel, sessionModelText } from "@/lib/local/runModel";
 import { placeText, shortPlace } from "@/lib/work/merge";
-import { localWait, running } from "@/lib/local/sessionView";
+import { contextUsage, localWait, running } from "@/lib/local/sessionView";
 import { startTopic } from "@/lib/local/start";
 import { WAIT_LABEL, canCommand, waitTone } from "@/lib/board/cards";
 import { addTopicVersionToPending, patchTopic, readTopic, readTopicVersion } from "@/lib/board/cloud";
@@ -86,6 +86,7 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
   useModelChangedRefresh(view.entries, local.refresh);
   const canAct = canCommand({ ready, handheld, hasSession: !!session });
   const mode = useSessionMode(local.runner, session, view);
+  const models = useSessionModels(local.runner, local.models, session, local.refresh, () => showWorkspaceToast({ text: "没换成" }), local.status);
   // 没成的不弹 toast：发消息交给输入框，批准、回答交给选项框，这页的按钮后面各自写「失败 · 重试」。
   const [failed, setFailed] = useState<{ at: "doc" | "head"; retry: () => void; reason: string } | null>(null);
   const act = (at: "doc" | "head", action: () => Promise<unknown>) => { setFailed(null); action().catch((error: unknown) => setFailed({ at, retry: () => act(at, action), reason: error instanceof Error ? error.message : "" })); };
@@ -171,7 +172,7 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
       <div className={s.chat}>
         <div className={s.scroll} ref={scroll.scrollRef}>
           <div ref={scroll.contentRef}>
-            {session ? <SessionTranscript entries={view.entries} agentName="Claude Code" canAct={canAct} onResend={(entry) => void say(entry.text).catch(() => showWorkspaceToast({ text: "没发出去" }))} device={device} live={running(status)} ended={ended} relay={relay} onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={asking} asking={question} />
+            {session ? <SessionTranscript entries={view.entries} agentName={HARNESS_NAME[session.agent]} canAct={canAct} onResend={(entry) => void say(entry.text).catch(() => showWorkspaceToast({ text: "没发出去" }))} device={device} live={running(status)} ended={ended} relay={relay} onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={asking} asking={question} />
               : <div className={s.feed}><span className={s.evt}>{topic.title}</span>
                   {ready && topic.status === "active" && !embedded ? <div className={s.actions}><HeroButton variant="primary" size="sm" onPress={() => setStarting(true)}>开始</HeroButton></div> : null}
                 </div>}
@@ -179,8 +180,8 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
           <div ref={scroll.reserveRef} aria-hidden />
         </div>
         {session || !embedded
-          ? <SessionComposer label={`给${topic.title}插话`} disabled={!canAct} onSend={say} mode={mode} subject={{ kind: "topic", id: topic.id }} place={place} model={model ? { label: model.label, title: model.title ?? undefined } : null}
-            models={sessionModels(local.runner, local.models, session, local.refresh, () => showWorkspaceToast({ text: "没换成" }), local.status)}
+          ? <SessionComposer label={`给${topic.title}插话`} disabled={!canAct} onSend={say} mode={mode} context={contextUsage(view.context ?? session?.context)} subject={{ kind: "topic", id: topic.id }} place={place} model={model ? { label: model.label, title: model.title ?? undefined } : null}
+            models={models}
             busy={running(status)} onStop={() => void local.runner.interrupt(session!.id).then(() => local.refresh()).catch(() => showWorkspaceToast({ text: "没停下" }))} dock={<PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} />} />
           : <div className={s.composerDock}><PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} /></div>}
       </div>

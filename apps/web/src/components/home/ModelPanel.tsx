@@ -4,12 +4,13 @@
  * 选模型的面板（设计 17.2 第 40 条，照 Claude Code）：入口是输入框下面的胶囊，点开三行——来源、模型、思考，左边行名、右边现在的值和「›」。
  * 点一行，同一个弹层翻到第二页：顶上一行「‹ 行名」回去，下面是能选的，选中的打勾；选完回到三行，弹层不关。点别处、Esc 关；第二页按 Esc 先回第一页。
  * 只列得出一项的那一行没有「›」、点不了。手持上从底部升起（同权限档那个抽屉）。子会话、开工对话框、项目对话三处共用；每一行的值和选项由调用方算（lib/local/modelPanel）。
+ * busy：选了以后要等一会儿才换好的（子会话换执行方，本机要等新的那家起来）——那一行转圈、先写选的那个，换好之前三行都点不了。
  */
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Dropdown } from "@heroui/react";
 import { Check, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { rowOpens, type PanelOption, type PanelRow, type PanelRowKey } from "@/lib/local/modelPanel";
-import { ICON } from "./StateIcon";
+import { ICON, StateIcon } from "./StateIcon";
 import h from "@/styles/home.module.css";
 
 const BACK = "back";
@@ -19,6 +20,8 @@ type Props = {
   title?: string | null;
   rows: readonly PanelRow[];
   onPick: (row: PanelRowKey, id: string) => void;
+  /** 正在换的那一行和选的那一项（见文件头）。 */
+  busy?: { row: PanelRowKey; id: string } | null;
   /** 手持：从底部升起。 */
   sheet?: boolean;
   placement?: "top end" | "bottom start";
@@ -29,16 +32,21 @@ export function ModelPanel({ sheet = false, ...props }: Props) {
   return sheet ? <PanelSheet {...props} /> : <PanelDropdown {...props} />;
 }
 
-const RowText = ({ row }: { row: PanelRow }) => (
-  <><span className={h.grow}>{row.name}</span><span className={h.panelValue}>{row.value}</span><span className={h.panelMark}>{rowOpens(row) ? <ChevronRight {...ICON} className={h.chevron} aria-hidden /> : null}</span></>
-);
+const RowText = ({ row, busy }: { row: PanelRow; busy?: Props["busy"] }) => {
+  const waiting = busy?.row === row.key ? busy : null;
+  const value = waiting ? row.options.find((option) => option.id === waiting.id)?.label ?? row.value : row.value;
+  return (
+    <><span className={h.grow}>{row.name}</span><span className={h.panelValue}>{value}</span>
+      <span className={h.panelMark}>{waiting ? <StateIcon state="running" label="正在换" /> : rowOpens(row) ? <ChevronRight {...ICON} className={h.chevron} aria-hidden /> : null}</span></>
+  );
+};
 const BackText = ({ row }: { row: PanelRow }) => <span className={h.panelBack}><ChevronLeft {...ICON} className={h.chevron} aria-hidden />{row.name}</span>;
 const OptionText = ({ option, selected }: { option: PanelOption; selected: boolean }) => (
   <><span className={h.grow}>{option.label}</span>{option.note ? <span className={h.menuFaint}>{option.note}</span> : null}<span className={h.panelMark}>{selected ? <Check {...ICON} aria-hidden /> : null}</span></>
 );
 const optionName = (option: PanelOption) => (option.note ? `${option.label} ${option.note}` : option.label);
 
-function PanelDropdown({ label, title, rows, onPick, placement = "top end", testId = "model-panel" }: Omit<Props, "sheet">) {
+function PanelDropdown({ label, title, rows, onPick, busy = null, placement = "top end", testId = "model-panel" }: Omit<Props, "sheet">) {
   const [open, setOpen] = useState(false);
   const [page, setPage] = useState<PanelRowKey | null>(null);
   const body = useRef<HTMLDivElement>(null);
@@ -51,11 +59,18 @@ function PanelDropdown({ label, title, rows, onPick, placement = "top end", test
     const key = focus.current;
     focus.current = null;
     if (!key) return;
-    // 菜单的项晚一拍才画出来，等它画完再把焦点放上去。
-    const timer = window.setTimeout(() => [...(body.current?.querySelectorAll<HTMLElement>("[data-panel-key]") ?? [])].find((item) => item.dataset.panelKey === key)?.focus());
+    // 菜单的项晚一两拍才画出来：等到那一项在了再把焦点放上去（最多等十来拍）。
+    let tries = 0;
+    let timer = 0;
+    const place = () => {
+      const item = [...(body.current?.querySelectorAll<HTMLElement>("[data-panel-key]") ?? [])].find((entry) => entry.dataset.panelKey === key);
+      if (item) item.focus(); else if (++tries < 12) timer = window.setTimeout(place, 16);
+    };
+    timer = window.setTimeout(place);
     return () => window.clearTimeout(timer);
   }, [page]);
   const act = (key: string) => {
+    if (busy) return;
     if (!row) { const next = rows.find((entry) => entry.key === key); if (next && rowOpens(next)) go(next.key, next.selected); return; }
     if (key !== BACK && key !== row.selected) onPick(row.key, key);
     go(null, row.key);
@@ -67,7 +82,7 @@ function PanelDropdown({ label, title, rows, onPick, placement = "top end", test
     event.stopPropagation();
     go(null, row.key);
   };
-  const disabled = row ? row.options.filter((option) => option.disabled).map((option) => option.id) : rows.filter((entry) => !rowOpens(entry)).map((entry) => entry.key);
+  const disabled = row ? row.options.filter((option) => option.disabled).map((option) => option.id) : rows.filter((entry) => busy || !rowOpens(entry)).map((entry) => entry.key);
   return (
     <Dropdown isOpen={open} onOpenChange={(next) => { setOpen(next); if (!next) setPage(null); }}>
       <Dropdown.Trigger className={h.sendTo} aria-label={`模型：${title ?? label}`} data-testid={testId}><b title={title ?? undefined}>{label}</b><ChevronDown {...ICON} /></Dropdown.Trigger>
@@ -88,8 +103,8 @@ function PanelDropdown({ label, title, rows, onPick, placement = "top end", test
                 </Dropdown.Section>
               </>
             ) : rows.map((entry) => (
-              <Dropdown.Item key={entry.key} id={entry.key} textValue={`${entry.name} ${entry.value}`} className={h.menuItem} shouldCloseOnSelect={false} data-panel-key={entry.key} data-static={rowOpens(entry) ? undefined : ""} data-testid="model-panel-row">
-                <RowText row={entry} />
+              <Dropdown.Item key={entry.key} id={entry.key} textValue={`${entry.name} ${entry.value}`} className={h.menuItem} shouldCloseOnSelect={false} data-panel-key={entry.key} data-static={busy || !rowOpens(entry) ? "" : undefined} data-busy={busy?.row === entry.key ? "" : undefined} data-testid="model-panel-row">
+                <RowText row={entry} busy={busy} />
               </Dropdown.Item>
             ))}
           </Dropdown.Menu>
@@ -100,7 +115,7 @@ function PanelDropdown({ label, title, rows, onPick, placement = "top end", test
 }
 
 /** 手持上的同一个面板：底部抽屉里两页；Esc 第二页先回第一页，再按收起；点空白处收起。 */
-function PanelSheet({ label, title, rows, onPick, testId = "model-panel" }: Omit<Props, "sheet" | "placement">) {
+function PanelSheet({ label, title, rows, onPick, busy = null, testId = "model-panel" }: Omit<Props, "sheet" | "placement">) {
   const [open, setOpen] = useState(false);
   const [closing, setClosing] = useState(false);
   const [page, setPage] = useState<PanelRowKey | null>(null);
@@ -136,9 +151,9 @@ function PanelSheet({ label, title, rows, onPick, testId = "model-panel" }: Omit
                       onClick={() => pick(option)} data-testid="model-panel-option"><OptionText option={option} selected={option.id === row.selected} /></button>
                   ))}
                 </>
-              ) : rows.map((entry) => (rowOpens(entry)
+              ) : rows.map((entry) => (rowOpens(entry) && !busy
                 ? <button key={entry.key} type="button" className={h.menuItem} onClick={() => setPage(entry.key)} data-testid="model-panel-row"><RowText row={entry} /></button>
-                : <div key={entry.key} className={h.menuItem} data-static="" data-testid="model-panel-row"><RowText row={entry} /></div>
+                : <div key={entry.key} className={h.menuItem} data-static="" data-busy={busy?.row === entry.key ? "" : undefined} data-testid="model-panel-row"><RowText row={entry} busy={busy} /></div>
               ))}
             </div>
           </div>

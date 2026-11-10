@@ -17,18 +17,18 @@ import { useHandheld } from "@/components/ui/useHandheld";
 import { StartDialog } from "@/components/local/StartDialog";
 import { latestSessionFor, useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { useSessionEvents } from "@/lib/local/useSessionEvents";
-import { localWait, planStep, running, type SessionView } from "@/lib/local/sessionView";
+import { contextUsage, localWait, planStep, running, type SessionView } from "@/lib/local/sessionView";
 import { startCard } from "@/lib/local/start";
 import { STAGES, WAIT_LABEL, boardCards, canCommand, circled, deliverableLabel, isAgentCard, waitTone, type CardStage, type CardWait } from "@/lib/board/cards";
 import { overrule, retryAcceptance } from "@/lib/board/cloud";
 import { cardRole } from "@/lib/team/roles";
 import { useAutoReturn } from "@/lib/board/useAutoReturn";
 import { showWorkspaceToast } from "@/lib/toast";
-import { RelayLine, SessionComposer, SessionTranscript, sayToSession, sessionModels, useModelChangedRefresh, sessionEnded, type DecideOptions } from "./SessionTranscript";
+import { RelayLine, SessionComposer, SessionTranscript, sayToSession, useSessionModels, useModelChangedRefresh, sessionEnded, type DecideOptions } from "./SessionTranscript";
 import { useSessionMode } from "./PermissionMode";
 import { FilePreview, cloudOutputFile, localSessionFile, type PreviewFile } from "./FilePreview";
 import { filesSignal, matchChangedFile, useSessionFiles } from "@/lib/local/sessionFiles";
-import { runLabel, sessionModelText } from "@/lib/local/runModel";
+import { HARNESS_NAME, runLabel, sessionModelText } from "@/lib/local/runModel";
 import { useCardDetail, type CardDetail } from "./useCardDetail";
 import { SourceWordIssues, SourceWords } from "./SourceWords";
 import { MergeAction } from "@/components/work/MergeAction";
@@ -82,6 +82,7 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
   const { view } = useSessionEvents(local.runner, session?.id ?? null);
   useModelChangedRefresh(view.entries, local.refresh);
   const mode = useSessionMode(local.runner, session, view);
+  const models = useSessionModels(local.runner, local.models, session, local.refresh, () => showWorkspaceToast({ text: "没换成" }), local.status);
   // 本会话改过的文件（这台电脑上跑着的会话才读得到）：右栏「改动的文件 N」列它，回答里提到的路径对得上才能点。
   const fileSession = ready && !handheld ? session?.id ?? null : null;
   const files = useSessionFiles(local.runner, fileSession, filesSignal(view.status, view.entries));
@@ -115,7 +116,7 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
   const item = detail.task;
   const agent = isAgentCard(item);
   const role = cardRole(item);
-  const agentName = role?.name ?? "Claude Code";
+  const agentName = role?.name ?? HARNESS_NAME[session?.agent ?? "claude-code"];
   const canAct = canCommand({ ready, handheld, hasSession: !!session });
   const card = boardCards([item], session ? [session] : [])[0]!;
   const wait = session ? localWait(view) ?? card.wait : card.wait;
@@ -170,8 +171,8 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
   const model = (session ? sessionModelText(session, local.models.find((entry) => entry.id === session.modelProfileId)?.efforts) : null) ?? ((label) => (label ? { label, title: null } : null))(runLabel(session?.run) ?? run?.modelLabel ?? item.card?.model?.label ?? null);
   const place = session?.workspace ? { name: shortPlace(session.workspace), title: placeText(session.workspace) } : null;
   const composer = agent && (session || !embedded)
-    ? <SessionComposer label={`给${item.title}插话`} disabled={!canAct} onSend={say} mode={mode} dock={dock} subject={{ kind: "card", id: cardId }} place={place} model={model ? { label: model.label, title: model.title ?? undefined } : null}
-      models={sessionModels(local.runner, local.models, session, local.refresh, () => showWorkspaceToast({ text: "没换成" }), local.status)}
+    ? <SessionComposer label={`给${item.title}插话`} disabled={!canAct} onSend={say} mode={mode} dock={dock} context={contextUsage(view.context ?? session?.context)} subject={{ kind: "card", id: cardId }} place={place} model={model ? { label: model.label, title: model.title ?? undefined } : null}
+      models={models}
       busy={sessionRunning} onStop={() => void control("interrupt").catch(() => showWorkspaceToast({ text: "没停下" }))} />
     : <div className={s.composerDock}>{dock}</div>;
   const chat = (
