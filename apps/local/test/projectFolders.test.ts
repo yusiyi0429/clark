@@ -41,6 +41,7 @@ describe("一个项目绑多个文件夹", { timeout: 60_000 }, () => {
   const docs = tempDir("tl-mf-docs-");
   const third = tempDir("tl-mf-third-");
   const sub = join(repo, "sub");
+  const web = join(repo, "web");
   const gone = tempDir("tl-mf-gone-");
   const picked = tempDir("tl-mf-picked-");
   let a: any, b: any, c: any, s: any; // 允许的文件夹：仓库、docs、third、仓库里的 sub
@@ -78,13 +79,15 @@ describe("一个项目绑多个文件夹", { timeout: 60_000 }, () => {
     writeFileSync(join(repo, ".fake-claude.json"), "{}");
     mkdirSync(sub);
     writeFileSync(join(sub, "说明.md"), "子文件夹\n");
+    mkdirSync(web);
+    writeFileSync(join(web, "页面.md"), "另一个子文件夹\n");
     git(repo, "add", "-A");
     git(repo, "-c", "user.name=测试", "-c", "user.email=test@example.com", "commit", "-q", "-m", "init");
     writeFileSync(join(docs, "记录.md"), "# 记录\n");
     writeFileSync(join(third, "别的.md"), "不在项目里\n");
     mkdirSync(join(dataDir, "codex"), { recursive: true });
     writeFileSync(join(dataDir, "codex", "auth.json"), "{}"); // Codex 已经登录着（假 codex 看这个）
-    const picks = [repo, docs, third, sub, gone, picked];
+    const picks = [repo, docs, third, sub, gone, picked, web];
     const offline = (async () => { throw new Error("offline"); }) as unknown as typeof fetch;
     t = await startTestRunner({ dataDir, pickFolder: () => picks.shift() ?? null, fetchImpl: offline, fakeCodex: true });
     token = await pair(t.port);
@@ -233,6 +236,23 @@ describe("一个项目绑多个文件夹", { timeout: 60_000 }, () => {
     await status(x.id, "waiting_permission");
     expect(asked(x.id)).toBe(1);
     await kill(x.id);
+  });
+
+  it("绑的是同一个仓库里的两个子文件夹：卡的工作树里已经有整个仓库，另一个子文件夹不算其余目录（不然卡绕过工作树改主文件夹）", async () => {
+    const w = (await call("POST", "/v1/folders/pick", {})).body.folder;
+    expect(same(w.path, web)).toBe(true);
+    expect(ids((await put(P4, { folderIds: [s.id, w.id, b.id] })).body)).toEqual([s.id, w.id, b.id]);
+    commitFake({ writePath: join(web, "页面.md") });
+    const r = await call("POST", "/v1/sessions", { subject: { kind: "card", cardId: "mf-sib", projectId: P4 }, title: "子文件夹", firstMessage: "做", permissionMode: "auto" });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body.workspace).toMatchObject({ kind: "worktree", folder: s.path });
+    expect(same(r.body.cwd, join(r.body.workspace.path, "sub"))).toBe(true);
+    // 写主文件夹里的另一个子文件夹：照样问本人；交给执行方的其余目录只有仓库外面的 docs
+    await status(r.body.id, "waiting_permission");
+    const dirs = addDirs(r.body.workspace.path, r.body.id);
+    expect(dirs.map((d) => posix(d).toLowerCase())).toEqual([posix(b.path).toLowerCase()]);
+    expect((await read(r.body.id, join(web, "页面.md"))).status).toBe(403);
+    await kill(r.body.id);
   });
 
   it("不在工作树里做的会话（专题）：没指定目录就在第一个文件夹里，其余目录一样交给它", async () => {

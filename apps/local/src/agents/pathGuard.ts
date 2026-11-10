@@ -216,6 +216,8 @@ const PROTECTED = /(^|[\\/\s"'])\.(git|claude)([\\/\s"']|$)/;
 const FILTER_ARG = /(^|\s)(-Exclude|-[ci]?(?:not)?(?:match|like)|--exclude(?:-dir)?|--glob|-g)(?:\s+|=)("[^"]*"|'[^']*'|[^\s;&|]+)/gi;
 /** 写、删、挪文件的命令和重定向（2>&1 这种合并输出的不算）。 */
 const WRITES = /(^|[\s;|&(])(Remove-Item|ri|rm|rmdir|rd|del|erase|Move-Item|mi|mv|move|Copy-Item|cpi|cp|copy|Rename-Item|rni|ren|Set-Content|sc|Add-Content|ac|Out-File|New-Item|ni|tee|Tee-Object)(?=\s|$)|(?<![\d*&])>(?!&)/i;
+/** 不在 WRITES 里、但一样会改掉文件的命令：git（reset、clean、checkout、stash…）和就地改文件的 sed -i、perl -pi。项目另外绑的文件夹里碰到就问。 */
+const REWRITES = /\bgit\b|\b(sed|perl)\b[^;&|\n]*\s-\w*i/i;
 /** 命令碰不碰 .git、.claude：只用来排除、筛选的不算（命令里还有写、删、挪、重定向时照样算，免得先筛出来再删）。 */
 function touchesProtected(cmd: string): boolean {
   return PROTECTED.test(WRITES.test(cmd) ? cmd : cmd.replace(FILTER_ARG, "$1"));
@@ -316,7 +318,8 @@ function bypassAsks(tool: string, input: Record<string, unknown>): boolean {
 /**
  * 这一档下这一步能不能不问本人就放行（契约 LocalPermissionMode）。「全部放行」只问 bypassAsks 那三类；别的档还有硬规矩（mustAsk）。worktree：卡在自己的工作树里做时是工作树的根，
  * 「自动」「自动接受改文件」只在工作树里自己放行；别的会话为 null，在允许的文件夹里放行，「自动」不在工作树时删、挪文件的命令照样问（没有 git 兜底）。
- * 卡在工作树里、项目另外还绑着文件夹（scope.extraDirs）：那些文件夹是本人真的文件夹，照「不在工作树里」的规矩放行。
+ * 卡在工作树里、项目另外还绑着文件夹（scope.extraDirs）：那些文件夹是本人真的文件夹，照「不在工作树里」的规矩放行，
+ * 再严一点：命令里有 git、就地改文件的（REWRITES）也问——卡原来出了工作树什么都问，不能因为多绑了文件夹就能不问本人把那里没提交的改动冲掉。
  */
 export function modeAllows(
   mode: "auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions", tool: string, input: Record<string, unknown>, scope: PathScope, hint: unknown, worktree: string | null,
@@ -329,7 +332,8 @@ export function modeAllows(
   if (!worktree) return pass(scope, false);
   if (pass({ ...scope, allowedRoots: () => [worktree] }, true)) return true;
   const extras = scope.extraDirs?.() ?? [];
-  return extras.length > 0 && pass({ ...scope, allowedRoots: () => [worktree, ...extras] }, false);
+  if (!extras.length || (SHELL_TOOLS.has(tool) && REWRITES.test(String(input.command ?? "")))) return false;
+  return pass({ ...scope, allowedRoots: () => [worktree, ...extras] }, false);
 }
 
 /** Claude Code 放行规则里的路径：//c/x 是绝对路径（Windows 是 C:\x），~/ 是主目录，/x 是项目根下，其余相对工作目录。 */
