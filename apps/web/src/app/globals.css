@@ -330,6 +330,19 @@
   outline: none;
 }
 /*
+ * react-aria 管焦点的元素（HeroUI 的按钮、菜单、菜单项、列表项、选项卡、选择框、开关，Dropdown.Trigger 等，都带 data-rac）
+ * 只在 react-aria 判定是键盘时（data-focus-visible）画焦点框（设计 17.2 第 39 条）。整页重新载入后（锁屏回来就是）第一次用鼠标点开菜单，
+ * 焦点由程序挪到菜单上，Chrome 也把它算成 :focus-visible：菜单、菜单项、关掉后焦点回到的那一行都会多一圈框。这里把浏览器原生那一半关掉：
+ * 全局的 2px 外框、各处 .xxx:focus-visible 的外框、HeroUI 用 box-shadow 画的环（--tw-ring-*）都不画。键盘走过来时 react-aria 会标
+ * data-focus-visible，照样有框。文字输入不在内（打字时照旧有聚焦边）；不是 react-aria 管的普通元素不动。不分层，压过分层的 base 和组件样式。
+ */
+[data-rac]:focus-visible:not([data-focus-visible], input, textarea) {
+  outline: none;
+  --tw-ring-shadow: 0 0 #0000;
+  --tw-ring-offset-shadow: 0 0 #0000;
+}
+
+/*
  * HeroUI / ts-design 的文本框（Input、TextArea、Select 触发器）。它们的样式在 @layer components（分层），
  * 所以这里用不分层的规则对齐：边、悬停边、聚焦边、占位字已经通过 --field-* 同名变量带过来了（见上方注释），
  * 这里补圆角（单行取 --field-radius-line，不然会跟着多行的 20 变成胶囊）、内边距、字号行高，并去掉 HeroUI 默认的 2px 聚焦圈。
