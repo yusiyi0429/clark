@@ -188,6 +188,15 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
 
   /** 真的执行方回答是 Markdown（17.2 第 41 条按 Markdown 排），假的也带一点：粗体、列表、行内代码、表格。 */
   const ANSWER_TEXT = ["好，按你说的改，**两处**：", "", "- 删掉旧的安装说明", "- `README.md` 里的链接换到新说明", "", "| 文件 | 改动 |", "| --- | --- |", "| README.md | 换链接 |", "| docs/install-old.md | 删掉 |"].join("\n");
+  /** 假的「本会话改过的文件」（17.2 第 41 条）：一个 Markdown、一个代码文件、一张图、一个删掉了的。 */
+  const FILE_ROOT = "C:/work/tianshu";
+  const FILES: Record<string, { kind: "markdown" | "text" | "image"; mimeType: string; content: string; sources: ("tool" | "git")[] }> = {
+    "交回说明.md": { kind: "markdown", mimeType: "text/markdown", sources: ["tool"], content: ["# 交回说明", "", "改了 **两处**，测试都过。", "", "- `README.md` 的链接换到新说明", "- 旧的安装说明删掉了"].join("\n") },
+    "README.md": { kind: "markdown", mimeType: "text/markdown", sources: ["tool", "git"], content: ["# tianshu", "", "安装见 [安装说明](docs/install.md)。"].join("\n") },
+    "apps/web/src/app/manifest.ts": { kind: "text", mimeType: "text/plain", sources: ["git"], content: ["export default function manifest() {", "  return { name: \"天枢\" };", "}"].join("\n") },
+    "apps/web/public/icon.png": { kind: "image", mimeType: "image/png", sources: ["git"],
+      content: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" },
+  };
   const script: Step[] = [
     (s) => { reportActual(s); setStatus(s, "running"); noteWorkspace(s); emit(s, { type: "agent_info", agent: "claude-code", version: "2.1.318", model: s.summary.modelLabel, permissionMode: "manual" }); },
     (s) => { emit(s, { type: "assistant_text", text: "先读一下交代和相关代码，列个计划。" }); plan(s, 0); },
@@ -475,6 +484,27 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
       }
       apply();
       return { applied: "now", session: summaryOf(s) };
+    },
+    listSessionFiles: async (id) => {
+      must(id);
+      const size = (file: { kind: string; content: string }) => (file.kind === "image" ? Math.floor(file.content.length * 0.75) : new TextEncoder().encode(file.content).length);
+      return {
+        root: FILE_ROOT, truncated: false,
+        files: [
+          ...Object.entries(FILES).map(([path, file]) => ({ path, absolutePath: `${FILE_ROOT}/${path}`, sources: file.sources, exists: true, size: size(file) })),
+          { path: "docs/install-old.md", absolutePath: `${FILE_ROOT}/docs/install-old.md`, sources: ["git" as const], exists: false, size: null },
+        ].sort((a, b) => a.path.localeCompare(b.path)),
+      };
+    },
+    readSessionFile: async (id, body) => {
+      must(id);
+      const asked = body.path.replace(/\\/g, "/");
+      if (asked.includes("../")) throw new LocalRunnerError("folder_not_allowed", "在本会话的文件夹外面", 403);
+      const path = asked.toLowerCase().startsWith(`${FILE_ROOT.toLowerCase()}/`) ? asked.slice(FILE_ROOT.length + 1) : asked;
+      const file = FILES[path];
+      if (!file) throw new LocalRunnerError("not_found", "文件不存在", 404);
+      return { path, absolutePath: `${FILE_ROOT}/${path}`, name: path.split("/").pop()!, size: file.kind === "image" ? Math.floor(file.content.length * 0.75) : new TextEncoder().encode(file.content).length,
+        modifiedAt: now(), kind: file.kind, mimeType: file.mimeType, encoding: file.kind === "image" ? "base64" as const : "utf8" as const, content: file.content, truncated: false };
     },
     setPermissionMode: async (id, mode) => {
       const s = must(id);

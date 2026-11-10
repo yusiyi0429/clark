@@ -4,6 +4,8 @@
  * 首页（新首页设计 5.4.4）：页头「11 月 7 日 周六」，从上到下是 等你（有才画）→ 各 Mission 的 Task → 输入框；区块之间 32，Mission 之间 16。
  * - 等你：一件两行（原话；来源 · 哪件 Task · 截止）。短的（批准、单选、合回、开工、岗位建议）在行尾就地答，推荐的那个是次按钮、另一个弱按钮；
  *   答完这一行变成状态词（「已批准」）停 2 秒再收走，不弹 toast。行首不放强调色点（组头已经写了「等你」）。
+ *   会后确认（Nexus 推来的会上待定事项，17.2 第 43 条）：第二行「会后确认 · 待确认的内容 · 截止 11/12 18:00」，行尾「确认」「修改」「拒绝」；
+ *   点「修改」（或点这一行）就地展开：有会上原话的先写原话，下面输入框预填原内容，改完「提交」。
  * - 本月（16.4）：按 Mission 分组列这个月的 Task，行尾「11/20 验收」，再是项目名 chip（点了进项目）；没挂上的是「挂到…」（选现有项目或新建）。
  * - 输入框：InputBar（14.5）；框下面「发给」默认自动（打字停下 300ms 后问一次分发接口，只认最后一次），也能选伙伴或某个项目；发出去以后跳进那条对话。
  */
@@ -16,7 +18,7 @@ import { HeroButton } from "@/components/HeroButton";
 import { FailedLine, failureOf, type Failure } from "@/components/work/DecisionBox";
 import { localOptions, oneTap } from "@/components/work/decisions";
 import { InputBar } from "./InputBar";
-import { acceptDrafts, acceptProjectDrafts, decideAutoRelay, planKey, type PlanTarget } from "@/lib/board/cloud";
+import { acceptDrafts, acceptProjectDrafts, decideAutoRelay, decideNexusConfirmation, planKey, type PlanTarget } from "@/lib/board/cloud";
 import { useLocalRunner, type LocalRunnerState } from "@/lib/local/LocalRunnerProvider";
 import { decideProposal } from "@/lib/team/roles";
 import { canCommandHere, decide } from "@/lib/work/actions";
@@ -24,7 +26,7 @@ import { mergeCard } from "@/lib/work/merge";
 import { missionHref, taskGateLabel, taskHref, waitingHref } from "@/lib/home/derive";
 import { projectHref, type Project } from "@/lib/home/projects";
 import type { ProjectsApi } from "./useProjects";
-import { relativeDayTime } from "@/lib/companyTime";
+import { monthDayTime, relativeDayTime } from "@/lib/companyTime";
 import type { HomeMonthMission, RouteTarget, WaitingItem, WorkHomeData } from "@/lib/home/types";
 import type { WorkHomeApi } from "@/lib/home/useWorkHome";
 import { ICON } from "./StateIcon";
@@ -112,8 +114,8 @@ function MonthRow({ task, gate, projects, go }: { task: HomeMonthMission["tasks"
 }
 
 type RunAction = { label: string; done: string; primary?: boolean; run: () => Promise<unknown> };
-/** 行尾的一个按钮：就地办（run），或点了去那件事里（href，开工的「改一改」进项目对话）。 */
-type Action = RunAction | { label: string; primary?: boolean; href: string };
+/** 行尾的一个按钮：就地办（run），点了去那件事里（href，开工的「改一改」进项目对话），或就地展开来改（edit，会后确认的「修改」）。 */
+type Action = RunAction | { label: string; primary?: boolean; href: string } | { label: string; primary?: boolean; edit: true };
 /** away：这里答不了的 inline_local（手机、别的电脑、本机没就绪），行尾画「等你 · {电脑名}」chip。 */
 export type WaitingRowAnswer = { actions: Action[]; away: string | null };
 
@@ -123,7 +125,8 @@ export type WaitingRowAnswer = { actions: Action[]; away: string | null };
  *   批准旁边是「换个做法」（进那个子会话说）。
  *   别处（手机、别的电脑、本机没就绪）画「等你 · {deviceName}」，整行点进去看。
  * - inline（开工、岗位建议、自动接力）走云端，手机上也能：开工「开始」= 接受派活单并登记开工（配对的电脑上开着的网页认领后开，同 PlanDecision 开不了本机时），
- *   「改一改」进项目对话；岗位建议「采纳 / 不要」；自动接力到了上限（18.12）「继续 / 停下」。
+ *   「改一改」进项目对话；岗位建议「采纳 / 不要」；自动接力到了上限（18.12）「继续 / 停下」；
+ *   会后确认（17.2 第 43 条）「确认 / 修改 / 拒绝」，没有内容可改的不出「修改」。
  * - open 的（受阻、会后确认、Mission Card、请你认可、月份、电脑、额度）整行点进去。
  */
 export function waitingAnswer(item: WaitingItem, { api, local, handheld }: { api: Pick<WorkHomeApi, "deviceId" | "work">; local: LocalRunnerState; handheld: boolean }): WaitingRowAnswer {
@@ -165,6 +168,14 @@ function waitingActions(item: WaitingItem, api: Pick<WorkHomeApi, "deviceId" | "
     const id = item.projectId;
     return [{ label: "继续", done: "已继续", primary: true, run: () => decideAutoRelay(id, "continue") }, { label: "停下", done: "已停下", run: () => decideAutoRelay(id, "stop") }];
   }
+  if (item.kind === "nexus_confirmation" && item.confirmation) {
+    const { id, value } = item.confirmation;
+    return [
+      { label: "确认", done: "已确认", primary: true, run: () => decideNexusConfirmation(id, "confirmed") },
+      ...(value !== null ? [{ label: "修改", edit: true as const }] : []),
+      { label: "拒绝", done: "已拒绝", run: () => decideNexusConfirmation(id, "rejected") },
+    ];
+  }
   if (item.kind === "merge" && item.sessionId) {
     const session = local.sessions.find((entry) => entry.id === item.sessionId);
     if (!session || !ready || handheld) return [];
@@ -201,6 +212,39 @@ export function dueText(dueAt: string, now: number): { text: string; warn: boole
   return { text: `剩 ${Math.max(1, Math.floor(left / 60_000))} 分钟`, warn: true };
 }
 
+/** 会后确认这一行的第二行和截止（17.2 第 43 条）：「会后确认 · 待确认的内容」，截止写时刻「截止 11/12 18:00」；别的种类为 null，照原来的写。 */
+export function confirmationLine(item: WaitingItem, now: number): { from: string; due: { text: string; warn: boolean } | null } | null {
+  if (item.kind !== "nexus_confirmation") return null;
+  const value = item.confirmation?.value?.replace(/\s+/g, " ").trim();
+  return {
+    from: [item.source, value].filter(Boolean).join(" · "),
+    due: item.dueAt ? { text: `截止 ${monthDayTime(item.dueAt)}`, warn: dueText(item.dueAt, now).warn } : null,
+  };
+}
+
+/** 会后确认展开的那一块：有会上原话的先写原话；有内容的给输入框（预填原内容），改了才能「提交」。 */
+function ConfirmEdit({ value, quote, busy, onSubmit, onCancel }: { value: string | null; quote: string | null; busy: boolean; onSubmit: (value: string) => void; onCancel: () => void }) {
+  const [text, setText] = useState(value ?? "");
+  const next = text.trim();
+  // 输入框的高度跟着内容：按换行和每行大约 30 个字估，2 到 8 行，再长自己滚。
+  const rows = Math.min(8, Math.max(2, text.split("\n").reduce((count, line) => count + Math.max(1, Math.ceil(line.length / 30)), 0)));
+  return (
+    <div className={h.waitEdit} data-testid="confirm-edit">
+      {quote ? <blockquote className={h.waitQuote} data-testid="confirm-quote">{quote}</blockquote> : null}
+      {value !== null ? (
+        <>
+          <textarea className={h.noteEdit} value={text} rows={rows} maxLength={20000} aria-label="内容" autoFocus
+            onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); onCancel(); } }} data-testid="confirm-value" />
+          <div className={h.noteFoot}>
+            <HeroButton variant="tertiary" size="sm" isDisabled={busy || !next || next === value.trim()} onPress={() => onSubmit(next)}>提交</HeroButton>
+            <HeroButton variant="ghost" size="sm" isDisabled={busy} onPress={onCancel}>取消</HeroButton>
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 /**
  * 等你的一行（5.4.4「等你行」）。第二行依次是对方（请你认可的：头像 16 和名字）、来源、截止；没有截止的不写时间，时间（5.6 相对时间）放在整行能点的那块的 title 里。
  * 额度那条的 dueAt 是恢复的时刻（原话里已经写了），不当截止写。
@@ -210,6 +254,8 @@ export function WaitingList({ items, api, go }: { items: WaitingItem[]; api: Wor
   const answer = useActions(api);
   const local = useLocalRunner();
   const [state, setState] = useState<Record<string, { busy?: boolean; done?: string; failed?: RunAction; reason?: string }>>({});
+  // 会后确认展开着的那一行（一次只开一行）。
+  const [editing, setEditing] = useState<string | null>(null);
   const timers = useRef<number[]>([]);
   useEffect(() => () => timers.current.forEach((timer) => window.clearTimeout(timer)), []);
   // 一行的状态按「这一次请求」记：同一个子会话接着又要批准、又问的，等你行的 id 不变，at（这次请求的时间）变了就是新的一行，不沿用「已批准」。
@@ -225,6 +271,8 @@ export function WaitingList({ items, api, go }: { items: WaitingItem[]; api: Wor
       timers.current.push(window.setTimeout(() => { void Promise.all([local.refresh(), api.refresh()]).finally(() => forget(key)); }, 2000));
     } catch (error) {
       setState((current) => ({ ...current, [key]: { failed: action, reason: error instanceof Error ? error.message : undefined } }));
+      // 会后确认没成多半是过期、作废或别处已经处理了：重读一次，已经不在的这一行就消失。
+      if (item.kind === "nexus_confirmation") void api.refresh();
     }
   };
   const now = Date.now();
@@ -233,13 +281,20 @@ export function WaitingList({ items, api, go }: { items: WaitingItem[]; api: Wor
       {items.map((item) => {
         const { actions, away } = answer(item);
         const row = state[keyOf(item)];
-        const due = item.dueAt && item.kind !== "quota" ? dueText(item.dueAt, now) : null;
+        const confirm = confirmationLine(item, now);
+        const due = confirm ? confirm.due : item.dueAt && item.kind !== "quota" ? dueText(item.dueAt, now) : null;
         // 批准那一行：越界路径写在来源后面（9.6、契约 permission.outsidePaths）。
         const outside = item.permission?.outsidePaths.length ? `越界：${item.permission.outsidePaths.join("、")}` : null;
-        const from = [item.person?.name, item.source, outside].filter(Boolean).join(" · ");
+        const from = confirm ? confirm.from : [item.person?.name, item.source, outside].filter(Boolean).join(" · ");
+        // 会后确认没有自己的页面：点这一行就地展开（看全内容和会上原话，能改的在这里改）。
+        const detail = confirm && !row?.done ? item.confirmation ?? null : null;
+        const canOpen = !!detail && (detail.value !== null || !!detail.quote);
+        const open = canOpen && editing === keyOf(item);
+        const toggle = () => setEditing(open ? null : keyOf(item));
         return (
-          <li key={item.id} className={h.wait} data-kind={item.kind} data-done={row?.done ? "" : undefined}>
-            <button type="button" className={h.waitMain} onClick={() => go(waitingHref(item))} title={!due && item.at ? relativeDayTime(item.at, new Date(now)) : undefined}>
+          <li key={item.id} className={h.wait} data-kind={item.kind} data-done={row?.done ? "" : undefined} data-editing={open ? "" : undefined}>
+            <button type="button" className={h.waitMain} aria-expanded={canOpen ? open : undefined} onClick={() => { if (!confirm) go(waitingHref(item)); else if (canOpen) toggle(); }}
+              title={!due && item.at ? relativeDayTime(item.at, new Date(now)) : undefined}>
               <span className={h.waitTitle}>{item.title}</span>
               {from || due ? (
                 <span className={h.waitSource}>
@@ -254,11 +309,16 @@ export function WaitingList({ items, api, go }: { items: WaitingItem[]; api: Wor
               {row?.done ? <span className={h.waitDone}>{row.done}</span>
                 : row?.failed ? <FailedLine inline reason={row.reason} onRetry={() => void run(item, row.failed!)} />
                 : away ? <span className={`${x.waitChip} ${h.waitAway}`} data-testid="wait-away"><i aria-hidden />{away}</span>
+                : open && detail?.value !== null ? null
                 : actions.map((action) => (
                   <HeroButton key={action.label} variant={action.primary ? "tertiary" : "ghost"} size="sm" isDisabled={row?.busy}
-                    onPress={() => { if ("href" in action) go(action.href); else void run(item, action); }}>{action.label}</HeroButton>
+                    onPress={() => { if ("href" in action) go(action.href); else if ("edit" in action) toggle(); else void run(item, action); }}>{action.label}</HeroButton>
                 ))}
             </span>
+            {open && detail ? (
+              <ConfirmEdit value={detail.value} quote={detail.quote} busy={!!row?.busy} onCancel={() => setEditing(null)}
+                onSubmit={(value) => { setEditing(null); void run(item, { label: "修改", done: "已修改", run: () => decideNexusConfirmation(detail.id, "amended", value) }); }} />
+            ) : null}
           </li>
         );
       })}

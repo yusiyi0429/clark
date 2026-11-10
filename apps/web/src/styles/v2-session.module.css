@@ -164,6 +164,11 @@ button.output { width: 100%; border: 0; color: inherit; font-family: inherit; te
 button.output:hover { background: var(--default-soft); }
 button.output[data-current] { background: var(--default-soft-hover); }
 button.output:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+/* 「改动的文件 N」（17.2 第 41 条）：一行字加箭头，默认收起；下面每个文件一行路径，太长从前面省略（文件名留着）；不在了的淡色、不能点。 */
+.filesHead { display: flex; align-items: center; gap: var(--space-1); margin: 0; padding: 0; border: 0; background: none; color: var(--ink-faint); font: inherit; font-size: var(--text-xs); line-height: 16px; text-align: left; cursor: pointer; }
+.filesHead:hover { color: var(--ink-muted); }
+.filesHead:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-bar); }
+.output[data-gone] { color: var(--ink-faint); text-decoration: line-through; }
 
 /* 文件预览（17.2 第 41 条）：子会话页右边一栏，顶上文件名和关闭，下面内容自己滚；手持上盖满整屏（下面的对话不卸，关了还在原来的位置）。 */
 .preview { display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; min-height: 0; box-shadow: inset 1px 0 0 var(--hairline); outline: 0; }

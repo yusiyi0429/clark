@@ -6,11 +6,11 @@
  * 只有这台电脑上的本机程序在跑这张卡、而且不是手机时，才能开始、插话、停止、批权限；别处只看云端同步来的摘要。
  * 手机上分「结果」「对话」两个标签。
  */
-import type { TLocalAttachmentRef } from "@warmap/contracts";
+import type { TLocalAttachmentRef, TLocalChangedFile } from "@warmap/contracts";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, ChevronLeft, Info, X } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Info, X } from "lucide-react";
 import type { TCardHandbackView, TLocalQuestionAnswerRequest, TLocalRunView } from "@warmap/contracts";
 import { HeroButton } from "@/components/HeroButton";
 import { useHandheld } from "@/components/ui/useHandheld";
@@ -26,7 +26,8 @@ import { useAutoReturn } from "@/lib/board/useAutoReturn";
 import { showWorkspaceToast } from "@/lib/toast";
 import { RelayLine, SessionComposer, SessionTranscript, sayToSession, sessionModels, useModelChangedRefresh, sessionEnded, type DecideOptions } from "./SessionTranscript";
 import { useSessionMode } from "./PermissionMode";
-import { FilePreview, cloudOutputFile, type PreviewFile } from "./FilePreview";
+import { FilePreview, cloudOutputFile, localSessionFile, type PreviewFile } from "./FilePreview";
+import { filesSignal, matchChangedFile, useSessionFiles } from "@/lib/local/sessionFiles";
 import { runLabel, sessionModelText } from "@/lib/local/runModel";
 import { useCardDetail, type CardDetail } from "./useCardDetail";
 import { SourceWordIssues, SourceWords } from "./SourceWords";
@@ -81,6 +82,18 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
   const { view } = useSessionEvents(local.runner, session?.id ?? null);
   useModelChangedRefresh(view.entries, local.refresh);
   const mode = useSessionMode(local.runner, session, view);
+  // 本会话改过的文件（这台电脑上跑着的会话才读得到）：右栏「改动的文件 N」列它，回答里提到的路径对得上才能点。
+  const fileSession = ready && !handheld ? session?.id ?? null : null;
+  const files = useSessionFiles(local.runner, fileSession, filesSignal(view.status, view.entries));
+  const outputs = detail?.outputs;
+  const openLocal = useCallback((path: string) => { if (fileSession) setPreview(localSessionFile(local.runner, fileSession, path)); }, [local.runner, fileSession]);
+  // 回答里提到的一处：先看是不是改过的文件（读这台电脑上现在的），再看是不是交出的产出（读云端那份）；都对不上不能点。
+  const openFile = useCallback((mention: string) => {
+    const changed = fileSession ? matchChangedFile(files, mention) : null;
+    if (changed) return () => openLocal(changed.path);
+    const output = outputs?.find((entry) => entry.kind === "artifact" && entry.fileName === mention);
+    return output ? () => setPreview(cloudOutputFile(output)) : null;
+  }, [files, outputs, fileSession, openLocal]);
   const [tab, setTab] = useState<"result" | "chat">("result");
   const [starting, setStarting] = useState(false);
   useAutoReturn(local.runner, ready, detail ? [detail.task] : [], local.sessions, () => void refresh());
@@ -142,7 +155,7 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
   const pane = (
     <aside className={s.pane} aria-label="结果">
       <ResultPane detail={detail} session={session} view={session ? view : null} canAct={canAct} wait={wait} stage={stage} handheld={handheld} ready={ready} embedded={embedded}
-        flipping={flipping} onFlipDone={() => setFlipping(false)} onPreview={setPreview} previewing={preview?.key ?? null}
+        flipping={flipping} onFlipDone={() => setFlipping(false)} onPreview={setPreview} previewing={preview?.key ?? null} files={files} onFile={openLocal}
         onStart={embedded ? undefined : () => setStarting(true)} onControl={control} onResume={() => say("继续")} onChanged={() => void refresh()} />
     </aside>
   );
@@ -168,7 +181,7 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
           <div ref={scroll.contentRef}>
             {session ? (
               <SessionTranscript entries={view.entries} agentName={agentName} canAct={canAct} onResend={(entry) => void say(entry.text).catch(() => showWorkspaceToast({ text: "没发出去" }))} device={device} live={sessionRunning} ended={ended} relay={relay} lead={`交代：${item.title}${item.card?.criterion ? ` · 按「${item.card.criterion.text}」验收` : ""}`}
-                onArtifact={(fileName) => { const output = detail.outputs.find((entry) => entry.kind === "artifact" && entry.fileName === fileName); return output ? () => setPreview(cloudOutputFile(output)) : null; }}
+                onFile={openFile}
                 onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={asking} asking={question} />
             ) : <CloudTimeline run={run} title={item.title} />}
           </div>
@@ -258,7 +271,7 @@ function CloudTimeline({ run, title }: { run: TLocalRunView | null; title: strin
   );
 }
 
-function ResultPane({ detail, session, view, canAct, wait, stage, handheld, ready, embedded, flipping, onFlipDone, onPreview, previewing, onStart, onControl, onResume, onChanged }: {
+function ResultPane({ detail, session, view, canAct, wait, stage, handheld, ready, embedded, flipping, onFlipDone, onPreview, previewing, files, onFile, onStart, onControl, onResume, onChanged }: {
   detail: CardDetail; session: TLocalSessionSummary | null; view: SessionView | null; canAct: boolean; wait: string | null; stage: string; handheld: boolean; ready: boolean;
   /** 新首页里：停止、推翻在页头（5.4.3），这里只留「继续」；不写订阅按标价折算的花费（11.2）。 */
   embedded: boolean;
@@ -266,10 +279,14 @@ function ResultPane({ detail, session, view, canAct, wait, stage, handheld, read
   flipping: boolean; onFlipDone: () => void;
   /** 交出的产出点了在右边看（41 条）；previewing 是正在看的那一份。 */
   onPreview: (file: PreviewFile) => void; previewing: string | null;
+  /** 本会话改过的文件（这台电脑上才有），点了在右边看；不在了的不能点。 */
+  files: readonly TLocalChangedFile[]; onFile: (path: string) => void;
   /** 新首页里没有常驻的「开始」（设计 9.8）：自动开工失败时由 Task 管线那一行出「手动开始」。 */
   onStart?: () => void; onControl: (action: "interrupt" | "kill") => Promise<unknown>; onResume: () => Promise<unknown>; onChanged: () => void;
 }) {
   const item = detail.task;
+  // 「改动的文件 N」默认收起。
+  const [filesOpen, setFilesOpen] = useState(false);
   // 停止、继续没成：那排按钮后面写「失败 · 重试」（原因在 title 里），不弹 toast。
   const [failed, setFailed] = useState<{ retry: () => void; reason: string } | null>(null);
   const act = (action: () => Promise<unknown>) => { setFailed(null); action().catch((error: unknown) => setFailed({ retry: () => act(action), reason: error instanceof Error ? error.message : "" })); };
@@ -345,6 +362,19 @@ function ResultPane({ detail, session, view, canAct, wait, stage, handheld, read
               </div>
             );
           })}
+        </div>
+      ) : null}
+
+      {files.length && session ? (
+        <div className={s.sec}>
+          <button type="button" className={s.filesHead} aria-expanded={filesOpen} onClick={() => setFilesOpen(!filesOpen)} data-testid="changed-files">
+            {filesOpen ? <ChevronDown {...ICON} /> : <ChevronRight {...ICON} />}改动的文件 {files.length}
+          </button>
+          {filesOpen ? files.map((file) => (file.exists
+            ? <button key={file.path} type="button" className={s.output} title={file.path} data-current={previewing === `local:${session.id}:${file.path}` ? "" : undefined} onClick={() => onFile(file.path)} data-testid="changed-file">
+              <span className={s.outTitle}>{file.path}</span>
+            </button>
+            : <div key={file.path} className={s.output} title={file.path} data-gone="" data-testid="changed-file"><span className={s.outTitle}>{file.path}</span></div>)) : null}
         </div>
       ) : null}
 

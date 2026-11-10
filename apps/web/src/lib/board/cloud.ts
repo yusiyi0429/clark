@@ -234,6 +234,12 @@ export const acceptProjectDrafts = (projectId: string, drafts: TAcceptCardDrafts
 export const decideAutoRelay = (projectId: string, decision: "continue" | "stop") =>
   unwrap<unknown>(browserApi.POST("/api/me/projects/{projectId}/auto-relay", { params: { path: { projectId } }, body: { decision } }) as Promise<Result<unknown>>)
     .then(() => undefined, (error: unknown) => { if (!(error instanceof CloudError && error.code === "NOT_PAUSED")) throw error; });
+/**
+ * 确认 / 修改 / 拒绝一条会后待定事项（17.2 第 43 条，契约 nexusDri.ts）：修改带改后的内容。
+ * 不是负责人 403；过期、被新版本作废、已处理过 409——下次读「等你」这一条就不在了。
+ */
+export const decideNexusConfirmation = (id: string, decision: "confirmed" | "amended" | "rejected", value?: string) =>
+  unwrap<unknown>(browserApi.POST("/api/me/nexus-confirmations/{id}/decision", { params: { path: { id } }, body: value === undefined ? { decision } : { decision, value } }) as Promise<Result<unknown>>);
 export const answerGoalChange = (projectId: string, changeId: string, answer: "stop" | "keep") =>
   unwrap<TProjectGoalChangedItem>(browserApi.POST("/api/me/projects/{projectId}/goal-changes/{id}", { params: { path: { projectId, id: changeId } }, body: { answer } }) as Promise<Result<TProjectGoalChangedItem>>)
     .then(() => undefined, (error: unknown) => { if (!(error instanceof CloudError && error.code === "ALREADY_ANSWERED")) throw error; });

@@ -37,8 +37,10 @@ export type SessionView = {
   queuedBecause: string | null;
   /** 执行方在问本人、还没答的那次提问。 */
   question: TLocalQuestionRequestView | null;
-  /** 换过的权限模式（事件 permission_mode：本人在网页上换的、计划批了转成自动）；没换过为 null，看会话摘要里的。 */
+  /** 换过的权限模式（事件 permission_mode：本人在网页上换的、计划批了转成自动、换了执行方）；没换过为 null，看会话摘要里的。 */
   permissionMode: TLocalPermissionMode | null;
+  /** 上下文用了多少（事件 context_usage，17.2 第 42 条）；还没报过为 null，看会话摘要里的 context。maxTokens 读不到为 null。 */
+  context: { usedTokens: number; maxTokens: number | null; at: string } | null;
 };
 
 /** 对话里记下的那一行「问：…」；还没答时对话最后是选项框，这一行不重复画（SessionTranscript）。 */
@@ -47,7 +49,7 @@ export const questionNotice = (request: TLocalQuestionRequestView) => `问：${r
 export const EMPTY_VIEW: SessionView = {
   lastSeq: 0, status: null, startedAt: null, agentVersion: null, plan: [], entries: [], pending: [],
   usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null },
-  lastActivity: null, interrupted: false, handedBack: false, place: null, queuedBecause: null, question: null, permissionMode: null,
+  lastActivity: null, interrupted: false, handedBack: false, place: null, queuedBecause: null, question: null, permissionMode: null, context: null,
 };
 
 const addUsage = (a: TLocalUsage, b: TLocalUsage): TLocalUsage => ({
@@ -75,6 +77,9 @@ export function foldEvent(view: SessionView, event: TLocalSessionEvent): Session
       return next;
     case "permission_mode":
       next.permissionMode = event.mode;
+      return next;
+    case "context_usage":
+      next.context = { usedTokens: event.usedTokens, maxTokens: event.maxTokens, at: event.at };
       return next;
     case "user_message":
       next.entries = [...view.entries, { kind: "user", ...base, text: event.text, ...(event.attachments?.length ? { attachments: event.attachments.map(({ name, size }) => ({ name, size })) } : {}),
