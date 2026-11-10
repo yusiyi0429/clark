@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import type { CompanyReader, CompanyRequest, CompanyViewer } from "../src/company.js";
 import { TEST_MEMBER } from "./helpers.js";
-import { boardFixture } from "./boardFixture.js";
+import { BOARD_NOW, boardFixture } from "./boardFixture.js";
 
 /**
  * V2 第 21 节：拆卡和验收在本人电脑上做。云端拆卡、云端验收的开关关着（BOARD_CLOUD_AGENTS 缺省），
@@ -498,7 +498,10 @@ describe("拆卡和验收在本机（第 21 节）", { timeout: 30_000 }, () => 
     } finally { await f.close(); }
   });
   it("17.2 第 29 条：拆卡那几块按序号插进项目对话——登记时记本人看到的最后一条（没带读对话最新的），派活单照登记的，开工时另记一个", async () => {
-    const f = await localFixture();
+    // 这条测试先后登记两次，派活单照「最近一次登记」取序号（按登记时间）。夹具的时钟是定住的，两次登记时间一样时先后只能看随机的 id，
+    // 所以这里让时钟每取一次往前走一秒，像真实情况那样分得出先后。
+    let ticks = 0;
+    const f = await localFixture({ monthlyNow: () => new Date(BOARD_NOW.getTime() + 1_000 * ticks++) });
     try {
       const project = (await f.call("POST", "/api/me/projects", { name: "天枢" })).json().projectId as string;
       const say = async (message: string) => expect((await f.call("POST", `/api/conversations/project:${project}/messages`, { message })).statusCode).toBe(200);
