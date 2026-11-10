@@ -63,6 +63,8 @@ export interface AgentRun {
   setMultiAgent(on: boolean): Promise<boolean>;
   /** 当场换模型，下一次回答起生效（Claude Code 的 set_model，11/09 实测 2.1.318 认；同一个来源里换才用它）。执行方答应了返回 true。 */
   setModel(model: string): Promise<boolean>;
+  /** 当场换思考程度，下一次回答起生效（Claude Code 的 apply_flag_settings { effortLevel }，11/09 实测 2.1.318 认；它不校验取值，调用方先校验）。 */
+  setEffort(effort: TLocalEffort): Promise<boolean>;
   /** 停一个后台任务（子 agent、后台命令），会话本身不停。执行方答应了返回 true；之后会来一条 background 事件（stopped）。 */
   stopTask(taskId: string): Promise<boolean>;
   /**

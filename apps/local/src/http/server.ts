@@ -237,7 +237,7 @@ export function createServer(d: ServerDeps): http.Server {
     stopBackground: async (c) => ({ session: await d.sessions.stopBackground(c.params.id!, c.params.itemId!) }),
     listBudgets: () => ({ budgets: d.sessions.budgets() }),
     putBudget: (c) => d.sessions.setBudget(validate(LocalBudgetUpdateRequest, c.body)),
-    setSessionModel: async (c) => d.sessions.setModel(c.params.id!, validate(LocalSessionModelRequest, c.body).modelProfileId),
+    setSessionModel: async (c) => d.sessions.setModel(c.params.id!, validate(LocalSessionModelRequest, c.body)),
     previewRun: (c) => d.sessions.previewRun(validate(LocalRunPreviewRequest, c.body ?? {})),
     setPermissionMode: async (c) => ({ session: await d.sessions.setPermissionMode(c.params.id!, validate(LocalPermissionModeRequest, c.body).mode) }),
     listProjects: () => ({ projects: d.folders.projects() }),

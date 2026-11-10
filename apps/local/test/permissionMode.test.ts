@@ -58,12 +58,42 @@ describe("每一档本机自己放行什么", () => {
     expect(allows("acceptEdits", "Edit", { file_path: join(folder, "a.txt"), old_string: "x", new_string: "y" })).toBe(true);
     expect(allows("acceptEdits", "Bash", { command: "ls" })).toBe(false);
   });
-  it("全部放行：除了硬规矩都放", () => {
+  it("全部放行：只问三类，别的都放（设计 17.2 第 33 条）", () => {
     expect(allows("bypassPermissions", "Bash", { command: `rm -rf ${sh(join(folder, "x"))}` })).toBe(true);
     expect(allows("bypassPermissions", "WebFetch", { url: "https://example.com" })).toBe(true);
     expect(allows("bypassPermissions", "Agent", { prompt: "x" })).toBe(true);
+    // 截图里那条：curl 去几个网站查商标；装东西
+    expect(allows("bypassPermissions", "Bash", { command: "curl -s 'https://tmsearch.example.com/?q=tianshu' && curl -s https://euipo.example.eu/search" })).toBe(true);
+    expect(allows("bypassPermissions", "Bash", { command: "npm install left-pad" })).toBe(true);
+    // 别的原来要问的也放：改系统设置、碰 .git .claude、允许范围以外、没装好的 npx、拉代码、gh 只读、飞书改文档、本人加的工具写的
+    for (const [tool, input] of [
+      ["Bash", { command: "setx FOO bar" }],
+      ["Bash", { command: "git pull && git fetch origin" }],
+      ["Bash", { command: "npx create-something" }],
+      ["Bash", { command: "gh pr view 12 && gh pr list && gh api repos/o/r/pulls" }],
+      ["Bash", { command: "lark-cli docs +update --doc x --text y" }],
+      ["Write", { file_path: join(folder, ".git", "config"), content: "x" }],
+      ["Write", { file_path: join(outside, "a.txt"), content: "x" }],
+      ["mcp__tool-kd__save_voucher", {}],
+    ] as [string, Record<string, unknown>][]) expect(allows("bypassPermissions", tool, input), `${tool} ${JSON.stringify(input)}`).toBe(true);
   });
-  it("硬规矩（9.5）哪一档都问：推拉代码、gh、装东西联网、飞书写的、碰 .git .claude、允许的文件夹以外、天枢写的工具", () => {
+  it("全部放行也问：推代码或开 PR", () => {
+    for (const command of ["git push origin main", "git -C repo push --force", "gh pr create --fill", "gh pr merge 12 --squash", "gh release create v1", "gh issue comment 3 -b hi", "gh api -X POST repos/o/r/issues -f title=x", "gh api repos/o/r/issues -f title=x", "echo $(git push)"]) {
+      expect(allows("bypassPermissions", "Bash", { command }), command).toBe(false);
+    }
+  });
+  it("全部放行也问：给别人发消息", () => {
+    for (const command of ["lark-cli im +messages-send --chat-id oc_x --text 你好", "lark-cli im +messages-reply --message-id om_x --text 好", "lark-cli mail +send --to a@b.com", "lark-cli im messages create --data x", "lark-cli api POST /open-apis/im/v1/messages"]) {
+      expect(allows("bypassPermissions", "Bash", { command }), command).toBe(false);
+    }
+    expect(allows("bypassPermissions", "Bash", { command: "lark-cli im +messages-list --chat-id oc_x" })).toBe(true);
+  });
+  it("全部放行也问：在天枢里替本人写入", () => {
+    expect(allows("bypassPermissions", "mcp__tianshu__append_progress", { text: "x" })).toBe(false);
+    expect(allows("bypassPermissions", "mcp__tianshu__submit_for_acceptance", {})).toBe(false);
+    expect(allows("bypassPermissions", "mcp__tianshu__get_item", {})).toBe(true);
+  });
+  it("硬规矩（9.5）自动、自动接受改文件照问：推拉代码、gh、装东西联网、飞书写的、碰 .git .claude、允许的文件夹以外、天枢写的工具", () => {
     const hard: [string, Record<string, unknown>][] = [
       ["Bash", { command: "git push origin main" }],
       ["Bash", { command: "gh pr create --fill" }],
@@ -76,7 +106,7 @@ describe("每一档本机自己放行什么", () => {
       ["Write", { file_path: join(outside, "a.txt"), content: "x" }],
       ["mcp__tianshu__append_progress", { text: "x" }],
     ];
-    for (const mode of ["auto", "acceptEdits", "bypassPermissions"] as const) {
+    for (const mode of ["auto", "acceptEdits"] as const) {
       for (const [tool, input] of hard) expect(allows(mode, tool, input), `${mode} ${tool} ${JSON.stringify(input)}`).toBe(false);
     }
   });
@@ -171,13 +201,14 @@ describe("开工带模式、中途换、先出计划", { timeout: 60_000 }, () =
     }
   });
 
-  it("全部放行也挡不住硬规矩：写到允许的文件夹以外照样等本人批", async () => {
+  it("全部放行：写到允许的文件夹以外也不问，这一轮直接做完（第 33 条）", async () => {
     const h = await setup();
     try {
-      h.fake({ writePath: join(tempDir("tl-pm-out-"), "x.txt") });
+      const outsideFile = join(tempDir("tl-pm-out-"), "x.txt");
+      h.fake({ writePath: outsideFile });
       const a = (await h.open("E", "bypassPermissions")).body;
-      await h.waitStatus(a.id, "waiting_permission");
-      expect((await h.session(a.id)).pendingPermissions[0].outsidePaths.length).toBe(1);
+      await h.waitStatus(a.id, "idle");
+      expect(readFileSync(join(h.t.dataDir, "sessions", a.id, "events.jsonl"), "utf8")).not.toContain("\"permission_request\"");
     } finally {
       await h.t.cleanup();
     }
