@@ -43,6 +43,8 @@ export type MeetingFollowThroughEnv = WorldEnv & {
   feishuWebOrigin?: string;
   /** MEETING_WORLD_RECORD_TEXT：记录正文能不能写进本体（缺省不能）。 */
   meetingRecordText?: boolean;
+  /** MEETING_WORLD_WRITES_OFF：只关会议写本体（会后链切到 Nexus 以后设 1；缺省不关）。 */
+  meetingWorldWritesOff?: boolean;
 };
 
 export type MeetingFollowThrough = {
@@ -84,16 +86,18 @@ export function createMeetingFollowThrough({ pool, env, peopleDirectory, world, 
   setOutcomeContextProvider(pool, () => context());
   // 本体可写时：整卡确认后一场会写一条会议事件。
   const worldClient = worldConfigured(env) && world.status().writes ? new WorldClient(q, env) : undefined;
-  const meetingWorld = worldClient ? createMeetingEventWorld({ client: worldClient }) : undefined;
+  // 只关会议写本体（MEETING_WORLD_WRITES_OFF，会后链切到 Nexus 以后）：会议事件和对象修改都不装，读挂点照旧；周复盘、周期目标等别的写入不受影响。
+  const writesOff = Boolean(env.meetingWorldWritesOff);
+  const meetingWorld = worldClient && !writesOff ? createMeetingEventWorld({ client: worldClient }) : undefined;
   // 挂点选项里的 LTO、本月 PO：同一条件下只列对象，用读的超时（预约表单在等）。
   const anchorWorld = worldClient ? new WorldClient(q, env, undefined, { timeoutMs: WORLD_READ_TIMEOUT_MS }) : undefined;
   // 会议卡草稿：生成（会后整理按池取）和读写共用同一套依赖；挂点对象、修改目标读本体（同一条件下用读的超时）。
   const recordText = Boolean(env.meetingRecordText);
-  const cardDeps = { world: anchorWorld, publicOrigin: env.publicOrigin, names: () => personDisplayNames(peopleDirectory), people: () => peopleDirectory.searchPeople(undefined), recordText };
+  const cardDeps = { world: anchorWorld, publicOrigin: env.publicOrigin, names: () => personDisplayNames(peopleDirectory), people: () => peopleDirectory.searchPeople(undefined), recordText, writesOff };
   registerMeetingCardDeps(pool, cardDeps);
   const cards = createMeetingCardService(pool, cardDeps);
-  const objectSync = worldClient ? createMeetingObjectSync({ q, world: worldClient, refreshDraft: cards.refreshDraft }) : undefined;
-  const cardConfirm = createMeetingCardConfirmService({ pool, world: anchorWorld, meetingWorld, objectSync, names: cardDeps.names, view: cards.view, recordText, now });
+  const objectSync = worldClient && !writesOff ? createMeetingObjectSync({ q, world: worldClient, refreshDraft: cards.refreshDraft }) : undefined;
+  const cardConfirm = createMeetingCardConfirmService({ pool, world: anchorWorld, meetingWorld, objectSync, names: cardDeps.names, view: cards.view, recordText, writesOff, now });
   const decisions = createMeetingDecisionService({ pool, peopleDirectory, anchorWorld, onAnchorsChanged: cards.anchorsChanged });
   const feishuMinutes = env.feishu ? { feishu: { env: env.feishu, api: minutesApi ?? createFeishuMinutesApi() } } : {};
   const minutes = createMeetingMinutesService({ pool, peopleDirectory, outcomeAgent, secret: env.sessionSecret, now, feishuWebOrigin: env.feishuWebOrigin, ...feishuMinutes });

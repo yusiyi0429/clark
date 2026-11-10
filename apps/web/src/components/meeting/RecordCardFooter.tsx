@@ -26,6 +26,8 @@ type RecordCardFooterProps = {
   time: { value: string; max: string; invalid: boolean; onChange: (value: string) => void } | null;
   /** 「不写进本体」默认开不开（修改时沿用上一版的选择）。 */
   skipWorld: boolean;
+  /** 会议写本体整个关掉了（会后链切到 Nexus 以后）：不出「不写进本体」开关，确认一律不写入。 */
+  worldOff?: boolean;
   error: ActionError | null;
   /** 服务端给的草稿和确认版的差别：content 要选修改原因；items 只改了行动项（不出新版本，没有原因和本体开关）；none 没改（可以只改写不写本体）。 */
   change?: TMeetingDraftChange;
@@ -47,7 +49,9 @@ type RecordCardFooterProps = {
  * 写进本体却没有挂点对象时开关旁标「未挂对象」，确认按钮不可点。
  */
 export function RecordCardFooter(props: RecordCardFooterProps) {
-  const { mode, confirmation, rows, busy, ready, anchored, time, skipWorld: skipDefault, error, change = "none", focusLine, onConfirm, onModify, onDiscard, onRetry, onWorldChoice } = props;
+  const { mode, confirmation, rows, busy, ready, anchored, time, worldOff = false, error, change = "none", focusLine, onConfirm, onModify, onDiscard, onRetry, onWorldChoice } = props;
+  // 写本体关着时当作一直选了「不写进本体」。
+  const skipDefault = worldOff || props.skipWorld;
   const [skipWorld, setSkipWorld] = useState(skipDefault);
   const [kind, setKind] = useState<ConfirmInput["kind"] | null>(null);
   const [reason, setReason] = useState("");
@@ -58,7 +62,7 @@ export function RecordCardFooter(props: RecordCardFooterProps) {
   const skipping = mode === "open" ? skipDefault : skipWorld;
   const noAnchor = !anchored && !skipping;
   const canConfirm = ready && !busy && !noAnchor;
-  const worldSwitch = (
+  const worldSwitch = worldOff ? null : (
     <span className={c.worldChoice}>
       <label className={c.toggle}>
         <button type="button" role="switch" aria-checked={skipping} className={c.switch} disabled={busy}

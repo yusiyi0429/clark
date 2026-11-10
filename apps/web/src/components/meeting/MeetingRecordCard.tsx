@@ -220,7 +220,7 @@ export function MeetingRecordCard({ meetingId, initial, onView, turns = [], spea
       <RecordCardFooter key={`${confirmed?.confirmation.revision ?? 0}:${editable}`} mode={mode} confirmation={confirmed?.confirmation ?? null}
         rows={confirmed && view.sync ? syncRows(view.sync, confirmed.payload.objectChanges) : []}
         busy={card.busy} ready={ready} anchored={Boolean(draft?.relatedObjectRefs.length)} error={view.canEdit ? card.error : null} change={view.draftChange}
-        skipWorld={confirmed ? view.sync?.writeToWorld === false : !view.writeToWorld} focusLine={card.focus === "confirmed"}
+        skipWorld={confirmed ? view.sync?.writeToWorld === false : !view.writeToWorld} worldOff={view.worldWritesOff === true} focusLine={card.focus === "confirmed"}
         onWorldChoice={(writeToWorld) => void card.setWorldChoice(writeToWorld)}
         time={editable && card.timeInFooter && draft ? { value: companyInput(draft.occurredAt), max: nowInput, invalid: timeInvalid, onChange: setOccurredAt } : null}
         onConfirm={(input) => void card.confirm(input)} onModify={card.startEditing} onDiscard={() => void card.discard()}
