@@ -17,6 +17,7 @@ import { readJson, writeJsonAtomic, nowIso } from "./store.js";
 import type { EventLog, EventBody } from "./eventLog.js";
 import type { AgentAdapter, AgentRun, TurnModels } from "./agents/types.js";
 import type { QuotaTracker } from "./quota.js";
+import type { CodexQuota } from "./codexQuota.js";
 import type { GatewayPricing } from "./pricing.js";
 import { Budgets, MULTI_AGENT_OFF_PERCENT, reworkRounds, runFor } from "./budget.js";
 import { AttachmentError, attachmentNote, saveAttachments, type FetchAttachment } from "./attachments.js";
@@ -33,6 +34,7 @@ import { SESSION_MCP_NAME, sessionToolNames } from "./sessionMcp.js";
 import { changesBrief, criticAgents, returnText, reviewMessage, systemPrompt } from "./rolePrompt.js";
 import { addWorktree, branchName, cardDiff, changedFiles, commitAll, deleteBranch, git, mergeBranch, pruneRepo, removeWorktree, repoHead } from "./git.js";
 import { ensureFeishuPlugin, larkSkills } from "./agents/feishuPlugin.js";
+import { AGENT_NAME, earlierTurns, handoffText, otherRules } from "./handoff.js";
 import type { VerifyBrief } from "./cloud.js";
 
 /** 云端天枢 MCP 在会话里的名字：和本人在 Claude Code 里配的天枢 MCP 同名，工具名一致。 */
@@ -140,8 +142,8 @@ interface SessionRecord {
   passed: boolean | null;
   /** 验收员：验收交代里的本人原话（16.8），核对结论里的 sourceWordIssues。老记录没有这一项，按空的算。 */
   sourceWords?: string[];
-  /** 发给执行方、还没读到的话（17.4 回执）：web 是本人在网页上说的（要同步给云端）。进程没了还没读到的记 failed。老记录没有，按空的算。 */
-  unread?: { id: string; web: boolean }[];
+  /** 发给执行方、还没读到的话（17.4 回执）：web 是本人在网页上说的（要同步给云端），delivered 是执行方收下了、排着等读。进程没了还没读到的记 failed。老记录没有，按空的算。 */
+  unread?: { id: string; web: boolean; delivered?: boolean }[];
   /** 这个会话里 Claude Code 自己开的后台任务（子 agent、后台命令），按开始的先后。 */
   background: TLocalBackgroundItem[];
   /** 停着等订阅额度恢复（新首页设计 11.2）：排着的不开始，做过的到点自动接着做。 */
@@ -156,6 +158,13 @@ interface SessionRecord {
   run: TLocalRun | null;
   /** 现在的权限模式（契约 LocalPermissionMode）：开工时带来的（没带为 auto），本人中途换、计划批了转 auto。 */
   permissionMode: TLocalPermissionMode;
+  /**
+   * 换过执行方的会话（Claude Code ↔ Codex）：每家自己的对话看到事件流的哪一条了。有这一家，它就开过自己的对话（Claude Code 的会话、Codex 的线程），
+   * 拉起时续上；没有就新开。没换过的会话没有这一项。
+   */
+  seen?: Partial<Record<TLocalAgentKind, number>>;
+  /** 换了执行方、还没把它没看到的那几轮交代给现在这一家（接在给它的下一句话前面，见 deliver）。 */
+  handoff?: boolean;
 }
 
 /** 不合契约时给执行方看的一句（哪个字段、哪里不对）。 */
@@ -196,6 +205,8 @@ export interface SessionDeps {
   verifyBrief?: (handbackKey: string) => Promise<VerifyBrief>;
   /** 本人订阅的额度：用完了订阅的会话停着等，跑着的卡报的额度变化记进去。 */
   quota?: QuotaTracker;
+  /** 本人 Codex 订阅的额度：用完了 Codex 的会话停着等（设计 17.2 第 38 条），跑着的 Codex 会话报的额度记进去。 */
+  codexQuota?: CodexQuota;
   /** 网关模型按 TokenHub 价目表算真钱。 */
   pricing?: GatewayPricing;
   /** 预算记账（新首页设计 11.3、11.4）。 */
@@ -265,6 +276,8 @@ export class SessionManager {
   private budgetTimer: NodeJS.Timeout | null = null;
   /** TokenHub 说余额不足的网关模型配置：排着的、新开的用它的先停着等，本人说一句才放开。 */
   private readonly balanceBlocked = new Set<string>();
+  /** 换了执行方后给新的那家的「接着做」交代（拉起时整理好，接在给它的第一句话前面）：null 是没有它没看到的轮次。 */
+  private readonly handoffs = new Map<string, string | null>();
   private readonly dir: string;
 
   constructor(private readonly d: SessionDeps) {
@@ -328,7 +341,7 @@ export class SessionManager {
     const {
       mcpSecret: _s, syncSeq: _q, outputs: _o, versionNumber: _v, lastVersion: _l, role: _r, critics: _c, queuedMessage: _m, queueOrder: _n,
       parentId: _p, briefPending: _b, criteria: _cr, failStreak: _f, submitted: _sb, nudged: _nd, workspace, commit: _cm, after: _af, passed: _ps, sourceWords: _sw, unread: _ur,
-      background, hold, holdSince: _hs, modelTier: _mt, budgetKey: _bk, runSince: _rs, run, ...rest
+      background, hold, holdSince: _hs, modelTier: _mt, budgetKey: _bk, runSince: _rs, seen: _se, handoff: _ho, run, ...rest
     } = rec;
     const question = this.questions.get(rec.id);
     const waitingFor = this.waitingFor(rec);
@@ -606,7 +619,10 @@ export class SessionManager {
     const model = await this.d.models.resolve(req.modelProfileId);
     if (!model) throw new SessionError("validation", "没有这个模型配置");
     if (model.source === "gateway" && !model.apiKey) throw new SessionError("validation", `「${model.label}」还没填钥匙`);
-    const agent = req.agent ?? "claude-code";
+    const agent = req.agent ?? this.d.models.agentOf(model.profileId) ?? "claude-code";
+    if (agent !== (this.d.models.agentOf(model.profileId) ?? "claude-code")) throw new SessionError("validation", `「${model.label}」是给 ${this.d.models.agentOf(model.profileId)} 用的`);
+    // 规划员开工前要用选项框问本人（18.11）：Codex 的提问工具只在它自己的计划模式里给
+    if (agent === "codex" && subject.kind === "plan") throw new SessionError("validation", "规划员只能用 Claude Code");
     const permissionMode = req.permissionMode ?? "auto";
     if (!modeOffered(agent, permissionMode)) throw new SessionError("validation", `${agent} 没有「${permissionMode}」这一档权限模式`);
     if (req.effort && !this.d.models.efforts(model.profileId).includes(req.effort)) throw new SessionError("validation", `「${model.label}」不能选「${req.effort}」这档思考程度`);
@@ -632,7 +648,7 @@ export class SessionManager {
     };
     // 满了（或前面还有人在排、在等前面的卡、文件夹被另一张卡占着、订阅额度用完了、预算用完了、余额不足）就进队，先来先跑；有空位时 pump 接上。
     const busy = this.folderBusy(rec);
-    const limited = model.source === "subscription" && this.blocked() !== null;
+    const limited = model.source === "subscription" && this.blocked(rec) !== null;
     const gate = this.gateReason(rec);
     if (waiting || this.ready().length || this.activeCount() >= this.max() || busy || limited || gate) {
       rec.queuedMessage = req.firstMessage;
@@ -760,9 +776,10 @@ export class SessionManager {
       : this.d.customTools.forSession(`http://127.0.0.1:${this.d.port()}/internal/sessions/${rec.id}`, { "x-tianshu-session-secret": "${TIANSHU_SESSION_SECRET}" });
     const mcp = await this.writeMcpConfig(rec, tools, custom);
     // 带个人配置时本人自己的技能照常加载，不另挂插件；干净会话挂一个只在本会话生效的插件。
+    // Codex 那边由它的适配器把本人的飞书技能链接进天枢专用的配置目录（launch 的 feishuSkillsDir），两边都有。
     const skillsDir = rec.role?.tools.includes("feishu") ? this.d.skillsDir : undefined;
-    const plugin = skillsDir && !rec.includePersonalConfig ? ensureFeishuPlugin(this.d.dataDir, skillsDir) : null;
-    const feishu = plugin ? "plugin" : skillsDir && rec.includePersonalConfig && larkSkills(skillsDir).length ? "personal" : null;
+    const plugin = skillsDir && rec.agent === "claude-code" && !rec.includePersonalConfig ? ensureFeishuPlugin(this.d.dataDir, skillsDir) : null;
+    const feishu = plugin ? "plugin" : skillsDir && (rec.agent === "codex" || rec.includePersonalConfig) && larkSkills(skillsDir).length ? "personal" : null;
     // 工作规矩、岗位、挑刺子 agent 写在本机程序的数据目录，经参数交给 Claude Code，不往本人的仓库写文件。
     const dir = join(this.dir, rec.id);
     const systemPromptPath = join(dir, "system.md");
@@ -774,7 +791,13 @@ export class SessionManager {
       if (this.records.has(rec.id)) this.save(rec);
       prompt += `\n${planFactsSection(facts)}\n`;
     }
+    // 两边照同一份规矩：仓库里只有另一家的规矩文件（CLAUDE.md、AGENTS.md）时把它的内容接上，不往仓库里写
+    prompt += otherRules(rec.agent, rec.cwd);
     writeFileSync(systemPromptPath, prompt);
+    // 换了执行方、还没交代过：这一家没看到的那几轮和改动的文件先整理好，接在给它的下一句话前面（deliver）
+    if (rec.handoff) {
+      this.handoffs.set(rec.id, handoffText(this.d.log.after(rec.id, 0), rec.seen?.[rec.agent] ?? 0, await this.changedSince(rec), `${SESSION_MCP_NAME} 的 read_earlier_turns`));
+    }
     let agentsPath: string | null = null;
     if (rec.subject.kind === "topic" && rec.critics.length) {
       agentsPath = join(dir, "agents.json");
@@ -790,10 +813,11 @@ export class SessionManager {
     rec.run = rec.run?.actual && rec.run.model === plan.view.model ? { ...plan.view, actual: rec.run.actual } : plan.view;
     if (this.records.has(rec.id)) this.save(rec);
     const run = await adapter.start({
-      sessionId: rec.id, cwd: rec.cwd, resume, model, run: plan.launch, includePersonalConfig: rec.includePersonalConfig,
+      // 换过执行方的会话：这一家开过自己的对话才续，没开过就新开
+      sessionId: rec.id, cwd: rec.cwd, resume: resume && (!rec.seen || rec.agent in rec.seen), model, run: plan.launch, includePersonalConfig: rec.includePersonalConfig,
       mcpConfigPath: mcp.path, mcpEnv: mcp.env, allowedTools: mcp.allowedTools,
       disallowedTools,
-      systemPromptPath, agentsPath, pluginDirs: plugin ? [plugin] : [],
+      systemPromptPath, agentsPath, pluginDirs: plugin ? [plugin] : [], feishuSkillsDir: rec.agent === "codex" ? skillsDir ?? null : null,
       // 每次现查：会话途中本人移除了文件夹，之后的请求（包括工作目录里的）就算越界。卡在工作树里做时整个工作树都算。
       allowedRoots: () => [
         ...(this.d.folders.isAllowed(folder) ? [rec.workspace?.kind === "worktree" ? rec.workspace.path : rec.cwd] : []),
@@ -812,8 +836,15 @@ export class SessionManager {
     this.pending.set(rec.id, new Map());
     run.onEvent((e) => this.onAgentEvent(rec, e));
     run.onExit((code) => this.onExit(rec, run, code));
-    if (model.source === "subscription") run.onRateLimit((info) => this.d.quota?.fromEvent(info));
+    if (model.source === "subscription") run.onRateLimit((info) => (rec.agent === "codex" ? this.d.codexQuota?.fromEvent(info) : this.d.quota?.fromEvent(info)));
     return run;
+  }
+
+  /** 工作目录里 git 看得到的改动文件：卡在工作树里做时算上开工以来已经提交的；不是仓库就是空的。 */
+  private async changedSince(rec: SessionRecord): Promise<string[]> {
+    const ws = rec.workspace;
+    const committed = ws?.kind === "worktree" ? await git(ws.path, ["diff", "--name-only", ws.baseCommit, "HEAD"]).then((o) => o.split("\n").filter(Boolean), () => []) : [];
+    return [...new Set([...committed, ...(await changedFiles(rec.cwd).catch(() => []))])];
   }
 
   private onAgentEvent(rec: SessionRecord, e: EventBody) {
@@ -852,6 +883,7 @@ export class SessionManager {
         const entry = rec.unread?.find((u) => u.id === e.messageId);
         if (!entry) break;
         if (e.state !== "delivered") { rec.unread = rec.unread!.filter((u) => u !== entry); this.save(rec); }
+        else entry.delivered = true;
         if (entry.web) this.sync(rec, { type: "receipt", data: { messageId: e.messageId, state: e.state } });
         break;
       }
@@ -951,7 +983,7 @@ export class SessionManager {
     if (this.endBudgetStop(rec) && !killed && !finished) this.markHold(rec, "budget");
     rec.mcpSecret = "";
     // 订阅额度用完时 Claude Code 可能不交结果、直接退出：也是停着等额度，不算失败
-    const limited = !killed && !finished && code !== 0 && (Boolean(rec.hold) || (this.subscription(rec) && this.blocked() !== null));
+    const limited = !killed && !finished && code !== 0 && (Boolean(rec.hold) || (this.subscription(rec) && this.blocked(rec) !== null));
     if (limited && !rec.hold) this.markHold(rec);
     // 交完收工、正常退出（本机关的：合回前、交完结论）的不再等；关机时留着，下次启动接着等
     if (rec.hold && !limited && (finished || code === 0) && !this.holdQueue) this.clearHold(rec);
@@ -1043,6 +1075,22 @@ export class SessionManager {
     if (web) this.syncSaid(rec, messageId, o.shown ?? text, o.attachments ?? []);
     rec.unread = [...(rec.unread ?? []), { id: messageId, web }];
     this.save(rec);
+    this.deliver(rec, run, text, messageId);
+  }
+
+  /**
+   * 把一句话送给执行方。换了执行方后的第一句，前面接上「接着做」的交代（这一家没看到的那几轮，拉起时整理好的）：只给执行方看，事件里还是原话。
+   * 交代过就记下这一家看到哪了：它自己的对话从这句起有了，以后续得上。
+   */
+  private deliver(rec: SessionRecord, run: AgentRun, text: string, messageId?: string) {
+    if (rec.handoff) {
+      const brief = this.handoffs.get(rec.id);
+      this.handoffs.delete(rec.id);
+      delete rec.handoff;
+      rec.seen = { ...rec.seen, [rec.agent]: this.d.log.lastSeq(rec.id) };
+      this.save(rec);
+      if (brief) text = `${brief}\n\n${text}`;
+    }
     run.send(text, messageId);
   }
 
@@ -1135,17 +1183,46 @@ export class SessionManager {
     const profileId = req.modelProfileId ?? rec.modelProfileId;
     const next = await this.d.models.resolve(profileId);
     if (!next || next.profileId !== profileId) throw new SessionError("validation", "没有这个模型配置");
-    const agent = this.d.models.agentOf(profileId);
-    if (agent !== rec.agent) throw new SessionError("validation", `这个模型配置是给 ${agent} 用的，这个会话是 ${rec.agent}`);
+    // 正在拉起（上一次换还没起来、刚续接）：等它起来再定，免得两次换叠在一起、记录和进程对不上
+    while (this.starting.has(id)) await this.starting.get(id)!.catch(() => undefined);
+    // 另一家的模型配置就是换执行方（Claude Code ↔ Codex）：会话、事件流不变，新的那家接着做
+    const agent = this.d.models.agentOf(profileId) ?? rec.agent;
+    const cross = agent !== rec.agent;
+    if (cross && agent === "codex" && READ_ONLY_KINDS.includes(rec.subject.kind)) throw new SessionError("validation", "规划员、验收员只能用 Claude Code");
     if (next.source === "gateway" && !next.apiKey) throw new SessionError("validation", `「${next.label}」还没填钥匙`);
     // 思考程度：带了就用（null 是回到自动）；只换模型时，原来选的新模型也支持就留着，不支持就回到自动
     const efforts = this.d.models.efforts(profileId);
     const effort = req.effort !== undefined ? req.effort ?? undefined : rec.effort && efforts.includes(rec.effort) ? rec.effort : undefined;
     if (effort && !efforts.includes(effort)) throw new SessionError("validation", `「${next.label}」不能选「${effort}」这档思考程度`);
     const run = this.runs.get(id);
+    // 要重开执行方的：先记下；在两轮之间就当场重开，不然这一轮做完再换
+    const swapLater = async (): Promise<{ applied: "now" | "after_turn"; session: TLocalSessionSummary }> => {
+      rec.pendingModel = { modelProfileId: next.profileId, modelLabel: next.label, effort: effort ?? null };
+      this.save(rec);
+      if (this.swapModel(rec)) {
+        // 换执行方：等新的那家起来再回，回执里的会话就是换好的（没起来的话，状态和原因也在里面）
+        if (cross) await this.starting.get(id)?.catch(() => undefined);
+        return { applied: "now", session: this.summary(rec) };
+      }
+      this.emit(rec, { type: "notice", level: "info", code: "model_pending", text: `这一轮做完后换成「${next.label}」${effort ? ` · 思考 ${effort}` : ""}` });
+      this.syncStatus(rec);
+      return { applied: "after_turn", session: this.summary(rec) };
+    };
+    // 换执行方时进程在的还是原来那家：不能只改记录，停掉它再拉起新的那家
+    if (cross && run) return swapLater();
     if (!run || this.starting.has(id)) {
       this.applyModel(rec, next, effort);
       return { applied: "now", session: this.summary(rec) };
+    }
+    if (rec.agent === "codex") {
+      // Codex 的模型和思考程度在开每一轮（turn/start）时带：先交给它，没在跑一轮就是当场换上，在跑就这一轮做完后换（不重开进程）
+      const plan = this.runFor(rec, next, effort ?? null);
+      await run.setModel(next.model ?? plan.launch.model);
+      await run.setEffort(plan.launch.effort);
+      if (!this.inTurn.has(id)) {
+        this.applyModel(rec, next, effort, plan.view);
+        return { applied: "now", session: this.summary(rec) };
+      }
     }
     const cur = await this.d.models.resolve(rec.modelProfileId);
     const sameEnv = cur && rec.agent === "claude-code" && cur.source === next.source && cur.baseUrl === next.baseUrl && cur.apiKey === next.apiKey && cur.webSearch === next.webSearch;
@@ -1159,25 +1236,42 @@ export class SessionManager {
         return { applied: "now", session: this.summary(rec) };
       }
     }
-    rec.pendingModel = { modelProfileId: next.profileId, modelLabel: next.label, effort: effort ?? null };
-    this.save(rec);
-    if (this.swapModel(rec)) return { applied: "now", session: this.summary(rec) };
-    this.emit(rec, { type: "notice", level: "info", code: "model_pending", text: `这一轮做完后换成「${next.label}」${effort ? ` · 思考 ${effort}` : ""}` });
-    this.syncStatus(rec);
-    return { applied: "after_turn", session: this.summary(rec) };
+    return swapLater();
   }
 
   /** 换上新模型、思考程度：记进会话、跑法跟着换（实际模型等执行方再报），事件流记一条、报给云端。effort 不带是回到自动。 */
   private applyModel(rec: SessionRecord, model: ResolvedModel, effort: TLocalEffort | undefined, view?: TLocalRun) {
+    const from = rec.agent;
+    const agent = this.d.models.agentOf(model.profileId) ?? from;
+    if (agent !== from) {
+      // 换执行方：原来那家开过自己的对话（而且交代过）就记下它看到哪了，换回来时续上、只补之后的；新的那家等下一句话时交代
+      const own = rec.seen ? from in rec.seen : rec.queuedMessage === null;
+      if (own && !rec.handoff) rec.seen = { ...rec.seen, [from]: this.d.log.lastSeq(rec.id) };
+      rec.handoff = true;
+      rec.agent = agent;
+    }
     rec.modelProfileId = model.profileId;
     rec.modelLabel = model.label;
     delete rec.pendingModel;
     if (effort) rec.effort = effort;
     else delete rec.effort;
     rec.run = view ?? this.runFor(rec, model).view;
+    // 新的那家没有现在这一档权限模式（「先出计划」换到 Codex）：改成「每次都问」
+    const modeGone = !modeOffered(rec.agent, rec.permissionMode);
+    if (modeGone) rec.permissionMode = "default";
     this.save(rec);
     const said = [rec.run.modelName, rec.run.effort ? `思考 ${rec.run.effort}` : null].filter(Boolean).join(" · ");
-    this.emit(rec, { type: "notice", level: "info", code: "model_changed", text: `换成了「${model.label}」${said ? ` · ${said}` : ""}` });
+    if (agent === from) this.emit(rec, { type: "notice", level: "info", code: "model_changed", text: `换成了「${model.label}」${said ? ` · ${said}` : ""}` });
+    else this.emit(rec, { type: "notice", level: "info", code: "harness_changed", text: `换成 ${AGENT_NAME[agent]} · ${model.label}${rec.run.effort ? ` · 思考 ${rec.run.effort}` : ""}` });
+    if (modeGone) this.emit(rec, { type: "permission_mode", mode: "default", by: "harness_changed" });
+    // 停着等的是原来那家订阅的额度：新的那家没用完就不等了（排着的回到队里），也用完了就照它的恢复时间等
+    if (agent !== from && rec.hold?.reason === "usage_limit") {
+      if (this.subscription(rec) && this.blocked(rec) !== null) this.markHold(rec);
+      else this.clearHold(rec);
+      this.noteHold(rec);
+      this.pump();
+      return;
+    }
     this.syncStatus(rec);
   }
 
@@ -1187,7 +1281,16 @@ export class SessionManager {
    */
   private swapModel(rec: SessionRecord): boolean {
     const old = this.runs.get(rec.id);
-    if (!rec.pendingModel || !old || this.inTurn.has(rec.id) || this.pending.get(rec.id)?.size || this.questions.has(rec.id) || this.starting.has(rec.id)) return false;
+    // 只在等你回复时重开：刚送出一句话、执行方还没报这一轮开始的（状态已是进行中）不算两轮之间；这一轮里插的话它收下了还没读（做完这一轮自己成新的一轮）也等，
+    // 免得把那句话连进程一起停掉
+    if (!rec.pendingModel || !old || rec.status !== "idle" || rec.unread?.some((u) => u.delivered) || this.inTurn.has(rec.id) || this.pending.get(rec.id)?.size || this.questions.has(rec.id) || this.starting.has(rec.id)) return false;
+    const cross = (this.d.models.agentOf(rec.pendingModel.modelProfileId) ?? rec.agent) !== rec.agent;
+    if (rec.agent === "codex" && !cross) {
+      // Codex 不用重开：模型已经交给它了，这一轮做完记上就行
+      const { modelProfileId, effort } = rec.pendingModel;
+      void this.d.models.resolve(modelProfileId).then((m) => { if (m && rec.pendingModel?.modelProfileId === modelProfileId) this.applyModel(rec, m, effort ?? undefined); });
+      return true;
+    }
     if (rec.background.some((b) => b.state === "running")) return false;
     const target = rec.pendingModel.modelProfileId;
     const effort = rec.pendingModel.effort ?? undefined;
@@ -1386,9 +1489,14 @@ export class SessionManager {
     return this.d.models.sourceOf(rec.modelProfileId) === "subscription";
   }
 
-  /** 订阅额度用完、还没到恢复时间：恢复时间（毫秒，不知道几点为 Infinity）；没用完为 null。 */
-  private blocked(): number | null {
-    return this.d.quota?.blockedUntil() ?? null;
+  /** 这个会话用的订阅（Claude 的，Codex 的会话看 Codex 的）额度用完、还没到恢复时间：恢复时间（毫秒，不知道几点为 Infinity）；没用完为 null。 */
+  private blocked(rec: SessionRecord): number | null {
+    return (rec.agent === "codex" ? this.d.codexQuota?.blockedUntil() : this.d.quota?.blockedUntil()) ?? null;
+  }
+
+  /** 马上读一次这个会话用的订阅额度。 */
+  private refreshQuota(rec: SessionRecord): void {
+    void (rec.agent === "codex" ? this.d.codexQuota?.refresh(true) : this.d.quota?.refresh(true));
   }
 
   private timing() {
@@ -1397,11 +1505,11 @@ export class SessionManager {
 
   /** 记下停着等（之后的状态变化会带上 hold）。额度用完又不知道几点恢复就马上读一次额度。 */
   private markHold(rec: SessionRecord, reason: TLocalHold["reason"] = "usage_limit") {
-    const b = this.blocked();
+    const b = this.blocked(rec);
     rec.hold = { reason, until: reason === "usage_limit" && b !== null && Number.isFinite(b) ? new Date(b).toISOString() : null };
     rec.holdSince = nowIso();
     this.save(rec);
-    if (reason === "usage_limit" && !rec.hold.until) void this.d.quota?.refresh(true);
+    if (reason === "usage_limit" && !rec.hold.until) this.refreshQuota(rec);
     this.scheduleHoldCheck();
   }
 
@@ -1427,10 +1535,9 @@ export class SessionManager {
 
   /** 排着、本来能开始的停着等：预算用完了、余额不足的；额度用完时的订阅会话（不开始，免得一开始就碰壁）。 */
   private gateQueued() {
-    const limited = this.blocked() !== null;
     for (const rec of this.queue()) {
       if (rec.hold || !this.startable(rec)) continue;
-      const gate = this.gateReason(rec) ?? (limited && this.subscription(rec) ? "usage_limit" : null);
+      const gate = this.gateReason(rec) ?? (this.blocked(rec) !== null && this.subscription(rec) ? "usage_limit" : null);
       if (!gate) continue;
       this.markHold(rec, gate);
       this.noteHold(rec);
@@ -1453,7 +1560,7 @@ export class SessionManager {
     if (!h || !["queued", "idle", "exited"].includes(rec.status)) return false;
     // 预算用完的：预算加了（不再用完）就接着做；余额不足的只等本人说一句
     if (h.reason === "budget") return !this.budgetExhausted(rec);
-    if (h.reason === "balance" || this.blocked() !== null) return false;
+    if (h.reason === "balance" || this.blocked(rec) !== null) return false;
     const now = Date.now();
     if (h.until) return now >= Date.parse(h.until) + this.timing().resumeAfterMs;
     return now >= (Date.parse(rec.holdSince ?? "") || 0) + this.timing().pollMs;
@@ -1463,7 +1570,7 @@ export class SessionManager {
   private resumeHeld(rec: SessionRecord) {
     const budget = rec.hold?.reason === "budget";
     // 额度恢复了但预算用完了、预算加了但额度用完了：换成另一种等
-    const other = budget ? (this.subscription(rec) && this.blocked() !== null ? "usage_limit" : null) : this.budgetExhausted(rec) ? "budget" : null;
+    const other = budget ? (this.subscription(rec) && this.blocked(rec) !== null ? "usage_limit" : null) : this.budgetExhausted(rec) ? "budget" : null;
     if (other) { this.markHold(rec, other); this.noteHold(rec); return; }
     this.clearHold(rec);
     if (rec.status === "queued") { this.noteHold(rec); return; }
@@ -1473,13 +1580,13 @@ export class SessionManager {
     if (run) {
       this.setStatus(rec, "running");
       const flip = this.syncMultiAgent(rec, run);
-      if (flip) void flip.then(() => run.send(say)); else run.send(say);
+      if (flip) void flip.then(() => this.deliver(rec, run, say)); else this.deliver(rec, run, say);
       return;
     }
     this.setStatus(rec, "starting");
     const p = this.startRun(rec, true);
     this.starting.set(rec.id, p);
-    p.then((r) => { r.send(say); this.setStatus(rec, "running"); this.sendBudgetStop(rec, r); }, (e: unknown) => {
+    p.then((r) => { this.deliver(rec, r, say); this.setStatus(rec, "running"); this.sendBudgetStop(rec, r); }, (e: unknown) => {
       const cancelled = e instanceof SessionError && e.message === CANCELLED_WHILE_STARTING;
       const reason = cancelled ? "已强停" : `额度恢复了，但没接上：${e instanceof Error ? e.message : String(e)}；再发一句话会接着做`;
       this.setStatus(rec, "exited", { reason });
@@ -1494,16 +1601,15 @@ export class SessionManager {
       this.d.budgets.observeWeekly(weekly);
       for (const key of this.d.budgets.keys()) this.evaluateBudget(key);
     }
-    const b = this.blocked();
-    if (b !== null) {
+    for (const rec of this.records.values()) {
+      const b = rec.hold?.reason === "usage_limit" ? this.blocked(rec) : null;
+      if (b === null) continue;
       const until = Number.isFinite(b) ? new Date(b).toISOString() : null;
-      for (const rec of this.records.values()) {
-        if (rec.hold?.reason !== "usage_limit" || rec.hold.until === until) continue;
-        rec.hold = { ...rec.hold, until };
-        rec.holdSince = nowIso();
-        this.save(rec);
-        this.noteHold(rec);
-      }
+      if (rec.hold!.until === until) continue;
+      rec.hold = { reason: "usage_limit", until };
+      rec.holdSince = nowIso();
+      this.save(rec);
+      this.noteHold(rec);
     }
     this.pump();
     this.scheduleHoldCheck();
@@ -1524,7 +1630,7 @@ export class SessionManager {
 
   private async checkHolds() {
     this.holdTimer = null;
-    await this.d.quota?.refresh(true);
+    await Promise.all([this.d.quota?.refresh(true), this.d.codexQuota?.refresh(true)]);
     this.onQuotaChange();
   }
 
@@ -1600,8 +1706,9 @@ export class SessionManager {
       budgetState: p.budgetKey && this.d.budgets ? this.d.budgets.judge(p.budgetKey, this.liveMs(p.budgetKey)) : "ok",
       quotaPercent: this.d.quota?.usedPercent() ?? null, quotaWarning: this.d.quota?.warning() ?? false,
     });
-    // 本人选了思考程度就用它（设计 17.2 第 36 条），不选按档位和预算模式定
-    const launch = p.effort ? { ...auto, effort: p.effort } : auto;
+    // 本人选了思考程度就用它（设计 17.2 第 36 条），不选按档位和预算模式定；Codex 不选用它模型目录里的默认档，也不开多 agent
+    const def = p.effort ?? (p.agent === "codex" ? this.d.models.defaultEffort(model.profileId) : null);
+    const launch = { ...auto, ...(def ? { effort: def } : {}), ...(p.agent === "codex" ? { multiAgent: false } : {}) };
     const used = model.source === "gateway" ? model.model : model.model ?? launch.model;
     const named = { source: model.source, sourceLabel: model.label, harness: p.agent, origin: model.origin, modelName: used ? this.d.models.displayName(used) : null, actual: null };
     const view: TLocalRun = model.source === "gateway"
@@ -1616,7 +1723,7 @@ export class SessionManager {
     if (!model) throw new SessionError("validation", "没有这个模型配置");
     const budgetKey = req.taskBudget?.taskId ? Budgets.key(req.taskBudget.taskId, "") : null;
     if (req.effort && !this.d.models.efforts(model.profileId).includes(req.effort)) throw new SessionError("validation", `「${model.label}」不能选「${req.effort}」这档思考程度`);
-    return this.planRun({ mode: req.taskBudget?.budget.mode ?? "auto", tier: req.modelTier ?? "normal", verify: false, budgetKey, agent: req.agent ?? "claude-code", effort: req.effort }, model).view;
+    return this.planRun({ mode: req.taskBudget?.budget.mode ?? "auto", tier: req.modelTier ?? "normal", verify: false, budgetKey, agent: req.agent ?? this.d.models.agentOf(model.profileId) ?? "claude-code", effort: req.effort }, model).view;
   }
 
   /**
@@ -1639,7 +1746,7 @@ export class SessionManager {
 
   /** 新的一轮之前：多 agent 该开该关（「无上限」额度到 95% 关掉，模式改了跟着改）。只管订阅；不用改时为 null（不多等一拍）。 */
   private syncMultiAgent(rec: SessionRecord, run: AgentRun): Promise<void> | null {
-    if (!rec.run || !this.subscription(rec)) return null;
+    if (!rec.run || !this.subscription(rec) || rec.agent === "codex") return null;
     const want = this.modeOf(rec) === "unlimited" && rec.subject.kind !== "verify" && (this.d.quota?.usedPercent() ?? 0) < MULTI_AGENT_OFF_PERCENT;
     if (want === rec.run.multiAgent) return null;
     return run.setMultiAgent(want).catch(() => false).then((ok) => {
@@ -1885,6 +1992,11 @@ export class SessionManager {
     return `已交回（用了 ${picked.map((o) => o.ref).join("、") || "0 份产出和证据"}${git ? `，提交 ${git.commit.slice(0, 7)}` : ""}），本机接着起验收员验收`;
   }
 
+  /** 本会话 MCP 的 read_earlier_turns：从事件记录里翻更早的轮次（换过执行方接着做时，交代里只带最近几轮）。 */
+  readEarlierTurns(id: string, input: { before?: number; limit?: number }): string {
+    return earlierTurns(this.d.log.after(this.must(id).id, 0), input.before, input.limit);
+  }
+
   // ───────── 验收员：交回后本机自己起（不经云端） ─────────
 
   /** 先排着；等交回被天枢收下、取到验收交代，再按验收员的岗位档位挑模型开始。 */
@@ -1892,7 +2004,8 @@ export class SessionManager {
     const now = nowIso();
     const rec: SessionRecord = {
       id: randomUUID(), subject: { kind: "verify", cardId: card.subject.cardId!, handbackKey, ...(card.subject.projectId ? { projectId: card.subject.projectId } : {}) }, title: `验收：${card.title}`.slice(0, 120),
-      agent: card.agent, modelProfileId: card.modelProfileId, modelLabel: card.modelLabel, cwd: card.cwd, includePersonalConfig: false,
+      // 验收员一律用 Claude Code（Codex 的卡也是，模型等交代到了按档位挑）：它要只读地查、交结论
+      agent: "claude-code", modelProfileId: card.agent === "claude-code" ? card.modelProfileId : this.d.models.forTier("normal"), modelLabel: card.modelLabel, cwd: card.cwd, includePersonalConfig: false,
       createdAt: now, updatedAt: now, status: "queued", usage: zeroUsage(), syncSeq: 0, mcpSecret: "", outputs: [], versionNumber: 0, lastVersion: null,
       role: null, modelTier: null, critics: [], queuedMessage: null, queueOrder: ++this.queueSeq,
       parentId: card.id, briefPending: true, criteria: [], failStreak: 0, submitted: 0, nudged: false, workspace: null, commit, after: [], passed: null,

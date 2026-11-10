@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import type { TLocalEffort, TLocalModelOrigin, TLocalModelProfile, TLocalModelProfileUpsert, TLocalModelTier } from "@warmap/contracts";
+import { codexProfileId, isCodexProfileId, type CodexModel } from "./codexCatalog.js";
 import { isLoopback, isMagpie, modelOrigin } from "./modelOrigin.js";
 import { readJson, writeJsonAtomic } from "./store.js";
 import type { SecretStore } from "./secrets.js";
@@ -22,15 +23,23 @@ export interface ResolvedModel {
 
 /**
  * 能选的思考程度（契约 LocalEffort）：Claude Code 的订阅模型都是这五档（11/09 实测 2.1.318 握手报的 Opus 5.5、Fable 5.1、Sonnet 5.5、Haiku 5.5）；
- * 网关模型本机不传思考程度，不给选；Codex 12 月接上以后按它的模型目录（codex debug models）给。
+ * 网关模型本机不传思考程度，不给选；Codex 的按它模型目录里这个模型的几档（见 CodexCatalog）。
  */
 const CLAUDE_EFFORTS: TLocalEffort[] = ["low", "medium", "high", "xhigh", "max"];
-const effortsOf = (p: { agent: string; source: string }): TLocalEffort[] => (p.agent === "claude-code" && p.source === "subscription" ? [...CLAUDE_EFFORTS] : []);
+const effortsOf = (p: Entry): TLocalEffort[] => p.efforts ?? (p.agent === "claude-code" && p.source === "subscription" ? [...CLAUDE_EFFORTS] : []);
 
 /** magpie 不认钥匙：照它的约定传 magpie（本人没填时）。 */
 const MAGPIE_KEY = "magpie";
 
-type Stored = Omit<TLocalModelProfile, "hasKey" | "origin" | "efforts" | "defaultEffort">;
+type Stored = Omit<TLocalModelProfile, "hasKey" | "origin" | "efforts" | "defaultEffort" | "catalog">;
+/** 本人配的，或 Codex 模型目录里现列的（带能选的几档和默认档）。 */
+type Entry = Stored & { efforts?: TLocalEffort[]; defaultEffort?: TLocalEffort | null; catalog?: true };
+
+/** Codex 模型目录里的一个模型 → 模型配置（只读）。 */
+const fromCatalog = (m: CodexModel): Entry => ({
+  id: codexProfileId(m.model), label: m.label, source: "subscription", agent: "codex", baseUrl: null, model: m.model, smallModel: null,
+  webSearch: true, isDefault: false, efforts: m.efforts, defaultEffort: m.defaultEffort, catalog: true,
+});
 
 const builtIn: Stored = {
   id: SUBSCRIPTION_ID, label: "我的 Claude 订阅", source: "subscription", agent: "claude-code",
@@ -79,7 +88,7 @@ export class ModelProfiles {
   private readonly file: string;
   /** 别名在这台电脑上实际跑出来是哪一版（opus → claude-opus-5-5）：开工前写「Opus 5.5」用。 */
   private readonly aliasFile: string;
-  constructor(dataDir: string, private readonly secrets: SecretStore) {
+  constructor(dataDir: string, private readonly secrets: SecretStore, private readonly codex: { list(): CodexModel[] } | null = null) {
     this.file = join(dataDir, "models.json");
     this.aliasFile = join(dataDir, "model-aliases.json");
   }
@@ -107,16 +116,23 @@ export class ModelProfiles {
     return [{ ...builtIn, isDefault: !hasDefault }, ...list];
   }
 
+  /** 本人配的，加上 Codex 模型目录里现列的。 */
+  private all(): Entry[] {
+    return [...this.stored(), ...(this.codex?.list() ?? []).map(fromCatalog)];
+  }
+
   async list(): Promise<TLocalModelProfile[]> {
     const out: TLocalModelProfile[] = [];
-    for (const p of this.stored()) {
-      out.push({ ...p, origin: modelOrigin(p), efforts: effortsOf(p), defaultEffort: null, webSearch: p.webSearch ?? searchDefault(p.source, p.model), hasKey: p.source === "gateway" ? Boolean(await this.secrets.get(keyName(p.id))) : false });
+    for (const p of this.all()) {
+      out.push({ ...p, origin: modelOrigin(p), efforts: effortsOf(p), defaultEffort: p.defaultEffort ?? null, catalog: Boolean(p.catalog), webSearch: p.webSearch ?? searchDefault(p.source, p.model), hasKey: p.source === "gateway" ? Boolean(await this.secrets.get(keyName(p.id))) : false });
     }
     return out;
   }
 
   async upsert(id: string, body: TLocalModelProfileUpsert): Promise<TLocalModelProfile> {
     if (id === SUBSCRIPTION_ID) throw new Error("内置的订阅配置不能改");
+    if (isCodexProfileId(id)) throw new Error("Codex 的模型从它自己的模型目录来，不能改");
+    if (body.agent === "codex") throw new Error("Codex 的模型从它自己的模型目录来，不用配");
     const gateway = body.source === "gateway";
     if (gateway && !body.baseUrl) throw new Error("网关模型要填地址");
     // 钥匙会发到这个地址：别处的要 https，本机地址（magpie 等）可以 http
@@ -155,18 +171,23 @@ export class ModelProfiles {
 
   /** 这个配置能选的思考程度（没有这个配置为空）。 */
   efforts(id: string): TLocalEffort[] {
-    const p = this.stored().find((x) => x.id === id);
+    const p = this.all().find((x) => x.id === id);
     return p ? effortsOf(p) : [];
+  }
+
+  /** 不选思考程度时用哪档（Codex 模型目录里的默认档；别的为 null，按档位和预算模式定）。 */
+  defaultEffort(id: string): TLocalEffort | null {
+    return this.all().find((x) => x.id === id)?.defaultEffort ?? null;
   }
 
   /** 这个配置给哪个执行方用（没有这个配置为 null）。 */
   agentOf(id: string): "claude-code" | "codex" | null {
-    return this.stored().find((p) => p.id === id)?.agent ?? null;
+    return this.all().find((p) => p.id === id)?.agent ?? null;
   }
 
   /** 这个配置是订阅还是网关（没有这个配置为 null）：额度用完时只停订阅的卡。 */
   sourceOf(id: string): "subscription" | "gateway" | null {
-    return this.stored().find((p) => p.id === id)?.source ?? null;
+    return this.all().find((p) => p.id === id)?.source ?? null;
   }
 
   /** 按档位挑模型（验收员由本机自己起时用）：和网页一样按模型名和名字认，认不出用默认的。 */
@@ -176,7 +197,7 @@ export class ModelProfiles {
   }
 
   async resolve(id?: string): Promise<ResolvedModel | null> {
-    const all = this.stored();
+    const all = this.all();
     const p = id ? all.find((x) => x.id === id) : all.find((x) => x.isDefault) ?? all[0];
     if (!p) return null;
     return {

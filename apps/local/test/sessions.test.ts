@@ -182,7 +182,7 @@ describe("会话：开工、事件、批权限、插话、停下、强停、续�
       body: JSON.stringify({ jsonrpc: "2.0", id: ++n, method, params }),
     })).body;
     expect((await rpc("initialize", { protocolVersion: "2025-06-18" })).result.serverInfo.name).toBe("tianshu-local");
-    expect((await rpc("tools/list")).result.tools.map((x: any) => x.name)).toEqual(["add_artifact", "add_evidence", "hand_back"]);
+    expect((await rpc("tools/list")).result.tools.map((x: any) => x.name)).toEqual(["add_artifact", "add_evidence", "hand_back", "read_earlier_turns"]);
     const call = async (name: string, args: unknown) => (await rpc("tools/call", { name, arguments: args })).result as { isError: boolean; content: { text: string }[] };
     expect((await call("add_artifact", { path: "方案.md", title: "方案" })).content[0]!.text).toContain("编号 A1");
     expect((await call("add_artifact", { path: "../../etc/passwd" })).isError).toBe(true);
@@ -221,7 +221,7 @@ describe("会话：开工、事件、批权限、插话、停下、强停、续�
       body: JSON.stringify({ jsonrpc: "2.0", id: ++n, method, params }),
     })).body;
     const call = async (name: string, args: unknown) => (await rpc("tools/call", { name, arguments: args })).result as { isError: boolean; content: { text: string }[] };
-    expect((await rpc("tools/list")).result.tools.map((x: any) => x.name)).toEqual(["add_artifact", "add_evidence", "save_version", "set_feishu_url"]);
+    expect((await rpc("tools/list")).result.tools.map((x: any) => x.name)).toEqual(["add_artifact", "add_evidence", "save_version", "set_feishu_url", "read_earlier_turns"]);
     writeFileSync(join(s.body.cwd, "提纲.md"), "# 提纲\n1. 背景");
     expect((await call("save_version", { path: "提纲.md", kind: "outline", note: "第一次出提纲" })).content[0]!.text).toBe("已存第 3 版");
     expect((await call("save_version", { path: "../x.md", kind: "draft" })).isError).toBe(true);
@@ -372,7 +372,7 @@ describe("模型配置与钥匙", () => {
 });
 
 describe("执行方异常", () => {
-  it("版本太旧拒绝开工；登录失效报 auth_required；Codex 还没接", async () => {
+  it("版本太旧拒绝开工；登录失效报 auth_required；执行方和模型配置对不上不开", async () => {
     const work = tempDir("tl-work-");
     const t = await startTestRunner({ pickFolder: work });
     try {
@@ -390,7 +390,7 @@ describe("执行方异常", () => {
       expect(events.find((e) => e.type === "turn_end")).toMatchObject({ isError: true, errorKind: "auth" });
 
       const codex = await api(t.port, token, "POST", "/v1/sessions", { subject: { kind: "topic", topicId: "t" }, title: "x", agent: "codex", firstMessage: "hi" });
-      expect(codex.status).toBe(501);
+      expect(codex.status).toBe(400); // 默认的模型配置是 Claude Code 的
     } finally {
       await t.cleanup();
     }
