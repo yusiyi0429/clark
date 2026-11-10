@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { LOCAL_RUNNER_DEFAULT_PORT } from "@warmap/contracts";
 import { readJson, writeJsonAtomic } from "./store.js";
 
-export const VERSION = "0.1.0";
+export const VERSION = "0.2.0";
 export const DEFAULT_ORIGINS = ["https://tk.tokenkingos.com"];
 export const DEFAULT_TIANSHU_URL = "https://tk.tokenkingos.com";
 

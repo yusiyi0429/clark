@@ -113,6 +113,17 @@ describe("读文件给预览、列改过的文件", { timeout: 40_000 }, () => {
     await call("POST", `/v1/sessions/${id}/kill`, {});
   });
 
+  it("在本人文件夹里直接做的（不是卡的工作树）：就算是 git 仓库，也只列执行方用写文件工具动过的，本人自己没提交的改动不算进来", async () => {
+    const dir = gitRepo(join(work, "T"));
+    writeFileSync(join(dir, "本人改到一半.md"), "还没提交");
+    const r0 = await call("POST", "/v1/sessions", { subject: { kind: "topic", topicId: "t-files" }, title: "T", cwd: dir, firstMessage: "做 T", permissionMode: "auto" });
+    expect(r0.status, JSON.stringify(r0.body)).toBe(200);
+    await idle(r0.body.id);
+    const r = await files(r0.body.id);
+    expect(r.files.map((f: any) => [f.path, f.sources])).toEqual([["hello.txt", ["tool"]]]);
+    await call("POST", `/v1/sessions/${r0.body.id}/kill`, {});
+  });
+
   it("列改过的文件：不是 git 仓库的文件夹里，只有执行方用写文件工具动过的（用别的办法改的看不到）", async () => {
     const id = await open("C");
     await idle(id);
