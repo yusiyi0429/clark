@@ -21,7 +21,7 @@ import type { TLocalSessionSummary } from "@/lib/local/runner";
 import { DecisionBox, FailedLine } from "@/components/work/DecisionBox";
 import { usePhone } from "./usePhone";
 import { CloudError, overrule, relayHandback } from "@/lib/board/cloud";
-import { runClaimedCommands } from "@/lib/buddy/sessionCommands";
+import { runClaimedCommands, type SayVia } from "@/lib/buddy/sessionCommands";
 import { isMergeLater, markMergeLater } from "@/lib/home/attention";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { canCommandHere } from "@/lib/work/actions";
@@ -60,11 +60,11 @@ const RELAY_LABEL = { return: "再改一轮", supply: "我来补" } as const;
 const PENDING_CHIP = { return: "电脑在线后执行", supply: "电脑在线后送到" } as const;
 
 /** 在跑它的这台电脑上：登记完马上认领、送给执行方（不等下一轮）。 */
-export function useRelayNow(): () => Promise<void> {
+export function useRelayNow(): (via?: SayVia | null) => Promise<void> {
   const local = useLocalRunner();
-  return async () => {
+  return async (via) => {
     const deviceId = local.status?.deviceId;
-    if (deviceId) await runClaimedCommands(deviceId, local).catch(() => undefined);
+    if (deviceId) await runClaimedCommands(deviceId, local, via).catch(() => undefined);
   };
 }
 
@@ -73,8 +73,10 @@ export function useRelayNow(): () => Promise<void> {
  * onFill：这台电脑上「我来补」把输入框填好、聚焦；不给（项目对话、手机、别的电脑）就在框里写。
  * stale：这次交回已经不是这张卡最近的那次（项目对话里的老行），收成「已失效」。
  */
-export function HandbackDecision({ cardId, handback, here, onFill, onLook, onEdit, onChanged, stale = false }: {
+export function HandbackDecision({ cardId, handback, here, via, onFill, onLook, onEdit, onChanged, stale = false }: {
   cardId: string; handback: HandbackForBox; here: boolean;
+  /** 子会话页里：登记完马上认领，转话走这一页的发话，像平时说话一样先画出来（见 SayVia）。 */
+  via?: SayVia | null;
   onFill?: (text: string) => void; onLook: () => void; onEdit: () => void; onChanged: () => void; stale?: boolean;
 }) {
   const relayNow = useRelayNow();
@@ -99,7 +101,7 @@ export function HandbackDecision({ cardId, handback, here, onFill, onLook, onEdi
     // 已经登记过、处理过（409）：框上写一句现状，同时重读卡，照云端的样子画。
     try { await relayHandback(cardId, handback.id, body); }
     catch (error) { if (error instanceof CloudError && error.status === 409) onChanged(); throw error; }
-    if (here) await relayNow();
+    if (here) await relayNow(via);
     setMode(null);
     onChanged();
   };
