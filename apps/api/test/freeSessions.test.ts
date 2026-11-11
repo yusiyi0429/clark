@@ -15,7 +15,7 @@ describe("自由子会话", { timeout: 60_000 }, () => {
       expect(created.statusCode).toBe(201);
       const topic = created.json();
       expect(topic).toMatchObject({ title: "把首页的配色改成深色系，…", free: true, planTaskId: null, role: null });
-      expect((await f.call("GET", `/api/me/topics/${topic.id}/brief`)).json()).toEqual({ markdown: `项目：品牌建设\n\n${first}`, title: "把首页的配色改成深色系，…",
+      expect((await f.call("GET", `/api/me/topics/${topic.id}/brief`)).json()).toEqual({ markdown: first, title: "把首页的配色改成深色系，…",
         latestVersion: null, role: null, critics: [] });
       const home = (await f.call("GET", "/api/me/work-home")).json();
       const sub = home.projects.find((entry: { projectId: string }) => entry.projectId === projectId).subSessions[0];
