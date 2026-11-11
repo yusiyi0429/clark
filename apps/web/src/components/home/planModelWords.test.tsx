@@ -13,13 +13,15 @@ const draft = (id: string, modelWords: string | null): TCardDraftView => ({
   id, planId: "00000000-0000-4000-8000-0000000000b1", position: 0, title: `第 ${id.slice(-1)} 步`, brief: "", doneDefinition: "做完", criterionIndex: 1, executor: "claude_code", modelTier: "normal",
   why: null, role: { id: "00000000-0000-4000-8000-000000000001", name: "开发", kind: "worker" }, suggestPresetKey: null, sourceWords: [], modelWords,
 });
-const render = async (modelWords: string | null) => {
+const render = async (modelWords: string | null, later?: string | null) => {
   const runner = createMockRunner({ stepMs: 1 });
   const local = { runner, phase: "offline", version: null, status: null, models: await runner.listModels(), folders: [], sessions: [], pairing: null, error: null,
     refresh: vi.fn(), pair: vi.fn(), unpair: vi.fn(), pickFolder: vi.fn(), setIncludePersonal: vi.fn() } as unknown as LocalRunnerState;
+  // later：再拆一次时接在后面的那一批（两张），带它自己的原话。
+  const drafts = [draft("00000000-0000-4000-8000-0000000000d1", modelWords), draft("00000000-0000-4000-8000-0000000000d2", modelWords),
+    ...(later === undefined ? [] : [draft("00000000-0000-4000-8000-0000000000d3", later), draft("00000000-0000-4000-8000-0000000000d4", later)])];
   return renderToStaticMarkup(<LocalContext.Provider value={local}>
-    <PlanDecision target={{ taskId: "t1" }} name="派活单" drafts={[draft("00000000-0000-4000-8000-0000000000d1", modelWords), draft("00000000-0000-4000-8000-0000000000d2", modelWords)]}
-      roles={[]} handheld={false} onSay={vi.fn()} onChanged={vi.fn()} />
+    <PlanDecision target={{ taskId: "t1" }} name="派活单" drafts={drafts} roles={[]} handheld={false} onSay={vi.fn()} onChanged={vi.fn()} />
   </LocalContext.Provider>);
 };
 const picks = (html: string) => [...html.matchAll(/data-testid="model-pick"[^>]*><span title="[^"]*">([^<]*)<\/span>/g)].map((match) => match[1]);
@@ -42,6 +44,18 @@ describe("派活单照对话里说的模型要求预选（第 69 条）", () => 
     expect(picks(html).every((label) => label!.startsWith("自动 · "))).toBe(true);
     const long = "这几件都用一个我们还没接进来的新模型来做，思考程度先随便，回头再说具体用哪个";
     expect(await render(long)).toMatch(new RegExp(`title="${long}"[^>]*>没找到「${long.slice(0, 23)}…」`));
+  });
+
+  it("同一张单里两批原话不同（再拆一次接在后面）：各批按自己的原话对，前一批照 Opus 预选，后一批写「没找到」、用自动，不互相盖", async () => {
+    const html = await render("这几件用本机的 Opus，思考开高", "用 Kimi 做");
+    const labels = picks(html);
+    expect(labels.slice(0, 2)).toEqual(["Claude 订阅 · Opus 5.5", "Claude 订阅 · Opus 5.5"]);
+    expect(labels.slice(2).every((label) => label!.startsWith("自动 · "))).toBe(true);
+    expect(html.match(/data-testid="model-words-missing"/g)).toHaveLength(1);
+    expect(html).toContain("没找到「用 Kimi 做」");
+    // 两批都对不上：按原话各写一行。
+    const both = await render("用 Kimi 做", "用 GLM 做");
+    expect([...both.matchAll(/data-testid="model-words-missing"[^>]*>([^<]*)</g)].map((match) => match[1])).toEqual(["没找到「用 Kimi 做」", "没找到「用 GLM 做」"]);
   });
 });
 
