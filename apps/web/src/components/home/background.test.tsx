@@ -92,6 +92,7 @@ describe("右栏（5.4.5）", () => {
       expect(off).toContain("暂不支持 Mac");
       expect(off).not.toMatch(/install|curl|irm /);
       expect(off).not.toContain("复制");
+      expect(off).not.toContain("重试");
     } finally { vi.unstubAllGlobals(); }
   });
 
