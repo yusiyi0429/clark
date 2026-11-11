@@ -90,6 +90,9 @@ export function foldEvent(view: SessionView, event: TLocalSessionEvent): Session
     // 后台任务（子 agent、后台命令）不进对话记录：右栏读会话摘要里的 background。
     case "background":
       return next;
+    // 本人恢复了文件（11/11）：怎么在对话里显示由网页的「恢复」那一笔定，先不进对话记录
+    case "files_restored":
+      return next;
     case "agent_info":
       next.agentVersion = event.version;
       return next;

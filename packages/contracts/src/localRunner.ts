@@ -678,6 +678,8 @@ export const LocalRole = Type.Object({
  * - bypassPermissions「全部放行」（11/09 用户定，设计 17.2 第 33 条：选了全部放行就是不看，不该来问）：只有三类还问本人——
  *   推代码或开 PR（git push；gh 的写操作，如 pr create、pr merge、release create、issue create、api 发 POST 等）、
  *   给别人发消息（飞书命令行发消息、回复、转发、发邮件）、在天枢里替本人写入（天枢 MCP 里写的工具）。
+ *   还有第四类（11/11 过渡规矩）：没有兜底的地方（不在本机自己的目录、卡的工作树、整份留了一份的工作目录里），已有文件要被删、挪、覆盖——
+ *   改文件工具改已有文件、Write 覆盖已有文件，命令里有删、挪、写、重定向、sed -i、冲文件的 git 子命令（扔掉输出的 > $null 不算）。见 LocalUndo。
  *   别的都自己放行：联网下载、装东西、改系统设置、碰 .git 和 .claude、动允许的文件夹以外的文件、跑没装好的 npx 包、本人加的工具里写的操作等。
  * 其他几档还有天枢的硬规矩，照问本人（设计 9.5）：对外的动作（git 推送和拉取、gh（开 PR 等）、飞书命令行写的（发消息、改文档等））、
  * 危险命令表里的（装东西、联网下载、ssh、sudo、改注册表和系统设置、跑没装好的 npx 包）、碰 .git 和 .claude 的、碰允许的文件夹以外的路径、
@@ -788,6 +790,24 @@ export const LocalWorkspace = Type.Union([
   }, strict),
   Type.Object({ kind: Type.Literal("folder"), folder: Type.String() }, strict),
 ]);
+
+/**
+ * 改、删前留一份（11/11 本人定，ADR 0039）：不在 git 工作树里做的会话（普通文件夹、「此电脑」、专题、规划员），执行方改、删已有文件之前本机留一份，
+ * 本人能在「改动的文件」里一个个恢复，或全部恢复到开工前（POST /v1/sessions/:id/files/restore）。会话摘要的 undo：
+ * - preparing：在留开工前那一份（后台做，开工不等）。这时用改文件工具改的先拷一份再放行；命令最多等 10 秒，等不到就按 touched_only 的规矩办。
+ * - ready：整个工作目录都留了（每一轮开始前、结束后各留一份），用命令、脚本、子 agent 改的、删的也能恢复。
+ * - touched_only：只给执行方用改文件工具（Claude Code 的 Write、Edit、MultiEdit、NotebookEdit，Codex 的改文件）改的已有文件留一份；
+ *   命令要删、挪、覆盖已有文件时，哪一档都照样问本人（包括「全部放行」）。reason 是为什么：too_large 文件夹太大（超过 3 万个文件或 3GB，
+ *   不算 32MB 以上的大文件和 node_modules 这类目录）、sync_folder 在 OneDrive 等同步盘里（整份留会把云端文件全下载下来）、disk_full 本机数据目录所在的盘不够、
+ *   failed 没留成（message 写原因）。本机自己的专用目录（专题、规划员、没绑文件夹的项目）不用整份留，也是 touched_only，不带 reason。
+ * 不管哪种：32MB 以上的大文件、工作目录以外的文件（项目另外绑的、允许范围以外的），只在用改文件工具改它时拷一份。
+ * 留的东西只在本机：会话最后一次活动后留 14 天；总量超过 20GB 或盘剩余空间的 10%（取小的）时，从最旧的已结束会话清起。
+ */
+export const LocalUndo = Type.Object({
+  state: Type.Union([Type.Literal("preparing"), Type.Literal("ready"), Type.Literal("touched_only")]),
+  reason: Type.Optional(Type.Union([Type.Literal("too_large"), Type.Literal("sync_folder"), Type.Literal("disk_full"), Type.Literal("failed")])),
+  message: Type.Optional(Type.String({ maxLength: 500 })),
+}, strict);
 
 /** Claude Code 的「问用户」（AskUserQuestion）里的一个问题，按它给的原样转给网页：标题、问题、选项（label + 说明），能不能多选。 */
 export const LocalQuestion = Type.Object({
@@ -931,6 +951,8 @@ export const LocalSessionSummary = Type.Object({
   usage: LocalUsage,
   /** 只有卡：在工作树还是文件夹里做（本机总会填；等前面的卡时还没有工作树，不带）。 */
   workspace: Type.Optional(LocalWorkspace),
+  /** 改、删前留一份的情况（见 LocalUndo）；卡在工作树里做的不带（有 git）。 */
+  undo: Type.Optional(LocalUndo),
   /** 在等本人回答的提问（状态是 idle，界面「等你回复」）；没有就不带。 */
   pendingQuestion: Type.Optional(LocalQuestionRequestView),
   /** 只有卡：排着队、还在等的前面的卡（cardId，还没在这台本机上合回的），界面「已排队 · 等前面的卡」；不在等就不带。 */
@@ -1014,18 +1036,48 @@ export const LocalSessionFileReadResponse = Type.Object({
  * path 是相对会话根的路径（正斜杠），absolutePath 是绝对路径（回答里两种写法都可能出现，网页拿它们去对）；exists 是现在还在不在（删掉的、挪走的为 false，不能点）；
  * size 是现在的字节数（不在了为 null）。按路径排，最多 500 个，多了 truncated 为 true。root 是会话根。删掉的文件只有 git 那一路知道。
  * 项目另外绑的文件夹里的也列（17.2 第 46 条）：只有 tool 这一路（那里是本人的文件夹，不开工作树），path 是绝对路径（正斜杠）。
+ * 不在工作树里做的会话有留一份时（见 LocalUndo，11/11）：
+ * - snapshot：整个工作目录留了的（undo.state ready）——每一轮开始前和结束后各留一份，两份之间变了的；用命令、脚本、子 agent 改的、删的、新建的都在。
+ *   本人在两轮之间自己改的不算。删掉的文件这一路也知道（exists 为 false）。
+ * - change：这个会话把它怎么了（added 新建、modified 改了、deleted 删了；挪走算原来的删了、新地方新建）。只有 snapshot 一路、或有留一份的才带。
+ * - restorable：能不能点「恢复」（有留一份，或是会话新建的）。restoredAt：最近一次恢复的时间；恢复以后又被会话改了就不带。
+ * 恢复了的文件还留在列表里（内容回到会话第一次动它之前；新建的恢复后不在了，exists false）。
  */
 export const LocalChangedFile = Type.Object({
   path: Type.String(),
   absolutePath: Type.String(),
-  sources: Type.Array(Type.Union([Type.Literal("tool"), Type.Literal("git")]), { minItems: 1, maxItems: 2 }),
+  sources: Type.Array(Type.Union([Type.Literal("tool"), Type.Literal("git"), Type.Literal("snapshot")]), { minItems: 1, maxItems: 3 }),
   exists: Type.Boolean(),
   size: NullableInteger({ minimum: 0 }),
+  change: Type.Optional(Type.Union([Type.Literal("added"), Type.Literal("modified"), Type.Literal("deleted")])),
+  restorable: Type.Optional(Type.Boolean()),
+  restoredAt: Type.Optional(Instant),
 }, strict);
 export const LocalSessionFilesResponse = Type.Object({
   root: Type.String(),
   files: Type.Array(LocalChangedFile, { maxItems: 500 }),
   truncated: Type.Boolean(),
+}, strict);
+
+/**
+ * POST /v1/sessions/:id/files/restore：把这个会话动过的文件恢复到它第一次动之前（11/11，见 LocalUndo）。paths 用 LocalChangedFile 的 path 或 absolutePath；
+ * 不给 paths 就是全部恢复到开工前。改了的、删了的写回原来的内容；会话新建的删掉。恢复前先给现在的样子也留一份（以后可以撤回这次恢复）。
+ * 一个个来，有的成了有的没成时照样回 200：restored 是恢复了的 path，failed 是没成的：in_use 文件正被别的程序打开（比如 Excel，关掉再点）、
+ * no_copy 没有留一份（不是这个会话动的、留的已过期清掉了）、error 别的（message 写原因）。
+ * 会话正在做一轮（starting、running、waiting_permission）时回 409（先停下）；没有这个会话 404；卡在工作树里做的回 409（用 git，合回前不需要）。
+ * 恢复完记一条事件 files_restored。
+ */
+export const LocalSessionRestoreRequest = Type.Object({
+  paths: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 2000 }), { minItems: 1, maxItems: 500 })),
+}, strict);
+export const LocalRestoreFailure = Type.Object({
+  path: Type.String(),
+  reason: Type.Union([Type.Literal("in_use"), Type.Literal("no_copy"), Type.Literal("error")]),
+  message: Type.String({ maxLength: 500 }),
+}, strict);
+export const LocalSessionRestoreResponse = Type.Object({
+  restored: Type.Array(Type.String(), { maxItems: 500 }),
+  failed: Type.Array(LocalRestoreFailure, { maxItems: 500 }),
 }, strict);
 
 /**
@@ -1403,8 +1455,11 @@ export const LocalSessionEvent = Type.Union([
    * workspace：卡开工时在哪做（工作树的分支、从哪个提交开始、主文件夹里没提交的改动没带进来）；merged：卡的分支已合回主文件夹；
    * context_compacted：执行方压缩了上下文（Claude Code 的 compact_boundary、Codex 的 contextCompaction；自动压的和本人让它压的都报），
    * text 是「压缩了上下文」，网页在对话里记这一行（设计 17.2 第 42 条）。
+   * undo：改、删前留一份变了（见 LocalUndo；留好了 info、只能给改文件工具改的留一份 warn、留的已清掉 warn），摘要的 undo 同时更新。
    */
   ev("notice", { level: Type.Union([Type.Literal("info"), Type.Literal("warn"), Type.Literal("error")]), code: Type.String(), text: Type.String() }),
+  /** 本人恢复了文件（POST /v1/sessions/:id/files/restore）：all 是不是「全部恢复」，restored、failed 同回执。只在本机，不同步给云端。 */
+  ev("files_restored", { all: Type.Boolean(), restored: Type.Array(Type.String(), { maxItems: 500 }), failed: Type.Array(LocalRestoreFailure, { maxItems: 500 }) }),
 ]);
 
 // ───────────────────────── 云端同步载荷（本机 → 天枢 api，单向） ─────────────────────────
@@ -1649,6 +1704,10 @@ export type TLocalSessionFileReadRequest = Static<typeof LocalSessionFileReadReq
 export type TLocalSessionFileReadResponse = Static<typeof LocalSessionFileReadResponse>;
 export type TLocalChangedFile = Static<typeof LocalChangedFile>;
 export type TLocalSessionFilesResponse = Static<typeof LocalSessionFilesResponse>;
+export type TLocalUndo = Static<typeof LocalUndo>;
+export type TLocalSessionRestoreRequest = Static<typeof LocalSessionRestoreRequest>;
+export type TLocalSessionRestoreResponse = Static<typeof LocalSessionRestoreResponse>;
+export type TLocalRestoreFailure = Static<typeof LocalRestoreFailure>;
 export type TLocalSessionModelResponse = Static<typeof LocalSessionModelResponse>;
 export type TLocalSessionStatus = Static<typeof LocalSessionStatus>;
 export type TLocalSessionSubject = Static<typeof LocalSessionSubject>;
@@ -1775,6 +1834,7 @@ export const LOCAL_RUNNER_ROUTES = {
   setSessionModel: { method: "PUT", path: "/v1/sessions/:id/model", auth: true },
   listSessionFiles: { method: "GET", path: "/v1/sessions/:id/files", auth: true },
   readSessionFile: { method: "POST", path: "/v1/sessions/:id/files/read", auth: true },
+  restoreSessionFiles: { method: "POST", path: "/v1/sessions/:id/files/restore", auth: true },
   listProjects: { method: "GET", path: "/v1/projects", auth: true },
   putProjectFolder: { method: "PUT", path: "/v1/projects/:projectId/folder", auth: true },
   handoverCheck: { method: "POST", path: "/v1/projects/:projectId/handover-check", auth: true },
