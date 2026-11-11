@@ -108,6 +108,9 @@ describe("Codex 子会话", { timeout: 60_000 }, () => {
     const s = await until(async () => { const x = await session(id); return x.pendingPermissions[0] ? x : null; });
     expect(s.session).toMatchObject({ agent: "codex", modelProfileId: SOL, run: { harness: "codex", model: "gpt-6.1-sol", effort: "low", multiAgent: false, origin: { provider: "codex" } } });
     expect(s.pendingPermissions[0]).toMatchObject({ toolName: process.platform === "win32" ? "PowerShell" : "Bash", title: "运行 git status" });
+    // 批准说人话（主循环第 64 条）：Codex 给的理由当说明；只读的命令没有会动的文件
+    expect(s.pendingPermissions[0].description).toBe("要跑一下这条命令");
+    expect(s.pendingPermissions[0].paths).toBeUndefined();
     const start = trace().find((l) => l.method === "thread/start");
     expect(start.params).toMatchObject({ approvalPolicy: "untrusted", sandbox: "workspace-write", model: "gpt-6.1-sol", cwd: join(work, "A") });
     expect(start.params.developerInstructions).toMatch(/字$/);
@@ -169,7 +172,7 @@ describe("Codex 子会话", { timeout: 60_000 }, () => {
     expect((await call("POST", "/v1/sessions", { subject: { kind: "card", cardId: "x" }, title: "x", cwd: join(work, "P"), firstMessage: "x", modelProfileId: G55, effort: "ultra" })).status).toBe(400);
     expect((await call("POST", "/v1/sessions", { subject: { kind: "card", cardId: "x" }, title: "x", cwd: join(work, "P"), firstMessage: "x", modelProfileId: SOL, agent: "claude-code" })).status).toBe(400);
     const preview = (await call("POST", "/v1/runs/preview", { modelProfileId: SOL, effort: "ultra" })).body;
-    expect(preview).toMatchObject({ harness: "codex", effort: "ultra", modelName: "gpt-6.1-sol" });
+    expect(preview).toMatchObject({ harness: "codex", effort: "ultra", modelName: "GPT-6.1-Sol" }); // 目录给的名字（第 67 条）
   });
 
   it("换模型、换思考程度：没在跑一轮当场换，在跑就这一轮做完换，都不重开进程；下一轮带新的", async () => {

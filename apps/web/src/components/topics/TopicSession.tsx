@@ -131,7 +131,7 @@ export function TopicSession({ topicId, embedded = false, waiting = null, queued
   const pinned = !embedded ? null
     : ask ? ask
     : attention === "approval" ? (view.lastSeq && view.pending.length
-      ? <ApprovalDecision requests={view.pending} blocked={away} onDecide={(request, decision, options) => decide(request.requestId, decision, options)} />
+      ? <ApprovalDecision requests={view.pending} blocked={away} inWorktree={session?.workspace?.kind === "worktree"} onDecide={(request, decision, options) => decide(request.requestId, decision, options)} />
       : placeholder("approval"))
     : attention === "question" ? asking ?? placeholder("question") : null;
   const toPending = async () => {
@@ -183,7 +183,8 @@ export function TopicSession({ topicId, embedded = false, waiting = null, queued
       <div className={s.chat}>
         <div className={s.scroll} ref={scroll.scrollRef}>
           <div ref={scroll.contentRef}>
-            {session ? <SessionTranscript entries={send.entries} agentName={HARNESS_NAME[session.agent]} canAct={canAct} onResend={(entry) => void say(entry.text).catch(() => showWorkspaceToast({ text: "没发出去" }))} onRetry={send.retry} draft={draft} drafted={drafted} device={device} live={running(status)} starting={status === "starting"} ended={ended} pinned={embedded} onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={embedded ? null : asking} asking={question} />
+            {session ? <SessionTranscript entries={send.entries} agentName={HARNESS_NAME[session.agent]} canAct={canAct} onResend={(entry) => void say(entry.text).catch(() => showWorkspaceToast({ text: "没发出去" }))} onRetry={send.retry} draft={draft} drafted={drafted} device={device} live={running(status)} starting={status === "starting"} ended={ended} pinned={embedded} onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={embedded ? null : asking} asking={question}
+              stopped={embedded ? view.stopped : null} onResume={canAct ? () => void say("接着做").catch(() => showWorkspaceToast({ text: "没发出去" })) : undefined} />
               : <div className={s.feed}><span className={s.evt}>{topic.title}</span>
                   {ready && topic.status === "active" && !embedded ? <div className={s.actions}><HeroButton variant="primary" size="sm" onPress={() => setStarting(true)}>开始</HeroButton></div> : null}
                 </div>}

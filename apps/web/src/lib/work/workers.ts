@@ -16,9 +16,9 @@ export type WorkerMark = TWorkerMark;
 
 export const CHAIN_LABEL: Record<ChainState, string> = { queued: "已排队", doing: "进行中", done: "已完成" };
 export const QUEUE_LABEL: Record<QueueReason, string> = { start: "等开工", slot: "等空位", offline: "等本机上线", folder: "等文件夹空出来", after: "等前面的卡", quota: "等额度恢复" };
-export const MARK_LABEL: Record<WorkerMark, string> = { approval: "等你批准", reply: "等你回复", paused: "已暂停", reviewing: "验收中", review_failed: "验收没过", blocked: "受阻" };
+export const MARK_LABEL: Record<WorkerMark, string> = { approval: "等你批准", reply: "等你回复", paused: "已暂停", reviewing: "验收中", review_failed: "验收没过", blocked: "受阻", needs_person: "等你补" };
 /** 「等你」：要本人动手的几种。 */
-export const WAITING: WorkerMark[] = ["approval", "reply", "review_failed", "blocked"];
+export const WAITING: WorkerMark[] = ["needs_person", "approval", "reply", "review_failed", "blocked"];
 export const isWaiting = (mark: WorkerMark | null) => !!mark && WAITING.includes(mark);
 const REASON: Record<NonNullable<TWorkerItem["queueReason"]>, QueueReason> = { not_dispatched: "start", slot: "slot", device_offline: "offline", prior_cards: "after", quota: "quota", folder_busy: "folder" };
 

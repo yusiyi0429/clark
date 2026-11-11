@@ -12,6 +12,7 @@ import {
   type TLocalBackgroundItem, type TLocalMergeHoldReason, type TLocalMergeSync, type TLocalModelTier, type TLocalHold, type TLocalMoney,
   type TLocalRun, type TLocalRunPreviewRequest, type TLocalTaskBudgetView, type TLocalBudgetUpdateRequest, type TBudgetMode, type TLocalPermissionBrief, type TLocalSavedAttachment, type TLocalStopReason, type TLocalStopReport,
   type TLocalEffort, type TLocalSessionModelRequest, type TLocalSessionFileReadResponse, type TLocalSessionFilesResponse, type TLocalContextUsage,
+  DONE_DEFINITION_LIMITS, LocalAgreementProposal, type TLocalAgreementProposal, type TLocalCardAgreementResponse, type TLocalFolderHolder,
 } from "@warmap/contracts";
 import { readJson, writeJsonAtomic, nowIso } from "./store.js";
 import type { EventLog, EventBody } from "./eventLog.js";
@@ -22,7 +23,7 @@ import type { CodexQuota } from "./codexQuota.js";
 import type { GatewayPricing } from "./pricing.js";
 import { Budgets, MULTI_AGENT_OFF_PERCENT, reworkRounds, runFor } from "./budget.js";
 import { AttachmentError, attachmentNote, saveAttachments, type FetchAttachment } from "./attachments.js";
-import { modelDisplayName, sameModel, type ResolvedModel } from "./models.js";
+import { runLine, sameModel, type ResolvedModel } from "./models.js";
 import { isClaudeProfileId } from "./claudeCatalog.js";
 import { isCodexProfileId } from "./codexCatalog.js";
 import { MAGPIE_PORT, modelOrigin } from "./modelOrigin.js";
@@ -33,8 +34,8 @@ import { flagText, planFactsSection, planFolderFacts, type PlanFlag } from "./pl
 import type { ModelProfiles } from "./models.js";
 import { isInside, type Folders } from "./folders.js";
 import type { Outbox } from "./outbox.js";
-import { SESSION_MCP_NAME, sessionToolNames } from "./sessionMcp.js";
-import { changesBrief, criticAgents, returnText, reviewMessage, systemPrompt } from "./rolePrompt.js";
+import { SESSION_MCP_NAME, sessionToolNames, type SessionToolset } from "./sessionMcp.js";
+import { agreementInBrief, changesBrief, criticAgents, returnText, reviewMessage, systemPrompt } from "./rolePrompt.js";
 import { addWorktree, branchName, cardDiff, changedFiles, commitAll, deleteBranch, git, mergeBranch, pruneRepo, removeWorktree, repoHead } from "./git.js";
 import { ensureFeishuPlugin, larkSkills } from "./agents/feishuPlugin.js";
 import { AGENT_NAME, earlierTurns, handoffText, otherRules } from "./handoff.js";
@@ -85,7 +86,6 @@ const BALANCE_REASON = "TokenHub 余额不足，充值后说一句接着做";
 /** 计时的状态：真在跑（排队、等额度、等你批准、等你回复都不算）。 */
 const RUNNING_TIME: TLocalSessionStatus[] = ["starting", "running"];
 /** 不是 git 仓库的文件夹同时只做一张卡（ADR 0038），另一张在那儿跑时排队的原因。 */
-const FOLDER_BUSY = "这个文件夹不是 git 仓库，同时只做一张卡，等另一张这一轮做完";
 
 interface SessionRecord {
   id: string;
@@ -173,6 +173,12 @@ interface SessionRecord {
   handoff?: boolean;
   /** 上下文用了多少（契约 LocalContextUsage）：执行方最近一次报的，摘要原样带；还没报过没有。 */
   context?: TLocalContextUsage;
+  /** 卡：执行方知道的是卡的约定第几版（主循环第 60 条）。开工时取一次，转话带了新的版本号就记新的；交回时云端更新了就退回。没取到过为空。 */
+  agreementRevision?: number;
+  /** 卡：开工交代里交给执行方的约定（agreementInBrief 认出来的）。没取到过版本号时，交回拿它和云端的比内容。 */
+  startAgreement?: { standards: string[] | null; brief?: string | null };
+  /** 自由子会话（第 68 条，项目下的「+」开的专题）：换一套规矩和工具；在哪个文件夹做都按普通文件夹算（workspace 是 folder）。 */
+  free?: true;
 }
 
 /** 不合契约时给执行方看的一句（哪个字段、哪里不对）。 */
@@ -181,7 +187,16 @@ function schemaProblem(schema: TSchema, value: unknown): string | null {
   const e = [...Value.Errors(schema, value)][0];
   return e ? `${e.path || "/"} ${e.message}` : "格式不对";
 }
+const heldKey = (h: TLocalFolderHolder | null) => (h ? `${h.kind}:${h.id}` : "");
 const textOrNull = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+/** 完成标准（一行一条）超了 DONE_DEFINITION_LIMITS 时说哪里超了；没超为 null。 */
+function standardsTooLong(lines: string[]): string | null {
+  const { line, total } = DONE_DEFINITION_LIMITS;
+  const long = lines.findIndex((l) => l.length > line);
+  if (long >= 0) return `完成标准第 ${long + 1} 条有 ${lines[long]!.length} 字，每条不能超过 ${line} 字，拆成几条或写短一点`;
+  const all = lines.join("\n").length;
+  return all > total ? `完成标准合起来有 ${all} 字，整份不能超过 ${total} 字` : null;
+}
 
 export class SessionError extends Error {
   constructor(readonly code: "not_found" | "conflict" | "folder_not_allowed" | "validation", message: string) { super(message); }
@@ -213,6 +228,8 @@ export interface SessionDeps {
   skillsDir?: string;
   /** 向天枢取一次交回的验收交代（没有就不自动验收）。 */
   verifyBrief?: (handbackKey: string) => Promise<VerifyBrief>;
+  /** 向天枢取卡此刻的约定（主循环第 60 条）：没连天枢、没有这张卡为 null，连不上抛错。 */
+  cardAgreement?: (cardId: string) => Promise<TLocalCardAgreementResponse | null>;
   /** 本人订阅的额度：用完了订阅的会话停着等，跑着的卡报的额度变化记进去。 */
   quota?: QuotaTracker;
   /** 本人 Codex 订阅的额度：用完了 Codex 的会话停着等（设计 17.2 第 38 条），跑着的 Codex 会话报的额度记进去。 */
@@ -268,6 +285,8 @@ export class SessionManager {
   private readonly sentAsk = new Map<string, string>();
   /** 上次报给云端的排队位置（位置变了才重报）。 */
   private readonly sentPosition = new Map<string, number>();
+  /** 上次报给云端的「占着文件夹的是谁」（第 68 条，换了人才重报）。 */
+  private readonly sentHeld = new Map<string, string>();
   private queueSeq = 0;
   /** 读回上次的会话时（本机程序还没开始监听）和关机时不从队里接；启动好后由 app 调 pump。 */
   private holdQueue = true;
@@ -334,9 +353,15 @@ export class SessionManager {
       this.stopAllBackground(rec);
       this.failUnread(rec); // 上次发出去还没读到的话：进程已不在，没读到
       // 本机程序重启时，上次的进程都已不在。排着的照原样排着；刚从队里拉起、还没开始的放回队里（位置不变）。
+      // 那时还在跑、在等批准或回答的（停着等额度的除外，到点自己接着做）补一条停了：本机程序重启（主循环第 65 条）。一轮做完在等本人回复的不补，那一轮已经报过。
+      const asked = this.voidStale(rec);
       if (rec.status === "starting" && rec.queuedMessage !== null) this.setStatus(rec, "queued", { reason: "本机程序重启，照原样排着" });
-      else if (LIVE.includes(rec.status)) this.setStatus(rec, "exited", { reason: rec.hold ? HOLD_REASON : "本机程序重启，会话已停；再发一句话会接着做" });
-      this.voidStale(rec);
+      else if (LIVE.includes(rec.status)) {
+        const why = !rec.hold && (OCCUPYING.includes(rec.status) || asked) ? "runner_restart" as const : undefined;
+        this.setStatus(rec, "exited", { reason: rec.hold ? HOLD_REASON : "本机程序重启，会话已停；再发一句话会接着做", ...(why ? { why } : {}) });
+        if (why) this.reportStop(rec, why);
+      }
+      this.d.log.evict(rec.id); // 启动时为补这些读进来的，没人在看就放掉
     }
     this.holdQueue = false;
     this.relabelAll(); // 记录里存的来源名、模型配置的名字可能是旧叫法（如「我的 Claude 订阅」）：照现在的配置改过来
@@ -359,13 +384,14 @@ export class SessionManager {
     const {
       mcpSecret: _s, syncSeq: _q, outputs: _o, versionNumber: _v, lastVersion: _l, role: _r, critics: _c, queuedMessage: _m, queueOrder: _n,
       parentId: _p, briefPending: _b, criteria: _cr, failStreak: _f, submitted: _sb, nudged: _nd, workspace, commit: _cm, after: _af, passed: _ps, sourceWords: _sw, unread: _ur,
-      background, hold, holdSince: _hs, modelTier: _mt, budgetKey: _bk, runSince: _rs, seen: _se, handoff: _ho, run, ...rest
+      background, hold, holdSince: _hs, modelTier: _mt, budgetKey: _bk, runSince: _rs, seen: _se, handoff: _ho, run, agreementRevision: _ar, startAgreement: _sa, free: _fr, ...rest
     } = rec;
     const question = this.questions.get(rec.id);
     const waitingFor = this.waitingFor(rec);
+    const heldBy = this.heldBy(rec);
     return {
       ...rest, lastSeq: this.d.log.lastSeq(rec.id), pendingPermissions: this.pending.get(rec.id)?.size ?? 0, queuePosition: this.queuePosition(rec),
-      ...(workspace ? { workspace } : {}), ...(question ? { pendingQuestion: question } : {}), ...(waitingFor.length ? { waitingFor } : {}),
+      ...(workspace ? { workspace } : {}), ...(question ? { pendingQuestion: question } : {}), ...(waitingFor.length ? { waitingFor } : {}), ...(heldBy ? { heldBy } : {}),
       ...(background.length ? { background } : {}), ...(hold ? { hold } : {}), ...(run ? { run } : {}),
     };
   }
@@ -384,6 +410,13 @@ export class SessionManager {
     const rec = this.records.get(id) ?? this.launching.get(id);
     if (!rec) throw new SessionError("not_found", "没有这个会话");
     return rec.subject.kind;
+  }
+
+  /** 本会话 MCP 给哪套工具：自由子会话（第 68 条）另算一套。 */
+  toolsetOf(id: string): SessionToolset {
+    const rec = this.records.get(id) ?? this.launching.get(id);
+    if (!rec) throw new SessionError("not_found", "没有这个会话");
+    return rec.free ? "free" : rec.subject.kind;
   }
 
   /** 排队时是第几个（验收员、规划员排前面，同一档先来先跑）；没在排队为 null。 */
@@ -445,7 +478,7 @@ export class SessionManager {
         this.d.onChange?.();
       } catch (e) {
         const reason = `前面的卡都做完了，但没开起来：${e instanceof Error ? e.message : String(e)}`;
-        this.setStatus(rec, "failed", { reason });
+        this.setStatus(rec, "failed", { reason, why: "error" });
         this.reportStop(rec, "error", { blocker: reason });
       } finally {
         this.opening.delete(rec.id);
@@ -456,11 +489,27 @@ export class SessionManager {
 
   /** 不是 git 仓库的文件夹同时只做一张卡：另一张卡正在那儿跑（占着位置、正在拉起，或它开的后台任务还在跑）。 */
   private folderBusy(rec: SessionRecord): boolean {
+    return this.folderHolder(rec) !== null;
+  }
+
+  /**
+   * 占着这个普通文件夹的会话（没有为 null）。在普通文件夹里做的卡、自由子会话（第 68 条，git 仓库的主文件夹也算普通文件夹）都算：
+   * 同一时间只许一个改，正在跑、在等批准、正在拉起，或它开的后台任务还在跑时占着。
+   */
+  private folderHolder(rec: SessionRecord): SessionRecord | null {
     const ws = rec.workspace;
-    if (ws?.kind !== "folder") return false;
+    if (ws?.kind !== "folder") return null;
     const same = (r: SessionRecord) => r !== rec && r.workspace?.kind === "folder" && r.workspace.folder === ws.folder;
     const busy = (r: SessionRecord) => OCCUPYING.includes(r.status) || r.background.some((b) => b.state === "running");
-    return [...this.records.values()].some((r) => same(r) && busy(r)) || [...this.launching.values()].some(same);
+    return [...this.records.values()].find((r) => same(r) && busy(r)) ?? [...this.launching.values()].find(same) ?? null;
+  }
+
+  /** 排着队等普通文件夹时，占着它的是谁（契约 LocalFolderHolder）；不在等为 null。 */
+  private heldBy(rec: SessionRecord): TLocalFolderHolder | null {
+    if (rec.status !== "queued" || rec.hold) return null;
+    const h = this.folderHolder(rec);
+    const id = h ? (h.subject.kind === "card" ? h.subject.cardId : h.subject.topicId) : undefined;
+    return h && id && (h.subject.kind === "card" || h.subject.kind === "topic") ? { kind: h.subject.kind, id, title: h.title.slice(0, 120) } : null;
   }
 
   private max(): number {
@@ -503,7 +552,7 @@ export class SessionManager {
     } catch (e) {
       const cancelled = e instanceof SessionError && e.message === CANCELLED_WHILE_STARTING;
       const reason = cancelled ? "已强停" : `没开起来：${e instanceof Error ? e.message : String(e)}`;
-      this.setStatus(rec, cancelled ? "exited" : "failed", { reason });
+      this.setStatus(rec, cancelled ? "exited" : "failed", { reason, ...(cancelled ? {} : { why: "error" as const }) });
       if (cancelled) void this.releaseWorktree(rec);
       else this.reportStop(rec, "error", { blocker: reason });
       return;
@@ -518,10 +567,10 @@ export class SessionManager {
     this.sendBudgetStop(rec, run); // 拉起途中预算用完了
   }
 
-  /** 队里还在排的，位置变了就给云端重报一条 queued。 */
+  /** 队里还在排的，位置变了、占着文件夹的换了人（第 68 条）就给云端重报一条 queued。 */
   private syncQueuePositions() {
     this.queue().forEach((rec, i) => {
-      if (this.sentPosition.get(rec.id) !== i + 1) this.syncStatus(rec);
+      if (this.sentPosition.get(rec.id) !== i + 1 || (this.sentHeld.get(rec.id) ?? "") !== heldKey(this.heldBy(rec))) this.syncStatus(rec);
     });
   }
 
@@ -530,11 +579,14 @@ export class SessionManager {
     if (queuePosition === null) this.sentPosition.delete(rec.id);
     else this.sentPosition.set(rec.id, queuePosition);
     const waitingFor = this.waitingFor(rec);
+    const heldBy = this.heldBy(rec);
+    if (heldBy) this.sentHeld.set(rec.id, heldKey(heldBy)); else this.sentHeld.delete(rec.id);
     const ask = this.askOf(rec);
     this.sentAsk.set(rec.id, ask.key);
     this.sync(rec, { type: "status", data: {
-      status: rec.status, title: rec.title, agent: rec.agent, modelLabel: rec.modelLabel, ...(queuePosition ? { queuePosition } : {}), ...(waitingFor.length ? { waitingFor } : {}),
-      ...(rec.hold ? { hold: rec.hold } : {}), ...(rec.run ? { run: rec.run } : {}), permissionMode: rec.permissionMode, ...ask.data,
+      // modelLabel 写成「来源 · 模型 · 思考」（第 67 条，别的电脑和手机上只有这个字符串）；还没拉起过用配置名
+      status: rec.status, title: rec.title, agent: rec.agent, modelLabel: runLine(rec.run) ?? rec.modelLabel, ...(queuePosition ? { queuePosition } : {}), ...(waitingFor.length ? { waitingFor } : {}),
+      ...(heldBy ? { heldBy } : {}), ...(rec.hold ? { hold: rec.hold } : {}), ...(rec.run ? { run: rec.run } : {}), permissionMode: rec.permissionMode, ...ask.data,
     } });
   }
 
@@ -546,7 +598,10 @@ export class SessionManager {
     const question = rec.status === "idle" ? this.questions.get(rec.id) : undefined;
     if (question) return { key: `q:${question.requestId}`, data: { question } };
     const p = rec.status === "waiting_permission" ? [...(this.pending.get(rec.id)?.values() ?? [])][0] : undefined;
-    if (p) return { key: `p:${p.requestId}`, data: { permission: { requestId: p.requestId, toolName: p.toolName.slice(0, 200), title: p.title.slice(0, 500), outsidePaths: p.outsidePaths.slice(0, 20), canAllowForSession: p.canAllowForSession } } };
+    if (p) {
+      return { key: `p:${p.requestId}`, data: { permission: { requestId: p.requestId, toolName: p.toolName.slice(0, 200), title: p.title.slice(0, 500), outsidePaths: p.outsidePaths.slice(0, 20), canAllowForSession: p.canAllowForSession,
+        ...(p.description ? { description: p.description } : {}), ...(p.paths?.length ? { paths: p.paths } : {}) } } }; // 批准说人话（主循环第 64 条）
+    }
     return { key: "", data: {} };
   }
 
@@ -572,19 +627,22 @@ export class SessionManager {
   /** 状态没变、在问的或在等批准的那一条变了（又来一条请求、批了一条还剩别的）：照样重报一条状态。 */
   /**
    * 本机程序被直接停掉（重启、升级、强杀）时没处理完的批准请求和提问：进程已不在，补一条作废（批准记 deny、提问记没答），
-   * 网页按事件不再以为在等。启动时每个会话都看一遍（以前重启留下的也补）；正常进程退出时 onExit 当场就补了。
+   * 网页按事件不再以为在等。启动时每个会话都看一遍（以前重启留下的也补）；正常进程退出时 onExit 当场就补了。补了至少一条回 true。
    */
-  private voidStale(rec: SessionRecord) {
+  private voidStale(rec: SessionRecord): boolean {
     const events = this.d.log.after(rec.id, 0);
     const resolved = new Set(events.flatMap((e) => (e.type === "permission_resolved" || e.type === "question_resolved" ? [e.requestId] : [])));
+    let voided = false;
     for (const e of events) {
       if (e.type === "permission_request" && !resolved.has(e.request.requestId)) {
         this.emit(rec, { type: "permission_resolved", requestId: e.request.requestId, decision: "deny", message: "本机程序重启，已作废", allowForSession: false, voided: true });
+        voided = true;
       } else if (e.type === "question" && !resolved.has(e.request.requestId)) {
         this.emit(rec, { type: "question_resolved", requestId: e.request.requestId, choices: null, text: null });
+        voided = true;
       }
     }
-    this.d.log.evict(rec.id); // 启动时为补这一下读进来的，没人在看就放掉
+    return voided;
   }
 
   private resyncAsk(rec: SessionRecord) {
@@ -610,7 +668,8 @@ export class SessionManager {
     return key;
   }
 
-  private setStatus(rec: SessionRecord, status: TLocalSessionStatus, extra: { exitCode?: number | null; reason?: string } = {}) {
+  /** why（主循环第 65 条）：这一条是停了时为什么停，和同时报的 stopped 同步条目同一个原因；不是停了不带。 */
+  private setStatus(rec: SessionRecord, status: TLocalSessionStatus, extra: { exitCode?: number | null; reason?: string; why?: TLocalStopReason } = {}) {
     if (rec.status === status && !extra.reason) return;
     const left = rec.status === "queued" && status !== "queued";
     this.countRunTime(rec, status);
@@ -618,7 +677,7 @@ export class SessionManager {
     this.save(rec);
     this.emit(rec, { type: "status", status, ...extra, ...(rec.hold ? { hold: rec.hold } : {}) });
     this.syncStatus(rec);
-    if (left) this.syncQueuePositions();
+    if (left || this.sentHeld.size) this.syncQueuePositions(); // 有在等文件夹的：占着的人可能换了
     this.d.onChange?.();
     if (!OCCUPYING.includes(status)) this.pump();
   }
@@ -632,6 +691,8 @@ export class SessionManager {
     if (subject.kind === "plan" && !subject.taskId && !subject.projectId) throw new SessionError("validation", "规划员的会话要带 taskId 或 projectId");
     if (subject.kind !== "topic" && req.critics?.length) throw new SessionError("validation", "挑刺技能只给专题的评审会用");
     if (subject.kind !== "card" && req.after?.length) throw new SessionError("validation", "只有卡能等别的卡");
+    if (req.free && subject.kind !== "topic") throw new SessionError("validation", "free 只给专题（项目下的「+」开的子会话）");
+    if (req.free && req.critics?.length) throw new SessionError("validation", "自由子会话没有评审会");
     let cwd: string;
     // 不指定目录时：项目在这台电脑上绑的文件夹（新首页设计 16.6）
     const projectDir = !req.cwd && subject.projectId ? this.d.folders.projectFolder(subject.projectId) : null;
@@ -678,11 +739,18 @@ export class SessionManager {
       outputs: [], versionNumber: subject.kind === "topic" ? req.versionBase ?? 0 : 0, lastVersion: null,
       role: req.role ?? null, modelTier: req.modelTier ?? req.role?.modelTier ?? null, critics: req.critics ?? [], queuedMessage: null, queueOrder: 0,
       parentId: null, briefPending: false, criteria: [], failStreak: 0, submitted: 0, nudged: false,
-      workspace: place?.workspace ?? null, commit: null, after: waiting ? after : [], passed: null, background: [], hold: null, holdSince: null,
-      budgetKey, runSince: null, run: null, permissionMode, ...(req.effort ? { effort: req.effort } : {}),
+      // 自由子会话（第 68 条）：在哪个文件夹做都按普通文件夹算（git 仓库的主文件夹也是），同一时间只许一个改，第 71 条照卡一样留一份
+      workspace: place?.workspace ?? (req.free ? { kind: "folder", folder: cwd } : null), commit: null, after: waiting ? after : [], passed: null, background: [], hold: null, holdSince: null,
+      budgetKey, runSince: null, run: null, permissionMode, ...(req.effort ? { effort: req.effort } : {}), ...(req.free ? { free: true as const } : {}),
     };
+    if (subject.kind === "card") {
+      // 卡开工时记下执行方知道约定的第几版（主循环第 60 条）；取不到时交回比内容，所以交代里的那份也记下
+      rec.startAgreement = agreementInBrief(req.firstMessage);
+      void this.noteAgreement(rec);
+    }
     // 满了（或前面还有人在排、在等前面的卡、文件夹被另一张卡占着、订阅额度用完了、预算用完了、余额不足）就进队，先来先跑；有空位时 pump 接上。
-    const busy = this.folderBusy(rec);
+    const holder = this.folderHolder(rec);
+    const busy = holder !== null;
     const limited = model.source === "subscription" && this.blocked(rec) !== null;
     const gate = this.gateReason(rec);
     if (waiting || this.ready().length || this.activeCount() >= this.max() || busy || limited || gate) {
@@ -691,7 +759,7 @@ export class SessionManager {
       this.records.set(rec.id, rec);
       if (!waiting && gate) this.markHold(rec, gate);
       else if (limited && !waiting) this.markHold(rec);
-      this.setStatus(rec, "queued", waiting ? { reason: WAITING_FOR_CARDS } : busy ? { reason: FOLDER_BUSY } : rec.hold ? { reason: this.holdReason(rec.hold) } : {});
+      this.setStatus(rec, "queued", waiting ? { reason: WAITING_FOR_CARDS } : holder ? { reason: `这个文件夹同一时间只让一个会话改，等「${holder.title}」这一轮做完` } : rec.hold ? { reason: this.holdReason(rec.hold) } : {});
       this.noteWorkspace(rec, place);
       return this.summary(rec);
     }
@@ -777,7 +845,7 @@ export class SessionManager {
         headers: secretHeader,
       },
     };
-    const allowedTools = sessionToolNames(rec.subject.kind);
+    const allowedTools = sessionToolNames(rec.free ? "free" : rec.subject.kind);
     if (tools.cloud) {
       // 天枢 MCP 经本机程序转发（/internal/sessions/:id/cloud-mcp），云端令牌留在本机程序里，会话和它跑的命令都拿不到。
       servers[CLOUD_MCP_NAME] = { type: "http", url: `${local}/cloud-mcp`, headers: secretHeader };
@@ -818,7 +886,7 @@ export class SessionManager {
     // 工作规矩、岗位、挑刺子 agent 写在本机程序的数据目录，经参数交给 Claude Code，不往本人的仓库写文件。
     const dir = join(this.dir, rec.id);
     const systemPromptPath = join(dir, "system.md");
-    let prompt = systemPrompt(rec.subject.kind, rec.role, rec.critics, feishu, rec.workspace, custom?.names ?? [], this.extraDirs(rec));
+    let prompt = systemPrompt(rec.subject.kind, rec.role, rec.critics, feishu, rec.workspace, custom?.names ?? [], this.extraDirs(rec), rec.free);
     if (rec.subject.kind === "plan") {
       // 开拆前看一眼项目的文件夹（只读）：在本机给它的专用目录里做就是没绑
       const facts = await planFolderFacts(isInside(join(this.d.dataDir, "plans"), rec.cwd) ? null : rec.cwd);
@@ -1016,8 +1084,11 @@ export class SessionManager {
           run.close();
           break;
         }
-        this.setStatus(rec, pending?.size ? "waiting_permission" : "idle", rec.hold && (limited || broke || stopped) ? { reason: this.holdReason(rec.hold) } : {});
-        if (!pending?.size && !this.questions.has(rec.id)) stop();
+        const stops = !pending?.size && !this.questions.has(rec.id);
+        this.setStatus(rec, pending?.size ? "waiting_permission" : "idle", {
+          ...(rec.hold && (limited || broke || stopped) ? { reason: this.holdReason(rec.hold) } : {}), ...(stops ? { why } : {}),
+        });
+        if (stops) stop();
         if (rec.pendingModel) this.swapModel(rec); // 这一轮做完了：换上本人要的模型
         break;
       }
@@ -1051,15 +1122,15 @@ export class SessionManager {
     if (limited && !rec.hold) this.markHold(rec);
     // 交完收工、正常退出（本机关的：合回前、交完结论）的不再等；关机时留着，下次启动接着等
     if (rec.hold && !limited && (finished || code === 0) && !this.holdQueue) this.clearHold(rec);
+    // 一轮做到一半没了：报停了的原因（状态那一条也带上，主循环第 65 条）
+    const why: TLocalStopReason | undefined = !midTurn || finished ? undefined : killed ? "killed" : rec.hold ? "held" : "error";
     if (finished) this.setStatus(rec, "done", { exitCode: code, reason: rec.subject.kind === "plan" ? "计划交了" : "验收完了" });
     else this.setStatus(rec, killed || code === 0 || limited || rec.hold?.reason === "budget" ? "exited" : "failed", {
-      exitCode: code, reason: killed ? "已强停" : rec.hold && !killed ? this.holdReason(rec.hold) : undefined,
+      exitCode: code, reason: killed ? "已强停" : rec.hold && !killed ? this.holdReason(rec.hold) : undefined, ...(why ? { why } : {}),
     });
-    if (midTurn && !finished) {
-      if (killed) this.reportStop(rec, "killed");
-      else if (rec.hold) this.reportStop(rec, "held", { blocker: this.holdReason(rec.hold) });
-      else this.reportStop(rec, "error", { blocker: `执行方中途退出了${code === null ? "" : `（退出码 ${code}）`}` });
-    }
+    if (why === "killed") this.reportStop(rec, "killed");
+    else if (why === "held") this.reportStop(rec, "held", { blocker: this.holdReason(rec.hold!) });
+    else if (why === "error") this.reportStop(rec, "error", { blocker: `执行方中途退出了${code === null ? "" : `（退出码 ${code}）`}` });
     this.d.log.evict(rec.id);
     // 本人要换的模型还没换上就退了（交完收工、强停等）：直接换，下次开起来用新的
     const want = rec.pendingModel?.modelProfileId;
@@ -1096,6 +1167,8 @@ export class SessionManager {
     if (req.kind === "review" && (rec.subject.kind !== "topic" || !rec.critics.length)) throw new SessionError("validation", "评审会只给开工时带了挑刺技能的专题用");
     if (req.kind !== "review" && !req.text && !req.attachments?.length) throw new SessionError("validation", "说一句要有内容");
     if (rec.subject.kind === "plan" && !rec.planAsked) { rec.planAsked = true; this.save(rec); } // 本人说了话：开拆前要问的算交代过了
+    // 这句是在告诉执行方「卡的约定改了」（主循环第 60 条）：记下它知道第几版了
+    if (rec.subject.kind === "card" && req.agreementRevision && req.agreementRevision > (rec.agreementRevision ?? 0)) { rec.agreementRevision = req.agreementRevision; this.save(rec); }
     // 附件（新首页设计 14.5）：先取回、存进工作区，有一个不行整句不发
     let saved: TLocalSavedAttachment[] = [];
     if (req.attachments?.length) {
@@ -1719,7 +1792,7 @@ export class SessionManager {
     p.then((r) => { this.deliver(rec, r, say); this.setStatus(rec, "running"); this.sendBudgetStop(rec, r); }, (e: unknown) => {
       const cancelled = e instanceof SessionError && e.message === CANCELLED_WHILE_STARTING;
       const reason = cancelled ? "已强停" : `额度恢复了，但没接上：${e instanceof Error ? e.message : String(e)}；再发一句话会接着做`;
-      this.setStatus(rec, "exited", { reason });
+      this.setStatus(rec, "exited", { reason, ...(cancelled ? {} : { why: "error" as const }) });
       if (!cancelled) this.reportStop(rec, "error", { blocker: reason });
     }).finally(() => this.starting.delete(rec.id));
   }
@@ -1890,7 +1963,7 @@ export class SessionManager {
   private noteActualModel(rec: SessionRecord, actual: string): void {
     if (!rec.run || rec.run.actual?.model === actual) return;
     const requested = rec.run.model;
-    rec.run = { ...rec.run, actual: { model: actual, modelName: modelDisplayName(actual), at: nowIso() } };
+    rec.run = { ...rec.run, actual: { model: actual, modelName: this.d.models.displayName(actual), at: nowIso() } };
     // 经 magpie：来源按实际模型名的前缀重认（codex/… 是 Codex 订阅）
     if (rec.run.origin?.via === "magpie") rec.run.origin = modelOrigin({ source: "gateway", baseUrl: `http://127.0.0.1:${MAGPIE_PORT}`, model: actual });
     if (requested && rec.run.source === "subscription") this.d.models.noteActual(requested, actual);
@@ -2129,6 +2202,8 @@ export class SessionManager {
       const latest = new Map(rec.outputs.filter((o) => o.artifactId).map((o) => [o.artifactId!, o.ref]));
       picked = rec.outputs.filter((o) => !o.artifactId || latest.get(o.artifactId) === o.ref);
     }
+    const changed = await this.agreementChanged(rec);
+    if (changed) throw new SessionError("conflict", changed);
     const summary = input.summary.slice(0, 4000);
     const criteria = input.criteria.slice(0, 50);
     const outputKeys = picked.slice(0, 100).map((o) => o.key);
@@ -2149,6 +2224,64 @@ export class SessionManager {
     this.turnOf(rec).handbackKey = key;
     this.queueVerify(rec, key, git?.commit ?? null);
     return `已交回（用了 ${picked.map((o) => o.ref).join("、") || "0 份产出和证据"}${git ? `，提交 ${git.commit.slice(0, 7)}` : ""}），本机接着起验收员验收`;
+  }
+
+  /** 取卡此刻的约定；没连天枢、没有这张卡、取不到都是 null（不挡交回）。 */
+  private async fetchAgreement(rec: SessionRecord): Promise<TLocalCardAgreementResponse | null> {
+    if (!this.d.cardAgreement || !rec.subject.cardId) return null;
+    return this.d.cardAgreement(rec.subject.cardId).catch(() => null);
+  }
+
+  /** 卡开工时取一次约定，记下执行方知道的是第几版（已经记过更新的就不动）。 */
+  private async noteAgreement(rec: SessionRecord) {
+    const got = await this.fetchAgreement(rec);
+    if (!got || got.revision <= (rec.agreementRevision ?? 0)) return;
+    rec.agreementRevision = got.revision;
+    if (this.records.get(rec.id) === rec) this.save(rec); // 没开起来、没登记的会话不留记录
+  }
+
+  /**
+   * 交回时核对卡的约定（主循环第 60 条）：云端的比执行方知道的新，回给执行方的话（新的完成标准原样，让它逐条重新自评再交），这次交回不报；
+   * 开工时没取到过版本号（离线开工）的，拿云端的完成标准（和交代）和开工交代里那一份逐条比文字，不一样也退回。
+   * 没变、取不到、开工交代里认不出完成标准都回 null，照常交回。取到了就记成这一版。
+   */
+  private async agreementChanged(rec: SessionRecord): Promise<string | null> {
+    const got = await this.fetchAgreement(rec);
+    if (!got) return null;
+    const known = rec.agreementRevision;
+    if (known !== undefined && got.revision <= known) return null;
+    const start = rec.startAgreement;
+    const differs = known !== undefined || (Boolean(start?.standards) && (
+      start!.standards!.join("\n") !== got.standards.map((s) => s.trim()).join("\n") || (start!.brief !== undefined && (start!.brief ?? null) !== (got.brief?.trim() || null))));
+    rec.agreementRevision = got.revision;
+    this.save(rec);
+    if (!differs) return null;
+    this.emit(rec, { type: "notice", level: "info", code: "agreement_changed", text: `卡的约定改成第 ${got.revision} 版了，这次交回退回，按新的完成标准再交` });
+    return [
+      `这次交回退回了：卡的约定在你做的时候改了（现在是第 ${got.revision} 版）。新的完成标准：`,
+      ...got.standards.map((s, i) => `${i + 1}. ${s}`),
+      ...(got.brief ? ["", "新的交代：", got.brief] : []),
+      "",
+      "按新的完成标准逐条重新自评（条数和序号照上面）；没做到的先做，再用 hand_back 交回。",
+    ].join("\n");
+  }
+
+  /** 执行方提议改卡的约定（主循环第 60 条）：不直接生效，记一条事件、报给云端，本人在网页上定。 */
+  proposeAgreementChange(id: string, input: { standards?: unknown; brief?: unknown; reason?: unknown }): string {
+    const rec = this.must(id);
+    if (rec.subject.kind !== "card") throw new SessionError("validation", "只有卡能提议改约定");
+    const standards = (Array.isArray(input.standards) ? input.standards : []).map((s) => String(s).trim()).filter(Boolean);
+    const brief = textOrNull(input.brief);
+    const proposal: TLocalAgreementProposal = { standards, ...(brief ? { brief } : {}), reason: String(input.reason ?? "").trim() };
+    if (!standards.length) throw new SessionError("validation", "standards 要写新的完成标准全文，一条一项");
+    if (standards.some((s) => /[\r\n]/.test(s))) throw new SessionError("validation", "每条完成标准写成一行，不要换行；多件事拆成几条");
+    const long = standardsTooLong(standards);
+    if (long) throw new SessionError("validation", long);
+    const problem = schemaProblem(LocalAgreementProposal, proposal);
+    if (problem) throw new SessionError("validation", `提议不合格：${problem}`);
+    const proposalKey = this.sync(rec, { type: "agreement_proposal", data: proposal });
+    this.emit(rec, { type: "agreement_proposal", proposalKey, ...proposal });
+    return "已经提给本人，等本人定；定了会告诉你。先接着做不受影响的部分，或者停下等。";
   }
 
   /**
@@ -2281,8 +2414,10 @@ export class SessionManager {
     if (rec.subject.kind !== "verify") throw new SessionError("validation", "只有验收员交结论");
     if (rec.submitted) throw new SessionError("conflict", "这次交回已经交过结论了，不能再交");
     const n = rec.criteria.length;
+    // fixBy（主循环第 61 条）：没达到的每条都带，没写的按执行方补；needs_person 一定是本人补；达到的不带
     const judged = input.criteria.map((c: any) => ({
       index: c?.index, verdict: c?.verdict, reason: String(c?.reason ?? "").trim(), evidence: textOrNull(c?.evidence), fix: textOrNull(c?.fix),
+      ...(c?.verdict === "met" ? {} : { fixBy: c?.verdict === "needs_person" ? "person" : c?.fixBy === "person" ? "person" : "worker" }),
     })) as TLocalVerdictCriterion[];
     judged.sort((a, b) => a.index - b.index);
     const seen = judged.map((c) => c.index);
@@ -2311,16 +2446,20 @@ export class SessionManager {
     rec.passed = verdict.passed;
     this.sync(rec, { type: "verdict", data: verdict });
     if (verdict.passed) void this.releaseWaiting(); // 文件夹里做的卡验收过了就算做完
-    const failStreak = verdict.passed ? 0 : rec.failStreak + 1;
-    const blocked = failStreak >= reworkRounds(this.modeOf(rec)); // 受阻前返工几轮：自动、设预算 2，无上限 3
+    // 等本人补（主循环第 61 条，规则同云端 CardHandbackOutcome）：有一条要本人补，不算没过、不计连续没过、不受阻，也不给改法（不自动送回）
+    const needsPerson = !verdict.passed && judged.some((c) => c.verdict === "needs_person" || c.fixBy === "person");
+    const failStreak = verdict.passed ? 0 : needsPerson ? rec.failStreak : rec.failStreak + 1;
+    const blocked = !needsPerson && failStreak >= reworkRounds(this.modeOf(rec)); // 受阻前返工几轮：自动、设预算 2，无上限 3
     const event = {
       type: "verdict" as const, handbackKey: rec.subject.handbackKey!, passed: verdict.passed, summary: verdict.summary, criteria: judged,
-      beyondScope: verdict.beyondScope, failStreak, blocked, returnText: verdict.passed ? null : returnText(rec.criteria, judged, issues),
+      beyondScope: verdict.beyondScope, failStreak, blocked, returnText: verdict.passed || needsPerson ? null : returnText(rec.criteria, judged, issues),
+      ...(needsPerson ? { needsPerson } : {}),
     };
     this.emit(rec, event);
     const card = rec.parentId ? this.records.get(rec.parentId) : undefined;
     if (card) this.emit(card, event);
     if (verdict.passed) return "结论已交：过了。";
+    if (needsPerson) return "结论已交：等本人补。";
     return blocked ? `结论已交：没过（连续第 ${failStreak} 次），停在受阻等本人。` : "结论已交：没过，改法会送回执行方。";
   }
 
@@ -2348,6 +2487,9 @@ export class SessionManager {
       })),
       modelLabel: rec.modelLabel, roleId: rec.role?.id ?? null, roleVersion: rec.role?.version ?? null,
     };
+    // 完成标准的长度（DONE_DEFINITION_LIMITS）：每条的上限契约写不出，这里查
+    const long = plan.cards.map((c, i) => { const p = standardsTooLong(c.doneDefinition.split("\n").map((l) => l.trim()).filter(Boolean)); return p ? `第 ${i + 1} 件的${p}` : null; }).filter(Boolean);
+    if (long.length) throw new SessionError("validation", `派活单要改，改完整份再交一次：${long.join("；")}`);
     const problem = schemaProblem(LocalCardPlan, plan);
     if (problem) throw new SessionError("validation", `计划不合格：${problem}`);
     // 卡标题照 Claude Code 起会话名的规矩（cardTitle.ts）：不合格退回让规划员重写，不硬截断

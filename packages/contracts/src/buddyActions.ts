@@ -107,6 +107,16 @@ export const BuddyAskQuestion = Type.Object({
  *   硬规矩：只有本人在这次对话里明说了（「批准 B」「B 可以」「同意它删」）才 allow，本人没说就不批，转述、猜测都不算。没在等批准 409 NOT_WAITING_PERMISSION。
  * 回 { letter, kind, id, title }，加登记了什么（commandId、stopId 或 start）。
  */
+/** update_card 的参数（主循环第 60 条，说明见上面）。 */
+export const UpdateCardActionParams = Type.Object({
+  letter: Type.Optional(SubSessionLetter),
+  cardId: Type.Optional(Uuid),
+  brief: Type.Optional(Type.String({ minLength: 1, maxLength: 4000 })),
+  standards: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 300 }), { minItems: 1, maxItems: 20 })),
+  reason: Type.String({ minLength: 1, maxLength: 200 }),
+}, strict);
+export type TUpdateCardActionParams = Static<typeof UpdateCardActionParams>;
+
 export const BuddyActionParams = {
   read_work_home: Type.Object({}, strict),
   read_project: Type.Object({ projectId: Uuid }, strict),
@@ -142,22 +152,11 @@ export const BuddyActionParams = {
   sub_session_restart: Type.Object({ letter: SubSessionLetter, text: Type.Optional(Type.String({ minLength: 1, maxLength: 4000 })) }, strict),
   sub_session_answer: Type.Object({ letter: SubSessionLetter, ...LocalQuestionAnswerRequest.properties }, strict),
   sub_session_approve: Type.Object({ letter: SubSessionLetter, ...LocalPermissionDecisionRequest.properties }, strict),
+  update_card: UpdateCardActionParams,
 } as const;
-/** 只在项目对话里能用的动作（18 节第 10 条）。 */
-export const PROJECT_ONLY_ACTIONS = ["sub_session_tell", "sub_session_stop", "sub_session_restart", "sub_session_answer", "sub_session_approve"] as const;
+/** 只在项目对话里能用的动作（18 节第 10 条；update_card 是主循环第 60 条）。 */
+export const PROJECT_ONLY_ACTIONS = ["sub_session_tell", "sub_session_stop", "sub_session_restart", "sub_session_answer", "sub_session_approve", "update_card"] as const;
 
-/**
- * update_card 的参数（主循环第 60 条，说明见上面）。云端实现的那一笔把它放进 BuddyActionParams（键 update_card）和 PROJECT_ONLY_ACTIONS，
- * 和处理函数一起上，免得动作清单里先列出一个还不能用的。
- */
-export const UpdateCardActionParams = Type.Object({
-  letter: Type.Optional(SubSessionLetter),
-  cardId: Type.Optional(Uuid),
-  brief: Type.Optional(Type.String({ minLength: 1, maxLength: 4000 })),
-  standards: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 300 }), { minItems: 1, maxItems: 20 })),
-  reason: Type.String({ minLength: 1, maxLength: 200 }),
-}, strict);
-export type TUpdateCardActionParams = Static<typeof UpdateCardActionParams>;
 export type BuddyActionName = keyof typeof BuddyActionParams;
 export type TBuddyAskQuestion = Static<typeof BuddyAskQuestion>;
 export const BUDDY_ACTION_NAMES = Object.keys(BuddyActionParams) as BuddyActionName[];

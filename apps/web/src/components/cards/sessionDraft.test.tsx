@@ -3,7 +3,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { SessionEntry } from "@/lib/local/sessionView";
 import { createHttpRunner, parseSse } from "@/lib/local/client";
 import { createMockRunner } from "@/lib/local/mock";
-import type { TLocalSessionDraft, TLocalSessionEvent } from "@/lib/local/runner";
+import type { TLocalSessionDraft } from "@warmap/contracts";
+import type { TLocalSessionEvent } from "@/lib/local/runner";
 import { SessionTranscript } from "./SessionTranscript";
 
 const render = (entries: SessionEntry[], extra: Partial<Parameters<typeof SessionTranscript>[0]> = {}) =>

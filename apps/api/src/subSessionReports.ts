@@ -1,6 +1,5 @@
 import type { TLocalPermissionBrief, TLocalQuestionRequestView, TLocalSessionStatus, TLocalStopReason, TLocalStopReport, TProjectSubSessionDecisionItem,
   TProjectSubSessionReportItem } from "@warmap/contracts";
-import { SUB_SESSION_REPORT_PREFIX } from "@warmap/contracts";
 import { randomUUID } from "node:crypto";
 import type { Query } from "./meetingStore.js";
 import type { RunAsk } from "./localDevices.js";
@@ -9,13 +8,11 @@ import { lettersFor, subProject, type SubKind } from "./subSessionLetters.js";
 /**
  * 子会话停了、要人介入，报进它所在项目的对话（18 节第 10 条，契约 projects.ts 的 sub_session_report / sub_session_decision）。
  * 在本机同步来的条目落下时记（localSync.ts，同一个事务）：
- * - 停了：同步条目 stopped（LocalStopReport），每停一次一条报告。提交以后调用方补上 afterSequence，再替本人给项目主管线发一句（reportTurnText），让它回一小轮。
+ * - 停了：同步条目 stopped（LocalStopReport），每停一次一条报告。提交以后调用方补上 afterSequence。不触发模型（主循环第 63 条）。
  * - 要介入：status 条目 idle 带提问、waiting_permission 带那一步，记一张决定卡；同一次（同一个 requestId）只一张，内容变了更新那一张，不触发模型。
  *   之后的 status 不再是这一次时，那张关掉。
  * 只报卡和专题；规划员、验收员不报。不在项目里的子会话不报。
  */
-
-const WHY_TEXT: Record<TLocalStopReason, string> = { turn_done: "做完一轮停下了", interrupted: "被停下了", held: "停着等", error: "出错停住了", killed: "被强停了" };
 
 export type SyncRun = { id: string; kind: "card" | "topic" | "plan" | "verify"; task_id: string | null; topic_id: string | null; device_id: string };
 export type StatusChange = { status: TLocalSessionStatus; question?: TLocalQuestionRequestView; permission?: TLocalPermissionBrief };
@@ -75,15 +72,6 @@ type DecisionRow = { id: string; kind: SubKind; subject_id: string; letter: stri
 
 export async function readReport(q: Query, id: string): Promise<ReportRow | null> {
   return ((await q("SELECT *,project_id::text,subject_id::text FROM sub_session_reports WHERE id=$1", [id])).rows[0] ?? null) as ReportRow | null;
-}
-
-/** 替本人给项目主管线发的那一句：开头 SUB_SESSION_REPORT_PREFIX，说哪个子会话、怎么停的、做成了什么、卡在哪、交了什么，请它回一小轮。 */
-export function reportTurnText(report: Pick<ReportRow, "letter" | "title" | "why" | "summary" | "blocker" | "outputs">): string {
-  const lines = [`${SUB_SESSION_REPORT_PREFIX}${report.letter} · ${report.title}：${WHY_TEXT[report.why]}${report.blocker ? `（${report.blocker}）` : ""}。`];
-  if (report.summary) lines.push(`它最后说：${report.summary}`);
-  if (report.outputs.length) lines.push(`这一轮交了：${report.outputs.map((output) => output.title || output.fileName).join("、")}`);
-  lines.push("请用一两句话告诉本人这意味着什么、下一步怎么办；要本人拿主意时讲清选项，只问一个问题。");
-  return lines.join("\n");
 }
 
 /** 项目动态里的报告和决定卡（这个项目的；谁能看由调用方核对）。报告里的产出物按 artifact 条目的 key 对上云端收下的那件。 */

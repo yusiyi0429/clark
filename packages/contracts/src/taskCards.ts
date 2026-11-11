@@ -317,9 +317,10 @@ export const OverruleCardHandbackRequest = Type.Object({ reason: Type.String({ m
  * 在跑这个会话的那台电脑上也走这条：登记完马上认领（POST /api/me/session-commands/claim）就送出去了，送达照样回写。
  * 送到以后：return 记 returnedAt（同 /returned），卡不再是 blocked、review_failed；supply 卡不再是 needs_person，执行方接着做、再交回。
  */
+// 带 text 的那一支放前面：api 的校验器会删掉不认识的字段，先试 return 那一支会把 text 删掉，supply 就过不了。
 export const CardRelayRequest = Type.Union([
-  Type.Object({ kind: Type.Literal("return") }, strict),
   Type.Object({ kind: Type.Literal("supply"), text: Type.String({ minLength: 1, maxLength: 3000 }) }, strict),
+  Type.Object({ kind: Type.Literal("return") }, strict),
 ]);
 
 /** 把调研专题的一版放进下一版交付物（专题要挂在这个 Task 上）。 */

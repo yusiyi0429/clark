@@ -1,6 +1,7 @@
 import { Type, type Static } from "@sinclair/typebox";
 import { runCandidateAgent, type CandidateThinkingLevel } from "./candidateAgentRuntime.js";
 import type { Query } from "./meetingStore.js";
+import { ADDRESS_STYLE } from "./promptStyle.js";
 
 /**
  * 复盘的统一评审员（设计第三版第 6 节）：同一套口径、同一个模型、不带伙伴性格。只评机械判不了的条目（monthReview.ts 先判过）。
@@ -27,7 +28,9 @@ JSON：月份、Mission 名、Task 名、要评的几条标准（index、text）
 3. 每条写 basis：一句话说依据，点到具体材料（如「第 2 版交付物里有安装包和安装记录」），不超过 60 字，不写建议。
 4. 标准本身写得含糊、判不了的，照样给一档，同时 vague 记 true。
 5. deliverable 为 true 表示这条的依据是最新一版交付物（会把它的材料挂到这条上）。
-6. 每条标准都要评，index 和输入对上，不多不少。通过 submit_candidate 提交。`;
+6. 每条标准都要评，index 和输入对上，不多不少。通过 submit_candidate 提交。
+
+${ADDRESS_STYLE}`;
 
 export const MonthReviewCandidate = Type.Object({
   criteria: Type.Array(Type.Object({
