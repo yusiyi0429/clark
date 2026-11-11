@@ -12,6 +12,7 @@ import { postCoAgentMessage, threadIntroInput, type ThreadRef } from "./threads.
 import type { PeopleDirectory } from "./peopleDirectory.js";
 import { CARD_COLUMNS, cardsOf, type CardRow } from "./cardProjection.js";
 import { DONE_DEFINITION_LIMITS } from "@warmap/contracts";
+import { agreementRow, writeAgreement } from "./cardAgreements.js";
 
 type TaskRow = {
   id: string; version: number; title: string; status: TTaskView["status"]; created_by: TTaskView["source"];
@@ -283,6 +284,12 @@ export function updateMyTaskStatus(pool: Pool, ownerId: string, taskId: string, 
     if (!validDates(start,due)) return error(400,"TASK_DATES_INVALID","计划开始不能晚于截止");
     const tooLong = doneDefinitionProblem(input.doneDefinition);
     if (tooLong) return error(400,"TOO_LONG",tooLong);
+    // 交给 Agent 做的卡改了完成标准：同样是改卡的约定（主循环第 60 条），记修改记录、加约定的版本号、在跑时转告执行方。
+    if (input.doneDefinition && row.status !== "done" && taskStandards(input.doneDefinition).length) {
+      const agent = (await client.query("SELECT 1 FROM tasks WHERE id=$1 AND executor='claude_code'",[taskId])).rowCount;
+      if (agent) await writeAgreement(queryOf(client),await agreementRow(queryOf(client),ownerId,taskId),{ standards:taskStandards(input.doneDefinition) },
+        { kind:"person",name:names.get(ownerId) ?? null },null,now);
+    }
     const missionId = input.missionId === undefined ? row.mission_id : input.missionId;
     // 换了 Mission，原来的 Task 不再对得上：同一请求没带新的就清掉。
     const planTaskId = input.planTaskId !== undefined ? input.planTaskId : missionId === row.mission_id ? row.plan_task_id : null;

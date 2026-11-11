@@ -19,6 +19,8 @@ import { ACTIVE } from "./workers.js";
 import { subByLetter } from "./subSessionLetters.js";
 import { autoRelayStep } from "./autoRelay.js";
 import type { RunAsk } from "./localDevices.js";
+import { agreementRow, writeAgreement } from "./cardAgreements.js";
+import { CardError } from "./taskCards.js";
 
 /**
  * 伙伴代本人做事（新首页 17.4，契约 buddyActions.ts）。Chat 每轮读动作清单（actionList），模型调哪个就按名字执行（runAction）。
@@ -44,6 +46,7 @@ const KIND: Record<BuddyActionName, Kind> = {
   delete_sub_session: "write", create_project: "write", rename_project: "write", archive_project: "write", link_task_to_project: "write",
   transfer_project: "write", split_cards: "write", set_budget: "write", set_task_due_date: "write", message_project: "write", send_message: "write",
   sub_session_tell: "write", sub_session_stop: "write", sub_session_restart: "write", sub_session_answer: "write", sub_session_approve: "write",
+  update_card: "write",
 };
 const DESCRIPTION: Record<BuddyActionName, string> = {
   read_work_home: "读本人的首页：项目、每个项目的子会话（卡、专题）和状态、等你、本月的 Mission 和 Task。要找项目 id、子会话 id、Task id 时先读它。",
@@ -80,13 +83,16 @@ const DESCRIPTION: Record<BuddyActionName, string> = {
     + "一次最多 4 个问题，只问真要本人定的；只有一种合理做法、或者只是确认能不能动手时不用它，直接说或直接做。"
     + "调完这一轮就结束：回答里最多再说一句，不要接着往下做，等本人回答。本人的回答会作为下一条消息发来（点选的会拼成「短标题：选项」）；本人也可能先聊别的、不答，那就照新的话办。",
   sub_session_tell: "只在项目对话里用：按字母给这个项目里的一个子会话转一句话（本人让你转的、或你安排它接下来怎么做）。它在跑就在下一步前送到，停着就续上接着做。"
-    + "字母见 read_work_home 里子会话的 letter。由本人电脑上开着的网页交给本机，立即返回。",
+    + "字母见 read_work_home 里子会话的 letter。由本人电脑上开着的网页交给本机，立即返回。"
+    + "这句话如果改变了「做成什么样算完」（加了要做的事、改了交付物、去掉某条标准），先用 update_card 改卡的约定，再转话。",
   sub_session_stop: "只在项目对话里用：按字母停下这个项目里的一个子会话（同 stop_sub_session）。",
   sub_session_restart: "只在项目对话里用：按字母重开这个项目里的一个子会话。还没开过工的登记开工；停着的（做完一轮、被停下、出错停住）往里说一句 text 续上，不给 text 是「接着做」。",
   sub_session_answer: "只在项目对话里用：替本人回答一个子会话在问的问题（本人说了「C 的问题选第二个」这类话时用）。choices 每题选中的选项 label（照它问的原样，条数和题数一样），"
     + "text 是另外要说的话。本人没表态的不要替本人选。",
   sub_session_approve: "只在项目对话里用：批准（decision = allow）或拒绝（deny）一个子会话在等批准的那一步。硬规矩：只有本人在这次对话里明说了"
     + "（「批准 B」「B 可以」「同意它删」）才能 allow；本人没说就不批，别人转述、你自己判断都不算，拿不准就问本人。拒绝可以附 message 说为什么。",
+  update_card: "只在项目对话里用：改一张卡的约定（交代 brief、完成标准 standards，standards 给新的全文、按条）。按字母（letter）或卡的 id（cardId）找卡，两样给一样；"
+    + "reason 必填，一句话说为什么改。验收员按改后的完成标准判，执行方在跑时天枢会把新标准告诉它。本人改了要求、或者某条标准做不到要换说法时用；不确定要不要改先问本人。",
 };
 
 const BUDDY_DAILY_MESSAGES = 20;
@@ -415,6 +421,28 @@ const handlers: Handlers = {
       [id, call.personId, await conversationScope(deps.q, call.personId, call.conversationId), call.conversationId, call.runId, JSON.stringify(args.questions), deps.now()]);
     return { summary: "选项框出给本人了。这一轮到这里结束，等本人回答（下一条消息）；本人先聊别的就照新的话办。", result: { questionId: id },
       card: { kind: "buddy_question", questionId: id, questions: args.questions, status: "open" } };
+  },
+  update_card: async (deps, call, args) => {
+    if (Boolean(args.letter) === Boolean(args.cardId)) throw new BuddyError(400, "INVALID_ARGS", "letter 和 cardId 给一样");
+    if (args.brief === undefined && !args.standards) throw new BuddyError(400, "INVALID_ARGS", "brief 和 standards 至少给一样");
+    let card: { id: string; label: string };
+    if (args.letter) {
+      const sub = await lettered(deps, call, args.letter);
+      if (sub.kind !== "card") throw new BuddyError(400, "NOT_A_CARD", `${sub.label} 是专题，没有完成标准`);
+      card = { id: sub.id, label: sub.label };
+    } else {
+      await callProject(deps, call);
+      card = { id: args.cardId!, label: `「${(await ownSub(deps.q, call.personId, "card", args.cardId!)).title}」` };
+    }
+    try {
+      const revision = await writeAgreement(deps.q, await agreementRow(deps.q, call.personId, card.id), { brief: args.brief, standards: args.standards },
+        { kind: "pipeline", name: "管线" }, args.reason.trim(), deps.now());
+      return { summary: revision === null ? `${card.label} 的约定和原来一样，没改` : `改了 ${card.label} 的约定（第 ${revision} 版）`,
+        result: { id: card.id, revision }, ui: [subRefresh(card.id)] };
+    } catch (cause) {
+      if (cause instanceof CardError) throw new BuddyError(cause.status, cause.code, cause.message);
+      throw cause;
+    }
   },
   sub_session_tell: async (deps, call, args) => {
     const sub = await lettered(deps, call, args.letter);

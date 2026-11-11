@@ -10,7 +10,8 @@ import { doneDefinitionProblem, taskStandards } from "./tasks.js";
 import { settleHandback } from "./cardAcceptance.js";
 import { saveLocalCardPlan, standardLines, type PlanTarget } from "./cardPlanner.js";
 import type { HandbackRow } from "./cardProjection.js";
-import type { CardPlanTask } from "./taskCards.js";
+import { CardError, type CardPlanTask } from "./taskCards.js";
+import { saveProposal } from "./cardAgreements.js";
 import { ownProject } from "./projects.js";
 import { closeStartsFor } from "./sessionStarts.js";
 import { latestSuccessor } from "./taskContinuity.js";
@@ -345,10 +346,23 @@ async function applyType(client: PoolClient, deps: Pick<SyncDeps, "storageDir" |
       return {};
     }
     case "stopped": {
-      // 子会话停了（18 节第 10 条）：卡和专题在项目里的记一条报告，提交以后由路由补位置、触发项目主管线一小轮。规划员、验收员不报。
+      // 子会话停了（18 节第 10 条）：卡和专题在项目里的记一条报告，提交以后由路由补位置（不触发模型，主循环第 63 条）。规划员、验收员不报。
       if (run.kind !== "card" && run.kind !== "topic") return {};
       await note(client, run, at, item.data.blocker ? `停了：${item.data.blocker}` : "停了", false);
       return recordStopReport(client.query.bind(client), owner.personId, run, item.data, at);
+    }
+    case "agreement_proposal": {
+      // 执行方提议改卡的约定（主循环第 60 条）：记成这张卡在等本人定的那一个，子会话里钉一个框。完成标准超长、卡已完成的拒收。
+      if (!card || run.kind !== "card") throw new SyncReject("INVALID_SUBJECT", "改约定的提议只收卡的会话");
+      if (card.status === "done") throw new SyncReject("CARD_DONE", "这张卡已经完成了");
+      try {
+        await saveProposal(client.query.bind(client), card, run.id, item.key, item.data, at);
+      } catch (cause) {
+        if (cause instanceof CardError) throw new SyncReject("INVALID_PROPOSAL", cause.message);
+        throw cause;
+      }
+      await note(client, run, at, "提议改约定，等本人定", true);
+      return {};
     }
     case "merge": {
       // 卡验收过以后合回到哪了（第 4.5 节）：记在验的那次交回上。同一次交回报了几条时以本机序号最大的为准（同一毫秒里可能报两条，不比时间）。

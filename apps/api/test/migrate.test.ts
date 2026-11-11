@@ -239,6 +239,7 @@ describe("migration", () => {
         "244_local_task_budgets.sql", "245_projects.sql", "246_project_transfers.sql", "247_project_card_splits.sql", "248_goal_changes.sql", "249_source_words.sql", "250_appearance.sql", "251_buddy_actions.sql", "252_buddy_personality_v2.sql", "253_local_run_messages.sql", "254_buddy_questions.sql", "255_transfer_after_sequence.sql", "256_chat_turn_models.sql", "257_permission_modes.sql", "258_sub_session_letters.sql", "259_stop_reports.sql", "260_auto_relay.sql", "261_goal_due_dates.sql", "262_work_seen.sql", "263_plan_sequences.sql", "264_split_plan.sql", "265_project_local_turns.sql",
         "270_nexus_dri.sql",
         "272_done_definition_limits.sql",
+        "273_card_agreements.sql",
       ]);
 
       // 幂等：重复执行不再变更

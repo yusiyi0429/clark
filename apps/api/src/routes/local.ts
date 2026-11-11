@@ -2,11 +2,12 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Type } from "@sinclair/typebox";
 import { ATTACHMENT_MAX_BYTES, ATTACHMENT_MAX_COUNT, CreateLocalDeviceRequest, CreateLocalDeviceResponse, LOCAL_RUNNER_ATTACHMENT_PATH, LOCAL_RUNNER_SYNC_PATH,
-  LOCAL_RUNNER_VERIFY_BRIEF_PATH, LocalDeviceListResponse, LocalSyncBatchRequest, LocalSyncBatchResponse, LocalVerifyBriefResponse, SessionAttachmentUploadResponse,
+  LOCAL_RUNNER_VERIFY_BRIEF_PATH, LOCAL_RUNNER_CARD_AGREEMENT_PATH, LocalCardAgreementResponse, LocalDeviceListResponse, LocalSyncBatchRequest, LocalSyncBatchResponse, LocalVerifyBriefResponse, SessionAttachmentUploadResponse,
   type TSessionAttachment } from "@warmap/contracts";
 import type { FastifyReply } from "fastify";
 import { readSessionAttachment, storeSessionAttachments } from "../sessionAttachments.js";
 import { verifyBrief } from "../cardAcceptance.js";
+import { cardAgreementForDevice } from "../cardAgreements.js";
 import { createLocalDevice, deviceOfToken, listLocalDevices, ownOutput, revokeLocalDevice } from "../localDevices.js";
 import { applySyncBatch } from "../localSync.js";
 import { lastSequenceReader, projectHistoryReader } from "../sourceWords.js";
@@ -133,6 +134,19 @@ export function registerLocalRoutes(app: AppInstance, ctx: RouteContext, board: 
     if (!identity) return fail(reply, 401, "UNAUTHORIZED", "设备令牌无效，请在天枢插件页重新配对");
     try {
       return await verifyBrief(q, identity.personId, req.query.handbackKey, (planTaskId) => board.planTask(identity.personId, planTaskId));
+    } catch (cause) {
+      if (cause instanceof CardError) return fail(reply, cause.status, cause.code, cause.message);
+      throw cause;
+    }
+  });
+
+  // 卡此刻的约定（主循环第 60 条）：本机开工、交回前取，核对执行方知道的是不是最新一版。
+  app.get(LOCAL_RUNNER_CARD_AGREEMENT_PATH, { schema: { querystring: Type.Object({ cardId: Type.String({ minLength: 1, maxLength: 80 }) }),
+    response: { 200: LocalCardAgreementResponse } } }, async (req, reply) => {
+    const identity = await authenticateLocalToken(q, req.headers.authorization, env.sessionSecret, ctx.now(), personExists);
+    if (!identity) return fail(reply, 401, "UNAUTHORIZED", "设备令牌无效，请在天枢插件页重新配对");
+    try {
+      return await cardAgreementForDevice(q, identity.personId, req.query.cardId);
     } catch (cause) {
       if (cause instanceof CardError) return fail(reply, cause.status, cause.code, cause.message);
       throw cause;
