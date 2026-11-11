@@ -48,8 +48,11 @@ export function DecisionBox({ kind, title, body, options, onPick, onTicks, initi
    */
   onTicks?: (picked: number[]) => void;
   initialPicks?: number[];
-  /** 最后一项：这一行本身就是输入框（占位「{label}…」，读屏念 label）。不给就没有这一项。maxLength 和接这句话的接口上限一致，超了发不出去。 */
-  other?: { label?: string; maxLength?: number; onSubmit: (text: string) => void | Promise<unknown> };
+  /**
+   * 最后一项：这一行本身就是输入框（占位「{label}…」，读屏念 label）。不给就没有这一项。maxLength 和接这句话的接口上限一致，超了发不出去。
+   * initial：预填的字（出现时光标就在这一行的末尾）；focus：没预填也让光标先进这一行；accept：这段字能不能发（不给时有字就能发）。
+   */
+  other?: { label?: string; maxLength?: number; initial?: string; accept?: (text: string) => boolean; focus?: boolean; onSubmit: (text: string) => void | Promise<unknown> };
   multi?: boolean;
   /** 几件一起来：第几件（从 0 起）、共几件、翻到哪件。 */
   pager?: { index: number; total: number; onGo: (index: number) => void };
@@ -73,7 +76,9 @@ export function DecisionBox({ kind, title, body, options, onPick, onTicks, initi
   const recommended = Math.max(0, options.findIndex((option) => option.recommended));
   const [selected, setSelected] = useState(recommended);
   const [picks, setPicks] = useState<number[]>([]);
-  const [text, setText] = useState("");
+  const initial = other?.initial ?? "";
+  const [text, setText] = useState(initial);
+  const canSend = (value: string) => !!value.trim() && (other?.accept ? other.accept(value) : true);
   const [sending, setSending] = useState<number | null>(null);
   /** 答案没发出去：框底下一行「失败 · 重试」（重试 = 同一个动作再来一次），title 里是原因。 */
   const [failed, setFailed] = useState<Failure | null>(null);
@@ -94,7 +99,9 @@ export function DecisionBox({ kind, title, body, options, onPick, onTicks, initi
 
   // 换页（翻到另一件）时回到推荐的那个、收起输入；勾过的照框外记着的。
   const pageKey = pager ? pager.index : 0;
-  useEffect(() => { setSelected(recommended); setPicks(startPicks.current ?? []); setText(""); }, [pageKey, recommended]);
+  const startText = useRef(initial);
+  startText.current = initial;
+  useEffect(() => { setSelected(recommended); setPicks(startPicks.current ?? []); setText(startText.current); }, [pageKey, recommended]);
   // 出现、翻页时：记下出现的时刻（220ms 内不接按键和点击）；本人没在别处打字时，焦点放到推荐的那个上。
   useEffect(() => {
     if (!live) return;
@@ -102,6 +109,9 @@ export function DecisionBox({ kind, title, body, options, onPick, onTicks, initi
     if (!autoFocus || outside) return;
     const active = document.activeElement;
     if (active instanceof HTMLElement && (active.isContentEditable || active instanceof HTMLTextAreaElement || active instanceof HTMLInputElement) && !rootRef.current?.contains(active)) return;
+    // 预填了字的：光标放到那一行的末尾，接着写。
+    const field = textRef.current;
+    if ((startText.current || other?.focus) && field) { setSelected(otherIndex); field.focus({ preventScroll: true }); field.setSelectionRange(field.value.length, field.value.length); return; }
     optionRefs.current[recommended]?.focus({ preventScroll: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 只在出现、翻页时定焦点
   }, [live, pageKey]);
@@ -131,7 +141,7 @@ export function DecisionBox({ kind, title, body, options, onPick, onTicks, initi
   // 发出去了：清掉字（框还留着时，再按回车不会把同一句又发一遍）。
   const sendText = () => {
     const value = text.trim();
-    if (!value || disabled || !other || arming()) return;
+    if (!canSend(text) || disabled || !other || arming()) return;
     void run(otherIndex, async () => { await other.onSubmit(value); setText(""); });
   };
   const move = (to: number) => {
@@ -220,7 +230,7 @@ export function DecisionBox({ kind, title, body, options, onPick, onTicks, initi
               onFocus={() => setSelected(otherIndex)} onChange={(event) => setText(event.target.value)} data-testid="decision-other-input" />
             <span className={x.trail}>
               {sending === otherIndex ? <LoaderCircle {...ICON} className={x.spin} aria-hidden />
-                : text.trim() ? <button type="button" className={x.otherSend} aria-label="发送" title="发送" disabled={disabled} onClick={(event) => { event.stopPropagation(); sendText(); }}><ArrowUp size={14} strokeWidth={2.2} aria-hidden /></button> : null}
+                : canSend(text) ? <button type="button" className={x.otherSend} aria-label="发送" title="发送" disabled={disabled} onClick={(event) => { event.stopPropagation(); sendText(); }}><ArrowUp size={14} strokeWidth={2.2} aria-hidden /></button> : null}
             </span>
           </div>
         ) : null}
@@ -251,13 +261,17 @@ export function FailedLine({ reason, note, onRetry, inline }: { reason?: string;
 
 /**
  * 一次没成的动作：原因（title 里）、重试（同一个动作再来一次）。
- * note：现在重试也没用、要等别的事的，云端的话原样写出来、不给「重试」——推翻时合回结果还没报上来（409 MERGE_PENDING，等电脑上线以后再推翻）。
+ * note：现在重试也没用、要等别的事的，写一句现状、不给「重试」——推翻时合回结果还没报上来（409 MERGE_PENDING，云端的话原样写），
+ * 登记「再改一轮」「我来补」时已经登记过、这次交回已经处理过、卡还没开过工（见 SETTLED）。
  */
 export type Failure = { onRetry: () => void; reason: string; note: string | null };
 export function failureOf(error: unknown, onRetry: () => void): Failure {
   const reason = error instanceof Error ? error.message : "";
-  return { onRetry, reason, note: error instanceof CloudError && error.code === "MERGE_PENDING" ? reason : null };
+  const code = error instanceof CloudError ? error.code : undefined;
+  return { onRetry, reason, note: code === "MERGE_PENDING" ? reason : (code && SETTLED[code]) || null };
 }
+/** 登记「再改一轮」「我来补」时云端回的 409（主循环第 62 条）：重试也没用，原处写一句现状。 */
+const SETTLED: Record<string, string> = { RELAY_PENDING: "已登记，等电脑在线", NOTHING_TO_RELAY: "这次交回已经处理过了", NOT_STARTED: "这张卡还没开过工" };
 
 /** 头部右侧的状态 chip（5.4.3）：「对外」「工作区外」是警告档。 */
 export function DecisionTag({ children }: { children: ReactNode }) {

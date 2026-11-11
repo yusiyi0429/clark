@@ -18,7 +18,9 @@ describe("网页认领主管线按字母发来的动作（18.10）", () => {
   it("转话、回答、批准各调本机对应的接口，报 done", async () => {
     const { runner: r, call } = runner();
     expect(await runSessionCommand(r, sessions, entry({ type: "message", text: "先停一下改测试" }))).toEqual({ result: "done" });
-    expect(call).toHaveBeenLastCalledWith(SESSION, "先停一下改测试");
+    expect(call).toHaveBeenLastCalledWith(SESSION, "先停一下改测试", undefined, undefined, undefined, undefined);
+    await runSessionCommand(r, sessions, entry({ type: "message", text: "约定改了，按新的完成标准做", agreementRevision: 3 }));
+    expect(call).toHaveBeenLastCalledWith(SESSION, "约定改了，按新的完成标准做", undefined, undefined, undefined, 3);
     await runSessionCommand(r, sessions, entry({ type: "answer", requestId: "q1", answer: { choices: [["zod"]] } }));
     expect(call).toHaveBeenLastCalledWith(SESSION, "q1", { choices: [["zod"]] });
     await runSessionCommand(r, sessions, entry({ type: "permission", requestId: "p1", decision: { decision: "allow" } }));

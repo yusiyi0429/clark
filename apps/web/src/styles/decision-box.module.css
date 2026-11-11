@@ -75,6 +75,8 @@
 @media (max-width: 959px), (pointer: coarse) {
   .option { min-height: 48px; grid-template-columns: minmax(0, 1fr) auto; }
   .key { display: none; }
+  /* 手持上输入框是 16（5.7），小于 16 时一聚焦浏览器就放大页面。 */
+  .otherInput { font-size: 16px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .box, .resolved, .chip { animation: none; }
@@ -94,3 +96,8 @@
 .limits input { width: 64px; height: var(--row-28); padding: 0 var(--space-2); border: 1px solid var(--field-border); border-radius: var(--r-control); background: var(--field-bg); color: var(--field-ink); font: inherit; font-size: var(--text-base); font-variant-numeric: tabular-nums; outline: none; }
 .limits input:hover { border-color: var(--field-border-hover); }
 .limits input:focus { border-color: var(--field-border-focus); }
+
+/* 框里默认收起的一段（受阻的「验收意见」）：同会话详情「改动的文件」那一行的样子。 */
+.fold { display: flex; align-items: center; gap: var(--space-1); width: fit-content; margin: 0; padding: 0; border: 0; background: none; color: var(--ink-faint); font: inherit; font-size: var(--text-xs); line-height: 16px; text-align: left; cursor: pointer; }
+.fold:hover { color: var(--ink-muted); }
+.fold:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-bar); }
