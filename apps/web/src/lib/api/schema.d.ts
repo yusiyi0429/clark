@@ -3101,6 +3101,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/work-counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 使用计数（设计第 70 条）：每人每周的对话轮数、派活单、卡、全部放行的会话、活跃天数，只计数不记内容；week 不传为本周。非管理员 404 */
+        get: operations["getAdminWorkCounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/usage/markdown": {
         parameters: {
             query?: never;
@@ -11905,6 +11922,35 @@ export interface components {
                     lastAt: string;
                 }[];
             };
+        };
+        WorkCountsResponse: {
+            /** Format: date */
+            weekStart: string;
+            /** Format: date */
+            weekEnd: string;
+            rows: {
+                personId: string;
+                name: string;
+                buddyTurns: number;
+                projectTurns: number;
+                plans: {
+                    started: number;
+                    revised: number;
+                    dropped: number;
+                };
+                cards: {
+                    started: number;
+                    handedBack: number;
+                    passed: number;
+                    failed: number;
+                    blocked: number;
+                    needsPerson: number;
+                    closedWithGap: number;
+                };
+                bypassSessions: number;
+                activeDays: number;
+            }[];
+            notCounted: string[];
         };
         OnboardingStepUsageRequest: {
             step: "buddy" | "hello" | "tour-notifications" | "tour-board" | "mission-flow" | "work" | "radar" | "voiceprint" | "connect" | "collector" | "scan" | "review" | "delegation" | "start";
@@ -32341,6 +32387,47 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UsageResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getAdminWorkCounts: {
+        parameters: {
+            query?: {
+                /** @description 周一（北京时间），如 2026-11-16 */
+                week?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 这一周每人的计数 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkCountsResponse"];
                 };
             };
             /** @description ApiError 统一错误 */
