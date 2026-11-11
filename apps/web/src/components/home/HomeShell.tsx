@@ -27,13 +27,14 @@ import { WorkspaceContext, type WorkspaceApi } from "@/components/shell/Workspac
 import { LocalRunnerProvider, useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { planStartRequest, readLast, startTopic } from "@/lib/local/start";
 import { useAutoReturn } from "@/lib/board/useAutoReturn";
-import { cancelStart, claimStarts, listSplits, markWorkSeen, planKey, registerPlan, releaseStart, removeSplit, routeMessage, type PlanTarget } from "@/lib/board/cloud";
+import { cancelStart, claimStarts, createTopic, listSplits, markWorkSeen, planKey, registerPlan, releaseStart, removeSplit, routeMessage, type PlanTarget } from "@/lib/board/cloud";
 import { dateGate, gateOf, gateText } from "@/components/board/MonthLanes";
 import { showWorkspaceToast } from "@/lib/toast";
 import { modelForTier } from "@/lib/team/roles";
 import { startBatch, type StartPlan } from "@/lib/work/queue";
 import type { Worker } from "@/lib/work/workers";
-import { HOME_HREF, buddyTargetHref, emptyMonth, goalDueDate, monthLabel, routeText, todayLabel } from "@/lib/home/derive";
+import { HOME_HREF, buddyTargetHref, emptyMonth, goalDueDate, monthLabel, routeText, subQueueText, todayLabel, topicHref } from "@/lib/home/derive";
+import { NewSubView } from "./NewSub";
 import { HeroButton } from "@/components/HeroButton";
 import type { BackgroundItem, RouteTarget } from "@/lib/home/types";
 import { useBackground } from "@/lib/home/useBackground";
@@ -50,7 +51,7 @@ import { LeftResize, RightResize, useLeftWidth, useRightWidth } from "./LeftResi
 import { SideDetailContext, type SideDetail } from "./SideDetail";
 import { seenKey, withSeen, type SeenKind, type SeenMarks } from "@/lib/home/seen";
 import { seenSequence } from "@/lib/home/transfer";
-import { projectIdOf, startFolder } from "@/lib/home/startFolder";
+import { claimTopic, projectIdOf, startFolder } from "@/lib/home/startFolder";
 import { FolderAsk } from "./FolderAsk";
 import { TransferFlow, TransferView } from "./Transfer";
 import type { TimedBlock } from "@/components/work/WorkTimeline";
@@ -314,6 +315,11 @@ function HomeFrame({ account }: { account: Account }) {
   // 接口没上（404）时照旧：没登记、等开工的卡也在这里开。
   const subs = useMemo(() => [...data.projects.flatMap((project) => project.subSessions), ...data.other.subSessions], [data]);
   const autoStartKey = subs.filter((sub) => sub.autoStart).map((sub) => sub.id).sort().join(",");
+  /** 认领到的专题怎么开（claimTopic，第 68 条）：开工、先问文件夹，或不开。 */
+  const topicClaim = useCallback((topicId: string, busy: ReadonlySet<string>) =>
+    claimTopic(topicId, { subs, projects: projects.all, bound: projects.bound, freeSessions: !!local.runner.freeSessions, busy }), [subs, projects.all, projects.bound, local.runner]);
+  /** 自由子会话等着项目绑文件夹：同卡，记进 needFolder，项目对话和这个子会话页都出「在哪个文件夹开工？」。 */
+  const askFolderFor = useCallback((projectId: string) => setNeedFolder((current) => (current.has(projectId) ? current : new Set([...current, projectId]))), []);
   const tried = useRef(new Set<string>());
   useEffect(() => {
     if (!here || !api.known) return;
@@ -338,8 +344,8 @@ function HomeFrame({ account }: { account: Account }) {
   // 认领到的卡在看板、worker 里还没刷新到（首页接口比看板先报）：放回去，3 秒后再认领，不等一分钟。
   // 只在要开工的那几个变了、或隔一会时再看（不跟着每次刷新）；认领进行中要开工的又变了，认领完马上再看一次。
   const claiming = useRef(false);
-  const latest = useRef({ workers: work.workers, subs, start, local, changed, autoStartKey, reload: api.refresh });
-  useEffect(() => { latest.current = { workers: work.workers, subs, start, local, changed, autoStartKey, reload: api.refresh }; });
+  const latest = useRef({ workers: work.workers, subs, start, local, changed, autoStartKey, reload: api.refresh, topicClaim });
+  useEffect(() => { latest.current = { workers: work.workers, subs, start, local, changed, autoStartKey, reload: api.refresh, topicClaim }; });
   const [claimTick, setClaimTick] = useState(0);
   const canOpen = local.models.length > 0;
   useEffect(() => {
@@ -359,7 +365,7 @@ function HomeFrame({ account }: { account: Account }) {
         await latest.current.reload();
         await new Promise((resolve) => window.setTimeout(resolve, 50));
       }
-      const { subs, start, local, changed } = latest.current;
+      const { start, local, changed, topicClaim } = latest.current;
       const cards = wanted.flatMap((cardId) => {
         const worker = find(cardId);
         if (!worker) soon = true;
@@ -370,9 +376,11 @@ function HomeFrame({ account }: { account: Account }) {
       const opened = cards.length ? await start(cards, [], undefined, modes) : new Set<string>();
       const model = local.models.find((entry) => entry.isDefault) ?? local.models[0];
       for (const entry of claimed) {
-        if (entry.kind !== "topic" || !entry.topicId || busy.has(entry.topicId) || !model) continue;
-        const title = subs.find((sub) => sub.id === entry.topicId)?.title ?? "";
-        try { await startTopic(local.runner, { id: entry.topicId, title }, model, undefined, entry.permissionMode); opened.add(entry.topicId); markStart([entry.topicId], false); }
+        if (entry.kind !== "topic" || !entry.topicId || !model) continue;
+        const claim = topicClaim(entry.topicId, busy);
+        if (claim.kind === "skip") { if (claim.failed) markStart([entry.topicId], true); continue; }
+        if (claim.kind === "ask") { askFolderFor(claim.projectId); continue; }
+        try { await startTopic(local.runner, claim.topic, model, undefined, entry.permissionMode); opened.add(entry.topicId); markStart([entry.topicId], false); }
         catch { markStart([entry.topicId], true); }
       }
       const done = (id: string | null) => !!id && (opened.has(id) || busy.has(id));
@@ -389,7 +397,7 @@ function HomeFrame({ account }: { account: Account }) {
         retry = window.setTimeout(() => setClaimTick((n) => n + 1), delay);
       });
     return () => window.clearTimeout(retry);
-  }, [here, api.live, api.deviceId, canOpen, autoStartKey, claimTick, markStart]);
+  }, [here, api.live, api.deviceId, canOpen, autoStartKey, claimTick, markStart, askFolderFor]);
   // 换了文件夹或模型（比如没开成以后去连接页加了文件夹）：没开成的再自动试一次。
   // 项目绑了文件夹（「在哪个文件夹开工？」选完）也算：等文件夹的卡马上再认领。
   const setupKey = `${local.folders.map((folder) => folder.id).join(",")}|${local.models.map((entry) => entry.id).join(",")}|${[...projects.bound].map(([projectId, folder]) => `${projectId}:${folder.id}`).join(",")}`;
@@ -408,10 +416,19 @@ function HomeFrame({ account }: { account: Account }) {
     if (worker) { await start([worker], []); return; }
     const sub = subs.find((entry) => entry.id === subId && entry.kind === "topic");
     const model = local.models.find((entry) => entry.isDefault) ?? local.models[0];
-    if (!sub || !model) { markStart([subId], true); return; }
-    try { await startTopic(local.runner, { id: sub.id, title: sub.title }, model); markStart([subId], false); await local.refresh(); changed(); }
+    const claim = topicClaim(subId, new Set());
+    if (!sub || !model || claim.kind === "skip") { markStart([subId], true); return; }
+    if (claim.kind === "ask") { askFolderFor(claim.projectId); return; }
+    try { await startTopic(local.runner, claim.topic, model); markStart([subId], false); await local.refresh(); changed(); }
     catch { markStart([subId], true); }
-  }, [start, markStart, changed, local]);
+  }, [start, markStart, changed, local, topicClaim, askFolderFor]);
+  /** 项目下的「+」（第 68 条）：建自由子会话（云端同时登记开工），读回首页数据、马上认领一次，换到这个子会话。 */
+  const createFree = useCallback(async (projectId: string, firstMessage: string) => {
+    const topic = await createTopic({ free: true, projectId, firstMessage });
+    await api.refresh();
+    setClaimTick((n) => n + 1);
+    go(topicHref(topic.id));
+  }, [api, go]);
 
   // 伙伴在这个标签页的回复里登记了拆卡：这一轮之前没见过的登记，本机连着就直接开规划员。
   const knownSplits = useRef(new Set<string>());
@@ -512,16 +529,16 @@ function HomeFrame({ account }: { account: Account }) {
     await local.refresh();
   };
   /** 项目对话里项目自己的几块：转交（16.7）从「准备交接」那一刻起，到发出、等接手。 */
+  /** 「在哪个文件夹开工？」（17.2 第 32 条）：卡或自由子会话等着这个项目在这台电脑上绑文件夹时才有，选完绑上就收起、接着开。 */
+  const folderAsk = (project: Project) => (here && needFolder.has(project.id) && !projects.bound.has(project.id)
+    ? <FolderAsk folders={local.folders} onBind={(folder) => projects.actions.setFolder(project.id, folder.id, project.name)} onPickOther={() => local.pickFolder()} /> : null);
   const projectBlocks = (project: Project): TimedBlock[] => [
     ...(project.transfer && (project.transfer.status === "preparing" || project.transfer.status === "sent") ? [{
       key: `transfer:${project.transfer.id}`, at: project.transfer.startedAt, afterSequence: project.transfer.afterSequence,
       node: <TransferFlow project={project} transfer={project.transfer} onChanged={api.refresh} onStop={stopForTransfer} />,
     }] : []),
     // 卡等着项目绑文件夹（17.2 第 32 条）：放在最后，选完绑上就收起，卡接着开。
-    ...(here && needFolder.has(project.id) && !projects.bound.has(project.id) ? [{
-      key: `folder-ask:${project.id}`, at: new Date().toISOString(), afterSequence: null,
-      node: <FolderAsk folders={local.folders} onBind={(folder) => projects.actions.setFolder(project.id, folder.id, project.name)} onPickOther={() => local.pickFolder()} />,
-    }] : []),
+    ...(folderAsk(project) ? [{ key: `folder-ask:${project.id}`, at: new Date().toISOString(), afterSequence: null, node: folderAsk(project) }] : []),
   ];
   /** 项目对话（16.3）：页头只有项目名和「详情」（文件夹在输入框下面）。没挂 Task 的项目也在自己的对话里拆卡、开工。 */
   const projectView = (project: Project) => {
@@ -550,6 +567,11 @@ function HomeFrame({ account }: { account: Account }) {
         if (!project) return <Missing loading={!api.ready} onRetry={api.planFailed ? () => void api.retryPlan() : undefined} />;
         return projectInfo(project);
       }
+      case "newSub": {
+        const project = projects.all.find((entry) => entry.id === current.projectId);
+        if (!project) return <Missing loading={!api.ready} onRetry={api.planFailed ? () => void api.retryPlan() : undefined} />;
+        return <NewSubView key={project.id} project={project} onCreate={(text) => createFree(project.id, text)} />;
+      }
       case "transfer": return <TransferView key={current.id} id={current.id} go={go} onChanged={api.refresh} />;
       case "buddy": return <BuddyView buddy={buddy} outbox={outbox} consume={consume} onSpeaking={setSpeaking} context={buddyContext} onClearContext={() => setBuddyContext(null)} />;
       case "mission": {
@@ -577,7 +599,12 @@ function HomeFrame({ account }: { account: Account }) {
       }
       // 等本人处理的框和左栏的点同一个来源（第 54 条）：首页数据里这个子会话在等什么。
       case "card": return <CardSession key={current.id} cardId={current.id} embedded waiting={subs.find((sub) => sub.id === current.id)?.waiting} />;
-      case "topic": return <TopicSession key={current.id} topicId={current.id} embedded waiting={subs.find((sub) => sub.id === current.id)?.waiting ?? null} />;
+      case "topic": {
+        const sub = subs.find((entry) => entry.id === current.id);
+        // 自由子会话等着项目绑文件夹：问的框钉在这个子会话的输入框上方（和项目对话里那份是同一个）。
+        const owner = sub?.free ? projects.all.find((project) => project.subSessions.some((entry) => entry.id === current.id)) : undefined;
+        return <TopicSession key={current.id} topicId={current.id} embedded waiting={sub?.waiting ?? null} queued={sub ? subQueueText(sub, handheld) : null} ask={owner ? folderAsk(owner) : null} />;
+      }
       case "page": {
         // 二级页：组件挂在 components/home/pages。
         const Page = SECONDARY_PAGES[current.page];

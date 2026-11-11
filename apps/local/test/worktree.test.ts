@@ -1,10 +1,11 @@
 // 卡在自己的 git 工作树里做（ADR 0038）：用真的临时 git 仓库测两张卡同时做、交回提交、验收员只看这张卡的改动、合回、不是仓库时排队、清理。
 // 假 claude 的配置（.fake-claude.json）提交在仓库里，工作树里也有；它的两个记录文件在 .gitignore 里，不进提交。
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { api, pair, raw, startTestRunner, tempDir, ORIGIN } from "./helpers.js";
+import { EDIT_SCOPE_RULE } from "../src/rolePrompt.js";
 
 async function until<T>(fn: () => Promise<T | null | undefined | false> | T | null | undefined | false, ms = 10_000): Promise<T> {
   const t0 = Date.now();
@@ -95,7 +96,11 @@ async function setup(folder: string, max = 3, dataDir?: string, token0?: string,
     until(async () => ((await call("GET", "/v1/sessions")).body.sessions as any[])
       .filter((s) => s.subject.kind === "verify" && s.subject.cardId === cardId).sort((a, b) => a.createdAt.localeCompare(b.createdAt))[n]);
   const merge = (id: string) => call("POST", `/v1/sessions/${id}/merge`, {});
-  return { t, token, cloud, call, session, status, waitStatus, open, allow, events, handBack, verifierOf, merge };
+  /** 项目下的「+」开的自由子会话（第 68 条，带 free 的专题）：按「每次都问」开，假 claude 写文件时停下等批准。 */
+  const openFree = async (title: string, extra: Record<string, unknown> = {}) => (await call("POST", "/v1/sessions", {
+    subject: { kind: "topic", topicId: title }, title, cwd: folder, firstMessage: `做 ${title}`, permissionMode: "default", free: true, ...extra,
+  })).body;
+  return { t, token, cloud, call, session, status, waitStatus, open, openFree, allow, events, handBack, verifierOf, merge };
 }
 
 // 每条要拉起几个假 claude 进程，全套并行跑时最长的一条要 30 秒上下：显式给 60 秒，不靠 vitest 默认的 5 秒或 package.json 里的参数
@@ -231,6 +236,49 @@ describe("卡在自己的工作树里做", { timeout: 60_000 }, () => {
     }
   });
 
+  it("自由子会话（第 68 条）：git 仓库的主文件夹也按普通文件夹算，两个自由子会话排队、写清等谁；卡照常在工作树里开；规矩和工具另一套", async () => {
+    const main = repo();
+    const h = await setup(main);
+    try {
+      expect((await h.call("POST", "/v1/sessions", { subject: { kind: "card", cardId: "X" }, title: "X", cwd: main, firstMessage: "x", free: true })).status).toBe(400); // 只给专题
+      const f1 = await h.openFree("改周报");
+      await h.waitStatus(f1.id, "waiting_permission");
+      const s1 = (await h.session(f1.id)).session;
+      expect(s1.workspace).toEqual({ kind: "folder", folder: realpathSync.native(main) }); // 有 .git 也按普通文件夹（第 71 条照卡一样留一份）
+      expect(s1.free).toBeUndefined(); // 只记在本机，不进摘要
+      expect(JSON.parse(readFileSync(join(h.t.dataDir, "sessions", f1.id, "session.json"), "utf8")).free).toBe(true); // 记在会话记录里，重启后还是它
+
+      // 同一个仓库里再开一个自由子会话：排队，写清在等前一个
+      const f2 = await h.openFree("整理目录");
+      expect(f2.status).toBe("queued");
+      expect((await h.session(f2.id)).session.heldBy).toEqual({ kind: "topic", id: "改周报", title: "改周报" });
+      expect(h.events(f2.id).find((e) => e.type === "status" && e.status === "queued").reason).toBe("这个文件夹同一时间只让一个会话改，等「改周报」这一轮做完");
+      const synced = await until(() => h.cloud.items.find((i) => i.sessionId === f2.id && i.type === "status" && i.data.status === "queued"));
+      expect(synced.data.heldBy).toEqual({ kind: "topic", id: "改周报", title: "改周报" });
+      // 同一个仓库里的卡在自己的工作树里，不排队
+      const a = await h.open("A");
+      expect(a.status).toBe("running");
+      expect((await h.session(a.id)).session.workspace.kind).toBe("worktree");
+
+      // 规矩：不提纲、不交回；本人要的文件就写在文件夹里，只是不留没要的；只改让改的那一处。工具只有交产出物和翻更早的轮次
+      const prompt = readFileSync(join(h.t.dataDir, "sessions", f1.id, "system.md"), "utf8");
+      expect(prompt).toContain("本人要的文件（文档、表格、代码等）就写在当前工作目录里");
+      expect(prompt).toContain(EDIT_SCOPE_RULE);
+      for (const no of ["不要在仓库里留报告或输出文件", "save_version", "hand_back", "提纲", "propose_agreement_change"]) expect(prompt.replace("没有提纲、交回和验收", "")).not.toContain(no);
+      const secret = JSON.parse(readFileSync(join(h.t.dataDir, "sessions", f1.id, "session.json"), "utf8")).mcpSecret;
+      const list = await raw(h.t.port, { method: "POST", path: `/internal/sessions/${f1.id}/mcp`, headers: { "x-tianshu-session-secret": secret, "content-type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) });
+      expect(list.body.result.tools.map((x: any) => x.name)).toEqual(["add_artifact", "read_earlier_turns"]);
+
+      // 前一个这一轮做完让出文件夹：后一个接上，不再写在等谁
+      await h.allow(f1.id);
+      await h.waitStatus(f2.id, "waiting_permission");
+      expect((await h.session(f2.id)).session.heldBy).toBeUndefined();
+    } finally {
+      await h.t.cleanup();
+    }
+  });
+
   it("不是 git 仓库的文件夹同时只做一张卡，别的排队；别的文件夹不受影响；交回不提交", async () => {
     const plain = tempDir("tl-plain-");
     mkdirSync(join(plain, "other"));
@@ -240,11 +288,19 @@ describe("卡在自己的工作树里做", { timeout: 60_000 }, () => {
       await h.waitStatus(a.id, "waiting_permission");
       const b = await h.open("B");
       expect(b.status).toBe("queued");
-      expect(h.events(b.id).find((e) => e.type === "status" && e.status === "queued").reason).toBe("这个文件夹不是 git 仓库，同时只做一张卡，等另一张这一轮做完");
+      expect(h.events(b.id).find((e) => e.type === "status" && e.status === "queued").reason).toBe("这个文件夹同一时间只让一个会话改，等「A」这一轮做完");
+      expect((await h.session(b.id)).session.heldBy).toEqual({ kind: "card", id: "A", title: "A" }); // 第 68 条：写清在等谁
+      // 自由子会话（第 68 条）也算占用：排在 B 后面，先等 A
+      const f = await h.openFree("F");
+      expect(f.status).toBe("queued");
+      expect((await h.session(f.id)).session.heldBy).toEqual({ kind: "card", id: "A", title: "A" });
       const c = await h.open("C", join(plain, "other"));
       expect(c.status).toBe("running"); // 别的文件夹照常开
       await h.allow(a.id); // A 这一轮做完让出文件夹，B 接上
       await h.waitStatus(b.id, "waiting_permission");
+      // F 还在排，占着的换成了 B：本机重报一条，云端看到的也换了
+      expect((await h.session(f.id)).session.heldBy).toEqual({ kind: "card", id: "B", title: "B" });
+      expect(await until(() => h.cloud.items.filter((i) => i.sessionId === f.id && i.type === "status").at(-1)?.data.heldBy?.id === "B")).toBe(true);
       expect(await h.status(a.id)).toBe("idle");
       const r = await h.handBack(a.id);
       expect(r.content[0]!.text).not.toContain("提交");

@@ -2,6 +2,7 @@
  * 把本机会话的事件流折成页面要画的样子：对话记录、计划条目、挂着的权限请求、花费、在等什么。
  * 纯函数，事件按 seq 只增；同一个 seq 来两次（重连补发）只算一次。
  */
+import type { TLocalHold, TLocalStopReason } from "@warmap/contracts";
 import type { TLocalPermissionMode, TLocalPermissionRequestView, TLocalPlanEntry, TLocalQuestionRequestView, TLocalSessionEvent, TLocalSessionStatus, TLocalUsage } from "./runner";
 import type { TurnFile } from "./fileChanges";
 
@@ -50,6 +51,8 @@ export type SessionView = {
   permissionMode: TLocalPermissionMode | null;
   /** 上下文用了多少（事件 context_usage，17.2 第 42 条）；还没报过为 null，看会话摘要里的 context。maxTokens 读不到为 null。 */
   context: { usedTokens: number; maxTokens: number | null; at: string } | null;
+  /** 最近一次停下的原因（主循环第 65 条，status 事件的 why）：做完一轮、又跑起来了为 null；reason 是出错的那句，hold 是停着等的那件。 */
+  stopped: { why: Exclude<TLocalStopReason, "turn_done">; reason: string | null; hold: TLocalHold | null } | null;
 };
 
 /** 「16.6 万」：token 数按万写，留一位小数。 */
@@ -70,7 +73,7 @@ export const questionNotice = (request: TLocalQuestionRequestView) => `问：${r
 export const EMPTY_VIEW: SessionView = {
   lastSeq: 0, status: null, startedAt: null, agentVersion: null, plan: [], entries: [], pending: [],
   usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, costUsd: null },
-  lastActivity: null, interrupted: false, handedBack: false, place: null, queuedBecause: null, question: null, permissionMode: null, context: null,
+  lastActivity: null, interrupted: false, handedBack: false, place: null, queuedBecause: null, question: null, permissionMode: null, context: null, stopped: null,
 };
 
 const addUsage = (a: TLocalUsage, b: TLocalUsage): TLocalUsage => ({
@@ -88,7 +91,9 @@ export function foldEvent(view: SessionView, event: TLocalSessionEvent): Session
       next.status = event.status;
       next.queuedBecause = event.status === "queued" ? event.reason ?? null : null;
       if (event.status === "running") next.interrupted = false;
-      if (event.status === "failed") next.entries = [...view.entries, { kind: "notice", ...base, level: "error", text: event.reason ?? "执行方异常退出" }];
+      // 停了带原因的（第 65 条）：对话末尾那一行写它，不再另记一行出错。
+      next.stopped = event.why && event.why !== "turn_done" ? { why: event.why, reason: event.reason ?? null, hold: event.hold ?? null } : event.why === "turn_done" || running(event.status) || event.status === "queued" ? null : view.stopped;
+      if (event.status === "failed" && !event.why) next.entries = [...view.entries, { kind: "notice", ...base, level: "error", text: event.reason ?? "执行方异常退出" }];
       return next;
     // 后台任务（子 agent、后台命令）不进对话记录：右栏读会话摘要里的 background。
     case "background":
@@ -177,11 +182,17 @@ export function foldEvent(view: SessionView, event: TLocalSessionEvent): Session
       return next;
     case "verdict": {
       // 本机验收员的结论（验收会话和被验的卡的会话各一条）。
-      const text = `验收${event.passed ? "过了" : event.blocked ? "未通过，受阻" : "未通过"}：${event.summary}`;
-      next.entries = [...view.entries, { kind: "notice", ...base, level: event.passed ? "info" : "warn", text }];
+      // 等本人补（主循环第 61 条）不算没过。
+      const text = event.needsPerson && !event.passed ? `等你补：${event.summary}` : `验收${event.passed ? "过了" : event.blocked ? "未通过，受阻" : "未通过"}：${event.summary}`;
+      next.entries = [...view.entries, { kind: "notice", ...base, level: event.passed || event.needsPerson ? "info" : "warn", text }];
       next.lastActivity = { at: event.at, text };
       return next;
     }
+    // 执行方提议改约定（主循环第 60 条）：对话里记一行；钉住的框照云端卡的详情画（子会话页看到这一行就重读）。
+    case "agreement_proposal":
+      next.entries = [...view.entries, { kind: "notice", ...base, level: "info", text: `提议改完成标准：${event.reason}`, code: "agreement_proposal" }];
+      next.lastActivity = { at: event.at, text: "提议改完成标准" };
+      return next;
   }
 }
 

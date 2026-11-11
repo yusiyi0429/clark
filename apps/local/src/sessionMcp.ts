@@ -32,7 +32,7 @@ const ADD_EVIDENCE = {
 };
 const HAND_BACK = {
   name: "hand_back",
-  description: "做完后交回：逐条对照完成标准写达到（met）、部分（partial）还是没达到（unmet），附证据；点名这次交回用哪几份产出和证据（编号）；再写一句总结。交回后由 Agent 验收。",
+  description: "做完后交回：逐条对照完成标准写达到（met）、部分（partial）、没达到（unmet），或要本人补（needs_person：要登录、验证码、人工查询、网站拦自动访问、要本人的权限或判断，你做不了的），附证据；标 needs_person 的必须带 need。点名这次交回用哪几份产出和证据（编号）；再写一句总结。交回后由 Agent 验收。",
   inputSchema: {
     type: "object",
     properties: {
@@ -41,7 +41,10 @@ const HAND_BACK = {
         type: "array",
         items: {
           type: "object",
-          properties: { index: { type: "integer", minimum: 1 }, result: { type: "string", enum: ["met", "partial", "unmet"] }, evidence: { type: "string" } },
+          properties: {
+            index: { type: "integer", minimum: 1 }, result: { type: "string", enum: ["met", "partial", "unmet", "needs_person"] }, evidence: { type: "string" },
+            need: { type: "string", description: "result 是 needs_person 时必填：一句人话，要本人做什么、做完给回什么，500 字以内" },
+          },
           required: ["index", "result", "evidence"],
         },
       },
@@ -93,7 +96,7 @@ const PROPOSE_PLAN = {
           properties: {
             title: { type: "string", description: CARD_TITLE_RULE },
             brief: { type: "string", description: "交代：做什么、从哪入手" },
-            doneDefinition: { type: "string", description: "完成标准，每行一条，500 字以内" },
+            doneDefinition: { type: "string", description: "完成标准，每行一条；每条 300 字以内，合起来 2000 字以内" },
             criterionIndex: { type: "integer", minimum: 1, description: "对约定第几条" },
             role: { type: "string", description: "技能名字（交代里的技能清单）" },
             modelTier: { type: "string", enum: ["strong", "normal", "light"] },
@@ -116,18 +119,19 @@ const PROPOSE_PLAN = {
 };
 const SUBMIT_VERDICT = {
   name: "submit_verdict",
-  description: "交验收结论（只交一次）：每条完成标准判一次（index 从 1 起，条数照交代），met 达到、partial 部分、unmet 没达到，写理由（reason）、依据（evidence），没达到的写怎么补（fix）；标准以外的建议放 beyondScope；交代里有「本人原话」时再对一遍原话，对不上的写 sourceWordIssues；summary 一句结论。",
+  description: "交验收结论（只交一次）：每条完成标准判一次（index 从 1 起，条数照交代），met 达到、partial 部分、unmet 没达到、needs_person 要本人补（执行方标了、而且确实只有本人能做），写理由（reason）、依据（evidence），没达到的写怎么补（fix）和谁来补（fixBy）；标准以外的建议放 beyondScope；交代里有「本人原话」时再对一遍原话，对不上的写 sourceWordIssues；summary 一句人话：卡在哪、要谁做什么，不写行号、不复述标准。",
   inputSchema: {
     type: "object",
     properties: {
-      summary: { type: "string" },
+      summary: { type: "string", description: "一句人话：卡在哪、要谁做什么；不写行号，不复述标准原文" },
       criteria: {
         type: "array",
         items: {
           type: "object",
           properties: {
-            index: { type: "integer", minimum: 1 }, verdict: { type: "string", enum: ["met", "partial", "unmet"] },
+            index: { type: "integer", minimum: 1 }, verdict: { type: "string", enum: ["met", "partial", "unmet", "needs_person"] },
             reason: { type: "string" }, evidence: { type: "string" }, fix: { type: "string" },
+            fixBy: { type: "string", enum: ["worker", "person"], description: "没达到时谁来补：worker 执行方、person 本人（needs_person 一定是 person）；达到的不写" },
           },
           required: ["index", "verdict", "reason"],
         },
@@ -147,6 +151,21 @@ const SUBMIT_VERDICT = {
   },
 };
 
+/** 只有卡有（主循环第 60 条）。 */
+const PROPOSE_AGREEMENT_CHANGE = {
+  name: "propose_agreement_change",
+  description: "提议改这张卡的约定（完成标准，要时连交代）：本人提了交代以外的新事、要就在这里做时，或者原来的标准做不到、要换个说法时用。不直接生效：本人在网页上选改不改，结果会告诉你；定之前照原来的约定做。",
+  inputSchema: {
+    type: "object",
+    properties: {
+      standards: { type: "array", items: { type: "string" }, description: "新的完成标准全文，一条一项、每项一行；每条 300 字以内，合起来 2000 字以内；没改的条也照抄" },
+      brief: { type: "string", description: "新的交代全文；不改交代就不填" },
+      reason: { type: "string", description: "为什么改，一句话" },
+    },
+    required: ["standards", "reason"],
+  },
+};
+
 /** 规划员、验收员换不了执行方，不给。 */
 const READ_EARLIER_TURNS = {
   name: "read_earlier_turns",
@@ -162,23 +181,27 @@ const READ_EARLIER_TURNS = {
 
 export const SESSION_MCP_NAME = "tianshu-session";
 
-const TOOLS: Record<TLocalSessionKind, { name: string }[]> = {
-  card: [ADD_ARTIFACT, ADD_EVIDENCE, HAND_BACK, READ_EARLIER_TURNS],
+/** 本会话 MCP 给哪套工具：会话的种类，自由子会话（第 68 条，带 free 的专题）另算一套。 */
+export type SessionToolset = TLocalSessionKind | "free";
+
+const TOOLS: Record<SessionToolset, { name: string }[]> = {
+  card: [ADD_ARTIFACT, ADD_EVIDENCE, HAND_BACK, PROPOSE_AGREEMENT_CHANGE, READ_EARLIER_TURNS],
   topic: [ADD_ARTIFACT, ADD_EVIDENCE, SAVE_VERSION, SET_FEISHU_URL, READ_EARLIER_TURNS],
+  free: [ADD_ARTIFACT, READ_EARLIER_TURNS],
   plan: [PROPOSE_PLAN],
   verify: [SUBMIT_VERDICT],
 };
 
-export function sessionTools(kind: TLocalSessionKind) {
+export function sessionTools(kind: SessionToolset) {
   return TOOLS[kind];
 }
 
 /** 预先放行的工具名（--allowedTools）。 */
-export function sessionToolNames(kind: TLocalSessionKind): string[] {
+export function sessionToolNames(kind: SessionToolset): string[] {
   return sessionTools(kind).map((t) => `mcp__${SESSION_MCP_NAME}__${t.name}`);
 }
 
-function callTool(sessions: SessionManager, id: string, kind: TLocalSessionKind, name: string, input: any): string | Promise<string> {
+function callTool(sessions: SessionManager, id: string, kind: SessionToolset, name: string, input: any): string | Promise<string> {
   if (!sessionTools(kind).some((t) => t.name === name)) throw new Error(`这个会话没有 ${name} 这个工具`);
   if (name === "add_artifact" && typeof input?.path === "string") return sessions.addArtifact(id, input);
   if (name === "add_evidence" && ["note", "log", "link", "diff_summary"].includes(input?.kind) && typeof input?.title === "string") {
@@ -187,11 +210,16 @@ function callTool(sessions: SessionManager, id: string, kind: TLocalSessionKind,
   }
   if (name === "hand_back" && typeof input?.summary === "string" && Array.isArray(input?.criteria)) {
     const criteria = input.criteria
-      .filter((c: any) => Number.isInteger(c?.index) && c.index >= 1 && ["met", "partial", "unmet"].includes(c?.result))
-      .map((c: any) => ({ index: c.index, result: c.result, evidence: String(c.evidence ?? "").slice(0, 2000) }));
+      .filter((c: any) => Number.isInteger(c?.index) && c.index >= 1 && ["met", "partial", "unmet", "needs_person"].includes(c?.result))
+      .map((c: any) => {
+        const need = c.result === "needs_person" ? String(c.need ?? "").trim().slice(0, 500) : "";
+        if (c.result === "needs_person" && !need) throw new Error(`第 ${c.index} 条标了要本人补（needs_person），要带 need：一句话写要本人做什么、做完给回什么。补上后整份再交一次。`);
+        return { index: c.index, result: c.result, evidence: String(c.evidence ?? "").slice(0, 2000), ...(need ? { need } : {}) };
+      });
     const outputs = Array.isArray(input.outputs) ? input.outputs.map(String) : undefined;
     return sessions.handBack(id, { summary: input.summary, criteria, outputs });
   }
+  if (name === "propose_agreement_change") return sessions.proposeAgreementChange(id, input ?? {});
   if (name === "save_version" && typeof input?.path === "string" && ["outline", "draft", "review"].includes(input?.kind)) {
     return sessions.saveVersion(id, {
       path: input.path, kind: input.kind,
@@ -212,7 +240,7 @@ function callTool(sessions: SessionManager, id: string, kind: TLocalSessionKind,
 export async function handleMcpMessage(sessions: SessionManager, id: string, msg: any): Promise<unknown | null> {
   if (msg?.id === undefined || msg?.id === null) return null;
   const ok = (result: unknown) => ({ jsonrpc: "2.0", id: msg.id, result });
-  const kind = sessions.kindOf(id);
+  const kind = sessions.toolsetOf(id);
   switch (msg.method) {
     case "initialize":
       return ok({ protocolVersion: msg.params?.protocolVersion ?? "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "tianshu-local", version: "0.1.0" } });

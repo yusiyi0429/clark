@@ -10,7 +10,7 @@ import { transferLine, type Person, type Transfer } from "./transfer";
 import type { HomeProject, SubSession, WorkHomeData } from "./types";
 import type { Worker } from "@/lib/work/workers";
 
-export { projectHref, projectInfoHref } from "./derive";
+export { newSubHref, projectHref, projectInfoHref } from "./derive";
 
 export type ProjectGoal = {
   taskId: string;

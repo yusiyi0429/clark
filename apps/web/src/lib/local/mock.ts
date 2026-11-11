@@ -11,7 +11,7 @@
 import type {
   TLocalBackgroundItem, TLocalCreateSessionRequest, TLocalEffort, TLocalFolder, TLocalMergeResponse, TLocalModelProfile, TLocalPermissionRequestView, TLocalPlanEntry, TLocalQuestionRequestView,
   TLocalProjectFolder, TLocalSessionDraft, TLocalSessionEvent, TLocalSessionStatus, TLocalSessionSummary, TLocalTool, TLocalToolUpsert, TLocalUsage, TLocalWorkspace,
-  TLocalSource, TLocalSourceModel, TLocalSourcePlan, TLocalSourcePreset, TLocalSourceRegion,
+  TLocalSource, TLocalSourceModel, TLocalSourcePlan, TLocalSourcePreset, TLocalSourceRegion, TLocalStopReason,
 } from "@warmap/contracts";
 import { LocalRunnerError, type EventWatch, type LocalRunner } from "./runner";
 import { createMockEdits } from "./mockChanges";
@@ -35,6 +35,8 @@ type MockSession = {
   mergeTries: number;
   /** 不在工作树里做的会话：执行方改了的文件（第 71、72 条，mockChanges）。 */
   edits?: ReturnType<typeof createMockEdits>;
+  /** 主循环演示（卡的标题里带关键字，见 cardScript）：这一次交回是不是「要本人补」。 */
+  needsPerson?: boolean;
   /** 等前面的卡时：都合回以后要开的工作树。 */
   waits?: { workspace: TLocalWorkspace | undefined };
 };
@@ -248,25 +250,36 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
     };
     tick();
   };
-  const setStatus = (s: MockSession, status: TLocalSessionStatus, reason?: string) => {
+  /** why：停了的原因（主循环第 65 条），同真本机只在停了的那几条带。 */
+  const setStatus = (s: MockSession, status: TLocalSessionStatus, reason?: string, why?: TLocalStopReason) => {
     s.summary = { ...s.summary, status };
-    emit(s, { type: "status", status, ...(reason ? { reason } : {}) });
+    emit(s, { type: "status", status, ...(reason ? { reason } : {}), ...(why ? { why } : {}) });
     if (!OCCUPYING.has(status)) promote();
   };
   const rank = (s: MockSession) => RANK[s.summary.subject.kind] ?? 2;
   const queue = () => [...sessions.values()].filter((s) => s.summary.status === "queued")
     .sort((a, b) => rank(a) - rank(b) || a.summary.createdAt.localeCompare(b.summary.createdAt));
   const renumber = () => queue().forEach((s, i) => { s.summary = { ...s.summary, queuePosition: i + 1 }; });
-  /** 不是 git 仓库的文件夹里已经有一张卡在做（同一个文件夹同时只做一张）。 */
-  const folderBusy = (s: MockSession) => {
+  /** 不是 git 仓库的文件夹里已经有一个在改的（卡或自由子会话，第 68 条；同一个文件夹同时只许一个）：占着它的那个会话，没有为 undefined。 */
+  const folderHolder = (s: Pick<MockSession, "summary">) => {
     const ws = s.summary.workspace;
-    return ws?.kind === "folder" && [...sessions.values()].some((other) => other !== s && other.summary.workspace?.kind === "folder"
+    return ws?.kind !== "folder" ? undefined : [...sessions.values()].find((other) => other !== s && other.summary.workspace?.kind === "folder"
       && other.summary.workspace.folder === ws.folder && OCCUPYING.has(other.summary.status));
   };
-  /** 有空位就按先后接上（文件夹被占着的、等前面的卡的跳过），其余的重新编号。 */
+  const folderBusy = (s: MockSession) => !!folderHolder(s);
+  /** 排队时占着文件夹的是谁（契约 LocalFolderHolder）。 */
+  const holderOf = (s: Pick<MockSession, "summary">): TLocalSessionSummary["heldBy"] => {
+    const other = folderHolder(s)?.summary;
+    const id = other?.subject.cardId ?? other?.subject.topicId;
+    return other && id ? { kind: other.subject.kind === "card" ? "card" : "topic", id, title: other.title } : undefined;
+  };
+  /** 有空位就按先后接上（文件夹被占着的、等前面的卡的跳过），其余的重新编号、重报在等谁。 */
   const promote = () => {
     let free = maxConcurrent - slots().running;
     for (const s of queue()) {
+      const { heldBy: _held, ...rest } = s.summary;
+      const heldBy = holderOf(s);
+      s.summary = heldBy ? { ...rest, heldBy } : rest;
       if (free > 0 && !folderBusy(s) && !s.summary.waitingFor) {
         free--;
         s.summary = { ...s.summary, queuePosition: null };
@@ -324,7 +337,8 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
     (s) => { emit(s, { type: "assistant_text", text: "先读一下交代和相关代码，列个计划。" }); plan(s, 0); },
     (s) => { tool(s, "Read", "读 apps/web/src/app/manifest.ts"); plan(s, 1); background(s, { id: `agent-${++seqId}`, title: "读相关代码", kind: "subagent", state: "running", startedAt: now(), finishedAt: null, stoppable: true }); },
     (s) => {
-      const request: TLocalPermissionRequestView = { requestId: `perm-${++seqId}`, toolName: "Bash", title: "运行 pnpm --filter @warmap/web test", input: { command: "pnpm --filter @warmap/web test" }, outsidePaths: [], canAllowForSession: true, requestedAt: now() };
+      const request: TLocalPermissionRequestView = { requestId: `perm-${++seqId}`, toolName: "Bash", title: "运行 pnpm --filter @warmap/web test", input: { command: "pnpm --filter @warmap/web test" }, outsidePaths: [], canAllowForSession: true, requestedAt: now(),
+        description: "跑一遍网页的测试，看改的地方有没有弄坏别的", paths: ["apps/web/test-results/report.json"] };
       s.pending = request;
       s.summary = { ...s.summary, pendingPermissions: 1 };
       emit(s, { type: "permission_request", request });
@@ -349,27 +363,54 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
     },
     (s) => { setStatus(s, "running"); speak(s, ANSWER_TEXT, () => { plan(s, 2); advance(s); }); return "wait"; },
     (s) => { tool(s, "Write", "写 交回说明.md"); emit(s, { type: "artifact", artifactId: `a${++seqId}`, title: "交回说明", fileName: "交回说明.md", size: 2048, sha256: "0".repeat(64) }); },
-    (s) => {
-      plan(s, 3);
-      const ws = s.summary.workspace;
-      finishBackground(s, "done");
-      let turnFiles: ReturnType<ReturnType<typeof createMockEdits>["apply"]> | null = null;
-      if (ws?.kind !== "worktree" && !s.edits) {
-        s.edits = createMockEdits(FILE_ROOT);
-        tool(s, "Edit", "改 周报.md");
-        turnFiles = s.edits.apply();
-      }
-      emit(s, { type: "handback", summary: "改完了，测试都过。", criteria: [{ index: 1, result: "met", evidence: "测试 12/12 通过" }, { index: 2, result: "met", evidence: "交回说明.md" }], outputKeys: [],
-        ...(ws?.kind === "worktree" ? { commit: sha(`${s.summary.id}:handback`) } : {}) });
-      if (turnFiles?.files.length) emit(s, { type: "files_changed", turn: turnFiles.turn, files: turnFiles.files, more: 0 });
-      turnEnd(s, "改完了，已交回。");
-      const subject = s.summary.subject;
-      if (subject.kind === "card" && subject.cardId)
-        void create({ subject: { kind: "verify", cardId: subject.cardId }, title: `验收：${s.summary.title}`.slice(0, 120), modelProfileId: s.summary.modelProfileId, firstMessage: "逐条对照约定验收这次交回。" });
-      setStatus(s, "idle");
-      return "wait";
-    },
+    (s) => { plan(s, 3); handBack(s, false); return "wait"; },
   ];
+  /** 交回，再开一个验收员。needs：第 2 条标「要本人补」（主循环第 61 条）。 */
+  const handBack = (s: MockSession, needs: boolean) => {
+    const ws = s.summary.workspace;
+    finishBackground(s, "done");
+    s.needsPerson = needs;
+    let turnFiles: ReturnType<ReturnType<typeof createMockEdits>["apply"]> | null = null;
+    if (ws?.kind !== "worktree" && !s.edits) {
+      s.edits = createMockEdits(FILE_ROOT);
+      tool(s, "Edit", "改 周报.md");
+      turnFiles = s.edits.apply();
+    }
+    const second = needs ? { index: 2, result: "needs_person", evidence: "商标网拦自动访问", need: "登录中国商标网查这 3 个名字，把近似商标的申请号贴回来" } : { index: 2, result: "met", evidence: "交回说明.md" };
+    emit(s, { type: "handback", summary: needs ? "候选名和含义都齐了，申请号要你查" : "改完了，测试都过。", criteria: [{ index: 1, result: "met", evidence: "测试 12/12 通过" }, second], outputKeys: [],
+      ...(ws?.kind === "worktree" ? { commit: sha(`${s.summary.id}:handback:${s.log.length}`) } : {}) });
+    if (turnFiles?.files.length) emit(s, { type: "files_changed", turn: turnFiles.turn, files: turnFiles.files, more: 0 });
+    turnEnd(s, "改完了，已交回。");
+    const subject = s.summary.subject;
+    if (subject.kind === "card" && subject.cardId)
+      void create({ subject: { kind: "verify", cardId: subject.cardId }, title: `验收：${s.summary.title}`.slice(0, 120), modelProfileId: s.summary.modelProfileId, firstMessage: "逐条对照约定验收这次交回。" });
+    setStatus(s, "idle", undefined, "turn_done");
+  };
+  /**
+   * 主循环的几种情形（假本机演示用，卡的标题里带关键字）：
+   * - 「改约定」：读完代码后执行方提议改完成标准（事件 agreement_proposal）；
+   * - 「重启」：做到一半本机程序重启（status exited，why = runner_restart），「接着做」续上；
+   * - 「本人补」：第一次交回第 2 条要本人补，验收结论是等本人补；本人补了一句以后接着做、再交回，这回都达到。
+   */
+  const cardScript = (title: string): Step[] => {
+    const steps = [...script];
+    if (title.includes("本人补")) {
+      steps[steps.length - 1] = (s) => { plan(s, 3); handBack(s, true); return "wait"; };
+      steps.push((s) => { setStatus(s, "running"); speak(s, "收到申请号，补进去了，再交一次。", () => { handBack(s, false); }); return "wait"; });
+    }
+    if (title.includes("重启")) steps.splice(3, 0, (s) => {
+      if (s.timer) { clearTimeout(s.timer); s.timer = null; }
+      finishBackground(s, "stopped");
+      s.paused = true;
+      setStatus(s, "exited", undefined, "runner_restart");
+      return "wait";
+    }, (s) => { setStatus(s, "running"); });
+    if (title.includes("改约定")) steps.splice(2, 0, (s) => {
+      emit(s, { type: "agreement_proposal", proposalKey: `proposal-${++seqId}`, standards: ["列出 3 个候选名", "每个写一句含义", "近似商标由本人在商标网查"],
+        reason: "商标网拦自动访问，第 3 条我做不了，改成由你查" });
+    });
+    return steps;
+  };
   /** 开工时告诉网页卡在哪做（同本机程序）。 */
   const noteWorkspace = (s: MockSession) => {
     const ws = s.summary.workspace;
@@ -396,7 +437,26 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
     (s) => started(s, "plan"),
     (s) => { emit(s, { type: "assistant_text", text: "逐条对照约定看交回的证据。" }); plan(s, 0, VERIFIER); },
     (s) => { plan(s, 1, VERIFIER); tool(s, "submit_verdict", "交验收结果"); },
-    (s) => { plan(s, 2, VERIFIER); turnEnd(s, "2/2 达到。"); setStatus(s, "done"); afterVerdict(s); return "wait"; },
+    (s) => {
+      plan(s, 2, VERIFIER);
+      const card = cardOf(s);
+      if (card?.needsPerson !== undefined) {
+        // 主循环演示「本人补」：两边各一条结论（同真本机），等本人补的不合回。
+        const needs = card.needsPerson;
+        const verdict = { handbackKey: `handback-${card.summary.id}-${card.log.length}`, passed: !needs, summary: needs ? "申请号要你去商标网查，别的都齐了" : "2/2 达到",
+          criteria: [{ index: 1, verdict: "met", reason: "测试都过", evidence: "测试 12/12 通过", fix: null },
+            needs ? { index: 2, verdict: "needs_person", reason: "商标网拦自动访问", evidence: "执行方标了要本人补", fix: "登录中国商标网查这 3 个名字，把近似商标的申请号贴回来", fixBy: "person" }
+              : { index: 2, verdict: "met", reason: "申请号齐了", evidence: "交回说明.md", fix: null }],
+          beyondScope: [], failStreak: 0, blocked: false, returnText: null, needsPerson: needs };
+        emit(s, { type: "verdict", ...verdict });
+        emit(card, { type: "verdict", ...verdict });
+        turnEnd(s, needs ? "等本人补。" : "2/2 达到。");
+        setStatus(s, "done");
+        if (!needs) afterVerdict(s);
+        return "wait";
+      }
+      turnEnd(s, "2/2 达到。"); setStatus(s, "done"); afterVerdict(s); return "wait";
+    },
   ];
 
   /** 合回：主文件夹记上提交，工作树清掉；等这张卡的卡少等一张，都合回了就开工作树、排进队里。 */
@@ -416,8 +476,9 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
     return commit;
   };
   /** 验收员交完（假的一律算过）：「验收过就合回」开着就合回那张卡，关着就记下要本人合。 */
+  const cardOf = (verify: MockSession) => [...sessions.values()].find((other) => other.summary.subject.kind === "card" && other.summary.subject.cardId === verify.summary.subject.cardId);
   const afterVerdict = (verify: MockSession) => {
-    const card = [...sessions.values()].find((other) => other.summary.subject.kind === "card" && other.summary.subject.cardId === verify.summary.subject.cardId);
+    const card = cardOf(verify);
     const ws = card?.summary.workspace;
     if (!card || ws?.kind !== "worktree" || ws.mergedCommit) return;
     if (autoMerge) { mergeInto(card); return; }
@@ -446,7 +507,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
       emit(s, { type: "assistant_text", text: "旧安排.md 删了，交接清单新建好了，合同的付款期限和报表也改好了。" });
       emit(s, { type: "files_changed", turn: turnFiles.turn, files: turnFiles.files, more: 0 });
       turnEnd(s, "改好了。");
-      setStatus(s, "idle");
+      setStatus(s, "idle", undefined, "turn_done");
     }, stepMs * 2);
   };
   const summaryOf = (s: MockSession) => ({ ...s.summary });
@@ -455,7 +516,8 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
   return {
     kind: "mock",
     clientMessageIds: true,
-    health: async () => ({ app: "tianshu-local", version: "0.1.0-mock", protocol: 2, platform: "win32", tokenValid: Boolean(token), slots: slots() }),
+    freeSessions: true,
+    health: async () => ({ app: "tianshu-local", version: "0.1.0-mock", protocol: 4, platform: "win32", tokenValid: Boolean(token), slots: slots() }),
     startPairing: async () => ({ pairingId: "mock-pairing", code: "4821", expiresAt: new Date(Date.now() + 120_000).toISOString() }),
     pairingStatus: async () => { token = "mock-token-0000000000000000000000"; return { status: "approved", token }; },
     unpair: async () => { token = ""; },
@@ -645,7 +707,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
       draftTo(s, "");
       s.paused = true;
       turnEnd(s, null, "interrupted");
-      setStatus(s, "idle");
+      setStatus(s, "idle", undefined, "interrupted");
       return summaryOf(s);
     },
     kill: async (id) => {
@@ -654,7 +716,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
       draftTo(s, "");
       s.paused = true;
       finishBackground(s, "stopped");
-      setStatus(s, "exited", "强停");
+      setStatus(s, "exited", "强停", "killed");
       return summaryOf(s);
     },
     decidePermission: async (id, requestId, body) => {
@@ -814,10 +876,13 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
     const model = models().find((m) => m.id === body.modelProfileId) ?? MODELS[0]!;
     // 规划员只能用 Claude Code（D 契约 b28c1f12）。
     if (model.agent === "codex" && body.subject.kind === "plan") throw new LocalRunnerError("validation", "规划员只能用 Claude Code", 400);
+    // 自由子会话（第 68 条）只给专题。
+    if (body.free && body.subject.kind !== "topic") throw new LocalRunnerError("validation", "只有专题能带 free", 400);
     const id = crypto.randomUUID();
     const cardId = body.subject.kind === "card" ? body.subject.cardId : undefined;
     const slug = body.title.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase().slice(0, 30);
-    const workspace: TLocalWorkspace | undefined = !cardId || !body.cwd ? undefined : body.cwd === REPO
+    // 自由子会话在项目文件夹里直接做：普通文件夹和卡一样占着（kind=folder），git 仓库不开工作树。
+    const workspace: TLocalWorkspace | undefined = body.free && body.cwd && body.cwd !== REPO ? { kind: "folder", folder: body.cwd } : !cardId || !body.cwd ? undefined : body.cwd === REPO
       ? { kind: "worktree", folder: REPO, path: `C:\\Users\\me\\.tianshu-local\\worktrees\\${cardId}`, branch: `tianshu/${cardId.slice(0, 8)}${slug ? `-${slug}` : ""}`,
         baseBranch: "main", baseCommit: sha(`${cardId}:base`), mergedCommit: null }
       : { kind: "folder", folder: body.cwd };
@@ -829,9 +894,10 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
     const s: MockSession = {
       summary: { id, subject: body.subject, title: body.title, agent: model.agent, modelProfileId: model.id, modelLabel: model.label, cwd: body.cwd ?? "topics", status: full ? "queued" : "starting", permissionMode: body.permissionMode ?? "auto", run: runFor(model, "auto", body.effort ?? null), ...(body.effort ? { effort: body.effort } : {}), includePersonalConfig: Boolean(body.includePersonalConfig), createdAt: now(), updatedAt: now(), lastSeq: 0, pendingPermissions: 0, queuePosition: full ? slots().queued + 1 : null, usage: { ...ZERO }, ...(workspace && !waitingFor.length ? { workspace } : {}), ...(waitingFor.length ? { waitingFor } : {}),
         ...(workspace?.kind === "worktree" ? {} : { undo: /onedrive/i.test(body.cwd ?? "") ? { state: "touched_only" as const, reason: "sync_folder" as const } : { state: "ready" as const } }) },
-      log: [], listeners: new Set(), drafters: new Set(), script: body.subject.kind === "plan" ? planner : body.subject.kind === "verify" ? verifier : script, cursor: 0, timer: null, pending: null, paused: false, denied: false, mergeTries: 0,
+      log: [], listeners: new Set(), drafters: new Set(), script: body.subject.kind === "plan" ? planner : body.subject.kind === "verify" ? verifier : cardScript(body.title), cursor: 0, timer: null, pending: null, paused: false, denied: false, mergeTries: 0,
       ...(waitingFor.length ? { waits: { workspace } } : {}),
     };
+    if (busy) { const heldBy = holderOf(s); if (heldBy) s.summary = { ...s.summary, heldBy }; }
     sessions.set(id, s);
     if (full) renumber();
     emit(s, { type: "status", status: s.summary.status, ...(busy ? { reason: FOLDER_BUSY } : {}) });

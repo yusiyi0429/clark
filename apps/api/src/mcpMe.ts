@@ -17,7 +17,7 @@ import { acceptMyTask, canReadTask, createMyTask, deleteMyTask, getTaskDetail, l
 import { addObjectMaterialLink, listObjectMaterials, ObjectMaterialError } from "./objectMaterials.js";
 import { logEvent } from "./observability.js";
 import { readPlanTasks, type PlanTaskSource } from "./planTasks.js";
-import { MissionCardField, PersonalReviewUpdateInput, type TPersonalReviewUpdateInput } from "@warmap/contracts";
+import { DONE_DEFINITION_LIMITS, MissionCardField, PersonalReviewUpdateInput, type TPersonalReviewUpdateInput } from "@warmap/contracts";
 import { actionFingerprint, signActionId } from "./actionToken.js";
 import { executePersonalReviewAction, getCurrentPersonalReview, getPersonalReview, personalReviewContext, personalReviewHref } from "./personalReviews.js";
 import { PERSONAL_REVIEW_WRITING_REQUIREMENTS } from "./personalReviewAgent.js";
@@ -52,7 +52,7 @@ const GetInput = Type.Object({ itemId: Uuid }, { additionalProperties: false });
 const Link = Type.Object({ url: Type.String({ pattern: "^https?://", maxLength: 500 }), title: Type.Optional(Type.String({ maxLength: 120 })) }, { additionalProperties: false });
 const DateOnly = Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" });
 const CreateInput = Type.Object({ clientId: Uuid, title: Type.String({ minLength: 1, maxLength: 120 }),
-  doneDefinition: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })), missionId: Type.Optional(Type.String({ minLength: 1 })),
+  doneDefinition: Type.Optional(Type.String({ minLength: 1, maxLength: DONE_DEFINITION_LIMITS.total })), missionId: Type.Optional(Type.String({ minLength: 1 })),
   planTaskId: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })), startDate: Type.Optional(DateOnly), dueDate: Type.Optional(DateOnly),
   noMissionReason: Type.Optional(Type.String({ minLength: 1, maxLength: 60 })) }, { additionalProperties: false });
 const AppendInput = Type.Object({ itemId: Uuid, body: Type.String({ minLength: 1, maxLength: 2000 }),
@@ -64,7 +64,7 @@ const SubmitInput = Type.Object({ itemId: Uuid, version: Type.Integer({ minimum:
   standards: Type.Optional(Type.Array(StandardCheck, { maxItems: 50 })), deliverables: Type.Optional(Type.Array(Uuid, { maxItems: 30 })) }, { additionalProperties: false });
 const Nullable = <T extends ReturnType<typeof Type.String>>(schema: T) => Type.Union([schema, Type.Null()]);
 const UpdateInput = Type.Object({ itemId: Uuid, version: Type.Integer({ minimum: 1 }), title: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
-  doneDefinition: Type.Optional(Nullable(Type.String({ minLength: 1, maxLength: 500 }))), startDate: Type.Optional(Nullable(DateOnly)), dueDate: Type.Optional(Nullable(DateOnly)),
+  doneDefinition: Type.Optional(Nullable(Type.String({ minLength: 1, maxLength: DONE_DEFINITION_LIMITS.total }))), startDate: Type.Optional(Nullable(DateOnly)), dueDate: Type.Optional(Nullable(DateOnly)),
   missionId: Type.Optional(Nullable(Type.String({ minLength: 1 }))), planTaskId: Type.Optional(Nullable(Type.String({ minLength: 1, maxLength: 200 }))) }, { additionalProperties: false });
 const VersionInput = Type.Object({ itemId: Uuid, version: Type.Integer({ minimum: 1 }) }, { additionalProperties: false });
 const ReturnInput = Type.Object({ itemId: Uuid, version: Type.Integer({ minimum: 1 }), reason: Type.String({ minLength: 1, maxLength: 200 }) }, { additionalProperties: false });

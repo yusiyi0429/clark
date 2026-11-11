@@ -4,7 +4,7 @@
  * 项目对话里的验收行（新首页设计第 4.5 条、16.3，契约 GET /api/me/projects/:projectId/feed）。网页按时间插进项目对话：
  * - 过了：管线说的一句话「greet 验收过了（5/5），已合进 main」，鼠标移上去句尾出「推翻」（弱按钮；写原因；合回以后推翻由管线开返工子会话）；
  *   没合回的在这台电脑上接着问合不合。
- * - 受阻：选项框「按这个改（推荐）/ 我去看看 / 仍然通过」。
+ * - 受阻：选项框「再改一轮（推荐）/ 我去看看 / 改完成标准 / 就到这里」（主循环第 62 条，同子会话里钉住的那个）；等你补只指过去。
  * - 约定都达到：「约定 n 条都达到了，交给认可人？」——交给认可人 = 把攒着的出一版，到 Task 详情里对表、请认可人看、交付（V1 的面板）。
  * - 合回以后被推翻：一句「推翻了，开了返工「b」」，点了进返工的子会话。
  * - 子会话的提问和批准（14.3）：都在这里出选项框，框顶上一行写子会话名，答案直接回给那个子会话；子会话页里只留一行问题和「去回答」。
@@ -89,6 +89,13 @@ export function feedBlocks({ items, workers, go, onSay, onChanged, remoteAsks, d
         return blocks;
       }
       case "card_blocked": return [{ key: item.id, at: item.at, node: <BlockedDecision item={item} worker={workerOf(item.cardId)} go={go} onChanged={onChanged} /> }];
+      // 等你补（主循环第 61 条）：框钉在子会话里，这里照第 54 条只指过去。
+      case "card_needs_person": return [{ key: item.id, at: item.at, node: (
+        <p className={f.sentence} data-testid="feed-needs-person">
+          <button type="button" className={f.sentenceLink} onClick={() => go(cardHref(item.cardId))}>{item.title} 等你补</button>
+          {item.handback?.headline ? <span className={f.more}>{item.handback.headline}</span> : null}
+        </p>
+      ) }];
       case "criteria_met": return [{ key: item.id, at: item.at, node: <CriteriaDecision item={item} go={go} onSay={onSay} /> }];
       case "rework_opened": return [{ key: item.id, at: item.at, node: (
         <p className={f.sentence} data-testid="feed-rework">
@@ -253,7 +260,7 @@ function SubSessionAsk({ worker, remote: item, letter }: { worker: Worker; remot
     <div ref={ref} id={session ? askAnchor(session.id) : undefined} className={f.ask} data-testid="sub-ask">
       <p className={f.askFrom}>{letter ? <SubLetter letter={letter} inline /> : null}{worker.title}</p>
       {pending.length && session ? (
-        <ApprovalDecision requests={pending} blocked={blocked} onDecide={(request, decision, { forSession, message }) => local.runner.decidePermission(session.id, request.requestId,
+        <ApprovalDecision requests={pending} blocked={blocked} inWorktree={session.workspace?.kind === "worktree"} onDecide={(request, decision, { forSession, message }) => local.runner.decidePermission(session.id, request.requestId,
           { decision, ...(forSession ? { allowForSession: true } : {}), ...(message ? { message } : {}) }).then(() => local.refresh())} />
       ) : null}
       {question ? <QuestionDecision key={question.requestId} request={question} blocked={blocked} onAnswer={answer} /> : null}
@@ -263,7 +270,7 @@ function SubSessionAsk({ worker, remote: item, letter }: { worker: Worker; remot
   );
 }
 
-const WHY: Record<TProjectSubSessionReportItem["why"], string> = { turn_done: "做完一轮", interrupted: "本人停下", held: "停着等", error: "出错", killed: "强停" };
+const WHY: Record<TProjectSubSessionReportItem["why"], string> = { turn_done: "做完一轮", interrupted: "本人停下", held: "停着等", error: "出错", killed: "强停", runner_restart: "本机程序重启" };
 const outputHref = (id: string) => `/api/me/local-outputs/${encodeURIComponent(id)}`;
 
 /**

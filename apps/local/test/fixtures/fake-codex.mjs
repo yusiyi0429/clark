@@ -52,7 +52,7 @@ async function runTurn(t, text, input, clientId) {
     const command = text.trim().slice(4);
     const c = item("commandExecution", { command: `"pwsh.exe" -Command '${command}'`, cwd: t.cwd, status: "inProgress", commandActions: [{ type: "unknown", command }] });
     note("item/started", { item: c, threadId: thread, turnId: t.id });
-    const r = await ask("item/commandExecution/requestApproval", { kind: "command", threadId: thread, turnId: t.id, itemId: c.id, command: c.command, cwd: t.cwd, commandActions: c.commandActions, availableDecisions: ["accept", "cancel"] });
+    const r = await ask("item/commandExecution/requestApproval", { kind: "command", threadId: thread, turnId: t.id, itemId: c.id, reason: "要跑一下这条命令", command: c.command, cwd: t.cwd, commandActions: c.commandActions, availableDecisions: ["accept", "cancel"] });
     if (t.done) return;
     trace({ decision: r.decision, command });
     note("serverRequest/resolved", { threadId: thread, requestId: serverId - 1 });

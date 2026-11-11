@@ -1,4 +1,5 @@
 import { Type, type Static } from "@sinclair/typebox";
+import { DONE_DEFINITION_LIMITS } from "@warmap/contracts";
 import { runCandidateAgent, type CandidateThinkingLevel } from "./candidateAgentRuntime.js";
 import type { Query } from "./meetingStore.js";
 import { cardTitleProblem, CARD_TITLE_RULE } from "./cardTitle.js";
@@ -62,7 +63,7 @@ export type CardPlanAgent = { plan(input: CardPlanInput, options: { planId: stri
 const normalTitle = (title: string) => title.replace(/\s+/g, "").toLowerCase();
 
 /**
- * 业务校验：标题照 cardTitle.ts 的规矩（太长、带括号冒号句号的退回重写，不截断）；编号在标准范围内；完成标准合起来放得进一件执行事项（500 字）；不和已有的卡、也不和彼此重名；
+ * 业务校验：标题照 cardTitle.ts 的规矩（太长、带括号冒号句号的退回重写，不截断）；编号在标准范围内；完成标准放得进一件执行事项（DONE_DEFINITION_LIMITS：每条 300 字、整份 2000 字）；不和已有的卡、也不和彼此重名；
  * 岗位只能是给的那几个，建议的预设只能是给的那几个，两样不同时写。
  */
 export function cardPlanProblem(candidate: TCardPlanCandidate, input: Pick<CardPlanInput, "task" | "existing" | "roles" | "presets">): string | null {
@@ -74,7 +75,8 @@ export function cardPlanProblem(candidate: TCardPlanCandidate, input: Pick<CardP
     if (title) return `第 ${n} 张的${title}`;
     if (card.criterionIndex !== null && card.criterionIndex > criteriaCount)
       return criteriaCount ? `第 ${n} 张的 criterionIndex 只能是 1 到 ${criteriaCount} 或 null` : `这个 Task 没有标准，第 ${n} 张的 criterionIndex 写 null`;
-    if (card.standards.map((line) => line.trim()).filter(Boolean).join("\n").length > 500) return `第 ${n} 张的完成标准合起来超过 500 字，写短一些`;
+    if (card.standards.map((line) => line.trim()).filter(Boolean).join("\n").length > DONE_DEFINITION_LIMITS.total)
+      return `第 ${n} 张的完成标准合起来超过 ${DONE_DEFINITION_LIMITS.total} 字，写短一些`;
     if (!card.standards.some((line) => line.trim())) return `第 ${n} 张至少要有一条完成标准`;
     if (seen.has(normalTitle(card.title))) return `第 ${n} 张「${card.title}」和已有的卡或前面的草稿重名`;
     seen.add(normalTitle(card.title));

@@ -6,11 +6,12 @@ import type { TLocalPlanEntry, TLocalRunActivity, TLocalSessionStatus, TLocalSyn
 import { MAX_MATERIAL_TEXT_CHARS, runWorker } from "./materialParser.js";
 import { htmlToText } from "./meetingEvidence.js";
 import { UUID_PATTERN } from "./meetingStore.js";
-import { taskStandards } from "./tasks.js";
+import { doneDefinitionProblem, taskStandards } from "./tasks.js";
 import { settleHandback } from "./cardAcceptance.js";
 import { saveLocalCardPlan, standardLines, type PlanTarget } from "./cardPlanner.js";
 import type { HandbackRow } from "./cardProjection.js";
-import type { CardPlanTask } from "./taskCards.js";
+import { CardError, type CardPlanTask } from "./taskCards.js";
+import { saveProposal } from "./cardAgreements.js";
 import { ownProject } from "./projects.js";
 import { closeStartsFor } from "./sessionStarts.js";
 import { latestSuccessor } from "./taskContinuity.js";
@@ -210,15 +211,17 @@ async function applyType(client: PoolClient, deps: Pick<SyncDeps, "storageDir" |
   switch (item.type) {
     case "status": {
       if (seq <= Number(run.state_seq)) return {};
-      const { status, title, modelLabel, waitingFor, hold, question, permission, permissionMode } = item.data;
+      const { status, title, modelLabel, waitingFor, hold, question, permission, permissionMode, heldBy } = item.data;
       // waitingFor：排着、在等前面的卡（只有 queued 带）；别的状态清掉。hold：停着等额度恢复，恢复接着做时报的那条不带，就清掉。
       // ask：在问本人（idle 带 question）、在等批准的那一步（waiting_permission 带 permission）；别的状态、不带的清掉（新首页 9.6）。
       const ask = status === "idle" && question ? { kind: "question", request: question }
         : status === "waiting_permission" && permission ? { kind: "permission", request: permission } : null;
       await client.query(`UPDATE local_runs SET state=$2,state_seq=$3,title=$4,model_label=$5,ended_at=$6,running_at=COALESCE(running_at,$7),waiting_for=$8,hold=$9::jsonb,
-        ask=$10::jsonb,permission_mode=COALESCE($11,permission_mode) WHERE id=$1`, [run.id, status, seq, title, modelLabel, ENDED_STATES.has(status) ? at : null, status === "running" ? at : null,
-        status === "queued" && waitingFor?.length ? waitingFor : null, hold ? JSON.stringify({ reason: hold.reason, until: hold.until }) : null,
-        ask ? JSON.stringify(ask) : null, permissionMode ?? null]);
+        ask=$10::jsonb,permission_mode=COALESCE($11,permission_mode),held_by=$12::jsonb WHERE id=$1`, [run.id, status, seq, title, modelLabel, ENDED_STATES.has(status) ? at : null,
+        status === "running" ? at : null, status === "queued" && waitingFor?.length ? waitingFor : null, hold ? JSON.stringify({ reason: hold.reason, until: hold.until }) : null,
+        ask ? JSON.stringify(ask) : null, permissionMode ?? null,
+        // 在等普通文件夹空出来（第 68 条）：占着它的是谁，只有 queued 带。
+        status === "queued" && heldBy ? JSON.stringify(heldBy) : null]);
       await note(client, run, at, hold ? "额度用完，等恢复" : status === "starting" ? `${STATUS_TEXT.starting}（${modelLabel}）`
         : status === "idle" && !question ? "这一轮做完了" : STATUS_TEXT[status], MILESTONE_STATES.has(status));
       // 要介入：在项目对话里出决定卡（18 节第 10 条）；停了另有 stopped 条目。
@@ -285,6 +288,8 @@ async function applyType(client: PoolClient, deps: Pick<SyncDeps, "storageDir" |
       if (run.kind !== "plan" || !planned) throw new SyncReject("INVALID_SUBJECT", "派活单只收规划员的会话");
       if (!item.data.summary.trim() || item.data.cards.some((card) => !card.title.trim() || !standardLines(card.doneDefinition)))
         throw new SyncReject("INVALID_PLAN", "计划要有一句话总结，每件派活单要有标题和完成标准");
+      const tooLong = item.data.cards.map((card) => doneDefinitionProblem(card.doneDefinition)).find(Boolean);
+      if (tooLong) throw new SyncReject("INVALID_PLAN", tooLong);
       if (item.data.cards.some((card, index) => (card.after ?? []).some((after) => after > index)))
         throw new SyncReject("INVALID_PLAN", "一件只能等排在它前面的几件（after 写前面的位置，从 1 起）");
       const saved = await saveLocalCardPlan(client, { ownerId: owner.personId, runId: run.id, target: planned, plan: item.data, at, currentSequence });
@@ -343,10 +348,23 @@ async function applyType(client: PoolClient, deps: Pick<SyncDeps, "storageDir" |
       return {};
     }
     case "stopped": {
-      // 子会话停了（18 节第 10 条）：卡和专题在项目里的记一条报告，提交以后由路由补位置、触发项目主管线一小轮。规划员、验收员不报。
+      // 子会话停了（18 节第 10 条）：卡和专题在项目里的记一条报告，提交以后由路由补位置（不触发模型，主循环第 63 条）。规划员、验收员不报。
       if (run.kind !== "card" && run.kind !== "topic") return {};
       await note(client, run, at, item.data.blocker ? `停了：${item.data.blocker}` : "停了", false);
       return recordStopReport(client.query.bind(client), owner.personId, run, item.data, at);
+    }
+    case "agreement_proposal": {
+      // 执行方提议改卡的约定（主循环第 60 条）：记成这张卡在等本人定的那一个，子会话里钉一个框。完成标准超长、卡已完成的拒收。
+      if (!card || run.kind !== "card") throw new SyncReject("INVALID_SUBJECT", "改约定的提议只收卡的会话");
+      if (card.status === "done") throw new SyncReject("CARD_DONE", "这张卡已经完成了");
+      try {
+        await saveProposal(client.query.bind(client), card, run.id, item.key, item.data, at);
+      } catch (cause) {
+        if (cause instanceof CardError) throw new SyncReject("INVALID_PROPOSAL", cause.message);
+        throw cause;
+      }
+      await note(client, run, at, "提议改约定，等本人定", true);
+      return {};
     }
     case "merge": {
       // 卡验收过以后合回到哪了（第 4.5 节）：记在验的那次交回上。同一次交回报了几条时以本机序号最大的为准（同一毫秒里可能报两条，不比时间）。
@@ -395,12 +413,13 @@ async function applyVerdict(client: PoolClient, owner: Owner, run: RunRow, card:
     throw new SyncReject("INVALID_VERDICT", `完成标准有 ${row.criteria.length} 条，每条判一次`);
   const result = { headline: data.summary, beyondScope: data.beyondScope,
     criteria: [...data.criteria].sort((a, b) => a.index - b.index)
-    .map(({ index, verdict, reason, evidence, fix }) => ({ index, verdict, reason: reason.trim(), evidence: evidence?.trim() || null, fix: fix?.trim() || null })),
+    .map(({ index, verdict, reason, evidence, fix, fixBy }) => ({ index, verdict, reason: reason.trim(), evidence: evidence?.trim() || null, fix: fix?.trim() || null,
+      ...(verdict === "met" ? {} : { fixBy: verdict === "needs_person" ? "person" as const : fixBy ?? "worker" }) })),
     sourceWordIssues: (data.sourceWordIssues ?? []).map(({ quote, kind, reason }) => ({ quote: quote.trim(), kind, reason: reason.trim() })) };
   const settled = await settleHandback(client, row, result,
     { source: "local", modelLabel: data.modelLabel, roleId: data.roleId, roleVersion: data.roleVersion, runId: run.id, commit: data.commit ?? null }, null, at);
   if (!settled.saved) throw new SyncReject("ALREADY_JUDGED", "这次交回已经有验收结论了");
-  await note(client, run, at, settled.outcome === "pass" ? "验收通过" : "验收没过", true);
+  await note(client, run, at, settled.outcome === "pass" ? "验收通过" : settled.outcome === "needs_person" ? "验收：等本人补" : "验收没过", true);
   return settled.proposal ? { proposal: settled.proposal } : {};
 }
 

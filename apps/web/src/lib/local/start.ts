@@ -57,13 +57,16 @@ export async function startCard(runner: LocalRunner, item: CardItem, model: TLoc
 }
 
 /** 专题：交代带岗位和评审会用的挑刺岗位（critics 是本人点的那几个，不点用团队里的前三个），本机从最新一版往下编号。 */
-export async function startTopic(runner: LocalRunner, topic: { id: string; title: string }, model: TLocalModelProfile, critics?: string[], permissionMode?: TLocalPermissionMode, effort?: TLocalEffort | null): Promise<TLocalSessionSummary> {
-  let request: TLocalCreateSessionRequest = { subject: { kind: "topic", topicId: topic.id }, title: topic.title.slice(0, 120), modelProfileId: model.id, firstMessage: `# 调研专题：${topic.title}`,
-    ...modeFor(model, permissionMode), ...(effort ? { effort } : {}) };
+export async function startTopic(runner: LocalRunner, topic: { id: string; title: string; free?: boolean; cwd?: string | null }, model: TLocalModelProfile, critics?: string[], permissionMode?: TLocalPermissionMode, effort?: TLocalEffort | null): Promise<TLocalSessionSummary> {
+  // 自由子会话（第 68 条）：带 free，在项目绑在这台电脑上的文件夹里做（没绑由本机给专用目录）；交代就是本人那句话（云端的交代），没有提纲、版本、评审。
+  const free = topic.free ? { free: true as const, ...(topic.cwd ? { cwd: topic.cwd } : {}) } : {};
+  let request: TLocalCreateSessionRequest = { subject: { kind: "topic", topicId: topic.id }, title: topic.title.slice(0, 120), modelProfileId: model.id,
+    firstMessage: topic.free ? topic.title : `# 调研专题：${topic.title}`, ...free, ...modeFor(model, permissionMode), ...(effort ? { effort } : {}) };
   try {
-    const brief = await topicBrief(topic.id, critics);
-    request = { ...request, firstMessage: brief.markdown, ...(brief.latestVersion ? { versionBase: brief.latestVersion } : {}),
-      ...(brief.role ? { role: localRole(brief.role) } : {}), ...(brief.critics.length ? { critics: brief.critics.map(localRole) } : {}) };
+    const brief = await topicBrief(topic.id, topic.free ? undefined : critics);
+    request = { ...request, firstMessage: brief.markdown, ...(topic.free ? {} : {
+      ...(brief.latestVersion ? { versionBase: brief.latestVersion } : {}),
+      ...(brief.role ? { role: localRole(brief.role) } : {}), ...(brief.critics.length ? { critics: brief.critics.map(localRole) } : {}) }) };
   } catch (error) {
     if (!(error instanceof CloudError) || error.status !== 404) throw error;
   }
