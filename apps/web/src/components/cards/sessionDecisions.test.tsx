@@ -99,6 +99,10 @@ describe("子会话页头的状态 chip（5.4.3、5.6、第 54 条）", () => {
     expect(stateChip(null, "paused", "doing", null)).toEqual({ text: "已停止", tone: "neutral" });
     expect(stateChip(null, "approval", "doing", null)).toEqual({ text: "进行中", tone: "neutral" });
   });
+  it("排着的卡照写在等谁（第 68 条）；有等你处理的框时先写等你", () => {
+    expect(stateChip(null, null, "todo", null, "已排队 · 等 B")).toEqual({ text: "已排队 · 等 B", tone: "neutral" });
+    expect(stateChip("approval", null, "doing", null, "已排队 · 等 B")).toEqual({ text: "等你批准", tone: "wait" });
+  });
   it("第一次验收没过是进行中的「重做中」，不是单独的状态；不是验收没过的受阻是警告档", () => {
     expect(stateChip(null, "review_failed", "review", null)).toEqual({ text: "重做中", tone: "neutral" });
     expect(stateChip(null, "blocked", "review", null)).toEqual({ text: "受阻", tone: "warn" });
