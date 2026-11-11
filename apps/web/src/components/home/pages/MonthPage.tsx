@@ -8,12 +8,16 @@
  * - 下半：下个月 Co-Agent 的草稿，按 Mission 分组；延续来的小字写「延续自 11 月的 X · X 现在的状态」。
  * - 底部两个动作：「和伙伴过一遍」（进总管线，伙伴已经读过草稿）、「去 M2 签复盘」（整页去 M2，ArrowUpRight）。
  * 数据见 useMonthPage（接口等 B2）。
+ * 复盘期间（GET …/review 有这个月的复盘）月份页就是复盘页（MonthReview，设计第三版），上面这些不画；第一版的「怎么办」随旧答案一起等本人定（B 的清单第 1 条）。
  */
 import { ArrowUpRight, Check } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
 import { DecisionBox, FailedLine, type DecisionOption } from "@/components/work/DecisionBox";
 import { BUDDY_HREF, monthLabel, taskHref } from "@/lib/home/derive";
+import { useEffect } from "react";
 import type { MonthPageProps } from "./index";
+import { MonthReviewView, ReviewHeadTrail } from "./MonthReview";
+import { headText, useMonthReview, type MonthReview, type ReviewActions } from "./useMonthReview";
 import { ICON, Loading, Section } from "./parts";
 import { CHOICE_LABEL, answerText, monthSummary, nextPeriod, settled, useMonthPage, type MonthAnswer, type MonthChoice, type MonthPageData, type MonthTask } from "./useMonthPage";
 import h from "@/styles/home.module.css";
@@ -24,7 +28,26 @@ const OPTIONS: DecisionOption[] = CHOICES.map((choice, index) => ({ label: CHOIC
 
 const openM2 = () => window.location.assign("/m2/");
 
-export function MonthPage({ go, period }: MonthPageProps) {
+export function MonthPage({ go, period, onHead }: MonthPageProps) {
+  const { review, failed, retry, actions } = useMonthReview(period);
+  if (failed !== null) return <FailedLine reason={failed} onRetry={retry} />;
+  if (review === undefined) return <Loading />;
+  if (review) return <ReviewPage review={review} actions={actions} go={go} onHead={onHead} />;
+  return <MonthTasks go={go} period={period} />;
+}
+
+/** 复盘页：页头换成「11 月复盘」，右边「截止 … · 待确认 … · 延期 …」和「与伙伴讨论」。 */
+function ReviewPage({ review, actions, go, onHead }: { review: MonthReview; actions: ReviewActions; go: (href: string) => void; onHead: MonthPageProps["onHead"] }) {
+  const title = `${monthLabel(review.period)}复盘`;
+  const text = headText(review);
+  useEffect(() => {
+    onHead?.({ title, trail: <ReviewHeadTrail text={text} onDiscuss={() => go(BUDDY_HREF)} /> });
+  }, [onHead, title, text, go]);
+  useEffect(() => () => onHead?.(null), [onHead]);
+  return <MonthReviewView review={review} actions={actions} />;
+}
+
+function MonthTasks({ go, period }: { go: (href: string) => void; period: string }) {
   const { data, failed, retry, decide } = useMonthPage(period);
   if (failed !== null) return <><FailedLine reason={failed} onRetry={retry} /><MonthFoot go={go} /></>;
   if (!data) return <Loading />;

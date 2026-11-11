@@ -57,7 +57,7 @@ import { useProjects } from "./useProjects";
 import { projectHref, projectWorking, type Project } from "@/lib/home/projects";
 import { usePhone } from "./usePhone";
 import { ViewChrome, PAGE_TITLE, monthHref, scopeOf, viewOf, type View } from "./view";
-import { MONTH_PAGE, SECONDARY_PAGES, type SecondaryPageProps } from "./pages";
+import { MONTH_PAGE, SECONDARY_PAGES, type MonthHead, type SecondaryPageProps } from "./pages";
 import { useHomeArrival } from "@/components/onboarding/useHomeArrival";
 import { ICON } from "./StateIcon";
 import { useTabTitle } from "./useTabTitle";
@@ -113,6 +113,8 @@ function HomeFrame({ account }: { account: Account }) {
   const [outbox, setOutbox] = useState<Outbox>([]);
   /** 从 Mission 详情点「问伙伴」带进总管线的上下文（输入框左上角「关于：{Mission}」胶囊，14.2、14.5）。 */
   const [buddyContext, setBuddyContext] = useState<string | null>(null);
+  /** 月份页在复盘期间换的页头（「11 月复盘」和右边那几样）。 */
+  const [monthHead, setMonthHead] = useState<MonthHead | null>(null);
   const outboxId = useRef(0);
 
   // 右栏：记住本人上次开没开；没记过时 1280 以下默认收起。
@@ -569,7 +571,7 @@ function HomeFrame({ account }: { account: Account }) {
       }
       case "month": {
         const Month = MONTH_PAGE;
-        return <SecondaryFrame key={current.period} title={`${Number(current.period.slice(5))} 月`} go={go}>{Month ? <Month go={go} period={current.period} /> : null}</SecondaryFrame>;
+        return <SecondaryFrame key={current.period} title={monthHead?.title ?? `${Number(current.period.slice(5))} 月`} trail={monthHead?.trail} go={go}>{Month ? <Month go={go} period={current.period} onHead={setMonthHead} /> : null}</SecondaryFrame>;
       }
     }
   };
@@ -638,12 +640,13 @@ function HomeFrame({ account }: { account: Account }) {
 }
 
 /** 二级页、月份页的壳（5.4.7）：页头（返回、标题）+ 文档类阅读尺，内容是挂进来的组件。 */
-function SecondaryFrame({ title, go, children }: { title: string; go: (href: string) => void; children: React.ReactNode }) {
+function SecondaryFrame({ title, trail, go, children }: { title: string; trail?: React.ReactNode; go: (href: string) => void; children: React.ReactNode }) {
   return (
     <div className={h.page} data-type-scale="doc" data-testid="secondary-page">
       <header className={h.viewHead}>
         <button type="button" className={h.icon} aria-label="返回" title="返回" onClick={() => (window.history.length > 1 ? window.history.back() : go(HOME_HREF))}><ArrowLeft {...ICON} /></button>
         <h1 className={h.viewTitle} tabIndex={-1}>{title}</h1>
+        {trail}
       </header>
       <div className={h.pageScroll}><div className={h.pageInner}>{children}</div></div>
     </div>
