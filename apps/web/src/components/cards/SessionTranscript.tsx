@@ -21,9 +21,9 @@ import { relativeDayTime } from "@/lib/companyTime";
 import { HeroButton } from "@/components/HeroButton";
 import { REMARK_PLUGINS } from "@/lib/markdown";
 import { InputBar } from "@/components/home/InputBar";
-import { ContextRing, FolderText, FootText } from "@/components/home/InputFooter";
+import { ContextRing, FolderText, FootText, QuotaRing } from "@/components/home/InputFooter";
 import { ModelPanel } from "@/components/home/ModelPanel";
-import { AUTO_EFFORT, localPanelRows, pickLocal, type PanelRowKey } from "@/lib/local/modelPanel";
+import { AUTO_EFFORT, QUOTA_RING_LEFT, localPanelRows, pickLocal, sourceQuota, type PanelRowKey } from "@/lib/local/modelPanel";
 import { usageCells } from "@/lib/home/quota";
 import { sizeText, uploadToSubSession } from "@/lib/home/attachments";
 import type { TLocalHold, TLocalAttachmentRef, TLocalEffort, TLocalPermissionMode, TLocalSessionModelRequest, TLocalStatusResponse, TSessionAttachment } from "@warmap/contracts";
@@ -484,8 +484,11 @@ export function sessionModels(runner: LocalRunner, models: readonly TLocalModelP
   const now = Date.now();
   // 规划员、验收员只用 Claude Code（换到 Codex 本机回 400），Codex 的来源灰着。
   const fixed = session.subject.kind === "plan" || session.subject.kind === "verify";
+  const cells = usageCells(status?.quota ?? [], now);
   return {
-    rows: localPanelRows({ models, modelId, effort, cells: usageCells(status?.quota ?? [], now), agents: status?.agents ?? [], now, agentsAllowed: fixed ? ["claude-code"] : undefined, canAddSource }),
+    /** 现在这个来源剩多少（模型旁边的圆环，第 73 条）。 */
+    quota: sourceQuota(models, modelId, cells),
+    rows: localPanelRows({ models, modelId, effort, cells, agents: status?.agents ?? [], now, agentsAllowed: fixed ? ["claude-code"] : undefined, canAddSource }),
     /** 选了一项：交给本机，回的是「换好了」；没有要换的为 null。 */
     pick: (row: PanelRowKey, id: string): Promise<void> | null => {
       if (row === "effort") return change({ effort: id === AUTO_EFFORT ? null : id as TLocalEffort });
@@ -505,7 +508,7 @@ export function useSessionModels(runner: LocalRunner, models: readonly TLocalMod
   const base = sessionModels(runner, models, session, refresh, onFail, status, canAddSource);
   if (!base) return null;
   return {
-    rows: base.rows, busy,
+    rows: base.rows, quota: base.quota, busy,
     onPick: (row: PanelRowKey, id: string) => {
       if (busy) return;
       const run = base.pick(row, id);
@@ -550,7 +553,7 @@ export function SessionComposer({ label, disabled, onSend, dock, pinned, subject
       <InputBar placeholder="" label={label} disabled={disabled} dock={dock} busy={busy} interruptible onStop={onStop} draftKey={`tianshu-home-draft-v1:${subject.kind}:${subject.id}`} fill={fill}
         footer={{
           left: place ? <FolderText name={place.name} title={place.title} /> : null,
-          right: <>{context ? <ContextRing {...context} /> : null}{model && models?.rows.length && !disabled ? <ModelPanel label={model.label} title={model.title} rows={models.rows} onPick={models.onPick} busy={models.busy} testId="session-model" />
+          right: <>{context ? <ContextRing {...context} /> : null}{models?.quota && models.quota.percent !== null && models.quota.percent <= QUOTA_RING_LEFT ? <QuotaRing used={100 - models.quota.percent} /> : null}{model && models?.rows.length && !disabled ? <ModelPanel label={model.label} title={model.title} rows={models.rows} onPick={models.onPick} busy={models.busy} testId="session-model" />
             : model ? <FootText title={model.title} testId="session-model">{model.label}</FootText> : null}{mode ? <PermissionModeMenu modes={mode.modes} value={mode.value} disabled={disabled} onChange={mode.set} /> : null}</>,
         }}
         onSend={onSend} />

@@ -38,6 +38,20 @@ export function sourceIdOf(profile: Pick<TLocalModelProfile, "source" | "agent" 
   return profile.origin ? `${profile.origin.provider}${profile.origin.via ? `:${profile.origin.via}` : ""}` : `gateway:${profileSourceName(profile)}`;
 }
 
+/** 用到八成以上（剩 ≤20%）：模型胶囊旁边出一颗琥珀色的小圆环（第 73 条）。 */
+export const QUOTA_RING_LEFT = 20;
+
+/**
+ * 现在这个模型的来源剩多少（来源那一行右边那个数，同一套对法）：订阅按执行方对用量那一格的 id，别的按来源名。
+ * 读不到、或是钱（没有百分比）为 null。
+ */
+export function sourceQuota(models: readonly TLocalModelProfile[], modelId: string | null, cells: readonly UsageCell[]): UsageCell | null {
+  const current = models.find((model) => model.id === modelId);
+  if (!current) return null;
+  const cell = cells.find((entry) => (current.source === "subscription" ? entry.id === SUBSCRIPTION[current.agent].quota : entry.name === profileSourceName(current)));
+  return cell && cell.percent !== null ? cell : null;
+}
+
 /** 这个来源的默认模型：标了默认的那个，没有就第一个。 */
 export function defaultModelOf(models: readonly TLocalModelProfile[], sourceId: string): TLocalModelProfile | null {
   const own = models.filter((model) => sourceIdOf(model) === sourceId);

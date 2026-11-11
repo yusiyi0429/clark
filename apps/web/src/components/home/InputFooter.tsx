@@ -89,18 +89,38 @@ export function FolderMenu({ folders, onPick, onPickOther, onCreate }: {
   );
 }
 
+/** 小圆环：画到 percent。 */
+function Ring({ percent }: { percent: number }) {
+  const r = 5.5, round = 2 * Math.PI * r;
+  return (
+    <svg className={h.usageRing} viewBox="0 0 14 14" aria-hidden>
+      <circle cx="7" cy="7" r={r} fill="none" strokeWidth="2" />
+      <circle cx="7" cy="7" r={r} fill="none" strokeWidth="2" strokeLinecap="round" strokeDasharray={`${((round * percent) / 100).toFixed(2)} ${round.toFixed(2)}`} />
+    </svg>
+  );
+}
+
 /** 子会话的上下文用了多少（17.2 第 42 条）：小圆环加百分比，样式同右栏用量那颗；到 80% 是警告色，悬停写「16.6 万 / 20 万」（站内统一的提示，不用原生 title）。 */
 export function ContextRing({ percent, warn, tip }: { percent: number; warn: boolean; tip: string }) {
-  const r = 5.5, round = 2 * Math.PI * r;
   const hover = useHoverTip(tip, "top");
   return (
     <>
     <span ref={hover.ref} className={h.footText} data-tone={warn ? "warning" : undefined} role="img" aria-label={`上下文 ${percent}%，${tip}`} data-testid="context-usage" {...hover.props}>
-      <svg className={h.usageRing} viewBox="0 0 14 14" aria-hidden>
-        <circle cx="7" cy="7" r={r} fill="none" strokeWidth="2" />
-        <circle cx="7" cy="7" r={r} fill="none" strokeWidth="2" strokeLinecap="round" strokeDasharray={`${((round * percent) / 100).toFixed(2)} ${round.toFixed(2)}`} />
-      </svg>
+      <Ring percent={percent} />
       <span className={h.num}>{percent}%</span>
+    </span>
+    {hover.tip}
+    </>
+  );
+}
+
+/** 来源用到八成以上（第 73 条）：模型胶囊旁边一颗琥珀色的小圆环，画法同上下文那颗，不带字；悬停只写用了多少。 */
+export function QuotaRing({ used }: { used: number }) {
+  const hover = useHoverTip(`${used}%`, "top");
+  return (
+    <>
+    <span ref={hover.ref} className={h.footText} data-tone="warning" role="img" aria-label={`用量 ${used}%`} data-testid="quota-ring" {...hover.props}>
+      <Ring percent={used} />
     </span>
     {hover.tip}
     </>

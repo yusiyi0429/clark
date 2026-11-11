@@ -13,7 +13,7 @@ const render = (extra: Partial<Parameters<typeof LeftColumn>[0]>) => {
   const used = extra.data ?? data;
   return renderToStaticMarkup(
     <LeftColumn data={used} view={{ kind: "home" }} buddy={null} speaking={false} go={() => undefined} phone={false}
-      account={{ displayName: "孙铭泽", role: "member" }} today="11 月 7 日 周六" alert={false}
+      account={{ displayName: "孙铭泽", role: "member" }} today="11 月 7 日 周六"
       projects={projectsOf(used)} archived={[]} onCreate={async () => "x"} {...extra} />,
   );
 };

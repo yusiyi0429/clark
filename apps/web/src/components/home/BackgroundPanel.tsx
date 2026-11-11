@@ -8,10 +8,10 @@
  * - 后台任务：组头 12/16 600 淡色，「进行中」前面一颗转圈（整栏只有它在转）；「已完成」默认收起，有失败时自动展开、组头后面加「· 失败 1」。
  *   行高 36：种类、名字、用时，停止按钮鼠标移上去或有焦点时才出（手持上一直显示），不能停的不画。行里不放状态图标，失败的行首一个叉、用时换成「失败」，
  *   停了的用时换成「已停止」，停着等额度恢复的换成「等额度恢复 · 08:00」。后台任务点不进去，行没有悬停底。
- * - 收起后是 44 宽的细条：展开键；有在跑的是转圈加数字；本机要处理时一个琥珀点。
+ * 电脑上（第 73 条）右边平时没有，只在面板位里放后台任务两组（BackgroundTasks）；这一整块（带资源块）只给手机的底部抽屉用。
  */
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronRight, LoaderCircle, PanelRightClose, PanelRightOpen, Square, X } from "lucide-react";
+import { ChevronDown, ChevronRight, LoaderCircle, Square, X } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
 import { MANY_SESSIONS, Slots } from "@/components/work/Slots";
 import { FailedLine } from "@/components/work/DecisionBox";
@@ -33,7 +33,7 @@ export const TOOL_STATE: Record<TLocalToolStatus["state"], string> = { ready: "�
 type Check = { name: string; value: string; bad: boolean };
 
 /**
- * 这台电脑现在是什么状态、要不要本人动手（本人行、细条上的琥珀点也用这个）。
+ * 这台电脑现在是什么状态、要不要本人动手（本人行的点、首页「等你」里「这台电脑没连上」那一行也用这个）。
  * checks 是「这台电脑」点开后的逐项：本机程序，再照本机报的 tools 列执行方和命令行工具；没就绪时工具那几项写「—」。
  * cloudQuota 是各台设备同步给云端的额度：这台电脑没就绪（手机、未配对、离线）或读不到额度时，每台设备一格「Claude · 设备名」；
  * 这台电脑就绪且读得到时只列它自己的。
@@ -62,7 +62,9 @@ export function useMachine(cloudQuota: Resources["quota"]) {
   // 云端的一项一条（契约 WorkerResources.quota = 本机报的 LocalQuotaSync 加设备）：名字后面加「 · 设备名」。
   const usage = here.length ? here : usageCells(cloudQuota.map((entry) => ({ ...entry, id: `${entry.id}:${entry.deviceId}`, device: entry.deviceName })), now);
   const quotaAlert = usage.some((cell) => cell.tone === "danger") ? "danger" as const : usage.some((cell) => cell.tone === "warning") ? "warning" as const : null;
-  return { ready, offline: local.phase === "offline", word, alert, checks, action, usage, quotaAlert };
+  // 没连上、没配对（首页「等你」里那一行，第 73 条）：暂停、检查中不算；Mac 上离线不算（同 alert）。
+  const disconnected = alert && !paused;
+  return { ready, offline: local.phase === "offline", word, alert, disconnected, checks, action, usage, quotaAlert };
 }
 
 /** 用量一格：圆环（订阅剩多少）或「¥」、名字、数；明细在 title 里。 */
@@ -82,12 +84,10 @@ function UsageItem({ cell }: { cell: UsageCell }) {
   );
 }
 
-export function BackgroundPanel({ items, resources, onStop, onCollapse, handheld = false }: {
+export function BackgroundPanel({ items, resources, onStop, handheld = false }: {
   items: BackgroundItem[];
   resources: Resources;
   onStop: (item: BackgroundItem) => Promise<void>;
-  /** 桌面：收成细条（手机抽屉没有，点外面或 Esc 关）。 */
-  onCollapse?: () => void;
   handheld?: boolean;
 }) {
   const machine = useMachine(resources.quota);
@@ -105,7 +105,6 @@ export function BackgroundPanel({ items, resources, onStop, onCollapse, handheld
             <span className={h.resName}>这台电脑</span><span className={h.resWord}> · {machine.word}</span>
             <ChevronDown size={14} strokeWidth={1.8} aria-hidden className={h.pcChevron} data-open={showChecks ? "" : undefined} />
           </button>
-          {onCollapse ? <HeroButton variant="ghost" size="sm" isIconOnly title="收起" aria-label="收起" onPress={onCollapse}><PanelRightClose {...ICON} /></HeroButton> : null}
         </div>
         {showChecks ? (
           <>
@@ -193,18 +192,6 @@ export function BackgroundTasks({ items, onStop, handheld = false }: { items: Ba
         </section>
       ) : null}
     </>
-  );
-}
-
-/** 收起后的细条：展开键；有在跑的是转圈加数字；本机要处理时一个琥珀点。 */
-export function BackgroundStrip({ running, quota, onExpand }: { running: number; quota: Resources["quota"]; onExpand: () => void }) {
-  const machine = useMachine(quota);
-  return (
-    <button type="button" className={h.strip} onClick={onExpand} aria-label={`展开，进行中 ${running}`} title="展开" data-testid="background-strip">
-      <PanelRightOpen {...ICON} />
-      {running ? <span className={h.runningCount}><LoaderCircle {...ICON} />{running}</span> : null}
-      {machine.alert || machine.quotaAlert ? <i className={h.warnDot} data-tone={machine.quotaAlert === "danger" ? "danger" : undefined} aria-label={machine.quotaAlert === "danger" || !machine.alert ? "额度快用完了" : "这台电脑要处理"} role="img" /> : null}
-    </button>
   );
 }
 

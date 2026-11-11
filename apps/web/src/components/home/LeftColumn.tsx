@@ -115,7 +115,7 @@ function useStageScale(off: boolean) {
   return { ref, scale };
 }
 
-export function LeftColumn({ data, view, buddy, speaking, go, phone, account, today, alert, trail, top, month, onRetryPlan, projects, archived, archivedSubs = [], actions = null, onCreate, folderLimit = LOCAL_PROJECT_FOLDER_LIMIT, cardAt, working, seen, onOpen }: {
+export function LeftColumn({ data, view, buddy, speaking, go, phone, account, today, machine = null, trail, top, month, onRetryPlan, projects, archived, archivedSubs = [], actions = null, onCreate, folderLimit = LOCAL_PROJECT_FOLDER_LIMIT, cardAt, working, seen, onOpen }: {
   data: WorkHomeData;
   view: View;
   buddy: Buddy | null;
@@ -126,8 +126,8 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
   account: Account;
   /** 「11 月 7 日 周六」。 */
   today: string;
-  /** 连接要处理：本人行的琥珀点。 */
-  alert: boolean;
+  /** 这台电脑（本人行尾的点，第 73 条）；手机上不给。 */
+  machine?: { alert: boolean; word: string } | null;
   /** 手机：「今天」行行尾的后台任务按钮。 */
   trail?: ReactNode;
   /** 手机首屏：「今天」行下面先放「等你」。 */
@@ -229,7 +229,7 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
           </section>
         ) : null}
       </div>
-      <PersonRow account={account} view={view} alert={alert} go={go} />
+      <PersonRow account={account} view={view} machine={machine} go={go} />
     </nav>
     </ActionsContext.Provider>
     </SeenContext.Provider>

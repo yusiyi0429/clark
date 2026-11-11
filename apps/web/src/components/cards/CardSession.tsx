@@ -77,11 +77,14 @@ export function CardSession({ cardId, embedded = false, waiting }: { cardId: str
   /** 看结果还是对话；没选过时，子会话不在这台电脑上（手机、别的电脑、还没开）先看摘要（5.4.3）。 */
   const [details, setDetails] = useState<boolean | null>(null);
   const side = useSideDetail();
-  // 右边看文件（41 条）：交出的产出点了在这一页右边看，不新开页；手持上整屏。
-  const [preview, setPreview] = useState<PreviewFile | null>(null);
-  // 放大（第 72 条）：预览占满内容区，对话收起；关了预览回到并排。
-  const [wide, setWide] = useState(false);
-  const closePreview = useCallback(() => { setPreview(null); setWide(false); }, []);
+  // 右边看文件（41 条）：交出的产出、改过的文件点了在右边看，不新开页；手持上整屏。
+  // 新首页电脑上放进右边的面板位（第 73 条）：和详情、后台任务互相替换，换成别的就不画；放大也由面板位管（对话收起）。
+  const [preview, setPreviewFile] = useState<PreviewFile | null>(null);
+  // 预览只在面板里放着文件时画，所以关掉时直接收起面板位（show 在首页里是稳定的）。
+  const showPanel = side?.show;
+  const setPreview = useCallback((file: PreviewFile) => { setPreviewFile(file); showPanel?.("file"); }, [showPanel]);
+  const shownPreview = side && side.shown !== "file" ? null : preview;
+  const closePreview = useCallback(() => { setPreviewFile(null); showPanel?.(null); }, [showPanel]);
   /** 页头点了「推翻」：打开结果、推翻的原因框直接展开。 */
   const [flipping, setFlipping] = useState(false);
   const { detail, missing, refresh } = useCardDetail(cardId);
@@ -105,7 +108,7 @@ export function CardSession({ cardId, embedded = false, waiting }: { cardId: str
     if (!fileSession) return;
     const wholeFile = session?.workspace?.kind !== "worktree" && !!files.find((file) => file.path === path)?.restorable;
     setPreview(localChangedFile(local.runner, fileSession, path, { turn, wholeFile }));
-  }, [local.runner, fileSession, files, session?.workspace?.kind]);
+  }, [local.runner, fileSession, files, session?.workspace?.kind, setPreview]);
   const openLocal = useCallback((path: string) => openChanges(path), [openChanges]);
   // 回答里提到的一处：先看是不是改过的文件（读这台电脑上现在的），再看是不是交出的产出（读云端那份）；都对不上不能点。
   const openFile = useCallback((mention: string) => {
@@ -113,7 +116,7 @@ export function CardSession({ cardId, embedded = false, waiting }: { cardId: str
     if (changed) return () => openLocal(changed.path);
     const output = outputs?.find((entry) => entry.kind === "artifact" && entry.fileName === mention);
     return output ? () => setPreview(cloudOutputFile(output)) : null;
-  }, [files, outputs, fileSession, openLocal]);
+  }, [files, outputs, fileSession, openLocal, setPreview]);
   const [tab, setTab] = useState<"result" | "chat">("result");
   const [starting, setStarting] = useState(false);
   useAutoReturn(local.runner, ready, detail ? [detail.task] : [], local.sessions, () => void refresh());
@@ -203,10 +206,12 @@ export function CardSession({ cardId, embedded = false, waiting }: { cardId: str
     await local.refresh();
   };
 
+  // 放大只在新首页电脑上的面板位里有（手持本来就整屏，老页面不加）。
+  const previewNode = shownPreview ? <FilePreview file={shownPreview} onClose={closePreview} canRestore={!sessionRunning} wide={side?.wide} onWide={side?.setWide} /> : null;
   const pane = (
     <aside className={s.pane} aria-label="结果">
       <ResultPane detail={detail} session={session} view={session ? view : null} canAct={canAct} wait={wait} stage={stage} handheld={handheld} ready={ready} embedded={embedded}
-        flipping={flipping} onFlipDone={() => setFlipping(false)} onPreview={setPreview} previewing={preview?.key ?? null} files={files} onFile={openLocal}
+        flipping={flipping} onFlipDone={() => setFlipping(false)} onPreview={setPreview} previewing={shownPreview?.key ?? null} files={files} onFile={openLocal}
         onRestoreFiles={(paths) => local.runner.restoreSessionFiles(session!.id, paths ? { paths } : {}).then((result) => { filesRestored(session!.id); return result; })}
         onStart={embedded ? undefined : () => setStarting(true)} onControl={control} onResume={() => say("继续")} onChanged={() => void refresh()}
         editing={editing} onEditing={setEditing} onSaved={settle} />
@@ -298,12 +303,13 @@ export function CardSession({ cardId, embedded = false, waiting }: { cardId: str
           <HeroButton variant="ghost" size="sm" isIconOnly aria-label={inSide ? "详情" : "结果"} title={inSide ? "详情" : "结果"} data-pressed={showPane || undefined} onPress={() => openDetails()} data-testid="session-details"><Info {...ICON} aria-hidden /></HeroButton>
           {chrome.trail}
         </header>
-        <div className={s.body} data-solo={preview && !handheld ? undefined : ""}>
+        <div className={s.body} data-solo={shownPreview && !side && !handheld ? undefined : ""}>
           {showPane && !inSide ? <div className={s.paneScroll}>{pane}</div> : chat}
-          {preview ? <FilePreview file={preview} onClose={closePreview} canRestore={!sessionRunning} wide={wide} onWide={handheld ? undefined : setWide} /> : null}
+          {side ? null : previewNode}
         </div>
         {starter}
         {side ? <SideContent side={side}><div className={s.page} data-embedded="" data-side="">{pane}</div></SideContent> : null}
+        {side ? <SideContent side={side} kind="file">{previewNode}</SideContent> : null}
       </div>
     );
   }
@@ -332,8 +338,8 @@ export function CardSession({ cardId, embedded = false, waiting }: { cardId: str
       ) : null}
       <div className={s.body} data-tab={handheld ? tab : undefined}>
         {chat}
-        {preview && !handheld ? null : pane}
-        {preview ? <FilePreview file={preview} onClose={closePreview} canRestore={!sessionRunning} wide={wide} onWide={handheld ? undefined : setWide} /> : null}
+        {shownPreview && !handheld ? null : pane}
+        {previewNode}
       </div>
       {starter}
     </div>
