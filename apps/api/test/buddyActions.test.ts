@@ -364,13 +364,9 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       await report("stopped", { why: "held", summary: null, blocker: "订阅额度用完，14:00 恢复", outputs: [] });
       expect((await feed()).filter((item) => item.kind === "sub_session_report").map((item) => [item.why, item.blocker])).toEqual([["turn_done", null],
         ["held", "订阅额度用完，14:00 恢复"]]);
-      // 报告替本人给项目主管线发了一句，它回了一小轮（项目对话里）。
-      const said = async () => (await f.t.sql(`SELECT m.content FROM conversation_messages m JOIN conversations c ON c.id=m.conversation_id
-        WHERE c.scope=$1 AND m.role='user' ORDER BY m.sequence`, [`project:${project}`])).map((row) => row.content as string);
-      for (let i = 0; i < 60 && (await said()).length < 2; i++) await new Promise((resolve) => setTimeout(resolve, 50));
-      expect(await said()).toEqual(["【子会话回报】A · 规划员岗位初版：做完一轮停下了。\n它最后说：规划员岗位写好了，放在 planner.md。\n这一轮交了：规划员岗位、截图\n"
-        + "请用一两句话告诉本人这意味着什么、下一步怎么办；要本人拿主意时讲清选项，只问一个问题。",
-      "【子会话回报】A · 规划员岗位初版：停着等（订阅额度用完，14:00 恢复）。\n请用一两句话告诉本人这意味着什么、下一步怎么办；要本人拿主意时讲清选项，只问一个问题。"]);
+      // 主循环第 63 条：报告不再替本人给项目主管线发一句、不让它回一小轮——项目对话里一条消息都没有（没跑模型）。
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(await f.t.sql(`SELECT 1 FROM conversation_messages m JOIN conversations c ON c.id=m.conversation_id WHERE c.scope=$1`, [`project:${project}`])).toEqual([]);
       // 停下按字母走 stop_sub_session：登记「请这台电脑停掉」。
       expect((await act("sub_session_stop", { letter: "A" })).json().summary).toBe("已请那台电脑停掉「A · 规划员岗位初版」（本人电脑上开着天枢网页时马上停）");
       expect((await f.call("POST", "/api/me/session-stops/claim", { deviceId: machine.device })).json().stops).toEqual([expect.objectContaining({ subSessionId: a, sessionId: session })]);

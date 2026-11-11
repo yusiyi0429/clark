@@ -1,4 +1,3 @@
-import { autoRelayStep } from "../autoRelay.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Type } from "@sinclair/typebox";
@@ -10,10 +9,8 @@ import { readSessionAttachment, storeSessionAttachments } from "../sessionAttach
 import { verifyBrief } from "../cardAcceptance.js";
 import { createLocalDevice, deviceOfToken, listLocalDevices, ownOutput, revokeLocalDevice } from "../localDevices.js";
 import { applySyncBatch } from "../localSync.js";
-import { reportToProject, type BuddyDeps } from "../buddyActions.js";
-import { personDisplayNames } from "../people.js";
 import { lastSequenceReader, projectHistoryReader } from "../sourceWords.js";
-import { readReport, reportTurnText, setAfterSequence } from "../subSessionReports.js";
+import { readReport, setAfterSequence } from "../subSessionReports.js";
 import { authenticateLocalToken } from "../personalTokens.js";
 import { CardError } from "../taskCards.js";
 import type { BoardHooks } from "./taskCards.js";
@@ -107,11 +104,10 @@ export function registerLocalRoutes(app: AppInstance, ctx: RouteContext, board: 
   });
 
   /**
-   * 子会话停了、要介入（18 节第 10 条），提交以后在后台做：补上项目对话当时最后一条消息的 sequence（报告、决定卡按它插进对话），
-   * 报告再替本人给项目主管线发一句，让它回一小轮（正在回上一轮时排在后面）。出错只记日志。
+   * 子会话停了、要介入（18 节第 10 条），提交以后在后台做：补上项目对话当时最后一条消息的 sequence（报告、决定卡按它插进对话）。出错只记日志。
+   * 主循环第 63 条：报告不再替本人给项目主管线发一句、不再让它回一小轮（不触发模型）；管线要知道近况自己读（read_project）。
    */
   const history = projectHistoryReader(ctx);
-  const buddy: BuddyDeps = { app, q, env, now: ctx.now, names: () => personDisplayNames(ctx.peopleDirectory) };
   const lastSequence = (projectId: string, ownerId: string) =>
     history(projectId, ownerId, "sub-session-report").then((read) => read.messages.at(-1)?.sequence ?? null).catch(() => null);
   async function reportNotices(ownerId: string, reports: string[], decisions: string[]) {
@@ -124,10 +120,6 @@ export function registerLocalRoutes(app: AppInstance, ctx: RouteContext, board: 
         const report = await readReport(q, id);
         if (!report) continue;
         await setAfterSequence(q, "sub_session_reports", id, await lastSequence(report.project_id, ownerId));
-        // 自动接力到上限停着了：报告照样在动态里，不再触发主管线（18 节第 12 条）。
-        if (!(await autoRelayStep(q, report.project_id, ctx.now()))) continue;
-        await reportToProject(buddy, ownerId, report.project_id, reportTurnText(report))
-          .catch((cause) => app.log.warn({ reportId: id, code: (cause as { code?: string }).code }, "sub-session report turn not started"));
       }
     } catch (cause) {
       app.log.error({ err: cause }, "sub-session notices failed");

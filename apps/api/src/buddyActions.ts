@@ -47,7 +47,8 @@ const KIND: Record<BuddyActionName, Kind> = {
 };
 const DESCRIPTION: Record<BuddyActionName, string> = {
   read_work_home: "读本人的首页：项目、每个项目的子会话（卡、专题）和状态、等你、本月的 Mission 和 Task。要找项目 id、子会话 id、Task id 时先读它。",
-  read_project: "读一个项目的详情（目标、挂着的 Task）和最近的动态。",
+  read_project: "读一个项目的详情（目标、挂着的 Task）和最近的动态（含子会话停下的报告：做成了什么、卡在哪、交了什么）。"
+    + "子会话停了不会再叫你；本人问到近况、或你要说某个子会话的结果，先读它再说，没读过的不评论。",
   find_people: "按名字在人员目录里找同事，拿到人员 id（转达、转交要的是 id）。回最多 10 个：personId、name、self（是不是本人自己）。",
   open_page: "让本人的网页打开某一处：home 首页、preferences 偏好，或某个项目、子会话（同「等你」的 open）。只动界面。",
   set_appearance: "切外观：system 跟随系统、light 浅色、dark 深色。",
@@ -389,7 +390,7 @@ const handlers: Handlers = {
     const name = await projectName(deps, call.personId, args.projectId);
     // 项目对话还没开过就开（归档的、别人的照网页接口回错）。
     await web(deps, call.personId, "POST", `${path}/pipeline`);
-    forwardToProject(deps, call.personId, args.projectId, `${BUDDY_FORWARD_PREFIX}${args.text}`, "buddy");
+    forwardToProject(deps, call.personId, args.projectId, `${BUDDY_FORWARD_PREFIX}${args.text}`);
     return { summary: `已把话转给项目「${name}」的对话，由它去安排；有结果、出问题或要本人拿主意时再回报`, undo: null, ui: [projectRefresh(args.projectId)] };
   },
   send_message: async (deps, call, args) => {
@@ -478,16 +479,16 @@ const handlers: Handlers = {
 const FORWARD_RETRY_MS = 5_000;
 const FORWARD_GIVE_UP_MS = 10 * 60_000;
 /**
- * 在后台以本人身份往项目对话里说这一句（message 已带开头：伙伴转来的「【伙伴转来】」，子会话报告的「【子会话回报】」），走网页同一个对话接口；
+ * 在后台以本人身份往项目对话里说这一句（message 已带开头「【伙伴转来】」），走网页同一个对话接口；
  * 读完这一轮的流（结果留在项目对话里）。项目对话正在回上一轮时不打断它，隔 5 秒再试，最多等 10 分钟（同 homeTurn.ts）。失败只记日志。
  */
-function forwardToProject(deps: BuddyDeps, personId: string, projectId: string, message: string, via: "buddy" | "report"): void {
+function forwardToProject(deps: BuddyDeps, personId: string, projectId: string, message: string): void {
   void (async () => {
     const startedAt = Date.now();
     for (;;) {
       const response = await deps.app.inject({ method: "POST", url: `/api/conversations/${encodeURIComponent(`project:${projectId}`)}/messages`, payloadAsStream: true,
         headers: { cookie: await sessionCookie(deps, personId), origin: deps.env.publicOrigin, accept: "text/event-stream", "content-type": "application/json",
-          [FORWARDED_HEADER]: via }, payload: JSON.stringify({ message }) });
+          [FORWARDED_HEADER]: "buddy" }, payload: JSON.stringify({ message }) });
       const stream = response.stream();
       if (response.statusCode === 200) {
         for await (const _event of sseEvents(stream)) { /* 读到这一轮结束 */ }
@@ -503,15 +504,6 @@ function forwardToProject(deps: BuddyDeps, personId: string, projectId: string, 
       await new Promise((resolve) => setTimeout(resolve, FORWARD_RETRY_MS));
     }
   })().catch((error) => logEvent({ event: "buddy.forward_failed", projectId, error: (error as Error)?.message }));
-}
-
-/**
- * 子会话停了的报告（18 节第 10 条）：替本人给项目主管线发 text（reportTurnText，开头 SUB_SESSION_REPORT_PREFIX），让它回一小轮。
- * 项目对话还没开过就开；项目归档了、不是本人的照网页接口抛错，调用方记日志。
- */
-export async function reportToProject(deps: BuddyDeps, personId: string, projectId: string, text: string): Promise<void> {
-  await web(deps, personId, "POST", `/api/me/projects/${encodeURIComponent(projectId)}/pipeline`);
-  forwardToProject(deps, personId, projectId, text, "report");
 }
 
 /** 转交的说明写好了、还在准备中、没有疑似凭据：发出。说明还没写好时等后台写好再发（projectTransfers.ts 的 writeLater）。 */

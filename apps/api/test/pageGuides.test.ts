@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PAGE_GUIDES, pageFor, pageGuide, taskOfPage, taskPageGuide } from "../src/pageGuides.js";
+import { PAGE_GUIDES, PIPELINE_RULES, pageFor, pageGuide, projectPageGuide, taskOfPage, taskPageGuide } from "../src/pageGuides.js";
 
 describe("页面目录", () => {
   it("每页的名字、说明都在 Chat 的上限内（title ≤ 40、guide ≤ 150 字），超了整轮会被拒", () => {
@@ -47,5 +47,14 @@ describe("页面目录", () => {
     const long = taskPageGuide("/me/month/tasks/x", { name: "长".repeat(80), criteria: 99, cards: { todo: 999, doing: 999, review: 999, done: 999 } });
     expect(long.title.length).toBeLessThanOrEqual(40);
     expect(long.guide.length).toBeLessThanOrEqual(150);
+  });
+
+  it("项目页（主循环第 63 条）：每一轮都带上管线的回话规矩，目标再多也不挤掉规矩、不超上限", async () => {
+    const path = "/me/work/projects/6b0f3a52-4d0c-4c1e-9a43-1f7d2c9b8e10";
+    const page = await pageFor(path, async () => null, async () => ({ name: "品牌建设", goals: ["候选名初查"] }));
+    expect(page?.guide).toBe(`本人在这个项目的对话里，说的事默认指这个项目。${PIPELINE_RULES}现在挂着的目标：候选名初查。`);
+    const crowded = projectPageGuide(path, { name: "品牌建设", goals: Array(20).fill("一件很长的目标名字") });
+    expect(crowded.guide.length).toBeLessThanOrEqual(150);
+    expect(crowded.guide).toContain(PIPELINE_RULES);
   });
 });

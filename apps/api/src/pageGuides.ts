@@ -150,9 +150,14 @@ export function projectOfPage(path: string): string | null {
 /** 本人的这个项目：名字、挂着没了结的 Task 的名字。 */
 export type ProjectPageFacts = { name: string; goals: string[] };
 
+/**
+ * 管线的回话规矩（主循环第 63 条）：Chat 自己的提示词不归我们改，跟着每一轮的页面说明带过去。放在目标前面，超长时截掉的是目标。
+ */
+export const PIPELINE_RULES = "回话规矩：不讲工具内部的周折；没读过的结果不评论，要说先读；「撤不回」只在要本人点头的不可逆动作前说一次；做不到本人的要求，一句话说做不到什么、改按什么做。";
+
 export function projectPageGuide(path: string, facts: ProjectPageFacts): PageGuide {
   const goals = facts.goals.length ? `现在挂着的目标：${facts.goals.join("、")}。` : "现在没有挂着的目标。";
-  return { path, title: `项目：${facts.name}`.slice(0, 40), guide: `本人在这个项目的对话里，说的事默认指这个项目。${goals}`.slice(0, 150) };
+  return { path, title: `项目：${facts.name}`.slice(0, 40), guide: `本人在这个项目的对话里，说的事默认指这个项目。${PIPELINE_RULES}${goals}`.slice(0, 150) };
 }
 
 /** 转给 Chat 的页面：Task 页、项目页按本人读到的现算，读不到（不是本人的、本体读不到）不带；其余查目录。 */
