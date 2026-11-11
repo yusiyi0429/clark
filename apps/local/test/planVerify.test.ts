@@ -36,6 +36,8 @@ const PLAN = {
 function fakeCloud() {
   const items: any[] = [];
   const asked: string[] = [];
+  const agreementAsked: string[] = [];
+  let agreement: (cardId: string) => { revision: number; brief: string | null; standards: string[] } | null | "offline" = () => null;
   let brief: (key: string) => { status: number; body?: unknown } | "offline" = () => ({ status: 200, body: { markdown: "# 验收交代", criteria: CRITERIA, role: REVIEWER, failStreak: 0 } });
   const impl = (async (input: any, init?: any) => {
     const url = new URL(String(input));
@@ -53,9 +55,17 @@ function fakeCloud() {
       if (r === "offline") throw new Error("offline");
       return new Response(r.body === undefined ? "{}" : JSON.stringify(r.body), { status: r.status, headers: { "content-type": "application/json" } });
     }
+    if (url.pathname === "/api/local-runner/card-agreement") {
+      // 卡的约定（主循环第 60 条）：默认没有这张卡（404），本机照常交回
+      const cardId = url.searchParams.get("cardId")!;
+      agreementAsked.push(cardId);
+      const a = agreement(cardId);
+      if (a === "offline") throw new Error("offline");
+      return a ? new Response(JSON.stringify({ cardId, ...a }), { status: 200, headers: { "content-type": "application/json" } }) : new Response("{}", { status: 404 });
+    }
     return new Response("{}", { status: 404 });
   }) as unknown as typeof fetch;
-  return { impl, items, asked, setBrief(fn: typeof brief) { brief = fn; } };
+  return { impl, items, asked, agreementAsked, setBrief(fn: typeof brief) { brief = fn; }, setAgreement(fn: typeof agreement) { agreement = fn; } };
 }
 
 async function setup(max: number, opts: { link?: boolean; reuse?: { dataDir: string; work: string; token: string; cloud: ReturnType<typeof fakeCloud> } } = {}) {
@@ -257,6 +267,54 @@ describe("规划员和验收员", { timeout: 30_000 }, () => {
     }
   });
 
+  it("卡的约定（主循环第 60 条）：开工记下第几版；云端改了交回就退回、带上新标准；转话带了版本号就不再退；取不到不挡；执行方提议改约定报给云端", async () => {
+    const h = await setup(3);
+    try {
+      const v1 = { revision: 1, brief: "做 A", standards: CRITERIA };
+      let current: { revision: number; brief: string | null; standards: string[] } | "offline" = v1;
+      h.cloud.setAgreement((id) => (id === "A" ? current : null));
+      const a = await h.open(h.card("A"));
+      await until(() => h.cloud.agreementAsked.includes("A")); // 开工时取一次
+      await until(() => JSON.parse(readFileSync(join(h.t.dataDir, "sessions", a.id, "session.json"), "utf8")).agreementRevision === 1);
+      expect((await h.session(a.id)).session.agreementRevision).toBeUndefined(); // 只记在本机，不进摘要
+
+      // 本人在网页上改了完成标准（第 2 版），执行方没收到转话：交回退回，新标准原样告诉它，不报给云端
+      current = { revision: 2, brief: null, standards: ["页面能登录", "近似商标由本人查"] };
+      const back = await h.handBack(a.id);
+      expect(back.isError).toBe(true);
+      expect(back.content[0]!.text).toContain("现在是第 2 版");
+      expect(back.content[0]!.text).toContain("1. 页面能登录\n2. 近似商标由本人查");
+      expect(h.events(a.id).some((e) => e.type === "notice" && e.code === "agreement_changed")).toBe(true);
+      expect(h.cloud.items.some((i) => i.type === "handback")).toBe(false);
+      // 再交就照常（记成第 2 版了）
+      expect((await h.handBack(a.id)).isError).toBe(false);
+
+      // 云端登记的转话带了版本号（第 3 版）：网页说给执行方时带上，交回时不再退
+      current = { revision: 3, brief: "做 A，商标不查", standards: ["页面能登录"] };
+      expect((await h.call("POST", `/v1/sessions/${a.id}/messages`, { text: "约定改了：只要页面能登录", agreementRevision: 3 })).status).toBe(200);
+      expect((await h.handBack(a.id)).isError).toBe(false);
+      // 取不到（离线）不挡交回
+      current = "offline";
+      expect((await h.handBack(a.id)).isError).toBe(false);
+      await until(() => h.cloud.items.filter((i) => i.type === "handback").length === 3);
+
+      // 执行方提议改约定：不直接生效，事件和同步条目同一个 key
+      const reason = "商标网拦自动访问";
+      const tooLong = await h.mcp(a.id, "propose_agreement_change", { standards: ["页面能登录", "查".repeat(301)], reason });
+      expect(tooLong.content[0]!.text).toContain("完成标准第 2 条有 301 字，每条不能超过 300 字");
+      expect((await h.mcp(a.id, "propose_agreement_change", { standards: [], reason })).isError).toBe(true);
+      const ok = await h.mcp(a.id, "propose_agreement_change", { standards: ["页面能登录", "近似商标由本人查"], reason });
+      expect(ok.content[0]!.text).toContain("已经提给本人");
+      const item = await until(() => h.cloud.items.find((i) => i.type === "agreement_proposal"));
+      expect(item.data).toEqual({ standards: ["页面能登录", "近似商标由本人查"], reason });
+      expect(item.subject).toMatchObject({ kind: "card", cardId: "A" });
+      expect(h.events(a.id).find((e) => e.type === "agreement_proposal")).toMatchObject({ proposalKey: item.key, standards: ["页面能登录", "近似商标由本人查"], reason });
+      expect(readFileSync(join(h.t.dataDir, "sessions", a.id, "system.md"), "utf8")).toContain("propose_agreement_change");
+    } finally {
+      await h.t.cleanup();
+    }
+  });
+
   it("本人原话（16.8）：带原话的验收交代能通过校验、原样作第一句话（本机不再拼一遍）；标准全过但漏了原话里明说的，判没过、写明是哪句；quote 要是原话；规划员的派活单带原话片段", async () => {
     const h = await setup(3);
     try {
@@ -446,6 +504,12 @@ describe("规划员和验收员", { timeout: 30_000 }, () => {
       expect(rejected.content[0]!.text).toContain("第 1 件的标题「把本机程序的配对流程整个重新做一遍并补上所有测试」太长");
       expect(rejected.content[0]!.text).toContain("第 2 件的标题「网页：派活单」不要带括号、冒号、句号");
       expect(readFileSync(join(h.t.dataDir, "sessions", p.id, "system.md"), "utf8")).toContain("中文 12 个字以内");
+      // 完成标准每条 300 字以内（DONE_DEFINITION_LIMITS，契约写不出这条）：超了退回，说清第几件第几条；整份 2000 字以内
+      const longLine = { ...PLAN.cards[1], doneDefinition: `有截图\n${"截".repeat(301)}` };
+      const tooLong = await h.mcp(p.id, "propose_plan", { ...PLAN, cards: [PLAN.cards[0], longLine] });
+      expect(tooLong.content[0]!.text).toContain("第 2 件的完成标准第 2 条有 301 字，每条不能超过 300 字");
+      const tooMuch = await h.mcp(p.id, "propose_plan", { ...PLAN, cards: [{ ...PLAN.cards[0], doneDefinition: Array(8).fill("截".repeat(260)).join("\n") }] });
+      expect(tooMuch.content[0]!.text).toContain("第 1 件的完成标准合起来有 2087 字，整份不能超过 2000 字");
       expect((await h.mcp(p.id, "propose_plan", PLAN)).content[0]!.text).toContain("已交第 1 次计划（2 件）");
       expect((await h.mcp(p.id, "propose_plan", PLAN)).content[0]!.text).toContain("已交第 2 次计划");
       expect((await h.mcp(p.id, "submit_verdict", PASSING)).isError).toBe(true); // 规划员没有交结论的工具

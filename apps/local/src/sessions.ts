@@ -12,6 +12,7 @@ import {
   type TLocalBackgroundItem, type TLocalMergeHoldReason, type TLocalMergeSync, type TLocalModelTier, type TLocalHold, type TLocalMoney,
   type TLocalRun, type TLocalRunPreviewRequest, type TLocalTaskBudgetView, type TLocalBudgetUpdateRequest, type TBudgetMode, type TLocalPermissionBrief, type TLocalSavedAttachment, type TLocalStopReason, type TLocalStopReport,
   type TLocalEffort, type TLocalSessionModelRequest, type TLocalSessionFileReadResponse, type TLocalSessionFilesResponse, type TLocalContextUsage,
+  DONE_DEFINITION_LIMITS, LocalAgreementProposal, type TLocalAgreementProposal, type TLocalCardAgreementResponse,
 } from "@warmap/contracts";
 import { readJson, writeJsonAtomic, nowIso } from "./store.js";
 import type { EventLog, EventBody } from "./eventLog.js";
@@ -173,6 +174,8 @@ interface SessionRecord {
   handoff?: boolean;
   /** 上下文用了多少（契约 LocalContextUsage）：执行方最近一次报的，摘要原样带；还没报过没有。 */
   context?: TLocalContextUsage;
+  /** 卡：执行方知道的是卡的约定第几版（主循环第 60 条）。开工时取一次，转话带了新的版本号就记新的；交回时云端更新了就退回。没取到过为空。 */
+  agreementRevision?: number;
 }
 
 /** 不合契约时给执行方看的一句（哪个字段、哪里不对）。 */
@@ -182,6 +185,14 @@ function schemaProblem(schema: TSchema, value: unknown): string | null {
   return e ? `${e.path || "/"} ${e.message}` : "格式不对";
 }
 const textOrNull = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+/** 完成标准（一行一条）超了 DONE_DEFINITION_LIMITS 时说哪里超了；没超为 null。 */
+function standardsTooLong(lines: string[]): string | null {
+  const { line, total } = DONE_DEFINITION_LIMITS;
+  const long = lines.findIndex((l) => l.length > line);
+  if (long >= 0) return `完成标准第 ${long + 1} 条有 ${lines[long]!.length} 字，每条不能超过 ${line} 字，拆成几条或写短一点`;
+  const all = lines.join("\n").length;
+  return all > total ? `完成标准合起来有 ${all} 字，整份不能超过 ${total} 字` : null;
+}
 
 export class SessionError extends Error {
   constructor(readonly code: "not_found" | "conflict" | "folder_not_allowed" | "validation", message: string) { super(message); }
@@ -213,6 +224,8 @@ export interface SessionDeps {
   skillsDir?: string;
   /** 向天枢取一次交回的验收交代（没有就不自动验收）。 */
   verifyBrief?: (handbackKey: string) => Promise<VerifyBrief>;
+  /** 向天枢取卡此刻的约定（主循环第 60 条）：没连天枢、没有这张卡为 null，连不上抛错。 */
+  cardAgreement?: (cardId: string) => Promise<TLocalCardAgreementResponse | null>;
   /** 本人订阅的额度：用完了订阅的会话停着等，跑着的卡报的额度变化记进去。 */
   quota?: QuotaTracker;
   /** 本人 Codex 订阅的额度：用完了 Codex 的会话停着等（设计 17.2 第 38 条），跑着的 Codex 会话报的额度记进去。 */
@@ -359,7 +372,7 @@ export class SessionManager {
     const {
       mcpSecret: _s, syncSeq: _q, outputs: _o, versionNumber: _v, lastVersion: _l, role: _r, critics: _c, queuedMessage: _m, queueOrder: _n,
       parentId: _p, briefPending: _b, criteria: _cr, failStreak: _f, submitted: _sb, nudged: _nd, workspace, commit: _cm, after: _af, passed: _ps, sourceWords: _sw, unread: _ur,
-      background, hold, holdSince: _hs, modelTier: _mt, budgetKey: _bk, runSince: _rs, seen: _se, handoff: _ho, run, ...rest
+      background, hold, holdSince: _hs, modelTier: _mt, budgetKey: _bk, runSince: _rs, seen: _se, handoff: _ho, run, agreementRevision: _ar, ...rest
     } = rec;
     const question = this.questions.get(rec.id);
     const waitingFor = this.waitingFor(rec);
@@ -681,6 +694,7 @@ export class SessionManager {
       workspace: place?.workspace ?? null, commit: null, after: waiting ? after : [], passed: null, background: [], hold: null, holdSince: null,
       budgetKey, runSince: null, run: null, permissionMode, ...(req.effort ? { effort: req.effort } : {}),
     };
+    if (subject.kind === "card") void this.noteAgreement(rec); // 卡开工时记下执行方知道约定的第几版（主循环第 60 条）
     // 满了（或前面还有人在排、在等前面的卡、文件夹被另一张卡占着、订阅额度用完了、预算用完了、余额不足）就进队，先来先跑；有空位时 pump 接上。
     const busy = this.folderBusy(rec);
     const limited = model.source === "subscription" && this.blocked(rec) !== null;
@@ -1096,6 +1110,8 @@ export class SessionManager {
     if (req.kind === "review" && (rec.subject.kind !== "topic" || !rec.critics.length)) throw new SessionError("validation", "评审会只给开工时带了挑刺技能的专题用");
     if (req.kind !== "review" && !req.text && !req.attachments?.length) throw new SessionError("validation", "说一句要有内容");
     if (rec.subject.kind === "plan" && !rec.planAsked) { rec.planAsked = true; this.save(rec); } // 本人说了话：开拆前要问的算交代过了
+    // 这句是在告诉执行方「卡的约定改了」（主循环第 60 条）：记下它知道第几版了
+    if (rec.subject.kind === "card" && req.agreementRevision && req.agreementRevision > (rec.agreementRevision ?? 0)) { rec.agreementRevision = req.agreementRevision; this.save(rec); }
     // 附件（新首页设计 14.5）：先取回、存进工作区，有一个不行整句不发
     let saved: TLocalSavedAttachment[] = [];
     if (req.attachments?.length) {
@@ -2129,6 +2145,8 @@ export class SessionManager {
       const latest = new Map(rec.outputs.filter((o) => o.artifactId).map((o) => [o.artifactId!, o.ref]));
       picked = rec.outputs.filter((o) => !o.artifactId || latest.get(o.artifactId) === o.ref);
     }
+    const changed = await this.agreementChanged(rec);
+    if (changed) throw new SessionError("conflict", changed);
     const summary = input.summary.slice(0, 4000);
     const criteria = input.criteria.slice(0, 50);
     const outputKeys = picked.slice(0, 100).map((o) => o.key);
@@ -2149,6 +2167,60 @@ export class SessionManager {
     this.turnOf(rec).handbackKey = key;
     this.queueVerify(rec, key, git?.commit ?? null);
     return `已交回（用了 ${picked.map((o) => o.ref).join("、") || "0 份产出和证据"}${git ? `，提交 ${git.commit.slice(0, 7)}` : ""}），本机接着起验收员验收`;
+  }
+
+  /** 取卡此刻的约定；没连天枢、没有这张卡、取不到都是 null（不挡交回）。 */
+  private async fetchAgreement(rec: SessionRecord): Promise<TLocalCardAgreementResponse | null> {
+    if (!this.d.cardAgreement || !rec.subject.cardId) return null;
+    return this.d.cardAgreement(rec.subject.cardId).catch(() => null);
+  }
+
+  /** 卡开工时取一次约定，记下执行方知道的是第几版（已经记过更新的就不动）。 */
+  private async noteAgreement(rec: SessionRecord) {
+    const got = await this.fetchAgreement(rec);
+    if (!got || got.revision <= (rec.agreementRevision ?? 0)) return;
+    rec.agreementRevision = got.revision;
+    if (this.records.get(rec.id) === rec) this.save(rec); // 没开起来、没登记的会话不留记录
+  }
+
+  /**
+   * 交回时核对卡的约定（主循环第 60 条）：云端的比执行方知道的新，回给执行方的话（新的完成标准原样，让它逐条重新自评再交），这次交回不报；
+   * 没变、取不到、开工时没取到过（不知道它知道第几版）都回 null，照常交回。取到了就记成这一版。
+   */
+  private async agreementChanged(rec: SessionRecord): Promise<string | null> {
+    const got = await this.fetchAgreement(rec);
+    if (!got) return null;
+    const known = rec.agreementRevision;
+    if (known !== undefined && got.revision <= known) return null;
+    rec.agreementRevision = got.revision;
+    this.save(rec);
+    if (known === undefined) return null;
+    this.emit(rec, { type: "notice", level: "info", code: "agreement_changed", text: `卡的约定改成第 ${got.revision} 版了，这次交回退回，按新的完成标准再交` });
+    return [
+      `这次交回退回了：卡的约定在你做的时候改了（现在是第 ${got.revision} 版）。新的完成标准：`,
+      ...got.standards.map((s, i) => `${i + 1}. ${s}`),
+      ...(got.brief ? ["", "新的交代：", got.brief] : []),
+      "",
+      "按新的完成标准逐条重新自评（条数和序号照上面）；没做到的先做，再用 hand_back 交回。",
+    ].join("\n");
+  }
+
+  /** 执行方提议改卡的约定（主循环第 60 条）：不直接生效，记一条事件、报给云端，本人在网页上定。 */
+  proposeAgreementChange(id: string, input: { standards?: unknown; brief?: unknown; reason?: unknown }): string {
+    const rec = this.must(id);
+    if (rec.subject.kind !== "card") throw new SessionError("validation", "只有卡能提议改约定");
+    const standards = (Array.isArray(input.standards) ? input.standards : []).map((s) => String(s).trim()).filter(Boolean);
+    const brief = textOrNull(input.brief);
+    const proposal: TLocalAgreementProposal = { standards, ...(brief ? { brief } : {}), reason: String(input.reason ?? "").trim() };
+    if (!standards.length) throw new SessionError("validation", "standards 要写新的完成标准全文，一条一项");
+    if (standards.some((s) => /[\r\n]/.test(s))) throw new SessionError("validation", "每条完成标准写成一行，不要换行；多件事拆成几条");
+    const long = standardsTooLong(standards);
+    if (long) throw new SessionError("validation", long);
+    const problem = schemaProblem(LocalAgreementProposal, proposal);
+    if (problem) throw new SessionError("validation", `提议不合格：${problem}`);
+    const proposalKey = this.sync(rec, { type: "agreement_proposal", data: proposal });
+    this.emit(rec, { type: "agreement_proposal", proposalKey, ...proposal });
+    return "已经提给本人，等本人定；定了会告诉你。先接着做不受影响的部分，或者停下等。";
   }
 
   /**
@@ -2354,6 +2426,9 @@ export class SessionManager {
       })),
       modelLabel: rec.modelLabel, roleId: rec.role?.id ?? null, roleVersion: rec.role?.version ?? null,
     };
+    // 完成标准的长度（DONE_DEFINITION_LIMITS）：每条的上限契约写不出，这里查
+    const long = plan.cards.map((c, i) => { const p = standardsTooLong(c.doneDefinition.split("\n").map((l) => l.trim()).filter(Boolean)); return p ? `第 ${i + 1} 件的${p}` : null; }).filter(Boolean);
+    if (long.length) throw new SessionError("validation", `派活单要改，改完整份再交一次：${long.join("；")}`);
     const problem = schemaProblem(LocalCardPlan, plan);
     if (problem) throw new SessionError("validation", `计划不合格：${problem}`);
     // 卡标题照 Claude Code 起会话名的规矩（cardTitle.ts）：不合格退回让规划员重写，不硬截断

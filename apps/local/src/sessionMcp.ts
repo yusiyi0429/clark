@@ -96,7 +96,7 @@ const PROPOSE_PLAN = {
           properties: {
             title: { type: "string", description: CARD_TITLE_RULE },
             brief: { type: "string", description: "交代：做什么、从哪入手" },
-            doneDefinition: { type: "string", description: "完成标准，每行一条，500 字以内" },
+            doneDefinition: { type: "string", description: "完成标准，每行一条；每条 300 字以内，合起来 2000 字以内" },
             criterionIndex: { type: "integer", minimum: 1, description: "对约定第几条" },
             role: { type: "string", description: "技能名字（交代里的技能清单）" },
             modelTier: { type: "string", enum: ["strong", "normal", "light"] },
@@ -151,6 +151,21 @@ const SUBMIT_VERDICT = {
   },
 };
 
+/** 只有卡有（主循环第 60 条）。 */
+const PROPOSE_AGREEMENT_CHANGE = {
+  name: "propose_agreement_change",
+  description: "提议改这张卡的约定（完成标准，要时连交代）：本人提了交代以外的新事、要就在这里做时，或者原来的标准做不到、要换个说法时用。不直接生效：本人在网页上选改不改，结果会告诉你；定之前照原来的约定做。",
+  inputSchema: {
+    type: "object",
+    properties: {
+      standards: { type: "array", items: { type: "string" }, description: "新的完成标准全文，一条一项、每项一行；每条 300 字以内，合起来 2000 字以内；没改的条也照抄" },
+      brief: { type: "string", description: "新的交代全文；不改交代就不填" },
+      reason: { type: "string", description: "为什么改，一句话" },
+    },
+    required: ["standards", "reason"],
+  },
+};
+
 /** 规划员、验收员换不了执行方，不给。 */
 const READ_EARLIER_TURNS = {
   name: "read_earlier_turns",
@@ -167,7 +182,7 @@ const READ_EARLIER_TURNS = {
 export const SESSION_MCP_NAME = "tianshu-session";
 
 const TOOLS: Record<TLocalSessionKind, { name: string }[]> = {
-  card: [ADD_ARTIFACT, ADD_EVIDENCE, HAND_BACK, READ_EARLIER_TURNS],
+  card: [ADD_ARTIFACT, ADD_EVIDENCE, HAND_BACK, PROPOSE_AGREEMENT_CHANGE, READ_EARLIER_TURNS],
   topic: [ADD_ARTIFACT, ADD_EVIDENCE, SAVE_VERSION, SET_FEISHU_URL, READ_EARLIER_TURNS],
   plan: [PROPOSE_PLAN],
   verify: [SUBMIT_VERDICT],
@@ -200,6 +215,7 @@ function callTool(sessions: SessionManager, id: string, kind: TLocalSessionKind,
     const outputs = Array.isArray(input.outputs) ? input.outputs.map(String) : undefined;
     return sessions.handBack(id, { summary: input.summary, criteria, outputs });
   }
+  if (name === "propose_agreement_change") return sessions.proposeAgreementChange(id, input ?? {});
   if (name === "save_version" && typeof input?.path === "string" && ["outline", "draft", "review"].includes(input?.kind)) {
     return sessions.saveVersion(id, {
       path: input.path, kind: input.kind,
