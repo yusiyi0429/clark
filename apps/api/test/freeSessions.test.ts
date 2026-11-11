@@ -32,13 +32,14 @@ describe("自由子会话", { timeout: 60_000 }, () => {
     } finally { await f.close(); }
   });
 
-  it("同一个普通文件夹：卡排着等自由子会话这一轮做完，写清在等谁（带字母）；自由子会话等批准进「等你」，一轮做完没在问的不进", async () => {
+  it("同一个普通文件夹：卡排着等自由子会话这一轮做完，首页和右栏 worker 列表都写清在等谁（首页带字母）；自由子会话等批准进「等你」，一轮做完没在问的不进", async () => {
     const f = await boardFixture({}, { boardCloudAgents: false });
     try {
       const projectId = (await f.call("POST", "/api/me/projects", { name: "品牌建设", taskId: "task-open" })).json().projectId as string;
       const topic = (await f.call("POST", "/api/me/topics", { free: true, projectId, firstMessage: "改首页配色" })).json();
       const card = await f.card("写说明");
-      await f.t.sql("UPDATE tasks SET executor='claude_code' WHERE id=$1", [card]);
+      const dev = (await f.call("POST", "/api/me/roles", { name: "开发", family: "dev", kind: "worker" })).json();
+      await f.call("PATCH", `/api/me/cards/${card}`, { version: 1, roleId: dev.id, executor: "claude_code" });
       const machine = await f.local();
       await machine.send({ kind: "topic", topicId: topic.id }, [status("waiting_permission", topic.title, { permission: { requestId: "p-1", toolName: "Bash",
         title: "运行 npm run build", outsidePaths: [], description: "构建一遍看配色" } })]);
@@ -49,6 +50,10 @@ describe("自由子会话", { timeout: 60_000 }, () => {
       const cardSub = subs.find((entry) => entry.id === card);
       const topicSub = subs.find((entry) => entry.id === topic.id) as { letter: string };
       expect(cardSub).toMatchObject({ state: "queued", queueReason: "folder_busy", heldBy: { kind: "topic", id: topic.id, letter: topicSub.letter, title: "改首页配色" } });
+      // 右栏 worker 列表：同一张卡也写在等文件夹、等的是谁，不再只写排队。
+      const queued = (await f.call("GET", "/api/me/workers")).json().queued as { key: string }[];
+      expect(queued.find((item) => item.key === `card:${card}`)).toMatchObject({ queueReason: "folder_busy", queuePosition: null,
+        heldBy: { kind: "topic", id: topic.id, title: "改首页配色" } });
       expect(home.waiting.find((item: { id: string }) => item.id === `approval:topic:${topic.id}`)).toMatchObject({ kind: "approval", summary: "构建一遍看配色" });
 
       // 一轮做完、没在问：已停下，不进「等你」。
