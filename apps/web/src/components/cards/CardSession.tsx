@@ -32,7 +32,7 @@ import { useCardDetail, type CardDetail } from "./useCardDetail";
 import { SourceWordIssues, SourceWords } from "./SourceWords";
 import { MergeAction } from "@/components/work/MergeAction";
 import { ApprovalDecision, QuestionDecision, awayChip } from "@/components/work/decisions";
-import { HandbackDecision, MergeDecision, useRelayNow } from "@/components/home/TaskDecisions";
+import { HandbackDecision, MergeDecision, stopPrefill, useRelayNow, wroteMore } from "@/components/home/TaskDecisions";
 import { ATTENTION_LABEL, attentionOf, isMergeLater, viewAsk, type Attention } from "@/lib/home/attention";
 import { DecisionBox, FailedLine, PendingBoxes, PendingDock, failureOf, type Failure } from "@/components/work/DecisionBox";
 import { useViewChrome } from "@/components/home/view";
@@ -48,7 +48,7 @@ import { AgreementSection, ProposalDecision } from "./Agreement";
 /** 回到新首页，锚着这张卡的 Task（V2 设计第 20.4 节；没打开新首页的人会被带回老首页）。 */
 const workHref = (taskId: string | null) => (taskId ? `/me/work/tasks/${encodeURIComponent(taskId)}` : "/me/work");
 
-const VERDICT: Record<string, string> = { met: "达到", partial: "部分达到", unmet: "未达到" };
+const VERDICT: Record<string, string> = { met: "达到", partial: "部分达到", unmet: "未达到", needs_person: "要你补" };
 const money = (usd: number | null) => (usd === null ? null : `约 $${usd.toFixed(usd < 1 ? 3 : 2)}`);
 
 /**
@@ -484,7 +484,13 @@ export function Acceptance({ cardId, handback, canOverrule, deliverable, onChang
   const head = handback.status === "queued" || handback.status === "running" ? "验收中"
     : handback.status === "failed" ? "验收失败"
     : handback.outcome === "pass" ? `验收过了 · ${handback.met}/${handback.total}${deliverable ? ` · ${deliverable}` : ""}`
+    : handback.passedWithGap ? `就到这里 · ${handback.met}/${handback.total} 条达到`
+    : handback.outcome === "needs_person" ? `等你补 · ${handback.met}/${handback.total} 条达到`
     : `未通过 · ${handback.met}/${handback.total} 条达到`;
+  // 没过、等你补的推翻就是「就到这里」（主循环第 62 条）：原因预填没达到那几条的短标题，只有预填的字提交不了。
+  const flipLabel = handback.outcome === "pass" ? "推翻" : "就到这里";
+  const prefill = handback.outcome === "pass" ? "" : stopPrefill(handback.gaps ?? []);
+  const canSubmit = reason !== null && wroteMore(prefill)(reason);
   const canFlip = canOverrule && handback.status === "done" && !handback.overruled && !(handback.outcome === "pass" && deliverable?.startsWith("已纳入"));
   return (
     <div className={s.sec} data-testid="acceptance">
@@ -505,15 +511,15 @@ export function Acceptance({ cardId, handback, canOverrule, deliverable, onChang
       {handback.overrule ? <p className={s.faint}>{handback.overrule.by.name} 推翻：{handback.overrule.reason}</p> : null}
       {handback.error ? <p className={s.faint}>{handback.error}</p> : null}
       {reason !== null ? (
-        <form className={s.reason} onSubmit={(event) => { event.preventDefault(); if (reason.trim()) void run(() => overrule(cardId, handback.id, reason.trim())); }}>
+        <form className={s.reason} onSubmit={(event) => { event.preventDefault(); if (canSubmit) void run(() => overrule(cardId, handback.id, reason.trim())); }}>
           <input autoFocus value={reason} maxLength={200} placeholder="原因" aria-label="推翻的原因" onChange={(event) => setReason(event.target.value)} />
-          <HeroButton variant="primary" size="sm" type="submit" isDisabled={busy || !reason.trim()}>{handback.outcome === "pass" ? "推翻" : "仍然通过"}</HeroButton>
+          <HeroButton variant="primary" size="sm" type="submit" isDisabled={busy || !canSubmit}>{flipLabel}</HeroButton>
           <HeroButton variant="ghost" size="sm" onPress={close}>取消</HeroButton>
           {failed && !busy ? <FailedLine inline {...failed} /> : null}
         </form>
       ) : (
         <div className={s.actions}>
-          {canFlip && !(hideFlip && handback.outcome === "pass") ? <HeroButton variant="ghost" size="sm" onPress={() => setReason("")}>{handback.outcome === "pass" ? "推翻" : "仍然通过"}</HeroButton> : null}
+          {canFlip && !(hideFlip && handback.outcome === "pass") ? <HeroButton variant="ghost" size="sm" onPress={() => setReason(prefill)}>{flipLabel}</HeroButton> : null}
           {canOverrule && handback.status === "failed" ? <HeroButton variant="ghost" size="sm" isDisabled={busy} onPress={() => void run(() => retryAcceptance(cardId, handback.id))}>重新验收</HeroButton> : null}
           {failed && !busy ? <FailedLine inline {...failed} /> : null}
         </div>
