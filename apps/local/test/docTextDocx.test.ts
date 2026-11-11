@@ -163,6 +163,18 @@ describe("Word 转文字", () => {
     expect(md(buf)).toBe("- 甲\n- 乙\n");
     expect(md(buf)).toBe(md(makeDocx(body, { numbering: "" })));
   });
+
+  it("飞书导出的写法：样式表是空的、标题靠段落上直接写的大纲级别、分隔线是没字的带边框段落、格子里多段", () => {
+    const h = (text: string, lvl: number) => p(text, `<w:pStyle w:val="${lvl + 1}"/><w:outlineLvl w:val="${lvl}"/><w:spacing w:before="120"/><w:ind w:left="0"/><w:jc w:val="left"/>`);
+    const body =
+      h("一级标题", 0) +
+      p("正文", '<w:spacing w:before="120"/><w:ind w:left="0" w:firstLine="0"/>') +
+      '<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:color="dee0e3"/><w:between w:val="single" w:color="dee0e3"/></w:pBdr></w:pPr></w:p>' +
+      h("二级标题", 1) +
+      `<w:tbl><w:tblPr><w:tblW w:w="0"/></w:tblPr><w:tr><w:tc><w:tcPr><w:tcW w:w="100"/><w:tcMar/></w:tcPr>${p("甲")}</w:tc><w:tc>${p("乙")}</w:tc></w:tr>` +
+      `<w:tr><w:tc>${p("第一段") + p("第二段")}</w:tc><w:tc>${p("丙")}</w:tc></w:tr></w:tbl>`;
+    expect(md(makeDocx(body, { styles: "", numbering: "" }))).toBe("# 一级标题\n\n正文\n\n## 二级标题\n\n| 甲 | 乙 |\n| --- | --- |\n| 第一段<br>第二段 | 丙 |\n");
+  });
 });
 
 describe("Word 转不了的，明说原因，不抛", () => {
