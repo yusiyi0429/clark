@@ -1,5 +1,5 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
-import { CardSourceWordIssue } from "./taskCardView.js";
+import { CardHandbackBrief, CardSourceWordIssue } from "./taskCardView.js";
 import { Budget } from "./budget.js";
 import { LocalPermissionBrief, LocalPermissionDecisionRequest, LocalPermissionMode, LocalQuestionAnswerRequest, LocalQuestionRequestView } from "./localRunner.js";
 import { PersonRef, ProjectTransfer } from "./projectTransfers.js";
@@ -47,10 +47,12 @@ export const SubSessionState = Type.Union([Type.Literal("queued"), Type.Literal(
 
 /**
  * 等你什么（只有 state = waiting 时可能有）：approval 等你批准（本机有权限请求没答）、question 执行方在问你（本机报 idle 带 question；一轮做完停下不算）、
- * verdict 验收结果等你拿主意（连续两次验收没过，受阻）、merge 验收过了但本机没能自动合回，等你合（「合进 main / 先不合」）。
+ * verdict 验收结果等你拿主意（连续两次验收没过，受阻）、merge 验收过了但本机没能自动合回，等你合（「合进 main / 先不合」）、
+ * needs_person 等你补（主循环第 61 条，卡的标记 needs_person：验收员判了有几条只有本人能做）。
  * 已暂停（停下了）也是等你（说一句就接着做），为 null。
  */
-export const SubSessionWaiting = Type.Union([Type.Literal("approval"), Type.Literal("question"), Type.Literal("verdict"), Type.Literal("merge")]);
+export const SubSessionWaiting = Type.Union([Type.Literal("approval"), Type.Literal("question"), Type.Literal("verdict"), Type.Literal("merge"),
+  Type.Literal("needs_person")]);
 
 /**
  * 卡验收过以后的合回（第 4.5 节，本机程序报的 merge 同步条目 LocalMergeSync；同一次交回报了几条时以本机序号最大的那条为准）：
@@ -265,11 +267,13 @@ export const HomeMonthMission = Type.Object({
  *   title 是要本人确认的问题，source 固定「会后确认」，at 是 Nexus 发出的时间，dueAt 是截止（过了就作废、从「等你」里消失，不催）；
  *   confirmation 带待确认的内容和会上原话。answer = inline：就地「确认」「拒绝」，有内容的可以「修改」（从原内容改起，只改内容），
  *   都是 POST /api/me/nexus-confirmations/{confirmation.id}/decision（手机上也能）。没有单独的页面，open 只是指回这一条。不属于 Task、项目。
+ * needs_person（主循环第 61 条）：一张卡等你补（同子会话 waiting = needs_person）。title「等你补」，source 同 verdict（卡名 · Task 名），
+ *   summary 是验收员那一句人话；answer = open，open 同 verdict 指到那张卡（框钉在子会话输入框上方）。
  */
 export const WaitingKind = Type.Union([
   Type.Literal("approval"), Type.Literal("question"), Type.Literal("verdict"), Type.Literal("meeting"), Type.Literal("mission_card"), Type.Literal("role"),
   Type.Literal("merge"), Type.Literal("plan_start"), Type.Literal("acceptance"), Type.Literal("month"), Type.Literal("device"), Type.Literal("quota"),
-  Type.Literal("transfer"), Type.Literal("goal_changed"), Type.Literal("auto_relay"), Type.Literal("nexus_confirmation"),
+  Type.Literal("transfer"), Type.Literal("goal_changed"), Type.Literal("auto_relay"), Type.Literal("nexus_confirmation"), Type.Literal("needs_person"),
 ]);
 
 /**
@@ -335,6 +339,11 @@ export const WaitingItem = Type.Object({
   question: Nullable(LocalQuestionRequestView),
   permission: Nullable(LocalPermissionBrief),
   confirmation: Type.Optional(Type.Object({ id: Type.String({ format: "uuid" }), value: Nullable(Type.String()), quote: Nullable(Type.String()) }, strict)),
+  /**
+   * 第二行的摘要（主循环第 64、66 条）：approval 是批准的那句人话（permission.description，没有为 null）；needs_person、verdict 是验收员那一句人话
+   * （那次交回的 headline）；question 是第一个问题的原文。别的种类、没有的为 null 或不带。
+   */
+  summary: Type.Optional(Nullable(Type.String())),
 }, strict);
 
 /**
@@ -363,10 +372,14 @@ export const WorkWaitingCountResponse = Type.Object({ count: Type.Integer({ mini
 
 /**
  * 项目对话（原 Task 管线）里网页按时间插的一行（第 4.5 节，从卡和交回现算，不另存事件）。id 稳定，网页按它去重；at 是这件事发生的时间。
- * - card_passed：一张卡验收过了（含本人「仍然通过」），met / total 几条达到，merge 是合回结果（「已合进 main」，或要你合的原因）。
+ * - card_passed：一张卡验收过了（含本人「就到这里」），met / total 几条达到，merge 是合回结果（「已合进 main」，或要你合的原因）。
+ *   gap（主循环第 62 条）：本人「就到这里」的写的原因（有缺口通过，界面写出来）；正常通过为 null 或不带。
  * - card_blocked：一张卡连续两次没过（受阻），fix 是拼好的改法（含原话对不上的几处）；sourceWordIssues 是那次交回和本人原话对不上的几处（16.8），和没过的标准一起列；
- *   网页给选项「按这个改（推荐）/ 我去看看 / 仍然通过」，
- *   按这个改 = 照原来的送回（说一句 + /handbacks/:id/returned），仍然通过 = 推翻（/handbacks/:id/overrule）。
+ *   handback（主循环第 62 条）是那次交回的摘要：headline 一句人话、gaps 逐条、relay 手机登记的「再改一轮」送到没有。云端都带，可选只为兼容。
+ *   选项（第 62 条）：「再改一轮（推荐）/ 我去看看 / 改完成标准 / 就到这里」。再改一轮 = 在那台电脑上照原来送回（说一句 + /returned），
+ *   别处 = POST /handbacks/:id/relay { kind: return }；就到这里 = 推翻（/handbacks/:id/overrule，必须写原因）。
+ * - card_needs_person（主循环第 61 条）：一张卡等你补，字段同 card_blocked（fix 是执行方能补的那几条拼好的改法，没有为 null）。
+ *   项目对话里照第 54 条只指过去（点了到子会话里钉住的框），不另开框。
  * - criteria_met：taskId 这件 Task 约定里的每一条都有验收通过的卡（met = total）；网页问「约定 n 条都达到了，交给认可人？（推荐）」，
  *   接 V1 的出一版（/deliverable/versions/from-pending）、对表、请 X 看、交付。完成仍只由本人确认。
  * - rework_opened：合回以后被推翻，管线在同一件 Task 下开了一张返工卡（cardId），fromCardId 是被推翻的那张，reason 是推翻的理由。
@@ -374,9 +387,13 @@ export const WorkWaitingCountResponse = Type.Object({ count: Type.Integer({ mini
 const FeedBase = { id: Type.String({ minLength: 1 }), at: Instant };
 export const TaskFeedItem = Type.Union([
   Type.Object({ kind: Type.Literal("card_passed"), ...FeedBase, cardId: Type.String({ format: "uuid" }), title: Type.String(),
-    met: Type.Integer({ minimum: 0 }), total: Type.Integer({ minimum: 0 }), merge: Nullable(CardMerge) }, strict),
+    met: Type.Integer({ minimum: 0 }), total: Type.Integer({ minimum: 0 }), merge: Nullable(CardMerge), gap: Type.Optional(Nullable(Type.String())) }, strict),
   Type.Object({ kind: Type.Literal("card_blocked"), ...FeedBase, cardId: Type.String({ format: "uuid" }), title: Type.String(),
-    handbackId: Type.String({ format: "uuid" }), fix: Nullable(Type.String()), sourceWordIssues: Type.Array(CardSourceWordIssue) }, strict),
+    handbackId: Type.String({ format: "uuid" }), fix: Nullable(Type.String()), sourceWordIssues: Type.Array(CardSourceWordIssue),
+    handback: Type.Optional(CardHandbackBrief) }, strict),
+  Type.Object({ kind: Type.Literal("card_needs_person"), ...FeedBase, cardId: Type.String({ format: "uuid" }), title: Type.String(),
+    handbackId: Type.String({ format: "uuid" }), fix: Nullable(Type.String()), sourceWordIssues: Type.Array(CardSourceWordIssue),
+    handback: Type.Optional(CardHandbackBrief) }, strict),
   Type.Object({ kind: Type.Literal("criteria_met"), ...FeedBase, taskId: Type.String({ minLength: 1 }), met: Type.Integer({ minimum: 1 }),
     total: Type.Integer({ minimum: 1 }) }, strict),
   Type.Object({ kind: Type.Literal("rework_opened"), ...FeedBase, cardId: Type.String({ format: "uuid" }), title: Type.String(),
@@ -513,12 +530,14 @@ export type TSessionStopDoneRequest = Static<typeof SessionStopDoneRequest>;
  *  （答过了、这一轮停了）；failed 本机拒了（message 写本机回的原因）。报过的不再出现。
  * command：
  * - message：往会话里说一句（POST /v1/sessions/:sessionId/messages，{ text }）。会话停着（exited、做完一轮）的，本机会续上接着做——「重开」也是这一条。
+ *   主循环第 60–62 条也走这一条：卡的约定改了（带 agreementRevision，本机 protocol ≥ 3 时原样放进 LocalSendMessageRequest.agreementRevision，老本机只发 text）、
+ *   执行方提的改约定本人定了、手机登记的「再改一轮」「我来补」（CardRelayView）。网页照常执行、报 done，云端据此回写送达。
  * - answer：回答它在问的那一次（POST /v1/sessions/:sessionId/questions/:requestId，体是 answer）。
  * - permission：批准或拒绝在等批准的那一步（POST /v1/sessions/:sessionId/permissions/:requestId，体是 decision）。只有本人明说才会登记 allow。
  * sessionId 是本机会话的 id（SubSession.sessionId），deviceId 是它所在的电脑。
  */
 export const SessionCommand = Type.Union([
-  Type.Object({ type: Type.Literal("message"), text: Type.String({ minLength: 1, maxLength: 4000 }) }, strict),
+  Type.Object({ type: Type.Literal("message"), text: Type.String({ minLength: 1, maxLength: 4000 }), agreementRevision: Type.Optional(Type.Integer({ minimum: 1 })) }, strict),
   Type.Object({ type: Type.Literal("answer"), requestId: Type.String({ minLength: 1, maxLength: 120 }), answer: LocalQuestionAnswerRequest }, strict),
   Type.Object({ type: Type.Literal("permission"), requestId: Type.String({ minLength: 1, maxLength: 120 }), decision: LocalPermissionDecisionRequest }, strict),
 ]);

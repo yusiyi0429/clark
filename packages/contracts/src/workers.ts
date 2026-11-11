@@ -17,10 +17,11 @@ const Nullable = <T extends TSchema>(schema: T) => Type.Union([schema, Type.Null
 
 /**
  * worker 身上的标记，都在「进行中」：approval 等你批准、reply 等你回复、paused 已暂停、reviewing 验收中（云端的验收员在验）、
- * review_failed 验收没过、blocked 受阻。
+ * review_failed 验收没过、blocked 受阻、needs_person 等你补（主循环第 61 条，同卡的标记）。
  */
 export const WorkerMark = Type.Union([
   Type.Literal("approval"), Type.Literal("reply"), Type.Literal("paused"), Type.Literal("reviewing"), Type.Literal("review_failed"), Type.Literal("blocked"),
+  Type.Literal("needs_person"),
 ]);
 
 /**
