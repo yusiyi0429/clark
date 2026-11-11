@@ -62,17 +62,32 @@ describe("卡上写技能名", () => {
     expect(text(renderToStaticMarkup(<KanbanCard card={boardCards([self])[0]!} canStart={false} elsewhere={null} onStart={vi.fn()} now={0} />))).not.toContain("我自己");
   });
 
-  it("开始时的模型默认按技能档位：强 Opus、中 Sonnet、轻 Haiku，认不出用默认", () => {
-    const models = [
-      { id: "subscription", model: null, label: "订阅", isDefault: true },
-      { id: "o", model: "opus", label: "Opus", isDefault: false },
-      { id: "s", model: "sonnet", label: "Sonnet", isDefault: false },
-      { id: "h", model: "haiku", label: "Haiku", isDefault: false },
-    ];
+  const SUB = { provider: "claude-subscription", label: "Claude 订阅", via: null };
+  const TH = { provider: "tokenhub", label: "TokenHub", via: null };
+  const profile = (id: string, model: string | null, origin: typeof SUB, isDefault = false, extra: { sourceId?: string } = {}) =>
+    ({ id, model, label: id, isDefault, agent: "claude-code" as const, source: origin === SUB ? ("subscription" as const) : ("gateway" as const), origin, ...extra });
+
+  it("开始时的模型默认按技能档位：强 Opus、中 Sonnet、轻 Haiku（在默认那个来源里），认不出用默认", () => {
+    const models = [profile("subscription", null, SUB, true), profile("o", "opus", SUB), profile("s", "sonnet", SUB), profile("h", "haiku", SUB)];
     expect(modelForTier(models, "strong")?.id).toBe("o");
     expect(modelForTier(models, "normal")?.id).toBe("s");
     expect(modelForTier(models, "light")?.id).toBe("h");
     expect(modelForTier(models.slice(0, 1), "strong")?.id).toBe("subscription");
+  });
+
+  it("「自动」只在默认来源里挑（11/11 定 A）：连了 TokenHub、默认是订阅时不挑 TokenHub 的；默认设成 TokenHub 的就在它那几条里挑", () => {
+    const th = [profile("th-opus", "wangsu/claude-opus-5-5", TH), profile("th-sonnet", "wangsu/claude-sonnet-5-5", TH), profile("th-flash", "wangsu/deepseek-v4.1-flash", TH)];
+    const subDefault = [profile("subscription", null, SUB, true), ...th];
+    expect(modelForTier(subDefault, "strong")?.id).toBe("subscription");
+    expect(modelForTier(subDefault, "light")?.id).toBe("subscription");
+    const thDefault = [profile("subscription", null, SUB), ...th.map((m) => (m.id === "th-sonnet" ? { ...m, isDefault: true } : m))];
+    expect(modelForTier(thDefault, "strong")?.id).toBe("th-opus");
+    expect(modelForTier(thDefault, "light")?.id).toBe("th-flash");
+    expect(modelForTier(thDefault.filter((m) => m.id !== "th-flash"), "light")?.id).toBe("th-sonnet"); // 认不出轻档：默认那条
+    // 添加来源建的（带 sourceId）按来源分：同一家的两个来源不混
+    const kimi = { provider: "kimi", label: "Kimi API", via: null };
+    const two = [profile("a", "kimi-k3.1-pro", kimi as typeof SUB, true, { sourceId: "kimi-api-cn" }), profile("b", "kimi-k3.1-opus", kimi as typeof SUB, false, { sourceId: "kimi-coding_plan-cn" })];
+    expect(modelForTier(two, "strong")?.id).toBe("a");
   });
 });
 

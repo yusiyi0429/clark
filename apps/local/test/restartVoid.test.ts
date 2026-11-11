@@ -51,8 +51,8 @@ describe("本机程序被强杀后重新起来", () => {
       const events = () => readFileSync(eventsFile, "utf8").trim().split("\n").map((l) => JSON.parse(l));
       const added = events().filter((e) => e.seq > seq);
       expect(added.filter((e) => e.type === "permission_resolved")).toEqual([
-        expect.objectContaining({ requestId: first.requestId, decision: "deny", message: "本机程序重启，已作废", allowForSession: false }),
-        expect.objectContaining({ requestId: "perm-hardkill-2", decision: "deny", message: "本机程序重启，已作废", allowForSession: false }),
+        expect.objectContaining({ requestId: first.requestId, decision: "deny", message: "本机程序重启，已作废", allowForSession: false, voided: true }),
+        expect.objectContaining({ requestId: "perm-hardkill-2", decision: "deny", message: "本机程序重启，已作废", allowForSession: false, voided: true }),
       ]);
       expect(added.filter((e) => e.type === "question_resolved")).toEqual([expect.objectContaining({ requestId: "q-hardkill", choices: null, text: null })]);
       expect(added.some((e) => e.type === "status" && e.status === "exited")).toBe(true);

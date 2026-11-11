@@ -41,8 +41,8 @@ type Step = Extract<SessionEntry, { kind: "step" }>;
 type Permission = Extract<SessionEntry, { kind: "permission" }>;
 /** 一次提问折成一项：答了是答案，没答就过去了是 expired。 */
 type Asked = { kind: "asked"; seq: number; question: string; answer: string | null };
-/** 过程里的一行：一步；denied = 本人让它换了做法（批准时选的「换个做法」）；note = 过程里的一句提示（换了模型），不算步数。 */
-type ProcessRow = { step: Step; denied: boolean; note?: boolean };
+/** 过程里的一行：一步；denied = 本人让它换了做法（批准时选的「换个做法」），voided = 本机程序重启时作废的（不是本人拒的）；note = 过程里的一句提示（换了模型），不算步数。 */
+type ProcessRow = { step: Step; denied: boolean; voided?: boolean; note?: boolean };
 /** 归进过程的提示（32 条：换模型那一句进过程行，不单独一行）。 */
 const PROCESS_NOTICES = new Set(["model_changed"]);
 /** 一段过程（28 条）：两句对话之间的步骤、批过的权限并成一段，start/end 是这一段第一条和最后一条记录的时间。 */
@@ -76,8 +76,8 @@ function processRows(steps: Step[], denied: Permission[], notes: Step[]): Proces
   for (const permission of denied) {
     const match = rows.filter((row) => !row.denied && row.step.title === permission.request.title)
       .sort((a, b) => Math.abs(a.step.seq - permission.seq) - Math.abs(b.step.seq - permission.seq))[0];
-    if (match) match.denied = true;
-    else rows.push({ step: { kind: "step", seq: permission.seq, at: permission.at, toolUseId: permission.request.requestId, title: permission.request.title, done: true, isError: false }, denied: true });
+    if (match) { match.denied = true; match.voided = Boolean(permission.voided); }
+    else rows.push({ step: { kind: "step", seq: permission.seq, at: permission.at, toolUseId: permission.request.requestId, title: permission.request.title, done: true, isError: false }, denied: true, voided: Boolean(permission.voided) });
   }
   for (const step of notes) rows.push({ step, denied: false, note: true });
   return rows.sort((a, b) => a.step.seq - b.step.seq);
@@ -189,13 +189,13 @@ function WorkingRow({ since, starting = false }: { since: string | null; startin
   );
 }
 
-/** 点开后的一步一行：不写时间；换了做法的行尾一个淡色「换个做法」。 */
+/** 点开后的一步一行：不写时间；换了做法的行尾一个淡色「换个做法」，本机程序重启作废的写「已作废」。 */
 function StepRow({ row, live }: { row: ProcessRow; live: boolean }) {
   return (
     <div className={s.step}>
       <StateIcon state={row.denied ? "stopped" : stepState(row.step, live)} />
       <span className={s.stepText}>{row.step.title}</span>
-      {row.denied ? <span className={s.stepsTook}>换个做法</span> : null}
+      {row.denied ? <span className={s.stepsTook}>{row.voided ? "已作废" : "换个做法"}</span> : null}
     </div>
   );
 }
