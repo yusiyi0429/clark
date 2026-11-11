@@ -857,7 +857,7 @@ export const LocalCreateSessionRequest = Type.Object({
   /**
    * 自由子会话（第 68 条，项目下的「+」）：只给 kind=topic（别的 400），云端专题带 free 时网页原样带上；本机 protocol ≥ 4 才收。
    * 本机换一套规矩：没有提纲、版本、交回、验收，本人要的文件就写在文件夹里；工具只有交产出物和翻更早的轮次。
-   * 在项目的文件夹里做；那是普通文件夹（不是 git 仓库）时，和卡一样同一时间只许一个在改（摘要的 workspace 是 folder，被占着时排队，见 LocalFolderHolder）。
+   * 在项目的文件夹里做，不管里面有没有 .git 都按普通文件夹算：摘要的 workspace 是 folder，和普通文件夹里的卡、别的自由子会话同一时间只许一个在改，被占着时排队（见 LocalFolderHolder）。
    */
   free: Type.Optional(Type.Literal(true)),
 }, strict);
@@ -1049,7 +1049,7 @@ export const LocalSessionSummary = Type.Object({
   usage: LocalUsage,
   /**
    * 卡：在工作树还是文件夹里做（本机总会填；等前面的卡时还没有工作树，不带）。
-   * 自由子会话（第 68 条）：项目文件夹是普通文件夹时带 kind=folder（第 71 条「改之前留一份」照卡一样认它）；是 git 仓库时不带（直接在主文件夹里做）。
+   * 自由子会话（第 68 条）：总带 kind=folder，git 仓库的主文件夹也是（它直接改主文件夹，没有自己的工作树；第 71 条「改之前留一份」照卡一样认它）。
    */
   workspace: Type.Optional(LocalWorkspace),
   /** 排着队、在等普通文件夹空出来时：占着它的是谁（LocalFolderHolder，第 68 条）；不在等就不带。 */

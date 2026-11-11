@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { Value } from "@sinclair/typebox/value";
-import { LOCAL_RUNNER_ATTACHMENT_PATH, LOCAL_RUNNER_VERIFY_BRIEF_PATH, LocalVerifyBriefResponse, type TLocalCloudLinkView, type TLocalSettings, type TLocalSettingsPatch, type TLocalVerifyBriefResponse } from "@warmap/contracts";
+import { LOCAL_RUNNER_ATTACHMENT_PATH, LOCAL_RUNNER_CARD_AGREEMENT_PATH, LOCAL_RUNNER_VERIFY_BRIEF_PATH, LocalCardAgreementResponse, LocalVerifyBriefResponse, type TLocalCardAgreementResponse, type TLocalCloudLinkView, type TLocalSettings, type TLocalSettingsPatch, type TLocalVerifyBriefResponse } from "@warmap/contracts";
 import { readJson, writeJsonAtomic } from "./store.js";
 import type { SecretStore } from "./secrets.js";
 import type { CloudTarget, Outbox } from "./outbox.js";
@@ -73,6 +73,19 @@ export async function fetchVerifyBrief(target: CloudTarget | null, handbackKey: 
   const body = (await res.json()) as unknown;
   if (!Value.Check(LocalVerifyBriefResponse, body)) throw new Error("天枢的验收交代格式不对");
   return { kind: "ok", brief: body };
+}
+
+/** 向天枢取卡此刻的约定（主循环第 60 条）。没连天枢、没有这张卡（404）为 null；连不上、出错、格式不对抛错。 */
+export async function fetchCardAgreement(target: CloudTarget | null, cardId: string, fetchImpl: typeof fetch): Promise<TLocalCardAgreementResponse | null> {
+  if (!target) return null;
+  const url = new URL(LOCAL_RUNNER_CARD_AGREEMENT_PATH, target.apiBaseUrl);
+  url.searchParams.set("cardId", cardId);
+  const res = await fetchImpl(url, { headers: { authorization: `Bearer ${target.token}` }, signal: AbortSignal.timeout(15_000) });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`天枢返回 ${res.status}`);
+  const body = (await res.json()) as unknown;
+  if (!Value.Check(LocalCardAgreementResponse, body)) throw new Error("天枢的卡约定格式不对");
+  return body;
 }
 
 /**
