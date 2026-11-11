@@ -141,11 +141,11 @@ export function AddSourceDialog({ onClose, source = null }: { onClose: () => voi
         const ids = step.candidates.length ? step.candidates : presets.map((entry) => entry.id);
         return (
           <>{keyField}
-            <div className={p.pickList} role="list" aria-label="是哪一家" data-testid="source-candidates">
+            <div className={p.sourceList} role="list" aria-label="是哪一家" data-testid="source-candidates">
               {ids.map((id) => presetOf(id)).filter((entry): entry is TLocalSourcePreset => !!entry).map((preset) => (
-                <button key={preset.id} type="button" role="listitem" className={`${h.menuItem} ${p.pick}`} disabled={busy} onClick={() => void check({ presetId: preset.id })}>{preset.name}</button>
+                <button key={preset.id} type="button" role="listitem" className={`${h.menuItem} ${p.sourceOption}`} disabled={busy} onClick={() => void check({ presetId: preset.id })}>{preset.name}</button>
               ))}
-              <button type="button" role="listitem" className={`${h.menuItem} ${p.pick}`} disabled={busy} onClick={() => setStep({ kind: "custom" })}>自定义</button>
+              <button type="button" role="listitem" className={`${h.menuItem} ${p.sourceOption}`} disabled={busy} onClick={() => setStep({ kind: "custom" })}>自定义</button>
             </div>
           </>
         );
@@ -171,11 +171,11 @@ export function AddSourceDialog({ onClose, source = null }: { onClose: () => voi
               {preset && preset.regions.length > 1 && !rekey ? <SegmentedSwitch label="地区" selected={found.region ?? "cn"} onSelect={(region) => void check({ presetId: found.presetId, plan: found.plan, region })}
                 segments={preset.regions.map((region) => ({ id: region, label: REGION_LABEL[region] }))} /> : null}
             </div>
-            <div className={p.pickList} role="group" aria-label="模型" data-testid="source-models">
+            <div className={p.sourceList} role="group" aria-label="模型" data-testid="source-models">
               {found.models.map((model) => {
                 const on = checked.includes(model.id);
                 return (
-                  <button key={model.id} type="button" role="checkbox" aria-checked={on} className={`${h.menuItem} ${p.pick}`} disabled={busy} onClick={() => toggle(model.id)} title={model.id}>
+                  <button key={model.id} type="button" role="checkbox" aria-checked={on} className={`${h.menuItem} ${p.sourceOption}`} disabled={busy} onClick={() => toggle(model.id)} title={model.id}>
                     <span className={h.grow}>{model.name}</span><span className={h.panelMark}>{on ? <Check {...ICON} aria-hidden /> : null}</span>
                   </button>
                 );
