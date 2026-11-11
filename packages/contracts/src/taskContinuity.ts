@@ -64,18 +64,13 @@ export const ContinueTaskResponse = Type.Object({
 export const StopTaskRequest = Type.Object({ note: Type.Optional(Note) }, strict);
 export const TaskSettlementResponse = Type.Object({ taskId: Type.String({ minLength: 1 }), settlement: TaskSettlement }, strict);
 
-/** 复盘时这件怎么办：continue 继续做（推荐）、revise 改一改再做、stop 到此为止（同时定了到此为止，和 POST .../stop 同一张表）。 */
-export const MonthChoice = Type.Union([Type.Literal("continue"), Type.Literal("revise"), Type.Literal("stop")]);
-/** 复盘时的答案：选了哪个（只补一句话时为 null）和补的那句话（没补为 null）。 */
-export const MonthAnswer = Type.Object({ choice: Nullable(MonthChoice), note: Nullable(Type.String({ maxLength: 200 })) }, strict);
-
 /**
  * 月份页上这个月本人的一件 Task（本人这个月的 Mission 下、本人负责的；本体没登记负责人的算本人的）。
  * agreement：约定达到了几条 / 共几条（一条算达到 = 本人对它的卡里有一张最近一次有结论的验收算通过）；没有标准为 null。
  * version：交付物到第几版，没交过为 null。running：还在跑的子会话（本机会话还开着的卡和专题）。blocked：受阻的子会话（卡连续两次验收没过）。
  * done：本人确认完成了（最新一版交付了，之后没返工），不问怎么办。
  * settlement：了结了的怎么了结的（completed / stopped / continued，延续去了哪在 settlement.to），没了结为 null。
- * continuedFrom：这件是从哪件延续来的，不是为 null。answer：复盘时定了的，还没定为 null。
+ * continuedFrom：这件是从哪件延续来的，不是为 null。复盘的去向和评定在复盘页（monthReview.ts）。
  */
 export const MonthTask = Type.Object({
   taskId: Type.String({ minLength: 1 }),
@@ -89,7 +84,6 @@ export const MonthTask = Type.Object({
   done: Type.Boolean(),
   settlement: Nullable(TaskSettlement),
   continuedFrom: Nullable(TaskRef),
-  answer: Nullable(MonthAnswer),
 }, strict);
 
 /**
@@ -118,20 +112,12 @@ export const MonthPageResponse = Type.Object({
   draft: Nullable(MonthDraft),
 }, strict);
 
-/**
- * PUT /api/me/months/:period/tasks/:taskId/decision（体是 MonthAnswer）→ 204：复盘时这件怎么办，同一件再答就覆盖。
- * 选了到此为止同时定了到此为止（那句话一起记）；选继续做、改一改再做就撤销到此为止；只补一句话（choice 为 null）不动到此为止。
- * choice、note 不能都是 null。只收这个月本人负责的 Task（别的 404）；已经延续出去的选到此为止 409。
- */
-
 export type TTaskRef = Static<typeof TaskRef>;
 export type TTaskSettlement = Static<typeof TaskSettlement>;
 export type TContinueTaskRequest = Static<typeof ContinueTaskRequest>;
 export type TContinueTaskResponse = Static<typeof ContinueTaskResponse>;
 export type TStopTaskRequest = Static<typeof StopTaskRequest>;
 export type TTaskSettlementResponse = Static<typeof TaskSettlementResponse>;
-export type TMonthChoice = Static<typeof MonthChoice>;
-export type TMonthAnswer = Static<typeof MonthAnswer>;
 export type TMonthTask = Static<typeof MonthTask>;
 export type TMonthDraft = Static<typeof MonthDraft>;
 export type TMonthPageResponse = Static<typeof MonthPageResponse>;

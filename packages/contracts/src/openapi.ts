@@ -3,6 +3,7 @@ import { taskQualityPaths, taskQualitySchemas } from "./taskQualityOpenapi.js";
 import { boardPaths, boardSchemas } from "./boardOpenapi.js";
 import { workHomePaths, workHomeSchemas } from "./workHomeOpenapi.js";
 import { taskContinuityPaths, taskContinuitySchemas } from "./taskContinuityOpenapi.js";
+import { monthReviewPaths, monthReviewSchemas } from "./monthReviewOpenapi.js";
 import { AcceptIssueDraftRequest, IssueDraftResponse } from "./issueDrafts.js";
 import {
   RequestStep, RequestPerson, RequestRecipientView, RequestQuestionView, RequestClarification, RequestView, RequestResponse,
@@ -3223,6 +3224,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
       ...boardPaths,
       ...workHomePaths,
       ...taskContinuityPaths,
+      ...monthReviewPaths,
     },
     components: {
       schemas: {
@@ -3593,6 +3595,7 @@ export function buildOpenApiDocument(): OpenAPIV3.Document {
         ...boardSchemas,
         ...workHomeSchemas,
         ...taskContinuitySchemas,
+        ...monthReviewSchemas,
       },
     },
   };

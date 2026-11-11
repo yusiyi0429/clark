@@ -69,6 +69,7 @@ pwsh -NoProfile -File .scratch/manual-test/stop.ps1    # 关闭：删库、停�
 | `welcome-luyao` | 重置王路遥的首次登录引导 |
 | `material-edit` | 模拟「我的 Agent」按上传者的要求改最近上传的一份 Markdown：改写一段、删一个列表项、文末加一段；材料上出现修改标注，群里出现一条说明（时间机器的 Agent 不连模型） |
 | `review-open` | 用 CEO 的「开始复盘」提前开启当月的月末复盘（平时月底倒数第 3 天自动开启）。打开 `/reviews/<当月>` 看总览；Method 能力域的负责人是孙铭泽（`browsermember`），其他待指派的项由 CEO 代复盘。三个复盘 Agent 给的是演示内容，会等两三秒 |
+| `review-prefill` | 月底复盘第三版：替孙铭泽跑一次上个月的预评（时间机器不跑后台任务，没有模型，按条目序号给演示预评）。先 `next-month` 让 10 月进复盘，再打开 `/me/work/month/2026-10` |
 | `target-none` / `target-negotiating` / `target-issued` | 本月目标的三种状态；只能在整理草稿之前用 |
 
 时钟只往前拨，不能倒回。想从头来，stop 再 start。

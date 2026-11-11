@@ -129,6 +129,65 @@ label.row:hover { background: var(--default-soft); }
 .draftRow { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-48); padding: 6px var(--space-2); }
 .foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: 0 var(--space-2); }
 
+/* ---------- 复盘页（设计第三版第 3 节）：Mission 一块，三列 验收标准 | 评定 | 交付，按 Task 分组；最下面延期和取消 ---------- */
+.reviewHeadTrail { display: inline-flex; flex: 0 1 auto; align-items: center; gap: var(--space-3); min-width: 0; }
+.reviewMeta { flex: none; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; white-space: nowrap; }
+.reviewHeadTrail .reviewMeta { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.reviewMissionHead { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-36); padding: 0 var(--space-2); }
+.reviewMissionName { flex: 1; min-width: 0; margin: 0; overflow: hidden; color: var(--ink); font-size: var(--text-base); font-weight: 600; line-height: var(--lh-row); text-overflow: ellipsis; white-space: nowrap; }
+.reviewFold { display: inline-grid; flex: none; place-items: center; width: var(--row-28); height: var(--row-28); margin-left: calc(-1 * var(--space-1)); border: 0; border-radius: var(--r-control); background: none; color: var(--ink-faint); cursor: pointer; }
+.reviewFold:hover { background: var(--default-soft); color: var(--ink-muted); }
+/* 确认过、收起来的一行：整行能点开。 */
+.reviewFolded { display: flex; align-items: center; gap: var(--space-2); width: 100%; min-height: var(--row-48); padding: 0 var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink-faint); font: inherit; text-align: left; cursor: pointer; }
+.reviewFolded:hover { background: var(--default-soft); }
+.reviewFold:focus-visible, .reviewFolded:focus-visible, .reviewAdd[data-focus-visible], .reviewUnlink:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+/* 三列：标准吃剩下的，评定 112，交付最多 176。 */
+.reviewTable { display: grid; grid-template-columns: minmax(0, 1fr); }
+.reviewColumns, .reviewRow { display: grid; grid-template-columns: minmax(0, 1fr) 112px minmax(0, 176px); column-gap: var(--space-3); padding: 0 var(--space-2); }
+.reviewColumns { align-items: center; min-height: var(--row-28); color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; }
+.reviewTask + .reviewTask { margin-top: var(--space-2); }
+.reviewTaskHead { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-36); padding: 0 var(--space-2); box-shadow: inset 0 -1px 0 var(--hairline); }
+.reviewTaskName { flex: 1; min-width: 0; overflow: hidden; color: var(--ink); font-size: var(--text-base); line-height: var(--lh-row); text-overflow: ellipsis; white-space: nowrap; }
+.reviewRow { align-items: start; padding-block: var(--space-2); }
+.reviewText { display: grid; gap: 2px; min-width: 0; color: var(--ink); font-size: var(--text-base); line-height: var(--lh-row); }
+.reviewBasis { color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; }
+/* 备注框：平时像一行淡字，聚焦时出底；要必填时占位字用警告色。 */
+.reviewNote { width: 100%; min-width: 0; height: var(--row-28); margin-left: calc(-1 * var(--space-2)); padding: 0 var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink-muted); font: inherit; font-size: var(--text-xs); line-height: 16px; outline: none; }
+.reviewNote:hover { background: var(--default-soft); }
+.reviewNote:focus { background: var(--neutral-wash); color: var(--ink); }
+.reviewNote:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.reviewNote[data-required]::placeholder { color: var(--warning); }
+.reviewNote[aria-invalid="true"] { box-shadow: inset 0 0 0 1px var(--warning); }
+.reviewRating { display: grid; justify-items: start; gap: 2px; min-width: 0; }
+.pick[data-rating="unmet"], .reviewRatingWord[data-rating="unmet"] { color: var(--danger); }
+.reviewRatingWord { font-size: var(--doc-type-meta); line-height: var(--row-28); }
+.reviewLinks { display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--space-1); min-width: 0; }
+.reviewLink { display: inline-flex; align-items: center; max-width: 100%; min-width: 0; height: var(--row-28); padding: 0 var(--space-1) 0 var(--space-2); border-radius: var(--r-capsule); background: var(--neutral-wash); font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); }
+.reviewLink a { min-width: 0; overflow: hidden; color: var(--ink); text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
+.reviewLink a:hover { text-decoration: underline; }
+.reviewUnlink { display: inline-grid; flex: none; place-items: center; width: 20px; height: 20px; border: 0; border-radius: var(--r-control); background: none; color: var(--ink-faint); opacity: 0; cursor: pointer; transition: opacity var(--dur-fast) linear; }
+.reviewLink:hover .reviewUnlink, .reviewUnlink:focus-visible { opacity: 1; }
+.reviewUnlink:hover { color: var(--ink); }
+@media (pointer: coarse) { .reviewUnlink { opacity: 1; } }
+.reviewAdd { display: inline-flex; align-items: center; gap: 2px; height: var(--row-28); padding: 0 var(--space-2); border: 0; border-radius: var(--r-capsule); background: none; color: var(--ink-faint); font: inherit; font-size: var(--doc-type-meta); line-height: var(--doc-lh-meta); cursor: pointer; outline: none; }
+.reviewAdd:hover, .reviewAdd[data-pressed] { background: var(--default-soft); color: var(--ink-muted); }
+.reviewAddDialog { display: grid; gap: var(--space-1); width: min(320px, calc(100vw - 32px)); outline: none; }
+.reviewAddList { display: grid; min-height: var(--row-36); margin: 0; padding: 0; list-style: none; }
+.reviewAddList button { width: 100%; border: 0; font-family: inherit; text-align: left; }
+.reviewAddForm { display: flex; }
+.reviewUrl { flex: 1; min-width: 0; height: var(--row-36); padding: 0 var(--space-3); border: 0; border-radius: var(--r-control); background: var(--neutral-wash); color: var(--ink); font: inherit; font-size: var(--text-base); outline: none; }
+.reviewUrl:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.reviewFoot { display: flex; justify-content: flex-end; align-items: center; gap: var(--space-2); padding: 0 var(--space-2); }
+.reviewAside { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-48); padding: 6px var(--space-2); }
+/* 手持：评定挪到标准文字右边，交付另起一行；列头不画。 */
+@media (max-width: 959px) {
+  .reviewColumns { display: none; }
+  .reviewRow { grid-template-columns: minmax(0, 1fr) auto; row-gap: var(--space-1); }
+  .reviewLinks { grid-column: 1 / -1; }
+  /* 页头放不下截止和条数：手持上只留「与伙伴讨论」，条数在各 Mission 那一行。 */
+  .reviewHeadTrail .reviewMeta { display: none; }
+}
+
 /* ---------- 岗位（RolesPage）、我的记忆（MemoryPage）共用的几样 ---------- */
 /* 能点进去的一行（岗位、修改记录）：整行一个按钮，悬停加底，行尾 ChevronRight（展开时转 90°）。 */
 .rowButton { width: 100%; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; transition: background-color var(--dur-fast) linear; }

@@ -4,7 +4,7 @@ const { readFile, rename, writeFile } = require("node:fs/promises");
 const { join } = require("node:path");
 
 const command = process.argv[2];
-if (!/^(inspect|target-none|target-negotiating|target-issued|draft|open|near|advance|reopen|confirm|confirm-all|next-month|welcome-member|welcome-dri|welcome-ceo|welcome-luyao|material-edit|review-open|close)$/.test(command || "") || process.argv.length !== 3) {
+if (!/^(inspect|target-none|target-negotiating|target-issued|draft|open|near|advance|reopen|confirm|confirm-all|next-month|welcome-member|welcome-dri|welcome-ceo|welcome-luyao|material-edit|review-open|review-prefill|close)$/.test(command || "") || process.argv.length !== 3) {
   process.stderr.write("用法: node control.cjs inspect|target-none|target-negotiating|target-issued|draft|open|near|advance|reopen|confirm|confirm-all|next-month|welcome-member|welcome-dri|welcome-ceo|welcome-luyao|material-edit|close\n");
   process.exitCode = 2;
 } else main().catch((error) => {

@@ -323,11 +323,11 @@ await app.nexusDri.resume();
 const jobWorker = createJobWorker({
   pool,
   handlers: {
-    ...exampleJobHandlers, ...feishuTokens?.handlers, ...followThroughJobs.handlers, ...docChangeJobs.handlers, ...app.collectionJobs.handlers, ...usageJobs.handlers, ...summaryJobs.handlers, ...ceoNoticeJobs.handlers, ...homePush.handlers, ...app.taskPlacementJobs, ...missionLoadJobs.handlers, ...app.nexusDri.jobs,
+    ...exampleJobHandlers, ...feishuTokens?.handlers, ...followThroughJobs.handlers, ...docChangeJobs.handlers, ...app.collectionJobs.handlers, ...usageJobs.handlers, ...summaryJobs.handlers, ...ceoNoticeJobs.handlers, ...homePush.handlers, ...app.taskPlacementJobs, ...missionLoadJobs.handlers, ...app.nexusDri.jobs, ...app.monthReviewJobs.handlers,
     ...(env.feishu ? feishuEventJobs(pool, mergeFeishuEventHandlers(followThroughJobs.feishuEvents, docChangeJobs.feishuEvents, app.feishuChat?.events ?? {})) : {}),
     ...(feishuClient ? feishuNotifyJobs({ pool, client: feishuClient, publicOrigin: env.publicOrigin }) : {}),
   },
-  recurring: [...(feishuTokens?.recurring ?? []), ...followThroughJobs.recurring, ...app.collectionJobs.recurring, ...usageJobs.recurring, ...summaryJobs.recurring, ...ceoNoticeJobs.recurring, ...homePush.recurring, ...missionLoadJobs.recurring],
+  recurring: [...(feishuTokens?.recurring ?? []), ...followThroughJobs.recurring, ...app.collectionJobs.recurring, ...usageJobs.recurring, ...summaryJobs.recurring, ...ceoNoticeJobs.recurring, ...homePush.recurring, ...missionLoadJobs.recurring, ...app.monthReviewJobs.recurring],
 });
 let feishuEvents: { close: () => void } | undefined;
 app.addHook("onClose", async () => {

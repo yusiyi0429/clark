@@ -196,6 +196,12 @@ async function main() {
         todos: [],
       } };
     } },
+    // 月底复盘第三版的预评：时间机器没有模型，按条目序号给演示预评（第 1、4… 条达到，第 2、5… 条部分达到，其余未达到）；
+    // 后台任务在时间机器里不跑，用 control.cjs review-prefill 跑一次。
+    monthReviewAgent: { async rate(input) {
+      return { criteria: input.criteria.map((criterion) => ({ index: criterion.index, rating: (["met", "partial", "unmet"] as const)[(criterion.index - 1) % 3]!,
+        basis: "（演示）时间机器没有模型，按条目序号给的预评", vague: false, deliverable: false })) };
+    } },
     // 月末复盘：时间机器没有模型，三个 Agent 都给演示内容（等两三秒，好看到「正在起草 / 评估 / 汇总」）。
     monthlyReviewAgents: {
       // 个人复盘：开启复盘时自动起草（演示内容按本人 Mission 标题拼出来）；上传材料后「按材料重新起草」也走这里。
@@ -435,6 +441,14 @@ async function main() {
           const opened = await app!.app.inject({ method: "POST", url: "/api/monthly-reviews/actions/execute", headers, payload: { actionId: open.actionId } });
           if (opened.statusCode !== 200) throw new Error(`开启复盘失败：${opened.statusCode} ${opened.body.slice(0, 200)}`);
           result = { reviewOpened: period, href: `/reviews/${period}` };
+        }
+        else if (request.command === "review-prefill") {
+          // 月底复盘第三版：时间机器不跑后台任务，这里替孙铭泽跑一次上个月（复盘的那个月）的预评，走正式的后台任务处理（演示预评见上面 monthReviewAgent）。
+          const [year, month] = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit" }).format(appNow()).split("-").map(Number) as [number, number];
+          const period = month === 1 ? `${year - 1}-12` : `${year}-${String(month - 1).padStart(2, "0")}`;
+          const jobs = (app!.app as unknown as { monthReviewJobs: { handlers: Record<string, (payload: unknown) => Promise<void>> } }).monthReviewJobs;
+          await jobs.handlers["month_review.prefill"]!({ personId: "sun-mingze", period });
+          result = { prefilled: period, personId: "sun-mingze", href: `/me/work/month/${period}` };
         }
         else if (request.command === "target-none") result = await setPlanStage("none");
         else if (request.command === "target-negotiating") result = await setPlanStage("negotiating");

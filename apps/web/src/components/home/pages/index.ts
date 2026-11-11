@@ -7,7 +7,7 @@
  * - 组件只画展示区里的内容（页头以下）：页头（标题、返回）、右栏、左栏由外壳画；导航用 props.go，地址见 view.ts 的 pageHref / monthHref。
  * 外壳给的是文档类阅读尺（data-type-scale="doc"，正文列 600，区块之间 24），组件直接返回几块 Section。
  */
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 import type { PageKey } from "../view";
 import { BuddyPage } from "./BuddyPage";
 import { ConnectionsTabPage, SkillsTabPage } from "./CustomizePage";
@@ -17,7 +17,10 @@ import { PreferencesPage } from "./PreferencesPage";
 import { ProfilePage } from "./ProfilePage";
 
 export type SecondaryPageProps = { go: (href: string) => void };
-export type MonthPageProps = SecondaryPageProps & { period: string };
+/** onHead：月份页在复盘期间换页头（标题「11 月复盘」、右边淡色小字和「与伙伴讨论」），null 换回默认。 */
+export type MonthHead = { title: string; trail: ReactNode };
+/** today：服务端的今天（YYYY-MM-DD，计划里的 today），判这个月在不在复盘；没有用这台电脑的钟。 */
+export type MonthPageProps = SecondaryPageProps & { period: string; today?: string | null; onHead?: (head: MonthHead | null) => void };
 
 export const SECONDARY_PAGES: Record<PageKey, ComponentType<SecondaryPageProps>> = {
   profile: ProfilePage,
