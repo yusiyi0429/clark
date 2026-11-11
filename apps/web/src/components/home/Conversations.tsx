@@ -40,7 +40,7 @@ import { HeroButton } from "@/components/HeroButton";
 import { chatModelLabel } from "@/lib/local/runModel";
 import { PermissionModeMenu, ProjectModeContext, useProjectMode } from "@/components/cards/PermissionMode";
 import { showWorkspaceToast } from "@/lib/toast";
-import { FolderMenu, FootText } from "./InputFooter";
+import { FolderMenu, FolderText, FootText } from "./InputFooter";
 import { PipelineModelMenu } from "./PipelineModel";
 
 /** 首页输入框发来、等着进对话的一句。 */
@@ -171,7 +171,7 @@ type PipelineProps = {
   blocks?: TimedBlock[];
   /** 接手以后「拉到这台电脑」拉好了（重读这台电脑上绑的文件夹）。 */
   onPulled?: () => void;
-  /** 输入框下面左边换文件夹（同项目详情，绑这台电脑上加过的一个，null 不绑）。 */
+  /** 输入框下面左边选文件夹（只在还没绑时给；同项目详情，绑这台电脑上加过的一个，null 是「此电脑」）。 */
   onSetFolder?: (folderId: string | null) => Promise<void>;
   /** 文件夹菜单里的「选择其他文件夹…」「新建文件夹…」：本机一步绑到这个项目上（32 条）。 */
   onPickFolder?: () => Promise<unknown>;
@@ -261,10 +261,12 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
     ? <ProjectPull projectId={project.id} name={project.name} clone={received.clone} onPulled={() => onPulled?.()} /> : null;
   // 交出去了（原负责人这边）：只读，不能发（输入框画成空的；不给 input 时 ChatColumn 会退回它自己的输入框）。
   const readOnly = project.transfer?.status === "accepted";
-  // 输入框下面左边：这个项目绑的文件夹（照 Claude Code），这台电脑上能换；手机上、本机没连上只写名字。
+  // 输入框下面左边：这个项目绑的文件夹（照 Claude Code，开始以后不在这里改）。这台电脑上还没绑才给下拉（「此电脑」）；
+  // 绑了只写工作目录那个的名字、悬停出路径，加、换在项目详情；手机上、本机没连上只写名字。
   const pickFolder = onSetFolder ? (id: string | null) => onSetFolder(id).catch(() => showWorkspaceToast({ text: "没改成" })) : undefined;
-  const folder = !handheld && local.phase === "ready" && pickFolder
-    ? <FolderMenu value={project.folder} currentId={bound?.id ?? null} folders={local.folders} onPick={(id) => void pickFolder(id)}
+  const here = !handheld && local.phase === "ready";
+  const folder = here && bound ? <FolderText name={bound.label} title={bound.path} />
+    : here && pickFolder ? <FolderMenu folders={local.folders} onPick={(id) => void pickFolder(id)}
       onPickOther={onPickFolder} onCreate={onCreateFolder} />
     : project.folder ? <FootText>{project.folder}</FootText> : null;
   // 输入框下面左侧：这个项目以后新开子会话的默认权限模式（17.2 第 11 条）。

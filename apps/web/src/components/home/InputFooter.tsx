@@ -29,12 +29,11 @@ export function createFolderError(error: unknown): string {
 }
 
 /**
- * 项目绑的文件夹（32 条）：点开列这台电脑上的文件夹（当前那个打勾）、「选择其他文件夹…」（本机弹选择框）、「新建文件夹…」（就地写名字，建在桌面）、「不绑」。
+ * 项目在这台电脑上还没绑文件夹时选一个（32 条）：按钮写「此电脑」；点开列这台电脑上的文件夹、「选择其他文件夹…」（本机弹选择框）、「新建文件夹…」（就地写名字，建在桌面）、「此电脑」（打勾）。
  * 选别的和新建都是本机一步绑到项目上，onPickOther / onCreate 不给就没有这两项。
+ * 照 Claude Code「开始以后就不在输入框下面改」：只在这台电脑上项目还没绑文件夹时给；绑了以后调用方只写名字（FolderText），要加、换在项目详情的「文件夹」一节。
  */
-export function FolderMenu({ value, currentId, folders, onPick, onPickOther, onCreate }: {
-  value: string | null;
-  currentId?: string | null;
+export function FolderMenu({ folders, onPick, onPickOther, onCreate }: {
   folders: readonly { id: string; label: string }[];
   onPick: (folderId: string | null) => void;
   onPickOther?: () => Promise<unknown>;
@@ -75,15 +74,15 @@ export function FolderMenu({ value, currentId, folders, onPick, onPickOther, onC
   );
   return (
     <Dropdown>
-      <Dropdown.Trigger className={h.sendTo} aria-label={`文件夹：${value ?? "不绑"}`} data-testid="footer-folder">
-        <Folder {...ICON} /><b>{value ?? "不绑"}</b><ChevronDown {...ICON} />
+      <Dropdown.Trigger className={h.sendTo} aria-label="文件夹：此电脑" data-testid="footer-folder">
+        <Folder {...ICON} /><b>此电脑</b><ChevronDown {...ICON} />
       </Dropdown.Trigger>
       <Dropdown.Popover placement="top start" offset={8} className={h.pop}>
         <Dropdown.Menu aria-label="文件夹" className={h.menuList} onAction={(key) => act(String(key))}>
-          {[...folders.map((folder) => item(folder.id, folder.label, folder.id === currentId)),
+          {[...folders.map((folder) => item(folder.id, folder.label)),
             ...(onPickOther ? [item("other", PICK_OTHER)] : []),
             ...(onCreate ? [item("create", CREATE_FOLDER)] : []),
-            item("none", "不绑", !value)]}
+            item("none", "此电脑", true)]}
         </Dropdown.Menu>
       </Dropdown.Popover>
     </Dropdown>
@@ -108,7 +107,7 @@ export function ContextRing({ percent, warn, tip }: { percent: number; warn: boo
   );
 }
 
-/** 子会话在哪个文件夹里跑（只看：开着的会话换不了地方），悬停出完整路径（站内统一的提示）。 */
+/** 在哪个文件夹里跑（只看）：子会话开着换不了地方；项目对话、派活单是项目在这台电脑上已经绑了（写工作目录那个）。悬停出完整路径（站内统一的提示）。 */
 export function FolderText({ name, title }: { name: string; title: string }) {
   const hover = useHoverTip(title, "top");
   return (
