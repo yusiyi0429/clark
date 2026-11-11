@@ -127,6 +127,9 @@ describe("读文件给预览、列改过的文件", { timeout: 40_000 }, () => {
   it("列改过的文件：不是 git 仓库的文件夹里，执行方用工具动过的、这一轮快照前后变了的（11/11 留一份）；本人在两轮之间自己改的不算", async () => {
     const id = await open("C");
     await idle(id);
+    // 空闲时一轮结束那份快照可能还没留完，那一两秒里本人改的会算成执行方这一轮改的（定下的样子，不修）；等这一轮记下 files_changed 再手改
+    const events = () => readFileSync(join(t.dataDir, "sessions", id, "events.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    await until(() => events().some((e) => e.type === "files_changed"));
     writeFileSync(join(work, "C", "手改的.txt"), "不是执行方写的");
     const r = await files(id);
     expect(r.root).toBe(join(work, "C"));
