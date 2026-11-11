@@ -41,7 +41,7 @@ describe("开工用项目绑的文件夹（17.2 第 32 条）", () => {
     expect(PICK_OTHER).toBe("选择其他文件夹…");
   });
 
-  it("派活单改文件夹等于改项目绑定：下面那一行是输入框下面同一个文件夹下拉，写项目绑的文件夹；没有「选文件夹」「这一次用别的」", () => {
+  it("派活单同输入框下面：项目绑了只写文件夹名（不能点、悬停出路径）；没绑才给同一个文件夹下拉，写「此电脑」；没有「选文件夹」「这一次用别的」", () => {
     const local = { runner: createMockRunner(), phase: "ready", version: null, status: null, models: [], folders: [folder(brand), folder(other)], sessions: [], pairing: null, error: null,
       refresh: vi.fn(), pair: vi.fn(), unpair: vi.fn(), pickFolder: vi.fn(), setIncludePersonal: vi.fn() } as unknown as Parameters<typeof LocalContext.Provider>[0]["value"];
     const draft = { id: "00000000-0000-4000-8000-0000000000d1", planId: "00000000-0000-4000-8000-0000000000b1", position: 0, title: "做 logo", brief: "", doneDefinition: "做完",
@@ -50,9 +50,11 @@ describe("开工用项目绑的文件夹（17.2 第 32 条）", () => {
       <PlanDecision target={{ projectId: "p-brand" }} name="品牌建设" drafts={[draft]} roles={[]} handheld={false} onSay={vi.fn()} onChanged={vi.fn()} folder={bound} onSetFolder={vi.fn()} />
     </LocalContext.Provider>);
     const html = render(brand);
-    expect(html).toMatch(/data-testid="footer-folder"[^>]*>[\s\S]*?<b>tk-branding<\/b>/);
+    expect(html).toMatch(/<span[^>]*data-testid="footer-folder"[^>]*>[\s\S]*?tk-branding/);
+    expect(html).not.toMatch(/<button[^>]*data-testid="footer-folder"/);
+    expect(html).not.toContain("此电脑");
     expect(html).not.toContain("选文件夹");
-    expect(render(null)).toMatch(/aria-label="文件夹：不绑"/);
+    expect(render(null)).toMatch(/<button[^>]*data-testid="footer-folder"[^>]*aria-label="文件夹：此电脑"/);
   });
 
   it("文件夹菜单「选择其他文件夹…」「新建文件夹…」：本机选好或建好后一步绑到项目上；重名 409 就地写「已有同名文件夹」，名字不行照本机说的", async () => {
