@@ -5710,26 +5710,9 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 月份页：这个月本人的 Task（约定几条达到、交付第几版、还在跑和受阻的子会话、确认完成没有、了结和延续去了哪、复盘时怎么定的），和下个月 Co-Agent 的草稿（现在为 null） */
+        /** 月份页：这个月本人的 Task（约定几条达到、交付第几版、还在跑和受阻的子会话、确认完成没有、了结和延续去了哪），和下个月 Co-Agent 的草稿（现在为 null） */
         get: operations["getMonthPage"];
         put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/me/months/{period}/tasks/{taskId}/decision": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** 复盘时这件怎么办：继续做 / 改一改再做 / 到此为止，可以补一句话；选到此为止同时定了到此为止，改成别的就撤销 */
-        put: operations["decideMonthTask"];
         post?: never;
         delete?: never;
         options?: never;
@@ -20938,10 +20921,6 @@ export interface components {
                 } | null;
             };
         };
-        MonthAnswer: {
-            choice: ("continue" | "revise" | "stop") | null;
-            note: string | null;
-        };
         MonthTask: {
             taskId: string;
             missionId: string;
@@ -20973,10 +20952,6 @@ export interface components {
                 name: string;
                 missionId: string;
                 period: string | null;
-            } | null;
-            answer: {
-                choice: ("continue" | "revise" | "stop") | null;
-                note: string | null;
             } | null;
         };
         MonthDraft: {
@@ -21029,10 +21004,6 @@ export interface components {
                     name: string;
                     missionId: string;
                     period: string | null;
-                } | null;
-                answer: {
-                    choice: ("continue" | "revise" | "stop") | null;
-                    note: string | null;
                 } | null;
             }[];
             draft: {
@@ -41322,76 +41293,6 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-        };
-    };
-    decideMonthTask: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                period: string;
-                taskId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MonthAnswer"];
-            };
-        };
-        responses: {
-            /** @description 存好了 */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description ApiError 统一错误 */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description ApiError 统一错误 */
-            409: {
                 headers: {
                     [name: string]: unknown;
                 };

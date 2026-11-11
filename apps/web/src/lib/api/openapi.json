@@ -23860,7 +23860,7 @@
     "/api/me/months/{period}": {
       "get": {
         "operationId": "getMonthPage",
-        "summary": "月份页：这个月本人的 Task（约定几条达到、交付第几版、还在跑和受阻的子会话、确认完成没有、了结和延续去了哪、复盘时怎么定的），和下个月 Co-Agent 的草稿（现在为 null）",
+        "summary": "月份页：这个月本人的 Task（约定几条达到、交付第几版、还在跑和受阻的子会话、确认完成没有、了结和延续去了哪），和下个月 Co-Agent 的草稿（现在为 null）",
         "parameters": [
           {
             "name": "period",
@@ -23903,95 +23903,6 @@
             }
           },
           "403": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/me/months/{period}/tasks/{taskId}/decision": {
-      "put": {
-        "operationId": "decideMonthTask",
-        "summary": "复盘时这件怎么办：继续做 / 改一改再做 / 到此为止，可以补一句话；选到此为止同时定了到此为止，改成别的就撤销",
-        "parameters": [
-          {
-            "name": "period",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "taskId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/MonthAnswer"
-              }
-            }
-          }
-        },
-        "responses": {
-          "204": {
-            "description": "存好了"
-          },
-          "400": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "ApiError 统一错误",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiError"
-                }
-              }
-            }
-          },
-          "409": {
             "description": "ApiError 统一错误",
             "content": {
               "application/json": {
@@ -127570,50 +127481,6 @@
           }
         }
       },
-      "MonthAnswer": {
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "choice",
-          "note"
-        ],
-        "properties": {
-          "choice": {
-            "anyOf": [
-              {
-                "anyOf": [
-                  {
-                    "const": "continue",
-                    "type": "string"
-                  },
-                  {
-                    "const": "revise",
-                    "type": "string"
-                  },
-                  {
-                    "const": "stop",
-                    "type": "string"
-                  }
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "note": {
-            "anyOf": [
-              {
-                "maxLength": 200,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        }
-      },
       "MonthTask": {
         "additionalProperties": false,
         "type": "object",
@@ -127628,8 +127495,7 @@
           "blocked",
           "done",
           "settlement",
-          "continuedFrom",
-          "answer"
+          "continuedFrom"
         ],
         "properties": {
           "taskId": {
@@ -127831,57 +127697,6 @@
                 "type": "null"
               }
             ]
-          },
-          "answer": {
-            "anyOf": [
-              {
-                "additionalProperties": false,
-                "type": "object",
-                "required": [
-                  "choice",
-                  "note"
-                ],
-                "properties": {
-                  "choice": {
-                    "anyOf": [
-                      {
-                        "anyOf": [
-                          {
-                            "const": "continue",
-                            "type": "string"
-                          },
-                          {
-                            "const": "revise",
-                            "type": "string"
-                          },
-                          {
-                            "const": "stop",
-                            "type": "string"
-                          }
-                        ]
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "note": {
-                    "anyOf": [
-                      {
-                        "maxLength": 200,
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  }
-                }
-              },
-              {
-                "type": "null"
-              }
-            ]
           }
         }
       },
@@ -128003,8 +127818,7 @@
                 "blocked",
                 "done",
                 "settlement",
-                "continuedFrom",
-                "answer"
+                "continuedFrom"
               ],
               "properties": {
                 "taskId": {
@@ -128193,57 +128007,6 @@
                           "anyOf": [
                             {
                               "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        }
-                      }
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "answer": {
-                  "anyOf": [
-                    {
-                      "additionalProperties": false,
-                      "type": "object",
-                      "required": [
-                        "choice",
-                        "note"
-                      ],
-                      "properties": {
-                        "choice": {
-                          "anyOf": [
-                            {
-                              "anyOf": [
-                                {
-                                  "const": "continue",
-                                  "type": "string"
-                                },
-                                {
-                                  "const": "revise",
-                                  "type": "string"
-                                },
-                                {
-                                  "const": "stop",
-                                  "type": "string"
-                                }
-                              ]
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "note": {
-                          "anyOf": [
-                            {
-                              "maxLength": 200,
                               "type": "string"
                             },
                             {
