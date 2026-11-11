@@ -6,7 +6,7 @@
  * 有了正文以后能开「评审会」（第 19.1、19.6 节）：选 2–3 个挑刺的岗位，本机并行挑刺、合成一份，存成「评审」那一版，按「分歧和建议」排版。
  * 版本由本机经同步报到云端；对话全文只在本机。手机和别的电脑上只能看版本。
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import Markdown from "react-markdown";
 import { ChevronLeft, Info } from "lucide-react";
@@ -41,9 +41,10 @@ import s from "@/styles/v2-session.module.css";
  * embedded：放在新首页的展示区里——没有返回键。页头右边的信息图标：桌面上在右栏打开当前版本，对话留着；手机上照旧在「对话」和「当前版本」之间切。
  * waiting：首页数据里这个专题在等什么（左栏的点用的那一份）；页头标签和钉在输入框上方的框从它和本机事件流算（第 54 条，同卡的子会话）。
  * queued：首页数据里它在排队时的状态词（「已排队 · 等 B 改登录页 这一轮做完」，第 68 条），页头照写；不在排队为 null。
+ * ask：钉在输入框上方的另一个框（自由子会话等着项目绑文件夹时的「在哪个文件夹开工？」），有它时先出它。
  * 自由子会话（topic.free，第 68 条，项目下的「+」开的）：界面上就是一个子会话，没有提纲、版本、评审会、存飞书，页头不出「当前版本」。
  */
-export function TopicSession({ topicId, embedded = false, waiting = null, queued = null }: { topicId: string; embedded?: boolean; waiting?: Attention | null; queued?: string | null }) {
+export function TopicSession({ topicId, embedded = false, waiting = null, queued = null, ask = null }: { topicId: string; embedded?: boolean; waiting?: Attention | null; queued?: string | null; ask?: ReactNode }) {
   const chrome = useViewChrome();
   const [reading, setReading] = useState(false);
   const side = useSideDetail();
@@ -128,6 +129,7 @@ export function TopicSession({ topicId, embedded = false, waiting = null, queued
   const away = canAct ? null : awayChip(device);
   const placeholder = (kind: "approval" | "question") => <DecisionBox kind={kind} title={ATTENTION_LABEL[kind]} options={[]} onPick={() => undefined} blocked={away ?? awayChip(device)} />;
   const pinned = !embedded ? null
+    : ask ? ask
     : attention === "approval" ? (view.lastSeq && view.pending.length
       ? <ApprovalDecision requests={view.pending} blocked={away} onDecide={(request, decision, options) => decide(request.requestId, decision, options)} />
       : placeholder("approval"))

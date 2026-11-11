@@ -315,12 +315,19 @@ function HomeFrame({ account }: { account: Account }) {
   // 接口没上（404）时照旧：没登记、等开工的卡也在这里开。
   const subs = useMemo(() => [...data.projects.flatMap((project) => project.subSessions), ...data.other.subSessions], [data]);
   const autoStartKey = subs.filter((sub) => sub.autoStart).map((sub) => sub.id).sort().join(",");
-  /** 专题开工要的：标题；自由子会话（第 68 条）多带 free 和它所在项目绑在这台电脑上的文件夹（没绑由本机给专用目录）。 */
+  /**
+   * 专题开工要的：标题；自由子会话（第 68 条）多带 free 和它所在项目绑在这台电脑上的文件夹。
+   * 项目还没在这台电脑上绑文件夹时同卡一样不开、去问（askFolder 是那个项目），选完绑上再认领。
+   */
   const topicStart = useCallback((topicId: string) => {
     const sub = subs.find((entry) => entry.id === topicId && entry.kind === "topic");
-    const owner = projects.all.find((project) => project.subSessions.some((entry) => entry.id === topicId));
-    return { id: topicId, title: sub?.title ?? "", ...(sub?.free ? { free: true, cwd: owner ? projects.bound.get(owner.id)?.path ?? null : null } : {}) };
+    if (!sub?.free) return { id: topicId, title: sub?.title ?? "", askFolder: null };
+    const owner = projects.all.find((project) => project.subSessions.some((entry) => entry.id === topicId)) ?? null;
+    const where = startFolder(owner?.id ?? null, projects.bound, null);
+    return { id: topicId, title: sub.title, free: true, cwd: where.cwd, askFolder: where.ask ? owner!.id : null };
   }, [subs, projects.all, projects.bound]);
+  /** 自由子会话等着项目绑文件夹：同卡，记进 needFolder，项目对话和这个子会话页都出「在哪个文件夹开工？」。 */
+  const askFolderFor = useCallback((projectId: string) => setNeedFolder((current) => (current.has(projectId) ? current : new Set([...current, projectId]))), []);
   const tried = useRef(new Set<string>());
   useEffect(() => {
     if (!here || !api.known) return;
@@ -381,6 +388,7 @@ function HomeFrame({ account }: { account: Account }) {
         const topic = topicStart(entry.topicId);
         // 自由子会话（第 68 条）老本机程序收不了（整个 400）：不开，记成没开成。
         if (topic.free && !local.runner.freeSessions) { markStart([entry.topicId], true); continue; }
+        if (topic.askFolder) { askFolderFor(topic.askFolder); continue; }
         try { await startTopic(local.runner, topic, model, undefined, entry.permissionMode); opened.add(entry.topicId); markStart([entry.topicId], false); }
         catch { markStart([entry.topicId], true); }
       }
@@ -398,7 +406,7 @@ function HomeFrame({ account }: { account: Account }) {
         retry = window.setTimeout(() => setClaimTick((n) => n + 1), delay);
       });
     return () => window.clearTimeout(retry);
-  }, [here, api.live, api.deviceId, canOpen, autoStartKey, claimTick, markStart]);
+  }, [here, api.live, api.deviceId, canOpen, autoStartKey, claimTick, markStart, askFolderFor]);
   // 换了文件夹或模型（比如没开成以后去连接页加了文件夹）：没开成的再自动试一次。
   // 项目绑了文件夹（「在哪个文件夹开工？」选完）也算：等文件夹的卡马上再认领。
   const setupKey = `${local.folders.map((folder) => folder.id).join(",")}|${local.models.map((entry) => entry.id).join(",")}|${[...projects.bound].map(([projectId, folder]) => `${projectId}:${folder.id}`).join(",")}`;
@@ -419,9 +427,10 @@ function HomeFrame({ account }: { account: Account }) {
     const model = local.models.find((entry) => entry.isDefault) ?? local.models[0];
     const topic = topicStart(subId);
     if (!sub || !model || (topic.free && !local.runner.freeSessions)) { markStart([subId], true); return; }
+    if (topic.askFolder) { askFolderFor(topic.askFolder); return; }
     try { await startTopic(local.runner, topic, model); markStart([subId], false); await local.refresh(); changed(); }
     catch { markStart([subId], true); }
-  }, [start, markStart, changed, local, topicStart]);
+  }, [start, markStart, changed, local, topicStart, askFolderFor]);
   /** 项目下的「+」（第 68 条）：建自由子会话（云端同时登记开工），读回首页数据、马上认领一次，换到这个子会话。 */
   const createFree = useCallback(async (projectId: string, firstMessage: string) => {
     const topic = await createTopic({ free: true, projectId, firstMessage });
@@ -529,16 +538,16 @@ function HomeFrame({ account }: { account: Account }) {
     await local.refresh();
   };
   /** 项目对话里项目自己的几块：转交（16.7）从「准备交接」那一刻起，到发出、等接手。 */
+  /** 「在哪个文件夹开工？」（17.2 第 32 条）：卡或自由子会话等着这个项目在这台电脑上绑文件夹时才有，选完绑上就收起、接着开。 */
+  const folderAsk = (project: Project) => (here && needFolder.has(project.id) && !projects.bound.has(project.id)
+    ? <FolderAsk folders={local.folders} onBind={(folder) => projects.actions.setFolder(project.id, folder.id, project.name)} onPickOther={() => local.pickFolder()} /> : null);
   const projectBlocks = (project: Project): TimedBlock[] => [
     ...(project.transfer && (project.transfer.status === "preparing" || project.transfer.status === "sent") ? [{
       key: `transfer:${project.transfer.id}`, at: project.transfer.startedAt, afterSequence: project.transfer.afterSequence,
       node: <TransferFlow project={project} transfer={project.transfer} onChanged={api.refresh} onStop={stopForTransfer} />,
     }] : []),
     // 卡等着项目绑文件夹（17.2 第 32 条）：放在最后，选完绑上就收起，卡接着开。
-    ...(here && needFolder.has(project.id) && !projects.bound.has(project.id) ? [{
-      key: `folder-ask:${project.id}`, at: new Date().toISOString(), afterSequence: null,
-      node: <FolderAsk folders={local.folders} onBind={(folder) => projects.actions.setFolder(project.id, folder.id, project.name)} onPickOther={() => local.pickFolder()} />,
-    }] : []),
+    ...(folderAsk(project) ? [{ key: `folder-ask:${project.id}`, at: new Date().toISOString(), afterSequence: null, node: folderAsk(project) }] : []),
   ];
   /** 项目对话（16.3）：页头只有项目名和「详情」（文件夹在输入框下面）。没挂 Task 的项目也在自己的对话里拆卡、开工。 */
   const projectView = (project: Project) => {
@@ -599,8 +608,12 @@ function HomeFrame({ account }: { account: Account }) {
       }
       // 等本人处理的框和左栏的点同一个来源（第 54 条）：首页数据里这个子会话在等什么。
       case "card": return <CardSession key={current.id} cardId={current.id} embedded waiting={subs.find((sub) => sub.id === current.id)?.waiting} />;
-      case "topic": { const sub = subs.find((entry) => entry.id === current.id);
-        return <TopicSession key={current.id} topicId={current.id} embedded waiting={sub?.waiting ?? null} queued={sub ? subQueueText(sub, handheld) : null} />; }
+      case "topic": {
+        const sub = subs.find((entry) => entry.id === current.id);
+        // 自由子会话等着项目绑文件夹：问的框钉在这个子会话的输入框上方（和项目对话里那份是同一个）。
+        const owner = sub?.free ? projects.all.find((project) => project.subSessions.some((entry) => entry.id === current.id)) : undefined;
+        return <TopicSession key={current.id} topicId={current.id} embedded waiting={sub?.waiting ?? null} queued={sub ? subQueueText(sub, handheld) : null} ask={owner ? folderAsk(owner) : null} />;
+      }
       case "page": {
         // 二级页：组件挂在 components/home/pages。
         const Page = SECONDARY_PAGES[current.page];
