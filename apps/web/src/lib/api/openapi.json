@@ -107124,19 +107124,6 @@
             "additionalProperties": false,
             "type": "object",
             "required": [
-              "kind"
-            ],
-            "properties": {
-              "kind": {
-                "const": "return",
-                "type": "string"
-              }
-            }
-          },
-          {
-            "additionalProperties": false,
-            "type": "object",
-            "required": [
               "kind",
               "text"
             ],
@@ -107148,6 +107135,19 @@
               "text": {
                 "minLength": 1,
                 "maxLength": 3000,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "const": "return",
                 "type": "string"
               }
             }
