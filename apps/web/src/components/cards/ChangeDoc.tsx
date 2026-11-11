@@ -3,7 +3,8 @@
 /**
  * 「改动」开着时预览的正文那一块（设计第 72 条第一步，照示意）：可滚，里面是全文；marks 关着时是改完以后的干净全文。
  * 左边一条窄边栏，每处一条小横线，位置对着它在全文的哪儿，点了滚过去；打开时滚到第一处。
- * 点一处改动，它下面出一个小浮层，只有「恢复」（restorable 为 false 时不出：一轮正在跑、Word / Excel 只能看）；点别处、Esc 收起。
+ * 点一处改动，它下面出一个小浮层，里面是能做的那个恢复：文本类恢复这一处（「恢复」）；Word、Excel、整份新建或删掉的恢复整个文件（「恢复整个文件」）。
+ * restore 为 null 时不出（一轮正在跑、看更早一轮而文件之后又改过）。点别处、Esc 收起。
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { diffLayout, type DiffMode, type FileChanges } from "@/lib/local/fileChanges";
@@ -15,8 +16,8 @@ type Pop = { ids: string[]; top: number; left: number };
 
 const escapeAttr = (value: string) => value.replace(/["\\]/g, "\\$&");
 
-export function ChangeDoc({ data, mode, marks, restorable, onRestore, bodyClass, docClass }: {
-  data: Pick<FileChanges, "path" | "range" | "before" | "after" | "changes">; mode: DiffMode; marks: boolean; restorable: boolean;
+export function ChangeDoc({ data, mode, marks, restore: kind, onRestore, bodyClass, docClass }: {
+  data: Pick<FileChanges, "path" | "range" | "turn" | "before" | "after" | "changes">; mode: DiffMode; marks: boolean; restore: "some" | "whole" | null;
   onRestore: (ids: string[]) => Promise<unknown>; bodyClass: string; docClass: string;
 }) {
   const sections = useMemo(() => diffLayout(data, mode), [data, mode]);
@@ -64,12 +65,12 @@ export function ChangeDoc({ data, mode, marks, restorable, onRestore, bodyClass,
   // 打开时（换了文件或换了看哪一段）滚到第一处。
   const opened = useRef<string | null>(null);
   useLayoutEffect(() => {
-    const key = `${data.path}:${data.range}`;
+    const key = `${data.path}:${data.range}:${data.turn}`;
     if (opened.current === key) return;
     opened.current = key;
     const first = body.current?.querySelector("[data-anchor]");
     if (first) center(first, false);
-  }, [data.path, data.range, sections]);
+  }, [data.path, data.range, data.turn, sections]);
 
   // 点开的那一处加深底色；内容变了、关了「改动」、不能恢复了就收起浮层。
   useEffect(() => {
@@ -77,7 +78,7 @@ export function ChangeDoc({ data, mode, marks, restorable, onRestore, bodyClass,
     root?.querySelectorAll("[data-open]").forEach((el) => el.removeAttribute("data-open"));
     if (pop && root) for (const id of pop.ids) root.querySelectorAll(`[data-change~="${escapeAttr(id)}"]`).forEach((el) => el.setAttribute("data-open", ""));
   }, [pop, sections]);
-  useEffect(() => { setPop(null); }, [sections, showMarks, restorable]);
+  useEffect(() => { setPop(null); }, [sections, showMarks, kind]);
   useEffect(() => {
     if (!pop) return;
     const away = (event: PointerEvent) => {
@@ -95,7 +96,7 @@ export function ChangeDoc({ data, mode, marks, restorable, onRestore, bodyClass,
   const pick = (event: MouseEvent) => {
     const root = body.current;
     const target = (event.target as Element).closest<HTMLElement>("[data-change]");
-    if (!root || !target || !showMarks || !restorable) { setPop(null); return; }
+    if (!root || !target || !showMarks || !kind) { setPop(null); return; }
     const ids = target.dataset.change!.split(" ");
     if (pop?.ids.join(" ") === ids.join(" ")) { setPop(null); return; }
     // 折了行的一处：浮层放在它最后一行的下面、对着那一行的开头。
@@ -123,7 +124,7 @@ export function ChangeDoc({ data, mode, marks, restorable, onRestore, bodyClass,
       <article className={docClass} onClick={pick}>
         {showMarks ? <ChangeView sections={sections!} mode={mode} /> : <DocChunk text={data.after ?? ""} mode={mode} />}
       </article>
-      {pop ? <div ref={popRef} className={c.pop} style={{ top: pop.top, left: pop.left }}><button type="button" disabled={busy} onClick={() => void restore()} data-testid="change-restore">恢复</button></div> : null}
+      {pop ? <div ref={popRef} className={c.pop} style={{ top: pop.top, left: pop.left }}><button type="button" disabled={busy} onClick={() => void restore()} data-testid="change-restore">{kind === "whole" ? "恢复整个文件" : "恢复"}</button></div> : null}
     </div>
   );
 }

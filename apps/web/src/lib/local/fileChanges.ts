@@ -5,29 +5,17 @@
  */
 import { unified } from "unified";
 import remarkParse from "remark-parse";
+import type { TLocalChangeRange, TLocalFileChangesResponse, TLocalTextChange, TLocalTurnFileChange } from "@warmap/contracts";
 import { REMARK_PLUGINS } from "@/lib/markdown";
 
-// —— 临时类型：本机的契约到了换成 @warmap/contracts 里的 ——
-
-export type ChangeRange = "turn" | "session";
-export type ChangeSpan = { start: number; end: number };
+// 数据形状照契约（localRunner.ts 的 LocalFileChangesResponse、LocalTurnFileChange，第 72 条）。
+export type ChangeRange = TLocalChangeRange;
 /** 一处：在改前、改后两份全文里的字符区间（JS 字符串下标，换行符原样）。纯新增时 before 是空区间，纯删除时 after 是空区间。 */
-export type FileChange = { id: string; before: ChangeSpan; after: ChangeSpan };
-/** 读一个文件的改动。新建的 before 为 null，删掉的 after 为 null；detail = none 只知道改过（超过 1MB、二进制），没有两份全文和逐处。 */
-export type FileChanges = {
-  path: string;
-  range: ChangeRange;
-  before: string | null;
-  after: string | null;
-  changes: FileChange[];
-  /** 读的那一刻文件内容的指纹，恢复时原样带回去核对。 */
-  revision: string;
-  /** full 有明细、能按处恢复；converted 是 Word、Excel 转出来的 Markdown，只能看；none 只知道改过（老格式、太大、带密码）。 */
-  detail: "full" | "converted" | "none";
-};
-
-/** 一轮结束的事件里的一个文件（临时）：这一轮改了几处（拿不到明细时为 null）、新建 / 改 / 删。 */
-export type TurnFile = { path: string; changes: number | null; change: "added" | "modified" | "deleted" };
+export type FileChange = TLocalTextChange;
+/** 读一个文件的改动。新建的 before 为 null，删掉的 after 为 null；detail none 不带 before、after、changes。 */
+export type FileChanges = TLocalFileChangesResponse;
+/** 一轮结束的事件 files_changed 里的一个文件：count 是几处（detail none 时为 null）。 */
+export type TurnFile = TLocalTurnFileChange;
 
 export type DiffMode = "markdown" | "text";
 
@@ -55,7 +43,7 @@ export function sortedChanges(before: string, after: string, changes: readonly F
   const list = [...changes].sort((x, y) => x.after.start - y.after.start || x.before.start - y.before.start);
   let b = 0;
   let a = 0;
-  const ok = (span: ChangeSpan, from: number, length: number) =>
+  const ok = (span: FileChange["before"], from: number, length: number) =>
     Number.isInteger(span.start) && Number.isInteger(span.end) && span.start >= from && span.end >= span.start && span.end <= length;
   for (const change of list) {
     if (!ok(change.before, b, before.length) || !ok(change.after, a, after.length)) return null;
@@ -105,7 +93,7 @@ function within(sorted: readonly number[], from: number, to: number): number[] {
 export function diffLayout(data: Pick<FileChanges, "before" | "after" | "changes">, mode: DiffMode): Section[] | null {
   const before = data.before ?? "";
   const after = data.after ?? "";
-  const changes = sortedChanges(before, after, data.changes);
+  const changes = sortedChanges(before, after, data.changes ?? []);
   if (!changes) return null;
   if (!changes.length) return after ? [{ kind: "same", text: after }] : [];
   const afterStarts = blockStarts(after, mode);

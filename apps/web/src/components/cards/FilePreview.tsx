@@ -12,12 +12,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import { Maximize2, Minimize2, X } from "lucide-react";
-import type { TLocalOutputView } from "@warmap/contracts";
+import type { TLocalOutputView, TLocalSessionRestoreResponse } from "@warmap/contracts";
 import { HeroButton } from "@/components/HeroButton";
 import { FailedLine } from "@/components/work/DecisionBox";
 import { ICON } from "@/components/home/StateIcon";
 import { sizeText } from "@/lib/home/attachments";
-import type { ChangeRange, DiffMode, FileChanges } from "@/lib/local/fileChanges";
+import type { DiffMode, FileChanges } from "@/lib/local/fileChanges";
 import { LocalRunnerError, fileChanged, type LocalRunner } from "@/lib/local/runner";
 import { filesRestored } from "@/lib/local/sessionFiles";
 import { REMARK_PLUGINS } from "@/lib/markdown";
@@ -34,11 +34,14 @@ export type PreviewContent =
   | { kind: "image"; url: string; /** 用完要放掉的（blob 地址）。 */ revoke?: () => void; size?: number }
   | { kind: "other"; size?: number };
 
-/** 这个文件的改动（第 72 条）：看哪一段时间由从哪打开定；restore 是恢复其中几处（只有本机的、能按处恢复的才有）。 */
+/**
+ * 这个文件的改动（第 72 条）：看哪一段时间由从哪打开定（对话里那一行看那一轮，右栏看开工到现在）。
+ * restore 恢复其中几处，回新的读结果；restoreFile 恢复整个文件（第 71 条，右栏清单里能恢复的才有）。
+ */
 export type PreviewChanges = {
-  range: ChangeRange;
   load: () => Promise<FileChanges>;
-  restore: (ids: string[], revision: string) => Promise<void>;
+  restore: (ids: string[], revision: string | null) => Promise<FileChanges>;
+  restoreFile?: () => Promise<TLocalSessionRestoreResponse>;
 };
 
 export type PreviewFile = {
@@ -75,8 +78,16 @@ export function previewKind(name: string, mime: string | null, size: number | nu
   return kind;
 }
 
-/** 点改动出不出「恢复」：有明细、能按处恢复（Word、Excel 转出来的只能看），而且这一轮没在跑。 */
-export const restorableChanges = (detail: FileChanges["detail"], canRestore: boolean) => canRestore && detail === "full";
+/**
+ * 点改过的地方出哪个恢复（主会话 11/11 定：点了就出能做的那个）：一轮正在跑什么都不出；
+ * Word、Excel 转出来的、整份新建或删掉的出「恢复整个文件」（右栏清单里能恢复的才有）；
+ * 文本类本机说能按处恢复（restorable）才出「恢复」——看更早一轮、之后文件又改过的不出。
+ */
+export function restoreKind(diff: Pick<FileChanges, "detail" | "change" | "restorable">, canRestore: boolean, wholeFile: boolean): "some" | "whole" | null {
+  if (!canRestore) return null;
+  if (diff.detail === "converted" || diff.change !== "modified") return wholeFile ? "whole" : null;
+  return diff.restorable ? "some" : null;
+}
 
 /** 表格文件（Excel 转出来的）：格子不折行，表太宽就横向滚。 */
 const SHEET_EXT = /\.(xlsx|xlsm|xls)$/i;
@@ -118,29 +129,46 @@ export function localSessionFile(runner: Pick<LocalRunner, "readSessionFile">, s
   };
 }
 
-/** 本会话改过的一个文件，打开先看改动：从对话里那一行打开看那一轮（turn），从右栏「改动的文件」打开看开工到现在（session）。 */
-export function localChangedFile(runner: Pick<LocalRunner, "readSessionFile" | "readFileChanges" | "restoreFileChanges">, sessionId: string, path: string, range: ChangeRange): PreviewFile {
+/**
+ * 本会话改过的一个文件，打开先看改动：从对话里那一行打开看那一轮（给轮号），从右栏「改动的文件」打开看开工到现在。
+ * wholeFile：右栏清单里这个文件能恢复（restorable），点改动时可以出「恢复整个文件」。恢复以后叫一声，清单和对话那一行重读。
+ */
+export function localChangedFile(runner: Pick<LocalRunner, "readSessionFile" | "readFileChanges" | "restoreFileChanges" | "restoreSessionFiles">, sessionId: string, path: string,
+  { turn, wholeFile = false }: { turn?: number; wholeFile?: boolean } = {}): PreviewFile {
   const file = localSessionFile(runner, sessionId, path);
+  const where = turn ? { range: "turn" as const, turn } : { range: "session" as const };
   return {
-    ...file, key: `${file.key}:${range}`,
+    ...file, key: `${file.key}:${turn ?? "session"}`,
     changes: {
-      range,
-      load: () => runner.readFileChanges(sessionId, { path, range }),
-      restore: async (ids, revision) => { await runner.restoreFileChanges(sessionId, { path, range, ids, revision }); filesRestored(sessionId); },
+      load: () => runner.readFileChanges(sessionId, { path, ...where }),
+      restore: async (ids, revision) => { const result = await runner.restoreFileChanges(sessionId, { path, ...where, ids, revision }); filesRestored(sessionId); return result.file; },
+      ...(wholeFile ? { restoreFile: async () => { const result = await runner.restoreSessionFiles(sessionId, { paths: [path] }); filesRestored(sessionId); return result; } } : {}),
     },
   };
 }
 
+/** 恢复没成时写的那句：一轮正在跑（409），别的。 */
+const failText = (error: unknown) => (error instanceof LocalRunnerError && error.status === 409 ? "这一轮还在跑" : "没恢复成");
+
 /**
- * 恢复其中几处，回写给人看的那句（成了为 null）：成了重读；文件又变了（revision 对不上）也重读，让本人重新看；
+ * 恢复其中几处，回写给人看的那句（成了为 null）：成了照本机回的新读结果重画（show）；文件又变了（revision 对不上）重读，让本人重新看；
  * 一轮正在跑（409）、别的错不重读。
  */
-export async function restoreChanges(changes: Pick<PreviewChanges, "restore">, ids: string[], revision: string, reload: () => Promise<unknown>): Promise<string | null> {
-  try { await changes.restore(ids, revision); }
+export async function restoreChanges(changes: Pick<PreviewChanges, "restore">, ids: string[], revision: string | null, show: (next: FileChanges) => void, reload: () => Promise<unknown>): Promise<string | null> {
+  try { show(await changes.restore(ids, revision)); return null; }
   catch (error) {
     if (fileChanged(error)) { await reload(); return "文件又变了"; }
-    return error instanceof LocalRunnerError && error.status === 409 ? "这一轮还在跑" : "没恢复成";
+    return failText(error);
   }
+}
+
+/** 恢复整个文件，回写给人看的那句（成了为 null，重读）：恢复不了的照本机回的原因写（文件被占用）。 */
+export async function restoreWholeFile(changes: Pick<PreviewChanges, "restoreFile">, reload: () => Promise<unknown>): Promise<string | null> {
+  if (!changes.restoreFile) return null;
+  try {
+    const result = await changes.restoreFile();
+    if (result.failed.length) return result.failed[0]!.message;
+  } catch (error) { return failText(error); }
   await reload();
   return null;
 }
@@ -159,17 +187,18 @@ export function FilePreview({ file, onClose, canRestore = true, wide = false, on
   const [diff, setDiff] = useState<FileChanges | null | undefined>(file.changes ? undefined : null);
   const [marks, setMarks] = useState(true);
   const root = useRef<HTMLElement>(null);
+  const show = useCallback((next: FileChanges) => setDiff(next.detail === "none" ? null : next), []);
   const reloadDiff = useCallback(async () => {
     if (!file.changes) return;
-    try { const next = await file.changes.load(); setDiff(next.detail === "none" ? null : next); }
+    try { show(await file.changes.load()); }
     catch { setDiff(null); }
-  }, [file.changes]);
+  }, [file.changes, show]);
   useEffect(() => {
     setMarks(true);
     if (!file.changes) { setDiff(null); return; }
     let alive = true;
     setDiff(undefined);
-    file.changes.load().then((next) => { if (alive) setDiff(next.detail === "none" ? null : next); }, () => { if (alive) setDiff(null); });
+    file.changes.load().then((next) => { if (alive) show(next); }, () => { if (alive) setDiff(null); });
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 换了文件才重读
   }, [file.key]);
@@ -202,16 +231,19 @@ export function FilePreview({ file, onClose, canRestore = true, wide = false, on
     return () => window.removeEventListener("keydown", onKey, true);
   }, [onClose]);
 
+  const kind = diff ? restoreKind(diff, canRestore, !!file.changes?.restoreFile) : null;
   const restore = async (ids: string[]) => {
     if (!diff || !file.changes) return;
-    const failed = await restoreChanges(file.changes, ids, diff.revision, reloadDiff);
+    const failed = kind === "whole" ? await restoreWholeFile(file.changes, reloadDiff) : await restoreChanges(file.changes, ids, diff.revision, show, reloadDiff);
     if (failed) showWorkspaceToast({ text: failed });
+    // 新建的恢复了就是删掉了：没有可看的，关掉预览。
+    else if (kind === "whole" && diff.change === "added") onClose();
   };
 
   const size = file.size ?? loaded?.size ?? null;
   const open = file.openHref ? <a href={file.openHref} target="_blank" rel="noopener" className={s.link}>打开</a> : null;
   // 有改动、文件还在时出「改动」开关；删掉的文件只有改动那一份，不出开关。
-  const toggle = diff && diff.changes.length > 0 && diff.after !== null;
+  const toggle = diff && !!diff.changes?.length && diff.after !== null;
   const zoom = onWide ? (
     <HeroButton variant="ghost" size="sm" isIconOnly aria-label={wide ? "缩小" : "放大"} title={wide ? "缩小" : "放大"} onPress={() => onWide(!wide)} data-testid="file-preview-zoom">
       {wide ? <Minimize2 {...ICON} /> : <Maximize2 {...ICON} />}
@@ -230,7 +262,7 @@ export function FilePreview({ file, onClose, canRestore = true, wide = false, on
         <HeroButton variant="ghost" size="sm" isIconOnly aria-label="关闭" title="关闭" onPress={onClose} data-testid="file-preview-close"><X {...ICON} /></HeroButton>
       </header>
       {diff ? (
-        <ChangeDoc data={diff} mode={diffMode(diff)} marks={marks} restorable={restorableChanges(diff.detail, canRestore)} onRestore={restore}
+        <ChangeDoc data={diff} mode={diffMode(diff)} marks={marks} restore={kind} onRestore={restore}
           bodyClass={s.previewBody} docClass={`${diffMode(diff) === "markdown" ? `${ts.prose} ${s.md} ${s.previewDoc}` : s.previewDoc}${SHEET_EXT.test(diff.path) ? ` ${c.sheet}` : ""}`} />
       ) : (
         <div className={s.previewBody} aria-busy={diff === undefined || (!loaded && failed === null) ? true : undefined}>

@@ -1,8 +1,9 @@
 "use client";
 
 /**
- * 右栏「改动的文件 N」（17.2 第 41 条；第 71、72 条加恢复）：每个文件一行，标出新建 / 改 / 删，点了在右边看开工到现在的改动。
- * 能恢复的（restorable）给「恢复」，删掉的文件也能恢复；顶上「全部恢复」；恢复过的写「已恢复」。
+ * 右栏「改动的文件 N」（17.2 第 41 条；第 71、72 条加恢复）：每个文件一行，点了在右边看开工到现在的改动。
+ * 改了的不加字；新建的行尾一个淡色「新建」（恢复一个新建的文件等于把它删掉，点之前该知道）；现在不在了的（删掉的、新建后恢复掉的）划线。
+ * 能恢复的（restorable）给「恢复」，删掉的文件也能恢复：桌面上指着那一行、键盘聚焦进来时出，触屏（没有悬停）一直出；组头「全部恢复」一直在。恢复过的写「已恢复」。
  * 恢复不了的（文件被占用）照本机回的原因在那一行下面写一句，别的照做。只给执行方直接改的文件留了一份时（undo touched_only），这一组顶上写一行。
  * 一轮正在跑、卡在工作树里做的（canRestore false）不出「恢复」。
  */
@@ -14,7 +15,6 @@ import { ICON } from "@/components/home/StateIcon";
 import { showWorkspaceToast } from "@/lib/toast";
 import s from "@/styles/v2-session.module.css";
 
-export const CHANGE_WORD: Record<NonNullable<TLocalChangedFile["change"]>, string> = { added: "新建", modified: "改", deleted: "删" };
 /** 这一组顶上那一行（文字先这样，等主会话定）。 */
 export const UNDO_LINE: Partial<Record<TLocalUndo["state"], string>> = { touched_only: "只留了直接改的文件" };
 
@@ -61,19 +61,20 @@ export function ChangedFiles({ files, undo, canRestore, current, onOpen, onResto
       </div>
       {open && note ? <p className={s.faint} data-testid="undo-note">{note}</p> : null}
       {open ? files.map((file) => {
-        const word = file.change ? CHANGE_WORD[file.change] : null;
-        const name = <span className={s.outTitle}>{file.path}</span>;
+        const inner = (
+          <>
+            <span className={s.outTitle} data-gone={file.exists ? undefined : ""}>{file.path}</span>
+            {file.restoredAt ? <span className={s.faint} data-testid="restored">已恢复</span> : file.change === "added" ? <span className={s.faint} data-testid="added">新建</span> : null}
+          </>
+        );
+        // 新建后恢复掉的不在了，没什么可看；删掉的还能点开看删了什么。
+        const openable = onOpen && (file.exists || file.change === "deleted");
         return (
           <div key={file.path} className={s.changedRow} data-testid="changed-file">
-            {onOpen ? (
-              <button type="button" className={s.output} title={file.path} data-current={current === file.path ? "" : undefined} onClick={() => onOpen(file.path)}>
-                {word ? <span className={s.faint}>{word}</span> : null}{name}
-                {file.restoredAt ? <span className={s.faint} data-testid="restored">已恢复</span> : null}
-              </button>
-            ) : (
-              <div className={s.output} title={file.path}>{word ? <span className={s.faint}>{word}</span> : null}{name}{file.restoredAt ? <span className={s.faint}>已恢复</span> : null}</div>
-            )}
-            {canRestore && canRestoreFile(file) ? <HeroButton variant="ghost" size="sm" isDisabled={busy} onPress={() => void restore([file.path])} data-testid="restore-file">恢复</HeroButton> : null}
+            {openable ? (
+              <button type="button" className={s.output} title={file.path} data-current={current === file.path ? "" : undefined} onClick={() => onOpen(file.path)}>{inner}</button>
+            ) : <div className={s.output} title={file.path}>{inner}</div>}
+            {canRestore && canRestoreFile(file) ? <HeroButton variant="ghost" size="sm" className={s.rowRestore} isDisabled={busy} onPress={() => void restore([file.path])} data-testid="restore-file">恢复</HeroButton> : null}
             {failed[file.path] ? <p className={s.faint} data-testid="restore-failed">{failed[file.path]}</p> : null}
           </div>
         );

@@ -8,7 +8,7 @@ import type {
   TLocalPermissionDecisionRequest, TLocalQuestionAnswerRequest, TLocalRunnerErrorCode, TLocalSendMessageRequest, TLocalSendMessageResponse, TLocalSessionDetailResponse,
   TLocalSessionEvent, TLocalSessionDraft, TLocalSessionSummary, TLocalSettings, TLocalSettingsPatch, TLocalStatusResponse, TLocalBudgetUpdateRequest, TLocalTaskBudgetView, TLocalAttachmentRef,
   TLocalFolderCreateRequest, TLocalFolderCreateResponse, TLocalFolderPickRequest, TLocalFolderPickResponse, TLocalSessionModelRequest, TLocalSessionModelResponse,
-  TLocalSessionFileReadRequest, TLocalSessionFileReadResponse, TLocalSessionFilesResponse, TLocalSessionRestoreRequest, TLocalSessionRestoreResponse,
+  TLocalSessionFileReadRequest, TLocalSessionFileReadResponse, TLocalSessionFilesResponse, TLocalSessionRestoreRequest, TLocalSessionRestoreResponse, TLocalFileChangesRequest, TLocalFileChangesResponse, TLocalFileChangesRestoreRequest, TLocalFileChangesRestoreResponse,
   TLocalHandoverCheck, TLocalProjectCloneRequest, TLocalProjectCloneResponse, TLocalProjectFolder, TLocalProjectFolderRequest, TLocalPermissionMode, TLocalRun, TLocalRunPreviewRequest,
   TLocalSourceListResponse, TLocalSourceCheckRequest, TLocalSourceCheckResponse, TLocalSourceAddRequest, TLocalSourceAddResponse,
 } from "@warmap/contracts";
@@ -19,15 +19,13 @@ export type {
   TLocalQuestionAnswerRequest, TLocalPermissionMode, TLocalRun, TLocalTool,
 } from "@warmap/contracts";
 
-import type { ChangeRange, FileChanges } from "./fileChanges";
-
 /** 本机接口回的错：code 照契约；network 是连不上（没装、没开、浏览器没给访问本机的授权）。 */
 export class LocalRunnerError extends Error {
   constructor(readonly code: TLocalRunnerErrorCode | "network", message: string, readonly status = 0) { super(message); }
 }
 
-/** 恢复一处时文件又变了（revision 对不上，第 72 条）：错误码是临时的，契约到了换。 */
-export const fileChanged = (error: unknown) => error instanceof LocalRunnerError && (error.code as string) === "file_changed";
+/** 恢复一处时文件又变了（revision 对不上，第 72 条）。 */
+export const fileChanged = (error: unknown) => error instanceof LocalRunnerError && error.code === "file_changed";
 
 export type EventWatch = {
   /** 从这个序号之后补发（断线重连时带上收到的最后一个）。 */
@@ -107,10 +105,10 @@ export interface LocalRunner {
   readSessionFile(id: string, body: TLocalSessionFileReadRequest): Promise<TLocalSessionFileReadResponse>;
   /** 把本会话动过的文件恢复到它第一次动之前（第 71 条）；paths 不给是全部。一轮正在跑、卡在工作树里做的 409。 */
   restoreSessionFiles(id: string, body: TLocalSessionRestoreRequest): Promise<TLocalSessionRestoreResponse>;
-  /** 读一个文件的改动（第 72 条，临时类型）：这一轮（turn）或开工到现在（session）。 */
-  readFileChanges(id: string, body: { path: string; range: ChangeRange }): Promise<FileChanges>;
-  /** 恢复其中几处（第 72 条，临时）：一轮正在跑 409 conflict；revision 对不上见 fileChanged。 */
-  restoreFileChanges(id: string, body: { path: string; range: ChangeRange; ids: string[]; revision: string }): Promise<void>;
+  /** 读一个文件的改动（第 72 条）：某一轮（turn，不给轮号是最近做完的一轮）或开工到现在（session）；工作树里的会话只有 session。 */
+  readFileChanges(id: string, body: TLocalFileChangesRequest): Promise<TLocalFileChangesResponse>;
+  /** 恢复其中几处（第 72 条），回新的读结果：一轮正在跑 409 conflict；revision 对不上见 fileChanged。 */
+  restoreFileChanges(id: string, body: TLocalFileChangesRestoreRequest): Promise<TLocalFileChangesRestoreResponse>;
   kill(id: string): Promise<TLocalSessionSummary>;
   decidePermission(id: string, requestId: string, body: TLocalPermissionDecisionRequest): Promise<TLocalSessionSummary>;
   /** 把卡的分支合回主文件夹（本人点了才合）；合不了回原因和文件，卡不在工作树、还在跑、交回后又改过、已合过是 409。 */

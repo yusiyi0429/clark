@@ -353,15 +353,15 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
       plan(s, 3);
       const ws = s.summary.workspace;
       finishBackground(s, "done");
-      let turnFiles: ReturnType<ReturnType<typeof createMockEdits>["apply"]> = [];
+      let turnFiles: ReturnType<ReturnType<typeof createMockEdits>["apply"]> | null = null;
       if (ws?.kind !== "worktree" && !s.edits) {
-        s.edits = createMockEdits();
+        s.edits = createMockEdits(FILE_ROOT);
         tool(s, "Edit", "改 周报.md");
         turnFiles = s.edits.apply();
       }
       emit(s, { type: "handback", summary: "改完了，测试都过。", criteria: [{ index: 1, result: "met", evidence: "测试 12/12 通过" }, { index: 2, result: "met", evidence: "交回说明.md" }], outputKeys: [],
         ...(ws?.kind === "worktree" ? { commit: sha(`${s.summary.id}:handback`) } : {}) });
-      if (turnFiles.length) emit(s, { type: "turn_files" as TLocalSessionEvent["type"], files: turnFiles });
+      if (turnFiles?.files.length) emit(s, { type: "files_changed", turn: turnFiles.turn, files: turnFiles.files, more: 0 });
       turnEnd(s, "改完了，已交回。");
       const subject = s.summary.subject;
       if (subject.kind === "card" && subject.cardId)
@@ -443,8 +443,8 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
       tool(s, "Bash", "运行 Remove-Item 旧安排.md");
       tool(s, "Bash", "运行 python 改合同和报表.py");
       const turnFiles = s.edits!.apply();
-      emit(s, { type: "assistant_text", text: "旧安排.md 删了，合同的付款期限和报表也改好了。" });
-      emit(s, { type: "turn_files" as TLocalSessionEvent["type"], files: turnFiles });
+      emit(s, { type: "assistant_text", text: "旧安排.md 删了，交接清单新建好了，合同的付款期限和报表也改好了。" });
+      emit(s, { type: "files_changed", turn: turnFiles.turn, files: turnFiles.files, more: 0 });
       turnEnd(s, "改好了。");
       setStatus(s, "idle");
     }, stepMs * 2);
@@ -710,7 +710,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
     },
     listSessionFiles: async (id) => {
       const edits = must(id).edits;
-      if (edits) return { root: FILE_ROOT, truncated: false, files: edits.list(FILE_ROOT) };
+      if (edits) return { root: FILE_ROOT, truncated: false, files: edits.list() };
       const size = (file: { kind: string; content: string }) => (file.kind === "image" ? Math.floor(file.content.length * 0.75) : new TextEncoder().encode(file.content).length);
       return {
         root: FILE_ROOT, truncated: false,
@@ -737,7 +737,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
       return { path, absolutePath: `${FILE_ROOT}/${path}`, name: path.split("/").pop()!, size: file.kind === "image" ? Math.floor(file.content.length * 0.75) : new TextEncoder().encode(file.content).length,
         modifiedAt: now(), kind: file.kind, mimeType: file.mimeType, encoding: file.kind === "image" ? "base64" as const : "utf8" as const, content: file.content, truncated: false };
     },
-    // 恢复（第 71、72 条）：一轮正在跑、卡在工作树里做的回 409；revision 对不上回 file_changed（临时）。
+    // 恢复（第 71、72 条）：一轮正在跑、卡在工作树里做的回 409；revision 对不上回 409 file_changed；不能按处恢复的 400。
     restoreSessionFiles: async (id, body) => {
       const s = must(id);
       if (OCCUPYING.has(s.summary.status) || s.summary.workspace?.kind === "worktree" || !s.edits) throw new LocalRunnerError("conflict", "这一轮还在跑", 409);
@@ -746,7 +746,9 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
       return result;
     },
     readFileChanges: async (id, body) => {
-      const found = must(id).edits?.read(body.path, body.range);
+      const s = must(id);
+      if (s.summary.workspace?.kind === "worktree" && body.range !== "session") throw new LocalRunnerError("validation", "工作树里的会话只能看开工到现在", 400);
+      const found = s.edits?.read(body.path, body.range ?? "turn", body.turn);
       if (!found) throw new LocalRunnerError("not_found", "这个文件没改过", 404);
       return found;
     },
@@ -754,10 +756,11 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
       const s = must(id);
       if (OCCUPYING.has(s.summary.status)) throw new LocalRunnerError("conflict", "这一轮还在跑", 409);
       const outcome = s.edits?.restoreChanges(body.path, body.ids, body.revision) ?? "missing";
-      if (outcome === "changed") throw new LocalRunnerError("file_changed" as "conflict", "文件又变了", 409);
-      if (outcome === "converted") throw new LocalRunnerError("validation", "这种文件只能整个恢复", 400);
+      if (outcome === "changed") throw new LocalRunnerError("file_changed", "文件又变了", 409);
+      if (outcome === "whole_only") throw new LocalRunnerError("validation", "这个文件只能整个恢复", 400);
       if (outcome === "missing") throw new LocalRunnerError("not_found", "这个文件没改过", 404);
       emit(s, { type: "files_restored", all: false, restored: [body.path], failed: [] });
+      return { restored: [...body.ids], file: s.edits!.read(body.path, body.range ?? "turn", body.turn)! };
     },
     setPermissionMode: async (id, mode) => {
       const s = must(id);

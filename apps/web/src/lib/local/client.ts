@@ -53,11 +53,9 @@ export function parseSse(buffer: string): { events: { id: number | null; data: s
 const RETRY_MS = 1000;
 
 export function createHttpRunner(base = localRunnerBase(), token: () => string = readLocalToken): LocalRunner {
-  function call<T>(name: RouteName, params: Record<string, string> = {}, body?: unknown): Promise<T> {
-    return request<T>(LOCAL_RUNNER_ROUTES[name].method, pathOf(name, params), body);
-  }
-  async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const write = method === "POST" || method === "PUT" || method === "PATCH";
+  async function call<T>(name: RouteName, params: Record<string, string> = {}, body?: unknown): Promise<T> {
+    const route = LOCAL_RUNNER_ROUTES[name];
+    const write = route.method === "POST" || route.method === "PUT" || route.method === "PATCH";
     const headers: Record<string, string> = {};
     const key = token();
     if (key) headers[LOCAL_RUNNER_TOKEN_HEADER] = key;
@@ -65,7 +63,7 @@ export function createHttpRunner(base = localRunnerBase(), token: () => string =
     let response: Response;
     try {
       // 没有内容的写请求（停下、强停、选文件夹）也发 {}：本机只收 JSON。
-      response = await fetch(base + path, { method, headers, body: write ? JSON.stringify(body ?? {}) : undefined, cache: "no-store" });
+      response = await fetch(base + pathOf(name, params), { method: route.method, headers, body: write ? JSON.stringify(body ?? {}) : undefined, cache: "no-store" });
     } catch (error) {
       throw new LocalRunnerError("network", error instanceof Error ? error.message : "连不上本机程序");
     }
@@ -151,9 +149,8 @@ export function createHttpRunner(base = localRunnerBase(), token: () => string =
     listSessionFiles: (id) => call("listSessionFiles", { id }),
     readSessionFile: (id, body) => call("readSessionFile", { id }, body),
     restoreSessionFiles: (id, body) => call("restoreSessionFiles", { id }, body),
-    // 第 72 条的两条路由还没进契约：先照约定的路径写死，契约到了换成路由表里的。
-    readFileChanges: (id, body) => request("POST", `/v1/sessions/${encodeURIComponent(id)}/files/changes`, body),
-    restoreFileChanges: async (id, body) => { await request("POST", `/v1/sessions/${encodeURIComponent(id)}/files/changes/restore`, body); },
+    readFileChanges: (id, body) => call("readFileChanges", { id }, body),
+    restoreFileChanges: (id, body) => call("restoreFileChanges", { id }, body),
     kill: async (id) => (await call<{ session: Awaited<ReturnType<LocalRunner["kill"]>> }>("kill", { id }, {})).session,
     decidePermission: async (id, requestId, body) => (await call<{ session: Awaited<ReturnType<LocalRunner["kill"]>> }>("decidePermission", { id, requestId }, body)).session,
     mergeSession: async (id) => call<Awaited<ReturnType<LocalRunner["mergeSession"]>>>("mergeSession", { id }, {}),
