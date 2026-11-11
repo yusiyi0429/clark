@@ -897,6 +897,7 @@ export const LocalWorkspace = Type.Union([
  * - preparing：在留开工前那一份（后台做，开工不等）。这时用改文件工具改的先拷一份再放行；命令最多等 10 秒，等不到就按 touched_only 的规矩办。
  * - ready：整个工作目录都留了（每一轮开始前、结束后各留一份），用命令、脚本、子 agent 改的、删的也能恢复。
  *   带 reason sync_folder 时（11/11）：文件夹在 OneDrive 等同步盘里，只给本地已有的文档类文件（Word、Excel、PPT、Markdown、文本、CSV 等，单个不超过 32MB）留了，只在云端的不碰、不下载。
+ *   带 reason too_large 时：文件夹太大（超过 3 万个文件或 3GB），只给里面的文档类文件留了。
  * - touched_only：只给执行方用改文件工具（Claude Code 的 Write、Edit、MultiEdit、NotebookEdit，Codex 的改文件）改的已有文件留一份；
  *   命令要删、挪、覆盖已有文件时，哪一档都照样问本人（包括「全部放行」）。reason 是为什么：too_large 文件夹太大（超过 3 万个文件或 3GB，
  *   不算 32MB 以上的大文件和 node_modules 这类目录）、sync_folder 在 OneDrive 等同步盘里、连文档都留不成、disk_full 本机数据目录所在的盘不够、
