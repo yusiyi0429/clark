@@ -2,7 +2,7 @@
  * 真本机程序的客户端：直连 http://127.0.0.1:<端口>，口令放在 x-tianshu-local-token 头里。
  * 事件流不能用 EventSource（带不了口令头），用 fetch 读 SSE，断了带 Last-Event-ID 重连（RFC 第 4 节）。
  */
-import type { TLocalCreateSessionBatchResponse, TLocalHealthResponse, TLocalModelProfile, TLocalSessionEvent } from "@warmap/contracts";
+import type { TLocalCreateSessionBatchResponse, TLocalHealthResponse, TLocalModelProfile, TLocalSessionDraft, TLocalSessionEvent, TLocalSourceAddResponse, TLocalSourceCheckResponse, TLocalSourceListResponse } from "@warmap/contracts";
 import { LOCAL_RUNNER_DEFAULT_PORT, LOCAL_RUNNER_ROUTES, LOCAL_RUNNER_TOKEN_HEADER } from "./routes";
 import { LocalRunnerError, acceptsClientMessageId, type EventWatch, type LocalRunner } from "./runner";
 
@@ -29,21 +29,23 @@ export function localRunnerBase(): string {
 const pathOf = (name: RouteName, params: Record<string, string> = {}) =>
   LOCAL_RUNNER_ROUTES[name].path.replace(/:([A-Za-z]+)/g, (_m, key: string) => encodeURIComponent(params[key] ?? ""));
 
-/** 把收到的一段 SSE 文本切成事件；没收完的半段留着下次拼。心跳注释（以 : 开头）跳过。 */
-export function parseSse(buffer: string): { events: { id: number | null; data: string }[]; rest: string } {
+/** 把收到的一段 SSE 文本切成事件；没收完的半段留着下次拼。心跳注释（以 : 开头）跳过。type 是 `event:` 行（草稿是 draft），没有就是普通事件。 */
+export function parseSse(buffer: string): { events: { id: number | null; data: string; type?: string }[]; rest: string } {
   const text = buffer.replace(/\r\n/g, "\n");
-  const events: { id: number | null; data: string }[] = [];
+  const events: { id: number | null; data: string; type?: string }[] = [];
   let start = 0;
   for (let end = text.indexOf("\n\n"); end >= 0; end = text.indexOf("\n\n", start)) {
     const block = text.slice(start, end);
     start = end + 2;
     let id: number | null = null;
+    let type: string | undefined;
     const data: string[] = [];
     for (const line of block.split("\n")) {
       if (line.startsWith("id:")) id = Number(line.slice(3).trim()) || null;
+      else if (line.startsWith("event:")) type = line.slice(6).trim();
       else if (line.startsWith("data:")) data.push(line.slice(line.startsWith("data: ") ? 6 : 5));
     }
-    if (data.length) events.push({ id, data: data.join("\n") });
+    if (data.length) events.push({ id, data: data.join("\n"), ...(type ? { type } : {}) });
   }
   return { events, rest: text.slice(start) };
 }
@@ -70,11 +72,11 @@ export function createHttpRunner(base = localRunnerBase(), token: () => string =
     return json as T;
   }
 
-  async function watch(id: string, { after, onEvent, onLink, signal }: EventWatch): Promise<void> {
+  async function watch(id: string, { after, onEvent, onDraft, onLink, signal }: EventWatch): Promise<void> {
     let last = after;
     while (!signal.aborted) {
       try {
-        const response = await fetch(base + pathOf("sessionEvents", { id }), {
+        const response = await fetch(base + pathOf("sessionEvents", { id }) + (onDraft ? "?drafts=1" : ""), {
           headers: { [LOCAL_RUNNER_TOKEN_HEADER]: token(), ...(last ? { "last-event-id": String(last) } : {}) }, signal, cache: "no-store",
         });
         if (!response.ok || !response.body) throw new LocalRunnerError("network", `事件流 ${response.status}`, response.status);
@@ -88,6 +90,8 @@ export function createHttpRunner(base = localRunnerBase(), token: () => string =
           const parsed = parseSse(buffer + decoder.decode(value, { stream: true }));
           buffer = parsed.rest;
           for (const item of parsed.events) {
+            // 草稿没有编号，不动 last（不影响 Last-Event-ID）。
+            if (item.type === "draft") { onDraft?.(JSON.parse(item.data) as TLocalSessionDraft); continue; }
             const event = JSON.parse(item.data) as TLocalSessionEvent;
             if (event.seq <= last) continue;
             last = event.seq;
@@ -121,6 +125,10 @@ export function createHttpRunner(base = localRunnerBase(), token: () => string =
     putModel: (id, body) => call("putModel", { id }, body),
     connectTokenHub: async (apiKey) => (await call<{ profiles: TLocalModelProfile[] }>("connectTokenHub", {}, { apiKey })).profiles,
     disconnectTokenHub: async () => { await call("disconnectTokenHub"); },
+    listSources: () => call<TLocalSourceListResponse>("listSources"),
+    checkSource: (body) => call<TLocalSourceCheckResponse>("checkSource", {}, body),
+    addSource: (body) => call<TLocalSourceAddResponse>("addSource", {}, body),
+    deleteSource: async (id) => { await call("deleteSource", { id }); },
     listTools: async () => (await call<{ tools: Awaited<ReturnType<LocalRunner["listTools"]>> }>("listTools")).tools,
     putTool: (id, body) => call("putTool", { id }, body),
     removeTool: async (id) => { await call("deleteTool", { id }); },

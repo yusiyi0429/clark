@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { FormatRegistry } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
-import { ContinueTaskResponse, MonthAnswer, MonthPageResponse, StopTaskRequest, TaskAgreementResponse, TaskSettlementResponse } from "../src/index.js";
+import { ContinueTaskResponse, MonthPageResponse, StopTaskRequest, TaskAgreementResponse, TaskSettlementResponse } from "../src/index.js";
 import { buildOpenApiDocument } from "../src/openapi.js";
 
 const at = "2026-12-01T02:00:00.000Z";
@@ -23,19 +23,17 @@ describe("跨月延续与月份页契约", () => {
     expect(Value.Check(StopTaskRequest, { note: "" })).toBe(false);
   });
 
-  it("月份页：每件 Task 的摘要、了结、延续自哪、复盘答案；草稿先是 null", () => {
+  it("月份页：每件 Task 的摘要、了结、延续自哪；草稿先是 null；不再带复盘答案", () => {
     const task = { taskId: "T-11", missionId: "M-11", missionTitle: "内部版上线", name: "上线 V1", agreement: { met: 1, total: 3 }, version: 2, running: 1, blocked: 0,
-      done: false, settlement: continued, continuedFrom: null, answer: { choice: "continue", note: null } };
+      done: false, settlement: continued, continuedFrom: null };
     expect(Value.Check(MonthPageResponse, { period: "2026-11", tasks: [task], draft: null })).toBe(true);
     expect(Value.Check(MonthPageResponse, { period: "2026-11", tasks: [{ ...task, agreement: null, version: null, settlement: null,
-      continuedFrom: { ...to, period: null }, answer: { choice: null, note: "再想想" } }],
+      continuedFrom: { ...to, period: null } }],
     draft: { period: "2026-12", missions: [{ id: "m", title: "12 月的 Mission", tasks: [{ id: "d", name: "接着做",
       continuesFrom: { taskId: "T-11", name: "上线 V1", period: "2026-11", summary: "约定 1/3 · 交付第 2 版" } }] }] } })).toBe(true);
     expect(Value.Check(MonthPageResponse, { period: "11 月", tasks: [], draft: null })).toBe(false);
     expect(Value.Check(MonthPageResponse, { period: "2026-11", tasks: [{ ...task, agreement: { met: 0, total: 0 } }], draft: null })).toBe(false);
-    expect(Value.Check(MonthAnswer, { choice: "stop", note: "不做了" })).toBe(true);
-    expect(Value.Check(MonthAnswer, { choice: null, note: "再想想" })).toBe(true);
-    expect(Value.Check(MonthAnswer, { choice: "later", note: null })).toBe(false);
+    expect(Value.Check(MonthPageResponse, { period: "2026-11", tasks: [{ ...task, answer: null }], draft: null })).toBe(false);
   });
 
   it("约定带 draftFrom（延续来的草稿）", () => {
@@ -49,7 +47,7 @@ describe("跨月延续与月份页契约", () => {
   it("OpenAPI 里列了延续和月份页的路径", () => {
     const paths = buildOpenApiDocument().paths;
     expect(Object.keys(paths["/api/me/tasks/{taskId}/stop"] ?? {}).sort()).toEqual(["delete", "post"]);
-    expect(Object.keys(paths["/api/me/months/{period}/tasks/{taskId}/decision"] ?? {})).toEqual(["put"]);
+    expect(paths["/api/me/months/{period}/tasks/{taskId}/decision"]).toBeUndefined();
     for (const key of ["/api/me/tasks/{taskId}/continuation", "/api/me/months/{period}"]) expect(paths[key]).toBeDefined();
   });
 });

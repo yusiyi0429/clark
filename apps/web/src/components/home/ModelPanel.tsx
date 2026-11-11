@@ -6,13 +6,15 @@
  * 第一层一直在，开着的那一行保持选中底色。第二层是能选的，选中的打勾；选了第二层收起、第一层不关。点别处、Esc 全关；第二层开着时 Esc、← 只收第二层，→、回车打开。
  * 手持上从底部升起（同权限档那个抽屉），地方不够，仍是同一个抽屉里翻到第二页（顶上「‹ 行名」回去）。
  * 只列得出一项的那一行没有「›」、不弹。子会话、开工对话框、项目对话三处共用；每一行的值和选项由调用方算（lib/local/modelPanel）。
+ * 来源那一层最底下的「+ 添加来源」（52 条，ADD_SOURCE）这里接住：收起面板、开添加来源的小弹窗，不交给调用方。
  * busy：选了以后要等一会儿才换好的（子会话换执行方，本机要等新的那家起来）——那一行转圈、先写选的那个，换好之前三行都点不了，另外两行的「›」也收起来。
  */
 import { useContext, useEffect, useRef, useState, type RefObject } from "react";
 import { Dropdown } from "@heroui/react";
 import { RootMenuTriggerStateContext } from "react-aria-components";
 import { Check, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
-import { rowOpens, type PanelOption, type PanelRow, type PanelRowKey } from "@/lib/local/modelPanel";
+import { ADD_SOURCE, rowOpens, type PanelOption, type PanelRow, type PanelRowKey } from "@/lib/local/modelPanel";
+import { AddSourceDialog } from "./AddSourceDialog";
 import { ICON, StateIcon } from "./StateIcon";
 import h from "@/styles/home.module.css";
 
@@ -31,7 +33,14 @@ type Props = {
 };
 
 export function ModelPanel({ sheet = false, ...props }: Props) {
-  return sheet ? <PanelSheet {...props} /> : <PanelDropdown {...props} />;
+  const [adding, setAdding] = useState(false);
+  const onAdd = () => setAdding(true);
+  return (
+    <>
+      {sheet ? <PanelSheet {...props} onAdd={onAdd} /> : <PanelDropdown {...props} onAdd={onAdd} />}
+      {adding ? <AddSourceDialog onClose={() => setAdding(false)} /> : null}
+    </>
+  );
 }
 
 const RowText = ({ row, busy }: { row: PanelRow; busy?: Props["busy"] }) => {
@@ -48,7 +57,7 @@ const OptionText = ({ option, selected }: { option: PanelOption; selected: boole
 );
 const optionName = (option: PanelOption) => (option.note ? `${option.label} ${option.note}` : option.label);
 
-function PanelDropdown({ label, title, rows, onPick, busy = null, placement = "top end", testId = "model-panel" }: Omit<Props, "sheet">) {
+function PanelDropdown({ label, title, rows, onPick, onAdd, busy = null, placement = "top end", testId = "model-panel" }: Omit<Props, "sheet"> & { onAdd: () => void }) {
   const body = useRef<HTMLDivElement>(null);
   // 点不开的（只有一项）和换着的时候三行都不弹第二层、也点不了。
   const disabled = rows.filter((entry) => busy || !rowOpens(entry)).map((entry) => entry.key);
@@ -69,7 +78,7 @@ function PanelDropdown({ label, title, rows, onPick, busy = null, placement = "t
                   {item}
                   {/* 第二层：贴在这一行右边，顶边对齐（放不下 react-aria 自己往上挪、往左翻）。 */}
                   <Dropdown.Popover placement="end top" className={h.pop} data-testid="model-panel-sub">
-                    <Options row={entry} onPick={onPick} body={body} />
+                    <Options row={entry} onPick={onPick} onAdd={onAdd} body={body} />
                   </Dropdown.Popover>
                 </Dropdown.SubmenuTrigger>
               );
@@ -82,9 +91,11 @@ function PanelDropdown({ label, title, rows, onPick, busy = null, placement = "t
 }
 
 /** 第二层的项：选了只收第二层（第一层不关），焦点回到那一行；选中的那项行尾打勾。 */
-function Options({ row, onPick, body }: { row: PanelRow; onPick: Props["onPick"]; body: RefObject<HTMLDivElement | null> }) {
+function Options({ row, onPick, onAdd, body }: { row: PanelRow; onPick: Props["onPick"]; onAdd: () => void; body: RefObject<HTMLDivElement | null> }) {
   const root = useContext(RootMenuTriggerStateContext);
   const pick = (id: string) => {
+    // 「+ 添加来源」：整个面板收起，开小弹窗。
+    if (id === ADD_SOURCE) { root?.close(); onAdd(); return; }
     if (id !== row.selected) onPick(row.key, id);
     // 开着的第二层在第 0 级；它的键是 react-aria 给子菜单自己起的（不是这一行的 id），照栈里那个收。
     const open = root?.expandedKeysStack[0];
@@ -103,7 +114,7 @@ function Options({ row, onPick, body }: { row: PanelRow; onPick: Props["onPick"]
 }
 
 /** 手持上的同一个面板：底部抽屉里两页；Esc 第二页先回第一页，再按收起；点空白处收起。 */
-function PanelSheet({ label, title, rows, onPick, busy = null, testId = "model-panel" }: Omit<Props, "sheet" | "placement">) {
+function PanelSheet({ label, title, rows, onPick, onAdd, busy = null, testId = "model-panel" }: Omit<Props, "sheet" | "placement"> & { onAdd: () => void }) {
   const [open, setOpen] = useState(false);
   const [closing, setClosing] = useState(false);
   const [page, setPage] = useState<PanelRowKey | null>(null);
@@ -120,7 +131,11 @@ function PanelSheet({ label, title, rows, onPick, busy = null, testId = "model-p
     document.addEventListener("keydown", onKey, true);
     return () => document.removeEventListener("keydown", onKey, true);
   }, [open, page]);
-  const pick = (option: PanelOption) => { if (row && option.id !== row.selected) onPick(row.key, option.id); setPage(null); };
+  const pick = (option: PanelOption) => {
+    if (option.id === ADD_SOURCE) { close(); onAdd(); return; }
+    if (row && option.id !== row.selected) onPick(row.key, option.id);
+    setPage(null);
+  };
   return (
     <>
       <button type="button" className={h.sendTo} aria-haspopup="dialog" aria-label={`模型：${title ?? label}`} onClick={() => setOpen(true)} data-testid={testId}>

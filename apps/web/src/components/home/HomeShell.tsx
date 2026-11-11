@@ -4,7 +4,7 @@
  * 新首页 /me/work（新首页_伙伴总管线与Task管线_2026-11-07，替换 V2 设计第 20.4 节的三栏首页），按人打开：
  * - 左：四个锚点——伙伴台（总管线）、「今天」行（首页）、Mission → Task → 子会话、本人行（个人菜单），见 LeftColumn。
  * - 中：展示区——首页、总管线、Task 管线、Task 详情、子会话、二级页、月份页（地址决定，见 view.ts）。
- * - 右：资源和后台任务，跟着展示区走，可以收成细条。
+ * - 右：资源和后台任务，跟着展示区走，可以收成细条；左边缘能拖宽。子会话、议题会话、项目对话页头的信息按钮在这里打开会话详情（SideDetail），不换掉对话。
  * 手机：首屏兼首页（伙伴台、今天、等你、树、本人），点进去全屏；后台任务从「今天」行和页头的按钮打开，是底部抽屉。
  * 深色按「偏好 · 外观」（跟随系统 / 浅色 / 深色，17.2）：外壳带 data-scheme="auto"，深色变量挂在根上（app/scheme-dark.css）；
  * 外观存在服务端，进首页、切回这个标签页时读一次（useAppearance）。伙伴不飞走，一直在台上（设计 9.2）。
@@ -16,7 +16,7 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type CSSProperties } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowLeft, ListChecks, LoaderCircle } from "lucide-react";
+import { ArrowLeft, ListChecks, LoaderCircle, X } from "lucide-react";
 import type { THomePlanTask, TLocalPermissionMode } from "@warmap/contracts";
 import type { Account } from "@/components/AccountMenu";
 import { useBuddy } from "@/components/buddy/useBuddy";
@@ -38,7 +38,7 @@ import { HeroButton } from "@/components/HeroButton";
 import type { BackgroundItem, RouteTarget } from "@/lib/home/types";
 import { useBackground } from "@/lib/home/useBackground";
 import { useWorkHome } from "@/lib/home/useWorkHome";
-import { BackgroundPanel, BackgroundStrip, useMachine } from "./BackgroundPanel";
+import { BackgroundPanel, BackgroundStrip, BackgroundTasks, useMachine } from "./BackgroundPanel";
 import { BuddyView, PipelineView, type Outbox, type OutboxEntry } from "./Conversations";
 import { HomeComposer, HomeView, WaitingList, type SendTarget } from "./HomeView";
 import { LeftColumn, SubLetter, subKey, subLetters, type RowActions } from "./LeftColumn";
@@ -46,7 +46,8 @@ import { ForeignTaskInfo, TaskInfo } from "./TaskInfo";
 import { MissionInfo } from "./MissionInfo";
 import { ProjectInfo } from "./ProjectInfo";
 import { ProjectTrail } from "./ProjectParts";
-import { LeftResize, useLeftWidth } from "./LeftResize";
+import { LeftResize, RightResize, useLeftWidth, useRightWidth } from "./LeftResize";
+import { SideDetailContext, type SideDetail } from "./SideDetail";
 import { seenKey, withSeen, type SeenKind, type SeenMarks } from "@/lib/home/seen";
 import { seenSequence } from "@/lib/home/transfer";
 import { projectIdOf, startFolder } from "@/lib/home/startFolder";
@@ -57,7 +58,7 @@ import { useProjects } from "./useProjects";
 import { projectHref, projectWorking, type Project } from "@/lib/home/projects";
 import { usePhone } from "./usePhone";
 import { ViewChrome, PAGE_TITLE, monthHref, scopeOf, viewOf, type View } from "./view";
-import { MONTH_PAGE, SECONDARY_PAGES, type SecondaryPageProps } from "./pages";
+import { MONTH_PAGE, SECONDARY_PAGES, type MonthHead, type SecondaryPageProps } from "./pages";
 import { useHomeArrival } from "@/components/onboarding/useHomeArrival";
 import { ICON } from "./StateIcon";
 import { useTabTitle } from "./useTabTitle";
@@ -113,6 +114,8 @@ function HomeFrame({ account }: { account: Account }) {
   const [outbox, setOutbox] = useState<Outbox>([]);
   /** 从 Mission 详情点「问伙伴」带进总管线的上下文（输入框左上角「关于：{Mission}」胶囊，14.2、14.5）。 */
   const [buddyContext, setBuddyContext] = useState<string | null>(null);
+  /** 月份页在复盘期间换的页头（「11 月复盘」和右边那几样）。 */
+  const [monthHead, setMonthHead] = useState<MonthHead | null>(null);
   const outboxId = useRef(0);
 
   // 右栏：记住本人上次开没开；没记过时 1280 以下默认收起。
@@ -120,6 +123,14 @@ function HomeFrame({ account }: { account: Account }) {
     try { const saved = localStorage.getItem(PANEL_KEY); setPanelOpen(saved ? saved === "open" : window.innerWidth >= 1280); } catch { setPanelOpen(window.innerWidth >= 1280); }
   }, []);
   const togglePanel = (open: boolean) => { setPanelOpen(open); try { localStorage.setItem(PANEL_KEY, open ? "open" : "closed"); } catch { /* 下次按宽度 */ } };
+  // 右栏里的会话详情（SideDetail）：开着时换着看别的子会话、项目也接着看那一个的详情；到了没有详情的页面右栏照旧。
+  // 收成细条时打开详情也展开右栏，关掉详情回到原来的样子。
+  const [sideWanted, setSideWanted] = useState(false);
+  const [sideNode, setSideNode] = useState<HTMLElement | null>(null);
+  const sideView = !handheld && (view.kind === "card" || view.kind === "topic" || view.kind === "project");
+  const sideOpen = sideWanted && sideView;
+  const side = useMemo<SideDetail | null>(() => (sideView ? { open: sideOpen, node: sideOpen ? sideNode : null, toggle: (open) => setSideWanted((current) => open ?? !current) } : null),
+    [sideView, sideOpen, sideNode]);
   useEffect(() => { setSheet(false); }, [pathname]);
   // 换了展示区的内容：焦点落到页头上（5.2 交互状态）。新内容自己抢了焦点（选项框、输入框）就不动；第一次打开页面不动。
   const firstPath = useRef(true);
@@ -192,8 +203,9 @@ function HomeFrame({ account }: { account: Account }) {
   });
   useSessionStops(local, here);
   useSessionCommands(local, here);
-  // 左栏宽度（24 条）：本人拖过的写在根上的 --home-left，没拖过照 CSS 的 clamp。
+  // 左栏宽度（24 条）：本人拖过的写在根上的 --home-left，没拖过照 CSS 的 clamp。右栏同理（--home-right）。
   const leftWidth = useLeftWidth();
+  const rightWidth = useRightWidth();
   // 蓝点「点了就藏」（25 条）：打开子会话、项目对话的那一刻记成「刚看过」（带那一刻的停下时间），左栏马上不画；work-seen 在后台发，失败不提示。
   // 左栏点行时在跳页之前记；别处打开的（等你、链接、改地址）在换页后、画出来之前记（layout effect），效果一样。开着时又来了更新的停下，也再记一次。
   const [seenMarks, setSeenMarks] = useState<SeenMarks>(() => new Map());
@@ -521,6 +533,10 @@ function HomeFrame({ account }: { account: Account }) {
       onPickFolder={() => projects.actions.pickFolder(project.id, project.name)} onCreateFolder={(name) => projects.actions.createFolder(project.id, project.name, name)}
       bound={projects.bound.get(project.id) ?? null} />;
   };
+  const projectInfo = (project: Project, inSide = false) => (
+    <ProjectInfo key={project.id} project={project} period={data.period} go={go} actions={projects.actions} folders={projects.boundAll.get(project.id) ?? []} folderLimit={projects.folderLimit} doneDefinitionOf={(taskId) => planTask(taskId)?.doneDefinition ?? null}
+      me={{ personId: account.personId ?? "", name: account.displayName }} side={inSide} />
+  );
   const display = (current: View) => {
     switch (current.kind) {
       case "home": return <HomeView data={data} api={api} buddy={buddy} today={todayLabel(work.plan?.today ?? null)} go={go} route={route} onSend={send} projects={projects} />;
@@ -532,8 +548,7 @@ function HomeFrame({ account }: { account: Account }) {
       case "projectInfo": {
         const project = projects.all.find((entry) => entry.id === current.id);
         if (!project) return <Missing loading={!api.ready} onRetry={api.planFailed ? () => void api.retryPlan() : undefined} />;
-        return <ProjectInfo key={project.id} project={project} period={data.period} go={go} actions={projects.actions} folders={projects.boundAll.get(project.id) ?? []} folderLimit={projects.folderLimit} doneDefinitionOf={(taskId) => planTask(taskId)?.doneDefinition ?? null}
-          me={{ personId: account.personId ?? "", name: account.displayName }} />;
+        return projectInfo(project);
       }
       case "transfer": return <TransferView key={current.id} id={current.id} go={go} onChanged={api.refresh} />;
       case "buddy": return <BuddyView buddy={buddy} outbox={outbox} consume={consume} onSpeaking={setSpeaking} context={buddyContext} onClearContext={() => setBuddyContext(null)} />;
@@ -560,8 +575,9 @@ function HomeFrame({ account }: { account: Account }) {
         const mission = data.month.missions.find((entry) => entry.missionId === task.missionId)?.title ?? null;
         return <TaskInfo task={task} mission={mission} gate={taskGate(task)} go={go} />;
       }
-      case "card": return <CardSession key={current.id} cardId={current.id} embedded />;
-      case "topic": return <TopicSession key={current.id} topicId={current.id} embedded />;
+      // 等本人处理的框和左栏的点同一个来源（第 54 条）：首页数据里这个子会话在等什么。
+      case "card": return <CardSession key={current.id} cardId={current.id} embedded waiting={subs.find((sub) => sub.id === current.id)?.waiting} />;
+      case "topic": return <TopicSession key={current.id} topicId={current.id} embedded waiting={subs.find((sub) => sub.id === current.id)?.waiting ?? null} />;
       case "page": {
         // 二级页：组件挂在 components/home/pages。
         const Page = SECONDARY_PAGES[current.page];
@@ -569,7 +585,7 @@ function HomeFrame({ account }: { account: Account }) {
       }
       case "month": {
         const Month = MONTH_PAGE;
-        return <SecondaryFrame key={current.period} title={`${Number(current.period.slice(5))} 月`} go={go}>{Month ? <Month go={go} period={current.period} /> : null}</SecondaryFrame>;
+        return <SecondaryFrame key={current.period} title={monthHead?.title ?? `${Number(current.period.slice(5))} 月`} trail={monthHead?.trail} go={go}>{Month ? <Month go={go} period={current.period} today={work.plan?.today ?? null} onHead={setMonthHead} /> : null}</SecondaryFrame>;
       }
     }
   };
@@ -624,26 +640,45 @@ function HomeFrame({ account }: { account: Account }) {
   return (
     <WorkspaceContext.Provider value={workspace}>
       <ViewChrome.Provider value={chrome}>
-        <div className={h.app} data-panel={panelOpen ? "open" : "closed"} data-view={view.kind} data-scheme="auto" data-entering={entering ? "" : undefined} data-testid="work-home"
-          data-resizing={leftWidth.dragging ? "" : undefined} style={leftWidth.width ? ({ "--home-left": `${leftWidth.width}px` } as CSSProperties) : undefined}>
-          <aside className={h.left}>{left}<LeftResize control={leftWidth} /></aside>
-          <main className={h.display}>{display(view)}</main>
-          <aside className={h.right} aria-label="后台任务">
-            {panelOpen ? panel({ onCollapse: () => togglePanel(false) }) : <BackgroundStrip running={running} quota={work.resources.quota} onExpand={() => togglePanel(true)} />}
-          </aside>
-        </div>
+        <SideDetailContext.Provider value={side}>
+          <div className={h.app} data-panel={panelOpen || sideOpen ? "open" : "closed"} data-view={view.kind} data-scheme="auto" data-entering={entering ? "" : undefined} data-testid="work-home"
+            data-resizing={leftWidth.dragging || rightWidth.dragging ? "" : undefined} style={{
+              ...(leftWidth.width ? { "--home-left": `${leftWidth.width}px` } : {}),
+              ...(rightWidth.width ? { "--home-right": `${rightWidth.width}px` } : {}),
+            } as CSSProperties}>
+            <aside className={h.left}>{left}<LeftResize control={leftWidth} /></aside>
+            <main className={h.display}>{display(view)}</main>
+            <aside className={h.right} aria-label={sideOpen ? "详情" : "后台任务"}>
+              {sideOpen ? (
+                <div className={h.side} data-testid="side-detail">
+                  <div className={h.sideHead}>
+                    <span className={h.resName}>详情</span><span className={h.grow} />
+                    <HeroButton variant="ghost" size="sm" isIconOnly title="关闭" aria-label="关闭详情" onPress={() => setSideWanted(false)} data-testid="side-close"><X {...ICON} /></HeroButton>
+                  </div>
+                  <div className={h.sideScroll}>
+                    {view.kind === "project" ? (() => { const project = projects.all.find((entry) => entry.id === view.id); return project ? projectInfo(project, true) : null; })()
+                      : <div ref={setSideNode} />}
+                    {items.length ? <div className={h.sideTasks}><BackgroundTasks items={items} onStop={stop} /></div> : null}
+                  </div>
+                </div>
+              ) : panelOpen ? panel({ onCollapse: () => togglePanel(false) }) : <BackgroundStrip running={running} quota={work.resources.quota} onExpand={() => togglePanel(true)} />}
+              {panelOpen || sideOpen ? <RightResize control={rightWidth} /> : null}
+            </aside>
+          </div>
+        </SideDetailContext.Provider>
       </ViewChrome.Provider>
     </WorkspaceContext.Provider>
   );
 }
 
 /** 二级页、月份页的壳（5.4.7）：页头（返回、标题）+ 文档类阅读尺，内容是挂进来的组件。 */
-function SecondaryFrame({ title, go, children }: { title: string; go: (href: string) => void; children: React.ReactNode }) {
+function SecondaryFrame({ title, trail, go, children }: { title: string; trail?: React.ReactNode; go: (href: string) => void; children: React.ReactNode }) {
   return (
     <div className={h.page} data-type-scale="doc" data-testid="secondary-page">
       <header className={h.viewHead}>
         <button type="button" className={h.icon} aria-label="返回" title="返回" onClick={() => (window.history.length > 1 ? window.history.back() : go(HOME_HREF))}><ArrowLeft {...ICON} /></button>
         <h1 className={h.viewTitle} tabIndex={-1}>{title}</h1>
+        {trail}
       </header>
       <div className={h.pageScroll}><div className={h.pageInner}>{children}</div></div>
     </div>

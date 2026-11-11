@@ -3,12 +3,12 @@
 .user{width:fit-content;max-width:82%;margin:0 0 30px auto;padding:11px 19px;border-radius:22px;background:#ffffff12;color:#f5f5f7;box-shadow:inset 0 1px 0 #ffffff06}
 .meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 12px;font-size:12px;line-height:1.5;color:#a5a5af}
 .prose>:first-child{margin-top:0!important}.prose>:last-child{margin-bottom:0!important}
-.prose p{margin:0 0 16px}.prose ul,.prose ol{padding-left:24px;margin:12px 0 18px}.prose ul{list-style:disc}.prose ol{list-style:decimal}.prose li{padding-left:3px;margin:6px 0}
+.prose p{margin:0 0 var(--space-4)}.prose ul,.prose ol{padding-left:var(--space-6);margin:var(--space-3) 0 18px}.prose ul{list-style:disc}.prose ol{list-style:decimal}.prose li{padding-left:3px;margin:6px 0}
 /* 用户自己的消息（多半是语音输入整理过的）：换行按原样分行；分点紧凑些，像输入框里那样。 */
-.user .prose p{white-space:pre-line;margin-bottom:8px}.user .prose ul,.user .prose ol{margin:6px 0 8px}.user .prose li{margin:2px 0}
-.prose h1,.prose h2,.prose h3{font-size:16px!important;line-height:1.5;margin:24px 0 12px!important;letter-spacing:0!important}
+.user .prose p{white-space:pre-line;margin-bottom:var(--space-2)}.user .prose ul,.user .prose ol{margin:6px 0 var(--space-2)}.user .prose li{margin:2px 0}
+.prose h1,.prose h2,.prose h3{font-size:16px!important;line-height:1.5;margin:var(--space-6) 0 var(--space-3)!important;letter-spacing:0!important}
 .prose strong{font-weight:600;color:#f7f7f9}.prose a{color:#a9caff;text-decoration:underline;text-underline-offset:3px}
-.prose pre{overflow:auto;padding:16px;background:#18181b;border-radius:12px}.prose code{font-size:.9em}.prose table{display:block;overflow-x:auto;border-collapse:collapse;max-width:100%}.prose td,.prose th{padding:8px 12px;border-bottom:1px solid #ffffff20;text-align:left}
+.prose pre{overflow:auto;padding:var(--space-4);background:#18181b;border-radius:var(--r-inset)}.prose code{font-size:.9em}.prose table{display:block;overflow-x:auto;border-collapse:collapse;max-width:100%}.prose td,.prose th{padding:var(--space-2) var(--space-3);border-bottom:1px solid #ffffff20;text-align:left}
 .sources{margin-top:18px;color:#aaaab5;font-size:12px}.sources summary{cursor:pointer;width:fit-content}.sources a{display:block;color:#d3d8e2;text-decoration:none;padding:10px 0;border-bottom:1px solid #ffffff0d}.sources a:hover{color:#a9caff}.sources a span{display:block;color:#8f929d;font-size:12px}.sources p{font-size:12px}
 /* 现场行（新首页设计 5.4.3）：颜色读变量，深色下跟着变；用时等宽数字。 */
 .thinking{display:flex;align-items:center;gap:9px;min-width:0;margin:4px 0 30px;color:var(--ink-faint);font-size:14px;min-height:30px}.elapsed{font-variant-numeric:tabular-nums;color:var(--ink-faint)}.thinking button{flex:none;margin-left:auto;border:0;background:none;color:var(--ink-faint);font-size:12px;cursor:pointer;padding:6px 10px;border-radius:9px}.thinking button:hover{background:var(--default-soft);color:var(--ink-muted)}
@@ -131,7 +131,7 @@
 /* 公式（KaTeX，conversation/richBlocks/markdown.ts）：块级公式一块浅底、宽了横向滚（不裁切），与富内容块一样和正文栏同宽；
    公式写错时 KaTeX 不抛错，错误样式改回正文色，看上去就是原文。 */
 .prose :global(.katex){font-size:1.06em}
-.prose :global(.katex-display){margin:14px 0 18px;padding:12px 16px;overflow-x:auto;overflow-y:hidden;border-radius:12px;background:var(--default-soft);scrollbar-width:thin}
+.prose :global(.katex-display){margin:14px 0 18px;padding:var(--space-3) var(--space-4);overflow-x:auto;overflow-y:hidden;border-radius:var(--r-inset);background:var(--default-soft);scrollbar-width:thin}
 .prose :global(.katex-display>.katex){text-align:left}
 .prose :global(.katex-error){color:inherit!important}
 

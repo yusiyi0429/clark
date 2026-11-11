@@ -185,29 +185,22 @@ describe("连接（卡片网格 + 三组）", () => {
 
 describe("月份页（设计 10.4、10.5）", () => {
   const go = vi.fn();
-  const render = (data: MonthPageData) => renderToStaticMarkup(<MonthView data={data} go={go} decide={async () => undefined} />);
+  const render = (data: MonthPageData) => renderToStaticMarkup(<MonthView data={data} go={go} />);
 
-  it("上半：每件 Task 一行，小字「约定 2/3 · 交付第 2 版 · 进行中 1」；没完成的接选项框「继续做（推荐）/ 改一改再做 / 到此为止 / 自己说…」，完成的行首一个勾、不问", () => {
+  it("上半：每件 Task 一行，小字「约定 2/3 · 交付第 2 版 · 进行中 1」，完成的行首一个勾；第一版的「怎么办」删了（去向在复盘页）", () => {
     const html = render(monthFixture("2026-11"));
     expect(text(html)).toContain("11 月的 Task");
     const tasks = html.split('data-testid="month-task"').slice(1);
     expect(tasks).toHaveLength(3);
     expect(text(tasks[0]!)).toContain("新首页改版 约定 2/3 · 交付第 2 版 · 进行中 1");
-    expect(text(tasks[0]!)).toContain("12 月怎么办");
-    expect(text(tasks[0]!)).toMatch(/继续做 ?（推荐）.*改一改再做.*到此为止/);
-    expect(tasks[0]).toContain('placeholder="自己说…"');
-    expect(tasks[0]).toContain('maxLength="200"');
+    expect(text(html)).not.toContain("怎么办");
+    expect(html).not.toContain('data-testid="month-decision"');
     expect(tasks[1]).toContain('aria-label="已完成"');
-    expect(tasks[1]).not.toContain('data-testid="month-decision"');
     expect(text(tasks[2]!)).toContain("约定 0/2 · 未交付 · 受阻 1");
   });
 
-  it("答过的收成一行「12 月怎么办 · 改一改再做：补一句」；下半是 12 月的草稿，延续来的写「延续自 11 月的 X · X 现在的状态」；底部两个动作，没有主按钮", () => {
-    const data = monthFixture("2026-11");
-    data.tasks[0] = { ...data.tasks[0]!, answer: { choice: "revise", note: "先把连接页做完" } };
-    const html = render(data);
-    expect(html.split('data-testid="month-task"')[1]).toContain("data-resolved");
-    expect(text(html)).toContain("12 月怎么办 改一改再做：先把连接页做完");
+  it("下半是 12 月的草稿，延续来的写「延续自 11 月的 X · X 现在的状态」；底部两个动作，没有主按钮", () => {
+    const html = render(monthFixture("2026-11"));
     expect(text(html)).toContain("12 月的草稿");
     const drafts = html.split('data-testid="draft-row"').slice(1).map(text);
     expect(drafts[0]).toContain("新首页收尾 延续自 11 月的新首页改版 · 约定 2/3 · 交付第 2 版");
@@ -219,21 +212,12 @@ describe("月份页（设计 10.4、10.5）", () => {
     expect(html).not.toContain("button--primary");
   });
 
-  it("已经延续出去的不再问怎么办，下面一行「已延续到 12 月的 X」；延续来的小字加「延续自 10 月的 X」", () => {
+  it("已经延续出去的下面一行「已延续到 12 月的 X」；延续来的小字加「延续自 10 月的 X」", () => {
     const data = monthFixture("2026-11");
     data.tasks[0] = { ...data.tasks[0]!, continuedFrom: { taskId: "old", name: "首页改版一期", missionId: "m0", period: "2026-10" } };
     const tasks = render(data).split('data-testid="month-task"').slice(1);
     expect(text(tasks[0]!)).toContain("延续自 10 月的首页改版一期");
-    expect(tasks[0]).toContain('data-testid="month-decision"');
-    expect(tasks[2]).not.toContain('data-testid="month-decision"');
     expect(text(tasks[2]!)).toContain("已延续到 12 月的复盘入口收尾");
-  });
-
-  it("选项和补的话都空时不发（接口会回 400）", async () => {
-    const request = vi.fn();
-    const source = httpMonthSource(request as unknown as typeof fetch, false);
-    await expect(source.decide("2026-11", "t1", { choice: null, note: "  " })).rejects.toThrow();
-    expect(request).not.toHaveBeenCalled();
   });
 
   it("没有 Task、没有草稿的部分不画；小字里是 0 的不写", () => {
@@ -245,14 +229,12 @@ describe("月份页（设计 10.4、10.5）", () => {
     expect(nextPeriod("2026-12")).toBe("2027-01");
   });
 
-  it("数据来源：B2 的接口在就用它；404 时开发里退回假数据（答过的记住），生产里报错不冒充", async () => {
+  it("数据来源：B2 的接口在就用它；404 时开发里退回假数据，生产里报错不冒充", async () => {
     const served: MonthPageData = { period: "2026-11", tasks: [], draft: null };
     const ok = httpMonthSource(async () => new Response(JSON.stringify(served), { status: 200 }));
     expect(await ok.load("2026-11")).toEqual(served);
     const missing = async () => new Response("{}", { status: 404 });
-    const dev = httpMonthSource(missing, true);
-    await dev.decide("2026-11", "fixture-home", { choice: "stop", note: null });
-    expect((await dev.load("2026-11")).tasks.find((task) => task.taskId === "fixture-home")?.answer).toEqual({ choice: "stop", note: null });
+    expect((await httpMonthSource(missing, true).load("2026-11")).tasks).toHaveLength(3);
     await expect(httpMonthSource(missing, false).load("2026-11")).rejects.toThrow("月份接口还没有");
     await expect(httpMonthSource(async () => new Response("{}", { status: 500 }), true).load("2026-11")).rejects.toThrow("500");
   });
@@ -287,5 +269,20 @@ describe("技能卡上那一行", () => {
     expect(dutyLine("- **按交代**改代码、补测试。交回前跑全量测试")).toBe("按交代改代码、补测试。");
     expect(dutyLine("Review the diff. Then report")).toBe("Review the diff.");
     expect(dutyLine("")).toBe("");
+  });
+});
+
+describe("连接页的来源（17.2 第 52 条）", () => {
+  it("本机有来源接口：这台电脑下面一行「来源」带「添加」，列加过的（TokenHub 那一行单独管，不重复），每个能换 Key、删除；老本机程序（sources 为 null）不画这一行", () => {
+    const kimi = { id: "kimi-coding_plan-cn", presetId: "kimi", name: "Kimi 编程套餐", plan: "coding_plan" as const, region: "cn" as const, baseUrl: "https://kimi.example/anthropic",
+      formats: ["anthropic" as const], agents: ["claude-code" as const], models: [{ id: "kimi-k2.5", name: "kimi-k2.5" }], verified: false, addedAt: "2026-11-11T00:00:00.000Z" };
+    const tokenhub = { ...kimi, id: "tokenhub", presetId: "tokenhub", name: "TokenHub", plan: "api" as const, region: null };
+    const value = { ...local("ready", status()), sources: { presets: [], sources: [tokenhub, kimi] } } as Parameters<typeof LocalContext.Provider>[0]["value"];
+    const html = renderToStaticMarkup(<LocalContext.Provider value={value}><ConnectionsPage go={() => undefined} /></LocalContext.Provider>);
+    const row = html.split('data-testid="row-sources"')[1]!.split('data-testid="row-folders"')[0]!;
+    expect(text(row)).toMatch(/来源 1 个 添加 Kimi 编程套餐 kimi-k2\.5 换 Key/);
+    expect(row).toContain('aria-label="删除 Kimi 编程套餐"');
+    expect(row.split('data-testid="source-row"')).toHaveLength(2);
+    expect(withLocal(<ConnectionsPage go={() => undefined} />, "ready", status())).not.toContain('data-testid="row-sources"');
   });
 });

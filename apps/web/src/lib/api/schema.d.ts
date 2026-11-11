@@ -5761,7 +5761,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** 月份页：这个月本人的 Task（约定几条达到、交付第几版、还在跑和受阻的子会话、确认完成没有、了结和延续去了哪、复盘时怎么定的），和下个月 Co-Agent 的草稿（现在为 null） */
+        /** 月份页：这个月本人的 Task（约定几条达到、交付第几版、还在跑和受阻的子会话、确认完成没有、了结和延续去了哪），和下个月 Co-Agent 的草稿（现在为 null） */
         get: operations["getMonthPage"];
         put?: never;
         post?: never;
@@ -5771,7 +5771,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/me/months/{period}/tasks/{taskId}/decision": {
+    "/api/me/months/{period}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 复盘页：本人这个月的 Mission（只放本期验收的 Task，逐条预评、评定、交付，总评），延期和取消的放最下面；预评走到哪了、截止时间 */
+        get: operations["getMonthReview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/months/{period}/review/tasks/{taskId}/disposition": {
         parameters: {
             query?: never;
             header?: never;
@@ -5779,8 +5796,110 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** 复盘时这件怎么办：继续做 / 改一改再做 / 到此为止，可以补一句话；选到此为止同时定了到此为止，改成别的就撤销 */
-        put: operations["decideMonthTask"];
+        /** 改一件 Task 的去向：本期验收 / 延期到某个月（缺省下个月）/ 已取消。Mission 负责人能改整个 Mission 的，Task 负责人能改自己的 */
+        put: operations["putMonthReviewDisposition"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/months/{period}/review/tasks/{taskId}/criteria/{index}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 改一条验收标准的评定和备注；和预评不同时备注必填。这件不是本期验收的 409 */
+        put: operations["putMonthReviewCriterion"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/months/{period}/review/tasks/{taskId}/criteria/{index}/links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 给一条标准挂一个交付：粘贴的链接，或者弹层里点的天枢交付物、子会话产出 */
+        post: operations["addMonthReviewLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/months/{period}/review/links/{linkId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** 删掉一个挂上的交付 */
+        delete: operations["deleteMonthReviewLink"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/months/{period}/review/tasks/{taskId}/link-candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 「+ 添加」弹层：这件 Task 在天枢里已有的交付物条目和子会话产出 */
+        get: operations["listMonthReviewLinkCandidates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/months/{period}/review/missions/{missionId}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 确认一个 Mission 的复盘（只有 Mission 负责人能点）；确认以后再改要重新确认 */
+        post: operations["confirmMonthReviewMission"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/months/{period}/carryover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 顺延清单：本人延期到这个月（和延期到更早、还没了结）的 Task，带原验收标准、做到哪了、已挂的交付；已取消的不带 */
+        get: operations["getMonthCarryover"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -21694,10 +21813,6 @@ export interface components {
                 } | null;
             };
         };
-        MonthAnswer: {
-            choice: ("continue" | "revise" | "stop") | null;
-            note: string | null;
-        };
         MonthTask: {
             taskId: string;
             missionId: string;
@@ -21729,10 +21844,6 @@ export interface components {
                 name: string;
                 missionId: string;
                 period: string | null;
-            } | null;
-            answer: {
-                choice: ("continue" | "revise" | "stop") | null;
-                note: string | null;
             } | null;
         };
         MonthDraft: {
@@ -21786,10 +21897,6 @@ export interface components {
                     missionId: string;
                     period: string | null;
                 } | null;
-                answer: {
-                    choice: ("continue" | "revise" | "stop") | null;
-                    note: string | null;
-                } | null;
             }[];
             draft: {
                 period: string;
@@ -21808,6 +21915,322 @@ export interface components {
                     }[];
                 }[];
             } | null;
+        };
+        ReviewDisposition: "current" | "deferred" | "cancelled";
+        ReviewRating: "met" | "partial" | "unmet";
+        MissionVerdict: "achieved" | "partial" | "not_achieved";
+        ReviewPerson: {
+            personId: string;
+            name: string;
+        };
+        MonthReviewLink: {
+            /** Format: uuid */
+            id: string;
+            title: string;
+            url: string;
+            source: "agent" | "person";
+        };
+        MonthReviewCriterion: {
+            index: number;
+            text: string;
+            agentRating: ("met" | "partial" | "unmet") | null;
+            agentBasis: string | null;
+            rating: ("met" | "partial" | "unmet") | null;
+            ratedBy: {
+                personId: string;
+                name: string;
+            } | null;
+            note: string | null;
+            links: {
+                /** Format: uuid */
+                id: string;
+                title: string;
+                url: string;
+                source: "agent" | "person";
+            }[];
+        };
+        MonthReviewTask: {
+            taskId: string;
+            name: string;
+            missionId: string;
+            missionTitle: string;
+            responsible: {
+                personId: string;
+                name: string;
+            } | null;
+            disposition: "current" | "deferred" | "cancelled";
+            deferredTo: string | null;
+            dispositionBy: {
+                personId: string;
+                name: string;
+            } | null;
+            canChange: boolean;
+            criteria: {
+                index: number;
+                text: string;
+                agentRating: ("met" | "partial" | "unmet") | null;
+                agentBasis: string | null;
+                rating: ("met" | "partial" | "unmet") | null;
+                ratedBy: {
+                    personId: string;
+                    name: string;
+                } | null;
+                note: string | null;
+                links: {
+                    /** Format: uuid */
+                    id: string;
+                    title: string;
+                    url: string;
+                    source: "agent" | "person";
+                }[];
+            }[];
+        };
+        MonthReviewMission: {
+            missionId: string;
+            code: string;
+            title: string;
+            owner: {
+                personId: string;
+                name: string;
+            };
+            verdict: ("achieved" | "partial" | "not_achieved") | null;
+            met: number;
+            total: number;
+            deferred: number;
+            cancelled: number;
+            confirmedAt: string | null;
+            confirmedBy: {
+                personId: string;
+                name: string;
+            } | null;
+            canConfirm: boolean;
+            tasks: {
+                taskId: string;
+                name: string;
+                missionId: string;
+                missionTitle: string;
+                responsible: {
+                    personId: string;
+                    name: string;
+                } | null;
+                disposition: "current" | "deferred" | "cancelled";
+                deferredTo: string | null;
+                dispositionBy: {
+                    personId: string;
+                    name: string;
+                } | null;
+                canChange: boolean;
+                criteria: {
+                    index: number;
+                    text: string;
+                    agentRating: ("met" | "partial" | "unmet") | null;
+                    agentBasis: string | null;
+                    rating: ("met" | "partial" | "unmet") | null;
+                    ratedBy: {
+                        personId: string;
+                        name: string;
+                    } | null;
+                    note: string | null;
+                    links: {
+                        /** Format: uuid */
+                        id: string;
+                        title: string;
+                        url: string;
+                        source: "agent" | "person";
+                    }[];
+                }[];
+            }[];
+        };
+        MonthReviewPrefill: {
+            status: "pending" | "running" | "done" | "failed";
+            error: string | null;
+        };
+        MonthReviewResponse: {
+            period: string;
+            /** Format: date-time */
+            deadline: string;
+            prefill: {
+                status: "pending" | "running" | "done" | "failed";
+                error: string | null;
+            };
+            toConfirm: number;
+            deferred: number;
+            cancelled: number;
+            missions: {
+                missionId: string;
+                code: string;
+                title: string;
+                owner: {
+                    personId: string;
+                    name: string;
+                };
+                verdict: ("achieved" | "partial" | "not_achieved") | null;
+                met: number;
+                total: number;
+                deferred: number;
+                cancelled: number;
+                confirmedAt: string | null;
+                confirmedBy: {
+                    personId: string;
+                    name: string;
+                } | null;
+                canConfirm: boolean;
+                tasks: {
+                    taskId: string;
+                    name: string;
+                    missionId: string;
+                    missionTitle: string;
+                    responsible: {
+                        personId: string;
+                        name: string;
+                    } | null;
+                    disposition: "current" | "deferred" | "cancelled";
+                    deferredTo: string | null;
+                    dispositionBy: {
+                        personId: string;
+                        name: string;
+                    } | null;
+                    canChange: boolean;
+                    criteria: {
+                        index: number;
+                        text: string;
+                        agentRating: ("met" | "partial" | "unmet") | null;
+                        agentBasis: string | null;
+                        rating: ("met" | "partial" | "unmet") | null;
+                        ratedBy: {
+                            personId: string;
+                            name: string;
+                        } | null;
+                        note: string | null;
+                        links: {
+                            /** Format: uuid */
+                            id: string;
+                            title: string;
+                            url: string;
+                            source: "agent" | "person";
+                        }[];
+                    }[];
+                }[];
+            }[];
+            setAside: {
+                taskId: string;
+                name: string;
+                missionId: string;
+                missionTitle: string;
+                responsible: {
+                    personId: string;
+                    name: string;
+                } | null;
+                disposition: "current" | "deferred" | "cancelled";
+                deferredTo: string | null;
+                dispositionBy: {
+                    personId: string;
+                    name: string;
+                } | null;
+                canChange: boolean;
+                criteria: {
+                    index: number;
+                    text: string;
+                    agentRating: ("met" | "partial" | "unmet") | null;
+                    agentBasis: string | null;
+                    rating: ("met" | "partial" | "unmet") | null;
+                    ratedBy: {
+                        personId: string;
+                        name: string;
+                    } | null;
+                    note: string | null;
+                    links: {
+                        /** Format: uuid */
+                        id: string;
+                        title: string;
+                        url: string;
+                        source: "agent" | "person";
+                    }[];
+                }[];
+            }[];
+        };
+        PutReviewDispositionRequest: {
+            disposition: "current" | "deferred" | "cancelled";
+            deferredTo?: string;
+        };
+        PutReviewCriterionRequest: {
+            rating: "met" | "partial" | "unmet";
+            note: string | null;
+        };
+        ReviewLinkCandidate: {
+            kind: "deliverable" | "output";
+            /** Format: uuid */
+            id: string;
+            title: string;
+            url: string;
+            /** Format: date-time */
+            at: string;
+        };
+        ReviewLinkCandidatesResponse: {
+            candidates: {
+                kind: "deliverable" | "output";
+                /** Format: uuid */
+                id: string;
+                title: string;
+                url: string;
+                /** Format: date-time */
+                at: string;
+            }[];
+        };
+        AddReviewLinkRequest: {
+            url: string;
+            title?: string;
+        } | {
+            candidate: {
+                kind: "deliverable" | "output";
+                /** Format: uuid */
+                id: string;
+            };
+        };
+        MonthCarryoverTask: {
+            taskId: string;
+            name: string;
+            missionId: string;
+            missionTitle: string;
+            fromPeriod: string;
+            deferredTo: string;
+            criteria: {
+                index: number;
+                text: string;
+                rating: ("met" | "partial" | "unmet") | null;
+                note: string | null;
+                links: {
+                    /** Format: uuid */
+                    id: string;
+                    title: string;
+                    url: string;
+                    source: "agent" | "person";
+                }[];
+            }[];
+        };
+        MonthCarryoverResponse: {
+            period: string;
+            tasks: {
+                taskId: string;
+                name: string;
+                missionId: string;
+                missionTitle: string;
+                fromPeriod: string;
+                deferredTo: string;
+                criteria: {
+                    index: number;
+                    text: string;
+                    rating: ("met" | "partial" | "unmet") | null;
+                    note: string | null;
+                    links: {
+                        /** Format: uuid */
+                        id: string;
+                        title: string;
+                        url: string;
+                        source: "agent" | "person";
+                    }[];
+                }[];
+            }[];
         };
     };
     responses: never;
@@ -41964,7 +42387,56 @@ export interface operations {
             };
         };
     };
-    decideMonthTask: {
+    getMonthReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                period: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 复盘页 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonthReviewResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    putMonthReviewDisposition: {
         parameters: {
             query?: never;
             header?: never;
@@ -41976,16 +42448,82 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["MonthAnswer"];
+                "application/json": components["schemas"]["PutReviewDispositionRequest"];
             };
         };
         responses: {
-            /** @description 存好了 */
-            204: {
+            /** @description 改好了，整份复盘页 */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MonthReviewResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    putMonthReviewCriterion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                period: string;
+                taskId: string;
+                index: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PutReviewCriterionRequest"];
+            };
+        };
+        responses: {
+            /** @description 改好了，整份复盘页 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonthReviewResponse"];
+                };
             };
             /** @description ApiError 统一错误 */
             400: {
@@ -42025,6 +42563,287 @@ export interface operations {
             };
             /** @description ApiError 统一错误 */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    addMonthReviewLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                period: string;
+                taskId: string;
+                index: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddReviewLinkRequest"];
+            };
+        };
+        responses: {
+            /** @description 挂好了，整份复盘页 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonthReviewResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    deleteMonthReviewLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                period: string;
+                linkId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 删好了，整份复盘页 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonthReviewResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listMonthReviewLinkCandidates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                period: string;
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 可以挂的 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewLinkCandidatesResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    confirmMonthReviewMission: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                period: string;
+                missionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 确认了，整份复盘页 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonthReviewResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    getMonthCarryover: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                period: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 顺延清单 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonthCarryoverResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

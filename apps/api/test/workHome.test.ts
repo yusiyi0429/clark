@@ -209,7 +209,7 @@ describe("新首页", { timeout: 30_000 }, () => {
       // Mission Card 的截止是本人确认关闭的时间。
       expect(byId.get(`mission_card:${mine}`)).toMatchObject({ kind: "mission_card", title: "确认我的任务", source: `${battlefield} · 11 月 Mission Card`,
         open: { kind: "mission_card", id: mine }, answer: "open", dueAt: "2026-11-08T10:00:00.000Z" });
-      // BOARD_NOW（11/06）在 10 月的复盘窗口里，但本人 10 月没有 Task，没什么要复盘的，不出「复盘 10 月」（monthPage.monthReviewAnswered）。
+      // BOARD_NOW（11/06）在 10 月的复盘窗口里，但本人 10 月没有 Task，没什么要复盘的，不出「复盘 10 月」（monthReview.monthReviewWaiting）。
       expect(byId.has("month:review:2026-10")).toBe(false);
       expect(body.waiting).toHaveLength(7);
       // 先是卡住正在跑的活的（批准、回答，新的在前），再是有截止的（早的在前），其余新的在前，没有时间的排后面。

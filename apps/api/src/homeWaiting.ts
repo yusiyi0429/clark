@@ -4,7 +4,7 @@ import { HOLD_STATES } from "./cardProjection.js";
 import { FEISHU_NOTIFY_KIND } from "./feishu/notify.js";
 import type { Query } from "./meetingStore.js";
 import type { MissionRoundPerson } from "./missionRounds.js";
-import { monthReviewAnswered } from "./monthPage.js";
+import { monthReviewWaiting, reviewDeadline } from "./monthReview.js";
 import { listProposals } from "./roles.js";
 import { CARD_PROJECT } from "./projects.js";
 import { openPlanTask, parseNotifyKey } from "./taskAgreements.js";
@@ -264,10 +264,10 @@ export async function assembleWaiting(input: WaitingInput): Promise<TWaitingItem
   // 月份（设计 10.4、10.7）：复盘窗口里「复盘 N 月」，截止是窗口关闭；之前月份还有没了结、在树上的 Task，每个月一条。
   // 新月份的草稿到了待敲定（finalize）要等 Co-Agent 的草稿，还没有数据，不出。
   const review = reviewWindow(deps.now);
-  // 这个月本人每件没了结的 Task 都选了怎么办（月份页，monthPage.ts）就不出。
-  if (review && !(await monthReviewAnswered(q, deps.planTasks, ownerId, review.period)))
+  // 复盘第三版（monthReview.ts）：预评做完了、本人还有没确认的 Mission 才出；截止是下月 1 号 18:00（本人 11/11 定），窗口照旧。
+  if (review && await monthReviewWaiting({ q, planTasks: deps.planTasks, names: deps.names }, deps.now, ownerId, review.period))
     add({ id: `month:review:${review.period}`, kind: "month", title: `复盘 ${Number(review.period.slice(5))} 月`, source: null, at: null,
-      open: { kind: "month", id: review.period }, dueAt: review.closesAt, answer: "open", month: { step: "review", period: review.period } });
+      open: { kind: "month", id: review.period }, dueAt: reviewDeadline(review.period), answer: "open", month: { step: "review", period: review.period } });
   const earlier = new Map<string, number>();
   for (const task of taskById.values()) if (task.period !== input.period) earlier.set(task.period, (earlier.get(task.period) ?? 0) + 1);
   for (const [period, count] of [...earlier].sort(([a], [b]) => b.localeCompare(a)))

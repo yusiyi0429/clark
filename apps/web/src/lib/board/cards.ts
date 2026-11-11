@@ -41,10 +41,13 @@ export function stageOf(item: CardItem): CardStage {
   return item.awaitingAcceptance ? "review" : "doing";
 }
 
-/** 本机会话的摘要能看出的标记：有权限请求挂着 → 等你批准；一轮停了在等话 → 等你回复；进程退了 → 已暂停。 */
+/**
+ * 本机会话的摘要能看出的标记：有权限请求挂着 → 等你批准；一轮停了在等话 → 等你回复；进程退了 → 已暂停。
+ * 会话停了、退了还挂着的批准是失效的（第 54 条），不算等你批准。
+ */
 export function localWaitOf(session: Pick<TLocalSessionSummary, "status" | "pendingPermissions"> | null): CardWait | null {
   if (!session) return null;
-  if (session.pendingPermissions > 0 || session.status === "waiting_permission") return "approval";
+  if (session.status === "waiting_permission" || (session.pendingPermissions > 0 && (session.status === "running" || session.status === "starting"))) return "approval";
   if (session.status === "idle") return "reply";
   if (session.status === "exited" || session.status === "failed") return "paused";
   return null;

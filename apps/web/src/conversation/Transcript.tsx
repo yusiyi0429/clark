@@ -1,7 +1,8 @@
 "use client";
 
 import { Fragment, createContext, memo, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components } from "react-markdown";
+import type { PluggableList } from "unified";
 import remend from "remend";
 import { ArrowDown, ArrowRight, Check, Paperclip, Quote } from "lucide-react";
 import { WorkspaceContext } from "@/components/shell/WorkspaceContext";
@@ -49,6 +50,13 @@ const TURN_MARKDOWN = { ...CITATION_MARKDOWN, components: { ...CITATION_MARKDOWN
 const TURN_REMARK_PLUGINS = [...CONVERSATION_REMARK_PLUGINS, remarkCitationMarks];
 
 /**
+ * 正文用哪一套 Markdown 部件。伙伴对话是 TURN_PARTS（出处标记、公式、富内容块）；子会话传自己的（不认出处和公式，
+ * 行内代码、链接对得上本会话的文件就能点开）。传进来的要是稳定的引用（模块常量），不然每次重画都重新解析。
+ */
+export type MarkdownParts = { components: Components; remarkPlugins: PluggableList; rehypePlugins: PluggableList };
+const TURN_PARTS: MarkdownParts = { components: TURN_MARKDOWN.components, remarkPlugins: TURN_REMARK_PLUGINS, rehypePlugins: CONVERSATION_REHYPE_PLUGINS };
+
+/**
  * 流式正文的一个顶层块：自己的到达记录（新放出的字淡入，旧字不重播）；文字没变就不重画、不重新解析。
  * `open`：还在长的最后一块，先用 remend（Streamdown 的未闭合 Markdown 补全）把没写完的加粗、代码、链接补齐再解析，
  * 块结构不在「** 原样」与「粗体」之间来回跳；末尾没写完的链接先不显示（holdOpenLink），句末的出处写完直接以标记出现。
@@ -57,7 +65,7 @@ const TURN_REMARK_PLUGINS = [...CONVERSATION_REMARK_PLUGINS, remarkCitationMarks
  * 不再是还在长的最后一块以后，淡入播完（ARRIVAL_SETTLE_MS）就不再按到达切：一段段 span 合并回普通文字
  * （每个 span 都带着播完的动画，数量一多，每帧的样式与排版都更贵）。外层节点与非 span 元素的 key 不变，富内容块、链接不重挂。
  */
-const ArrivalBlock = memo(function ArrivalBlock({ text, open }: { text: string; open: boolean }) {
+const ArrivalBlock = memo(function ArrivalBlock({ text, open, parts }: { text: string; open: boolean; parts: MarkdownParts }) {
   const arrival = useRef<ArrivalLog | null>(null);
   arrival.current ??= createArrivalLog();
   // 合并时的原文：原文再变（极少），就重新按到达切。
@@ -72,7 +80,7 @@ const ArrivalBlock = memo(function ArrivalBlock({ text, open }: { text: string; 
   if (merged) {
     return (
       <RichStreamProvider open={false}>
-        <ReactMarkdown remarkPlugins={TURN_REMARK_PLUGINS} rehypePlugins={CONVERSATION_REHYPE_PLUGINS} {...TURN_MARKDOWN}>{text}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={parts.remarkPlugins} rehypePlugins={parts.rehypePlugins} components={parts.components} urlTransform={TURN_MARKDOWN.urlTransform}>{text}</ReactMarkdown>
       </RichStreamProvider>
     );
   }
@@ -80,7 +88,7 @@ const ArrivalBlock = memo(function ArrivalBlock({ text, open }: { text: string; 
   const source = open ? remend(holdOpenLink(held.text), { linkMode: "text-only" }) : text;
   return (
     <RichStreamProvider open={open}>
-      <ReactMarkdown remarkPlugins={TURN_REMARK_PLUGINS} rehypePlugins={[...CONVERSATION_REHYPE_PLUGINS, rehypeArrival(arrival.current, text)]} {...TURN_MARKDOWN}>
+      <ReactMarkdown remarkPlugins={parts.remarkPlugins} rehypePlugins={[...parts.rehypePlugins, rehypeArrival(arrival.current, text)]} components={parts.components} urlTransform={TURN_MARKDOWN.urlTransform}>
         {source}
       </ReactMarkdown>
       {held.pending ? <RichSkeleton title="公式" /> : null}
@@ -93,18 +101,20 @@ const ArrivalBlock = memo(function ArrivalBlock({ text, open }: { text: string; 
  * 在这里流式过的那条（同一个节点）：到达的文字按字匀速放出（useSmoothText，积压多就快、结束尽快补齐），
  * 按顶层块分开画——只有最后一块随出字重新解析，前面的块不动；新出现的字轻淡入。
  * 结束后这个节点继续这样画，结束那一刻不换内部节点、不打断淡入。
+ * fresh：整段一次到的（子会话还没有逐字草稿时，页面开着时刚到的那段）也这样画：短的按字放出、长的整段淡入。
+ * 伙伴对话、子会话共用（子会话传自己的 parts）。
  */
-const MarkdownBody = memo(function MarkdownBody({ text, streaming }: { text: string; streaming: boolean }) {
-  const streamed = useRef(streaming);
+export const MarkdownBody = memo(function MarkdownBody({ text, streaming, fresh = false, parts = TURN_PARTS }: { text: string; streaming: boolean; fresh?: boolean; parts?: MarkdownParts }) {
+  const streamed = useRef(streaming || fresh);
   if (streaming) streamed.current = true;
   const shown = useSmoothText(text, streamed.current, streaming);
-  if (!streamed.current) return <ReactMarkdown remarkPlugins={TURN_REMARK_PLUGINS} rehypePlugins={CONVERSATION_REHYPE_PLUGINS} {...TURN_MARKDOWN}>{text}</ReactMarkdown>;
+  if (!streamed.current) return <ReactMarkdown remarkPlugins={parts.remarkPlugins} rehypePlugins={parts.rehypePlugins} components={parts.components} urlTransform={TURN_MARKDOWN.urlTransform}>{text}</ReactMarkdown>;
   const catchingUp = shown.length < text.length;
   const blocks = splitStableBlocks(shown);
   return (
     <>
       {blocks.map((block, index) => (
-        <ArrivalBlock key={index} text={block} open={index === blocks.length - 1 && (streaming || catchingUp)} />
+        <ArrivalBlock key={index} text={block} open={index === blocks.length - 1 && (streaming || catchingUp)} parts={parts} />
       ))}
     </>
   );

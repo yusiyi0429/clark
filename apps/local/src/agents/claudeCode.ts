@@ -101,6 +101,10 @@ function turnModelsOf(result: Json, ids: Map<string, Set<string>>): TurnModels |
 class ClaudeRun implements AgentRun {
   private buf = "";
   private readonly eventFns: ((e: EventBody) => void)[] = [];
+  private readonly draftFns: ((text: string) => void)[] = [];
+  /** 正在逐字写的这段正文（null：现在写的不是正文，是思考或工具参数）；drafted：报过草稿、还没等到这段写完。 */
+  private drafting: string | null = null;
+  private drafted = false;
   private readonly exitFns: ((code: number | null) => void)[] = [];
   private readonly hostRequests = new Map<string, (r: Json) => void>();
   /** 带编号发出、还没读到的话（等 command_lifecycle 回执）。 */
@@ -166,8 +170,10 @@ class ClaudeRun implements AgentRun {
 
   get pid() { return this.child.pid; }
   onEvent(fn: (e: EventBody) => void) { this.eventFns.push(fn); }
+  onDraft(fn: (text: string) => void) { this.draftFns.push(fn); }
   onExit(fn: (code: number | null) => void) { this.exitFns.push(fn); }
   private emit(e: EventBody) { for (const fn of this.eventFns) fn(e); }
+  private draft(text: string) { for (const fn of this.draftFns) fn(text); }
 
   onRateLimit(fn: (info: Json) => void) { this.rateFns.push(fn); }
 
@@ -440,6 +446,17 @@ class ClaudeRun implements AgentRun {
         }
         return;
       }
+      case "stream_event": {
+        // 逐字输出（--include-partial-messages）：只取主线正文的字报草稿；思考、工具参数、子 agent 的不报
+        if (ev.parent_tool_use_id) return;
+        const e = ev.event ?? {};
+        if (e.type === "content_block_start") this.drafting = e.content_block?.type === "text" ? "" : null;
+        else if (e.type === "content_block_delta" && e.delta?.type === "text_delta" && this.drafting !== null && typeof e.delta.text === "string") {
+          this.drafting += e.delta.text;
+          if (this.drafting.trim()) { this.drafted = true; this.draft(this.drafting); }
+        }
+        return;
+      }
       case "command_lifecycle": {
         // 带 uuid 发的话，Claude Code 回 queued（收下了）、started（放进对话，下一次模型请求就带着它）、completed / cancelled（11/08 实测 2.1.318）
         const id = ev.command_uuid;
@@ -482,7 +499,7 @@ class ClaudeRun implements AgentRun {
           this.context.report(n(used.input_tokens) + n(used.cache_read_input_tokens) + n(used.cache_creation_input_tokens) + n(used.output_tokens), this.contextMax);
         }
         for (const c of ev.message?.content ?? []) {
-          if (c.type === "text" && c.text?.trim()) this.emit({ type: "assistant_text", text: c.text });
+          if (c.type === "text" && c.text?.trim()) { this.drafted = false; this.emit({ type: "assistant_text", text: c.text }); }
           if (c.type === "tool_use") {
             this.emit({ type: "tool_call", toolUseId: c.id, name: c.name, title: describeTool(c.name, c.input ?? {}), input: clipInput(c.input ?? {}) });
             if (c.name === "TodoWrite" && Array.isArray(c.input?.todos)) {
@@ -518,6 +535,9 @@ class ClaudeRun implements AgentRun {
         this.apiRetried = false;
         this.limitHit = false;
         this.balanceHit = false;
+        // 这一轮完了还有没写完的那段（停下、出错）：草稿清掉
+        this.drafting = null;
+        if (this.drafted) { this.drafted = false; this.draft(""); }
         this.lastTurn = turnModelsOf(ev, this.turnIds);
         this.turnIds = new Map();
         const isError = Boolean(ev.is_error) || ev.subtype !== "success";

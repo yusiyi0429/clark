@@ -19,11 +19,11 @@ export const isMagpie = (baseUrl: string | null) => isLoopback(baseUrl) && urlOf
 const VENDORS: { hosts: RegExp; provider: string; label: string }[] = [
   { hosts: /(^|\.)(tokenhub|tokavi)([.-]|$)/, provider: "tokenhub", label: "TokenHub" },
   { hosts: /(^|\.)deepseek\.com$/, provider: "deepseek", label: "DeepSeek API" },
-  { hosts: /(^|\.)moonshot\.(cn|ai)$/, provider: "kimi", label: "Kimi API" },
+  { hosts: /(^|\.)(moonshot|kimi)\.(cn|ai|com)$/, provider: "kimi", label: "Kimi API" },
   { hosts: /(^|\.)(bigmodel\.cn|z\.ai)$/, provider: "glm", label: "GLM API" },
   { hosts: /(^|\.)dashscope(-intl)?\.aliyuncs\.com$/, provider: "qwen", label: "Qwen API" },
   { hosts: /(^|\.)volces\.com$/, provider: "volcengine", label: "火山方舟 API" },
-  { hosts: /(^|\.)minimaxi?\.(com|io|chat)$/, provider: "minimax", label: "MiniMax API" },
+  { hosts: /(^|\.)minimaxi?\.(com|io|chat|cn)$/, provider: "minimax", label: "MiniMax API" },
   { hosts: /(^|\.)anthropic\.com$/, provider: "anthropic", label: "Anthropic API" },
   { hosts: /(^|\.)openrouter\.ai$/, provider: "openrouter", label: "OpenRouter" },
 ];

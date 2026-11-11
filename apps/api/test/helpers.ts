@@ -341,6 +341,9 @@ export async function createTestApp(
     /** Task 交付物的假评审、假版本说明 Agent 和假链接读取。 */
     deliverableAgents?: Parameters<typeof buildApp>[0]["deliverableAgents"];
     deliverableFetcher?: Parameters<typeof buildApp>[0]["deliverableFetcher"];
+    /** 复盘的假评审员和假本体事件。 */
+    monthReviewAgent?: Parameters<typeof buildApp>[0]["monthReviewAgent"];
+    monthReviewEvents?: Parameters<typeof buildApp>[0]["monthReviewEvents"];
     materialAnnotationAgent?: MaterialAnnotationAgent;
     missionCardAnnotationAgent?: MissionCardAnnotationAgent;
     missionCardReviewAgent?: MissionCardReviewAgent;

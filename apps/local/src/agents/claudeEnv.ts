@@ -79,7 +79,8 @@ export const permissionArgs = (plan: boolean) => [
  * 那种组合由 personalSettingsSetKey 拦下，不开工。
  */
 export function buildClaudeArgs(launch: AgentLaunch): { args: string[]; env: Record<string, string> } {
-  const args = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", ...permissionArgs(launch.permissionMode === "plan")];
+  // --include-partial-messages：逐字报（stream_event），本机取正文的字给网页当草稿
+  const args = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages", ...permissionArgs(launch.permissionMode === "plan")];
   args.push(launch.resume ? "--resume" : "--session-id", launch.sessionId);
   if (!launch.includePersonalConfig) args.push("--setting-sources", "project,local", "--strict-mcp-config");
   if (launch.mcpConfigPath) args.push("--mcp-config", launch.mcpConfigPath);

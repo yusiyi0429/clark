@@ -85,7 +85,7 @@ export function feedBlocks({ items, workers, go, onSay, onChanged, remoteAsks, d
       case "card_passed": {
         const worker = workerOf(item.cardId);
         const blocks: TimedBlock[] = [{ key: item.id, at: item.at, node: <PassedLine item={item} worker={worker} go={go} onChanged={onChanged} /> }];
-        if (item.merge?.state === "needs_merge" && worker?.session) blocks.push({ key: `${item.id}:merge`, at: `${item.at}~`, node: <MergeDecision worker={worker} onChanged={onChanged} /> });
+        if (item.merge?.state === "needs_merge" && worker?.session) blocks.push({ key: `${item.id}:merge`, at: `${item.at}~`, node: <MergeDecision session={worker.session} title={worker.title} onChanged={onChanged} /> });
         return blocks;
       }
       case "card_blocked": return [{ key: item.id, at: item.at, node: <BlockedDecision item={item} worker={workerOf(item.cardId)} go={go} onChanged={onChanged} /> }];

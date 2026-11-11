@@ -13,7 +13,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNod
 import { Boxes, Check, ChevronDown, Copy, Database, GitBranch, MessageSquare, Monitor, Plug, Terminal, X } from "lucide-react";
 import { Dropdown } from "@heroui/react";
 import { Popover } from "ts-design/primitives";
-import type { TLocalAgentKind, TLocalDeviceView, TLocalTool, TLocalToolUpsert } from "@warmap/contracts";
+import type { TLocalAgentKind, TLocalDeviceView, TLocalTool, TLocalToolUpsert, TLocalSource } from "@warmap/contracts";
 import { HeroButton } from "@/components/HeroButton";
 import { ConnectionDialog } from "@/components/ConnectionDialog";
 import { WechatConnectPanel, readWechatConnection, type WechatConnection } from "@/components/WechatConnect";
@@ -29,6 +29,7 @@ import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { linkCloud, type LinkPerson } from "@/lib/local/link";
 import type { SecondaryPageProps } from "./index";
 import { TokenHubDialog } from "./TokenHubDialog";
+import { AddSourceDialog } from "../AddSourceDialog";
 import { KINGDEE_PLACEHOLDER, agentRow, feishuRow, isCliTool, localToolRow, mcpRow, programRow, tokenHubRow, toolRow, type RowAction, type RowModel, type TokenLike } from "./connectionRows";
 import { AddButton, Added, Card, CardGrid, ICON, QuotaBlock, Row, Section, StateLine, SwitchRow, relative, useMe, type Me } from "./parts";
 import h from "@/styles/home.module.css";
@@ -75,6 +76,9 @@ function ThisComputer({ me }: { me: Me | null }) {
   const patch = (body: Parameters<typeof local.runner.patchSettings>[0]) => actions.run("settings", async () => { await local.runner.patchSettings(body); await local.refresh(); });
   const [tokenHubOpen, setTokenHubOpen] = useState(false);
   const tokenHub = tokenHubRow(local.models);
+  // 加过的来源（第 52 条）：TokenHub 上面那一行单独管，这里列别的；老本机程序没有来源接口（sources 为 null）不画这一行。
+  const [sourceDialog, setSourceDialog] = useState<{ source: TLocalSource | null } | null>(null);
+  const added = (local.sources?.sources ?? []).filter((source) => source.id !== "tokenhub");
 
   // 额度和右栏「用量」同一套数：订阅的挂在 Claude Code、Codex 下面，其余（网关余额、当天花费）挂在 TokenHub 下面。
   const cells = ready ? usageCells(status?.quota ?? [], now) : [];
@@ -97,6 +101,19 @@ function ThisComputer({ me }: { me: Me | null }) {
           })}
           {rowOf(tokenHub, gatewayCells.length ? gatewayCells.map((cell) => <QuotaBlock key={cell.id} cell={cell} />) : null,
             tokenHub.action === "link" ? async () => setTokenHubOpen(true) : async () => { await local.runner.disconnectTokenHub(); await local.refresh(); })}
+          {local.sources ? (
+            <Row testId="row-sources" name="来源" sub={added.length ? `${added.length} 个` : null}
+              action={<HeroButton variant="tertiary" size="sm" onPress={() => setSourceDialog({ source: null })}>添加</HeroButton>}>
+              {added.map((source) => (
+                <div key={source.id} className={p.sub} title={source.baseUrl} data-testid="source-row">
+                  <b>{source.name}</b><span className={p.path}>{source.models.map((model) => model.name).join(" · ")}</span><span className={p.grow} />
+                  <HeroButton variant="ghost" size="sm" onPress={() => setSourceDialog({ source })}>换 Key</HeroButton>
+                  <HeroButton variant="ghost" size="sm" isIconOnly title="删除" aria-label={`删除 ${source.name}`}
+                    onPress={() => actions.run(`source:${source.id}`, async () => { await local.runner.deleteSource(source.id); await local.refresh(); })}><X {...ICON} /></HeroButton>
+                </div>
+              ))}
+            </Row>
+          ) : null}
           <Row testId="row-folders" name="文件夹" sub={local.folders.length ? `${local.folders.length} 个` : null}
             action={<HeroButton variant="tertiary" size="sm" onPress={() => void local.pickFolder()}>添加</HeroButton>}>
             {local.folders.length || local.error ? <>
@@ -119,7 +136,8 @@ function ThisComputer({ me }: { me: Me | null }) {
         </> : null}
         <Devices me={me} />
       </ul>
-      {actions.failed?.key === "settings" || actions.failed?.key.startsWith("folder:") ? <FailedLine reason={actions.failed.reason} onRetry={actions.failed.retry} /> : null}
+      {actions.failed?.key === "settings" || actions.failed?.key.startsWith("folder:") || actions.failed?.key.startsWith("source:") ? <FailedLine reason={actions.failed.reason} onRetry={actions.failed.retry} /> : null}
+      {sourceDialog ? <AddSourceDialog source={sourceDialog.source} onClose={() => setSourceDialog(null)} /> : null}
       {tokenHubOpen ? <TokenHubDialog onClose={() => setTokenHubOpen(false)} onConnect={async (apiKey) => { await local.runner.connectTokenHub(apiKey); await local.refresh(); }} /> : null}
     </Section>
   );

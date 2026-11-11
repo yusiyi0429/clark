@@ -56,6 +56,8 @@ export const LocalRunnerErrorCode = Type.Union([
   Type.Literal("not_implemented"), Type.Literal("cloud_not_linked"), Type.Literal("internal"),
   /** 连 TokenHub（POST /v1/tokenhub）：TokenHub 不认这把 Key（422）；连不上 TokenHub、它回的认不出（502）；这把 Key 的账户没有能用的模型（422）。 */
   Type.Literal("tokenhub_key_rejected"), Type.Literal("tokenhub_unreachable"), Type.Literal("tokenhub_no_models"),
+  /** 添加来源（/v1/sources，设计 17.2 第 52 条）：厂商不认这把 Key（422）；连不上厂商、它回的认不出（502）；这把 Key 列不出能用的模型（422）。 */
+  Type.Literal("source_key_rejected"), Type.Literal("source_unreachable"), Type.Literal("source_no_models"),
 ]);
 export const LocalRunnerError = Type.Object({
   error: Type.Object({ code: LocalRunnerErrorCode, message: Type.String() }, strict),
@@ -384,6 +386,8 @@ export const LocalModelProfile = Type.Object({
   webSearch: Type.Boolean(),
   hasKey: Type.Boolean(),
   isDefault: Type.Boolean(),
+  /** 经「添加来源」建的（见 LocalSource）：是哪个来源的。本人在模型配置里自己配的、模型目录里的、TokenHub 的没有。老版本本机不带。 */
+  sourceId: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
 }, strict);
 export const LocalModelListResponse = Type.Object({ profiles: Type.Array(LocalModelProfile) }, strict);
 
@@ -426,6 +430,100 @@ export const LocalModelProfileUpsert = Type.Object({
   apiKey: Type.Optional(Type.String({ maxLength: 400, pattern: SECRET_CHARS })),
   isDefault: Type.Optional(Type.Boolean()),
 }, strict);
+
+// ───────────────────────── 添加来源（设计 17.2 第 52 条） ─────────────────────────
+
+/** 来源说的「话」（接口格式）：anthropic 是 Anthropic Messages，openai_responses 是 OpenAI Responses，openai_chat 是 OpenAI Chat Completions。 */
+export const LocalSourceFormat = Type.Union([Type.Literal("anthropic"), Type.Literal("openai_responses"), Type.Literal("openai_chat")]);
+/** api：按量付费的 API；coding_plan：厂商的编程套餐（也是一把 Key，配专门的地址，额度按窗口算）。 */
+export const LocalSourcePlan = Type.Union([Type.Literal("api"), Type.Literal("coding_plan")]);
+/** 有国内、国际两个地址的厂商要选地区（默认 cn）。 */
+export const LocalSourceRegion = Type.Union([Type.Literal("cn"), Type.Literal("intl")]);
+/** 来源里的一个模型：id 是厂商的模型名（原样交给执行方），name 是给人看的（认得出的写成「Opus 5.5」，别的去掉「厂商/」前缀）。 */
+export const LocalSourceModel = Type.Object({ id: Type.String({ minLength: 1, maxLength: 120 }), name: Type.String({ minLength: 1, maxLength: 60 }) }, strict);
+
+/**
+ * 预设厂商（本机程序内置、核过才放，不在线读）。id 现在有：anthropic（Anthropic 官方 API）、tokenhub、kimi、glm、deepseek、qwen（通义千问 · 阿里百炼）、
+ * minimax、volcengine（火山方舟）、openrouter。另有「自定义」，不在这张表里（添加时 presetId 为 null）。
+ * - plans：这家有哪几种（只有按量的是 ["api"]）；regions：要选地区的才有，空数组是不用选。
+ * - agents：现在这台电脑上能接哪几个执行方（按格式配对：Claude Code 只说 anthropic，Codex 只说 openai_responses），配不上的执行方网页灰掉。
+ *   本机这一版只接 Claude Code，所以现在只会有 claude-code；以后接上 Codex 的 Key 类来源，这里跟着多。
+ */
+export const LocalSourcePreset = Type.Object({
+  id: Type.String({ minLength: 1, maxLength: 40 }),
+  name: Type.String({ minLength: 1, maxLength: 40 }),
+  plans: Type.Array(LocalSourcePlan, { minItems: 1, maxItems: 2 }),
+  regions: Type.Array(LocalSourceRegion, { maxItems: 2 }),
+  agents: Type.Array(LocalAgentKind, { maxItems: 4 }),
+}, strict);
+
+/**
+ * 加好的来源。Key 只在本机（系统凭据库），任何接口都不回传。选了的每个模型建一条网关模型配置（LocalModelProfile，sourceId 指回这里），共用这把 Key；
+ * 模型配置的名字、默认、联网搜索照常在模型配置里改，地址、钥匙只能经来源换（PUT /v1/models/:id 改它们回 400）。
+ * - id：本机给的。预设的是「厂商-种类-地区」，如 kimi-coding_plan-cn、anthropic-api；自定义的是 custom- 加名字。同一个预设、种类、地区只有一个，再加一次就是换 Key、换模型。
+ *   TokenHub 并进来了：id 固定 tokenhub，加、换、删都同 POST/DELETE /v1/tokenhub（第 51 条，模型配置还是 th- 开头的那几条，不带 sourceId）。
+ * - name：给人看的来源名，如「Kimi 编程套餐」「Anthropic 官方 API」「DeepSeek API」，自定义的是本人起的名字。选模型「来源」那一行写它。
+ * - verified：加的时候用这把 Key 验过（按量 API 读过一次模型列表）。编程套餐不验（厂商条款不许命令行以外的请求），第一次真跑才知道 Key 对不对。
+ */
+export const LocalSource = Type.Object({
+  id: Type.String({ minLength: 1, maxLength: 80 }),
+  presetId: Nullable(Type.String({ minLength: 1, maxLength: 40 })),
+  name: Type.String({ minLength: 1, maxLength: 60 }),
+  plan: LocalSourcePlan,
+  region: Nullable(LocalSourceRegion),
+  /** 给执行方用的地址（Anthropic 格式的那个；自定义的是本人填的）。 */
+  baseUrl: Type.String({ minLength: 8, maxLength: 300 }),
+  formats: Type.Array(LocalSourceFormat, { minItems: 1, maxItems: 3 }),
+  agents: Type.Array(LocalAgentKind, { maxItems: 4 }),
+  models: Type.Array(LocalSourceModel, { maxItems: 100 }),
+  verified: Type.Boolean(),
+  addedAt: Instant,
+}, strict);
+/** GET /v1/sources：预设厂商和加好的来源。 */
+export const LocalSourceListResponse = Type.Object({ presets: Type.Array(LocalSourcePreset), sources: Type.Array(LocalSource) }, strict);
+
+/**
+ * POST /v1/sources/check：贴上 Key 先认、先验，不存任何东西（Key 只交给本机，不经过云端）。
+ * - presetId 不给：按 Key 的开头认厂商（如 sk-ant- 是 Anthropic 官方，sk-or- 是 OpenRouter，sk-sp- 是阿里百炼编程套餐）。认得出回 recognized；
+ *   认不出（多家都是 sk- 开头的）recognized 为 null，candidates 是可能的几家，网页让本人选，选了带 presetId 再调一次。
+ * - presetId 给了（或认出来了）：plan、region 不给用这家的第一种、cn。按量 API 用这把 Key 读一次模型列表（不花 token），回能用的模型；
+ *   厂商不认回 422 source_key_rejected，连不上回 502 source_unreachable，列不出能用的回 422 source_no_models。
+ *   编程套餐不发请求，回预设的模型表，verified 为 false；没有不花钱验法的按量 API（现在是 GLM、通义千问）也一样。
+ * - 自定义（presetId 为 null 且给了 baseUrl）：本人填地址和格式（这一版只收 anthropic），模型名本人填，不验。
+ */
+export const LocalSourceCheckRequest = Type.Object({
+  apiKey: Type.String({ minLength: 1, maxLength: 400, pattern: SECRET_CHARS }),
+  presetId: Type.Optional(Nullable(Type.String({ minLength: 1, maxLength: 40 }))),
+  plan: Type.Optional(LocalSourcePlan),
+  region: Type.Optional(LocalSourceRegion),
+  baseUrl: Type.Optional(Type.String({ minLength: 8, maxLength: 300, pattern: "^https?://" })),
+}, strict);
+export const LocalSourceCheckResponse = Type.Object({
+  recognized: Nullable(Type.Object({ presetId: Type.String(), plan: LocalSourcePlan, region: Nullable(LocalSourceRegion) }, strict)),
+  /** recognized 为 null 时可能的几家（预设 id），按常见程度排；都不像时是空的，网页列全部预设加自定义。 */
+  candidates: Type.Array(Type.String(), { maxItems: 20 }),
+  /** 认出了（或给了 presetId）才有：这把 Key 能用的模型（按量 API 是厂商列的，编程套餐是预设表）；本机建议先勾的排在前面。 */
+  models: Type.Array(LocalSourceModel, { maxItems: 300 }),
+  verified: Type.Boolean(),
+}, strict);
+
+/**
+ * POST /v1/sources：加来源（或同一个预设、种类、地区再加一次 = 换 Key、换模型）。和 check 一样先验（按量 API 再读一次模型列表，不认、连不上照 check 回错，不改本机的东西）；
+ * 通过了 Key 存进本机钥匙，models 里每个建一条模型配置（id 是 src- 加来源 id 加模型名），上一次有、这次没有的删掉，默认模型不改。回加好的来源和现在全部的模型配置。
+ * models 至少一个；按量 API 的必须是这把 Key 列得出来的，编程套餐的必须在预设表里，自定义的随本人填。presetId 为 null 时要 name、baseUrl、format。
+ */
+export const LocalSourceAddRequest = Type.Object({
+  apiKey: Type.String({ minLength: 1, maxLength: 400, pattern: SECRET_CHARS }),
+  presetId: Nullable(Type.String({ minLength: 1, maxLength: 40 })),
+  plan: Type.Optional(LocalSourcePlan),
+  region: Type.Optional(LocalSourceRegion),
+  models: Type.Array(Type.String({ minLength: 1, maxLength: 120 }), { minItems: 1, maxItems: 100 }),
+  name: Type.Optional(Type.String({ minLength: 1, maxLength: 60 })),
+  baseUrl: Type.Optional(Type.String({ minLength: 8, maxLength: 300, pattern: "^https?://" })),
+  format: Type.Optional(LocalSourceFormat),
+}, strict);
+export const LocalSourceAddResponse = Type.Object({ source: LocalSource, profiles: Type.Array(LocalModelProfile) }, strict);
+/** DELETE /v1/sources/:id：删这个来源的 Key 和它的模型配置；用着它们的会话同删了模型配置一样（再说话时回「这个会话用的模型配置已被删除」）。回 { ok: true }。 */
 
 // ───────────────────────── 本人加的工具 ─────────────────────────
 
@@ -1397,6 +1495,7 @@ export const LocalStopReason = Type.Union([
  * GET /v1/sessions/:id/events（text/event-stream）。每条 `id: <seq>` + `data: <JSON>`。
  * 断线后带 Last-Event-ID 重连，本机从会话事件日志补发其后的全部事件；也可用 ?after=<seq>。
  * 事件已归一化，不随执行方变：Claude Code 和以后的 Codex 都映射到这几种。
+ * 带 ?drafts=1 时还夹着推「正在写」的草稿（LocalSessionDraft）。
  */
 export const LocalSessionEvent = Type.Union([
   /**
@@ -1491,6 +1590,20 @@ export const LocalSessionEvent = Type.Union([
    */
   ev("notice", { level: Type.Union([Type.Literal("info"), Type.Literal("warn"), Type.Literal("error")]), code: Type.String(), text: Type.String() }),
 ]);
+
+/**
+ * 「正在写」的草稿：GET /v1/sessions/:id/events?drafts=1 时夹在事件之间推，帧是 `event: draft` + `data: <JSON>`，没有 id 行。
+ * 不是会话事件：不占编号、不写盘、不进云端同步和交接摘要，断线重连不补（一会儿完整的 assistant_text 就到）。
+ * text 是执行方正在写的这一段话到目前为止的全文（不是增量），本机合并成每 80 毫秒至多一条。
+ * 这一段写完照常来一条 assistant_text，以它为准：网页收到 assistant_text 就拿它替换草稿。
+ * text 为空串：这一段没写完就不写了（停下、出错、进程没了），网页清掉草稿。
+ * 只发正文：思考内容、工具参数、子 agent 的字不发。老本机程序不认 drafts=1，照旧只推事件，网页照旧能用。
+ */
+export const LocalSessionDraft = Type.Object({
+  type: Type.Literal("draft"),
+  sessionId: Uuid,
+  text: Type.String(),
+}, strict);
 
 // ───────────────────────── 云端同步载荷（本机 → 天枢 api，单向） ─────────────────────────
 
@@ -1713,6 +1826,17 @@ export type TLocalCloudLinkRequest = Static<typeof LocalCloudLinkRequest>;
 export type TLocalModelSource = Static<typeof LocalModelSource>;
 export type TLocalModelProfile = Static<typeof LocalModelProfile>;
 export type TLocalModelListResponse = Static<typeof LocalModelListResponse>;
+export type TLocalSourceFormat = Static<typeof LocalSourceFormat>;
+export type TLocalSourcePlan = Static<typeof LocalSourcePlan>;
+export type TLocalSourceRegion = Static<typeof LocalSourceRegion>;
+export type TLocalSourceModel = Static<typeof LocalSourceModel>;
+export type TLocalSourcePreset = Static<typeof LocalSourcePreset>;
+export type TLocalSource = Static<typeof LocalSource>;
+export type TLocalSourceListResponse = Static<typeof LocalSourceListResponse>;
+export type TLocalSourceCheckRequest = Static<typeof LocalSourceCheckRequest>;
+export type TLocalSourceCheckResponse = Static<typeof LocalSourceCheckResponse>;
+export type TLocalSourceAddRequest = Static<typeof LocalSourceAddRequest>;
+export type TLocalSourceAddResponse = Static<typeof LocalSourceAddResponse>;
 export type TLocalTokenHubConnectRequest = Static<typeof LocalTokenHubConnectRequest>;
 export type TLocalModelProfileUpsert = Static<typeof LocalModelProfileUpsert>;
 export type TLocalModelOrigin = Static<typeof LocalModelOrigin>;
@@ -1807,6 +1931,7 @@ export type TLocalCreateSessionBatchRequest = Static<typeof LocalCreateSessionBa
 export type TLocalCreateSessionBatchResponse = Static<typeof LocalCreateSessionBatchResponse>;
 export type TLocalRoleTool = Static<typeof LocalRoleTool>;
 export type TLocalSessionEvent = Static<typeof LocalSessionEvent>;
+export type TLocalSessionDraft = Static<typeof LocalSessionDraft>;
 export type TLocalSyncItem = Static<typeof LocalSyncItem>;
 export type TLocalSyncBatchRequest = Static<typeof LocalSyncBatchRequest>;
 export type TLocalSyncBatchResponse = Static<typeof LocalSyncBatchResponse>;
@@ -1835,6 +1960,10 @@ export const LOCAL_RUNNER_ROUTES = {
   deleteModel: { method: "DELETE", path: "/v1/models/:id", auth: true },
   connectTokenHub: { method: "POST", path: "/v1/tokenhub", auth: true },
   disconnectTokenHub: { method: "DELETE", path: "/v1/tokenhub", auth: true },
+  listSources: { method: "GET", path: "/v1/sources", auth: true },
+  checkSource: { method: "POST", path: "/v1/sources/check", auth: true },
+  addSource: { method: "POST", path: "/v1/sources", auth: true },
+  deleteSource: { method: "DELETE", path: "/v1/sources/:id", auth: true },
   listTools: { method: "GET", path: "/v1/tools", auth: true },
   putTool: { method: "PUT", path: "/v1/tools/:id", auth: true },
   deleteTool: { method: "DELETE", path: "/v1/tools/:id", auth: true },

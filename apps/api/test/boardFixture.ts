@@ -27,6 +27,10 @@ export async function boardFixture(runtime: Parameters<typeof createTestApp>[2] 
       return { headline: "评过了", summary: "逐条看过", gain: null, criteria: input.criteria.map(({ index }) => ({ index, verdict: "met" as const, reason: "有材料", evidence: "材料", fix: null })) };
     } }, note: { async write() { return { achieved: "达成了", gain: "多了", why: null, lesson: null }; } } },
     deliverableFetcher: async (url) => ({ text: `网页正文 ${url}`, images: [] }),
+    // 复盘的评审员：不调模型，每条「部分达到」。
+    monthReviewAgent: { async rate(input) {
+      return { criteria: input.criteria.map(({ index }) => ({ index, rating: "partial" as const, basis: "看过材料", vague: false, deliverable: false })) };
+    } },
     ...runtime,
   });
   const mission = (id: string, owner: string) => t.sql(`INSERT INTO missions(id,version,code,period,title,owner_id,capability_id,battlefield_ids,outcome,milestones,

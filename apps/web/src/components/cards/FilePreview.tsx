@@ -17,6 +17,7 @@ import { sizeText } from "@/lib/home/attachments";
 import type { LocalRunner } from "@/lib/local/runner";
 import { REMARK_PLUGINS } from "@/lib/markdown";
 import s from "@/styles/v2-session.module.css";
+import ts from "@/styles/conversation-transcript.module.css";
 
 export type PreviewKind = "markdown" | "text" | "image" | "other";
 /** 读到的内容。truncated：文本太长只给了前面一截（本机最多 1 MB）；size 是读到才知道的文件大小。 */
@@ -137,7 +138,7 @@ export function FilePreview({ file, onClose }: { file: PreviewFile; onClose: () 
       <div className={s.previewBody} aria-busy={!loaded && failed === null ? true : undefined}>
         {failed !== null ? <FailedLine reason={failed} onRetry={() => setAttempt((n) => n + 1)} />
           : !loaded ? null
-          : loaded.kind === "markdown" ? <article className={`${s.md} ${s.previewDoc}`}><Markdown remarkPlugins={REMARK_PLUGINS}>{loaded.text}</Markdown></article>
+          : loaded.kind === "markdown" ? <article className={`${ts.prose} ${s.md} ${s.previewDoc}`}><Markdown remarkPlugins={REMARK_PLUGINS}>{loaded.text}</Markdown></article>
           : loaded.kind === "text" ? <pre className={s.previewCode}>{loaded.text}</pre>
           // eslint-disable-next-line @next/next/no-img-element -- 本人自己的文件，读成 blob 或 data 地址再显示
           : loaded.kind === "image" ? <img className={s.previewImage} src={loaded.url} alt={file.name} />

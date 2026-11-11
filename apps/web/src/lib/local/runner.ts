@@ -6,15 +6,16 @@ import type {
   TLocalAgentKind, TLocalCloudLinkRequest, TLocalCloudLinkView, TLocalCreateSessionBatchResponse, TLocalCreateSessionRequest, TLocalFolder, TLocalHealthResponse, TLocalMergeResponse,
   TLocalModelProfile, TLocalModelProfileUpsert, TLocalTool, TLocalToolUpsert, TLocalPairingStartResponse, TLocalPairingStatusResponse,
   TLocalPermissionDecisionRequest, TLocalQuestionAnswerRequest, TLocalRunnerErrorCode, TLocalSendMessageRequest, TLocalSendMessageResponse, TLocalSessionDetailResponse,
-  TLocalSessionEvent, TLocalSessionSummary, TLocalSettings, TLocalSettingsPatch, TLocalStatusResponse, TLocalBudgetUpdateRequest, TLocalTaskBudgetView, TLocalAttachmentRef,
+  TLocalSessionEvent, TLocalSessionDraft, TLocalSessionSummary, TLocalSettings, TLocalSettingsPatch, TLocalStatusResponse, TLocalBudgetUpdateRequest, TLocalTaskBudgetView, TLocalAttachmentRef,
   TLocalFolderCreateRequest, TLocalFolderCreateResponse, TLocalFolderPickRequest, TLocalFolderPickResponse, TLocalSessionModelRequest, TLocalSessionModelResponse,
   TLocalSessionFileReadRequest, TLocalSessionFileReadResponse, TLocalSessionFilesResponse,
   TLocalHandoverCheck, TLocalProjectCloneRequest, TLocalProjectCloneResponse, TLocalProjectFolder, TLocalProjectFolderRequest, TLocalPermissionMode, TLocalRun, TLocalRunPreviewRequest,
+  TLocalSourceListResponse, TLocalSourceCheckRequest, TLocalSourceCheckResponse, TLocalSourceAddRequest, TLocalSourceAddResponse,
 } from "@warmap/contracts";
 
 export type {
   TLocalCreateSessionRequest, TLocalFolder, TLocalHealthResponse, TLocalModelProfile, TLocalPermissionRequestView, TLocalPlanEntry, TLocalRole, TLocalSessionEvent,
-  TLocalSessionStatus, TLocalSessionSummary, TLocalStatusResponse, TLocalUsage, TLocalWorkspace, TLocalMergeResponse, TLocalQuestion, TLocalQuestionRequestView,
+  TLocalSessionDraft, TLocalSessionStatus, TLocalSessionSummary, TLocalStatusResponse, TLocalUsage, TLocalWorkspace, TLocalMergeResponse, TLocalQuestion, TLocalQuestionRequestView,
   TLocalQuestionAnswerRequest, TLocalPermissionMode, TLocalRun, TLocalTool,
 } from "@warmap/contracts";
 
@@ -27,6 +28,11 @@ export type EventWatch = {
   /** 从这个序号之后补发（断线重连时带上收到的最后一个）。 */
   after: number;
   onEvent: (event: TLocalSessionEvent) => void;
+  /**
+   * 「正在写」的草稿（契约 LocalSessionDraft）：给了就带 ?drafts=1 要；text 是这一段到目前为止的全文，空串是清掉。
+   * 老本机程序不认这个参数，照旧只推事件。
+   */
+  onDraft?: (draft: TLocalSessionDraft) => void;
   /** 事件流断了、正在重连（connected=false）或重新接上（true）。 */
   onLink?: (connected: boolean) => void;
   signal: AbortSignal;
@@ -57,6 +63,14 @@ export interface LocalRunner {
   connectTokenHub(apiKey: string): Promise<TLocalModelProfile[]>;
   /** 断开 TokenHub：本机删 Key 和连接时建的模型配置。 */
   disconnectTokenHub(): Promise<void>;
+  /**
+   * 添加来源（设计 17.2 第 52 条，契约 /v1/sources）：预设厂商和加好的来源；贴 Key 先认先验（不存）；加（同一个预设、种类、地区再加 = 换 Key、换模型）；删。
+   * Key 只交给本机。老本机程序没有这几条（404、501），调用方当没有来源这回事。
+   */
+  listSources(): Promise<TLocalSourceListResponse>;
+  checkSource(body: TLocalSourceCheckRequest): Promise<TLocalSourceCheckResponse>;
+  addSource(body: TLocalSourceAddRequest): Promise<TLocalSourceAddResponse>;
+  deleteSource(id: string): Promise<void>;
   /** 本人加的工具（给执行子会话挂的 HTTP MCP 服务器，存在本机）：列出、加或改（存完本机查一次连没连上）、移除、再查一次。钥匙只写不读。 */
   listTools(): Promise<TLocalTool[]>;
   putTool(id: string, body: TLocalToolUpsert): Promise<TLocalTool>;
