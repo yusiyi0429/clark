@@ -2,7 +2,7 @@
 
 /**
  * 栏宽能拖：左栏（17.2 第 24 条，改掉第 15 条的「不能拖」）拖右边缘，240–360；没拖过照 --home-left 的 clamp 随窗口变。
- * 右栏（11/11）拖左边缘，260–560；没拖过照 --home-right（288）。窗口窄时右栏让中栏至少留 480（CSS 里夹，见 home.module.css .app）。
+ * 右边的面板（11/11）拖左边缘，260–560；没拖过照 --home-right（288）。放文件时另记一个宽（第 73 条），360–1400，没拖过约占展示区一半（--home-file）。窗口窄时右栏让中栏至少留 480（CSS 里夹，见 home.module.css .app）。
  * 拖过记住本人的宽度（这台浏览器 localStorage，读写都包 try/catch），双击边缘回到默认；键盘聚焦把手后左右键一次 8。手机走抽屉，不画。
  */
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
@@ -17,6 +17,7 @@ const STEP = 8;
 type Spec = { key: string; min: number; max: number };
 const LEFT: Spec = { key: "tianshu-home-left-width-v1", min: LEFT_MIN, max: LEFT_MAX };
 const RIGHT: Spec = { key: "tianshu-home-right-width-v1", min: RIGHT_MIN, max: RIGHT_MAX };
+const FILE: Spec = { key: "tianshu-home-file-width-v1", min: 360, max: 1400 };
 
 const clampTo = (spec: Spec, width: number) => Math.round(Math.min(spec.max, Math.max(spec.min, width)));
 export const clampLeft = (width: number) => clampTo(LEFT, width);
@@ -45,6 +46,7 @@ function useColumnWidth(spec: Spec) {
 }
 export const useLeftWidth = () => useColumnWidth(LEFT);
 export const useRightWidth = () => useColumnWidth(RIGHT);
+export const useFileWidth = () => useColumnWidth(FILE);
 type Control = ReturnType<typeof useColumnWidth>;
 
 /**

@@ -48,7 +48,7 @@ describe("子会话换模型（32 条，D 契约 5e52c73f）", () => {
     expect(pending.label).toMatch(/^Claude Code · .+ → deepseek-v4\.1-flash$/);
     expect(pending.title).toBe(PENDING_MODEL_TITLE);
     const html = renderToStaticMarkup(<SessionComposer label="插话" disabled={false} onSend={vi.fn()} subject={subject} model={{ label: pending.label, title: pending.title ?? undefined }}
-      models={{ rows: sessionModels(runner, await runner.listModels(), changed.session, vi.fn(), vi.fn())!.rows, busy: null, onPick: vi.fn() }} />);
+      models={{ rows: sessionModels(runner, await runner.listModels(), changed.session, vi.fn(), vi.fn())!.rows, quota: null, busy: null, onPick: vi.fn() }} />);
     expect(html).toContain(`title="${PENDING_MODEL_TITLE}"`);
     expect(html).toContain('data-testid="session-model"');
     let after = changed.session;
@@ -89,5 +89,17 @@ describe("思考程度（36 条，D 契约 c97b38c5）", () => {
     expect(picks.rows[3]!.options.map((option) => option.label)).toEqual(["自动", "低", "中", "高", "超高", "最高"]);
     expect(sessionModelText({ ...now, effort: undefined }, effortsOf(now.modelProfileId))?.label).not.toContain("自动");
     expect(sessionModelText({ run: { ...session.run!, modelName: "deepseek-v4.1-flash" }, agent: "claude-code" }, effortsOf("tokenhub-deepseek"))?.label).toBe("Claude 订阅 · deepseek-v4.1-flash");
+  });
+});
+
+describe("模型旁边的用量圆环（第 73 条）", () => {
+  const cell = (percent: number) => ({ id: "claude", name: "Claude", percent, value: `${percent}%`, tone: "warning" as const, tip: "", stale: false });
+  const render = (percent: number | null) => renderToStaticMarkup(<SessionComposer label="插话" disabled={false} onSend={vi.fn()} subject={subject} model={{ label: "Claude 订阅 · Opus" }}
+    models={{ rows: [], quota: percent === null ? null : cell(percent), busy: null, onPick: vi.fn() }} />);
+  it("这个来源剩 ≤20% 才出一颗圆环，悬停只写用了多少；剩得多、读不到都不出", () => {
+    expect(render(12)).toContain('data-testid="quota-ring"');
+    expect(render(12)).toContain('aria-label="用量 88%"');
+    expect(render(21)).not.toContain("quota-ring");
+    expect(render(null)).not.toContain("quota-ring");
   });
 });

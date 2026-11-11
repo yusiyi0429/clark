@@ -88,7 +88,7 @@ const home = (extra: Partial<HomeProject> = {}) => ({
 }) as unknown as WorkHomeData;
 const left = (data: WorkHomeData, local?: Partial<LocalRunnerState>) => {
   const tree = <LeftColumn data={data} view={{ kind: "home" }} buddy={null} speaking={false} go={() => undefined} phone={false} account={{ displayName: "孙铭泽", role: "member" }}
-    today="11 月 11 日 周三" alert={false} projects={data.projects.map((project) => fromHome(project, data, new Map()))} archived={[]} onCreate={async () => "x"}
+    today="11 月 11 日 周三" projects={data.projects.map((project) => fromHome(project, data, new Map()))} archived={[]} onCreate={async () => "x"}
     actions={{ archiveSub: vi.fn(), deleteSub: vi.fn(), renameSub: vi.fn(), archiveProject: vi.fn(), deleteProject: vi.fn(), renameProject: vi.fn() } as never} />;
   return renderToStaticMarkup(local ? <LocalContext.Provider value={{ sessions: [], ...local } as LocalRunnerState}>{tree}</LocalContext.Provider> : tree);
 };
