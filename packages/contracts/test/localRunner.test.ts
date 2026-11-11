@@ -52,7 +52,7 @@ describe("本机程序契约", () => {
   });
 
   it("说一句可带网页生成的编号（protocol 2 起）", () => {
-    expect(LOCAL_RUNNER_PROTOCOL).toBe(2);
+    expect(LOCAL_RUNNER_PROTOCOL).toBeGreaterThanOrEqual(2);
     expect(Value.Check(LocalSendMessageRequest, { text: "x", messageId: sessionId })).toBe(true);
     expect(Value.Check(LocalSendMessageRequest, { text: "x", messageId: "m-1" })).toBe(false);
   });

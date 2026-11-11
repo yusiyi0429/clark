@@ -4457,7 +4457,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** 改执行方、模型、交代、对哪条标准（推进人）；version 不一致 409 带 latestTask */
+        /** 改执行方、模型、交代、完成标准、对哪条标准（推进人）；交代或完成标准变了记一条约定修改；version 不一致 409 带 latestTask */
         patch: operations["patchCard"];
         trace?: never;
     };
@@ -4487,7 +4487,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 推翻 Agent 验收（推进人）：通过的变回进行中、从准备中拿掉；没过的算通过 */
+        /** 推翻 Agent 验收（推进人）：通过的变回进行中、从准备中拿掉；没过的、等本人补的「就到这里」，算有缺口通过 */
         post: operations["overruleCardHandback"];
         delete?: never;
         options?: never;
@@ -4523,6 +4523,57 @@ export interface paths {
         put?: never;
         /** 网页已经把没过的改法送到本机，记一笔（推进人）；已经记过的照样返回 */
         post: operations["markCardHandbackReturned"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/cards/{id}/handbacks/{handbackId}/relay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 从手机或别的电脑登记「再改一轮」「我来补」（推进人）：那台电脑上开着的网页认领后送给执行方，送到后回写 */
+        post: operations["relayCardHandback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/cards/{id}/agreement-changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 卡的约定（交代、完成标准）的修改记录，新的在前（推进人） */
+        get: operations["listCardAgreementChanges"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/cards/{id}/agreement-proposals/{proposalId}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 对执行方提的改约定拍板（推进人）：改成这样 / 不改，结果转告执行方 */
+        post: operations["decideCardAgreementProposal"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6329,7 +6380,7 @@ export interface components {
                 updatedAt: string;
                 card: {
                     stage: "todo" | "doing" | "review" | "done";
-                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked" | "needs_person") | null;
                     role: {
                         /** Format: uuid */
                         id: string;
@@ -6382,7 +6433,7 @@ export interface components {
                         id: string;
                         attempt: number;
                         status: "queued" | "running" | "done" | "failed";
-                        outcome: ("pass" | "fail") | null;
+                        outcome: ("pass" | "fail" | "needs_person") | null;
                         met: number;
                         total: number;
                         headline: string | null;
@@ -6404,6 +6455,29 @@ export interface components {
                             kind: "missing" | "extra";
                             reason: string;
                         }[];
+                        gaps?: {
+                            index: number;
+                            short: string;
+                            verdict: "met" | "partial" | "unmet" | "needs_person";
+                            fixBy: "worker" | "person";
+                            fix: string | null;
+                        }[];
+                        relay?: {
+                            /** Format: uuid */
+                            id: string;
+                            kind: "return" | "supply";
+                            state: "pending" | "delivered" | "failed";
+                            text: string;
+                            /** Format: date-time */
+                            requestedAt: string;
+                            doneAt: string | null;
+                            message: string | null;
+                        } | null;
+                        passedWithGap?: {
+                            reason: string;
+                            /** Format: date-time */
+                            at: string;
+                        } | null;
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -10600,7 +10674,7 @@ export interface components {
             updatedAt: string;
             card: {
                 stage: "todo" | "doing" | "review" | "done";
-                wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked" | "needs_person") | null;
                 role: {
                     /** Format: uuid */
                     id: string;
@@ -10653,7 +10727,7 @@ export interface components {
                     id: string;
                     attempt: number;
                     status: "queued" | "running" | "done" | "failed";
-                    outcome: ("pass" | "fail") | null;
+                    outcome: ("pass" | "fail" | "needs_person") | null;
                     met: number;
                     total: number;
                     headline: string | null;
@@ -10675,6 +10749,29 @@ export interface components {
                         kind: "missing" | "extra";
                         reason: string;
                     }[];
+                    gaps?: {
+                        index: number;
+                        short: string;
+                        verdict: "met" | "partial" | "unmet" | "needs_person";
+                        fixBy: "worker" | "person";
+                        fix: string | null;
+                    }[];
+                    relay?: {
+                        /** Format: uuid */
+                        id: string;
+                        kind: "return" | "supply";
+                        state: "pending" | "delivered" | "failed";
+                        text: string;
+                        /** Format: date-time */
+                        requestedAt: string;
+                        doneAt: string | null;
+                        message: string | null;
+                    } | null;
+                    passedWithGap?: {
+                        reason: string;
+                        /** Format: date-time */
+                        at: string;
+                    } | null;
                 } | null;
                 deliverable: {
                     state: "pending" | "included";
@@ -10791,7 +10888,7 @@ export interface components {
                     updatedAt: string;
                     card: {
                         stage: "todo" | "doing" | "review" | "done";
-                        wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                        wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked" | "needs_person") | null;
                         role: {
                             /** Format: uuid */
                             id: string;
@@ -10844,7 +10941,7 @@ export interface components {
                             id: string;
                             attempt: number;
                             status: "queued" | "running" | "done" | "failed";
-                            outcome: ("pass" | "fail") | null;
+                            outcome: ("pass" | "fail" | "needs_person") | null;
                             met: number;
                             total: number;
                             headline: string | null;
@@ -10866,6 +10963,29 @@ export interface components {
                                 kind: "missing" | "extra";
                                 reason: string;
                             }[];
+                            gaps?: {
+                                index: number;
+                                short: string;
+                                verdict: "met" | "partial" | "unmet" | "needs_person";
+                                fixBy: "worker" | "person";
+                                fix: string | null;
+                            }[];
+                            relay?: {
+                                /** Format: uuid */
+                                id: string;
+                                kind: "return" | "supply";
+                                state: "pending" | "delivered" | "failed";
+                                text: string;
+                                /** Format: date-time */
+                                requestedAt: string;
+                                doneAt: string | null;
+                                message: string | null;
+                            } | null;
+                            passedWithGap?: {
+                                reason: string;
+                                /** Format: date-time */
+                                at: string;
+                            } | null;
                         } | null;
                         deliverable: {
                             state: "pending" | "included";
@@ -12130,7 +12250,7 @@ export interface components {
                 updatedAt: string;
                 card: {
                     stage: "todo" | "doing" | "review" | "done";
-                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked" | "needs_person") | null;
                     role: {
                         /** Format: uuid */
                         id: string;
@@ -12183,7 +12303,7 @@ export interface components {
                         id: string;
                         attempt: number;
                         status: "queued" | "running" | "done" | "failed";
-                        outcome: ("pass" | "fail") | null;
+                        outcome: ("pass" | "fail" | "needs_person") | null;
                         met: number;
                         total: number;
                         headline: string | null;
@@ -12205,6 +12325,29 @@ export interface components {
                             kind: "missing" | "extra";
                             reason: string;
                         }[];
+                        gaps?: {
+                            index: number;
+                            short: string;
+                            verdict: "met" | "partial" | "unmet" | "needs_person";
+                            fixBy: "worker" | "person";
+                            fix: string | null;
+                        }[];
+                        relay?: {
+                            /** Format: uuid */
+                            id: string;
+                            kind: "return" | "supply";
+                            state: "pending" | "delivered" | "failed";
+                            text: string;
+                            /** Format: date-time */
+                            requestedAt: string;
+                            doneAt: string | null;
+                            message: string | null;
+                        } | null;
+                        passedWithGap?: {
+                            reason: string;
+                            /** Format: date-time */
+                            at: string;
+                        } | null;
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -12362,7 +12505,7 @@ export interface components {
                 updatedAt: string;
                 card: {
                     stage: "todo" | "doing" | "review" | "done";
-                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked" | "needs_person") | null;
                     role: {
                         /** Format: uuid */
                         id: string;
@@ -12415,7 +12558,7 @@ export interface components {
                         id: string;
                         attempt: number;
                         status: "queued" | "running" | "done" | "failed";
-                        outcome: ("pass" | "fail") | null;
+                        outcome: ("pass" | "fail" | "needs_person") | null;
                         met: number;
                         total: number;
                         headline: string | null;
@@ -12437,6 +12580,29 @@ export interface components {
                             kind: "missing" | "extra";
                             reason: string;
                         }[];
+                        gaps?: {
+                            index: number;
+                            short: string;
+                            verdict: "met" | "partial" | "unmet" | "needs_person";
+                            fixBy: "worker" | "person";
+                            fix: string | null;
+                        }[];
+                        relay?: {
+                            /** Format: uuid */
+                            id: string;
+                            kind: "return" | "supply";
+                            state: "pending" | "delivered" | "failed";
+                            text: string;
+                            /** Format: date-time */
+                            requestedAt: string;
+                            doneAt: string | null;
+                            message: string | null;
+                        } | null;
+                        passedWithGap?: {
+                            reason: string;
+                            /** Format: date-time */
+                            at: string;
+                        } | null;
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -12527,7 +12693,7 @@ export interface components {
                     updatedAt: string;
                     card: {
                         stage: "todo" | "doing" | "review" | "done";
-                        wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                        wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked" | "needs_person") | null;
                         role: {
                             /** Format: uuid */
                             id: string;
@@ -12580,7 +12746,7 @@ export interface components {
                             id: string;
                             attempt: number;
                             status: "queued" | "running" | "done" | "failed";
-                            outcome: ("pass" | "fail") | null;
+                            outcome: ("pass" | "fail" | "needs_person") | null;
                             met: number;
                             total: number;
                             headline: string | null;
@@ -12602,6 +12768,29 @@ export interface components {
                                 kind: "missing" | "extra";
                                 reason: string;
                             }[];
+                            gaps?: {
+                                index: number;
+                                short: string;
+                                verdict: "met" | "partial" | "unmet" | "needs_person";
+                                fixBy: "worker" | "person";
+                                fix: string | null;
+                            }[];
+                            relay?: {
+                                /** Format: uuid */
+                                id: string;
+                                kind: "return" | "supply";
+                                state: "pending" | "delivered" | "failed";
+                                text: string;
+                                /** Format: date-time */
+                                requestedAt: string;
+                                doneAt: string | null;
+                                message: string | null;
+                            } | null;
+                            passedWithGap?: {
+                                reason: string;
+                                /** Format: date-time */
+                                at: string;
+                            } | null;
                         } | null;
                         deliverable: {
                             state: "pending" | "included";
@@ -12692,7 +12881,7 @@ export interface components {
                 updatedAt: string;
                 card: {
                     stage: "todo" | "doing" | "review" | "done";
-                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked" | "needs_person") | null;
                     role: {
                         /** Format: uuid */
                         id: string;
@@ -12745,7 +12934,7 @@ export interface components {
                         id: string;
                         attempt: number;
                         status: "queued" | "running" | "done" | "failed";
-                        outcome: ("pass" | "fail") | null;
+                        outcome: ("pass" | "fail" | "needs_person") | null;
                         met: number;
                         total: number;
                         headline: string | null;
@@ -12767,6 +12956,29 @@ export interface components {
                             kind: "missing" | "extra";
                             reason: string;
                         }[];
+                        gaps?: {
+                            index: number;
+                            short: string;
+                            verdict: "met" | "partial" | "unmet" | "needs_person";
+                            fixBy: "worker" | "person";
+                            fix: string | null;
+                        }[];
+                        relay?: {
+                            /** Format: uuid */
+                            id: string;
+                            kind: "return" | "supply";
+                            state: "pending" | "delivered" | "failed";
+                            text: string;
+                            /** Format: date-time */
+                            requestedAt: string;
+                            doneAt: string | null;
+                            message: string | null;
+                        } | null;
+                        passedWithGap?: {
+                            reason: string;
+                            /** Format: date-time */
+                            at: string;
+                        } | null;
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -13266,7 +13478,7 @@ export interface components {
                 updatedAt: string;
                 card: {
                     stage: "todo" | "doing" | "review" | "done";
-                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked" | "needs_person") | null;
                     role: {
                         /** Format: uuid */
                         id: string;
@@ -13319,7 +13531,7 @@ export interface components {
                         id: string;
                         attempt: number;
                         status: "queued" | "running" | "done" | "failed";
-                        outcome: ("pass" | "fail") | null;
+                        outcome: ("pass" | "fail" | "needs_person") | null;
                         met: number;
                         total: number;
                         headline: string | null;
@@ -13341,6 +13553,29 @@ export interface components {
                             kind: "missing" | "extra";
                             reason: string;
                         }[];
+                        gaps?: {
+                            index: number;
+                            short: string;
+                            verdict: "met" | "partial" | "unmet" | "needs_person";
+                            fixBy: "worker" | "person";
+                            fix: string | null;
+                        }[];
+                        relay?: {
+                            /** Format: uuid */
+                            id: string;
+                            kind: "return" | "supply";
+                            state: "pending" | "delivered" | "failed";
+                            text: string;
+                            /** Format: date-time */
+                            requestedAt: string;
+                            doneAt: string | null;
+                            message: string | null;
+                        } | null;
+                        passedWithGap?: {
+                            reason: string;
+                            /** Format: date-time */
+                            at: string;
+                        } | null;
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -13470,7 +13705,7 @@ export interface components {
                     updatedAt: string;
                     card: {
                         stage: "todo" | "doing" | "review" | "done";
-                        wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                        wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked" | "needs_person") | null;
                         role: {
                             /** Format: uuid */
                             id: string;
@@ -13523,7 +13758,7 @@ export interface components {
                             id: string;
                             attempt: number;
                             status: "queued" | "running" | "done" | "failed";
-                            outcome: ("pass" | "fail") | null;
+                            outcome: ("pass" | "fail" | "needs_person") | null;
                             met: number;
                             total: number;
                             headline: string | null;
@@ -13545,6 +13780,29 @@ export interface components {
                                 kind: "missing" | "extra";
                                 reason: string;
                             }[];
+                            gaps?: {
+                                index: number;
+                                short: string;
+                                verdict: "met" | "partial" | "unmet" | "needs_person";
+                                fixBy: "worker" | "person";
+                                fix: string | null;
+                            }[];
+                            relay?: {
+                                /** Format: uuid */
+                                id: string;
+                                kind: "return" | "supply";
+                                state: "pending" | "delivered" | "failed";
+                                text: string;
+                                /** Format: date-time */
+                                requestedAt: string;
+                                doneAt: string | null;
+                                message: string | null;
+                            } | null;
+                            passedWithGap?: {
+                                reason: string;
+                                /** Format: date-time */
+                                at: string;
+                            } | null;
                         } | null;
                         deliverable: {
                             state: "pending" | "included";
@@ -13624,7 +13882,7 @@ export interface components {
                 updatedAt: string;
                 card: {
                     stage: "todo" | "doing" | "review" | "done";
-                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked" | "needs_person") | null;
                     role: {
                         /** Format: uuid */
                         id: string;
@@ -13677,7 +13935,7 @@ export interface components {
                         id: string;
                         attempt: number;
                         status: "queued" | "running" | "done" | "failed";
-                        outcome: ("pass" | "fail") | null;
+                        outcome: ("pass" | "fail" | "needs_person") | null;
                         met: number;
                         total: number;
                         headline: string | null;
@@ -13699,6 +13957,29 @@ export interface components {
                             kind: "missing" | "extra";
                             reason: string;
                         }[];
+                        gaps?: {
+                            index: number;
+                            short: string;
+                            verdict: "met" | "partial" | "unmet" | "needs_person";
+                            fixBy: "worker" | "person";
+                            fix: string | null;
+                        }[];
+                        relay?: {
+                            /** Format: uuid */
+                            id: string;
+                            kind: "return" | "supply";
+                            state: "pending" | "delivered" | "failed";
+                            text: string;
+                            /** Format: date-time */
+                            requestedAt: string;
+                            doneAt: string | null;
+                            message: string | null;
+                        } | null;
+                        passedWithGap?: {
+                            reason: string;
+                            /** Format: date-time */
+                            at: string;
+                        } | null;
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -16264,7 +16545,7 @@ export interface components {
         };
         TaskCard: {
             stage: "todo" | "doing" | "review" | "done";
-            wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+            wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked" | "needs_person") | null;
             role: {
                 /** Format: uuid */
                 id: string;
@@ -16317,7 +16598,7 @@ export interface components {
                 id: string;
                 attempt: number;
                 status: "queued" | "running" | "done" | "failed";
-                outcome: ("pass" | "fail") | null;
+                outcome: ("pass" | "fail" | "needs_person") | null;
                 met: number;
                 total: number;
                 headline: string | null;
@@ -16339,6 +16620,29 @@ export interface components {
                     kind: "missing" | "extra";
                     reason: string;
                 }[];
+                gaps?: {
+                    index: number;
+                    short: string;
+                    verdict: "met" | "partial" | "unmet" | "needs_person";
+                    fixBy: "worker" | "person";
+                    fix: string | null;
+                }[];
+                relay?: {
+                    /** Format: uuid */
+                    id: string;
+                    kind: "return" | "supply";
+                    state: "pending" | "delivered" | "failed";
+                    text: string;
+                    /** Format: date-time */
+                    requestedAt: string;
+                    doneAt: string | null;
+                    message: string | null;
+                } | null;
+                passedWithGap?: {
+                    reason: string;
+                    /** Format: date-time */
+                    at: string;
+                } | null;
             } | null;
             deliverable: {
                 state: "pending" | "included";
@@ -16411,7 +16715,7 @@ export interface components {
             updatedAt: string;
             card: {
                 stage: "todo" | "doing" | "review" | "done";
-                wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked" | "needs_person") | null;
                 role: {
                     /** Format: uuid */
                     id: string;
@@ -16464,7 +16768,7 @@ export interface components {
                     id: string;
                     attempt: number;
                     status: "queued" | "running" | "done" | "failed";
-                    outcome: ("pass" | "fail") | null;
+                    outcome: ("pass" | "fail" | "needs_person") | null;
                     met: number;
                     total: number;
                     headline: string | null;
@@ -16486,6 +16790,29 @@ export interface components {
                         kind: "missing" | "extra";
                         reason: string;
                     }[];
+                    gaps?: {
+                        index: number;
+                        short: string;
+                        verdict: "met" | "partial" | "unmet" | "needs_person";
+                        fixBy: "worker" | "person";
+                        fix: string | null;
+                    }[];
+                    relay?: {
+                        /** Format: uuid */
+                        id: string;
+                        kind: "return" | "supply";
+                        state: "pending" | "delivered" | "failed";
+                        text: string;
+                        /** Format: date-time */
+                        requestedAt: string;
+                        doneAt: string | null;
+                        message: string | null;
+                    } | null;
+                    passedWithGap?: {
+                        reason: string;
+                        /** Format: date-time */
+                        at: string;
+                    } | null;
                 } | null;
                 deliverable: {
                     state: "pending" | "included";
@@ -16627,7 +16954,7 @@ export interface components {
                 updatedAt: string;
                 card: {
                     stage: "todo" | "doing" | "review" | "done";
-                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked" | "needs_person") | null;
                     role: {
                         /** Format: uuid */
                         id: string;
@@ -16680,7 +17007,7 @@ export interface components {
                         id: string;
                         attempt: number;
                         status: "queued" | "running" | "done" | "failed";
-                        outcome: ("pass" | "fail") | null;
+                        outcome: ("pass" | "fail" | "needs_person") | null;
                         met: number;
                         total: number;
                         headline: string | null;
@@ -16702,6 +17029,29 @@ export interface components {
                             kind: "missing" | "extra";
                             reason: string;
                         }[];
+                        gaps?: {
+                            index: number;
+                            short: string;
+                            verdict: "met" | "partial" | "unmet" | "needs_person";
+                            fixBy: "worker" | "person";
+                            fix: string | null;
+                        }[];
+                        relay?: {
+                            /** Format: uuid */
+                            id: string;
+                            kind: "return" | "supply";
+                            state: "pending" | "delivered" | "failed";
+                            text: string;
+                            /** Format: date-time */
+                            requestedAt: string;
+                            doneAt: string | null;
+                            message: string | null;
+                        } | null;
+                        passedWithGap?: {
+                            reason: string;
+                            /** Format: date-time */
+                            at: string;
+                        } | null;
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -16865,7 +17215,7 @@ export interface components {
                 updatedAt: string;
                 card: {
                     stage: "todo" | "doing" | "review" | "done";
-                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked" | "needs_person") | null;
                     role: {
                         /** Format: uuid */
                         id: string;
@@ -16918,7 +17268,7 @@ export interface components {
                         id: string;
                         attempt: number;
                         status: "queued" | "running" | "done" | "failed";
-                        outcome: ("pass" | "fail") | null;
+                        outcome: ("pass" | "fail" | "needs_person") | null;
                         met: number;
                         total: number;
                         headline: string | null;
@@ -16940,6 +17290,29 @@ export interface components {
                             kind: "missing" | "extra";
                             reason: string;
                         }[];
+                        gaps?: {
+                            index: number;
+                            short: string;
+                            verdict: "met" | "partial" | "unmet" | "needs_person";
+                            fixBy: "worker" | "person";
+                            fix: string | null;
+                        }[];
+                        relay?: {
+                            /** Format: uuid */
+                            id: string;
+                            kind: "return" | "supply";
+                            state: "pending" | "delivered" | "failed";
+                            text: string;
+                            /** Format: date-time */
+                            requestedAt: string;
+                            doneAt: string | null;
+                            message: string | null;
+                        } | null;
+                        passedWithGap?: {
+                            reason: string;
+                            /** Format: date-time */
+                            at: string;
+                        } | null;
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -16961,13 +17334,15 @@ export interface components {
             } | null;
             brief?: string | null;
             criterionIndex?: number | null;
+            standards?: string[];
+            reason?: string;
         };
         CardHandbackView: {
             /** Format: uuid */
             id: string;
             attempt: number;
             status: "queued" | "running" | "done" | "failed";
-            outcome: ("pass" | "fail") | null;
+            outcome: ("pass" | "fail" | "needs_person") | null;
             met: number;
             total: number;
             headline: string | null;
@@ -16989,12 +17364,36 @@ export interface components {
                 kind: "missing" | "extra";
                 reason: string;
             }[];
+            gaps?: {
+                index: number;
+                short: string;
+                verdict: "met" | "partial" | "unmet" | "needs_person";
+                fixBy: "worker" | "person";
+                fix: string | null;
+            }[];
+            relay?: {
+                /** Format: uuid */
+                id: string;
+                kind: "return" | "supply";
+                state: "pending" | "delivered" | "failed";
+                text: string;
+                /** Format: date-time */
+                requestedAt: string;
+                doneAt: string | null;
+                message: string | null;
+            } | null;
+            passedWithGap?: {
+                reason: string;
+                /** Format: date-time */
+                at: string;
+            } | null;
             runId: string | null;
             criteria: string[];
             claims: {
                 index: number;
-                result: "met" | "partial" | "unmet";
+                result: "met" | "partial" | "unmet" | "needs_person";
                 evidence: string;
+                need?: string;
             }[];
             summary: string | null;
             outputIds: string[];
@@ -17002,10 +17401,11 @@ export interface components {
                 criteria: {
                     index: number;
                     text: string;
-                    verdict: "met" | "partial" | "unmet";
+                    verdict: "met" | "partial" | "unmet" | "needs_person";
                     reason: string;
                     evidence: string | null;
                     fix: string | null;
+                    fixBy?: ("worker" | "person") | null;
                 }[];
                 beyondScope: string[];
             } | null;
@@ -17093,7 +17493,7 @@ export interface components {
                 updatedAt: string;
                 card: {
                     stage: "todo" | "doing" | "review" | "done";
-                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked" | "needs_person") | null;
                     role: {
                         /** Format: uuid */
                         id: string;
@@ -17146,7 +17546,7 @@ export interface components {
                         id: string;
                         attempt: number;
                         status: "queued" | "running" | "done" | "failed";
-                        outcome: ("pass" | "fail") | null;
+                        outcome: ("pass" | "fail" | "needs_person") | null;
                         met: number;
                         total: number;
                         headline: string | null;
@@ -17168,6 +17568,29 @@ export interface components {
                             kind: "missing" | "extra";
                             reason: string;
                         }[];
+                        gaps?: {
+                            index: number;
+                            short: string;
+                            verdict: "met" | "partial" | "unmet" | "needs_person";
+                            fixBy: "worker" | "person";
+                            fix: string | null;
+                        }[];
+                        relay?: {
+                            /** Format: uuid */
+                            id: string;
+                            kind: "return" | "supply";
+                            state: "pending" | "delivered" | "failed";
+                            text: string;
+                            /** Format: date-time */
+                            requestedAt: string;
+                            doneAt: string | null;
+                            message: string | null;
+                        } | null;
+                        passedWithGap?: {
+                            reason: string;
+                            /** Format: date-time */
+                            at: string;
+                        } | null;
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -17234,7 +17657,7 @@ export interface components {
                 id: string;
                 attempt: number;
                 status: "queued" | "running" | "done" | "failed";
-                outcome: ("pass" | "fail") | null;
+                outcome: ("pass" | "fail" | "needs_person") | null;
                 met: number;
                 total: number;
                 headline: string | null;
@@ -17256,12 +17679,36 @@ export interface components {
                     kind: "missing" | "extra";
                     reason: string;
                 }[];
+                gaps?: {
+                    index: number;
+                    short: string;
+                    verdict: "met" | "partial" | "unmet" | "needs_person";
+                    fixBy: "worker" | "person";
+                    fix: string | null;
+                }[];
+                relay?: {
+                    /** Format: uuid */
+                    id: string;
+                    kind: "return" | "supply";
+                    state: "pending" | "delivered" | "failed";
+                    text: string;
+                    /** Format: date-time */
+                    requestedAt: string;
+                    doneAt: string | null;
+                    message: string | null;
+                } | null;
+                passedWithGap?: {
+                    reason: string;
+                    /** Format: date-time */
+                    at: string;
+                } | null;
                 runId: string | null;
                 criteria: string[];
                 claims: {
                     index: number;
-                    result: "met" | "partial" | "unmet";
+                    result: "met" | "partial" | "unmet" | "needs_person";
                     evidence: string;
+                    need?: string;
                 }[];
                 summary: string | null;
                 outputIds: string[];
@@ -17269,10 +17716,11 @@ export interface components {
                     criteria: {
                         index: number;
                         text: string;
-                        verdict: "met" | "partial" | "unmet";
+                        verdict: "met" | "partial" | "unmet" | "needs_person";
                         reason: string;
                         evidence: string | null;
                         fix: string | null;
+                        fixBy?: ("worker" | "person") | null;
                     }[];
                     beyondScope: string[];
                 } | null;
@@ -17311,6 +17759,19 @@ export interface components {
                 /** Format: date-time */
                 createdAt: string;
             }[];
+            agreement?: {
+                revision: number;
+                changes: number;
+                proposal: {
+                    /** Format: uuid */
+                    id: string;
+                    standards: string[];
+                    brief: string | null;
+                    reason: string;
+                    /** Format: date-time */
+                    at: string;
+                } | null;
+            };
         };
         CardBriefResponse: {
             markdown: string;
@@ -17353,6 +17814,39 @@ export interface components {
         };
         CreateVersionFromPendingRequest: {
             statement?: string;
+        };
+        CardAgreementChangeListResponse: {
+            changes: {
+                /** Format: uuid */
+                id: string;
+                revision: number;
+                /** Format: date-time */
+                at: string;
+                by: {
+                    kind: "person" | "pipeline" | "worker";
+                    name: string | null;
+                };
+                before: {
+                    brief: string | null;
+                    standards: string[];
+                };
+                after: {
+                    brief: string | null;
+                    standards: string[];
+                };
+                reason: string | null;
+            }[];
+        };
+        DecideAgreementProposalRequest: {
+            decision: "accept" | "reject";
+        };
+        CardRelayRequest: {
+            /** @constant */
+            kind: "return";
+        } | {
+            /** @constant */
+            kind: "supply";
+            text: string;
         };
         LocalDeviceView: {
             /** Format: uuid */
@@ -18070,7 +18564,7 @@ export interface components {
                 costCny: number | null;
             } | null;
             stage: "todo" | "doing" | "review" | "done";
-            wait: ("approval" | "reply" | "paused" | "reviewing" | "review_failed" | "blocked") | null;
+            wait: ("approval" | "reply" | "paused" | "reviewing" | "review_failed" | "blocked" | "needs_person") | null;
             needsYou: boolean;
             queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota") | null;
             queuePosition: number | null;
@@ -18185,7 +18679,7 @@ export interface components {
                     costCny: number | null;
                 } | null;
                 stage: "todo" | "doing" | "review" | "done";
-                wait: ("approval" | "reply" | "paused" | "reviewing" | "review_failed" | "blocked") | null;
+                wait: ("approval" | "reply" | "paused" | "reviewing" | "review_failed" | "blocked" | "needs_person") | null;
                 needsYou: boolean;
                 queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota") | null;
                 queuePosition: number | null;
@@ -18244,7 +18738,7 @@ export interface components {
                     costCny: number | null;
                 } | null;
                 stage: "todo" | "doing" | "review" | "done";
-                wait: ("approval" | "reply" | "paused" | "reviewing" | "review_failed" | "blocked") | null;
+                wait: ("approval" | "reply" | "paused" | "reviewing" | "review_failed" | "blocked" | "needs_person") | null;
                 needsYou: boolean;
                 queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota") | null;
                 queuePosition: number | null;
@@ -18303,7 +18797,7 @@ export interface components {
                     costCny: number | null;
                 } | null;
                 stage: "todo" | "doing" | "review" | "done";
-                wait: ("approval" | "reply" | "paused" | "reviewing" | "review_failed" | "blocked") | null;
+                wait: ("approval" | "reply" | "paused" | "reviewing" | "review_failed" | "blocked" | "needs_person") | null;
                 needsYou: boolean;
                 queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota") | null;
                 queuePosition: number | null;
@@ -18465,7 +18959,7 @@ export interface components {
             title: string;
             state: "queued" | "running" | "waiting" | "done" | "failed";
             unseen: boolean;
-            waiting: ("approval" | "question" | "verdict" | "merge") | null;
+            waiting: ("approval" | "question" | "verdict" | "merge" | "needs_person") | null;
             queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota") | null;
             role: {
                 /** Format: uuid */
@@ -18560,7 +19054,7 @@ export interface components {
                 title: string;
                 state: "queued" | "running" | "waiting" | "done" | "failed";
                 unseen: boolean;
-                waiting: ("approval" | "question" | "verdict" | "merge") | null;
+                waiting: ("approval" | "question" | "verdict" | "merge" | "needs_person") | null;
                 queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota") | null;
                 role: {
                     /** Format: uuid */
@@ -18693,7 +19187,7 @@ export interface components {
         };
         WaitingItem: {
             id: string;
-            kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer" | "goal_changed" | "auto_relay" | "nexus_confirmation";
+            kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer" | "goal_changed" | "auto_relay" | "nexus_confirmation" | "needs_person";
             title: string;
             source: string | null;
             at: string | null;
@@ -18743,6 +19237,8 @@ export interface components {
                 title: string;
                 outsidePaths: string[];
                 canAllowForSession?: boolean;
+                description?: string;
+                paths?: string[];
             } | null;
             confirmation?: {
                 /** Format: uuid */
@@ -18750,6 +19246,7 @@ export interface components {
                 value: string | null;
                 quote: string | null;
             };
+            summary?: string | null;
         };
         WorkHomeResponse: {
             period: string;
@@ -18800,7 +19297,7 @@ export interface components {
                     title: string;
                     state: "queued" | "running" | "waiting" | "done" | "failed";
                     unseen: boolean;
-                    waiting: ("approval" | "question" | "verdict" | "merge") | null;
+                    waiting: ("approval" | "question" | "verdict" | "merge" | "needs_person") | null;
                     queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota") | null;
                     role: {
                         /** Format: uuid */
@@ -18922,7 +19419,7 @@ export interface components {
                     title: string;
                     state: "queued" | "running" | "waiting" | "done" | "failed";
                     unseen: boolean;
-                    waiting: ("approval" | "question" | "verdict" | "merge") | null;
+                    waiting: ("approval" | "question" | "verdict" | "merge" | "needs_person") | null;
                     queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota") | null;
                     role: {
                         /** Format: uuid */
@@ -18959,7 +19456,7 @@ export interface components {
             };
             waiting: {
                 id: string;
-                kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer" | "goal_changed" | "auto_relay" | "nexus_confirmation";
+                kind: "approval" | "question" | "verdict" | "meeting" | "mission_card" | "role" | "merge" | "plan_start" | "acceptance" | "month" | "device" | "quota" | "transfer" | "goal_changed" | "auto_relay" | "nexus_confirmation" | "needs_person";
                 title: string;
                 source: string | null;
                 at: string | null;
@@ -19009,6 +19506,8 @@ export interface components {
                     title: string;
                     outsidePaths: string[];
                     canAllowForSession?: boolean;
+                    description?: string;
+                    paths?: string[];
                 } | null;
                 confirmation?: {
                     /** Format: uuid */
@@ -19016,6 +19515,7 @@ export interface components {
                     value: string | null;
                     quote: string | null;
                 };
+                summary?: string | null;
             }[];
         };
         WorkWaitingCountResponse: {
@@ -19186,6 +19686,7 @@ export interface components {
                 /** Format: date-time */
                 at: string;
             } | null;
+            gap?: string | null;
         } | {
             /** @constant */
             kind: "card_blocked";
@@ -19203,6 +19704,125 @@ export interface components {
                 kind: "missing" | "extra";
                 reason: string;
             }[];
+            handback?: {
+                /** Format: uuid */
+                id: string;
+                attempt: number;
+                status: "queued" | "running" | "done" | "failed";
+                outcome: ("pass" | "fail" | "needs_person") | null;
+                met: number;
+                total: number;
+                headline: string | null;
+                returnText: string | null;
+                returnedAt: string | null;
+                overruled: boolean;
+                /** Format: date-time */
+                createdAt: string;
+                finishedAt: string | null;
+                git: {
+                    branch: string;
+                    baseBranch: string;
+                    baseCommit: string;
+                    commit: string;
+                    verifiedCommit: string | null;
+                } | null;
+                sourceWordIssues: {
+                    quote: string;
+                    kind: "missing" | "extra";
+                    reason: string;
+                }[];
+                gaps?: {
+                    index: number;
+                    short: string;
+                    verdict: "met" | "partial" | "unmet" | "needs_person";
+                    fixBy: "worker" | "person";
+                    fix: string | null;
+                }[];
+                relay?: {
+                    /** Format: uuid */
+                    id: string;
+                    kind: "return" | "supply";
+                    state: "pending" | "delivered" | "failed";
+                    text: string;
+                    /** Format: date-time */
+                    requestedAt: string;
+                    doneAt: string | null;
+                    message: string | null;
+                } | null;
+                passedWithGap?: {
+                    reason: string;
+                    /** Format: date-time */
+                    at: string;
+                } | null;
+            };
+        } | {
+            /** @constant */
+            kind: "card_needs_person";
+            id: string;
+            /** Format: date-time */
+            at: string;
+            /** Format: uuid */
+            cardId: string;
+            title: string;
+            /** Format: uuid */
+            handbackId: string;
+            fix: string | null;
+            sourceWordIssues: {
+                quote: string;
+                kind: "missing" | "extra";
+                reason: string;
+            }[];
+            handback?: {
+                /** Format: uuid */
+                id: string;
+                attempt: number;
+                status: "queued" | "running" | "done" | "failed";
+                outcome: ("pass" | "fail" | "needs_person") | null;
+                met: number;
+                total: number;
+                headline: string | null;
+                returnText: string | null;
+                returnedAt: string | null;
+                overruled: boolean;
+                /** Format: date-time */
+                createdAt: string;
+                finishedAt: string | null;
+                git: {
+                    branch: string;
+                    baseBranch: string;
+                    baseCommit: string;
+                    commit: string;
+                    verifiedCommit: string | null;
+                } | null;
+                sourceWordIssues: {
+                    quote: string;
+                    kind: "missing" | "extra";
+                    reason: string;
+                }[];
+                gaps?: {
+                    index: number;
+                    short: string;
+                    verdict: "met" | "partial" | "unmet" | "needs_person";
+                    fixBy: "worker" | "person";
+                    fix: string | null;
+                }[];
+                relay?: {
+                    /** Format: uuid */
+                    id: string;
+                    kind: "return" | "supply";
+                    state: "pending" | "delivered" | "failed";
+                    text: string;
+                    /** Format: date-time */
+                    requestedAt: string;
+                    doneAt: string | null;
+                    message: string | null;
+                } | null;
+                passedWithGap?: {
+                    reason: string;
+                    /** Format: date-time */
+                    at: string;
+                } | null;
+            };
         } | {
             /** @constant */
             kind: "criteria_met";
@@ -19527,6 +20147,7 @@ export interface components {
                 /** Format: date-time */
                 at: string;
             } | null;
+            gap?: string | null;
         } | {
             /** @constant */
             kind: "card_blocked";
@@ -19544,6 +20165,125 @@ export interface components {
                 kind: "missing" | "extra";
                 reason: string;
             }[];
+            handback?: {
+                /** Format: uuid */
+                id: string;
+                attempt: number;
+                status: "queued" | "running" | "done" | "failed";
+                outcome: ("pass" | "fail" | "needs_person") | null;
+                met: number;
+                total: number;
+                headline: string | null;
+                returnText: string | null;
+                returnedAt: string | null;
+                overruled: boolean;
+                /** Format: date-time */
+                createdAt: string;
+                finishedAt: string | null;
+                git: {
+                    branch: string;
+                    baseBranch: string;
+                    baseCommit: string;
+                    commit: string;
+                    verifiedCommit: string | null;
+                } | null;
+                sourceWordIssues: {
+                    quote: string;
+                    kind: "missing" | "extra";
+                    reason: string;
+                }[];
+                gaps?: {
+                    index: number;
+                    short: string;
+                    verdict: "met" | "partial" | "unmet" | "needs_person";
+                    fixBy: "worker" | "person";
+                    fix: string | null;
+                }[];
+                relay?: {
+                    /** Format: uuid */
+                    id: string;
+                    kind: "return" | "supply";
+                    state: "pending" | "delivered" | "failed";
+                    text: string;
+                    /** Format: date-time */
+                    requestedAt: string;
+                    doneAt: string | null;
+                    message: string | null;
+                } | null;
+                passedWithGap?: {
+                    reason: string;
+                    /** Format: date-time */
+                    at: string;
+                } | null;
+            };
+        } | {
+            /** @constant */
+            kind: "card_needs_person";
+            id: string;
+            /** Format: date-time */
+            at: string;
+            /** Format: uuid */
+            cardId: string;
+            title: string;
+            /** Format: uuid */
+            handbackId: string;
+            fix: string | null;
+            sourceWordIssues: {
+                quote: string;
+                kind: "missing" | "extra";
+                reason: string;
+            }[];
+            handback?: {
+                /** Format: uuid */
+                id: string;
+                attempt: number;
+                status: "queued" | "running" | "done" | "failed";
+                outcome: ("pass" | "fail" | "needs_person") | null;
+                met: number;
+                total: number;
+                headline: string | null;
+                returnText: string | null;
+                returnedAt: string | null;
+                overruled: boolean;
+                /** Format: date-time */
+                createdAt: string;
+                finishedAt: string | null;
+                git: {
+                    branch: string;
+                    baseBranch: string;
+                    baseCommit: string;
+                    commit: string;
+                    verifiedCommit: string | null;
+                } | null;
+                sourceWordIssues: {
+                    quote: string;
+                    kind: "missing" | "extra";
+                    reason: string;
+                }[];
+                gaps?: {
+                    index: number;
+                    short: string;
+                    verdict: "met" | "partial" | "unmet" | "needs_person";
+                    fixBy: "worker" | "person";
+                    fix: string | null;
+                }[];
+                relay?: {
+                    /** Format: uuid */
+                    id: string;
+                    kind: "return" | "supply";
+                    state: "pending" | "delivered" | "failed";
+                    text: string;
+                    /** Format: date-time */
+                    requestedAt: string;
+                    doneAt: string | null;
+                    message: string | null;
+                } | null;
+                passedWithGap?: {
+                    reason: string;
+                    /** Format: date-time */
+                    at: string;
+                } | null;
+            };
         } | {
             /** @constant */
             kind: "criteria_met";
@@ -19651,7 +20391,7 @@ export interface components {
                 letter: string;
                 title: string;
             };
-            why: "turn_done" | "interrupted" | "held" | "error" | "killed";
+            why: "turn_done" | "interrupted" | "held" | "error" | "killed" | "runner_restart";
             summary: string | null;
             blocker: string | null;
             outputs: {
@@ -19698,6 +20438,8 @@ export interface components {
                 title: string;
                 outsidePaths: string[];
                 canAllowForSession?: boolean;
+                description?: string;
+                paths?: string[];
             } | null;
             status: "open" | "closed";
             closedAt: string | null;
@@ -19723,6 +20465,7 @@ export interface components {
                     /** Format: date-time */
                     at: string;
                 } | null;
+                gap?: string | null;
             } | {
                 /** @constant */
                 kind: "card_blocked";
@@ -19740,6 +20483,125 @@ export interface components {
                     kind: "missing" | "extra";
                     reason: string;
                 }[];
+                handback?: {
+                    /** Format: uuid */
+                    id: string;
+                    attempt: number;
+                    status: "queued" | "running" | "done" | "failed";
+                    outcome: ("pass" | "fail" | "needs_person") | null;
+                    met: number;
+                    total: number;
+                    headline: string | null;
+                    returnText: string | null;
+                    returnedAt: string | null;
+                    overruled: boolean;
+                    /** Format: date-time */
+                    createdAt: string;
+                    finishedAt: string | null;
+                    git: {
+                        branch: string;
+                        baseBranch: string;
+                        baseCommit: string;
+                        commit: string;
+                        verifiedCommit: string | null;
+                    } | null;
+                    sourceWordIssues: {
+                        quote: string;
+                        kind: "missing" | "extra";
+                        reason: string;
+                    }[];
+                    gaps?: {
+                        index: number;
+                        short: string;
+                        verdict: "met" | "partial" | "unmet" | "needs_person";
+                        fixBy: "worker" | "person";
+                        fix: string | null;
+                    }[];
+                    relay?: {
+                        /** Format: uuid */
+                        id: string;
+                        kind: "return" | "supply";
+                        state: "pending" | "delivered" | "failed";
+                        text: string;
+                        /** Format: date-time */
+                        requestedAt: string;
+                        doneAt: string | null;
+                        message: string | null;
+                    } | null;
+                    passedWithGap?: {
+                        reason: string;
+                        /** Format: date-time */
+                        at: string;
+                    } | null;
+                };
+            } | {
+                /** @constant */
+                kind: "card_needs_person";
+                id: string;
+                /** Format: date-time */
+                at: string;
+                /** Format: uuid */
+                cardId: string;
+                title: string;
+                /** Format: uuid */
+                handbackId: string;
+                fix: string | null;
+                sourceWordIssues: {
+                    quote: string;
+                    kind: "missing" | "extra";
+                    reason: string;
+                }[];
+                handback?: {
+                    /** Format: uuid */
+                    id: string;
+                    attempt: number;
+                    status: "queued" | "running" | "done" | "failed";
+                    outcome: ("pass" | "fail" | "needs_person") | null;
+                    met: number;
+                    total: number;
+                    headline: string | null;
+                    returnText: string | null;
+                    returnedAt: string | null;
+                    overruled: boolean;
+                    /** Format: date-time */
+                    createdAt: string;
+                    finishedAt: string | null;
+                    git: {
+                        branch: string;
+                        baseBranch: string;
+                        baseCommit: string;
+                        commit: string;
+                        verifiedCommit: string | null;
+                    } | null;
+                    sourceWordIssues: {
+                        quote: string;
+                        kind: "missing" | "extra";
+                        reason: string;
+                    }[];
+                    gaps?: {
+                        index: number;
+                        short: string;
+                        verdict: "met" | "partial" | "unmet" | "needs_person";
+                        fixBy: "worker" | "person";
+                        fix: string | null;
+                    }[];
+                    relay?: {
+                        /** Format: uuid */
+                        id: string;
+                        kind: "return" | "supply";
+                        state: "pending" | "delivered" | "failed";
+                        text: string;
+                        /** Format: date-time */
+                        requestedAt: string;
+                        doneAt: string | null;
+                        message: string | null;
+                    } | null;
+                    passedWithGap?: {
+                        reason: string;
+                        /** Format: date-time */
+                        at: string;
+                    } | null;
+                };
             } | {
                 /** @constant */
                 kind: "criteria_met";
@@ -19847,7 +20709,7 @@ export interface components {
                     letter: string;
                     title: string;
                 };
-                why: "turn_done" | "interrupted" | "held" | "error" | "killed";
+                why: "turn_done" | "interrupted" | "held" | "error" | "killed" | "runner_restart";
                 summary: string | null;
                 blocker: string | null;
                 outputs: {
@@ -19894,6 +20756,8 @@ export interface components {
                     title: string;
                     outsidePaths: string[];
                     canAllowForSession?: boolean;
+                    description?: string;
+                    paths?: string[];
                 } | null;
                 status: "open" | "closed";
                 closedAt: string | null;
@@ -19966,7 +20830,7 @@ export interface components {
                 updatedAt: string;
                 card: {
                     stage: "todo" | "doing" | "review" | "done";
-                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked") | null;
+                    wait: ("approval" | "reply" | "paused" | "review_failed" | "blocked" | "needs_person") | null;
                     role: {
                         /** Format: uuid */
                         id: string;
@@ -20019,7 +20883,7 @@ export interface components {
                         id: string;
                         attempt: number;
                         status: "queued" | "running" | "done" | "failed";
-                        outcome: ("pass" | "fail") | null;
+                        outcome: ("pass" | "fail" | "needs_person") | null;
                         met: number;
                         total: number;
                         headline: string | null;
@@ -20041,6 +20905,29 @@ export interface components {
                             kind: "missing" | "extra";
                             reason: string;
                         }[];
+                        gaps?: {
+                            index: number;
+                            short: string;
+                            verdict: "met" | "partial" | "unmet" | "needs_person";
+                            fixBy: "worker" | "person";
+                            fix: string | null;
+                        }[];
+                        relay?: {
+                            /** Format: uuid */
+                            id: string;
+                            kind: "return" | "supply";
+                            state: "pending" | "delivered" | "failed";
+                            text: string;
+                            /** Format: date-time */
+                            requestedAt: string;
+                            doneAt: string | null;
+                            message: string | null;
+                        } | null;
+                        passedWithGap?: {
+                            reason: string;
+                            /** Format: date-time */
+                            at: string;
+                        } | null;
                     } | null;
                     deliverable: {
                         state: "pending" | "included";
@@ -20139,7 +21026,7 @@ export interface components {
                 letter: string;
                 title: string;
             };
-            why: "turn_done" | "interrupted" | "held" | "error" | "killed";
+            why: "turn_done" | "interrupted" | "held" | "error" | "killed" | "runner_restart";
             summary: string | null;
             blocker: string | null;
             outputs: {
@@ -20187,6 +21074,8 @@ export interface components {
                 title: string;
                 outsidePaths: string[];
                 canAllowForSession?: boolean;
+                description?: string;
+                paths?: string[];
             } | null;
             status: "open" | "closed";
             closedAt: string | null;
@@ -20416,6 +21305,7 @@ export interface components {
             /** @constant */
             type: "message";
             text: string;
+            agreementRevision?: number;
         } | {
             /** @constant */
             type: "answer";
@@ -20450,6 +21340,7 @@ export interface components {
                 /** @constant */
                 type: "message";
                 text: string;
+                agreementRevision?: number;
             } | {
                 /** @constant */
                 type: "answer";
@@ -20490,6 +21381,7 @@ export interface components {
                     /** @constant */
                     type: "message";
                     text: string;
+                    agreementRevision?: number;
                 } | {
                     /** @constant */
                     type: "answer";
@@ -36367,6 +37259,199 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CardDetailResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    relayCardHandback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                handbackId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CardRelayRequest"];
+            };
+        };
+        responses: {
+            /** @description 卡的详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardDetailResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    listCardAgreementChanges: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 修改记录 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardAgreementChangeListResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    decideCardAgreementProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                proposalId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecideAgreementProposalRequest"];
+            };
+        };
+        responses: {
+            /** @description 卡的详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardDetailResponse"];
+                };
+            };
+            /** @description ApiError 统一错误 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
                 };
             };
             /** @description ApiError 统一错误 */

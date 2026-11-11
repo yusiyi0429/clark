@@ -1,11 +1,10 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import { SourceWords } from "./cardSplits.js";
 import { Budget } from "./budget.js";
-import { CriterionVerdict } from "./deliverables.js";
 import { LocalHandbackCriterion } from "./localRunner.js";
 import { LocalOutputView, LocalRunView } from "./localDevices.js";
 import { TaskPerson, TaskView } from "./tasks.js";
-import { CardCriterion, CardExecutor, CardGit, CardHandbackBrief, CardModel, TaskCard } from "./taskCardView.js";
+import { CardCriterion, CardCriterionVerdict, CardExecutor, CardFixBy, CardGit, CardHandbackBrief, CardModel, TaskCard } from "./taskCardView.js";
 import { RoleBrief, RoleRef } from "./roles.js";
 import { NullableInteger } from "./nullable.js";
 
@@ -137,8 +136,18 @@ export const AcceptCardDraftsRequest = Type.Object({
 export const AcceptCardDraftsResponse = Type.Object({ cards: Type.Array(CardTaskView) }, strict);
 
 /**
- * 改卡上卡的那几样（只有推进人）：执行方、岗位（本人没归档的岗位，null 不配）、模型、交代、对哪条标准。标题和完成标准照旧用 PATCH /api/me/tasks/:id。
- * version 不一致 409 VERSION_CONFLICT（带 latestTask）。除 version 外至少带一个字段。
+ * 一条完成标准（主循环第 60 条）：卡上存成 doneDefinition 一行一条，这里按条给。整份 doneDefinition（各条用换行接起来）不超过 500 字，超了 400 TOO_LONG。
+ */
+export const CardStandard = Type.String({ minLength: 1, maxLength: 200, pattern: "^[^\\r\\n]+$" });
+
+/**
+ * 改卡上卡的那几样（只有推进人）：执行方、岗位（本人没归档的岗位，null 不配）、模型、交代、对哪条标准。标题照旧用 PATCH /api/me/tasks/:id。
+ * version 不一致 409 VERSION_CONFLICT（带 latestTask）。除 version、reason 外至少带一个字段。
+ * 卡的约定（主循环第 60 条，交代 + 完成标准，依据只有云端卡上这一份）：本人在子会话的会话详情里改，网页带 brief、standards（整份新的，按顺序）、reason（可选，一句话）。
+ * - 交代或完成标准真的变了，存了就生效：约定的版本号加 1，记一条修改记录（by person，见 CardAgreementChange）。和原来一样的不记。
+ * - 这张卡有本机会话时，云端顺手登记一条转话（SessionCommand message，带 agreementRevision），那台电脑上开着的网页认领后把新的完成标准全文说给执行方。
+ * - 交回时本机还会向云端取最新的约定（LocalCardAgreementResponse）再核一遍，所以网页没开着也不会对着旧标准交回。
+ * 老路 PATCH /api/me/tasks/:id 改 doneDefinition 照旧能用，同样记修改记录、登记转话。
  */
 export const PatchCardRequest = Type.Object({
   version: Type.Integer({ minimum: 1 }),
@@ -147,16 +156,77 @@ export const PatchCardRequest = Type.Object({
   model: Type.Optional(Nullable(CardModel)),
   brief: Type.Optional(Nullable(Type.String({ minLength: 1, maxLength: 4000 }))),
   criterionIndex: Type.Optional(NullableInteger({ minimum: 1 })),
+  standards: Type.Optional(Type.Array(CardStandard, { minItems: 1, maxItems: 20 })),
+  reason: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
 }, strict);
 
-/** Agent 验收里的一条：对照卡的第几条完成标准（从 1 起）、判定、理由、依据、怎么补。 */
+/** 卡的约定在某一刻的样子：交代（没写为 null）和完成标准（按条）。 */
+export const CardAgreement = Type.Object({
+  brief: Nullable(Type.String()),
+  standards: Type.Array(Type.String()),
+}, strict);
+
+/**
+ * 约定的一次修改（主循环第 60 条）。revision 是改完以后的版本号（卡建出来是 1）；at 什么时候；
+ * by.kind：person 本人直接改的；pipeline 项目管线用 update_card 改的；worker 执行方提议（propose_agreement_change）、本人点了「改成这样」的。
+ * by.name 给人看（本人的名字、「管线」、执行方的名字），读不到为 null。
+ * before、after 是改前改后（只列不比对）；reason 是原因（管线、执行方必有，本人没写为 null）。
+ */
+export const CardAgreementChange = Type.Object({
+  id: Type.String({ format: "uuid" }),
+  revision: Type.Integer({ minimum: 2 }),
+  at: Instant,
+  by: Type.Object({ kind: Type.Union([Type.Literal("person"), Type.Literal("pipeline"), Type.Literal("worker")]), name: Nullable(Type.String()) }, strict),
+  before: CardAgreement,
+  after: CardAgreement,
+  reason: Nullable(Type.String()),
+}, strict);
+/** GET /api/me/cards/:id/agreement-changes（只有推进人）：这张卡约定的修改记录，新的在前。没改过为空数组。 */
+export const CardAgreementChangeListResponse = Type.Object({ changes: Type.Array(CardAgreementChange) }, strict);
+
+/**
+ * 执行方提的改约定（主循环第 60 条，本机同步条目 agreement_proposal，见 LocalAgreementProposal）。不直接生效：在子会话里钉一个框，本人选「改成这样（推荐）」「不改」。
+ * standards 是提议的完成标准全文；brief 是提议的新交代（不改交代为 null）；reason 是执行方写的原因；at 是本机报上来的时间。
+ * 同一张卡同时只有一个在等：新的到了，旧的作废（不再列）。
+ */
+export const CardAgreementProposalView = Type.Object({
+  id: Type.String({ format: "uuid" }),
+  standards: Type.Array(Type.String({ minLength: 1 }), { minItems: 1 }),
+  brief: Nullable(Type.String()),
+  reason: Type.String({ minLength: 1 }),
+  at: Instant,
+}, strict);
+
+/**
+ * 卡的约定的现状（CardDetailResponse.agreement）：revision 现在是第几版（没改过是 1）；changes 改过几次（会话详情「约定改过 N 次」，0 不画）；
+ * proposal 是执行方提的、在等本人定的那一个（见 CardAgreementProposalView），没有为 null。
+ */
+export const CardAgreementView = Type.Object({
+  revision: Type.Integer({ minimum: 1 }),
+  changes: Type.Integer({ minimum: 0 }),
+  proposal: Nullable(CardAgreementProposalView),
+}, strict);
+
+/**
+ * POST /api/me/cards/:id/agreement-proposals/:proposalId/decision（只有推进人，手机上也能，回卡的详情）：本人对执行方提的改约定拍板。
+ * accept「改成这样」：照提议改卡的约定（记一条修改记录，by worker，原因是执行方写的），登记一条转话告诉执行方约定改了、附新的完成标准全文；
+ * reject「不改」：约定不动，登记一条转话告诉执行方本人不改约定、照原来的做。
+ * 已经定过、已经作废的 409 PROPOSAL_CLOSED；没有的 404。
+ */
+export const DecideAgreementProposalRequest = Type.Object({ decision: Type.Union([Type.Literal("accept"), Type.Literal("reject")]) }, strict);
+
+/**
+ * Agent 验收里的一条：对照卡的第几条完成标准（从 1 起）、判定、理由、依据、怎么补。
+ * verdict 多一种 needs_person（见 CardCriterionVerdict）；fixBy 是没达到时谁来补（见 CardFixBy），met 的、老结论为 null 或不带。
+ */
 export const CardAcceptanceCriterion = Type.Object({
   index: Type.Integer({ minimum: 1 }),
   text: Type.String({ minLength: 1 }),
-  verdict: CriterionVerdict,
+  verdict: CardCriterionVerdict,
   reason: Type.String(),
   evidence: Nullable(Type.String()),
   fix: Nullable(Type.String()),
+  fixBy: Type.Optional(Nullable(CardFixBy)),
 }, strict);
 
 /** 推翻：本人、时间、原因。 */
@@ -204,6 +274,8 @@ export const CardDetailResponse = Type.Object({
   runs: Type.Array(LocalRunView, { maxItems: 5 }),
   handbacks: Type.Array(CardHandbackView),
   outputs: Type.Array(LocalOutputView),
+  /** 卡的约定的现状（主循环第 60 条，见 CardAgreementView）。云端都带；可选只为兼容。 */
+  agreement: Type.Optional(CardAgreementView),
 }, strict);
 
 /**
@@ -227,9 +299,23 @@ export const CardBriefResponse = Type.Object({
 
 /**
  * 推翻 Agent 验收（只有推进人）：通过的推翻后卡回进行中、从准备中拿掉（已经进了某一版的不能推翻，409）；
- * 没过的推翻就是「仍然通过」，卡完成、进准备中，验收记录写本人。
+ * 没过的、等本人补的推翻就是「就到这里」（主循环第 62 条，替换原来的「仍然通过」，所有设备一样）：reason 是本人写的一句原因
+ * （网页预填没达到那几条的短标题 CardGapItem.short），卡完成、进准备中，记成有缺口通过（CardHandbackBrief.passedWithGap），验收记录写本人和原因。
  */
 export const OverruleCardHandbackRequest = Type.Object({ reason: Type.String({ minLength: 1, maxLength: 200 }) }, strict);
+
+/**
+ * POST /api/me/cards/:id/handbacks/:handbackId/relay（只有推进人；手机上、别的电脑上也能，回卡的详情）：登记「再改一轮」「我来补」，见 CardRelayView。
+ * - return 再改一轮：只对最近一次交回、结论 fail（受阻或没过）、改法还没送到的；送的是这次交回的 returnText。
+ * - supply 我来补：只对最近一次交回、结论 needs_person 的；text 是本人写的（每条要补的一段）。
+ * 这张卡没有本机会话 409 NOT_STARTED；条件不对 409 NOTHING_TO_RELAY；这次交回已经有一条 pending 的 409 RELAY_PENDING。
+ * 在跑这个会话的那台电脑上也走这条：登记完马上认领（POST /api/me/session-commands/claim）就送出去了，送达照样回写。
+ * 送到以后：return 记 returnedAt（同 /returned），卡不再是 blocked、review_failed；supply 卡不再是 needs_person，执行方接着做、再交回。
+ */
+export const CardRelayRequest = Type.Union([
+  Type.Object({ kind: Type.Literal("return") }, strict),
+  Type.Object({ kind: Type.Literal("supply"), text: Type.String({ minLength: 1, maxLength: 3000 }) }, strict),
+]);
 
 /** 把调研专题的一版放进下一版交付物（专题要挂在这个 Task 上）。 */
 export const AddPendingDeliverableRequest = Type.Object({ topicVersionId: Type.String({ format: "uuid" }) }, strict);
@@ -252,6 +338,13 @@ export type TCreateCardPlanRequest = Static<typeof CreateCardPlanRequest>;
 export type TAcceptCardDraftsRequest = Static<typeof AcceptCardDraftsRequest>;
 export type TAcceptCardDraftsResponse = Static<typeof AcceptCardDraftsResponse>;
 export type TPatchCardRequest = Static<typeof PatchCardRequest>;
+export type TCardAgreement = Static<typeof CardAgreement>;
+export type TCardAgreementChange = Static<typeof CardAgreementChange>;
+export type TCardAgreementChangeListResponse = Static<typeof CardAgreementChangeListResponse>;
+export type TCardAgreementProposalView = Static<typeof CardAgreementProposalView>;
+export type TCardAgreementView = Static<typeof CardAgreementView>;
+export type TDecideAgreementProposalRequest = Static<typeof DecideAgreementProposalRequest>;
+export type TCardRelayRequest = Static<typeof CardRelayRequest>;
 export type TCardAcceptanceCriterion = Static<typeof CardAcceptanceCriterion>;
 export type TCardOverrule = Static<typeof CardOverrule>;
 export type TCardHandbackView = Static<typeof CardHandbackView>;

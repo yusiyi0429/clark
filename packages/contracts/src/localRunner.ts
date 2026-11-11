@@ -18,14 +18,17 @@ import { NullableInteger, NullableNumber } from "./nullable.js";
 /**
  * 本机程序的协议号（GET /v1/health 的 protocol）。网页按它判断能不能带新字段：老本机程序 strict，带了它不认识的字段整个请求回 400。
  * 2：发话可带 messageId（LocalSendMessageRequest）。
+ * 3：发话可带 agreementRevision（主循环第 60 条，LocalSendMessageRequest）。
  */
-export const LOCAL_RUNNER_PROTOCOL = 2;
+export const LOCAL_RUNNER_PROTOCOL = 3;
 export const LOCAL_RUNNER_DEFAULT_PORT = 47610;
 export const LOCAL_RUNNER_TOKEN_HEADER = "x-tianshu-local-token";
 /** 云端接收端路径（相对天枢 api 的根），鉴权用 Authorization: Bearer <个人令牌>。 */
 export const LOCAL_RUNNER_SYNC_PATH = "/api/local-runner/sync";
 /** 云端「验收交代」（相对天枢 api 的根）：GET ?handbackKey=<交回条目的 key>，鉴权同上。本机在交回同步上去以后取它，起验收会话。 */
 export const LOCAL_RUNNER_VERIFY_BRIEF_PATH = "/api/local-runner/verify-brief";
+/** 云端「卡的约定」（相对天枢 api 的根，主循环第 60 条）：GET ?cardId=<卡 id>，鉴权同上，回 LocalCardAgreementResponse。 */
+export const LOCAL_RUNNER_CARD_AGREEMENT_PATH = "/api/local-runner/card-agreement";
 /**
  * 云端子会话附件（相对天枢 api 的根，新首页 14.5）：GET /api/local-runner/attachments/:id 回文件原样（Content-Type 是它的类型，x-sha256 是摘要），鉴权同上，
  * 只给附件主人配对的电脑。本机收到带 attachments 的一句话时按 id 取回，存进这件 Task 的工作区，把路径交给 Claude Code。
@@ -969,6 +972,16 @@ export const LocalPermissionRequestView = Type.Object({
    */
   canAllowForSession: Type.Boolean(),
   requestedAt: Instant,
+  /**
+   * 批准说人话（主循环第 64 条）：执行方自己写的一句「要做什么」。Claude Code 取 Bash（PowerShell）入参里的 description；Codex 取它给的理由；都没有就不带。
+   * 网页批准框第一行写它，命令原文收进「命令」里点了才看（会话在代码仓库的工作树里时默认展开）；没有就照原来的样子（第一行是 title）。
+   */
+  description: Type.Optional(Type.String({ minLength: 1, maxLength: 300 })),
+  /**
+   * 这一步会动的文件（主循环第 64 条）：本机认得出的（pathGuard 在认的：文件类工具的路径、从命令里尽力认出来的），会话根里的写相对路径，外面的写绝对路径。
+   * 网页第二行「会动：文件名…」；认不出、只读的不带。越界的照旧另在 outsidePaths 里。
+   */
+  paths: Type.Optional(Type.Array(Type.String({ minLength: 1 }), { minItems: 1, maxItems: 20 })),
 }, strict);
 export const LocalSessionDetailResponse = Type.Object({
   session: LocalSessionSummary,
@@ -1073,6 +1086,12 @@ export const LocalSendMessageRequest = Type.Object({
    * 没记下就被拒的（排队中、空话、附件取不回）不算记过，同一个编号可以再发。不带就由本机给。
    */
   messageId: Type.Optional(Uuid),
+  /**
+   * 这句话是在告诉执行方「卡的约定改了」（主循环第 60 条，本机程序 protocol ≥ 3 才收）：改完以后约定的版本号（同 LocalCardAgreementResponse.revision）。
+   * 网页转的是云端登记的那条转话（SessionCommand message 带了 agreementRevision）时原样带上；本机记下「执行方已经知道第 N 版」，交回时核对就不再为这一版退回。
+   * 老本机程序不带它（只发 text），交回时最多多退回一次。
+   */
+  agreementRevision: Type.Optional(Type.Integer({ minimum: 1 })),
 }, strict);
 export const LocalSendMessageResponse = Type.Object({
   /** next_step：进行中，下一步前送达；new_turn：开了新一轮；resumed：进程已退出，续接后送达。 */
@@ -1213,11 +1232,16 @@ export const LocalPlanEntry = Type.Object({
   status: Type.Union([Type.Literal("pending"), Type.Literal("in_progress"), Type.Literal("completed")]),
 }, strict);
 
+/**
+ * 交回时执行方对一条完成标准的自评。result 多一种 needs_person 要本人补（主循环第 61 条）：要登录、验证码、人工查询、网站拦自动访问、
+ * 要本人的权限或判断，执行方做不了的，不绕，标这个；need 是一句人话：要本人做什么、给回什么（needs_person 时必带，本机检查；别的不带）。
+ */
 export const LocalHandbackCriterion = Type.Object({
   /** 第几条完成标准，从 1 开始。 */
   index: Type.Integer({ minimum: 1 }),
-  result: Type.Union([Type.Literal("met"), Type.Literal("partial"), Type.Literal("unmet")]),
+  result: Type.Union([Type.Literal("met"), Type.Literal("partial"), Type.Literal("unmet"), Type.Literal("needs_person")]),
   evidence: Type.String({ maxLength: 2000 }),
+  need: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
 }, strict);
 
 /**
@@ -1255,13 +1279,19 @@ export const LocalCardPlan = Type.Object({
   roleVersion: NullableInteger({ minimum: 1 }),
 }, strict);
 
-/** 验收员对一条完成标准的判定（对得上云端的 CardAcceptanceCriterion，少了 text：云端有交回时的标准快照）。fix 是没达到时怎么补。 */
+/**
+ * 验收员对一条完成标准的判定（对得上云端的 CardAcceptanceCriterion，少了 text：云端有交回时的标准快照）。fix 是没达到时怎么补。
+ * 主循环第 61 条：verdict 多一种 needs_person（执行方标了「要本人补」、而且确实只有本人能做；执行方其实能做的照旧 unmet）；
+ * fixBy 是没达到时谁来补：worker 执行方、person 本人（needs_person 的是 person）。新验收员没达到的每条都带，met 不带；老验收员不带，云端按 worker 算。
+ * fixBy = person 时 fix 写要本人做什么、给回什么，一句人话。
+ */
 export const LocalVerdictCriterion = Type.Object({
   index: Type.Integer({ minimum: 1 }),
-  verdict: Type.Union([Type.Literal("met"), Type.Literal("partial"), Type.Literal("unmet")]),
+  verdict: Type.Union([Type.Literal("met"), Type.Literal("partial"), Type.Literal("unmet"), Type.Literal("needs_person")]),
   reason: Type.String({ minLength: 1, maxLength: 2000 }),
   evidence: Nullable(Type.String({ maxLength: 2000 })),
   fix: Nullable(Type.String({ maxLength: 2000 })),
+  fixBy: Type.Optional(Type.Union([Type.Literal("worker"), Type.Literal("person")])),
 }, strict);
 /**
  * 产出和本人原话对不上的一处（16.8）：quote 是原话里的哪一句（原样，是某段原话或其中一截），kind：missing 漏了原话里明说的，extra 做了原话里没要的；reason 为什么。
@@ -1273,6 +1303,8 @@ export const LocalSourceWordIssue = Type.Object({
 }, strict);
 /**
  * 验收员的结论（submit_verdict）：每条完成标准判一次，条数和验收交代的 criteria 一样；passed 是每条都 met、并且没有 sourceWordIssues；beyondScope 是标准以外的建议，不算没达到。
+ * 「等本人补」（主循环第 61 条）不另报：有一条 needs_person 或 fixBy = person 时 passed 照样是 false，云端按逐条判定算成 needs_person（规则见 CardHandbackOutcome）。
+ * summary（主循环第 61 条的新规矩）：一句人话，说卡在哪、要谁做什么；不写行号，不复述标准原文。云端存成 headline，等你补和受阻的框第一行就是它。
  * sourceWordIssues：验收交代带了本人原话（LocalVerifyBriefResponse.sourceWords）时，产出和原话明显对不上的地方（见 LocalSourceWordIssue）；有一条就是没过，标准全达到也一样。没有时不带。
  * modelLabel、roleId、roleVersion 记是谁验的（本机用的模型、验收员岗位和版本，用内置规矩时为 null）。
  */
@@ -1294,7 +1326,8 @@ export const LocalVerdict = Type.Object({
  * - markdown 原样作为验收会话的第一句话（≤ 20000 字）：约定、卡的完成标准、卡所属岗位的验收口径、这次交回的逐条自评和总结、交回点名的产出和证据（标题、文件名、链接、证据正文）。
  * - criteria 是交回那一刻卡的完成标准（按行拆好），验收员逐条判，条数以它为准。
  * - role 是验收员岗位（kind=reviewer，带模型档位，本机按档位挑模型）；没配为 null，本机用内置的验收规矩、普通档。
- * - failStreak 是这张卡在这次交回之前连续没过几次（推翻以后从 0 算）。这次再没过、累计到 2 就是「受阻」。
+ * - failStreak 是这张卡在这次交回之前连续没过几次（推翻以后从 0 算；等本人补的那几次跳过，不算也不打断）。这次再没过、累计到 2 就是「受阻」；这次是等本人补的不算受阻。
+ * - markdown 里执行方的逐条自评带上「要本人补」的那几条和它写的 need（主循环第 61 条），验收员据此判 needs_person 还是 unmet。
  * 404：云端没有这次交回（还没收到或拒收了）；409：这次交回已经有结论（已验过或已推翻），不用再验。
  * sourceWords（16.8）：卡上的本人原话；不为空时 markdown 里有一段「本人原话」，验收员逐条对完标准再对一遍原话，明显对不上（做了原话里没要的、漏了原话里明说的）算没过。
  *   本机核对验收员写的 sourceWordIssues：quote 必须是其中某段或某段里的一截。
@@ -1305,6 +1338,34 @@ export const LocalVerifyBriefResponse = Type.Object({
   role: Nullable(LocalRole),
   failStreak: Type.Integer({ minimum: 0 }),
   sourceWords: Type.Optional(Type.Array(Type.String(), { maxItems: 10 })),
+}, strict);
+
+/**
+ * GET <apiBaseUrl>/api/local-runner/card-agreement?cardId=<卡 id>（云端实现，主循环第 60 条）：卡此刻的约定。卡的约定的依据只有云端卡上这一份。
+ * revision 是约定的版本号（卡建出来是 1，交代或完成标准每改一次加 1）；brief 是交代（没写为 null）；standards 是完成标准，按条。
+ * 本机这样用：
+ * - 卡开工时取一次，记下执行方知道的是第几版；网页转来带 agreementRevision 的那句话时（LocalSendMessageRequest），记成那一版。
+ * - 执行方 hand_back 时再取一次：比记下的新，就退回这次交回（不报 handback 同步条目），把新的完成标准原样告诉执行方，让它逐条重新自评再交；记成新的这一版。
+ *   取不到（离线、云端出错）不挡交回，照常报上去。
+ * 不是本人的卡、没有这张卡 404。
+ */
+export const LocalCardAgreementResponse = Type.Object({
+  cardId: Type.String({ minLength: 1 }),
+  revision: Type.Integer({ minimum: 1 }),
+  brief: Nullable(Type.String()),
+  standards: Type.Array(Type.String({ minLength: 1 }), { maxItems: 50 }),
+}, strict);
+
+/**
+ * 执行方提议改卡的约定（主循环第 60 条，天枢 MCP 的工具 propose_agreement_change 的入参，只有卡的会话有这个工具）：
+ * standards 是新的完成标准全文（按条，整份；每条一行、不超过 200 字，合起来不超过 500 字）；brief 是新的交代（不改交代就不带）；reason 是原因，一句话。
+ * 它不直接生效：本机记一条事件 agreement_proposal、报一条同步条目 agreement_proposal，云端在这个子会话里钉一个框，本人选「改成这样（推荐）」「不改」，
+ * 结果由云端登记的转话告诉执行方。工具立刻回「已经提给本人，等本人定」，执行方接着做别的、或停下等。
+ */
+export const LocalAgreementProposal = Type.Object({
+  standards: Type.Array(Type.String({ minLength: 1, maxLength: 200 }), { minItems: 1, maxItems: 20 }),
+  brief: Type.Optional(Type.String({ minLength: 1, maxLength: 4000 })),
+  reason: Type.String({ minLength: 1, maxLength: 500 }),
 }, strict);
 
 /** 专题一版的种类：outline 提纲、draft 正文、review 评审会合成的「分歧和建议」。 */
@@ -1322,13 +1383,29 @@ export const LocalPlanProgress = Type.Object({
 }, strict);
 
 /**
+ * 子会话停了（新首页设计 18.10「报给主管线」）：why 是怎么停的——
+ * turn_done 做完一轮（等本人下一句；卡交回了、规划员交了计划、验收员交了结论也是这个）；interrupted 本人点了停下（含托盘「暂停全部」）；
+ * held 停着等（订阅额度用完、网关余额不足、预算用完，blocker 写等什么）；error 出错停住（执行方报错、没开起来、进程意外退出，blocker 写原因）；killed 强停；
+ * runner_restart 本机程序被直接停掉（重启、升级、强杀）后重新起来，那时还在跑、在等的会话补一条（主循环第 65 条；老版本本机不报）。
+ * 要人介入（在问本人、在等批准）不报这一条：照旧是 status 条目带 question / permission，云端据此在项目对话里直接出决定卡。
+ */
+export const LocalStopReason = Type.Union([
+  Type.Literal("turn_done"), Type.Literal("interrupted"), Type.Literal("held"), Type.Literal("error"), Type.Literal("killed"), Type.Literal("runner_restart"),
+]);
+
+/**
  * GET /v1/sessions/:id/events（text/event-stream）。每条 `id: <seq>` + `data: <JSON>`。
  * 断线后带 Last-Event-ID 重连，本机从会话事件日志补发其后的全部事件；也可用 ?after=<seq>。
  * 事件已归一化，不随执行方变：Claude Code 和以后的 Codex 都映射到这几种。
  */
 export const LocalSessionEvent = Type.Union([
-  /** hold：停着等额度恢复时带（见 LocalHold）。 */
-  ev("status", { status: LocalSessionStatus, exitCode: Type.Optional(NullableInteger()), reason: Type.Optional(Type.String()), hold: Type.Optional(LocalHold) }),
+  /**
+   * hold：停着等额度恢复时带（见 LocalHold）。
+   * why（主循环第 65 条）：这一条是「停了」时（转成 idle 且没在问、exited、failed、done）为什么停，同 LocalStopReason；和同时报的 stopped 同步条目是同一个原因。
+   * 网页在对话末尾画一行：turn_done 不画；其余写原因（你停的 / 本机程序重启 / 出错：reason / 额度用完，hold 里的恢复时间），行尾一个「接着做」。不是停了的那几条不带。
+   */
+  ev("status", { status: LocalSessionStatus, exitCode: Type.Optional(NullableInteger()), reason: Type.Optional(Type.String()), hold: Type.Optional(LocalHold),
+    why: Type.Optional(LocalStopReason) }),
   ev("agent_info", { agent: LocalAgentKind, version: Type.String(), model: Nullable(Type.String()), permissionMode: Nullable(Type.String()) }),
   /**
    * 权限模式换了（见 LocalPermissionMode）：by web 是本人在网页上换的，plan_approved 是本人批了计划、从 plan 转成 auto，
@@ -1389,10 +1466,18 @@ export const LocalSessionEvent = Type.Union([
    * returnText 是改法（过了时为 null）。网页**不要**据这条事件送回改法：送回只走云端那条路——verdict 同步上去，云端把改法写进那次交回，
    * 网页原有的自动送回按交回送一次（多个标签页也只送一次）。
    */
+  /**
+   * needsPerson（主循环第 61 条）：这次是「等本人补」（规则同 CardHandbackOutcome），网页写「等你补」，不写没过、不算受阻（blocked 为 false）。老本机不带，按 false。
+   */
   ev("verdict", {
     handbackKey: SyncKey, passed: Type.Boolean(), summary: Type.String(), criteria: Type.Array(LocalVerdictCriterion), beyondScope: Type.Array(Type.String()),
-    failStreak: Type.Integer({ minimum: 0 }), blocked: Type.Boolean(), returnText: Nullable(Type.String()),
+    failStreak: Type.Integer({ minimum: 0 }), blocked: Type.Boolean(), returnText: Nullable(Type.String()), needsPerson: Type.Optional(Type.Boolean()),
   }),
+  /**
+   * 执行方提议改约定（主循环第 60 条，见 LocalAgreementProposal）：proposalKey 是同时报给云端的 agreement_proposal 同步条目的 key。
+   * 网页在对话里记这一行；钉住的框和「改成这样 / 不改」照云端的 CardDetailResponse.agreement.proposal 画（手机上也一样），看到这条事件就重读一次卡的详情。
+   */
+  ev("agreement_proposal", { proposalKey: SyncKey, ...LocalAgreementProposal.properties }),
   /**
    * 上下文用了多少变了（见 LocalContextUsage，摘要的 context 同步更新）：每轮做完报一次；这一轮中间每次模型回复后算一次，
    * 百分比（取整）变了才报，免得事件太密；上限读不到时只在每轮做完报。压缩以后跟着报一条新的。
@@ -1444,6 +1529,7 @@ const syncItem = <T extends string, D extends TSchema>(type: T, data: D) => Type
  * 同步给云端的「在等批准的那一步」（status = waiting_permission 时带）：给人看的一行、越界路径，不传工具的完整输入（输入只在本机）。
  * 云端「等你」那一行的标题就是 title（原话）；项目对话里的批准卡（新首页设计 18.10）也照它画：
  * 批准、拒绝都走网页的 POST /v1/sessions/:id/permissions/:requestId（已处理过或已失效回 409）。
+ * description、paths（主循环第 64 条）同 LocalPermissionRequestView：有 description 时「等你」那一行的摘要用它。老版本本机不带。
  */
 export const LocalPermissionBrief = Type.Object({
   requestId: Type.String({ minLength: 1, maxLength: 120 }),
@@ -1452,24 +1538,18 @@ export const LocalPermissionBrief = Type.Object({
   outsidePaths: Type.Array(Type.String(), { maxItems: 20 }),
   /** 能不能「这张卡都允许」（同 LocalPermissionRequestView.canAllowForSession）：为 false 时批准卡只给「允许这一次」。老版本本机报的不带，按 false。 */
   canAllowForSession: Type.Optional(Type.Boolean()),
+  description: Type.Optional(Type.String({ minLength: 1, maxLength: 300 })),
+  paths: Type.Optional(Type.Array(Type.String({ minLength: 1 }), { minItems: 1, maxItems: 20 })),
 }, strict);
 
-/**
- * 子会话停了（新首页设计 18.10「报给主管线」）：why 是怎么停的——
- * turn_done 做完一轮（等本人下一句；卡交回了、规划员交了计划、验收员交了结论也是这个）；interrupted 本人点了停下（含托盘「暂停全部」）；
- * held 停着等（订阅额度用完、网关余额不足、预算用完，blocker 写等什么）；error 出错停住（执行方报错、没开起来、进程意外退出，blocker 写原因）；killed 强停。
- * 要人介入（在问本人、在等批准）不报这一条：照旧是 status 条目带 question / permission，云端据此在项目对话里直接出决定卡。
- */
-export const LocalStopReason = Type.Union([
-  Type.Literal("turn_done"), Type.Literal("interrupted"), Type.Literal("held"), Type.Literal("error"), Type.Literal("killed"),
-]);
 /**
  * 停了的报告（同步条目 stopped）。都取会话里现成的内容，本机不另调模型：
  * - summary：做成了什么，取这一轮执行方最后那段话的头一两句（去掉 Markdown 记号，200 字以内）；这一轮一句话也没说为 null。
  * - blocker：卡在哪，出错、停着等时的原因（一句话，给人看）；做完一轮、本人停下、强停为 null。
  * - outputs：这一轮交的产出物，key 是它那条 artifact 同步条目的 key（云端据此出「看结果」），title、fileName 同那一条。
  * - handbackKey：这一轮交回了时，那条 handback 同步条目的 key。
- * 云端照它在项目对话里出「B · 标题」的报告，再让项目主管线回一小轮。subject 里有 cardId、topicId、taskId 和 projectId。
+ * 云端照它在项目对话里出「B · 标题」的报告，不再让项目主管线回一小轮（主循环第 63 条：报告不触发模型）。subject 里有 cardId、topicId、taskId 和 projectId。
+ * 本机程序重启时，那时还在跑、在等的会话各补一条 why = runner_restart（主循环第 65 条）。
  */
 export const LocalStopReport = Type.Object({
   why: LocalStopReason,
@@ -1583,6 +1663,11 @@ export const LocalSyncItem = Type.Union([
   syncItem("merge", LocalMergeSync),
   /** 子会话停了：一两句摘要、卡在哪、这一轮的产出物，见 LocalStopReport。每停一次报一条。 */
   syncItem("stopped", LocalStopReport),
+  /**
+   * 执行方提议改卡的约定（主循环第 60 条，只有卡，subject 带 cardId），见 LocalAgreementProposal。云端按 key 去重，记成这张卡在等本人定的那一个（旧的作废）。
+   * 卡不是本人的、卡已完成的永久拒收。
+   */
+  syncItem("agreement_proposal", LocalAgreementProposal),
   /**
    * 预算变了（见 LocalTaskBudgetView）：state 变了（到 80%、到 100%、加了预算回落）和预算被改了时报一条，按报这一条的会话（这件 Task 里刚做完一轮的、或随便一个）。
    * 云端照它画 Task 行的「预算 80%」、Task 管线里的「加 50%」和 100% 时的选项框、「等你」里那一行。同一件 Task 以 updatedAt 最新的一条为准。
@@ -1714,6 +1799,8 @@ export type TLocalSourceWordIssue = Static<typeof LocalSourceWordIssue>;
 export type TLocalVerdictCriterion = Static<typeof LocalVerdictCriterion>;
 export type TLocalVerdict = Static<typeof LocalVerdict>;
 export type TLocalVerifyBriefResponse = Static<typeof LocalVerifyBriefResponse>;
+export type TLocalCardAgreementResponse = Static<typeof LocalCardAgreementResponse>;
+export type TLocalAgreementProposal = Static<typeof LocalAgreementProposal>;
 export type TLocalSlots = Static<typeof LocalSlots>;
 export type TLocalPlanProgress = Static<typeof LocalPlanProgress>;
 export type TLocalCreateSessionBatchRequest = Static<typeof LocalCreateSessionBatchRequest>;
