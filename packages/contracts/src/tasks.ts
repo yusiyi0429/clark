@@ -18,6 +18,13 @@ export const DateOnly = Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" });
 const NullableDate = Type.Union([DateOnly, Type.Null()]);
 export const Period = Type.String({ pattern: "^\\d{4}-(0[1-9]|1[0-2])$" });
 
+/**
+ * 完成标准（doneDefinition，一行一条）的长度（11/11 主会话定，原来整份 500 字）：每条不超过 line 字，整份不超过 total 字。
+ * 规划员要把每条写成「看得见的结果 + 拿什么证明」（17.2 第 59 条）。卡、草稿卡、派活单（LocalPlanCard）、执行事项的建和改都照这个。
+ * 整份由 schema 拦；每条的上限 schema 写不出，云端写入时查（超了 400 TOO_LONG），本机的派活单检查也照它。
+ */
+export const DONE_DEFINITION_LIMITS = { line: 300, total: 2000 } as const;
+
 export const TaskPerson = Type.Object(
   { personId: Type.String({ minLength: 1 }), name: Type.String({ minLength: 1 }) },
   { additionalProperties: false },
@@ -97,7 +104,7 @@ export const TaskView = Type.Object(
     startDate: NullableDate,
     /** YYYY-MM-DD */
     dueDate: NullableDate,
-    doneDefinition: Type.Union([Type.String({ minLength: 1, maxLength: 500 }), Type.Null()]),
+    doneDefinition: Type.Union([Type.String({ minLength: 1, maxLength: 2000 }), Type.Null()]),
     /** 独立事项为 null。 */
     mission: Type.Union([TaskMissionRef, Type.Null()]),
     /** 同一项个人任务里上一步还没完成时指向它。 */
@@ -243,7 +250,7 @@ export const PatchMyTaskRequest = Type.Object(
     title: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
     startDate: Type.Optional(NullableDate),
     dueDate: Type.Optional(NullableDate),
-    doneDefinition: Type.Optional(Type.Union([Type.String({ minLength: 1, maxLength: 500 }), Type.Null()])),
+    doneDefinition: Type.Optional(Type.Union([Type.String({ minLength: 1, maxLength: 2000 }), Type.Null()])),
     judgment: Type.Optional(Type.Union([Type.String({ minLength: 1, maxLength: 2000 }), Type.Null()])),
     missionId: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
     /** 挂到哪个 Task；null 取消挂靠。 */
@@ -264,7 +271,7 @@ export const CreateMyTaskRequest = Type.Object(
     missionId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
     startDate: Type.Optional(DateOnly),
     dueDate: Type.Optional(DateOnly),
-    doneDefinition: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
+    doneDefinition: Type.Optional(Type.String({ minLength: 1, maxLength: 2000 })),
     planTaskId: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
   },
   { additionalProperties: false },
