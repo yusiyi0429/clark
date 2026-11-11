@@ -16,7 +16,9 @@
   --wash-hover: var(--default-soft);
   --slot-on: var(--ink-muted);
   position: fixed; inset: 0;
-  display: grid; grid-template-columns: var(--home-left) minmax(0, 1fr) var(--home-right); grid-template-rows: minmax(0, 1fr);
+  /* 右栏宽（11/11 起能拖）：本人拖过（260–560）写在根的 style 上；窗口窄时让中栏至少留 480，但不比默认 288 窄。 */
+  --home-right-col: min(var(--home-right), max(288px, calc(100vw - var(--home-left) - 480px)));
+  display: grid; grid-template-columns: var(--home-left) minmax(0, 1fr) var(--home-right-col); grid-template-rows: minmax(0, 1fr);
   background: var(--surface); color: var(--ink); font-size: var(--text-base); line-height: var(--lh-row);
   /* 右栏收起、展开时中栏同步让位（5.5）：--dur-slow + --ease-brand，减少动效时直接切。 */
   transition: grid-template-columns var(--dur-slow) var(--ease-brand);
@@ -31,10 +33,14 @@
 .leftHandle { position: absolute; top: 0; right: -3px; bottom: 0; z-index: 5; width: 6px; cursor: col-resize; touch-action: none; outline: none; }
 .leftHandle::after { content: ""; position: absolute; top: 0; bottom: 0; left: 2px; width: 2px; background: transparent; transition: background var(--dur-fast) linear; }
 .leftHandle:hover::after, .leftHandle[data-dragging]::after, .leftHandle:focus-visible::after { background: var(--hairline-strong); }
+/* 右栏左边缘的把手：同左栏，骑在右栏的左边线上。 */
+.rightHandle { position: absolute; top: 0; left: -3px; bottom: 0; z-index: 5; width: 6px; cursor: col-resize; touch-action: none; outline: none; }
+.rightHandle::after { content: ""; position: absolute; top: 0; bottom: 0; left: 2px; width: 2px; background: transparent; transition: background var(--dur-fast) linear; }
+.rightHandle:hover::after, .rightHandle[data-dragging]::after, .rightHandle:focus-visible::after { background: var(--hairline-strong); }
 .app[data-resizing] { cursor: col-resize; transition: none; user-select: none; }
 /* 展示区和对话都是单列 grid：列宽给 minmax(0, 1fr)，里面的长标题、代码块不能把这一列撑得比展示区宽（不出横向滚动、不压到右栏）。 */
 .display { position: relative; min-width: 0; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); }
-.right { min-width: 0; min-height: 0; background: var(--surface); box-shadow: inset 1px 0 0 var(--hairline); }
+.right { position: relative; min-width: 0; min-height: 0; background: var(--surface); box-shadow: inset 1px 0 0 var(--hairline); }
 .grow { flex: 1; }
 .faint { color: var(--ink-faint); font-size: var(--text-xs); }
 .missing { display: grid; place-items: center; color: var(--ink-faint); }
@@ -560,7 +566,8 @@ button.bgLabel { cursor: pointer; }
 button.bgLabel:hover { background: var(--default-soft); }
 .bgSpin { color: var(--ink-muted); animation: spin 1.1s linear infinite; }
 .bgFailCount { color: var(--danger); font-weight: 400; }
-.bgGroup ul { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+/* 列宽 minmax(0, 1fr)：长名字在行里省略，不把整栏撑出横向滚动。 */
+.bgGroup ul { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; margin: 0; padding: 0; list-style: none; }
 /* 行高 36：种类、名字、用时、停止（悬停或有焦点才出）；没有悬停底。 */
 .bgRow { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-36); padding: 0 var(--space-2); font-size: var(--text-base); line-height: var(--lh-row); }
 .bgFail { display: inline-grid; flex: none; color: var(--danger); }
@@ -571,6 +578,12 @@ button.bgLabel:hover { background: var(--default-soft); }
 .bgHold { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .bgStop { display: inline-flex; flex: none; opacity: 0; transition: opacity var(--dur-snap) var(--ease-swift); }
 .bgRow:hover .bgStop, .bgStop:focus-within, .bgRow[data-handheld] .bgStop { opacity: 1; }
+/* 右栏里的会话详情（11/11）：页头「详情」加关闭，下面一起滚——详情内容，再是这个会话的后台任务（上面一条发丝线）。 */
+.side { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100%; min-height: 0; }
+.sideHead { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-32); padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4); box-shadow: inset 0 -1px 0 var(--hairline); font-size: var(--text-base); line-height: var(--lh-row); }
+.sideScroll { min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+.sideTasks { padding: var(--space-2) var(--space-2) var(--space-4); box-shadow: inset 0 1px 0 var(--hairline); }
+.sideInfo { padding: var(--space-2) var(--space-4) var(--space-4); }
 /* 收起条：44 宽，整条都能点，悬停底；展开键和展开时的收起键同一个高度。 */
 .strip { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); width: 100%; height: 100%; padding: calc(var(--space-2) + 8px) 0; border: 0; background: none; color: var(--ink-faint); cursor: pointer; }
 .strip:hover { background: var(--default-soft); color: var(--ink-muted); }

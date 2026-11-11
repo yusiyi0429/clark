@@ -90,44 +90,12 @@ export function BackgroundPanel({ items, resources, onStop, onCollapse, handheld
   onCollapse?: () => void;
   handheld?: boolean;
 }) {
-  const groups = groupBackground(items);
-  const now = useNow(groups.running.some((item) => item.state === "running"));
   const machine = useMachine(resources.quota);
-  const [stopping, setStopping] = useState<string | null>(null);
-  const failed = groups.finished.filter((item) => item.state === "failed").length;
-  // 有失败时默认展开「已完成」；本人点过（收起或展开）就照本人的来（5.4.5）。
-  const [open, setOpen] = useState<boolean | null>(null);
-  const finishedOpen = open ?? failed > 0;
   const [acting, setActing] = useState(false);
   // 逐项检查：有一项不对时默认展开；本人点过就照本人的来。
   const [checksOpen, setChecksOpen] = useState<boolean | null>(null);
   const bad = machine.checks.some((check) => check.bad);
   const showChecks = checksOpen ?? bad;
-  /** 没停下：那一行停止按钮的位置写「失败 · 重试」（原因在 title 里），不弹 toast。 */
-  const [stopFailed, setStopFailed] = useState<{ id: string; reason: string } | null>(null);
-  const stop = async (item: BackgroundItem) => {
-    setStopping(item.id);
-    setStopFailed(null);
-    try { await onStop(item); }
-    catch (error) { setStopFailed({ id: item.id, reason: error instanceof Error ? error.message : "" }); }
-    finally { setStopping(null); }
-  };
-  const row = (item: BackgroundItem) => (
-    <li key={item.id} className={h.bgRow} data-state={item.state} data-handheld={handheld ? "" : undefined} data-testid="bg-row">
-      {item.state === "failed" ? <span className={h.bgFail}><X {...ICON} aria-label="失败" /></span> : null}
-      <span className={h.bgKind}>{KIND[item.kind]}</span>
-      <span className={h.bgTitle} title={item.title}>{item.title}</span>
-      {/* 停着等额度恢复：放不下就省略，不挤掉停止按钮。 */}
-      {item.state === "queued" && item.holdUntil ? <span className={`${h.bgTime} ${h.bgHold}`}>{queueText("quota", item.holdUntil)}</span>
-        : <span className={h.bgTime}>{item.state === "failed" ? "失败" : item.state === "stopped" ? "已停止" : item.state === "queued" ? "已排队" : duration(item.startedAt, item.finishedAt ?? now)}</span>}
-      {stopFailed?.id === item.id && stopping !== item.id ? <FailedLine inline reason={stopFailed.reason} onRetry={() => void stop(item)} />
-      : item.stoppable && (item.state === "running" || item.state === "queued") ? (
-        <span className={h.bgStop}>
-          <HeroButton variant="ghost" size="sm" isIconOnly title="停止" aria-label={`停止 ${item.title}`} isDisabled={stopping === item.id} onPress={() => void stop(item)}><Square {...ICON} /></HeroButton>
-        </span>
-      ) : null}
-    </li>
-  );
   return (
     <div className={h.bg} data-testid="background-panel">
       <div className={h.bgHead} data-testid="resources">
@@ -166,24 +134,63 @@ export function BackgroundPanel({ items, resources, onStop, onCollapse, handheld
           </>
         ) : null}
       </div>
-      <div className={h.bgBody}>
-        {groups.running.length ? (
-          <section aria-label="进行中" className={h.bgGroup}>
-            <p className={h.bgLabel}><LoaderCircle {...ICON} className={h.bgSpin} />进行中 <span className={h.num}>{groups.running.length}</span></p>
-            <ul>{groups.running.map(row)}</ul>
-          </section>
-        ) : null}
-        {groups.finished.length ? (
-          <section aria-label="已完成" className={h.bgGroup}>
-            <button type="button" className={h.bgLabel} aria-expanded={finishedOpen} onClick={() => setOpen(!finishedOpen)}>
-              <ChevronRight {...ICON} className={h.chevron} data-open={finishedOpen ? "" : undefined} />已完成 <span className={h.num}>{groups.finished.length}</span>
-              {failed ? <span className={h.bgFailCount}> · 失败 {failed}</span> : null}
-            </button>
-            {finishedOpen ? <ul>{groups.finished.map(row)}</ul> : null}
-          </section>
-        ) : null}
-      </div>
+      <div className={h.bgBody}><BackgroundTasks items={items} onStop={onStop} handheld={handheld} /></div>
     </div>
+  );
+}
+
+/** 后台任务两组（「进行中」「已完成」）：右栏默认内容里有，右栏的会话详情下面也用（这个会话的）。 */
+export function BackgroundTasks({ items, onStop, handheld = false }: { items: BackgroundItem[]; onStop: (item: BackgroundItem) => Promise<void>; handheld?: boolean }) {
+  const groups = groupBackground(items);
+  const now = useNow(groups.running.some((item) => item.state === "running"));
+  const [stopping, setStopping] = useState<string | null>(null);
+  const failed = groups.finished.filter((item) => item.state === "failed").length;
+  // 有失败时默认展开「已完成」；本人点过（收起或展开）就照本人的来（5.4.5）。
+  const [open, setOpen] = useState<boolean | null>(null);
+  const finishedOpen = open ?? failed > 0;
+  /** 没停下：那一行停止按钮的位置写「失败 · 重试」（原因在 title 里），不弹 toast。 */
+  const [stopFailed, setStopFailed] = useState<{ id: string; reason: string } | null>(null);
+  const stop = async (item: BackgroundItem) => {
+    setStopping(item.id);
+    setStopFailed(null);
+    try { await onStop(item); }
+    catch (error) { setStopFailed({ id: item.id, reason: error instanceof Error ? error.message : "" }); }
+    finally { setStopping(null); }
+  };
+  const row = (item: BackgroundItem) => (
+    <li key={item.id} className={h.bgRow} data-state={item.state} data-handheld={handheld ? "" : undefined} data-testid="bg-row">
+      {item.state === "failed" ? <span className={h.bgFail}><X {...ICON} aria-label="失败" /></span> : null}
+      <span className={h.bgKind}>{KIND[item.kind]}</span>
+      <span className={h.bgTitle} title={item.title}>{item.title}</span>
+      {/* 停着等额度恢复：放不下就省略，不挤掉停止按钮。 */}
+      {item.state === "queued" && item.holdUntil ? <span className={`${h.bgTime} ${h.bgHold}`}>{queueText("quota", item.holdUntil)}</span>
+        : <span className={h.bgTime}>{item.state === "failed" ? "失败" : item.state === "stopped" ? "已停止" : item.state === "queued" ? "已排队" : duration(item.startedAt, item.finishedAt ?? now)}</span>}
+      {stopFailed?.id === item.id && stopping !== item.id ? <FailedLine inline reason={stopFailed.reason} onRetry={() => void stop(item)} />
+      : item.stoppable && (item.state === "running" || item.state === "queued") ? (
+        <span className={h.bgStop}>
+          <HeroButton variant="ghost" size="sm" isIconOnly title="停止" aria-label={`停止 ${item.title}`} isDisabled={stopping === item.id} onPress={() => void stop(item)}><Square {...ICON} /></HeroButton>
+        </span>
+      ) : null}
+    </li>
+  );
+  return (
+    <>
+      {groups.running.length ? (
+        <section aria-label="进行中" className={h.bgGroup}>
+          <p className={h.bgLabel}><LoaderCircle {...ICON} className={h.bgSpin} />进行中 <span className={h.num}>{groups.running.length}</span></p>
+          <ul>{groups.running.map(row)}</ul>
+        </section>
+      ) : null}
+      {groups.finished.length ? (
+        <section aria-label="已完成" className={h.bgGroup}>
+          <button type="button" className={h.bgLabel} aria-expanded={finishedOpen} onClick={() => setOpen(!finishedOpen)}>
+            <ChevronRight {...ICON} className={h.chevron} data-open={finishedOpen ? "" : undefined} />已完成 <span className={h.num}>{groups.finished.length}</span>
+            {failed ? <span className={h.bgFailCount}> · 失败 {failed}</span> : null}
+          </button>
+          {finishedOpen ? <ul>{groups.finished.map(row)}</ul> : null}
+        </section>
+      ) : null}
+    </>
   );
 }
 
