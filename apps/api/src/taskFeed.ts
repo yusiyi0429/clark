@@ -1,5 +1,5 @@
 import type { TCardMerge, TProjectFeedItem, TProjectFeedResponse, TProjectTransfer, TTaskFeedItem } from "@warmap/contracts";
-import { effectiveOutcome, failStreak, type HandbackRow } from "./cardProjection.js";
+import { HANDBACKS_WITH_RELAY, effectiveOutcome, failStreak, handbackBrief, type HandbackRow } from "./cardProjection.js";
 import type { Query } from "./meetingStore.js";
 import type { GoalRow } from "./projects.js";
 
@@ -27,7 +27,7 @@ type FeedCard = { id: string; title: string; status: string; plan_task_id: strin
 
 /** 这些卡的交回，按卡分（新的在前）。 */
 async function handbacksOf(q: Query, cards: FeedCard[]): Promise<Map<string, FeedHandback[]>> {
-  const handbacks = cards.length ? (await q("SELECT * FROM card_handbacks WHERE task_id=ANY($1::uuid[]) ORDER BY attempt DESC",
+  const handbacks = cards.length ? (await q(`${HANDBACKS_WITH_RELAY} WHERE h.task_id=ANY($1::uuid[]) ORDER BY h.attempt DESC`,
     [cards.map((card) => card.id)])).rows as FeedHandback[] : [];
   return new Map(cards.map((card) => [card.id, handbacks.filter((row) => row.task_id === card.id)]));
 }
@@ -38,23 +38,28 @@ function criteriaMetAt(cards: FeedCard[], byCard: Map<string, FeedHandback[]>, t
     .flatMap((card) => { const latest = latestJudged(byCard.get(card.id)!); return latest && effectiveOutcome(latest) === "pass" ? [judgedAt(latest)] : []; }).sort()[0]);
 }
 
-/** 卡的验收行：过了（每次算通过的交回一行）、受阻、合回后推翻开的返工卡。 */
+/** 卡的验收行：过了（每次算通过的交回一行）、受阻、等你补（每次一行）、合回后推翻开的返工卡。 */
 function cardItems(cards: FeedCard[], byCard: Map<string, FeedHandback[]>): TTaskFeedItem[] {
   const items: TTaskFeedItem[] = [];
   for (const card of cards) {
     const mine = byCard.get(card.id)!;
-    // 验收过了：每次算通过的交回一行（含本人「仍然通过」，那种算全部达到）。
+    // 验收过了：每次算通过的交回一行（含本人「就到这里」，那种算全部达到，gap 写本人的原因）。
     for (const row of mine) if (row.status === "done" && effectiveOutcome(row) === "pass") {
       const verdicts = row.result?.criteria ?? [];
       const total = row.result ? verdicts.length : row.criteria.length;
       items.push({ kind: "card_passed", id: `passed:${row.id}`, at: judgedAt(row), cardId: card.id, title: card.title,
-        met: row.overruled_at ? total : verdicts.filter((item) => item.verdict === "met").length, total, merge: cardMerge(row.merge) });
+        met: row.overruled_at ? total : verdicts.filter((item) => item.verdict === "met").length, total, merge: cardMerge(row.merge),
+        gap: row.overruled_at && row.outcome !== "pass" ? row.overrule_reason : null });
     }
+    // 等你补（主循环第 61 条）：每次结论是等本人补的交回一行（在验完的时间），项目对话里照第 54 条只指过去；handback 带一句人话、逐条、送到没有。
+    for (const row of mine) if (row.status === "done" && row.outcome === "needs_person")
+      items.push({ kind: "card_needs_person", id: `needs_person:${row.id}`, at: (row.finished_at ?? row.created_at).toISOString(), cardId: card.id, title: card.title,
+        handbackId: row.id, fix: row.return_text, sourceWordIssues: row.result?.sourceWordIssues ?? [], handback: handbackBrief(row) });
     // 受阻（连续两次没过，同卡的投影；完成了的卡不算）：最近那次没过的交回一行，改法是它的 return_text。
     if (card.status !== "done" && failStreak(mine) >= 2) {
-      const failed = latestJudged(mine)!;
+      const failed = mine.find((row) => row.status === "done" && effectiveOutcome(row) === "fail")!;
       items.push({ kind: "card_blocked", id: `blocked:${failed.id}`, at: judgedAt(failed), cardId: card.id, title: card.title, handbackId: failed.id, fix: failed.return_text,
-        sourceWordIssues: failed.result?.sourceWordIssues ?? [] });
+        sourceWordIssues: failed.result?.sourceWordIssues ?? [], handback: handbackBrief(failed) });
     }
     // 合回后推翻开的返工卡：理由在原卡被推翻的那次（本来通过的）交回上，取最近一次。
     if (card.rework_of_card_id) {

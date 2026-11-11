@@ -9,7 +9,7 @@ import { describeTool, homeDir, versionAtLeast } from "./claudeEnv.js";
 import { codexEnv, CodexRpcError, openCodex, withCodex, type CodexBin, type CodexRpc } from "./codexRpc.js";
 import { linkLarkSkills } from "./feishuPlugin.js";
 import { CONTEXT_COMPACTED, ContextReporter } from "./contextUsage.js";
-import { modeAllows, outsidePaths, type PathScope } from "./pathGuard.js";
+import { modeAllows, outsidePaths, permissionSummary, touchedPaths, type PathScope } from "./pathGuard.js";
 import { AgentStartError, type AgentAdapter, type AgentLaunch, type AgentRun, type PermissionAnswer, type TurnModels } from "./types.js";
 
 /** 11/10 实测基于 codex-cli 0.159.2（app-server 的 turn/steer、两种批准、mcpServer/elicitation 都在稳定接口里）。 */
@@ -61,7 +61,8 @@ function errorKindOf(info: unknown): string {
   return "other";
 }
 
-interface Pending { kind: "command" | "file" | "mcp"; rpcId: number | string; steps: { tool: string; input: Record<string, unknown> }[]; hint: string | null; turnId: string }
+/** reason：Codex 请求批准时给的理由（主循环第 64 条，有才有）。 */
+interface Pending { kind: "command" | "file" | "mcp"; rpcId: number | string; steps: { tool: string; input: Record<string, unknown> }[]; hint: string | null; turnId: string; reason?: unknown }
 
 export class CodexRun implements AgentRun {
   private readonly eventFns: ((e: EventBody) => void)[] = [];
@@ -232,6 +233,7 @@ export class CodexRun implements AgentRun {
       // 只有改文件能「这个会话都允许」（Codex 的 acceptForSession 只在本会话内）；命令的「以后都允许」会写进 Codex 的规则文件，不用
       canAllowForSession: p.kind === "file" && !outside.length,
       requestedAt: new Date().toISOString(),
+      ...permissionSummary(p.reason, p.steps.flatMap((s) => touchedPaths(s.tool, s.input, scope))),
     };
     this.emit({ type: "permission_request", request: view });
   }
@@ -240,12 +242,12 @@ export class CodexRun implements AgentRun {
     const requestId = `cx-${String(id)}-${String(p.itemId ?? p.turnId ?? "")}`.slice(0, 120);
     if (method === "item/commandExecution/requestApproval") {
       const cwd = typeof p.cwd === "string" ? p.cwd : null;
-      this.ask(requestId, { kind: "command", rpcId: id, steps: [{ tool: SHELL, input: { command: commandOf(p) } }], hint: cwd, turnId: String(p.turnId ?? "") });
+      this.ask(requestId, { kind: "command", rpcId: id, steps: [{ tool: SHELL, input: { command: commandOf(p) } }], hint: cwd, turnId: String(p.turnId ?? ""), reason: p.reason });
       return;
     }
     if (method === "item/fileChange/requestApproval") {
       const item = this.items.get(String(p.itemId));
-      this.ask(requestId, { kind: "file", rpcId: id, steps: fileSteps(Array.isArray(item?.changes) ? item.changes : []), hint: null, turnId: String(p.turnId ?? "") });
+      this.ask(requestId, { kind: "file", rpcId: id, steps: fileSteps(Array.isArray(item?.changes) ? item.changes : []), hint: null, turnId: String(p.turnId ?? ""), reason: p.reason });
       return;
     }
     if (method === "mcpServer/elicitation/request" && p._meta?.codex_approval_kind === "mcp_tool_call") {

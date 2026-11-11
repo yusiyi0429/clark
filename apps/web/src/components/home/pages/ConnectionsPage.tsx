@@ -27,6 +27,7 @@ import { feishuConnectHref, readFeishuConnection, type FeishuConnection } from "
 import { usageCells } from "@/lib/home/quota";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { linkCloud, type LinkPerson } from "@/lib/local/link";
+import { modelDisplayName } from "@/lib/local/runModel";
 import type { SecondaryPageProps } from "./index";
 import { TokenHubDialog } from "./TokenHubDialog";
 import { AddSourceDialog } from "../AddSourceDialog";
@@ -106,7 +107,7 @@ function ThisComputer({ me }: { me: Me | null }) {
               action={<HeroButton variant="tertiary" size="sm" onPress={() => setSourceDialog({ source: null })}>添加</HeroButton>}>
               {added.map((source) => (
                 <div key={source.id} className={p.sub} title={source.baseUrl} data-testid="source-row">
-                  <b>{source.name}</b><span className={p.path}>{source.models.map((model) => model.name).join(" · ")}</span><span className={p.grow} />
+                  <b>{source.name}</b><span className={p.path}>{source.models.map((model) => modelDisplayName(model.name)).join(" · ")}</span><span className={p.grow} />
                   <HeroButton variant="ghost" size="sm" onPress={() => setSourceDialog({ source })}>换 Key</HeroButton>
                   <HeroButton variant="ghost" size="sm" isIconOnly title="删除" aria-label={`删除 ${source.name}`}
                     onPress={() => actions.run(`source:${source.id}`, async () => { await local.runner.deleteSource(source.id); await local.refresh(); })}><X {...ICON} /></HeroButton>

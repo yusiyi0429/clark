@@ -20,7 +20,7 @@ export const MARK_LABEL: Record<WorkerMark, string> = { approval: "等你批准"
 /** 「等你」：要本人动手的几种。 */
 export const WAITING: WorkerMark[] = ["needs_person", "approval", "reply", "review_failed", "blocked"];
 export const isWaiting = (mark: WorkerMark | null) => !!mark && WAITING.includes(mark);
-const REASON: Record<NonNullable<TWorkerItem["queueReason"]>, QueueReason> = { not_dispatched: "start", slot: "slot", device_offline: "offline", prior_cards: "after", quota: "quota" };
+const REASON: Record<NonNullable<TWorkerItem["queueReason"]>, QueueReason> = { not_dispatched: "start", slot: "slot", device_offline: "offline", prior_cards: "after", quota: "quota", folder_busy: "folder" };
 
 export type Worker = {
   key: string;

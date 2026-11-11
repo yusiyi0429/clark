@@ -1,5 +1,5 @@
 import { existsSync, lstatSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { insideAny } from "../folders.js";
 import { TOOL_SERVER_PREFIX } from "../customTools.js";
 
@@ -365,4 +365,37 @@ export function suggestionsReachOutside(suggestions: unknown, scope: PathScope):
     }
   }
   return false;
+}
+
+/** 像文件或文件夹的词：带分隔符、带扩展名，或者工作目录里有这个东西。 */
+function looksLikePath(w: string, s: PathScope): boolean {
+  return /[\/]/.test(w) || /\.\w{1,10}$/.test(w) || existsSync(resolve(s.cwd, w));
+}
+
+/**
+ * 这一步会动的文件（主循环第 64 条，批准框第二行「会动：…」）：改文件的工具按字段取；Bash、PowerShell 只在命令会写、删、挪文件时（WRITES）从命令里尽力认，
+ * 认不全、可能认错，只给人看。工作目录里的写相对路径（正斜杠），外面的写绝对路径。认不出、只读的回空。
+ */
+export function touchedPaths(tool: string, input: Record<string, unknown>, scope: PathScope): string[] {
+  let words: string[] = [];
+  if (EDIT_TOOLS.has(tool)) words = (FILE_FIELDS[tool] ?? []).map((f) => input[f]).filter((v): v is string => typeof v === "string");
+  else if (SHELL_TOOLS.has(tool) && typeof input.command === "string" && WRITES.test(input.command)) {
+    words = shellCandidates(input.command, tool === "Bash").filter((w) => !w.startsWith("-") && !HARMLESS.has(w.toLowerCase()) && looksLikePath(w, scope));
+  }
+  const out: string[] = [];
+  for (const w of words) {
+    const abs = resolve(scope.cwd, w);
+    const rel = relative(scope.cwd, abs);
+    const shown = rel && !rel.startsWith("..") && !isAbsolute(rel) ? rel.split(sep).join("/") : abs;
+    if (!out.includes(shown)) out.push(shown);
+    if (out.length >= MAX_PATHS) break;
+  }
+  return out;
+}
+
+/** 批准请求给人看的那两项（主循环第 64 条）：执行方写的一句「要做什么」和会动的文件，有才带。 */
+export function permissionSummary(description: unknown, paths: string[]): { description?: string; paths?: string[] } {
+  const text = typeof description === "string" ? description.trim().slice(0, 300) : "";
+  const files = [...new Set(paths)].slice(0, MAX_PATHS);
+  return { ...(text ? { description: text } : {}), ...(files.length ? { paths: files } : {}) };
 }

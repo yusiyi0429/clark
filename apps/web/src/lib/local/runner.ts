@@ -43,6 +43,8 @@ export type EventWatch = {
  * 老版本（protocol 1）的发话请求是 strict，带了整个请求回 400：不带、不先画，和原来一样。
  */
 export const acceptsClientMessageId = (health: Pick<TLocalHealthResponse, "protocol">): boolean => health.protocol >= 2;
+/** 本机程序收不收自由子会话（第 68 条，开工请求带 free）：protocol ≥ 4。老版本开工请求是 strict，带了整个 400。 */
+export const acceptsFreeSession = (health: Pick<TLocalHealthResponse, "protocol">): boolean => health.protocol >= 4;
 /** 本机程序收不收转话带的 agreementRevision（主循环第 60 条，卡的约定改了）：protocol ≥ 3；老版本带了整句 400，不带。 */
 export const acceptsAgreementRevision = (health: Pick<TLocalHealthResponse, "protocol">): boolean => health.protocol >= 3;
 
@@ -50,6 +52,8 @@ export interface LocalRunner {
   readonly kind: "http" | "mock";
   /** 见 acceptsClientMessageId：读过 health 以后才知道；没读过当不收。 */
   readonly clientMessageIds?: boolean;
+  /** 见 acceptsFreeSession：读过 health 以后才知道；没读过当不收。 */
+  readonly freeSessions?: boolean;
   health(): Promise<TLocalHealthResponse>;
   startPairing(clientLabel: string): Promise<TLocalPairingStartResponse>;
   pairingStatus(pairingId: string): Promise<TLocalPairingStatusResponse>;

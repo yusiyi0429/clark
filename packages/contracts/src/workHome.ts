@@ -105,6 +105,15 @@ export const SubSession = Type.Object({
   updatedAt: Instant,
   merge: Nullable(CardMerge),
   holdUntil: Nullable(Instant),
+  /** 自由子会话（第 68 条，项目下的「+」开的，带 free 的专题）：界面上就是一个子会话，不叫专题，没有提纲、版本、评审会。不是的不带。 */
+  free: Type.Optional(Type.Literal(true)),
+  /**
+   * queueReason = folder_busy 时占着文件夹的那个子会话（第 68 条）：kind、id 同 SubSession；letter 是它在项目里的字母（不在项目里为 null）；title 是标题。
+   * 界面「已排队 · 等 B 改登录页 这一轮做完」。别的时候不带。
+   */
+  heldBy: Type.Optional(Type.Object({
+    kind: Type.Union([Type.Literal("card"), Type.Literal("topic")]), id: Type.String({ minLength: 1 }), letter: Nullable(SubSessionLetter), title: Type.String(),
+  }, strict)),
 }, strict);
 
 /**

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createMockRunner, mockDisplayName } from "@/lib/local/mock";
 import { LocalRunnerError } from "@/lib/local/runner";
 import { localPanelRows, panelLabel } from "@/lib/local/modelPanel";
-import { defaultSourceLabel, pillSource, sessionModelText } from "@/lib/local/runModel";
+import { sessionModelText } from "@/lib/local/runModel";
 import { latestPerSeries, sourceFailure } from "./AddSourceDialog";
 
 describe("添加来源（17.2 第 52 条）", () => {
@@ -44,18 +44,15 @@ describe("添加来源（17.2 第 52 条）", () => {
     expect((await runner.listModels()).some((profile) => profile.sourceId)).toBe(false);
   });
 
-  it("胶囊：不是默认来源时模型名后面多写来源，「Anthropic 官方 API」写「API」：「Opus 5.5 · API · 最高」；默认来源照旧", async () => {
+  it("胶囊一律写全「来源 · 模型 · 思考」（67 条）：加进来的来源写它的名字，默认来源也写", async () => {
     const runner = createMockRunner({ stepMs: 1 });
     const { profiles } = await runner.addSource({ apiKey: "sk-ant-x", presetId: "anthropic", plan: "api", models: ["claude-opus-5-5"] });
-    const fallback = defaultSourceLabel(profiles);
-    expect(fallback).toBe("Claude 订阅");
-    expect(pillSource("Anthropic 官方 API")).toBe("API");
     const api = profiles.find((profile) => profile.sourceId === "anthropic-api")!;
-    expect(panelLabel({ ...api, efforts: ["low", "max"] }, "max", fallback)).toBe("Opus 5.5 · API · 最高");
-    expect(panelLabel(profiles.find((profile) => profile.id === "sub-haiku")!, "high", fallback)).toBe("Haiku 5.5 · 高");
+    expect(panelLabel({ ...api, efforts: ["low", "max"] }, "max")).toBe("Anthropic 官方 API · Opus 5.5 · 最高");
+    expect(panelLabel(profiles.find((profile) => profile.id === "sub-haiku")!, "high")).toBe("Claude 订阅 · Haiku 5.5 · 高");
     const run = { origin: { provider: "anthropic", label: "Anthropic 官方 API", via: null }, modelName: "Opus 5.5" };
-    expect(sessionModelText({ run, agent: "claude-code", effort: "max" } as never, ["max"], fallback)?.label).toBe("Opus 5.5 · API · 最高");
-    expect(sessionModelText({ run: { ...run, origin: { provider: "claude-subscription", label: "Claude 订阅", via: null } }, agent: "claude-code", effort: "max" } as never, ["max"], fallback)?.label).toBe("Opus 5.5 · 最高");
+    expect(sessionModelText({ run, agent: "claude-code", effort: "max" } as never, ["max"])?.label).toBe("Anthropic 官方 API · Opus 5.5 · 最高");
+    expect(sessionModelText({ run: { ...run, origin: { provider: "claude-subscription", label: "Claude 订阅", via: null } }, agent: "claude-code", effort: "max" } as never, ["max"])?.label).toBe("Claude 订阅 · Opus 5.5 · 最高");
   });
 
   it("假本机开工写的模型名照本机的 modelDisplayName：claude-sonnet-5-5 →「Sonnet 5.5」，日期版本去掉，别名写跑出来的那一版，网关的去掉厂商前缀", async () => {

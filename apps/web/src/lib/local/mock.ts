@@ -257,16 +257,26 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
   const queue = () => [...sessions.values()].filter((s) => s.summary.status === "queued")
     .sort((a, b) => rank(a) - rank(b) || a.summary.createdAt.localeCompare(b.summary.createdAt));
   const renumber = () => queue().forEach((s, i) => { s.summary = { ...s.summary, queuePosition: i + 1 }; });
-  /** 不是 git 仓库的文件夹里已经有一张卡在做（同一个文件夹同时只做一张）。 */
-  const folderBusy = (s: MockSession) => {
+  /** 不是 git 仓库的文件夹里已经有一个在改的（卡或自由子会话，第 68 条；同一个文件夹同时只许一个）：占着它的那个会话，没有为 undefined。 */
+  const folderHolder = (s: Pick<MockSession, "summary">) => {
     const ws = s.summary.workspace;
-    return ws?.kind === "folder" && [...sessions.values()].some((other) => other !== s && other.summary.workspace?.kind === "folder"
+    return ws?.kind !== "folder" ? undefined : [...sessions.values()].find((other) => other !== s && other.summary.workspace?.kind === "folder"
       && other.summary.workspace.folder === ws.folder && OCCUPYING.has(other.summary.status));
   };
-  /** 有空位就按先后接上（文件夹被占着的、等前面的卡的跳过），其余的重新编号。 */
+  const folderBusy = (s: MockSession) => !!folderHolder(s);
+  /** 排队时占着文件夹的是谁（契约 LocalFolderHolder）。 */
+  const holderOf = (s: Pick<MockSession, "summary">): TLocalSessionSummary["heldBy"] => {
+    const other = folderHolder(s)?.summary;
+    const id = other?.subject.cardId ?? other?.subject.topicId;
+    return other && id ? { kind: other.subject.kind === "card" ? "card" : "topic", id, title: other.title } : undefined;
+  };
+  /** 有空位就按先后接上（文件夹被占着的、等前面的卡的跳过），其余的重新编号、重报在等谁。 */
   const promote = () => {
     let free = maxConcurrent - slots().running;
     for (const s of queue()) {
+      const { heldBy: _held, ...rest } = s.summary;
+      const heldBy = holderOf(s);
+      s.summary = heldBy ? { ...rest, heldBy } : rest;
       if (free > 0 && !folderBusy(s) && !s.summary.waitingFor) {
         free--;
         s.summary = { ...s.summary, queuePosition: null };
@@ -482,7 +492,8 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
   return {
     kind: "mock",
     clientMessageIds: true,
-    health: async () => ({ app: "tianshu-local", version: "0.1.0-mock", protocol: 3, platform: "win32", tokenValid: Boolean(token), slots: slots() }),
+    freeSessions: true,
+    health: async () => ({ app: "tianshu-local", version: "0.1.0-mock", protocol: 4, platform: "win32", tokenValid: Boolean(token), slots: slots() }),
     startPairing: async () => ({ pairingId: "mock-pairing", code: "4821", expiresAt: new Date(Date.now() + 120_000).toISOString() }),
     pairingStatus: async () => { token = "mock-token-0000000000000000000000"; return { status: "approved", token }; },
     unpair: async () => { token = ""; },
@@ -806,10 +817,13 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
     const model = models().find((m) => m.id === body.modelProfileId) ?? MODELS[0]!;
     // 规划员只能用 Claude Code（D 契约 b28c1f12）。
     if (model.agent === "codex" && body.subject.kind === "plan") throw new LocalRunnerError("validation", "规划员只能用 Claude Code", 400);
+    // 自由子会话（第 68 条）只给专题。
+    if (body.free && body.subject.kind !== "topic") throw new LocalRunnerError("validation", "只有专题能带 free", 400);
     const id = crypto.randomUUID();
     const cardId = body.subject.kind === "card" ? body.subject.cardId : undefined;
     const slug = body.title.replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase().slice(0, 30);
-    const workspace: TLocalWorkspace | undefined = !cardId || !body.cwd ? undefined : body.cwd === REPO
+    // 自由子会话在项目文件夹里直接做：普通文件夹和卡一样占着（kind=folder），git 仓库不开工作树。
+    const workspace: TLocalWorkspace | undefined = body.free && body.cwd && body.cwd !== REPO ? { kind: "folder", folder: body.cwd } : !cardId || !body.cwd ? undefined : body.cwd === REPO
       ? { kind: "worktree", folder: REPO, path: `C:\\Users\\me\\.tianshu-local\\worktrees\\${cardId}`, branch: `tianshu/${cardId.slice(0, 8)}${slug ? `-${slug}` : ""}`,
         baseBranch: "main", baseCommit: sha(`${cardId}:base`), mergedCommit: null }
       : { kind: "folder", folder: body.cwd };
@@ -823,6 +837,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
       log: [], listeners: new Set(), drafters: new Set(), script: body.subject.kind === "plan" ? planner : body.subject.kind === "verify" ? verifier : cardScript(body.title), cursor: 0, timer: null, pending: null, paused: false, denied: false, mergeTries: 0,
       ...(waitingFor.length ? { waits: { workspace } } : {}),
     };
+    if (busy) { const heldBy = holderOf(s); if (heldBy) s.summary = { ...s.summary, heldBy }; }
     sessions.set(id, s);
     if (full) renumber();
     emit(s, { type: "status", status: s.summary.status, ...(busy ? { reason: FOLDER_BUSY } : {}) });

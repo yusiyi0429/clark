@@ -14,7 +14,7 @@ import type { SessionView } from "@/lib/local/sessionView";
 import type { SubSession, WorkHomeData } from "./types";
 
 export type Attention = NonNullable<SubSession["waiting"]>;
-export const ATTENTION_LABEL: Record<Attention, string> = { approval: "等你批准", question: "在问你", verdict: "等你拿主意", merge: "等你合回", needs_person: "等你补" };
+export const ATTENTION_LABEL: Record<Attention, string> = { approval: "等你批准", question: "在问你", verdict: "等你拿主意", needs_person: "等你补", merge: "等你合回" };
 
 /** 本机这一个会话现在的样子：状态、挂着几个批准、有没有在问、工作树合没合回（later：本人点了先不合；不在工作树里做为 null）。 */
 export type LocalAsk = { status: TLocalSessionStatus | null; pending: number; question: boolean; merge: "needs" | "merged" | "later" | null };
@@ -36,6 +36,7 @@ export function attentionOf(cloud: Attention | null, local: LocalAsk | null): At
   if (!local) return cloud;
   const here = localAsk(local);
   if (here) return here;
+  // 受阻、等你补（主循环第 61 条）都只有云端知道，执行方又在跑了（补了一句、按改法在改）时不算在等本人。
   if ((cloud === "verdict" || cloud === "needs_person") && !(local.status && ALIVE.has(local.status))) return cloud;
   if (local.merge === "needs" || (cloud === "merge" && local.merge === null)) return "merge";
   return null;

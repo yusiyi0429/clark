@@ -62,7 +62,7 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       expect((await f.grant()).json()).toEqual(granted);
       const all = await list();
       expect(all.authority).toEqual(granted);
-      expect(all.actions).toHaveLength(27);
+      expect(all.actions).toHaveLength(28);
       expect(all.actions.find((action: { name: string }) => action.name === "send_message")).toMatchObject({ kind: "write", parameters: { type: "object" } });
 
       expect((await f.act("fly_away", {})).json().code).toBe("UNKNOWN_ACTION");
@@ -364,13 +364,9 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       await report("stopped", { why: "held", summary: null, blocker: "订阅额度用完，14:00 恢复", outputs: [] });
       expect((await feed()).filter((item) => item.kind === "sub_session_report").map((item) => [item.why, item.blocker])).toEqual([["turn_done", null],
         ["held", "订阅额度用完，14:00 恢复"]]);
-      // 报告替本人给项目主管线发了一句，它回了一小轮（项目对话里）。
-      const said = async () => (await f.t.sql(`SELECT m.content FROM conversation_messages m JOIN conversations c ON c.id=m.conversation_id
-        WHERE c.scope=$1 AND m.role='user' ORDER BY m.sequence`, [`project:${project}`])).map((row) => row.content as string);
-      for (let i = 0; i < 60 && (await said()).length < 2; i++) await new Promise((resolve) => setTimeout(resolve, 50));
-      expect(await said()).toEqual(["【子会话回报】A · 规划员岗位初版：做完一轮停下了。\n它最后说：规划员岗位写好了，放在 planner.md。\n这一轮交了：规划员岗位、截图\n"
-        + "请用一两句话告诉本人这意味着什么、下一步怎么办；要本人拿主意时讲清选项，只问一个问题。",
-      "【子会话回报】A · 规划员岗位初版：停着等（订阅额度用完，14:00 恢复）。\n请用一两句话告诉本人这意味着什么、下一步怎么办；要本人拿主意时讲清选项，只问一个问题。"]);
+      // 主循环第 63 条：报告不再替本人给项目主管线发一句、不让它回一小轮——项目对话里一条消息都没有（没跑模型）。
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(await f.t.sql(`SELECT 1 FROM conversation_messages m JOIN conversations c ON c.id=m.conversation_id WHERE c.scope=$1`, [`project:${project}`])).toEqual([]);
       // 停下按字母走 stop_sub_session：登记「请这台电脑停掉」。
       expect((await act("sub_session_stop", { letter: "A" })).json().summary).toBe("已请那台电脑停掉「A · 规划员岗位初版」（本人电脑上开着天枢网页时马上停）");
       expect((await f.call("POST", "/api/me/session-stops/claim", { deviceId: machine.device })).json().stops).toEqual([expect.objectContaining({ subSessionId: a, sessionId: session })]);
@@ -440,6 +436,32 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       expect((await f.call("PATCH", `/api/me/projects/${project.projectId}`, { autoRelayLimit: null })).json().autoRelayLimit).toBeNull();
       for (let i = 0; i < 25; i++) expect((await tell(`不限 ${i}`)).statusCode).toBe(200);
       expect(await waiting()).toEqual([]);
+    } finally { await f.close(); }
+  });
+  it("主循环第 60 条：项目管线用 update_card 改卡的约定（按字母或卡 id，原因必带），记一条 by pipeline 的修改；只在项目对话里能用", async () => {
+    const f = await fixture();
+    try {
+      await f.grant();
+      const project = (await f.call("POST", "/api/me/projects", { name: "品牌建设" })).json().projectId as string;
+      const card = await f.agentCard("候选名初查");
+      await f.t.sql("UPDATE tasks SET project_id=$2,plan_task_id=NULL WHERE id=$1", [card, project]);
+      const conversation = randomUUID();
+      await f.t.sql("INSERT INTO project_pipelines(project_id,owner_id,conversation_id) VALUES($1,$2,$3)", [project, TEST_MEMBER.personId, conversation]);
+      await f.call("GET", "/api/me/work-home"); // 读首页时给子会话编字母
+      const update = (args: Record<string, unknown>, conversationId: string | null = conversation) => f.t.app.inject({ method: "POST",
+        url: "/internal/me/buddy-actions/update_card", headers: { authorization: `Bearer ${TOKEN}`, "x-owner-id": TEST_MEMBER.personId },
+        payload: { args, ...(conversationId ? { conversationId } : {}), runId: randomUUID() } });
+
+      const done = await update({ letter: "A", standards: ["列出 3 个候选名", "近似商标由本人查"], reason: "本人说商标网要他自己查" });
+      expect(done.statusCode).toBe(200);
+      expect(done.json().summary).toBe("改了 A · 候选名初查 的约定（第 2 版）");
+      expect((await f.call("GET", `/api/me/cards/${card}/agreement-changes`)).json().changes).toEqual([expect.objectContaining({ revision: 2,
+        by: { kind: "pipeline", name: "管线" }, reason: "本人说商标网要他自己查", after: { brief: null, standards: ["列出 3 个候选名", "近似商标由本人查"] } })]);
+      expect((await update({ cardId: card, brief: "先查商标网", reason: "补一句交代" })).json().summary).toBe("改了 「候选名初查」 的约定（第 3 版）");
+      expect((await update({ letter: "A", cardId: card, brief: "x", reason: "r" })).json().code).toBe("INVALID_ARGS");
+      expect((await update({ letter: "A", reason: "r" })).json().code).toBe("INVALID_ARGS");
+      expect((await update({ letter: "A", standards: ["x"] })).json().code).toBe("INVALID_ARGS");
+      expect((await update({ letter: "A", standards: ["x"], reason: "r" }, null)).json().code).toBe("PROJECT_ONLY");
     } finally { await f.close(); }
   });
   it("伙伴改 Task 的验收截止日（set_task_due_date），能撤回原来的", async () => {
