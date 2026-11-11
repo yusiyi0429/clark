@@ -27,7 +27,6 @@ import type { TLocalAttachmentRef, TLocalEffort, TLocalPermissionMode, TLocalSes
 import { PermissionModeMenu } from "./PermissionMode";
 import { ApprovalDecision, DENY_MAX, awayChip } from "@/components/work/decisions";
 import { DecisionBox, FailedLine } from "@/components/work/DecisionBox";
-import { HeroButton } from "@/components/HeroButton";
 import { ICON, StateIcon, type IconState } from "@/components/home/StateIcon";
 import { ReceiptFailed, ReceiptSending, ReceiptTicks } from "@/conversation/Transcript";
 import h from "@/styles/home.module.css";
@@ -315,14 +314,10 @@ export function useSessionSend(runner: LocalRunner, sessionId: string | null, vi
   return { entries, say: outbox.say, retry: outbox.retry };
 }
 
-/** 子会话页里转给 Task 管线去答的那一处（14.3）：一行问题原话，加「去回答」（次按钮），点了跳到 Task 管线那个框。 */
-export function RelayLine({ text, onGo }: { text: string; onGo: () => void }) {
-  return <p className={s.relay} data-testid="relay-line"><span>{text}</span><HeroButton variant="tertiary" size="sm" onPress={onGo}>去回答</HeroButton></p>;
-}
 
 type UserEntry = Extract<SessionEntry, { kind: "user" }>;
 
-export function SessionTranscript({ entries, agentName, canAct, device, onDecide, lead, tail, asking, live, starting = false, ended = false, relay, onResend, onRetry, onFile }: {
+export function SessionTranscript({ entries, agentName, canAct, device, onDecide, lead, tail, asking, live, starting = false, ended = false, pinned = false, onResend, onRetry, onFile }: {
   entries: SessionEntry[];
   agentName: string;
   canAct: boolean;
@@ -341,8 +336,8 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
   starting?: boolean;
   /** 会话已经结束（退出、失败、交完收工）：没批的权限收成「已失效」。 */
   ended?: boolean;
-  /** 提问、批准由 Task 管线转达（新首页 14.3）：这里不画选项框，只一行原话加「去回答」。 */
-  relay?: (() => void) | null;
+  /** 没答的批准钉在输入框上方（第 54 条）：对话里那一处先不画，答了、失效了照常收成一行。 */
+  pinned?: boolean;
   /** 没读到的那句再发一遍（只发原话；这里答不了时不给）。 */
   onResend?: (entry: UserEntry) => void;
   /** 先画出来却没发出去的那句再发一遍（useSessionSend.retry，同一个编号）。 */
@@ -385,7 +380,7 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
           case "permission":
             if (ended) return <DecisionBox key={entry.seq} kind="approval" title={entry.request.title} options={[]} onPick={noop} expired />;
             if (entry.request.requestId !== firstPending) return null;
-            return relay ? <RelayLine key={entry.seq} text={entry.request.title} onGo={relay} /> : <ApprovalDecision key={entry.seq} requests={pending} blocked={canAct ? null : awayChip(device)} onDecide={onDecide} />;
+            return pinned ? null : <ApprovalDecision key={entry.seq} requests={pending} blocked={canAct ? null : awayChip(device)} onDecide={onDecide} />;
           case "artifact": {
             const open = onFile?.(entry.fileName) ?? null;
             return <div key={entry.seq} className={s.step}><StateIcon state="done" />
@@ -462,7 +457,7 @@ export function useModelChangedRefresh(entries: SessionEntry[], refresh: () => u
   useEffect(() => { if (changed !== null) void refresh(); }, [changed, refresh]);
 }
 
-export function SessionComposer({ label, disabled, onSend, dock, subject, mode, place, model, models, context, busy = false, onStop }: {
+export function SessionComposer({ label, disabled, onSend, dock, pinned, subject, mode, place, model, models, context, busy = false, onStop }: {
   /** 发一句（useSessionSend.say）：附件由它传云端（POST /api/me/sub-sessions/:kind/:id/attachments）再交给本机。 */
   label: string; disabled: boolean; onSend: (text: string, files: File[]) => Promise<boolean>; dock?: ReactNode;
   subject: TSessionAttachment["subject"];
@@ -476,9 +471,12 @@ export function SessionComposer({ label, disabled, onSend, dock, subject, mode, 
   /** 会话在跑（27 条）：右边没字时是停止方块（onStop，本机 interrupt），有字时照样能发（插话），同项目对话、伙伴台。 */
   busy?: boolean;
   onStop?: () => void;
+  /** 等本人处理的框（第 54 条）：钉在输入框上方。 */
+  pinned?: ReactNode;
 }) {
   return (
     <div className={s.composerDock}>
+      {pinned ? <div className={s.pinned} data-testid="pinned">{pinned}</div> : null}
       <InputBar placeholder="" label={label} disabled={disabled} dock={dock} busy={busy} interruptible onStop={onStop} draftKey={`tianshu-home-draft-v1:${subject.kind}:${subject.id}`}
         footer={{
           left: place ? <FolderText name={place.name} title={place.title} /> : null,

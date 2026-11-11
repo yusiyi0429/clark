@@ -268,6 +268,5 @@ button.output:focus-visible { outline: 2px solid var(--focus); outline-offset: -
 .page[data-embedded] .pulse { width: 6px; height: 6px; background: var(--accent); }
 .page[data-embedded] .docHead b { font-size: 14px; font-weight: 600; }
 .page[data-embedded] .doc { font-size: 16px; line-height: 26px; }
-/* 子会话页里转给 Task 管线去答的那一处（14.3）：一行问题原话（14 --ink），加「去回答」（次按钮）。 */
-.relay { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: var(--space-2) 0; color: var(--ink); font-size: var(--text-base); line-height: var(--lh-row); }
-.relay > span { min-width: 0; overflow-wrap: anywhere; }
+/* 等本人处理的框钉在输入框上方（第 54 条）：贴着输入框上沿，太高时自己滚。 */
+.pinned { display: grid; gap: var(--space-2); max-height: min(50vh, 420px); margin-bottom: var(--space-3); overflow-y: auto; scrollbar-width: thin; }
