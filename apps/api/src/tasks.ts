@@ -11,6 +11,7 @@ import { postThreadIntro, type ThreadIntroAgent } from "./threadIntro.js";
 import { postCoAgentMessage, threadIntroInput, type ThreadRef } from "./threads.js";
 import type { PeopleDirectory } from "./peopleDirectory.js";
 import { CARD_COLUMNS, cardsOf, type CardRow } from "./cardProjection.js";
+import { DONE_DEFINITION_LIMITS } from "@warmap/contracts";
 
 type TaskRow = {
   id: string; version: number; title: string; status: TTaskView["status"]; created_by: TTaskView["source"];
@@ -95,6 +96,12 @@ async function withCards(q: Query, tasks: TaskBase[]): Promise<TTaskView[]> {
   return tasks.flatMap((task) => { const card = cards.get(task.id); return card ? [{ ...task, card }] : []; });
 }
 const projectOne = async (q: Query, row: TaskRow, names: Map<string, string>): Promise<TTaskView> => (await withCards(q, [projectTask(row, names)]))[0];
+
+/** 完成标准有一条超过 DONE_DEFINITION_LIMITS.line 字时的提示（整份的上限由 schema 拦）；没超为 null。 */
+export function doneDefinitionProblem(doneDefinition: string | null | undefined): string | null {
+  const long = (doneDefinition ?? "").split(/\r?\n/).findIndex((line) => line.trim().length > DONE_DEFINITION_LIMITS.line);
+  return long < 0 ? null : `完成标准第 ${long + 1} 行超过 ${DONE_DEFINITION_LIMITS.line} 字，写短一些`;
+}
 
 /** 完成标准：doneDefinition 按行拆开，去掉空行和行首的列表记号（- * · • [ ] 1. 1、 (1) ①）。 */
 export function taskStandards(doneDefinition: string | null): string[] {
@@ -216,6 +223,8 @@ async function createInTransaction(client: PoolClient, ownerId: string, names: M
     return { task: (await getTaskView(queryOf(client),row.id,names))! };
   }
   if (!validDates(input.startDate ?? null,input.dueDate ?? null)) return error(400,"TASK_DATES_INVALID","计划开始不能晚于截止");
+  const tooLong = doneDefinitionProblem(input.doneDefinition);
+  if (tooLong) return error(400,"TOO_LONG",tooLong);
   const step = await appendStep(client,input.missionId);
   const id = randomUUID();
   await client.query(`INSERT INTO tasks(id,title,owner_id,created_by,status,mission_id,step_order,client_id,start_date,due_date,done_definition,plan_task_id,unplaced_reason)
@@ -272,6 +281,8 @@ export function updateMyTaskStatus(pool: Pool, ownerId: string, taskId: string, 
     const start = input.startDate === undefined ? row.start_date : input.startDate;
     const due = input.dueDate === undefined ? row.due_date : input.dueDate;
     if (!validDates(start,due)) return error(400,"TASK_DATES_INVALID","计划开始不能晚于截止");
+    const tooLong = doneDefinitionProblem(input.doneDefinition);
+    if (tooLong) return error(400,"TOO_LONG",tooLong);
     const missionId = input.missionId === undefined ? row.mission_id : input.missionId;
     // 换了 Mission，原来的 Task 不再对得上：同一请求没带新的就清掉。
     const planTaskId = input.planTaskId !== undefined ? input.planTaskId : missionId === row.mission_id ? row.plan_task_id : null;

@@ -6,7 +6,7 @@ import type { TLocalPlanEntry, TLocalRunActivity, TLocalSessionStatus, TLocalSyn
 import { MAX_MATERIAL_TEXT_CHARS, runWorker } from "./materialParser.js";
 import { htmlToText } from "./meetingEvidence.js";
 import { UUID_PATTERN } from "./meetingStore.js";
-import { taskStandards } from "./tasks.js";
+import { doneDefinitionProblem, taskStandards } from "./tasks.js";
 import { settleHandback } from "./cardAcceptance.js";
 import { saveLocalCardPlan, standardLines, type PlanTarget } from "./cardPlanner.js";
 import type { HandbackRow } from "./cardProjection.js";
@@ -285,6 +285,8 @@ async function applyType(client: PoolClient, deps: Pick<SyncDeps, "storageDir" |
       if (run.kind !== "plan" || !planned) throw new SyncReject("INVALID_SUBJECT", "派活单只收规划员的会话");
       if (!item.data.summary.trim() || item.data.cards.some((card) => !card.title.trim() || !standardLines(card.doneDefinition)))
         throw new SyncReject("INVALID_PLAN", "计划要有一句话总结，每件派活单要有标题和完成标准");
+      const tooLong = item.data.cards.map((card) => doneDefinitionProblem(card.doneDefinition)).find(Boolean);
+      if (tooLong) throw new SyncReject("INVALID_PLAN", tooLong);
       if (item.data.cards.some((card, index) => (card.after ?? []).some((after) => after > index)))
         throw new SyncReject("INVALID_PLAN", "一件只能等排在它前面的几件（after 写前面的位置，从 1 起）");
       const saved = await saveLocalCardPlan(client, { ownerId: owner.personId, runId: run.id, target: planned, plan: item.data, at, currentSequence });

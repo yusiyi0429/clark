@@ -111,6 +111,27 @@ describe("执行看板：卡的投影和看板接口", { timeout: 30_000 }, () =
     } finally { await f.close(); }
   });
 
+  it("完成标准每条 300 字、整份 2000 字：执行事项建、改都照它，派活单草稿的库约束也放开了", async () => {
+    const f = await boardFixture();
+    try {
+      const line = "看得见的结果，拿什么证明。".repeat(25).slice(0, 300);
+      const whole = Array.from({ length: 6 }, () => line).join("\n");
+      const created = await f.call("POST", "/api/me/tasks", { clientId: randomUUID(), title: "初查", missionId: "mine", planTaskId: "task-open", doneDefinition: whole });
+      expect(created.statusCode).toBe(200);
+      const { id, version } = created.json();
+      expect((await f.call("GET", `/api/me/cards/${id}`)).json().standards).toHaveLength(6);
+      const tooLong = await f.call("PATCH", `/api/me/tasks/${id}`, { version, doneDefinition: `${line}多` });
+      expect(tooLong.statusCode).toBe(400);
+      expect(tooLong.json()).toMatchObject({ code: "TOO_LONG" });
+      expect((await f.call("POST", "/api/me/tasks", { clientId: randomUUID(), title: "超长", missionId: "mine", doneDefinition: `${line}多` })).json())
+        .toMatchObject({ code: "TOO_LONG" });
+      const planId = randomUUID();
+      await f.t.sql(`INSERT INTO card_plans(id,plan_task_id,mission_id,owner_id,status) VALUES($1,'task-open','mine',$2,'done')`, [planId, TEST_MEMBER.personId]);
+      await f.t.sql(`INSERT INTO card_drafts(id,plan_id,plan_task_id,owner_id,position,title,done_definition,executor,model_tier)
+        VALUES($1,$2,'task-open',$3,0,'草稿',$4,'claude_code','normal')`, [randomUUID(), planId, TEST_MEMBER.personId, whole]);
+    } finally { await f.close(); }
+  });
+
   it("推进人改执行方、模型、交代、对哪条标准；版本不对 409；卡的详情和开工交代只给推进人", async () => {
     const f = await boardFixture();
     try {
