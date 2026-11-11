@@ -1,4 +1,5 @@
 // Word（.docx / .docm）→ Markdown：标题、段落、列表、表格照结构转，只留看得见的正文。
+// 没用标题样式、只靠「整段加粗 + 字号比正文大」写的标题，在全文一个标题样式都没用时也认成标题，字号越大级别越高。
 // 不带加粗、字体、颜色；修订取现在看到的样子（插入的算、删除的不算）；不读批注、页眉页脚、脚注。
 // 图片、图表、嵌入对象写成固定占位字；文本框里的字跟在所在段落后面。
 import { DocTextError } from "./limits.js";
@@ -8,8 +9,17 @@ import type { ZipReader } from "./zip.js";
 
 const PLACEHOLDER = { image: "【图片】", chart: "【图表】", object: "【嵌入对象】" } as const;
 
-interface Style { name: string; basedOn?: string; outline?: number; numId?: string; ilvl?: number }
-type Block = { md: string; list: boolean };
+interface Style { name: string; basedOn?: string; outline?: number; numId?: string; ilvl?: number; sz?: number; b?: boolean }
+interface Styles { map: Map<string, Style>; defaultId?: string; defaultSz: number }
+/** look：这段像不像手写的标题（整段加粗、字号比正文大），像就记下字号。 */
+type Block = { md: string; list: boolean; look?: number };
+/** 一个有字的 run 自己身上的字号（半磅）和加粗，没写是 undefined。 */
+type RunLook = { chars: number; sz?: number; b?: boolean };
+
+/** 手写标题最多这么多字。 */
+const LOOK_HEADING_MAX_CHARS = 60;
+/** 手写标题的字号至少是正文的这么多倍（10.5 磅正文配 11 磅加粗不算，配 12 磅算）。 */
+const LOOK_HEADING_MIN_RATIO = 1.1;
 
 export function docxToMarkdown(zip: ZipReader): string {
   const docPart = relOfType(readRels(zip, ""), "officeDocument")?.target ?? "word/document.xml";
@@ -18,16 +28,28 @@ export function docxToMarkdown(zip: ZipReader): string {
   const body = find(parseTree(docXml), "body");
   if (!body) throw new DocTextError("corrupt", "转不了：文件坏了，或者不是 Word 文件");
   const rels = readRels(zip, docPart);
-  const ctx = new Ctx(readStyles(zip, relOfType(rels, "styles")?.target), readNumbering(zip, relOfType(rels, "numbering")?.target));
+  const styles = readStyles(zip, relOfType(rels, "styles")?.target);
+  const ctx = new Ctx(styles, readNumbering(zip, relOfType(rels, "numbering")?.target), bodySize(body, styles));
   ctx.blocks(body.children);
+  if (!ctx.styledHeading) {
+    // 全文没用标题样式：把手写的标题按字号从大到小排成 1、2、3… 级
+    const sizes = [...new Set(ctx.out.map((b) => b.look ?? 0).filter(Boolean))].sort((a, b) => b - a);
+    for (const b of ctx.out) if (b.look) b.md = `${"#".repeat(Math.min(6, sizes.indexOf(b.look) + 1))} ${b.md}`;
+  }
   return join(ctx.out);
 }
 
 class Ctx {
   readonly out: Block[] = [];
+  /** 有没有用标题样式（或大纲级别）的段落。 */
+  styledHeading = false;
   private listLevel = -1;
 
-  constructor(private readonly styles: Map<string, Style>, private readonly numFmt: (numId: string, ilvl: number) => string | undefined) {}
+  constructor(
+    private readonly styles: Styles,
+    private readonly numFmt: (numId: string, ilvl: number) => string | undefined,
+    private readonly bodySz: number,
+  ) {}
 
   blocks(nodes: XNode["children"]): void {
     for (const n of nodes) {
@@ -46,14 +68,17 @@ class Ctx {
   }
 
   private paragraph(p: XNode): void {
-    const { text, boxes } = paraText(p);
+    const { text, boxes, runs } = paraText(p);
     const md = paragraphMd(text);
     if (md) {
       const pPr = kid(p, "pPr");
       const styleId = kid(pPr, "pStyle")?.attrs.val;
       const level = this.headingLevel(pPr, styleId);
       const num = level ? undefined : this.numbering(pPr, styleId);
-      if (level) this.push({ md: `${"#".repeat(level)} ${md.replace(/\n/g, " ")}`, list: false });
+      if (level) {
+        this.styledHeading = true;
+        this.push({ md: `${"#".repeat(level)} ${md.replace(/\n/g, " ")}`, list: false });
+      }
       else if (num) {
         const lvl = Math.min(num.ilvl, this.listLevel + 1);
         this.listLevel = lvl;
@@ -63,9 +88,21 @@ class Ctx {
         const marker = fmt && fmt !== "bullet" && fmt !== "none" ? "1. " : "- ";
         const cont = "\n" + " ".repeat(lead.length + marker.length);
         this.push({ md: lead + marker + md.split("\n").join(cont), list: true });
-      } else this.push({ md, list: false });
+      } else this.push({ md, list: false, look: this.headingLook(text, runs, styleId) });
     }
     for (const box of boxes) this.blocks(box.children);
+  }
+
+  /** 整段加粗、单行、不长、每个字的字号都比正文大一成以上：回这段最小的字号；不像标题回 0。 */
+  private headingLook(text: string, runs: RunLook[], styleId: string | undefined): number {
+    const t = text.trim();
+    if (!runs.length || t.includes("\n") || [...t].length > LOOK_HEADING_MAX_CHARS) return 0;
+    let min = Infinity;
+    for (const r of runs) {
+      if (!(r.b ?? styleValue(this.styles, styleId, "b"))) return 0;
+      min = Math.min(min, r.sz ?? styleValue(this.styles, styleId, "sz") ?? this.styles.defaultSz);
+    }
+    return min >= this.bodySz * LOOK_HEADING_MIN_RATIO ? min : 0;
   }
 
   private table(tbl: XNode): string {
@@ -114,18 +151,54 @@ class Ctx {
   }
 
   private *chain(styleId: string | undefined): Generator<Style> {
-    for (let i = 0, id = styleId; id && i < 20; i++) {
-      const s = this.styles.get(id);
-      if (!s) return;
-      yield s;
-      id = s.basedOn;
-    }
+    yield* chain(this.styles.map, styleId);
   }
 }
 
-/** 一段的正文（未转义）和段里的文本框。 */
-function paraText(p: XNode): { text: string; boxes: XNode[] } {
+function* chain(map: Map<string, Style>, styleId: string | undefined): Generator<Style> {
+  for (let i = 0, id = styleId; id && i < 20; i++) {
+    const s = map.get(id);
+    if (!s) return;
+    yield s;
+    id = s.basedOn;
+  }
+}
+
+/** 段落样式链上（没写样式就用默认段落样式）第一个写了的字号或加粗。 */
+function styleValue<K extends "sz" | "b">(styles: Styles, styleId: string | undefined, key: K): Style[K] | undefined {
+  for (const s of chain(styles.map, styleId ?? styles.defaultId)) if (s[key] !== undefined) return s[key];
+  return undefined;
+}
+
+/**
+ * 正文字号：表格外、不加粗的字里，字数最多的那个字号（一样多取小的）；一个都没有就用正文样式的字号。
+ * 不看表格（表格里常用小字，会把正文字号拉低），不看加粗的（标题多、正文短时会把正文字号拉高）。
+ */
+function bodySize(body: XNode, styles: Styles): number {
+  const counts = new Map<number, number>();
+  const walk = (node: XNode): void => {
+    for (const c of node.children) {
+      if (typeof c === "string" || c.name === "tbl") continue;
+      if (c.name !== "p") { walk(c); continue; }
+      const styleId = kid(kid(c, "pPr"), "pStyle")?.attrs.val;
+      for (const r of paraText(c).runs) {
+        if (r.b ?? styleValue(styles, styleId, "b")) continue;
+        const sz = r.sz ?? styleValue(styles, styleId, "sz") ?? styles.defaultSz;
+        counts.set(sz, (counts.get(sz) ?? 0) + r.chars);
+      }
+    }
+  };
+  walk(body);
+  let best = styleValue(styles, undefined, "sz") ?? styles.defaultSz;
+  let most = 0;
+  for (const [sz, n] of counts) if (n > most || (n === most && sz < best)) { best = sz; most = n; }
+  return best;
+}
+
+/** 一段的正文（未转义）、段里的文本框、每个有字的 run 的字号和加粗。 */
+function paraText(p: XNode): { text: string; boxes: XNode[]; runs: RunLook[] } {
   const boxes: XNode[] = [];
+  const runs: RunLook[] = [];
   let text = "";
   const walk = (node: XNode): void => {
     for (const c of node.children) {
@@ -142,7 +215,10 @@ function paraText(p: XNode): { text: string; boxes: XNode[] } {
     const rPr = kid(r, "rPr");
     const vanish = kid(rPr, "vanish");
     if (vanish && vanish.attrs.val !== "0" && vanish.attrs.val !== "false") return; // 隐藏文字
+    const before = text.length;
     runKids(r.children);
+    const chars = text.slice(before).replace(/\s/g, "").length;
+    if (chars) runs.push({ chars, sz: numberOr(kid(rPr, "sz")?.attrs.val), b: onOff(kid(rPr, "b")) });
   };
   const runKids = (children: XNode["children"]): void => {
     for (const c of children) {
@@ -159,7 +235,7 @@ function paraText(p: XNode): { text: string; boxes: XNode[] } {
     }
   };
   walk(p);
-  return { text, boxes };
+  return { text, boxes, runs };
 }
 
 function shape(node: XNode, boxes: XNode[]): string {
@@ -205,25 +281,32 @@ function join(blocks: Block[]): string {
 
 // ---------- 样式和编号 ----------
 
-function readStyles(zip: ZipReader, part: string | undefined): Map<string, Style> {
-  const map = new Map<string, Style>();
+function readStyles(zip: ZipReader, part: string | undefined): Styles {
+  // 样式表里没写文档默认字号时，Word 按 10 磅（20 个半磅）
+  const styles: Styles = { map: new Map(), defaultSz: 20 };
   const xml = part ? zip.readText(part) : null;
-  if (xml === null) return map;
-  for (const s of kids(parseTree(xml), "style")) {
+  if (xml === null) return styles;
+  const root = parseTree(xml);
+  styles.defaultSz = numberOr(kid(kid(kid(kid(root, "docDefaults"), "rPrDefault"), "rPr"), "sz")?.attrs.val) ?? 20;
+  for (const s of kids(root, "style")) {
     const id = s.attrs.styleId;
     if (!id || (s.attrs.type && s.attrs.type !== "paragraph")) continue;
+    if (s.attrs.default === "1" || s.attrs.default === "true") styles.defaultId ??= id;
     const pPr = kid(s, "pPr");
+    const rPr = kid(s, "rPr");
     const numPr = kid(pPr, "numPr");
     const outline = kid(pPr, "outlineLvl")?.attrs.val;
-    map.set(id, {
+    styles.map.set(id, {
       name: (kid(s, "name")?.attrs.val ?? "").toLowerCase(),
       basedOn: kid(s, "basedOn")?.attrs.val,
       outline: outline === undefined ? undefined : outlineToLevel(outline),
       numId: kid(numPr, "numId")?.attrs.val,
       ilvl: numberOr(kid(numPr, "ilvl")?.attrs.val),
+      sz: numberOr(kid(rPr, "sz")?.attrs.val),
+      b: onOff(kid(rPr, "b")),
     });
   }
-  return map;
+  return styles;
 }
 
 function readNumbering(zip: ZipReader, part: string | undefined): (numId: string, ilvl: number) => string | undefined {
@@ -273,6 +356,13 @@ function collect(node: XNode, name: string): XNode[] {
 function outlineToLevel(val: string): number {
   const n = Number(val);
   return Number.isInteger(n) && n >= 0 && n < 9 ? Math.min(6, n + 1) : 0;
+}
+
+/** <w:b/>、<w:b w:val="1"/> 是开，val 是 0 / false / off 是关，没有这个元素是 undefined。 */
+function onOff(node: XNode | undefined): boolean | undefined {
+  if (!node) return undefined;
+  const v = node.attrs.val;
+  return v !== "0" && v !== "false" && v !== "off";
 }
 
 function numberOr(val: string | undefined): number | undefined {

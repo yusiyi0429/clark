@@ -175,6 +175,52 @@ describe("Word 转文字", () => {
       `<w:tr><w:tc>${p("第一段") + p("第二段")}</w:tc><w:tc>${p("丙")}</w:tc></w:tr></w:tbl>`;
     expect(md(makeDocx(body, { styles: "", numbering: "" }))).toBe("# 一级标题\n\n正文\n\n## 二级标题\n\n| 甲 | 乙 |\n| --- | --- |\n| 第一段<br>第二段 | 丙 |\n");
   });
+
+  describe("手写的标题（没用标题样式，只是整段加粗、字号比正文大）", () => {
+    // 照本人给的 Word 文件的写法：文档默认 11 磅、正文样式 10.5 磅，标题样式定义了但一段都没用，字号都直接写在字上，表格里是小字
+    const STYLES =
+      '<w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults>' +
+      '<w:style w:type="paragraph" w:default="1" w:styleId="a"><w:name w:val="Normal"/><w:rPr><w:sz w:val="21"/></w:rPr></w:style>' +
+      '<w:style w:type="paragraph" w:styleId="1"><w:name w:val="heading 1"/><w:basedOn w:val="a"/><w:pPr><w:outlineLvl w:val="0"/></w:pPr></w:style>';
+    const r = (text: string, rPr: string) => `<w:r><w:rPr>${rPr}</w:rPr><w:t xml:space="preserve">${text}</w:t></w:r>`;
+    const b = (sz: number) => `<w:b/><w:color w:val="1F2937"/><w:sz w:val="${sz}"/>`;
+    const para = (...runs: string[]) => `<w:p><w:pPr><w:spacing w:after="120"/></w:pPr>${runs.join("")}</w:p>`;
+    const smallTable = `<w:tbl><w:tblPr/><w:tr><w:tc>${para(r("表格里的小字".repeat(30), '<w:sz w:val="17"/>'))}</w:tc></w:tr></w:tbl>`;
+    const body =
+      para(r("方案名", b(50))) +
+      para(r("副标题", b(41))) +
+      para(r("正文第一段。", "")) +
+      smallTable +
+      para(r("一、背景", b(37))) +
+      para(r("加粗但和正文差不多大的一句。", b(22))) +
+      para(r("长".repeat(61), b(37))) +
+      para(r("一半加粗", b(37)), r("一半不加粗", '<w:sz w:val="37"/>')) +
+      para(r("二、", b(37)), r("做法", b(37))) +
+      para(r("正文第二段。", '<w:sz w:val="21"/>'));
+
+    it("按字号从大到小排成一、二、三级；加粗但不比正文大一成、太长、没整段加粗的不算；表格里的小字不拉低正文字号", () => {
+      expect(md(makeDocx(body, { styles: STYLES, numbering: "" }))).toBe(
+        [
+          "# 方案名",
+          "## 副标题",
+          "正文第一段。",
+          `| ${"表格里的小字".repeat(30)} |\n| --- |`,
+          "### 一、背景",
+          "加粗但和正文差不多大的一句。",
+          "长".repeat(61),
+          "一半加粗一半不加粗",
+          "### 二、做法",
+          "正文第二段。",
+        ].join("\n\n") + "\n",
+      );
+    });
+
+    it("全文有一段用了标题样式，就只认标题样式，加粗大字不再当标题", () => {
+      const withStyled = p("真标题", '<w:pStyle w:val="1"/>') + body;
+      const out = md(makeDocx(withStyled, { styles: STYLES, numbering: "" }));
+      expect(out.match(/^#+ .*$/gm)).toEqual(["# 真标题"]);
+    });
+  });
 });
 
 describe("Word 转不了的，明说原因，不抛", () => {

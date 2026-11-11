@@ -75,10 +75,19 @@ function compareConverted(kind: string, before: Uint8Array | null, after: Uint8A
   let aText = a?.ok ? a.markdown : null;
   let bText = b?.ok ? b.markdown : null;
   if (a?.ok && a.kind === "xlsx" && b?.ok && b.kind === "xlsx") {
-    const rows = (sheets: typeof a.sheets) => new Set(sheets.flatMap((s) => s.rows.map((r) => r.start)));
-    ({ before: aText, after: bText } = trimTables(a.markdown, b.markdown, rows(a.sheets), rows(b.sheets)));
+    // 能省略的行：表格的数据行，和批注的每一行（批注常常比表格还长）
+    const rows = (md: string, sheets: typeof a.sheets) =>
+      new Set(sheets.flatMap((s) => [...s.rows.map((r) => r.start), ...s.notes.flatMap((n) => lineStarts(md, n.start, n.end))]));
+    ({ before: aText, after: bText } = trimTables(a.markdown, b.markdown, rows(a.markdown, a.sheets), rows(b.markdown, b.sheets)));
   }
   return withChanges("converted", aText, bText);
+}
+
+/** [start, end) 里每一行的起点。 */
+function lineStarts(text: string, start: number, end: number): number[] {
+  const out = [start];
+  for (let i = text.indexOf("\n", start); i >= 0 && i + 1 < end; i = text.indexOf("\n", i + 1)) out.push(i + 1);
+  return out;
 }
 
 function withChanges(detail: "full" | "converted", before: string | null, after: string | null): FileChanges {

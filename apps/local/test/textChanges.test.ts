@@ -1,7 +1,7 @@
 // 比两份内容、切出一处一处的改动，能把其中几处恢复回去（设计第 72 条）。
 import { afterEach, describe, expect, it } from "vitest";
 import { ELLIPSIS_LINE, FILE_CHANGE_LIMITS, compareFiles, diffText, restoreFile, restoreText, type TextChange } from "../src/textChanges/index.js";
-import { makeDocx, makeXlsx, p } from "./docTextFiles.js";
+import { makeDocx, makeXlsx, noteParts, p } from "./docTextFiles.js";
 
 /** 每一处：改前那几个字 → 改后那几个字。 */
 const pieces = (a: string, b: string, cs: TextChange[]) => cs.map((c) => [a.slice(c.before.start, c.before.end), b.slice(c.after.start, c.after.end)]);
@@ -240,6 +240,21 @@ describe("Word、Excel：转文字再比（converted，只给看）", () => {
     expect(lines(r.after!).filter((l) => l === ELLIPSIS_LINE)).toHaveLength(1);
     expect(pieces(r.before!, r.after!, r.changes)).toEqual([["", "| 表头说明 | 0 |\n"], ["| 项目120 | 1200 |\n", ""]]);
     expect(r.before!.length).toBeLessThan(400);
+  });
+
+  it("Excel 大表带批注：改一格时批注也折掉；改一条批注，只留那条和上下各两行", () => {
+    const notes = (changed?: number) =>
+      noteParts(1, Array.from({ length: 20 }, (_, i): [string, string] => [`B${i + 1}`, i === changed ? "改过的批注" : `批注${i + 1}\n第二行`]));
+    const book = (data: Array<[string, string]>, changed?: number) => makeXlsx([{ name: "表", data: sheet(data) }], { extra: notes(changed) });
+    const base = rows(80);
+    const cell = compareFiles("xlsx", book(base), book(base.map((r, i): [string, string] => (i === 40 ? [r[0], "7"] : r))));
+    if (cell.detail === "none") throw new Error("应该能比");
+    expect(cell.after!.split("\n").filter((l) => l.startsWith("- B"))).toEqual([]);
+    expect(pieces(cell.before!, cell.after!, cell.changes)).toEqual([["410", "7"]]);
+    const note = compareFiles("xlsx", book(base), book(base, 9));
+    if (note.detail === "none") throw new Error("应该能比");
+    expect(note.after!.split("\n### 批注\n\n")[1]).toBe([ELLIPSIS_LINE, "- B9：批注9", "  第二行", "- B10：改过的批注", "- B11：批注11", "  第二行", ELLIPSIS_LINE, ""].join("\n"));
+    expect(pieces(note.before!, note.after!, note.changes)).toEqual([["批注10\n  第二行", "改过的批注"]]);
   });
 
   it("同样输入结果稳定", () => {
