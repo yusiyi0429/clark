@@ -127,10 +127,10 @@ describe("模型配置和子会话带上执行方和来源", { timeout: 30_000 }
       expect(JSON.stringify(now)).not.toContain("我的");
       expect(now.updatedAt).toBe(updatedAt); // 只是改名字，不算会话有更新
       expect(JSON.parse(readFileSync(file, "utf8"))).toMatchObject({ modelLabel: "Claude 订阅", updatedAt });
-      // 报给云端：多了带新名字的状态
+      // 报给云端：多了带新名字的状态，模型那一栏是「来源 · 模型 · 思考」（第 67 条）
       const later = statuses().slice(sent);
       expect(later.length).toBeGreaterThan(0);
-      expect(later.at(-1)).toMatchObject({ modelLabel: "Claude 订阅", run: { sourceLabel: "Claude 订阅", origin: { label: "Claude 订阅" } } });
+      expect(later.at(-1)).toMatchObject({ modelLabel: "Claude 订阅 · Opus 5.5 · 中", run: { sourceLabel: "Claude 订阅", origin: { label: "Claude 订阅" } } });
       // 事件记录原样
       expect(readFileSync(eventsFile, "utf8")).toBe(before);
       // 再启动一次：名字已经对了，不重报
