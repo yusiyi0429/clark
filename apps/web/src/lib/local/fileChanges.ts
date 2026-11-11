@@ -1,7 +1,7 @@
 /**
  * 这一轮改了什么（设计第 72 条第一步）：本机给改前、改后两份全文和逐处的位置（「一处」由本机切好），网页照位置画，不自己再比一遍。
  * 这里是纯函数：核对位置、按块切成「没改的」和「改了的」几段、判断一段能不能只标那几个字。
- * 标不准就整块标（改前那块划掉、改后那块标绿）：宁可标粗一点，不许标错位置。
+ * 标不准就整块标（改前那块整块划掉、改后那块整块垫底色）：宁可标粗一点，不许标错位置。
  */
 import { unified } from "unified";
 import remarkParse from "remark-parse";
@@ -22,8 +22,12 @@ export type FileChanges = {
   changes: FileChange[];
   /** 读的那一刻文件内容的指纹，恢复时原样带回去核对。 */
   revision: string;
-  detail: "full" | "none";
+  /** full 有明细、能按处恢复；converted 是 Word、Excel 转出来的 Markdown，只能看；none 只知道改过（老格式、太大、带密码）。 */
+  detail: "full" | "converted" | "none";
 };
+
+/** 一轮结束的事件里的一个文件（临时）：这一轮改了几处（拿不到明细时为 null）、新建 / 改 / 删。 */
+export type TurnFile = { path: string; changes: number | null; change: "added" | "modified" | "deleted" };
 
 export type DiffMode = "markdown" | "text";
 
@@ -31,26 +35,20 @@ export type DiffMode = "markdown" | "text";
 export type Part = { kind: "same"; text: string } | { kind: "change"; id: string; del: string; ins: string };
 
 export type Section =
-  /** 没改的：blocks 是按块切好的源文（Markdown 按顶层块，别的按行），拼起来就是这一段。 */
-  | { kind: "same"; blocks: string[] }
-  /**
-   * 改了的一段：从一块的开头到一块的结尾，含一处或相邻的几处。
-   * inline：能只标那几个字；false 时整块标。table：这一段就是一张表（「恢复这处」放在格子里，不放在下面）。
-   */
-  | { kind: "change"; ids: string[]; parts: Part[]; inline: boolean; table: boolean };
-
-/** 每处改动上下各留几块（Markdown 按块算，别的按行算）。 */
-export const CONTEXT_BLOCKS = 2;
+  /** 没改的一段源文：从一块的开头到一块的开头。 */
+  | { kind: "same"; text: string }
+  /** 改了的一段：从一块的开头到一块的结尾，含一处或相邻的几处。inline：能只标那几个字；false 时整块标。 */
+  | { kind: "change"; ids: string[]; parts: Part[]; inline: boolean };
 
 // 拼进源文的记号：用私用区的字，正常文档里几乎不会有；文档里本来就有私用区的字时一律整块标。
-export const DEL_OPEN = "";
-export const DEL_CLOSE = "";
-export const INS_OPEN = "";
-export const INS_CLOSE = "";
+export const DEL_OPEN = "\uF8F0";
+export const DEL_CLOSE = "\uF8F1";
+export const INS_OPEN = "\uF8F2";
+export const INS_CLOSE = "\uF8F3";
 /** 开头记号后面紧跟一个字，是这一处在这一段里的序号（U+E000 起）。 */
 export const ID_BASE = 0xe000;
 const ID_MAX = 0xefff - ID_BASE;
-const PRIVATE_USE = /[-]/;
+const PRIVATE_USE = /[\uE000-\uF8FF]/;
 
 /** 位置核对：区间在界内、按顺序不重叠、两处之间没改的字两边一模一样、整份对得上。对不上回 null（不画明细，只写「改过」）。 */
 export function sortedChanges(before: string, after: string, changes: readonly FileChange[]): FileChange[] | null {
@@ -100,14 +98,6 @@ function within(sorted: readonly number[], from: number, to: number): number[] {
   return out;
 }
 
-/** 一段没改的按块切开（块的起点用改后那份的）。 */
-function sameBlocks(after: string, from: number, to: number, afterStarts: readonly number[]): string[] {
-  const cuts = [from, ...within(afterStarts, from + 1, to - 1), to];
-  const blocks: string[] = [];
-  for (let index = 0; index + 1 < cuts.length; index += 1) blocks.push(after.slice(cuts[index]!, cuts[index + 1]!));
-  return blocks.filter(Boolean);
-}
-
 /**
  * 摆出来的样子：没改的段和改了的段交替。改了的段两头都落在两份共有的块边界上（改前改后都是一块的开头）；
  * 两处之间没有共有的边界（同一块里两处、或者改动动了块的结构）就并成一段。位置对不上回 null。
@@ -117,7 +107,7 @@ export function diffLayout(data: Pick<FileChanges, "before" | "after" | "changes
   const after = data.after ?? "";
   const changes = sortedChanges(before, after, data.changes);
   if (!changes) return null;
-  if (!changes.length) return after ? [{ kind: "same", blocks: sameBlocks(after, 0, after.length, blockStarts(after, mode)) }] : [];
+  if (!changes.length) return after ? [{ kind: "same", text: after }] : [];
   const afterStarts = blockStarts(after, mode);
   const beforeSet = new Set(blockStarts(before, mode));
   /** 第 k 段没改的（第 k 处之前那段）里两份共有的块边界，按改后那份的位置。 */
@@ -128,7 +118,7 @@ export function diffLayout(data: Pick<FileChanges, "before" | "after" | "changes
     return within(afterStarts, fromA, toA).filter((offset) => beforeSet.has(offset - fromA + fromB));
   };
   const sections: Section[] = [];
-  const pushSame = (from: number, to: number) => { const blocks = sameBlocks(after, from, to, afterStarts); if (blocks.length) sections.push({ kind: "same", blocks }); };
+  const pushSame = (from: number, to: number) => { if (to > from) sections.push({ kind: "same", text: after.slice(from, to) }); };
   let regionStart = common(0).at(-1)!;
   pushSame(0, regionStart);
   let members: FileChange[] = [changes[0]!];
@@ -144,7 +134,6 @@ export function diffLayout(data: Pick<FileChanges, "before" | "after" | "changes
   return sections;
 }
 
-
 function changeSection(before: string, after: string, from: number, to: number, members: FileChange[], mode: DiffMode): Section {
   const parts: Part[] = [];
   let cursor = from;
@@ -154,8 +143,7 @@ function changeSection(before: string, after: string, from: number, to: number, 
     cursor = change.after.end;
   }
   if (to > cursor) parts.push({ kind: "same", text: after.slice(cursor, to) });
-  const judged = mode === "text" ? { inline: true, table: false } : markInline(parts);
-  return { kind: "change", ids: members.map((change) => change.id), parts, ...judged };
+  return { kind: "change", ids: members.map((change) => change.id), parts, inline: mode === "text" || markInline(parts) };
 }
 
 /** 这一段改前、改后的源文。 */
@@ -251,33 +239,14 @@ const shape = (text: string) => JSON.stringify(project(parseMarkdown(text), { mo
  * （块的种类、层级、链接地址、字都对得上），记号都落在字里、成对。有一条不满足就整块标。
  * 整块新加、整块删掉（这一段改前或改后是空的）直接整块标。
  */
-export function markInline(parts: readonly Part[]): { inline: boolean; table: boolean } {
+export function markInline(parts: readonly Part[]): boolean {
   const before = sideText(parts, "before");
   const after = sideText(parts, "after");
-  const afterTree = parseMarkdown(after);
-  const blocks = (afterTree.children ?? []).filter((child) => child.type !== "definition");
-  const table = blocks.length === 1 && blocks[0]!.type === "table";
   const changes = parts.filter((part) => part.kind === "change");
-  if (!before.trim() || !after.trim() || changes.length > ID_MAX + 1 || PRIVATE_USE.test(before) || PRIVATE_USE.test(after)) return { inline: false, table };
+  if (!before.trim() || !after.trim() || changes.length > ID_MAX + 1 || PRIVATE_USE.test(before) || PRIVATE_USE.test(after)) return false;
   const walk: Walk = { mode: null, expectId: false, marks: 0, ok: true };
   const [afterSide, beforeSide] = project(parseMarkdown(markedSource(parts)), walk);
   const expected = changes.reduce((sum, part) => sum + (part.del ? 1 : 0) + (part.ins ? 1 : 0), 0);
-  const inline = walk.ok && walk.mode === null && walk.marks === expected
+  return walk.ok && walk.mode === null && walk.marks === expected
     && JSON.stringify(afterSide) === shape(after) && JSON.stringify(beforeSide) === shape(before);
-  return { inline, table };
 }
-
-/** 一段没改的怎么收：前后各留 CONTEXT_BLOCKS 块，中间收起来（收起来的不到 2 块且不到 3 行就不收）。first：文件开头那段（只留后面）；last：结尾那段（只留前面）。 */
-export function foldSame(blocks: readonly string[], { first, last }: { first: boolean; last: boolean }): { head: string; hidden: string; tail: string; hiddenLines: number } {
-  const keepHead = first ? 0 : CONTEXT_BLOCKS;
-  const keepTail = last ? 0 : CONTEXT_BLOCKS;
-  const join = (list: readonly string[]) => list.join("");
-  if (blocks.length <= keepHead + keepTail) return { head: join(blocks), hidden: "", tail: "", hiddenLines: 0 };
-  const hidden = join(blocks.slice(keepHead, blocks.length - keepTail));
-  const hiddenLines = countLines(hidden);
-  if (blocks.length - keepHead - keepTail < 2 && hiddenLines < 3) return { head: join(blocks), hidden: "", tail: "", hiddenLines: 0 };
-  return { head: join(blocks.slice(0, keepHead)), hidden, tail: join(blocks.slice(blocks.length - keepTail)), hiddenLines };
-}
-
-/** 「没改的 N 行」：不算空行。 */
-export const countLines = (text: string) => text.split("\n").filter((line) => line.trim()).length;

@@ -24,14 +24,25 @@ export function filesSignal(status: string | null, entries: readonly SessionEntr
   return `${status ?? ""}|${entries.filter((entry) => entry.kind === "step" && entry.done && WRITE_STEP.test(entry.title)).length}`;
 }
 
+/** 恢复了文件（第 71、72 条）以后叫一声：在看这个会话的清单都重读一次（右栏「改动的文件」、对话里那一行的「已恢复」）。 */
+const restoredBus = typeof EventTarget === "undefined" ? null : new EventTarget();
+export const filesRestored = (sessionId: string) => { restoredBus?.dispatchEvent(new Event(sessionId)); };
+
 export function useSessionFiles(runner: Pick<LocalRunner, "listSessionFiles">, sessionId: string | null, signal: string): TLocalChangedFile[] {
   const [files, setFiles] = useState<TLocalChangedFile[]>([]);
+  const [restored, setRestored] = useState(0);
+  useEffect(() => {
+    if (!sessionId || !restoredBus) return;
+    const bump = () => setRestored((n) => n + 1);
+    restoredBus.addEventListener(sessionId, bump);
+    return () => restoredBus.removeEventListener(sessionId, bump);
+  }, [sessionId]);
   useEffect(() => {
     if (!sessionId) { setFiles([]); return; }
     let alive = true;
     // 读不到（老版本、还没实现、断线）留着上一次的；第一次就读不到就是空的。
     void runner.listSessionFiles(sessionId).then((data) => { if (alive) setFiles(data.files); }, () => undefined);
     return () => { alive = false; };
-  }, [runner, sessionId, signal]);
+  }, [runner, sessionId, signal, restored]);
   return files;
 }

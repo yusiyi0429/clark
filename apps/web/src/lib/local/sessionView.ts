@@ -3,6 +3,7 @@
  * 纯函数，事件按 seq 只增；同一个 seq 来两次（重连补发）只算一次。
  */
 import type { TLocalPermissionMode, TLocalPermissionRequestView, TLocalPlanEntry, TLocalQuestionRequestView, TLocalSessionEvent, TLocalSessionStatus, TLocalUsage } from "./runner";
+import type { TurnFile } from "./fileChanges";
 
 export type SessionEntry =
   /**
@@ -18,7 +19,9 @@ export type SessionEntry =
   | { kind: "permission"; seq: number; at: string; request: TLocalPermissionRequestView; decision: "allow" | "deny" | null; voided?: true }
   | { kind: "artifact"; seq: number; at: string; title: string; fileName: string }
   | { kind: "handback"; seq: number; at: string; summary: string; met: number; total: number }
-  | { kind: "notice"; seq: number; at: string; level: "info" | "warn" | "error"; text: string; code?: string };
+  | { kind: "notice"; seq: number; at: string; level: "info" | "warn" | "error"; text: string; code?: string }
+  /** 这一轮改了哪些文件（第 72 条，一轮结束的事件；临时）：对话里这一轮末尾那一行。 */
+  | { kind: "files"; seq: number; at: string; files: TurnFile[] };
 
 /** 卡身上的标记里由本机报的三种（第 3 节）。 */
 export type LocalWait = "approval" | "reply" | "paused";
@@ -80,6 +83,12 @@ export function foldEvent(view: SessionView, event: TLocalSessionEvent): Session
   if (event.seq <= view.lastSeq) return view;
   const next: SessionView = { ...view, lastSeq: event.seq, startedAt: view.startedAt ?? event.at };
   const base = { seq: event.seq, at: event.at };
+  // 一轮结束的事件还没进契约（第 72 条）：先认临时的名字，契约到了挪进下面的 switch。
+  if ((event.type as string) === "turn_files") {
+    const files = (event as unknown as { files: TurnFile[] }).files;
+    if (files.length) next.entries = [...view.entries, { kind: "files", ...base, files }];
+    return next;
+  }
   switch (event.type) {
     case "status":
       next.status = event.status;

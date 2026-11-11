@@ -1,32 +1,41 @@
-/* 预览里的「改动」（设计第 72 条，示意 示意_改动视图_2026-11-11.html）：删掉的字划线淡红底，加的字淡绿底；没改的收起来。只用现有令牌。 */
+/* 预览里的「改动」（设计第 72 条，示意 示意_改动视图_2026-11-11.html）：改前的字淡色划线、没有底色；改后的字垫一种底色。只有这一种标法。 */
 
-.bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); min-height: 40px; padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3); box-shadow: inset 0 -1px 0 var(--hairline); }
-.tabs { display: inline-flex; padding: 2px; border-radius: var(--r-control); background: var(--default-soft); }
-.tabs button { height: 24px; padding: 0 10px; border: 0; border-radius: 8px; background: none; color: var(--ink-muted); font: inherit; font-size: var(--text-xs); cursor: pointer; }
-.tabs button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 0 0 1px var(--hairline); }
-.tabs button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
-.count { color: var(--ink-muted); font-size: var(--text-xs); line-height: 16px; }
-.warn { color: var(--judgment); font-size: var(--text-xs); line-height: 16px; }
-.gap { flex: 1; }
-
-.fold { display: block; width: 100%; height: 28px; margin: var(--space-1) 0; border: 0; border-radius: var(--r-control); background: var(--default-soft); color: var(--ink-faint); font: inherit; font-size: var(--text-xs); cursor: pointer; }
-.fold:hover { color: var(--ink-muted); }
-.fold:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
-
-.del { padding: 1px 2px; border-radius: 4px; background: var(--counter-wash); color: var(--counter); text-decoration: line-through; text-decoration-thickness: 1px; }
-.ins { padding: 1px 2px; border-radius: 4px; background: var(--confirmed-wash); color: var(--confirmed); text-decoration: none; }
-/* 整块标：标不准时，改前那块整个划掉、改后那块整个标绿。 */
-.blockDel, .blockIns { margin: 2px 0; padding: 2px 8px; border-radius: var(--r-inset); }
-.blockDel { background: var(--counter-wash); color: var(--counter); text-decoration: line-through; text-decoration-thickness: 1px; }
-.blockIns { background: var(--confirmed-wash); color: var(--confirmed); }
+.del, .ins, .blockDel, .blockIns { cursor: pointer; }
+.del { color: var(--ink-faint); text-decoration: line-through; text-decoration-color: color-mix(in oklab, var(--ink) 40%, transparent); }
+.ins { margin: 0 1px; padding: 2px 3px; border-radius: 4px; background: var(--mark); color: inherit; text-decoration: none; }
+.ins:hover, .ins[data-open] { background: var(--mark-strong); }
+/* 整块标：标不准、整段新加或删掉时，改前那块整块淡色划线，改后那块整块垫底色。 */
+.blockDel { color: var(--ink-faint); text-decoration: line-through; text-decoration-color: color-mix(in oklab, var(--ink) 40%, transparent); }
+.blockIns { margin: 0 calc(-1 * var(--space-2)); padding: 2px var(--space-2); border-radius: var(--r-inset); background: var(--mark); }
+.blockIns:hover, .blockIns[data-open] { background: var(--mark-strong); }
 .blockDel > :first-child, .blockIns > :first-child { margin-top: 0; }
 .blockDel > :last-child, .blockIns > :last-child { margin-bottom: 0; }
 
-.hunk { position: relative; margin: 0 calc(-1 * var(--space-2)); padding: 2px var(--space-2); border-radius: var(--r-inset); scroll-margin: var(--space-6); }
-.hunk[data-on] { background: var(--neutral-wash); }
-.hunk > :first-child { margin-top: 0; }
-.hunkBar { display: flex; align-items: center; gap: var(--space-2); padding-bottom: var(--space-1); }
-.inlineRevert { margin-left: var(--space-1); vertical-align: baseline; }
-
 .code { margin: 0; color: var(--ink); font-family: var(--font-mono); font-size: var(--text-base); line-height: var(--lh-row); white-space: pre; tab-size: 2; }
-.none { margin: 0; color: var(--ink-muted); }
+
+/* 正文那一块：可滚，「改动」开着时左边留出边栏；浮层按它定位。 */
+.body { position: relative; padding-top: 0; }
+.body > article { padding-top: var(--space-4); }
+.body[data-marks="on"] { padding-left: 32px; }
+.body[data-marks="off"] :is(.del, .ins) { cursor: default; }
+/* 边栏贴着可见区域不动，像一张缩小的全文：小横线的高低对着那一处在全文里的位置。 */
+.rail { position: sticky; top: 0; float: left; width: 24px; height: 100%; margin: 0 -24px 0 -32px; pointer-events: none; }
+.tick { position: absolute; left: 10px; width: 12px; height: 12px; padding: 0; border: 0; background: none; cursor: pointer; pointer-events: auto; }
+.tick::before { content: ""; position: absolute; left: 0; top: 5px; width: 12px; height: 2px; border-radius: 1px; background: var(--mark-strong); }
+.tick:hover::before { background: var(--judgment); }
+.tick:focus-visible { outline: 2px solid var(--focus); outline-offset: 0; border-radius: 2px; }
+.pop { position: absolute; z-index: 2; padding: 4px; border-radius: var(--r-control); background: var(--surface); box-shadow: 0 0 0 1px var(--hairline-strong), 0 6px 20px color-mix(in oklab, var(--ink) 12%, transparent); }
+.pop button { height: 28px; padding: 0 12px; border: 0; border-radius: 7px; background: none; color: var(--ink); font: inherit; font-size: var(--text-xs); cursor: pointer; }
+.pop button:hover { background: var(--default-soft); }
+.pop button:disabled { opacity: .5; cursor: default; }
+.pop button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+/* 页头的「改动」开关：开着时前面一个底色小方块。 */
+.toggle { height: 28px; padding: 0 8px; border: 0; border-radius: 8px; background: none; color: var(--ink-faint); font: inherit; font-size: var(--text-xs); cursor: pointer; white-space: nowrap; }
+.toggle:hover { background: var(--default-soft); color: var(--ink); }
+.toggle[aria-pressed="true"] { color: var(--ink); }
+.toggle[aria-pressed="true"]::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 2px; background: var(--mark-strong); }
+.toggle:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+/* 放大：正文居中，行宽不超过 720px。 */
+[data-wide] .body > article { max-width: 720px; margin-inline: auto; }
