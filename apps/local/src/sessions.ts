@@ -15,6 +15,7 @@ import {
 } from "@warmap/contracts";
 import { readJson, writeJsonAtomic, nowIso } from "./store.js";
 import type { EventLog, EventBody } from "./eventLog.js";
+import type { Drafts } from "./drafts.js";
 import type { AgentAdapter, AgentRun, TurnModels } from "./agents/types.js";
 import type { QuotaTracker } from "./quota.js";
 import type { CodexQuota } from "./codexQuota.js";
@@ -198,6 +199,8 @@ export interface SessionDeps {
   port: () => number;
   /** 关联了云端时会话挂天枢 MCP（经本机程序转发，令牌不进会话）。 */
   cloudLinked?: () => Promise<boolean>;
+  /** 「正在写」的草稿：只推给正在看的网页，不进事件流。 */
+  drafts?: Drafts;
   /** 托盘或网页暂停后，不开新会话、不续接旧会话。 */
   paused?: () => boolean;
   /** 同时最多跑几个（本机设置 maxConcurrent）。 */
@@ -854,6 +857,7 @@ export class SessionManager {
     this.runs.set(rec.id, run);
     this.pending.set(rec.id, new Map());
     run.onEvent((e) => this.onAgentEvent(rec, e));
+    run.onDraft((text) => this.d.drafts?.set(rec.id, text));
     run.onExit((code) => this.onExit(rec, run, code));
     if (model.source === "subscription") run.onRateLimit((info) => (rec.agent === "codex" ? this.d.codexQuota?.fromEvent(info) : this.d.quota?.fromEvent(info)));
     if (brief) this.handoffs.set(rec.id, await brief);
@@ -938,6 +942,7 @@ export class SessionManager {
         break;
       case "assistant_text":
         this.turnOf(rec).text = e.text;
+        this.d.drafts?.done(rec.id); // 这段写完了，网页拿它替换草稿；还没发的草稿不再发
         break;
       case "plan":
         this.sync(rec, { type: "plan", data: { entries: e.entries.slice(0, 100), progress: e.progress } });
@@ -1006,6 +1011,7 @@ export class SessionManager {
   private onExit(rec: SessionRecord, run: AgentRun, code: number | null) {
     if (this.runs.get(rec.id) !== run) return;
     this.runs.delete(rec.id);
+    this.d.drafts?.set(rec.id, ""); // 写到一半进程没了：草稿清掉
     // 一轮做到一半没了（强停、意外退出、额度用完直接退）：报一条停了；一轮之外退的（收工、本机关的）在一轮结束时已经报过
     const midTurn = this.inTurn.delete(rec.id) || Boolean(this.pending.get(rec.id)?.size) || this.questions.has(rec.id);
     for (const id of this.pending.get(rec.id)?.keys() ?? []) {

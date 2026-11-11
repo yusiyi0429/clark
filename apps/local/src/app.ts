@@ -4,6 +4,7 @@ import type { Server } from "node:http";
 import { loadConfig, VERSION, type RunnerConfig } from "./config.js";
 import { registerFormats } from "./store.js";
 import { EventLog } from "./eventLog.js";
+import { Drafts } from "./drafts.js";
 import { Pairings, TokenStore } from "./pairing.js";
 import { createSecretStore, type SecretStore } from "./secrets.js";
 import { ModelProfiles } from "./models.js";
@@ -81,6 +82,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   if (opts.allowedOrigins) config.allowedOrigins = opts.allowedOrigins;
   const secrets = opts.secrets ?? createSecretStore(config.dataDir);
   const log = new EventLog(join(config.dataDir, "sessions"));
+  const drafts = new Drafts();
   const desktop = opts.desktop ?? createDesktop(Boolean(opts.headless), config.dataDir);
   const tokens = new TokenStore(config.dataDir);
   const pairings = new Pairings(tokens, ({ code, origin, label }) =>
@@ -143,7 +145,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   let sessionsRef: SessionManager | null = null;
   const updateTray = () => desktop.setState({ paired: tokens.count() > 0, running: sessionsRef?.activeCount() ?? 0, paused: settings.get().paused });
   const sessions = new SessionManager({
-    dataDir: config.dataDir, log, models, customTools, folders, outbox, deviceId: config.deviceId, port: () => config.port,
+    dataDir: config.dataDir, log, drafts, models, customTools, folders, outbox, deviceId: config.deviceId, port: () => config.port,
     // 只看关联记录在不在，不解钥匙：本机程序重启后第一次解要起 powershell（11/11 量过 0.5–2.6 秒），拉起时不等它。关联、取消时令牌和记录一起写、一起删。
     cloudLinked: async () => cloud.view().linked,
     paused: () => settings.get().paused,
@@ -168,7 +170,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   // 交回送到天枢以后去取验收交代。
   outbox.onSent = () => void sessions.pullBriefs();
   const server = createServer({
-    config, version: VERSION, tokens, pairings, sessions, log, models, folders, claude, cloud, settings, quota, codexQuota, codex, codexCatalog, claudeCatalog, tools, customTools, spend, tokenHub,
+    config, version: VERSION, tokens, pairings, sessions, log, drafts, models, folders, claude, cloud, settings, quota, codexQuota, codex, codexCatalog, claudeCatalog, tools, customTools, spend, tokenHub,
     pickFolder: () => desktop.pickFolder(),
     cloneRepo: opts.cloneRepo ?? cloneRepo,
     fetchImpl: cloudFetch,
