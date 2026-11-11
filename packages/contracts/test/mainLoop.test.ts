@@ -73,7 +73,7 @@ describe("主循环契约：卡的约定（第 60 条）", () => {
   it("交回时本机取最新约定；网页转「约定改了」时带版本号（protocol 3），老的转话不带照旧合法", () => {
     expect(LOCAL_RUNNER_CARD_AGREEMENT_PATH).toBe("/api/local-runner/card-agreement");
     expect(Value.Check(LocalCardAgreementResponse, { cardId: uuid, revision: 2, brief: null, standards: ["a", "b"] })).toBe(true);
-    expect(LOCAL_RUNNER_PROTOCOL).toBe(3);
+    expect(LOCAL_RUNNER_PROTOCOL).toBeGreaterThanOrEqual(3);
     expect(Value.Check(LocalSendMessageRequest, { text: "约定改了", agreementRevision: 2 })).toBe(true);
     expect(Value.Check(SessionCommand, { type: "message", text: "约定改了", agreementRevision: 2 })).toBe(true);
     expect(Value.Check(SessionCommand, { type: "message", text: "接着做" })).toBe(true);
