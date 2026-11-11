@@ -34,7 +34,7 @@ describe("本机 API 的安全检查", () => {
   it("口令：health 不要口令但会说口令无效；其余接口没口令或口令错 401", async () => {
     const h = await raw(t.port, { path: "/v1/health", headers: { origin: ORIGIN } });
     expect(h.status).toBe(200);
-    expect(h.body).toMatchObject({ app: "tianshu-local", protocol: 1, tokenValid: false });
+    expect(h.body).toMatchObject({ app: "tianshu-local", protocol: 2, tokenValid: false });
     expect((await raw(t.port, { path: "/v1/health", headers: { origin: ORIGIN, "x-tianshu-local-token": token } })).body.tokenValid).toBe(true);
     expect((await raw(t.port, { path: "/v1/status", headers: { origin: ORIGIN } })).status).toBe(401);
     expect((await raw(t.port, { path: "/v1/status", headers: { origin: ORIGIN, "x-tianshu-local-token": "0".repeat(64) } })).status).toBe(401);

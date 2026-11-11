@@ -223,7 +223,8 @@ describe("子会话 Claude Code ↔ Codex 双向换", { timeout: 60_000 }, () =>
     expect(notice.text).toBe("换成 Codex · GPT-6.1-Sol · 思考 low");
     expect(notice.seq).toBeGreaterThan(seqBefore);
     expect(events(id).some((e) => e.type === "notice" && e.code === "model_changed")).toBe(false);
-    // 重开不算停了：状态一直是等你回复，云端的 status 带新的执行方和跑法
+    // 重开不算停了：重开期间是启动中，起来了回到等你回复；云端的 status 带新的执行方和跑法
+    expect(events(id).filter((e) => e.seq > seqBefore && e.type === "status").map((e) => e.status)).toEqual(["starting", "idle"]);
     const sent = (JSON.parse(readFileSync(join(dataDir, "outbox.json"), "utf8")).entries as { item: any }[]).map((e) => e.item).filter((i) => i.sessionId === id);
     expect(sent.filter((i) => i.type === "status").at(-1).data).toMatchObject({ status: "idle", agent: "codex", modelLabel: "GPT-6.1-Sol", run: { harness: "codex" } });
     expect(sent.some((i) => i.type === "status" && ["exited", "failed"].includes(i.data.status))).toBe(false);
@@ -367,6 +368,8 @@ describe("子会话 Claude Code ↔ Codex 双向换", { timeout: 60_000 }, () =>
     await until(() => codexTurns(join(work, "E")).length === 1);
     // 强停的那一轮没有做完的记录：交代里自成一轮，写明没做完
     expect(codexTurns(join(work, "E"))[0]).toMatch(/— 第 1 轮（Claude Code） —\n本人：做 E\n[^]*\n（这一轮没做完就停了）\n\n［以上是之前的经过/);
+    // 这句先记进事件流、再拉起：交代里不把它算成没看到的一轮（它就接在交代后面）
+    expect(codexTurns(join(work, "E"))[0]).not.toContain("本人：接着做");
     await idle(id);
     // Codex 没有「先出计划」这一档，换回 Claude Code 也不会自己变回去
     expect((await call("PUT", `/v1/sessions/${id}/permission-mode`, { mode: "plan" })).status).toBe(400);

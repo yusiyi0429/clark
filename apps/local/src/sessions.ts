@@ -237,6 +237,8 @@ const LIVE: TLocalSessionStatus[] = ["starting", "running", "waiting_permission"
 const modeOffered = (agent: TLocalAgentKind, mode: TLocalPermissionMode) => (LOCAL_AGENT_PERMISSION_MODES[agent] as readonly string[]).includes(mode);
 /** 占着位置的状态：一轮做完在等本人回复的（idle）不占，排队的不占。 */
 const OCCUPYING: TLocalSessionStatus[] = ["starting", "running", "waiting_permission"];
+/** 每个会话记住最近几句带编号的话的结果（网页重发只在刚发完的那一会儿）。 */
+const SAID_KEPT = 20;
 const CANCELLED_WHILE_STARTING = "启动途中已被强停";
 
 export class SessionManager {
@@ -285,6 +287,10 @@ export class SessionManager {
   private readonly balanceBlocked = new Set<string>();
   /** 换了执行方后给新的那家的「接着做」交代（拉起时整理好，接在给它的第一句话前面）：null 是没有它没看到的轮次。 */
   private readonly handoffs = new Map<string, string | null>();
+  /** 已记下、等执行方拉起再送的话（编号）：拉起时整理交代不算进去，它就是交代后面那句。 */
+  private readonly unsent = new Set<string>();
+  /** 网页带编号说的话（每个会话最近 SAID_KEPT 句）：重发时回同一个结果。 */
+  private readonly said = new Map<string, Map<string, Promise<TLocalSendMessageResponse>>>();
   private readonly dir: string;
 
   constructor(private readonly d: SessionDeps) {
@@ -804,7 +810,8 @@ export class SessionManager {
     writeFileSync(systemPromptPath, prompt);
     // 换了执行方、还没交代过：这一家没看到的那几轮和改动的文件先整理好，接在给它的下一句话前面（deliver）
     if (rec.handoff) {
-      this.handoffs.set(rec.id, handoffText(this.d.log.after(rec.id, 0), rec.seen?.[rec.agent] ?? 0, await this.changedSince(rec), `${SESSION_MCP_NAME} 的 read_earlier_turns`));
+      const events = this.d.log.after(rec.id, 0).filter((e) => !(e.type === "user_message" && e.messageId && this.unsent.has(e.messageId)));
+      this.handoffs.set(rec.id, handoffText(events, rec.seen?.[rec.agent] ?? 0, await this.changedSince(rec), `${SESSION_MCP_NAME} 的 read_earlier_turns`));
     }
     let agentsPath: string | null = null;
     if (rec.subject.kind === "topic" && rec.critics.length) {
@@ -1033,7 +1040,28 @@ export class SessionManager {
     if (finished && rec.subject.kind === "verify" && rec.passed) void this.autoMerge(rec);
   }
 
-  async sendMessage(id: string, req: TLocalSendMessageRequest): Promise<TLocalSendMessageResponse> {
+  /**
+   * 说一句。网页带了编号（protocol 2）：同一会话里记过的当成重发，不再送一遍，回原来的结果（原来回的错误照样回）；
+   * 没记下就被拒的不算记过，同号可以再发。本机程序重启前记过的，原来回的什么已经不知道，回 next_step。
+   */
+  sendMessage(id: string, req: TLocalSendMessageRequest): Promise<TLocalSendMessageResponse> {
+    const key = req.messageId;
+    if (!key) return this.sendNew(id, req, randomUUID());
+    const said = this.said.get(id) ?? new Map<string, Promise<TLocalSendMessageResponse>>();
+    const prior = said.get(key);
+    if (prior) return prior;
+    const logged = (this.records.has(id) ? this.d.log.after(id, 0) : []).some((e) => e.type === "user_message" && e.messageId === key);
+    if (logged) return Promise.resolve({ delivery: "next_step", messageId: key });
+    const p = this.sendNew(id, req, key);
+    said.set(key, p);
+    if (said.size > SAID_KEPT) said.delete(said.keys().next().value!);
+    this.said.set(id, said);
+    // 没记下就被拒的：不算记过
+    p.catch(() => { if (!this.d.log.after(id, 0).some((e) => e.type === "user_message" && e.messageId === key)) said.delete(key); });
+    return p;
+  }
+
+  private async sendNew(id: string, req: TLocalSendMessageRequest, messageId: string): Promise<TLocalSendMessageResponse> {
     const rec = this.must(id);
     if (rec.status === "queued") throw new SessionError("conflict", "还在等空位，开始后再说");
     if (rec.queuedMessage !== null && !this.starting.has(id)) throw new SessionError("conflict", "这件还没开始过（排队时取消了或没开起来），要做就重新开工");
@@ -1051,7 +1079,6 @@ export class SessionManager {
       }
     }
     const note = saved.length ? attachmentNote(saved) : null;
-    const messageId = randomUUID();
     const withNote = (t: string) => (note ? (t ? `${t}\n\n${note}` : note) : t);
     // 在等回答时说的一句就是回答（不选选项）
     const question = this.questions.get(id);
@@ -1071,23 +1098,43 @@ export class SessionManager {
     if (rec.hold?.reason === "balance") this.releaseBalance(rec.modelProfileId);
     this.clearHold(rec);
     this.dropBudgetStop(rec);
+    // 先记下这句（对话里马上有），再拉起执行方、送出去：拉起要几秒，不让本人干等（11/11 定）。事件里是本人说的原话和附件
+    this.record(rec, req.kind === "review" ? text : said, { source: "web", messageId, attachments: saved });
     let run = this.runs.get(id);
     let resumed = false;
-    if (!run) {
-      const inflight = this.starting.get(id);
-      if (inflight) run = await inflight;
-      else {
-        const p = this.startRun(rec, true);
-        this.starting.set(id, p);
-        try { run = await p; } finally { this.starting.delete(id); }
-        resumed = true;
+    let delivery: TLocalSendMessageResponse["delivery"];
+    this.unsent.add(messageId);
+    try {
+      if (!run) {
+        const inflight = this.starting.get(id);
+        if (inflight) run = await inflight;
+        else {
+          // 拉起期间是「启动中」，送出去才是进行中
+          this.setStatus(rec, "starting");
+          const p = this.startRun(rec, true);
+          this.starting.set(id, p);
+          resumed = true;
+          try { run = await p; } finally { this.starting.delete(id); }
+        }
       }
+      delivery = resumed ? "resumed" : rec.status === "idle" ? "new_turn" : "next_step";
+      const flip = delivery !== "next_step" ? this.syncMultiAgent(rec, run) : null;
+      if (flip) await flip;
+    } catch (e) {
+      // 没拉起来：这句已经显示了，记没送达（网页上可重发）；错误照样回给网页
+      this.failSaid(rec, messageId);
+      // 「启动中」是这里改的：起来了（后面出的错）回到等你回复，没起来就是停了
+      if (resumed && rec.status === "starting") {
+        const cancelled = e instanceof SessionError && e.message === CANCELLED_WHILE_STARTING;
+        if (this.runs.has(id)) this.setStatus(rec, "idle");
+        else this.setStatus(rec, "exited", { reason: cancelled ? "已强停" : `没接上：${e instanceof Error ? e.message : String(e)}；再发一句话会接着做` });
+      }
+      throw e;
+    } finally {
+      this.unsent.delete(messageId);
     }
-    const delivery: TLocalSendMessageResponse["delivery"] = resumed ? "resumed" : rec.status === "idle" ? "new_turn" : "next_step";
-    const flip = delivery !== "next_step" ? this.syncMultiAgent(rec, run) : null;
-    if (flip) await flip;
-    // 事件里是本人说的原话和附件；给执行方的那句接上附件在哪
-    this.say(rec, run, text, { source: "web", messageId, shown: req.kind === "review" ? text : said, attachments: saved });
+    // 给执行方的那句接上附件在哪
+    this.deliver(rec, run, text, messageId);
     if (delivery === "next_step") this.emit(rec, { type: "notice", level: "info", code: "interjection_next_step", text: "已送达，它做完这一步（或这一轮）后读到" });
     else this.setStatus(rec, "running");
     return { delivery, messageId };
@@ -1097,14 +1144,27 @@ export class SessionManager {
    * 把一句话交给执行方并记下编号（17.4 回执）：事件里 user_message 带 messageId；执行方收下、读到时它报 receipt（onAgentEvent 记账、同步）。
    * shown 是事件里显示的原话（插话时不含本机拼的附件路径），没有就用 text。本人在网页上说的（source web）同步给云端。
    */
-  private say(rec: SessionRecord, run: AgentRun, text: string, o: { source: "initial" | "web"; messageId?: string; shown?: string; attachments?: TLocalSavedAttachment[] }) {
+  private say(rec: SessionRecord, run: AgentRun, text: string, o: { source: "initial" | "web"; shown?: string }) {
+    this.deliver(rec, run, text, this.record(rec, o.shown ?? text, o));
+  }
+
+  /** 记下一句（还没送出）：发 user_message、本人在网页上说的同步给云端、记进还没读到的。返回编号。 */
+  private record(rec: SessionRecord, shown: string, o: { source: "initial" | "web"; messageId?: string; attachments?: TLocalSavedAttachment[] }): string {
     const messageId = o.messageId ?? randomUUID();
     const web = o.source === "web";
-    this.emit(rec, { type: "user_message", text: o.shown ?? text, source: o.source, ...(o.attachments?.length ? { attachments: o.attachments } : {}), messageId });
-    if (web) this.syncSaid(rec, messageId, o.shown ?? text, o.attachments ?? []);
+    this.emit(rec, { type: "user_message", text: shown, source: o.source, ...(o.attachments?.length ? { attachments: o.attachments } : {}), messageId });
+    if (web) this.syncSaid(rec, messageId, shown, o.attachments ?? []);
     rec.unread = [...(rec.unread ?? []), { id: messageId, web }];
     this.save(rec);
-    this.deliver(rec, run, text, messageId);
+    return messageId;
+  }
+
+  /** 记下了没送出去（拉起失败）：记 failed。进程在拉起途中没了的，failUnread 已经记过，不重复。 */
+  private failSaid(rec: SessionRecord, messageId: string) {
+    if (!rec.unread?.some((u) => u.id === messageId)) return;
+    rec.unread = rec.unread.filter((u) => u.id !== messageId);
+    this.save(rec);
+    this.receipt(rec, messageId, "failed", true);
   }
 
   /**
@@ -1333,13 +1393,15 @@ export class SessionManager {
     const target = rec.pendingModel.modelProfileId;
     const effort = rec.pendingModel.effort ?? undefined;
     this.runs.delete(rec.id); // 旧进程退出时 onExit 认不出它，不改状态、不报停了
+    this.setStatus(rec, "starting"); // 重开期间是「启动中」，起来了回到等你回复
     const p = (async () => {
       await old.kill();
       const model = await this.d.models.resolve(target);
       if (!model || model.profileId !== target) throw new Error("要换的模型配置已被删除");
       const carry = this.applyModel(rec, model, effort);
       const run = await this.startRun(rec, true);
-      if (carry) this.carryOn(rec);
+      if (carry) this.carryOn(rec); // 停着等额度时换的：替本人接着做，状态成进行中
+      if (rec.status === "starting") this.setStatus(rec, "idle");
       return run;
     })();
     this.starting.set(rec.id, p);
