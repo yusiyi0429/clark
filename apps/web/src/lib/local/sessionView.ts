@@ -5,8 +5,11 @@
 import type { TLocalPermissionMode, TLocalPermissionRequestView, TLocalPlanEntry, TLocalQuestionRequestView, TLocalSessionEvent, TLocalSessionStatus, TLocalUsage } from "./runner";
 
 export type SessionEntry =
-  /** messageId、receipt：本人这句话的编号和回执（17.4，本机补发的话没有编号也没有回执）。 */
-  | { kind: "user"; seq: number; at: string; text: string; attachments?: { name: string; size: number }[]; messageId?: string; receipt?: "delivered" | "read" | "failed";
+  /**
+   * messageId、receipt：本人这句话的编号和回执（17.4，本机补发的话没有编号也没有回执）。
+   * local：网页先画的、事件流里还没来的那句（useSessionSend）：sending 发送中，unsent 没发出去（给「重发」，同一个编号）。
+   */
+  | { kind: "user"; seq: number; at: string; text: string; attachments?: { name: string; size: number }[]; messageId?: string; receipt?: "delivered" | "read" | "failed"; local?: "sending" | "unsent";
       /** 开工那句（派活时交给会话的交代，user_message 的 source = initial）：按 Markdown 画。 */
       initial?: true }
   | { kind: "assistant"; seq: number; at: string; text: string }

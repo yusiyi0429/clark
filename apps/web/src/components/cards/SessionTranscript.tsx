@@ -7,12 +7,13 @@
  * 答过的问题收成一行（勾 · 问题 · 答案），不另起「问：」「答：」两行，AskUserQuestion 那一步不画；没答就过去了的（被新的取代、作废、子会话停了）收成「已失效」。
  * 交回、产出、提醒各一行。
  * 本人那句话的回执（17.4，样子同伙伴台）：一个勾已送达、两个勾已读；没读到就没了写「没读到 · 重发」。本机补发的话没有回执。
+ * 一按发送就先画出来（useSessionSend）：淡一点、写「发送中」，事件流里同编号的那句来了换成真的；没发出去写「没发出去 · 重发」。
  * canAct=false（手机、别的电脑、本机没连）时选项框不给选项，头上写「等你 · {电脑名}」。
  */
-import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Markdown, { type Components } from "react-markdown";
 import { ChevronRight } from "lucide-react";
-import { questionNotice, type SessionEntry } from "@/lib/local/sessionView";
+import { questionNotice, type SessionEntry, type SessionView } from "@/lib/local/sessionView";
 import type { LocalRunner, TLocalModelProfile, TLocalSessionSummary, TLocalPermissionRequestView, TLocalQuestionRequestView, TLocalSessionStatus } from "@/lib/local/runner";
 import { duration } from "@/lib/home/derive";
 import { REMARK_PLUGINS } from "@/lib/markdown";
@@ -28,7 +29,7 @@ import { ApprovalDecision, DENY_MAX, awayChip } from "@/components/work/decision
 import { DecisionBox, FailedLine } from "@/components/work/DecisionBox";
 import { HeroButton } from "@/components/HeroButton";
 import { ICON, StateIcon, type IconState } from "@/components/home/StateIcon";
-import { ReceiptFailed, ReceiptTicks } from "@/conversation/Transcript";
+import { ReceiptFailed, ReceiptSending, ReceiptTicks } from "@/conversation/Transcript";
 import h from "@/styles/home.module.css";
 import s from "@/styles/v2-session.module.css";
 
@@ -172,8 +173,9 @@ export function roundStart(entries: SessionEntry[]): string | null {
 /**
  * 「在跑」那一行（27 条，照 Claude Code 底部那行）：模型在两步之间想的时候界面也在动——转圈加这一轮跑了多久（每秒走一下）。
  * 只在会话在跑、最后不是一段过程、也没在等你批准或回答时出；最后那段过程在转圈时不重复出。不写解释句。
+ * starting（本机在拉起执行方）：写「启动中 · N 秒」，running 以后照旧。
  */
-function WorkingRow({ since }: { since: string | null }) {
+function WorkingRow({ since, starting = false }: { since: string | null; starting?: boolean }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -181,8 +183,8 @@ function WorkingRow({ since }: { since: string | null }) {
   }, []);
   return (
     <div className={s.step} data-testid="session-working">
-      <StateIcon state="running" label="在跑" />
-      {since ? <span className={`${s.stepText} ${h.num}`}>{duration(since, now)}</span> : null}
+      <StateIcon state="running" label={starting ? "启动中" : "在跑"} />
+      {since || starting ? <span className={`${s.stepText} ${h.num}`}>{[starting ? "启动中" : null, since ? duration(since, now) : null].filter(Boolean).join(" · ")}</span> : null}
     </div>
   );
 }
@@ -230,16 +232,87 @@ export const sessionEnded = (status: TLocalSessionStatus | null) => status === "
 
 /**
  * 子会话底下的输入框发一句话（5.4.3「和底部输入框的关系」）：有没批的批准时，这句话 = 「换个做法：{这句话}」，批准框收起；
- * 超过「换个做法」的上限时批准那边只记换个做法，整句照常插话。没有要批的就是插话。
+ * 超过「换个做法」的上限时批准那边只记换个做法，整句照常插话。没有要批的就是插话。messageId 见 useSessionSend。
  */
-export async function sayToSession(runner: LocalRunner, sessionId: string, pending: TLocalPermissionRequestView[], text: string, attachments: TLocalAttachmentRef[] = []): Promise<boolean> {
+export async function sayToSession(runner: LocalRunner, sessionId: string, pending: TLocalPermissionRequestView[], text: string, attachments: TLocalAttachmentRef[] = [], messageId?: string): Promise<boolean> {
   const waiting = pending[0];
-  if (!waiting) { await runner.sendMessage(sessionId, text, undefined, attachments); return true; }
+  if (!waiting) { await runner.sendMessage(sessionId, text, undefined, attachments, messageId); return true; }
   // 带了附件的，批准那边只记换个做法，整句（连附件）照常插话。
   const fits = text.length <= DENY_MAX && !attachments.length;
   await runner.decidePermission(sessionId, waiting.requestId, { decision: "deny", ...(fits && text ? { message: text } : {}) });
-  if (!fits) await runner.sendMessage(sessionId, text, undefined, attachments);
+  if (!fits) await runner.sendMessage(sessionId, text, undefined, attachments, messageId);
   return true;
+}
+
+/** 这句话会不会交给本机发（会才有 user_message 回来、才能先画）：有没批的批准且放得进「换个做法」的，只记换个做法、不发。 */
+const sendsMessage = (pending: readonly TLocalPermissionRequestView[], text: string, withFiles: boolean) => !pending[0] || text.length > DENY_MAX || withFiles;
+
+/** 网页先画的一句（还没在事件流里见到）。 */
+export type Outgoing = { sessionId: string; messageId: string; at: string; text: string; files: File[]; failed: boolean };
+
+/** 先画的那几句接在对话最后（事件流里已经有同编号的就不画了，不重复）。 */
+export function withOutgoing(view: Pick<SessionView, "entries" | "lastSeq">, outgoing: readonly Pick<Outgoing, "messageId" | "at" | "text" | "files" | "failed">[]): SessionEntry[] {
+  const arrived = new Set(view.entries.flatMap((entry) => (entry.kind === "user" && entry.messageId ? [entry.messageId] : [])));
+  const left = outgoing.filter((item) => !arrived.has(item.messageId));
+  if (!left.length) return view.entries;
+  return [...view.entries, ...left.map((item, index): SessionEntry => ({
+    kind: "user", seq: view.lastSeq + (index + 1) / 1000, at: item.at, text: item.text, messageId: item.messageId, local: item.failed ? "unsent" : "sending",
+    ...(item.files.length ? { attachments: item.files.map((file) => ({ name: file.name, size: file.size })) } : {}),
+  }))];
+}
+
+/** 发话那一头要读的（每次读最新的）：本机、会话、没批的批准、先画着的那几句。 */
+type OutboxState = { runner: LocalRunner; sessionId: string | null; pending: readonly TLocalPermissionRequestView[]; list: readonly Outgoing[] };
+
+/**
+ * 子会话里说一句（输入框、「继续」、专题那几个按钮都走这里）：本机收 messageId 时，一按就先画出来（发送中），附件先传云端、再交给本机；
+ * 没发出去（传附件或发话报错）那句变「没发出去 · 重发」，重发用同一个编号（本机去重），附件传好了不再传，输入框不动。
+ * 本机不收 messageId、或这句话只记成「换个做法」时照原来：等发完才算发出去，没发出去由输入框放回去。
+ * 不碰 React：先画着的那几句由 update 交给调用方存（useSessionSend 存在 state 里），测试直接用。
+ */
+export function sessionOutbox(read: () => OutboxState, update: (change: (list: Outgoing[]) => Outgoing[]) => void, upload: (files: File[]) => Promise<TLocalAttachmentRef[]>) {
+  const uploaded = new Map<string, TLocalAttachmentRef[]>();
+  const mark = (messageId: string, failed: boolean) => update((list) => list.map((item) => (item.messageId === messageId ? { ...item, failed } : item)));
+  const deliver = async (item: Outgoing) => {
+    try {
+      let refs = uploaded.get(item.messageId);
+      if (!refs) { refs = item.files.length ? await upload(item.files) : []; uploaded.set(item.messageId, refs); }
+      const now = read();
+      await sayToSession(now.runner, item.sessionId, [...now.pending], item.text, refs, item.messageId);
+    } catch { mark(item.messageId, true); }
+  };
+  return {
+    say: async (text: string, files: File[] = []): Promise<boolean> => {
+      const { runner, sessionId, pending } = read();
+      if (!sessionId) return false;
+      if (!runner.clientMessageIds || !sendsMessage(pending, text, files.length > 0)) return sayToSession(runner, sessionId, [...pending], text, files.length ? await upload(files) : []);
+      const item: Outgoing = { sessionId, messageId: crypto.randomUUID(), at: new Date().toISOString(), text, files, failed: false };
+      update((list) => [...list, item]);
+      void deliver(item);
+      return true;
+    },
+    retry: (messageId: string) => {
+      const item = read().list.find((entry) => entry.messageId === messageId && entry.failed);
+      if (!item) return;
+      mark(messageId, false);
+      void deliver(item);
+    },
+  };
+}
+
+/** 页面里用的 sessionOutbox：先画的几句存在 state 里，和事件流折出来的拼成对话（entries）；真的那条来了本地那句就不要了。 */
+export function useSessionSend(runner: LocalRunner, sessionId: string | null, view: Pick<SessionView, "entries" | "pending" | "lastSeq">, subject: TSessionAttachment["subject"]) {
+  const [outgoing, setOutgoing] = useState<Outgoing[]>([]);
+  const latest = useRef<OutboxState & { subject: TSessionAttachment["subject"] }>({ runner, sessionId, pending: view.pending, list: outgoing, subject });
+  latest.current = { runner, sessionId, pending: view.pending, list: outgoing, subject };
+  const [outbox] = useState(() => sessionOutbox(() => latest.current, setOutgoing, (files) => uploadToSubSession(latest.current.subject, files)));
+  const mine = useMemo(() => outgoing.filter((item) => item.sessionId === sessionId), [outgoing, sessionId]);
+  const entries = useMemo(() => withOutgoing(view, mine), [view, mine]);
+  useEffect(() => {
+    const arrived = new Set(view.entries.flatMap((entry) => (entry.kind === "user" && entry.messageId ? [entry.messageId] : [])));
+    setOutgoing((list) => (list.some((item) => arrived.has(item.messageId)) ? list.filter((item) => !arrived.has(item.messageId)) : list));
+  }, [view.entries]);
+  return { entries, say: outbox.say, retry: outbox.retry };
 }
 
 /** 子会话页里转给 Task 管线去答的那一处（14.3）：一行问题原话，加「去回答」（次按钮），点了跳到 Task 管线那个框。 */
@@ -249,7 +322,7 @@ export function RelayLine({ text, onGo }: { text: string; onGo: () => void }) {
 
 type UserEntry = Extract<SessionEntry, { kind: "user" }>;
 
-export function SessionTranscript({ entries, agentName, canAct, device, onDecide, lead, tail, asking, live, ended = false, relay, onResend, onFile }: {
+export function SessionTranscript({ entries, agentName, canAct, device, onDecide, lead, tail, asking, live, starting = false, ended = false, relay, onResend, onRetry, onFile }: {
   entries: SessionEntry[];
   agentName: string;
   canAct: boolean;
@@ -264,12 +337,16 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
   asking?: TLocalQuestionRequestView | null;
   /** 会话还在跑（running(view.status)）：没做完的步骤转圈；结束了的没做完的步骤画方块。 */
   live: boolean;
+  /** 本机在拉起执行方（状态 starting）：「在跑」那一行写「启动中 · N 秒」。 */
+  starting?: boolean;
   /** 会话已经结束（退出、失败、交完收工）：没批的权限收成「已失效」。 */
   ended?: boolean;
   /** 提问、批准由 Task 管线转达（新首页 14.3）：这里不画选项框，只一行原话加「去回答」。 */
   relay?: (() => void) | null;
   /** 没读到的那句再发一遍（只发原话；这里答不了时不给）。 */
   onResend?: (entry: UserEntry) => void;
+  /** 先画出来却没发出去的那句再发一遍（useSessionSend.retry，同一个编号）。 */
+  onRetry?: (messageId: string) => void;
   /** 「交出 文件名」那一行能不能点开看（41 条）：对得上交出的产出时回打开的办法，对不上回 null（不能点，不猜）。 */
   onFile?: OpenFile;
 }) {
@@ -287,7 +364,7 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
       {items.map((entry, index) => {
         switch (entry.kind) {
           case "user": return [
-            <div key={entry.seq} className={s.me}>
+            <div key={entry.seq} className={s.me} data-sending={entry.local === "sending" ? "" : undefined}>
               {entry.attachments?.length ? (
                 <ul className={h.bubbleAtts} aria-label="附件">
                   {entry.attachments.map((file, index) => (
@@ -297,7 +374,9 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
               ) : null}
               {entry.initial ? <AgentText text={entry.text} onFile={onFile} /> : entry.text}
             </div>,
-            entry.receipt === "failed" ? <ReceiptFailed key={`${entry.seq}:receipt`} className={s.meReceipt} label="没读到" onResend={canAct && entry.text ? () => onResend?.(entry) : undefined} />
+            entry.local === "sending" ? <ReceiptSending key={`${entry.seq}:receipt`} className={s.meReceipt} />
+              : entry.local === "unsent" ? <ReceiptFailed key={`${entry.seq}:receipt`} className={s.meReceipt} label="没发出去" onResend={canAct && onRetry && entry.messageId ? () => onRetry(entry.messageId!) : undefined} />
+              : entry.receipt === "failed" ? <ReceiptFailed key={`${entry.seq}:receipt`} className={s.meReceipt} label="没读到" onResend={canAct && entry.text ? () => onResend?.(entry) : undefined} />
               : entry.receipt ? <ReceiptTicks key={`${entry.seq}:receipt`} className={s.meReceipt} state={entry.receipt} /> : null,
           ];
           case "assistant": return <div key={entry.seq} className={s.bubble}><small className={s.who}>{agentName}</small><AgentText text={entry.text} onFile={onFile} /></div>;
@@ -316,7 +395,7 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
           case "notice": return <span key={entry.seq} className={s.evt} data-level={entry.level}>{entry.text}</span>;
         }
       })}
-      {busy && !tailProcess ? <WorkingRow since={roundStart(entries)} /> : null}
+      {busy && !tailProcess ? <WorkingRow since={roundStart(entries)} starting={starting} /> : null}
       {tail}
     </div>
   );
@@ -384,7 +463,8 @@ export function useModelChangedRefresh(entries: SessionEntry[], refresh: () => u
 }
 
 export function SessionComposer({ label, disabled, onSend, dock, subject, mode, place, model, models, context, busy = false, onStop }: {
-  label: string; disabled: boolean; onSend: (text: string, attachments: TLocalAttachmentRef[]) => Promise<boolean>; dock?: ReactNode;
+  /** 发一句（useSessionSend.say）：附件由它传云端（POST /api/me/sub-sessions/:kind/:id/attachments）再交给本机。 */
+  label: string; disabled: boolean; onSend: (text: string, files: File[]) => Promise<boolean>; dock?: ReactNode;
   subject: TSessionAttachment["subject"];
   mode?: { modes: readonly TLocalPermissionMode[]; value: TLocalPermissionMode; set: (mode: TLocalPermissionMode) => void } | null;
   place?: { name: string; title: string } | null;
@@ -405,7 +485,7 @@ export function SessionComposer({ label, disabled, onSend, dock, subject, mode, 
           right: <>{context ? <ContextRing {...context} /> : null}{model && models?.rows.length && !disabled ? <ModelPanel label={model.label} title={model.title} rows={models.rows} onPick={models.onPick} busy={models.busy} testId="session-model" />
             : model ? <FootText title={model.title} testId="session-model">{model.label}</FootText> : null}{mode ? <PermissionModeMenu modes={mode.modes} value={mode.value} disabled={disabled} onChange={mode.set} /> : null}</>,
         }}
-        onSend={async (text, files) => onSend(text, files.length ? await uploadToSubSession(subject, files) : [])} />
+        onSend={onSend} />
     </div>
   );
 }

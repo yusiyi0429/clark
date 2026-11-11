@@ -32,8 +32,16 @@ export type EventWatch = {
   signal: AbortSignal;
 };
 
+/**
+ * 本机程序收不收网页给的 messageId（子会话一按发送就先画那句话，事件流里同编号的 user_message 来了再换成真的）：health 的 protocol ≥ 2（契约 LOCAL_RUNNER_PROTOCOL）。
+ * 老版本（protocol 1）的发话请求是 strict，带了整个请求回 400：不带、不先画，和原来一样。
+ */
+export const acceptsClientMessageId = (health: Pick<TLocalHealthResponse, "protocol">): boolean => health.protocol >= 2;
+
 export interface LocalRunner {
   readonly kind: "http" | "mock";
+  /** 见 acceptsClientMessageId：读过 health 以后才知道；没读过当不收。 */
+  readonly clientMessageIds?: boolean;
   health(): Promise<TLocalHealthResponse>;
   startPairing(clientLabel: string): Promise<TLocalPairingStartResponse>;
   pairingStatus(pairingId: string): Promise<TLocalPairingStatusResponse>;
@@ -67,7 +75,8 @@ export interface LocalRunner {
   getSession(id: string): Promise<TLocalSessionDetailResponse>;
   /** 说一句；kind=review 是专题开评审会（text 可不填）。 */
   /** attachments：云端存好的子会话附件（14.5），本机按 id 取回；只带附件时 text 可以是空的。 */
-  sendMessage(id: string, text: string, kind?: TLocalSendMessageRequest["kind"], attachments?: TLocalAttachmentRef[]): Promise<TLocalSendMessageResponse>;
+  /** messageId：网页给的这句话的编号（只在 clientMessageIds 时带）；没发成用同一个编号重发，本机按它去重。 */
+  sendMessage(id: string, text: string, kind?: TLocalSendMessageRequest["kind"], attachments?: TLocalAttachmentRef[], messageId?: string): Promise<TLocalSendMessageResponse>;
   interrupt(id: string): Promise<TLocalSessionSummary>;
   /** 换这个子会话的权限模式（跑着也能换，下一步就按新的来）；执行方没有这一档 400、会话已结束 409。 */
   setPermissionMode(id: string, mode: TLocalPermissionMode): Promise<TLocalSessionSummary>;
