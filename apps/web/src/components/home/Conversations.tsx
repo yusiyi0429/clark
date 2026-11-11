@@ -14,7 +14,6 @@ import { ChatColumn } from "@/components/rail/ChatPane";
 import { PendingBoxes, PendingDock } from "@/components/work/DecisionBox";
 import { WorkTimeline, type TimedBlock } from "@/components/work/WorkTimeline";
 import type { ConversationData } from "@/conversation/useConversation";
-import { ModelSwitchContext } from "@/conversation/Transcript";
 import { useConversation } from "@/conversation/useConversation";
 import { openProjectPipeline, planKey, type PlanTarget } from "@/lib/board/cloud";
 import type { Worker } from "@/lib/work/workers";
@@ -143,7 +142,7 @@ export function BuddyView({ buddy, outbox, consume, onSpeaking, context = null, 
               {chrome.trail}
             </header>
           )}
-          timeline={(current) => <ModelSwitchContext.Provider value={modelRule}><WorkTimeline data={current} blocks={NO_BLOCKS} /></ModelSwitchContext.Provider>}
+          timeline={(current) => <WorkTimeline data={current} blocks={NO_BLOCKS} modelRule={modelRule} />}
           dock={(latest) => <PendingDock latest={latest} />}
           input={(onHeight) => <ChatInput data={data} placeholder={`与${name}讨论…`} onHeight={onHeight} footer={{ right: <ModelText data={data} /> }}
             context={context ? { label: context, onClear: () => onClearContext?.() } : null} />} />
@@ -378,7 +377,7 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
               </header>
             </>
           )}
-          timeline={(current) => <ModelSwitchContext.Provider value={modelRule}><WorkTimeline data={current} blocks={blocks} /></ModelSwitchContext.Provider>}
+          timeline={(current) => <WorkTimeline data={current} blocks={blocks} modelRule={modelRule} />}
           dock={(latest) => <PendingDock latest={latest} />}
           input={readOnly ? () => null : (onHeight) => <ChatInput data={data} placeholder={handheld ? "说点什么…" : `与${project.name}讨论…`} onHeight={onHeight} footer={{
             left: folder,

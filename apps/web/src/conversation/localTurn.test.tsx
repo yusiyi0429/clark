@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { ConversationTurns, LocalTurnRow, ModelSwitchContext, modelSwitches, turnModel } from "./Transcript";
+import { ConversationTurns, LocalTurnRow, modelSwitches, turnModel } from "./Transcript";
 import type { Message } from "./useConversation";
 
 const text = (html: string) => html.replace(/<[^>]+>/g, "|").replace(/\|+/g, "|");
@@ -27,7 +27,7 @@ describe("项目对话在本机跑（17.2 第 38 条，B 契约 7d6a62b3）", ()
     const plain = renderToStaticMarkup(<ConversationTurns messages={messages.slice(0, 2)} />);
     expect(plain).not.toContain("Opus");
     expect(text(plain)).toContain("|用时 9 秒|");
-    const html = renderToStaticMarkup(<ModelSwitchContext.Provider value={(label) => <p data-testid="model-rule">换成 {label}</p>}><ConversationTurns messages={messages} /></ModelSwitchContext.Provider>);
+    const html = renderToStaticMarkup(<ConversationTurns messages={messages} modelRule={(label) => <p data-testid="model-rule">换成 {label}</p>} />);
     expect(html.match(/data-testid="model-rule">[^<]*/g)).toEqual(['data-testid="model-rule">换成 TokenHub · deepseek-v4.1-flash', 'data-testid="model-rule">换成 TokenHub · Opus 5.5']);
     expect(html.indexOf("换成 TokenHub · deepseek")).toBeLessThan(html.indexOf("换个快的"));
     // 没给画法的地方（老页面）不画。

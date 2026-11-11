@@ -210,9 +210,6 @@ export function modelSwitches(messages: readonly Pick<Message, "role" | "ranOn" 
   return at;
 }
 
-/** 画「换成 …」那一行的办法：新首页的对话给（分隔线同「11 月目标」那一种）；别处不给，就不画。 */
-export const ModelSwitchContext = createContext<((label: string) => ReactNode) | null>(null);
-
 /**
  * 项目对话正在本人电脑上跑、还没写进历史的那一轮（localTurn）：别的页面、手机上先画本人那一句和「正在回答」，写进来后换成那一轮。
  * 第一版这里停不了。
@@ -336,7 +333,7 @@ function CarriedDivider({ message }: { message: Message }) {
  * 状态区紧贴在正在写的文字下面，正文第一个字就出现在思考原来的位置；卡先做好就先在下面淡入，正文往下长时把卡往下推。
  * 状态区占的是完成后选项（footer）的位置，卡的位置不变，读回历史时卡不重挂。
  */
-export function ConversationTurns({ messages, partial = "", footer, after, trailing, thought, steps, status }: {
+export function ConversationTurns({ messages, partial = "", footer, after, trailing, thought, steps, status, modelRule }: {
   messages: Message[]; partial?: string;
   /** 本轮的步骤（正文开始后才给）：与思考摘要一样，流式中挂在正在写的那条，结束后挂在最后一条回答上。 */
   steps?: Step[] | null;
@@ -350,14 +347,15 @@ export function ConversationTurns({ messages, partial = "", footer, after, trail
   after?: (index: number) => ReactNode;
   /** 当前输出之后的内容（流式中本轮的提案卡）。 */
   trailing?: ReactNode;
+  /** 画「换成 …」那一行的办法（67 条）：新首页的对话给（分隔线同「11 月目标」那一种）；别处不给，就不画。 */
+  modelRule?: (label: string) => ReactNode;
 }) {
-  const divider = useContext(ModelSwitchContext);
-  const switches = useMemo(() => (divider ? modelSwitches(messages) : null), [divider, messages]);
+  const switches = modelRule ? modelSwitches(messages) : null;
   return (
     <>
       {messages.map((message, index) => (
         <Fragment key={`turn-${index}`}>
-          {switches?.has(index) ? divider!(switches.get(index)!) : null}
+          {switches?.has(index) ? modelRule!(switches.get(index)!) : null}
           {message.kind === "carried" && messages[index - 1]?.kind !== "carried" ? <CarriedDivider message={message} /> : null}
           {isReportPrompt(message) ? null : (
             <ConversationTurn message={message} ms={message.role === "assistant" ? turnMs(messages, index) : undefined}
