@@ -573,8 +573,9 @@ function HomeFrame({ account }: { account: Account }) {
         const mission = data.month.missions.find((entry) => entry.missionId === task.missionId)?.title ?? null;
         return <TaskInfo task={task} mission={mission} gate={taskGate(task)} go={go} />;
       }
-      case "card": return <CardSession key={current.id} cardId={current.id} embedded />;
-      case "topic": return <TopicSession key={current.id} topicId={current.id} embedded />;
+      // 等本人处理的框和左栏的点同一个来源（第 54 条）：首页数据里这个子会话在等什么。
+      case "card": return <CardSession key={current.id} cardId={current.id} embedded waiting={subs.find((sub) => sub.id === current.id)?.waiting} />;
+      case "topic": return <TopicSession key={current.id} topicId={current.id} embedded waiting={subs.find((sub) => sub.id === current.id)?.waiting ?? null} />;
       case "page": {
         // 二级页：组件挂在 components/home/pages。
         const Page = SECONDARY_PAGES[current.page];

@@ -24,7 +24,7 @@ import { overrule, retryAcceptance } from "@/lib/board/cloud";
 import { cardRole } from "@/lib/team/roles";
 import { useAutoReturn } from "@/lib/board/useAutoReturn";
 import { showWorkspaceToast } from "@/lib/toast";
-import { RelayLine, SessionComposer, SessionTranscript, useSessionSend, useSessionModels, useModelChangedRefresh, sessionEnded, type DecideOptions } from "./SessionTranscript";
+import { SessionComposer, SessionTranscript, useSessionSend, useSessionModels, useModelChangedRefresh, sessionEnded, type DecideOptions } from "./SessionTranscript";
 import { useSessionMode } from "./PermissionMode";
 import { FilePreview, cloudOutputFile, localSessionFile, type PreviewFile } from "./FilePreview";
 import { filesSignal, matchChangedFile, useSessionFiles } from "@/lib/local/sessionFiles";
@@ -32,9 +32,10 @@ import { HARNESS_NAME, defaultSourceLabel, runLabel, sessionModelText } from "@/
 import { useCardDetail, type CardDetail } from "./useCardDetail";
 import { SourceWordIssues, SourceWords } from "./SourceWords";
 import { MergeAction } from "@/components/work/MergeAction";
-import { QuestionDecision, awayChip, questionTitle } from "@/components/work/decisions";
-import { askAnchor } from "@/components/home/TaskFeed";
-import { FailedLine, PendingBoxes, PendingDock, failureOf, type Failure } from "@/components/work/DecisionBox";
+import { ApprovalDecision, QuestionDecision, awayChip } from "@/components/work/decisions";
+import { MergeDecision, SessionBlocked, answeredOf } from "@/components/home/TaskDecisions";
+import { ATTENTION_LABEL, attentionOf, isMergeLater, viewAsk, type Attention } from "@/lib/home/attention";
+import { DecisionBox, FailedLine, PendingBoxes, PendingDock, failureOf, type Failure } from "@/components/work/DecisionBox";
 import { useViewChrome } from "@/components/home/view";
 import { SideContent, useSideDetail } from "@/components/home/SideDetail";
 import { ICON } from "@/components/home/StateIcon";
@@ -52,21 +53,24 @@ const money = (usd: number | null) => (usd === null ? null : `约 $${usd.toFixed
 
 /**
  * 新首页页头的状态 chip（5.4.3「状态 chip」、5.6 状态词）：中性、警告、等你（中性底加强调色圆点）三档；新首页不用成功色。
- * 第一次验收没过不是单独的状态：进行中，阶段「重做中」。away：不在这台电脑上、又在等你时写「等你 · {电脑名}」。
+ * 「等你」档只给等本人处理的框（attention，第 54 条，和左栏的点同一个来源）：等你批准、在问你、等你拿主意、等你合回；
+ * 批准、提问不在这台电脑上时写「等你 · {电脑名}」（away）。别的照会话和阶段：已停止、已停下（一轮做完）、受阻（不是验收没过的）、重做中、已排队、进行中…。
  */
-export function stateChip(wait: CardWait | null, stage: CardStage, away: string | null): { text: string; tone: "neutral" | "warn" | "wait" } {
-  if (wait === "approval" || wait === "reply") return { text: away ?? WAIT_LABEL[wait], tone: "wait" };
-  if (wait === "blocked") return { text: "受阻", tone: "warn" };
-  if (wait === "paused") return { text: "已停止", tone: "neutral" };
-  if (wait === "review_failed") return { text: "重做中", tone: "neutral" };
+export function stateChip(attention: Attention | null, rest: CardWait | null, stage: CardStage, away: string | null): { text: string; tone: "neutral" | "warn" | "wait" } {
+  if (attention) return { text: (attention === "approval" || attention === "question") && away ? away : ATTENTION_LABEL[attention], tone: "wait" };
+  if (rest === "blocked") return { text: "受阻", tone: "warn" };
+  if (rest === "paused") return { text: "已停止", tone: "neutral" };
+  if (rest === "reply") return { text: "已停下", tone: "neutral" };
+  if (rest === "review_failed") return { text: "重做中", tone: "neutral" };
   return { text: stage === "todo" ? "已排队" : STAGES.find((entry) => entry.id === stage)?.label ?? "进行中", tone: "neutral" };
 }
 
 /**
  * embedded：放在新首页的展示区里——没有返回键（左栏就是导航）。页头右边的信息图标：桌面上在右栏打开详情（交代、标准、验收、产出、改动的文件），对话留着；
  * 手机上没有右栏，照旧在「对话」和「结果」之间切。
+ * waiting：首页数据里这个子会话在等什么（左栏的点用的那一份，已经照这台电脑上的会话改过）；页头标签和钉在输入框上方的框都从它和本机事件流算（第 54 条）。
  */
-export function CardSession({ cardId, embedded = false }: { cardId: string; embedded?: boolean }) {
+export function CardSession({ cardId, embedded = false, waiting }: { cardId: string; embedded?: boolean; waiting?: Attention | null }) {
   const chrome = useViewChrome();
   const router = useRouter();
   /** 看结果还是对话；没选过时，子会话不在这台电脑上（手机、别的电脑、还没开）先看摘要（5.4.3）。 */
@@ -128,6 +132,9 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
   const canAct = canCommand({ ready, handheld, hasSession: !!session });
   const card = boardCards([item], session ? [session] : [])[0]!;
   const wait = session ? localWait(view) ?? card.wait : card.wait;
+  // 等本人处理的框（第 54 条）：首页数据给的（左栏同一份），这台电脑上有会话时按事件流再对一遍。没给时照卡的标记。
+  const cloudWaiting = waiting !== undefined ? waiting : card.wait === "approval" ? "approval" : card.wait === "blocked" ? "verdict" : null;
+  const attention = attentionOf(cloudWaiting, session ? viewAsk(view, session) : null);
   const stage = card.stage;
   const taskId = item.planTaskId;
   const backHref = workHref(taskId);
@@ -165,11 +172,28 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
         onStart={embedded ? undefined : () => setStarting(true)} onControl={control} onResume={() => say("继续")} onChanged={() => void refresh()} />
     </aside>
   );
-  // 执行方在问本人：选项框放在对话最后（问的那一处）；手机、别的电脑上只留问题和「等你 · {电脑名}」。会话停了收成「已失效」。
-  // 新首页里提问、批准由 Task 管线转达（14.3）：这里只一行原话加「去回答」，点了跳到 Task 管线那个框。
-  const relay = embedded && taskId && session && !ended ? () => router.push(`${workHref(taskId)}#${askAnchor(session.id)}`) : null;
-  const asking = !question ? null : relay ? <RelayLine text={questionTitle(question)} onGo={relay} />
-    : <QuestionDecision key={question.requestId} request={question} blocked={canAct ? null : awayChip(device)} expired={ended} onAnswer={answer} />;
+  // 执行方在问本人：选项框（手机、别的电脑上只留问题和「等你 · {电脑名}」，会话停了收成「已失效」）。老页面放在对话最后，新首页钉在输入框上方。
+  const asking = !question ? null : <QuestionDecision key={question.requestId} request={question} blocked={canAct ? null : awayChip(device)} expired={ended} onAnswer={answer} />;
+  // 新首页里等本人处理的框钉在输入框上方（第 54 条），和项目对话那份是同一件事（本机同一个请求、同一条交回），答一处两处都收起。
+  // 处理了、失效了回到对话里：批准收进那一步、提问收成「问：…」一行（事件流照常画），受阻、先不合在最后收成一行。
+  const away = canAct ? null : awayChip(device);
+  const handback = detail.handbacks[0] ?? null;
+  const placeholder = (kind: "approval" | "question") => <DecisionBox kind={kind} title={ATTENTION_LABEL[kind]} options={[]} onPick={() => undefined} blocked={away ?? awayChip(device)} />;
+  const pinned = !embedded || !attention ? null
+    : attention === "approval" ? (view.lastSeq && view.pending.length
+      ? <ApprovalDecision requests={view.pending} blocked={away} onDecide={(request, decision, options) => decide(request.requestId, decision, options)} />
+      : placeholder("approval"))
+    : attention === "question" ? asking ?? placeholder("question")
+    : attention === "verdict" ? <SessionBlocked key={handback?.id ?? "blocked"} cardId={item.id} handback={handback} blocker={item.blocker?.reason ?? null} canSay={canAct}
+      onSay={(text) => say(text)} onStop={async () => { if (canAct && session && running(status)) { await local.runner.kill(session.id); await local.refresh(); } }}
+      onChanged={() => void refresh()} onGone={() => router.push("/me/work")} />
+    : <MergeDecision session={session} title={item.title} onChanged={() => void refresh()} />;
+  // 答过的受阻、点了先不合的：对话最后收成一行。
+  const blockedAnswer = embedded && attention !== "verdict" && handback ? answeredOf(`blocked:${handback.id}`) : null;
+  const ws = session?.workspace;
+  const mergeLater = embedded && attention !== "merge" && !!session && ws?.kind === "worktree" && !!ws.needsMerge && !ws.mergedCommit && isMergeLater(session.id);
+  const settled = (title: string, answerText: string) => <DecisionBox kind="question" title={title} options={[]} onPick={() => undefined} resolved={answerText} />;
+  const tail = !embedded ? asking : blockedAnswer ? settled("受阻", blockedAnswer) : mergeLater ? settled(`「${item.title}」无法合回`, "先不合") : null;
   const dock = <PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} />;
   // 新首页里输入框只在这台电脑上跑着这张卡时出（别处看摘要）；老页面照旧灰着。
   // 输入框下面一行的右边写「执行方 · 模型」（21 条），来源在悬停里：这台电脑上的会话报的（实际跑的优先），没有时退回「来源 · 模型」、再退回云端记的。文件夹在左边。
@@ -177,18 +201,18 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
   const place = session?.workspace ? { name: shortPlace(session.workspace), title: placeText(session.workspace) } : null;
   const composer = agent && (session || !embedded)
     ? <SessionComposer label={`给${item.title}插话`} disabled={!canAct} onSend={say} mode={mode} dock={dock} context={contextUsage(view.context ?? session?.context)} subject={{ kind: "card", id: cardId }} place={place} model={model ? { label: model.label, title: model.title ?? undefined } : null}
-      models={models}
+      models={models} pinned={pinned}
       busy={sessionRunning} onStop={() => void control("interrupt").catch(() => showWorkspaceToast({ text: "没停下" }))} />
-    : <div className={s.composerDock}>{dock}</div>;
+    : <div className={s.composerDock}>{pinned ? <div className={s.pinned} data-testid="pinned">{pinned}</div> : null}{dock}</div>;
   const chat = (
     <PendingBoxes>
       <div className={s.chat}>
         <div className={s.scroll} ref={scroll.scrollRef}>
           <div ref={scroll.contentRef}>
             {session ? (
-              <SessionTranscript entries={send.entries} agentName={agentName} canAct={canAct} onResend={(entry) => void say(entry.text).catch(() => showWorkspaceToast({ text: "没发出去" }))} onRetry={send.retry} draft={draft} drafted={drafted} device={device} live={sessionRunning} starting={status === "starting"} ended={ended} relay={relay} lead={`交代：${item.title}${item.card?.criterion ? ` · 按「${item.card.criterion.text}」验收` : ""}`}
+              <SessionTranscript entries={send.entries} agentName={agentName} canAct={canAct} onResend={(entry) => void say(entry.text).catch(() => showWorkspaceToast({ text: "没发出去" }))} onRetry={send.retry} draft={draft} drafted={drafted} device={device} live={sessionRunning} starting={status === "starting"} ended={ended} pinned={embedded} lead={`交代：${item.title}${item.card?.criterion ? ` · 按「${item.card.criterion.text}」验收` : ""}`}
                 onFile={openFile}
-                onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={asking} asking={question} />
+                onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={tail} asking={question} />
             ) : <CloudTimeline run={run} title={item.title} />}
           </div>
           <div ref={scroll.reserveRef} aria-hidden />
@@ -210,7 +234,7 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
     const inSide = !!side;
     const showPane = side ? side.open : details ?? !session;
     const openDetails = (open?: boolean) => (side ? side.toggle(open) : setDetails(open ?? !showPane));
-    const chipOf = stateChip(wait, stage, !canAct && device ? awayChip(device) : null);
+    const chipOf = stateChip(attention, session ? localWait(view) : card.wait, stage, !canAct && device ? awayChip(device) : null);
     const handback = detail.handbacks[0] ?? null;
     const canFlip = !handheld && !!handback && handback.status === "done" && !handback.overruled && handback.outcome === "pass" && !deliverableLabel(item)?.startsWith("已纳入");
     // 停止在输入框右边（27 条，在跑时没字是停止方块）；页头只留「推翻」。

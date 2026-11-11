@@ -44,11 +44,11 @@ describe("子会话里答过、过期的选项框（5.4.3）", () => {
     expect(render([permission(1, null)], { canAct: false, device: "ThinkPad" })).toContain("等你 · ThinkPad");
   });
 
-  it("转给 Task 管线（14.3）：只一行原话加「去回答」，不画选项", () => {
-    const html = render([permission(1, null)], { relay: vi.fn() });
-    expect(html).toContain("运行 pnpm test");
-    expect(html).toContain("去回答");
+  it("钉在输入框上方时（第 54 条）：对话里那一处不画没答的批准；会话停了照样收成「已失效」", () => {
+    const html = render([permission(1, null)], { pinned: true });
     expect(html).not.toContain("同类以后都批准");
+    expect(html).not.toContain("去回答");
+    expect(render([permission(1, null)], { pinned: true, ended: true })).toContain("已失效");
   });
 });
 
@@ -87,14 +87,21 @@ describe("有没批的批准时，底下发一句话 = 换个做法（5.4.3）",
   });
 });
 
-describe("子会话页头的状态 chip（5.4.3、5.6）", () => {
-  it("等你是等你档；不在这台电脑上写「等你 · 电脑名」", () => {
-    expect(stateChip("approval", "doing", null)).toEqual({ text: "等你批准", tone: "wait" });
-    expect(stateChip("reply", "doing", "等你 · ThinkPad")).toEqual({ text: "等你 · ThinkPad", tone: "wait" });
+describe("子会话页头的状态 chip（5.4.3、5.6、第 54 条）", () => {
+  it("只有等本人处理的框是等你档；批准、提问不在这台电脑上写「等你 · 电脑名」", () => {
+    expect(stateChip("approval", null, "doing", null)).toEqual({ text: "等你批准", tone: "wait" });
+    expect(stateChip("question", null, "doing", "等你 · ThinkPad")).toEqual({ text: "等你 · ThinkPad", tone: "wait" });
+    expect(stateChip("verdict", "blocked", "doing", "等你 · ThinkPad")).toEqual({ text: "等你拿主意", tone: "wait" });
+    expect(stateChip("merge", null, "done", null)).toEqual({ text: "等你合回", tone: "wait" });
   });
-  it("第一次验收没过是进行中的「重做中」，不是单独的状态；受阻是警告档", () => {
-    expect(stateChip("review_failed", "review", null)).toEqual({ text: "重做中", tone: "neutral" });
-    expect(stateChip("blocked", "review", null)).toEqual({ text: "受阻", tone: "warn" });
-    expect(stateChip(null, "done", null)).toEqual({ text: "已完成", tone: "neutral" });
+  it("没有框的不是等你档：一轮做完是「已停下」，停了是「已停止」", () => {
+    expect(stateChip(null, "reply", "doing", null)).toEqual({ text: "已停下", tone: "neutral" });
+    expect(stateChip(null, "paused", "doing", null)).toEqual({ text: "已停止", tone: "neutral" });
+    expect(stateChip(null, "approval", "doing", null)).toEqual({ text: "进行中", tone: "neutral" });
+  });
+  it("第一次验收没过是进行中的「重做中」，不是单独的状态；不是验收没过的受阻是警告档", () => {
+    expect(stateChip(null, "review_failed", "review", null)).toEqual({ text: "重做中", tone: "neutral" });
+    expect(stateChip(null, "blocked", "review", null)).toEqual({ text: "受阻", tone: "warn" });
+    expect(stateChip(null, null, "done", null)).toEqual({ text: "已完成", tone: "neutral" });
   });
 });
