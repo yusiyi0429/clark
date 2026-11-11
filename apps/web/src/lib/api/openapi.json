@@ -100371,6 +100371,18 @@
               "maxLength": 4000,
               "type": "string"
             }
+          },
+          "modelWords": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -101993,6 +102005,18 @@
                     "maxLength": 4000,
                     "type": "string"
                   }
+                },
+                "modelWords": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "maxLength": 300,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               }
             }
@@ -115353,6 +115377,18 @@
                 "type": "null"
               }
             ]
+          },
+          "modelWords": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -115468,6 +115504,18 @@
                     {
                       "minimum": 1,
                       "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "modelWords": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "maxLength": 300,
+                      "type": "string"
                     },
                     {
                       "type": "null"
@@ -115870,6 +115918,11 @@
           "afterSequence": {
             "minimum": 1,
             "type": "integer"
+          },
+          "modelWords": {
+            "minLength": 1,
+            "maxLength": 300,
+            "type": "string"
           }
         }
       },
@@ -129975,6 +130028,18 @@
                     "maxLength": 4000,
                     "type": "string"
                   }
+                },
+                "modelWords": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "maxLength": 300,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               }
             }

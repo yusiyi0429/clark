@@ -16984,6 +16984,7 @@ export interface components {
             modelTier: "strong" | "normal" | "light";
             why: string | null;
             sourceWords: string[];
+            modelWords?: string | null;
         };
         PendingDeliverableItem: {
             /** Format: uuid */
@@ -17201,6 +17202,7 @@ export interface components {
                 modelTier: "strong" | "normal" | "light";
                 why: string | null;
                 sourceWords: string[];
+                modelWords?: string | null;
             }[];
             plan: {
                 /** Format: uuid */
@@ -19013,6 +19015,7 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
             afterSequence: number | null;
+            modelWords?: string | null;
         };
         CardSplitListResponse: {
             requests: {
@@ -19028,6 +19031,7 @@ export interface components {
                 /** Format: date-time */
                 createdAt: string;
                 afterSequence: number | null;
+                modelWords?: string | null;
             }[];
         };
         PlanBriefRole: {
@@ -19081,6 +19085,7 @@ export interface components {
         RegisterCardSplitRequest: {
             words?: string;
             afterSequence?: number;
+            modelWords?: string;
         };
         SubSession: {
             id: string;
@@ -21120,6 +21125,7 @@ export interface components {
                 modelTier: "strong" | "normal" | "light";
                 why: string | null;
                 sourceWords: string[];
+                modelWords?: string | null;
             }[];
             plan: {
                 /** Format: uuid */
