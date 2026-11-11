@@ -5,7 +5,7 @@ import type { TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import {
   LOCAL_RUNNER_PROTOCOL, LOCAL_RUNNER_ROUTES, LOCAL_RUNNER_TOKEN_HEADER,
-  LocalSessionFileReadRequest, LocalPairingStartRequest, LocalAgentLoginCodeRequest, LocalCloudLinkRequest, LocalSettingsPatch, LocalModelProfileUpsert, LocalTokenHubConnectRequest, LocalToolUpsert, LocalFolderPickRequest, LocalFolderCreateRequest, LocalSessionModelRequest,
+  LocalSessionFileReadRequest, LocalPairingStartRequest, LocalAgentLoginCodeRequest, LocalCloudLinkRequest, LocalSettingsPatch, LocalModelProfileUpsert, LocalTokenHubConnectRequest, LocalSourceCheckRequest, LocalSourceAddRequest, LocalToolUpsert, LocalFolderPickRequest, LocalFolderCreateRequest, LocalSessionModelRequest,
   LocalCreateSessionRequest, LocalCreateSessionBatchRequest, LocalSendMessageRequest, LocalPermissionDecisionRequest, LocalQuestionAnswerRequest, LocalBudgetUpdateRequest, LocalProjectFolderRequest, LocalProjectCloneRequest, LocalRunPreviewRequest, LocalPermissionModeRequest,
   type TLocalRunnerErrorCode, type TLocalStatusResponse, type TLocalHealthResponse,
 } from "@warmap/contracts";
@@ -32,6 +32,7 @@ import { handoverCheck, repoName, stripCredentials, type cloneRepo } from "../ha
 import type { CliTools } from "../tools.js";
 import type { CustomTools } from "../customTools.js";
 import { TokenHubError, type TokenHub } from "../tokenHub.js";
+import { SourceError, type Sources } from "../sources.js";
 import { DEV_PAGE } from "./devPage.js";
 import { handleMcpMessage } from "../sessionMcp.js";
 
@@ -61,6 +62,7 @@ export interface ServerDeps {
   customTools: CustomTools;
   /** 连接页连 TokenHub（/v1/tokenhub）。 */
   tokenHub: TokenHub;
+  sources: Sources;
   pickFolder: () => Promise<string | null>;
   /** 接手项目时 clone 仓库（16.7；测试里换成从本地仓库 clone）。 */
   cloneRepo: typeof cloneRepo;
@@ -227,10 +229,23 @@ export function createServer(d: ServerDeps): http.Server {
         if (e instanceof TokenHubError) throw new HttpError(e.code === "tokenhub_unreachable" ? 502 : 422, e.code, e.message);
         throw e;
       }
+      d.sources.markTokenHub();
       void d.spend.refresh(true); // 右栏、这一行下面的 TokenHub 花费马上重读（断开时同样，免得未连接下面还挂着花费）
       return { profiles: await d.models.list() };
     },
     disconnectTokenHub: async () => { await d.tokenHub.disconnect(); void d.spend.refresh(true); return { ok: true }; },
+    listSources: async () => ({ presets: d.sources.presets(), sources: await d.sources.list() }),
+    checkSource: (c) => sourceCall(() => d.sources.check(validate(LocalSourceCheckRequest, c.body))),
+    addSource: async (c) => {
+      const r = await sourceCall(() => d.sources.add(validate(LocalSourceAddRequest, c.body)));
+      void d.spend.refresh(true);
+      return r;
+    },
+    deleteSource: async (c) => {
+      if (!(await d.sources.remove(c.params.id!))) throw new HttpError(404, "not_found", "没有这个来源");
+      void d.spend.refresh(true);
+      return { ok: true };
+    },
     listTools: async () => ({ tools: await d.customTools.list() }),
     putTool: async (c) => {
       if (!/^[A-Za-z0-9_-]{1,80}$/.test(c.params.id!)) throw new HttpError(400, "validation", "id 只能用字母数字、- 和 _");
@@ -340,6 +355,14 @@ export function createServer(d: ServerDeps): http.Server {
 
   function agentMustBeClaude(c: Ctx) {
     if (c.params.agent !== "claude-code") throw new HttpError(404, "not_found", "没有这个执行方");
+  }
+
+  /** 添加来源（第 52 条）：来源表的错照契约的码和状态回（厂商不认、列不出 422，连不上 502，参数不对 400）。 */
+  async function sourceCall<T>(fn: () => Promise<T>): Promise<T> {
+    try { return await fn(); } catch (e) {
+      if (!(e instanceof SourceError)) throw e;
+      throw new HttpError(e.code === "source_unreachable" ? 502 : e.code === "validation" ? 400 : e.code === "not_found" ? 404 : 422, e.code, e.message);
+    }
   }
 
   /**

@@ -3,7 +3,7 @@ import { FormatRegistry } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import {
   LocalCreateSessionRequest, LocalModelProfileUpsert, LocalTokenHubConnectRequest, LocalRunnerError, LOCAL_TOKENHUB_PROFILE_PREFIX, LocalModelProfile, LocalPermissionDecisionRequest, LocalSessionEvent,
-  LocalSyncBatchRequest, LocalPairingStatusResponse, LocalSendMessageRequest, LOCAL_RUNNER_ROUTES, LOCAL_RUNNER_PROTOCOL, LocalSessionDraft,
+  LocalSyncBatchRequest, LocalPairingStatusResponse, LocalSendMessageRequest, LOCAL_RUNNER_ROUTES, LOCAL_RUNNER_PROTOCOL, LocalSessionDraft, LocalSourceCheckRequest, LocalSourceCheckResponse, LocalSourceAddRequest, LocalSource, LocalSourceListResponse,
   LocalCreateSessionBatchRequest, LocalCreateSessionBatchResponse, LocalSettingsPatch, LocalSessionSummary, LocalHealthResponse,
   LocalVerifyBriefResponse, LOCAL_RUNNER_VERIFY_BRIEF_PATH, LocalMergeResponse, LocalVerdict, LocalQuestionAnswerRequest, LocalPlanCard, LocalBackgroundItem,
   LocalSettings, LocalMergeSync, LocalStatusResponse, LocalQuotaSource, LocalQuotaSync,
@@ -56,6 +56,27 @@ describe("本机程序契约", () => {
     expect(Value.Check(LocalSessionDraft, { type: "draft", sessionId, text: "" })).toBe(true);
     expect(Value.Check(LocalSessionDraft, { type: "draft", sessionId, text: "x", seq: 3 })).toBe(false);
     expect(Value.Check(LocalSessionEvent, { type: "draft", sessionId, text: "x", seq: 3, at: "2026-11-11T00:00:00.000Z" })).toBe(false);
+  });
+
+  it("添加来源：路由、先认先验（presetId 可空、可不给）、加的时候至少选一个模型、来源和预设的形状、三个错误码", () => {
+    expect([LOCAL_RUNNER_ROUTES.listSources, LOCAL_RUNNER_ROUTES.checkSource, LOCAL_RUNNER_ROUTES.addSource, LOCAL_RUNNER_ROUTES.deleteSource]).toEqual([
+      { method: "GET", path: "/v1/sources", auth: true }, { method: "POST", path: "/v1/sources/check", auth: true },
+      { method: "POST", path: "/v1/sources", auth: true }, { method: "DELETE", path: "/v1/sources/:id", auth: true },
+    ]);
+    expect(Value.Check(LocalSourceCheckRequest, { apiKey: "sk-ant-api03-x" })).toBe(true);
+    expect(Value.Check(LocalSourceCheckRequest, { apiKey: "sk-x", presetId: "kimi", plan: "coding_plan", region: "intl" })).toBe(true);
+    expect(Value.Check(LocalSourceCheckRequest, { apiKey: "sk-x", presetId: null, baseUrl: "https://llm.example.com/anthropic" })).toBe(true);
+    expect(Value.Check(LocalSourceCheckRequest, { apiKey: "sk x" })).toBe(false);
+    expect(Value.Check(LocalSourceCheckResponse, { recognized: null, candidates: ["kimi", "deepseek"], models: [], verified: false })).toBe(true);
+    expect(Value.Check(LocalSourceAddRequest, { apiKey: "sk-x", presetId: "deepseek", models: [] })).toBe(false);
+    expect(Value.Check(LocalSourceAddRequest, { apiKey: "sk-x", presetId: null, name: "nebula", baseUrl: "https://nebula.example.com", format: "anthropic", models: ["m1"] })).toBe(true);
+    const source = { id: "kimi-coding_plan-cn", presetId: "kimi", name: "Kimi 编程套餐", plan: "coding_plan", region: "cn", baseUrl: "https://api.example.com/anthropic",
+      formats: ["anthropic"], agents: ["claude-code"], models: [{ id: "kimi-k3", name: "kimi-k3" }], verified: false, addedAt: "2026-11-11T00:00:00.000Z" };
+    expect(Value.Check(LocalSource, source)).toBe(true);
+    expect(Value.Check(LocalSourceListResponse, { presets: [{ id: "anthropic", name: "Anthropic 官方 API", plans: ["api"], regions: [], agents: ["claude-code"] }], sources: [source] })).toBe(true);
+    for (const code of ["source_key_rejected", "source_unreachable", "source_no_models"]) {
+      expect(Value.Check(LocalRunnerError, { error: { code, message: "x" } })).toBe(true);
+    }
   });
 
   it("说一句可带网页生成的编号（protocol 2 起）", () => {
