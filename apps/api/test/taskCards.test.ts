@@ -52,7 +52,8 @@ describe("执行看板：卡的投影和看板接口", { timeout: 30_000 }, () =
       await run(f, ids.failedReturned, "running", 1);
       await handback(f, ids.failedReturned, 1, { outcome: "fail", verdicts: ["met", "unmet"], returned: true });
       await handback(f, ids.blocked, 1, { outcome: "fail", verdicts: ["unmet", "unmet"], returned: true });
-      await handback(f, ids.blocked, 2, { outcome: "fail", verdicts: ["met", "unmet"], returned: true });
+      // 第二次没过的改法还没送回：送回就是本人选了「再改一轮」，不再受阻（主循环第 62 条）。
+      await handback(f, ids.blocked, 2, { outcome: "fail", verdicts: ["met", "unmet"] });
       await run(f, ids.crashed, "failed", 1);
       await run(f, ids.crashed, "failed", 2);
       // 异常退出一次：已暂停（连续两次才受阻）。停着等额度恢复（本机报了 hold）：不是等你回复。

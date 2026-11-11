@@ -1,4 +1,4 @@
-import type { TCardCriterionVerdict, TCardFixBy, TCardGapItem, TCardGit, TCardHandbackBrief, TCardHandbackOutcome, TCardModel, TCardWait, TDeliverableInclusion, TLocalGitRef,
+import type { TCardCriterionVerdict, TCardFixBy, TCardGapItem, TCardGit, TCardHandbackBrief, TCardHandbackOutcome, TCardModel, TCardRelayView, TCardWait, TDeliverableInclusion, TLocalGitRef,
   TLocalHandbackCriterion, TTaskCard, TTaskView, TCardSourceWordIssue } from "@warmap/contracts";
 import { askingQuestion, runBrief, type RunRow } from "./localDevices.js";
 import type { Query } from "./meetingStore.js";
@@ -19,7 +19,25 @@ export type HandbackRow = { id: string; task_id: string; run_id: string | null; 
   result: StoredAcceptance | null; outcome: TCardHandbackOutcome | null; return_text: string | null; returned_at: Date | null; overruled_at: Date | null;
   overruled_by: string | null; overrule_reason: string | null; created_at: Date;
   verifier_source: "cloud" | "local" | null; verifier_model: string | null; verifier_role_id: string | null; verifier_role_version: number | null;
-  git: TLocalGitRef | null; verified_commit: string | null };
+  git: TLocalGitRef | null; verified_commit: string | null;
+  /** 「我来补」送到的时间（主循环第 61 条）。 */
+  supplied_at?: Date | null;
+  /** 这次交回最近一次登记的「再改一轮」「我来补」（HANDBACKS_WITH_RELAY 读的才有）。 */
+  relay?: StoredRelay | null };
+/** session_commands 里登记的那一条（json_build_object 读出来的，时间是字符串）。 */
+export type StoredRelay = { id: string; relay: "return" | "supply"; text: string; requested_at: string; done_at: string | null; result: string | null; message: string | null };
+
+/** 读交回连同最近一次登记的「再改一轮」「我来补」（看板、卡的详情用）。条件接在后面，表名 h。 */
+export const HANDBACKS_WITH_RELAY = `SELECT h.*,(SELECT json_build_object('id',c.id,'relay',c.relay,'text',c.command->>'text','requested_at',c.requested_at,'done_at',c.done_at,
+  'result',c.result,'message',c.message) FROM session_commands c WHERE c.handback_id=h.id ORDER BY c.requested_at DESC,c.id DESC LIMIT 1) AS relay FROM card_handbacks h`;
+
+const RELAY_FAILED: Record<string, string> = { not_running: "那台电脑上已经没有这个会话了", expired: "已经失效了" };
+function relayView(relay: StoredRelay): TCardRelayView {
+  const state = !relay.done_at ? "pending" : relay.result === "done" ? "delivered" : "failed";
+  return { id: relay.id, kind: relay.relay, state, text: relay.text, requestedAt: new Date(relay.requested_at).toISOString(),
+    doneAt: relay.done_at ? new Date(relay.done_at).toISOString() : null,
+    message: state === "failed" ? relay.message ?? RELAY_FAILED[relay.result ?? ""] ?? "没送成" : null };
+}
 export type CardRow = { id: string; status: TTaskView["status"]; executor: TTaskCard["executor"]; model: TCardModel | null; brief: string | null;
   criterion_index: number | null; criterion_text: string | null; plan_task_id: string | null; done_definition: string | null; mission_id: string | null;
   role_id: string | null; after_card_ids: string[]; source_words: string[] };
@@ -76,7 +94,9 @@ export function handbackBrief(row: HandbackRow): TCardHandbackBrief {
   return { id: row.id, attempt: row.attempt, status: row.status, outcome: row.outcome, met: criteria.filter((item) => item.verdict === "met").length, total: criteria.length,
     headline: row.result?.headline ?? null, returnText: row.return_text, returnedAt: row.returned_at?.toISOString() ?? null, overruled: row.overruled_at !== null,
     createdAt: row.created_at.toISOString(), finishedAt: row.finished_at?.toISOString() ?? null, git: cardGit(row),
-    sourceWordIssues: row.result?.sourceWordIssues ?? [], gaps: handbackGaps(row) };
+    sourceWordIssues: row.result?.sourceWordIssues ?? [], gaps: handbackGaps(row), relay: row.relay ? relayView(row.relay) : null,
+    // 有缺口通过（主循环第 62 条「就到这里」）：没过、等本人补的那次被本人推翻成通过。
+    passedWithGap: row.overruled_at && row.outcome !== "pass" && row.overrule_reason ? { reason: row.overrule_reason, at: row.overruled_at.toISOString() } : null };
 }
 
 /** 列和标记（第 3 节）：handbacks、runs 都是新的在前。 */
@@ -86,9 +106,11 @@ function stageAndWait(row: CardRow, handbacks: HandbackRow[], runs: RunRow[]): P
   const latest = handbacks[0];
   if (latest && (latest.status === "queued" || latest.status === "running")) return { stage: "review", wait: null };
   // 等你补（主循环第 61 条）：最近一次交回是等本人补、本人还没「就到这里」，排在受阻前面。
-  if (latest?.status === "done" && effectiveOutcome(latest) === "needs_person") return { stage: "doing", wait: "needs_person" };
+  // 「我来补」送到了就不再等。
+  if (latest?.status === "done" && effectiveOutcome(latest) === "needs_person" && !latest.supplied_at) return { stage: "doing", wait: "needs_person" };
   const failedRuns = runs.length >= 2 && runs.slice(0, 2).every((run) => run.state === "failed");
-  if (failStreak(handbacks) >= 2 || failedRuns) return { stage: "doing", wait: "blocked" };
+  // 受阻：「再改一轮」送到（returnedAt）以后就不是了（主循环第 62 条）。
+  if ((failStreak(handbacks) >= 2 && !latest?.returned_at) || failedRuns) return { stage: "doing", wait: "blocked" };
   if (latest && effectiveOutcome(latest) === "fail" && !latest.returned_at) return { stage: "doing", wait: "review_failed" };
   // 停着等额度恢复的不是等你回复、也不是已暂停（契约的标记里没有额度，给 null）；停下了、异常退出了一次都算已暂停。
   if (runs[0]?.hold?.reason === "usage_limit" && HOLD_STATES.includes(runs[0].state)) return { stage: "doing", wait: null };
@@ -105,7 +127,7 @@ export async function cardsOf(q: Query, rows: CardRow[]): Promise<Map<string, TT
   const ids = rows.map((row) => row.id);
   if (!ids.length) return new Map();
   // 依次读：执行事项的投影有时在事务里（q 是同一个连接），有时用连接池，并发读会多占连接。
-  const handbacks = (await q("SELECT * FROM card_handbacks WHERE task_id=ANY($1::uuid[]) ORDER BY attempt DESC", [ids])).rows as HandbackRow[];
+  const handbacks = (await q(`${HANDBACKS_WITH_RELAY} WHERE h.task_id=ANY($1::uuid[]) ORDER BY h.attempt DESC`, [ids])).rows as HandbackRow[];
   // 每张卡最近两次执行：最近一次给摘要和标记，两次都异常退出算受阻。
   const runs = (await q(`SELECT * FROM (SELECT r.*,d.name AS device_name,row_number() OVER (PARTITION BY r.task_id ORDER BY r.started_at DESC,r.id) AS n
     FROM local_runs r LEFT JOIN local_devices d ON d.owner_id=r.owner_id AND d.id=r.device_id WHERE r.task_id=ANY($1::uuid[]) AND r.kind='card') x

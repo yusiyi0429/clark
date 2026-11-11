@@ -182,6 +182,62 @@ describe("拆卡和验收在本机（第 21 节）", { timeout: 30_000 }, () => 
     } finally { await f.close(); }
   });
 
+  it("手机上登记「我来补」「再改一轮」（主循环第 62 条）：等那台电脑认领送到，送到后不再等你补、不再受阻；就到这里记成有缺口通过", async () => {
+    const f = await localFixture();
+    try {
+      const keyOf = async (cardId: string) => (await f.t.sql("SELECT client_id FROM card_handbacks WHERE task_id=$1 ORDER BY attempt DESC LIMIT 1", [cardId]))[0].client_id as string;
+      const handBack = (cardId: string, criteria: unknown[]) => f.sync({ kind: "card", cardId }, [["handback", { summary: "交回", criteria, outputKeys: [] }]]);
+      const judge = async (cardId: string, criteria: { index: number; verdict: string; fix?: string; fixBy?: string }[]) =>
+        f.sync({ kind: "verify", cardId, handbackKey: await keyOf(cardId) }, [["verdict", { passed: false, summary: "就差申请号，要你查", beyondScope: [], modelLabel: "Opus 5.5",
+          roleId: null, roleVersion: null, criteria: criteria.map(({ index, verdict, fix, fixBy }) => ({ index, verdict, reason: "缺", evidence: null, fix: fix ?? null,
+            ...(fixBy ? { fixBy } : {}) })) }]]);
+      const card = async (title: string) => { const id = await f.card(title); await f.t.sql("UPDATE tasks SET executor='claude_code' WHERE id=$1", [id]); return id; };
+      const latest = async (cardId: string) => (await f.t.sql("SELECT id::text FROM card_handbacks WHERE task_id=$1 ORDER BY attempt DESC LIMIT 1", [cardId]))[0].id as string;
+      const relay = async (cardId: string, body: unknown) => f.call("POST", `/api/me/cards/${cardId}/handbacks/${await latest(cardId)}/relay`, body);
+      const claim = async () => (await f.call("POST", "/api/me/session-commands/claim", { deviceId: f.machine.device })).json().commands as
+        { id: string; subSessionId: string; command: { text: string } }[];
+      const done = (id: string) => f.call("POST", `/api/me/session-commands/${id}/done`, { deviceId: f.machine.device, result: "done" });
+
+      // 我来补：先登记，框上「电脑在线后送到」；再登记一条 409；那台电脑认领送到后不再等你补。
+      const a = await card("候选名初查");
+      await handBack(a, [{ index: 1, result: "met", evidence: "" }, { index: 2, result: "needs_person", evidence: "", need: "查申请号" }]);
+      await judge(a, [{ index: 1, verdict: "unmet", fix: "补上含义", fixBy: "worker" }, { index: 2, verdict: "needs_person", fix: "查申请号" }]);
+      expect((await relay(a, { kind: "return" })).json()).toMatchObject({ code: "NOTHING_TO_RELAY" });
+      const pending = await relay(a, { kind: "supply", text: "B 名 第 12345678 号" });
+      expect(pending.statusCode).toBe(200);
+      expect(pending.json().task.card).toMatchObject({ wait: "needs_person", handback: { relay: { kind: "supply", state: "pending", doneAt: null, message: null } } });
+      expect((await relay(a, { kind: "supply", text: "再补一句" })).json()).toMatchObject({ code: "RELAY_PENDING" });
+      const [supply] = await claim();
+      expect(supply.command.text).toBe("本人补上了：\nB 名 第 12345678 号\n\n你能补的：第 1 条「有方案文档」，缺；怎么补：补上含义。改完再交回。\n\n接着做，做完再交回。");
+      expect((await done(supply.id)).statusCode).toBe(204);
+      const delivered = (await f.call("GET", `/api/me/cards/${a}`)).json().task.card;
+      expect(delivered.wait).not.toBe("needs_person");
+      expect(delivered.handback.relay).toMatchObject({ state: "delivered", doneAt: expect.any(String) });
+      expect((await relay(a, { kind: "supply", text: "又一句" })).json()).toMatchObject({ code: "NOTHING_TO_RELAY" });
+
+      // 再改一轮：连续两次没过受阻；手机上登记，送到后不再受阻。
+      const b = await card("写说明");
+      for (let i = 0; i < 2; i++) {
+        await handBack(b, [{ index: 1, result: "met", evidence: "" }, { index: 2, result: "met", evidence: "" }]);
+        await judge(b, [{ index: 1, verdict: "met" }, { index: 2, verdict: "unmet", fix: "补评审结论" }]);
+      }
+      expect((await f.call("GET", `/api/me/cards/${b}`)).json().task.card.wait).toBe("blocked");
+      await relay(b, { kind: "return" });
+      const [again] = await claim();
+      expect(again.command.text).toContain("验收没过：第 2 条「有评审结论」");
+      await done(again.id);
+      expect((await f.call("GET", `/api/me/cards/${b}`)).json().task.card).toMatchObject({ handback: { returnedAt: expect.any(String) } });
+      expect((await f.call("GET", `/api/me/cards/${b}`)).json().task.card.wait).not.toBe("blocked");
+
+      // 就到这里：有缺口通过，原因在卡上读得到。
+      const c = await card("出方案");
+      await handBack(c, [{ index: 1, result: "met", evidence: "" }, { index: 2, result: "met", evidence: "" }]);
+      await judge(c, [{ index: 1, verdict: "met" }, { index: 2, verdict: "unmet", fix: "补" }]);
+      const closed = await f.call("POST", `/api/me/cards/${c}/handbacks/${await latest(c)}/overrule`, { reason: "评审结论先不要" });
+      expect(closed.json().task.card).toMatchObject({ stage: "done", handback: { passedWithGap: { reason: "评审结论先不要", at: expect.any(String) } } });
+    } finally { await f.close(); }
+  });
+
   it("本机验收员：交回不排云端验收；验收交代带标准、自评、点名的产出和证据；没过写改法、第二次没过记岗位修改，交代里带上一次没过的地方；过了进准备中；已经有结论的再报拒收", async () => {
     const f = await localFixture();
     try {

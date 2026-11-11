@@ -384,3 +384,31 @@ export function markHandbackReturned(pool: Pool, ownerId: string, cardId: string
     await client.query("UPDATE card_handbacks SET returned_at=COALESCE(returned_at,$2) WHERE id=$1", [handbackId, now]);
   });
 }
+
+/**
+ * 从手机或别的电脑登记「再改一轮」「我来补」（主循环第 61、62 条，POST /api/me/cards/:id/handbacks/:handbackId/relay）：
+ * 复用转话——给这张卡最近一次本机会话登记一条 SessionCommand message，记上是哪次交回、哪一种；那台电脑上的网页认领、送到、报 done 后
+ * finishCommand 回写：return 记 returned_at，supply 记 supplied_at。
+ * return 只对最近一次、没过、改法还没送到的；supply 只对最近一次、等本人补、还没补的。这次交回有一条在等送的 409 RELAY_PENDING。
+ */
+export function relayHandback(pool: Pool, ownerId: string, cardId: string, handbackId: string, body: { kind: "return" } | { kind: "supply"; text: string }, now: Date):
+  Promise<void> {
+  return inTransaction(pool, async (client) => {
+    const { row } = await lockedHandback(client, ownerId, cardId, handbackId);
+    const latest = (await client.query("SELECT max(attempt)::int AS n FROM card_handbacks WHERE task_id=$1", [cardId])).rows[0].n as number;
+    const outcome = row.status === "done" ? effectiveOutcome(row) : null;
+    const fits = row.attempt === latest && (body.kind === "return" ? outcome === "fail" && row.return_text && !row.returned_at
+      : outcome === "needs_person" && !row.supplied_at);
+    if (!fits) throw new CardError(409, "NOTHING_TO_RELAY", body.kind === "return" ? "这次交回没有要送回的改法" : "这次交回不在等你补");
+    if ((await client.query("SELECT 1 FROM session_commands WHERE handback_id=$1 AND done_at IS NULL", [handbackId])).rowCount)
+      throw new CardError(409, "RELAY_PENDING", "已经登记过一条，等那台电脑上线送到");
+    const run = (await client.query("SELECT id::text,device_id::text FROM local_runs WHERE task_id=$1 AND kind='card' ORDER BY started_at DESC,id LIMIT 1", [cardId])).rows[0] as
+      { id: string; device_id: string } | undefined;
+    if (!run) throw new CardError(409, "NOT_STARTED", "这张卡还没在电脑上开过工");
+    const text = body.kind === "return" ? row.return_text!
+      : [`本人补上了：\n${body.text.trim()}`, ...(row.return_text ? [row.return_text] : []), "接着做，做完再交回。"].join("\n\n");
+    await client.query(`INSERT INTO session_commands(id,owner_id,kind,card_id,topic_id,run_id,device_id,command,requested_at,handback_id,relay)
+      VALUES($1,$2,'card',$3,NULL,$4,$5,$6::jsonb,$7,$8,$9)`,
+    [randomUUID(), ownerId, cardId, run.id, run.device_id, JSON.stringify({ type: "message", text: text.slice(0, 4000) }), now, handbackId, body.kind]);
+  });
+}

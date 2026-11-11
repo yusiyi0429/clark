@@ -2,12 +2,13 @@ import { Type } from "@sinclair/typebox";
 import type { FastifyReply } from "fastify";
 import { AcceptCardDraftsRequest, AcceptCardDraftsResponse, CardBoardResponse, CardBriefResponse, CardDetailResponse, CardPlanBriefResponse, CardPlanView, CardSplitListResponse,
   CardSplitRequestView, CardTaskView, CreateCardPlanRequest, AddPendingDeliverableRequest, CreateVersionFromPendingRequest, DeliverableVersion, OverruleCardHandbackRequest,
-  PatchCardRequest, PendingDeliverableItem, RegisterCardSplitRequest, CardAgreementChangeListResponse, DecideAgreementProposalRequest } from "@warmap/contracts";
+  PatchCardRequest, PendingDeliverableItem, RegisterCardSplitRequest, CardAgreementChangeListResponse, DecideAgreementProposalRequest, CardRelayRequest,
+  type TCardRelayRequest } from "@warmap/contracts";
 import { decideProposal, listAgreementChanges } from "../cardAgreements.js";
 import { emptyBodyAsObject, lastSequenceReader, projectHistoryReader, recentOwnerWords, typedWords } from "../sourceWords.js";
 import { createArticleFetcher, type ArticleFetcher } from "../articleText.js";
 import { normalizeBudget, writeTaskBudget } from "../budgets.js";
-import { createCardAcceptanceQueue, markHandbackReturned, overruleHandback, retryHandback } from "../cardAcceptance.js";
+import { createCardAcceptanceQueue, markHandbackReturned, overruleHandback, relayHandback, retryHandback } from "../cardAcceptance.js";
 import { createCardAcceptanceAgent, type CardAcceptanceAgent } from "../cardAcceptanceAgent.js";
 import { addPendingTopicVersion, createVersionFromPending, removePending } from "../cardDeliverables.js";
 import { createCardPlanAgent, type CardPlanAgent } from "../cardPlanAgent.js";
@@ -156,7 +157,8 @@ export function registerTaskCardRoutes(app: AppInstance, ctx: RouteContext, deps
     handle(reply, () => cardBrief(q, req.person!.personId, req.params.id, planTaskOf(req.person!.personId))));
 
   /** 对一次交回做完一件事，回卡的详情。 */
-  const handbackAction = (path: string, work: (personId: string, cardId: string, handbackId: string, body: never) => Promise<void>, body?: typeof OverruleCardHandbackRequest) =>
+  const handbackAction = (path: string, work: (personId: string, cardId: string, handbackId: string, body: never) => Promise<void>,
+    body?: typeof OverruleCardHandbackRequest | typeof CardRelayRequest) =>
     app.post(path, { preHandler: requireMember, schema: { params: handbackParams, ...(body ? { body } : {}), response: { 200: CardDetailResponse } } }, async (req, reply) => {
       const params = req.params as { id: string; handbackId: string };
       return handle(reply, async () => {
@@ -174,6 +176,8 @@ export function registerTaskCardRoutes(app: AppInstance, ctx: RouteContext, deps
     void acceptance.enqueue(handbackId);
   });
   handbackAction("/api/me/cards/:id/handbacks/:handbackId/returned", (personId, cardId, handbackId) => markHandbackReturned(pool, personId, cardId, handbackId, ctx.now()));
+  handbackAction("/api/me/cards/:id/handbacks/:handbackId/relay", (personId, cardId, handbackId, body: TCardRelayRequest) =>
+    relayHandback(pool, personId, cardId, handbackId, body, ctx.now()), CardRelayRequest);
 
   app.post("/api/plan-tasks/:taskId/deliverable/pending", { preHandler: requireMember, schema: { params: taskParams, body: AddPendingDeliverableRequest,
     response: { 201: PendingDeliverableItem } } }, async (req, reply) => handle(reply, async () =>

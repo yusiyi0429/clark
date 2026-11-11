@@ -9,7 +9,7 @@ import { planTaskViewer, type PlanTaskAccess } from "./planTaskAccess.js";
 import type { PeopleDirectory } from "./peopleDirectory.js";
 import { personDisplayNames } from "./people.js";
 import { openPlanTask } from "./taskAgreements.js";
-import { CARD_COLUMNS, cardGit, cardsOf, effectiveOutcome, handbackBrief, nextVersions, type CardRow, type HandbackRow, type StoredAcceptance } from "./cardProjection.js";
+import { CARD_COLUMNS, HANDBACKS_WITH_RELAY, cardGit, cardsOf, effectiveOutcome, handbackBrief, nextVersions, type CardRow, type HandbackRow, type StoredAcceptance } from "./cardProjection.js";
 import { outputView, recentRuns, runViews, type OutputRow } from "./localDevices.js";
 import type { Query } from "./meetingStore.js";
 import { UUID_PATTERN } from "./meetingStore.js";
@@ -181,7 +181,7 @@ export async function acceptanceExpectedSeconds(q: Query): Promise<number> {
 export async function readCardDetail(q: Query, ownerId: string, id: string, names: Map<string, string>): Promise<TCardDetailResponse> {
   const card = await ownCard(q, ownerId, id);
   const [task] = await cardTaskViews(q, [id], names);
-  const handbacks = (await q("SELECT * FROM card_handbacks WHERE task_id=$1 ORDER BY attempt DESC", [id])).rows as HandbackRow[];
+  const handbacks = (await q(`${HANDBACKS_WITH_RELAY} WHERE h.task_id=$1 ORDER BY h.attempt DESC`, [id])).rows as HandbackRow[];
   const outputs = (await q("SELECT * FROM local_outputs WHERE task_id=$1 ORDER BY created_at DESC,id", [id])).rows as OutputRow[];
   const expected = await acceptanceExpectedSeconds(q);
   return { task, letter: (await letterOfSub(q, "card", id))?.letter ?? null, brief: card.brief, standards: taskStandards(card.done_definition), runs: await runViews(q, await recentRuns(q, { taskId: id }, 5)),

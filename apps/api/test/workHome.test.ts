@@ -38,11 +38,12 @@ const home = async (f: BoardFixture) => {
   expect(res.statusCode).toBe(200);
   return res.json();
 };
-/** 卡在做、连续两次验收没过（受阻）：两次交回都验完、没过，改法都送回了。 */
+/** 卡在做、连续两次验收没过（受阻）：两次交回都验完、没过；第一次的改法送回了，第二次的还没（送回就是本人选了「再改一轮」，不再受阻）。 */
 async function failedTwice(f: BoardFixture, cardId: string) {
   await f.t.sql("UPDATE tasks SET status='in_progress' WHERE id=$1", [cardId]);
   for (const attempt of [1, 2]) await f.t.sql(`INSERT INTO card_handbacks(id,task_id,owner_id,client_id,attempt,criteria,status,outcome,returned_at)
-    VALUES($1,$2,$3,$4,$5,'["有方案文档","有评审结论"]'::jsonb,'done','fail',$6)`, [randomUUID(), cardId, TEST_MEMBER.personId, `k${attempt}-${randomUUID()}`, attempt, BOARD_NOW]);
+    VALUES($1,$2,$3,$4,$5,'["有方案文档","有评审结论"]'::jsonb,'done','fail',$6)`, [randomUUID(), cardId, TEST_MEMBER.personId, `k${attempt}-${randomUUID()}`, attempt,
+    attempt === 1 ? BOARD_NOW : null]);
 }
 
 describe("新首页", { timeout: 30_000 }, () => {

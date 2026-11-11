@@ -241,6 +241,7 @@ describe("migration", () => {
         "272_done_definition_limits.sql",
         "273_card_agreements.sql",
         "274_needs_person.sql",
+        "275_handback_relays.sql",
       ]);
 
       // 幂等：重复执行不再变更

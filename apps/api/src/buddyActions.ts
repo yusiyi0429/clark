@@ -819,8 +819,13 @@ export async function claimCommands(q: Query, ownerId: string, deviceId: string,
 export async function finishCommand(q: Query, ownerId: string, id: string, deviceId: string, result: "done" | "not_running" | "expired" | "failed",
   message: string | undefined, now: Date): Promise<boolean> {
   if (!UUID_PATTERN.test(id)) return false;
-  return Boolean((await q("UPDATE session_commands SET done_at=$4,result=$5,message=$6 WHERE id=$1 AND owner_id=$2 AND device_id=$3 AND done_at IS NULL",
-    [id, ownerId, deviceId, now, result, message ?? null])).rowCount);
+  const done = (await q(`UPDATE session_commands SET done_at=$4,result=$5,message=$6 WHERE id=$1 AND owner_id=$2 AND device_id=$3 AND done_at IS NULL
+    RETURNING handback_id::text,relay`, [id, ownerId, deviceId, now, result, message ?? null])).rows[0] as { handback_id: string | null; relay: "return" | "supply" | null } | undefined;
+  // 「再改一轮」「我来补」送到了（主循环第 62 条）：回写那次交回。
+  if (done?.handback_id && result === "done")
+    await q(`UPDATE card_handbacks SET ${done.relay === "return" ? "returned_at" : "supplied_at"}=COALESCE(${done.relay === "return" ? "returned_at" : "supplied_at"},$2) WHERE id=$1`,
+      [done.handback_id, now]);
+  return Boolean(done);
 }
 
 /** 报结果：本人的、这台电脑的、还没报过的；否则 false。 */
