@@ -15,15 +15,15 @@ export type RowModel = { key: string; name: string; sub: string | null; state: C
 type Tool = TLocalStatusResponse["tools"][number] & { kind: "gh" | "lark-cli" };
 export const isCliTool = (tool: TLocalStatusResponse["tools"][number]): tool is Tool => tool.kind === "gh" || tool.kind === "lark-cli";
 
-/** 本机程序这一行：七种状态（检查中、等浏览器允许、被拦截、离线、未配对、暂停中、就绪）落到四个状态词加小字和一个动作。离线时下面放安装命令。 */
-export function programRow(input: { phase: LocalPhase; status: TLocalStatusResponse | null; version: string | null; pairing: Pairing | null; error: string | null; linking: boolean; install: string }): RowModel {
+/** 本机程序这一行：七种状态（检查中、等浏览器允许、被拦截、离线、未配对、暂停中、就绪）落到四个状态词加小字和一个动作。离线时下面放安装命令；install 为 null（Mac，这一版没有 Mac 版）写「暂不支持 Mac」，不给命令和重试。 */
+export function programRow(input: { phase: LocalPhase; status: TLocalStatusResponse | null; version: string | null; pairing: Pairing | null; error: string | null; linking: boolean; install: string | null }): RowModel {
   const { phase, status, pairing } = input;
   const base = { key: "program", name: "本机程序" };
   switch (phase) {
     case "checking": return { ...base, sub: "检查中", state: null, action: null };
     case "prompt": return { ...base, sub: "等浏览器允许", state: "disconnected", action: "retry" };
     case "blocked": return { ...base, sub: "被拦截 · 站点设置 › 本地网络访问 › 允许", state: "disconnected", action: "retry" };
-    case "offline": return { ...base, sub: "离线", state: "disconnected", action: "retry", command: input.install };
+    case "offline": return input.install ? { ...base, sub: "离线", state: "disconnected", action: "retry", command: input.install } : { ...base, sub: "暂不支持 Mac", state: "disconnected", action: null };
     case "unpaired": {
       if (pairing?.state === "waiting") return { ...base, sub: `确认码 ${pairing.code}`, state: "disconnected", action: null };
       const why = pairing?.state === "denied" ? "本机拒绝了" : pairing ? "过期了" : input.error ?? "未配对";

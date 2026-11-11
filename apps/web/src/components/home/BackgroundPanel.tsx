@@ -15,7 +15,7 @@ import { ChevronDown, ChevronRight, LoaderCircle, PanelRightClose, PanelRightOpe
 import { HeroButton } from "@/components/HeroButton";
 import { MANY_SESSIONS, Slots } from "@/components/work/Slots";
 import { FailedLine } from "@/components/work/DecisionBox";
-import { LocalInstall } from "@/components/local/PluginsPage";
+import { LocalInstall, isMac } from "@/components/local/PluginsPage";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import type { LocalPhase } from "@/lib/local/connection";
 import { duration, groupBackground, queueText } from "@/lib/home/derive";
@@ -37,13 +37,14 @@ type Check = { name: string; value: string; bad: boolean };
  * checks 是「这台电脑」点开后的逐项：本机程序，再照本机报的 tools 列执行方和命令行工具；没就绪时工具那几项写「—」。
  * cloudQuota 是各台设备同步给云端的额度：这台电脑没就绪（手机、未配对、离线）或读不到额度时，每台设备一格「Claude · 设备名」；
  * 这台电脑就绪且读得到时只列它自己的。
+ * Mac 上离线算中性（这一版没有 Mac 版，本人什么都做不了）：不亮琥珀点、不给「重试」，展开后只写「暂不支持 Mac」。
  */
 export function useMachine(cloudQuota: Resources["quota"]) {
   const local = useLocalRunner();
   const ready = local.phase === "ready";
   const paused = ready && !!local.status?.settings.paused;
   const word = paused ? "暂停中" : PHASE[local.phase];
-  const alert = paused || local.phase === "prompt" || local.phase === "blocked" || local.phase === "offline" || local.phase === "unpaired";
+  const alert = paused || local.phase === "prompt" || local.phase === "blocked" || (local.phase === "offline" && !isMac()) || local.phase === "unpaired";
   const tools = local.status?.tools ?? [];
   const checks: Check[] = [
     { name: "本机程序", value: ready ? (paused ? "暂停中" : "已连接") : PHASE[local.phase], bad: alert },

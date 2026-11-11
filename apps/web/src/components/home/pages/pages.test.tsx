@@ -46,6 +46,8 @@ describe("连接页每一行（设计 9.5、5.4.6）", () => {
     expect(programRow({ ...base, phase: "prompt" })).toMatchObject({ sub: "等浏览器允许", state: "disconnected", action: "retry" });
     expect(programRow({ ...base, phase: "blocked" }).sub).toContain("被拦截");
     expect(programRow({ ...base, phase: "offline" })).toMatchObject({ sub: "离线", action: "retry", command: install });
+    // Mac：这一版没有 Mac 版，不给安装命令和重试。
+    expect(programRow({ ...base, install: null, phase: "offline" })).toEqual({ key: "program", name: "本机程序", sub: "暂不支持 Mac", state: "disconnected", action: null });
     expect(programRow({ ...base, phase: "unpaired" })).toMatchObject({ sub: "未配对", action: "pair" });
     expect(programRow({ ...base, phase: "unpaired", pairing: { code: "4821", state: "waiting" } })).toMatchObject({ sub: "确认码 4821", action: null });
     expect(programRow({ ...base, phase: "unpaired", pairing: { code: "4821", state: "denied" } }).sub).toBe("本机拒绝了");
@@ -175,7 +177,7 @@ describe("连接（卡片网格 + 三组）", () => {
     expect(text(html)).toContain("本机程序 未连接 · 离线 这台电脑 重试");
     expect(html.indexOf('data-testid="card-program"')).toBeLessThan(html.indexOf('data-testid="card-world"'));
     expect(html).not.toContain('data-testid="row-program"');
-    expect(html).toMatch(/<code>(irm|curl) [^<]*install/);
+    expect(html).toMatch(/<code>irm [^<]*install/);
     expect(html).not.toContain('data-testid="row-agent:claude-code"');
     expect(html).not.toContain('data-testid="row-folders"');
   });

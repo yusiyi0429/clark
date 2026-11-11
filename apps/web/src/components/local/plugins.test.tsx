@@ -38,8 +38,7 @@ describe("插件页：连本机的几种状态", () => {
     expect(text(html)).toContain("复制");
     expect(text(html)).toContain("重试");
     expect(text(html)).not.toContain("等浏览器授权");
-    expect(installCommand(false)).toMatch(/^irm .*\/install\.ps1 \| iex$/);
-    expect(installCommand(true)).toMatch(/^curl -fsSL .*\/install\.sh \| sh$/);
+    expect(installCommand()).toMatch(/^irm .*\/install\.ps1 \| iex$/);
   });
   it("手机上不引导连本机", () => {
     expect(text(render(state("offline"), true))).toBe("在电脑上用");

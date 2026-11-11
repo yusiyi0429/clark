@@ -9,6 +9,7 @@ import { createMockRunner } from "@/lib/local/mock";
 import type { LocalPhase } from "@/lib/local/connection";
 import type { BackgroundItem } from "@/lib/home/types";
 import type { Resources } from "@/lib/work/useWork";
+import { LocalInstall } from "@/components/local/PluginsPage";
 import { BackgroundPanel, BackgroundStrip } from "./BackgroundPanel";
 import { scopeOf } from "./view";
 
@@ -83,6 +84,23 @@ describe("右栏（5.4.5）", () => {
     expect(off).toContain("复制");
     expect(off).toContain("重试");
     expect(text(render(panel([], []), "prompt"))).not.toContain("install.ps1");
+  });
+
+  it("Mac 上离线算中性：不亮琥珀点、不给安装命令和「重试」，展开后只写「暂不支持 Mac」", () => {
+    vi.stubGlobal("navigator", { userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)" });
+    try {
+      // 收起条上没有点；「这台电脑」没有要处理的，默认收着（有一项不对才自动展开、给「重试」）。
+      expect(render(<BackgroundStrip running={0} quota={[]} onExpand={() => undefined} />, "offline")).not.toContain('role="img"');
+      const html = render(panel([], []), "offline", [], [tool("gh")]);
+      expect(html).toMatch(/aria-expanded="false"[^>]*data-testid="machine-row"/);
+      expect(text(html)).not.toContain("重试");
+      // 展开后那一块：只写「暂不支持 Mac」。
+      const off = text(render(<LocalInstall />, "offline"));
+      expect(off).toContain("暂不支持 Mac");
+      expect(off).not.toMatch(/install|curl|irm /);
+      expect(off).not.toContain("复制");
+      expect(off).not.toContain("重试");
+    } finally { vi.unstubAllGlobals(); }
   });
 
   it("这台电脑就绪且读得到额度：只列本机的，别的设备不列；读不到时用云端的", () => {

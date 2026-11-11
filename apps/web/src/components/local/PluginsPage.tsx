@@ -21,7 +21,9 @@ import { showWorkspaceToast } from "@/lib/toast";
 import s from "@/styles/v2-local.module.css";
 
 const downloadBase = () => process.env.NEXT_PUBLIC_LOCAL_DOWNLOAD_BASE ?? `${typeof window === "undefined" ? "" : window.location.origin}/downloads/local`;
-export const installCommand = (mac: boolean) => (mac ? `curl -fsSL ${downloadBase()}/install.sh | sh` : `irm ${downloadBase()}/install.ps1 | iex`);
+/** 只有 Windows 版：Mac 版这一版发不了（签名坏的），Mac 上不给安装命令、只写「暂不支持 Mac」。 */
+export const installCommand = () => `irm ${downloadBase()}/install.ps1 | iex`;
+export const isMac = () => typeof navigator !== "undefined" && /Mac/i.test(navigator.userAgent);
 const ago = (iso: string | null) => {
   if (!iso) return "没同步过";
   const minutes = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60_000));
@@ -160,21 +162,21 @@ function Retry() {
 
 /**
  * 本机程序没开：给打开它的路——安装命令和「复制」（装好就起来，装过的再跑一遍也是把它打开）。
- * 桌面版窗口里本机程序是壳自己带的，不给安装命令（壳会把它重新拉起来）。
+ * 桌面版窗口里本机程序是壳自己带的，不给安装命令（壳会把它重新拉起来）；Mac 上也不给，只写「暂不支持 Mac」。
  * 右栏也用这一块，只要命令（「离线」和「重试」右栏自己有）；连接页 standalone，带「没连上」和「重试」。
  */
 export function LocalInstall({ standalone = false }: { standalone?: boolean }) {
   const [copied, setCopied] = useState<string | null>(null);
-  const mac = typeof navigator !== "undefined" && /Mac/i.test(navigator.userAgent);
   const desktop = typeof navigator !== "undefined" && navigator.userAgent.includes("TianshuDesktop/");
-  const lines = desktop ? [] : [{ key: mac ? "mac" : "win", label: mac ? "Mac" : "Windows", text: installCommand(mac) }];
+  const mac = !desktop && isMac();
+  const lines = desktop || mac ? [] : [{ key: "win", label: "Windows", text: installCommand() }];
   const copy = async (key: string, text: string) => {
     try { await navigator.clipboard.writeText(text); setCopied(key); window.setTimeout(() => setCopied(null), 1600); } catch { /* 手动选中复制 */ }
   };
-  if (!standalone && !lines.length) return null;
+  if (!standalone && !lines.length && !mac) return null;
   return (
     <div className={s.guide} data-testid="local-offline">
-      {standalone ? <span className={s.state}>没连上</span> : null}
+      {mac ? <span className={s.state}>暂不支持 Mac</span> : standalone ? <span className={s.state}>没连上</span> : null}
       {lines.map((line) => (
         <div key={line.key} className={s.command}>
           <small>{line.label}</small>
@@ -182,7 +184,7 @@ export function LocalInstall({ standalone = false }: { standalone?: boolean }) {
           <button type="button" className={s.copy} onClick={() => void copy(line.key, line.text)} aria-label="复制">{copied === line.key ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}{copied === line.key ? "已复制" : "复制"}</button>
         </div>
       ))}
-      {standalone ? <Retry /> : null}
+      {standalone && !mac ? <Retry /> : null}
     </div>
   );
 }
