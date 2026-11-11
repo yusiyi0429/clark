@@ -66,17 +66,17 @@ describe("思考程度（36 条，D 契约 c97b38c5）", () => {
     expect(effortText(null)).toBe("自动");
   });
 
-  it("子会话下面一行写「Opus 5.5 · 高」、全称在悬停里；开工带的思考程度进摘要；开着只换思考程度当场换，换成网关模型（不能选）回到自动、不写后半", async () => {
+  it("子会话下面一行写「Claude 订阅 · Opus 5.5 · 高」（67 条），悬停前面多写执行方；开工带的思考程度进摘要；开着只换思考程度当场换，换成网关模型（不能选）回到自动、不写后半", async () => {
     const runner = createMockRunner({ stepMs: 5 });
     const models = await runner.listModels();
     const effortsOf = (id: string) => models.find((model) => model.id === id)?.efforts;
     const session = await runner.createSession({ subject: { kind: "card", cardId: "c1" }, title: "卡", cwd: "C:\\work\\tianshu", firstMessage: "交代", effort: "high" });
     expect(session.effort).toBe("high");
-    expect(sessionModelText(session, effortsOf(session.modelProfileId))).toEqual({ label: "Opus 5.5 · 高", title: "Claude Code · Opus 5.5 · Claude 订阅 · 思考 高" });
+    expect(sessionModelText(session, effortsOf(session.modelProfileId))).toEqual({ label: "Claude 订阅 · Opus 5.5 · 高", title: "Claude Code · Claude 订阅 · Opus 5.5 · 高" });
     const changed = await runner.setSessionModel(session.id, { effort: "max" });
     expect(changed.applied).toBe("now");
     expect(changed.session.effort).toBe("max");
-    expect(sessionModelText(changed.session, effortsOf(changed.session.modelProfileId))?.label).toBe("Opus 5.5 · 最高");
+    expect(sessionModelText(changed.session, effortsOf(changed.session.modelProfileId))?.label).toBe("Claude 订阅 · Opus 5.5 · 最高");
     expect((await runner.setSessionModel(session.id, { effort: null })).session.effort).toBeUndefined();
     await expect(runner.setSessionModel(session.id, { modelProfileId: "tokenhub-deepseek", effort: "high" })).rejects.toMatchObject({ status: 400 });
     // 换模型不带思考程度：新模型也支持就留着。
@@ -88,6 +88,6 @@ describe("思考程度（36 条，D 契约 c97b38c5）", () => {
     expect(picks.rows.map((row) => [row.name, row.value])).toEqual([["执行方", "Claude Code"], ["来源", "Claude 订阅"], ["模型", "Haiku 5.5"], ["思考", "低"]]);
     expect(picks.rows[3]!.options.map((option) => option.label)).toEqual(["自动", "低", "中", "高", "超高", "最高"]);
     expect(sessionModelText({ ...now, effort: undefined }, effortsOf(now.modelProfileId))?.label).not.toContain("自动");
-    expect(sessionModelText({ run: { ...session.run!, modelName: "deepseek-v4.1-flash" }, agent: "claude-code" }, effortsOf("tokenhub-deepseek"))?.label).toBe("deepseek-v4.1-flash");
+    expect(sessionModelText({ run: { ...session.run!, modelName: "deepseek-v4.1-flash" }, agent: "claude-code" }, effortsOf("tokenhub-deepseek"))?.label).toBe("Claude 订阅 · deepseek-v4.1-flash");
   });
 });

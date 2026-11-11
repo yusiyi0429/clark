@@ -1,6 +1,6 @@
 import { Type, type Static } from "@sinclair/typebox";
 import type { ImageContent } from "@earendil-works/pi-ai";
-import type { TCriterionVerdict, TLocalHandbackCriterion } from "@warmap/contracts";
+import type { TCardCriterionVerdict, TLocalHandbackCriterion } from "@warmap/contracts";
 import { runCandidateAgent } from "./candidateAgentRuntime.js";
 import { boardModel, type BoardModelOptions } from "./cardPlanAgent.js";
 import { reviewProblem, type TReviewCandidate } from "./deliverableReview.js";
@@ -67,7 +67,7 @@ export type AcceptanceInput = {
   summary: string | null;
   outputs: { name: string; kind: "artifact" | "evidence"; text: string | null; url: string | null }[];
   unreadable: { name: string; note: string }[];
-  previous?: { index: number; text: string; verdict: TCriterionVerdict; reason: string; fix: string | null }[];
+  previous?: { index: number; text: string; verdict: TCardCriterionVerdict; reason: string; fix: string | null }[];
   /** 约定（V1）：卡对的那条 Task 标准用什么证明、这次不包括什么；两样都没有为 null。 */
   agreement: { proof: string | null; exclusions: string[] } | null;
   role: { name: string; acceptanceMd: string } | null;

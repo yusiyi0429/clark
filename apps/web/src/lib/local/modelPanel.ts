@@ -8,7 +8,7 @@
  */
 import type { TLocalAgentKind, TLocalAgentStatus, TLocalEffort, TLocalModelProfile } from "@warmap/contracts";
 import type { UsageCell } from "@/lib/home/quota";
-import { HARNESS_NAME, effortText, pillSource, profileModel, profileSourceName } from "./runModel";
+import { HARNESS_NAME, effortText, modelLine, profileModel, profileSourceName } from "./runModel";
 
 export type PanelOption = { id: string; label: string; /** 右边淡色的一小段：剩余用量，或置灰的原因（状态词）。 */ note?: string | null; disabled?: boolean };
 export type PanelRowKey = "agent" | "source" | "model" | "effort";
@@ -134,14 +134,9 @@ export function pickLocal(models: readonly TLocalModelProfile[], current: { mode
 }
 
 /**
- * 胶囊上写的：「模型名 · 思考档」；思考是自动时只写模型名。订阅没写模型的（内置那条，模型由本机按档位挑）写来源名（同派活单的写法）。
- * 给了默认来源（defaultSourceLabel，52 条）而这个不是：模型名后面多写来源，「Opus 5.5 · API · 最高」。
+ * 胶囊上写的（67 条）：「来源 · 模型 · 思考」，同 modelLine；思考是自动时不写。订阅没写模型的（内置那条，模型由本机按档位挑）只写来源名（同派活单的写法）。
  */
-export function panelLabel(model: Pick<TLocalModelProfile, "model" | "label" | "catalog" | "source" | "agent" | "efforts" | "modelName" | "origin">, effort: TLocalEffort | null, defaultSource?: string | null): string {
+export function panelLabel(model: Pick<TLocalModelProfile, "model" | "label" | "catalog" | "source" | "agent" | "efforts" | "modelName" | "origin">, effort: TLocalEffort | null): string {
   const bare = !model.catalog && !model.model && model.source === "subscription";
-  const name = bare ? profileSourceName(model) : profileModel(model);
-  const source = profileSourceName(model);
-  const extra = defaultSource !== undefined && !bare && source !== defaultSource ? pillSource(source) : null;
-  const level = keptEffort(model, effort);
-  return [name, extra, level ? effortText(level) : null].filter(Boolean).join(" · ");
+  return modelLine({ source: profileSourceName(model), model: bare ? null : profileModel(model), effort: keptEffort(model, effort) }) ?? profileModel(model);
 }

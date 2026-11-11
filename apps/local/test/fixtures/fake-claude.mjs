@@ -130,7 +130,9 @@ function askWrite() {
   const permId = `perm-${turns}`;
   turn = { permId };
   const suggestions = cfg.suggestions ?? [{ type: "setMode", mode: "acceptEdits", destination: "session" }];
-  out({ type: "control_request", request_id: permId, request: { subtype: "can_use_tool", tool_name: tool, input, permission_suggestions: suggestions, tool_use_id: `toolu_w${turns}` } });
+  // cfg.bash（{ command, description }）：要的是跑一条命令的权限，入参带执行方写的那句 description（批准说人话，主循环第 64 条）
+  const [askTool, askInput] = cfg.bash ? ["Bash", cfg.bash] : [tool, input];
+  out({ type: "control_request", request_id: permId, request: { subtype: "can_use_tool", tool_name: askTool, input: askInput, permission_suggestions: suggestions, tool_use_id: `toolu_w${turns}` } });
 }
 
 // 只读会话（规划员、验收员）：和真 Claude Code 一样，--disallowedTools 里的 Write 根本不在工具里，不会来要写文件的权限。

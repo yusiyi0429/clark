@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { TLocalEffort, TLocalModelOrigin, TLocalModelProfile, TLocalModelProfileUpsert, TLocalModelTier } from "@warmap/contracts";
+import type { TLocalEffort, TLocalModelOrigin, TLocalModelProfile, TLocalModelProfileUpsert, TLocalModelTier, TLocalRun } from "@warmap/contracts";
 import { claudeProfileId, isClaudeProfileId, type ClaudeModel } from "./claudeCatalog.js";
 import { codexProfileId, isCodexProfileId, type CodexModel } from "./codexCatalog.js";
 import { isLoopback, isMagpie, modelOrigin } from "./modelOrigin.js";
@@ -93,6 +93,27 @@ export function modelDisplayName(model: string): string {
   return model.slice(model.lastIndexOf("/") + 1).slice(0, 60);
 }
 
+/** 思考程度给人看的字（同网页 runModel.ts 的 EFFORT_LABEL）。 */
+const EFFORT_LABEL: Record<TLocalEffort, string> = { low: "低", medium: "中", high: "高", xhigh: "超高", max: "最高", ultra: "极限" };
+/** 接入方的 id → 给人看的来源名（同网页 runModel.ts 的 PROVIDER_NAMES）。 */
+const PROVIDER_NAMES: Record<string, string> = { tokenhub: "TokenHub", wangsu: "TokenHub" };
+
+/**
+ * 子会话的「来源 · 模型 · 思考」（第 67 条，如「Claude 订阅 · Opus 5.5 · 高」），和网页 runModel.ts 的 runLabel 一字不差（照抄 runSource、sourceName、modelLine）：
+ * 来源取 origin.label，没有取 sourceLabel，不写「我的」、只取「·」前面那一段；模型实际跑的优先，和来源一样时只写一次；思考没选不写。
+ * 同步给云端的 status.modelLabel 用它，别的电脑和手机上只拿得到这个字符串。没有来源（还没拉起过、老记录）为 null，调用方用原来的配置名。
+ */
+export function runLine(run: Pick<TLocalRun, "sourceLabel" | "modelName" | "actual" | "origin" | "effort"> | null | undefined): string | null {
+  const raw = run?.origin?.label ?? run?.sourceLabel ?? null;
+  if (!raw) return null;
+  const text = raw.replace(/^我的\s*/, "").split(" · ")[0]!.trim();
+  const from = text ? PROVIDER_NAMES[text.toLowerCase()] ?? text : null;
+  const model = run?.actual?.modelName ?? run?.modelName;
+  const name = model ? modelDisplayName(model) : null;
+  const parts = [from, name && name !== from ? name : null, run?.effort ? EFFORT_LABEL[run.effort] : null].filter(Boolean);
+  return parts.length ? parts.join(" · ") : null;
+}
+
 /** 请求的和执行方实际报的是不是同一个：一样，或者请求的是别名、实际是这个系列的某一版（opus → claude-opus-5-5）。 */
 export function sameModel(requested: string, actual: string): boolean {
   const r = bare(requested), a = bare(actual);
@@ -115,8 +136,10 @@ export class ModelProfiles {
     this.aliasFile = join(dataDir, "model-aliases.json");
   }
 
-  /** 给人看的名字：别名用上一次实际跑出来的那一版，没跑过就是「Opus」这种。 */
+  /** 给人看的名字：Codex 模型目录里有的用目录给的名字（gpt-6.1-sol →「GPT-6.1-Sol」，第 67 条）；别名用上一次实际跑出来的那一版，没跑过就是「Opus」这种。 */
   displayName(model: string): string {
+    const listed = this.codex?.list().find((m) => m.model === model);
+    if (listed) return listed.label;
     const alias = ALIAS.exec(bare(model));
     const seen = alias ? readJson<Record<string, string>>(this.aliasFile, {})[alias[1]!] : undefined;
     return modelDisplayName(seen ?? model);

@@ -10,6 +10,7 @@
  * 开工（计划）那一种在 components/home/PlanDecision。
  */
 import { useContext, useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import type { TConversationCard, TLocalQuestionAnswerRequest, TLocalQuestionRequestView } from "@warmap/contracts";
 import type { TLocalPermissionRequestView } from "@/lib/local/runner";
 import { AskContext, answersOf } from "@/conversation/AskPanel";
@@ -101,10 +102,29 @@ const EXTERNAL = /\bgit\s+push\b|\bgh\s+(pr|issue|release)\s+(create|merge|comme
 
 const commandOf = (request: TLocalPermissionRequestView) => (typeof request.input.command === "string" ? request.input.command : null);
 
-/** 等着批的几件（同一个会话）：一页一件；批完一件自动到下一件。 */
-export function ApprovalDecision({ requests, blocked, onDecide }: {
+/** 「会动：a.ts、b.ts 等 5 个」：只写文件名，全路径在悬停里。 */
+export function touchText(paths: readonly string[]): string {
+  const names = paths.map((path) => path.split(/[\\/]/).filter(Boolean).pop() ?? path);
+  return names.length > 3 ? `${names.slice(0, 3).join("、")} 等 ${names.length} 个` : names.join("、");
+}
+
+/** 有那句人话时，命令原文收进「命令」，点了才看（工作树里的会话默认展开）。 */
+function CommandFold({ command, open: initial }: { command: string; open: boolean }) {
+  const [open, setOpen] = useState(initial);
+  return <>
+    <button type="button" className={x.fold} aria-expanded={open} onClick={() => setOpen(!open)} data-testid="approval-command">
+      {open ? <ChevronDown size={16} strokeWidth={1.8} aria-hidden /> : <ChevronRight size={16} strokeWidth={1.8} aria-hidden />}命令
+    </button>
+    {open ? <code className={x.cmd}>{command}</code> : null}
+  </>;
+}
+
+/** 等着批的几件（同一个会话）：一页一件；批完一件自动到下一件。第一行是执行方写的那句人话（description，第 64 条），没有时照旧是标题。 */
+export function ApprovalDecision({ requests, blocked, onDecide, inWorktree = false }: {
   requests: TLocalPermissionRequestView[];
   blocked?: string | null;
+  /** 会话在代码仓库的工作树里（第 64 条）：有那句人话时，命令也默认展开。 */
+  inWorktree?: boolean;
   onDecide: (request: TLocalPermissionRequestView, decision: "allow" | "deny", options: { forSession?: boolean; message?: string }) => Promise<unknown>;
 }) {
   const [page, setPage] = useState(0);
@@ -130,9 +150,10 @@ export function ApprovalDecision({ requests, blocked, onDecide }: {
   const plain = requests.every((entry) => !(entry.outsidePaths ?? []).length);
   return (
     // 换一件就重新来：上一件「换个做法」里写的话不带到这一件。
-    <DecisionBox key={request.requestId} kind="approval" testId="approval-decision" title={request.title} blocked={blocked} outside={outside.length > 0} autoFocus={!outside.length} busy={allBusy}
-      body={command || outside.length ? <>
-        {command ? <code className={x.cmd}>{command}</code> : null}
+    <DecisionBox key={request.requestId} kind="approval" testId="approval-decision" title={request.description ?? request.title} blocked={blocked} outside={outside.length > 0} autoFocus={!outside.length} busy={allBusy}
+      body={command || outside.length || request.paths?.length ? <>
+        {request.paths?.length ? <span title={request.paths.join(" · ")} data-testid="approval-paths">会动：{touchText(request.paths)}</span> : null}
+        {command ? (request.description ? <CommandFold key={request.requestId} command={command} open={inWorktree} /> : <code className={x.cmd}>{command}</code>) : null}
         {outside.length ? <ul className={x.outside} aria-label="工作区外的路径">{outside.map((path) => <li key={path}>{path}</li>)}</ul> : null}
       </> : undefined}
       pager={requests.length > 1 ? { index, total: requests.length, onGo: setPage } : undefined}

@@ -225,11 +225,11 @@ export const AnswerGoalChangeRequest = Type.Object({ answer: Type.Union([Type.Li
  * 对话还没有消息、读不到为 null。sub 是哪个子会话：kind、id、字母、记下时的标题；界面写「B · {标题}」。
  *
  * sub_session_report：子会话停了（本机的同步条目 stopped，LocalStopReport；只报卡和专题，规划员、验收员不报）。界面写「B · 标题」，一两句写做成了什么、卡在哪，附「看结果」：
- * - why 同 LocalStopReason：turn_done 做完一轮；interrupted 本人停下；held 停着等（额度、余额、预算）；error 出错停住；killed 强停。
+ * - why 同 LocalStopReason：turn_done 做完一轮；interrupted 本人停下；held 停着等（额度、余额、预算）；error 出错停住；killed 强停；runner_restart 本机程序重启（主循环第 65 条）。
  * - summary：做成了什么（本机取这一轮最后那段话的头一两句），这一轮没说话为 null；blocker：卡在哪（出错、停着等时的原因），别的为 null。
  * - outputs：这一轮交的产出物，outputId 是云端收下的那件产出（GET /api/me/local-outputs/:id 打开，同卡详情的 outputs）；还没收到为 null，只显示标题和文件名。
- * - 记下以后云端以本人身份给项目主管线（模型）发一句（开头是 SUB_SESSION_REPORT_PREFIX 那几个字，读回历史时去掉、标成 ConversationMessage.via = report，
- *   网页不画成本人的气泡，报告这一行已经画了），让它回一小轮：说一句这意味着什么、下一步。项目主管线正在回上一轮时不打断，排在它后面。
+ * - 主循环第 63 条起，报告不再触发模型：云端只记这一行，不再以本人身份给项目主管线发一句。管线只在本人对它说话时回话，要知道子会话的近况自己读（read_project）。
+ *   以前发过的那几句（开头是 SUB_SESSION_REPORT_PREFIX 那几个字）读回历史时照旧去掉、标成 ConversationMessage.via = report，网页不画成本人的气泡。
  *
  * sub_session_decision：子会话要人介入，直接出它的决定卡，不先等模型想一轮。question 是它在问的那一次（同 WaitingItem.question，网页画选项框），
  * permission 是在等批准的那一步（同 WaitingItem.permission，网页画批准卡；canAllowForSession 为 true 才给「这张卡都允许」），两样只有一样。答、批由网页在本人电脑上直接交给本机（同「等你」里就地答）；
@@ -266,7 +266,7 @@ export const ProjectSubSessionDecisionItem = Type.Object({
   status: Type.Union([Type.Literal("open"), Type.Literal("closed")]),
   closedAt: Nullable(Instant),
 }, strict);
-/** 子会话报告触发项目主管线那一轮时，发给它的那句的开头（读回历史时去掉，标 via = report）。 */
+/** 以前子会话报告触发项目主管线那一轮时，发给它的那句的开头（读回历史时去掉，标 via = report；主循环第 63 条起不再发）。 */
 export const SUB_SESSION_REPORT_PREFIX = "【子会话回报】";
 
 export const ProjectFeedItem = Type.Union([TaskFeedItem, ProjectGoalLinkedItem, ProjectHandoverItem, ProjectHandoverSummaryItem, ProjectTransferDeclinedItem,

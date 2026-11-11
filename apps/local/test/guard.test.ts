@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } fro
 import { homedir, tmpdir } from "node:os";
 import { join, parse, resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { autoAllowed, outsidePaths, suggestionsReachOutside, type PathScope } from "../src/agents/pathGuard.js";
+import { autoAllowed, outsidePaths, permissionSummary, suggestionsReachOutside, touchedPaths, type PathScope } from "../src/agents/pathGuard.js";
 import { Folders } from "../src/folders.js";
 import { api, pair, startTestRunner, tempDir } from "./helpers.js";
 
@@ -31,6 +31,18 @@ describe("越界路径识别", () => {
   const scope: PathScope = { cwd, home: homedir(), allowedRoots: () => [cwd] };
   const out = (tool: string, input: Record<string, unknown>, hint?: string) => outsidePaths(tool, input, scope, hint);
   const win = process.platform === "win32";
+
+  it("会动的文件（主循环第 64 条）：改文件的工具按字段取，命令只在写、删、挪时认；工作目录里写相对路径，外面写绝对路径；说明有才带", () => {
+    writeFileSync(join(cwd, "build"), "x");
+    expect(touchedPaths("Write", { file_path: join(cwd, "src", "a.ts") }, scope)).toEqual(["src/a.ts"]);
+    expect(touchedPaths("Edit", { file_path: join(other, "a.ts") }, scope)).toEqual([join(other, "a.ts")]);
+    expect(touchedPaths("Read", { file_path: join(cwd, "a.ts") }, scope)).toEqual([]); // 只读的不算
+    expect(touchedPaths("Bash", { command: "ls -la src" }, scope)).toEqual([]);
+    expect(touchedPaths("Bash", { command: "rm -rf build out/a.txt" }, scope)).toEqual(["build", "out/a.txt"]);
+    expect(touchedPaths("PowerShell", { command: "echo hi > notes.md" }, scope)).toEqual(["notes.md"]); // hi 不像路径
+    expect(permissionSummary("  跑一下测试  ", ["a", "a"])).toEqual({ description: "跑一下测试", paths: ["a"] });
+    expect(permissionSummary(undefined, [])).toEqual({});
+  });
 
   it("文件类工具按字段取路径：工作目录里的不算，外面的算", () => {
     expect(out("Read", { file_path: join(cwd, "a.ts") })).toEqual([]);

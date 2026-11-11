@@ -26,11 +26,12 @@ export const WAIT_LABEL: Record<CardWait, string> = {
   paused: "已暂停",
   review_failed: "验收未过",
   blocked: "受阻",
+  needs_person: "等你补",
 };
 /** 要你动手的排前面。 */
-const WAIT_ORDER: CardWait[] = ["approval", "reply", "review_failed", "paused", "blocked"];
-/** 等你批准、等你回复用强调色；已暂停、验收未过、受阻用提醒色。 */
-export const waitTone = (wait: CardWait) => (wait === "approval" || wait === "reply" ? "wait" : "warn");
+const WAIT_ORDER: CardWait[] = ["needs_person", "approval", "reply", "review_failed", "paused", "blocked"];
+/** 等你补、等你批准、等你回复用强调色；已暂停、验收未过、受阻用提醒色。 */
+export const waitTone = (wait: CardWait) => (wait === "approval" || wait === "reply" || wait === "needs_person" ? "wait" : "warn");
 /** 前四种算「待处理」（Task 名字旁边的小数字）。 */
 export const isPendingWait = (wait: CardWait | null | undefined) => !!wait && wait !== "blocked";
 

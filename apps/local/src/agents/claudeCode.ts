@@ -4,7 +4,7 @@ import type { TLocalBackgroundItem, TLocalEffort, TLocalPermissionMode, TLocalPe
 import type { EventBody } from "../eventLog.js";
 import { AgentStartError, type AgentAdapter, type AgentLaunch, type AgentRun, type PermissionAnswer, type TurnModels } from "./types.js";
 import { buildClaudeArgs, childEnv, describeTool, homeDir, personalSettingsSetKey, versionAtLeast } from "./claudeEnv.js";
-import { modeAllows, outsidePaths, suggestionsReachOutside, type PathScope } from "./pathGuard.js";
+import { modeAllows, outsidePaths, permissionSummary, suggestionsReachOutside, touchedPaths, type PathScope } from "./pathGuard.js";
 import { planProgress } from "../plan.js";
 import { CONTEXT_COMPACTED, ContextReporter } from "./contextUsage.js";
 
@@ -378,6 +378,8 @@ class ClaudeRun implements AgentRun {
       outsidePaths: outside,
       canAllowForSession: !broad && Array.isArray(req.permission_suggestions) && req.permission_suggestions.length > 0,
       requestedAt: new Date().toISOString(),
+      // 批准说人话（主循环第 64 条）：Bash、PowerShell 入参里执行方写的那句 description，和会动的文件
+      ...permissionSummary(req.input?.description, touchedPaths(toolName, req.input ?? {}, this.scope)),
     };
     this.emit({ type: "permission_request", request: view });
   }

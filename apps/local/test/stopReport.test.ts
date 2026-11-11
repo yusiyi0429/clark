@@ -62,7 +62,7 @@ describe("停了、要人介入都报给云端", { timeout: 30_000 }, () => {
     const p = await pending(s.id);
     const ask = await until(() => items(s.id).find((i) => i.type === "status" && i.data.status === "waiting_permission"));
     expect(ask.subject).toMatchObject({ kind: "card", cardId: "A", projectId: "6b0f3a52-4d0c-4c1e-9a43-1f7d2c9b8e10" });
-    expect(ask.data.permission).toEqual({ requestId: p.requestId, toolName: p.toolName, title: p.title, outsidePaths: [], canAllowForSession: p.canAllowForSession });
+    expect(ask.data.permission).toEqual({ requestId: p.requestId, toolName: p.toolName, title: p.title, outsidePaths: [], canAllowForSession: p.canAllowForSession, paths: ["hello.txt"] });
     expect(stops(s.id)).toEqual([]); // 要人介入不算停了
 
     // 等批准的时候交了一份产出物

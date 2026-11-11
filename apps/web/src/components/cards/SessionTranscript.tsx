@@ -16,6 +16,8 @@ import { ChevronRight } from "lucide-react";
 import { questionNotice, type SessionEntry, type SessionView } from "@/lib/local/sessionView";
 import type { LocalRunner, TLocalModelProfile, TLocalSessionSummary, TLocalPermissionRequestView, TLocalQuestionRequestView, TLocalSessionStatus } from "@/lib/local/runner";
 import { duration } from "@/lib/home/derive";
+import { relativeDayTime } from "@/lib/companyTime";
+import { HeroButton } from "@/components/HeroButton";
 import { REMARK_PLUGINS } from "@/lib/markdown";
 import { InputBar } from "@/components/home/InputBar";
 import { ContextRing, FolderText, FootText } from "@/components/home/InputFooter";
@@ -23,7 +25,7 @@ import { ModelPanel } from "@/components/home/ModelPanel";
 import { AUTO_EFFORT, localPanelRows, pickLocal, type PanelRowKey } from "@/lib/local/modelPanel";
 import { usageCells } from "@/lib/home/quota";
 import { sizeText, uploadToSubSession } from "@/lib/home/attachments";
-import type { TLocalAttachmentRef, TLocalEffort, TLocalPermissionMode, TLocalSessionModelRequest, TLocalStatusResponse, TSessionAttachment } from "@warmap/contracts";
+import type { TLocalHold, TLocalAttachmentRef, TLocalEffort, TLocalPermissionMode, TLocalSessionModelRequest, TLocalStatusResponse, TSessionAttachment } from "@warmap/contracts";
 import { PermissionModeMenu } from "./PermissionMode";
 import { ApprovalDecision, DENY_MAX, awayChip } from "@/components/work/decisions";
 import { DecisionBox, FailedLine } from "@/components/work/DecisionBox";
@@ -345,7 +347,32 @@ type UserEntry = Extract<SessionEntry, { kind: "user" }>;
 
 const NO_DRAFTED: ReadonlySet<number> = new Set();
 
-export function SessionTranscript({ entries, agentName, canAct, device, onDecide, lead, tail, asking, live, starting = false, ended = false, pinned = false, onResend, onRetry, onFile, draft = null, drafted = NO_DRAFTED }: {
+const HOLD: Record<TLocalHold["reason"], string> = { usage_limit: "额度用完", balance: "余额不足", budget: "预算用完" };
+/** 停下那一行的字（主循环第 65 条）：你停的 / 本机程序重启 / 出错：一句话 / 额度用完，几点恢复。 */
+export function stopText(stopped: NonNullable<SessionView["stopped"]>): string {
+  switch (stopped.why) {
+    case "interrupted": return "你停的";
+    case "killed": return "强停";
+    case "runner_restart": return "本机程序重启";
+    case "error": return stopped.reason ? `出错：${stopped.reason}` : "出错";
+    case "held": {
+      const what = stopped.hold ? HOLD[stopped.hold.reason] : "停着等";
+      return stopped.hold?.until ? `${what}，${relativeDayTime(stopped.hold.until)} 恢复` : what;
+    }
+  }
+}
+
+/** 对话末尾那一行：为什么停了，行尾「接着做」（这台电脑上才给）。 */
+export function StopLine({ stopped, onResume }: { stopped: NonNullable<SessionView["stopped"]>; onResume?: () => void }) {
+  return (
+    <div className={s.stopLine} data-testid="stop-line">
+      <span>{stopText(stopped)}</span>
+      {onResume ? <HeroButton variant="ghost" size="sm" onPress={onResume}>接着做</HeroButton> : null}
+    </div>
+  );
+}
+
+export function SessionTranscript({ entries, agentName, canAct, device, onDecide, lead, tail, asking, live, starting = false, ended = false, pinned = false, onResend, onRetry, onFile, draft = null, drafted = NO_DRAFTED, stopped = null, onResume }: {
   entries: SessionEntry[];
   agentName: string;
   canAct: boolean;
@@ -356,6 +383,9 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
   lead?: string;
   /** 接在最后的（执行方在问本人时的选项框）。 */
   tail?: ReactNode;
+  /** 停了（不是做完一轮）：末尾一行写原因，行尾「接着做」（onResume，这台电脑上才给）。 */
+  stopped?: SessionView["stopped"];
+  onResume?: () => void;
   /** 还没答的那次提问：它的「问：…」一行不画，选项框就是它。 */
   asking?: TLocalQuestionRequestView | null;
   /** 会话还在跑（running(view.status)）：没做完的步骤转圈；结束了的没做完的步骤画方块。 */
@@ -424,6 +454,7 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
       })}
       {draft ? <DraftBubble text={draft} agentName={agentName} /> : null}
       {busy && !tailProcess && !draft ? <WorkingRow since={roundStart(entries)} starting={starting} /> : null}
+      {stopped && !live ? <StopLine stopped={stopped} onResume={onResume} /> : null}
       {tail}
     </div>
     </OpenFileContext.Provider>
@@ -492,7 +523,7 @@ export function useModelChangedRefresh(entries: SessionEntry[], refresh: () => u
   useEffect(() => { if (changed !== null) void refresh(); }, [changed, refresh]);
 }
 
-export function SessionComposer({ label, disabled, onSend, dock, pinned, subject, mode, place, model, models, context, busy = false, onStop }: {
+export function SessionComposer({ label, disabled, onSend, dock, pinned, subject, mode, place, model, models, context, busy = false, onStop, fill }: {
   /** 发一句（useSessionSend.say）：附件由它传云端（POST /api/me/sub-sessions/:kind/:id/attachments）再交给本机。 */
   label: string; disabled: boolean; onSend: (text: string, files: File[]) => Promise<boolean>; dock?: ReactNode;
   subject: TSessionAttachment["subject"];
@@ -508,11 +539,13 @@ export function SessionComposer({ label, disabled, onSend, dock, pinned, subject
   onStop?: () => void;
   /** 等本人处理的框（第 54 条）：钉在输入框上方。 */
   pinned?: ReactNode;
+  /** 往框里填一段、聚焦（等你补的「我来补」）：nonce 变了才填。 */
+  fill?: { text: string; nonce: number } | null;
 }) {
   return (
     <div className={s.composerDock}>
       {pinned ? <div className={s.pinned} data-testid="pinned">{pinned}</div> : null}
-      <InputBar placeholder="" label={label} disabled={disabled} dock={dock} busy={busy} interruptible onStop={onStop} draftKey={`tianshu-home-draft-v1:${subject.kind}:${subject.id}`}
+      <InputBar placeholder="" label={label} disabled={disabled} dock={dock} busy={busy} interruptible onStop={onStop} draftKey={`tianshu-home-draft-v1:${subject.kind}:${subject.id}`} fill={fill}
         footer={{
           left: place ? <FolderText name={place.name} title={place.title} /> : null,
           right: <>{context ? <ContextRing {...context} /> : null}{model && models?.rows.length && !disabled ? <ModelPanel label={model.label} title={model.title} rows={models.rows} onPick={models.onPick} busy={models.busy} testId="session-model" />

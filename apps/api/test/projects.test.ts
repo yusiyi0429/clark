@@ -155,8 +155,8 @@ describe("项目", { timeout: 60_000 }, () => {
       await f.t.sql("UPDATE tasks SET plan_task_id=NULL,project_id=$2 WHERE id=$1", [loose, projectId]);
       const scorePass = await handback(score, 1, "pass", 5, ["met", "met"]);
       const videoPass = await handback(video, 1, "pass", 8, ["met", "met"]);
-      await handback(stuck, 1, "fail", 2, ["not_met", "met"], { returnText: "第一次" });
-      const blocked = await handback(stuck, 2, "fail", 3, ["not_met", "met"], { returnText: "第二次" });
+      await handback(stuck, 1, "fail", 2, ["unmet", "met"], { returnText: "第一次" });
+      const blocked = await handback(stuck, 2, "fail", 3, ["unmet", "met"], { returnText: "第二次" });
       const loosePass = await handback(loose, 1, "pass", 9, ["met"]);
       // 别人在这件 Task 下的卡、本人在别的 Task 下的卡：不出现。
       const theirs = randomUUID();

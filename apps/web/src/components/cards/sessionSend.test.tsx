@@ -124,6 +124,24 @@ describe("子会话一按发送就先画出来", () => {
       expect(bodies).toEqual([{ text: "先跑测试" }, { text: "再改样式", messageId: "00000000-0000-4000-8000-00000000abcd" }]);
     } finally { vi.unstubAllGlobals(); }
   });
+
+  it("转话带的 agreementRevision（主循环第 60 条）：本机 protocol ≥ 3 才放进请求体，老本机只发字", async () => {
+    const bodies: unknown[] = [];
+    let protocol = 2;
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.body) bodies.push(JSON.parse(String(init.body)));
+      return new Response(JSON.stringify({ app: "tianshu-local", version: "0.9.0", protocol, platform: "win32", tokenValid: true, slots: { max: 3, running: 0, queued: 0 }, delivery: "new_turn", messageId: "x" }), { status: 200, headers: { "content-type": "application/json" } });
+    }));
+    try {
+      const runner = createHttpRunner("http://127.0.0.1:1", () => "t");
+      await runner.health();
+      await runner.sendMessage("s1", "约定改了", undefined, undefined, undefined, 2);
+      protocol = 3;
+      await runner.health();
+      await runner.sendMessage("s1", "约定改了", undefined, undefined, undefined, 2);
+      expect(bodies).toEqual([{ text: "约定改了" }, { text: "约定改了", agreementRevision: 2 }]);
+    } finally { vi.unstubAllGlobals(); }
+  });
 });
 
 describe("启动中（本机在拉起执行方）", () => {

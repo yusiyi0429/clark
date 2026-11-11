@@ -19,7 +19,7 @@ import { ICON, StateIcon } from "./StateIcon";
 import h from "@/styles/home.module.css";
 
 type Props = {
-  /** 胶囊上写的（「Opus 5.5 · 高」），悬停 title。 */
+  /** 胶囊上写的（「Claude 订阅 · Opus 5.5 · 高」，modelLine），悬停 title。 */
   label: string;
   title?: string | null;
   rows: readonly PanelRow[];
