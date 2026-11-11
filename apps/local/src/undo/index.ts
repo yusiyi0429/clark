@@ -291,7 +291,7 @@ export class SessionUndo {
   }
 
   /** 按处写回：先把现在的样子留一份（before-restore），再写。被占用时抛 EBUSY 一类的错。 */
-  async writeBack(abs: string, body: string): Promise<void> {
+  async writeBack(abs: string, body: Buffer): Promise<void> {
     if (existsSync(abs)) {
       const keep = join(this.dir, "before-restore", new Date().toISOString().replace(/[:.]/g, "-"));
       await mkdir(keep, { recursive: true });

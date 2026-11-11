@@ -1,15 +1,16 @@
 // 看得见改了什么、只动让动的那一块（设计第 72 条第一步，契约 LocalFileChangesResponse、LocalFileChangesRestoreRequest、事件 files_changed）。
 // 真的临时文件夹、真的 git、假 Claude Code，不调模型。
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { Value } from "@sinclair/typebox/value";
 import { LocalFileChangesResponse, LocalFileChangesRestoreResponse, LocalSessionEvent } from "@warmap/contracts";
 import { UNDO_LIMITS, UndoStore, type SessionUndo, type TurnFile } from "../src/undo/index.js";
 import { ChangesError, readChanges, restoreChanges, turnSummary } from "../src/undo/changes.js";
-import { revertChanges, textChanges } from "../src/undo/textDiff.js";
+import { diffText as textChanges, restoreText as revertChanges } from "../src/textChanges/index.js";
 import { registerFormats } from "../src/store.js";
+import { makeDocx, makeXlsx, p } from "./docTextFiles.js";
 import { api, pair, startTestRunner, tempDir } from "./helpers.js";
 
 registerFormats();
@@ -45,8 +46,9 @@ describe("「一处」怎么切", () => {
 
 function store() {
   const turns: { turn: number; files: TurnFile[] }[] = [];
-  const s = new UndoStore(tempDir("tl-chg-data-"), { isOwn: () => false, changed: () => {}, notice: () => {}, turnFiles: (_id, turn, files) => turns.push({ turn, files }) });
-  return { s, turns };
+  const data = tempDir("tl-chg-data-");
+  const s = new UndoStore(data, { isOwn: () => false, changed: () => {}, notice: () => {}, turnFiles: (_id, turn, files) => turns.push({ turn, files }) });
+  return { s, turns, data };
 }
 async function ready(u: SessionUndo) {
   u.open();
@@ -67,26 +69,29 @@ describe("读改动、按处恢复（快照这一路）", { timeout: 60_000 }, (
     const dir = tempDir("tl-chg-");
     const doc = join(dir, "周报.md");
     writeFileSync(doc, "# 周报\r\n进展评估：良好。计划：完成联调和文档。\r\n");
-    const { s, turns } = store();
+    const { s, turns, data } = store();
     const u = await ready(s.for("c1", dir));
     await turn(u, () => writeFileSync(doc, "# 周报\r\n进展评估：优秀。计划：完成联调、测试和文档。\r\n"));
     // 一轮结束的事件：周报.md · 2 处
     expect(turns).toHaveLength(1);
     expect(await turnSummary(u, turns[0]!.turn, turns[0]!.files)).toEqual({ files: [{ path: "周报.md", absolutePath: doc, change: "modified", detail: "full", count: 2 }], more: 0 });
     const r = await readChanges(u, "周报.md", "turn");
-    expect(Value.Check(LocalFileChangesResponse, r.file)).toBe(true);
-    expect(r.file).toMatchObject({ range: "turn", turn: 1, change: "modified", detail: "full", restorable: true });
-    expect(r.file.changes!.map((c) => r.file.after!.slice(c.after.start, c.after.end))).toEqual(["优秀", "、测试"]);
-    const out = await restoreChanges(u, "周报.md", "turn", undefined, [r.file.changes![0]!.id], r.file.revision);
+    expect(Value.Check(LocalFileChangesResponse, r)).toBe(true);
+    expect(r).toMatchObject({ range: "turn", turn: 1, change: "modified", detail: "full", restorable: true });
+    expect(r.changes!.map((c) => r.after!.slice(c.after.start, c.after.end))).toEqual(["优秀", "、测试"]);
+    const out = await restoreChanges(u, "周报.md", "turn", undefined, [r.changes![0]!.id], r.revision);
     expect(Value.Check(LocalFileChangesRestoreResponse, out)).toBe(true);
+    // 写回前留了一份恢复前的样子
+    const kept = join(data, "sessions", "c1", "before-restore");
+    expect(readdirSync(kept, { recursive: true, withFileTypes: true }).filter((e) => e.isFile()).map((e) => readFileSync(join(e.parentPath, e.name), "utf8"))).toContain("# 周报\r\n进展评估：优秀。计划：完成联调、测试和文档。\r\n");
     expect(readFileSync(doc)).toEqual(Buffer.from("# 周报\r\n进展评估：良好。计划：完成联调、测试和文档。\r\n"));
     expect(out.file.changes!.map((c) => out.file.after!.slice(c.after.start, c.after.end))).toEqual(["、测试"]); // 剩下那一处还在
     // 读了以后本人又改了：拒绝，让网页重读
     const again = await readChanges(u, "周报.md", "turn");
     writeFileSync(doc, readFileSync(doc, "utf8") + "本人加的\r\n");
-    await expect(restoreChanges(u, "周报.md", "turn", undefined, [again.file.changes![0]!.id], again.file.revision)).rejects.toMatchObject({ code: "file_changed" });
+    await expect(restoreChanges(u, "周报.md", "turn", undefined, [again.changes![0]!.id], again.revision)).rejects.toMatchObject({ code: "file_changed" });
     expect(readFileSync(doc, "utf8")).toContain("本人加的");
-    await expect(restoreChanges(u, "周报.md", "turn", undefined, ["不认识"], (await readChanges(u, "周报.md", "turn")).file.revision)).rejects.toMatchObject({ code: "validation" });
+    await expect(restoreChanges(u, "周报.md", "turn", undefined, ["不认识"], (await readChanges(u, "周报.md", "turn")).revision)).rejects.toMatchObject({ code: "validation" });
   });
 
   it("带 BOM 的文件（Windows 记事本存的）：区间对得上，按处恢复后 BOM 还在", async () => {
@@ -96,7 +101,7 @@ describe("读改动、按处恢复（快照这一路）", { timeout: 60_000 }, (
     const { s } = store();
     const u = await ready(s.for("c5", dir));
     await turn(u, () => writeFileSync(doc, "﻿甲：优秀\r\n乙：很好\r\n"));
-    const r = (await readChanges(u, "记事本.txt", "turn")).file;
+    const r = (await readChanges(u, "记事本.txt", "turn"));
     expect(r.changes!.map((c) => r.after!.slice(c.after.start, c.after.end))).toEqual(["优秀", "很好"]);
     await restoreChanges(u, "记事本.txt", "turn", undefined, [r.changes![1]!.id], r.revision);
     expect(readFileSync(doc)).toEqual(Buffer.from("﻿甲：优秀\r\n乙：一般\r\n"));
@@ -121,15 +126,44 @@ describe("读改动、按处恢复（快照这一路）", { timeout: 60_000 }, (
     ]);
     for (const p of ["大.md", "表.xlsx"]) {
       const r = await readChanges(u, p, "turn");
-      expect(r.file).toMatchObject({ detail: "none", restorable: false });
-      expect(r.file.before).toBeUndefined();
-      expect(r.file.changes).toBeUndefined();
-      await expect(restoreChanges(u, p, "turn", undefined, ["x"], r.file.revision)).rejects.toMatchObject({ code: "validation" });
+      expect(r).toMatchObject({ detail: "none", restorable: false });
+      expect(r.before).toBeUndefined();
+      expect(r.changes).toBeUndefined();
+      await expect(restoreChanges(u, p, "turn", undefined, ["x"], r.revision)).rejects.toMatchObject({ code: "validation" });
     }
     const n = await readChanges(u, "新建.md", "turn");
-    expect(n.file).toMatchObject({ change: "added", detail: "full", before: null, after: "第一行\n第二行\n", restorable: false, changes: [{ before: { start: 0, end: 0 }, after: { start: 0, end: 8 } }] });
+    expect(n).toMatchObject({ change: "added", detail: "full", before: null, after: "第一行\n第二行\n", restorable: false, changes: [{ before: { start: 0, end: 0 }, after: { start: 0, end: 8 } }] });
     // 这一轮没改过的文件：404
     await expect(readChanges(u, "没有.md", "turn")).rejects.toBeInstanceOf(ChangesError);
+  });
+
+  it("Word、Excel 转成文字比（converted）：看得到逐处、处数照转出来的文字算、不能按处恢复；Excel 大表只给改过的行和上下几行；整个文件恢复照旧", async () => {
+    const dir = tempDir("tl-chg-office-");
+    const doc = join(dir, "周报.docx"), xls = join(dir, "台账.xlsx");
+    writeFileSync(doc, makeDocx(p("进展评估：良好") + p("下周计划：联调")));
+    const sheet = (changed: string) => makeXlsx([{ name: "台账", data: Array.from({ length: 120 }, (_, i) => `<row r="${i + 1}"><c r="A${i + 1}" t="inlineStr"><is><t>${i === 60 ? changed : `第${i + 1}行`}</t></is></c></row>`).join("") }]);
+    writeFileSync(xls, sheet("第61行"));
+    const { s, turns } = store();
+    const u = await ready(s.for("c6", dir));
+    const before = readFileSync(doc);
+    await turn(u, () => {
+      writeFileSync(doc, makeDocx(p("进展评估：优秀") + p("下周计划：联调")));
+      writeFileSync(xls, sheet("改过的第61行"));
+    });
+    const sum = await turnSummary(u, turns[0]!.turn, turns[0]!.files);
+    expect(sum.files.map((f) => [f.path, f.detail, f.count])).toEqual([["台账.xlsx", "converted", 1], ["周报.docx", "converted", 1]]);
+    const w = await readChanges(u, "周报.docx", "turn");
+    expect(w).toMatchObject({ detail: "converted", restorable: false });
+    expect(w.changes!.map((c) => w.after!.slice(c.after.start, c.after.end))).toEqual(["优秀"]);
+    await expect(restoreChanges(u, "周报.docx", "turn", undefined, [w.changes![0]!.id], w.revision)).rejects.toMatchObject({ code: "validation" });
+    const x = await readChanges(u, "台账.xlsx", "turn");
+    expect(x.detail).toBe("converted");
+    expect(x.after!.length).toBeLessThan(400); // 120 行只给改过的那行和上下两行
+    expect(x.after).toContain("改过的第61行");
+    expect(x.after).not.toContain("第100行");
+    // 整个文件恢复照旧（按字节拷回去）
+    await u.restore(["周报.docx"]);
+    expect(readFileSync(doc)).toEqual(before);
   });
 
   it("这一轮 / 开工到现在：两轮改同一个文件，turn 给轮号看那一轮（更早的一轮不能按处恢复），session 从会话第一次动它之前比到现在", async () => {
@@ -140,11 +174,11 @@ describe("读改动、按处恢复（快照这一路）", { timeout: 60_000 }, (
     const u = await ready(s.for("c3", dir));
     await turn(u, () => writeFileSync(doc, "一改\n二\n三\n"));
     await turn(u, () => writeFileSync(doc, "一改\n二\n三改\n"));
-    const t1 = (await readChanges(u, "a.md", "turn", 1)).file;
+    const t1 = (await readChanges(u, "a.md", "turn", 1));
     expect([t1.turn, t1.before, t1.after, t1.restorable]).toEqual([1, "一\n二\n三\n", "一改\n二\n三\n", false]);
-    const t2 = (await readChanges(u, "a.md", "turn")).file;
+    const t2 = (await readChanges(u, "a.md", "turn"));
     expect([t2.turn, t2.before, t2.after, t2.restorable]).toEqual([2, "一改\n二\n三\n", "一改\n二\n三改\n", true]);
-    const all = (await readChanges(u, "a.md", "session")).file;
+    const all = (await readChanges(u, "a.md", "session"));
     expect([all.turn, all.before, all.after, all.changes!.length]).toEqual([null, "一\n二\n三\n", "一改\n二\n三改\n", 2]);
   });
 
@@ -171,8 +205,8 @@ describe("读改动、按处恢复（快照这一路）", { timeout: 60_000 }, (
       u.onEvent("turn_end");
       await u.files();
       expect(turns.map((t) => [t.turn, t.files.map((f) => f.path)])).toEqual([[1, ["a.md"]], [2, ["a.md"]]]);
-      expect((await readChanges(u, "a.md", "turn")).file).toMatchObject({ turn: 2, before: "第一轮\n", after: "第二轮\n", restorable: true });
-      expect((await readChanges(u, "a.md", "session")).file).toMatchObject({ before: "原文\n", after: "第二轮\n" });
+      expect((await readChanges(u, "a.md", "turn"))).toMatchObject({ turn: 2, before: "第一轮\n", after: "第二轮\n", restorable: true });
+      expect((await readChanges(u, "a.md", "session"))).toMatchObject({ before: "原文\n", after: "第二轮\n" });
       await expect(readChanges(u, "b.md", "session")).rejects.toMatchObject({ code: "not_found" });
     } finally {
       UNDO_LIMITS.files = 30_000;

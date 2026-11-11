@@ -2223,7 +2223,7 @@ export class SessionManager {
       }
       const undo = this.undoOf(rec, false);
       if (!undo) throw new SessionError("not_found", "这个会话没有留一份");
-      return (await readChanges(undo, req.path, range, req.turn)).file;
+      return await readChanges(undo, req.path, range, req.turn);
     } catch (e) {
       throw e instanceof ChangesError ? new SessionError(e.code, e.message) : e;
     }
