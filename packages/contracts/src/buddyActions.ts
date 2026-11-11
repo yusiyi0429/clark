@@ -95,7 +95,7 @@ export const BuddyAskQuestion = Type.Object({
  * - update_card（主循环第 60 条）：改一张卡的约定（交代、完成标准）。按 letter（这个项目里的字母）或 cardId（卡的 id）找卡，两样给一样；
  *   brief 新的交代、standards 新的完成标准全文（按条，整份），至少给一样；reason 必填，一句话说为什么改。同本人在会话详情里改（PATCH /api/me/cards/:id）：
  *   存了就生效，记一条修改记录（by pipeline），这张卡有本机会话时登记一条转话把新的完成标准告诉执行方。
- *   不是卡（是专题）400 NOT_A_CARD；卡已完成 409 CARD_DONE；完成标准合起来超过 500 字 400 TOO_LONG。不可撤（要改回就再改一次）。
+ *   不是卡（是专题）400 NOT_A_CARD；卡已完成 409 CARD_DONE；完成标准一条超过 300 字、合起来超过 2000 字 400 TOO_LONG。不可撤（要改回就再改一次）。
  * - sub_session_stop：停下它（同 stop_sub_session）。
  * - sub_session_restart：重开。还没开过工、或开工登记已了结的，登记开工（同 start_sub_session）；本机会话停着的（做完一轮、被停下、出错停住），
  *   往里说一句 text（不给是「接着做」）续上。在跑 409 ALREADY_RUNNING。
@@ -150,7 +150,7 @@ export const UpdateCardActionParams = Type.Object({
   letter: Type.Optional(SubSessionLetter),
   cardId: Type.Optional(Uuid),
   brief: Type.Optional(Type.String({ minLength: 1, maxLength: 4000 })),
-  standards: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 200 }), { minItems: 1, maxItems: 20 })),
+  standards: Type.Optional(Type.Array(Type.String({ minLength: 1, maxLength: 300 }), { minItems: 1, maxItems: 20 })),
   reason: Type.String({ minLength: 1, maxLength: 200 }),
 }, strict);
 export type TUpdateCardActionParams = Static<typeof UpdateCardActionParams>;

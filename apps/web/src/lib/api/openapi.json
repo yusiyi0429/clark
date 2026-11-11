@@ -28173,7 +28173,7 @@
                 "anyOf": [
                   {
                     "minLength": 1,
-                    "maxLength": 500,
+                    "maxLength": 2000,
                     "type": "string"
                   },
                   {
@@ -56263,7 +56263,7 @@
             "anyOf": [
               {
                 "minLength": 1,
-                "maxLength": 500,
+                "maxLength": 2000,
                 "type": "string"
               },
               {
@@ -57838,7 +57838,7 @@
                         "anyOf": [
                           {
                             "minLength": 1,
-                            "maxLength": 500,
+                            "maxLength": 2000,
                             "type": "string"
                           },
                           {
@@ -66788,7 +66788,7 @@
           },
           "doneDefinition": {
             "minLength": 1,
-            "maxLength": 500,
+            "maxLength": 2000,
             "type": "string"
           },
           "planTaskId": {
@@ -66922,7 +66922,7 @@
                 "anyOf": [
                   {
                     "minLength": 1,
-                    "maxLength": 500,
+                    "maxLength": 2000,
                     "type": "string"
                   },
                   {
@@ -68846,7 +68846,7 @@
                   "anyOf": [
                     {
                       "minLength": 1,
-                      "maxLength": 500,
+                      "maxLength": 2000,
                       "type": "string"
                     },
                     {
@@ -70282,7 +70282,7 @@
                         "anyOf": [
                           {
                             "minLength": 1,
-                            "maxLength": 500,
+                            "maxLength": 2000,
                             "type": "string"
                           },
                           {
@@ -71693,7 +71693,7 @@
                   "anyOf": [
                     {
                       "minLength": 1,
-                      "maxLength": 500,
+                      "maxLength": 2000,
                       "type": "string"
                     },
                     {
@@ -76174,7 +76174,7 @@
                 "anyOf": [
                   {
                     "minLength": 1,
-                    "maxLength": 500,
+                    "maxLength": 2000,
                     "type": "string"
                   },
                   {
@@ -77849,7 +77849,7 @@
                       "anyOf": [
                         {
                           "minLength": 1,
-                          "maxLength": 500,
+                          "maxLength": 2000,
                           "type": "string"
                         },
                         {
@@ -79205,7 +79205,7 @@
                   "anyOf": [
                     {
                       "minLength": 1,
-                      "maxLength": 500,
+                      "maxLength": 2000,
                       "type": "string"
                     },
                     {
@@ -83705,7 +83705,7 @@
             "anyOf": [
               {
                 "minLength": 1,
-                "maxLength": 500,
+                "maxLength": 2000,
                 "type": "string"
               },
               {
@@ -98843,7 +98843,7 @@
             "anyOf": [
               {
                 "minLength": 1,
-                "maxLength": 500,
+                "maxLength": 2000,
                 "type": "string"
               },
               {
@@ -100262,7 +100262,7 @@
           },
           "doneDefinition": {
             "minLength": 1,
-            "maxLength": 500,
+            "maxLength": 2000,
             "type": "string"
           },
           "criterionIndex": {
@@ -100635,7 +100635,7 @@
                   "anyOf": [
                     {
                       "minLength": 1,
-                      "maxLength": 500,
+                      "maxLength": 2000,
                       "type": "string"
                     },
                     {
@@ -101884,7 +101884,7 @@
                 },
                 "doneDefinition": {
                   "minLength": 1,
-                  "maxLength": 500,
+                  "maxLength": 2000,
                   "type": "string"
                 },
                 "criterionIndex": {
@@ -102345,7 +102345,7 @@
                 },
                 "doneDefinition": {
                   "minLength": 1,
-                  "maxLength": 500,
+                  "maxLength": 2000,
                   "type": "string"
                 },
                 "executor": {
@@ -102576,7 +102576,7 @@
                   "anyOf": [
                     {
                       "minLength": 1,
-                      "maxLength": 500,
+                      "maxLength": 2000,
                       "type": "string"
                     },
                     {
@@ -103883,7 +103883,7 @@
             "type": "array",
             "items": {
               "minLength": 1,
-              "maxLength": 200,
+              "maxLength": 300,
               "pattern": "^[^\\r\\n]+$",
               "type": "string"
             }
@@ -104727,7 +104727,7 @@
                 "anyOf": [
                   {
                     "minLength": 1,
-                    "maxLength": 500,
+                    "maxLength": 2000,
                     "type": "string"
                   },
                   {
@@ -128379,7 +128379,7 @@
                   "anyOf": [
                     {
                       "minLength": 1,
-                      "maxLength": 500,
+                      "maxLength": 2000,
                       "type": "string"
                     },
                     {
@@ -129628,7 +129628,7 @@
                 },
                 "doneDefinition": {
                   "minLength": 1,
-                  "maxLength": 500,
+                  "maxLength": 2000,
                   "type": "string"
                 },
                 "criterionIndex": {
