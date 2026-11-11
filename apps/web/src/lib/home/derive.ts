@@ -92,9 +92,15 @@ export function queueText(reason: TWorkerQueueReason, holdUntil: string | null, 
   return reason === "quota" && holdUntil ? `${QUEUE_TEXT.quota} · ${clock(holdUntil, Date.now())}` : QUEUE_TEXT[reason];
 }
 
-/** 排着的子会话的状态词（页头、事件行）：「已排队 · 等 B 改登录页 这一轮做完」；不在排队为 null。 */
-export const subQueueText = (sub: Pick<SubSession, "state" | "queueReason" | "holdUntil" | "heldBy">): string | null =>
-  (sub.state === "queued" ? `已排队${sub.queueReason ? ` · ${queueText(sub.queueReason, sub.holdUntil, sub.heldBy)}` : ""}` : null);
+/**
+ * 排着的子会话的状态词（页头、事件行）：「已排队 · 等 B 改登录页 这一轮做完」；不在排队为 null。
+ * short（手机页头，放不下一整句）：在等文件夹的只写「已排队 · 等 B」（没有字母写标题）。
+ */
+export const subQueueText = (sub: Pick<SubSession, "state" | "queueReason" | "holdUntil" | "heldBy">, short = false): string | null => {
+  if (sub.state !== "queued") return null;
+  if (short && sub.queueReason === "folder_busy" && sub.heldBy) return `已排队 · 等 ${sub.heldBy.letter ?? sub.heldBy.title}`;
+  return `已排队${sub.queueReason ? ` · ${queueText(sub.queueReason, sub.holdUntil, sub.heldBy)}` : ""}`;
+};
 
 const QUEUE: Record<QueueReason, TWorkerQueueReason> = { start: "not_dispatched", slot: "slot", offline: "device_offline", folder: "folder_busy", after: "prior_cards", quota: "quota" };
 const EPOCH = new Date(0).toISOString();

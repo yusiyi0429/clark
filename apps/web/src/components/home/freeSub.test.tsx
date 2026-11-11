@@ -57,6 +57,8 @@ describe("项目下的「+」开自由子会话（第 68 条）", () => {
     expect(queueText("folder_busy", null, { ...HOLDER, letter: null })).toBe("等 改登录页 这一轮做完");
     expect(queueText("folder_busy", null)).toBe("等文件夹空出来");
     expect(subQueueText({ state: "queued", queueReason: "folder_busy", holdUntil: null, heldBy: HOLDER })).toBe("已排队 · 等 B 改登录页 这一轮做完");
+    expect(subQueueText({ state: "queued", queueReason: "folder_busy", holdUntil: null, heldBy: HOLDER }, true)).toBe("已排队 · 等 B");
+    expect(subQueueText({ state: "queued", queueReason: "slot", holdUntil: null }, true)).toBe("已排队 · 等空位");
     expect(subQueueText({ state: "running", queueReason: null, holdUntil: null })).toBeNull();
   });
 
