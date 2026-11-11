@@ -4,7 +4,7 @@ import type { TCardAgreementChange } from "@warmap/contracts";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }), usePathname: () => "/me/work" }));
 
-import { AgreementSection, ChangeItem, ProposalDecision, standardsOk } from "./Agreement";
+import { AgreementSection, ChangeItem, ProposalDecision, overLimit, standardsOk } from "./Agreement";
 import { foldEvents } from "@/lib/local/sessionView";
 
 /** 卡的约定（主循环第 60 条）：没有 jsdom，只看画出来的样子。 */
@@ -32,6 +32,11 @@ describe("会话详情里的完成标准", () => {
     expect(html.match(/data-testid="agreement-line"/g)).toHaveLength(3);
     expect(html).toContain('value="近似商标的申请号"');
     expect(html.match(/aria-label="删除"/g)).toHaveLength(3);
+  });
+  it("超长的那一条标出来：自己超过 300 字的，或者从它起整份超过 2000 字的", () => {
+    expect(overLimit(["短", "字".repeat(301), "短"])).toEqual([false, true, false]);
+    const long = Array.from({ length: 8 }, () => "字".repeat(260));
+    expect(overLimit(long)).toEqual([false, false, false, false, false, false, false, true]);
   });
   it("能不能存：至少一条，每条不空、不超 300 字，合起来不超 2000 字", () => {
     expect(standardsOk(standards)).toBe(true);

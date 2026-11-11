@@ -16,10 +16,20 @@ import { ICON } from "@/components/home/StateIcon";
 import { relativeDayTime } from "@/lib/companyTime";
 import s from "@/styles/v2-session.module.css";
 
-/** 完成标准的长度（照契约 DONE_DEFINITION_LIMITS 抄的：每条 300 字，整份 2000 字）；交代 4000 字（PatchCardRequest.brief）。 */
+/** 完成标准的长度（照契约 tasks.ts 的 DONE_DEFINITION_LIMITS 抄的，网页不从契约引运行时的值：每条 300 字，整份 2000 字）；交代 4000 字（PatchCardRequest.brief）。 */
 export const STANDARD_LIMITS = { line: 300, total: 2000, count: 20, brief: 4000 } as const;
 
 /** 这份完成标准能不能存：至少一条，每条不空、不换行、不超长，合起来不超长。 */
+/** 哪几条超长：这一条超过每条的上限，或者从它起整份超过上限（各条用换行接起来算）。 */
+export function overLimit(lines: readonly string[]): boolean[] {
+  let total = -1;
+  return lines.map((line) => {
+    const kept = line.trim();
+    total += kept.length + 1;
+    return kept.length > STANDARD_LIMITS.line || total > STANDARD_LIMITS.total;
+  });
+}
+
 export function standardsOk(lines: readonly string[]): boolean {
   const kept = lines.map((line) => line.trim());
   return kept.length > 0 && kept.length <= STANDARD_LIMITS.count && kept.every((line) => line && line.length <= STANDARD_LIMITS.line && !/[\r\n]/.test(line))
@@ -72,6 +82,7 @@ export function AgreementSection({ cardId, version, brief, standards, agreement,
   if (editing && draft) {
     const set = (index: number, value: string) => setDraft({ ...draft, standards: draft.standards.map((line, at) => (at === index ? value.replace(/[\r\n]+/g, " ") : line)) });
     const ok = standardsOk(draft.standards) && draft.brief.length <= STANDARD_LIMITS.brief;
+    const over = overLimit(draft.standards);
     return (
       <div className={s.sec} data-testid="agreement-edit">
         <p className={s.lab}>交代</p>
@@ -80,7 +91,7 @@ export function AgreementSection({ cardId, version, brief, standards, agreement,
         <ol className={s.agreeList}>
           {draft.standards.map((line, index) => (
             <li key={index}>
-              <input className={s.agreeField} value={line} maxLength={STANDARD_LIMITS.line} aria-label={`第 ${index + 1} 条`} autoFocus={index === 0}
+              <input className={s.agreeField} value={line} aria-invalid={over[index] || undefined} aria-label={`第 ${index + 1} 条`} autoFocus={index === 0}
                 onChange={(event) => set(index, event.target.value)} data-testid="agreement-line" />
               <HeroButton variant="ghost" size="sm" isIconOnly aria-label="删除" title="删除" isDisabled={draft.standards.length <= 1}
                 onPress={() => setDraft({ ...draft, standards: draft.standards.filter((_, at) => at !== index) })}><X {...ICON} aria-hidden /></HeroButton>

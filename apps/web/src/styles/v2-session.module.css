@@ -266,6 +266,8 @@ button.output:focus-visible { outline: 2px solid var(--focus); outline-offset: -
 .agreeField { width: 100%; min-width: 0; min-height: var(--row-32); padding: var(--space-1) var(--space-2); border: 1px solid var(--field-border); border-radius: var(--r-control); background: var(--field-bg); color: var(--field-ink); font: inherit; font-size: var(--text-base); line-height: var(--lh-row); outline: none; resize: vertical; }
 .agreeField:hover { border-color: var(--field-border-hover); }
 .agreeField:focus { border-color: var(--field-border-focus); }
+/* 超长的那一条：同复盘备注框的错误样式。 */
+.agreeField[aria-invalid="true"] { border-color: var(--warning); }
 .agreeList { display: grid; gap: var(--space-1); margin: 0; padding-left: 18px; }
 .agreeList li { padding-left: var(--space-1); }
 .agreeList li .agreeField { width: calc(100% - 36px); vertical-align: middle; }
