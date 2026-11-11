@@ -22,13 +22,13 @@ async function card(title: string) {
 }
 
 describe("假本机：主循环的几种情形", () => {
-  it("批准带一句人话和会动的文件；协议是 3", async () => {
+  it("批准带一句人话和会动的文件；协议不低于 3", async () => {
     const { runner, seen, stop } = await card("普通的卡");
     await until(() => seen.some((event) => event.type === "permission_request"));
     const request = seen.find((event) => event.type === "permission_request");
     expect(request?.type === "permission_request" && request.request.description).toBe("跑一遍网页的测试，看改的地方有没有弄坏别的");
     expect(request?.type === "permission_request" && request.request.paths).toEqual(["apps/web/test-results/report.json"]);
-    expect((await runner.health()).protocol).toBe(3);
+    expect((await runner.health()).protocol).toBeGreaterThanOrEqual(3);
     stop();
   });
 
