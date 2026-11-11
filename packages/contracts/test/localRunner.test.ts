@@ -44,7 +44,7 @@ describe("本机程序契约", () => {
     expect(Value.Check(LocalSendMessageRequest, { kind: "vote", text: "x" })).toBe(false);
   });
 
-  it("添加来源：路由、先认先验（presetId 可空、可不给）、加的时候至少选一个模型、来源和预设的形状、四个错误码", () => {
+  it("添加来源：路由、先认先验（presetId 可空、可不给）、加的时候至少选一个模型、来源和预设的形状、三个错误码", () => {
     expect([LOCAL_RUNNER_ROUTES.listSources, LOCAL_RUNNER_ROUTES.checkSource, LOCAL_RUNNER_ROUTES.addSource, LOCAL_RUNNER_ROUTES.deleteSource]).toEqual([
       { method: "GET", path: "/v1/sources", auth: true }, { method: "POST", path: "/v1/sources/check", auth: true },
       { method: "POST", path: "/v1/sources", auth: true }, { method: "DELETE", path: "/v1/sources/:id", auth: true },
@@ -60,7 +60,7 @@ describe("本机程序契约", () => {
       formats: ["anthropic"], agents: ["claude-code"], models: [{ id: "kimi-k3", name: "kimi-k3" }], verified: false, addedAt: "2026-11-11T00:00:00.000Z" };
     expect(Value.Check(LocalSource, source)).toBe(true);
     expect(Value.Check(LocalSourceListResponse, { presets: [{ id: "anthropic", name: "Anthropic 官方 API", plans: ["api"], regions: [], agents: ["claude-code"] }], sources: [source] })).toBe(true);
-    for (const code of ["source_unrecognized", "source_key_rejected", "source_unreachable", "source_no_models"]) {
+    for (const code of ["source_key_rejected", "source_unreachable", "source_no_models"]) {
       expect(Value.Check(LocalRunnerError, { error: { code, message: "x" } })).toBe(true);
     }
   });

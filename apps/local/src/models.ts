@@ -59,6 +59,11 @@ const builtIn: Stored = {
 /** 连接页连 TokenHub 建的那些（th- 开头）共用一把钥匙。 */
 const TOKENHUB_KEY = "tokenhub";
 const keyName = (id: string) => (isTokenHubProfileId(id) ? TOKENHUB_KEY : `model:${id}`);
+/** 添加来源建的（src- 开头，第 52 条）：同一个来源的几条共用来源那把钥匙。 */
+const SOURCE_PROFILE_PREFIX = "src-";
+const isSourceProfileId = (id: string) => id.startsWith(SOURCE_PROFILE_PREFIX);
+const keyOf = (p: { id: string; sourceId?: string }) => (p.sourceId ? `source:${p.sourceId}` : keyName(p.id));
+export const sourceProfileId = (sourceId: string, model: string) => `${SOURCE_PROFILE_PREFIX}${sourceId}-${model.replace(/[^A-Za-z0-9_-]/g, "_")}`.slice(0, 80);
 /** 档位怎么认模型：和网页（apps/web 的 modelForTier）同一套。 */
 const TIER_MATCH: Record<TLocalModelTier, RegExp> = { strong: /opus/i, normal: /sonnet/i, light: /haiku|flash|mini|lite/i };
 
@@ -100,6 +105,8 @@ export class ModelProfiles {
   private readonly file: string;
   /** 别名在这台电脑上实际跑出来是哪一版（opus → claude-opus-5-5）：开工前写「Opus 5.5」用。 */
   private readonly aliasFile: string;
+  /** 添加来源建的模型配置是哪个来源（来源名写进 origin）：由来源表（sources.ts）接上。 */
+  sourceOrigin: (sourceId: string) => { provider: string; label: string } | null = () => null;
   constructor(
     dataDir: string, private readonly secrets: SecretStore, private readonly codex: { list(): CodexModel[] } | null = null,
     private readonly claude: { list(): ClaudeModel[] } | null = null,
@@ -142,10 +149,16 @@ export class ModelProfiles {
     return p.model ? this.displayName(p.model) : p.id === SUBSCRIPTION_ID ? AUTO_MODEL_NAME : p.label;
   }
 
+  /** 认出的来源：添加来源建的写来源的名字，别的按地址和模型名认。 */
+  private originOf(p: Entry): TLocalModelOrigin {
+    const s = p.sourceId ? this.sourceOrigin(p.sourceId) : null;
+    return s ? { provider: s.provider.slice(0, 100), label: s.label.slice(0, 120), via: null } : modelOrigin(p);
+  }
+
   async list(): Promise<TLocalModelProfile[]> {
     const out: TLocalModelProfile[] = [];
     for (const p of this.all()) {
-      out.push({ ...p, origin: modelOrigin(p), modelName: this.modelNameOf(p), efforts: effortsOf(p), defaultEffort: p.defaultEffort ?? null, catalog: Boolean(p.catalog), webSearch: p.webSearch ?? searchDefault(p.source, p.model), hasKey: p.source === "gateway" ? Boolean(await this.secrets.get(keyName(p.id))) : false });
+      out.push({ ...p, origin: this.originOf(p), modelName: this.modelNameOf(p), efforts: effortsOf(p), defaultEffort: p.defaultEffort ?? null, catalog: Boolean(p.catalog), webSearch: p.webSearch ?? searchDefault(p.source, p.model), hasKey: p.source === "gateway" ? Boolean(await this.secrets.get(keyOf(p))) : false });
     }
     return out;
   }
@@ -161,6 +174,12 @@ export class ModelProfiles {
       if (!own) throw new Error("th- 开头的 id 留给连接页连 TokenHub");
       if (body.source !== "gateway" || (body.baseUrl ?? null) !== own.baseUrl || body.model !== own.model || body.apiKey !== undefined) throw new Error("TokenHub 的地址、模型和钥匙在连接页换");
     }
+    if (isSourceProfileId(id)) {
+      // 添加来源建的：同上，地址、模型和钥匙只经来源换（钥匙几条共用）
+      const own = this.stored().find((p) => p.id === id);
+      if (!own) throw new Error("src- 开头的 id 留给添加来源");
+      if (body.source !== "gateway" || (body.baseUrl ?? null) !== own.baseUrl || body.model !== own.model || body.apiKey !== undefined) throw new Error("来源的地址、模型和钥匙在来源里换");
+    }
     const gateway = body.source === "gateway";
     if (gateway && !body.baseUrl) throw new Error("网关模型要填地址");
     // 钥匙会发到这个地址：别处的要 https，本机地址（magpie 等）可以 http
@@ -174,6 +193,7 @@ export class ModelProfiles {
       baseUrl: gateway ? body.baseUrl!.replace(/\/+$/, "") : null, model: body.model, smallModel: body.smallModel ?? null,
       webSearch: body.webSearch ?? searchDefault(body.source, body.model),
       isDefault: body.isDefault ?? prev?.isDefault ?? false,
+      ...(prev?.sourceId ? { sourceId: prev.sourceId } : {}),
     };
     list = prev ? list.map((p) => (p.id === id ? next : p)) : [...list, next];
     writeJsonAtomic(this.file, list);
@@ -230,13 +250,39 @@ export class ModelProfiles {
   }
 
   /**
+   * 加好一个来源（契约 POST /v1/sources）：每个模型一条 src- 开头的网关配置，共用来源那把钥匙（钥匙由来源表先存好）。
+   * 上次建的、这次也有的留着本人改过的名字、默认和联网搜索；这次没有的删掉。默认模型不改。webSearch：新建的默认开不开自带搜索。
+   */
+  async setSource(sourceId: string, baseUrl: string, models: { id: string; name: string }[], webSearch: boolean): Promise<void> {
+    const list = this.stored().slice(1);
+    const before = new Map(list.filter((p) => p.sourceId === sourceId).map((p) => [p.id, p]));
+    const labels = new Set<string>();
+    const added: Stored[] = [];
+    for (const m of models) {
+      const id = sourceProfileId(sourceId, m.id);
+      if (added.some((p) => p.id === id)) continue;
+      const prev = before.get(id);
+      const shown = m.name.slice(0, 40);
+      const label = prev?.label ?? (labels.has(shown) ? m.id.slice(0, 40) : shown);
+      labels.add(label);
+      added.push({ ...(prev ?? { label, agent: "claude-code", smallModel: null, webSearch: webSearch || searchDefault("gateway", m.id), isDefault: false }), id, source: "gateway", baseUrl: baseUrl.replace(/\/+$/, ""), model: m.id, sourceId });
+    }
+    writeJsonAtomic(this.file, [...list.filter((p) => p.sourceId !== sourceId), ...added]);
+  }
+
+  /** 删来源（契约 DELETE /v1/sources/:id）：删它建的模型配置（钥匙由来源表删）。 */
+  async removeSource(sourceId: string): Promise<void> {
+    writeJsonAtomic(this.file, this.stored().slice(1).filter((p) => p.sourceId !== sourceId));
+  }
+
+  /**
    * 这个配置现在叫什么（没有这个配置为 null）：label 配置的名字；sourceLabel 来源的名字——本人配的写配置的名字，
    * 模型目录里的一条配置的名字就是模型名，来源写认出的那个（「Claude 订阅」「Codex 订阅」）；origin 认出的来源。
    */
   naming(id: string): { label: string; sourceLabel: string; origin: TLocalModelOrigin } | null {
     const p = this.all().find((x) => x.id === id);
     if (!p) return null;
-    const origin = modelOrigin(p);
+    const origin = this.originOf(p);
     return { label: p.label, sourceLabel: p.catalog ? origin.label.slice(0, 40) : p.label, origin };
   }
 
@@ -274,8 +320,8 @@ export class ModelProfiles {
     return {
       profileId: p.id, label: p.label, source: p.source,
       baseUrl: p.baseUrl, model: p.model, smallModel: p.smallModel, webSearch: p.webSearch ?? searchDefault(p.source, p.model),
-      apiKey: p.source === "gateway" ? (await this.secrets.get(keyName(p.id))) ?? (isMagpie(p.baseUrl) ? MAGPIE_KEY : null) : null,
-      origin: modelOrigin(p),
+      apiKey: p.source === "gateway" ? (await this.secrets.get(keyOf(p))) ?? (isMagpie(p.baseUrl) ? MAGPIE_KEY : null) : null,
+      origin: this.originOf(p),
     };
   }
 }

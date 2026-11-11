@@ -53,11 +53,8 @@ export const LocalRunnerErrorCode = Type.Union([
   Type.Literal("not_implemented"), Type.Literal("cloud_not_linked"), Type.Literal("internal"),
   /** 连 TokenHub（POST /v1/tokenhub）：TokenHub 不认这把 Key（422）；连不上 TokenHub、它回的认不出（502）；这把 Key 的账户没有能用的模型（422）。 */
   Type.Literal("tokenhub_key_rejected"), Type.Literal("tokenhub_unreachable"), Type.Literal("tokenhub_no_models"),
-  /**
-   * 添加来源（/v1/sources，设计 17.2 第 52 条）：认不出这把 Key 是哪家、要本人选（422，回的 message 是一句话，候选在 LocalSourceCheckResponse 里另给）；
-   * 厂商不认这把 Key（422）；连不上厂商、它回的认不出（502）；这把 Key 列不出能用的模型（422）。
-   */
-  Type.Literal("source_unrecognized"), Type.Literal("source_key_rejected"), Type.Literal("source_unreachable"), Type.Literal("source_no_models"),
+  /** 添加来源（/v1/sources，设计 17.2 第 52 条）：厂商不认这把 Key（422）；连不上厂商、它回的认不出（502）；这把 Key 列不出能用的模型（422）。 */
+  Type.Literal("source_key_rejected"), Type.Literal("source_unreachable"), Type.Literal("source_no_models"),
 ]);
 export const LocalRunnerError = Type.Object({
   error: Type.Object({ code: LocalRunnerErrorCode, message: Type.String() }, strict),
@@ -488,7 +485,7 @@ export const LocalSourceListResponse = Type.Object({ presets: Type.Array(LocalSo
  *   认不出（多家都是 sk- 开头的）recognized 为 null，candidates 是可能的几家，网页让本人选，选了带 presetId 再调一次。
  * - presetId 给了（或认出来了）：plan、region 不给用这家的第一种、cn。按量 API 用这把 Key 读一次模型列表（不花 token），回能用的模型；
  *   厂商不认回 422 source_key_rejected，连不上回 502 source_unreachable，列不出能用的回 422 source_no_models。
- *   编程套餐不发请求，回预设的模型表，verified 为 false。
+ *   编程套餐不发请求，回预设的模型表，verified 为 false；没有不花钱验法的按量 API（现在是 GLM、通义千问）也一样。
  * - 自定义（presetId 为 null 且给了 baseUrl）：本人填地址和格式（这一版只收 anthropic），模型名本人填，不验。
  */
 export const LocalSourceCheckRequest = Type.Object({

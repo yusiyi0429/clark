@@ -29,6 +29,7 @@ import { CliTools, type ToolExec } from "./tools.js";
 import { GatewayPricing } from "./pricing.js";
 import { GatewaySpend } from "./spend.js";
 import { TokenHub } from "./tokenHub.js";
+import { Sources } from "./sources.js";
 import { Budgets } from "./budget.js";
 import { CodexQuota } from "./codexQuota.js";
 import { createDesktop, openUrl, type Desktop, type MenuAction } from "./desktop/index.js";
@@ -139,6 +140,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
     const s = await claude.status();
     return s.installed && s.loggedIn;
   }));
+  const sources = new Sources(config.dataDir, secrets, models, tokenHub, config.tokenHubUrl, baseFetch);
   const budgets = new Budgets(config.dataDir);
   let sessionsRef: SessionManager | null = null;
   const updateTray = () => desktop.setState({ paired: tokens.count() > 0, running: sessionsRef?.activeCount() ?? 0, paused: settings.get().paused });
@@ -168,7 +170,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   // 交回送到天枢以后去取验收交代。
   outbox.onSent = () => void sessions.pullBriefs();
   const server = createServer({
-    config, version: VERSION, tokens, pairings, sessions, log, models, folders, claude, cloud, settings, quota, codexQuota, codex, codexCatalog, claudeCatalog, tools, customTools, spend, tokenHub,
+    config, version: VERSION, tokens, pairings, sessions, log, models, folders, claude, cloud, settings, quota, codexQuota, codex, codexCatalog, claudeCatalog, tools, customTools, spend, tokenHub, sources,
     pickFolder: () => desktop.pickFolder(),
     cloneRepo: opts.cloneRepo ?? cloneRepo,
     fetchImpl: cloudFetch,
