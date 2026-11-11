@@ -34,7 +34,7 @@ export const chatModelLabel = (model: { provider: string; model: string } | null
   (model ? `${PROVIDER_NAMES[model.provider.toLowerCase()] ?? model.provider} · ${modelDisplayName(model.model)}` : null);
 
 /** 来源的叫法不写「我的」（40 条）：本机报的「我的 Claude 订阅」写成「Claude 订阅」。 */
-const plainSource = (text: string) => text.replace(/^我的\s*/, "");
+export const plainSource = (text: string) => text.replace(/^我的\s*/, "");
 /** 执行方（harness）给人看的名字（21 条：选模型时要看得出哪个模型配的哪个执行方）。 */
 export const HARNESS_NAME: Record<TLocalAgentKind, string> = { "claude-code": "Claude Code", codex: "Codex" };
 

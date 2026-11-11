@@ -566,6 +566,9 @@ button.bgLabel:hover { background: var(--default-soft); }
 .bgFail { display: inline-grid; flex: none; color: var(--danger); }
 .bgKind { flex: none; color: var(--ink-faint); }
 .bgTitle { flex: 1; min-width: 0; overflow: hidden; color: var(--ink); text-overflow: ellipsis; white-space: nowrap; }
+/* 规划、验收那一行：名字下面一行淡色小字「来源 · 模型 · 思考」（56 条），行跟着高一点。 */
+.bgMain { display: grid; flex: 1; min-width: 0; padding-block: var(--space-1); }
+.bgModel { min-width: 0; overflow: hidden; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
 .bgTime { flex: none; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .bgRow[data-state="failed"] .bgTime { color: var(--danger); }
 .bgHold { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
