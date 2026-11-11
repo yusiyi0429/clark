@@ -113196,6 +113196,38 @@
                 "type": "null"
               }
             ]
+          },
+          "heldBy": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "kind",
+              "id",
+              "title"
+            ],
+            "properties": {
+              "kind": {
+                "anyOf": [
+                  {
+                    "const": "card",
+                    "type": "string"
+                  },
+                  {
+                    "const": "topic",
+                    "type": "string"
+                  }
+                ]
+              },
+              "id": {
+                "minLength": 1,
+                "maxLength": 80,
+                "type": "string"
+              },
+              "title": {
+                "maxLength": 120,
+                "type": "string"
+              }
+            }
           }
         }
       },
@@ -114072,6 +114104,38 @@
                       "type": "null"
                     }
                   ]
+                },
+                "heldBy": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "id",
+                    "title"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "const": "card",
+                          "type": "string"
+                        },
+                        {
+                          "const": "topic",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "id": {
+                      "minLength": 1,
+                      "maxLength": 80,
+                      "type": "string"
+                    },
+                    "title": {
+                      "maxLength": 120,
+                      "type": "string"
+                    }
+                  }
                 }
               }
             }
@@ -114581,6 +114645,38 @@
                       "type": "null"
                     }
                   ]
+                },
+                "heldBy": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "id",
+                    "title"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "const": "card",
+                          "type": "string"
+                        },
+                        {
+                          "const": "topic",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "id": {
+                      "minLength": 1,
+                      "maxLength": 80,
+                      "type": "string"
+                    },
+                    "title": {
+                      "maxLength": 120,
+                      "type": "string"
+                    }
+                  }
                 }
               }
             }
@@ -115090,6 +115186,38 @@
                       "type": "null"
                     }
                   ]
+                },
+                "heldBy": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "id",
+                    "title"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "const": "card",
+                          "type": "string"
+                        },
+                        {
+                          "const": "topic",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "id": {
+                      "minLength": 1,
+                      "maxLength": 80,
+                      "type": "string"
+                    },
+                    "title": {
+                      "maxLength": 120,
+                      "type": "string"
+                    }
+                  }
                 }
               }
             }

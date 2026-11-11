@@ -18758,6 +18758,11 @@ export interface components {
                 title: string;
             }[];
             holdUntil: string | null;
+            heldBy?: {
+                kind: "card" | "topic";
+                id: string;
+                title: string;
+            };
         };
         WorkerResources: {
             devices: {
@@ -18873,6 +18878,11 @@ export interface components {
                     title: string;
                 }[];
                 holdUntil: string | null;
+                heldBy?: {
+                    kind: "card" | "topic";
+                    id: string;
+                    title: string;
+                };
             }[];
             queued: {
                 key: string;
@@ -18932,6 +18942,11 @@ export interface components {
                     title: string;
                 }[];
                 holdUntil: string | null;
+                heldBy?: {
+                    kind: "card" | "topic";
+                    id: string;
+                    title: string;
+                };
             }[];
             done: {
                 key: string;
@@ -18991,6 +19006,11 @@ export interface components {
                     title: string;
                 }[];
                 holdUntil: string | null;
+                heldBy?: {
+                    kind: "card" | "topic";
+                    id: string;
+                    title: string;
+                };
             }[];
             resources: {
                 devices: {
