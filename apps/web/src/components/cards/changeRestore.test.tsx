@@ -38,9 +38,11 @@ describe("恢复其中几处的三种结果（第 72 条）", () => {
     expect(show).toHaveBeenCalledWith(next);
     expect(reload).not.toHaveBeenCalled();
   });
-  it("一轮正在跑（409）：写「这一轮还在跑」，不重读", async () => {
+  it("409 conflict（一轮在跑、文件被占着）：照本机说的写，不重读", async () => {
     const reload = vi.fn(async () => undefined);
     const busy = async (): Promise<FileChanges> => { throw new LocalRunnerError("conflict", "这一轮还在跑", 409); };
+    const held = async (): Promise<FileChanges> => { throw new LocalRunnerError("conflict", "周报.md 正被别的程序打开", 409); };
+    expect(await restoreChanges({ restore: held }, ["c1"], "r1", vi.fn(), reload)).toBe("周报.md 正被别的程序打开");
     expect(await restoreChanges({ restore: busy }, ["c1"], "r1", vi.fn(), reload)).toBe("这一轮还在跑");
     expect(reload).not.toHaveBeenCalled();
   });
@@ -56,7 +58,7 @@ describe("恢复其中几处的三种结果（第 72 条）", () => {
     expect(reload).toHaveBeenCalledTimes(1);
     expect(await restoreWholeFile({ restoreFile: async () => ({ restored: [], failed: [{ path: "报表.xlsx", reason: "in_use", message: "正被 Excel 打开，关掉再点" }] }) }, reload))
       .toBe("正被 Excel 打开，关掉再点");
-    expect(await restoreWholeFile({ restoreFile: async () => { throw new LocalRunnerError("conflict", "x", 409); } }, reload)).toBe("这一轮还在跑");
+    expect(await restoreWholeFile({ restoreFile: async () => { throw new LocalRunnerError("conflict", "", 409); } }, reload)).toBe("这一轮还在跑");
   });
 });
 

@@ -147,8 +147,8 @@ export function localChangedFile(runner: Pick<LocalRunner, "readSessionFile" | "
   };
 }
 
-/** 恢复没成时写的那句：一轮正在跑（409），别的。 */
-const failText = (error: unknown) => (error instanceof LocalRunnerError && error.status === 409 ? "这一轮还在跑" : "没恢复成");
+/** 恢复没成时写的那句：409 conflict 是一轮在跑或文件被别的程序占着，照本机说的写（没说就当一轮在跑）；别的写「没恢复成」。 */
+const failText = (error: unknown) => (error instanceof LocalRunnerError && error.status === 409 ? error.message || "这一轮还在跑" : "没恢复成");
 
 /**
  * 恢复其中几处，回写给人看的那句（成了为 null）：成了照本机回的新读结果重画（show）；文件又变了（revision 对不上）重读，让本人重新看；
