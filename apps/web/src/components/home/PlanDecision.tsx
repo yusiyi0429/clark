@@ -25,6 +25,7 @@ import { planStep } from "@/lib/local/sessionView";
 import { useSessionEvents } from "@/lib/local/useSessionEvents";
 import type { TLocalModelProfile } from "@/lib/local/runner";
 import { HARNESS_NAME, effortText, pickLabel, profileModel, profileSource, sourceName } from "@/lib/local/runModel";
+import { matchModelWords } from "@/lib/local/modelWords";
 import { acceptDrafts, acceptProjectDrafts, dismissDraft, readTaskBudget, type PlanTarget } from "@/lib/board/cloud";
 import { TIER_LABEL, draftRole, modelForTier, type CardRole, type RoleView } from "@/lib/team/roles";
 import { SLOT_CAP, startBatch, type StartPlan } from "@/lib/work/queue";
@@ -120,16 +121,23 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
   const workerRoles = useMemo(() => roles.filter((role) => role.kind === "worker"), [roles]);
   const kept = drafts.filter((draft) => !edits[draft.id]?.dropped);
   const used = liveSessions(local.sessions).length;
+  // 对话里说的模型要求（第 69 条）：整张派活单一句原话，和这台电脑连着的来源对；对上了每张卡照它预选，对不上在单子顶上写「没找到」、用自动。
+  const modelWords = drafts.find((draft) => draft.modelWords)?.modelWords ?? null;
+  const fromWords = useMemo(() => (modelWords && local.models.length ? matchModelWords(modelWords, local.models) : null), [modelWords, local.models]);
+  const words = fromWords?.matched ? fromWords : null;
+  /** 这一步的模型、思考：本人改过的以本人的为准（选回自动也算改过，不再被原话盖回去）；没改过照原话；都没有是自动（undefined）。 */
+  const pickedModel = (draft: TCardDraftView) => { const own = edits[draft.id]; return own && "modelId" in own ? own.modelId : words?.modelId ?? undefined; };
+  const pickedEffort = (draft: TCardDraftView) => { const own = edits[draft.id]; return own && "effort" in own ? own.effort : words?.effort ?? undefined; };
   const roleOf = (draft: TCardDraftView) => { const edit = edits[draft.id]; return edit && "role" in edit ? edit.role ?? null : draftWorkerRole(draft); };
   const tierOf = (draft: TCardDraftView, role: CardRole | null) => roles.find((entry) => entry.id === role?.id)?.modelTier ?? draft.modelTier;
   const modelOf = (draft: TCardDraftView): TLocalModelProfile | null => {
     const role = roleOf(draft);
     if (!role) return null;
-    return local.models.find((model) => model.id === edits[draft.id]?.modelId) ?? modelForTier(local.models, tierOf(draft, role));
+    return local.models.find((model) => model.id === pickedModel(draft)) ?? modelForTier(local.models, tierOf(draft, role));
   };
   /** 这一步选的思考程度（36 条）：要在它的模型支持的几档里，不然算自动（null）。 */
   const effortOf = (draft: TCardDraftView, model: TLocalModelProfile | null): TLocalEffort | null => {
-    const picked = edits[draft.id]?.effort;
+    const picked = pickedEffort(draft);
     return picked && model?.efforts?.includes(picked) ? picked : null;
   };
   const edit = (id: string, patch: Edit) => setEdits((current) => ({ ...current, [id]: { ...current[id], ...patch } }));
@@ -213,6 +221,8 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
   const gateway = sources.has("gateway");
   const steps = (
     <>
+    {modelWords && fromWords && !fromWords.matched
+      ? <p className={h.stepSum} title={modelWords} data-testid="model-words-missing">没找到「{modelWords.length > 24 ? `${modelWords.slice(0, 23)}…` : modelWords}」</p> : null}
     <ol className={h.steps}>
       {kept.map((draft, index) => {
         const role = roleOf(draft);
@@ -232,13 +242,13 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
                   options={[...workerRoles.map((entry) => ({ id: entry.id, label: entry.name })), { id: "self", label: "我自己" }]}
                   onPick={(id) => edit(draft.id, { role: id === "self" ? null : { id, name: workerRoles.find((entry) => entry.id === id)!.name, kind: "worker" }, modelId: undefined })} />
                 <button type="button" className={h.icon} aria-label={`去掉「${draft.title}」`} title="删除" onClick={() => edit(draft.id, { dropped: true })}><X {...ICON} /></button>
-              </> : role ? (local.models.length && model ? <ModelPick models={local.models} value={edits[draft.id]?.modelId ?? AUTO_MODEL}
-                  shown={modelText(draft, model, role, !edits[draft.id]?.modelId)}
+              </> : role ? (local.models.length && model ? <ModelPick models={local.models} value={pickedModel(draft) ?? AUTO_MODEL}
+                  shown={modelText(draft, model, role, !pickedModel(draft))}
                   auto={(() => { const fallback = modelForTier(local.models, tierOf(draft, role)); return fallback ? modelText(draft, fallback, role, false).label : null; })()}
                   onPick={(id) => {
                     // 换了模型：原来选的思考程度新模型不支持就回到自动。
                     const next = id === AUTO_MODEL ? modelForTier(local.models, tierOf(draft, role)) : local.models.find((entry) => entry.id === id);
-                    const kept = edits[draft.id]?.effort;
+                    const kept = pickedEffort(draft);
                     edit(draft.id, { modelId: id === AUTO_MODEL ? undefined : id, effort: kept && next?.efforts?.includes(kept) ? kept : undefined });
                   }} />
                 : <span className={h.chip}>{TIER_LABEL[tierOf(draft, role)]}</span>) : null}
