@@ -47,9 +47,25 @@ export function draftWorkerRole(draft: TCardDraftView): CardRole | null {
   return draftRole(draft) ?? (draft.executor === "self" ? null : { id: "", name: "Claude Code", kind: "worker" });
 }
 
-type Edit = { title?: string; role?: CardRole | null; modelId?: string; effort?: TLocalEffort; dropped?: boolean };
+export type Edit = { title?: string; role?: CardRole | null; modelId?: string; effort?: TLocalEffort; dropped?: boolean };
 /** 模型下拉里的「自动」：不单独选，按岗位的档位配（modelForTier）。 */
-const AUTO_MODEL = "auto";
+export const AUTO_MODEL = "auto";
+
+/** 本人改了一步（改名、换技能、换模型、换思考、去掉）：在这一步原来改过的上面叠。 */
+export const applyEdit = (edits: Record<string, Edit>, id: string, patch: Edit): Record<string, Edit> => ({ ...edits, [id]: { ...edits[id], ...patch } });
+/** 在模型下拉里选了一项：选「自动」记成没有模型（仍算本人改过）；原来的思考档新模型不支持就回到自动。 */
+export const modelPickPatch = (id: string, next: Pick<TLocalModelProfile, "efforts"> | null | undefined, kept: TLocalEffort | undefined): Edit =>
+  ({ modelId: id === AUTO_MODEL ? undefined : id, effort: kept && next?.efforts?.includes(kept) ? kept : undefined });
+/**
+ * 这一步用的模型、思考（第 69 条）：本人改过的以本人的为准（选回自动也算改过，不再被原话盖回去）；没改过照原话对上的；都没有是 undefined（自动）。
+ * 按草稿 id 记，派活单刷新（草稿是新对象）也不变。
+ */
+export function draftPick(edit: Edit | undefined, words: { modelId: string | null; effort: TLocalEffort | null } | null): { modelId: string | undefined; effort: TLocalEffort | undefined } {
+  return {
+    modelId: edit && "modelId" in edit ? edit.modelId : words?.modelId ?? undefined,
+    effort: edit && "effort" in edit ? edit.effort : words?.effort ?? undefined,
+  };
+}
 export const START_LABEL = "就按这个开始";
 
 /** 开工的模式（11.3）：自动（默认）· 设预算 · 无上限。 */
@@ -125,9 +141,9 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
   const modelWords = drafts.find((draft) => draft.modelWords)?.modelWords ?? null;
   const fromWords = useMemo(() => (modelWords && local.models.length ? matchModelWords(modelWords, local.models) : null), [modelWords, local.models]);
   const words = fromWords?.matched ? fromWords : null;
-  /** 这一步的模型、思考：本人改过的以本人的为准（选回自动也算改过，不再被原话盖回去）；没改过照原话；都没有是自动（undefined）。 */
-  const pickedModel = (draft: TCardDraftView) => { const own = edits[draft.id]; return own && "modelId" in own ? own.modelId : words?.modelId ?? undefined; };
-  const pickedEffort = (draft: TCardDraftView) => { const own = edits[draft.id]; return own && "effort" in own ? own.effort : words?.effort ?? undefined; };
+  /** 这一步的模型、思考（draftPick）。 */
+  const pickedModel = (draft: TCardDraftView) => draftPick(edits[draft.id], words).modelId;
+  const pickedEffort = (draft: TCardDraftView) => draftPick(edits[draft.id], words).effort;
   const roleOf = (draft: TCardDraftView) => { const edit = edits[draft.id]; return edit && "role" in edit ? edit.role ?? null : draftWorkerRole(draft); };
   const tierOf = (draft: TCardDraftView, role: CardRole | null) => roles.find((entry) => entry.id === role?.id)?.modelTier ?? draft.modelTier;
   const modelOf = (draft: TCardDraftView): TLocalModelProfile | null => {
@@ -140,7 +156,7 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
     const picked = pickedEffort(draft);
     return picked && model?.efforts?.includes(picked) ? picked : null;
   };
-  const edit = (id: string, patch: Edit) => setEdits((current) => ({ ...current, [id]: { ...current[id], ...patch } }));
+  const edit = (id: string, patch: Edit) => setEdits((current) => applyEdit(current, id, patch));
   // 每一步会落到哪个来源的哪个模型（开工前问本机 previewRun）：按「模型配置 · 档位」记，同样的只问一次。
   const [previews, setPreviews] = useState<Record<string, { model: string | null; source: string | null; harness: TLocalAgentKind }>>({});
   const asked = useRef(new Set<string>());
@@ -248,8 +264,7 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
                   onPick={(id) => {
                     // 换了模型：原来选的思考程度新模型不支持就回到自动。
                     const next = id === AUTO_MODEL ? modelForTier(local.models, tierOf(draft, role)) : local.models.find((entry) => entry.id === id);
-                    const kept = pickedEffort(draft);
-                    edit(draft.id, { modelId: id === AUTO_MODEL ? undefined : id, effort: kept && next?.efforts?.includes(kept) ? kept : undefined });
+                    edit(draft.id, modelPickPatch(id, next, pickedEffort(draft)));
                   }} />
                 : <span className={h.chip}>{TIER_LABEL[tierOf(draft, role)]}</span>) : null}
               {role && model?.efforts?.length && !editing ? <Pick label={effortText(effortOf(draft, model))} value={effortOf(draft, model) ?? ""}
