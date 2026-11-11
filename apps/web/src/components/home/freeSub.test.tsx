@@ -15,6 +15,7 @@ import { LocalContext, type LocalRunnerState } from "@/lib/local/LocalRunnerProv
 import { createMockRunner } from "@/lib/local/mock";
 import type { LocalRunner } from "@/lib/local/runner";
 import { startTopic } from "@/lib/local/start";
+import { claimTopic } from "@/lib/home/startFolder";
 import { LeftColumn } from "./LeftColumn";
 import { NewSubView } from "./NewSub";
 import { scopeOf, viewOf } from "./view";
@@ -105,5 +106,42 @@ describe("左栏的「+」和排队行（第 68 条）", () => {
     const html = left(other({ state: "queued", queueReason: "folder_busy", heldBy: HOLDER }));
     expect(html).toMatch(/把按钮改圆<\/span><span[^>]*data-testid="sub-held">等 B<\/span>/);
     expect(left(other({ state: "queued", queueReason: "slot" }))).not.toContain("sub-held");
+  });
+});
+
+describe("认领到自由子会话以后怎么开（第 68 条，claimTopic）", () => {
+  const FREE = { id: "t1", kind: "topic" as const, title: "把按钮改圆", free: true as const };
+  const projects = [{ id: "p1", subSessions: [{ id: "t1" }] }] as never;
+  const folder = { id: "f1", path: "D:\site", label: "site" };
+  const input = (extra: Partial<Parameters<typeof claimTopic>[1]> = {}) => ({ subs: [FREE], projects, bound: new Map(), freeSessions: true, busy: new Set<string>(), ...extra });
+
+  it("项目已在这台电脑上绑了文件夹：开，带 free 和那个文件夹", () => {
+    expect(claimTopic("t1", input({ bound: new Map([["p1", folder]]) }))).toEqual({ kind: "start", topic: { id: "t1", title: "把按钮改圆", free: true, cwd: "D:\site" } });
+  });
+
+  it("项目没绑：先问这个项目在哪个文件夹开工，不开", () => {
+    expect(claimTopic("t1", input())).toEqual({ kind: "ask", projectId: "p1" });
+  });
+
+  it("选完文件夹再认领：开，而且只开一个（这台电脑上已经有它的会话时不再开，也不算没开成）", async () => {
+    const runner = createMockRunner({ stepMs: 2000 });
+    const bound = new Map([["p1", folder]]);
+    const busyNow = async () => new Set((await runner.listSessions()).flatMap((session) => [session.subject.topicId].filter((id): id is string => !!id)));
+    const first = claimTopic("t1", input({ bound, busy: await busyNow() }));
+    expect(first.kind).toBe("start");
+    if (first.kind === "start") await startTopic(runner, first.topic, MODEL as never);
+    expect(claimTopic("t1", input({ bound, busy: await busyNow() }))).toEqual({ kind: "skip", failed: false });
+    const sessions = await runner.listSessions();
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]).toMatchObject({ subject: { kind: "topic", topicId: "t1" }, cwd: "D:\site" });
+  });
+
+  it("本机程序协议号小于 4：不开，记成没开成（不管绑没绑）", () => {
+    expect(claimTopic("t1", input({ freeSessions: false }))).toEqual({ kind: "skip", failed: true });
+    expect(claimTopic("t1", input({ freeSessions: false, bound: new Map([["p1", folder]]) }))).toEqual({ kind: "skip", failed: true });
+  });
+
+  it("普通专题照旧开（本机给专用目录），不看文件夹、不看协议号", () => {
+    expect(claimTopic("t2", input({ subs: [{ id: "t2", kind: "topic", title: "调研" }], freeSessions: false }))).toEqual({ kind: "start", topic: { id: "t2", title: "调研" } });
   });
 });

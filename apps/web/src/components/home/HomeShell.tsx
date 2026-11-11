@@ -51,7 +51,7 @@ import { LeftResize, RightResize, useLeftWidth, useRightWidth } from "./LeftResi
 import { SideDetailContext, type SideDetail } from "./SideDetail";
 import { seenKey, withSeen, type SeenKind, type SeenMarks } from "@/lib/home/seen";
 import { seenSequence } from "@/lib/home/transfer";
-import { projectIdOf, startFolder } from "@/lib/home/startFolder";
+import { claimTopic, projectIdOf, startFolder } from "@/lib/home/startFolder";
 import { FolderAsk } from "./FolderAsk";
 import { TransferFlow, TransferView } from "./Transfer";
 import type { TimedBlock } from "@/components/work/WorkTimeline";
@@ -315,17 +315,9 @@ function HomeFrame({ account }: { account: Account }) {
   // 接口没上（404）时照旧：没登记、等开工的卡也在这里开。
   const subs = useMemo(() => [...data.projects.flatMap((project) => project.subSessions), ...data.other.subSessions], [data]);
   const autoStartKey = subs.filter((sub) => sub.autoStart).map((sub) => sub.id).sort().join(",");
-  /**
-   * 专题开工要的：标题；自由子会话（第 68 条）多带 free 和它所在项目绑在这台电脑上的文件夹。
-   * 项目还没在这台电脑上绑文件夹时同卡一样不开、去问（askFolder 是那个项目），选完绑上再认领。
-   */
-  const topicStart = useCallback((topicId: string) => {
-    const sub = subs.find((entry) => entry.id === topicId && entry.kind === "topic");
-    if (!sub?.free) return { id: topicId, title: sub?.title ?? "", askFolder: null };
-    const owner = projects.all.find((project) => project.subSessions.some((entry) => entry.id === topicId)) ?? null;
-    const where = startFolder(owner?.id ?? null, projects.bound, null);
-    return { id: topicId, title: sub.title, free: true, cwd: where.cwd, askFolder: where.ask ? owner!.id : null };
-  }, [subs, projects.all, projects.bound]);
+  /** 认领到的专题怎么开（claimTopic，第 68 条）：开工、先问文件夹，或不开。 */
+  const topicClaim = useCallback((topicId: string, busy: ReadonlySet<string>) =>
+    claimTopic(topicId, { subs, projects: projects.all, bound: projects.bound, freeSessions: !!local.runner.freeSessions, busy }), [subs, projects.all, projects.bound, local.runner]);
   /** 自由子会话等着项目绑文件夹：同卡，记进 needFolder，项目对话和这个子会话页都出「在哪个文件夹开工？」。 */
   const askFolderFor = useCallback((projectId: string) => setNeedFolder((current) => (current.has(projectId) ? current : new Set([...current, projectId]))), []);
   const tried = useRef(new Set<string>());
@@ -352,8 +344,8 @@ function HomeFrame({ account }: { account: Account }) {
   // 认领到的卡在看板、worker 里还没刷新到（首页接口比看板先报）：放回去，3 秒后再认领，不等一分钟。
   // 只在要开工的那几个变了、或隔一会时再看（不跟着每次刷新）；认领进行中要开工的又变了，认领完马上再看一次。
   const claiming = useRef(false);
-  const latest = useRef({ workers: work.workers, subs, start, local, changed, autoStartKey, reload: api.refresh, topicStart });
-  useEffect(() => { latest.current = { workers: work.workers, subs, start, local, changed, autoStartKey, reload: api.refresh, topicStart }; });
+  const latest = useRef({ workers: work.workers, subs, start, local, changed, autoStartKey, reload: api.refresh, topicClaim });
+  useEffect(() => { latest.current = { workers: work.workers, subs, start, local, changed, autoStartKey, reload: api.refresh, topicClaim }; });
   const [claimTick, setClaimTick] = useState(0);
   const canOpen = local.models.length > 0;
   useEffect(() => {
@@ -373,7 +365,7 @@ function HomeFrame({ account }: { account: Account }) {
         await latest.current.reload();
         await new Promise((resolve) => window.setTimeout(resolve, 50));
       }
-      const { start, local, changed, topicStart } = latest.current;
+      const { start, local, changed, topicClaim } = latest.current;
       const cards = wanted.flatMap((cardId) => {
         const worker = find(cardId);
         if (!worker) soon = true;
@@ -384,12 +376,11 @@ function HomeFrame({ account }: { account: Account }) {
       const opened = cards.length ? await start(cards, [], undefined, modes) : new Set<string>();
       const model = local.models.find((entry) => entry.isDefault) ?? local.models[0];
       for (const entry of claimed) {
-        if (entry.kind !== "topic" || !entry.topicId || busy.has(entry.topicId) || !model) continue;
-        const topic = topicStart(entry.topicId);
-        // 自由子会话（第 68 条）老本机程序收不了（整个 400）：不开，记成没开成。
-        if (topic.free && !local.runner.freeSessions) { markStart([entry.topicId], true); continue; }
-        if (topic.askFolder) { askFolderFor(topic.askFolder); continue; }
-        try { await startTopic(local.runner, topic, model, undefined, entry.permissionMode); opened.add(entry.topicId); markStart([entry.topicId], false); }
+        if (entry.kind !== "topic" || !entry.topicId || !model) continue;
+        const claim = topicClaim(entry.topicId, busy);
+        if (claim.kind === "skip") { if (claim.failed) markStart([entry.topicId], true); continue; }
+        if (claim.kind === "ask") { askFolderFor(claim.projectId); continue; }
+        try { await startTopic(local.runner, claim.topic, model, undefined, entry.permissionMode); opened.add(entry.topicId); markStart([entry.topicId], false); }
         catch { markStart([entry.topicId], true); }
       }
       const done = (id: string | null) => !!id && (opened.has(id) || busy.has(id));
@@ -425,12 +416,12 @@ function HomeFrame({ account }: { account: Account }) {
     if (worker) { await start([worker], []); return; }
     const sub = subs.find((entry) => entry.id === subId && entry.kind === "topic");
     const model = local.models.find((entry) => entry.isDefault) ?? local.models[0];
-    const topic = topicStart(subId);
-    if (!sub || !model || (topic.free && !local.runner.freeSessions)) { markStart([subId], true); return; }
-    if (topic.askFolder) { askFolderFor(topic.askFolder); return; }
-    try { await startTopic(local.runner, topic, model); markStart([subId], false); await local.refresh(); changed(); }
+    const claim = topicClaim(subId, new Set());
+    if (!sub || !model || claim.kind === "skip") { markStart([subId], true); return; }
+    if (claim.kind === "ask") { askFolderFor(claim.projectId); return; }
+    try { await startTopic(local.runner, claim.topic, model); markStart([subId], false); await local.refresh(); changed(); }
     catch { markStart([subId], true); }
-  }, [start, markStart, changed, local, topicStart, askFolderFor]);
+  }, [start, markStart, changed, local, topicClaim, askFolderFor]);
   /** 项目下的「+」（第 68 条）：建自由子会话（云端同时登记开工），读回首页数据、马上认领一次，换到这个子会话。 */
   const createFree = useCallback(async (projectId: string, firstMessage: string) => {
     const topic = await createTopic({ free: true, projectId, firstMessage });
