@@ -152,10 +152,9 @@ label.row:hover { background: var(--default-soft); }
 .reviewText { display: grid; gap: 2px; min-width: 0; color: var(--ink); font-size: var(--text-base); line-height: var(--lh-row); }
 .reviewBasis { color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; }
 /* 备注框：平时像一行淡字，聚焦时出底；要必填时占位字用警告色。 */
-.reviewNote { width: 100%; min-width: 0; height: var(--row-28); margin-left: calc(-1 * var(--space-2)); padding: 0 var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink-muted); font: inherit; font-size: var(--text-xs); line-height: 16px; outline: none; }
+.reviewNote { box-sizing: border-box; width: 100%; min-width: 0; height: var(--row-28); margin-left: calc(-1 * var(--space-2)); padding: 0 var(--space-2); border: 1px solid transparent; border-radius: var(--r-control); background: none; color: var(--ink-muted); font: inherit; font-size: var(--text-xs); line-height: 16px; outline: none; }
 .reviewNote:hover { background: var(--default-soft); }
-.reviewNote:focus { background: var(--neutral-wash); color: var(--ink); }
-.reviewNote:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.reviewNote:focus { border-color: var(--field-border-focus); background: var(--neutral-wash); color: var(--ink); }
 .reviewNote[data-required]::placeholder { color: var(--warning); }
 .reviewNote[aria-invalid="true"] { box-shadow: inset 0 0 0 1px var(--warning); }
 .reviewRating { display: grid; justify-items: start; gap: 2px; min-width: 0; }
