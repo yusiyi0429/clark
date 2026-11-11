@@ -329,6 +329,9 @@ export function createServer(d: ServerDeps): http.Server {
     readSessionFile: (c) => d.sessions.readFile(c.params.id!, validate(LocalSessionFileReadRequest, c.body).path),
     // 改、删前留一份的恢复（11/11，契约 LocalSessionRestoreRequest）：下一笔接上
     restoreSessionFiles: () => { throw new HttpError(404, "not_found", "这个本机程序还不能恢复文件"); },
+    // 看得见改了什么（第 72 条，契约 LocalFileChangesRequest）：下一笔接上
+    readFileChanges: () => { throw new HttpError(501, "not_implemented", "这个本机程序还不能读改动"); },
+    restoreFileChanges: () => { throw new HttpError(501, "not_implemented", "这个本机程序还不能按处恢复"); },
     // 接手以后「拉到这台电脑」（16.7）：本人选放在哪，clone、切到交接分支、加进允许的文件夹、绑到项目
     cloneProject: async (c) => {
       const b = validate(LocalProjectCloneRequest, c.body);
