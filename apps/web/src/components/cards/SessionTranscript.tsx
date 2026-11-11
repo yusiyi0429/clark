@@ -166,11 +166,16 @@ export const AgentText = memo(function AgentText({ text, fresh = false }: { text
   return <div className={`${ts.prose} ${s.md}`}><MarkdownBody text={text} streaming={false} fresh={fresh} parts={SESSION_PARTS} /></div>;
 });
 
+/** 执行方正在写的那一段（本机推的草稿）：按字匀速放出、新字淡入，这一段写完换成真的那条。 */
+function DraftBubble({ text, agentName }: { text: string; agentName: string }) {
+  return <div className={s.bubble} data-testid="session-draft"><small className={s.who}>{agentName}</small><div className={`${ts.prose} ${s.md}`}><MarkdownBody text={text} streaming parts={SESSION_PARTS} /></div></div>;
+}
+
 /** 刚到多久以内算「页面开着时到的」（打开时从头重放的历史早于它，不淡入）。 */
 const FRESH_MS = 5000;
-/** 执行方的一段话：挂上那一刻看它是不是刚到的，之后不再变。 */
-function AssistantBubble({ entry, agentName }: { entry: Extract<SessionEntry, { kind: "assistant" }>; agentName: string }) {
-  const [fresh] = useState(() => Date.now() - Date.parse(entry.at) < FRESH_MS);
+/** 执行方的一段话：挂上那一刻看它是不是刚到的，之后不再变。drafted：这一段已经按草稿一个字一个字出过了，换成真的时不再整段淡入。 */
+function AssistantBubble({ entry, agentName, drafted }: { entry: Extract<SessionEntry, { kind: "assistant" }>; agentName: string; drafted: boolean }) {
+  const [fresh] = useState(() => !drafted && Date.now() - Date.parse(entry.at) < FRESH_MS);
   return <div className={s.bubble}><small className={s.who}>{agentName}</small><AgentText text={entry.text} fresh={fresh} /></div>;
 }
 
@@ -343,7 +348,9 @@ export function RelayLine({ text, onGo }: { text: string; onGo: () => void }) {
 
 type UserEntry = Extract<SessionEntry, { kind: "user" }>;
 
-export function SessionTranscript({ entries, agentName, canAct, device, onDecide, lead, tail, asking, live, starting = false, ended = false, relay, onResend, onRetry, onFile }: {
+const NO_DRAFTED: ReadonlySet<number> = new Set();
+
+export function SessionTranscript({ entries, agentName, canAct, device, onDecide, lead, tail, asking, live, starting = false, ended = false, relay, onResend, onRetry, onFile, draft = null, drafted = NO_DRAFTED }: {
   entries: SessionEntry[];
   agentName: string;
   canAct: boolean;
@@ -370,6 +377,9 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
   onRetry?: (messageId: string) => void;
   /** 「交出 文件名」那一行能不能点开看（41 条）：对得上交出的产出时回打开的办法，对不上回 null（不能点，不猜）。 */
   onFile?: OpenFile;
+  /** 执行方正在写的那一段（useSessionEvents 的草稿）；没有为 null。drafted：按草稿出过的那几段的编号。 */
+  draft?: string | null;
+  drafted?: ReadonlySet<number>;
 }) {
   const pending = ended ? [] : entries.flatMap((entry) => (entry.kind === "permission" && !entry.decision ? [entry.request] : []));
   const firstPending = pending[0]?.requestId;
@@ -401,7 +411,7 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
               : entry.receipt === "failed" ? <ReceiptFailed key={`${entry.seq}:receipt`} className={s.meReceipt} label="没读到" onResend={canAct && entry.text ? () => onResend?.(entry) : undefined} />
               : entry.receipt ? <ReceiptTicks key={`${entry.seq}:receipt`} className={s.meReceipt} state={entry.receipt} /> : null,
           ];
-          case "assistant": return <AssistantBubble key={entry.seq} entry={entry} agentName={agentName} />;
+          case "assistant": return <AssistantBubble key={entry.seq} entry={entry} agentName={agentName} drafted={drafted.has(entry.seq)} />;
           case "process": return <ProcessGroup key={entry.seq} process={entry} live={live} running={busy && index === items.length - 1} />;
           case "asked": return <DecisionBox key={entry.seq} kind="question" title={entry.question} options={[]} onPick={noop} resolved={entry.answer ?? undefined} expired={entry.answer === null} />;
           case "permission":
@@ -417,7 +427,8 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
           case "notice": return <span key={entry.seq} className={s.evt} data-level={entry.level}>{entry.text}</span>;
         }
       })}
-      {busy && !tailProcess ? <WorkingRow since={roundStart(entries)} starting={starting} /> : null}
+      {draft ? <DraftBubble text={draft} agentName={agentName} /> : null}
+      {busy && !tailProcess && !draft ? <WorkingRow since={roundStart(entries)} starting={starting} /> : null}
       {tail}
     </div>
     </OpenFileContext.Provider>

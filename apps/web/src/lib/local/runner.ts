@@ -6,7 +6,7 @@ import type {
   TLocalAgentKind, TLocalCloudLinkRequest, TLocalCloudLinkView, TLocalCreateSessionBatchResponse, TLocalCreateSessionRequest, TLocalFolder, TLocalHealthResponse, TLocalMergeResponse,
   TLocalModelProfile, TLocalModelProfileUpsert, TLocalTool, TLocalToolUpsert, TLocalPairingStartResponse, TLocalPairingStatusResponse,
   TLocalPermissionDecisionRequest, TLocalQuestionAnswerRequest, TLocalRunnerErrorCode, TLocalSendMessageRequest, TLocalSendMessageResponse, TLocalSessionDetailResponse,
-  TLocalSessionEvent, TLocalSessionSummary, TLocalSettings, TLocalSettingsPatch, TLocalStatusResponse, TLocalBudgetUpdateRequest, TLocalTaskBudgetView, TLocalAttachmentRef,
+  TLocalSessionEvent, TLocalSessionDraft, TLocalSessionSummary, TLocalSettings, TLocalSettingsPatch, TLocalStatusResponse, TLocalBudgetUpdateRequest, TLocalTaskBudgetView, TLocalAttachmentRef,
   TLocalFolderCreateRequest, TLocalFolderCreateResponse, TLocalFolderPickRequest, TLocalFolderPickResponse, TLocalSessionModelRequest, TLocalSessionModelResponse,
   TLocalSessionFileReadRequest, TLocalSessionFileReadResponse, TLocalSessionFilesResponse,
   TLocalHandoverCheck, TLocalProjectCloneRequest, TLocalProjectCloneResponse, TLocalProjectFolder, TLocalProjectFolderRequest, TLocalPermissionMode, TLocalRun, TLocalRunPreviewRequest,
@@ -27,6 +27,11 @@ export type EventWatch = {
   /** 从这个序号之后补发（断线重连时带上收到的最后一个）。 */
   after: number;
   onEvent: (event: TLocalSessionEvent) => void;
+  /**
+   * 「正在写」的草稿（契约 LocalSessionDraft）：给了就带 ?drafts=1 要；text 是这一段到目前为止的全文，空串是清掉。
+   * 老本机程序不认这个参数，照旧只推事件。
+   */
+  onDraft?: (draft: TLocalSessionDraft) => void;
   /** 事件流断了、正在重连（connected=false）或重新接上（true）。 */
   onLink?: (connected: boolean) => void;
   signal: AbortSignal;
