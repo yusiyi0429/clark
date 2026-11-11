@@ -410,10 +410,11 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
 /**
  * 子会话能换的来源、模型和思考（32、36、40 条）：三行面板的每一行和选了以后做什么。来源右边的数和状态词照本机状态（status，同右栏）。
  * 选了交给本机（PUT /v1/sessions/:id/model；换来源、换模型时思考档留不留由本机算），换好或记下「这一轮做完后换」后重读摘要，没成 onFail。
- * 换到另一家的来源就是换执行方（Claude Code ↔ Codex，D 契约 5a217add）：会话还是这一个，摘要的 agent、权限档跟着变；规划员、验收员只能用 Claude Code。
+ * 在「执行方」那一行换执行方（Claude Code ↔ Codex，D 契约 5a217add）：会话还是这一个，摘要的 agent、权限档跟着变；规划员、验收员只能用 Claude Code。
+ * canAddSource：本机有添加来源的接口（第 52 条），来源那一层最底下出「+ 添加来源」。
  */
 export function sessionModels(runner: LocalRunner, models: readonly TLocalModelProfile[], session: TLocalSessionSummary | null | undefined, refresh: () => unknown, onFail: () => void,
-  status?: Pick<TLocalStatusResponse, "quota" | "agents"> | null) {
+  status?: Pick<TLocalStatusResponse, "quota" | "agents"> | null, canAddSource = false) {
   if (!session) return null;
   const change = (body: TLocalSessionModelRequest): Promise<void> => runner.setSessionModel(session.id, body).then(async () => { await refresh(); }, onFail);
   const modelId = session.pendingModel?.modelProfileId ?? session.modelProfileId;
@@ -422,7 +423,7 @@ export function sessionModels(runner: LocalRunner, models: readonly TLocalModelP
   // 规划员、验收员只用 Claude Code（换到 Codex 本机回 400），Codex 的来源灰着。
   const fixed = session.subject.kind === "plan" || session.subject.kind === "verify";
   return {
-    rows: localPanelRows({ models, modelId, effort, cells: usageCells(status?.quota ?? [], now), agents: status?.agents ?? [], now, agentsAllowed: fixed ? ["claude-code"] : undefined }),
+    rows: localPanelRows({ models, modelId, effort, cells: usageCells(status?.quota ?? [], now), agents: status?.agents ?? [], now, agentsAllowed: fixed ? ["claude-code"] : undefined, canAddSource }),
     /** 选了一项：交给本机，回的是「换好了」；没有要换的为 null。 */
     pick: (row: PanelRowKey, id: string): Promise<void> | null => {
       if (row === "effort") return change({ effort: id === AUTO_EFFORT ? null : id as TLocalEffort });
@@ -437,9 +438,9 @@ export function sessionModels(runner: LocalRunner, models: readonly TLocalModelP
  * 这期间那一行转圈、先写选的那个，三行都点不了，不会重复点。
  */
 export function useSessionModels(runner: LocalRunner, models: readonly TLocalModelProfile[], session: TLocalSessionSummary | null | undefined, refresh: () => unknown, onFail: () => void,
-  status?: Pick<TLocalStatusResponse, "quota" | "agents"> | null) {
+  status?: Pick<TLocalStatusResponse, "quota" | "agents"> | null, canAddSource = false) {
   const [busy, setBusy] = useState<{ row: PanelRowKey; id: string } | null>(null);
-  const base = sessionModels(runner, models, session, refresh, onFail, status);
+  const base = sessionModels(runner, models, session, refresh, onFail, status, canAddSource);
   if (!base) return null;
   return {
     rows: base.rows, busy,

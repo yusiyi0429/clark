@@ -28,7 +28,7 @@ import { RelayLine, SessionComposer, SessionTranscript, useSessionSend, useSessi
 import { useSessionMode } from "./PermissionMode";
 import { FilePreview, cloudOutputFile, localSessionFile, type PreviewFile } from "./FilePreview";
 import { filesSignal, matchChangedFile, useSessionFiles } from "@/lib/local/sessionFiles";
-import { HARNESS_NAME, runLabel, sessionModelText } from "@/lib/local/runModel";
+import { HARNESS_NAME, defaultSourceLabel, runLabel, sessionModelText } from "@/lib/local/runModel";
 import { useCardDetail, type CardDetail } from "./useCardDetail";
 import { SourceWordIssues, SourceWords } from "./SourceWords";
 import { MergeAction } from "@/components/work/MergeAction";
@@ -82,7 +82,7 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
   const { view } = useSessionEvents(local.runner, session?.id ?? null);
   useModelChangedRefresh(view.entries, local.refresh);
   const mode = useSessionMode(local.runner, session, view);
-  const models = useSessionModels(local.runner, local.models, session, local.refresh, () => showWorkspaceToast({ text: "没换成" }), local.status);
+  const models = useSessionModels(local.runner, local.models, session, local.refresh, () => showWorkspaceToast({ text: "没换成" }), local.status, local.sources !== null);
   // 本会话改过的文件（这台电脑上跑着的会话才读得到）：右栏「改动的文件 N」列它，回答里提到的路径对得上才能点。
   const fileSession = ready && !handheld ? session?.id ?? null : null;
   const files = useSessionFiles(local.runner, fileSession, filesSignal(view.status, view.entries));
@@ -168,7 +168,7 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
   const dock = <PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} />;
   // 新首页里输入框只在这台电脑上跑着这张卡时出（别处看摘要）；老页面照旧灰着。
   // 输入框下面一行的右边写「执行方 · 模型」（21 条），来源在悬停里：这台电脑上的会话报的（实际跑的优先），没有时退回「来源 · 模型」、再退回云端记的。文件夹在左边。
-  const model = (session ? sessionModelText(session, local.models.find((entry) => entry.id === session.modelProfileId)?.efforts) : null) ?? ((label) => (label ? { label, title: null } : null))(runLabel(session?.run) ?? run?.modelLabel ?? item.card?.model?.label ?? null);
+  const model = (session ? sessionModelText(session, local.models.find((entry) => entry.id === session.modelProfileId)?.efforts, defaultSourceLabel(local.models)) : null) ?? ((label) => (label ? { label, title: null } : null))(runLabel(session?.run) ?? run?.modelLabel ?? item.card?.model?.label ?? null);
   const place = session?.workspace ? { name: shortPlace(session.workspace), title: placeText(session.workspace) } : null;
   const composer = agent && (session || !embedded)
     ? <SessionComposer label={`给${item.title}插话`} disabled={!canAct} onSend={say} mode={mode} dock={dock} context={contextUsage(view.context ?? session?.context)} subject={{ kind: "card", id: cardId }} place={place} model={model ? { label: model.label, title: model.title ?? undefined } : null}

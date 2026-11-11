@@ -11,6 +11,7 @@
 import type {
   TLocalBackgroundItem, TLocalCreateSessionRequest, TLocalEffort, TLocalFolder, TLocalMergeResponse, TLocalModelProfile, TLocalPermissionRequestView, TLocalPlanEntry, TLocalQuestionRequestView,
   TLocalProjectFolder, TLocalSessionEvent, TLocalSessionStatus, TLocalSessionSummary, TLocalTool, TLocalToolUpsert, TLocalUsage, TLocalWorkspace,
+  TLocalSource, TLocalSourceModel, TLocalSourcePlan, TLocalSourcePreset, TLocalSourceRegion,
 } from "@warmap/contracts";
 import { LocalRunnerError, type EventWatch, type LocalRunner } from "./runner";
 
@@ -72,6 +73,39 @@ const tokenHubModel = (model: string, name: string): TLocalModelProfile => ({
 });
 const TOKENHUB_MODELS = [tokenHubModel("wangsu/claude-opus-5-5", "Opus 5.5"), tokenHubModel("wangsu/deepseek-v4.1-flash", "deepseek-v4.1-flash")];
 
+/** 添加来源的预设厂商（同契约 LocalSourcePreset 列的 9 家；这一版只接 Claude Code）。 */
+const both = { plans: ["api", "coding_plan"] as TLocalSourcePlan[], regions: ["cn", "intl"] as TLocalSourceRegion[] };
+export const SOURCE_PRESETS: TLocalSourcePreset[] = [
+  { id: "anthropic", name: "Anthropic", plans: ["api"], regions: [], agents: ["claude-code"] },
+  { id: "tokenhub", name: "TokenHub", plans: ["api"], regions: [], agents: ["claude-code"] },
+  { id: "kimi", name: "Kimi", ...both, agents: ["claude-code"] },
+  { id: "glm", name: "智谱 GLM", ...both, agents: ["claude-code"] },
+  { id: "deepseek", name: "DeepSeek", plans: ["api"], regions: [], agents: ["claude-code"] },
+  { id: "qwen", name: "通义千问", ...both, agents: ["claude-code"] },
+  { id: "minimax", name: "MiniMax", ...both, agents: ["claude-code"] },
+  { id: "volcengine", name: "火山方舟", plans: ["api", "coding_plan"], regions: [], agents: ["claude-code"] },
+  { id: "openrouter", name: "OpenRouter", plans: ["api"], regions: [], agents: ["claude-code"] },
+];
+/** 假的模型表：按量 API 读到的、编程套餐的预设表都用它（本机建议先勾的排前面）。 */
+const SOURCE_MODELS: Record<string, TLocalSourceModel[]> = {
+  anthropic: [{ id: "claude-opus-5-5", name: "Opus 5.5" }, { id: "claude-sonnet-5-5", name: "Sonnet 5.5" }, { id: "claude-haiku-4-5", name: "Haiku 4.5" }, { id: "claude-opus-5-1", name: "Opus 5.1" }, { id: "claude-sonnet-4-5", name: "Sonnet 4.5" }],
+  kimi: [{ id: "kimi-k2.5", name: "kimi-k2.5" }, { id: "kimi-k2-turbo", name: "kimi-k2-turbo" }, { id: "kimi-k2-0905", name: "kimi-k2-0905" }],
+  glm: [{ id: "glm-5", name: "glm-5" }, { id: "glm-4.6", name: "glm-4.6" }, { id: "glm-4.5-air", name: "glm-4.5-air" }],
+  deepseek: [{ id: "deepseek-v4.1", name: "deepseek-v4.1" }, { id: "deepseek-v4.1-flash", name: "deepseek-v4.1-flash" }],
+  qwen: [{ id: "qwen3.5-coder-plus", name: "qwen3.5-coder-plus" }, { id: "qwen3-max", name: "qwen3-max" }],
+  minimax: [{ id: "MiniMax-M3", name: "MiniMax-M3" }, { id: "MiniMax-M2.5", name: "MiniMax-M2.5" }],
+  volcengine: [{ id: "doubao-seed-2-code", name: "doubao-seed-2-code" }, { id: "kimi-k2.5", name: "kimi-k2.5" }],
+  openrouter: [{ id: "anthropic/claude-opus-5-5", name: "Opus 5.5" }, { id: "z-ai/glm-5", name: "glm-5" }, { id: "moonshotai/kimi-k2.5", name: "kimi-k2.5" }],
+};
+const PLAN_NAME: Record<TLocalSourcePlan, string> = { api: "API", coding_plan: "编程套餐" };
+/** 按 Key 的开头认厂商（假的规则，真的在本机程序里）。 */
+function recognizeKey(apiKey: string): { presetId: string; plan: TLocalSourcePlan; region: TLocalSourceRegion | null } | null {
+  if (apiKey.startsWith("sk-ant-")) return { presetId: "anthropic", plan: "api", region: null };
+  if (apiKey.startsWith("sk-or-")) return { presetId: "openrouter", plan: "api", region: null };
+  if (apiKey.startsWith("sk-sp-")) return { presetId: "qwen", plan: "coding_plan", region: "cn" };
+  return null;
+}
+
 /**
  * Claude 订阅的模型目录（设计 17.2 第 40 条，D 契约 584eb5e9）：Claude Code 握手回的模型每个一条，只读（catalog），id 是 cc- 开头；
  * 不能选思考的 efforts 为空（Haiku 4.5）。排在本人配的后面（真的本机程序里「自动」在最上面，目录已经筛过）。
@@ -128,7 +162,17 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
   let codexIn = codex === "logged_in";
   let codexSetup: { phase: "idle" | "waiting_browser"; startedAt: string | null } = { phase: "idle", startedAt: null };
   let tokenHub: TLocalModelProfile[] = [];
-  const models = () => [...MODELS, ...tokenHub, ...CLAUDE_MODELS, ...(codexIn ? CODEX_MODELS : [])];
+  let sources: TLocalSource[] = [];
+  let sourceProfiles: TLocalModelProfile[] = [];
+  const models = () => [...MODELS, ...tokenHub, ...sourceProfiles, ...CLAUDE_MODELS, ...(codexIn ? CODEX_MODELS : [])];
+  /** 验一把 Key（假的）：带 bad 当成不认，带 offline 当成连不上，带 empty 当成列不出模型。 */
+  const vet = (apiKey: string, name: string) => {
+    if (apiKey.includes("bad")) throw new LocalRunnerError("source_key_rejected", "Key 不对", 422);
+    if (apiKey.includes("offline")) throw new LocalRunnerError("source_unreachable", `连不上${name}`, 502);
+    if (apiKey.includes("empty")) throw new LocalRunnerError("source_no_models", "这个 Key 没有能用的模型", 422);
+  };
+  const tokenHubSource = (): TLocalSource[] => (tokenHub.length ? [{ id: "tokenhub", presetId: "tokenhub", name: "TokenHub", plan: "api", region: null, baseUrl: "https://tokenhub.example/api/anthropic",
+    formats: ["anthropic"], agents: ["claude-code"], models: tokenHub.map((model) => ({ id: model.model ?? model.id, name: model.modelName ?? model.label })), verified: true, addedAt: now() }] : []);
   const sessions = new Map<string, MockSession>();
   const projects = new Map<string, TLocalProjectFolder>();
   const bindAll = (projectId: string, list: TLocalFolder[], name?: string): TLocalProjectFolder => {
@@ -405,6 +449,49 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
       return models();
     },
     disconnectTokenHub: async () => { tokenHub = []; },
+    listSources: async () => ({ presets: SOURCE_PRESETS, sources: [...tokenHubSource(), ...sources] }),
+    checkSource: async (body) => {
+      await new Promise((resolve) => setTimeout(resolve, stepMs / 2));
+      if (body.presetId === null || (!body.presetId && body.baseUrl)) return { recognized: null, candidates: [], models: [], verified: false };
+      const known = body.presetId ? null : recognizeKey(body.apiKey);
+      const presetId = body.presetId ?? known?.presetId ?? null;
+      if (!presetId) return { recognized: null, candidates: body.apiKey.startsWith("sk-") ? ["deepseek", "kimi", "qwen", "glm", "minimax"] : [], models: [], verified: false };
+      const preset = SOURCE_PRESETS.find((entry) => entry.id === presetId);
+      if (!preset) throw new LocalRunnerError("source_unrecognized", "认不出这把 Key", 422);
+      const plan = body.plan ?? known?.plan ?? preset.plans[0]!;
+      const region = preset.regions.length ? body.region ?? known?.region ?? "cn" : null;
+      if (plan === "api") vet(body.apiKey, preset.name);
+      return { recognized: { presetId, plan, region }, candidates: [], models: SOURCE_MODELS[presetId] ?? TOKENHUB_MODELS.map((model) => ({ id: model.model!, name: model.modelName! })), verified: plan === "api" };
+    },
+    addSource: async (body) => {
+      await new Promise((resolve) => setTimeout(resolve, stepMs / 2));
+      const preset = body.presetId ? SOURCE_PRESETS.find((entry) => entry.id === body.presetId) ?? null : null;
+      if (body.presetId && !preset) throw new LocalRunnerError("source_unrecognized", "认不出这把 Key", 422);
+      const plan = body.plan ?? preset?.plans[0] ?? "api";
+      if (plan === "api" && preset) vet(body.apiKey, preset.name);
+      if (body.presetId === "tokenhub") {
+        tokenHub = TOKENHUB_MODELS.filter((model) => body.models.includes(model.model!));
+        return { source: tokenHubSource()[0]!, profiles: models() };
+      }
+      const region = preset?.regions.length ? body.region ?? "cn" : null;
+      const id = preset ? [preset.id, plan, region].filter(Boolean).join("-") : `custom-${(body.name ?? "来源").replace(/\s+/g, "-")}`;
+      const list = preset ? SOURCE_MODELS[preset.id] ?? [] : [];
+      const name = preset ? (preset.id === "anthropic" ? "Anthropic 官方 API" : `${preset.name} ${PLAN_NAME[plan]}`) : body.name ?? "自定义";
+      const picked = body.models.map((model) => list.find((entry) => entry.id === model) ?? { id: model, name: model.replace(/^[^/]+\//, "") });
+      const source: TLocalSource = { id, presetId: preset?.id ?? null, name, plan, region, baseUrl: body.baseUrl ?? `https://${preset?.id ?? "custom"}.example/anthropic`,
+        formats: ["anthropic"], agents: ["claude-code"], models: picked, verified: plan === "api" && !!preset, addedAt: now() };
+      sources = [...sources.filter((entry) => entry.id !== id), source];
+      sourceProfiles = [...sourceProfiles.filter((profile) => profile.sourceId !== id), ...picked.map((model): TLocalModelProfile => ({
+        id: `src-${id}-${model.id.replace(/[^A-Za-z0-9_-]/g, "_")}`, label: model.name, source: "gateway", agent: "claude-code", baseUrl: source.baseUrl, model: model.id, smallModel: null,
+        webSearch: false, hasKey: true, isDefault: false, efforts: [], defaultEffort: null, catalog: false, origin: { provider: preset?.id ?? "custom", label: name, via: null }, modelName: model.name, sourceId: id,
+      }))];
+      return { source, profiles: models() };
+    },
+    deleteSource: async (id) => {
+      if (id === "tokenhub") { tokenHub = []; return; }
+      sources = sources.filter((entry) => entry.id !== id);
+      sourceProfiles = sourceProfiles.filter((profile) => profile.sourceId !== id);
+    },
     putModel: async (id, body) => ({ id, label: body.label, source: body.source, agent: "claude-code", baseUrl: body.baseUrl ?? null, model: body.model, smallModel: body.smallModel ?? null, webSearch: body.webSearch ?? false, hasKey: Boolean(body.apiKey), isDefault: Boolean(body.isDefault) }),
     listTools: async () => tools.map((tool) => ({ ...tool })),
     putTool: async (id, body) => { const tool = upsertTool(tools, id, body); return { ...tool }; },
