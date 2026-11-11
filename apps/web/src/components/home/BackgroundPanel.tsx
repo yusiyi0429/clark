@@ -116,7 +116,9 @@ export function BackgroundPanel({ items, resources, onStop, onCollapse, handheld
     <li key={item.id} className={h.bgRow} data-state={item.state} data-handheld={handheld ? "" : undefined} data-testid="bg-row">
       {item.state === "failed" ? <span className={h.bgFail}><X {...ICON} aria-label="失败" /></span> : null}
       <span className={h.bgKind}>{KIND[item.kind]}</span>
-      <span className={h.bgTitle} title={item.title}>{item.title}</span>
+      {/* 规划、验收：名字下面一行淡色小字写「来源 · 模型 · 思考」（56 条），本机报的才有。 */}
+      {item.model ? <span className={h.bgMain}><span className={h.bgTitle} title={item.title}>{item.title}</span><span className={h.bgModel} title={item.model} data-testid="bg-model">{item.model}</span></span>
+        : <span className={h.bgTitle} title={item.title}>{item.title}</span>}
       {/* 停着等额度恢复：放不下就省略，不挤掉停止按钮。 */}
       {item.state === "queued" && item.holdUntil ? <span className={`${h.bgTime} ${h.bgHold}`}>{queueText("quota", item.holdUntil)}</span>
         : <span className={h.bgTime}>{item.state === "failed" ? "失败" : item.state === "stopped" ? "已停止" : item.state === "queued" ? "已排队" : duration(item.startedAt, item.finishedAt ?? now)}</span>}

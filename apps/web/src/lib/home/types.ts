@@ -10,7 +10,11 @@ export type SubSession = TSubSession;
 export type HomeProject = THomeProject;
 export type HomeProjectGoal = THomeProjectGoal;
 export type HomeMonthMission = THomeMonthMission;
-export type BackgroundItem = TBackgroundItem;
+/**
+ * 后台任务一行（契约 BackgroundItem）。model：规划员、验收员用的「来源 · 模型 · 思考」（56 条，backgroundModel）；
+ * 只有这台电脑上本机报的会话有（契约里没有这一项，云端转来的没有，就不写）。
+ */
+export type BackgroundItem = TBackgroundItem & { model?: string | null };
 export type FeedItem = TTaskFeedItem;
 /** 项目对话里按时间插的一行：验收那几种，加 goal_linked（挂上一件 Task，画「{月} 月目标：{Task}」）。 */
 export type ProjectFeedItem = TProjectFeedItem;

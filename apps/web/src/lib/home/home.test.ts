@@ -4,7 +4,7 @@ import type { TLocalSessionSummary } from "@/lib/local/runner";
 import { toWorker, type Worker } from "@/lib/work/workers";
 import type { MemberNotification } from "@/components/member/useMemberHome";
 import {
-  deriveFeed, deriveWorkHome, duration, gateLabel, taskGateLabel, toSubSession, groupBackground, inScope, localBackground, mergeBackground, emptyMonth, queueText, routeText, sortWaiting, statusLine, waitingHref, workerBackground,
+  backgroundModel, deriveFeed, deriveWorkHome, duration, gateLabel, taskGateLabel, toSubSession, groupBackground, inScope, localBackground, mergeBackground, emptyMonth, queueText, routeText, sortWaiting, statusLine, waitingHref, workerBackground,
 } from "./derive";
 import type { BackgroundItem, WaitingItem } from "./types";
 import type { CardItem } from "@/lib/board/cards";
@@ -215,6 +215,27 @@ describe("后台任务", () => {
     ]);
     expect(here[2]).toMatchObject({ stoppable: true, sessionId: card.id, itemId: "t-2", taskId: "t1", cardId: "c1", deviceId: "dev-1" });
     expect(localBackground({ sessions: [card], deviceId: null, canStop: false, today: "2026-11-07", taskOfCard: () => null }).every((entry) => !entry.stoppable)).toBe(true);
+  });
+
+  it("规划、验收写「来源 · 模型 · 思考」（56 条）：来源总写；模型以实际为准、没报写 modelName、都没有写「自动」；跑完的照样留着；还没拉起（没有 run）不写；子 agent、命令不写", () => {
+    const run = (extra: Record<string, unknown>) => ({ mode: "auto", model: "opus", effort: "high", multiAgent: false, source: "subscription", sourceLabel: "Claude 订阅",
+      origin: { provider: "claude-subscription", label: "Claude 订阅", via: null }, modelName: "Opus", actual: null, ...extra });
+    const live = session({ id: "00000000-0000-4000-8000-0000000000e1", run: run({ actual: { modelName: "Opus 5.5", model: "claude-opus-5-5" } }) } as never);
+    const done = session({ id: "00000000-0000-4000-8000-0000000000e2", subject: { kind: "verify", cardId: "c3" }, title: "验收：改样式", status: "done", run: run({ modelName: "Sonnet 5.5", effort: null }) } as never);
+    const fresh = session({ id: "00000000-0000-4000-8000-0000000000e3", run: run({ modelName: null, effort: null, origin: undefined, sourceLabel: "我的 Claude 订阅" }) } as never);
+    const queued = session({ id: "00000000-0000-4000-8000-0000000000e4", status: "queued" });
+    const items = localBackground({ sessions: [live, done, fresh, queued, card], deviceId: null, canStop: true, today: "2026-11-07", taskOfCard: () => null });
+    expect(items.map((entry) => [entry.kind, entry.state, entry.model ?? null])).toEqual([
+      ["plan", "running", "Claude 订阅 · Opus 5.5 · 高"],
+      ["verify", "done", "Claude 订阅 · Sonnet 5.5 · 自动"],
+      ["plan", "running", "Claude 订阅 · 自动 · 自动"],
+      ["plan", "queued", null],
+      ["subagent", "done", null],
+      ["command", "running", null],
+    ]);
+    expect(backgroundModel({ run: undefined, effort: "high" })).toBeNull();
+    // 合并云端的同一条以这台电脑的为准，这一行跟着留下。
+    expect(mergeBackground([{ ...items[0]!, model: undefined }], [items[0]!])[0]?.model).toBe("Claude 订阅 · Opus 5.5 · 高");
   });
 
   it("结束了的只列今天（公司时区）结束的；交完收工（done）是完成，退出了（停下、强停）是已停止；专题会话里的挂到它所在的 Task", () => {

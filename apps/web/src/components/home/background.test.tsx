@@ -52,6 +52,17 @@ describe("右栏（5.4.5）", () => {
     expect(rows[1]).toContain("已排队");
   });
 
+  it("规划、验收的名字下面一行淡色小字「来源 · 模型 · 思考」（56 条）：在跑、跑完（失败自动展开）、只有「自动」都写；没带的行照旧", () => {
+    const html = render(panel([
+      item({ model: "Claude 订阅 · Opus 5.5 · 高" }),
+      item({ id: "plan:auto", sessionId: "00000000-0000-4000-8000-0000000000a2", title: "拆另一张", model: "Claude 订阅 · 自动 · 自动" }),
+      item({ id: "verify:done", kind: "verify", title: "验收「改样式」", state: "failed", finishedAt: today(0, 30), stoppable: false, model: "API · Sonnet 5.5 · 最高" }),
+      item({ id: "cmd:1", kind: "command", title: "pnpm test", sessionId: null }),
+    ]), "ready");
+    const lines = [...html.matchAll(/data-testid="bg-model"[^>]*>([^<]+)</g)].map((match) => match[1]);
+    expect(lines).toEqual(["Claude 订阅 · Opus 5.5 · 高", "Claude 订阅 · 自动 · 自动", "API · Sonnet 5.5 · 最高"]);
+    expect(text(html)).toContain("pnpm test");
+  });
   it("这台电脑没就绪：用量用云端报的，每台设备一格「Claude · 设备名」", () => {
     const html = render(panel([], [cloud("ThinkPad", 83, 1), cloud("Mac mini", 40, 2)]), "offline");
     const rows = html.split('data-testid="quota-row"').slice(1).map(text);

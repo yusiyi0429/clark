@@ -9,6 +9,7 @@ import { isAgentCard, type CardItem } from "@/lib/board/cards";
 import { calendarDate } from "@/lib/companyTime";
 import type { MemberNotification, UnreadMissionGroup } from "@/components/member/useMemberHome";
 import type { TLocalSessionSummary } from "@/lib/local/runner";
+import { effortText, plainSource } from "@/lib/local/runModel";
 import type { RoleProposalView } from "@/lib/team/roles";
 import { FIELD_LABEL } from "@/lib/team/roles";
 import type { MergeIssue } from "@/lib/work/merge";
@@ -503,6 +504,19 @@ const sessionState = (status: TLocalSessionSummary["status"]): BackgroundItem["s
 const verifyTitle = (title: string) => `验收「${title.replace(/^验收[:：]\s*/, "")}」`;
 
 /**
+ * 规划员、验收员用的「来源 · 模型 · 思考」（设计 17.2 第 56 条），如「Claude 订阅 · Opus 5.5 · 高」：
+ * 来源总写出来（不像胶囊在默认来源时省掉）；模型以执行方报的实际为准（run.actual），没报写 run.modelName，都还没有（刚起、内置「自动」）写「自动」；
+ * 思考是这次实际跑的（run.effort，没有就是本人选的），用现有的词。还没拉起过（排着，没有 run）为 null，不写。
+ */
+export function backgroundModel(session: Pick<TLocalSessionSummary, "run" | "effort">): string | null {
+  const run = session.run;
+  if (!run) return null;
+  const source = plainSource(run.origin?.label ?? run.sourceLabel ?? "") || null;
+  const model = run.actual?.modelName || run.modelName || "自动";
+  return [source, model, effortText(run.effort ?? session.effort ?? null)].filter(Boolean).join(" · ");
+}
+
+/**
  * 这台电脑上本机程序报的：规划员（拆卡）、验收员（验收「卡」）两种会话，和各会话里 Claude Code 开的子 agent、后台命令。
  * id 和云端同一套（plan:<会话>、verify:<会话>、bg:<会话>:<task_id>），合并时这里的为准（实时）。卡的会话只带卡 id，Task 由 taskOfCard 查。
  */
@@ -526,7 +540,7 @@ export function localBackground({ sessions, deviceId, canStop, today, taskOfCard
       // 规划员的会话名就是「拆卡：{Task 或项目名}」（和云端的一样）。
       id: `${subject.kind}:${session.id}`, kind: subject.kind, title: subject.kind === "plan" ? session.title || "拆卡" : verifyTitle(session.title),
       state: session.hold ? "queued" : sessionState(session.status), startedAt: session.createdAt, finishedAt: LIVE.has(session.status) ? null : session.updatedAt,
-      stoppable: canStop && LIVE.has(session.status), itemId: null, holdUntil: session.hold?.until ?? null, ...where,
+      stoppable: canStop && LIVE.has(session.status), itemId: null, holdUntil: session.hold?.until ?? null, model: backgroundModel(session), ...where,
     }] : [];
     const children = (session.background ?? []).map((item): BackgroundItem => ({
       id: `bg:${session.id}:${item.id}`, kind: item.kind, title: item.title, state: item.state, startedAt: item.startedAt, finishedAt: item.finishedAt,
