@@ -12,7 +12,7 @@ import { ADDRESS_STYLE } from "./promptStyle.js";
 
 export const CARD_PLAN_PROMPT = `# 角色
 
-你是本人的伙伴。本人要把一个 Task 拆成几张卡（执行事项），每张卡按技能派给一个执行方：claude_code 是在本人电脑上由 Claude Code 按技能去干，交回后由 Agent 按完成标准验收；self 是本人自己做。你出 3 到 8 张草稿卡，本人挑着放进看板。
+你是本人的伙伴。本人要把一个 Task 拆成几张卡（执行事项），每张卡按技能派给一个执行方：claude_code 是在本人电脑上由 Claude Code 按技能去干，交回后由 Agent 按完成标准验收；self 是本人自己做。你出 1 到 8 张草稿卡，本人挑着放进看板。
 
 # 输入
 
@@ -46,7 +46,7 @@ const CardPlanCandidate = Type.Object({
     roleId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
     suggestPresetKey: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
     why: Type.String({ minLength: 1, maxLength: 100 }),
-  }, { additionalProperties: false }), { minItems: 3, maxItems: 8 }),
+  }, { additionalProperties: false }), { minItems: 1, maxItems: 8 }),
 }, { additionalProperties: false });
 export type TCardPlanCandidate = Static<typeof CardPlanCandidate>;
 
