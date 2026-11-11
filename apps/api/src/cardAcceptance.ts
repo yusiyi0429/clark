@@ -8,7 +8,8 @@ import type { ArticleFetcher } from "./articleText.js";
 import { acceptanceProblem, type AcceptanceInput, type CardAcceptanceAgent } from "./cardAcceptanceAgent.js";
 import type { Query } from "./meetingStore.js";
 import { requestRoleProposal } from "./roleProposals.js";
-import type { TLocalVerifyBriefResponse } from "@warmap/contracts";
+import type { TCardHandbackOutcome, TLocalVerifyBriefResponse } from "@warmap/contracts";
+import { fixByOf, outcomeOf } from "./cardProjection.js";
 import { reviewerRole, roleBrief, rolesById } from "./roles.js";
 import { CardError, cardAgreement, effectiveOutcome, failStreak, type CardPlanTask, type HandbackRow, type StoredAcceptance } from "./taskCards.js";
 import { requestStarts } from "./sessionStarts.js";
@@ -23,14 +24,18 @@ import { postCoAgentMessage } from "./threads.js";
  * 只验交回时执行方不是「本人自己做」的卡（本人自己做的照旧本人验收）。
  */
 
-/** 没过时发回执行方的那段话：固定格式拼，不调模型。 */
-export function returnText(criteria: string[], result: StoredAcceptance): string {
-  const missed = result.criteria.filter((item) => item.verdict !== "met").sort((a, b) => a.index - b.index)
+/**
+ * 发回执行方的改法：固定格式拼，不调模型。没过的发全部没达到的几条；等本人补的（主循环第 61 条）只拼执行方能补的那几条，
+ * 一条都没有（原话也对得上）为 null——「我来补」时跟在本人写的后面一起送。
+ */
+export function returnText(criteria: string[], result: StoredAcceptance, workerOnly = false): string | null {
+  const missed = result.criteria.filter((item) => item.verdict !== "met" && (!workerOnly || fixByOf(item) === "worker")).sort((a, b) => a.index - b.index)
     .map((item) => `第 ${item.index} 条「${criteria[item.index - 1] ?? ""}」，${item.reason}；怎么补：${item.fix ?? "补上能核对的证据"}`);
   // 和本人原话对不上的几处（16.8）跟在没过的标准后面。
   for (const issue of result.sourceWordIssues ?? [])
     missed.push(`本人原话「${issue.quote}」${issue.kind === "missing" ? "说了要的没做" : "没要的做了"}，${issue.reason}`);
-  return `验收没过：${missed.join("。")}。改完再交回。`;
+  if (!missed.length) return null;
+  return `${workerOnly ? "你能补的" : "验收没过"}：${missed.join("。")}。改完再交回。`;
 }
 
 /** 通过时写进执行事项的验收记录：by 记推进人，agentHandbackId 表示是 Agent 验收；本人「仍然通过」时 verdict 写推翻的原因。 */
@@ -76,15 +81,15 @@ export type Verifier = { source: "cloud" | "local"; modelLabel: string | null; r
  * token：云端作业的 run_token（只认还是自己在验的那次）；本机的为 null，只要这次交回还没有结论。没落下（已有结论、被别人认领）时 saved=false。
  */
 export async function settleHandback(client: PoolClient, row: HandbackRow, result: StoredAcceptance, verifier: Verifier, token: string | null, now: Date):
-  Promise<{ saved: boolean; outcome: "pass" | "fail"; proposal: string | null }> {
+  Promise<{ saved: boolean; outcome: TCardHandbackOutcome; proposal: string | null }> {
   const met = result.criteria.filter((item) => item.verdict === "met").length;
-  // 和本人原话对不上（16.8）有一处就是没过，标准全达到也一样。
-  const outcome = met === result.criteria.length && !result.sourceWordIssues?.length ? "pass" : "fail";
+  // 和本人原话对不上（16.8）有一处就是没过，标准全达到也一样；有一条要本人补就是等本人补（主循环第 61 条），不算没过。
+  const outcome = outcomeOf(result);
   const locked = (await client.query("SELECT id::text,owner_id,status,plan_task_id FROM tasks WHERE id=$1 FOR UPDATE", [row.task_id])).rows[0] as TaskRow;
   const saved = await client.query(`UPDATE card_handbacks SET status='done',result=$3::jsonb,outcome=$4,return_text=$5,finished_at=$6,error=NULL,
     verifier_source=$7,verifier_model=$8,verifier_role_id=$9,verifier_role_version=$10,verify_run_id=$11,verified_commit=$12
     WHERE id=$1 AND (($2::uuid IS NULL AND outcome IS NULL AND overruled_at IS NULL) OR (run_token=$2 AND status='running'))`,
-  [row.id, token, JSON.stringify(result), outcome, outcome === "fail" ? returnText(row.criteria, result) : null, now,
+  [row.id, token, JSON.stringify(result), outcome, outcome === "pass" ? null : returnText(row.criteria, result, outcome === "needs_person"), now,
     verifier.source, verifier.modelLabel, verifier.roleId, verifier.roleVersion, verifier.runId, verifier.commit]);
   if (!saved.rowCount) return { saved: false, outcome, proposal: null };
   // 旧的一次交回验完了，新的已经交上来：只记结论，不动卡。
@@ -98,7 +103,8 @@ export async function settleHandback(client: PoolClient, row: HandbackRow, resul
     }
     return { saved: true, outcome, proposal: null };
   }
-  // 同一张卡第二次没过：提一条岗位修改。
+  // 等本人补不算没过，不提岗位修改。同一张卡第二次没过：提一条岗位修改。
+  if (outcome === "needs_person") return { saved: true, outcome, proposal: null };
   const history = (await client.query("SELECT * FROM card_handbacks WHERE task_id=$1 ORDER BY attempt DESC", [row.task_id])).rows as HandbackRow[];
   const proposal = failStreak(history) === 2
     ? await requestRoleProposal(client, { taskId: row.task_id, ownerId: row.owner_id, sourceKind: "second_fail", sourceId: row.id, reason: null }) : null;
@@ -180,7 +186,7 @@ export function createCardAcceptanceQueue(options: { pool: Pool; storageDir: str
         agreement: cardAgreement(task.plan_task_id ? (await options.planTask(row.owner_id, task.plan_task_id))?.agreement ?? null : null, task.criterion_index),
         role: role ? { name: role.name, acceptanceMd: role.acceptance_md } : null,
         reviewer: reviewer ? { name: reviewer.name, practiceMd: reviewer.practice_md, acceptanceMd: reviewer.acceptance_md } : null,
-        ...(previous && effectiveOutcome(previous) === "fail" ? { previous: previous.result!.criteria.map((item) => ({ index: item.index,
+        ...(previous && effectiveOutcome(previous) !== "pass" ? { previous: previous.result!.criteria.map((item) => ({ index: item.index,
           text: previous.criteria[item.index - 1] ?? "", verdict: item.verdict, reason: item.reason, fix: item.fix })) } : {}),
       };
       const candidate = await Promise.race([options.agent.accept(input, { handbackId, personId: row.owner_id, images, signal }), new Promise<never>((_resolve, reject) => {
@@ -315,7 +321,7 @@ export function retryHandback(pool: Pool, ownerId: string, cardId: string, handb
   });
 }
 
-const RESULT_TEXT = { met: "达到", partial: "部分达到", unmet: "没达到" } as const;
+const RESULT_TEXT = { met: "达到", partial: "部分达到", unmet: "没达到", needs_person: "要本人补" } as const;
 const BRIEF_ITEM_CHARS = 2000;
 
 /**
@@ -351,13 +357,17 @@ export async function verifyBrief(q: Query, ownerId: string, handbackKey: string
       ...(agreement?.exclusions.length ? ["这次不包括（不能当作没达到的理由）：", ...agreement.exclusions.map((text) => `- ${text}`)] : [])] : []),
     ...(role?.acceptance_md.trim() ? ["", `## ${role.name}的验收口径`, "", role.acceptance_md.trim()] : []),
     "", "## 执行方的逐条自评（自己说的不算证据）", "",
-    ...(row.claims.length ? [...row.claims].sort((a, b) => a.index - b.index).map((claim) => `- 第 ${claim.index} 条：${RESULT_TEXT[claim.result]}。${cut(claim.evidence)}`) : ["没有写。"]),
+    ...(row.claims.length ? [...row.claims].sort((a, b) => a.index - b.index).map((claim) => `- 第 ${claim.index} 条：${RESULT_TEXT[claim.result]}。${cut(claim.evidence)}`
+      + (claim.need ? `\n  要本人做：${cut(claim.need)}` : "")) : ["没有写。"]),
+    // 主循环第 61 条：执行方标了要本人补的，确实只有本人能做（登录、验证码、人工查询、网站拦自动访问、本人的权限或判断）判 needs_person，执行方其实能做的判 unmet。
+    ...(row.claims.some((claim) => claim.result === "needs_person") ? ["", "执行方标「要本人补」的几条：确实只有本人能做的判 needs_person（fixBy person，fix 写要本人做什么、给回什么）；"
+      + "执行方其实能做的判 unmet（fixBy worker）。"] : []),
     ...(row.summary?.trim() ? ["", "## 执行方的总结", "", cut(row.summary.trim())] : []),
     "", "## 交回点名的产出和证据", "",
     ...(outputs.length ? outputs.map((output) => output.kind === "artifact"
       ? `- 产出「${output.title}」${output.file_name ? `：文件 ${output.file_name}` : ""}${output.mime ? `（${output.mime}）` : ""}`
       : `- 证据「${output.title}」${output.url ? `：${output.url}` : ""}${output.text?.trim() ? `\n  ${cut(output.text.trim()).replace(/\n/g, "\n  ")}` : ""}`) : ["没有点名产出和证据。"]),
-    ...(previous && effectiveOutcome(previous) === "fail" && previous.result ? ["", "## 上一次没过的地方", "",
+    ...(previous && effectiveOutcome(previous) !== "pass" && previous.result ? ["", "## 上一次没过的地方", "",
       ...previous.result.criteria.filter((item) => item.verdict !== "met").map((item) =>
         `- 第 ${item.index} 条「${previous.criteria[item.index - 1] ?? ""}」：${item.reason}${item.fix ? `；怎么补：${item.fix}` : ""}`)] : []),
   ];

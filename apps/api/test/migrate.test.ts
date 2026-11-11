@@ -240,6 +240,7 @@ describe("migration", () => {
         "270_nexus_dri.sql",
         "272_done_definition_limits.sql",
         "273_card_agreements.sql",
+        "274_needs_person.sql",
       ]);
 
       // 幂等：重复执行不再变更

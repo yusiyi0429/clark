@@ -165,7 +165,7 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
       AND (status<>'done' OR plan_task_id=ANY($3::text[]) OR (plan_task_id IS NULL
         AND date_trunc('month',(acceptance->>'at')::timestamptz AT TIME ZONE 'Asia/Shanghai')=date_trunc('month',$2::timestamptz AT TIME ZONE 'Asia/Shanghai'))
         OR (SELECT h.merge->>'merged' FROM card_handbacks h WHERE h.task_id=tasks.id AND h.status='done'
-          AND (h.outcome='pass' AND h.overruled_at IS NULL OR h.outcome='fail' AND h.overruled_at IS NOT NULL) ORDER BY h.attempt DESC LIMIT 1)='false')
+          AND (h.outcome='pass' AND h.overruled_at IS NULL OR h.outcome IN ('fail','needs_person') AND h.overruled_at IS NOT NULL) ORDER BY h.attempt DESC LIMIT 1)='false')
     ORDER BY created_at,id`, [ownerId, now, tasks.map((task) => task.taskId)])).rows as { id: string; accepted_at: string | null; project_id: string | null }[];
   const acceptedAt = new Map(cardRows.map((row) => [row.id, row.accepted_at]));
   const cardProject = new Map(cardRows.map((row) => [row.id, row.project_id]));
@@ -173,7 +173,7 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
   // 合回：每张卡最近一次算通过的交回（推翻过的按本人的判断算）上本机报的合回结果，和交回那次执行在哪台电脑。
   const handbacks = cards.length ? (await q(`SELECT h.task_id::text,h.status,h.outcome,h.overruled_at,h.merge,h.run_id::text,r.device_id::text
     FROM card_handbacks h LEFT JOIN local_runs r ON r.id=h.run_id WHERE h.task_id=ANY($1::uuid[]) ORDER BY h.attempt DESC`, [cards.map((view) => view.id)])).rows as
-    { task_id: string; status: HandbackRow["status"]; outcome: "pass" | "fail" | null; overruled_at: Date | null; merge: StoredMerge | null; run_id: string | null; device_id: string | null }[] : [];
+    { task_id: string; status: HandbackRow["status"]; outcome: HandbackRow["outcome"]; overruled_at: Date | null; merge: StoredMerge | null; run_id: string | null; device_id: string | null }[] : [];
   const passed = new Map<string, (typeof handbacks)[number]>();
   for (const row of handbacks) if (!passed.has(row.task_id) && row.status === "done" && effectiveOutcome(row) === "pass") passed.set(row.task_id, row);
   /** 连续两次验收没过（受阻、等你拿主意）；卡的标记 blocked 还包括执行连续两次异常退出，那种首页算已暂停。 */
@@ -200,7 +200,9 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
       // 还没开工；本机收下了在等空位、等前面的卡、等额度恢复时照本机报的。
       state = "queued";
       queueReason = run ? queuedBy(run) ?? notStarted(view.id) : notStarted(view.id);
-    } else if (wait === "blocked" && reviewBlocked(view.id)) [state, waiting] = ["waiting", "verdict"];
+    } else if (wait === "needs_person") [state, waiting] = ["waiting", "needs_person"];
+    // 等你补（主循环第 61 条）、连续两次验收没过要你拿主意，都不用等电脑：排在排队前面。
+    else if (wait === "blocked" && reviewBlocked(view.id)) [state, waiting] = ["waiting", "verdict"];
     // 连续两次验收没过要你拿主意，不用等电脑：排在排队前面。
     else if (run && (queueReason = queuedBy(run))) state = "queued";
     else if (wait === "blocked") state = "waiting";

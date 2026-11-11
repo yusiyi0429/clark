@@ -135,6 +135,53 @@ describe("拆卡和验收在本机（第 21 节）", { timeout: 30_000 }, () => 
     } finally { await f.close(); }
   });
 
+  it("要本人补（主循环第 61 条）：交代带执行方标的 need；有一条要本人补就是等你补、不算没过、不写岗位修改、不自动送回，改法只拼执行方能补的；连续没过跳过它；就到这里算通过", async () => {
+    const f = await localFixture();
+    try {
+      const keyOf = async (cardId: string) => (await f.t.sql("SELECT client_id FROM card_handbacks WHERE task_id=$1 ORDER BY attempt DESC LIMIT 1", [cardId]))[0].client_id as string;
+      const handBack = (cardId: string, criteria: unknown[]) => f.sync({ kind: "card", cardId }, [["handback", { summary: "能做的做完了", criteria, outputKeys: [] }]]);
+      const judge = async (cardId: string, criteria: { index: number; verdict: string; fix?: string; fixBy?: string }[]) =>
+        (await f.sync({ kind: "verify", cardId, handbackKey: await keyOf(cardId) }, [["verdict", { passed: false, summary: "就差申请号，要你登录商标网查", beyondScope: [],
+          modelLabel: "Opus 5.5", roleId: null, roleVersion: null,
+          criteria: criteria.map(({ index, verdict, fix, fixBy }) => ({ index, verdict, reason: verdict === "met" ? "对得上" : "缺", evidence: null, fix: fix ?? null,
+            ...(fixBy ? { fixBy } : {}) })) }]])).rejected;
+      const card = async (title: string) => { const id = await f.card(title); await f.t.sql("UPDATE tasks SET executor='claude_code' WHERE id=$1", [id]); return id; };
+      const view = async (cardId: string) => (await f.call("GET", `/api/me/cards/${cardId}`)).json().task.card;
+
+      // 第一次验收就有要本人补的：直接等你补。
+      const a = await card("候选名初查");
+      await handBack(a, [{ index: 1, result: "met", evidence: "A1" }, { index: 2, result: "needs_person", evidence: "商标网拦自动访问", need: "登录商标网查这 3 个名字的申请号" }]);
+      const brief = (await f.brief(await keyOf(a))).json().markdown as string;
+      for (const text of ["第 2 条：要本人补。商标网拦自动访问", "要本人做：登录商标网查这 3 个名字的申请号", "确实只有本人能做的判 needs_person"]) expect(brief).toContain(text);
+      expect(await judge(a, [{ index: 1, verdict: "met" }, { index: 2, verdict: "needs_person" }])).toEqual([]);
+      expect((await f.t.sql("SELECT outcome,return_text FROM card_handbacks WHERE task_id=$1", [a]))[0]).toEqual({ outcome: "needs_person", return_text: null });
+      expect(await view(a)).toMatchObject({ wait: "needs_person", handback: { outcome: "needs_person", headline: "就差申请号，要你登录商标网查", met: 1, total: 2,
+        gaps: [{ index: 2, short: "有评审结论", verdict: "needs_person", fixBy: "person", fix: "登录商标网查这 3 个名字的申请号" }] } });
+      expect(await f.t.sql("SELECT 1 FROM role_proposals WHERE task_id=$1", [a])).toEqual([]);
+      // 就到这里：推翻成通过，卡完成。
+      const handbackId = (await f.t.sql("SELECT id::text FROM card_handbacks WHERE task_id=$1", [a]))[0].id as string;
+      expect((await f.call("POST", `/api/me/cards/${a}/handbacks/${handbackId}/overrule`, { reason: "申请号先不要了" })).statusCode).toBe(200);
+      expect((await f.t.sql("SELECT status FROM tasks WHERE id=$1", [a]))[0].status).toBe("done");
+
+      // 执行方能补的和要本人补的都有：还是等你补，改法只拼执行方能补的。
+      const b = await card("写说明");
+      await handBack(b, [{ index: 1, result: "unmet", evidence: "" }, { index: 2, result: "unmet", evidence: "" }]);
+      await judge(b, [{ index: 1, verdict: "unmet", fix: "补上文档", fixBy: "worker" }, { index: 2, verdict: "unmet", fix: "本人确认口径", fixBy: "person" }]);
+      expect((await f.t.sql("SELECT outcome,return_text FROM card_handbacks WHERE task_id=$1", [b]))[0])
+        .toEqual({ outcome: "needs_person", return_text: "你能补的：第 1 条「有方案文档」，缺；怎么补：补上文档。改完再交回。" });
+
+      // 没过 → 等你补 → 再交回：连续没过只数 1 次（等你补的那次跳过）。
+      const c = await card("出方案");
+      await handBack(c, [{ index: 1, result: "met", evidence: "" }, { index: 2, result: "met", evidence: "" }]);
+      await judge(c, [{ index: 1, verdict: "met" }, { index: 2, verdict: "unmet", fix: "补" }]);
+      expect(await view(c)).toMatchObject({ wait: "review_failed", handback: { outcome: "fail" } });
+      await handBack(c, [{ index: 1, result: "met", evidence: "" }, { index: 2, result: "needs_person", evidence: "", need: "本人拍板" }]);
+      await judge(c, [{ index: 1, verdict: "met" }, { index: 2, verdict: "needs_person", fix: "本人拍板" }]);
+      await handBack(c, [{ index: 1, result: "met", evidence: "" }, { index: 2, result: "met", evidence: "" }]);
+      expect((await f.brief(await keyOf(c))).json().failStreak).toBe(1);
+    } finally { await f.close(); }
+  });
+
   it("本机验收员：交回不排云端验收；验收交代带标准、自评、点名的产出和证据；没过写改法、第二次没过记岗位修改，交代里带上一次没过的地方；过了进准备中；已经有结论的再报拒收", async () => {
     const f = await localFixture();
     try {

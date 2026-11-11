@@ -1,4 +1,5 @@
-import type { TCardGit, TCardHandbackBrief, TCardModel, TCardWait, TCriterionVerdict, TDeliverableInclusion, TLocalGitRef, TLocalHandbackCriterion, TTaskCard, TTaskView, TCardSourceWordIssue } from "@warmap/contracts";
+import type { TCardCriterionVerdict, TCardFixBy, TCardGapItem, TCardGit, TCardHandbackBrief, TCardHandbackOutcome, TCardModel, TCardWait, TDeliverableInclusion, TLocalGitRef,
+  TLocalHandbackCriterion, TTaskCard, TTaskView, TCardSourceWordIssue } from "@warmap/contracts";
 import { askingQuestion, runBrief, type RunRow } from "./localDevices.js";
 import type { Query } from "./meetingStore.js";
 import { roleRef, rolesById } from "./roles.js";
@@ -10,11 +11,12 @@ import { roleRef, rolesById } from "./roles.js";
 
 /** 一次交回在库里的验收结论。 */
 /** sourceWordIssues：和本人原话对不上的几处（16.8，本机验收员报的；云端验收和老的结论没有）。 */
-export type StoredAcceptance = { headline: string | null; criteria: { index: number; verdict: TCriterionVerdict; reason: string; evidence: string | null; fix: string | null }[];
-  beyondScope: string[]; sourceWordIssues?: TCardSourceWordIssue[] };
+/** 主循环第 61 条：verdict 多 needs_person，fixBy 是没达到时谁来补（老结论没有）。 */
+export type StoredCriterion = { index: number; verdict: TCardCriterionVerdict; reason: string; evidence: string | null; fix: string | null; fixBy?: TCardFixBy | null };
+export type StoredAcceptance = { headline: string | null; criteria: StoredCriterion[]; beyondScope: string[]; sourceWordIssues?: TCardSourceWordIssue[] };
 export type HandbackRow = { id: string; task_id: string; run_id: string | null; owner_id: string; attempt: number; criteria: string[]; claims: TLocalHandbackCriterion[];
   summary: string | null; output_ids: string[]; status: TCardHandbackBrief["status"]; started_at: Date | null; finished_at: Date | null; error: string | null;
-  result: StoredAcceptance | null; outcome: "pass" | "fail" | null; return_text: string | null; returned_at: Date | null; overruled_at: Date | null;
+  result: StoredAcceptance | null; outcome: TCardHandbackOutcome | null; return_text: string | null; returned_at: Date | null; overruled_at: Date | null;
   overruled_by: string | null; overrule_reason: string | null; created_at: Date;
   verifier_source: "cloud" | "local" | null; verifier_model: string | null; verifier_role_id: string | null; verifier_role_version: number | null;
   git: TLocalGitRef | null; verified_commit: string | null };
@@ -25,19 +27,45 @@ export type CardRow = { id: string; status: TTaskView["status"]; executor: TTask
 /** 本机报 hold（订阅额度用完，停着等恢复）时会话的几种状态：排着没开始、一轮停在中间（等你说话的状态）、进程退了。 */
 export const HOLD_STATES = ["queued", "idle", "exited"];
 
-/** 推翻过的验收按本人的判断算：通过的推翻算没过，没过的推翻算通过。 */
-export const effectiveOutcome = (row: Pick<HandbackRow, "outcome" | "overruled_at">) =>
+/** 没达到的一条该谁补：needs_person 一定是本人；老结论没写 fixBy 的按执行方。 */
+export const fixByOf = (item: Pick<StoredCriterion, "verdict" | "fixBy">): TCardFixBy => item.verdict === "needs_person" ? "person" : item.fixBy ?? "worker";
+
+/**
+ * 一次交回的结论（契约 CardHandbackOutcome，主循环第 61 条）：每条都达到、原话对得上 → pass；
+ * 否则有一条要本人补（needs_person 或 fixBy = person）→ needs_person（第一次就这样也直接等你补）；其余 → fail。
+ */
+export function outcomeOf(result: StoredAcceptance): TCardHandbackOutcome {
+  if (result.criteria.every((item) => item.verdict === "met") && !result.sourceWordIssues?.length) return "pass";
+  return result.criteria.some((item) => item.verdict !== "met" && fixByOf(item) === "person") ? "needs_person" : "fail";
+}
+
+/** 推翻过的验收按本人的判断算：通过的推翻算没过；没过的、等本人补的推翻（「就到这里」）算通过。 */
+export const effectiveOutcome = (row: Pick<HandbackRow, "outcome" | "overruled_at">): TCardHandbackOutcome | null =>
   row.outcome && row.overruled_at ? (row.outcome === "pass" ? "fail" : "pass") : row.outcome;
 
-/** 连续几次没过（从最近一次往前数，排队或在验收的不算）。 */
+/** 连续几次没过（从最近一次往前数，排队或在验收的不算；等本人补的那次跳过，不算也不打断）。 */
 export function failStreak(handbacks: Pick<HandbackRow, "status" | "outcome" | "overruled_at">[]): number {
   let streak = 0;
   for (const row of handbacks) {
-    if (row.status !== "done" || effectiveOutcome(row) === null) continue;
-    if (effectiveOutcome(row) !== "fail") break;
+    const outcome = row.status === "done" ? effectiveOutcome(row) : null;
+    if (outcome === null || outcome === "needs_person") continue;
+    if (outcome !== "fail") break;
     streak++;
   }
   return streak;
+}
+
+/** 一条标准的短标题（「就到这里」「我来补」预填用）：到第一个逗号、句号、分号、冒号、括号为止，最多 20 字。 */
+export function shortStandard(text: string, index: number): string {
+  const head = text.trim().split(/[，,。；;：:（(]/)[0].trim();
+  return (head || text.trim()).slice(0, 20) || `第 ${index} 条`;
+}
+
+/** 交回里没达到的几条（契约 CardGapItem），按 index 排。fix 没写时用执行方交回时写的 need。 */
+export function handbackGaps(row: Pick<HandbackRow, "criteria" | "claims" | "result">): TCardGapItem[] {
+  return (row.result?.criteria ?? []).filter((item) => item.verdict !== "met").sort((a, b) => a.index - b.index).map((item) => ({
+    index: item.index, short: shortStandard(row.criteria[item.index - 1] ?? "", item.index), verdict: item.verdict, fixBy: fixByOf(item),
+    fix: item.fix ?? row.claims.find((claim) => claim.index === item.index)?.need ?? null }));
 }
 
 /** 交回的分支和提交、验的提交（卡在工作树里做时才有，ADR 0038）。 */
@@ -48,7 +76,7 @@ export function handbackBrief(row: HandbackRow): TCardHandbackBrief {
   return { id: row.id, attempt: row.attempt, status: row.status, outcome: row.outcome, met: criteria.filter((item) => item.verdict === "met").length, total: criteria.length,
     headline: row.result?.headline ?? null, returnText: row.return_text, returnedAt: row.returned_at?.toISOString() ?? null, overruled: row.overruled_at !== null,
     createdAt: row.created_at.toISOString(), finishedAt: row.finished_at?.toISOString() ?? null, git: cardGit(row),
-    sourceWordIssues: row.result?.sourceWordIssues ?? [] };
+    sourceWordIssues: row.result?.sourceWordIssues ?? [], gaps: handbackGaps(row) };
 }
 
 /** 列和标记（第 3 节）：handbacks、runs 都是新的在前。 */
@@ -57,6 +85,8 @@ function stageAndWait(row: CardRow, handbacks: HandbackRow[], runs: RunRow[]): P
   if (row.status === "done") return { stage: "done", wait: null };
   const latest = handbacks[0];
   if (latest && (latest.status === "queued" || latest.status === "running")) return { stage: "review", wait: null };
+  // 等你补（主循环第 61 条）：最近一次交回是等本人补、本人还没「就到这里」，排在受阻前面。
+  if (latest?.status === "done" && effectiveOutcome(latest) === "needs_person") return { stage: "doing", wait: "needs_person" };
   const failedRuns = runs.length >= 2 && runs.slice(0, 2).every((run) => run.state === "failed");
   if (failStreak(handbacks) >= 2 || failedRuns) return { stage: "doing", wait: "blocked" };
   if (latest && effectiveOutcome(latest) === "fail" && !latest.returned_at) return { stage: "doing", wait: "review_failed" };

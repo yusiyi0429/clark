@@ -411,12 +411,13 @@ async function applyVerdict(client: PoolClient, owner: Owner, run: RunRow, card:
     throw new SyncReject("INVALID_VERDICT", `完成标准有 ${row.criteria.length} 条，每条判一次`);
   const result = { headline: data.summary, beyondScope: data.beyondScope,
     criteria: [...data.criteria].sort((a, b) => a.index - b.index)
-    .map(({ index, verdict, reason, evidence, fix }) => ({ index, verdict, reason: reason.trim(), evidence: evidence?.trim() || null, fix: fix?.trim() || null })),
+    .map(({ index, verdict, reason, evidence, fix, fixBy }) => ({ index, verdict, reason: reason.trim(), evidence: evidence?.trim() || null, fix: fix?.trim() || null,
+      ...(verdict === "met" ? {} : { fixBy: verdict === "needs_person" ? "person" as const : fixBy ?? "worker" }) })),
     sourceWordIssues: (data.sourceWordIssues ?? []).map(({ quote, kind, reason }) => ({ quote: quote.trim(), kind, reason: reason.trim() })) };
   const settled = await settleHandback(client, row, result,
     { source: "local", modelLabel: data.modelLabel, roleId: data.roleId, roleVersion: data.roleVersion, runId: run.id, commit: data.commit ?? null }, null, at);
   if (!settled.saved) throw new SyncReject("ALREADY_JUDGED", "这次交回已经有验收结论了");
-  await note(client, run, at, settled.outcome === "pass" ? "验收通过" : "验收没过", true);
+  await note(client, run, at, settled.outcome === "pass" ? "验收通过" : settled.outcome === "needs_person" ? "验收：等本人补" : "验收没过", true);
   return settled.proposal ? { proposal: settled.proposal } : {};
 }
 
