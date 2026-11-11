@@ -228,8 +228,8 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
     emit(s, { type: "turn_end", isError: false, text, durationMs: stepMs * 4, usage, ...(errorKind ? { errorKind } : {}) });
   };
 
-  /** 真的执行方回答是 Markdown（17.2 第 41 条按 Markdown 排），假的也带一点：粗体、列表、行内代码、表格。 */
-  const ANSWER_TEXT = ["好，按你说的改，**两处**：", "", "- 删掉旧的安装说明", "- `README.md` 里的链接换到新说明", "", "| 文件 | 改动 |", "| --- | --- |", "| README.md | 换链接 |", "| docs/install-old.md | 删掉 |"].join("\n");
+  /** 真的执行方回答是 Markdown（17.2 第 41 条按 Markdown 排），假的也带一点：粗体、列表、行内代码、代码块、表格。 */
+  const ANSWER_TEXT = ["好，按你说的改，**两处**：", "", "- 删掉旧的安装说明", "- `README.md` 里的链接换到新说明", "", "```bash", "git rm docs/install-old.md", "```", "", "| 文件 | 改动 |", "| --- | --- |", "| README.md | 换链接 |", "| docs/install-old.md | 删掉 |"].join("\n");
   /** 假的「本会话改过的文件」（17.2 第 41 条）：一个 Markdown、一个代码文件、一张图、一个删掉了的。 */
   const FILE_ROOT = "C:/work/tianshu";
   const FILES: Record<string, { kind: "markdown" | "text" | "image"; mimeType: string; content: string; sources: ("tool" | "git")[] }> = {

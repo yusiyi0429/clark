@@ -44,27 +44,10 @@
 .bubble, .permission { align-self: flex-start; display: grid; gap: 6px; max-width: 94%; padding: 11px 13px; border-radius: var(--r-card) var(--r-card) var(--r-card) 5px; background: var(--surface-hover); color: var(--ink); font-size: var(--text-sm); line-height: 1.6; } /* 待设计规范 */
 .bubble p, .permission p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 /* 执行方的回答按 Markdown 排（17.2 第 41 条）：字号行距跟着这条回答，标题不放大；表格、代码小一档（不小于最小那档字），放不下自己横向滚。 */
-.md { --md-small: max(.875em, var(--text-sm)); min-width: 0; overflow-wrap: anywhere; }
+/* 回答、交代、预览里的 Markdown 用伙伴对话的 .prose（conversation-transcript.module.css，一套排法）；这里只管在气泡里不撑宽、交代那句不按原样换行。 */
+.md { min-width: 0; overflow-wrap: anywhere; }
 /* 交代气泡里的 Markdown：气泡本身保留换行（pre-wrap），这里交给 Markdown 自己分段。 */
 .me .md { white-space: normal; }
-.md strong { font-weight: 600; }
-.md > :first-child { margin-top: 0; }
-.md > :last-child { margin-bottom: 0; }
-.md p { margin: 0 0 var(--space-2); white-space: normal; }
-.md :is(h1, h2, h3, h4, h5, h6) { margin: var(--space-4) 0 var(--space-1); font-size: inherit; font-weight: 600; line-height: inherit; }
-.md :is(ul, ol) { margin: 0 0 var(--space-2); padding-left: 20px; list-style: disc; }
-.md ol { list-style: decimal; }
-.md li > p { margin: 0; }
-.md table { display: block; max-width: 100%; margin: 0 0 var(--space-2); overflow-x: auto; border-collapse: collapse; font-size: var(--md-small); line-height: 1.45; }
-.md :is(th, td) { padding: 6px var(--space-2); border-bottom: 1px solid var(--hairline); text-align: left; vertical-align: top; }
-.md th { color: var(--ink-faint); font-weight: 400; white-space: nowrap; }
-.md code { padding: 0 var(--space-1); border-radius: var(--r-bar); background: var(--neutral-wash); font-family: var(--font-mono); font-size: var(--md-small); }
-.md pre { margin: 0 0 var(--space-2); padding: var(--space-2) var(--space-3); overflow-x: auto; border-radius: var(--r-inset); background: var(--neutral-wash); font-size: var(--md-small); line-height: 1.45; }
-.md pre code { padding: 0; background: none; font-size: inherit; overflow-wrap: normal; }
-.md a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
-.md blockquote { margin: 0 0 var(--space-2); padding-left: var(--space-3); box-shadow: inset 2px 0 0 var(--hairline-strong); color: var(--ink-muted); }
-.md hr { margin: var(--space-3) 0; border: 0; border-top: 1px solid var(--hairline); }
-.md img { max-width: 100%; }
 /* 「交出 文件名」里能点开看的文件名。 */
 .fileLink { padding: 0; border: 0; background: none; color: inherit; font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .fileLink:hover { color: var(--ink); }
@@ -191,7 +174,7 @@ button.output:focus-visible { outline: 2px solid var(--focus); outline-offset: -
 .previewHead small { flex: none; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; }
 .previewGap { flex: 1; }
 .previewBody { min-width: 0; min-height: 0; overflow: auto; padding: var(--space-4); scrollbar-width: thin; }
-/* 预览里的 Markdown 和回答同一套排法（.md），字号行距照专题页的文档。 */
+/* 预览里的 Markdown 和回答同一套排法（.prose），字号行距照专题页的文档。 */
 .previewDoc { color: var(--ink); font-size: var(--text-base); line-height: 1.75; }
 .page[data-embedded] .previewDoc { font-size: 16px; line-height: 26px; }
 .previewCode { margin: 0; color: var(--ink); font-family: var(--font-mono); font-size: var(--text-base); line-height: var(--lh-row); white-space: pre; tab-size: 2; }

@@ -32,6 +32,7 @@ import { ICON, StateIcon, type IconState } from "@/components/home/StateIcon";
 import { MarkdownBody, ReceiptFailed, ReceiptSending, ReceiptTicks, type MarkdownParts } from "@/conversation/Transcript";
 import h from "@/styles/home.module.css";
 import s from "@/styles/v2-session.module.css";
+import ts from "@/styles/conversation-transcript.module.css";
 
 const hhmm = (iso: string) => new Date(iso).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 
@@ -159,10 +160,10 @@ const SESSION_PARTS: MarkdownParts = { components: { a: MentionLink, code: Menti
 
 /**
  * 执行方说的话按 Markdown 排（41 条）：标题、列表、表格、加粗、代码、链接；字号行距跟着这条回答，不比正文大。
- * 用伙伴对话的出字组件（MarkdownBody）：按顶层块分开解析、文字没变就不重排；fresh（页面开着时刚到的）新字淡入。
+ * 用伙伴对话的出字组件（MarkdownBody）和它的排法（.prose，一套）：按顶层块分开解析、文字没变就不重排；fresh（页面开着时刚到的）新字淡入。
  */
 export const AgentText = memo(function AgentText({ text, fresh = false }: { text: string; fresh?: boolean }) {
-  return <div className={s.md}><MarkdownBody text={text} streaming={false} fresh={fresh} parts={SESSION_PARTS} /></div>;
+  return <div className={`${ts.prose} ${s.md}`}><MarkdownBody text={text} streaming={false} fresh={fresh} parts={SESSION_PARTS} /></div>;
 });
 
 /** 刚到多久以内算「页面开着时到的」（打开时从头重放的历史早于它，不淡入）。 */
