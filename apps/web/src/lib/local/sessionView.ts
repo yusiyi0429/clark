@@ -173,7 +173,10 @@ export function foldEvent(view: SessionView, event: TLocalSessionEvent): Session
       next.lastActivity = { at: event.at, text };
       return next;
     }
+    // 执行方提议改约定（主循环第 60 条）：对话里记一行；钉住的框照云端卡的详情画（子会话页看到这一行就重读）。
     case "agreement_proposal":
+      next.entries = [...view.entries, { kind: "notice", ...base, level: "info", text: `提议改完成标准：${event.reason}`, code: "agreement_proposal" }];
+      next.lastActivity = { at: event.at, text: "提议改完成标准" };
       return next;
   }
 }

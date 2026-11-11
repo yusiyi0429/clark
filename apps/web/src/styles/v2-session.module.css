@@ -261,3 +261,15 @@ button.output:focus-visible { outline: 2px solid var(--focus); outline-offset: -
 .page[data-embedded] .doc { font-size: 16px; line-height: 26px; }
 /* 等本人处理的框钉在输入框上方（第 54 条）：贴着输入框上沿，太高时自己滚。 */
 .pinned { display: grid; gap: var(--space-2); max-height: min(50vh, 420px); margin-bottom: var(--space-3); overflow-y: auto; scrollbar-width: thin; }
+
+/* 卡的约定（主循环第 60 条）：会话详情里改交代和完成标准；改前改后各一块。只用现有令牌。 */
+.agreeField { width: 100%; min-width: 0; min-height: var(--row-32); padding: var(--space-1) var(--space-2); border: 1px solid var(--field-border); border-radius: var(--r-control); background: var(--field-bg); color: var(--field-ink); font: inherit; font-size: var(--text-base); line-height: var(--lh-row); outline: none; resize: vertical; }
+.agreeField:hover { border-color: var(--field-border-hover); }
+.agreeField:focus { border-color: var(--field-border-focus); }
+.agreeList { display: grid; gap: var(--space-1); margin: 0; padding-left: 18px; }
+.agreeList li { padding-left: var(--space-1); }
+.agreeList li .agreeField { width: calc(100% - 36px); vertical-align: middle; }
+.agreeGrow { flex: 1; }
+.agreeChanges { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+.agreeChanges li { display: grid; gap: var(--space-1); }
+.agreeSide { display: grid; gap: 2px; }

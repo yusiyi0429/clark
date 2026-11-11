@@ -20,7 +20,7 @@ export async function runSessionCommand(runner: LocalRunner, sessions: TLocalSes
   if (!sessions.some((session) => session.id === entry.sessionId)) return { result: "not_running" };
   const { command } = entry;
   try {
-    if (command.type === "message") await runner.sendMessage(entry.sessionId, command.text);
+    if (command.type === "message") await runner.sendMessage(entry.sessionId, command.text, undefined, undefined, undefined, command.agreementRevision);
     else if (command.type === "answer") await runner.answerQuestion(entry.sessionId, command.requestId, command.answer);
     else await runner.decidePermission(entry.sessionId, command.requestId, command.decision);
     return { result: "done" };

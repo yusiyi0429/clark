@@ -43,6 +43,8 @@ export type EventWatch = {
  * 老版本（protocol 1）的发话请求是 strict，带了整个请求回 400：不带、不先画，和原来一样。
  */
 export const acceptsClientMessageId = (health: Pick<TLocalHealthResponse, "protocol">): boolean => health.protocol >= 2;
+/** 本机程序收不收转话带的 agreementRevision（主循环第 60 条，卡的约定改了）：protocol ≥ 3；老版本带了整句 400，不带。 */
+export const acceptsAgreementRevision = (health: Pick<TLocalHealthResponse, "protocol">): boolean => health.protocol >= 3;
 
 export interface LocalRunner {
   readonly kind: "http" | "mock";
@@ -90,7 +92,8 @@ export interface LocalRunner {
   /** 说一句；kind=review 是专题开评审会（text 可不填）。 */
   /** attachments：云端存好的子会话附件（14.5），本机按 id 取回；只带附件时 text 可以是空的。 */
   /** messageId：网页给的这句话的编号（只在 clientMessageIds 时带）；没发成用同一个编号重发，本机按它去重。 */
-  sendMessage(id: string, text: string, kind?: TLocalSendMessageRequest["kind"], attachments?: TLocalAttachmentRef[], messageId?: string): Promise<TLocalSendMessageResponse>;
+  /** agreementRevision：云端登记的「约定改了」那句转话带的版本号，本机 protocol ≥ 3 才放进请求（见 acceptsAgreementRevision）。 */
+  sendMessage(id: string, text: string, kind?: TLocalSendMessageRequest["kind"], attachments?: TLocalAttachmentRef[], messageId?: string, agreementRevision?: number): Promise<TLocalSendMessageResponse>;
   interrupt(id: string): Promise<TLocalSessionSummary>;
   /** 换这个子会话的权限模式（跑着也能换，下一步就按新的来）；执行方没有这一档 400、会话已结束 409。 */
   setPermissionMode(id: string, mode: TLocalPermissionMode): Promise<TLocalSessionSummary>;
