@@ -81,7 +81,7 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
     setStarting(true);
     window.history.replaceState(null, "", window.location.pathname);
   }, [autoStart, ready, detail, session]);
-  const { view } = useSessionEvents(local.runner, session?.id ?? null);
+  const { view, draft, drafted } = useSessionEvents(local.runner, session?.id ?? null, { drafts: true });
   useModelChangedRefresh(view.entries, local.refresh);
   const canAct = canCommand({ ready, handheld, hasSession: !!session });
   const mode = useSessionMode(local.runner, session, view);
@@ -170,7 +170,7 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
       <div className={s.chat}>
         <div className={s.scroll} ref={scroll.scrollRef}>
           <div ref={scroll.contentRef}>
-            {session ? <SessionTranscript entries={send.entries} agentName={HARNESS_NAME[session.agent]} canAct={canAct} onResend={(entry) => void say(entry.text).catch(() => showWorkspaceToast({ text: "没发出去" }))} onRetry={send.retry} device={device} live={running(status)} starting={status === "starting"} ended={ended} relay={relay} onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={asking} asking={question} />
+            {session ? <SessionTranscript entries={send.entries} agentName={HARNESS_NAME[session.agent]} canAct={canAct} onResend={(entry) => void say(entry.text).catch(() => showWorkspaceToast({ text: "没发出去" }))} onRetry={send.retry} draft={draft} drafted={drafted} device={device} live={running(status)} starting={status === "starting"} ended={ended} relay={relay} onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={asking} asking={question} />
               : <div className={s.feed}><span className={s.evt}>{topic.title}</span>
                   {ready && topic.status === "active" && !embedded ? <div className={s.actions}><HeroButton variant="primary" size="sm" onPress={() => setStarting(true)}>开始</HeroButton></div> : null}
                 </div>}

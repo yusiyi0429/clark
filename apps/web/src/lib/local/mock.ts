@@ -10,7 +10,7 @@
  */
 import type {
   TLocalBackgroundItem, TLocalCreateSessionRequest, TLocalEffort, TLocalFolder, TLocalMergeResponse, TLocalModelProfile, TLocalPermissionRequestView, TLocalPlanEntry, TLocalQuestionRequestView,
-  TLocalProjectFolder, TLocalSessionEvent, TLocalSessionStatus, TLocalSessionSummary, TLocalTool, TLocalToolUpsert, TLocalUsage, TLocalWorkspace,
+  TLocalProjectFolder, TLocalSessionDraft, TLocalSessionEvent, TLocalSessionStatus, TLocalSessionSummary, TLocalTool, TLocalToolUpsert, TLocalUsage, TLocalWorkspace,
 } from "@warmap/contracts";
 import { LocalRunnerError, type EventWatch, type LocalRunner } from "./runner";
 
@@ -19,6 +19,8 @@ type MockSession = {
   summary: TLocalSessionSummary;
   log: TLocalSessionEvent[];
   listeners: Set<(event: TLocalSessionEvent) => void>;
+  /** 在看草稿的（watch 带了 onDraft）。 */
+  drafters: Set<(draft: TLocalSessionDraft) => void>;
   script: Step[];
   cursor: number;
   timer: ReturnType<typeof setTimeout> | null;
@@ -168,6 +170,25 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
     s.summary = { ...s.summary, lastSeq: full.seq, updatedAt: full.at };
     for (const listener of s.listeners) listener(full);
   };
+  /** 推一条草稿（全文）；空串是清掉。 */
+  const draftTo = (s: MockSession, text: string) => { for (const send of s.drafters) send({ type: "draft", sessionId: s.summary.id, text }); };
+  /**
+   * 执行方说一段话：有在看草稿的就先按草稿一点点推（每 80ms 一条到目前为止的全文，同真本机），说完再发 assistant_text，然后 done；
+   * 没人看草稿（测试）直接发。推草稿期间占着 s.timer，停下、强停时清掉。
+   */
+  const speak = (s: MockSession, text: string, done: () => void) => {
+    if (!s.drafters.size) { emit(s, { type: "assistant_text", text }); done(); return; }
+    let shown = 0;
+    const tick = () => {
+      shown = Math.min(text.length, shown + 6);
+      draftTo(s, text.slice(0, shown));
+      if (shown < text.length) { s.timer = setTimeout(tick, 80); return; }
+      s.timer = null;
+      emit(s, { type: "assistant_text", text });
+      done();
+    };
+    tick();
+  };
   const setStatus = (s: MockSession, status: TLocalSessionStatus, reason?: string) => {
     s.summary = { ...s.summary, status };
     emit(s, { type: "status", status, ...(reason ? { reason } : {}) });
@@ -228,8 +249,8 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
     emit(s, { type: "turn_end", isError: false, text, durationMs: stepMs * 4, usage, ...(errorKind ? { errorKind } : {}) });
   };
 
-  /** 真的执行方回答是 Markdown（17.2 第 41 条按 Markdown 排），假的也带一点：粗体、列表、行内代码、表格。 */
-  const ANSWER_TEXT = ["好，按你说的改，**两处**：", "", "- 删掉旧的安装说明", "- `README.md` 里的链接换到新说明", "", "| 文件 | 改动 |", "| --- | --- |", "| README.md | 换链接 |", "| docs/install-old.md | 删掉 |"].join("\n");
+  /** 真的执行方回答是 Markdown（17.2 第 41 条按 Markdown 排），假的也带一点：粗体、列表、行内代码、代码块、表格。 */
+  const ANSWER_TEXT = ["好，按你说的改，**两处**：", "", "- 删掉旧的安装说明", "- `README.md` 里的链接换到新说明", "", "```bash", "git rm docs/install-old.md", "```", "", "| 文件 | 改动 |", "| --- | --- |", "| README.md | 换链接 |", "| docs/install-old.md | 删掉 |"].join("\n");
   /** 假的「本会话改过的文件」（17.2 第 41 条）：一个 Markdown、一个代码文件、一张图、一个删掉了的。 */
   const FILE_ROOT = "C:/work/tianshu";
   const FILES: Record<string, { kind: "markdown" | "text" | "image"; mimeType: string; content: string; sources: ("tool" | "git")[] }> = {
@@ -267,7 +288,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
       setStatus(s, "idle");
       return "wait";
     },
-    (s) => { setStatus(s, "running"); emit(s, { type: "assistant_text", text: ANSWER_TEXT }); plan(s, 2); },
+    (s) => { setStatus(s, "running"); speak(s, ANSWER_TEXT, () => { plan(s, 2); advance(s); }); return "wait"; },
     (s) => { tool(s, "Write", "写 交回说明.md"); emit(s, { type: "artifact", artifactId: `a${++seqId}`, title: "交回说明", fileName: "交回说明.md", size: 2048, sha256: "0".repeat(64) }); },
     (s) => {
       plan(s, 3);
@@ -496,6 +517,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
     interrupt: async (id) => {
       const s = must(id);
       if (s.timer) { clearTimeout(s.timer); s.timer = null; }
+      draftTo(s, "");
       s.paused = true;
       turnEnd(s, null, "interrupted");
       setStatus(s, "idle");
@@ -504,6 +526,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
     kill: async (id) => {
       const s = must(id);
       if (s.timer) { clearTimeout(s.timer); s.timer = null; }
+      draftTo(s, "");
       s.paused = true;
       finishBackground(s, "stopped");
       setStatus(s, "exited", "强停");
@@ -618,12 +641,13 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
       const commit = mergeInto(s)!;
       return { merged: true, commit, session: summaryOf(s) };
     },
-    watch: async (id: string, { after, onEvent, onLink, signal }: EventWatch) => {
+    watch: async (id: string, { after, onEvent, onDraft, onLink, signal }: EventWatch) => {
       const s = must(id);
       onLink?.(true);
       for (const event of s.log) if (event.seq > after) onEvent(event);
       const off = listen(s, onEvent);
-      await new Promise<void>((resolve) => signal.addEventListener("abort", () => { off(); resolve(); }, { once: true }));
+      if (onDraft) s.drafters.add(onDraft);
+      await new Promise<void>((resolve) => signal.addEventListener("abort", () => { off(); if (onDraft) s.drafters.delete(onDraft); resolve(); }, { once: true }));
     },
   };
 
@@ -646,7 +670,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
     const full = slots().running >= maxConcurrent || busy || waitingFor.length > 0;
     const s: MockSession = {
       summary: { id, subject: body.subject, title: body.title, agent: model.agent, modelProfileId: model.id, modelLabel: model.label, cwd: body.cwd ?? "topics", status: full ? "queued" : "starting", permissionMode: body.permissionMode ?? "auto", run: runFor(model, "auto", body.effort ?? null), ...(body.effort ? { effort: body.effort } : {}), includePersonalConfig: Boolean(body.includePersonalConfig), createdAt: now(), updatedAt: now(), lastSeq: 0, pendingPermissions: 0, queuePosition: full ? slots().queued + 1 : null, usage: { ...ZERO }, ...(workspace && !waitingFor.length ? { workspace } : {}), ...(waitingFor.length ? { waitingFor } : {}) },
-      log: [], listeners: new Set(), script: body.subject.kind === "plan" ? planner : body.subject.kind === "verify" ? verifier : script, cursor: 0, timer: null, pending: null, paused: false, denied: false, mergeTries: 0,
+      log: [], listeners: new Set(), drafters: new Set(), script: body.subject.kind === "plan" ? planner : body.subject.kind === "verify" ? verifier : script, cursor: 0, timer: null, pending: null, paused: false, denied: false, mergeTries: 0,
       ...(waitingFor.length ? { waits: { workspace } } : {}),
     };
     sessions.set(id, s);

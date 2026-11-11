@@ -79,7 +79,7 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
   const scroll = useConversationScroll({ streaming: false, resetKey: cardId });
   const ready = local.phase === "ready";
   const session = ready ? latestSessionFor(local.sessions, { cardId }) : null;
-  const { view } = useSessionEvents(local.runner, session?.id ?? null);
+  const { view, draft, drafted } = useSessionEvents(local.runner, session?.id ?? null, { drafts: true });
   useModelChangedRefresh(view.entries, local.refresh);
   const mode = useSessionMode(local.runner, session, view);
   const models = useSessionModels(local.runner, local.models, session, local.refresh, () => showWorkspaceToast({ text: "没换成" }), local.status);
@@ -181,7 +181,7 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
         <div className={s.scroll} ref={scroll.scrollRef}>
           <div ref={scroll.contentRef}>
             {session ? (
-              <SessionTranscript entries={send.entries} agentName={agentName} canAct={canAct} onResend={(entry) => void say(entry.text).catch(() => showWorkspaceToast({ text: "没发出去" }))} onRetry={send.retry} device={device} live={sessionRunning} starting={status === "starting"} ended={ended} relay={relay} lead={`交代：${item.title}${item.card?.criterion ? ` · 按「${item.card.criterion.text}」验收` : ""}`}
+              <SessionTranscript entries={send.entries} agentName={agentName} canAct={canAct} onResend={(entry) => void say(entry.text).catch(() => showWorkspaceToast({ text: "没发出去" }))} onRetry={send.retry} draft={draft} drafted={drafted} device={device} live={sessionRunning} starting={status === "starting"} ended={ended} relay={relay} lead={`交代：${item.title}${item.card?.criterion ? ` · 按「${item.card.criterion.text}」验收` : ""}`}
                 onFile={openFile}
                 onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={asking} asking={question} />
             ) : <CloudTimeline run={run} title={item.title} />}

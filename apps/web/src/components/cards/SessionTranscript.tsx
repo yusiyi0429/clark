@@ -10,8 +10,8 @@
  * 一按发送就先画出来（useSessionSend）：淡一点、写「发送中」，事件流里同编号的那句来了换成真的；没发出去写「没发出去 · 重发」。
  * canAct=false（手机、别的电脑、本机没连）时选项框不给选项，头上写「等你 · {电脑名}」。
  */
-import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import Markdown, { type Components } from "react-markdown";
+import { createContext, memo, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { Components } from "react-markdown";
 import { ChevronRight } from "lucide-react";
 import { questionNotice, type SessionEntry, type SessionView } from "@/lib/local/sessionView";
 import type { LocalRunner, TLocalModelProfile, TLocalSessionSummary, TLocalPermissionRequestView, TLocalQuestionRequestView, TLocalSessionStatus } from "@/lib/local/runner";
@@ -29,9 +29,10 @@ import { ApprovalDecision, DENY_MAX, awayChip } from "@/components/work/decision
 import { DecisionBox, FailedLine } from "@/components/work/DecisionBox";
 import { HeroButton } from "@/components/HeroButton";
 import { ICON, StateIcon, type IconState } from "@/components/home/StateIcon";
-import { ReceiptFailed, ReceiptSending, ReceiptTicks } from "@/conversation/Transcript";
+import { MarkdownBody, ReceiptFailed, ReceiptSending, ReceiptTicks, type MarkdownParts } from "@/conversation/Transcript";
 import h from "@/styles/home.module.css";
 import s from "@/styles/v2-session.module.css";
+import ts from "@/styles/conversation-transcript.module.css";
 
 const hhmm = (iso: string) => new Date(iso).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 
@@ -133,31 +134,50 @@ function groupEntries(entries: SessionEntry[]): Item[] {
   return items.filter((item) => item.kind !== "process" || item.rows.length > 0);
 }
 
-/** 回答里的链接新开一页。 */
 /** 回答里提到的一处（行内代码、链接的地址）能不能点开看：对得上本会话改过的文件或交出的产出才给，回 null 就照原样画。 */
 export type OpenFile = (mention: string) => (() => void) | null;
+/**
+ * 打开文件的办法走 context，不进 Markdown 的部件：改动清单一刷新，只有提到文件的那几处重画（能不能点跟着最新的清单），
+ * 整段回答不重新解析。
+ */
+const OpenFileContext = createContext<OpenFile | null>(null);
 const decoded = (href: string) => { try { return decodeURIComponent(href); } catch { return href; } };
-const markdownParts = (onFile?: OpenFile): Components => ({
-  a: ({ href, children }) => {
-    const open = href ? onFile?.(decoded(href)) ?? null : null;
-    return open ? <button type="button" className={s.fileLink} onClick={open} data-testid="file-open">{children}</button> : <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
-  },
-  code: ({ className, children }) => {
-    // 只认行内的一小段（代码块带 language- 类或有换行）。
-    const text = typeof children === "string" && !className && !children.includes("\n") ? children : null;
-    const open = text ? onFile?.(text) ?? null : null;
-    return open ? <code><button type="button" className={s.fileLink} onClick={open} data-testid="file-open">{text}</button></code> : <code className={className}>{children}</code>;
-  },
-});
+/** 回答里的链接：对得上文件就是打开它的按钮，不然新开一页。 */
+function MentionLink({ href, children }: { href?: string; children?: ReactNode }) {
+  const onFile = useContext(OpenFileContext);
+  const open = href ? onFile?.(decoded(href)) ?? null : null;
+  return open ? <button type="button" className={s.fileLink} onClick={open} data-testid="file-open">{children}</button> : <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
+}
+/** 行内代码：只认行内的一小段（代码块带 language- 类或有换行）。 */
+function MentionCode({ className, children }: { className?: string; children?: ReactNode }) {
+  const onFile = useContext(OpenFileContext);
+  const text = typeof children === "string" && !className && !children.includes("\n") ? children : null;
+  const open = text ? onFile?.(text) ?? null : null;
+  return open ? <code><button type="button" className={s.fileLink} onClick={open} data-testid="file-open">{text}</button></code> : <code className={className}>{children}</code>;
+}
+/** 子会话正文的 Markdown 部件（不认伙伴对话的出处标记和公式：命令里的 $ 不当公式）。 */
+const SESSION_PARTS: MarkdownParts = { components: { a: MentionLink, code: MentionCode } as Components, remarkPlugins: REMARK_PLUGINS, rehypePlugins: [] };
 
 /**
  * 执行方说的话按 Markdown 排（41 条）：标题、列表、表格、加粗、代码、链接；字号行距跟着这条回答，不比正文大。
- * 流式时一条回答会重画很多次，文字没变就不重排。
+ * 用伙伴对话的出字组件（MarkdownBody）和它的排法（.prose，一套）：按顶层块分开解析、文字没变就不重排；fresh（页面开着时刚到的）新字淡入。
  */
-export const AgentText = memo(function AgentText({ text, onFile }: { text: string; onFile?: OpenFile }) {
-  const parts = useMemo(() => markdownParts(onFile), [onFile]);
-  return <div className={s.md}><Markdown remarkPlugins={REMARK_PLUGINS} components={parts}>{text}</Markdown></div>;
+export const AgentText = memo(function AgentText({ text, fresh = false }: { text: string; fresh?: boolean }) {
+  return <div className={`${ts.prose} ${s.md}`}><MarkdownBody text={text} streaming={false} fresh={fresh} parts={SESSION_PARTS} /></div>;
 });
+
+/** 执行方正在写的那一段（本机推的草稿）：按字匀速放出、新字淡入，这一段写完换成真的那条。 */
+function DraftBubble({ text, agentName }: { text: string; agentName: string }) {
+  return <div className={s.bubble} data-testid="session-draft"><small className={s.who}>{agentName}</small><div className={`${ts.prose} ${s.md}`}><MarkdownBody text={text} streaming parts={SESSION_PARTS} /></div></div>;
+}
+
+/** 刚到多久以内算「页面开着时到的」（打开时从头重放的历史早于它，不淡入）。 */
+const FRESH_MS = 5000;
+/** 执行方的一段话：挂上那一刻看它是不是刚到的，之后不再变。drafted：这一段已经按草稿一个字一个字出过了，换成真的时不再整段淡入。 */
+function AssistantBubble({ entry, agentName, drafted }: { entry: Extract<SessionEntry, { kind: "assistant" }>; agentName: string; drafted: boolean }) {
+  const [fresh] = useState(() => !drafted && Date.now() - Date.parse(entry.at) < FRESH_MS);
+  return <div className={s.bubble}><small className={s.who}>{agentName}</small><AgentText text={entry.text} fresh={fresh} /></div>;
+}
 
 /** 没做完的那一步：会话还在跑就是进行中，不在跑了就是停在那儿了。 */
 const stepState = (step: Step, live: boolean): IconState => step.isError ? "failed" : step.done ? "done" : live ? "running" : "stopped";
@@ -204,7 +224,7 @@ function StepRow({ row, live }: { row: ProcessRow; live: boolean }) {
  * 一段过程一行（28 条，照 Claude Code）：收着时写总结和这一段的用时，点开一步一行。
  * running（会话在跑、这一段在最后）：转圈加当前那一步的标题；做完了收成总结。
  */
-function ProcessGroup({ process, live, running }: { process: Process; live: boolean; running: boolean }) {
+const ProcessGroup = memo(function ProcessGroup({ process, live, running }: { process: Process; live: boolean; running: boolean }) {
   const [open, setOpen] = useState(false);
   const counted = process.rows.filter((row) => !row.note);
   const summary = counted.length ? processSummary(counted.map((row) => row.step.title)) : process.rows.map((row) => row.step.title).join(" · ");
@@ -223,6 +243,12 @@ function ProcessGroup({ process, live, running }: { process: Process; live: bool
       </div>
     </div>
   );
+}, (a, b) => a.live === b.live && a.running === b.running && sameProcess(a.process, b.process));
+
+/** 一段过程画出来一样不一样（每来一条事件都重新分组，对象是新的，按内容比）。 */
+function sameProcess(a: Process, b: Process): boolean {
+  return a.seq === b.seq && a.start === b.start && a.end === b.end && a.rows.length === b.rows.length
+    && a.rows.every((row, index) => { const other = b.rows[index]!; return row.denied === other.denied && row.note === other.note && row.step.seq === other.step.seq && row.step.title === other.step.title && row.step.done === other.step.done && row.step.isError === other.step.isError; });
 }
 
 const noop = () => undefined;
@@ -322,7 +348,9 @@ export function RelayLine({ text, onGo }: { text: string; onGo: () => void }) {
 
 type UserEntry = Extract<SessionEntry, { kind: "user" }>;
 
-export function SessionTranscript({ entries, agentName, canAct, device, onDecide, lead, tail, asking, live, starting = false, ended = false, relay, onResend, onRetry, onFile }: {
+const NO_DRAFTED: ReadonlySet<number> = new Set();
+
+export function SessionTranscript({ entries, agentName, canAct, device, onDecide, lead, tail, asking, live, starting = false, ended = false, relay, onResend, onRetry, onFile, draft = null, drafted = NO_DRAFTED }: {
   entries: SessionEntry[];
   agentName: string;
   canAct: boolean;
@@ -349,16 +377,20 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
   onRetry?: (messageId: string) => void;
   /** 「交出 文件名」那一行能不能点开看（41 条）：对得上交出的产出时回打开的办法，对不上回 null（不能点，不猜）。 */
   onFile?: OpenFile;
+  /** 执行方正在写的那一段（useSessionEvents 的草稿）；没有为 null。drafted：按草稿出过的那几段的编号。 */
+  draft?: string | null;
+  drafted?: ReadonlySet<number>;
 }) {
   const pending = ended ? [] : entries.flatMap((entry) => (entry.kind === "permission" && !entry.decision ? [entry.request] : []));
   const firstPending = pending[0]?.requestId;
   const askingText = asking ? questionNotice(asking) : null;
   const lastAsk = askingText ? entries.map((entry) => entry.kind === "notice" && entry.text === askingText).lastIndexOf(true) : -1;
-  const items = groupEntries(entries.filter((_, index) => index !== lastAsk));
+  const items = useMemo(() => groupEntries(entries.filter((_, index) => index !== lastAsk)), [entries, lastAsk]);
   // 在跑、没在等你：最后一段过程就是正在做的（转圈加当前那一步）；最后不是过程（刚说完、在想）时出「在跑」那一行。
   const busy = live && !pending.length && !asking;
   const tailProcess = items[items.length - 1]?.kind === "process";
   return (
+    <OpenFileContext.Provider value={onFile ?? null}>
     <div className={s.feed}>
       {lead ? <span className={s.evt}>{lead}</span> : null}
       {items.map((entry, index) => {
@@ -372,14 +404,14 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
                   ))}
                 </ul>
               ) : null}
-              {entry.initial ? <AgentText text={entry.text} onFile={onFile} /> : entry.text}
+              {entry.initial ? <AgentText text={entry.text} /> : entry.text}
             </div>,
             entry.local === "sending" ? <ReceiptSending key={`${entry.seq}:receipt`} className={s.meReceipt} />
               : entry.local === "unsent" ? <ReceiptFailed key={`${entry.seq}:receipt`} className={s.meReceipt} label="没发出去" onResend={canAct && onRetry && entry.messageId ? () => onRetry(entry.messageId!) : undefined} />
               : entry.receipt === "failed" ? <ReceiptFailed key={`${entry.seq}:receipt`} className={s.meReceipt} label="没读到" onResend={canAct && entry.text ? () => onResend?.(entry) : undefined} />
               : entry.receipt ? <ReceiptTicks key={`${entry.seq}:receipt`} className={s.meReceipt} state={entry.receipt} /> : null,
           ];
-          case "assistant": return <div key={entry.seq} className={s.bubble}><small className={s.who}>{agentName}</small><AgentText text={entry.text} onFile={onFile} /></div>;
+          case "assistant": return <AssistantBubble key={entry.seq} entry={entry} agentName={agentName} drafted={drafted.has(entry.seq)} />;
           case "process": return <ProcessGroup key={entry.seq} process={entry} live={live} running={busy && index === items.length - 1} />;
           case "asked": return <DecisionBox key={entry.seq} kind="question" title={entry.question} options={[]} onPick={noop} resolved={entry.answer ?? undefined} expired={entry.answer === null} />;
           case "permission":
@@ -395,9 +427,11 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
           case "notice": return <span key={entry.seq} className={s.evt} data-level={entry.level}>{entry.text}</span>;
         }
       })}
-      {busy && !tailProcess ? <WorkingRow since={roundStart(entries)} starting={starting} /> : null}
+      {draft ? <DraftBubble text={draft} agentName={agentName} /> : null}
+      {busy && !tailProcess && !draft ? <WorkingRow since={roundStart(entries)} starting={starting} /> : null}
       {tail}
     </div>
+    </OpenFileContext.Provider>
   );
 }
 
