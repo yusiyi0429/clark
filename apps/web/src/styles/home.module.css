@@ -374,6 +374,8 @@ button.today:hover .todayIcon, .today[aria-current="page"] .todayIcon { color: v
 .wait:hover { background: var(--default-soft); }
 .waitMain { display: grid; flex: 1; align-content: center; min-width: 0; min-height: var(--row-48); padding: 6px var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
 .waitTitle { overflow: hidden; font-size: var(--text-base); line-height: var(--lh-row); text-overflow: ellipsis; white-space: nowrap; }
+/* 摘要（主循环第 66 条）：第一行下面，12/16 次一级的墨色，放不下省略。 */
+.waitSummary { overflow: hidden; color: var(--ink-muted); font-size: var(--text-xs); line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
 /* 第二行（9.6、9.10）：请你认可的先是对方 16 的头像和名字，再来源，再截止「剩 2 天」；不到 24 小时、已过截止用 --warning。来源放不下省略，截止不省略。 */
 .waitSource { display: flex; align-items: center; gap: var(--space-1); min-width: 0; color: var(--ink-faint); font-size: var(--text-xs); line-height: 16px; white-space: nowrap; }
 .waitAvatar { margin-right: var(--space-1); }

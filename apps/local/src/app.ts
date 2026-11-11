@@ -12,7 +12,7 @@ import { CustomTools } from "./customTools.js";
 import { readsTokenHubSpend } from "./modelOrigin.js";
 import { Folders } from "./folders.js";
 import { Outbox } from "./outbox.js";
-import { CloudLink, Settings, fetchAttachment, fetchVerifyBrief } from "./cloud.js";
+import { CloudLink, Settings, fetchAttachment, fetchCardAgreement, fetchVerifyBrief } from "./cloud.js";
 import { MAX_ATTACHMENT_BYTES } from "./attachments.js";
 import { cloneRepo } from "./handover.js";
 import { SessionManager, type SessionDeps } from "./sessions.js";
@@ -157,6 +157,7 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
     autoMerge: () => settings.get().autoMerge,
     quota, codexQuota, pricing, budgets, holdTiming: opts.holdTiming,
     verifyBrief: async (handbackKey) => fetchVerifyBrief(await cloud.target(), handbackKey, cloudFetch),
+    cardAgreement: async (cardId) => fetchCardAgreement(await cloud.target(), cardId, cloudFetch),
     fetchAttachment: async (id) => fetchAttachment(await cloud.target(), id, cloudFetch, MAX_ATTACHMENT_BYTES),
     adapters: {
       "claude-code": new ClaudeCodeAdapter(claudeBin),

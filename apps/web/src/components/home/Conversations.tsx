@@ -51,7 +51,10 @@ export type Outbox = OutboxEntry[];
 
 const NO_BLOCKS: TimedBlock[] = [];
 
-/** 输入框下面一行的右边：最近一轮实际用的「来源 · 模型」（走 Chat 的才有；由 Chat 的配置定，不能点）。 */
+/** 同一条对话里换了模型（67 条）：在换的那一处画一行「换成 来源 · 模型」，样子同「11 月目标」那条分隔线。 */
+const modelRule = (label: string) => <p className={h.monthRule} role="separator" data-testid="model-rule">换成 {label}</p>;
+
+/** 输入框下面一行的右边：最近一轮实际用的「来源 · 模型」（67 条，走 Chat 的才有；由 Chat 的配置定，不能点）。 */
 export function ModelText({ data }: { data: Pick<ConversationData, "model"> }) {
   const label = chatModelLabel(data.model);
   return label ? <FootText testId="chat-model">{label}</FootText> : null;
@@ -139,7 +142,7 @@ export function BuddyView({ buddy, outbox, consume, onSpeaking, context = null, 
               {chrome.trail}
             </header>
           )}
-          timeline={(current) => <WorkTimeline data={current} blocks={NO_BLOCKS} />}
+          timeline={(current) => <WorkTimeline data={current} blocks={NO_BLOCKS} modelRule={modelRule} />}
           dock={(latest) => <PendingDock latest={latest} />}
           input={(onHeight) => <ChatInput data={data} placeholder={`与${name}讨论…`} onHeight={onHeight} footer={{ right: <ModelText data={data} /> }}
             context={context ? { label: context, onClear: () => onClearContext?.() } : null} />} />
@@ -374,7 +377,7 @@ function PipelineBody({ data, project, tasks, api, buddy, outbox, consume, go, o
               </header>
             </>
           )}
-          timeline={(current) => <WorkTimeline data={current} blocks={blocks} />}
+          timeline={(current) => <WorkTimeline data={current} blocks={blocks} modelRule={modelRule} />}
           dock={(latest) => <PendingDock latest={latest} />}
           input={readOnly ? () => null : (onHeight) => <ChatInput data={data} placeholder={handheld ? "说点什么…" : `与${project.name}讨论…`} onHeight={onHeight} footer={{
             left: folder,

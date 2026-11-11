@@ -6,7 +6,7 @@
  * 有了正文以后能开「评审会」（第 19.1、19.6 节）：选 2–3 个挑刺的岗位，本机并行挑刺、合成一份，存成「评审」那一版，按「分歧和建议」排版。
  * 版本由本机经同步报到云端；对话全文只在本机。手机和别的电脑上只能看版本。
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import Markdown from "react-markdown";
 import { ChevronLeft, Info } from "lucide-react";
@@ -27,7 +27,7 @@ import { useConversationScroll } from "@/conversation/useConversationScroll";
 import { latestSessionFor, useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { useSessionEvents } from "@/lib/local/useSessionEvents";
 import { useSessionMode } from "@/components/cards/PermissionMode";
-import { HARNESS_NAME, defaultSourceLabel, runLabel, sessionModelText } from "@/lib/local/runModel";
+import { HARNESS_NAME, runLabel, sessionModelText } from "@/lib/local/runModel";
 import { placeText, shortPlace } from "@/lib/work/merge";
 import { contextUsage, localWait, running } from "@/lib/local/sessionView";
 import { startTopic } from "@/lib/local/start";
@@ -40,8 +40,11 @@ import s from "@/styles/v2-session.module.css";
 /**
  * embedded：放在新首页的展示区里——没有返回键。页头右边的信息图标：桌面上在右栏打开当前版本，对话留着；手机上照旧在「对话」和「当前版本」之间切。
  * waiting：首页数据里这个专题在等什么（左栏的点用的那一份）；页头标签和钉在输入框上方的框从它和本机事件流算（第 54 条，同卡的子会话）。
+ * queued：首页数据里它在排队时的状态词（「已排队 · 等 B 改登录页 这一轮做完」，第 68 条），页头照写；不在排队为 null。
+ * ask：钉在输入框上方的另一个框（自由子会话等着项目绑文件夹时的「在哪个文件夹开工？」），有它时先出它。
+ * 自由子会话（topic.free，第 68 条，项目下的「+」开的）：界面上就是一个子会话，没有提纲、版本、评审会、存飞书，页头不出「当前版本」。
  */
-export function TopicSession({ topicId, embedded = false, waiting = null }: { topicId: string; embedded?: boolean; waiting?: Attention | null }) {
+export function TopicSession({ topicId, embedded = false, waiting = null, queued = null, ask = null }: { topicId: string; embedded?: boolean; waiting?: Attention | null; queued?: string | null; ask?: ReactNode }) {
   const chrome = useViewChrome();
   const [reading, setReading] = useState(false);
   const side = useSideDetail();
@@ -99,6 +102,7 @@ export function TopicSession({ topicId, embedded = false, waiting = null }: { to
   if (!detail) return <div className={s.page} aria-busy />;
 
   const { topic } = detail;
+  const free = !!topic.free;
   const shown = version ?? detail.current;
   const hasDraft = detail.versions.some((entry) => entry.kind === "draft");
   const wait = session ? localWait(view) : null;
@@ -125,8 +129,9 @@ export function TopicSession({ topicId, embedded = false, waiting = null }: { to
   const away = canAct ? null : awayChip(device);
   const placeholder = (kind: "approval" | "question") => <DecisionBox kind={kind} title={ATTENTION_LABEL[kind]} options={[]} onPick={() => undefined} blocked={away ?? awayChip(device)} />;
   const pinned = !embedded ? null
+    : ask ? ask
     : attention === "approval" ? (view.lastSeq && view.pending.length
-      ? <ApprovalDecision requests={view.pending} blocked={away} onDecide={(request, decision, options) => decide(request.requestId, decision, options)} />
+      ? <ApprovalDecision requests={view.pending} blocked={away} inWorktree={session?.workspace?.kind === "worktree"} onDecide={(request, decision, options) => decide(request.requestId, decision, options)} />
       : placeholder("approval"))
     : attention === "question" ? asking ?? placeholder("question") : null;
   const toPending = async () => {
@@ -171,14 +176,15 @@ export function TopicSession({ topicId, embedded = false, waiting = null }: { to
 
   const state = wait ? <span className={s.tag} data-tone={waitTone(wait)}>{WAIT_LABEL[wait]}</span> : <span className={s.tag} data-tone={topic.status === "archived" ? undefined : "ver"}>{topic.status === "archived" ? "已归档" : "进行中"}</span>;
   // 输入框下面一行的右边写「执行方 · 模型」（21 条），来源在悬停里；没有时退回「来源 · 模型」、再退回云端记的。文件夹在左边。
-  const model = (session ? sessionModelText(session, local.models.find((entry) => entry.id === session.modelProfileId)?.efforts, defaultSourceLabel(local.models)) : null) ?? ((label) => (label ? { label, title: null } : null))(runLabel(session?.run) ?? topic.run?.modelLabel ?? null);
+  const model = (session ? sessionModelText(session, local.models.find((entry) => entry.id === session.modelProfileId)?.efforts) : null) ?? ((label) => (label ? { label, title: null } : null))(runLabel(session?.run) ?? topic.run?.modelLabel ?? null);
   const place = session?.workspace ? { name: shortPlace(session.workspace), title: placeText(session.workspace) } : null;
   const chat = (
     <PendingBoxes>
       <div className={s.chat}>
         <div className={s.scroll} ref={scroll.scrollRef}>
           <div ref={scroll.contentRef}>
-            {session ? <SessionTranscript entries={send.entries} agentName={HARNESS_NAME[session.agent]} canAct={canAct} onResend={(entry) => void say(entry.text).catch(() => showWorkspaceToast({ text: "没发出去" }))} onRetry={send.retry} draft={draft} drafted={drafted} device={device} live={running(status)} starting={status === "starting"} ended={ended} pinned={embedded} onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={embedded ? null : asking} asking={question} />
+            {session ? <SessionTranscript entries={send.entries} agentName={HARNESS_NAME[session.agent]} canAct={canAct} onResend={(entry) => void say(entry.text).catch(() => showWorkspaceToast({ text: "没发出去" }))} onRetry={send.retry} draft={draft} drafted={drafted} device={device} live={running(status)} starting={status === "starting"} ended={ended} pinned={embedded} onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={embedded ? null : asking} asking={question}
+              stopped={embedded ? view.stopped : null} onResume={canAct ? () => void say("接着做").catch(() => showWorkspaceToast({ text: "没发出去" })) : undefined} />
               : <div className={s.feed}><span className={s.evt}>{topic.title}</span>
                   {ready && topic.status === "active" && !embedded ? <div className={s.actions}><HeroButton variant="primary" size="sm" onPress={() => setStarting(true)}>开始</HeroButton></div> : null}
                 </div>}
@@ -207,9 +213,11 @@ export function TopicSession({ topicId, embedded = false, waiting = null }: { to
   </>;
   // 新首页的展示区：一行页头（名字、状态、文档图标），下面是对话；点文档图标换成当前版本（手机上默认看文档）。
   if (embedded) {
-    const showDoc = side ? side.open : reading || (handheld && !session);
+    const showDoc = !free && (side ? side.open : reading || (handheld && !session));
     // 页头的状态 chip（5.4.3）：中性、警告、等你（中性底加圆点）；不在这台电脑上又在等你时写「等你 · {电脑名}」。
-    const chipOf = attention || wait ? stateChip(attention, wait, "doing", !canAct && device ? awayChip(device) : null) : { text: topic.status === "archived" ? "已归档" : "进行中", tone: "neutral" as const };
+    const chipOf = attention ? stateChip(attention, wait, "doing", !canAct && device ? awayChip(device) : null)
+      : queued ? { text: queued, tone: "neutral" as const }
+      : wait ? stateChip(attention, wait, "doing", !canAct && device ? awayChip(device) : null) : { text: topic.status === "archived" ? "已归档" : "进行中", tone: "neutral" as const };
     return (
       <div className={s.page} data-embedded="" data-testid="topic-session">
         <header className={s.embedHead}>
@@ -217,11 +225,11 @@ export function TopicSession({ topicId, embedded = false, waiting = null }: { to
           <b className={s.embedTitle}>{chrome.parent}{chrome.letter}<span className={s.embedName}>{topic.title}</span></b>
           <span className={s.stateChip} data-tone={chipOf.tone}>{chipOf.tone === "wait" ? <i aria-hidden /> : null}{chipOf.text}</span>
           <span className={s.exec} />
-          <HeroButton variant="ghost" size="sm" isIconOnly aria-label="当前版本" title="当前版本" data-pressed={showDoc || undefined} onPress={() => (side ? side.toggle() : setReading(!showDoc))} data-testid="session-details"><Info {...ICON} aria-hidden /></HeroButton>
+          {free ? null : <HeroButton variant="ghost" size="sm" isIconOnly aria-label="当前版本" title="当前版本" data-pressed={showDoc || undefined} onPress={() => (side ? side.toggle() : setReading(!showDoc))} data-testid="session-details"><Info {...ICON} aria-hidden /></HeroButton>}
           {chrome.trail}
         </header>
         <div className={s.body} data-solo="">{showDoc && !side ? <div className={s.paneScroll}>{doc}</div> : chat}</div>
-        {side ? <SideContent side={side}><div className={s.page} data-embedded="" data-side="">{doc}</div></SideContent> : null}
+        {side && !free ? <SideContent side={side}><div className={s.page} data-embedded="" data-side="">{doc}</div></SideContent> : null}
         {dialogs}
       </div>
     );

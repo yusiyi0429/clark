@@ -2,7 +2,7 @@
 
 /**
  * 项目对话输入框下面右边的模型（17.2 第 36、40 条，B 契约 f508dda5；天枢伙伴的对话没有）：
- * 胶囊写「模型名 · 思考档」（思考是自动时只写模型名），点开是三行——来源、模型、思考（components/home/ModelPanel）。
+ * 胶囊写「来源 · 模型 · 思考」（67 条，modelLine；思考是自动时不写），点开是三行——来源、模型、思考（components/home/ModelPanel）。
  * 思考那一页「自动」是这个模型自己的默认档（右边淡色写是哪档），别的几档列在下面，off 写「不思考」。
  * 选了交给云端（PUT /api/me/projects/:projectId/pipeline/model），下一轮起生效；选回默认那个模型加自动就是「没选」（choice = null，照 Chat 配的）。
  * 没改成在旁边写「没改成」加「重试」。能选的为空（没接 Chat）时不出选择。
@@ -12,7 +12,7 @@ import type { TConversationModelChoice, TConversationModelOption, TModelEffort }
 import { HeroButton } from "@/components/HeroButton";
 import { listConversationModels, readPipelineModel, setPipelineModel } from "@/lib/board/cloud";
 import { AUTO_EFFORT, ROW_NAME, type PanelRow, type PanelRowKey } from "@/lib/local/modelPanel";
-import { effortText } from "@/lib/local/runModel";
+import { effortText, modelDisplayName, modelLine } from "@/lib/local/runModel";
 import { FootText } from "./InputFooter";
 import { ModelPanel } from "./ModelPanel";
 
@@ -26,12 +26,12 @@ export function pipelineCurrent(models: readonly TConversationModelOption[], cho
   return { model, effort, auto: !model || effort === model.defaultEffort };
 }
 
-/** 胶囊上写的：「模型名 · 思考档」，思考是自动时只写模型名；悬停写来源和思考。 */
+/** 胶囊上写的：「来源 · 模型 · 思考」（67 条），思考是自动时不写；悬停写全来源（如「TokenHub · 网宿」）和思考。 */
 export function pipelineLabel(models: readonly TConversationModelOption[], choice: TConversationModelChoice | null): { label: string; title: string } | null {
   const { model, effort, auto } = pipelineCurrent(models, choice);
   if (!model) return null;
   const level = effortText(auto ? null : effort);
-  return { label: auto ? model.label : `${model.label} · ${level}`, title: [model.label, model.source, `思考 ${level}`].join(" · ") };
+  return { label: modelLine({ source: model.source, model: model.label, effort: auto ? null : effort })!, title: [model.source, modelDisplayName(model.label), `思考 ${level}`].join(" · ") };
 }
 
 /** 三行：来源、模型、思考。 */
@@ -41,7 +41,8 @@ export function pipelineRows(models: readonly TConversationModelOption[], choice
   const sources = [...new Set(models.map((entry) => entry.source))];
   return [
     { key: "source", name: ROW_NAME.source, value: model.source, selected: model.source, options: sources.map((source) => ({ id: source, label: source })) },
-    { key: "model", name: ROW_NAME.model, value: model.label, selected: keyOf(model), options: models.filter((entry) => entry.source === model.source).map((entry) => ({ id: keyOf(entry), label: entry.label })) },
+    { key: "model", name: ROW_NAME.model, value: modelDisplayName(model.label), selected: keyOf(model),
+      options: models.filter((entry) => entry.source === model.source).map((entry) => ({ id: keyOf(entry), label: modelDisplayName(entry.label) })) },
     { key: "effort", name: ROW_NAME.effort, value: effortText(auto ? null : effort), selected: auto || !effort ? AUTO_EFFORT : effort,
       options: [{ id: AUTO_EFFORT, label: effortText(null), note: effortText(model.defaultEffort) },
         ...model.efforts.filter((entry) => entry !== model.defaultEffort).map((entry) => ({ id: entry, label: effortText(entry) }))] },

@@ -148,6 +148,24 @@ describe("选项框", () => {
     expect(push).toContain("对外");
   });
 
+  it("批准说人话（主循环第 64 条）：第一行是 description，第二行「会动：文件名」，命令收进「命令」默认不展开；工作树里的会话默认展开；没有 description 照原样", () => {
+    const said = { description: "查 3 个候选名在商标网上有没有近似", paths: ["notes/trademark.md", "C:/work/brand/names.csv", "a.txt", "b.txt"] };
+    const html = renderToStaticMarkup(<ApprovalDecision requests={[permission("p5", said)]} onDecide={vi.fn()} />);
+    const page = text(html);
+    expect(page.trim().startsWith("查 3 个候选名在商标网上有没有近似")).toBe(true);
+    expect(page).toContain("会动：trademark.md、names.csv、a.txt 等 4 个");
+    expect(page).toContain("命令");
+    expect(page).not.toContain("pnpm --filter @warmap/web test");
+    expect(page).not.toContain("运行 pnpm test");
+    expect(html).toMatch(/aria-expanded="false"[^>]*data-testid="approval-command"/);
+    const tree = text(renderToStaticMarkup(<ApprovalDecision requests={[permission("p5", said)]} inWorktree onDecide={vi.fn()} />));
+    expect(tree).toContain("pnpm --filter @warmap/web test");
+    const plain = text(renderToStaticMarkup(<ApprovalDecision requests={[permission("p6")]} onDecide={vi.fn()} />));
+    expect(plain).toContain("运行 pnpm test");
+    expect(plain).not.toContain("会动");
+    expect(plain).toContain("pnpm --filter @warmap/web test");
+  });
+
   it("手机和别的电脑上只显示要做的事，不给选项，写到电脑上处理", () => {
     const html = renderToStaticMarkup(<ApprovalDecision requests={[permission("p1")]} blocked="到电脑上处理" onDecide={vi.fn()} />);
     expect(html).toContain("到电脑上处理");

@@ -47,7 +47,7 @@ export function buddyQuestionOpen(card: { status: string }, messages: readonly {
   return card.status === "open" && !messages.slice(index + 1).some((message) => message.role === "user");
 }
 
-export function WorkTimeline({ data, blocks }: { data: ConversationData; blocks: TimedBlock[] }) {
+export function WorkTimeline({ data, blocks, modelRule }: { data: ConversationData; blocks: TimedBlock[]; modelRule?: (label: string) => ReactNode }) {
   const lastIndex = data.messages.length - 1;
   const last = data.messages[lastIndex];
   const options = !data.streaming && last?.role === "assistant" ? parseAnswerOptions(last.content).options : [];
@@ -70,7 +70,7 @@ export function WorkTimeline({ data, blocks }: { data: ConversationData; blocks:
     <RescopeContext.Provider value={rescope}>
     <AskContext.Provider value={ask}>
     {blocksAt(-1)}
-    <ConversationTurns messages={data.messages} partial={data.streaming ? data.partial : ""} status={status}
+    <ConversationTurns messages={data.messages} partial={data.streaming ? data.partial : ""} status={status} modelRule={modelRule}
       trailing={!data.streaming && data.localTurn ? <LocalTurnRow turn={data.localTurn} /> : undefined}
       thought={data.thought?.seconds != null ? { text: data.thought.text, seconds: data.thought.seconds } : null}
       steps={!data.thinking || data.stage === "answering" ? data.steps : null}

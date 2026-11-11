@@ -6,9 +6,16 @@ import { CARD_TITLE_RULE } from "./cardTitle.js";
  * 工作规矩写在这里（V2 设计 6.6），岗位的职责、做法、验收口径原样接在后面。都写在本机程序自己的数据目录，不进本人的仓库。
  */
 
+/** 只改让改的那一处（主循环第 72 条）：卡和专题都用；以后的自由子会话也照这条。 */
+export const EDIT_SCOPE_RULE = "- 本人让改某一处时只改那一处：别处觉得也该改（措辞、格式、相邻的段落），先说，不动手。改完用一句话说改了哪几处。";
+
 const CARD_RULES = `## 规矩
 - 产出写在当前工作目录里，用 add_artifact 交；证据（说明、日志片段、链接、改动摘要）用 add_evidence 交。两个工具都会返回编号（A1、E1）。
-- 做完用 hand_back 交回：对照完成标准逐条写达到、部分还是没达到，附证据，点名用到的产出和证据编号，再写一句总结。交回后由验收员验收，没过会把意见发回来，照着改完再交回。
+- 做完用 hand_back 交回：对照完成标准逐条写达到、部分、没达到还是要本人补，附证据，点名用到的产出和证据编号，再写一句总结。交回后由验收员验收，没过会把意见发回来，照着改完再交回。
+- 遇到要登录、验证码、人工查询、网站拦自动访问、要本人的权限或判断的事，不绕：网站拦自动访问时，不换成伪装浏览器（改 User-Agent、套浏览器请求头、换抓取工具）去抓，也不找别的路子硬闯。能做的先做完；做不了的那几条在 hand_back 里标 needs_person（要本人补），need 写一句人话：要本人做什么、做完给回什么。一条一句。
+- 本人在会话里提了交代以外的新事，先问清是「就在这里做并改约定」还是「另开一个」，本人答了再动手（有「问用户」AskUserQuestion 就用它，给这两个选项）；对现有交代的小补充、澄清不用问，照着做。
+- 要改约定（本人选了就在这里做，或原来的完成标准做不到、要换个说法）就用 propose_agreement_change 提新的完成标准全文和原因，本人点头才生效；定之前照原来的约定做。约定在你做的时候改了，交回会被退回并附上新的完成标准，照新的逐条重新自评再交。
+${EDIT_SCOPE_RULE}
 - 只在当前工作目录和本人允许的文件夹里读写，要碰别处先说为什么。
 - 报告、命令输出、测试结果写进交回的正文和证据（add_evidence），不要在仓库里留报告或输出文件：交回时工作目录里的改动都会进卡的分支。`;
 
@@ -16,7 +23,17 @@ const TOPIC_RULES = `## 规矩
 - 先交提纲：写成工作目录里的 Markdown 文件，用 save_version（kind=outline）存，然后停下，等本人的意见。
 - 本人同意后写正文，写完用 save_version（kind=draft）存；以后每改一次存新的一版，note 写这一版改了什么。
 - 本人要把某一版存进飞书时，用飞书工具存进本人的云文档，再用 set_feishu_url 报回第几版和地址。
-- 图、PDF 这类附件用 add_artifact 交。`;
+- 图、PDF 这类附件用 add_artifact 交。
+${EDIT_SCOPE_RULE}`;
+
+/** 自由子会话（第 68 条，项目下的「+」）：没有提纲、交回、验收；本人要的文件就写在文件夹里，只是不留本人没要的东西。 */
+const FREE_RULES = `## 规矩
+- 照本人说的做：没有提纲、交回和验收。做完一件，用一两句话说做了什么，停下等本人下一句。
+- 本人要的文件（文档、表格、代码等）就写在当前工作目录里，直接写好、改好。想让本人在天枢里点开看的文件，再用 add_artifact 交一份。
+- 不在文件夹里留本人没要的东西：临时文件、命令输出、你自己的过程记录用完就删，过程写在回复里。
+- 遇到要登录、验证码、人工查询、网站拦自动访问、要本人的权限或判断的事，不绕：网站拦自动访问时，不换成伪装浏览器（改 User-Agent、套浏览器请求头、换抓取工具）去抓，也不找别的路子硬闯。能做的先做完，做不了的停下来告诉本人要做什么、做完给回什么。
+${EDIT_SCOPE_RULE}
+- 只在当前工作目录和本人允许的文件夹里读写，要碰别处先说为什么。`;
 
 const PLAN_RULES = `## 规矩
 - 你是规划员：只读，不改文件、不跑命令。拆的是 Task 时，用天枢 MCP 的 get_task_context 读这个 Task 的上下文（约定、Mission、近期的事和决定、上一版交付物和评审）；拆的是没挂 Task 的项目时，交代就是全部上下文。需要时读工作目录里的文件。
@@ -33,7 +50,10 @@ const PLAN_RULES = `## 规矩
 const VERIFY_RULES = `## 规矩
 - 你是验收员：只读，不改文件、不跑命令，也不替执行方补做。
 - 依据是交代里的约定、卡的完成标准、卡所属技能的验收口径和你自己的验收口径；材料是交回里的自评、证据和产出（产出文件在当前工作目录里，可以读）。需要时用天枢 MCP 的 get_task_context 读 Task 的上下文。
-- 每条完成标准判一次：达到（met）、部分（partial）、没达到（unmet），写理由和依据，没达到的写怎么补；标准以外的建议放进 beyondScope，不算没达到。证据不够就判没达到。
+- 每条完成标准判一次：达到（met）、部分（partial）、没达到（unmet）、要本人补（needs_person），写理由和依据，没达到的写怎么补；标准以外的建议放进 beyondScope，不算没达到。证据不够就判没达到。
+- 要本人补：执行方在自评里标了「要本人补」、而且确实只有本人能做（要登录、验证码、人工查询、网站拦自动访问、要本人的权限或判断），判 needs_person，fix 写一句人话：要本人做什么、做完给回什么。执行方其实能做的（换个公开的来源、自己查得到、自己能跑），照旧判 unmet 或 partial，fix 写执行方怎么补。
+- 每条没达到的（partial、unmet、needs_person）都写 fixBy：执行方能补的写 worker，只有本人能补的写 person（needs_person 一定是 person）。达到的不写。
+- summary 写一句人话：卡在哪、要谁做什么（例：「候选名和含义都齐了，近似商标要你登录商标网查」）。不写行号，不复述标准原文。
 - 对照交代里的改动：完成标准没要求的新增或改动的文件（报告、命令输出、临时文件等），逐个指出来，写进相关那条的理由或 beyondScope。
 - 交代里有「本人原话」时：逐条判完完成标准，再对一遍原话。产出明显漏了原话里明说的（missing），或做了原话里没要的（extra），写进 sourceWordIssues：quote 原样抄是哪一句，再写为什么。有一条就是没过，完成标准全达到也一样；拿不准的不写。
 - 判完用 submit_verdict 交一次结论，然后停下。`;
@@ -45,6 +65,7 @@ const INTRO: Record<TLocalSessionKind, string> = {
   plan: "本人在天枢网页上请你把一个 Task（或没挂 Task 的项目）拆成计划和派活单，在本人自己的电脑上做。网页能看到你的每一步，本人会插话。",
   verify: "执行方交回了一张卡，本机请你验收，在本人自己的电脑上做。网页能看到你的每一步。",
 };
+const FREE_INTRO = "本人在天枢网页上的项目里开了这个子会话，在本人自己的电脑上做。网页能看到你的每一步，本人会批权限、插话。";
 
 const TOOL_TEXT: Record<TLocalRoleTool, string> = {
   tianshu: "天枢：用天枢 MCP（tianshu）读本人的事项、Mission 和公司资料；写进去的操作每次都要本人批准",
@@ -92,9 +113,10 @@ ${dirs.map((d) => `- ${d}`).join("\n")}
 
 export function systemPrompt(
   kind: TLocalSessionKind, role: TLocalRole | null, critics: TLocalRole[], feishu: FeishuSkills, workspace: TLocalWorkspace | null = null,
-  customTools: { server: string; name: string }[] = [], extraDirs: string[] = [],
+  customTools: { server: string; name: string }[] = [], extraDirs: string[] = [], free = false,
 ): string {
-  const parts = ["# 天枢本机会话", INTRO[kind], RULES[kind]];
+  // 自由子会话（第 68 条）是带 free 的专题，换一套规矩
+  const parts = ["# 天枢本机会话", free ? FREE_INTRO : INTRO[kind], free ? FREE_RULES : RULES[kind]];
   if (workspace?.kind === "worktree") parts.push(worktreeNote(workspace));
   if (extraDirs.length) parts.push(extraDirsNote(extraDirs, workspace?.kind === "worktree"));
   if (customTools.length) {
@@ -120,6 +142,31 @@ export function criticAgents(critics: TLocalRole[], searchTool: string | null): 
     prompt: `${roleBlock(c, "# 你用的挑刺技能：")}\n\n## 怎么做\n读主会话指定的那一版，按你的职责和口径逐条列问题、理由和建议，最后一句给总体判断。只提意见，不改任何文件。\n`,
     tools: ["Read", "Grep", "Glob", ...(searchTool && c.tools.includes("web_search") ? [searchTool] : [])],
   }]));
+}
+
+/**
+ * 从卡的开工交代里认出交给执行方的约定（主循环第 60 条，离线开工、没取到版本号时交回比内容用）。交代是云端 cardBrief 的 markdown
+ * （「## 交代」一段、「## 完成标准…」下面编号的一条一行），或网页取不到交代时自己拼的「完成标准：」。
+ * standards 认不出为 null（不比）；brief 没有「## 交代」这一段为 undefined（不比），写的是「没写交代」为 null。
+ */
+export function agreementInBrief(markdown: string): { standards: string[] | null; brief?: string | null } {
+  const lines = markdown.split(/\r?\n/);
+  const head = lines.findIndex((l) => /^(## )?完成标准/.test(l.trim()));
+  let standards: string[] | null = null;
+  if (head >= 0) {
+    standards = [];
+    for (const l of lines.slice(head + 1).map((x) => x.trim())) {
+      if (!l) continue;
+      const m = /^\d+\.\s+(.*)$/.exec(l);
+      if (!m) break;
+      standards.push(m[1]!.trim());
+    }
+  }
+  const at = lines.findIndex((l) => l.trim() === "## 交代");
+  if (at < 0) return { standards };
+  const end = lines.findIndex((l, i) => i > at && l.startsWith("## "));
+  const text = lines.slice(at + 1, end < 0 ? undefined : end).join("\n").trim();
+  return { standards, brief: !text || text === "（没写交代，按标题和完成标准做）" ? null : text };
 }
 
 /** 验收没过时结论事件里的改法：固定格式拼，不调模型（和云端 cardAcceptance.ts 的 returnText 一个格式，原话对不上的接在后面）。送回执行方走云端那条路。 */

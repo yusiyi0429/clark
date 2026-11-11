@@ -3,6 +3,7 @@
  * 后端实现还在做，接口可能暂时 404：读的当成「还没有」，写的报一句「没成功」。
  */
 import type {
+  TCreateTopicRequest,
   TBudget, TAcceptCardDraftsRequest, TCardBoardResponse, TCardBriefResponse, TCardDetailResponse, TCardPlanBriefResponse, TCardPlanView, TCardSplitListResponse, TCardSplitRequestView, TCardTaskView,
   TCreateLocalDeviceRequest, TCreateLocalDeviceResponse, TLocalDeviceView, TPatchCardRequest, TResearchTopicView,
   TTopicBriefResponse, TTopicDetailResponse, TTopicVersionView, TWorkersResponse,
@@ -10,6 +11,7 @@ import type {
   TProject, TProjectDetailResponse, TProjectFeedResponse, TProjectGoal, TProjectListResponse, TProjectPipelineResponse, TUpdateProjectRequest,
   TArchivedSubSessionListResponse, TSubSessionKind, TUpdateSubSessionRequest,
   TConversationModelChoice, TConversationModelListResponse, TProjectPipelineModel,
+  TCardAgreementChangeListResponse, TCardRelayRequest,
   THandoverSecretFinding, TProjectTransfer, TUpdateProjectTransferRequest, TConversationHistory, TProjectBoardResponse, TProjectGoalChangedItem,
 } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
@@ -105,6 +107,15 @@ const handback = (cardId: string, handbackId: string) => ({ path: { id: cardId, 
 export const overrule = (cardId: string, handbackId: string, reason: string) =>
   unwrap(browserApi.POST("/api/me/cards/{id}/handbacks/{handbackId}/overrule", { params: handback(cardId, handbackId), body: { reason } }));
 export const retryAcceptance = (cardId: string, handbackId: string) => unwrap(browserApi.POST("/api/me/cards/{id}/handbacks/{handbackId}/retry", { params: handback(cardId, handbackId) }));
+/** 登记「再改一轮」「我来补」（主循环第 61、62 条）：那台电脑上开着的网页认领后送给执行方；回卡的详情。 */
+export const relayHandback = (cardId: string, handbackId: string, body: TCardRelayRequest) =>
+  unwrap<TCardDetailResponse>(browserApi.POST("/api/me/cards/{id}/handbacks/{handbackId}/relay", { params: handback(cardId, handbackId), body }) as Promise<Result<TCardDetailResponse>>);
+/** 卡的约定的修改记录，新的在前（主循环第 60 条）。 */
+export const listAgreementChanges = (cardId: string) =>
+  unwrap<TCardAgreementChangeListResponse>(browserApi.GET("/api/me/cards/{id}/agreement-changes", { params: id(cardId) }) as Promise<Result<TCardAgreementChangeListResponse>>).then((data) => data.changes);
+/** 执行方提的改约定：改成这样 / 不改；回卡的详情。 */
+export const decideProposal = (cardId: string, proposalId: string, decision: "accept" | "reject") =>
+  unwrap<TCardDetailResponse>(browserApi.POST("/api/me/cards/{id}/agreement-proposals/{proposalId}/decision", { params: { path: { id: cardId, proposalId } }, body: { decision } }) as Promise<Result<TCardDetailResponse>>);
 export const markReturned = (cardId: string, handbackId: string) => unwrap(browserApi.POST("/api/me/cards/{id}/handbacks/{handbackId}/returned", { params: handback(cardId, handbackId) }));
 
 // ── worker（跨 Task）──
@@ -120,7 +131,8 @@ export const revokeDevice = (deviceId: string) => unwrap(browserApi.DELETE("/api
 // ── 调研专题 ──
 export const listTopics = (status: "active" | "archived" = "active") =>
   maybe(browserApi.GET("/api/me/topics", { params: { query: { status } } })).then((data) => (data?.topics ?? []) as TResearchTopicView[]);
-export const createTopic = (body: { title: string; planTaskId?: string }) => unwrap<TResearchTopicView>(browserApi.POST("/api/me/topics", { body }) as Promise<Result<TResearchTopicView>>);
+/** 建专题；自由子会话（第 68 条，项目下的「+」）带 free、projectId、firstMessage，不带标题（云端取第一句截短），云端同时登记开工。 */
+export const createTopic = (body: TCreateTopicRequest) => unwrap<TResearchTopicView>(browserApi.POST("/api/me/topics", { body }) as Promise<Result<TResearchTopicView>>);
 export const readTopic = (topicId: string) => maybe<TTopicDetailResponse>(browserApi.GET("/api/me/topics/{id}", { params: id(topicId) }));
 export const patchTopic = (topicId: string, body: { title?: string; status?: "active" | "archived" }) => unwrap(browserApi.PATCH("/api/me/topics/{id}", { params: id(topicId), body }));
 export const readTopicVersion = (topicId: string, number: number) =>
