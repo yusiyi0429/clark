@@ -5,7 +5,7 @@ import type { TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import {
   LOCAL_RUNNER_PROTOCOL, LOCAL_RUNNER_ROUTES, LOCAL_RUNNER_TOKEN_HEADER,
-  LocalSessionFileReadRequest, LocalPairingStartRequest, LocalAgentLoginCodeRequest, LocalCloudLinkRequest, LocalSettingsPatch, LocalModelProfileUpsert, LocalTokenHubConnectRequest, LocalToolUpsert, LocalFolderPickRequest, LocalFolderCreateRequest, LocalSessionModelRequest,
+  LocalSessionFileReadRequest, LocalSessionRestoreRequest, LocalPairingStartRequest, LocalAgentLoginCodeRequest, LocalCloudLinkRequest, LocalSettingsPatch, LocalModelProfileUpsert, LocalTokenHubConnectRequest, LocalToolUpsert, LocalFolderPickRequest, LocalFolderCreateRequest, LocalSessionModelRequest,
   LocalCreateSessionRequest, LocalCreateSessionBatchRequest, LocalSendMessageRequest, LocalPermissionDecisionRequest, LocalQuestionAnswerRequest, LocalBudgetUpdateRequest, LocalProjectFolderRequest, LocalProjectCloneRequest, LocalRunPreviewRequest, LocalPermissionModeRequest,
   type TLocalRunnerErrorCode, type TLocalStatusResponse, type TLocalHealthResponse,
 } from "@warmap/contracts";
@@ -310,8 +310,8 @@ export function createServer(d: ServerDeps): http.Server {
     // 在右边预览文件（17.2 第 41 条）：列本会话写过改过的文件、读一个文件，都只看会话自己的文件夹或工作树
     listSessionFiles: (c) => d.sessions.listFiles(c.params.id!),
     readSessionFile: (c) => d.sessions.readFile(c.params.id!, validate(LocalSessionFileReadRequest, c.body).path),
-    // 改、删前留一份的恢复（11/11，契约 LocalSessionRestoreRequest）：下一笔接上
-    restoreSessionFiles: () => { throw new HttpError(404, "not_found", "这个本机程序还不能恢复文件"); },
+    // 改、删前留一份的恢复（11/11，契约 LocalSessionRestoreRequest）
+    restoreSessionFiles: (c) => d.sessions.restoreFiles(c.params.id!, validate(LocalSessionRestoreRequest, c.body ?? {}).paths),
     // 接手以后「拉到这台电脑」（16.7）：本人选放在哪，clone、切到交接分支、加进允许的文件夹、绑到项目
     cloneProject: async (c) => {
       const b = validate(LocalProjectCloneRequest, c.body);

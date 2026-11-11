@@ -161,6 +161,21 @@ describe("Codex 子会话", { timeout: 60_000 }, () => {
     await call("POST", `/v1/sessions/${id}/kill`, {});
   });
 
+  it("改前拷一份（11/11）：Codex 改工作目录外面本人的已有文件，放行前先拷一份；恢复回到原文", async () => {
+    const elsewhere = tempDir("tl-codex-else-");
+    const target = join(elsewhere, "表.md");
+    writeFileSync(target, "本人的原文");
+    const id = await open("U", `patch ${target}`, { permissionMode: "bypassPermissions" });
+    await idle(id);
+    expect(readFileSync(target, "utf8")).toBe("hello\n");
+    expect(events(id).some((e) => e.type === "permission_request")).toBe(false);
+    const r = await call("POST", `/v1/sessions/${id}/files/restore`, { paths: [target] });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body.failed).toEqual([]);
+    expect(readFileSync(target, "utf8")).toBe("本人的原文");
+    await call("POST", `/v1/sessions/${id}/kill`, {});
+  });
+
   it("Codex 没有「先出计划」，规划员只能用 Claude Code；思考程度只收这个模型有的档", async () => {
     mkdirSync(join(work, "P"), { recursive: true });
     const plan = await call("POST", "/v1/sessions", { subject: { kind: "plan", projectId: "11111111-1111-4111-8111-111111111111" }, title: "拆", cwd: join(work, "P"), firstMessage: "拆", modelProfileId: SOL });

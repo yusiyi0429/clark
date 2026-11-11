@@ -175,7 +175,8 @@ describe("会话里的后台任务", { timeout: 30_000 }, () => {
   it("后台子 agent 的权限请求和主轮的提问同时在等：算等你批准；先批回到等你回复（还在等回答，不算在跑），先答还是等你批准", async () => {
     const both = async (h: Awaited<ReturnType<typeof setup>>) => {
       const a = await h.open("A");
-      await until(async () => (await h.session(a.id)).pendingQuestion);
+      // 命令的请求等开工那份留好才转过来（11/11 留一份，最多 10 秒）：等两件都到了再看
+      await until(async () => { const b = (await h.call("GET", `/v1/sessions/${a.id}`)).body; return b.session.pendingQuestion && b.pendingPermissions.length; });
       const body = (await h.call("GET", `/v1/sessions/${a.id}`)).body;
       expect([body.session.status, body.pendingPermissions.map((p: any) => p.requestId)]).toEqual(["waiting_permission", ["perm-agent1"]]);
       return a;

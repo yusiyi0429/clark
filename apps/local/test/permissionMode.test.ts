@@ -278,17 +278,21 @@ describe("开工带模式、中途换、先出计划", { timeout: 60_000 }, () =
     }
   });
 
-  it("全部放行：本人文件夹里覆盖已有文件照样问（11/11 过渡规矩，没有兜底）", async () => {
+  it("全部放行：覆盖已有文件——有兜底时先留一份再放行；没兜底（工作目录以外的本人文件）先拷一份也就有了兜底", async () => {
     const h = await setup();
     try {
-      mkdirSync(join(h.work, "F"), { recursive: true });
-      const existing = join(h.work, "F", "表.md");
+      // 工作目录外面、本人的文件：快照管不到，改前拷一份，拷了就不用问
+      const elsewhere = tempDir("tl-pm-else-");
+      const existing = join(elsewhere, "表.md");
       writeFileSync(existing, "本人的原文");
       h.fake({ writePath: existing });
       const a = (await h.open("F", "bypassPermissions")).body;
-      await h.waitStatus(a.id, "waiting_permission");
-      expect((await h.session(a.id)).pendingPermissions[0].toolName).toBe("Write");
-      expect(readFileSync(existing, "utf8")).toBe("本人的原文");
+      await h.waitStatus(a.id, "idle");
+      expect(h.events(a.id).some((e) => e.type === "permission_request")).toBe(false);
+      const copies = JSON.parse(readFileSync(join(h.t.dataDir, "undo", "sessions", a.id, "copies.json"), "utf8"));
+      const entry = Object.values(copies)[0] as { path: string; copy: string };
+      expect(entry.path.toLowerCase()).toBe(existing.toLowerCase());
+      expect(readFileSync(join(h.t.dataDir, "undo", "sessions", a.id, "files", entry.copy), "utf8")).toBe("本人的原文");
     } finally {
       await h.t.cleanup();
     }

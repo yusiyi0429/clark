@@ -43,6 +43,8 @@ export interface AgentLaunch {
   toolReads?(tool: string): boolean;
   /** 改、删、覆盖不会丢本人东西的地方（pathGuard 的 PathScope.covered），每次现查。 */
   covered?(path: string): boolean;
+  /** 放行之前（本机自己放行、转给本人之前都先过一遍）：改已有文件的先留一份，命令等这一轮开头那份留好（undo/，ADR 0039）。 */
+  beforeWrite?(tool: string, input: Record<string, unknown>): Promise<void>;
   /** 开工时的权限模式（契约 LocalPermissionMode）：本机按它放行请求；plan 时执行方以自己的 plan 模式起。 */
   permissionMode: TLocalPermissionMode;
 }

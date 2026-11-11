@@ -360,7 +360,9 @@ export function modeAllows(
   if (mode === "default" || mode === "plan" || mustAsk(tool, input, scope, hint)) return false;
   const pass = (area: PathScope, ownTree: boolean) => mode === "acceptEdits"
     ? EDIT_TOOLS.has(tool) && !collect(tool, input, area, insideAny(area.allowedRoots()), hint).length
-    : autoAllowed(tool, input, area, hint) && (ownTree || !(SHELL_TOOLS.has(tool) && WRITES.test(String(input.command ?? ""))));
+    : autoAllowed(tool, input, area, hint) && (ownTree || !(SHELL_TOOLS.has(tool) && WRITES.test(String(input.command ?? "")))
+      // 删、挪、写的命令：碰的地方都有兜底（留了一份的文件夹，11/11 ADR 0039）也放行
+      || (Boolean(area.covered) && !noLossAsks(tool, input, area)));
   if (!worktree) return pass(scope, false);
   if (pass({ ...scope, allowedRoots: () => [worktree] }, true)) return true;
   const extras = scope.extraDirs?.() ?? [];
