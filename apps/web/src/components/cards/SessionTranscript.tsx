@@ -10,6 +10,7 @@
  * 一按发送就先画出来（useSessionSend）：淡一点、写「发送中」，事件流里同编号的那句来了换成真的；没发出去写「没发出去 · 重发」。
  * canAct=false（手机、别的电脑、本机没连）时选项框不给选项，头上写「等你 · {电脑名}」。
  */
+import { TurnFilesLine } from "./TurnFiles";
 import { createContext, memo, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Components } from "react-markdown";
 import { ChevronRight } from "lucide-react";
@@ -450,6 +451,7 @@ export function SessionTranscript({ entries, agentName, canAct, device, onDecide
           }
           case "handback": return <span key={entry.seq} className={s.evt}>{hhmm(entry.at)} · 交回：{entry.summary}（{entry.met}/{entry.total} 条自评达到）</span>;
           case "notice": return <span key={entry.seq} className={s.evt} data-level={entry.level}>{entry.text}</span>;
+          case "files": return <TurnFilesLine key={entry.seq} seq={entry.seq} turn={entry.turn} files={entry.files} more={entry.more} />;
         }
       })}
       {draft ? <DraftBubble text={draft} agentName={agentName} /> : null}

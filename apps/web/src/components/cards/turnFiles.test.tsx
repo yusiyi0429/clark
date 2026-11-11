@@ -39,4 +39,11 @@ describe("对话里一轮末尾那一行（第 72 条，事件 files_changed）"
     expect(render(["a", "b", "c", "d", "e"].map((path) => tf(`${path}.md`)))).toContain("改了 5 个文件 ›");
     expect(render([tf("a.md"), tf("b.md")], 98)).toContain("改了 100 个文件 ›");
   });
+
+  it("没有看文件的地方（专题会话页，没包 TurnFilesContext）：只写字、不能点", () => {
+    const html = renderToStaticMarkup(<TurnFilesLine seq={1} turn={1} files={[tf("周报.md", "modified", 2)]} more={0} />);
+    expect(html).toContain("改了 周报.md · 2 处");
+    expect(html).not.toContain("<button");
+    expect(html).not.toContain("›");
+  });
 });

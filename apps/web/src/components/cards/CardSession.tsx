@@ -9,7 +9,7 @@
 import type { TLocalChangedFile } from "@warmap/contracts";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Check, ChevronDown, ChevronLeft, ChevronRight, Info, X } from "lucide-react";
+import { Check, ChevronLeft, Info, X } from "lucide-react";
 import type { TCardHandbackView, TLocalQuestionAnswerRequest, TLocalRunView } from "@warmap/contracts";
 import { HeroButton } from "@/components/HeroButton";
 import { useHandheld } from "@/components/ui/useHandheld";
@@ -25,8 +25,10 @@ import { useAutoReturn } from "@/lib/board/useAutoReturn";
 import { showWorkspaceToast } from "@/lib/toast";
 import { SessionComposer, SessionTranscript, useSessionSend, useSessionModels, useModelChangedRefresh, sessionEnded, type DecideOptions } from "./SessionTranscript";
 import { useSessionMode } from "./PermissionMode";
-import { FilePreview, cloudOutputFile, localSessionFile, type PreviewFile } from "./FilePreview";
-import { filesSignal, matchChangedFile, useSessionFiles } from "@/lib/local/sessionFiles";
+import { FilePreview, cloudOutputFile, localChangedFile, type PreviewFile } from "./FilePreview";
+import { filesRestored, filesSignal, matchChangedFile, useSessionFiles } from "@/lib/local/sessionFiles";
+import { ChangedFiles } from "./ChangedFiles";
+import { TurnFilesContext, latestFilesSeq } from "./TurnFiles";
 import { HARNESS_NAME, runLabel, sessionModelText } from "@/lib/local/runModel";
 import { useCardDetail, type CardDetail } from "./useCardDetail";
 import { SourceWordIssues, SourceWords } from "./SourceWords";
@@ -40,7 +42,7 @@ import { SideContent, useSideDetail } from "@/components/home/SideDetail";
 import { ICON } from "@/components/home/StateIcon";
 import { useConversationScroll } from "@/conversation/useConversationScroll";
 import { commitText, placeText, shortPlace } from "@/lib/work/merge";
-import type { TLocalSessionSummary } from "@/lib/local/runner";
+import type { LocalRunner, TLocalSessionSummary } from "@/lib/local/runner";
 import s from "@/styles/v2-session.module.css";
 import { PlanChecklist } from "./PlanChecklist";
 import { AgreementSection, ProposalDecision } from "./Agreement";
@@ -77,7 +79,9 @@ export function CardSession({ cardId, embedded = false, waiting }: { cardId: str
   const side = useSideDetail();
   // 右边看文件（41 条）：交出的产出点了在这一页右边看，不新开页；手持上整屏。
   const [preview, setPreview] = useState<PreviewFile | null>(null);
-  const closePreview = useCallback(() => setPreview(null), []);
+  // 放大（第 72 条）：预览占满内容区，对话收起；关了预览回到并排。
+  const [wide, setWide] = useState(false);
+  const closePreview = useCallback(() => { setPreview(null); setWide(false); }, []);
   /** 页头点了「推翻」：打开结果、推翻的原因框直接展开。 */
   const [flipping, setFlipping] = useState(false);
   const { detail, missing, refresh } = useCardDetail(cardId);
@@ -95,7 +99,14 @@ export function CardSession({ cardId, embedded = false, waiting }: { cardId: str
   const fileSession = ready && !handheld ? session?.id ?? null : null;
   const files = useSessionFiles(local.runner, fileSession, filesSignal(view.status, view.entries));
   const outputs = detail?.outputs;
-  const openLocal = useCallback((path: string) => { if (fileSession) setPreview(localSessionFile(local.runner, fileSession, path)); }, [local.runner, fileSession]);
+  // 改过的文件先看改动（第 72 条）：右栏和回答里点的看开工到现在，对话里一轮末尾那一行点的看那一轮（带轮号）。
+  // 右栏清单里能恢复的（不在工作树里做的会话才有），点改动时可以出「恢复整个文件」。
+  const openChanges = useCallback((path: string, turn?: number) => {
+    if (!fileSession) return;
+    const wholeFile = session?.workspace?.kind !== "worktree" && !!files.find((file) => file.path === path)?.restorable;
+    setPreview(localChangedFile(local.runner, fileSession, path, { turn, wholeFile }));
+  }, [local.runner, fileSession, files, session?.workspace?.kind]);
+  const openLocal = useCallback((path: string) => openChanges(path), [openChanges]);
   // 回答里提到的一处：先看是不是改过的文件（读这台电脑上现在的），再看是不是交出的产出（读云端那份）；都对不上不能点。
   const openFile = useCallback((mention: string) => {
     const changed = fileSession ? matchChangedFile(files, mention) : null;
@@ -196,6 +207,7 @@ export function CardSession({ cardId, embedded = false, waiting }: { cardId: str
     <aside className={s.pane} aria-label="结果">
       <ResultPane detail={detail} session={session} view={session ? view : null} canAct={canAct} wait={wait} stage={stage} handheld={handheld} ready={ready} embedded={embedded}
         flipping={flipping} onFlipDone={() => setFlipping(false)} onPreview={setPreview} previewing={preview?.key ?? null} files={files} onFile={openLocal}
+        onRestoreFiles={(paths) => local.runner.restoreSessionFiles(session!.id, paths ? { paths } : {}).then((result) => { filesRestored(session!.id); return result; })}
         onStart={embedded ? undefined : () => setStarting(true)} onControl={control} onResume={() => say("继续")} onChanged={() => void refresh()}
         editing={editing} onEditing={setEditing} onSaved={settle} />
     </aside>
@@ -242,10 +254,13 @@ export function CardSession({ cardId, embedded = false, waiting }: { cardId: str
         <div className={s.scroll} ref={scroll.scrollRef}>
           <div ref={scroll.contentRef}>
             {session ? (
+              <TurnFilesContext.Provider value={{ open: fileSession ? openChanges : null, restored: (path) => !!files.find((file) => file.path === path)?.restoredAt, latest: latestFilesSeq(view.entries),
+                count: fileSession ? (path, turn) => local.runner.readFileChanges(fileSession, { path, range: "turn", turn }).then((data) => (data.detail === "none" ? null : data.changes?.length ?? 0)) : undefined, version: files }}>
               <SessionTranscript entries={send.entries} agentName={agentName} canAct={canAct} onResend={(entry) => void say(entry.text).catch(() => showWorkspaceToast({ text: "没发出去" }))} onRetry={send.retry} draft={draft} drafted={drafted} device={device} live={sessionRunning} starting={status === "starting"} ended={ended} pinned={embedded} lead={`交代：${item.title}${item.card?.criterion ? ` · 按「${item.card.criterion.text}」验收` : ""}`}
                 onFile={openFile}
                 onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={tail} asking={question}
                 stopped={embedded ? view.stopped : null} onResume={canAct ? () => void say("接着做").catch(() => showWorkspaceToast({ text: "没发出去" })) : undefined} />
+              </TurnFilesContext.Provider>
             ) : <CloudTimeline run={run} title={item.title} />}
           </div>
           <div ref={scroll.reserveRef} aria-hidden />
@@ -285,7 +300,7 @@ export function CardSession({ cardId, embedded = false, waiting }: { cardId: str
         </header>
         <div className={s.body} data-solo={preview && !handheld ? undefined : ""}>
           {showPane && !inSide ? <div className={s.paneScroll}>{pane}</div> : chat}
-          {preview ? <FilePreview file={preview} onClose={closePreview} /> : null}
+          {preview ? <FilePreview file={preview} onClose={closePreview} canRestore={!sessionRunning} wide={wide} onWide={handheld ? undefined : setWide} /> : null}
         </div>
         {starter}
         {side ? <SideContent side={side}><div className={s.page} data-embedded="" data-side="">{pane}</div></SideContent> : null}
@@ -318,7 +333,7 @@ export function CardSession({ cardId, embedded = false, waiting }: { cardId: str
       <div className={s.body} data-tab={handheld ? tab : undefined}>
         {chat}
         {preview && !handheld ? null : pane}
-        {preview ? <FilePreview file={preview} onClose={closePreview} /> : null}
+        {preview ? <FilePreview file={preview} onClose={closePreview} canRestore={!sessionRunning} wide={wide} onWide={handheld ? undefined : setWide} /> : null}
       </div>
       {starter}
     </div>
@@ -337,7 +352,7 @@ function CloudTimeline({ run, title }: { run: TLocalRunView | null; title: strin
   );
 }
 
-function ResultPane({ detail, session, view, canAct, wait, stage, handheld, ready, embedded, flipping, onFlipDone, onPreview, previewing, files, onFile, onStart, onControl, onResume, onChanged, editing, onEditing, onSaved }: {
+function ResultPane({ detail, session, view, canAct, wait, stage, handheld, ready, embedded, flipping, onFlipDone, onPreview, previewing, files, onFile, onRestoreFiles, onStart, onControl, onResume, onChanged, editing, onEditing, onSaved }: {
   detail: CardDetail; session: TLocalSessionSummary | null; view: SessionView | null; canAct: boolean; wait: string | null; stage: string; handheld: boolean; ready: boolean;
   /** 新首页里：停止、推翻在页头（5.4.3），这里只留「继续」；不写订阅按标价折算的花费（11.2）。 */
   embedded: boolean;
@@ -347,14 +362,14 @@ function ResultPane({ detail, session, view, canAct, wait, stage, handheld, read
   onPreview: (file: PreviewFile) => void; previewing: string | null;
   /** 本会话改过的文件（这台电脑上才有），点了在右边看；不在了的不能点。 */
   files: readonly TLocalChangedFile[]; onFile: (path: string) => void;
+  /** 恢复文件（第 71 条）：paths 不给是全部。 */
+  onRestoreFiles: (paths?: string[]) => ReturnType<LocalRunner["restoreSessionFiles"]>;
   /** 新首页里没有常驻的「开始」（设计 9.8）：自动开工失败时由 Task 管线那一行出「手动开始」。 */
   onStart?: () => void; onControl: (action: "interrupt" | "kill") => Promise<unknown>; onResume: () => Promise<unknown>; onChanged: () => void;
   /** 约定（交代、完成标准）在改（第 60 条）；存好以后 onSaved。 */
   editing: boolean; onEditing: (editing: boolean) => void; onSaved: () => Promise<unknown>;
 }) {
   const item = detail.task;
-  // 「改动的文件 N」默认收起。
-  const [filesOpen, setFilesOpen] = useState(false);
   // 停止、继续没成：那排按钮后面写「失败 · 重试」（原因在 title 里），不弹 toast。
   const [failed, setFailed] = useState<{ retry: () => void; reason: string } | null>(null);
   const act = (action: () => Promise<unknown>) => { setFailed(null); action().catch((error: unknown) => setFailed({ retry: () => act(action), reason: error instanceof Error ? error.message : "" })); };
@@ -431,16 +446,8 @@ function ResultPane({ detail, session, view, canAct, wait, stage, handheld, read
       ) : null}
 
       {files.length && session ? (
-        <div className={s.sec}>
-          <button type="button" className={s.filesHead} aria-expanded={filesOpen} onClick={() => setFilesOpen(!filesOpen)} data-testid="changed-files">
-            {filesOpen ? <ChevronDown {...ICON} /> : <ChevronRight {...ICON} />}改动的文件 {files.length}
-          </button>
-          {filesOpen ? files.map((file) => (file.exists
-            ? <button key={file.path} type="button" className={s.output} title={file.path} data-current={previewing === `local:${session.id}:${file.path}` ? "" : undefined} onClick={() => onFile(file.path)} data-testid="changed-file">
-              <span className={s.outTitle}>{file.path}</span>
-            </button>
-            : <div key={file.path} className={s.output} title={file.path} data-gone="" data-testid="changed-file"><span className={s.outTitle}>{file.path}</span></div>)) : null}
-        </div>
+        <ChangedFiles files={files} undo={session.undo} canRestore={!handheld && session.workspace?.kind !== "worktree" && !live} onRestore={onRestoreFiles}
+          current={previewing?.startsWith(`local:${session.id}:`) ? previewing.slice(`local:${session.id}:`.length).replace(/:(turn|session)$/, "") : null} onOpen={handheld ? undefined : onFile} />
       ) : null}
 
       {usage && usage.tokens && !embedded ? <p className={s.cost}>{usage.tokens.toLocaleString("zh-CN")} tokens{money(usage.cost) ? ` · ${money(usage.cost)}` : ""}</p> : null}

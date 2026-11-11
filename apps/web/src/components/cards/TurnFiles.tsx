@@ -58,6 +58,8 @@ export function TurnFilesLine({ seq, turn, files, more }: { seq: number; turn: n
   }, [files, turn, version]);
   const open = (path: string) => { if (view?.open) view.open(path, turn); else setAway(path); };
   const total = files.length + more;
+  // 没有看文件的地方（专题会话页）：只写字，不能点。
+  if (!view) return <div className={c.turnFiles}>{files.map((file) => <span key={file.path} className={c.edited} data-testid="turn-file">{turnFileText(file, false)}</span>)}{more ? <span className={c.edited} data-more="">还有 {more} 个</span> : null}</div>;
   if (total > FOLD_OVER && !unfolded) {
     return <div className={c.turnFiles}><button type="button" className={c.edited} onClick={() => setUnfolded(true)} data-testid="turn-files">改了 {total} 个文件 ›</button></div>;
   }
