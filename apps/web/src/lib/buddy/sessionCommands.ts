@@ -31,11 +31,26 @@ export async function runSessionCommand(runner: LocalRunner, sessions: TLocalSes
   }
 }
 
-/** 认领这台电脑上的命令、照着调本机、报结果。登记了「再改一轮」「我来补」的那台电脑上也马上调一次（不等下一轮）。 */
-export async function runClaimedCommands(deviceId: string, local: Pick<LocalRunnerState, "runner" | "sessions" | "refresh">): Promise<void> {
+/**
+ * 开着的子会话页自己的发话（useSessionSend.say）：先画出来、再交给本机、回执照常（先发后到）。
+ * 认领到的转话是说给这个会话的、又不带 agreementRevision 时走它，本人马上在对话里看到这句话，不用等本机的事件。
+ */
+export type SayVia = { sessionId: string; say: (text: string) => Promise<boolean> };
+
+/** 交给 SayVia：收下算送到；没收下（本机没连上）不报，下一轮再认领。 */
+async function sayCommand(via: SayVia, text: string): Promise<Outcome | null> {
+  try { return (await via.say(text)) ? { result: "done" } : null; }
+  catch (error) { return { result: "failed", message: (error instanceof Error ? error.message : String(error)).slice(0, 500) }; }
+}
+
+/** 认领这台电脑上的命令、照着调本机、报结果。登记了「再改一轮」「我来补」的那台电脑上也马上调一次（不等下一轮），via 见 SayVia。 */
+export async function runClaimedCommands(deviceId: string, local: Pick<LocalRunnerState, "runner" | "sessions" | "refresh">, via?: SayVia | null): Promise<void> {
   const commands = await claimSessionCommands(deviceId);
   for (const entry of commands) {
-    const outcome = await runSessionCommand(local.runner, local.sessions, entry);
+    const { command } = entry;
+    const outcome = via && entry.sessionId === via.sessionId && command.type === "message" && !command.agreementRevision
+      ? await sayCommand(via, command.text)
+      : await runSessionCommand(local.runner, local.sessions, entry);
     if (outcome) await reportSessionCommand(entry.id, { deviceId, ...outcome }).catch(() => undefined);
   }
   if (commands.length) await local.refresh();

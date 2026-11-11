@@ -174,12 +174,14 @@ export function CardSession({ cardId, embedded = false, waiting }: { cardId: str
   const say = send.say;
   const openPane = () => (side ? side.toggle(true) : setDetails(true));
   // 约定改了、提议定了：云端登记了一句转话，这台电脑上跑着这张卡时马上说给执行方。
-  const settle = async () => { if (canAct) await relayNow(); await refresh(); };
+  // 登记了的转话（我来补、再改一轮、约定改了）：这一页马上认领，说给执行方的那句像平时发话一样先画出来。
+  const via = canAct && session ? { sessionId: session.id, say: (text: string) => say(text) } : null;
+  const settle = async () => { if (canAct) await relayNow(via); await refresh(); };
   const onSend = async (text: string, files: File[]) => {
     if (!supply) return say(text, files);
     try { await relayHandback(cardId, supply.handbackId, { kind: "supply", text }); }
     catch (error) { if (error instanceof CloudError && error.status === 409) { setSupply(null); void refresh(); } throw error; }
-    await relayNow();
+    await relayNow(via);
     setSupply(null);
     await refresh();
     return true;
@@ -210,7 +212,7 @@ export function CardSession({ cardId, embedded = false, waiting }: { cardId: str
       ? <ApprovalDecision requests={view.pending} blocked={away} inWorktree={session?.workspace?.kind === "worktree"} onDecide={(request, decision, options) => decide(request.requestId, decision, options)} />
       : placeholder("approval"))
     : attention === "question" ? asking ?? placeholder("question")
-    : attention === "verdict" || attention === "needs_person" ? (handback ? <HandbackDecision key={handback.id} cardId={item.id} handback={handback} here={canAct}
+    : attention === "verdict" || attention === "needs_person" ? (handback ? <HandbackDecision key={handback.id} cardId={item.id} handback={handback} here={canAct} via={via}
       onFill={canAct && session ? (text) => setSupply({ handbackId: handback.id, text, nonce: Date.now() }) : undefined}
       onLook={openPane} onEdit={() => { openPane(); setEditing(true); }} onChanged={() => void refresh()} /> : null)
     : <MergeDecision session={session} title={item.title} onChanged={() => void refresh()} />;
