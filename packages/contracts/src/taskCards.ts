@@ -1,5 +1,5 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
-import { SourceWords } from "./cardSplits.js";
+import { ModelWords, SourceWords } from "./cardSplits.js";
 import { Budget } from "./budget.js";
 import { LocalHandbackCriterion } from "./localRunner.js";
 import { LocalOutputView, LocalRunView } from "./localDevices.js";
@@ -72,6 +72,11 @@ export const CardDraftView = Type.Object({
   why: Nullable(Type.String({ maxLength: 200 })),
   /** 本人原话（16.8）：云端核对过的原文片段，或整条原话；登记时什么都没说为空。 */
   sourceWords: SourceWords,
+  /**
+   * 本人对用什么模型的要求原话（第 69 条，见 ModelWords）：拆出这张草稿的那次登记带的，整张派活单的草稿都一样。
+   * 网页拿它和这台电脑连着的来源对，预选；对不上时那一行写「没找到「…」」并用自动。没有为 null 或不带。
+   */
+  modelWords: Type.Optional(Nullable(ModelWords)),
 }, strict);
 
 /**

@@ -1,5 +1,6 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import { Budget } from "./budget.js";
+import { ModelWords } from "./cardSplits.js";
 import { LocalPermissionDecisionRequest, LocalPlanEntry, LocalQuestionAnswerRequest } from "./localRunner.js";
 import { PersonRef } from "./projectTransfers.js";
 import { AppearanceSettings, SubSessionLetter, WaitingTarget } from "./workHome.js";
@@ -74,6 +75,7 @@ export const BuddyAskQuestion = Type.Object({
  * - link_task_to_project（write）：把本人负责的一件 Task 挂到项目上（同 PUT /api/me/projects/:id/goals/:taskId）。可撤（挂回原来的或取下来）。
  * - transfer_project（write）：发起转交并直接发出（同 16.7 的发起 + 发出；交接说明照常由云端写，写完才发出）。可撤（撤回转交）。
  * - split_cards（write）：登记拆卡（Task 或没挂 Task 的项目，带本人原话）。可撤（去掉登记）。
+ *   本人对用什么来源、模型、思考有要求时，把那一截原话放进 modelWords（第 69 条），原样带，不要自己翻译成型号；派活单上照它预选。
  * - set_budget（write）：改一件 Task 的预算或本人的缺省预算（taskId 不带是缺省）。可撤。
  * - set_task_due_date（write）：给挂在项目上的一件 Task 存验收截止日（同 PUT /api/me/projects/:projectId/goals/:taskId/due-date，null 不存了）。可撤（改回原来的）。
  * - message_project（write）：把本人在伙伴台说的、关于某个项目的话转给这个项目的对话（设计 18 节第 8 条：伙伴台 → 项目对话 → 子会话，一层管一层，
@@ -132,7 +134,9 @@ export const BuddyActionParams = {
   link_task_to_project: Type.Object({ projectId: Uuid, taskId: Type.String({ minLength: 1 }) }, strict),
   transfer_project: Type.Object({ projectId: Uuid, toPersonId: Type.String({ minLength: 1 }) }, strict),
   split_cards: Type.Object({ taskId: Type.Optional(Type.String({ minLength: 1 })), projectId: Type.Optional(Uuid),
-    words: Type.Optional(Type.String({ maxLength: 4000 })) }, strict),
+    words: Type.Optional(Type.String({ maxLength: 4000 })),
+    /** 第 69 条：本人对用什么来源、模型、思考有要求时那一截原话，原样带，不要自己翻译成型号（见 cardSplits.ts 的 ModelWords）。 */
+    modelWords: Type.Optional(ModelWords) }, strict),
   set_budget: Type.Object({ taskId: Type.Optional(Type.String({ minLength: 1 })), budget: Budget }, strict),
   set_task_due_date: Type.Object({ projectId: Uuid, taskId: Type.String({ minLength: 1 }),
     dueDate: Type.Union([Type.String({ pattern: "^\\d{4}-\\d{2}-\\d{2}$" }), Type.Null()]) }, strict),
