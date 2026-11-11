@@ -172,6 +172,8 @@ export function foldEvent(view: SessionView, event: TLocalSessionEvent): Session
       next.lastActivity = { at: event.at, text };
       return next;
     }
+    case "agreement_proposal":
+      return next;
   }
 }
 

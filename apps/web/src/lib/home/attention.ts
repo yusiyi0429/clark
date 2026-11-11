@@ -14,7 +14,7 @@ import type { SessionView } from "@/lib/local/sessionView";
 import type { SubSession, WorkHomeData } from "./types";
 
 export type Attention = NonNullable<SubSession["waiting"]>;
-export const ATTENTION_LABEL: Record<Attention, string> = { approval: "等你批准", question: "在问你", verdict: "等你拿主意", merge: "等你合回" };
+export const ATTENTION_LABEL: Record<Attention, string> = { approval: "等你批准", question: "在问你", verdict: "等你拿主意", merge: "等你合回", needs_person: "等你补" };
 
 /** 本机这一个会话现在的样子：状态、挂着几个批准、有没有在问、工作树合没合回（later：本人点了先不合；不在工作树里做为 null）。 */
 export type LocalAsk = { status: TLocalSessionStatus | null; pending: number; question: boolean; merge: "needs" | "merged" | "later" | null };

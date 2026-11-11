@@ -89,6 +89,13 @@ export function feedBlocks({ items, workers, go, onSay, onChanged, remoteAsks, d
         return blocks;
       }
       case "card_blocked": return [{ key: item.id, at: item.at, node: <BlockedDecision item={item} worker={workerOf(item.cardId)} go={go} onChanged={onChanged} /> }];
+      // 等你补（主循环第 61 条）：框钉在子会话里，这里照第 54 条只指过去。
+      case "card_needs_person": return [{ key: item.id, at: item.at, node: (
+        <p className={f.sentence} data-testid="feed-needs-person">
+          <button type="button" className={f.sentenceLink} onClick={() => go(cardHref(item.cardId))}>{item.title} 等你补</button>
+          {item.handback?.headline ? <span className={f.more}>{item.handback.headline}</span> : null}
+        </p>
+      ) }];
       case "criteria_met": return [{ key: item.id, at: item.at, node: <CriteriaDecision item={item} go={go} onSay={onSay} /> }];
       case "rework_opened": return [{ key: item.id, at: item.at, node: (
         <p className={f.sentence} data-testid="feed-rework">
@@ -263,7 +270,7 @@ function SubSessionAsk({ worker, remote: item, letter }: { worker: Worker; remot
   );
 }
 
-const WHY: Record<TProjectSubSessionReportItem["why"], string> = { turn_done: "做完一轮", interrupted: "本人停下", held: "停着等", error: "出错", killed: "强停" };
+const WHY: Record<TProjectSubSessionReportItem["why"], string> = { turn_done: "做完一轮", interrupted: "本人停下", held: "停着等", error: "出错", killed: "强停", runner_restart: "本机程序重启" };
 const outputHref = (id: string) => `/api/me/local-outputs/${encodeURIComponent(id)}`;
 
 /**
