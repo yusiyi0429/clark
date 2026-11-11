@@ -37,14 +37,14 @@ type Check = { name: string; value: string; bad: boolean };
  * checks 是「这台电脑」点开后的逐项：本机程序，再照本机报的 tools 列执行方和命令行工具；没就绪时工具那几项写「—」。
  * cloudQuota 是各台设备同步给云端的额度：这台电脑没就绪（手机、未配对、离线）或读不到额度时，每台设备一格「Claude · 设备名」；
  * 这台电脑就绪且读得到时只列它自己的。
- * Mac 上离线不给「重试」（这一版没有 Mac 版，没东西可重试）。
+ * Mac 上离线算中性（这一版没有 Mac 版，本人什么都做不了）：不亮琥珀点、不给「重试」，展开后只写「暂不支持 Mac」。
  */
 export function useMachine(cloudQuota: Resources["quota"]) {
   const local = useLocalRunner();
   const ready = local.phase === "ready";
   const paused = ready && !!local.status?.settings.paused;
   const word = paused ? "暂停中" : PHASE[local.phase];
-  const alert = paused || local.phase === "prompt" || local.phase === "blocked" || local.phase === "offline" || local.phase === "unpaired";
+  const alert = paused || local.phase === "prompt" || local.phase === "blocked" || (local.phase === "offline" && !isMac()) || local.phase === "unpaired";
   const tools = local.status?.tools ?? [];
   const checks: Check[] = [
     { name: "本机程序", value: ready ? (paused ? "暂停中" : "已连接") : PHASE[local.phase], bad: alert },
@@ -54,7 +54,6 @@ export function useMachine(cloudQuota: Resources["quota"]) {
   ];
   const action = local.phase === "unpaired" ? { label: "配对", run: () => local.pair() }
     : paused ? { label: "继续", run: async () => { await local.runner.patchSettings({ paused: false }); await local.refresh(); } }
-    : local.phase === "offline" && isMac() ? null
     : alert || checks.some((check) => check.bad) ? { label: "重试", run: () => local.refresh({ fresh: true }) }
     : null;
   // 用量（本机 status.quota，读不到用云端的）：剩 ≤25% 琥珀点、≤10% 或用完红点，和本机要处理的点是同一颗（5.4.5、5.6），看列出来的那几格。
