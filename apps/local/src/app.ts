@@ -144,7 +144,8 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
   const updateTray = () => desktop.setState({ paired: tokens.count() > 0, running: sessionsRef?.activeCount() ?? 0, paused: settings.get().paused });
   const sessions = new SessionManager({
     dataDir: config.dataDir, log, models, customTools, folders, outbox, deviceId: config.deviceId, port: () => config.port,
-    cloudLinked: async () => Boolean(await cloud.target()),
+    // 只看关联记录在不在，不解钥匙：本机程序重启后第一次解要起 powershell（11/11 量过 0.5–2.6 秒），拉起时不等它。关联、取消时令牌和记录一起写、一起删。
+    cloudLinked: async () => cloud.view().linked,
     paused: () => settings.get().paused,
     skillsDir: opts.skillsDir ?? join(homeDir(), ".claude", "skills"),
     maxConcurrent: () => settings.get().maxConcurrent,

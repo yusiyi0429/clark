@@ -808,10 +808,13 @@ export class SessionManager {
     // 两边照同一份规矩：仓库里只有另一家的规矩文件（CLAUDE.md、AGENTS.md）时把它的内容接上，不往仓库里写
     prompt += otherRules(rec.agent, rec.cwd);
     writeFileSync(systemPromptPath, prompt);
-    // 换了执行方、还没交代过：这一家没看到的那几轮和改动的文件先整理好，接在给它的下一句话前面（deliver）
+    // 换了执行方、还没交代过：这一家没看到的那几轮和改动的文件整理好，接在给它的下一句话前面（deliver）。
+    // 改动的文件要跑 git，和拉起一起算，不让拉起等它。
+    let brief: Promise<string | null> | null = null;
     if (rec.handoff) {
       const events = this.d.log.after(rec.id, 0).filter((e) => !(e.type === "user_message" && e.messageId && this.unsent.has(e.messageId)));
-      this.handoffs.set(rec.id, handoffText(events, rec.seen?.[rec.agent] ?? 0, await this.changedSince(rec), `${SESSION_MCP_NAME} 的 read_earlier_turns`));
+      const seen = rec.seen?.[rec.agent] ?? 0;
+      brief = this.changedSince(rec).then((files) => handoffText(events, seen, files, `${SESSION_MCP_NAME} 的 read_earlier_turns`));
     }
     let agentsPath: string | null = null;
     if (rec.subject.kind === "topic" && rec.critics.length) {
@@ -853,6 +856,7 @@ export class SessionManager {
     run.onEvent((e) => this.onAgentEvent(rec, e));
     run.onExit((code) => this.onExit(rec, run, code));
     if (model.source === "subscription") run.onRateLimit((info) => (rec.agent === "codex" ? this.d.codexQuota?.fromEvent(info) : this.d.quota?.fromEvent(info)));
+    if (brief) this.handoffs.set(rec.id, await brief);
     return run;
   }
 
