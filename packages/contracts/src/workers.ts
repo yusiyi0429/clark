@@ -28,9 +28,10 @@ export const WorkerMark = Type.Union([
  * 已排队在等什么：not_dispatched 等开工（本人确认了、还没交给本机）、slot 等空位（本机同时跑满了）、device_offline 等本机上线、
  * prior_cards 等前面的卡（本机报的 waitingFor：派活单上要等的那几张还没在这台本机上合回）、
  * quota 等额度恢复（本机报的 hold：订阅额度用完了，停着不占位置，到点本机自己接着做；界面「等额度恢复 · HH:MM」，时间是 holdUntil）。
+ * folder_busy 等文件夹空出来（第 68 条，本机报的 heldBy：普通文件夹同一时间只许一个会话改，卡和自由子会话都算；占着的是谁见 SubSession.heldBy）。
  */
 export const WorkerQueueReason = Type.Union([Type.Literal("not_dispatched"), Type.Literal("slot"), Type.Literal("device_offline"), Type.Literal("prior_cards"),
-  Type.Literal("quota")]);
+  Type.Literal("quota"), Type.Literal("folder_busy")]);
 
 /** worker 用的资源：local 在本人电脑上（哪台、什么模型）；cloud 在云端（验收员验收），没有设备。 */
 export const WorkerResource = Type.Object({
