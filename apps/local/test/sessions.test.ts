@@ -95,7 +95,8 @@ describe("会话：开工、事件、批权限、插话、停下、强停、续�
     expect(first.sessionSecret).toMatch(/^[0-9a-f]{48}$/); // 本会话密钥只经环境变量传
     expect(a.join(" ")).not.toContain(first.sessionSecret);
     expect(a).not.toContain("--disallowedTools"); // 订阅模型保留自带搜索
-    expect(first.envKeys.filter((k: string) => /^(ANTHROPIC_|CLAUDE_)/i.test(k) || k === "CLAUDECODE")).toEqual([]);
+    // 不继承桌面应用注入的；本机自己设的只有第一轮等 MCP 的封顶
+    expect(first.envKeys.filter((k: string) => /^(ANTHROPIC_|CLAUDE_)/i.test(k) || k === "CLAUDECODE")).toEqual(["CLAUDE_CODE_MCP_STARTUP_WAIT_MS"]);
     expect(first.envKeys).toContain("DISABLE_AUTOUPDATER");
 
     const detail = await api(t.port, token, "GET", `/v1/sessions/${id}`);

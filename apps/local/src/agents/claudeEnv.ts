@@ -55,6 +55,13 @@ export function childEnv(base: NodeJS.ProcessEnv, extra: Record<string, string> 
 const GATEWAY_FAIL_FAST = { CLAUDE_CODE_MAX_RETRIES: "2", API_TIMEOUT_MS: "40000" };
 
 /**
+ * 第一轮最多等 MCP 服务 3 秒（11/11 用 Claude Code 2.1.318 实测）：带 --mcp-config 时，第一轮要等所有 MCP 连上才开始，最多等 MCP_TIMEOUT（默认 30 秒）；
+ * 有一个连不上（本人全局配置里超时的、云端转发慢的）每次拉起后第一句就多等 30 秒。封顶后到点照常开始，晚到的那几个之后再接上。
+ * 本会话自己的 MCP 在本机，几十毫秒就连上。
+ */
+const MCP_FIRST_TURN_WAIT = { CLAUDE_CODE_MCP_STARTUP_WAIT_MS: "3000" };
+
+/**
  * 权限参数：一律「每次都问」起、请求都交给本机（本机按会话的权限模式放行或转给网页，见 pathGuard 的 modeAllows）；
  * 只有「先出计划」用 Claude Code 自己的 plan 模式。它的 auto、bypassPermissions 放行的步骤不经本机，天枢的硬规矩管不住，不用。
  */
@@ -88,7 +95,7 @@ export function buildClaudeArgs(launch: AgentLaunch): { args: string[]; env: Rec
   for (const dir of launch.extraDirs()) args.push("--add-dir", dir);
 
   // MCP 配置文件里用 ${变量名} 引用的密钥和令牌，经子进程环境变量交给 Claude Code。
-  const env: Record<string, string> = { DISABLE_AUTOUPDATER: "1", ...launch.mcpEnv };
+  const env: Record<string, string> = { DISABLE_AUTOUPDATER: "1", ...MCP_FIRST_TURN_WAIT, ...launch.mcpEnv };
   // WebFetch 抓取前默认连 api.anthropic.com 做域名检查，国内网络连不上就整个失败（11/06 实测）。每个会话都关掉。
   const settings: { skipWebFetchPreflight: true; claudeMdExcludes?: string[]; env?: Record<string, string>; ultracode?: true } = { skipWebFetchPreflight: true };
   if (!launch.includePersonalConfig) settings.claudeMdExcludes = personalMemoryExcludes(homeDir(), homedir());
