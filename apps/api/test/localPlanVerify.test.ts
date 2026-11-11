@@ -135,6 +135,25 @@ describe("拆卡和验收在本机（第 21 节）", { timeout: 30_000 }, () => 
     } finally { await f.close(); }
   });
 
+  it("对话里说的模型要求（第 69 条）：登记拆卡带原话，登记读得到；规划员出的派活单每张草稿都原样带上；再登记一次换成新的；项目拆卡同样", async () => {
+    const f = await localFixture();
+    try {
+      const words = "这几件用本机的 Opus 5.5，思考开高";
+      const registered = await f.call("POST", "/api/plan-tasks/task-open/card-splits", { words: "拆成两件", modelWords: words });
+      expect(registered.json()).toMatchObject({ modelWords: words });
+      await f.sync({ kind: "plan", taskId: "task-open" }, [["card_plan", plan(1, [{ title: "跑一遍题库打分" }, { title: "录一段上手视频" }])]]);
+      const drafts = (await f.call("GET", "/api/plan-tasks/task-open/cards")).json().drafts as { modelWords: string | null }[];
+      expect(drafts.map((draft) => draft.modelWords)).toEqual([words, words]);
+      // 已有一条没开工的登记：再登记带新的就换。
+      expect((await f.call("POST", "/api/plan-tasks/task-open/card-splits", { modelWords: "用 TokenHub" })).json()).toMatchObject({ modelWords: "用 TokenHub" });
+
+      const projectId = (await f.call("POST", "/api/me/projects", { name: "品牌建设" })).json().projectId as string;
+      expect((await f.call("POST", `/api/me/projects/${projectId}/card-splits`, { modelWords: "用 Codex" })).json()).toMatchObject({ modelWords: "用 Codex" });
+      await f.sync({ kind: "plan", projectId }, [["card_plan", plan(1, [{ title: "列候选名", criterionIndex: null }])]]);
+      expect((await f.call("GET", `/api/me/projects/${projectId}/board`)).json().drafts.map((draft: { modelWords: string | null }) => draft.modelWords)).toEqual(["用 Codex"]);
+    } finally { await f.close(); }
+  });
+
   it("要本人补（主循环第 61 条）：交代带执行方标的 need；有一条要本人补就是等你补、不算没过、不写岗位修改、不自动送回，改法只拼执行方能补的；连续没过跳过它；就到这里算通过", async () => {
     const f = await localFixture();
     try {
@@ -476,7 +495,7 @@ describe("拆卡和验收在本机（第 21 节）", { timeout: 30_000 }, () => 
       const web = await f.call("POST", `${base}/card-splits`);
       expect(web.statusCode).toBe(201);
       expect(web.json()).toEqual({ id: web.json().id, taskId: null, taskName: null, missionId: null, projectId: project, projectName: "天枢新首页", origin: "web", sourceWords: [],
-        afterSequence: null,
+        afterSequence: null, modelWords: null,
         createdAt: web.json().createdAt });
       expect([(await f.call("POST", `${base}/card-splits`)).statusCode, (await f.call("POST", "/api/plan-tasks/task-open/card-splits")).statusCode]).toEqual([200, 201]);
       const buddy = await f.t.app.inject({ method: "POST", url: `/internal/me/projects/${project}/card-splits`,

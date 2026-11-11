@@ -145,12 +145,12 @@ export async function readProjectBoard(q: Query, ownerId: string, projectId: str
 
 export type DraftRow = { id: string; plan_id: string; position: number; title: string; brief: string; done_definition: string; criterion_index: number | null;
   role_id: string | null; suggest_preset_key: string | null;
-  executor: "claude_code" | "self"; model_tier: "strong" | "normal" | "light"; why: string | null; source_words: string[] };
+  executor: "claude_code" | "self"; model_tier: "strong" | "normal" | "light"; why: string | null; source_words: string[]; model_words?: string | null };
 const draftView = (roles: Map<string, RoleRow>) => (row: DraftRow) => {
   const role = row.role_id ? roles.get(row.role_id) : undefined;
   return { id: row.id, planId: row.plan_id, position: row.position, title: row.title, brief: row.brief, doneDefinition: row.done_definition,
     criterionIndex: row.criterion_index, role: role ? roleRef(role) : null, suggestPresetKey: row.suggest_preset_key, executor: row.executor, modelTier: row.model_tier, why: row.why,
-    sourceWords: row.source_words };
+    sourceWords: row.source_words, modelWords: row.model_words ?? null };
 };
 
 /** 推进人自己的卡（锁住改用 forUpdate）；不是推进人的当找不到。 */

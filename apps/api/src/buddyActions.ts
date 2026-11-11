@@ -362,7 +362,7 @@ const handlers: Handlers = {
   },
   split_cards: async (deps, call, args) => {
     if (Boolean(args.taskId) === Boolean(args.projectId)) throw new BuddyError(400, "INVALID_ARGS", "taskId 和 projectId 要带且只带一个");
-    const body = args.words?.trim() ? { words: args.words } : {};
+    const body = { ...args.words?.trim() ? { words: args.words } : {}, ...args.modelWords?.trim() ? { modelWords: args.modelWords.trim() } : {} };
     // 登记之前就有一条没开的：那条不是这次登记的，不给撤。
     const before = new Set(((await deps.q("SELECT id::text FROM card_split_requests WHERE owner_id=$1 AND closed_at IS NULL", [call.personId])).rows as
       { id: string }[]).map((row) => row.id));

@@ -119,7 +119,7 @@ export function registerTaskCardRoutes(app: AppInstance, ctx: RouteContext, deps
     response: { 200: CardSplitRequestView, 201: CardSplitRequestView } } }, async (req, reply) => handle(reply, async () => {
     const own = await board(req.person!.personId, req.params.taskId);
     const { request, created } = await registerCardSplit(q, own, "web", ctx.now(), typedWords(req.body.words),
-      await sequenceOf(req.body.afterSequence, own.viewerId, own.task.taskId, String(req.id)));
+      await sequenceOf(req.body.afterSequence, own.viewerId, own.task.taskId, String(req.id)), req.body.modelWords?.trim() || undefined);
     return reply.status(created ? 201 : 200).send(request);
   }));
 
