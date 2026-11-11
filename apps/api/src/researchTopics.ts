@@ -137,12 +137,8 @@ export async function readTopicVersion(q: Query, ownerId: string, id: string, nu
 export async function topicBrief(q: Query, ownerId: string, id: string, picked: string[] | undefined, planTask: (taskId: string) => Promise<OwnTask | null>):
   Promise<TTopicBriefResponse> {
   const row = await ownTopic(q, ownerId, id);
-  // 自由子会话（第 68 条）：交代就是本人说的第一句话，前面带项目名；没有提纲、版本、评审会。
-  if (row.free) {
-    const project = row.project_id ? (await q("SELECT name FROM projects WHERE id=$1", [row.project_id])).rows[0] as { name: string } | undefined : undefined;
-    return { markdown: [...(project ? [`项目：${project.name}`, ""] : []), row.first_message ?? row.title].join("\n").slice(0, 20_000), title: row.title,
-      latestVersion: null, role: null, critics: [] };
-  }
+  // 自由子会话（第 68 条）：交代就是本人说的第一句话原话，网页原样当第一句发出去（开工的文件夹已经是项目的，不再带项目名）；没有提纲、版本、评审会。
+  if (row.free) return { markdown: (row.first_message ?? row.title).slice(0, 20_000), title: row.title, latestVersion: null, role: null, critics: [] };
   const own = row.plan_task_id ? await planTask(row.plan_task_id) : null;
   const mission = row.mission_id ? (await q("SELECT title FROM missions WHERE id=$1", [row.mission_id])).rows[0] as { title: string } | undefined : undefined;
   const latest = (await q("SELECT max(number)::int AS n FROM topic_versions WHERE topic_id=$1", [id])).rows[0].n as number | null;
