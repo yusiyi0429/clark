@@ -1,30 +1,28 @@
 "use client";
 
 /**
- * 月份页（「今天」行的「复盘」「12 月待敲定」chip、等你里月份那一行点进来，设计 10.4、10.5、5.4.6）：文档类页面，没有主按钮，要拿的主意都在选项框里。
+ * 月份页（「今天」行的「复盘」「12 月待敲定」chip、等你里月份那一行点进来，设计 10.4、10.5、5.4.6）：文档类页面，没有主按钮。
  * - 上半：这个月每件 Task 一行（和左栏 Task 行同一个样子），小字「约定 2/3 · 交付第 2 版 · 进行中 1」，延续来的再加「延续自 10 月的 X」；
- *   本人确认完成的行首一个勾、整行变淡；已经延续出去的不再问，下面一行「已延续到 X」（点了进那件）。
- *   其余的下面接一个选项框「继续做（推荐）/ 改一改再做 / 到此为止 / 自己说…」，答完收成一行。点 Task 行进它的管线。
+ *   本人确认完成的行首一个勾、整行变淡；已经延续出去的下面一行「已延续到 X」（点了进那件）。点 Task 行进它的管线。
  * - 下半：下个月 Co-Agent 的草稿，按 Mission 分组；延续来的小字写「延续自 11 月的 X · X 现在的状态」。
  * - 底部两个动作：「和伙伴过一遍」（进总管线，伙伴已经读过草稿）、「去 M2 签复盘」（整页去 M2，ArrowUpRight）。
  * 数据见 useMonthPage（接口等 B2）。
- * 复盘期间（GET …/review 有这个月的复盘）月份页就是复盘页（MonthReview，设计第三版），上面这些不画；第一版的「怎么办」随旧答案一起等本人定（B 的清单第 1 条）。
+ * 复盘期间（GET …/review 有这个月的复盘）月份页就是复盘页（MonthReview，设计第三版），上面这些不画。
+ * 第一版的「怎么办」（继续做 / 改一改再做 / 到此为止）随旧答案一起删了（本人 11/11 定，去向和评定都在复盘页）。
  */
 import { ArrowUpRight, Check } from "lucide-react";
 import { HeroButton } from "@/components/HeroButton";
-import { DecisionBox, FailedLine, type DecisionOption } from "@/components/work/DecisionBox";
+import { FailedLine } from "@/components/work/DecisionBox";
 import { BUDDY_HREF, monthLabel, taskHref } from "@/lib/home/derive";
 import { useEffect } from "react";
 import type { MonthPageProps } from "./index";
 import { MonthReviewView, ReviewHeadTrail } from "./MonthReview";
 import { headText, useMonthReview, type MonthReview, type ReviewActions } from "./useMonthReview";
 import { ICON, Loading, Section } from "./parts";
-import { CHOICE_LABEL, answerText, monthSummary, nextPeriod, settled, useMonthPage, type MonthAnswer, type MonthChoice, type MonthPageData, type MonthTask } from "./useMonthPage";
+import { monthSummary, useMonthPage, type MonthPageData, type MonthTask } from "./useMonthPage";
 import h from "@/styles/home.module.css";
 import p from "@/styles/home-pages.module.css";
 
-const CHOICES: MonthChoice[] = ["continue", "revise", "stop"];
-const OPTIONS: DecisionOption[] = CHOICES.map((choice, index) => ({ label: CHOICE_LABEL[choice], recommended: index === 0 }));
 
 const openM2 = () => window.location.assign("/m2/");
 
@@ -48,10 +46,10 @@ function ReviewPage({ review, actions, go, onHead }: { review: MonthReview; acti
 }
 
 function MonthTasks({ go, period }: { go: (href: string) => void; period: string }) {
-  const { data, failed, retry, decide } = useMonthPage(period);
+  const { data, failed, retry } = useMonthPage(period);
   if (failed !== null) return <><FailedLine reason={failed} onRetry={retry} /><MonthFoot go={go} /></>;
   if (!data) return <Loading />;
-  return <MonthView data={data} go={go} decide={decide} />;
+  return <MonthView data={data} go={go} />;
 }
 
 /** 按 Mission 分组，顺序照数据给的。 */
@@ -61,8 +59,7 @@ function byMission<T>(items: T[], title: (item: T) => string): [string, T[]][] {
   return [...groups];
 }
 
-export function MonthView({ data, go, decide }: { data: MonthPageData; go: (href: string) => void; decide: (taskId: string, answer: MonthAnswer) => Promise<void> }) {
-  const next = monthLabel(nextPeriod(data.period));
+export function MonthView({ data, go }: { data: MonthPageData; go: (href: string) => void }) {
   const draft = data.draft;
   return (
     <>
@@ -72,7 +69,7 @@ export function MonthView({ data, go, decide }: { data: MonthPageData; go: (href
             {byMission(data.tasks, (task) => task.missionTitle).map(([mission, tasks]) => (
               <div key={mission}>
                 <p className={p.groupTitle}>{mission}</p>
-                {tasks.map((task) => <MonthTaskRow key={task.taskId} task={task} next={next} go={go} decide={decide} />)}
+                {tasks.map((task) => <MonthTaskRow key={task.taskId} task={task} go={go} />)}
               </div>
             ))}
           </div>
@@ -105,7 +102,7 @@ export function MonthView({ data, go, decide }: { data: MonthPageData; go: (href
   );
 }
 
-function MonthTaskRow({ task, next, go, decide }: { task: MonthTask; next: string; go: (href: string) => void; decide: (taskId: string, answer: MonthAnswer) => Promise<void> }) {
+function MonthTaskRow({ task, go }: { task: MonthTask; go: (href: string) => void }) {
   const done = task.done || task.settlement?.kind === "completed";
   const to = task.settlement?.kind === "continued" ? task.settlement.to : null;
   const from = task.continuedFrom;
@@ -121,12 +118,6 @@ function MonthTaskRow({ task, next, go, decide }: { task: MonthTask; next: strin
       {to ? (
         <p className={h.line} data-testid="month-continued"><button type="button" className={h.lineLink} onClick={() => go(taskHref(to.taskId))}>已延续到{to.period ? ` ${monthLabel(to.period)}` : ""}的{to.name}</button></p>
       ) : null}
-      {settled(task) ? null : (
-        <DecisionBox kind="question" testId="month-decision" title={`${next}怎么办`} options={OPTIONS} autoFocus={false}
-          resolved={task.answer ? answerText(task.answer) : undefined}
-          onPick={([index], note) => decide(task.taskId, { choice: CHOICES[index ?? 0]!, note: note ?? null })}
-          other={{ maxLength: 200, onSubmit: (text) => decide(task.taskId, { choice: null, note: text }) }} />
-      )}
     </div>
   );
 }
