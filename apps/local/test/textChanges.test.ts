@@ -38,6 +38,29 @@ describe("比两份文字", () => {
     expect(pieces(b, a, del)).toEqual([["第二段新加的\n\n", ""]]);
   });
 
+  it("整个数算一处：3160 改 3180 盖住整个数", () => {
+    const a = "本月收入 3160 万元\n";
+    const b = "本月收入 3180 万元\n";
+    const cs = diffText(a, b);
+    expect(pieces(a, b, cs)).toEqual([["3160", "3180"]]);
+    expect(cs[0]).toEqual({ id: "c1", before: { start: 5, end: 9 }, after: { start: 5, end: 9 } });
+  });
+
+  it("小数、千分位算在数里，后面的 % 不算", () => {
+    expect(pieces("增长 17.4%\n", "增长 17.6%\n", diffText("增长 17.4%\n", "增长 17.6%\n"))).toEqual([["17.4", "17.6"]]);
+    expect(pieces("| 合计 | 15,040 |\n", "| 合计 | 15,240 |\n", diffText("| 合计 | 15,040 |\n", "| 合计 | 15,240 |\n"))).toEqual([["15,040", "15,240"]]);
+  });
+
+  it("英文单词整个算一处", () => {
+    expect(pieces("the color is red\n", "the colour is red\n", diffText("the color is red\n", "the colour is red\n"))).toEqual([["color", "colour"]]);
+  });
+
+  it("中文照旧一个字一个字：只盖「良好」「优秀」", () => {
+    const a = "进展评估：良好\n";
+    const b = "进展评估：优秀\n";
+    expect(pieces(a, b, diffText(a, b))).toEqual([["良好", "优秀"]]);
+  });
+
   it("emoji 这类两个下标的字不会被切开", () => {
     expect(pieces("ab😀cd", "ab😁cd", diffText("ab😀cd", "ab😁cd"))).toEqual([["😀", "😁"]]);
   });
@@ -115,7 +138,7 @@ describe("比两份文件", () => {
     expect(new TextDecoder("gbk").decode(before)).toBe("姓名,金额\r\n张三,100\r\n李四,200\r\n");
     const r = compareFiles("csv", before, after);
     expect(r.detail).toBe("full");
-    expect(r.detail !== "none" && pieces(r.before!, r.after!, r.changes)).toEqual([["张三", "王五"], ["2", "3"]]);
+    expect(r.detail !== "none" && pieces(r.before!, r.after!, r.changes)).toEqual([["张三", "王五"], ["200", "300"]]);
     // 只恢复「张三」：手工改回去应该是 姓名,金额 / 张三,100 / 李四,300
     const back = restoreFile("csv", before, after, ["c1"]);
     const expected = hex("d0 d5 c3 fb 2c bd f0 b6 ee 0d 0a d5 c5 c8 fd 2c 31 30 30 0d 0a c0 ee cb c4 2c 33 30 30 0d 0a");

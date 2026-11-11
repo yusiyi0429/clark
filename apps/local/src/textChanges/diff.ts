@@ -1,5 +1,5 @@
 // 比两份文字，切成「一处一处」的改动；把其中几处恢复回去。
-// 先按行比，再在改过的那几行里按字比（按 Unicode 字符，中文一个字一个字）；同一行里只隔不超过 3 个没变的字的并成一处，不跨行并。
+// 先按行比，再在改过的那几行里按词比（中文、标点一个字一个词，英文单词、整个数各算一个词）；同一行里只隔不超过 3 个没变的字的并成一处，不跨行并。
 // 用的是线性内存的 Myers 差分（找中间一段相同的，两边递归）。计算量按步数限（不按时间，同样的输入永远同样的结果）；
 // 超了就退成「这一大块算一处」。
 
@@ -97,13 +97,15 @@ function refine(before: string, after: string, a: TextSpan, b: TextSpan, budget:
   const sa = before.slice(a.start, a.end);
   const sb = after.slice(b.start, b.end);
   if (sa.length > TEXT_DIFF_LIMITS.maxHunkChars || sb.length > TEXT_DIFF_LIMITS.maxHunkChars) return [[a, b]];
-  const ca = codePoints(sa);
-  const cb = codePoints(sb);
-  // 并：两处之间没变的字不超过 mergeGap 个、而且中间没有换行
+  const ids = new Map<string, number>();
+  const ca = words(sa, ids);
+  const cb = words(sb, ids);
+  // 并：两处之间没变的不超过 mergeGap 个字（按字符数，不按词数）、而且中间没有换行
   const merged: Region[] = [];
-  for (const r of regions(ca.cps, cb.cps, budget)) {
+  for (const r of regions(ca.ids, cb.ids, budget)) {
     const prev = merged[merged.length - 1];
-    if (prev && r[0] - prev[1] <= TEXT_DIFF_LIMITS.mergeGap && !ca.cps.subarray(prev[1], r[0]).includes(10)) {
+    const gap = prev && sa.slice(ca.at[prev[1]], ca.at[r[0]]);
+    if (prev && countChars(gap!) <= TEXT_DIFF_LIMITS.mergeGap && !gap!.includes("\n")) {
       prev[1] = r[1];
       prev[3] = r[3];
     } else merged.push([...r]);
@@ -114,18 +116,27 @@ function refine(before: string, after: string, a: TextSpan, b: TextSpan, budget:
   ]);
 }
 
-/** 按 Unicode 字符切开：cps 是每个字的码位，at[i] 是第 i 个字在字符串里的下标（at[长度] = 字符串长度）。 */
-function codePoints(s: string): { cps: Int32Array; at: Int32Array } {
-  const cps: number[] = [];
+// 一个词：英文字母连着的一串；一个数（中间的小数点、千分位逗号算在里面，后面的 % 和单位不算）；其余一个字一个词（中文、标点、空白、emoji）
+const WORD = /[A-Za-z]+|[0-9]+(?:[.,][0-9]+)*|[\s\S]/gu;
+
+/** 按词切开：ids 是每个词的编号（两边共用一张表），at[i] 是第 i 个词在字符串里的下标（at[词数] = 字符串长度）。 */
+function words(s: string, table: Map<string, number>): { ids: Int32Array; at: Int32Array } {
+  const ids: number[] = [];
   const at: number[] = [];
-  for (let i = 0; i < s.length; ) {
-    const cp = s.codePointAt(i)!;
-    cps.push(cp);
-    at.push(i);
-    i += cp > 0xffff ? 2 : 1;
+  for (const m of s.matchAll(WORD)) {
+    let id = table.get(m[0]);
+    if (id === undefined) table.set(m[0], (id = table.size));
+    ids.push(id);
+    at.push(m.index);
   }
   at.push(s.length);
-  return { cps: Int32Array.from(cps), at: Int32Array.from(at) };
+  return { ids: Int32Array.from(ids), at: Int32Array.from(at) };
+}
+
+function countChars(s: string): number {
+  let n = 0;
+  for (const _ of s) n++;
+  return n;
 }
 
 function lineStarts(lines: string[]): number[] {
