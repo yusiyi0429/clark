@@ -229,6 +229,10 @@ export function createServer(d: ServerDeps): http.Server {
       return { profiles: await d.models.list() };
     },
     disconnectTokenHub: async () => { await d.tokenHub.disconnect(); void d.spend.refresh(true); return { ok: true }; },
+    listSources: sourcesPending,
+    checkSource: sourcesPending,
+    addSource: sourcesPending,
+    deleteSource: sourcesPending,
     listTools: async () => ({ tools: await d.customTools.list() }),
     putTool: async (c) => {
       if (!/^[A-Za-z0-9_-]{1,80}$/.test(c.params.id!)) throw new HttpError(400, "validation", "id 只能用字母数字、- 和 _");
@@ -338,6 +342,11 @@ export function createServer(d: ServerDeps): http.Server {
 
   function agentMustBeClaude(c: Ctx) {
     if (c.params.agent !== "claude-code") throw new HttpError(404, "not_found", "没有这个执行方");
+  }
+
+  /** 添加来源（第 52 条）：契约先发，本机实现跟着来。 */
+  function sourcesPending(): never {
+    throw new HttpError(501, "not_implemented", "这一版本机程序还不能添加来源");
   }
 
   /** SSE：先补发 Last-Event-ID（或 ?after=）之后的事件，再推新事件；15 秒一次心跳注释。 */
