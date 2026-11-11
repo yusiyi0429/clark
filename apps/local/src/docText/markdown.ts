@@ -3,11 +3,12 @@
 const INLINE = /[\\`*_[\]<>]/g;
 const BLOCK_START = /^(#{1,6}(\s|$)|[-+](\s|$)|-{3,}\s*$|={3,}\s*$)/;
 const ORDERED_START = /^(\d{1,9})([.)])(?=\s|$)/;
+const NEWLINE = /\r\n?|\n/;
 
 /** 一段正文：每行去掉首尾空白，空行去掉。 */
 export function paragraphMd(text: string): string {
   return text
-    .split("\n")
+    .split(NEWLINE)
     .map((l) => l.trim())
     .filter(Boolean)
     .map((l) => {
@@ -20,7 +21,7 @@ export function paragraphMd(text: string): string {
 /** 表格里的一格：竖线转义，换行写成 <br>。 */
 export function cellMd(text: string): string {
   return text
-    .split("\n")
+    .split(NEWLINE)
     .map((l) => l.trim().replace(INLINE, "\\$&").replace(/\|/g, "\\|"))
     .filter(Boolean)
     .join("<br>");

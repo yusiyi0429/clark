@@ -42,10 +42,6 @@ export class ZipReader {
     }
   }
 
-  has(name: string): boolean {
-    return this.entries.has(name.toLowerCase());
-  }
-
   /** 读一个部件成 UTF-8 文字；没有这个部件回 null。 */
   readText(name: string): string | null {
     const e = this.entries.get(name.toLowerCase());

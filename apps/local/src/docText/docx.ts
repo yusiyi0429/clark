@@ -75,8 +75,7 @@ class Ctx {
       for (const tc of unwrap(tr, "tc")) {
         const tcPr = kid(tc, "tcPr");
         const vMerge = kid(tcPr, "vMerge");
-        const merged = (vMerge && vMerge.attrs.val !== "restart") || (kid(tcPr, "hMerge") && kid(tcPr, "hMerge")!.attrs.val !== "restart");
-        cells.push(merged ? "" : cellMd(cellText(tc)));
+        cells.push(vMerge && vMerge.attrs.val !== "restart" ? "" : cellMd(cellText(tc)));
         const span = Number(kid(tcPr, "gridSpan")?.attrs.val ?? 1) || 1;
         for (let s = 1; s < span; s++) cells.push("");
       }

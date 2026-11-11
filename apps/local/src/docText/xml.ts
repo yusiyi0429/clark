@@ -12,6 +12,7 @@ export interface XmlHandler {
 export function scanXml(xml: string, h: XmlHandler): void {
   let i = 0;
   const n = xml.length;
+  const open: string[] = []; // 开着的标签，关的时候核对，坏了的 XML 当坏文件
   while (i < n) {
     const lt = xml.indexOf("<", i);
     const textEnd = lt < 0 ? n : lt;
@@ -34,7 +35,9 @@ export function scanXml(xml: string, h: XmlHandler): void {
     } else if (xml[lt + 1] === "/") {
       const gt = xml.indexOf(">", lt);
       if (gt < 0) throw bad();
-      h.close(local(xml.slice(lt + 2, gt).trim()));
+      const qname = xml.slice(lt + 2, gt).trim();
+      if (open.pop() !== qname) throw bad();
+      h.close(local(qname));
       i = gt + 1;
     } else {
       // 开标签：找到不在引号里的 ">"
@@ -62,9 +65,11 @@ export function scanXml(xml: string, h: XmlHandler): void {
       const name = local(m[0]);
       h.open(name, attrs, selfClosing);
       if (selfClosing) h.close(name);
+      else open.push(m[0]);
       i = j + 1;
     }
   }
+  if (open.length) throw bad();
 }
 
 export interface XNode { name: string; attrs: Record<string, string>; children: Array<XNode | string> }
@@ -108,10 +113,6 @@ export function find(node: XNode, name: string): XNode | undefined {
     if (hit) return hit;
   }
   return undefined;
-}
-
-export function ownText(node: XNode): string {
-  return node.children.filter((c): c is string => typeof c === "string").join("");
 }
 
 // ---------- 部件关系（.rels） ----------

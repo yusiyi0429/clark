@@ -81,6 +81,41 @@ export const DEFAULT_NUMBERING =
   '<w:abstractNum w:abstractNumId="1"><w:lvl w:ilvl="0"><w:numFmt w:val="decimal"/></w:lvl></w:abstractNum>' +
   '<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num>';
 
+const S = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+
+export interface SheetSpec { name: string; data?: string; state?: string; chart?: boolean; file?: string; after?: string }
+
+/**
+ * 拼一个 .xlsx。每张表给 sheetData 里面的 XML（data）和 sheetData 后面的（after，比如合并格子）。
+ * styles 是 styles.xml 里 <styleSheet> 下面的内容；默认第 1 号样式是日期（内置 14）。
+ */
+export function makeXlsx(sheets: SheetSpec[], opts: { strings?: string[]; styles?: string; date1904?: boolean; store?: boolean; reverse?: boolean; extra?: Part[] } = {}): Buffer {
+  const target = (s: SheetSpec, i: number) => s.file ?? (s.chart ? `chartsheets/sheet${i + 1}.xml` : `worksheets/sheet${i + 1}.xml`);
+  const parts: Part[] = [
+    ["[Content_Types].xml", '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>'],
+    ["_rels/.rels", `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/officeDocument" Target="xl/workbook.xml"/></Relationships>`],
+    [
+      "xl/workbook.xml",
+      `<?xml version="1.0" encoding="UTF-8"?><workbook ${S}>${opts.date1904 ? '<workbookPr date1904="1"/>' : "<workbookPr/>"}<sheets>` +
+        sheets.map((s, i) => `<sheet name="${s.name}" sheetId="${i + 1}"${s.state ? ` state="${s.state}"` : ""} r:id="rId${i + 10}"/>`).join("") +
+        "</sheets></workbook>",
+    ],
+    [
+      "xl/_rels/workbook.xml.rels",
+      `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/sharedStrings" Target="sharedStrings.xml"/><Relationship Id="rId2" Type="${REL}/styles" Target="styles.xml"/>` +
+        sheets.map((s, i) => `<Relationship Id="rId${i + 10}" Type="${REL}/${s.chart ? "chartsheet" : "worksheet"}" Target="${target(s, i)}"/>`).join("") +
+        "</Relationships>",
+    ],
+    ["xl/sharedStrings.xml", `<sst ${S} count="${opts.strings?.length ?? 0}">${(opts.strings ?? []).map((t) => `<si><t xml:space="preserve">${t}</t></si>`).join("")}</sst>`],
+    ["xl/styles.xml", `<styleSheet ${S}>${opts.styles ?? DEFAULT_XLSX_STYLES}</styleSheet>`],
+    ...sheets.map((s, i): Part => [`xl/${target(s, i)}`, s.chart ? `<chartsheet ${S}/>` : `<worksheet ${S}><dimension ref="A1"/><sheetData>${s.data ?? ""}</sheetData>${s.after ?? ""}</worksheet>`]),
+    ...(opts.extra ?? []),
+  ];
+  return makeZip(opts.reverse ? parts.reverse() : parts, { store: opts.store });
+}
+
+export const DEFAULT_XLSX_STYLES = '<cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="14" applyNumberFormat="1"/></cellXfs>';
+
 /** 一段普通文字。 */
 export function p(text: string, pPr = ""): string {
   return `<w:p>${pPr ? `<w:pPr>${pPr}</w:pPr>` : ""}<w:r><w:t xml:space="preserve">${text}</w:t></w:r></w:p>`;
