@@ -5,7 +5,7 @@ import { LocalContext } from "@/lib/local/LocalRunnerProvider";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }), usePathname: () => "/me/work" }));
 
-import { HandbackDecision, StopBox, SupplyBox, stopPrefill, supplyPrefill, wroteMore, type HandbackForBox } from "./TaskDecisions";
+import { HandbackDecision, StopBox, SupplyBox, supplyPrefill, type HandbackForBox } from "./TaskDecisions";
 
 /** 等你补和受阻并成的框（主循环第 61、62 条）：没有 jsdom，只看画出来的第一屏；点了以后的那两个写字的框单独画。 */
 const text = (html: string) => html.replace(/<[^>]+>/g, "|").replace(/\|+/g, "|");
@@ -85,21 +85,16 @@ describe("登记以后（relay.state）", () => {
 });
 
 describe("就到这里、我来补（写字的那一步）", () => {
-  it("就到这里预填没达到那几条的短标题；只有预填的字发不出去（没有发送键），写了原因才能发", () => {
-    expect(stopPrefill(gaps)).toBe("候选名的含义、近似商标申请号：");
+  it("就到这里：没达到的几条短标题列在上面，输入框空着、占位字「原因」，空着没有发送键", () => {
     const html = renderToStaticMarkup(<StopBox title="含义还缺两个" gaps={gaps} onCancel={() => undefined} onSubmit={async () => undefined} />);
-    expect(html).toContain(">候选名的含义、近似商标申请号：</textarea>");
-    expect(html).toContain('aria-label="原因"');
+    expect(text(html)).toContain("|含义还缺两个|候选名的含义|近似商标申请号|1|取消|");
+    expect(html).toMatch(/<textarea[^>]*placeholder="原因…"[^>]*><\/textarea>/);
     expect(html).not.toContain('aria-label="发送"');
-    const accept = wroteMore(stopPrefill(gaps));
-    expect(accept("候选名的含义、近似商标申请号：")).toBe(false);
-    expect(accept("   ")).toBe(false);
-    expect(accept("候选名的含义、近似商标申请号：先不查了")).toBe(true);
   });
-  it("没有逐条的老交回：不预填，空着发不出去", () => {
-    expect(stopPrefill([])).toBe("");
-    expect(wroteMore("")("")).toBe(false);
-    expect(wroteMore("")("不做了")).toBe(true);
+  it("没有逐条的老交回：上面不列，照样空着提交不了", () => {
+    const html = renderToStaticMarkup(<StopBox title="验收两次没过" gaps={[]} onCancel={() => undefined} onSubmit={async () => undefined} />);
+    expect(html).not.toContain("handback-stop-gaps");
+    expect(html).not.toContain('aria-label="发送"');
   });
   it("我来补预填每条要你补的短标题，一行一条；只有预填的发不出去", () => {
     expect(supplyPrefill(gaps)).toBe("近似商标申请号：");

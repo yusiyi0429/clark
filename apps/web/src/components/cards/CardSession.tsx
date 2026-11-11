@@ -32,7 +32,7 @@ import { useCardDetail, type CardDetail } from "./useCardDetail";
 import { SourceWordIssues, SourceWords } from "./SourceWords";
 import { MergeAction } from "@/components/work/MergeAction";
 import { ApprovalDecision, QuestionDecision, awayChip } from "@/components/work/decisions";
-import { HandbackDecision, MergeDecision, stopPrefill, useRelayNow, wroteMore } from "@/components/home/TaskDecisions";
+import { HandbackDecision, MergeDecision, useRelayNow } from "@/components/home/TaskDecisions";
 import { ATTENTION_LABEL, attentionOf, isMergeLater, viewAsk, type Attention } from "@/lib/home/attention";
 import { DecisionBox, FailedLine, PendingBoxes, PendingDock, failureOf, type Failure } from "@/components/work/DecisionBox";
 import { useViewChrome } from "@/components/home/view";
@@ -489,10 +489,9 @@ export function Acceptance({ cardId, handback, canOverrule, deliverable, onChang
     : handback.passedWithGap ? `就到这里 · ${handback.met}/${handback.total} 条达到`
     : handback.outcome === "needs_person" ? `等你补 · ${handback.met}/${handback.total} 条达到`
     : `未通过 · ${handback.met}/${handback.total} 条达到`;
-  // 没过、等你补的推翻就是「就到这里」（主循环第 62 条）：原因预填没达到那几条的短标题，只有预填的字提交不了。
+  // 没过、等你补的推翻就是「就到这里」（主循环第 62 条）：没达到的几条上面逐条列着，原因空着提交不了。
   const flipLabel = handback.outcome === "pass" ? "推翻" : "就到这里";
-  const prefill = handback.outcome === "pass" ? "" : stopPrefill(handback.gaps ?? []);
-  const canSubmit = reason !== null && wroteMore(prefill)(reason);
+  const canSubmit = !!reason?.trim();
   const canFlip = canOverrule && handback.status === "done" && !handback.overruled && !(handback.outcome === "pass" && deliverable?.startsWith("已纳入"));
   return (
     <div className={s.sec} data-testid="acceptance">
@@ -521,7 +520,7 @@ export function Acceptance({ cardId, handback, canOverrule, deliverable, onChang
         </form>
       ) : (
         <div className={s.actions}>
-          {canFlip && !(hideFlip && handback.outcome === "pass") ? <HeroButton variant="ghost" size="sm" onPress={() => setReason(prefill)}>{flipLabel}</HeroButton> : null}
+          {canFlip && !(hideFlip && handback.outcome === "pass") ? <HeroButton variant="ghost" size="sm" onPress={() => setReason("")}>{flipLabel}</HeroButton> : null}
           {canOverrule && handback.status === "failed" ? <HeroButton variant="ghost" size="sm" isDisabled={busy} onPress={() => void run(() => retryAcceptance(cardId, handback.id))}>重新验收</HeroButton> : null}
           {failed && !busy ? <FailedLine inline {...failed} /> : null}
         </div>

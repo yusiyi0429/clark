@@ -50,9 +50,9 @@ export function DecisionBox({ kind, title, body, options, onPick, onTicks, initi
   initialPicks?: number[];
   /**
    * 最后一项：这一行本身就是输入框（占位「{label}…」，读屏念 label）。不给就没有这一项。maxLength 和接这句话的接口上限一致，超了发不出去。
-   * initial：预填的字（出现时光标就在这一行的末尾）；accept：这段字能不能发（不给时有字就能发）。
+   * initial：预填的字（出现时光标就在这一行的末尾）；focus：没预填也让光标先进这一行；accept：这段字能不能发（不给时有字就能发）。
    */
-  other?: { label?: string; maxLength?: number; initial?: string; accept?: (text: string) => boolean; onSubmit: (text: string) => void | Promise<unknown> };
+  other?: { label?: string; maxLength?: number; initial?: string; accept?: (text: string) => boolean; focus?: boolean; onSubmit: (text: string) => void | Promise<unknown> };
   multi?: boolean;
   /** 几件一起来：第几件（从 0 起）、共几件、翻到哪件。 */
   pager?: { index: number; total: number; onGo: (index: number) => void };
@@ -111,7 +111,7 @@ export function DecisionBox({ kind, title, body, options, onPick, onTicks, initi
     if (active instanceof HTMLElement && (active.isContentEditable || active instanceof HTMLTextAreaElement || active instanceof HTMLInputElement) && !rootRef.current?.contains(active)) return;
     // 预填了字的：光标放到那一行的末尾，接着写。
     const field = textRef.current;
-    if (startText.current && field) { setSelected(otherIndex); field.focus({ preventScroll: true }); field.setSelectionRange(field.value.length, field.value.length); return; }
+    if ((startText.current || other?.focus) && field) { setSelected(otherIndex); field.focus({ preventScroll: true }); field.setSelectionRange(field.value.length, field.value.length); return; }
     optionRefs.current[recommended]?.focus({ preventScroll: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 只在出现、翻页时定焦点
   }, [live, pageKey]);

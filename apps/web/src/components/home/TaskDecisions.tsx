@@ -6,7 +6,7 @@
  *   第一行是验收员那一句人话（headline）。
  *   等你补：逐条列要你做什么（gaps 里 fixBy = person 的），「我来补（推荐）/ 就到这里 / 改完成标准」。
  *   受阻：「验收意见」默认收起，点开是逐条的理由和改法，「再改一轮（推荐）/ 我去看看 / 改完成标准 / 就到这里」。
- *   「就到这里」必须写一句原因（预填没达到那几条的短标题，只有预填的字提交不了），推翻成有缺口通过。
+ *   「就到这里」必须写一句原因（没达到那几条的短标题列在输入框上面，输入框空着提交不了），推翻成有缺口通过。
  *   「再改一轮」「我来补」都走登记（…/relay）：在跑它的这台电脑上登记完马上认领送出去；手机上、别的电脑上框上写「电脑在线后执行 / 送到」，送到以后照 relay.state 收起。
  *   「我来补」在这台电脑上把输入框填好、聚焦（发出时由子会话页走登记）；别处就在框里写。
  * - 验收过了没合回：「合进 main（推荐）/ 先不合」。本机程序在主文件夹干净、停在原分支、没冲突时自己合，合不了、或本人关了「验收过就合回」（本机报 needsMerge）才问；
@@ -49,8 +49,6 @@ export type HandbackForBox = Pick<TCardHandbackBrief, "id" | "outcome" | "headli
 const REASON_MAX = 200;
 const SUPPLY_MAX = 3000;
 
-/** 「就到这里」预填：没达到那几条的短标题，后面接本人写的原因。 */
-export const stopPrefill = (gaps: readonly TCardGapItem[]) => (gaps.length ? `${gaps.map((gap) => gap.short).join("、")}：` : "");
 /** 「我来补」预填：要本人补的每条一行。 */
 export const supplyPrefill = (gaps: readonly TCardGapItem[]) => gaps.filter((gap) => gap.fixBy === "person").map((gap) => `${gap.short}：`).join("\n");
 /** 写了东西：不是空的，也不只是预填的那几个字。 */
@@ -143,12 +141,12 @@ export function HandbackDecision({ cardId, handback, here, onFill, onLook, onEdi
 
 type WriteBox = { title: string; gaps: readonly TCardGapItem[]; onCancel: () => void; onSubmit: (text: string) => Promise<unknown> };
 
-/** 「就到这里」：写一句原因（预填没达到那几条的短标题）；只有预填的字发不出去。 */
+/** 「就到这里」：没达到的那几条（短标题）列在上面，下面写一句原因；空着提交不了。 */
 export function StopBox({ title, gaps, onCancel, onSubmit }: WriteBox) {
-  const prefill = stopPrefill(gaps);
   return (
     <DecisionBox kind="question" testId="handback-stop" title={title} options={[{ label: "取消" }]} onPick={onCancel}
-      other={{ label: "原因", maxLength: REASON_MAX, initial: prefill, accept: wroteMore(prefill), onSubmit }} />
+      body={gaps.length ? <ul className={h.wordIssues} data-testid="handback-stop-gaps">{gaps.map((gap) => <li key={gap.index}>{gap.short}</li>)}</ul> : undefined}
+      other={{ label: "原因", maxLength: REASON_MAX, focus: true, onSubmit }} />
   );
 }
 
