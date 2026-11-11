@@ -35,7 +35,7 @@ import type { ModelProfiles } from "./models.js";
 import { isInside, type Folders } from "./folders.js";
 import type { Outbox } from "./outbox.js";
 import { SESSION_MCP_NAME, sessionToolNames } from "./sessionMcp.js";
-import { changesBrief, criticAgents, returnText, reviewMessage, systemPrompt } from "./rolePrompt.js";
+import { agreementInBrief, changesBrief, criticAgents, returnText, reviewMessage, systemPrompt } from "./rolePrompt.js";
 import { addWorktree, branchName, cardDiff, changedFiles, commitAll, deleteBranch, git, mergeBranch, pruneRepo, removeWorktree, repoHead } from "./git.js";
 import { ensureFeishuPlugin, larkSkills } from "./agents/feishuPlugin.js";
 import { AGENT_NAME, earlierTurns, handoffText, otherRules } from "./handoff.js";
@@ -176,6 +176,8 @@ interface SessionRecord {
   context?: TLocalContextUsage;
   /** 卡：执行方知道的是卡的约定第几版（主循环第 60 条）。开工时取一次，转话带了新的版本号就记新的；交回时云端更新了就退回。没取到过为空。 */
   agreementRevision?: number;
+  /** 卡：开工交代里交给执行方的约定（agreementInBrief 认出来的）。没取到过版本号时，交回拿它和云端的比内容。 */
+  startAgreement?: { standards: string[] | null; brief?: string | null };
 }
 
 /** 不合契约时给执行方看的一句（哪个字段、哪里不对）。 */
@@ -378,7 +380,7 @@ export class SessionManager {
     const {
       mcpSecret: _s, syncSeq: _q, outputs: _o, versionNumber: _v, lastVersion: _l, role: _r, critics: _c, queuedMessage: _m, queueOrder: _n,
       parentId: _p, briefPending: _b, criteria: _cr, failStreak: _f, submitted: _sb, nudged: _nd, workspace, commit: _cm, after: _af, passed: _ps, sourceWords: _sw, unread: _ur,
-      background, hold, holdSince: _hs, modelTier: _mt, budgetKey: _bk, runSince: _rs, seen: _se, handoff: _ho, run, agreementRevision: _ar, ...rest
+      background, hold, holdSince: _hs, modelTier: _mt, budgetKey: _bk, runSince: _rs, seen: _se, handoff: _ho, run, agreementRevision: _ar, startAgreement: _sa, ...rest
     } = rec;
     const question = this.questions.get(rec.id);
     const waitingFor = this.waitingFor(rec);
@@ -707,7 +709,11 @@ export class SessionManager {
       workspace: place?.workspace ?? null, commit: null, after: waiting ? after : [], passed: null, background: [], hold: null, holdSince: null,
       budgetKey, runSince: null, run: null, permissionMode, ...(req.effort ? { effort: req.effort } : {}),
     };
-    if (subject.kind === "card") void this.noteAgreement(rec); // 卡开工时记下执行方知道约定的第几版（主循环第 60 条）
+    if (subject.kind === "card") {
+      // 卡开工时记下执行方知道约定的第几版（主循环第 60 条）；取不到时交回比内容，所以交代里的那份也记下
+      rec.startAgreement = agreementInBrief(req.firstMessage);
+      void this.noteAgreement(rec);
+    }
     // 满了（或前面还有人在排、在等前面的卡、文件夹被另一张卡占着、订阅额度用完了、预算用完了、余额不足）就进队，先来先跑；有空位时 pump 接上。
     const busy = this.folderBusy(rec);
     const limited = model.source === "subscription" && this.blocked(rec) !== null;
@@ -2201,16 +2207,20 @@ export class SessionManager {
 
   /**
    * 交回时核对卡的约定（主循环第 60 条）：云端的比执行方知道的新，回给执行方的话（新的完成标准原样，让它逐条重新自评再交），这次交回不报；
-   * 没变、取不到、开工时没取到过（不知道它知道第几版）都回 null，照常交回。取到了就记成这一版。
+   * 开工时没取到过版本号（离线开工）的，拿云端的完成标准（和交代）和开工交代里那一份逐条比文字，不一样也退回。
+   * 没变、取不到、开工交代里认不出完成标准都回 null，照常交回。取到了就记成这一版。
    */
   private async agreementChanged(rec: SessionRecord): Promise<string | null> {
     const got = await this.fetchAgreement(rec);
     if (!got) return null;
     const known = rec.agreementRevision;
     if (known !== undefined && got.revision <= known) return null;
+    const start = rec.startAgreement;
+    const differs = known !== undefined || (Boolean(start?.standards) && (
+      start!.standards!.join("\n") !== got.standards.map((s) => s.trim()).join("\n") || (start!.brief !== undefined && (start!.brief ?? null) !== (got.brief?.trim() || null))));
     rec.agreementRevision = got.revision;
     this.save(rec);
-    if (known === undefined) return null;
+    if (!differs) return null;
     this.emit(rec, { type: "notice", level: "info", code: "agreement_changed", text: `卡的约定改成第 ${got.revision} 版了，这次交回退回，按新的完成标准再交` });
     return [
       `这次交回退回了：卡的约定在你做的时候改了（现在是第 ${got.revision} 版）。新的完成标准：`,

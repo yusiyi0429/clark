@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { api, gitRepo, pair, raw, startTestRunner, tempDir, ORIGIN } from "./helpers.js";
-import { systemPrompt } from "../src/rolePrompt.js";
+import { agreementInBrief, EDIT_SCOPE_RULE, systemPrompt } from "../src/rolePrompt.js";
 
 async function until<T>(fn: () => Promise<T | null | undefined | false> | T | null | undefined | false, ms = 10_000): Promise<T> {
   const t0 = Date.now();
@@ -315,6 +315,29 @@ describe("规划员和验收员", { timeout: 30_000 }, () => {
     }
   });
 
+  it("卡的约定（主循环第 60 条）：离线开工、没取到版本号的，交回时和开工交代里的约定比内容，没改不退、改了退回", async () => {
+    const h = await setup(3);
+    try {
+      let online = false;
+      const same = { revision: 4, brief: "按设计稿改登录页", standards: CRITERIA };
+      h.cloud.setAgreement((id) => (!online ? "offline" : id === "A" ? same : { ...same, standards: ["页面能登录", "有截图，标出按钮"] }));
+      const md = (title: string) => [`# 执行事项：${title}`, "", "## 交代", "", "按设计稿改登录页", "", "## 完成标准（交回时逐条写证据）", "", "1. 页面能登录", "2. 有截图", "", "## 这次不包括", "", "- 注册页"].join("\n");
+      const a = await h.open({ ...h.card("A"), firstMessage: md("A") });
+      const b = await h.open({ ...h.card("B"), firstMessage: md("B") });
+      await until(() => ["A", "B"].every((id) => h.cloud.agreementAsked.includes(id))); // 开工时取过，离线没取到
+      online = true;
+      // A：云端和开工交代一样（版本号是 4 也不退）
+      expect((await h.handBack(a.id)).isError).toBe(false);
+      // B：云端改了一条：退回，列出新标准
+      const back = await h.handBack(b.id);
+      expect(back.isError).toBe(true);
+      expect(back.content[0]!.text).toContain("1. 页面能登录\n2. 有截图，标出按钮");
+      expect((await h.handBack(b.id)).isError).toBe(false); // 记成第 4 版了，再交照常
+    } finally {
+      await h.t.cleanup();
+    }
+  });
+
   it("批准说人话（主循环第 64 条）：Bash 入参里的说明和会动的文件进批准请求，也进报给云端的「在等批准哪一步」", async () => {
     const h = await setup(3);
     try {
@@ -599,5 +622,23 @@ describe("规划员和验收员", { timeout: 30_000 }, () => {
     } finally {
       await h.t.cleanup();
     }
+  });
+});
+
+describe("规矩和交代（不起进程）", () => {
+  it("只改让改的那一处（主循环第 72 条）：卡和专题的规矩里有，规划员、验收员没有", () => {
+    expect(EDIT_SCOPE_RULE).toContain("只改那一处");
+    expect(EDIT_SCOPE_RULE).toContain("先说，不动手");
+    expect(EDIT_SCOPE_RULE).toContain("改了哪几处");
+    for (const kind of ["card", "topic"] as const) expect(systemPrompt(kind, null, [], null)).toContain(EDIT_SCOPE_RULE);
+    for (const kind of ["plan", "verify"] as const) expect(systemPrompt(kind, null, [], null)).not.toContain(EDIT_SCOPE_RULE);
+  });
+
+  it("从开工交代里认出约定：云端的交代、网页自己拼的、还没写标准的、认不出的", () => {
+    const md = ["# 执行事项：A", "", "## 交代", "", "第一行", "第二行", "", "## 完成标准（交回时逐条写证据）", "", "1. 页面能登录", "2. 有截图", "", "## 这次不包括", "", "- 注册页"].join("\n");
+    expect(agreementInBrief(md)).toEqual({ standards: ["页面能登录", "有截图"], brief: "第一行\n第二行" });
+    expect(agreementInBrief("# A\n\n完成标准：\n1. 能登录\n2. 有截图")).toEqual({ standards: ["能登录", "有截图"] });
+    expect(agreementInBrief("## 交代\n\n（没写交代，按标题和完成标准做）\n\n## 完成标准\n\n（还没写完成标准）")).toEqual({ standards: [], brief: null });
+    expect(agreementInBrief("做 A")).toEqual({ standards: null });
   });
 });

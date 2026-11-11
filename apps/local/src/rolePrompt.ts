@@ -6,12 +6,16 @@ import { CARD_TITLE_RULE } from "./cardTitle.js";
  * 工作规矩写在这里（V2 设计 6.6），岗位的职责、做法、验收口径原样接在后面。都写在本机程序自己的数据目录，不进本人的仓库。
  */
 
+/** 只改让改的那一处（主循环第 72 条）：卡和专题都用；以后的自由子会话也照这条。 */
+export const EDIT_SCOPE_RULE = "- 本人让改某一处时只改那一处：别处觉得也该改（措辞、格式、相邻的段落），先说，不动手。改完用一句话说改了哪几处。";
+
 const CARD_RULES = `## 规矩
 - 产出写在当前工作目录里，用 add_artifact 交；证据（说明、日志片段、链接、改动摘要）用 add_evidence 交。两个工具都会返回编号（A1、E1）。
 - 做完用 hand_back 交回：对照完成标准逐条写达到、部分、没达到还是要本人补，附证据，点名用到的产出和证据编号，再写一句总结。交回后由验收员验收，没过会把意见发回来，照着改完再交回。
 - 遇到要登录、验证码、人工查询、网站拦自动访问、要本人的权限或判断的事，不绕：网站拦自动访问时，不换成伪装浏览器（改 User-Agent、套浏览器请求头、换抓取工具）去抓，也不找别的路子硬闯。能做的先做完；做不了的那几条在 hand_back 里标 needs_person（要本人补），need 写一句人话：要本人做什么、做完给回什么。一条一句。
 - 本人在会话里提了交代以外的新事，先问清是「就在这里做并改约定」还是「另开一个」，本人答了再动手（有「问用户」AskUserQuestion 就用它，给这两个选项）；对现有交代的小补充、澄清不用问，照着做。
 - 要改约定（本人选了就在这里做，或原来的完成标准做不到、要换个说法）就用 propose_agreement_change 提新的完成标准全文和原因，本人点头才生效；定之前照原来的约定做。约定在你做的时候改了，交回会被退回并附上新的完成标准，照新的逐条重新自评再交。
+${EDIT_SCOPE_RULE}
 - 只在当前工作目录和本人允许的文件夹里读写，要碰别处先说为什么。
 - 报告、命令输出、测试结果写进交回的正文和证据（add_evidence），不要在仓库里留报告或输出文件：交回时工作目录里的改动都会进卡的分支。`;
 
@@ -19,7 +23,8 @@ const TOPIC_RULES = `## 规矩
 - 先交提纲：写成工作目录里的 Markdown 文件，用 save_version（kind=outline）存，然后停下，等本人的意见。
 - 本人同意后写正文，写完用 save_version（kind=draft）存；以后每改一次存新的一版，note 写这一版改了什么。
 - 本人要把某一版存进飞书时，用飞书工具存进本人的云文档，再用 set_feishu_url 报回第几版和地址。
-- 图、PDF 这类附件用 add_artifact 交。`;
+- 图、PDF 这类附件用 add_artifact 交。
+${EDIT_SCOPE_RULE}`;
 
 const PLAN_RULES = `## 规矩
 - 你是规划员：只读，不改文件、不跑命令。拆的是 Task 时，用天枢 MCP 的 get_task_context 读这个 Task 的上下文（约定、Mission、近期的事和决定、上一版交付物和评审）；拆的是没挂 Task 的项目时，交代就是全部上下文。需要时读工作目录里的文件。
@@ -126,6 +131,31 @@ export function criticAgents(critics: TLocalRole[], searchTool: string | null): 
     prompt: `${roleBlock(c, "# 你用的挑刺技能：")}\n\n## 怎么做\n读主会话指定的那一版，按你的职责和口径逐条列问题、理由和建议，最后一句给总体判断。只提意见，不改任何文件。\n`,
     tools: ["Read", "Grep", "Glob", ...(searchTool && c.tools.includes("web_search") ? [searchTool] : [])],
   }]));
+}
+
+/**
+ * 从卡的开工交代里认出交给执行方的约定（主循环第 60 条，离线开工、没取到版本号时交回比内容用）。交代是云端 cardBrief 的 markdown
+ * （「## 交代」一段、「## 完成标准…」下面编号的一条一行），或网页取不到交代时自己拼的「完成标准：」。
+ * standards 认不出为 null（不比）；brief 没有「## 交代」这一段为 undefined（不比），写的是「没写交代」为 null。
+ */
+export function agreementInBrief(markdown: string): { standards: string[] | null; brief?: string | null } {
+  const lines = markdown.split(/\r?\n/);
+  const head = lines.findIndex((l) => /^(## )?完成标准/.test(l.trim()));
+  let standards: string[] | null = null;
+  if (head >= 0) {
+    standards = [];
+    for (const l of lines.slice(head + 1).map((x) => x.trim())) {
+      if (!l) continue;
+      const m = /^\d+\.\s+(.*)$/.exec(l);
+      if (!m) break;
+      standards.push(m[1]!.trim());
+    }
+  }
+  const at = lines.findIndex((l) => l.trim() === "## 交代");
+  if (at < 0) return { standards };
+  const end = lines.findIndex((l, i) => i > at && l.startsWith("## "));
+  const text = lines.slice(at + 1, end < 0 ? undefined : end).join("\n").trim();
+  return { standards, brief: !text || text === "（没写交代，按标题和完成标准做）" ? null : text };
 }
 
 /** 验收没过时结论事件里的改法：固定格式拼，不调模型（和云端 cardAcceptance.ts 的 returnText 一个格式，原话对不上的接在后面）。送回执行方走云端那条路。 */
