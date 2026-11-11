@@ -261,13 +261,17 @@ export function FailedLine({ reason, note, onRetry, inline }: { reason?: string;
 
 /**
  * 一次没成的动作：原因（title 里）、重试（同一个动作再来一次）。
- * note：现在重试也没用、要等别的事的，云端的话原样写出来、不给「重试」——推翻时合回结果还没报上来（409 MERGE_PENDING，等电脑上线以后再推翻）。
+ * note：现在重试也没用、要等别的事的，写一句现状、不给「重试」——推翻时合回结果还没报上来（409 MERGE_PENDING，云端的话原样写），
+ * 登记「再改一轮」「我来补」时已经登记过、这次交回已经处理过、卡还没开过工（见 SETTLED）。
  */
 export type Failure = { onRetry: () => void; reason: string; note: string | null };
 export function failureOf(error: unknown, onRetry: () => void): Failure {
   const reason = error instanceof Error ? error.message : "";
-  return { onRetry, reason, note: error instanceof CloudError && error.code === "MERGE_PENDING" ? reason : null };
+  const code = error instanceof CloudError ? error.code : undefined;
+  return { onRetry, reason, note: code === "MERGE_PENDING" ? reason : (code && SETTLED[code]) || null };
 }
+/** 登记「再改一轮」「我来补」时云端回的 409（主循环第 62 条）：重试也没用，原处写一句现状。 */
+const SETTLED: Record<string, string> = { RELAY_PENDING: "已登记，等电脑在线", NOTHING_TO_RELAY: "这次交回已经处理过了", NOT_STARTED: "这张卡还没开过工" };
 
 /** 头部右侧的状态 chip（5.4.3）：「对外」「工作区外」是警告档。 */
 export function DecisionTag({ children }: { children: ReactNode }) {

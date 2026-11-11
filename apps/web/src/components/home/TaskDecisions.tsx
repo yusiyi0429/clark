@@ -20,7 +20,7 @@ import type { TCardGapItem, TCardHandbackBrief, TCardHandbackView, TTaskFeedItem
 import type { TLocalSessionSummary } from "@/lib/local/runner";
 import { DecisionBox, FailedLine } from "@/components/work/DecisionBox";
 import { usePhone } from "./usePhone";
-import { overrule, relayHandback } from "@/lib/board/cloud";
+import { CloudError, overrule, relayHandback } from "@/lib/board/cloud";
 import { runClaimedCommands } from "@/lib/buddy/sessionCommands";
 import { isMergeLater, markMergeLater } from "@/lib/home/attention";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
@@ -98,7 +98,9 @@ export function HandbackDecision({ cardId, handback, here, onFill, onLook, onEdi
   }
   const done = (label: string) => { setAnswer(label); setMode(null); onChanged(); };
   const send = async (body: { kind: "return" } | { kind: "supply"; text: string }) => {
-    await relayHandback(cardId, handback.id, body);
+    // 已经登记过、处理过（409）：框上写一句现状，同时重读卡，照云端的样子画。
+    try { await relayHandback(cardId, handback.id, body); }
+    catch (error) { if (error instanceof CloudError && error.status === 409) onChanged(); throw error; }
     if (here) await relayNow();
     setMode(null);
     onChanged();

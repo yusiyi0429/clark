@@ -19,7 +19,7 @@ import { useSessionEvents } from "@/lib/local/useSessionEvents";
 import { contextUsage, localWait, planStep, running, type SessionView } from "@/lib/local/sessionView";
 import { startCard } from "@/lib/local/start";
 import { STAGES, WAIT_LABEL, boardCards, canCommand, circled, deliverableLabel, isAgentCard, waitTone, type CardStage, type CardWait } from "@/lib/board/cards";
-import { overrule, relayHandback, retryAcceptance } from "@/lib/board/cloud";
+import { CloudError, overrule, relayHandback, retryAcceptance } from "@/lib/board/cloud";
 import { cardRole } from "@/lib/team/roles";
 import { useAutoReturn } from "@/lib/board/useAutoReturn";
 import { showWorkspaceToast } from "@/lib/toast";
@@ -177,7 +177,8 @@ export function CardSession({ cardId, embedded = false, waiting }: { cardId: str
   const settle = async () => { if (canAct) await relayNow(); await refresh(); };
   const onSend = async (text: string, files: File[]) => {
     if (!supply) return say(text, files);
-    await relayHandback(cardId, supply.handbackId, { kind: "supply", text });
+    try { await relayHandback(cardId, supply.handbackId, { kind: "supply", text }); }
+    catch (error) { if (error instanceof CloudError && error.status === 409) { setSupply(null); void refresh(); } throw error; }
     await relayNow();
     setSupply(null);
     await refresh();
