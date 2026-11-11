@@ -1,0 +1,27 @@
+{
+ "label": "large",
+ "folder": {
+  "files": 59001,
+  "MB": 4944
+ },
+ "initMs": 131,
+ "baselineMs": 492778,
+ "addErr": "",
+ "gitDirAfterBase": 4489,
+ "tracked": 49001,
+ "noChangeSnapshotMs": 2178,
+ "turnSnapshotMs": 2809,
+ "changesMs": 1666,
+ "changes": {
+  "A": 5,
+  "M": 10,
+  "D": 3
+ },
+ "gitDirAfterTurn": 4519,
+ "restoreOneMs": 140,
+ "restoreOneOk": true,
+ "restoreAllMs": 1961,
+ "restoreAllFailed": [],
+ "restoreAllOk": true,
+ "changesAfterRestore": 0
+}

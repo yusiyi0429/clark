@@ -42,5 +42,6 @@ ADR 保留决策依据，被替代的部分只作历史参考。当前产品术�
 | [0036](0036-local-runner-cloud-side-receives-only.md) | 本机程序的云端一侧：设备令牌、只收上报、联网搜索走服务器 | 有效 |
 | [0037](0037-local-runner-roles-via-cli-flags.md) | 岗位进本机会话：用 Claude Code 自带的参数，文件放本机程序的数据目录 | 有效 |
 | [0038](0038-local-runner-card-worktrees.md) | 卡在自己的 git 工作树里做：分支是交付物，合回由本人点 | 有效 |
+| [0039](0039-local-runner-folder-undo.md) | 普通文件夹里改、删前留一份：影子快照为主，改前拷一份补漏 | 有效 |
 
 新增 ADR 沿用下一个编号，被替代时在原文开头写明替代关系，不删除原文。
