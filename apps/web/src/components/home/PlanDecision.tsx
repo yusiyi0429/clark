@@ -137,13 +137,15 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
   const workerRoles = useMemo(() => roles.filter((role) => role.kind === "worker"), [roles]);
   const kept = drafts.filter((draft) => !edits[draft.id]?.dropped);
   const used = liveSessions(local.sessions).length;
-  // 对话里说的模型要求（第 69 条）：整张派活单一句原话，和这台电脑连着的来源对；对上了每张卡照它预选，对不上在单子顶上写「没找到」、用自动。
-  const modelWords = drafts.find((draft) => draft.modelWords)?.modelWords ?? null;
-  const fromWords = useMemo(() => (modelWords && local.models.length ? matchModelWords(modelWords, local.models) : null), [modelWords, local.models]);
-  const words = fromWords?.matched ? fromWords : null;
+  // 对话里说的模型要求（第 69 条）：每张卡带着它那一批的原话（再拆一次时同一张单里会有两批），各自和这台电脑连着的来源对；
+  // 对上了那一批的卡照它预选，对不上的在单子顶上按原话各写一行「没找到」、那一批用自动。
+  const saidKey = JSON.stringify([...new Set(drafts.map((draft) => draft.modelWords).filter((words): words is string => !!words))]);
+  const said = useMemo(() => new Map(local.models.length ? (JSON.parse(saidKey) as string[]).map((words) => [words, matchModelWords(words, local.models)] as const) : []),
+    [saidKey, local.models]);
+  const wordsOf = (draft: TCardDraftView) => { const found = draft.modelWords ? said.get(draft.modelWords) : undefined; return found?.matched ? found : null; };
   /** 这一步的模型、思考（draftPick）。 */
-  const pickedModel = (draft: TCardDraftView) => draftPick(edits[draft.id], words).modelId;
-  const pickedEffort = (draft: TCardDraftView) => draftPick(edits[draft.id], words).effort;
+  const pickedModel = (draft: TCardDraftView) => draftPick(edits[draft.id], wordsOf(draft)).modelId;
+  const pickedEffort = (draft: TCardDraftView) => draftPick(edits[draft.id], wordsOf(draft)).effort;
   const roleOf = (draft: TCardDraftView) => { const edit = edits[draft.id]; return edit && "role" in edit ? edit.role ?? null : draftWorkerRole(draft); };
   const tierOf = (draft: TCardDraftView, role: CardRole | null) => roles.find((entry) => entry.id === role?.id)?.modelTier ?? draft.modelTier;
   const modelOf = (draft: TCardDraftView): TLocalModelProfile | null => {
@@ -237,8 +239,9 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
   const gateway = sources.has("gateway");
   const steps = (
     <>
-    {modelWords && fromWords && !fromWords.matched
-      ? <p className={h.stepSum} title={modelWords} data-testid="model-words-missing">没找到「{modelWords.length > 24 ? `${modelWords.slice(0, 23)}…` : modelWords}」</p> : null}
+    {[...said].filter(([, found]) => !found.matched).map(([words]) => (
+      <p key={words} className={h.stepSum} title={words} data-testid="model-words-missing">没找到「{words.length > 24 ? `${words.slice(0, 23)}…` : words}」</p>
+    ))}
     <ol className={h.steps}>
       {kept.map((draft, index) => {
         const role = roleOf(draft);
