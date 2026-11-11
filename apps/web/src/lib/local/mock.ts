@@ -357,8 +357,6 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
       if (ws?.kind !== "worktree" && !s.edits) {
         s.edits = createMockEdits();
         tool(s, "Edit", "改 周报.md");
-        tool(s, "Bash", "运行 Remove-Item 旧安排.md");
-        tool(s, "Bash", "运行 python 改合同和报表.py");
         turnFiles = s.edits.apply();
       }
       emit(s, { type: "handback", summary: "改完了，测试都过。", criteria: [{ index: 1, result: "met", evidence: "测试 12/12 通过" }, { index: 2, result: "met", evidence: "交回说明.md" }], outputKeys: [],
@@ -437,6 +435,20 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
     }, stepMs);
   };
 
+  /** 交回以后本人再说一句：第二轮删一个文件、改 Word、Excel 和老格式的表，一轮末尾报这一轮改了哪些。 */
+  const editRound = (s: MockSession) => {
+    setStatus(s, "running");
+    s.timer = setTimeout(() => {
+      s.timer = null;
+      tool(s, "Bash", "运行 Remove-Item 旧安排.md");
+      tool(s, "Bash", "运行 python 改合同和报表.py");
+      const turnFiles = s.edits!.apply();
+      emit(s, { type: "assistant_text", text: "旧安排.md 删了，合同的付款期限和报表也改好了。" });
+      emit(s, { type: "turn_files" as TLocalSessionEvent["type"], files: turnFiles });
+      turnEnd(s, "改好了。");
+      setStatus(s, "idle");
+    }, stepMs * 2);
+  };
   const summaryOf = (s: MockSession) => ({ ...s.summary });
   const listen = (s: MockSession, fn: (event: TLocalSessionEvent) => void) => { s.listeners.add(fn); return () => s.listeners.delete(fn); };
 
@@ -622,6 +634,8 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
         s.summary = { ...s.summary, pendingQuestion: undefined };
       }
       if (was === "running") { emit(s, { type: "notice", level: "info", code: "interjection_next_step", text: "下一步生效" }); return { delivery: "next_step", messageId }; }
+      // 交回以后再说一句：演第二轮改文件（第 71 条：删一个、改几个）。
+      if (s.edits?.pending() && s.cursor >= s.script.length) { editRound(s); return { delivery: "new_turn", messageId }; }
       advance(s);
       return { delivery: was === "exited" || was === "done" ? "resumed" : "new_turn", messageId };
     },

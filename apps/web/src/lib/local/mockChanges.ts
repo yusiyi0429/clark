@@ -50,25 +50,38 @@ const initial = (): MockFile[] => [
 
 const now = () => new Date().toISOString();
 
-/** 一个会话的改动（假的）：apply() 是执行方这一轮动手。 */
+/**
+ * 一个会话的改动（假的），分两轮演：第一轮只改周报（验收第 10 条：「周报.md 2 处」）；
+ * 本人再说一句，第二轮删旧安排.md、改 Word、Excel 和老格式的表（验收第 9 条，四个文件收成「改了 4 个文件」）。
+ */
+const ROUNDS = [["周报.md"], ["旧安排.md", "合同.docx", "报表.xlsx", "预算.xls"]];
+
 export function createMockEdits() {
+  const all = initial();
+  const deletedAtFirst = new Set(all.filter((file) => file.deleted).map((file) => file.path));
   let files: MockFile[] = [];
+  let round = 0;
   const find = (path: string) => files.find((file) => file.path === path) ?? null;
   /** 现在的样子：没恢复的改动照位置算出来，id 换回各自的。 */
   const current = (file: MockFile): { after: string; changes: FileChange[] } => {
     const made = edited(file.start, file.edits.map((edit) => [edit.find, edit.replace, edit.nth]));
     return { after: made.after, changes: made.changes.map((change) => ({ ...change, id: file.edits[Number(change.id.slice(1)) - 1]!.id })) };
   };
-  const changeOf = (file: MockFile): TurnFile["change"] => (file.deleted ? "deleted" : "modified");
+  /** 会话把它怎么了：恢复以后照旧是原来那样（删了的还写「删」）。 */
+  const changeOf = (file: MockFile): TurnFile["change"] => (deletedAtFirst.has(file.path) ? "deleted" : "modified");
   const touched = (file: MockFile) => file.deleted || file.edits.length > 0;
   const restoreAll = (file: MockFile) => { file.edits = []; file.deleted = false; file.restoredAt = now(); file.version += 1; };
 
   return {
-    /** 执行方这一轮改了这些（一个会话只演一次）。 */
+    /** 执行方下一轮动手，回这一轮改了哪些；两轮都演完了回空。 */
     apply(): TurnFile[] {
-      files = initial();
-      return files.map((file) => ({ path: file.path, changes: file.detail === "none" ? null : file.deleted ? 1 : file.edits.length, change: changeOf(file) }));
+      const batch = all.filter((file) => ROUNDS[round]?.includes(file.path));
+      round += 1;
+      files = [...files, ...batch];
+      return batch.map((file) => ({ path: file.path, changes: file.detail === "none" ? null : file.deleted ? 1 : file.edits.length, change: changeOf(file) }));
     },
+    /** 还有没演的一轮。 */
+    pending: () => round < ROUNDS.length,
     has: (path: string) => !!find(path),
     /** 右栏「改动的文件」：都有留一份、都能恢复。 */
     list(root: string): TLocalChangedFile[] {

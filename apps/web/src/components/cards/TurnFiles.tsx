@@ -6,7 +6,7 @@
  * 点了在右边打开预览，停在第一处：最近一轮的看这一轮，早先几轮的看开工到现在（接口没有轮次编号）。
  * 手机上、别的电脑上（连不上那台电脑的本机程序）：那一行照样出，点了写「在那台电脑上看」。
  */
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import type { ChangeRange, TurnFile } from "@/lib/local/fileChanges";
 import type { SessionEntry } from "@/lib/local/sessionView";
 import c from "@/styles/change-view.module.css";
@@ -18,6 +18,10 @@ export type TurnFilesView = {
   restored: (path: string) => boolean;
   /** 最近一轮那一行的编号：它看这一轮，早先的看开工到现在。 */
   latest: number | null;
+  /** 这一轮这个文件现在还剩几处（恢复了几处以后重读；读不到明细为 null）。只有最近一轮那一行用。 */
+  count?: (path: string) => Promise<number | null>;
+  /** 恢复过文件就会变（右栏清单重读了）：最近一轮那一行跟着重读剩几处。 */
+  version?: unknown;
 };
 export const TurnFilesContext = createContext<TurnFilesView | null>(null);
 
@@ -30,7 +34,7 @@ const VERB: Record<TurnFile["change"], string> = { added: "新建", modified: "�
 
 /** 一个文件那一行的字：几处只在改了的、有明细的文件上写；恢复过的写「已恢复」。 */
 export function turnFileText(file: TurnFile, restored: boolean): string {
-  const tail = restored ? " · 已恢复" : file.change === "modified" && file.changes !== null ? ` · ${file.changes} 处` : "";
+  const tail = restored || file.changes === 0 ? " · 已恢复" : file.change === "modified" && file.changes !== null ? ` · ${file.changes} 处` : "";
   return `${VERB[file.change]} ${file.path.replace(/\\/g, "/").split("/").pop()}${tail}`;
 }
 
@@ -38,7 +42,22 @@ export function TurnFilesLine({ seq, files }: { seq: number; files: TurnFile[] }
   const view = useContext(TurnFilesContext);
   const [unfolded, setUnfolded] = useState(false);
   const [away, setAway] = useState<string | null>(null);
-  const range: ChangeRange = view?.latest === seq ? "turn" : "session";
+  const latest = view?.latest === seq;
+  const range: ChangeRange = latest ? "turn" : "session";
+  // 最近一轮：恢复过以后重读还剩几处（恢复了一处，「2 处」变「1 处」；都恢复了写「已恢复」）。
+  const [left, setLeft] = useState<Record<string, number | null>>({});
+  const count = useRef(view?.count);
+  count.current = latest ? view?.count : undefined;
+  const version = latest ? view?.version : undefined;
+  useEffect(() => {
+    const read = count.current;
+    if (!read || version === undefined) return;
+    let alive = true;
+    void Promise.all(files.map(async (file) => [file.path, await read(file.path).catch(() => undefined)] as const)).then((pairs) => {
+      if (alive) setLeft(Object.fromEntries(pairs.filter((pair): pair is readonly [string, number | null] => pair[1] !== undefined)));
+    });
+    return () => { alive = false; };
+  }, [files, version]);
   const open = (path: string) => { if (view?.open) view.open(path, range); else setAway(path); };
   if (files.length > FOLD_OVER && !unfolded) {
     return <div className={c.turnFiles}><button type="button" className={c.edited} onClick={() => setUnfolded(true)} data-testid="turn-files">改了 {files.length} 个文件 ›</button></div>;
@@ -47,7 +66,7 @@ export function TurnFilesLine({ seq, files }: { seq: number; files: TurnFile[] }
     <div className={c.turnFiles}>
       {files.map((file) => (
         <button key={file.path} type="button" className={c.edited} onClick={() => open(file.path)} data-testid="turn-file">
-          {away === file.path ? "在那台电脑上看" : `${turnFileText(file, view?.restored(file.path) ?? false)} ›`}
+          {away === file.path ? "在那台电脑上看" : `${turnFileText(file.path in left && file.change === "modified" ? { ...file, changes: left[file.path]! } : file, view?.restored(file.path) ?? false)} ›`}
         </button>
       ))}
     </div>

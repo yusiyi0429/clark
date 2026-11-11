@@ -51,6 +51,13 @@ export function ChangeDoc({ data, mode, marks, restorable, onRestore, bodyClass,
   const center = (el: Element, smooth: boolean) => {
     const root = body.current;
     if (!root) return;
+    // 宽表格里靠右的一处：先让表格自己横着滚到它（只动表格那一块，不动整页）。
+    const wide = el.closest<HTMLElement>("table");
+    if (wide && wide.scrollWidth > wide.clientWidth) {
+      const cell = el.getBoundingClientRect();
+      const box = wide.getBoundingClientRect();
+      wide.scrollLeft += cell.left - box.left - (box.width - cell.width) / 2;
+    }
     const y = el.getBoundingClientRect().top - root.getBoundingClientRect().top + root.scrollTop;
     root.scrollTo({ top: Math.max(0, y - root.clientHeight / 2), behavior: smooth ? "smooth" : "auto" });
   };

@@ -43,3 +43,7 @@
 .edited:hover { color: var(--ink); }
 .edited:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
 
+
+/* 表格太宽时在自己那一块里横向滚（.prose table），格子里不要一个字一行：不在词中间断；Excel 转出来的格子不折行。 */
+.body article :is(td, th) { overflow-wrap: normal; }
+.sheet :is(td, th) { white-space: nowrap; }

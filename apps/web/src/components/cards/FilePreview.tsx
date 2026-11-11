@@ -75,6 +75,12 @@ export function previewKind(name: string, mime: string | null, size: number | nu
   return kind;
 }
 
+/** 点改动出不出「恢复」：有明细、能按处恢复（Word、Excel 转出来的只能看），而且这一轮没在跑。 */
+export const restorableChanges = (detail: FileChanges["detail"], canRestore: boolean) => canRestore && detail === "full";
+
+/** 表格文件（Excel 转出来的）：格子不折行，表太宽就横向滚。 */
+const SHEET_EXT = /\.(xlsx|xlsm|xls)$/i;
+
 /** 改动按哪种画：Markdown 文件和 Word、Excel 转出来的按 Markdown 排，别的（纯文本、代码、CSV）等宽。 */
 export const diffMode = (data: Pick<FileChanges, "path" | "detail">): DiffMode =>
   data.detail === "converted" || previewKind(data.path, null) === "markdown" ? "markdown" : "text";
@@ -224,8 +230,8 @@ export function FilePreview({ file, onClose, canRestore = true, wide = false, on
         <HeroButton variant="ghost" size="sm" isIconOnly aria-label="关闭" title="关闭" onPress={onClose} data-testid="file-preview-close"><X {...ICON} /></HeroButton>
       </header>
       {diff ? (
-        <ChangeDoc data={diff} mode={diffMode(diff)} marks={marks} restorable={canRestore && diff.detail === "full"} onRestore={restore}
-          bodyClass={s.previewBody} docClass={diffMode(diff) === "markdown" ? `${ts.prose} ${s.md} ${s.previewDoc}` : s.previewDoc} />
+        <ChangeDoc data={diff} mode={diffMode(diff)} marks={marks} restorable={restorableChanges(diff.detail, canRestore)} onRestore={restore}
+          bodyClass={s.previewBody} docClass={`${diffMode(diff) === "markdown" ? `${ts.prose} ${s.md} ${s.previewDoc}` : s.previewDoc}${SHEET_EXT.test(diff.path) ? ` ${c.sheet}` : ""}`} />
       ) : (
         <div className={s.previewBody} aria-busy={diff === undefined || (!loaded && failed === null) ? true : undefined}>
           {diff === undefined ? null

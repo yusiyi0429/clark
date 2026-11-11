@@ -4,9 +4,14 @@ import type { TLocalChangedFile } from "@warmap/contracts";
 import { LocalRunnerError } from "@/lib/local/runner";
 import { createMockEdits } from "@/lib/local/mockChanges";
 import { ChangedFiles } from "./ChangedFiles";
-import { restoreChanges } from "./FilePreview";
+import { restorableChanges, restoreChanges } from "./FilePreview";
 
 describe("恢复其中几处的三种结果（第 72 条）", () => {
+  it("Word、Excel 转出来的（converted）、一轮正在跑时点改动不出「恢复」", () => {
+    expect(restorableChanges("full", true)).toBe(true);
+    expect(restorableChanges("converted", true)).toBe(false);
+    expect(restorableChanges("full", false)).toBe(false);
+  });
   it("成了：重读，不写话", async () => {
     const reload = vi.fn(async () => undefined);
     expect(await restoreChanges({ restore: async () => undefined }, ["c2"], "r1", reload)).toBeNull();
@@ -29,10 +34,14 @@ describe("恢复其中几处的三种结果（第 72 条）", () => {
 describe("假本机：执行方改的文件、按处恢复、整个恢复（两个验收场景的数据）", () => {
   it("周报 2 处，第二处恢复以后「良好」回来、只剩第一处；旧的 revision 再恢复回「文件又变了」", () => {
     const edits = createMockEdits();
+    // 第一轮只改周报；第二轮删一个、改三个；演完了回空。
+    expect(edits.apply()).toEqual([{ path: "周报.md", changes: 2, change: "modified" }]);
+    expect(edits.list("C:/work").map((file) => file.path)).toEqual(["周报.md"]);
     expect(edits.apply()).toEqual([
-      { path: "周报.md", changes: 2, change: "modified" }, { path: "旧安排.md", changes: 1, change: "deleted" },
-      { path: "合同.docx", changes: 1, change: "modified" }, { path: "报表.xlsx", changes: 3, change: "modified" }, { path: "预算.xls", changes: null, change: "modified" },
+      { path: "旧安排.md", changes: 1, change: "deleted" }, { path: "合同.docx", changes: 1, change: "modified" },
+      { path: "报表.xlsx", changes: 3, change: "modified" }, { path: "预算.xls", changes: null, change: "modified" },
     ]);
+    expect(edits.pending()).toBe(false);
     const first = edits.read("周报.md", "turn")!;
     expect(first.after).toContain("| 进展评估 | 优秀 |");
     expect(edits.restoreChanges("周报.md", ["c2"], first.revision)).toBe("ok");
@@ -45,6 +54,7 @@ describe("假本机：执行方改的文件、按处恢复、整个恢复（两�
   it("Word、Excel 转出来的只能看，按处恢复回 converted；老格式只知道改过", () => {
     const edits = createMockEdits();
     edits.apply();
+    edits.apply();
     const sheet = edits.read("报表.xlsx", "session")!;
     expect(sheet.detail).toBe("converted");
     expect(edits.restoreChanges("报表.xlsx", ["x1"], sheet.revision)).toBe("converted");
@@ -52,6 +62,7 @@ describe("假本机：执行方改的文件、按处恢复、整个恢复（两�
   });
   it("整个恢复：删掉的回来了、改了的回到原样，都标「已恢复」；Excel 开着时第一次回 in_use，别的照做", () => {
     const edits = createMockEdits();
+    edits.apply();
     edits.apply();
     const result = edits.restoreFiles(["旧安排.md", "周报.md", "报表.xlsx"]);
     expect(result.restored).toEqual(["周报.md", "旧安排.md"]);
