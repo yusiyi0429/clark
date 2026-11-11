@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  createScrollController, easeOutCubic, followTop, isAtEnd, nextMode, nextReserve, pinTarget, reserveNeeded, SEND_PIN_MS,
+  createScrollController, easeOutCubic, followGlides, followTop, isAtEnd, nextMode, nextReserve, OPEN_SETTLE_MS, pinTarget, reserveNeeded, SEND_PIN_MS,
 } from "./scrollController";
 
 /**
@@ -137,7 +137,9 @@ function setup(options: { reduced?: boolean; anchor?: "end" | "reply" } & Parame
     }
     dom.fire("scroll");
   };
-  return { ...dom, controller, onAtBottom, runFrames, frames };
+  /** 时间往前走（不跑帧）：过了打开后的那一小会儿。 */
+  const advance = (ms: number) => { clock += ms; };
+  return { ...dom, controller, onAtBottom, runFrames, frames, advance };
 }
 
 describe("滚动控制器", () => {
@@ -341,5 +343,66 @@ describe("讨论台展开 / 收起：宽度变了、正在缩放", () => {
     expect(t.controller.mode()).toBe("free");
     t.state.height = 3500; t.controller.layout();
     expect(t.scroller.scrollTop).toBe(1200);
+  });
+
+  describe("跟随时一整段到了：短促滑过去（流畅感第 3 条）", () => {
+    it("纯函数：打开一会儿以后、长高超过半屏、不超过三屏才滑", () => {
+      expect(followGlides({ jump: 400, viewport: 600, sinceOpen: OPEN_SETTLE_MS })).toBe(true);
+      expect(followGlides({ jump: 200, viewport: 600, sinceOpen: OPEN_SETTLE_MS })).toBe(false);
+      expect(followGlides({ jump: 400, viewport: 600, sinceOpen: OPEN_SETTLE_MS - 1 })).toBe(false);
+      expect(followGlides({ jump: 2000, viewport: 600, sinceOpen: OPEN_SETTLE_MS })).toBe(false);
+    });
+
+    it("长高超过半屏：不瞬间跳，约 240ms 缓动到底；逐字的小增长照旧直接贴底", () => {
+      const t = setup({ height: 2000 });
+      t.advance(OPEN_SETTLE_MS);
+      const end = (h: number) => 44 + h + 130 - 600;
+      t.state.height = 2100;
+      t.controller.layout();
+      expect(t.scroller.scrollTop).toBe(end(2100));
+      expect(t.frames.length).toBe(0);
+      t.state.height = 2600;
+      t.controller.layout();
+      expect(t.scroller.scrollTop).toBe(end(2100));
+      expect(t.frames.length).toBe(1);
+      t.runFrames(100);
+      expect(t.scroller.scrollTop).toBeGreaterThan(end(2100));
+      expect(t.scroller.scrollTop).toBeLessThan(end(2600));
+      t.runFrames();
+      expect(t.scroller.scrollTop).toBe(end(2600));
+      expect(t.controller.mode()).toBe("follow");
+    });
+
+    it("滑动途中本人往上滚：立刻停下、不再跟随", () => {
+      const t = setup({ height: 2000 });
+      t.advance(OPEN_SETTLE_MS);
+      t.state.height = 2600;
+      t.controller.layout();
+      t.runFrames(60);
+      const at = t.scroller.scrollTop;
+      t.userScroll(at - 200);
+      expect(t.frames.length).toBe(0);
+      expect(t.controller.mode()).toBe("free");
+      t.state.height = 3000;
+      t.controller.layout();
+      expect(t.scroller.scrollTop).toBe(at - 200);
+    });
+
+    it("减少动效、刚打开（历史一次到）、一次长高超过三屏：照旧瞬间到底", () => {
+      const reduced = setup({ height: 2000, reduced: true });
+      reduced.advance(OPEN_SETTLE_MS);
+      reduced.state.height = 2600;
+      reduced.controller.layout();
+      expect(reduced.scroller.scrollTop).toBe(44 + 2600 + 130 - 600);
+      const fresh = setup({ height: 2000 });
+      fresh.state.height = 2600;
+      fresh.controller.layout();
+      expect(fresh.scroller.scrollTop).toBe(44 + 2600 + 130 - 600);
+      const huge = setup({ height: 2000 });
+      huge.advance(OPEN_SETTLE_MS);
+      huge.state.height = 5000;
+      huge.controller.layout();
+      expect(huge.scroller.scrollTop).toBe(44 + 5000 + 130 - 600);
+    });
   });
 });

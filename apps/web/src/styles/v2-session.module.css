@@ -33,6 +33,11 @@
 .chat { position: relative; display: grid; grid-template-rows: minmax(0, 1fr) auto; min-width: 0; min-height: 0; --gl: max(20px, calc((100% - 680px) / 2)); }
 .scroll { min-height: 0; overflow-y: auto; scrollbar-width: thin; padding: 20px var(--gl) 16px; }
 .feed { display: flex; flex-direction: column; gap: 10px; }
+/*
+ * 长会话（流畅感第 5 条）：除了最后几行，屏幕外的行跳过排版和绘制；高度先按估计（画过一次后记住真实高度），
+ * 往上快速滚时滚动条长度会微调。最后几行（正在写、选项框、在跑那一行）照常画。
+ */
+.feed > :not(:nth-last-child(-n + 8)) { content-visibility: auto; contain-intrinsic-size: auto 72px; }
 .evt { align-self: center; max-width: 92%; color: var(--ink-faint); font-size: 12px; text-align: center; }
 .evt[data-level="error"] { color: var(--counter); }
 .evt[data-level="warn"] { color: var(--judgment); }
