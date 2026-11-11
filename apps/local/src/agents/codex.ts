@@ -94,7 +94,7 @@ export class CodexRun implements AgentRun {
   lastTurn: TurnModels | null = null;
 
   constructor(
-    private readonly rpc: CodexRpc, private readonly threadId: string, private readonly version: string, private readonly scope: PathScope,
+    private readonly rpc: CodexRpc, private readonly threadId: string, private readonly version: string, private readonly scope: PathScope & Pick<AgentLaunch, "beforeWrite">,
     private readonly autoAllowRoot: string | null, private mode: TLocalPermissionMode,
     /** 下一轮开始时带的模型和思考程度（换模型、换思考程度改这里，从下一轮起生效）。 */
     private model: string, private effort: TLocalEffort | null,
@@ -218,7 +218,9 @@ export class CodexRun implements AgentRun {
     return p.steps.length > 0 && p.steps.every((s) => modeAllows(this.mode, s.tool, s.input, scope, p.hint, this.autoAllowRoot));
   }
 
-  private ask(requestId: string, p: Pending) {
+  private async ask(requestId: string, p: Pending) {
+    // 先留一份（改已有文件的拷一份，命令等这一轮开头那份，undo/），再按权限模式放行或转给本人
+    for (const s of p.steps) await this.scope.beforeWrite?.(s.tool, s.input).catch(() => undefined);
     if (this.allowed(p)) { this.answer(p, true); return; }
     this.permissions.set(requestId, p);
     const scope = p.hint ? { ...this.scope, cwd: p.hint } : this.scope;
@@ -242,12 +244,12 @@ export class CodexRun implements AgentRun {
     const requestId = `cx-${String(id)}-${String(p.itemId ?? p.turnId ?? "")}`.slice(0, 120);
     if (method === "item/commandExecution/requestApproval") {
       const cwd = typeof p.cwd === "string" ? p.cwd : null;
-      this.ask(requestId, { kind: "command", rpcId: id, steps: [{ tool: SHELL, input: { command: commandOf(p) } }], hint: cwd, turnId: String(p.turnId ?? ""), reason: p.reason });
+      void this.ask(requestId, { kind: "command", rpcId: id, steps: [{ tool: SHELL, input: { command: commandOf(p) } }], hint: cwd, turnId: String(p.turnId ?? ""), reason: p.reason });
       return;
     }
     if (method === "item/fileChange/requestApproval") {
       const item = this.items.get(String(p.itemId));
-      this.ask(requestId, { kind: "file", rpcId: id, steps: fileSteps(Array.isArray(item?.changes) ? item.changes : []), hint: null, turnId: String(p.turnId ?? ""), reason: p.reason });
+      void this.ask(requestId, { kind: "file", rpcId: id, steps: fileSteps(Array.isArray(item?.changes) ? item.changes : []), hint: null, turnId: String(p.turnId ?? ""), reason: p.reason });
       return;
     }
     if (method === "mcpServer/elicitation/request" && p._meta?.codex_approval_kind === "mcp_tool_call") {
@@ -256,7 +258,7 @@ export class CodexRun implements AgentRun {
       const tool = call?.tool ?? /tool "([^"]+)"/.exec(String(p.message ?? ""))?.[1] ?? "unknown";
       if (call) call.asked = true;
       const args = call?.arguments && typeof call.arguments === "object" ? call.arguments : (p._meta?.tool_params ?? {});
-      this.ask(requestId, { kind: "mcp", rpcId: id, steps: [{ tool: `mcp__${String(p.serverName)}__${tool}`, input: args }], hint: null, turnId: String(p.turnId ?? "") });
+      void this.ask(requestId, { kind: "mcp", rpcId: id, steps: [{ tool: `mcp__${String(p.serverName)}__${tool}`, input: args }], hint: null, turnId: String(p.turnId ?? "") });
       return;
     }
     if (method === "mcpServer/elicitation/request") { this.rpc.respond(id, { action: "decline", content: null, _meta: null }); return; }
@@ -519,7 +521,7 @@ export class CodexAdapter implements AgentAdapter {
       return fail("agent_incompatible", `Codex 没开出会话：${e instanceof Error ? e.message : String(e)}`);
     }
     this.threads.set(launch.sessionId, threadId);
-    const scope: PathScope = { cwd: launch.cwd, home: homeDir(), allowedRoots: launch.allowedRoots, toolReads: launch.toolReads, extraDirs: launch.extraDirs };
+    const scope: PathScope & Pick<AgentLaunch, "beforeWrite"> = { cwd: launch.cwd, home: homeDir(), allowedRoots: launch.allowedRoots, readRoots: launch.readRoots, toolReads: launch.toolReads, extraDirs: launch.extraDirs, covered: launch.covered, beforeWrite: launch.beforeWrite };
     return new CodexRun(rpc, threadId, version, scope, launch.autoAllowRoot, launch.permissionMode, model, launch.run.effort ?? null, new Set(launch.allowedTools));
   }
 }

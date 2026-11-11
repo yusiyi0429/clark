@@ -129,9 +129,39 @@ describe("拆卡和验收在本机（第 21 节）", { timeout: 30_000 }, () => 
       expect(body.roles.map((role: { kind: string }) => role.kind)).not.toContain("reviewer");
       for (const text of ["# 拆卡：对话质量达标", "propose_plan", "get_task_context", "1. 有题库打分结果", "卡：已有的一张", "- 开发（轻档）：写代码", "- 执行员（预设 executor，",
         // 标题的规矩（短的动宾短语，细节进交代和完成标准）照样交代给本机规划员。
-        "中文 12 个字以内", "不重复项目名"])
+        "中文 12 个字以内", "不重复项目名",
+        // 一个 worker 一次能做完的只出一件：派活单下限是 1 件，不硬拆成 3 件。
+        "1 到 8 件"])
         expect(body.markdown).toContain(text);
+      expect(body.markdown).not.toContain("3 到 8 件");
       expect((await f.call("GET", "/api/plan-tasks/task-theirs/plan-brief")).statusCode).toBe(403);
+    } finally { await f.close(); }
+  });
+
+  it("对话里说的模型要求（第 69 条）：登记拆卡带原话，登记读得到；规划员出的派活单每张草稿都原样带上；再登记一次换成新的；项目拆卡同样", async () => {
+    const f = await localFixture();
+    try {
+      const words = "这几件用本机的 Opus 5.5，思考开高";
+      const registered = await f.call("POST", "/api/plan-tasks/task-open/card-splits", { words: "拆成两件", modelWords: words });
+      expect(registered.json()).toMatchObject({ modelWords: words });
+      await f.sync({ kind: "plan", taskId: "task-open" }, [["card_plan", plan(1, [{ title: "跑一遍题库打分" }, { title: "录一段上手视频" }])]]);
+      const drafts = (await f.call("GET", "/api/plan-tasks/task-open/cards")).json().drafts as { modelWords: string | null }[];
+      expect(drafts.map((draft) => draft.modelWords)).toEqual([words, words]);
+      // 已有一条没开工的登记：再登记带新的就换。
+      expect((await f.call("POST", "/api/plan-tasks/task-open/card-splits", { modelWords: "用 TokenHub" })).json()).toMatchObject({ modelWords: "用 TokenHub" });
+
+      const projectId = (await f.call("POST", "/api/me/projects", { name: "品牌建设" })).json().projectId as string;
+      expect((await f.call("POST", `/api/me/projects/${projectId}/card-splits`, { modelWords: "用 Codex" })).json()).toMatchObject({ modelWords: "用 Codex" });
+      await f.sync({ kind: "plan", projectId }, [["card_plan", plan(1, [{ title: "列候选名", criterionIndex: null }])]]);
+      expect((await f.call("GET", `/api/me/projects/${projectId}/board`)).json().drafts.map((draft: { modelWords: string | null }) => draft.modelWords)).toEqual(["用 Codex"]);
+    } finally { await f.close(); }
+  });
+
+  it("派活单只有 1 件也能登记：变成一张草稿", async () => {
+    const f = await localFixture();
+    try {
+      expect((await f.sync({ kind: "plan", taskId: "task-open" }, [["card_plan", plan(1, [{ title: "改个错字", criterionIndex: null }])]])).rejected).toEqual([]);
+      expect((await f.call("GET", "/api/plan-tasks/task-open/cards")).json().drafts.map((draft: { title: string }) => draft.title)).toEqual(["改个错字"]);
     } finally { await f.close(); }
   });
 
@@ -476,7 +506,7 @@ describe("拆卡和验收在本机（第 21 节）", { timeout: 30_000 }, () => 
       const web = await f.call("POST", `${base}/card-splits`);
       expect(web.statusCode).toBe(201);
       expect(web.json()).toEqual({ id: web.json().id, taskId: null, taskName: null, missionId: null, projectId: project, projectName: "天枢新首页", origin: "web", sourceWords: [],
-        afterSequence: null,
+        afterSequence: null, modelWords: null,
         createdAt: web.json().createdAt });
       expect([(await f.call("POST", `${base}/card-splits`)).statusCode, (await f.call("POST", "/api/plan-tasks/task-open/card-splits")).statusCode]).toEqual([200, 201]);
       const buddy = await f.t.app.inject({ method: "POST", url: `/internal/me/projects/${project}/card-splits`,

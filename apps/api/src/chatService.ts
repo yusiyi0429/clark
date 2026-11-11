@@ -168,7 +168,7 @@ export function createChatService(options: {
   /** 伙伴每一轮的计划清单和出的卡（17.4，buddyActions.ts 的 runExtras）：读回历史时接到那一轮的回答上。 */
   runExtras?: (viewer: ChatViewer, runIds: string[]) => Promise<Map<string, ChatRunExtras>>;
   /** 这一轮实际用的来源和模型（Chat 的 usage 事件报的，一轮里换了才再给）：记下来，读历史时由 runExtras 接回去。失败只记日志。 */
-  onModel?: (viewer: ChatViewer, runId: string, used: TConversationModel) => Promise<void>;
+  onModel?: (viewer: ChatViewer, runId: string, used: TConversationModel, scope: string) => Promise<void>;
   /** 项目对话这一轮本该在本机跑、没跑成改发云端（请求带 fallback，17.2 第 38 条）：Chat 开始这一轮时记下。失败只记日志。 */
   onFallback?: (viewer: ChatViewer, runId: string, reason: TLocalFallbackReason) => Promise<void>;
   /** 本人在伙伴回答到一半时发来新消息、上一轮要停掉之前（17.4）：收起那一轮的计划清单。失败只记日志。 */
@@ -566,7 +566,7 @@ export function createChatService(options: {
               used = reported;
               write({ type: "model", ...reported });
               const run = runId;
-              saving = saving.then(() => options.onModel?.(viewer, run, reported))
+              saving = saving.then(() => options.onModel?.(viewer, run, reported, scope))
                 .catch((error) => logEvent({ event: "chat_service.model_hook_failed", requestId, error: (error as Error)?.message }));
             }
             return rest;

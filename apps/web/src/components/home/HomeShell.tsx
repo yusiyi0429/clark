@@ -597,7 +597,10 @@ function HomeFrame({ account }: { account: Account }) {
         return <TaskInfo task={task} mission={mission} gate={taskGate(task)} go={go} />;
       }
       // 等本人处理的框和左栏的点同一个来源（第 54 条）：首页数据里这个子会话在等什么。
-      case "card": return <CardSession key={current.id} cardId={current.id} embedded waiting={subs.find((sub) => sub.id === current.id)?.waiting} />;
+      case "card": {
+        const sub = subs.find((entry) => entry.id === current.id);
+        return <CardSession key={current.id} cardId={current.id} embedded waiting={sub?.waiting} queued={sub ? subQueueText(sub, handheld) : null} />;
+      }
       case "topic": {
         const sub = subs.find((entry) => entry.id === current.id);
         // 自由子会话等着项目绑文件夹：问的框钉在这个子会话的输入框上方（和项目对话里那份是同一个）。

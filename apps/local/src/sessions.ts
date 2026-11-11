@@ -11,7 +11,7 @@ import {
   type TLocalWorkspace, type TLocalGitRef, type TLocalMergeResponse, type TLocalQuestionRequestView, type TLocalQuestionAnswerRequest,
   type TLocalBackgroundItem, type TLocalMergeHoldReason, type TLocalMergeSync, type TLocalModelTier, type TLocalHold, type TLocalMoney,
   type TLocalRun, type TLocalRunPreviewRequest, type TLocalTaskBudgetView, type TLocalBudgetUpdateRequest, type TBudgetMode, type TLocalPermissionBrief, type TLocalSavedAttachment, type TLocalStopReason, type TLocalStopReport,
-  type TLocalEffort, type TLocalSessionModelRequest, type TLocalSessionFileReadResponse, type TLocalSessionFilesResponse, type TLocalContextUsage,
+  type TLocalEffort, type TLocalSessionModelRequest, type TLocalSessionFileReadResponse, type TLocalSessionFilesResponse, type TLocalSessionRestoreResponse, type TLocalFileChangesRequest, type TLocalFileChangesResponse, type TLocalFileChangesRestoreRequest, type TLocalFileChangesRestoreResponse, type TLocalContextUsage,
   DONE_DEFINITION_LIMITS, LocalAgreementProposal, type TLocalAgreementProposal, type TLocalCardAgreementResponse, type TLocalFolderHolder,
 } from "@warmap/contracts";
 import { readJson, writeJsonAtomic, nowIso } from "./store.js";
@@ -40,6 +40,8 @@ import { addWorktree, branchName, cardDiff, changedFiles, commitAll, deleteBranc
 import { ensureFeishuPlugin, larkSkills } from "./agents/feishuPlugin.js";
 import { AGENT_NAME, earlierTurns, handoffText, otherRules } from "./handoff.js";
 import { listSessionFiles, readSessionFile, SessionFileError } from "./sessionFiles.js";
+import { UndoStore, type SessionUndo } from "./undo/index.js";
+import { ChangesError, readChanges, readWorktreeChanges, restoreChanges, turnSummary } from "./undo/changes.js";
 import type { VerifyBrief } from "./cloud.js";
 
 /** 云端天枢 MCP 在会话里的名字：和本人在 Claude Code 里配的天枢 MCP 同名，工具名一致。 */
@@ -199,7 +201,7 @@ function standardsTooLong(lines: string[]): string | null {
 }
 
 export class SessionError extends Error {
-  constructor(readonly code: "not_found" | "conflict" | "folder_not_allowed" | "validation", message: string) { super(message); }
+  constructor(readonly code: "not_found" | "conflict" | "folder_not_allowed" | "validation" | "file_changed", message: string) { super(message); }
 }
 
 export interface SessionDeps {
@@ -314,10 +316,23 @@ export class SessionManager {
   /** 网页带编号说的话（每个会话最近 SAID_KEPT 句）：重发时回同一个结果。 */
   private readonly said = new Map<string, Map<string, Promise<TLocalSendMessageResponse>>>();
   private readonly dir: string;
+  /** 改、删前留一份（ADR 0039，undo/）。 */
+  private readonly undo: UndoStore;
 
   constructor(private readonly d: SessionDeps) {
     this.dir = join(d.dataDir, "sessions");
     mkdirSync(this.dir, { recursive: true });
+    this.undo = new UndoStore(join(d.dataDir, "undo"), {
+      isOwn: (p) => d.folders.isOwn(p),
+      changed: () => this.d.onChange?.(),
+      notice: (id, level, text) => { const r = this.records.get(id); if (r) this.emit(r, { type: "notice", level, code: "undo", text }); },
+      // 一轮结束、这一轮改过文件：记一条 files_changed（第 72 条），网页在对话里画「改了 周报.md · 2 处」
+      turnFiles: (id, turn, files) => {
+        const r = this.records.get(id);
+        const u = this.undo.peek(id);
+        if (r && u) void turnSummary(u, turn, files).then((s) => this.emit(r, { type: "files_changed", turn, files: s.files, more: s.more }), () => undefined);
+      },
+    });
     for (const id of readdirSync(this.dir)) {
       const rec = readJson<SessionRecord | null>(join(this.dir, id, "session.json"), null);
       if (!rec) continue;
@@ -364,6 +379,7 @@ export class SessionManager {
       this.d.log.evict(rec.id); // 启动时为补这些读进来的，没人在看就放掉
     }
     this.holdQueue = false;
+    void this.undo.cleanup(new Set()).catch(() => undefined); // 过期的留一份（14 天、总量上限）
     this.relabelAll(); // 记录里存的来源名、模型配置的名字可能是旧叫法（如「我的 Claude 订阅」）：照现在的配置改过来
     this.scheduleHoldCheck(); // 上次停着等额度的，照原来的恢复时间接着等
     if (d.budgets) {
@@ -373,6 +389,12 @@ export class SessionManager {
       }, d.holdTiming?.budgetTickMs ?? BUDGET_TICK_MS);
       this.budgetTimer.unref?.();
     }
+  }
+
+  /** 这个会话的留一份：卡的工作树、验收员（有 git）没有；工作目录是本人的文件夹才整份留。create 为 false 时只取已有的。 */
+  private undoOf(rec: SessionRecord, create = true): SessionUndo | undefined {
+    if (rec.workspace?.kind === "worktree" || rec.subject.kind === "verify") return undefined;
+    return create ? this.undo.for(rec.id, this.d.folders.isOwn(rec.cwd) ? null : rec.cwd) : this.undo.peek(rec.id);
   }
 
   private save(rec: SessionRecord) {
@@ -393,6 +415,7 @@ export class SessionManager {
       ...rest, lastSeq: this.d.log.lastSeq(rec.id), pendingPermissions: this.pending.get(rec.id)?.size ?? 0, queuePosition: this.queuePosition(rec),
       ...(workspace ? { workspace } : {}), ...(question ? { pendingQuestion: question } : {}), ...(waitingFor.length ? { waitingFor } : {}), ...(heldBy ? { heldBy } : {}),
       ...(background.length ? { background } : {}), ...(hold ? { hold } : {}), ...(run ? { run } : {}),
+      ...(this.undoOf(rec, false) ? { undo: this.undoOf(rec, false)!.view() } : {}),
     };
   }
 
@@ -868,6 +891,8 @@ export class SessionManager {
     const model = await this.d.models.resolve(rec.modelProfileId);
     if (!model) throw new SessionError("validation", "这个会话用的模型配置已被删除");
     mkdirSync(join(this.dir, rec.id), { recursive: true });
+    const undo = this.undoOf(rec);
+    undo?.open(); // 开工那份在后台和拉起执行方同时做，不等
     // 每次拉起换一个本会话密钥，进程退出即作废：会话里跑的命令就算读到它，也只在这一次进程活着时有用。
     rec.mcpSecret = randomBytes(24).toString("hex");
     if (this.records.has(rec.id)) this.save(rec);
@@ -926,13 +951,23 @@ export class SessionManager {
       disallowedTools,
       systemPromptPath, agentsPath, pluginDirs: plugin ? [plugin] : [], feishuSkillsDir: rec.agent === "codex" ? skillsDir ?? null : null,
       // 每次现查：会话途中本人移除了文件夹，之后的请求（包括工作目录里的）就算越界。卡在工作树里做时整个工作树都算。
+      // 只有工作目录和项目另外绑的文件夹算范围内（11/11）：本人允许过的别的文件夹也算工作区外（「自动」问；「全部放行」不问，有兜底规矩）。
       allowedRoots: () => [
+        ...(this.d.folders.isAllowed(folder) ? (rec.workspace?.kind === "worktree" ? [rec.workspace.path, rec.workspace.folder] : [rec.cwd]) : []),
+        // 项目绑的全部文件夹（绑了工作目录的上级时，上级里别的子文件夹也算；交给执行方的 extraDirs 去掉了这种重复）
+        ...(rec.subject.projectId ? this.d.folders.projectFolders(rec.subject.projectId) : []),
+      ],
+      // 只读的步骤照收紧以前的范围（11/11：只收紧写，读照旧放）：工作目录加本人允许的所有文件夹
+      readRoots: () => [
         ...(this.d.folders.isAllowed(folder) ? [rec.workspace?.kind === "worktree" ? rec.workspace.path : rec.cwd] : []),
         ...this.d.folders.list().map((f) => f.path),
       ],
       // 卡在自己的工作树里：「自动」「自动接受改文件」只在工作树里自己放行（规则在 pathGuard 的 modeAllows）
       autoAllowRoot: rec.subject.kind === "card" && rec.workspace?.kind === "worktree" ? rec.workspace.path : null,
       extraDirs: () => this.extraDirs(rec),
+      // 「全部放行」的兜底规矩（pathGuard 的 noLossAsks）：本机自己的目录（含卡的工作树）、留了一份的地方改、删不丢本人的东西
+      covered: (p) => (undo ? undo.covers(p) : this.d.folders.isOwn(p)),
+      ...(undo ? { beforeWrite: (tool: string, input: Record<string, unknown>) => undo.beforeWrite(tool, input, rec.cwd) } : {}),
       permissionMode: rec.permissionMode,
       toolReads: custom?.reads,
     });
@@ -975,6 +1010,7 @@ export class SessionManager {
 
   private onAgentEvent(rec: SessionRecord, e: EventBody) {
     this.emit(rec, e);
+    this.undoOf(rec, false)?.onEvent(e.type); // 每一轮开始前、结束后各留一份
     switch (e.type) {
       case "permission_request":
         this.pending.get(rec.id)?.set(e.request.requestId, e.request);
@@ -2303,9 +2339,56 @@ export class SessionManager {
   }
 
   /** 本会话写过、改过的文件：事件记录里的写文件、改文件，加 git 看得到的（卡在工作树里做时算上开工以来已经提交的）。 */
-  listFiles(id: string): Promise<TLocalSessionFilesResponse> {
+  async listFiles(id: string): Promise<TLocalSessionFilesResponse> {
     const { rec, root } = this.fileRoot(id);
-    return listSessionFiles(root, rec.cwd, rec.workspace?.kind === "worktree" ? rec.workspace.baseCommit : null, this.d.log.after(id, 0), this.extraDirs(rec));
+    return listSessionFiles(root, rec.cwd, rec.workspace?.kind === "worktree" ? rec.workspace.baseCommit : null, this.d.log.after(id, 0), this.extraDirs(rec), await this.undoOf(rec, false)?.files() ?? []);
+  }
+
+  /** 读一个文件的改动（第 72 条，契约 LocalFileChangesRequest）：卡在工作树里的只有开工到现在。 */
+  async readFileChanges(id: string, req: TLocalFileChangesRequest): Promise<TLocalFileChangesResponse> {
+    const rec = this.records.get(id);
+    if (!rec) throw new SessionError("not_found", "没有这个会话");
+    const range = req.range ?? "turn";
+    try {
+      if (rec.workspace?.kind === "worktree") {
+        if (range === "turn") throw new SessionError("validation", "卡在工作树里做的会话只能看开工到现在");
+        return await readWorktreeChanges(rec.workspace.path, rec.workspace.baseCommit, req.path);
+      }
+      const undo = this.undoOf(rec, false);
+      if (!undo) throw new SessionError("not_found", "这个会话没有留一份");
+      return await readChanges(undo, req.path, range, req.turn);
+    } catch (e) {
+      throw e instanceof ChangesError ? new SessionError(e.code, e.message) : e;
+    }
+  }
+
+  /** 按处恢复（第 72 条，契约 LocalFileChangesRestoreRequest）：一轮在跑时 409；文件读了以后又变了 409 file_changed。 */
+  async restoreFileChanges(id: string, req: TLocalFileChangesRestoreRequest): Promise<TLocalFileChangesRestoreResponse> {
+    const rec = this.records.get(id);
+    if (!rec) throw new SessionError("not_found", "没有这个会话");
+    if (OCCUPYING.includes(rec.status)) throw new SessionError("conflict", "这个会话还在做，先停下再恢复");
+    if (rec.workspace?.kind === "worktree") throw new SessionError("conflict", "卡在自己的工作树里做，用不着恢复");
+    const undo = this.undoOf(rec, false);
+    if (!undo) throw new SessionError("not_found", "这个会话没有留一份");
+    try {
+      const r = await restoreChanges(undo, req.path, req.range ?? "turn", req.turn, req.ids, req.revision);
+      this.emit(rec, { type: "files_restored", all: false, restored: [r.file.path], failed: [] });
+      return r;
+    } catch (e) {
+      throw e instanceof ChangesError ? new SessionError(e.code, e.message) : e;
+    }
+  }
+
+  /** 恢复这个会话动过的文件（契约 LocalSessionRestoreRequest）：一轮在跑时、卡在工作树里时 409。 */
+  async restoreFiles(id: string, paths: string[] | undefined): Promise<TLocalSessionRestoreResponse> {
+    const rec = this.records.get(id);
+    if (!rec) throw new SessionError("not_found", "没有这个会话");
+    if (OCCUPYING.includes(rec.status)) throw new SessionError("conflict", "这个会话还在做，先停下再恢复");
+    const undo = this.undoOf(rec, false);
+    if (!undo) throw new SessionError("conflict", rec.workspace?.kind === "worktree" ? "卡在自己的工作树里做，用不着恢复" : "这个会话没有留一份");
+    const r = await undo.restore(paths);
+    this.emit(rec, { type: "files_restored", all: !paths, restored: r.restored, failed: r.failed });
+    return r;
   }
 
   /** 本会话 MCP 的 read_earlier_turns：从事件记录里翻更早的轮次（换过执行方接着做时，交代里只带最近几轮）。 */

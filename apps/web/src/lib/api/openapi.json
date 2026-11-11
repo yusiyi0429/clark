@@ -12187,6 +12187,56 @@
         }
       }
     },
+    "/api/admin/work-counts": {
+      "get": {
+        "operationId": "getAdminWorkCounts",
+        "summary": "使用计数（设计第 70 条）：每人每周的对话轮数、派活单、卡、全部放行的会话、活跃天数，只计数不记内容；week 不传为本周。非管理员 404",
+        "parameters": [
+          {
+            "name": "week",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "周一（北京时间），如 2026-11-16"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "这一周每人的计数",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkCountsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/usage/markdown": {
       "get": {
         "operationId": "getAdminUsageMarkdown",
@@ -64198,6 +64248,141 @@
           }
         }
       },
+      "WorkCountsResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "weekStart",
+          "weekEnd",
+          "rows",
+          "notCounted"
+        ],
+        "properties": {
+          "weekStart": {
+            "format": "date",
+            "type": "string"
+          },
+          "weekEnd": {
+            "format": "date",
+            "type": "string"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "personId",
+                "name",
+                "buddyTurns",
+                "projectTurns",
+                "plans",
+                "cards",
+                "bypassSessions",
+                "activeDays"
+              ],
+              "properties": {
+                "personId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "buddyTurns": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "projectTurns": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "plans": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "started",
+                    "revised",
+                    "dropped"
+                  ],
+                  "properties": {
+                    "started": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "revised": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "dropped": {
+                      "minimum": 0,
+                      "type": "integer"
+                    }
+                  }
+                },
+                "cards": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "started",
+                    "handedBack",
+                    "passed",
+                    "failed",
+                    "blocked",
+                    "needsPerson",
+                    "closedWithGap"
+                  ],
+                  "properties": {
+                    "started": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "handedBack": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "passed": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "failed": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "blocked": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "needsPerson": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "closedWithGap": {
+                      "minimum": 0,
+                      "type": "integer"
+                    }
+                  }
+                },
+                "bypassSessions": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "activeDays": {
+                  "minimum": 0,
+                  "maximum": 7,
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "notCounted": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "OnboardingStepUsageRequest": {
         "additionalProperties": false,
         "type": "object",
@@ -100371,6 +100556,18 @@
               "maxLength": 4000,
               "type": "string"
             }
+          },
+          "modelWords": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -101993,6 +102190,18 @@
                     "maxLength": 4000,
                     "type": "string"
                   }
+                },
+                "modelWords": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "maxLength": 300,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               }
             }
@@ -112987,6 +113196,38 @@
                 "type": "null"
               }
             ]
+          },
+          "heldBy": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "kind",
+              "id",
+              "title"
+            ],
+            "properties": {
+              "kind": {
+                "anyOf": [
+                  {
+                    "const": "card",
+                    "type": "string"
+                  },
+                  {
+                    "const": "topic",
+                    "type": "string"
+                  }
+                ]
+              },
+              "id": {
+                "minLength": 1,
+                "maxLength": 80,
+                "type": "string"
+              },
+              "title": {
+                "maxLength": 120,
+                "type": "string"
+              }
+            }
           }
         }
       },
@@ -113863,6 +114104,38 @@
                       "type": "null"
                     }
                   ]
+                },
+                "heldBy": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "id",
+                    "title"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "const": "card",
+                          "type": "string"
+                        },
+                        {
+                          "const": "topic",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "id": {
+                      "minLength": 1,
+                      "maxLength": 80,
+                      "type": "string"
+                    },
+                    "title": {
+                      "maxLength": 120,
+                      "type": "string"
+                    }
+                  }
                 }
               }
             }
@@ -114372,6 +114645,38 @@
                       "type": "null"
                     }
                   ]
+                },
+                "heldBy": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "id",
+                    "title"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "const": "card",
+                          "type": "string"
+                        },
+                        {
+                          "const": "topic",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "id": {
+                      "minLength": 1,
+                      "maxLength": 80,
+                      "type": "string"
+                    },
+                    "title": {
+                      "maxLength": 120,
+                      "type": "string"
+                    }
+                  }
                 }
               }
             }
@@ -114881,6 +115186,38 @@
                       "type": "null"
                     }
                   ]
+                },
+                "heldBy": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "id",
+                    "title"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "const": "card",
+                          "type": "string"
+                        },
+                        {
+                          "const": "topic",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "id": {
+                      "minLength": 1,
+                      "maxLength": 80,
+                      "type": "string"
+                    },
+                    "title": {
+                      "maxLength": 120,
+                      "type": "string"
+                    }
+                  }
                 }
               }
             }
@@ -115353,6 +115690,18 @@
                 "type": "null"
               }
             ]
+          },
+          "modelWords": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "maxLength": 300,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -115468,6 +115817,18 @@
                     {
                       "minimum": 1,
                       "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "modelWords": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "maxLength": 300,
+                      "type": "string"
                     },
                     {
                       "type": "null"
@@ -115870,6 +116231,11 @@
           "afterSequence": {
             "minimum": 1,
             "type": "integer"
+          },
+          "modelWords": {
+            "minLength": 1,
+            "maxLength": 300,
+            "type": "string"
           }
         }
       },
@@ -129975,6 +130341,18 @@
                     "maxLength": 4000,
                     "type": "string"
                   }
+                },
+                "modelWords": {
+                  "anyOf": [
+                    {
+                      "minLength": 1,
+                      "maxLength": 300,
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 }
               }
             }

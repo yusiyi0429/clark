@@ -56,10 +56,12 @@ const money = (usd: number | null) => (usd === null ? null : `约 $${usd.toFixed
 /**
  * 新首页页头的状态 chip（5.4.3「状态 chip」、5.6 状态词）：中性、警告、等你（中性底加强调色圆点）三档；新首页不用成功色。
  * 「等你」档只给等本人处理的框（attention，第 54 条，和左栏的点同一个来源）：等你批准、在问你、等你拿主意、等你合回；
- * 批准、提问不在这台电脑上时写「等你 · {电脑名}」（away）。别的照会话和阶段：已停止、已停下（一轮做完）、受阻（不是验收没过的）、重做中、已排队、进行中…。
+ * 批准、提问不在这台电脑上时写「等你 · {电脑名}」（away）。首页数据里它在排队时照写排队的状态词（queued，「已排队 · 等 B」，第 68 条）。
+ * 别的照会话和阶段：已停止、已停下（一轮做完）、受阻（不是验收没过的）、重做中、已排队、进行中…。
  */
-export function stateChip(attention: Attention | null, rest: CardWait | null, stage: CardStage, away: string | null): { text: string; tone: "neutral" | "warn" | "wait" } {
+export function stateChip(attention: Attention | null, rest: CardWait | null, stage: CardStage, away: string | null, queued: string | null = null): { text: string; tone: "neutral" | "warn" | "wait" } {
   if (attention) return { text: (attention === "approval" || attention === "question") && away ? away : ATTENTION_LABEL[attention], tone: "wait" };
+  if (queued) return { text: queued, tone: "neutral" };
   if (rest === "blocked") return { text: "受阻", tone: "warn" };
   if (rest === "paused") return { text: "已停止", tone: "neutral" };
   if (rest === "reply") return { text: "已停下", tone: "neutral" };
@@ -71,8 +73,9 @@ export function stateChip(attention: Attention | null, rest: CardWait | null, st
  * embedded：放在新首页的展示区里——没有返回键（左栏就是导航）。页头右边的信息图标：桌面上在右栏打开详情（交代、标准、验收、产出、改动的文件），对话留着；
  * 手机上没有右栏，照旧在「对话」和「结果」之间切。
  * waiting：首页数据里这个子会话在等什么（左栏的点用的那一份，已经照这台电脑上的会话改过）；页头标签和钉在输入框上方的框都从它和本机事件流算（第 54 条）。
+ * queued：首页数据里它在排队时的状态词（subQueueText），页头照写；不在排队为 null。
  */
-export function CardSession({ cardId, embedded = false, waiting }: { cardId: string; embedded?: boolean; waiting?: Attention | null }) {
+export function CardSession({ cardId, embedded = false, waiting, queued = null }: { cardId: string; embedded?: boolean; waiting?: Attention | null; queued?: string | null }) {
   const chrome = useViewChrome();
   /** 看结果还是对话；没选过时，子会话不在这台电脑上（手机、别的电脑、还没开）先看摘要（5.4.3）。 */
   const [details, setDetails] = useState<boolean | null>(null);
@@ -287,7 +290,7 @@ export function CardSession({ cardId, embedded = false, waiting }: { cardId: str
     const inSide = !!side;
     const showPane = side ? side.open : details ?? !session;
     const openDetails = (open?: boolean) => (side ? side.toggle(open) : setDetails(open ?? !showPane));
-    const chipOf = stateChip(attention, session ? localWait(view) : card.wait, stage, !canAct && device ? awayChip(device) : null);
+    const chipOf = stateChip(attention, session ? localWait(view) : card.wait, stage, !canAct && device ? awayChip(device) : null, queued);
     const handback = detail.handbacks[0] ?? null;
     const canFlip = !handheld && !!handback && handback.status === "done" && !handback.overruled && handback.outcome === "pass" && !deliverableLabel(item)?.startsWith("已纳入");
     // 停止在输入框右边（27 条，在跑时没字是停止方块）；页头只留「推翻」。

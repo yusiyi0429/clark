@@ -32,6 +32,8 @@ export interface AgentLaunch {
   feishuSkillsDir?: string | null;
   /** 本会话允许的范围（本人允许的文件夹，加上还算数的工作目录），每次权限请求现查，据此标出越界路径。 */
   allowedRoots(): string[];
+  /** 只读的步骤按它算范围（本人允许的所有文件夹，11/11：只收紧写，读照旧放）。 */
+  readRoots?(): string[];
   /** 卡在自己的工作树里做时是工作树的根：「自动」「自动接受改文件」只在这里面自己放行（pathGuard 的 modeAllows）。别的会话为 null。 */
   autoAllowRoot: string | null;
   /**
@@ -41,6 +43,10 @@ export interface AgentLaunch {
   extraDirs(): string[];
   /** 本人在连接页加的工具（mcp__tool-…）里哪些是读的：照权限模式放行；不给就是都要问。 */
   toolReads?(tool: string): boolean;
+  /** 改、删、覆盖不会丢本人东西的地方（pathGuard 的 PathScope.covered），每次现查。 */
+  covered?(path: string): boolean;
+  /** 放行之前（本机自己放行、转给本人之前都先过一遍）：改已有文件的先留一份，命令等这一轮开头那份留好（undo/，ADR 0039）。 */
+  beforeWrite?(tool: string, input: Record<string, unknown>): Promise<void>;
   /** 开工时的权限模式（契约 LocalPermissionMode）：本机按它放行请求；plan 时执行方以自己的 plan 模式起。 */
   permissionMode: TLocalPermissionMode;
 }
