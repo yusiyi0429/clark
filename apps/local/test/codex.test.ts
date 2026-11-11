@@ -176,6 +176,17 @@ describe("Codex 子会话", { timeout: 60_000 }, () => {
     await call("POST", `/v1/sessions/${id}/kill`, {});
   });
 
+  it("全部放行也问（11/11 过渡规矩）：Codex 用命令删工作目录外面本人的已有文件（没有兜底）→ 停在等批准、原文没动", async () => {
+    const elsewhere = tempDir("tl-codex-del-");
+    const target = join(elsewhere, "表.md");
+    writeFileSync(target, "本人的原文");
+    const id = await open("D", `run Remove-Item ${target.replaceAll("\\", "/")}`, { permissionMode: "bypassPermissions" });
+    const p = await until(async () => (await session(id)).pendingPermissions[0] ?? null);
+    expect(p.title).toContain("Remove-Item");
+    expect(readFileSync(target, "utf8")).toBe("本人的原文");
+    await call("POST", `/v1/sessions/${id}/kill`, {});
+  });
+
   it("Codex 没有「先出计划」，规划员只能用 Claude Code；思考程度只收这个模型有的档", async () => {
     mkdirSync(join(work, "P"), { recursive: true });
     const plan = await call("POST", "/v1/sessions", { subject: { kind: "plan", projectId: "11111111-1111-4111-8111-111111111111" }, title: "拆", cwd: join(work, "P"), firstMessage: "拆", modelProfileId: SOL });

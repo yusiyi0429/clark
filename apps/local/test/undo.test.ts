@@ -180,6 +180,35 @@ describe("留一份：整份快照（普通文件夹）", { timeout: 60_000 }, (
   });
 });
 
+describe("留一份：根目录本身是 git 仓库（自由子会话直接在主文件夹里改，第 68 条）", { timeout: 60_000 }, () => {
+  it(".git 不进快照、不被碰；没提交的改动、没纳入版本的文件照样能恢复", async () => {
+    const dir = folder();
+    const g = (...args: string[]) => execFileSync("git", ["-c", "user.name=测试", "-c", "user.email=test@example.com", ...args], { cwd: dir, windowsHide: true, stdio: "pipe" });
+    g("init", "-q", "-b", "main");
+    g("add", "-A");
+    g("commit", "-q", "-m", "init");
+    writeFileSync(join(dir, "笔记.md"), "本人没提交的改动"); // 主文件夹里没提交的
+    writeFileSync(join(dir, "草稿.md"), "没纳入版本的");
+    const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim();
+    const { s } = store();
+    const u = await opened(s.for("g1", dir));
+    expect(u.view().state).toBe("ready");
+    expect(u.covers(join(dir, ".git", "config"))).toBe(false);
+    await turn(u, () => {
+      writeFileSync(join(dir, "笔记.md"), "执行方改了");
+      rmSync(join(dir, "草稿.md"));
+    });
+    const paths = (await u.files()).map((f) => f.path).sort();
+    expect(paths).toEqual(["笔记.md", "草稿.md"]);
+    await u.restore();
+    expect(readFileSync(join(dir, "笔记.md"), "utf8")).toBe("本人没提交的改动");
+    expect(readFileSync(join(dir, "草稿.md"), "utf8")).toBe("没纳入版本的");
+    // 本人的仓库没被动过：HEAD 不变，状态还是那两处改动
+    expect(execFileSync("git", ["rev-parse", "HEAD"], { cwd: dir, encoding: "utf8" }).trim()).toBe(head);
+    expect(execFileSync("git", ["-c", "core.quotepath=false", "status", "--porcelain"], { cwd: dir, encoding: "utf8" }).split("\n").filter(Boolean).sort()).toEqual([" M 笔记.md", "?? 草稿.md"].sort());
+  });
+});
+
 describe("留一份：只改前拷一份（太大、同步盘、盘不够、没留成、本机自己的目录）", { timeout: 60_000 }, () => {
   it("太大：降级成 touched_only、出一行提示；改文件工具改的照样拷一份能恢复，命令改的不在兜底里", async () => {
     UNDO_LIMITS.files = 2;
