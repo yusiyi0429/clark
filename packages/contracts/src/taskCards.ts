@@ -63,7 +63,7 @@ export const CardDraftView = Type.Object({
   position: Type.Integer({ minimum: 0 }),
   title: Type.String({ minLength: 1, maxLength: 120 }),
   brief: Type.String({ maxLength: 4000 }),
-  doneDefinition: Type.String({ minLength: 1, maxLength: 500 }),
+  doneDefinition: Type.String({ minLength: 1, maxLength: 2000 }),
   criterionIndex: NullableInteger({ minimum: 1 }),
   role: Nullable(RoleRef),
   suggestPresetKey: Nullable(Type.String()),
@@ -119,7 +119,7 @@ export const AcceptCardDraftsRequest = Type.Object({
     id: Type.String({ format: "uuid" }),
     title: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
     brief: Type.Optional(Type.String({ maxLength: 4000 })),
-    doneDefinition: Type.Optional(Type.String({ minLength: 1, maxLength: 500 })),
+    doneDefinition: Type.Optional(Type.String({ minLength: 1, maxLength: 2000 })),
     executor: Type.Optional(CardExecutor),
     roleId: Type.Optional(Nullable(Type.String({ format: "uuid" }))),
   }, strict), { minItems: 1, maxItems: 8 }),
@@ -136,9 +136,9 @@ export const AcceptCardDraftsRequest = Type.Object({
 export const AcceptCardDraftsResponse = Type.Object({ cards: Type.Array(CardTaskView) }, strict);
 
 /**
- * 一条完成标准（主循环第 60 条）：卡上存成 doneDefinition 一行一条，这里按条给。整份 doneDefinition（各条用换行接起来）不超过 500 字，超了 400 TOO_LONG。
+ * 一条完成标准（主循环第 60 条）：卡上存成 doneDefinition 一行一条，这里按条给。限制见 DONE_DEFINITION_LIMITS：每条不超过 300 字，整份不超过 2000 字。
  */
-export const CardStandard = Type.String({ minLength: 1, maxLength: 200, pattern: "^[^\\r\\n]+$" });
+export const CardStandard = Type.String({ minLength: 1, maxLength: 300, pattern: "^[^\\r\\n]+$" });
 
 /**
  * 改卡上卡的那几样（只有推进人）：执行方、岗位（本人没归档的岗位，null 不配）、模型、交代、对哪条标准。标题照旧用 PATCH /api/me/tasks/:id。

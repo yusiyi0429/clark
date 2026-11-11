@@ -1251,7 +1251,7 @@ export const LocalHandbackCriterion = Type.Object({
 export const LocalPlanCard = Type.Object({
   title: Type.String({ minLength: 1, maxLength: 120 }),
   brief: Type.String({ maxLength: 4000 }),
-  doneDefinition: Type.String({ minLength: 1, maxLength: 500 }),
+  doneDefinition: Type.String({ minLength: 1, maxLength: 2000 }),
   criterionIndex: NullableInteger({ minimum: 1 }),
   role: Nullable(Type.String({ minLength: 1, maxLength: 80 })),
   modelTier: LocalModelTier,
@@ -1358,12 +1358,12 @@ export const LocalCardAgreementResponse = Type.Object({
 
 /**
  * 执行方提议改卡的约定（主循环第 60 条，天枢 MCP 的工具 propose_agreement_change 的入参，只有卡的会话有这个工具）：
- * standards 是新的完成标准全文（按条，整份；每条一行、不超过 200 字，合起来不超过 500 字）；brief 是新的交代（不改交代就不带）；reason 是原因，一句话。
+ * standards 是新的完成标准全文（按条，整份；每条一行、不超过 300 字，合起来不超过 2000 字）；brief 是新的交代（不改交代就不带）；reason 是原因，一句话。
  * 它不直接生效：本机记一条事件 agreement_proposal、报一条同步条目 agreement_proposal，云端在这个子会话里钉一个框，本人选「改成这样（推荐）」「不改」，
  * 结果由云端登记的转话告诉执行方。工具立刻回「已经提给本人，等本人定」，执行方接着做别的、或停下等。
  */
 export const LocalAgreementProposal = Type.Object({
-  standards: Type.Array(Type.String({ minLength: 1, maxLength: 200 }), { minItems: 1, maxItems: 20 }),
+  standards: Type.Array(Type.String({ minLength: 1, maxLength: 300 }), { minItems: 1, maxItems: 20 }),
   brief: Type.Optional(Type.String({ minLength: 1, maxLength: 4000 })),
   reason: Type.String({ minLength: 1, maxLength: 500 }),
 }, strict);
