@@ -32,7 +32,7 @@ const ADD_EVIDENCE = {
 };
 const HAND_BACK = {
   name: "hand_back",
-  description: "做完后交回：逐条对照完成标准写达到（met）、部分（partial）还是没达到（unmet），附证据；点名这次交回用哪几份产出和证据（编号）；再写一句总结。交回后由 Agent 验收。",
+  description: "做完后交回：逐条对照完成标准写达到（met）、部分（partial）、没达到（unmet），或要本人补（needs_person：要登录、验证码、人工查询、网站拦自动访问、要本人的权限或判断，你做不了的），附证据；标 needs_person 的必须带 need。点名这次交回用哪几份产出和证据（编号）；再写一句总结。交回后由 Agent 验收。",
   inputSchema: {
     type: "object",
     properties: {
@@ -41,7 +41,10 @@ const HAND_BACK = {
         type: "array",
         items: {
           type: "object",
-          properties: { index: { type: "integer", minimum: 1 }, result: { type: "string", enum: ["met", "partial", "unmet"] }, evidence: { type: "string" } },
+          properties: {
+            index: { type: "integer", minimum: 1 }, result: { type: "string", enum: ["met", "partial", "unmet", "needs_person"] }, evidence: { type: "string" },
+            need: { type: "string", description: "result 是 needs_person 时必填：一句人话，要本人做什么、做完给回什么，500 字以内" },
+          },
           required: ["index", "result", "evidence"],
         },
       },
@@ -187,8 +190,12 @@ function callTool(sessions: SessionManager, id: string, kind: TLocalSessionKind,
   }
   if (name === "hand_back" && typeof input?.summary === "string" && Array.isArray(input?.criteria)) {
     const criteria = input.criteria
-      .filter((c: any) => Number.isInteger(c?.index) && c.index >= 1 && ["met", "partial", "unmet"].includes(c?.result))
-      .map((c: any) => ({ index: c.index, result: c.result, evidence: String(c.evidence ?? "").slice(0, 2000) }));
+      .filter((c: any) => Number.isInteger(c?.index) && c.index >= 1 && ["met", "partial", "unmet", "needs_person"].includes(c?.result))
+      .map((c: any) => {
+        const need = c.result === "needs_person" ? String(c.need ?? "").trim().slice(0, 500) : "";
+        if (c.result === "needs_person" && !need) throw new Error(`第 ${c.index} 条标了要本人补（needs_person），要带 need：一句话写要本人做什么、做完给回什么。补上后整份再交一次。`);
+        return { index: c.index, result: c.result, evidence: String(c.evidence ?? "").slice(0, 2000), ...(need ? { need } : {}) };
+      });
     const outputs = Array.isArray(input.outputs) ? input.outputs.map(String) : undefined;
     return sessions.handBack(id, { summary: input.summary, criteria, outputs });
   }

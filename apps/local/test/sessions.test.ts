@@ -204,6 +204,14 @@ describe("会话：开工、事件、批权限、插话、停下、强停、续�
     const again = JSON.parse(readFileSync(join(t.dataDir, "outbox.json"), "utf8")).entries.map((e: any) => e.item);
     const a2 = again.filter((i: any) => i.type === "artifact" && i.data.title === "方案").at(-1).key;
     expect(again.filter((i: any) => i.type === "handback").at(-1).data.outputKeys).toEqual([keyOf("evidence", (d) => d.title === "PR"), keyOf("evidence", (d) => d.title === "草稿说明"), a2]);
+    // 要本人补（主循环第 61 条）：标了 needs_person 不带 need 的退回让它补；带了的原样交上去
+    const noNeed = await call("hand_back", { summary: "查不了", criteria: [{ index: 1, result: "needs_person", evidence: "商标网拦自动访问" }] });
+    expect(noNeed.isError).toBe(true);
+    expect(noNeed.content[0]!.text).toContain("要带 need");
+    const need = "登录中国商标网查这 3 个名字，把近似商标的申请号贴回来";
+    expect((await call("hand_back", { summary: "候选名齐了，申请号要你查", criteria: [{ index: 1, result: "needs_person", evidence: "商标网拦自动访问", need }] })).isError).toBe(false);
+    const third = JSON.parse(readFileSync(join(t.dataDir, "outbox.json"), "utf8")).entries.map((e: any) => e.item).filter((i: any) => i.type === "handback").at(-1);
+    expect(third.data.criteria).toEqual([{ index: 1, result: "needs_person", evidence: "商标网拦自动访问", need }]);
     const note = await raw(t.port, { method: "POST", path: `/internal/sessions/${id}/mcp`, headers: { "x-tianshu-session-secret": secret, "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) });
     expect(note.status).toBe(202);
     const all = await readSse(t.port, token, id, { until: has("handback") });
