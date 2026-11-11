@@ -108983,6 +108983,10 @@
                 "type": "null"
               }
             ]
+          },
+          "free": {
+            "const": true,
+            "type": "boolean"
           }
         }
       },
@@ -109587,6 +109591,10 @@
                       "type": "null"
                     }
                   ]
+                },
+                "free": {
+                  "const": true,
+                  "type": "boolean"
                 }
               }
             }
@@ -109596,9 +109604,6 @@
       "CreateTopicRequest": {
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "title"
-        ],
         "properties": {
           "title": {
             "minLength": 1,
@@ -109612,6 +109617,19 @@
           },
           "roleId": {
             "format": "uuid",
+            "type": "string"
+          },
+          "free": {
+            "const": true,
+            "type": "boolean"
+          },
+          "projectId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "firstMessage": {
+            "minLength": 1,
+            "maxLength": 20000,
             "type": "string"
           }
         }
@@ -110043,6 +110061,10 @@
                     "type": "null"
                   }
                 ]
+              },
+              "free": {
+                "const": true,
+                "type": "boolean"
               }
             }
           },
@@ -112874,6 +112896,10 @@
                   {
                     "const": "quota",
                     "type": "string"
+                  },
+                  {
+                    "const": "folder_busy",
+                    "type": "string"
                   }
                 ]
               },
@@ -113746,6 +113772,10 @@
                         {
                           "const": "quota",
                           "type": "string"
+                        },
+                        {
+                          "const": "folder_busy",
+                          "type": "string"
                         }
                       ]
                     },
@@ -114251,6 +114281,10 @@
                         {
                           "const": "quota",
                           "type": "string"
+                        },
+                        {
+                          "const": "folder_busy",
+                          "type": "string"
                         }
                       ]
                     },
@@ -114755,6 +114789,10 @@
                         },
                         {
                           "const": "quota",
+                          "type": "string"
+                        },
+                        {
+                          "const": "folder_busy",
                           "type": "string"
                         }
                       ]
@@ -115967,6 +116005,10 @@
                   {
                     "const": "quota",
                     "type": "string"
+                  },
+                  {
+                    "const": "folder_busy",
+                    "type": "string"
                   }
                 ]
               },
@@ -116154,6 +116196,52 @@
                 "type": "null"
               }
             ]
+          },
+          "free": {
+            "const": true,
+            "type": "boolean"
+          },
+          "heldBy": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "kind",
+              "id",
+              "letter",
+              "title"
+            ],
+            "properties": {
+              "kind": {
+                "anyOf": [
+                  {
+                    "const": "card",
+                    "type": "string"
+                  },
+                  {
+                    "const": "topic",
+                    "type": "string"
+                  }
+                ]
+              },
+              "id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "letter": {
+                "anyOf": [
+                  {
+                    "pattern": "^[A-Z]{1,3}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "title": {
+                "type": "string"
+              }
+            }
           }
         }
       },
@@ -116663,6 +116751,10 @@
                         {
                           "const": "quota",
                           "type": "string"
+                        },
+                        {
+                          "const": "folder_busy",
+                          "type": "string"
                         }
                       ]
                     },
@@ -116850,6 +116942,52 @@
                       "type": "null"
                     }
                   ]
+                },
+                "free": {
+                  "const": true,
+                  "type": "boolean"
+                },
+                "heldBy": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "kind",
+                    "id",
+                    "letter",
+                    "title"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "const": "card",
+                          "type": "string"
+                        },
+                        {
+                          "const": "topic",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "id": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "letter": {
+                      "anyOf": [
+                        {
+                          "pattern": "^[A-Z]{1,3}$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "title": {
+                      "type": "string"
+                    }
+                  }
                 }
               }
             }
@@ -118493,6 +118631,10 @@
                               {
                                 "const": "quota",
                                 "type": "string"
+                              },
+                              {
+                                "const": "folder_busy",
+                                "type": "string"
                               }
                             ]
                           },
@@ -118680,6 +118822,52 @@
                             "type": "null"
                           }
                         ]
+                      },
+                      "free": {
+                        "const": true,
+                        "type": "boolean"
+                      },
+                      "heldBy": {
+                        "additionalProperties": false,
+                        "type": "object",
+                        "required": [
+                          "kind",
+                          "id",
+                          "letter",
+                          "title"
+                        ],
+                        "properties": {
+                          "kind": {
+                            "anyOf": [
+                              {
+                                "const": "card",
+                                "type": "string"
+                              },
+                              {
+                                "const": "topic",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          "id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "letter": {
+                            "anyOf": [
+                              {
+                                "pattern": "^[A-Z]{1,3}$",
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "title": {
+                            "type": "string"
+                          }
+                        }
                       }
                     }
                   }
@@ -119401,6 +119589,10 @@
                             {
                               "const": "quota",
                               "type": "string"
+                            },
+                            {
+                              "const": "folder_busy",
+                              "type": "string"
                             }
                           ]
                         },
@@ -119588,6 +119780,52 @@
                           "type": "null"
                         }
                       ]
+                    },
+                    "free": {
+                      "const": true,
+                      "type": "boolean"
+                    },
+                    "heldBy": {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "kind",
+                        "id",
+                        "letter",
+                        "title"
+                      ],
+                      "properties": {
+                        "kind": {
+                          "anyOf": [
+                            {
+                              "const": "card",
+                              "type": "string"
+                            },
+                            {
+                              "const": "topic",
+                              "type": "string"
+                            }
+                          ]
+                        },
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "letter": {
+                          "anyOf": [
+                            {
+                              "pattern": "^[A-Z]{1,3}$",
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "title": {
+                          "type": "string"
+                        }
+                      }
                     }
                   }
                 }

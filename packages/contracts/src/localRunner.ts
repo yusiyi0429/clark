@@ -19,8 +19,9 @@ import { NullableInteger, NullableNumber } from "./nullable.js";
  * 本机程序的协议号（GET /v1/health 的 protocol）。网页按它判断能不能带新字段：老本机程序 strict，带了它不认识的字段整个请求回 400。
  * 2：发话可带 messageId（LocalSendMessageRequest）。
  * 3：发话可带 agreementRevision（主循环第 60 条，LocalSendMessageRequest）。
+ * 4：开工可带 free（第 68 条自由子会话，LocalCreateSessionRequest）。
  */
-export const LOCAL_RUNNER_PROTOCOL = 3;
+export const LOCAL_RUNNER_PROTOCOL = 4;
 export const LOCAL_RUNNER_DEFAULT_PORT = 47610;
 export const LOCAL_RUNNER_TOKEN_HEADER = "x-tianshu-local-token";
 /** 云端接收端路径（相对天枢 api 的根），鉴权用 Authorization: Bearer <个人令牌>。 */
@@ -853,6 +854,22 @@ export const LocalCreateSessionRequest = Type.Object({
   taskBudget: Type.Optional(Type.Object({ taskId: Nullable(Type.String({ minLength: 1, maxLength: 80 })), budget: Budget }, strict)),
   /** 权限模式（见 LocalPermissionMode）：网页带项目主管线上设的默认；不带为 auto。执行方没有这一档时 400。验收员随被验的卡。 */
   permissionMode: Type.Optional(LocalPermissionMode),
+  /**
+   * 自由子会话（第 68 条，项目下的「+」）：只给 kind=topic（别的 400），云端专题带 free 时网页原样带上；本机 protocol ≥ 4 才收。
+   * 本机换一套规矩：没有提纲、版本、交回、验收，本人要的文件就写在文件夹里；工具只有交产出物和翻更早的轮次。
+   * 在项目的文件夹里做；那是普通文件夹（不是 git 仓库）时，和卡一样同一时间只许一个在改（摘要的 workspace 是 folder，被占着时排队，见 LocalFolderHolder）。
+   */
+  free: Type.Optional(Type.Literal(true)),
+}, strict);
+
+/**
+ * 排队是因为普通文件夹被占着（第 68 条）：占着它的那个会话是谁。kind 是卡还是专题（自由子会话是带 free 的专题），id 是天枢里卡或专题的 id，title 是它的标题。
+ * 普通文件夹同一时间只许一个会话改：卡和自由子会话都算，正在跑、在等批准时占着，一轮做完在等本人时不占。占着的换了人，本机重报一条。
+ */
+export const LocalFolderHolder = Type.Object({
+  kind: Type.Union([Type.Literal("card"), Type.Literal("topic")]),
+  id: Type.String({ minLength: 1, maxLength: 80 }),
+  title: Type.String({ maxLength: 120 }),
 }, strict);
 
 /**
@@ -1030,8 +1047,13 @@ export const LocalSessionSummary = Type.Object({
   /** 排队时是第几个（1 起），没在排队为 null。 */
   queuePosition: NullableInteger({ minimum: 1 }),
   usage: LocalUsage,
-  /** 只有卡：在工作树还是文件夹里做（本机总会填；等前面的卡时还没有工作树，不带）。 */
+  /**
+   * 卡：在工作树还是文件夹里做（本机总会填；等前面的卡时还没有工作树，不带）。
+   * 自由子会话（第 68 条）：项目文件夹是普通文件夹时带 kind=folder（第 71 条「改之前留一份」照卡一样认它）；是 git 仓库时不带（直接在主文件夹里做）。
+   */
   workspace: Type.Optional(LocalWorkspace),
+  /** 排着队、在等普通文件夹空出来时：占着它的是谁（LocalFolderHolder，第 68 条）；不在等就不带。 */
+  heldBy: Type.Optional(LocalFolderHolder),
   /** 在等本人回答的提问（状态是 idle，界面「等你回复」）；没有就不带。 */
   pendingQuestion: Type.Optional(LocalQuestionRequestView),
   /** 只有卡：排着队、还在等的前面的卡（cardId，还没在这台本机上合回的），界面「已排队 · 等前面的卡」；不在等就不带。 */
@@ -1679,6 +1701,8 @@ export const LocalSyncItem = Type.Union([
     queuePosition: Type.Optional(Type.Integer({ minimum: 1 })),
     /** 只在 status = queued、卡在等前面的卡时带：还没合回的那几张的 cardId（派活单上「已排队 · 等前面的卡」）。少了一张就重发一条。 */
     waitingFor: Type.Optional(Type.Array(Type.String(), { minItems: 1, maxItems: 8 })),
+    /** 只在 status = queued、在等普通文件夹空出来时带：占着它的是谁（LocalFolderHolder，第 68 条）。云端据此算 queueReason = folder_busy。 */
+    heldBy: Type.Optional(LocalFolderHolder),
     /** 停着等（见 LocalHold）：等的时候报一条带它的，接着做时报的那条不带。 */
     hold: Type.Optional(LocalHold),
     /** 最近一次拉起时定的跑法（见 LocalRun，卡行写模型和思考强度）；还没拉起过不带。 */
@@ -1925,6 +1949,7 @@ export type TLocalVerdict = Static<typeof LocalVerdict>;
 export type TLocalVerifyBriefResponse = Static<typeof LocalVerifyBriefResponse>;
 export type TLocalCardAgreementResponse = Static<typeof LocalCardAgreementResponse>;
 export type TLocalAgreementProposal = Static<typeof LocalAgreementProposal>;
+export type TLocalFolderHolder = Static<typeof LocalFolderHolder>;
 export type TLocalSlots = Static<typeof LocalSlots>;
 export type TLocalPlanProgress = Static<typeof LocalPlanProgress>;
 export type TLocalCreateSessionBatchRequest = Static<typeof LocalCreateSessionBatchRequest>;

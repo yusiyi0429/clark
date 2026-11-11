@@ -18158,6 +18158,8 @@ export interface components {
                 endedAt: string | null;
                 permissionMode: ("auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions") | null;
             } | null;
+            /** @constant */
+            free?: true;
         };
         TopicVersionSummary: {
             /** Format: uuid */
@@ -18245,13 +18247,20 @@ export interface components {
                     endedAt: string | null;
                     permissionMode: ("auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions") | null;
                 } | null;
+                /** @constant */
+                free?: true;
             }[];
         };
         CreateTopicRequest: {
-            title: string;
+            title?: string;
             planTaskId?: string;
             /** Format: uuid */
             roleId?: string;
+            /** @constant */
+            free?: true;
+            /** Format: uuid */
+            projectId?: string;
+            firstMessage?: string;
         };
         PatchTopicRequest: {
             title?: string;
@@ -18313,6 +18322,8 @@ export interface components {
                     endedAt: string | null;
                     permissionMode: ("auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions") | null;
                 } | null;
+                /** @constant */
+                free?: true;
             };
             letter: string | null;
             task: {
@@ -18685,7 +18696,7 @@ export interface components {
             stage: "todo" | "doing" | "review" | "done";
             wait: ("approval" | "reply" | "paused" | "reviewing" | "review_failed" | "blocked" | "needs_person") | null;
             needsYou: boolean;
-            queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota") | null;
+            queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota" | "folder_busy") | null;
             queuePosition: number | null;
             git: {
                 branch: string;
@@ -18800,7 +18811,7 @@ export interface components {
                 stage: "todo" | "doing" | "review" | "done";
                 wait: ("approval" | "reply" | "paused" | "reviewing" | "review_failed" | "blocked" | "needs_person") | null;
                 needsYou: boolean;
-                queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota") | null;
+                queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota" | "folder_busy") | null;
                 queuePosition: number | null;
                 git: {
                     branch: string;
@@ -18859,7 +18870,7 @@ export interface components {
                 stage: "todo" | "doing" | "review" | "done";
                 wait: ("approval" | "reply" | "paused" | "reviewing" | "review_failed" | "blocked" | "needs_person") | null;
                 needsYou: boolean;
-                queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota") | null;
+                queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota" | "folder_busy") | null;
                 queuePosition: number | null;
                 git: {
                     branch: string;
@@ -18918,7 +18929,7 @@ export interface components {
                 stage: "todo" | "doing" | "review" | "done";
                 wait: ("approval" | "reply" | "paused" | "reviewing" | "review_failed" | "blocked" | "needs_person") | null;
                 needsYou: boolean;
-                queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota") | null;
+                queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota" | "folder_busy") | null;
                 queuePosition: number | null;
                 git: {
                     branch: string;
@@ -19079,7 +19090,7 @@ export interface components {
             state: "queued" | "running" | "waiting" | "done" | "failed";
             unseen: boolean;
             waiting: ("approval" | "question" | "verdict" | "merge" | "needs_person") | null;
-            queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota") | null;
+            queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota" | "folder_busy") | null;
             role: {
                 /** Format: uuid */
                 id: string;
@@ -19101,6 +19112,14 @@ export interface components {
                 at: string;
             } | null;
             holdUntil: string | null;
+            /** @constant */
+            free?: true;
+            heldBy?: {
+                kind: "card" | "topic";
+                id: string;
+                letter: string | null;
+                title: string;
+            };
         };
         HomeTaskSummary: {
             running: number;
@@ -19174,7 +19193,7 @@ export interface components {
                 state: "queued" | "running" | "waiting" | "done" | "failed";
                 unseen: boolean;
                 waiting: ("approval" | "question" | "verdict" | "merge" | "needs_person") | null;
-                queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota") | null;
+                queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota" | "folder_busy") | null;
                 role: {
                     /** Format: uuid */
                     id: string;
@@ -19196,6 +19215,14 @@ export interface components {
                     at: string;
                 } | null;
                 holdUntil: string | null;
+                /** @constant */
+                free?: true;
+                heldBy?: {
+                    kind: "card" | "topic";
+                    id: string;
+                    letter: string | null;
+                    title: string;
+                };
             }[];
             items: {
                 /** Format: uuid */
@@ -19417,7 +19444,7 @@ export interface components {
                     state: "queued" | "running" | "waiting" | "done" | "failed";
                     unseen: boolean;
                     waiting: ("approval" | "question" | "verdict" | "merge" | "needs_person") | null;
-                    queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota") | null;
+                    queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota" | "folder_busy") | null;
                     role: {
                         /** Format: uuid */
                         id: string;
@@ -19439,6 +19466,14 @@ export interface components {
                         at: string;
                     } | null;
                     holdUntil: string | null;
+                    /** @constant */
+                    free?: true;
+                    heldBy?: {
+                        kind: "card" | "topic";
+                        id: string;
+                        letter: string | null;
+                        title: string;
+                    };
                 }[];
                 items: {
                     /** Format: uuid */
@@ -19539,7 +19574,7 @@ export interface components {
                     state: "queued" | "running" | "waiting" | "done" | "failed";
                     unseen: boolean;
                     waiting: ("approval" | "question" | "verdict" | "merge" | "needs_person") | null;
-                    queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota") | null;
+                    queueReason: ("not_dispatched" | "slot" | "device_offline" | "prior_cards" | "quota" | "folder_busy") | null;
                     role: {
                         /** Format: uuid */
                         id: string;
@@ -19561,6 +19596,14 @@ export interface components {
                         at: string;
                     } | null;
                     holdUntil: string | null;
+                    /** @constant */
+                    free?: true;
+                    heldBy?: {
+                        kind: "card" | "topic";
+                        id: string;
+                        letter: string | null;
+                        title: string;
+                    };
                 }[];
                 items: {
                     /** Format: uuid */
