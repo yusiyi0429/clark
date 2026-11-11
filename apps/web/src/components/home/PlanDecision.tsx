@@ -32,7 +32,7 @@ import { QUEUE_LABEL, liveSessions, type Worker } from "@/lib/work/workers";
 import type { SubSession } from "@/lib/home/types";
 import { ICON as STATE_ICON, StateIcon } from "./StateIcon";
 import { subIcon } from "./LeftColumn";
-import { queueText } from "@/lib/home/derive";
+import { subQueueText } from "@/lib/home/derive";
 import h from "@/styles/home.module.css";
 import x from "@/styles/decision-box.module.css";
 import { SourceWords } from "@/components/cards/SourceWords";
@@ -373,7 +373,7 @@ const WAIT_TEXT: Record<string, string> = { approval: "等你批准", question: 
 /** 事件行的阶段（5.6 状态词）。 */
 export function subStage(sub: SubSession): string {
   switch (sub.state) {
-    case "queued": return `已排队${sub.queueReason ? ` · ${queueText(sub.queueReason, sub.holdUntil)}` : ""}`;
+    case "queued": return subQueueText(sub)!;
     // 停下了、没在问你：「已停下」（契约 aa6aba9e）；第一次验收没过是进行中的「重做中」（5.4.2），不是失败。
     case "waiting": return sub.waiting ? WAIT_TEXT[sub.waiting] ?? "等你" : "已停下";
     case "done": return "已完成";

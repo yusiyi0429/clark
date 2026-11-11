@@ -3,6 +3,7 @@
  * 后端实现还在做，接口可能暂时 404：读的当成「还没有」，写的报一句「没成功」。
  */
 import type {
+  TCreateTopicRequest,
   TBudget, TAcceptCardDraftsRequest, TCardBoardResponse, TCardBriefResponse, TCardDetailResponse, TCardPlanBriefResponse, TCardPlanView, TCardSplitListResponse, TCardSplitRequestView, TCardTaskView,
   TCreateLocalDeviceRequest, TCreateLocalDeviceResponse, TLocalDeviceView, TPatchCardRequest, TResearchTopicView,
   TTopicBriefResponse, TTopicDetailResponse, TTopicVersionView, TWorkersResponse,
@@ -120,7 +121,8 @@ export const revokeDevice = (deviceId: string) => unwrap(browserApi.DELETE("/api
 // ── 调研专题 ──
 export const listTopics = (status: "active" | "archived" = "active") =>
   maybe(browserApi.GET("/api/me/topics", { params: { query: { status } } })).then((data) => (data?.topics ?? []) as TResearchTopicView[]);
-export const createTopic = (body: { title: string; planTaskId?: string }) => unwrap<TResearchTopicView>(browserApi.POST("/api/me/topics", { body }) as Promise<Result<TResearchTopicView>>);
+/** 建专题；自由子会话（第 68 条，项目下的「+」）带 free、projectId、firstMessage，不带标题（云端取第一句截短），云端同时登记开工。 */
+export const createTopic = (body: TCreateTopicRequest) => unwrap<TResearchTopicView>(browserApi.POST("/api/me/topics", { body }) as Promise<Result<TResearchTopicView>>);
 export const readTopic = (topicId: string) => maybe<TTopicDetailResponse>(browserApi.GET("/api/me/topics/{id}", { params: id(topicId) }));
 export const patchTopic = (topicId: string, body: { title?: string; status?: "active" | "archived" }) => unwrap(browserApi.PATCH("/api/me/topics/{id}", { params: id(topicId), body }));
 export const readTopicVersion = (topicId: string, number: number) =>

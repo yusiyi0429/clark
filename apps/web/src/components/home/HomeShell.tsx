@@ -27,13 +27,14 @@ import { WorkspaceContext, type WorkspaceApi } from "@/components/shell/Workspac
 import { LocalRunnerProvider, useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { planStartRequest, readLast, startTopic } from "@/lib/local/start";
 import { useAutoReturn } from "@/lib/board/useAutoReturn";
-import { cancelStart, claimStarts, listSplits, markWorkSeen, planKey, registerPlan, releaseStart, removeSplit, routeMessage, type PlanTarget } from "@/lib/board/cloud";
+import { cancelStart, claimStarts, createTopic, listSplits, markWorkSeen, planKey, registerPlan, releaseStart, removeSplit, routeMessage, type PlanTarget } from "@/lib/board/cloud";
 import { dateGate, gateOf, gateText } from "@/components/board/MonthLanes";
 import { showWorkspaceToast } from "@/lib/toast";
 import { modelForTier } from "@/lib/team/roles";
 import { startBatch, type StartPlan } from "@/lib/work/queue";
 import type { Worker } from "@/lib/work/workers";
-import { HOME_HREF, buddyTargetHref, emptyMonth, goalDueDate, monthLabel, routeText, todayLabel } from "@/lib/home/derive";
+import { HOME_HREF, buddyTargetHref, emptyMonth, goalDueDate, monthLabel, routeText, subQueueText, todayLabel, topicHref } from "@/lib/home/derive";
+import { NewSubView } from "./NewSub";
 import { HeroButton } from "@/components/HeroButton";
 import type { BackgroundItem, RouteTarget } from "@/lib/home/types";
 import { useBackground } from "@/lib/home/useBackground";
@@ -314,6 +315,12 @@ function HomeFrame({ account }: { account: Account }) {
   // 接口没上（404）时照旧：没登记、等开工的卡也在这里开。
   const subs = useMemo(() => [...data.projects.flatMap((project) => project.subSessions), ...data.other.subSessions], [data]);
   const autoStartKey = subs.filter((sub) => sub.autoStart).map((sub) => sub.id).sort().join(",");
+  /** 专题开工要的：标题；自由子会话（第 68 条）多带 free 和它所在项目绑在这台电脑上的文件夹（没绑由本机给专用目录）。 */
+  const topicStart = useCallback((topicId: string) => {
+    const sub = subs.find((entry) => entry.id === topicId && entry.kind === "topic");
+    const owner = projects.all.find((project) => project.subSessions.some((entry) => entry.id === topicId));
+    return { id: topicId, title: sub?.title ?? "", ...(sub?.free ? { free: true, cwd: owner ? projects.bound.get(owner.id)?.path ?? null : null } : {}) };
+  }, [subs, projects.all, projects.bound]);
   const tried = useRef(new Set<string>());
   useEffect(() => {
     if (!here || !api.known) return;
@@ -338,8 +345,8 @@ function HomeFrame({ account }: { account: Account }) {
   // 认领到的卡在看板、worker 里还没刷新到（首页接口比看板先报）：放回去，3 秒后再认领，不等一分钟。
   // 只在要开工的那几个变了、或隔一会时再看（不跟着每次刷新）；认领进行中要开工的又变了，认领完马上再看一次。
   const claiming = useRef(false);
-  const latest = useRef({ workers: work.workers, subs, start, local, changed, autoStartKey, reload: api.refresh });
-  useEffect(() => { latest.current = { workers: work.workers, subs, start, local, changed, autoStartKey, reload: api.refresh }; });
+  const latest = useRef({ workers: work.workers, subs, start, local, changed, autoStartKey, reload: api.refresh, topicStart });
+  useEffect(() => { latest.current = { workers: work.workers, subs, start, local, changed, autoStartKey, reload: api.refresh, topicStart }; });
   const [claimTick, setClaimTick] = useState(0);
   const canOpen = local.models.length > 0;
   useEffect(() => {
@@ -359,7 +366,7 @@ function HomeFrame({ account }: { account: Account }) {
         await latest.current.reload();
         await new Promise((resolve) => window.setTimeout(resolve, 50));
       }
-      const { subs, start, local, changed } = latest.current;
+      const { start, local, changed, topicStart } = latest.current;
       const cards = wanted.flatMap((cardId) => {
         const worker = find(cardId);
         if (!worker) soon = true;
@@ -371,8 +378,10 @@ function HomeFrame({ account }: { account: Account }) {
       const model = local.models.find((entry) => entry.isDefault) ?? local.models[0];
       for (const entry of claimed) {
         if (entry.kind !== "topic" || !entry.topicId || busy.has(entry.topicId) || !model) continue;
-        const title = subs.find((sub) => sub.id === entry.topicId)?.title ?? "";
-        try { await startTopic(local.runner, { id: entry.topicId, title }, model, undefined, entry.permissionMode); opened.add(entry.topicId); markStart([entry.topicId], false); }
+        const topic = topicStart(entry.topicId);
+        // 自由子会话（第 68 条）老本机程序收不了（整个 400）：不开，记成没开成。
+        if (topic.free && !local.runner.freeSessions) { markStart([entry.topicId], true); continue; }
+        try { await startTopic(local.runner, topic, model, undefined, entry.permissionMode); opened.add(entry.topicId); markStart([entry.topicId], false); }
         catch { markStart([entry.topicId], true); }
       }
       const done = (id: string | null) => !!id && (opened.has(id) || busy.has(id));
@@ -408,10 +417,18 @@ function HomeFrame({ account }: { account: Account }) {
     if (worker) { await start([worker], []); return; }
     const sub = subs.find((entry) => entry.id === subId && entry.kind === "topic");
     const model = local.models.find((entry) => entry.isDefault) ?? local.models[0];
-    if (!sub || !model) { markStart([subId], true); return; }
-    try { await startTopic(local.runner, { id: sub.id, title: sub.title }, model); markStart([subId], false); await local.refresh(); changed(); }
+    const topic = topicStart(subId);
+    if (!sub || !model || (topic.free && !local.runner.freeSessions)) { markStart([subId], true); return; }
+    try { await startTopic(local.runner, topic, model); markStart([subId], false); await local.refresh(); changed(); }
     catch { markStart([subId], true); }
-  }, [start, markStart, changed, local]);
+  }, [start, markStart, changed, local, topicStart]);
+  /** 项目下的「+」（第 68 条）：建自由子会话（云端同时登记开工），读回首页数据、马上认领一次，换到这个子会话。 */
+  const createFree = useCallback(async (projectId: string, firstMessage: string) => {
+    const topic = await createTopic({ free: true, projectId, firstMessage });
+    await api.refresh();
+    setClaimTick((n) => n + 1);
+    go(topicHref(topic.id));
+  }, [api, go]);
 
   // 伙伴在这个标签页的回复里登记了拆卡：这一轮之前没见过的登记，本机连着就直接开规划员。
   const knownSplits = useRef(new Set<string>());
@@ -550,6 +567,11 @@ function HomeFrame({ account }: { account: Account }) {
         if (!project) return <Missing loading={!api.ready} onRetry={api.planFailed ? () => void api.retryPlan() : undefined} />;
         return projectInfo(project);
       }
+      case "newSub": {
+        const project = projects.all.find((entry) => entry.id === current.projectId);
+        if (!project) return <Missing loading={!api.ready} onRetry={api.planFailed ? () => void api.retryPlan() : undefined} />;
+        return <NewSubView key={project.id} project={project} onCreate={(text) => createFree(project.id, text)} />;
+      }
       case "transfer": return <TransferView key={current.id} id={current.id} go={go} onChanged={api.refresh} />;
       case "buddy": return <BuddyView buddy={buddy} outbox={outbox} consume={consume} onSpeaking={setSpeaking} context={buddyContext} onClearContext={() => setBuddyContext(null)} />;
       case "mission": {
@@ -577,7 +599,8 @@ function HomeFrame({ account }: { account: Account }) {
       }
       // 等本人处理的框和左栏的点同一个来源（第 54 条）：首页数据里这个子会话在等什么。
       case "card": return <CardSession key={current.id} cardId={current.id} embedded waiting={subs.find((sub) => sub.id === current.id)?.waiting} />;
-      case "topic": return <TopicSession key={current.id} topicId={current.id} embedded waiting={subs.find((sub) => sub.id === current.id)?.waiting ?? null} />;
+      case "topic": { const sub = subs.find((entry) => entry.id === current.id);
+        return <TopicSession key={current.id} topicId={current.id} embedded waiting={sub?.waiting ?? null} queued={sub ? subQueueText(sub) : null} />; }
       case "page": {
         // 二级页：组件挂在 components/home/pages。
         const Page = SECONDARY_PAGES[current.page];
