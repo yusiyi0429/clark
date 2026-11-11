@@ -32,6 +32,7 @@ import { TokenHub } from "./tokenHub.js";
 import { Budgets } from "./budget.js";
 import { CodexQuota } from "./codexQuota.js";
 import { createDesktop, openUrl, type Desktop, type MenuAction } from "./desktop/index.js";
+import { AppWindow } from "./desktop/appWindow.js";
 
 export interface RunnerOptions {
   dataDir?: string;
@@ -184,8 +185,10 @@ export async function startRunner(opts: RunnerOptions = {}): Promise<Runner> {
     await new Promise<void>((r) => server.close(() => r()));
   })();
 
+  // 托盘点开：装成了 Chrome / Edge 应用就开应用窗口，没装开浏览器标签
+  const appWindow = new AppWindow(config.tianshuUrl, openUrl);
   const onMenu = async (a: MenuAction) => {
-    if (a === "open") openUrl(config.tianshuUrl);
+    if (a === "open") await appWindow.open();
     if (a === "pause") { settings.patch({ paused: true }); await sessions.interruptAll(); }
     if (a === "resume") { settings.patch({ paused: false }); sessions.pump(); }
     if (a === "quit") { await close(); opts.onQuit?.(); }

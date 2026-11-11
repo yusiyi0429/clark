@@ -14,6 +14,8 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: "/",
     scope: "/",
     display: "standalone",
+    // 托盘、开始菜单再点一次：已开着的应用窗口带到前面，不另开一个
+    launch_handler: { client_mode: "focus-existing" },
     background_color: THEME_COLOR.dark,
     theme_color: THEME_COLOR.dark,
     icons: [
