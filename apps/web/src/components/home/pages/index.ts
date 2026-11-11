@@ -19,7 +19,8 @@ import { ProfilePage } from "./ProfilePage";
 export type SecondaryPageProps = { go: (href: string) => void };
 /** onHead：月份页在复盘期间换页头（标题「11 月复盘」、右边淡色小字和「与伙伴讨论」），null 换回默认。 */
 export type MonthHead = { title: string; trail: ReactNode };
-export type MonthPageProps = SecondaryPageProps & { period: string; onHead?: (head: MonthHead | null) => void };
+/** today：服务端的今天（YYYY-MM-DD，计划里的 today），判这个月在不在复盘；没有用这台电脑的钟。 */
+export type MonthPageProps = SecondaryPageProps & { period: string; today?: string | null; onHead?: (head: MonthHead | null) => void };
 
 export const SECONDARY_PAGES: Record<PageKey, ComponentType<SecondaryPageProps>> = {
   profile: ProfilePage,

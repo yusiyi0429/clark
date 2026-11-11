@@ -7,7 +7,7 @@
  * - 下半：下个月 Co-Agent 的草稿，按 Mission 分组；延续来的小字写「延续自 11 月的 X · X 现在的状态」。
  * - 底部两个动作：「和伙伴过一遍」（进总管线，伙伴已经读过草稿）、「去 M2 签复盘」（整页去 M2，ArrowUpRight）。
  * 数据见 useMonthPage（接口等 B2）。
- * 复盘期间（GET …/review 有这个月的复盘）月份页就是复盘页（MonthReview，设计第三版），上面这些不画。
+ * 复盘期间（月份已经过去，或本月最后两天，同服务端）月份页就是复盘页（MonthReview，设计第三版，读 GET …/review），上面这些不画。
  * 第一版的「怎么办」（继续做 / 改一改再做 / 到此为止）随旧答案一起删了（本人 11/11 定，去向和评定都在复盘页）。
  */
 import { ArrowUpRight, Check } from "lucide-react";
@@ -26,8 +26,8 @@ import p from "@/styles/home-pages.module.css";
 
 const openM2 = () => window.location.assign("/m2/");
 
-export function MonthPage({ go, period, onHead }: MonthPageProps) {
-  const { review, failed, retry, actions } = useMonthReview(period);
+export function MonthPage({ go, period, today = null, onHead }: MonthPageProps) {
+  const { review, failed, retry, actions } = useMonthReview(period, today);
   if (failed !== null) return <FailedLine reason={failed} onRetry={retry} />;
   if (review === undefined) return <Loading />;
   if (review) return <ReviewPage review={review} actions={actions} go={go} onHead={onHead} />;

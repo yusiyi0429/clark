@@ -571,7 +571,7 @@ function HomeFrame({ account }: { account: Account }) {
       }
       case "month": {
         const Month = MONTH_PAGE;
-        return <SecondaryFrame key={current.period} title={monthHead?.title ?? `${Number(current.period.slice(5))} 月`} trail={monthHead?.trail} go={go}>{Month ? <Month go={go} period={current.period} onHead={setMonthHead} /> : null}</SecondaryFrame>;
+        return <SecondaryFrame key={current.period} title={monthHead?.title ?? `${Number(current.period.slice(5))} 月`} trail={monthHead?.trail} go={go}>{Month ? <Month go={go} period={current.period} today={work.plan?.today ?? null} onHead={setMonthHead} /> : null}</SecondaryFrame>;
       }
     }
   };
