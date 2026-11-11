@@ -11,7 +11,7 @@ import {
   type TLocalWorkspace, type TLocalGitRef, type TLocalMergeResponse, type TLocalQuestionRequestView, type TLocalQuestionAnswerRequest,
   type TLocalBackgroundItem, type TLocalMergeHoldReason, type TLocalMergeSync, type TLocalModelTier, type TLocalHold, type TLocalMoney,
   type TLocalRun, type TLocalRunPreviewRequest, type TLocalTaskBudgetView, type TLocalBudgetUpdateRequest, type TBudgetMode, type TLocalPermissionBrief, type TLocalSavedAttachment, type TLocalStopReason, type TLocalStopReport,
-  type TLocalEffort, type TLocalSessionModelRequest, type TLocalSessionFileReadResponse, type TLocalSessionFilesResponse, type TLocalSessionRestoreResponse, type TLocalContextUsage,
+  type TLocalEffort, type TLocalSessionModelRequest, type TLocalSessionFileReadResponse, type TLocalSessionFilesResponse, type TLocalSessionRestoreResponse, type TLocalFileChangesRequest, type TLocalFileChangesResponse, type TLocalFileChangesRestoreRequest, type TLocalFileChangesRestoreResponse, type TLocalContextUsage,
 } from "@warmap/contracts";
 import { readJson, writeJsonAtomic, nowIso } from "./store.js";
 import type { EventLog, EventBody } from "./eventLog.js";
@@ -40,6 +40,7 @@ import { ensureFeishuPlugin, larkSkills } from "./agents/feishuPlugin.js";
 import { AGENT_NAME, earlierTurns, handoffText, otherRules } from "./handoff.js";
 import { listSessionFiles, readSessionFile, SessionFileError } from "./sessionFiles.js";
 import { UndoStore, type SessionUndo } from "./undo/index.js";
+import { ChangesError, readChanges, readWorktreeChanges, restoreChanges, turnSummary } from "./undo/changes.js";
 import type { VerifyBrief } from "./cloud.js";
 
 /** 云端天枢 MCP 在会话里的名字：和本人在 Claude Code 里配的天枢 MCP 同名，工具名一致。 */
@@ -185,7 +186,7 @@ function schemaProblem(schema: TSchema, value: unknown): string | null {
 const textOrNull = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
 
 export class SessionError extends Error {
-  constructor(readonly code: "not_found" | "conflict" | "folder_not_allowed" | "validation", message: string) { super(message); }
+  constructor(readonly code: "not_found" | "conflict" | "folder_not_allowed" | "validation" | "file_changed", message: string) { super(message); }
 }
 
 export interface SessionDeps {
@@ -306,6 +307,12 @@ export class SessionManager {
       isOwn: (p) => d.folders.isOwn(p),
       changed: () => this.d.onChange?.(),
       notice: (id, level, text) => { const r = this.records.get(id); if (r) this.emit(r, { type: "notice", level, code: "undo", text }); },
+      // 一轮结束、这一轮改过文件：记一条 files_changed（第 72 条），网页在对话里画「改了 周报.md · 2 处」
+      turnFiles: (id, turn, files) => {
+        const r = this.records.get(id);
+        const u = this.undo.peek(id);
+        if (r && u) void turnSummary(u, turn, files).then((s) => this.emit(r, { type: "files_changed", turn, files: s.files, more: s.more }), () => undefined);
+      },
     });
     for (const id of readdirSync(this.dir)) {
       const rec = readJson<SessionRecord | null>(join(this.dir, id, "session.json"), null);
@@ -2202,6 +2209,41 @@ export class SessionManager {
   async listFiles(id: string): Promise<TLocalSessionFilesResponse> {
     const { rec, root } = this.fileRoot(id);
     return listSessionFiles(root, rec.cwd, rec.workspace?.kind === "worktree" ? rec.workspace.baseCommit : null, this.d.log.after(id, 0), this.extraDirs(rec), await this.undoOf(rec, false)?.files() ?? []);
+  }
+
+  /** 读一个文件的改动（第 72 条，契约 LocalFileChangesRequest）：卡在工作树里的只有开工到现在。 */
+  async readFileChanges(id: string, req: TLocalFileChangesRequest): Promise<TLocalFileChangesResponse> {
+    const rec = this.records.get(id);
+    if (!rec) throw new SessionError("not_found", "没有这个会话");
+    const range = req.range ?? "turn";
+    try {
+      if (rec.workspace?.kind === "worktree") {
+        if (range === "turn") throw new SessionError("validation", "卡在工作树里做的会话只能看开工到现在");
+        return await readWorktreeChanges(rec.workspace.path, rec.workspace.baseCommit, req.path);
+      }
+      const undo = this.undoOf(rec, false);
+      if (!undo) throw new SessionError("not_found", "这个会话没有留一份");
+      return (await readChanges(undo, req.path, range, req.turn)).file;
+    } catch (e) {
+      throw e instanceof ChangesError ? new SessionError(e.code, e.message) : e;
+    }
+  }
+
+  /** 按处恢复（第 72 条，契约 LocalFileChangesRestoreRequest）：一轮在跑时 409；文件读了以后又变了 409 file_changed。 */
+  async restoreFileChanges(id: string, req: TLocalFileChangesRestoreRequest): Promise<TLocalFileChangesRestoreResponse> {
+    const rec = this.records.get(id);
+    if (!rec) throw new SessionError("not_found", "没有这个会话");
+    if (OCCUPYING.includes(rec.status)) throw new SessionError("conflict", "这个会话还在做，先停下再恢复");
+    if (rec.workspace?.kind === "worktree") throw new SessionError("conflict", "卡在自己的工作树里做，用不着恢复");
+    const undo = this.undoOf(rec, false);
+    if (!undo) throw new SessionError("not_found", "这个会话没有留一份");
+    try {
+      const r = await restoreChanges(undo, req.path, req.range ?? "turn", req.turn, req.ids, req.revision);
+      this.emit(rec, { type: "files_restored", all: false, restored: [r.file.path], failed: [] });
+      return r;
+    } catch (e) {
+      throw e instanceof ChangesError ? new SessionError(e.code, e.message) : e;
+    }
   }
 
   /** 恢复这个会话动过的文件（契约 LocalSessionRestoreRequest）：一轮在跑时、卡在工作树里时 409。 */

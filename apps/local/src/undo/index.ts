@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, rmSync, statSync, statfsSync } from "node:fs";
-import { mkdir, writeFile, rm } from "node:fs/promises";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, statfsSync } from "node:fs";
+import { copyFile, mkdir, writeFile, rm } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { TLocalRestoreFailure, TLocalSessionRestoreResponse, TLocalUndo } from "@warmap/contracts";
 import { isInside } from "../folders.js";
@@ -43,6 +43,8 @@ export function isSyncFolder(p: string, env: NodeJS.ProcessEnv = process.env): b
 }
 
 interface Turn {
+  /** 第几轮（1 起，同 files_changed 的 turn）。 */
+  n?: number;
   start: string;
   end: string | null;
   /** 这一轮里变了的（start → end），轮结束时算好。 */
@@ -59,7 +61,25 @@ interface Meta {
   /** 恢复过的（规范化路径 → 时间）；之后会话又改了它就去掉。 */
   restored: Record<string, string>;
   lastActivity: string;
+  /** 到第几轮了（执行方每轮开头报 agent_info 加一）、这一轮还在不在做。 */
+  turn?: number;
+  inTurn?: boolean;
 }
+
+/** 一个文件在一段时间里的前后两份（第 72 条）：null 是那时没有这个文件；before 为 undefined 是拿不到改前那份（只知道改过）。 */
+export interface ChangePair {
+  abs: string;
+  /** 会话根里的相对路径（正斜杠），根外面的是绝对路径。 */
+  path: string;
+  turn: number | null;
+  before: Buffer | null | undefined;
+  after: Buffer | null;
+  /** after 就是磁盘上现在的样子（能按处恢复的前提）。 */
+  afterIsDisk: boolean;
+}
+
+/** 一轮结束时这一轮动过的文件（files_changed 的原料）。 */
+export interface TurnFile { abs: string; path: string; change: "added" | "modified" | "deleted" }
 
 export interface UndoFile {
   /** 会话根里的相对路径（正斜杠），根外面的是绝对路径。 */
@@ -84,7 +104,7 @@ export class SessionUndo {
     readonly id: string,
     private readonly dir: string,
     private meta: Meta,
-    private readonly hooks: { isOwn(p: string): boolean; changed(): void; notice(level: "info" | "warn", text: string): void; free(path: string): number },
+    private readonly hooks: { isOwn(p: string): boolean; changed(): void; notice(level: "info" | "warn", text: string): void; free(path: string): number; turnFiles?(turn: number, files: TurnFile[]): void },
   ) {
     this.copies = new Copies(dir);
     this.shadow = meta.gitDir && meta.root ? new Shadow(meta.gitDir, meta.root) : null;
@@ -149,34 +169,112 @@ export class SessionUndo {
 
   /** 执行方的事件：新的一轮开始（agent_info）前留一份，一轮结束（turn_end）后留一份并记下这一轮改了哪些。 */
   onEvent(type: string): void {
-    if (type === "agent_info") this.turnStart();
-    else if (type === "turn_end") this.turnEnd();
+    if (type === "agent_info") {
+      if (!this.meta.inTurn) { this.meta.turn = (this.meta.turn ?? 0) + 1; this.meta.inTurn = true; this.save(); }
+      this.turnStart(this.meta.turn!);
+    } else if (type === "turn_end" && this.meta.inTurn) {
+      this.meta.inTurn = false;
+      this.save();
+      this.turnEnd(this.meta.turn!);
+    }
   }
 
-  private turnStart() {
+  private turnStart(n: number) {
     if (!this.shadow || this.meta.state === "touched_only") return;
     void this.chain(async () => {
       const turns = this.meta.turns;
       const last = turns.at(-1);
-      if (this.meta.state !== "ready" || !last || last.end === null) return; // 开工那份就是第一轮的开头；一轮里又报一次不重留
-      const start = await this.shadow!.snapshot(this.index, this.ref(turns.length, "start"), last.end, this.meta.excludes, `第 ${turns.length + 1} 轮开始前`);
-      turns.push({ start, end: null });
+      if (this.meta.state !== "ready" || !last) return;
+      // 开工那份就是第一轮的开头；一轮里又报一次不重留
+      if (last.end === null) { last.n ??= n; this.save(); return; }
+      const start = await this.shadow!.snapshot(this.index, this.ref(turns.length, "start"), last.end, this.meta.excludes, `第 ${n} 轮开始前`);
+      turns.push({ n, start, end: null });
       this.save();
     }).catch((e) => this.degrade("failed", `没留成：${e instanceof Error ? e.message : String(e)}`));
   }
 
-  private turnEnd() {
-    if (!this.shadow || this.meta.state === "touched_only") return;
+  /** 一轮结束：整份留了的再留一份、记下这一轮变了哪些；不管哪种都把这一轮动过的文件报出去（files_changed）。 */
+  private turnEnd(n: number) {
     void this.chain(async () => {
+      const files: TurnFile[] = [];
       const turns = this.meta.turns;
       const last = turns.at(-1);
-      if (this.meta.state !== "ready" || !last || last.end !== null) return;
-      last.end = await this.shadow!.snapshot(this.index, this.ref(turns.length - 1, "end"), last.start, this.meta.excludes, `第 ${turns.length} 轮结束后`);
-      last.changed = await this.shadow!.diff(last.start, last.end);
-      for (const c of last.changed) delete this.meta.restored[norm(join(this.meta.root!, c.path))];
+      if (this.shadow && this.meta.state === "ready" && last && last.end === null) {
+        last.n ??= n;
+        last.end = await this.shadow.snapshot(this.index, this.ref(turns.length - 1, "end"), last.start, this.meta.excludes, `第 ${n} 轮结束后`);
+        last.changed = await this.shadow.diff(last.start, last.end);
+        for (const c of last.changed) {
+          delete this.meta.restored[norm(join(this.meta.root!, c.path))];
+          files.push({ abs: join(this.meta.root!, c.path), path: c.path, change: c.status === "A" ? "added" : c.status === "D" ? "deleted" : "modified" });
+        }
+      }
+      const seen = new Set(files.map((f) => norm(f.abs)));
+      for (const e of this.copies.list()) {
+        const v = this.copies.version(e, n);
+        if (!v || seen.has(norm(e.path)) || !this.copies.changedSince(e.path, v)) continue;
+        files.push({ abs: e.path, path: this.relOf(e.path), change: !v.copy ? "added" : existsSync(e.path) ? "modified" : "deleted" });
+      }
       this.save();
       this.hooks.changed();
+      if (files.length) this.hooks.turnFiles?.(n, files.sort((a, b) => a.path.localeCompare(b.path)));
     }).catch((e) => this.degrade("failed", `没留成：${e instanceof Error ? e.message : String(e)}`));
+  }
+
+  private relOf(abs: string): string {
+    const root = this.meta.root;
+    return root && isInside(root, abs) ? posix(relative(root, abs)) : posix(abs);
+  }
+
+  /** 最近做完的那一轮（一轮正在做时是上一轮）。 */
+  latestTurn(): number | null {
+    const t = (this.meta.turn ?? 0) - (this.meta.inTurn ? 1 : 0);
+    return t > 0 ? t : null;
+  }
+
+  /**
+   * 一个文件在一段时间里的前后两份（第 72 条）：range turn 是那一轮开始前 → 那一轮结束后（最近做完的那一轮、现在没在做时，结束后取磁盘上现在的）；
+   * session 是会话第一次动它之前 → 磁盘上现在。这个会话（那一轮）没动过它回 null。
+   */
+  async pair(path: string, range: "turn" | "session", turn?: number): Promise<ChangePair | null> {
+    await this.queue;
+    const root = this.meta.root;
+    const abs = root && !isAbsolute(path) ? join(root, path) : resolve(path);
+    const disk = existsSync(abs) ? readFileSync(abs) : null;
+    const latest = this.latestTurn();
+    const n = range === "turn" ? turn ?? latest : null;
+    if (range === "turn" && !n) return null;
+    const rel = root && isInside(root, abs) ? posix(relative(root, abs)) : null;
+    const same = (p: string) => (WIN ? p.toLowerCase() === rel!.toLowerCase() : p === rel);
+    if (this.shadow && rel) {
+      const ended = this.meta.turns.filter((t) => t.end !== null && t.changed?.some((c) => same(c.path)));
+      const t = range === "turn" ? ended.find((x) => x.n === n) : ended[0];
+      if (t) {
+        const name = t.changed!.find((c) => same(c.path))!.path;
+        const afterIsDisk = range === "session" || (n === latest && !this.meta.inTurn);
+        return {
+          abs, path: name, turn: n, before: await this.shadow.read(t.start, name),
+          after: afterIsDisk ? disk : await this.shadow.read(t.end!, name), afterIsDisk,
+        };
+      }
+    }
+    const e = this.copies.get(abs);
+    if (!e) return null;
+    // 拷的这一路没有每轮结束后那份：「这一轮」只看最近做完的那一轮，结束后就是磁盘上现在的
+    const v = range === "turn" ? (n === latest && !this.meta.inTurn ? this.copies.version(e, n!) : undefined) : e;
+    if (!v || !this.copies.changedSince(abs, v)) return null;
+    return { abs, path: this.relOf(abs), turn: n, before: this.copies.read(v.copy), after: disk, afterIsDisk: true };
+  }
+
+  /** 按处写回：先把现在的样子留一份（before-restore），再写。被占用时抛 EBUSY 一类的错。 */
+  async writeBack(abs: string, body: string): Promise<void> {
+    if (existsSync(abs)) {
+      const keep = join(this.dir, "before-restore", new Date().toISOString().replace(/[:.]/g, "-"));
+      await mkdir(keep, { recursive: true });
+      await copyFile(abs, join(keep, createHash("sha1").update(norm(abs)).digest("hex").slice(0, 12)));
+    }
+    await writeFile(abs, body);
+    this.save();
+    this.hooks.changed();
   }
 
   /** 快照管得住这个路径：整份留好了、这一刻没在留、在工作目录里、不在不留的地方。 */
@@ -205,7 +303,7 @@ export class SessionUndo {
       if (typeof p !== "string" || !p) return;
       const abs = resolve(cwd, p);
       if (this.hooks.isOwn(abs) || this.snapshotCovers(abs)) return;
-      await this.copies.save(abs);
+      await this.copies.save(abs, this.meta.turn ?? 0);
       this.save();
       return;
     }
@@ -306,7 +404,11 @@ export class SessionUndo {
 export class UndoStore {
   private readonly open = new Map<string, SessionUndo>();
 
-  constructor(private readonly dir: string, private readonly hooks: { isOwn(p: string): boolean; changed(id: string): void; notice(id: string, level: "info" | "warn", text: string): void; free?(path: string): number }) {}
+  constructor(private readonly dir: string, private readonly hooks: {
+    isOwn(p: string): boolean; changed(id: string): void; notice(id: string, level: "info" | "warn", text: string): void; free?(path: string): number;
+    /** 一轮结束、这一轮动过文件时（第 72 条 files_changed）。 */
+    turnFiles?(id: string, turn: number, files: TurnFile[]): void;
+  }) {}
 
   private sessionDir(id: string) {
     return join(this.dir, "sessions", id.replace(/[^A-Za-z0-9_-]/g, "_"));
@@ -325,6 +427,7 @@ export class UndoStore {
     if (meta.state === "preparing") meta.turns = [];
     const u = new SessionUndo(id, dir, meta, {
       isOwn: this.hooks.isOwn, changed: () => this.hooks.changed(id), notice: (level, text) => this.hooks.notice(id, level, text), free: this.hooks.free ?? freeBytes,
+      turnFiles: (turn, files) => this.hooks.turnFiles?.(id, turn, files),
     });
     this.open.set(id, u);
     return u;

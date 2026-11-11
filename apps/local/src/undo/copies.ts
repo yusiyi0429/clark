@@ -14,7 +14,13 @@ export interface CopyEntry {
   size: number | null;
   mtimeMs: number | null;
   at: string;
+  /** 第几轮拷的（1 起；开工前为 0）。 */
+  turn?: number;
+  /** 之后某一轮第一次动它时又拷的那份（看「这一轮改了什么」用，第 72 条）；整个恢复照旧回到第一次那份。 */
+  last?: CopyVersion;
 }
+/** 拷下的一份：在哪、当时的大小和修改时间（之后没变就不算改过）。 */
+export interface CopyVersion { turn: number; copy: string | null; size: number | null; mtimeMs: number | null }
 
 const key = (p: string) => (process.platform === "win32" ? resolve(p).toLowerCase() : resolve(p));
 
@@ -40,26 +46,45 @@ export class Copies {
   }
 
   /** 第一次动它之前留一份。 */
-  async save(path: string): Promise<void> {
+  async save(path: string, turn = 0): Promise<void> {
     const abs = resolve(path);
-    if (this.has(abs)) return;
+    const had = this.entries[key(abs)];
+    if (had && (had.turn === turn || had.last?.turn === turn)) return;
     const st = existsSync(abs) ? statSync(abs) : null;
     if (st && !st.isFile()) return;
     let copy: string | null = null;
     if (st) {
-      copy = `${Object.keys(this.entries).length + 1}`;
+      copy = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
       mkdirSync(join(this.dir, "files"), { recursive: true });
       try { await copyFile(abs, join(this.dir, "files", copy)); } catch { return; }
     }
-    this.entries[key(abs)] = { path: abs, copy, size: st?.size ?? null, mtimeMs: st?.mtimeMs ?? null, at: new Date().toISOString() };
+    const v = { turn, copy, size: st?.size ?? null, mtimeMs: st?.mtimeMs ?? null };
+    if (had) had.last = v;
+    else this.entries[key(abs)] = { path: abs, ...v, at: new Date().toISOString() };
     writeJsonAtomic(this.file, this.entries);
   }
 
-  /** 拷之后有没有变过（被拒绝、没改成的不算会话改的）。 */
+  /** 第 turn 轮第一次动它之前的那份（没在那一轮拷过为 undefined）。 */
+  version(e: CopyEntry, turn: number): CopyVersion | undefined {
+    if (e.last?.turn === turn) return e.last;
+    if (e.turn === turn) return { turn, copy: e.copy, size: e.size, mtimeMs: e.mtimeMs };
+    return undefined;
+  }
+
+  /** 拷那份之后磁盘上的文件变了没有。 */
+  changedSince(path: string, v: Pick<CopyVersion, "copy" | "size" | "mtimeMs">): boolean {
+    const st = existsSync(path) ? statSync(path) : null;
+    if (!v.copy) return Boolean(st);
+    return !st || st.size !== v.size || st.mtimeMs !== v.mtimeMs;
+  }
+
+  read(copy: string | null): Buffer | null {
+    return copy ? readFileSync(join(this.dir, "files", copy)) : null;
+  }
+
+  /** 第一次拷之后有没有变过（被拒绝、没改成的不算会话改的）。 */
   changed(e: CopyEntry): boolean {
-    const st = existsSync(e.path) ? statSync(e.path) : null;
-    if (!e.copy) return Boolean(st);
-    return !st || st.size !== e.size || st.mtimeMs !== e.mtimeMs;
+    return this.changedSince(e.path, e);
   }
 
   /** 写回第一次动之前的样子（当时不在的就删掉）。恢复前先把现在的样子拷一份到 before-restore 里。 */
