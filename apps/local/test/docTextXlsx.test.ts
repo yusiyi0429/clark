@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { DOC_TEXT_LIMITS, docToText, type DocTextSheet } from "../src/docText/index.js";
 import { shiftFormula } from "../src/docText/xlsx.js";
-import { changedSpan, makeXlsx } from "./docTextFiles.js";
+import { changedSpan, makeXlsx, noteParts } from "./docTextFiles.js";
 
 function convert(buf: Buffer, ext = "xlsx"): { markdown: string; sheets: DocTextSheet[] } {
   const r = docToText(buf, ext);
@@ -163,6 +163,40 @@ describe("Excel 转文字", () => {
       '<row r="1048576" s="1" customFormat="1"><c r="XFD1048576" s="1"/></row>';
     const after = '<mergeCells count="1"><mergeCell ref="C3:XFD1048576"/></mergeCells>';
     expect(convert(makeXlsx([{ name: "表", data, after }])).markdown).toBe("## 表\n\n| A |\n| --- |\n| 1 |\n");
+  });
+
+  it("批注写在表格后面，按行列排、空的不写、多行缩进；合并区里被盖住的格子存了同样的字也只写左上角", () => {
+    // 照本人给的 Excel 文件的写法：标题行合并，被盖住的格子也存了同样的字；批注全在 C 列
+    const title = ["A", "B", "C"].map((c) => `<c r="${c}1" t="inlineStr"><is><t>需求分级</t></is></c>`).join("");
+    const row = (r: number, no: string, name: string) =>
+      `<row r="${r}"><c r="A${r}"><v>${no}</v></c><c r="B${r}" t="inlineStr"><is><t>${name}</t></is></c><c r="C${r}" t="inlineStr"><is><t>说明</t></is></c></row>`;
+    const data = `<row r="1">${title}</row>` + row(2, "1", "甲") + row(3, "2", "乙");
+    const after = '<mergeCells count="1"><mergeCell ref="A1:C1"/></mergeCells><legacyDrawing r:id="rId2"/>';
+    const notes = noteParts(1, [["C3", "第二条"], ["C2", "第一行\n第二行"], ["B2", ""]]);
+    const { markdown, sheets } = convert(makeXlsx([{ name: "需求", data, after }], { extra: notes }));
+    expect(markdown).toBe(
+      [
+        "## 需求",
+        "",
+        "| A | B | C |",
+        "| --- | --- | --- |",
+        "| 需求分级 |  |  |",
+        "| 1 | 甲 | 说明 |",
+        "| 2 | 乙 | 说明 |",
+        "",
+        "### 批注",
+        "",
+        "- C2：第一行",
+        "  第二行",
+        "- C3：第二条",
+        "",
+      ].join("\n"),
+    );
+    expect(sheets[0].notes.map((n) => [n.cell, n.text, markdown.slice(n.start, n.end)])).toEqual([
+      ["C2", "第一行\n第二行", "- C2：第一行\n  第二行"],
+      ["C3", "第二条", "- C3：第二条"],
+    ]);
+    expect(sheets[0].end).toBe(markdown.length - 1);
   });
 
   it("公式平移：相对的动、$ 锁住的不动、引号和函数名不动", () => {

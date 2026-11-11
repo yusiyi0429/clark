@@ -8,7 +8,7 @@ import { xlsxToMarkdown, type DocTextSheet } from "./xlsx.js";
 import { ZipReader } from "./zip.js";
 
 export { DOC_TEXT_LIMITS, type DocTextFailReason } from "./limits.js";
-export type { DocTextCell, DocTextRow, DocTextSheet } from "./xlsx.js";
+export type { DocTextCell, DocTextNote, DocTextRow, DocTextSheet } from "./xlsx.js";
 
 export type DocTextResult =
   | { ok: true; kind: "docx"; markdown: string }

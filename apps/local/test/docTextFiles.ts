@@ -114,7 +114,23 @@ export function makeXlsx(sheets: SheetSpec[], opts: { strings?: string[]; sst?: 
   return makeZip(opts.reverse ? parts.reverse() : parts, { store: opts.store });
 }
 
-export const DEFAULT_XLSX_STYLES = '<cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="14" applyNumberFormat="1"/></cellXfs>';
+/**
+ * 第 n 张表（从 1 起）的批注，照 Excel 存老式批注的写法：作者是空的，每条一段带字号字体的富文本；
+ * 同一张表还挂着画批注框的 VML（这里不给内容）。放进 makeXlsx 的 extra。
+ */
+export function noteParts(n: number, notes: Array<[cell: string, text: string]>): Part[] {
+  const comment = ([cell, text]: [string, string]) =>
+    `<comment ref="${cell}" authorId="0" shapeId="0"><text><r><rPr><sz val="11"/><rFont val="Carlito"/></rPr><t xml:space="preserve">${text}</t></r></text></comment>`;
+  return [
+    [
+      `xl/worksheets/_rels/sheet${n}.xml.rels`,
+      `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId2" Type="${REL}/vmlDrawing" Target="../drawings/vmlDrawing${n}.vml"/><Relationship Id="rId3" Type="${REL}/comments" Target="../comments${n}.xml"/></Relationships>`,
+    ],
+    [`xl/comments${n}.xml`, `<comments ${S}><authors><author/></authors><commentList>${notes.map(comment).join("")}</commentList></comments>`],
+  ];
+}
+
+export const DEFAULT_XLSX_STYLES ='<cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="14" applyNumberFormat="1"/></cellXfs>';
 
 /** 一段普通文字。 */
 export function p(text: string, pPr = ""): string {
