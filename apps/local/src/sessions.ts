@@ -333,6 +333,7 @@ export class SessionManager {
       // 本机程序重启时，上次的进程都已不在。排着的照原样排着；刚从队里拉起、还没开始的放回队里（位置不变）。
       if (rec.status === "starting" && rec.queuedMessage !== null) this.setStatus(rec, "queued", { reason: "本机程序重启，照原样排着" });
       else if (LIVE.includes(rec.status)) this.setStatus(rec, "exited", { reason: rec.hold ? HOLD_REASON : "本机程序重启，会话已停；再发一句话会接着做" });
+      this.voidStale(rec);
     }
     this.holdQueue = false;
     this.relabelAll(); // 记录里存的来源名、模型配置的名字可能是旧叫法（如「我的 Claude 订阅」）：照现在的配置改过来
@@ -566,6 +567,23 @@ export class SessionManager {
   }
 
   /** 状态没变、在问的或在等批准的那一条变了（又来一条请求、批了一条还剩别的）：照样重报一条状态。 */
+  /**
+   * 本机程序被直接停掉（重启、升级、强杀）时没处理完的批准请求和提问：进程已不在，补一条作废（批准记 deny、提问记没答），
+   * 网页按事件不再以为在等。启动时每个会话都看一遍（以前重启留下的也补）；正常进程退出时 onExit 当场就补了。
+   */
+  private voidStale(rec: SessionRecord) {
+    const events = this.d.log.after(rec.id, 0);
+    const resolved = new Set(events.flatMap((e) => (e.type === "permission_resolved" || e.type === "question_resolved" ? [e.requestId] : [])));
+    for (const e of events) {
+      if (e.type === "permission_request" && !resolved.has(e.request.requestId)) {
+        this.emit(rec, { type: "permission_resolved", requestId: e.request.requestId, decision: "deny", message: "本机程序重启，已作废", allowForSession: false });
+      } else if (e.type === "question" && !resolved.has(e.request.requestId)) {
+        this.emit(rec, { type: "question_resolved", requestId: e.request.requestId, choices: null, text: null });
+      }
+    }
+    this.d.log.evict(rec.id); // 启动时为补这一下读进来的，没人在看就放掉
+  }
+
   private resyncAsk(rec: SessionRecord) {
     if ((this.sentAsk.get(rec.id) ?? "") !== this.askOf(rec).key) this.syncStatus(rec);
   }
