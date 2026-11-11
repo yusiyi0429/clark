@@ -49,7 +49,7 @@ describe("飞书推送（新首页 13.2）", () => {
     expect((await call("GET", undefined, false)).statusCode).toBe(401);
   });
 
-  it("只推三类里的两类（CEO 拍板在原来那条）：不在天枢时的受阻、额度、批准等了 10 分钟；离截止不到 24 小时的确认。同一件不推第二次，10 分钟里的合成一条", async () => {
+  it("只推三类里的两类（CEO 拍板在原来那条）：不在天枢时的受阻、额度、批准等了 10 分钟；离截止不到 24 小时的 Mission Card、出了的复盘。同一件不推第二次，10 分钟里的合成一条", async () => {
     t = await createTestApp();
     await t.sql("INSERT INTO feishu_identities (person_id, open_id) VALUES ($1,'ou_member'),($2,'ou_ceo')", [TEST_MEMBER.personId, TEST_CEO.personId]);
     await t.sql("INSERT INTO person_settings(person_id,feishu) VALUES($1,false)", [TEST_CEO.personId]);
@@ -58,15 +58,15 @@ describe("飞书推送（新首页 13.2）", () => {
     const question = item({ id: "question:card:c-2", kind: "question", title: "等你回复", at: minutes(T0, -30), open: { kind: "card", id: "c-2" } });
     const approval = item({ id: "approval:topic:p-1", kind: "approval", title: "等你批准", source: "行业报告", at: minutes(T0, -5), open: { kind: "topic", id: "p-1" } });
     const laterCard = item({ id: "mission_card:mc-1", kind: "mission_card", title: "确认我的任务", dueAt: minutes(T0, 30 * 60), open: { kind: "mission_card", id: "mc-1" } });
-    const review = item({ id: "month:review:2026-10", kind: "month", title: "复盘 10 月", dueAt: minutes(T0, 20 * 60), open: { kind: "month", id: "2026-10" },
+    const review = item({ id: "month:review:2026-10", kind: "month", title: "复盘 10 月", dueAt: minutes(T0, 3 * 24 * 60), open: { kind: "month", id: "2026-10" },
       month: { step: "review", period: "2026-10" } });
     const waiting = new Map([[TEST_MEMBER.personId, [verdict, question, approval, laterCard, review]], [TEST_CEO.personId, [verdict]], [UNLINKED, [verdict]]]);
     const tick = pusher(waiting);
 
-    // 本人不在天枢：受阻、离截止 20 小时的复盘推；等你回复不推，批准才等了 5 分钟、Mission Card 离截止还有 30 小时不推。关了的、没关联飞书的不推。
+    // 本人不在天枢：受阻推；复盘预评做完出了就推，不看离截止多久（本人 11/11 定）；等你回复不推，批准才等了 5 分钟、Mission Card 离截止还有 30 小时不推。关了的、没关联飞书的不推。
     const first = await tick(T0);
     expect(first).toEqual([{ personId: TEST_MEMBER.personId, title: "2 件等你",
-      body: "验收两次没过 · 做登录页 · 对话质量达标\n复盘 10 月（11月8日 06:00 截止）",
+      body: "验收两次没过 · 做登录页 · 对话质量达标\n复盘 10 月（11月10日 10:00 截止）",
       links: [{ label: "验收两次没过", path: "/me/work/cards/c-1" }, { label: "复盘 10 月", path: "/me/work/month/2026-10" }] }]);
     // 5 分钟后批准等满 10 分钟，但离上一条不到 10 分钟：攒着；同一件不推第二次。
     expect(await tick(minutes(T0, 5))).toEqual([]);

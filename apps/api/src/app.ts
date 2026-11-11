@@ -65,6 +65,10 @@ import type { FeishuMinutesApi } from "./feishu/minutes.js";
 import { registerMeetingFollowThroughRoutes } from "./routes/meetingFollowThrough.js";
 import { registerInternalMeetingRoutes } from "./routes/internalMeetings.js";
 import { createNexusDri, type NexusDri, type NexusDriEnv } from "./nexusDri.js";
+import { monthReviewJobs, type TaskEventReader } from "./monthReview.js";
+import { createMonthReviewAgent, type MonthReviewAgent } from "./monthReviewAgent.js";
+import { registerMonthReviewRoutes } from "./routes/monthReview.js";
+import { canUseMemberView } from "./memberAccess.js";
 import { registerNexusDriRoutes } from "./routes/nexusDri.js";
 import { createDocChangeAgent, type DocChangeAgent } from "./docChangeAgent.js";
 import { createDocChangeService, type DocChangeService } from "./docChanges.js";
@@ -178,6 +182,26 @@ function worldPlanTaskSource(q: Query, env: AppEnv, mainReads: boolean): PlanTas
   // Task 负责人：各实例配置的 people（personId → 本体主体）反查；主实例优先。
   const people = new Map([...clients].reverse().flatMap((client) => Object.entries(client.config.people).map(([personId, principal]) => [principal, personId] as const)));
   return createWorldPlanTaskSource(clients[0], { scopes, personOf: (principal) => people.get(principal) ?? null });
+}
+
+/** 复盘评审员读的本体事件：按 Mission 的 scope 找读身份（同 worldPlanTaskSource），只读；一件最多 30 条，读不到为空。 */
+function worldTaskEvents(q: Query, env: AppEnv, mainReads: boolean): TaskEventReader {
+  const clients = [
+    ...(mainReads ? [new WorldClient(q, env)] : []),
+    ...(env.worldTk && worldConfigured(env.worldTk) ? [new WorldClient(q, env.worldTk)] : []),
+  ];
+  const scopes = new Map<string, WorldClient>();
+  for (const client of clients) if (!scopes.has(client.config.scope_id)) scopes.set(client.config.scope_id, client);
+  const text = (event: Record<string, unknown>) => {
+    const plain = ["summary", "title", "content"].map((name) => event[name]).find((value) => typeof value === "string" && value.trim()) as string | undefined;
+    return (plain ?? JSON.stringify(event.payload ?? event.data ?? event.kind ?? "")).slice(0, 600);
+  };
+  return async ({ taskId, scopeId }) => {
+    const client = (scopeId && scopes.get(scopeId)) || clients[0];
+    if (!client) return [];
+    const read = await client.getEvents(taskId);
+    return (read.events ?? read.items ?? []).slice(-30).map((event) => ({ at: String(event.occurred_at ?? event.recorded_at ?? ""), text: text(event) }));
+  };
 }
 
 /** 会前预审读挂点内容用的本体客户端（只读 GET，每次 8 秒）：本体没配或配置不对时不给，预审照常跑。 */
@@ -329,6 +353,8 @@ declare module "fastify" {
     taskPlacementJobs: Record<string, JobHandler>;
     /** Nexus → DRI 确认；server.ts 启动时调 resume()，把 jobs 注册给 jobs worker。 */
     nexusDri: NexusDri;
+    /** 月底复盘第三版的预评（窗口里按人排、按人跑）；server.ts 注册给 jobs worker。 */
+    monthReviewJobs: { handlers: Record<string, JobHandler>; recurring: RecurringJob[] };
     feishuChat: FeishuChat | undefined;
     /** 微信 ClawBot；server.ts 启动后调 start() 开始收消息和推送。没接飞书（借用它的令牌密钥）时为空。 */
     wechat: WechatService | undefined;
@@ -362,6 +388,8 @@ export async function buildApp({
   planTasks,
   deliverableAgents,
   deliverableFetcher,
+  monthReviewAgent,
+  monthReviewEvents,
   materialAnnotationAgent,
   missionCardAnnotationAgent,
   missionCardReviewAgent,
@@ -430,6 +458,9 @@ export async function buildApp({
   deliverableAgents?: Partial<DeliverableAgents>;
   /** 交付物里链接的正文读取；缺省抓公网页（测试注入假实现）。 */
   deliverableFetcher?: ArticleFetcher;
+  /** 复盘的统一评审员和它读的本体事件；缺省按 REVIEW_* 装配、读本体（测试注入假实现）。 */
+  monthReviewAgent?: MonthReviewAgent;
+  monthReviewEvents?: TaskEventReader;
   materialAnnotationAgent?: MaterialAnnotationAgent;
   missionCardAnnotationAgent?: MissionCardAnnotationAgent;
   missionCardReviewAgent?: MissionCardReviewAgent;
@@ -921,6 +952,13 @@ export async function buildApp({
     people: env.nexusDri ? loadWorldInstance(env.worldInstance, env.worldInstanceLocalFile).people : {} });
   app.decorate("nexusDri", nexusDri);
   registerNexusDriRoutes(app, ctx, nexusDri);
+  // 月底复盘第三版：评审员和交付物评审同一个模型（REVIEW_*，没配用 heavy），只读本体事件；不写本体、不转 M2。
+  app.decorate("monthReviewJobs", monthReviewJobs({ pool, planTasks: planTaskSource, names: () => personDisplayNames(peopleDirectory), now,
+    people: () => peopleDirectory.searchPeople(undefined).filter(canUseMemberView).map((person) => person.personId),
+    agent: monthReviewAgent ?? createMonthReviewAgent({ query: q, baseUrl: env.review?.baseUrl ?? env.piBaseUrl, apiKey: env.review?.apiKey ?? env.piApiKey,
+      modelId: env.review?.model ?? env.heavyModel, thinking: env.review?.thinking }),
+    events: monthReviewEvents ?? worldTaskEvents(q, env, world.enabled) }));
+  registerMonthReviewRoutes(app, ctx);
   // 文档变更：找候选用快模型；按作者身份读飞书文档元数据（不读正文）；后台任务与群消息事件由 server.ts 按 app.docChanges.jobs() 注册。
   const isCeo = (personId: string) => peopleDirectory.searchPeople(undefined).find((person) => person.personId === personId)?.roles.includes("ceo") ?? false;
   const docChanges = createDocChangeService({

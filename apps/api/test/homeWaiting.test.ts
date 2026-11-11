@@ -109,7 +109,7 @@ describe("首页等你：扩的几种", { timeout: 30_000 }, () => {
     } finally { await f.close(); }
   });
 
-  it("月份：复盘窗口里出「复盘 N 月」（截止是窗口关闭），窗口外不出；之前月份还有没了结的 Task 每个月一条，了结了的不算", async () => {
+  it("月份：复盘窗口里预评做完、还有没确认的 Mission 才出「复盘 N 月」（截止下月 1 号 18:00），窗口外不出；之前月份还有没了结的 Task 每个月一条，了结了的不算", async () => {
     let now = BOARD_NOW;
     const october: THomePlanTask[] = [
       { taskId: "oct-a", missionId: "oct", name: "十月甲", doneDefinition: null, criteria: [] },
@@ -122,20 +122,21 @@ describe("首页等你：扩的几种", { timeout: 30_000 }, () => {
         VALUES('oct',1,'oct','2026-10','十月的 Mission',$1,'method','["growth"]','目标','[]','fixture://b','fixture',1,'fixture')`, [TEST_MEMBER.personId]);
       for (const taskId of ["oct-a", "oct-b"]) await f.t.sql("UPDATE tasks SET mission_id='oct',plan_task_id=$2 WHERE id=$1", [await roleCard(f, taskId), taskId]);
 
-      // 11/06 在 10 月的复盘窗口里（10/30 起到 11/07 23:59）。
+      // 11/06 在 10 月的复盘窗口里（10/30 起到 11/07 23:59）。预评还没做：只出「之前月份没了结」，不出「复盘 10 月」。
       let items = await waiting(f, "month");
       expect(items).toEqual([
-        { id: "month:review:2026-10", kind: "month", title: "复盘 10 月", source: null, at: null, open: { kind: "month", id: "2026-10" }, taskId: null, projectId: null,
-          sessionId: null, deviceId: null, deviceName: null, letter: null, dueAt: "2026-11-07T15:59:59.000Z", answer: "open", person: null, month: { step: "review", period: "2026-10" }, question: null, permission: null },
         { id: "month:continue:2026-10", kind: "month", title: "10 月还有 2 件没了结", source: null, at: null, open: { kind: "month", id: "2026-10" }, taskId: null, projectId: null,
           sessionId: null, deviceId: null, deviceName: null, letter: null, dueAt: null, answer: "open", person: null, month: { step: "continue", period: "2026-10" }, question: null, permission: null },
       ]);
-
-      // 两件都在月份页选了怎么办：复盘答完了，不再出「复盘 10 月」（只补一句话的不算答完）。
-      expect((await f.call("PUT", "/api/me/months/2026-10/tasks/oct-a/decision", { choice: "continue", note: null })).statusCode).toBe(204);
-      expect((await f.call("PUT", "/api/me/months/2026-10/tasks/oct-b/decision", { choice: null, note: "再看看" })).statusCode).toBe(204);
-      expect((await waiting(f, "month")).map((item) => item.id)).toContain("month:review:2026-10");
-      expect((await f.call("PUT", "/api/me/months/2026-10/tasks/oct-b/decision", { choice: "revise", note: null })).statusCode).toBe(204);
+      // 预评做完：出「复盘 10 月」，截止是 11/1 18:00（复盘第三版，本人 11/11 定）。
+      await f.t.app.monthReviewJobs.handlers["month_review.prefill"]({ personId: TEST_MEMBER.personId, period: "2026-10" },
+        { id: "j", kind: "month_review.prefill", dedupe_key: "j", attempts: 1, payload: {} });
+      items = await waiting(f, "month");
+      expect(items[0]).toEqual({ id: "month:review:2026-10", kind: "month", title: "复盘 10 月", source: null, at: null, open: { kind: "month", id: "2026-10" }, taskId: null,
+        projectId: null, sessionId: null, deviceId: null, deviceName: null, letter: null, dueAt: "2026-11-01T10:00:00.000Z", answer: "open", person: null,
+        month: { step: "review", period: "2026-10" }, question: null, permission: null });
+      // 本人确认了 10 月的 Mission：不再出。
+      expect((await f.call("POST", "/api/me/months/2026-10/review/missions/oct/confirm")).statusCode).toBe(200);
       expect((await waiting(f, "month")).map((item) => item.id)).not.toContain("month:review:2026-10");
 
       // 月中：不在复盘窗口里；交付了一件，还剩一件没了结。
@@ -145,10 +146,12 @@ describe("首页等你：扩的几种", { timeout: 30_000 }, () => {
       items = await waiting(f, "month");
       expect(items.map((item) => [item.id, item.title])).toEqual([["month:continue:2026-10", "10 月还有 1 件没了结"]]);
 
-      // 月底最后两天：复盘本月，截止下个月 7 号 23:59。
+      // 月底最后两天：复盘本月，预评做完出「复盘 11 月」，截止下个月 1 号 18:00。
       now = new Date("2026-11-29T02:00:00.000Z");
+      await f.t.app.monthReviewJobs.handlers["month_review.prefill"]({ personId: TEST_MEMBER.personId, period: "2026-11" },
+        { id: "j", kind: "month_review.prefill", dedupe_key: "j", attempts: 1, payload: {} });
       items = await waiting(f, "month");
-      expect(items.find((item) => item.id === "month:review:2026-11")).toMatchObject({ title: "复盘 11 月", dueAt: "2026-12-07T15:59:59.000Z",
+      expect(items.find((item) => item.id === "month:review:2026-11")).toMatchObject({ title: "复盘 11 月", dueAt: "2026-12-01T10:00:00.000Z",
         month: { step: "review", period: "2026-11" }, question: null, permission: null });
     } finally { await f.close(); }
   });

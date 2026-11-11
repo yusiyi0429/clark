@@ -23860,7 +23860,7 @@
     "/api/me/months/{period}": {
       "get": {
         "operationId": "getMonthPage",
-        "summary": "月份页：这个月本人的 Task（约定几条达到、交付第几版、还在跑和受阻的子会话、确认完成没有、了结和延续去了哪、复盘时怎么定的），和下个月 Co-Agent 的草稿（现在为 null）",
+        "summary": "月份页：这个月本人的 Task（约定几条达到、交付第几版、还在跑和受阻的子会话、确认完成没有、了结和延续去了哪），和下个月 Co-Agent 的草稿（现在为 null）",
         "parameters": [
           {
             "name": "period",
@@ -23915,10 +23915,68 @@
         }
       }
     },
-    "/api/me/months/{period}/tasks/{taskId}/decision": {
+    "/api/me/months/{period}/review": {
+      "get": {
+        "operationId": "getMonthReview",
+        "summary": "复盘页：本人这个月的 Mission（只放本期验收的 Task，逐条预评、评定、交付，总评），延期和取消的放最下面；预评走到哪了、截止时间",
+        "parameters": [
+          {
+            "name": "period",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "复盘页",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonthReviewResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/months/{period}/review/tasks/{taskId}/disposition": {
       "put": {
-        "operationId": "decideMonthTask",
-        "summary": "复盘时这件怎么办：继续做 / 改一改再做 / 到此为止，可以补一句话；选到此为止同时定了到此为止，改成别的就撤销",
+        "operationId": "putMonthReviewDisposition",
+        "summary": "改一件 Task 的去向：本期验收 / 延期到某个月（缺省下个月）/ 已取消。Mission 负责人能改整个 Mission 的，Task 负责人能改自己的",
         "parameters": [
           {
             "name": "period",
@@ -23942,14 +24000,115 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/MonthAnswer"
+                "$ref": "#/components/schemas/PutReviewDispositionRequest"
               }
             }
           }
         },
         "responses": {
-          "204": {
-            "description": "存好了"
+          "200": {
+            "description": "改好了，整份复盘页",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonthReviewResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/months/{period}/review/tasks/{taskId}/criteria/{index}": {
+      "put": {
+        "operationId": "putMonthReviewCriterion",
+        "summary": "改一条验收标准的评定和备注；和预评不同时备注必填。这件不是本期验收的 409",
+        "parameters": [
+          {
+            "name": "period",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "index",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutReviewCriterionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "改好了，整份复盘页",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonthReviewResponse"
+                }
+              }
+            }
           },
           "400": {
             "description": "ApiError 统一错误",
@@ -23992,6 +24151,376 @@
             }
           },
           "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/months/{period}/review/tasks/{taskId}/criteria/{index}/links": {
+      "post": {
+        "operationId": "addMonthReviewLink",
+        "summary": "给一条标准挂一个交付：粘贴的链接，或者弹层里点的天枢交付物、子会话产出",
+        "parameters": [
+          {
+            "name": "period",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "index",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddReviewLinkRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "挂好了，整份复盘页",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonthReviewResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/months/{period}/review/links/{linkId}": {
+      "delete": {
+        "operationId": "deleteMonthReviewLink",
+        "summary": "删掉一个挂上的交付",
+        "parameters": [
+          {
+            "name": "period",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "linkId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "删好了，整份复盘页",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonthReviewResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/months/{period}/review/tasks/{taskId}/link-candidates": {
+      "get": {
+        "operationId": "listMonthReviewLinkCandidates",
+        "summary": "「+ 添加」弹层：这件 Task 在天枢里已有的交付物条目和子会话产出",
+        "parameters": [
+          {
+            "name": "period",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "可以挂的",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewLinkCandidatesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/months/{period}/review/missions/{missionId}/confirm": {
+      "post": {
+        "operationId": "confirmMonthReviewMission",
+        "summary": "确认一个 Mission 的复盘（只有 Mission 负责人能点）；确认以后再改要重新确认",
+        "parameters": [
+          {
+            "name": "period",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "missionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "确认了，整份复盘页",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonthReviewResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/months/{period}/carryover": {
+      "get": {
+        "operationId": "getMonthCarryover",
+        "summary": "顺延清单：本人延期到这个月（和延期到更早、还没了结）的 Task，带原验收标准、做到哪了、已挂的交付；已取消的不带",
+        "parameters": [
+          {
+            "name": "period",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "顺延清单",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonthCarryoverResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "ApiError 统一错误",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
             "description": "ApiError 统一错误",
             "content": {
               "application/json": {
@@ -126952,50 +127481,6 @@
           }
         }
       },
-      "MonthAnswer": {
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "choice",
-          "note"
-        ],
-        "properties": {
-          "choice": {
-            "anyOf": [
-              {
-                "anyOf": [
-                  {
-                    "const": "continue",
-                    "type": "string"
-                  },
-                  {
-                    "const": "revise",
-                    "type": "string"
-                  },
-                  {
-                    "const": "stop",
-                    "type": "string"
-                  }
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "note": {
-            "anyOf": [
-              {
-                "maxLength": 200,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        }
-      },
       "MonthTask": {
         "additionalProperties": false,
         "type": "object",
@@ -127010,8 +127495,7 @@
           "blocked",
           "done",
           "settlement",
-          "continuedFrom",
-          "answer"
+          "continuedFrom"
         ],
         "properties": {
           "taskId": {
@@ -127213,57 +127697,6 @@
                 "type": "null"
               }
             ]
-          },
-          "answer": {
-            "anyOf": [
-              {
-                "additionalProperties": false,
-                "type": "object",
-                "required": [
-                  "choice",
-                  "note"
-                ],
-                "properties": {
-                  "choice": {
-                    "anyOf": [
-                      {
-                        "anyOf": [
-                          {
-                            "const": "continue",
-                            "type": "string"
-                          },
-                          {
-                            "const": "revise",
-                            "type": "string"
-                          },
-                          {
-                            "const": "stop",
-                            "type": "string"
-                          }
-                        ]
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "note": {
-                    "anyOf": [
-                      {
-                        "maxLength": 200,
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  }
-                }
-              },
-              {
-                "type": "null"
-              }
-            ]
           }
         }
       },
@@ -127385,8 +127818,7 @@
                 "blocked",
                 "done",
                 "settlement",
-                "continuedFrom",
-                "answer"
+                "continuedFrom"
               ],
               "properties": {
                 "taskId": {
@@ -127588,57 +128020,6 @@
                       "type": "null"
                     }
                   ]
-                },
-                "answer": {
-                  "anyOf": [
-                    {
-                      "additionalProperties": false,
-                      "type": "object",
-                      "required": [
-                        "choice",
-                        "note"
-                      ],
-                      "properties": {
-                        "choice": {
-                          "anyOf": [
-                            {
-                              "anyOf": [
-                                {
-                                  "const": "continue",
-                                  "type": "string"
-                                },
-                                {
-                                  "const": "revise",
-                                  "type": "string"
-                                },
-                                {
-                                  "const": "stop",
-                                  "type": "string"
-                                }
-                              ]
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "note": {
-                          "anyOf": [
-                            {
-                              "maxLength": 200,
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        }
-                      }
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
                 }
               }
             }
@@ -127738,6 +128119,2203 @@
                 "type": "null"
               }
             ]
+          }
+        }
+      },
+      "ReviewDisposition": {
+        "anyOf": [
+          {
+            "const": "current",
+            "type": "string"
+          },
+          {
+            "const": "deferred",
+            "type": "string"
+          },
+          {
+            "const": "cancelled",
+            "type": "string"
+          }
+        ]
+      },
+      "ReviewRating": {
+        "anyOf": [
+          {
+            "const": "met",
+            "type": "string"
+          },
+          {
+            "const": "partial",
+            "type": "string"
+          },
+          {
+            "const": "unmet",
+            "type": "string"
+          }
+        ]
+      },
+      "MissionVerdict": {
+        "anyOf": [
+          {
+            "const": "achieved",
+            "type": "string"
+          },
+          {
+            "const": "partial",
+            "type": "string"
+          },
+          {
+            "const": "not_achieved",
+            "type": "string"
+          }
+        ]
+      },
+      "ReviewPerson": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "personId",
+          "name"
+        ],
+        "properties": {
+          "personId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "MonthReviewLink": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "url",
+          "source"
+        ],
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "title": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "url": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "const": "agent",
+                "type": "string"
+              },
+              {
+                "const": "person",
+                "type": "string"
+              }
+            ]
+          }
+        }
+      },
+      "MonthReviewCriterion": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "index",
+          "text",
+          "agentRating",
+          "agentBasis",
+          "rating",
+          "ratedBy",
+          "note",
+          "links"
+        ],
+        "properties": {
+          "index": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "text": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "agentRating": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "const": "met",
+                    "type": "string"
+                  },
+                  {
+                    "const": "partial",
+                    "type": "string"
+                  },
+                  {
+                    "const": "unmet",
+                    "type": "string"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "agentBasis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rating": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "const": "met",
+                    "type": "string"
+                  },
+                  {
+                    "const": "partial",
+                    "type": "string"
+                  },
+                  {
+                    "const": "unmet",
+                    "type": "string"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ratedBy": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "personId",
+                  "name"
+                ],
+                "properties": {
+                  "personId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "id",
+                "title",
+                "url",
+                "source"
+              ],
+              "properties": {
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "title": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "url": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "source": {
+                  "anyOf": [
+                    {
+                      "const": "agent",
+                      "type": "string"
+                    },
+                    {
+                      "const": "person",
+                      "type": "string"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "MonthReviewTask": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "taskId",
+          "name",
+          "missionId",
+          "missionTitle",
+          "responsible",
+          "disposition",
+          "deferredTo",
+          "dispositionBy",
+          "canChange",
+          "criteria"
+        ],
+        "properties": {
+          "taskId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "missionId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "missionTitle": {
+            "type": "string"
+          },
+          "responsible": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "personId",
+                  "name"
+                ],
+                "properties": {
+                  "personId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "disposition": {
+            "anyOf": [
+              {
+                "const": "current",
+                "type": "string"
+              },
+              {
+                "const": "deferred",
+                "type": "string"
+              },
+              {
+                "const": "cancelled",
+                "type": "string"
+              }
+            ]
+          },
+          "deferredTo": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dispositionBy": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "personId",
+                  "name"
+                ],
+                "properties": {
+                  "personId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "canChange": {
+            "type": "boolean"
+          },
+          "criteria": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "index",
+                "text",
+                "agentRating",
+                "agentBasis",
+                "rating",
+                "ratedBy",
+                "note",
+                "links"
+              ],
+              "properties": {
+                "index": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "text": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "agentRating": {
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "const": "met",
+                          "type": "string"
+                        },
+                        {
+                          "const": "partial",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unmet",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "agentBasis": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "rating": {
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "const": "met",
+                          "type": "string"
+                        },
+                        {
+                          "const": "partial",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unmet",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "ratedBy": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "personId",
+                        "name"
+                      ],
+                      "properties": {
+                        "personId": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "note": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "links": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "title",
+                      "url",
+                      "source"
+                    ],
+                    "properties": {
+                      "id": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "title": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "url": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "source": {
+                        "anyOf": [
+                          {
+                            "const": "agent",
+                            "type": "string"
+                          },
+                          {
+                            "const": "person",
+                            "type": "string"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "MonthReviewMission": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "missionId",
+          "code",
+          "title",
+          "owner",
+          "verdict",
+          "met",
+          "total",
+          "deferred",
+          "cancelled",
+          "confirmedAt",
+          "confirmedBy",
+          "canConfirm",
+          "tasks"
+        ],
+        "properties": {
+          "missionId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "owner": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "personId",
+              "name"
+            ],
+            "properties": {
+              "personId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          },
+          "verdict": {
+            "anyOf": [
+              {
+                "anyOf": [
+                  {
+                    "const": "achieved",
+                    "type": "string"
+                  },
+                  {
+                    "const": "partial",
+                    "type": "string"
+                  },
+                  {
+                    "const": "not_achieved",
+                    "type": "string"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "met": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "deferred": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "cancelled": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "confirmedAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "confirmedBy": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "personId",
+                  "name"
+                ],
+                "properties": {
+                  "personId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "canConfirm": {
+            "type": "boolean"
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "taskId",
+                "name",
+                "missionId",
+                "missionTitle",
+                "responsible",
+                "disposition",
+                "deferredTo",
+                "dispositionBy",
+                "canChange",
+                "criteria"
+              ],
+              "properties": {
+                "taskId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "missionId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "missionTitle": {
+                  "type": "string"
+                },
+                "responsible": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "personId",
+                        "name"
+                      ],
+                      "properties": {
+                        "personId": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "disposition": {
+                  "anyOf": [
+                    {
+                      "const": "current",
+                      "type": "string"
+                    },
+                    {
+                      "const": "deferred",
+                      "type": "string"
+                    },
+                    {
+                      "const": "cancelled",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "deferredTo": {
+                  "anyOf": [
+                    {
+                      "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "dispositionBy": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "personId",
+                        "name"
+                      ],
+                      "properties": {
+                        "personId": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "canChange": {
+                  "type": "boolean"
+                },
+                "criteria": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "index",
+                      "text",
+                      "agentRating",
+                      "agentBasis",
+                      "rating",
+                      "ratedBy",
+                      "note",
+                      "links"
+                    ],
+                    "properties": {
+                      "index": {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "text": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "agentRating": {
+                        "anyOf": [
+                          {
+                            "anyOf": [
+                              {
+                                "const": "met",
+                                "type": "string"
+                              },
+                              {
+                                "const": "partial",
+                                "type": "string"
+                              },
+                              {
+                                "const": "unmet",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "agentBasis": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "rating": {
+                        "anyOf": [
+                          {
+                            "anyOf": [
+                              {
+                                "const": "met",
+                                "type": "string"
+                              },
+                              {
+                                "const": "partial",
+                                "type": "string"
+                              },
+                              {
+                                "const": "unmet",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "ratedBy": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "personId",
+                              "name"
+                            ],
+                            "properties": {
+                              "personId": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "note": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "links": {
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "id",
+                            "title",
+                            "url",
+                            "source"
+                          ],
+                          "properties": {
+                            "id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "title": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "url": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "source": {
+                              "anyOf": [
+                                {
+                                  "const": "agent",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "person",
+                                  "type": "string"
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "MonthReviewPrefill": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "error"
+        ],
+        "properties": {
+          "status": {
+            "anyOf": [
+              {
+                "const": "pending",
+                "type": "string"
+              },
+              {
+                "const": "running",
+                "type": "string"
+              },
+              {
+                "const": "done",
+                "type": "string"
+              },
+              {
+                "const": "failed",
+                "type": "string"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "MonthReviewResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "period",
+          "deadline",
+          "prefill",
+          "toConfirm",
+          "deferred",
+          "cancelled",
+          "missions",
+          "setAside"
+        ],
+        "properties": {
+          "period": {
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "type": "string"
+          },
+          "deadline": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "prefill": {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "status",
+              "error"
+            ],
+            "properties": {
+              "status": {
+                "anyOf": [
+                  {
+                    "const": "pending",
+                    "type": "string"
+                  },
+                  {
+                    "const": "running",
+                    "type": "string"
+                  },
+                  {
+                    "const": "done",
+                    "type": "string"
+                  },
+                  {
+                    "const": "failed",
+                    "type": "string"
+                  }
+                ]
+              },
+              "error": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          "toConfirm": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "deferred": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "cancelled": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "missions": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "missionId",
+                "code",
+                "title",
+                "owner",
+                "verdict",
+                "met",
+                "total",
+                "deferred",
+                "cancelled",
+                "confirmedAt",
+                "confirmedBy",
+                "canConfirm",
+                "tasks"
+              ],
+              "properties": {
+                "missionId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "code": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "owner": {
+                  "additionalProperties": false,
+                  "type": "object",
+                  "required": [
+                    "personId",
+                    "name"
+                  ],
+                  "properties": {
+                    "personId": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "verdict": {
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "const": "achieved",
+                          "type": "string"
+                        },
+                        {
+                          "const": "partial",
+                          "type": "string"
+                        },
+                        {
+                          "const": "not_achieved",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "met": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "total": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "deferred": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "cancelled": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "confirmedAt": {
+                  "anyOf": [
+                    {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "confirmedBy": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "personId",
+                        "name"
+                      ],
+                      "properties": {
+                        "personId": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "canConfirm": {
+                  "type": "boolean"
+                },
+                "tasks": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "taskId",
+                      "name",
+                      "missionId",
+                      "missionTitle",
+                      "responsible",
+                      "disposition",
+                      "deferredTo",
+                      "dispositionBy",
+                      "canChange",
+                      "criteria"
+                    ],
+                    "properties": {
+                      "taskId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "missionId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "missionTitle": {
+                        "type": "string"
+                      },
+                      "responsible": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "personId",
+                              "name"
+                            ],
+                            "properties": {
+                              "personId": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "disposition": {
+                        "anyOf": [
+                          {
+                            "const": "current",
+                            "type": "string"
+                          },
+                          {
+                            "const": "deferred",
+                            "type": "string"
+                          },
+                          {
+                            "const": "cancelled",
+                            "type": "string"
+                          }
+                        ]
+                      },
+                      "deferredTo": {
+                        "anyOf": [
+                          {
+                            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "dispositionBy": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "personId",
+                              "name"
+                            ],
+                            "properties": {
+                              "personId": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "canChange": {
+                        "type": "boolean"
+                      },
+                      "criteria": {
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "index",
+                            "text",
+                            "agentRating",
+                            "agentBasis",
+                            "rating",
+                            "ratedBy",
+                            "note",
+                            "links"
+                          ],
+                          "properties": {
+                            "index": {
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "text": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "agentRating": {
+                              "anyOf": [
+                                {
+                                  "anyOf": [
+                                    {
+                                      "const": "met",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "partial",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "unmet",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "agentBasis": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "rating": {
+                              "anyOf": [
+                                {
+                                  "anyOf": [
+                                    {
+                                      "const": "met",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "partial",
+                                      "type": "string"
+                                    },
+                                    {
+                                      "const": "unmet",
+                                      "type": "string"
+                                    }
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "ratedBy": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "type": "object",
+                                  "required": [
+                                    "personId",
+                                    "name"
+                                  ],
+                                  "properties": {
+                                    "personId": {
+                                      "minLength": 1,
+                                      "type": "string"
+                                    },
+                                    "name": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "note": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "links": {
+                              "type": "array",
+                              "items": {
+                                "additionalProperties": false,
+                                "type": "object",
+                                "required": [
+                                  "id",
+                                  "title",
+                                  "url",
+                                  "source"
+                                ],
+                                "properties": {
+                                  "id": {
+                                    "format": "uuid",
+                                    "type": "string"
+                                  },
+                                  "title": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "url": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "source": {
+                                    "anyOf": [
+                                      {
+                                        "const": "agent",
+                                        "type": "string"
+                                      },
+                                      {
+                                        "const": "person",
+                                        "type": "string"
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "setAside": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "taskId",
+                "name",
+                "missionId",
+                "missionTitle",
+                "responsible",
+                "disposition",
+                "deferredTo",
+                "dispositionBy",
+                "canChange",
+                "criteria"
+              ],
+              "properties": {
+                "taskId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "missionId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "missionTitle": {
+                  "type": "string"
+                },
+                "responsible": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "personId",
+                        "name"
+                      ],
+                      "properties": {
+                        "personId": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "disposition": {
+                  "anyOf": [
+                    {
+                      "const": "current",
+                      "type": "string"
+                    },
+                    {
+                      "const": "deferred",
+                      "type": "string"
+                    },
+                    {
+                      "const": "cancelled",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "deferredTo": {
+                  "anyOf": [
+                    {
+                      "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "dispositionBy": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "type": "object",
+                      "required": [
+                        "personId",
+                        "name"
+                      ],
+                      "properties": {
+                        "personId": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "canChange": {
+                  "type": "boolean"
+                },
+                "criteria": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "index",
+                      "text",
+                      "agentRating",
+                      "agentBasis",
+                      "rating",
+                      "ratedBy",
+                      "note",
+                      "links"
+                    ],
+                    "properties": {
+                      "index": {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "text": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "agentRating": {
+                        "anyOf": [
+                          {
+                            "anyOf": [
+                              {
+                                "const": "met",
+                                "type": "string"
+                              },
+                              {
+                                "const": "partial",
+                                "type": "string"
+                              },
+                              {
+                                "const": "unmet",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "agentBasis": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "rating": {
+                        "anyOf": [
+                          {
+                            "anyOf": [
+                              {
+                                "const": "met",
+                                "type": "string"
+                              },
+                              {
+                                "const": "partial",
+                                "type": "string"
+                              },
+                              {
+                                "const": "unmet",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "ratedBy": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "type": "object",
+                            "required": [
+                              "personId",
+                              "name"
+                            ],
+                            "properties": {
+                              "personId": {
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "note": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "links": {
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "id",
+                            "title",
+                            "url",
+                            "source"
+                          ],
+                          "properties": {
+                            "id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "title": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "url": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "source": {
+                              "anyOf": [
+                                {
+                                  "const": "agent",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "person",
+                                  "type": "string"
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "PutReviewDispositionRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "disposition"
+        ],
+        "properties": {
+          "disposition": {
+            "anyOf": [
+              {
+                "const": "current",
+                "type": "string"
+              },
+              {
+                "const": "deferred",
+                "type": "string"
+              },
+              {
+                "const": "cancelled",
+                "type": "string"
+              }
+            ]
+          },
+          "deferredTo": {
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "type": "string"
+          }
+        }
+      },
+      "PutReviewCriterionRequest": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "rating",
+          "note"
+        ],
+        "properties": {
+          "rating": {
+            "anyOf": [
+              {
+                "const": "met",
+                "type": "string"
+              },
+              {
+                "const": "partial",
+                "type": "string"
+              },
+              {
+                "const": "unmet",
+                "type": "string"
+              }
+            ]
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ReviewLinkCandidate": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "id",
+          "title",
+          "url",
+          "at"
+        ],
+        "properties": {
+          "kind": {
+            "anyOf": [
+              {
+                "const": "deliverable",
+                "type": "string"
+              },
+              {
+                "const": "output",
+                "type": "string"
+              }
+            ]
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "title": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "url": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        }
+      },
+      "ReviewLinkCandidatesResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "candidates"
+        ],
+        "properties": {
+          "candidates": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "kind",
+                "id",
+                "title",
+                "url",
+                "at"
+              ],
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "const": "deliverable",
+                      "type": "string"
+                    },
+                    {
+                      "const": "output",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "id": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "title": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "url": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "at": {
+                  "format": "date-time",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "AddReviewLinkRequest": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "url"
+            ],
+            "properties": {
+              "url": {
+                "minLength": 1,
+                "maxLength": 2000,
+                "type": "string"
+              },
+              "title": {
+                "minLength": 1,
+                "maxLength": 200,
+                "type": "string"
+              }
+            }
+          },
+          {
+            "additionalProperties": false,
+            "type": "object",
+            "required": [
+              "candidate"
+            ],
+            "properties": {
+              "candidate": {
+                "additionalProperties": false,
+                "type": "object",
+                "required": [
+                  "kind",
+                  "id"
+                ],
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "const": "deliverable",
+                        "type": "string"
+                      },
+                      {
+                        "const": "output",
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "MonthCarryoverTask": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "taskId",
+          "name",
+          "missionId",
+          "missionTitle",
+          "fromPeriod",
+          "deferredTo",
+          "criteria"
+        ],
+        "properties": {
+          "taskId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "missionId": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "missionTitle": {
+            "type": "string"
+          },
+          "fromPeriod": {
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "type": "string"
+          },
+          "deferredTo": {
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "type": "string"
+          },
+          "criteria": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "index",
+                "text",
+                "rating",
+                "note",
+                "links"
+              ],
+              "properties": {
+                "index": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "text": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "rating": {
+                  "anyOf": [
+                    {
+                      "anyOf": [
+                        {
+                          "const": "met",
+                          "type": "string"
+                        },
+                        {
+                          "const": "partial",
+                          "type": "string"
+                        },
+                        {
+                          "const": "unmet",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "note": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "links": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "title",
+                      "url",
+                      "source"
+                    ],
+                    "properties": {
+                      "id": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "title": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "url": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "source": {
+                        "anyOf": [
+                          {
+                            "const": "agent",
+                            "type": "string"
+                          },
+                          {
+                            "const": "person",
+                            "type": "string"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "MonthCarryoverResponse": {
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "period",
+          "tasks"
+        ],
+        "properties": {
+          "period": {
+            "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+            "type": "string"
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "additionalProperties": false,
+              "type": "object",
+              "required": [
+                "taskId",
+                "name",
+                "missionId",
+                "missionTitle",
+                "fromPeriod",
+                "deferredTo",
+                "criteria"
+              ],
+              "properties": {
+                "taskId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "missionId": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "missionTitle": {
+                  "type": "string"
+                },
+                "fromPeriod": {
+                  "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                  "type": "string"
+                },
+                "deferredTo": {
+                  "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                  "type": "string"
+                },
+                "criteria": {
+                  "type": "array",
+                  "items": {
+                    "additionalProperties": false,
+                    "type": "object",
+                    "required": [
+                      "index",
+                      "text",
+                      "rating",
+                      "note",
+                      "links"
+                    ],
+                    "properties": {
+                      "index": {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "text": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "rating": {
+                        "anyOf": [
+                          {
+                            "anyOf": [
+                              {
+                                "const": "met",
+                                "type": "string"
+                              },
+                              {
+                                "const": "partial",
+                                "type": "string"
+                              },
+                              {
+                                "const": "unmet",
+                                "type": "string"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "note": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "links": {
+                        "type": "array",
+                        "items": {
+                          "additionalProperties": false,
+                          "type": "object",
+                          "required": [
+                            "id",
+                            "title",
+                            "url",
+                            "source"
+                          ],
+                          "properties": {
+                            "id": {
+                              "format": "uuid",
+                              "type": "string"
+                            },
+                            "title": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "url": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "source": {
+                              "anyOf": [
+                                {
+                                  "const": "agent",
+                                  "type": "string"
+                                },
+                                {
+                                  "const": "person",
+                                  "type": "string"
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }

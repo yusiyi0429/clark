@@ -13,6 +13,7 @@ import { readWorkHome } from "@/lib/board/cloud";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { useMergeIssues } from "@/lib/work/merge";
 import { useWork } from "@/lib/work/useWork";
+import { withLocalAttention } from "./attention";
 import { deriveWorkHome } from "./derive";
 import type { WorkHomeData } from "./types";
 
@@ -50,8 +51,9 @@ export function useWorkHome() {
     [member.notifications, member.rounds, member.unreadThreads, member.unreadMissionGroups]);
   const derived = useMemo(() => deriveWorkHome({ plan: work.plan, workers: work.workers, boards: work.boards, proposals: work.proposals, merges, notices, deviceId, sessions: local.sessions }),
     [work.plan, work.workers, work.boards, work.proposals, merges, notices, deviceId, local.sessions]);
-  // 云端的等你照契约（设计 9.6：群消息、会后分给你不进）。
-  const data = useMemo<WorkHomeData>(() => remote ?? derived, [remote, derived]);
+  // 云端的等你照契约（设计 9.6：群消息、会后分给你不进）。批准、提问以这台电脑上的会话为准（第 54 条，attention.ts）。
+  const here = local.phase === "ready" ? local.sessions : null;
+  const data = useMemo<WorkHomeData>(() => withLocalAttention(remote ?? derived, here ?? []), [remote, derived, here]);
 
   const refresh = useCallback(async () => { await Promise.all([work.refresh(), member.refresh(), loadRemote()]); }, [work, member, loadRemote]);
   // 计划（Mission / Task，来自本体）读不到：树和首页写「本体读取失败」加「重试」，不画成空树（5.4.2、5.4.4）。

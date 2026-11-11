@@ -1,12 +1,12 @@
 import type { JsonSchema, OpenAPIV3 } from "./types/JsonSchemaTypes.js";
 import {
-  ContinueTaskRequest, ContinueTaskResponse, MonthAnswer, MonthDraft, MonthPageResponse, MonthTask, StopTaskRequest, TaskRef, TaskSettlement, TaskSettlementResponse,
+  ContinueTaskRequest, ContinueTaskResponse, MonthDraft, MonthPageResponse, MonthTask, StopTaskRequest, TaskRef, TaskSettlement, TaskSettlementResponse,
 } from "./taskContinuity.js";
 
 /** 跨月延续与月份页的 OpenAPI 路径，手工列出，在 openapi.ts 里展开。 */
 
 export const taskContinuitySchemas: Record<string, JsonSchema> = {
-  TaskRef, TaskSettlement, ContinueTaskRequest, ContinueTaskResponse, StopTaskRequest, TaskSettlementResponse, MonthAnswer, MonthTask, MonthDraft, MonthPageResponse,
+  TaskRef, TaskSettlement, ContinueTaskRequest, ContinueTaskResponse, StopTaskRequest, TaskSettlementResponse, MonthTask, MonthDraft, MonthPageResponse,
 };
 
 const error = { description: "ApiError 统一错误", content: { "application/json": { schema: { $ref: "#/components/schemas/ApiError" } } } };
@@ -43,18 +43,9 @@ export const taskContinuityPaths: OpenAPIV3.Document["paths"] = {
   "/api/me/months/{period}": {
     get: {
       operationId: "getMonthPage",
-      summary: "月份页：这个月本人的 Task（约定几条达到、交付第几版、还在跑和受阻的子会话、确认完成没有、了结和延续去了哪、复盘时怎么定的），和下个月 Co-Agent 的草稿（现在为 null）",
+      summary: "月份页：这个月本人的 Task（约定几条达到、交付第几版、还在跑和受阻的子会话、确认完成没有、了结和延续去了哪），和下个月 Co-Agent 的草稿（现在为 null）",
       parameters: path("period"),
       responses: { "200": json("月份页", "MonthPageResponse"), ...errors(400, 401, 403) },
-    },
-  },
-  "/api/me/months/{period}/tasks/{taskId}/decision": {
-    put: {
-      operationId: "decideMonthTask",
-      summary: "复盘时这件怎么办：继续做 / 改一改再做 / 到此为止，可以补一句话；选到此为止同时定了到此为止，改成别的就撤销",
-      parameters: path("period", "taskId"),
-      requestBody: body("MonthAnswer"),
-      responses: { "204": { description: "存好了" }, ...errors(400, 401, 403, 404, 409) },
     },
   },
 };

@@ -3,32 +3,21 @@
 /**
  * 月份页的数据（设计 10.4、10.5、12.4），形状照 B2 的契约（packages/contracts/src/taskContinuity.ts）：
  * - GET  /api/me/months/:period → MonthPageData：这个月本人的每件 Task 和天枢备好的状态（约定几条达到、交付第几版、还在跑的、受阻的、本人确认完成没有、
- *   了结了没有（完成 / 到此为止 / 已延续，延续去了哪）、从哪件延续来的、复盘时怎么定的），以及下个月 Co-Agent 的草稿（暂为 null，等溪南）。
- * - PUT  /api/me/months/:period/tasks/:taskId/decision，体 MonthAnswer → 204：复盘时这件怎么办（继续做 / 改一改再做 / 到此为止，可以补一句话）。
- *   choice、note 不能都空（接口回 400，这里先拦下）；已经延续出去的选到此为止接口回 409。
- *   答案就是交给 Co-Agent 的「负责人 agent 参考信息」（怎么交在等溪南，10.8）。
+ *   了结了没有（完成 / 到此为止 / 已延续，延续去了哪）、从哪件延续来的），以及下个月 Co-Agent 的草稿（暂为 null，等溪南）。
+ *   第一版的复盘答案（PUT …/tasks/:taskId/decision）删了：去向和评定都在复盘页（useMonthReview）。
  * 接口还没有（404）时：开发和测试里用假数据（monthFixture），生产里写「失败 · 重试」，不拿假数据冒充。换来源只换 MonthSource。
  */
 import { useCallback, useEffect, useState } from "react";
-import type { TMonthAnswer, TMonthChoice, TMonthDraft, TMonthPageResponse, TMonthTask } from "@warmap/contracts";
+import type { TMonthDraft, TMonthPageResponse, TMonthTask } from "@warmap/contracts";
 
-export type MonthChoice = TMonthChoice;
-/** 复盘时这件怎么办：选了哪个（只补一句话时为 null）和补的那句话。 */
-export type MonthAnswer = TMonthAnswer;
-/** 这个月的一件 Task；settlement 不为 null 的已经了结（完成、到此为止、已延续），不再问怎么办。 */
+/** 这个月的一件 Task；settlement 不为 null 的已经了结（完成、到此为止、已延续）。 */
 export type MonthTask = TMonthTask;
 export type MonthDraft = TMonthDraft;
 export type MonthPageData = TMonthPageResponse;
 
-/** 已经了结了（本人确认完成、到此为止、已延续出去）：不问怎么办。到此为止的仍能改回来，所以只看完成和延续。 */
-export const settled = (task: Pick<MonthTask, "done" | "settlement">) => task.done || task.settlement?.kind === "completed" || task.settlement?.kind === "continued";
-
 export type MonthSource = {
   load: (period: string) => Promise<MonthPageData>;
-  decide: (period: string, taskId: string, answer: MonthAnswer) => Promise<void>;
 };
-
-export const CHOICE_LABEL: Record<MonthChoice, string> = { continue: "继续做", revise: "改一改再做", stop: "到此为止" };
 
 /** 「2026-11」的下一个月「2026-12」。 */
 export function nextPeriod(period: string): string {
@@ -46,23 +35,18 @@ export function monthSummary(task: Pick<MonthTask, "agreement" | "version" | "ru
   ].filter(Boolean).join(" · ");
 }
 
-/** 答了什么（收起那一行的答案）：选了的那个，补了话的接在后面。 */
-export function answerText(answer: MonthAnswer): string {
-  return [answer.choice ? CHOICE_LABEL[answer.choice] : null, answer.note].filter(Boolean).join("：");
-}
-
 /** 假数据：接口上之前，开发和测试里用（也是给 B2 的样例）。 */
 export function monthFixture(period: string): MonthPageData {
   const next = nextPeriod(period);
   return {
     period,
     tasks: [
-      { taskId: "fixture-home", missionId: "fixture-m1", missionTitle: "首页与派活", name: "新首页改版", agreement: { met: 2, total: 3 }, version: 2, running: 1, blocked: 0, done: false, settlement: null, continuedFrom: null, answer: null },
+      { taskId: "fixture-home", missionId: "fixture-m1", missionTitle: "首页与派活", name: "新首页改版", agreement: { met: 2, total: 3 }, version: 2, running: 1, blocked: 0, done: false, settlement: null, continuedFrom: null },
       { taskId: "fixture-meeting", missionId: "fixture-m1", missionTitle: "首页与派活", name: "会后写回本体", agreement: { met: 3, total: 3 }, version: 3, running: 0, blocked: 0, done: true,
-        settlement: { kind: "completed", at: `${period}-20T08:00:00.000Z`, by: null, note: null, to: null }, continuedFrom: null, answer: null },
+        settlement: { kind: "completed", at: `${period}-20T08:00:00.000Z`, by: null, note: null, to: null }, continuedFrom: null },
       { taskId: "fixture-review", missionId: "fixture-m2", missionTitle: "复盘与拆解", name: "月度复盘入口", agreement: { met: 0, total: 2 }, version: null, running: 0, blocked: 1, done: false,
         settlement: { kind: "continued", at: `${period}-28T08:00:00.000Z`, by: null, note: null, to: { taskId: "fixture-review-next", name: "复盘入口收尾", missionId: "fixture-m3", period: next } },
-        continuedFrom: null, answer: null },
+        continuedFrom: null },
     ],
     draft: {
       period: next,
@@ -81,7 +65,6 @@ class Missing extends Error {}
 
 /** 先问 B2 的接口；404（还没有）时开发、测试里退回假数据，生产里报错。 */
 export function httpMonthSource(request: typeof fetch = (...args) => fetch(...args), fallback = process.env.NODE_ENV !== "production"): MonthSource {
-  const answers = new Map<string, MonthAnswer>();
   const call = async (path: string, init?: RequestInit) => {
     const response = await request(path, { credentials: "same-origin", ...init, headers: { "content-type": "application/json", ...init?.headers } });
     if (response.status === 404) throw new Missing();
@@ -93,16 +76,7 @@ export function httpMonthSource(request: typeof fetch = (...args) => fetch(...ar
       try { return await (await call(`/api/me/months/${encodeURIComponent(period)}`)).json() as MonthPageData; }
       catch (error) {
         if (!(error instanceof Missing) || !fallback) throw error instanceof Missing ? new Error("月份接口还没有") : error;
-        const data = monthFixture(period);
-        return { ...data, tasks: data.tasks.map((task) => ({ ...task, answer: answers.get(`${period}:${task.taskId}`) ?? null })) };
-      }
-    },
-    decide: async (period, taskId, answer) => {
-      if (!answer.choice && !answer.note?.trim()) throw new Error("选一个，或者补一句话");
-      try { await call(`/api/me/months/${encodeURIComponent(period)}/tasks/${encodeURIComponent(taskId)}/decision`, { method: "PUT", body: JSON.stringify(answer) }); }
-      catch (error) {
-        if (!(error instanceof Missing) || !fallback) throw error instanceof Missing ? new Error("月份接口还没有") : error;
-        answers.set(`${period}:${taskId}`, answer);
+        return monthFixture(period);
       }
     },
   };
@@ -110,7 +84,7 @@ export function httpMonthSource(request: typeof fetch = (...args) => fetch(...ar
 
 export const monthSource: MonthSource = httpMonthSource();
 
-/** 月份页用的：data（null 是还在读）、failed（没读到的原因）、retry、decide（答一件，答完这一件收成一行）。 */
+/** 月份页用的：data（null 是还在读）、failed（没读到的原因）、retry。 */
 export function useMonthPage(period: string, source: MonthSource = monthSource) {
   const [data, setData] = useState<MonthPageData | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
@@ -119,10 +93,6 @@ export function useMonthPage(period: string, source: MonthSource = monthSource) 
     void source.load(period).then(setData).catch((error: unknown) => setFailed(error instanceof Error ? error.message : ""));
   }, [period, source]);
   useEffect(load, [load]);
-  const decide = useCallback(async (taskId: string, answer: MonthAnswer) => {
-    await source.decide(period, taskId, answer);
-    setData((current) => current && { ...current, tasks: current.tasks.map((task) => (task.taskId === taskId ? { ...task, answer } : task)) });
-  }, [period, source]);
-  return { data, failed, retry: load, decide };
+  return { data, failed, retry: load };
 }
 

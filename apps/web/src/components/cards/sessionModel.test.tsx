@@ -85,8 +85,8 @@ describe("思考程度（36 条，D 契约 c97b38c5）", () => {
     // 面板「思考」那一行只列这个模型的几档，「自动」在前（开着才画，这里看给它的数据）；思考是自动时下面一行只写模型名。
     const now = (await runner.listSessions())[0]!;
     const picks = sessionModels(runner, models, now, vi.fn(), vi.fn())!;
-    expect(picks.rows.map((row) => [row.name, row.value])).toEqual([["来源", "Claude 订阅"], ["模型", "Haiku 5.5"], ["思考", "低"]]);
-    expect(picks.rows[2]!.options.map((option) => option.label)).toEqual(["自动", "低", "中", "高", "超高", "最高"]);
+    expect(picks.rows.map((row) => [row.name, row.value])).toEqual([["执行方", "Claude Code"], ["来源", "Claude 订阅"], ["模型", "Haiku 5.5"], ["思考", "低"]]);
+    expect(picks.rows[3]!.options.map((option) => option.label)).toEqual(["自动", "低", "中", "高", "超高", "最高"]);
     expect(sessionModelText({ ...now, effort: undefined }, effortsOf(now.modelProfileId))?.label).not.toContain("自动");
     expect(sessionModelText({ run: { ...session.run!, modelName: "deepseek-v4.1-flash" }, agent: "claude-code" }, effortsOf("tokenhub-deepseek"))?.label).toBe("deepseek-v4.1-flash");
   });

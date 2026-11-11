@@ -89,6 +89,7 @@ function startTurn(text) {
     turn = { permId: null, work: true, timer: setTimeout(() => { out({ type: "assistant", message: { content: [{ type: "text", text: "做完了" }] }, parent_tool_use_id: null }); finish(true, "做完了"); }, live.work.ms ?? 200) };
     return;
   }
+  if (live.stream && argv.includes("--include-partial-messages")) { streamTurn(text, live.stream); return; }
   if (mode === "gateway_down") {
     // 11/06 假网关实测：每次重试一条 api_retry，最后 result 是 success + is_error，拒连时没有 api_error_status。
     for (let a = 1; a <= 2; a++) out({ type: "system", subtype: "api_retry", attempt: a, max_retries: 2, retry_delay_ms: 500 * a, error_status: null, error: "unknown" });
@@ -230,6 +231,40 @@ function agentDone() {
 const lifecycle = (id, state) => { if (id) out({ type: "command_lifecycle", command_uuid: id, state, uuid: `l-${Math.random()}`, session_id: sid }); };
 /** holdInterjections：进行中插的话这一轮读不到，等这一轮结束自己成为新的一轮（真机里模型只在出字、中间没有工具时就是这样）。 */
 const held = [];
+
+/**
+ * 逐字写的一轮（照 --include-partial-messages 的 stream_event）：先来思考的片段、子 agent 的片段（本机都不该报），
+ * 再一个字一个字写正文（每 ms 毫秒一个字），写完来工具参数的片段，最后整段 assistant 和 result。
+ * cut：正文写到一半就以出错结束，没有整段 assistant。
+ */
+function streamTurn(text, opt) {
+  const ev = (event, parent = null) => out({ type: "stream_event", event, parent_tool_use_id: parent, session_id: sid });
+  ev({ type: "message_start", message: { id: `msg_s${turns}`, role: "assistant", content: [] } });
+  ev({ type: "content_block_start", index: 0, content_block: { type: "thinking", thinking: "" } });
+  ev({ type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "先想想" } });
+  ev({ type: "content_block_stop", index: 0 });
+  ev({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } }, "toolu_sub");
+  ev({ type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "子 agent 的字" } }, "toolu_sub");
+  ev({ type: "content_block_start", index: 1, content_block: { type: "text", text: "" } });
+  const full = `正在写：${text}`;
+  const chars = [...full];
+  let i = 0;
+  const tick = () => {
+    if (i < chars.length && !(opt.cut && i >= chars.length / 2)) {
+      ev({ type: "content_block_delta", index: 1, delta: { type: "text_delta", text: chars[i++] } });
+      turn = { permId: null, work: true, timer: setTimeout(tick, opt.ms ?? 5) };
+      return;
+    }
+    if (opt.cut) { finish(false, "写到一半出错了"); return; }
+    ev({ type: "content_block_stop", index: 1 });
+    ev({ type: "content_block_start", index: 2, content_block: { type: "tool_use", id: `toolu_s${turns}`, name: "Write", input: {} } });
+    ev({ type: "content_block_delta", index: 2, delta: { type: "input_json_delta", partial_json: '{"file_path":"a.txt"' } });
+    ev({ type: "content_block_stop", index: 2 });
+    out({ type: "assistant", message: { content: [{ type: "text", text: full }] }, parent_tool_use_id: null });
+    finish(true, full);
+  };
+  tick();
+}
 
 function finish(ok, text) {
   out({ type: "result", subtype: ok ? "success" : "error_during_execution", is_error: !ok, result: text, duration_ms: 12, total_cost_usd: 0.01 * turns,

@@ -8,7 +8,6 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import Markdown from "react-markdown";
 import { ChevronLeft, Info } from "lucide-react";
 import type { TLocalQuestionAnswerRequest, TTopicDetailResponse, TTopicVersionView } from "@warmap/contracts";
@@ -16,18 +15,19 @@ import { HeroButton } from "@/components/HeroButton";
 import { useHandheld } from "@/components/ui/useHandheld";
 import { StartDialog } from "@/components/local/StartDialog";
 import { showWorkspaceToast } from "@/lib/toast";
-import { RelayLine, SessionComposer, SessionTranscript, useSessionSend, useSessionModels, useModelChangedRefresh, sessionEnded, type DecideOptions } from "@/components/cards/SessionTranscript";
+import { SessionComposer, SessionTranscript, useSessionSend, useSessionModels, useModelChangedRefresh, sessionEnded, type DecideOptions } from "@/components/cards/SessionTranscript";
 import { stateChip } from "@/components/cards/CardSession";
-import { QuestionDecision, awayChip, questionTitle } from "@/components/work/decisions";
-import { askAnchor } from "@/components/home/TaskFeed";
-import { FailedLine, PendingBoxes, PendingDock } from "@/components/work/DecisionBox";
+import { ApprovalDecision, QuestionDecision, awayChip } from "@/components/work/decisions";
+import { DecisionBox, FailedLine, PendingBoxes, PendingDock } from "@/components/work/DecisionBox";
+import { ATTENTION_LABEL, attentionOf, viewAsk, type Attention } from "@/lib/home/attention";
 import { useViewChrome } from "@/components/home/view";
+import { SideContent, useSideDetail } from "@/components/home/SideDetail";
 import { ICON } from "@/components/home/StateIcon";
 import { useConversationScroll } from "@/conversation/useConversationScroll";
 import { latestSessionFor, useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { useSessionEvents } from "@/lib/local/useSessionEvents";
 import { useSessionMode } from "@/components/cards/PermissionMode";
-import { HARNESS_NAME, runLabel, sessionModelText } from "@/lib/local/runModel";
+import { HARNESS_NAME, defaultSourceLabel, runLabel, sessionModelText } from "@/lib/local/runModel";
 import { placeText, shortPlace } from "@/lib/work/merge";
 import { contextUsage, localWait, running } from "@/lib/local/sessionView";
 import { startTopic } from "@/lib/local/start";
@@ -37,11 +37,14 @@ import { REMARK_PLUGINS } from "@/lib/markdown";
 import { ReviewDialog, ReviewDoc, isReview, reviewText } from "./Review";
 import s from "@/styles/v2-session.module.css";
 
-/** embedded：放在新首页的展示区里——没有返回键，页头右边的文档图标在「对话」和「当前版本」之间切。 */
-export function TopicSession({ topicId, embedded = false }: { topicId: string; embedded?: boolean }) {
+/**
+ * embedded：放在新首页的展示区里——没有返回键。页头右边的信息图标：桌面上在右栏打开当前版本，对话留着；手机上照旧在「对话」和「当前版本」之间切。
+ * waiting：首页数据里这个专题在等什么（左栏的点用的那一份）；页头标签和钉在输入框上方的框从它和本机事件流算（第 54 条，同卡的子会话）。
+ */
+export function TopicSession({ topicId, embedded = false, waiting = null }: { topicId: string; embedded?: boolean; waiting?: Attention | null }) {
   const chrome = useViewChrome();
-  const router = useRouter();
   const [reading, setReading] = useState(false);
+  const side = useSideDetail();
   const local = useLocalRunner();
   const handheld = useHandheld();
   const scroll = useConversationScroll({ streaming: false, resetKey: topicId });
@@ -81,11 +84,11 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
     setStarting(true);
     window.history.replaceState(null, "", window.location.pathname);
   }, [autoStart, ready, detail, session]);
-  const { view } = useSessionEvents(local.runner, session?.id ?? null);
+  const { view, draft, drafted } = useSessionEvents(local.runner, session?.id ?? null, { drafts: true });
   useModelChangedRefresh(view.entries, local.refresh);
   const canAct = canCommand({ ready, handheld, hasSession: !!session });
   const mode = useSessionMode(local.runner, session, view);
-  const models = useSessionModels(local.runner, local.models, session, local.refresh, () => showWorkspaceToast({ text: "没换成" }), local.status);
+  const models = useSessionModels(local.runner, local.models, session, local.refresh, () => showWorkspaceToast({ text: "没换成" }), local.status, local.sources !== null);
   // 说一句：一按就先画出来（useSessionSend）。
   const send = useSessionSend(local.runner, session?.id ?? null, view, { kind: "topic", id: topicId });
   // 没成的不弹 toast：发消息交给输入框，批准、回答交给选项框，这页的按钮后面各自写「失败 · 重试」。
@@ -116,11 +119,16 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
     await local.refresh();
     scroll.jumpToLatest();
   };
-  // 新首页里挂在 Task 下的专题：提问、批准由 Task 管线转达（14.3），这里只一行原话加「去回答」。
-  const relayTask = embedded && session && !ended ? topic.planTaskId : null;
-  const relay = relayTask && session ? () => router.push(`/me/work/tasks/${encodeURIComponent(relayTask)}#${askAnchor(session.id)}`) : null;
-  const asking = !question ? null : relay ? <RelayLine text={questionTitle(question)} onGo={relay} />
-    : <QuestionDecision key={question.requestId} request={question} blocked={canAct ? null : awayChip(device)} expired={ended} onAnswer={answer} />;
+  const asking = !question ? null : <QuestionDecision key={question.requestId} request={question} blocked={canAct ? null : awayChip(device)} expired={ended} onAnswer={answer} />;
+  // 新首页里等本人处理的框（批准、提问）钉在输入框上方（第 54 条），和项目对话那份是同一个本机请求，答一处两处都收起。
+  const attention = attentionOf(waiting, session ? viewAsk(view, session) : null);
+  const away = canAct ? null : awayChip(device);
+  const placeholder = (kind: "approval" | "question") => <DecisionBox kind={kind} title={ATTENTION_LABEL[kind]} options={[]} onPick={() => undefined} blocked={away ?? awayChip(device)} />;
+  const pinned = !embedded ? null
+    : attention === "approval" ? (view.lastSeq && view.pending.length
+      ? <ApprovalDecision requests={view.pending} blocked={away} onDecide={(request, decision, options) => decide(request.requestId, decision, options)} />
+      : placeholder("approval"))
+    : attention === "question" ? asking ?? placeholder("question") : null;
   const toPending = async () => {
     if (!shown || !topic.planTaskId) return;
     await addTopicVersionToPending(topic.planTaskId, shown.id);
@@ -163,14 +171,14 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
 
   const state = wait ? <span className={s.tag} data-tone={waitTone(wait)}>{WAIT_LABEL[wait]}</span> : <span className={s.tag} data-tone={topic.status === "archived" ? undefined : "ver"}>{topic.status === "archived" ? "已归档" : "进行中"}</span>;
   // 输入框下面一行的右边写「执行方 · 模型」（21 条），来源在悬停里；没有时退回「来源 · 模型」、再退回云端记的。文件夹在左边。
-  const model = (session ? sessionModelText(session, local.models.find((entry) => entry.id === session.modelProfileId)?.efforts) : null) ?? ((label) => (label ? { label, title: null } : null))(runLabel(session?.run) ?? topic.run?.modelLabel ?? null);
+  const model = (session ? sessionModelText(session, local.models.find((entry) => entry.id === session.modelProfileId)?.efforts, defaultSourceLabel(local.models)) : null) ?? ((label) => (label ? { label, title: null } : null))(runLabel(session?.run) ?? topic.run?.modelLabel ?? null);
   const place = session?.workspace ? { name: shortPlace(session.workspace), title: placeText(session.workspace) } : null;
   const chat = (
     <PendingBoxes>
       <div className={s.chat}>
         <div className={s.scroll} ref={scroll.scrollRef}>
           <div ref={scroll.contentRef}>
-            {session ? <SessionTranscript entries={send.entries} agentName={HARNESS_NAME[session.agent]} canAct={canAct} onResend={(entry) => void say(entry.text).catch(() => showWorkspaceToast({ text: "没发出去" }))} onRetry={send.retry} device={device} live={running(status)} starting={status === "starting"} ended={ended} relay={relay} onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={asking} asking={question} />
+            {session ? <SessionTranscript entries={send.entries} agentName={HARNESS_NAME[session.agent]} canAct={canAct} onResend={(entry) => void say(entry.text).catch(() => showWorkspaceToast({ text: "没发出去" }))} onRetry={send.retry} draft={draft} drafted={drafted} device={device} live={running(status)} starting={status === "starting"} ended={ended} pinned={embedded} onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={embedded ? null : asking} asking={question} />
               : <div className={s.feed}><span className={s.evt}>{topic.title}</span>
                   {ready && topic.status === "active" && !embedded ? <div className={s.actions}><HeroButton variant="primary" size="sm" onPress={() => setStarting(true)}>开始</HeroButton></div> : null}
                 </div>}
@@ -179,9 +187,9 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
         </div>
         {session || !embedded
           ? <SessionComposer label={`给${topic.title}插话`} disabled={!canAct} onSend={say} mode={mode} context={contextUsage(view.context ?? session?.context)} subject={{ kind: "topic", id: topic.id }} place={place} model={model ? { label: model.label, title: model.title ?? undefined } : null}
-            models={models}
+            models={models} pinned={pinned}
             busy={running(status)} onStop={() => void local.runner.interrupt(session!.id).then(() => local.refresh()).catch(() => showWorkspaceToast({ text: "没停下" }))} dock={<PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} />} />
-          : <div className={s.composerDock}><PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} /></div>}
+          : <div className={s.composerDock}>{pinned ? <div className={s.pinned} data-testid="pinned">{pinned}</div> : null}<PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} /></div>}
       </div>
     </PendingBoxes>
   );
@@ -199,9 +207,9 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
   </>;
   // 新首页的展示区：一行页头（名字、状态、文档图标），下面是对话；点文档图标换成当前版本（手机上默认看文档）。
   if (embedded) {
-    const showDoc = reading || (handheld && !session);
+    const showDoc = side ? side.open : reading || (handheld && !session);
     // 页头的状态 chip（5.4.3）：中性、警告、等你（中性底加圆点）；不在这台电脑上又在等你时写「等你 · {电脑名}」。
-    const chipOf = wait ? stateChip(wait, "doing", !canAct && device ? awayChip(device) : null) : { text: topic.status === "archived" ? "已归档" : "进行中", tone: "neutral" as const };
+    const chipOf = attention || wait ? stateChip(attention, wait, "doing", !canAct && device ? awayChip(device) : null) : { text: topic.status === "archived" ? "已归档" : "进行中", tone: "neutral" as const };
     return (
       <div className={s.page} data-embedded="" data-testid="topic-session">
         <header className={s.embedHead}>
@@ -209,10 +217,11 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
           <b className={s.embedTitle}>{chrome.parent}{chrome.letter}<span className={s.embedName}>{topic.title}</span></b>
           <span className={s.stateChip} data-tone={chipOf.tone}>{chipOf.tone === "wait" ? <i aria-hidden /> : null}{chipOf.text}</span>
           <span className={s.exec} />
-          <HeroButton variant="ghost" size="sm" isIconOnly aria-label="当前版本" title="当前版本" data-pressed={showDoc || undefined} onPress={() => setReading(!showDoc)} data-testid="session-details"><Info {...ICON} aria-hidden /></HeroButton>
+          <HeroButton variant="ghost" size="sm" isIconOnly aria-label="当前版本" title="当前版本" data-pressed={showDoc || undefined} onPress={() => (side ? side.toggle() : setReading(!showDoc))} data-testid="session-details"><Info {...ICON} aria-hidden /></HeroButton>
           {chrome.trail}
         </header>
-        <div className={s.body} data-solo="">{showDoc ? <div className={s.paneScroll}>{doc}</div> : chat}</div>
+        <div className={s.body} data-solo="">{showDoc && !side ? <div className={s.paneScroll}>{doc}</div> : chat}</div>
+        {side ? <SideContent side={side}><div className={s.page} data-embedded="" data-side="">{doc}</div></SideContent> : null}
         {dialogs}
       </div>
     );
