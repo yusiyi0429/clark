@@ -3,7 +3,7 @@ import { FormatRegistry } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import { buildOpenApiDocument } from "../src/openapi.js";
 import {
-  CardAcceptanceCriterion, CardAgreementChangeListResponse, CardHandbackBrief, CardRelayRequest, DecideAgreementProposalRequest, LOCAL_RUNNER_CARD_AGREEMENT_PATH,
+  AcceptCardDraftsRequest, DONE_DEFINITION_LIMITS, LocalPlanCard, CardAcceptanceCriterion, CardAgreementChangeListResponse, CardHandbackBrief, CardRelayRequest, DecideAgreementProposalRequest, LOCAL_RUNNER_CARD_AGREEMENT_PATH,
   LOCAL_RUNNER_PROTOCOL, LocalAgreementProposal, LocalCardAgreementResponse, LocalPermissionBrief, LocalSendMessageRequest, LocalSessionEvent, LocalSyncBatchRequest,
   PatchCardRequest, ProjectFeedItem, SessionCommand, TaskCard, UpdateCardActionParams, WaitingItem, WorkerMark,
 } from "../src/index.js";
@@ -33,6 +33,18 @@ describe("主循环契约：卡的约定（第 60 条）", () => {
     expect(Value.Check(PatchCardRequest, { version: 3, brief: "只改交代" })).toBe(true);
     expect(Value.Check(PatchCardRequest, { version: 3, standards: ["第一条\n第二条"] })).toBe(false);
     expect(Value.Check(PatchCardRequest, { version: 3, standards: [] })).toBe(false);
+  });
+
+  it("完成标准放宽到每条 300 字、整份 2000 字：卡、草稿、派活单、执行事项一致", () => {
+    expect(DONE_DEFINITION_LIMITS).toEqual({ line: 300, total: 2000 });
+    const long = "看得见的结果，拿什么证明".repeat(25).slice(0, 300);
+    expect(Value.Check(PatchCardRequest, { version: 1, standards: [long] })).toBe(true);
+    expect(Value.Check(PatchCardRequest, { version: 1, standards: [`${long}多`] })).toBe(false);
+    const whole = Array.from({ length: 6 }, () => long).join("\n");
+    expect(Value.Check(LocalPlanCard, { title: "初查", brief: "", doneDefinition: whole, criterionIndex: null, role: null, modelTier: "normal", why: null })).toBe(true);
+    expect(Value.Check(AcceptCardDraftsRequest, { drafts: [{ id: uuid, doneDefinition: whole }] })).toBe(true);
+    expect(Value.Check(AcceptCardDraftsRequest, { drafts: [{ id: uuid, doneDefinition: "x".repeat(2001) }] })).toBe(false);
+    expect(Value.Check(LocalAgreementProposal, { standards: [long], reason: "r" })).toBe(true);
   });
 
   it("修改记录：谁、什么时候、改前改后、原因", () => {
