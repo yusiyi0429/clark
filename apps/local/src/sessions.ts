@@ -879,7 +879,13 @@ export class SessionManager {
       // 只有工作目录和项目另外绑的文件夹算范围内（11/11）：本人允许过的别的文件夹也算工作区外（「自动」问；「全部放行」不问，有兜底规矩）。
       allowedRoots: () => [
         ...(this.d.folders.isAllowed(folder) ? (rec.workspace?.kind === "worktree" ? [rec.workspace.path, rec.workspace.folder] : [rec.cwd]) : []),
-        ...this.extraDirs(rec),
+        // 项目绑的全部文件夹（绑了工作目录的上级时，上级里别的子文件夹也算；交给执行方的 extraDirs 去掉了这种重复）
+        ...(rec.subject.projectId ? this.d.folders.projectFolders(rec.subject.projectId) : []),
+      ],
+      // 只读的步骤照收紧以前的范围（11/11：只收紧写，读照旧放）：工作目录加本人允许的所有文件夹
+      readRoots: () => [
+        ...(this.d.folders.isAllowed(folder) ? [rec.workspace?.kind === "worktree" ? rec.workspace.path : rec.cwd] : []),
+        ...this.d.folders.list().map((f) => f.path),
       ],
       // 卡在自己的工作树里：「自动」「自动接受改文件」只在工作树里自己放行（规则在 pathGuard 的 modeAllows）
       autoAllowRoot: rec.subject.kind === "card" && rec.workspace?.kind === "worktree" ? rec.workspace.path : null,

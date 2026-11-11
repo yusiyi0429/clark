@@ -32,6 +32,8 @@ export interface AgentLaunch {
   feishuSkillsDir?: string | null;
   /** 本会话允许的范围（本人允许的文件夹，加上还算数的工作目录），每次权限请求现查，据此标出越界路径。 */
   allowedRoots(): string[];
+  /** 只读的步骤按它算范围（本人允许的所有文件夹，11/11：只收紧写，读照旧放）。 */
+  readRoots?(): string[];
   /** 卡在自己的工作树里做时是工作树的根：「自动」「自动接受改文件」只在这里面自己放行（pathGuard 的 modeAllows）。别的会话为 null。 */
   autoAllowRoot: string | null;
   /**

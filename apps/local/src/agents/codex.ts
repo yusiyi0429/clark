@@ -519,7 +519,7 @@ export class CodexAdapter implements AgentAdapter {
       return fail("agent_incompatible", `Codex 没开出会话：${e instanceof Error ? e.message : String(e)}`);
     }
     this.threads.set(launch.sessionId, threadId);
-    const scope: PathScope & Pick<AgentLaunch, "beforeWrite"> = { cwd: launch.cwd, home: homeDir(), allowedRoots: launch.allowedRoots, toolReads: launch.toolReads, extraDirs: launch.extraDirs, covered: launch.covered, beforeWrite: launch.beforeWrite };
+    const scope: PathScope & Pick<AgentLaunch, "beforeWrite"> = { cwd: launch.cwd, home: homeDir(), allowedRoots: launch.allowedRoots, readRoots: launch.readRoots, toolReads: launch.toolReads, extraDirs: launch.extraDirs, covered: launch.covered, beforeWrite: launch.beforeWrite };
     return new CodexRun(rpc, threadId, version, scope, launch.autoAllowRoot, launch.permissionMode, model, launch.run.effort ?? null, new Set(launch.allowedTools));
   }
 }

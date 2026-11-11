@@ -11,8 +11,10 @@ import { TOOL_SERVER_PREFIX } from "../customTools.js";
 export interface PathScope {
   cwd: string;
   home: string;
-  /** 本会话允许的范围：本人允许的文件夹，加上本会话的工作目录（工作目录所在的文件夹被移除后就不算）。 */
+  /** 本会话允许的范围：本人允许的文件夹，加上本会话的工作目录（工作目录所在的文件夹被移除后就不算）。写、删、挪按它。 */
   allowedRoots(): string[];
+  /** 只读的步骤（读文件、列目录、搜索，不写不删不挪的命令）按它算范围（11/11：只收紧写，读照旧放）；不给就和 allowedRoots 一样。 */
+  readRoots?(): string[];
   /** 本人在连接页加的工具（mcp__tool-…）里哪些是读的（预设的读工具名单）；不给就是都不算读。 */
   toolReads?(tool: string): boolean;
   /** 项目另外绑的文件夹（设计 17.2 第 46 条），每次现查：卡在工作树里做时，这些地方照「不在工作树里」的规矩放行（modeAllows）。 */
@@ -138,7 +140,7 @@ function shellCandidates(cmd: string, bash: boolean, patterns?: Set<string>): st
 
 /** 这一步要碰的、允许范围外的路径（原样，给人看）。 */
 export function outsidePaths(tool: string, input: Record<string, unknown>, scope: PathScope, hint?: unknown): string[] {
-  return collect(tool, input, scope, insideAny(scope.allowedRoots()), hint);
+  return collect(tool, input, scope, insideAny(rootsFor(tool, input, scope)), hint);
 }
 
 function collect(tool: string, input: Record<string, unknown>, scope: PathScope, inside: Inside, hint?: unknown): string[] {
@@ -155,6 +157,16 @@ function collect(tool: string, input: Record<string, unknown>, scope: PathScope,
     if (out.length >= MAX_PATHS) break;
   }
   return out;
+}
+
+/** 只读的工具。 */
+const READ_TOOLS = new Set(["Read", "Glob", "Grep", "LS"]);
+/** 这一步按哪个范围算：只读的（读的工具；不写不删不挪、不装不联网的命令）按 readRoots，别的按 allowedRoots。 */
+function rootsFor(tool: string, input: Record<string, unknown>, s: PathScope): string[] {
+  if (!s.readRoots) return s.allowedRoots();
+  const cmd = String(input.command ?? "");
+  const readOnly = READ_TOOLS.has(tool) || (SHELL_TOOLS.has(tool) && !WRITES.test(cmd) && !REWRITES.test(cmd) && !RISKY_COMMAND.test(cmd));
+  return readOnly ? s.readRoots() : s.allowedRoots();
 }
 
 /** 卡在自己的工作树里做时不用问就放行的读写工具（路径都在工作树里才放行）。 */
@@ -239,7 +251,7 @@ function touchesProtected(cmd: string): boolean {
 export function autoAllowed(tool: string, input: Record<string, unknown>, scope: PathScope, hint?: unknown): boolean {
   if (tool.startsWith("mcp__tianshu__")) return /^mcp__tianshu__(get|list)_/.test(tool);
   if (isCustomTool(tool)) return Boolean(scope.toolReads?.(tool));
-  const inside = insideAny(scope.allowedRoots());
+  const inside = insideAny(rootsFor(tool, input, scope));
   if (SHELL_TOOLS.has(tool)) {
     const cmd = input.command;
     return typeof cmd === "string" && !RISKY_COMMAND.test(cmd) && !larkWrites(cmd) && binsInstalled(cmd, [scope.cwd, ...scope.allowedRoots()])
@@ -268,7 +280,7 @@ function mustAsk(tool: string, input: Record<string, unknown>, scope: PathScope,
   } else if ((FILE_FIELDS[tool] ?? []).some((f) => typeof input[f] === "string" && PROTECTED.test(input[f] as string))) {
     return true;
   }
-  return collect(tool, input, scope, insideAny(scope.allowedRoots()), hint).length > 0;
+  return collect(tool, input, scope, insideAny(rootsFor(tool, input, scope)), hint).length > 0;
 }
 
 /** gh 只读的：看、列、查状态、搜（gh api 只发 GET、不带字段）。别的（pr create、pr merge、release create、issue comment、api 发 POST…）都算写。 */
@@ -364,10 +376,10 @@ export function modeAllows(
       // 删、挪、写的命令：碰的地方都有兜底（留了一份的文件夹，11/11 ADR 0039）也放行
       || (Boolean(area.covered) && !noLossAsks(tool, input, area)));
   if (!worktree) return pass(scope, false);
-  if (pass({ ...scope, allowedRoots: () => [worktree] }, true)) return true;
+  if (pass({ ...scope, allowedRoots: () => [worktree], readRoots: undefined }, true)) return true;
   const extras = scope.extraDirs?.() ?? [];
   if (!extras.length || (SHELL_TOOLS.has(tool) && REWRITES.test(String(input.command ?? "")))) return false;
-  return pass({ ...scope, allowedRoots: () => [worktree, ...extras] }, false);
+  return pass({ ...scope, allowedRoots: () => [worktree, ...extras], readRoots: undefined }, false);
 }
 
 /** Claude Code 放行规则里的路径：//c/x 是绝对路径（Windows 是 C:\x），~/ 是主目录，/x 是项目根下，其余相对工作目录。 */
