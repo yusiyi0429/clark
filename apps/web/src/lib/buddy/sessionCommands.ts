@@ -31,6 +31,16 @@ export async function runSessionCommand(runner: LocalRunner, sessions: TLocalSes
   }
 }
 
+/** 认领这台电脑上的命令、照着调本机、报结果。登记了「再改一轮」「我来补」的那台电脑上也马上调一次（不等下一轮）。 */
+export async function runClaimedCommands(deviceId: string, local: Pick<LocalRunnerState, "runner" | "sessions" | "refresh">): Promise<void> {
+  const commands = await claimSessionCommands(deviceId);
+  for (const entry of commands) {
+    const outcome = await runSessionCommand(local.runner, local.sessions, entry);
+    if (outcome) await reportSessionCommand(entry.id, { deviceId, ...outcome }).catch(() => undefined);
+  }
+  if (commands.length) await local.refresh();
+}
+
 export function useSessionCommands(local: LocalRunnerState, enabled: boolean) {
   const deviceId = enabled ? local.status?.deviceId ?? null : null;
   const ref = useRef(local);
@@ -41,14 +51,8 @@ export function useSessionCommands(local: LocalRunnerState, enabled: boolean) {
     const tick = async () => {
       if (busy || document.visibilityState !== "visible") return;
       busy = true;
-      try {
-        const commands = await claimSessionCommands(deviceId);
-        for (const entry of commands) {
-          const outcome = await runSessionCommand(ref.current.runner, ref.current.sessions, entry);
-          if (outcome) await reportSessionCommand(entry.id, { deviceId, ...outcome }).catch(() => undefined);
-        }
-        if (commands.length) await ref.current.refresh();
-      } catch { /* 认领不到（接口没上、断网）下一次再来 */ } finally { busy = false; }
+      try { await runClaimedCommands(deviceId, ref.current); }
+      catch { /* 认领不到（接口没上、断网）下一次再来 */ } finally { busy = false; }
     };
     void tick();
     const timer = window.setInterval(() => void tick(), STOP_POLL_MS);

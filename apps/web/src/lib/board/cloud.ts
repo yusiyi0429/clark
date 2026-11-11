@@ -10,6 +10,7 @@ import type {
   TProject, TProjectDetailResponse, TProjectFeedResponse, TProjectGoal, TProjectListResponse, TProjectPipelineResponse, TUpdateProjectRequest,
   TArchivedSubSessionListResponse, TSubSessionKind, TUpdateSubSessionRequest,
   TConversationModelChoice, TConversationModelListResponse, TProjectPipelineModel,
+  TCardAgreementChangeListResponse, TCardRelayRequest,
   THandoverSecretFinding, TProjectTransfer, TUpdateProjectTransferRequest, TConversationHistory, TProjectBoardResponse, TProjectGoalChangedItem,
 } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
@@ -105,6 +106,15 @@ const handback = (cardId: string, handbackId: string) => ({ path: { id: cardId, 
 export const overrule = (cardId: string, handbackId: string, reason: string) =>
   unwrap(browserApi.POST("/api/me/cards/{id}/handbacks/{handbackId}/overrule", { params: handback(cardId, handbackId), body: { reason } }));
 export const retryAcceptance = (cardId: string, handbackId: string) => unwrap(browserApi.POST("/api/me/cards/{id}/handbacks/{handbackId}/retry", { params: handback(cardId, handbackId) }));
+/** 登记「再改一轮」「我来补」（主循环第 61、62 条）：那台电脑上开着的网页认领后送给执行方；回卡的详情。 */
+export const relayHandback = (cardId: string, handbackId: string, body: TCardRelayRequest) =>
+  unwrap<TCardDetailResponse>(browserApi.POST("/api/me/cards/{id}/handbacks/{handbackId}/relay", { params: handback(cardId, handbackId), body }) as Promise<Result<TCardDetailResponse>>);
+/** 卡的约定的修改记录，新的在前（主循环第 60 条）。 */
+export const listAgreementChanges = (cardId: string) =>
+  unwrap<TCardAgreementChangeListResponse>(browserApi.GET("/api/me/cards/{id}/agreement-changes", { params: id(cardId) }) as Promise<Result<TCardAgreementChangeListResponse>>).then((data) => data.changes);
+/** 执行方提的改约定：改成这样 / 不改；回卡的详情。 */
+export const decideProposal = (cardId: string, proposalId: string, decision: "accept" | "reject") =>
+  unwrap<TCardDetailResponse>(browserApi.POST("/api/me/cards/{id}/agreement-proposals/{proposalId}/decision", { params: { path: { id: cardId, proposalId } }, body: { decision } }) as Promise<Result<TCardDetailResponse>>);
 export const markReturned = (cardId: string, handbackId: string) => unwrap(browserApi.POST("/api/me/cards/{id}/handbacks/{handbackId}/returned", { params: handback(cardId, handbackId) }));
 
 // ── worker（跨 Task）──

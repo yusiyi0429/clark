@@ -9,7 +9,6 @@
 import type { TLocalChangedFile } from "@warmap/contracts";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Info, X } from "lucide-react";
 import type { TCardHandbackView, TLocalQuestionAnswerRequest, TLocalRunView } from "@warmap/contracts";
 import { HeroButton } from "@/components/HeroButton";
@@ -20,7 +19,7 @@ import { useSessionEvents } from "@/lib/local/useSessionEvents";
 import { contextUsage, localWait, planStep, running, type SessionView } from "@/lib/local/sessionView";
 import { startCard } from "@/lib/local/start";
 import { STAGES, WAIT_LABEL, boardCards, canCommand, circled, deliverableLabel, isAgentCard, waitTone, type CardStage, type CardWait } from "@/lib/board/cards";
-import { overrule, retryAcceptance } from "@/lib/board/cloud";
+import { overrule, relayHandback, retryAcceptance } from "@/lib/board/cloud";
 import { cardRole } from "@/lib/team/roles";
 import { useAutoReturn } from "@/lib/board/useAutoReturn";
 import { showWorkspaceToast } from "@/lib/toast";
@@ -33,7 +32,7 @@ import { useCardDetail, type CardDetail } from "./useCardDetail";
 import { SourceWordIssues, SourceWords } from "./SourceWords";
 import { MergeAction } from "@/components/work/MergeAction";
 import { ApprovalDecision, QuestionDecision, awayChip } from "@/components/work/decisions";
-import { MergeDecision, SessionBlocked, answeredOf } from "@/components/home/TaskDecisions";
+import { HandbackDecision, MergeDecision, useRelayNow } from "@/components/home/TaskDecisions";
 import { ATTENTION_LABEL, attentionOf, isMergeLater, viewAsk, type Attention } from "@/lib/home/attention";
 import { DecisionBox, FailedLine, PendingBoxes, PendingDock, failureOf, type Failure } from "@/components/work/DecisionBox";
 import { useViewChrome } from "@/components/home/view";
@@ -72,7 +71,6 @@ export function stateChip(attention: Attention | null, rest: CardWait | null, st
  */
 export function CardSession({ cardId, embedded = false, waiting }: { cardId: string; embedded?: boolean; waiting?: Attention | null }) {
   const chrome = useViewChrome();
-  const router = useRouter();
   /** 看结果还是对话；没选过时，子会话不在这台电脑上（手机、别的电脑、还没开）先看摘要（5.4.3）。 */
   const [details, setDetails] = useState<boolean | null>(null);
   const side = useSideDetail();
@@ -121,6 +119,9 @@ export function CardSession({ cardId, embedded = false, waiting }: { cardId: str
 
   // 说一句：一按就先画出来（useSessionSend）。
   const send = useSessionSend(local.runner, session?.id ?? null, view, { kind: "card", id: cardId });
+  // 等你补的「我来补」（第 61 条）：输入框填好、聚焦；这时发出的那一句走登记（…/relay），登记完马上在这台电脑上送出去。
+  const [supply, setSupply] = useState<{ handbackId: string; text: string; nonce: number } | null>(null);
+  const relayNow = useRelayNow();
 
   if (missing) return <div className={s.gone}><p>没有这件事项</p><Link href="/me/month">回到本月</Link></div>;
   if (!detail) return <div className={s.page} aria-busy />;
@@ -133,7 +134,7 @@ export function CardSession({ cardId, embedded = false, waiting }: { cardId: str
   const card = boardCards([item], session ? [session] : [])[0]!;
   const wait = session ? localWait(view) ?? card.wait : card.wait;
   // 等本人处理的框（第 54 条）：首页数据给的（左栏同一份），这台电脑上有会话时按事件流再对一遍。没给时照卡的标记。
-  const cloudWaiting = waiting !== undefined ? waiting : card.wait === "approval" ? "approval" : card.wait === "blocked" ? "verdict" : null;
+  const cloudWaiting = waiting !== undefined ? waiting : card.wait === "approval" ? "approval" : card.wait === "blocked" ? "verdict" : card.wait === "needs_person" ? "needs_person" : null;
   const attention = attentionOf(cloudWaiting, session ? viewAsk(view, session) : null);
   const stage = card.stage;
   const taskId = item.planTaskId;
@@ -159,6 +160,15 @@ export function CardSession({ cardId, embedded = false, waiting }: { cardId: str
     scroll.jumpToLatest();
   };
   const say = send.say;
+  const openPane = () => (side ? side.toggle(true) : setDetails(true));
+  const onSend = async (text: string, files: File[]) => {
+    if (!supply) return say(text, files);
+    await relayHandback(cardId, supply.handbackId, { kind: "supply", text });
+    await relayNow();
+    setSupply(null);
+    await refresh();
+    return true;
+  };
   const control = async (action: "interrupt" | "kill") => {
     if (!session) return;
     await local.runner[action](session.id);
@@ -184,24 +194,25 @@ export function CardSession({ cardId, embedded = false, waiting }: { cardId: str
       ? <ApprovalDecision requests={view.pending} blocked={away} onDecide={(request, decision, options) => decide(request.requestId, decision, options)} />
       : placeholder("approval"))
     : attention === "question" ? asking ?? placeholder("question")
-    : attention === "verdict" ? <SessionBlocked key={handback?.id ?? "blocked"} cardId={item.id} handback={handback} blocker={item.blocker?.reason ?? null} canSay={canAct}
-      onSay={(text) => say(text)} onStop={async () => { if (canAct && session && running(status)) { await local.runner.kill(session.id); await local.refresh(); } }}
-      onChanged={() => void refresh()} onGone={() => router.push("/me/work")} />
+    : attention === "verdict" || attention === "needs_person" ? (handback ? <HandbackDecision key={handback.id} cardId={item.id} handback={handback} here={canAct}
+      onFill={canAct && session ? (text) => setSupply({ handbackId: handback.id, text, nonce: Date.now() }) : undefined}
+      onLook={openPane} onEdit={openPane} onChanged={() => void refresh()} /> : null)
     : <MergeDecision session={session} title={item.title} onChanged={() => void refresh()} />;
-  // 答过的受阻、点了先不合的：对话最后收成一行。
-  const blockedAnswer = embedded && attention !== "verdict" && handback ? answeredOf(`blocked:${handback.id}`) : null;
+  // 答过的等你补、受阻（就到这里、登记送到了），点了先不合的：对话最后收成一行。
+  const handled = embedded && attention !== "verdict" && attention !== "needs_person" && handback;
+  const blockedAnswer = !handled ? null : handback.passedWithGap ? "就到这里" : handback.relay?.state === "delivered" ? (handback.relay.kind === "return" ? "再改一轮" : "我来补") : null;
   const ws = session?.workspace;
   const mergeLater = embedded && attention !== "merge" && !!session && ws?.kind === "worktree" && !!ws.needsMerge && !ws.mergedCommit && isMergeLater(session.id);
   const settled = (title: string, answerText: string) => <DecisionBox kind="question" title={title} options={[]} onPick={() => undefined} resolved={answerText} />;
-  const tail = !embedded ? asking : blockedAnswer ? settled("受阻", blockedAnswer) : mergeLater ? settled(`「${item.title}」无法合回`, "先不合") : null;
+  const tail = !embedded ? asking : blockedAnswer && handback ? settled(handback.headline ?? "验收", blockedAnswer) : mergeLater ? settled(`「${item.title}」无法合回`, "先不合") : null;
   const dock = <PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} />;
   // 新首页里输入框只在这台电脑上跑着这张卡时出（别处看摘要）；老页面照旧灰着。
   // 输入框下面一行的右边写「执行方 · 模型」（21 条），来源在悬停里：这台电脑上的会话报的（实际跑的优先），没有时退回「来源 · 模型」、再退回云端记的。文件夹在左边。
   const model = (session ? sessionModelText(session, local.models.find((entry) => entry.id === session.modelProfileId)?.efforts, defaultSourceLabel(local.models)) : null) ?? ((label) => (label ? { label, title: null } : null))(runLabel(session?.run) ?? run?.modelLabel ?? item.card?.model?.label ?? null);
   const place = session?.workspace ? { name: shortPlace(session.workspace), title: placeText(session.workspace) } : null;
   const composer = agent && (session || !embedded)
-    ? <SessionComposer label={`给${item.title}插话`} disabled={!canAct} onSend={say} mode={mode} dock={dock} context={contextUsage(view.context ?? session?.context)} subject={{ kind: "card", id: cardId }} place={place} model={model ? { label: model.label, title: model.title ?? undefined } : null}
-      models={models} pinned={pinned}
+    ? <SessionComposer label={`给${item.title}插话`} disabled={!canAct} onSend={onSend} mode={mode} dock={dock} context={contextUsage(view.context ?? session?.context)} subject={{ kind: "card", id: cardId }} place={place} model={model ? { label: model.label, title: model.title ?? undefined } : null}
+      models={models} pinned={pinned} fill={supply ? { text: supply.text, nonce: supply.nonce } : null}
       busy={sessionRunning} onStop={() => void control("interrupt").catch(() => showWorkspaceToast({ text: "没停下" }))} />
     : <div className={s.composerDock}>{pinned ? <div className={s.pinned} data-testid="pinned">{pinned}</div> : null}{dock}</div>;
   const chat = (

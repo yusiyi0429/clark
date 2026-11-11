@@ -67,17 +67,17 @@ describe("Task 管线里的验收行（第 4.5 条）", () => {
     expect(text(onThis.html)).toContain("交回以后卡又改过");
   });
 
-  it("受阻：「按这个改（推荐）/ 我去看看 / 仍然通过」，改法和原话对不上的几处写在框里；不在这台电脑上没有「按这个改」", () => {
+  it("受阻（主循环第 62 条）：「再改一轮（推荐）/ 我去看看 / 改完成标准 / 就到这里」，验收意见收起；不在这台电脑上选项一个不少", () => {
     const blocked: FeedItem = { kind: "card_blocked", id: "b1", at: "2026-11-07T05:00:00Z", cardId: CARD, title: "greet", handbackId: HANDBACK, fix: "补上 404 的处理",
       sourceWordIssues: [{ quote: "别动登录", kind: "extra", reason: "改了登录页" }, { quote: "要有 404", kind: "missing", reason: "没处理 404" }] };
     const here = session({});
     const onThis = text(render([blocked], [{ ...passedWorker(), session: here }], [here]).html);
-    expect(onThis).toMatch(/「greet」受阻.*补上 404 的处理.*按这个改.*推荐.*我去看看.*仍然通过/);
-    // 原话对不上的几处（16.8）：每条一行，原话、「多做了 / 漏了」、为什么。
-    expect(onThis).toMatch(/别动登录 多做了 改了登录页 .*要有 404 漏了 没处理 404/);
+    expect(onThis).toMatch(/验收两次没过.*验收意见.*再改一轮.*推荐.*我去看看.*改完成标准.*就到这里/);
+    // 改法、原话对不上的几处都收在「验收意见」里，默认不展开。
+    expect(onThis).not.toContain("补上 404 的处理");
+    expect(onThis).not.toContain("仍然通过");
     const elsewhere = text(render([blocked], [passedWorker()]).html);
-    expect(elsewhere).not.toContain("按这个改");
-    expect(elsewhere).toMatch(/我去看看.*仍然通过/);
+    expect(elsewhere).toMatch(/再改一轮.*推荐.*我去看看.*改完成标准.*就到这里/);
   });
 
   it("约定都达到：问「约定 3 条都达到了，交给认可人？」，交给认可人推荐、先不交、自己说", () => {

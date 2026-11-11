@@ -5,7 +5,7 @@
  * 两份数据并成一个：
  * - 批准、提问以跑它的那台电脑为准。在这台电脑上的会话看本机（会话还活着才算：停了、退了还挂着的批准是失效的，对话里收成「已失效」）；
  *   别的电脑上的照云端（那台电脑报上来的）。
- * - 受阻只有云端知道（连续两次验收没过）；这台电脑上的会话又在跑了（补了一句、按改法在改）时不算在等本人。
+ * - 受阻、等你补只有云端知道（连续两次验收没过；验收员判了有几条要本人补）；这台电脑上的会话又在跑了（补了一句、按改法在改）时不算在等本人。
  * - 合回看本机的工作树（没合、本机报 needsMerge），本机没有这个会话时照云端；本人点了「先不合」的记在这台浏览器上，不再算等你。
  */
 import type { TLocalSessionStatus } from "@warmap/contracts";
@@ -36,7 +36,7 @@ export function attentionOf(cloud: Attention | null, local: LocalAsk | null): At
   if (!local) return cloud;
   const here = localAsk(local);
   if (here) return here;
-  if (cloud === "verdict" && !(local.status && ALIVE.has(local.status))) return "verdict";
+  if ((cloud === "verdict" || cloud === "needs_person") && !(local.status && ALIVE.has(local.status))) return cloud;
   if (local.merge === "needs" || (cloud === "merge" && local.merge === null)) return "merge";
   return null;
 }

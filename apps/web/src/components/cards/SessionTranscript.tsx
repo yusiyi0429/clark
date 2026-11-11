@@ -492,7 +492,7 @@ export function useModelChangedRefresh(entries: SessionEntry[], refresh: () => u
   useEffect(() => { if (changed !== null) void refresh(); }, [changed, refresh]);
 }
 
-export function SessionComposer({ label, disabled, onSend, dock, pinned, subject, mode, place, model, models, context, busy = false, onStop }: {
+export function SessionComposer({ label, disabled, onSend, dock, pinned, subject, mode, place, model, models, context, busy = false, onStop, fill }: {
   /** 发一句（useSessionSend.say）：附件由它传云端（POST /api/me/sub-sessions/:kind/:id/attachments）再交给本机。 */
   label: string; disabled: boolean; onSend: (text: string, files: File[]) => Promise<boolean>; dock?: ReactNode;
   subject: TSessionAttachment["subject"];
@@ -508,11 +508,13 @@ export function SessionComposer({ label, disabled, onSend, dock, pinned, subject
   onStop?: () => void;
   /** 等本人处理的框（第 54 条）：钉在输入框上方。 */
   pinned?: ReactNode;
+  /** 往框里填一段、聚焦（等你补的「我来补」）：nonce 变了才填。 */
+  fill?: { text: string; nonce: number } | null;
 }) {
   return (
     <div className={s.composerDock}>
       {pinned ? <div className={s.pinned} data-testid="pinned">{pinned}</div> : null}
-      <InputBar placeholder="" label={label} disabled={disabled} dock={dock} busy={busy} interruptible onStop={onStop} draftKey={`tianshu-home-draft-v1:${subject.kind}:${subject.id}`}
+      <InputBar placeholder="" label={label} disabled={disabled} dock={dock} busy={busy} interruptible onStop={onStop} draftKey={`tianshu-home-draft-v1:${subject.kind}:${subject.id}`} fill={fill}
         footer={{
           left: place ? <FolderText name={place.name} title={place.title} /> : null,
           right: <>{context ? <ContextRing {...context} /> : null}{model && models?.rows.length && !disabled ? <ModelPanel label={model.label} title={model.title} rows={models.rows} onPick={models.onPick} busy={models.busy} testId="session-model" />

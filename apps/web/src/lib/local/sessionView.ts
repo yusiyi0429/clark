@@ -167,8 +167,9 @@ export function foldEvent(view: SessionView, event: TLocalSessionEvent): Session
       return next;
     case "verdict": {
       // 本机验收员的结论（验收会话和被验的卡的会话各一条）。
-      const text = `验收${event.passed ? "过了" : event.blocked ? "未通过，受阻" : "未通过"}：${event.summary}`;
-      next.entries = [...view.entries, { kind: "notice", ...base, level: event.passed ? "info" : "warn", text }];
+      // 等本人补（主循环第 61 条）不算没过。
+      const text = event.needsPerson && !event.passed ? `等你补：${event.summary}` : `验收${event.passed ? "过了" : event.blocked ? "未通过，受阻" : "未通过"}：${event.summary}`;
+      next.entries = [...view.entries, { kind: "notice", ...base, level: event.passed || event.needsPerson ? "info" : "warn", text }];
       next.lastActivity = { at: event.at, text };
       return next;
     }
