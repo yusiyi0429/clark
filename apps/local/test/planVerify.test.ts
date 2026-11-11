@@ -221,6 +221,42 @@ describe("规划员和验收员", { timeout: 30_000 }, () => {
     }
   });
 
+  it("要本人补（主循环第 61 条）：有一条要本人补就是等本人补，不计连续没过、不受阻、不给改法；没写 fixBy 的按执行方补", async () => {
+    const h = await setup(3);
+    try {
+      // 已经连续没过 1 次：这次要是算没过就是受阻
+      h.cloud.setBrief(() => ({ status: 200, body: { markdown: "# 验收交代", criteria: CRITERIA, role: REVIEWER, failStreak: 1 } }));
+      h.fake({ verdict: {
+        summary: "能登录了，截图要你登录后台截一张",
+        criteria: [{ index: 1, verdict: "unmet", reason: "少一个按钮", fix: "补上按钮" }, { index: 2, verdict: "needs_person", reason: "后台要本人登录", fix: "登录后台截一张图贴回来", fixBy: "worker" }],
+      } });
+      const a = await h.open(h.card("A"));
+      await h.allow(a.id);
+      await h.waitStatus(a.id, "idle");
+      await h.mcp(a.id, "hand_back", { summary: "做完了", criteria: [{ index: 1, result: "met", evidence: "hello.txt" }, { index: 2, result: "needs_person", evidence: "后台要登录", need: "登录后台截一张图贴回来" }] });
+      const v = await until(async () => (await h.verifies())[0]);
+      await h.waitStatus(v.id, "done");
+      const ev = h.events(a.id).find((e) => e.type === "verdict");
+      expect(ev).toMatchObject({ passed: false, needsPerson: true, failStreak: 1, blocked: false, returnText: null, summary: "能登录了，截图要你登录后台截一张" });
+      expect(ev.criteria.map((c: any) => [c.verdict, c.fixBy])).toEqual([["unmet", "worker"], ["needs_person", "person"]]);
+      const synced = await until(() => h.cloud.items.find((i) => i.type === "verdict"));
+      expect(synced.data.criteria.map((c: any) => c.fixBy)).toEqual(["worker", "person"]);
+      // 达到的不带 fixBy
+      h.fake({ verdict: PASSING });
+      const b = await h.open(h.card("B"));
+      await h.allow(b.id);
+      await h.waitStatus(b.id, "idle");
+      await h.handBack(b.id);
+      const vb = await until(async () => (await h.verifies()).find((x) => x.subject.cardId === "B"));
+      await h.waitStatus(vb.id, "done");
+      const pass = h.events(b.id).find((e) => e.type === "verdict");
+      expect(pass.needsPerson).toBeUndefined();
+      expect(pass.criteria.every((c: any) => !("fixBy" in c))).toBe(true);
+    } finally {
+      await h.t.cleanup();
+    }
+  });
+
   it("本人原话（16.8）：带原话的验收交代能通过校验、原样作第一句话（本机不再拼一遍）；标准全过但漏了原话里明说的，判没过、写明是哪句；quote 要是原话；规划员的派活单带原话片段", async () => {
     const h = await setup(3);
     try {

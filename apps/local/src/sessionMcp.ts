@@ -119,18 +119,19 @@ const PROPOSE_PLAN = {
 };
 const SUBMIT_VERDICT = {
   name: "submit_verdict",
-  description: "交验收结论（只交一次）：每条完成标准判一次（index 从 1 起，条数照交代），met 达到、partial 部分、unmet 没达到，写理由（reason）、依据（evidence），没达到的写怎么补（fix）；标准以外的建议放 beyondScope；交代里有「本人原话」时再对一遍原话，对不上的写 sourceWordIssues；summary 一句结论。",
+  description: "交验收结论（只交一次）：每条完成标准判一次（index 从 1 起，条数照交代），met 达到、partial 部分、unmet 没达到、needs_person 要本人补（执行方标了、而且确实只有本人能做），写理由（reason）、依据（evidence），没达到的写怎么补（fix）和谁来补（fixBy）；标准以外的建议放 beyondScope；交代里有「本人原话」时再对一遍原话，对不上的写 sourceWordIssues；summary 一句人话：卡在哪、要谁做什么，不写行号、不复述标准。",
   inputSchema: {
     type: "object",
     properties: {
-      summary: { type: "string" },
+      summary: { type: "string", description: "一句人话：卡在哪、要谁做什么；不写行号，不复述标准原文" },
       criteria: {
         type: "array",
         items: {
           type: "object",
           properties: {
-            index: { type: "integer", minimum: 1 }, verdict: { type: "string", enum: ["met", "partial", "unmet"] },
+            index: { type: "integer", minimum: 1 }, verdict: { type: "string", enum: ["met", "partial", "unmet", "needs_person"] },
             reason: { type: "string" }, evidence: { type: "string" }, fix: { type: "string" },
+            fixBy: { type: "string", enum: ["worker", "person"], description: "没达到时谁来补：worker 执行方、person 本人（needs_person 一定是 person）；达到的不写" },
           },
           required: ["index", "verdict", "reason"],
         },

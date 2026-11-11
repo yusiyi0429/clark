@@ -2281,8 +2281,10 @@ export class SessionManager {
     if (rec.subject.kind !== "verify") throw new SessionError("validation", "只有验收员交结论");
     if (rec.submitted) throw new SessionError("conflict", "这次交回已经交过结论了，不能再交");
     const n = rec.criteria.length;
+    // fixBy（主循环第 61 条）：没达到的每条都带，没写的按执行方补；needs_person 一定是本人补；达到的不带
     const judged = input.criteria.map((c: any) => ({
       index: c?.index, verdict: c?.verdict, reason: String(c?.reason ?? "").trim(), evidence: textOrNull(c?.evidence), fix: textOrNull(c?.fix),
+      ...(c?.verdict === "met" ? {} : { fixBy: c?.verdict === "needs_person" ? "person" : c?.fixBy === "person" ? "person" : "worker" }),
     })) as TLocalVerdictCriterion[];
     judged.sort((a, b) => a.index - b.index);
     const seen = judged.map((c) => c.index);
@@ -2311,16 +2313,20 @@ export class SessionManager {
     rec.passed = verdict.passed;
     this.sync(rec, { type: "verdict", data: verdict });
     if (verdict.passed) void this.releaseWaiting(); // 文件夹里做的卡验收过了就算做完
-    const failStreak = verdict.passed ? 0 : rec.failStreak + 1;
-    const blocked = failStreak >= reworkRounds(this.modeOf(rec)); // 受阻前返工几轮：自动、设预算 2，无上限 3
+    // 等本人补（主循环第 61 条，规则同云端 CardHandbackOutcome）：有一条要本人补，不算没过、不计连续没过、不受阻，也不给改法（不自动送回）
+    const needsPerson = !verdict.passed && judged.some((c) => c.verdict === "needs_person" || c.fixBy === "person");
+    const failStreak = verdict.passed ? 0 : needsPerson ? rec.failStreak : rec.failStreak + 1;
+    const blocked = !needsPerson && failStreak >= reworkRounds(this.modeOf(rec)); // 受阻前返工几轮：自动、设预算 2，无上限 3
     const event = {
       type: "verdict" as const, handbackKey: rec.subject.handbackKey!, passed: verdict.passed, summary: verdict.summary, criteria: judged,
-      beyondScope: verdict.beyondScope, failStreak, blocked, returnText: verdict.passed ? null : returnText(rec.criteria, judged, issues),
+      beyondScope: verdict.beyondScope, failStreak, blocked, returnText: verdict.passed || needsPerson ? null : returnText(rec.criteria, judged, issues),
+      ...(needsPerson ? { needsPerson } : {}),
     };
     this.emit(rec, event);
     const card = rec.parentId ? this.records.get(rec.parentId) : undefined;
     if (card) this.emit(card, event);
     if (verdict.passed) return "结论已交：过了。";
+    if (needsPerson) return "结论已交：等本人补。";
     return blocked ? `结论已交：没过（连续第 ${failStreak} 次），停在受阻等本人。` : "结论已交：没过，改法会送回执行方。";
   }
 
