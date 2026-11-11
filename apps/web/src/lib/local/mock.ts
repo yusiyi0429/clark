@@ -46,9 +46,21 @@ const sha = (seed: string) => Array.from({ length: 40 }, (_, i) => "0123456789ab
 
 /** 这次会怎么跑（同本机的 previewRun）：别名（opus、sonnet、haiku）写成「Opus 5.5」这种，网关模型去掉厂商前缀原样写，没定模型是订阅默认的 Opus。 */
 const ALIAS: Record<string, string> = { opus: "Opus 5.5", sonnet: "Sonnet 5.5", haiku: "Haiku 5.5" };
+/**
+ * 给人看的模型名，照本机程序的 modelDisplayName（apps/local/src/models.ts，网页不能引本机的源码，这里照它的规则写）：
+ * 去掉「厂商/」前缀和 [1m]，claude-opus-5-5 →「Opus 5.5」、claude-sonnet-4-20250514 →「Sonnet 4」；别名写这台电脑上跑出来的那一版（假的：ALIAS）；
+ * 别的原样（去掉前缀），如 wangsu/deepseek-v4.1-flash → deepseek-v4.1-flash。
+ */
+export function mockDisplayName(model: string): string {
+  const bare = model.slice(model.lastIndexOf("/") + 1).replace(/\[1m\]$/i, "").toLowerCase();
+  const full = /^claude-(opus|sonnet|haiku|fable)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?$/.exec(bare);
+  if (full) return `${full[1]![0]!.toUpperCase()}${full[1]!.slice(1)} ${full[2]}${full[3] ? `.${full[3]}` : ""}`;
+  if (ALIAS[bare]) return ALIAS[bare]!;
+  return model.slice(model.lastIndexOf("/") + 1).slice(0, 60);
+}
 const runFor = (profile: TLocalModelProfile, mode: "auto" | "set" | "unlimited" = "auto", effort: TLocalEffort | null = null) => ({
   mode, model: profile.model, effort, multiAgent: false, source: profile.source, sourceLabel: profile.label,
-  modelName: profile.catalog ? profile.label : profile.model ? ALIAS[profile.model] ?? profile.model.replace(/^.*\//, "") : "Opus 5.5", actual: null,
+  modelName: profile.catalog ? profile.label : profile.model ? mockDisplayName(profile.model) : "Opus 5.5", actual: null,
   harness: profile.agent, ...(profile.origin ? { origin: profile.origin } : {}),
 });
 

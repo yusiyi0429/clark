@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createMockRunner } from "@/lib/local/mock";
+import { createMockRunner, mockDisplayName } from "@/lib/local/mock";
 import { LocalRunnerError } from "@/lib/local/runner";
 import { localPanelRows, panelLabel } from "@/lib/local/modelPanel";
 import { defaultSourceLabel, pillSource, sessionModelText } from "@/lib/local/runModel";
@@ -56,5 +56,18 @@ describe("添加来源（17.2 第 52 条）", () => {
     const run = { origin: { provider: "anthropic", label: "Anthropic 官方 API", via: null }, modelName: "Opus 5.5" };
     expect(sessionModelText({ run, agent: "claude-code", effort: "max" } as never, ["max"], fallback)?.label).toBe("Opus 5.5 · API · 最高");
     expect(sessionModelText({ run: { ...run, origin: { provider: "claude-subscription", label: "Claude 订阅", via: null } }, agent: "claude-code", effort: "max" } as never, ["max"], fallback)?.label).toBe("Opus 5.5 · 最高");
+  });
+
+  it("假本机开工写的模型名照本机的 modelDisplayName：claude-sonnet-5-5 →「Sonnet 5.5」，日期版本去掉，别名写跑出来的那一版，网关的去掉厂商前缀", async () => {
+    expect(mockDisplayName("claude-sonnet-5-5")).toBe("Sonnet 5.5");
+    expect(mockDisplayName("anthropic/claude-opus-5-5")).toBe("Opus 5.5");
+    expect(mockDisplayName("claude-sonnet-4-20250514")).toBe("Sonnet 4");
+    expect(mockDisplayName("claude-opus-5-5[1m]")).toBe("Opus 5.5");
+    expect(mockDisplayName("haiku")).toBe("Haiku 5.5");
+    expect(mockDisplayName("wangsu/deepseek-v4.1-flash")).toBe("deepseek-v4.1-flash");
+    const runner = createMockRunner({ stepMs: 1 });
+    const { profiles } = await runner.addSource({ apiKey: "sk-ant-x", presetId: "anthropic", plan: "api", models: ["claude-sonnet-5-5"] });
+    const run = await runner.previewRun({ modelProfileId: profiles.find((profile) => profile.sourceId === "anthropic-api")!.id } as never);
+    expect(run.modelName).toBe("Sonnet 5.5");
   });
 });
