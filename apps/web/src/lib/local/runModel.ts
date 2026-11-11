@@ -99,21 +99,14 @@ export function withPendingModel(model: { label: string; title: string | null } 
   return { label: `${model.label} → ${pending.modelLabel}`, title: PENDING_MODEL_TITLE };
 }
 
-/** 默认来源：标了默认的那条模型配置的来源名。67 条以后胶囊一律写全、不再按它省来源；子会话页还在传，等那边去掉后删。 */
-export function defaultSourceLabel(models: readonly Pick<TLocalModelProfile, "isDefault" | "source" | "agent" | "label" | "origin">[]): string | null {
-  const preferred = models.find((model) => model.isDefault);
-  return preferred ? profileSourceName(preferred) : null;
-}
-
 /** 子会话里实际在跑的来源：origin.label，老版本本机退回 sourceLabel。 */
 const runSource = (run: Pick<TLocalRun, "sourceLabel"> & { origin?: TLocalRun["origin"] } | null | undefined) => run?.origin?.label ?? run?.sourceLabel ?? null;
 
 /**
  * 子会话输入框下面的模型（36、40、67 条）：「Claude 订阅 · Opus 5.5 · 高」，默认来源也写出来；思考是自动、模型没有思考档时不写。悬停前面多写执行方。
  * 换了模型要等这一轮做完时是「当前 → 新」（同 withPendingModel）。没有模型名时为 null，调用方退回原来的写法。
- * 第三个参数（默认来源）不再用，留着是因为子会话页还在传。
  */
-export function sessionModelText(session: Pick<TLocalSessionSummary, "run" | "agent" | "effort" | "pendingModel">, efforts: readonly TLocalEffort[] | undefined, _defaultSource?: string | null): { label: string; title: string | null } | null {
+export function sessionModelText(session: Pick<TLocalSessionSummary, "run" | "agent" | "effort" | "pendingModel">, efforts: readonly TLocalEffort[] | undefined): { label: string; title: string | null } | null {
   const run = session.run;
   const name = run?.actual?.modelName ?? run?.modelName ?? null;
   if (!name) return null;
