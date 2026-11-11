@@ -12,7 +12,7 @@ import {
   type TLocalBackgroundItem, type TLocalMergeHoldReason, type TLocalMergeSync, type TLocalModelTier, type TLocalHold, type TLocalMoney,
   type TLocalRun, type TLocalRunPreviewRequest, type TLocalTaskBudgetView, type TLocalBudgetUpdateRequest, type TBudgetMode, type TLocalPermissionBrief, type TLocalSavedAttachment, type TLocalStopReason, type TLocalStopReport,
   type TLocalEffort, type TLocalSessionModelRequest, type TLocalSessionFileReadResponse, type TLocalSessionFilesResponse, type TLocalContextUsage,
-  DONE_DEFINITION_LIMITS, LocalAgreementProposal, type TLocalAgreementProposal, type TLocalCardAgreementResponse,
+  DONE_DEFINITION_LIMITS, LocalAgreementProposal, type TLocalAgreementProposal, type TLocalCardAgreementResponse, type TLocalFolderHolder,
 } from "@warmap/contracts";
 import { readJson, writeJsonAtomic, nowIso } from "./store.js";
 import type { EventLog, EventBody } from "./eventLog.js";
@@ -34,7 +34,7 @@ import { flagText, planFactsSection, planFolderFacts, type PlanFlag } from "./pl
 import type { ModelProfiles } from "./models.js";
 import { isInside, type Folders } from "./folders.js";
 import type { Outbox } from "./outbox.js";
-import { SESSION_MCP_NAME, sessionToolNames } from "./sessionMcp.js";
+import { SESSION_MCP_NAME, sessionToolNames, type SessionToolset } from "./sessionMcp.js";
 import { agreementInBrief, changesBrief, criticAgents, returnText, reviewMessage, systemPrompt } from "./rolePrompt.js";
 import { addWorktree, branchName, cardDiff, changedFiles, commitAll, deleteBranch, git, mergeBranch, pruneRepo, removeWorktree, repoHead } from "./git.js";
 import { ensureFeishuPlugin, larkSkills } from "./agents/feishuPlugin.js";
@@ -86,7 +86,6 @@ const BALANCE_REASON = "TokenHub 余额不足，充值后说一句接着做";
 /** 计时的状态：真在跑（排队、等额度、等你批准、等你回复都不算）。 */
 const RUNNING_TIME: TLocalSessionStatus[] = ["starting", "running"];
 /** 不是 git 仓库的文件夹同时只做一张卡（ADR 0038），另一张在那儿跑时排队的原因。 */
-const FOLDER_BUSY = "这个文件夹不是 git 仓库，同时只做一张卡，等另一张这一轮做完";
 
 interface SessionRecord {
   id: string;
@@ -178,6 +177,8 @@ interface SessionRecord {
   agreementRevision?: number;
   /** 卡：开工交代里交给执行方的约定（agreementInBrief 认出来的）。没取到过版本号时，交回拿它和云端的比内容。 */
   startAgreement?: { standards: string[] | null; brief?: string | null };
+  /** 自由子会话（第 68 条，项目下的「+」开的专题）：换一套规矩和工具；在哪个文件夹做都按普通文件夹算（workspace 是 folder）。 */
+  free?: true;
 }
 
 /** 不合契约时给执行方看的一句（哪个字段、哪里不对）。 */
@@ -186,6 +187,7 @@ function schemaProblem(schema: TSchema, value: unknown): string | null {
   const e = [...Value.Errors(schema, value)][0];
   return e ? `${e.path || "/"} ${e.message}` : "格式不对";
 }
+const heldKey = (h: TLocalFolderHolder | null) => (h ? `${h.kind}:${h.id}` : "");
 const textOrNull = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
 /** 完成标准（一行一条）超了 DONE_DEFINITION_LIMITS 时说哪里超了；没超为 null。 */
 function standardsTooLong(lines: string[]): string | null {
@@ -283,6 +285,8 @@ export class SessionManager {
   private readonly sentAsk = new Map<string, string>();
   /** 上次报给云端的排队位置（位置变了才重报）。 */
   private readonly sentPosition = new Map<string, number>();
+  /** 上次报给云端的「占着文件夹的是谁」（第 68 条，换了人才重报）。 */
+  private readonly sentHeld = new Map<string, string>();
   private queueSeq = 0;
   /** 读回上次的会话时（本机程序还没开始监听）和关机时不从队里接；启动好后由 app 调 pump。 */
   private holdQueue = true;
@@ -380,13 +384,14 @@ export class SessionManager {
     const {
       mcpSecret: _s, syncSeq: _q, outputs: _o, versionNumber: _v, lastVersion: _l, role: _r, critics: _c, queuedMessage: _m, queueOrder: _n,
       parentId: _p, briefPending: _b, criteria: _cr, failStreak: _f, submitted: _sb, nudged: _nd, workspace, commit: _cm, after: _af, passed: _ps, sourceWords: _sw, unread: _ur,
-      background, hold, holdSince: _hs, modelTier: _mt, budgetKey: _bk, runSince: _rs, seen: _se, handoff: _ho, run, agreementRevision: _ar, startAgreement: _sa, ...rest
+      background, hold, holdSince: _hs, modelTier: _mt, budgetKey: _bk, runSince: _rs, seen: _se, handoff: _ho, run, agreementRevision: _ar, startAgreement: _sa, free: _fr, ...rest
     } = rec;
     const question = this.questions.get(rec.id);
     const waitingFor = this.waitingFor(rec);
+    const heldBy = this.heldBy(rec);
     return {
       ...rest, lastSeq: this.d.log.lastSeq(rec.id), pendingPermissions: this.pending.get(rec.id)?.size ?? 0, queuePosition: this.queuePosition(rec),
-      ...(workspace ? { workspace } : {}), ...(question ? { pendingQuestion: question } : {}), ...(waitingFor.length ? { waitingFor } : {}),
+      ...(workspace ? { workspace } : {}), ...(question ? { pendingQuestion: question } : {}), ...(waitingFor.length ? { waitingFor } : {}), ...(heldBy ? { heldBy } : {}),
       ...(background.length ? { background } : {}), ...(hold ? { hold } : {}), ...(run ? { run } : {}),
     };
   }
@@ -405,6 +410,13 @@ export class SessionManager {
     const rec = this.records.get(id) ?? this.launching.get(id);
     if (!rec) throw new SessionError("not_found", "没有这个会话");
     return rec.subject.kind;
+  }
+
+  /** 本会话 MCP 给哪套工具：自由子会话（第 68 条）另算一套。 */
+  toolsetOf(id: string): SessionToolset {
+    const rec = this.records.get(id) ?? this.launching.get(id);
+    if (!rec) throw new SessionError("not_found", "没有这个会话");
+    return rec.free ? "free" : rec.subject.kind;
   }
 
   /** 排队时是第几个（验收员、规划员排前面，同一档先来先跑）；没在排队为 null。 */
@@ -477,11 +489,27 @@ export class SessionManager {
 
   /** 不是 git 仓库的文件夹同时只做一张卡：另一张卡正在那儿跑（占着位置、正在拉起，或它开的后台任务还在跑）。 */
   private folderBusy(rec: SessionRecord): boolean {
+    return this.folderHolder(rec) !== null;
+  }
+
+  /**
+   * 占着这个普通文件夹的会话（没有为 null）。在普通文件夹里做的卡、自由子会话（第 68 条，git 仓库的主文件夹也算普通文件夹）都算：
+   * 同一时间只许一个改，正在跑、在等批准、正在拉起，或它开的后台任务还在跑时占着。
+   */
+  private folderHolder(rec: SessionRecord): SessionRecord | null {
     const ws = rec.workspace;
-    if (ws?.kind !== "folder") return false;
+    if (ws?.kind !== "folder") return null;
     const same = (r: SessionRecord) => r !== rec && r.workspace?.kind === "folder" && r.workspace.folder === ws.folder;
     const busy = (r: SessionRecord) => OCCUPYING.includes(r.status) || r.background.some((b) => b.state === "running");
-    return [...this.records.values()].some((r) => same(r) && busy(r)) || [...this.launching.values()].some(same);
+    return [...this.records.values()].find((r) => same(r) && busy(r)) ?? [...this.launching.values()].find(same) ?? null;
+  }
+
+  /** 排着队等普通文件夹时，占着它的是谁（契约 LocalFolderHolder）；不在等为 null。 */
+  private heldBy(rec: SessionRecord): TLocalFolderHolder | null {
+    if (rec.status !== "queued" || rec.hold) return null;
+    const h = this.folderHolder(rec);
+    const id = h ? (h.subject.kind === "card" ? h.subject.cardId : h.subject.topicId) : undefined;
+    return h && id && (h.subject.kind === "card" || h.subject.kind === "topic") ? { kind: h.subject.kind, id, title: h.title.slice(0, 120) } : null;
   }
 
   private max(): number {
@@ -539,10 +567,10 @@ export class SessionManager {
     this.sendBudgetStop(rec, run); // 拉起途中预算用完了
   }
 
-  /** 队里还在排的，位置变了就给云端重报一条 queued。 */
+  /** 队里还在排的，位置变了、占着文件夹的换了人（第 68 条）就给云端重报一条 queued。 */
   private syncQueuePositions() {
     this.queue().forEach((rec, i) => {
-      if (this.sentPosition.get(rec.id) !== i + 1) this.syncStatus(rec);
+      if (this.sentPosition.get(rec.id) !== i + 1 || (this.sentHeld.get(rec.id) ?? "") !== heldKey(this.heldBy(rec))) this.syncStatus(rec);
     });
   }
 
@@ -551,11 +579,13 @@ export class SessionManager {
     if (queuePosition === null) this.sentPosition.delete(rec.id);
     else this.sentPosition.set(rec.id, queuePosition);
     const waitingFor = this.waitingFor(rec);
+    const heldBy = this.heldBy(rec);
+    if (heldBy) this.sentHeld.set(rec.id, heldKey(heldBy)); else this.sentHeld.delete(rec.id);
     const ask = this.askOf(rec);
     this.sentAsk.set(rec.id, ask.key);
     this.sync(rec, { type: "status", data: {
       status: rec.status, title: rec.title, agent: rec.agent, modelLabel: rec.modelLabel, ...(queuePosition ? { queuePosition } : {}), ...(waitingFor.length ? { waitingFor } : {}),
-      ...(rec.hold ? { hold: rec.hold } : {}), ...(rec.run ? { run: rec.run } : {}), permissionMode: rec.permissionMode, ...ask.data,
+      ...(heldBy ? { heldBy } : {}), ...(rec.hold ? { hold: rec.hold } : {}), ...(rec.run ? { run: rec.run } : {}), permissionMode: rec.permissionMode, ...ask.data,
     } });
   }
 
@@ -646,7 +676,7 @@ export class SessionManager {
     this.save(rec);
     this.emit(rec, { type: "status", status, ...extra, ...(rec.hold ? { hold: rec.hold } : {}) });
     this.syncStatus(rec);
-    if (left) this.syncQueuePositions();
+    if (left || this.sentHeld.size) this.syncQueuePositions(); // 有在等文件夹的：占着的人可能换了
     this.d.onChange?.();
     if (!OCCUPYING.includes(status)) this.pump();
   }
@@ -660,6 +690,8 @@ export class SessionManager {
     if (subject.kind === "plan" && !subject.taskId && !subject.projectId) throw new SessionError("validation", "规划员的会话要带 taskId 或 projectId");
     if (subject.kind !== "topic" && req.critics?.length) throw new SessionError("validation", "挑刺技能只给专题的评审会用");
     if (subject.kind !== "card" && req.after?.length) throw new SessionError("validation", "只有卡能等别的卡");
+    if (req.free && subject.kind !== "topic") throw new SessionError("validation", "free 只给专题（项目下的「+」开的子会话）");
+    if (req.free && req.critics?.length) throw new SessionError("validation", "自由子会话没有评审会");
     let cwd: string;
     // 不指定目录时：项目在这台电脑上绑的文件夹（新首页设计 16.6）
     const projectDir = !req.cwd && subject.projectId ? this.d.folders.projectFolder(subject.projectId) : null;
@@ -706,8 +738,9 @@ export class SessionManager {
       outputs: [], versionNumber: subject.kind === "topic" ? req.versionBase ?? 0 : 0, lastVersion: null,
       role: req.role ?? null, modelTier: req.modelTier ?? req.role?.modelTier ?? null, critics: req.critics ?? [], queuedMessage: null, queueOrder: 0,
       parentId: null, briefPending: false, criteria: [], failStreak: 0, submitted: 0, nudged: false,
-      workspace: place?.workspace ?? null, commit: null, after: waiting ? after : [], passed: null, background: [], hold: null, holdSince: null,
-      budgetKey, runSince: null, run: null, permissionMode, ...(req.effort ? { effort: req.effort } : {}),
+      // 自由子会话（第 68 条）：在哪个文件夹做都按普通文件夹算（git 仓库的主文件夹也是），同一时间只许一个改，第 71 条照卡一样留一份
+      workspace: place?.workspace ?? (req.free ? { kind: "folder", folder: cwd } : null), commit: null, after: waiting ? after : [], passed: null, background: [], hold: null, holdSince: null,
+      budgetKey, runSince: null, run: null, permissionMode, ...(req.effort ? { effort: req.effort } : {}), ...(req.free ? { free: true as const } : {}),
     };
     if (subject.kind === "card") {
       // 卡开工时记下执行方知道约定的第几版（主循环第 60 条）；取不到时交回比内容，所以交代里的那份也记下
@@ -715,7 +748,8 @@ export class SessionManager {
       void this.noteAgreement(rec);
     }
     // 满了（或前面还有人在排、在等前面的卡、文件夹被另一张卡占着、订阅额度用完了、预算用完了、余额不足）就进队，先来先跑；有空位时 pump 接上。
-    const busy = this.folderBusy(rec);
+    const holder = this.folderHolder(rec);
+    const busy = holder !== null;
     const limited = model.source === "subscription" && this.blocked(rec) !== null;
     const gate = this.gateReason(rec);
     if (waiting || this.ready().length || this.activeCount() >= this.max() || busy || limited || gate) {
@@ -724,7 +758,7 @@ export class SessionManager {
       this.records.set(rec.id, rec);
       if (!waiting && gate) this.markHold(rec, gate);
       else if (limited && !waiting) this.markHold(rec);
-      this.setStatus(rec, "queued", waiting ? { reason: WAITING_FOR_CARDS } : busy ? { reason: FOLDER_BUSY } : rec.hold ? { reason: this.holdReason(rec.hold) } : {});
+      this.setStatus(rec, "queued", waiting ? { reason: WAITING_FOR_CARDS } : holder ? { reason: `这个文件夹同一时间只让一个会话改，等「${holder.title}」这一轮做完` } : rec.hold ? { reason: this.holdReason(rec.hold) } : {});
       this.noteWorkspace(rec, place);
       return this.summary(rec);
     }
@@ -810,7 +844,7 @@ export class SessionManager {
         headers: secretHeader,
       },
     };
-    const allowedTools = sessionToolNames(rec.subject.kind);
+    const allowedTools = sessionToolNames(rec.free ? "free" : rec.subject.kind);
     if (tools.cloud) {
       // 天枢 MCP 经本机程序转发（/internal/sessions/:id/cloud-mcp），云端令牌留在本机程序里，会话和它跑的命令都拿不到。
       servers[CLOUD_MCP_NAME] = { type: "http", url: `${local}/cloud-mcp`, headers: secretHeader };
@@ -851,7 +885,7 @@ export class SessionManager {
     // 工作规矩、岗位、挑刺子 agent 写在本机程序的数据目录，经参数交给 Claude Code，不往本人的仓库写文件。
     const dir = join(this.dir, rec.id);
     const systemPromptPath = join(dir, "system.md");
-    let prompt = systemPrompt(rec.subject.kind, rec.role, rec.critics, feishu, rec.workspace, custom?.names ?? [], this.extraDirs(rec));
+    let prompt = systemPrompt(rec.subject.kind, rec.role, rec.critics, feishu, rec.workspace, custom?.names ?? [], this.extraDirs(rec), rec.free);
     if (rec.subject.kind === "plan") {
       // 开拆前看一眼项目的文件夹（只读）：在本机给它的专用目录里做就是没绑
       const facts = await planFolderFacts(isInside(join(this.d.dataDir, "plans"), rec.cwd) ? null : rec.cwd);

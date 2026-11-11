@@ -181,23 +181,27 @@ const READ_EARLIER_TURNS = {
 
 export const SESSION_MCP_NAME = "tianshu-session";
 
-const TOOLS: Record<TLocalSessionKind, { name: string }[]> = {
+/** 本会话 MCP 给哪套工具：会话的种类，自由子会话（第 68 条，带 free 的专题）另算一套。 */
+export type SessionToolset = TLocalSessionKind | "free";
+
+const TOOLS: Record<SessionToolset, { name: string }[]> = {
   card: [ADD_ARTIFACT, ADD_EVIDENCE, HAND_BACK, PROPOSE_AGREEMENT_CHANGE, READ_EARLIER_TURNS],
   topic: [ADD_ARTIFACT, ADD_EVIDENCE, SAVE_VERSION, SET_FEISHU_URL, READ_EARLIER_TURNS],
+  free: [ADD_ARTIFACT, READ_EARLIER_TURNS],
   plan: [PROPOSE_PLAN],
   verify: [SUBMIT_VERDICT],
 };
 
-export function sessionTools(kind: TLocalSessionKind) {
+export function sessionTools(kind: SessionToolset) {
   return TOOLS[kind];
 }
 
 /** 预先放行的工具名（--allowedTools）。 */
-export function sessionToolNames(kind: TLocalSessionKind): string[] {
+export function sessionToolNames(kind: SessionToolset): string[] {
   return sessionTools(kind).map((t) => `mcp__${SESSION_MCP_NAME}__${t.name}`);
 }
 
-function callTool(sessions: SessionManager, id: string, kind: TLocalSessionKind, name: string, input: any): string | Promise<string> {
+function callTool(sessions: SessionManager, id: string, kind: SessionToolset, name: string, input: any): string | Promise<string> {
   if (!sessionTools(kind).some((t) => t.name === name)) throw new Error(`这个会话没有 ${name} 这个工具`);
   if (name === "add_artifact" && typeof input?.path === "string") return sessions.addArtifact(id, input);
   if (name === "add_evidence" && ["note", "log", "link", "diff_summary"].includes(input?.kind) && typeof input?.title === "string") {
@@ -236,7 +240,7 @@ function callTool(sessions: SessionManager, id: string, kind: TLocalSessionKind,
 export async function handleMcpMessage(sessions: SessionManager, id: string, msg: any): Promise<unknown | null> {
   if (msg?.id === undefined || msg?.id === null) return null;
   const ok = (result: unknown) => ({ jsonrpc: "2.0", id: msg.id, result });
-  const kind = sessions.kindOf(id);
+  const kind = sessions.toolsetOf(id);
   switch (msg.method) {
     case "initialize":
       return ok({ protocolVersion: msg.params?.protocolVersion ?? "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "tianshu-local", version: "0.1.0" } });

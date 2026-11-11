@@ -26,6 +26,15 @@ const TOPIC_RULES = `## 规矩
 - 图、PDF 这类附件用 add_artifact 交。
 ${EDIT_SCOPE_RULE}`;
 
+/** 自由子会话（第 68 条，项目下的「+」）：没有提纲、交回、验收；本人要的文件就写在文件夹里，只是不留本人没要的东西。 */
+const FREE_RULES = `## 规矩
+- 照本人说的做：没有提纲、交回和验收。做完一件，用一两句话说做了什么，停下等本人下一句。
+- 本人要的文件（文档、表格、代码等）就写在当前工作目录里，直接写好、改好。想让本人在天枢里点开看的文件，再用 add_artifact 交一份。
+- 不在文件夹里留本人没要的东西：临时文件、命令输出、你自己的过程记录用完就删，过程写在回复里。
+- 遇到要登录、验证码、人工查询、网站拦自动访问、要本人的权限或判断的事，不绕：网站拦自动访问时，不换成伪装浏览器（改 User-Agent、套浏览器请求头、换抓取工具）去抓，也不找别的路子硬闯。能做的先做完，做不了的停下来告诉本人要做什么、做完给回什么。
+${EDIT_SCOPE_RULE}
+- 只在当前工作目录和本人允许的文件夹里读写，要碰别处先说为什么。`;
+
 const PLAN_RULES = `## 规矩
 - 你是规划员：只读，不改文件、不跑命令。拆的是 Task 时，用天枢 MCP 的 get_task_context 读这个 Task 的上下文（约定、Mission、近期的事和决定、上一版交付物和评审）；拆的是没挂 Task 的项目时，交代就是全部上下文。需要时读工作目录里的文件。
 - 拆之前先把现实问清楚：对着末尾「开拆前本机看过的文件夹」想一想，照这样做下去会做成什么、是不是本人要的。没绑文件夹、文件夹是空的、不是 git 仓库，
@@ -56,6 +65,7 @@ const INTRO: Record<TLocalSessionKind, string> = {
   plan: "本人在天枢网页上请你把一个 Task（或没挂 Task 的项目）拆成计划和派活单，在本人自己的电脑上做。网页能看到你的每一步，本人会插话。",
   verify: "执行方交回了一张卡，本机请你验收，在本人自己的电脑上做。网页能看到你的每一步。",
 };
+const FREE_INTRO = "本人在天枢网页上的项目里开了这个子会话，在本人自己的电脑上做。网页能看到你的每一步，本人会批权限、插话。";
 
 const TOOL_TEXT: Record<TLocalRoleTool, string> = {
   tianshu: "天枢：用天枢 MCP（tianshu）读本人的事项、Mission 和公司资料；写进去的操作每次都要本人批准",
@@ -103,9 +113,10 @@ ${dirs.map((d) => `- ${d}`).join("\n")}
 
 export function systemPrompt(
   kind: TLocalSessionKind, role: TLocalRole | null, critics: TLocalRole[], feishu: FeishuSkills, workspace: TLocalWorkspace | null = null,
-  customTools: { server: string; name: string }[] = [], extraDirs: string[] = [],
+  customTools: { server: string; name: string }[] = [], extraDirs: string[] = [], free = false,
 ): string {
-  const parts = ["# 天枢本机会话", INTRO[kind], RULES[kind]];
+  // 自由子会话（第 68 条）是带 free 的专题，换一套规矩
+  const parts = ["# 天枢本机会话", free ? FREE_INTRO : INTRO[kind], free ? FREE_RULES : RULES[kind]];
   if (workspace?.kind === "worktree") parts.push(worktreeNote(workspace));
   if (extraDirs.length) parts.push(extraDirsNote(extraDirs, workspace?.kind === "worktree"));
   if (customTools.length) {
