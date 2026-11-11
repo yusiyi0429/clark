@@ -23,7 +23,7 @@ import type { CodexQuota } from "./codexQuota.js";
 import type { GatewayPricing } from "./pricing.js";
 import { Budgets, MULTI_AGENT_OFF_PERCENT, reworkRounds, runFor } from "./budget.js";
 import { AttachmentError, attachmentNote, saveAttachments, type FetchAttachment } from "./attachments.js";
-import { modelDisplayName, sameModel, type ResolvedModel } from "./models.js";
+import { modelDisplayName, runLine, sameModel, type ResolvedModel } from "./models.js";
 import { isClaudeProfileId } from "./claudeCatalog.js";
 import { isCodexProfileId } from "./codexCatalog.js";
 import { MAGPIE_PORT, modelOrigin } from "./modelOrigin.js";
@@ -584,7 +584,8 @@ export class SessionManager {
     const ask = this.askOf(rec);
     this.sentAsk.set(rec.id, ask.key);
     this.sync(rec, { type: "status", data: {
-      status: rec.status, title: rec.title, agent: rec.agent, modelLabel: rec.modelLabel, ...(queuePosition ? { queuePosition } : {}), ...(waitingFor.length ? { waitingFor } : {}),
+      // modelLabel 写成「来源 · 模型 · 思考」（第 67 条，别的电脑和手机上只有这个字符串）；还没拉起过用配置名
+      status: rec.status, title: rec.title, agent: rec.agent, modelLabel: runLine(rec.run) ?? rec.modelLabel, ...(queuePosition ? { queuePosition } : {}), ...(waitingFor.length ? { waitingFor } : {}),
       ...(heldBy ? { heldBy } : {}), ...(rec.hold ? { hold: rec.hold } : {}), ...(rec.run ? { run: rec.run } : {}), permissionMode: rec.permissionMode, ...ask.data,
     } });
   }
