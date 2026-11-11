@@ -13,6 +13,7 @@ import { browserApi } from "@/lib/api/client";
 import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import { projectInfoHref, type Project, type ProjectGoal } from "@/lib/home/projects";
 import { ICON } from "./StateIcon";
+import { useSideDetail } from "./SideDetail";
 import h from "@/styles/home.module.css";
 
 type Criterion = { text: string; met: boolean };
@@ -66,10 +67,11 @@ export function GoalBar({ project }: { project: Project }) {
 
 /** 页头右边：「详情」。 */
 export function ProjectTrail({ project, go }: { project: Project; go: (href: string) => void }) {
+  // 新首页桌面上在右栏打开详情（SideDetail），对话留着；手机上照旧去详情页。
+  const side = useSideDetail();
   return (
-    <>
-      <button type="button" className={h.icon} aria-label="详情" title="详情" onClick={() => go(projectInfoHref(project.id))} data-testid="project-detail"><Info {...ICON} /></button>
-    </>
+    <button type="button" className={h.icon} aria-label="详情" title="详情" aria-pressed={side ? side.open : undefined}
+      onClick={() => (side ? side.toggle() : go(projectInfoHref(project.id)))} data-testid="project-detail"><Info {...ICON} /></button>
   );
 }
 

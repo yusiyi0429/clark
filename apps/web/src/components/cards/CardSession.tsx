@@ -36,6 +36,7 @@ import { QuestionDecision, awayChip, questionTitle } from "@/components/work/dec
 import { askAnchor } from "@/components/home/TaskFeed";
 import { FailedLine, PendingBoxes, PendingDock, failureOf, type Failure } from "@/components/work/DecisionBox";
 import { useViewChrome } from "@/components/home/view";
+import { SideContent, useSideDetail } from "@/components/home/SideDetail";
 import { ICON } from "@/components/home/StateIcon";
 import { useConversationScroll } from "@/conversation/useConversationScroll";
 import { commitText, placeText, shortPlace } from "@/lib/work/merge";
@@ -61,12 +62,16 @@ export function stateChip(wait: CardWait | null, stage: CardStage, away: string 
   return { text: stage === "todo" ? "已排队" : STAGES.find((entry) => entry.id === stage)?.label ?? "进行中", tone: "neutral" };
 }
 
-/** embedded：放在新首页的展示区里——没有返回键（左栏就是导航），页头右边的信息图标在「对话」和「结果」之间切。 */
+/**
+ * embedded：放在新首页的展示区里——没有返回键（左栏就是导航）。页头右边的信息图标：桌面上在右栏打开详情（交代、标准、验收、产出、改动的文件），对话留着；
+ * 手机上没有右栏，照旧在「对话」和「结果」之间切。
+ */
 export function CardSession({ cardId, embedded = false }: { cardId: string; embedded?: boolean }) {
   const chrome = useViewChrome();
   const router = useRouter();
   /** 看结果还是对话；没选过时，子会话不在这台电脑上（手机、别的电脑、还没开）先看摘要（5.4.3）。 */
   const [details, setDetails] = useState<boolean | null>(null);
+  const side = useSideDetail();
   // 右边看文件（41 条）：交出的产出点了在这一页右边看，不新开页；手持上整屏。
   const [preview, setPreview] = useState<PreviewFile | null>(null);
   const closePreview = useCallback(() => setPreview(null), []);
@@ -202,12 +207,14 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
   }} /> : null;
   // 新首页的展示区（5.4.3「页头」）：上一级 / 名字，右边状态 chip、「停止」或「推翻」（弱按钮）、信息图标；下面是对话，点信息图标换成结果。模型和文件夹在输入框下面一行。
   if (embedded) {
-    const showPane = details ?? !session;
+    const inSide = !!side;
+    const showPane = side ? side.open : details ?? !session;
+    const openDetails = (open?: boolean) => (side ? side.toggle(open) : setDetails(open ?? !showPane));
     const chipOf = stateChip(wait, stage, !canAct && device ? awayChip(device) : null);
     const handback = detail.handbacks[0] ?? null;
     const canFlip = !handheld && !!handback && handback.status === "done" && !handback.overruled && handback.outcome === "pass" && !deliverableLabel(item)?.startsWith("已纳入");
     // 停止在输入框右边（27 条，在跑时没字是停止方块）；页头只留「推翻」。
-    const stop = canFlip ? <HeroButton variant="ghost" size="sm" onPress={() => { setDetails(true); setFlipping(true); }}>推翻</HeroButton> : null;
+    const stop = canFlip ? <HeroButton variant="ghost" size="sm" onPress={() => { openDetails(true); setFlipping(true); }}>推翻</HeroButton> : null;
     return (
       <div className={s.page} data-embedded="" data-testid="card-session">
         <header className={s.embedHead}>
@@ -216,14 +223,15 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
           <span className={s.stateChip} data-tone={chipOf.tone}>{chipOf.tone === "wait" ? <i aria-hidden /> : null}{chipOf.text}</span>
           <span className={s.exec} />
           {stop}
-          <HeroButton variant="ghost" size="sm" isIconOnly aria-label="结果" title="结果" data-pressed={showPane || undefined} onPress={() => setDetails(!showPane)} data-testid="session-details"><Info {...ICON} aria-hidden /></HeroButton>
+          <HeroButton variant="ghost" size="sm" isIconOnly aria-label={inSide ? "详情" : "结果"} title={inSide ? "详情" : "结果"} data-pressed={showPane || undefined} onPress={() => openDetails()} data-testid="session-details"><Info {...ICON} aria-hidden /></HeroButton>
           {chrome.trail}
         </header>
         <div className={s.body} data-solo={preview && !handheld ? undefined : ""}>
-          {showPane ? <div className={s.paneScroll}>{pane}</div> : chat}
+          {showPane && !inSide ? <div className={s.paneScroll}>{pane}</div> : chat}
           {preview ? <FilePreview file={preview} onClose={closePreview} /> : null}
         </div>
         {starter}
+        {side ? <SideContent side={side}><div className={s.page} data-embedded="" data-side="">{pane}</div></SideContent> : null}
       </div>
     );
   }

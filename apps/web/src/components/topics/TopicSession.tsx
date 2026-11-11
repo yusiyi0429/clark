@@ -22,6 +22,7 @@ import { QuestionDecision, awayChip, questionTitle } from "@/components/work/dec
 import { askAnchor } from "@/components/home/TaskFeed";
 import { FailedLine, PendingBoxes, PendingDock } from "@/components/work/DecisionBox";
 import { useViewChrome } from "@/components/home/view";
+import { SideContent, useSideDetail } from "@/components/home/SideDetail";
 import { ICON } from "@/components/home/StateIcon";
 import { useConversationScroll } from "@/conversation/useConversationScroll";
 import { latestSessionFor, useLocalRunner } from "@/lib/local/LocalRunnerProvider";
@@ -37,11 +38,12 @@ import { REMARK_PLUGINS } from "@/lib/markdown";
 import { ReviewDialog, ReviewDoc, isReview, reviewText } from "./Review";
 import s from "@/styles/v2-session.module.css";
 
-/** embedded：放在新首页的展示区里——没有返回键，页头右边的文档图标在「对话」和「当前版本」之间切。 */
+/** embedded：放在新首页的展示区里——没有返回键。页头右边的信息图标：桌面上在右栏打开当前版本，对话留着；手机上照旧在「对话」和「当前版本」之间切。 */
 export function TopicSession({ topicId, embedded = false }: { topicId: string; embedded?: boolean }) {
   const chrome = useViewChrome();
   const router = useRouter();
   const [reading, setReading] = useState(false);
+  const side = useSideDetail();
   const local = useLocalRunner();
   const handheld = useHandheld();
   const scroll = useConversationScroll({ streaming: false, resetKey: topicId });
@@ -199,7 +201,7 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
   </>;
   // 新首页的展示区：一行页头（名字、状态、文档图标），下面是对话；点文档图标换成当前版本（手机上默认看文档）。
   if (embedded) {
-    const showDoc = reading || (handheld && !session);
+    const showDoc = side ? side.open : reading || (handheld && !session);
     // 页头的状态 chip（5.4.3）：中性、警告、等你（中性底加圆点）；不在这台电脑上又在等你时写「等你 · {电脑名}」。
     const chipOf = wait ? stateChip(wait, "doing", !canAct && device ? awayChip(device) : null) : { text: topic.status === "archived" ? "已归档" : "进行中", tone: "neutral" as const };
     return (
@@ -209,10 +211,11 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
           <b className={s.embedTitle}>{chrome.parent}{chrome.letter}<span className={s.embedName}>{topic.title}</span></b>
           <span className={s.stateChip} data-tone={chipOf.tone}>{chipOf.tone === "wait" ? <i aria-hidden /> : null}{chipOf.text}</span>
           <span className={s.exec} />
-          <HeroButton variant="ghost" size="sm" isIconOnly aria-label="当前版本" title="当前版本" data-pressed={showDoc || undefined} onPress={() => setReading(!showDoc)} data-testid="session-details"><Info {...ICON} aria-hidden /></HeroButton>
+          <HeroButton variant="ghost" size="sm" isIconOnly aria-label="当前版本" title="当前版本" data-pressed={showDoc || undefined} onPress={() => (side ? side.toggle() : setReading(!showDoc))} data-testid="session-details"><Info {...ICON} aria-hidden /></HeroButton>
           {chrome.trail}
         </header>
-        <div className={s.body} data-solo="">{showDoc ? <div className={s.paneScroll}>{doc}</div> : chat}</div>
+        <div className={s.body} data-solo="">{showDoc && !side ? <div className={s.paneScroll}>{doc}</div> : chat}</div>
+        {side ? <SideContent side={side}><div className={s.page} data-embedded="" data-side="">{doc}</div></SideContent> : null}
         {dialogs}
       </div>
     );
