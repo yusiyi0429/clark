@@ -15,7 +15,11 @@ import { NullableInteger, NullableNumber } from "./nullable.js";
  * 浏览器的 EventSource 不能带自定义头，网页要用 fetch + ReadableStream 读事件流，断线时把最后的 id 放进 Last-Event-ID 头重连。
  */
 
-export const LOCAL_RUNNER_PROTOCOL = 1;
+/**
+ * 本机程序的协议号（GET /v1/health 的 protocol）。网页按它判断能不能带新字段：老本机程序 strict，带了它不认识的字段整个请求回 400。
+ * 2：发话可带 messageId（LocalSendMessageRequest）。
+ */
+export const LOCAL_RUNNER_PROTOCOL = 2;
 export const LOCAL_RUNNER_DEFAULT_PORT = 47610;
 export const LOCAL_RUNNER_TOKEN_HEADER = "x-tianshu-local-token";
 /** 云端接收端路径（相对天枢 api 的根），鉴权用 Authorization: Bearer <个人令牌>。 */
@@ -1041,11 +1045,17 @@ export const LocalSendMessageRequest = Type.Object({
   text: Type.Optional(Type.String({ minLength: 1, maxLength: 20000 })),
   /** 附件（最多 20 个）：本机取回存进工作区，路径和这句话一起交给执行方；只带附件不说话时 text 可以不填。 */
   attachments: Type.Optional(Type.Array(LocalAttachmentRef, { minItems: 1, maxItems: 20 })),
+  /**
+   * 这句话的编号（网页生成；本机程序 protocol ≥ 2 才收，见 LOCAL_RUNNER_PROTOCOL）。本机就用它当编号，网页发出去就能先画这句。
+   * 幂等：同一会话里这个编号已经记过（事件流里有这条 user_message），当成重发，不再送一遍，回原来的结果（原来回的错误照样回）。
+   * 没记下就被拒的（排队中、空话、附件取不回）不算记过，同一个编号可以再发。不带就由本机给。
+   */
+  messageId: Type.Optional(Uuid),
 }, strict);
 export const LocalSendMessageResponse = Type.Object({
   /** next_step：进行中，下一步前送达；new_turn：开了新一轮；resumed：进程已退出，续接后送达。 */
   delivery: Type.Union([Type.Literal("next_step"), Type.Literal("new_turn"), Type.Literal("resumed")]),
-  /** 这句话的编号（本机给的），事件流里 user_message 和 receipt 按它对上。 */
+  /** 这句话的编号（请求带了就是它，没带是本机给的），事件流里 user_message 和 receipt 按它对上。 */
   messageId: Uuid,
 }, strict);
 
