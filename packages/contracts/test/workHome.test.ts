@@ -198,7 +198,7 @@ describe("新首页契约", () => {
     expect(Value.Check(BuddyActionParams.sub_session_approve, { letter: "B", decision: "allow", allowForSession: true })).toBe(true);
     expect(Value.Check(BuddyActionParams.sub_session_answer, { letter: "C", choices: [["第二个"]] })).toBe(true);
     expect(Value.Check(BuddyActionParams.sub_session_tell, { letter: "b", text: "停一下" })).toBe(false);
-    expect([...PROJECT_ONLY_ACTIONS]).toEqual(["sub_session_tell", "sub_session_stop", "sub_session_restart", "sub_session_answer", "sub_session_approve"]);
+    expect([...PROJECT_ONLY_ACTIONS]).toEqual(["sub_session_tell", "sub_session_stop", "sub_session_restart", "sub_session_answer", "sub_session_approve", "update_card"]);
     const paths = buildOpenApiDocument().paths!;
     expect(paths["/api/me/session-commands/claim"]).toBeDefined();
     // 18 节第 12 条：自动接力的上限在项目设置里，null 不限；「等你」里 auto_relay 就地继续或停下。
