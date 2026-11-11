@@ -176,9 +176,9 @@ describe("Codex 子会话", { timeout: 60_000 }, () => {
     await call("POST", `/v1/sessions/${id}/kill`, {});
   });
 
-  it("全部放行也问（11/11 过渡规矩）：Codex 用命令删工作目录外面本人的已有文件（没有兜底）→ 停在等批准、原文没动", async () => {
+  it("全部放行也问（11/11 过渡规矩）：Codex 用命令删工作目录外面本人的已有文件（不是文档，没有兜底；文档会先拷一份）→ 停在等批准、原文没动", async () => {
     const elsewhere = tempDir("tl-codex-del-");
-    const target = join(elsewhere, "表.md");
+    const target = join(elsewhere, "照片.jpg");
     writeFileSync(target, "本人的原文");
     const id = await open("D", `run Remove-Item ${target.replaceAll("\\", "/")}`, { permissionMode: "bypassPermissions" });
     const p = await until(async () => (await session(id)).pendingPermissions[0] ?? null);
