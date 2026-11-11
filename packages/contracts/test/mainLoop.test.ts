@@ -3,7 +3,7 @@ import { FormatRegistry } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import { buildOpenApiDocument } from "../src/openapi.js";
 import {
-  AcceptCardDraftsRequest, DONE_DEFINITION_LIMITS, LocalPlanCard, CardAcceptanceCriterion, CardAgreementChangeListResponse, CardHandbackBrief, CardRelayRequest, DecideAgreementProposalRequest, LOCAL_RUNNER_CARD_AGREEMENT_PATH,
+  AcceptCardDraftsRequest, BuddyActionParams, CardDraftView, DONE_DEFINITION_LIMITS, LocalPlanCard, RegisterCardSplitRequest, CardAcceptanceCriterion, CardAgreementChangeListResponse, CardHandbackBrief, CardRelayRequest, DecideAgreementProposalRequest, LOCAL_RUNNER_CARD_AGREEMENT_PATH,
   LOCAL_RUNNER_PROTOCOL, LocalAgreementProposal, LocalCardAgreementResponse, LocalPermissionBrief, LocalSendMessageRequest, LocalSessionEvent, LocalSyncBatchRequest,
   PatchCardRequest, ProjectFeedItem, SessionCommand, TaskCard, UpdateCardActionParams, WaitingItem, WorkerMark,
 } from "../src/index.js";
@@ -153,4 +153,19 @@ it("OpenAPI 里列了主循环的三个新接口", () => {
   expect(doc.paths["/api/me/cards/{id}/handbacks/{handbackId}/relay"]?.post).toBeTruthy();
   expect(doc.paths["/api/me/cards/{id}/agreement-changes"]?.get).toBeTruthy();
   expect(doc.paths["/api/me/cards/{id}/agreement-proposals/{proposalId}/decision"]?.post).toBeTruthy();
+});
+
+describe("主循环契约：对话里说的模型要求落到派活单上（第 69 条）", () => {
+  it("split_cards、登记拆卡带模型要求原话；草稿卡和登记读得到；不带照旧合法", () => {
+    const words = "这几件用本机的 Opus 5.5，思考开高";
+    expect(Value.Check(BuddyActionParams.split_cards, { taskId: "task-open", words: "拆成三件", modelWords: words })).toBe(true);
+    expect(Value.Check(BuddyActionParams.split_cards, { taskId: "task-open", modelWords: "" })).toBe(false);
+    expect(Value.Check(RegisterCardSplitRequest, { words: "拆", modelWords: words })).toBe(true);
+    expect(Value.Check(RegisterCardSplitRequest, { words: "拆" })).toBe(true);
+    const draft = { id: uuid, planId: uuid, position: 0, title: "初查", brief: "", doneDefinition: "a", criterionIndex: null, role: null, suggestPresetKey: null,
+      executor: "claude_code", modelTier: "normal", why: null, sourceWords: [] };
+    expect(Value.Check(CardDraftView, { ...draft, modelWords: words })).toBe(true);
+    expect(Value.Check(CardDraftView, { ...draft, modelWords: null })).toBe(true);
+    expect(Value.Check(CardDraftView, draft)).toBe(true);
+  });
 });

@@ -1,5 +1,5 @@
 import { Type, type Static, type TSchema } from "@sinclair/typebox";
-import { LocalQuotaSync } from "./localRunner.js";
+import { LocalFolderHolder, LocalQuotaSync } from "./localRunner.js";
 import { RoleRef } from "./roles.js";
 import { CardGit, CardStage } from "./taskCardView.js";
 import { NullableInteger, NullableNumber } from "./nullable.js";
@@ -66,6 +66,7 @@ export const WorkerCost = Type.Object({
  * git：卡和验收员这一行，卡最近一次交回的分支、提交和验的提交（卡在工作树里做时才有）；规划员、专题和没交回过的卡为 null。
  * waitingFor：queueReason=prior_cards 时在等的那几张卡（id 和标题），别的为空。
  * holdUntil：queueReason=quota 时额度恢复的时间（本机读不到为 null），别的为 null。
+ * heldBy：queueReason=folder_busy 时占着文件夹的那个会话（本机报的，kind、id、标题，同首页 SubSession.heldBy 的那一个）；别的时候不带。
  */
 export const WorkerItem = Type.Object({
   key: Type.String({ minLength: 1 }),
@@ -91,6 +92,7 @@ export const WorkerItem = Type.Object({
   git: Nullable(CardGit),
   waitingFor: Type.Array(Type.Object({ cardId: Type.String({ minLength: 1 }), title: Type.String() }, strict)),
   holdUntil: Nullable(Instant),
+  heldBy: Type.Optional(LocalFolderHolder),
 }, strict);
 
 /**

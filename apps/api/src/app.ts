@@ -596,7 +596,7 @@ export async function buildApp({
       for (const [runId, ran] of local) extras.set(runId, { ...extras.get(runId), ...ran });
       return extras;
     },
-    onModel: (viewer, runId, used) => recordTurnModel(pool.query.bind(pool), viewer.personId, runId, used, now()),
+    onModel: (viewer, runId, used, scope) => recordTurnModel(pool.query.bind(pool), viewer.personId, runId, used, now(), scope === "global" ? "buddy" : "project"),
     onFallback: (viewer, runId, reason) => recordTurnFallback(pool.query.bind(pool), viewer.personId, runId, reason, now()),
     onInterrupt: async (_viewer, runId) => {
       const plan = await collapsePlan(pool.query.bind(pool), runId);

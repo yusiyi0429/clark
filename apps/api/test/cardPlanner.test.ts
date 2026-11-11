@@ -105,6 +105,9 @@ describe("拆卡：作业和草稿", { timeout: 30_000 }, () => {
       roles: [{ id: "role-1", name: "开发", duties: "" }], presets: [{ key: "researcher", name: "调研员", duties: "" }] };
     const ok = cards("role-1");
     expect(cardPlanProblem({ cards: ok }, input)).toBeNull();
+    // 只有 1 张也收（一个 worker 一次能做完的只出一件）。
+    expect(cardPlanProblem({ cards: [ok[0]] }, input)).toBeNull();
+    expect(CARD_PLAN_PROMPT).toContain("1 到 8 张");
     expect(cardPlanProblem({ cards: ok }, { ...input, task: { ...input.task, criteria: [] } })).toBe("这个 Task 没有标准，第 1 张的 criterionIndex 写 null");
     expect(cardPlanProblem({ cards: [{ ...ok[0], criterionIndex: 3 }, ...ok.slice(1)] }, input)).toBe("第 1 张的 criterionIndex 只能是 1 到 2 或 null");
     expect(cardPlanProblem({ cards: ok }, { ...input, existing: [{ title: "录 新人上手", criterionIndex: null, status: "not_started" }] }))
