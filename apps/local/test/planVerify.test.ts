@@ -598,6 +598,20 @@ describe("规划员和验收员", { timeout: 30_000 }, () => {
     }
   });
 
+  it("规划员的规矩加了拆任务的五条（11/11 本人定，设计 17.2 第 59 条）：原来的一条不少；验收员、执行方的规矩不带", () => {
+    const plan = systemPrompt("plan", null, [], null);
+    for (const rule of [
+      "summary 开头先复述三件事：这件事要达到什么、解决什么问题、最少做到哪一步算完",
+      "能自己查到的不问本人", "只把要本人拿主意的事问出来",
+      "小事不拆：一个 worker 一次能做完的，就只出一件",
+      "最没把握的那件排前面", "别的件要用到的排前面，并在用它的那件的 after 里写上",
+      "完成标准每行写成能在真东西上看到的结果，并写清拿什么证明（文件、截图、链接、命令输出）",
+    ]) expect(plan).toContain(rule);
+    // 原来的规矩还在
+    for (const kept of ["你是规划员：只读", "不要怕问", "一件就是一个 worker 一次能交回的活", "after 写上它要等的那几件的位置", "交完就停"]) expect(plan).toContain(kept);
+    for (const kind of ["card", "topic", "verify"] as const) expect(systemPrompt(kind, null, [], null)).not.toContain("小事不拆");
+  });
+
   it("规划员交了计划这一轮做完就收工（done，不停在等你回复）；「改一改」对它说一句：续上原来的对话，改完再交一次，又收工", async () => {
     const h = await setup(3);
     try {
