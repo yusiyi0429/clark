@@ -1,17 +1,15 @@
-import type { Pool } from "pg";
-import type { TMonthAnswer, TMonthChoice, TMonthPageResponse, TMonthTask } from "@warmap/contracts";
+import type { TMonthPageResponse, TMonthTask } from "@warmap/contracts";
 import { effectiveOutcome, failStreak, type HandbackRow } from "./cardProjection.js";
 import { latestRuns } from "./localDevices.js";
 import type { Query } from "./meetingStore.js";
 import { LOCATE_BUDGET_MS, taskBasis } from "./planTaskAccess.js";
 import { readPlanTasks, type PlanTask, type PlanTaskMission, type PlanTaskSource } from "./planTasks.js";
-import { continuedFrom, settlementsOf, stopTask, unstopTask } from "./taskContinuity.js";
-import { CardError } from "./taskCards.js";
+import { continuedFrom, settlementsOf } from "./taskContinuity.js";
 import { deliverableStatuses } from "./taskDeliverables.js";
 import { ACTIVE } from "./workers.js";
 
 /**
- * 月份页（契约 taskContinuity.ts 的 MonthPageResponse，设计 10.4、10.5）：这个月本人的 Task 和每件的状态摘要、复盘的答案。
+ * 月份页（契约 taskContinuity.ts 的 MonthPageResponse，设计 10.4、10.5）：这个月本人的 Task 和每件的状态摘要。复盘在 monthReview.ts。
  * 下个月 Co-Agent 的草稿（draft）等溪南的接口，现在一律为 null。
  */
 
@@ -32,12 +30,6 @@ async function monthTasks(q: Query, planTasks: PlanTaskSource, personId: string,
   const tasks = (await readPlanTasks(planTasks, missions, LOCATE_BUDGET_MS)).filter((task) => !task.responsibleId || task.responsibleId === personId)
     .sort((a, b) => order.get(a.missionId)! - order.get(b.missionId)! || a.name.localeCompare(b.name, "zh") || a.taskId.localeCompare(b.taskId));
   return { tasks, missionTitles: new Map(rows.map((row) => [row.id, row.title])) };
-}
-
-async function monthAnswers(q: Query, personId: string, period: string): Promise<Map<string, TMonthAnswer>> {
-  const rows = (await q("SELECT task_id,choice,note FROM task_month_reviews WHERE owner_id=$1 AND period=$2", [personId, period])).rows as
-    { task_id: string; choice: TMonthChoice | null; note: string | null }[];
-  return new Map(rows.map((row) => [row.task_id, { choice: row.choice, note: row.note }]));
 }
 
 type CardTally = { met: Map<string, Set<number>>; blocked: Map<string, number> };
@@ -84,53 +76,16 @@ async function runningSubSessions(q: Query, personId: string, taskIds: string[])
 export async function readMonthPage(q: Query, planTasks: PlanTaskSource, personId: string, period: string): Promise<TMonthPageResponse> {
   const { tasks, missionTitles } = await monthTasks(q, planTasks, personId, period);
   const ids = tasks.map((task) => task.taskId);
-  const [settlements, sources, answers, deliverables, cards, running] = await Promise.all([settlementsOf(q, ids), continuedFrom(q, ids),
-    monthAnswers(q, personId, period), deliverableStatuses(q, ids), tallyCards(q, personId, ids), runningSubSessions(q, personId, ids)]);
+  const [settlements, sources, deliverables, cards, running] = await Promise.all([settlementsOf(q, ids), continuedFrom(q, ids),
+    deliverableStatuses(q, ids), tallyCards(q, personId, ids), runningSubSessions(q, personId, ids)]);
   const rows: TMonthTask[] = tasks.map((task) => {
     const total = taskBasis(task).criteria.length;
     const settlement = settlements.get(task.taskId) ?? null;
     return { taskId: task.taskId, missionId: task.missionId, missionTitle: missionTitles.get(task.missionId) ?? "", name: task.name,
       agreement: total ? { met: [...cards.met.get(task.taskId) ?? []].filter((index) => index <= total).length, total } : null,
       version: deliverables.get(task.taskId)?.version ?? null, running: running.get(task.taskId) ?? 0, blocked: cards.blocked.get(task.taskId) ?? 0,
-      done: settlement?.kind === "completed", settlement, continuedFrom: sources.get(task.taskId) ?? null, answer: answers.get(task.taskId) ?? null };
+      done: settlement?.kind === "completed", settlement, continuedFrom: sources.get(task.taskId) ?? null };
   });
   return { period, tasks: rows, draft: null };
 }
 
-/**
- * 「复盘 N 月」答完了没有（给 B 的 homeWaiting.reviewAnswered）：这个月本人每件没了结的 Task 都选了怎么办（只补了一句话的不算）。
- * 本体读不到 Task 时一件都没有，算答完（不出「复盘」那一行），下次读到了再出。
- */
-export async function monthReviewAnswered(q: Query, planTasks: PlanTaskSource, personId: string, period: string): Promise<boolean> {
-  const { tasks } = await monthTasks(q, planTasks, personId, period);
-  const ids = tasks.map((task) => task.taskId);
-  const [settlements, answers] = await Promise.all([settlementsOf(q, ids), monthAnswers(q, personId, period)]);
-  return tasks.every((task) => settlements.has(task.taskId) || answers.get(task.taskId)?.choice);
-}
-
-/**
- * PUT /api/me/months/:period/tasks/:taskId/decision：复盘时这件怎么办，一个事务，同一件再答就覆盖。只收这个月本人负责的 Task，别的 404。
- * 选到此为止同时定了到此为止（task_stops，那句话一起记）；选继续做、改一改再做就撤销到此为止；只补一句话（choice 为 null）不动。
- * 已经延续出去的选到此为止 409。两样都没写 400。
- */
-export async function decideMonthTask(pool: Pool, planTasks: PlanTaskSource, personId: string, period: string, taskId: string, answer: TMonthAnswer,
-  now: Date): Promise<void> {
-  const note = answer.note?.trim() || null;
-  if (!answer.choice && !note) throw new CardError(400, "INVALID_INPUT", "选一个，或者补一句话");
-  const { tasks } = await monthTasks(pool.query.bind(pool), planTasks, personId, period);
-  if (!tasks.some((task) => task.taskId === taskId)) throw new CardError(404, "NOT_FOUND", "这个月没有你负责的这件 Task");
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    const tx: Query = client.query.bind(client);
-    await tx(`INSERT INTO task_month_reviews(owner_id,period,task_id,choice,note,answered_at) VALUES($1,$2,$3,$4,$5,$6)
-      ON CONFLICT (owner_id,period,task_id) DO UPDATE SET choice=EXCLUDED.choice,note=EXCLUDED.note,answered_at=EXCLUDED.answered_at`,
-    [personId, period, taskId, answer.choice, note, now]);
-    if (answer.choice === "stop") await stopTask(tx, taskId, personId, note, now);
-    else if (answer.choice) await unstopTask(tx, taskId);
-    await client.query("COMMIT");
-  } catch (cause) {
-    await client.query("ROLLBACK").catch(() => undefined);
-    throw cause;
-  } finally { client.release(); }
-}

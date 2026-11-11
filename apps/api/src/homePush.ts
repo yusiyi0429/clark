@@ -10,7 +10,7 @@ import { shanghaiLabel } from "./workdays.js";
 /**
  * 飞书推送（新首页设计 13.2）：把首页「等你」里急的几件推到本人和天枢机器人的单聊（「天枢伙伴」那条对话），发送走 feishu/notify.ts 的队列。
  * - 推：卡住正在跑的活、而本人 10 分钟内没在网页上打开天枢的（验收两次没过、额度用完要定、批准等了 10 分钟）；
- *   要本人确认、离截止不到 24 小时的（Mission Card、复盘）。CEO 要拍板的是原有的 ceoFeishuNotices.ts，不在这里。
+ *   要本人确认、离截止不到 24 小时的 Mission Card；复盘预评做完出了「复盘 N 月」推一次，截止前不催。CEO 要拍板的是原有的 ceoFeishuNotices.ts，不在这里。
  * - 同一件只推一次（feishu_pushes 记着）；离上一条不到 10 分钟的攒着，到 10 分钟合成一条；22:00 到 08:00 不推，08:00 把那时还在等的合成一条。
  * - 每件带一个打开天枢那一处的链接，不放批准、回答这类操作（云端不指挥本机）。
  * - 本人在「偏好」里关了飞书通知、或没关联飞书的，不推。
@@ -90,7 +90,8 @@ export function pushable(item: TWaitingItem, away: boolean, now: Date): boolean 
     case "verdict": case "quota": return away;
     case "approval": return away && !!item.at && now.getTime() - Date.parse(item.at) >= APPROVAL_MS;
     case "mission_card": return dueSoon(item, now);
-    case "month": return item.month?.step === "review" && dueSoon(item, now);
+    // 复盘：预评做完出了「复盘 N 月」就推一次（同一件只推一次），截止前不再催（本人 11/11 定）。
+    case "month": return item.month?.step === "review";
     default: return false;
   }
 }

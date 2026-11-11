@@ -1,14 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import type { THomePlanTask } from "@warmap/contracts";
-import { monthReviewAnswered } from "../src/monthPage.js";
 import type { PlanTaskSource } from "../src/planTasks.js";
 import { settlementsOf } from "../src/taskContinuity.js";
 import { BOARD_NOW, BOARD_TASKS, boardFixture, THIRD, type BoardFixture } from "./boardFixture.js";
 import { TEST_MEMBER } from "./helpers.js";
 
 /**
- * 跨月延续与月份（设计《新首页》第 10 节）：Task 按 id 找不按月份找、延续、到此为止、月份页和复盘答案。
+ * 跨月延续与月份（设计《新首页》第 10 节）：Task 按 id 找不按月份找、延续、到此为止、月份页（复盘在 monthReview.test.ts）。
  * 本人在 11 月有 Mission「mine」（本体对象 w-mine），12 月有「mine-dec」（w-dec），下面两件 12 月的 Task。
  */
 const MEMBER = TEST_MEMBER.personId;
@@ -185,7 +184,7 @@ describe("跨月延续与月份", () => {
     expect((await settlementsOf(g.q, ["task-open"])).get("task-open")).toMatchObject({ kind: "continued", by: null, to: { taskId: "task-next", period: "2026-12" } });
   }, 120_000);
 
-  it("月份页：这个月本人的 Task、约定几条达到、交付第几版、还在跑和受阻的子会话；复盘答案能存，选到此为止同时了结，改回来撤销", async () => {
+  it("月份页：这个月本人的 Task、约定几条达到、交付第几版、还在跑和受阻的子会话；旧的复盘答案接口没了", async () => {
     const g = f = await fixture();
     const machine = await g.local();
     const passed = await g.card("打分");
@@ -206,25 +205,9 @@ describe("跨月延续与月份", () => {
     const month = await g.call("GET", "/api/me/months/2026-11");
     expect(month.statusCode).toBe(200);
     expect(month.json()).toEqual({ period: "2026-11", draft: null, tasks: [{ taskId: "task-open", missionId: "mine", missionTitle: "内部版上线", name: "对话质量达标",
-      agreement: { met: 1, total: 2 }, version: 1, running: 1, blocked: 1, done: false, settlement: null, continuedFrom: null, answer: null }] });
-    expect(await monthReviewAnswered(g.q, withById, MEMBER, "2026-11")).toBe(false);
-
-    const decide = (taskId: string, answer: unknown) => g.call("PUT", `/api/me/months/2026-11/tasks/${taskId}/decision`, answer);
-    // 只补一句话：记下，不算答完，不动到此为止。
-    expect((await decide("task-open", { choice: null, note: "再想想" })).statusCode).toBe(204);
-    expect((await g.call("GET", "/api/me/months/2026-11")).json().tasks[0]).toMatchObject({ settlement: null, answer: { choice: null, note: "再想想" } });
-    expect(await monthReviewAnswered(g.q, withById, MEMBER, "2026-11")).toBe(false);
-
-    expect((await decide("task-open", { choice: "stop", note: "不做了" })).statusCode).toBe(204);
-    expect((await g.call("GET", "/api/me/months/2026-11")).json().tasks[0]).toMatchObject({ settlement: { kind: "stopped", note: "不做了" },
-      answer: { choice: "stop", note: "不做了" } });
-    expect(await monthReviewAnswered(g.q, withById, MEMBER, "2026-11")).toBe(true);
-    expect((await decide("task-open", { choice: "continue", note: null })).statusCode).toBe(204);
-    expect((await g.call("GET", "/api/me/months/2026-11")).json().tasks[0]).toMatchObject({ settlement: null, answer: { choice: "continue", note: null } });
-
-    // 不是这个月本人负责的 Task 不收；两样都没写 400；月份写错 400。
-    expect((await decide("task-theirs", { choice: "continue", note: null })).statusCode).toBe(404);
-    expect((await decide("task-open", { choice: null, note: " " })).statusCode).toBe(400);
+      agreement: { met: 1, total: 2 }, version: 1, running: 1, blocked: 1, done: false, settlement: null, continuedFrom: null }] });
+    // 第一版复盘答案的接口去掉了（复盘第三版，本人 11/11 定）。
+    expect((await g.call("PUT", "/api/me/months/2026-11/tasks/task-open/decision", { choice: "continue", note: null })).statusCode).toBe(404);
     expect((await g.call("GET", "/api/me/months/2026-13")).statusCode).toBe(400);
 
     // 延续以后：11 月这件写延续去了哪，12 月那件写延续自哪。

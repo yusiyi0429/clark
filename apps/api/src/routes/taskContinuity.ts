@@ -1,14 +1,13 @@
 import { Type } from "@sinclair/typebox";
 import type { FastifyReply } from "fastify";
-import { ContinueTaskRequest, ContinueTaskResponse, MonthAnswer, MonthPageResponse, MonthPeriod, StopTaskRequest, TaskSettlementResponse } from "@warmap/contracts";
-import { decideMonthTask, readMonthPage } from "../monthPage.js";
+import { ContinueTaskRequest, ContinueTaskResponse, MonthPageResponse, MonthPeriod, StopTaskRequest, TaskSettlementResponse } from "@warmap/contracts";
+import { readMonthPage } from "../monthPage.js";
 import { continueTask, stopTask, unstopTask } from "../taskContinuity.js";
 import { boardTask, CardError, planTaskOpener } from "../taskCards.js";
 import type { AppInstance, Guard, RouteContext } from "./shared.js";
 
 const taskParams = Type.Object({ taskId: Type.String({ minLength: 1 }) });
 const monthParams = Type.Object({ period: MonthPeriod });
-const decisionParams = Type.Object({ period: MonthPeriod, taskId: Type.String({ minLength: 1 }) });
 
 /**
  * 跨月延续与月份页（契约 taskContinuity.ts）：DRI 工作台的人才有。
@@ -51,10 +50,4 @@ export function registerTaskContinuityRoutes(app: AppInstance, ctx: RouteContext
 
   app.get("/api/me/months/:period", { preHandler: requireMember, schema: { params: monthParams, response: { 200: MonthPageResponse } } }, async (req) =>
     readMonthPage(q, ctx.planTasks, req.person!.personId, req.params.period));
-
-  app.put("/api/me/months/:period/tasks/:taskId/decision", { preHandler: requireMember, schema: { params: decisionParams, body: MonthAnswer } },
-    async (req, reply) => handle(reply, async () => {
-      await decideMonthTask(pool, ctx.planTasks, req.person!.personId, req.params.period, req.params.taskId, req.body, ctx.now());
-      return reply.status(204).send();
-    }));
 }
