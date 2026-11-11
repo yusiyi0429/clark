@@ -243,6 +243,7 @@ describe("migration", () => {
         "273_card_agreements.sql",
         "274_needs_person.sql",
         "275_handback_relays.sql",
+        "276_free_sessions.sql",
       ]);
 
       // 幂等：重复执行不再变更

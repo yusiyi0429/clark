@@ -1,6 +1,6 @@
 import type { Pool } from "pg";
 import type { TBackgroundItem, TBackgroundResponse, TBackgroundState, TCard, TCardMerge, TCardTaskView, THomeItem, THomeProject, THomeProjectGoal,
-  TLocalTaskBudgetView, TMyMeetingCard, TMyMeetingConfirm, TNexusConfirmationItem, TSubSession, TSubSessionState, TWorkerQueueReason, TWorkHomeResponse } from "@warmap/contracts";
+  TLocalFolderHolder, TLocalTaskBudgetView, TMyMeetingCard, TMyMeetingConfirm, TNexusConfirmationItem, TSubSession, TSubSessionState, TWorkerQueueReason, TWorkHomeResponse } from "@warmap/contracts";
 import { assembleWaiting, HELD } from "./homeWaiting.js";
 import { planTaskMissions, type MissionRow } from "./homePlan.js";
 import { failStreak, type HandbackRow } from "./cardProjection.js";
@@ -144,6 +144,9 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
   const priorWaits = new Set(((await q("SELECT id::text FROM local_runs WHERE owner_id=$1 AND state='queued' AND waiting_for IS NOT NULL", [ownerId])).rows as
     { id: string }[]).map((row) => row.id));
   const held = await heldRuns(q, ownerId);
+  // 在等普通文件夹空出来（第 68 条）：本机报的占着它的那个会话。
+  const folderHolders = new Map(((await q("SELECT id::text,held_by FROM local_runs WHERE owner_id=$1 AND state='queued' AND held_by IS NOT NULL", [ownerId])).rows as
+    { id: string; held_by: TLocalFolderHolder }[]).map((row) => [row.id, row.held_by]));
   /**
    * 本机的会话停着等额度恢复（那台电脑在线、恢复时间没到）：等额度恢复；会话还在或停着等额度、那台电脑不在线：等本机上线；
    * 本机报 queued：等空位（在等前面的卡时是等前面的卡）。都不是为 null。
@@ -151,7 +154,7 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
   const queuedBy = (run: { id: string; deviceId: string; state: string }): TWorkerQueueReason | null =>
     held.has(run.id) && awaitsQuota(held.get(run.id) ?? null, run.deviceId, online, now) ? "quota"
       : (ACTIVE.has(run.state) || held.has(run.id)) && !online.has(run.deviceId) ? "device_offline"
-        : run.state === "queued" ? priorWaits.has(run.id) ? "prior_cards" : "slot" : null;
+        : run.state === "queued" ? folderHolders.has(run.id) ? "folder_busy" : priorWaits.has(run.id) ? "prior_cards" : "slot" : null;
   const holdUntil = (queueReason: TWorkerQueueReason | null, runId: string | undefined) => {
     const until = queueReason === "quota" && runId ? held.get(runId) : null;
     return until ? new Date(until).toISOString() : null;
@@ -215,8 +218,9 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
   }
 
   // 专题：没归档的都列；最近一次本机执行定状态。专题没有「完成」：会话停了、交完收工、异常退出都算已暂停（等你说一句接着做）。
-  const topics = (await q(`SELECT id::text,title,role_id::text,plan_task_id,project_id::text,updated_at FROM research_topics WHERE owner_id=$1 AND status='active' AND trashed_at IS NULL
-    ORDER BY created_at,id`, [ownerId])).rows as { id: string; title: string; role_id: string | null; plan_task_id: string | null; project_id: string | null; updated_at: Date }[];
+  const topics = (await q(`SELECT id::text,title,role_id::text,plan_task_id,project_id::text,updated_at,free FROM research_topics WHERE owner_id=$1 AND status='active'
+    AND trashed_at IS NULL ORDER BY created_at,id`, [ownerId])).rows as { id: string; title: string; role_id: string | null; plan_task_id: string | null; project_id: string | null;
+    updated_at: Date; free: boolean }[];
   const topicRuns = await latestRuns(q, "topic_id", topics.map((topic) => topic.id), "topic");
   const topicRoles = await rolesById(q, topics.map((topic) => topic.role_id));
   const TOPIC_STATES: Record<RunRow["state"], [TSubSessionState, TSubSession["waiting"]]> = { queued: ["queued", null], starting: ["running", null],
@@ -228,7 +232,7 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
     const base = { id: topic.id, kind: "topic" as const, letter: null as string | null, unseen: false, title: topic.title, role: role ? roleRef(role) : null, sessionId: run?.id ?? null, deviceId: run?.device_id ?? null,
       autoStart: autoStart.has(topic.id), updatedAt: latest(topic.updated_at, run?.updated_at), planTaskId: topic.plan_task_id,
       projectId: taskProject(topic.plan_task_id) ?? topic.project_id, runUpdatedAt: run?.updated_at.toISOString() ?? null,
-      merge: null, acceptedAt: null, mergeRun: null, ask: run?.ask ?? null };
+      merge: null, acceptedAt: null, mergeRun: null, ask: run?.ask ?? null, ...(topic.free ? { free: true as const } : {}) };
     if (!run) { subs.push({ ...base, state: "queued", waiting: null, queueReason: notStarted(topic.id), holdUntil: null, stoppedAt: null }); continue; }
     const queueReason = queuedBy({ id: run.id, deviceId: run.device_id, state: run.state });
     // 一轮做完停下、没在问你：已停下（waiting / null），不进等你（9.6）。
@@ -240,6 +244,12 @@ export async function readWorkHome(deps: WorkHomeDeps, person: MissionRoundPerso
   // 字母（18 节第 10 条）：在项目里的子会话带它在那个项目里的字母，没编号的当场补上。
   const letters = await lettersFor(q, subs.flatMap((sub) => sub.projectId ? [{ projectId: sub.projectId, kind: sub.kind, id: sub.id }] : []));
   for (const sub of subs) sub.letter = sub.projectId ? letters.get(`${sub.kind}:${sub.id}`) ?? null : null;
+  // 在等文件夹（第 68 条）：写上占着它的是谁，字母照它在本人首页上的那个。
+  for (const sub of subs) {
+    const holder = sub.queueReason === "folder_busy" && sub.sessionId ? folderHolders.get(sub.sessionId) : undefined;
+    if (holder) sub.heldBy = { kind: holder.kind, id: holder.id, letter: subs.find((other) => other.kind === holder.kind && other.id === holder.id)?.letter ?? null,
+      title: holder.title };
+  }
   // 蓝点（17.2 第 25 条）：停下的时间晚于本人上次打开它。
   const seen = await seenTimes(q, ownerId);
   for (const sub of subs) sub.unseen = unseenSince(sub.stoppedAt, seen.get(`sub:${sub.id}`));
