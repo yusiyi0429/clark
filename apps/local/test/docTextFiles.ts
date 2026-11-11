@@ -89,7 +89,7 @@ export interface SheetSpec { name: string; data?: string; state?: string; chart?
  * 拼一个 .xlsx。每张表给 sheetData 里面的 XML（data）和 sheetData 后面的（after，比如合并格子）。
  * styles 是 styles.xml 里 <styleSheet> 下面的内容；默认第 1 号样式是日期（内置 14）。
  */
-export function makeXlsx(sheets: SheetSpec[], opts: { strings?: string[]; styles?: string; date1904?: boolean; store?: boolean; reverse?: boolean; extra?: Part[] } = {}): Buffer {
+export function makeXlsx(sheets: SheetSpec[], opts: { strings?: string[]; sst?: string; styles?: string; date1904?: boolean; store?: boolean; reverse?: boolean; extra?: Part[] } = {}): Buffer {
   const target = (s: SheetSpec, i: number) => s.file ?? (s.chart ? `chartsheets/sheet${i + 1}.xml` : `worksheets/sheet${i + 1}.xml`);
   const parts: Part[] = [
     ["[Content_Types].xml", '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>'],
@@ -106,7 +106,7 @@ export function makeXlsx(sheets: SheetSpec[], opts: { strings?: string[]; styles
         sheets.map((s, i) => `<Relationship Id="rId${i + 10}" Type="${REL}/${s.chart ? "chartsheet" : "worksheet"}" Target="${target(s, i)}"/>`).join("") +
         "</Relationships>",
     ],
-    ["xl/sharedStrings.xml", `<sst ${S} count="${opts.strings?.length ?? 0}">${(opts.strings ?? []).map((t) => `<si><t xml:space="preserve">${t}</t></si>`).join("")}</sst>`],
+    ["xl/sharedStrings.xml", `<sst ${S} count="${opts.strings?.length ?? 0}">${opts.sst ?? (opts.strings ?? []).map((t) => `<si><t xml:space="preserve">${t}</t></si>`).join("")}</sst>`],
     ["xl/styles.xml", `<styleSheet ${S}>${opts.styles ?? DEFAULT_XLSX_STYLES}</styleSheet>`],
     ...sheets.map((s, i): Part => [`xl/${target(s, i)}`, s.chart ? `<chartsheet ${S}/>` : `<worksheet ${S}><dimension ref="A1"/><sheetData>${s.data ?? ""}</sheetData>${s.after ?? ""}</worksheet>`]),
     ...(opts.extra ?? []),

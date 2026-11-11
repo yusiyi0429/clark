@@ -132,6 +132,39 @@ describe("Excel 转文字", () => {
     expect(convert(makeXlsx([{ name: "表", data }], { date1904: true })).markdown).toContain("| 2026-11-11 | 18:00:00 | a\\|b<br>第二行 |");
   });
 
+  it("共享字符串：拼音标注（rPh、phoneticPr）去掉，富文本的多段连起来", () => {
+    const sst =
+      '<si><t>北京</t><rPh sb="0" eb="2"><t>ペキン</t></rPh><phoneticPr fontId="1"/></si>' +
+      '<si><r><rPr><b/></rPr><t>进展</t></r><r><rPr><color rgb="FFFF0000"/></rPr><t xml:space="preserve">良好 </t></r><rPh sb="0" eb="1"><t>しんてん</t></rPh><phoneticPr fontId="1" type="noConversion"/></si>';
+    const data = '<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row>';
+    const { markdown, sheets } = convert(makeXlsx([{ name: "表", data }], { sst }));
+    expect(markdown).toContain("| 北京 | 进展良好 |");
+    expect(sheets[0].rows[0].cells).toEqual([{ col: "A", text: "北京" }, { col: "B", text: "进展良好 " }]);
+  });
+
+  it("布尔、错误值照写；算出错误的公式写公式", () => {
+    const data =
+      '<row r="1"><c r="A1" t="b"><v>0</v></c><c r="B1" t="e"><v>#N/A</v></c><c r="C1" t="e"><f>VLOOKUP(A1,D:E,2,FALSE)</f><v>#N/A</v></c><c r="D1" t="str"><f>"文"&amp;"字"</f><v>文字</v></c></row>';
+    expect(convert(makeXlsx([{ name: "表", data }])).markdown).toContain('| FALSE | #N/A | =VLOOKUP(A1,D:E,2,FALSE) | ="文"&"字" |');
+  });
+
+  it("日期只认 styles.xml 里的日期格式；认不准的（时长、带单位的数字）照数字原样", () => {
+    const styles =
+      '<numFmts><numFmt numFmtId="164" formatCode="[h]:mm:ss"/><numFmt numFmtId="165" formatCode="0.00&quot;万元&quot;"/><numFmt numFmtId="166" formatCode="[$-804]yyyy&quot;年&quot;m&quot;月&quot;"/></numFmts>' +
+      '<cellXfs><xf numFmtId="0"/><xf numFmtId="164"/><xf numFmtId="165"/><xf numFmtId="166"/><xf numFmtId="4"/></cellXfs>';
+    const data = '<row r="1"><c r="A1" s="1"><v>1.5</v></c><c r="B1" s="2"><v>12.5</v></c><c r="C1" s="3"><v>46337</v></c><c r="D1" s="4"><v>1234567.891</v></c><c r="E1" s="9"><v>7</v></c></row>';
+    expect(convert(makeXlsx([{ name: "表", data }], { styles })).markdown).toContain("| 1.5 | 12.5 | 2026-11-11 | 1234567.891 | 7 |");
+  });
+
+  it("格式刷到一百万行、一万多列的空格子不算内容，不撑大表格", () => {
+    const data =
+      '<row r="1"><c r="A1"><v>1</v></c><c r="B1" s="1"/></row>' +
+      Array.from({ length: 200 }, (_, i) => `<row r="${i + 2}" s="1" customFormat="1"><c r="XFD${i + 2}" s="1"/></row>`).join("") +
+      '<row r="1048576" s="1" customFormat="1"><c r="XFD1048576" s="1"/></row>';
+    const after = '<mergeCells count="1"><mergeCell ref="C3:XFD1048576"/></mergeCells>';
+    expect(convert(makeXlsx([{ name: "表", data, after }])).markdown).toBe("## 表\n\n| A |\n| --- |\n| 1 |\n");
+  });
+
   it("公式平移：相对的动、$ 锁住的不动、引号和函数名不动", () => {
     expect(shiftFormula("SUM(B2:B9)", 1, 0)).toBe("SUM(B3:B10)");
     expect(shiftFormula("A1*$B$1+$C2+D$3", 2, 1)).toBe("B3*$B$1+$C4+E$3");

@@ -58,7 +58,9 @@ class Ctx {
         const lvl = Math.min(num.ilvl, this.listLevel + 1);
         this.listLevel = lvl;
         const lead = " ".repeat(4 * lvl);
-        const marker = this.numFmt(num.numId, num.ilvl) === "bullet" ? "- " : "1. ";
+        // 认得出是编号的写 1.；项目符号、不编号、认不出的都写成普通列表项
+        const fmt = this.numFmt(num.numId, num.ilvl);
+        const marker = fmt && fmt !== "bullet" && fmt !== "none" ? "1. " : "- ";
         const cont = "\n" + " ".repeat(lead.length + marker.length);
         this.push({ md: lead + marker + md.split("\n").join(cont), list: true });
       } else this.push({ md, list: false });

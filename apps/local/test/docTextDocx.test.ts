@@ -139,6 +139,30 @@ describe("Word 转文字", () => {
       "</w:tbl>";
     expect(md(makeDocx(body))).toBe(["| 合并标题 |  | C |", "| --- | --- | --- |", "| 上 | a\\|b<br>第二行 | x / y |", "|  | d |  |", ""].join("\n"));
   });
+
+  it("超链接、内容控件、AlternateContent、两种域里的字：不丢、不重", () => {
+    const body =
+      '<w:p><w:hyperlink r:id="rId5" w:history="1"><w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:t>官网</w:t></w:r></w:hyperlink>' +
+      '<w:sdt><w:sdtPr><w:alias w:val="负责人"/><w:showingPlcHdr/></w:sdtPr><w:sdtContent><w:r><w:t>控件里的字</w:t></w:r></w:sdtContent></w:sdt>' +
+      '<w:fldSimple w:instr=" DATE \\@ &quot;yyyy/M/d&quot; "><w:r><w:t>2026/11/11</w:t></w:r></w:fldSimple>' +
+      '<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>第5页</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r>' +
+      '<mc:AlternateContent xmlns:mc="m"><mc:Choice Requires="w14"><w:r><w:t>二选一</w:t></w:r></mc:Choice><mc:Fallback><w:r><w:t>二选一</w:t></w:r></mc:Fallback></mc:AlternateContent></w:p>' +
+      `<w:sdt><w:sdtPr/><w:sdtContent>${p("块级控件")}</w:sdtContent></w:sdt>` +
+      `<mc:AlternateContent xmlns:mc="m"><mc:Choice Requires="w14">${p("块级二选一")}</mc:Choice><mc:Fallback>${p("块级二选一")}</mc:Fallback></mc:AlternateContent>`;
+    expect(md(makeDocx(body))).toBe("官网控件里的字2026/11/11第5页二选一\n\n块级控件\n\n块级二选一\n");
+  });
+
+  it("制表符、换行、分页符、保留的空格、实体", () => {
+    const body = '<w:p><w:r><w:t xml:space="preserve">A &amp; B &lt;C&gt; &#x4E2D;&#25991; </w:t><w:tab/><w:t>D</w:t><w:br/><w:t>第二行</w:t><w:br w:type="page"/><w:t>同一行</w:t></w:r></w:p>';
+    expect(md(makeDocx(body))).toBe("A & B \\<C\\> 中文 \tD\n第二行同一行\n");
+  });
+
+  it("列表编号认不出（numbering.xml 里没有这个编号）时当普通列表项，每次一样", () => {
+    const body = p("甲", '<w:numPr><w:ilvl w:val="3"/><w:numId w:val="99"/></w:numPr>') + p("乙", '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="99"/></w:numPr>');
+    const buf = makeDocx(body);
+    expect(md(buf)).toBe("- 甲\n- 乙\n");
+    expect(md(buf)).toBe(md(makeDocx(body, { numbering: "" })));
+  });
 });
 
 describe("Word 转不了的，明说原因，不抛", () => {
