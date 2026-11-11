@@ -76,6 +76,8 @@
 .feed > :is(.step, .steps) + :is(.step, .steps) { margin-top: -6px; }
 /* 本人那句话的回执贴着气泡（17.4）。 */
 .feed > .meReceipt { margin-top: -8px; }
+/* 先画出来、本机还没回的那句（发送中）：淡一点。 */
+.me[data-sending] { opacity: .6; }
 .step > svg { flex: none; color: var(--ink-faint); }
 .step time, .stepsTook { flex: none; color: var(--field-placeholder); font-variant-numeric: tabular-nums; }
 .stepText, .step > time + span, .stepsSummary { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

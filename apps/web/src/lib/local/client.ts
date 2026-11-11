@@ -2,9 +2,9 @@
  * 真本机程序的客户端：直连 http://127.0.0.1:<端口>，口令放在 x-tianshu-local-token 头里。
  * 事件流不能用 EventSource（带不了口令头），用 fetch 读 SSE，断了带 Last-Event-ID 重连（RFC 第 4 节）。
  */
-import type { TLocalCreateSessionBatchResponse, TLocalSessionEvent } from "@warmap/contracts";
+import type { TLocalCreateSessionBatchResponse, TLocalHealthResponse, TLocalSessionEvent } from "@warmap/contracts";
 import { LOCAL_RUNNER_DEFAULT_PORT, LOCAL_RUNNER_ROUTES, LOCAL_RUNNER_TOKEN_HEADER } from "./routes";
-import { LocalRunnerError, type EventWatch, type LocalRunner } from "./runner";
+import { LocalRunnerError, acceptsClientMessageId, type EventWatch, type LocalRunner } from "./runner";
 
 type RouteName = keyof typeof LOCAL_RUNNER_ROUTES;
 
@@ -105,9 +105,11 @@ export function createHttpRunner(base = localRunnerBase(), token: () => string =
     }
   }
 
+  let messageIds = false;
   return {
     kind: "http",
-    health: () => call("health"),
+    get clientMessageIds() { return messageIds; },
+    health: async () => { const health = await call<TLocalHealthResponse>("health"); messageIds = acceptsClientMessageId(health); return health; },
     startPairing: (clientLabel) => call("startPairing", {}, { clientLabel }),
     pairingStatus: (pairingId) => call("pairingStatus", { pairingId }),
     unpair: async () => { await call("unpair"); },
@@ -129,8 +131,8 @@ export function createHttpRunner(base = localRunnerBase(), token: () => string =
     createSession: (body) => call("createSession", {}, body),
     createSessionBatch: async (items) => (await call<TLocalCreateSessionBatchResponse>("createSessionBatch", {}, { items })).results,
     getSession: (id) => call("getSession", { id }),
-    sendMessage: (id, text, kind, attachments) => call("sendMessage", { id }, kind === "review" ? { kind, ...(text ? { text } : {}) }
-      : { ...(text ? { text } : {}), ...(attachments?.length ? { attachments } : {}) }),
+    sendMessage: (id, text, kind, attachments, messageId) => call("sendMessage", { id }, kind === "review" ? { kind, ...(text ? { text } : {}) }
+      : { ...(text ? { text } : {}), ...(attachments?.length ? { attachments } : {}), ...(messageId ? { messageId } : {}) }),
     interrupt: async (id) => (await call<{ session: Awaited<ReturnType<LocalRunner["interrupt"]>> }>("interrupt", { id }, {})).session,
     setPermissionMode: async (id, mode) => (await call<{ session: Awaited<ReturnType<LocalRunner["setPermissionMode"]>> }>("setPermissionMode", { id }, { mode })).session,
     setSessionModel: (id, body) => call("setSessionModel", { id }, body),

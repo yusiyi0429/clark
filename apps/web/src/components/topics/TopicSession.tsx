@@ -6,7 +6,6 @@
  * 有了正文以后能开「评审会」（第 19.1、19.6 节）：选 2–3 个挑刺的岗位，本机并行挑刺、合成一份，存成「评审」那一版，按「分歧和建议」排版。
  * 版本由本机经同步报到云端；对话全文只在本机。手机和别的电脑上只能看版本。
  */
-import type { TLocalAttachmentRef } from "@warmap/contracts";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -17,7 +16,7 @@ import { HeroButton } from "@/components/HeroButton";
 import { useHandheld } from "@/components/ui/useHandheld";
 import { StartDialog } from "@/components/local/StartDialog";
 import { showWorkspaceToast } from "@/lib/toast";
-import { RelayLine, SessionComposer, SessionTranscript, sayToSession, useSessionModels, useModelChangedRefresh, sessionEnded, type DecideOptions } from "@/components/cards/SessionTranscript";
+import { RelayLine, SessionComposer, SessionTranscript, useSessionSend, useSessionModels, useModelChangedRefresh, sessionEnded, type DecideOptions } from "@/components/cards/SessionTranscript";
 import { stateChip } from "@/components/cards/CardSession";
 import { QuestionDecision, awayChip, questionTitle } from "@/components/work/decisions";
 import { askAnchor } from "@/components/home/TaskFeed";
@@ -87,6 +86,8 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
   const canAct = canCommand({ ready, handheld, hasSession: !!session });
   const mode = useSessionMode(local.runner, session, view);
   const models = useSessionModels(local.runner, local.models, session, local.refresh, () => showWorkspaceToast({ text: "没换成" }), local.status);
+  // 说一句：一按就先画出来（useSessionSend）。
+  const send = useSessionSend(local.runner, session?.id ?? null, view, { kind: "topic", id: topicId });
   // 没成的不弹 toast：发消息交给输入框，批准、回答交给选项框，这页的按钮后面各自写「失败 · 重试」。
   const [failed, setFailed] = useState<{ at: "doc" | "head"; retry: () => void; reason: string } | null>(null);
   const act = (at: "doc" | "head", action: () => Promise<unknown>) => { setFailed(null); action().catch((error: unknown) => setFailed({ at, retry: () => act(at, action), reason: error instanceof Error ? error.message : "" })); };
@@ -101,10 +102,7 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
   const status = view.status ?? session?.status ?? null;
   const ended = !!session && sessionEnded(status);
   const device = topic.run?.deviceName ?? detail.runs[0]?.deviceName ?? null;
-  const say = async (text: string, attachments: TLocalAttachmentRef[] = []) => {
-    if (!session) return false;
-    return sayToSession(local.runner, session.id, view.pending, text, attachments);
-  };
+  const say = send.say;
   const decide = async (requestId: string, decision: "allow" | "deny", { forSession, message }: DecideOptions) => {
     if (!session) return;
     await local.runner.decidePermission(session.id, requestId, { decision, ...(forSession ? { allowForSession: true } : {}), ...(message ? { message } : {}) });
@@ -172,7 +170,7 @@ export function TopicSession({ topicId, embedded = false }: { topicId: string; e
       <div className={s.chat}>
         <div className={s.scroll} ref={scroll.scrollRef}>
           <div ref={scroll.contentRef}>
-            {session ? <SessionTranscript entries={view.entries} agentName={HARNESS_NAME[session.agent]} canAct={canAct} onResend={(entry) => void say(entry.text).catch(() => showWorkspaceToast({ text: "没发出去" }))} device={device} live={running(status)} ended={ended} relay={relay} onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={asking} asking={question} />
+            {session ? <SessionTranscript entries={send.entries} agentName={HARNESS_NAME[session.agent]} canAct={canAct} onResend={(entry) => void say(entry.text).catch(() => showWorkspaceToast({ text: "没发出去" }))} onRetry={send.retry} device={device} live={running(status)} starting={status === "starting"} ended={ended} relay={relay} onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={asking} asking={question} />
               : <div className={s.feed}><span className={s.evt}>{topic.title}</span>
                   {ready && topic.status === "active" && !embedded ? <div className={s.actions}><HeroButton variant="primary" size="sm" onPress={() => setStarting(true)}>开始</HeroButton></div> : null}
                 </div>}

@@ -6,7 +6,7 @@
  * 只有这台电脑上的本机程序在跑这张卡、而且不是手机时，才能开始、插话、停止、批权限；别处只看云端同步来的摘要。
  * 手机上分「结果」「对话」两个标签。
  */
-import type { TLocalAttachmentRef, TLocalChangedFile } from "@warmap/contracts";
+import type { TLocalChangedFile } from "@warmap/contracts";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -24,7 +24,7 @@ import { overrule, retryAcceptance } from "@/lib/board/cloud";
 import { cardRole } from "@/lib/team/roles";
 import { useAutoReturn } from "@/lib/board/useAutoReturn";
 import { showWorkspaceToast } from "@/lib/toast";
-import { RelayLine, SessionComposer, SessionTranscript, sayToSession, useSessionModels, useModelChangedRefresh, sessionEnded, type DecideOptions } from "./SessionTranscript";
+import { RelayLine, SessionComposer, SessionTranscript, useSessionSend, useSessionModels, useModelChangedRefresh, sessionEnded, type DecideOptions } from "./SessionTranscript";
 import { useSessionMode } from "./PermissionMode";
 import { FilePreview, cloudOutputFile, localSessionFile, type PreviewFile } from "./FilePreview";
 import { filesSignal, matchChangedFile, useSessionFiles } from "@/lib/local/sessionFiles";
@@ -110,6 +110,9 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
     } catch { /* 不量了 */ }
   }, [session, view.lastSeq]);
 
+  // 说一句：一按就先画出来（useSessionSend）。
+  const send = useSessionSend(local.runner, session?.id ?? null, view, { kind: "card", id: cardId });
+
   if (missing) return <div className={s.gone}><p>没有这件事项</p><Link href="/me/month">回到本月</Link></div>;
   if (!detail) return <div className={s.page} aria-busy />;
 
@@ -143,10 +146,7 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
     await local.refresh();
     scroll.jumpToLatest();
   };
-  const say = async (text: string, attachments: TLocalAttachmentRef[] = []) => {
-    if (!session) return false;
-    return sayToSession(local.runner, session.id, view.pending, text, attachments);
-  };
+  const say = send.say;
   const control = async (action: "interrupt" | "kill") => {
     if (!session) return;
     await local.runner[action](session.id);
@@ -181,7 +181,7 @@ export function CardSession({ cardId, embedded = false }: { cardId: string; embe
         <div className={s.scroll} ref={scroll.scrollRef}>
           <div ref={scroll.contentRef}>
             {session ? (
-              <SessionTranscript entries={view.entries} agentName={agentName} canAct={canAct} onResend={(entry) => void say(entry.text).catch(() => showWorkspaceToast({ text: "没发出去" }))} device={device} live={sessionRunning} ended={ended} relay={relay} lead={`交代：${item.title}${item.card?.criterion ? ` · 按「${item.card.criterion.text}」验收` : ""}`}
+              <SessionTranscript entries={send.entries} agentName={agentName} canAct={canAct} onResend={(entry) => void say(entry.text).catch(() => showWorkspaceToast({ text: "没发出去" }))} onRetry={send.retry} device={device} live={sessionRunning} starting={status === "starting"} ended={ended} relay={relay} lead={`交代：${item.title}${item.card?.criterion ? ` · 按「${item.card.criterion.text}」验收` : ""}`}
                 onFile={openFile}
                 onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={asking} asking={question} />
             ) : <CloudTimeline run={run} title={item.title} />}

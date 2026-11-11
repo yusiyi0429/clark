@@ -345,7 +345,8 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
 
   return {
     kind: "mock",
-    health: async () => ({ app: "tianshu-local", version: "0.1.0-mock", protocol: 1, platform: "win32", tokenValid: Boolean(token), slots: slots() }),
+    clientMessageIds: true,
+    health: async () => ({ app: "tianshu-local", version: "0.1.0-mock", protocol: 2, platform: "win32", tokenValid: Boolean(token), slots: slots() }),
     startPairing: async () => ({ pairingId: "mock-pairing", code: "4821", expiresAt: new Date(Date.now() + 120_000).toISOString() }),
     pairingStatus: async () => { token = "mock-token-0000000000000000000000"; return { status: "approved", token }; },
     unpair: async () => { token = ""; },
@@ -450,11 +451,11 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
       catch (error) { return { ok: false as const, error: { code: error instanceof LocalRunnerError && error.code !== "network" ? error.code : "internal", message: error instanceof Error ? error.message : "没开起来" } }; }
     })),
     getSession: async (id) => { const s = must(id); return { session: summaryOf(s), pendingPermissions: s.pending ? [s.pending] : [] }; },
-    sendMessage: async (id, text, kind, attachments) => {
+    sendMessage: async (id, text, kind, attachments, given) => {
       const s = must(id);
       const was = s.summary.status;
-      // 回执（17.4）：假程序收下即送达，下一步读到。
-      const messageId = crypto.randomUUID();
+      // 回执（17.4）：假程序收下即送达，下一步读到。网页给了编号就用它的（先画的那句按它换成真的）。
+      const messageId = given ?? crypto.randomUUID();
       const receipts = () => { emit(s, { type: "receipt", messageId, state: "delivered" }); setTimeout(() => emit(s, { type: "receipt", messageId, state: "read" }), stepMs); };
       if (kind === "review") {
         // 评审会：并行挑刺、合成「分歧和建议」存成一版（假程序只吐事件）。
@@ -463,7 +464,7 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
         setTimeout(() => { emit(s, { type: "assistant_text", text: "几位挑刺的看完了，合成好了。" }); emit(s, { type: "version", number: 99, kind: "review", label: "评审", note: null }); }, stepMs * 3);
         return { delivery: was === "running" ? "next_step" : "new_turn", messageId };
       }
-      emit(s, { type: "user_message", text, source: "web", messageId });
+      emit(s, { type: "user_message", text, source: "web", messageId, ...(attachments?.length ? { attachments: attachments.map((file) => ({ name: file.fileName, path: file.fileName, size: file.size })) } : {}) });
       receipts();
       s.paused = false;
       if (s.summary.pendingQuestion) {

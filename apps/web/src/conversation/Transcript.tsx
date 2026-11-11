@@ -144,6 +144,10 @@ export function ReceiptTicks({ state, className }: { state: "delivered" | "read"
     </span>
   );
 }
+/** 子会话里先画出来、本机还没回的那句：勾的位置写「发送中」。 */
+export function ReceiptSending({ className }: { className?: string }) {
+  return <span className={className ? `${s.receipt} ${className}` : s.receipt} data-testid="message-sending"><span className={s.receiptNote}>发送中</span></span>;
+}
 /** 收下了却没读到：在勾的位置写「没读到」加「重发」（子会话）；伙伴对话只给「重发」。 */
 export function ReceiptFailed({ label, onResend, className }: { label?: string; onResend?: () => void; className?: string }) {
   return <span className={className ? `${s.receipt} ${className}` : s.receipt} data-testid="message-resend">{label ? <span className={s.receiptNote}>{label}{onResend ? " ·" : ""}</span> : null}{onResend ? <HeroButton variant="ghost" size="sm" onPress={onResend}>重发</HeroButton> : null}</span>;
