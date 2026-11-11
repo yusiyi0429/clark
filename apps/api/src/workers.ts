@@ -25,7 +25,7 @@ import { cardTaskViews } from "./taskCards.js";
 export const ONLINE_WINDOW_MS = 10 * 60_000;
 /** 本机的会话还在（没退出、没失败）。 */
 export const ACTIVE = new Set<string>(["queued", "starting", "running", "waiting_permission", "idle"]);
-const NEEDS_YOU = new Set<TWorkerMark>(["approval", "reply", "review_failed", "blocked"]);
+const NEEDS_YOU = new Set<TWorkerMark>(["approval", "reply", "review_failed", "blocked", "needs_person"]);
 const ZERO: TWorkerCost = { inputTokens: 0, outputTokens: 0, costUsd: null, costCny: null };
 const COST_SUM = `sum((tokens->>'input')::bigint) AS input,sum((tokens->>'output')::bigint) AS output,
   sum((money->>'USD')::numeric) AS usd,sum((money->>'CNY')::numeric) AS cny`;

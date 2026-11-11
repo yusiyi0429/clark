@@ -33,12 +33,66 @@ export const CardStage = Type.Union([Type.Literal("todo"), Type.Literal("doing")
 /**
  * 卡身上的标记，不成列，卡留在原来那一列（都在进行中）、排在格子最上面：
  * approval 等你批准（本机有权限请求没答）、reply 等你回复（一轮结束等人说话）、paused 已暂停（停下了）、
- * review_failed 验收未过（改法还没送到执行方）、blocked 受阻（连续两次验收没过，或本机连着两次异常退出）。
- * 前四种算「待处理」。同时有几种时只给一种，次序：blocked、review_failed、approval、reply、paused。
+ * review_failed 验收未过（改法还没送到执行方）、blocked 受阻（连续两次验收没过，或本机连着两次异常退出）、
+ * needs_person 等你补（主循环第 61 条：最近一次交回的结论是 needs_person，本人还没「我来补」送到、也没「就到这里」）。
+ * needs_person 不自动送回执行方（老网页的自动送回只认 review_failed，碰不到它）。「再改一轮」送到以后（returnedAt 有值）不再是 blocked。
+ * 前四种算「待处理」。同时有几种时只给一种，次序：needs_person、blocked、review_failed、approval、reply、paused。
  */
 export const CardWait = Type.Union([
-  Type.Literal("approval"), Type.Literal("reply"), Type.Literal("paused"), Type.Literal("review_failed"), Type.Literal("blocked"),
+  Type.Literal("approval"), Type.Literal("reply"), Type.Literal("paused"), Type.Literal("review_failed"), Type.Literal("blocked"), Type.Literal("needs_person"),
 ]);
+
+/**
+ * 卡的验收对一条完成标准的判定（主循环第 61 条）：met 达到、partial 部分、unmet 没达到，同交付物评审的 CriterionVerdict；
+ * 多一种 needs_person 要本人补：执行方标了「要本人补」、而且确实只有本人能做（要登录、验证码、人工查询、网站拦自动访问、要本人的权限或判断）。
+ * 执行方其实能做的，验收员照旧判 unmet。交付物评审那边不用这个值。
+ */
+export const CardCriterionVerdict = Type.Union([Type.Literal("met"), Type.Literal("partial"), Type.Literal("unmet"), Type.Literal("needs_person")]);
+
+/** 没达到的那条该谁补（主循环第 61 条）：worker 执行方能补，person 要本人补。needs_person 的一定是 person。 */
+export const CardFixBy = Type.Union([Type.Literal("worker"), Type.Literal("person")]);
+
+/**
+ * 一次交回的结论（主循环第 61 条）：pass 通过、fail 没过、needs_person 等本人补。云端按验收员逐条的判定算，不看本机的 passed：
+ * - 每条都 met、没有和本人原话对不上的 → pass；
+ * - 否则，有一条 needs_person 或 fixBy = person → needs_person（第一次验收就是这样也直接进「等你补」，不再白跑第二轮）；
+ * - 其余 → fail。
+ * needs_person 不算没过：不计入连续没过的次数（failStreak 数的时候跳过它，也不打断前后的连续），不自动送回。
+ */
+export const CardHandbackOutcome = Type.Union([Type.Literal("pass"), Type.Literal("fail"), Type.Literal("needs_person")]);
+
+/**
+ * 交回里没达到的一条（主循环第 61、62 条，等你补和受阻两个框逐条列的就是它）：index 第几条完成标准（从 1 起）；
+ * short 是这条的短标题（云端从标准原文截：到第一个逗号、句号或 20 字为止，「就到这里」「我来补」预填用）；verdict 是验收员的判定（不会是 met）；
+ * fixBy 谁来补（老结论没写的按 worker）；fix 是验收员写的改法——fixBy = person 的就是要本人做什么、给回什么（执行方交回时写的 need 也在这里，验收员没写时用它）。
+ */
+export const CardGapItem = Type.Object({
+  index: Type.Integer({ minimum: 1 }),
+  short: Type.String({ minLength: 1, maxLength: 40 }),
+  verdict: CardCriterionVerdict,
+  fixBy: CardFixBy,
+  fix: Nullable(Type.String()),
+}, strict);
+
+/**
+ * 从手机或别的电脑登记的「再改一轮」「我来补」（主循环第 61、62 条，POST /api/me/cards/:id/handbacks/:handbackId/relay）。
+ * 走现有的转话那条路：云端记一条 SessionCommand（message），这张卡会话所在那台电脑上开着的网页认领后说给执行方，报 done 后云端回写这里。
+ * kind：return 再改一轮（送的是 returnText），supply 我来补（送的是本人写的，后面附上执行方能补的那几条改法）。
+ * state：pending 等那台电脑上线（框上写「电脑在线后送到」「电脑在线后执行」）；delivered 送到了（doneAt）；failed 没送成（message 写本机回的原因，可以再登记一次）。
+ * text 是要送给执行方的原文。
+ */
+export const CardRelayView = Type.Object({
+  id: Type.String({ format: "uuid" }),
+  kind: Type.Union([Type.Literal("return"), Type.Literal("supply")]),
+  state: Type.Union([Type.Literal("pending"), Type.Literal("delivered"), Type.Literal("failed")]),
+  text: Type.String({ minLength: 1 }),
+  requestedAt: Instant,
+  doneAt: Nullable(Instant),
+  message: Nullable(Type.String()),
+}, strict);
+
+/** 有缺口通过（主循环第 62 条「就到这里」）：没过或等本人补的那次交回，本人写了原因算通过。reason 是本人写的原因，at 是什么时候。 */
+export const CardGapPass = Type.Object({ reason: Type.String({ minLength: 1 }), at: Instant }, strict);
 
 /** 对的是本体 Task 的第几条标准（从 1 起，和评审编号一致）和那条当时的原文；卡对「其他」时整项为 null。 */
 export const CardCriterion = Type.Object({
@@ -77,12 +131,19 @@ export const CardSourceWordIssue = Type.Object({
   reason: Type.String({ minLength: 1 }),
 }, strict);
 
-/** sourceWordIssues：这次交回和本人原话对不上的几处（见 CardSourceWordIssue），和没过的标准一起列；没有、还没验、老的交回为空数组。 */
+/**
+ * sourceWordIssues：这次交回和本人原话对不上的几处（见 CardSourceWordIssue），和没过的标准一起列；没有、还没验、老的交回为空数组。
+ * outcome 见 CardHandbackOutcome（needs_person 是主循环第 61 条加的）。headline 是验收员那一句人话（卡在哪、要谁做什么），等你补和受阻的框第一行写它。
+ * 下面三样是主循环第 61、62 条加的，云端都带；标成可选只为老数据：
+ * - gaps：没达到的几条（见 CardGapItem，按 index 排）；通过的、还没结论的为空数组。
+ * - relay：这次交回最近一次从手机或别的电脑登记的「再改一轮」「我来补」（见 CardRelayView）；没登记过为 null。
+ * - passedWithGap：本人「就到这里」了（没过或等本人补的那次被推翻成通过），见 CardGapPass；没有为 null。
+ */
 export const CardHandbackBrief = Type.Object({
   id: Type.String({ format: "uuid" }),
   attempt: Type.Integer({ minimum: 1 }),
   status: CardHandbackStatus,
-  outcome: Nullable(Type.Union([Type.Literal("pass"), Type.Literal("fail")])),
+  outcome: Nullable(CardHandbackOutcome),
   met: Type.Integer({ minimum: 0 }),
   total: Type.Integer({ minimum: 0 }),
   headline: Nullable(Type.String()),
@@ -93,6 +154,9 @@ export const CardHandbackBrief = Type.Object({
   finishedAt: Nullable(Instant),
   git: Nullable(CardGit),
   sourceWordIssues: Type.Array(CardSourceWordIssue),
+  gaps: Type.Optional(Type.Array(CardGapItem, { maxItems: 50 })),
+  relay: Type.Optional(Nullable(CardRelayView)),
+  passedWithGap: Type.Optional(Nullable(CardGapPass)),
 }, strict);
 
 /**
@@ -132,6 +196,12 @@ export type TCardWait = Static<typeof CardWait>;
 export type TCardCriterion = Static<typeof CardCriterion>;
 export type TCardHandbackStatus = Static<typeof CardHandbackStatus>;
 export type TCardHandbackBrief = Static<typeof CardHandbackBrief>;
+export type TCardCriterionVerdict = Static<typeof CardCriterionVerdict>;
+export type TCardFixBy = Static<typeof CardFixBy>;
+export type TCardHandbackOutcome = Static<typeof CardHandbackOutcome>;
+export type TCardGapItem = Static<typeof CardGapItem>;
+export type TCardRelayView = Static<typeof CardRelayView>;
+export type TCardGapPass = Static<typeof CardGapPass>;
 export type TCardSourceWordIssue = Static<typeof CardSourceWordIssue>;
 export type TCardGit = Static<typeof CardGit>;
 export type TDeliverableInclusion = Static<typeof DeliverableInclusion>;

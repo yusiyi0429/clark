@@ -1,5 +1,5 @@
 import { Type, type Static } from "@sinclair/typebox";
-import type { TCriterionVerdict, TRoleKind } from "@warmap/contracts";
+import type { TCardCriterionVerdict, TCardHandbackOutcome, TRoleKind } from "@warmap/contracts";
 import { runCandidateAgent } from "./candidateAgentRuntime.js";
 import { boardModel, type BoardModelOptions } from "./cardPlanAgent.js";
 import { ADDRESS_STYLE } from "./promptStyle.js";
@@ -42,7 +42,7 @@ export type RoleProposalInput = {
   sourceKind: "overrule" | "second_fail";
   reason: string | null;
   card: { title: string; brief: string | null; standards: string[] };
-  acceptance: { outcome: "pass" | "fail" | null; criteria: { index: number; text: string; verdict: TCriterionVerdict; reason: string; fix: string | null }[] };
+  acceptance: { outcome: TCardHandbackOutcome | null; criteria: { index: number; text: string; verdict: TCardCriterionVerdict; reason: string; fix: string | null }[] };
   roles: { id: string; name: string; kind: TRoleKind; dutiesMd: string; practiceMd: string; acceptanceMd: string }[];
 };
 export type RoleProposalAgent = {

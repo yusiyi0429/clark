@@ -54,16 +54,27 @@ export const ResearchTopicView = Type.Object({
   lastVersionAt: Nullable(Instant),
   latestVersion: Nullable(Type.Object({ number: Type.Integer({ minimum: 1 }), kind: TopicVersionKind, label: Type.String() }, strict)),
   run: Nullable(LocalRunBrief),
+  /** 自由子会话（第 68 条，项目下的「+」开的）：没有提纲、版本、评审会；交代就是本人说的第一句话。不是的不带。 */
+  free: Type.Optional(Type.Literal(true)),
 }, strict);
 
 /** GET /api/me/topics?status=active|archived（默认 active）：新动静的在前。 */
 export const TopicListResponse = Type.Object({ topics: Type.Array(ResearchTopicView) }, strict);
 
-/** 新建专题：planTaskId 只能是本人 Mission 下的 Task，roleId 是本人没归档的岗位。建好以后网页对本机「开始」（kind=topic）。 */
+/**
+ * 新建专题：planTaskId 只能是本人 Mission 下的 Task，roleId 是本人没归档的岗位。建好以后网页对本机「开始」（kind=topic）。
+ * 自由子会话（第 68 条，项目下的「+」）：带 free、projectId（本人的、没归档的项目）和 firstMessage（本人说的第一句话），不带 title、planTaskId、roleId。
+ * 云端取第一句话的第一行当标题，照卡标题的规矩截到 12 个字，截了加「…」；在项目里编下一个字母；登记要开工（同伙伴的 open_topic），
+ * 交代（TopicBriefResponse.markdown）就是这句话，所以手机上开的也由那台电脑上开着的网页认领开工。
+ * 不是 free 时 title 必带（400）；free 时缺 projectId、firstMessage，或带了 title、planTaskId、roleId 也 400。
+ */
 export const CreateTopicRequest = Type.Object({
-  title: Type.String({ minLength: 1, maxLength: 60 }),
+  title: Type.Optional(Type.String({ minLength: 1, maxLength: 60 })),
   planTaskId: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
   roleId: Type.Optional(Type.String({ format: "uuid" })),
+  free: Type.Optional(Type.Literal(true)),
+  projectId: Type.Optional(Type.String({ format: "uuid" })),
+  firstMessage: Type.Optional(Type.String({ minLength: 1, maxLength: 20000 })),
 }, strict);
 
 /** 改标题、归档或取消归档、换岗位（null 不配）。至少带一个字段。 */
@@ -91,6 +102,7 @@ export const TopicDetailResponse = Type.Object({
  * GET /api/me/topics/:id/brief?critics=<id>,<id>：开专题时交给本机的交代，markdown 原样作为第一句话：专题标题；挂了 Task 的带 Mission、Task、标准和约定；
  * 有版本时带最新一版的号（续写时用）。role 是专题的岗位；critics 是评审会用的挑刺岗位（本人团队里 kind=critic 的，最多 3 个；
  * 带 critics 参数时用本人点的那几个）。先交提纲等工作规矩在本机程序的提示词里。
+ * 自由子会话（free，第 68 条）：markdown 是项目名加本人说的第一句话，critics 为空、latestVersion 为 null；网页开工时带 LocalCreateSessionRequest.free。
  */
 export const TopicBriefResponse = Type.Object({
   markdown: Type.String({ minLength: 1, maxLength: 20000 }),

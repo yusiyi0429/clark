@@ -60,12 +60,16 @@ export function reviewWindow(now: Date): { period: string; closesAt: string } | 
 /** 管线里那个框是哪一次提问或批准（老版本本机程序没报时为 null）。 */
 const askRequestId = (ask: RunAsk | null) => ask?.request.requestId ?? null;
 
-/** 等你那一行的原话和就地答要的东西：在问的用第一个问题的原话，等批准的用那一步给人看的那一行；老版本本机程序没报时退回泛称。 */
-function askFields(kind: "approval" | "question", ask: RunAsk | null): Pick<TWaitingItem, "title" | "question" | "permission"> {
-  if (kind === "question") return ask?.kind === "question" ? { title: ask.request.questions[0].question, question: ask.request, permission: null }
-    : { title: "等你回复", question: null, permission: null };
-  return ask?.kind === "permission" && ask.request.title ? { title: ask.request.title, question: null, permission: ask.request }
-    : { title: "等你批准", question: null, permission: ask?.kind === "permission" ? ask.request : null };
+/**
+ * 等你那一行的原话和就地答要的东西：在问的用第一个问题的原话，等批准的用那一步给人看的那一行；老版本本机程序没报时退回泛称。
+ * summary（第二行，主循环第 64、66 条）：在问的是第一个问题的原文，等批准的是执行方写的那句人话（没有为 null）。
+ */
+function askFields(kind: "approval" | "question", ask: RunAsk | null): Pick<TWaitingItem, "title" | "question" | "permission" | "summary"> {
+  if (kind === "question") return ask?.kind === "question"
+    ? { title: ask.request.questions[0].question, question: ask.request, permission: null, summary: ask.request.questions[0].question }
+    : { title: "等你回复", question: null, permission: null, summary: null };
+  const permission = ask?.kind === "permission" ? ask.request : null;
+  return { title: permission?.title || "等你批准", question: null, permission, summary: permission?.description ?? null };
 }
 
 /**
@@ -110,12 +114,15 @@ export async function assembleWaiting(input: WaitingInput): Promise<TWaitingItem
         sessionId: sub.mergeRun?.sessionId ?? null, deviceId: sub.mergeRun?.deviceId ?? null, letter: sub.letter, answer: "inline_local" });
   }
   // 受阻只算连续两次验收没过（子会话 waiting = verdict）；执行连续两次异常退出是已暂停，不在这里。
+  // 等你补（主循环第 61 条，子会话 waiting = needs_person）同样一行，点了到子会话里钉住的框。第二行是验收员那一句人话。
   for (const view of cards) {
-    const sub = subs.find((entry) => entry.id === view.id && entry.waiting === "verdict");
+    const sub = subs.find((entry) => entry.id === view.id && (entry.waiting === "verdict" || entry.waiting === "needs_person"));
     if (!sub) continue;
     const taskId = treeTask(view.planTaskId);
-    add({ id: `verdict:card:${view.id}`, kind: "verdict", title: "验收两次没过", source: [view.title, taskName(taskId)].filter(Boolean).join(" · "),
-      at: view.card.handback?.createdAt ?? null, open: { kind: "card", id: view.id }, taskId, projectId: sub.projectId, letter: sub.letter, answer: "open" });
+    const kind = sub.waiting === "needs_person" ? "needs_person" as const : "verdict" as const;
+    add({ id: `${kind}:card:${view.id}`, kind, title: kind === "needs_person" ? "等你补" : "验收两次没过", source: [view.title, taskName(taskId)].filter(Boolean).join(" · "),
+      at: view.card.handback?.createdAt ?? null, open: { kind: "card", id: view.id }, taskId, projectId: sub.projectId, letter: sub.letter, answer: "open",
+      summary: view.card.handback?.headline ?? null });
   }
   // 规划员、验收员在等批准、等回复（停着等额度恢复的不算）。
   // 只算真在问（idle 带提问）和在等批准的；一轮做完停下的不算（9.6）。
