@@ -169,6 +169,13 @@ button.output:focus-visible { outline: 2px solid var(--focus); outline-offset: -
 /* 文件预览（17.2 第 41 条）：子会话页右边一栏，顶上文件名和关闭，下面内容自己滚；手持上盖满整屏（下面的对话不卸，关了还在原来的位置）。 */
 .preview { display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; min-height: 0; box-shadow: inset 1px 0 0 var(--hairline); outline: 0; }
 @media (min-width: 960px) { .body:has(> .preview) { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); } }
+/* 放大（第 72 条）：预览占满子会话页的内容区，对话收起；正文居中，行宽不超过 720px。 */
+@media (min-width: 960px) {
+  .body:has(> .preview[data-wide]) { grid-template-columns: minmax(0, 1fr); }
+  .body:has(> .preview[data-wide]) > :not(.preview) { display: none; }
+  .preview[data-wide] { box-shadow: none; }
+}
+.preview[data-wide] .previewBody > :is(article, pre) { max-width: 720px; margin-inline: auto; }
 @media (max-width: 959px) {
   .preview { position: fixed; inset: 0; z-index: 41; padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px); background: var(--surface); box-shadow: none; }
 }
