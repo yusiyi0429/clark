@@ -219,6 +219,7 @@ describe("留一份：同步盘（OneDrive）里只留本地已有的文档", { 
     writeFileSync(join(dir, "报告.docx"), body("报告原文"));
     writeFileSync(join(dir, "表.xlsx"), body("表原文"));
     writeFileSync(join(dir, "照片.jpg"), body("照片原文"));
+    writeFileSync(join(dir, "短.md"), "短的笔记"); // 4KB 以内：块数是 0 也照读（就算真是占位，下载也没代价）
     // 占位：大小 1MB、占的盘块数为 0（稀疏文件，和 OneDrive「只在云端」的文件在 stat 里一样）
     const ph = join(dir, "占位.docx");
     writeFileSync(ph, "");
@@ -243,7 +244,7 @@ describe("留一份：同步盘（OneDrive）里只留本地已有的文档", { 
       // 占位文件没进影子仓库
       const repo = readdirSync(join(data, "repos"))[0]!;
       const tree = execFileSync("git", ["--git-dir", join(data, "repos", repo), "-c", "core.quotepath=false", "ls-tree", "-r", "--name-only", "refs/tianshu/od1/t0-start"], { encoding: "utf8" });
-      expect(tree.split("\n").filter(Boolean).sort()).toEqual(["报告.docx", "表.xlsx"].sort());
+      expect(tree.split("\n").filter(Boolean).sort()).toEqual(["报告.docx", "表.xlsx", "短.md"].sort());
       await u.restore();
       expect(readFileSync(join(dir, "报告.docx"), "utf8")).toBe(body("报告原文"));
       expect(readFileSync(join(dir, "表.xlsx"), "utf8")).toBe(body("表原文"));
@@ -255,6 +256,25 @@ describe("留一份：同步盘（OneDrive）里只留本地已有的文档", { 
     } finally {
       if (before === undefined) delete process.env.OneDrive; else process.env.OneDrive = before;
     }
+  });
+});
+
+describe("留一份：太大的文件夹退到只留文档", { timeout: 60_000 }, () => {
+  it("文件太多：只给文档留一份（ready、reason too_large），文档命令改了照样能恢复；不是文档的不留", async () => {
+    UNDO_LIMITS.files = 3;
+    const dir = folder(); // 3 个文档
+    writeFileSync(join(dir, "图1.png"), "x");
+    writeFileSync(join(dir, "图2.png"), "y");
+    const { s } = store();
+    const u = await opened(s.for("big1", dir));
+    expect(u.view()).toMatchObject({ state: "ready", reason: "too_large" });
+    expect(u.covers(join(dir, "笔记.md"))).toBe(true);
+    expect(u.covers(join(dir, "图1.png"))).toBe(false);
+    expect(u.covers(dir)).toBe(false);
+    await turn(u, () => { writeFileSync(join(dir, "笔记.md"), "脚本改了"); writeFileSync(join(dir, "图1.png"), "改了"); });
+    expect((await u.files()).map((f) => f.path)).toEqual(["笔记.md"]);
+    await u.restore();
+    expect(readFileSync(join(dir, "笔记.md"), "utf8")).toBe("# 原文\n");
   });
 });
 

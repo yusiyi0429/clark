@@ -33,9 +33,11 @@ export interface ScanResult {
 export const DOC_EXT = new Set([".docx", ".xlsx", ".pptx", ".doc", ".xls", ".ppt", ".md", ".markdown", ".txt", ".csv", ".tsv", ".rtf", ".odt", ".ods", ".odp", ".pdf"]);
 /**
  * 同步盘的占位文件（只在云端、本地没内容）：大小不为 0、占的盘块数为 0。读它会触发下载，不能碰。
- * 几百字节的小文件在本地也可能是 0 块（内容存在目录项里），一律当占位跳过，往安全那边错。
+ * 几百字节的小文件在本地也可能是 0 块（内容存在目录项里）：4KB 以内的照读（11/11 主会话定：就算真是占位，下载这么小的也没代价，
+ * 不然短的 md、txt、csv 留不下）。
  */
-export const isPlaceholder = (size: number, blocks: number) => size > 0 && blocks === 0;
+export const PLACEHOLDER_MIN_BYTES = 4096;
+export const isPlaceholder = (size: number, blocks: number) => size > PLACEHOLDER_MIN_BYTES && blocks === 0;
 
 const posix = (p: string) => p.split(sep).join("/");
 

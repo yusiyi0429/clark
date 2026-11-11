@@ -149,7 +149,10 @@ export class SessionUndo {
       const root = this.meta.root!;
       // 同步盘里：只留本地已有的文档类文件（不读占位文件，免得把云端的都下载下来）
       this.meta.docsOnly = isSyncFolder(root);
-      const s = await this.scanNow();
+      let s = await this.scanNow();
+      // 太大：也退到只留文档（11/11 主会话定）；连文档都太多才只改前拷一份
+      const tooLarge = s.tooLarge && !this.meta.docsOnly;
+      if (tooLarge) { this.meta.docsOnly = true; s = await this.scanNow(); }
       if (s.tooLarge) return this.degrade("too_large", "这个文件夹太大，只给执行方直接改的文件留一份");
       if (this.hooks.free(this.dir) < s.bytes * 2 + UNDO_LIMITS.spareBytes) return this.degrade("disk_full", "本机的盘不够，只给执行方直接改的文件留一份");
       try {
@@ -157,7 +160,8 @@ export class SessionUndo {
         const base = await this.shadow!.snapshot(this.index, this.ref(0, "start"), null, s.excludes, "开工前", s.included);
         this.meta.excludes = s.excludes;
         this.meta.turns = [{ start: base, end: null }];
-        if (this.meta.docsOnly) this.set("ready", "sync_folder", "这个文件夹在同步盘里，只给本地已有的文档留一份");
+        if (tooLarge) this.set("ready", "too_large", "这个文件夹太大，只给里面的文档留一份");
+        else if (this.meta.docsOnly) this.set("ready", "sync_folder", "这个文件夹在同步盘里，只给本地已有的文档留一份");
         else this.set("ready");
       } catch (e) {
         this.degrade("failed", `没留成：${e instanceof Error ? e.message : String(e)}`);
