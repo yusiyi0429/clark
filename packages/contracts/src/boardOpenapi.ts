@@ -2,8 +2,8 @@ import type { JsonSchema, OpenAPIV3 } from "./types/JsonSchemaTypes.js";
 import { CreateLocalDeviceRequest, CreateLocalDeviceResponse, LocalDeviceListResponse, LocalDeviceView, LocalOutputView, LocalRunBrief, LocalRunView } from "./localDevices.js";
 import {
   AcceptCardDraftsRequest, AcceptCardDraftsResponse, AddPendingDeliverableRequest, CardBoardResponse, CardBriefResponse, CardDetailResponse, CardDraftView,
-  CardHandbackView, CardPlanView, CardTaskView, CreateCardPlanRequest, CreateVersionFromPendingRequest, OverruleCardHandbackRequest, PatchCardRequest,
-  PendingDeliverableItem,
+  CardAgreementChangeListResponse, CardHandbackView, CardPlanView, CardRelayRequest, CardTaskView, CreateCardPlanRequest, CreateVersionFromPendingRequest,
+  DecideAgreementProposalRequest, OverruleCardHandbackRequest, PatchCardRequest, PendingDeliverableItem,
 } from "./taskCards.js";
 import { TaskCard } from "./taskCardView.js";
 import { CreateRoleRequest, PatchRoleRequest, RoleBrief, RoleListResponse, RolePresetView, RoleProposalList, RoleProposalView, RoleRef, RoleRevisionList,
@@ -22,7 +22,7 @@ import {
 export const boardSchemas: Record<string, JsonSchema> = {
   TaskCard, CardTaskView, CardPlanView, CardDraftView, PendingDeliverableItem, CardBoardResponse, CreateCardPlanRequest, AcceptCardDraftsRequest,
   AcceptCardDraftsResponse, PatchCardRequest, CardHandbackView, CardDetailResponse, CardBriefResponse, OverruleCardHandbackRequest,
-  AddPendingDeliverableRequest, CreateVersionFromPendingRequest,
+  AddPendingDeliverableRequest, CreateVersionFromPendingRequest, CardAgreementChangeListResponse, DecideAgreementProposalRequest, CardRelayRequest,
   LocalDeviceView, CreateLocalDeviceRequest, CreateLocalDeviceResponse, LocalDeviceListResponse, LocalRunBrief, LocalRunView, LocalOutputView,
   ResearchTopicView, TopicVersionSummary, TopicVersionView, TopicListResponse, CreateTopicRequest, PatchTopicRequest, TopicDetailResponse, TopicBriefResponse,
   RoleRef, RoleBrief, RoleView, RolePresetView, RoleListResponse, CreateRoleRequest, PatchRoleRequest, RoleRevisionView, RoleRevisionList, RoleProposalView, RoleProposalList,
@@ -112,7 +112,7 @@ export const boardPaths: OpenAPIV3.Document["paths"] = {
     },
     patch: {
       operationId: "patchCard",
-      summary: "改执行方、模型、交代、对哪条标准（推进人）；version 不一致 409 带 latestTask",
+      summary: "改执行方、模型、交代、完成标准、对哪条标准（推进人）；交代或完成标准变了记一条约定修改；version 不一致 409 带 latestTask",
       parameters: path("id"),
       requestBody: body("PatchCardRequest"),
       responses: { "200": json("改好的卡", "CardTaskView"), ...errors(400, 401, 403, 404, 409) },
@@ -129,7 +129,7 @@ export const boardPaths: OpenAPIV3.Document["paths"] = {
   "/api/me/cards/{id}/handbacks/{handbackId}/overrule": {
     post: {
       operationId: "overruleCardHandback",
-      summary: "推翻 Agent 验收（推进人）：通过的变回进行中、从准备中拿掉；没过的算通过",
+      summary: "推翻 Agent 验收（推进人）：通过的变回进行中、从准备中拿掉；没过的、等本人补的「就到这里」，算有缺口通过",
       parameters: path("id", "handbackId"),
       requestBody: body("OverruleCardHandbackRequest"),
       responses: { "200": json("卡的详情", "CardDetailResponse"), ...errors(400, 401, 403, 404, 409) },
@@ -149,6 +149,32 @@ export const boardPaths: OpenAPIV3.Document["paths"] = {
       summary: "网页已经把没过的改法送到本机，记一笔（推进人）；已经记过的照样返回",
       parameters: path("id", "handbackId"),
       responses: { "200": json("卡的详情", "CardDetailResponse"), ...errors(401, 403, 404, 409) },
+    },
+  },
+  "/api/me/cards/{id}/handbacks/{handbackId}/relay": {
+    post: {
+      operationId: "relayCardHandback",
+      summary: "从手机或别的电脑登记「再改一轮」「我来补」（推进人）：那台电脑上开着的网页认领后送给执行方，送到后回写",
+      parameters: path("id", "handbackId"),
+      requestBody: body("CardRelayRequest"),
+      responses: { "200": json("卡的详情", "CardDetailResponse"), ...errors(400, 401, 403, 404, 409) },
+    },
+  },
+  "/api/me/cards/{id}/agreement-changes": {
+    get: {
+      operationId: "listCardAgreementChanges",
+      summary: "卡的约定（交代、完成标准）的修改记录，新的在前（推进人）",
+      parameters: path("id"),
+      responses: { "200": json("修改记录", "CardAgreementChangeListResponse"), ...errors(401, 403, 404) },
+    },
+  },
+  "/api/me/cards/{id}/agreement-proposals/{proposalId}/decision": {
+    post: {
+      operationId: "decideCardAgreementProposal",
+      summary: "对执行方提的改约定拍板（推进人）：改成这样 / 不改，结果转告执行方",
+      parameters: path("id", "proposalId"),
+      requestBody: body("DecideAgreementProposalRequest"),
+      responses: { "200": json("卡的详情", "CardDetailResponse"), ...errors(400, 401, 403, 404, 409) },
     },
   },
   "/api/plan-tasks/{taskId}/deliverable/pending": {
