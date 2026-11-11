@@ -17961,11 +17961,11 @@ export interface components {
         };
         CardRelayRequest: {
             /** @constant */
-            kind: "return";
-        } | {
-            /** @constant */
             kind: "supply";
             text: string;
+        } | {
+            /** @constant */
+            kind: "return";
         };
         LocalDeviceView: {
             /** Format: uuid */
