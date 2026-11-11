@@ -158,10 +158,20 @@ describe("拆卡和验收在本机（第 21 节）", { timeout: 30_000 }, () => 
       expect(await view(a)).toMatchObject({ wait: "needs_person", handback: { outcome: "needs_person", headline: "就差申请号，要你登录商标网查", met: 1, total: 2,
         gaps: [{ index: 2, short: "有评审结论", verdict: "needs_person", fixBy: "person", fix: "登录商标网查这 3 个名字的申请号" }] } });
       expect(await f.t.sql("SELECT 1 FROM role_proposals WHERE task_id=$1", [a])).toEqual([]);
+      // 首页「等你」一行，第二行是验收员那一句人话；项目动态里一条 card_needs_person 指过去。
+      const project = (await f.call("POST", "/api/me/projects", { name: "品牌建设", taskId: "task-open" })).json().projectId as string;
+      const home = (await f.call("GET", "/api/me/work-home")).json();
+      expect(home.waiting.find((item: { kind: string }) => item.kind === "needs_person")).toMatchObject({ id: `needs_person:card:${a}`, title: "等你补",
+        summary: "就差申请号，要你登录商标网查", open: { kind: "card", id: a }, answer: "open" });
+      const feed = (await f.call("GET", `/api/me/projects/${project}/feed`)).json().items;
+      expect(feed.find((item: { kind: string }) => item.kind === "card_needs_person")).toMatchObject({ cardId: a, fix: null,
+        handback: { outcome: "needs_person", headline: "就差申请号，要你登录商标网查", gaps: [{ index: 2, fixBy: "person" }] } });
       // 就到这里：推翻成通过，卡完成。
       const handbackId = (await f.t.sql("SELECT id::text FROM card_handbacks WHERE task_id=$1", [a]))[0].id as string;
       expect((await f.call("POST", `/api/me/cards/${a}/handbacks/${handbackId}/overrule`, { reason: "申请号先不要了" })).statusCode).toBe(200);
       expect((await f.t.sql("SELECT status FROM tasks WHERE id=$1", [a]))[0].status).toBe("done");
+      expect((await f.call("GET", `/api/me/projects/${project}/feed`)).json().items.find((item: { kind: string }) => item.kind === "card_passed"))
+        .toMatchObject({ cardId: a, gap: "申请号先不要了" });
 
       // 执行方能补的和要本人补的都有：还是等你补，改法只拼执行方能补的。
       const b = await card("写说明");
@@ -228,6 +238,13 @@ describe("拆卡和验收在本机（第 21 节）", { timeout: 30_000 }, () => 
       await done(again.id);
       expect((await f.call("GET", `/api/me/cards/${b}`)).json().task.card).toMatchObject({ handback: { returnedAt: expect.any(String) } });
       expect((await f.call("GET", `/api/me/cards/${b}`)).json().task.card.wait).not.toBe("blocked");
+
+      // 批准说人话（主循环第 64 条）：「等你」那一行第二行是执行方写的那句，标题照旧是命令那一行。
+      const d = await card("查商标");
+      await f.sync({ kind: "card", cardId: d }, [["status", { status: "waiting_permission", title: "查商标", agent: "claude-code", modelLabel: "Opus 5.5",
+        permission: { requestId: "p-1", toolName: "Bash", title: "运行 curl -A Mozilla …", outsidePaths: [], description: "查商标网上这 3 个名字", paths: ["notes/候选名.md"] } }]]);
+      expect((await f.call("GET", "/api/me/work-home")).json().waiting.find((item: { id: string }) => item.id === `approval:card:${d}`))
+        .toMatchObject({ title: "运行 curl -A Mozilla …", summary: "查商标网上这 3 个名字", permission: { description: "查商标网上这 3 个名字", paths: ["notes/候选名.md"] } });
 
       // 就到这里：有缺口通过，原因在卡上读得到。
       const c = await card("出方案");

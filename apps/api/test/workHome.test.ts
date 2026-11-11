@@ -188,11 +188,11 @@ describe("新首页", { timeout: 30_000 }, () => {
       // 子会话的提问和批准由项目对话转达（14.3）：落在项目对话里那个框上（focus），来源只写项目名。
       expect(byId.get(`approval:card:${ids["等批准"]}`)).toEqual({ id: `approval:card:${ids["等批准"]}`, kind: "approval", title: "等你批准", source: "内部版上线",
         at: "2026-11-06T01:10:00.000Z", open: { kind: "project", id: projectId, focus: { sessionId: approval, requestId: null } }, taskId: "task-open", projectId,
-        sessionId: approval, deviceId: laptop.device, ...local, letter: "A" });
+        sessionId: approval, deviceId: laptop.device, ...local, letter: "A", summary: null });
       // 在问本人：标题是第一个问题的原话，带原样的提问（就地答）。规划员在它拆的 Task 挂的项目里。
       expect(byId.get(`question:plan:${planner}`)).toEqual({ id: `question:plan:${planner}`, kind: "question", title: "先做哪一页？", source: "内部版上线",
         at: "2026-11-06T01:20:00.000Z", open: { kind: "project", id: projectId, focus: { sessionId: planner, requestId: "q-1" } }, taskId: "task-open", projectId,
-        sessionId: planner, deviceId: laptop.device, ...local, question: QUESTION });
+        sessionId: planner, deviceId: laptop.device, ...local, question: QUESTION, summary: "先做哪一页？" });
       expect(byId.get(`approval:verify:${verifier}`)).toMatchObject({ kind: "approval", source: "内部版上线", open: { kind: "project", id: projectId, focus: { sessionId: verifier } },
         taskId: "task-open", projectId, sessionId: verifier, answer: "inline_local" });
       expect(byId.get(`verdict:card:${ids["受阻"]}`)).toMatchObject({ kind: "verdict", title: "验收两次没过", open: { kind: "card", id: ids["受阻"] }, taskId: "task-open",
