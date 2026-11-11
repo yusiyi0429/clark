@@ -62,6 +62,7 @@ export const LOCAL_RUNNER_ROUTES: Contracts["LOCAL_RUNNER_ROUTES"] = {
   setSessionModel: { method: "PUT", path: "/v1/sessions/:id/model", auth: true },
   listSessionFiles: { method: "GET", path: "/v1/sessions/:id/files", auth: true },
   readSessionFile: { method: "POST", path: "/v1/sessions/:id/files/read", auth: true },
+  restoreSessionFiles: { method: "POST", path: "/v1/sessions/:id/files/restore", auth: true },
   listProjects: { method: "GET", path: "/v1/projects", auth: true },
   putProjectFolder: { method: "PUT", path: "/v1/projects/:projectId/folder", auth: true },
   handoverCheck: { method: "POST", path: "/v1/projects/:projectId/handover-check", auth: true },
