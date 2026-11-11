@@ -241,7 +241,8 @@ export function CardSession({ cardId, embedded = false, waiting }: { cardId: str
             {session ? (
               <SessionTranscript entries={send.entries} agentName={agentName} canAct={canAct} onResend={(entry) => void say(entry.text).catch(() => showWorkspaceToast({ text: "没发出去" }))} onRetry={send.retry} draft={draft} drafted={drafted} device={device} live={sessionRunning} starting={status === "starting"} ended={ended} pinned={embedded} lead={`交代：${item.title}${item.card?.criterion ? ` · 按「${item.card.criterion.text}」验收` : ""}`}
                 onFile={openFile}
-                onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={tail} asking={question} />
+                onDecide={(request, decision, options) => decide(request.requestId, decision, options)} tail={tail} asking={question}
+                stopped={embedded ? view.stopped : null} onResume={canAct ? () => void say("接着做").catch(() => showWorkspaceToast({ text: "没发出去" })) : undefined} />
             ) : <CloudTimeline run={run} title={item.title} />}
           </div>
           <div ref={scroll.reserveRef} aria-hidden />
