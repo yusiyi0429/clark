@@ -6,6 +6,7 @@ import type { TLocalAgentStatus, TLocalModelProfile, TLocalStatusResponse, TLoca
 import type { Pairing } from "@/lib/local/LocalRunnerProvider";
 import type { LocalPhase } from "@/lib/local/connection";
 import { LOCAL_TOKENHUB_PROFILE_PREFIX } from "@/lib/local/routes";
+import { modelDisplayName, profileModel } from "@/lib/local/runModel";
 import type { ConnState } from "./parts";
 
 export type RowAction = "pair" | "retry" | "resume" | "link" | "unpair" | "reauth" | "login";
@@ -60,7 +61,7 @@ export function agentRow(agent: TLocalAgentStatus, now: number, exhausted = fals
  * 没有是未连接，动作「连接」（弹窗填 Key，Key 只交给本机）。本人在模型配置里自己配的网关不算。
  */
 export function tokenHubRow(models: TLocalModelProfile[]): RowModel {
-  const names = models.filter((model) => model.id.startsWith(LOCAL_TOKENHUB_PROFILE_PREFIX)).map((model) => model.modelName ?? model.label);
+  const names = models.filter((model) => model.id.startsWith(LOCAL_TOKENHUB_PROFILE_PREFIX)).map((model) => modelDisplayName(profileModel(model)));
   const base = { key: "tokenhub", name: "TokenHub" };
   if (!names.length) return { ...base, sub: null, state: "disconnected", action: "link" };
   const sub = names.length > 3 ? `${names.slice(0, 3).join(" · ")} 等 ${names.length} 个` : names.join(" · ");

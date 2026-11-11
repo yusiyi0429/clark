@@ -11,11 +11,12 @@ const models: TConversationModelOption[] = [
 const choice = (modelId: string, effort: TConversationModelOption["defaultEffort"], source = SOURCE) => ({ source, modelId, effort });
 
 describe("项目对话选模型（17.2 第 36、40 条，B 契约 f508dda5）", () => {
-  it("胶囊写「模型名 · 思考档」，思考是自动（这个模型自己的默认档）时只写模型名；没选就是默认那个模型加自动，不再有「默认」那一项", () => {
-    expect(pipelineLabel(models, null)).toEqual({ label: "Kimi K3", title: "Kimi K3 · TokenHub · 网宿 · 思考 自动" });
+  it("胶囊写「来源 · 模型 · 思考」（67 条），来源只写「·」前面那段，思考是自动（这个模型自己的默认档）时不写；没选就是默认那个模型加自动，不再有「默认」那一项", () => {
+    expect(pipelineLabel(models, null)).toEqual({ label: "TokenHub · Kimi K3", title: "TokenHub · 网宿 · Kimi K3 · 思考 自动" });
     expect(pipelineCurrent(models, null)).toMatchObject({ model: { modelId: "kimi-k3" }, effort: "medium", auto: true });
-    expect(pipelineLabel(models, choice("kimi-k3", "off"))).toEqual({ label: "Kimi K3 · 不思考", title: "Kimi K3 · TokenHub · 网宿 · 思考 不思考" });
-    expect(pipelineLabel(models, choice("deepseek-v4", "off"))?.label).toBe("DeepSeek V4");
+    expect(pipelineLabel(models, choice("kimi-k3", "off"))).toEqual({ label: "TokenHub · Kimi K3 · 不思考", title: "TokenHub · 网宿 · Kimi K3 · 思考 不思考" });
+    expect(pipelineLabel(models, choice("deepseek-v4", "off"))?.label).toBe("TokenHub · DeepSeek V4");
+    expect(pipelineLabel(models, choice("deepseek-r2", "high", "DeepSeek"))?.label).toBe("DeepSeek · DeepSeek R2 · 高");
     expect(pipelineLabel([], null)).toBeNull();
   });
 

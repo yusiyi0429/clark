@@ -11,7 +11,6 @@ import { HeroButton } from "@/components/HeroButton";
 import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { readLast, writeLast } from "@/lib/local/start";
 import { localPanelRows, panelLabel, pickLocal, type PanelRowKey } from "@/lib/local/modelPanel";
-import { defaultSourceLabel } from "@/lib/local/runModel";
 import { usageCells } from "@/lib/home/quota";
 import { ModelPanel } from "@/components/home/ModelPanel";
 import type { TLocalEffort } from "@warmap/contracts";
@@ -102,7 +101,7 @@ export function StartDialog({ title, needsFolder = true, role: given, onClose, o
         {model ? (
           <div className={s.field}>
             <span className={s.label}>模型{role ? <small className={s.faint}> · 档位：{TIER_LABEL[role.modelTier]}</small> : null}</span>
-            <div className={s.chipRow}><ModelPanel label={panelLabel(model, effort, defaultSourceLabel(local.models))} rows={rows} onPick={pickModel} placement="bottom start" testId="start-model" /></div>
+            <div className={s.chipRow}><ModelPanel label={panelLabel(model, effort)} rows={rows} onPick={pickModel} placement="bottom start" testId="start-model" /></div>
           </div>
         ) : null}
         {needsFolder ? (

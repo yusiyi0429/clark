@@ -4,7 +4,7 @@
  */
 import type { TLocalCreateSessionBatchResponse, TLocalHealthResponse, TLocalModelProfile, TLocalSessionDraft, TLocalSessionEvent, TLocalSourceAddResponse, TLocalSourceCheckResponse, TLocalSourceListResponse } from "@warmap/contracts";
 import { LOCAL_RUNNER_DEFAULT_PORT, LOCAL_RUNNER_ROUTES, LOCAL_RUNNER_TOKEN_HEADER } from "./routes";
-import { LocalRunnerError, acceptsClientMessageId, type EventWatch, type LocalRunner } from "./runner";
+import { LocalRunnerError, acceptsClientMessageId, acceptsFreeSession, type EventWatch, type LocalRunner } from "./runner";
 
 type RouteName = keyof typeof LOCAL_RUNNER_ROUTES;
 
@@ -110,10 +110,12 @@ export function createHttpRunner(base = localRunnerBase(), token: () => string =
   }
 
   let messageIds = false;
+  let free = false;
   return {
     kind: "http",
     get clientMessageIds() { return messageIds; },
-    health: async () => { const health = await call<TLocalHealthResponse>("health"); messageIds = acceptsClientMessageId(health); return health; },
+    get freeSessions() { return free; },
+    health: async () => { const health = await call<TLocalHealthResponse>("health"); messageIds = acceptsClientMessageId(health); free = acceptsFreeSession(health); return health; },
     startPairing: (clientLabel) => call("startPairing", {}, { clientLabel }),
     pairingStatus: (pairingId) => call("pairingStatus", { pairingId }),
     unpair: async () => { await call("unpair"); },
