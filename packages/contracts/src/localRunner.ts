@@ -1325,6 +1325,7 @@ export const LocalPlanProgress = Type.Object({
  * GET /v1/sessions/:id/events（text/event-stream）。每条 `id: <seq>` + `data: <JSON>`。
  * 断线后带 Last-Event-ID 重连，本机从会话事件日志补发其后的全部事件；也可用 ?after=<seq>。
  * 事件已归一化，不随执行方变：Claude Code 和以后的 Codex 都映射到这几种。
+ * 带 ?drafts=1 时还夹着推「正在写」的草稿（LocalSessionDraft）。
  */
 export const LocalSessionEvent = Type.Union([
   /** hold：停着等额度恢复时带（见 LocalHold）。 */
@@ -1402,6 +1403,20 @@ export const LocalSessionEvent = Type.Union([
    */
   ev("notice", { level: Type.Union([Type.Literal("info"), Type.Literal("warn"), Type.Literal("error")]), code: Type.String(), text: Type.String() }),
 ]);
+
+/**
+ * 「正在写」的草稿：GET /v1/sessions/:id/events?drafts=1 时夹在事件之间推，帧是 `event: draft` + `data: <JSON>`，没有 id 行。
+ * 不是会话事件：不占编号、不写盘、不进云端同步和交接摘要，断线重连不补（一会儿完整的 assistant_text 就到）。
+ * text 是执行方正在写的这一段话到目前为止的全文（不是增量），本机合并成每 80 毫秒至多一条。
+ * 这一段写完照常来一条 assistant_text，以它为准：网页收到 assistant_text 就拿它替换草稿。
+ * text 为空串：这一段没写完就不写了（停下、出错、进程没了），网页清掉草稿。
+ * 只发正文：思考内容、工具参数、子 agent 的字不发。老本机程序不认 drafts=1，照旧只推事件，网页照旧能用。
+ */
+export const LocalSessionDraft = Type.Object({
+  type: Type.Literal("draft"),
+  sessionId: Uuid,
+  text: Type.String(),
+}, strict);
 
 // ───────────────────────── 云端同步载荷（本机 → 天枢 api，单向） ─────────────────────────
 
@@ -1716,6 +1731,7 @@ export type TLocalCreateSessionBatchRequest = Static<typeof LocalCreateSessionBa
 export type TLocalCreateSessionBatchResponse = Static<typeof LocalCreateSessionBatchResponse>;
 export type TLocalRoleTool = Static<typeof LocalRoleTool>;
 export type TLocalSessionEvent = Static<typeof LocalSessionEvent>;
+export type TLocalSessionDraft = Static<typeof LocalSessionDraft>;
 export type TLocalSyncItem = Static<typeof LocalSyncItem>;
 export type TLocalSyncBatchRequest = Static<typeof LocalSyncBatchRequest>;
 export type TLocalSyncBatchResponse = Static<typeof LocalSyncBatchResponse>;
