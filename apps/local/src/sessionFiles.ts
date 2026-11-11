@@ -3,6 +3,7 @@ import { basename, extname, isAbsolute, join, relative, resolve, sep } from "nod
 import type { TLocalChangedFile, TLocalFileKind, TLocalSessionEvent, TLocalSessionFileReadResponse, TLocalSessionFilesResponse } from "@warmap/contracts";
 import { isInside } from "./folders.js";
 import { git } from "./git.js";
+import type { UndoFile } from "./undo/index.js";
 
 /**
  * 在右边预览文件（设计 17.2 第 41 条，契约 LocalSessionFileReadResponse、LocalSessionFilesResponse）：读一个文件、列本会话写过改过的文件。
@@ -122,24 +123,32 @@ async function gitFiles(cwd: string, base: string): Promise<string[]> {
  * 工作树是这张卡自己的，工具调用和 git 两路取并集；在本人文件夹里直接做的只认工具调用（11/10 用户：宁可漏掉用命令改的，也不把本人自己没提交的改动算成这个会话改的）。
  * 项目另外绑的文件夹（extras）是本人自己的文件夹，同样只认工具调用，path 给绝对路径。
  */
-export async function listSessionFiles(root: string, cwd: string, base: string | null, events: TLocalSessionEvent[], extras: string[] = []): Promise<TLocalSessionFilesResponse> {
-  const found = new Map<string, { abs: string; path: string; sources: Set<"tool" | "git"> }>();
-  const add = (abs: string, source: "tool" | "git") => {
+export async function listSessionFiles(root: string, cwd: string, base: string | null, events: TLocalSessionEvent[], extras: string[] = [], undo: UndoFile[] = []): Promise<TLocalSessionFilesResponse> {
+  type Source = "tool" | "git" | "snapshot";
+  const found = new Map<string, { abs: string; path: string; sources: Set<Source>; undo?: UndoFile }>();
+  const add = (abs: string, source: Source, u?: UndoFile) => {
     const rel = relative(root, abs);
     const inRoot = Boolean(rel) && !rel.startsWith("..") && !isAbsolute(rel);
-    // 会话根外面的：只列工具动过的、在项目另外绑的文件夹里的
-    if (!inRoot && !(source === "tool" && extras.some((x) => abs !== resolve(x) && within(x, abs) && isInside(x, abs)))) return;
+    // 会话根外面的：只列工具动过的、在项目另外绑的文件夹里的；留了一份的（11/11，ADR 0039）不管在哪都列，好恢复
+    if (!inRoot && !u && !(source === "tool" && extras.some((x) => abs !== resolve(x) && within(x, abs) && isInside(x, abs)))) return;
     const path = inRoot ? posix(rel) : posix(abs);
     const key = process.platform === "win32" ? path.toLowerCase() : path;
     const entry = found.get(key) ?? { abs: inRoot ? join(root, rel) : abs, path, sources: new Set() };
     entry.sources.add(source);
+    if (u) entry.undo = u;
     found.set(key, entry);
   };
   for (const p of toolFiles(events, cwd)) add(p, "tool");
   for (const p of base && existsSync(cwd) ? await gitFiles(cwd, base) : []) add(p, "git");
+  // 留了一份的：快照这一路（命令、子 agent 改的也在），拷的那一路是改文件工具动的
+  for (const u of undo) add(u.absolutePath, u.source === "snapshot" ? "snapshot" : "tool", u);
   const all = [...found.values()].map((f): TLocalChangedFile => {
     const st = existsSync(f.abs) ? statSync(f.abs) : null;
-    return { path: f.path, absolutePath: f.abs, sources: (["tool", "git"] as const).filter((s) => f.sources.has(s)), exists: Boolean(st?.isFile()), size: st?.isFile() ? st.size : null };
+    const u = f.undo;
+    return {
+      path: f.path, absolutePath: f.abs, sources: (["tool", "git", "snapshot"] as const).filter((s) => f.sources.has(s)), exists: Boolean(st?.isFile()), size: st?.isFile() ? st.size : null,
+      ...(u ? { change: u.change, restorable: u.restorable, ...(u.restoredAt ? { restoredAt: u.restoredAt } : {}) } : {}),
+    };
   }).sort((a, b) => a.path.localeCompare(b.path));
   return { root, files: all.slice(0, MAX_FILES), truncated: all.length > MAX_FILES };
 }

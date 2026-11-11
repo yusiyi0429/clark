@@ -189,7 +189,12 @@ export class Folders {
   }
 
   isAllowed(cwd: string): boolean {
-    return this.contains(cwd) || ["topics", "plans", "projects", "worktrees"].some((g) => isInside(join(this.dataDir, g), cwd));
+    return this.contains(cwd) || this.isOwn(cwd);
+  }
+
+  /** 本机自己给会话建的目录（专题、规划员、没绑文件夹的项目、卡的工作树）：里面只有执行方写的东西，工作树还有 git。 */
+  isOwn(p: string): boolean {
+    return ["topics", "plans", "projects", "worktrees"].some((g) => isInside(join(this.dataDir, g), p));
   }
 }
 

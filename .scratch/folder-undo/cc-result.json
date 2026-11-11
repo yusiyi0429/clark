@@ -1,0 +1,112 @@
+{
+ "port": 53391,
+ "version": "2.1.318",
+ "result": {
+  "subtype": "success",
+  "is_error": false,
+  "text": "完成"
+ },
+ "cChangedBySubagent": true,
+ "asked": [
+  {
+   "tool": "Edit",
+   "file": "C:\\Users\\10021\\AppData\\Local\\Temp\\tianshu-undo-exp\\cc\\文件夹\\A.md",
+   "agentId": null,
+   "copiedMs": 2.1
+  },
+  {
+   "tool": "Bash",
+   "file": "rm \"C:/Users/10021/AppData/Local/Temp/tianshu-undo-exp/cc/文件夹/B.md\"",
+   "agentId": null,
+   "copiedMs": null
+  },
+  {
+   "tool": "Edit",
+   "file": "C:\\Users\\10021\\AppData\\Local\\Temp\\tianshu-undo-exp\\cc\\文件夹\\C.md",
+   "agentId": "a9712e339ae288136",
+   "copiedMs": 1.8
+  }
+ ],
+ "afterTurn": {
+  "A": "改过A",
+  "B": "（被删了）",
+  "C": "子agent改过C"
+ },
+ "userUuids": [
+  "07d6f7ae-a763-46ca-bed6-819b32fdb687"
+ ],
+ "sentUuid": "07d6f7ae-a763-46ca-bed6-819b32fdb687",
+ "dryRun": {
+  "subtype": "success",
+  "request_id": "h2",
+  "response": {
+   "canRewind": true,
+   "filesChanged": [
+    "C:\\Users\\10021\\AppData\\Local\\Temp\\tianshu-undo-exp\\cc\\文件夹\\A.md"
+   ],
+   "insertions": 1,
+   "deletions": 1
+  }
+ },
+ "rewind": {
+  "subtype": "success",
+  "request_id": "h3",
+  "response": {
+   "canRewind": true,
+   "skippedLinks": 0
+  }
+ },
+ "afterRewind": {
+  "A": "原文A",
+  "B": "（还是没有）",
+  "C": "子agent改过C"
+ },
+ "modelCalls": [
+  {
+   "url": "/v1/messages?beta=true",
+   "step": "Read",
+   "stream": true
+  },
+  {
+   "url": "/v1/messages?beta=true",
+   "step": "Edit",
+   "stream": true
+  },
+  {
+   "url": "/v1/messages?beta=true",
+   "step": "Bash",
+   "stream": true
+  },
+  {
+   "url": "/v1/messages?beta=true",
+   "step": "Agent",
+   "stream": true
+  },
+  {
+   "url": "/v1/messages?beta=true",
+   "step": "text",
+   "stream": true
+  },
+  {
+   "url": "/v1/messages?beta=true",
+   "step": "Read",
+   "stream": true
+  },
+  {
+   "url": "/v1/messages?beta=true",
+   "step": "Edit",
+   "stream": true
+  },
+  {
+   "url": "/v1/messages?beta=true",
+   "step": "text",
+   "stream": true
+  },
+  {
+   "url": "/v1/messages?beta=true",
+   "step": "text",
+   "stream": true
+  }
+ ],
+ "stderr": ""
+}

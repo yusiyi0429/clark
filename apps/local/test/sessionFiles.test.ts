@@ -124,13 +124,19 @@ describe("读文件给预览、列改过的文件", { timeout: 40_000 }, () => {
     await call("POST", `/v1/sessions/${r0.body.id}/kill`, {});
   });
 
-  it("列改过的文件：不是 git 仓库的文件夹里，只有执行方用写文件工具动过的（用别的办法改的看不到）", async () => {
+  it("列改过的文件：不是 git 仓库的文件夹里，执行方用工具动过的、这一轮快照前后变了的（11/11 留一份）；本人在两轮之间自己改的不算", async () => {
     const id = await open("C");
     await idle(id);
+    // 空闲时一轮结束那份快照可能还没留完，那一两秒里本人改的会算成执行方这一轮改的（定下的样子，不修）；等这一轮记下 files_changed 再手改
+    const events = () => readFileSync(join(t.dataDir, "sessions", id, "events.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+    await until(() => events().some((e) => e.type === "files_changed"));
     writeFileSync(join(work, "C", "手改的.txt"), "不是执行方写的");
     const r = await files(id);
     expect(r.root).toBe(join(work, "C"));
-    expect(r.files).toEqual([{ path: "hello.txt", absolutePath: join(work, "C", "hello.txt"), sources: ["tool"], exists: true, size: Buffer.byteLength("你好") }]);
+    expect(r.files).toHaveLength(1);
+    // 开工那份留好以前写的走「改前拷一份」（sources 只有 tool），留好以后写的快照也知道（tool + snapshot）：都能恢复
+    expect(r.files[0]).toMatchObject({ path: "hello.txt", absolutePath: join(work, "C", "hello.txt"), exists: true, size: Buffer.byteLength("你好"), change: "added", restorable: true });
+    expect(r.files[0].sources).toContain("tool");
     expect(r.truncated).toBe(false);
     // 被拒绝、没写成的不算
     const denied = await open("C2", { permissionMode: "default" });
