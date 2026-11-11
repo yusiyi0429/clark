@@ -44,6 +44,13 @@ describe("本机程序契约", () => {
     expect(Value.Check(LocalSendMessageRequest, { kind: "vote", text: "x" })).toBe(false);
   });
 
+  it("权限请求了结可带 voided（本机程序重启作废的，不是本人拒的）；不带照旧", () => {
+    const e = { seq: 3, at: "2026-11-11T00:00:00.000Z", sessionId, type: "permission_resolved", requestId: "r1", decision: "deny", message: "本机程序重启，已作废", allowForSession: false };
+    expect(Value.Check(LocalSessionEvent, { ...e, voided: true })).toBe(true);
+    expect(Value.Check(LocalSessionEvent, e)).toBe(true);
+    expect(Value.Check(LocalSessionEvent, { ...e, voided: "yes" })).toBe(false);
+  });
+
   it("说一句可带网页生成的编号（protocol 2 起）", () => {
     expect(LOCAL_RUNNER_PROTOCOL).toBe(2);
     expect(Value.Check(LocalSendMessageRequest, { text: "x", messageId: sessionId })).toBe(true);

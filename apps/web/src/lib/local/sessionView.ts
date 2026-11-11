@@ -14,7 +14,8 @@ export type SessionEntry =
       initial?: true }
   | { kind: "assistant"; seq: number; at: string; text: string }
   | { kind: "step"; seq: number; at: string; toolUseId: string; title: string; done: boolean; isError: boolean }
-  | { kind: "permission"; seq: number; at: string; request: TLocalPermissionRequestView; decision: "allow" | "deny" | null }
+  /** voided：本机程序重启时作废的（不是本人拒的），那一步行尾写「已作废」。 */
+  | { kind: "permission"; seq: number; at: string; request: TLocalPermissionRequestView; decision: "allow" | "deny" | null; voided?: true }
   | { kind: "artifact"; seq: number; at: string; title: string; fileName: string }
   | { kind: "handback"; seq: number; at: string; summary: string; met: number; total: number }
   | { kind: "notice"; seq: number; at: string; level: "info" | "warn" | "error"; text: string; code?: string };
@@ -127,7 +128,7 @@ export function foldEvent(view: SessionView, event: TLocalSessionEvent): Session
       next.lastActivity = { at: event.at, text: event.request.title };
       return next;
     case "permission_resolved":
-      next.entries = view.entries.map((entry) => entry.kind === "permission" && entry.request.requestId === event.requestId ? { ...entry, decision: event.decision } : entry);
+      next.entries = view.entries.map((entry) => entry.kind === "permission" && entry.request.requestId === event.requestId ? { ...entry, decision: event.decision, ...(event.voided ? { voided: true as const } : {}) } : entry);
       next.pending = view.pending.filter((item) => item.requestId !== event.requestId);
       return next;
     case "turn_end":

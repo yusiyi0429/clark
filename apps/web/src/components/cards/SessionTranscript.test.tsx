@@ -74,6 +74,21 @@ describe("过程收起（28 条，照 Claude Code）", () => {
     expect(heads(pending)).toHaveLength(1);
   });
 
+  it("本机程序重启作废的批准（permission_resolved 带 voided）：那一步行尾写「已作废」，不写「换个做法」；不带的照旧「换个做法」", () => {
+    const sessionId = "6b0f3a52-4d0c-4c1e-9a43-1f7d2c9b8e10";
+    const request = (seq: number, title: string) => ({ seq, at: `2026-11-11T02:18:0${seq}Z`, sessionId, type: "permission_request" as const,
+      request: { requestId: `p${seq}`, toolName: "Bash", title, input: {}, outsidePaths: [], canAllowForSession: true, requestedAt: `2026-11-11T02:18:0${seq}Z` } });
+    const resolved = (seq: number, requestId: string, voided: boolean) => ({ seq, at: `2026-11-11T05:05:0${seq}Z`, sessionId, type: "permission_resolved" as const,
+      requestId, decision: "deny" as const, allowForSession: false, ...(voided ? { message: "本机程序重启，已作废", voided: true } : {}) });
+    const events: TLocalSessionEvent[] = [request(1, "运行 检索商标"), request(2, "运行 rm -rf dist"), resolved(3, "p1", true), resolved(4, "p2", false)];
+    const view = foldEvents(events);
+    expect(view.entries.filter((entry) => entry.kind === "permission").map((entry) => [entry.kind === "permission" && entry.request.requestId, entry.kind === "permission" && entry.voided])).toEqual([["p1", true], ["p2", undefined]]);
+    const html = render(view.entries, false);
+    expect(text(html)).toContain("|运行 检索商标|已作废|运行 rm -rf dist|换个做法|");
+    expect(html.match(/换个做法/g)).toHaveLength(1);
+    expect(html.match(/已作废/g)).toHaveLength(1);
+  });
+
   it("AskUserQuestion 这一步不画，留问答那一行；产出、交回照旧单独一行", () => {
     const html = render([
       step(1, "读文件 a.ts", "2026-11-09T01:00:00Z"),

@@ -1356,7 +1356,11 @@ export const LocalSessionEvent = Type.Union([
   ev("tool_result", { toolUseId: Type.String(), isError: Type.Boolean(), preview: Type.String() }),
   ev("plan", { entries: Type.Array(LocalPlanEntry), progress: LocalPlanProgress }),
   ev("permission_request", { request: LocalPermissionRequestView }),
-  ev("permission_resolved", { requestId: Type.String(), decision: Type.Union([Type.Literal("allow"), Type.Literal("deny")]), message: Type.Optional(Type.String()), allowForSession: Type.Boolean() }),
+  /**
+   * 权限请求了结。voided：不是本人批的或拒的，是本机程序被直接停掉（重启、升级、强杀）后重新起来时作废的（decision 记 deny），
+   * 网页写「已作废」，不写「换个做法」。老版本本机不带；老网页忽略它（协议号不升）。
+   */
+  ev("permission_resolved", { requestId: Type.String(), decision: Type.Union([Type.Literal("allow"), Type.Literal("deny")]), message: Type.Optional(Type.String()), allowForSession: Type.Boolean(), voided: Type.Optional(Type.Boolean()) }),
   /** 后台任务开始或变了（开始、跑完、失败、被停）：每次带这一项的全部字段，按 item.id 覆盖。 */
   ev("background", { item: LocalBackgroundItem }),
   /** 执行方问本人（Claude Code 的 AskUserQuestion）：会话转成 idle（等你回复）。 */

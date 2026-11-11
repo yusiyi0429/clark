@@ -576,7 +576,7 @@ export class SessionManager {
     const resolved = new Set(events.flatMap((e) => (e.type === "permission_resolved" || e.type === "question_resolved" ? [e.requestId] : [])));
     for (const e of events) {
       if (e.type === "permission_request" && !resolved.has(e.request.requestId)) {
-        this.emit(rec, { type: "permission_resolved", requestId: e.request.requestId, decision: "deny", message: "本机程序重启，已作废", allowForSession: false });
+        this.emit(rec, { type: "permission_resolved", requestId: e.request.requestId, decision: "deny", message: "本机程序重启，已作废", allowForSession: false, voided: true });
       } else if (e.type === "question" && !resolved.has(e.request.requestId)) {
         this.emit(rec, { type: "question_resolved", requestId: e.request.requestId, choices: null, text: null });
       }
