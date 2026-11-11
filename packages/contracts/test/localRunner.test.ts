@@ -3,7 +3,7 @@ import { FormatRegistry } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import {
   LocalCreateSessionRequest, LocalModelProfileUpsert, LocalTokenHubConnectRequest, LocalRunnerError, LOCAL_TOKENHUB_PROFILE_PREFIX, LocalModelProfile, LocalPermissionDecisionRequest, LocalSessionEvent,
-  LocalSyncBatchRequest, LocalPairingStatusResponse, LocalSendMessageRequest, LOCAL_RUNNER_ROUTES,
+  LocalSyncBatchRequest, LocalPairingStatusResponse, LocalSendMessageRequest, LOCAL_RUNNER_ROUTES, LOCAL_RUNNER_PROTOCOL,
   LocalCreateSessionBatchRequest, LocalCreateSessionBatchResponse, LocalSettingsPatch, LocalSessionSummary, LocalHealthResponse,
   LocalVerifyBriefResponse, LOCAL_RUNNER_VERIFY_BRIEF_PATH, LocalMergeResponse, LocalVerdict, LocalQuestionAnswerRequest, LocalPlanCard, LocalBackgroundItem,
   LocalSettings, LocalMergeSync, LocalStatusResponse, LocalQuotaSource, LocalQuotaSync,
@@ -42,6 +42,12 @@ describe("本机程序契约", () => {
     expect(Value.Check(LocalSendMessageRequest, { kind: "review" })).toBe(true);
     expect(Value.Check(LocalSendMessageRequest, { kind: "review", text: "重点看数据" })).toBe(true);
     expect(Value.Check(LocalSendMessageRequest, { kind: "vote", text: "x" })).toBe(false);
+  });
+
+  it("说一句可带网页生成的编号（protocol 2 起）", () => {
+    expect(LOCAL_RUNNER_PROTOCOL).toBe(2);
+    expect(Value.Check(LocalSendMessageRequest, { text: "x", messageId: sessionId })).toBe(true);
+    expect(Value.Check(LocalSendMessageRequest, { text: "x", messageId: "m-1" })).toBe(false);
   });
 
   it("模型钥匙只写不读", () => {
