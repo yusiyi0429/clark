@@ -102,5 +102,5 @@ describe("找天枢的应用快捷方式", () => {
     expect([read!.path, read!.target]).toEqual([path, process.execPath]);
     expect(appIdOf(read!.args)).toEqual({ appId: LOCAL_ID, profile: "Profile 3" });
     rmSync(dir, { recursive: true, force: true });
-  });
+  }, 30_000); // 两次 PowerShell + COM：电脑刚重启时冷启动慢（11/11 实测 7 秒多），5 秒不够
 });

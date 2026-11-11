@@ -271,4 +271,58 @@ describe("一个项目绑多个文件夹", { timeout: 60_000 }, () => {
     expect(none).toEqual([]);
     await kill(loose.body.id);
   });
+
+  it("允许的范围只有工作目录和项目绑的文件夹（11/11）：本人允许过、但这个项目没绑的文件夹算工作区外，「自动」照样问；绑上了就不问", async () => {
+    const target = join(third, "别的文件夹里的表.md");
+    writeFileSync(join(docs, ".fake-claude.json"), JSON.stringify({ writePath: target }));
+    const start = async (topicId: string) => {
+      const r = await call("POST", "/v1/sessions", { subject: { kind: "topic", topicId, projectId: P4 }, title: "调研", firstMessage: "调研", permissionMode: "auto" });
+      expect(r.status, JSON.stringify(r.body)).toBe(200);
+      return r.body;
+    };
+    // 只绑 docs：third 本人允许过，但不是这个项目的
+    expect((await put(P4, { folderIds: [b.id] })).status).toBe(200);
+    const x = await start("mf-scope-1");
+    await status(x.id, "waiting_permission");
+    const perm = (await call("GET", `/v1/sessions/${x.id}`)).body.pendingPermissions[0];
+    expect(perm.outsidePaths.map((p: string) => posix(p).toLowerCase())).toEqual([posix(target).toLowerCase()]);
+    expect(existsSync(target)).toBe(false);
+    await kill(x.id);
+    // 绑上 third：在范围内，「自动」直接写
+    expect((await put(P4, { folderIds: [b.id, c.id] })).status).toBe(200);
+    const y = await start("mf-scope-2");
+    await status(y.id, "idle");
+    expect(asked(y.id)).toBe(0); // 假 claude 给了 writePath 时只要权限、不真写
+    await kill(y.id);
+    // 只收紧写，读照旧放：只绑 docs 时读 third 里的文件不问
+    expect((await put(P4, { folderIds: [b.id] })).status).toBe(200);
+    writeFileSync(target, "别处的材料");
+    writeFileSync(join(docs, ".fake-claude.json"), JSON.stringify({ readPath: target }));
+    const z = await start("mf-scope-3");
+    await status(z.id, "idle");
+    expect(asked(z.id)).toBe(0);
+    await kill(z.id);
+    writeFileSync(join(docs, ".fake-claude.json"), "{}");
+  });
+
+  it("没挂项目的会话读本人别的允许文件夹不问；项目把工作目录的上级也绑上时，上级里别的子文件夹在范围内（写不问）", async () => {
+    // 没挂项目的散卡：读 docs 里的
+    mkdirSync(join(third, "散2"), { recursive: true });
+    writeFileSync(join(docs, "材料.md"), "材料");
+    writeFileSync(join(third, "散2", ".fake-claude.json"), JSON.stringify({ readPath: join(docs, "材料.md") }));
+    const loose = await call("POST", "/v1/sessions", { subject: { kind: "card", cardId: "mf-loose-read" }, title: "散卡", cwd: join(third, "散2"), firstMessage: "做", permissionMode: "auto" });
+    expect(loose.status, JSON.stringify(loose.body)).toBe(200);
+    await status(loose.body.id, "idle");
+    expect(asked(loose.body.id)).toBe(0);
+    await kill(loose.body.id);
+    // 项目绑 sub（工作目录）和它的上级 repo：写 repo 里别的子文件夹不问（以前所有允许的文件夹都放，收紧时别倒退）
+    const other = join(repo, "上级里别的", "x.md");
+    writeFileSync(join(sub, ".fake-claude.json"), JSON.stringify({ writePath: other }));
+    expect((await put(P4, { folderIds: [s.id, a.id] })).status).toBe(200);
+    const r = await call("POST", "/v1/sessions", { subject: { kind: "topic", topicId: "mf-parent", projectId: P4 }, title: "调研", firstMessage: "调研", permissionMode: "auto" });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    await status(r.body.id, "idle");
+    expect(asked(r.body.id)).toBe(0);
+    await kill(r.body.id);
+  });
 });

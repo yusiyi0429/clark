@@ -111,6 +111,8 @@ class ClaudeRun implements AgentRun {
   private readonly receipts = new Set<string>();
   /** broad：这一步越界，或「这张卡都允许」要放开的范围越界——这时不给本会话放行。 */
   private readonly permissions = new Map<string, { req: Json; broad: boolean }>();
+  /** 等留一份时 CLI 撤回了的请求：留好以后不再放行、不再转给本人。 */
+  private readonly cancelled = new Set<string>();
   /** 在等本人回答的提问（AskUserQuestion）。 */
   private readonly questions = new Map<string, Json>();
   /** Claude Code 报来的任务（task_started 起）。visible：算不算后台任务（前台跑完的普通命令、它内部的任务不算）。 */
@@ -137,7 +139,7 @@ class ClaudeRun implements AgentRun {
   private contextAsked = false;
 
   constructor(
-    private readonly child: ChildProcessWithoutNullStreams, private readonly sessionId: string, private readonly scope: PathScope,
+    private readonly child: ChildProcessWithoutNullStreams, private readonly sessionId: string, private readonly scope: PathScope & Pick<AgentLaunch, "beforeWrite">,
     private readonly autoAllowRoot: string | null, private readonly subscription: boolean,
     /** 现在的权限模式：本机按它放行请求（pathGuard 的 modeAllows）。 */
     private mode: TLocalPermissionMode,
@@ -355,6 +357,33 @@ class ClaudeRun implements AgentRun {
     this.emit({ type: "notice", level: "error", code: "auth_required", text });
   }
 
+  /** 一次权限请求：先留一份（改已有文件的拷一份，命令等这一轮开头那份，undo/），再按会话的权限模式放行或转给本人。 */
+  private async permit(ev: Json, req: Json, toolName: string) {
+    await this.scope.beforeWrite?.(toolName, req.input ?? {}).catch(() => undefined);
+    if (this.cancelled.delete(ev.request_id) || this.exited) return;
+    // 按会话的权限模式放行（规则在 pathGuard 的 modeAllows；硬规矩哪一档都问本人）
+    if (modeAllows(this.mode, toolName, req.input ?? {}, this.scope, req.blocked_path, this.autoAllowRoot)) {
+      this.write({ type: "control_response", response: { subtype: "success", request_id: ev.request_id, response: { behavior: "allow", updatedInput: req.input ?? {} } } });
+      return;
+    }
+    // blocked_path：Claude Code 自己从 Bash 命令里认出的越界路径（11/06 实测）。
+    const outside = outsidePaths(toolName, req.input ?? {}, this.scope, req.blocked_path);
+    const broad = outside.length > 0 || suggestionsReachOutside(req.permission_suggestions, this.scope);
+    this.permissions.set(ev.request_id, { req, broad });
+    const view: TLocalPermissionRequestView = {
+      requestId: ev.request_id,
+      toolName,
+      title: describeTool(toolName, req.input ?? {}),
+      input: clipInput(req.input ?? {}),
+      outsidePaths: outside,
+      canAllowForSession: !broad && Array.isArray(req.permission_suggestions) && req.permission_suggestions.length > 0,
+      requestedAt: new Date().toISOString(),
+      // 批准说人话（主循环第 64 条）：Bash、PowerShell 入参里执行方写的那句 description，和会动的文件
+      ...permissionSummary(req.input?.description, touchedPaths(toolName, req.input ?? {}, this.scope)),
+    };
+    this.emit({ type: "permission_request", request: view });
+  }
+
   private handle(ev: Json) {
     switch (ev.type) {
       case "control_response": {
@@ -376,31 +405,12 @@ class ClaudeRun implements AgentRun {
           this.emit({ type: "question", request: { requestId: ev.request_id, questions: questionsOf(req.input ?? {}), askedAt: new Date().toISOString() } });
           return;
         }
-        // 按会话的权限模式放行（规则在 pathGuard 的 modeAllows；硬规矩哪一档都问本人）
-        if (modeAllows(this.mode, toolName, req.input ?? {}, this.scope, req.blocked_path, this.autoAllowRoot)) {
-          this.write({ type: "control_response", response: { subtype: "success", request_id: ev.request_id, response: { behavior: "allow", updatedInput: req.input ?? {} } } });
-          return;
-        }
-        // blocked_path：Claude Code 自己从 Bash 命令里认出的越界路径（11/06 实测）。
-        const outside = outsidePaths(toolName, req.input ?? {}, this.scope, req.blocked_path);
-        const broad = outside.length > 0 || suggestionsReachOutside(req.permission_suggestions, this.scope);
-        this.permissions.set(ev.request_id, { req, broad });
-        const view: TLocalPermissionRequestView = {
-          requestId: ev.request_id,
-          toolName,
-          title: describeTool(toolName, req.input ?? {}),
-          input: clipInput(req.input ?? {}),
-          outsidePaths: outside,
-          canAllowForSession: !broad && Array.isArray(req.permission_suggestions) && req.permission_suggestions.length > 0,
-          requestedAt: new Date().toISOString(),
-          // 批准说人话（主循环第 64 条）：Bash、PowerShell 入参里执行方写的那句 description，和会动的文件
-          ...permissionSummary(req.input?.description, touchedPaths(toolName, req.input ?? {}, this.scope)),
-        };
-        this.emit({ type: "permission_request", request: view });
+        void this.permit(ev, req, toolName);
         return;
       }
       case "control_cancel_request": {
         // CLI 自己撤回了还没答复的权限请求或提问（例如停下时）。
+        if (!this.permissions.has(ev.request_id) && !this.questions.has(ev.request_id)) this.cancelled.add(ev.request_id);
         if (this.permissions.delete(ev.request_id)) {
           this.emit({ type: "permission_resolved", requestId: ev.request_id, decision: "deny", message: "已撤回", allowForSession: false });
         }
@@ -638,7 +648,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       // Mac/Linux 上自成进程组，强停时整组杀掉。
       detached: process.platform !== "win32",
     });
-    const run = new ClaudeRun(child, launch.sessionId, { cwd: launch.cwd, home: homeDir(), allowedRoots: launch.allowedRoots, toolReads: launch.toolReads, extraDirs: launch.extraDirs }, launch.autoAllowRoot, launch.model.source === "subscription", launch.permissionMode);
+    const run = new ClaudeRun(child, launch.sessionId, { cwd: launch.cwd, home: homeDir(), allowedRoots: launch.allowedRoots, readRoots: launch.readRoots, toolReads: launch.toolReads, extraDirs: launch.extraDirs, covered: launch.covered, beforeWrite: launch.beforeWrite }, launch.autoAllowRoot, launch.model.source === "subscription", launch.permissionMode);
     const spawned = await new Promise<Error | null>((resolve) => {
       child.once("spawn", () => resolve(null));
       child.once("error", (e) => resolve(e));
