@@ -260,7 +260,7 @@ function SubSessionAsk({ worker, remote: item, letter }: { worker: Worker; remot
     <div ref={ref} id={session ? askAnchor(session.id) : undefined} className={f.ask} data-testid="sub-ask">
       <p className={f.askFrom}>{letter ? <SubLetter letter={letter} inline /> : null}{worker.title}</p>
       {pending.length && session ? (
-        <ApprovalDecision requests={pending} blocked={blocked} onDecide={(request, decision, { forSession, message }) => local.runner.decidePermission(session.id, request.requestId,
+        <ApprovalDecision requests={pending} blocked={blocked} inWorktree={session.workspace?.kind === "worktree"} onDecide={(request, decision, { forSession, message }) => local.runner.decidePermission(session.id, request.requestId,
           { decision, ...(forSession ? { allowForSession: true } : {}), ...(message ? { message } : {}) }).then(() => local.refresh())} />
       ) : null}
       {question ? <QuestionDecision key={question.requestId} request={question} blocked={blocked} onAnswer={answer} /> : null}
