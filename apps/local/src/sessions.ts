@@ -23,7 +23,7 @@ import type { CodexQuota } from "./codexQuota.js";
 import type { GatewayPricing } from "./pricing.js";
 import { Budgets, MULTI_AGENT_OFF_PERCENT, reworkRounds, runFor } from "./budget.js";
 import { AttachmentError, attachmentNote, saveAttachments, type FetchAttachment } from "./attachments.js";
-import { modelDisplayName, runLine, sameModel, type ResolvedModel } from "./models.js";
+import { runLine, sameModel, type ResolvedModel } from "./models.js";
 import { isClaudeProfileId } from "./claudeCatalog.js";
 import { isCodexProfileId } from "./codexCatalog.js";
 import { MAGPIE_PORT, modelOrigin } from "./modelOrigin.js";
@@ -1963,7 +1963,7 @@ export class SessionManager {
   private noteActualModel(rec: SessionRecord, actual: string): void {
     if (!rec.run || rec.run.actual?.model === actual) return;
     const requested = rec.run.model;
-    rec.run = { ...rec.run, actual: { model: actual, modelName: modelDisplayName(actual), at: nowIso() } };
+    rec.run = { ...rec.run, actual: { model: actual, modelName: this.d.models.displayName(actual), at: nowIso() } };
     // 经 magpie：来源按实际模型名的前缀重认（codex/… 是 Codex 订阅）
     if (rec.run.origin?.via === "magpie") rec.run.origin = modelOrigin({ source: "gateway", baseUrl: `http://127.0.0.1:${MAGPIE_PORT}`, model: actual });
     if (requested && rec.run.source === "subscription") this.d.models.noteActual(requested, actual);

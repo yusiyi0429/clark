@@ -226,7 +226,7 @@ describe("子会话 Claude Code ↔ Codex 双向换", { timeout: 60_000 }, () =>
     // 重开不算停了：重开期间是启动中，起来了回到等你回复；云端的 status 带新的执行方和跑法
     expect(events(id).filter((e) => e.seq > seqBefore && e.type === "status").map((e) => e.status)).toEqual(["starting", "idle"]);
     const sent = (JSON.parse(readFileSync(join(dataDir, "outbox.json"), "utf8")).entries as { item: any }[]).map((e) => e.item).filter((i) => i.sessionId === id);
-    expect(sent.filter((i) => i.type === "status").at(-1).data).toMatchObject({ status: "idle", agent: "codex", modelLabel: "Codex 订阅 · gpt-6.1-sol · 低", run: { harness: "codex" } }); // 「来源 · 模型 · 思考」（第 67 条）
+    expect(sent.filter((i) => i.type === "status").at(-1).data).toMatchObject({ status: "idle", agent: "codex", modelLabel: "Codex 订阅 · GPT-6.1-Sol · 低", run: { harness: "codex", modelName: "GPT-6.1-Sol" } }); // 「来源 · 模型 · 思考」，模型用目录给的名字（第 67 条）
     expect(sent.some((i) => i.type === "status" && ["exited", "failed"].includes(i.data.status))).toBe(false);
 
     // Codex 起来了：新开它自己的线程；挂的是同一份 MCP，工作规矩是同一份文字

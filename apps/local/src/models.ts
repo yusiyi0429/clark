@@ -136,8 +136,10 @@ export class ModelProfiles {
     this.aliasFile = join(dataDir, "model-aliases.json");
   }
 
-  /** 给人看的名字：别名用上一次实际跑出来的那一版，没跑过就是「Opus」这种。 */
+  /** 给人看的名字：Codex 模型目录里有的用目录给的名字（gpt-6.1-sol →「GPT-6.1-Sol」，第 67 条）；别名用上一次实际跑出来的那一版，没跑过就是「Opus」这种。 */
   displayName(model: string): string {
+    const listed = this.codex?.list().find((m) => m.model === model);
+    if (listed) return listed.label;
     const alias = ALIAS.exec(bare(model));
     const seen = alias ? readJson<Record<string, string>>(this.aliasFile, {})[alias[1]!] : undefined;
     return modelDisplayName(seen ?? model);

@@ -172,7 +172,7 @@ describe("Codex 子会话", { timeout: 60_000 }, () => {
     expect((await call("POST", "/v1/sessions", { subject: { kind: "card", cardId: "x" }, title: "x", cwd: join(work, "P"), firstMessage: "x", modelProfileId: G55, effort: "ultra" })).status).toBe(400);
     expect((await call("POST", "/v1/sessions", { subject: { kind: "card", cardId: "x" }, title: "x", cwd: join(work, "P"), firstMessage: "x", modelProfileId: SOL, agent: "claude-code" })).status).toBe(400);
     const preview = (await call("POST", "/v1/runs/preview", { modelProfileId: SOL, effort: "ultra" })).body;
-    expect(preview).toMatchObject({ harness: "codex", effort: "ultra", modelName: "gpt-6.1-sol" });
+    expect(preview).toMatchObject({ harness: "codex", effort: "ultra", modelName: "GPT-6.1-Sol" }); // 目录给的名字（第 67 条）
   });
 
   it("换模型、换思考程度：没在跑一轮当场换，在跑就这一轮做完换，都不重开进程；下一轮带新的", async () => {
