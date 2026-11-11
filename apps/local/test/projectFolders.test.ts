@@ -271,4 +271,28 @@ describe("一个项目绑多个文件夹", { timeout: 60_000 }, () => {
     expect(none).toEqual([]);
     await kill(loose.body.id);
   });
+
+  it("允许的范围只有工作目录和项目绑的文件夹（11/11）：本人允许过、但这个项目没绑的文件夹算工作区外，「自动」照样问；绑上了就不问", async () => {
+    const target = join(third, "别的文件夹里的表.md");
+    writeFileSync(join(docs, ".fake-claude.json"), JSON.stringify({ writePath: target }));
+    const start = async (topicId: string) => {
+      const r = await call("POST", "/v1/sessions", { subject: { kind: "topic", topicId, projectId: P4 }, title: "调研", firstMessage: "调研", permissionMode: "auto" });
+      expect(r.status, JSON.stringify(r.body)).toBe(200);
+      return r.body;
+    };
+    // 只绑 docs：third 本人允许过，但不是这个项目的
+    expect((await put(P4, { folderIds: [b.id] })).status).toBe(200);
+    const x = await start("mf-scope-1");
+    await status(x.id, "waiting_permission");
+    const perm = (await call("GET", `/v1/sessions/${x.id}`)).body.pendingPermissions[0];
+    expect(perm.outsidePaths.map((p: string) => posix(p).toLowerCase())).toEqual([posix(target).toLowerCase()]);
+    expect(existsSync(target)).toBe(false);
+    await kill(x.id);
+    // 绑上 third：在范围内，「自动」直接写
+    expect((await put(P4, { folderIds: [b.id, c.id] })).status).toBe(200);
+    const y = await start("mf-scope-2");
+    await status(y.id, "idle");
+    expect(asked(y.id)).toBe(0); // 假 claude 给了 writePath 时只要权限、不真写
+    writeFileSync(join(docs, ".fake-claude.json"), "{}");
+  });
 });

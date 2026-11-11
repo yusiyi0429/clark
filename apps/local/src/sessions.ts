@@ -855,9 +855,10 @@ export class SessionManager {
       disallowedTools,
       systemPromptPath, agentsPath, pluginDirs: plugin ? [plugin] : [], feishuSkillsDir: rec.agent === "codex" ? skillsDir ?? null : null,
       // 每次现查：会话途中本人移除了文件夹，之后的请求（包括工作目录里的）就算越界。卡在工作树里做时整个工作树都算。
+      // 只有工作目录和项目另外绑的文件夹算范围内（11/11）：本人允许过的别的文件夹也算工作区外（「自动」问；「全部放行」不问，有兜底规矩）。
       allowedRoots: () => [
-        ...(this.d.folders.isAllowed(folder) ? [rec.workspace?.kind === "worktree" ? rec.workspace.path : rec.cwd] : []),
-        ...this.d.folders.list().map((f) => f.path),
+        ...(this.d.folders.isAllowed(folder) ? (rec.workspace?.kind === "worktree" ? [rec.workspace.path, rec.workspace.folder] : [rec.cwd]) : []),
+        ...this.extraDirs(rec),
       ],
       // 卡在自己的工作树里：「自动」「自动接受改文件」只在工作树里自己放行（规则在 pathGuard 的 modeAllows）
       autoAllowRoot: rec.subject.kind === "card" && rec.workspace?.kind === "worktree" ? rec.workspace.path : null,
