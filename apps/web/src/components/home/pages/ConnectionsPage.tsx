@@ -17,7 +17,7 @@ import type { TLocalAgentKind, TLocalDeviceView, TLocalTool, TLocalToolUpsert } 
 import { HeroButton } from "@/components/HeroButton";
 import { ConnectionDialog } from "@/components/ConnectionDialog";
 import { WechatConnectPanel, readWechatConnection, type WechatConnection } from "@/components/WechatConnect";
-import { installCommand } from "@/components/local/PluginsPage";
+import { installCommand, isMac } from "@/components/local/PluginsPage";
 import { useHandheld } from "@/components/ui/useHandheld";
 import { FailedLine } from "@/components/work/DecisionBox";
 import { MANY_SESSIONS } from "@/components/work/Slots";
@@ -210,8 +210,7 @@ function ProgramCard({ me }: { me: Me | null }) {
   const [copied, setCopied] = useState(false);
   const status = local.status;
   const person: LinkPerson | null = me ? { personId: me.personId, name: me.displayName } : null;
-  const mac = typeof navigator !== "undefined" && /Mac/i.test(navigator.userAgent);
-  const program = programRow({ phase: local.phase, status, version: local.version, pairing: local.pairing, error: local.error, linking, install: installCommand(mac) });
+  const program = programRow({ phase: local.phase, status, version: local.version, pairing: local.pairing, error: local.error, linking, install: isMac() ? null : installCommand() });
   if (handheld) return null;
   const work: Record<RowAction, (() => Promise<unknown>) | null> = {
     pair: () => local.pair(),

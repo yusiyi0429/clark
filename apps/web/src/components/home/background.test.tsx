@@ -85,6 +85,16 @@ describe("右栏（5.4.5）", () => {
     expect(text(render(panel([], []), "prompt"))).not.toContain("install.ps1");
   });
 
+  it("Mac 上离线不给安装命令，只写「暂不支持 Mac」", () => {
+    vi.stubGlobal("navigator", { userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)" });
+    try {
+      const off = text(render(panel([], []), "offline", [], [tool("gh")]));
+      expect(off).toContain("暂不支持 Mac");
+      expect(off).not.toMatch(/install|curl|irm /);
+      expect(off).not.toContain("复制");
+    } finally { vi.unstubAllGlobals(); }
+  });
+
   it("这台电脑就绪且读得到额度：只列本机的，别的设备不列；读不到时用云端的", () => {
     const ready = text(render(panel([], [cloud("ThinkPad", 83, 1)]), "ready", [sub(70)]));
     expect(ready).toContain("Claude 70%");
