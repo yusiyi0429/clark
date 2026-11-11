@@ -111,6 +111,36 @@ describe("每一档本机自己放行什么", () => {
       ["mcp__tool-kd__save_voucher", {}],
     ] as [string, Record<string, unknown>][]) expect(allows("bypassPermissions", tool, input), `${tool} ${JSON.stringify(input)}`).toBe(true);
   });
+  it("全部放行也问：没有兜底的地方，已有文件要被删、挪、覆盖（11/11 过渡规矩）；本机自己的目录、新建文件、读的照旧放", () => {
+    const own = tempDir("tl-pm-own-"); // 当成本机自己的目录（工作树、专题、此电脑）
+    const user = tempDir("tl-pm-user-"); // 本人的普通文件夹
+    writeFileSync(join(user, "表.xlsx"), "x");
+    writeFileSync(join(own, "稿.md"), "x");
+    const covered = (p: string) => p.toLowerCase().startsWith(own.toLowerCase());
+    const at = (cwd: string): PathScope => ({ cwd, home: scope.home, allowedRoots: () => [own, user], covered });
+    const ok = (s: PathScope, tool: string, input: Record<string, unknown>) => modeAllows("bypassPermissions", tool, input, s, undefined, null);
+    const inUser = at(user), inOwn = at(own);
+    // 本人文件夹里：改已有文件、覆盖已有文件、删、挪、就地改、冲文件的 git 都问
+    expect(ok(inUser, "Edit", { file_path: join(user, "表.xlsx"), old_string: "x", new_string: "y" })).toBe(false);
+    expect(ok(inUser, "Write", { file_path: join(user, "表.xlsx"), content: "y" })).toBe(false);
+    expect(ok(inUser, "Write", { file_path: "表.xlsx", content: "y" })).toBe(false); // 相对路径按工作目录
+    for (const command of ["rm 表.xlsx", "del 表.xlsx", "Remove-Item -Recurse .", "mv 表.xlsx 旧.xlsx", "echo y > 表.xlsx", "Get-ChildItem | Remove-Item", "sed -i s/x/y/ 表.xlsx", "git checkout -- .", "Set-Content 表.xlsx y"]) {
+      expect(ok(inUser, "Bash", { command }), command).toBe(false);
+    }
+    // 新建文件、读、扔掉输出的重定向不问
+    expect(ok(inUser, "Write", { file_path: join(user, "新.md"), content: "y" })).toBe(true);
+    for (const command of ["ls", "cat 表.xlsx", "python report.py > $null", "dir 2> nul", "git status 2>&1"]) expect(ok(inUser, "Bash", { command }), command).toBe(true);
+    // 本机自己的目录里：照旧都放
+    expect(ok(inOwn, "Edit", { file_path: join(own, "稿.md"), old_string: "x", new_string: "y" })).toBe(true);
+    expect(ok(inOwn, "Bash", { command: "rm 稿.md" })).toBe(true);
+    // 从本机目录去删、覆盖本人文件夹里的：问；认不出的变量路径：问
+    expect(ok(inOwn, "Bash", { command: `rm ${sh(join(user, "表.xlsx"))}` })).toBe(false);
+    expect(ok(inOwn, "Bash", { command: `cp 稿.md ${sh(join(user, "表.xlsx"))}` })).toBe(false);
+    expect(ok(inOwn, "Bash", { command: "rm $TMPDIR/x" })).toBe(false);
+    expect(ok(inOwn, "Edit", { file_path: join(user, "表.xlsx"), old_string: "x", new_string: "y" })).toBe(false);
+    // 别的档不受影响：自动在本人文件夹里改文件照旧放（自动档的删挪原来就问）
+    expect(modeAllows("auto", "Edit", { file_path: join(user, "表.xlsx"), old_string: "x", new_string: "y" }, inUser, undefined, null)).toBe(true);
+  });
   it("全部放行也问：推代码或开 PR", () => {
     for (const command of ["git push origin main", "git -C repo push --force", "gh pr create --fill", "gh pr merge 12 --squash", "gh release create v1", "gh issue comment 3 -b hi", "gh api -X POST repos/o/r/issues -f title=x", "gh api repos/o/r/issues -f title=x", "echo $(git push)"]) {
       expect(allows("bypassPermissions", "Bash", { command }), command).toBe(false);
@@ -243,6 +273,22 @@ describe("开工带模式、中途换、先出计划", { timeout: 60_000 }, () =
       const a = (await h.open("E", "bypassPermissions")).body;
       await h.waitStatus(a.id, "idle");
       expect(readFileSync(join(h.t.dataDir, "sessions", a.id, "events.jsonl"), "utf8")).not.toContain("\"permission_request\"");
+    } finally {
+      await h.t.cleanup();
+    }
+  });
+
+  it("全部放行：本人文件夹里覆盖已有文件照样问（11/11 过渡规矩，没有兜底）", async () => {
+    const h = await setup();
+    try {
+      mkdirSync(join(h.work, "F"), { recursive: true });
+      const existing = join(h.work, "F", "表.md");
+      writeFileSync(existing, "本人的原文");
+      h.fake({ writePath: existing });
+      const a = (await h.open("F", "bypassPermissions")).body;
+      await h.waitStatus(a.id, "waiting_permission");
+      expect((await h.session(a.id)).pendingPermissions[0].toolName).toBe("Write");
+      expect(readFileSync(existing, "utf8")).toBe("本人的原文");
     } finally {
       await h.t.cleanup();
     }

@@ -41,6 +41,8 @@ export interface AgentLaunch {
   extraDirs(): string[];
   /** 本人在连接页加的工具（mcp__tool-…）里哪些是读的：照权限模式放行；不给就是都要问。 */
   toolReads?(tool: string): boolean;
+  /** 改、删、覆盖不会丢本人东西的地方（pathGuard 的 PathScope.covered），每次现查。 */
+  covered?(path: string): boolean;
   /** 开工时的权限模式（契约 LocalPermissionMode）：本机按它放行请求；plan 时执行方以自己的 plan 模式起。 */
   permissionMode: TLocalPermissionMode;
 }

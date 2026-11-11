@@ -17,6 +17,11 @@ export interface PathScope {
   toolReads?(tool: string): boolean;
   /** 项目另外绑的文件夹（设计 17.2 第 46 条），每次现查：卡在工作树里做时，这些地方照「不在工作树里」的规矩放行（modeAllows）。 */
   extraDirs?(): string[];
+  /**
+   * 改、删、覆盖不会丢本人东西的地方（卡的 git 工作树、本机自己的专用目录），每次现查。给了才有「全部放行」的兜底规矩（noLossAsks）：
+   * 别处的已有文件要被删、挪、覆盖时照样问。不给就没有这条（只在单测里不给）。
+   */
+  covered?(path: string): boolean;
 }
 /** 本人加的工具：读的照权限模式放行，写的、认不出的哪一档都问。 */
 const isCustomTool = (tool: string) => tool.startsWith(`mcp__${TOOL_SERVER_PREFIX}`);
@@ -315,8 +320,35 @@ function bypassAsks(tool: string, input: Record<string, unknown>): boolean {
   return /\bgit\b[^;&|\n]*\bpush\b/i.test(cmd) || ghWrites(cmd) || larkMessages(cmd);
 }
 
+/** 会冲掉已有文件的 git 子命令（WRITES 认不出的）。 */
+const GIT_REWRITES = /\bgit\b[^;&|\n]*\b(checkout|reset|clean|restore|stash|rm|mv|apply|switch|merge|rebase|pull|am|cherry-pick|revert)\b/i;
+/** 扔掉输出的重定向（> $null、2> nul、>/dev/null）不算写文件。 */
+const DISCARD = /\d?>\s*(\$null|nul|\/dev\/null)(?=[\s;|&)]|$)/gi;
+
 /**
- * 这一档下这一步能不能不问本人就放行（契约 LocalPermissionMode）。「全部放行」只问 bypassAsks 那三类；别的档还有硬规矩（mustAsk）。worktree：卡在自己的工作树里做时是工作树的根，
+ * 「全部放行」也照样问的第四类（11/11 本人定，兜底到位前的过渡规矩）：没有兜底的地方（scope.covered 以外），已有文件要被删、挪、覆盖。
+ * - 改文件的工具：Edit、MultiEdit、NotebookEdit 改的文件不在兜底里；Write 写的是已有文件、而且不在兜底里（新建不问）。
+ * - 命令：有写、删、挪（WRITES）、就地改（sed -i、perl -pi）、冲文件的 git 子命令，而工作目录或认出的路径里有一处不在兜底里
+ *   （按词认，认不全；认不出的变量路径按不在兜底里算）。脚本自己改文件认不出，要等快照兜底。
+ */
+function noLossAsks(tool: string, input: Record<string, unknown>, s: PathScope): boolean {
+  const covered = s.covered;
+  if (!covered) return false;
+  const uncovered: Inside = (p) => !covered(p);
+  const field = (FILE_FIELDS[tool] ?? []).find((f) => typeof input[f] === "string");
+  if (EDIT_TOOLS.has(tool) && field) {
+    const abs = resolve(s.cwd, input[field] as string);
+    return tool === "Write" && !existsSync(abs) ? false : uncovered(abs);
+  }
+  if (!SHELL_TOOLS.has(tool)) return false;
+  const cmd = String(input.command ?? "").replace(DISCARD, " ");
+  if (!WRITES.test(cmd) && !/\b(sed|perl)\b[^;&|\n]*\s-\w*i/i.test(cmd) && !GIT_REWRITES.test(cmd)) return false;
+  if (uncovered(s.cwd)) return true;
+  return shellCandidates(cmd, tool === "Bash").some((w) => isOutside(w, s, covered));
+}
+
+/**
+ * 这一档下这一步能不能不问本人就放行（契约 LocalPermissionMode）。「全部放行」只问 bypassAsks 那三类，加上没有兜底的删、挪、覆盖（noLossAsks）；别的档还有硬规矩（mustAsk）。worktree：卡在自己的工作树里做时是工作树的根，
  * 「自动」「自动接受改文件」只在工作树里自己放行；别的会话为 null，在允许的文件夹里放行，「自动」不在工作树时删、挪文件的命令照样问（没有 git 兜底）。
  * 卡在工作树里、项目另外还绑着文件夹（scope.extraDirs）：那些文件夹是本人真的文件夹，照「不在工作树里」的规矩放行，
  * 再严一点：命令里有 git、就地改文件的（REWRITES）也问——卡原来出了工作树什么都问，不能因为多绑了文件夹就能不问本人把那里没提交的改动冲掉。
@@ -324,7 +356,7 @@ function bypassAsks(tool: string, input: Record<string, unknown>): boolean {
 export function modeAllows(
   mode: "auto" | "default" | "acceptEdits" | "plan" | "bypassPermissions", tool: string, input: Record<string, unknown>, scope: PathScope, hint: unknown, worktree: string | null,
 ): boolean {
-  if (mode === "bypassPermissions") return !bypassAsks(tool, input);
+  if (mode === "bypassPermissions") return !bypassAsks(tool, input) && !noLossAsks(tool, input, scope);
   if (mode === "default" || mode === "plan" || mustAsk(tool, input, scope, hint)) return false;
   const pass = (area: PathScope, ownTree: boolean) => mode === "acceptEdits"
     ? EDIT_TOOLS.has(tool) && !collect(tool, input, area, insideAny(area.allowedRoots()), hint).length

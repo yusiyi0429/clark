@@ -862,6 +862,8 @@ export class SessionManager {
       // 卡在自己的工作树里：「自动」「自动接受改文件」只在工作树里自己放行（规则在 pathGuard 的 modeAllows）
       autoAllowRoot: rec.subject.kind === "card" && rec.workspace?.kind === "worktree" ? rec.workspace.path : null,
       extraDirs: () => this.extraDirs(rec),
+      // 「全部放行」的兜底规矩（pathGuard 的 noLossAsks）：只有本机自己的目录（含卡的工作树）改、删不丢本人的东西
+      covered: (p) => this.d.folders.isOwn(p),
       permissionMode: rec.permissionMode,
       toolReads: custom?.reads,
     });
