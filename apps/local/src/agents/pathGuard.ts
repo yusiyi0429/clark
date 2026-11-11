@@ -138,6 +138,11 @@ function shellCandidates(cmd: string, bash: boolean, patterns?: Set<string>): st
   return words.flatMap(argPaths);
 }
 
+/** 命令里像路径的词（尽力认，认不全）：改前拷一份时用（undo/）。 */
+export function commandPaths(cmd: string, bash: boolean): string[] {
+  return shellCandidates(cmd, bash);
+}
+
 /** 这一步要碰的、允许范围外的路径（原样，给人看）。 */
 export function outsidePaths(tool: string, input: Record<string, unknown>, scope: PathScope, hint?: unknown): string[] {
   return collect(tool, input, scope, insideAny(rootsFor(tool, input, scope)), hint);

@@ -209,6 +209,55 @@ describe("留一份：根目录本身是 git 仓库（自由子会话直接在�
   });
 });
 
+describe("留一份：同步盘（OneDrive）里只留本地已有的文档", { timeout: 60_000 }, () => {
+  it.runIf(WIN)("本地的 Word、Excel 命令改了也能看到、能恢复；占位文件（只在云端）不读不留；不是文档的不留；命令点名的占位文档先拷一份", async () => {
+    const onedrive = tempDir("tl-undo-od-");
+    const dir = join(onedrive, "桌面", "报表");
+    mkdirSync(dir, { recursive: true });
+    // 真的 Word、Excel 都有几 KB 以上（几百字节的小文件内容存在目录项里、占 0 块，会被当成占位跳过）
+    const body = (t: string) => t + "。".repeat(4000);
+    writeFileSync(join(dir, "报告.docx"), body("报告原文"));
+    writeFileSync(join(dir, "表.xlsx"), body("表原文"));
+    writeFileSync(join(dir, "照片.jpg"), body("照片原文"));
+    // 占位：大小 1MB、占的盘块数为 0（稀疏文件，和 OneDrive「只在云端」的文件在 stat 里一样）
+    const ph = join(dir, "占位.docx");
+    writeFileSync(ph, "");
+    execFileSync("fsutil", ["sparse", "setflag", ph], { stdio: "ignore" });
+    execFileSync("powershell", ["-NoProfile", "-Command", `$f=[IO.File]::Open('${ph}','Open','ReadWrite'); $f.SetLength(1MB); $f.Close()`], { stdio: "ignore" });
+    const before = process.env.OneDrive;
+    process.env.OneDrive = onedrive;
+    try {
+      const { s, dir: data } = store();
+      const u = await opened(s.for("od1", dir));
+      expect(u.view()).toMatchObject({ state: "ready", reason: "sync_folder" });
+      expect(u.covers(join(dir, "报告.docx"))).toBe(true);
+      expect(u.covers(ph)).toBe(false);
+      expect(u.covers(join(dir, "照片.jpg"))).toBe(false);
+      await turn(u, () => {
+        writeFileSync(join(dir, "报告.docx"), "脚本改了");
+        writeFileSync(join(dir, "表.xlsx"), "脚本改了");
+        writeFileSync(join(dir, "新的.docx"), body("脚本新建"));
+        writeFileSync(join(dir, "照片.jpg"), "脚本改了");
+      });
+      expect((await u.files()).map((f) => f.path).sort()).toEqual(["报告.docx", "新的.docx", "表.xlsx"].sort());
+      // 占位文件没进影子仓库
+      const repo = readdirSync(join(data, "repos"))[0]!;
+      const tree = execFileSync("git", ["--git-dir", join(data, "repos", repo), "-c", "core.quotepath=false", "ls-tree", "-r", "--name-only", "refs/tianshu/od1/t0-start"], { encoding: "utf8" });
+      expect(tree.split("\n").filter(Boolean).sort()).toEqual(["报告.docx", "表.xlsx"].sort());
+      await u.restore();
+      expect(readFileSync(join(dir, "报告.docx"), "utf8")).toBe(body("报告原文"));
+      expect(readFileSync(join(dir, "表.xlsx"), "utf8")).toBe(body("表原文"));
+      expect(existsSync(join(dir, "新的.docx"))).toBe(false);
+      expect(readFileSync(join(dir, "照片.jpg"), "utf8")).toBe("脚本改了"); // 不是文档：没留
+      // 命令点名了占位的文档：先拷一份（命令本来就要把它拉下来）
+      await u.beforeWrite("PowerShell", { command: `python fix.py "${ph}"` }, dir);
+      expect(u.covers(ph)).toBe(true);
+    } finally {
+      if (before === undefined) delete process.env.OneDrive; else process.env.OneDrive = before;
+    }
+  });
+});
+
 describe("留一份：只改前拷一份（太大、同步盘、盘不够、没留成、本机自己的目录）", { timeout: 60_000 }, () => {
   it("太大：降级成 touched_only、出一行提示；改文件工具改的照样拷一份能恢复，命令改的不在兜底里", async () => {
     UNDO_LIMITS.files = 2;
@@ -308,6 +357,27 @@ describe("留一份：时机和清理", { timeout: 60_000 }, () => {
     } finally {
       hold.kill();
     }
+  });
+});
+
+describe("真的兜底范围接到放行规矩上（covers → pathGuard）", { timeout: 60_000 }, () => {
+  it("整份留好的文件夹：「全部放行」「自动」里文件夹内的删、挪命令都不问；外面的、同步盘里的照样问", async () => {
+    const dir = folder();
+    const outside = tempDir("tl-undo-cov-out-");
+    const { s } = store();
+    const u = await opened(s.for("cov1", dir));
+    const scope: PathScope = { cwd: dir, home: tempDir("tl-undo-cov-home-"), allowedRoots: () => [dir], covered: (p) => u.covers(p) };
+    const ok = (mode: "bypassPermissions" | "auto", command: string) => modeAllows(mode, "PowerShell", { command }, scope, undefined, null);
+    expect(u.covers(dir)).toBe(true);
+    expect(ok("bypassPermissions", "Remove-Item 笔记.md")).toBe(true);
+    expect(ok("auto", "Remove-Item 笔记.md")).toBe(true);
+    expect(ok("bypassPermissions", "Get-ChildItem | Remove-Item")).toBe(true);
+    expect(ok("bypassPermissions", `Remove-Item ${join(outside, "x.md")}`)).toBe(false);
+    // 开工那份还没留好时：问
+    const v = s.for("cov2", folder());
+    v.open();
+    const early: PathScope = { ...scope, covered: (p) => v.covers(p) };
+    expect(modeAllows("bypassPermissions", "PowerShell", { command: "Remove-Item a.md" }, { ...early, cwd: tempDir("tl-undo-cov-x-") }, undefined, null)).toBe(false);
   });
 });
 

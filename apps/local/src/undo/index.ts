@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, statfsSync } from "node:fs";
 import { copyFile, mkdir, writeFile, rm } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { TLocalRestoreFailure, TLocalSessionRestoreResponse, TLocalUndo } from "@warmap/contracts";
 import { isInside } from "../folders.js";
 import { readJson, writeJsonAtomic } from "../store.js";
 import { Copies } from "./copies.js";
-import { SKIP_DIRS, Shadow, scan, type Change } from "./shadow.js";
+import { DOC_EXT, SKIP_DIRS, Shadow, isPlaceholder, scan, type Change } from "./shadow.js";
+import { commandPaths } from "../agents/pathGuard.js";
 
 /**
  * 改、删前留一份（11/11 本人定，ADR 0039，契约 LocalUndo）。每个不在 git 工作树里做的会话一个 SessionUndo：
@@ -61,6 +62,8 @@ interface Meta {
   /** 恢复过的（规范化路径 → 时间）；之后会话又改了它就去掉。 */
   restored: Record<string, string>;
   lastActivity: string;
+  /** 同步盘里：只给本地已有的文档类文件留一份（不读占位文件，11/11）。 */
+  docsOnly?: boolean;
   /** 到第几轮了（执行方每轮开头报 agent_info 加一）、这一轮还在不在做。 */
   turn?: number;
   inTurn?: boolean;
@@ -99,6 +102,8 @@ export class SessionUndo {
   private queue: Promise<unknown> = Promise.resolve();
   private busy = 0;
   private opened = false;
+  /** 同步盘里最近一份留下的文档（规范化绝对路径）：只有它们算快照管得住。 */
+  private docs = new Set<string>();
 
   constructor(
     readonly id: string,
@@ -142,20 +147,36 @@ export class SessionUndo {
     if (this.meta.state !== "preparing" || !this.shadow) return;
     void this.chain(async () => {
       const root = this.meta.root!;
-      if (isSyncFolder(root)) return this.degrade("sync_folder", "这个文件夹在同步盘里，只给执行方直接改的文件留一份");
-      const s = await scan(root, { files: UNDO_LIMITS.files, bytes: UNDO_LIMITS.bytes, bigFile: UNDO_LIMITS.bigFile, ms: UNDO_LIMITS.scanMs });
+      // 同步盘里：只留本地已有的文档类文件（不读占位文件，免得把云端的都下载下来）
+      this.meta.docsOnly = isSyncFolder(root);
+      const s = await this.scanNow();
       if (s.tooLarge) return this.degrade("too_large", "这个文件夹太大，只给执行方直接改的文件留一份");
       if (this.hooks.free(this.dir) < s.bytes * 2 + UNDO_LIMITS.spareBytes) return this.degrade("disk_full", "本机的盘不够，只给执行方直接改的文件留一份");
       try {
         await this.shadow!.init();
-        const base = await this.shadow!.snapshot(this.index, this.ref(0, "start"), null, s.excludes, "开工前");
+        const base = await this.shadow!.snapshot(this.index, this.ref(0, "start"), null, s.excludes, "开工前", s.included);
         this.meta.excludes = s.excludes;
         this.meta.turns = [{ start: base, end: null }];
-        this.set("ready");
+        if (this.meta.docsOnly) this.set("ready", "sync_folder", "这个文件夹在同步盘里，只给本地已有的文档留一份");
+        else this.set("ready");
       } catch (e) {
         this.degrade("failed", `没留成：${e instanceof Error ? e.message : String(e)}`);
       }
     });
+  }
+
+  /** 数一遍；同步盘里只挑本地已有的文档类文件（不超过 32MB、不是占位）。 */
+  private async scanNow() {
+    const limits = { files: UNDO_LIMITS.files, bytes: UNDO_LIMITS.bytes, bigFile: UNDO_LIMITS.bigFile, ms: UNDO_LIMITS.scanMs };
+    if (!this.meta.docsOnly) return scan(this.meta.root!, limits);
+    const s = await scan(this.meta.root!, limits, (rel, size, blocks) => DOC_EXT.has(extname(rel).toLowerCase()) && !isPlaceholder(size, blocks));
+    this.docs = new Set(s.included!.map((r) => norm(join(this.meta.root!, r))));
+    return s;
+  }
+
+  /** 每一轮前后留一份时：同步盘里重新挑一遍要留的文档（新建的文档也算）。 */
+  private async include(): Promise<string[] | undefined> {
+    return this.meta.docsOnly ? (await this.scanNow()).included : undefined;
   }
 
   private degrade(reason: NonNullable<TLocalUndo["reason"]>, text: string) {
@@ -187,7 +208,7 @@ export class SessionUndo {
       if (this.meta.state !== "ready" || !last) return;
       // 开工那份就是第一轮的开头；一轮里又报一次不重留
       if (last.end === null) { last.n ??= n; this.save(); return; }
-      const start = await this.shadow!.snapshot(this.index, this.ref(turns.length, "start"), last.end, this.meta.excludes, `第 ${n} 轮开始前`);
+      const start = await this.shadow!.snapshot(this.index, this.ref(turns.length, "start"), last.end, this.meta.excludes, `第 ${n} 轮开始前`, await this.include());
       turns.push({ n, start, end: null });
       this.save();
     }).catch((e) => this.degrade("failed", `没留成：${e instanceof Error ? e.message : String(e)}`));
@@ -201,7 +222,7 @@ export class SessionUndo {
       const last = turns.at(-1);
       if (this.shadow && this.meta.state === "ready" && last && last.end === null) {
         last.n ??= n;
-        last.end = await this.shadow.snapshot(this.index, this.ref(turns.length - 1, "end"), last.start, this.meta.excludes, `第 ${n} 轮结束后`);
+        last.end = await this.shadow.snapshot(this.index, this.ref(turns.length - 1, "end"), last.start, this.meta.excludes, `第 ${n} 轮结束后`, await this.include());
         last.changed = await this.shadow.diff(last.start, last.end);
         for (const c of last.changed) {
           delete this.meta.restored[norm(join(this.meta.root!, c.path))];
@@ -282,9 +303,12 @@ export class SessionUndo {
     const root = this.meta.root;
     if (!root || this.meta.state !== "ready" || this.busy > 0) return false;
     const rel = relative(root, resolve(p));
-    if (!rel || rel.startsWith("..") || isAbsolute(rel)) return false;
+    if (rel.startsWith("..") || isAbsolute(rel)) return false;
+    // 工作目录本身（命令在这里跑、认不出路径时按它算）：整份留了就算；同步盘里只留了文档，不算
+    if (!rel) return !this.meta.docsOnly;
     const r = posix(rel);
     if (r.split("/").some((part) => SKIP_DIRS.includes(part))) return false;
+    if (this.meta.docsOnly) return this.docs.has(norm(p));
     return !this.meta.excludes.some((x) => (WIN ? r.toLowerCase() === x.toLowerCase() || r.toLowerCase().startsWith(`${x.toLowerCase()}/`) : r === x || r.startsWith(`${x}/`)));
   }
 
@@ -307,8 +331,18 @@ export class SessionUndo {
       this.save();
       return;
     }
-    if (SHELL_TOOLS.has(tool) && this.busy > 0) {
-      await Promise.race([this.queue, new Promise((r) => setTimeout(r, UNDO_LIMITS.commandWaitMs).unref())]);
+    if (!SHELL_TOOLS.has(tool)) return;
+    if (this.busy > 0) await Promise.race([this.queue, new Promise((r) => setTimeout(r, UNDO_LIMITS.commandWaitMs).unref())]);
+    // 命令里认得出路径的已有文档，快照管不到的（同步盘里只在云端的、工作目录以外的、大文件）先拷一份：
+    // 只在云端的会被拉下来，但命令本来就要拉它
+    const cmd = typeof input.command === "string" ? input.command : "";
+    for (const w of commandPaths(cmd, tool === "Bash").slice(0, 50)) {
+      const abs = resolve(cwd, w);
+      if (!DOC_EXT.has(extname(abs).toLowerCase()) || this.hooks.isOwn(abs) || this.snapshotCovers(abs)) continue;
+      const st = existsSync(abs) ? statSync(abs) : null;
+      if (!st?.isFile() || st.size > UNDO_LIMITS.bigFile) continue;
+      await this.copies.save(abs, this.meta.turn ?? 0);
+      this.save();
     }
   }
 
@@ -371,7 +405,7 @@ export class SessionUndo {
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     if (this.shadow && this.meta.state === "ready" && targets.some((f) => f.source === "snapshot")) {
       const last = this.meta.turns.at(-1);
-      await this.chain(() => this.shadow!.snapshot(this.index, `refs/tianshu/${this.id}/restore-${stamp}`, last?.end ?? last?.start ?? null, this.meta.excludes, "恢复前"));
+      await this.chain(async () => this.shadow!.snapshot(this.index, `refs/tianshu/${this.id}/restore-${stamp}`, last?.end ?? last?.start ?? null, this.meta.excludes, "恢复前", await this.include()));
     }
     const now = new Date().toISOString();
     for (const f of targets) {
