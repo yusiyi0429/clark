@@ -315,6 +315,20 @@ describe("规划员和验收员", { timeout: 30_000 }, () => {
     }
   });
 
+  it("批准说人话（主循环第 64 条）：Bash 入参里的说明和会动的文件进批准请求，也进报给云端的「在等批准哪一步」", async () => {
+    const h = await setup(3);
+    try {
+      h.fake({ bash: { command: "rm -rf out/build", description: "清掉旧的构建产物" } });
+      const a = await h.open(h.card("A"));
+      const s = await until(async () => { const x = await h.session(a.id); return x.pendingPermissions[0] ? x : null; });
+      expect(s.pendingPermissions[0]).toMatchObject({ toolName: "Bash", description: "清掉旧的构建产物", paths: ["out/build"] });
+      const status = await until(() => h.cloud.items.find((i) => i.type === "status" && i.sessionId === a.id && i.data.permission));
+      expect(status.data.permission).toMatchObject({ toolName: "Bash", description: "清掉旧的构建产物", paths: ["out/build"] });
+    } finally {
+      await h.t.cleanup();
+    }
+  });
+
   it("本人原话（16.8）：带原话的验收交代能通过校验、原样作第一句话（本机不再拼一遍）；标准全过但漏了原话里明说的，判没过、写明是哪句；quote 要是原话；规划员的派活单带原话片段", async () => {
     const h = await setup(3);
     try {

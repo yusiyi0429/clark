@@ -101,7 +101,8 @@ describe("会话：开工、事件、批权限、插话、停下、强停、续�
 
     const detail = await api(t.port, token, "GET", `/v1/sessions/${id}`);
     expect(detail.body.session.status).toBe("waiting_permission");
-    expect(detail.body.pendingPermissions[0]).toMatchObject({ toolName: "Write", title: "写文件 hello.txt", canAllowForSession: true });
+    expect(detail.body.pendingPermissions[0]).toMatchObject({ toolName: "Write", title: "写文件 hello.txt", canAllowForSession: true, paths: ["hello.txt"] });
+    expect(detail.body.pendingPermissions[0].description).toBeUndefined(); // Write 没有说明就不带
   });
 
   it("断线重连按 Last-Event-ID 只补发之后的事件", async () => {

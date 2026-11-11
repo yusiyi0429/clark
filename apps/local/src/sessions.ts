@@ -559,7 +559,10 @@ export class SessionManager {
     const question = rec.status === "idle" ? this.questions.get(rec.id) : undefined;
     if (question) return { key: `q:${question.requestId}`, data: { question } };
     const p = rec.status === "waiting_permission" ? [...(this.pending.get(rec.id)?.values() ?? [])][0] : undefined;
-    if (p) return { key: `p:${p.requestId}`, data: { permission: { requestId: p.requestId, toolName: p.toolName.slice(0, 200), title: p.title.slice(0, 500), outsidePaths: p.outsidePaths.slice(0, 20), canAllowForSession: p.canAllowForSession } } };
+    if (p) {
+      return { key: `p:${p.requestId}`, data: { permission: { requestId: p.requestId, toolName: p.toolName.slice(0, 200), title: p.title.slice(0, 500), outsidePaths: p.outsidePaths.slice(0, 20), canAllowForSession: p.canAllowForSession,
+        ...(p.description ? { description: p.description } : {}), ...(p.paths?.length ? { paths: p.paths } : {}) } } }; // 批准说人话（主循环第 64 条）
+    }
     return { key: "", data: {} };
   }
 
