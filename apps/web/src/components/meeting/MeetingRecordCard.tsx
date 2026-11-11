@@ -81,8 +81,8 @@ export function MeetingRecordCard({ meetingId, initial, onView, turns = [], spea
   const saveLabel = editable ? SAVE_LABEL[card.saveState] : null;
   const mode: FooterMode = !view.canEdit ? "readonly" : !confirmed ? (legacy ? "first" : "open") : editable ? "editing" : "confirmed";
   const nameOf = (personId: string) => people.find((person) => person.personId === personId)?.displayName ?? personId;
-  // 逐条状态按服务端此刻的（确认版的行动项快照不跟着接下、退回变）。
-  const reviewOf = new Map(view.actionItems.map((item) => [item.id, item.review]));
+  // 逐条状态按服务端此刻的（确认版的行动项快照不跟着接下、退回变）。会议写本体关掉了（会后判定归 Nexus）不再等人接下，不标「待接下」。
+  const reviewOf = new Map(view.actionItems.map((item) => [item.id, view.worldWritesOff && item.review?.status === "pending" ? undefined : item.review]));
   const timeInvalid = Boolean(draft && (card.timeRejected || inFuture(draft.occurredAt)));
   const pendingHasText = Boolean(pending && (pending.heading.trim() || pending.body.trim()));
   const ready = editable && draft !== null && !card.unsaved && card.saveState !== "saving" && !card.conflict && !pendingHasText
@@ -156,7 +156,7 @@ export function MeetingRecordCard({ meetingId, initial, onView, turns = [], spea
 
       {view.decisions?.length ? (
         <MeetingDecisionList decisions={view.decisions} sections={content.sections} hostId={view.hostId} viewerId={view.viewerId} people={people}
-          frozen={Boolean(confirmed)} busy={card.busy} nameOf={nameOf} onReview={card.review} onAssign={card.assignOwner} />
+          frozen={Boolean(confirmed)} noReview={view.worldWritesOff === true} busy={card.busy} nameOf={nameOf} onReview={card.review} onAssign={card.assignOwner} />
       ) : null}
 
       <section className={c.block}>

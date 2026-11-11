@@ -201,19 +201,21 @@ describe("会议决策逐条确认", { timeout: 30_000 }, () => {
     }
   });
 
-  it("只关会议写本体（MEETING_WORLD_WRITES_OFF）：照常逐条确认、照常冻结，冻结后只留天枢，不写会议事件", async () => {
+  it("只关会议写本体（MEETING_WORLD_WRITES_OFF，切到 Nexus）：不找人逐条确认（已经在等的也不出），会议卡照常生成、48 小时冻结，只留天枢，不写会议事件", async () => {
     const world = ontology();
     const s = await setup(TWO_DECISIONS, { meetingWorldWritesOff: true }, V2);
     try {
-      expect(await confirmsOf(s, s.owner)).toEqual(["decision:dec-1", "action:act-1"]);
-      expect((await review(s, s.owner, { kind: "decision", id: "dec-1", verdict: "confirm" })).statusCode).toBe(200);
-      await assign(s, s.host, { id: "dec-2", ownerPersonId: OWNER });
-      expect((await review(s, s.owner, { kind: "decision", id: "dec-2", verdict: "confirm" })).statusCode).toBe(200);
-      await s.run();
+      // 切换前生成的会，决策和行动项本来在等责任人、主持人：开关打开后通知栏（等你、飞书同源）里都没有了。
+      expect(await confirmsOf(s, s.owner)).toEqual([]);
+      expect(await confirmsOf(s, s.host)).toEqual([]);
+      const draft = await getCard(s.t, s.host, s.meetingId);
+      expect(draft.worldWritesOff).toBe(true);
+      expect(draft.decisions!.map((decision) => decision.text)).toEqual(["接口统一改成 v2", "验收按 4 家客户上线算"]);
 
+      await s.t.app.meetingFollowThrough.cardConfirm.freeze(s.meetingId);
+      await s.run();
       const view = await getCard(s.t, s.host, s.meetingId);
-      expect(view.worldWritesOff).toBe(true);
-      expect(view.confirmed).toMatchObject({ confirmation: { revision: 1 }, payload: { decisions: [{ id: "dec-1", confirmedBy: OWNER }, { id: "dec-2", confirmedBy: OWNER }] } });
+      expect(view.confirmed).toMatchObject({ confirmation: { revision: 1, confirmedBy: null }, payload: { decisions: [] } });
       expect(view.sync).toMatchObject({ writeToWorld: false, event: { status: "skipped" } });
       expect(world.events()).toEqual([]);
       expect(world.revisions()).toEqual([]);

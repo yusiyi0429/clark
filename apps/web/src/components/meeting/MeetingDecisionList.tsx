@@ -17,6 +17,8 @@ type MeetingDecisionListProps = {
   people: MeetingPerson[];
   /** 已定版：不能再点。 */
   frozen: boolean;
+  /** 天枢不再逐条确认（会议写本体关掉了，会后判定归 Nexus）：不出确认、补归属，没处理的只写责任人。 */
+  noReview?: boolean;
   busy: boolean;
   nameOf: (personId: string) => string;
   onReview: (id: string, verdict: "confirm" | "reject", reason?: string) => Promise<boolean>;
@@ -40,19 +42,20 @@ export function MeetingDecisionList({ decisions, sections, ...row }: MeetingDeci
   );
 }
 
-export function DecisionRow({ number, decision, basis, hostId, viewerId, people, frozen, busy, nameOf, onReview, onAssign }: {
+export function DecisionRow({ number, decision, basis, hostId, viewerId, people, frozen, noReview, busy, nameOf, onReview, onAssign }: {
   number: number; decision: TMeetingCardDecision; basis: string | null;
 } & Omit<MeetingDecisionListProps, "decisions" | "sections">) {
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
   const { review, ownerPersonId: owner } = decision;
-  const open = review.status === "pending" && !frozen;
+  const open = review.status === "pending" && !frozen && !noReview;
   const self = owner === viewerId;
   const assigning = open && !owner && hostId === viewerId;
   const who = review.by ? nameOf(review.by) : "";
   const status = review.status === "confirmed" ? `${who}确认`
     : review.status === "rejected" ? `${who}：${review.reason ?? ""}`
-    : !owner ? (frozen ? "没有责任人" : `待${nameOf(hostId)}指定责任人`)
+    : noReview ? (owner ? nameOf(owner) : null)
+    : !owner ?(frozen ? "没有责任人" : `待${nameOf(hostId)}指定责任人`)
     : frozen ? `${nameOf(owner)}没有确认` : `待${nameOf(owner)}确认`;
   const reject = async () => {
     if (await onReview(decision.id, "reject", reason.trim())) setRejecting(false);
