@@ -409,9 +409,9 @@ export const SubLetter = ({ letter, inline = false }: { letter: string; inline?:
 
 /**
  * 子会话行最右边的状态点（18.10）：在跑灰点闪（同项目标题的呼吸点）；停了（一轮做完、被停下、做完了）、本人还没看过的蓝点（26 条，看过就不画）；
- * 要人介入（问题、批准、验收拿主意、合回）黄点；排队不出点（行尾写在等什么）。读屏按状态读。
+ * 要人介入（问题、批准、验收拿主意、等你补、合回）黄点；排队不出点（行尾写在等什么）。读屏按状态读。
  */
-const ASK: Record<NonNullable<SubSession["waiting"]>, string> = { approval: "等你批准", question: "在问你", verdict: "等你拿主意", merge: "等你合回" };
+const ASK: Record<NonNullable<SubSession["waiting"]>, string> = { approval: "等你批准", question: "在问你", verdict: "等你拿主意", needs_person: "等你补", merge: "等你合回" };
 export function subDot(sub: Pick<SubSession, "state" | "waiting" | "unseen">): { tone: "running" | "stopped" | "attention"; label: string } | null {
   const state = treeState(sub.state);
   if (state === "queued") return null;

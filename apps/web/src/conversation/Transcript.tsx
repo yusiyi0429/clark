@@ -23,6 +23,7 @@ import { RichPre, RichSkeleton } from "./richBlocks/RichBlocks";
 import { CONVERSATION_REHYPE_PLUGINS, CONVERSATION_REMARK_PLUGINS, holdOpenMath } from "./richBlocks/markdown";
 import { RichStreamProvider } from "./richBlocks/surface";
 import { afterResize, resizing } from "./resizeGate";
+import { modelLine } from "@/lib/local/runModel";
 import s from "@/styles/conversation-transcript.module.css";
 import c from "@/styles/card-references.module.css";
 
@@ -139,7 +140,6 @@ export function sameTurn(previous: TurnProps, next: TurnProps): boolean {
     && (a.memoryUsed ?? []).join("|") === (b.memoryUsed ?? []).join("|")
     && a.readScope?.label === b.readScope?.label && a.kind === b.kind && a.via === b.via && a.meta?.href === b.meta?.href && a.answers?.askId === b.answers?.askId
     && a.receipt === b.receipt
-    && a.ranOn === b.ranOn && a.model?.model === b.model?.model
     && sameList(a.attachments, b.attachments, (item) => item.id)
     && sameList(a.referencesSnapshot, b.referencesSnapshot, (item) => `${item.cardId}@${item.version}`);
 }
@@ -185,14 +185,33 @@ function TraceLine({ message }: { message: Message }) {
 
 /** 一条消息（clark `ConversationTurn`）：不显示角色名，读屏读「你 / 天枢」。 */
 /**
- * 项目对话里一轮回答在哪跑（17.2 第 38 条，B 契约 7d6a62b3）：「本机 · Opus 5.5」「云端 · claude-opus-5-5」；本该本机没跑成（fallback）的也写「云端」。
- * 不是项目对话（没有 ranOn）的为 null。
+ * 一轮回答用的模型（主循环第 67 条）：「来源 · 模型」，同 modelLine。本机跑的（ranOn = local）云端只记了执行方，不当来源写，只写模型。没带模型的为 null。
  */
-export function turnSource(message: Pick<Message, "ranOn" | "model">): string | null {
-  if (!message.ranOn) return null;
-  const where = message.ranOn === "local" ? "本机" : "云端";
-  return message.model?.model ? `${where} · ${message.model.model}` : where;
+export function turnModel(message: Pick<Message, "ranOn" | "model">): string | null {
+  if (!message.model) return null;
+  return modelLine({ source: message.ranOn === "local" ? null : message.model.provider, model: message.model.model });
 }
+
+/**
+ * 换了模型的地方（67 条）：每条回答上方不再标模型；一条回答的模型和前一条带模型的回答不一样时，在这一轮本人那句前面（没有就在回答前面）画「换成 …」。
+ * 第一条带模型的回答不画。返回 消息下标 → 换成的「来源 · 模型」。
+ */
+export function modelSwitches(messages: readonly Pick<Message, "role" | "ranOn" | "model">[]): Map<number, string> {
+  const at = new Map<number, string>();
+  let last: string | null = null;
+  let asked: number | null = null;
+  messages.forEach((message, index) => {
+    if (message.role === "user") { asked ??= index; return; }
+    const label = turnModel(message);
+    if (label && last && label !== last) at.set(asked ?? index, label);
+    if (label) last = label;
+    asked = null;
+  });
+  return at;
+}
+
+/** 画「换成 …」那一行的办法：新首页的对话给（分隔线同「11 月目标」那一种）；别处不给，就不画。 */
+export const ModelSwitchContext = createContext<((label: string) => ReactNode) | null>(null);
 
 /**
  * 项目对话正在本人电脑上跑、还没写进历史的那一轮（localTurn）：别的页面、手机上先画本人那一句和「正在回答」，写进来后换成那一轮。
@@ -222,8 +241,6 @@ function ConversationTurnBody({ message, ms, streaming = false, thought, steps }
   const [stepsOpen, setStepsOpen] = useState(false);
   const stepsId = useId();
   const scope = !user && message.readScope ? <ScopeChip scope={message.readScope} /> : null;
-  const source = user ? null : turnSource(message);
-  const sourceTag = source ? <span className={s.source} data-testid="turn-source">{source}</span> : null;
   const thoughtToggle = thought || steps?.length || scope ? (
     <>
       {scope}
@@ -248,12 +265,11 @@ function ConversationTurnBody({ message, ms, streaming = false, thought, steps }
       {!user && ms !== undefined ? (
         <div className={s.meta}>
           <span className={s.time}>用时 {seconds(ms)}</span>
-          {sourceTag}
           {thoughtToggle}
         </div>
-      ) : !user && (thoughtToggle || sourceTag) ? (
+      ) : !user && thoughtToggle ? (
         // 正文已经开始：思考收成「已思考 N 秒」放在这一行，结束后「用时」写在它前面。
-        <div className={s.meta}>{sourceTag}{thoughtToggle}</div>
+        <div className={s.meta}>{thoughtToggle}</div>
       ) : !user && streaming ? (
         // 先占住「用时」那一行：结束后写上用时，正文不被往下推。
         <div className={s.meta} aria-hidden data-meta-placeholder="true" style={{ visibility: "hidden" }}>
@@ -335,10 +351,13 @@ export function ConversationTurns({ messages, partial = "", footer, after, trail
   /** 当前输出之后的内容（流式中本轮的提案卡）。 */
   trailing?: ReactNode;
 }) {
+  const divider = useContext(ModelSwitchContext);
+  const switches = useMemo(() => (divider ? modelSwitches(messages) : null), [divider, messages]);
   return (
     <>
       {messages.map((message, index) => (
         <Fragment key={`turn-${index}`}>
+          {switches?.has(index) ? divider!(switches.get(index)!) : null}
           {message.kind === "carried" && messages[index - 1]?.kind !== "carried" ? <CarriedDivider message={message} /> : null}
           {isReportPrompt(message) ? null : (
             <ConversationTurn message={message} ms={message.role === "assistant" ? turnMs(messages, index) : undefined}

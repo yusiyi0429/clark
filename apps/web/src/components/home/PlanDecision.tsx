@@ -24,7 +24,7 @@ import { useLocalRunner } from "@/lib/local/LocalRunnerProvider";
 import { planStep } from "@/lib/local/sessionView";
 import { useSessionEvents } from "@/lib/local/useSessionEvents";
 import type { TLocalModelProfile } from "@/lib/local/runner";
-import { HARNESS_NAME, effortText, pickLabel, profileModel, profileSource } from "@/lib/local/runModel";
+import { HARNESS_NAME, effortText, pickLabel, profileModel, profileSource, sourceName } from "@/lib/local/runModel";
 import { acceptDrafts, acceptProjectDrafts, dismissDraft, readTaskBudget, type PlanTarget } from "@/lib/board/cloud";
 import { TIER_LABEL, draftRole, modelForTier, type CardRole, type RoleView } from "@/lib/team/roles";
 import { SLOT_CAP, startBatch, type StartPlan } from "@/lib/work/queue";
@@ -158,7 +158,7 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 草稿、改过的岗位和模型变了才再问
   }, [ready, local.runner, local.models, drafts, edits, roles]);
   /**
-   * 胶囊上写的（用户定 A+B）：只写模型，自动时「自动 · 模型」，订阅读不到模型名写「Claude 订阅」；执行方和来源在悬停的全称里（见 pickLabel）。
+   * 胶囊上写的（67 条）：「来源 · 模型」，思考在旁边的胶囊；自动时前面加「自动 · 」，订阅读不到模型名只写来源；执行方在悬停里（见 pickLabel）。
    * 本机开工前算出来的（previewRun）优先；还没回（或老版本不报）时照模型配置写。
    */
   const modelText = (draft: TCardDraftView, model: TLocalModelProfile, role: CardRole, auto: boolean) => {
@@ -308,8 +308,8 @@ function ModelPick({ models, value, shown, auto, onPick }: {
             <Dropdown.Section key={group.agent} className={h.menuSection}>
               <Header className={h.menuHeader}>{HARNESS_NAME[group.agent]}</Header>
               {group.list.map((model) => (
-                <Dropdown.Item key={model.id} id={model.id} textValue={`${profileModel(model)} ${profileSource(model)}`} className={h.menuItem} data-testid="model-option">
-                  <span className={h.grow}>{profileModel(model)}<span className={h.menuFaint}> · {profileSource(model)}</span></span>{mark(model.id)}
+                <Dropdown.Item key={model.id} id={model.id} textValue={`${profileSource(model)} ${profileModel(model)}`} className={h.menuItem} data-testid="model-option">
+                  <span className={h.grow}><span className={h.menuFaint}>{sourceName(profileSource(model))} · </span>{profileModel(model)}</span>{mark(model.id)}
                 </Dropdown.Item>
               ))}
             </Dropdown.Section>

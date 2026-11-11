@@ -9,7 +9,7 @@ import { isAgentCard, type CardItem } from "@/lib/board/cards";
 import { calendarDate } from "@/lib/companyTime";
 import type { MemberNotification, UnreadMissionGroup } from "@/components/member/useMemberHome";
 import type { TLocalSessionSummary } from "@/lib/local/runner";
-import { effortText, plainSource } from "@/lib/local/runModel";
+import { modelLine } from "@/lib/local/runModel";
 import type { RoleProposalView } from "@/lib/team/roles";
 import { FIELD_LABEL } from "@/lib/team/roles";
 import type { MergeIssue } from "@/lib/work/merge";
@@ -231,6 +231,37 @@ export function taskGateLabel(projects: Parameters<typeof goalDueDate>[0], plan:
 export function statusLine(task: StatusSource): string {
   const { needsYou, rest } = statusParts(task);
   return [needsYou ? `等你 ${needsYou}` : null, ...rest].filter(Boolean).join(" · ");
+}
+
+/**
+ * 「本月」一件 Task 下面的子会话（主循环第 66 条）：首页数据里的子会话不带 Task，按这件 Task 看板上的卡、worker 里挂着它的卡和专题认。同一个 id 只算一次。
+ */
+export function monthTaskSubs(taskId: string, subs: readonly SubSession[], workers: readonly Pick<Worker, "taskId" | "cardId" | "topicId">[], cards: readonly Pick<CardItem, "id">[] = []): SubSession[] {
+  const ids = new Set<string>(cards.map((card) => card.id));
+  for (const worker of workers) if (worker.taskId === taskId) for (const id of [worker.cardId, worker.topicId]) if (id) ids.add(id);
+  const seen = new Set<string>();
+  return subs.filter((sub) => ids.has(sub.id) && !seen.has(sub.id) && !!seen.add(sub.id));
+}
+
+/**
+ * 「本月」一行行尾的现状（主循环第 66 条）：「1 件等你 · 1 个有新结果 · 2 个在跑」，是 0 的不写；
+ * 等你按「等你」里归这件 Task 的条数（和子会话自己在等的取大的），有新结果是停了、本人还没看过的（同左栏蓝点），在跑含第一次没过在改的。
+ * 三样都没有时：没开过子会话写「未开始」（规划员在拆写「拆卡中」），都完成了写「N 件都做完了」，别的写排着、停着几个。
+ * rank 是排序用的：有等你 0，有新结果 1，在跑 2，其余 3。
+ */
+export function monthStatus(subs: readonly Pick<SubSession, "state" | "waiting" | "unseen">[], waiting: number, planning: boolean): { text: string; waiting: number; rank: number } {
+  const asks = Math.max(waiting, subs.filter((sub) => sub.state === "waiting" && !!sub.waiting).length);
+  const fresh = subs.filter((sub) => sub.unseen && (sub.state === "done" || (sub.state === "waiting" && !sub.waiting))).length;
+  const running = subs.filter((sub) => sub.state === "running" || sub.state === "failed").length;
+  const rank = asks ? 0 : fresh ? 1 : running ? 2 : 3;
+  const parts = [asks ? `${asks} 件等你` : null, fresh ? `${fresh} 个有新结果` : null, running ? `${running} 个在跑` : null].filter(Boolean);
+  if (parts.length) return { text: parts.join(" · "), waiting: asks, rank };
+  if (!subs.length) return { text: planning ? "拆卡中" : "未开始", waiting: 0, rank };
+  const done = subs.filter((sub) => sub.state === "done").length;
+  if (done === subs.length) return { text: `${done} 件都做完了`, waiting: 0, rank };
+  const queued = subs.filter((sub) => sub.state === "queued").length;
+  const stopped = subs.length - done - queued;
+  return { text: [planning ? "拆卡中" : null, queued ? `${queued} 个排着` : null, stopped ? `${stopped} 个停着` : null].filter(Boolean).join(" · "), waiting: 0, rank };
 }
 
 /** 「今天」行和首页页头的日期（5.6）：「11 月 7 日 周六」。today 是公司时区的 YYYY-MM-DD，没有就按这台电脑的钟。 */
@@ -504,16 +535,14 @@ const sessionState = (status: TLocalSessionSummary["status"]): BackgroundItem["s
 const verifyTitle = (title: string) => `验收「${title.replace(/^验收[:：]\s*/, "")}」`;
 
 /**
- * 规划员、验收员用的「来源 · 模型 · 思考」（设计 17.2 第 56 条），如「Claude 订阅 · Opus 5.5 · 高」：
- * 来源总写出来（不像胶囊在默认来源时省掉）；模型以执行方报的实际为准（run.actual），没报写 run.modelName，都还没有（刚起、内置「自动」）写「自动」；
- * 思考是这次实际跑的（run.effort，没有就是本人选的），用现有的词。还没拉起过（排着，没有 run）为 null，不写。
+ * 规划员、验收员用的「来源 · 模型 · 思考」（设计 17.2 第 56 条、主循环第 67 条，modelLine），如「Claude 订阅 · Opus 5.5 · 高」：
+ * 模型以执行方报的实际为准（run.actual），没报写 run.modelName，都还没有（刚起、内置「自动」）写「自动」；
+ * 思考是这次实际跑的（run.effort，没有就是本人选的），自动时不写。还没拉起过（排着，没有 run）为 null，不写。
  */
 export function backgroundModel(session: Pick<TLocalSessionSummary, "run" | "effort">): string | null {
   const run = session.run;
   if (!run) return null;
-  const source = plainSource(run.origin?.label ?? run.sourceLabel ?? "") || null;
-  const model = run.actual?.modelName || run.modelName || "自动";
-  return [source, model, effortText(run.effort ?? session.effort ?? null)].filter(Boolean).join(" · ");
+  return modelLine({ source: run.origin?.label ?? run.sourceLabel, model: run.actual?.modelName || run.modelName || "自动", effort: run.effort ?? session.effort ?? null });
 }
 
 /**
