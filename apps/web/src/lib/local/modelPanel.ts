@@ -1,18 +1,22 @@
 /**
- * 选模型的三行（设计 17.2 第 40 条）：来源、模型、思考。这里只算每一行现在的值和能选的项，界面在 components/home/ModelPanel。
+ * 选模型的四行（设计 17.2 第 40、52 条）：执行方、来源、模型、思考。这里只算每一行现在的值和能选的项，界面在 components/home/ModelPanel。
+ * 执行方放最前：先选谁干活，来源只有它能用的可选，配不上的灰掉；换执行方时来源能接着用就不动，不能用换成这个执行方能用的第一个。
+ * 来源那一层最底下「+ 添加来源」（本机有添加来源的接口时，canAddSource），选了由 ModelPanel 开小弹窗。
  * 来源按本机认出的归组（origin.provider，经不经 magpie 分开算）：「Claude 订阅」「Codex 订阅」，网关的照本机认出的名字（如「TokenHub」）；不写「我的」。
  * 模型那一行在这个来源的几条配置里选，写本机给的 modelName（内置的订阅那条是「自动」，排最上面）；模型目录里不能选思考的（efforts 为空）思考那一行点不开。
  * 联动：换来源，模型落到那个来源的默认；换模型，原来的思考档它支持就留着，不支持回到自动（同 36 条，本机也这样算）。
  */
 import type { TLocalAgentKind, TLocalAgentStatus, TLocalEffort, TLocalModelProfile } from "@warmap/contracts";
 import type { UsageCell } from "@/lib/home/quota";
-import { effortText, profileModel, profileSourceName } from "./runModel";
+import { HARNESS_NAME, effortText, pillSource, profileModel, profileSourceName } from "./runModel";
 
 export type PanelOption = { id: string; label: string; /** 右边淡色的一小段：剩余用量，或置灰的原因（状态词）。 */ note?: string | null; disabled?: boolean };
-export type PanelRowKey = "source" | "model" | "effort";
+export type PanelRowKey = "agent" | "source" | "model" | "effort";
 export type PanelRow = { key: PanelRowKey; name: string; /** 这一行现在选的，写在右边。 */ value: string; selected: string; options: PanelOption[] };
 
-export const ROW_NAME: Record<PanelRowKey, string> = { source: "来源", model: "模型", effort: "思考" };
+export const ROW_NAME: Record<PanelRowKey, string> = { agent: "执行方", source: "来源", model: "模型", effort: "思考" };
+/** 来源那一层最底下那一项的键：选了开「添加来源」小弹窗（ModelPanel 接住，不交给调用方）。 */
+export const ADD_SOURCE = "+add-source";
 /** 思考那一行「自动」的键。 */
 export const AUTO_EFFORT = "auto";
 /** 这一行点不点得开：只列得出一项的不给「›」、不能点。 */
@@ -64,13 +68,15 @@ export type LocalPanelInput = {
   now?: number;
   /** 只许这几个执行方的来源（规划员、验收员只许 Claude Code）；别的置灰。不给都能选。 */
   agentsAllowed?: readonly TLocalAgentKind[];
+  /** 本机有添加来源的接口：来源那一层最底下出「+ 添加来源」。 */
+  canAddSource?: boolean;
 };
 
 /**
- * 三行：来源、模型、思考。没有模型配置时为空（不画）。
- * 来源那一页也列没登录、没装的订阅（置灰，后面写状态词），哪怕它现在一个模型都没有。
+ * 四行：执行方、来源、模型、思考。没有模型配置时为空（不画）。
+ * 来源那一页也列没登录、没装的订阅（置灰，后面写状态词），哪怕它现在一个模型都没有；别的执行方的来源也列，置灰。
  */
-export function localPanelRows({ models, modelId, effort, cells = [], agents = [], now = Date.now(), agentsAllowed }: LocalPanelInput): PanelRow[] {
+export function localPanelRows({ models, modelId, effort, cells = [], agents = [], now = Date.now(), agentsAllowed, canAddSource = false }: LocalPanelInput): PanelRow[] {
   const current = models.find((model) => model.id === modelId) ?? null;
   if (!current) return [];
   const sourceId = sourceIdOf(current);
@@ -85,15 +91,24 @@ export function localPanelRows({ models, modelId, effort, cells = [], agents = [
   }
   const sources: PanelOption[] = [...seen].map(([id, source]) => {
     const blocked = source.subscription ? agentBlock(agents.find((agent) => agent.kind === source.agent), now) : null;
-    const locked = !!agentsAllowed && !agentsAllowed.includes(source.agent);
+    // 配不上现在这个执行方的来源灰掉（先在执行方那一行换）。
+    const other = source.agent !== current.agent;
     const cell = cells.find((entry) => (source.subscription ? entry.id === SUBSCRIPTION[source.agent].quota : entry.name === source.label));
-    return { id, label: source.label, note: blocked ?? cell?.value ?? null, disabled: (!!blocked || locked) && id !== sourceId };
+    return { id, label: source.label, note: blocked ?? cell?.value ?? null, disabled: (!!blocked || other) && id !== sourceId };
+  });
+  // 执行方：模型配置里有的，加上没装、没登录的（置灰写状态词）；规划员、验收员只许 Claude Code。
+  const harnesses = [...new Set<TLocalAgentKind>([...models.map((model) => model.agent), ...agents.map((agent) => agent.kind)])];
+  const agentOptions: PanelOption[] = harnesses.map((kind) => {
+    const blocked = models.some((model) => model.agent === kind) ? null : agentBlock(agents.find((agent) => agent.kind === kind), now) ?? "没装";
+    const locked = !!agentsAllowed && !agentsAllowed.includes(kind);
+    return { id: kind, label: HARNESS_NAME[kind], note: blocked, disabled: (!!blocked || locked) && kind !== current.agent };
   });
   const own = models.filter((model) => sourceIdOf(model) === sourceId);
   const efforts = current.efforts ?? [];
   const level = keptEffort(current, effort);
   return [
-    { key: "source", name: ROW_NAME.source, value: profileSourceName(current), selected: sourceId, options: sources },
+    { key: "agent", name: ROW_NAME.agent, value: HARNESS_NAME[current.agent], selected: current.agent, options: agentOptions },
+    { key: "source", name: ROW_NAME.source, value: profileSourceName(current), selected: sourceId, options: canAddSource ? [...sources, { id: ADD_SOURCE, label: "+ 添加来源" }] : sources },
     { key: "model", name: ROW_NAME.model, value: profileModel(current), selected: current.id, options: own.map((model) => ({ id: model.id, label: profileModel(model) })) },
     { key: "effort", name: ROW_NAME.effort, value: effortText(level), selected: level ?? AUTO_EFFORT,
       options: [{ id: AUTO_EFFORT, label: effortText(null) }, ...efforts.map((entry) => ({ id: entry, label: effortText(entry) }))] },
@@ -103,13 +118,30 @@ export function localPanelRows({ models, modelId, effort, cells = [], agents = [
 /** 在某一行选了一项以后的模型和思考档（联动见文件头）；选不出（那个来源没有模型）为 null。 */
 export function pickLocal(models: readonly TLocalModelProfile[], current: { modelId: string | null; effort: TLocalEffort | null }, key: PanelRowKey, id: string): { modelId: string; effort: TLocalEffort | null } | null {
   if (key === "effort") return current.modelId ? { modelId: current.modelId, effort: id === AUTO_EFFORT ? null : id as TLocalEffort } : null;
+  if (id === ADD_SOURCE) return null;
+  if (key === "agent") {
+    // 换执行方：现在这个来源它也能用就留在这个来源（落到默认模型），不能用换成它能用的第一个来源。
+    const now = models.find((model) => model.id === current.modelId);
+    const own = models.filter((model) => model.agent === id);
+    const same = now ? own.filter((model) => sourceIdOf(model) === sourceIdOf(now)) : [];
+    if (!own.length) return null;
+    const pool = same.length ? same : own.filter((model) => sourceIdOf(model) === sourceIdOf(own[0]!));
+    const model = pool.find((entry) => entry.isDefault) ?? pool[0]!;
+    return { modelId: model.id, effort: keptEffort(model, current.effort) };
+  }
   const model = key === "source" ? defaultModelOf(models, id) : models.find((entry) => entry.id === id) ?? null;
   return model ? { modelId: model.id, effort: keptEffort(model, current.effort) } : null;
 }
 
-/** 胶囊上写的：「模型名 · 思考档」；思考是自动时只写模型名。订阅没写模型的（内置那条，模型由本机按档位挑）写来源名（同派活单的写法）。 */
-export function panelLabel(model: Pick<TLocalModelProfile, "model" | "label" | "catalog" | "source" | "agent" | "efforts" | "modelName">, effort: TLocalEffort | null): string {
-  const name = !model.catalog && !model.model && model.source === "subscription" ? profileSourceName(model) : profileModel(model);
+/**
+ * 胶囊上写的：「模型名 · 思考档」；思考是自动时只写模型名。订阅没写模型的（内置那条，模型由本机按档位挑）写来源名（同派活单的写法）。
+ * 给了默认来源（defaultSourceLabel，52 条）而这个不是：模型名后面多写来源，「Opus 5.5 · API · 最高」。
+ */
+export function panelLabel(model: Pick<TLocalModelProfile, "model" | "label" | "catalog" | "source" | "agent" | "efforts" | "modelName" | "origin">, effort: TLocalEffort | null, defaultSource?: string | null): string {
+  const bare = !model.catalog && !model.model && model.source === "subscription";
+  const name = bare ? profileSourceName(model) : profileModel(model);
+  const source = profileSourceName(model);
+  const extra = defaultSource !== undefined && !bare && source !== defaultSource ? pillSource(source) : null;
   const level = keptEffort(model, effort);
-  return level ? `${name} · ${effortText(level)}` : name;
+  return [name, extra, level ? effortText(level) : null].filter(Boolean).join(" · ");
 }

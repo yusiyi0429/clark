@@ -289,3 +289,18 @@ describe("技能卡上那一行", () => {
     expect(dutyLine("")).toBe("");
   });
 });
+
+describe("连接页的来源（17.2 第 52 条）", () => {
+  it("本机有来源接口：这台电脑下面一行「来源」带「添加」，列加过的（TokenHub 那一行单独管，不重复），每个能换 Key、删除；老本机程序（sources 为 null）不画这一行", () => {
+    const kimi = { id: "kimi-coding_plan-cn", presetId: "kimi", name: "Kimi 编程套餐", plan: "coding_plan" as const, region: "cn" as const, baseUrl: "https://kimi.example/anthropic",
+      formats: ["anthropic" as const], agents: ["claude-code" as const], models: [{ id: "kimi-k2.5", name: "kimi-k2.5" }], verified: false, addedAt: "2026-11-11T00:00:00.000Z" };
+    const tokenhub = { ...kimi, id: "tokenhub", presetId: "tokenhub", name: "TokenHub", plan: "api" as const, region: null };
+    const value = { ...local("ready", status()), sources: { presets: [], sources: [tokenhub, kimi] } } as Parameters<typeof LocalContext.Provider>[0]["value"];
+    const html = renderToStaticMarkup(<LocalContext.Provider value={value}><ConnectionsPage go={() => undefined} /></LocalContext.Provider>);
+    const row = html.split('data-testid="row-sources"')[1]!.split('data-testid="row-folders"')[0]!;
+    expect(text(row)).toMatch(/来源 1 个 添加 Kimi 编程套餐 kimi-k2\.5 换 Key/);
+    expect(row).toContain('aria-label="删除 Kimi 编程套餐"');
+    expect(row.split('data-testid="source-row"')).toHaveLength(2);
+    expect(withLocal(<ConnectionsPage go={() => undefined} />, "ready", status())).not.toContain('data-testid="row-sources"');
+  });
+});

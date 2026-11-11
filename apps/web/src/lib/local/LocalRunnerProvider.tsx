@@ -7,7 +7,7 @@
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { TLocalFolder, TLocalModelProfile, TLocalSessionSummary, TLocalStatusResponse } from "./runner";
-import type { TLocalFolderCreateRequest, TLocalFolderPickRequest } from "@warmap/contracts";
+import type { TLocalFolderCreateRequest, TLocalFolderPickRequest, TLocalSourceListResponse } from "@warmap/contracts";
 import { LocalRunnerError, type LocalRunner } from "./runner";
 import { createHttpRunner, writeLocalToken } from "./client";
 import { createMockRunner } from "./mock";
@@ -25,6 +25,8 @@ export type LocalRunnerState = {
   version: string | null;
   status: TLocalStatusResponse | null;
   models: TLocalModelProfile[];
+  /** 添加来源（第 52 条）：预设厂商和加好的来源；老本机程序没有这条（404、501）为 null，面板不出「+ 添加来源」。 */
+  sources: TLocalSourceListResponse | null;
   folders: TLocalFolder[];
   sessions: TLocalSessionSummary[];
   pairing: Pairing | null;
@@ -79,6 +81,7 @@ export function LocalRunnerProvider({ children, runner: given, person: given_per
   const [version, setVersion] = useState<string | null>(null);
   const [status, setStatus] = useState<TLocalStatusResponse | null>(null);
   const [models, setModels] = useState<TLocalModelProfile[]>([]);
+  const [sources, setSources] = useState<TLocalSourceListResponse | null>(null);
   const [folders, setFolders] = useState<TLocalFolder[]>([]);
   const [sessions, setSessions] = useState<TLocalSessionSummary[]>([]);
   const [pairing, setPairing] = useState<Pairing | null>(null);
@@ -87,10 +90,11 @@ export function LocalRunnerProvider({ children, runner: given, person: given_per
   const alive = useRef(true);
 
   const loadPaired = useCallback(async (nextStatus: TLocalStatusResponse) => {
-    const [nextModels, nextFolders, nextSessions] = await Promise.all([runner.listModels(), runner.listFolders(), runner.listSessions()]);
+    const [nextModels, nextFolders, nextSessions, nextSources] = await Promise.all([runner.listModels(), runner.listFolders(), runner.listSessions(), runner.listSources().catch(() => null)]);
     if (!alive.current) return;
     setStatus(nextStatus);
     setModels(nextModels);
+    setSources(nextSources);
     setFolders(nextFolders);
     setSessions(nextSessions);
   }, [runner]);
@@ -213,8 +217,8 @@ export function LocalRunnerProvider({ children, runner: given, person: given_per
     await refresh();
   }, [runner, refresh]);
 
-  const value = useMemo<LocalRunnerState>(() => ({ runner, phase, version, status, models, folders, sessions, pairing, error, refresh, pair, unpair, pickFolder, createFolder, setIncludePersonal }),
-    [runner, phase, version, status, models, folders, sessions, pairing, error, refresh, pair, unpair, pickFolder, createFolder, setIncludePersonal]);
+  const value = useMemo<LocalRunnerState>(() => ({ runner, phase, version, status, models, sources, folders, sessions, pairing, error, refresh, pair, unpair, pickFolder, createFolder, setIncludePersonal }),
+    [runner, phase, version, status, models, sources, folders, sessions, pairing, error, refresh, pair, unpair, pickFolder, createFolder, setIncludePersonal]);
   return <LocalContext.Provider value={value}>{children}</LocalContext.Provider>;
 }
 
