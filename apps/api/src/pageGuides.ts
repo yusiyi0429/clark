@@ -151,9 +151,10 @@ export function projectOfPage(path: string): string | null {
 export type ProjectPageFacts = { name: string; goals: string[] };
 
 /**
- * 管线的回话规矩（主循环第 63 条）：Chat 自己的提示词不归我们改，跟着每一轮的页面说明带过去。放在目标前面，超长时截掉的是目标。
+ * 管线怎么说话的两条（主循环第 63 条）：Chat 自己的提示词不归我们改，跟着每一轮的页面说明带过去（40 字以内，给目标留地方）。放在目标前面，超长时截掉的是目标。
+ * 跟动作走的另两条在动作说明里：「没读过的不评论」在 read_project，「撤不回只说一次」在停掉子会话那几个（buddyActions.ts 的 IRREVERSIBLE）。
  */
-export const PIPELINE_RULES = "回话规矩：不讲工具内部的周折；没读过的结果不评论，要说先读；「撤不回」只在要本人点头的不可逆动作前说一次；做不到本人的要求，一句话说做不到什么、改按什么做。";
+export const PIPELINE_RULES = "回话：不讲工具内部的周折；做不到本人的要求，一句话说做不到什么、改按什么做。";
 
 export function projectPageGuide(path: string, facts: ProjectPageFacts): PageGuide {
   const goals = facts.goals.length ? `现在挂着的目标：${facts.goals.join("、")}。` : "现在没有挂着的目标。";

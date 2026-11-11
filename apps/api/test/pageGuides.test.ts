@@ -56,5 +56,10 @@ describe("页面目录", () => {
     const crowded = projectPageGuide(path, { name: "品牌建设", goals: Array(20).fill("一件很长的目标名字") });
     expect(crowded.guide.length).toBeLessThanOrEqual(150);
     expect(crowded.guide).toContain(PIPELINE_RULES);
+    // 规矩只占 40 字以内：常见的三个 10 字目标全在，不被截。
+    expect(PIPELINE_RULES.length).toBeLessThanOrEqual(40);
+    const three = ["候选名初查和商标近似", "品牌口号三版和取舍说", "官网首页文案初稿完成"];
+    expect(three.every((goal) => goal.length === 10)).toBe(true);
+    expect(projectPageGuide(path, { name: "品牌建设", goals: three }).guide).toContain(`现在挂着的目标：${three.join("、")}。`);
   });
 });

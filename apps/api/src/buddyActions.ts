@@ -48,6 +48,11 @@ const KIND: Record<BuddyActionName, Kind> = {
   sub_session_tell: "write", sub_session_stop: "write", sub_session_restart: "write", sub_session_answer: "write", sub_session_approve: "write",
   update_card: "write",
 };
+/**
+ * 不可逆的几个动作说明末尾加这一句（主循环第 63 条的回话规矩）：「撤不回」只在要本人点头时说一次，别的回话里不念。
+ * 管说话方式的另两条跟着项目页的页面说明走（pageGuides.ts 的 PIPELINE_RULES）。
+ */
+const IRREVERSIBLE = "这一步撤不回：只在动手前请本人点头时说一次，做完以后和别的回话里不再提。";
 const DESCRIPTION: Record<BuddyActionName, string> = {
   read_work_home: "读本人的首页：项目、每个项目的子会话（卡、专题）和状态、等你、本月的 Mission 和 Task。要找项目 id、子会话 id、Task id 时先读它。",
   read_project: "读一个项目的详情（目标、挂着的 Task）和最近的动态（含子会话停下的报告：做成了什么、卡在哪、交了什么）。"
@@ -57,7 +62,7 @@ const DESCRIPTION: Record<BuddyActionName, string> = {
   set_appearance: "切外观：system 跟随系统、light 浅色、dark 深色。",
   set_feishu_push: "打开或关掉飞书推送（feishu: true 开）。",
   start_sub_session: "让一个卡或专题开工：登记要开工，本人电脑上开着的网页接下后交给本机。已经在跑的不用再开。",
-  stop_sub_session: "停掉一个子会话：还没被电脑接下的撤掉开工登记；在跑的请它所在的那台电脑停掉。停掉不能撤。",
+  stop_sub_session: `停掉一个子会话：还没被电脑接下的撤掉开工登记；在跑的请它所在的那台电脑停掉。${IRREVERSIBLE}`,
   archive_sub_session: "归档一个子会话（卡或专题），从首页收起。在跑的要先停掉。",
   delete_sub_session: "删掉一个子会话：先进回收站，30 天内能恢复。在跑的要先停掉。",
   create_project: "新建一个项目，可以顺带挂上一件本人负责的 Task（taskId）。一个工作文件夹加一条长期的线是一个项目，功能是挂在项目下的每月 Task，不另立项目。"
@@ -85,7 +90,7 @@ const DESCRIPTION: Record<BuddyActionName, string> = {
   sub_session_tell: "只在项目对话里用：按字母给这个项目里的一个子会话转一句话（本人让你转的、或你安排它接下来怎么做）。它在跑就在下一步前送到，停着就续上接着做。"
     + "字母见 read_work_home 里子会话的 letter。由本人电脑上开着的网页交给本机，立即返回。"
     + "这句话如果改变了「做成什么样算完」（加了要做的事、改了交付物、去掉某条标准），先用 update_card 改卡的约定，再转话。",
-  sub_session_stop: "只在项目对话里用：按字母停下这个项目里的一个子会话（同 stop_sub_session）。",
+  sub_session_stop: `只在项目对话里用：按字母停下这个项目里的一个子会话（同 stop_sub_session）。${IRREVERSIBLE}`,
   sub_session_restart: "只在项目对话里用：按字母重开这个项目里的一个子会话。还没开过工的登记开工；停着的（做完一轮、被停下、出错停住）往里说一句 text 续上，不给 text 是「接着做」。",
   sub_session_answer: "只在项目对话里用：替本人回答一个子会话在问的问题（本人说了「C 的问题选第二个」这类话时用）。choices 每题选中的选项 label（照它问的原样，条数和题数一样），"
     + "text 是另外要说的话。本人没表态的不要替本人选。",
