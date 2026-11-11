@@ -213,9 +213,9 @@ export function CardSession({ cardId, embedded = false, waiting }: { cardId: str
       onFill={canAct && session ? (text) => setSupply({ handbackId: handback.id, text, nonce: Date.now() }) : undefined}
       onLook={openPane} onEdit={() => { openPane(); setEditing(true); }} onChanged={() => void refresh()} /> : null)
     : <MergeDecision session={session} title={item.title} onChanged={() => void refresh()} />;
-  // 执行方提议改约定（第 60 条）：也钉在输入框上方，手机上、别的电脑上一样能定。
+  // 执行方提议改约定（第 60 条）：也钉在输入框上方，手机上、别的电脑上一样能定。同时只钉一个框：批准、提问这些先答，答完再出它。
   const proposal = embedded ? detail.agreement?.proposal ?? null : null;
-  const pinned = asked || proposal ? <>{asked}{proposal ? <ProposalDecision key={proposal.id} cardId={item.id} proposal={proposal} current={{ brief: detail.brief, standards: detail.standards }} onDecided={settle} /> : null}</> : null;
+  const pinned = asked ?? (proposal ? <ProposalDecision key={proposal.id} cardId={item.id} proposal={proposal} current={{ brief: detail.brief, standards: detail.standards }} onDecided={settle} /> : null);
   // 答过的等你补、受阻（就到这里、登记送到了），点了先不合的：对话最后收成一行。
   const handled = embedded && attention !== "verdict" && attention !== "needs_person" && handback;
   const blockedAnswer = !handled ? null : handback.passedWithGap ? "就到这里" : handback.relay?.state === "delivered" ? (handback.relay.kind === "return" ? "再改一轮" : "我来补") : null;
@@ -372,7 +372,7 @@ function ResultPane({ detail, session, view, canAct, wait, stage, handheld, read
   return (
     <>
       <div className={s.brief}>
-        <p className={s.lab}>交代</p>
+        {editing ? null : <p className={s.lab}>交代</p>}
         {item.planTaskId ? <Link href={workHref(item.planTaskId)} className={s.link}>{item.mission?.title ? `${item.mission.title} › ` : ""}Task</Link> : null}
         {item.card?.criterion ? <div className={s.meta}><span className={s.crit}>{circled(item.card.criterion.index)}</span><span>{item.card.criterion.text}</span></div> : null}
         {detail.brief && !editing ? <p className={s.text}>{detail.brief}</p> : null}
