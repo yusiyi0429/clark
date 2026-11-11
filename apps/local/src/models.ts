@@ -261,10 +261,24 @@ export class ModelProfiles {
     return this.all().find((p) => p.id === id)?.source ?? null;
   }
 
-  /** 按档位挑模型（验收员由本机自己起时用）：和网页一样按模型名和名字认，认不出用默认的。 */
+  /**
+   * 按档位挑模型（验收员由本机自己起时用）：和网页的 modelForTier 一样，只在默认模型（标了默认的，没有就第一条）那个来源里按模型名和名字认，
+   * 认不出用默认的（11/11 本人定 A：连了 TokenHub、默认是订阅时不悄悄改用 TokenHub）。来源的分法同网页模型面板的 sourceIdOf：
+   * 有 sourceId（添加来源建的）先认它，订阅一组，网关按认出的来源（经 magpie 的另算）。
+   */
   forTier(tier: TLocalModelTier): string {
     const all = this.stored();
-    return (all.find((p) => TIER_MATCH[tier].test(`${p.model ?? ""} ${p.label}`)) ?? all.find((p) => p.isDefault) ?? all[0]!).id;
+    const fallback = all.find((p) => p.isDefault) ?? all[0]!;
+    const source = this.sourceGroup(fallback);
+    return (all.find((p) => this.sourceGroup(p) === source && TIER_MATCH[tier].test(`${p.model ?? ""} ${p.label}`)) ?? fallback).id;
+  }
+
+  private sourceGroup(p: Stored): string {
+    const sourceId = (p as { sourceId?: string }).sourceId;
+    if (sourceId) return `source:${sourceId}`;
+    if (p.source === "subscription") return p.agent === "codex" ? "codex" : "claude-subscription";
+    const o = modelOrigin(p);
+    return `${o.provider}${o.via ? `:${o.via}` : ""}`;
   }
 
   async resolve(id?: string): Promise<ResolvedModel | null> {

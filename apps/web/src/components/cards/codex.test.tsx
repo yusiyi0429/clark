@@ -34,6 +34,11 @@ describe("子会话能用 Codex（17.2 第 38 条，D 契约 b28c1f12）", () =>
     // 不看 Claude 订阅的模型目录：没配强档的模型时落到内置那条，由本机挑。
     expect(modelForTier(models, "strong")?.id).toBe("subscription");
     expect(modelForTier(models.filter((model) => model.agent === "codex"), "strong")).toBeNull();
+    // 连上 TokenHub、默认还是订阅：「自动」不挑 TokenHub 的 Opus（11/11 定 A）
+    await runner.connectTokenHub("good-key");
+    const withHub = await runner.listModels();
+    expect(withHub.some((model) => model.id.startsWith("th-"))).toBe(true);
+    expect(modelForTier(withHub, "strong")?.id).toBe("subscription");
     await expect(runner.createSession({ subject: { kind: "plan", taskId: "t1" }, title: "拆卡", modelProfileId: "codex-gpt-6_1-sol", firstMessage: "拆" })).rejects.toMatchObject({ status: 400 });
   });
 

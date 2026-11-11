@@ -4,11 +4,12 @@
  */
 import type {
   TLocalRole, TPatchRoleRequest, TRoleBrief, TRoleFamily, TRoleKind, TRoleListResponse, TRoleModelTier, TRoleProposalField, TRoleProposalView,
-  TRoleRef, TRoleRevisionField, TRoleRevisionView, TRoleTool, TRoleView, TCardDraftView,
+  TRoleRef, TRoleRevisionField, TRoleRevisionView, TRoleTool, TRoleView, TCardDraftView, TLocalModelProfile,
 } from "@warmap/contracts";
 import { browserApi } from "@/lib/api/client";
 import { CloudError, patchCard } from "@/lib/board/cloud";
 import type { CardItem } from "@/lib/board/cards";
+import { sourceIdOf } from "@/lib/local/modelPanel";
 
 export type RoleFamily = TRoleFamily;
 export type RoleKind = TRoleKind;
@@ -75,11 +76,16 @@ export async function setCardRole(cardId: string, version: number, role: CardRol
 const TIER_MATCH: Record<ModelTier, RegExp> = { strong: /opus/i, normal: /sonnet/i, light: /haiku|flash|mini|lite/i };
 /**
  * 按档位配模型（「自动」）：只在 Claude Code 的模型里挑（设计 17.2 第 38 条：Codex 要本人自己选；规划员只能用 Claude Code）。
- * 只看本人配的和内置那条，不看 Claude 订阅的模型目录（40 条）：没配对应档位的模型时落到内置的「自动」，由本机按档位和预算模式挑，同以前。
+ * 不看 Claude 订阅的模型目录（40 条）。只在默认模型（标了默认的，没有就第一条）那个来源里挑（11/11 本人定 A）：
+ * 默认是 Claude 订阅时，连了 TokenHub 也不会悄悄用 TokenHub 按量花钱；没配对应档位的模型时落到默认那条（内置的「自动」由本机按档位和预算模式挑），同以前。
+ * 来源的分法同模型面板（sourceIdOf），本机 ModelProfiles.forTier 也照这套。
  */
-export function modelForTier<T extends { model: string | null; label: string; isDefault: boolean; agent?: string; catalog?: boolean }>(all: T[], tier: ModelTier): T | null {
-  const models = all.filter((entry) => (entry.agent ?? "claude-code") === "claude-code" && !entry.catalog);
-  return models.find((entry) => TIER_MATCH[tier].test(`${entry.model ?? ""} ${entry.label}`)) ?? models.find((entry) => entry.isDefault) ?? models[0] ?? null;
+export function modelForTier<T extends Pick<TLocalModelProfile, "model" | "label" | "isDefault" | "agent" | "source" | "origin"> & { catalog?: boolean; sourceId?: string }>(all: T[], tier: ModelTier): T | null {
+  const models = all.filter((entry) => entry.agent === "claude-code" && !entry.catalog);
+  const fallback = models.find((entry) => entry.isDefault) ?? models[0];
+  if (!fallback) return null;
+  const source = sourceIdOf(fallback);
+  return models.find((entry) => sourceIdOf(entry) === source && TIER_MATCH[tier].test(`${entry.model ?? ""} ${entry.label}`)) ?? fallback;
 }
 
 /** 交代里的岗位原样转给本机（本机按它写系统提示词、挂插件）。 */

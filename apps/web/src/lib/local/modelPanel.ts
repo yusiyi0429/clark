@@ -24,8 +24,12 @@ const SUBSCRIPTION: Record<TLocalAgentKind, { source: string; quota: string }> =
   codex: { source: "codex", quota: "codex" },
 };
 
-/** 一个模型配置属于哪个来源：订阅按执行方；网关按本机认出的 provider（经 magpie 的另算一个），老版本本机不带 origin 时按名字。 */
-export function sourceIdOf(profile: Pick<TLocalModelProfile, "source" | "agent" | "origin" | "label">): string {
+/**
+ * 一个模型配置属于哪个来源：添加来源建的（带 sourceId，第 52 条）按来源；订阅按执行方；网关按本机认出的 provider（经 magpie 的另算一个），
+ * 老版本本机不带 origin 时按名字。本机的 ModelProfiles.forTier 用同一套分法。
+ */
+export function sourceIdOf(profile: Pick<TLocalModelProfile, "source" | "agent" | "origin" | "label"> & { sourceId?: string }): string {
+  if (profile.sourceId) return `source:${profile.sourceId}`;
   if (profile.source === "subscription") return SUBSCRIPTION[profile.agent].source;
   return profile.origin ? `${profile.origin.provider}${profile.origin.via ? `:${profile.origin.via}` : ""}` : `gateway:${profileSourceName(profile)}`;
 }
