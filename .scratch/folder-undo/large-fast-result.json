@@ -1,0 +1,28 @@
+{
+ "label": "large-fast",
+ "scanMs": 4729,
+ "baselineMs": 106256,
+ "sent": 49000,
+ "skipped": 0,
+ "bigSkipped": [
+  "录像.mp4 1024MB"
+ ],
+ "links": 0,
+ "gitDirMB": 525,
+ "noChangeSnapshotMs": 10687,
+ "noChangeSent": 0,
+ "turnSnapshotMs": 7051,
+ "turnSent": 15,
+ "turnDeleted": 3,
+ "diffMs": 70,
+ "changes": {
+  "A": 5,
+  "M": 10,
+  "D": 3
+ },
+ "gitDirAfterTurnMB": 553,
+ "restoreOneMs": 152,
+ "restoreOneOk": true,
+ "restoreAllMs": 174,
+ "restoreAllOk": true
+}
