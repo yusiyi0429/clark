@@ -3,7 +3,7 @@ import { FormatRegistry } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import {
   LocalCreateSessionRequest, LocalModelProfileUpsert, LocalTokenHubConnectRequest, LocalRunnerError, LOCAL_TOKENHUB_PROFILE_PREFIX, LocalModelProfile, LocalPermissionDecisionRequest, LocalSessionEvent,
-  LocalSyncBatchRequest, LocalPairingStatusResponse, LocalSendMessageRequest, LOCAL_RUNNER_ROUTES, LOCAL_RUNNER_PROTOCOL,
+  LocalSyncBatchRequest, LocalPairingStatusResponse, LocalSendMessageRequest, LOCAL_RUNNER_ROUTES, LOCAL_RUNNER_PROTOCOL, LocalSessionDraft,
   LocalCreateSessionBatchRequest, LocalCreateSessionBatchResponse, LocalSettingsPatch, LocalSessionSummary, LocalHealthResponse,
   LocalVerifyBriefResponse, LOCAL_RUNNER_VERIFY_BRIEF_PATH, LocalMergeResponse, LocalVerdict, LocalQuestionAnswerRequest, LocalPlanCard, LocalBackgroundItem,
   LocalSettings, LocalMergeSync, LocalStatusResponse, LocalQuotaSource, LocalQuotaSync,
@@ -49,6 +49,13 @@ describe("本机程序契约", () => {
     expect(Value.Check(LocalSessionEvent, { ...e, voided: true })).toBe(true);
     expect(Value.Check(LocalSessionEvent, e)).toBe(true);
     expect(Value.Check(LocalSessionEvent, { ...e, voided: "yes" })).toBe(false);
+  });
+
+  it("正在写的草稿：没有编号，只带会话和这一段的全文；空串表示清掉", () => {
+    expect(Value.Check(LocalSessionDraft, { type: "draft", sessionId, text: "正在写" })).toBe(true);
+    expect(Value.Check(LocalSessionDraft, { type: "draft", sessionId, text: "" })).toBe(true);
+    expect(Value.Check(LocalSessionDraft, { type: "draft", sessionId, text: "x", seq: 3 })).toBe(false);
+    expect(Value.Check(LocalSessionEvent, { type: "draft", sessionId, text: "x", seq: 3, at: "2026-11-11T00:00:00.000Z" })).toBe(false);
   });
 
   it("说一句可带网页生成的编号（protocol 2 起）", () => {

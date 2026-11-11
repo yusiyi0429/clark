@@ -14,6 +14,7 @@ import { READ_ONLY_KINDS, SessionError, type SessionManager } from "../sessions.
 import { AgentStartError } from "../agents/types.js";
 import type { TokenStore, Pairings } from "../pairing.js";
 import type { EventLog } from "../eventLog.js";
+import type { Drafts } from "../drafts.js";
 import type { ModelProfiles } from "../models.js";
 import { FolderError, type Folders } from "../folders.js";
 import type { ClaudeSetup } from "../agents/claudeSetup.js";
@@ -41,6 +42,7 @@ export interface ServerDeps {
   pairings: Pairings;
   sessions: SessionManager;
   log: EventLog;
+  drafts: Drafts;
   models: ModelProfiles;
   folders: Folders;
   claude: ClaudeSetup;
@@ -340,7 +342,10 @@ export function createServer(d: ServerDeps): http.Server {
     if (c.params.agent !== "claude-code") throw new HttpError(404, "not_found", "没有这个执行方");
   }
 
-  /** SSE：先补发 Last-Event-ID（或 ?after=）之后的事件，再推新事件；15 秒一次心跳注释。 */
+  /**
+   * SSE：先补发 Last-Event-ID（或 ?after=）之后的事件，再推新事件；15 秒一次心跳注释。
+   * 带 ?drafts=1 时夹着推「正在写」的草稿（event: draft，没有 id 行，不影响断线续传的编号）。
+   */
   function streamEvents(c: Ctx): symbol {
     const id = c.params.id!;
     d.sessions.get(id); // 不存在就抛 not_found
@@ -356,8 +361,9 @@ export function createServer(d: ServerDeps): http.Server {
     };
     const unsubscribe = d.log.subscribe(id, write);
     for (const e of d.log.after(id, after)) write(e);
+    const offDrafts = url.searchParams.get("drafts") === "1" ? d.drafts.subscribe(id, (x) => c.res.write(`event: draft\ndata: ${JSON.stringify(x)}\n\n`)) : null;
     const ka = setInterval(() => c.res.write(": ka\n\n"), 15_000);
-    c.req.on("close", () => { clearInterval(ka); unsubscribe(); });
+    c.req.on("close", () => { clearInterval(ka); unsubscribe(); offDrafts?.(); });
     return STREAMING;
   }
 

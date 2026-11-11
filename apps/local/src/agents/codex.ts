@@ -65,6 +65,9 @@ interface Pending { kind: "command" | "file" | "mcp"; rpcId: number | string; st
 
 export class CodexRun implements AgentRun {
   private readonly eventFns: ((e: EventBody) => void)[] = [];
+  private readonly draftFns: ((text: string) => void)[] = [];
+  /** 正在逐字写的那段话（agentMessage 的 itemId → 到目前为止的全文）。 */
+  private readonly drafts = new Map<string, string>();
   private readonly exitFns: ((code: number | null) => void)[] = [];
   private readonly rateFns: ((info: Json) => void)[] = [];
   private readonly permissions = new Map<string, Pending>();
@@ -111,9 +114,11 @@ export class CodexRun implements AgentRun {
   /** 正在跑一轮（换模型、换思考程度要等这一轮做完）。 */
   get busy() { return this.turnId !== null || this.starting !== null; }
   onEvent(fn: (e: EventBody) => void) { this.eventFns.push(fn); }
+  onDraft(fn: (text: string) => void) { this.draftFns.push(fn); }
   onExit(fn: (code: number | null) => void) { this.exitFns.push(fn); }
   onRateLimit(fn: (info: Json) => void) { this.rateFns.push(fn); }
   private emit(e: EventBody) { for (const fn of this.eventFns) fn(e); }
+  private draft(text: string) { for (const fn of this.draftFns) fn(text); }
 
   send(text: string, messageId?: string) {
     if (messageId) this.receipts.add(messageId);
@@ -289,10 +294,20 @@ export class CodexRun implements AgentRun {
         }
         return;
       }
+      case "item/agentMessage/delta": {
+        // 正文逐字来：报这段到目前为止的全文当草稿（思考是 item/reasoning/*，不报）
+        if (typeof p.delta !== "string" || (p.threadId && this.threadId && p.threadId !== this.threadId)) return;
+        const id = String(p.itemId ?? "");
+        const text = (this.drafts.get(id) ?? "") + p.delta;
+        this.drafts.set(id, text);
+        if (text.trim()) this.draft(text);
+        return;
+      }
       case "item/completed": {
         const item = p.item ?? {};
         const id = String(item.id ?? "");
         this.items.delete(id);
+        this.drafts.delete(id);
         if (item.type === "agentMessage" && typeof item.text === "string" && item.text.trim()) {
           this.lastText = item.text;
           this.emit({ type: "assistant_text", text: item.text });
@@ -352,6 +367,9 @@ export class CodexRun implements AgentRun {
         if (turn.id) this.doneTurns.add(String(turn.id));
         this.turnId = null;
         this.items.clear();
+        // 这一轮完了还有没写完的那段（停下、出错）：草稿清掉
+        if ([...this.drafts.values()].some((t) => t.trim())) this.draft("");
+        this.drafts.clear();
         const usage = usageBetween(this.turnStartUsage, this.usage);
         this.lastTurn = { models: [{ model: this.model, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, cacheReadTokens: usage.cacheReadTokens, cacheWriteTokens: usage.cacheWriteTokens, costBasis: null, requests: this.requests || null }] };
         const status = String(turn.status ?? "completed");

@@ -8,6 +8,7 @@
 //   slow              一直跑，等停下或插话（插话后回一句 heard: …）
 //   compact           先压缩一次上下文（contextCompaction），再回一句
 //   ctx <n>           这一次请求用了 n 个 token（上下文用了多少），再回一句
+//   stream <话>       一个字一个字写出这句（item/agentMessage/delta）；streamcut 写到一半出错
 //   别的              回一句 echo: <话>
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -101,6 +102,20 @@ async function runTurn(t, text, input, clientId) {
       note("item/started", { item: item("userMessage", { clientId: s.id ?? null, content: [{ type: "text", text: s.text }] }) });
       await msg(`heard: ${s.text}`);
     }
+    usage();
+    return finish();
+  }
+  if (words[0] === "stream" || words[0] === "streamcut") {
+    // 一个字一个字写（每 5 毫秒一个）；streamcut 写到一半这一轮出错结束，没有完整的那段
+    const m = item("agentMessage", { text: "" });
+    note("item/started", { item: m, threadId: thread, turnId: t.id });
+    const chars = [...text.trim()];
+    for (let i = 0; i < chars.length; i++) {
+      if (words[0] === "streamcut" && i >= chars.length / 2) return finish("failed", { message: "写到一半出错了" });
+      note("item/agentMessage/delta", { threadId: thread, turnId: t.id, itemId: m.id, delta: chars[i] });
+      await new Promise((r) => setTimeout(r, 5));
+    }
+    note("item/completed", { item: { ...m, text: text.trim() }, threadId: thread, turnId: t.id });
     usage();
     return finish();
   }

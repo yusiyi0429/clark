@@ -85,6 +85,11 @@ export interface AgentRun {
   /** 说完了：关掉输入，让执行方自己退出（验收员交完结论用）；一会儿还不退就强停。 */
   close(): void;
   onEvent(fn: (e: EventBody) => void): void;
+  /**
+   * 正在写的这一段正文到目前为止的全文（每来几个字报一次，不进事件流）；写完照常来 assistant_text。
+   * 空串：这一段没写完就不写了（这一轮停下、出错）。思考内容、工具参数、子 agent 的字不报。
+   */
+  onDraft(fn: (text: string) => void): void;
   onExit(fn: (code: number | null) => void): void;
   /** Claude Code 报的额度变化（rate_limit_event 的 rate_limit_info，原样）：只给本机记额度用，不进事件流。 */
   onRateLimit(fn: (info: Record<string, unknown>) => void): void;
