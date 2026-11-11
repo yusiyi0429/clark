@@ -51,7 +51,10 @@ export type MeetingCardDeps = {
   people?: () => TPersonResult[];
   /** 记录正文能不能写进本体（等斯一答复，MEETING_WORLD_RECORD_TEXT）：能时，没有决策的会生成后直接冻结写入。 */
   recordText?: boolean;
-  /** 会议写本体整个关掉了（MEETING_WORLD_WRITES_OFF）：视图带 worldWritesOff，网页收起「不写进本体」开关。 */
+  /**
+   * 会议写本体整个关掉了（MEETING_WORLD_WRITES_OFF，切到 Nexus）：视图带 worldWritesOff，网页收起「不写进本体」开关和逐条确认；
+   * 会后判定归 Nexus，天枢不再找人逐条确认（通知栏、等你、飞书都不出，已经在等的也不出），会议卡照常生成、48 小时冻结。
+   */
   writesOff?: boolean;
 };
 export type Viewer = { personId: string; isCeo: boolean };
@@ -568,11 +571,11 @@ export function createMeetingCardService(pool: Pool, deps: MeetingCardDeps) {
     for (const row of rows) {
       const mine = (item: { ownerPersonId: string | null; review?: { status: string } }) => item.review?.status === "pending" && (item.ownerPersonId ?? row.lead_dri_id) === personId;
       const at = { meetingId: row.id, title: row.title };
-      // 决策：有责任人的给责任人确认；没有的给主持人补归属。
-      if (!row.current_revision) for (const decision of (row.decisions ?? []).filter(mine)) {
+      // 决策：有责任人的给责任人确认；没有的给主持人补归属。会议写本体关掉了（切到 Nexus）不再找人逐条确认。
+      if (!deps.writesOff && !row.current_revision) for (const decision of (row.decisions ?? []).filter(mine)) {
         confirms.push({ ...at, kind: "decision", id: decision.id, text: decision.text, dueDate: null, needsOwner: !decision.ownerPersonId });
       }
-      for (const item of row.action_items.filter(mine)) confirms.push({ ...at, kind: "action", id: item.id, text: item.text, dueDate: item.dueDate, needsOwner: false });
+      if (!deps.writesOff) for (const item of row.action_items.filter(mine)) confirms.push({ ...at, kind: "action", id: item.id, text: item.text, dueDate: item.dueDate, needsOwner: false });
       if (!isHostOrCreator(row, personId) || !row.current_revision) continue;
       if ((await meetingRecordState(q, row.id, (id) => id)).status === "failed") meetings.push({ ...at, endedAt: new Date(row.ended_at).toISOString(), status: "failed" });
     }
