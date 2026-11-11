@@ -27,7 +27,7 @@ import { SessionComposer, SessionTranscript, useSessionSend, useSessionModels, u
 import { useSessionMode } from "./PermissionMode";
 import { FilePreview, cloudOutputFile, localSessionFile, type PreviewFile } from "./FilePreview";
 import { filesSignal, matchChangedFile, useSessionFiles } from "@/lib/local/sessionFiles";
-import { HARNESS_NAME, defaultSourceLabel, runLabel, sessionModelText } from "@/lib/local/runModel";
+import { HARNESS_NAME, runLabel, sessionModelText } from "@/lib/local/runModel";
 import { useCardDetail, type CardDetail } from "./useCardDetail";
 import { SourceWordIssues, SourceWords } from "./SourceWords";
 import { MergeAction } from "@/components/work/MergeAction";
@@ -227,7 +227,7 @@ export function CardSession({ cardId, embedded = false, waiting }: { cardId: str
   const dock = <PendingDock above latest={{ visible: !scroll.atBottom, jump: scroll.jumpToLatest }} />;
   // 新首页里输入框只在这台电脑上跑着这张卡时出（别处看摘要）；老页面照旧灰着。
   // 输入框下面一行的右边写「执行方 · 模型」（21 条），来源在悬停里：这台电脑上的会话报的（实际跑的优先），没有时退回「来源 · 模型」、再退回云端记的。文件夹在左边。
-  const model = (session ? sessionModelText(session, local.models.find((entry) => entry.id === session.modelProfileId)?.efforts, defaultSourceLabel(local.models)) : null) ?? ((label) => (label ? { label, title: null } : null))(runLabel(session?.run) ?? run?.modelLabel ?? item.card?.model?.label ?? null);
+  const model = (session ? sessionModelText(session, local.models.find((entry) => entry.id === session.modelProfileId)?.efforts) : null) ?? ((label) => (label ? { label, title: null } : null))(runLabel(session?.run) ?? run?.modelLabel ?? item.card?.model?.label ?? null);
   const place = session?.workspace ? { name: shortPlace(session.workspace), title: placeText(session.workspace) } : null;
   const composer = agent && (session || !embedded)
     ? <SessionComposer label={`给${item.title}插话`} disabled={!canAct} onSend={onSend} mode={mode} dock={dock} context={contextUsage(view.context ?? session?.context)} subject={{ kind: "card", id: cardId }} place={place} model={model ? { label: model.label, title: model.title ?? undefined } : null}
@@ -366,7 +366,8 @@ function ResultPane({ detail, session, view, canAct, wait, stage, handheld, read
   const status = view?.status ?? null;
   const live = status === "running" || status === "starting" || status === "waiting_permission";
   const paused = wait === "paused" || status === "idle";
-  const model = view ? null : item.card?.model?.label;
+  // 这台电脑上有会话时照它的摘要写「来源 · 模型 · 思考」（第 67 条），别处只有云端记的原文。
+  const model = view ? runLabel(session?.run) : item.card?.model?.label;
   // 在哪做：本机开工时说的（分支、从哪个提交开始、主文件夹没提交的改动没带进来），没收到时照会话摘要。
   const git = item.card?.handback?.git ?? null;
   const place = view?.place ?? (session?.workspace ? placeText(session.workspace) : git ? `分支 ${git.branch}` : null);
