@@ -2,7 +2,7 @@
 
 /**
  * 左栏只有四个锚点（新首页设计 9.1–9.4、5.4.2）：
- * 1. 伙伴台：正方形，伙伴居中；点了进总管线。伙伴不飞走：在总管线时台子铺选中底、伙伴换成「在听」；任何管线里伙伴在说话时是「在说」。
+ * 1. 伙伴台：5:3（高 = 宽 × 0.6），伙伴居中；点了进总管线。伙伴不飞走：在总管线时台子铺选中底、伙伴换成「在听」；任何管线里伙伴在说话时是「在说」。
  *    鼠标移上去右上角出「⋯」，点开「伙伴」二级页。
  * 2. 「今天」行：House +「11 月 7 日 周六」，就是首页（Esc 也回这里）；不在首页时行尾是等你的计数。
  * 3. 「项目」组头（右边「+」就地新建）→ 项目行（16.2，有等你的在前、本月有目标的按截止、其余按最近活动）→「已归档 N」（折起）→「其他」。
@@ -24,6 +24,7 @@ import type { THomeItem as HomeItem } from "@warmap/contracts";
 import type { SubSession, WorkHomeData } from "@/lib/home/types";
 import { PersonAvatar } from "@/components/avatar/PersonAvatar";
 import { useDictationSignal } from "@/conversation/dictationSignal";
+import { useListeningLevel } from "@/components/coagent/presence";
 import { PersonRow } from "./PersonMenu";
 import { NewProjectDialog } from "./NewProjectDialog";
 import { isTruncated, useNameTip } from "./NameTip";
@@ -84,39 +85,81 @@ import h from "@/styles/home.module.css";
 
 export const subHref = (sub: Pick<SubSession, "kind" | "id">) => (sub.kind === "card" ? cardHref(sub.id) : topicHref(sub.id));
 
-/** 1440 宽时伙伴台的边长：形象和台子的比例以它为准。 */
+/** 1440 宽时伙伴台的宽：形象和台子的比例以它为准。 */
 export const STAGE_BASE = 255;
+/** 伙伴台的高 = 宽 × 0.6（5:3，11/12 从正方形压矮 40%）。 */
+export const STAGE_RATIO = 0.6;
 
 /**
- * 伙伴形象跟着台子缩放（17.2 第 15 条）：边长按 1440 时的比例走，不比原来的小；矮屏台子变扁时跟着高度一起缩。
+ * 伙伴形象跟着台子缩放（17.2 第 15 条）：宽按 1440 时的比例走，不比原来的小；矮屏台子比 5:3 还扁时跟着高度一起缩。
  */
 export function stageScale(width: number, height: number): number {
   if (!width || !height) return 1;
-  return Math.max(1, width / STAGE_BASE) * Math.min(1, height / width);
+  return Math.max(1, width / STAGE_BASE) * Math.min(1, height / (width * STAGE_RATIO));
 }
 
 /** 台子的宽高变了就重算形象的倍数，写进 --stage-scale（手机上台子是 160 高的横条，形象不跟着缩，不写）。 */
 function useStageScale(off: boolean) {
   const ref = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
+  const [room, setRoom] = useState(1);
   useEffect(() => {
     const element = ref.current;
-    if (off || !element || typeof ResizeObserver === "undefined") { setScale(1); return; }
+    if (off || !element || typeof ResizeObserver === "undefined") { setScale(1); setRoom(1); return; }
+    const measure = (width: number, height: number) => { setScale(stageScale(width, height)); setRoom(stageRoom(width)); };
     // 先量一次（首屏就对），之后台子变了再跟。
     const box = element.getBoundingClientRect();
-    setScale(stageScale(box.width, box.height));
+    measure(box.width, box.height);
     const observer = new ResizeObserver(([entry]) => {
       const box = entry?.contentRect;
-      if (box) setScale(stageScale(box.width, box.height));
+      if (box) measure(box.width, box.height);
     });
     observer.observe(element);
     return () => observer.disconnect();
   }, [off]);
-  return { ref, scale };
+  return { ref, scale, room };
 }
 
-export function LeftColumn({ data, view, buddy, speaking, go, phone, account, today, machine = null, trail, top, month, onRetryPlan, projects, archived, archivedSubs = [], actions = null, onCreate, folderLimit = LOCAL_PROJECT_FOLDER_LIMIT, cardAt, working, seen, onOpen }: {
+/**
+ * 台子比 1440 时窄（左栏最窄 250，台子 234×140）：形象不缩，但 Miles、C妹 在听那一下放到 1.16 会顶出台子，
+ * 按台宽比例少放一点（写进 --stage-room，buddy-mark.module.css 用）。
+ */
+export const stageRoom = (width: number): number => (width ? Math.min(1, width / STAGE_BASE) : 1);
+
+/** 伙伴台上的会：右下角那一颗（按钮或胶囊），和开着会、在录音时伙伴在听。 */
+type StageMeeting = { slot: ReactNode; listening: boolean };
+
+/**
+ * 伙伴台。听写或开会录音时伙伴跟着声音动（5.4.2、9.2）：响度一秒十几次，只让台子这一块跟着重画，不带着整棵树。
+ * 「亮着」（17.2）：伙伴对话里在说或在想 > 在听（听写开着）> 空闲；开着会录音时不管在哪一页都亮、光跟着麦克风响度。
+ */
+function BuddyStage({ buddy, name, view, speaking, go, phone, meeting }: {
+  buddy: Buddy | null; name: string; view: View; speaking: boolean; go: (href: string) => void; phone: boolean; meeting: StageMeeting | null;
+}) {
+  const dictation = useDictationSignal();
+  const meetingLevel = useListeningLevel();
+  const inMeeting = Boolean(meeting?.listening);
+  const level = inMeeting ? meetingLevel : dictation?.level ?? 0;
+  const glow = inMeeting ? "listening" : view.kind !== "buddy" ? undefined : speaking ? "speaking" : dictation ? "listening" : "idle";
+  const stage = useStageScale(phone);
+  return (
+    <div ref={stage.ref} className={h.stage} data-current={view.kind === "buddy" ? "" : undefined} data-glow={glow}
+      style={{ "--stage-scale": stage.scale, "--stage-room": stage.room, ...(glow === "listening" ? { "--level": level } : {}) } as CSSProperties}>
+      <button type="button" className={h.stageHit} aria-label={name} aria-current={view.kind === "buddy" ? "page" : undefined} onClick={() => go(BUDDY_HREF)} data-testid="buddy-entry">
+        <BuddyMark buddy={buddy} place="stage" active={speaking} listening={inMeeting || !!dictation || (view.kind === "buddy" && !speaking)} level={level} />
+      </button>
+      <span className={h.stageMore}>
+        <HeroButton variant="ghost" size="sm" isIconOnly title="伙伴" aria-label="伙伴" onPress={() => go(pageHref("buddy"))}><Ellipsis {...ICON} /></HeroButton>
+      </span>
+      {meeting?.slot}
+    </div>
+  );
+}
+
+export function LeftColumn({ data, view, buddy, speaking, go, phone, account, today, machine = null, trail, top, month, onRetryPlan, projects, archived, archivedSubs = [], actions = null, onCreate, folderLimit = LOCAL_PROJECT_FOLDER_LIMIT, cardAt, working, seen, onOpen, meeting = null }: {
   data: WorkHomeData;
+  /** 伙伴台右下角的「开会」（MeetingControl）和开着会时伙伴在听；不给就没有。 */
+  meeting?: StageMeeting | null;
   view: View;
   buddy: Buddy | null;
   /** 伙伴在说话（任何一条对话的回答进行中）。 */
@@ -162,26 +205,13 @@ export function LeftColumn({ data, view, buddy, speaking, go, phone, account, to
   const tree = useRef<HTMLDivElement>(null);
   const [naming, setNaming] = useState(false);
   const [archivedOpen, setArchivedOpen] = useState(false);
-  // 听写时台上的伙伴跟着声音动（5.4.2、9.2），哪个输入框在听都算。
-  const dictation = useDictationSignal();
-  // 伙伴台「亮着」（17.2）：只在伙伴对话里；在说或在想（回话流着）> 在听（听写开着）> 空闲。
-  const glow = view.kind !== "buddy" ? undefined : speaking ? "speaking" : dictation ? "listening" : "idle";
-  const stage = useStageScale(phone);
   // 新建项目的弹窗里有没有文件夹那一块：这台电脑连着本机程序才有（手机、没装的没有）。
   const localReady = useContext(LocalContext)?.phase === "ready";
   return (
     <SeenContext.Provider value={{ seen, onOpen }}>
     <ActionsContext.Provider value={actions}>
     <nav className={h.leftInner} aria-label="导航">
-      <div ref={stage.ref} className={h.stage} data-current={view.kind === "buddy" ? "" : undefined} data-glow={glow}
-        style={{ "--stage-scale": stage.scale, ...(glow === "listening" ? { "--level": dictation?.level ?? 0 } : {}) } as CSSProperties}>
-        <button type="button" className={h.stageHit} aria-label={name} aria-current={view.kind === "buddy" ? "page" : undefined} onClick={() => go(BUDDY_HREF)} data-testid="buddy-entry">
-          <BuddyMark buddy={buddy} place="stage" active={speaking} listening={!!dictation || (view.kind === "buddy" && !speaking)} level={dictation?.level ?? 0} />
-        </button>
-        <span className={h.stageMore}>
-          <HeroButton variant="ghost" size="sm" isIconOnly title="伙伴" aria-label="伙伴" onPress={() => go(pageHref("buddy"))}><Ellipsis {...ICON} /></HeroButton>
-        </span>
-      </div>
+      <BuddyStage buddy={buddy} name={name} view={view} speaking={speaking} go={go} phone={phone} meeting={meeting} />
       {phone ? (
         <div className={h.today} data-phone="">
           <span className={h.todayIcon}><House {...ICON} /></span><span className={h.todayText}>{today}</span>

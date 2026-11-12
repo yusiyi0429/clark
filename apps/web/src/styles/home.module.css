@@ -76,8 +76,8 @@
 /* ---------- 左栏（5.4.2）：栏内边距 8、行内边距 8，字头在 x=16；Task 状态位 16 宽、标题从 x=40；子会话图标在 x=40、名字在 x=64；竖线在 x=24 ---------- */
 .leftInner { display: flex; flex-direction: column; height: 100%; min-height: 0; padding: var(--space-2) var(--space-2) 0; }
 
-/* 伙伴台：正方形（边长跟着左栏宽，四边等距；矮屏变扁），伙伴居中；没有边、没有阴影。在总管线时铺选中底。 */
-.stage { position: relative; flex: none; aspect-ratio: 1; max-height: 36dvh; border-radius: var(--r-card); transition: background-color var(--dur-base) var(--ease-swift); }
+/* 伙伴台：5:3（宽跟着左栏，高 = 宽 × 0.6；矮屏再变扁），伙伴居中；没有边、没有阴影。在总管线时铺选中底。 */
+.stage { position: relative; flex: none; aspect-ratio: 5 / 3; max-height: 36dvh; border-radius: var(--r-card); transition: background-color var(--dur-base) var(--ease-swift); }
 .stage:hover { background: var(--default-soft); }
 .stage[data-current] { background: var(--default-soft-hover); }
 .stageHit { display: grid; place-items: center; width: 100%; height: 100%; padding: 0; border: 0; border-radius: inherit; background: none; cursor: pointer; }
@@ -105,7 +105,68 @@
 .stage[data-glow="listening"]::after { transition: opacity 120ms linear; }
 .stage[data-glow="speaking"]::before { animation: glowSpin 4s linear infinite; }
 @keyframes glowSpin { to { --glow-angle: 360deg; } }
-@media (prefers-reduced-motion: reduce) { .stage::before { animation: none !important; } }
+@media (prefers-reduced-motion: reduce) {
+  .stage::before { animation: none !important; }
+  /* 减少动态效果：底光不跟着响度一明一暗，亮着就是一片定的淡光。 */
+  .stage[data-glow="listening"]::after { opacity: calc(var(--wash) + .1); }
+}
+
+/*
+ * 伙伴台右下角的「开会」（设计 2026-11-12）：常驻一颗小图标按钮（弱化字色，悬停变正常）；开着会就地变成走秒胶囊，
+ * 在台子底部右侧、不挡伙伴。红点慢慢一明一暗，「减少动态效果」时不闪。手机上在横条最右边。
+ */
+.meetSlot { position: absolute; right: var(--space-2); bottom: var(--space-2); display: flex; }
+.app[data-phone] .meetSlot { top: 50%; bottom: auto; transform: translateY(-50%); }
+.app[data-phone] .meetButton { min-width: var(--touch-hit, 44px); min-height: var(--touch-hit, 44px); }
+.meetButton { color: var(--ink-muted); }
+.meetButton:hover { color: var(--ink); }
+.meetPill { display: inline-flex; align-items: center; gap: 6px; height: var(--row-28); padding: 0 var(--space-3); border: 0; border-radius: var(--r-capsule); outline: none; background: var(--surface); color: var(--ink); font: inherit; font-size: var(--text-xs); font-variant-numeric: tabular-nums; line-height: 16px; white-space: nowrap; box-shadow: inset 0 0 0 1px var(--hairline); cursor: pointer; transition: box-shadow var(--dur-snap) var(--ease-swift); }
+.meetPill:hover { box-shadow: inset 0 0 0 1px var(--hairline-strong); }
+.meetPill[data-focus-visible] { outline: 2px solid var(--focus); outline-offset: 2px; }
+.meetPill i { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--danger); animation: meetBreath 2s ease-in-out infinite; }
+.meetPill:is([data-state="quiet"], [data-state="failed"]) { color: var(--warning); }
+.meetPill[data-state="broken"] i { animation: none; opacity: .5; }
+.meetPill[data-state="organizing"] { color: var(--ink-muted); cursor: default; }
+.meetPill[data-state="organizing"]:hover { box-shadow: inset 0 0 0 1px var(--hairline); }
+@keyframes meetBreath { 50% { opacity: .3; } }
+/*
+ * Miles、C妹 占满台子的高，名牌在台子下沿：胶囊一长（整理中、没录上音、录音断了……）就会压到名牌，这时伙伴往左让开；
+ * 三种横放胶囊在台子中间偏上，碰不到右下角，不动。
+ */
+.stage [data-place="stage"]:is([data-skin="miles"], [data-skin="cmei"]) { position: relative; left: 0; transition: left var(--dur-base) var(--ease-swift), scale 420ms cubic-bezier(.34, 1.56, .64, 1); }
+.stage:has(.meetPill:is([data-state="organizing"], [data-state="ready"], [data-state="failed"])) [data-place="stage"]:is([data-skin="miles"], [data-skin="cmei"]) { left: -16px; }
+.stage:has(.meetPill:is([data-state="quiet"], [data-state="broken"])) [data-place="stage"]:is([data-skin="miles"], [data-skin="cmei"]) { left: -56px; }
+@media (prefers-reduced-motion: reduce) {
+  .meetPill i { animation: none; }
+  .stage [data-place="stage"]:is([data-skin="miles"], [data-skin="cmei"]) { transition: none; }
+}
+/* 点开的那一小块：全站那一种弹层，宽 300；已约的会在上，「新的一场」在下。 */
+.meetPop { width: min(300px, calc(100vw - 32px)); }
+.meetDialog { display: grid; gap: var(--space-2); padding: var(--space-2); outline: none; }
+.meetTitle { display: block; margin: 0; overflow: hidden; color: var(--ink); font-size: var(--text-base); font-weight: 600; line-height: var(--lh-row); text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
+a.meetTitle:hover { text-decoration: underline; text-underline-offset: 3px; }
+a.meetTitle:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-control); }
+.meetMeta { margin: 0; color: var(--ink-muted); font-size: var(--text-xs); line-height: 16px; font-variant-numeric: tabular-nums; }
+.meetBooked { display: grid; margin: 0 calc(var(--space-2) * -1); padding: 0 0 var(--space-2); list-style: none; box-shadow: inset 0 -1px 0 var(--hairline); }
+.meetBooked li { display: flex; align-items: center; gap: var(--space-1); }
+.meetBooked .menuItem { flex: 1; min-width: 0; border: 0; font: inherit; text-align: left; }
+.meetBooked .menuItem:hover, .meetBooked .menuItem:focus-visible { background: var(--default-soft); }
+.meetBooked .menuItem:disabled { cursor: default; opacity: .5; }
+.meetRowTitle { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meetField { display: flex; align-items: center; gap: var(--space-2); min-height: var(--row-32); }
+.meetField > :first-child { flex: none; width: 3em; }
+.meetAnchor { flex: 1; min-width: 0; height: var(--row-32); padding: 0 var(--space-2); overflow: hidden; border: 0; border-radius: var(--r-control); background: none; color: var(--ink); font: inherit; font-size: var(--text-base); text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.meetAnchor:hover { background: var(--default-soft); }
+.meetAnchor:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.meetError { margin: 0; color: var(--danger); font-size: var(--text-xs); line-height: 16px; }
+/* 弹层里的挂点选择（约会议那一份 WorldAnchorPicker，颜色写死浅色）：换成这里的变量，深色也对。 */
+.meetDialog input[type="search"] { height: var(--row-32); border: 1px solid var(--field-border); border-radius: var(--r-control); background: var(--field-bg); color: var(--field-ink); font-size: var(--text-base); }
+.meetDialog input[type="search"]::placeholder { color: var(--field-placeholder); }
+.meetDialog input[type="search"]:focus { border-color: var(--field-border-focus); outline: 0; }
+.meetDialog h4, .meetDialog button[aria-pressed] small, .meetDialog button[data-level] > span:last-child { color: var(--ink-faint); }
+.meetDialog button[aria-pressed], .meetDialog button[data-level] { border-radius: var(--r-control); color: var(--ink); font-size: var(--text-base); }
+.meetDialog button[aria-pressed]:hover, .meetDialog button[data-level]:hover { background: var(--default-soft); }
+.meetDialog button[aria-pressed="true"] { background: var(--default-soft-hover); }
 
 /* 「今天」行：就是首页。行尾是等你的计数（在首页时不显示）。 */
 .today { display: flex; flex: none; align-items: center; gap: var(--space-2); height: var(--row-36); margin-top: var(--space-2); padding: 0 var(--space-2); border: 0; border-radius: var(--r-control); background: none; color: var(--ink); font: inherit; font-size: var(--text-base); line-height: var(--lh-row); text-align: left; cursor: pointer; }

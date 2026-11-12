@@ -65,6 +65,7 @@ import { MONTH_PAGE, SECONDARY_PAGES, type MonthHead, type SecondaryPageProps } 
 import { useHomeArrival } from "@/components/onboarding/useHomeArrival";
 import { ICON } from "./StateIcon";
 import { useTabTitle } from "./useTabTitle";
+import { MeetingControl, useHomeMeeting } from "./MeetingControl";
 import h from "@/styles/home.module.css";
 import { linkPerson } from "@/lib/local/link";
 import { useAppearance } from "@/lib/appearance";
@@ -518,7 +519,10 @@ function HomeFrame({ account }: { account: Account }) {
     // 手机上页头不写上一级（左边已经有返回），只留字母和子会话标题（排查清单第 3 条）。
     trail: backgroundButton, parent: null, letter,
   } : { lead: null, trail: backgroundButton, parent, letter }), [handheld, go, backgroundButton, parent, letter]);
-  useTabTitle(data.waiting.length);
+  // 开会（设计 2026-11-12）：录音挂在外壳上，切项目、切子会话、开设置都不断。在项目页里新的一场默认挂这个项目本月目标的 Mission。
+  const meeting = useHomeMeeting({ account, go });
+  const meetingMission = view.kind === "project" ? projects.all.find((entry) => entry.id === view.id)?.current[0]?.missionId ?? null : null;
+  useTabTitle(data.waiting.length, meeting.live);
   /** 转交时选了「停掉」：这台电脑上在跑的经本机程序停，云端还排着、没有电脑接下的撤掉登记（别的电脑上在跑的只能在那台电脑上停）。 */
   const stopForTransfer = async (subs: Project["subSessions"]) => {
     const here = new Set(local.sessions.map((session) => session.id));
@@ -636,6 +640,7 @@ function HomeFrame({ account }: { account: Account }) {
         if (folderIds.length) await projects.actions.setFolders(id, folderIds, name).catch(() => showWorkspaceToast({ text: "文件夹没绑上" }));
         return id;
       }} cardAt={cardAt} working={working} seen={seenMarks} onOpen={markSeen}
+      meeting={{ slot: <MeetingControl meeting={meeting} missionId={meetingMission} />, listening: meeting.listening }}
       today={todayLabel(work.plan?.today ?? null)} machine={machineDot} trail={handheld ? backgroundButton : null}
       top={handheld && data.waiting.length ? (
         <section aria-label="等你" className={h.phoneWaiting}>

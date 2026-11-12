@@ -46,7 +46,7 @@
 .mark[data-place="note"]:is([data-skin="miles"], [data-skin="cmei"]) .scale { transform: scale(.5); width: max-content; }
 
 /*
- * 伙伴台（新首页左栏顶上的正方形，设计 9.2 / 5.4.2）：形象在台子正中。横放的三种胶囊按页头那份（208×64）画到约 0.7，
+ * 伙伴台（新首页左栏顶上的 5:3 台子，设计 9.2 / 5.4.2）：形象在台子正中。横放的三种胶囊按页头那份（208×64）画到约 0.7，
  * Miles、C妹 按页头那份放到约 1.6（倍数待原型）。用 zoom 缩放，台子按缩放后的大小居中。在听时整块再变大一圈（只有伙伴可以回弹）。
  * 整块（连名牌）再乘台子给的 --stage-scale：台子比 1440 时大就跟着放大，矮屏变扁时跟着高度缩（LeftColumn 的 stageScale）。
  */
@@ -54,8 +54,14 @@
 .mark[data-place="stage"] .scale { zoom: .7; }
 .mark[data-place="stage"]:is([data-skin="miles"], [data-skin="cmei"]) .scale { zoom: 1.6; }
 .mark[data-place="stage"][data-listening] { scale: 1.16; }
+/*
+ * 台子是 5:3：比 1440 窄时（左栏最窄 250，台子 234×140）Miles、C妹 在听那一下放到 1.16 会顶出台子，按台宽少放一点（--stage-room，最少不比平时小）；
+ * C妹 头顶的呆毛高出画框一截，整块往下挪一点，呆毛和名牌都在台子里。
+ */
+.mark[data-place="stage"]:is([data-skin="miles"], [data-skin="cmei"])[data-listening] { scale: max(1, calc(1.16 * var(--stage-room, 1))); }
+.mark[data-place="stage"][data-skin="cmei"] { translate: 0 6px; }
 
 @media (prefers-reduced-motion: reduce) {
   .mark[data-place="sheet"], .mark[data-place="stage"] { transition: none; }
-  .mark[data-place="stage"][data-listening] { scale: none; }
+  .mark[data-place="stage"][data-listening], .mark[data-place="stage"]:is([data-skin="miles"], [data-skin="cmei"])[data-listening] { scale: none; }
 }

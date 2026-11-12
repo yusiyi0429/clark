@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { THomeItem } from "@warmap/contracts";
 import type { HomeProject, SubSession, WorkHomeData } from "@/lib/home/types";
 import { fromHome, projectWorking } from "@/lib/home/projects";
-import { LeftColumn, STAGE_BASE, letterOf, planOrder, stageScale, subDot, subIcon, subLetters, subsSummary } from "./LeftColumn";
+import { LeftColumn, STAGE_BASE, STAGE_RATIO, letterOf, planOrder, stageScale, subDot, subIcon, subLetters, subsSummary } from "./LeftColumn";
 
 const data = { period: "2026-11", projects: [], archivedCount: 0, month: { missions: [] }, waiting: [], other: { subSessions: [], items: [] } } as unknown as WorkHomeData;
 const projectsOf = (used: WorkHomeData) => used.projects.map((project) => fromHome(project, used, new Map()));
@@ -249,12 +249,12 @@ describe("左栏：项目在后台干活的灰点", () => {
 });
 
 describe("伙伴形象跟着台子缩放（17.2 第 15 条）", () => {
-  it("按 1440 时（台子 255）的比例走，不比原来的小；矮屏台子变扁时跟着高度缩", () => {
-    expect(stageScale(242, 242)).toBe(1);
-    expect(stageScale(STAGE_BASE, STAGE_BASE)).toBe(1);
-    expect(stageScale(344, 344)).toBeCloseTo(344 / 255);
-    expect(stageScale(344, 172)).toBeCloseTo((344 / 255) / 2);
-    expect(stageScale(242, 121)).toBeCloseTo(0.5);
+  it("台子 5:3：按 1440 时（宽 255）的比例走，不比原来的小；矮屏台子比 5:3 还扁时跟着高度缩", () => {
+    expect(stageScale(242, 242 * STAGE_RATIO)).toBe(1);
+    expect(stageScale(STAGE_BASE, STAGE_BASE * STAGE_RATIO)).toBe(1);
+    expect(stageScale(344, 344 * STAGE_RATIO)).toBeCloseTo(344 / 255);
+    expect(stageScale(344, 344 * STAGE_RATIO / 2)).toBeCloseTo((344 / 255) / 2);
+    expect(stageScale(242, 242 * STAGE_RATIO / 2)).toBeCloseTo(0.5);
     expect(stageScale(0, 0)).toBe(1);
   });
 });
