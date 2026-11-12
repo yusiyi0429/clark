@@ -16,7 +16,7 @@ export type TurnFilesView = {
   open: ((path: string, turn: number) => void) | null;
   /** 恢复过了（右栏清单里带 restoredAt）。 */
   restored: (path: string) => boolean;
-  /** 最近一轮那一行的编号：恢复过以后只有它重读剩几处。 */
+  /** 最近一轮那一行的编号：恢复过以后只有它重读剩几处；开了新一轮就是 null，各行停在最后读到的数。 */
   latest: number | null;
   /** 那一轮这个文件现在还剩几处（读不到明细为 null）。 */
   count?: (path: string, turn: number) => Promise<number | null>;
@@ -25,8 +25,9 @@ export type TurnFilesView = {
 };
 export const TurnFilesContext = createContext<TurnFilesView | null>(null);
 
-/** 对话记录里最近一轮那一行的编号。 */
-export const latestFilesSeq = (entries: readonly SessionEntry[]) => entries.reduce<number | null>((last, entry) => (entry.kind === "files" ? entry.seq : last), null);
+/** 对话记录里最近一轮那一行的编号；它后面来了本人的话（开了新一轮）就没有：本机对更早的一轮给的是当时的改动，重读会把恢复过的又算回去。 */
+export const latestFilesSeq = (entries: readonly SessionEntry[]) =>
+  entries.reduce<number | null>((last, entry) => (entry.kind === "files" ? entry.seq : entry.kind === "user" ? null : last), null);
 
 /** 收成一行的门槛：超过这么多个文件写「改了 N 个文件」。 */
 const FOLD_OVER = 3;
