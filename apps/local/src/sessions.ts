@@ -128,6 +128,8 @@ interface SessionRecord {
   critics: TLocalRole[];
   /** 排队时存着的第一句话；真开始时送出并清空。不为 null 说明这件还没开始过。 */
   queuedMessage: string | null;
+  /** 还没开始过时本人说的话（排队时停下后说「接着做」重新排上的那句）：开始时接在第一句话后面送出。 */
+  queuedSaid?: { id: string; text: string }[];
   /** 进队的先后（先来先跑；一批里同一毫秒进的也分得清）。 */
   queueOrder: number;
   /** 验收员：是哪个执行会话交回后起的（结论也报给它）。 */
@@ -406,7 +408,7 @@ export class SessionManager {
 
   private summary(rec: SessionRecord): TLocalSessionSummary {
     const {
-      mcpSecret: _s, syncSeq: _q, outputs: _o, versionNumber: _v, lastVersion: _l, role: _r, critics: _c, queuedMessage: _m, queueOrder: _n,
+      mcpSecret: _s, syncSeq: _q, outputs: _o, versionNumber: _v, lastVersion: _l, role: _r, critics: _c, queuedMessage: _m, queuedSaid: _qs, queueOrder: _n,
       parentId: _p, briefPending: _b, criteria: _cr, failStreak: _f, submitted: _sb, nudged: _nd, workspace, commit: _cm, after: _af, passed: _ps, sourceWords: _sw, unread: _ur,
       background, hold, holdSince: _hs, modelTier: _mt, budgetKey: _bk, runSince: _rs, seen: _se, handoff: _ho, run, agreementRevision: _ar, startAgreement: _sa, free: _fr, ...rest
     } = rec;
@@ -588,6 +590,12 @@ export class SessionManager {
     rec.queuedMessage = null;
     const run = this.runs.get(rec.id)!;
     this.say(rec, run, text, { source: "initial" });
+    // 排队时停下、本人说一句重新排上的：那几句已经记过，接着第一句送出
+    const said = rec.queuedSaid ?? [];
+    delete rec.queuedSaid;
+    for (const s of said) rec.unread = [...(rec.unread ?? []), { id: s.id, web: true }];
+    this.save(rec);
+    for (const s of said) this.deliver(rec, run, s.text, s.id);
     this.setStatus(rec, "running");
     this.sendBudgetStop(rec, run); // 拉起途中预算用完了
   }
@@ -1206,7 +1214,6 @@ export class SessionManager {
   private async sendNew(id: string, req: TLocalSendMessageRequest, messageId: string): Promise<TLocalSendMessageResponse> {
     const rec = this.must(id);
     if (rec.status === "queued") throw new SessionError("conflict", "还在等空位，开始后再说");
-    if (rec.queuedMessage !== null && !this.starting.has(id)) throw new SessionError("conflict", "这件还没开始过（排队时取消了或没开起来），要做就重新开工");
     if (req.kind === "review" && (rec.subject.kind !== "topic" || !rec.critics.length)) throw new SessionError("validation", "评审会只给开工时带了挑刺技能的专题用");
     if (req.kind !== "review" && !req.text && !req.attachments?.length) throw new SessionError("validation", "说一句要有内容");
     if (rec.subject.kind === "plan" && !rec.planAsked) { rec.planAsked = true; this.save(rec); } // 本人说了话：开拆前要问的算交代过了
@@ -1242,6 +1249,7 @@ export class SessionManager {
     if (rec.hold?.reason === "balance") this.releaseBalance(rec.modelProfileId);
     this.clearHold(rec);
     this.dropBudgetStop(rec);
+    if (rec.queuedMessage !== null && !this.starting.has(id)) return this.requeue(rec, req.kind === "review" ? text : said, text, messageId, saved);
     // 先记下这句（对话里马上有），再拉起执行方、送出去：拉起要几秒，不让本人干等（11/11 定）。事件里是本人说的原话和附件
     this.record(rec, req.kind === "review" ? text : said, { source: "web", messageId, attachments: saved });
     let run = this.runs.get(id);
@@ -1346,12 +1354,38 @@ export class SessionManager {
     this.save(rec);
   }
 
-  /** 还在排的：停下、强停都是取消，让它出队（不留进程，不能再续）。 */
+  /**
+   * 还在排的：停下、强停都是本人停的，让它出队（不再因为空出位置、前面的卡做完而自己开始），记「本人停下」报给云端（主循环 A，11/12）。
+   * 本人说一句（「接着做」）重新排上，见 requeue。
+   */
   private cancelQueued(rec: SessionRecord): boolean {
     if (rec.status !== "queued") return false;
-    this.setStatus(rec, "exited", { reason: "排队时取消了，没开始" });
+    this.setStatus(rec, "exited", { reason: "排队时停下了，还没开始", why: "interrupted" });
+    this.reportStop(rec, "interrupted");
     void this.releaseWorktree(rec);
     return true;
+  }
+
+  /**
+   * 还没开始过的（排队时停下了、拉起途中被停、没开起来）本人说了一句：记下这句，重新排到队尾，开始时先送第一句话、再送这句。
+   * 卡的工作树停下时清掉了的，从主文件夹最新的提交重新开；还在等前面的卡的照样等。
+   */
+  private async requeue(rec: SessionRecord, shown: string, text: string, messageId: string, saved: TLocalSavedAttachment[]): Promise<TLocalSendMessageResponse> {
+    const ws = rec.workspace;
+    if (ws?.kind === "worktree" && !existsSync(ws.path) && rec.subject.cardId) {
+      const place = await this.openWorkspace(rec.subject.cardId, rec.title, ws.folder);
+      Object.assign(rec, { cwd: place.cwd, workspace: place.workspace });
+      this.noteWorkspace(rec, place);
+    }
+    this.emit(rec, { type: "user_message", text: shown, source: "web", ...(saved.length ? { attachments: saved } : {}), messageId });
+    this.syncSaid(rec, messageId, shown, saved);
+    rec.queuedSaid = [...(rec.queuedSaid ?? []), { id: messageId, text }];
+    rec.queueOrder = ++this.queueSeq;
+    const waiting = !rec.workspace && rec.after.some((c) => !this.cardDone(c));
+    const holder = this.folderHolder(rec);
+    this.setStatus(rec, "queued", waiting ? { reason: WAITING_FOR_CARDS } : holder ? { reason: `这个文件夹同一时间只让一个会话改，等「${holder.title}」这一轮做完` } : {});
+    if (rec.after.length && !rec.workspace) void this.releaseWaiting(); // 前面的卡已经都做完了：开工作树
+    return { delivery: "new_turn", messageId };
   }
 
   /** 卡没开始就取消了：工作树没有别的会话在用就清掉（分支保留）。 */
