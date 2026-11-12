@@ -6,6 +6,7 @@
  *   标题、关于（挂点）预填好，CEO 多一行主持人；焦点在「开始」上，回车就开，Esc 关。
  * - 开着会：按钮就地变成走秒胶囊「● 12:34」（麦克风没给是「没录上音」）；点胶囊出一小块，「这场会开完了」才停，不一按就停。
  * - 开完：停录、传完最后一片、通知服务端录完、记开完（meeting.end）；胶囊写「整理中 0:42」，录音转出会议记录候选后变「记录待确认」。
+ *   没录上音的直接去这场会的会议页（贴妙记、传会议记录）。开始、录上、开完、整理完都发 MEETING_CHANGED，开着的会议页跟着重取。
  * - 录音挂在首页外壳上（useHomeMeeting 在 HomeFrame 里），新首页里切页不断；开着的会记在本机（localStorage），刷新后回来是「录音断了」，
  *   服务端那份录音还停在一半就能接着录，否则只给开完。离开新首页去旧页面时外壳卸下，录音照老规矩停下并交给服务端（不丢已录的）。
  * - 弹层里的会议标题、已约那几场行尾的箭头、「记录待确认」都去这场会的会议页（/me/work/meetings/:id）；
@@ -28,7 +29,7 @@ import { BOOK_ERROR } from "@/components/meeting/MeetingBookingSheet";
 import { bookMeeting, listPeople, listPersonDirectory, listWorldAnchorOptions, type DirectoryPerson } from "@/components/meeting/meetingDecisionApi";
 import { WorldAnchorPicker } from "@/components/meeting/WorldAnchorPicker";
 import { companyMonth } from "@/lib/companyTime";
-import { SLOT_MS, defaultAnchor, defaultMeetingTitle, elapsed, meetingHref, meetingSpan, startableMeetings, type BookedMeeting } from "@/lib/home/meeting";
+import { SLOT_MS, announceMeeting, defaultAnchor, defaultMeetingTitle, elapsed, meetingHref, meetingSpan, startableMeetings, type BookedMeeting } from "@/lib/home/meeting";
 import { ICON } from "./StateIcon";
 import h from "@/styles/home.module.css";
 
@@ -155,6 +156,9 @@ export function useHomeMeeting({ account, go }: { account: Account; go: (href: s
     if (status === "recording" && recordingId && phase.meeting.recordingId !== recordingId) setPhase({ ...phase, meeting: { ...phase.meeting, recordingId, audio: true } });
     else if (phase.meeting.audio && (status === "denied" || status === "unsupported" || status === "failed")) setPhase({ ...phase, meeting: { ...phase.meeting, audio: false } });
   }, [status, recordingId, phase, setPhase]);
+  // 录上了（开始、接着录）：开着的会议页重取一次。
+  const meetingId = meeting?.id;
+  useEffect(() => { if (status === "recording" && meetingId) announceMeeting(meetingId); }, [status, meetingId]);
 
   /** 开一场：已约的直接开，新的一场先建会。没开成回一句短话。 */
   const start = useCallback(async (target: { meetingId: string; title: string } | { book: TMeetingBookingRequest }): Promise<string | null> => {
@@ -173,6 +177,7 @@ export function useHomeMeeting({ account, go }: { account: Account; go: (href: s
     }
     pendingStart.current = true;
     setPhase({ kind: "live", meeting: { id, title, startedAt: Date.now(), audio: true } });
+    announceMeeting(id);
     return null;
   }, [setPhase]);
 
@@ -206,10 +211,14 @@ export function useHomeMeeting({ account, go }: { account: Account; go: (href: s
     }
     const ended = await endMeeting(meeting.id, role);
     window.dispatchEvent(new Event("meeting-changed"));
+    announceMeeting(meeting.id);
     if (!ended) return setPhase({ kind: "failed", meeting, error: "没记上开完", retry: "end" });
     if (failure) return setPhase({ kind: "failed", meeting, error: failure, retry: "finish" });
-    setPhase(handed ? { kind: "organizing", meeting, since } : { kind: "idle" });
-  }, [meeting, phase, role, status, recorder, setPhase]);
+    if (handed) return setPhase({ kind: "organizing", meeting, since });
+    // 没录上音：没有记录可等，直接去这场会的会议页（贴妙记链接、上传会议记录都在那里），不然这场会就停在「待交记录」没人提醒。
+    setPhase({ kind: "idle" });
+    go(meetingHref(meeting.id));
+  }, [meeting, phase, role, status, recorder, setPhase, go]);
 
   // 整理中：每 5 秒看一次这份录音走到哪一步；识别完（已写成会议记录候选）就是「记录待确认」。
   const organizing = phase.kind === "organizing" ? phase : null;
@@ -219,8 +228,9 @@ export function useHomeMeeting({ account, go }: { account: Account; go: (href: s
     const check = async () => {
       const recording = await loadRecording(organizing.meeting);
       if (!live || !recording) return;
-      if (recording.status === "done") setPhase({ kind: "ready", meeting: organizing.meeting });
-      else if (recording.status === "failed") setPhase({ kind: "failed", meeting: organizing.meeting, error: recording.error ?? "没整理出来" });
+      if (recording.status !== "done" && recording.status !== "failed") return;
+      setPhase(recording.status === "done" ? { kind: "ready", meeting: organizing.meeting } : { kind: "failed", meeting: organizing.meeting, error: recording.error ?? "没整理出来" });
+      announceMeeting(organizing.meeting.id);
     };
     const timer = window.setInterval(() => void check(), POLL_MS);
     return () => { live = false; window.clearInterval(timer); };

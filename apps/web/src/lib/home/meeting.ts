@@ -8,6 +8,12 @@ import { COMPANY_TIMEZONE } from "@/lib/companyTime";
 /** 这场会的会议页（新首页里，旧的 /me/meetings/:id 会跳过来）。 */
 export const meetingHref = (id: string) => `/me/work/meetings/${encodeURIComponent(id)}`;
 
+/** 伙伴台上开会改了某场会（开始录、接着录、开完、录音整理完）：开着的会议页听到同一场就重取一次，不用手动刷新。 */
+export const MEETING_CHANGED = "tianshu:meeting-changed";
+export function announceMeeting(meetingId: string): void {
+  window.dispatchEvent(new CustomEvent<{ meetingId: string }>(MEETING_CHANGED, { detail: { meetingId } }));
+}
+
 /** 已约的会提前多久就能开。 */
 export const EARLY_MS = 15 * 60_000;
 /** 新的一场先占一小时（实际以按下「开完了」为准）。 */
