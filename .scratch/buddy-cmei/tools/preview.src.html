@@ -1,0 +1,284 @@
+<title>天枢伙伴形象</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: one quiet centred column; the product's own misty-blue stages carry the two characters, everything else stays out of the way. */
+:root {
+  --bg: #f4f6fb;
+  --surface: #ffffff;
+  --paper: #ffffff;
+  --ink: #1f2a3d;
+  --ink-2: #5d6878;
+  --line: #e3e8ef;
+  --chip: #eef2f8;
+  --accent: #3a6cf0;
+  --stage-top: #e7efff;
+  --stage-bottom: #f3f7fd;
+  --paper-ink: #5d6878;
+  --font: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e131d; --surface: #161c29; --paper: #f7f9fd; --ink: #e7ecf5; --ink-2: #9ba7bb; --line: #263046; --chip: #1f2737; --accent: #7b9bff;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e131d; --surface: #161c29; --paper: #f7f9fd; --ink: #e7ecf5; --ink-2: #9ba7bb; --line: #263046; --chip: #1f2737; --accent: #7b9bff;
+  color-scheme: dark;
+}
+body { background: var(--bg); color: var(--ink); font-family: var(--font); }
+.page {
+  max-width: 960px; margin: 0 auto; display: grid; gap: 40px;
+  padding-block: 28px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+header { display: grid; gap: 8px; }
+.meta { font-size: 12px; color: var(--ink-2); letter-spacing: .04em; }
+h1 { font-size: 24px; font-weight: 650; margin: 0; text-wrap: balance; }
+.lede { margin: 0; color: var(--ink-2); font-size: 14px; line-height: 1.7; max-width: 62ch; }
+section { display: grid; gap: 14px; min-width: 0; }
+h2 { font-size: 15px; font-weight: 650; margin: 0; text-wrap: balance; }
+.hint { font-size: 12.5px; color: var(--ink-2); margin: 0; line-height: 1.65; max-width: 66ch; }
+
+.controls { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
+.seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--chip); }
+.seg label { position: relative; padding: 5px 14px; border-radius: 999px; color: var(--ink-2); font-size: 12.5px; cursor: pointer; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label:has(input:checked) { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgb(31 53 86 / 12%); }
+.seg label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.field { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink-2); }
+.field input { width: 8.5em; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; }
+.field input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn { padding: 6px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: 12.5px; cursor: pointer; }
+.btn:hover { border-color: var(--accent); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 12px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 8px; display: grid; gap: 6px; margin: 0; min-width: 0; }
+.card figcaption { font-size: 12.5px; color: var(--ink-2); padding: 2px 6px 2px; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.card figcaption b { color: var(--ink); font-weight: 600; }
+.stage { display: grid; place-items: center; border-radius: 12px; background: linear-gradient(180deg, var(--stage-top) 0%, var(--stage-bottom) 100%); overflow: hidden; }
+.stage.live { height: calc(96px * var(--zoom, 2)); }
+.zoom { zoom: var(--zoom, 2); }
+
+.motions { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 10px; }
+.motion { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 8px; display: grid; gap: 6px; }
+.motion h3 { margin: 0; font-size: 12.5px; font-weight: 600; padding: 2px 4px; }
+.motion p { margin: 0; font-size: 11.5px; color: var(--ink-2); padding: 0 4px 2px; line-height: 1.5; }
+.motion .duo { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.motion .stage { height: 128px; }
+.motion .zoom { zoom: 1.5; }
+
+.bigpair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 12px; }
+.big { margin: 0; background: var(--paper); border: 1px solid var(--line); border-radius: 18px; padding: 12px; display: grid; gap: 6px; min-width: 0; }
+.big svg { width: 100%; height: auto; display: block; }
+.big figcaption { font-size: 12.5px; color: var(--paper-ink); text-align: center; }
+.sil svg { filter: brightness(0); }  /* 整张压成剪影：C妹 是位图，改颜色的写法对她不管用 */
+.toggles { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 12.5px; color: var(--ink-2); }
+.toggles label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+
+.notes { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.notes li { display: grid; grid-template-columns: 5.5em minmax(0, 1fr); gap: 12px; font-size: 13.5px; line-height: 1.7; }
+.notes li span { color: var(--ink-2); font-size: 12.5px; padding-top: 1px; }
+
+/* Miles 胶囊的动作样式（coagent-miles.module.css 原样） */
+.miles { position: relative; height: 66px; animation: capsuleIn 460ms cubic-bezier(0.32, 0.72, 0, 1) both; }
+.miles[data-leaving] { animation: capsuleOut 320ms cubic-bezier(0.32, 0.72, 0, 1) both; }
+.unit { display: block; width: 100%; height: 100%; overflow: visible; }
+.headPose { transition: transform 420ms cubic-bezier(0.22, 1, 0.36, 1); }
+.gaze { transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1); }
+.miles[data-pose='listening'] .headPose { transform: rotate(3.5deg); }
+.miles[data-pose='listening'] .gaze { transform: translate(var(--g), 0px); }
+.breathe { animation: breathe 3.8s ease-in-out infinite; }
+.speakGlass { opacity: 0; transition: opacity 260ms ease; }
+.miles[data-pose='speaking'] .speakGlass { opacity: 1; }
+.still .miles { animation: none; }
+.still .breathe { animation: none; }
+@keyframes capsuleIn { from { opacity: 0; transform: scale(0.94); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes capsuleOut { from { opacity: 1; transform: none; filter: none; } to { opacity: 0; transform: scale(0.94); filter: blur(6px); } }
+@keyframes breathe { 0%, 100% { transform: none; } 50% { transform: scale(1.012, 1.02); } }
+@media (prefers-reduced-motion: reduce) {
+  .miles, .miles[data-leaving], .breathe { animation: none; }
+  .headPose, .gaze, .speakGlass { transition: none; }
+}
+@media (max-width: 520px) {
+  .notes li { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+}
+</style>
+<!--BODY-->
+<main class="page">
+  <header>
+    <div class="meta">伙伴形象 · 设计稿 · 2026-11-03</div>
+    <h1>天枢伙伴形象：C妹</h1>
+    <p class="lede">C妹 一比一取自授权原图，两只手扒在胶囊沿上；旁边是现有的 Miles 作对照。动作是同一套代码，C妹 只是转眼幅度小一点。下面两颗胶囊都是活的，和产品里「选择伙伴的形象」那一格一样大，可以放大看。</p>
+  </header>
+
+  <section aria-labelledby="live-title">
+    <h2 id="live-title">实际效果</h2>
+    <div class="controls">
+      <div class="seg" role="radiogroup" aria-label="姿势">
+        <label><input type="radio" name="pose" id="pose-listening" value="listening" checked>在听</label>
+        <label><input type="radio" name="pose" id="pose-speaking" value="speaking">在说</label>
+      </div>
+      <div class="seg" role="radiogroup" aria-label="大小">
+        <label><input type="radio" name="zoom" id="zoom-1" value="1">原大</label>
+        <label><input type="radio" name="zoom" id="zoom-2" value="2" checked>2 倍</label>
+        <label><input type="radio" name="zoom" id="zoom-3" value="3">3 倍</label>
+      </div>
+      <label class="field" for="girl-name">C妹 的名字 <input id="girl-name" value="C妹" maxlength="12" autocomplete="off"></label>
+      <button class="btn" id="replay" type="button">重新出场</button>
+      <button class="btn" id="leave" type="button">退场</button>
+    </div>
+    <div class="pair" id="live">
+      <figure class="card"><div class="stage live" id="live-miles"></div><figcaption><b>Miles</b><span>现有</span></figcaption></figure>
+      <figure class="card"><div class="stage live" id="live-cmei"></div><figcaption><b>C妹</b><span>一比一</span></figcaption></figure>
+    </div>
+    <p class="hint">平时会随机眨眼；在听时偶尔转头看一眼，C妹 的眼眶不动、只转眼珠。手举 9–16 秒就放进胶囊歇 5–10 秒（C妹 是两只手松开胶囊沿）。在听时右耳的耳机跟着模拟的说话声亮；在说时嘴跟着音节开合。不想等的话看下面的动作一览。</p>
+  </section>
+
+  <section aria-labelledby="motion-title">
+    <h2 id="motion-title">动作一览</h2>
+    <p class="hint">每一格左边是 Miles、右边是 C妹，摆的是同一个动作的同一帧。</p>
+    <div class="motions still" id="motions"></div>
+  </section>
+
+  <section aria-labelledby="big-title">
+    <h2 id="big-title">大图</h2>
+    <div class="toggles">
+      <label><input type="checkbox" id="hand-down">C妹 把手放进胶囊</label>
+      <label><input type="checkbox" id="silhouette">只看剪影</label>
+    </div>
+    <div class="bigpair" id="bigpair">
+      <figure class="big" id="big-miles"><figcaption>Miles</figcaption></figure>
+      <figure class="big" id="big-cmei"><figcaption>C妹</figcaption></figure>
+    </div>
+  </section>
+
+  <section aria-labelledby="notes-title">
+    <h2 id="notes-title">怎么做的</h2>
+    <ul class="notes">
+      <li><span>C妹</span><div>一比一取自孙铭泽提供并确认有授权的原图：平时取第 1 格，说话的嘴取第 2 格张嘴，第 4 格的闭眼也放在画里（现在的动作代码眨眼时不显示它）。原图的像素按部件切开放进画里：头发、脸和衣服一层，眼睛拆成眼白、能转的眼珠和睫毛，嘴，两只扒在胶囊沿上的手。眨眼、说话、放手时被挡住的地方补成皮肤和衣服。只多了一只右耳的 AirPods，在听时它会亮。整体比一开始放大了 15%，头和 Miles 差不多大，两只手照样整只搭在胶囊沿上；头顶的呆毛比胶囊框高出一点。</div></li>
+      <li><span>动作</span><div>和 Miles 同一套动作代码：出场回弹、眨眼、转头、在听侧头、耳机亮、在说张嘴、呼吸、举手和放手、打招呼、退场。C妹 的眼珠小，转眼幅度从 15 收到 8；她的「放手」是两只手从胶囊沿上松开、滑进胶囊，「打招呼」是两只手轻轻晃一下；侧头和呼吸带着整个上半身。</div></li>
+      <li><span>还没定</span><div>眨眼要不要换成原图第 4 格的闭眼（要改动作代码）。确认后接进产品，作为一种伙伴形象。</div></li>
+    </ul>
+  </section>
+</main>
+
+<script>
+/*__RIG__*/
+/*__ARTS__*/
+(() => {
+  const NS = "http://www.w3.org/2000/svg";
+  const CLASSES = { headPose: "headPose", gaze: "gaze", breathe: "breathe", speakGlass: "speakGlass" };
+  const reducedPref = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const rigs = { miles: makeRig(ART, MILES_SVG_SRC), cmei: makeRig(CMEI_ART, CMEI_SVG_SRC) };
+  const WHO = ["miles", "cmei"];
+  const NAMES = { miles: "Miles", cmei: "C妹" };
+  let uid = 0;
+
+  function mount(host, who, { pose, name, reduced }) {
+    host.replaceChildren();
+    const zoom = document.createElement("div"); zoom.className = "zoom";
+    const box = document.createElement("div"); box.className = "miles"; box.dataset.pose = pose;
+    const svg = document.createElementNS(NS, "svg"); svg.setAttribute("class", "unit"); svg.setAttribute("aria-hidden", "true");
+    box.appendChild(svg); zoom.appendChild(box); host.appendChild(zoom);
+    const rig = rigs[who].mountMiles(svg, { idPrefix: `p${uid++}`, name, pose, reduced, classes: CLASSES });
+    box.style.width = rig.setName(name) + "px";
+    return { rig, box, svg };
+  }
+
+  // ── 实际效果 ──
+  const live = { pose: "listening", name: "C妹", items: [] };
+  const girlName = () => (document.getElementById("girl-name").value.trim() || "C妹");
+  function mountLive() {
+    live.items.forEach(({ rig }) => rig.destroy());
+    live.items = [
+      mount(document.getElementById("live-miles"), "miles", { pose: live.pose, name: "Miles", reduced: reducedPref }),
+      mount(document.getElementById("live-cmei"), "cmei", { pose: live.pose, name: girlName(), reduced: reducedPref }),
+    ];
+  }
+  mountLive();
+  document.querySelectorAll('input[name="pose"]').forEach((input) => input.addEventListener("change", () => {
+    live.pose = input.value;
+    live.items.forEach(({ rig, box }) => { rig.setPose(live.pose); box.dataset.pose = live.pose; });
+  }));
+  document.querySelectorAll('input[name="zoom"]').forEach((input) => input.addEventListener("change", () => {
+    document.getElementById("live").style.setProperty("--zoom", input.value);
+  }));
+  document.getElementById("girl-name").addEventListener("input", () => {
+    const { rig, box } = live.items[1];
+    box.style.width = rig.setName(girlName()) + "px";
+  });
+  document.getElementById("replay").addEventListener("click", mountLive);
+  document.getElementById("leave").addEventListener("click", () => {
+    live.items.forEach(({ rig, box }) => { rig.leave(); box.dataset.leaving = "true"; });
+    window.setTimeout(mountLive, 1400);
+  });
+  // 模拟有人在说话（和选形象时的预览同一个算法），在听时耳机跟着亮、流光跟着起伏
+  const started = performance.now();
+  window.setInterval(() => {
+    if (reducedPref) return;
+    const t = (performance.now() - started) / 1000;
+    const voice = Math.abs(Math.sin(t * 5.1) * 0.5 + Math.sin(t * 8.3 + 1) * 0.3 + Math.sin(t * 1.7) * 0.2);
+    const level = Math.min(1, voice * (Math.sin(t * 0.9) > 0.75 ? 0.15 : 1));
+    if (live.pose === "listening") live.items.forEach(({ rig }) => rig.setLevel(level));
+  }, 80);
+
+  // ── 动作一览：同一帧摆好静止，变换和 milesRig 里的一样 ──
+  const g = "var(--g)";
+  const STATES = [
+    ["在听", "头侧过来 3.5°，目光朝向说话的人", "listening", () => {}],
+    ["在说", "嘴跟着音节张开，胶囊染一层淡淡的蓝紫", "speaking", () => {}],
+    ["眨眼", "随机眨，偶尔连眨两下", "listening", (p) => p.shells.forEach((s) => (s.style.transform = "scaleY(0.08)"))],
+    ["转头看一眼", "头转 1.5°、目光跟过去，看完再转回来；她的眼眶不动，只转眼珠", "listening", (p) => { p.look.style.transform = "rotate(-1.5deg)"; p.gazes.forEach((n) => (n.style.transform = `translate(calc(${g} * -1.6), 0px)`)); }],
+    ["举手回弹", "手从胶囊里举回来，先冲过头一点", "listening", (p) => (p.lift.style.transform = "translate(0px, -14px) rotate(3deg)")],
+    ["手放进胶囊", "歇 5–10 秒；C妹 是两只手从胶囊沿上松开", "listening", (p) => (p.lift.style.transform = "translate(-10px, 340px) rotate(-18deg)")],
+    ["打招呼", "出场后晃一下比耶的手", "listening", (p) => (p.wiggle.style.transform = "rotate(-7deg)")],
+    ["耳机亮", "在听时右耳的耳机跟着声音亮", "listening", (p, rig) => rig.setLevel(1)],
+    ["升上来", "从胶囊里升起约 0.5 秒，带 2px 回弹", "listening", (p) => (p.rise.style.transform = "translateY(26px)")],
+  ];
+  const grid = document.getElementById("motions");
+  for (const [title, desc, pose, apply] of STATES) {
+    const card = document.createElement("article"); card.className = "motion";
+    card.innerHTML = `<h3></h3><div class="duo">${WHO.map(() => `<div class="stage"></div>`).join("")}</div><p></p>`;
+    card.querySelector("h3").textContent = title;
+    card.querySelector("p").textContent = desc;
+    grid.appendChild(card);
+    const stages = card.querySelectorAll(".stage");
+    WHO.forEach((who, i) => {
+      const { rig, svg } = mount(stages[i], who, { pose, name: NAMES[who], reduced: true });
+      window.setTimeout(() => {
+        const head = svg.querySelector('[data-part="head"]');
+        const arm = svg.querySelector('[data-part="arm-peace"]');
+        const parts = {
+          look: head.parentNode,
+          wiggle: arm.parentNode,
+          lift: arm.parentNode.parentNode,
+          gazes: [...svg.querySelectorAll("g.gaze")],
+          shells: ["eye-l", "eye-r"].map((n) => svg.querySelector(`[data-part="${n}"]`).parentNode),
+          rise: svg.querySelector("g[clip-path] > g"),
+        };
+        apply(parts, rig);
+      }, 60);
+    });
+  }
+
+  // ── 大图 ──
+  const big = (host, src, prefix, viewBox = BIG_VIEWBOX) => {
+    const holder = document.createElement("div");
+    holder.innerHTML = `<svg xmlns="${NS}" viewBox="${viewBox}" role="img">${src.replaceAll("{id}", prefix)}</svg>`;
+    host.insertBefore(holder.firstChild, host.firstChild);
+  };
+  big(document.getElementById("big-miles"), MILES_SVG_SRC, "bm");
+  big(document.getElementById("big-cmei"), CMEI_SVG_SRC, "bc", CMEI_BIG_VIEWBOX);
+  document.querySelector("#big-miles svg").setAttribute("aria-label", "Miles 的整张画");
+  document.querySelector("#big-cmei svg").setAttribute("aria-label", "C妹 的整张画");
+  document.getElementById("hand-down").addEventListener("change", (e) => {
+    document.querySelectorAll('#big-cmei [data-part="arm-peace"]').forEach((n) => (n.style.display = e.target.checked ? "none" : ""));
+  });
+  document.getElementById("silhouette").addEventListener("change", (e) => {
+    document.getElementById("bigpair").classList.toggle("sil", e.target.checked);
+  });
+})();
+</script>
