@@ -382,6 +382,9 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
     }
     expect(description("create_project")).toContain("这个文件夹已经有项目了还要再建，先问本人");
     expect(description("split_cards")).toContain("不拆、不开工");
+    // 3700 验收：项目对话把「只拆这两张验收卡，范围限定在…」塞进了 modelWords。说明里写死只放来源、模型、思考的原话，没说就不带。
+    for (const word of ["modelWords 只放本人关于用哪个来源、哪个模型、思考开到多少的原话", "本人没说这些就不带", "不放 modelWords"])
+      expect(description("split_cards")).toContain(word);
     expect(description("ask_user")).toContain("建项目、拆卡之前一定先用它把现实问清楚");
     for (const personality of ["steady", "direct", "warm", "coach"] as const)
       expect(buddyPersona({ name: "团团", personality }, "测试乙")).toContain("# 先从现实出发（哪种性格都一样）");
