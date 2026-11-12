@@ -414,6 +414,10 @@ describe("伙伴代本人做事（17.4）", { timeout: 60_000 }, () => {
       // 停下按字母走 stop_sub_session：登记「请这台电脑停掉」。
       expect((await act("sub_session_stop", { letter: "A" })).json().summary).toBe("已请那台电脑停掉「A · 规划员岗位初版」（本人电脑上开着天枢网页时马上停）");
       expect((await f.call("POST", "/api/me/session-stops/claim", { deviceId: machine.device })).json().stops).toEqual([expect.objectContaining({ subSessionId: a, sessionId: session })]);
+      // 排着的（run 是 queued，3700 的 C、D、K、N）：回本人的话是从队列撤下，不写「停掉」。
+      await status("queued", { queuePosition: 1 });
+      expect(await f.t.sql("SELECT state FROM local_runs WHERE id=$1", [session])).toEqual([{ state: "queued" }]);
+      expect((await act("sub_session_stop", { letter: "A" })).json().summary).toBe("已请那台电脑把「A · 规划员岗位初版」从队列撤下（本人电脑上开着天枢网页时马上停）");
       // 不在项目里的卡停了不报。
       await machine.send({ kind: "card", cardId: loose }, [running("不在项目里的卡"), ["stopped", { why: "turn_done", summary: null, blocker: null, outputs: [] }]]);
       expect(await f.t.sql("SELECT 1 FROM sub_session_reports WHERE subject_id=$1", [loose])).toEqual([]);
