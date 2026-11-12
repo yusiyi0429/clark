@@ -273,6 +273,7 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
                 : <span className={h.stepTitle}>{edits[draft.id]?.title ?? draft.title}</span>}
               <span className={h.stepMeta}>{[role?.name ?? "我自己", draft.criterionIndex ? `约定第 ${draft.criterionIndex} 条` : null].filter(Boolean).join(" · ")}</span>
               <SourceWords words={draft.sourceWords} className={h.stepWords} />
+              <StepCriteria text={draft.doneDefinition} />
             </span>
             <span className={h.stepSide}>
               {editing ? <>
@@ -329,6 +330,29 @@ export function PlanDecision({ target, name, drafts, roles, handheld, onSay, onC
           onBind={async (picked) => { await onSetFolder?.(picked.id); setAsking(false); await start(picked); }} />
       ) : null}
     </>
+  );
+}
+
+/** 每步先露几条完成标准，多的收成「还有 N 条」。 */
+const CRITERIA_SHOWN = 3;
+/** 完成标准一行一条（同开工时交给本机的 standards，见 lib/local/start）。 */
+const criteriaLines = (text: string) => text.split("\n").map((line) => line.trim()).filter(Boolean);
+
+/** 这一步的完成标准（11/12 验收第 13 条）：开工前就看得到每一步怎么验；点「还有 N 条」展开后焦点落在第一条新露出来的上。 */
+function StepCriteria({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const next = useRef<HTMLLIElement>(null);
+  useEffect(() => { if (open) next.current?.focus(); }, [open]);
+  const lines = criteriaLines(text);
+  if (!lines.length) return null;
+  const shown = open ? lines : lines.slice(0, CRITERIA_SHOWN);
+  return (
+    <ul className={h.stepCriteria} data-testid="plan-criteria">
+      {shown.map((line, index) => <li key={index} ref={index === CRITERIA_SHOWN ? next : undefined} tabIndex={index === CRITERIA_SHOWN ? -1 : undefined}>{line}</li>)}
+      {lines.length > shown.length ? (
+        <li className={h.stepMoreRow}><button type="button" className={h.stepMore} onClick={() => setOpen(true)}>还有 {lines.length - shown.length} 条</button></li>
+      ) : null}
+    </ul>
   );
 }
 
