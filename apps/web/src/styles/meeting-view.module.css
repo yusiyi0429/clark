@@ -37,6 +37,8 @@
   --meeting-home-field-border: var(--field-border); --meeting-home-field-border-hover: var(--field-border-hover); --meeting-home-field-border-focus: var(--field-border-focus);
   /* 次要按钮照新首页的 tertiary（HeroUI）：底 --default、字 --default-foreground、悬停 --default-hover；各模块的深色覆盖读这几个。 */
   --meeting-home-default: var(--default); --meeting-home-default-fg: var(--default-foreground); --meeting-home-default-hover: var(--default-hover); --meeting-home-default-soft: var(--default-soft);
+  /* 卡片和进度行用的细边、浅一级字色（框架里可能被重写，一并记下）。 */
+  --meeting-home-hairline: var(--hairline); --meeting-home-faint: var(--ink-faint);
 }
 :global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .root :global([data-ts-theme]) {
   --field-bg: var(--meeting-home-field-bg); --field-ink: var(--meeting-home-field-ink); --field-placeholder: var(--meeting-home-field-placeholder);

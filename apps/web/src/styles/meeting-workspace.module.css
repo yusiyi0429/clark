@@ -516,3 +516,14 @@
 :global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .editPopover { border-color: var(--hairline); background: var(--meeting-home-surface, var(--surface)); }
 :global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .editTitle { color: var(--ink); }
 :global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .editField > span { color: var(--ink-muted); }
+/* 「预审进度」卡和预审过程：整块浅蓝底换成新首页面板（面板色、细边），字用新首页字色；勾照新首页「已完成」（--ink-faint），转圈照「进行中」（--ink-muted）。 */
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .progressPanel { border-color: var(--meeting-home-hairline, var(--hairline)); background: var(--meeting-home-surface, var(--surface)); }
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .progressHead small, :global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .progressNow, :global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .progressThought, :global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .progressStep, :global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .progressStep[data-state=active] { color: var(--ink); }
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .progressHead span, :global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .progressThought small, :global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .progressText small, :global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .progressTime, :global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .progressRecord > summary { color: var(--ink-muted); }
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .progressMark { color: var(--meeting-home-faint, var(--ink-faint)); }
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .progressStep[data-state=active] .progressMark { color: var(--ink-muted); }
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .progressRecord { border-top-color: var(--meeting-home-hairline, var(--hairline)); }
+/* 会前预审结论：预审条目的标题、正文和「依据与过程」在深底上看不清，换成新首页字色。 */
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .entryTitle strong, :global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .taskContext p { color: var(--ink); }
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .entryBody, :global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .taskContext > summary { color: var(--ink-muted); }
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .taskContext .gapLine { color: var(--warning); }
