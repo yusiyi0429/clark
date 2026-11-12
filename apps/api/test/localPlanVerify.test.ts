@@ -647,6 +647,38 @@ describe("拆卡和验收在本机（第 21 节）", { timeout: 30_000 }, () => 
       expect(blocked.fix).toContain("本人原话「录屏这次先不做」");
     } finally { await f.close(); }
   });
+  it("3700 小卡 U：约定后来改过，验收交代在本人原话后面列每次第几版、谁改的、原因；本人改过或确认过的跟一句以新约定为准，只有伙伴改的不跟", async () => {
+    const f = await localFixture();
+    try {
+      const keyOf = async (id: string) => (await f.t.sql("SELECT client_id FROM card_handbacks WHERE id=$1", [id]))[0].client_id as string;
+      const change = (card: string, revision: number, kind: string, reason: string) => f.t.sql(`INSERT INTO card_agreement_changes(id,card_id,owner_id,revision,by_kind,by_name,
+        agreement_before,agreement_after,reason,at) VALUES(gen_random_uuid(),$1,$2,$3,$4,NULL,'{}'::jsonb,'{}'::jsonb,$5,now())`, [card, TEST_MEMBER.personId, revision, kind, reason]);
+      const SENTENCE = "原话和本人改过或确认过的新约定冲突的地方，以新约定为准，不算原话没要的或漏了的。";
+
+      const card = await f.card("生成文件清单", { doneDefinition: "新建 文件清单.md" });
+      await f.t.sql(`UPDATE tasks SET source_words='["只新建 文件清单.md，别的文件都不要动"]' WHERE id=$1`, [card]);
+      const version = (await f.call("GET", `/api/me/cards/${card}`)).json().task.version as number;
+      expect((await f.call("PATCH", `/api/me/cards/${card}`, { version, standards: ["新建 文件清单.md", "新建 风险.md"], reason: "本人在子会话里加了 风险.md" }))
+        .statusCode).toBe(200);
+      await change(card, 3, "worker", "执行方说清单要带大小");
+      await change(card, 4, "pipeline", "伙伴补了一句交代");
+      const markdown = (await f.brief(await keyOf(await f.machine.handBack(card)))).json().markdown as string;
+      const changes = ["## 约定后来改过", "", "- 第 2 版：本人直接改，原因：本人在子会话里加了 风险.md", "- 第 3 版：本人确认执行方的提议，原因：执行方说清单要带大小",
+        "- 第 4 版：伙伴改的，原因：伙伴补了一句交代", "", SENTENCE].join("\n");
+      expect(markdown).toContain(changes);
+      expect(markdown.indexOf("## 本人原话")).toBeLessThan(markdown.indexOf("## 约定后来改过"));
+      expect(markdown.indexOf("## 约定后来改过")).toBeLessThan(markdown.indexOf("## 完成标准"));
+
+      // 只有伙伴改过：照列，不跟那句。没改过的卡不写这段。
+      const buddyOnly = await f.card("只有伙伴改过", { doneDefinition: "新建 文件清单.md" });
+      await change(buddyOnly, 2, "pipeline", "伙伴改的");
+      const buddyBrief = (await f.brief(await keyOf(await f.machine.handBack(buddyOnly)))).json().markdown as string;
+      expect(buddyBrief).toContain("- 第 2 版：伙伴改的，原因：伙伴改的");
+      expect(buddyBrief).not.toContain(SENTENCE);
+      const plain = await f.card("没改过", { doneDefinition: "新建 文件清单.md" });
+      expect((await f.brief(await keyOf(await f.machine.handBack(plain)))).json().markdown).not.toContain("约定后来改过");
+    } finally { await f.close(); }
+  });
   it("17.2 第 29 条：拆卡那几块按序号插进项目对话——登记时记本人看到的最后一条（没带读对话最新的），派活单照登记的，开工时另记一个", async () => {
     // 这条测试先后登记两次，派活单照「最近一次登记」取序号（按登记时间）。夹具的时钟是定住的，两次登记时间一样时先后只能看随机的 id，
     // 所以这里让时钟每取一次往前走一秒，像真实情况那样分得出先后。
