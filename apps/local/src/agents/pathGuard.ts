@@ -40,8 +40,32 @@ const SHELL_TOOLS = new Set(["Bash", "PowerShell"]);
 const HARMLESS = new Set(["/dev/null", "/dev/stdout", "/dev/stderr", "/dev/stdin", "/dev/tty", "nul", "$null"]);
 const HOME_VARS = /^(~|\$HOME|\$\{HOME\}|%USERPROFILE%|\$env:USERPROFILE|\$\{env:USERPROFILE\}|\$env:HOME)(?=[\\/]|$)/i;
 const CWD_VARS = /^(\$PWD|\$\{PWD\}|\$pwd)(?=[\\/]|$)/;
-/** 别的环境变量开头的路径（$TMPDIR/x、$env:APPDATA\x、%APPDATA%\x）：认不出指向哪，按越界算。 */
+/** 别的环境变量开头的路径（$TMPDIR/x、$env:APPDATA\x、%APPDATA%\x）：认不出指向哪，按越界算。同一条命令里先赋成字面路径的变量先代入（literalVars）。 */
 const OTHER_VARS = /^(\$\{?[A-Za-z_][\w:]*\}?|%[A-Za-z_]\w*%)(?=[\\/])/;
+/**
+ * 同一条命令里赋成字面值的变量（3700 验收：执行方写 PowerShell 习惯 $d='C:\…'; Get-Content "$d\x"）。
+ * PowerShell 认 $x='…'、不含 $ 和反引号的 $x="…"（变量名不分大小写）；Bash 认 x='…'、x="…"（不含 $ \ 反引号）、x=不带引号的字面值。
+ * 赋成别的（Join-Path、带别的变量、+= 等）或前后赋了两个不同的值：认不出，不代入（照旧按越界）。
+ */
+const PS_ASSIGN = /(?:^|[\s;{(])\$(\w+)\s*([-+*/%]?)=(?!=)\s*(?:(?:'([^']*)'(?!')|"([^"$`]*)")(?=[\s;})|]|$))?/g;
+const SH_ASSIGN = /(?:^|[\s;&|(])([A-Za-z_]\w*)=(?:(?:'([^']*)'|"([^"$`\\]*)"|([^\s;&|<>()'"$`\\]+))(?=[\s;&|)]|$))?/g;
+function literalVars(cmd: string, bash: boolean): Map<string, string | null> {
+  const vars = new Map<string, string | null>();
+  for (const m of cmd.matchAll(bash ? SH_ASSIGN : PS_ASSIGN)) {
+    const name = bash ? m[1]! : m[1]!.toLowerCase();
+    const value = bash ? m[2] ?? m[3] ?? m[4] ?? null : m[2] ? null : m[3] ?? m[4] ?? null;
+    vars.set(name, vars.has(name) && vars.get(name) !== value ? null : value);
+  }
+  return vars;
+}
+/** 词里认得的 $x、${x} 换成字面值，认不得的原样留着。 */
+function expandVars(word: string, vars: Map<string, string | null>, bash: boolean): string {
+  if (!vars.size || !word.includes("$")) return word;
+  return word.replace(/\$\{(\w+)\}|\$(\w+)/g, (all, braced: string | undefined, plain: string | undefined) => {
+    const value = vars.get(bash ? (braced ?? plain)! : (braced ?? plain)!.toLowerCase());
+    return value ?? all;
+  });
+}
 
 /** 一个词指向的地方在不在允许范围外。相对路径按工作目录算（工作目录里的目录链接也会被解开）。 */
 function isOutside(word: string, s: PathScope, inside: Inside): boolean {
@@ -125,6 +149,12 @@ function shellCandidates(cmd: string, bash: boolean, patterns?: Set<string>): st
     }
     if (/\s/.test(c)) { end(c === "\n"); continue; }
     if (";|&()".includes(c)) { end(true); continue; }
+    // PowerShell 的 { } 是脚本块（foreach (…) { Get-Content "$d\$f" }），不算进词里；${x}、${env:X} 是变量，整个留着。
+    if (!bash && c === "$" && cmd[i + 1] === "{") {
+      const close = cmd.indexOf("}", i);
+      if (close > i) { cur += cmd.slice(i, close + 1); has = true; i = close; continue; }
+    }
+    if (!bash && (c === "{" || c === "}")) { end(true); continue; }
     if (c === "<" || c === ">") {
       const wasFirst = first && !has;
       end(false);
@@ -135,7 +165,8 @@ function shellCandidates(cmd: string, bash: boolean, patterns?: Set<string>): st
     has = true;
   }
   end(true);
-  return words.flatMap(argPaths);
+  const vars = literalVars(cmd, bash);
+  return words.flatMap(argPaths).map((w) => expandVars(w, vars, bash));
 }
 
 /** 命令里像路径的词（尽力认，认不全）：改前拷一份时用（undo/）。 */

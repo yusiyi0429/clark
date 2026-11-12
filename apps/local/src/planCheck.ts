@@ -5,6 +5,7 @@ import { stripCredentials } from "./handover.js";
 /**
  * 规划员开拆前的检查（新首页设计 18.11）：项目绑的文件夹现在什么样。只读，只跑 git 的查询命令，不改文件夹，不调模型。
  * 没绑、是空的、不是 git 仓库，规划员先不出派活单，用「问用户」把这几件问清楚（本机在 propose_plan 那里把关）；
+ * 不是 git 仓库的，本人在同一个文件夹上答过一次以后不再拦（sessions.ts 开拆前那里认，普通文件夹改之前本机会留一份）；
  * 有没有远端、文件夹里有什么，交给规划员对着 Task 判断对不对得上。
  */
 export type PlanFlag = "unbound" | "empty" | "not_git";
@@ -45,18 +46,19 @@ const FLAG_TEXT: Record<PlanFlag, string> = {
 };
 export const flagText = (flags: PlanFlag[]) => flags.map((f) => FLAG_TEXT[f]).join("、");
 
-/** 写进规划员系统提示词的那一节：本机看到的现实，和该怎么做。 */
-export function planFactsSection(f: PlanFolderFacts): string {
+/** 写进规划员系统提示词的那一节：本机看到的现实，和该怎么做。settled：不是 git 仓库，本人之前拆这个文件夹时答过、选了不建。 */
+export function planFactsSection(f: PlanFolderFacts, settled = false): string {
   const lines = [
     "## 开拆前本机看过的文件夹",
     f.folder ? `- 文件夹：${f.folder}` : "- 文件夹：没绑（你现在在本机给这件事建的空目录里，不是项目的文件夹）",
   ];
   if (f.folder) {
     lines.push(`- ${f.empty ? "是空的" : `顶层有：${f.top.join("、")}${f.top.length >= 30 ? "…" : ""}`}`);
-    lines.push(`- ${f.git ? `是 git 仓库${f.branch ? `，当前分支 ${f.branch}` : ""}；${f.remotes.length ? `远端 ${f.remotes.map((r) => `${r.name} ${r.url}`).join("，")}` : "没有远端"}` : "不是 git 仓库"}`);
+    lines.push(`- ${f.git ? `是 git 仓库${f.branch ? `，当前分支 ${f.branch}` : ""}；${f.remotes.length ? `远端 ${f.remotes.map((r) => `${r.name} ${r.url}`).join("，")}` : "没有远端"}`
+      : settled ? "不是 git 仓库（本人之前拆这个文件夹时答过，选了不建 git：直接在这里拆，不再问 git、GitHub）" : "不是 git 仓库"}`);
   }
   if (f.flags.length) {
-    lines.push(`- 要先问清楚：${flagText(f.flags)}。这时不交派活单：用「问用户」（AskUserQuestion）问本人在哪个文件夹做、要不要新建、要不要连 GitHub 仓库、是不是从别处迁过来的；本人答了再拆。`);
+    lines.push(`- 要先问清楚：${flagText(f.flags)}。这时不交派活单：用「问用户」（AskUserQuestion）问本人在哪个文件夹做、要不要新建、是不是从别处迁过来的；本人答了再拆。`);
   }
   return lines.join("\n");
 }

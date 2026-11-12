@@ -14,6 +14,13 @@ export const MIN_CLAUDE_VERSION = "2.1.300";
 /** 可执行文件：正式是 claude.exe 的绝对路径；测试用 node + 假脚本。 */
 export interface ClaudeBin { command: string; prefixArgs: string[] }
 
+/**
+ * Claude Code 续接一段被打断、没回完的对话时自己补的助手消息（model 是 <synthetic>，2.1.3xx 程序里的原字）：
+ * 不是执行方说的话，给本人看换成中文（3700 验收自由子会话 T，本机程序重启后）。
+ */
+const SYNTHETIC_NO_REPLY = "No response requested.";
+const NO_REPLY_TEXT = "这一轮被打断了，没有回话。";
+const zhNoReply = (text: string) => (text.trim() === SYNTHETIC_NO_REPLY ? NO_REPLY_TEXT : text);
 const INIT_TIMEOUT_MS = 60_000;
 const PREVIEW_CHARS = 600;
 const INPUT_CHARS = 2_000;
@@ -511,7 +518,7 @@ class ClaudeRun implements AgentRun {
           this.context.report(n(used.input_tokens) + n(used.cache_read_input_tokens) + n(used.cache_creation_input_tokens) + n(used.output_tokens), this.contextMax);
         }
         for (const c of ev.message?.content ?? []) {
-          if (c.type === "text" && c.text?.trim()) { this.drafted = false; this.emit({ type: "assistant_text", text: c.text }); }
+          if (c.type === "text" && c.text?.trim()) { this.drafted = false; this.emit({ type: "assistant_text", text: zhNoReply(c.text) }); }
           if (c.type === "tool_use") {
             this.emit({ type: "tool_call", toolUseId: c.id, name: c.name, title: describeTool(c.name, c.input ?? {}), input: clipInput(c.input ?? {}) });
             if (c.name === "TodoWrite" && Array.isArray(c.input?.todos)) {
@@ -558,7 +565,7 @@ class ClaudeRun implements AgentRun {
         this.emit({
           type: "turn_end",
           isError,
-          text: typeof ev.result === "string" ? ev.result : null,
+          text: typeof ev.result === "string" ? zhNoReply(ev.result) : null,
           durationMs: Math.max(0, Math.round(Number(ev.duration_ms) || 0)),
           usage: usageOf(ev),
           // 拒连、超时没有 HTTP 状态码，但这一轮重试过就算模型服务的错。

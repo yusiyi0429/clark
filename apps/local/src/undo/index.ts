@@ -67,7 +67,13 @@ interface Meta {
   /** 到第几轮了（执行方每轮开头报 agent_info 加一）、这一轮还在不在做。 */
   turn?: number;
   inTurn?: boolean;
+  /**
+   * 这一轮里天枢自己写回的（恢复、按处恢复，可能是同一个文件夹的别的会话做的）：规范化路径 → 写回内容的 sha1（删掉为 null）。
+   * 轮结束时文件还是这个样子就不算执行方这一轮改的（3700 验收）。
+   */
+  ownWrites?: Record<string, string | null>;
 }
+const digest = (body: Buffer | null) => (body ? createHash("sha1").update(body).digest("hex") : null);
 
 /** 一个文件在一段时间里的前后两份（第 72 条）：null 是那时没有这个文件；before 为 undefined 是拿不到改前那份（只知道改过）。 */
 export interface ChangePair {
@@ -109,7 +115,11 @@ export class SessionUndo {
     readonly id: string,
     private readonly dir: string,
     private meta: Meta,
-    private readonly hooks: { isOwn(p: string): boolean; changed(): void; notice(level: "info" | "warn", text: string): void; free(path: string): number; turnFiles?(turn: number, files: TurnFile[]): void },
+    private readonly hooks: {
+      isOwn(p: string): boolean; changed(): void; notice(level: "info" | "warn", text: string): void; free(path: string): number; turnFiles?(turn: number, files: TurnFile[]): void;
+      /** 天枢自己写回了一个文件（告诉这台本机所有会话）。 */
+      wrote?(abs: string, body: Buffer | null): void;
+    },
   ) {
     this.copies = new Copies(dir);
     this.shadow = meta.gitDir && meta.root ? new Shadow(meta.gitDir, meta.root) : null;
@@ -218,16 +228,30 @@ export class SessionUndo {
     }).catch((e) => this.degrade("failed", `没留成：${e instanceof Error ? e.message : String(e)}`));
   }
 
-  /** 一轮结束：整份留了的再留一份、记下这一轮变了哪些；不管哪种都把这一轮动过的文件报出去（files_changed）。 */
+  /** 天枢自己写回了 abs：一轮正在做时记下，轮结束时它还是这样就不算执行方改的。 */
+  noteOwnWrite(abs: string, body: Buffer | null): void {
+    if (!this.meta.inTurn) return;
+    (this.meta.ownWrites ??= {})[norm(abs)] = digest(body);
+    this.save();
+  }
+
+  /** 一轮结束：整份留了的再留一份、记下这一轮变了哪些；不管哪种都把这一轮动过的文件报出去（files_changed）。天枢自己写回的不算。 */
   private turnEnd(n: number) {
     void this.chain(async () => {
       const files: TurnFile[] = [];
       const turns = this.meta.turns;
       const last = turns.at(-1);
+      const own = this.meta.ownWrites ?? {};
+      delete this.meta.ownWrites;
+      const ours = async (abs: string, read: () => Promise<Buffer | null> | Buffer | null) => norm(abs) in own && own[norm(abs)] === digest(await read());
       if (this.shadow && this.meta.state === "ready" && last && last.end === null) {
         last.n ??= n;
         last.end = await this.shadow.snapshot(this.index, this.ref(turns.length - 1, "end"), last.start, this.meta.excludes, `第 ${n} 轮结束后`, await this.include());
-        last.changed = await this.shadow.diff(last.start, last.end);
+        const changed: Change[] = [];
+        for (const c of await this.shadow.diff(last.start, last.end)) {
+          if (!(await ours(join(this.meta.root!, c.path), () => this.shadow!.read(last.end!, c.path)))) changed.push(c);
+        }
+        last.changed = changed;
         for (const c of last.changed) {
           delete this.meta.restored[norm(join(this.meta.root!, c.path))];
           files.push({ abs: join(this.meta.root!, c.path), path: c.path, change: c.status === "A" ? "added" : c.status === "D" ? "deleted" : "modified" });
@@ -237,6 +261,7 @@ export class SessionUndo {
       for (const e of this.copies.list()) {
         const v = this.copies.version(e, n);
         if (!v || seen.has(norm(e.path)) || !this.copies.changedSince(e.path, v)) continue;
+        if (await ours(e.path, () => (existsSync(e.path) ? readFileSync(e.path) : null))) continue;
         files.push({ abs: e.path, path: this.relOf(e.path), change: !v.copy ? "added" : existsSync(e.path) ? "modified" : "deleted" });
       }
       this.save();
@@ -298,6 +323,7 @@ export class SessionUndo {
       await copyFile(abs, join(keep, createHash("sha1").update(norm(abs)).digest("hex").slice(0, 12)));
     }
     await writeFile(abs, body);
+    this.hooks.wrote?.(abs, body);
     this.save();
     this.hooks.changed();
   }
@@ -423,6 +449,7 @@ export class SessionUndo {
           if (body === null) await rm(f.absolutePath, { force: true });
           else { await mkdir(dirname(f.absolutePath), { recursive: true }); await writeFile(f.absolutePath, body); }
         }
+        this.hooks.wrote?.(f.absolutePath, existsSync(f.absolutePath) ? readFileSync(f.absolutePath) : null);
         this.meta.restored[norm(f.absolutePath)] = now;
         restored.push(f.path);
       } catch (e) {
@@ -466,6 +493,8 @@ export class UndoStore {
     const u = new SessionUndo(id, dir, meta, {
       isOwn: this.hooks.isOwn, changed: () => this.hooks.changed(id), notice: (level, text) => this.hooks.notice(id, level, text), free: this.hooks.free ?? freeBytes,
       turnFiles: (turn, files) => this.hooks.turnFiles?.(id, turn, files),
+      // 恢复会碰到同一个文件夹里正在跑的别的会话：都记上，免得算进它们这一轮
+      wrote: (abs, body) => { for (const other of this.open.values()) other.noteOwnWrite(abs, body); },
     });
     this.open.set(id, u);
     return u;

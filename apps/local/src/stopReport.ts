@@ -4,9 +4,11 @@
 
 const MAX = 200;
 const END = /[。！？!?；;]$/;
+/** 话没说完的行（冒号、逗号、顿号结尾）：直接接下一行，不补「；」（「三件事都做完了：」后面接的是那几件）。英文的冒号、逗号后面空一格。 */
+const OPEN = /[：，、:,]$/;
 
 /**
- * 一段话的头一两句：去掉代码块、标题行、列表和强调记号、链接只留字；每行没标点结尾的补一个「；」再按句切，取前两句，200 字以内。
+ * 一段话的头一两句：去掉代码块、标题行、列表和强调记号、链接只留字；每行没标点结尾的补一个「；」（冒号、逗号、顿号结尾的直接接下一行）再按句切，取前两句，200 字以内。
  * 没有字为 null。
  */
 export function firstSentences(text: string | null | undefined): string | null {
@@ -22,7 +24,7 @@ export function firstSentences(text: string | null | undefined): string | null {
       .trim())
     .filter(Boolean);
   if (!lines.length) return null;
-  const joined = lines.map((l, i) => (i === lines.length - 1 || END.test(l) ? l : /\.$/.test(l) ? `${l} ` : `${l}；`)).join("");
+  const joined = lines.map((l, i) => (i === lines.length - 1 || END.test(l) ? l : /[.:,]$/.test(l) ? `${l} ` : OPEN.test(l) ? l : `${l}；`)).join("");
   // 中文标点后面断；英文句号后面要有空格才断（版本号、文件名里的点不断）
   const sentences = joined.split(/(?<=[。！？!?；;])|(?<=\.)\s+/).map((s) => s.trim()).filter(Boolean);
   let out = "";
