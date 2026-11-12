@@ -132,6 +132,58 @@ describe("留一份：整份快照（普通文件夹）", { timeout: 60_000 }, (
     expect(readFileSync(join(dir, "笔记.md"), "utf8")).toBe("# 原文\n");
   });
 
+  it("天枢自己的恢复（同一个文件夹别的会话做的）不算进正在跑的会话这一轮；恢复以后执行方又改了的照样算（3700 卡 Q）", async () => {
+    const dir = folder();
+    const reported: Record<string, string[]> = {};
+    const s = new UndoStore(tempDir("tl-undo-data-"), {
+      isOwn: () => false, changed: () => {}, notice: () => {},
+      turnFiles: (id, n, files) => { reported[`${id}#${n}`] = files.map((f) => f.path); },
+    });
+    const earlier = await opened(s.for("earlier", dir));
+    await turn(earlier, () => {
+      writeFileSync(join(dir, "笔记.md"), "上一个会话改的");
+      writeFileSync(join(dir, "人事 文档", "合同.docx"), "上一个会话改的");
+      rmSync(join(dir, "报销单.xlsx"));
+    });
+    const q = await opened(s.for("q", dir));
+    q.onEvent("agent_info");
+    await q.beforeWrite("Bash", { command: "x" }, ".");
+    writeFileSync(join(dir, "卡Q.md"), "卡 Q 写的");
+    await earlier.restore(); // 卡 Q 跑着的时候，本人在上一个会话里点了全部恢复
+    writeFileSync(join(dir, "人事 文档", "合同.docx"), "卡 Q 恢复以后又改了");
+    q.onEvent("turn_end");
+    expect((await q.files()).map((f) => f.path).sort()).toEqual(["人事 文档/合同.docx", "卡Q.md"]);
+    expect(reported["q#1"]).toEqual(["人事 文档/合同.docx", "卡Q.md"]);
+    // 下一轮不再带着上一轮的记号：恢复写回的内容执行方原样又写一遍，照样算它改的
+    await turn(q, () => writeFileSync(join(dir, "笔记.md"), "# 原文\n改"));
+    expect(reported["q#2"]).toEqual(["笔记.md"]);
+  });
+
+  it("只改前拷一份的会话：执行方改过、又被天枢恢复回去的，不算它这一轮改的", async () => {
+    const dir = folder();
+    const reported: Record<string, string[]> = {};
+    const s = new UndoStore(tempDir("tl-undo-data-"), {
+      isOwn: () => false, changed: () => {}, notice: () => {}, free: () => 0,
+      turnFiles: (id, n, files) => { reported[`${id}#${n}`] = files.map((f) => f.path); },
+    });
+    const note = join(dir, "笔记.md");
+    const earlier = await opened(s.for("earlier", dir));
+    expect(earlier.view().state).toBe("touched_only");
+    await turn(earlier, () => {});
+    await earlier.beforeWrite("Write", { file_path: note }, dir);
+    writeFileSync(note, "上一个会话改的");
+    const q = await opened(s.for("q", dir));
+    q.onEvent("agent_info");
+    await q.beforeWrite("Write", { file_path: note }, dir);
+    writeFileSync(note, "卡 Q 改的");
+    await q.beforeWrite("Write", { file_path: join(dir, "卡Q.md") }, dir);
+    writeFileSync(join(dir, "卡Q.md"), "卡 Q 写的");
+    await earlier.restore([note]);
+    q.onEvent("turn_end");
+    await q.files();
+    expect(reported["q#1"]).toEqual(["卡Q.md"]);
+  });
+
   it("不进快照的：目录联接（不跟到外面）、node_modules、套着的 git 仓库、大文件；文件夹自己的 .gitignore 里的照样留；路径超长照样留", async () => {
     const dir = folder();
     const outside = tempDir("tl-undo-outside-");
