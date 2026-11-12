@@ -401,6 +401,60 @@ describe("卡在自己的工作树里做", { timeout: 60_000 }, () => {
     }
   });
 
+  it("排着的卡被停掉（等空位的、等前面的卡的）：撤出队列，前面的卡合回也不开工；说「接着做」重新排上：工作树重新开、照常开工", async () => {
+    const main = repo(true);
+    const h = await setup(main, 1);
+    const deny = async (id: string) => {
+      const s = await until(async () => { const b = await h.session(id); return b.pendingPermissions[0] ? b : null; });
+      return h.call("POST", `/v1/sessions/${id}/permissions/${encodeURIComponent(s.pendingPermissions[0].requestId)}`, { decision: "deny", message: "先不写" });
+    };
+    try {
+      const a = await h.open("A");
+      await h.waitStatus(a.id, "waiting_permission");
+      const b = await h.open("B");
+      const c = await h.open("C", main, ["A"]);
+      expect([b.status, c.status]).toEqual(["queued", "queued"]);
+      expect(existsSync(b.workspace.path)).toBe(true);
+      await h.call("POST", `/v1/sessions/${b.id}/kill`, {});
+      await h.call("POST", `/v1/sessions/${c.id}/kill`, {});
+      expect([await h.status(b.id), await h.status(c.id)]).toEqual(["exited", "exited"]);
+      await until(() => !existsSync(b.workspace.path));
+      const stops = await until(() => { const s = h.cloud.items.filter((i) => [b.id, c.id].includes(i.sessionId) && i.type === "stopped"); return s.length === 2 ? s : null; });
+      expect(stops.map((i) => i.data.why)).toEqual(["interrupted", "interrupted"]);
+
+      // A 做完、交回、验收过、合回：B、C 都不自己开始
+      await deny(a.id);
+      await h.waitStatus(a.id, "idle");
+      writeFileSync(join(a.workspace.path, "a.txt"), "A\n");
+      await h.handBack(a.id);
+      await h.waitStatus((await h.verifierOf("A")).id, "done");
+      expect((await h.merge(a.id)).body.merged).toBe(true);
+      await new Promise((r) => setTimeout(r, 300));
+      expect((await h.session(c.id)).session).toMatchObject({ status: "exited" });
+      expect((await h.session(c.id)).session.workspace).toBeUndefined();
+      expect(await h.status(b.id)).toBe("exited");
+
+      // B 说「接着做」：工作树从最新的 main 重新开（原分支名被占，加 -2），开工时先送交代、再送这句
+      const head = git(main, "rev-parse", "HEAD");
+      expect((await h.call("POST", `/v1/sessions/${b.id}/messages`, { text: "接着做" })).status).toBe(200);
+      await h.waitStatus(b.id, "waiting_permission");
+      const nb = (await h.session(b.id)).session;
+      expect(nb.workspace).toMatchObject({ branch: `${b.workspace.branch}-2`, baseCommit: head });
+      expect(existsSync(nb.workspace.path)).toBe(true);
+      expect(h.events(b.id).filter((e) => e.type === "user_message").map((e) => e.text)).toEqual(["接着做", "做 B"]);
+
+      // C 说「接着做」：前面的 A 已经合回，开工作树，排着等 B 让出位置后开始
+      expect((await h.call("POST", `/v1/sessions/${c.id}/messages`, { text: "接着做" })).status).toBe(200);
+      const queued = await until(async () => { const s = (await h.session(c.id)).session; return s.workspace ? s : null; });
+      expect(queued).toMatchObject({ status: "queued", workspace: { baseCommit: head } });
+      await deny(b.id);
+      await h.waitStatus(c.id, "waiting_permission");
+      expect(existsSync(join(queued.workspace.path, "a.txt"))).toBe(true);
+    } finally {
+      await h.t.cleanup();
+    }
+  });
+
   it("卡的先后：不是 git 仓库（没有合回）时，等的卡验收过了就算做完", async () => {
     const plain = tempDir("tl-plain-");
     writeFileSync(join(plain, ".fake-claude.json"), JSON.stringify({ verdict: PASSING }));

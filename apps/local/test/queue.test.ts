@@ -29,6 +29,7 @@ const started = (work: string) => existsSync(join(work, ".fake-claude-trace.json
 const statusItems = (dataDir: string, id: string) => JSON.parse(readFileSync(join(dataDir, "outbox.json"), "utf8")).entries
   .map((e: any) => e.item).filter((i: any) => i.sessionId === id && i.type === "status").map((i: any) => i.data);
 
+const evs = (dataDir: string, id: string) => readFileSync(join(dataDir, "sessions", id, "events.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
 const sub = (work: string, name: string) => { mkdirSync(join(work, name), { recursive: true }); return join(work, name); };
 
 async function setup(max: number, reuse?: { dataDir: string; work: string; token: string }) {
@@ -102,7 +103,7 @@ describe("同时跑的上限和队列", { timeout: 30_000 }, () => {
     }
   });
 
-  it("排着的：不能说话；停下、强停都是取消（出队、后面的往前挪），取消后也不能续", async () => {
+  it("排着的：不能说话；停下、强停都是本人停的（出队、后面的往前挪，记「本人停下」报云端），空出位置也不自己开始；说「接着做」重新排上、照常开工", async () => {
     const h = await setup(1);
     try {
       const a = await h.open("A");
@@ -117,14 +118,33 @@ describe("同时跑的上限和队列", { timeout: 30_000 }, () => {
       expect((await h.session(c.id)).session.queuePosition).toBe(1);
       await h.call("POST", `/v1/sessions/${c.id}/kill`, {});
       expect(await h.status(c.id)).toBe("exited");
-      expect((await h.call("POST", `/v1/sessions/${b.id}/messages`, { text: "接着" })).status).toBe(409);
       expect(await h.slots()).toEqual({ max: 1, running: 1, queued: 0 });
+      // 停下的原因是本人停的：状态带 why，云端收到 stopped（左栏、页头「已停下」）
+      for (const id of [b.id, c.id]) {
+        expect(statusItems(h.t.dataDir, id).at(-1)).toMatchObject({ status: "exited" });
+        const ev = evs(h.t.dataDir, id);
+        expect(ev.filter((e: any) => e.type === "status").at(-1)).toMatchObject({ status: "exited", why: "interrupted" });
+        const stops = JSON.parse(readFileSync(join(h.t.dataDir, "outbox.json"), "utf8")).entries.map((e: any) => e.item).filter((i: any) => i.sessionId === id && i.type === "stopped");
+        expect(stops.map((i: any) => i.data.why)).toEqual(["interrupted"]);
+      }
 
-      // A 结束后没有排着的，不再拉起别的
+      // B 说「接着做」：重新排上；A 结束后 B 开始，先送交代、再送这句；C 停着，不自己开始
+      const again = await h.call("POST", `/v1/sessions/${b.id}/messages`, { text: "接着做" });
+      expect(again.status).toBe(200);
+      expect((await h.session(b.id)).session).toMatchObject({ status: "queued", queuePosition: 1 });
+      expect(statusItems(h.t.dataDir, b.id).at(-1)).toMatchObject({ status: "queued", queuePosition: 1 });
       await h.call("POST", `/v1/sessions/${a.id}/kill`, {});
       await h.waitStatus(a.id, "exited");
+      await h.waitStatus(b.id, "waiting_permission");
+      const turns = () => readFileSync(join(h.work, ".fake-claude-turns.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l)).filter((l) => l.sid === b.id);
+      await until(() => turns().length >= 2);
+      expect(turns().map((l) => l.turnText ?? l.interjection)).toEqual(["做 B", "接着做"]);
+      const said = evs(h.t.dataDir, b.id).filter((e: any) => e.type === "user_message");
+      expect(said.map((e: any) => [e.source, e.text])).toEqual([["web", "接着做"], ["initial", "做 B"]]);
+      expect(said[0].messageId).toBe(again.body.messageId);
       await new Promise((r) => setTimeout(r, 200));
-      expect(started(h.work)).toEqual([a.id]);
+      expect(started(h.work)).toEqual([a.id, b.id]);
+      expect(await h.status(c.id)).toBe("exited");
     } finally {
       await h.t.cleanup();
     }

@@ -200,7 +200,7 @@ async function ownSub(q: Query, ownerId: string, kind: SubKind, id: string): Pro
 }
 const column = (kind: SubKind) => (kind === "card" ? "card_id" : "topic_id");
 /** 最近一次本机执行，还在跑（含排队、停着等回话）的。 */
-async function activeRun(q: Query, kind: SubKind, id: string): Promise<{ id: string; device_id: string } | null> {
+async function activeRun(q: Query, kind: SubKind, id: string): Promise<{ id: string; device_id: string; state: string } | null> {
   const row = (await q(`SELECT id::text,device_id::text,state FROM local_runs WHERE ${kind === "card" ? "task_id" : "topic_id"}=$1 ORDER BY started_at DESC,id LIMIT 1`,
     [id])).rows[0] as { id: string; device_id: string; state: string } | undefined;
   return row && ACTIVE.has(row.state) ? row : null;
@@ -302,7 +302,9 @@ const handlers: Handlers = {
     if (!run) throw new BuddyError(409, "NOT_RUNNING", `「${sub.title}」没在跑`);
     await q(`INSERT INTO session_stops(id,owner_id,kind,${column(args.kind)},run_id,device_id,requested_at) VALUES($1,$2,$3,$4,$5,$6,$7)
       ON CONFLICT DO NOTHING`, [randomUUID(), call.personId, args.kind, args.id, run.id, run.device_id, now]);
-    return { summary: `已请那台电脑停掉「${sub.title}」（本人电脑上开着天枢网页时马上停）`, ui: [subRefresh(args.id)] };
+    // 排着的停掉是从队列撤下（本机不再等空位、前面的卡做完也不开工）
+    const done = run.state === "queued" ? `已请那台电脑把「${sub.title}」从队列撤下` : `已请那台电脑停掉「${sub.title}」`;
+    return { summary: `${done}（本人电脑上开着天枢网页时马上停）`, ui: [subRefresh(args.id)] };
   },
   archive_sub_session: async (deps, call, args) => {
     const { q } = deps;
