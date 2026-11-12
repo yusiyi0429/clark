@@ -115,3 +115,8 @@
 
 /* 新首页深色（会议页挪进新首页后）：当前这一步的深色字在深底上看不清，只换成新首页的字色变量；浅色不变。 */
 :global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .step[data-state='current'] { color: var(--ink); }
+
+/* 新首页深色（会议页挪进新首页后）：「贴妙记链接」输入框换成新首页输入框变量；「读取」不能点时不再是浅灰块，照会议卡主按钮不能点时的做法（原色、半透明）。浅色不变。 */
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .link input { border-color: var(--field-border); background: var(--field-bg); color: var(--field-ink); }
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .read.read:disabled { background: #215ba1; opacity: .45; }
+:global(:root[data-color-scheme="dark"]:has([data-scheme="auto"])) .quiet.quiet:hover { color: var(--ink); }
