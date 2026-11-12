@@ -10,7 +10,7 @@
  *   有等你的排最前，其次有新结果的、在跑的；本月的 Task 不止挂在一个项目上时最后是项目名 chip（点了进项目）；没挂上的是「挂到…」（选现有项目或新建）。
  * - 输入框：InputBar（14.5）；框下面「发给」默认自动（打字停下 300ms 后问一次分发接口，只认最后一次），也能选伙伴或某个项目；发出去以后跳进那条对话。
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Dropdown, Header } from "@heroui/react";
 import { Check, ChevronDown, Plus } from "lucide-react";
 import { PersonAvatar } from "@/components/avatar/PersonAvatar";
@@ -32,12 +32,13 @@ import type { HomeMonthMission, RouteTarget, WaitingItem, WorkHomeData } from "@
 import type { WorkHomeApi } from "@/lib/home/useWorkHome";
 import { ICON } from "./StateIcon";
 import { usePhone } from "./usePhone";
+import { pageHref } from "./view";
 import h from "@/styles/home.module.css";
 import x from "@/styles/decision-box.module.css";
 
 export type SendTarget = "auto" | RouteTarget;
 
-export function HomeView({ data, api, buddy, today, go, route, onSend, projects }: {
+export function HomeView({ data, api, buddy, today, go, route, onSend, projects, trail, offline = false }: {
   data: WorkHomeData;
   api: WorkHomeApi;
   buddy: Buddy | null;
@@ -48,6 +49,10 @@ export function HomeView({ data, api, buddy, today, go, route, onSend, projects 
   route: (text: string) => Promise<RouteTarget>;
   onSend: (text: string, target: SendTarget, files: File[]) => void;
   projects: ProjectsApi;
+  /** 页头右上角（后台任务按钮）。 */
+  trail?: ReactNode;
+  /** 这台电脑没连上、没配对（第 73 条）：「等你」最前面一行，点了去连接页。 */
+  offline?: boolean;
 }) {
   // 「本月」（16.4）：这个月的 Task 按 Mission 分组；之前月份没了结的在各自的项目里，不在这里列。
   const missions = data.month.missions.filter((mission) => mission.tasks.length && mission.period === data.period);
@@ -56,13 +61,20 @@ export function HomeView({ data, api, buddy, today, go, route, onSend, projects 
   const manyProjects = new Set(missions.flatMap((mission) => mission.tasks.flatMap((task) => (task.project ? [task.project.projectId] : [])))).size > 1;
   return (
     <div className={h.homeView} data-testid="home-view">
-      <header className={h.viewHead}><h1 className={h.viewTitle} tabIndex={-1}>{today}</h1></header>
+      <header className={h.viewHead}><h1 className={h.viewTitle} tabIndex={-1}>{today}</h1>{trail}</header>
       <div className={h.homeScroll}>
         <div className={h.homeInner}>
-          {data.waiting.length ? (
+          {data.waiting.length || offline ? (
             <section aria-label="等你" className={h.section}>
-              <p className={h.sectionTitle}>等你 <span>{data.waiting.length}</span></p>
-              <WaitingList items={data.waiting} api={api} go={go} />
+              <p className={h.sectionTitle}>等你 <span>{data.waiting.length + (offline ? 1 : 0)}</span></p>
+              {offline ? (
+                <ul className={h.waiting}>
+                  <li className={h.wait} data-kind="machine">
+                    <button type="button" className={h.waitMain} onClick={() => go(pageHref("connections"))} data-testid="wait-machine"><span className={h.waitTitle}>这台电脑没连上</span></button>
+                  </li>
+                </ul>
+              ) : null}
+              {data.waiting.length ? <WaitingList items={data.waiting} api={api} go={go} /> : null}
             </section>
           ) : null}
           {api.planFailed ? (

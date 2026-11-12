@@ -14,8 +14,15 @@ export const ELLIPSIS_LINE = "| … |";
 /**
  * @param beforeRows 改前那份里每个数据行的行首下标（来自转文字的结构化结果）
  * @param afterRows 改后那份里的
+ * @param lineKey 对行时拿它算出来的去比，和 diffText 的一样
  */
-export function trimTables(before: string, after: string, beforeRows: ReadonlySet<number>, afterRows: ReadonlySet<number>): { before: string; after: string } {
+export function trimTables(
+  before: string,
+  after: string,
+  beforeRows: ReadonlySet<number>,
+  afterRows: ReadonlySet<number>,
+  lineKey: (line: string) => string = (l) => l,
+): { before: string; after: string } {
   if (beforeRows.size <= TRIM_LIMITS.minRows && afterRows.size <= TRIM_LIMITS.minRows) return { before, after };
   const a = splitLines(before);
   const b = splitLines(after);
@@ -29,7 +36,7 @@ export function trimTables(before: string, after: string, beforeRows: ReadonlySe
       if (near > TRIM_LIMITS.contextRows && aData[a0 + t] && bData[b0 + t]) keepA[a0 + t] = keepB[b0 + t] = 0;
     }
   };
-  const regions = lineRegions(a, b);
+  const regions = lineRegions(a.map(lineKey), b.map(lineKey));
   let ai = 0;
   let bi = 0;
   regions.forEach(([as, ae, bs, be], i) => {

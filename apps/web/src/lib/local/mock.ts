@@ -14,6 +14,7 @@ import type {
   TLocalSource, TLocalSourceModel, TLocalSourcePlan, TLocalSourcePreset, TLocalSourceRegion, TLocalStopReason,
 } from "@warmap/contracts";
 import { LocalRunnerError, type EventWatch, type LocalRunner } from "./runner";
+import { createMockEdits } from "./mockChanges";
 
 type Step = (s: MockSession) => void | "wait";
 type MockSession = {
@@ -32,6 +33,8 @@ type MockSession = {
   denied: boolean;
   /** 合回点了几次（假程序第一次回主文件夹不干净）。 */
   mergeTries: number;
+  /** 不在工作树里做的会话：执行方改了的文件（第 71、72 条，mockChanges）。 */
+  edits?: ReturnType<typeof createMockEdits>;
   /** 主循环演示（卡的标题里带关键字，见 cardScript）：这一次交回是不是「要本人补」。 */
   needsPerson?: boolean;
   /** 等前面的卡时：都合回以后要开的工作树。 */
@@ -367,9 +370,16 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
     const ws = s.summary.workspace;
     finishBackground(s, "done");
     s.needsPerson = needs;
+    let turnFiles: ReturnType<ReturnType<typeof createMockEdits>["apply"]> | null = null;
+    if (ws?.kind !== "worktree" && !s.edits) {
+      s.edits = createMockEdits(FILE_ROOT);
+      tool(s, "Edit", "改 周报.md");
+      turnFiles = s.edits.apply();
+    }
     const second = needs ? { index: 2, result: "needs_person", evidence: "商标网拦自动访问", need: "登录中国商标网查这 3 个名字，把近似商标的申请号贴回来" } : { index: 2, result: "met", evidence: "交回说明.md" };
     emit(s, { type: "handback", summary: needs ? "候选名和含义都齐了，申请号要你查" : "改完了，测试都过。", criteria: [{ index: 1, result: "met", evidence: "测试 12/12 通过" }, second], outputKeys: [],
       ...(ws?.kind === "worktree" ? { commit: sha(`${s.summary.id}:handback:${s.log.length}`) } : {}) });
+    if (turnFiles?.files.length) emit(s, { type: "files_changed", turn: turnFiles.turn, files: turnFiles.files, more: 0 });
     turnEnd(s, "改完了，已交回。");
     const subject = s.summary.subject;
     if (subject.kind === "card" && subject.cardId)
@@ -486,6 +496,20 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
     }, stepMs);
   };
 
+  /** 交回以后本人再说一句：第二轮删一个文件、改 Word、Excel 和老格式的表，一轮末尾报这一轮改了哪些。 */
+  const editRound = (s: MockSession) => {
+    setStatus(s, "running");
+    s.timer = setTimeout(() => {
+      s.timer = null;
+      tool(s, "Bash", "运行 Remove-Item 旧安排.md");
+      tool(s, "Bash", "运行 python 改合同和报表.py");
+      const turnFiles = s.edits!.apply();
+      emit(s, { type: "assistant_text", text: "旧安排.md 删了，交接清单新建好了，合同的付款期限和报表也改好了。" });
+      emit(s, { type: "files_changed", turn: turnFiles.turn, files: turnFiles.files, more: 0 });
+      turnEnd(s, "改好了。");
+      setStatus(s, "idle", undefined, "turn_done");
+    }, stepMs * 2);
+  };
   const summaryOf = (s: MockSession) => ({ ...s.summary });
   const listen = (s: MockSession, fn: (event: TLocalSessionEvent) => void) => { s.listeners.add(fn); return () => s.listeners.delete(fn); };
 
@@ -672,6 +696,8 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
         s.summary = { ...s.summary, pendingQuestion: undefined };
       }
       if (was === "running") { emit(s, { type: "notice", level: "info", code: "interjection_next_step", text: "下一步生效" }); return { delivery: "next_step", messageId }; }
+      // 交回以后再说一句：演第二轮改文件（第 71 条：删一个、改几个）。
+      if (s.edits?.pending() && s.cursor >= s.script.length) { editRound(s); return { delivery: "new_turn", messageId }; }
       advance(s);
       return { delivery: was === "exited" || was === "done" ? "resumed" : "new_turn", messageId };
     },
@@ -745,7 +771,8 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
       return { applied: "now", session: summaryOf(s) };
     },
     listSessionFiles: async (id) => {
-      must(id);
+      const edits = must(id).edits;
+      if (edits) return { root: FILE_ROOT, truncated: false, files: edits.list() };
       const size = (file: { kind: string; content: string }) => (file.kind === "image" ? Math.floor(file.content.length * 0.75) : new TextEncoder().encode(file.content).length);
       return {
         root: FILE_ROOT, truncated: false,
@@ -760,10 +787,42 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
       const asked = body.path.replace(/\\/g, "/");
       if (asked.includes("../")) throw new LocalRunnerError("folder_not_allowed", "在本会话的文件夹外面", 403);
       const path = asked.toLowerCase().startsWith(`${FILE_ROOT.toLowerCase()}/`) ? asked.slice(FILE_ROOT.length + 1) : asked;
+      const edits = must(id).edits;
+      if (edits?.has(path)) {
+        const content = edits.content(path);
+        const markdown = path.endsWith(".md");
+        if (content === null) return { path, absolutePath: `${FILE_ROOT}/${path}`, name: path.split("/").pop()!, size: 40_960, modifiedAt: now(), kind: "other" as const, mimeType: "application/octet-stream", encoding: "utf8" as const, content: null, truncated: false };
+        return { path, absolutePath: `${FILE_ROOT}/${path}`, name: path.split("/").pop()!, size: new TextEncoder().encode(content).length, modifiedAt: now(), kind: markdown ? "markdown" as const : "text" as const, mimeType: markdown ? "text/markdown" : "text/plain", encoding: "utf8" as const, content, truncated: false };
+      }
       const file = FILES[path];
       if (!file) throw new LocalRunnerError("not_found", "文件不存在", 404);
       return { path, absolutePath: `${FILE_ROOT}/${path}`, name: path.split("/").pop()!, size: file.kind === "image" ? Math.floor(file.content.length * 0.75) : new TextEncoder().encode(file.content).length,
         modifiedAt: now(), kind: file.kind, mimeType: file.mimeType, encoding: file.kind === "image" ? "base64" as const : "utf8" as const, content: file.content, truncated: false };
+    },
+    // 恢复（第 71、72 条）：一轮正在跑、卡在工作树里做的回 409；revision 对不上回 409 file_changed；不能按处恢复的 400。
+    restoreSessionFiles: async (id, body) => {
+      const s = must(id);
+      if (OCCUPYING.has(s.summary.status) || s.summary.workspace?.kind === "worktree" || !s.edits) throw new LocalRunnerError("conflict", "这一轮还在跑", 409);
+      const result = s.edits.restoreFiles(body.paths);
+      emit(s, { type: "files_restored", all: !body.paths, restored: result.restored, failed: result.failed });
+      return result;
+    },
+    readFileChanges: async (id, body) => {
+      const s = must(id);
+      if (s.summary.workspace?.kind === "worktree" && body.range !== "session") throw new LocalRunnerError("validation", "工作树里的会话只能看开工到现在", 400);
+      const found = s.edits?.read(body.path, body.range ?? "turn", body.turn);
+      if (!found) throw new LocalRunnerError("not_found", "这个文件没改过", 404);
+      return found;
+    },
+    restoreFileChanges: async (id, body) => {
+      const s = must(id);
+      if (OCCUPYING.has(s.summary.status)) throw new LocalRunnerError("conflict", "这一轮还在跑", 409);
+      const outcome = s.edits?.restoreChanges(body.path, body.ids, body.revision) ?? "missing";
+      if (outcome === "changed") throw new LocalRunnerError("file_changed", "文件又变了", 409);
+      if (outcome === "whole_only") throw new LocalRunnerError("validation", "这个文件只能整个恢复", 400);
+      if (outcome === "missing") throw new LocalRunnerError("not_found", "这个文件没改过", 404);
+      emit(s, { type: "files_restored", all: false, restored: [body.path], failed: [] });
+      return { restored: [...body.ids], file: s.edits!.read(body.path, body.range ?? "turn", body.turn)! };
     },
     setPermissionMode: async (id, mode) => {
       const s = must(id);
@@ -833,7 +892,8 @@ export function createMockRunner({ stepMs = 900, paired = true, onPlanned, codex
     const waitingFor = (body.after ?? []).filter((entry) => !merged.has(entry));
     const full = slots().running >= maxConcurrent || busy || waitingFor.length > 0;
     const s: MockSession = {
-      summary: { id, subject: body.subject, title: body.title, agent: model.agent, modelProfileId: model.id, modelLabel: model.label, cwd: body.cwd ?? "topics", status: full ? "queued" : "starting", permissionMode: body.permissionMode ?? "auto", run: runFor(model, "auto", body.effort ?? null), ...(body.effort ? { effort: body.effort } : {}), includePersonalConfig: Boolean(body.includePersonalConfig), createdAt: now(), updatedAt: now(), lastSeq: 0, pendingPermissions: 0, queuePosition: full ? slots().queued + 1 : null, usage: { ...ZERO }, ...(workspace && !waitingFor.length ? { workspace } : {}), ...(waitingFor.length ? { waitingFor } : {}) },
+      summary: { id, subject: body.subject, title: body.title, agent: model.agent, modelProfileId: model.id, modelLabel: model.label, cwd: body.cwd ?? "topics", status: full ? "queued" : "starting", permissionMode: body.permissionMode ?? "auto", run: runFor(model, "auto", body.effort ?? null), ...(body.effort ? { effort: body.effort } : {}), includePersonalConfig: Boolean(body.includePersonalConfig), createdAt: now(), updatedAt: now(), lastSeq: 0, pendingPermissions: 0, queuePosition: full ? slots().queued + 1 : null, usage: { ...ZERO }, ...(workspace && !waitingFor.length ? { workspace } : {}), ...(waitingFor.length ? { waitingFor } : {}),
+        ...(workspace?.kind === "worktree" ? {} : { undo: /onedrive/i.test(body.cwd ?? "") ? { state: "touched_only" as const, reason: "sync_folder" as const } : { state: "ready" as const } }) },
       log: [], listeners: new Set(), drafters: new Set(), script: body.subject.kind === "plan" ? planner : body.subject.kind === "verify" ? verifier : cardScript(body.title), cursor: 0, timer: null, pending: null, paused: false, denied: false, mergeTries: 0,
       ...(waitingFor.length ? { waits: { workspace } } : {}),
     };

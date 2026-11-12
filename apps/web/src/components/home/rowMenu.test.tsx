@@ -16,7 +16,7 @@ const data = {
 const actions: RowActions = { renameProject: vi.fn(), archiveProject: vi.fn(), deleteProject: vi.fn(), renameSub: vi.fn(), archiveSub: vi.fn(), deleteSub: vi.fn() };
 const render = (extra: Partial<Parameters<typeof LeftColumn>[0]>) => renderToStaticMarkup(
   <LeftColumn data={data} view={{ kind: "card", id: sub.id }} buddy={null} speaking={false} go={() => undefined} phone={false}
-    account={{ displayName: "孙铭泽", role: "member" }} today="11 月 9 日 周一" alert={false}
+    account={{ displayName: "孙铭泽", role: "member" }} today="11 月 9 日 周一"
     projects={data.projects.map((project) => fromHome(project, data, new Map()))} archived={[]} onCreate={async () => "x"} {...extra} />,
 );
 

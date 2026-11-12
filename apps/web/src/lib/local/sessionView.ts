@@ -4,6 +4,7 @@
  */
 import type { TLocalHold, TLocalStopReason } from "@warmap/contracts";
 import type { TLocalPermissionMode, TLocalPermissionRequestView, TLocalPlanEntry, TLocalQuestionRequestView, TLocalSessionEvent, TLocalSessionStatus, TLocalUsage } from "./runner";
+import type { TurnFile } from "./fileChanges";
 
 export type SessionEntry =
   /**
@@ -19,7 +20,9 @@ export type SessionEntry =
   | { kind: "permission"; seq: number; at: string; request: TLocalPermissionRequestView; decision: "allow" | "deny" | null; voided?: true }
   | { kind: "artifact"; seq: number; at: string; title: string; fileName: string }
   | { kind: "handback"; seq: number; at: string; summary: string; met: number; total: number }
-  | { kind: "notice"; seq: number; at: string; level: "info" | "warn" | "error"; text: string; code?: string };
+  | { kind: "notice"; seq: number; at: string; level: "info" | "warn" | "error"; text: string; code?: string }
+  /** 这一轮改了哪些文件（第 72 条，事件 files_changed）：对话里这一轮末尾那一行。turn 是第几轮，more 是没列全的还有几个。 */
+  | { kind: "files"; seq: number; at: string; turn: number; files: TurnFile[]; more: number };
 
 /** 卡身上的标记里由本机报的三种（第 3 节）。 */
 export type LocalWait = "approval" | "reply" | "paused";
@@ -95,10 +98,12 @@ export function foldEvent(view: SessionView, event: TLocalSessionEvent): Session
     // 后台任务（子 agent、后台命令）不进对话记录：右栏读会话摘要里的 background。
     case "background":
       return next;
-    // 本人恢复了文件（11/11）：怎么在对话里显示由网页的「恢复」那一笔定，先不进对话记录
+    // 本人恢复了文件（11/11）：不进对话记录，右栏「改动的文件」重读（sessionFiles 的 filesRestored）。
     case "files_restored":
-    // 这一轮改了什么（第 72 条）：对话里那一行由网页的改动视图那一笔画，先不进对话记录
+      return next;
+    // 这一轮改了什么（第 72 条）：这一轮末尾记一行。
     case "files_changed":
+      next.entries = [...view.entries, { kind: "files", ...base, turn: event.turn, files: event.files, more: event.more }];
       return next;
     case "agent_info":
       next.agentVersion = event.version;

@@ -1,7 +1,7 @@
 // 比两份内容、切出一处一处的改动，能把其中几处恢复回去（设计第 72 条）。
 import { afterEach, describe, expect, it } from "vitest";
 import { ELLIPSIS_LINE, FILE_CHANGE_LIMITS, compareFiles, diffText, restoreFile, restoreText, type TextChange } from "../src/textChanges/index.js";
-import { makeDocx, makeXlsx, p } from "./docTextFiles.js";
+import { makeDocx, makeXlsx, noteParts, p } from "./docTextFiles.js";
 
 /** 每一处：改前那几个字 → 改后那几个字。 */
 const pieces = (a: string, b: string, cs: TextChange[]) => cs.map((c) => [a.slice(c.before.start, c.before.end), b.slice(c.after.start, c.after.end)]);
@@ -215,7 +215,7 @@ describe("Word、Excel：转文字再比（converted，只给看）", () => {
     const r1 = compareFiles("xlsx", makeXlsx([{ name: "表", data: sheet(base) }]), makeXlsx([{ name: "表", data: sheet(edited) }]));
     expect(r1.detail !== "none" && pieces(r1.before!, r1.after!, r1.changes)).toEqual([["30", "999"]]);
     const r2 = compareFiles("xlsx", makeXlsx([{ name: "表", data: sheet(base) }]), makeXlsx([{ name: "表", data: sheet([...base, ["新项目", "60"]]) }]));
-    expect(r2.detail !== "none" && pieces(r2.before!, r2.after!, r2.changes)).toEqual([["", "| 新项目 | 60 |\n"]]);
+    expect(r2.detail !== "none" && pieces(r2.before!, r2.after!, r2.changes)).toEqual([["", "| 6 | 新项目 | 60 |\n"]]);
   });
 
   it("Excel 大表裁剪：只留表头、改过的行和上下各两行，中间省略；两边对得上，区间按裁过的算", () => {
@@ -224,13 +224,13 @@ describe("Word、Excel：转文字再比（converted，只给看）", () => {
     const r = compareFiles("xlsx", makeXlsx([{ name: "表", data: sheet(base) }]), makeXlsx([{ name: "表", data: sheet(edited) }]));
     if (r.detail === "none") throw new Error("应该能比");
     const expected = (v: string) =>
-      ["## 表", "", "| A | B |", "| --- | --- |", ELLIPSIS_LINE, "| 项目148 | 1480 |", "| 项目149 | 1490 |", `| 项目150 | ${v} |`, "| 项目151 | 1510 |", "| 项目152 | 1520 |", ELLIPSIS_LINE, ""].join("\n");
+      ["## 表", "", "|  | A | B |", "| --- | --- | --- |", ELLIPSIS_LINE, "| 148 | 项目148 | 1480 |", "| 149 | 项目149 | 1490 |", `| 150 | 项目150 | ${v} |`, "| 151 | 项目151 | 1510 |", "| 152 | 项目152 | 1520 |", ELLIPSIS_LINE, ""].join("\n");
     expect(r.before).toBe(expected("1500"));
     expect(r.after).toBe(expected("7"));
     expect(pieces(r.before!, r.after!, r.changes)).toEqual([["1500", "7"]]);
   });
 
-  it("Excel 大表在开头加一行、末尾删一行：省略行两边位置一样", () => {
+  it("Excel 大表在开头加一行、末尾删一行：后面的行号都变了也不算改过；省略行两边位置一样", () => {
     const base = rows(120);
     const edited: Array<[string, string]> = [["表头说明", "0"], ...base.slice(0, -1)];
     const r = compareFiles("xlsx", makeXlsx([{ name: "表", data: sheet(base) }]), makeXlsx([{ name: "表", data: sheet(edited) }]));
@@ -238,8 +238,33 @@ describe("Word、Excel：转文字再比（converted，只给看）", () => {
     const lines = (s: string) => s.split("\n");
     expect(lines(r.before!).filter((l) => l === ELLIPSIS_LINE)).toHaveLength(1);
     expect(lines(r.after!).filter((l) => l === ELLIPSIS_LINE)).toHaveLength(1);
-    expect(pieces(r.before!, r.after!, r.changes)).toEqual([["", "| 表头说明 | 0 |\n"], ["| 项目120 | 1200 |\n", ""]]);
+    expect(pieces(r.before!, r.after!, r.changes)).toEqual([["", "| 1 | 表头说明 | 0 |\n"], ["| 120 | 项目120 | 1200 |\n", ""]]);
     expect(r.before!.length).toBeLessThan(400);
+  });
+
+  it("Excel 大表中间加一行：只算整行新增一处，上下各留两行，两边的行号各照各的", () => {
+    const base = rows(120);
+    const edited: Array<[string, string]> = [...base.slice(0, 60), ["新项目", "5"], ...base.slice(60)];
+    const r = compareFiles("xlsx", makeXlsx([{ name: "表", data: sheet(base) }]), makeXlsx([{ name: "表", data: sheet(edited) }]));
+    if (r.detail === "none") throw new Error("应该能比");
+    expect(pieces(r.before!, r.after!, r.changes)).toEqual([["", "| 61 | 新项目 | 5 |\n"]]);
+    expect(r.before!.split("\n").slice(4)).toEqual([ELLIPSIS_LINE, "| 59 | 项目59 | 590 |", "| 60 | 项目60 | 600 |", "| 61 | 项目61 | 610 |", "| 62 | 项目62 | 620 |", ELLIPSIS_LINE, ""]);
+    expect(r.after!.split("\n").slice(4)).toEqual([ELLIPSIS_LINE, "| 59 | 项目59 | 590 |", "| 60 | 项目60 | 600 |", "| 61 | 新项目 | 5 |", "| 62 | 项目61 | 610 |", "| 63 | 项目62 | 620 |", ELLIPSIS_LINE, ""]);
+  });
+
+  it("Excel 大表带批注：改一格时批注也折掉；改一条批注，只留那条和上下各两行", () => {
+    const notes = (changed?: number) =>
+      noteParts(1, Array.from({ length: 20 }, (_, i): [string, string] => [`B${i + 1}`, i === changed ? "改过的批注" : `批注${i + 1}\n第二行`]));
+    const book = (data: Array<[string, string]>, changed?: number) => makeXlsx([{ name: "表", data: sheet(data) }], { extra: notes(changed) });
+    const base = rows(80);
+    const cell = compareFiles("xlsx", book(base), book(base.map((r, i): [string, string] => (i === 40 ? [r[0], "7"] : r))));
+    if (cell.detail === "none") throw new Error("应该能比");
+    expect(cell.after!.split("\n").filter((l) => l.startsWith("- B"))).toEqual([]);
+    expect(pieces(cell.before!, cell.after!, cell.changes)).toEqual([["410", "7"]]);
+    const note = compareFiles("xlsx", book(base), book(base, 9));
+    if (note.detail === "none") throw new Error("应该能比");
+    expect(note.after!.split("\n### 批注\n\n")[1]).toBe([ELLIPSIS_LINE, "- B9：批注9", "  第二行", "- B10：改过的批注", "- B11：批注11", "  第二行", ELLIPSIS_LINE, ""].join("\n"));
+    expect(pieces(note.before!, note.after!, note.changes)).toEqual([["批注10\n  第二行", "改过的批注"]]);
   });
 
   it("同样输入结果稳定", () => {

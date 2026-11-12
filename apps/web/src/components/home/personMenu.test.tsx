@@ -25,7 +25,7 @@ import { PersonRow } from "./PersonMenu";
 describe("个人菜单", () => {
   it("技能、我的记忆在里面；「任务数据质量」不在新首页的菜单里（用户 11/08 定）", () => {
     const html = renderToStaticMarkup(<PersonRow account={{ displayName: "孙铭泽", loginId: "sunm", role: "member", personId: "sun-mingze" } as never}
-      view={{ kind: "home" }} alert={false} go={() => undefined} />);
+      view={{ kind: "home" }} go={() => undefined} />);
     const items = [...html.matchAll(/data-item="([^"]+)"/g)].map((match) => match[1]);
     // 连接、技能合成一项「连接和技能」（11/09 用户定）。
     expect(items).toEqual(["profile", "buddy", "connections", "memory", "preferences", "mode-manage", "mode-work", "admin", "lock", "logout"]);
@@ -35,7 +35,7 @@ describe("个人菜单", () => {
 
   it("CEO 的两种模式（17.2 第 45 条）：一组两项「管理模式」「工作模式」，新首页里打勾的是工作模式；不写「切换到…」", () => {
     const html = renderToStaticMarkup(<PersonRow account={{ displayName: "王路遥", loginId: "wangluyao", role: "member", personId: "wang-luyao" } as never}
-      view={{ kind: "home" }} alert={false} go={() => undefined} />);
+      view={{ kind: "home" }} go={() => undefined} />);
     expect(html).toMatch(/data-item="mode-manage"><span[^>]*>管理模式<\/span><\/div>/);
     expect(html).toMatch(/data-item="mode-work"><span[^>]*>工作模式<\/span><svg/);
     expect(html).not.toContain("切换到");

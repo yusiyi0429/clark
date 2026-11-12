@@ -1,6 +1,7 @@
-// Excel（.xlsx / .xlsm）→ Markdown：每张表一个二级标题，下面一张表格（表头是列字母 A B C…，空行不写）。
+// Excel（.xlsx / .xlsm）→ Markdown：每张表一个二级标题，下面一张表格（表头是列字母 A B C…，最左一列是 Excel 的行号，空行不写）。
 // 有公式的格子写公式本身（=SUM(B2:B9)），不写缓存的值；没公式的写值：数字原样、日期写成 YYYY-MM-DD[ HH:MM:SS]。
-// 合并的格子只在左上角写；隐藏的表、行、列照样带。同时给出结构化结果：每张表、每一行在 Markdown 里的位置和格子里的字。
+// 合并的格子只在左上角写；隐藏的表、行、列照样带。格子上的批注写在这张表的表格后面（「### 批注」，一条一行「C7：…」）。
+// 同时给出结构化结果：每张表、每一行在 Markdown 里的位置和格子里的字。
 import { DOC_TEXT_LIMITS, DocTextError } from "./limits.js";
 import { cellMd, paragraphMd, tableMd } from "./markdown.js";
 import { kid, kids, parseTree, readRels, relOfType, scanXml } from "./xml.js";
@@ -10,17 +11,29 @@ export interface DocTextSheet {
   /** 表名。 */
   name: string;
   hidden: boolean;
-  /** 这张表在 markdown 里的字符区间 [start, end)：从「## 表名」到最后一行末尾。 */
+  /** 这张表在 markdown 里的字符区间 [start, end)：从「## 表名」到最后一行末尾（有批注的到最后一条批注）。 */
   start: number;
   end: number;
   /** 有内容的行，按行号从小到大。 */
   rows: DocTextRow[];
+  /** 格子上的批注，按行、列排。 */
+  notes: DocTextNote[];
+}
+
+export interface DocTextNote {
+  /** 批注所在的格子，比如 C7。 */
+  cell: string;
+  /** 批注的字（未做 Markdown 转义）。 */
+  text: string;
+  /** 这一条在 markdown 里的字符区间 [start, end)：从「- C7：」到这条最后一行末尾，不含行末的换行。 */
+  start: number;
+  end: number;
 }
 
 export interface DocTextRow {
   /** 行号，从 1 起，和 Excel 里一样。 */
   row: number;
-  /** 这一行在 markdown 里的字符区间 [start, end)，不含行末的换行。 */
+  /** 这一行在 markdown 里的字符区间 [start, end)：从行首（行号那一格）起，不含行末的换行。 */
   start: number;
   end: number;
   /** 有内容的格子，按列从左到右。 */
@@ -53,7 +66,7 @@ export function xlsxToMarkdown(zip: ZipReader): { markdown: string; sheets: DocT
   for (const s of kids(kid(wb, "sheets") ?? wb, "sheet")) {
     const rel = rels.find((r) => r.id === s.attrs.id);
     const name = s.attrs.name ?? "";
-    const sheet: DocTextSheet = { name, hidden: s.attrs.state === "hidden" || s.attrs.state === "veryHidden", start: 0, end: 0, rows: [] };
+    const sheet: DocTextSheet = { name, hidden: s.attrs.state === "hidden" || s.attrs.state === "veryHidden", start: 0, end: 0, rows: [], notes: [] };
     if (out.length) out.add("\n\n");
     sheet.start = out.length;
     out.add(`## ${paragraphMd(name).replace(/\n/g, " ")}`);
@@ -63,6 +76,7 @@ export function xlsxToMarkdown(zip: ZipReader): { markdown: string; sheets: DocT
       const xml = zip.readText(rel.target);
       if (xml === null) throw new DocTextError("corrupt", "转不了：文件坏了，或者不是 Excel 文件");
       writeSheet(out, sheet, readSheet(xml, strings, isDate, date1904, budget));
+      writeNotes(out, sheet, readNotes(zip, relOfType(readRels(zip, rel.target), "comments")?.target));
     }
     sheet.end = out.length;
     sheets.push(sheet);
@@ -88,7 +102,7 @@ function writeSheet(out: Out, sheet: DocTextSheet, grid: Map<number, Map<number,
   let width = 0;
   for (const cells of grid.values()) for (const c of cells.keys()) width = Math.max(width, c);
   if (!width) return;
-  const header = Array.from({ length: width }, (_, i) => colName(i + 1));
+  const header = ["", ...Array.from({ length: width }, (_, i) => colName(i + 1))];
   out.add("\n\n" + tableMd(header, []));
   for (const r of [...grid.keys()].sort((a, b) => a - b)) {
     const cells = grid.get(r)!;
@@ -101,9 +115,49 @@ function writeSheet(out: Out, sheet: DocTextSheet, grid: Map<number, Map<number,
     }
     out.add("\n");
     const start = out.length;
-    out.add(`| ${row.join(" | ")} |`);
+    out.add(`| ${r} | ${row.join(" | ")} |`);
     sheet.rows.push({ row: r, start, end: out.length, cells: list });
   }
+}
+
+function writeNotes(out: Out, sheet: DocTextSheet, notes: Array<{ cell: string; text: string }>): void {
+  for (const { cell, text } of notes) {
+    const md = paragraphMd(text);
+    if (!md) continue;
+    out.add(sheet.notes.length ? "\n" : "\n\n### 批注\n\n");
+    const start = out.length;
+    out.add(`- ${cell}：${md.split("\n").join("\n  ")}`);
+    sheet.notes.push({ cell, text, start, end: out.length });
+  }
+}
+
+/** 一张表的批注（老式批注，新式的「讨论」Excel 也会存一份在这里），按行、列排。 */
+function readNotes(zip: ZipReader, part: string | undefined): Array<{ cell: string; text: string }> {
+  const xml = part ? zip.readText(part) : null;
+  if (xml === null) return [];
+  const notes: Array<{ cell: string; text: string; row: number; col: number }> = [];
+  let cur: (typeof notes)[number] | null = null;
+  let inT = false;
+  let phonetic = 0;
+  scanXml(xml, {
+    open(name, attrs) {
+      if (name === "comment") {
+        const at = parseRef(attrs.ref ?? "");
+        cur = at ? { cell: colName(at.col) + at.row, text: "", ...at } : null;
+      } else if (name === "rPh") phonetic++;
+      else if (name === "t" && cur && phonetic === 0) inT = true;
+    },
+    close(name) {
+      if (name === "comment" && cur) { notes.push(cur); cur = null; }
+      else if (name === "rPh") phonetic--;
+      else if (name === "t") inT = false;
+    },
+    text(t) {
+      if (inT && cur) cur.text += t;
+    },
+  });
+  notes.sort((a, b) => a.row - b.row || a.col - b.col);
+  return notes.map(({ cell, text }) => ({ cell, text: unescapeX(text) }));
 }
 
 // ---------- 读一张表 ----------
